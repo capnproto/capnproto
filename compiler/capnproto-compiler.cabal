@@ -1,0 +1,21 @@
+name:           capnproto-compiler
+version:        0.1
+cabal-version:  >=1.2
+build-type:     Simple
+author:         kenton
+
+executable capnproto-compiler
+  hs-source-dirs:  src
+  main-is:         Main.hs
+  build-depends:   
+                   base >= 4,
+                   parsec,
+                   mtl,
+                   containers
+  ghc-options:     -Wall -fno-warn-missing-signatures
+  other-modules:   
+                   Lexer,
+                   Token,
+                   Grammar,
+                   Parser
+
