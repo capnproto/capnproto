@@ -21,40 +21,10 @@
 -- (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 -- SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-module Main ( main ) where
+module Util where
 
-import System.Environment
-import Compiler
-import Util(delimit)
-import Text.Parsec.Pos
-import Text.Parsec.Error
-import Text.Printf(printf)
-
-main::IO()
-main = do
-    files <- getArgs
-    mapM_ handleFile files
-
-handleFile filename = do
-    text <- readFile filename
-    case parseAndCompileFile filename text of
-        Active desc [] -> print desc
-        Active _ e -> mapM_ printError e
-        Failed e -> mapM_ printError e
-
---printError e = mapM_ printMessage (errorMessages e) where
---    pos = errorPos e
---    f = sourceName pos
---    l = sourceLine pos
---    c = sourceColumn pos
---    printMessage :: Message -> IO ()
---    printMessage m = printf "%s:%d:%d: %s\n" f l c (messageString m)
-
-printError e = printf "%s:%d:%d: %s\n" f l c m' where
-    pos = errorPos e
-    f = sourceName pos
-    l = sourceLine pos
-    c = sourceColumn pos
-    m = showErrorMessages "or" "Unknown parse error" "Expected" "Unexpected" "end of expression"
-        (errorMessages e)
-    m' = delimit "; " (lines m)
+delimit delimiter list = concat $ loop list where
+    loop ("":t) = loop t
+    loop (a:"":t) = loop (a:t)
+    loop (a:b:t) = a:delimiter:loop (b:t)
+    loop a = a

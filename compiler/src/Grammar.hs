@@ -39,8 +39,9 @@ data FieldValue = VoidFieldValue
                 | IntegerFieldValue Integer
                 | FloatFieldValue Double
                 | StringFieldValue String
-                | ArrayFieldValue [FieldValue]
-                | RecordFieldValue [(String, FieldValue)]
+                | IdentifierFieldValue String
+                | ListFieldValue [Located FieldValue]
+                | RecordFieldValue [(Located String, Located FieldValue)]
                 deriving (Show)
 
 data Declaration = AliasDecl (Located String) DeclName
@@ -56,3 +57,14 @@ data Declaration = AliasDecl (Located String) DeclName
                               TypeExpression [Declaration]
                  | OptionDecl DeclName (Located FieldValue)
                  deriving (Show)
+
+declarationName :: Declaration -> Maybe (Located String)
+declarationName (AliasDecl n _)        = Just n
+declarationName (ConstantDecl n _ _)   = Just n
+declarationName (EnumDecl n _)         = Just n
+declarationName (EnumValueDecl n _ _)  = Just n
+declarationName (StructDecl n _)       = Just n
+declarationName (FieldDecl n _ _ _ _)  = Just n
+declarationName (InterfaceDecl n _)    = Just n
+declarationName (MethodDecl n _ _ _ _) = Just n
+declarationName (OptionDecl _ _)       = Nothing

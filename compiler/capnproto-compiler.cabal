@@ -19,5 +19,6 @@ executable capnproto-compiler
                    Grammar,
                    Parser,
                    Compiler,
-                   Semantics
+                   Semantics,
+                   Util
 

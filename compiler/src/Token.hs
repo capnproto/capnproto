@@ -26,10 +26,16 @@ module Token where
 import Text.Parsec.Pos (SourcePos, sourceLine, sourceColumn)
 import Text.Printf (printf)
 
-data Located t = Located { locatedPos :: SourcePos, locatedValue :: t } deriving (Eq)
+data Located t = Located { locatedPos :: SourcePos, locatedValue :: t }
 
 instance Show t => Show (Located t) where
     show (Located pos x) = printf "%d:%d:%s" (sourceLine pos) (sourceColumn pos) (show x)
+
+instance Eq a => Eq (Located a) where
+    Located _ a == Located _ b = a == b
+
+instance Ord a => Ord (Located a) where
+    compare (Located _ a) (Located _ b) = compare a b
 
 data Token = Identifier String
            | ParenthesizedList [[Located Token]]
@@ -41,6 +47,7 @@ data Token = Identifier String
            | Colon
            | Period
            | EqualsSign
+           | MinusSign
            | ImportKeyword
            | UsingKeyword
            | ConstKeyword

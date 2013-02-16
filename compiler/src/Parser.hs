@@ -25,12 +25,31 @@ module Parser (parseFile) where
 
 import Text.Parsec hiding (tokens)
 import Token
-import Control.Monad (liftM)
 import Grammar
 import Lexer (lexer)
+import Control.Monad.Identity
 
 tokenParser :: (Located Token -> Maybe a) -> Parsec [Located Token] u a
-tokenParser = token (show . locatedValue) locatedPos
+tokenParser = token (tokenErrorString . locatedValue) locatedPos
+
+tokenErrorString (Identifier s) = "identifier \"" ++ s ++ "\""
+tokenErrorString (ParenthesizedList _) = "parenthesized list"
+tokenErrorString (BracketedList _) = "bracketed list"
+tokenErrorString (LiteralInt i) = "integer literal " ++ show i
+tokenErrorString (LiteralFloat f) = "float literal " ++ show f
+tokenErrorString (LiteralString s) = "string literal " ++  show s
+tokenErrorString AtSign = "\"@\""
+tokenErrorString Colon = "\":\""
+tokenErrorString Period = "\".\""
+tokenErrorString EqualsSign = "\"=\""
+tokenErrorString MinusSign = "\"-\""
+tokenErrorString ImportKeyword = "\"import\""
+tokenErrorString UsingKeyword = "\"using\""
+tokenErrorString ConstKeyword = "\"const\""
+tokenErrorString EnumKeyword = "\"enum\""
+tokenErrorString StructKeyword = "\"struct\""
+tokenErrorString InterfaceKeyword = "\"interface\""
+tokenErrorString OptionKeyword = "\"option\""
 
 type TokenParser = Parsec [Located Token] [ParseError]
 
@@ -49,22 +68,23 @@ matchLiteralFloat t      = case locatedValue t of { (LiteralFloat      v) -> Jus
 matchLiteralString t     = case locatedValue t of { (LiteralString     v) -> Just v; _ -> Nothing }
 matchSimpleToken expected t = if locatedValue t == expected then Just () else Nothing
 
-identifier = tokenParser matchIdentifier
-literalInt = tokenParser matchLiteralInt
-literalFloat = tokenParser matchLiteralFloat
-literalString = tokenParser matchLiteralString
+identifier = tokenParser matchIdentifier <?> "identifier"
+literalInt = tokenParser matchLiteralInt <?> "integer"
+literalFloat = tokenParser matchLiteralFloat <?> "floating-point number"
+literalString = tokenParser matchLiteralString <?> "string"
 
-atSign = tokenParser (matchSimpleToken AtSign)
-colon = tokenParser (matchSimpleToken Colon)
-period = tokenParser (matchSimpleToken Period)
-equalsSign = tokenParser (matchSimpleToken EqualsSign)
-importKeyword = tokenParser (matchSimpleToken ImportKeyword)
-usingKeyword = tokenParser (matchSimpleToken UsingKeyword)
-constKeyword = tokenParser (matchSimpleToken ConstKeyword)
-enumKeyword = tokenParser (matchSimpleToken EnumKeyword)
-structKeyword = tokenParser (matchSimpleToken StructKeyword)
-interfaceKeyword = tokenParser (matchSimpleToken InterfaceKeyword)
-optionKeyword = tokenParser (matchSimpleToken OptionKeyword)
+atSign = tokenParser (matchSimpleToken AtSign) <?> "\"@\""
+colon = tokenParser (matchSimpleToken Colon) <?> "\":\""
+period = tokenParser (matchSimpleToken Period) <?> "\".\""
+equalsSign = tokenParser (matchSimpleToken EqualsSign) <?> "\"=\""
+minusSign = tokenParser (matchSimpleToken MinusSign) <?> "\"=\""
+importKeyword = tokenParser (matchSimpleToken ImportKeyword) <?> "\"import\""
+usingKeyword = tokenParser (matchSimpleToken UsingKeyword) <?> "\"using\""
+constKeyword = tokenParser (matchSimpleToken ConstKeyword) <?> "\"const\""
+enumKeyword = tokenParser (matchSimpleToken EnumKeyword) <?> "\"enum\""
+structKeyword = tokenParser (matchSimpleToken StructKeyword) <?> "\"struct\""
+interfaceKeyword = tokenParser (matchSimpleToken InterfaceKeyword) <?> "\"interface\""
+optionKeyword = tokenParser (matchSimpleToken OptionKeyword) <?> "\"option\""
 
 parenthesizedList parser = do
     items <- tokenParser matchParenthesizedList
@@ -155,16 +175,22 @@ fieldDecl statements = do
     children <- parseBlock fieldLine statements
     return (FieldDecl name ordinal t value children)
 
+negativeFieldValue = liftM (IntegerFieldValue . negate) literalInt
+                 <|> liftM (FloatFieldValue . negate) literalFloat
+
 fieldValue = liftM IntegerFieldValue literalInt
          <|> liftM FloatFieldValue literalFloat
          <|> liftM StringFieldValue literalString
-         <|> liftM ArrayFieldValue (bracketedList fieldValue)
+         <|> liftM IdentifierFieldValue identifier
+         <|> liftM ListFieldValue (bracketedList (located fieldValue))
          <|> liftM RecordFieldValue (parenthesizedList fieldAssignment)
+         <|> (minusSign >> negativeFieldValue)
+         <?> "default value"
 
 fieldAssignment = do
-    name <- identifier
+    name <- located identifier
     equalsSign
-    value <- fieldValue
+    value <- located fieldValue
     return (name, value)
 
 fieldLine :: Maybe [Located Statement] -> TokenParser Declaration
@@ -186,6 +212,7 @@ methodDecl statements = do
     atSign
     ordinal <- located literalInt
     params <- parenthesizedList paramDecl
+    colon
     t <- typeExpression
     children <- parseBlock methodLine statements
     return (MethodDecl name ordinal params t children)
@@ -227,8 +254,16 @@ parseBlock parser statements = finish where
         return [ result | Right (result, _) <- results ]
 
 parseCollectingErrors :: TokenParser a -> [Located Token] -> Either ParseError (a, [ParseError])
-parseCollectingErrors parser = runParser parser' [] "" where
+parseCollectingErrors parser tokens = runParser parser' [] "" tokens where
     parser' = do
+        -- Work around Parsec bug:  Text.Parsec.Print.token is supposed to produce a parser that
+        -- sets the position by using the provided function to extract it from each token.  However,
+        -- it doesn't bother to call this function for the *first* token, only subsequent tokens.
+        -- The first token is always assumed to be at 1:1.  To fix this, set it manually.
+        case tokens of
+            Located pos _:_ -> setPosition pos
+            [] -> return ()
+
         result <- parser
         eof
         errors <- getState

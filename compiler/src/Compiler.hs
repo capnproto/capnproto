@@ -28,6 +28,8 @@ import Semantics
 import Token(Located(Located))
 import Parser(parseFile)
 import qualified Data.Map as Map
+import qualified Data.List as List
+import Data.Maybe(mapMaybe)
 import Text.Parsec.Pos(SourcePos, newPos)
 import Text.Parsec.Error(ParseError, newErrorMessage, Message(Message, Expect))
 import Text.Printf(printf)
@@ -98,6 +100,8 @@ feedback f = status where
 statusToMaybe (Active x _) = Just x
 statusToMaybe (Failed _) = Nothing
 
+doAll statuses = Active [x | (Active x _) <- statuses] (concatMap statusErrors statuses)
+
 ------------------------------------------------------------------------------------------
 -- Symbol lookup
 ------------------------------------------------------------------------------------------
@@ -150,30 +154,48 @@ builtinTypeMap = Map.fromList
 
 ------------------------------------------------------------------------------------------
 
-fromIntegerChecked :: Integral a => SourcePos -> Integer -> Status a
-fromIntegerChecked pos x = result where
+fromIntegerChecked :: Integral a => String -> SourcePos -> Integer -> Status a
+fromIntegerChecked name pos x = result where
     unchecked = fromInteger x
     result = if toInteger unchecked == x
         then succeed unchecked
-        else makeError pos "Integer out of range for type."
+        else makeError pos (printf "Integer %d out of range for type %s." x name)
 
+compileValue :: SourcePos -> TypeDesc -> FieldValue -> Status ValueDesc
 compileValue _ (BuiltinType BuiltinVoid) VoidFieldValue = succeed VoidDesc
 compileValue _ (BuiltinType BuiltinBool) (BoolFieldValue x) = succeed (BoolDesc x)
-compileValue pos (BuiltinType BuiltinInt8) (IntegerFieldValue x) = fmap Int8Desc (fromIntegerChecked pos x)
-compileValue pos (BuiltinType BuiltinInt16) (IntegerFieldValue x) = fmap Int16Desc (fromIntegerChecked pos x)
-compileValue pos (BuiltinType BuiltinInt32) (IntegerFieldValue x) = fmap Int32Desc (fromIntegerChecked pos x)
-compileValue pos (BuiltinType BuiltinInt64) (IntegerFieldValue x) = fmap Int64Desc (fromIntegerChecked pos x)
-compileValue pos (BuiltinType BuiltinUInt8) (IntegerFieldValue x) = fmap UInt8Desc (fromIntegerChecked pos x)
-compileValue pos (BuiltinType BuiltinUInt16) (IntegerFieldValue x) = fmap UInt16Desc (fromIntegerChecked pos x)
-compileValue pos (BuiltinType BuiltinUInt32) (IntegerFieldValue x) = fmap UInt32Desc (fromIntegerChecked pos x)
-compileValue pos (BuiltinType BuiltinUInt64) (IntegerFieldValue x) = fmap UInt64Desc (fromIntegerChecked pos x)
+compileValue pos (BuiltinType BuiltinInt8  ) (IntegerFieldValue x) = fmap Int8Desc   (fromIntegerChecked "Int8"   pos x)
+compileValue pos (BuiltinType BuiltinInt16 ) (IntegerFieldValue x) = fmap Int16Desc  (fromIntegerChecked "Int16"  pos x)
+compileValue pos (BuiltinType BuiltinInt32 ) (IntegerFieldValue x) = fmap Int32Desc  (fromIntegerChecked "Int32"  pos x)
+compileValue pos (BuiltinType BuiltinInt64 ) (IntegerFieldValue x) = fmap Int64Desc  (fromIntegerChecked "Int64"  pos x)
+compileValue pos (BuiltinType BuiltinUInt8 ) (IntegerFieldValue x) = fmap UInt8Desc  (fromIntegerChecked "UInt8"  pos x)
+compileValue pos (BuiltinType BuiltinUInt16) (IntegerFieldValue x) = fmap UInt16Desc (fromIntegerChecked "UInt16" pos x)
+compileValue pos (BuiltinType BuiltinUInt32) (IntegerFieldValue x) = fmap UInt32Desc (fromIntegerChecked "UInt32" pos x)
+compileValue pos (BuiltinType BuiltinUInt64) (IntegerFieldValue x) = fmap UInt64Desc (fromIntegerChecked "UInt64" pos x)
 compileValue _ (BuiltinType BuiltinFloat32) (FloatFieldValue x) = succeed (Float32Desc (realToFrac x))
 compileValue _ (BuiltinType BuiltinFloat64) (FloatFieldValue x) = succeed (Float64Desc x)
 compileValue _ (BuiltinType BuiltinFloat32) (IntegerFieldValue x) = succeed (Float32Desc (realToFrac x))
 compileValue _ (BuiltinType BuiltinFloat64) (IntegerFieldValue x) = succeed (Float64Desc (realToFrac x))
 compileValue _ (BuiltinType BuiltinText) (StringFieldValue x) = succeed (TextDesc x)
-compileValue _ (BuiltinType BuiltinBytes) (StringFieldValue x) =
-    succeed (BytesDesc (map (fromIntegral . fromEnum) x))
+compileValue _ (BuiltinType BuiltinData) (StringFieldValue x) =
+    succeed (DataDesc (map (fromIntegral . fromEnum) x))
+
+compileValue pos (EnumType desc) (IdentifierFieldValue name) =
+    case lookupMember name (enumMemberMap desc) of
+        Just (DescEnumValue value) -> succeed (EnumValueValueDesc value)
+        _ -> makeError pos (printf "Enum type %s has no value %s." (enumName desc) name)
+
+compileValue _ (StructType desc) (RecordFieldValue fields) = result where
+    result = fmap StructValueDesc (doAll (map compileFieldAssignment fields))
+    compileFieldAssignment :: (Located String, Located FieldValue) -> Status (FieldDesc, ValueDesc)
+    compileFieldAssignment (Located namePos name, Located valPos val) =
+        case lookupMember name (structMemberMap desc) of
+            Just (DescField field) ->
+                fmap (\x -> (field, x)) (compileValue valPos (fieldType field) val)
+            _ -> makeError namePos (printf "Struct %s has no field %s." (structName desc) name)
+
+compileValue _ (ListType t) (ListFieldValue l) =
+    fmap ListDesc (doAll [ compileValue vpos t v | Located vpos v <- l ])
 
 compileValue pos (BuiltinType BuiltinVoid) _ = makeError pos "Void fields cannot have values."
 compileValue pos (BuiltinType BuiltinBool) _ = makeExpectError pos "boolean"
@@ -188,12 +210,12 @@ compileValue pos (BuiltinType BuiltinUInt64) _ = makeExpectError pos "integer"
 compileValue pos (BuiltinType BuiltinFloat32) _ = makeExpectError pos "number"
 compileValue pos (BuiltinType BuiltinFloat64) _ = makeExpectError pos "number"
 compileValue pos (BuiltinType BuiltinText) _ = makeExpectError pos "string"
-compileValue pos (BuiltinType BuiltinBytes) _ = makeExpectError pos "string"
+compileValue pos (BuiltinType BuiltinData) _ = makeExpectError pos "string"
 
-compileValue pos (EnumType _) _ = makeError pos "Unimplemented: enum default values"
-compileValue pos (StructType _) _ = makeError pos "Unimplemented: struct default values"
+compileValue pos (EnumType _) _ = makeExpectError pos "enum value name"
+compileValue pos (StructType _) _ = makeExpectError pos "parenthesized list of field assignments"
 compileValue pos (InterfaceType _) _ = makeError pos "Interfaces can't have default values."
-compileValue pos (ListType _) _ = makeError pos "Unimplemented: array default values"
+compileValue pos (ListType _) _ = makeExpectError pos "list"
 
 makeFileMemberMap :: FileDesc -> Map.Map String Desc
 makeFileMemberMap desc = Map.fromList allMembers where
@@ -226,6 +248,47 @@ compileType scope (TypeExpression n (param:moreParams)) = do
                 else makeError (declNamePos n) "'List' requires exactly one type parameter."
         _ -> makeError (declNamePos n) "Only the type 'List' can have type parameters."
 
+------------------------------------------------------------------------------------------
+
+requireSequentialNumbering :: String -> [Located Integer] -> Status ()
+requireSequentialNumbering kind items = Active () (loop 0 sortedItems) where
+    sortedItems = List.sort items
+    loop _ [] = []
+    loop expected (Located pos num:rest) = result where
+        rest' = loop (num + 1) rest
+        result = if num == expected
+            then rest'
+            else err:rest' where
+                err = newErrorMessage (Message message) pos
+                message = printf "Skipped number %d.  %s must be numbered sequentially starting \
+                                 \from zero." expected kind
+
+maxFieldNumber = 1023
+
+requireFieldNumbersInRange fieldNums =
+    Active () [ fieldNumError num pos | Located pos num <- fieldNums, num > maxFieldNumber ] where
+        fieldNumError num = newErrorMessage (Message
+            (printf "Field number %d too large; maximum is %d." num maxFieldNumber))
+
+requireNoDuplicateNames :: [Declaration] -> Status()
+requireNoDuplicateNames decls = Active () (loop (List.sort locatedNames)) where
+    locatedNames = mapMaybe declarationName decls
+    loop (Located pos1 val1:Located pos2 val2:t) =
+        if val1 == val2
+            then dupError val1 pos1:dupError val2 pos2:loop2 val1 t
+            else loop t
+    loop _ = []
+    loop2 val1 l@(Located pos2 val2:t) =
+        if val1 == val2
+            then dupError val2 pos2:loop2 val1 t
+            else loop l
+    loop2 _ _ = []
+
+    dupError val = newErrorMessage (Message message) where
+        message = printf "Duplicate declaration \"%s\"." val
+
+------------------------------------------------------------------------------------------
+
 data CompiledDecl = CompiledMember String (Status Desc)
                   | CompiledOption (Status OptionAssignmentDesc)
 
@@ -241,8 +304,6 @@ compileChildDecls desc decls = Active (members, memberMap, options) errors where
     options = Map.fromList [(optionName (optionAssignmentOption o), o)
                            | CompiledOption (Active o _) <- compiledDecls]
     errors = concatMap compiledErrors compiledDecls
-
-doAll statuses = Active [x | (Active x _) <- statuses] (concatMap statusErrors statuses)
 
 compileDecl scope (AliasDecl (Located _ name) target) =
     CompiledMember name (do
@@ -267,6 +328,8 @@ compileDecl scope (ConstantDecl (Located _ name) t (Located valuePos value)) =
 compileDecl scope (EnumDecl (Located _ name) decls) =
     CompiledMember name (feedback (\desc -> do
         (members, memberMap, options) <- compileChildDecls desc decls
+        requireNoDuplicateNames decls
+        requireSequentialNumbering "Enum values" [ num | EnumValueDecl _ num _ <- decls ]
         return (DescEnum EnumDesc
             { enumName = name
             , enumParent = scope
@@ -289,6 +352,10 @@ compileDecl scope (EnumValueDecl (Located _ name) (Located _ number) decls) =
 compileDecl scope (StructDecl (Located _ name) decls) =
     CompiledMember name (feedback (\desc -> do
         (members, memberMap, options) <- compileChildDecls desc decls
+        requireNoDuplicateNames decls
+        fieldNums <- return [ num | FieldDecl _ num _ _ _ <- decls ]
+        requireSequentialNumbering "Fields" fieldNums
+        requireFieldNumbersInRange fieldNums
         return (DescStruct StructDesc
             { structName = name
             , structParent = scope
@@ -322,6 +389,8 @@ compileDecl scope (FieldDecl (Located _ name) (Located _ number) typeExp default
 compileDecl scope (InterfaceDecl (Located _ name) decls) =
     CompiledMember name (feedback (\desc -> do
         (members, memberMap, options) <- compileChildDecls desc decls
+        requireNoDuplicateNames decls
+        requireSequentialNumbering "Methods" [ num | MethodDecl _ num _ _ _ <- decls ]
         return (DescInterface InterfaceDesc
             { interfaceName = name
             , interfaceParent = scope
@@ -372,6 +441,7 @@ compileParam scope (name, typeExp, defaultValue) = do
 compileFile name decls =
     feedback (\desc -> do
         (members, memberMap, options) <- compileChildDecls (DescFile desc) decls
+        requireNoDuplicateNames decls
         return FileDesc
             { fileName = name
             , fileImports = []

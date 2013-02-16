@@ -86,6 +86,7 @@ token = keyword
     <|> liftM (const Colon)      (symbol ":")
     <|> liftM (const Period)     (symbol ".")
     <|> liftM (const EqualsSign) (symbol "=")
+    <|> liftM (const MinusSign)  (symbol "-")
     <?> "token"
 
 locatedToken = located token

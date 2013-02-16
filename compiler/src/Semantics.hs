@@ -30,6 +30,7 @@ import Data.Word (Word8, Word16, Word32, Word64)
 import Data.Char (chr)
 import Text.Printf(printf)
 import Control.Monad(join)
+import Util(delimit)
 
 type ByteString = [Word8]
 
@@ -81,7 +82,7 @@ data BuiltinType = BuiltinVoid | BuiltinBool
                  | BuiltinInt8 | BuiltinInt16 | BuiltinInt32 | BuiltinInt64
                  | BuiltinUInt8 | BuiltinUInt16 | BuiltinUInt32 | BuiltinUInt64
                  | BuiltinFloat32 | BuiltinFloat64
-                 | BuiltinText | BuiltinBytes
+                 | BuiltinText | BuiltinData
                  deriving (Show, Enum, Bounded, Eq)
 
 builtinTypes = [minBound::BuiltinType .. maxBound::BuiltinType]
@@ -103,7 +104,10 @@ data ValueDesc = VoidDesc
                | Float32Desc Float
                | Float64Desc Double
                | TextDesc String
-               | BytesDesc ByteString
+               | DataDesc ByteString
+               | EnumValueValueDesc EnumValueDesc
+               | StructValueDesc [(FieldDesc, ValueDesc)]
+               | ListDesc [ValueDesc]
                deriving (Show)
 
 valueString VoidDesc = error "Can't stringify void value."
@@ -119,7 +123,11 @@ valueString (UInt64Desc  i) = show i
 valueString (Float32Desc x) = show x
 valueString (Float64Desc x) = show x
 valueString (TextDesc    s) = show s
-valueString (BytesDesc   s) = show (map (chr . fromIntegral) s)
+valueString (DataDesc    s) = show (map (chr . fromIntegral) s)
+valueString (EnumValueValueDesc v) = enumValueName v
+valueString (StructValueDesc l) = "(" ++  delimit ", " (map assignmentString l) ++ ")" where
+    assignmentString (field, value) = fieldName field ++ " = " ++ valueString value
+valueString (ListDesc l) = "[" ++ delimit ", " (map valueString l) ++ "]" where
 
 data TypeDesc = BuiltinType BuiltinType
               | EnumType EnumDesc
