@@ -47,7 +47,7 @@ data Declaration = AliasDecl (Located String) DeclName
                  | ConstantDecl (Located String) TypeExpression (Located FieldValue)
                  | EnumDecl (Located String) [Declaration]
                  | EnumValueDecl (Located String) (Located Integer) [Declaration]
-                 | ClassDecl (Located String) [Declaration]
+                 | StructDecl (Located String) [Declaration]
                  | FieldDecl (Located String) (Located Integer)
                              TypeExpression (Maybe (Located FieldValue)) [Declaration]
                  | InterfaceDecl (Located String) [Declaration]

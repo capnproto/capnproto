@@ -35,7 +35,7 @@ keywords =
     , (UsingKeyword, "using")
     , (ConstKeyword, "const")
     , (EnumKeyword, "enum")
-    , (ClassKeyword, "class")
+    , (StructKeyword, "struct")
     , (InterfaceKeyword, "interface")
     , (OptionKeyword, "option")
     ]

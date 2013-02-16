@@ -105,7 +105,7 @@ statusToMaybe (Failed _) = Nothing
 -- | Look up a direct member of a descriptor by name.
 descMember name (DescFile      d) = lookupMember name (fileMemberMap d)
 descMember name (DescEnum      d) = lookupMember name (enumMemberMap d)
-descMember name (DescClass     d) = lookupMember name (classMemberMap d)
+descMember name (DescStruct    d) = lookupMember name (structMemberMap d)
 descMember name (DescInterface d) = lookupMember name (interfaceMemberMap d)
 descMember name (DescAlias     d) = descMember name (aliasTarget d)
 descMember _ _ = Nothing
@@ -191,7 +191,7 @@ compileValue pos (BuiltinType BuiltinText) _ = makeExpectError pos "string"
 compileValue pos (BuiltinType BuiltinBytes) _ = makeExpectError pos "string"
 
 compileValue pos (EnumType _) _ = makeError pos "Unimplemented: enum default values"
-compileValue pos (ClassType _) _ = makeError pos "Unimplemented: class default values"
+compileValue pos (StructType _) _ = makeError pos "Unimplemented: struct default values"
 compileValue pos (InterfaceType _) _ = makeError pos "Interfaces can't have default values."
 compileValue pos (ListType _) _ = makeError pos "Unimplemented: array default values"
 
@@ -200,11 +200,11 @@ makeFileMemberMap desc = Map.fromList allMembers where
     allMembers = [ (aliasName     m, DescAlias     m) | m <- fileAliases    desc ]
               ++ [ (constantName  m, DescConstant  m) | m <- fileConstants  desc ]
               ++ [ (enumName      m, DescEnum      m) | m <- fileEnums      desc ]
-              ++ [ (className     m, DescClass     m) | m <- fileClasses    desc ]
+              ++ [ (structName    m, DescStruct    m) | m <- fileStructs    desc ]
               ++ [ (interfaceName m, DescInterface m) | m <- fileInterfaces desc ]
 
 descAsType _ (DescEnum desc) = succeed (EnumType desc)
-descAsType _ (DescClass desc) = succeed (ClassType desc)
+descAsType _ (DescStruct desc) = succeed (StructType desc)
 descAsType _ (DescInterface desc) = succeed (InterfaceType desc)
 descAsType _ (DescBuiltinType desc) = succeed (BuiltinType desc)
 descAsType name (DescAlias desc) = descAsType name (aliasTarget desc)
@@ -286,21 +286,21 @@ compileDecl scope (EnumValueDecl (Located _ name) (Located _ number) decls) =
             , enumValueOptions = options
             })))
 
-compileDecl scope (ClassDecl (Located _ name) decls) =
+compileDecl scope (StructDecl (Located _ name) decls) =
     CompiledMember name (feedback (\desc -> do
         (members, memberMap, options) <- compileChildDecls desc decls
-        return (DescClass ClassDesc
-            { className = name
-            , classParent = scope
-            , classFields           = [d | DescField     d <- members]
-            , classNestedAliases    = [d | DescAlias     d <- members]
-            , classNestedConstants  = [d | DescConstant  d <- members]
-            , classNestedEnums      = [d | DescEnum      d <- members]
-            , classNestedClasses    = [d | DescClass     d <- members]
-            , classNestedInterfaces = [d | DescInterface d <- members]
-            , classOptions = options
-            , classMembers = members
-            , classMemberMap = memberMap
+        return (DescStruct StructDesc
+            { structName = name
+            , structParent = scope
+            , structFields           = [d | DescField     d <- members]
+            , structNestedAliases    = [d | DescAlias     d <- members]
+            , structNestedConstants  = [d | DescConstant  d <- members]
+            , structNestedEnums      = [d | DescEnum      d <- members]
+            , structNestedStructs    = [d | DescStruct    d <- members]
+            , structNestedInterfaces = [d | DescInterface d <- members]
+            , structOptions = options
+            , structMembers = members
+            , structMemberMap = memberMap
             })))
 
 compileDecl scope (FieldDecl (Located _ name) (Located _ number) typeExp defaultValue decls) =
@@ -329,7 +329,7 @@ compileDecl scope (InterfaceDecl (Located _ name) decls) =
             , interfaceNestedAliases    = [d | DescAlias     d <- members]
             , interfaceNestedConstants  = [d | DescConstant  d <- members]
             , interfaceNestedEnums      = [d | DescEnum      d <- members]
-            , interfaceNestedClasses    = [d | DescClass     d <- members]
+            , interfaceNestedStructs    = [d | DescStruct    d <- members]
             , interfaceNestedInterfaces = [d | DescInterface d <- members]
             , interfaceOptions = options
             , interfaceMembers = members
@@ -378,7 +378,7 @@ compileFile name decls =
             , fileAliases    = [d | DescAlias     d <- members]
             , fileConstants  = [d | DescConstant  d <- members]
             , fileEnums      = [d | DescEnum      d <- members]
-            , fileClasses    = [d | DescClass     d <- members]
+            , fileStructs    = [d | DescStruct    d <- members]
             , fileInterfaces = [d | DescInterface d <- members]
             , fileOptions = options
             , fileMembers = members

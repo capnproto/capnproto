@@ -62,7 +62,7 @@ importKeyword = tokenParser (matchSimpleToken ImportKeyword)
 usingKeyword = tokenParser (matchSimpleToken UsingKeyword)
 constKeyword = tokenParser (matchSimpleToken ConstKeyword)
 enumKeyword = tokenParser (matchSimpleToken EnumKeyword)
-classKeyword = tokenParser (matchSimpleToken ClassKeyword)
+structKeyword = tokenParser (matchSimpleToken StructKeyword)
 interfaceKeyword = tokenParser (matchSimpleToken InterfaceKeyword)
 optionKeyword = tokenParser (matchSimpleToken OptionKeyword)
 
@@ -111,7 +111,7 @@ constantDecl = do
     return (ConstantDecl name typeName value)
 
 typeDecl statements = enumDecl statements
-                  <|> classDecl statements
+                  <|> structDecl statements
                   <|> interfaceDecl statements
 
 enumDecl statements = do
@@ -135,15 +135,15 @@ enumValueLine :: Maybe [Located Statement] -> TokenParser Declaration
 enumValueLine Nothing = optionDecl
 enumValueLine (Just _) = fail "Blocks not allowed here."
 
-classDecl statements = do
-    classKeyword
+structDecl statements = do
+    structKeyword
     name <- located identifier
-    children <- parseBlock classLine statements
-    return (ClassDecl name children)
+    children <- parseBlock structLine statements
+    return (StructDecl name children)
 
-classLine :: Maybe [Located Statement] -> TokenParser Declaration
-classLine Nothing = optionDecl <|> constantDecl <|> fieldDecl []
-classLine (Just statements) = typeDecl statements <|> fieldDecl statements
+structLine :: Maybe [Located Statement] -> TokenParser Declaration
+structLine Nothing = optionDecl <|> constantDecl <|> fieldDecl []
+structLine (Just statements) = typeDecl statements <|> fieldDecl statements
 
 fieldDecl statements = do
     name <- located identifier

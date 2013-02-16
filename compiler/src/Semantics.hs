@@ -38,7 +38,7 @@ data Desc = DescFile FileDesc
           | DescConstant ConstantDesc
           | DescEnum EnumDesc
           | DescEnumValue EnumValueDesc
-          | DescClass ClassDesc
+          | DescStruct StructDesc
           | DescField FieldDesc
           | DescInterface InterfaceDesc
           | DescMethod MethodDesc
@@ -51,7 +51,7 @@ descName (DescAlias     d) = aliasName d
 descName (DescConstant  d) = constantName d
 descName (DescEnum      d) = enumName d
 descName (DescEnumValue d) = enumValueName d
-descName (DescClass     d) = className d
+descName (DescStruct    d) = structName d
 descName (DescField     d) = fieldName d
 descName (DescInterface d) = interfaceName d
 descName (DescMethod    d) = methodName d
@@ -64,7 +64,7 @@ descParent (DescAlias     d) = aliasParent d
 descParent (DescConstant  d) = constantParent d
 descParent (DescEnum      d) = enumParent d
 descParent (DescEnumValue d) = enumValueParent d
-descParent (DescClass     d) = classParent d
+descParent (DescStruct    d) = structParent d
 descParent (DescField     d) = fieldParent d
 descParent (DescInterface d) = interfaceParent d
 descParent (DescMethod    d) = methodParent d
@@ -123,7 +123,7 @@ valueString (BytesDesc   s) = show (map (chr . fromIntegral) s)
 
 data TypeDesc = BuiltinType BuiltinType
               | EnumType EnumDesc
-              | ClassType ClassDesc
+              | StructType StructDesc
               | InterfaceType InterfaceDesc
               | ListType TypeDesc
 
@@ -131,7 +131,7 @@ data TypeDesc = BuiltinType BuiltinType
 typeName :: Desc -> TypeDesc -> String
 typeName _ (BuiltinType t) = builtinTypeName t  -- TODO:  Check for shadowing.
 typeName scope (EnumType desc) = descQualifiedName scope (DescEnum desc)
-typeName scope (ClassType desc) = descQualifiedName scope (DescClass desc)
+typeName scope (StructType desc) = descQualifiedName scope (DescStruct desc)
 typeName scope (InterfaceType desc) = descQualifiedName scope (DescInterface desc)
 typeName scope (ListType t) = "List(" ++ typeName scope t ++ ")"
 
@@ -159,7 +159,7 @@ data FileDesc = FileDesc
     , fileAliases :: [AliasDesc]
     , fileConstants :: [ConstantDesc]
     , fileEnums :: [EnumDesc]
-    , fileClasses :: [ClassDesc]
+    , fileStructs :: [StructDesc]
     , fileInterfaces :: [InterfaceDesc]
     , fileOptions :: OptionMap
     , fileMembers :: [Desc]
@@ -196,18 +196,18 @@ data EnumValueDesc = EnumValueDesc
     , enumValueOptions :: OptionMap
     }
 
-data ClassDesc = ClassDesc
-    { className :: String
-    , classParent :: Desc
-    , classFields :: [FieldDesc]
-    , classNestedAliases :: [AliasDesc]
-    , classNestedConstants :: [ConstantDesc]
-    , classNestedEnums :: [EnumDesc]
-    , classNestedClasses :: [ClassDesc]
-    , classNestedInterfaces :: [InterfaceDesc]
-    , classOptions :: OptionMap
-    , classMembers :: [Desc]
-    , classMemberMap :: MemberMap
+data StructDesc = StructDesc
+    { structName :: String
+    , structParent :: Desc
+    , structFields :: [FieldDesc]
+    , structNestedAliases :: [AliasDesc]
+    , structNestedConstants :: [ConstantDesc]
+    , structNestedEnums :: [EnumDesc]
+    , structNestedStructs :: [StructDesc]
+    , structNestedInterfaces :: [InterfaceDesc]
+    , structOptions :: OptionMap
+    , structMembers :: [Desc]
+    , structMemberMap :: MemberMap
     }
 
 data FieldDesc = FieldDesc
@@ -226,7 +226,7 @@ data InterfaceDesc = InterfaceDesc
     , interfaceNestedAliases :: [AliasDesc]
     , interfaceNestedConstants :: [ConstantDesc]
     , interfaceNestedEnums :: [EnumDesc]
-    , interfaceNestedClasses :: [ClassDesc]
+    , interfaceNestedStructs :: [StructDesc]
     , interfaceNestedInterfaces :: [InterfaceDesc]
     , interfaceOptions :: OptionMap
     , interfaceMembers :: [Desc]
@@ -273,9 +273,9 @@ descToCode indent (DescEnum desc) = printf "%senum %s {\n%s%s}\n" indent
     indent
 descToCode indent (DescEnumValue desc) = printf "%s%s = %d;\n" indent
     (enumValueName desc) (enumValueNumber desc)
-descToCode indent (DescClass desc) = printf "%sclass %s {\n%s%s}\n" indent
-    (className desc)
-    (concatMap (descToCode ("  " ++ indent)) (classMembers desc))
+descToCode indent (DescStruct desc) = printf "%sstruct %s {\n%s%s}\n" indent
+    (structName desc)
+    (concatMap (descToCode ("  " ++ indent)) (structMembers desc))
     indent
 descToCode indent (DescField desc) = printf "%s%s@%d: %s%s;\n" indent
     (fieldName desc) (fieldNumber desc)
@@ -303,7 +303,7 @@ instance Show AliasDesc where { show desc = descToCode "" (DescAlias desc) }
 instance Show ConstantDesc where { show desc = descToCode "" (DescConstant desc) }
 instance Show EnumDesc where { show desc = descToCode "" (DescEnum desc) }
 instance Show EnumValueDesc where { show desc = descToCode "" (DescEnumValue desc) }
-instance Show ClassDesc where { show desc = descToCode "" (DescClass desc) }
+instance Show StructDesc where { show desc = descToCode "" (DescStruct desc) }
 instance Show FieldDesc where { show desc = descToCode "" (DescField desc) }
 instance Show InterfaceDesc where { show desc = descToCode "" (DescInterface desc) }
 instance Show MethodDesc where { show desc = descToCode "" (DescMethod desc) }

@@ -45,7 +45,7 @@ data Token = Identifier String
            | UsingKeyword
            | ConstKeyword
            | EnumKeyword
-           | ClassKeyword
+           | StructKeyword
            | InterfaceKeyword
            | OptionKeyword
            deriving (Show, Eq)
