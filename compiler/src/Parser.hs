@@ -34,6 +34,12 @@ tokenParser = token (show . locatedValue) locatedPos
 
 type TokenParser = Parsec [Located Token] [ParseError]
 
+located :: TokenParser t -> TokenParser (Located t)
+located p = do
+    input <- getInput
+    t <- p
+    return (Located (locatedPos (head input)) t)
+
 -- Hmm, boilerplate is not supposed to happen in Haskell.
 matchIdentifier t        = case locatedValue t of { (Identifier        v) -> Just v; _ -> Nothing }
 matchParenthesizedList t = case locatedValue t of { (ParenthesizedList v) -> Just v; _ -> Nothing }
@@ -53,6 +59,7 @@ colon = tokenParser (matchSimpleToken Colon)
 period = tokenParser (matchSimpleToken Period)
 equalsSign = tokenParser (matchSimpleToken EqualsSign)
 importKeyword = tokenParser (matchSimpleToken ImportKeyword)
+usingKeyword = tokenParser (matchSimpleToken UsingKeyword)
 constKeyword = tokenParser (matchSimpleToken ConstKeyword)
 enumKeyword = tokenParser (matchSimpleToken EnumKeyword)
 classKeyword = tokenParser (matchSimpleToken ClassKeyword)
@@ -67,37 +74,40 @@ bracketedList parser = do
     parseList parser items
 
 declNameBase :: TokenParser DeclName
-declNameBase = liftM ImportName (importKeyword >> literalString)
-           <|> liftM AbsoluteName (period >> identifier)
-           <|> liftM RelativeName identifier
+declNameBase = liftM ImportName (importKeyword >> located literalString)
+           <|> liftM AbsoluteName (period >> located identifier)
+           <|> liftM RelativeName (located identifier)
 
 declName :: TokenParser DeclName
 declName = do
     base <- declNameBase
-    members <- many (period >> identifier)
+    members <- many (period >> located identifier)
     return (foldl MemberName base members :: DeclName)
 
 typeExpression :: TokenParser TypeExpression
 typeExpression = do
     name <- declName
-    suffixes <- many (bracketedList (fail "Brackets should be empty."))
-    return (applySuffixes (TypeName name) (length suffixes)) where
-        applySuffixes t 0 = t
-        applySuffixes t n = applySuffixes (Array t) (n - 1)
+    suffixes <- option [] (parenthesizedList typeExpression)
+    return (TypeExpression name suffixes)
 
 topLine :: Maybe [Located Statement] -> TokenParser Declaration
-topLine Nothing = optionDecl <|> constantDecl <|> implicitConstantDecl
+topLine Nothing = optionDecl <|> aliasDecl <|> constantDecl
 topLine (Just statements) = typeDecl statements
+
+aliasDecl = do
+    usingKeyword
+    name <- located identifier
+    equalsSign
+    target <- declName
+    return (AliasDecl name target)
 
 constantDecl = do
     constKeyword
-    implicitConstantDecl
-
-implicitConstantDecl = do
-    name <- identifier
-    typeName <- optionMaybe (period >> typeExpression)
+    name <- located identifier
+    colon
+    typeName <- typeExpression
     equalsSign
-    value <- fieldValue
+    value <- located fieldValue
     return (ConstantDecl name typeName value)
 
 typeDecl statements = enumDecl statements
@@ -106,7 +116,7 @@ typeDecl statements = enumDecl statements
 
 enumDecl statements = do
     enumKeyword
-    name <- identifier
+    name <- located identifier
     children <- parseBlock enumLine statements
     return (EnumDecl name children)
 
@@ -115,9 +125,9 @@ enumLine Nothing = optionDecl <|> enumValueDecl []
 enumLine (Just statements) = enumValueDecl statements
 
 enumValueDecl statements = do
-    name <- identifier
+    name <- located identifier
     equalsSign
-    value <- literalInt
+    value <- located literalInt
     children <- parseBlock enumValueLine statements
     return (EnumValueDecl name value children)
 
@@ -127,7 +137,7 @@ enumValueLine (Just _) = fail "Blocks not allowed here."
 
 classDecl statements = do
     classKeyword
-    name <- identifier
+    name <- located identifier
     children <- parseBlock classLine statements
     return (ClassDecl name children)
 
@@ -136,12 +146,12 @@ classLine Nothing = optionDecl <|> constantDecl <|> fieldDecl []
 classLine (Just statements) = typeDecl statements <|> fieldDecl statements
 
 fieldDecl statements = do
-    name <- identifier
+    name <- located identifier
     atSign
-    ordinal <- literalInt
+    ordinal <- located literalInt
     colon
     t <- typeExpression
-    value <- option VoidFieldValue (equalsSign >> fieldValue)
+    value <- optionMaybe (equalsSign >> located fieldValue)
     children <- parseBlock fieldLine statements
     return (FieldDecl name ordinal t value children)
 
@@ -163,7 +173,7 @@ fieldLine (Just _) = fail "Blocks not allowed here."
 
 interfaceDecl statements = do
     interfaceKeyword
-    name <- identifier
+    name <- located identifier
     children <- parseBlock interfaceLine statements
     return (InterfaceDecl name children)
 
@@ -172,17 +182,19 @@ interfaceLine Nothing = optionDecl <|> constantDecl <|> methodDecl []
 interfaceLine (Just statements) = typeDecl statements <|> methodDecl statements
 
 methodDecl statements = do
-    name <- identifier
+    name <- located identifier
+    atSign
+    ordinal <- located literalInt
     params <- parenthesizedList paramDecl
     t <- typeExpression
     children <- parseBlock methodLine statements
-    return (MethodDecl name params t children)
+    return (MethodDecl name ordinal params t children)
 
 paramDecl = do
     name <- identifier
     colon
     t <- typeExpression
-    value <- option VoidFieldValue (equalsSign >> fieldValue)
+    value <- optionMaybe (equalsSign >> located fieldValue)
     return (name, t, value)
 
 methodLine :: Maybe [Located Statement] -> TokenParser Declaration
@@ -193,7 +205,7 @@ optionDecl = do
     optionKeyword
     name <- declName
     equalsSign
-    value <- fieldValue
+    value <- located fieldValue
     return (OptionDecl name value)
 
 extractErrors :: Either ParseError (a, [ParseError]) -> [ParseError]

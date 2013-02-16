@@ -23,19 +23,8 @@
 
 module Token where
 
-import Data.Char (toLower)
 import Text.Parsec.Pos (SourcePos, sourceLine, sourceColumn)
 import Text.Printf (printf)
-
-data PrimitiveType = Void | Bool
-                   | Int8 | Int16 | Int32 | Int64
-                   | UInt8 | UInt16 | UInt32 | UInt64
-                   | Float32 | Float64
-                   | Text | Bytes
-                   deriving (Show, Enum, Bounded, Eq)
-
-primitiveTypes = [(t, map toLower (show t))
-                 | t <- [minBound::PrimitiveType .. maxBound::PrimitiveType]]
 
 data Located t = Located { locatedPos :: SourcePos, locatedValue :: t } deriving (Eq)
 
@@ -53,6 +42,7 @@ data Token = Identifier String
            | Period
            | EqualsSign
            | ImportKeyword
+           | UsingKeyword
            | ConstKeyword
            | EnumKeyword
            | ClassKeyword

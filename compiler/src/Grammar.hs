@@ -23,14 +23,15 @@
 
 module Grammar where
 
-data DeclName = AbsoluteName String
-              | RelativeName String
-              | ImportName String
-              | MemberName DeclName String
+import Token (Located)
+
+data DeclName = AbsoluteName (Located String)
+              | RelativeName (Located String)
+              | ImportName (Located String)
+              | MemberName DeclName (Located String)
               deriving (Show)
 
-data TypeExpression = TypeName DeclName
-                    | Array TypeExpression
+data TypeExpression = TypeExpression DeclName [TypeExpression]
                     deriving (Show)
 
 data FieldValue = VoidFieldValue
@@ -42,13 +43,16 @@ data FieldValue = VoidFieldValue
                 | RecordFieldValue [(String, FieldValue)]
                 deriving (Show)
 
-data Declaration = ConstantDecl String (Maybe TypeExpression) FieldValue
-                 | EnumDecl String [Declaration]
-                 | EnumValueDecl String Integer [Declaration]
-                 | ClassDecl String [Declaration]
-                 | FieldDecl String Integer TypeExpression FieldValue [Declaration]
-                 | InterfaceDecl String [Declaration]
-                 | MethodDecl String [(String, TypeExpression, FieldValue)]
+data Declaration = AliasDecl (Located String) DeclName
+                 | ConstantDecl (Located String) TypeExpression (Located FieldValue)
+                 | EnumDecl (Located String) [Declaration]
+                 | EnumValueDecl (Located String) (Located Integer) [Declaration]
+                 | ClassDecl (Located String) [Declaration]
+                 | FieldDecl (Located String) (Located Integer)
+                             TypeExpression (Maybe (Located FieldValue)) [Declaration]
+                 | InterfaceDecl (Located String) [Declaration]
+                 | MethodDecl (Located String) (Located Integer)
+                              [(String, TypeExpression, Maybe (Located FieldValue))]
                               TypeExpression [Declaration]
-                 | OptionDecl DeclName FieldValue
+                 | OptionDecl DeclName (Located FieldValue)
                  deriving (Show)

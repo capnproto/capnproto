@@ -17,5 +17,7 @@ executable capnproto-compiler
                    Lexer,
                    Token,
                    Grammar,
-                   Parser
+                   Parser,
+                   Compiler,
+                   Semantics
 

@@ -23,5 +23,17 @@
 
 module Main ( main ) where
 
+import System.Environment
+import Compiler
+
 main::IO()
-main = undefined
+main = do
+    files <- getArgs
+    mapM_ handleFile files
+
+handleFile filename = do
+    text <- readFile filename
+    case parseAndCompileFile filename text of
+        Active desc [] -> print desc
+        Active _ e -> mapM_ print e
+        Failed e -> mapM_ print e

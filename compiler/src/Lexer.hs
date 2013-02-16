@@ -32,6 +32,7 @@ import Token
 
 keywords =
     [ (ImportKeyword, "import")
+    , (UsingKeyword, "using")
     , (ConstKeyword, "const")
     , (EnumKeyword, "enum")
     , (ClassKeyword, "class")
