@@ -29,6 +29,7 @@ import Util(delimit)
 import Text.Parsec.Pos
 import Text.Parsec.Error
 import Text.Printf(printf)
+import qualified Data.List as List
 
 main::IO()
 main = do
@@ -39,17 +40,13 @@ handleFile filename = do
     text <- readFile filename
     case parseAndCompileFile filename text of
         Active desc [] -> print desc
-        Active _ e -> mapM_ printError e
-        Failed e -> mapM_ printError e
+        Active _ e -> mapM_ printError (List.sortBy compareErrors e)
+        Failed e -> mapM_ printError (List.sortBy compareErrors e)
 
---printError e = mapM_ printMessage (errorMessages e) where
---    pos = errorPos e
---    f = sourceName pos
---    l = sourceLine pos
---    c = sourceColumn pos
---    printMessage :: Message -> IO ()
---    printMessage m = printf "%s:%d:%d: %s\n" f l c (messageString m)
+compareErrors a b = compare (errorPos a) (errorPos b)
 
+-- TODO:  This is a fairly hacky way to make showErrorMessages' output not suck.  We could do better
+--   by interpreting the error structure ourselves.
 printError e = printf "%s:%d:%d: %s\n" f l c m' where
     pos = errorPos e
     f = sourceName pos
@@ -57,4 +54,4 @@ printError e = printf "%s:%d:%d: %s\n" f l c m' where
     c = sourceColumn pos
     m = showErrorMessages "or" "Unknown parse error" "Expected" "Unexpected" "end of expression"
         (errorMessages e)
-    m' = delimit "; " (lines m)
+    m' = delimit "; " (List.filter (not . null) (lines m))

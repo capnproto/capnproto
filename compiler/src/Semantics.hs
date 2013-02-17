@@ -25,6 +25,7 @@ module Semantics where
 
 import qualified Data.Map as Map
 import qualified Data.List as List
+import qualified Data.Maybe as Maybe
 import Data.Int (Int8, Int16, Int32, Int64)
 import Data.Word (Word8, Word16, Word32, Word64)
 import Data.Char (chr)
@@ -89,7 +90,7 @@ builtinTypes = [minBound::BuiltinType .. maxBound::BuiltinType]
 
 -- Get in-language name of type.
 builtinTypeName :: BuiltinType -> String
-builtinTypeName = List.drop 7 . show  -- drop "Builtin" prefix
+builtinTypeName = Maybe.fromJust . List.stripPrefix "Builtin" . show
 
 data ValueDesc = VoidDesc
                | BoolDesc Bool
@@ -170,9 +171,9 @@ data FileDesc = FileDesc
     , fileStructs :: [StructDesc]
     , fileInterfaces :: [InterfaceDesc]
     , fileOptions :: OptionMap
-    , fileMembers :: [Desc]
     , fileMemberMap :: MemberMap
     , fileImportMap :: Map.Map String FileDesc
+    , fileStatements :: [CompiledStatement]
     }
 
 data AliasDesc = AliasDesc
@@ -193,8 +194,8 @@ data EnumDesc = EnumDesc
     , enumParent :: Desc
     , enumValues :: [EnumValueDesc]
     , enumOptions :: OptionMap
-    , enumMembers :: [Desc]
     , enumMemberMap :: MemberMap
+    , enumStatements :: [CompiledStatement]
     }
 
 data EnumValueDesc = EnumValueDesc
@@ -202,6 +203,7 @@ data EnumValueDesc = EnumValueDesc
     , enumValueParent :: Desc
     , enumValueNumber :: Integer
     , enumValueOptions :: OptionMap
+    , enumValueStatements :: [CompiledStatement]
     }
 
 data StructDesc = StructDesc
@@ -214,8 +216,8 @@ data StructDesc = StructDesc
     , structNestedStructs :: [StructDesc]
     , structNestedInterfaces :: [InterfaceDesc]
     , structOptions :: OptionMap
-    , structMembers :: [Desc]
     , structMemberMap :: MemberMap
+    , structStatements :: [CompiledStatement]
     }
 
 data FieldDesc = FieldDesc
@@ -225,6 +227,7 @@ data FieldDesc = FieldDesc
     , fieldType :: TypeDesc
     , fieldDefaultValue :: Maybe ValueDesc
     , fieldOptions :: OptionMap
+    , fieldStatements :: [CompiledStatement]
     }
 
 data InterfaceDesc = InterfaceDesc
@@ -237,8 +240,8 @@ data InterfaceDesc = InterfaceDesc
     , interfaceNestedStructs :: [StructDesc]
     , interfaceNestedInterfaces :: [InterfaceDesc]
     , interfaceOptions :: OptionMap
-    , interfaceMembers :: [Desc]
     , interfaceMemberMap :: MemberMap
+    , interfaceStatements :: [CompiledStatement]
     }
 
 data MethodDesc = MethodDesc
@@ -248,12 +251,14 @@ data MethodDesc = MethodDesc
     , methodParams :: [(String, TypeDesc, Maybe ValueDesc)]
     , methodReturnType :: TypeDesc
     , methodOptions :: OptionMap
+    , methodStatements :: [CompiledStatement]
     }
 
 type OptionMap = Map.Map String OptionAssignmentDesc
 
 data OptionAssignmentDesc = OptionAssignmentDesc
-    { optionAssignmentOption :: OptionDesc
+    { optionAssignmentParent :: Desc
+    , optionAssignmentOption :: OptionDesc
     , optionAssignmentValue :: ValueDesc
     }
 
@@ -265,9 +270,12 @@ data OptionDesc = OptionDesc
     , optionDefaultValue :: Maybe ValueDesc
     }
 
+data CompiledStatement = CompiledMember Desc
+                       | CompiledOption OptionAssignmentDesc
+
 -- TODO:  Print options as well as members.  Will be ugly-ish.
 descToCode :: String -> Desc -> String
-descToCode indent (DescFile desc) = concatMap (descToCode indent) (fileMembers desc)
+descToCode indent (DescFile desc) = concatMap (statementToCode indent) (fileStatements desc)
 descToCode indent (DescAlias desc) = printf "%susing %s = %s;\n" indent
     (aliasName desc)
     (descQualifiedName (aliasParent desc) (aliasTarget desc))
@@ -275,36 +283,49 @@ descToCode indent (DescConstant desc) = printf "%sconst %s: %s = %s;\n" indent
     (constantName desc)
     (typeName (constantParent desc) (constantType desc))
     (valueString (constantValue desc))
-descToCode indent (DescEnum desc) = printf "%senum %s {\n%s%s}\n" indent
+descToCode indent (DescEnum desc) = printf "%senum %s%s" indent
     (enumName desc)
-    (concatMap (descToCode ("  " ++ indent)) (enumMembers desc))
-    indent
-descToCode indent (DescEnumValue desc) = printf "%s%s = %d;\n" indent
-    (enumValueName desc) (enumValueNumber desc)
-descToCode indent (DescStruct desc) = printf "%sstruct %s {\n%s%s}\n" indent
+    (blockCode indent (enumStatements desc))
+descToCode indent (DescEnumValue desc) = printf "%s%s = %d%s" indent
+    (enumValueName desc) (enumValueNumber desc) (maybeBlockCode indent $ enumValueStatements desc)
+descToCode indent (DescStruct desc) = printf "%sstruct %s%s" indent
     (structName desc)
-    (concatMap (descToCode ("  " ++ indent)) (structMembers desc))
-    indent
-descToCode indent (DescField desc) = printf "%s%s@%d: %s%s;\n" indent
+    (blockCode indent (structStatements desc))
+descToCode indent (DescField desc) = printf "%s%s@%d: %s%s%s" indent
     (fieldName desc) (fieldNumber desc)
     (typeName (fieldParent desc) (fieldType desc))
     (case fieldDefaultValue desc of { Nothing -> ""; Just v -> " = " ++ valueString v; })
-descToCode indent (DescInterface desc) = printf "%sinterface %s {\n%s%s}\n" indent
+    (maybeBlockCode indent $ fieldStatements desc)
+descToCode indent (DescInterface desc) = printf "%sinterface %s%s" indent
     (interfaceName desc)
-    (concatMap (descToCode ("  " ++ indent)) (interfaceMembers desc))
-    indent
-descToCode indent (DescMethod desc) = printf "%s%s@%d(%s): %s;\n" indent
+    (blockCode indent (interfaceStatements desc))
+descToCode indent (DescMethod desc) = printf "%s%s@%d(%s): %s%s" indent
     (methodName desc) (methodNumber desc)
-    (delimit (map paramToCode (methodParams desc)))
-    (typeName (methodParent desc) (methodReturnType desc)) where
-        delimit [] = ""
-        delimit (h:t) = h ++ concatMap (", " ++) t
+    (delimit ", " (map paramToCode (methodParams desc)))
+    (typeName (methodParent desc) (methodReturnType desc))
+    (maybeBlockCode indent $ methodStatements desc) where
         paramToCode (name, t, Nothing) = printf "%s: %s" name (typeName (methodParent desc) t)
         paramToCode (name, t, Just v) = printf "%s: %s = %s"
             name (typeName (methodParent desc) t) (valueString v)
 descToCode _ (DescOption _) = error "options not implemented"
 descToCode _ (DescBuiltinType _) = error "Can't print code for builtin type."
 descToCode _ DescBuiltinList = error "Can't print code for builtin type."
+
+statementToCode :: String -> CompiledStatement -> String
+statementToCode indent (CompiledMember desc) = descToCode indent desc
+statementToCode indent (CompiledOption desc) = printf "%s%s.%s = %s;\n" indent
+    (descQualifiedName (optionAssignmentParent desc) $ optionParent $ optionAssignmentOption desc)
+    (optionName $ optionAssignmentOption desc)
+    (valueString (optionAssignmentValue desc))
+
+maybeBlockCode :: String -> [CompiledStatement] -> String
+maybeBlockCode _ [] = ";\n"
+maybeBlockCode indent statements = blockCode indent statements
+
+blockCode :: String -> [CompiledStatement] -> String
+blockCode indent statements = printf " {\n%s%s}\n"
+    (concatMap (statementToCode ("  " ++ indent)) statements)
+    indent
 
 instance Show FileDesc where { show desc = descToCode "" (DescFile desc) }
 instance Show AliasDesc where { show desc = descToCode "" (DescAlias desc) }

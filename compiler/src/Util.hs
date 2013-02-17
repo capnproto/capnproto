@@ -23,8 +23,11 @@
 
 module Util where
 
-delimit delimiter list = concat $ loop list where
-    loop ("":t) = loop t
-    loop (a:"":t) = loop (a:t)
-    loop (a:b:t) = a:delimiter:loop (b:t)
-    loop a = a
+delimit _ [] = ""
+delimit delimiter (h:t) = h ++ concatMap (delimiter ++) t
+
+--delimit delimiter list = concat $ loop list where
+--    loop ("":t) = loop t
+--    loop (a:"":t) = loop (a:t)
+--    loop (a:b:t) = a:delimiter:loop (b:t)
+--    loop a = a

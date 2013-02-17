@@ -289,24 +289,31 @@ requireNoDuplicateNames decls = Active () (loop (List.sort locatedNames)) where
 
 ------------------------------------------------------------------------------------------
 
-data CompiledDecl = CompiledMember String (Status Desc)
-                  | CompiledOption (Status OptionAssignmentDesc)
+data CompiledStatementStatus = CompiledMemberStatus String (Status Desc)
+                             | CompiledOptionStatus (Status OptionAssignmentDesc)
 
-compiledErrors (CompiledMember _ status) = statusErrors status
-compiledErrors (CompiledOption status) = statusErrors status
+toCompiledStatement :: CompiledStatementStatus -> Maybe CompiledStatement
+toCompiledStatement (CompiledMemberStatus name (Active desc _)) = Just (CompiledMember desc)
+toCompiledStatement (CompiledOptionStatus (Active desc _)) = Just (CompiledOption desc)
+toCompiledStatement _ = Nothing
 
-compileChildDecls :: Desc -> [Declaration] -> Status ([Desc], MemberMap, OptionMap)
-compileChildDecls desc decls = Active (members, memberMap, options) errors where
+compiledErrors (CompiledMemberStatus _ status) = statusErrors status
+compiledErrors (CompiledOptionStatus status) = statusErrors status
+
+compileChildDecls :: Desc -> [Declaration]
+                  -> Status ([Desc], MemberMap, OptionMap, [CompiledStatement])
+compileChildDecls desc decls = Active (members, memberMap, options, statements) errors where
     compiledDecls = map (compileDecl desc) decls
     memberMap = Map.fromList memberPairs
     members = [member | (_, Just member) <- memberPairs]
-    memberPairs = [(name, statusToMaybe status) | CompiledMember name status <- compiledDecls]
+    memberPairs = [(name, statusToMaybe status) | CompiledMemberStatus name status <- compiledDecls]
     options = Map.fromList [(optionName (optionAssignmentOption o), o)
-                           | CompiledOption (Active o _) <- compiledDecls]
+                           | CompiledOptionStatus (Active o _) <- compiledDecls]
     errors = concatMap compiledErrors compiledDecls
+    statements = mapMaybe toCompiledStatement compiledDecls
 
 compileDecl scope (AliasDecl (Located _ name) target) =
-    CompiledMember name (do
+    CompiledMemberStatus name (do
         targetDesc <- lookupDesc scope target
         return (DescAlias AliasDesc
             { aliasName = name
@@ -315,7 +322,7 @@ compileDecl scope (AliasDecl (Located _ name) target) =
             }))
 
 compileDecl scope (ConstantDecl (Located _ name) t (Located valuePos value)) =
-    CompiledMember name (do
+    CompiledMemberStatus name (do
         typeDesc <- compileType scope t
         valueDesc <- compileValue valuePos typeDesc value
         return (DescConstant ConstantDesc
@@ -326,8 +333,8 @@ compileDecl scope (ConstantDecl (Located _ name) t (Located valuePos value)) =
             }))
 
 compileDecl scope (EnumDecl (Located _ name) decls) =
-    CompiledMember name (feedback (\desc -> do
-        (members, memberMap, options) <- compileChildDecls desc decls
+    CompiledMemberStatus name (feedback (\desc -> do
+        (members, memberMap, options, statements) <- compileChildDecls desc decls
         requireNoDuplicateNames decls
         requireSequentialNumbering "Enum values" [ num | EnumValueDecl _ num _ <- decls ]
         return (DescEnum EnumDesc
@@ -335,23 +342,24 @@ compileDecl scope (EnumDecl (Located _ name) decls) =
             , enumParent = scope
             , enumValues = [d | DescEnumValue d <- members]
             , enumOptions = options
-            , enumMembers = members
             , enumMemberMap = memberMap
+            , enumStatements = statements
             })))
 
 compileDecl scope (EnumValueDecl (Located _ name) (Located _ number) decls) =
-    CompiledMember name (feedback (\desc -> do
-        (_, _, options) <- compileChildDecls desc decls
+    CompiledMemberStatus name (feedback (\desc -> do
+        (_, _, options, statements) <- compileChildDecls desc decls
         return (DescEnumValue EnumValueDesc
             { enumValueName = name
             , enumValueParent = scope
             , enumValueNumber = number
             , enumValueOptions = options
+            , enumValueStatements = statements
             })))
 
 compileDecl scope (StructDecl (Located _ name) decls) =
-    CompiledMember name (feedback (\desc -> do
-        (members, memberMap, options) <- compileChildDecls desc decls
+    CompiledMemberStatus name (feedback (\desc -> do
+        (members, memberMap, options, statements) <- compileChildDecls desc decls
         requireNoDuplicateNames decls
         fieldNums <- return [ num | FieldDecl _ num _ _ _ <- decls ]
         requireSequentialNumbering "Fields" fieldNums
@@ -366,17 +374,17 @@ compileDecl scope (StructDecl (Located _ name) decls) =
             , structNestedStructs    = [d | DescStruct    d <- members]
             , structNestedInterfaces = [d | DescInterface d <- members]
             , structOptions = options
-            , structMembers = members
             , structMemberMap = memberMap
+            , structStatements = statements
             })))
 
 compileDecl scope (FieldDecl (Located _ name) (Located _ number) typeExp defaultValue decls) =
-    CompiledMember name (feedback (\desc -> do
+    CompiledMemberStatus name (feedback (\desc -> do
         typeDesc <- compileType scope typeExp
         defaultDesc <- case defaultValue of
             Just (Located pos value) -> fmap Just (compileValue pos typeDesc value)
             Nothing -> return Nothing
-        (_, _, options) <- compileChildDecls desc decls
+        (_, _, options, statements) <- compileChildDecls desc decls
         return (DescField FieldDesc
             { fieldName = name
             , fieldParent = scope
@@ -384,11 +392,12 @@ compileDecl scope (FieldDecl (Located _ name) (Located _ number) typeExp default
             , fieldType = typeDesc
             , fieldDefaultValue = defaultDesc
             , fieldOptions = options
+            , fieldStatements = statements
             })))
 
 compileDecl scope (InterfaceDecl (Located _ name) decls) =
-    CompiledMember name (feedback (\desc -> do
-        (members, memberMap, options) <- compileChildDecls desc decls
+    CompiledMemberStatus name (feedback (\desc -> do
+        (members, memberMap, options, statements) <- compileChildDecls desc decls
         requireNoDuplicateNames decls
         requireSequentialNumbering "Methods" [ num | MethodDecl _ num _ _ _ <- decls ]
         return (DescInterface InterfaceDesc
@@ -401,15 +410,15 @@ compileDecl scope (InterfaceDecl (Located _ name) decls) =
             , interfaceNestedStructs    = [d | DescStruct    d <- members]
             , interfaceNestedInterfaces = [d | DescInterface d <- members]
             , interfaceOptions = options
-            , interfaceMembers = members
             , interfaceMemberMap = memberMap
+            , interfaceStatements = statements
             })))
 
 compileDecl scope (MethodDecl (Located _ name) (Located _ number) params returnType decls) =
-    CompiledMember name (feedback (\desc -> do
+    CompiledMemberStatus name (feedback (\desc -> do
         paramDescs <- doAll (map (compileParam scope) params)
         returnTypeDesc <- compileType scope returnType
-        (_, _, options) <- compileChildDecls desc decls
+        (_, _, options, statements) <- compileChildDecls desc decls
         return (DescMethod MethodDesc
             { methodName = name
             , methodParent = scope
@@ -417,17 +426,19 @@ compileDecl scope (MethodDecl (Located _ name) (Located _ number) params returnT
             , methodParams = paramDescs
             , methodReturnType = returnTypeDesc
             , methodOptions = options
+            , methodStatements = statements
             })))
 
 compileDecl scope (OptionDecl name (Located valuePos value)) =
-    CompiledOption (do
+    CompiledOptionStatus (do
         uncheckedOptionDesc <- lookupDesc scope name
         optionDesc <- case uncheckedOptionDesc of
             (DescOption d) -> return d
             _ -> makeError (declNamePos name) (printf "'%s' is not an option." (declNameString name))
         valueDesc <- compileValue valuePos (optionType optionDesc) value
         return OptionAssignmentDesc
-            { optionAssignmentOption = optionDesc
+            { optionAssignmentParent = scope
+            , optionAssignmentOption = optionDesc
             , optionAssignmentValue = valueDesc
             })
 
@@ -440,7 +451,7 @@ compileParam scope (name, typeExp, defaultValue) = do
 
 compileFile name decls =
     feedback (\desc -> do
-        (members, memberMap, options) <- compileChildDecls (DescFile desc) decls
+        (members, memberMap, options, statements) <- compileChildDecls (DescFile desc) decls
         requireNoDuplicateNames decls
         return FileDesc
             { fileName = name
@@ -451,11 +462,17 @@ compileFile name decls =
             , fileStructs    = [d | DescStruct    d <- members]
             , fileInterfaces = [d | DescInterface d <- members]
             , fileOptions = options
-            , fileMembers = members
             , fileMemberMap = memberMap
             , fileImportMap = undefined
+            , fileStatements = statements
             })
 
 parseAndCompileFile filename text = result where
     (decls, parseErrors) = parseFile filename text
+    -- Here we're doing the copmile step even if there were errors in parsing, and just combining
+    -- all the errors together.  This may allow the user to fix more errors per compiler iteration,
+    -- but it might also be confusing if a parse error causes a subsequent compile error, especially
+    -- if the compile error ends up being on a line before the parse error (e.g. there's a parse
+    -- error in a type definition, causing a not-defined error on a field trying to use that type).
+    -- TODO:  Re-evaluate after getting some experience on whether this is annoing.
     result = statusAddErrors parseErrors (compileFile filename decls)
