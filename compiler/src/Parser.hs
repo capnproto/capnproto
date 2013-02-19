@@ -128,7 +128,7 @@ nameWithOrdinal maxNumber = do
     name <- located identifier
     atSign
     ordinal <- located literalInt
-    if locatedValue ordinal > maxNumber - 32
+    if locatedValue ordinal > maxNumber - 32 && locatedValue ordinal <= maxNumber
         then exclamationPoint
          <|> failNonFatal (locatedPos ordinal)
                  (printf "%d is nearing maximum of %d.  Be sure to plan for future extensibility \
