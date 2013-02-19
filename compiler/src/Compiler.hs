@@ -33,6 +33,7 @@ import Data.Maybe(mapMaybe)
 import Text.Parsec.Pos(SourcePos, newPos)
 import Text.Parsec.Error(ParseError, newErrorMessage, Message(Message, Expect))
 import Text.Printf(printf)
+import Util(delimit)
 
 ------------------------------------------------------------------------------------------
 -- Error helpers
@@ -289,7 +290,17 @@ requireNoDuplicateNames decls = Active () (loop (List.sort locatedNames)) where
 
 fieldInUnion name f = case fieldUnion f of
     Nothing -> False
-    Just x -> (unionName x) == name
+    Just x -> unionName x == name
+
+requireNoMoreThanOneFieldNumberLessThan name pos num fields = Active () errors where
+    retroFields = [fieldName f | f <- fields, fieldNumber f < num]
+    message = printf "No more than one field in a union may have a number less than the \
+                     \union's number, as it is not possible to retroactively unionize fields that \
+                     \had been separate.  The following fields of union '%s' have lower numbers: %s"
+                     name (delimit ", " retroFields)
+    errors = if length retroFields <= 1
+        then []
+        else [newErrorMessage (Message message) pos]
 
 ------------------------------------------------------------------------------------------
 
@@ -378,6 +389,7 @@ compileDecl scope (StructDecl (Located _ name) decls) =
             { structName = name
             , structParent = scope
             , structFields           = [d | DescField     d <- members]
+            , structUnions           = [d | DescUnion     d <- members]
             , structNestedAliases    = [d | DescAlias     d <- members]
             , structNestedConstants  = [d | DescConstant  d <- members]
             , structNestedEnums      = [d | DescEnum      d <- members]
@@ -388,14 +400,16 @@ compileDecl scope (StructDecl (Located _ name) decls) =
             , structStatements = statements
             })))
 
-compileDecl (DescStruct parent) (UnionDecl (Located _ name) (Located _ number) decls) =
+compileDecl (DescStruct parent) (UnionDecl (Located _ name) (Located numPos number) decls) =
     CompiledMemberStatus name (feedback (\desc -> do
         (_, _, options, statements) <- compileChildDecls desc decls
+        fields <- return [f | f <- structFields parent, fieldInUnion name f]
+        requireNoMoreThanOneFieldNumberLessThan name numPos number fields
         return (DescUnion UnionDesc
             { unionName = name
             , unionParent = parent
             , unionNumber = number
-            , unionFields = [f | f <- structFields parent, fieldInUnion name f]
+            , unionFields = fields
             , unionOptions = options
             , unionStatements = statements
             })))

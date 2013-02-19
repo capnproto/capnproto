@@ -216,6 +216,7 @@ data StructDesc = StructDesc
     { structName :: String
     , structParent :: Desc
     , structFields :: [FieldDesc]
+    , structUnions :: [UnionDesc]
     , structNestedAliases :: [AliasDesc]
     , structNestedConstants :: [ConstantDesc]
     , structNestedEnums :: [EnumDesc]
