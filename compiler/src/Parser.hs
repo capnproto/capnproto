@@ -24,8 +24,11 @@
 module Parser (parseFile) where
 
 import Text.Parsec hiding (tokens)
+import Text.Parsec.Error(newErrorMessage, Message(Message))
+import Text.Printf(printf)
 import Token
 import Grammar
+import Semantics(maxFieldNumber, maxMethodNumber)
 import Lexer (lexer)
 import Control.Monad.Identity
 
@@ -43,6 +46,7 @@ tokenErrorString Colon = "\":\""
 tokenErrorString Period = "\".\""
 tokenErrorString EqualsSign = "\"=\""
 tokenErrorString MinusSign = "\"-\""
+tokenErrorString ExclamationPoint = "\"!\""
 tokenErrorString InKeyword = "keyword \"in\""
 tokenErrorString OfKeyword = "keyword \"of\""
 tokenErrorString AsKeyword = "keyword \"as\""
@@ -84,6 +88,7 @@ colon = tokenParser (matchSimpleToken Colon) <?> "\":\""
 period = tokenParser (matchSimpleToken Period) <?> "\".\""
 equalsSign = tokenParser (matchSimpleToken EqualsSign) <?> "\"=\""
 minusSign = tokenParser (matchSimpleToken MinusSign) <?> "\"=\""
+exclamationPoint = tokenParser (matchSimpleToken ExclamationPoint) <?> "\"!\""
 inKeyword = tokenParser (matchSimpleToken InKeyword) <?> "\"in\""
 importKeyword = tokenParser (matchSimpleToken ImportKeyword) <?> "\"import\""
 usingKeyword = tokenParser (matchSimpleToken UsingKeyword) <?> "\"using\""
@@ -118,11 +123,21 @@ typeExpression = do
     suffixes <- option [] (parenthesizedList typeExpression)
     return (TypeExpression name suffixes)
 
-nameWithOrdinal :: TokenParser (Located String, Located Integer)
-nameWithOrdinal = do
+nameWithOrdinal :: Integer -> TokenParser (Located String, Located Integer)
+nameWithOrdinal maxNumber = do
     name <- located identifier
     atSign
     ordinal <- located literalInt
+    if locatedValue ordinal > maxNumber - 32
+        then exclamationPoint
+         <|> failNonFatal (locatedPos ordinal)
+                 (printf "%d is nearing maximum of %d.  Be sure to plan for future extensibility \
+                         \before you run out of numbers, e.g. by declaring a new nested type which \
+                         \can hold future declarations.  To acknowledge this warning, add an \
+                         \exclamation point after the number, i.e.:  %s@%d!"
+                         (locatedValue ordinal) maxNumber (locatedValue name)
+                         (locatedValue ordinal))
+        else optional exclamationPoint
     return (name, ordinal)
 
 topLine :: Maybe [Located Statement] -> TokenParser Declaration
@@ -182,7 +197,7 @@ structLine (Just statements) = typeDecl statements <|> unionDecl statements <|> 
 
 unionDecl statements = do
     unionKeyword
-    (name, ordinal) <- nameWithOrdinal
+    (name, ordinal) <- nameWithOrdinal maxFieldNumber
     children <- parseBlock unionLine statements
     return (UnionDecl name ordinal children)
 
@@ -191,7 +206,7 @@ unionLine Nothing = optionDecl <|> fieldDecl []
 unionLine (Just statements) = fieldDecl statements
 
 fieldDecl statements = do
-    (name, ordinal) <- nameWithOrdinal
+    (name, ordinal) <- nameWithOrdinal maxFieldNumber
     union <- optionMaybe (inKeyword >> located identifier)
     colon
     t <- typeExpression
@@ -232,7 +247,7 @@ interfaceLine Nothing = optionDecl <|> constantDecl <|> methodDecl []
 interfaceLine (Just statements) = typeDecl statements <|> methodDecl statements
 
 methodDecl statements = do
-    (name, ordinal) <- nameWithOrdinal
+    (name, ordinal) <- nameWithOrdinal maxMethodNumber
     params <- parenthesizedList paramDecl
     colon
     t <- typeExpression
@@ -260,6 +275,10 @@ optionDecl = do
 extractErrors :: Either ParseError (a, [ParseError]) -> [ParseError]
 extractErrors (Left err) = [err]
 extractErrors (Right (_, errors)) = errors
+
+failNonFatal :: SourcePos -> String -> TokenParser ()
+failNonFatal pos msg = modifyState (newError:) where
+    newError = newErrorMessage (Message msg) pos
 
 parseList parser items = finish where
     results = map (parseCollectingErrors parser) items

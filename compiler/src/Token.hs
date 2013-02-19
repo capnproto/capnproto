@@ -48,6 +48,7 @@ data Token = Identifier String
            | Period
            | EqualsSign
            | MinusSign
+           | ExclamationPoint
            | InKeyword
            | OfKeyword
            | AsKeyword

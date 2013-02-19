@@ -93,6 +93,7 @@ token = keyword
     <|> liftM (const Period)     (symbol ".")
     <|> liftM (const EqualsSign) (symbol "=")
     <|> liftM (const MinusSign)  (symbol "-")
+    <|> liftM (const ExclamationPoint) (symbol "!")
     <?> "token"
 
 locatedToken = located token

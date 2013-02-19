@@ -33,7 +33,8 @@ import Text.Printf(printf)
 import Control.Monad(join)
 import Util(delimit)
 
-maxFieldNumber = 255
+maxFieldNumber = 255 :: Integer
+maxMethodNumber = 65535 :: Integer
 
 type ByteString = [Word8]
 
