@@ -33,6 +33,7 @@ import Token
 keywords =
     [ (InKeyword, "in")
     , (OfKeyword, "of")
+    , (OnKeyword, "on")
     , (AsKeyword, "as")
     , (WithKeyword, "with")
     , (FromKeyword, "from")

@@ -50,7 +50,8 @@ data Token = Identifier String
            | MinusSign
            | ExclamationPoint
            | InKeyword
-           | OfKeyword
+           | OfKeyword    -- We reserve some common, short English words for use as future keywords.
+           | OnKeyword
            | AsKeyword
            | WithKeyword
            | FromKeyword
