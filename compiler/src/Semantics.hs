@@ -33,6 +33,8 @@ import Text.Printf(printf)
 import Control.Monad(join)
 import Util(delimit)
 
+maxFieldNumber = 255
+
 type ByteString = [Word8]
 
 data Desc = DescFile FileDesc
@@ -41,6 +43,7 @@ data Desc = DescFile FileDesc
           | DescEnum EnumDesc
           | DescEnumValue EnumValueDesc
           | DescStruct StructDesc
+          | DescUnion UnionDesc
           | DescField FieldDesc
           | DescInterface InterfaceDesc
           | DescMethod MethodDesc
@@ -54,6 +57,7 @@ descName (DescConstant  d) = constantName d
 descName (DescEnum      d) = enumName d
 descName (DescEnumValue d) = enumValueName d
 descName (DescStruct    d) = structName d
+descName (DescUnion     d) = unionName d
 descName (DescField     d) = fieldName d
 descName (DescInterface d) = interfaceName d
 descName (DescMethod    d) = methodName d
@@ -65,11 +69,12 @@ descParent (DescFile      _) = error "File descriptor has no parent."
 descParent (DescAlias     d) = aliasParent d
 descParent (DescConstant  d) = constantParent d
 descParent (DescEnum      d) = enumParent d
-descParent (DescEnumValue d) = enumValueParent d
+descParent (DescEnumValue d) = DescEnum (enumValueParent d)
 descParent (DescStruct    d) = structParent d
-descParent (DescField     d) = fieldParent d
+descParent (DescUnion     d) = DescStruct (unionParent d)
+descParent (DescField     d) = DescStruct (fieldParent d)
 descParent (DescInterface d) = interfaceParent d
-descParent (DescMethod    d) = methodParent d
+descParent (DescMethod    d) = DescInterface (methodParent d)
 descParent (DescOption    d) = optionParent d
 descParent (DescBuiltinType _) = error "Builtin type has no parent."
 descParent DescBuiltinList = error "Builtin type has no parent."
@@ -200,7 +205,7 @@ data EnumDesc = EnumDesc
 
 data EnumValueDesc = EnumValueDesc
     { enumValueName :: String
-    , enumValueParent :: Desc
+    , enumValueParent :: EnumDesc
     , enumValueNumber :: Integer
     , enumValueOptions :: OptionMap
     , enumValueStatements :: [CompiledStatement]
@@ -220,10 +225,20 @@ data StructDesc = StructDesc
     , structStatements :: [CompiledStatement]
     }
 
+data UnionDesc = UnionDesc
+    { unionName :: String
+    , unionParent :: StructDesc
+    , unionNumber :: Integer
+    , unionFields :: [FieldDesc]
+    , unionOptions :: OptionMap
+    , unionStatements :: [CompiledStatement]
+    }
+
 data FieldDesc = FieldDesc
     { fieldName :: String
-    , fieldParent :: Desc
+    , fieldParent :: StructDesc
     , fieldNumber :: Integer
+    , fieldUnion :: Maybe UnionDesc
     , fieldType :: TypeDesc
     , fieldDefaultValue :: Maybe ValueDesc
     , fieldOptions :: OptionMap
@@ -246,7 +261,7 @@ data InterfaceDesc = InterfaceDesc
 
 data MethodDesc = MethodDesc
     { methodName :: String
-    , methodParent :: Desc
+    , methodParent :: InterfaceDesc
     , methodNumber :: Integer
     , methodParams :: [(String, TypeDesc, Maybe ValueDesc)]
     , methodReturnType :: TypeDesc
@@ -291,22 +306,27 @@ descToCode indent (DescEnumValue desc) = printf "%s%s = %d%s" indent
 descToCode indent (DescStruct desc) = printf "%sstruct %s%s" indent
     (structName desc)
     (blockCode indent (structStatements desc))
-descToCode indent (DescField desc) = printf "%s%s@%d: %s%s%s" indent
+descToCode indent (DescField desc) = printf "%s%s@%d%s: %s%s%s" indent
     (fieldName desc) (fieldNumber desc)
-    (typeName (fieldParent desc) (fieldType desc))
+    (case fieldUnion desc of { Nothing -> ""; Just u -> " in " ++ unionName u})
+    (typeName (DescStruct (fieldParent desc)) (fieldType desc))
     (case fieldDefaultValue desc of { Nothing -> ""; Just v -> " = " ++ valueString v; })
     (maybeBlockCode indent $ fieldStatements desc)
+descToCode indent (DescUnion desc) = printf "%sunion %s@%d%s" indent
+    (unionName desc) (unionNumber desc)
+    (maybeBlockCode indent $ unionStatements desc)
 descToCode indent (DescInterface desc) = printf "%sinterface %s%s" indent
     (interfaceName desc)
     (blockCode indent (interfaceStatements desc))
 descToCode indent (DescMethod desc) = printf "%s%s@%d(%s): %s%s" indent
     (methodName desc) (methodNumber desc)
     (delimit ", " (map paramToCode (methodParams desc)))
-    (typeName (methodParent desc) (methodReturnType desc))
+    (typeName scope (methodReturnType desc))
     (maybeBlockCode indent $ methodStatements desc) where
-        paramToCode (name, t, Nothing) = printf "%s: %s" name (typeName (methodParent desc) t)
+        scope = DescInterface (methodParent desc)
+        paramToCode (name, t, Nothing) = printf "%s: %s" name (typeName scope t)
         paramToCode (name, t, Just v) = printf "%s: %s = %s"
-            name (typeName (methodParent desc) t) (valueString v)
+            name (typeName scope t) (valueString v)
 descToCode _ (DescOption _) = error "options not implemented"
 descToCode _ (DescBuiltinType _) = error "Can't print code for builtin type."
 descToCode _ DescBuiltinList = error "Can't print code for builtin type."

@@ -49,8 +49,9 @@ data Declaration = AliasDecl (Located String) DeclName
                  | EnumDecl (Located String) [Declaration]
                  | EnumValueDecl (Located String) (Located Integer) [Declaration]
                  | StructDecl (Located String) [Declaration]
-                 | FieldDecl (Located String) (Located Integer)
+                 | FieldDecl (Located String) (Located Integer) (Maybe (Located String))
                              TypeExpression (Maybe (Located FieldValue)) [Declaration]
+                 | UnionDecl (Located String) (Located Integer) [Declaration]
                  | InterfaceDecl (Located String) [Declaration]
                  | MethodDecl (Located String) (Located Integer)
                               [(String, TypeExpression, Maybe (Located FieldValue))]
@@ -59,12 +60,13 @@ data Declaration = AliasDecl (Located String) DeclName
                  deriving (Show)
 
 declarationName :: Declaration -> Maybe (Located String)
-declarationName (AliasDecl n _)        = Just n
-declarationName (ConstantDecl n _ _)   = Just n
-declarationName (EnumDecl n _)         = Just n
-declarationName (EnumValueDecl n _ _)  = Just n
-declarationName (StructDecl n _)       = Just n
-declarationName (FieldDecl n _ _ _ _)  = Just n
-declarationName (InterfaceDecl n _)    = Just n
-declarationName (MethodDecl n _ _ _ _) = Just n
-declarationName (OptionDecl _ _)       = Nothing
+declarationName (AliasDecl n _)         = Just n
+declarationName (ConstantDecl n _ _)    = Just n
+declarationName (EnumDecl n _)          = Just n
+declarationName (EnumValueDecl n _ _)   = Just n
+declarationName (StructDecl n _)        = Just n
+declarationName (FieldDecl n _ _ _ _ _) = Just n
+declarationName (UnionDecl n _ _)       = Just n
+declarationName (InterfaceDecl n _)     = Just n
+declarationName (MethodDecl n _ _ _ _)  = Just n
+declarationName (OptionDecl _ _)        = Nothing

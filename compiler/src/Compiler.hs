@@ -251,19 +251,19 @@ compileType scope (TypeExpression n (param:moreParams)) = do
 ------------------------------------------------------------------------------------------
 
 requireSequentialNumbering :: String -> [Located Integer] -> Status ()
-requireSequentialNumbering kind items = Active () (loop 0 sortedItems) where
+requireSequentialNumbering kind items = Active () (loop undefined (-1) sortedItems) where
     sortedItems = List.sort items
-    loop _ [] = []
-    loop expected (Located pos num:rest) = result where
-        rest' = loop (num + 1) rest
-        result = if num == expected
-            then rest'
-            else err:rest' where
-                err = newErrorMessage (Message message) pos
-                message = printf "Skipped number %d.  %s must be numbered sequentially starting \
-                                 \from zero." expected kind
-
-maxFieldNumber = 1023
+    loop _ _ [] = []
+    loop _ prev (Located pos num:rest) | num == prev + 1 = loop pos num rest
+    loop prevPos prev (Located pos num:rest) | num == prev = err1:err2:loop pos num rest where
+        err1 = newErrorMessage (Message message) prevPos
+        err2 = newErrorMessage (Message message) pos
+        message = printf "Duplicate number %d.  %s must be numbered uniquely within their scope."
+            num kind
+    loop _ prev (Located pos num:rest) = err:loop pos num rest where
+        err = newErrorMessage (Message message) pos
+        message = printf "Skipped number %d.  %s must be numbered sequentially starting \
+                         \from zero." (prev + 1) kind
 
 requireFieldNumbersInRange fieldNums =
     Active () [ fieldNumError num pos | Located pos num <- fieldNums, num > maxFieldNumber ] where
@@ -287,13 +287,20 @@ requireNoDuplicateNames decls = Active () (loop (List.sort locatedNames)) where
     dupError val = newErrorMessage (Message message) where
         message = printf "Duplicate declaration \"%s\"." val
 
+fieldInUnion name f = case fieldUnion f of
+    Nothing -> False
+    Just x -> (unionName x) == name
+
 ------------------------------------------------------------------------------------------
 
+-- For CompiledMemberStatus, the second parameter contains members that should be inserted into the
+-- parent's map, e.g. fields defined in a union which should be considered members of the parent
+-- struct as well.  Usually (except in the case of unions) this map is empty.
 data CompiledStatementStatus = CompiledMemberStatus String (Status Desc)
                              | CompiledOptionStatus (Status OptionAssignmentDesc)
 
 toCompiledStatement :: CompiledStatementStatus -> Maybe CompiledStatement
-toCompiledStatement (CompiledMemberStatus name (Active desc _)) = Just (CompiledMember desc)
+toCompiledStatement (CompiledMemberStatus _ (Active desc _)) = Just (CompiledMember desc)
 toCompiledStatement (CompiledOptionStatus (Active desc _)) = Just (CompiledOption desc)
 toCompiledStatement _ = Nothing
 
@@ -346,22 +353,25 @@ compileDecl scope (EnumDecl (Located _ name) decls) =
             , enumStatements = statements
             })))
 
-compileDecl scope (EnumValueDecl (Located _ name) (Located _ number) decls) =
+compileDecl (DescEnum parent) (EnumValueDecl (Located _ name) (Located _ number) decls) =
     CompiledMemberStatus name (feedback (\desc -> do
         (_, _, options, statements) <- compileChildDecls desc decls
         return (DescEnumValue EnumValueDesc
             { enumValueName = name
-            , enumValueParent = scope
+            , enumValueParent = parent
             , enumValueNumber = number
             , enumValueOptions = options
             , enumValueStatements = statements
             })))
+compileDecl _ (EnumValueDecl (Located pos name) _ _) =
+    CompiledMemberStatus name (makeError pos "Enum values can only appear inside enums.")
 
 compileDecl scope (StructDecl (Located _ name) decls) =
     CompiledMemberStatus name (feedback (\desc -> do
         (members, memberMap, options, statements) <- compileChildDecls desc decls
         requireNoDuplicateNames decls
-        fieldNums <- return [ num | FieldDecl _ num _ _ _ <- decls ]
+        fieldNums <- return ([ num | FieldDecl _ num _ _ _ _ <- decls ] ++
+                             [ num | UnionDecl _ num _ <- decls ])
         requireSequentialNumbering "Fields" fieldNums
         requireFieldNumbersInRange fieldNums
         return (DescStruct StructDesc
@@ -378,8 +388,31 @@ compileDecl scope (StructDecl (Located _ name) decls) =
             , structStatements = statements
             })))
 
-compileDecl scope (FieldDecl (Located _ name) (Located _ number) typeExp defaultValue decls) =
+compileDecl (DescStruct parent) (UnionDecl (Located _ name) (Located _ number) decls) =
     CompiledMemberStatus name (feedback (\desc -> do
+        (_, _, options, statements) <- compileChildDecls desc decls
+        return (DescUnion UnionDesc
+            { unionName = name
+            , unionParent = parent
+            , unionNumber = number
+            , unionFields = [f | f <- structFields parent, fieldInUnion name f]
+            , unionOptions = options
+            , unionStatements = statements
+            })))
+compileDecl _ (UnionDecl (Located pos name) _ _) =
+    CompiledMemberStatus name (makeError pos "Unions can only appear inside structs.")
+
+compileDecl scope@(DescStruct parent)
+            (FieldDecl (Located _ name) (Located _ number) union typeExp defaultValue decls) =
+    CompiledMemberStatus name (feedback (\desc -> do
+        unionDesc <- case union of
+            Nothing -> return Nothing
+            Just (Located p n) -> do
+                udesc <- maybeError (descMember n scope) p
+                    (printf "No union '%s' defined in '%s'." n (structName parent))
+                case udesc of
+                    DescUnion d -> return (Just d)
+                    _ -> makeError p (printf "'%s' is not a union." n)
         typeDesc <- compileType scope typeExp
         defaultDesc <- case defaultValue of
             Just (Located pos value) -> fmap Just (compileValue pos typeDesc value)
@@ -387,13 +420,16 @@ compileDecl scope (FieldDecl (Located _ name) (Located _ number) typeExp default
         (_, _, options, statements) <- compileChildDecls desc decls
         return (DescField FieldDesc
             { fieldName = name
-            , fieldParent = scope
+            , fieldParent = parent
             , fieldNumber = number
+            , fieldUnion = unionDesc
             , fieldType = typeDesc
             , fieldDefaultValue = defaultDesc
             , fieldOptions = options
             , fieldStatements = statements
             })))
+compileDecl _ (FieldDecl (Located pos name) _ _ _ _ _) =
+    CompiledMemberStatus name (makeError pos "Fields can only appear inside structs.")
 
 compileDecl scope (InterfaceDecl (Located _ name) decls) =
     CompiledMemberStatus name (feedback (\desc -> do
@@ -414,20 +450,23 @@ compileDecl scope (InterfaceDecl (Located _ name) decls) =
             , interfaceStatements = statements
             })))
 
-compileDecl scope (MethodDecl (Located _ name) (Located _ number) params returnType decls) =
+compileDecl scope@(DescInterface parent)
+            (MethodDecl (Located _ name) (Located _ number) params returnType decls) =
     CompiledMemberStatus name (feedback (\desc -> do
         paramDescs <- doAll (map (compileParam scope) params)
         returnTypeDesc <- compileType scope returnType
         (_, _, options, statements) <- compileChildDecls desc decls
         return (DescMethod MethodDesc
             { methodName = name
-            , methodParent = scope
+            , methodParent = parent
             , methodNumber = number
             , methodParams = paramDescs
             , methodReturnType = returnTypeDesc
             , methodOptions = options
             , methodStatements = statements
             })))
+compileDecl _ (MethodDecl (Located pos name) _ _ _ _) =
+    CompiledMemberStatus name (makeError pos "Methods can only appear inside interfaces.")
 
 compileDecl scope (OptionDecl name (Located valuePos value)) =
     CompiledOptionStatus (do

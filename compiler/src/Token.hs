@@ -48,11 +48,17 @@ data Token = Identifier String
            | Period
            | EqualsSign
            | MinusSign
+           | InKeyword
+           | OfKeyword
+           | AsKeyword
+           | WithKeyword
+           | FromKeyword
            | ImportKeyword
            | UsingKeyword
            | ConstKeyword
            | EnumKeyword
            | StructKeyword
+           | UnionKeyword
            | InterfaceKeyword
            | OptionKeyword
            deriving (Show, Eq)

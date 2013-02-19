@@ -43,13 +43,19 @@ tokenErrorString Colon = "\":\""
 tokenErrorString Period = "\".\""
 tokenErrorString EqualsSign = "\"=\""
 tokenErrorString MinusSign = "\"-\""
-tokenErrorString ImportKeyword = "\"import\""
-tokenErrorString UsingKeyword = "\"using\""
-tokenErrorString ConstKeyword = "\"const\""
-tokenErrorString EnumKeyword = "\"enum\""
-tokenErrorString StructKeyword = "\"struct\""
-tokenErrorString InterfaceKeyword = "\"interface\""
-tokenErrorString OptionKeyword = "\"option\""
+tokenErrorString InKeyword = "keyword \"in\""
+tokenErrorString OfKeyword = "keyword \"of\""
+tokenErrorString AsKeyword = "keyword \"as\""
+tokenErrorString WithKeyword = "keyword \"with\""
+tokenErrorString FromKeyword = "keyword \"from\""
+tokenErrorString ImportKeyword = "keyword \"import\""
+tokenErrorString UsingKeyword = "keyword \"using\""
+tokenErrorString ConstKeyword = "keyword \"const\""
+tokenErrorString EnumKeyword = "keyword \"enum\""
+tokenErrorString StructKeyword = "keyword \"struct\""
+tokenErrorString UnionKeyword = "keyword \"union\""
+tokenErrorString InterfaceKeyword = "keyword \"interface\""
+tokenErrorString OptionKeyword = "keyword \"option\""
 
 type TokenParser = Parsec [Located Token] [ParseError]
 
@@ -78,11 +84,13 @@ colon = tokenParser (matchSimpleToken Colon) <?> "\":\""
 period = tokenParser (matchSimpleToken Period) <?> "\".\""
 equalsSign = tokenParser (matchSimpleToken EqualsSign) <?> "\"=\""
 minusSign = tokenParser (matchSimpleToken MinusSign) <?> "\"=\""
+inKeyword = tokenParser (matchSimpleToken InKeyword) <?> "\"in\""
 importKeyword = tokenParser (matchSimpleToken ImportKeyword) <?> "\"import\""
 usingKeyword = tokenParser (matchSimpleToken UsingKeyword) <?> "\"using\""
 constKeyword = tokenParser (matchSimpleToken ConstKeyword) <?> "\"const\""
 enumKeyword = tokenParser (matchSimpleToken EnumKeyword) <?> "\"enum\""
 structKeyword = tokenParser (matchSimpleToken StructKeyword) <?> "\"struct\""
+unionKeyword = tokenParser (matchSimpleToken UnionKeyword) <?> "\"union\""
 interfaceKeyword = tokenParser (matchSimpleToken InterfaceKeyword) <?> "\"interface\""
 optionKeyword = tokenParser (matchSimpleToken OptionKeyword) <?> "\"option\""
 
@@ -109,6 +117,13 @@ typeExpression = do
     name <- declName
     suffixes <- option [] (parenthesizedList typeExpression)
     return (TypeExpression name suffixes)
+
+nameWithOrdinal :: TokenParser (Located String, Located Integer)
+nameWithOrdinal = do
+    name <- located identifier
+    atSign
+    ordinal <- located literalInt
+    return (name, ordinal)
 
 topLine :: Maybe [Located Statement] -> TokenParser Declaration
 topLine Nothing = optionDecl <|> aliasDecl <|> constantDecl
@@ -162,18 +177,27 @@ structDecl statements = do
     return (StructDecl name children)
 
 structLine :: Maybe [Located Statement] -> TokenParser Declaration
-structLine Nothing = optionDecl <|> constantDecl <|> fieldDecl []
-structLine (Just statements) = typeDecl statements <|> fieldDecl statements
+structLine Nothing = optionDecl <|> constantDecl <|> unionDecl [] <|> fieldDecl []
+structLine (Just statements) = typeDecl statements <|> unionDecl statements <|> fieldDecl statements
+
+unionDecl statements = do
+    unionKeyword
+    (name, ordinal) <- nameWithOrdinal
+    children <- parseBlock unionLine statements
+    return (UnionDecl name ordinal children)
+
+unionLine :: Maybe [Located Statement] -> TokenParser Declaration
+unionLine Nothing = optionDecl <|> fieldDecl []
+unionLine (Just statements) = fieldDecl statements
 
 fieldDecl statements = do
-    name <- located identifier
-    atSign
-    ordinal <- located literalInt
+    (name, ordinal) <- nameWithOrdinal
+    union <- optionMaybe (inKeyword >> located identifier)
     colon
     t <- typeExpression
     value <- optionMaybe (equalsSign >> located fieldValue)
     children <- parseBlock fieldLine statements
-    return (FieldDecl name ordinal t value children)
+    return (FieldDecl name ordinal union t value children)
 
 negativeFieldValue = liftM (IntegerFieldValue . negate) literalInt
                  <|> liftM (FloatFieldValue . negate) literalFloat
@@ -208,9 +232,7 @@ interfaceLine Nothing = optionDecl <|> constantDecl <|> methodDecl []
 interfaceLine (Just statements) = typeDecl statements <|> methodDecl statements
 
 methodDecl statements = do
-    name <- located identifier
-    atSign
-    ordinal <- located literalInt
+    (name, ordinal) <- nameWithOrdinal
     params <- parenthesizedList paramDecl
     colon
     t <- typeExpression

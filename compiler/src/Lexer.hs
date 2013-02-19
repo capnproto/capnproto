@@ -31,11 +31,17 @@ import Text.Parsec.Language (emptyDef)
 import Token
 
 keywords =
-    [ (ImportKeyword, "import")
+    [ (InKeyword, "in")
+    , (OfKeyword, "of")
+    , (AsKeyword, "as")
+    , (WithKeyword, "with")
+    , (FromKeyword, "from")
+    , (ImportKeyword, "import")
     , (UsingKeyword, "using")
     , (ConstKeyword, "const")
     , (EnumKeyword, "enum")
     , (StructKeyword, "struct")
+    , (UnionKeyword, "union")
     , (InterfaceKeyword, "interface")
     , (OptionKeyword, "option")
     ]
