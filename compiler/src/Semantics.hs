@@ -33,8 +33,13 @@ import Text.Printf(printf)
 import Control.Monad(join)
 import Util(delimit)
 
-maxFieldNumber = 255 :: Integer
-maxMethodNumber = 65535 :: Integer
+-- Field counts are 8-bit, therefore there cannot be more than 255 fields, therefore the max field
+-- number is 254.
+maxFieldNumber = 254 :: Integer
+
+-- Limiting method counts is not as important technically, but obviously it would be insane to have
+-- anywhere near 2^16 methods.
+maxMethodNumber = 65534 :: Integer
 
 type ByteString = [Word8]
 
