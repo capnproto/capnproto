@@ -22,12 +22,12 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "wire-format.h"
-#include "arena.h"
+#include "message.h"
 #include "descriptor.h"
 
 namespace capnproto {
-
 namespace internal {
+
 namespace debug {
 
 bool fieldIsStruct(const StructDescriptor* descriptor, int fieldNumber, int refIndex) {
@@ -91,7 +91,6 @@ bool elementsAreData(const ListDescriptor* descriptor, int bitSize) {
 }
 
 }  // namespace debug
-}  // namespace internal
 
 // =======================================================================================
 
@@ -125,8 +124,8 @@ struct WireReference {
     struct {
       WireValue<uint32_t> elementSizeAndCount;
 
-      CAPNPROTO_ALWAYS_INLINE(internal::FieldSize elementSize() const) {
-        return static_cast<internal::FieldSize>(elementSizeAndCount.get() >> 29);
+      CAPNPROTO_ALWAYS_INLINE(FieldSize elementSize() const) {
+        return static_cast<FieldSize>(elementSizeAndCount.get() >> 29);
       }
       CAPNPROTO_ALWAYS_INLINE(uint32_t elementCount() const) {
         return elementSizeAndCount.get() & 0x1fffffffu;
@@ -147,8 +146,7 @@ struct WireReference {
     offsetAndTag.set(offset | tag);
   }
 
-  CAPNPROTO_ALWAYS_INLINE(void setStruct(
-      const internal::StructDescriptor* descriptor, uint32_t offset)) {
+  CAPNPROTO_ALWAYS_INLINE(void setStruct(const StructDescriptor* descriptor, uint32_t offset)) {
     setTagAndOffset(STRUCT, offset);
     structRef.fieldCount.set(descriptor->fieldCount);
     structRef.dataSize.set(descriptor->dataSize);
@@ -157,7 +155,7 @@ struct WireReference {
   }
 
   CAPNPROTO_ALWAYS_INLINE(void setList(
-      const internal::ListDescriptor* descriptor, uint32_t elementCount, uint32_t offset)) {
+      const ListDescriptor* descriptor, uint32_t elementCount, uint32_t offset)) {
     setTagAndOffset(LIST, offset);
     CAPNPROTO_DEBUG_ASSERT((elementCount >> 29) == 0, "Lists are limited to 2**29 elements.");
     listRef.elementSizeAndCount.set(
@@ -190,61 +188,71 @@ static inline void* offsetPtr(void* ptr, int amount) {
   return reinterpret_cast<T*>(ptr) + amount;
 }
 
-struct WireHelpers {
-  static CAPNPROTO_ALWAYS_INLINE(void* allocate(
-      WireReference*& ref, Segment*& segment, uint32_t size)) {
-    void* ptr = segment->allocate(size);
+template <typename T>
+static inline T* takeFromAllocation(SegmentBuilder::Allocation& allocation, int count = 1) {
+  T* result = reinterpret_cast<T*>(allocation.ptr);
+  allocation.ptr = result + count;
+  allocation.offset += sizeof(T) * count;
+  return result;
+}
 
-    if (ptr == nullptr) {
+struct WireHelpers {
+  static CAPNPROTO_ALWAYS_INLINE(SegmentBuilder::Allocation allocate(
+      WireReference*& ref, SegmentBuilder*& segment, uint32_t size)) {
+    SegmentBuilder::Allocation allocation = segment->allocate(size);
+
+    if (allocation == nullptr) {
       // Need to allocate in a new segment.
 
       // Loop here just in case we ever make Segment::allocate() thread-safe -- in this case another
-      // thread could have grabbed the space between when we asked the arena for the segment and
+      // thread could have grabbed the space between when we asked the message for the segment and
       // when we asked the segment to allocate space.
       do {
-        segment = segment->getArena()->getSegmentWithAvailable(size + sizeof(WireReference));
-        ptr = segment->allocate(size + sizeof(WireReference));
-      } while (CAPNPROTO_EXPECT_FALSE(ptr == nullptr));
+        segment = segment->getMessage()->getSegmentWithAvailable(size + sizeof(WireReference));
+        allocation = segment->allocate(size + sizeof(WireReference));
+      } while (CAPNPROTO_EXPECT_FALSE(allocation == nullptr));
 
-      ref->setFar(segment->getSegmentId(), segment->getOffset(ptr));
-      ref = reinterpret_cast<WireReference*>(ptr);
+      ref->setFar(segment->getSegmentId(), allocation.offset);
+      ref = takeFromAllocation<WireReference>(allocation);
 
       // Allocated space follows new reference.
-      return ref + 1;
+      return allocation;
     } else {
-      return ptr;
+      return allocation;
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(void followFars(WireReference*& ref, Segment*& segment)) {
+  static CAPNPROTO_ALWAYS_INLINE(void followFars(WireReference*& ref, SegmentBuilder*& segment)) {
     if (ref->tag() == WireReference::FAR) {
-      segment = segment->getArena()->getWritableSegment(ref->farRef.segmentId.get());
+      segment = segment->getMessage()->getSegment(ref->farRef.segmentId.get());
       ref = reinterpret_cast<WireReference*>(segment->getPtrUnchecked(ref->offset()));
     }
   }
 
   static CAPNPROTO_ALWAYS_INLINE(bool followFars(
-      const WireReference*& ref, const Segment*& segment)) {
+      const WireReference*& ref, SegmentReader*& segment)) {
     if (ref->tag() == WireReference::FAR) {
-      segment = segment->getArena()->getSegment(ref->farRef.segmentId.get());
+      segment = segment->getMessage()->tryGetSegment(ref->farRef.segmentId.get());
+      if (CAPNPROTO_EXPECT_FALSE(segment == nullptr)) {
+        return false;
+      }
       ref = reinterpret_cast<const WireReference*>(
           segment->getPtrChecked(ref->offset(), 0, sizeof(WireReference)));
-      return CAPNPROTO_EXPECT_TRUE(ref != nullptr);
+      return ref != nullptr;
     } else {
       return true;
     }
   }
 
   static CAPNPROTO_ALWAYS_INLINE(bool isStructCompatible(
-      const internal::StructDescriptor* descriptor, const WireReference* ref)) {
+      const StructDescriptor* descriptor, const WireReference* ref)) {
     if (ref->structRef.fieldCount.get() >= descriptor->fieldCount) {
       // The incoming struct has all of the fields that we know about.
       return ref->structRef.dataSize.get() >= descriptor->dataSize &&
              ref->structRef.refCount.get() >= descriptor->referenceCount;
     } else if (ref->structRef.fieldCount.get() > 0) {
       // We know about more fields than the struct has, and the struct is non-empty.
-      const internal::FieldDescriptor* field =
-          &descriptor->fields[ref->structRef.fieldCount.get() - 1];
+      const FieldDescriptor* field = &descriptor->fields[ref->structRef.fieldCount.get() - 1];
       return ref->structRef.dataSize.get() >= field->requiredDataSize &&
              ref->structRef.refCount.get() >= field->requiredReferenceSize;
     } else {
@@ -254,22 +262,22 @@ struct WireHelpers {
   }
 
   static CAPNPROTO_ALWAYS_INLINE(StructPtr initStructReference(
-      const internal::StructDescriptor* descriptor, WireReference* ref, Segment* segment)) {
+      const StructDescriptor* descriptor, WireReference* ref, SegmentBuilder* segment)) {
     if (ref->isNull()) {
       // Calculate the size of the struct.
       uint32_t size = (descriptor->dataSize + descriptor->referenceCount) * sizeof(uint64_t);
 
       // Allocate space for the new struct.
-      void* ptr = allocate(ref, segment, size);
+      SegmentBuilder::Allocation allocation = allocate(ref, segment, size);
 
       // Advance the pointer to point between the data and reference segments.
-      ptr = offsetPtr<uint64_t>(ptr, descriptor->dataSize);
+      takeFromAllocation<uint64_t>(allocation, descriptor->dataSize);
 
       // Initialize the reference.
-      ref->setStruct(descriptor, segment->getOffset(ptr));
+      ref->setStruct(descriptor, allocation.offset);
 
       // Build the StructPtr.
-      return StructPtr(descriptor, segment, ptr);
+      return StructPtr(descriptor, segment, allocation.ptr);
     } else {
       followFars(ref, segment);
 
@@ -287,45 +295,47 @@ struct WireHelpers {
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListPtr initListReference(
-      const internal::ListDescriptor* descriptor, WireReference* ref,
-      Segment* segment, uint32_t elementCount)) {
-    if (descriptor->elementSize == internal::FieldSize::STRUCT) {
-      const internal::StructDescriptor* elementDescriptor =
+      const ListDescriptor* descriptor, WireReference* ref,
+      SegmentBuilder* segment, uint32_t elementCount)) {
+    if (descriptor->elementSize == FieldSize::STRUCT) {
+      const StructDescriptor* elementDescriptor =
           descriptor->elementDescriptor->asStruct();
 
       // Allocate the list, prefixed by a single WireReference.
-      WireReference* structRef = reinterpret_cast<WireReference*>(
+      SegmentBuilder::Allocation allocation =
           allocate(ref, segment, sizeof(WireReference) +
-              elementDescriptor->wordSize() * elementCount * sizeof(uint64_t)));
-      void* ptr = offsetPtr<uint64_t>(structRef + 1, elementDescriptor->dataSize);
+              elementDescriptor->wordSize() * elementCount * sizeof(uint64_t));
 
       // Initialize the reference.
-      ref->setList(descriptor, elementCount, segment->getOffset(structRef));
+      ref->setList(descriptor, elementCount, allocation.offset);
+      WireReference* structRef = takeFromAllocation<WireReference>(allocation);
+
+      // Skip past the data segment of the first struct.
+      takeFromAllocation<uint64_t>(allocation, elementDescriptor->dataSize);
 
       // Initialize the struct reference.
-      structRef->setStruct(elementDescriptor, segment->getOffset(ptr));
+      structRef->setStruct(elementDescriptor, allocation.offset);
 
       // Build the ListPtr.
-      return ListPtr(descriptor, segment, ptr, elementCount);
+      return ListPtr(descriptor, segment, structRef, elementCount);
     } else {
       // Calculate size of the list.
       uint32_t size = divRoundingUp<uint32_t>(
           static_cast<uint32_t>(sizeInBits(descriptor->elementSize)) * elementCount, 8);
 
       // Allocate the list.
-      void* ptr = allocate(ref, segment, size);
+      SegmentBuilder::Allocation allocation = allocate(ref, segment, size);
 
       // Initialize the reference.
-      ref->setList(descriptor, elementCount, segment->getOffset(ptr));
+      ref->setList(descriptor, elementCount, allocation.offset);
 
       // Build the ListPtr.
-      return ListPtr(descriptor, segment, ptr, elementCount);
+      return ListPtr(descriptor, segment, allocation.ptr, elementCount);
     }
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListPtr getWritableListReference(
-      const internal::ListDescriptor* descriptor, WireReference* ref,
-      Segment* segment)) {
+      const ListDescriptor* descriptor, WireReference* ref, SegmentBuilder* segment)) {
     if (ref->isNull()) {
       return ListPtr(descriptor, segment, nullptr, 0);
     }
@@ -335,7 +345,7 @@ struct WireHelpers {
     CAPNPROTO_ASSERT(ref->tag() == WireReference::LIST,
         "Called getList{Field,Element}() but existing reference is not a list.");
 
-    if (descriptor->elementSize == internal::FieldSize::STRUCT) {
+    if (descriptor->elementSize == FieldSize::STRUCT) {
       WireReference* structRef = reinterpret_cast<WireReference*>(
           segment->getPtrUnchecked(ref->offset()));
       return ListPtr(descriptor, segment,
@@ -347,33 +357,33 @@ struct WireHelpers {
   }
 
   static CAPNPROTO_ALWAYS_INLINE(StructReadPtr readStructReference(
-      const internal::StructDescriptor* descriptor, const WireReference* ref,
-      const Segment* segment, int recursionLimit)) {
+      const StructDescriptor* descriptor, const WireReference* ref,
+      SegmentReader* segment, int recursionLimit)) {
     do {
       if (ref == nullptr || ref->isNull()) {
         break;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(recursionLimit == 0)) {
-        segment->getArena()->parseError(
+        segment->getMessage()->reportInvalidData(
             "Message is too deeply-nested or contains cycles.");
         break;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(!followFars(ref, segment))) {
-        segment->getArena()->parseError(
+        segment->getMessage()->reportInvalidData(
             "Message contains out-of-bounds far reference.");
         break;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(ref->tag() != WireReference::STRUCT)) {
-        segment->getArena()->parseError(
+        segment->getMessage()->reportInvalidData(
             "Message contains non-struct reference where struct reference was expected.");
         break;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(!isStructCompatible(descriptor, ref))) {
-        segment->getArena()->parseError(
+        segment->getMessage()->reportInvalidData(
             "Message contains struct that is too small for its field count.");
         break;
       }
@@ -383,7 +393,8 @@ struct WireHelpers {
           ref->structRef.refCount.get() * sizeof(WireReference));
 
       if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
-        segment->getArena()->parseError("Message contained out-of-bounds struct reference.");
+        segment->getMessage()->reportInvalidData(
+            "Message contained out-of-bounds struct reference.");
         break;
       }
 
@@ -395,38 +406,38 @@ struct WireHelpers {
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListReadPtr readListReference(
-      const internal::ListDescriptor* descriptor, const WireReference* ref, const Segment* segment,
-      int recursionLimit)) {
+      const ListDescriptor* descriptor, const WireReference* ref,
+      SegmentReader* segment, int recursionLimit)) {
     do {
       if (ref == nullptr || ref->isNull()) {
         break;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(recursionLimit == 0)) {
-        segment->getArena()->parseError(
+        segment->getMessage()->reportInvalidData(
             "Message is too deeply-nested or contains cycles.");
         break;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(!followFars(ref, segment))) {
-        segment->getArena()->parseError(
+        segment->getMessage()->reportInvalidData(
             "Message contains out-of-bounds far reference.");
         break;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(ref->tag() != WireReference::LIST)) {
-        segment->getArena()->parseError(
+        segment->getMessage()->reportInvalidData(
             "Message contains non-list reference where list reference was expected.");
         break;
       }
 
-      if (ref->listRef.elementSize() == internal::FieldSize::STRUCT) {
+      if (ref->listRef.elementSize() == FieldSize::STRUCT) {
         // A struct list reference actually points to a struct reference which in turn points to the
         // first struct in the list.
         const void* ptrPtr =
             segment->getPtrChecked(ref->offset(), 0, sizeof(WireReference));
         if (CAPNPROTO_EXPECT_FALSE(ptrPtr == nullptr)) {
-          segment->getArena()->parseError(
+          segment->getMessage()->reportInvalidData(
               "Message contains out-of-bounds list reference.");
           break;
         }
@@ -435,7 +446,7 @@ struct WireHelpers {
         ref = reinterpret_cast<const WireReference*>(ptrPtr);
 
         if (CAPNPROTO_EXPECT_FALSE(ref->tag() != WireReference::STRUCT)) {
-          segment->getArena()->parseError(
+          segment->getMessage()->reportInvalidData(
               "Message contains struct list reference that does not point to a struct reference.");
           break;
         }
@@ -447,7 +458,7 @@ struct WireHelpers {
             ref->structRef.refCount.get() * sizeof(WireReference) +
             step * (size - 1));
         if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
-          segment->getArena()->parseError(
+          segment->getMessage()->reportInvalidData(
               "Message contains out-of-bounds struct list reference.");
           break;
         }
@@ -461,31 +472,31 @@ struct WireHelpers {
         // Check whether the size is compatible.
         bool compatible = true;
         switch (descriptor->elementSize) {
-          case internal::FieldSize::BIT:
-          case internal::FieldSize::BYTE:
-          case internal::FieldSize::TWO_BYTES:
-          case internal::FieldSize::FOUR_BYTES:
-          case internal::FieldSize::EIGHT_BYTES:
+          case FieldSize::BIT:
+          case FieldSize::BYTE:
+          case FieldSize::TWO_BYTES:
+          case FieldSize::FOUR_BYTES:
+          case FieldSize::EIGHT_BYTES:
             compatible = ref->structRef.dataSize.get() > 0;
             break;
 
-          case internal::FieldSize::REFERENCE:
+          case FieldSize::REFERENCE:
             compatible = ref->structRef.refCount.get() > 0;
             break;
 
-          case internal::FieldSize::KEY_REFERENCE:
+          case FieldSize::KEY_REFERENCE:
             compatible = ref->structRef.dataSize.get() > 0 &&
                          ref->structRef.refCount.get() > 0;
             break;
 
-          case internal::FieldSize::STRUCT: {
+          case FieldSize::STRUCT: {
             compatible = isStructCompatible(descriptor->elementDescriptor->asStruct(), ref);
             break;
           }
         }
 
         if (CAPNPROTO_EXPECT_FALSE(!compatible)) {
-          segment->getArena()->parseError("A list had incompatible element type.");
+          segment->getMessage()->reportInvalidData("A list had incompatible element type.");
           break;
         }
 
@@ -501,24 +512,24 @@ struct WireHelpers {
                 implicit_cast<uint64_t>(ref->listRef.elementCount()) * step, 8));
 
         if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
-          segment->getArena()->parseError("Message contained out-of-bounds list reference.");
+          segment->getMessage()->reportInvalidData(
+              "Message contained out-of-bounds list reference.");
           break;
         }
 
         if (descriptor->elementSize == ref->listRef.elementSize()) {
           return ListReadPtr(descriptor, segment, ptr, ref->listRef.elementCount(),
                              sizeInBits(ref->listRef.elementSize()), 0, recursionLimit);
-        } else if (descriptor->elementSize == internal::FieldSize::STRUCT) {
+        } else if (descriptor->elementSize == FieldSize::STRUCT) {
           // We were expecting a struct, but we received a list of some other type.  Perhaps a
           // non-struct list was recently upgraded to a struct list, but the sender is using the
           // old version of the protocol.  We need to verify that the struct's first field matches
           // what the sender sent us.
-          const internal::StructDescriptor* elementDescriptor =
-              descriptor->elementDescriptor->asStruct();
+          const StructDescriptor* elementDescriptor = descriptor->elementDescriptor->asStruct();
           if (CAPNPROTO_EXPECT_FALSE(
               elementDescriptor->fieldCount == 0 ||
               elementDescriptor->fields[0].size != ref->listRef.elementSize())) {
-            segment->getArena()->parseError("A list had incompatible element type.");
+            segment->getMessage()->reportInvalidData("A list had incompatible element type.");
             break;
           }
 
@@ -528,21 +539,21 @@ struct WireHelpers {
           return ListReadPtr(descriptor, segment, ptr, ref->listRef.elementCount(),
                              sizeInBits(ref->listRef.elementSize()), 1, recursionLimit);
         } else {
-          segment->getArena()->parseError("A list had incompatible element type.");
+          segment->getMessage()->reportInvalidData("A list had incompatible element type.");
           break;
         }
       }
     } while (false);
 
     switch (descriptor->elementSize) {
-      case internal::FieldSize::REFERENCE:
-      case internal::FieldSize::KEY_REFERENCE:
-      case internal::FieldSize::STRUCT:
+      case FieldSize::REFERENCE:
+      case FieldSize::KEY_REFERENCE:
+      case FieldSize::STRUCT:
         return ListReadPtr(descriptor, segment, nullptr, descriptor->defaultCount, 0, 0,
             recursionLimit - 1);
       default:
         return ListReadPtr(descriptor, segment, descriptor->defaultData, descriptor->defaultCount,
-            internal::sizeInBits(descriptor->elementSize), 0, recursionLimit - 1);
+            sizeInBits(descriptor->elementSize), 0, recursionLimit - 1);
     }
   }
 };
@@ -612,21 +623,21 @@ ListPtr ListPtr::getListElementInternal(unsigned int index) const {
 
 ListReadPtr ListPtr::asReadPtr() const {
   return ListReadPtr(descriptor, segment, ptr, elementCount,
-      internal::sizeInBits(descriptor->elementSize),
-      descriptor->elementSize == internal::FieldSize::STRUCT
+      sizeInBits(descriptor->elementSize),
+      descriptor->elementSize == FieldSize::STRUCT
           ? descriptor->elementDescriptor->asStruct()->fieldCount : 0,
       1 << 30);
 }
 
 StructReadPtr ListReadPtr::getStructElementInternal(unsigned int index) const {
-  const internal::StructDescriptor* elementDescriptor;
+  const StructDescriptor* elementDescriptor;
   if (ptr == nullptr) {
     elementDescriptor = descriptor->defaultReferences()[index]->asStruct();
   } else {
     elementDescriptor = descriptor->elementDescriptor->asStruct();
 
     if (CAPNPROTO_EXPECT_FALSE(recursionLimit == 0)) {
-      segment->getArena()->parseError(
+      segment->getMessage()->reportInvalidData(
           "Message is too deeply-nested or contains cycles.");
     } else {
       uint64_t indexBit = static_cast<uint64_t>(index) * stepBits;
@@ -652,4 +663,5 @@ ListReadPtr ListReadPtr::getListElementInternal(unsigned int index, uint32_t siz
   }
 }
 
+}  // namespace internal
 }  // namespace capnproto
