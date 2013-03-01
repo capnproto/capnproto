@@ -261,7 +261,7 @@ struct WireHelpers {
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(StructPtr initStructReference(
+  static CAPNPROTO_ALWAYS_INLINE(StructBuilder initStructReference(
       const StructDescriptor* descriptor, WireReference* ref, SegmentBuilder* segment)) {
     if (ref->isNull()) {
       // Calculate the size of the struct.
@@ -276,8 +276,8 @@ struct WireHelpers {
       // Initialize the reference.
       ref->setStruct(descriptor, allocation.offset);
 
-      // Build the StructPtr.
-      return StructPtr(descriptor, segment, allocation.ptr);
+      // Build the StructBuilder.
+      return StructBuilder(descriptor, segment, allocation.ptr);
     } else {
       followFars(ref, segment);
 
@@ -290,11 +290,11 @@ struct WireHelpers {
       CAPNPROTO_ASSERT(ref->structRef.refCount == fieldDescriptor->referenceCount,
           "Trying to update struct with incorrect reference count.");
 
-      return StructPtr(descriptor, segment, segment->getPtrUnchecked(ref->offset()));
+      return StructBuilder(descriptor, segment, segment->getPtrUnchecked(ref->offset()));
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(ListPtr initListReference(
+  static CAPNPROTO_ALWAYS_INLINE(ListBuilder initListReference(
       const ListDescriptor* descriptor, WireReference* ref,
       SegmentBuilder* segment, uint32_t elementCount)) {
     if (descriptor->elementSize == FieldSize::STRUCT) {
@@ -316,8 +316,8 @@ struct WireHelpers {
       // Initialize the struct reference.
       structRef->setStruct(elementDescriptor, allocation.offset);
 
-      // Build the ListPtr.
-      return ListPtr(descriptor, segment, structRef, elementCount);
+      // Build the ListBuilder.
+      return ListBuilder(descriptor, segment, structRef, elementCount);
     } else {
       // Calculate size of the list.
       uint32_t size = divRoundingUp<uint32_t>(
@@ -329,15 +329,15 @@ struct WireHelpers {
       // Initialize the reference.
       ref->setList(descriptor, elementCount, allocation.offset);
 
-      // Build the ListPtr.
-      return ListPtr(descriptor, segment, allocation.ptr, elementCount);
+      // Build the ListBuilder.
+      return ListBuilder(descriptor, segment, allocation.ptr, elementCount);
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(ListPtr getWritableListReference(
+  static CAPNPROTO_ALWAYS_INLINE(ListBuilder getWritableListReference(
       const ListDescriptor* descriptor, WireReference* ref, SegmentBuilder* segment)) {
     if (ref->isNull()) {
-      return ListPtr(descriptor, segment, nullptr, 0);
+      return ListBuilder(descriptor, segment, nullptr, 0);
     }
 
     followFars(ref, segment);
@@ -348,15 +348,15 @@ struct WireHelpers {
     if (descriptor->elementSize == FieldSize::STRUCT) {
       WireReference* structRef = reinterpret_cast<WireReference*>(
           segment->getPtrUnchecked(ref->offset()));
-      return ListPtr(descriptor, segment,
+      return ListBuilder(descriptor, segment,
           segment->getPtrUnchecked(structRef->offset()), ref->listRef.elementCount());
     } else {
-      return ListPtr(descriptor, segment,
+      return ListBuilder(descriptor, segment,
           segment->getPtrUnchecked(ref->offset()), ref->listRef.elementCount());
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(StructReadPtr readStructReference(
+  static CAPNPROTO_ALWAYS_INLINE(StructReader readStructReference(
       const StructDescriptor* descriptor, const WireReference* ref,
       SegmentReader* segment, int recursionLimit)) {
     do {
@@ -398,14 +398,14 @@ struct WireHelpers {
         break;
       }
 
-      return StructReadPtr(descriptor, segment, ptr, descriptor->defaultData,
-                           ref->structRef.fieldCount.get(), 0, recursionLimit - 1);
+      return StructReader(descriptor, segment, ptr, descriptor->defaultData,
+                          ref->structRef.fieldCount.get(), 0, recursionLimit - 1);
     } while (false);
 
-    return StructReadPtr(descriptor, segment, nullptr, descriptor->defaultData, 0, 0, 0);
+    return StructReader(descriptor, segment, nullptr, descriptor->defaultData, 0, 0, 0);
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(ListReadPtr readListReference(
+  static CAPNPROTO_ALWAYS_INLINE(ListReader readListReference(
       const ListDescriptor* descriptor, const WireReference* ref,
       SegmentReader* segment, int recursionLimit)) {
     do {
@@ -500,7 +500,7 @@ struct WireHelpers {
           break;
         }
 
-        return ListReadPtr(descriptor, segment, ptr, size, step * 8,
+        return ListReader(descriptor, segment, ptr, size, step * 8,
             ref->structRef.fieldCount.get(), recursionLimit - 1);
 
       } else {
@@ -518,8 +518,8 @@ struct WireHelpers {
         }
 
         if (descriptor->elementSize == ref->listRef.elementSize()) {
-          return ListReadPtr(descriptor, segment, ptr, ref->listRef.elementCount(),
-                             sizeInBits(ref->listRef.elementSize()), 0, recursionLimit);
+          return ListReader(descriptor, segment, ptr, ref->listRef.elementCount(),
+                            sizeInBits(ref->listRef.elementSize()), 0, recursionLimit);
         } else if (descriptor->elementSize == FieldSize::STRUCT) {
           // We were expecting a struct, but we received a list of some other type.  Perhaps a
           // non-struct list was recently upgraded to a struct list, but the sender is using the
@@ -536,8 +536,8 @@ struct WireHelpers {
           // Adjust the pointer to point where we expect it for a struct.
           ptr = offsetPtr<uint8_t>(ptr, byteOffsetForFieldZero(descriptor->elementSize));
 
-          return ListReadPtr(descriptor, segment, ptr, ref->listRef.elementCount(),
-                             sizeInBits(ref->listRef.elementSize()), 1, recursionLimit);
+          return ListReader(descriptor, segment, ptr, ref->listRef.elementCount(),
+                            sizeInBits(ref->listRef.elementSize()), 1, recursionLimit);
         } else {
           segment->getMessage()->reportInvalidData("A list had incompatible element type.");
           break;
@@ -549,10 +549,10 @@ struct WireHelpers {
       case FieldSize::REFERENCE:
       case FieldSize::KEY_REFERENCE:
       case FieldSize::STRUCT:
-        return ListReadPtr(descriptor, segment, nullptr, descriptor->defaultCount, 0, 0,
+        return ListReader(descriptor, segment, nullptr, descriptor->defaultCount, 0, 0,
             recursionLimit - 1);
       default:
-        return ListReadPtr(descriptor, segment, descriptor->defaultData, descriptor->defaultCount,
+        return ListReader(descriptor, segment, descriptor->defaultData, descriptor->defaultCount,
             sizeInBits(descriptor->elementSize), 0, recursionLimit - 1);
     }
   }
@@ -560,30 +560,30 @@ struct WireHelpers {
 
 // =======================================================================================
 
-StructPtr StructPtr::getStructFieldInternal(int refIndex) const {
+StructBuilder StructBuilder::getStructFieldInternal(int refIndex) const {
   return WireHelpers::initStructReference(
       descriptor->defaultReferences[refIndex]->asStruct(),
       reinterpret_cast<WireReference*>(ptr) + refIndex, segment);
 }
 
-ListPtr StructPtr::initListFieldInternal(int refIndex, uint32_t elementCount) const {
+ListBuilder StructBuilder::initListFieldInternal(int refIndex, uint32_t elementCount) const {
   return WireHelpers::initListReference(
       descriptor->defaultReferences[refIndex]->asList(),
       reinterpret_cast<WireReference*>(ptr) + refIndex, segment, elementCount);
 }
 
-ListPtr StructPtr::getListFieldInternal(int refIndex) const {
+ListBuilder StructBuilder::getListFieldInternal(int refIndex) const {
   return WireHelpers::getWritableListReference(
       descriptor->defaultReferences[refIndex]->asList(),
       reinterpret_cast<WireReference*>(ptr) + refIndex, segment);
 }
 
-StructReadPtr StructPtr::asReadPtr() const {
-  return StructReadPtr(descriptor, segment, ptr, descriptor->defaultData,
-                       descriptor->fieldCount, 0, 1 << 30);
+StructReader StructBuilder::asReader() const {
+  return StructReader(descriptor, segment, ptr, descriptor->defaultData,
+                      descriptor->fieldCount, 0, 1 << 30);
 }
 
-StructReadPtr StructReadPtr::getStructFieldInternal(int fieldNumber, unsigned int refIndex) const {
+StructReader StructReader::getStructFieldInternal(int fieldNumber, unsigned int refIndex) const {
   return WireHelpers::readStructReference(
       descriptor->defaultReferences[refIndex]->asStruct(),
       fieldNumber < fieldCount
@@ -592,7 +592,7 @@ StructReadPtr StructReadPtr::getStructFieldInternal(int fieldNumber, unsigned in
       segment, recursionLimit);
 }
 
-ListReadPtr StructReadPtr::getListFieldInternal(int fieldNumber, unsigned int refIndex) const {
+ListReader StructReader::getListFieldInternal(int fieldNumber, unsigned int refIndex) const {
   return WireHelpers::readListReference(
       descriptor->defaultReferences[refIndex]->asList(),
       fieldNumber < fieldCount
@@ -601,35 +601,36 @@ ListReadPtr StructReadPtr::getListFieldInternal(int fieldNumber, unsigned int re
       segment, recursionLimit);
 }
 
-StructPtr ListPtr::getStructElementInternal(unsigned int index, uint32_t elementWordSize) const {
-  return StructPtr(
+StructBuilder ListBuilder::getStructElementInternal(
+    unsigned int index, uint32_t elementWordSize) const {
+  return StructBuilder(
       descriptor->elementDescriptor->asStruct(), segment,
       offsetPtr<uint64_t>(ptr, elementWordSize * index));
 }
 
-ListPtr ListPtr::initListElementInternal(unsigned int index, uint32_t size) const {
+ListBuilder ListBuilder::initListElementInternal(unsigned int index, uint32_t size) const {
   return WireHelpers::initListReference(
       descriptor->elementDescriptor->asList(),
       reinterpret_cast<WireReference*>(ptr) + index,
       segment, size);
 }
 
-ListPtr ListPtr::getListElementInternal(unsigned int index) const {
+ListBuilder ListBuilder::getListElementInternal(unsigned int index) const {
   return WireHelpers::getWritableListReference(
       descriptor->elementDescriptor->asList(),
       reinterpret_cast<WireReference*>(ptr) + index,
       segment);
 }
 
-ListReadPtr ListPtr::asReadPtr() const {
-  return ListReadPtr(descriptor, segment, ptr, elementCount,
+ListReader ListBuilder::asReader() const {
+  return ListReader(descriptor, segment, ptr, elementCount,
       sizeInBits(descriptor->elementSize),
       descriptor->elementSize == FieldSize::STRUCT
           ? descriptor->elementDescriptor->asStruct()->fieldCount : 0,
       1 << 30);
 }
 
-StructReadPtr ListReadPtr::getStructElementInternal(unsigned int index) const {
+StructReader ListReader::getStructElementInternal(unsigned int index) const {
   const StructDescriptor* elementDescriptor;
   if (ptr == nullptr) {
     elementDescriptor = descriptor->defaultReferences()[index]->asStruct();
@@ -641,16 +642,16 @@ StructReadPtr ListReadPtr::getStructElementInternal(unsigned int index) const {
           "Message is too deeply-nested or contains cycles.");
     } else {
       uint64_t indexBit = static_cast<uint64_t>(index) * stepBits;
-      return StructReadPtr(
+      return StructReader(
           elementDescriptor, segment, offsetPtr<uint8_t>(ptr, indexBit / 8),
           descriptor->defaultData, structFieldCount, indexBit % 8, recursionLimit - 1);
     }
   }
 
-  return StructReadPtr(elementDescriptor, segment, nullptr, descriptor->defaultData, 0, 0, 0);
+  return StructReader(elementDescriptor, segment, nullptr, descriptor->defaultData, 0, 0, 0);
 }
 
-ListReadPtr ListReadPtr::getListElementInternal(unsigned int index, uint32_t size) const {
+ListReader ListReader::getListElementInternal(unsigned int index, uint32_t size) const {
   if (ptr == nullptr) {
     return WireHelpers::readListReference(
         descriptor->defaultReferences()[index]->asList(),
