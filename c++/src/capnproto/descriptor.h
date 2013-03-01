@@ -46,6 +46,15 @@ struct ListDescriptor;
 struct StructDescriptor;
 struct FieldDescriptor;
 
+template <int wordCount>
+union AlignedData {
+  // Useful for declaring static constant data blobs as an array of bytes, but forcing those
+  // bytes to be word-aligned.
+
+  uint8_t bytes[wordCount * sizeof(word)];
+  word words[wordCount];
+};
+
 struct Descriptor {
   // This is the "base type" for descriptors that describe the target of a reference.
   // StructDescriptor and ListDescriptor should be treated as if they subclass this type.  However,
@@ -79,17 +88,19 @@ enum class FieldSize: uint8_t {
                    // fields, since a struct cannot embed another struct inline.
 };
 
-inline int sizeInBits(FieldSize s) {
-  static const int table[] = {1, 8, 16, 32, 64, 64, 128, -1};
+inline BitCount sizeInBits(FieldSize s) {
+  static constexpr BitCount table[] = {1*BITS, 8*BITS, 16*BITS, 32*BITS, 64*BITS,
+                                       64*BITS, 128*BITS, 0*BITS};
   return table[static_cast<int>(s)];
 }
 
-inline int byteOffsetForFieldZero(FieldSize s) {
+inline ByteCount byteOffsetForFieldZero(FieldSize s) {
   // For the given field size, get the offset, in bytes, between a struct pointer and the location
   // of the struct's first field, if the struct's first field is of the given type.  We use this
   // to adjust pointers when non-struct lists are converted to struct lists or vice versa.
 
-  static const int table[] = {1, 1, 2, 4, 8, 0, 8, 0};
+  static constexpr ByteCount table[] = {1*BYTES, 1*BYTES, 2*BYTES, 4*BYTES, 8*BYTES,
+                                        0*BYTES, 8*BYTES, 0*BYTES};
   return table[static_cast<int>(s)];
 }
 
@@ -131,8 +142,9 @@ struct StructDescriptor {
   uint8_t fieldCount;
   // Number of fields in this type -- that we were aware of at compile time, of course.
 
-  uint8_t dataSize;
+  WordCount8 dataSize;
   // Size of the data segment, in 64-bit words.
+  // TODO:  Can we use WordCount here and still get static init?
 
   uint8_t referenceCount;
   // Number of references in the reference segment.
@@ -146,9 +158,10 @@ struct StructDescriptor {
   const Descriptor* const* defaultReferences;
   // Array of descriptors describing the references.
 
-  inline uint32_t wordSize() const {
+  inline WordCount wordSize() const {
     // Size of the struct in words.
-    return static_cast<uint32_t>(fieldCount) + static_cast<uint32_t>(referenceCount);
+    // TODO:  Somehow use WORDS_PER_REFERENCE here.
+    return WordCount(dataSize) + referenceCount * WORDS;
   }
 };
 static_assert(__builtin_offsetof(StructDescriptor, base) == 0,
@@ -158,12 +171,12 @@ static_assert(__builtin_offsetof(StructDescriptor, base) == 0,
 struct FieldDescriptor {
   // Describes one field of a struct.
 
-  uint8_t requiredDataSize;
+  WordCount8 requiredDataSize;
   // The minimum size of the data segment of any object which includes this field.  This is always
   // offset * size / 64 bits, rounded up.  This value is useful for validating object references
   // received on the wire -- if dataSize is insufficient to support fieldCount, don't trust it!
 
-  uint8_t requiredReferenceSize;
+  uint8_t requiredReferenceCount;
   // The minimum size of the reference segment of any object which includes this field.  Same deal
   // as with requiredDataSize.
 

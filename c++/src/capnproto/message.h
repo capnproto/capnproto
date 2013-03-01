@@ -21,7 +21,6 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <inttypes.h>
 #include <cstddef>
 #include "macros.h"
 
@@ -36,6 +35,22 @@ class MessageReader;
 class MessageBuilder;
 class ReadLimiter;
 
+struct SegmentId {
+  // TODO:  Generalize this.  class Id<Base, Type>.
+
+  uint32_t number;
+
+  inline constexpr SegmentId(): number(0) {}
+  inline constexpr explicit SegmentId(int number): number(number) {}
+
+  inline constexpr bool operator==(const SegmentId& other) { return number == other.number; }
+  inline constexpr bool operator!=(const SegmentId& other) { return number != other.number; }
+  inline constexpr bool operator<=(const SegmentId& other) { return number <= other.number; }
+  inline constexpr bool operator>=(const SegmentId& other) { return number >= other.number; }
+  inline constexpr bool operator< (const SegmentId& other) { return number <  other.number; }
+  inline constexpr bool operator> (const SegmentId& other) { return number >  other.number; }
+};
+
 class MessageReader {
   // Abstract interface encapsulating a readable message.  By implementing this interface, you can
   // control how memory is allocated for the message.  Or use MallocMessage to make things easy.
@@ -43,7 +58,7 @@ class MessageReader {
 public:
   virtual ~MessageReader();
 
-  virtual SegmentReader* tryGetSegment(uint32_t index) = 0;
+  virtual SegmentReader* tryGetSegment(SegmentId id) = 0;
   // Gets the segment with the given ID, or return nullptr if no such segment exists.
 
   virtual void reportInvalidData(const char* description) = 0;
@@ -78,10 +93,10 @@ class MessageBuilder: public MessageReader {
 public:
   virtual ~MessageBuilder();
 
-  virtual SegmentBuilder* getSegment(uint32_t id) = 0;
+  virtual SegmentBuilder* getSegment(SegmentId id) = 0;
   // Get the segment with the given id.  Crashes or throws an exception if no such segment exists.
 
-  virtual SegmentBuilder* getSegmentWithAvailable(uint32_t minimumSize) = 0;
+  virtual SegmentBuilder* getSegmentWithAvailable(WordCount minimumAvailable) = 0;
   // Get a segment which has at least the given amount of space available, allocating it if
   // necessary.  Crashes or throws an exception if there is not enough memory.
 
@@ -95,7 +110,7 @@ class ReadLimiter {
   // and overlapping are not permitted by the Cap'n Proto format because in many cases they could
   // be used to craft a deceptively small message which could consume excessive server resources to
   // process, perhaps even sending it into an infinite loop.  Actually detecting overlaps would be
-  // time-consuming, so instead we just keep track of how many bytes worth of data structures the
+  // time-consuming, so instead we just keep track of how many words worth of data structures the
   // receiver has actually dereferenced and error out if this gets too high.
   //
   // This counting takes place as you call getters (for non-primitive values) on the message
@@ -104,67 +119,55 @@ class ReadLimiter {
   // only trigger in unreasonable cases.
 
 public:
-  inline explicit ReadLimiter();                 // No limit.
-  inline explicit ReadLimiter(int64_t limit);    // Limit to the given number of bytes.
+  inline explicit ReadLimiter();                     // No limit.
+  inline explicit ReadLimiter(WordCount64 limit);    // Limit to the given number of words.
 
-  inline bool canRead(uint32_t amount);
+  inline bool canRead(WordCount amount);
 
 private:
-  int64_t counter;
+  WordCount64 limit;
 };
 
 class SegmentReader {
 public:
-  inline SegmentReader(MessageReader* message, uint32_t id, const void* ptr, uint32_t size,
+  inline SegmentReader(MessageReader* message, SegmentId id, const word ptr[], WordCount size,
                        ReadLimiter* readLimiter);
 
-  CAPNPROTO_ALWAYS_INLINE(const void* getPtrChecked(
-      uint32_t offset, uint32_t bytesBefore, uint32_t bytesAfter));
+  CAPNPROTO_ALWAYS_INLINE(const word* getPtrChecked(
+      WordCount offset, WordCount before, WordCount after));
 
   inline MessageReader* getMessage();
-  inline uint32_t getSegmentId();
+  inline SegmentId getSegmentId();
 
-  inline const void* getStartPtr();
-  inline uint32_t getSize();
+  inline const word* getStartPtr();
+  inline WordCount getOffsetTo(const word* ptr);
+  inline WordCount getSize();
 
 private:
   MessageReader* message;
-  uint32_t id;
-  uint32_t size;
-  const void* start;
+  SegmentId id;
+  WordCount size;
+  const word* start;
   ReadLimiter* readLimiter;
 
   SegmentReader(const SegmentReader& other) = delete;
   SegmentReader& operator=(const SegmentReader& other) = delete;
-
-  void readLimitReached();
 
   friend class SegmentBuilder;
 };
 
 class SegmentBuilder: public SegmentReader {
 public:
-  inline SegmentBuilder(MessageBuilder* message, uint32_t id, void* ptr, uint32_t available);
+  inline SegmentBuilder(MessageBuilder* message, SegmentId id, word ptr[], WordCount available);
 
-  struct Allocation {
-    void* ptr;
-    uint32_t offset;
-
-    inline Allocation(): ptr(nullptr), offset(0) {}
-    inline Allocation(std::nullptr_t): ptr(nullptr), offset(0) {}
-    inline Allocation(void* ptr, uint32_t offset): ptr(ptr), offset(offset) {}
-
-    inline bool operator==(std::nullptr_t) const { return ptr == nullptr; }
-  };
-
-  CAPNPROTO_ALWAYS_INLINE(Allocation allocate(uint32_t amount));
-  inline void* getPtrUnchecked(uint32_t offset);
+  CAPNPROTO_ALWAYS_INLINE(word* allocate(WordCount amount));
+  inline word* getPtrUnchecked(WordCount offset);
 
   inline MessageBuilder* getMessage();
 
 private:
-  char* pos;
-  char* end;
+  word* pos;
+  word* end;
   ReadLimiter dummyLimiter;
 
   SegmentBuilder(const SegmentBuilder& other) = delete;
@@ -177,64 +180,74 @@ private:
 
 inline ReadLimiter::ReadLimiter()
     // I didn't want to #include <limits> just for this one lousy constant.
-    : counter(0x7fffffffffffffffll) {}
+    : limit(uint64_t(0x7fffffffffffffffll) * WORDS) {}
 
-inline ReadLimiter::ReadLimiter(int64_t limit): counter(limit) {}
+inline ReadLimiter::ReadLimiter(WordCount64 limit): limit(limit) {}
 
-inline bool ReadLimiter::canRead(uint32_t amount) {
-  return (counter -= amount) >= 0;
+inline bool ReadLimiter::canRead(WordCount amount) {
+  if (amount > limit) {
+    return false;
+  } else {
+    limit -= amount;
+    return true;
+  }
 }
 
 // -------------------------------------------------------------------
 
-inline SegmentReader::SegmentReader(
-    MessageReader* message, uint32_t id, const void* ptr, uint32_t size, ReadLimiter* readLimiter)
+inline SegmentReader::SegmentReader(MessageReader* message, SegmentId id, const word ptr[],
+                                    WordCount size, ReadLimiter* readLimiter)
     : message(message), id(id), size(size), start(ptr), readLimiter(readLimiter) {}
 
-inline const void* SegmentReader::getPtrChecked(uint32_t offset, uint32_t bytesBefore,
-                                                uint32_t bytesAfter) {
+inline const word* SegmentReader::getPtrChecked(
+    WordCount offset, WordCount before, WordCount after) {
   // Check bounds.  Watch out for overflow and underflow here.
-  if (offset > size || bytesBefore > offset || bytesAfter > size - offset) {
+  if (offset > size ||
+      before > offset ||
+      after > size - offset) {
     return nullptr;
   } else {
     // Enforce the read limit.  Synchronization is not necessary because readLimit is just a rough
     // counter to prevent infinite loops leading to DoS attacks.
-    if (CAPNPROTO_EXPECT_FALSE(!readLimiter->canRead(bytesBefore + bytesAfter))) {
+    if (CAPNPROTO_EXPECT_FALSE(!readLimiter->canRead(before + after))) {
       message->reportReadLimitReached();
     }
 
-    return reinterpret_cast<const char*>(start) + offset;
+    return start + offset;
   }
 }
 
 inline MessageReader* SegmentReader::getMessage() { return message; }
-inline uint32_t SegmentReader::getSegmentId() { return id; }
-inline const void* SegmentReader::getStartPtr() { return start; }
-inline uint32_t SegmentReader::getSize() { return size; }
+inline SegmentId SegmentReader::getSegmentId() { return id; }
+inline const word* SegmentReader::getStartPtr() { return start; }
+inline WordCount SegmentReader::getOffsetTo(const word* ptr) {
+  return intervalLength(start, ptr);
+}
+inline WordCount SegmentReader::getSize() { return size; }
 
 // -------------------------------------------------------------------
 
 inline SegmentBuilder::SegmentBuilder(
-    MessageBuilder* message, uint32_t id, void* ptr, uint32_t available)
-    : SegmentReader(message, id, ptr, 0, &dummyLimiter),
-      pos(reinterpret_cast<char*>(ptr)),
+    MessageBuilder* message, SegmentId id, word ptr[], WordCount available)
+    : SegmentReader(message, id, ptr, 0 * WORDS, &dummyLimiter),
+      pos(ptr),
       end(pos + available) {}
 
-inline SegmentBuilder::Allocation SegmentBuilder::allocate(uint32_t amount) {
-  if (amount > end - pos) {
+inline word* SegmentBuilder::allocate(WordCount amount) {
+  if (amount > intervalLength(pos, end)) {
     return nullptr;
   } else {
-    char* result = pos;
+    word* result = pos;
     pos += amount;
     size += amount;
-    return Allocation(result, result - reinterpret_cast<const char*>(start));
+    return result;
   }
 }
 
-inline void* SegmentBuilder::getPtrUnchecked(uint32_t offset) {
+inline word* SegmentBuilder::getPtrUnchecked(WordCount offset) {
   // const_cast OK because SegmentBuilder's constructor always initializes its SegmentReader base
   // class with a pointer that was originally non-const.
-  return const_cast<char*>(reinterpret_cast<const char*>(start) + offset);
+  return const_cast<word*>(start + offset);
 }
 
 inline MessageBuilder* SegmentBuilder::getMessage() {

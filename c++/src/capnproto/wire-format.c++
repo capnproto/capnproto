@@ -24,47 +24,49 @@
 #include "wire-format.h"
 #include "message.h"
 #include "descriptor.h"
+#include <limits>
 
 namespace capnproto {
 namespace internal {
 
 namespace debug {
 
-bool fieldIsStruct(const StructDescriptor* descriptor, int fieldNumber, int refIndex) {
+bool fieldIsStruct(const StructDescriptor* descriptor, uint fieldNumber, uint refIndex) {
   return descriptor->fieldCount > fieldNumber &&
          descriptor->fields[fieldNumber].size == FieldSize::REFERENCE &&
          descriptor->fields[fieldNumber].offset == refIndex &&
          descriptor->defaultReferences[refIndex]->kind == Descriptor::Kind::STRUCT;
 }
 
-bool fieldIsList(const StructDescriptor* descriptor, int fieldNumber, int refIndex) {
+bool fieldIsList(const StructDescriptor* descriptor, uint fieldNumber, uint refIndex) {
   return descriptor->fieldCount > fieldNumber &&
          descriptor->fields[fieldNumber].size == FieldSize::REFERENCE &&
          descriptor->fields[fieldNumber].offset == refIndex &&
          descriptor->defaultReferences[refIndex]->kind == Descriptor::Kind::LIST;
 }
 
-bool fieldIsData(const StructDescriptor* descriptor, int fieldNumber, int dataOffset, int bitSize) {
+bool fieldIsData(const StructDescriptor* descriptor, uint fieldNumber, uint dataOffset,
+                 BitCount bitSize) {
   return descriptor->fieldCount > fieldNumber &&
          descriptor->fields[fieldNumber].size != FieldSize::REFERENCE &&
          sizeInBits(descriptor->fields[fieldNumber].size) == bitSize &&
          descriptor->fields[fieldNumber].offset == dataOffset;
 }
 
-bool dataFieldInRange(const StructDescriptor* descriptor, uint32_t dataOffset, uint32_t size) {
-  return descriptor->dataSize * sizeof(uint64_t) >= (dataOffset * size);
+bool dataFieldInRange(const StructDescriptor* descriptor, uint dataOffset, ByteCount size) {
+  return descriptor->dataSize * BYTES_PER_WORD >= dataOffset * size;
 }
 
-bool bitFieldInRange(const StructDescriptor* descriptor, uint32_t offset) {
-  return descriptor->dataSize * sizeof(uint64_t) > offset / 64;
+bool bitFieldInRange(const StructDescriptor* descriptor, BitCount offset) {
+  return descriptor->dataSize * BITS_PER_WORD >= offset;
 }
 
-bool refFieldIsStruct(const StructDescriptor* descriptor, int refIndex) {
+bool refFieldIsStruct(const StructDescriptor* descriptor, uint refIndex) {
   return descriptor->referenceCount > refIndex &&
          descriptor->defaultReferences[refIndex]->kind == Descriptor::Kind::STRUCT;
 }
 
-bool refFieldIsList(const StructDescriptor* descriptor, int refIndex) {
+bool refFieldIsList(const StructDescriptor* descriptor, uint refIndex) {
   return descriptor->referenceCount > refIndex &&
          descriptor->defaultReferences[refIndex]->kind == Descriptor::Kind::LIST;
 }
@@ -72,27 +74,29 @@ bool refFieldIsList(const StructDescriptor* descriptor, int refIndex) {
 bool elementsAreStructs(const ListDescriptor* descriptor) {
   return descriptor->elementSize == FieldSize::STRUCT;
 }
-bool elementsAreStructs(const ListDescriptor* descriptor, uint32_t wordSize) {
+bool elementsAreStructs(const ListDescriptor* descriptor, WordCount wordSize) {
   return descriptor->elementSize == FieldSize::STRUCT &&
          descriptor->elementDescriptor->asStruct()->wordSize() == wordSize;
 }
 bool elementsAreLists(const ListDescriptor* descriptor) {
   return descriptor->elementSize == FieldSize::REFERENCE;
 }
-bool elementsAreData(const ListDescriptor* descriptor, int bitSize) {
+bool elementsAreData(const ListDescriptor* descriptor, BitCount bitSize) {
   switch (descriptor->elementSize) {
     case FieldSize::REFERENCE:
     case FieldSize::KEY_REFERENCE:
     case FieldSize::STRUCT:
       return false;
     default:
-      return true;
+      return sizeInBits(descriptor->elementSize) == bitSize;
   }
 }
 
 }  // namespace debug
 
 // =======================================================================================
+
+static const WordCount WORDS_PER_REFERENCE = 1 * WORDS;
 
 struct WireReference {
   // A reference, in exactly the format in which it appears on the wire.
@@ -107,7 +111,11 @@ struct WireReference {
     STRUCT = 0,
     LIST = 1,
     CAPABILITY = 2,
-    FAR = 3
+    FAR = 3,
+    RESERVED_4 = 4,
+    RESERVED_5 = 5,
+    RESERVED_6 = 6,
+    RESERVED_7 = 7
   };
 
   WireValue<uint32_t> offsetAndTag;
@@ -115,9 +123,13 @@ struct WireReference {
   union {
     struct {
       WireValue<uint8_t> fieldCount;
-      WireValue<uint8_t> dataSize;
+      WireValue<WordCount8> dataWordCount;
       WireValue<uint8_t> refCount;
       WireValue<uint8_t> reserved0;
+
+      inline WordCount wordSize() const {
+        return dataWordCount.get() + refCount.get() * WORDS_PER_REFERENCE;
+      }
     } structRef;
     // Also covers capabilities.
 
@@ -127,98 +139,101 @@ struct WireReference {
       CAPNPROTO_ALWAYS_INLINE(FieldSize elementSize() const) {
         return static_cast<FieldSize>(elementSizeAndCount.get() >> 29);
       }
-      CAPNPROTO_ALWAYS_INLINE(uint32_t elementCount() const) {
+      CAPNPROTO_ALWAYS_INLINE(uint elementCount() const) {
         return elementSizeAndCount.get() & 0x1fffffffu;
       }
     } listRef;
 
     struct {
-      WireValue<uint32_t> segmentId;
+      WireValue<SegmentId> segmentId;
     } farRef;
   };
 
   CAPNPROTO_ALWAYS_INLINE(bool isNull() const) { return offsetAndTag.get() == 0; }
-  CAPNPROTO_ALWAYS_INLINE(uint32_t offset() const) { return offsetAndTag.get() & ~7; }
-  CAPNPROTO_ALWAYS_INLINE(int tag() const) { return offsetAndTag.get() & 7; }
-
-  CAPNPROTO_ALWAYS_INLINE(void setTagAndOffset(Tag tag, uint32_t offset)) {
-    CAPNPROTO_DEBUG_ASSERT((offset & 7) == 0, "Offsets must be word-aligned.");
-    offsetAndTag.set(offset | tag);
+  CAPNPROTO_ALWAYS_INLINE(WordCount offset() const) {
+    return (offsetAndTag.get() >> 3) * WORDS;
+  }
+  CAPNPROTO_ALWAYS_INLINE(Tag tag() const) {
+    return static_cast<Tag>(offsetAndTag.get() & 7);
   }
 
-  CAPNPROTO_ALWAYS_INLINE(void setStruct(const StructDescriptor* descriptor, uint32_t offset)) {
+  CAPNPROTO_ALWAYS_INLINE(void setTagAndOffset(Tag tag, WordCount offset)) {
+    offsetAndTag.set(((offset / WORDS) << 3) | tag);
+  }
+
+  CAPNPROTO_ALWAYS_INLINE(void setStruct(const StructDescriptor* descriptor, WordCount offset)) {
     setTagAndOffset(STRUCT, offset);
     structRef.fieldCount.set(descriptor->fieldCount);
-    structRef.dataSize.set(descriptor->dataSize);
+    structRef.dataWordCount.set(WordCount8(descriptor->dataSize));
     structRef.refCount.set(descriptor->referenceCount);
     structRef.reserved0.set(0);
   }
 
   CAPNPROTO_ALWAYS_INLINE(void setList(
-      const ListDescriptor* descriptor, uint32_t elementCount, uint32_t offset)) {
+      const ListDescriptor* descriptor, int elementCount, WordCount offset)) {
     setTagAndOffset(LIST, offset);
     CAPNPROTO_DEBUG_ASSERT((elementCount >> 29) == 0, "Lists are limited to 2**29 elements.");
     listRef.elementSizeAndCount.set(
-        (static_cast<uint32_t>(descriptor->elementSize) << 29) | elementCount);
+        (static_cast<int>(descriptor->elementSize) << 29) | elementCount);
   }
 
-  CAPNPROTO_ALWAYS_INLINE(void setFar(uint32_t segmentId, uint32_t offset)) {
+  CAPNPROTO_ALWAYS_INLINE(void setFar(SegmentId segmentId, WordCount offset)) {
     setTagAndOffset(FAR, offset);
     farRef.segmentId.set(segmentId);
   }
 };
-static_assert(sizeof(WireReference) == 8, "Layout of capnproto::WireReference is wrong.");
+static_assert(sizeof(WireReference) == sizeof(word),
+    "Layout of capnproto::WireReference is wrong.  It must be exactly one word or all hell will "
+    "break loose.  (At the very least WORDS_PER_REFERENCE needs updating, but that's "
+    "probably not all.)");
 
 // =======================================================================================
 
-template <typename T>
-static CAPNPROTO_ALWAYS_INLINE(T divRoundingUp(T a, T b));
-template <typename T>
-static inline T divRoundingUp(T a, T b) {
+template <typename T, typename U>
+static inline decltype(T() / U()) divRoundingUp(T a, U b) {
   return (a + b - 1) / b;
 }
 
-template <typename T>
-static inline const void* offsetPtr(const void* ptr, int amount) {
-  return reinterpret_cast<const T*>(ptr) + amount;
+template <typename T, typename U>
+static CAPNPROTO_ALWAYS_INLINE(T divRoundingUp(UnitMeasure<T, U> a, UnitMeasure<T, U> b));
+template <typename T, typename U>
+static inline T divRoundingUp(UnitMeasure<T, U> a, UnitMeasure<T, U> b) {
+  return (a + b - UnitMeasure<T, U>::ONE) / b;
 }
 
-template <typename T>
-static inline void* offsetPtr(void* ptr, int amount) {
-  return reinterpret_cast<T*>(ptr) + amount;
-}
-
-template <typename T>
-static inline T* takeFromAllocation(SegmentBuilder::Allocation& allocation, int count = 1) {
-  T* result = reinterpret_cast<T*>(allocation.ptr);
-  allocation.ptr = result + count;
-  allocation.offset += sizeof(T) * count;
-  return result;
+template <typename T, typename T2, typename U, typename U2>
+static CAPNPROTO_ALWAYS_INLINE(
+    decltype(UnitMeasure<T, U>() / UnitRatio<T2, U, U2>(1))
+    divRoundingUp(UnitMeasure<T, U> a, UnitRatio<T2, U, U2> b));
+template <typename T, typename T2, typename U, typename U2>
+static inline decltype(UnitMeasure<T, U>() / UnitRatio<T2, U, U2>(1))
+divRoundingUp(UnitMeasure<T, U> a, UnitRatio<T2, U, U2> b) {
+  return (a + (UnitMeasure<T2, U2>::ONE * b - UnitMeasure<T2, U>::ONE)) / b;
 }
 
 struct WireHelpers {
-  static CAPNPROTO_ALWAYS_INLINE(SegmentBuilder::Allocation allocate(
-      WireReference*& ref, SegmentBuilder*& segment, uint32_t size)) {
-    SegmentBuilder::Allocation allocation = segment->allocate(size);
+  static CAPNPROTO_ALWAYS_INLINE(word* allocate(
+      WireReference*& ref, SegmentBuilder*& segment, WordCount amount)) {
+    word* ptr = segment->allocate(amount);
 
-    if (allocation == nullptr) {
+    if (ptr == nullptr) {
       // Need to allocate in a new segment.
 
       // Loop here just in case we ever make Segment::allocate() thread-safe -- in this case another
       // thread could have grabbed the space between when we asked the message for the segment and
       // when we asked the segment to allocate space.
       do {
-        segment = segment->getMessage()->getSegmentWithAvailable(size + sizeof(WireReference));
-        allocation = segment->allocate(size + sizeof(WireReference));
-      } while (CAPNPROTO_EXPECT_FALSE(allocation == nullptr));
+        segment = segment->getMessage()->getSegmentWithAvailable(amount + WORDS_PER_REFERENCE);
+        ptr = segment->allocate(amount + WORDS_PER_REFERENCE);
+      } while (CAPNPROTO_EXPECT_FALSE(ptr == nullptr));
 
-      ref->setFar(segment->getSegmentId(), allocation.offset);
-      ref = takeFromAllocation<WireReference>(allocation);
+      ref->setFar(segment->getSegmentId(), segment->getOffsetTo(ptr));
+      ref = reinterpret_cast<WireReference*>(ptr);
 
       // Allocated space follows new reference.
-      return allocation;
+      return ptr + WORDS_PER_REFERENCE;
     } else {
-      return allocation;
+      return ptr;
     }
   }
 
@@ -237,7 +252,7 @@ struct WireHelpers {
         return false;
       }
       ref = reinterpret_cast<const WireReference*>(
-          segment->getPtrChecked(ref->offset(), 0, sizeof(WireReference)));
+          segment->getPtrChecked(ref->offset(), 0 * WORDS, WORDS_PER_REFERENCE));
       return ref != nullptr;
     } else {
       return true;
@@ -248,13 +263,13 @@ struct WireHelpers {
       const StructDescriptor* descriptor, const WireReference* ref)) {
     if (ref->structRef.fieldCount.get() >= descriptor->fieldCount) {
       // The incoming struct has all of the fields that we know about.
-      return ref->structRef.dataSize.get() >= descriptor->dataSize &&
+      return ref->structRef.dataWordCount.get() >= descriptor->dataSize &&
              ref->structRef.refCount.get() >= descriptor->referenceCount;
     } else if (ref->structRef.fieldCount.get() > 0) {
       // We know about more fields than the struct has, and the struct is non-empty.
       const FieldDescriptor* field = &descriptor->fields[ref->structRef.fieldCount.get() - 1];
-      return ref->structRef.dataSize.get() >= field->requiredDataSize &&
-             ref->structRef.refCount.get() >= field->requiredReferenceSize;
+      return ref->structRef.dataWordCount.get() >= field->requiredDataSize &&
+             ref->structRef.refCount.get() >= field->requiredReferenceCount;
     } else {
       // The incoming struct has no fields, so is necessarily compatible.
       return true;
@@ -264,20 +279,17 @@ struct WireHelpers {
   static CAPNPROTO_ALWAYS_INLINE(StructBuilder initStructReference(
       const StructDescriptor* descriptor, WireReference* ref, SegmentBuilder* segment)) {
     if (ref->isNull()) {
-      // Calculate the size of the struct.
-      uint32_t size = (descriptor->dataSize + descriptor->referenceCount) * sizeof(uint64_t);
-
       // Allocate space for the new struct.
-      SegmentBuilder::Allocation allocation = allocate(ref, segment, size);
+      word* ptr = allocate(ref, segment, descriptor->wordSize());
 
       // Advance the pointer to point between the data and reference segments.
-      takeFromAllocation<uint64_t>(allocation, descriptor->dataSize);
+      ptr += descriptor->dataSize;
 
       // Initialize the reference.
-      ref->setStruct(descriptor, allocation.offset);
+      ref->setStruct(descriptor, segment->getOffsetTo(ptr));
 
       // Build the StructBuilder.
-      return StructBuilder(descriptor, segment, allocation.ptr);
+      return StructBuilder(descriptor, segment, ptr);
     } else {
       followFars(ref, segment);
 
@@ -296,41 +308,39 @@ struct WireHelpers {
 
   static CAPNPROTO_ALWAYS_INLINE(ListBuilder initListReference(
       const ListDescriptor* descriptor, WireReference* ref,
-      SegmentBuilder* segment, uint32_t elementCount)) {
+      SegmentBuilder* segment, uint elementCount)) {
     if (descriptor->elementSize == FieldSize::STRUCT) {
       const StructDescriptor* elementDescriptor =
           descriptor->elementDescriptor->asStruct();
 
       // Allocate the list, prefixed by a single WireReference.
-      SegmentBuilder::Allocation allocation =
-          allocate(ref, segment, sizeof(WireReference) +
-              elementDescriptor->wordSize() * elementCount * sizeof(uint64_t));
+      word* ptr = allocate(ref, segment,
+          WORDS_PER_REFERENCE + elementDescriptor->wordSize() * elementCount);
 
       // Initialize the reference.
-      ref->setList(descriptor, elementCount, allocation.offset);
-      WireReference* structRef = takeFromAllocation<WireReference>(allocation);
+      ref->setList(descriptor, elementCount, segment->getOffsetTo(ptr));
 
-      // Skip past the data segment of the first struct.
-      takeFromAllocation<uint64_t>(allocation, elementDescriptor->dataSize);
-
-      // Initialize the struct reference.
-      structRef->setStruct(elementDescriptor, allocation.offset);
+      // The list is prefixed by a struct reference.
+      WireReference* structRef = reinterpret_cast<WireReference*>(ptr);
+      word* structPtr = ptr + WORDS_PER_REFERENCE + elementDescriptor->dataSize;
+      structRef->setStruct(elementDescriptor, segment->getOffsetTo(structPtr));
 
       // Build the ListBuilder.
-      return ListBuilder(descriptor, segment, structRef, elementCount);
+      return ListBuilder(descriptor, segment, ptr, elementCount);
     } else {
-      // Calculate size of the list.
-      uint32_t size = divRoundingUp<uint32_t>(
-          static_cast<uint32_t>(sizeInBits(descriptor->elementSize)) * elementCount, 8);
+      // Calculate size of the list.  Need to cast to uint here because a list can be up to
+      // 2**32-1 bits, so int would overflow.  Plus uint division by a power of 2 is a bit shift.
+      WordCount wordCount = divRoundingUp(
+          sizeInBits(descriptor->elementSize) * elementCount, BITS_PER_WORD);
 
       // Allocate the list.
-      SegmentBuilder::Allocation allocation = allocate(ref, segment, size);
+      word* ptr = allocate(ref, segment, wordCount);
 
       // Initialize the reference.
-      ref->setList(descriptor, elementCount, allocation.offset);
+      ref->setList(descriptor, elementCount, segment->getOffsetTo(ptr));
 
       // Build the ListBuilder.
-      return ListBuilder(descriptor, segment, allocation.ptr, elementCount);
+      return ListBuilder(descriptor, segment, ptr, elementCount);
     }
   }
 
@@ -388,9 +398,9 @@ struct WireHelpers {
         break;
       }
 
-      const void* ptr = segment->getPtrChecked(ref->offset(),
-          ref->structRef.dataSize.get() * sizeof(uint8_t),
-          ref->structRef.refCount.get() * sizeof(WireReference));
+      const word* ptr = segment->getPtrChecked(ref->offset(),
+          ref->structRef.dataWordCount.get(),
+          ref->structRef.refCount.get() * WORDS_PER_REFERENCE);
 
       if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
         segment->getMessage()->reportInvalidData(
@@ -399,10 +409,10 @@ struct WireHelpers {
       }
 
       return StructReader(descriptor, segment, ptr, descriptor->defaultData,
-                          ref->structRef.fieldCount.get(), 0, recursionLimit - 1);
+                          ref->structRef.fieldCount.get(), 0 * BITS, recursionLimit - 1);
     } while (false);
 
-    return StructReader(descriptor, segment, nullptr, descriptor->defaultData, 0, 0, 0);
+    return StructReader(descriptor, segment, nullptr, descriptor->defaultData, 0, 0 * BITS, 0);
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListReader readListReference(
@@ -434,15 +444,15 @@ struct WireHelpers {
       if (ref->listRef.elementSize() == FieldSize::STRUCT) {
         // A struct list reference actually points to a struct reference which in turn points to the
         // first struct in the list.
-        const void* ptrPtr =
-            segment->getPtrChecked(ref->offset(), 0, sizeof(WireReference));
+        const word* ptrPtr =
+            segment->getPtrChecked(ref->offset(), 0 * WORDS, WORDS_PER_REFERENCE);
         if (CAPNPROTO_EXPECT_FALSE(ptrPtr == nullptr)) {
           segment->getMessage()->reportInvalidData(
               "Message contains out-of-bounds list reference.");
           break;
         }
 
-        uint32_t size = ref->listRef.elementCount();
+        int size = ref->listRef.elementCount();
         ref = reinterpret_cast<const WireReference*>(ptrPtr);
 
         if (CAPNPROTO_EXPECT_FALSE(ref->tag() != WireReference::STRUCT)) {
@@ -451,12 +461,10 @@ struct WireHelpers {
           break;
         }
 
-        int step = (ref->structRef.dataSize.get() + ref->structRef.refCount.get()) *
-            sizeof(uint8_t);
         const void* ptr = segment->getPtrChecked(ref->offset(),
-            ref->structRef.dataSize.get() * sizeof(uint8_t),
-            ref->structRef.refCount.get() * sizeof(WireReference) +
-            step * (size - 1));
+            ref->structRef.dataWordCount.get(),
+            ref->structRef.refCount.get() * WORDS_PER_REFERENCE +
+            ref->structRef.wordSize() * (size - 1));
         if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
           segment->getMessage()->reportInvalidData(
               "Message contains out-of-bounds struct list reference.");
@@ -467,7 +475,7 @@ struct WireHelpers {
         // struct list.  We need to manipulate the pointer to point at the first field of the
         // struct.  Together with the "stepBits", this will allow the struct list to be accessed as
         // if it were a primitive list without branching.
-        ptr = offsetPtr<uint8_t>(ptr, -byteOffsetForFieldZero(descriptor->elementSize));
+        ptr = reinterpret_cast<const byte*>(ptr) - byteOffsetForFieldZero(descriptor->elementSize);
 
         // Check whether the size is compatible.
         bool compatible = true;
@@ -477,7 +485,7 @@ struct WireHelpers {
           case FieldSize::TWO_BYTES:
           case FieldSize::FOUR_BYTES:
           case FieldSize::EIGHT_BYTES:
-            compatible = ref->structRef.dataSize.get() > 0;
+            compatible = ref->structRef.dataWordCount.get() > 0 * WORDS;
             break;
 
           case FieldSize::REFERENCE:
@@ -485,7 +493,7 @@ struct WireHelpers {
             break;
 
           case FieldSize::KEY_REFERENCE:
-            compatible = ref->structRef.dataSize.get() > 0 &&
+            compatible = ref->structRef.dataWordCount.get() > 0 * WORDS &&
                          ref->structRef.refCount.get() > 0;
             break;
 
@@ -500,16 +508,15 @@ struct WireHelpers {
           break;
         }
 
-        return ListReader(descriptor, segment, ptr, size, step * 8,
+        return ListReader(descriptor, segment, ptr, size, ref->structRef.wordSize() * BITS_PER_WORD,
             ref->structRef.fieldCount.get(), recursionLimit - 1);
 
       } else {
         // The elements of the list are NOT structs.
-        int step = sizeInBits(ref->listRef.elementSize());
+        BitCount step = sizeInBits(ref->listRef.elementSize());
 
-        const void* ptr = segment->getPtrChecked(ref->offset(), 0,
-            divRoundingUp<uint64_t>(
-                implicit_cast<uint64_t>(ref->listRef.elementCount()) * step, 8));
+        const void* ptr = segment->getPtrChecked(ref->offset(), 0 * WORDS,
+            divRoundingUp(ref->listRef.elementCount() * BitCount64(step), BITS_PER_WORD));
 
         if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
           segment->getMessage()->reportInvalidData(
@@ -534,7 +541,8 @@ struct WireHelpers {
           }
 
           // Adjust the pointer to point where we expect it for a struct.
-          ptr = offsetPtr<uint8_t>(ptr, byteOffsetForFieldZero(descriptor->elementSize));
+          ptr = reinterpret_cast<const byte*>(ptr) +
+              byteOffsetForFieldZero(descriptor->elementSize);
 
           return ListReader(descriptor, segment, ptr, ref->listRef.elementCount(),
                             sizeInBits(ref->listRef.elementSize()), 1, recursionLimit);
@@ -549,7 +557,7 @@ struct WireHelpers {
       case FieldSize::REFERENCE:
       case FieldSize::KEY_REFERENCE:
       case FieldSize::STRUCT:
-        return ListReader(descriptor, segment, nullptr, descriptor->defaultCount, 0, 0,
+        return ListReader(descriptor, segment, nullptr, descriptor->defaultCount, 0 * BITS, 0,
             recursionLimit - 1);
       default:
         return ListReader(descriptor, segment, descriptor->defaultData, descriptor->defaultCount,
@@ -580,7 +588,7 @@ ListBuilder StructBuilder::getListFieldInternal(int refIndex) const {
 
 StructReader StructBuilder::asReader() const {
   return StructReader(descriptor, segment, ptr, descriptor->defaultData,
-                      descriptor->fieldCount, 0, 1 << 30);
+                      descriptor->fieldCount, 0 * BITS, std::numeric_limits<int>::max());
 }
 
 StructReader StructReader::getStructFieldInternal(int fieldNumber, unsigned int refIndex) const {
@@ -602,10 +610,10 @@ ListReader StructReader::getListFieldInternal(int fieldNumber, unsigned int refI
 }
 
 StructBuilder ListBuilder::getStructElementInternal(
-    unsigned int index, uint32_t elementWordSize) const {
+    unsigned int index, WordCount elementSize) const {
   return StructBuilder(
       descriptor->elementDescriptor->asStruct(), segment,
-      offsetPtr<uint64_t>(ptr, elementWordSize * index));
+      ptr + elementSize * index);
 }
 
 ListBuilder ListBuilder::initListElementInternal(unsigned int index, uint32_t size) const {
@@ -641,14 +649,16 @@ StructReader ListReader::getStructElementInternal(unsigned int index) const {
       segment->getMessage()->reportInvalidData(
           "Message is too deeply-nested or contains cycles.");
     } else {
-      uint64_t indexBit = static_cast<uint64_t>(index) * stepBits;
+      BitCount64 indexBit = static_cast<uint64_t>(index) * stepBits;
       return StructReader(
-          elementDescriptor, segment, offsetPtr<uint8_t>(ptr, indexBit / 8),
-          descriptor->defaultData, structFieldCount, indexBit % 8, recursionLimit - 1);
+          elementDescriptor, segment,
+          reinterpret_cast<const byte*>(ptr) + indexBit / BITS_PER_BYTE,
+          descriptor->defaultData, structFieldCount, indexBit % BITS_PER_BYTE,
+          recursionLimit - 1);
     }
   }
 
-  return StructReader(elementDescriptor, segment, nullptr, descriptor->defaultData, 0, 0, 0);
+  return StructReader(elementDescriptor, segment, nullptr, descriptor->defaultData, 0, 0 * BITS, 0);
 }
 
 ListReader ListReader::getListElementInternal(unsigned int index, uint32_t size) const {
@@ -659,7 +669,8 @@ ListReader ListReader::getListElementInternal(unsigned int index, uint32_t size)
   } else {
     return WireHelpers::readListReference(
         descriptor->elementDescriptor->asList(),
-        reinterpret_cast<const WireReference*>(offsetPtr<uint64_t>(ptr, index * (stepBits / 64))),
+        reinterpret_cast<const WireReference*>(ptr) +
+            index * (stepBits / BITS_PER_WORD / WORDS_PER_REFERENCE),
         segment, recursionLimit);
   }
 }

@@ -30,7 +30,6 @@
 #ifndef CAPNPROTO_WIRE_FORMAT_H_
 #define CAPNPROTO_WIRE_FORMAT_H_
 
-#include <inttypes.h>
 #include "macros.h"
 
 namespace capnproto {
@@ -51,18 +50,18 @@ namespace debug {
   // header is #included from generated headers, whereas descriptor.h is only #included in generated
   // source files.
 
-  bool fieldIsStruct(const StructDescriptor* descriptor, int fieldNumber, int refIndex);
-  bool fieldIsList(const StructDescriptor* descriptor, int fieldNumber, int refIndex);
-  bool fieldIsData(const StructDescriptor* descriptor, int fieldNumber, int dataOffset,
-                   int bitSize);
-  bool dataFieldInRange(const StructDescriptor* descriptor, uint32_t dataOffset, uint32_t size);
-  bool bitFieldInRange(const StructDescriptor* descriptor, uint32_t offset);
-  bool refFieldIsStruct(const StructDescriptor* descriptor, int refIndex);
-  bool refFieldIsList(const StructDescriptor* descriptor, int refIndex);
+  bool fieldIsStruct(const StructDescriptor* descriptor, uint fieldNumber, uint refIndex);
+  bool fieldIsList(const StructDescriptor* descriptor, uint fieldNumber, uint refIndex);
+  bool fieldIsData(const StructDescriptor* descriptor, uint fieldNumber, uint dataOffset,
+                   BitCount bitSize);
+  bool dataFieldInRange(const StructDescriptor* descriptor, uint dataOffset, ByteCount size);
+  bool bitFieldInRange(const StructDescriptor* descriptor, BitCount offset);
+  bool refFieldIsStruct(const StructDescriptor* descriptor, uint refIndex);
+  bool refFieldIsList(const StructDescriptor* descriptor, uint refIndex);
   bool elementsAreStructs(const ListDescriptor* descriptor);
-  bool elementsAreStructs(const ListDescriptor* descriptor, uint32_t wordSize);
+  bool elementsAreStructs(const ListDescriptor* descriptor, WordCount wordSize);
   bool elementsAreLists(const ListDescriptor* descriptor);
-  bool elementsAreData(const ListDescriptor* descriptor, int bitSize);
+  bool elementsAreData(const ListDescriptor* descriptor, BitCount bitSize);
 }  // namespace debug
 
 class StructBuilder;
@@ -73,6 +72,14 @@ struct WireReference;
 struct WireHelpers;
 
 // -------------------------------------------------------------------
+
+template <typename T>
+struct NoInfer {
+  // Use NoInfer<T>::Type in place of T for a function parameter to prevent inference of the
+  // parameter.  There's something in the standard library for this but I didn't want to #include
+  // type_traits or whatever.
+  typedef T Type;
+};
 
 template <typename T>
 class WireValue {
@@ -101,14 +108,19 @@ private:
 
 class StructBuilder {
 public:
+  inline StructBuilder(): descriptor(nullptr), segment(nullptr), ptr(nullptr) {}
+
+  static StructBuilder initRoot(const StructDescriptor* descriptor,
+                                SegmentBuilder* segment, word* location);
+
   template <typename T>
-  inline T getDataField(unsigned int offset) const;
+  inline T getDataField(uint offset) const;
   // Get the data field value of the given type at the given offset.  The offset is measured in
   // multiples of the field size, determined by the type.
 
   template <typename T>
-  inline void setDataField(unsigned int offset, T value) const;
-  // Set the data field value at the given offset.  Be careful to use the correct type.
+  inline void setDataField(uint offset, typename NoInfer<T>::Type value) const;
+  // Set the data field value at the given offset.
 
   CAPNPROTO_ALWAYS_INLINE(StructBuilder getStructField(int refIndex) const);
   // Get the struct field at the given index in the reference segment.  Allocates space for the
@@ -128,9 +140,9 @@ public:
 private:
   const StructDescriptor* descriptor;  // Descriptor for the struct.
   SegmentBuilder* segment;  // Memory segment in which the struct resides.
-  void* ptr;  // Pointer to the location between the struct's data and reference segments.
+  word* ptr;  // Pointer to the location between the struct's data and reference segments.
 
-  inline StructBuilder(const StructDescriptor* descriptor, SegmentBuilder* segment, void* ptr)
+  inline StructBuilder(const StructDescriptor* descriptor, SegmentBuilder* segment, word* ptr)
       : descriptor(descriptor), segment(segment), ptr(ptr) {}
 
   StructBuilder getStructFieldInternal(int refIndex) const;
@@ -146,17 +158,21 @@ private:
 
 class StructReader {
 public:
+  inline StructReader()
+      : descriptor(nullptr), segment(nullptr), ptr{nullptr, nullptr}, fieldCount(0),
+        bit0Offset(0 * BITS), recursionLimit(0) {}
+
   template <typename T>
-  inline T getDataField(int fieldNumber, unsigned int offset) const;
+  inline T getDataField(int fieldNumber, uint offset) const;
   // Get the data field value of the given type at the given offset.  The offset is measured in
   // multiples of the field size, determined by the type.
 
   CAPNPROTO_ALWAYS_INLINE(
-      StructReader getStructField(int fieldNumber, unsigned int refIndex) const);
+      StructReader getStructField(int fieldNumber, uint refIndex) const);
   // Get the struct field at the given index in the reference segment, or the default value if not
   // initialized.
 
-  CAPNPROTO_ALWAYS_INLINE(ListReader getListField(int fieldNumber, unsigned int refIndex) const);
+  CAPNPROTO_ALWAYS_INLINE(ListReader getListField(int fieldNumber, uint refIndex) const);
   // Get the list field at the given index in the reference segment, or the default value if not
   // initialized.
 
@@ -168,10 +184,17 @@ private:
   // ptr[0] points to the location between the struct's data and reference segments.
   // ptr[1] points to the end of the *default* data segment.
   // We put these in an array so we can choose between them without a branch.
+  // These pointers are not necessarily word-aligned -- they are aligned as well as necessary for
+  // the data they might point at.  So if the struct has only one field that we know of, and it is
+  // of type Int16, then the pointers only need to be 16-bit aligned.  Or if the struct has fields
+  // of type Int16 and Int64 (in that order), but the struct reference on the wire self-reported
+  // as having only one field (therefore, only the Int16), then ptr[0] need only be 16-bit aligned
+  // while ptr[1] must be 64-bit aligned.  This relaxation of alignment is needed to handle the
+  // case where a list of primitives is upgraded to a list of structs.
 
   int fieldCount;  // Number of fields the struct is reported to have.
 
-  int bit0Offset;
+  BitCount bit0Offset;
   // A special hack:  When accessing a boolean with field number zero, pretend its offset is this
   // instead of the usual zero.  This is needed to allow a boolean list to be upgraded to a list
   // of structs.
@@ -181,13 +204,13 @@ private:
   // Once this reaches zero, further pointers will be pruned.
 
   inline StructReader(const StructDescriptor* descriptor, SegmentReader* segment,
-                      const void* ptr, const void* defaultData, int fieldCount, int bit0Offset,
+                      const void* ptr, const void* defaultData, int fieldCount, BitCount bit0Offset,
                       int recursionLimit)
       : descriptor(descriptor), segment(segment), ptr{ptr, defaultData}, fieldCount(fieldCount),
         bit0Offset(bit0Offset), recursionLimit(recursionLimit) {}
 
-  StructReader getStructFieldInternal(int fieldNumber, unsigned int refIndex) const;
-  ListReader getListFieldInternal(int fieldNumber, unsigned int refIndex) const;
+  StructReader getStructFieldInternal(int fieldNumber, uint refIndex) const;
+  ListReader getListFieldInternal(int fieldNumber, uint refIndex) const;
   // The public methods are inlined and simply wrap these "Internal" methods after doing debug
   // asserts.  This way, debugging is enabled by the caller's compiler flags rather than
   // libcapnproto's debug flags.
@@ -201,26 +224,28 @@ private:
 
 class ListBuilder {
 public:
+  inline ListBuilder(): descriptor(nullptr), segment(nullptr), ptr(nullptr), elementCount(0) {}
+
   inline uint32_t size();
   // The number of elements in the list.
 
   template <typename T>
-  CAPNPROTO_ALWAYS_INLINE(T getDataElement(unsigned int index) const);
+  CAPNPROTO_ALWAYS_INLINE(T getDataElement(uint index) const);
   // Get the element of the given type at the given index.
 
   template <typename T>
-  CAPNPROTO_ALWAYS_INLINE(void setDataElement(unsigned int index, T value) const);
-  // Set the element at the given index.  Be careful to use the correct type.
+  CAPNPROTO_ALWAYS_INLINE(void setDataElement(uint index, typename NoInfer<T>::Type value) const);
+  // Set the element at the given index.
 
   CAPNPROTO_ALWAYS_INLINE(
-      StructBuilder getStructElement(unsigned int index, uint32_t elementWordSize) const);
+      StructBuilder getStructElement(uint index, WordCount elementSize) const);
   // Get the struct element at the given index.  elementWordSize is the size, in 64-bit words, of
   // each element.
 
-  CAPNPROTO_ALWAYS_INLINE(ListBuilder initListElement(unsigned int index, uint32_t size) const);
+  CAPNPROTO_ALWAYS_INLINE(ListBuilder initListElement(uint index, uint32_t size) const);
   // Create a new list element of the given size at the given index.
 
-  CAPNPROTO_ALWAYS_INLINE(ListBuilder getListElement(unsigned int index) const);
+  CAPNPROTO_ALWAYS_INLINE(ListBuilder getListElement(uint index) const);
   // Get the existing list element at the given index.
 
   ListReader asReader() const;
@@ -229,16 +254,16 @@ public:
 private:
   const ListDescriptor* descriptor;  // Descriptor for the list.
   SegmentBuilder* segment;  // Memory segment in which the list resides.
-  void* ptr;  // Pointer to the beginning of the list.
+  word* ptr;  // Pointer to the beginning of the list.
   uint32_t elementCount;  // Number of elements in the list.
 
   inline ListBuilder(const ListDescriptor* descriptor, SegmentBuilder* segment,
-                     void* ptr, uint32_t size)
+                     word* ptr, uint32_t size)
       : descriptor(descriptor), segment(segment), ptr(ptr), elementCount(size) {}
 
-  StructBuilder getStructElementInternal(unsigned int index, uint32_t elementWordSize) const;
-  ListBuilder initListElementInternal(unsigned int index, uint32_t size) const;
-  ListBuilder getListElementInternal(unsigned int index) const;
+  StructBuilder getStructElementInternal(uint index, WordCount elementSize) const;
+  ListBuilder initListElementInternal(uint index, uint32_t size) const;
+  ListBuilder getListElementInternal(uint index) const;
   // The public methods are inlined and simply wrap these "Internal" methods after doing debug
   // asserts.  This way, debugging is enabled by the caller's compiler flags rather than
   // libcapnproto's debug flags.
@@ -249,17 +274,21 @@ private:
 
 class ListReader {
 public:
+  inline ListReader()
+      : descriptor(nullptr), segment(nullptr), ptr(nullptr), elementCount(0), stepBits(0 * BITS),
+        structFieldCount(0), recursionLimit(0) {}
+
   inline uint32_t size();
   // The number of elements in the list.
 
   template <typename T>
-  CAPNPROTO_ALWAYS_INLINE(T getDataElement(unsigned int index) const);
+  CAPNPROTO_ALWAYS_INLINE(T getDataElement(uint index) const);
   // Get the element of the given type at the given index.
 
-  CAPNPROTO_ALWAYS_INLINE(StructReader getStructElement(unsigned int index) const);
+  CAPNPROTO_ALWAYS_INLINE(StructReader getStructElement(uint index) const);
   // Get the struct element at the given index.
 
-  CAPNPROTO_ALWAYS_INLINE(ListReader getListElement(unsigned int index, uint32_t size) const);
+  CAPNPROTO_ALWAYS_INLINE(ListReader getListElement(uint index, uint32_t size) const);
   // Get the list element at the given index.
 
 private:
@@ -267,11 +296,12 @@ private:
   SegmentReader* segment;  // Memory segment in which the list resides.
 
   const void* ptr;
-  // Pointer to the data.  If NULL, use defaultReferences.  (Never NULL for data lists.)
+  // Pointer to the data.  If null, use defaultReferences.  (Never null for data lists.)
+  // Must be aligned appropriately for the elements.
 
   uint32_t elementCount;  // Number of elements in the list.
 
-  unsigned int stepBits;
+  BitCount stepBits;
   // The distance between elements, in bits.  This is usually the element size, but can be larger
   // if the sender upgraded a data list to a struct list.  It will always be aligned properly for
   // the type.  Unsigned so that division by a constant power of 2 is efficient.
@@ -284,13 +314,13 @@ private:
   // Once this reaches zero, further pointers will be pruned.
 
   inline ListReader(const ListDescriptor* descriptor, SegmentReader* segment,
-                    const void* ptr, uint32_t size, int stepBits, int structFieldCount,
+                    const void* ptr, uint32_t size, BitCount stepBits, int structFieldCount,
                     int recursionLimit)
       : descriptor(descriptor), segment(segment), ptr(ptr), elementCount(size), stepBits(stepBits),
         structFieldCount(structFieldCount), recursionLimit(recursionLimit) {}
 
-  StructReader getStructElementInternal(unsigned int index) const;
-  ListReader getListElementInternal(unsigned int index, uint32_t size) const;
+  StructReader getStructElementInternal(uint index) const;
+  ListReader getListElementInternal(uint index, uint32_t size) const;
   // The public methods are inlined and simply wrap these "Internal" methods after doing debug
   // asserts.  This way, debugging is enabled by the caller's compiler flags rather than
   // libcapnproto's debug flags.
@@ -304,31 +334,31 @@ private:
 // Internal implementation details...
 
 template <typename T>
-inline T StructBuilder::getDataField(unsigned int offset) const {
-  CAPNPROTO_DEBUG_ASSERT(debug::dataFieldInRange(descriptor, offset, sizeof(T)),
+inline T StructBuilder::getDataField(uint offset) const {
+  CAPNPROTO_DEBUG_ASSERT(debug::dataFieldInRange(descriptor, offset, sizeof(T) * BYTES),
       "StructBuilder::getDataField() type mismatch.");
 
   return reinterpret_cast<WireValue<T>*>(ptr)[-offset].get();
 }
 
 template <>
-inline bool StructBuilder::getDataField<bool>(unsigned int offset) const {
-  CAPNPROTO_DEBUG_ASSERT(debug::bitFieldInRange(descriptor, offset),
+inline bool StructBuilder::getDataField<bool>(uint offset) const {
+  CAPNPROTO_DEBUG_ASSERT(debug::bitFieldInRange(descriptor, offset * BITS),
       "StructBuilder::getDataField<bool>() type mismatch.");
   uint8_t byte = *(reinterpret_cast<uint8_t*>(ptr) - (offset / 8) - 1);
   return (byte & (1 << (offset % 8))) != 0;
 }
 
 template <typename T>
-inline void StructBuilder::setDataField(unsigned int offset, T value) const {
-  CAPNPROTO_DEBUG_ASSERT(debug::dataFieldInRange(descriptor, offset, sizeof(T)),
+inline void StructBuilder::setDataField(uint offset, typename NoInfer<T>::Type value) const {
+  CAPNPROTO_DEBUG_ASSERT(debug::dataFieldInRange(descriptor, offset, sizeof(T) * BYTES),
       "StructBuilder::setDataField() type mismatch.");
   reinterpret_cast<WireValue<T>*>(ptr)[-offset].set(value);
 }
 
 template <>
-inline void StructBuilder::setDataField<bool>(unsigned int offset, bool value) const {
-  CAPNPROTO_DEBUG_ASSERT(debug::bitFieldInRange(descriptor, offset),
+inline void StructBuilder::setDataField<bool>(uint offset, bool value) const {
+  CAPNPROTO_DEBUG_ASSERT(debug::bitFieldInRange(descriptor, offset * BITS),
       "StructBuilder::setDataField<bool>() type mismatch.");
   uint8_t* byte = reinterpret_cast<uint8_t*>(ptr) - (offset / 8) - 1;
   *byte = (*byte & ~(1 << (offset % 8)))
@@ -356,33 +386,34 @@ inline ListBuilder StructBuilder::getListField(int refIndex) const {
 // -------------------------------------------------------------------
 
 template <typename T>
-T StructReader::getDataField(int fieldNumber, unsigned int offset) const {
-  CAPNPROTO_DEBUG_ASSERT(debug::fieldIsData(descriptor, fieldNumber, offset, sizeof(T) * 8),
+T StructReader::getDataField(int fieldNumber, uint offset) const {
+  CAPNPROTO_DEBUG_ASSERT(
+      debug::fieldIsData(descriptor, fieldNumber, offset, sizeof(T) * BYTES * BITS_PER_BYTE),
       "StructReader::getDataField() type mismatch.");
   const void* dataPtr = ptr[fieldNumber >= fieldCount];
   return reinterpret_cast<WireValue<T>*>(dataPtr)[-offset].get();
 }
 
 template <>
-inline bool StructReader::getDataField<bool>(int fieldNumber, unsigned int offset) const {
-  CAPNPROTO_DEBUG_ASSERT(debug::fieldIsData(descriptor, fieldNumber, offset, 1),
+inline bool StructReader::getDataField<bool>(int fieldNumber, uint offset) const {
+  CAPNPROTO_DEBUG_ASSERT(debug::fieldIsData(descriptor, fieldNumber, offset, 1 * BITS),
       "StructReader::getDataField<bool>() type mismatch.");
 
   // This branch should always be optimized away when inlining.
-  if (offset == 0) offset = bit0Offset;
+  if (offset == 0) offset = bit0Offset / BITS;
 
   const void* dataPtr = ptr[fieldNumber >= fieldCount];
   uint8_t byte = *(reinterpret_cast<const uint8_t*>(dataPtr) - (offset / 8) - 1);
   return (byte & (1 << (offset % 8))) != 0;
 }
 
-inline StructReader StructReader::getStructField(int fieldNumber, unsigned int refIndex) const {
+inline StructReader StructReader::getStructField(int fieldNumber, uint refIndex) const {
   CAPNPROTO_DEBUG_ASSERT(debug::fieldIsStruct(descriptor, fieldNumber, refIndex),
       "StructReader::getStructField() type mismatch.");
   return getStructFieldInternal(fieldNumber, refIndex);
 }
 
-inline ListReader StructReader::getListField(int fieldNumber, unsigned int refIndex) const {
+inline ListReader StructReader::getListField(int fieldNumber, uint refIndex) const {
   CAPNPROTO_DEBUG_ASSERT(debug::fieldIsList(descriptor, fieldNumber, refIndex),
       "StructReader::getListField() type mismatch.");
   return getListFieldInternal(fieldNumber, refIndex);
@@ -393,30 +424,30 @@ inline ListReader StructReader::getListField(int fieldNumber, unsigned int refIn
 inline uint32_t ListBuilder::size() { return elementCount; }
 
 template <typename T>
-inline T ListBuilder::getDataElement(unsigned int index) const {
-  CAPNPROTO_DEBUG_ASSERT(debug::elementsAreData(descriptor, sizeof(T) * 8),
+inline T ListBuilder::getDataElement(uint index) const {
+  CAPNPROTO_DEBUG_ASSERT(debug::elementsAreData(descriptor, sizeof(T) * BYTES * BITS_PER_BYTE),
       "ListBuilder::getDataElement() type mismatch.");
   return reinterpret_cast<WireValue<T>*>(ptr)[index].get();
 }
 
 template <>
-inline bool ListBuilder::getDataElement<bool>(unsigned int index) const {
-  CAPNPROTO_DEBUG_ASSERT(debug::elementsAreData(descriptor, 1),
+inline bool ListBuilder::getDataElement<bool>(uint index) const {
+  CAPNPROTO_DEBUG_ASSERT(debug::elementsAreData(descriptor, 1 * BITS),
       "ListBuilder::getDataElement<bool>() type mismatch.");
   uint8_t byte = *(reinterpret_cast<uint8_t*>(ptr) + (index / 8));
   return (byte & (1 << (index % 8))) != 0;
 }
 
 template <typename T>
-inline void ListBuilder::setDataElement(unsigned int index, T value) const {
-  CAPNPROTO_DEBUG_ASSERT(debug::elementsAreData(descriptor, sizeof(T) * 8),
+inline void ListBuilder::setDataElement(uint index, typename NoInfer<T>::Type value) const {
+  CAPNPROTO_DEBUG_ASSERT(debug::elementsAreData(descriptor, sizeof(T) * BYTES * BITS_PER_BYTE),
       "ListBuilder::setDataElement() type mismatch.");
   reinterpret_cast<WireValue<T>*>(ptr)[index].set(value);
 }
 
 template <>
-inline void ListBuilder::setDataElement<bool>(unsigned int index, bool value) const {
-  CAPNPROTO_DEBUG_ASSERT(debug::elementsAreData(descriptor, 1),
+inline void ListBuilder::setDataElement<bool>(uint index, bool value) const {
+  CAPNPROTO_DEBUG_ASSERT(debug::elementsAreData(descriptor, 1 * BITS),
       "ListBuilder::setDataElement<bool>() type mismatch.");
   uint8_t* byte = reinterpret_cast<uint8_t*>(ptr) + (index / 8);
   *byte = (*byte & ~(1 << (index % 8)))
@@ -424,21 +455,21 @@ inline void ListBuilder::setDataElement<bool>(unsigned int index, bool value) co
 }
 
 inline StructBuilder ListBuilder::getStructElement(
-    unsigned int index, uint32_t elementWordSize) const {
+    uint index, WordCount elementSize) const {
   CAPNPROTO_DEBUG_ASSERT(index < elementCount, "List index out of range.");
-  CAPNPROTO_DEBUG_ASSERT(debug::elementsAreStructs(descriptor, elementWordSize),
+  CAPNPROTO_DEBUG_ASSERT(debug::elementsAreStructs(descriptor, elementSize),
       "ListBuilder::getStructElement() type mismatch.");
-  return getStructElementInternal(index, elementWordSize);
+  return getStructElementInternal(index, elementSize);
 }
 
-inline ListBuilder ListBuilder::initListElement(unsigned int index, uint32_t size) const {
+inline ListBuilder ListBuilder::initListElement(uint index, uint32_t size) const {
   CAPNPROTO_DEBUG_ASSERT(index < elementCount, "List index out of range.");
   CAPNPROTO_DEBUG_ASSERT(debug::elementsAreLists(descriptor),
       "ListBuilder::initListElement() type mismatch.");
   return initListElementInternal(index, size);
 }
 
-inline ListBuilder ListBuilder::getListElement(unsigned int index) const {
+inline ListBuilder ListBuilder::getListElement(uint index) const {
   CAPNPROTO_DEBUG_ASSERT(index < elementCount, "List index out of range.");
   CAPNPROTO_DEBUG_ASSERT(debug::elementsAreLists(descriptor),
       "ListBuilder::getListElement() type mismatch.");
@@ -450,30 +481,30 @@ inline ListBuilder ListBuilder::getListElement(unsigned int index) const {
 inline uint32_t ListReader::size() { return elementCount; }
 
 template <typename T>
-inline T ListReader::getDataElement(unsigned int index) const {
-  CAPNPROTO_DEBUG_ASSERT(debug::elementsAreData(descriptor, sizeof(T) * 8),
+inline T ListReader::getDataElement(uint index) const {
+  CAPNPROTO_DEBUG_ASSERT(debug::elementsAreData(descriptor, sizeof(T) * BYTES * BITS_PER_BYTE),
       "ListReader::getDataElement() type mismatch.");
   return *reinterpret_cast<const T*>(
-      reinterpret_cast<const uint8_t*>(ptr) + index * (stepBits / 8));
+      reinterpret_cast<const byte*>(ptr) + index * (stepBits / BITS_PER_BYTE));
 }
 
 template <>
-inline bool ListReader::getDataElement<bool>(unsigned int index) const {
-  CAPNPROTO_DEBUG_ASSERT(debug::elementsAreData(descriptor, 1),
+inline bool ListReader::getDataElement<bool>(uint index) const {
+  CAPNPROTO_DEBUG_ASSERT(debug::elementsAreData(descriptor, 1 * BITS),
       "ListReader::getDataElement<bool>() type mismatch.");
-  unsigned int bitIndex = index * stepBits;
+  uint bitIndex = index * stepBits / BITS;
   uint8_t byte = *(reinterpret_cast<const uint8_t*>(ptr) + (bitIndex / 8));
   return (byte & (1 << (bitIndex % 8))) != 0;
 }
 
-inline StructReader ListReader::getStructElement(unsigned int index) const {
+inline StructReader ListReader::getStructElement(uint index) const {
   CAPNPROTO_DEBUG_ASSERT(index < elementCount, "List index out of range.");
   CAPNPROTO_DEBUG_ASSERT(debug::elementsAreStructs(descriptor),
       "ListReader::getStructElement() type mismatch.");
   return getStructElementInternal(index);
 }
 
-inline ListReader ListReader::getListElement(unsigned int index, uint32_t size) const {
+inline ListReader ListReader::getListElement(uint index, uint32_t size) const {
   CAPNPROTO_DEBUG_ASSERT(index < elementCount, "List index out of range.");
   CAPNPROTO_DEBUG_ASSERT(debug::elementsAreLists(descriptor),
       "ListReader::getListElement() type mismatch.");
