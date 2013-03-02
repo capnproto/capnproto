@@ -23,6 +23,7 @@
 
 #include <cstddef>
 #include "macros.h"
+#include "type-safety.h"
 
 #ifndef CAPNPROTO_MESSAGE_H_
 #define CAPNPROTO_MESSAGE_H_
@@ -35,21 +36,7 @@ class MessageReader;
 class MessageBuilder;
 class ReadLimiter;
 
-struct SegmentId {
-  // TODO:  Generalize this.  class Id<Base, Type>.
-
-  uint32_t number;
-
-  inline constexpr SegmentId(): number(0) {}
-  inline constexpr explicit SegmentId(int number): number(number) {}
-
-  inline constexpr bool operator==(const SegmentId& other) { return number == other.number; }
-  inline constexpr bool operator!=(const SegmentId& other) { return number != other.number; }
-  inline constexpr bool operator<=(const SegmentId& other) { return number <= other.number; }
-  inline constexpr bool operator>=(const SegmentId& other) { return number >= other.number; }
-  inline constexpr bool operator< (const SegmentId& other) { return number <  other.number; }
-  inline constexpr bool operator> (const SegmentId& other) { return number >  other.number; }
-};
+typedef Id<uint32_t, SegmentReader> SegmentId;
 
 class MessageReader {
   // Abstract interface encapsulating a readable message.  By implementing this interface, you can
@@ -82,6 +69,10 @@ public:
   //
   // As with reportInvalidData(), this may throw an exception, and if it doesn't, default values
   // will be used in place of the actual message data.
+  //
+  // If this method returns rather that throwing, many other errors are likely to be reported as
+  // a side-effect of reading being blocked.  The MessageReader should ignore all further errors
+  // after this call.
 
   // TODO:  Methods to deal with bundled capabilities.
 };
@@ -122,10 +113,12 @@ public:
   inline explicit ReadLimiter();                     // No limit.
   inline explicit ReadLimiter(WordCount64 limit);    // Limit to the given number of words.
 
-  inline bool canRead(WordCount amount);
+  CAPNPROTO_ALWAYS_INLINE(bool canRead(WordCount amount, MessageReader* message));
 
 private:
   WordCount64 limit;
+
+  CAPNPROTO_DISALLOW_COPY(ReadLimiter);
 };
 
 class SegmentReader {
@@ -133,8 +126,7 @@ public:
   inline SegmentReader(MessageReader* message, SegmentId id, const word ptr[], WordCount size,
                        ReadLimiter* readLimiter);
 
-  CAPNPROTO_ALWAYS_INLINE(const word* getPtrChecked(
-      WordCount offset, WordCount before, WordCount after));
+  CAPNPROTO_ALWAYS_INLINE(bool containsInterval(const word* from, const word* to));
 
   inline MessageReader* getMessage();
   inline SegmentId getSegmentId();
@@ -150,8 +142,7 @@ private:
   const word* start;
   ReadLimiter* readLimiter;
 
-  SegmentReader(const SegmentReader& other) = delete;
-  SegmentReader& operator=(const SegmentReader& other) = delete;
+  CAPNPROTO_DISALLOW_COPY(SegmentReader);
 
   friend class SegmentBuilder;
 };
@@ -170,8 +161,7 @@ private:
   word* end;
   ReadLimiter dummyLimiter;
 
-  SegmentBuilder(const SegmentBuilder& other) = delete;
-  SegmentBuilder& operator=(const SegmentBuilder& other) = delete;
+  CAPNPROTO_DISALLOW_COPY(SegmentBuilder);
 
   // TODO:  Do we need mutex locking?
 };
@@ -184,8 +174,9 @@ inline ReadLimiter::ReadLimiter()
 
 inline ReadLimiter::ReadLimiter(WordCount64 limit): limit(limit) {}
 
-inline bool ReadLimiter::canRead(WordCount amount) {
-  if (amount > limit) {
+inline bool ReadLimiter::canRead(WordCount amount, MessageReader* message) {
+  if (CAPNPROTO_EXPECT_FALSE(amount > limit)) {
+    message->reportReadLimitReached();
     return false;
   } else {
     limit -= amount;
@@ -199,22 +190,9 @@ inline SegmentReader::SegmentReader(MessageReader* message, SegmentId id, const 
                                     WordCount size, ReadLimiter* readLimiter)
     : message(message), id(id), size(size), start(ptr), readLimiter(readLimiter) {}
 
-inline const word* SegmentReader::getPtrChecked(
-    WordCount offset, WordCount before, WordCount after) {
-  // Check bounds.  Watch out for overflow and underflow here.
-  if (offset > size ||
-      before > offset ||
-      after > size - offset) {
-    return nullptr;
-  } else {
-    // Enforce the read limit.  Synchronization is not necessary because readLimit is just a rough
-    // counter to prevent infinite loops leading to DoS attacks.
-    if (CAPNPROTO_EXPECT_FALSE(!readLimiter->canRead(before + after))) {
-      message->reportReadLimitReached();
-    }
-
-    return start + offset;
-  }
+inline bool SegmentReader::containsInterval(const word* from, const word* to) {
+  return from >= this->start && to <= this->start + size &&
+      readLimiter->canRead(intervalLength(from, to), message);
 }
 
 inline MessageReader* SegmentReader::getMessage() { return message; }

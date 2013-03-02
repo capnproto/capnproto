@@ -31,8 +31,8 @@ namespace {
 const int READONLY_SEGMENT_START = 123;
 
 const FieldDescriptor TEST_FIELDS[2] = {
-    { WordCount8(1 * WORDS), 0, 0, FieldSize::FOUR_BYTES, 1, 0, 0, 0 },
-    { WordCount8(1 * WORDS), 1, 0, FieldSize::REFERENCE, 1, 0, 0, 0 }
+    { 1 * WORDS, 0, 0, FieldSize::FOUR_BYTES, 1, 0, 0, 0 },
+    { 1 * WORDS, 1, 0, FieldSize::REFERENCE, 1, 0, 0, 0 }
 };
 
 extern const StructDescriptor TEST_STRUCT;

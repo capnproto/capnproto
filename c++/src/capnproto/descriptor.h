@@ -38,6 +38,7 @@
 
 #include <inttypes.h>
 #include "macros.h"
+#include "type-safety.h"
 
 namespace capnproto {
 namespace internal {
@@ -45,6 +46,7 @@ namespace internal {
 struct ListDescriptor;
 struct StructDescriptor;
 struct FieldDescriptor;
+typedef Id<uint8_t, FieldDescriptor> FieldNumber;
 
 template <int wordCount>
 union AlignedData {
@@ -75,33 +77,38 @@ struct Descriptor {
 };
 
 enum class FieldSize: uint8_t {
-  BIT,
-  BYTE,
-  TWO_BYTES,
-  FOUR_BYTES,
-  EIGHT_BYTES,
+  // TODO:  Rename to FieldLayout or maybe ValueLayout.
 
-  REFERENCE,       // Indicates that the field lives in the reference segment, not the data segment.
-  KEY_REFERENCE,   // A 64-bit key, 64-bit reference pair.
+  BIT = 0,
+  BYTE = 1,
+  TWO_BYTES = 2,
+  FOUR_BYTES = 3,
+  EIGHT_BYTES = 4,
 
-  STRUCT           // An arbitrary-sized inlined struct.  Used only for list elements, not struct
-                   // fields, since a struct cannot embed another struct inline.
+  REFERENCE = 5,  // Indicates that the field lives in the reference segment, not the data segment.
+  KEY_REFERENCE = 6,  // A 64-bit key, 64-bit reference pair.  Valid only in lists.
+
+  STRUCT = 7   // An arbitrary-sized inlined struct.  Used only for list elements, not struct
+               // fields, since a struct cannot embed another struct inline.
 };
 
-inline BitCount sizeInBits(FieldSize s) {
-  static constexpr BitCount table[] = {1*BITS, 8*BITS, 16*BITS, 32*BITS, 64*BITS,
-                                       64*BITS, 128*BITS, 0*BITS};
-  return table[static_cast<int>(s)];
+typedef decltype(BITS / ELEMENTS) BitsPerElement;
+
+namespace internal {
+  static constexpr BitsPerElement BITS_PER_ELEMENT_TABLE[] = {
+      1 * BITS / ELEMENTS,
+      8 * BITS / ELEMENTS,
+      16 * BITS / ELEMENTS,
+      32 * BITS / ELEMENTS,
+      64 * BITS / ELEMENTS,
+      64 * BITS / ELEMENTS,
+      128 * BITS / ELEMENTS,
+      0 * BITS / ELEMENTS
+  };
 }
 
-inline ByteCount byteOffsetForFieldZero(FieldSize s) {
-  // For the given field size, get the offset, in bytes, between a struct pointer and the location
-  // of the struct's first field, if the struct's first field is of the given type.  We use this
-  // to adjust pointers when non-struct lists are converted to struct lists or vice versa.
-
-  static constexpr ByteCount table[] = {1*BYTES, 1*BYTES, 2*BYTES, 4*BYTES, 8*BYTES,
-                                        0*BYTES, 8*BYTES, 0*BYTES};
-  return table[static_cast<int>(s)];
+inline constexpr BitsPerElement bitsPerElement(FieldSize size) {
+  return internal::BITS_PER_ELEMENT_TABLE[static_cast<int>(size)];
 }
 
 struct ListDescriptor {
@@ -113,24 +120,16 @@ struct ListDescriptor {
   // Size of each element of the list.  Also determines whether it is a reference list or a data
   // list.
 
-  const Descriptor* elementDescriptor;
-  // For a reference list, this is a descriptor of an element.  Otherwise, NULL.
-
-  uint32_t defaultCount;
+  ElementCount32 defaultCount;
   // Number of elements in the default value.
 
-  const void* defaultData;
-  // For a data list, points to an array of elements representing the default contents of the list.
-  // Note that unlike data segments of structs, this pointer points to the first byte of the data.
-  // For a reference list, points to an array of descriptor pointers -- use defaultReferences()
-  // for type-safety.
+  const word* defaultValue;
+  // Default content, parseable as a raw (trusted) message.
 
-  const Descriptor* const* defaultReferences() const {
-    // Convenience accessor for reference lists.
-    return reinterpret_cast<const Descriptor* const*>(defaultData);
-  }
+  const Descriptor* elementDescriptor;
+  // For a reference list, this is a descriptor of an element.  Otherwise, NULL.
 };
-static_assert(__builtin_offsetof(ListDescriptor, base) == 0,
+static_assert(CAPNPROTO_OFFSETOF(ListDescriptor, base) == 0,
       "'base' must be the first member of ListDescriptor to allow reinterpret_cast from "
       "Descriptor to ListDescriptor.");
 
@@ -139,34 +138,32 @@ struct StructDescriptor {
 
   Descriptor base;
 
-  uint8_t fieldCount;
+  FieldNumber fieldCount;
   // Number of fields in this type -- that we were aware of at compile time, of course.
 
   WordCount8 dataSize;
   // Size of the data segment, in 64-bit words.
-  // TODO:  Can we use WordCount here and still get static init?
 
-  uint8_t referenceCount;
+  WireReferenceCount8 referenceCount;
   // Number of references in the reference segment.
 
   const FieldDescriptor* fields;
-  // Array of FieldDescriptors.
+  // Descriptors for fields, ordered by field number.
 
-  const void* defaultData;
-  // Default data.  The pointer actually points to the byte immediately after the end of the data.
+  const word* defaultValue;
+  // Default content, parseable as a raw (trusted) message.  This pointer actually points at a
+  // struct reference which in turn points at the struct content.
 
-  const Descriptor* const* defaultReferences;
-  // Array of descriptors describing the references.
-
-  inline WordCount wordSize() const {
-    // Size of the struct in words.
-    // TODO:  Somehow use WORDS_PER_REFERENCE here.
-    return WordCount(dataSize) + referenceCount * WORDS;
+  WordCount wordSize() const {
+    return WordCount(dataSize) + referenceCount * WORDS_PER_REFERENCE;
   }
 };
-static_assert(__builtin_offsetof(StructDescriptor, base) == 0,
+static_assert(CAPNPROTO_OFFSETOF(StructDescriptor, base) == 0,
       "'base' must be the first member of StructDescriptor to allow reinterpret_cast from "
       "Descriptor to StructDescriptor.");
+
+static constexpr uint16_t INVALID_FIELD_OFFSET = 0xffff;
+static constexpr ByteCount16 FIELD_ITSELF_IS_UNION_TAG = 0xfffe * BYTES;
 
 struct FieldDescriptor {
   // Describes one field of a struct.
@@ -176,47 +173,60 @@ struct FieldDescriptor {
   // offset * size / 64 bits, rounded up.  This value is useful for validating object references
   // received on the wire -- if dataSize is insufficient to support fieldCount, don't trust it!
 
-  uint8_t requiredReferenceCount;
+  WireReferenceCount8 requiredReferenceCount;
   // The minimum size of the reference segment of any object which includes this field.  Same deal
   // as with requiredDataSize.
-
-  uint16_t offset;
-  // If the field is a data field (size != REFERENCE), then this is the offset within the object's
-  // data segment at which the field is positioned, measured in multiples of the field's size.  This
-  // offset is intended to be *subtracted* from the object pointer, since the object pointer points
-  // to the beginning of the reference segment, which is located immediately after the data segment.
-  // Therefore, this offset can never be zero.
-  //
-  // For size == BIT, the meaning is slightly different:  bits are numbered from zero, starting with
-  // the eight bits in the last byte of the data segment, followed by the eight bits in the byte
-  // before that, and so on.  Within each byte, bits are numbered from least-significant to
-  // most-significant -- i.e. *not* backwards.  This awkward numbering is necessary to allow a
-  // list of booleans to be upgraded to a list of structs where field number zero is a boolean --
-  // we need the first boolean in either a list or a struct to be located at the same end of its
-  // byte.
-  //
-  // If the field is a reference field (size == REFERENCE), then this is the index within the
-  // reference array at which the field is located.
 
   FieldSize size;
   // Size of this field.
 
-  uint8_t hole32Offset;
+  ElementCount16 offset;
+  // If the field is a data field (size != REFERENCE), then this is the offset within the object's
+  // data segment at which the field is positioned, measured in multiples of the field's size.  Note
+  // that for size == BIT, bits are considered to be in little-endian order.  Therefore, an offset
+  // of zero refers to the least-significant bit of the first byte, 15 refers to the
+  // most-significant bit of the second byte, etc.
+  //
+  // If the field is a reference field (size == REFERENCE), then this is the index within the
+  // reference array at which the field is located.
+  //
+  // A value of INVALID_FIELD_OFFSET means that this is a void field.
+
+  ByteCount16 unionTagOffset;
+  // Offset within the data segment at which a union tag exists deciding whether this field is
+  // valid.  If the tag byte does not contain this field's number, then this field is considered
+  // to be unset.  An offset of INVALID_FIELD_OFFSET means the field is not a member of a union.
+  // An offset of FIELD_ITSELF_IS_UNION_TAG means that this field itself is actually a union tag.
+
+  uint16_t hole32Offset;
   uint16_t hole16Offset;
-  uint16_t hole8Offset;
+  ByteCount16 hole8Offset;
   // In the case that this field is the last one in the object, and thus the object's data segment
   // size is equal to requiredDataSize, then the following offsets indicate locations of "holes" in
   // the data segment which are not occupied by any field.  The packing algorithm guarantees that
-  // there can be at most one hole of each size.  An offset of zero indicates that no hole is
-  // present.  Each offset is measured in multiples two times the hole size.  E.g. hole32Offset is
-  // measured in 64-bit words.  (The packing algorithm guarantees that hole offsets will always be
-  // an even multiple of the hole size.)
+  // there can be at most one hole of each size, and such holes will always be located at an offset
+  // that is an odd multiple of the hole size.  The hole offsets here are given in multiples of the
+  // hole size, with INVALID_FIELD_OFFSET meaning there is no hole.
+  //
+  // TODO:  Measurement types for hole16 and hole32?
 
-  uint16_t bitholeOffset;
+  BitCount16 bitholeOffset;
   // If the object contains boolean fields and the number of booleans is not divisible by 8, then
   // there will also be a hole of 1-7 bits somewhere.  bitholeOffset is the offset, in bits, of the
-  // first (most-significant) such missing bit.  All subsequent (less-significant) bits within the
-  // same byte are also missing.
+  // first (least-significant) such missing bit.  All subsequent (more-significant) bits within the
+  // same byte are also missing.  A value of INVALID_FIELD_OFFSET indicates that there is no hole.
+
+  const Descriptor* descriptor;
+  // If the field has a composite type, this is its descriptor.
+
+  const void* defaultValue;
+  // Pointer to the field's default value.  For reference fields, this should actually be a pointer
+  // to a reference, which may be interpreted as a raw (trusted) message.  This pointer must be
+  // aligned correctly for the value it points at.
+  //
+  // You might wonder why we can't just pull the default field value from the struct's defalut
+  // value.  The problem is with unions -- at best, the struct default data only encodes one member
+  // of each union.
 };
 
 inline const ListDescriptor* Descriptor::asList() const {
