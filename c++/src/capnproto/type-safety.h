@@ -90,6 +90,10 @@ public:
   // This constructor was intended to be private, but GCC complains about it being private in a
   // bunch of places that don't appear to even call it, so I made it public.  Oh well.
 
+  template <typename OtherNumber>
+  inline constexpr UnitRatio(const UnitRatio<OtherNumber, Unit1, Unit2>& other)
+      : unit1PerUnit2(other.unit1PerUnit2) {}
+
   template <typename OtherNumber, typename Unit3>
   inline constexpr UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit3, Unit2>
       operator*(UnitRatio<OtherNumber, Unit3, Unit1> other) {
@@ -422,72 +426,38 @@ inline constexpr decltype(BYTES / ELEMENTS) bytesPerElement() {
 
 #ifndef __CDT_PARSER__
 
-template <typename T>
-inline constexpr byte* operator+(byte* ptr, Quantity<T, byte> offset) {
-  return ptr + offset / BYTES;
+template <typename T, typename U>
+inline constexpr U* operator+(U* ptr, Quantity<T, U> offset) {
+  return ptr + offset / unit<Quantity<T, U>>();
 }
-template <typename T>
-inline constexpr const byte* operator+(const byte* ptr, Quantity<T, byte> offset) {
-  return ptr + offset / BYTES;
+template <typename T, typename U>
+inline constexpr const U* operator+(const U* ptr, Quantity<T, U> offset) {
+  return ptr + offset / unit<Quantity<T, U>>();
 }
-template <typename T>
-inline constexpr byte* operator+=(byte*& ptr, Quantity<T, byte> offset) {
-  return ptr = ptr + offset / BYTES;
+template <typename T, typename U>
+inline constexpr U* operator+=(U*& ptr, Quantity<T, U> offset) {
+  return ptr = ptr + offset / unit<Quantity<T, U>>();
 }
-template <typename T>
-inline constexpr const byte* operator+=(const byte* ptr, Quantity<T, byte> offset) {
-  return ptr = ptr + offset / BYTES;
-}
-
-template <typename T>
-inline constexpr word* operator+(word* ptr, Quantity<T, word> offset) {
-  return ptr + offset / WORDS;
-}
-template <typename T>
-inline constexpr const word* operator+(const word* ptr, Quantity<T, word> offset) {
-  return ptr + offset / WORDS;
-}
-template <typename T>
-inline constexpr word* operator+=(word*& ptr, Quantity<T, word> offset) {
-  return ptr = ptr + offset / WORDS;
-}
-template <typename T>
-inline constexpr const word* operator+=(const word*& ptr, Quantity<T, word> offset) {
-  return ptr = ptr + offset / WORDS;
+template <typename T, typename U>
+inline constexpr const U* operator+=(const U*& ptr, Quantity<T, U> offset) {
+  return ptr = ptr + offset / unit<Quantity<T, U>>();
 }
 
-template <typename T>
-inline constexpr byte* operator-(byte* ptr, Quantity<T, byte> offset) {
-  return ptr - offset / BYTES;
+template <typename T, typename U>
+inline constexpr U* operator-(U* ptr, Quantity<T, U> offset) {
+  return ptr - offset / unit<Quantity<T, U>>();
 }
-template <typename T>
-inline constexpr const byte* operator-(const byte* ptr, Quantity<T, byte> offset) {
-  return ptr - offset / BYTES;
+template <typename T, typename U>
+inline constexpr const U* operator-(const U* ptr, Quantity<T, U> offset) {
+  return ptr - offset / unit<Quantity<T, U>>();
 }
-template <typename T>
-inline constexpr byte* operator-=(byte*& ptr, Quantity<T, byte> offset) {
-  return ptr = ptr - offset / BYTES;
+template <typename T, typename U>
+inline constexpr U* operator-=(U*& ptr, Quantity<T, U> offset) {
+  return ptr = ptr - offset / unit<Quantity<T, U>>();
 }
-template <typename T>
-inline constexpr const byte* operator-=(const byte* ptr, Quantity<T, byte> offset) {
-  return ptr = ptr - offset / BYTES;
-}
-
-template <typename T>
-inline constexpr word* operator-(word* ptr, Quantity<T, word> offset) {
-  return ptr - offset / WORDS;
-}
-template <typename T>
-inline constexpr const word* operator-(const word* ptr, Quantity<T, word> offset) {
-  return ptr - offset / WORDS;
-}
-template <typename T>
-inline constexpr word* operator-=(word*& ptr, Quantity<T, word> offset) {
-  return ptr = ptr - offset / WORDS;
-}
-template <typename T>
-inline constexpr const word* operator-=(const word*& ptr, Quantity<T, word> offset) {
-  return ptr = ptr - offset / WORDS;
+template <typename T, typename U>
+inline constexpr const U* operator-=(const U*& ptr, Quantity<T, U> offset) {
+  return ptr = ptr - offset / unit<Quantity<T, U>>();
 }
 
 #endif

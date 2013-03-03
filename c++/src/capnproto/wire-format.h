@@ -81,9 +81,10 @@ private:
 
 class StructBuilder {
 public:
-  inline StructBuilder(): segment(nullptr), ptr(nullptr) {}
+  inline StructBuilder(): segment(nullptr), data(nullptr), references(nullptr) {}
 
-  static StructBuilder initRoot(SegmentBuilder* segment, word* location);
+  static StructBuilder initRoot(SegmentBuilder* segment, word* location,
+      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount referenceCount);
 
   template <typename T>
   CAPNPROTO_ALWAYS_INLINE(T getDataField(ElementCount offset) const);
@@ -95,16 +96,21 @@ public:
       ElementCount offset, typename NoInfer<T>::Type value) const);
   // Set the data field value at the given offset.
 
-  inline StructBuilder getStructField(WireReferenceCount refIndex) const;
+  StructBuilder getStructField(
+      WireReferenceCount refIndex, FieldNumber fieldCount,
+      WordCount dataSize, WireReferenceCount referenceCount) const;
   // Get the struct field at the given index in the reference segment.  Allocates space for the
   // struct if necessary.
 
-  inline ListBuilder initListField(WireReferenceCount refIndex, FieldSize fieldSize,
-                                   ElementCount elementCount) const;
+  ListBuilder initListField(WireReferenceCount refIndex, FieldSize elementSize,
+                            ElementCount elementCount) const;
+  ListBuilder initStructListField(
+      WireReferenceCount refIndex, ElementCount elementCount,
+      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount referenceCount) const;
   // Allocate a new list of the given size for the field at the given index in the reference
   // segment, and return a pointer to it.
 
-  inline ListBuilder getListField(WireReferenceCount refIndex) const;
+  ListBuilder getListField(WireReferenceCount refIndex, FieldSize elementSize) const;
   // Get the already-allocated list field for the given reference index.  Returns an empty list --
   // NOT necessarily the default value -- if the field is not initialized.
 
@@ -112,11 +118,12 @@ public:
   // Get a StructReader pointing at the same memory.
 
 private:
-  SegmentBuilder* segment;  // Memory segment in which the struct resides.
-  word* ptr;  // Pointer to the encoded struct (data followed by references).
+  SegmentBuilder* segment;     // Memory segment in which the struct resides.
+  word* data;                  // Pointer to the encoded data.
+  WireReference* references;   // Pointer to the encoded references.
 
-  inline StructBuilder(SegmentBuilder* segment, word* ptr)
-      : segment(segment), ptr(ptr) {}
+  inline StructBuilder(SegmentBuilder* segment, word* data, WireReference* references)
+      : segment(segment), data(data), references(references) {}
 
   friend class ListBuilder;
   friend struct WireHelpers;
@@ -127,6 +134,10 @@ public:
   inline StructReader()
       : segment(nullptr), ptr(nullptr), fieldCount(0), dataSize(0), referenceCount(0),
         bit0Offset(0 * BITS), recursionLimit(0) {}
+
+  static StructReader readRootTrusted(const word* location, const word* defaultValue);
+  static StructReader readRoot(const word* location, const word* defaultValue,
+                               SegmentReader* segment, int recursionLimit);
 
   template <typename T>
   CAPNPROTO_ALWAYS_INLINE(
@@ -143,11 +154,13 @@ public:
   // with later numbers, and therefore the offset being in-bounds alone does not prove that the
   // struct contains the field.
 
-  inline StructReader getStructField(WireReferenceCount refIndex) const;
+  StructReader getStructField(WireReferenceCount refIndex, const word* defaultValue) const;
   // Get the struct field at the given index in the reference segment, or the default value if not
-  // initialized.
+  // initialized.  defaultValue will be interpreted as a trusted message -- it must point at a
+  // struct reference, which in turn points at the struct value.
 
-  inline ListReader getListField(WireReferenceCount refIndex, FieldSize expectedElementSize) const;
+  ListReader getListField(WireReferenceCount refIndex, FieldSize expectedElementSize,
+                          const word* defaultValue) const;
   // Get the list field at the given index in the reference segment, or the default value if not
   // initialized.
 
@@ -208,20 +221,27 @@ public:
       ElementCount index, typename NoInfer<T>::Type value) const);
   // Set the element at the given index.
 
-  CAPNPROTO_ALWAYS_INLINE(StructBuilder getStructElement(
-      ElementCount index, decltype(WORDS/ELEMENTS) elementSize) const);
+  StructBuilder getStructElement(
+      ElementCount index, decltype(WORDS/ELEMENTS) elementSize, WordCount structDataSize) const;
   // Get the struct element at the given index.  elementSize is the size, in 64-bit words, of
   // each element.
 
-  CAPNPROTO_ALWAYS_INLINE(
-      ListBuilder initListElement(WireReferenceCount index, ElementCount size) const);
+  ListBuilder initListElement(
+      WireReferenceCount index, FieldSize elementSize, ElementCount elementCount) const;
+  ListBuilder initStructListElement(
+      WireReferenceCount index, ElementCount elementCount,
+      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount referenceCount) const;
   // Create a new list element of the given size at the given index.
 
-  CAPNPROTO_ALWAYS_INLINE(ListBuilder getListElement(WireReferenceCount index) const);
+  ListBuilder getListElement(WireReferenceCount index, FieldSize elementSize) const;
   // Get the existing list element at the given index.
 
-  ListReader asReader() const;
-  // Get a ListReader pointing at the same memory.
+  ListReader asReader(FieldSize elementSize) const;
+  // Get a ListReader pointing at the same memory.  Use this version only for non-struct lists.
+
+  ListReader asReader(FieldNumber fieldCount, WordCount dataSize,
+                      WireReferenceCount referenceCount) const;
+  // Get a ListReader pointing at the same memory.  Use this version only for struct lists.
 
 private:
   SegmentBuilder* segment;  // Memory segment in which the list resides.
@@ -249,11 +269,11 @@ public:
   CAPNPROTO_ALWAYS_INLINE(T getDataElement(ElementCount index) const);
   // Get the element of the given type at the given index.
 
-  CAPNPROTO_ALWAYS_INLINE(StructReader getStructElement(ElementCount index) const);
+  StructReader getStructElement(ElementCount index, const word* defaultValue) const;
   // Get the struct element at the given index.
 
-  CAPNPROTO_ALWAYS_INLINE(ListReader getListElement(
-      WireReferenceCount index, FieldSize expectedElementSize) const);
+  ListReader getListElement(WireReferenceCount index, FieldSize expectedElementSize,
+                            const word* defaultValue) const;
   // Get the list element at the given index.
 
 private:
@@ -273,7 +293,9 @@ private:
   FieldNumber structFieldCount;
   WordCount structDataSize;
   WireReferenceCount structReferenceCount;
-  // If the elements are structs, the properties of the struct.
+  // If the elements are structs, the properties of the struct.  The field and reference counts are
+  // only used to check for field presence; the data size is also used to compute the reference
+  // pointer.
 
   int recursionLimit;
   // Limits the depth of message structures to guard against stack-overflow-based DoS attacks.
@@ -302,26 +324,26 @@ private:
 
 template <typename T>
 inline T StructBuilder::getDataField(ElementCount offset) const {
-  return reinterpret_cast<WireValue<T>*>(ptr)[offset / ELEMENTS].get();
+  return reinterpret_cast<WireValue<T>*>(data)[offset / ELEMENTS].get();
 }
 
 template <>
 inline bool StructBuilder::getDataField<bool>(ElementCount offset) const {
   BitCount boffset = offset * (1 * BITS / ELEMENTS);
-  byte* b = reinterpret_cast<byte*>(ptr) + boffset / BITS_PER_BYTE;
+  byte* b = reinterpret_cast<byte*>(data) + boffset / BITS_PER_BYTE;
   return (*reinterpret_cast<uint8_t*>(b) & (1 << (boffset % BITS_PER_BYTE / BITS))) != 0;
 }
 
 template <typename T>
 inline void StructBuilder::setDataField(
     ElementCount offset, typename NoInfer<T>::Type value) const {
-  reinterpret_cast<WireValue<T>*>(ptr)[offset / ELEMENTS].set(value);
+  reinterpret_cast<WireValue<T>*>(data)[offset / ELEMENTS].set(value);
 }
 
 template <>
 inline void StructBuilder::setDataField<bool>(ElementCount offset, bool value) const {
   BitCount boffset = offset * (1 * BITS / ELEMENTS);
-  byte* b = reinterpret_cast<byte*>(ptr) + boffset / BITS_PER_BYTE;
+  byte* b = reinterpret_cast<byte*>(data) + boffset / BITS_PER_BYTE;
   uint bitnum = boffset % BITS_PER_BYTE / BITS;
   *reinterpret_cast<uint8_t*>(b) = (*reinterpret_cast<uint8_t*>(b) & ~(1 << bitnum))
                                  | (static_cast<uint8_t>(value) << bitnum);
@@ -332,7 +354,7 @@ inline void StructBuilder::setDataField<bool>(ElementCount offset, bool value) c
 template <typename T>
 T StructReader::getDataField(ElementCount offset, typename NoInfer<T>::Type defaultValue) const {
   if (offset * bytesPerElement<T>() < dataSize * BYTES_PER_WORD) {
-    return reinterpret_cast<WireValue<T>*>(ptr)[offset / ELEMENTS].get();
+    return reinterpret_cast<const WireValue<T>*>(ptr)[offset / ELEMENTS].get();
   } else {
     return defaultValue;
   }
@@ -359,7 +381,7 @@ T StructReader::getDataFieldCheckingNumber(
   // Intentionally use & rather than && to reduce branches.
   if ((fieldNumber < fieldCount) &
       (offset * bytesPerElement<T>() < dataSize * BYTES_PER_WORD)) {
-    return reinterpret_cast<WireValue<T>*>(ptr)[offset / ELEMENTS].get();
+    return reinterpret_cast<const WireValue<T>*>(ptr)[offset / ELEMENTS].get();
   } else {
     return defaultValue;
   }

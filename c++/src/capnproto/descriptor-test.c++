@@ -31,28 +31,23 @@ namespace {
 const int READONLY_SEGMENT_START = 123;
 
 const FieldDescriptor TEST_FIELDS[2] = {
-    { 1 * WORDS, 0, 0, FieldSize::FOUR_BYTES, 1, 0, 0, 0 },
-    { 1 * WORDS, 1, 0, FieldSize::REFERENCE, 1, 0, 0, 0 }
+    { 1*WORDS, 0*REFERENCES, FieldSize::FOUR_BYTES, 0*ELEMENTS, 0*BYTES, 1, 0, 0*BYTES, 0*BITS, nullptr, nullptr },
+    { 1*WORDS, 1*REFERENCES, FieldSize::REFERENCE , 0*ELEMENTS, 0*BYTES, 1, 0, 0*BYTES, 0*BITS, nullptr, nullptr }
 };
 
 extern const StructDescriptor TEST_STRUCT;
 
-extern const Descriptor* const TEST_STRUCT_DEFAULT_REFS[1] = {
-    &TEST_STRUCT.base
-};
-
-const AlignedData<1> TEST_STRUCT_DEFAULT_DATA = {
+const AlignedData<1> TEST_STRUCT_DEFAULT_VALUE = {
     { 0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0 }
 };
 
 const StructDescriptor TEST_STRUCT = {
     { Descriptor::Kind::STRUCT },
-    2,
-    WordCount8(1 * WORDS),
-    1,
+    FieldNumber(2),
+    1 * WORDS,
+    1 * REFERENCES,
     TEST_FIELDS,
-    TEST_STRUCT_DEFAULT_DATA.bytes,
-    TEST_STRUCT_DEFAULT_REFS
+    TEST_STRUCT_DEFAULT_VALUE.words
 };
 
 const int READONLY_SEGMENT_END = 321;
@@ -66,10 +61,8 @@ TEST(Descriptors, InReadOnlySegment) {
 
   EXPECT_LE((const void*)&READONLY_SEGMENT_START, (const void*)&TEST_FIELDS);
   EXPECT_GE((const void*)&READONLY_SEGMENT_END  , (const void*)&TEST_FIELDS);
-  EXPECT_LE((const void*)&READONLY_SEGMENT_START, (const void*)&TEST_STRUCT_DEFAULT_DATA);
-  EXPECT_GE((const void*)&READONLY_SEGMENT_END  , (const void*)&TEST_STRUCT_DEFAULT_DATA);
-  EXPECT_LE((const void*)&READONLY_SEGMENT_START, (const void*)&TEST_STRUCT_DEFAULT_REFS);
-  EXPECT_GE((const void*)&READONLY_SEGMENT_END  , (const void*)&TEST_STRUCT_DEFAULT_REFS);
+  EXPECT_LE((const void*)&READONLY_SEGMENT_START, (const void*)&TEST_STRUCT_DEFAULT_VALUE);
+  EXPECT_GE((const void*)&READONLY_SEGMENT_END  , (const void*)&TEST_STRUCT_DEFAULT_VALUE);
   EXPECT_LE((const void*)&READONLY_SEGMENT_START, (const void*)&TEST_STRUCT);
   EXPECT_GE((const void*)&READONLY_SEGMENT_END  , (const void*)&TEST_STRUCT);
 }
