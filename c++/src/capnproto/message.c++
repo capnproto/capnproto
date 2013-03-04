@@ -22,10 +22,71 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "message.h"
+#include <vector>
+#include <string.h>
+#include <iostream>
 
 namespace capnproto {
 
 MessageReader::~MessageReader() {}
 MessageBuilder::~MessageBuilder() {}
+
+class MallocMessage: public MessageBuilder {
+public:
+  MallocMessage(WordCount preferredSegmentSize);
+  ~MallocMessage();
+
+  SegmentReader* tryGetSegment(SegmentId id);
+  void reportInvalidData(const char* description);
+  void reportReadLimitReached();
+  SegmentBuilder* getSegment(SegmentId id);
+  SegmentBuilder* getSegmentWithAvailable(WordCount minimumAvailable);
+
+private:
+  WordCount preferredSegmentSize;
+  std::vector<std::unique_ptr<SegmentBuilder>> segments;
+  std::vector<std::unique_ptr<word[]>> memory;
+};
+
+MallocMessage::MallocMessage(WordCount preferredSegmentSize)
+    : preferredSegmentSize(preferredSegmentSize) {}
+MallocMessage::~MallocMessage() {}
+
+SegmentReader* MallocMessage::tryGetSegment(SegmentId id) {
+  if (id.value > segments.size()) {
+    return nullptr;
+  } else {
+    return segments[id.value].get();
+  }
+}
+
+void MallocMessage::reportInvalidData(const char* description) {
+  // TODO:  Better error reporting.
+  std::cerr << "MallocMessage: Parse error: " << description << std::endl;
+}
+
+void MallocMessage::reportReadLimitReached() {
+  // TODO:  Better error reporting.
+  std::cerr << "MallocMessage: Exceeded read limit." << std::endl;
+}
+
+SegmentBuilder* MallocMessage::getSegment(SegmentId id) {
+  return segments[id.value].get();
+}
+
+SegmentBuilder* MallocMessage::getSegmentWithAvailable(WordCount minimumAvailable) {
+  if (segments.empty() || segments.back()->available() < minimumAvailable) {
+    WordCount newSize = std::max(minimumAvailable, preferredSegmentSize);
+    memory.push_back(std::unique_ptr<word[]>(new word[newSize / WORDS]));
+    memset(memory.back().get(), 0, newSize / WORDS * sizeof(word));
+    segments.push_back(std::unique_ptr<SegmentBuilder>(new SegmentBuilder(
+        this, SegmentId(segments.size()), memory.back().get(), newSize)));
+  }
+  return segments.back().get();
+}
+
+std::unique_ptr<MessageBuilder> newMallocMessage(WordCount preferredSegmentSize) {
+  return std::unique_ptr<MessageBuilder>(new MallocMessage(preferredSegmentSize));
+}
 
 }  // namespace capnproto

@@ -101,8 +101,8 @@ struct WireReference {
   }
 
   CAPNPROTO_ALWAYS_INLINE(void setStruct(
-      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount refCount, WordCount offset)) {
-    setTagAndOffset(STRUCT, offset);
+      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount refCount, word* target)) {
+    setTagAndOffset(STRUCT, intervalLength(reinterpret_cast<word*>(this), target));
     structRef.fieldCount.set(fieldCount);
     structRef.dataSize.set(WordCount8(dataSize));
     structRef.refCount.set(refCount);
@@ -110,8 +110,8 @@ struct WireReference {
   }
 
   CAPNPROTO_ALWAYS_INLINE(void setList(
-      FieldSize elementSize, ElementCount elementCount, WordCount offset)) {
-    setTagAndOffset(LIST, offset);
+      FieldSize elementSize, ElementCount elementCount, word* target)) {
+    setTagAndOffset(LIST, intervalLength(reinterpret_cast<word*>(this), target));
     CAPNPROTO_DEBUG_ASSERT(elementCount < (1 << 29) * ELEMENTS,
         "Lists are limited to 2**29 elements.");
     listRef.elementSizeAndCount.set(
@@ -200,7 +200,7 @@ struct WireHelpers {
       word* ptr = allocate(ref, segment, dataSize + referenceCount * WORDS_PER_REFERENCE);
 
       // Initialize the reference.
-      ref->setStruct(fieldCount, dataSize, referenceCount, segment->getOffsetTo(ptr));
+      ref->setStruct(fieldCount, dataSize, referenceCount, ptr);
 
       // Build the StructBuilder.
       return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + dataSize));
@@ -235,7 +235,7 @@ struct WireHelpers {
     word* ptr = allocate(ref, segment, wordCount);
 
     // Initialize the reference.
-    ref->setList(elementSize, elementCount, segment->getOffsetTo(ptr));
+    ref->setList(elementSize, elementCount, ptr);
 
     // Build the ListBuilder.
     return ListBuilder(segment, ptr, elementCount);
@@ -251,15 +251,15 @@ struct WireHelpers {
         1 * REFERENCES * WORDS_PER_REFERENCE + elementCount * wordsPerElement);
 
     // Initialize the reference.
-    ref->setList(FieldSize::STRUCT, elementCount, segment->getOffsetTo(ptr));
+    ref->setList(FieldSize::STRUCT, elementCount, ptr);
 
     // The list is prefixed by a struct reference.
     WireReference* structRef = reinterpret_cast<WireReference*>(ptr);
     word* structPtr = ptr + 1 * REFERENCES * WORDS_PER_REFERENCE;
-    structRef->setStruct(fieldCount, dataSize, referenceCount, segment->getOffsetTo(structPtr));
+    structRef->setStruct(fieldCount, dataSize, referenceCount, structPtr);
 
     // Build the ListBuilder.
-    return ListBuilder(segment, ptr, elementCount);
+    return ListBuilder(segment, structPtr, elementCount);
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListBuilder getWritableListReference(
@@ -287,12 +287,13 @@ struct WireHelpers {
   static CAPNPROTO_ALWAYS_INLINE(StructReader readStructReference(
       SegmentReader* segment, const WireReference* ref, const word* defaultValue,
       int recursionLimit)) {
-    const word* ptr = ref->target();
+    const word* ptr;
 
     if (ref == nullptr || ref->isNull()) {
     useDefault:
       segment = nullptr;
       ref = reinterpret_cast<const WireReference*>(defaultValue);
+      ptr = ref->target();
     } else if (segment != nullptr) {
       if (CAPNPROTO_EXPECT_FALSE(recursionLimit == 0)) {
         segment->getMessage()->reportInvalidData(
@@ -312,6 +313,7 @@ struct WireHelpers {
         goto useDefault;
       }
 
+      ptr = ref->target();
       WordCount size = ref->structRef.dataSize.get() +
           ref->structRef.refCount.get() * WORDS_PER_REFERENCE;
 
@@ -320,6 +322,9 @@ struct WireHelpers {
             "Message contained out-of-bounds struct reference.");
         goto useDefault;
       }
+    } else {
+      // Trusted messages don't contain far pointers.
+      ptr = ref->target();
     }
 
     return StructReader(segment, ptr,
@@ -387,7 +392,7 @@ struct WireHelpers {
 
         if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr + wordsPerElement * size))) {
           segment->getMessage()->reportInvalidData(
-              "Message contained out-of-bounds struct reference.");
+              "Message contained out-of-bounds struct list tag.");
           goto useDefault;
         }
 

@@ -317,8 +317,8 @@ inline constexpr auto operator*(UnitRatio<Number1, Unit2, Unit> ratio,
 // =======================================================================================
 // Raw memory types and measures
 
-class byte { uint8_t  content; CAPNPROTO_DISALLOW_COPY(byte); };
-class word { uint64_t content; CAPNPROTO_DISALLOW_COPY(word); };
+class byte { uint8_t  content; CAPNPROTO_DISALLOW_COPY(byte); public: byte() = default; };
+class word { uint64_t content; CAPNPROTO_DISALLOW_COPY(word); public: word() = default; };
 // byte and word are opaque types with sizes of 8 and 64 bits, respectively.  These types are useful
 // only to make pointer arithmetic clearer.  Since the contents are private, the only way to access
 // them is to first reinterpret_cast to some other pointer type.
@@ -334,44 +334,20 @@ static_assert(sizeof(word) == 8, "uint64_t is not 8 bytes?");
 
 namespace internal { class BitLabel; class ElementLabel; class WireReference; }
 
-#ifdef __CDT_PARSER__
-// Eclipse gets confused by decltypes, so we'll feed it these simplified-yet-compatible definitions.
+#ifndef CAPNPROTO_DEBUG_TYPES
+#define CAPNPROTO_DEBUG_TYPES 1
+// Set this to zero to degrade all the "count" types below to being plain integers.  All the code
+// should still operate exactly the same, we just lose compile-time checking.  Note that this will
+// also change symbol names, so it's important that the Cap'n proto library and any clients be
+// compiled with the same setting here.
 //
-// We could also consider using these definitions in opt builds.  Trouble is, the mangled symbol
-// names of any functions that take these types as inputs would be affected, so it would be
-// important to compile the Cap'n Proto library and the client app with the same flags.
+// TODO:  Decide policy on this.  It may make sense to only use CAPNPROTO_DEBUG_TYPES when compiling
+//   Cap'n Proto's own tests, but disable it for all real builds, as clients may find this safety
+//   tiring.
 
-typedef uint BitCount;
-typedef uint8_t BitCount8;
-typedef uint16_t BitCount16;
-typedef uint32_t BitCount32;
-typedef uint64_t BitCount64;
+#endif
 
-typedef uint ByteCount;
-typedef uint8_t ByteCount8;
-typedef uint16_t ByteCount16;
-typedef uint32_t ByteCount32;
-typedef uint64_t ByteCount64;
-
-typedef uint WordCount;
-typedef uint8_t WordCount8;
-typedef uint16_t WordCount16;
-typedef uint32_t WordCount32;
-typedef uint64_t WordCount64;
-
-typedef uint ElementCount;
-typedef uint8_t ElementCount8;
-typedef uint16_t ElementCount16;
-typedef uint32_t ElementCount32;
-typedef uint64_t ElementCount64;
-
-typedef uint WireReferenceCount;
-typedef uint8_t WireReferenceCount8;
-typedef uint16_t WireReferenceCount16;
-typedef uint32_t WireReferenceCount32;
-typedef uint64_t WireReferenceCount64;
-
-#else
+#if CAPNPROTO_DEBUG_TYPES
 
 typedef Quantity<uint, internal::BitLabel> BitCount;
 typedef Quantity<uint8_t, internal::BitLabel> BitCount8;
@@ -402,6 +378,38 @@ typedef Quantity<uint8_t, internal::WireReference> WireReferenceCount8;
 typedef Quantity<uint16_t, internal::WireReference> WireReferenceCount16;
 typedef Quantity<uint32_t, internal::WireReference> WireReferenceCount32;
 typedef Quantity<uint64_t, internal::WireReference> WireReferenceCount64;
+
+#else
+
+typedef uint BitCount;
+typedef uint8_t BitCount8;
+typedef uint16_t BitCount16;
+typedef uint32_t BitCount32;
+typedef uint64_t BitCount64;
+
+typedef uint ByteCount;
+typedef uint8_t ByteCount8;
+typedef uint16_t ByteCount16;
+typedef uint32_t ByteCount32;
+typedef uint64_t ByteCount64;
+
+typedef uint WordCount;
+typedef uint8_t WordCount8;
+typedef uint16_t WordCount16;
+typedef uint32_t WordCount32;
+typedef uint64_t WordCount64;
+
+typedef uint ElementCount;
+typedef uint8_t ElementCount8;
+typedef uint16_t ElementCount16;
+typedef uint32_t ElementCount32;
+typedef uint64_t ElementCount64;
+
+typedef uint WireReferenceCount;
+typedef uint8_t WireReferenceCount8;
+typedef uint16_t WireReferenceCount16;
+typedef uint32_t WireReferenceCount32;
+typedef uint64_t WireReferenceCount64;
 
 #endif
 

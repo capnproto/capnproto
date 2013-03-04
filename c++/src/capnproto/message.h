@@ -22,6 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <cstddef>
+#include <memory>
 #include "macros.h"
 #include "type-safety.h"
 
@@ -94,6 +95,9 @@ public:
   // TODO:  Methods to deal with bundled capabilities.
 };
 
+std::unique_ptr<MessageBuilder> newMallocMessage(WordCount preferredSegmentSize);
+// Returns a simple MessageBuilder implementation that uses standard allocation.
+
 class ReadLimiter {
   // Used to keep track of how much data has been processed from a message, and cut off further
   // processing if and when a particular limit is reached.  This is primarily intended to guard
@@ -155,6 +159,8 @@ public:
   inline word* getPtrUnchecked(WordCount offset);
 
   inline MessageBuilder* getMessage();
+
+  inline WordCount available();
 
 private:
   word* pos;
@@ -232,6 +238,10 @@ inline MessageBuilder* SegmentBuilder::getMessage() {
   // Down-cast safe because SegmentBuilder's constructor always initializes its SegmentReader base
   // class with a MessageReader pointer that actually points to a MessageBuilder.
   return static_cast<MessageBuilder*>(message);
+}
+
+inline WordCount SegmentBuilder::available() {
+  return intervalLength(pos, end);
 }
 
 }  // namespace capnproto
