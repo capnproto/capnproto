@@ -234,9 +234,11 @@ TEST(WireFormat, StructRoundTrip) {
   EXPECT_EQ(34 * WORDS, segment->getSize());
 
   checkStruct(builder.asReader());
+  checkStruct(StructReader::readRootTrusted(segment->getStartPtr(), nullptr));
+  checkStruct(StructReader::readRoot(segment->getStartPtr(), nullptr, segment, 4));
 }
 
-TEST(WireFormat, StructRoundTrip_FarPointers) {
+TEST(WireFormat, StructRoundTrip_MultipleSegments) {
   std::unique_ptr<MessageBuilder> message = newMallocMessage(1 * WORDS);
   SegmentBuilder* segment = message->getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
@@ -245,23 +247,12 @@ TEST(WireFormat, StructRoundTrip_FarPointers) {
       StructBuilder::initRoot(segment, rootLocation, FieldNumber(16), 2 * WORDS, 4 * REFERENCES);
   setupStruct(builder);
 
-  // word count:
-  //    1  root reference
-  //    6  root struct
-  //    1  sub message
-  //    2  3-element int32 list
-  //   13  struct list
-  //         1 tag
-  //        12 4x struct
-  //           1 data segment
-  //           1 reference segment
-  //           1 sub-struct
-  //   11  list list
-  //         5 references to sub-lists
-  //         6 sub-lists (4x 1 word, 1x 2 words)
-  // -----
-  //   34
+  // Verify that we made 15 segments.
+  ASSERT_TRUE(message->tryGetSegment(SegmentId(14)) != nullptr);
+  EXPECT_EQ(nullptr, message->tryGetSegment(SegmentId(15)));
 
+  // Check that each segment has the expected size.  Recall that the first word of each segment will
+  // actually be a reference to the first thing allocated within that segment.
   EXPECT_EQ( 1 * WORDS, message->getSegment(SegmentId( 0))->getSize());  // root ref
   EXPECT_EQ( 7 * WORDS, message->getSegment(SegmentId( 1))->getSize());  // root struct
   EXPECT_EQ( 2 * WORDS, message->getSegment(SegmentId( 2))->getSize());  // sub-struct

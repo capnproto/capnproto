@@ -567,7 +567,7 @@ StructReader StructReader::readRootTrusted(const word* location, const word* def
 
 StructReader StructReader::readRoot(const word* location, const word* defaultValue,
                                     SegmentReader* segment, int recursionLimit) {
-  if (segment->containsInterval(location, location + 1 * REFERENCES * WORDS_PER_REFERENCE)) {
+  if (!segment->containsInterval(location, location + 1 * REFERENCES * WORDS_PER_REFERENCE)) {
     segment->getMessage()->reportInvalidData("Root location out-of-bounds.");
     location = nullptr;
   }
