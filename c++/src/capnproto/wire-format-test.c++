@@ -96,6 +96,14 @@ TEST(WireFormat, SimpleRawDataStruct) {
   EXPECT_TRUE (reader.getDataFieldCheckingNumber<bool>(FieldNumber(1), 0 * ELEMENTS, true ));
 }
 
+static const AlignedData<2> STRUCT_DEFAULT = {{8,0,0,0,16,2,4,0,  0}};
+
+static const AlignedData<2> SUBSTRUCT_DEFAULT = {{8,0,0,0,1,1,0,0,  0,0,0,0,0,0,0,0}};
+static const AlignedData<3> STRUCTLIST_ELEMENT_DEFAULT =
+    {{8,0,0,0,1,1,1,0,  0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0}};
+static const AlignedData<2> STRUCTLIST_ELEMENT_SUBSTRUCT_DEFAULT =
+    {{8,0,0,0,1,1,0,0,  0,0,0,0,0,0,0,0}};
+
 static void setupStruct(StructBuilder builder) {
   builder.setDataField<uint64_t>(0 * ELEMENTS, 0x1011121314151617ull);
   builder.setDataField<uint32_t>(2 * ELEMENTS, 0x20212223u);
@@ -111,8 +119,7 @@ static void setupStruct(StructBuilder builder) {
   builder.setDataField<bool>(127 * ELEMENTS, false);
 
   {
-    StructBuilder subStruct = builder.getStructField(
-        0 * REFERENCES, FieldNumber(1), 1 * WORDS, 0 * REFERENCES);
+    StructBuilder subStruct = builder.initStructField(0 * REFERENCES, SUBSTRUCT_DEFAULT.words);
     subStruct.setDataField<uint32_t>(0 * ELEMENTS, 123);
   }
 
@@ -126,12 +133,12 @@ static void setupStruct(StructBuilder builder) {
 
   {
     ListBuilder list = builder.initStructListField(
-        2 * REFERENCES, 4 * ELEMENTS, FieldNumber(2), 1 * WORDS, 1 * REFERENCES);
+        2 * REFERENCES, 4 * ELEMENTS, STRUCTLIST_ELEMENT_DEFAULT.words);
     EXPECT_EQ(4 * ELEMENTS, list.size());
     for (int i = 0; i < 4; i++) {
       StructBuilder element = list.getStructElement(i * ELEMENTS, 2 * WORDS / ELEMENTS, 1 * WORDS);
       element.setDataField<int32_t>(0 * ELEMENTS, 300 + i);
-      element.getStructField(0 * REFERENCES, FieldNumber(1), 1 * WORDS, 0 * REFERENCES)
+      element.initStructField(0 * REFERENCES, STRUCTLIST_ELEMENT_SUBSTRUCT_DEFAULT.words)
              .setDataField<int32_t>(0 * ELEMENTS, 400 + i);
     }
   }
@@ -165,13 +172,12 @@ static void checkStruct(StructBuilder builder) {
   EXPECT_FALSE(builder.getDataField<bool>(127 * ELEMENTS));
 
   {
-    StructBuilder subStruct = builder.getStructField(
-        0 * REFERENCES, FieldNumber(1), 1 * WORDS, 0 * REFERENCES);
+    StructBuilder subStruct = builder.getStructField(0 * REFERENCES, SUBSTRUCT_DEFAULT.words);
     EXPECT_EQ(123u, subStruct.getDataField<uint32_t>(0 * ELEMENTS));
   }
 
   {
-    ListBuilder list = builder.getListField(1 * REFERENCES, FieldSize::FOUR_BYTES);
+    ListBuilder list = builder.getListField(1 * REFERENCES, nullptr);
     ASSERT_EQ(3 * ELEMENTS, list.size());
     EXPECT_EQ(200, list.getDataElement<int32_t>(0 * ELEMENTS));
     EXPECT_EQ(201, list.getDataElement<int32_t>(1 * ELEMENTS));
@@ -179,19 +185,19 @@ static void checkStruct(StructBuilder builder) {
   }
 
   {
-    ListBuilder list = builder.getListField(2 * REFERENCES, FieldSize::INLINE_COMPOSITE);
+    ListBuilder list = builder.getListField(2 * REFERENCES, nullptr);
     ASSERT_EQ(4 * ELEMENTS, list.size());
     for (int i = 0; i < 4; i++) {
       StructBuilder element = list.getStructElement(i * ELEMENTS, 2 * WORDS / ELEMENTS, 1 * WORDS);
       EXPECT_EQ(300 + i, element.getDataField<int32_t>(0 * ELEMENTS));
       EXPECT_EQ(400 + i,
-          element.getStructField(0 * REFERENCES, FieldNumber(1), 1 * WORDS, 0 * REFERENCES)
+          element.getStructField(0 * REFERENCES, STRUCTLIST_ELEMENT_SUBSTRUCT_DEFAULT.words)
               .getDataField<int32_t>(0 * ELEMENTS));
     }
   }
 
   {
-    ListBuilder list = builder.getListField(3 * REFERENCES, FieldSize::REFERENCE);
+    ListBuilder list = builder.getListField(3 * REFERENCES, nullptr);
     ASSERT_EQ(5 * ELEMENTS, list.size());
     for (uint i = 0; i < 5; i++) {
       ListBuilder element = list.getListElement(i * REFERENCES, FieldSize::TWO_BYTES);
@@ -218,13 +224,11 @@ static void checkStruct(StructReader reader) {
   EXPECT_FALSE(reader.getDataField<bool>(127 * ELEMENTS, false));
 
   {
-    // TODO:  Use valid default value.
-    StructReader subStruct = reader.getStructField(0 * REFERENCES, nullptr);
+    StructReader subStruct = reader.getStructField(0 * REFERENCES, SUBSTRUCT_DEFAULT.words);
     EXPECT_EQ(123u, subStruct.getDataField<uint32_t>(0 * ELEMENTS, 456));
   }
 
   {
-    // TODO:  Use valid default value.
     ListReader list = reader.getListField(1 * REFERENCES, FieldSize::FOUR_BYTES, nullptr);
     ASSERT_EQ(3 * ELEMENTS, list.size());
     EXPECT_EQ(200, list.getDataElement<int32_t>(0 * ELEMENTS));
@@ -233,14 +237,13 @@ static void checkStruct(StructReader reader) {
   }
 
   {
-    // TODO:  Use valid default value.
     ListReader list = reader.getListField(2 * REFERENCES, FieldSize::INLINE_COMPOSITE, nullptr);
     ASSERT_EQ(4 * ELEMENTS, list.size());
     for (int i = 0; i < 4; i++) {
-      StructReader element = list.getStructElement(i * ELEMENTS, nullptr);
+      StructReader element = list.getStructElement(i * ELEMENTS, STRUCTLIST_ELEMENT_DEFAULT.words);
       EXPECT_EQ(300 + i, element.getDataField<int32_t>(0 * ELEMENTS, 1616));
       EXPECT_EQ(400 + i,
-          element.getStructField(0 * REFERENCES, nullptr)
+          element.getStructField(0 * REFERENCES, STRUCTLIST_ELEMENT_SUBSTRUCT_DEFAULT.words)
               .getDataField<int32_t>(0 * ELEMENTS, 1616));
     }
   }
@@ -264,8 +267,7 @@ TEST(WireFormat, StructRoundTrip_OneSegment) {
   SegmentBuilder* segment = message->getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
 
-  StructBuilder builder =
-      StructBuilder::initRoot(segment, rootLocation, FieldNumber(16), 2 * WORDS, 4 * REFERENCES);
+  StructBuilder builder = StructBuilder::initRoot(segment, rootLocation, STRUCT_DEFAULT.words);
   setupStruct(builder);
 
   // word count:
@@ -297,8 +299,7 @@ TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
   SegmentBuilder* segment = message->getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
 
-  StructBuilder builder =
-      StructBuilder::initRoot(segment, rootLocation, FieldNumber(16), 2 * WORDS, 4 * REFERENCES);
+  StructBuilder builder = StructBuilder::initRoot(segment, rootLocation, STRUCT_DEFAULT.words);
   setupStruct(builder);
 
   // Verify that we made 15 segments.
@@ -333,8 +334,7 @@ TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
   SegmentBuilder* segment = message->getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
 
-  StructBuilder builder =
-      StructBuilder::initRoot(segment, rootLocation, FieldNumber(16), 2 * WORDS, 4 * REFERENCES);
+  StructBuilder builder = StructBuilder::initRoot(segment, rootLocation, STRUCT_DEFAULT.words);
   setupStruct(builder);
 
   // Verify that we made 6 segments.

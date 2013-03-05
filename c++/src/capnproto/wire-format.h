@@ -69,7 +69,7 @@ class WireValue {
   //   allocation and layout of memory, in order to squeeze out every last drop of performance.
 
 public:
-  CAPNPROTO_ALWAYS_INLINE(WireValue()) {}
+  WireValue() = default;
   CAPNPROTO_ALWAYS_INLINE(WireValue(T value)): value(value) {}
 
   CAPNPROTO_ALWAYS_INLINE(T get() const) { return value; }
@@ -83,39 +83,49 @@ class StructBuilder {
 public:
   inline StructBuilder(): segment(nullptr), data(nullptr), references(nullptr) {}
 
-  static StructBuilder initRoot(SegmentBuilder* segment, word* location,
-      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount referenceCount);
+  static StructBuilder initRoot(SegmentBuilder* segment, word* location, const word* defaultValue);
 
   template <typename T>
   CAPNPROTO_ALWAYS_INLINE(T getDataField(ElementCount offset) const);
-  // Get the data field value of the given type at the given offset.  The offset is measured in
+  // Gets the data field value of the given type at the given offset.  The offset is measured in
   // multiples of the field size, determined by the type.
 
   template <typename T>
   CAPNPROTO_ALWAYS_INLINE(void setDataField(
       ElementCount offset, typename NoInfer<T>::Type value) const);
-  // Set the data field value at the given offset.
+  // Sets the data field value at the given offset.
 
-  StructBuilder getStructField(
-      WireReferenceCount refIndex, FieldNumber fieldCount,
-      WordCount dataSize, WireReferenceCount referenceCount) const;
-  // Get the struct field at the given index in the reference segment.  Allocates space for the
-  // struct if necessary.
+  StructBuilder initStructField(WireReferenceCount refIndex, const word* typeDefaultValue) const;
+  // Initializes the struct field at the given index in the reference segment.  If it is already
+  // initialized, the previous value is discarded or overwritten.  The struct is initialized to
+  // match the given default value (a trusted message).  This must be the default value for the
+  // *type*, not the specific field, and in particular its reference segment is expected to be
+  // all nulls (only the data segment is copied).  Use getStructField() if you want the struct
+  // to be initialized as a copy of the field's default value (which may have non-null references).
+
+  StructBuilder getStructField(WireReferenceCount refIndex, const word* defaultValue) const;
+  // Gets the struct field at the given index in the reference segment.  If the field is not already
+  // initialized, it is initialized as a deep copy of the given default value (a trusted message).
 
   ListBuilder initListField(WireReferenceCount refIndex, FieldSize elementSize,
                             ElementCount elementCount) const;
-  ListBuilder initStructListField(
-      WireReferenceCount refIndex, ElementCount elementCount,
-      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount referenceCount) const;
-  // Allocate a new list of the given size for the field at the given index in the reference
-  // segment, and return a pointer to it.
+  // Allocates a new list of the given size for the field at the given index in the reference
+  // segment, and return a pointer to it.  All elements are initialized to zero.
 
-  ListBuilder getListField(WireReferenceCount refIndex, FieldSize elementSize) const;
-  // Get the already-allocated list field for the given reference index.  Returns an empty list --
-  // NOT necessarily the default value -- if the field is not initialized.
+  ListBuilder initStructListField(WireReferenceCount refIndex, ElementCount elementCount,
+                                  const word* elementDefaultValue) const;
+  // Allocates a new list of the given size for the field at the given index in the reference
+  // segment, and return a pointer to it.  Each element is initialized as a copy of
+  // elementDefaultValue.  As with initStructField(), this should be the default value for the
+  // *type*, with all-null references.
+
+  ListBuilder getListField(WireReferenceCount refIndex, const word* defaultValue) const;
+  // Gets the already-allocated list field for the given reference index.  If the list is not
+  // already allocated, it is allocated as a deep copy of the given default value (a trusted
+  // message).  If the default value is null, an empty list is used.
 
   StructReader asReader() const;
-  // Get a StructReader pointing at the same memory.
+  // Gets a StructReader pointing at the same memory.
 
 private:
   SegmentBuilder* segment;     // Memory segment in which the struct resides.
@@ -162,7 +172,7 @@ public:
   ListReader getListField(WireReferenceCount refIndex, FieldSize expectedElementSize,
                           const word* defaultValue) const;
   // Get the list field at the given index in the reference segment, or the default value if not
-  // initialized.
+  // initialized.  The default value is allowed to be null, in which case an empty list is used.
 
 private:
   SegmentReader* segment;  // Memory segment in which the struct resides.
@@ -220,13 +230,19 @@ public:
 
   ListBuilder initListElement(
       WireReferenceCount index, FieldSize elementSize, ElementCount elementCount) const;
-  ListBuilder initStructListElement(
-      WireReferenceCount index, ElementCount elementCount,
-      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount referenceCount) const;
-  // Create a new list element of the given size at the given index.
+  // Create a new list element of the given size at the given index.  All elements are initialized
+  // to zero.
+
+  ListBuilder initStructListElement(WireReferenceCount index, ElementCount elementCount,
+                                    const word* elementDefaultValue) const;
+  // Allocates a new list of the given size for the field at the given index in the reference
+  // segment, and return a pointer to it.  Each element is initialized as a copy of
+  // elementDefaultValue.  As with StructBuilder::initStructListElement(), this should be the
+  // default value for the *type*, with all-null references.
 
   ListBuilder getListElement(WireReferenceCount index, FieldSize elementSize) const;
-  // Get the existing list element at the given index.
+  // Get the existing list element at the given index.  Returns an empty list if the element is
+  // not initialized.
 
   ListReader asReader(FieldSize elementSize) const;
   // Get a ListReader pointing at the same memory.  Use this version only for non-struct lists.

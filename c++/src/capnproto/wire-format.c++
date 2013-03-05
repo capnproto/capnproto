@@ -24,6 +24,7 @@
 #include "wire-format.h"
 #include "message.h"
 #include "descriptor.h"
+#include <string.h>
 #include <limits>
 
 namespace capnproto {
@@ -138,6 +139,11 @@ struct WireReference {
         (static_cast<int>(elementSize) << 29) | (elementCount / ELEMENTS));
   }
 
+  CAPNPROTO_ALWAYS_INLINE(void setEmptyList(FieldSize elementSize)) {
+    setTagAndOffset(LIST, 0 * WORDS);
+    listRef.elementSizeAndCount.set(static_cast<int>(elementSize) << 29);
+  }
+
   CAPNPROTO_ALWAYS_INLINE(void setInlineCompositeList(WordCount wordCount, word* target)) {
     setTagAndOffset(LIST, intervalLength(reinterpret_cast<word*>(this), target));
     CAPNPROTO_DEBUG_ASSERT(wordCount < (1 << 29) * WORDS,
@@ -229,33 +235,160 @@ struct WireHelpers {
     return true;
   }
 
+  // -----------------------------------------------------------------
+
+  static CAPNPROTO_ALWAYS_INLINE(
+      void copyStruct(SegmentBuilder* segment, word* dst, const word* src,
+                      WordCount dataSize, WireReferenceCount referenceCount)) {
+    memcpy(dst, src, dataSize * BYTES_PER_WORD / BYTES);
+
+    const WireReference* srcRefs = reinterpret_cast<const WireReference*>(src + dataSize);
+    WireReference* dstRefs = reinterpret_cast<WireReference*>(dst + dataSize);
+
+    uint n = referenceCount / REFERENCES;
+    for (uint i = 0; i < n; i++) {
+      copyMessage(segment, dstRefs + i, srcRefs + i);
+    }
+  }
+
+  // Not always-inline because it's recursive.
+  static WireReference* copyMessage(
+      SegmentBuilder* segment, WireReference* dst, const WireReference* src) {
+    switch (src->tag()) {
+      case WireReference::STRUCT: {
+        if (src->isNull()) {
+          memset(dst, 0, sizeof(WireReference));
+        } else {
+          const word* srcPtr = src->target();
+          word* dstPtr = allocate(dst, segment, src->structRef.wordSize());
+
+          copyStruct(segment, dstPtr, srcPtr, dst->structRef.dataSize.get(),
+                     dst->structRef.refCount.get());
+
+          dst->setStruct(dst->structRef.fieldCount.get(), dst->structRef.dataSize.get(),
+                         dst->structRef.refCount.get(), dstPtr);
+        }
+        break;
+      }
+      case WireReference::LIST: {
+        switch (src->listRef.elementSize()) {
+          case FieldSize::VOID:
+          case FieldSize::BIT:
+          case FieldSize::BYTE:
+          case FieldSize::TWO_BYTES:
+          case FieldSize::FOUR_BYTES:
+          case FieldSize::EIGHT_BYTES: {
+            WordCount wordCount = roundUpToWords(
+                ElementCount64(src->listRef.elementCount()) *
+                bitsPerElement(src->listRef.elementSize()));
+            const word* srcPtr = src->target();
+            word* dstPtr = allocate(dst, segment, wordCount);
+            memcpy(dstPtr, srcPtr, wordCount * BYTES_PER_WORD / BYTES);
+
+            dst->setList(src->listRef.elementSize(), src->listRef.elementCount(), dstPtr);
+            break;
+          }
+
+          case FieldSize::REFERENCE: {
+            const WireReference* srcRefs = reinterpret_cast<const WireReference*>(src->target());
+            WireReference* dstRefs = reinterpret_cast<WireReference*>(
+                allocate(dst, segment, src->listRef.elementCount() *
+                    (1 * REFERENCES / ELEMENTS) * WORDS_PER_REFERENCE));
+
+            uint n = src->listRef.elementCount() / ELEMENTS;
+            for (uint i = 0; i < n; i++) {
+              copyMessage(segment, dstRefs + i, srcRefs + i);
+            }
+
+            dst->setList(FieldSize::REFERENCE, src->listRef.elementCount(),
+                         reinterpret_cast<word*>(dstRefs));
+            break;
+          }
+
+          case FieldSize::INLINE_COMPOSITE: {
+            const word* srcPtr = src->target();
+            word* dstPtr = allocate(dst, segment,
+                src->listRef.inlineCompositeWordCount() + REFERENCE_SIZE_IN_WORDS);
+
+            dst->setInlineCompositeList(src->listRef.inlineCompositeWordCount(), dstPtr);
+
+            const WireReference* srcTag = reinterpret_cast<const WireReference*>(srcPtr);
+            memcpy(dstPtr, srcTag, sizeof(WireReference));
+
+            srcPtr += REFERENCE_SIZE_IN_WORDS;
+            dstPtr += REFERENCE_SIZE_IN_WORDS;
+
+            CAPNPROTO_ASSERT(srcTag->tag() == WireReference::STRUCT,
+                "INLINE_COMPOSITE of lists is not yet supported.");
+
+            uint n = srcTag->tagElementCount() / ELEMENTS;
+            for (uint i = 0; i < n; i++) {
+              copyStruct(segment, dstPtr, srcPtr,
+                  srcTag->structRef.dataSize.get(), srcTag->structRef.refCount.get());
+              srcPtr += srcTag->structRef.wordSize();
+              dstPtr += srcTag->structRef.wordSize();
+            }
+            break;
+          }
+        }
+        break;
+      }
+      default:
+        CAPNPROTO_ASSERT(false, "Copy source message contained unexpected tag.");
+        break;
+    }
+
+    return dst;
+  }
+
+  // -----------------------------------------------------------------
+
   static CAPNPROTO_ALWAYS_INLINE(StructBuilder initStructReference(
-      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount referenceCount,
-      WireReference* ref, SegmentBuilder* segment)) {
+      WireReference* ref, SegmentBuilder* segment, const word* typeDefaultValue)) {
+    const WireReference* defaultRef = reinterpret_cast<const WireReference*>(typeDefaultValue);
+
+    // Allocate space for the new struct.
+    word* ptr = allocate(ref, segment, defaultRef->structRef.wordSize());
+
+    // Copy over the data segment from the default value.  We don't have to copy the reference
+    // segment because it is presumed to be all-null.
+    memcpy(ptr, defaultRef->target(),
+        defaultRef->structRef.dataSize.get() * BYTES_PER_WORD / BYTES);
+
+    // Initialize the reference.
+    ref->setStruct(defaultRef->structRef.fieldCount.get(), defaultRef->structRef.dataSize.get(),
+                   defaultRef->structRef.refCount.get(), ptr);
+
+    // Build the StructBuilder.
+    return StructBuilder(segment, ptr,
+        reinterpret_cast<WireReference*>(ptr + defaultRef->structRef.dataSize.get()));
+  }
+
+  static CAPNPROTO_ALWAYS_INLINE(StructBuilder getStructReference(
+      WireReference* ref, SegmentBuilder* segment, const word* defaultValue)) {
+    const WireReference* defaultRef = reinterpret_cast<const WireReference*>(defaultValue);
+
     if (ref->isNull()) {
-      // Allocate space for the new struct.
-      word* ptr = allocate(ref, segment, dataSize + referenceCount * WORDS_PER_REFERENCE);
-
-      // Initialize the reference.
-      ref->setStruct(fieldCount, dataSize, referenceCount, ptr);
-
-      // Build the StructBuilder.
-      return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + dataSize));
+      ref = copyMessage(segment, ref, defaultRef);
     } else {
       followFars(ref, segment);
 
       CAPNPROTO_DEBUG_ASSERT(ref->tag() == WireReference::STRUCT,
           "Called getStruct{Field,Element}() but existing reference is not a struct.");
-      CAPNPROTO_DEBUG_ASSERT(ref->structRef.fieldCount.get() == fieldCount,
+      CAPNPROTO_DEBUG_ASSERT(
+          ref->structRef.fieldCount.get() == defaultRef->structRef.fieldCount.get(),
           "Trying to update struct with incorrect field count.");
-      CAPNPROTO_DEBUG_ASSERT(ref->structRef.dataSize.get() == dataSize,
+      CAPNPROTO_DEBUG_ASSERT(
+          ref->structRef.dataSize.get() == defaultRef->structRef.dataSize.get(),
           "Trying to update struct with incorrect data size.");
-      CAPNPROTO_DEBUG_ASSERT(ref->structRef.refCount.get() == referenceCount,
+      CAPNPROTO_DEBUG_ASSERT(
+          ref->structRef.refCount.get() == defaultRef->structRef.refCount.get(),
           "Trying to update struct with incorrect reference count.");
-
-      word* ptr = ref->target();
-      return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + dataSize));
     }
+
+    word* ptr = ref->target();
+    return StructBuilder(segment, ptr,
+        reinterpret_cast<WireReference*>(ptr + defaultRef->structRef.dataSize.get()));
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListBuilder initListReference(
@@ -280,8 +413,10 @@ struct WireHelpers {
 
   static CAPNPROTO_ALWAYS_INLINE(ListBuilder initStructListReference(
       WireReference* ref, SegmentBuilder* segment, ElementCount elementCount,
-      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount referenceCount)) {
-    auto wordsPerElement = (dataSize + referenceCount * WORDS_PER_REFERENCE) / ELEMENTS;
+      const word* elementDefaultValue)) {
+    const WireReference* defaultRef = reinterpret_cast<const WireReference*>(elementDefaultValue);
+
+    auto wordsPerElement = defaultRef->structRef.wordSize() / ELEMENTS;
 
     // Allocate the list, prefixed by a single WireReference.
     WordCount wordCount = elementCount * wordsPerElement;
@@ -293,24 +428,44 @@ struct WireHelpers {
 
     // Initialize the list tag.
     reinterpret_cast<WireReference*>(ptr)->setStructTag(
-        fieldCount, dataSize, referenceCount, elementCount);
+        defaultRef->structRef.fieldCount.get(),
+        defaultRef->structRef.dataSize.get(),
+        defaultRef->structRef.refCount.get(),
+        elementCount);
+    ptr += REFERENCE_SIZE_IN_WORDS;
+
+    // Initialize the elements.  We only have to copy the data segments, as the reference segment
+    // in a struct type default value is always all-null.
+    ByteCount elementDataByteSize = defaultRef->structRef.dataSize.get() * BYTES_PER_WORD;
+    const word* defaultData = defaultRef->target();
+    word* elementPtr = ptr;
+    uint n = elementCount / ELEMENTS;
+    for (uint i = 0; i < n; i++) {
+      memcpy(elementPtr, defaultData, elementDataByteSize / BYTES);
+      elementPtr += 1 * ELEMENTS * wordsPerElement;
+    }
 
     // Build the ListBuilder.
-    return ListBuilder(segment, ptr + REFERENCE_SIZE_IN_WORDS, elementCount);
+    return ListBuilder(segment, ptr, elementCount);
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListBuilder getWritableListReference(
-      FieldSize elementSize, WireReference* ref, SegmentBuilder* segment)) {
+      WireReference* ref, SegmentBuilder* segment, const word* defaultValue)) {
+    const WireReference* defaultRef = reinterpret_cast<const WireReference*>(defaultValue);
+
     if (ref->isNull()) {
-      return ListBuilder(segment, nullptr, 0 * ELEMENTS);
+      if (defaultValue == nullptr) {
+        return ListBuilder(segment, nullptr, 0 * ELEMENTS);
+      }
+      ref = copyMessage(segment, ref, defaultRef);
+    } else {
+      followFars(ref, segment);
+
+      CAPNPROTO_ASSERT(ref->tag() == WireReference::LIST,
+          "Called getList{Field,Element}() but existing reference is not a list.");
     }
 
-    followFars(ref, segment);
-
-    CAPNPROTO_ASSERT(ref->tag() == WireReference::LIST,
-        "Called getList{Field,Element}() but existing reference is not a list.");
-
-    if (elementSize == FieldSize::INLINE_COMPOSITE) {
+    if (ref->listRef.elementSize() == FieldSize::INLINE_COMPOSITE) {
       // Read the tag to get the actual element count.
       WireReference* tag = reinterpret_cast<WireReference*>(ref->target());
       CAPNPROTO_ASSERT(tag->tag() == WireReference::STRUCT,
@@ -379,7 +534,11 @@ struct WireHelpers {
     if (ref == nullptr || ref->isNull()) {
     useDefault:
       segment = nullptr;
-      ref = reinterpret_cast<const WireReference*>(defaultValue);
+      if (defaultValue == nullptr) {
+        return ListReader(nullptr, nullptr, 0 * ELEMENTS, 0 * BITS / ELEMENTS, recursionLimit - 1);
+      } else {
+        ref = reinterpret_cast<const WireReference*>(defaultValue);
+      }
     } else if (segment != nullptr) {
       if (CAPNPROTO_EXPECT_FALSE(recursionLimit == 0)) {
         segment->getMessage()->reportInvalidData(
@@ -553,19 +712,20 @@ struct WireHelpers {
 
 // =======================================================================================
 
-StructBuilder StructBuilder::initRoot(SegmentBuilder* segment, word* location,
-    FieldNumber fieldCount, WordCount dataSize, WireReferenceCount referenceCount) {
+StructBuilder StructBuilder::initRoot(
+    SegmentBuilder* segment, word* location, const word* defaultValue) {
   return WireHelpers::initStructReference(
-      fieldCount, dataSize, referenceCount,
-      reinterpret_cast<WireReference*>(location), segment);
+      reinterpret_cast<WireReference*>(location), segment, defaultValue);
+}
+
+StructBuilder StructBuilder::initStructField(
+    WireReferenceCount refIndex, const word* typeDefaultValue) const {
+  return WireHelpers::initStructReference(references + refIndex, segment, typeDefaultValue);
 }
 
 StructBuilder StructBuilder::getStructField(
-    WireReferenceCount refIndex, FieldNumber fieldCount,
-    WordCount dataSize, WireReferenceCount referenceCount) const {
-  return WireHelpers::initStructReference(
-      fieldCount, dataSize, referenceCount,
-      references + refIndex, segment);
+    WireReferenceCount refIndex, const word* defaultValue) const {
+  return WireHelpers::getStructReference(references + refIndex, segment, defaultValue);
 }
 
 ListBuilder StructBuilder::initListField(
@@ -577,15 +737,15 @@ ListBuilder StructBuilder::initListField(
 
 ListBuilder StructBuilder::initStructListField(
     WireReferenceCount refIndex, ElementCount elementCount,
-    FieldNumber fieldCount, WordCount dataSize, WireReferenceCount referenceCount) const {
+    const word* elementDefaultValue) const {
   return WireHelpers::initStructListReference(
-      references + refIndex, segment,
-      elementCount, fieldCount, dataSize, referenceCount);
+      references + refIndex, segment, elementCount, elementDefaultValue);
 }
 
-ListBuilder StructBuilder::getListField(WireReferenceCount refIndex, FieldSize elementSize) const {
+ListBuilder StructBuilder::getListField(
+    WireReferenceCount refIndex, const word* defaultValue) const {
   return WireHelpers::getWritableListReference(
-      elementSize, references + refIndex, segment);
+      references + refIndex, segment, defaultValue);
 }
 
 StructReader StructBuilder::asReader() const {
@@ -646,16 +806,15 @@ ListBuilder ListBuilder::initListElement(
 }
 
 ListBuilder ListBuilder::initStructListElement(
-    WireReferenceCount index, ElementCount elementCount,
-    FieldNumber fieldCount, WordCount dataSize, WireReferenceCount referenceCount) const {
+    WireReferenceCount index, ElementCount elementCount, const word* elementDefaultValue) const {
   return WireHelpers::initStructListReference(
       reinterpret_cast<WireReference*>(ptr) + index, segment,
-      elementCount, fieldCount, dataSize, referenceCount);
+      elementCount, elementDefaultValue);
 }
 
 ListBuilder ListBuilder::getListElement(WireReferenceCount index, FieldSize elementSize) const {
   return WireHelpers::getWritableListReference(
-      elementSize, reinterpret_cast<WireReference*>(ptr) + index, segment);
+      reinterpret_cast<WireReference*>(ptr) + index, segment, nullptr);
 }
 
 ListReader ListBuilder::asReader(FieldSize elementSize) const {
