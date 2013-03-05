@@ -427,6 +427,8 @@ constexpr auto BITS_PER_REFERENCE = 64 * BITS / REFERENCES;
 constexpr auto BYTES_PER_REFERENCE = 8 * BYTES / REFERENCES;
 constexpr auto WORDS_PER_REFERENCE = 1 * WORDS / REFERENCES;
 
+constexpr WordCount REFERENCE_SIZE_IN_WORDS = 1 * REFERENCES * WORDS_PER_REFERENCE;
+
 template <typename T>
 inline constexpr decltype(BYTES / ELEMENTS) bytesPerElement() {
   return sizeof(T) * BYTES / ELEMENTS;

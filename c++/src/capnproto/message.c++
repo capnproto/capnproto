@@ -53,7 +53,7 @@ MallocMessage::MallocMessage(WordCount preferredSegmentSize)
 MallocMessage::~MallocMessage() {}
 
 SegmentReader* MallocMessage::tryGetSegment(SegmentId id) {
-  if (id.value > segments.size()) {
+  if (id.value >= segments.size()) {
     return nullptr;
   } else {
     return segments[id.value].get();

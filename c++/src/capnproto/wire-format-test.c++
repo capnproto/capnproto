@@ -150,6 +150,59 @@ static void setupStruct(StructBuilder builder) {
   }
 }
 
+static void checkStruct(StructBuilder builder) {
+  EXPECT_EQ(0x1011121314151617ull, builder.getDataField<uint64_t>(0 * ELEMENTS));
+  EXPECT_EQ(0x20212223u, builder.getDataField<uint32_t>(2 * ELEMENTS));
+  EXPECT_EQ(0x3031u, builder.getDataField<uint16_t>(6 * ELEMENTS));
+  EXPECT_EQ(0x40u, builder.getDataField<uint8_t>(14 * ELEMENTS));
+  EXPECT_FALSE(builder.getDataField<bool>(120 * ELEMENTS));
+  EXPECT_FALSE(builder.getDataField<bool>(121 * ELEMENTS));
+  EXPECT_TRUE (builder.getDataField<bool>(122 * ELEMENTS));
+  EXPECT_FALSE(builder.getDataField<bool>(123 * ELEMENTS));
+  EXPECT_TRUE (builder.getDataField<bool>(124 * ELEMENTS));
+  EXPECT_TRUE (builder.getDataField<bool>(125 * ELEMENTS));
+  EXPECT_TRUE (builder.getDataField<bool>(126 * ELEMENTS));
+  EXPECT_FALSE(builder.getDataField<bool>(127 * ELEMENTS));
+
+  {
+    StructBuilder subStruct = builder.getStructField(
+        0 * REFERENCES, FieldNumber(1), 1 * WORDS, 0 * REFERENCES);
+    EXPECT_EQ(123u, subStruct.getDataField<uint32_t>(0 * ELEMENTS));
+  }
+
+  {
+    ListBuilder list = builder.getListField(1 * REFERENCES, FieldSize::FOUR_BYTES);
+    ASSERT_EQ(3 * ELEMENTS, list.size());
+    EXPECT_EQ(200, list.getDataElement<int32_t>(0 * ELEMENTS));
+    EXPECT_EQ(201, list.getDataElement<int32_t>(1 * ELEMENTS));
+    EXPECT_EQ(202, list.getDataElement<int32_t>(2 * ELEMENTS));
+  }
+
+  {
+    ListBuilder list = builder.getListField(2 * REFERENCES, FieldSize::INLINE_COMPOSITE);
+    ASSERT_EQ(4 * ELEMENTS, list.size());
+    for (int i = 0; i < 4; i++) {
+      StructBuilder element = list.getStructElement(i * ELEMENTS, 2 * WORDS / ELEMENTS, 1 * WORDS);
+      EXPECT_EQ(300 + i, element.getDataField<int32_t>(0 * ELEMENTS));
+      EXPECT_EQ(400 + i,
+          element.getStructField(0 * REFERENCES, FieldNumber(1), 1 * WORDS, 0 * REFERENCES)
+              .getDataField<int32_t>(0 * ELEMENTS));
+    }
+  }
+
+  {
+    ListBuilder list = builder.getListField(3 * REFERENCES, FieldSize::REFERENCE);
+    ASSERT_EQ(5 * ELEMENTS, list.size());
+    for (uint i = 0; i < 5; i++) {
+      ListBuilder element = list.getListElement(i * REFERENCES, FieldSize::TWO_BYTES);
+      ASSERT_EQ((i + 1) * ELEMENTS, element.size());
+      for (uint j = 0; j <= i; j++) {
+        EXPECT_EQ(500u + j, element.getDataElement<uint16_t>(j * ELEMENTS));
+      }
+    }
+  }
+}
+
 static void checkStruct(StructReader reader) {
   EXPECT_EQ(0x1011121314151617ull, reader.getDataField<uint64_t>(0 * ELEMENTS, 1616));
   EXPECT_EQ(0x20212223u, reader.getDataField<uint32_t>(2 * ELEMENTS, 1616));
@@ -181,7 +234,7 @@ static void checkStruct(StructReader reader) {
 
   {
     // TODO:  Use valid default value.
-    ListReader list = reader.getListField(2 * REFERENCES, FieldSize::STRUCT, nullptr);
+    ListReader list = reader.getListField(2 * REFERENCES, FieldSize::INLINE_COMPOSITE, nullptr);
     ASSERT_EQ(4 * ELEMENTS, list.size());
     for (int i = 0; i < 4; i++) {
       StructReader element = list.getStructElement(i * ELEMENTS, nullptr);
@@ -206,7 +259,7 @@ static void checkStruct(StructReader reader) {
   }
 }
 
-TEST(WireFormat, StructRoundTrip) {
+TEST(WireFormat, StructRoundTrip_OneSegment) {
   std::unique_ptr<MessageBuilder> message = newMallocMessage(512 * WORDS);
   SegmentBuilder* segment = message->getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
@@ -233,12 +286,13 @@ TEST(WireFormat, StructRoundTrip) {
   //   34
   EXPECT_EQ(34 * WORDS, segment->getSize());
 
+  checkStruct(builder);
   checkStruct(builder.asReader());
   checkStruct(StructReader::readRootTrusted(segment->getStartPtr(), nullptr));
   checkStruct(StructReader::readRoot(segment->getStartPtr(), nullptr, segment, 4));
 }
 
-TEST(WireFormat, StructRoundTrip_MultipleSegments) {
+TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
   std::unique_ptr<MessageBuilder> message = newMallocMessage(1 * WORDS);
   SegmentBuilder* segment = message->getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
@@ -269,7 +323,36 @@ TEST(WireFormat, StructRoundTrip_MultipleSegments) {
   EXPECT_EQ( 2 * WORDS, message->getSegment(SegmentId(13))->getSize());  // list list sublist 4
   EXPECT_EQ( 3 * WORDS, message->getSegment(SegmentId(14))->getSize());  // list list sublist 5
 
+  checkStruct(builder);
   checkStruct(builder.asReader());
+  checkStruct(StructReader::readRoot(segment->getStartPtr(), nullptr, segment, 4));
+}
+
+TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
+  std::unique_ptr<MessageBuilder> message = newMallocMessage(8 * WORDS);
+  SegmentBuilder* segment = message->getSegmentWithAvailable(1 * WORDS);
+  word* rootLocation = segment->allocate(1 * WORDS);
+
+  StructBuilder builder =
+      StructBuilder::initRoot(segment, rootLocation, FieldNumber(16), 2 * WORDS, 4 * REFERENCES);
+  setupStruct(builder);
+
+  // Verify that we made 6 segments.
+  ASSERT_TRUE(message->tryGetSegment(SegmentId(5)) != nullptr);
+  EXPECT_EQ(nullptr, message->tryGetSegment(SegmentId(6)));
+
+  // Check that each segment has the expected size.  Recall that each object will be prefixed by an
+  // extra word if its parent is in a different segment.
+  EXPECT_EQ( 8 * WORDS, message->getSegment(SegmentId(0))->getSize());  // root ref + struct + sub
+  EXPECT_EQ( 3 * WORDS, message->getSegment(SegmentId(1))->getSize());  // 3-element int32 list
+  EXPECT_EQ(10 * WORDS, message->getSegment(SegmentId(2))->getSize());  // struct list
+  EXPECT_EQ( 8 * WORDS, message->getSegment(SegmentId(3))->getSize());  // struct list substructs
+  EXPECT_EQ( 8 * WORDS, message->getSegment(SegmentId(4))->getSize());  // list list + sublist 1,2
+  EXPECT_EQ( 7 * WORDS, message->getSegment(SegmentId(5))->getSize());  // list list sublist 3,4,5
+
+  checkStruct(builder);
+  checkStruct(builder.asReader());
+  checkStruct(StructReader::readRoot(segment->getStartPtr(), nullptr, segment, 4));
 }
 
 }  // namespace

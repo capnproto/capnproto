@@ -132,8 +132,8 @@ private:
 class StructReader {
 public:
   inline StructReader()
-      : segment(nullptr), ptr(nullptr), fieldCount(0), dataSize(0), referenceCount(0),
-        bit0Offset(0 * BITS), recursionLimit(0) {}
+      : segment(nullptr), data(nullptr), references(nullptr), fieldCount(0), dataSize(0),
+        referenceCount(0), bit0Offset(0 * BITS), recursionLimit(0) {}
 
   static StructReader readRootTrusted(const word* location, const word* defaultValue);
   static StructReader readRoot(const word* location, const word* defaultValue,
@@ -167,17 +167,8 @@ public:
 private:
   SegmentReader* segment;  // Memory segment in which the struct resides.
 
-  const void* ptr;
-  // ptr[0] points to the location between the struct's data and reference segments.
-  // ptr[1] points to the end of the *default* data segment.
-  // We put these in an array so we can choose between them without a branch.
-  // These pointers are not necessarily word-aligned -- they are aligned as well as necessary for
-  // the data they might point at.  So if the struct has only one field that we know of, and it is
-  // of type Int16, then the pointers only need to be 16-bit aligned.  Or if the struct has fields
-  // of type Int16 and Int64 (in that order), but the struct reference on the wire self-reported
-  // as having only one field (therefore, only the Int16), then ptr[0] need only be 16-bit aligned
-  // while ptr[1] must be 64-bit aligned.  This relaxation of alignment is needed to handle the
-  // case where a list of primitives is upgraded to a list of structs.
+  const void* data;
+  const WireReference* references;
 
   FieldNumber fieldCount;              // Number of fields the struct is reported to have.
   WordCount8 dataSize;                 // Size of data segment.
@@ -192,11 +183,12 @@ private:
   // Limits the depth of message structures to guard against stack-overflow-based DoS attacks.
   // Once this reaches zero, further pointers will be pruned.
 
-  inline StructReader(SegmentReader* segment, const void* ptr, FieldNumber fieldCount,
-                      WordCount dataSize, WireReferenceCount referenceCount,
+  inline StructReader(SegmentReader* segment, const void* data, const WireReference* references,
+                      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount referenceCount,
                       BitCount bit0Offset, int recursionLimit)
-      : segment(segment), ptr(ptr), fieldCount(fieldCount), dataSize(dataSize),
-        referenceCount(referenceCount), bit0Offset(bit0Offset), recursionLimit(recursionLimit) {}
+      : segment(segment), data(data), references(references), fieldCount(fieldCount),
+        dataSize(dataSize), referenceCount(referenceCount), bit0Offset(bit0Offset),
+        recursionLimit(recursionLimit) {}
 
   friend class ListReader;
   friend class StructBuilder;
@@ -354,7 +346,7 @@ inline void StructBuilder::setDataField<bool>(ElementCount offset, bool value) c
 template <typename T>
 T StructReader::getDataField(ElementCount offset, typename NoInfer<T>::Type defaultValue) const {
   if (offset * bytesPerElement<T>() < dataSize * BYTES_PER_WORD) {
-    return reinterpret_cast<const WireValue<T>*>(ptr)[offset / ELEMENTS].get();
+    return reinterpret_cast<const WireValue<T>*>(data)[offset / ELEMENTS].get();
   } else {
     return defaultValue;
   }
@@ -368,7 +360,7 @@ inline bool StructReader::getDataField<bool>(ElementCount offset, bool defaultVa
   if (boffset == 0 * BITS) boffset = bit0Offset;
 
   if (boffset < dataSize * BITS_PER_WORD) {
-    const byte* b = reinterpret_cast<const byte*>(ptr) + boffset / BITS_PER_BYTE;
+    const byte* b = reinterpret_cast<const byte*>(data) + boffset / BITS_PER_BYTE;
     return (*reinterpret_cast<const uint8_t*>(b) & (1 << (boffset % BITS_PER_BYTE / BITS))) != 0;
   } else {
     return defaultValue;
@@ -381,7 +373,7 @@ T StructReader::getDataFieldCheckingNumber(
   // Intentionally use & rather than && to reduce branches.
   if ((fieldNumber < fieldCount) &
       (offset * bytesPerElement<T>() < dataSize * BYTES_PER_WORD)) {
-    return reinterpret_cast<const WireValue<T>*>(ptr)[offset / ELEMENTS].get();
+    return reinterpret_cast<const WireValue<T>*>(data)[offset / ELEMENTS].get();
   } else {
     return defaultValue;
   }
@@ -397,7 +389,7 @@ inline bool StructReader::getDataFieldCheckingNumber<bool>(
 
   // Intentionally use & rather than && to reduce branches.
   if ((fieldNumber < fieldCount) & (boffset < dataSize * BITS_PER_WORD)) {
-    const byte* b = reinterpret_cast<const byte*>(ptr) + boffset / BITS_PER_BYTE;
+    const byte* b = reinterpret_cast<const byte*>(data) + boffset / BITS_PER_BYTE;
     return (*reinterpret_cast<const uint8_t*>(b) & (1 << (boffset % BITS_PER_BYTE / BITS))) != 0;
   } else {
     return defaultValue;
