@@ -25,6 +25,7 @@
 #include <vector>
 #include <string.h>
 #include <iostream>
+#include <stdlib.h>
 
 namespace capnproto {
 
@@ -45,12 +46,16 @@ public:
 private:
   WordCount preferredSegmentSize;
   std::vector<std::unique_ptr<SegmentBuilder>> segments;
-  std::vector<std::unique_ptr<word[]>> memory;
+  std::vector<word*> memory;
 };
 
 MallocMessage::MallocMessage(WordCount preferredSegmentSize)
     : preferredSegmentSize(preferredSegmentSize) {}
-MallocMessage::~MallocMessage() {}
+MallocMessage::~MallocMessage() {
+  for (word* ptr: memory) {
+    free(ptr);
+  }
+}
 
 SegmentReader* MallocMessage::tryGetSegment(SegmentId id) {
   if (id.value >= segments.size()) {
@@ -77,10 +82,9 @@ SegmentBuilder* MallocMessage::getSegment(SegmentId id) {
 SegmentBuilder* MallocMessage::getSegmentWithAvailable(WordCount minimumAvailable) {
   if (segments.empty() || segments.back()->available() < minimumAvailable) {
     WordCount newSize = std::max(minimumAvailable, preferredSegmentSize);
-    memory.push_back(std::unique_ptr<word[]>(new word[newSize / WORDS]));
-    memset(memory.back().get(), 0, newSize / WORDS * sizeof(word));
+    memory.push_back(reinterpret_cast<word*>(calloc(newSize / WORDS, sizeof(word))));
     segments.push_back(std::unique_ptr<SegmentBuilder>(new SegmentBuilder(
-        this, SegmentId(segments.size()), memory.back().get(), newSize)));
+        this, SegmentId(segments.size()), memory.back(), newSize)));
   }
   return segments.back().get();
 }

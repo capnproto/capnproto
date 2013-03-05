@@ -317,8 +317,8 @@ inline constexpr auto operator*(UnitRatio<Number1, Unit2, Unit> ratio,
 // =======================================================================================
 // Raw memory types and measures
 
-class byte { uint8_t  content; CAPNPROTO_DISALLOW_COPY(byte); public: byte() = default; };
-class word { uint64_t content; CAPNPROTO_DISALLOW_COPY(word); public: word() = default; };
+class byte { uint8_t  content; CAPNPROTO_DISALLOW_COPY(byte); };
+class word { uint64_t content; CAPNPROTO_DISALLOW_COPY(word); };
 // byte and word are opaque types with sizes of 8 and 64 bits, respectively.  These types are useful
 // only to make pointer arithmetic clearer.  Since the contents are private, the only way to access
 // them is to first reinterpret_cast to some other pointer type.
