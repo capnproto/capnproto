@@ -64,6 +64,13 @@ struct WireReference {
       inline WordCount wordSize() const {
         return dataSize.get() + refCount.get() * WORDS_PER_REFERENCE;
       }
+
+      CAPNPROTO_ALWAYS_INLINE(void set(FieldNumber fc, WordCount ds, WireReferenceCount rc)) {
+        fieldCount.set(fc);
+        dataSize.set(ds);
+        refCount.set(rc);
+        reserved0.set(0);
+      }
     } structRef;
     // Also covers capabilities.
 
@@ -78,6 +85,19 @@ struct WireReference {
       }
       CAPNPROTO_ALWAYS_INLINE(WordCount inlineCompositeWordCount() const) {
         return elementCount() * (1 * WORDS / ELEMENTS);
+      }
+
+      CAPNPROTO_ALWAYS_INLINE(void set(FieldSize es, ElementCount ec)) {
+        CAPNPROTO_DEBUG_ASSERT(ec < (1 << 29) * ELEMENTS,
+            "Lists are limited to 2**29 elements.");
+        elementSizeAndCount.set((static_cast<int>(es) << 29) | (ec / ELEMENTS));
+      }
+
+      CAPNPROTO_ALWAYS_INLINE(void setInlineComposite(WordCount wc)) {
+        CAPNPROTO_DEBUG_ASSERT(wc < (1 << 29) * WORDS,
+            "Inline composite lists are limited to 2**29 words.");
+        elementSizeAndCount.set(
+            (static_cast<int>(FieldSize::INLINE_COMPOSITE) << 29) | (wc / WORDS));
       }
     } listRef;
 
@@ -111,54 +131,39 @@ struct WireReference {
     offsetAndTag.set(((elementCount / ELEMENTS) << 3) | tag);
   }
 
-  CAPNPROTO_ALWAYS_INLINE(void setStruct(
-      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount refCount, word* target)) {
-    setTagAndOffset(STRUCT, intervalLength(reinterpret_cast<word*>(this), target));
-    structRef.fieldCount.set(fieldCount);
-    structRef.dataSize.set(WordCount8(dataSize));
-    structRef.refCount.set(refCount);
-    structRef.reserved0.set(0);
-  }
-
+//  CAPNPROTO_ALWAYS_INLINE(void setStruct(
+//      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount refCount, word* target)) {
+//    setTagAndOffset(STRUCT, intervalLength(reinterpret_cast<word*>(this), target));
+//    structRef.set(fieldCount, dataSize, refCount);
+//  }
+//
   CAPNPROTO_ALWAYS_INLINE(void setStructTag(
       FieldNumber fieldCount, WordCount dataSize, WireReferenceCount refCount,
       ElementCount elementCount)) {
     setTagAndElementCount(STRUCT, elementCount);
-    structRef.fieldCount.set(fieldCount);
-    structRef.dataSize.set(WordCount8(dataSize));
-    structRef.refCount.set(refCount);
-    structRef.reserved0.set(0);
+    structRef.set(fieldCount, dataSize, refCount);
   }
 
-  CAPNPROTO_ALWAYS_INLINE(void setList(
-      FieldSize elementSize, ElementCount elementCount, word* target)) {
-    setTagAndOffset(LIST, intervalLength(reinterpret_cast<word*>(this), target));
-    CAPNPROTO_DEBUG_ASSERT(elementCount < (1 << 29) * ELEMENTS,
-        "Lists are limited to 2**29 elements.");
-    listRef.elementSizeAndCount.set(
-        (static_cast<int>(elementSize) << 29) | (elementCount / ELEMENTS));
-  }
-
-  CAPNPROTO_ALWAYS_INLINE(void setEmptyList(FieldSize elementSize)) {
-    setTagAndOffset(LIST, 0 * WORDS);
-    listRef.elementSizeAndCount.set(static_cast<int>(elementSize) << 29);
-  }
-
-  CAPNPROTO_ALWAYS_INLINE(void setInlineCompositeList(WordCount wordCount, word* target)) {
-    setTagAndOffset(LIST, intervalLength(reinterpret_cast<word*>(this), target));
-    CAPNPROTO_DEBUG_ASSERT(wordCount < (1 << 29) * WORDS,
-        "Inline composite lists are limited to 2**29 words.");
-    listRef.elementSizeAndCount.set(
-        (static_cast<int>(FieldSize::INLINE_COMPOSITE) << 29) | (wordCount / WORDS));
-  }
-
+//  CAPNPROTO_ALWAYS_INLINE(void setList(
+//      FieldSize elementSize, ElementCount elementCount, word* target)) {
+//    setTagAndOffset(LIST, intervalLength(reinterpret_cast<word*>(this), target));
+//    listRef.set(elementSize, elementCount);
+//  }
+//
+//  CAPNPROTO_ALWAYS_INLINE(void setEmptyList(FieldSize elementSize)) {
+//    setTagAndOffset(LIST, 0 * WORDS);
+//    listRef.set(elementSize, 0 * ELEMENTS);
+//  }
+//
+//  CAPNPROTO_ALWAYS_INLINE(void setInlineCompositeList(WordCount wordCount, word* target)) {
+//    setTagAndOffset(LIST, intervalLength(reinterpret_cast<word*>(this), target));
+//    listRef.setInlineComposite(wordCount);
+//  }
+//
   CAPNPROTO_ALWAYS_INLINE(void setListTag(FieldSize elementSize, ElementCount listCount,
                                           ElementCount elementsPerList)) {
     setTagAndElementCount(LIST, listCount);
-    CAPNPROTO_DEBUG_ASSERT(elementsPerList < (1 << 29) * ELEMENTS,
-        "Lists are limited to 2**29 elements.");
-    listRef.elementSizeAndCount.set(
-        (static_cast<int>(elementSize) << 29) | (elementsPerList / ELEMENTS));
+    listRef.set(elementSize, elementsPerList);
   }
 
   CAPNPROTO_ALWAYS_INLINE(void setFar(SegmentId segmentId, WordCount offset)) {
@@ -185,54 +190,89 @@ struct WireHelpers {
   }
 
   static CAPNPROTO_ALWAYS_INLINE(word* allocate(
-      WireReference*& ref, SegmentBuilder*& segment, WordCount amount)) {
+      WireReference*& ref, SegmentBuilder*& segment, WordCount amount,
+      WireReference::Tag tag)) {
     word* ptr = segment->allocate(amount);
 
     if (ptr == nullptr) {
-      // Need to allocate in a new segment.
+      // Need to allocate in a new segment.  We'll need to allocate an extra reference worth of
+      // space to act as the landing pad for a far reference.
 
-      // Loop here just in case we ever make Segment::allocate() thread-safe -- in this case another
-      // thread could have grabbed the space between when we asked the message for the segment and
-      // when we asked the segment to allocate space.
-      do {
-        WordCount amountPlusRef = amount + REFERENCE_SIZE_IN_WORDS;
-        segment = segment->getMessage()->getSegmentWithAvailable(amountPlusRef);
-        ptr = segment->allocate(amountPlusRef);
-      } while (CAPNPROTO_EXPECT_FALSE(ptr == nullptr));
+      WordCount amountPlusRef = amount + REFERENCE_SIZE_IN_WORDS;
+      segment = segment->getMessage()->getSegmentWithAvailable(amountPlusRef);
+      ptr = segment->allocate(amountPlusRef);
 
+      // Set up the original reference to be a far reference to the new segment.
       ref->setFar(segment->getSegmentId(), segment->getOffsetTo(ptr));
+
+      // The landing pad has an offset of zero to indicate that the data immediately follows it.
       ref = reinterpret_cast<WireReference*>(ptr);
+      ref->setTagAndOffset(tag, 0 * WORDS);
 
       // Allocated space follows new reference.
       return ptr + REFERENCE_SIZE_IN_WORDS;
     } else {
+      ref->setTagAndOffset(tag, intervalLength(reinterpret_cast<word*>(ref), ptr));
       return ptr;
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(void followFars(WireReference*& ref, SegmentBuilder*& segment)) {
+  static CAPNPROTO_ALWAYS_INLINE(word* followFars(WireReference*& ref, SegmentBuilder*& segment)) {
     if (ref->tag() == WireReference::FAR) {
       segment = segment->getMessage()->getSegment(ref->farRef.segmentId.get());
       ref = reinterpret_cast<WireReference*>(segment->getPtrUnchecked(ref->offset()));
+      if (ref->offset() == 0 * WORDS) {
+        // Target immediately follows tag.
+        return reinterpret_cast<word*>(ref + 1);
+      } else {
+        // Target is in another castle.  Another far reference follows.
+        WireReference* far2 = ref + 1;
+        segment = segment->getMessage()->getSegment(far2->farRef.segmentId.get());
+        return segment->getPtrUnchecked(far2->offset());
+      }
+    } else {
+      return ref->target();
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(bool followFars(
-      const WireReference*& ref, SegmentReader*& segment)) {
+  static CAPNPROTO_ALWAYS_INLINE(
+      const word* followFars(const WireReference*& ref, SegmentReader*& segment)) {
     if (ref->tag() == WireReference::FAR) {
       segment = segment->getMessage()->tryGetSegment(ref->farRef.segmentId.get());
       if (CAPNPROTO_EXPECT_FALSE(segment == nullptr)) {
-        return false;
+        return nullptr;
       }
 
       const word* ptr = segment->getStartPtr() + ref->offset();
-      if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr + REFERENCE_SIZE_IN_WORDS))) {
-        return false;
+      if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(
+          ptr, ptr + REFERENCE_SIZE_IN_WORDS))) {
+        return nullptr;
       }
 
       ref = reinterpret_cast<const WireReference*>(ptr);
+
+      if (ref->offset() == 0 * WORDS) {
+        // Target immediately follows tag.
+        return reinterpret_cast<const word*>(ref + 1);
+      } else {
+        // Target is in another castle.  Another far reference follows.
+        const WireReference* far2 = ref + 1;
+        segment = segment->getMessage()->tryGetSegment(far2->farRef.segmentId.get());
+        if (CAPNPROTO_EXPECT_FALSE(segment == nullptr)) {
+          return nullptr;
+        }
+
+        ptr = segment->getStartPtr() + far2->offset();
+        if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(
+            ptr, ptr + REFERENCE_SIZE_IN_WORDS))) {
+          return nullptr;
+        }
+
+        return ptr;
+      }
+    } else {
+      return ref->target();
     }
-    return true;
   }
 
   // -----------------------------------------------------------------
@@ -247,28 +287,31 @@ struct WireHelpers {
 
     uint n = referenceCount / REFERENCES;
     for (uint i = 0; i < n; i++) {
-      copyMessage(segment, dstRefs + i, srcRefs + i);
+      SegmentBuilder* subSegment = segment;
+      WireReference* dstRef = dstRefs + i;
+      copyMessage(subSegment, dstRef, srcRefs + i);
     }
   }
 
   // Not always-inline because it's recursive.
-  static WireReference* copyMessage(
-      SegmentBuilder* segment, WireReference* dst, const WireReference* src) {
+  static word* copyMessage(
+      SegmentBuilder*& segment, WireReference*& dst, const WireReference* src) {
     switch (src->tag()) {
       case WireReference::STRUCT: {
         if (src->isNull()) {
           memset(dst, 0, sizeof(WireReference));
+          return nullptr;
         } else {
           const word* srcPtr = src->target();
-          word* dstPtr = allocate(dst, segment, src->structRef.wordSize());
+          word* dstPtr = allocate(dst, segment, src->structRef.wordSize(), WireReference::STRUCT);
 
           copyStruct(segment, dstPtr, srcPtr, dst->structRef.dataSize.get(),
                      dst->structRef.refCount.get());
 
-          dst->setStruct(dst->structRef.fieldCount.get(), dst->structRef.dataSize.get(),
-                         dst->structRef.refCount.get(), dstPtr);
+          dst->structRef.set(dst->structRef.fieldCount.get(), dst->structRef.dataSize.get(),
+                             dst->structRef.refCount.get());
+          return dstPtr;
         }
-        break;
       }
       case WireReference::LIST: {
         switch (src->listRef.elementSize()) {
@@ -282,53 +325,56 @@ struct WireHelpers {
                 ElementCount64(src->listRef.elementCount()) *
                 bitsPerElement(src->listRef.elementSize()));
             const word* srcPtr = src->target();
-            word* dstPtr = allocate(dst, segment, wordCount);
+            word* dstPtr = allocate(dst, segment, wordCount, WireReference::LIST);
             memcpy(dstPtr, srcPtr, wordCount * BYTES_PER_WORD / BYTES);
 
-            dst->setList(src->listRef.elementSize(), src->listRef.elementCount(), dstPtr);
-            break;
+            dst->listRef.set(src->listRef.elementSize(), src->listRef.elementCount());
+            return dstPtr;
           }
 
           case FieldSize::REFERENCE: {
             const WireReference* srcRefs = reinterpret_cast<const WireReference*>(src->target());
             WireReference* dstRefs = reinterpret_cast<WireReference*>(
                 allocate(dst, segment, src->listRef.elementCount() *
-                    (1 * REFERENCES / ELEMENTS) * WORDS_PER_REFERENCE));
+                    (1 * REFERENCES / ELEMENTS) * WORDS_PER_REFERENCE,
+                    WireReference::LIST));
 
             uint n = src->listRef.elementCount() / ELEMENTS;
             for (uint i = 0; i < n; i++) {
-              copyMessage(segment, dstRefs + i, srcRefs + i);
+              SegmentBuilder* subSegment = segment;
+              WireReference* dstRef = dstRefs + i;
+              copyMessage(subSegment, dstRef, srcRefs + i);
             }
 
-            dst->setList(FieldSize::REFERENCE, src->listRef.elementCount(),
-                         reinterpret_cast<word*>(dstRefs));
-            break;
+            dst->listRef.set(FieldSize::REFERENCE, src->listRef.elementCount());
+            return reinterpret_cast<word*>(dstRefs);
           }
 
           case FieldSize::INLINE_COMPOSITE: {
             const word* srcPtr = src->target();
             word* dstPtr = allocate(dst, segment,
-                src->listRef.inlineCompositeWordCount() + REFERENCE_SIZE_IN_WORDS);
+                src->listRef.inlineCompositeWordCount() + REFERENCE_SIZE_IN_WORDS,
+                WireReference::LIST);
 
-            dst->setInlineCompositeList(src->listRef.inlineCompositeWordCount(), dstPtr);
+            dst->listRef.setInlineComposite(src->listRef.inlineCompositeWordCount());
 
             const WireReference* srcTag = reinterpret_cast<const WireReference*>(srcPtr);
             memcpy(dstPtr, srcTag, sizeof(WireReference));
 
-            srcPtr += REFERENCE_SIZE_IN_WORDS;
-            dstPtr += REFERENCE_SIZE_IN_WORDS;
+            const word* srcElement = srcPtr + REFERENCE_SIZE_IN_WORDS;
+            word* dstElement = dstPtr + REFERENCE_SIZE_IN_WORDS;
 
             CAPNPROTO_ASSERT(srcTag->tag() == WireReference::STRUCT,
                 "INLINE_COMPOSITE of lists is not yet supported.");
 
             uint n = srcTag->tagElementCount() / ELEMENTS;
             for (uint i = 0; i < n; i++) {
-              copyStruct(segment, dstPtr, srcPtr,
+              copyStruct(segment, dstElement, srcElement,
                   srcTag->structRef.dataSize.get(), srcTag->structRef.refCount.get());
-              srcPtr += srcTag->structRef.wordSize();
-              dstPtr += srcTag->structRef.wordSize();
+              srcElement += srcTag->structRef.wordSize();
+              dstElement += srcTag->structRef.wordSize();
             }
-            break;
+            return dstPtr;
           }
         }
         break;
@@ -338,7 +384,7 @@ struct WireHelpers {
         break;
     }
 
-    return dst;
+    return nullptr;
   }
 
   // -----------------------------------------------------------------
@@ -348,7 +394,7 @@ struct WireHelpers {
     const WireReference* defaultRef = reinterpret_cast<const WireReference*>(typeDefaultValue);
 
     // Allocate space for the new struct.
-    word* ptr = allocate(ref, segment, defaultRef->structRef.wordSize());
+    word* ptr = allocate(ref, segment, defaultRef->structRef.wordSize(), WireReference::STRUCT);
 
     // Copy over the data segment from the default value.  We don't have to copy the reference
     // segment because it is presumed to be all-null.
@@ -356,8 +402,8 @@ struct WireHelpers {
         defaultRef->structRef.dataSize.get() * BYTES_PER_WORD / BYTES);
 
     // Initialize the reference.
-    ref->setStruct(defaultRef->structRef.fieldCount.get(), defaultRef->structRef.dataSize.get(),
-                   defaultRef->structRef.refCount.get(), ptr);
+    ref->structRef.set(defaultRef->structRef.fieldCount.get(), defaultRef->structRef.dataSize.get(),
+                       defaultRef->structRef.refCount.get());
 
     // Build the StructBuilder.
     return StructBuilder(segment, ptr,
@@ -367,11 +413,12 @@ struct WireHelpers {
   static CAPNPROTO_ALWAYS_INLINE(StructBuilder getStructReference(
       WireReference* ref, SegmentBuilder* segment, const word* defaultValue)) {
     const WireReference* defaultRef = reinterpret_cast<const WireReference*>(defaultValue);
+    word* ptr;
 
     if (ref->isNull()) {
-      ref = copyMessage(segment, ref, defaultRef);
+      ptr = copyMessage(segment, ref, defaultRef);
     } else {
-      followFars(ref, segment);
+      ptr = followFars(ref, segment);
 
       CAPNPROTO_DEBUG_ASSERT(ref->tag() == WireReference::STRUCT,
           "Called getStruct{Field,Element}() but existing reference is not a struct.");
@@ -386,7 +433,6 @@ struct WireHelpers {
           "Trying to update struct with incorrect reference count.");
     }
 
-    word* ptr = ref->target();
     return StructBuilder(segment, ptr,
         reinterpret_cast<WireReference*>(ptr + defaultRef->structRef.dataSize.get()));
   }
@@ -402,10 +448,10 @@ struct WireHelpers {
         ElementCount64(elementCount) * bitsPerElement(elementSize));
 
     // Allocate the list.
-    word* ptr = allocate(ref, segment, wordCount);
+    word* ptr = allocate(ref, segment, wordCount, WireReference::LIST);
 
     // Initialize the reference.
-    ref->setList(elementSize, elementCount, ptr);
+    ref->listRef.set(elementSize, elementCount);
 
     // Build the ListBuilder.
     return ListBuilder(segment, ptr, elementCount);
@@ -420,11 +466,11 @@ struct WireHelpers {
 
     // Allocate the list, prefixed by a single WireReference.
     WordCount wordCount = elementCount * wordsPerElement;
-    word* ptr = allocate(ref, segment, REFERENCE_SIZE_IN_WORDS + wordCount);
+    word* ptr = allocate(ref, segment, REFERENCE_SIZE_IN_WORDS + wordCount, WireReference::LIST);
 
     // Initialize the reference.
     // INLINE_COMPOSITE lists replace the element count with the word count.
-    ref->setInlineCompositeList(wordCount, ptr);
+    ref->listRef.setInlineComposite(wordCount);
 
     // Initialize the list tag.
     reinterpret_cast<WireReference*>(ptr)->setStructTag(
@@ -452,14 +498,15 @@ struct WireHelpers {
   static CAPNPROTO_ALWAYS_INLINE(ListBuilder getWritableListReference(
       WireReference* ref, SegmentBuilder* segment, const word* defaultValue)) {
     const WireReference* defaultRef = reinterpret_cast<const WireReference*>(defaultValue);
+    word* ptr;
 
     if (ref->isNull()) {
       if (defaultValue == nullptr) {
         return ListBuilder(segment, nullptr, 0 * ELEMENTS);
       }
-      ref = copyMessage(segment, ref, defaultRef);
+      ptr = copyMessage(segment, ref, defaultRef);
     } else {
-      followFars(ref, segment);
+      ptr = followFars(ref, segment);
 
       CAPNPROTO_ASSERT(ref->tag() == WireReference::LIST,
           "Called getList{Field,Element}() but existing reference is not a list.");
@@ -467,15 +514,15 @@ struct WireHelpers {
 
     if (ref->listRef.elementSize() == FieldSize::INLINE_COMPOSITE) {
       // Read the tag to get the actual element count.
-      WireReference* tag = reinterpret_cast<WireReference*>(ref->target());
+      WireReference* tag = reinterpret_cast<WireReference*>(ptr);
       CAPNPROTO_ASSERT(tag->tag() == WireReference::STRUCT,
           "INLINE_COMPOSITE list with non-STRUCT elements not supported.");
       ElementCount elementCount = tag->tagElementCount();
 
-      // First list element is at ptr + 1 reference.
+      // First list element is at tag + 1 reference.
       return ListBuilder(segment, reinterpret_cast<word*>(tag + 1), elementCount);
     } else {
-      return ListBuilder(segment, ref->target(), ref->listRef.elementCount());
+      return ListBuilder(segment, ptr, ref->listRef.elementCount());
     }
   }
 
@@ -496,7 +543,8 @@ struct WireHelpers {
         goto useDefault;
       }
 
-      if (CAPNPROTO_EXPECT_FALSE(!followFars(ref, segment))) {
+      ptr = followFars(ref, segment);
+      if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
         segment->getMessage()->reportInvalidData(
             "Message contains out-of-bounds far reference.");
         goto useDefault;
@@ -507,8 +555,6 @@ struct WireHelpers {
             "Message contains non-struct reference where struct reference was expected.");
         goto useDefault;
       }
-
-      ptr = ref->target();
 
       if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr + ref->structRef.wordSize()))){
         segment->getMessage()->reportInvalidData(
@@ -531,14 +577,15 @@ struct WireHelpers {
   static CAPNPROTO_ALWAYS_INLINE(ListReader readListReference(
       SegmentReader* segment, const WireReference* ref, const word* defaultValue,
       FieldSize expectedElementSize, int recursionLimit)) {
+    const word* ptr;
     if (ref == nullptr || ref->isNull()) {
     useDefault:
-      segment = nullptr;
       if (defaultValue == nullptr) {
         return ListReader(nullptr, nullptr, 0 * ELEMENTS, 0 * BITS / ELEMENTS, recursionLimit - 1);
-      } else {
-        ref = reinterpret_cast<const WireReference*>(defaultValue);
       }
+      segment = nullptr;
+      ref = reinterpret_cast<const WireReference*>(defaultValue);
+      ptr = ref->target();
     } else if (segment != nullptr) {
       if (CAPNPROTO_EXPECT_FALSE(recursionLimit == 0)) {
         segment->getMessage()->reportInvalidData(
@@ -546,7 +593,8 @@ struct WireHelpers {
         goto useDefault;
       }
 
-      if (CAPNPROTO_EXPECT_FALSE(!followFars(ref, segment))) {
+      ptr = followFars(ref, segment);
+      if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
         segment->getMessage()->reportInvalidData(
             "Message contains out-of-bounds far reference.");
         goto useDefault;
@@ -557,13 +605,15 @@ struct WireHelpers {
             "Message contains non-list reference where list reference was expected.");
         goto useDefault;
       }
+    } else {
+      // Trusted messages don't contain far pointers.
+      ptr = ref->target();
     }
 
     if (ref->listRef.elementSize() == FieldSize::INLINE_COMPOSITE) {
       decltype(WORDS/ELEMENTS) wordsPerElement;
       ElementCount size;
 
-      const word* ptr = ref->target();
       WordCount wordCount = ref->listRef.inlineCompositeWordCount();
 
       // An INLINE_COMPOSITE list points to a tag, which is formatted like a reference.
@@ -651,8 +701,6 @@ struct WireHelpers {
     } else {
       // The elements of the list are NOT structs.
       decltype(BITS/ELEMENTS) step = bitsPerElement(ref->listRef.elementSize());
-
-      const word* ptr = ref->target();
 
       if (segment != nullptr) {
         if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr +
