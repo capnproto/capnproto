@@ -38,6 +38,7 @@ instance Ord a => Ord (Located a) where
     compare (Located _ a) (Located _ b) = compare a b
 
 data Token = Identifier String
+           | TypeIdentifier String
            | ParenthesizedList [[Located Token]]
            | BracketedList [[Located Token]]
            | LiteralInt Integer

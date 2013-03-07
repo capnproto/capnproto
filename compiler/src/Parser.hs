@@ -36,6 +36,7 @@ tokenParser :: (Located Token -> Maybe a) -> Parsec [Located Token] u a
 tokenParser = token (tokenErrorString . locatedValue) locatedPos
 
 tokenErrorString (Identifier s) = "identifier \"" ++ s ++ "\""
+tokenErrorString (TypeIdentifier s) = "type identifier \"" ++ s ++ "\""
 tokenErrorString (ParenthesizedList _) = "parenthesized list"
 tokenErrorString (BracketedList _) = "bracketed list"
 tokenErrorString (LiteralInt i) = "integer literal " ++ show i
@@ -72,6 +73,7 @@ located p = do
 
 -- Hmm, boilerplate is not supposed to happen in Haskell.
 matchIdentifier t        = case locatedValue t of { (Identifier        v) -> Just v; _ -> Nothing }
+matchTypeIdentifier t    = case locatedValue t of { (TypeIdentifier    v) -> Just v; _ -> Nothing }
 matchParenthesizedList t = case locatedValue t of { (ParenthesizedList v) -> Just v; _ -> Nothing }
 matchBracketedList t     = case locatedValue t of { (BracketedList     v) -> Just v; _ -> Nothing }
 matchLiteralInt t        = case locatedValue t of { (LiteralInt        v) -> Just v; _ -> Nothing }
@@ -79,7 +81,18 @@ matchLiteralFloat t      = case locatedValue t of { (LiteralFloat      v) -> Jus
 matchLiteralString t     = case locatedValue t of { (LiteralString     v) -> Just v; _ -> Nothing }
 matchSimpleToken expected t = if locatedValue t == expected then Just () else Nothing
 
-identifier = tokenParser matchIdentifier <?> "identifier"
+varIdentifier = tokenParser matchIdentifier
+            <|> (tokenParser matchTypeIdentifier >>=
+                 fail "Non-type identifiers must start with lower-case letter.")
+            <?> "identifier"
+typeIdentifier = tokenParser matchTypeIdentifier
+             <|> (tokenParser matchIdentifier >>=
+                  fail "Type identifiers must start with upper-case letter.")
+             <?> "type identifier"
+anyIdentifier = tokenParser matchIdentifier
+            <|> tokenParser matchTypeIdentifier
+            <?> "identifier"
+
 literalInt = tokenParser matchLiteralInt <?> "integer"
 literalFloat = tokenParser matchLiteralFloat <?> "floating-point number"
 literalString = tokenParser matchLiteralString <?> "string"
@@ -109,13 +122,13 @@ bracketedList parser = do
 
 declNameBase :: TokenParser DeclName
 declNameBase = liftM ImportName (importKeyword >> located literalString)
-           <|> liftM AbsoluteName (period >> located identifier)
-           <|> liftM RelativeName (located identifier)
+           <|> liftM AbsoluteName (period >> located anyIdentifier)
+           <|> liftM RelativeName (located anyIdentifier)
 
 declName :: TokenParser DeclName
 declName = do
     base <- declNameBase
-    members <- many (period >> located identifier)
+    members <- many (period >> located anyIdentifier)
     return (foldl MemberName base members :: DeclName)
 
 typeExpression :: TokenParser TypeExpression
@@ -126,7 +139,7 @@ typeExpression = do
 
 nameWithOrdinal :: Integer -> TokenParser (Located String, Located Integer)
 nameWithOrdinal maxNumber = do
-    name <- located identifier
+    name <- located varIdentifier
     atSign
     ordinal <- located literalInt
     if locatedValue ordinal > maxNumber - 32 && locatedValue ordinal <= maxNumber
@@ -147,14 +160,14 @@ topLine (Just statements) = typeDecl statements
 
 aliasDecl = do
     usingKeyword
-    name <- located identifier
+    name <- located typeIdentifier
     equalsSign
     target <- declName
     return (AliasDecl name target)
 
 constantDecl = do
     constKeyword
-    name <- located identifier
+    name <- located varIdentifier
     colon
     typeName <- typeExpression
     equalsSign
@@ -167,7 +180,7 @@ typeDecl statements = enumDecl statements
 
 enumDecl statements = do
     enumKeyword
-    name <- located identifier
+    name <- located typeIdentifier
     children <- parseBlock enumLine statements
     return (EnumDecl name children)
 
@@ -176,7 +189,7 @@ enumLine Nothing = optionDecl <|> enumValueDecl []
 enumLine (Just statements) = enumValueDecl statements
 
 enumValueDecl statements = do
-    name <- located identifier
+    name <- located varIdentifier
     equalsSign
     value <- located literalInt
     children <- parseBlock enumValueLine statements
@@ -188,7 +201,7 @@ enumValueLine (Just _) = fail "Blocks not allowed here."
 
 structDecl statements = do
     structKeyword
-    name <- located identifier
+    name <- located typeIdentifier
     children <- parseBlock structLine statements
     return (StructDecl name children)
 
@@ -208,7 +221,7 @@ unionLine (Just statements) = fieldDecl statements
 
 fieldDecl statements = do
     (name, ordinal) <- nameWithOrdinal maxFieldNumber
-    union <- optionMaybe (inKeyword >> located identifier)
+    union <- optionMaybe (inKeyword >> located varIdentifier)
     colon
     t <- typeExpression
     value <- optionMaybe (equalsSign >> located fieldValue)
@@ -221,14 +234,14 @@ negativeFieldValue = liftM (IntegerFieldValue . negate) literalInt
 fieldValue = liftM IntegerFieldValue literalInt
          <|> liftM FloatFieldValue literalFloat
          <|> liftM StringFieldValue literalString
-         <|> liftM IdentifierFieldValue identifier
+         <|> liftM IdentifierFieldValue varIdentifier
          <|> liftM ListFieldValue (bracketedList (located fieldValue))
          <|> liftM RecordFieldValue (parenthesizedList fieldAssignment)
          <|> (minusSign >> negativeFieldValue)
          <?> "default value"
 
 fieldAssignment = do
-    name <- located identifier
+    name <- located varIdentifier
     equalsSign
     value <- located fieldValue
     return (name, value)
@@ -239,7 +252,7 @@ fieldLine (Just _) = fail "Blocks not allowed here."
 
 interfaceDecl statements = do
     interfaceKeyword
-    name <- located identifier
+    name <- located typeIdentifier
     children <- parseBlock interfaceLine statements
     return (InterfaceDecl name children)
 
@@ -256,7 +269,7 @@ methodDecl statements = do
     return (MethodDecl name ordinal params t children)
 
 paramDecl = do
-    name <- identifier
+    name <- varIdentifier
     colon
     t <- typeExpression
     value <- optionMaybe (equalsSign >> located fieldValue)

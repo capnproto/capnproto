@@ -25,10 +25,13 @@ module Lexer (lexer) where
 
 import Text.Parsec hiding (token, tokens)
 import Text.Parsec.String
-import Control.Monad (liftM)
+import Control.Monad (liftM, when)
 import qualified Text.Parsec.Token as T
 import Text.Parsec.Language (emptyDef)
 import Token
+import Data.Char (isUpper, isLower)
+import Data.List (find)
+import Data.Maybe (isJust)
 
 keywords =
     [ (InKeyword, "in")
@@ -59,7 +62,7 @@ languageDef = emptyDef
 
 tokenParser = T.makeTokenParser languageDef
 
-identifier     = T.identifier tokenParser
+rawIdentifier  = T.identifier tokenParser
 reserved       = T.reserved tokenParser
 symbol         = T.symbol tokenParser
 naturalOrFloat = T.naturalOrFloat tokenParser
@@ -82,9 +85,29 @@ located p = do
     t <- p
     return (Located pos t)
 
+isTypeName (c:_) = isUpper c
+isTypeName _ = False
+
+hasUppercaseAcronym (a:rest@(b:c:_)) =
+    (isUpper a && isUpper b && not (isLower c)) || hasUppercaseAcronym rest
+hasUppercaseAcronym (a:b:[]) = isUpper a && isUpper b
+hasUppercaseAcronym _ = False
+
+identifier :: Parser Token
+identifier = do
+    text <- rawIdentifier
+    when (isJust $ find (== '_') text) $
+        fail "Identifiers containing underscores are reserved for the implementation.  Use \
+             \camelCase style for multi-word names."
+    when (hasUppercaseAcronym text) $
+        fail "Wrong style:  Only the first letter of an acronym should be capitalized.  \
+             \Consistent style is necessary to allow code generators to sanely translate \
+             \names into the target language's preferred style."
+    return (if isTypeName text then TypeIdentifier text else Identifier text)
+
 token :: Parser Token
 token = keyword
-    <|> liftM Identifier         identifier
+    <|> identifier
     <|> liftM ParenthesizedList  (parens (sepBy (many locatedToken) (symbol ",")))
     <|> liftM BracketedList      (brackets (sepBy (many locatedToken) (symbol ",")))
     <|> liftM toLiteral          naturalOrFloat
