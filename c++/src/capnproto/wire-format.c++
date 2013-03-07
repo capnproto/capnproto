@@ -41,18 +41,77 @@ struct WireReference {
   WireReference& operator=(const WireReference& other) = delete;
   WireReference& operator=(WireReference&& other) = delete;
 
-  enum Tag {
+  // -----------------------------------------------------------------
+  // Common part of all references:  kind + offset
+  //
+  // Actually this is not terribly common.  The "offset" could actually be different things
+  // depending on the context:
+  // - For a regular (e.g. struct/list) reference, a signed word offset from the reference pointer.
+  // - For an inline composite list tag (not really a reference, but structured similarly), an
+  //   element count.
+  // - For a FAR reference, an unsigned offset into the target segment.
+  // - For a FAR landing pad, zero indicates that the target value immediately follows the pad while
+  //   1 indicates that the pad is followed by another FAR reference that actually points at the
+  //   value.
+
+  enum Kind {
     STRUCT = 0,
+    // Reference points at / describes a struct.
+
     LIST = 1,
-    CAPABILITY = 2,
-    FAR = 3,
-    RESERVED_4 = 4,
-    RESERVED_5 = 5,
-    RESERVED_6 = 6,
-    RESERVED_7 = 7
+    // Reference points at / describes a list.
+
+    FAR = 2,
+    // Reference is a "far pointer", which points at data located in a different segment.  The
+    // eventual target is one of the other kinds.
+
+    RESERVED_3 = 3
+    // Reserved for future use.
   };
 
-  WireValue<uint32_t> offsetAndTag;
+  WireValue<uint32_t> offsetAndKind;
+
+  CAPNPROTO_ALWAYS_INLINE(bool isNull() const) { return offsetAndKind.get() == 0; }
+  CAPNPROTO_ALWAYS_INLINE(Kind kind() const) {
+    return static_cast<Kind>(offsetAndKind.get() & 3);
+  }
+
+  CAPNPROTO_ALWAYS_INLINE(word* target()) {
+    return reinterpret_cast<word*>(this) + (static_cast<int32_t>(offsetAndKind.get()) >> 2);
+  }
+  CAPNPROTO_ALWAYS_INLINE(const word* target() const) {
+    return reinterpret_cast<const word*>(this) + (static_cast<int32_t>(offsetAndKind.get()) >> 2);
+  }
+  CAPNPROTO_ALWAYS_INLINE(void setKindAndTarget(Kind kind, word* target)) {
+    offsetAndKind.set(((target - reinterpret_cast<word*>(this)) << 2) | kind);
+  }
+
+  CAPNPROTO_ALWAYS_INLINE(ElementCount inlineCompositeListElementCount() const) {
+    return (offsetAndKind.get() >> 2) * ELEMENTS;
+  }
+  CAPNPROTO_ALWAYS_INLINE(void setKindAndInlineCompositeListElementCount(
+      Kind kind, ElementCount elementCount)) {
+    offsetAndKind.set(((elementCount / ELEMENTS) << 2) | kind);
+  }
+
+  CAPNPROTO_ALWAYS_INLINE(WordCount positionInSegment() const) {
+    CAPNPROTO_DEBUG_ASSERT(kind() == FAR,
+        "positionInSegment() should only be called on FAR references.");
+    return (offsetAndKind.get() >> 2) * WORDS;
+  }
+  CAPNPROTO_ALWAYS_INLINE(void setKindAndPositionInSegment(Kind kind, WordCount pos)) {
+    offsetAndKind.set(((pos / WORDS) << 2) | kind);
+  }
+
+  CAPNPROTO_ALWAYS_INLINE(bool landingPadIsFollowedByAnotherReference() const) {
+    return (offsetAndKind.get() & ~3) != 0;
+  }
+  CAPNPROTO_ALWAYS_INLINE(void setLandingPad(Kind kind, bool followedByAnotherReference)) {
+    offsetAndKind.set((static_cast<uint32_t>(followedByAnotherReference) << 2) | kind);
+  }
+
+  // -----------------------------------------------------------------
+  // Part of reference that depends on the kind.
 
   union {
     struct {
@@ -103,73 +162,12 @@ struct WireReference {
 
     struct {
       WireValue<SegmentId> segmentId;
+
+      CAPNPROTO_ALWAYS_INLINE(void set(SegmentId si)) {
+        segmentId.set(si);
+      }
     } farRef;
   };
-
-  CAPNPROTO_ALWAYS_INLINE(bool isNull() const) { return offsetAndTag.get() == 0; }
-  CAPNPROTO_ALWAYS_INLINE(WordCount offset() const) {
-    return (offsetAndTag.get() >> 3) * WORDS;
-  }
-  CAPNPROTO_ALWAYS_INLINE(ElementCount tagElementCount() const) {
-    return (offsetAndTag.get() >> 3) * ELEMENTS;
-  }
-  CAPNPROTO_ALWAYS_INLINE(word* target()) {
-    return reinterpret_cast<word*>(this) + offset();
-  }
-  CAPNPROTO_ALWAYS_INLINE(const word* target() const) {
-    return reinterpret_cast<const word*>(this) + offset();
-  }
-  CAPNPROTO_ALWAYS_INLINE(Tag tag() const) {
-    return static_cast<Tag>(offsetAndTag.get() & 7);
-  }
-
-  CAPNPROTO_ALWAYS_INLINE(void setTagAndOffset(Tag tag, WordCount offset)) {
-    offsetAndTag.set(((offset / WORDS) << 3) | tag);
-  }
-
-  CAPNPROTO_ALWAYS_INLINE(void setTagAndElementCount(Tag tag, ElementCount elementCount)) {
-    offsetAndTag.set(((elementCount / ELEMENTS) << 3) | tag);
-  }
-
-//  CAPNPROTO_ALWAYS_INLINE(void setStruct(
-//      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount refCount, word* target)) {
-//    setTagAndOffset(STRUCT, intervalLength(reinterpret_cast<word*>(this), target));
-//    structRef.set(fieldCount, dataSize, refCount);
-//  }
-//
-  CAPNPROTO_ALWAYS_INLINE(void setStructTag(
-      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount refCount,
-      ElementCount elementCount)) {
-    setTagAndElementCount(STRUCT, elementCount);
-    structRef.set(fieldCount, dataSize, refCount);
-  }
-
-//  CAPNPROTO_ALWAYS_INLINE(void setList(
-//      FieldSize elementSize, ElementCount elementCount, word* target)) {
-//    setTagAndOffset(LIST, intervalLength(reinterpret_cast<word*>(this), target));
-//    listRef.set(elementSize, elementCount);
-//  }
-//
-//  CAPNPROTO_ALWAYS_INLINE(void setEmptyList(FieldSize elementSize)) {
-//    setTagAndOffset(LIST, 0 * WORDS);
-//    listRef.set(elementSize, 0 * ELEMENTS);
-//  }
-//
-//  CAPNPROTO_ALWAYS_INLINE(void setInlineCompositeList(WordCount wordCount, word* target)) {
-//    setTagAndOffset(LIST, intervalLength(reinterpret_cast<word*>(this), target));
-//    listRef.setInlineComposite(wordCount);
-//  }
-//
-  CAPNPROTO_ALWAYS_INLINE(void setListTag(FieldSize elementSize, ElementCount listCount,
-                                          ElementCount elementsPerList)) {
-    setTagAndElementCount(LIST, listCount);
-    listRef.set(elementSize, elementsPerList);
-  }
-
-  CAPNPROTO_ALWAYS_INLINE(void setFar(SegmentId segmentId, WordCount offset)) {
-    setTagAndOffset(FAR, offset);
-    farRef.segmentId.set(segmentId);
-  }
 };
 static_assert(sizeof(WireReference) == sizeof(word),
     "capnproto::WireReference is not exactly one word.  This will probably break everything.");
@@ -191,7 +189,7 @@ struct WireHelpers {
 
   static CAPNPROTO_ALWAYS_INLINE(word* allocate(
       WireReference*& ref, SegmentBuilder*& segment, WordCount amount,
-      WireReference::Tag tag)) {
+      WireReference::Kind kind)) {
     word* ptr = segment->allocate(amount);
 
     if (ptr == nullptr) {
@@ -203,32 +201,33 @@ struct WireHelpers {
       ptr = segment->allocate(amountPlusRef);
 
       // Set up the original reference to be a far reference to the new segment.
-      ref->setFar(segment->getSegmentId(), segment->getOffsetTo(ptr));
+      ref->setKindAndPositionInSegment(WireReference::FAR, segment->getOffsetTo(ptr));
+      ref->farRef.set(segment->getSegmentId());
 
-      // The landing pad has an offset of zero to indicate that the data immediately follows it.
+      // Initialize the landing pad to indicate that the data immediately follows the pad.
       ref = reinterpret_cast<WireReference*>(ptr);
-      ref->setTagAndOffset(tag, 0 * WORDS);
+      ref->setLandingPad(kind, false);
 
       // Allocated space follows new reference.
       return ptr + REFERENCE_SIZE_IN_WORDS;
     } else {
-      ref->setTagAndOffset(tag, intervalLength(reinterpret_cast<word*>(ref), ptr));
+      ref->setKindAndTarget(kind, ptr);
       return ptr;
     }
   }
 
   static CAPNPROTO_ALWAYS_INLINE(word* followFars(WireReference*& ref, SegmentBuilder*& segment)) {
-    if (ref->tag() == WireReference::FAR) {
+    if (ref->kind() == WireReference::FAR) {
       segment = segment->getMessage()->getSegment(ref->farRef.segmentId.get());
-      ref = reinterpret_cast<WireReference*>(segment->getPtrUnchecked(ref->offset()));
-      if (ref->offset() == 0 * WORDS) {
-        // Target immediately follows tag.
-        return reinterpret_cast<word*>(ref + 1);
-      } else {
-        // Target is in another castle.  Another far reference follows.
+      ref = reinterpret_cast<WireReference*>(segment->getPtrUnchecked(ref->positionInSegment()));
+      if (ref->landingPadIsFollowedByAnotherReference()) {
+        // Target lives elsewhere.  Another far reference follows.
         WireReference* far2 = ref + 1;
         segment = segment->getMessage()->getSegment(far2->farRef.segmentId.get());
-        return segment->getPtrUnchecked(far2->offset());
+        return segment->getPtrUnchecked(far2->positionInSegment());
+      } else {
+        // Target immediately follows landing pad.
+        return reinterpret_cast<word*>(ref + 1);
       }
     } else {
       return ref->target();
@@ -237,13 +236,13 @@ struct WireHelpers {
 
   static CAPNPROTO_ALWAYS_INLINE(
       const word* followFars(const WireReference*& ref, SegmentReader*& segment)) {
-    if (ref->tag() == WireReference::FAR) {
+    if (ref->kind() == WireReference::FAR) {
       segment = segment->getMessage()->tryGetSegment(ref->farRef.segmentId.get());
       if (CAPNPROTO_EXPECT_FALSE(segment == nullptr)) {
         return nullptr;
       }
 
-      const word* ptr = segment->getStartPtr() + ref->offset();
+      const word* ptr = segment->getStartPtr() + ref->positionInSegment();
       if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(
           ptr, ptr + REFERENCE_SIZE_IN_WORDS))) {
         return nullptr;
@@ -251,24 +250,27 @@ struct WireHelpers {
 
       ref = reinterpret_cast<const WireReference*>(ptr);
 
-      if (ref->offset() == 0 * WORDS) {
-        // Target immediately follows tag.
-        return reinterpret_cast<const word*>(ref + 1);
-      } else {
+      if (ref->landingPadIsFollowedByAnotherReference()) {
         // Target is in another castle.  Another far reference follows.
         const WireReference* far2 = ref + 1;
         segment = segment->getMessage()->tryGetSegment(far2->farRef.segmentId.get());
         if (CAPNPROTO_EXPECT_FALSE(segment == nullptr)) {
           return nullptr;
         }
+        if (CAPNPROTO_EXPECT_FALSE(far2->kind() != WireReference::FAR)) {
+          return nullptr;
+        }
 
-        ptr = segment->getStartPtr() + far2->offset();
+        ptr = segment->getStartPtr() + far2->positionInSegment();
         if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(
             ptr, ptr + REFERENCE_SIZE_IN_WORDS))) {
           return nullptr;
         }
 
         return ptr;
+      } else {
+        // Target immediately follows landing pad.
+        return reinterpret_cast<const word*>(ref + 1);
       }
     } else {
       return ref->target();
@@ -296,7 +298,7 @@ struct WireHelpers {
   // Not always-inline because it's recursive.
   static word* copyMessage(
       SegmentBuilder*& segment, WireReference*& dst, const WireReference* src) {
-    switch (src->tag()) {
+    switch (src->kind()) {
       case WireReference::STRUCT: {
         if (src->isNull()) {
           memset(dst, 0, sizeof(WireReference));
@@ -364,10 +366,10 @@ struct WireHelpers {
             const word* srcElement = srcPtr + REFERENCE_SIZE_IN_WORDS;
             word* dstElement = dstPtr + REFERENCE_SIZE_IN_WORDS;
 
-            CAPNPROTO_ASSERT(srcTag->tag() == WireReference::STRUCT,
+            CAPNPROTO_ASSERT(srcTag->kind() == WireReference::STRUCT,
                 "INLINE_COMPOSITE of lists is not yet supported.");
 
-            uint n = srcTag->tagElementCount() / ELEMENTS;
+            uint n = srcTag->inlineCompositeListElementCount() / ELEMENTS;
             for (uint i = 0; i < n; i++) {
               copyStruct(segment, dstElement, srcElement,
                   srcTag->structRef.dataSize.get(), srcTag->structRef.refCount.get());
@@ -380,7 +382,7 @@ struct WireHelpers {
         break;
       }
       default:
-        CAPNPROTO_ASSERT(false, "Copy source message contained unexpected tag.");
+        CAPNPROTO_ASSERT(false, "Copy source message contained unexpected kind.");
         break;
     }
 
@@ -420,7 +422,7 @@ struct WireHelpers {
     } else {
       ptr = followFars(ref, segment);
 
-      CAPNPROTO_DEBUG_ASSERT(ref->tag() == WireReference::STRUCT,
+      CAPNPROTO_DEBUG_ASSERT(ref->kind() == WireReference::STRUCT,
           "Called getStruct{Field,Element}() but existing reference is not a struct.");
       CAPNPROTO_DEBUG_ASSERT(
           ref->structRef.fieldCount.get() == defaultRef->structRef.fieldCount.get(),
@@ -473,11 +475,12 @@ struct WireHelpers {
     ref->listRef.setInlineComposite(wordCount);
 
     // Initialize the list tag.
-    reinterpret_cast<WireReference*>(ptr)->setStructTag(
+    reinterpret_cast<WireReference*>(ptr)->setKindAndInlineCompositeListElementCount(
+        WireReference::STRUCT, elementCount);
+    reinterpret_cast<WireReference*>(ptr)->structRef.set(
         defaultRef->structRef.fieldCount.get(),
         defaultRef->structRef.dataSize.get(),
-        defaultRef->structRef.refCount.get(),
-        elementCount);
+        defaultRef->structRef.refCount.get());
     ptr += REFERENCE_SIZE_IN_WORDS;
 
     // Initialize the elements.  We only have to copy the data segments, as the reference segment
@@ -508,16 +511,16 @@ struct WireHelpers {
     } else {
       ptr = followFars(ref, segment);
 
-      CAPNPROTO_ASSERT(ref->tag() == WireReference::LIST,
+      CAPNPROTO_ASSERT(ref->kind() == WireReference::LIST,
           "Called getList{Field,Element}() but existing reference is not a list.");
     }
 
     if (ref->listRef.elementSize() == FieldSize::INLINE_COMPOSITE) {
       // Read the tag to get the actual element count.
       WireReference* tag = reinterpret_cast<WireReference*>(ptr);
-      CAPNPROTO_ASSERT(tag->tag() == WireReference::STRUCT,
+      CAPNPROTO_ASSERT(tag->kind() == WireReference::STRUCT,
           "INLINE_COMPOSITE list with non-STRUCT elements not supported.");
-      ElementCount elementCount = tag->tagElementCount();
+      ElementCount elementCount = tag->inlineCompositeListElementCount();
 
       // First list element is at tag + 1 reference.
       return ListBuilder(segment, reinterpret_cast<word*>(tag + 1), elementCount);
@@ -550,7 +553,7 @@ struct WireHelpers {
         goto useDefault;
       }
 
-      if (CAPNPROTO_EXPECT_FALSE(ref->tag() != WireReference::STRUCT)) {
+      if (CAPNPROTO_EXPECT_FALSE(ref->kind() != WireReference::STRUCT)) {
         segment->getMessage()->reportInvalidData(
             "Message contains non-struct reference where struct reference was expected.");
         goto useDefault;
@@ -600,7 +603,7 @@ struct WireHelpers {
         goto useDefault;
       }
 
-      if (CAPNPROTO_EXPECT_FALSE(ref->tag() != WireReference::LIST)) {
+      if (CAPNPROTO_EXPECT_FALSE(ref->kind() != WireReference::LIST)) {
         segment->getMessage()->reportInvalidData(
             "Message contains non-list reference where list reference was expected.");
         goto useDefault;
@@ -628,13 +631,13 @@ struct WireHelpers {
           goto useDefault;
         }
 
-        if (CAPNPROTO_EXPECT_FALSE(tag->tag() != WireReference::STRUCT)) {
+        if (CAPNPROTO_EXPECT_FALSE(tag->kind() != WireReference::STRUCT)) {
           segment->getMessage()->reportInvalidData(
               "INLINE_COMPOSITE lists of non-STRUCT type are not supported.");
           goto useDefault;
         }
 
-        size = tag->tagElementCount();
+        size = tag->inlineCompositeListElementCount();
         wordsPerElement = tag->structRef.wordSize() / ELEMENTS;
 
         if (CAPNPROTO_EXPECT_FALSE(size * wordsPerElement > wordCount)) {
@@ -684,7 +687,7 @@ struct WireHelpers {
       } else {
         // Trusted message.
         // This logic is equivalent to the other branch, above, but skipping all the checks.
-        size = tag->tagElementCount();
+        size = tag->inlineCompositeListElementCount();
         wordsPerElement = tag->structRef.wordSize() / ELEMENTS;
 
         if (expectedElementSize == FieldSize::REFERENCE) {
