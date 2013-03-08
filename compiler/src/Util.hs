@@ -23,11 +23,21 @@
 
 module Util where
 
+import Data.Char (isUpper, toUpper)
+
 delimit _ [] = ""
 delimit delimiter (h:t) = h ++ concatMap (delimiter ++) t
 
---delimit delimiter list = concat $ loop list where
---    loop ("":t) = loop t
---    loop (a:"":t) = loop (a:t)
---    loop (a:b:t) = a:delimiter:loop (b:t)
---    loop a = a
+splitName :: String -> [String]
+splitName (a:rest@(b:_)) | isUpper b = [a]:splitName rest
+splitName (a:rest) = case splitName rest of
+    firstWord:moreWords -> (a:firstWord):moreWords
+    [] -> [[a]]
+splitName [] = []
+
+toTitleCase :: String -> String
+toTitleCase (a:rest) = toUpper a:rest
+toTitleCase [] = []
+
+toUpperCaseWithUnderscores :: String -> String
+toUpperCaseWithUnderscores name = delimit "_" $ map (map toUpper) $ splitName name

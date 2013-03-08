@@ -48,6 +48,8 @@ tokenErrorString Period = "\".\""
 tokenErrorString EqualsSign = "\"=\""
 tokenErrorString MinusSign = "\"-\""
 tokenErrorString ExclamationPoint = "\"!\""
+tokenErrorString TrueKeyword = "keyword \"true\""
+tokenErrorString FalseKeyword = "keyword \"false\""
 tokenErrorString InKeyword = "keyword \"in\""
 tokenErrorString OfKeyword = "keyword \"of\""
 tokenErrorString OnKeyword = "keyword \"on\""
@@ -79,6 +81,10 @@ matchBracketedList t     = case locatedValue t of { (BracketedList     v) -> Jus
 matchLiteralInt t        = case locatedValue t of { (LiteralInt        v) -> Just v; _ -> Nothing }
 matchLiteralFloat t      = case locatedValue t of { (LiteralFloat      v) -> Just v; _ -> Nothing }
 matchLiteralString t     = case locatedValue t of { (LiteralString     v) -> Just v; _ -> Nothing }
+matchLiteralBool t = case locatedValue t of
+    TrueKeyword -> Just True
+    FalseKeyword -> Just False
+    _ -> Nothing
 matchSimpleToken expected t = if locatedValue t == expected then Just () else Nothing
 
 varIdentifier = tokenParser matchIdentifier
@@ -96,6 +102,7 @@ anyIdentifier = tokenParser matchIdentifier
 literalInt = tokenParser matchLiteralInt <?> "integer"
 literalFloat = tokenParser matchLiteralFloat <?> "floating-point number"
 literalString = tokenParser matchLiteralString <?> "string"
+literalBool = tokenParser matchLiteralBool <?> "boolean"
 
 atSign = tokenParser (matchSimpleToken AtSign) <?> "\"@\""
 colon = tokenParser (matchSimpleToken Colon) <?> "\":\""
@@ -231,7 +238,8 @@ fieldDecl statements = do
 negativeFieldValue = liftM (IntegerFieldValue . negate) literalInt
                  <|> liftM (FloatFieldValue . negate) literalFloat
 
-fieldValue = liftM IntegerFieldValue literalInt
+fieldValue = liftM BoolFieldValue literalBool
+         <|> liftM IntegerFieldValue literalInt
          <|> liftM FloatFieldValue literalFloat
          <|> liftM StringFieldValue literalString
          <|> liftM IdentifierFieldValue varIdentifier

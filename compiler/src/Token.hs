@@ -44,6 +44,8 @@ data Token = Identifier String
            | LiteralInt Integer
            | LiteralFloat Double
            | LiteralString String
+           | TrueKeyword
+           | FalseKeyword
            | AtSign
            | Colon
            | Period

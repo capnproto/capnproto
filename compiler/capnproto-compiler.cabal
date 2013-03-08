@@ -7,18 +7,25 @@ author:         kenton
 executable capnproto-compiler
   hs-source-dirs:  src
   main-is:         Main.hs
-  build-depends:   
+  build-depends:
                    base >= 4,
                    parsec,
                    mtl,
-                   containers
+                   containers,
+                   file-embed,
+                   bytestring,
+                   Crypto,
+                   utf8-string,
+                   hastache
   ghc-options:     -Wall -fno-warn-missing-signatures
-  other-modules:   
+  other-modules:
                    Lexer,
                    Token,
                    Grammar,
                    Parser,
                    Compiler,
                    Semantics,
-                   Util
+                   Util,
+                   CxxGenerator,
+                   WireFormat
 

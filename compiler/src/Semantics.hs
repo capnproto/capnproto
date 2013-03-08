@@ -147,6 +147,82 @@ data TypeDesc = BuiltinType BuiltinType
               | InterfaceType InterfaceDesc
               | ListType TypeDesc
 
+data PackingState = PackingState
+    { packingHole1 :: Integer
+    , packingHole8 :: Integer
+    , packingHole16 :: Integer
+    , packingHole32 :: Integer
+    , packingDataSize :: Integer
+    , packingReferenceCount :: Integer
+    }
+
+-- Represents the current packing state of a union.  The parameters are:
+-- - The offset of a 64-bit word in the data segment allocated to the union.
+-- - The offset of a reference allocated to the union.
+-- - The offset of a smaller piece of the data segment allocated to the union.  Such a smaller
+--   piece exists if one field in the union has lower number than the union itself -- in this case,
+--   this is the piece that had been allocated to that field, and is now retroactively part of the
+--   union.
+data UnionPackingState = UnionPackingState
+    { unionPackDataOffset :: Maybe Integer
+    , unionPackReferenceOffset :: Maybe Integer
+    , unionPackRetroactiveSlot :: Maybe (Integer, FieldSize)
+    }
+
+data FieldSize = Size0 | Size1 | Size8 | Size16 | Size32 | Size64 | SizeReference
+               | SizeInlineComposite Integer Integer
+
+fieldSize (BuiltinType BuiltinVoid) = Size0
+fieldSize (BuiltinType BuiltinBool) = Size1
+fieldSize (BuiltinType BuiltinInt8) = Size8
+fieldSize (BuiltinType BuiltinInt16) = Size16
+fieldSize (BuiltinType BuiltinInt32) = Size32
+fieldSize (BuiltinType BuiltinInt64) = Size64
+fieldSize (BuiltinType BuiltinUInt8) = Size8
+fieldSize (BuiltinType BuiltinUInt16) = Size16
+fieldSize (BuiltinType BuiltinUInt32) = Size32
+fieldSize (BuiltinType BuiltinUInt64) = Size64
+fieldSize (BuiltinType BuiltinFloat32) = Size32
+fieldSize (BuiltinType BuiltinFloat64) = Size64
+fieldSize (BuiltinType BuiltinText) = SizeReference
+fieldSize (BuiltinType BuiltinData) = SizeReference
+fieldSize (EnumType _) = Size16  -- TODO: ??
+fieldSize (StructType _) = SizeReference
+fieldSize (InterfaceType _) = SizeReference
+fieldSize (ListType _) = SizeReference
+
+fieldValueSize VoidDesc = Size0
+fieldValueSize (BoolDesc _) = Size1
+fieldValueSize (Int8Desc _) = Size8
+fieldValueSize (Int16Desc _) = Size16
+fieldValueSize (Int32Desc _) = Size32
+fieldValueSize (Int64Desc _) = Size64
+fieldValueSize (UInt8Desc _) = Size8
+fieldValueSize (UInt16Desc _) = Size16
+fieldValueSize (UInt32Desc _) = Size32
+fieldValueSize (UInt64Desc _) = Size64
+fieldValueSize (Float32Desc _) = Size32
+fieldValueSize (Float64Desc _) = Size64
+fieldValueSize (TextDesc _) = SizeReference
+fieldValueSize (DataDesc _) = SizeReference
+fieldValueSize (EnumValueValueDesc _) = Size16
+fieldValueSize (StructValueDesc _) = SizeReference
+fieldValueSize (ListDesc _) = SizeReference
+
+elementSize (StructType StructDesc { structPacking =
+        PackingState { packingDataSize = ds, packingReferenceCount = rc } }) =
+    SizeInlineComposite ds rc
+elementSize t = fieldSize t
+
+sizeInBits Size0 = 0
+sizeInBits Size1 = 1
+sizeInBits Size8 = 8
+sizeInBits Size16 = 16
+sizeInBits Size32 = 32
+sizeInBits Size64 = 64
+sizeInBits SizeReference = 64
+sizeInBits (SizeInlineComposite d r) = (d + r) * 64
+
 -- Render the type descriptor's name as a string, appropriate for use in the given scope.
 typeName :: Desc -> TypeDesc -> String
 typeName _ (BuiltinType t) = builtinTypeName t  -- TODO:  Check for shadowing.
@@ -220,6 +296,7 @@ data EnumValueDesc = EnumValueDesc
 data StructDesc = StructDesc
     { structName :: String
     , structParent :: Desc
+    , structPacking :: PackingState
     , structFields :: [FieldDesc]
     , structUnions :: [UnionDesc]
     , structNestedAliases :: [AliasDesc]
@@ -230,12 +307,23 @@ data StructDesc = StructDesc
     , structOptions :: OptionMap
     , structMemberMap :: MemberMap
     , structStatements :: [CompiledStatement]
+
+    -- Don't use these directly, use the members of FieldDesc and UnionDesc.
+    -- These fields are exposed here only because I was too lazy to create a way to pass them on
+    -- the side when compiling members of a struct.
+    , structFieldPackingMap :: Map.Map Integer (Integer, PackingState)
+    , structUnionPackingMap :: Map.Map Integer UnionPackingState
     }
 
 data UnionDesc = UnionDesc
     { unionName :: String
     , unionParent :: StructDesc
     , unionNumber :: Integer
+    , unionTagOffset :: Integer
+    , unionTagPacking :: PackingState
+    , unionDataOffset :: Maybe Integer
+    , unionReferenceOffset :: Maybe Integer
+    , unionRetroactiveSlot :: Maybe (Integer, FieldSize)
     , unionFields :: [FieldDesc]
     , unionOptions :: OptionMap
     , unionStatements :: [CompiledStatement]
@@ -245,6 +333,8 @@ data FieldDesc = FieldDesc
     { fieldName :: String
     , fieldParent :: StructDesc
     , fieldNumber :: Integer
+    , fieldOffset :: Integer
+    , fieldPacking :: PackingState    -- PackingState for the struct *if* this were the final field.
     , fieldUnion :: Maybe UnionDesc
     , fieldType :: TypeDesc
     , fieldDefaultValue :: Maybe ValueDesc
@@ -313,15 +403,23 @@ descToCode indent (DescEnumValue desc) = printf "%s%s = %d%s" indent
 descToCode indent (DescStruct desc) = printf "%sstruct %s%s" indent
     (structName desc)
     (blockCode indent (structStatements desc))
-descToCode indent (DescField desc) = printf "%s%s@%d%s: %s%s%s" indent
+descToCode indent (DescField desc) = printf "%s%s@%d%s: %s%s;  # %s\n" indent
     (fieldName desc) (fieldNumber desc)
     (case fieldUnion desc of { Nothing -> ""; Just u -> " in " ++ unionName u})
     (typeName (DescStruct (fieldParent desc)) (fieldType desc))
     (case fieldDefaultValue desc of { Nothing -> ""; Just v -> " = " ++ valueString v; })
-    (maybeBlockCode indent $ fieldStatements desc)
-descToCode indent (DescUnion desc) = printf "%sunion %s@%d%s" indent
+    (case fieldSize $ fieldType desc of
+        SizeReference -> printf "ref[%d]" $ fieldOffset desc
+        SizeInlineComposite _ _ -> "??"
+        s -> let
+            bits = (sizeInBits s)
+            offset = fieldOffset desc
+            in printf "bits[%d, %d)" (offset * bits) ((offset + 1) * bits))
+--    (maybeBlockCode indent $ fieldStatements desc)
+descToCode indent (DescUnion desc) = printf "%sunion %s@%d;  # [%d, %d)\n" indent
     (unionName desc) (unionNumber desc)
-    (maybeBlockCode indent $ unionStatements desc)
+    (unionTagOffset desc * 8) (unionTagOffset desc * 8 + 8)
+--    (maybeBlockCode indent $ unionStatements desc)
 descToCode indent (DescInterface desc) = printf "%sinterface %s%s" indent
     (interfaceName desc)
     (blockCode indent (interfaceStatements desc))

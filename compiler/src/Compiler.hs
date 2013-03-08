@@ -28,8 +28,9 @@ import Semantics
 import Token(Located(Located))
 import Parser(parseFile)
 import qualified Data.Map as Map
+import Data.Map((!))
 import qualified Data.List as List
-import Data.Maybe(mapMaybe)
+import Data.Maybe(mapMaybe, fromMaybe)
 import Text.Parsec.Pos(SourcePos, newPos)
 import Text.Parsec.Error(ParseError, newErrorMessage, Message(Message, Expect))
 import Text.Printf(printf)
@@ -162,6 +163,14 @@ fromIntegerChecked name pos x = result where
         then succeed unchecked
         else makeError pos (printf "Integer %d out of range for type %s." x name)
 
+compileFieldAssignment :: StructDesc -> (Located String, Located FieldValue)
+                       -> Status (FieldDesc, ValueDesc)
+compileFieldAssignment desc (Located namePos name, Located valPos val) =
+    case lookupMember name (structMemberMap desc) of
+        Just (DescField field) ->
+            fmap (\x -> (field, x)) (compileValue valPos (fieldType field) val)
+        _ -> makeError namePos (printf "Struct %s has no field %s." (structName desc) name)
+
 compileValue :: SourcePos -> TypeDesc -> FieldValue -> Status ValueDesc
 compileValue _ (BuiltinType BuiltinVoid) VoidFieldValue = succeed VoidDesc
 compileValue _ (BuiltinType BuiltinBool) (BoolFieldValue x) = succeed (BoolDesc x)
@@ -184,16 +193,32 @@ compileValue _ (BuiltinType BuiltinData) (StringFieldValue x) =
 compileValue pos (EnumType desc) (IdentifierFieldValue name) =
     case lookupMember name (enumMemberMap desc) of
         Just (DescEnumValue value) -> succeed (EnumValueValueDesc value)
-        _ -> makeError pos (printf "Enum type %s has no value %s." (enumName desc) name)
+        _ -> makeError pos (printf "Enum type '%s' has no value '%s'." (enumName desc) name)
 
-compileValue _ (StructType desc) (RecordFieldValue fields) = result where
-    result = fmap StructValueDesc (doAll (map compileFieldAssignment fields))
-    compileFieldAssignment :: (Located String, Located FieldValue) -> Status (FieldDesc, ValueDesc)
-    compileFieldAssignment (Located namePos name, Located valPos val) =
-        case lookupMember name (structMemberMap desc) of
-            Just (DescField field) ->
-                fmap (\x -> (field, x)) (compileValue valPos (fieldType field) val)
-            _ -> makeError namePos (printf "Struct %s has no field %s." (structName desc) name)
+compileValue pos (StructType desc) (RecordFieldValue fields) = do
+    assignments <- doAll (map (compileFieldAssignment desc) fields)
+
+    -- Check for duplicate fields.
+    _ <- let
+        dupes = findDupesBy id [fieldName f | (f, _) <- assignments]
+        errors = map dupFieldError dupes
+        dupFieldError [] = error "empty group?"
+        dupFieldError (name:_) = makeError pos
+            (printf "Struct literal assigns field '%s' multiple times." name)
+        in doAll errors
+
+    -- Check for multiple assignments in the same union.
+    _ <- let
+        dupes = findDupesBy (\(_, u) -> unionName u)
+            [(f, u) | (f@(FieldDesc {fieldUnion = Just u}), _) <- assignments]
+        errors = map dupUnionError dupes
+        dupUnionError [] = error "empty group?"
+        dupUnionError dupFields@((_, u):_) = makeError pos (printf
+            "Struct literal assigns multiple fields belonging to the same union '%s': %s"
+            (unionName u) (delimit ", " (map (\(f, _) -> fieldName f) dupFields)))
+        in doAll errors
+
+    return (StructValueDesc assignments)
 
 compileValue _ (ListType t) (ListFieldValue l) =
     fmap ListDesc (doAll [ compileValue vpos t v | Located vpos v <- l ])
@@ -251,6 +276,13 @@ compileType scope (TypeExpression n (param:moreParams)) = do
 
 ------------------------------------------------------------------------------------------
 
+findDupesBy :: Ord a => (b -> a) -> [b] -> [[b]]
+findDupesBy getKey items = let
+    compareItems a b = compare (getKey a) (getKey b)
+    eqItems a b = (getKey a) == (getKey b)
+    grouped = List.groupBy eqItems $ List.sortBy compareItems items
+    in [ item | item@(_:_:_) <- grouped ]
+
 requireSequentialNumbering :: String -> [Located Integer] -> Status ()
 requireSequentialNumbering kind items = Active () (loop undefined (-1) sortedItems) where
     sortedItems = List.sort items
@@ -301,6 +333,117 @@ requireNoMoreThanOneFieldNumberLessThan name pos num fields = Active () errors w
     errors = if length retroFields <= 1
         then []
         else [newErrorMessage (Message message) pos]
+
+------------------------------------------------------------------------------------------
+
+initialPackingState = PackingState 0 0 0 0 0 0
+
+packValue :: FieldSize -> PackingState -> (Integer, PackingState)
+packValue Size64 s@(PackingState { packingDataSize = ds }) =
+    (ds, s { packingDataSize = ds + 1 })
+packValue SizeReference s@(PackingState { packingReferenceCount = rc }) =
+    (rc, s { packingReferenceCount = rc + 1 })
+packValue (SizeInlineComposite _ _) _ = error "Inline fields not yet supported."
+packValue Size32 s@(PackingState { packingHole32 = 0 }) =
+    case packValue Size64 s of
+        (o64, s2) -> (o64 * 2, s2 { packingHole32 = o64 * 2 + 1 })
+packValue Size32 s@(PackingState { packingHole32 = h32 }) =
+    (h32, s { packingHole32 = 0 })
+packValue Size16 s@(PackingState { packingHole16 = 0 }) =
+    case packValue Size32 s of
+        (o32, s2) -> (o32 * 2, s2 { packingHole16 = o32 * 2 + 1 })
+packValue Size16 s@(PackingState { packingHole16 = h16 }) =
+    (h16, s { packingHole16 = 0 })
+packValue Size8 s@(PackingState { packingHole8 = 0 }) =
+    case packValue Size16 s of
+        (o16, s2) -> (o16 * 2, s2 { packingHole8 = o16 * 2 + 1 })
+packValue Size8 s@(PackingState { packingHole8 = h8 }) =
+    (h8, s { packingHole8 = 0 })
+packValue Size1 s@(PackingState { packingHole1 = 0 }) =
+    case packValue Size8 s of
+        (o8, s2) -> (o8 * 8, s2 { packingHole1 = o8 * 8 + 1 })
+packValue Size1 s@(PackingState { packingHole1 = h1 }) =
+    (h1, s { packingHole1 = if mod (h1 + 1) 8 == 0 then 0 else h1 + 1 })
+packValue Size0 s = (0, s)
+
+initialUnionPackingState = UnionPackingState Nothing Nothing Nothing
+
+packUnionizedValue :: FieldSize             -- Size of field to pack.
+                   -> Bool                  -- Whether the field is retroactively unionized.
+                   -> UnionPackingState     -- Current layout of the union
+                   -> PackingState          -- Current layout of the struct.
+                   -> (Integer, UnionPackingState, PackingState)
+packUnionizedValue (SizeInlineComposite _ _) _ _ _ = error "Can't put inline composite into union."
+packUnionizedValue Size0 _ u s = (0, u, s)
+
+-- Pack reference when we already have a reference slot allocated.
+packUnionizedValue SizeReference _ u@(UnionPackingState _ (Just offset) _) s = (offset, u, s)
+
+-- Pack reference when we don't have a reference slot.
+packUnionizedValue SizeReference _ (UnionPackingState d Nothing retro) s = (offset, u2, s2) where
+    (offset, s2) = packValue SizeReference s
+    u2 = UnionPackingState d (Just offset) retro
+
+-- Pack data that fits into the retro slot.
+packUnionizedValue size _ u@(UnionPackingState _ _ (Just (offset, retroSize))) s
+    | sizeInBits retroSize >= sizeInBits size =
+        (offset * div (sizeInBits retroSize) (sizeInBits size), u, s)
+
+-- Pack data when a data word has been allocated.
+packUnionizedValue size _ u@(UnionPackingState (Just offset) _ _) s =
+    (offset * div 64 (sizeInBits size), u, s)
+
+-- Pack retroactive data when no data word has been allocated.
+packUnionizedValue size True (UnionPackingState Nothing r Nothing) s =
+    (offset, u2, s2) where
+        (offset, s2) = packValue size s
+        u2 = UnionPackingState Nothing r (Just (offset, size))
+
+-- Pack non-retroactive data when no data word has been allocated.
+packUnionizedValue size _ (UnionPackingState Nothing r retro) s =
+    (offset * div 64 (sizeInBits size), u2, s2) where
+        (offset, s2) = packValue Size64 s
+        u2 = UnionPackingState (Just offset) r retro
+
+-- Determine the offset for the given field, and update the packing states to include the field.
+packField :: FieldDesc -> PackingState -> Map.Map Integer UnionPackingState
+          -> (Integer, PackingState, Map.Map Integer UnionPackingState)
+packField fieldDesc state unionState =
+    case fieldUnion fieldDesc of
+        Nothing -> let
+            (offset, newState) = packValue (fieldSize $ fieldType fieldDesc) state
+            in (offset, newState, unionState)
+        Just unionDesc -> let
+            n = unionNumber unionDesc
+            oldUnionPacking = fromMaybe initialUnionPackingState (Map.lookup n unionState)
+            isRetro = fieldNumber fieldDesc < unionNumber unionDesc
+            (offset, newUnionPacking, newState) =
+                packUnionizedValue (fieldSize $ fieldType fieldDesc) isRetro oldUnionPacking state
+            newUnionState = Map.insert n newUnionPacking unionState
+            in (offset, newState, newUnionState)
+
+-- Determine the offset for the given union, and update the packing states to include the union.
+-- Specifically, this packs the union tag, *not* the fields of the union.
+packUnion :: UnionDesc -> PackingState -> Map.Map Integer UnionPackingState
+          -> (Integer, PackingState, Map.Map Integer UnionPackingState)
+packUnion _ state unionState = (offset, newState, unionState) where
+    (offset, newState) = packValue Size8 state
+
+packFields :: [FieldDesc] -> [UnionDesc]
+    -> (PackingState, Map.Map Integer UnionPackingState, Map.Map Integer (Integer, PackingState))
+packFields fields unions = (finalState, finalUnionState, Map.fromList packedItems) where
+    items = [(fieldNumber d, packField d) | d <- fields] ++
+            [(unionNumber d, packUnion d) | d <- unions]
+
+    itemsByNumber = List.sortBy compareNumbers items
+    compareNumbers (a, _) (b, _) = compare a b
+
+    (finalState, finalUnionState, packedItems) =
+        foldl packItem (initialPackingState, Map.empty, []) itemsByNumber
+
+    packItem (state, unionState, packed) (n, item) =
+        (newState, newUnionState, (n, (offset, newState)):packed) where
+            (offset, newState, newUnionState) = item state unionState
 
 ------------------------------------------------------------------------------------------
 
@@ -385,11 +528,16 @@ compileDecl scope (StructDecl (Located _ name) decls) =
                              [ num | UnionDecl _ num _ <- decls ])
         requireSequentialNumbering "Fields" fieldNums
         requireFieldNumbersInRange fieldNums
-        return (DescStruct StructDesc
+        return (let
+            fields = [d | DescField d <- members]
+            unions = [d | DescUnion d <- members]
+            (packing, unionPackingMap, fieldPackingMap) = packFields fields unions
+            in DescStruct StructDesc
             { structName = name
             , structParent = scope
-            , structFields           = [d | DescField     d <- members]
-            , structUnions           = [d | DescUnion     d <- members]
+            , structPacking = packing
+            , structFields = fields
+            , structUnions = unions
             , structNestedAliases    = [d | DescAlias     d <- members]
             , structNestedConstants  = [d | DescConstant  d <- members]
             , structNestedEnums      = [d | DescEnum      d <- members]
@@ -398,6 +546,8 @@ compileDecl scope (StructDecl (Located _ name) decls) =
             , structOptions = options
             , structMemberMap = memberMap
             , structStatements = statements
+            , structFieldPackingMap = fieldPackingMap
+            , structUnionPackingMap = unionPackingMap
             })))
 
 compileDecl (DescStruct parent) (UnionDecl (Located _ name) (Located numPos number) decls) =
@@ -405,10 +555,18 @@ compileDecl (DescStruct parent) (UnionDecl (Located _ name) (Located numPos numb
         (_, _, options, statements) <- compileChildDecls desc decls
         fields <- return [f | f <- structFields parent, fieldInUnion name f]
         requireNoMoreThanOneFieldNumberLessThan name numPos number fields
-        return (DescUnion UnionDesc
+        return (let
+            (tagOffset, tagPacking) = structFieldPackingMap parent ! number
+            unionPacking = structUnionPackingMap parent ! number
+            in DescUnion UnionDesc
             { unionName = name
             , unionParent = parent
             , unionNumber = number
+            , unionTagOffset = tagOffset
+            , unionTagPacking = tagPacking
+            , unionDataOffset = unionPackDataOffset unionPacking
+            , unionReferenceOffset = unionPackReferenceOffset unionPacking
+            , unionRetroactiveSlot = unionPackRetroactiveSlot unionPacking
             , unionFields = fields
             , unionOptions = options
             , unionStatements = statements
@@ -432,10 +590,14 @@ compileDecl scope@(DescStruct parent)
             Just (Located pos value) -> fmap Just (compileValue pos typeDesc value)
             Nothing -> return Nothing
         (_, _, options, statements) <- compileChildDecls desc decls
-        return (DescField FieldDesc
+        return (let
+            (offset, packing) = structFieldPackingMap parent ! number
+            in DescField FieldDesc
             { fieldName = name
             , fieldParent = parent
             , fieldNumber = number
+            , fieldOffset = offset
+            , fieldPacking = packing
             , fieldUnion = unionDesc
             , fieldType = typeDesc
             , fieldDefaultValue = defaultDesc

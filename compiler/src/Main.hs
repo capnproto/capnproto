@@ -30,6 +30,8 @@ import Text.Parsec.Pos
 import Text.Parsec.Error
 import Text.Printf(printf)
 import qualified Data.List as List
+import CxxGenerator(generateCxx)
+import qualified Data.ByteString.Lazy.Char8 as LZ
 
 main::IO()
 main = do
@@ -39,7 +41,11 @@ main = do
 handleFile filename = do
     text <- readFile filename
     case parseAndCompileFile filename text of
-        Active desc [] -> print desc
+        Active desc [] -> do
+            print desc
+            cxx <- generateCxx desc
+            LZ.putStr cxx
+
         Active _ e -> mapM_ printError (List.sortBy compareErrors e)
         Failed e -> mapM_ printError (List.sortBy compareErrors e)
 

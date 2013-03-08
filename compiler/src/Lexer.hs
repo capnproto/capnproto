@@ -30,11 +30,11 @@ import qualified Text.Parsec.Token as T
 import Text.Parsec.Language (emptyDef)
 import Token
 import Data.Char (isUpper, isLower)
-import Data.List (find)
-import Data.Maybe (isJust)
 
 keywords =
-    [ (InKeyword, "in")
+    [ (TrueKeyword, "true")
+    , (FalseKeyword, "false")
+    , (InKeyword, "in")
     , (OfKeyword, "of")
     , (OnKeyword, "on")
     , (AsKeyword, "as")
@@ -96,7 +96,7 @@ hasUppercaseAcronym _ = False
 identifier :: Parser Token
 identifier = do
     text <- rawIdentifier
-    when (isJust $ find (== '_') text) $
+    when (elem '_' text) $
         fail "Identifiers containing underscores are reserved for the implementation.  Use \
              \camelCase style for multi-word names."
     when (hasUppercaseAcronym text) $
