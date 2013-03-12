@@ -24,9 +24,11 @@
 module Util where
 
 import Data.Char (isUpper, toUpper)
+import Data.List (intercalate)
 
-delimit _ [] = ""
-delimit delimiter (h:t) = h ++ concatMap (delimiter ++) t
+--delimit _ [] = ""
+--delimit delimiter (h:t) = h ++ concatMap (delimiter ++) t
+delimit = intercalate
 
 splitName :: String -> [String]
 splitName (a:rest@(b:_)) | isUpper b = [a]:splitName rest

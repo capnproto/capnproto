@@ -21,13 +21,128 @@
 -- (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 -- SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-module WireFormat where
+module WireFormat(encodeMessage) where
 
-import Data.List(sortBy, minimum)
-import Data.Maybe(maybe)
-import qualified Data.Map as Map
+import Data.List(sortBy, genericLength, genericReplicate)
+import Data.Word
+import Data.Bits(shiftL, shiftR, Bits, setBit)
 import qualified Data.Set as Set
 import Semantics
+import Data.Binary.IEEE754(floatToWord, doubleToWord)
+import qualified Codec.Binary.UTF8.String as UTF8
+
+--
+byte :: (Integral a, Bits a) => a -> Int -> Word8
+byte i amount = fromIntegral (shiftR i (amount * 8))
+
+bytes :: (Integral a, Bits a) => a -> Int -> [Word8]
+bytes i count = map (byte i) [0..(count - 1)]
+
+padToWord b = let
+    trailing = mod (length b) 8
+    in if trailing == 0
+        then b
+        else b ++ replicate (8 - trailing) 0
+
+roundUpToMultiple factor n = let
+    remainder = mod n factor
+    in if remainder == 0
+        then n
+        else n + (factor - remainder)
+
+encodeDataValue :: ValueDesc -> [Word8]
+encodeDataValue VoidDesc = []
+encodeDataValue (BoolDesc _) = error "Bools must be handled specially."
+encodeDataValue (Int8Desc v) = bytes v 1
+encodeDataValue (Int16Desc v) = bytes v 2
+encodeDataValue (Int32Desc v) = bytes v 4
+encodeDataValue (Int64Desc v) = bytes v 8
+encodeDataValue (UInt8Desc v) = bytes v 1
+encodeDataValue (UInt16Desc v) = bytes v 2
+encodeDataValue (UInt32Desc v) = bytes v 4
+encodeDataValue (UInt64Desc v) = bytes v 8
+encodeDataValue (Float32Desc v) = bytes (floatToWord v) 4
+encodeDataValue (Float64Desc v) = bytes (doubleToWord v) 8
+encodeDataValue (TextDesc _) = error "Not fixed-width data."
+encodeDataValue (DataDesc _) = error "Not fixed-width data."
+encodeDataValue (EnumValueValueDesc v) = bytes (enumValueNumber v) 2
+encodeDataValue (StructValueDesc _) = error "Not fixed-width data."
+encodeDataValue (ListDesc _) = error "Not fixed-width data."
+
+packBits :: Bits a => Int -> [Bool] -> a
+packBits _ [] = 0
+packBits offset (True:bits) = setBit (packBits (offset + 1) bits) offset
+packBits offset (False:bits) = packBits (offset + 1) bits
+
+encodeData :: Integer -> [(Integer, TypeDesc, ValueDesc)] -> [Word8]
+encodeData size = loop 0 where
+    loop bit [] | bit == size = []
+    loop bit [] | bit > size = error "Data values overran size."
+    loop bit [] = 0:loop (bit + 8) []
+    loop bit rest@((valuePos, _, BoolDesc _):_) | valuePos == bit = let
+        (bits, rest2) = popBits (bit + 8) rest
+        in packBits 0 bits : loop (bit + 8) rest2
+    loop bit ((valuePos, _, value):rest) | valuePos == bit =
+        encodeDataValue value ++ loop (bit + sizeInBits (fieldValueSize value)) rest
+    loop bit rest@((valuePos, _, _):_) | valuePos > bit = 0 : loop (bit + 8) rest
+    loop _ _ = error "Data values were out-of-order."
+
+    popBits limit ((valuePos, _, BoolDesc b):rest) | valuePos < limit = let
+        (restBits, rest2) = popBits limit rest
+        in (b:restBits, rest2)
+    popBits _ rest = ([], rest)
+
+encodeReferences :: Integer -> Integer -> [(Integer, TypeDesc, ValueDesc)] -> ([Word8], [Word8])
+encodeReferences o size = loop 0 (o + size) where
+    loop idx offset ((pos, t, v):rest) | idx == pos = let
+        (ref, obj) = case (t, v) of
+            (StructType desc, StructValueDesc assignments) -> let
+                (dataBytes, refBytes, childBytes) = encodeStruct desc assignments 0
+                in (encodeStructReference desc offset, concat [dataBytes, refBytes, childBytes])
+            (ListType elementType, ListDesc items) ->
+                (encodeListReference (fieldSize elementType) (genericLength items) offset,
+                 encodeList elementType items)
+            (BuiltinType BuiltinText, TextDesc text) -> let
+                encoded = (UTF8.encode text ++ [0])
+                in (encodeListReference Size8 (genericLength encoded) offset, padToWord encoded)
+            (BuiltinType BuiltinData, DataDesc d) -> let
+                in (encodeListReference Size8 (genericLength d) offset, padToWord d)
+            _ -> error "Unknown reference type."
+        len = genericLength obj
+        wordLen = if mod len 8 == 0 then div len 8 else error "Child not word-aligned."
+        (refs, objects) = loop (idx + 1) (offset + wordLen - 1) rest
+        in (ref ++ refs, obj ++ objects)
+    loop idx offset rest@((pos, _, _):_) = let
+        padCount = pos - idx
+        (refs, objects) = loop pos (offset - padCount) rest
+        in (genericReplicate (padCount * 8) 0 ++ refs, objects)
+    loop idx _ [] = (genericReplicate ((size - idx) * 8) 0, [])
+
+encodeStructReference desc offset =
+    bytes (offset * 4 + structTag) 4 ++
+    [ fromIntegral (length (structFields desc) + length (structUnions desc))
+    , fromIntegral $ packingDataSize $ structPacking desc
+    , fromIntegral $ packingReferenceCount $ structPacking desc
+    , 0 ]
+
+encodeListReference elemSize@(SizeInlineComposite ds rc) elementCount offset =
+    bytes (offset * 4 + listTag) 4 ++
+    bytes (shiftL (fieldSizeEnum elemSize) 29 + elementCount * (ds + rc)) 4
+encodeListReference elemSize elementCount offset =
+    bytes (offset * 4 + listTag) 4 ++
+    bytes (shiftL (fieldSizeEnum elemSize) 29 + elementCount) 4
+
+fieldSizeEnum Size0 = 0
+fieldSizeEnum Size1 = 1
+fieldSizeEnum Size8 = 2
+fieldSizeEnum Size16 = 3
+fieldSizeEnum Size32 = 4
+fieldSizeEnum Size64 = 5
+fieldSizeEnum SizeReference = 6
+fieldSizeEnum (SizeInlineComposite _ _) = 7
+
+structTag = 0
+listTag = 1
 
 -- Is this field a non-retroactive member of a union?  If so, its default value is not written.
 isNonRetroUnionMember (FieldDesc {fieldNumber = n, fieldUnion = Just u}) = n > unionNumber u
@@ -35,10 +150,13 @@ isNonRetroUnionMember _ = False
 
 -- What is this union's default tag value?  If there is a retroactive field, it is that field's
 -- number, otherwise it is the union's number (meaning no field set).
-unionDefault desc = max (minimum $ map fieldNumber $ unionFields desc) (unionNumber desc)
+unionDefault desc = UInt8Desc $ fromIntegral $
+    max (minimum $ map fieldNumber $ unionFields desc) (unionNumber desc)
 
-encodeStruct desc assignments = result where
-    explicitlyAssignedNums = Set.fromList [fieldNumber desc | (desc, _) <- assignments]
+-- childOffset = number of words between the last reference and the location where children will
+-- be allocated.
+encodeStruct desc assignments childOffset = (dataBytes, referenceBytes, children) where
+    explicitlyAssignedNums = Set.fromList [fieldNumber f | (f, _) <- assignments]
     explicitlyAssignedUnions = Set.fromList
         [unionNumber u | (FieldDesc {fieldUnion = Just u}, _) <- assignments]
 
@@ -49,30 +167,65 @@ encodeStruct desc assignments = result where
         maybe False (flip Set.member explicitlyAssignedUnions . unionNumber) u
 
     -- Values explicitly assigned.
-    explicitValues = [(fieldOffset f, v) | (f, v) <- assignments]
+    explicitValues = [(fieldOffset f, fieldType f, v) | (f, v) <- assignments]
 
     -- Values from defaults.
-    defaultValues = [(o, v)
+    defaultValues = [(o, fieldType field, v)
         | field@(FieldDesc { fieldOffset = o, fieldDefaultValue = Just v}) <- structFields desc
+        -- Don't include default values for fields that were explicitly assigned.
         , not $ isExplicitlyAssigned field
-        , not $ isNonRetroUnionMember field ]
+        -- Don't encode defaults for union members since they'd overwrite each other, and anyway
+        -- they wouldn't be valid unless the union tag specified them, which by default it doesn't,
+        -- except of course in the case of retroactively-added fields.  So do include retro fields.
+        , not $ isNonRetroUnionMember field
+        -- Don't encode defaults for references.  Setting them to null has the same effect.
+        , isDataFieldSize $ fieldValueSize v ]
 
     -- Values of union tags.
-    unionValues = [(unionTagOffset u, UInt8Desc n)
+    unionValues = [(unionTagOffset u, BuiltinType BuiltinUInt8, UInt8Desc $ fromIntegral n)
                   | (FieldDesc {fieldUnion = Just u, fieldNumber = n}, _) <- assignments]
 
-    -- Default values of union dacs.
-    unionDefaultValues = [(unionTagOffset u, unionDefault u) | u <- structUnions desc
+    -- Default values of union tags.
+    unionDefaultValues = [(unionTagOffset u, BuiltinType BuiltinUInt8, unionDefault u)
+                         | u <- structUnions desc
                          , not $ Set.member (unionNumber u) explicitlyAssignedUnions]
 
     allValues = explicitValues ++ defaultValues ++ unionValues ++ unionDefaultValues
+    allData = [ (o * sizeInBits (fieldValueSize v), t, v)
+              | (o, t, v) <- allValues, isDataFieldSize $ fieldValueSize v ]
+    allReferences = [ (o, t, v) | (o, t, v) <- allValues
+                    , not $ isDataFieldSize $ fieldValueSize v ]
 
-    allData = [ (o * sizeInBits (fieldValueSize v)) v
-              | (o, v) <- allValues, fieldValueSize v /= SizeReference ]
-    allReferences = [ (o, v) | (o, v) <- allValues, fieldValueSize v == SizeReference ]
-
-    compareValues (o1, _) (o2, _) = compare o1 o2
     sortedData = sortBy compareValues allData
     sortedReferences = sortBy compareValues allReferences
+    compareValues (o1, _, _) (o2, _, _) = compare o1 o2
 
-    result = encodeData sortedData ++ encodeReferences sortedReferences
+    dataBytes = encodeData (packingDataSize (structPacking desc) * 64) sortedData
+    (referenceBytes, children) = encodeReferences childOffset
+        (packingReferenceCount $ structPacking desc) sortedReferences
+
+encodeList elementType elements = case elementSize elementType of
+    SizeInlineComposite ds rc -> case elementType of
+        StructType desc -> let
+            count = genericLength elements
+            tag = encodeStructReference desc count
+            elemWords = ds + rc
+            (elemBytes, childBytes) = unzip
+                [ (d ++ r, c)
+                | (i, StructValueDesc assignments) <- zip [1..] elements
+                , let (d, r, c) = encodeStruct desc assignments ((count - i) * elemWords)]
+            in concat $ concat [[tag], elemBytes, childBytes]
+        _ -> error "Only structs can be inline composites."
+    SizeReference -> refBytes ++ childBytes where
+        (refBytes, childBytes) = encodeReferences 0 (genericLength elements)
+                               $ zipWith (\i v -> (i, elementType, v)) [0..] elements
+    size -> encodeData (roundUpToMultiple (genericLength elements * sizeInBits size) 64)
+          $ zipWith (\i v -> (i * sizeInBits size, elementType, v)) [0..] elements
+
+encodeMessage (StructType desc) (StructValueDesc assignments) = let
+    (dataBytes, refBytes, childBytes) = encodeStruct desc assignments 0
+    in concat [encodeStructReference desc (1::Integer), dataBytes, refBytes, childBytes]
+encodeMessage (ListType elementType) (ListDesc elements) =
+    encodeListReference (elementSize elementType) (genericLength elements) (1::Integer) ++
+    encodeList elementType elements
+encodeMessage _ _ = error "Not a message."

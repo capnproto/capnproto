@@ -16,7 +16,10 @@ executable capnproto-compiler
                    bytestring,
                    Crypto,
                    utf8-string,
-                   hastache
+                   hastache,
+                   array,
+                   data-binary-ieee754,
+                   filepath
   ghc-options:     -Wall -fno-warn-missing-signatures
   other-modules:
                    Lexer,

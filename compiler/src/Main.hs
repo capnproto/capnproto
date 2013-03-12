@@ -30,8 +30,9 @@ import Text.Parsec.Pos
 import Text.Parsec.Error
 import Text.Printf(printf)
 import qualified Data.List as List
-import CxxGenerator(generateCxx)
 import qualified Data.ByteString.Lazy.Char8 as LZ
+
+import CxxGenerator
 
 main::IO()
 main = do
@@ -43,8 +44,10 @@ handleFile filename = do
     case parseAndCompileFile filename text of
         Active desc [] -> do
             print desc
-            cxx <- generateCxx desc
-            LZ.putStr cxx
+            header <- generateCxxHeader desc
+            LZ.writeFile (filename ++ ".h") header
+            source <- generateCxxSource desc
+            LZ.writeFile (filename ++ ".c++") source
 
         Active _ e -> mapM_ printError (List.sortBy compareErrors e)
         Failed e -> mapM_ printError (List.sortBy compareErrors e)

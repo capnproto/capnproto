@@ -1,23 +1,49 @@
-// Generated code, DO NOT EDIT {{! unless you are editing the template, of course }}
+{{!
+| Copyright (c) 2013, Kenton Varda <temporal@gmail.com>
+| All rights reserved.
+|
+| Redistribution and use in source and binary forms, with or without
+| modification, are permitted provided that the following conditions are met:
+|
+| 1. Redistributions of source code must retain the above copyright notice, this
+|    list of conditions and the following disclaimer.
+| 2. Redistributions in binary form must reproduce the above copyright notice,
+|    this list of conditions and the following disclaimer in the documentation
+|    and/or other materials provided with the distribution.
+|
+| THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+| ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+| WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+| DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+| ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+| (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+| LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+| ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+| (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+| SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <capnproto/wire-format.h>
+Template for generated C++ header files.
+}}// Generated code, DO NOT EDIT
+
+#include <capnproto/generated-header-support.h>
 
 #ifndef {{fileIncludeGuard}}
 #define {{fileIncludeGuard}}
-
 {{#fileNamespaces}}
 namespace {{namespaceName}} {
 {{/fileNamespaces}}
-
 {{#fileStructs}}
+
 struct {{structName}} {
   class Reader;
   class Builder;
-
 {{#structChildren}}
   struct {{structChildName}};
 {{/structChildren}}
 
+{{#structDefault}}
+  static const ::capnproto::internal::AlignedData<{{defaultWordCount}}> DEFAULT;
+{{/structDefault}}
 {{#structFields}}
 {{#fieldDefaultBytes}}
   static const ::capnproto::internal::AlignedData<{{defaultWordCount}}> DEFAULT_{{fieldUpperCase}};
@@ -25,115 +51,146 @@ struct {{structName}} {
 {{/structFields}}
 };
 {{/fileStructs}}
-
 {{#fileStructs}}
+
 class {{structName}}::Reader {
 public:
   Reader() = default;
-  inline Reader(::capnproto::internal::StructReader base): _reader(base) {}
-
+  inline explicit Reader(::capnproto::internal::StructReader base): _reader(base) {}
 {{#structFields}}
+
   // {{fieldDecl}}
 {{#fieldIsPrimitive}}
-  inline {{fieldType}} get{{fieldTitleCase}}() {
-    return _reader.getDataField<{{fieldType}}>(
-        {{fieldOffset}} * ::capnproto::ELEMENTS, {{fieldDefaultValue}});
-  }
+  inline {{fieldType}} get{{fieldTitleCase}}();
 {{/fieldIsPrimitive}}
 {{#fieldIsStruct}}
-  inline {{fieldType}}::Reader get{{fieldTitleCase}}() {
-    {{! TODO:  Support per-field default values. }}
-    return {{fieldType}}::Reader(_reader.getStructField(
-        {{fieldOffset}} * ::capnproto::REFERENCES,
-        {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}{{/fieldDefaultBytes}}
-        {{^fieldDefaultBytes}}{{fieldType}}::DEFAULT.words{{/fieldDefaultBytes}}));
-  }
+  inline {{fieldType}}::Reader get{{fieldTitleCase}}();
 {{/fieldIsStruct}}
 {{#fieldIsList}}
-  inline {{fieldType}}::Reader get{{fieldTitleCase}}() {
-    return {{fieldType}}::Reader(_reader.getListField(
-        {{fieldOffset}} * ::capnproto::REFERENCES,
-        {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}.words{{/fieldDefaultBytes}}
-        {{^fieldDefaultBytes}}nullptr{{/fieldDefaultBytes}}));
-  }
+  inline {{fieldType}}::Reader get{{fieldTitleCase}}();
 {{/fieldIsList}}
-
 {{/structFields}}
-
 private:
   ::capnproto::internal::StructReader _reader;
 };
 {{/fileStructs}}
-
 {{#fileStructs}}
+
 class {{structName}}::Builder {
 public:
   Builder() = default;
-  inline Builder(::capnproto::internal::StructBuilder base): _builder(base) {}
-
+  inline explicit Builder(::capnproto::internal::StructBuilder base): _builder(base) {}
 {{#structFields}}
+
   // {{fieldDecl}}
-{{#fieldDefaultBytes}}
-  static const ::capnproto::internal::AlignedData<{{defaultWordCount}}> DEFAULT_{{fieldUpperCase}};
-{{/fieldDefaultBytes}}
 {{#fieldIsPrimitive}}
-  inline {{fieldType}} get{{fieldTitleCase}}() {
-    return _builder.getDataField<{{fieldType}}>({{fieldOffset}} * ::capnproto::ELEMENTS);
-  }
-  inline void set{{fieldTitleCase}}({{fieldType}} value) {
-    return _builder.setDataField<{{fieldType}}>(
-        {{fieldOffset}} * ::capnproto::ELEMENTS, value);
-  }
+  inline {{fieldType}} get{{fieldTitleCase}}();
+  inline void set{{fieldTitleCase}}({{fieldType}} value);
 {{/fieldIsPrimitive}}
 {{#fieldIsStruct}}
-  inline {{fieldType}}::Builder init{{fieldTitleCase}}() {
-    return {{fieldType}}::Builder(_builder.initStructField(
-        {{fieldOffset}} * ::capnproto::REFERENCES, {{fieldType}}::DEFAULT.words));
-  }
-  inline {{fieldType}}::Builder get{{fieldTitleCase}}() {
-    {{! TODO:  Support per-field default values. }}
-    return {{fieldType}}::Builder(_builder.getStructField(
-        {{fieldOffset}} * ::capnproto::REFERENCES,
-        {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}{{/fieldDefaultBytes}}
-        {{^fieldDefaultBytes}}{{fieldType}}::DEFAULT.words{{/fieldDefaultBytes}}));
-  }
+  inline {{fieldType}}::Builder init{{fieldTitleCase}}();
+  inline {{fieldType}}::Builder get{{fieldTitleCase}}();
 {{/fieldIsStruct}}
 {{#fieldIsPrimitiveList}}
-  inline {{fieldType}}::Builder init{{fieldTitleCase}}(unsigned int size) {
-    return {{fieldType}}::Builder(_builder.initListField(
-        {{fieldOffset}} * ::capnproto::REFERENCES, ::capnproto::FieldSize::{{fieldElementSize}},
-        size * ::capnproto::ELEMENTS));
-  }
-  inline {{fieldType}}::Builder get{{fieldTitleCase}}() {
-    return {{fieldType}}::Builder(_builder.getListField(
-        {{fieldOffset}} * ::capnproto::REFERENCES,
-        {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}.words{{/fieldDefaultBytes}}
-        {{^fieldDefaultBytes}}nullptr{{/fieldDefaultBytes}}));
-  }
+  inline {{fieldType}}::Builder init{{fieldTitleCase}}(unsigned int size);
+  inline {{fieldType}}::Builder get{{fieldTitleCase}}();
 {{/fieldIsPrimitiveList}}
 {{#fieldIsStructList}}
-  inline {{fieldType}}::Builder init{{fieldTitleCase}}(unsigned int size) {
-    return {{fieldType}}::Builder(_builder.initStructListField(
-        {{fieldOffset}} * ::capnproto::REFERENCES, size * ::capnproto::ELEMENTS,
-        {{fieldType}}::DEFAULT.words));
-  }
-  inline {{fieldType}}::Builder get{{fieldTitleCase}}() {
-    return {{fieldType}}::Builder(_builder.getListField(
-        {{fieldOffset}} * ::capnproto::REFERENCES,
-        {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}.words{{/fieldDefaultBytes}}
-        {{^fieldDefaultBytes}}nullptr{{/fieldDefaultBytes}}));
-  }
+  inline {{fieldType}}::Builder init{{fieldTitleCase}}(unsigned int size);
+  inline {{fieldType}}::Builder get{{fieldTitleCase}}();
 {{/fieldIsStructList}}
-
 {{/structFields}}
-
 private:
   ::capnproto::internal::StructBuilder _builder;
 };
+{{/fileStructs}}
+{{#fileStructs}}
+{{#structFields}}
+
+// {{structName}}.{{fieldDecl}}
+{{#fieldIsPrimitive}}
+inline {{fieldType}} {{structName}}::Reader::get{{fieldTitleCase}}() {
+  return _reader.getDataField<{{fieldType}}>(
+      {{fieldOffset}} * ::capnproto::ELEMENTS, {{fieldDefaultValue}});
+}
+{{/fieldIsPrimitive}}
+{{#fieldIsStruct}}
+inline {{fieldType}}::Reader {{structName}}::Reader::get{{fieldTitleCase}}() {
+  {{! TODO:  Support per-field default values. }}
+  return {{fieldType}}::Reader(_reader.getStructField(
+      {{fieldOffset}} * ::capnproto::REFERENCES,
+      {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}{{/fieldDefaultBytes}}
+      {{^fieldDefaultBytes}}{{fieldType}}::DEFAULT.words{{/fieldDefaultBytes}}));
+}
+{{/fieldIsStruct}}
+{{#fieldIsList}}
+inline {{fieldType}}::Reader {{structName}}::Reader::get{{fieldTitleCase}}() {
+  return {{fieldType}}::Reader(_reader.getListField(
+      {{fieldOffset}} * ::capnproto::REFERENCES,
+      ::capnproto::internal::FieldSize::{{fieldElementSize}},
+      {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}.words{{/fieldDefaultBytes}}
+      {{^fieldDefaultBytes}}nullptr{{/fieldDefaultBytes}}));
+}
+{{/fieldIsList}}
+{{/structFields}}
+{{/fileStructs}}
+{{#fileStructs}}
+{{#structFields}}
+
+// {{structName}}.{{fieldDecl}}
+{{#fieldIsPrimitive}}
+inline {{fieldType}} {{structName}}::Builder::get{{fieldTitleCase}}() {
+  return _builder.getDataField<{{fieldType}}>({{fieldOffset}} * ::capnproto::ELEMENTS);
+}
+inline void {{structName}}::Builder::set{{fieldTitleCase}}({{fieldType}} value) {
+  return _builder.setDataField<{{fieldType}}>(
+      {{fieldOffset}} * ::capnproto::ELEMENTS, value);
+}
+{{/fieldIsPrimitive}}
+{{#fieldIsStruct}}
+inline {{fieldType}}::Builder {{structName}}::Builder::init{{fieldTitleCase}}() {
+  return {{fieldType}}::Builder(_builder.initStructField(
+      {{fieldOffset}} * ::capnproto::REFERENCES, {{fieldType}}::DEFAULT.words));
+}
+inline {{fieldType}}::Builder {{structName}}::Builder::get{{fieldTitleCase}}() {
+  {{! TODO:  Support per-field default values. }}
+  return {{fieldType}}::Builder(_builder.getStructField(
+      {{fieldOffset}} * ::capnproto::REFERENCES,
+      {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}{{/fieldDefaultBytes}}
+      {{^fieldDefaultBytes}}{{fieldType}}::DEFAULT.words{{/fieldDefaultBytes}}));
+}
+{{/fieldIsStruct}}
+{{#fieldIsPrimitiveList}}
+inline {{fieldType}}::Builder {{structName}}::Builder::init{{fieldTitleCase}}(unsigned int size) {
+  return {{fieldType}}::Builder(_builder.initListField(
+      {{fieldOffset}} * ::capnproto::REFERENCES,
+      ::capnproto::internal::FieldSize::{{fieldElementSize}},
+      size * ::capnproto::ELEMENTS));
+}
+inline {{fieldType}}::Builder {{structName}}::Builder::get{{fieldTitleCase}}() {
+  return {{fieldType}}::Builder(_builder.getListField(
+      {{fieldOffset}} * ::capnproto::REFERENCES,
+      {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}.words{{/fieldDefaultBytes}}
+      {{^fieldDefaultBytes}}nullptr{{/fieldDefaultBytes}}));
+}
+{{/fieldIsPrimitiveList}}
+{{#fieldIsStructList}}
+inline {{fieldType}}::Builder {{structName}}::Builder::init{{fieldTitleCase}}(unsigned int size) {
+  return {{fieldType}}::Builder(_builder.initStructListField(
+      {{fieldOffset}} * ::capnproto::REFERENCES, size * ::capnproto::ELEMENTS,
+      {{fieldType}}::DEFAULT.words));
+}
+inline {{fieldType}}::Builder {{structName}}::Builder::get{{fieldTitleCase}}() {
+  return {{fieldType}}::Builder(_builder.getListField(
+      {{fieldOffset}} * ::capnproto::REFERENCES,
+      {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}.words{{/fieldDefaultBytes}}
+      {{^fieldDefaultBytes}}nullptr{{/fieldDefaultBytes}}));
+}
+{{/fieldIsStructList}}
+{{/structFields}}
 {{/fileStructs}}
 
 {{#fileNamespaces}}
 }  // namespace
 {{/fileNamespaces}}
-
 #endif  // {{fileIncludeGuard}}

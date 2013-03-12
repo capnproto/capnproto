@@ -279,7 +279,7 @@ compileType scope (TypeExpression n (param:moreParams)) = do
 findDupesBy :: Ord a => (b -> a) -> [b] -> [[b]]
 findDupesBy getKey items = let
     compareItems a b = compare (getKey a) (getKey b)
-    eqItems a b = (getKey a) == (getKey b)
+    eqItems a b = getKey a == getKey b
     grouped = List.groupBy eqItems $ List.sortBy compareItems items
     in [ item | item@(_:_:_) <- grouped ]
 
@@ -524,8 +524,8 @@ compileDecl scope (StructDecl (Located _ name) decls) =
     CompiledMemberStatus name (feedback (\desc -> do
         (members, memberMap, options, statements) <- compileChildDecls desc decls
         requireNoDuplicateNames decls
-        fieldNums <- return ([ num | FieldDecl _ num _ _ _ _ <- decls ] ++
-                             [ num | UnionDecl _ num _ <- decls ])
+        let fieldNums = [ num | FieldDecl _ num _ _ _ _ <- decls ] ++
+                        [ num | UnionDecl _ num _ <- decls ]
         requireSequentialNumbering "Fields" fieldNums
         requireFieldNumbersInRange fieldNums
         return (let
@@ -553,7 +553,7 @@ compileDecl scope (StructDecl (Located _ name) decls) =
 compileDecl (DescStruct parent) (UnionDecl (Located _ name) (Located numPos number) decls) =
     CompiledMemberStatus name (feedback (\desc -> do
         (_, _, options, statements) <- compileChildDecls desc decls
-        fields <- return [f | f <- structFields parent, fieldInUnion name f]
+        let fields = [f | f <- structFields parent, fieldInUnion name f]
         requireNoMoreThanOneFieldNumberLessThan name numPos number fields
         return (let
             (tagOffset, tagPacking) = structFieldPackingMap parent ! number

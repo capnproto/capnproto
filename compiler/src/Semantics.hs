@@ -172,6 +172,10 @@ data UnionPackingState = UnionPackingState
 data FieldSize = Size0 | Size1 | Size8 | Size16 | Size32 | Size64 | SizeReference
                | SizeInlineComposite Integer Integer
 
+isDataFieldSize SizeReference = False
+isDataFieldSize (SizeInlineComposite _ _) = False
+isDataFieldSize _ = True
+
 fieldSize (BuiltinType BuiltinVoid) = Size0
 fieldSize (BuiltinType BuiltinBool) = Size1
 fieldSize (BuiltinType BuiltinInt8) = Size8

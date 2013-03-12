@@ -23,19 +23,21 @@
 
 {-# LANGUAGE TemplateHaskell #-}
 
-module CxxGenerator(generateCxx) where
+module CxxGenerator(generateCxxHeader, generateCxxSource) where
 
-import qualified Data.ByteString as ByteString
-import qualified Data.ByteString.UTF8 as UTF8
+import qualified Data.ByteString.UTF8 as ByteStringUTF8
 import Data.FileEmbed(embedFile)
-import Data.Char(ord)
+import Data.Word(Word8)
 import qualified Data.Digest.MD5 as MD5
 import Text.Printf(printf)
 import Text.Hastache
 import Text.Hastache.Context
+import qualified Codec.Binary.UTF8.String as UTF8
+import System.FilePath(takeBaseName)
 
 import Semantics
 import Util
+import WireFormat
 
 -- MuNothing isn't considered a false value for the purpose of {{#variable}} expansion.  Use this
 -- instead.
@@ -45,8 +47,7 @@ hashString :: String -> String
 hashString str =
     concatMap (printf "%02x" . fromEnum) $
     MD5.hash $
-    ByteString.unpack $
-    UTF8.fromString str
+    UTF8.encode str
 
 isPrimitive (BuiltinType _) = True
 isPrimitive (EnumType _) = True
@@ -94,24 +95,6 @@ cxxFieldSizeString Size64 = "EIGHT_BYTES";
 cxxFieldSizeString SizeReference = "REFERENCE";
 cxxFieldSizeString (SizeInlineComposite _ _) = "INLINE_COMPOSITE";
 
-cEscape [] = []
-cEscape (first:rest) = result where
-    eRest = cEscape rest
-    result = case first of
-        '\a' -> '\\':'a':eRest
-        '\b' -> '\\':'b':eRest
-        '\f' -> '\\':'f':eRest
-        '\n' -> '\\':'n':eRest
-        '\r' -> '\\':'r':eRest
-        '\t' -> '\\':'t':eRest
-        '\v' -> '\\':'v':eRest
-        '\'' -> '\\':'\'':eRest
-        '\"' -> '\\':'\"':eRest
-        '\\' -> '\\':'\\':eRest
-        '?'  -> '\\':'?':eRest
-        c | c < ' ' || c > '~' -> '\\':(printf "%03o" (ord c) ++ eRest)
-        c    -> c:eRest
-
 cxxValueString VoidDesc = error "Can't stringify void value."
 cxxValueString (BoolDesc    b) = if b then "true" else "false"
 cxxValueString (Int8Desc    i) = show i
@@ -124,13 +107,19 @@ cxxValueString (UInt32Desc  i) = show i ++ "u"
 cxxValueString (UInt64Desc  i) = show i ++ "llu"
 cxxValueString (Float32Desc x) = show x ++ "f"
 cxxValueString (Float64Desc x) = show x
-cxxValueString (TextDesc    s) = "\"" ++ cEscape s ++ "\""
-cxxValueString (DataDesc    _) = error "Data defaults are encoded as bytes."
 cxxValueString (EnumValueValueDesc v) =
     cxxTypeString (EnumType $ enumValueParent v) ++ "::" ++
     toUpperCaseWithUnderscores (enumValueName v)
-cxxValueString (StructValueDesc _) = error "Struct defaults are encoded as bytes."
-cxxValueString (ListDesc _) = error "List defaults are encoded as bytes."
+cxxValueString (TextDesc _) = error "No default value literal for aggregate type."
+cxxValueString (DataDesc _) = error "No default value literal for aggregate type."
+cxxValueString (StructValueDesc _) = error "No default value literal for aggregate type."
+cxxValueString (ListDesc _) = error "No default value literal for aggregate type."
+
+defaultValueBytes _ (TextDesc s) = Just (UTF8.encode s ++ [0])
+defaultValueBytes _ (DataDesc d) = Just d
+defaultValueBytes t v@(StructValueDesc _) = Just $ encodeMessage t v
+defaultValueBytes t v@(ListDesc _) = Just $ encodeMessage t v
+defaultValueBytes _ _ = Nothing
 
 cxxDefaultDefault (BuiltinType BuiltinVoid) = error "Can't stringify void value."
 cxxDefaultDefault (BuiltinType BuiltinBool) = "false"
@@ -145,14 +134,24 @@ cxxDefaultDefault (BuiltinType BuiltinUInt64) = "0"
 cxxDefaultDefault (BuiltinType BuiltinFloat32) = "0"
 cxxDefaultDefault (BuiltinType BuiltinFloat64) = "0"
 cxxDefaultDefault (BuiltinType BuiltinText) = "\"\""
-cxxDefaultDefault (BuiltinType BuiltinData) = error "Data defaults are encoded as bytes."
 cxxDefaultDefault (EnumType desc) = cxxValueString $ EnumValueValueDesc $ head $ enumValues desc
-cxxDefaultDefault (StructType _) = error "Struct defaults are encoded as bytes."
-cxxDefaultDefault (InterfaceType _) = error "Interfaces have no default value."
-cxxDefaultDefault (ListType _) = error "List defaults are encoded as bytes."
+cxxDefaultDefault (BuiltinType BuiltinData) = error "No default value literal for aggregate type."
+cxxDefaultDefault (StructType _) = error "No default value literal for aggregate type."
+cxxDefaultDefault (InterfaceType _) = error "No default value literal for aggregate type."
+cxxDefaultDefault (ListType _) = error "No default value literal for aggregate type."
 
 elementType (ListType t) = t
 elementType _ = error "Called elementType on non-list."
+
+repeatedlyTake _ [] = []
+repeatedlyTake n l = take n l : repeatedlyTake n (drop n l)
+
+defaultBytesContext :: Monad m => (String -> MuType m) -> [Word8] -> MuContext m
+defaultBytesContext parent bytes = mkStrContext context where
+    codeLines = map (delimit ", ") $ repeatedlyTake 8 $ map (printf "%3d") bytes
+    context "defaultByteList" = MuVariable $ delimit ",\n    " codeLines
+    context "defaultWordCount" = MuVariable $ div (length bytes + 7) 8
+    context s = parent s
 
 fieldContext parent desc = mkStrContext context where
     context "fieldName" = MuVariable $ fieldName desc
@@ -164,7 +163,10 @@ fieldContext parent desc = mkStrContext context where
     context "fieldIsList" = MuBool $ isList $ fieldType desc
     context "fieldIsPrimitiveList" = MuBool $ isPrimitiveList $ fieldType desc
     context "fieldIsStructList" = MuBool $ isStructList $ fieldType desc
-    context "fieldDefaultBytes" = muNull
+    context "fieldDefaultBytes" =
+        case fieldDefaultValue desc >>= defaultValueBytes (fieldType desc) of
+            Just v -> MuList [defaultBytesContext context v]
+            Nothing -> muNull
     context "fieldType" = MuVariable $ cxxTypeString $ fieldType desc
     context "fieldOffset" = MuVariable $ fieldOffset desc
     context "fieldDefaultValue" = case fieldDefaultValue desc of
@@ -178,10 +180,13 @@ structContext parent desc = mkStrContext context where
     context "structName" = MuVariable $ structName desc
     context "structFields" = MuList $ map (fieldContext context) $ structFields desc
     context "structChildren" = MuList []  -- TODO
+    context "structDefault" = MuList [defaultBytesContext context
+        (encodeMessage (StructType desc) (StructValueDesc []))]
     context s = parent s
 
 fileContext desc = mkStrContext context where
     context "fileName" = MuVariable $ fileName desc
+    context "fileBasename" = MuVariable $ takeBaseName $ fileName desc
     context "fileIncludeGuard" = MuVariable $
         "CAPNPROTO_INCLUDED_" ++ hashString (fileName desc)
     context "fileNamespaces" = MuList []  -- TODO
@@ -189,7 +194,10 @@ fileContext desc = mkStrContext context where
     context s = MuVariable $ concat ["@@@", s, "@@@"]
 
 headerTemplate :: String
-headerTemplate = UTF8.toString $(embedFile "src/c++-header.mustache")
+headerTemplate = ByteStringUTF8.toString $(embedFile "src/c++-header.mustache")
+
+srcTemplate :: String
+srcTemplate = ByteStringUTF8.toString $(embedFile "src/c++-source.mustache")
 
 -- Sadly it appears that hashtache requires access to the IO monad, even when template inclusion
 -- is disabled.
@@ -201,5 +209,5 @@ hastacheConfig = MuConfig
     , muTemplateRead = \_ -> return Nothing
     }
 
-generateCxx file =
-    hastacheStr hastacheConfig (encodeStr headerTemplate) (fileContext file)
+generateCxxHeader file = hastacheStr hastacheConfig (encodeStr headerTemplate) (fileContext file)
+generateCxxSource file = hastacheStr hastacheConfig (encodeStr srcTemplate) (fileContext file)
