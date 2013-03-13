@@ -240,7 +240,7 @@ public:
   // elementDefaultValue.  As with StructBuilder::initStructListElement(), this should be the
   // default value for the *type*, with all-null references.
 
-  ListBuilder getListElement(WireReferenceCount index, FieldSize elementSize) const;
+  ListBuilder getListElement(WireReferenceCount index) const;
   // Get the existing list element at the given index.  Returns an empty list if the element is
   // not initialized.
 
@@ -280,8 +280,7 @@ public:
   StructReader getStructElement(ElementCount index, const word* defaultValue) const;
   // Get the struct element at the given index.
 
-  ListReader getListElement(WireReferenceCount index, FieldSize expectedElementSize,
-                            const word* defaultValue) const;
+  ListReader getListElement(WireReferenceCount index, FieldSize expectedElementSize) const;
   // Get the list element at the given index.
 
 private:

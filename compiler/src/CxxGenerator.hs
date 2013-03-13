@@ -61,30 +61,30 @@ isStruct _ = False
 isList (ListType _) = True
 isList _ = False
 
-isPrimitiveList (ListType t) = isPrimitive t
-isPrimitiveList _ = False
+isNonStructList (ListType t) = not $ isStruct t
+isNonStructList _ = False
 
 isStructList (ListType t) = isStruct t
 isStructList _ = False
 
 cxxTypeString (BuiltinType BuiltinVoid) = "void"
 cxxTypeString (BuiltinType BuiltinBool) = "bool"
-cxxTypeString (BuiltinType BuiltinInt8) = "int8_t"
-cxxTypeString (BuiltinType BuiltinInt16) = "int16_t"
-cxxTypeString (BuiltinType BuiltinInt32) = "int32_t"
-cxxTypeString (BuiltinType BuiltinInt64) = "int64_t"
-cxxTypeString (BuiltinType BuiltinUInt8) = "uint8_t"
-cxxTypeString (BuiltinType BuiltinUInt16) = "uint16_t"
-cxxTypeString (BuiltinType BuiltinUInt32) = "uint32_t"
-cxxTypeString (BuiltinType BuiltinUInt64) = "uint64_t"
+cxxTypeString (BuiltinType BuiltinInt8) = " ::int8_t"
+cxxTypeString (BuiltinType BuiltinInt16) = " ::int16_t"
+cxxTypeString (BuiltinType BuiltinInt32) = " ::int32_t"
+cxxTypeString (BuiltinType BuiltinInt64) = " ::int64_t"
+cxxTypeString (BuiltinType BuiltinUInt8) = " ::uint8_t"
+cxxTypeString (BuiltinType BuiltinUInt16) = " ::uint16_t"
+cxxTypeString (BuiltinType BuiltinUInt32) = " ::uint32_t"
+cxxTypeString (BuiltinType BuiltinUInt64) = " ::uint64_t"
 cxxTypeString (BuiltinType BuiltinFloat32) = "float"
 cxxTypeString (BuiltinType BuiltinFloat64) = "double"
 cxxTypeString (BuiltinType BuiltinText) = "TODO"
 cxxTypeString (BuiltinType BuiltinData) = "TODO"
-cxxTypeString (EnumType desc) = enumName desc
-cxxTypeString (StructType desc) = structName desc
-cxxTypeString (InterfaceType desc) = interfaceName desc
-cxxTypeString (ListType t) = concat ["::capnproto::List<", cxxTypeString t, ">"]
+cxxTypeString (EnumType desc) = enumName desc               -- TODO: full name
+cxxTypeString (StructType desc) = structName desc           -- TODO: full name
+cxxTypeString (InterfaceType desc) = interfaceName desc     -- TODO: full name
+cxxTypeString (ListType t) = concat [" ::capnproto::List<", cxxTypeString t, ">"]
 
 cxxFieldSizeString Size0 = "VOID";
 cxxFieldSizeString Size1 = "BIT";
@@ -161,7 +161,7 @@ fieldContext parent desc = mkStrContext context where
     context "fieldIsPrimitive" = MuBool $ isPrimitive $ fieldType desc
     context "fieldIsStruct" = MuBool $ isStruct $ fieldType desc
     context "fieldIsList" = MuBool $ isList $ fieldType desc
-    context "fieldIsPrimitiveList" = MuBool $ isPrimitiveList $ fieldType desc
+    context "fieldIsNonStructList" = MuBool $ isNonStructList $ fieldType desc
     context "fieldIsStructList" = MuBool $ isStructList $ fieldType desc
     context "fieldDefaultBytes" =
         case fieldDefaultValue desc >>= defaultValueBytes (fieldType desc) of
@@ -173,12 +173,16 @@ fieldContext parent desc = mkStrContext context where
         Just v -> MuVariable $ cxxValueString v
         Nothing -> MuVariable $ cxxDefaultDefault $ fieldType desc
     context "fieldElementSize" =
-        MuVariable $ cxxFieldSizeString $ fieldSize $ elementType $ fieldType desc
+        MuVariable $ cxxFieldSizeString $ elementSize $ elementType $ fieldType desc
+    context "fieldElementType" =
+        MuVariable $ cxxTypeString $ elementType $ fieldType desc
     context s = parent s
 
 structContext parent desc = mkStrContext context where
     context "structName" = MuVariable $ structName desc
     context "structFields" = MuList $ map (fieldContext context) $ structFields desc
+    context "structDataSize" = MuVariable $ packingDataSize $ structPacking desc
+    context "structReferenceCount" = MuVariable $ packingReferenceCount $ structPacking desc
     context "structChildren" = MuList []  -- TODO
     context "structDefault" = MuList [defaultBytesContext context
         (encodeMessage (StructType desc) (StructValueDesc []))]
@@ -191,7 +195,7 @@ fileContext desc = mkStrContext context where
         "CAPNPROTO_INCLUDED_" ++ hashString (fileName desc)
     context "fileNamespaces" = MuList []  -- TODO
     context "fileStructs" = MuList $ map (structContext context) $ fileStructs desc
-    context s = MuVariable $ concat ["@@@", s, "@@@"]
+    context s = error ("Template variable not defined: " ++ s)
 
 headerTemplate :: String
 headerTemplate = ByteStringUTF8.toString $(embedFile "src/c++-header.mustache")

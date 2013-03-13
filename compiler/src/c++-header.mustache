@@ -41,6 +41,9 @@ struct {{structName}} {
   struct {{structChildName}};
 {{/structChildren}}
 
+  static constexpr ::capnproto::WordCount DATA_SIZE = {{structDataSize}} * ::capnproto::WORDS;
+  static constexpr ::capnproto::WireReferenceCount REFERENCE_COUNT =
+      {{structReferenceCount}} * ::capnproto::REFERENCES;
 {{#structDefault}}
   static const ::capnproto::internal::AlignedData<{{defaultWordCount}}> DEFAULT;
 {{/structDefault}}
@@ -91,10 +94,10 @@ public:
   inline {{fieldType}}::Builder init{{fieldTitleCase}}();
   inline {{fieldType}}::Builder get{{fieldTitleCase}}();
 {{/fieldIsStruct}}
-{{#fieldIsPrimitiveList}}
+{{#fieldIsNonStructList}}
   inline {{fieldType}}::Builder init{{fieldTitleCase}}(unsigned int size);
   inline {{fieldType}}::Builder get{{fieldTitleCase}}();
-{{/fieldIsPrimitiveList}}
+{{/fieldIsNonStructList}}
 {{#fieldIsStructList}}
   inline {{fieldType}}::Builder init{{fieldTitleCase}}(unsigned int size);
   inline {{fieldType}}::Builder get{{fieldTitleCase}}();
@@ -160,7 +163,7 @@ inline {{fieldType}}::Builder {{structName}}::Builder::get{{fieldTitleCase}}() {
       {{^fieldDefaultBytes}}{{fieldType}}::DEFAULT.words{{/fieldDefaultBytes}}));
 }
 {{/fieldIsStruct}}
-{{#fieldIsPrimitiveList}}
+{{#fieldIsNonStructList}}
 inline {{fieldType}}::Builder {{structName}}::Builder::init{{fieldTitleCase}}(unsigned int size) {
   return {{fieldType}}::Builder(_builder.initListField(
       {{fieldOffset}} * ::capnproto::REFERENCES,
@@ -173,12 +176,12 @@ inline {{fieldType}}::Builder {{structName}}::Builder::get{{fieldTitleCase}}() {
       {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}.words{{/fieldDefaultBytes}}
       {{^fieldDefaultBytes}}nullptr{{/fieldDefaultBytes}}));
 }
-{{/fieldIsPrimitiveList}}
+{{/fieldIsNonStructList}}
 {{#fieldIsStructList}}
 inline {{fieldType}}::Builder {{structName}}::Builder::init{{fieldTitleCase}}(unsigned int size) {
   return {{fieldType}}::Builder(_builder.initStructListField(
       {{fieldOffset}} * ::capnproto::REFERENCES, size * ::capnproto::ELEMENTS,
-      {{fieldType}}::DEFAULT.words));
+      {{fieldElementType}}::DEFAULT.words));
 }
 inline {{fieldType}}::Builder {{structName}}::Builder::get{{fieldTitleCase}}() {
   return {{fieldType}}::Builder(_builder.getListField(

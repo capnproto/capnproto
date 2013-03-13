@@ -863,7 +863,7 @@ ListBuilder ListBuilder::initStructListElement(
       elementCount, elementDefaultValue);
 }
 
-ListBuilder ListBuilder::getListElement(WireReferenceCount index, FieldSize elementSize) const {
+ListBuilder ListBuilder::getListElement(WireReferenceCount index) const {
   return WireHelpers::getWritableListReference(
       reinterpret_cast<WireReference*>(ptr) + index, segment, nullptr);
 }
@@ -900,10 +900,10 @@ StructReader ListReader::getStructElement(ElementCount index, const word* defaul
 }
 
 ListReader ListReader::getListElement(
-    WireReferenceCount index, FieldSize expectedElementSize, const word* defaultValue) const {
+    WireReferenceCount index, FieldSize expectedElementSize) const {
   return WireHelpers::readListReference(
       segment, reinterpret_cast<const WireReference*>(ptr) + index,
-      defaultValue, expectedElementSize, recursionLimit);
+      nullptr, expectedElementSize, recursionLimit);
 }
 
 }  // namespace internal

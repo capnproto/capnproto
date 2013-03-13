@@ -39,27 +39,107 @@ TEST(Encoding, Simple) {
   EXPECT_EQ(1234, builder.getA());
   EXPECT_EQ(-1, builder.getB());
   EXPECT_EQ(200, builder.getC());
-  ASSERT_EQ(0, builder.getNums().size());
+  ASSERT_EQ(0u, builder.getNums().size());
 
   builder.setA(321);
   builder.setB(45);
   builder.setC(67);
   builder.initD().setX(55.25);
 
-  List<int32_t>::Builder listBuilder = builder.initNums(5);
-  ASSERT_EQ(5, listBuilder.size());
-  listBuilder[0] = 12;
-  listBuilder[1] = 34;
-  listBuilder[2] = 56;
-  listBuilder[3] = 78;
-  listBuilder[4] = 90;
+  {
+    List<int32_t>::Builder listBuilder = builder.initNums(5);
+    ASSERT_EQ(5u, listBuilder.size());
+    listBuilder.set(0, 12);
+    listBuilder.set(1, 34);
+    listBuilder.set(2, 56);
+    listBuilder.set(3, 78);
+    listBuilder.set(4, 90);
+
+    EXPECT_EQ(12, listBuilder[0]);
+    EXPECT_EQ(34, listBuilder[1]);
+    EXPECT_EQ(56, listBuilder[2]);
+    EXPECT_EQ(78, listBuilder[3]);
+    EXPECT_EQ(90, listBuilder[4]);
+
+    {
+      int sum = 0;
+      for (int32_t i: listBuilder) {
+        sum += i;
+      }
+      EXPECT_EQ(12 + 34 + 56 + 78 + 90, sum);
+    }
+  }
 
   {
-    int sum = 0;
-    for (int32_t i: listBuilder) {
-      sum += i;
+    List<Bar>::Builder structListBuilder = builder.initBars(3);
+    ASSERT_EQ(3u, structListBuilder.size());
+
+    structListBuilder[0].setX(123);
+    structListBuilder[1].setX(456);
+    structListBuilder[2].setX(789);
+
+    EXPECT_EQ(123, structListBuilder[0].getX());
+    EXPECT_EQ(456, structListBuilder[1].getX());
+    EXPECT_EQ(789, structListBuilder[2].getX());
+
+    {
+      double sum = 0;
+      for (auto bar: structListBuilder) {
+        sum += bar.getX();
+      }
+      EXPECT_EQ(123 + 456 + 789, sum);
     }
-    EXPECT_EQ(12 + 34 + 56 + 78 + 90, sum);
+  }
+
+  {
+    List<Bar>::Builder structListBuilder = builder.getBars();
+    ASSERT_EQ(3u, structListBuilder.size());
+
+    EXPECT_EQ(123, structListBuilder[0].getX());
+    EXPECT_EQ(456, structListBuilder[1].getX());
+    EXPECT_EQ(789, structListBuilder[2].getX());
+
+    {
+      double sum = 0;
+      for (auto bar: structListBuilder) {
+        sum += bar.getX();
+      }
+      EXPECT_EQ(123 + 456 + 789, sum);
+    }
+  }
+
+  {
+    List<List<int32_t>>::Builder listListBuilder = builder.initPrimListList(2);
+    ASSERT_EQ(2u, listListBuilder.size());
+
+    List<int32_t>::Builder sublist = listListBuilder.init(0, 2);
+    ASSERT_EQ(2u, sublist.size());
+    sublist.set(0, 1234);
+    sublist.set(1, 5678);
+
+    sublist = listListBuilder.init(1, 4);
+    ASSERT_EQ(4u, sublist.size());
+    sublist.set(0, 21);
+    sublist.set(1, 43);
+    sublist.set(2, 65);
+    sublist.set(3, 87);
+  }
+
+  {
+    List<List<Bar>>::Builder listListBuilder = builder.initStructListList(2);
+    ASSERT_EQ(2u, listListBuilder.size());
+
+    List<Bar>::Builder sublist = listListBuilder.init(0, 2);
+    ASSERT_EQ(2u, sublist.size());
+    sublist[0].setX(1234);
+    sublist[1].setX(5678);
+
+    sublist = listListBuilder.init(1, 4);
+    ASSERT_EQ(4u, sublist.size());
+    sublist[0].setX(21);
+    sublist[1].setX(43);
+    sublist[2].setX(65);
+    sublist[3].setX(87);
   }
 
   EXPECT_EQ(321, builder.getA());
@@ -75,20 +155,73 @@ TEST(Encoding, Simple) {
   EXPECT_EQ(67, reader.getC());
   EXPECT_EQ(55.25, reader.getD().getX());
 
-  List<int32_t>::Reader listReader = reader.getNums();
-  ASSERT_EQ(5, listReader.size());
-  EXPECT_EQ(12, listReader[0]);
-  EXPECT_EQ(34, listReader[1]);
-  EXPECT_EQ(56, listReader[2]);
-  EXPECT_EQ(78, listReader[3]);
-  EXPECT_EQ(90, listReader[4]);
+  {
+    List<int32_t>::Reader listReader = reader.getNums();
+    ASSERT_EQ(5u, listReader.size());
+    EXPECT_EQ(12, listReader[0]);
+    EXPECT_EQ(34, listReader[1]);
+    EXPECT_EQ(56, listReader[2]);
+    EXPECT_EQ(78, listReader[3]);
+    EXPECT_EQ(90, listReader[4]);
+
+    {
+      int sum = 0;
+      for (int32_t i: listReader) {
+        sum += i;
+      }
+      EXPECT_EQ(12 + 34 + 56 + 78 + 90, sum);
+    }
+  }
 
   {
-    int sum = 0;
-    for (int32_t i: listReader) {
-      sum += i;
+    List<Bar>::Reader structListReader = reader.getBars();
+    ASSERT_EQ(3u, structListReader.size());
+
+    EXPECT_EQ(123, structListReader[0].getX());
+    EXPECT_EQ(456, structListReader[1].getX());
+    EXPECT_EQ(789, structListReader[2].getX());
+
+    {
+      double sum = 0;
+      for (auto bar: structListReader) {
+        sum += bar.getX();
+      }
+      EXPECT_EQ(123 + 456 + 789, sum);
     }
-    EXPECT_EQ(12 + 34 + 56 + 78 + 90, sum);
+  }
+
+  {
+    List<List<int32_t>>::Reader listListReader = reader.getPrimListList();
+    ASSERT_EQ(2u, listListReader.size());
+
+    List<int32_t>::Reader sublist = listListReader[0];
+    ASSERT_EQ(2u, sublist.size());
+    EXPECT_EQ(1234, sublist[0]);
+    EXPECT_EQ(5678, sublist[1]);
+
+    sublist = listListReader[1];
+    ASSERT_EQ(4u, sublist.size());
+    EXPECT_EQ(21, sublist[0]);
+    EXPECT_EQ(43, sublist[1]);
+    EXPECT_EQ(65, sublist[2]);
+    EXPECT_EQ(87, sublist[3]);
+  }
+
+  {
+    List<List<Bar>>::Reader listListReader = reader.getStructListList();
+    ASSERT_EQ(2u, listListReader.size());
+
+    List<Bar>::Reader sublist = listListReader[0];
+    ASSERT_EQ(2u, sublist.size());
+    EXPECT_EQ(1234, sublist[0].getX());
+    EXPECT_EQ(5678, sublist[1].getX());
+
+    sublist = listListReader[1];
+    ASSERT_EQ(4u, sublist.size());
+    EXPECT_EQ(21, sublist[0].getX());
+    EXPECT_EQ(43, sublist[1].getX());
+    EXPECT_EQ(65, sublist[2].getX());
+    EXPECT_EQ(87, sublist[3].getX());
   }
 }
 

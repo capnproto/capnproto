@@ -25,8 +25,16 @@
 #define CAPNPROTO_LIST_H_
 
 #include "wire-format.h"
+#include "descriptor.h"     // only for FieldSize; TODO:  Eliminate this
 
 namespace capnproto {
+
+namespace internal {
+template <typename T> struct IsPrimitive;
+}  // namespace internal
+
+template <typename T, bool isPrimitive = internal::IsPrimitive<T>::value>
+struct List;
 
 namespace internal {
 
@@ -44,6 +52,27 @@ template <> struct IsPrimitive<uint32_t> { static constexpr bool value = true; }
 template <> struct IsPrimitive<uint64_t> { static constexpr bool value = true; };
 template <> struct IsPrimitive<float>    { static constexpr bool value = true; };
 template <> struct IsPrimitive<double>   { static constexpr bool value = true; };
+template <typename T, bool b> struct IsPrimitive<List<T, b>> {
+  static constexpr bool value = IsPrimitive<T>::value;
+};
+
+template <typename T> struct FieldSizeForType { static constexpr FieldSize value = FieldSize::INLINE_COMPOSITE; };
+
+template <> struct FieldSizeForType<void>     { static constexpr FieldSize value = FieldSize::VOID; };
+template <> struct FieldSizeForType<bool>     { static constexpr FieldSize value = FieldSize::BIT; };
+template <> struct FieldSizeForType<int8_t>   { static constexpr FieldSize value = FieldSize::BYTE; };
+template <> struct FieldSizeForType<int16_t>  { static constexpr FieldSize value = FieldSize::TWO_BYTES; };
+template <> struct FieldSizeForType<int32_t>  { static constexpr FieldSize value = FieldSize::FOUR_BYTES; };
+template <> struct FieldSizeForType<int64_t>  { static constexpr FieldSize value = FieldSize::EIGHT_BYTES; };
+template <> struct FieldSizeForType<uint8_t>  { static constexpr FieldSize value = FieldSize::BYTE; };
+template <> struct FieldSizeForType<uint16_t> { static constexpr FieldSize value = FieldSize::TWO_BYTES; };
+template <> struct FieldSizeForType<uint32_t> { static constexpr FieldSize value = FieldSize::FOUR_BYTES; };
+template <> struct FieldSizeForType<uint64_t> { static constexpr FieldSize value = FieldSize::EIGHT_BYTES; };
+template <> struct FieldSizeForType<float>    { static constexpr FieldSize value = FieldSize::FOUR_BYTES; };
+template <> struct FieldSizeForType<double>   { static constexpr FieldSize value = FieldSize::EIGHT_BYTES; };
+template <typename T, bool b> struct FieldSizeForType<List<T, b>> {
+  static constexpr FieldSize value = FieldSize::REFERENCE;
+};
 
 template<typename T> constexpr T&& move(T& t) noexcept { return static_cast<T&&>(t); }
 // Like std::move.  Unfortunately, #including <utility> brings in tons of unnecessary stuff.
@@ -64,15 +93,17 @@ private:
   T value;
 };
 
-template <typename Container, typename Element, typename Reference>
+template <typename Container, typename Element>
 class IndexingIterator {
 public:
   IndexingIterator() = default;
 
-  inline Reference operator*() { return (*container)[index]; }
-  inline Reference operator->() { return TemporaryPointer<Element>((*container)[index]); }
-  inline Reference operator[]( int off) { return (*container)[index]; }
-  inline Reference operator[](uint off) { return (*container)[index]; }
+  inline Element operator*() { return (*container)[index]; }
+  inline TemporaryPointer<Element> operator->() {
+    return TemporaryPointer<Element>((*container)[index]);
+  }
+  inline Element operator[]( int off) { return (*container)[index]; }
+  inline Element operator[](uint off) { return (*container)[index]; }
 
   inline IndexingIterator& operator++() { ++index; return *this; }
   inline IndexingIterator operator++(int) { IndexingIterator other = *this; ++index; return other; }
@@ -105,13 +136,10 @@ private:
   uint index;
 
   friend Container;
-  IndexingIterator(Container* builder, uint index): container(container), index(index) {}
+  inline IndexingIterator(Container* container, uint index): container(container), index(index) {}
 };
 
 }  // namespace internal
-
-template <typename T, bool isPrimitive = internal::IsPrimitive<T>::value>
-struct List;
 
 template <typename T>
 struct List<T, true> {
@@ -120,11 +148,10 @@ struct List<T, true> {
     Reader() = default;
     inline explicit Reader(internal::ListReader reader): reader(reader) {}
 
-    typedef internal::IndexingIterator<Reader, T, T> iterator;
-
-    inline T operator[](uint index) { return reader.template getDataElement<T>(index * ELEMENTS); }
     inline uint size() { return reader.size() / ELEMENTS; }
+    inline T operator[](uint index) { return reader.template getDataElement<T>(index * ELEMENTS); }
 
+    typedef internal::IndexingIterator<Reader, T> iterator;
     inline iterator begin() { return iterator(this, 0); }
     inline iterator end() { return iterator(this, size()); }
 
@@ -137,36 +164,21 @@ struct List<T, true> {
     Builder() = default;
     inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
 
-    class reference {
-    public:
-      reference() = default;
-
-      inline operator T() { return (*builder)[index]; }
-      inline reference& operator=(T value) {
-        builder->builder.template setDataElement<T>(index * ELEMENTS, value);
-        return *this;
-      }
-
-      T* operator&() {
-        static_assert(sizeof(T) < 0,
-            "You can't take the address of a list member because they are not stored in memory "
-            "in a directly-usable format.");
-        return nullptr;
-      }
-
-    private:
-      Builder* builder;
-      uint index;
-
-      friend class Builder;
-      reference(Builder* builder, uint index): builder(builder), index(index) {}
-    };
-
-    typedef internal::IndexingIterator<Builder, T, reference> iterator;
-
-    inline reference operator[](uint index) { return reference(this, index); }
     inline uint size() { return builder.size() / ELEMENTS; }
+    inline T operator[](uint index) {
+      return builder.template getDataElement<T>(index * ELEMENTS);
+    }
+    inline void set(uint index, T value) {
+      // Alas, it is not possible to make operator[] return a reference to which you can assign,
+      // since the encoded representation does not necessarily match the compiler's representation
+      // of the type.  We can't even return a clever class that implements operator T() and
+      // operator=() because it will lead to surprising behavior when using type inference (e.g.
+      // calling a template function with inferred argument types, or using "auto" or "decltype").
 
+      builder.template setDataElement<T>(index * ELEMENTS, value);
+    }
+
+    typedef internal::IndexingIterator<Builder, T> iterator;
     inline iterator begin() { return iterator(this, 0); }
     inline iterator end() { return iterator(this, size()); }
 
@@ -182,13 +194,12 @@ struct List<T, false> {
     Reader() = default;
     inline explicit Reader(internal::ListReader reader): reader(reader) {}
 
-    typedef internal::IndexingIterator<Reader, typename T::Reader, typename T::Reader> iterator;
-
+    inline uint size() { return reader.size() / ELEMENTS; }
     inline typename T::Reader operator[](uint index) {
       return typename T::Reader(reader.getStructElement(index * ELEMENTS, T::DEFAULT.words));
     }
-    inline uint size() { return reader.size() / ELEMENTS; }
 
+    typedef internal::IndexingIterator<Reader, typename T::Reader> iterator;
     inline iterator begin() { return iterator(this, 0); }
     inline iterator end() { return iterator(this, size()); }
 
@@ -201,38 +212,102 @@ struct List<T, false> {
     Builder() = default;
     inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
 
-    class reference {
-    public:
-      reference() = default;
-
-      inline operator typename T::Builder() { return (*builder)[index]; }
-
-      // TODO:  operator= to accept ownership transfer.
-
-      T* operator&() {
-        static_assert(sizeof(T) < 0,
-            "You can't take the address of a list member because they are not stored in memory "
-            "in a directly-usable format.");
-        return nullptr;
-      }
-
-    private:
-      Builder* builder;
-      uint index;
-
-      friend class Builder;
-      reference(Builder* builder, uint index): builder(builder), index(index) {}
-    };
-
-    typedef internal::IndexingIterator<Builder, typename T::Builder, reference> iterator;
-
+    inline uint size() { return builder.size() / ELEMENTS; }
     inline typename T::Builder operator[](uint index) {
       return typename T::Builder(builder.getStructElement(index * ELEMENTS,
           (T::DATA_SIZE + T::REFERENCE_COUNT * WORDS_PER_REFERENCE) / ELEMENTS,
           T::DATA_SIZE));
     }
-    inline uint size() { return builder.size() / ELEMENTS; }
 
+    typedef internal::IndexingIterator<Builder, typename T::Builder> iterator;
+    inline iterator begin() { return iterator(this, 0); }
+    inline iterator end() { return iterator(this, size()); }
+
+  private:
+    internal::ListBuilder builder;
+  };
+};
+
+template <typename T>
+struct List<List<T>, true> {
+  class Reader {
+  public:
+    Reader() = default;
+    inline explicit Reader(internal::ListReader reader): reader(reader) {}
+
+    inline uint size() { return reader.size() / ELEMENTS; }
+    inline typename List<T>::Reader operator[](uint index) {
+      return typename List<T>::Reader(reader.getListElement(index * REFERENCES,
+          internal::FieldSizeForType<T>::value));
+    }
+
+    typedef internal::IndexingIterator<Reader, typename List<T>::Reader> iterator;
+    inline iterator begin() { return iterator(this, 0); }
+    inline iterator end() { return iterator(this, size()); }
+
+  private:
+    internal::ListReader reader;
+  };
+
+  class Builder {
+  public:
+    Builder() = default;
+    inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
+
+    inline uint size() { return builder.size() / ELEMENTS; }
+    inline typename List<T>::Builder operator[](uint index) {
+      return typename List<T>::Builder(builder.getListElement(index * REFERENCES));
+    }
+    inline typename List<T>::Builder init(uint index, uint size) {
+      return typename List<T>::Builder(builder.initListElement(
+          index * REFERENCES, internal::FieldSizeForType<T>::value, size * ELEMENTS));
+    }
+
+    typedef internal::IndexingIterator<Builder, typename List<T>::Builder> iterator;
+    inline iterator begin() { return iterator(this, 0); }
+    inline iterator end() { return iterator(this, size()); }
+
+  private:
+    internal::ListBuilder builder;
+  };
+};
+
+template <typename T>
+struct List<List<T>, false> {
+  class Reader {
+  public:
+    Reader() = default;
+    inline explicit Reader(internal::ListReader reader): reader(reader) {}
+
+    inline uint size() { return reader.size() / ELEMENTS; }
+    inline typename List<T>::Reader operator[](uint index) {
+      return typename List<T>::Reader(reader.getListElement(index * REFERENCES,
+          internal::FieldSizeForType<T>::value));
+    }
+
+    typedef internal::IndexingIterator<Reader, typename List<T>::Reader> iterator;
+    inline iterator begin() { return iterator(this, 0); }
+    inline iterator end() { return iterator(this, size()); }
+
+  private:
+    internal::ListReader reader;
+  };
+
+  class Builder {
+  public:
+    Builder() = default;
+    inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
+
+    inline uint size() { return builder.size() / ELEMENTS; }
+    inline typename List<T>::Builder operator[](uint index) {
+      return typename List<T>::Builder(builder.getListElement(index * REFERENCES));
+    }
+    inline typename List<T>::Builder init(uint index, uint size) {
+      return typename List<T>::Builder(builder.initStructListElement(
+          index * REFERENCES, size * ELEMENTS, T::DEFAULT.words));
+    }
+
+    typedef internal::IndexingIterator<Builder, typename List<T>::Builder> iterator;
     inline iterator begin() { return iterator(this, 0); }
     inline iterator end() { return iterator(this, size()); }
 
