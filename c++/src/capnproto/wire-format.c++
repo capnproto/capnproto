@@ -187,6 +187,12 @@ struct WireHelpers {
     return ((bits2 >> 6) + ((bits2 & 63) != 0)) * WORDS;
   }
 
+  static CAPNPROTO_ALWAYS_INLINE(WordCount roundUpToWords(ByteCount bytes)) {
+    static_assert(sizeof(word) == 8, "This code assumes 64-bit words.");
+    uint bytes2 = bytes / BYTES;
+    return ((bytes2 >> 3) + ((bytes2 & 7) != 0)) * WORDS;
+  }
+
   static CAPNPROTO_ALWAYS_INLINE(word* allocate(
       WireReference*& ref, SegmentBuilder*& segment, WordCount amount,
       WireReference::Kind kind)) {
@@ -529,6 +535,82 @@ struct WireHelpers {
     }
   }
 
+  static CAPNPROTO_ALWAYS_INLINE(Text::Builder initTextReference(
+      WireReference* ref, SegmentBuilder* segment, ByteCount size)) {
+    // The byte list must include a NUL terminator.
+    ByteCount byteSize = size + 1 * BYTES;
+
+    // Allocate the space.
+    word* ptr = allocate(ref, segment, roundUpToWords(byteSize), WireReference::LIST);
+
+    // Initialize the reference.
+    ref->listRef.set(FieldSize::BYTE, byteSize * (1 * ELEMENTS / BYTES));
+
+    // Build the Text::Builder.  This will initialize the NUL terminator.
+    return Text::Builder(reinterpret_cast<char*>(ptr), size / BYTES);
+  }
+
+  static CAPNPROTO_ALWAYS_INLINE(void setTextReference(
+      WireReference* ref, SegmentBuilder* segment, Text::Reader value)) {
+    initTextReference(ref, segment, value.size() * BYTES).copyFrom(value);
+  }
+
+  static CAPNPROTO_ALWAYS_INLINE(Text::Builder getWritableTextReference(
+      WireReference* ref, SegmentBuilder* segment,
+      const void* defaultValue, ByteCount defaultSize)) {
+    if (ref->isNull()) {
+      Text::Builder builder = initTextReference(ref, segment, defaultSize);
+      builder.copyFrom(defaultValue);
+      return builder;
+    } else {
+      word* ptr = followFars(ref, segment);
+
+      CAPNPROTO_ASSERT(ref->kind() == WireReference::LIST,
+          "Called getText{Field,Element}() but existing reference is not a list.");
+      CAPNPROTO_ASSERT(ref->listRef.elementSize() == FieldSize::BYTE,
+          "Called getText{Field,Element}() but existing list reference is not byte-sized.");
+
+      // Subtract 1 from the size for the NUL terminator.
+      return Text::Builder(reinterpret_cast<char*>(ptr), ref->listRef.elementCount() / ELEMENTS - 1);
+    }
+  }
+
+  static CAPNPROTO_ALWAYS_INLINE(Data::Builder initDataReference(
+      WireReference* ref, SegmentBuilder* segment, ByteCount size)) {
+    // Allocate the space.
+    word* ptr = allocate(ref, segment, roundUpToWords(size), WireReference::LIST);
+
+    // Initialize the reference.
+    ref->listRef.set(FieldSize::BYTE, size * (1 * ELEMENTS / BYTES));
+
+    // Build the Data::Builder.
+    return Data::Builder(reinterpret_cast<char*>(ptr), size / BYTES);
+  }
+
+  static CAPNPROTO_ALWAYS_INLINE(void setDataReference(
+      WireReference* ref, SegmentBuilder* segment, Data::Reader value)) {
+    initDataReference(ref, segment, value.size() * BYTES).copyFrom(value);
+  }
+
+  static CAPNPROTO_ALWAYS_INLINE(Data::Builder getWritableDataReference(
+      WireReference* ref, SegmentBuilder* segment,
+      const void* defaultValue, ByteCount defaultSize)) {
+    if (ref->isNull()) {
+      Data::Builder builder = initDataReference(ref, segment, defaultSize);
+      builder.copyFrom(defaultValue);
+      return builder;
+    } else {
+      word* ptr = followFars(ref, segment);
+
+      CAPNPROTO_ASSERT(ref->kind() == WireReference::LIST,
+          "Called getData{Field,Element}() but existing reference is not a list.");
+      CAPNPROTO_ASSERT(ref->listRef.elementSize() == FieldSize::BYTE,
+          "Called getData{Field,Element}() but existing list reference is not byte-sized.");
+
+      return Data::Builder(reinterpret_cast<char*>(ptr), ref->listRef.elementCount() / ELEMENTS);
+    }
+  }
+
   static CAPNPROTO_ALWAYS_INLINE(StructReader readStructReference(
       SegmentReader* segment, const WireReference* ref, const word* defaultValue,
       int recursionLimit)) {
@@ -759,6 +841,104 @@ struct WireHelpers {
       }
     }
   }
+
+  static CAPNPROTO_ALWAYS_INLINE(Text::Reader readTextReference(
+      SegmentReader* segment, const WireReference* ref,
+      const void* defaultValue, ByteCount defaultSize)) {
+    if (ref == nullptr || ref->isNull()) {
+    useDefault:
+      if (defaultValue == nullptr) {
+        defaultValue = "";
+      }
+      return Text::Reader(reinterpret_cast<const char*>(defaultValue), defaultSize / BYTES);
+    } else if (segment == nullptr) {
+      // Trusted message.
+      return Text::Reader(reinterpret_cast<const char*>(ref->target()),
+                          ref->listRef.elementCount() / ELEMENTS - 1);
+    } else {
+      const word* ptr = followFars(ref, segment);
+      uint size = ref->listRef.elementCount() / ELEMENTS;
+
+      if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
+        segment->getMessage()->reportInvalidData(
+            "Message contains out-of-bounds far reference.");
+        goto useDefault;
+      }
+
+      if (CAPNPROTO_EXPECT_FALSE(ref->kind() != WireReference::LIST)) {
+        segment->getMessage()->reportInvalidData(
+            "Message contains non-list reference where text was expected.");
+        goto useDefault;
+      }
+
+      if (CAPNPROTO_EXPECT_FALSE(ref->listRef.elementSize() != FieldSize::BYTE)) {
+        segment->getMessage()->reportInvalidData(
+            "Message contains list reference of non-bytes where text was expected.");
+        goto useDefault;
+      }
+
+      if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr +
+          roundUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))))) {
+        segment->getMessage()->reportInvalidData(
+            "Message contained out-of-bounds text reference.");
+        goto useDefault;
+      }
+
+      const char* cptr = reinterpret_cast<const char*>(ptr);
+      --size;  // NUL terminator
+
+      if (CAPNPROTO_EXPECT_FALSE(cptr[size] != '\0')) {
+        segment->getMessage()->reportInvalidData(
+            "Message contains text that is not NUL-terminated.");
+        goto useDefault;
+      }
+
+      return Text::Reader(cptr, size);
+    }
+  }
+
+  static CAPNPROTO_ALWAYS_INLINE(Data::Reader readDataReference(
+      SegmentReader* segment, const WireReference* ref,
+      const void* defaultValue, ByteCount defaultSize)) {
+    if (ref == nullptr || ref->isNull()) {
+    useDefault:
+      return Data::Reader(reinterpret_cast<const char*>(defaultValue), defaultSize / BYTES);
+    } else if (segment == nullptr) {
+      // Trusted message.
+      return Data::Reader(reinterpret_cast<const char*>(ref->target()),
+                        ref->listRef.elementCount() / ELEMENTS);
+    } else {
+      const word* ptr = followFars(ref, segment);
+      uint size = ref->listRef.elementCount() / ELEMENTS;
+
+      if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
+        segment->getMessage()->reportInvalidData(
+            "Message contains out-of-bounds far reference.");
+        goto useDefault;
+      }
+
+      if (CAPNPROTO_EXPECT_FALSE(ref->kind() != WireReference::LIST)) {
+        segment->getMessage()->reportInvalidData(
+            "Message contains non-list reference where data was expected.");
+        goto useDefault;
+      }
+
+      if (CAPNPROTO_EXPECT_FALSE(ref->listRef.elementSize() == FieldSize::BYTE)) {
+        segment->getMessage()->reportInvalidData(
+            "Message contains list reference of non-bytes where data was expected.");
+        goto useDefault;
+      }
+
+      if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr +
+          roundUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))))) {
+        segment->getMessage()->reportInvalidData(
+            "Message contained out-of-bounds data reference.");
+        goto useDefault;
+      }
+
+      return Data::Reader(reinterpret_cast<const char*>(ptr), size);
+    }
+  }
 };
 
 // =======================================================================================
@@ -797,6 +977,30 @@ ListBuilder StructBuilder::getListField(
     WireReferenceCount refIndex, const word* defaultValue) const {
   return WireHelpers::getWritableListReference(
       references + refIndex, segment, defaultValue);
+}
+
+Text::Builder StructBuilder::initTextField(WireReferenceCount refIndex, ByteCount size) const {
+  return WireHelpers::initTextReference(references + refIndex, segment, size);
+}
+void StructBuilder::setTextField(WireReferenceCount refIndex, Text::Reader value) const {
+  WireHelpers::setTextReference(references + refIndex, segment, value);
+}
+Text::Builder StructBuilder::getTextField(
+    WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const {
+  return WireHelpers::getWritableTextReference(
+      references + refIndex, segment, defaultValue, defaultSize);
+}
+
+Data::Builder StructBuilder::initDataField(WireReferenceCount refIndex, ByteCount size) const {
+  return WireHelpers::initDataReference(references + refIndex, segment, size);
+}
+void StructBuilder::setDataField(WireReferenceCount refIndex, Data::Reader value) const {
+  WireHelpers::setDataReference(references + refIndex, segment, value);
+}
+Data::Builder StructBuilder::getDataField(
+    WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const {
+  return WireHelpers::getWritableDataReference(
+      references + refIndex, segment, defaultValue, defaultSize);
 }
 
 StructReader StructBuilder::asReader() const {
@@ -842,6 +1046,18 @@ ListReader StructReader::getListField(
       segment, ref, defaultValue, expectedElementSize, recursionLimit);
 }
 
+Text::Reader StructReader::getTextField(
+    WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const {
+  const WireReference* ref = refIndex >= referenceCount ? nullptr : references + refIndex;
+  return WireHelpers::readTextReference(segment, ref, defaultValue, defaultSize);
+}
+
+Data::Reader StructReader::getDataField(
+    WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const {
+  const WireReference* ref = refIndex >= referenceCount ? nullptr : references + refIndex;
+  return WireHelpers::readDataReference(segment, ref, defaultValue, defaultSize);
+}
+
 StructBuilder ListBuilder::getStructElement(
     ElementCount index, decltype(WORDS/ELEMENTS) elementSize, WordCount structDataSize) const {
   word* structPtr = ptr + elementSize * index;
@@ -866,6 +1082,32 @@ ListBuilder ListBuilder::initStructListElement(
 ListBuilder ListBuilder::getListElement(WireReferenceCount index) const {
   return WireHelpers::getWritableListReference(
       reinterpret_cast<WireReference*>(ptr) + index, segment, nullptr);
+}
+
+Text::Builder ListBuilder::initTextElement(WireReferenceCount index, ByteCount size) const {
+  return WireHelpers::initTextReference(
+      reinterpret_cast<WireReference*>(ptr) + index, segment, size);
+}
+void ListBuilder::setTextElement(WireReferenceCount index, Text::Reader value) const {
+  WireHelpers::setTextReference(
+      reinterpret_cast<WireReference*>(ptr) + index, segment, value);
+}
+Text::Builder ListBuilder::getTextElement(WireReferenceCount index) const {
+  return WireHelpers::getWritableTextReference(
+      reinterpret_cast<WireReference*>(ptr) + index, segment, "", 0 * BYTES);
+}
+
+Data::Builder ListBuilder::initDataElement(WireReferenceCount index, ByteCount size) const {
+  return WireHelpers::initDataReference(
+      reinterpret_cast<WireReference*>(ptr) + index, segment, size);
+}
+void ListBuilder::setDataElement(WireReferenceCount index, Data::Reader value) const {
+  WireHelpers::setDataReference(
+      reinterpret_cast<WireReference*>(ptr) + index, segment, value);
+}
+Data::Builder ListBuilder::getDataElement(WireReferenceCount index) const {
+  return WireHelpers::getWritableDataReference(
+      reinterpret_cast<WireReference*>(ptr) + index, segment, nullptr, 0 * BYTES);
 }
 
 ListReader ListBuilder::asReader(FieldSize elementSize) const {
@@ -904,6 +1146,16 @@ ListReader ListReader::getListElement(
   return WireHelpers::readListReference(
       segment, reinterpret_cast<const WireReference*>(ptr) + index,
       nullptr, expectedElementSize, recursionLimit);
+}
+
+Text::Reader ListReader::getTextElement(WireReferenceCount index) const {
+  return WireHelpers::readTextReference(segment,
+      reinterpret_cast<const WireReference*>(ptr) + index, "", 0 * BYTES);
+}
+
+Data::Reader ListReader::getDataElement(WireReferenceCount index) const {
+  return WireHelpers::readDataReference(segment,
+      reinterpret_cast<const WireReference*>(ptr) + index, nullptr, 0 * BYTES);
 }
 
 }  // namespace internal

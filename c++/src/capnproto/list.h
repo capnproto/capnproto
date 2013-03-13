@@ -98,24 +98,24 @@ class IndexingIterator {
 public:
   IndexingIterator() = default;
 
-  inline Element operator*() { return (*container)[index]; }
-  inline TemporaryPointer<Element> operator->() {
+  inline Element operator*() const { return (*container)[index]; }
+  inline TemporaryPointer<Element> operator->() const {
     return TemporaryPointer<Element>((*container)[index]);
   }
-  inline Element operator[]( int off) { return (*container)[index]; }
-  inline Element operator[](uint off) { return (*container)[index]; }
+  inline Element operator[]( int off) const { return (*container)[index]; }
+  inline Element operator[](uint off) const { return (*container)[index]; }
 
   inline IndexingIterator& operator++() { ++index; return *this; }
   inline IndexingIterator operator++(int) { IndexingIterator other = *this; ++index; return other; }
   inline IndexingIterator& operator--() { --index; return *this; }
   inline IndexingIterator operator--(int) { IndexingIterator other = *this; --index; return other; }
 
-  inline IndexingIterator operator+(uint amount) { return IndexingIterator(container, index + amount); }
-  inline IndexingIterator operator-(uint amount) { return IndexingIterator(container, index - amount); }
-  inline IndexingIterator operator+( int amount) { return IndexingIterator(container, index + amount); }
-  inline IndexingIterator operator-( int amount) { return IndexingIterator(container, index - amount); }
+  inline IndexingIterator operator+(uint amount) const { return IndexingIterator(container, index + amount); }
+  inline IndexingIterator operator-(uint amount) const { return IndexingIterator(container, index - amount); }
+  inline IndexingIterator operator+( int amount) const { return IndexingIterator(container, index + amount); }
+  inline IndexingIterator operator-( int amount) const { return IndexingIterator(container, index - amount); }
 
-  inline int operator-(const IndexingIterator& other) { return index - other.index; }
+  inline int operator-(const IndexingIterator& other) const { return index - other.index; }
 
   inline IndexingIterator& operator+=(uint amount) { index += amount; return *this; }
   inline IndexingIterator& operator-=(uint amount) { index -= amount; return *this; }
@@ -124,12 +124,12 @@ public:
 
   // STL says comparing iterators of different containers is not allowed, so we only compare
   // indices here.
-  inline bool operator==(const IndexingIterator& other) { return index == other.index; }
-  inline bool operator!=(const IndexingIterator& other) { return index != other.index; }
-  inline bool operator<=(const IndexingIterator& other) { return index <= other.index; }
-  inline bool operator>=(const IndexingIterator& other) { return index >= other.index; }
-  inline bool operator< (const IndexingIterator& other) { return index <  other.index; }
-  inline bool operator> (const IndexingIterator& other) { return index >  other.index; }
+  inline bool operator==(const IndexingIterator& other) const { return index == other.index; }
+  inline bool operator!=(const IndexingIterator& other) const { return index != other.index; }
+  inline bool operator<=(const IndexingIterator& other) const { return index <= other.index; }
+  inline bool operator>=(const IndexingIterator& other) const { return index >= other.index; }
+  inline bool operator< (const IndexingIterator& other) const { return index <  other.index; }
+  inline bool operator> (const IndexingIterator& other) const { return index >  other.index; }
 
 private:
   Container* container;
@@ -308,6 +308,90 @@ struct List<List<T>, false> {
     }
 
     typedef internal::IndexingIterator<Builder, typename List<T>::Builder> iterator;
+    inline iterator begin() { return iterator(this, 0); }
+    inline iterator end() { return iterator(this, size()); }
+
+  private:
+    internal::ListBuilder builder;
+  };
+};
+
+template <>
+struct List<Data, false> {
+  class Reader {
+  public:
+    Reader() = default;
+    inline explicit Reader(internal::ListReader reader): reader(reader) {}
+
+    inline uint size() { return reader.size() / ELEMENTS; }
+    inline Data::Reader operator[](uint index) {
+      return reader.getDataElement(index * REFERENCES);
+    }
+
+    typedef internal::IndexingIterator<Reader, Data::Reader> iterator;
+    inline iterator begin() { return iterator(this, 0); }
+    inline iterator end() { return iterator(this, size()); }
+
+  private:
+    internal::ListReader reader;
+  };
+
+  class Builder {
+  public:
+    Builder() = default;
+    inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
+
+    inline uint size() { return builder.size() / ELEMENTS; }
+    inline Data::Builder operator[](uint index) {
+      return builder.getDataElement(index * REFERENCES);
+    }
+    inline Data::Builder init(uint index, uint size) {
+      return builder.initDataElement(index * REFERENCES, size * BYTES);
+    }
+
+    typedef internal::IndexingIterator<Builder, Data::Builder> iterator;
+    inline iterator begin() { return iterator(this, 0); }
+    inline iterator end() { return iterator(this, size()); }
+
+  private:
+    internal::ListBuilder builder;
+  };
+};
+
+template <>
+struct List<Text, false> {
+  class Reader {
+  public:
+    Reader() = default;
+    inline explicit Reader(internal::ListReader reader): reader(reader) {}
+
+    inline uint size() { return reader.size() / ELEMENTS; }
+    inline Text::Reader operator[](uint index) {
+      return reader.getTextElement(index * REFERENCES);
+    }
+
+    typedef internal::IndexingIterator<Reader, Text::Reader> iterator;
+    inline iterator begin() { return iterator(this, 0); }
+    inline iterator end() { return iterator(this, size()); }
+
+  private:
+    internal::ListReader reader;
+  };
+
+  class Builder {
+  public:
+    Builder() = default;
+    inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
+
+    inline uint size() { return builder.size() / ELEMENTS; }
+    inline Text::Builder operator[](uint index) {
+      return builder.getTextElement(index * REFERENCES);
+    }
+    inline Text::Builder init(uint index, uint size) {
+      return builder.initTextElement(index * REFERENCES, size * BYTES);
+    }
+
+    typedef internal::IndexingIterator<Builder, Text::Builder> iterator;
     inline iterator begin() { return iterator(this, 0); }
     inline iterator end() { return iterator(this, size()); }
 

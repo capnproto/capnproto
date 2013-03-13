@@ -66,6 +66,9 @@ public:
 {{#fieldIsPrimitive}}
   inline {{fieldType}} get{{fieldTitleCase}}();
 {{/fieldIsPrimitive}}
+{{#fieldIsBlob}}
+  inline {{fieldType}}::Reader get{{fieldTitleCase}}();
+{{/fieldIsBlob}}
 {{#fieldIsStruct}}
   inline {{fieldType}}::Reader get{{fieldTitleCase}}();
 {{/fieldIsStruct}}
@@ -90,6 +93,11 @@ public:
   inline {{fieldType}} get{{fieldTitleCase}}();
   inline void set{{fieldTitleCase}}({{fieldType}} value);
 {{/fieldIsPrimitive}}
+{{#fieldIsBlob}}
+  inline {{fieldType}}::Builder get{{fieldTitleCase}}();
+  inline void set{{fieldTitleCase}}({{fieldType}}::Reader value);
+  inline {{fieldType}}::Builder init{{fieldTitleCase}}(unsigned int size);
+{{/fieldIsBlob}}
 {{#fieldIsStruct}}
   inline {{fieldType}}::Builder init{{fieldTitleCase}}();
   inline {{fieldType}}::Builder get{{fieldTitleCase}}();
@@ -117,12 +125,22 @@ inline {{fieldType}} {{structName}}::Reader::get{{fieldTitleCase}}() {
       {{fieldOffset}} * ::capnproto::ELEMENTS, {{fieldDefaultValue}});
 }
 {{/fieldIsPrimitive}}
+{{#fieldIsBlob}}
+inline {{fieldType}}::Reader {{structName}}::Reader::get{{fieldTitleCase}}() {
+  return _reader.get{{fieldBlobType}}Field(
+      {{fieldOffset}} * ::capnproto::REFERENCES,
+{{#fieldDefaultBytes}}
+      DEFAULT_{{fieldUpperCase}}.words, {{defaultBlobSize}} * ::capnproto::BYTES
+{{/fieldDefaultBytes}}
+      {{^fieldDefaultBytes}}nullptr, 0 * ::capnproto::BYTES{{/fieldDefaultBytes}});
+}
+{{/fieldIsBlob}}
 {{#fieldIsStruct}}
 inline {{fieldType}}::Reader {{structName}}::Reader::get{{fieldTitleCase}}() {
   {{! TODO:  Support per-field default values. }}
   return {{fieldType}}::Reader(_reader.getStructField(
       {{fieldOffset}} * ::capnproto::REFERENCES,
-      {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}{{/fieldDefaultBytes}}
+      {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}.words{{/fieldDefaultBytes}}
       {{^fieldDefaultBytes}}{{fieldType}}::DEFAULT.words{{/fieldDefaultBytes}}));
 }
 {{/fieldIsStruct}}
@@ -150,6 +168,22 @@ inline void {{structName}}::Builder::set{{fieldTitleCase}}({{fieldType}} value) 
       {{fieldOffset}} * ::capnproto::ELEMENTS, value);
 }
 {{/fieldIsPrimitive}}
+{{#fieldIsBlob}}
+inline {{fieldType}}::Builder {{structName}}::Builder::get{{fieldTitleCase}}() {
+  return _builder.get{{fieldBlobType}}Field({{fieldOffset}} * ::capnproto::REFERENCES,
+{{#fieldDefaultBytes}}
+      DEFAULT_{{fieldUpperCase}}.words, {{defaultBlobSize}} * ::capnproto::BYTES
+{{/fieldDefaultBytes}}
+      {{^fieldDefaultBytes}}nullptr, 0 * ::capnproto::BYTES{{/fieldDefaultBytes}});
+}
+inline void {{structName}}::Builder::set{{fieldTitleCase}}({{fieldType}}::Reader value) {
+  _builder.set{{fieldBlobType}}Field({{fieldOffset}} * ::capnproto::REFERENCES, value);
+}
+inline {{fieldType}}::Builder {{structName}}::Builder::init{{fieldTitleCase}}(unsigned int size) {
+  return _builder.init{{fieldBlobType}}Field(
+      {{fieldOffset}} * ::capnproto::REFERENCES, size * ::capnproto::BYTES);
+}
+{{/fieldIsBlob}}
 {{#fieldIsStruct}}
 inline {{fieldType}}::Builder {{structName}}::Builder::init{{fieldTitleCase}}() {
   return {{fieldType}}::Builder(_builder.initStructField(
@@ -159,7 +193,7 @@ inline {{fieldType}}::Builder {{structName}}::Builder::get{{fieldTitleCase}}() {
   {{! TODO:  Support per-field default values. }}
   return {{fieldType}}::Builder(_builder.getStructField(
       {{fieldOffset}} * ::capnproto::REFERENCES,
-      {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}{{/fieldDefaultBytes}}
+      {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}.words{{/fieldDefaultBytes}}
       {{^fieldDefaultBytes}}{{fieldType}}::DEFAULT.words{{/fieldDefaultBytes}}));
 }
 {{/fieldIsStruct}}

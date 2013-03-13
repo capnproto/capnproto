@@ -45,6 +45,7 @@ TEST(Encoding, Simple) {
   builder.setB(45);
   builder.setC(67);
   builder.initD().setX(55.25);
+  builder.setTx("foo");
 
   {
     List<int32_t>::Builder listBuilder = builder.initNums(5);
@@ -146,6 +147,7 @@ TEST(Encoding, Simple) {
   EXPECT_EQ(45, builder.getB());
   EXPECT_EQ(67, builder.getC());
   EXPECT_EQ(55.25, builder.getD().getX());
+  EXPECT_STREQ("foo", builder.getTx());
 
   Foo::Reader reader(StructReader::readRoot(
       segment->getStartPtr(), Foo::DEFAULT.words, segment, 4));
@@ -154,6 +156,7 @@ TEST(Encoding, Simple) {
   EXPECT_EQ(45, reader.getB());
   EXPECT_EQ(67, reader.getC());
   EXPECT_EQ(55.25, reader.getD().getX());
+  EXPECT_STREQ("foo", reader.getTx());
 
   {
     List<int32_t>::Reader listReader = reader.getNums();

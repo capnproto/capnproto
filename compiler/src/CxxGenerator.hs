@@ -49,11 +49,15 @@ hashString str =
     MD5.hash $
     UTF8.encode str
 
-isPrimitive (BuiltinType _) = True
+isPrimitive t@(BuiltinType _) = not $ isBlob t
 isPrimitive (EnumType _) = True
 isPrimitive (StructType _) = False
 isPrimitive (InterfaceType _) = False
 isPrimitive (ListType _) = False
+
+isBlob (BuiltinType BuiltinText) = True
+isBlob (BuiltinType BuiltinData) = True
+isBlob _ = False
 
 isStruct (StructType _) = True
 isStruct _ = False
@@ -67,6 +71,10 @@ isNonStructList _ = False
 isStructList (ListType t) = isStruct t
 isStructList _ = False
 
+blobTypeString (BuiltinType BuiltinText) = "Text"
+blobTypeString (BuiltinType BuiltinData) = "Data"
+blobTypeString _ = error "Not a blob."
+
 cxxTypeString (BuiltinType BuiltinVoid) = "void"
 cxxTypeString (BuiltinType BuiltinBool) = "bool"
 cxxTypeString (BuiltinType BuiltinInt8) = " ::int8_t"
@@ -79,8 +87,8 @@ cxxTypeString (BuiltinType BuiltinUInt32) = " ::uint32_t"
 cxxTypeString (BuiltinType BuiltinUInt64) = " ::uint64_t"
 cxxTypeString (BuiltinType BuiltinFloat32) = "float"
 cxxTypeString (BuiltinType BuiltinFloat64) = "double"
-cxxTypeString (BuiltinType BuiltinText) = "TODO"
-cxxTypeString (BuiltinType BuiltinData) = "TODO"
+cxxTypeString (BuiltinType BuiltinText) = " ::capnproto::Text"
+cxxTypeString (BuiltinType BuiltinData) = " ::capnproto::Data"
 cxxTypeString (EnumType desc) = enumName desc               -- TODO: full name
 cxxTypeString (StructType desc) = structName desc           -- TODO: full name
 cxxTypeString (InterfaceType desc) = interfaceName desc     -- TODO: full name
@@ -146,11 +154,15 @@ elementType _ = error "Called elementType on non-list."
 repeatedlyTake _ [] = []
 repeatedlyTake n l = take n l : repeatedlyTake n (drop n l)
 
-defaultBytesContext :: Monad m => (String -> MuType m) -> [Word8] -> MuContext m
-defaultBytesContext parent bytes = mkStrContext context where
+defaultBytesContext :: Monad m => (String -> MuType m) -> TypeDesc -> [Word8] -> MuContext m
+defaultBytesContext parent t bytes = mkStrContext context where
     codeLines = map (delimit ", ") $ repeatedlyTake 8 $ map (printf "%3d") bytes
     context "defaultByteList" = MuVariable $ delimit ",\n    " codeLines
     context "defaultWordCount" = MuVariable $ div (length bytes + 7) 8
+    context "defaultBlobSize" = case t of
+        BuiltinType BuiltinText -> MuVariable (length bytes - 1)  -- Don't include NUL terminator.
+        BuiltinType BuiltinData -> MuVariable (length bytes)
+        _ -> error "defaultBlobSize used on non-blob."
     context s = parent s
 
 fieldContext parent desc = mkStrContext context where
@@ -159,15 +171,17 @@ fieldContext parent desc = mkStrContext context where
     context "fieldTitleCase" = MuVariable $ toTitleCase $ fieldName desc
     context "fieldUpperCase" = MuVariable $ toUpperCaseWithUnderscores $ fieldName desc
     context "fieldIsPrimitive" = MuBool $ isPrimitive $ fieldType desc
+    context "fieldIsBlob" = MuBool $ isBlob $ fieldType desc
     context "fieldIsStruct" = MuBool $ isStruct $ fieldType desc
     context "fieldIsList" = MuBool $ isList $ fieldType desc
     context "fieldIsNonStructList" = MuBool $ isNonStructList $ fieldType desc
     context "fieldIsStructList" = MuBool $ isStructList $ fieldType desc
     context "fieldDefaultBytes" =
         case fieldDefaultValue desc >>= defaultValueBytes (fieldType desc) of
-            Just v -> MuList [defaultBytesContext context v]
+            Just v -> MuList [defaultBytesContext context (fieldType desc) v]
             Nothing -> muNull
     context "fieldType" = MuVariable $ cxxTypeString $ fieldType desc
+    context "fieldBlobType" = MuVariable $ blobTypeString $ fieldType desc
     context "fieldOffset" = MuVariable $ fieldOffset desc
     context "fieldDefaultValue" = case fieldDefaultValue desc of
         Just v -> MuVariable $ cxxValueString v
@@ -184,7 +198,7 @@ structContext parent desc = mkStrContext context where
     context "structDataSize" = MuVariable $ packingDataSize $ structPacking desc
     context "structReferenceCount" = MuVariable $ packingReferenceCount $ structPacking desc
     context "structChildren" = MuList []  -- TODO
-    context "structDefault" = MuList [defaultBytesContext context
+    context "structDefault" = MuList [defaultBytesContext context (StructType desc)
         (encodeMessage (StructType desc) (StructValueDesc []))]
     context s = parent s
 

@@ -32,6 +32,7 @@
 
 #include "macros.h"
 #include "type-safety.h"
+#include "blob.h"
 
 namespace capnproto {
   class SegmentReader;
@@ -124,6 +125,23 @@ public:
   // already allocated, it is allocated as a deep copy of the given default value (a trusted
   // message).  If the default value is null, an empty list is used.
 
+  Text::Builder initTextField(WireReferenceCount refIndex, ByteCount size) const;
+  // Initialize the text field to the given size in bytes (not including NUL terminator) and return
+  // a Text::Builder which can be used to fill in the content.
+
+  void setTextField(WireReferenceCount refIndex, Text::Reader value) const;
+  // Set the text field to a copy of the given text.
+
+  Text::Builder getTextField(WireReferenceCount refIndex,
+                             const void* defaultValue, ByteCount defaultSize) const;
+  // Get the text field.  If it is not initialized, initialize it to a copy of the given default.
+
+  Data::Builder initDataField(WireReferenceCount refIndex, ByteCount size) const;
+  void setDataField(WireReferenceCount refIndex, Data::Reader value) const;
+  Data::Builder getDataField(WireReferenceCount refIndex,
+                             const void* defaultValue, ByteCount defaultSize) const;
+  // Same as *Text*, but for data blobs.
+
   StructReader asReader() const;
   // Gets a StructReader pointing at the same memory.
 
@@ -173,6 +191,14 @@ public:
                           const word* defaultValue) const;
   // Get the list field at the given index in the reference segment, or the default value if not
   // initialized.  The default value is allowed to be null, in which case an empty list is used.
+
+  Text::Reader getTextField(WireReferenceCount refIndex,
+                            const void* defaultValue, ByteCount defaultSize) const;
+  // Gets the text field, or the given default value if not initialized.
+
+  Data::Reader getDataField(WireReferenceCount refIndex,
+                            const void* defaultValue, ByteCount defaultSize) const;
+  // Gets the data field, or the given default value if not initialized.
 
 private:
   SegmentReader* segment;  // Memory segment in which the struct resides.
@@ -244,6 +270,20 @@ public:
   // Get the existing list element at the given index.  Returns an empty list if the element is
   // not initialized.
 
+  Text::Builder initTextElement(WireReferenceCount index, ByteCount size) const;
+  // Initialize the text element to the given size in bytes (not including NUL terminator) and
+  // return a Text::Builder which can be used to fill in the content.
+
+  void setTextElement(WireReferenceCount index, Text::Reader value) const;
+  // Set the text element to a copy of the given text.
+
+  Text::Builder getTextElement(WireReferenceCount index) const;
+  // Get the text element.  If it is not initialized, returns an empty Text::Builder.
+
+  Data::Builder initDataElement(WireReferenceCount index, ByteCount size) const;
+  void setDataElement(WireReferenceCount index, Data::Reader value) const;
+  Data::Builder getDataElement(WireReferenceCount index) const;
+
   ListReader asReader(FieldSize elementSize) const;
   // Get a ListReader pointing at the same memory.  Use this version only for non-struct lists.
 
@@ -282,6 +322,12 @@ public:
 
   ListReader getListElement(WireReferenceCount index, FieldSize expectedElementSize) const;
   // Get the list element at the given index.
+
+  Text::Reader getTextElement(WireReferenceCount index) const;
+  // Get the text element.  If it is not initialized, returns an empty Text::Reader.
+
+  Data::Reader getDataElement(WireReferenceCount index) const;
+  // Get the data element.  If it is not initialized, returns an empty Data::Reader.
 
 private:
   SegmentReader* segment;  // Memory segment in which the list resides.
