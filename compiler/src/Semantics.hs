@@ -122,7 +122,7 @@ data ValueDesc = VoidDesc
                | ListDesc [ValueDesc]
                deriving (Show)
 
-valueString VoidDesc = error "Can't stringify void value."
+valueString VoidDesc = "void"
 valueString (BoolDesc    b) = if b then "true" else "false"
 valueString (Int8Desc    i) = show i
 valueString (Int16Desc   i) = show i
@@ -155,6 +155,8 @@ data PackingState = PackingState
     , packingDataSize :: Integer
     , packingReferenceCount :: Integer
     }
+
+packingSize PackingState { packingDataSize = ds, packingReferenceCount = rc } = ds + rc
 
 -- Represents the current packing state of a union.  The parameters are:
 -- - The offset of a 64-bit word in the data segment allocated to the union.
@@ -416,7 +418,7 @@ descToCode indent (DescField desc) = printf "%s%s@%d%s: %s%s;  # %s\n" indent
         SizeReference -> printf "ref[%d]" $ fieldOffset desc
         SizeInlineComposite _ _ -> "??"
         s -> let
-            bits = (sizeInBits s)
+            bits = sizeInBits s
             offset = fieldOffset desc
             in printf "bits[%d, %d)" (offset * bits) ((offset + 1) * bits))
 --    (maybeBlockCode indent $ fieldStatements desc)

@@ -34,6 +34,14 @@ namespace capnproto {
 
 typedef unsigned int uint;
 
+enum class Void {
+  // Type used for Void fields.  There is only one value.  Using C++'s "void" type creates a bunch
+  // of issues since it behaves differently from other types.
+  VOID
+};
+template <typename T>
+inline T& operator<<(T& os, Void) { return os << "void"; }
+
 template <typename T>
 struct NoInfer {
   // Use NoInfer<T>::Type in place of T for a template function parameter to prevent inference of

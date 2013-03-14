@@ -26,6 +26,7 @@
 
 #include "wire-format.h"
 #include "descriptor.h"     // only for FieldSize; TODO:  Eliminate this
+#include <initializer_list>
 
 namespace capnproto {
 
@@ -40,7 +41,7 @@ namespace internal {
 
 template <typename T> struct IsPrimitive { static constexpr bool value = false; };
 
-template <> struct IsPrimitive<void>     { static constexpr bool value = true; };
+template <> struct IsPrimitive<Void>     { static constexpr bool value = true; };
 template <> struct IsPrimitive<bool>     { static constexpr bool value = true; };
 template <> struct IsPrimitive<int8_t>   { static constexpr bool value = true; };
 template <> struct IsPrimitive<int16_t>  { static constexpr bool value = true; };
@@ -58,7 +59,7 @@ template <typename T, bool b> struct IsPrimitive<List<T, b>> {
 
 template <typename T> struct FieldSizeForType { static constexpr FieldSize value = FieldSize::INLINE_COMPOSITE; };
 
-template <> struct FieldSizeForType<void>     { static constexpr FieldSize value = FieldSize::VOID; };
+template <> struct FieldSizeForType<Void>     { static constexpr FieldSize value = FieldSize::VOID; };
 template <> struct FieldSizeForType<bool>     { static constexpr FieldSize value = FieldSize::BIT; };
 template <> struct FieldSizeForType<int8_t>   { static constexpr FieldSize value = FieldSize::BYTE; };
 template <> struct FieldSizeForType<int16_t>  { static constexpr FieldSize value = FieldSize::TWO_BYTES; };
@@ -182,6 +183,23 @@ struct List<T, true> {
     inline iterator begin() { return iterator(this, 0); }
     inline iterator end() { return iterator(this, size()); }
 
+    template <typename Other>
+    void copyFrom(const Other& other) {
+      auto i = other.begin();
+      auto end = other.end();
+      uint pos = 0;
+      for (; i != end && pos < size(); ++i) {
+        set(pos, *i);
+      }
+      CAPNPROTO_DEBUG_ASSERT(pos == size() && i == end, "copyFrom() argument had different size.");
+    }
+    void copyFrom(std::initializer_list<T> other) {
+      CAPNPROTO_DEBUG_ASSERT(other.size() == size(), "copyFrom() argument had different size.");
+      for (uint i = 0; i < other.size(); i++) {
+        set(i, other.begin()[i]);
+      }
+    }
+
   private:
     internal::ListBuilder builder;
   };
@@ -222,6 +240,11 @@ struct List<T, false> {
     typedef internal::IndexingIterator<Builder, typename T::Builder> iterator;
     inline iterator begin() { return iterator(this, 0); }
     inline iterator end() { return iterator(this, size()); }
+
+    template <typename Other>
+    void copyFrom(const Other& other);
+    void copyFrom(std::initializer_list<typename T::Reader> other);
+    // TODO
 
   private:
     internal::ListBuilder builder;
@@ -267,6 +290,11 @@ struct List<List<T>, true> {
     inline iterator begin() { return iterator(this, 0); }
     inline iterator end() { return iterator(this, size()); }
 
+    template <typename Other>
+    void copyFrom(const Other& other);
+    void copyFrom(std::initializer_list<typename List<T>::Reader> other);
+    // TODO
+
   private:
     internal::ListBuilder builder;
   };
@@ -311,6 +339,11 @@ struct List<List<T>, false> {
     inline iterator begin() { return iterator(this, 0); }
     inline iterator end() { return iterator(this, size()); }
 
+    template <typename Other>
+    void copyFrom(const Other& other);
+    void copyFrom(std::initializer_list<typename List<T>::Reader> other);
+    // TODO
+
   private:
     internal::ListBuilder builder;
   };
@@ -345,6 +378,9 @@ struct List<Data, false> {
     inline Data::Builder operator[](uint index) {
       return builder.getDataElement(index * REFERENCES);
     }
+    inline void set(uint index, Data::Reader value) {
+      builder.setDataElement(index * REFERENCES, value);
+    }
     inline Data::Builder init(uint index, uint size) {
       return builder.initDataElement(index * REFERENCES, size * BYTES);
     }
@@ -352,6 +388,23 @@ struct List<Data, false> {
     typedef internal::IndexingIterator<Builder, Data::Builder> iterator;
     inline iterator begin() { return iterator(this, 0); }
     inline iterator end() { return iterator(this, size()); }
+
+    template <typename Other>
+    void copyFrom(const Other& other) {
+      auto i = other.begin();
+      auto end = other.end();
+      uint pos = 0;
+      for (; i != end && pos < size(); ++i) {
+        set(pos, *i);
+      }
+      CAPNPROTO_DEBUG_ASSERT(pos == size() && i == end, "copyFrom() argument had different size.");
+    }
+    void copyFrom(std::initializer_list<Data::Reader> other) {
+      CAPNPROTO_DEBUG_ASSERT(other.size() == size(), "copyFrom() argument had different size.");
+      for (uint i = 0; i < other.size(); i++) {
+        set(i, other.begin()[i]);
+      }
+    }
 
   private:
     internal::ListBuilder builder;
@@ -387,6 +440,9 @@ struct List<Text, false> {
     inline Text::Builder operator[](uint index) {
       return builder.getTextElement(index * REFERENCES);
     }
+    inline void set(uint index, Text::Reader value) {
+      builder.setTextElement(index * REFERENCES, value);
+    }
     inline Text::Builder init(uint index, uint size) {
       return builder.initTextElement(index * REFERENCES, size * BYTES);
     }
@@ -394,6 +450,23 @@ struct List<Text, false> {
     typedef internal::IndexingIterator<Builder, Text::Builder> iterator;
     inline iterator begin() { return iterator(this, 0); }
     inline iterator end() { return iterator(this, size()); }
+
+    template <typename Other>
+    void copyFrom(const Other& other) {
+      auto i = other.begin();
+      auto end = other.end();
+      uint pos = 0;
+      for (; i != end && pos < size(); ++i) {
+        set(pos, *i);
+      }
+      CAPNPROTO_DEBUG_ASSERT(pos == size() && i == end, "copyFrom() argument had different size.");
+    }
+    void copyFrom(std::initializer_list<Text::Reader> other) {
+      CAPNPROTO_DEBUG_ASSERT(other.size() == size(), "copyFrom() argument had different size.");
+      for (uint i = 0; i < other.size(); i++) {
+        set(i, other.begin()[i]);
+      }
+    }
 
   private:
     internal::ListBuilder builder;

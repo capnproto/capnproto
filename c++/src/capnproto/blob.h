@@ -98,7 +98,11 @@ class Text::Reader: public Data::Reader {
   // Like Data::Reader, but points at NUL-terminated UTF-8 text.  The NUL terminator is not counted
   // in the size but must be present immediately after the last byte.
   //
-  // TextReader can be implicitly converted to and from const char*.  Additionally, it can be
+  // Text::Reader's interface contract is that its data MUST be NUL-terminated.  The producer of
+  // the Text::Reader must guarantee this, so that the consumer need not check.  The data SHOULD
+  // also be valid UTF-8, but this is NOT guaranteed -- the consumer must verify if it cares.
+  //
+  // Text::Reader can be implicitly converted to and from const char*.  Additionally, it can be
   // implicitly converted to any type that can be constructed from a (const char*, size) pair, as
   // well as from any type which has c_str() and size() methods.  Many types follow this pattern,
   // such as std::string.
@@ -196,6 +200,20 @@ public:
 private:
   static char nulstr[1];
 };
+
+inline bool operator==(const char* a, Data::Reader  b) { return Data::Reader(a) == b; }
+inline bool operator==(const char* a, Data::Builder b) { return Data::Reader(a) == (Data::Reader)b; }
+inline bool operator==(Data::Reader a, Data::Builder b) { return a == (Data::Reader)b; }
+inline bool operator==(Data::Builder a, Data::Reader b) { return (Data::Reader)a == b; }
+
+template <typename T>
+T& operator<<(T& os, Data::Reader value) { return os.write(value.data(), value.size()); }
+template <typename T>
+T& operator<<(T& os, Data::Builder value) { return os.write(value.data(), value.size()); }
+template <typename T>
+T& operator<<(T& os, Text::Reader value) { return os.write(value.data(), value.size()); }
+template <typename T>
+T& operator<<(T& os, Text::Builder value) { return os.write(value.data(), value.size()); }
 
 }  // namespace capnproto
 

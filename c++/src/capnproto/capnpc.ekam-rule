@@ -44,9 +44,9 @@ echo findProvider file:capnproto-compiler
 read CAPNPC
 
 if test "$CAPNPC" = ""; then
-  echo "error:  couldn't find capnproto-compiler." >&2
-  exit 1
+  CAPNPC=capnpc
 fi
 
+# When exception stack traces are needed, add: +RTS -xc -RTS
 LD_PRELOAD=$INTERCEPTOR DYLD_FORCE_FLAT_NAMESPACE= DYLD_INSERT_LIBRARIES=$INTERCEPTOR \
 $CAPNPC "$INPUT" 3>&1 4<&0 >&2

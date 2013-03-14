@@ -32,7 +32,8 @@ import Token
 import Data.Char (isUpper, isLower)
 
 keywords =
-    [ (TrueKeyword, "true")
+    [ (VoidKeyword, "void")
+    , (TrueKeyword, "true")
     , (FalseKeyword, "false")
     , (InKeyword, "in")
     , (OfKeyword, "of")
@@ -105,11 +106,16 @@ identifier = do
              \names into the target language's preferred style."
     return (if isTypeName text then TypeIdentifier text else Identifier text)
 
+tokenSequence = do
+    tokens <- many1 locatedToken
+    endPos <- getPosition
+    return (TokenSequence tokens endPos)
+
 token :: Parser Token
 token = keyword
     <|> identifier
-    <|> liftM ParenthesizedList  (parens (sepBy (many locatedToken) (symbol ",")))
-    <|> liftM BracketedList      (brackets (sepBy (many locatedToken) (symbol ",")))
+    <|> liftM ParenthesizedList  (parens (sepBy tokenSequence (symbol ",")))
+    <|> liftM BracketedList      (brackets (sepBy tokenSequence (symbol ",")))
     <|> liftM toLiteral          naturalOrFloat
     <|> liftM LiteralString      stringLiteral
     <|> liftM (const AtSign)     (symbol "@")
@@ -126,13 +132,13 @@ statementEnd :: Parser (Maybe [Located Statement])
 statementEnd = (symbol ";" >>= \_ -> return Nothing)
            <|> (braces (many locatedStatement) >>= \statements -> return (Just statements))
 
-compileStatement :: [Located Token] -> Maybe [Located Statement] -> Statement
+compileStatement :: TokenSequence -> Maybe [Located Statement] -> Statement
 compileStatement tokens Nothing = Line tokens
 compileStatement tokens (Just statements) = Block tokens statements
 
 statement :: Parser Statement
 statement = do
-    tokens <- many locatedToken
+    tokens <- tokenSequence
     end <- statementEnd
     return (compileStatement tokens end)
 

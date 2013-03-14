@@ -293,8 +293,7 @@ struct WireHelpers {
     const WireReference* srcRefs = reinterpret_cast<const WireReference*>(src + dataSize);
     WireReference* dstRefs = reinterpret_cast<WireReference*>(dst + dataSize);
 
-    uint n = referenceCount / REFERENCES;
-    for (uint i = 0; i < n; i++) {
+    for (uint i = 0; i < referenceCount / REFERENCES; i++) {
       SegmentBuilder* subSegment = segment;
       WireReference* dstRef = dstRefs + i;
       copyMessage(subSegment, dstRef, srcRefs + i);
@@ -313,11 +312,11 @@ struct WireHelpers {
           const word* srcPtr = src->target();
           word* dstPtr = allocate(dst, segment, src->structRef.wordSize(), WireReference::STRUCT);
 
-          copyStruct(segment, dstPtr, srcPtr, dst->structRef.dataSize.get(),
-                     dst->structRef.refCount.get());
+          copyStruct(segment, dstPtr, srcPtr, src->structRef.dataSize.get(),
+                     src->structRef.refCount.get());
 
-          dst->structRef.set(dst->structRef.fieldCount.get(), dst->structRef.dataSize.get(),
-                             dst->structRef.refCount.get());
+          dst->structRef.set(src->structRef.fieldCount.get(), src->structRef.dataSize.get(),
+                             src->structRef.refCount.get());
           return dstPtr;
         }
       }
@@ -418,7 +417,7 @@ struct WireHelpers {
         reinterpret_cast<WireReference*>(ptr + defaultRef->structRef.dataSize.get()));
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(StructBuilder getStructReference(
+  static CAPNPROTO_ALWAYS_INLINE(StructBuilder getWritableStructReference(
       WireReference* ref, SegmentBuilder* segment, const word* defaultValue)) {
     const WireReference* defaultRef = reinterpret_cast<const WireReference*>(defaultValue);
     word* ptr;
@@ -631,7 +630,7 @@ struct WireHelpers {
       ptr = followFars(ref, segment);
       if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
         segment->getMessage()->reportInvalidData(
-            "Message contains out-of-bounds far reference.");
+            "Message contains invalid far reference.");
         goto useDefault;
       }
 
@@ -681,7 +680,7 @@ struct WireHelpers {
       ptr = followFars(ref, segment);
       if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
         segment->getMessage()->reportInvalidData(
-            "Message contains out-of-bounds far reference.");
+            "Message contains invalid far reference.");
         goto useDefault;
       }
 
@@ -861,7 +860,7 @@ struct WireHelpers {
 
       if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
         segment->getMessage()->reportInvalidData(
-            "Message contains out-of-bounds far reference.");
+            "Message contains invalid far reference.");
         goto useDefault;
       }
 
@@ -913,7 +912,7 @@ struct WireHelpers {
 
       if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
         segment->getMessage()->reportInvalidData(
-            "Message contains out-of-bounds far reference.");
+            "Message contains invalid far reference.");
         goto useDefault;
       }
 
@@ -923,7 +922,7 @@ struct WireHelpers {
         goto useDefault;
       }
 
-      if (CAPNPROTO_EXPECT_FALSE(ref->listRef.elementSize() == FieldSize::BYTE)) {
+      if (CAPNPROTO_EXPECT_FALSE(ref->listRef.elementSize() != FieldSize::BYTE)) {
         segment->getMessage()->reportInvalidData(
             "Message contains list reference of non-bytes where data was expected.");
         goto useDefault;
@@ -956,7 +955,7 @@ StructBuilder StructBuilder::initStructField(
 
 StructBuilder StructBuilder::getStructField(
     WireReferenceCount refIndex, const word* defaultValue) const {
-  return WireHelpers::getStructReference(references + refIndex, segment, defaultValue);
+  return WireHelpers::getWritableStructReference(references + refIndex, segment, defaultValue);
 }
 
 ListBuilder StructBuilder::initListField(

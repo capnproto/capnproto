@@ -100,7 +100,7 @@ encodeReferences o size = loop 0 (o + size) where
                 (dataBytes, refBytes, childBytes) = encodeStruct desc assignments 0
                 in (encodeStructReference desc offset, concat [dataBytes, refBytes, childBytes])
             (ListType elementType, ListDesc items) ->
-                (encodeListReference (fieldSize elementType) (genericLength items) offset,
+                (encodeListReference (elementSize elementType) (genericLength items) offset,
                  encodeList elementType items)
             (BuiltinType BuiltinText, TextDesc text) -> let
                 encoded = (UTF8.encode text ++ [0])
@@ -117,6 +117,20 @@ encodeReferences o size = loop 0 (o + size) where
         (refs, objects) = loop pos (offset - padCount) rest
         in (genericReplicate (padCount * 8) 0 ++ refs, objects)
     loop idx _ [] = (genericReplicate ((size - idx) * 8) 0, [])
+
+encodeStructList :: Integer -> StructDesc -> [[(FieldDesc, ValueDesc)]] -> ([Word8], [Word8])
+encodeStructList o desc elements = loop (o + eSize * genericLength elements) elements where
+    eSize = packingSize $ structPacking desc
+    loop _ [] = ([], [])
+    loop offset (element:rest) = let
+        offsetFromElementEnd = offset - eSize
+        (dataBytes, refBytes, childBytes) = encodeStruct desc element offsetFromElementEnd
+        childLen = genericLength childBytes
+        childWordLen = if mod childLen 8 == 0
+            then div childLen 8
+            else error "Child not word-aligned."
+        (restBytes, restChildren) = loop (offsetFromElementEnd + childWordLen) rest
+        in (dataBytes ++ refBytes ++ restBytes, childBytes ++ restChildren)
 
 encodeStructReference desc offset =
     bytes (offset * 4 + structTag) 4 ++
@@ -205,21 +219,17 @@ encodeStruct desc assignments childOffset = (dataBytes, referenceBytes, children
         (packingReferenceCount $ structPacking desc) sortedReferences
 
 encodeList elementType elements = case elementSize elementType of
-    SizeInlineComposite ds rc -> case elementType of
+    SizeInlineComposite _ _ -> case elementType of
         StructType desc -> let
             count = genericLength elements
             tag = encodeStructReference desc count
-            elemWords = ds + rc
-            (elemBytes, childBytes) = unzip
-                [ (d ++ r, c)
-                | (i, StructValueDesc assignments) <- zip [1..] elements
-                , let (d, r, c) = encodeStruct desc assignments ((count - i) * elemWords)]
-            in concat $ concat [[tag], elemBytes, childBytes]
+            (elemBytes, childBytes) = encodeStructList 0 desc [v | StructValueDesc v <- elements]
+            in concat [tag, elemBytes, childBytes]
         _ -> error "Only structs can be inline composites."
     SizeReference -> refBytes ++ childBytes where
         (refBytes, childBytes) = encodeReferences 0 (genericLength elements)
                                $ zipWith (\i v -> (i, elementType, v)) [0..] elements
-    size -> encodeData (roundUpToMultiple (genericLength elements * sizeInBits size) 64)
+    size -> encodeData (roundUpToMultiple 64 (genericLength elements * sizeInBits size))
           $ zipWith (\i v -> (i * sizeInBits size, elementType, v)) [0..] elements
 
 encodeMessage (StructType desc) (StructValueDesc assignments) = let

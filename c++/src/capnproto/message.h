@@ -25,6 +25,8 @@
 #include <memory>
 #include "macros.h"
 #include "type-safety.h"
+#include "wire-format.h"
+#include "list.h"
 
 #ifndef CAPNPROTO_MESSAGE_H_
 #define CAPNPROTO_MESSAGE_H_
@@ -95,8 +97,23 @@ public:
   // TODO:  Methods to deal with bundled capabilities.
 };
 
-std::unique_ptr<MessageBuilder> newMallocMessage(WordCount preferredSegmentSize);
+std::unique_ptr<MessageBuilder> newMallocMessage(WordCount preferredSegmentSize = 512 * WORDS);
 // Returns a simple MessageBuilder implementation that uses standard allocation.
+
+template <typename T>
+struct MessageRoot {
+  std::unique_ptr<MessageBuilder> message;
+  typename T::Builder builder;
+
+  MessageRoot() = default;
+  MessageRoot(std::unique_ptr<MessageBuilder> message, typename T::Builder builder)
+      : message(move(message)), builder(builder) {}
+};
+
+template <typename T>
+MessageRoot<T> newMallocMessageRoot(WordCount preferredSegmentSize = 512 * WORDS);
+// Starts a new message with the given root type backed by a MallocMessage.
+// T must be a Cap'n Proto struct type.
 
 class ReadLimiter {
   // Used to keep track of how much data has been processed from a message, and cut off further
@@ -242,6 +259,18 @@ inline MessageBuilder* SegmentBuilder::getMessage() {
 
 inline WordCount SegmentBuilder::available() {
   return intervalLength(pos, end);
+}
+
+// -------------------------------------------------------------------
+
+template <typename T>
+MessageRoot<T> newMallocMessageRoot(WordCount preferredSegmentSize) {
+  std::unique_ptr<MessageBuilder> message = newMallocMessage(preferredSegmentSize);
+  SegmentBuilder* segment = message->getSegmentWithAvailable(1 * WORDS);
+  word* rootLocation = segment->allocate(1 * WORDS);
+  return MessageRoot<T>(move(message),
+      typename T::Builder(internal::StructBuilder::initRoot(
+          segment, rootLocation, T::DEFAULT.words)));
 }
 
 }  // namespace capnproto

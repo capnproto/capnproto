@@ -68,6 +68,9 @@ isList _ = False
 isNonStructList (ListType t) = not $ isStruct t
 isNonStructList _ = False
 
+isPrimitiveList (ListType t) = isPrimitive t
+isPrimitiveList _ = False
+
 isStructList (ListType t) = isStruct t
 isStructList _ = False
 
@@ -75,7 +78,7 @@ blobTypeString (BuiltinType BuiltinText) = "Text"
 blobTypeString (BuiltinType BuiltinData) = "Data"
 blobTypeString _ = error "Not a blob."
 
-cxxTypeString (BuiltinType BuiltinVoid) = "void"
+cxxTypeString (BuiltinType BuiltinVoid) = " ::capnproto::Void"
 cxxTypeString (BuiltinType BuiltinBool) = "bool"
 cxxTypeString (BuiltinType BuiltinInt8) = " ::int8_t"
 cxxTypeString (BuiltinType BuiltinInt16) = " ::int16_t"
@@ -103,7 +106,7 @@ cxxFieldSizeString Size64 = "EIGHT_BYTES";
 cxxFieldSizeString SizeReference = "REFERENCE";
 cxxFieldSizeString (SizeInlineComposite _ _) = "INLINE_COMPOSITE";
 
-cxxValueString VoidDesc = error "Can't stringify void value."
+cxxValueString VoidDesc = " ::capnproto::Void::VOID"
 cxxValueString (BoolDesc    b) = if b then "true" else "false"
 cxxValueString (Int8Desc    i) = show i
 cxxValueString (Int16Desc   i) = show i
@@ -129,7 +132,7 @@ defaultValueBytes t v@(StructValueDesc _) = Just $ encodeMessage t v
 defaultValueBytes t v@(ListDesc _) = Just $ encodeMessage t v
 defaultValueBytes _ _ = Nothing
 
-cxxDefaultDefault (BuiltinType BuiltinVoid) = error "Can't stringify void value."
+cxxDefaultDefault (BuiltinType BuiltinVoid) = " ::capnproto::Void::VOID"
 cxxDefaultDefault (BuiltinType BuiltinBool) = "false"
 cxxDefaultDefault (BuiltinType BuiltinInt8) = "0"
 cxxDefaultDefault (BuiltinType BuiltinInt16) = "0"
@@ -175,6 +178,7 @@ fieldContext parent desc = mkStrContext context where
     context "fieldIsStruct" = MuBool $ isStruct $ fieldType desc
     context "fieldIsList" = MuBool $ isList $ fieldType desc
     context "fieldIsNonStructList" = MuBool $ isNonStructList $ fieldType desc
+    context "fieldIsPrimitiveList" = MuBool $ isPrimitiveList $ fieldType desc
     context "fieldIsStructList" = MuBool $ isStructList $ fieldType desc
     context "fieldDefaultBytes" =
         case fieldDefaultValue desc >>= defaultValueBytes (fieldType desc) of

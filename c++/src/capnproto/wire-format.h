@@ -387,6 +387,11 @@ inline bool StructBuilder::getDataField<bool>(ElementCount offset) const {
   return (*reinterpret_cast<uint8_t*>(b) & (1 << (boffset % BITS_PER_BYTE / BITS))) != 0;
 }
 
+template <>
+inline Void StructBuilder::getDataField<Void>(ElementCount offset) const {
+  return Void::VOID;
+}
+
 template <typename T>
 inline void StructBuilder::setDataField(
     ElementCount offset, typename NoInfer<T>::Type value) const {
@@ -401,6 +406,9 @@ inline void StructBuilder::setDataField<bool>(ElementCount offset, bool value) c
   *reinterpret_cast<uint8_t*>(b) = (*reinterpret_cast<uint8_t*>(b) & ~(1 << bitnum))
                                  | (static_cast<uint8_t>(value) << bitnum);
 }
+
+template <>
+inline void StructBuilder::setDataField<Void>(ElementCount offset, Void value) const {}
 
 // -------------------------------------------------------------------
 
@@ -426,6 +434,11 @@ inline bool StructReader::getDataField<bool>(ElementCount offset, bool defaultVa
   } else {
     return defaultValue;
   }
+}
+
+template <>
+inline Void StructReader::getDataField<Void>(ElementCount offset, Void defaultValue) const {
+  return Void::VOID;
 }
 
 template <typename T>
@@ -457,6 +470,12 @@ inline bool StructReader::getDataFieldCheckingNumber<bool>(
   }
 }
 
+template <>
+inline Void StructReader::getDataFieldCheckingNumber<Void>(
+    FieldNumber fieldNumber, ElementCount offset, Void defaultValue) const {
+  return Void::VOID;
+}
+
 // -------------------------------------------------------------------
 
 inline ElementCount ListBuilder::size() { return elementCount; }
@@ -473,6 +492,11 @@ inline bool ListBuilder::getDataElement<bool>(ElementCount index) const {
   return (*reinterpret_cast<uint8_t*>(b) & (1 << (bindex % BITS_PER_BYTE / BITS))) != 0;
 }
 
+template <>
+inline Void ListBuilder::getDataElement<Void>(ElementCount index) const {
+  return Void::VOID;
+}
+
 template <typename T>
 inline void ListBuilder::setDataElement(ElementCount index, typename NoInfer<T>::Type value) const {
   reinterpret_cast<WireValue<T>*>(ptr)[index / ELEMENTS].set(value);
@@ -486,6 +510,9 @@ inline void ListBuilder::setDataElement<bool>(ElementCount index, bool value) co
   *reinterpret_cast<uint8_t*>(b) = (*reinterpret_cast<uint8_t*>(b) & ~(1 << bitnum))
                                  | (static_cast<uint8_t>(value) << bitnum);
 }
+
+template <>
+inline void ListBuilder::setDataElement<Void>(ElementCount index, Void value) const {}
 
 // -------------------------------------------------------------------
 
@@ -502,6 +529,11 @@ inline bool ListReader::getDataElement<bool>(ElementCount index) const {
   BitCount bindex = index * stepBits;
   const byte* b = reinterpret_cast<const byte*>(ptr) + bindex / BITS_PER_BYTE;
   return (*reinterpret_cast<const uint8_t*>(b) & (1 << (bindex % BITS_PER_BYTE / BITS))) != 0;
+}
+
+template <>
+inline Void ListReader::getDataElement<Void>(ElementCount index) const {
+  return Void::VOID;
 }
 
 }  // namespace internal

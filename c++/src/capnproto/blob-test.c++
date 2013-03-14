@@ -42,7 +42,7 @@ TEST(Blob, Text) {
   std::string str = "foo";
   Text::Reader text = str;
 
-  EXPECT_STREQ("foo", text);
+  EXPECT_EQ("foo", text);
   EXPECT_STREQ("foo", text.c_str());
   EXPECT_STREQ("foo", text.data());
   EXPECT_EQ(3u, text.size());
@@ -51,14 +51,14 @@ TEST(Blob, Text) {
   EXPECT_EQ("foo", str2);
 
   Text::Reader text2 = "bar";
-  EXPECT_STREQ("bar", text2);
+  EXPECT_EQ("bar", text2);
 
   char c[4] = "baz";
   Text::Reader text3(c);
-  EXPECT_STREQ("baz", text3);
+  EXPECT_EQ("baz", text3);
 
   Text::Builder builder(c, 3);
-  EXPECT_STREQ("baz", builder);
+  EXPECT_EQ("baz", builder);
 
   EXPECT_EQ(Data::Reader("az"), builder.slice(1, 3));
 }
@@ -67,6 +67,7 @@ TEST(Blob, Data) {
   std::string str = "foo";
   Data::Reader data = str;
 
+  EXPECT_EQ("foo", data);
   EXPECT_EQ(3u, data.size());
 
   std::string str2 = data;

@@ -24,208 +24,259 @@
 #include "test.capnp.h"
 #include "message.h"
 #include <gtest/gtest.h>
+#include <initializer_list>
 
 namespace capnproto {
 namespace internal {
 namespace {
 
-TEST(Encoding, Simple) {
+template <typename Builder>
+void initMessage(Builder builder) {
+  builder.setVoidField(Void::VOID);
+  builder.setBoolField(true);
+  builder.setInt8Field(-123);
+  builder.setInt16Field(-12345);
+  builder.setInt32Field(-12345678);
+  builder.setInt64Field(-123456789012345ll);
+  builder.setUInt8Field(234u);
+  builder.setUInt16Field(45678u);
+  builder.setUInt32Field(3456789012u);
+  builder.setUInt64Field(12345678901234567890ull);
+  builder.setFloat32Field(1234.5);
+  builder.setFloat64Field(-123e45);
+  builder.setTextField("foo");
+  builder.setDataField("bar");
+  {
+    auto subBuilder = builder.initStructField();
+    subBuilder.setVoidField(Void::VOID);
+    subBuilder.setBoolField(true);
+    subBuilder.setInt8Field(-12);
+    subBuilder.setInt16Field(3456);
+    subBuilder.setInt32Field(-78901234);
+    subBuilder.setInt64Field(56789012345678ll);
+    subBuilder.setUInt8Field(90u);
+    subBuilder.setUInt16Field(1234u);
+    subBuilder.setUInt32Field(56789012u);
+    subBuilder.setUInt64Field(345678901234567890ull);
+    subBuilder.setFloat32Field(-1.25e-10);
+    subBuilder.setFloat64Field(345);
+    subBuilder.setTextField("baz");
+    subBuilder.setDataField("qux");
+    {
+      auto subSubBuilder = subBuilder.initStructField();
+      subSubBuilder.setTextField("nested");
+      subSubBuilder.initStructField().setTextField("really nested");
+    }
+
+    subBuilder.setVoidList({Void::VOID, Void::VOID, Void::VOID});
+    subBuilder.setBoolList({false, true, false, true, true});
+    subBuilder.setInt8List({12, -34, -0x80, 0x7f});
+    subBuilder.setInt16List({1234, -5678, -0x8000, 0x7fff});
+    subBuilder.setInt32List({12345678, -90123456, -0x8000000, 0x7ffffff});
+    // gcc warns on -0x800...ll and the only work-around I could find was to do -0x7ff...ll-1.
+    subBuilder.setInt64List({123456789012345ll, -678901234567890ll, -0x7fffffffffffffffll-1, 0x7fffffffffffffffll});
+    subBuilder.setUInt8List({12u, 34u, 0u, 0xffu});
+    subBuilder.setUInt16List({1234u, 5678u, 0u, 0xffffu});
+    subBuilder.setUInt32List({12345678u, 90123456u, 0u, 0xffffffffu});
+    subBuilder.setUInt64List({123456789012345ull, 678901234567890ull, 0ull, 0xffffffffffffffffull});
+    subBuilder.setFloat32List({0, 1234567, 1e37, -1e37, 1e-37, -1e-37});
+    subBuilder.setFloat64List({0, 123456789012345, 1e306, -1e306, 1e-306, -1e-306});
+    subBuilder.setTextList({"quux", "corge", "grault"});
+    subBuilder.setDataList({"garply", "waldo", "fred"});
+
+    {
+      auto listBuilder = subBuilder.initStructList(3);
+      listBuilder[0].setTextField("x structlist 1");
+      listBuilder[1].setTextField("x structlist 2");
+      listBuilder[2].setTextField("x structlist 3");
+    }
+  }
+
+  builder.initVoidList(6);
+  builder.setBoolList({true, false, false, true});
+  builder.setInt8List({111, -111});
+  builder.setInt16List({11111, -11111});
+  builder.setInt32List({111111111, -111111111});
+  builder.setInt64List({1111111111111111111ll, -1111111111111111111ll});
+  builder.setUInt8List({111u, 222u});
+  builder.setUInt16List({33333u, 44444u});
+  builder.setUInt32List({3333333333u});
+  builder.setUInt64List({11111111111111111111ull});
+  builder.setFloat32List({5555.5, 2222.25});
+  builder.setFloat64List({7777.75, 1111.125});
+  builder.setTextList({"plugh", "xyzzy", "thud"});
+  builder.setDataList({"oops", "exhausted", "rfc3092"});
+
+  {
+    auto listBuilder = builder.initStructList(3);
+    listBuilder[0].setTextField("structlist 1");
+    listBuilder[1].setTextField("structlist 2");
+    listBuilder[2].setTextField("structlist 3");
+  }
+}
+
+template <typename T, typename U>
+void checkList(T reader, std::initializer_list<U> expected) {
+  ASSERT_EQ(expected.size(), reader.size());
+  for (uint i = 0; i < expected.size(); i++) {
+    EXPECT_EQ(expected.begin()[i], reader[i]);
+  }
+}
+
+template <typename T>
+void checkList(T reader, std::initializer_list<float> expected) {
+  ASSERT_EQ(expected.size(), reader.size());
+  for (uint i = 0; i < expected.size(); i++) {
+    EXPECT_FLOAT_EQ(expected.begin()[i], reader[i]);
+  }
+}
+
+template <typename T>
+void checkList(T reader, std::initializer_list<double> expected) {
+  ASSERT_EQ(expected.size(), reader.size());
+  for (uint i = 0; i < expected.size(); i++) {
+    EXPECT_DOUBLE_EQ(expected.begin()[i], reader[i]);
+  }
+}
+
+template <typename Reader>
+void checkMessage(Reader reader) {
+  EXPECT_EQ(Void::VOID, reader.getVoidField());
+  EXPECT_EQ(true, reader.getBoolField());
+  EXPECT_EQ(-123, reader.getInt8Field());
+  EXPECT_EQ(-12345, reader.getInt16Field());
+  EXPECT_EQ(-12345678, reader.getInt32Field());
+  EXPECT_EQ(-123456789012345ll, reader.getInt64Field());
+  EXPECT_EQ(234u, reader.getUInt8Field());
+  EXPECT_EQ(45678u, reader.getUInt16Field());
+  EXPECT_EQ(3456789012u, reader.getUInt32Field());
+  EXPECT_EQ(12345678901234567890ull, reader.getUInt64Field());
+  EXPECT_FLOAT_EQ(1234.5f, reader.getFloat32Field());
+  EXPECT_DOUBLE_EQ(-123e45, reader.getFloat64Field());
+  EXPECT_EQ("foo", reader.getTextField());
+  EXPECT_EQ("bar", reader.getDataField());
+  {
+    auto subReader = reader.getStructField();
+    EXPECT_EQ(Void::VOID, subReader.getVoidField());
+    EXPECT_EQ(true, subReader.getBoolField());
+    EXPECT_EQ(-12, subReader.getInt8Field());
+    EXPECT_EQ(3456, subReader.getInt16Field());
+    EXPECT_EQ(-78901234, subReader.getInt32Field());
+    EXPECT_EQ(56789012345678ll, subReader.getInt64Field());
+    EXPECT_EQ(90u, subReader.getUInt8Field());
+    EXPECT_EQ(1234u, subReader.getUInt16Field());
+    EXPECT_EQ(56789012u, subReader.getUInt32Field());
+    EXPECT_EQ(345678901234567890ull, subReader.getUInt64Field());
+    EXPECT_FLOAT_EQ(-1.25e-10f, subReader.getFloat32Field());
+    EXPECT_DOUBLE_EQ(345, subReader.getFloat64Field());
+    EXPECT_EQ("baz", subReader.getTextField());
+    EXPECT_EQ("qux", subReader.getDataField());
+    {
+      auto subSubReader = subReader.getStructField();
+      EXPECT_EQ("nested", subSubReader.getTextField());
+      EXPECT_EQ("really nested", subSubReader.getStructField().getTextField());
+    }
+
+    checkList(subReader.getVoidList(), {Void::VOID, Void::VOID, Void::VOID});
+    checkList(subReader.getBoolList(), {false, true, false, true, true});
+    checkList(subReader.getInt8List(), {12, -34, -0x80, 0x7f});
+    checkList(subReader.getInt16List(), {1234, -5678, -0x8000, 0x7fff});
+    checkList(subReader.getInt32List(), {12345678, -90123456, -0x8000000, 0x7ffffff});
+    // gcc warns on -0x800...ll and the only work-around I could find was to do -0x7ff...ll-1.
+    checkList(subReader.getInt64List(), {123456789012345ll, -678901234567890ll, -0x7fffffffffffffffll-1, 0x7fffffffffffffffll});
+    checkList(subReader.getUInt8List(), {12u, 34u, 0u, 0xffu});
+    checkList(subReader.getUInt16List(), {1234u, 5678u, 0u, 0xffffu});
+    checkList(subReader.getUInt32List(), {12345678u, 90123456u, 0u, 0xffffffffu});
+    checkList(subReader.getUInt64List(), {123456789012345ull, 678901234567890ull, 0ull, 0xffffffffffffffffull});
+    checkList(subReader.getFloat32List(), {0.0f, 1234567.0f, 1e37f, -1e37f, 1e-37f, -1e-37f});
+    checkList(subReader.getFloat64List(), {0.0, 123456789012345.0, 1e306, -1e306, 1e-306, -1e-306});
+    checkList(subReader.getTextList(), {"quux", "corge", "grault"});
+    checkList(subReader.getDataList(), {"garply", "waldo", "fred"});
+
+    {
+      auto listReader = subReader.getStructList();
+      ASSERT_EQ(3u, listReader.size());
+      EXPECT_EQ("x structlist 1", listReader[0].getTextField());
+      EXPECT_EQ("x structlist 2", listReader[1].getTextField());
+      EXPECT_EQ("x structlist 3", listReader[2].getTextField());
+    }
+  }
+
+  EXPECT_EQ(6u, reader.getVoidList().size());
+  checkList(reader.getBoolList(), {true, false, false, true});
+  checkList(reader.getInt8List(), {111, -111});
+  checkList(reader.getInt16List(), {11111, -11111});
+  checkList(reader.getInt32List(), {111111111, -111111111});
+  checkList(reader.getInt64List(), {1111111111111111111ll, -1111111111111111111ll});
+  checkList(reader.getUInt8List(), {111u, 222u});
+  checkList(reader.getUInt16List(), {33333u, 44444u});
+  checkList(reader.getUInt32List(), {3333333333u});
+  checkList(reader.getUInt64List(), {11111111111111111111ull});
+  checkList(reader.getFloat32List(), {5555.5f, 2222.25f});
+  checkList(reader.getFloat64List(), {7777.75, 1111.125});
+  checkList(reader.getTextList(), {"plugh", "xyzzy", "thud"});
+  checkList(reader.getDataList(), {"oops", "exhausted", "rfc3092"});
+
+  {
+    auto listReader = reader.getStructList();
+    ASSERT_EQ(3u, listReader.size());
+    EXPECT_EQ("structlist 1", listReader[0].getTextField());
+    EXPECT_EQ("structlist 2", listReader[1].getTextField());
+    EXPECT_EQ("structlist 3", listReader[2].getTextField());
+  }
+}
+
+TEST(Encoding, AllTypes) {
+  auto root = newMallocMessageRoot<TestAllTypes>();
+
+  initMessage(root.builder);
+  checkMessage(root.builder);
+  checkMessage(root.builder.asReader());
+}
+
+TEST(Encoding, AllTypesMultiSegment) {
+  auto root = newMallocMessageRoot<TestAllTypes>(0 * WORDS);
+
+  initMessage(root.builder);
+  checkMessage(root.builder);
+  checkMessage(root.builder.asReader());
+}
+
+TEST(Encoding, Defaults) {
+  auto root = newMallocMessageRoot<TestDefaults>();
+
+  checkMessage(root.builder.asReader());
+}
+
+TEST(Encoding, DefaultInitialization) {
+  auto root = newMallocMessageRoot<TestDefaults>();
+
+  checkMessage(root.builder);
+  checkMessage(root.builder.asReader());
+}
+
+TEST(Encoding, DefaultInitializationMultiSegment) {
+  auto root = newMallocMessageRoot<TestDefaults>(0 * WORDS);
+
+  checkMessage(root.builder);
+  checkMessage(root.builder.asReader());
+}
+
+TEST(Encoding, DefaultsNotOnWire) {
+  AlignedData<1> emptyMessage = {{4, 0, 0, 0, 0, 0, 0, 0}};
+
   std::unique_ptr<MessageBuilder> message = newMallocMessage(512 * WORDS);
   SegmentBuilder* segment = message->getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
+  memcpy(rootLocation, emptyMessage.words, sizeof(word));
 
-  Foo::Builder builder(StructBuilder::initRoot(segment, rootLocation, Foo::DEFAULT.words));
+  TestDefaults::Reader reader(StructReader::readRoot(
+      emptyMessage.words, TestDefaults::DEFAULT.words, segment, 64));
+  checkMessage(reader);
 
-  EXPECT_EQ(1234, builder.getA());
-  EXPECT_EQ(-1, builder.getB());
-  EXPECT_EQ(200, builder.getC());
-  ASSERT_EQ(0u, builder.getNums().size());
-
-  builder.setA(321);
-  builder.setB(45);
-  builder.setC(67);
-  builder.initD().setX(55.25);
-  builder.setTx("foo");
-
-  {
-    List<int32_t>::Builder listBuilder = builder.initNums(5);
-    ASSERT_EQ(5u, listBuilder.size());
-    listBuilder.set(0, 12);
-    listBuilder.set(1, 34);
-    listBuilder.set(2, 56);
-    listBuilder.set(3, 78);
-    listBuilder.set(4, 90);
-
-    EXPECT_EQ(12, listBuilder[0]);
-    EXPECT_EQ(34, listBuilder[1]);
-    EXPECT_EQ(56, listBuilder[2]);
-    EXPECT_EQ(78, listBuilder[3]);
-    EXPECT_EQ(90, listBuilder[4]);
-
-    {
-      int sum = 0;
-      for (int32_t i: listBuilder) {
-        sum += i;
-      }
-      EXPECT_EQ(12 + 34 + 56 + 78 + 90, sum);
-    }
-  }
-
-  {
-    List<Bar>::Builder structListBuilder = builder.initBars(3);
-    ASSERT_EQ(3u, structListBuilder.size());
-
-    structListBuilder[0].setX(123);
-    structListBuilder[1].setX(456);
-    structListBuilder[2].setX(789);
-
-    EXPECT_EQ(123, structListBuilder[0].getX());
-    EXPECT_EQ(456, structListBuilder[1].getX());
-    EXPECT_EQ(789, structListBuilder[2].getX());
-
-    {
-      double sum = 0;
-      for (auto bar: structListBuilder) {
-        sum += bar.getX();
-      }
-      EXPECT_EQ(123 + 456 + 789, sum);
-    }
-  }
-
-  {
-    List<Bar>::Builder structListBuilder = builder.getBars();
-    ASSERT_EQ(3u, structListBuilder.size());
-
-    EXPECT_EQ(123, structListBuilder[0].getX());
-    EXPECT_EQ(456, structListBuilder[1].getX());
-    EXPECT_EQ(789, structListBuilder[2].getX());
-
-    {
-      double sum = 0;
-      for (auto bar: structListBuilder) {
-        sum += bar.getX();
-      }
-      EXPECT_EQ(123 + 456 + 789, sum);
-    }
-  }
-
-  {
-    List<List<int32_t>>::Builder listListBuilder = builder.initPrimListList(2);
-    ASSERT_EQ(2u, listListBuilder.size());
-
-    List<int32_t>::Builder sublist = listListBuilder.init(0, 2);
-    ASSERT_EQ(2u, sublist.size());
-    sublist.set(0, 1234);
-    sublist.set(1, 5678);
-
-    sublist = listListBuilder.init(1, 4);
-    ASSERT_EQ(4u, sublist.size());
-    sublist.set(0, 21);
-    sublist.set(1, 43);
-    sublist.set(2, 65);
-    sublist.set(3, 87);
-  }
-
-  {
-    List<List<Bar>>::Builder listListBuilder = builder.initStructListList(2);
-    ASSERT_EQ(2u, listListBuilder.size());
-
-    List<Bar>::Builder sublist = listListBuilder.init(0, 2);
-    ASSERT_EQ(2u, sublist.size());
-    sublist[0].setX(1234);
-    sublist[1].setX(5678);
-
-    sublist = listListBuilder.init(1, 4);
-    ASSERT_EQ(4u, sublist.size());
-    sublist[0].setX(21);
-    sublist[1].setX(43);
-    sublist[2].setX(65);
-    sublist[3].setX(87);
-  }
-
-  EXPECT_EQ(321, builder.getA());
-  EXPECT_EQ(45, builder.getB());
-  EXPECT_EQ(67, builder.getC());
-  EXPECT_EQ(55.25, builder.getD().getX());
-  EXPECT_STREQ("foo", builder.getTx());
-
-  Foo::Reader reader(StructReader::readRoot(
-      segment->getStartPtr(), Foo::DEFAULT.words, segment, 4));
-
-  EXPECT_EQ(321, reader.getA());
-  EXPECT_EQ(45, reader.getB());
-  EXPECT_EQ(67, reader.getC());
-  EXPECT_EQ(55.25, reader.getD().getX());
-  EXPECT_STREQ("foo", reader.getTx());
-
-  {
-    List<int32_t>::Reader listReader = reader.getNums();
-    ASSERT_EQ(5u, listReader.size());
-    EXPECT_EQ(12, listReader[0]);
-    EXPECT_EQ(34, listReader[1]);
-    EXPECT_EQ(56, listReader[2]);
-    EXPECT_EQ(78, listReader[3]);
-    EXPECT_EQ(90, listReader[4]);
-
-    {
-      int sum = 0;
-      for (int32_t i: listReader) {
-        sum += i;
-      }
-      EXPECT_EQ(12 + 34 + 56 + 78 + 90, sum);
-    }
-  }
-
-  {
-    List<Bar>::Reader structListReader = reader.getBars();
-    ASSERT_EQ(3u, structListReader.size());
-
-    EXPECT_EQ(123, structListReader[0].getX());
-    EXPECT_EQ(456, structListReader[1].getX());
-    EXPECT_EQ(789, structListReader[2].getX());
-
-    {
-      double sum = 0;
-      for (auto bar: structListReader) {
-        sum += bar.getX();
-      }
-      EXPECT_EQ(123 + 456 + 789, sum);
-    }
-  }
-
-  {
-    List<List<int32_t>>::Reader listListReader = reader.getPrimListList();
-    ASSERT_EQ(2u, listListReader.size());
-
-    List<int32_t>::Reader sublist = listListReader[0];
-    ASSERT_EQ(2u, sublist.size());
-    EXPECT_EQ(1234, sublist[0]);
-    EXPECT_EQ(5678, sublist[1]);
-
-    sublist = listListReader[1];
-    ASSERT_EQ(4u, sublist.size());
-    EXPECT_EQ(21, sublist[0]);
-    EXPECT_EQ(43, sublist[1]);
-    EXPECT_EQ(65, sublist[2]);
-    EXPECT_EQ(87, sublist[3]);
-  }
-
-  {
-    List<List<Bar>>::Reader listListReader = reader.getStructListList();
-    ASSERT_EQ(2u, listListReader.size());
-
-    List<Bar>::Reader sublist = listListReader[0];
-    ASSERT_EQ(2u, sublist.size());
-    EXPECT_EQ(1234, sublist[0].getX());
-    EXPECT_EQ(5678, sublist[1].getX());
-
-    sublist = listListReader[1];
-    ASSERT_EQ(4u, sublist.size());
-    EXPECT_EQ(21, sublist[0].getX());
-    EXPECT_EQ(43, sublist[1].getX());
-    EXPECT_EQ(65, sublist[2].getX());
-    EXPECT_EQ(87, sublist[3].getX());
-  }
+  TestDefaults::Reader reader2(StructReader::readRootTrusted(
+      emptyMessage.words, TestDefaults::DEFAULT.words));
+  checkMessage(reader2);
 }
 
 }  // namespace

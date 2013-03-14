@@ -25,6 +25,7 @@ module Parser (parseFile) where
 
 import Text.Parsec hiding (tokens)
 import Text.Parsec.Error(newErrorMessage, Message(Message))
+import Text.Parsec.Pos(newPos)
 import Text.Printf(printf)
 import Token
 import Grammar
@@ -48,6 +49,7 @@ tokenErrorString Period = "\".\""
 tokenErrorString EqualsSign = "\"=\""
 tokenErrorString MinusSign = "\"-\""
 tokenErrorString ExclamationPoint = "\"!\""
+tokenErrorString VoidKeyword = "keyword \"void\""
 tokenErrorString TrueKeyword = "keyword \"true\""
 tokenErrorString FalseKeyword = "keyword \"false\""
 tokenErrorString InKeyword = "keyword \"in\""
@@ -103,6 +105,7 @@ literalInt = tokenParser matchLiteralInt <?> "integer"
 literalFloat = tokenParser matchLiteralFloat <?> "floating-point number"
 literalString = tokenParser matchLiteralString <?> "string"
 literalBool = tokenParser matchLiteralBool <?> "boolean"
+literalVoid = tokenParser (matchSimpleToken VoidKeyword) <?> "\"void\""
 
 atSign = tokenParser (matchSimpleToken AtSign) <?> "\"@\""
 colon = tokenParser (matchSimpleToken Colon) <?> "\":\""
@@ -238,7 +241,8 @@ fieldDecl statements = do
 negativeFieldValue = liftM (IntegerFieldValue . negate) literalInt
                  <|> liftM (FloatFieldValue . negate) literalFloat
 
-fieldValue = liftM BoolFieldValue literalBool
+fieldValue = (literalVoid >> return VoidFieldValue)
+         <|> liftM BoolFieldValue literalBool
          <|> liftM IntegerFieldValue literalInt
          <|> liftM FloatFieldValue literalFloat
          <|> liftM StringFieldValue literalString
@@ -302,30 +306,33 @@ failNonFatal :: SourcePos -> String -> TokenParser ()
 failNonFatal pos msg = modifyState (newError:) where
     newError = newErrorMessage (Message msg) pos
 
-parseList parser items = finish where
-    results = map (parseCollectingErrors parser) items
-    finish = do
-        modifyState (\old -> concat (old:map extractErrors results))
-        return [ result | Right (result, _) <- results ]
+parseList parser items = do
+    let results = map (parseCollectingErrors parser) items
+    modifyState (\old -> concat (old:map extractErrors results))
+    return [ result | Right (result, _) <- results ]
 
 parseBlock :: (Maybe [Located Statement] -> TokenParser Declaration)
            -> [Located Statement] -> TokenParser [Declaration]
-parseBlock parser statements = finish where
-    results = map (parseStatement parser) statements
-    finish = do
-        modifyState (\old -> concat (old:map extractErrors results))
-        return [ result | Right (result, _) <- results ]
+parseBlock parser statements = do
+    let results = map (parseStatement parser) statements
+    modifyState (\old -> concat (old:map extractErrors results))
+    return [ result | Right (result, _) <- results ]
 
-parseCollectingErrors :: TokenParser a -> [Located Token] -> Either ParseError (a, [ParseError])
-parseCollectingErrors parser tokens = runParser parser' [] "" tokens where
+parseCollectingErrors :: TokenParser a -> TokenSequence
+                      -> Either ParseError (a, [ParseError])
+parseCollectingErrors parser tokenSequence = runParser parser' [] "" tokens where
+    TokenSequence tokens endPos = tokenSequence
     parser' = do
         -- Work around Parsec bug:  Text.Parsec.Print.token is supposed to produce a parser that
         -- sets the position by using the provided function to extract it from each token.  However,
         -- it doesn't bother to call this function for the *first* token, only subsequent tokens.
         -- The first token is always assumed to be at 1:1.  To fix this, set it manually.
-        case tokens of
-            Located pos _:_ -> setPosition pos
-            [] -> return ()
+        --
+        -- TODO:  There's still a problem when a parse error occurs at end-of-input:  Parsec will
+        --   report the error at the location of the previous token.
+        setPosition (case tokens of
+            Located pos2 _:_ -> pos2
+            [] -> endPos)
 
         result <- parser
         eof
@@ -349,4 +356,4 @@ parseFileTokens statements = (decls, errors) where
 parseFile :: String -> String -> ([Declaration], [ParseError])
 parseFile filename text = case parse lexer filename text of
     Left e -> ([], [e])
-    Right tokens -> parseFileTokens tokens
+    Right statements -> parseFileTokens statements

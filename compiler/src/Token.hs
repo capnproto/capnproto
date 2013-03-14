@@ -37,13 +37,16 @@ instance Eq a => Eq (Located a) where
 instance Ord a => Ord (Located a) where
     compare (Located _ a) (Located _ b) = compare a b
 
+data TokenSequence = TokenSequence [Located Token] SourcePos deriving(Show, Eq)
+
 data Token = Identifier String
            | TypeIdentifier String
-           | ParenthesizedList [[Located Token]]
-           | BracketedList [[Located Token]]
+           | ParenthesizedList [TokenSequence]
+           | BracketedList [TokenSequence]
            | LiteralInt Integer
            | LiteralFloat Double
            | LiteralString String
+           | VoidKeyword
            | TrueKeyword
            | FalseKeyword
            | AtSign
@@ -68,6 +71,6 @@ data Token = Identifier String
            | OptionKeyword
            deriving (Show, Eq)
 
-data Statement = Line [Located Token]
-               | Block [Located Token] [Located Statement]
+data Statement = Line TokenSequence
+               | Block TokenSequence [Located Statement]
                deriving (Show)
