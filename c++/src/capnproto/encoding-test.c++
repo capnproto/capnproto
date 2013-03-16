@@ -233,8 +233,7 @@ TEST(Encoding, AllTypes) {
   checkMessage(builder.getRoot());
   checkMessage(builder.getRoot().asReader());
 
-  Message<TestAllTypes>::Reader reader(
-      builder.getSegmentsForOutput(), 64, 1 << 30, ThrowingErrorReporter::getDefaultInstance());
+  Message<TestAllTypes>::Reader reader(builder.getSegmentsForOutput());
 
   checkMessage(reader.getRoot());
 
@@ -244,15 +243,13 @@ TEST(Encoding, AllTypes) {
 }
 
 TEST(Encoding, AllTypesMultiSegment) {
-  MallocAllocator allocator(0);
-  Message<TestAllTypes>::Builder builder(&allocator);
+  Message<TestAllTypes>::Builder builder(newFixedWidthBuilderContext(0));
 
   initMessage(builder.initRoot());
   checkMessage(builder.getRoot());
   checkMessage(builder.getRoot().asReader());
 
-  Message<TestAllTypes>::Reader reader(
-      builder.getSegmentsForOutput(), 64, 1 << 30, ThrowingErrorReporter::getDefaultInstance());
+  Message<TestAllTypes>::Reader reader(builder.getSegmentsForOutput());
 
   checkMessage(reader.getRoot());
 }
@@ -260,8 +257,7 @@ TEST(Encoding, AllTypesMultiSegment) {
 TEST(Encoding, Defaults) {
   AlignedData<1> nullRoot = {{0, 0, 0, 0, 0, 0, 0, 0}};
   ArrayPtr<const word> segments[1] = {arrayPtr(nullRoot.words, 1)};
-  Message<TestDefaults>::Reader reader(arrayPtr(segments, 1), 64, 1 << 30,
-      ThrowingErrorReporter::getDefaultInstance());
+  Message<TestDefaults>::Reader reader(arrayPtr(segments, 1));
 
   checkMessage(reader.getRoot());
   checkMessage(Message<TestDefaults>::readTrusted(nullRoot.words));
@@ -276,15 +272,13 @@ TEST(Encoding, DefaultInitialization) {
   checkMessage(builder.getRoot());  // second pass just reads the initialized structure
   checkMessage(builder.getRoot().asReader());
 
-  Message<TestDefaults>::Reader reader(
-      builder.getSegmentsForOutput(), 64, 1 << 30, ThrowingErrorReporter::getDefaultInstance());
+  Message<TestDefaults>::Reader reader(builder.getSegmentsForOutput());
 
   checkMessage(reader.getRoot());
 }
 
 TEST(Encoding, DefaultInitializationMultiSegment) {
-  MallocAllocator allocator(0);
-  Message<TestDefaults>::Builder builder(&allocator);
+  Message<TestDefaults>::Builder builder(newFixedWidthBuilderContext(0));
 
   checkMessage(builder.getRoot());  // first pass initializes to defaults
   checkMessage(builder.getRoot().asReader());
@@ -292,8 +286,7 @@ TEST(Encoding, DefaultInitializationMultiSegment) {
   checkMessage(builder.getRoot());  // second pass just reads the initialized structure
   checkMessage(builder.getRoot().asReader());
 
-  Message<TestDefaults>::Reader reader(
-      builder.getSegmentsForOutput(), 64, 1 << 30, ThrowingErrorReporter::getDefaultInstance());
+  Message<TestDefaults>::Reader reader(builder.getSegmentsForOutput());
 
   checkMessage(reader.getRoot());
 }
@@ -302,8 +295,7 @@ TEST(Encoding, DefaultsFromEmptyMessage) {
   AlignedData<1> emptyMessage = {{4, 0, 0, 0, 0, 0, 0, 0}};
 
   ArrayPtr<const word> segments[1] = {arrayPtr(emptyMessage.words, 1)};
-  Message<TestDefaults>::Reader reader(arrayPtr(segments, 1), 64, 1 << 30,
-      ThrowingErrorReporter::getDefaultInstance());
+  Message<TestDefaults>::Reader reader(arrayPtr(segments, 1));
 
   checkMessage(reader.getRoot());
   checkMessage(Message<TestDefaults>::readTrusted(emptyMessage.words));

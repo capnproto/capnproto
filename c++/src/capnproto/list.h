@@ -75,9 +75,6 @@ template <typename T, bool b> struct FieldSizeForType<List<T, b>> {
   static constexpr FieldSize value = FieldSize::REFERENCE;
 };
 
-template<typename T> constexpr T&& move(T& t) noexcept { return static_cast<T&&>(t); }
-// Like std::move.  Unfortunately, #including <utility> brings in tons of unnecessary stuff.
-
 template <typename T>
 class TemporaryPointer {
   // This class is a little hack which lets us define operator->() in cases where it needs to

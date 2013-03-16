@@ -38,20 +38,65 @@ typedef Id<uint32_t, Segment> SegmentId;
 
 // =======================================================================================
 
-class Allocator {
+class ReaderContext {
 public:
-  virtual ~Allocator();
+  virtual ~ReaderContext();
 
-  virtual ArrayPtr<word> allocate(SegmentId id, uint minimumSize) = 0;
-  virtual void free(SegmentId id, ArrayPtr<word> ptr) = 0;
-};
+  virtual ArrayPtr<const word> getSegment(uint id) = 0;
+  // Gets the segment with the given ID, or returns null if no such segment exists.
 
-class ErrorReporter {
-public:
-  virtual ~ErrorReporter();
+  virtual uint64_t getReadLimit() = 0;
+  virtual uint getNestingLimit() = 0;
 
   virtual void reportError(const char* description) = 0;
 };
+
+enum class ErrorBehavior {
+  THROW_EXCEPTION,
+  REPORT_TO_STDERR_AND_RETURN_DEFAULT,
+  IGNORE_AND_RETURN_DEFAULT
+};
+
+std::unique_ptr<ReaderContext> newReaderContext(
+    ArrayPtr<const ArrayPtr<const word>> segments,
+    ErrorBehavior errorBehavior = ErrorBehavior::THROW_EXCEPTION,
+    uint64_t readLimit = 64 * 1024 * 1024, uint nestingLimit = 64);
+// Creates a ReaderContext pointing at the given segment list, without taking ownership of the
+// segments.  All arrays passed in must remain valid until the context is destroyed.
+
+class BuilderContext {
+public:
+  virtual ~BuilderContext();
+
+  virtual ArrayPtr<word> allocateSegment(uint minimumSize) = 0;
+  // Allocates an array of at least the given number of words, throwing an exception or crashing if
+  // this is not possible.  It is expected that this method will usually return more space than
+  // requested, and the caller should use that extra space as much as possible before allocating
+  // more.  All returned space is deleted when the context is destroyed.
+};
+
+std::unique_ptr<BuilderContext> newBuilderContext(uint firstSegmentWords = 1024);
+// Creates a BuilderContext which allocates at least the given number of words for the first
+// segment, and then heuristically decides how much to allocate for subsequent segments.  This
+// should work well for most use cases that do not require writing messages to specific locations
+// in memory.  When choosing a value for firstSegmentWords, consider that:
+// 1) Reading and writing messages gets slower when multiple segments are involved, so it's good
+//    if most messages fit in a single segment.
+// 2) Unused bytes will not be written to the wire, so generally it is not a big deal to allocate
+//    more space than you need.  It only becomes problematic if you are allocating many messages
+//    in parallel and thus use lots of memory, or if you allocate so much extra space that just
+//    zeroing it out becomes a bottleneck.
+// The default has been chosen to be reasonable for most people, so don't change it unless you have
+// reason to believe you need to.
+
+std::unique_ptr<BuilderContext> newFixedWidthBuilderContext(uint preferredSegmentWords = 1024);
+// Creates a BuilderContext which will always prefer to allocate segments with the given size with
+// no heuristic growth.  It will still allocate larger segments when the preferred size is too small
+// for some single object.  You can force every single object to be located in a separate segment by
+// passing zero for the parameter to this function, but this isn't a good idea.  This context
+// implementation is probably most useful for testing purposes, where you want to verify that your
+// serializer works when a message is split across segments and you want those segments to be
+// somewhat predictable.
 
 // =======================================================================================
 
@@ -61,12 +106,17 @@ struct Message {
 
   class Reader {
   public:
-    Reader(ArrayPtr<const ArrayPtr<const word>> segments,
-           uint recursionLimit, uint64_t readLimit, ErrorReporter* errorReporter);
-    Reader(Reader&& other) = default;
+    Reader(ArrayPtr<const ArrayPtr<const word>> segments);
+    // Make a Reader that reads from the given segments, as if the context were created using
+    // newReaderContext(segments).
+
+    Reader(std::unique_ptr<ReaderContext> context);
+
     CAPNPROTO_DISALLOW_COPY(Reader);
+    Reader(Reader&& other) = default;
 
     typename RootType::Reader getRoot();
+    // Get a reader pointing to the message root.
 
   private:
     internal::MessageImpl::Reader internal;
@@ -75,16 +125,19 @@ struct Message {
   class Builder {
   public:
     Builder();
-    // Make a Builder that allocates using malloc, using the default segment size.
+    // Make a Builder as if with a context created by newBuilderContext().
 
-    Builder(Allocator* allocator);
-    // Make a Builder that allocates memory using the given allocator.
+    Builder(std::unique_ptr<BuilderContext> context);
 
-    Builder(Builder&& other) = default;
     CAPNPROTO_DISALLOW_COPY(Builder);
+    Builder(Builder&& other) = default;
 
     typename RootType::Builder initRoot();
+    // Allocate and initialize the message root.  If already initialized, the old data is discarded.
+
     typename RootType::Builder getRoot();
+    // Get the message root, initializing it to the type's default value if it isn't initialized
+    // already.
 
     ArrayPtr<const ArrayPtr<const word>> getSegmentsForOutput();
 
@@ -116,50 +169,15 @@ struct Message {
 };
 
 // =======================================================================================
-// Standard implementations of allocators and error reporters.
-
-class MallocAllocator: public Allocator {
-public:
-  explicit MallocAllocator(uint preferredSegmentSizeWords);
-  ~MallocAllocator();
-
-  static MallocAllocator* getDefaultInstance();
-
-  // implements Allocator --------------------------------------------
-  ArrayPtr<word> allocate(SegmentId id, uint minimumSize) override;
-  void free(SegmentId id, ArrayPtr<word> ptr) override;
-
-private:
-  uint preferredSegmentSizeWords;
-};
-
-class StderrErrorReporter: public ErrorReporter {
-public:
-  ~StderrErrorReporter();
-
-  static StderrErrorReporter* getDefaultInstance();
-
-  // implements ErrorReporter ----------------------------------------
-  void reportError(const char* description) override;
-};
-
-class ThrowingErrorReporter: public ErrorReporter {
-public:
-  ~ThrowingErrorReporter();
-
-  static ThrowingErrorReporter* getDefaultInstance();
-
-  // implements ErrorReporter ----------------------------------------
-  void reportError(const char* description) override;
-};
-
-// =======================================================================================
 // implementation details
 
 template <typename RootType>
-inline Message<RootType>::Reader::Reader(ArrayPtr<const ArrayPtr<const word>> segments,
-       uint recursionLimit, uint64_t readLimit, ErrorReporter* errorReporter)
-    : internal(segments, recursionLimit, readLimit, errorReporter) {}
+inline Message<RootType>::Reader::Reader(ArrayPtr<const ArrayPtr<const word>> segments)
+    : internal(segments) {}
+
+template <typename RootType>
+inline Message<RootType>::Reader::Reader(std::unique_ptr<ReaderContext> context)
+    : internal(std::move(context)) {}
 
 template <typename RootType>
 inline typename RootType::Reader Message<RootType>::Reader::getRoot() {
@@ -171,8 +189,8 @@ inline Message<RootType>::Builder::Builder()
     : internal() {}
 
 template <typename RootType>
-inline Message<RootType>::Builder::Builder(Allocator* allocator)
-    : internal(allocator) {}
+inline Message<RootType>::Builder::Builder(std::unique_ptr<BuilderContext> context)
+    : internal(std::move(context)) {}
 
 template <typename RootType>
 inline typename RootType::Builder Message<RootType>::Builder::initRoot() {

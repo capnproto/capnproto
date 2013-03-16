@@ -37,15 +37,15 @@
 #include "wire-format.h"
 
 namespace capnproto {
-  class Allocator;
-  class ErrorReporter;
+  class ReaderContext;
+  class BuilderContext;
 }
 
 namespace capnproto {
 namespace internal {
 // TODO:  Move to message-internal.h so that this header looks nicer?
 
-class Arena;
+class ReaderArena;
 class BuilderArena;
 
 struct MessageImpl {
@@ -56,8 +56,8 @@ struct MessageImpl {
 
   class Reader {
   public:
-    Reader(ArrayPtr<const ArrayPtr<const word>> segments,
-           uint recursionLimit, uint64_t readLimit, ErrorReporter* errorReporter);
+    Reader(ArrayPtr<const ArrayPtr<const word>> segments);
+    Reader(std::unique_ptr<ReaderContext> context);
     Reader(Reader&& other) = default;
     CAPNPROTO_DISALLOW_COPY(Reader);
     ~Reader();
@@ -65,15 +65,22 @@ struct MessageImpl {
     StructReader getRoot(const word* defaultValue);
 
   private:
-    std::unique_ptr<Arena> arena;
     uint recursionLimit;
+
+    // Space in which we can construct a ReaderArena.  We don't use ReaderArena directly here
+    // because we don't want clients to have to #include arena.h, which itself includes a bunch of
+    // big STL headers.  We don't use a pointer to a ReaderArena because that would require an
+    // extra malloc on every message which could be expensive when processing small messages,
+    // particularly when the context itself is freelisted and so no other allocation is necessary.
+    void* arenaSpace[15];
+
+    ReaderArena* arena() { return reinterpret_cast<ReaderArena*>(arenaSpace); }
   };
 
   class Builder {
   public:
     Builder();
-    Builder(Allocator* allocator);
-
+    Builder(std::unique_ptr<BuilderContext> context);
     Builder(Builder&& other) = default;
     CAPNPROTO_DISALLOW_COPY(Builder);
     ~Builder();
@@ -84,8 +91,16 @@ struct MessageImpl {
     ArrayPtr<const ArrayPtr<const word>> getSegmentsForOutput();
 
   private:
-    std::unique_ptr<BuilderArena> arena;
     SegmentBuilder* rootSegment;
+
+    // Space in which we can construct a BuilderArena.  We don't use BuilderArena directly here
+    // because we don't want clients to have to #include arena.h, which itself includes a bunch of
+    // big STL headers.  We don't use a pointer to a BuilderArena because that would require an
+    // extra malloc on every message which could be expensive when processing small messages,
+    // particularly when the context itself is freelisted and so no other allocation is necessary.
+    void* arenaSpace[15];
+
+    BuilderArena* arena() { return reinterpret_cast<BuilderArena*>(arenaSpace); }
 
     static SegmentBuilder* allocateRoot(BuilderArena* arena);
   };

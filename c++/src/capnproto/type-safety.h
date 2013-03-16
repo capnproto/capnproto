@@ -51,6 +51,9 @@ struct NoInfer {
   typedef T Type;
 };
 
+template<typename T> constexpr T&& move(T& t) noexcept { return static_cast<T&&>(t); }
+// Like std::move.  Unfortunately, #including <utility> brings in tons of unnecessary stuff.
+
 // =======================================================================================
 // ArrayPtr
 
@@ -82,6 +85,9 @@ public:
     CAPNPROTO_DEBUG_ASSERT(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
     return ArrayPtr(ptr + start, end - start);
   }
+
+  inline bool operator==(std::nullptr_t) { return ptr == nullptr; }
+  inline bool operator!=(std::nullptr_t) { return ptr != nullptr; }
 
 private:
   T* ptr;

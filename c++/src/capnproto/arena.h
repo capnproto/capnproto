@@ -26,6 +26,7 @@
 
 #include <vector>
 #include <memory>
+#include <unordered_map>
 #include "macros.h"
 #include "type-safety.h"
 #include "message.h"
@@ -70,14 +71,58 @@ private:
   CAPNPROTO_DISALLOW_COPY(ReadLimiter);
 };
 
+class SegmentReader {
+public:
+  inline SegmentReader(Arena* arena, SegmentId id, ArrayPtr<const word> ptr,
+                       ReadLimiter* readLimiter);
+
+  CAPNPROTO_ALWAYS_INLINE(bool containsInterval(const word* from, const word* to));
+
+  inline Arena* getArena();
+  inline SegmentId getSegmentId();
+
+  inline const word* getStartPtr();
+  inline WordCount getOffsetTo(const word* ptr);
+  inline WordCount getSize();
+
+  inline ArrayPtr<const word> getArray();
+
+private:
+  Arena* arena;
+  SegmentId id;
+  ArrayPtr<const word> ptr;
+  ReadLimiter* readLimiter;
+
+  CAPNPROTO_DISALLOW_COPY(SegmentReader);
+
+  friend class SegmentBuilder;
+};
+
+class SegmentBuilder: public SegmentReader {
+public:
+  inline SegmentBuilder(BuilderArena* arena, SegmentId id, ArrayPtr<word> ptr,
+                        ReadLimiter* readLimiter);
+
+  CAPNPROTO_ALWAYS_INLINE(word* allocate(WordCount amount));
+  inline word* getPtrUnchecked(WordCount offset);
+
+  inline BuilderArena* getArena();
+
+  inline WordCount available();
+
+  inline ArrayPtr<const word> currentlyAllocated();
+
+private:
+  word* pos;
+
+  CAPNPROTO_DISALLOW_COPY(SegmentBuilder);
+
+  // TODO:  Do we need mutex locking?
+};
+
 class Arena {
 public:
   virtual ~Arena();
-
-  virtual ArrayPtr<const ArrayPtr<const word>> getSegmentsForOutput() = 0;
-  // Get an array of all the segments, suitable for writing out.  For BuilderArena, this only
-  // returns the allocated portion of each segment, whereas tryGetSegment() returns something that
-  // includes not-yet-allocated space.
 
   virtual SegmentReader* tryGetSegment(SegmentId id) = 0;
   // Gets the segment with the given ID, or return nullptr if no such segment exists.
@@ -113,27 +158,31 @@ public:
 
 class ReaderArena final: public Arena {
 public:
-  ReaderArena(ArrayPtr<const ArrayPtr<const word>> segments, ErrorReporter* errorReporter,
-              WordCount64 readLimit);
+  ReaderArena(std::unique_ptr<ReaderContext> context);
   ~ReaderArena();
+  CAPNPROTO_DISALLOW_COPY(ReaderArena);
 
   // implements Arena ------------------------------------------------
-  ArrayPtr<const ArrayPtr<const word>> getSegmentsForOutput() override;
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportInvalidData(const char* description) override;
   void reportReadLimitReached() override;
 
 private:
-  ArrayPtr<const ArrayPtr<const word>> segments;
-  ErrorReporter* errorReporter;
+  std::unique_ptr<ReaderContext> context;
   ReadLimiter readLimiter;
-  std::vector<std::unique_ptr<SegmentReader>> segmentReaders;
+
+  // Optimize for single-segment messages so that small messages are handled quickly.
+  SegmentReader segment0;
+
+  typedef std::unordered_map<uint, std::unique_ptr<SegmentReader>> SegmentMap;
+  std::unique_ptr<SegmentMap> moreSegments;
 };
 
 class BuilderArena final: public Arena {
 public:
-  BuilderArena(Allocator* allocator);
+  BuilderArena(std::unique_ptr<BuilderContext> context);
   ~BuilderArena();
+  CAPNPROTO_DISALLOW_COPY(BuilderArena);
 
   SegmentBuilder* getSegment(SegmentId id);
   // Get the segment with the given id.  Crashes or throws an exception if no such segment exists.
@@ -142,67 +191,30 @@ public:
   // Get a segment which has at least the given amount of space available, allocating it if
   // necessary.  Crashes or throws an exception if there is not enough memory.
 
+  ArrayPtr<const ArrayPtr<const word>> getSegmentsForOutput();
+  // Get an array of all the segments, suitable for writing out.  This only returns the allocated
+  // portion of each segment, whereas tryGetSegment() returns something that includes
+  // not-yet-allocated space.
+
   // TODO:  Methods to deal with bundled capabilities.
 
   // implements Arena ------------------------------------------------
-  ArrayPtr<const ArrayPtr<const word>> getSegmentsForOutput() override;
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportInvalidData(const char* description) override;
   void reportReadLimitReached() override;
 
 private:
-  Allocator* allocator;
-  std::vector<std::unique_ptr<SegmentBuilder>> segments;
-  std::vector<ArrayPtr<word>> memory;
-  std::vector<ArrayPtr<const word>> segmentsForOutput;
+  std::unique_ptr<BuilderContext> context;
   ReadLimiter dummyLimiter;
-};
 
-class SegmentReader {
-public:
-  inline SegmentReader(Arena* arena, SegmentId id, ArrayPtr<const word> ptr,
-                       ReadLimiter* readLimiter);
+  SegmentBuilder segment0;
+  ArrayPtr<const word> segment0ForOutput;
 
-  CAPNPROTO_ALWAYS_INLINE(bool containsInterval(const word* from, const word* to));
-
-  inline Arena* getArena();
-  inline SegmentId getSegmentId();
-
-  inline const word* getStartPtr();
-  inline WordCount getOffsetTo(const word* ptr);
-  inline WordCount getSize();
-
-private:
-  Arena* arena;
-  SegmentId id;
-  ArrayPtr<const word> ptr;
-  ReadLimiter* readLimiter;
-
-  CAPNPROTO_DISALLOW_COPY(SegmentReader);
-
-  friend class SegmentBuilder;
-};
-
-class SegmentBuilder: public SegmentReader {
-public:
-  inline SegmentBuilder(BuilderArena* arena, SegmentId id, ArrayPtr<word> ptr,
-                        ReadLimiter* readLimiter);
-
-  CAPNPROTO_ALWAYS_INLINE(word* allocate(WordCount amount));
-  inline word* getPtrUnchecked(WordCount offset);
-
-  inline BuilderArena* getArena();
-
-  inline WordCount available();
-
-  inline ArrayPtr<const word> currentlyAllocated();
-
-private:
-  word* pos;
-
-  CAPNPROTO_DISALLOW_COPY(SegmentBuilder);
-
-  // TODO:  Do we need mutex locking?
+  struct MultiSegmentState {
+    std::vector<std::unique_ptr<SegmentBuilder>> builders;
+    std::vector<ArrayPtr<const word>> forOutput;
+  };
+  std::unique_ptr<MultiSegmentState> moreSegments;
 };
 
 // =======================================================================================
@@ -241,6 +253,7 @@ inline WordCount SegmentReader::getOffsetTo(const word* ptr) {
   return intervalLength(this->ptr.begin(), ptr);
 }
 inline WordCount SegmentReader::getSize() { return ptr.size() * WORDS; }
+inline ArrayPtr<const word> SegmentReader::getArray() { return ptr; }
 
 // -------------------------------------------------------------------
 

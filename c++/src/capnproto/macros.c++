@@ -25,6 +25,7 @@
 #include <exception>
 #include <string>
 #include <unistd.h>
+#include <stdio.h>
 
 namespace capnproto {
 namespace internal {
@@ -47,7 +48,9 @@ Exception::Exception(
   description = "Captain Proto debug assertion failed:\n  ";
   description += file;
   description += ':';
-  description += line;
+  char buf[32];
+  sprintf(buf, "%d", line);
+  description += buf;
   description += ": ";
   description += expectation;
   description += "\n  ";
