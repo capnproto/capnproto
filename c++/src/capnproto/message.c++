@@ -22,75 +22,131 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "message.h"
-#include <vector>
-#include <string.h>
-#include <iostream>
-#include <stdlib.h>
+#include "arena.h"
+#include "stdlib.h"
+#include <exception>
+#include <string>
+#include <unistd.h>
 
 namespace capnproto {
 
-MessageReader::~MessageReader() {}
-MessageBuilder::~MessageBuilder() {}
+Allocator::~Allocator() {}
+ErrorReporter::~ErrorReporter() {}
 
-class MallocMessage: public MessageBuilder {
+MallocAllocator::MallocAllocator(uint preferredSegmentSizeWords)
+    : preferredSegmentSizeWords(preferredSegmentSizeWords) {}
+MallocAllocator::~MallocAllocator() {}
+
+MallocAllocator* MallocAllocator::getDefaultInstance() {
+  static MallocAllocator defaultInstance(1024);
+  return &defaultInstance;
+}
+
+ArrayPtr<word> MallocAllocator::allocate(SegmentId id, uint minimumSize) {
+  uint size = std::max(minimumSize, preferredSegmentSizeWords);
+  return arrayPtr(reinterpret_cast<word*>(calloc(size, sizeof(word))), size);
+}
+void MallocAllocator::free(SegmentId id, ArrayPtr<word> ptr) {
+  ::free(ptr.begin());
+}
+
+StderrErrorReporter::~StderrErrorReporter() {}
+
+StderrErrorReporter* StderrErrorReporter::getDefaultInstance() {
+  static StderrErrorReporter defaultInstance;
+  return &defaultInstance;
+}
+
+void StderrErrorReporter::reportError(const char* description) {
+  std::string message("ERROR: Cap'n Proto parse error: ");
+  message += description;
+  message += '\n';
+  write(STDERR_FILENO, message.data(), message.size());
+}
+
+class ParseException: public std::exception {
 public:
-  MallocMessage(WordCount preferredSegmentSize);
-  ~MallocMessage();
+  ParseException(const char* description);
+  ~ParseException() noexcept;
 
-  SegmentReader* tryGetSegment(SegmentId id);
-  void reportInvalidData(const char* description);
-  void reportReadLimitReached();
-  SegmentBuilder* getSegment(SegmentId id);
-  SegmentBuilder* getSegmentWithAvailable(WordCount minimumAvailable);
+  const char* what() const noexcept override;
 
 private:
-  WordCount preferredSegmentSize;
-  std::vector<std::unique_ptr<SegmentBuilder>> segments;
-  std::vector<word*> memory;
+  std::string description;
 };
 
-MallocMessage::MallocMessage(WordCount preferredSegmentSize)
-    : preferredSegmentSize(preferredSegmentSize) {}
-MallocMessage::~MallocMessage() {
-  for (word* ptr: memory) {
-    free(ptr);
-  }
+ParseException::ParseException(const char* description)
+    : description(description) {}
+
+ParseException::~ParseException() noexcept {}
+
+const char* ParseException::what() const noexcept {
+  return description.c_str();
 }
 
-SegmentReader* MallocMessage::tryGetSegment(SegmentId id) {
-  if (id.value >= segments.size()) {
-    return nullptr;
+ThrowingErrorReporter::~ThrowingErrorReporter() {}
+
+ThrowingErrorReporter* ThrowingErrorReporter::getDefaultInstance() {
+  static ThrowingErrorReporter defaultInstance;
+  return &defaultInstance;
+}
+
+void ThrowingErrorReporter::reportError(const char* description) {
+  throw ParseException(description);
+}
+
+// =======================================================================================
+
+namespace internal {
+
+MessageImpl::Reader::Reader(ArrayPtr<const ArrayPtr<const word>> segments,
+       uint recursionLimit, uint64_t readLimit, ErrorReporter* errorReporter)
+    : arena(new ReaderArena(segments, errorReporter, readLimit * WORDS)),
+      recursionLimit(recursionLimit) {}
+MessageImpl::Reader::~Reader() {}
+
+StructReader MessageImpl::Reader::getRoot(const word* defaultValue) {
+  SegmentReader* segment = arena->tryGetSegment(SegmentId(0));
+  if (segment == nullptr ||
+      !segment->containsInterval(segment->getStartPtr(), segment->getStartPtr() + 1)) {
+    segment->getArena()->reportInvalidData("Message did not contain a root pointer.");
+    return StructReader::readRootTrusted(defaultValue, defaultValue);
   } else {
-    return segments[id.value].get();
+    return StructReader::readRoot(segment->getStartPtr(), defaultValue, segment, recursionLimit);
   }
 }
 
-void MallocMessage::reportInvalidData(const char* description) {
-  // TODO:  Better error reporting.
-  std::cerr << "MallocMessage: Parse error: " << description << std::endl;
+MessageImpl::Builder::Builder()
+    : arena(new BuilderArena(MallocAllocator::getDefaultInstance())),
+      rootSegment(allocateRoot(arena.get())) {}
+MessageImpl::Builder::Builder(Allocator* allocator)
+    : arena(new BuilderArena(allocator)),
+      rootSegment(allocateRoot(arena.get())) {}
+MessageImpl::Builder::~Builder() {}
+
+StructBuilder MessageImpl::Builder::initRoot(const word* defaultValue) {
+  return StructBuilder::initRoot(
+      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), defaultValue);
 }
 
-void MallocMessage::reportReadLimitReached() {
-  // TODO:  Better error reporting.
-  std::cerr << "MallocMessage: Exceeded read limit." << std::endl;
+StructBuilder MessageImpl::Builder::getRoot(const word* defaultValue) {
+  return StructBuilder::getRoot(rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), defaultValue);
 }
 
-SegmentBuilder* MallocMessage::getSegment(SegmentId id) {
-  return segments[id.value].get();
+ArrayPtr<const ArrayPtr<const word>> MessageImpl::Builder::getSegmentsForOutput() {
+  return arena->getSegmentsForOutput();
 }
 
-SegmentBuilder* MallocMessage::getSegmentWithAvailable(WordCount minimumAvailable) {
-  if (segments.empty() || segments.back()->available() < minimumAvailable) {
-    WordCount newSize = std::max(minimumAvailable, preferredSegmentSize);
-    memory.push_back(reinterpret_cast<word*>(calloc(newSize / WORDS, sizeof(word))));
-    segments.push_back(std::unique_ptr<SegmentBuilder>(new SegmentBuilder(
-        this, SegmentId(segments.size()), memory.back(), newSize)));
-  }
-  return segments.back().get();
+SegmentBuilder* MessageImpl::Builder::allocateRoot(BuilderArena* arena) {
+  WordCount refSize = 1 * REFERENCES * WORDS_PER_REFERENCE;
+  SegmentBuilder* segment = arena->getSegmentWithAvailable(refSize);
+  CAPNPROTO_ASSERT(segment->getSegmentId() == SegmentId(0),
+      "First allocated word of new arena was not in segment ID 0.");
+  word* location = segment->allocate(refSize);
+  CAPNPROTO_ASSERT(location == segment->getPtrUnchecked(0 * WORDS),
+      "First allocated word of new arena was not the first word in its segment.");
+  return segment;
 }
 
-std::unique_ptr<MessageBuilder> newMallocMessage(WordCount preferredSegmentSize) {
-  return std::unique_ptr<MessageBuilder>(new MallocMessage(preferredSegmentSize));
-}
-
+}  // namespace internal
 }  // namespace capnproto

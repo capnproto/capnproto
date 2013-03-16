@@ -22,7 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "wire-format.h"
-#include "message.h"
+#include "arena.h"
 #include "descriptor.h"
 #include <string.h>
 #include <limits>
@@ -203,7 +203,7 @@ struct WireHelpers {
       // space to act as the landing pad for a far reference.
 
       WordCount amountPlusRef = amount + REFERENCE_SIZE_IN_WORDS;
-      segment = segment->getMessage()->getSegmentWithAvailable(amountPlusRef);
+      segment = segment->getArena()->getSegmentWithAvailable(amountPlusRef);
       ptr = segment->allocate(amountPlusRef);
 
       // Set up the original reference to be a far reference to the new segment.
@@ -224,12 +224,12 @@ struct WireHelpers {
 
   static CAPNPROTO_ALWAYS_INLINE(word* followFars(WireReference*& ref, SegmentBuilder*& segment)) {
     if (ref->kind() == WireReference::FAR) {
-      segment = segment->getMessage()->getSegment(ref->farRef.segmentId.get());
+      segment = segment->getArena()->getSegment(ref->farRef.segmentId.get());
       ref = reinterpret_cast<WireReference*>(segment->getPtrUnchecked(ref->positionInSegment()));
       if (ref->landingPadIsFollowedByAnotherReference()) {
         // Target lives elsewhere.  Another far reference follows.
         WireReference* far2 = ref + 1;
-        segment = segment->getMessage()->getSegment(far2->farRef.segmentId.get());
+        segment = segment->getArena()->getSegment(far2->farRef.segmentId.get());
         return segment->getPtrUnchecked(far2->positionInSegment());
       } else {
         // Target immediately follows landing pad.
@@ -243,7 +243,7 @@ struct WireHelpers {
   static CAPNPROTO_ALWAYS_INLINE(
       const word* followFars(const WireReference*& ref, SegmentReader*& segment)) {
     if (ref->kind() == WireReference::FAR) {
-      segment = segment->getMessage()->tryGetSegment(ref->farRef.segmentId.get());
+      segment = segment->getArena()->tryGetSegment(ref->farRef.segmentId.get());
       if (CAPNPROTO_EXPECT_FALSE(segment == nullptr)) {
         return nullptr;
       }
@@ -259,7 +259,7 @@ struct WireHelpers {
       if (ref->landingPadIsFollowedByAnotherReference()) {
         // Target is in another castle.  Another far reference follows.
         const WireReference* far2 = ref + 1;
-        segment = segment->getMessage()->tryGetSegment(far2->farRef.segmentId.get());
+        segment = segment->getArena()->tryGetSegment(far2->farRef.segmentId.get());
         if (CAPNPROTO_EXPECT_FALSE(segment == nullptr)) {
           return nullptr;
         }
@@ -622,26 +622,26 @@ struct WireHelpers {
       ptr = ref->target();
     } else if (segment != nullptr) {
       if (CAPNPROTO_EXPECT_FALSE(recursionLimit == 0)) {
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message is too deeply-nested or contains cycles.");
         goto useDefault;
       }
 
       ptr = followFars(ref, segment);
       if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message contains invalid far reference.");
         goto useDefault;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(ref->kind() != WireReference::STRUCT)) {
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message contains non-struct reference where struct reference was expected.");
         goto useDefault;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr + ref->structRef.wordSize()))){
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message contained out-of-bounds struct reference.");
         goto useDefault;
       }
@@ -672,20 +672,20 @@ struct WireHelpers {
       ptr = ref->target();
     } else if (segment != nullptr) {
       if (CAPNPROTO_EXPECT_FALSE(recursionLimit == 0)) {
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message is too deeply-nested or contains cycles.");
         goto useDefault;
       }
 
       ptr = followFars(ref, segment);
       if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message contains invalid far reference.");
         goto useDefault;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(ref->kind() != WireReference::LIST)) {
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message contains non-list reference where list reference was expected.");
         goto useDefault;
       }
@@ -707,13 +707,13 @@ struct WireHelpers {
       if (segment != nullptr) {
         if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(
             ptr - REFERENCE_SIZE_IN_WORDS, ptr + wordCount))) {
-          segment->getMessage()->reportInvalidData(
+          segment->getArena()->reportInvalidData(
               "Message contains out-of-bounds list reference.");
           goto useDefault;
         }
 
         if (CAPNPROTO_EXPECT_FALSE(tag->kind() != WireReference::STRUCT)) {
-          segment->getMessage()->reportInvalidData(
+          segment->getArena()->reportInvalidData(
               "INLINE_COMPOSITE lists of non-STRUCT type are not supported.");
           goto useDefault;
         }
@@ -722,7 +722,7 @@ struct WireHelpers {
         wordsPerElement = tag->structRef.wordSize() / ELEMENTS;
 
         if (CAPNPROTO_EXPECT_FALSE(size * wordsPerElement > wordCount)) {
-          segment->getMessage()->reportInvalidData(
+          segment->getArena()->reportInvalidData(
               "INLINE_COMPOSITE list's elements overrun its word count.");
           goto useDefault;
         }
@@ -761,7 +761,7 @@ struct WireHelpers {
         }
 
         if (CAPNPROTO_EXPECT_FALSE(!compatible)) {
-          segment->getMessage()->reportInvalidData("A list had incompatible element type.");
+          segment->getArena()->reportInvalidData("A list had incompatible element type.");
           goto useDefault;
         }
 
@@ -789,7 +789,7 @@ struct WireHelpers {
       if (segment != nullptr) {
         if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr +
             roundUpToWords(ElementCount64(ref->listRef.elementCount()) * step)))) {
-          segment->getMessage()->reportInvalidData(
+          segment->getArena()->reportInvalidData(
               "Message contained out-of-bounds list reference.");
           goto useDefault;
         }
@@ -835,7 +835,7 @@ struct WireHelpers {
             dataSize, referenceCount, recursionLimit - 1);
       } else {
         CAPNPROTO_ASSERT(segment != nullptr, "Trusted message had incompatible list element type.");
-        segment->getMessage()->reportInvalidData("A list had incompatible element type.");
+        segment->getArena()->reportInvalidData("A list had incompatible element type.");
         goto useDefault;
       }
     }
@@ -859,26 +859,26 @@ struct WireHelpers {
       uint size = ref->listRef.elementCount() / ELEMENTS;
 
       if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message contains invalid far reference.");
         goto useDefault;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(ref->kind() != WireReference::LIST)) {
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message contains non-list reference where text was expected.");
         goto useDefault;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(ref->listRef.elementSize() != FieldSize::BYTE)) {
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message contains list reference of non-bytes where text was expected.");
         goto useDefault;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr +
           roundUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))))) {
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message contained out-of-bounds text reference.");
         goto useDefault;
       }
@@ -887,7 +887,7 @@ struct WireHelpers {
       --size;  // NUL terminator
 
       if (CAPNPROTO_EXPECT_FALSE(cptr[size] != '\0')) {
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message contains text that is not NUL-terminated.");
         goto useDefault;
       }
@@ -911,26 +911,26 @@ struct WireHelpers {
       uint size = ref->listRef.elementCount() / ELEMENTS;
 
       if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message contains invalid far reference.");
         goto useDefault;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(ref->kind() != WireReference::LIST)) {
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message contains non-list reference where data was expected.");
         goto useDefault;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(ref->listRef.elementSize() != FieldSize::BYTE)) {
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message contains list reference of non-bytes where data was expected.");
         goto useDefault;
       }
 
       if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr +
           roundUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))))) {
-        segment->getMessage()->reportInvalidData(
+        segment->getArena()->reportInvalidData(
             "Message contained out-of-bounds data reference.");
         goto useDefault;
       }
@@ -945,6 +945,12 @@ struct WireHelpers {
 StructBuilder StructBuilder::initRoot(
     SegmentBuilder* segment, word* location, const word* defaultValue) {
   return WireHelpers::initStructReference(
+      reinterpret_cast<WireReference*>(location), segment, defaultValue);
+}
+
+StructBuilder StructBuilder::getRoot(
+    SegmentBuilder* segment, word* location, const word* defaultValue) {
+  return WireHelpers::getWritableStructReference(
       reinterpret_cast<WireReference*>(location), segment, defaultValue);
 }
 
@@ -1024,7 +1030,7 @@ StructReader StructReader::readRootTrusted(const word* location, const word* def
 StructReader StructReader::readRoot(const word* location, const word* defaultValue,
                                     SegmentReader* segment, int recursionLimit) {
   if (!segment->containsInterval(location, location + REFERENCE_SIZE_IN_WORDS)) {
-    segment->getMessage()->reportInvalidData("Root location out-of-bounds.");
+    segment->getArena()->reportInvalidData("Root location out-of-bounds.");
     location = nullptr;
   }
 
@@ -1126,7 +1132,7 @@ ListReader ListBuilder::asReader(FieldNumber fieldCount, WordCount dataSize,
 
 StructReader ListReader::getStructElement(ElementCount index, const word* defaultValue) const {
   if (CAPNPROTO_EXPECT_FALSE((segment != nullptr) & (recursionLimit == 0))) {
-    segment->getMessage()->reportInvalidData(
+    segment->getArena()->reportInvalidData(
         "Message is too deeply-nested or contains cycles.");
     return WireHelpers::readStructReference(nullptr, nullptr, defaultValue, recursionLimit);
   } else {

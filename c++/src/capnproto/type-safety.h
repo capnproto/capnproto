@@ -29,6 +29,7 @@
 #define CAPNPROTO_TYPE_SAFETY_H_
 
 #include "macros.h"
+#include <cstddef>
 
 namespace capnproto {
 
@@ -49,6 +50,55 @@ struct NoInfer {
   // I didn't want to #include type_traits or whatever.
   typedef T Type;
 };
+
+// =======================================================================================
+// ArrayPtr
+
+template <typename T>
+class ArrayPtr {
+  // A pointer to an array.  Includes a size.  Like any pointer, it doesn't own the target data,
+  // and passing by value only copies the pointer, not the target.
+
+public:
+  inline ArrayPtr(): ptr(nullptr), size_(0) {}
+  inline ArrayPtr(std::nullptr_t): ptr(nullptr), size_(0) {}
+  inline ArrayPtr(T* ptr, std::size_t size): ptr(ptr), size_(size) {}
+  inline ArrayPtr(T* begin, T* end): ptr(begin), size_(end - begin) {}
+
+  inline operator ArrayPtr<const T>() {
+    return ArrayPtr<const T>(ptr, size_);
+  }
+
+  inline std::size_t size() const { return size_; }
+  inline T& operator[](std::size_t index) const {
+    CAPNPROTO_DEBUG_ASSERT(index < size_, "Out-of-bounds ArrayPtr access.");
+    return ptr[index];
+  }
+
+  inline T* begin() const { return ptr; }
+  inline T* end() const { return ptr + size_; }
+
+  inline ArrayPtr slice(size_t start, size_t end) {
+    CAPNPROTO_DEBUG_ASSERT(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
+    return ArrayPtr(ptr + start, end - start);
+  }
+
+private:
+  T* ptr;
+  std::size_t size_;
+};
+
+template <typename T>
+inline ArrayPtr<T> arrayPtr(T* ptr, size_t size) {
+  // Use this function to construct ArrayPtrs without writing out the type name.
+  return ArrayPtr<T>(ptr, size);
+}
+
+template <typename T>
+inline ArrayPtr<T> arrayPtr(T* begin, T* end) {
+  // Use this function to construct ArrayPtrs without writing out the type name.
+  return ArrayPtr<T>(begin, end);
+}
 
 // =======================================================================================
 // IDs

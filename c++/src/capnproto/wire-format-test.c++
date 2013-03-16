@@ -24,6 +24,7 @@
 #include "wire-format.h"
 #include "descriptor.h"
 #include "message.h"
+#include "arena.h"
 #include <gtest/gtest.h>
 
 namespace capnproto {
@@ -263,8 +264,8 @@ static void checkStruct(StructReader reader) {
 }
 
 TEST(WireFormat, StructRoundTrip_OneSegment) {
-  std::unique_ptr<MessageBuilder> message = newMallocMessage(512 * WORDS);
-  SegmentBuilder* segment = message->getSegmentWithAvailable(1 * WORDS);
+  BuilderArena arena(MallocAllocator::getDefaultInstance());
+  SegmentBuilder* segment = arena.getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
 
   StructBuilder builder = StructBuilder::initRoot(segment, rootLocation, STRUCT_DEFAULT.words);
@@ -286,7 +287,9 @@ TEST(WireFormat, StructRoundTrip_OneSegment) {
   //         6 sub-lists (4x 1 word, 1x 2 words)
   // -----
   //   34
-  EXPECT_EQ(34 * WORDS, segment->getSize());
+  ArrayPtr<const ArrayPtr<const word>> segments = arena.getSegmentsForOutput();
+  ASSERT_EQ(1u, segments.size());
+  EXPECT_EQ(34u, segments[0].size());
 
   checkStruct(builder);
   checkStruct(builder.asReader());
@@ -295,34 +298,35 @@ TEST(WireFormat, StructRoundTrip_OneSegment) {
 }
 
 TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
-  std::unique_ptr<MessageBuilder> message = newMallocMessage(1 * WORDS);
-  SegmentBuilder* segment = message->getSegmentWithAvailable(1 * WORDS);
+  MallocAllocator allocator(1);
+  BuilderArena arena(&allocator);
+  SegmentBuilder* segment = arena.getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
 
   StructBuilder builder = StructBuilder::initRoot(segment, rootLocation, STRUCT_DEFAULT.words);
   setupStruct(builder);
 
   // Verify that we made 15 segments.
-  ASSERT_TRUE(message->tryGetSegment(SegmentId(14)) != nullptr);
-  EXPECT_EQ(nullptr, message->tryGetSegment(SegmentId(15)));
+  ArrayPtr<const ArrayPtr<const word>> segments = arena.getSegmentsForOutput();
+  ASSERT_EQ(15u, segments.size());
 
   // Check that each segment has the expected size.  Recall that the first word of each segment will
   // actually be a reference to the first thing allocated within that segment.
-  EXPECT_EQ( 1 * WORDS, message->getSegment(SegmentId( 0))->getSize());  // root ref
-  EXPECT_EQ( 7 * WORDS, message->getSegment(SegmentId( 1))->getSize());  // root struct
-  EXPECT_EQ( 2 * WORDS, message->getSegment(SegmentId( 2))->getSize());  // sub-struct
-  EXPECT_EQ( 3 * WORDS, message->getSegment(SegmentId( 3))->getSize());  // 3-element int32 list
-  EXPECT_EQ(10 * WORDS, message->getSegment(SegmentId( 4))->getSize());  // struct list
-  EXPECT_EQ( 2 * WORDS, message->getSegment(SegmentId( 5))->getSize());  // struct list substruct 1
-  EXPECT_EQ( 2 * WORDS, message->getSegment(SegmentId( 6))->getSize());  // struct list substruct 2
-  EXPECT_EQ( 2 * WORDS, message->getSegment(SegmentId( 7))->getSize());  // struct list substruct 3
-  EXPECT_EQ( 2 * WORDS, message->getSegment(SegmentId( 8))->getSize());  // struct list substruct 4
-  EXPECT_EQ( 6 * WORDS, message->getSegment(SegmentId( 9))->getSize());  // list list
-  EXPECT_EQ( 2 * WORDS, message->getSegment(SegmentId(10))->getSize());  // list list sublist 1
-  EXPECT_EQ( 2 * WORDS, message->getSegment(SegmentId(11))->getSize());  // list list sublist 2
-  EXPECT_EQ( 2 * WORDS, message->getSegment(SegmentId(12))->getSize());  // list list sublist 3
-  EXPECT_EQ( 2 * WORDS, message->getSegment(SegmentId(13))->getSize());  // list list sublist 4
-  EXPECT_EQ( 3 * WORDS, message->getSegment(SegmentId(14))->getSize());  // list list sublist 5
+  EXPECT_EQ( 1u, segments[ 0].size());  // root ref
+  EXPECT_EQ( 7u, segments[ 1].size());  // root struct
+  EXPECT_EQ( 2u, segments[ 2].size());  // sub-struct
+  EXPECT_EQ( 3u, segments[ 3].size());  // 3-element int32 list
+  EXPECT_EQ(10u, segments[ 4].size());  // struct list
+  EXPECT_EQ( 2u, segments[ 5].size());  // struct list substruct 1
+  EXPECT_EQ( 2u, segments[ 6].size());  // struct list substruct 2
+  EXPECT_EQ( 2u, segments[ 7].size());  // struct list substruct 3
+  EXPECT_EQ( 2u, segments[ 8].size());  // struct list substruct 4
+  EXPECT_EQ( 6u, segments[ 9].size());  // list list
+  EXPECT_EQ( 2u, segments[10].size());  // list list sublist 1
+  EXPECT_EQ( 2u, segments[11].size());  // list list sublist 2
+  EXPECT_EQ( 2u, segments[12].size());  // list list sublist 3
+  EXPECT_EQ( 2u, segments[13].size());  // list list sublist 4
+  EXPECT_EQ( 3u, segments[14].size());  // list list sublist 5
 
   checkStruct(builder);
   checkStruct(builder.asReader());
@@ -330,25 +334,26 @@ TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
 }
 
 TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
-  std::unique_ptr<MessageBuilder> message = newMallocMessage(8 * WORDS);
-  SegmentBuilder* segment = message->getSegmentWithAvailable(1 * WORDS);
+  MallocAllocator allocator(8);
+  BuilderArena arena(&allocator);
+  SegmentBuilder* segment = arena.getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
 
   StructBuilder builder = StructBuilder::initRoot(segment, rootLocation, STRUCT_DEFAULT.words);
   setupStruct(builder);
 
   // Verify that we made 6 segments.
-  ASSERT_TRUE(message->tryGetSegment(SegmentId(5)) != nullptr);
-  EXPECT_EQ(nullptr, message->tryGetSegment(SegmentId(6)));
+  ArrayPtr<const ArrayPtr<const word>> segments = arena.getSegmentsForOutput();
+  ASSERT_EQ(6u, segments.size());
 
   // Check that each segment has the expected size.  Recall that each object will be prefixed by an
   // extra word if its parent is in a different segment.
-  EXPECT_EQ( 8 * WORDS, message->getSegment(SegmentId(0))->getSize());  // root ref + struct + sub
-  EXPECT_EQ( 3 * WORDS, message->getSegment(SegmentId(1))->getSize());  // 3-element int32 list
-  EXPECT_EQ(10 * WORDS, message->getSegment(SegmentId(2))->getSize());  // struct list
-  EXPECT_EQ( 8 * WORDS, message->getSegment(SegmentId(3))->getSize());  // struct list substructs
-  EXPECT_EQ( 8 * WORDS, message->getSegment(SegmentId(4))->getSize());  // list list + sublist 1,2
-  EXPECT_EQ( 7 * WORDS, message->getSegment(SegmentId(5))->getSize());  // list list sublist 3,4,5
+  EXPECT_EQ( 8u, segments[0].size());  // root ref + struct + sub
+  EXPECT_EQ( 3u, segments[1].size());  // 3-element int32 list
+  EXPECT_EQ(10u, segments[2].size());  // struct list
+  EXPECT_EQ( 8u, segments[3].size());  // struct list substructs
+  EXPECT_EQ( 8u, segments[4].size());  // list list + sublist 1,2
+  EXPECT_EQ( 7u, segments[5].size());  // list list sublist 3,4,5
 
   checkStruct(builder);
   checkStruct(builder.asReader());

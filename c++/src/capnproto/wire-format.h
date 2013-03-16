@@ -35,11 +35,6 @@
 #include "blob.h"
 
 namespace capnproto {
-  class SegmentReader;
-  class SegmentBuilder;
-}
-
-namespace capnproto {
 namespace internal {
 
 class FieldDescriptor;
@@ -52,6 +47,8 @@ class ListBuilder;
 class ListReader;
 struct WireReference;
 struct WireHelpers;
+class SegmentReader;
+class SegmentBuilder;
 
 // -------------------------------------------------------------------
 
@@ -85,6 +82,7 @@ public:
   inline StructBuilder(): segment(nullptr), data(nullptr), references(nullptr) {}
 
   static StructBuilder initRoot(SegmentBuilder* segment, word* location, const word* defaultValue);
+  static StructBuilder getRoot(SegmentBuilder* segment, word* location, const word* defaultValue);
 
   template <typename T>
   CAPNPROTO_ALWAYS_INLINE(T getDataField(ElementCount offset) const);

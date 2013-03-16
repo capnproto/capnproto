@@ -22,10 +22,9 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "macros.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <exception>
+#include <string>
+#include <unistd.h>
 
 namespace capnproto {
 namespace internal {
@@ -35,39 +34,33 @@ class Exception: public std::exception {
 
 public:
   Exception(const char* file, int line, const char* expectation, const char* message);
-  virtual ~Exception() noexcept;
+  ~Exception() noexcept;
 
-  const char* getFile() { return file; }
-  int getLine() { return line; }
-  const char* getExpectation() { return expectation; }
-  const char* getMessage() { return message; }
-
-  virtual const char* what();
+  const char* what() const noexcept override;
 
 private:
-  const char* file;
-  int line;
-  const char* expectation;
-  const char* message;
-  char* whatBuffer;
+  std::string description;
 };
 
 Exception::Exception(
-    const char* file, int line, const char* expectation, const char* message)
-    : file(file), line(line), expectation(expectation), message(message), whatBuffer(nullptr) {
-  fprintf(stderr, "Captain Proto debug assertion failed:\n  %s:%d: %s\n  %s",
-          file, line, expectation, message);
+    const char* file, int line, const char* expectation, const char* message) {
+  description = "Captain Proto debug assertion failed:\n  ";
+  description += file;
+  description += ':';
+  description += line;
+  description += ": ";
+  description += expectation;
+  description += "\n  ";
+  description += message;
+  description += "\n";
+
+  write(STDERR_FILENO, description.data(), description.size());
 }
 
-Exception::~Exception() noexcept {
-  delete [] whatBuffer;
-}
+Exception::~Exception() noexcept {}
 
-const char* Exception::what() {
-  whatBuffer = new char[strlen(file) + strlen(expectation) + strlen(message) + 256];
-  sprintf(whatBuffer, "Captain Proto debug assertion failed:\n  %s:%d: %s\n  %s",
-          file, line, expectation, message);
-  return whatBuffer;
+const char* Exception::what() const noexcept {
+  return description.c_str();
 }
 
 void assertionFailure(const char* file, int line, const char* expectation, const char* message) {

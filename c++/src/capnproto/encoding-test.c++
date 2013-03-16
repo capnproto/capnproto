@@ -227,56 +227,86 @@ void checkMessage(Reader reader) {
 }
 
 TEST(Encoding, AllTypes) {
-  auto root = newMallocMessageRoot<TestAllTypes>();
+  Message<TestAllTypes>::Builder builder;
 
-  initMessage(root.builder);
-  checkMessage(root.builder);
-  checkMessage(root.builder.asReader());
+  initMessage(builder.initRoot());
+  checkMessage(builder.getRoot());
+  checkMessage(builder.getRoot().asReader());
+
+  Message<TestAllTypes>::Reader reader(
+      builder.getSegmentsForOutput(), 64, 1 << 30, ThrowingErrorReporter::getDefaultInstance());
+
+  checkMessage(reader.getRoot());
+
+  ASSERT_EQ(1u, builder.getSegmentsForOutput().size());
+
+  checkMessage(Message<TestAllTypes>::readTrusted(builder.getSegmentsForOutput()[0].begin()));
 }
 
 TEST(Encoding, AllTypesMultiSegment) {
-  auto root = newMallocMessageRoot<TestAllTypes>(0 * WORDS);
+  MallocAllocator allocator(0);
+  Message<TestAllTypes>::Builder builder(&allocator);
 
-  initMessage(root.builder);
-  checkMessage(root.builder);
-  checkMessage(root.builder.asReader());
+  initMessage(builder.initRoot());
+  checkMessage(builder.getRoot());
+  checkMessage(builder.getRoot().asReader());
+
+  Message<TestAllTypes>::Reader reader(
+      builder.getSegmentsForOutput(), 64, 1 << 30, ThrowingErrorReporter::getDefaultInstance());
+
+  checkMessage(reader.getRoot());
 }
 
 TEST(Encoding, Defaults) {
-  auto root = newMallocMessageRoot<TestDefaults>();
+  AlignedData<1> nullRoot = {{0, 0, 0, 0, 0, 0, 0, 0}};
+  ArrayPtr<const word> segments[1] = {arrayPtr(nullRoot.words, 1)};
+  Message<TestDefaults>::Reader reader(arrayPtr(segments, 1), 64, 1 << 30,
+      ThrowingErrorReporter::getDefaultInstance());
 
-  checkMessage(root.builder.asReader());
+  checkMessage(reader.getRoot());
+  checkMessage(Message<TestDefaults>::readTrusted(nullRoot.words));
 }
 
 TEST(Encoding, DefaultInitialization) {
-  auto root = newMallocMessageRoot<TestDefaults>();
+  Message<TestDefaults>::Builder builder;
 
-  checkMessage(root.builder);
-  checkMessage(root.builder.asReader());
+  checkMessage(builder.getRoot());  // first pass initializes to defaults
+  checkMessage(builder.getRoot().asReader());
+
+  checkMessage(builder.getRoot());  // second pass just reads the initialized structure
+  checkMessage(builder.getRoot().asReader());
+
+  Message<TestDefaults>::Reader reader(
+      builder.getSegmentsForOutput(), 64, 1 << 30, ThrowingErrorReporter::getDefaultInstance());
+
+  checkMessage(reader.getRoot());
 }
 
 TEST(Encoding, DefaultInitializationMultiSegment) {
-  auto root = newMallocMessageRoot<TestDefaults>(0 * WORDS);
+  MallocAllocator allocator(0);
+  Message<TestDefaults>::Builder builder(&allocator);
 
-  checkMessage(root.builder);
-  checkMessage(root.builder.asReader());
+  checkMessage(builder.getRoot());  // first pass initializes to defaults
+  checkMessage(builder.getRoot().asReader());
+
+  checkMessage(builder.getRoot());  // second pass just reads the initialized structure
+  checkMessage(builder.getRoot().asReader());
+
+  Message<TestDefaults>::Reader reader(
+      builder.getSegmentsForOutput(), 64, 1 << 30, ThrowingErrorReporter::getDefaultInstance());
+
+  checkMessage(reader.getRoot());
 }
 
-TEST(Encoding, DefaultsNotOnWire) {
+TEST(Encoding, DefaultsFromEmptyMessage) {
   AlignedData<1> emptyMessage = {{4, 0, 0, 0, 0, 0, 0, 0}};
 
-  std::unique_ptr<MessageBuilder> message = newMallocMessage(512 * WORDS);
-  SegmentBuilder* segment = message->getSegmentWithAvailable(1 * WORDS);
-  word* rootLocation = segment->allocate(1 * WORDS);
-  memcpy(rootLocation, emptyMessage.words, sizeof(word));
+  ArrayPtr<const word> segments[1] = {arrayPtr(emptyMessage.words, 1)};
+  Message<TestDefaults>::Reader reader(arrayPtr(segments, 1), 64, 1 << 30,
+      ThrowingErrorReporter::getDefaultInstance());
 
-  TestDefaults::Reader reader(StructReader::readRoot(
-      emptyMessage.words, TestDefaults::DEFAULT.words, segment, 64));
-  checkMessage(reader);
-
-  TestDefaults::Reader reader2(StructReader::readRootTrusted(
-      emptyMessage.words, TestDefaults::DEFAULT.words));
-  checkMessage(reader2);
+  checkMessage(reader.getRoot());
+  checkMessage(Message<TestDefaults>::readTrusted(emptyMessage.words));
 }
 
 }  // namespace
