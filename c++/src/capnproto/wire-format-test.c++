@@ -264,7 +264,8 @@ static void checkStruct(StructReader reader) {
 }
 
 TEST(WireFormat, StructRoundTrip_OneSegment) {
-  BuilderArena arena(newBuilderContext());
+  MallocMessageBuilder message;
+  BuilderArena arena(&message);
   SegmentBuilder* segment = arena.getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
 
@@ -298,7 +299,8 @@ TEST(WireFormat, StructRoundTrip_OneSegment) {
 }
 
 TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
-  BuilderArena arena(newFixedWidthBuilderContext(0));
+  MallocMessageBuilder message(0, AllocationStrategy::FIXED_SIZE);
+  BuilderArena arena(&message);
   SegmentBuilder* segment = arena.getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
 
@@ -333,7 +335,8 @@ TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
 }
 
 TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
-  BuilderArena arena(newFixedWidthBuilderContext(8));
+  MallocMessageBuilder message(8, AllocationStrategy::FIXED_SIZE);
+  BuilderArena arena(&message);
   SegmentBuilder* segment = arena.getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
 

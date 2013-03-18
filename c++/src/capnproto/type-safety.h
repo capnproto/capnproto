@@ -106,6 +106,77 @@ inline ArrayPtr<T> arrayPtr(T* begin, T* end) {
   return ArrayPtr<T>(begin, end);
 }
 
+template <typename T>
+class Array {
+  // An owned array which will automatically be deleted in the destructor.  Can be moved, but not
+  // copied.
+
+public:
+  inline Array(): ptr(nullptr), size_(0) {}
+  inline Array(std::nullptr_t): ptr(nullptr), size_(0) {}
+  inline Array(Array&& other): ptr(other.ptr), size_(other.size_) {
+    other.ptr = nullptr;
+    other.size_ = 0;
+  }
+
+  CAPNPROTO_DISALLOW_COPY(Array);
+  inline ~Array() noexcept { delete[] ptr; }
+
+  inline operator ArrayPtr<T>() {
+    return ArrayPtr<T>(ptr, size_);
+  }
+  inline ArrayPtr<T> asPtr() {
+    return ArrayPtr<T>(ptr, size_);
+  }
+
+  inline std::size_t size() const { return size_; }
+  inline T& operator[](std::size_t index) const {
+    CAPNPROTO_DEBUG_ASSERT(index < size_, "Out-of-bounds Array access.");
+    return ptr[index];
+  }
+
+  inline T* begin() const { return ptr; }
+  inline T* end() const { return ptr + size_; }
+
+  inline ArrayPtr<T> slice(size_t start, size_t end) {
+    CAPNPROTO_DEBUG_ASSERT(start <= end && end <= size_, "Out-of-bounds Array::slice().");
+    return ArrayPtr<T>(ptr + start, end - start);
+  }
+
+  inline bool operator==(std::nullptr_t) { return ptr == nullptr; }
+  inline bool operator!=(std::nullptr_t) { return ptr != nullptr; }
+
+  inline Array& operator=(std::nullptr_t) {
+    delete[] ptr;
+    ptr = nullptr;
+    size_ = 0;
+    return *this;
+  }
+
+  inline Array& operator=(Array&& other) {
+    delete[] ptr;
+    ptr = other.ptr;
+    size_ = other.size_;
+    other.ptr = nullptr;
+    other.size_ = 0;
+    return *this;
+  }
+
+private:
+  T* ptr;
+  std::size_t size_;
+
+  inline explicit Array(std::size_t size): ptr(new T[size]), size_(size) {}
+
+  template <typename U>
+  friend Array<U> newArray(size_t size);
+};
+
+template <typename T>
+inline Array<T> newArray(size_t size) {
+  return Array<T>(size);
+}
+
 // =======================================================================================
 // IDs
 
@@ -381,8 +452,8 @@ inline constexpr auto operator*(UnitRatio<Number1, Unit2, Unit> ratio,
 // =======================================================================================
 // Raw memory types and measures
 
-class byte { uint8_t  content; CAPNPROTO_DISALLOW_COPY(byte); };
-class word { uint64_t content; CAPNPROTO_DISALLOW_COPY(word); };
+class byte { uint8_t  content; CAPNPROTO_DISALLOW_COPY(byte); public: byte() = default; };
+class word { uint64_t content; CAPNPROTO_DISALLOW_COPY(word); public: word() = default; };
 // byte and word are opaque types with sizes of 8 and 64 bits, respectively.  These types are useful
 // only to make pointer arithmetic clearer.  Since the contents are private, the only way to access
 // them is to first reinterpret_cast to some other pointer type.

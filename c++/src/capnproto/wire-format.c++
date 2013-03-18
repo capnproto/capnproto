@@ -612,7 +612,7 @@ struct WireHelpers {
 
   static CAPNPROTO_ALWAYS_INLINE(StructReader readStructReference(
       SegmentReader* segment, const WireReference* ref, const word* defaultValue,
-      int recursionLimit)) {
+      int nestingLimit)) {
     const word* ptr;
 
     if (ref == nullptr || ref->isNull()) {
@@ -621,9 +621,9 @@ struct WireHelpers {
       ref = reinterpret_cast<const WireReference*>(defaultValue);
       ptr = ref->target();
     } else if (segment != nullptr) {
-      if (CAPNPROTO_EXPECT_FALSE(recursionLimit == 0)) {
+      if (CAPNPROTO_EXPECT_FALSE(nestingLimit == 0)) {
         segment->getArena()->reportInvalidData(
-            "Message is too deeply-nested or contains cycles.");
+            "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.");
         goto useDefault;
       }
 
@@ -655,25 +655,25 @@ struct WireHelpers {
         ref->structRef.fieldCount.get(),
         ref->structRef.dataSize.get(),
         ref->structRef.refCount.get(),
-        0 * BITS, recursionLimit - 1);
+        0 * BITS, nestingLimit - 1);
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListReader readListReference(
       SegmentReader* segment, const WireReference* ref, const word* defaultValue,
-      FieldSize expectedElementSize, int recursionLimit)) {
+      FieldSize expectedElementSize, int nestingLimit)) {
     const word* ptr;
     if (ref == nullptr || ref->isNull()) {
     useDefault:
       if (defaultValue == nullptr) {
-        return ListReader(nullptr, nullptr, 0 * ELEMENTS, 0 * BITS / ELEMENTS, recursionLimit - 1);
+        return ListReader(nullptr, nullptr, 0 * ELEMENTS, 0 * BITS / ELEMENTS, nestingLimit - 1);
       }
       segment = nullptr;
       ref = reinterpret_cast<const WireReference*>(defaultValue);
       ptr = ref->target();
     } else if (segment != nullptr) {
-      if (CAPNPROTO_EXPECT_FALSE(recursionLimit == 0)) {
+      if (CAPNPROTO_EXPECT_FALSE(nestingLimit == 0)) {
         segment->getArena()->reportInvalidData(
-            "Message is too deeply-nested or contains cycles.");
+            "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.");
         goto useDefault;
       }
 
@@ -780,7 +780,7 @@ struct WireHelpers {
           tag->structRef.fieldCount.get(),
           tag->structRef.dataSize.get(),
           tag->structRef.refCount.get(),
-          recursionLimit - 1);
+          nestingLimit - 1);
 
     } else {
       // The elements of the list are NOT structs.
@@ -796,7 +796,7 @@ struct WireHelpers {
       }
 
       if (ref->listRef.elementSize() == expectedElementSize) {
-        return ListReader(segment, ptr, ref->listRef.elementCount(), step, recursionLimit - 1);
+        return ListReader(segment, ptr, ref->listRef.elementCount(), step, nestingLimit - 1);
       } else if (expectedElementSize == FieldSize::INLINE_COMPOSITE) {
         // We were expecting a struct list, but we received a list of some other type.  Perhaps a
         // non-struct list was recently upgraded to a struct list, but the sender is using the
@@ -832,7 +832,7 @@ struct WireHelpers {
         }
 
         return ListReader(segment, ptr, ref->listRef.elementCount(), step, FieldNumber(1),
-            dataSize, referenceCount, recursionLimit - 1);
+            dataSize, referenceCount, nestingLimit - 1);
       } else {
         CAPNPROTO_ASSERT(segment != nullptr, "Trusted message had incompatible list element type.");
         segment->getArena()->reportInvalidData("A list had incompatible element type.");
@@ -1028,27 +1028,27 @@ StructReader StructReader::readRootTrusted(const word* location, const word* def
 }
 
 StructReader StructReader::readRoot(const word* location, const word* defaultValue,
-                                    SegmentReader* segment, int recursionLimit) {
+                                    SegmentReader* segment, int nestingLimit) {
   if (!segment->containsInterval(location, location + REFERENCE_SIZE_IN_WORDS)) {
     segment->getArena()->reportInvalidData("Root location out-of-bounds.");
     location = nullptr;
   }
 
   return WireHelpers::readStructReference(segment, reinterpret_cast<const WireReference*>(location),
-                                          defaultValue, recursionLimit);
+                                          defaultValue, nestingLimit);
 }
 
 StructReader StructReader::getStructField(
     WireReferenceCount refIndex, const word* defaultValue) const {
   const WireReference* ref = refIndex >= referenceCount ? nullptr : references + refIndex;
-  return WireHelpers::readStructReference(segment, ref, defaultValue, recursionLimit);
+  return WireHelpers::readStructReference(segment, ref, defaultValue, nestingLimit);
 }
 
 ListReader StructReader::getListField(
     WireReferenceCount refIndex, FieldSize expectedElementSize, const word* defaultValue) const {
   const WireReference* ref = refIndex >= referenceCount ? nullptr : references + refIndex;
   return WireHelpers::readListReference(
-      segment, ref, defaultValue, expectedElementSize, recursionLimit);
+      segment, ref, defaultValue, expectedElementSize, nestingLimit);
 }
 
 Text::Reader StructReader::getTextField(
@@ -1131,10 +1131,10 @@ ListReader ListBuilder::asReader(FieldNumber fieldCount, WordCount dataSize,
 }
 
 StructReader ListReader::getStructElement(ElementCount index, const word* defaultValue) const {
-  if (CAPNPROTO_EXPECT_FALSE((segment != nullptr) & (recursionLimit == 0))) {
+  if (CAPNPROTO_EXPECT_FALSE((segment != nullptr) & (nestingLimit == 0))) {
     segment->getArena()->reportInvalidData(
-        "Message is too deeply-nested or contains cycles.");
-    return WireHelpers::readStructReference(nullptr, nullptr, defaultValue, recursionLimit);
+        "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.");
+    return WireHelpers::readStructReference(nullptr, nullptr, defaultValue, nestingLimit);
   } else {
     BitCount64 indexBit = ElementCount64(index) * stepBits;
     const byte* structPtr = reinterpret_cast<const byte*>(ptr) + indexBit / BITS_PER_BYTE;
@@ -1142,7 +1142,7 @@ StructReader ListReader::getStructElement(ElementCount index, const word* defaul
         segment, structPtr,
         reinterpret_cast<const WireReference*>(structPtr + structDataSize * BYTES_PER_WORD),
         structFieldCount, structDataSize, structReferenceCount, indexBit % BITS_PER_BYTE,
-        recursionLimit - 1);
+        nestingLimit - 1);
   }
 }
 
@@ -1150,7 +1150,7 @@ ListReader ListReader::getListElement(
     WireReferenceCount index, FieldSize expectedElementSize) const {
   return WireHelpers::readListReference(
       segment, reinterpret_cast<const WireReference*>(ptr) + index,
-      nullptr, expectedElementSize, recursionLimit);
+      nullptr, expectedElementSize, nestingLimit);
 }
 
 Text::Reader ListReader::getTextElement(WireReferenceCount index) const {

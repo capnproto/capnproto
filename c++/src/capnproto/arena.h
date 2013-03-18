@@ -116,8 +116,6 @@ private:
   word* pos;
 
   CAPNPROTO_DISALLOW_COPY(SegmentBuilder);
-
-  // TODO:  Do we need mutex locking?
 };
 
 class Arena {
@@ -158,7 +156,7 @@ public:
 
 class ReaderArena final: public Arena {
 public:
-  ReaderArena(std::unique_ptr<ReaderContext> context);
+  ReaderArena(MessageReader* message);
   ~ReaderArena();
   CAPNPROTO_DISALLOW_COPY(ReaderArena);
 
@@ -168,8 +166,9 @@ public:
   void reportReadLimitReached() override;
 
 private:
-  std::unique_ptr<ReaderContext> context;
+  MessageReader* message;
   ReadLimiter readLimiter;
+  bool ignoreErrors;
 
   // Optimize for single-segment messages so that small messages are handled quickly.
   SegmentReader segment0;
@@ -180,7 +179,7 @@ private:
 
 class BuilderArena final: public Arena {
 public:
-  BuilderArena(std::unique_ptr<BuilderContext> context);
+  BuilderArena(MessageBuilder* message);
   ~BuilderArena();
   CAPNPROTO_DISALLOW_COPY(BuilderArena);
 
@@ -204,7 +203,7 @@ public:
   void reportReadLimitReached() override;
 
 private:
-  std::unique_ptr<BuilderContext> context;
+  MessageBuilder* message;
   ReadLimiter dummyLimiter;
 
   SegmentBuilder segment0;

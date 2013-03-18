@@ -227,78 +227,80 @@ void checkMessage(Reader reader) {
 }
 
 TEST(Encoding, AllTypes) {
-  Message<TestAllTypes>::Builder builder;
+  MallocMessageBuilder builder;
 
-  initMessage(builder.initRoot());
-  checkMessage(builder.getRoot());
-  checkMessage(builder.getRoot().asReader());
+  initMessage(builder.initRoot<TestAllTypes>());
+  checkMessage(builder.getRoot<TestAllTypes>());
+  checkMessage(builder.getRoot<TestAllTypes>().asReader());
 
-  Message<TestAllTypes>::Reader reader(builder.getSegmentsForOutput());
+  SegmentArrayMessageReader reader(builder.getSegmentsForOutput());
 
-  checkMessage(reader.getRoot());
+  checkMessage(reader.getRoot<TestAllTypes>());
 
   ASSERT_EQ(1u, builder.getSegmentsForOutput().size());
 
-  checkMessage(Message<TestAllTypes>::readTrusted(builder.getSegmentsForOutput()[0].begin()));
+  checkMessage(readMessageTrusted<TestAllTypes>(builder.getSegmentsForOutput()[0].begin()));
 }
 
 TEST(Encoding, AllTypesMultiSegment) {
-  Message<TestAllTypes>::Builder builder(newFixedWidthBuilderContext(0));
+  MallocMessageBuilder builder(0, AllocationStrategy::FIXED_SIZE);
 
-  initMessage(builder.initRoot());
-  checkMessage(builder.getRoot());
-  checkMessage(builder.getRoot().asReader());
+  initMessage(builder.initRoot<TestAllTypes>());
+  checkMessage(builder.getRoot<TestAllTypes>());
+  checkMessage(builder.getRoot<TestAllTypes>().asReader());
 
-  Message<TestAllTypes>::Reader reader(builder.getSegmentsForOutput());
+  SegmentArrayMessageReader reader(builder.getSegmentsForOutput());
 
-  checkMessage(reader.getRoot());
+  checkMessage(reader.getRoot<TestAllTypes>());
 }
 
 TEST(Encoding, Defaults) {
   AlignedData<1> nullRoot = {{0, 0, 0, 0, 0, 0, 0, 0}};
   ArrayPtr<const word> segments[1] = {arrayPtr(nullRoot.words, 1)};
-  Message<TestDefaults>::Reader reader(arrayPtr(segments, 1));
+  SegmentArrayMessageReader reader(arrayPtr(segments, 1));
 
-  checkMessage(reader.getRoot());
-  checkMessage(Message<TestDefaults>::readTrusted(nullRoot.words));
+  checkMessage(reader.getRoot<TestDefaults>());
+  checkMessage(readMessageTrusted<TestDefaults>(nullRoot.words));
 }
 
 TEST(Encoding, DefaultInitialization) {
-  Message<TestDefaults>::Builder builder;
+  MallocMessageBuilder builder;
 
-  checkMessage(builder.getRoot());  // first pass initializes to defaults
-  checkMessage(builder.getRoot().asReader());
+  checkMessage(builder.getRoot<TestDefaults>());  // first pass initializes to defaults
+  checkMessage(builder.getRoot<TestDefaults>().asReader());
 
-  checkMessage(builder.getRoot());  // second pass just reads the initialized structure
-  checkMessage(builder.getRoot().asReader());
+  checkMessage(builder.getRoot<TestDefaults>());  // second pass just reads the initialized structure
+  checkMessage(builder.getRoot<TestDefaults>().asReader());
 
-  Message<TestDefaults>::Reader reader(builder.getSegmentsForOutput());
+  SegmentArrayMessageReader reader(builder.getSegmentsForOutput());
 
-  checkMessage(reader.getRoot());
+  checkMessage(reader.getRoot<TestDefaults>());
 }
 
 TEST(Encoding, DefaultInitializationMultiSegment) {
-  Message<TestDefaults>::Builder builder(newFixedWidthBuilderContext(0));
+  MallocMessageBuilder builder(0, AllocationStrategy::FIXED_SIZE);
 
-  checkMessage(builder.getRoot());  // first pass initializes to defaults
-  checkMessage(builder.getRoot().asReader());
+  // first pass initializes to defaults
+  checkMessage(builder.getRoot<TestDefaults>());
+  checkMessage(builder.getRoot<TestDefaults>().asReader());
 
-  checkMessage(builder.getRoot());  // second pass just reads the initialized structure
-  checkMessage(builder.getRoot().asReader());
+  // second pass just reads the initialized structure
+  checkMessage(builder.getRoot<TestDefaults>());
+  checkMessage(builder.getRoot<TestDefaults>().asReader());
 
-  Message<TestDefaults>::Reader reader(builder.getSegmentsForOutput());
+  SegmentArrayMessageReader reader(builder.getSegmentsForOutput());
 
-  checkMessage(reader.getRoot());
+  checkMessage(reader.getRoot<TestDefaults>());
 }
 
 TEST(Encoding, DefaultsFromEmptyMessage) {
   AlignedData<1> emptyMessage = {{4, 0, 0, 0, 0, 0, 0, 0}};
 
   ArrayPtr<const word> segments[1] = {arrayPtr(emptyMessage.words, 1)};
-  Message<TestDefaults>::Reader reader(arrayPtr(segments, 1));
+  SegmentArrayMessageReader reader(arrayPtr(segments, 1));
 
-  checkMessage(reader.getRoot());
-  checkMessage(Message<TestDefaults>::readTrusted(emptyMessage.words));
+  checkMessage(reader.getRoot<TestDefaults>());
+  checkMessage(readMessageTrusted<TestDefaults>(emptyMessage.words));
 }
 
 }  // namespace

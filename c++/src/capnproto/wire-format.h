@@ -159,11 +159,11 @@ class StructReader {
 public:
   inline StructReader()
       : segment(nullptr), data(nullptr), references(nullptr), fieldCount(0), dataSize(0),
-        referenceCount(0), bit0Offset(0 * BITS), recursionLimit(0) {}
+        referenceCount(0), bit0Offset(0 * BITS), nestingLimit(0) {}
 
   static StructReader readRootTrusted(const word* location, const word* defaultValue);
   static StructReader readRoot(const word* location, const word* defaultValue,
-                               SegmentReader* segment, int recursionLimit);
+                               SegmentReader* segment, int nestingLimit);
 
   template <typename T>
   CAPNPROTO_ALWAYS_INLINE(
@@ -213,16 +213,16 @@ private:
   // instead of the usual zero.  This is needed to allow a boolean list to be upgraded to a list
   // of structs.
 
-  int recursionLimit;
+  int nestingLimit;
   // Limits the depth of message structures to guard against stack-overflow-based DoS attacks.
   // Once this reaches zero, further pointers will be pruned.
 
   inline StructReader(SegmentReader* segment, const void* data, const WireReference* references,
                       FieldNumber fieldCount, WordCount dataSize, WireReferenceCount referenceCount,
-                      BitCount bit0Offset, int recursionLimit)
+                      BitCount bit0Offset, int nestingLimit)
       : segment(segment), data(data), references(references), fieldCount(fieldCount),
         dataSize(dataSize), referenceCount(referenceCount), bit0Offset(bit0Offset),
-        recursionLimit(recursionLimit) {}
+        nestingLimit(nestingLimit) {}
 
   friend class ListReader;
   friend class StructBuilder;
@@ -306,7 +306,7 @@ public:
   inline ListReader()
       : segment(nullptr), ptr(nullptr), elementCount(0),
         stepBits(0 * BITS / ELEMENTS), structFieldCount(0), structDataSize(0),
-        structReferenceCount(0), recursionLimit(0) {}
+        structReferenceCount(0), nestingLimit(0) {}
 
   inline ElementCount size();
   // The number of elements in the list.
@@ -348,22 +348,22 @@ private:
   // only used to check for field presence; the data size is also used to compute the reference
   // pointer.
 
-  int recursionLimit;
+  int nestingLimit;
   // Limits the depth of message structures to guard against stack-overflow-based DoS attacks.
   // Once this reaches zero, further pointers will be pruned.
 
   inline ListReader(SegmentReader* segment, const void* ptr, ElementCount elementCount,
-                    decltype(BITS / ELEMENTS) stepBits, int recursionLimit)
+                    decltype(BITS / ELEMENTS) stepBits, int nestingLimit)
       : segment(segment), ptr(ptr), elementCount(elementCount), stepBits(stepBits),
         structFieldCount(0), structDataSize(0), structReferenceCount(0),
-        recursionLimit(recursionLimit) {}
+        nestingLimit(nestingLimit) {}
   inline ListReader(SegmentReader* segment, const void* ptr, ElementCount elementCount,
                     decltype(BITS / ELEMENTS) stepBits,
                     FieldNumber structFieldCount, WordCount structDataSize,
-                    WireReferenceCount structReferenceCount, int recursionLimit)
+                    WireReferenceCount structReferenceCount, int nestingLimit)
       : segment(segment), ptr(ptr), elementCount(elementCount), stepBits(stepBits),
         structFieldCount(structFieldCount), structDataSize(structDataSize),
-        structReferenceCount(structReferenceCount), recursionLimit(recursionLimit) {}
+        structReferenceCount(structReferenceCount), nestingLimit(nestingLimit) {}
 
   friend class StructReader;
   friend class ListBuilder;

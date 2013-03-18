@@ -34,10 +34,11 @@ Arena::~Arena() {}
 
 // =======================================================================================
 
-ReaderArena::ReaderArena(std::unique_ptr<ReaderContext> context)
-    : context(std::move(context)),
-      readLimiter(this->context->getReadLimit() * WORDS),
-      segment0(this, SegmentId(0), this->context->getSegment(0), &readLimiter) {}
+ReaderArena::ReaderArena(MessageReader* message)
+    : message(message),
+      readLimiter(this->message->getOptions().traversalLimitInWords * WORDS),
+      ignoreErrors(false),
+      segment0(this, SegmentId(0), this->message->getSegment(0), &readLimiter) {}
 
 ReaderArena::~ReaderArena() {}
 
@@ -61,7 +62,7 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
     }
   }
 
-  ArrayPtr<const word> newSegment = context->getSegment(id.value);
+  ArrayPtr<const word> newSegment = message->getSegment(id.value);
   if (newSegment == nullptr) {
     return nullptr;
   }
@@ -77,17 +78,26 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
 }
 
 void ReaderArena::reportInvalidData(const char* description) {
-  context->reportError(description);
+  if (!ignoreErrors) {
+    message->getOptions().errorReporter->reportError(description);
+  }
 }
 
 void ReaderArena::reportReadLimitReached() {
-  context->reportError("Exceeded read limit.");
+  if (!ignoreErrors) {
+    message->getOptions().errorReporter->reportError(
+        "Exceeded message traversal limit.  See capnproto::ReaderOptions.");
+
+    // Ignore further errors since they are likely repeats or caused by the read limit being
+    // reached.
+    ignoreErrors = true;
+  }
 }
 
 // =======================================================================================
 
-BuilderArena::BuilderArena(std::unique_ptr<BuilderContext> context)
-    : context(std::move(context)), segment0(nullptr, SegmentId(0), nullptr, nullptr) {}
+BuilderArena::BuilderArena(MessageBuilder* message)
+    : message(message), segment0(nullptr, SegmentId(0), nullptr, nullptr) {}
 BuilderArena::~BuilderArena() {}
 
 SegmentBuilder* BuilderArena::getSegment(SegmentId id) {
@@ -105,7 +115,7 @@ SegmentBuilder* BuilderArena::getSegmentWithAvailable(WordCount minimumAvailable
 
   if (segment0.getArena() == nullptr) {
     // We're allocating the first segment.
-    ArrayPtr<word> ptr = context->allocateSegment(minimumAvailable / WORDS);
+    ArrayPtr<word> ptr = message->allocateSegment(minimumAvailable / WORDS);
 
     // Re-allocate segment0 in-place.  This is a bit of a hack, but we have not returned any
     // pointers to this segment yet, so it should be fine.
@@ -132,7 +142,7 @@ SegmentBuilder* BuilderArena::getSegmentWithAvailable(WordCount minimumAvailable
 
     std::unique_ptr<SegmentBuilder> newBuilder = std::unique_ptr<SegmentBuilder>(
         new SegmentBuilder(this, SegmentId(moreSegments->builders.size() + 1),
-            context->allocateSegment(minimumAvailable / WORDS), &this->dummyLimiter));
+            message->allocateSegment(minimumAvailable / WORDS), &this->dummyLimiter));
     SegmentBuilder* result = newBuilder.get();
     moreSegments->builders.push_back(std::move(newBuilder));
 

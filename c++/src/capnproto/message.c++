@@ -31,8 +31,86 @@
 
 namespace capnproto {
 
-ReaderContext::~ReaderContext() {}
-BuilderContext::~BuilderContext() {}
+MessageReader::MessageReader(ReaderOptions options): options(options), allocatedArena(false) {}
+MessageReader::~MessageReader() {
+  if (allocatedArena) {
+    arena()->~ReaderArena();
+  }
+}
+
+internal::StructReader MessageReader::getRoot(const word* defaultValue) {
+  if (!allocatedArena) {
+    static_assert(sizeof(internal::ReaderArena) <= sizeof(arenaSpace),
+        "arenaSpace is too small to hold a ReaderArena.  Please increase it.  This will break "
+        "ABI compatibility.");
+    new(arena()) internal::ReaderArena(this);
+    allocatedArena = true;
+  }
+
+  internal::SegmentReader* segment = arena()->tryGetSegment(SegmentId(0));
+  if (segment == nullptr ||
+      !segment->containsInterval(segment->getStartPtr(), segment->getStartPtr() + 1)) {
+    segment->getArena()->reportInvalidData("Message did not contain a root pointer.");
+    return internal::StructReader::readRootTrusted(defaultValue, defaultValue);
+  } else {
+    return internal::StructReader::readRoot(
+        segment->getStartPtr(), defaultValue, segment, options.nestingLimit);
+  }
+}
+
+// -------------------------------------------------------------------
+
+MessageBuilder::MessageBuilder(): allocatedArena(false) {}
+MessageBuilder::~MessageBuilder() {
+  if (allocatedArena) {
+    arena()->~BuilderArena();
+  }
+}
+
+internal::SegmentBuilder* MessageBuilder::getRootSegment() {
+  if (allocatedArena) {
+    return arena()->getSegment(SegmentId(0));
+  } else {
+    static_assert(sizeof(internal::BuilderArena) <= sizeof(arenaSpace),
+        "arenaSpace is too small to hold a BuilderArena.  Please increase it.  This will break "
+        "ABI compatibility.");
+    new(arena()) internal::BuilderArena(this);
+    allocatedArena = true;
+
+    WordCount refSize = 1 * REFERENCES * WORDS_PER_REFERENCE;
+    internal::SegmentBuilder* segment = arena()->getSegmentWithAvailable(refSize);
+    CAPNPROTO_ASSERT(segment->getSegmentId() == SegmentId(0),
+        "First allocated word of new arena was not in segment ID 0.");
+    word* location = segment->allocate(refSize);
+    CAPNPROTO_ASSERT(location == segment->getPtrUnchecked(0 * WORDS),
+        "First allocated word of new arena was not the first word in its segment.");
+    return segment;
+  }
+}
+
+internal::StructBuilder MessageBuilder::initRoot(const word* defaultValue) {
+  internal::SegmentBuilder* rootSegment = getRootSegment();
+  return internal::StructBuilder::initRoot(
+      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), defaultValue);
+}
+
+internal::StructBuilder MessageBuilder::getRoot(const word* defaultValue) {
+  internal::SegmentBuilder* rootSegment = getRootSegment();
+  return internal::StructBuilder::getRoot(
+      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), defaultValue);
+}
+
+ArrayPtr<const ArrayPtr<const word>> MessageBuilder::getSegmentsForOutput() {
+  if (allocatedArena) {
+    return arena()->getSegmentsForOutput();
+  } else {
+    return nullptr;
+  }
+}
+
+// =======================================================================================
+
+ErrorReporter::~ErrorReporter() {}
 
 class ParseException: public std::exception {
 public:
@@ -48,192 +126,107 @@ private:
   std::string message;
 };
 
-class DefaultReaderContext: public ReaderContext {
+class ThrowingErrorReporter: public ErrorReporter {
 public:
-  DefaultReaderContext(ArrayPtr<const ArrayPtr<const word>> segments,
-      ErrorBehavior errorBehavior, uint64_t readLimit, uint nestingLimit)
-      : segments(segments), errorBehavior(errorBehavior), readLimit(readLimit),
-        nestingLimit(nestingLimit) {}
-  ~DefaultReaderContext() {}
-
-  ArrayPtr<const word> getSegment(uint id) override {
-    if (id < segments.size()) {
-      return segments[id];
-    } else {
-      return nullptr;
-    }
-  }
-
-  uint64_t getReadLimit() override {
-    return readLimit;
-  }
-
-  uint getNestingLimit() override {
-    return nestingLimit;
-  }
+  virtual ~ThrowingErrorReporter() {}
 
   void reportError(const char* description) override {
-    std::string message("ERROR: Cap'n Proto parse error: ");
+    std::string message("Cap'n Proto message was invalid: ");
+    message += description;
+    throw ParseException(std::move(message));
+  }
+};
+
+ErrorReporter* getThrowingErrorReporter() {
+  static ThrowingErrorReporter instance;
+  return &instance;
+}
+
+class StderrErrorReporter: public ErrorReporter {
+public:
+  virtual ~StderrErrorReporter() {}
+
+  void reportError(const char* description) override {
+    std::string message("ERROR: Cap'n Proto message was invalid: ");
     message += description;
     message += '\n';
-
-    switch (errorBehavior) {
-      case ErrorBehavior::THROW_EXCEPTION:
-        throw ParseException(std::move(message));
-        break;
-      case ErrorBehavior::REPORT_TO_STDERR_AND_RETURN_DEFAULT:
-        write(STDERR_FILENO, message.data(), message.size());
-        break;
-      case ErrorBehavior::IGNORE_AND_RETURN_DEFAULT:
-        break;
-    }
+    write(STDERR_FILENO, message.data(), message.size());
   }
-
-private:
-  ArrayPtr<const ArrayPtr<const word>> segments;
-  ErrorBehavior errorBehavior;
-  uint64_t readLimit;
-  uint nestingLimit;
 };
 
-std::unique_ptr<ReaderContext> newReaderContext(
-    ArrayPtr<const ArrayPtr<const word>> segments,
-    ErrorBehavior errorBehavior, uint64_t readLimit, uint nestingLimit) {
-  return std::unique_ptr<ReaderContext>(new DefaultReaderContext(
-      segments, errorBehavior, readLimit, nestingLimit));
+ErrorReporter* getStderrErrorReporter() {
+  static StderrErrorReporter instance;
+  return &instance;
 }
 
-class DefaultBuilderContext: public BuilderContext {
+class IgnoringErrorReporter: public ErrorReporter {
 public:
-  DefaultBuilderContext(uint firstSegmentWords, bool enableGrowthHeursitic)
-      : nextSize(firstSegmentWords), enableGrowthHeursitic(enableGrowthHeursitic),
-        firstSegment(nullptr) {}
+  virtual ~IgnoringErrorReporter() {}
 
-  ~DefaultBuilderContext() {
-    free(firstSegment);
-    for (void* ptr: moreSegments) {
-      free(ptr);
-    }
-  }
-
-  ArrayPtr<word> allocateSegment(uint minimumSize) override {
-    uint size = std::max(minimumSize, nextSize);
-
-    void* result = calloc(size, sizeof(word));
-    if (result == nullptr) {
-      throw std::bad_alloc();
-    }
-
-    if (firstSegment == nullptr) {
-      firstSegment = result;
-      if (enableGrowthHeursitic) nextSize = size;
-    } else {
-      moreSegments.push_back(result);
-      if (enableGrowthHeursitic) nextSize += size;
-    }
-
-    return arrayPtr(reinterpret_cast<word*>(result), size);
-  }
-
-private:
-  uint nextSize;
-  bool enableGrowthHeursitic;
-
-  // Avoid allocating the vector if there is only one segment.
-  void* firstSegment;
-  std::vector<void*> moreSegments;
+  void reportError(const char* description) override {}
 };
 
-std::unique_ptr<BuilderContext> newBuilderContext(uint firstSegmentWords) {
-  return std::unique_ptr<BuilderContext>(new DefaultBuilderContext(firstSegmentWords, true));
-}
-
-std::unique_ptr<BuilderContext> newFixedWidthBuilderContext(uint firstSegmentWords) {
-  return std::unique_ptr<BuilderContext>(new DefaultBuilderContext(firstSegmentWords, false));
+ErrorReporter* getIgnoringErrorReporter() {
+  static IgnoringErrorReporter instance;
+  return &instance;
 }
 
 // =======================================================================================
 
-namespace internal {
+SegmentArrayMessageReader::SegmentArrayMessageReader(
+    ArrayPtr<const ArrayPtr<const word>> segments, ReaderOptions options)
+    : MessageReader(options), segments(segments) {}
 
-MessageImpl::Reader::Reader(ArrayPtr<const ArrayPtr<const word>> segments) {
-  std::unique_ptr<ReaderContext> context = newReaderContext(segments);
-  recursionLimit = context->getNestingLimit();
+SegmentArrayMessageReader::~SegmentArrayMessageReader() {}
 
-  static_assert(sizeof(ReaderArena) <= sizeof(arenaSpace),
-      "arenaSpace is too small to hold a ReaderArena.  Please increase it.  This will break "
-      "ABI compatibility.");
-  new(arena()) ReaderArena(std::move(context));
-}
-
-MessageImpl::Reader::Reader(std::unique_ptr<ReaderContext> context)
-    : recursionLimit(context->getNestingLimit()) {
-  static_assert(sizeof(ReaderArena) <= sizeof(arenaSpace),
-      "arenaSpace is too small to hold a ReaderArena.  Please increase it.  This will break "
-      "ABI compatibility.");
-  new(arena()) ReaderArena(std::move(context));
-}
-
-MessageImpl::Reader::~Reader() {
-  arena()->~ReaderArena();
-}
-
-StructReader MessageImpl::Reader::getRoot(const word* defaultValue) {
-  SegmentReader* segment = arena()->tryGetSegment(SegmentId(0));
-  if (segment == nullptr ||
-      !segment->containsInterval(segment->getStartPtr(), segment->getStartPtr() + 1)) {
-    segment->getArena()->reportInvalidData("Message did not contain a root pointer.");
-    return StructReader::readRootTrusted(defaultValue, defaultValue);
+ArrayPtr<const word> SegmentArrayMessageReader::getSegment(uint id) {
+  if (id < segments.size()) {
+    return segments[id];
   } else {
-    return StructReader::readRoot(segment->getStartPtr(), defaultValue, segment, recursionLimit);
+    return nullptr;
   }
 }
 
-MessageImpl::Builder::Builder(): rootSegment(nullptr) {
-  std::unique_ptr<BuilderContext> context = newBuilderContext();
+// -------------------------------------------------------------------
 
-  static_assert(sizeof(BuilderArena) <= sizeof(arenaSpace),
-      "arenaSpace is too small to hold a BuilderArena.  Please increase it.  This will break "
-      "ABI compatibility.");
-  new(arena()) BuilderArena(std::move(context));
+struct MallocMessageBuilder::MoreSegments {
+  std::vector<void*> segments;
+};
+
+MallocMessageBuilder::MallocMessageBuilder(
+    uint firstSegmentWords, AllocationStrategy allocationStrategy)
+    : nextSize(firstSegmentWords), allocationStrategy(allocationStrategy),
+      firstSegment(nullptr) {}
+
+MallocMessageBuilder::~MallocMessageBuilder() {
+  free(firstSegment);
+  if (moreSegments != nullptr) {
+    for (void* ptr: moreSegments->segments) {
+      free(ptr);
+    }
+  }
 }
 
-MessageImpl::Builder::Builder(std::unique_ptr<BuilderContext> context): rootSegment(nullptr) {
-  static_assert(sizeof(BuilderArena) <= sizeof(arenaSpace),
-      "arenaSpace is too small to hold a BuilderArena.  Please increase it.  This will break "
-      "ABI compatibility.");
-  new(arena()) BuilderArena(std::move(context));
+ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
+  uint size = std::max(minimumSize, nextSize);
+
+  void* result = calloc(size, sizeof(word));
+  if (result == nullptr) {
+    throw std::bad_alloc();
+  }
+
+  if (firstSegment == nullptr) {
+    firstSegment = result;
+    if (allocationStrategy == AllocationStrategy::GROW_HEURISTICALLY) nextSize = size;
+  } else {
+    if (moreSegments == nullptr) {
+      moreSegments = std::unique_ptr<MoreSegments>(new MoreSegments);
+    }
+    moreSegments->segments.push_back(result);
+    if (allocationStrategy == AllocationStrategy::GROW_HEURISTICALLY) nextSize += size;
+  }
+
+  return arrayPtr(reinterpret_cast<word*>(result), size);
 }
 
-MessageImpl::Builder::~Builder() {
-  arena()->~BuilderArena();
-}
-
-StructBuilder MessageImpl::Builder::initRoot(const word* defaultValue) {
-  if (rootSegment == nullptr) rootSegment = allocateRoot(arena());
-  return StructBuilder::initRoot(
-      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), defaultValue);
-}
-
-StructBuilder MessageImpl::Builder::getRoot(const word* defaultValue) {
-  if (rootSegment == nullptr) rootSegment = allocateRoot(arena());
-  return StructBuilder::getRoot(rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), defaultValue);
-}
-
-ArrayPtr<const ArrayPtr<const word>> MessageImpl::Builder::getSegmentsForOutput() {
-  return arena()->getSegmentsForOutput();
-}
-
-SegmentBuilder* MessageImpl::Builder::allocateRoot(BuilderArena* arena) {
-  WordCount refSize = 1 * REFERENCES * WORDS_PER_REFERENCE;
-  SegmentBuilder* segment = arena->getSegmentWithAvailable(refSize);
-  CAPNPROTO_ASSERT(segment->getSegmentId() == SegmentId(0),
-      "First allocated word of new arena was not in segment ID 0.");
-  word* location = segment->allocate(refSize);
-  CAPNPROTO_ASSERT(location == segment->getPtrUnchecked(0 * WORDS),
-      "First allocated word of new arena was not the first word in its segment.");
-  return segment;
-}
-
-}  // namespace internal
 }  // namespace capnproto
