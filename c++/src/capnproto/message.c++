@@ -38,6 +38,10 @@ MessageReader::~MessageReader() {
   }
 }
 
+void MessageReader::reset() {
+  if (allocatedArena) arena()->reset();
+}
+
 internal::StructReader MessageReader::getRoot(const word* defaultValue) {
   if (!allocatedArena) {
     static_assert(sizeof(internal::ReaderArena) <= sizeof(arenaSpace),
@@ -67,35 +71,35 @@ MessageBuilder::~MessageBuilder() {
   }
 }
 
-internal::SegmentBuilder* MessageBuilder::getRootSegment() {
-  if (allocatedArena) {
-    return arena()->getSegment(SegmentId(0));
-  } else {
+internal::SegmentBuilder* MessageBuilder::allocateRootSegment() {
+  if (!allocatedArena) {
     static_assert(sizeof(internal::BuilderArena) <= sizeof(arenaSpace),
         "arenaSpace is too small to hold a BuilderArena.  Please increase it.  This will break "
         "ABI compatibility.");
     new(arena()) internal::BuilderArena(this);
     allocatedArena = true;
-
-    WordCount refSize = 1 * REFERENCES * WORDS_PER_REFERENCE;
-    internal::SegmentBuilder* segment = arena()->getSegmentWithAvailable(refSize);
-    CAPNPROTO_ASSERT(segment->getSegmentId() == SegmentId(0),
-        "First allocated word of new arena was not in segment ID 0.");
-    word* location = segment->allocate(refSize);
-    CAPNPROTO_ASSERT(location == segment->getPtrUnchecked(0 * WORDS),
-        "First allocated word of new arena was not the first word in its segment.");
-    return segment;
   }
+
+  WordCount refSize = 1 * REFERENCES * WORDS_PER_REFERENCE;
+  internal::SegmentBuilder* segment = arena()->getSegmentWithAvailable(refSize);
+  CAPNPROTO_ASSERT(segment->getSegmentId() == SegmentId(0),
+      "First allocated word of new arena was not in segment ID 0.");
+  word* location = segment->allocate(refSize);
+  CAPNPROTO_ASSERT(location == segment->getPtrUnchecked(0 * WORDS),
+      "First allocated word of new arena was not the first word in its segment.");
+  return segment;
 }
 
 internal::StructBuilder MessageBuilder::initRoot(const word* defaultValue) {
-  internal::SegmentBuilder* rootSegment = getRootSegment();
+  if (allocatedArena) arena()->reset();
+  internal::SegmentBuilder* rootSegment = allocateRootSegment();
   return internal::StructBuilder::initRoot(
       rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), defaultValue);
 }
 
 internal::StructBuilder MessageBuilder::getRoot(const word* defaultValue) {
-  internal::SegmentBuilder* rootSegment = getRootSegment();
+  internal::SegmentBuilder* rootSegment = allocatedArena ?
+      arena()->getSegment(SegmentId(0)) : allocateRootSegment();
   return internal::StructBuilder::getRoot(
       rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), defaultValue);
 }

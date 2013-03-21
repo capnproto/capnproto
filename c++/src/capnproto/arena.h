@@ -63,6 +63,8 @@ public:
   inline explicit ReadLimiter();                     // No limit.
   inline explicit ReadLimiter(WordCount64 limit);    // Limit to the given number of words.
 
+  inline void reset(WordCount64 limit);
+
   CAPNPROTO_ALWAYS_INLINE(bool canRead(WordCount amount, Arena* arena));
 
 private:
@@ -112,6 +114,8 @@ public:
 
   inline ArrayPtr<const word> currentlyAllocated();
 
+  inline void reset();
+
 private:
   word* pos;
 
@@ -160,6 +164,8 @@ public:
   ~ReaderArena();
   CAPNPROTO_DISALLOW_COPY(ReaderArena);
 
+  void reset();
+
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportInvalidData(const char* description) override;
@@ -182,6 +188,9 @@ public:
   BuilderArena(MessageBuilder* message);
   ~BuilderArena();
   CAPNPROTO_DISALLOW_COPY(BuilderArena);
+
+  void reset();
+  // Resets all the segments to be empty, so that a new message can be started.
 
   SegmentBuilder* getSegment(SegmentId id);
   // Get the segment with the given id.  Crashes or throws an exception if no such segment exists.
@@ -223,6 +232,8 @@ inline ReadLimiter::ReadLimiter()
     : limit(uint64_t(0x7fffffffffffffffll) * WORDS) {}
 
 inline ReadLimiter::ReadLimiter(WordCount64 limit): limit(limit) {}
+
+inline void ReadLimiter::reset(WordCount64 limit) { this->limit = limit; }
 
 inline bool ReadLimiter::canRead(WordCount amount, Arena* arena) {
   if (CAPNPROTO_EXPECT_FALSE(amount > limit)) {
@@ -291,6 +302,12 @@ inline WordCount SegmentBuilder::available() {
 
 inline ArrayPtr<const word> SegmentBuilder::currentlyAllocated() {
   return arrayPtr(ptr.begin(), pos - ptr.begin());
+}
+
+inline void SegmentBuilder::reset() {
+  word* start = getPtrUnchecked(0 * WORDS);
+  memset(start, 0, (pos - start) * sizeof(word));
+  pos = start;
 }
 
 }  // namespace internal

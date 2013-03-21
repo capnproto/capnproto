@@ -54,6 +54,14 @@ struct {{structName}} {
 {{/structFields}}
 };
 {{/fileStructs}}
+{{#fileEnums}}
+
+enum class {{enumName}}: uint16_t {
+{{#enumValues}}
+  {{enumValueName}} = {{enumValueNumber}},
+{{/enumValues}}
+};
+{{/fileEnums}}
 {{#fileStructs}}
 
 class {{structName}}::Reader {

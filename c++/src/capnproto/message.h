@@ -123,12 +123,23 @@ public:
 
   virtual ArrayPtr<const word> getSegment(uint id) = 0;
   // Gets the segment with the given ID, or returns null if no such segment exists.
+  //
+  // Normally getSegment() will only be called once for each segment ID.  Subclasses can call
+  // reset() to clear the segment table and start over with new segments.
 
   inline const ReaderOptions& getOptions();
   // Get the options passed to the constructor.
 
   template <typename RootType>
   typename RootType::Reader getRoot();
+
+protected:
+  void reset();
+  // Clear the cached segment table so that the reader can be reused to read another message.
+  // reset() may call getSegment() again before returning, so you must arrange for the new segment
+  // set to be active *before* calling this.
+  //
+  // This invalidates any Readers currently pointing into this message.
 
 private:
   ReaderOptions options;
@@ -171,7 +182,7 @@ private:
   bool allocatedArena = false;
 
   internal::BuilderArena* arena() { return reinterpret_cast<internal::BuilderArena*>(arenaSpace); }
-  internal::SegmentBuilder* getRootSegment();
+  internal::SegmentBuilder* allocateRootSegment();
   internal::StructBuilder initRoot(const word* defaultValue);
   internal::StructBuilder getRoot(const word* defaultValue);
 };

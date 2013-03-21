@@ -103,11 +103,17 @@ enum class InputStrategy {
   // an InputStream, the stream will then be positioned at the byte immediately after the end of
   // the message, and will not be accessed again.
 
-  LAZY
+  LAZY,
   // Read segments of the message into RAM as needed while the message structure is being traversed.
   // When reading from an InputStream, segments must be read in order, so segments up to the
   // required segment will also be read.  No guarantee is made about the position of the InputStream
   // after reading.  When using an InputFile, only the exact segments desired are read.
+
+  EAGER_WAIT_FOR_READ_NEXT,
+  // Like EAGER but don't read the first mesasge until readNext() is called the first time.
+
+  LAZY_WAIT_FOR_READ_NEXT,
+  // Like LAZY but don't read the first mesasge until readNext() is called the first time.
 };
 
 class InputStreamMessageReader: public MessageReader {
@@ -116,16 +122,23 @@ public:
                            ReaderOptions options = ReaderOptions(),
                            InputStrategy inputStrategy = InputStrategy::EAGER);
 
+  void readNext();
+  // Progress to the next message in the input stream, reusing the same memory if possible.
+  // Calling this invalidates any Readers currently pointing into this message.
+
   // implements MessageReader ----------------------------------------
   ArrayPtr<const word> getSegment(uint id) override;
 
 private:
   InputStream* inputStream;
+  InputStrategy inputStrategy;
   uint segmentsReadSoFar;
 
   struct LazySegment {
     uint size;
-    Array<word> words;   // null until actually read
+    Array<word> words;
+    // words may be larger than the desired size in the case where space is being reused from a
+    // previous read.
 
     inline LazySegment(): size(0), words(nullptr) {}
   };
@@ -133,6 +146,8 @@ private:
   // Optimize for single-segment case.
   LazySegment segment0;
   Array<LazySegment> moreSegments;
+
+  void readNextInternal();
 };
 
 class InputFileMessageReader: public MessageReader {

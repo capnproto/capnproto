@@ -157,6 +157,16 @@ elementType _ = error "Called elementType on non-list."
 repeatedlyTake _ [] = []
 repeatedlyTake n l = take n l : repeatedlyTake n (drop n l)
 
+enumValueContext parent desc = mkStrContext context where
+    context "enumValueName" = MuVariable $ toUpperCaseWithUnderscores $ enumValueName desc
+    context "enumValueNumber" = MuVariable $ enumValueNumber desc
+    context s = parent s
+
+enumContext parent desc = mkStrContext context where
+    context "enumName" = MuVariable $ enumName desc
+    context "enumValues" = MuList $ map (enumValueContext context) $ enumValues desc
+    context s = parent s
+
 defaultBytesContext :: Monad m => (String -> MuType m) -> TypeDesc -> [Word8] -> MuContext m
 defaultBytesContext parent t bytes = mkStrContext context where
     codeLines = map (delimit ", ") $ repeatedlyTake 8 $ map (printf "%3d") bytes
@@ -212,6 +222,7 @@ fileContext desc = mkStrContext context where
     context "fileIncludeGuard" = MuVariable $
         "CAPNPROTO_INCLUDED_" ++ hashString (fileName desc)
     context "fileNamespaces" = MuList []  -- TODO
+    context "fileEnums" = MuList $ map (enumContext context) $ fileEnums desc
     context "fileStructs" = MuList $ map (structContext context) $ fileStructs desc
     context s = error ("Template variable not defined: " ++ s)
 

@@ -134,7 +134,60 @@ OutputStream::~OutputStream() {}
 
 InputStreamMessageReader::InputStreamMessageReader(
     InputStream* inputStream, ReaderOptions options, InputStrategy inputStrategy)
-    : MessageReader(options), inputStream(inputStream), segmentsReadSoFar(0) {
+    : MessageReader(options), inputStream(inputStream), inputStrategy(inputStrategy),
+      segmentsReadSoFar(0) {
+  switch (inputStrategy) {
+    case InputStrategy::EAGER:
+    case InputStrategy::LAZY:
+      readNextInternal();
+      break;
+    case InputStrategy::EAGER_WAIT_FOR_READ_NEXT:
+    case InputStrategy::LAZY_WAIT_FOR_READ_NEXT:
+      break;
+  }
+}
+
+void InputStreamMessageReader::readNext() {
+  bool needReset = false;
+
+  switch (inputStrategy) {
+    case InputStrategy::LAZY:
+      if (moreSegments != nullptr || segment0.size != 0) {
+        // Make sure we've finished reading the previous message.
+        // Note that this sort of defeats the purpose of lazy parsing.  In theory we could be a
+        // little more efficient by reading into a stack-allocated scratch buffer rather than
+        // allocating space for the remaining segments, but people really shouldn't be using
+        // readNext() when lazy-parsing anyway.
+        getSegment(moreSegments.size());
+      }
+
+      // no break
+
+    case InputStrategy::EAGER:
+      needReset = true;
+
+      // TODO:  Save moreSegments for reuse?
+      moreSegments = nullptr;
+
+      segmentsReadSoFar = 0;
+      segment0.size = 0;
+      break;
+
+    case InputStrategy::EAGER_WAIT_FOR_READ_NEXT:
+      this->inputStrategy = InputStrategy::EAGER;
+      break;
+    case InputStrategy::LAZY_WAIT_FOR_READ_NEXT:
+      this->inputStrategy = InputStrategy::LAZY;
+      break;
+  }
+
+  if (inputStream != nullptr) {
+    readNextInternal();
+  }
+  if (needReset) reset();
+}
+
+void InputStreamMessageReader::readNextInternal() {
   internal::WireValue<uint32_t> firstWord[2];
 
   if (!inputStream->read(firstWord, sizeof(firstWord))) return;
@@ -160,7 +213,6 @@ InputStreamMessageReader::InputStreamMessageReader(
 
   if (inputStrategy == InputStrategy::EAGER) {
     getSegment(segmentCount - 1);
-    inputStream = nullptr;
   }
 }
 
@@ -171,20 +223,22 @@ ArrayPtr<const word> InputStreamMessageReader::getSegment(uint id) {
 
   while (segmentsReadSoFar <= id && inputStream != nullptr) {
     LazySegment& segment = segmentsReadSoFar == 0 ? segment0 : moreSegments[segmentsReadSoFar - 1];
-    Array<word> words = newArray<word>(segment.size);
+    if (segment.words.size() < segment.size) {
+      segment.words = newArray<word>(segment.size);
+    }
 
-    if (!inputStream->read(words.begin(), words.size() * sizeof(word))) {
+    if (!inputStream->read(segment.words.begin(), segment.size * sizeof(word))) {
       // There was an error but no exception was thrown, so we're supposed to plod along with
       // default values.  Discard the broken stream.
       inputStream = nullptr;
       break;
     }
 
-    segment.words = move(words);
     ++segmentsReadSoFar;
   }
 
-  return id == 0 ? segment0.words.asPtr() : moreSegments[id - 1].words.asPtr();
+  LazySegment& segment = id == 0 ? segment0 : moreSegments[id - 1];
+  return segment.words.slice(0, segment.size);
 }
 
 // -------------------------------------------------------------------
