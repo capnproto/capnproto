@@ -40,3 +40,15 @@ struct Expression {
 struct EvaluationResult {
   value@0: Int32;
 }
+
+# ========================================================================================
+
+struct SearchResultList {
+  results@0: List(SearchResult);
+}
+
+struct SearchResult {
+  url@0: Text;
+  score@1: Float64;
+  snippet@2: Text;
+}

@@ -42,3 +42,15 @@ message Expression {
 message EvaluationResult {
   required sint32 value = 1;
 }
+
+// =======================================================================================
+
+message SearchResultList {
+  repeated SearchResult result = 1;
+}
+
+message SearchResult {
+  optional string url = 1;
+  optional double score = 2;
+  optional string snippet = 3;
+}

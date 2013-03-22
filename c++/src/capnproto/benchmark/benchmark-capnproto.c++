@@ -33,7 +33,7 @@
 #include <stdexcept>
 #include <memory>
 #include <thread>
-#include <mutex>
+#include <algorithm>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <semaphore.h>
@@ -181,6 +181,125 @@ public:
   }
   static inline bool checkResponse(EvaluationResult::Reader response, int32_t expected) {
     return response.getValue() == expected;
+  }
+};
+
+// =======================================================================================
+// Test case:  Cat Rank
+//
+// The server receives a list of candidate search results with scores.  It promotes the ones that
+// mention "cat" in their snippet and demotes the ones that mention "dog", sorts the results by
+// descending score, and returns.
+//
+// The promotion multiplier is large enough that all the results mentioning "cat" but not "dog"
+// should end up at the front ofthe list, which is how we verify the result.
+
+static const char* WORDS[] = {
+    "foo ", "bar ", "baz ", "qux ", "quux ", "corge ", "grault ", "garply ", "waldo ", "fred ",
+    "plugh ", "xyzzy ", "thud "
+};
+constexpr size_t WORDS_COUNT = sizeof(WORDS) / sizeof(WORDS[0]);
+
+struct ScoredResult {
+  double score;
+  SearchResult::Reader result;
+
+  ScoredResult() = default;
+  ScoredResult(double score, SearchResult::Reader result): score(score), result(result) {}
+
+  inline bool operator<(const ScoredResult& other) const { return score > other.score; }
+};
+
+class CatRankTestCase {
+public:
+  typedef SearchResultList Request;
+  typedef SearchResultList Response;
+  typedef int Expectation;
+
+  static int setupRequest(SearchResultList::Builder request) {
+    int count = rand() % 1000;
+    int goodCount = 0;
+
+    auto list = request.initResults(count);
+
+    for (int i = 0; i < count; i++) {
+      SearchResult::Builder result = list[i];
+      result.setScore(1000 - i);
+      int urlSize = rand() % 100;
+
+      static const char URL_PREFIX[] = "http://example.com/";
+      auto url = result.initUrl(urlSize + sizeof(URL_PREFIX));
+
+      strcpy(url.data(), URL_PREFIX);
+      char* pos = url.data() + strlen(URL_PREFIX);
+      for (int j = 0; j < urlSize; j++) {
+        *pos++ = 'a' + rand() % 26;
+      }
+
+      bool isCat = rand() % 8 == 0;
+      bool isDog = rand() % 8 == 0;
+      goodCount += isCat && !isDog;
+
+      std::string snippet;
+      snippet.push_back(' ');
+
+      int prefix = rand() % 20;
+      for (int j = 0; j < prefix; j++) {
+        snippet.append(WORDS[rand() % WORDS_COUNT]);
+      }
+
+      if (isCat) snippet.append("cat ");
+      if (isDog) snippet.append("dog ");
+
+      int suffix = rand() % 20;
+      for (int j = 0; j < suffix; j++) {
+        snippet.append(WORDS[rand() % WORDS_COUNT]);
+      }
+
+      result.setSnippet(snippet);
+    }
+
+    return goodCount;
+  }
+
+  static inline void handleRequest(SearchResultList::Reader request,
+                                   SearchResultList::Builder response) {
+    std::vector<ScoredResult> scoredResults;
+
+    for (auto result: request.getResults()) {
+      double score = result.getScore();
+      if (strstr(result.getSnippet().c_str(), " cat ") != nullptr) {
+        score *= 10000;
+      }
+      if (strstr(result.getSnippet().c_str(), " dog ") != nullptr) {
+        score /= 10000;
+      }
+      scoredResults.emplace_back(score, result);
+    }
+
+    std::sort(scoredResults.begin(), scoredResults.end());
+
+    auto list = response.initResults(scoredResults.size());
+    auto iter = list.begin();
+    for (auto result: scoredResults) {
+      iter->setScore(result.score);
+      iter->setUrl(result.result.getUrl());
+      iter->setSnippet(result.result.getSnippet());
+      ++iter;
+    }
+  }
+
+  static inline bool checkResponse(SearchResultList::Reader response, int expectedGoodCount) {
+    int goodCount = 0;
+    for (auto result: response.getResults()) {
+      if (result.getScore() > 1001) {
+        ++goodCount;
+      } else {
+        break;
+      }
+    }
+
+    return goodCount == expectedGoodCount;
   }
 };
 
@@ -443,62 +562,75 @@ uint64_t passByPipe(Func&& clientFunc, uint64_t iters) {
   }
 }
 
-template <typename ReuseStrategy, typename Compression>
+template <typename TestCase, typename ReuseStrategy, typename Compression>
 uint64_t doBenchmark(const std::string& mode, uint64_t iters) {
   if (mode == "client") {
-    return syncClient<ExpressionTestCase, ReuseStrategy, Compression>(
+    return syncClient<TestCase, ReuseStrategy, Compression>(
         STDIN_FILENO, STDOUT_FILENO, iters);
   } else if (mode == "server") {
-    return server<ExpressionTestCase, ReuseStrategy, Compression>(
+    return server<TestCase, ReuseStrategy, Compression>(
         STDIN_FILENO, STDOUT_FILENO, iters);
   } else if (mode == "object") {
-    return passByObject<ExpressionTestCase, ReuseStrategy, Compression>(iters);
+    return passByObject<TestCase, ReuseStrategy, Compression>(iters);
   } else if (mode == "bytes") {
-    return passByBytes<ExpressionTestCase, ReuseStrategy, Compression>(iters);
+    return passByBytes<TestCase, ReuseStrategy, Compression>(iters);
   } else if (mode == "pipe") {
-    return passByPipe<ExpressionTestCase, ReuseStrategy, Compression>(
-        syncClient<ExpressionTestCase, ReuseStrategy, Compression>, iters);
+    return passByPipe<TestCase, ReuseStrategy, Compression>(
+        syncClient<TestCase, ReuseStrategy, Compression>, iters);
   } else if (mode == "pipe-async") {
-    return passByPipe<ExpressionTestCase, ReuseStrategy, Compression>(
-        asyncClient<ExpressionTestCase, ReuseStrategy, Compression>, iters);
+    return passByPipe<TestCase, ReuseStrategy, Compression>(
+        asyncClient<TestCase, ReuseStrategy, Compression>, iters);
   } else {
     std::cerr << "Unknown mode: " << mode << std::endl;
     exit(1);
   }
 }
 
-template <typename Compression>
+template <typename TestCase, typename Compression>
 uint64_t doBenchmark2(const std::string& mode, const std::string& reuse, uint64_t iters) {
   if (reuse == "reuse") {
-    return doBenchmark<UseScratch<Compression, 1024>, Compression>(mode, iters);
+    return doBenchmark<TestCase, UseScratch<Compression, 1024>, Compression>(mode, iters);
   } else if (reuse == "no-reuse") {
-    return doBenchmark<NoScratch<Compression>, Compression>(mode, iters);
+    return doBenchmark<TestCase, NoScratch<Compression>, Compression>(mode, iters);
   } else {
     std::cerr << "Unknown reuse mode: " << reuse << std::endl;
     exit(1);
   }
 }
 
+template <typename TestCase>
+uint64_t doBenchmark3(const std::string& mode, const std::string& reuse,
+                      const std::string& compression, uint64_t iters) {
+  if (compression == "none") {
+    return doBenchmark2<TestCase, Uncompressed>(mode, reuse, iters);
+  } else if (compression == "snappy") {
+    return doBenchmark2<TestCase, SnappyCompressed>(mode, reuse, iters);
+  } else {
+    std::cerr << "Unknown compression mode: " << compression << std::endl;
+    exit(1);
+  }
+}
+
 int main(int argc, char* argv[]) {
-  if (argc != 5) {
+  if (argc != 6) {
     std::cerr << "USAGE:  " << argv[0] << " MODE REUSE COMPRESSION ITERATION_COUNT" << std::endl;
     return 1;
   }
 
-  uint64_t iters = strtoull(argv[4], nullptr, 0);
+  uint64_t iters = strtoull(argv[5], nullptr, 0);
   srand(123);
 
   std::cerr << "Doing " << iters << " iterations..." << std::endl;
 
   uint64_t throughput;
 
-  std::string compression = argv[3];
-  if (compression == "none") {
-    throughput = doBenchmark2<Uncompressed>(argv[1], argv[2], iters);
-  } else if (compression == "snappy") {
-    throughput = doBenchmark2<SnappyCompressed>(argv[1], argv[2], iters);
+  std::string testcase = argv[1];
+  if (testcase == "eval") {
+    throughput = doBenchmark3<ExpressionTestCase>(argv[2], argv[3], argv[4], iters);
+  } else if (testcase == "catrank") {
+    throughput = doBenchmark3<CatRankTestCase>(argv[2], argv[3], argv[4], iters);
   } else {
-    std::cerr << "Unknown compression mode: " << compression << std::endl;
+    std::cerr << "Unknown test case: " << testcase << std::endl;
     return 1;
   }
 

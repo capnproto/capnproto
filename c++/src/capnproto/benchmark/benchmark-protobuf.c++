@@ -31,7 +31,7 @@
 #include <stdexcept>
 #include <memory>
 #include <thread>
-#include <mutex>
+#include <algorithm>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <semaphore.h>
@@ -166,8 +166,6 @@ int32_t evaluateExpression(const Expression& exp) {
 
 class ExpressionTestCase {
 public:
-  ~ExpressionTestCase() {}
-
   typedef Expression Request;
   typedef EvaluationResult Response;
   typedef int32_t Expectation;
@@ -180,6 +178,114 @@ public:
   }
   static inline bool checkResponse(const EvaluationResult& response, int32_t expected) {
     return response.value() == expected;
+  }
+};
+
+// =======================================================================================
+// Test case:  Cat Rank
+//
+// The server receives a list of candidate search results with scores.  It promotes the ones that
+// mention "cat" in their snippet and demotes the ones that mention "dog", sorts the results by
+// descending score, and returns.
+//
+// The promotion multiplier is large enough that all the results mentioning "cat" but not "dog"
+// should end up at the front ofthe list, which is how we verify the result.
+
+static const char* WORDS[] = {
+    "foo ", "bar ", "baz ", "qux ", "quux ", "corge ", "grault ", "garply ", "waldo ", "fred ",
+    "plugh ", "xyzzy ", "thud "
+};
+constexpr size_t WORDS_COUNT = sizeof(WORDS) / sizeof(WORDS[0]);
+
+struct ScoredResult {
+  double score;
+  const SearchResult* result;
+
+  ScoredResult() = default;
+  ScoredResult(double score, const SearchResult* result): score(score), result(result) {}
+
+  inline bool operator<(const ScoredResult& other) const { return score > other.score; }
+};
+
+class CatRankTestCase {
+public:
+  typedef SearchResultList Request;
+  typedef SearchResultList Response;
+  typedef int Expectation;
+
+  static int setupRequest(SearchResultList* request) {
+    int count = rand() % 1000;
+    int goodCount = 0;
+
+    for (int i = 0; i < count; i++) {
+      SearchResult* result = request->add_result();
+      result->set_score(1000 - i);
+      result->set_url("http://example.com/");
+      std::string* url = result->mutable_url();
+      int urlSize = rand() % 100;
+      for (int j = 0; j < urlSize; j++) {
+        url->push_back('a' + rand() % 26);
+      }
+
+      bool isCat = rand() % 8 == 0;
+      bool isDog = rand() % 8 == 0;
+      goodCount += isCat && !isDog;
+
+      std::string* snippet = result->mutable_snippet();
+      snippet->push_back(' ');
+
+      int prefix = rand() % 20;
+      for (int j = 0; j < prefix; j++) {
+        snippet->append(WORDS[rand() % WORDS_COUNT]);
+      }
+
+      if (isCat) snippet->append("cat ");
+      if (isDog) snippet->append("dog ");
+
+      int suffix = rand() % 20;
+      for (int j = 0; j < suffix; j++) {
+        snippet->append(WORDS[rand() % WORDS_COUNT]);
+      }
+    }
+
+    return goodCount;
+  }
+
+  static inline void handleRequest(const SearchResultList& request, SearchResultList* response) {
+    std::vector<ScoredResult> scoredResults;
+
+    for (auto& result: request.result()) {
+      double score = result.score();
+      if (result.snippet().find(" cat ") != std::string::npos) {
+        score *= 10000;
+      }
+      if (result.snippet().find(" dog ") != std::string::npos) {
+        score /= 10000;
+      }
+      scoredResults.emplace_back(score, &result);
+    }
+
+    std::sort(scoredResults.begin(), scoredResults.end());
+
+    for (auto& result: scoredResults) {
+      SearchResult* out = response->add_result();
+      out->set_score(result.score);
+      out->set_url(result.result->url());
+      out->set_snippet(result.result->snippet());
+    }
+  }
+
+  static inline bool checkResponse(const SearchResultList& response, int expectedGoodCount) {
+    int goodCount = 0;
+    for (auto& result: response.result()) {
+      if (result.score() > 1001) {
+        ++goodCount;
+      } else {
+        break;
+      }
+    }
+
+    return goodCount == expectedGoodCount;
   }
 };
 
@@ -293,8 +399,8 @@ void readAll(int fd, void* buffer, size_t size) {
   }
 }
 
-static char scratch[128 << 10];
-static char scratch2[128 << 10];
+static char scratch[1 << 20];
+static char scratch2[1 << 20];
 
 struct SnappyCompressed {
   typedef int InputStream;
@@ -546,62 +652,76 @@ uint64_t passByPipe(Func&& clientFunc, uint64_t iters) {
   }
 }
 
-template <typename ReuseStrategy, typename Compression>
+template <typename TestCase, typename ReuseStrategy, typename Compression>
 uint64_t doBenchmark(const std::string& mode, uint64_t iters) {
   if (mode == "client") {
-    return syncClient<ExpressionTestCase, ReuseStrategy, Compression>(
+    return syncClient<TestCase, ReuseStrategy, Compression>(
         STDIN_FILENO, STDOUT_FILENO, iters);
   } else if (mode == "server") {
-    return server<ExpressionTestCase, ReuseStrategy, Compression>(
+    return server<TestCase, ReuseStrategy, Compression>(
         STDIN_FILENO, STDOUT_FILENO, iters);
   } else if (mode == "object") {
-    return passByObject<ExpressionTestCase, ReuseStrategy, Compression>(iters);
+    return passByObject<TestCase, ReuseStrategy, Compression>(iters);
   } else if (mode == "bytes") {
-    return passByBytes<ExpressionTestCase, ReuseStrategy, Compression>(iters);
+    return passByBytes<TestCase, ReuseStrategy, Compression>(iters);
   } else if (mode == "pipe") {
-    return passByPipe<ExpressionTestCase, ReuseStrategy, Compression>(
-        syncClient<ExpressionTestCase, ReuseStrategy, Compression>, iters);
+    return passByPipe<TestCase, ReuseStrategy, Compression>(
+        syncClient<TestCase, ReuseStrategy, Compression>, iters);
   } else if (mode == "pipe-async") {
-    return passByPipe<ExpressionTestCase, ReuseStrategy, Compression>(
-        asyncClient<ExpressionTestCase, ReuseStrategy, Compression>, iters);
+    return passByPipe<TestCase, ReuseStrategy, Compression>(
+        asyncClient<TestCase, ReuseStrategy, Compression>, iters);
   } else {
     std::cerr << "Unknown mode: " << mode << std::endl;
     exit(1);
   }
 }
 
-template <typename Compression>
+template <typename TestCase, typename Compression>
 uint64_t doBenchmark2(const std::string& mode, const std::string& reuse, uint64_t iters) {
   if (reuse == "reuse") {
-    return doBenchmark<ReusableMessages, Compression>(mode, iters);
+    return doBenchmark<TestCase, ReusableMessages, Compression>(mode, iters);
   } else if (reuse == "no-reuse") {
-    return doBenchmark<SingleUseMessages, Compression>(mode, iters);
+    return doBenchmark<TestCase, SingleUseMessages, Compression>(mode, iters);
   } else {
     std::cerr << "Unknown reuse mode: " << reuse << std::endl;
     exit(1);
   }
 }
 
+template <typename TestCase>
+uint64_t doBenchmark3(const std::string& mode, const std::string& reuse,
+                      const std::string& compression, uint64_t iters) {
+  if (compression == "none") {
+    return doBenchmark2<TestCase, Uncompressed>(mode, reuse, iters);
+  } else if (compression == "snappy") {
+    return doBenchmark2<TestCase, SnappyCompressed>(mode, reuse, iters);
+  } else {
+    std::cerr << "Unknown compression mode: " << compression << std::endl;
+    exit(1);
+  }
+}
+
 int main(int argc, char* argv[]) {
-  if (argc != 5) {
-    std::cerr << "USAGE:  " << argv[0] << " MODE REUSE COMPRESSION ITERATION_COUNT" << std::endl;
+  if (argc != 6) {
+    std::cerr << "USAGE:  " << argv[0]
+              << " TEST_CASE MODE REUSE COMPRESSION ITERATION_COUNT" << std::endl;
     return 1;
   }
 
-  uint64_t iters = strtoull(argv[4], nullptr, 0);
+  uint64_t iters = strtoull(argv[5], nullptr, 0);
   srand(123);
 
   std::cerr << "Doing " << iters << " iterations..." << std::endl;
 
   uint64_t throughput;
 
-  std::string compression = argv[3];
-  if (compression == "none") {
-    throughput = doBenchmark2<Uncompressed>(argv[1], argv[2], iters);
-  } else if (compression == "snappy") {
-    throughput = doBenchmark2<SnappyCompressed>(argv[1], argv[2], iters);
+  std::string testcase = argv[1];
+  if (testcase == "eval") {
+    throughput = doBenchmark3<ExpressionTestCase>(argv[2], argv[3], argv[4], iters);
+  } else if (testcase == "catrank") {
+    throughput = doBenchmark3<CatRankTestCase>(argv[2], argv[3], argv[4], iters);
   } else {
-    std::cerr << "Unknown compression mode: " << compression << std::endl;
+    std::cerr << "Unknown test case: " << testcase << std::endl;
     return 1;
   }
 
