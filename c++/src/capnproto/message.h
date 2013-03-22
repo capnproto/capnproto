@@ -133,14 +133,6 @@ public:
   template <typename RootType>
   typename RootType::Reader getRoot();
 
-protected:
-  void reset();
-  // Clear the cached segment table so that the reader can be reused to read another message.
-  // reset() may call getSegment() again before returning, so you must arrange for the new segment
-  // set to be active *before* calling this.
-  //
-  // This invalidates any Readers currently pointing into this message.
-
 private:
   ReaderOptions options;
 
@@ -182,7 +174,7 @@ private:
   bool allocatedArena = false;
 
   internal::BuilderArena* arena() { return reinterpret_cast<internal::BuilderArena*>(arenaSpace); }
-  internal::SegmentBuilder* allocateRootSegment();
+  internal::SegmentBuilder* getRootSegment();
   internal::StructBuilder initRoot(const word* defaultValue);
   internal::StructBuilder getRoot(const word* defaultValue);
 };
@@ -232,7 +224,7 @@ private:
   ArrayPtr<const ArrayPtr<const word>> segments;
 };
 
-enum class AllocationStrategy {
+enum class AllocationStrategy: uint8_t {
   FIXED_SIZE,
   // The builder will prefer to allocate the same amount of space for each segment with no
   // heuristic growth.  It will still allocate larger segments when the preferred size is too small
@@ -257,7 +249,7 @@ class MallocMessageBuilder: public MessageBuilder {
   // a specific location in memory.
 
 public:
-  MallocMessageBuilder(uint firstSegmentWords = 1024,
+  explicit MallocMessageBuilder(uint firstSegmentWords = 1024,
       AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY);
   // Creates a BuilderContext which allocates at least the given number of words for the first
   // segment, and then uses the given strategy to decide how much to allocate for subsequent
@@ -271,6 +263,12 @@ public:
   // The defaults have been chosen to be reasonable for most people, so don't change them unless you
   // have reason to believe you need to.
 
+  explicit MallocMessageBuilder(ArrayPtr<word> firstSegment,
+      AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY);
+  // This version always returns the given array for the first segment, and then proceeds with the
+  // allocation strategy.  This is useful for optimization when building lots of small messages in
+  // a tight loop:  you can reuse the space for the first segment.
+
   CAPNPROTO_DISALLOW_COPY(MallocMessageBuilder);
   virtual ~MallocMessageBuilder();
 
@@ -280,6 +278,7 @@ private:
   uint nextSize;
   AllocationStrategy allocationStrategy;
 
+  bool ownFirstSegment;
   void* firstSegment;
 
   struct MoreSegments;

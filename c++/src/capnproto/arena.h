@@ -164,8 +164,6 @@ public:
   ~ReaderArena();
   CAPNPROTO_DISALLOW_COPY(ReaderArena);
 
-  void reset();
-
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportInvalidData(const char* description) override;
@@ -188,9 +186,6 @@ public:
   BuilderArena(MessageBuilder* message);
   ~BuilderArena();
   CAPNPROTO_DISALLOW_COPY(BuilderArena);
-
-  void reset();
-  // Resets all the segments to be empty, so that a new message can be started.
 
   SegmentBuilder* getSegment(SegmentId id);
   // Get the segment with the given id.  Crashes or throws an exception if no such segment exists.

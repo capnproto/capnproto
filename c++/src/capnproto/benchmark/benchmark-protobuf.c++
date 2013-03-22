@@ -183,7 +183,49 @@ public:
 
 // =======================================================================================
 
-void writeProtoFast(const google::protobuf::MessageLite& message,
+struct SingleUseMessages {
+  template <typename MessageType>
+  struct Message {
+    struct Reusable {};
+    struct SingleUse: public MessageType {
+      inline SingleUse(Reusable&) {}
+    };
+  };
+
+  struct ReusableString {};
+  struct SingleUseString: std::string {
+    inline SingleUseString(ReusableString&) {}
+  };
+
+  template <typename MessageType>
+  static inline void doneWith(MessageType& message) {
+    // Don't clear -- single-use.
+  }
+};
+
+struct ReusableMessages {
+  template <typename MessageType>
+  struct Message {
+    struct Reusable: public MessageType {};
+    typedef MessageType& SingleUse;
+  };
+
+  typedef std::string ReusableString;
+  typedef std::string& SingleUseString;
+
+  template <typename MessageType>
+  static inline void doneWith(MessageType& message) {
+    message.Clear();
+  }
+};
+
+// =======================================================================================
+// The protobuf Java library defines a format for writing multiple protobufs to a stream, in which
+// each message is prefixed by a varint size.  This was never added to the C++ library.  It's easy
+// to do naively, but tricky to implement without accidentally losing various optimizations.  These
+// two functions should be optimal.
+
+void writeDelimited(const google::protobuf::MessageLite& message,
                     google::protobuf::io::FileOutputStream* rawOutput) {
   google::protobuf::io::CodedOutputStream output(rawOutput);
   const int size = message.ByteSize();
@@ -199,7 +241,7 @@ void writeProtoFast(const google::protobuf::MessageLite& message,
   }
 }
 
-void readProtoFast(google::protobuf::io::ZeroCopyInputStream* rawInput,
+void readDelimited(google::protobuf::io::ZeroCopyInputStream* rawInput,
                    google::protobuf::MessageLite* message) {
   google::protobuf::io::CodedInputStream input(rawInput);
   uint32_t size;
@@ -217,139 +259,160 @@ void readProtoFast(google::protobuf::io::ZeroCopyInputStream* rawInput,
   input.PopLimit(limit);
 }
 
-template <typename TestCase>
+// =======================================================================================
+
+#define REUSABLE(type) \
+  typename ReuseStrategy::template Message<typename TestCase::type>::Reusable
+#define SINGLE_USE(type) \
+  typename ReuseStrategy::template Message<typename TestCase::type>::SingleUse
+
+template <typename TestCase, typename ReuseStrategy>
 void syncClient(int inputFd, int outputFd, uint64_t iters) {
   google::protobuf::io::FileOutputStream output(outputFd);
   google::protobuf::io::FileInputStream input(inputFd);
 
-  typename TestCase::Request request;
-  typename TestCase::Response response;
+  REUSABLE(Request) reusableRequest;
+  REUSABLE(Response) reusableResponse;
 
   for (; iters > 0; --iters) {
+    SINGLE_USE(Request) request(reusableRequest);
     typename TestCase::Expectation expected = TestCase::setupRequest(&request);
-    writeProtoFast(request, &output);
+    writeDelimited(request, &output);
     if (!output.Flush()) throw OsException(output.GetErrno());
-    request.Clear();
+    ReuseStrategy::doneWith(request);
 
-    // std::cerr << "client: wait" << std::endl;
-    readProtoFast(&input, &response);
+    SINGLE_USE(Response) response(reusableResponse);
+    readDelimited(&input, &response);
     if (!TestCase::checkResponse(response, expected)) {
       throw std::logic_error("Incorrect response.");
     }
-    response.Clear();
+    ReuseStrategy::doneWith(response);
   }
 }
 
-template <typename TestCase>
+template <typename TestCase, typename ReuseStrategy>
 void asyncClientSender(int outputFd,
                        ProducerConsumerQueue<typename TestCase::Expectation>* expectations,
                        uint64_t iters) {
   google::protobuf::io::FileOutputStream output(outputFd);
-  typename TestCase::Request request;
+  REUSABLE(Request) reusableRequest;
 
   for (; iters > 0; --iters) {
+    SINGLE_USE(Request) request(reusableRequest);
     expectations->post(TestCase::setupRequest(&request));
-    writeProtoFast(request, &output);
-    request.Clear();
+    writeDelimited(request, &output);
+    ReuseStrategy::doneWith(request);
   }
 
   if (!output.Flush()) throw OsException(output.GetErrno());
 }
 
-template <typename TestCase>
+template <typename TestCase, typename ReuseStrategy>
 void asyncClientReceiver(int inputFd,
                          ProducerConsumerQueue<typename TestCase::Expectation>* expectations,
                          uint64_t iters) {
   google::protobuf::io::FileInputStream input(inputFd);
-  typename TestCase::Response response;
+  REUSABLE(Response) reusableResponse;
 
   for (; iters > 0; --iters) {
     typename TestCase::Expectation expected = expectations->next();
-    readProtoFast(&input, &response);
+    SINGLE_USE(Response) response(reusableResponse);
+    readDelimited(&input, &response);
     if (!TestCase::checkResponse(response, expected)) {
       throw std::logic_error("Incorrect response.");
     }
-    response.Clear();
+    ReuseStrategy::doneWith(response);
   }
 }
 
-template <typename TestCase>
+template <typename TestCase, typename ReuseStrategy>
 void asyncClient(int inputFd, int outputFd, uint64_t iters) {
   ProducerConsumerQueue<typename TestCase::Expectation> expectations;
-  std::thread receiverThread(asyncClientReceiver<TestCase>, inputFd, &expectations, iters);
-  asyncClientSender<TestCase>(outputFd, &expectations, iters);
+  std::thread receiverThread(
+      asyncClientReceiver<TestCase, ReuseStrategy>, inputFd, &expectations, iters);
+  asyncClientSender<TestCase, ReuseStrategy>(outputFd, &expectations, iters);
   receiverThread.join();
 }
 
-template <typename TestCase>
+template <typename TestCase, typename ReuseStrategy>
 void server(int inputFd, int outputFd, uint64_t iters) {
   google::protobuf::io::FileOutputStream output(outputFd);
   google::protobuf::io::FileInputStream input(inputFd);
 
-  typename TestCase::Request request;
-  typename TestCase::Response response;
+  REUSABLE(Request) reusableRequest;
+  REUSABLE(Response) reusableResponse;
 
   for (; iters > 0; --iters) {
-    readProtoFast(&input, &request);
-    TestCase::handleRequest(request, &response);
-    request.Clear();
+    SINGLE_USE(Request) request(reusableRequest);
+    readDelimited(&input, &request);
 
-    writeProtoFast(response, &output);
+    SINGLE_USE(Response) response(reusableResponse);
+    TestCase::handleRequest(request, &response);
+    ReuseStrategy::doneWith(request);
+
+    writeDelimited(response, &output);
     if (!output.Flush()) throw std::logic_error("Write failed.");
-    response.Clear();
+    ReuseStrategy::doneWith(response);
   }
 }
 
-template <typename TestCase>
+template <typename TestCase, typename ReuseStrategy>
 void passByObject(uint64_t iters) {
-  typename TestCase::Request request;
-  typename TestCase::Response response;
+  REUSABLE(Request) reusableRequest;
+  REUSABLE(Response) reusableResponse;
 
   for (; iters > 0; --iters) {
+    SINGLE_USE(Request) request(reusableRequest);
     typename TestCase::Expectation expected = TestCase::setupRequest(&request);
+
+    SINGLE_USE(Response) response(reusableResponse);
     TestCase::handleRequest(request, &response);
-    request.Clear();
+    ReuseStrategy::doneWith(request);
     if (!TestCase::checkResponse(response, expected)) {
       throw std::logic_error("Incorrect response.");
     }
-    response.Clear();
+    ReuseStrategy::doneWith(response);
   }
 }
 
-template <typename TestCase>
+template <typename TestCase, typename ReuseStrategy>
 void passByBytes(uint64_t iters) {
-  typename TestCase::Request clientRequest;
-  typename TestCase::Request serverRequest;
-  typename TestCase::Response serverResponse;
-  typename TestCase::Response clientResponse;
-  std::string requestString, responseString;
+  REUSABLE(Request) reusableClientRequest;
+  REUSABLE(Request) reusableServerRequest;
+  REUSABLE(Response) reusableServerResponse;
+  REUSABLE(Response) reusableClientResponse;
+  typename ReuseStrategy::ReusableString reusableRequestString, reusableResponseString;
 
   for (; iters > 0; --iters) {
+    SINGLE_USE(Request) clientRequest(reusableClientRequest);
     typename TestCase::Expectation expected = TestCase::setupRequest(&clientRequest);
 
+    typename ReuseStrategy::SingleUseString requestString(reusableRequestString);
     clientRequest.SerializePartialToString(&requestString);
-    clientRequest.Clear();
+    ReuseStrategy::doneWith(clientRequest);
 
+    SINGLE_USE(Request) serverRequest(reusableServerRequest);
     serverRequest.ParsePartialFromString(requestString);
-    requestString.clear();
 
+    SINGLE_USE(Response) serverResponse(reusableServerResponse);
     TestCase::handleRequest(serverRequest, &serverResponse);
-    serverRequest.Clear();
+    ReuseStrategy::doneWith(serverRequest);
 
+    typename ReuseStrategy::SingleUseString responseString(reusableResponseString);
     serverResponse.SerializePartialToString(&responseString);
-    serverResponse.Clear();
+    ReuseStrategy::doneWith(serverResponse);
 
+    SINGLE_USE(Response) clientResponse(reusableClientResponse);
     clientResponse.ParsePartialFromString(responseString);
-    responseString.clear();
 
     if (!TestCase::checkResponse(clientResponse, expected)) {
       throw std::logic_error("Incorrect response.");
     }
-    clientResponse.Clear();
+    ReuseStrategy::doneWith(clientResponse);
   }
 }
 
-template <typename TestCase, typename Func>
+template <typename TestCase, typename ReuseStrategy, typename Func>
 void passByPipe(Func&& clientFunc, uint64_t iters) {
   int clientToServer[2];
   int serverToClient[2];
@@ -369,7 +432,7 @@ void passByPipe(Func&& clientFunc, uint64_t iters) {
     close(clientToServer[1]);
     close(serverToClient[0]);
 
-    server<TestCase>(clientToServer[0], serverToClient[1], iters);
+    server<TestCase, ReuseStrategy>(clientToServer[0], serverToClient[1], iters);
 
     int status;
     if (waitpid(child, &status, 0) != child) {
@@ -381,32 +444,46 @@ void passByPipe(Func&& clientFunc, uint64_t iters) {
   }
 }
 
+template <typename ReuseStrategy>
+void doBenchmark(const std::string& mode, uint64_t iters) {
+  if (mode == "client") {
+    syncClient<ExpressionTestCase, ReuseStrategy>(STDIN_FILENO, STDOUT_FILENO, iters);
+  } else if (mode == "server") {
+    server<ExpressionTestCase, ReuseStrategy>(STDIN_FILENO, STDOUT_FILENO, iters);
+  } else if (mode == "object") {
+    passByObject<ExpressionTestCase, ReuseStrategy>(iters);
+  } else if (mode == "bytes") {
+    passByBytes<ExpressionTestCase, ReuseStrategy>(iters);
+  } else if (mode == "pipe") {
+    passByPipe<ExpressionTestCase, ReuseStrategy>(
+        syncClient<ExpressionTestCase, ReuseStrategy>, iters);
+  } else if (mode == "pipe-async") {
+    passByPipe<ExpressionTestCase, ReuseStrategy>(
+        asyncClient<ExpressionTestCase, ReuseStrategy>, iters);
+  } else {
+    std::cerr << "Unknown mode: " << mode << std::endl;
+    exit(1);
+  }
+}
+
 int main(int argc, char* argv[]) {
-  if (argc != 3) {
-    std::cerr << "USAGE:  " << argv[0] << " MODE ITERATION_COUNT" << std::endl;
+  if (argc != 4) {
+    std::cerr << "USAGE:  " << argv[0] << " MODE REUSE ITERATION_COUNT" << std::endl;
     return 1;
   }
 
-  uint64_t iters = strtoull(argv[2], nullptr, 0);
+  uint64_t iters = strtoull(argv[3], nullptr, 0);
   srand(123);
 
   std::cerr << "Doing " << iters << " iterations..." << std::endl;
 
-  std::string mode = argv[1];
-  if (mode == "client") {
-    syncClient<ExpressionTestCase>(STDIN_FILENO, STDOUT_FILENO, iters);
-  } else if (mode == "server") {
-    server<ExpressionTestCase>(STDIN_FILENO, STDOUT_FILENO, iters);
-  } else if (mode == "object") {
-    passByObject<ExpressionTestCase>(iters);
-  } else if (mode == "bytes") {
-    passByBytes<ExpressionTestCase>(iters);
-  } else if (mode == "pipe") {
-    passByPipe<ExpressionTestCase>(syncClient<ExpressionTestCase>, iters);
-  } else if (mode == "pipe-async") {
-    passByPipe<ExpressionTestCase>(asyncClient<ExpressionTestCase>, iters);
+  std::string reuse = argv[2];
+  if (reuse == "reuse") {
+    doBenchmark<ReusableMessages>(argv[1], iters);
+  } else if (reuse == "no-reuse") {
+    doBenchmark<SingleUseMessages>(argv[1], iters);
   } else {
-    std::cerr << "Unknown mode: " << mode << std::endl;
+    std::cerr << "Unknown reuse mode: " << reuse << std::endl;
     return 1;
   }
 

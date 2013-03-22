@@ -83,7 +83,7 @@ TEST(Serialize, FlatArrayOddSegmentCount) {
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
 
-TEST(Serialize, FlatArrayEventSegmentCount) {
+TEST(Serialize, FlatArrayEvenSegmentCount) {
   TestMessageBuilder builder(10);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
@@ -95,25 +95,24 @@ TEST(Serialize, FlatArrayEventSegmentCount) {
 
 class TestInputStream: public InputStream {
 public:
-  TestInputStream(ArrayPtr<const word> data)
+  TestInputStream(ArrayPtr<const word> data, bool lazy)
       : pos(reinterpret_cast<const char*>(data.begin())),
-        end(reinterpret_cast<const char*>(data.end())) {}
+        end(reinterpret_cast<const char*>(data.end())),
+        lazy(lazy) {}
   ~TestInputStream() {}
 
-  bool read(void* buffer, size_t size) override {
-    if (size_t(end - pos) < size) {
-      ADD_FAILURE() << "Overran end of stream.";
-      return false;
-    } else {
-      memcpy(buffer, pos, size);
-      pos += size;
-      return true;
-    }
+  size_t read(void* buffer, size_t minBytes, size_t maxBytes) override {
+    CAPNPROTO_ASSERT(maxBytes <= size_t(end - pos), "Overran end of stream.");
+    size_t amount = lazy ? minBytes : maxBytes;
+    memcpy(buffer, pos, amount);
+    pos += amount;
+    return amount;
   }
 
 private:
   const char* pos;
   const char* end;
+  bool lazy;
 };
 
 TEST(Serialize, InputStream) {
@@ -122,8 +121,21 @@ TEST(Serialize, InputStream) {
 
   Array<word> serialized = messageToFlatArray(builder);
 
-  TestInputStream stream(serialized.asPtr());
-  InputStreamMessageReader reader(&stream, ReaderOptions(), InputStrategy::EAGER);
+  TestInputStream stream(serialized.asPtr(), false);
+  InputStreamMessageReader reader(stream, ReaderOptions());
+
+  checkTestMessage(reader.getRoot<TestAllTypes>());
+}
+
+TEST(Serialize, InputStreamScratchSpace) {
+  TestMessageBuilder builder(1);
+  initTestMessage(builder.initRoot<TestAllTypes>());
+
+  Array<word> serialized = messageToFlatArray(builder);
+
+  word scratch[4096];
+  TestInputStream stream(serialized.asPtr(), false);
+  InputStreamMessageReader reader(stream, ReaderOptions(), ArrayPtr<word>(scratch, 4096));
 
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
@@ -134,8 +146,8 @@ TEST(Serialize, InputStreamLazy) {
 
   Array<word> serialized = messageToFlatArray(builder);
 
-  TestInputStream stream(serialized.asPtr());
-  InputStreamMessageReader reader(&stream, ReaderOptions(), InputStrategy::LAZY);
+  TestInputStream stream(serialized.asPtr(), true);
+  InputStreamMessageReader reader(stream, ReaderOptions());
 
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
@@ -146,8 +158,8 @@ TEST(Serialize, InputStreamOddSegmentCount) {
 
   Array<word> serialized = messageToFlatArray(builder);
 
-  TestInputStream stream(serialized.asPtr());
-  InputStreamMessageReader reader(&stream, ReaderOptions(), InputStrategy::EAGER);
+  TestInputStream stream(serialized.asPtr(), false);
+  InputStreamMessageReader reader(stream, ReaderOptions());
 
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
@@ -158,126 +170,32 @@ TEST(Serialize, InputStreamOddSegmentCountLazy) {
 
   Array<word> serialized = messageToFlatArray(builder);
 
-  TestInputStream stream(serialized.asPtr());
-  InputStreamMessageReader reader(&stream, ReaderOptions(), InputStrategy::LAZY);
+  TestInputStream stream(serialized.asPtr(), true);
+  InputStreamMessageReader reader(stream, ReaderOptions());
 
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
 
-TEST(Serialize, InputStreamEventSegmentCount) {
+TEST(Serialize, InputStreamEvenSegmentCount) {
   TestMessageBuilder builder(10);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
   Array<word> serialized = messageToFlatArray(builder);
 
-  TestInputStream stream(serialized.asPtr());
-  InputStreamMessageReader reader(&stream, ReaderOptions(), InputStrategy::EAGER);
+  TestInputStream stream(serialized.asPtr(), false);
+  InputStreamMessageReader reader(stream, ReaderOptions());
 
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
 
-TEST(Serialize, InputStreamEventSegmentCountLazy) {
+TEST(Serialize, InputStreamEvenSegmentCountLazy) {
   TestMessageBuilder builder(10);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
   Array<word> serialized = messageToFlatArray(builder);
 
-  TestInputStream stream(serialized.asPtr());
-  InputStreamMessageReader reader(&stream, ReaderOptions(), InputStrategy::LAZY);
-
-  checkTestMessage(reader.getRoot<TestAllTypes>());
-}
-
-class TestInputFile: public InputFile {
-public:
-  TestInputFile(ArrayPtr<const word> data)
-      : begin(reinterpret_cast<const char*>(data.begin())),
-        size_(data.size() * sizeof(word)) {}
-  ~TestInputFile() {}
-
-  bool read(size_t offset, void* buffer, size_t size) override {
-    if (size_ < offset + size) {
-      ADD_FAILURE() << "Overran end of file.";
-      return false;
-    } else {
-      memcpy(buffer, begin + offset, size);
-      return true;
-    }
-  }
-
-private:
-  const char* begin;
-  size_t size_;
-};
-
-TEST(Serialize, InputFile) {
-  TestMessageBuilder builder(1);
-  initTestMessage(builder.initRoot<TestAllTypes>());
-
-  Array<word> serialized = messageToFlatArray(builder);
-
-  TestInputFile file(serialized.asPtr());
-  InputFileMessageReader reader(&file, ReaderOptions(), InputStrategy::EAGER);
-
-  checkTestMessage(reader.getRoot<TestAllTypes>());
-}
-
-TEST(Serialize, InputFileLazy) {
-  TestMessageBuilder builder(1);
-  initTestMessage(builder.initRoot<TestAllTypes>());
-
-  Array<word> serialized = messageToFlatArray(builder);
-
-  TestInputFile file(serialized.asPtr());
-  InputFileMessageReader reader(&file, ReaderOptions(), InputStrategy::LAZY);
-
-  checkTestMessage(reader.getRoot<TestAllTypes>());
-}
-
-TEST(Serialize, InputFileOddSegmentCount) {
-  TestMessageBuilder builder(7);
-  initTestMessage(builder.initRoot<TestAllTypes>());
-
-  Array<word> serialized = messageToFlatArray(builder);
-
-  TestInputFile file(serialized.asPtr());
-  InputFileMessageReader reader(&file, ReaderOptions(), InputStrategy::EAGER);
-
-  checkTestMessage(reader.getRoot<TestAllTypes>());
-}
-
-TEST(Serialize, InputFileOddSegmentCountLazy) {
-  TestMessageBuilder builder(7);
-  initTestMessage(builder.initRoot<TestAllTypes>());
-
-  Array<word> serialized = messageToFlatArray(builder);
-
-  TestInputFile file(serialized.asPtr());
-  InputFileMessageReader reader(&file, ReaderOptions(), InputStrategy::LAZY);
-
-  checkTestMessage(reader.getRoot<TestAllTypes>());
-}
-
-TEST(Serialize, InputFileEventSegmentCount) {
-  TestMessageBuilder builder(10);
-  initTestMessage(builder.initRoot<TestAllTypes>());
-
-  Array<word> serialized = messageToFlatArray(builder);
-
-  TestInputFile file(serialized.asPtr());
-  InputFileMessageReader reader(&file, ReaderOptions(), InputStrategy::EAGER);
-
-  checkTestMessage(reader.getRoot<TestAllTypes>());
-}
-
-TEST(Serialize, InputFileEventSegmentCountLazy) {
-  TestMessageBuilder builder(10);
-  initTestMessage(builder.initRoot<TestAllTypes>());
-
-  Array<word> serialized = messageToFlatArray(builder);
-
-  TestInputFile file(serialized.asPtr());
-  InputFileMessageReader reader(&file, ReaderOptions(), InputStrategy::LAZY);
+  TestInputStream stream(serialized.asPtr(), true);
+  InputStreamMessageReader reader(stream, ReaderOptions());
 
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
@@ -324,7 +242,7 @@ TEST(Serialize, WriteMessageOddSegmentCount) {
   EXPECT_TRUE(output.dataEquals(serialized.asPtr()));
 }
 
-TEST(Serialize, WriteMessageEventSegmentCount) {
+TEST(Serialize, WriteMessageEvenSegmentCount) {
   TestMessageBuilder builder(10);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
@@ -364,19 +282,7 @@ TEST(Serialize, FileDescriptors) {
   }
 
   {
-    FileFdMessageReader reader(tmpfile.get(), 0);
-    checkTestMessage(reader.getRoot<TestAllTypes>());
-  }
-
-  size_t secondStart = lseek(tmpfile, 0, SEEK_CUR);
-
-  {
     StreamFdMessageReader reader(tmpfile.get());
-    EXPECT_EQ("second message in file", reader.getRoot<TestAllTypes>().getTextField());
-  }
-
-  {
-    FileFdMessageReader reader(move(tmpfile), secondStart);
     EXPECT_EQ("second message in file", reader.getRoot<TestAllTypes>().getTextField());
   }
 }

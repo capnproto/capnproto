@@ -75,18 +75,25 @@ class InputStream {
 public:
   virtual ~InputStream();
 
-  virtual bool read(void* buffer, size_t size) = 0;
-  // Always reads the full size requested.  Returns true if successful.  May throw an exception
-  // on failure, or report the error through some side channel and return false.
-};
+  virtual size_t read(void* buffer, size_t minBytes, size_t maxBytes) = 0;
+  // Reads at least minBytes and at most maxBytes, copying them into the given buffer.  Returns
+  // the size read.  Throws an exception on errors.
+  //
+  // maxBytes is the number of bytes the caller really wants, but minBytes is the minimum amount
+  // needed by the caller before it can start doing useful processing.  If the stream returns less
+  // than maxBytes, the caller will usually call read() again later to get the rest.  Returning
+  // less than maxBytes is useful when it makes sense for the caller to parallelize processing
+  // with I/O.
+  //
+  // Cap'n Proto never asks for more bytes than it knows are part of the message.  Therefore, if
+  // the InputStream happens to know that the stream will never reach maxBytes -- even if it has
+  // reached minBytes -- it should throw an exception to avoid wasting time processing an incomplete
+  // message.  If it can't even reach minBytes, it MUST throw an exception, as the caller is not
+  // expected to understand how to deal with partial reads.
 
-class InputFile {
-public:
-  virtual ~InputFile();
-
-  virtual bool read(size_t offset, void* buffer, size_t size) = 0;
-  // Always reads the full size requested.  Returns true if successful.  May throw an exception
-  // on failure, or report the error through some side channel and return false.
+  virtual void skip(size_t bytes);
+  // Skips past the given number of bytes, discarding them.  The default implementation read()s
+  // into a scratch buffer.
 };
 
 class OutputStream {
@@ -94,85 +101,34 @@ public:
   virtual ~OutputStream();
 
   virtual void write(const void* buffer, size_t size) = 0;
-  // Throws exception on error, or reports errors via some side channel and returns.
-};
+  // Always writes the full size.  Throws exception on error.
 
-enum class InputStrategy {
-  EAGER,
-  // Read the whole message into RAM upfront, in the MessageReader constructor.  When reading from
-  // an InputStream, the stream will then be positioned at the byte immediately after the end of
-  // the message, and will not be accessed again.
-
-  LAZY,
-  // Read segments of the message into RAM as needed while the message structure is being traversed.
-  // When reading from an InputStream, segments must be read in order, so segments up to the
-  // required segment will also be read.  No guarantee is made about the position of the InputStream
-  // after reading.  When using an InputFile, only the exact segments desired are read.
-
-  EAGER_WAIT_FOR_READ_NEXT,
-  // Like EAGER but don't read the first mesasge until readNext() is called the first time.
-
-  LAZY_WAIT_FOR_READ_NEXT,
-  // Like LAZY but don't read the first mesasge until readNext() is called the first time.
+  virtual void write(ArrayPtr<const ArrayPtr<const byte>> pieces);
+  // Equivalent to write()ing each byte array in sequence, which is what the default implementation
+  // does.  Override if you can do something better, e.g. use writev() to do the write in a single
+  // syscall.
 };
 
 class InputStreamMessageReader: public MessageReader {
 public:
-  InputStreamMessageReader(InputStream* inputStream,
+  InputStreamMessageReader(InputStream& inputStream,
                            ReaderOptions options = ReaderOptions(),
-                           InputStrategy inputStrategy = InputStrategy::EAGER);
-
-  void readNext();
-  // Progress to the next message in the input stream, reusing the same memory if possible.
-  // Calling this invalidates any Readers currently pointing into this message.
+                           ArrayPtr<word> scratchSpace = nullptr);
+  ~InputStreamMessageReader();
 
   // implements MessageReader ----------------------------------------
   ArrayPtr<const word> getSegment(uint id) override;
 
 private:
-  InputStream* inputStream;
-  InputStrategy inputStrategy;
-  uint segmentsReadSoFar;
-
-  struct LazySegment {
-    uint size;
-    Array<word> words;
-    // words may be larger than the desired size in the case where space is being reused from a
-    // previous read.
-
-    inline LazySegment(): size(0), words(nullptr) {}
-  };
+  InputStream& inputStream;
+  byte* readPos;
 
   // Optimize for single-segment case.
-  LazySegment segment0;
-  Array<LazySegment> moreSegments;
+  ArrayPtr<const word> segment0;
+  Array<ArrayPtr<const word>> moreSegments;
 
-  void readNextInternal();
-};
-
-class InputFileMessageReader: public MessageReader {
-public:
-  InputFileMessageReader(InputFile* inputFile,
-                         ReaderOptions options = ReaderOptions(),
-                         InputStrategy inputStrategy = InputStrategy::EAGER);
-
-  // implements MessageReader ----------------------------------------
-  ArrayPtr<const word> getSegment(uint id) override;
-
-private:
-  InputFile* inputFile;
-
-  struct LazySegment {
-    uint size;
-    size_t offset;
-    Array<word> words;   // null until actually read
-
-    inline LazySegment(): size(0), offset(0), words(nullptr) {}
-  };
-
-  // Optimize for single-segment case.
-  LazySegment segment0;
-  Array<LazySegment> moreSegments;
+  Array<word> ownedSpace;
+  // Only if scratchSpace wasn't big enough.
 };
 
 void writeMessage(OutputStream& output, MessageBuilder& builder);
@@ -218,39 +174,15 @@ class FdInputStream: public InputStream {
   // An InputStream wrapping a file descriptor.
 
 public:
-  FdInputStream(int fd, ErrorReporter* errorReporter = getThrowingErrorReporter())
-      : fd(fd), errorReporter(errorReporter) {};
-  FdInputStream(AutoCloseFd fd, ErrorReporter* errorReporter = getThrowingErrorReporter())
-      : fd(fd), autoclose(move(fd)), errorReporter(errorReporter) {}
+  FdInputStream(int fd): fd(fd) {};
+  FdInputStream(AutoCloseFd fd): fd(fd), autoclose(move(fd)) {}
   ~FdInputStream();
 
-  bool read(void* buffer, size_t size) override;
+  size_t read(void* buffer, size_t minBytes, size_t maxBytes) override;
 
 private:
   int fd;
   AutoCloseFd autoclose;
-  ErrorReporter* errorReporter;
-};
-
-class FdInputFile: public InputFile {
-  // An InputFile wrapping a file descriptor.  The file descriptor must be seekable.  This
-  // implementation uses pread(), so the stream pointer will not be modified.
-
-public:
-  FdInputFile(int fd, size_t offset, ErrorReporter* errorReporter = getThrowingErrorReporter())
-      : fd(fd), offset(offset), errorReporter(errorReporter) {};
-  FdInputFile(AutoCloseFd fd, size_t offset,
-              ErrorReporter* errorReporter = getThrowingErrorReporter())
-      : fd(fd), autoclose(move(fd)), offset(offset), errorReporter(errorReporter) {}
-  ~FdInputFile();
-
-  bool read(size_t offset, void* buffer, size_t size) override;
-
-private:
-  int fd;
-  AutoCloseFd autoclose;
-  size_t offset;
-  ErrorReporter* errorReporter;
 };
 
 class FdOutputStream: public OutputStream {
@@ -262,6 +194,7 @@ public:
   ~FdOutputStream();
 
   void write(const void* buffer, size_t size) override;
+  void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
 
 private:
   int fd;
@@ -274,8 +207,8 @@ class StreamFdMessageReader: private FdInputStream, public InputStreamMessageRea
 
 public:
   StreamFdMessageReader(int fd, ReaderOptions options = ReaderOptions(),
-                        InputStrategy inputStrategy = InputStrategy::EAGER)
-      : FdInputStream(fd), InputStreamMessageReader(this, options, inputStrategy) {}
+                        ArrayPtr<word> scratchSpace = nullptr)
+      : FdInputStream(fd), InputStreamMessageReader(*this, options, scratchSpace) {}
   // Read message from a file descriptor, without taking ownership of the descriptor.
   //
   // Since this version implies that the caller intends to read more data from the fd later on, the
@@ -283,39 +216,14 @@ public:
   // deterministically positioned just past the end of the message.
 
   StreamFdMessageReader(AutoCloseFd fd, ReaderOptions options = ReaderOptions(),
-                        InputStrategy inputStrategy = InputStrategy::LAZY)
-      : FdInputStream(move(fd)), InputStreamMessageReader(this, options, inputStrategy) {}
+                        ArrayPtr<word> scratchSpace = nullptr)
+      : FdInputStream(move(fd)), InputStreamMessageReader(*this, options, scratchSpace) {}
   // Read a message from a file descriptor, taking ownership of the descriptor.
   //
   // Since this version implies that the caller does not intend to read any more data from the fd,
   // the default is to read the message lazily as needed.
 
   ~StreamFdMessageReader();
-};
-
-class FileFdMessageReader: private FdInputFile, public InputFileMessageReader {
-  // A MessageReader that reads from a seekable file descriptor, e.g. disk files.  For non-seekable
-  // file descriptors, use FdStreamMessageReader.  This implementation uses pread(), so the file
-  // descriptor's stream pointer will not be modified.
-
-public:
-  FileFdMessageReader(int fd, size_t offset, ReaderOptions options = ReaderOptions(),
-                      InputStrategy inputStrategy = InputStrategy::LAZY)
-      : FdInputFile(fd, offset, options.errorReporter),
-        InputFileMessageReader(this, options, inputStrategy) {}
-  // Read message from a file descriptor, without taking ownership of the descriptor.
-  //
-  // All reads use pread(), so the file descriptor's stream pointer will not be modified.
-
-  FileFdMessageReader(AutoCloseFd fd, size_t offset, ReaderOptions options = ReaderOptions(),
-                      InputStrategy inputStrategy = InputStrategy::LAZY)
-      : FdInputFile(move(fd), offset, options.errorReporter),
-        InputFileMessageReader(this, options, inputStrategy) {}
-  // Read a message from a file descriptor, taking ownership of the descriptor.
-  //
-  // All reads use pread(), so the file descriptor's stream pointer will not be modified.
-
-  ~FileFdMessageReader();
 };
 
 void writeMessageToFd(int fd, MessageBuilder& builder);

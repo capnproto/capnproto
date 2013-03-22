@@ -80,6 +80,8 @@ public:
 
   inline T* begin() const { return ptr; }
   inline T* end() const { return ptr + size_; }
+  inline T& front() const { return *ptr; }
+  inline T& back() const { return *(ptr + size_ - 1); }
 
   inline ArrayPtr slice(size_t start, size_t end) {
     CAPNPROTO_DEBUG_ASSERT(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
@@ -137,6 +139,8 @@ public:
 
   inline T* begin() const { return ptr; }
   inline T* end() const { return ptr + size_; }
+  inline T& front() const { return *ptr; }
+  inline T& back() const { return *(ptr + size_ - 1); }
 
   inline ArrayPtr<T> slice(size_t start, size_t end) {
     CAPNPROTO_DEBUG_ASSERT(start <= end && end <= size_, "Out-of-bounds Array::slice().");

@@ -42,16 +42,6 @@ ReaderArena::ReaderArena(MessageReader* message)
 
 ReaderArena::~ReaderArena() {}
 
-void ReaderArena::reset() {
-  readLimiter.reset(message->getOptions().traversalLimitInWords * WORDS);
-  ignoreErrors = false;
-  segment0.~SegmentReader();
-  new(&segment0) SegmentReader(this, SegmentId(0), this->message->getSegment(0), &readLimiter);
-
-  // TODO:  Reuse the rest of the SegmentReaders?
-  moreSegments = nullptr;
-}
-
 SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
   if (id == SegmentId(0)) {
     if (segment0.getArray() == nullptr) {
@@ -109,16 +99,6 @@ void ReaderArena::reportReadLimitReached() {
 BuilderArena::BuilderArena(MessageBuilder* message)
     : message(message), segment0(nullptr, SegmentId(0), nullptr, nullptr) {}
 BuilderArena::~BuilderArena() {}
-
-void BuilderArena::reset() {
-  segment0.reset();
-  if (moreSegments != nullptr) {
-    // TODO:  As mentioned in another TODO below, only the last segment will only be reused.
-    for (auto& segment: moreSegments->builders) {
-      segment->reset();
-    }
-  }
-}
 
 SegmentBuilder* BuilderArena::getSegment(SegmentId id) {
   // This method is allowed to crash if the segment ID is not valid.

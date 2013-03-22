@@ -26,6 +26,8 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include <string>
+#include <sys/uio.h>
 
 namespace capnproto {
 
@@ -127,92 +129,78 @@ Array<word> messageToFlatArray(ArrayPtr<const ArrayPtr<const word>> segments) {
 // =======================================================================================
 
 InputStream::~InputStream() {}
-InputFile::~InputFile() {}
 OutputStream::~OutputStream() {}
+
+void InputStream::skip(size_t bytes) {
+  char scratch[8192];
+  while (bytes > 0) {
+    size_t amount = std::min(bytes, sizeof(scratch));
+    bytes -= read(scratch, amount, amount);
+  }
+}
+
+void OutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+  for (auto piece: pieces) {
+    write(piece.begin(), piece.size());
+  }
+}
 
 // -------------------------------------------------------------------
 
 InputStreamMessageReader::InputStreamMessageReader(
-    InputStream* inputStream, ReaderOptions options, InputStrategy inputStrategy)
-    : MessageReader(options), inputStream(inputStream), inputStrategy(inputStrategy),
-      segmentsReadSoFar(0) {
-  switch (inputStrategy) {
-    case InputStrategy::EAGER:
-    case InputStrategy::LAZY:
-      readNextInternal();
-      break;
-    case InputStrategy::EAGER_WAIT_FOR_READ_NEXT:
-    case InputStrategy::LAZY_WAIT_FOR_READ_NEXT:
-      break;
-  }
-}
-
-void InputStreamMessageReader::readNext() {
-  bool needReset = false;
-
-  switch (inputStrategy) {
-    case InputStrategy::LAZY:
-      if (moreSegments != nullptr || segment0.size != 0) {
-        // Make sure we've finished reading the previous message.
-        // Note that this sort of defeats the purpose of lazy parsing.  In theory we could be a
-        // little more efficient by reading into a stack-allocated scratch buffer rather than
-        // allocating space for the remaining segments, but people really shouldn't be using
-        // readNext() when lazy-parsing anyway.
-        getSegment(moreSegments.size());
-      }
-
-      // no break
-
-    case InputStrategy::EAGER:
-      needReset = true;
-
-      // TODO:  Save moreSegments for reuse?
-      moreSegments = nullptr;
-
-      segmentsReadSoFar = 0;
-      segment0.size = 0;
-      break;
-
-    case InputStrategy::EAGER_WAIT_FOR_READ_NEXT:
-      this->inputStrategy = InputStrategy::EAGER;
-      break;
-    case InputStrategy::LAZY_WAIT_FOR_READ_NEXT:
-      this->inputStrategy = InputStrategy::LAZY;
-      break;
-  }
-
-  if (inputStream != nullptr) {
-    readNextInternal();
-  }
-  if (needReset) reset();
-}
-
-void InputStreamMessageReader::readNextInternal() {
+    InputStream& inputStream, ReaderOptions options, ArrayPtr<word> scratchSpace)
+    : MessageReader(options), inputStream(inputStream), readPos(nullptr) {
   internal::WireValue<uint32_t> firstWord[2];
 
-  if (!inputStream->read(firstWord, sizeof(firstWord))) return;
+  inputStream.read(firstWord, sizeof(firstWord), sizeof(firstWord));
 
   uint segmentCount = firstWord[0].get();
-  segment0.size = segmentCount == 0 ? 0 : firstWord[1].get();
+  uint segment0Size = segmentCount == 0 ? 0 : firstWord[1].get();
 
+  size_t totalWords = segment0Size;
+
+  // Read sizes for all segments except the first.  Include padding if necessary.
+  internal::WireValue<uint32_t> moreSizes[segmentCount & ~1];
   if (segmentCount > 1) {
-    internal::WireValue<uint32_t> sizes[segmentCount - 1];
-    if (!inputStream->read(sizes, sizeof(sizes))) return;
-
-    moreSegments = newArray<LazySegment>(segmentCount - 1);
-    for (uint i = 1; i < segmentCount; i++) {
-      moreSegments[i - 1].size = sizes[i - 1].get();
+    inputStream.read(moreSizes, sizeof(moreSizes), sizeof(moreSizes));
+    for (uint i = 0; i < segmentCount - 1; i++) {
+      totalWords += moreSizes[i].get();
     }
   }
 
-  if (segmentCount % 2 == 0) {
-    // Read the padding.
-    uint32_t pad;
-    if (!inputStream->read(&pad, sizeof(pad))) return;
+  if (scratchSpace.size() < totalWords) {
+    // TODO:  Consider allocating each segment as a separate chunk to reduce memory fragmentation.
+    ownedSpace = newArray<word>(totalWords);
+    scratchSpace = ownedSpace;
   }
 
-  if (inputStrategy == InputStrategy::EAGER) {
-    getSegment(segmentCount - 1);
+  segment0 = scratchSpace.slice(0, segment0Size);
+
+  if (segmentCount > 1) {
+    moreSegments = newArray<ArrayPtr<const word>>(segmentCount - 1);
+    size_t offset = segment0Size;
+
+    for (uint i = 0; i < segmentCount - 1; i++) {
+      uint segmentSize = moreSizes[i].get();
+      moreSegments[i] = scratchSpace.slice(offset, offset + segmentSize);
+      offset += segmentSize;
+    }
+  }
+
+  if (segmentCount == 1) {
+    inputStream.read(scratchSpace.begin(), totalWords * sizeof(word), totalWords * sizeof(word));
+  } else if (segmentCount > 1) {
+    readPos = reinterpret_cast<byte*>(scratchSpace.begin());
+    readPos += inputStream.read(readPos, segment0Size * sizeof(word), totalWords * sizeof(word));
+  }
+}
+
+InputStreamMessageReader::~InputStreamMessageReader() {
+  if (readPos != nullptr) {
+    // Note that lazy reads only happen when we have multiple segments, so moreSegments.back() is
+    // valid.
+    const byte* allEnd = reinterpret_cast<const byte*>(moreSegments.back().end());
+    inputStream.skip(allEnd - readPos);
   }
 }
 
@@ -221,85 +209,20 @@ ArrayPtr<const word> InputStreamMessageReader::getSegment(uint id) {
     return nullptr;
   }
 
-  while (segmentsReadSoFar <= id && inputStream != nullptr) {
-    LazySegment& segment = segmentsReadSoFar == 0 ? segment0 : moreSegments[segmentsReadSoFar - 1];
-    if (segment.words.size() < segment.size) {
-      segment.words = newArray<word>(segment.size);
-    }
+  ArrayPtr<const word> segment = id == 0 ? segment0 : moreSegments[id - 1];
 
-    if (!inputStream->read(segment.words.begin(), segment.size * sizeof(word))) {
-      // There was an error but no exception was thrown, so we're supposed to plod along with
-      // default values.  Discard the broken stream.
-      inputStream = nullptr;
-      break;
-    }
-
-    ++segmentsReadSoFar;
-  }
-
-  LazySegment& segment = id == 0 ? segment0 : moreSegments[id - 1];
-  return segment.words.slice(0, segment.size);
-}
-
-// -------------------------------------------------------------------
-
-InputFileMessageReader::InputFileMessageReader(
-    InputFile* inputFile, ReaderOptions options, InputStrategy inputStrategy)
-    : MessageReader(options), inputFile(inputFile) {
-  internal::WireValue<uint32_t> firstWord[2];
-
-  if (!inputFile->read(0, firstWord, sizeof(firstWord))) return;
-
-  uint segmentCount = firstWord[0].get();
-  segment0.size = segmentCount == 0 ? 0 : firstWord[1].get();
-
-  if (segmentCount > 1) {
-    internal::WireValue<uint32_t> sizes[segmentCount - 1];
-    if (!inputFile->read(sizeof(firstWord), sizes, sizeof(sizes))) return;
-
-    uint64_t offset = (segmentCount / 2 + 1) * sizeof(word);
-    segment0.offset = offset;
-    offset += segment0.size * sizeof(word);
-
-    moreSegments = newArray<LazySegment>(segmentCount - 1);
-    for (uint i = 1; i < segmentCount; i++) {
-      uint segmentSize = sizes[i - 1].get();
-      moreSegments[i - 1].size = segmentSize;
-      moreSegments[i - 1].offset = offset;
-      offset += segmentSize * sizeof(word);
-    }
-  } else {
-    segment0.offset = sizeof(firstWord);
-  }
-
-  if (inputStrategy == InputStrategy::EAGER) {
-    for (uint i = 0; i < segmentCount; i++) {
-      getSegment(segmentCount);
-    }
-    inputFile = nullptr;
-  }
-}
-
-ArrayPtr<const word> InputFileMessageReader::getSegment(uint id) {
-  if (id > moreSegments.size()) {
-    return nullptr;
-  }
-
-  LazySegment& segment = id == 0 ? segment0 : moreSegments[id - 1];
-
-  if (segment.words == nullptr && segment.size > 0 && inputFile != nullptr) {
-    Array<word> words = newArray<word>(segment.size);
-
-    if (!inputFile->read(segment.offset, words.begin(), words.size() * sizeof(word))) {
-      // There was an error but no exception was thrown, so we're supposed to plod along with
-      // default values.  Discard the broken stream.
-      inputFile = nullptr;
-    } else {
-      segment.words = move(words);
+  if (readPos != nullptr) {
+    // May need to lazily read more data.
+    const byte* segmentEnd = reinterpret_cast<const byte*>(segment.end());
+    if (readPos < segmentEnd) {
+      // Note that lazy reads only happen when we have multiple segments, so moreSegments.back() is
+      // valid.
+      const byte* allEnd = reinterpret_cast<const byte*>(moreSegments.back().end());
+      readPos += inputStream.read(readPos, segmentEnd - readPos, allEnd - readPos);
     }
   }
 
-  return segment.words.asPtr();
+  return segment;
 }
 
 // -------------------------------------------------------------------
@@ -316,27 +239,45 @@ void writeMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> seg
     table[segments.size() + 1].set(0);
   }
 
-  output.write(table, sizeof(table));
+  ArrayPtr<const byte> pieces[segments.size() + 1];
+  pieces[0] = arrayPtr(reinterpret_cast<byte*>(table), sizeof(table));
 
-  for (auto& segment: segments) {
-    output.write(segment.begin(), segment.size() * sizeof(word));
+  for (uint i = 0; i < segments.size(); i++) {
+    pieces[i + 1] = arrayPtr(reinterpret_cast<const byte*>(segments[i].begin()),
+                             reinterpret_cast<const byte*>(segments[i].end()));
   }
+
+  output.write(arrayPtr(pieces, segments.size() + 1));
 }
 
 // =======================================================================================
 
 class OsException: public std::exception {
 public:
-  OsException(int error): error(error) {}
+  OsException(const char* function, int error) {
+    char buffer[256];
+    message = function;
+    message += ": ";
+    message.append(strerror_r(error, buffer, sizeof(buffer)));
+  }
   ~OsException() noexcept {}
 
   const char* what() const noexcept override {
-    // TODO:  Use strerror_r or whatever for thread-safety.  Ugh.
-    return strerror(error);
+    return message.c_str();
   }
 
 private:
-  int error;
+  std::string message;
+};
+
+class PrematureEofException: public std::exception {
+public:
+  PrematureEofException() {}
+  ~PrematureEofException() noexcept {}
+
+  const char* what() const noexcept override {
+    return "Stream ended prematurely.";
+  }
 };
 
 AutoCloseFd::~AutoCloseFd() {
@@ -344,59 +285,38 @@ AutoCloseFd::~AutoCloseFd() {
     if (std::uncaught_exception()) {
       // TODO:  Devise some way to report secondary errors during unwind.
     } else {
-      throw OsException(errno);
+      throw OsException("close", errno);
     }
   }
 }
 
 FdInputStream::~FdInputStream() {}
 
-bool FdInputStream::read(void* buffer, size_t size) {
-  char* pos = reinterpret_cast<char*>(buffer);
+size_t FdInputStream::read(void* buffer, size_t minBytes, size_t maxBytes) {
+  byte* pos = reinterpret_cast<byte*>(buffer);
+  byte* min = pos + minBytes;
+  byte* max = pos + maxBytes;
 
-  while (size > 0) {
-    ssize_t n = ::read(fd, pos, size);
+  while (pos < min) {
+    ssize_t n = ::read(fd, pos, max - pos);
     if (n <= 0) {
       if (n < 0) {
-        // TODO:  Use strerror_r or whatever for thread-safety.  Ugh.
-        errorReporter->reportError(strerror(errno));
+        int error = errno;
+        if (error == EINTR) {
+          continue;
+        } else {
+          throw OsException("read", error);
+        }
       } else if (n == 0) {
-        errorReporter->reportError("Stream ended prematurely.");
+        throw PrematureEofException();
       }
       return false;
     }
 
     pos += n;
-    size -= n;
   }
 
-  return true;
-}
-
-FdInputFile::~FdInputFile() {}
-
-bool FdInputFile::read(size_t offset, void* buffer, size_t size) {
-  char* pos = reinterpret_cast<char*>(buffer);
-  offset += this->offset;
-
-  while (size > 0) {
-    ssize_t n = ::pread(fd, pos, size, offset);
-    if (n <= 0) {
-      if (n < 0) {
-        // TODO:  Use strerror_r or whatever for thread-safety.  Ugh.
-        errorReporter->reportError(strerror(errno));
-      } else if (n == 0) {
-        errorReporter->reportError("Stream ended prematurely.");
-      }
-      return false;
-    }
-
-    pos += n;
-    offset += n;
-    size -= n;
-  }
-
-  return true;
+  return pos - reinterpret_cast<byte*>(buffer);
 }
 
 FdOutputStream::~FdOutputStream() {}
@@ -407,15 +327,53 @@ void FdOutputStream::write(const void* buffer, size_t size) {
   while (size > 0) {
     ssize_t n = ::write(fd, pos, size);
     if (n <= 0) {
-      throw OsException(n == 0 ? EIO : errno);
+      CAPNPROTO_ASSERT(n < 0, "write() returned zero.");
+      throw OsException("write", errno);
     }
     pos += n;
     size -= n;
   }
 }
 
+void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
+  struct iovec iov[pieces.size()];
+  for (uint i = 0; i < pieces.size(); i++) {
+    // writev() interface is not const-correct.  :(
+    iov[i].iov_base = const_cast<byte*>(pieces[i].begin());
+    iov[i].iov_len = pieces[i].size();
+  }
+
+  struct iovec* current = iov;
+  struct iovec* end = iov + pieces.size();
+
+  // Make sure we don't do anything on an empty write.
+  while (current < end && current->iov_len == 0) {
+    ++current;
+  }
+
+  while (current < end) {
+    ssize_t n = ::writev(fd, iov, end - current);
+
+    if (n <= 0) {
+      if (n <= 0) {
+        CAPNPROTO_ASSERT(n < 0, "write() returned zero.");
+        throw OsException("writev", errno);
+      }
+    }
+
+    while (static_cast<size_t>(n) >= current->iov_len) {
+      n -= current->iov_len;
+      ++current;
+    }
+
+    if (n > 0) {
+      current->iov_base = reinterpret_cast<byte*>(current->iov_base) + n;
+      current->iov_len -= n;
+    }
+  }
+}
+
 StreamFdMessageReader::~StreamFdMessageReader() {}
-FileFdMessageReader::~FileFdMessageReader() {}
 
 void writeMessageToFd(int fd, ArrayPtr<const ArrayPtr<const word>> segments) {
   FdOutputStream stream(fd);

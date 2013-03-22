@@ -185,83 +185,130 @@ public:
 
 // =======================================================================================
 
-template <typename TestCase>
+struct NoScratch {
+  struct ScratchSpace {};
+
+  class MessageReader: public StreamFdMessageReader {
+  public:
+    inline MessageReader(int fd, ScratchSpace& scratch)
+        : StreamFdMessageReader(fd) {}
+  };
+
+  class MessageBuilder: public MallocMessageBuilder {
+  public:
+    inline MessageBuilder(ScratchSpace& scratch): MallocMessageBuilder() {}
+  };
+};
+
+template <size_t size>
+struct UseScratch {
+  struct ScratchSpace {
+    word words[size];
+  };
+
+  class MessageReader: public StreamFdMessageReader {
+  public:
+    inline MessageReader(int fd, ScratchSpace& scratch)
+        : StreamFdMessageReader(fd, ReaderOptions(), arrayPtr(scratch.words, size)) {}
+  };
+
+  class MessageBuilder: public MallocMessageBuilder {
+  public:
+    inline MessageBuilder(ScratchSpace& scratch)
+        : MallocMessageBuilder(arrayPtr(scratch.words, size)) {}
+  };
+};
+
+// =======================================================================================
+
+template <typename TestCase, typename ReuseStrategy>
 void syncClient(int inputFd, int outputFd, uint64_t iters) {
-  MallocMessageBuilder builder;
-//  StreamFdMessageReader reader(inputFd, ReaderOptions(), InputStrategy::EAGER_WAIT_FOR_READ_NEXT);
+  typename ReuseStrategy::ScratchSpace scratch;
 
   for (; iters > 0; --iters) {
-    typename TestCase::Expectation expected = TestCase::setupRequest(
-        builder.initRoot<typename TestCase::Request>());
-    writeMessageToFd(outputFd, builder);
+    typename TestCase::Expectation expected;
+    {
+      typename ReuseStrategy::MessageBuilder builder(scratch);
+      expected = TestCase::setupRequest(
+          builder.template initRoot<typename TestCase::Request>());
+      writeMessageToFd(outputFd, builder);
+    }
 
-//    reader.readNext();
-    StreamFdMessageReader reader(inputFd);
-    if (!TestCase::checkResponse(reader.getRoot<typename TestCase::Response>(), expected)) {
-      throw std::logic_error("Incorrect response.");
+    {
+      typename ReuseStrategy::MessageReader reader(inputFd, scratch);
+      if (!TestCase::checkResponse(
+          reader.template getRoot<typename TestCase::Response>(), expected)) {
+        throw std::logic_error("Incorrect response.");
+      }
     }
   }
 }
 
-template <typename TestCase>
+template <typename TestCase, typename ReuseStrategy>
 void asyncClientSender(int outputFd,
                        ProducerConsumerQueue<typename TestCase::Expectation>* expectations,
                        uint64_t iters) {
-  MallocMessageBuilder builder;
+  typename ReuseStrategy::ScratchSpace scratch;
 
   for (; iters > 0; --iters) {
-    expectations->post(TestCase::setupRequest(builder.initRoot<typename TestCase::Request>()));
+    typename ReuseStrategy::MessageBuilder builder(scratch);
+    expectations->post(TestCase::setupRequest(
+        builder.template initRoot<typename TestCase::Request>()));
     writeMessageToFd(outputFd, builder);
   }
 }
 
-template <typename TestCase>
+template <typename TestCase, typename ReuseStrategy>
 void asyncClientReceiver(int inputFd,
                          ProducerConsumerQueue<typename TestCase::Expectation>* expectations,
                          uint64_t iters) {
-  StreamFdMessageReader reader(inputFd, ReaderOptions(), InputStrategy::EAGER_WAIT_FOR_READ_NEXT);
+  typename ReuseStrategy::ScratchSpace scratch;
 
   for (; iters > 0; --iters) {
     typename TestCase::Expectation expected = expectations->next();
-    reader.readNext();
-    if (!TestCase::checkResponse(reader.getRoot<typename TestCase::Response>(), expected)) {
+    typename ReuseStrategy::MessageReader reader(inputFd, scratch);
+    if (!TestCase::checkResponse(
+        reader.template getRoot<typename TestCase::Response>(), expected)) {
       throw std::logic_error("Incorrect response.");
     }
   }
 }
 
-template <typename TestCase>
+template <typename TestCase, typename ReuseStrategy>
 void asyncClient(int inputFd, int outputFd, uint64_t iters) {
   ProducerConsumerQueue<typename TestCase::Expectation> expectations;
-  std::thread receiverThread(asyncClientReceiver<TestCase>, inputFd, &expectations, iters);
-  asyncClientSender<TestCase>(outputFd, &expectations, iters);
+  std::thread receiverThread(
+      asyncClientReceiver<TestCase, ReuseStrategy>, inputFd, &expectations, iters);
+  asyncClientSender<TestCase, ReuseStrategy>(outputFd, &expectations, iters);
   receiverThread.join();
 }
 
-template <typename TestCase>
+template <typename TestCase, typename ReuseStrategy>
 void server(int inputFd, int outputFd, uint64_t iters) {
-  StreamFdMessageReader reader(inputFd, ReaderOptions(), InputStrategy::EAGER_WAIT_FOR_READ_NEXT);
-  MallocMessageBuilder builder;
+  typename ReuseStrategy::ScratchSpace builderScratch;
+  typename ReuseStrategy::ScratchSpace readerScratch;
 
   for (; iters > 0; --iters) {
-    reader.readNext();
-//    StreamFdMessageReader reader(inputFd);
-    TestCase::handleRequest(reader.getRoot<typename TestCase::Request>(),
-                            builder.initRoot<typename TestCase::Response>());
+    typename ReuseStrategy::MessageBuilder builder(builderScratch);
+    typename ReuseStrategy::MessageReader reader(inputFd, readerScratch);
+    TestCase::handleRequest(reader.template getRoot<typename TestCase::Request>(),
+                            builder.template initRoot<typename TestCase::Response>());
     writeMessageToFd(outputFd, builder);
   }
 }
 
-template <typename TestCase>
+template <typename TestCase, typename ReuseStrategy>
 void passByObject(uint64_t iters) {
-  MallocMessageBuilder requestMessage;
-  MallocMessageBuilder responseMessage;
+  typename ReuseStrategy::ScratchSpace requestScratch;
+  typename ReuseStrategy::ScratchSpace responseScratch;
 
   for (; iters > 0; --iters) {
-    auto request = requestMessage.initRoot<typename TestCase::Request>();
+    typename ReuseStrategy::MessageBuilder requestMessage(requestScratch);
+    auto request = requestMessage.template initRoot<typename TestCase::Request>();
     typename TestCase::Expectation expected = TestCase::setupRequest(request);
 
-    auto response = responseMessage.initRoot<typename TestCase::Response>();
+    typename ReuseStrategy::MessageBuilder responseMessage(responseScratch);
+    auto response = responseMessage.template initRoot<typename TestCase::Response>();
     TestCase::handleRequest(request.asReader(), response);
 
     if (!TestCase::checkResponse(response.asReader(), expected)) {
@@ -270,29 +317,32 @@ void passByObject(uint64_t iters) {
   }
 }
 
-template <typename TestCase>
+template <typename TestCase, typename ReuseStrategy>
 void passByBytes(uint64_t iters) {
-  MallocMessageBuilder requestBuilder;
-  MallocMessageBuilder responseBuilder;
+  typename ReuseStrategy::ScratchSpace requestScratch;
+  typename ReuseStrategy::ScratchSpace responseScratch;
 
   for (; iters > 0; --iters) {
+    typename ReuseStrategy::MessageBuilder requestBuilder(requestScratch);
     typename TestCase::Expectation expected = TestCase::setupRequest(
-        requestBuilder.initRoot<typename TestCase::Request>());
+        requestBuilder.template initRoot<typename TestCase::Request>());
 
     Array<word> requestBytes = messageToFlatArray(requestBuilder);
     FlatArrayMessageReader requestReader(requestBytes.asPtr());
-    TestCase::handleRequest(requestReader.getRoot<typename TestCase::Request>(),
-                            responseBuilder.initRoot<typename TestCase::Response>());
+    typename ReuseStrategy::MessageBuilder responseBuilder(responseScratch);
+    TestCase::handleRequest(requestReader.template getRoot<typename TestCase::Request>(),
+                            responseBuilder.template initRoot<typename TestCase::Response>());
 
     Array<word> responseBytes = messageToFlatArray(responseBuilder);
     FlatArrayMessageReader responseReader(responseBytes.asPtr());
-    if (!TestCase::checkResponse(responseReader.getRoot<typename TestCase::Response>(), expected)) {
+    if (!TestCase::checkResponse(
+        responseReader.template getRoot<typename TestCase::Response>(), expected)) {
       throw std::logic_error("Incorrect response.");
     }
   }
 }
 
-template <typename TestCase, typename Func>
+template <typename TestCase, typename ReuseStrategy, typename Func>
 void passByPipe(Func&& clientFunc, uint64_t iters) {
   int clientToServer[2];
   int serverToClient[2];
@@ -312,7 +362,7 @@ void passByPipe(Func&& clientFunc, uint64_t iters) {
     close(clientToServer[1]);
     close(serverToClient[0]);
 
-    server<TestCase>(clientToServer[0], serverToClient[1], iters);
+    server<TestCase, ReuseStrategy>(clientToServer[0], serverToClient[1], iters);
 
     int status;
     if (waitpid(child, &status, 0) != child) {
@@ -324,32 +374,46 @@ void passByPipe(Func&& clientFunc, uint64_t iters) {
   }
 }
 
+template <typename ReuseStrategy>
+void doBenchmark(const std::string& mode, uint64_t iters) {
+  if (mode == "client") {
+    syncClient<ExpressionTestCase, ReuseStrategy>(STDIN_FILENO, STDOUT_FILENO, iters);
+  } else if (mode == "server") {
+    server<ExpressionTestCase, ReuseStrategy>(STDIN_FILENO, STDOUT_FILENO, iters);
+  } else if (mode == "object") {
+    passByObject<ExpressionTestCase, ReuseStrategy>(iters);
+  } else if (mode == "bytes") {
+    passByBytes<ExpressionTestCase, ReuseStrategy>(iters);
+  } else if (mode == "pipe") {
+    passByPipe<ExpressionTestCase, ReuseStrategy>(
+        syncClient<ExpressionTestCase, ReuseStrategy>, iters);
+  } else if (mode == "pipe-async") {
+    passByPipe<ExpressionTestCase, ReuseStrategy>(
+        asyncClient<ExpressionTestCase, ReuseStrategy>, iters);
+  } else {
+    std::cerr << "Unknown mode: " << mode << std::endl;
+    exit(1);
+  }
+}
+
 int main(int argc, char* argv[]) {
-  if (argc != 3) {
-    std::cerr << "USAGE:  " << argv[0] << " MODE ITERATION_COUNT" << std::endl;
+  if (argc != 4) {
+    std::cerr << "USAGE:  " << argv[0] << " MODE REUSE ITERATION_COUNT" << std::endl;
     return 1;
   }
 
-  uint64_t iters = strtoull(argv[2], nullptr, 0);
+  uint64_t iters = strtoull(argv[3], nullptr, 0);
   srand(123);
 
   std::cerr << "Doing " << iters << " iterations..." << std::endl;
 
-  std::string mode = argv[1];
-  if (mode == "client") {
-    syncClient<ExpressionTestCase>(STDIN_FILENO, STDOUT_FILENO, iters);
-  } else if (mode == "server") {
-    server<ExpressionTestCase>(STDIN_FILENO, STDOUT_FILENO, iters);
-  } else if (mode == "object") {
-    passByObject<ExpressionTestCase>(iters);
-  } else if (mode == "bytes") {
-    passByBytes<ExpressionTestCase>(iters);
-  } else if (mode == "pipe") {
-    passByPipe<ExpressionTestCase>(syncClient<ExpressionTestCase>, iters);
-  } else if (mode == "pipe-async") {
-    passByPipe<ExpressionTestCase>(asyncClient<ExpressionTestCase>, iters);
+  std::string reuse = argv[2];
+  if (reuse == "reuse") {
+    doBenchmark<UseScratch<1024>>(argv[1], iters);
+  } else if (reuse == "no-reuse") {
+    doBenchmark<NoScratch>(argv[1], iters);
   } else {
-    std::cerr << "Unknown mode: " << mode << std::endl;
+    std::cerr << "Unknown reuse mode: " << reuse << std::endl;
     return 1;
   }
 
