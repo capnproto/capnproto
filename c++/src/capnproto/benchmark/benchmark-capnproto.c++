@@ -240,7 +240,8 @@ public:
       bool isDog = rand() % 8 == 0;
       goodCount += isCat && !isDog;
 
-      std::string snippet;
+      static std::string snippet;
+      snippet.clear();
       snippet.push_back(' ');
 
       int prefix = rand() % 20;
