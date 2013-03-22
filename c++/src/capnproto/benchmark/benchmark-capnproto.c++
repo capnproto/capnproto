@@ -23,6 +23,7 @@
 
 #include "benchmark.capnp.h"
 #include <capnproto/serialize.h>
+#include <capnproto/serialize-snappy.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -185,13 +186,53 @@ public:
 
 // =======================================================================================
 
+class CountingOutputStream: public FdOutputStream {
+public:
+  CountingOutputStream(int fd): FdOutputStream(fd), throughput(0) {}
+
+  uint64_t throughput;
+
+  void write(const void* buffer, size_t size) override {
+    FdOutputStream::write(buffer, size);
+    throughput += size;
+  }
+
+  void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+    FdOutputStream::write(pieces);
+    for (auto& piece: pieces) {
+      throughput += piece.size();
+    }
+  }
+};
+
+// =======================================================================================
+
+struct Uncompressed {
+  typedef StreamFdMessageReader MessageReader;
+
+  static inline void write(OutputStream& output, MessageBuilder& builder) {
+    writeMessage(output, builder);
+  }
+};
+
+struct SnappyCompressed {
+  typedef SnappyFdMessageReader MessageReader;
+
+  static inline void write(OutputStream& output, MessageBuilder& builder) {
+    writeSnappyMessage(output, builder);
+  }
+};
+
+// =======================================================================================
+
+template <typename Compression>
 struct NoScratch {
   struct ScratchSpace {};
 
-  class MessageReader: public StreamFdMessageReader {
+  class MessageReader: public Compression::MessageReader {
   public:
     inline MessageReader(int fd, ScratchSpace& scratch)
-        : StreamFdMessageReader(fd) {}
+        : Compression::MessageReader(fd) {}
   };
 
   class MessageBuilder: public MallocMessageBuilder {
@@ -200,16 +241,16 @@ struct NoScratch {
   };
 };
 
-template <size_t size>
+template <typename Compression, size_t size>
 struct UseScratch {
   struct ScratchSpace {
     word words[size];
   };
 
-  class MessageReader: public StreamFdMessageReader {
+  class MessageReader: public Compression::MessageReader {
   public:
     inline MessageReader(int fd, ScratchSpace& scratch)
-        : StreamFdMessageReader(fd, ReaderOptions(), arrayPtr(scratch.words, size)) {}
+        : Compression::MessageReader(fd, ReaderOptions(), arrayPtr(scratch.words, size)) {}
   };
 
   class MessageBuilder: public MallocMessageBuilder {
@@ -221,8 +262,9 @@ struct UseScratch {
 
 // =======================================================================================
 
-template <typename TestCase, typename ReuseStrategy>
-void syncClient(int inputFd, int outputFd, uint64_t iters) {
+template <typename TestCase, typename ReuseStrategy, typename Compression>
+uint64_t syncClient(int inputFd, int outputFd, uint64_t iters) {
+  CountingOutputStream output(outputFd);
   typename ReuseStrategy::ScratchSpace scratch;
 
   for (; iters > 0; --iters) {
@@ -231,7 +273,7 @@ void syncClient(int inputFd, int outputFd, uint64_t iters) {
       typename ReuseStrategy::MessageBuilder builder(scratch);
       expected = TestCase::setupRequest(
           builder.template initRoot<typename TestCase::Request>());
-      writeMessageToFd(outputFd, builder);
+      Compression::write(output, builder);
     }
 
     {
@@ -242,23 +284,28 @@ void syncClient(int inputFd, int outputFd, uint64_t iters) {
       }
     }
   }
+
+  return output.throughput;
 }
 
-template <typename TestCase, typename ReuseStrategy>
-void asyncClientSender(int outputFd,
-                       ProducerConsumerQueue<typename TestCase::Expectation>* expectations,
-                       uint64_t iters) {
+template <typename TestCase, typename ReuseStrategy, typename Compression>
+uint64_t asyncClientSender(int outputFd,
+                           ProducerConsumerQueue<typename TestCase::Expectation>* expectations,
+                           uint64_t iters) {
+  CountingOutputStream output(outputFd);
   typename ReuseStrategy::ScratchSpace scratch;
 
   for (; iters > 0; --iters) {
     typename ReuseStrategy::MessageBuilder builder(scratch);
     expectations->post(TestCase::setupRequest(
         builder.template initRoot<typename TestCase::Request>()));
-    writeMessageToFd(outputFd, builder);
+    Compression::write(output, builder);
   }
+
+  return output.throughput;
 }
 
-template <typename TestCase, typename ReuseStrategy>
+template <typename TestCase, typename ReuseStrategy, typename Compression>
 void asyncClientReceiver(int inputFd,
                          ProducerConsumerQueue<typename TestCase::Expectation>* expectations,
                          uint64_t iters) {
@@ -274,17 +321,20 @@ void asyncClientReceiver(int inputFd,
   }
 }
 
-template <typename TestCase, typename ReuseStrategy>
-void asyncClient(int inputFd, int outputFd, uint64_t iters) {
+template <typename TestCase, typename ReuseStrategy, typename Compression>
+uint64_t asyncClient(int inputFd, int outputFd, uint64_t iters) {
   ProducerConsumerQueue<typename TestCase::Expectation> expectations;
   std::thread receiverThread(
-      asyncClientReceiver<TestCase, ReuseStrategy>, inputFd, &expectations, iters);
-  asyncClientSender<TestCase, ReuseStrategy>(outputFd, &expectations, iters);
+      asyncClientReceiver<TestCase, ReuseStrategy, Compression>, inputFd, &expectations, iters);
+  uint64_t throughput =
+      asyncClientSender<TestCase, ReuseStrategy, Compression>(outputFd, &expectations, iters);
   receiverThread.join();
+  return throughput;
 }
 
-template <typename TestCase, typename ReuseStrategy>
-void server(int inputFd, int outputFd, uint64_t iters) {
+template <typename TestCase, typename ReuseStrategy, typename Compression>
+uint64_t server(int inputFd, int outputFd, uint64_t iters) {
+  CountingOutputStream output(outputFd);
   typename ReuseStrategy::ScratchSpace builderScratch;
   typename ReuseStrategy::ScratchSpace readerScratch;
 
@@ -293,12 +343,14 @@ void server(int inputFd, int outputFd, uint64_t iters) {
     typename ReuseStrategy::MessageReader reader(inputFd, readerScratch);
     TestCase::handleRequest(reader.template getRoot<typename TestCase::Request>(),
                             builder.template initRoot<typename TestCase::Response>());
-    writeMessageToFd(outputFd, builder);
+    Compression::write(output, builder);
   }
+
+  return output.throughput;
 }
 
-template <typename TestCase, typename ReuseStrategy>
-void passByObject(uint64_t iters) {
+template <typename TestCase, typename ReuseStrategy, typename Compression>
+uint64_t passByObject(uint64_t iters) {
   typename ReuseStrategy::ScratchSpace requestScratch;
   typename ReuseStrategy::ScratchSpace responseScratch;
 
@@ -315,10 +367,13 @@ void passByObject(uint64_t iters) {
       throw std::logic_error("Incorrect response.");
     }
   }
+
+  return 0;
 }
 
-template <typename TestCase, typename ReuseStrategy>
-void passByBytes(uint64_t iters) {
+template <typename TestCase, typename ReuseStrategy, typename Compression>
+uint64_t passByBytes(uint64_t iters) {
+  uint64_t throughput = 0;
   typename ReuseStrategy::ScratchSpace requestScratch;
   typename ReuseStrategy::ScratchSpace responseScratch;
 
@@ -328,22 +383,26 @@ void passByBytes(uint64_t iters) {
         requestBuilder.template initRoot<typename TestCase::Request>());
 
     Array<word> requestBytes = messageToFlatArray(requestBuilder);
+    throughput += requestBytes.size() * sizeof(word);
     FlatArrayMessageReader requestReader(requestBytes.asPtr());
     typename ReuseStrategy::MessageBuilder responseBuilder(responseScratch);
     TestCase::handleRequest(requestReader.template getRoot<typename TestCase::Request>(),
                             responseBuilder.template initRoot<typename TestCase::Response>());
 
     Array<word> responseBytes = messageToFlatArray(responseBuilder);
+    throughput += responseBytes.size() * sizeof(word);
     FlatArrayMessageReader responseReader(responseBytes.asPtr());
     if (!TestCase::checkResponse(
         responseReader.template getRoot<typename TestCase::Response>(), expected)) {
       throw std::logic_error("Incorrect response.");
     }
   }
+
+  return throughput;
 }
 
-template <typename TestCase, typename ReuseStrategy, typename Func>
-void passByPipe(Func&& clientFunc, uint64_t iters) {
+template <typename TestCase, typename ReuseStrategy, typename Compression, typename Func>
+uint64_t passByPipe(Func&& clientFunc, uint64_t iters) {
   int clientToServer[2];
   int serverToClient[2];
   if (pipe(clientToServer) < 0) throw OsException(errno);
@@ -355,14 +414,22 @@ void passByPipe(Func&& clientFunc, uint64_t iters) {
     close(clientToServer[0]);
     close(serverToClient[1]);
 
-    clientFunc(serverToClient[0], clientToServer[1], iters);
+    uint64_t throughput = clientFunc(serverToClient[0], clientToServer[1], iters);
+
+    FdOutputStream(clientToServer[1]).write(&throughput, sizeof(throughput));
+
     exit(0);
   } else {
     // Server.
     close(clientToServer[1]);
     close(serverToClient[0]);
 
-    server<TestCase, ReuseStrategy>(clientToServer[0], serverToClient[1], iters);
+    uint64_t throughput =
+        server<TestCase, ReuseStrategy, Compression>(clientToServer[0], serverToClient[1], iters);
+
+    uint64_t clientThroughput = 0;
+    FdInputStream(clientToServer[0]).InputStream::read(&clientThroughput, sizeof(clientThroughput));
+    throughput += clientThroughput;
 
     int status;
     if (waitpid(child, &status, 0) != child) {
@@ -371,51 +438,71 @@ void passByPipe(Func&& clientFunc, uint64_t iters) {
     if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
       throw std::logic_error("Child exited abnormally.");
     }
+
+    return throughput;
   }
 }
 
-template <typename ReuseStrategy>
-void doBenchmark(const std::string& mode, uint64_t iters) {
+template <typename ReuseStrategy, typename Compression>
+uint64_t doBenchmark(const std::string& mode, uint64_t iters) {
   if (mode == "client") {
-    syncClient<ExpressionTestCase, ReuseStrategy>(STDIN_FILENO, STDOUT_FILENO, iters);
+    return syncClient<ExpressionTestCase, ReuseStrategy, Compression>(
+        STDIN_FILENO, STDOUT_FILENO, iters);
   } else if (mode == "server") {
-    server<ExpressionTestCase, ReuseStrategy>(STDIN_FILENO, STDOUT_FILENO, iters);
+    return server<ExpressionTestCase, ReuseStrategy, Compression>(
+        STDIN_FILENO, STDOUT_FILENO, iters);
   } else if (mode == "object") {
-    passByObject<ExpressionTestCase, ReuseStrategy>(iters);
+    return passByObject<ExpressionTestCase, ReuseStrategy, Compression>(iters);
   } else if (mode == "bytes") {
-    passByBytes<ExpressionTestCase, ReuseStrategy>(iters);
+    return passByBytes<ExpressionTestCase, ReuseStrategy, Compression>(iters);
   } else if (mode == "pipe") {
-    passByPipe<ExpressionTestCase, ReuseStrategy>(
-        syncClient<ExpressionTestCase, ReuseStrategy>, iters);
+    return passByPipe<ExpressionTestCase, ReuseStrategy, Compression>(
+        syncClient<ExpressionTestCase, ReuseStrategy, Compression>, iters);
   } else if (mode == "pipe-async") {
-    passByPipe<ExpressionTestCase, ReuseStrategy>(
-        asyncClient<ExpressionTestCase, ReuseStrategy>, iters);
+    return passByPipe<ExpressionTestCase, ReuseStrategy, Compression>(
+        asyncClient<ExpressionTestCase, ReuseStrategy, Compression>, iters);
   } else {
     std::cerr << "Unknown mode: " << mode << std::endl;
     exit(1);
   }
 }
 
+template <typename Compression>
+uint64_t doBenchmark2(const std::string& mode, const std::string& reuse, uint64_t iters) {
+  if (reuse == "reuse") {
+    return doBenchmark<UseScratch<Compression, 1024>, Compression>(mode, iters);
+  } else if (reuse == "no-reuse") {
+    return doBenchmark<NoScratch<Compression>, Compression>(mode, iters);
+  } else {
+    std::cerr << "Unknown reuse mode: " << reuse << std::endl;
+    exit(1);
+  }
+}
+
 int main(int argc, char* argv[]) {
-  if (argc != 4) {
-    std::cerr << "USAGE:  " << argv[0] << " MODE REUSE ITERATION_COUNT" << std::endl;
+  if (argc != 5) {
+    std::cerr << "USAGE:  " << argv[0] << " MODE REUSE COMPRESSION ITERATION_COUNT" << std::endl;
     return 1;
   }
 
-  uint64_t iters = strtoull(argv[3], nullptr, 0);
+  uint64_t iters = strtoull(argv[4], nullptr, 0);
   srand(123);
 
   std::cerr << "Doing " << iters << " iterations..." << std::endl;
 
-  std::string reuse = argv[2];
-  if (reuse == "reuse") {
-    doBenchmark<UseScratch<1024>>(argv[1], iters);
-  } else if (reuse == "no-reuse") {
-    doBenchmark<NoScratch>(argv[1], iters);
+  uint64_t throughput;
+
+  std::string compression = argv[3];
+  if (compression == "none") {
+    throughput = doBenchmark2<Uncompressed>(argv[1], argv[2], iters);
+  } else if (compression == "snappy") {
+    throughput = doBenchmark2<SnappyCompressed>(argv[1], argv[2], iters);
   } else {
-    std::cerr << "Unknown reuse mode: " << reuse << std::endl;
+    std::cerr << "Unknown compression mode: " << compression << std::endl;
     return 1;
   }
+
+  std::cerr << "Average messages size = " << (throughput / iters) << std::endl;
 
   return 0;
 }

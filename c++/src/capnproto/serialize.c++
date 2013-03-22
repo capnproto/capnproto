@@ -152,7 +152,7 @@ InputStreamMessageReader::InputStreamMessageReader(
     : MessageReader(options), inputStream(inputStream), readPos(nullptr) {
   internal::WireValue<uint32_t> firstWord[2];
 
-  inputStream.read(firstWord, sizeof(firstWord), sizeof(firstWord));
+  inputStream.read(firstWord, sizeof(firstWord));
 
   uint segmentCount = firstWord[0].get();
   uint segment0Size = segmentCount == 0 ? 0 : firstWord[1].get();
@@ -162,7 +162,7 @@ InputStreamMessageReader::InputStreamMessageReader(
   // Read sizes for all segments except the first.  Include padding if necessary.
   internal::WireValue<uint32_t> moreSizes[segmentCount & ~1];
   if (segmentCount > 1) {
-    inputStream.read(moreSizes, sizeof(moreSizes), sizeof(moreSizes));
+    inputStream.read(moreSizes, sizeof(moreSizes));
     for (uint i = 0; i < segmentCount - 1; i++) {
       totalWords += moreSizes[i].get();
     }
@@ -188,7 +188,7 @@ InputStreamMessageReader::InputStreamMessageReader(
   }
 
   if (segmentCount == 1) {
-    inputStream.read(scratchSpace.begin(), totalWords * sizeof(word), totalWords * sizeof(word));
+    inputStream.read(scratchSpace.begin(), totalWords * sizeof(word));
   } else if (segmentCount > 1) {
     readPos = reinterpret_cast<byte*>(scratchSpace.begin());
     readPos += inputStream.read(readPos, segment0Size * sizeof(word), totalWords * sizeof(word));
@@ -200,7 +200,16 @@ InputStreamMessageReader::~InputStreamMessageReader() {
     // Note that lazy reads only happen when we have multiple segments, so moreSegments.back() is
     // valid.
     const byte* allEnd = reinterpret_cast<const byte*>(moreSegments.back().end());
-    inputStream.skip(allEnd - readPos);
+
+    if (std::uncaught_exception()) {
+      try {
+        inputStream.skip(allEnd - readPos);
+      } catch (...) {
+        // TODO:  Devise some way to report secondary errors during unwind.
+      }
+    } else {
+      inputStream.skip(allEnd - readPos);
+    }
   }
 }
 
@@ -328,7 +337,12 @@ void FdOutputStream::write(const void* buffer, size_t size) {
     ssize_t n = ::write(fd, pos, size);
     if (n <= 0) {
       CAPNPROTO_ASSERT(n < 0, "write() returned zero.");
-      throw OsException("write", errno);
+      int error = errno;
+      if (error == EINTR) {
+        continue;
+      } else {
+        throw OsException("write", error);
+      }
     }
     pos += n;
     size -= n;

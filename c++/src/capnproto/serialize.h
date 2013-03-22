@@ -91,6 +91,9 @@ public:
   // message.  If it can't even reach minBytes, it MUST throw an exception, as the caller is not
   // expected to understand how to deal with partial reads.
 
+  inline void read(void* buffer, size_t bytes) { read(buffer, bytes, bytes); }
+  // Convenience method for reading an exact number of bytes.
+
   virtual void skip(size_t bytes);
   // Skips past the given number of bytes, discarding them.  The default implementation read()s
   // into a scratch buffer.
@@ -210,18 +213,11 @@ public:
                         ArrayPtr<word> scratchSpace = nullptr)
       : FdInputStream(fd), InputStreamMessageReader(*this, options, scratchSpace) {}
   // Read message from a file descriptor, without taking ownership of the descriptor.
-  //
-  // Since this version implies that the caller intends to read more data from the fd later on, the
-  // default is to read the entire message eagerly in the constructor, so that the fd will be
-  // deterministically positioned just past the end of the message.
 
   StreamFdMessageReader(AutoCloseFd fd, ReaderOptions options = ReaderOptions(),
                         ArrayPtr<word> scratchSpace = nullptr)
       : FdInputStream(move(fd)), InputStreamMessageReader(*this, options, scratchSpace) {}
   // Read a message from a file descriptor, taking ownership of the descriptor.
-  //
-  // Since this version implies that the caller does not intend to read any more data from the fd,
-  // the default is to read the message lazily as needed.
 
   ~StreamFdMessageReader();
 };

@@ -116,7 +116,7 @@ class Array {
 public:
   inline Array(): ptr(nullptr), size_(0) {}
   inline Array(std::nullptr_t): ptr(nullptr), size_(0) {}
-  inline Array(Array&& other): ptr(other.ptr), size_(other.size_) {
+  inline Array(Array&& other) noexcept: ptr(other.ptr), size_(other.size_) {
     other.ptr = nullptr;
     other.size_ = 0;
   }

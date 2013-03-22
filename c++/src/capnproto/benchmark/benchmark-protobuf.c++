@@ -35,6 +35,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <semaphore.h>
+#include <snappy/snappy.h>
+#include <snappy/snappy-sinksource.h>
 
 namespace capnproto {
 namespace benchmark {
@@ -225,39 +227,108 @@ struct ReusableMessages {
 // to do naively, but tricky to implement without accidentally losing various optimizations.  These
 // two functions should be optimal.
 
-void writeDelimited(const google::protobuf::MessageLite& message,
-                    google::protobuf::io::FileOutputStream* rawOutput) {
-  google::protobuf::io::CodedOutputStream output(rawOutput);
-  const int size = message.ByteSize();
-  output.WriteVarint32(size);
-  uint8_t* buffer = output.GetDirectBufferForNBytesAndAdvance(size);
-  if (buffer != NULL) {
-    message.SerializeWithCachedSizesToArray(buffer);
-  } else {
-    message.SerializeWithCachedSizes(&output);
-    if (output.HadError()) {
-      throw OsException(rawOutput->GetErrno());
+struct Uncompressed {
+  typedef google::protobuf::io::FileInputStream InputStream;
+  typedef google::protobuf::io::FileOutputStream OutputStream;
+
+  static uint64_t write(const google::protobuf::MessageLite& message,
+                        google::protobuf::io::FileOutputStream* rawOutput) {
+    google::protobuf::io::CodedOutputStream output(rawOutput);
+    const int size = message.ByteSize();
+    output.WriteVarint32(size);
+    uint8_t* buffer = output.GetDirectBufferForNBytesAndAdvance(size);
+    if (buffer != NULL) {
+      message.SerializeWithCachedSizesToArray(buffer);
+    } else {
+      message.SerializeWithCachedSizes(&output);
+      if (output.HadError()) {
+        throw OsException(rawOutput->GetErrno());
+      }
     }
-  }
-}
 
-void readDelimited(google::protobuf::io::ZeroCopyInputStream* rawInput,
+    return size;
+  }
+
+  static void read(google::protobuf::io::ZeroCopyInputStream* rawInput,
                    google::protobuf::MessageLite* message) {
-  google::protobuf::io::CodedInputStream input(rawInput);
-  uint32_t size;
-  if (!input.ReadVarint32(&size)) {
-    throw std::logic_error("Read failed.");
+    google::protobuf::io::CodedInputStream input(rawInput);
+    uint32_t size;
+    GOOGLE_CHECK(input.ReadVarint32(&size));
+
+    auto limit = input.PushLimit(size);
+
+    GOOGLE_CHECK(message->MergePartialFromCodedStream(&input) &&
+                 input.ConsumedEntireMessage());
+
+    input.PopLimit(limit);
   }
 
-  auto limit = input.PushLimit(size);
-
-  if (!message->MergePartialFromCodedStream(&input) ||
-      !input.ConsumedEntireMessage()) {
-    throw std::logic_error("Read failed.");
+  static void flush(google::protobuf::io::FileOutputStream* output) {
+    if (!output->Flush()) throw OsException(output->GetErrno());
   }
+};
 
-  input.PopLimit(limit);
+// =======================================================================================
+// The Snappy interface is really obnoxious.  I gave up here and am just reading/writing flat
+// arrays in some static scratch space.  This probably gives protobufs an edge that it doesn't
+// deserve.
+
+void writeAll(int fd, const void* buffer, size_t size) {
+  const char* pos = reinterpret_cast<const char*>(buffer);
+  while (size > 0) {
+    ssize_t n = write(fd, pos, size);
+    GOOGLE_CHECK_GT(n, 0);
+    pos += n;
+    size -= n;
+  }
 }
+
+void readAll(int fd, void* buffer, size_t size) {
+  char* pos = reinterpret_cast<char*>(buffer);
+  while (size > 0) {
+    ssize_t n = read(fd, pos, size);
+    GOOGLE_CHECK_GT(n, 0);
+    pos += n;
+    size -= n;
+  }
+}
+
+static char scratch[128 << 10];
+static char scratch2[128 << 10];
+
+struct SnappyCompressed {
+  typedef int InputStream;
+  typedef int OutputStream;
+
+  static uint64_t write(const google::protobuf::MessageLite& message, int* output) {
+    size_t size = message.ByteSize();
+    GOOGLE_CHECK_LE(size, sizeof(scratch));
+
+    message.SerializeWithCachedSizesToArray(reinterpret_cast<uint8_t*>(scratch));
+
+    size_t compressedSize = 0;
+    snappy::RawCompress(scratch, size, scratch2 + sizeof(uint32_t), &compressedSize);
+    uint32_t tag = compressedSize;
+    memcpy(scratch2, &tag, sizeof(tag));
+
+    writeAll(*output, scratch2, compressedSize + sizeof(tag));
+    return compressedSize + sizeof(tag);
+  }
+
+  static void read(int* input, google::protobuf::MessageLite* message) {
+    uint32_t size;
+    readAll(*input, &size, sizeof(size));
+    readAll(*input, scratch, size);
+
+    size_t uncompressedSize;
+    GOOGLE_CHECK(snappy::GetUncompressedLength(scratch, size, &uncompressedSize));
+    GOOGLE_CHECK(snappy::RawUncompress(scratch, size, scratch2));
+
+    GOOGLE_CHECK(message->ParsePartialFromArray(scratch2, uncompressedSize));
+  }
+
+  static void flush(OutputStream*) {}
+};
 
 // =======================================================================================
 
@@ -266,10 +337,12 @@ void readDelimited(google::protobuf::io::ZeroCopyInputStream* rawInput,
 #define SINGLE_USE(type) \
   typename ReuseStrategy::template Message<typename TestCase::type>::SingleUse
 
-template <typename TestCase, typename ReuseStrategy>
-void syncClient(int inputFd, int outputFd, uint64_t iters) {
-  google::protobuf::io::FileOutputStream output(outputFd);
-  google::protobuf::io::FileInputStream input(inputFd);
+template <typename TestCase, typename ReuseStrategy, typename Compression>
+uint64_t syncClient(int inputFd, int outputFd, uint64_t iters) {
+  uint64_t throughput = 0;
+
+  typename Compression::OutputStream output(outputFd);
+  typename Compression::InputStream input(inputFd);
 
   REUSABLE(Request) reusableRequest;
   REUSABLE(Response) reusableResponse;
@@ -277,47 +350,52 @@ void syncClient(int inputFd, int outputFd, uint64_t iters) {
   for (; iters > 0; --iters) {
     SINGLE_USE(Request) request(reusableRequest);
     typename TestCase::Expectation expected = TestCase::setupRequest(&request);
-    writeDelimited(request, &output);
-    if (!output.Flush()) throw OsException(output.GetErrno());
+    throughput += Compression::write(request, &output);
+    Compression::flush(&output);
     ReuseStrategy::doneWith(request);
 
     SINGLE_USE(Response) response(reusableResponse);
-    readDelimited(&input, &response);
+    Compression::read(&input, &response);
     if (!TestCase::checkResponse(response, expected)) {
       throw std::logic_error("Incorrect response.");
     }
     ReuseStrategy::doneWith(response);
   }
+
+  return throughput;
 }
 
-template <typename TestCase, typename ReuseStrategy>
-void asyncClientSender(int outputFd,
-                       ProducerConsumerQueue<typename TestCase::Expectation>* expectations,
-                       uint64_t iters) {
-  google::protobuf::io::FileOutputStream output(outputFd);
+template <typename TestCase, typename ReuseStrategy, typename Compression>
+uint64_t asyncClientSender(int outputFd,
+                           ProducerConsumerQueue<typename TestCase::Expectation>* expectations,
+                           uint64_t iters) {
+  uint64_t throughput = 0;
+
+  typename Compression::OutputStream output(outputFd);
   REUSABLE(Request) reusableRequest;
 
   for (; iters > 0; --iters) {
     SINGLE_USE(Request) request(reusableRequest);
     expectations->post(TestCase::setupRequest(&request));
-    writeDelimited(request, &output);
+    throughput += Compression::write(request, &output);
+    Compression::flush(&output);
     ReuseStrategy::doneWith(request);
   }
 
-  if (!output.Flush()) throw OsException(output.GetErrno());
+  return throughput;
 }
 
-template <typename TestCase, typename ReuseStrategy>
+template <typename TestCase, typename ReuseStrategy, typename Compression>
 void asyncClientReceiver(int inputFd,
                          ProducerConsumerQueue<typename TestCase::Expectation>* expectations,
                          uint64_t iters) {
-  google::protobuf::io::FileInputStream input(inputFd);
+  typename Compression::InputStream input(inputFd);
   REUSABLE(Response) reusableResponse;
 
   for (; iters > 0; --iters) {
     typename TestCase::Expectation expected = expectations->next();
     SINGLE_USE(Response) response(reusableResponse);
-    readDelimited(&input, &response);
+    Compression::read(&input, &response);
     if (!TestCase::checkResponse(response, expected)) {
       throw std::logic_error("Incorrect response.");
     }
@@ -325,39 +403,46 @@ void asyncClientReceiver(int inputFd,
   }
 }
 
-template <typename TestCase, typename ReuseStrategy>
-void asyncClient(int inputFd, int outputFd, uint64_t iters) {
+template <typename TestCase, typename ReuseStrategy, typename Compression>
+uint64_t asyncClient(int inputFd, int outputFd, uint64_t iters) {
   ProducerConsumerQueue<typename TestCase::Expectation> expectations;
   std::thread receiverThread(
-      asyncClientReceiver<TestCase, ReuseStrategy>, inputFd, &expectations, iters);
-  asyncClientSender<TestCase, ReuseStrategy>(outputFd, &expectations, iters);
+      asyncClientReceiver<TestCase, ReuseStrategy, Compression>, inputFd, &expectations, iters);
+  uint64_t throughput =
+      asyncClientSender<TestCase, ReuseStrategy, Compression>(outputFd, &expectations, iters);
   receiverThread.join();
+
+  return throughput;
 }
 
-template <typename TestCase, typename ReuseStrategy>
-void server(int inputFd, int outputFd, uint64_t iters) {
-  google::protobuf::io::FileOutputStream output(outputFd);
-  google::protobuf::io::FileInputStream input(inputFd);
+template <typename TestCase, typename ReuseStrategy, typename Compression>
+uint64_t server(int inputFd, int outputFd, uint64_t iters) {
+  uint64_t throughput = 0;
+
+  typename Compression::OutputStream output(outputFd);
+  typename Compression::InputStream input(inputFd);
 
   REUSABLE(Request) reusableRequest;
   REUSABLE(Response) reusableResponse;
 
   for (; iters > 0; --iters) {
     SINGLE_USE(Request) request(reusableRequest);
-    readDelimited(&input, &request);
+    Compression::read(&input, &request);
 
     SINGLE_USE(Response) response(reusableResponse);
     TestCase::handleRequest(request, &response);
     ReuseStrategy::doneWith(request);
 
-    writeDelimited(response, &output);
-    if (!output.Flush()) throw std::logic_error("Write failed.");
+    throughput += Compression::write(response, &output);
+    Compression::flush(&output);
     ReuseStrategy::doneWith(response);
   }
+
+  return throughput;
 }
 
-template <typename TestCase, typename ReuseStrategy>
-void passByObject(uint64_t iters) {
+template <typename TestCase, typename ReuseStrategy, typename Compression>
+uint64_t passByObject(uint64_t iters) {
   REUSABLE(Request) reusableRequest;
   REUSABLE(Response) reusableResponse;
 
@@ -373,10 +458,14 @@ void passByObject(uint64_t iters) {
     }
     ReuseStrategy::doneWith(response);
   }
+
+  return 0;
 }
 
-template <typename TestCase, typename ReuseStrategy>
-void passByBytes(uint64_t iters) {
+template <typename TestCase, typename ReuseStrategy, typename Compression>
+uint64_t passByBytes(uint64_t iters) {
+  uint64_t throughput = 0;
+
   REUSABLE(Request) reusableClientRequest;
   REUSABLE(Request) reusableServerRequest;
   REUSABLE(Response) reusableServerResponse;
@@ -389,6 +478,7 @@ void passByBytes(uint64_t iters) {
 
     typename ReuseStrategy::SingleUseString requestString(reusableRequestString);
     clientRequest.SerializePartialToString(&requestString);
+    throughput += requestString.size();
     ReuseStrategy::doneWith(clientRequest);
 
     SINGLE_USE(Request) serverRequest(reusableServerRequest);
@@ -400,6 +490,7 @@ void passByBytes(uint64_t iters) {
 
     typename ReuseStrategy::SingleUseString responseString(reusableResponseString);
     serverResponse.SerializePartialToString(&responseString);
+    throughput += responseString.size();
     ReuseStrategy::doneWith(serverResponse);
 
     SINGLE_USE(Response) clientResponse(reusableClientResponse);
@@ -410,10 +501,12 @@ void passByBytes(uint64_t iters) {
     }
     ReuseStrategy::doneWith(clientResponse);
   }
+
+  return throughput;
 }
 
-template <typename TestCase, typename ReuseStrategy, typename Func>
-void passByPipe(Func&& clientFunc, uint64_t iters) {
+template <typename TestCase, typename ReuseStrategy, typename Compression, typename Func>
+uint64_t passByPipe(Func&& clientFunc, uint64_t iters) {
   int clientToServer[2];
   int serverToClient[2];
   if (pipe(clientToServer) < 0) throw OsException(errno);
@@ -425,14 +518,21 @@ void passByPipe(Func&& clientFunc, uint64_t iters) {
     close(clientToServer[0]);
     close(serverToClient[1]);
 
-    clientFunc(serverToClient[0], clientToServer[1], iters);
+    uint64_t throughput = clientFunc(serverToClient[0], clientToServer[1], iters);
+    writeAll(clientToServer[1], &throughput, sizeof(throughput));
+
     exit(0);
   } else {
     // Server.
     close(clientToServer[1]);
     close(serverToClient[0]);
 
-    server<TestCase, ReuseStrategy>(clientToServer[0], serverToClient[1], iters);
+    uint64_t throughput =
+        server<TestCase, ReuseStrategy, Compression>(clientToServer[0], serverToClient[1], iters);
+
+    uint64_t clientThroughput = 0;
+    readAll(clientToServer[0], &clientThroughput, sizeof(clientThroughput));
+    throughput += clientThroughput;
 
     int status;
     if (waitpid(child, &status, 0) != child) {
@@ -441,51 +541,71 @@ void passByPipe(Func&& clientFunc, uint64_t iters) {
     if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
       throw std::logic_error("Child exited abnormally.");
     }
+
+    return throughput;
   }
 }
 
-template <typename ReuseStrategy>
-void doBenchmark(const std::string& mode, uint64_t iters) {
+template <typename ReuseStrategy, typename Compression>
+uint64_t doBenchmark(const std::string& mode, uint64_t iters) {
   if (mode == "client") {
-    syncClient<ExpressionTestCase, ReuseStrategy>(STDIN_FILENO, STDOUT_FILENO, iters);
+    return syncClient<ExpressionTestCase, ReuseStrategy, Compression>(
+        STDIN_FILENO, STDOUT_FILENO, iters);
   } else if (mode == "server") {
-    server<ExpressionTestCase, ReuseStrategy>(STDIN_FILENO, STDOUT_FILENO, iters);
+    return server<ExpressionTestCase, ReuseStrategy, Compression>(
+        STDIN_FILENO, STDOUT_FILENO, iters);
   } else if (mode == "object") {
-    passByObject<ExpressionTestCase, ReuseStrategy>(iters);
+    return passByObject<ExpressionTestCase, ReuseStrategy, Compression>(iters);
   } else if (mode == "bytes") {
-    passByBytes<ExpressionTestCase, ReuseStrategy>(iters);
+    return passByBytes<ExpressionTestCase, ReuseStrategy, Compression>(iters);
   } else if (mode == "pipe") {
-    passByPipe<ExpressionTestCase, ReuseStrategy>(
-        syncClient<ExpressionTestCase, ReuseStrategy>, iters);
+    return passByPipe<ExpressionTestCase, ReuseStrategy, Compression>(
+        syncClient<ExpressionTestCase, ReuseStrategy, Compression>, iters);
   } else if (mode == "pipe-async") {
-    passByPipe<ExpressionTestCase, ReuseStrategy>(
-        asyncClient<ExpressionTestCase, ReuseStrategy>, iters);
+    return passByPipe<ExpressionTestCase, ReuseStrategy, Compression>(
+        asyncClient<ExpressionTestCase, ReuseStrategy, Compression>, iters);
   } else {
     std::cerr << "Unknown mode: " << mode << std::endl;
     exit(1);
   }
 }
 
+template <typename Compression>
+uint64_t doBenchmark2(const std::string& mode, const std::string& reuse, uint64_t iters) {
+  if (reuse == "reuse") {
+    return doBenchmark<ReusableMessages, Compression>(mode, iters);
+  } else if (reuse == "no-reuse") {
+    return doBenchmark<SingleUseMessages, Compression>(mode, iters);
+  } else {
+    std::cerr << "Unknown reuse mode: " << reuse << std::endl;
+    exit(1);
+  }
+}
+
 int main(int argc, char* argv[]) {
-  if (argc != 4) {
-    std::cerr << "USAGE:  " << argv[0] << " MODE REUSE ITERATION_COUNT" << std::endl;
+  if (argc != 5) {
+    std::cerr << "USAGE:  " << argv[0] << " MODE REUSE COMPRESSION ITERATION_COUNT" << std::endl;
     return 1;
   }
 
-  uint64_t iters = strtoull(argv[3], nullptr, 0);
+  uint64_t iters = strtoull(argv[4], nullptr, 0);
   srand(123);
 
   std::cerr << "Doing " << iters << " iterations..." << std::endl;
 
-  std::string reuse = argv[2];
-  if (reuse == "reuse") {
-    doBenchmark<ReusableMessages>(argv[1], iters);
-  } else if (reuse == "no-reuse") {
-    doBenchmark<SingleUseMessages>(argv[1], iters);
+  uint64_t throughput;
+
+  std::string compression = argv[3];
+  if (compression == "none") {
+    throughput = doBenchmark2<Uncompressed>(argv[1], argv[2], iters);
+  } else if (compression == "snappy") {
+    throughput = doBenchmark2<SnappyCompressed>(argv[1], argv[2], iters);
   } else {
-    std::cerr << "Unknown reuse mode: " << reuse << std::endl;
+    std::cerr << "Unknown compression mode: " << compression << std::endl;
     return 1;
   }
+
+  std::cerr << "Average messages size = " << (throughput / iters) << std::endl;
 
   return 0;
 }
