@@ -22,19 +22,25 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 enum Operation {
-  value = 0;
-  add = 1;
-  subtract = 2;
-  multiply = 3;
-  divide = 4;
-  modulus = 5;
+  add = 0;
+  subtract = 1;
+  multiply = 2;
+  divide = 3;
+  modulus = 4;
 }
 
 struct Expression {
   op@0: Operation;
-  value@1: Int32;
-  left@2: Expression;
-  right@3: Expression;
+
+  # TODO:  Use unions once fully-implemented.
+
+  leftIsValue@1: Bool;
+  leftValue@2: Int32;
+  leftExpression@3: Expression;
+
+  rightIsValue@4: Bool;
+  rightValue@5: Int32;
+  rightExpression@6: Expression;
 }
 
 struct EvaluationResult {

@@ -119,48 +119,68 @@ inline int32_t mod(int32_t a, int32_t b) {
 }
 
 int32_t makeExpression(Expression::Builder exp, int depth) {
+  // TODO:  Operation_MAX or something.
+  exp.setOp((Operation)(rand() % (int)Operation::MODULUS + 1));
+
+  int left, right;
+
   if (rand() % 8 < depth) {
-    exp.setOp(Operation::VALUE);
-    exp.setValue(rand() % 128 + 1);
-    return exp.getValue();
+    exp.setLeftIsValue(true);
+    left = rand() % 128 + 1;
+    exp.setLeftValue(left);
   } else {
-    // TODO:  Operation_MAX or something.
-    exp.setOp((Operation)(rand() % (int)Operation::MODULUS + 1));
-    int32_t left = makeExpression(exp.initLeft(), depth + 1);
-    int32_t right = makeExpression(exp.initRight(), depth + 1);
-    switch (exp.getOp()) {
-      case Operation::ADD:
-        return left + right;
-      case Operation::SUBTRACT:
-        return left - right;
-      case Operation::MULTIPLY:
-        return left * right;
-      case Operation::DIVIDE:
-        return div(left, right);
-      case Operation::MODULUS:
-        return mod(left, right);
-      case Operation::VALUE:
-        break;
-    }
-    throw std::logic_error("Can't get here.");
+    left = makeExpression(exp.initLeftExpression(), depth + 1);
   }
+
+  if (rand() % 8 < depth) {
+    exp.setRightIsValue(true);
+    right = rand() % 128 + 1;
+    exp.setRightValue(right);
+  } else {
+    right = makeExpression(exp.initRightExpression(), depth + 1);
+  }
+
+  switch (exp.getOp()) {
+    case Operation::ADD:
+      return left + right;
+    case Operation::SUBTRACT:
+      return left - right;
+    case Operation::MULTIPLY:
+      return left * right;
+    case Operation::DIVIDE:
+      return div(left, right);
+    case Operation::MODULUS:
+      return mod(left, right);
+  }
+  throw std::logic_error("Can't get here.");
 }
 
 int32_t evaluateExpression(Expression::Reader exp) {
+  int left, right;
+
+  if (exp.getLeftIsValue()) {
+    left = exp.getLeftValue();
+  } else {
+    left = evaluateExpression(exp.getLeftExpression());
+  }
+
+  if (exp.getRightIsValue()) {
+    right = exp.getRightValue();
+  } else {
+    right = evaluateExpression(exp.getRightExpression());
+  }
+
   switch (exp.getOp()) {
-    case Operation::VALUE:
-      return exp.getValue();
     case Operation::ADD:
-      return evaluateExpression(exp.getLeft()) + evaluateExpression(exp.getRight());
+      return left + right;
     case Operation::SUBTRACT:
-      return evaluateExpression(exp.getLeft()) - evaluateExpression(exp.getRight());
+      return left - right;
     case Operation::MULTIPLY:
-      return evaluateExpression(exp.getLeft()) * evaluateExpression(exp.getRight());
+      return left * right;
     case Operation::DIVIDE:
-      return div(evaluateExpression(exp.getLeft()), evaluateExpression(exp.getRight()));
-    case Operation::MODULUS: {
-      return mod(evaluateExpression(exp.getLeft()), evaluateExpression(exp.getRight()));
-    }
+      return div(left, right);
+    case Operation::MODULUS:
+      return mod(left, right);
   }
   throw std::logic_error("Can't get here.");
 }

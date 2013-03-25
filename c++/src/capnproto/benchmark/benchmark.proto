@@ -24,19 +24,21 @@
 package capnproto.benchmark.protobuf;
 
 enum Operation {
-  VALUE = 0;
-  ADD = 1;
-  SUBTRACT = 2;
-  MULTIPLY = 3;
-  DIVIDE = 4;
-  MODULUS = 5;
+  ADD = 0;
+  SUBTRACT = 1;
+  MULTIPLY = 2;
+  DIVIDE = 3;
+  MODULUS = 4;
 }
 
 message Expression {
   required Operation op = 1;
-  optional int32 value = 2;
-  optional Expression left = 3;
-  optional Expression right = 4;
+
+  optional int32 left_value = 2;
+  optional Expression left_expression = 3;
+
+  optional int32 right_value = 4;
+  optional Expression right_expression = 5;
 }
 
 message EvaluationResult {
