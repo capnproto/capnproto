@@ -25,7 +25,7 @@
 #include "message.h"
 #include <vector>
 #include <string.h>
-#include <iostream>
+#include <stdio.h>
 
 namespace capnproto {
 namespace internal {
@@ -204,12 +204,12 @@ SegmentReader* BuilderArena::tryGetSegment(SegmentId id) {
 
 void BuilderArena::reportInvalidData(const char* description) {
   // TODO:  Better error reporting.
-  std::cerr << "BuilderArena: Parse error: " << description << std::endl;
+  fprintf(stderr, "BuilderArena: Parse error: %s\n", description);
 }
 
 void BuilderArena::reportReadLimitReached() {
   // TODO:  Better error reporting.
-  std::cerr << "BuilderArena: Exceeded read limit." << std::endl;
+  fputs("BuilderArena: Exceeded read limit.\n", stderr);
 }
 
 }  // namespace internal
