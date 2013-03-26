@@ -144,7 +144,7 @@ TestResult runTest(Product product, TestCase testCase, Mode mode, Reuse reuse,
   }
 
   progName += testCaseName(testCase);
-  argv[0] = progName.c_str();
+  argv[0] = strdup(progName.c_str());
 
   switch (mode) {
     case Mode::OBJECTS:
@@ -208,7 +208,7 @@ TestResult runTest(Product product, TestCase testCase, Mode mode, Reuse reuse,
   }
 
   close(childPipe[1]);
-  for (int i = 1; i < 4; i++) {
+  for (int i = 0; i < 4; i++) {
     free(argv[i]);
   }
 
