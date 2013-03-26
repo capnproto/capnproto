@@ -94,6 +94,19 @@ enum class TestCase {
   CARSALES
 };
 
+const char* testCaseName(TestCase testCase) {
+  switch (testCase) {
+    case TestCase::EVAL:
+      return "eval";
+    case TestCase::CATRANK:
+      return "catrank";
+    case TestCase::CARSALES:
+      return "carsales";
+  }
+  // Can't get here.
+  return nullptr;
+}
+
 enum class Mode {
   OBJECTS,
   OBJECT_SIZE,
@@ -114,73 +127,66 @@ enum class Compression {
 
 TestResult runTest(Product product, TestCase testCase, Mode mode, Reuse reuse,
                    Compression compression, uint64_t iters) {
-  char* argv[7];
+  char* argv[6];
+
+  string progName;
 
   switch (product) {
     case Product::CAPNPROTO:
-      argv[0] = strdup("benchmark-capnproto");
+      progName = "capnproto-";
       break;
     case Product::PROTOBUF:
-      argv[0] = strdup("benchmark-protobuf");
+      progName = "protobuf-";
       break;
     case Product::NULLCASE:
-      argv[0] = strdup("benchmark-null");
+      progName = "null-";
       break;
   }
 
-  switch (testCase) {
-    case TestCase::EVAL:
-      argv[1] = strdup("eval");
-      break;
-    case TestCase::CATRANK:
-      argv[1] = strdup("catrank");
-      break;
-    case TestCase::CARSALES:
-      argv[1] = strdup("carsales");
-      break;
-  }
+  progName += testCaseName(testCase);
+  argv[0] = progName.c_str();
 
   switch (mode) {
     case Mode::OBJECTS:
-      argv[2] = strdup("object");
+      argv[1] = strdup("object");
       break;
     case Mode::OBJECT_SIZE:
-      argv[2] = strdup("object-size");
+      argv[1] = strdup("object-size");
       break;
     case Mode::BYTES:
-      argv[2] = strdup("bytes");
+      argv[1] = strdup("bytes");
       break;
     case Mode::PIPE_SYNC:
-      argv[2] = strdup("pipe");
+      argv[1] = strdup("pipe");
       break;
     case Mode::PIPE_ASYNC:
-      argv[2] = strdup("pipe-async");
+      argv[1] = strdup("pipe-async");
       break;
   }
 
   switch (reuse) {
     case Reuse::YES:
-      argv[3] = strdup("reuse");
+      argv[2] = strdup("reuse");
       break;
     case Reuse::NO:
-      argv[3] = strdup("no-reuse");
+      argv[2] = strdup("no-reuse");
       break;
   }
 
   switch (compression) {
     case Compression::SNAPPY:
-      argv[4] = strdup("snappy");
+      argv[3] = strdup("snappy");
       break;
     case Compression::NONE:
-      argv[4] = strdup("none");
+      argv[3] = strdup("none");
       break;
   }
 
   char itersStr[64];
   sprintf(itersStr, "%llu", (long long unsigned int)iters);
-  argv[5] = itersStr;
+  argv[4] = itersStr;
 
-  argv[6] = nullptr;
+  argv[5] = nullptr;
 
   // Make pipe for child to write throughput.
   int childPipe[2];
@@ -202,7 +208,7 @@ TestResult runTest(Product product, TestCase testCase, Mode mode, Reuse reuse,
   }
 
   close(childPipe[1]);
-  for (int i = 0; i < 5; i++) {
+  for (int i = 1; i < 4; i++) {
     free(argv[i]);
   }
 
@@ -308,10 +314,10 @@ void reportComparison(const char* name, const char* unit, double protobuf, doubl
   cout << setw(14) << right << Gain(capnproto, protobuf) << endl;
 }
 
-size_t fileSize(const char* name) {
+size_t fileSize(const std::string& name) {
   struct stat stats;
-  if (stat(name, &stats) < 0) {
-    perror(name);
+  if (stat(name.c_str(), &stats) < 0) {
+    perror(name.c_str());
     exit(1);
   }
 
@@ -454,12 +460,16 @@ int main(int argc, char* argv[]) {
       (capnp.time.cpu() - capnpBase.time.cpu()) / 1000.0, iters);
 
   reportComparison("binary size", "kB",
-      fileSize("benchmark-protobuf") / 1024.0, fileSize("benchmark-capnproto") / 1024.0, 1);
+      fileSize("protobuf-" + std::string(testCaseName(testCase))) / 1024.0,
+      fileSize("capnproto-" + std::string(testCaseName(testCase))) / 1024.0, 1);
   reportComparison("generated code size", "kB",
-      fileSize("benchmark.pb.cc") / 1024.0 + fileSize("benchmark.pb.h") / 1024.0,
-      fileSize("benchmark.capnp.c++") / 1024.0 + fileSize("benchmark.capnp.h") / 1024.0, 1);
+      fileSize(std::string(testCaseName(testCase)) + ".pb.cc") / 1024.0
+      + fileSize(std::string(testCaseName(testCase)) + ".pb.h") / 1024.0,
+      fileSize(std::string(testCaseName(testCase)) + ".capnp.c++") / 1024.0
+      + fileSize(std::string(testCaseName(testCase)) + ".capnp.h") / 1024.0, 1);
   reportComparison("generated obj size", "kB",
-      fileSize("benchmark.pb.o") / 1024.0, fileSize("benchmark.capnp.o") / 1024.0, 1);
+      fileSize(std::string(testCaseName(testCase)) + ".pb.o") / 1024.0,
+      fileSize(std::string(testCaseName(testCase)) + ".capnp.o") / 1024.0, 1);
 
   return 0;
 }

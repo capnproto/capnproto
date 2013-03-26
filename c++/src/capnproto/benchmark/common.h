@@ -21,8 +21,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNPROTO_BENCHMARK_BENCHMARK_COMMON_H_
-#define CAPNPROTO_BENCHMARK_BENCHMARK_COMMON_H_
+#ifndef CAPNPROTO_BENCHMARK_COMMON_H_
+#define CAPNPROTO_BENCHMARK_COMMON_H_
 
 #include <unistd.h>
 #include <limits>
@@ -260,33 +260,16 @@ uint64_t doBenchmark3(const std::string& mode, const std::string& reuse,
   }
 }
 
-template <typename BenchmarkTypes>
+template <typename BenchmarkTypes, typename TestCase>
 int benchmarkMain(int argc, char* argv[]) {
-  if (argc != 6) {
-    fprintf(stderr, "USAGE:  %s TEST_CASE MODE REUSE COMPRESSION ITERATION_COUNT\n", argv[0]);
+  if (argc != 5) {
+    fprintf(stderr, "USAGE:  %s MODE REUSE COMPRESSION ITERATION_COUNT\n", argv[0]);
     return 1;
   }
 
-  uint64_t iters = strtoull(argv[5], nullptr, 0);
-
-  uint64_t throughput;
-
-  std::string testcase = argv[1];
-  if (testcase == "eval") {
-    throughput = doBenchmark3<BenchmarkTypes, typename BenchmarkTypes::ExpressionTestCase>(
-        argv[2], argv[3], argv[4], iters);
-  } else if (testcase == "catrank") {
-    throughput = doBenchmark3<BenchmarkTypes, typename BenchmarkTypes::CatRankTestCase>(
-        argv[2], argv[3], argv[4], iters);
-  } else if (testcase == "carsales") {
-    throughput = doBenchmark3<BenchmarkTypes, typename BenchmarkTypes::CarSalesTestCase>(
-        argv[2], argv[3], argv[4], iters);
-  } else {
-    fprintf(stderr, "Unknown test case: %s\n", testcase.c_str());
-    return 1;
-  }
-
-  fprintf(stdout, "%llu", (long long unsigned int)throughput);
+  uint64_t iters = strtoull(argv[4], nullptr, 0);
+  uint64_t throughput = doBenchmark3<BenchmarkTypes, TestCase>(argv[1], argv[2], argv[3], iters);
+  fprintf(stdout, "%llu\n", (long long unsigned int)throughput);
 
   return 0;
 }
@@ -294,4 +277,4 @@ int benchmarkMain(int argc, char* argv[]) {
 }  // namespace capnproto
 }  // namespace benchmark
 
-#endif  // CAPNPROTO_BENCHMARK_BENCHMARK_COMMON_H_
+#endif  // CAPNPROTO_BENCHMARK_COMMON_H_

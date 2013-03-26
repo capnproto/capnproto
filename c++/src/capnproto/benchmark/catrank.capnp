@@ -21,34 +21,6 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-enum Operation {
-  add = 0;
-  subtract = 1;
-  multiply = 2;
-  divide = 3;
-  modulus = 4;
-}
-
-struct Expression {
-  op@0: Operation;
-
-  # TODO:  Use unions once fully-implemented.
-
-  leftIsValue@1: Bool;
-  leftValue@2: Int32;
-  leftExpression@3: Expression;
-
-  rightIsValue@4: Bool;
-  rightValue@5: Int32;
-  rightExpression@6: Expression;
-}
-
-struct EvaluationResult {
-  value@0: Int32;
-}
-
-# ========================================================================================
-
 struct SearchResultList {
   results@0: List(SearchResult);
 }
@@ -57,61 +29,4 @@ struct SearchResult {
   url@0: Text;
   score@1: Float64;
   snippet@2: Text;
-}
-
-# ========================================================================================
-
-struct ParkingLot {
-  cars@0: List(Car);
-}
-
-struct TotalValue {
-  amount@0: UInt64;
-}
-
-struct Car {
-  make@0: Text;
-  model@1: Text;
-  color@2: Color;
-  seats@3: UInt8;
-  doors@4: UInt8;
-  wheels@5: List(Wheel);
-  length@6: UInt16;
-  width@7: UInt16;
-  height@8: UInt16;
-  weight@9: UInt32;
-  engine@10: Engine;
-  fuelCapacity@11: Float32;
-  fuelLevel@12: Float32;
-  hasPowerWindows@13: Bool;
-  hasPowerSteering@14: Bool;
-  hasCruiseControl@15: Bool;
-  cupHolders@16: UInt8;
-  hasNavSystem@17: Bool;
-}
-
-enum Color {
-  black = 0;
-  white = 1;
-  red = 2;
-  green = 3;
-  blue = 4;
-  cyan = 5;
-  magenta = 6;
-  yellow = 7;
-  silver = 8;
-}
-
-struct Wheel {
-  diameter@0: UInt16;
-  airPressure@1: Float32;
-  snowTires@2: Bool;
-}
-
-struct Engine {
-  horsepower@0: UInt16;
-  cylinders@1: UInt8;
-  cc@2: UInt32;
-  usesGas@3: Bool;
-  usesElectric@4: Bool;
 }
