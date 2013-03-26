@@ -10,10 +10,10 @@ continuous:
 	CXX=g++-4.7 CXXFLAGS='-std=gnu++0x -g -Wall' LIBS='-lz -pthread' ekam -j6 -c -n :51315
 
 continuous-opt:
-	CXX=g++-4.7 CXXFLAGS='-std=gnu++0x -O2 -DNDEBUG -Wall' LIBS='-lz -lprofiler -pthread' ekam -j6 -c -n :51315
+	CXX=g++-4.7 CXXFLAGS='-std=gnu++0x -O2 -DNDEBUG -Wall' LIBS='-lz -pthread' ekam -j6 -c -n :51315
 
-continuous-prof:
-	CXX=g++-4.7 CXXFLAGS='-std=gnu++0x -O2 -DNDEBUG -Wall -pg' LIBS='-pg -lz -pthread' ekam -j6 -c -n :51315
+continuous-opt3:
+	CXX=g++-4.7 CXXFLAGS='-std=gnu++0x -O3 -DNDEBUG -Wall' LIBS='-lz -pthread' ekam -j6 -c -n :51315
 
 clean:
 	rm -rf bin lib tmp

@@ -90,7 +90,8 @@ enum class Product {
 
 enum class TestCase {
   EVAL,
-  CATRANK
+  CATRANK,
+  CARSALES
 };
 
 enum class Mode {
@@ -133,6 +134,9 @@ TestResult runTest(Product product, TestCase testCase, Mode mode, Reuse reuse,
       break;
     case TestCase::CATRANK:
       argv[1] = strdup("catrank");
+      break;
+    case TestCase::CARSALES:
+      argv[1] = strdup("carsales");
       break;
   }
 
@@ -342,6 +346,8 @@ int main(int argc, char* argv[]) {
       mode = Mode::BYTES;
     } else if (arg == "eval") {
       testCase = TestCase::EVAL;
+    } else if (arg == "carsales") {
+      testCase = TestCase::CARSALES;
     } else if (arg == "no-reuse") {
       reuse = Reuse::NO;
     } else if (arg == "snappy") {
@@ -356,6 +362,9 @@ int main(int argc, char* argv[]) {
     case TestCase::CATRANK:
       iters *= 1000;
       break;
+    case TestCase::CARSALES:
+      iters *= 20000;
+      break;
   }
 
   cout << "Running " << iters << " iterations of ";
@@ -365,6 +374,9 @@ int main(int argc, char* argv[]) {
       break;
     case TestCase::CATRANK:
       cout << "CatRank";
+      break;
+    case TestCase::CARSALES:
+      cout << "car sales";
       break;
   }
 
@@ -404,7 +416,6 @@ int main(int argc, char* argv[]) {
       break;
   }
 
-  cout << endl;
   reportTableHeader();
 
   TestResult nullCase = runTest(
@@ -417,19 +428,19 @@ int main(int argc, char* argv[]) {
       Product::PROTOBUF, testCase, Mode::OBJECT_SIZE, reuse, compression, iters).throughput;
   reportResults("Protobuf pass-by-object", iters, protobufBase);
 
-  TestResult protobuf = runTest(
-      Product::PROTOBUF, testCase, mode, reuse, compression, iters);
-  reportResults("Protobuf end-to-end", iters, protobuf);
-
   TestResult capnpBase = runTest(
       Product::CAPNPROTO, testCase, Mode::OBJECTS, reuse, compression, iters);
   capnpBase.throughput = runTest(
       Product::CAPNPROTO, testCase, Mode::OBJECT_SIZE, reuse, compression, iters).throughput;
   reportResults("Cap'n Proto pass-by-object", iters, capnpBase);
 
+  TestResult protobuf = runTest(
+      Product::PROTOBUF, testCase, mode, reuse, compression, iters);
+  reportResults("Protobuf pass-by-I/O", iters, protobuf);
+
   TestResult capnp = runTest(
       Product::CAPNPROTO, testCase, mode, reuse, compression, iters);
-  reportResults("Cap'n Proto end-to-end", iters, capnp);
+  reportResults("Cap'n Proto pass-by-I/O", iters, capnp);
 
   cout << endl;
 
@@ -438,7 +449,7 @@ int main(int argc, char* argv[]) {
       nullCase.throughput, protobufBase.throughput, capnpBase.throughput, iters);
   reportComparison("object manipulation",
       nullCase.time.cpu(), protobufBase.time.cpu(), capnpBase.time.cpu(), iters);
-  reportComparison("I/O overhead", "us",
+  reportComparison("I/O", "us",
       (protobuf.time.cpu() - protobufBase.time.cpu()) / 1000.0,
       (capnp.time.cpu() - capnpBase.time.cpu()) / 1000.0, iters);
 

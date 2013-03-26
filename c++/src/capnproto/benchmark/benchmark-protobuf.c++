@@ -23,6 +23,7 @@
 
 #include "benchmark.pb.h"
 #include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <limits>
 #include <unistd.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -37,6 +38,7 @@
 #include <semaphore.h>
 #include <snappy/snappy.h>
 #include <snappy/snappy-sinksource.h>
+#include "fast-random.h"
 
 namespace capnproto {
 namespace benchmark {
@@ -118,20 +120,20 @@ inline int32_t mod(int32_t a, int32_t b) {
   return a % b;
 }
 
-int32_t makeExpression(Expression* exp, int depth) {
-  exp->set_op((Operation)(rand() % Operation_MAX + 1));
+int32_t makeExpression(Expression* exp, uint depth) {
+  exp->set_op((Operation)(fastRand(Operation_MAX + 1)));
 
   int32_t left, right;
 
-  if (rand() % 8 < depth) {
-    left = rand() % 128 + 1;
+  if (fastRand(8) < depth) {
+    left = fastRand(128) + 1;
     exp->set_left_value(left);
   } else {
     left = makeExpression(exp->mutable_left_expression(), depth + 1);
   }
 
-  if (rand() % 8 < depth) {
-    right = rand() % 128 + 1;
+  if (fastRand(8) < depth) {
+    right = fastRand(128) + 1;
     exp->set_right_value(right);
   } else {
     right = makeExpression(exp->mutable_right_expression(), depth + 1);
@@ -209,7 +211,7 @@ public:
 // The promotion multiplier is large enough that all the results mentioning "cat" but not "dog"
 // should end up at the front ofthe list, which is how we verify the result.
 
-static const char* WORDS[] = {
+static const char* const WORDS[] = {
     "foo ", "bar ", "baz ", "qux ", "quux ", "corge ", "grault ", "garply ", "waldo ", "fred ",
     "plugh ", "xyzzy ", "thud "
 };
@@ -232,7 +234,7 @@ public:
   typedef int Expectation;
 
   static int setupRequest(SearchResultList* request) {
-    int count = rand() % 1000;
+    int count = fastRand(1000);
     int goodCount = 0;
 
     for (int i = 0; i < count; i++) {
@@ -240,29 +242,29 @@ public:
       result->set_score(1000 - i);
       result->set_url("http://example.com/");
       std::string* url = result->mutable_url();
-      int urlSize = rand() % 100;
+      int urlSize = fastRand(100);
       for (int j = 0; j < urlSize; j++) {
-        url->push_back('a' + rand() % 26);
+        url->push_back('a' + fastRand(26));
       }
 
-      bool isCat = rand() % 8 == 0;
-      bool isDog = rand() % 8 == 0;
+      bool isCat = fastRand(8) == 0;
+      bool isDog = fastRand(8) == 0;
       goodCount += isCat && !isDog;
 
       std::string* snippet = result->mutable_snippet();
       snippet->push_back(' ');
 
-      int prefix = rand() % 20;
+      int prefix = fastRand(20);
       for (int j = 0; j < prefix; j++) {
-        snippet->append(WORDS[rand() % WORDS_COUNT]);
+        snippet->append(WORDS[fastRand(WORDS_COUNT)]);
       }
 
       if (isCat) snippet->append("cat ");
       if (isDog) snippet->append("dog ");
 
-      int suffix = rand() % 20;
+      int suffix = fastRand(20);
       for (int j = 0; j < suffix; j++) {
-        snippet->append(WORDS[rand() % WORDS_COUNT]);
+        snippet->append(WORDS[fastRand(WORDS_COUNT)]);
       }
     }
 
@@ -304,6 +306,113 @@ public:
     }
 
     return goodCount == expectedGoodCount;
+  }
+};
+
+// =======================================================================================
+// Test case:  Car Sales
+//
+// We have a parking lot full of cars and we want to know how much they are worth.
+
+uint64_t carValue(const Car& car) {
+  // Do not think too hard about realism.
+
+  uint64_t result = 0;
+
+  result += car.seats() * 200;
+  result += car.doors() * 350;
+  for (auto& wheel: car.wheel()) {
+    result += wheel.diameter() * wheel.diameter();
+    result += wheel.snow_tires() ? 100 : 0;
+  }
+
+  result += car.length() * car.width() * car.height() / 50;
+
+  const Engine& engine = car.engine();
+  result += engine.horsepower() * 40;
+  if (engine.uses_electric()) {
+    if (engine.uses_gas()) {
+      // hybrid
+      result += 5000;
+    } else {
+      result += 3000;
+    }
+  }
+
+  result += car.has_power_windows() ? 100 : 0;
+  result += car.has_power_steering() ? 200 : 0;
+  result += car.has_cruise_control() ? 400 : 0;
+  result += car.has_nav_system() ? 2000 : 0;
+
+  result += car.cup_holders() * 25;
+
+  return result;
+}
+
+void randomCar(Car* car) {
+  // Do not think too hard about realism.
+
+  static const char* const MAKES[] = { "Toyota", "GM", "Ford", "Honda", "Tesla" };
+  static const char* const MODELS[] = { "Camry", "Prius", "Volt", "Accord", "Leaf", "Model S" };
+
+  car->set_make(MAKES[fastRand(sizeof(MAKES) / sizeof(MAKES[0]))]);
+  car->set_model(MODELS[fastRand(sizeof(MODELS) / sizeof(MODELS[0]))]);
+
+  car->set_color((Color)fastRand(Color_MAX));
+  car->set_seats(2 + fastRand(6));
+  car->set_doors(2 + fastRand(3));
+
+  for (uint i = 0; i < 4; i++) {
+    Wheel* wheel = car->add_wheel();
+    wheel->set_diameter(25 + fastRand(15));
+    wheel->set_air_pressure(30 + fastRandDouble(20));
+    wheel->set_snow_tires(fastRand(16) == 0);
+  }
+
+  car->set_length(170 + fastRand(150));
+  car->set_width(48 + fastRand(36));
+  car->set_height(54 + fastRand(48));
+  car->set_weight(car->length() * car->width() * car->height() / 200);
+
+  Engine* engine = car->mutable_engine();
+  engine->set_horsepower(100 * fastRand(400));
+  engine->set_cylinders(4 + 2 * fastRand(3));
+  engine->set_cc(800 + fastRand(10000));
+
+  car->set_fuel_capacity(10.0 + fastRandDouble(30.0));
+  car->set_fuel_level(fastRandDouble(car->fuel_capacity()));
+  car->set_has_power_windows(fastRand(2));
+  car->set_has_power_steering(fastRand(2));
+  car->set_has_cruise_control(fastRand(2));
+  car->set_cup_holders(fastRand(12));
+  car->set_has_nav_system(fastRand(2));
+}
+
+class CarSalesTestCase {
+public:
+  typedef ParkingLot Request;
+  typedef TotalValue Response;
+  typedef uint64_t Expectation;
+
+  static uint64_t setupRequest(ParkingLot* request) {
+    uint count = fastRand(200);
+    uint64_t result = 0;
+    for (uint i = 0; i < count; i++) {
+      Car* car = request->add_car();
+      randomCar(car);
+      result += carValue(*car);
+    }
+    return result;
+  }
+  static void handleRequest(const ParkingLot& request, TotalValue* response) {
+    uint64_t result = 0;
+    for (auto& car: request.car()) {
+      result += carValue(car);
+    }
+    response->set_amount(result);
+  }
+  static inline bool checkResponse(const TotalValue& response, uint64_t expected) {
+    return response.amount() == expected;
   }
 };
 
@@ -736,7 +845,6 @@ int main(int argc, char* argv[]) {
   }
 
   uint64_t iters = strtoull(argv[5], nullptr, 0);
-  srand(123);
 
   uint64_t throughput;
 
@@ -745,6 +853,8 @@ int main(int argc, char* argv[]) {
     throughput = doBenchmark3<ExpressionTestCase>(argv[2], argv[3], argv[4], iters);
   } else if (testcase == "catrank") {
     throughput = doBenchmark3<CatRankTestCase>(argv[2], argv[3], argv[4], iters);
+  } else if (testcase == "carsales") {
+    throughput = doBenchmark3<CarSalesTestCase>(argv[2], argv[3], argv[4], iters);
   } else {
     std::cerr << "Unknown test case: " << testcase << std::endl;
     return 1;
