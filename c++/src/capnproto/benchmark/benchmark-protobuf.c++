@@ -121,7 +121,7 @@ inline int32_t mod(int32_t a, int32_t b) {
 int32_t makeExpression(Expression* exp, int depth) {
   exp->set_op((Operation)(rand() % Operation_MAX + 1));
 
-  int left, right;
+  int32_t left, right;
 
   if (rand() % 8 < depth) {
     left = rand() % 128 + 1;
@@ -153,7 +153,7 @@ int32_t makeExpression(Expression* exp, int depth) {
 }
 
 int32_t evaluateExpression(const Expression& exp) {
-  int left, right;
+  uint32_t left, right;
 
   if (exp.has_left_value()) {
     left = exp.left_value();
@@ -566,7 +566,9 @@ uint64_t server(int inputFd, int outputFd, uint64_t iters) {
 }
 
 template <typename TestCase, typename ReuseStrategy, typename Compression>
-uint64_t passByObject(uint64_t iters) {
+uint64_t passByObject(uint64_t iters, bool countObjectSize) {
+  uint64_t throughput = 0;
+
   REUSABLE(Request) reusableRequest;
   REUSABLE(Response) reusableResponse;
 
@@ -581,9 +583,14 @@ uint64_t passByObject(uint64_t iters) {
       throw std::logic_error("Incorrect response.");
     }
     ReuseStrategy::doneWith(response);
+
+    if (countObjectSize) {
+      throughput += request.SpaceUsed();
+      throughput += response.SpaceUsed();
+    }
   }
 
-  return 0;
+  return throughput;
 }
 
 template <typename TestCase, typename ReuseStrategy, typename Compression>
@@ -679,7 +686,9 @@ uint64_t doBenchmark(const std::string& mode, uint64_t iters) {
     return server<TestCase, ReuseStrategy, Compression>(
         STDIN_FILENO, STDOUT_FILENO, iters);
   } else if (mode == "object") {
-    return passByObject<TestCase, ReuseStrategy, Compression>(iters);
+    return passByObject<TestCase, ReuseStrategy, Compression>(iters, false);
+  } else if (mode == "object-size") {
+    return passByObject<TestCase, ReuseStrategy, Compression>(iters, true);
   } else if (mode == "bytes") {
     return passByBytes<TestCase, ReuseStrategy, Compression>(iters);
   } else if (mode == "pipe") {
@@ -729,8 +738,6 @@ int main(int argc, char* argv[]) {
   uint64_t iters = strtoull(argv[5], nullptr, 0);
   srand(123);
 
-  std::cerr << "Doing " << iters << " iterations..." << std::endl;
-
   uint64_t throughput;
 
   std::string testcase = argv[1];
@@ -743,7 +750,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  std::cerr << "Average messages size = " << (throughput / iters) << std::endl;
+  std::cout << throughput << std::endl;
 
   return 0;
 }

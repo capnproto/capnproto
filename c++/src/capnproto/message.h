@@ -268,6 +268,9 @@ public:
   // This version always returns the given array for the first segment, and then proceeds with the
   // allocation strategy.  This is useful for optimization when building lots of small messages in
   // a tight loop:  you can reuse the space for the first segment.
+  //
+  // firstSegment MUST be zero-initialized.  MallocMessageBuilder's destructor will write new zeros
+  // over any space that was used so that it can be reused.
 
   CAPNPROTO_DISALLOW_COPY(MallocMessageBuilder);
   virtual ~MallocMessageBuilder();

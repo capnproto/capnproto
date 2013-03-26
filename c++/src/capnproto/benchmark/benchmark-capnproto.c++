@@ -122,7 +122,7 @@ int32_t makeExpression(Expression::Builder exp, int depth) {
   // TODO:  Operation_MAX or something.
   exp.setOp((Operation)(rand() % (int)Operation::MODULUS + 1));
 
-  int left, right;
+  uint32_t left, right;
 
   if (rand() % 8 < depth) {
     exp.setLeftIsValue(true);
@@ -156,7 +156,7 @@ int32_t makeExpression(Expression::Builder exp, int depth) {
 }
 
 int32_t evaluateExpression(Expression::Reader exp) {
-  int left, right;
+  int32_t left, right;
 
   if (exp.getLeftIsValue()) {
     left = exp.getLeftValue();
@@ -379,24 +379,79 @@ struct NoScratch {
   public:
     inline MessageBuilder(ScratchSpace& scratch): MallocMessageBuilder() {}
   };
+
+  class ObjectSizeCounter {
+  public:
+    ObjectSizeCounter(uint64_t iters): counter(0) {}
+
+    template <typename RequestBuilder, typename ResponseBuilder>
+    void add(RequestBuilder& request, ResponseBuilder& response) {
+      for (auto segment: request.getSegmentsForOutput()) {
+        counter += segment.size() * sizeof(word);
+      }
+      for (auto segment: response.getSegmentsForOutput()) {
+        counter += segment.size() * sizeof(word);
+      }
+    }
+
+    uint64_t get() { return counter; }
+
+  private:
+    uint64_t counter;
+  };
 };
 
-template <typename Compression, size_t size>
+constexpr size_t SCRATCH_SIZE = 128 * 1024;
+word scratchSpace[4 * SCRATCH_SIZE];
+int scratchCounter = 0;
+
+template <typename Compression>
 struct UseScratch {
   struct ScratchSpace {
-    word words[size];
+    word* words;
+
+    ScratchSpace() {
+      CAPNPROTO_ASSERT(scratchCounter < 4, "Too many scratch spaces needed at once.");
+      words = scratchSpace + scratchCounter++ * SCRATCH_SIZE;
+    }
+    ~ScratchSpace() {
+      --scratchCounter;
+    }
   };
 
   class MessageReader: public Compression::MessageReader {
   public:
     inline MessageReader(int fd, ScratchSpace& scratch)
-        : Compression::MessageReader(fd, ReaderOptions(), arrayPtr(scratch.words, size)) {}
+        : Compression::MessageReader(fd, ReaderOptions(), arrayPtr(scratch.words, SCRATCH_SIZE)) {}
   };
 
   class MessageBuilder: public MallocMessageBuilder {
   public:
     inline MessageBuilder(ScratchSpace& scratch)
-        : MallocMessageBuilder(arrayPtr(scratch.words, size)) {}
+        : MallocMessageBuilder(arrayPtr(scratch.words, SCRATCH_SIZE)) {}
+  };
+
+  class ObjectSizeCounter {
+  public:
+    ObjectSizeCounter(uint64_t iters): iters(iters), maxSize(0) {}
+
+    template <typename RequestBuilder, typename ResponseBuilder>
+    void add(RequestBuilder& request, ResponseBuilder& response) {
+      size_t counter = 0;
+      for (auto segment: request.getSegmentsForOutput()) {
+        counter += segment.size() * sizeof(word);
+      }
+      for (auto segment: response.getSegmentsForOutput()) {
+        counter += segment.size() * sizeof(word);
+      }
+      maxSize = std::max(counter, maxSize);
+    }
+
+    uint64_t get() { return iters * maxSize; }
+
+  private:
+    uint64_t iters;
+    size_t maxSize;
   };
 };
 
@@ -490,9 +545,11 @@ uint64_t server(int inputFd, int outputFd, uint64_t iters) {
 }
 
 template <typename TestCase, typename ReuseStrategy, typename Compression>
-uint64_t passByObject(uint64_t iters) {
+uint64_t passByObject(uint64_t iters, bool countObjectSize) {
   typename ReuseStrategy::ScratchSpace requestScratch;
   typename ReuseStrategy::ScratchSpace responseScratch;
+
+  typename ReuseStrategy::ObjectSizeCounter counter(iters);
 
   for (; iters > 0; --iters) {
     typename ReuseStrategy::MessageBuilder requestMessage(requestScratch);
@@ -506,9 +563,13 @@ uint64_t passByObject(uint64_t iters) {
     if (!TestCase::checkResponse(response.asReader(), expected)) {
       throw std::logic_error("Incorrect response.");
     }
+
+    if (countObjectSize) {
+      counter.add(requestMessage, responseMessage);
+    }
   }
 
-  return 0;
+  return counter.get();
 }
 
 template <typename TestCase, typename ReuseStrategy, typename Compression>
@@ -592,7 +653,9 @@ uint64_t doBenchmark(const std::string& mode, uint64_t iters) {
     return server<TestCase, ReuseStrategy, Compression>(
         STDIN_FILENO, STDOUT_FILENO, iters);
   } else if (mode == "object") {
-    return passByObject<TestCase, ReuseStrategy, Compression>(iters);
+    return passByObject<TestCase, ReuseStrategy, Compression>(iters, false);
+  } else if (mode == "object-size") {
+    return passByObject<TestCase, ReuseStrategy, Compression>(iters, true);
   } else if (mode == "bytes") {
     return passByBytes<TestCase, ReuseStrategy, Compression>(iters);
   } else if (mode == "pipe") {
@@ -610,7 +673,7 @@ uint64_t doBenchmark(const std::string& mode, uint64_t iters) {
 template <typename TestCase, typename Compression>
 uint64_t doBenchmark2(const std::string& mode, const std::string& reuse, uint64_t iters) {
   if (reuse == "reuse") {
-    return doBenchmark<TestCase, UseScratch<Compression, 1024>, Compression>(mode, iters);
+    return doBenchmark<TestCase, UseScratch<Compression>, Compression>(mode, iters);
   } else if (reuse == "no-reuse") {
     return doBenchmark<TestCase, NoScratch<Compression>, Compression>(mode, iters);
   } else {
@@ -634,14 +697,13 @@ uint64_t doBenchmark3(const std::string& mode, const std::string& reuse,
 
 int main(int argc, char* argv[]) {
   if (argc != 6) {
-    std::cerr << "USAGE:  " << argv[0] << " MODE REUSE COMPRESSION ITERATION_COUNT" << std::endl;
+    std::cerr << "USAGE:  " << argv[0]
+              << " TEST_CASE MODE REUSE COMPRESSION ITERATION_COUNT" << std::endl;
     return 1;
   }
 
   uint64_t iters = strtoull(argv[5], nullptr, 0);
   srand(123);
-
-  std::cerr << "Doing " << iters << " iterations..." << std::endl;
 
   uint64_t throughput;
 
@@ -655,7 +717,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  std::cerr << "Average messages size = " << (throughput / iters) << std::endl;
+  std::cout << throughput << std::endl;
 
   return 0;
 }

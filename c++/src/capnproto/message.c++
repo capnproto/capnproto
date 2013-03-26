@@ -204,7 +204,16 @@ MallocMessageBuilder::MallocMessageBuilder(
       ownFirstSegment(false), firstSegment(firstSegment.begin()) {}
 
 MallocMessageBuilder::~MallocMessageBuilder() {
-  if (ownFirstSegment) free(firstSegment);
+  if (ownFirstSegment) {
+    free(firstSegment);
+  } else {
+    ArrayPtr<const ArrayPtr<const word>> segments = getSegmentsForOutput();
+    if (segments.size() > 0) {
+      CAPNPROTO_ASSERT(segments[0].begin() == firstSegment,
+          "First segment in getSegmentsForOutput() is not the first segment allocated?");
+      memset(firstSegment, 0, segments[0].size() * sizeof(word));
+    }
+  }
   if (moreSegments != nullptr) {
     for (void* ptr: moreSegments->segments) {
       free(ptr);
@@ -218,7 +227,6 @@ ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
     firstSegment = nullptr;
     ownFirstSegment = true;
     if (result.size() >= minimumSize) {
-      memset(result.begin(), 0, result.size() * sizeof(word));
       return result;
     }
     // If the provided first segment wasn't big enough, we discard it and proceed to allocate
