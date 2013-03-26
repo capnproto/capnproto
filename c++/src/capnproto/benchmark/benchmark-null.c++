@@ -21,17 +21,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <inttypes.h>
-#include <iostream>
-#include <string>
-#include <stddef.h>
-#include <limits.h>
-#include <memory>
-#include <stdexcept>
-#include <algorithm>
-#include <string.h>
-#include <limits>
-#include "fast-random.h"
+#include "benchmark-common.h"
 
 namespace capnproto {
 namespace benchmark {
@@ -84,20 +74,6 @@ struct Expression {
     Expression* rightExpression;
   };
 };
-
-inline int32_t div(int32_t a, int32_t b) {
-  if (b == 0) return INT_MAX;
-  // INT_MIN / -1 => SIGFPE.  Who knew?
-  if (a == INT_MIN && b == -1) return INT_MAX;
-  return a / b;
-}
-
-inline int32_t mod(int32_t a, int32_t b) {
-  if (b == 0) return INT_MAX;
-  // INT_MIN % -1 => SIGFPE.  Who knew?
-  if (a == INT_MIN && b == -1) return INT_MAX;
-  return a % b;
-}
 
 int32_t makeExpression(Expression* exp, uint depth) {
   exp->op = (Operation)(fastRand(OPERATION_RANGE));
@@ -201,12 +177,6 @@ public:
 //
 // The promotion multiplier is large enough that all the results mentioning "cat" but not "dog"
 // should end up at the front ofthe list, which is how we verify the result.
-
-static const char* const WORDS[] = {
-    "foo ", "bar ", "baz ", "qux ", "quux ", "corge ", "grault ", "garply ", "waldo ", "fred ",
-    "plugh ", "xyzzy ", "thud "
-};
-constexpr size_t WORDS_COUNT = sizeof(WORDS) / sizeof(WORDS[0]);
 
 template <typename T>
 struct List {
@@ -533,70 +503,84 @@ struct ReusableObjects {
 
 // =======================================================================================
 
-template <typename TestCase>
-uint64_t passByObject(uint64_t iters) {
-  uint64_t throughput = 0;
-
-  for (; iters > 0; --iters) {
-    arenaPos = arena;
-
-    typename TestCase::Request request;
-    typename TestCase::Expectation expected = TestCase::setupRequest(&request);
-
-    typename TestCase::Response response;
-    TestCase::handleRequest(request, &response);
-    if (!TestCase::checkResponse(response, expected)) {
-      throw std::logic_error("Incorrect response.");
-    }
-
-    throughput += (arenaPos - arena) * sizeof(arena[0]);
-  }
-
-  return throughput;
-}
-
-template <typename TestCase>
-uint64_t doBenchmark(const std::string& mode, uint64_t iters) {
-  if (mode == "object") {
-    return passByObject<TestCase>(iters);
-  } else {
-    std::cerr << "Unknown mode: " << mode << std::endl;
+template <typename TestCase, typename ReuseStrategy, typename Compression>
+struct BenchmarkMethods {
+  static uint64_t syncClient(int inputFd, int outputFd, uint64_t iters) {
+    fprintf(stderr, "Null benchmark doesn't do I/O.\n");
     exit(1);
   }
-}
 
-int main(int argc, char* argv[]) {
-  if (argc != 6) {
-    std::cerr << "USAGE:  " << argv[0]
-              << " TEST_CASE MODE REUSE COMPRESSION ITERATION_COUNT" << std::endl;
-    return 1;
+  static uint64_t asyncClientSender(
+      int outputFd, ProducerConsumerQueue<typename TestCase::Expectation>* expectations,
+      uint64_t iters) {
+    fprintf(stderr, "Null benchmark doesn't do I/O.\n");
+    exit(1);
   }
 
-  uint64_t iters = strtoull(argv[5], nullptr, 0);
-
-  uint64_t throughput;
-
-  std::string testcase = argv[1];
-  if (testcase == "eval") {
-    throughput = doBenchmark<ExpressionTestCase>(argv[2], iters);
-  } else if (testcase == "catrank") {
-    throughput = doBenchmark<CatRankTestCase>(argv[2], iters);
-  } else if (testcase == "carsales") {
-    throughput = doBenchmark<CarSalesTestCase>(argv[2], iters);
-  } else {
-    std::cerr << "Unknown test case: " << testcase << std::endl;
-    return 1;
+  static void asyncClientReceiver(
+      int inputFd, ProducerConsumerQueue<typename TestCase::Expectation>* expectations,
+      uint64_t iters) {
+    fprintf(stderr, "Null benchmark doesn't do I/O.\n");
+    exit(1);
   }
 
-  std::cout << throughput << std::endl;
+  static uint64_t asyncClient(int inputFd, int outputFd, uint64_t iters) {
+    fprintf(stderr, "Null benchmark doesn't do I/O.\n");
+    exit(1);
+  }
 
-  return 0;
-}
+  static uint64_t server(int inputFd, int outputFd, uint64_t iters) {
+    fprintf(stderr, "Null benchmark doesn't do I/O.\n");
+    exit(1);
+  }
+
+  static uint64_t passByObject(uint64_t iters, bool countObjectSize) {
+    uint64_t throughput = 0;
+
+    for (; iters > 0; --iters) {
+      arenaPos = arena;
+
+      typename TestCase::Request request;
+      typename TestCase::Expectation expected = TestCase::setupRequest(&request);
+
+      typename TestCase::Response response;
+      TestCase::handleRequest(request, &response);
+      if (!TestCase::checkResponse(response, expected)) {
+        throw std::logic_error("Incorrect response.");
+      }
+
+      throughput += (arenaPos - arena) * sizeof(arena[0]);
+    }
+
+    return throughput;
+  }
+
+  static uint64_t passByBytes(uint64_t iters) {
+    fprintf(stderr, "Null benchmark doesn't do I/O.\n");
+    exit(1);
+  }
+};
+
+struct BenchmarkTypes {
+  typedef null::ExpressionTestCase ExpressionTestCase;
+  typedef null::CatRankTestCase CatRankTestCase;
+  typedef null::CarSalesTestCase CarSalesTestCase;
+
+  typedef void SnappyCompressed;
+  typedef void Uncompressed;
+
+  typedef void ReusableResources;
+  typedef void SingleUseResources;
+
+  template <typename TestCase, typename ReuseStrategy, typename Compression>
+  struct BenchmarkMethods: public null::BenchmarkMethods<TestCase, ReuseStrategy, Compression> {};
+};
 
 }  // namespace null
 }  // namespace benchmark
 }  // namespace capnproto
 
 int main(int argc, char* argv[]) {
-  return capnproto::benchmark::null::main(argc, argv);
+  return capnproto::benchmark::benchmarkMain<
+      capnproto::benchmark::null::BenchmarkTypes>(argc, argv);
 }
