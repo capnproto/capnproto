@@ -117,8 +117,7 @@ public:
     return goodCount;
   }
 
-  static inline void handleRequest(
-      const List<SearchResult>& request, List<SearchResult>* response) {
+  static void handleRequest(const List<SearchResult>& request, List<SearchResult>* response) {
     std::vector<ScoredResult> scoredResults;
     scoredResults.reserve(request.size);
 
@@ -145,8 +144,7 @@ public:
     }
   }
 
-  static inline bool checkResponse(
-      const List<SearchResult>& response, int expectedGoodCount) {
+  static bool checkResponse(const List<SearchResult>& response, int expectedGoodCount) {
     int goodCount = 0;
     for (auto& result: response) {
       if (result.score > 1001) {

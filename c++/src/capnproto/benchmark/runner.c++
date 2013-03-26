@@ -358,6 +358,9 @@ int main(int argc, char* argv[]) {
       reuse = Reuse::NO;
     } else if (arg == "snappy") {
       compression = Compression::SNAPPY;
+    } else {
+      fprintf(stderr, "Unknown option: %s\n", argv[i]);
+      return 1;
     }
   }
 
@@ -456,8 +459,8 @@ int main(int argc, char* argv[]) {
   reportComparison("object manipulation",
       nullCase.time.cpu(), protobufBase.time.cpu(), capnpBase.time.cpu(), iters);
   reportComparison("I/O", "us",
-      (protobuf.time.cpu() - protobufBase.time.cpu()) / 1000.0,
-      (capnp.time.cpu() - capnpBase.time.cpu()) / 1000.0, iters);
+      ((int64_t)protobuf.time.cpu() - (int64_t)protobufBase.time.cpu()) / 1000.0,
+      ((int64_t)capnp.time.cpu() - (int64_t)capnpBase.time.cpu()) / 1000.0, iters);
 
   reportComparison("binary size", "kB",
       fileSize("protobuf-" + std::string(testCaseName(testCase))) / 1024.0,

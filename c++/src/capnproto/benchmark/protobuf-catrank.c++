@@ -63,6 +63,7 @@ public:
       goodCount += isCat && !isDog;
 
       std::string* snippet = result->mutable_snippet();
+      snippet->reserve(7 * 22);
       snippet->push_back(' ');
 
       int prefix = fastRand(20);
@@ -82,7 +83,7 @@ public:
     return goodCount;
   }
 
-  static inline void handleRequest(const SearchResultList& request, SearchResultList* response) {
+  static void handleRequest(const SearchResultList& request, SearchResultList* response) {
     std::vector<ScoredResult> scoredResults;
 
     for (auto& result: request.result()) {
@@ -106,7 +107,7 @@ public:
     }
   }
 
-  static inline bool checkResponse(const SearchResultList& response, int expectedGoodCount) {
+  static bool checkResponse(const SearchResultList& response, int expectedGoodCount) {
     int goodCount = 0;
     for (auto& result: response.result()) {
       if (result.score() > 1001) {

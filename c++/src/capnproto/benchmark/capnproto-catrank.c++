@@ -91,8 +91,7 @@ public:
     return goodCount;
   }
 
-  static inline void handleRequest(SearchResultList::Reader request,
-                                   SearchResultList::Builder response) {
+  static void handleRequest(SearchResultList::Reader request, SearchResultList::Builder response) {
     std::vector<ScoredResult> scoredResults;
 
     for (auto result: request.getResults()) {
@@ -118,7 +117,7 @@ public:
     }
   }
 
-  static inline bool checkResponse(SearchResultList::Reader response, int expectedGoodCount) {
+  static bool checkResponse(SearchResultList::Reader response, int expectedGoodCount) {
     int goodCount = 0;
     for (auto result: response.getResults()) {
       if (result.getScore() > 1001) {
