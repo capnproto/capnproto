@@ -25,7 +25,7 @@
 #include <memory>
 #include "macros.h"
 #include "type-safety.h"
-#include "wire-format.h"
+#include "layout.h"
 
 #ifndef CAPNPROTO_MESSAGE_H_
 #define CAPNPROTO_MESSAGE_H_

@@ -22,7 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "serialize-snappy.h"
-#include "wire-format.h"
+#include "layout.h"
 #include <snappy/snappy.h>
 #include <snappy/snappy-sinksource.h>
 #include <vector>

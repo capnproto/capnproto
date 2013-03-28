@@ -24,7 +24,7 @@
 #ifndef CAPNPROTO_LIST_H_
 #define CAPNPROTO_LIST_H_
 
-#include "wire-format.h"
+#include "layout.h"
 #include <initializer_list>
 
 namespace capnproto {

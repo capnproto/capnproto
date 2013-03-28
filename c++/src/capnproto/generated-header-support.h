@@ -26,7 +26,7 @@
 #ifndef CAPNPROTO_GENERATED_HEADER_SUPPORT_H_
 #define CAPNPROTO_GENERATED_HEADER_SUPPORT_H_
 
-#include "wire-format.h"
+#include "layout.h"
 #include "list.h"
 
 #endif  // CAPNPROTO_GENERATED_HEADER_SUPPORT_H_

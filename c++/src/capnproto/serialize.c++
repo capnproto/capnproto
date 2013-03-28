@@ -22,7 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "serialize.h"
-#include "wire-format.h"
+#include "layout.h"
 
 namespace capnproto {
 
