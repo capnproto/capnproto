@@ -26,6 +26,7 @@
 
 #include "common.h"
 #include <capnproto/serialize.h>
+#include <capnproto/serialize-packed.h>
 #include <capnproto/serialize-snappy.h>
 #include <thread>
 
@@ -55,17 +56,64 @@ public:
 // =======================================================================================
 
 struct Uncompressed {
-  typedef StreamFdMessageReader MessageReader;
+  typedef FdInputStream& BufferedInput;
+  typedef InputStreamMessageReader MessageReader;
+
+  class ArrayMessageReader: public FlatArrayMessageReader {
+  public:
+    ArrayMessageReader(ArrayPtr<const byte> array,
+                       ReaderOptions options = ReaderOptions(),
+                       ArrayPtr<word> scratchSpace = nullptr)
+      : FlatArrayMessageReader(arrayPtr(
+          reinterpret_cast<const word*>(array.begin()),
+          reinterpret_cast<const word*>(array.end())), options) {}
+  };
 
   static inline void write(OutputStream& output, MessageBuilder& builder) {
     writeMessage(output, builder);
   }
 };
 
-struct SnappyCompressed {
-  typedef SnappyFdMessageReader MessageReader;
+struct Packed {
+  typedef BufferedInputStreamWrapper BufferedInput;
+  typedef PackedMessageReader MessageReader;
+
+  class ArrayMessageReader: private ArrayInputStream, public PackedMessageReader {
+  public:
+    ArrayMessageReader(ArrayPtr<const byte> array,
+                       ReaderOptions options = ReaderOptions(),
+                       ArrayPtr<word> scratchSpace = nullptr)
+      : ArrayInputStream(array),
+        PackedMessageReader(*this, options, scratchSpace) {}
+  };
 
   static inline void write(OutputStream& output, MessageBuilder& builder) {
+    writePackedMessage(output, builder);
+  }
+
+  static inline void write(BufferedOutputStream& output, MessageBuilder& builder) {
+    writePackedMessage(output, builder);
+  }
+};
+
+struct SnappyCompressed {
+  typedef FdInputStream& BufferedInput;
+  typedef SnappyMessageReader MessageReader;
+
+  class ArrayMessageReader: private ArrayInputStream, public SnappyMessageReader {
+  public:
+    ArrayMessageReader(ArrayPtr<const byte> array,
+                       ReaderOptions options = ReaderOptions(),
+                       ArrayPtr<word> scratchSpace = nullptr)
+      : ArrayInputStream(array),
+        SnappyMessageReader(*this, options, scratchSpace) {}
+  };
+
+  static inline void write(OutputStream& output, MessageBuilder& builder) {
+    writeSnappyMessage(output, builder);
+  }
+
+  static inline void write(BufferedOutputStream& output, MessageBuilder& builder) {
     writeSnappyMessage(output, builder);
   }
 };
@@ -78,8 +126,15 @@ struct NoScratch {
   template <typename Compression>
   class MessageReader: public Compression::MessageReader {
   public:
-    inline MessageReader(int fd, ScratchSpace& scratch)
-        : Compression::MessageReader(fd) {}
+    inline MessageReader(typename Compression::BufferedInput& input, ScratchSpace& scratch)
+        : Compression::MessageReader(input) {}
+  };
+
+  template <typename Compression>
+  class ArrayMessageReader: public Compression::ArrayMessageReader {
+  public:
+    inline ArrayMessageReader(ArrayPtr<const byte> input, ScratchSpace& scratch)
+        : Compression::ArrayMessageReader(input) {}
   };
 
   class MessageBuilder: public MallocMessageBuilder {
@@ -109,7 +164,7 @@ struct NoScratch {
 };
 
 constexpr size_t SCRATCH_SIZE = 128 * 1024;
-word scratchSpace[4 * SCRATCH_SIZE];
+word scratchSpace[6 * SCRATCH_SIZE];
 int scratchCounter = 0;
 
 struct UseScratch {
@@ -117,7 +172,7 @@ struct UseScratch {
     word* words;
 
     ScratchSpace() {
-      CAPNPROTO_ASSERT(scratchCounter < 4, "Too many scratch spaces needed at once.");
+      CAPNPROTO_ASSERT(scratchCounter < 6, "Too many scratch spaces needed at once.");
       words = scratchSpace + scratchCounter++ * SCRATCH_SIZE;
     }
     ~ScratchSpace() {
@@ -128,8 +183,17 @@ struct UseScratch {
   template <typename Compression>
   class MessageReader: public Compression::MessageReader {
   public:
-    inline MessageReader(int fd, ScratchSpace& scratch)
-        : Compression::MessageReader(fd, ReaderOptions(), arrayPtr(scratch.words, SCRATCH_SIZE)) {}
+    inline MessageReader(typename Compression::BufferedInput& input, ScratchSpace& scratch)
+        : Compression::MessageReader(
+            input, ReaderOptions(), arrayPtr(scratch.words, SCRATCH_SIZE)) {}
+  };
+
+  template <typename Compression>
+  class ArrayMessageReader: public Compression::ArrayMessageReader {
+  public:
+    inline ArrayMessageReader(ArrayPtr<const byte> input, ScratchSpace& scratch)
+        : Compression::ArrayMessageReader(
+            input, ReaderOptions(), arrayPtr(scratch.words, SCRATCH_SIZE)) {}
   };
 
   class MessageBuilder: public MallocMessageBuilder {
@@ -167,6 +231,9 @@ struct UseScratch {
 template <typename TestCase, typename ReuseStrategy, typename Compression>
 struct BenchmarkMethods {
   static uint64_t syncClient(int inputFd, int outputFd, uint64_t iters) {
+    FdInputStream inputStream(inputFd);
+    typename Compression::BufferedInput bufferedInput(inputStream);
+
     CountingOutputStream output(outputFd);
     typename ReuseStrategy::ScratchSpace scratch;
 
@@ -180,7 +247,7 @@ struct BenchmarkMethods {
       }
 
       {
-        typename ReuseStrategy::template MessageReader<Compression> reader(inputFd, scratch);
+        typename ReuseStrategy::template MessageReader<Compression> reader(bufferedInput, scratch);
         if (!TestCase::checkResponse(
             reader.template getRoot<typename TestCase::Response>(), expected)) {
           throw std::logic_error("Incorrect response.");
@@ -210,11 +277,14 @@ struct BenchmarkMethods {
   static void asyncClientReceiver(
       int inputFd, ProducerConsumerQueue<typename TestCase::Expectation>* expectations,
       uint64_t iters) {
+    FdInputStream inputStream(inputFd);
+    typename Compression::BufferedInput bufferedInput(inputStream);
+
     typename ReuseStrategy::ScratchSpace scratch;
 
     for (; iters > 0; --iters) {
       typename TestCase::Expectation expected = expectations->next();
-      typename ReuseStrategy::template MessageReader<Compression> reader(inputFd, scratch);
+      typename ReuseStrategy::template MessageReader<Compression> reader(bufferedInput, scratch);
       if (!TestCase::checkResponse(
           reader.template getRoot<typename TestCase::Response>(), expected)) {
         throw std::logic_error("Incorrect response.");
@@ -231,13 +301,17 @@ struct BenchmarkMethods {
   }
 
   static uint64_t server(int inputFd, int outputFd, uint64_t iters) {
+    FdInputStream inputStream(inputFd);
+    typename Compression::BufferedInput bufferedInput(inputStream);
+
     CountingOutputStream output(outputFd);
     typename ReuseStrategy::ScratchSpace builderScratch;
     typename ReuseStrategy::ScratchSpace readerScratch;
 
     for (; iters > 0; --iters) {
       typename ReuseStrategy::MessageBuilder builder(builderScratch);
-      typename ReuseStrategy::template MessageReader<Compression> reader(inputFd, readerScratch);
+      typename ReuseStrategy::template MessageReader<Compression> reader(
+          bufferedInput, readerScratch);
       TestCase::handleRequest(reader.template getRoot<typename TestCase::Request>(),
                               builder.template initRoot<typename TestCase::Response>());
       Compression::write(output, builder);
@@ -275,24 +349,36 @@ struct BenchmarkMethods {
 
   static uint64_t passByBytes(uint64_t iters) {
     uint64_t throughput = 0;
-    typename ReuseStrategy::ScratchSpace requestScratch;
-    typename ReuseStrategy::ScratchSpace responseScratch;
+    typename ReuseStrategy::ScratchSpace clientRequestScratch;
+    UseScratch::ScratchSpace requestBytesScratch;
+    typename ReuseStrategy::ScratchSpace serverRequestScratch;
+    typename ReuseStrategy::ScratchSpace serverResponseScratch;
+    UseScratch::ScratchSpace responseBytesScratch;
+    typename ReuseStrategy::ScratchSpace clientResponseScratch;
 
     for (; iters > 0; --iters) {
-      typename ReuseStrategy::MessageBuilder requestBuilder(requestScratch);
+      typename ReuseStrategy::MessageBuilder requestBuilder(clientRequestScratch);
       typename TestCase::Expectation expected = TestCase::setupRequest(
           requestBuilder.template initRoot<typename TestCase::Request>());
 
-      Array<word> requestBytes = messageToFlatArray(requestBuilder);
-      throughput += requestBytes.size() * sizeof(word);
-      FlatArrayMessageReader requestReader(requestBytes.asPtr());
-      typename ReuseStrategy::MessageBuilder responseBuilder(responseScratch);
+      ArrayOutputStream requestOutput(arrayPtr(reinterpret_cast<byte*>(requestBytesScratch.words),
+                                               SCRATCH_SIZE * sizeof(word)));
+      Compression::write(requestOutput, requestBuilder);
+      throughput += requestOutput.getArray().size();
+      typename ReuseStrategy::template ArrayMessageReader<Compression> requestReader(
+          requestOutput.getArray(), serverRequestScratch);
+
+      typename ReuseStrategy::MessageBuilder responseBuilder(serverResponseScratch);
       TestCase::handleRequest(requestReader.template getRoot<typename TestCase::Request>(),
                               responseBuilder.template initRoot<typename TestCase::Response>());
 
-      Array<word> responseBytes = messageToFlatArray(responseBuilder);
-      throughput += responseBytes.size() * sizeof(word);
-      FlatArrayMessageReader responseReader(responseBytes.asPtr());
+      ArrayOutputStream responseOutput(arrayPtr(reinterpret_cast<byte*>(responseBytesScratch.words),
+                                                SCRATCH_SIZE * sizeof(word)));
+      Compression::write(responseOutput, responseBuilder);
+      throughput += responseOutput.getArray().size();
+      typename ReuseStrategy::template ArrayMessageReader<Compression> responseReader(
+          responseOutput.getArray(), clientResponseScratch);
+
       if (!TestCase::checkResponse(
           responseReader.template getRoot<typename TestCase::Response>(), expected)) {
         throw std::logic_error("Incorrect response.");
@@ -304,8 +390,9 @@ struct BenchmarkMethods {
 };
 
 struct BenchmarkTypes {
-  typedef capnp::SnappyCompressed SnappyCompressed;
   typedef capnp::Uncompressed Uncompressed;
+  typedef capnp::Packed Packed;
+  typedef capnp::SnappyCompressed SnappyCompressed;
 
   typedef capnp::UseScratch ReusableResources;
   typedef capnp::NoScratch SingleUseResources;

@@ -23,11 +23,6 @@
 
 #include "serialize.h"
 #include "wire-format.h"
-#include <string.h>
-#include <errno.h>
-#include <unistd.h>
-#include <string>
-#include <sys/uio.h>
 
 namespace capnproto {
 
@@ -41,7 +36,7 @@ FlatArrayMessageReader::FlatArrayMessageReader(ArrayPtr<const word> array, Reade
   const internal::WireValue<uint32_t>* table =
       reinterpret_cast<const internal::WireValue<uint32_t>*>(array.begin());
 
-  uint segmentCount = table[0].get();
+  uint segmentCount = table[0].get() + 1;
   size_t offset = segmentCount / 2u + 1u;
 
   if (array.size() < offset) {
@@ -92,6 +87,8 @@ ArrayPtr<const word> FlatArrayMessageReader::getSegment(uint id) {
 }
 
 Array<word> messageToFlatArray(ArrayPtr<const ArrayPtr<const word>> segments) {
+  CAPNPROTO_ASSERT(segments.size() > 0, "Tried to serialize uninitialized message.");
+
   size_t totalSize = segments.size() / 2 + 1;
 
   for (auto& segment: segments) {
@@ -103,7 +100,7 @@ Array<word> messageToFlatArray(ArrayPtr<const ArrayPtr<const word>> segments) {
   internal::WireValue<uint32_t>* table =
       reinterpret_cast<internal::WireValue<uint32_t>*>(result.begin());
 
-  table[0].set(segments.size());
+  table[0].set(segments.size() - 1);
 
   for (uint i = 0; i < segments.size(); i++) {
     table[i + 1].set(segments[i].size());
@@ -128,25 +125,6 @@ Array<word> messageToFlatArray(ArrayPtr<const ArrayPtr<const word>> segments) {
 
 // =======================================================================================
 
-InputStream::~InputStream() {}
-OutputStream::~OutputStream() {}
-
-void InputStream::skip(size_t bytes) {
-  char scratch[8192];
-  while (bytes > 0) {
-    size_t amount = std::min(bytes, sizeof(scratch));
-    bytes -= read(scratch, amount, amount);
-  }
-}
-
-void OutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
-  for (auto piece: pieces) {
-    write(piece.begin(), piece.size());
-  }
-}
-
-// -------------------------------------------------------------------
-
 InputStreamMessageReader::InputStreamMessageReader(
     InputStream& inputStream, ReaderOptions options, ArrayPtr<word> scratchSpace)
     : MessageReader(options), inputStream(inputStream), readPos(nullptr) {
@@ -154,7 +132,7 @@ InputStreamMessageReader::InputStreamMessageReader(
 
   inputStream.read(firstWord, sizeof(firstWord));
 
-  uint segmentCount = firstWord[0].get();
+  uint segmentCount = firstWord[0].get() + 1;
   uint segment0Size = segmentCount == 0 ? 0 : firstWord[1].get();
 
   size_t totalWords = segment0Size;
@@ -237,9 +215,11 @@ ArrayPtr<const word> InputStreamMessageReader::getSegment(uint id) {
 // -------------------------------------------------------------------
 
 void writeMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> segments) {
+  CAPNPROTO_ASSERT(segments.size() > 0, "Tried to serialize uninitialized message.");
+
   internal::WireValue<uint32_t> table[(segments.size() + 2) & ~size_t(1)];
 
-  table[0].set(segments.size());
+  table[0].set(segments.size() - 1);
   for (uint i = 0; i < segments.size(); i++) {
     table[i + 1].set(segments[i].size());
   }
@@ -260,133 +240,6 @@ void writeMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> seg
 }
 
 // =======================================================================================
-
-class OsException: public std::exception {
-public:
-  OsException(const char* function, int error) {
-    char buffer[256];
-    message = function;
-    message += ": ";
-    message.append(strerror_r(error, buffer, sizeof(buffer)));
-  }
-  ~OsException() noexcept {}
-
-  const char* what() const noexcept override {
-    return message.c_str();
-  }
-
-private:
-  std::string message;
-};
-
-class PrematureEofException: public std::exception {
-public:
-  PrematureEofException() {}
-  ~PrematureEofException() noexcept {}
-
-  const char* what() const noexcept override {
-    return "Stream ended prematurely.";
-  }
-};
-
-AutoCloseFd::~AutoCloseFd() {
-  if (fd >= 0 && close(fd) < 0) {
-    if (std::uncaught_exception()) {
-      // TODO:  Devise some way to report secondary errors during unwind.
-    } else {
-      throw OsException("close", errno);
-    }
-  }
-}
-
-FdInputStream::~FdInputStream() {}
-
-size_t FdInputStream::read(void* buffer, size_t minBytes, size_t maxBytes) {
-  byte* pos = reinterpret_cast<byte*>(buffer);
-  byte* min = pos + minBytes;
-  byte* max = pos + maxBytes;
-
-  while (pos < min) {
-    ssize_t n = ::read(fd, pos, max - pos);
-    if (n <= 0) {
-      if (n < 0) {
-        int error = errno;
-        if (error == EINTR) {
-          continue;
-        } else {
-          throw OsException("read", error);
-        }
-      } else if (n == 0) {
-        throw PrematureEofException();
-      }
-      return false;
-    }
-
-    pos += n;
-  }
-
-  return pos - reinterpret_cast<byte*>(buffer);
-}
-
-FdOutputStream::~FdOutputStream() {}
-
-void FdOutputStream::write(const void* buffer, size_t size) {
-  const char* pos = reinterpret_cast<const char*>(buffer);
-
-  while (size > 0) {
-    ssize_t n = ::write(fd, pos, size);
-    if (n <= 0) {
-      CAPNPROTO_ASSERT(n < 0, "write() returned zero.");
-      int error = errno;
-      if (error == EINTR) {
-        continue;
-      } else {
-        throw OsException("write", error);
-      }
-    }
-    pos += n;
-    size -= n;
-  }
-}
-
-void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
-  struct iovec iov[pieces.size()];
-  for (uint i = 0; i < pieces.size(); i++) {
-    // writev() interface is not const-correct.  :(
-    iov[i].iov_base = const_cast<byte*>(pieces[i].begin());
-    iov[i].iov_len = pieces[i].size();
-  }
-
-  struct iovec* current = iov;
-  struct iovec* end = iov + pieces.size();
-
-  // Make sure we don't do anything on an empty write.
-  while (current < end && current->iov_len == 0) {
-    ++current;
-  }
-
-  while (current < end) {
-    ssize_t n = ::writev(fd, iov, end - current);
-
-    if (n <= 0) {
-      if (n <= 0) {
-        CAPNPROTO_ASSERT(n < 0, "write() returned zero.");
-        throw OsException("writev", errno);
-      }
-    }
-
-    while (static_cast<size_t>(n) >= current->iov_len) {
-      n -= current->iov_len;
-      ++current;
-    }
-
-    if (n > 0) {
-      current->iov_base = reinterpret_cast<byte*>(current->iov_base) + n;
-      current->iov_len -= n;
-    }
-  }
-}
-
 StreamFdMessageReader::~StreamFdMessageReader() {}
 
 void writeMessageToFd(int fd, ArrayPtr<const ArrayPtr<const word>> segments) {

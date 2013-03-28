@@ -25,56 +25,84 @@
 #define CAPNPROTO_SERIALIZE_SNAPPY_H_
 
 #include "serialize.h"
+#include "serialize-packed.h"
 
 namespace capnproto {
 
-class SnappyMessageReader: public MessageReader {
-public:
-  SnappyMessageReader(InputStream& inputStream, ReaderOptions options = ReaderOptions(),
-                      ArrayPtr<word> scratchSpace = nullptr);
-  ~SnappyMessageReader();
+constexpr size_t SNAPPY_BUFFER_SIZE = 65536;
+constexpr size_t SNAPPY_COMPRESSED_BUFFER_SIZE = 76490;
 
-  ArrayPtr<const word> getSegment(uint id) override;
+class SnappyInputStream: public BufferedInputStream {
+public:
+  explicit SnappyInputStream(BufferedInputStream& inner, ArrayPtr<byte> buffer = nullptr);
+  CAPNPROTO_DISALLOW_COPY(SnappyInputStream);
+  ~SnappyInputStream();
+
+  // implements BufferedInputStream ----------------------------------
+  ArrayPtr<const byte> getReadBuffer() override;
+  size_t read(void* buffer, size_t minBytes, size_t maxBytes) override;
+  void skip(size_t bytes) override;
 
 private:
-  InputStream& inputStream;
-  Array<word> space;
+  class InputStreamSnappySource;
 
-  union {
-    FlatArrayMessageReader underlyingReader;
-  };
+  BufferedInputStream& inner;
+  Array<byte> ownedBuffer;
+  ArrayPtr<byte> buffer;
+  ArrayPtr<byte> bufferAvailable;
+
+  void refill();
 };
 
-class SnappyFdMessageReader: private FdInputStream, public SnappyMessageReader {
+class SnappyOutputStream: public BufferedOutputStream {
 public:
-  SnappyFdMessageReader(int fd, ReaderOptions options = ReaderOptions(),
-                        ArrayPtr<word> scratchSpace = nullptr)
-      : FdInputStream(fd), SnappyMessageReader(*this, options, scratchSpace) {}
-  // Read message from a file descriptor, without taking ownership of the descriptor.
+  explicit SnappyOutputStream(OutputStream& inner,
+                              ArrayPtr<byte> buffer = nullptr,
+                              ArrayPtr<byte> compressedBuffer = nullptr);
+  CAPNPROTO_DISALLOW_COPY(SnappyOutputStream);
+  ~SnappyOutputStream();
 
-  SnappyFdMessageReader(AutoCloseFd fd, ReaderOptions options = ReaderOptions(),
-                        ArrayPtr<word> scratchSpace = nullptr)
-      : FdInputStream(move(fd)), SnappyMessageReader(*this, options, scratchSpace) {}
-  // Read a message from a file descriptor, taking ownership of the descriptor.
+  void flush();
+  // Force the stream to write any remaining bytes in its buffer to the inner stream.  This will
+  // hurt compression, of course, by forcing the current block to end prematurely.
 
-  ~SnappyFdMessageReader();
+  // implements BufferedOutputStream ---------------------------------
+  ArrayPtr<byte> getWriteBuffer() override;
+  void write(const void* buffer, size_t size) override;
+
+private:
+  OutputStream& inner;
+
+  Array<byte> ownedBuffer;
+  ArrayPtr<byte> buffer;
+  byte* bufferPos;
+
+  Array<byte> ownedCompressedBuffer;
+  ArrayPtr<byte> compressedBuffer;
 };
 
-void writeSnappyMessage(OutputStream& output, MessageBuilder& builder);
-void writeSnappyMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> segments);
+class SnappyPackedMessageReader: private SnappyInputStream, public PackedMessageReader {
+public:
+  SnappyPackedMessageReader(
+      BufferedInputStream& inputStream, ReaderOptions options = ReaderOptions(),
+      ArrayPtr<word> scratchSpace = nullptr, ArrayPtr<byte> buffer = nullptr);
+  ~SnappyPackedMessageReader();
+};
 
-void writeSnappyMessageToFd(int fd, MessageBuilder& builder);
-void writeSnappyMessageToFd(int fd, ArrayPtr<const ArrayPtr<const word>> segments);
+void writeSnappyPackedMessage(OutputStream& output, MessageBuilder& builder,
+                              ArrayPtr<byte> buffer = nullptr,
+                              ArrayPtr<byte> compressedBuffer = nullptr);
+void writeSnappyPackedMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> segments,
+                              ArrayPtr<byte> buffer = nullptr,
+                              ArrayPtr<byte> compressedBuffer = nullptr);
 
 // =======================================================================================
 // inline stuff
 
-inline void writeSnappyMessage(OutputStream& output, MessageBuilder& builder) {
-  writeSnappyMessage(output, builder.getSegmentsForOutput());
-}
-
-inline void writeSnappyMessageToFd(int fd, MessageBuilder& builder) {
-  writeSnappyMessageToFd(fd, builder.getSegmentsForOutput());
+inline void writeSnappyPackedMessage(OutputStream& output, MessageBuilder& builder,
+                                     ArrayPtr<byte> buffer,
+                                     ArrayPtr<byte> compressedBuffer) {
+  writeSnappyPackedMessage(output, builder.getSegmentsForOutput(), buffer, compressedBuffer);
 }
 
 }  // namespace capnproto

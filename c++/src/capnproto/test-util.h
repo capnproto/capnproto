@@ -38,6 +38,9 @@ void checkTestMessage(TestDefaults::Builder builder);
 void checkTestMessage(TestAllTypes::Reader reader);
 void checkTestMessage(TestDefaults::Reader reader);
 
+void checkTestMessageAllZero(TestAllTypes::Builder builder);
+void checkTestMessageAllZero(TestAllTypes::Reader reader);
+
 }  // namespace internal
 }  // namespace capnproto
 

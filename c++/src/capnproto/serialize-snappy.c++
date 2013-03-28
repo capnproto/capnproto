@@ -26,280 +26,182 @@
 #include <snappy/snappy.h>
 #include <snappy/snappy-sinksource.h>
 #include <vector>
+#include <iostream>
 
 namespace capnproto {
 
-namespace {
-
-class InputStreamSource: public snappy::Source {
+class SnappyInputStream::InputStreamSnappySource: public snappy::Source {
 public:
-  inline InputStreamSource(InputStream& inputStream, size_t available)
-      : inputStream(inputStream), available(available), pos(nullptr), end(nullptr) {
-    // Read at least 10 bytes (or all available bytes if less than 10), and at most the whole buffer
-    // (unless less is available).
-    size_t firstSize = inputStream.read(buffer,
-        std::min<size_t>(available, 10),
-        std::min<size_t>(available, sizeof(buffer)));
-
-    CAPNPROTO_ASSERT(snappy::GetUncompressedLength(buffer, firstSize, &uncompressedSize),
-                     "Invalid snappy-compressed data.");
-
-    pos = buffer;
-    end = pos + firstSize;
-  }
-  inline ~InputStreamSource() {};
-
-  inline size_t getUncompressedSize() { return uncompressedSize; }
+  inline InputStreamSnappySource(BufferedInputStream& inputStream)
+      : inputStream(inputStream) {}
+  inline ~InputStreamSnappySource() {};
 
   // implements snappy::Source ---------------------------------------
 
   size_t Available() const override {
-    return available;
+    CAPNPROTO_ASSERT(false, "Snappy doesn't actually call this.");
+    return 0;
   }
 
   const char* Peek(size_t* len) override {
-    *len = end - pos;
-    return pos;
+    ArrayPtr<const byte> buffer = inputStream.getReadBuffer();
+    *len = buffer.size();
+    return reinterpret_cast<const char*>(buffer.begin());
   }
 
   void Skip(size_t n) override {
-    pos += n;
-    available -= n;
-
-    if (pos == end && available > 0) {
-      // Read more from the input.
-      pos = buffer;
-      end = pos + inputStream.read(buffer, 1, std::min<size_t>(available, sizeof(buffer)));
-    }
+    inputStream.skip(n);
   }
 
 private:
-  InputStream& inputStream;
-  size_t available;
-  size_t uncompressedSize;
-  char* pos;
-  char* end;
-  char buffer[8192];
+  BufferedInputStream& inputStream;
 };
 
-}  // namespcae
+SnappyInputStream::SnappyInputStream(BufferedInputStream& inner, ArrayPtr<byte> buffer)
+    : inner(inner) {
+  if (buffer.size() < SNAPPY_BUFFER_SIZE) {
+    ownedBuffer = newArray<byte>(SNAPPY_BUFFER_SIZE);
+    buffer = ownedBuffer;
+  }
+  this->buffer = buffer;
+}
 
-SnappyMessageReader::SnappyMessageReader(
-    InputStream& inputStream, ReaderOptions options, ArrayPtr<word> scratchSpace)
-    : MessageReader(options), inputStream(inputStream) {
-  internal::WireValue<uint32_t> wireCompressedSize;
-  inputStream.read(&wireCompressedSize, sizeof(wireCompressedSize));
+SnappyInputStream::~SnappyInputStream() {}
 
-  size_t compressedSize = wireCompressedSize.get();
-  InputStreamSource source(inputStream, compressedSize);
-
-  CAPNPROTO_ASSERT(source.getUncompressedSize() % sizeof(word) == 0,
-                   "Uncompressed size was not a whole number of words.");
-  size_t uncompressedWords = source.getUncompressedSize() / sizeof(word);
-
-  if (scratchSpace.size() < uncompressedWords) {
-    space = newArray<word>(uncompressedWords);
-    scratchSpace = space;
+ArrayPtr<const byte> SnappyInputStream::getReadBuffer() {
+  if (bufferAvailable.size() == 0) {
+    refill();
   }
 
+  return bufferAvailable;
+}
+
+size_t SnappyInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
+  while (minBytes > bufferAvailable.size()) {
+    memcpy(dst, bufferAvailable.begin(), bufferAvailable.size());
+
+    dst = reinterpret_cast<byte*>(dst) + bufferAvailable.size();
+    minBytes -= bufferAvailable.size();
+    maxBytes -= bufferAvailable.size();
+
+    refill();
+  }
+
+  // Serve from current buffer.
+  size_t n = std::min(bufferAvailable.size(), maxBytes);
+  memcpy(dst, bufferAvailable.begin(), n);
+  bufferAvailable = bufferAvailable.slice(n, bufferAvailable.size());
+  return n;
+}
+
+void SnappyInputStream::skip(size_t bytes) {
+  while (bytes > bufferAvailable.size()) {
+    bytes -= bufferAvailable.size();
+    refill();
+  }
+  bufferAvailable = bufferAvailable.slice(bytes, bufferAvailable.size());
+}
+
+void SnappyInputStream::refill() {
+  uint32_t length = 0;
+  InputStreamSnappySource snappySource(inner);
   CAPNPROTO_ASSERT(
-      snappy::RawUncompress(&source, reinterpret_cast<char*>(scratchSpace.begin())),
+      snappy::RawUncompress(
+          &snappySource, reinterpret_cast<char*>(buffer.begin()), buffer.size(), &length),
       "Snappy decompression failed.");
 
-  new(&underlyingReader) FlatArrayMessageReader(scratchSpace, options);
+  bufferAvailable = buffer.slice(0, length);
 }
-
-SnappyMessageReader::~SnappyMessageReader() {
-  underlyingReader.~FlatArrayMessageReader();
-}
-
-ArrayPtr<const word> SnappyMessageReader::getSegment(uint id) {
-  return underlyingReader.getSegment(id);
-}
-
-SnappyFdMessageReader::~SnappyFdMessageReader() {}
 
 // =======================================================================================
 
-namespace {
+SnappyOutputStream::SnappyOutputStream(
+    OutputStream& inner, ArrayPtr<byte> buffer, ArrayPtr<byte> compressedBuffer)
+    : inner(inner) {
+  CAPNPROTO_DEBUG_ASSERT(
+      SNAPPY_COMPRESSED_BUFFER_SIZE >= snappy::MaxCompressedLength(snappy::kBlockSize),
+      "snappy::MaxCompressedLength() changed?");
 
-class SegmentArraySource: public snappy::Source {
-public:
-  SegmentArraySource(ArrayPtr<const ArrayPtr<const byte>> pieces)
-      : pieces(pieces), offset(0), available(0) {
-    for (auto& piece: pieces) {
-      available += piece.size();
-    }
-    Skip(0);  // Skip leading zero-sized pieces, if any.
+  if (buffer.size() < SNAPPY_BUFFER_SIZE) {
+    ownedBuffer = newArray<byte>(SNAPPY_BUFFER_SIZE);
+    buffer = ownedBuffer;
   }
-  ~SegmentArraySource() {}
+  this->buffer = buffer;
+  bufferPos = buffer.begin();
 
-  // implements snappy::Source ---------------------------------------
-
-  size_t Available() const override {
-    return available;
+  if (compressedBuffer.size() < SNAPPY_COMPRESSED_BUFFER_SIZE) {
+    ownedCompressedBuffer = newArray<byte>(SNAPPY_COMPRESSED_BUFFER_SIZE);
+    compressedBuffer = ownedCompressedBuffer;
   }
-
-  const char* Peek(size_t* len) override {
-    if (pieces.size() == 0) {
-      *len = 0;
-      return nullptr;
-    } else {
-      *len = pieces[0].size() - offset;
-      return reinterpret_cast<const char*>(pieces[0].begin()) + offset;
-    }
-  }
-
-  void Skip(size_t n) override {
-    available -= n;
-    while (pieces.size() > 0 && n >= pieces[0].size() - offset) {
-      n -= pieces[0].size() - offset;
-      offset = 0;
-      pieces = pieces.slice(1, pieces.size());
-    }
-    offset += n;
-  }
-
-private:
-  ArrayPtr<const ArrayPtr<const byte>> pieces;
-  size_t offset;
-  size_t available;
-};
-
-class AccumulatingSink: public snappy::Sink {
-public:
-  AccumulatingSink()
-      : pos(firstPiece + sizeof(compressedSize)),
-        end(firstPiece + sizeof(firstPiece)), firstEnd(firstPiece) {}
-  ~AccumulatingSink() {}
-
-  void writeTo(size_t size, OutputStream& output) {
-    finalizePiece();
-
-    compressedSize.set(size);
-
-    ArrayPtr<const byte> pieces[morePieces.size() + 1];
-
-    pieces[0] = arrayPtr(reinterpret_cast<byte*>(firstPiece),
-                         reinterpret_cast<byte*>(firstEnd));
-    for (uint i = 0; i < morePieces.size(); i++) {
-      auto& piece = morePieces[i];
-      pieces[i + 1] = arrayPtr(reinterpret_cast<byte*>(piece.start.get()),
-                               reinterpret_cast<byte*>(piece.end));
-    }
-
-    output.write(arrayPtr(pieces, morePieces.size() + 1));
-  }
-
-  // implements snappy::Sink -----------------------------------------
-
-  void Append(const char* bytes, size_t n) override {
-    if (bytes == pos) {
-      pos += n;
-    } else {
-      size_t a = available();
-      if (n > a) {
-        memcpy(pos, bytes, a);
-        bytes += a;
-        addPiece(n);
-      }
-
-      memcpy(pos, bytes, n);
-      pos += n;
-    }
-  }
-
-  char* GetAppendBuffer(size_t length, char* scratch) override {
-    if (length > available()) {
-      addPiece(length);
-    }
-    return pos;
-  }
-
-private:
-  char* pos;
-  char* end;
-  // Stand and end point of the current available space.
-
-  char* firstEnd;
-  // End point of the used portion of the first piece.
-
-  struct Piece {
-    std::unique_ptr<char[]> start;
-    // Start point of the piece.
-
-    char* end;
-    // End point of the used portion of the piece.
-
-    Piece() = default;
-    Piece(std::unique_ptr<char[]> start, char* end): start(std::move(start)), end(end) {}
-  };
-
-  std::vector<Piece> morePieces;
-
-  union {
-    internal::WireValue<uint32_t> compressedSize;
-    char firstPiece[8192];
-  };
-
-  inline size_t available() {
-    return end - pos;
-  }
-
-  inline void finalizePiece() {
-    if (morePieces.empty()) {
-      firstEnd = pos;
-    } else {
-      morePieces.back().end = pos;
-    }
-  }
-
-  void addPiece(size_t minSize) {
-    finalizePiece();
-
-    std::unique_ptr<char[]> newPiece(new char[minSize]);
-    pos = newPiece.get();
-    end = pos + minSize;
-    morePieces.emplace_back(std::move(newPiece), pos);
-  }
-};
-
-class SnappyOutputStream: public OutputStream {
-public:
-  SnappyOutputStream(OutputStream& output): output(output), sawWrite(false) {}
-
-  // implements OutputStream -----------------------------------------
-
-  void write(const void* buffer, size_t size) override {
-    CAPNPROTO_ASSERT(false, "writeMessage() was not expected to call this.");
-  }
-
-  void write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
-    CAPNPROTO_ASSERT(!sawWrite, "writeMessage() was expected to issue exactly one write.");
-    sawWrite = true;
-
-    SegmentArraySource source(pieces);
-    AccumulatingSink sink;
-    size_t size = snappy::Compress(&source, &sink);
-
-    sink.writeTo(size, output);
-  }
-
-private:
-  OutputStream& output;
-  bool sawWrite;
-};
-
-}  // namespace
-
-void writeSnappyMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> segments) {
-  SnappyOutputStream snappyOutput(output);
-  writeMessage(snappyOutput, segments);
+  this->compressedBuffer = compressedBuffer;
 }
 
-void writeSnappyMessageToFd(int fd, ArrayPtr<const ArrayPtr<const word>> segments) {
-  FdOutputStream output(fd);
-  writeSnappyMessage(output, segments);
+SnappyOutputStream::~SnappyOutputStream() {
+  if (bufferPos > buffer.begin()) {
+    if (std::uncaught_exception()) {
+      try {
+        flush();
+      } catch (...) {
+        // TODO: report secondary faults
+      }
+    } else {
+      flush();
+    }
+  }
+}
+
+void SnappyOutputStream::flush() {
+  if (bufferPos > buffer.begin()) {
+    snappy::ByteArraySource source(
+        reinterpret_cast<char*>(buffer.begin()), bufferPos - buffer.begin());
+    snappy::UncheckedByteArraySink sink(reinterpret_cast<char*>(compressedBuffer.begin()));
+
+    size_t n = snappy::Compress(&source, &sink);
+    CAPNPROTO_ASSERT(n <= compressedBuffer.size(),
+        "Critical security bug:  Snappy compression overran its output buffer.");
+    inner.write(compressedBuffer.begin(), n);
+
+    bufferPos = buffer.begin();
+  }
+}
+
+ArrayPtr<byte> SnappyOutputStream::getWriteBuffer() {
+  return arrayPtr(bufferPos, buffer.end());
+}
+
+void SnappyOutputStream::write(const void* src, size_t size) {
+  if (src == bufferPos) {
+    // Oh goody, the caller wrote directly into our buffer.
+    bufferPos += size;
+  } else {
+    for (;;) {
+      size_t available = buffer.end() - bufferPos;
+      if (size < available) break;
+      memcpy(bufferPos, src, available);
+      size -= available;
+      bufferPos = buffer.end();
+      flush();
+    }
+
+    memcpy(bufferPos, src, size);
+    bufferPos += size;
+  }
+}
+
+// =======================================================================================
+
+SnappyPackedMessageReader::SnappyPackedMessageReader(
+    BufferedInputStream& inputStream, ReaderOptions options,
+    ArrayPtr<word> scratchSpace, ArrayPtr<byte> buffer)
+    : SnappyInputStream(inputStream, buffer),
+      PackedMessageReader(static_cast<SnappyInputStream&>(*this), options, scratchSpace) {}
+
+SnappyPackedMessageReader::~SnappyPackedMessageReader() {}
+
+void writeSnappyPackedMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> segments,
+                              ArrayPtr<byte> buffer, ArrayPtr<byte> compressedBuffer) {
+  SnappyOutputStream snappyOut(output, buffer, compressedBuffer);
+  writePackedMessage(snappyOut, segments);
 }
 
 }  // namespace capnproto

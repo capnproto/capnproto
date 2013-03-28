@@ -335,8 +335,9 @@ struct BenchmarkMethods {
 };
 
 struct BenchmarkTypes {
-  typedef protobuf::SnappyCompressed SnappyCompressed;
   typedef protobuf::Uncompressed Uncompressed;
+  typedef protobuf::Uncompressed Packed;
+  typedef protobuf::SnappyCompressed SnappyCompressed;
 
   typedef protobuf::ReusableMessages ReusableResources;
   typedef protobuf::SingleUseMessages SingleUseResources;

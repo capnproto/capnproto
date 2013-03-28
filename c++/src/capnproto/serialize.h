@@ -44,6 +44,7 @@
 #define CAPNPROTO_SERIALIZE_H_
 
 #include "message.h"
+#include "io.h"
 
 namespace capnproto {
 
@@ -70,47 +71,6 @@ Array<word> messageToFlatArray(ArrayPtr<const ArrayPtr<const word>> segments);
 // Version of messageToFlatArray that takes a raw segment array.
 
 // =======================================================================================
-
-class InputStream {
-public:
-  virtual ~InputStream();
-
-  virtual size_t read(void* buffer, size_t minBytes, size_t maxBytes) = 0;
-  // Reads at least minBytes and at most maxBytes, copying them into the given buffer.  Returns
-  // the size read.  Throws an exception on errors.
-  //
-  // maxBytes is the number of bytes the caller really wants, but minBytes is the minimum amount
-  // needed by the caller before it can start doing useful processing.  If the stream returns less
-  // than maxBytes, the caller will usually call read() again later to get the rest.  Returning
-  // less than maxBytes is useful when it makes sense for the caller to parallelize processing
-  // with I/O.
-  //
-  // Cap'n Proto never asks for more bytes than it knows are part of the message.  Therefore, if
-  // the InputStream happens to know that the stream will never reach maxBytes -- even if it has
-  // reached minBytes -- it should throw an exception to avoid wasting time processing an incomplete
-  // message.  If it can't even reach minBytes, it MUST throw an exception, as the caller is not
-  // expected to understand how to deal with partial reads.
-
-  inline void read(void* buffer, size_t bytes) { read(buffer, bytes, bytes); }
-  // Convenience method for reading an exact number of bytes.
-
-  virtual void skip(size_t bytes);
-  // Skips past the given number of bytes, discarding them.  The default implementation read()s
-  // into a scratch buffer.
-};
-
-class OutputStream {
-public:
-  virtual ~OutputStream();
-
-  virtual void write(const void* buffer, size_t size) = 0;
-  // Always writes the full size.  Throws exception on error.
-
-  virtual void write(ArrayPtr<const ArrayPtr<const byte>> pieces);
-  // Equivalent to write()ing each byte array in sequence, which is what the default implementation
-  // does.  Override if you can do something better, e.g. use writev() to do the write in a single
-  // syscall.
-};
 
 class InputStreamMessageReader: public MessageReader {
 public:
@@ -142,67 +102,6 @@ void writeMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> seg
 
 // =======================================================================================
 // Specializations for reading from / writing to file descriptors.
-
-class AutoCloseFd {
-  // A wrapper around a file descriptor which automatically closes the descriptor when destroyed.
-  // The wrapper supports move construction for transferring ownership of the descriptor.  If
-  // close() returns an error, the destructor throws an exception, UNLESS the destructor is being
-  // called during unwind from another exception, in which case the close error is ignored.
-  //
-  // If your code is not exception-safe, you should not use AutoCloseFd.  In this case you will
-  // have to call close() yourself and handle errors appropriately.
-  //
-  // TODO:  Create a general helper library for reporting/detecting secondary exceptions that
-  //   occurred during unwind of some primary exception.
-
-public:
-  inline AutoCloseFd(): fd(-1) {}
-  inline AutoCloseFd(std::nullptr_t): fd(-1) {}
-  inline explicit AutoCloseFd(int fd): fd(fd) {}
-  inline AutoCloseFd(AutoCloseFd&& other): fd(other.fd) { other.fd = -1; }
-  CAPNPROTO_DISALLOW_COPY(AutoCloseFd);
-  ~AutoCloseFd();
-
-  inline operator int() { return fd; }
-  inline int get() { return fd; }
-
-  inline bool operator==(std::nullptr_t) { return fd < 0; }
-  inline bool operator!=(std::nullptr_t) { return fd >= 0; }
-
-private:
-  int fd;
-};
-
-class FdInputStream: public InputStream {
-  // An InputStream wrapping a file descriptor.
-
-public:
-  FdInputStream(int fd): fd(fd) {};
-  FdInputStream(AutoCloseFd fd): fd(fd), autoclose(move(fd)) {}
-  ~FdInputStream();
-
-  size_t read(void* buffer, size_t minBytes, size_t maxBytes) override;
-
-private:
-  int fd;
-  AutoCloseFd autoclose;
-};
-
-class FdOutputStream: public OutputStream {
-  // An OutputStream wrapping a file descriptor.
-
-public:
-  FdOutputStream(int fd): fd(fd) {};
-  FdOutputStream(AutoCloseFd fd): fd(fd), autoclose(move(fd)) {}
-  ~FdOutputStream();
-
-  void write(const void* buffer, size_t size) override;
-  void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
-
-private:
-  int fd;
-  AutoCloseFd autoclose;
-};
 
 class StreamFdMessageReader: private FdInputStream, public InputStreamMessageReader {
   // A MessageReader that reads from a steam-based file descriptor.  For seekable file descriptors

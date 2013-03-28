@@ -60,6 +60,17 @@ void assertionFailure(const char* file, int line, const char* expectation, const
 #define CAPNPROTO_DEBUG_ASSERT(condition, message) CAPNPROTO_ASSERT(condition, message)
 #endif
 
+// Allocate an array, preferably on the stack, unless it is too big.  On GCC this will use
+// variable-sized arrays.  For other compilers we could just use a fixed-size array.
+#define CAPNPROTO_STACK_ARRAY(type, name, size, maxStack) \
+  size_t name##_size = (size); \
+  bool name##_isOnStack = name##_size <= (maxStack); \
+  type name##_stack[name##_isOnStack ? size : 0]; \
+  ::capnproto::Array<type> name##_heap = name##_isOnStack ? \
+      nullptr : newArray<type>(name##_size); \
+  ::capnproto::ArrayPtr<type> name = name##_isOnStack ? \
+      arrayPtr(name##_stack, name##_size) : name##_heap
+
 }  // namespace internal
 
 template <typename T, typename U>

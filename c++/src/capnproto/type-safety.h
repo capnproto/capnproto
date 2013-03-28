@@ -88,8 +88,8 @@ public:
     return ArrayPtr(ptr + start, end - start);
   }
 
-  inline bool operator==(std::nullptr_t) { return ptr == nullptr; }
-  inline bool operator!=(std::nullptr_t) { return ptr != nullptr; }
+  inline bool operator==(std::nullptr_t) { return size_ == 0; }
+  inline bool operator!=(std::nullptr_t) { return size_ != 0; }
 
 private:
   T* ptr;

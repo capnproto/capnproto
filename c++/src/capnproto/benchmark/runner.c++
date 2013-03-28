@@ -121,8 +121,9 @@ enum class Reuse {
 };
 
 enum class Compression {
-  SNAPPY,
-  NONE
+  NONE,
+  PACKED,
+  SNAPPY
 };
 
 TestResult runTest(Product product, TestCase testCase, Mode mode, Reuse reuse,
@@ -174,11 +175,14 @@ TestResult runTest(Product product, TestCase testCase, Mode mode, Reuse reuse,
   }
 
   switch (compression) {
-    case Compression::SNAPPY:
-      argv[3] = strdup("snappy");
-      break;
     case Compression::NONE:
       argv[3] = strdup("none");
+      break;
+    case Compression::PACKED:
+      argv[3] = strdup("packed");
+      break;
+    case Compression::SNAPPY:
+      argv[3] = strdup("snappy");
       break;
   }
 
@@ -295,7 +299,7 @@ ostream& operator<<(ostream& os, Gain gain) {
 }
 
 void reportComparison(const char* name, double base, double protobuf, double capnproto,
-                      double iters) {
+                      uint64_t iters) {
   cout << setw(35) << left << name
        << setw(14) << right << Gain(base, protobuf)
        << setw(14) << right << Gain(base, capnproto);
@@ -305,7 +309,7 @@ void reportComparison(const char* name, double base, double protobuf, double cap
 }
 
 void reportComparison(const char* name, const char* unit, double protobuf, double capnproto,
-                      double iters) {
+                      uint64_t iters) {
   cout << setw(35) << left << name
        << setw(15-strlen(unit)) << right << setprecision(2) << (protobuf / iters) << unit
        << setw(15-strlen(unit)) << right << setprecision(2) << (capnproto / iters) << unit;
@@ -356,6 +360,8 @@ int main(int argc, char* argv[]) {
       testCase = TestCase::CARSALES;
     } else if (arg == "no-reuse") {
       reuse = Reuse::NO;
+    } else if (arg == "packed") {
+      compression = Compression::PACKED;
     } else if (arg == "snappy") {
       compression = Compression::SNAPPY;
     } else {
@@ -417,11 +423,15 @@ int main(int argc, char* argv[]) {
       break;
   }
   switch (compression) {
-    case Compression::SNAPPY:
-      cout << "* Snappy compression" << endl;
-      break;
     case Compression::NONE:
       cout << "* no compression" << endl;
+      break;
+    case Compression::PACKED:
+      cout << "* de-zero packing for Cap'n Proto" << endl;
+      cout << "* standard packing for Protobuf" << endl;
+      break;
+    case Compression::SNAPPY:
+      cout << "* Snappy compression" << endl;
       break;
   }
 
@@ -458,9 +468,11 @@ int main(int argc, char* argv[]) {
       nullCase.throughput, protobufBase.throughput, capnpBase.throughput, iters);
   reportComparison("object manipulation",
       nullCase.time.cpu(), protobufBase.time.cpu(), capnpBase.time.cpu(), iters);
-  reportComparison("I/O", "us",
+  reportComparison("I/O time", "us",
       ((int64_t)protobuf.time.cpu() - (int64_t)protobufBase.time.cpu()) / 1000.0,
       ((int64_t)capnp.time.cpu() - (int64_t)capnpBase.time.cpu()) / 1000.0, iters);
+
+  reportComparison("bandwidth", "B", protobuf.throughput, capnp.throughput, iters);
 
   reportComparison("binary size", "kB",
       fileSize("protobuf-" + std::string(testCaseName(testCase))) / 1024.0,

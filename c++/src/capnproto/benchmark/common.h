@@ -251,6 +251,9 @@ uint64_t doBenchmark3(const std::string& mode, const std::string& reuse,
   if (compression == "none") {
     return doBenchmark2<BenchmarkTypes, TestCase, typename BenchmarkTypes::Uncompressed>(
         mode, reuse, iters);
+  } else if (compression == "packed") {
+    return doBenchmark2<BenchmarkTypes, TestCase, typename BenchmarkTypes::Packed>(
+        mode, reuse, iters);
   } else if (compression == "snappy") {
     return doBenchmark2<BenchmarkTypes, TestCase, typename BenchmarkTypes::SnappyCompressed>(
         mode, reuse, iters);

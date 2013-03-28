@@ -147,8 +147,9 @@ struct BenchmarkMethods {
 };
 
 struct BenchmarkTypes {
-  typedef void SnappyCompressed;
   typedef void Uncompressed;
+  typedef void Packed;
+  typedef void SnappyCompressed;
 
   typedef void ReusableResources;
   typedef void SingleUseResources;

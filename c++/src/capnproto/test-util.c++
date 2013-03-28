@@ -225,6 +225,78 @@ void genericCheckTestMessage(Reader reader) {
   }
 }
 
+template <typename Reader>
+void genericCheckTestMessageAllZero(Reader reader) {
+  EXPECT_EQ(Void::VOID, reader.getVoidField());
+  EXPECT_EQ(false, reader.getBoolField());
+  EXPECT_EQ(0, reader.getInt8Field());
+  EXPECT_EQ(0, reader.getInt16Field());
+  EXPECT_EQ(0, reader.getInt32Field());
+  EXPECT_EQ(0, reader.getInt64Field());
+  EXPECT_EQ(0u, reader.getUInt8Field());
+  EXPECT_EQ(0u, reader.getUInt16Field());
+  EXPECT_EQ(0u, reader.getUInt32Field());
+  EXPECT_EQ(0u, reader.getUInt64Field());
+  EXPECT_FLOAT_EQ(0, reader.getFloat32Field());
+  EXPECT_DOUBLE_EQ(0, reader.getFloat64Field());
+  EXPECT_EQ("", reader.getTextField());
+  EXPECT_EQ("", reader.getDataField());
+  {
+    auto subReader = reader.getStructField();
+    EXPECT_EQ(Void::VOID, subReader.getVoidField());
+    EXPECT_EQ(false, subReader.getBoolField());
+    EXPECT_EQ(0, subReader.getInt8Field());
+    EXPECT_EQ(0, subReader.getInt16Field());
+    EXPECT_EQ(0, subReader.getInt32Field());
+    EXPECT_EQ(0, subReader.getInt64Field());
+    EXPECT_EQ(0u, subReader.getUInt8Field());
+    EXPECT_EQ(0u, subReader.getUInt16Field());
+    EXPECT_EQ(0u, subReader.getUInt32Field());
+    EXPECT_EQ(0u, subReader.getUInt64Field());
+    EXPECT_FLOAT_EQ(0, subReader.getFloat32Field());
+    EXPECT_DOUBLE_EQ(0, subReader.getFloat64Field());
+    EXPECT_EQ("", subReader.getTextField());
+    EXPECT_EQ("", subReader.getDataField());
+    {
+      auto subSubReader = subReader.getStructField();
+      EXPECT_EQ("", subSubReader.getTextField());
+      EXPECT_EQ("", subSubReader.getStructField().getTextField());
+    }
+
+    EXPECT_EQ(0u, subReader.getVoidList().size());
+    EXPECT_EQ(0u, subReader.getBoolList().size());
+    EXPECT_EQ(0u, subReader.getInt8List().size());
+    EXPECT_EQ(0u, subReader.getInt16List().size());
+    EXPECT_EQ(0u, subReader.getInt32List().size());
+    EXPECT_EQ(0u, subReader.getInt64List().size());
+    EXPECT_EQ(0u, subReader.getUInt8List().size());
+    EXPECT_EQ(0u, subReader.getUInt16List().size());
+    EXPECT_EQ(0u, subReader.getUInt32List().size());
+    EXPECT_EQ(0u, subReader.getUInt64List().size());
+    EXPECT_EQ(0u, subReader.getFloat32List().size());
+    EXPECT_EQ(0u, subReader.getFloat64List().size());
+    EXPECT_EQ(0u, subReader.getTextList().size());
+    EXPECT_EQ(0u, subReader.getDataList().size());
+    EXPECT_EQ(0u, subReader.getStructList().size());
+  }
+
+  EXPECT_EQ(0u, reader.getVoidList().size());
+  EXPECT_EQ(0u, reader.getBoolList().size());
+  EXPECT_EQ(0u, reader.getInt8List().size());
+  EXPECT_EQ(0u, reader.getInt16List().size());
+  EXPECT_EQ(0u, reader.getInt32List().size());
+  EXPECT_EQ(0u, reader.getInt64List().size());
+  EXPECT_EQ(0u, reader.getUInt8List().size());
+  EXPECT_EQ(0u, reader.getUInt16List().size());
+  EXPECT_EQ(0u, reader.getUInt32List().size());
+  EXPECT_EQ(0u, reader.getUInt64List().size());
+  EXPECT_EQ(0u, reader.getFloat32List().size());
+  EXPECT_EQ(0u, reader.getFloat64List().size());
+  EXPECT_EQ(0u, reader.getTextList().size());
+  EXPECT_EQ(0u, reader.getDataList().size());
+  EXPECT_EQ(0u, reader.getStructList().size());
+}
+
 }  // namespace
 
 void initTestMessage(TestAllTypes::Builder builder) { genericInitTestMessage(builder); }
@@ -235,6 +307,13 @@ void checkTestMessage(TestDefaults::Builder builder) { genericCheckTestMessage(b
 
 void checkTestMessage(TestAllTypes::Reader reader) { genericCheckTestMessage(reader); }
 void checkTestMessage(TestDefaults::Reader reader) { genericCheckTestMessage(reader); }
+
+void checkTestMessageAllZero(TestAllTypes::Builder builder) {
+  genericCheckTestMessageAllZero(builder);
+}
+void checkTestMessageAllZero(TestAllTypes::Reader reader) {
+  genericCheckTestMessageAllZero(reader);
+}
 
 }  // namespace internal
 }  // namespace capnproto

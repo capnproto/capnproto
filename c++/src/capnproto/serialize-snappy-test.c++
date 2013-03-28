@@ -63,11 +63,31 @@ private:
   uint desiredSegmentCount;
 };
 
-class TestPipe: public InputStream, public OutputStream {
+class TestPipe: public BufferedInputStream, public OutputStream {
 public:
-  TestPipe(bool lazy)
-      : lazy(lazy), readPos(0) {}
+  TestPipe()
+      : preferredReadSize(std::numeric_limits<size_t>::max()), readPos(0) {}
+  explicit TestPipe(size_t preferredReadSize)
+      : preferredReadSize(preferredReadSize), readPos(0) {}
   ~TestPipe() {}
+
+  const std::string& getData() { return data; }
+  std::string getUnreadData() { return data.substr(readPos); }
+  std::string::size_type getReadPos() { return readPos; }
+
+  void resetRead(size_t preferredReadSize = std::numeric_limits<size_t>::max()) {
+    readPos = 0;
+    this->preferredReadSize = preferredReadSize;
+  }
+
+  bool allRead() {
+    return readPos == data.size();
+  }
+
+  void clear(size_t preferredReadSize = std::numeric_limits<size_t>::max()) {
+    resetRead(preferredReadSize);
+    data.clear();
+  }
 
   void write(const void* buffer, size_t size) override {
     data.append(reinterpret_cast<const char*>(buffer), size);
@@ -75,94 +95,134 @@ public:
 
   size_t read(void* buffer, size_t minBytes, size_t maxBytes) override {
     CAPNPROTO_ASSERT(maxBytes <= data.size() - readPos, "Overran end of stream.");
-    size_t amount = lazy ? minBytes : maxBytes;
+    size_t amount = std::min(maxBytes, std::max(minBytes, preferredReadSize));
     memcpy(buffer, data.data() + readPos, amount);
     readPos += amount;
     return amount;
   }
 
+  void skip(size_t bytes) override {
+    CAPNPROTO_ASSERT(bytes <= data.size() - readPos, "Overran end of stream.");
+    readPos += bytes;
+  }
+
+  ArrayPtr<const byte> getReadBuffer() override {
+    size_t amount = std::min(data.size() - readPos, preferredReadSize);
+    return arrayPtr(reinterpret_cast<const byte*>(data.data() + readPos), amount);
+  }
+
 private:
-  bool lazy;
+  size_t preferredReadSize;
   std::string data;
   std::string::size_type readPos;
 };
+
+struct DisplayByteArray {
+  DisplayByteArray(const std::string& str)
+      : data(reinterpret_cast<const uint8_t*>(str.data())), size(str.size()) {}
+  DisplayByteArray(const std::initializer_list<uint8_t>& list)
+      : data(list.begin()), size(list.size()) {}
+
+  const uint8_t* data;
+  size_t size;
+};
+
+std::ostream& operator<<(std::ostream& os, const DisplayByteArray& bytes) {
+  os << "{ ";
+  for (size_t i = 0; i < bytes.size; i++) {
+    if (i > 0) {
+      os << ", ";
+    }
+    os << (uint)bytes.data[i];
+  }
+  os << " }";
+
+  return os;
+}
 
 TEST(Snappy, RoundTrip) {
   TestMessageBuilder builder(1);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  TestPipe pipe(false);
-  writeSnappyMessage(pipe, builder);
+  TestPipe pipe;
+  writeSnappyPackedMessage(pipe, builder);
 
-  SnappyMessageReader reader(pipe);
+  SnappyPackedMessageReader reader(pipe);
   checkTestMessage(reader.getRoot<TestAllTypes>());
+  EXPECT_TRUE(pipe.allRead());
 }
 
 TEST(Snappy, RoundTripScratchSpace) {
   TestMessageBuilder builder(1);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  TestPipe pipe(false);
-  writeSnappyMessage(pipe, builder);
+  TestPipe pipe;
+  writeSnappyPackedMessage(pipe, builder);
 
   word scratch[1024];
-  SnappyMessageReader reader(pipe, ReaderOptions(), ArrayPtr<word>(scratch, 1024));
+  SnappyPackedMessageReader reader(pipe, ReaderOptions(), ArrayPtr<word>(scratch, 1024));
   checkTestMessage(reader.getRoot<TestAllTypes>());
+  EXPECT_TRUE(pipe.allRead());
 }
 
 TEST(Snappy, RoundTripLazy) {
   TestMessageBuilder builder(1);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  TestPipe pipe(true);
-  writeSnappyMessage(pipe, builder);
+  TestPipe pipe(1);
+  writeSnappyPackedMessage(pipe, builder);
 
-  SnappyMessageReader reader(pipe);
+  SnappyPackedMessageReader reader(pipe);
   checkTestMessage(reader.getRoot<TestAllTypes>());
+  EXPECT_TRUE(pipe.allRead());
 }
 
 TEST(Snappy, RoundTripOddSegmentCount) {
   TestMessageBuilder builder(7);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  TestPipe pipe(false);
-  writeSnappyMessage(pipe, builder);
+  TestPipe pipe;
+  writeSnappyPackedMessage(pipe, builder);
 
-  SnappyMessageReader reader(pipe);
+  SnappyPackedMessageReader reader(pipe);
   checkTestMessage(reader.getRoot<TestAllTypes>());
+  EXPECT_TRUE(pipe.allRead());
 }
 
 TEST(Snappy, RoundTripOddSegmentCountLazy) {
   TestMessageBuilder builder(7);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  TestPipe pipe(true);
-  writeSnappyMessage(pipe, builder);
+  TestPipe pipe(1);
+  writeSnappyPackedMessage(pipe, builder);
 
-  SnappyMessageReader reader(pipe);
+  SnappyPackedMessageReader reader(pipe);
   checkTestMessage(reader.getRoot<TestAllTypes>());
+  EXPECT_TRUE(pipe.allRead());
 }
 
 TEST(Snappy, RoundTripEvenSegmentCount) {
   TestMessageBuilder builder(10);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  TestPipe pipe(false);
-  writeSnappyMessage(pipe, builder);
+  TestPipe pipe;
+  writeSnappyPackedMessage(pipe, builder);
 
-  SnappyMessageReader reader(pipe);
+  SnappyPackedMessageReader reader(pipe);
   checkTestMessage(reader.getRoot<TestAllTypes>());
+  EXPECT_TRUE(pipe.allRead());
 }
 
 TEST(Snappy, RoundTripEvenSegmentCountLazy) {
   TestMessageBuilder builder(10);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  TestPipe pipe(true);
-  writeSnappyMessage(pipe, builder);
+  TestPipe pipe(1);
+  writeSnappyPackedMessage(pipe, builder);
 
-  SnappyMessageReader reader(pipe);
+  SnappyPackedMessageReader reader(pipe);
   checkTestMessage(reader.getRoot<TestAllTypes>());
+  EXPECT_TRUE(pipe.allRead());
 }
 
 TEST(Snappy, RoundTripTwoMessages) {
@@ -172,19 +232,23 @@ TEST(Snappy, RoundTripTwoMessages) {
   TestMessageBuilder builder2(1);
   builder2.initRoot<TestAllTypes>().setTextField("Second message.");
 
-  TestPipe pipe(false);
-  writeSnappyMessage(pipe, builder);
-  writeSnappyMessage(pipe, builder2);
+  TestPipe pipe(1);
+  writeSnappyPackedMessage(pipe, builder);
+  size_t firstSize = pipe.getData().size();
+  writeSnappyPackedMessage(pipe, builder2);
 
   {
-    SnappyMessageReader reader(pipe);
+    SnappyPackedMessageReader reader(pipe);
     checkTestMessage(reader.getRoot<TestAllTypes>());
   }
 
+  EXPECT_EQ(firstSize, pipe.getReadPos());
+
   {
-    SnappyMessageReader reader(pipe);
+    SnappyPackedMessageReader reader(pipe);
     EXPECT_EQ("Second message.", reader.getRoot<TestAllTypes>().getTextField());
   }
+  EXPECT_TRUE(pipe.allRead());
 }
 
 // TODO:  Test error cases.

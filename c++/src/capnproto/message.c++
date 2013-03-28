@@ -50,7 +50,7 @@ internal::StructReader MessageReader::getRoot(const word* defaultValue) {
   internal::SegmentReader* segment = arena()->tryGetSegment(SegmentId(0));
   if (segment == nullptr ||
       !segment->containsInterval(segment->getStartPtr(), segment->getStartPtr() + 1)) {
-    segment->getArena()->reportInvalidData("Message did not contain a root pointer.");
+    arena()->reportInvalidData("Message did not contain a root pointer.");
     return internal::StructReader::readRootTrusted(defaultValue, defaultValue);
   } else {
     return internal::StructReader::readRoot(
