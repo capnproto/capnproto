@@ -96,25 +96,28 @@ struct Packed {
   }
 };
 
-struct SnappyCompressed {
-  typedef FdInputStream& BufferedInput;
-  typedef SnappyMessageReader MessageReader;
+static byte snappyReadBuffer[SNAPPY_BUFFER_SIZE];
+static byte snappyWriteBuffer[SNAPPY_BUFFER_SIZE];
+static byte snappyCompressedBuffer[SNAPPY_COMPRESSED_BUFFER_SIZE];
 
-  class ArrayMessageReader: private ArrayInputStream, public SnappyMessageReader {
+struct SnappyCompressed {
+  typedef BufferedInputStreamWrapper BufferedInput;
+  typedef SnappyPackedMessageReader MessageReader;
+
+  class ArrayMessageReader: private ArrayInputStream, public SnappyPackedMessageReader {
   public:
     ArrayMessageReader(ArrayPtr<const byte> array,
                        ReaderOptions options = ReaderOptions(),
                        ArrayPtr<word> scratchSpace = nullptr)
       : ArrayInputStream(array),
-        SnappyMessageReader(*this, options, scratchSpace) {}
+        SnappyPackedMessageReader(static_cast<ArrayInputStream&>(*this), options, scratchSpace,
+                                  arrayPtr(snappyReadBuffer, SNAPPY_BUFFER_SIZE)) {}
   };
 
   static inline void write(OutputStream& output, MessageBuilder& builder) {
-    writeSnappyMessage(output, builder);
-  }
-
-  static inline void write(BufferedOutputStream& output, MessageBuilder& builder) {
-    writeSnappyMessage(output, builder);
+    writeSnappyPackedMessage(output, builder,
+        arrayPtr(snappyWriteBuffer, SNAPPY_BUFFER_SIZE),
+        arrayPtr(snappyCompressedBuffer, SNAPPY_COMPRESSED_BUFFER_SIZE));
   }
 };
 

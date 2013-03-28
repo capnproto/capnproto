@@ -278,11 +278,11 @@ void reportComparisonHeader() {
 class Gain {
 public:
   Gain(double oldValue, double newValue)
-      : amount(oldValue < newValue ? newValue / oldValue : -oldValue / newValue) {}
+      : amount(newValue / oldValue) {}
 
   void writeTo(std::ostream& os) {
-    if (-2 < amount && amount < 2) {
-      double percent = (amount > 0 ? amount - 1 : amount + 1) * 100;
+    if (amount < 2) {
+      double percent = (amount - 1) * 100;
       os << (int)(percent + 0.5) << "%";
     } else {
       os << fixed << setprecision(2) << amount << "x";
@@ -311,8 +311,18 @@ void reportComparison(const char* name, double base, double protobuf, double cap
 void reportComparison(const char* name, const char* unit, double protobuf, double capnproto,
                       uint64_t iters) {
   cout << setw(35) << left << name
-       << setw(15-strlen(unit)) << right << setprecision(2) << (protobuf / iters) << unit
-       << setw(15-strlen(unit)) << right << setprecision(2) << (capnproto / iters) << unit;
+       << setw(15-strlen(unit)) << fixed << right << setprecision(2) << (protobuf / iters) << unit
+       << setw(15-strlen(unit)) << fixed << right << setprecision(2) << (capnproto / iters) << unit;
+
+  // Since smaller is better, the "improvement" is the "gain" from capnproto to protobuf.
+  cout << setw(14) << right << Gain(capnproto, protobuf) << endl;
+}
+
+void reportIntComparison(const char* name, const char* unit, uint64_t protobuf, uint64_t capnproto,
+                         uint64_t iters) {
+  cout << setw(35) << left << name
+       << setw(15-strlen(unit)) << right << (protobuf / iters) << unit
+       << setw(15-strlen(unit)) << right << (capnproto / iters) << unit;
 
   // Since smaller is better, the "improvement" is the "gain" from capnproto to protobuf.
   cout << setw(14) << right << Gain(capnproto, protobuf) << endl;
@@ -472,7 +482,7 @@ int main(int argc, char* argv[]) {
       ((int64_t)protobuf.time.cpu() - (int64_t)protobufBase.time.cpu()) / 1000.0,
       ((int64_t)capnp.time.cpu() - (int64_t)capnpBase.time.cpu()) / 1000.0, iters);
 
-  reportComparison("bandwidth", "B", protobuf.throughput, capnp.throughput, iters);
+  reportIntComparison("bandwidth", "B", protobuf.throughput, capnp.throughput, iters);
 
   reportComparison("binary size", "kB",
       fileSize("protobuf-" + std::string(testCaseName(testCase))) / 1024.0,
