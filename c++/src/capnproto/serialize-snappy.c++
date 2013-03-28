@@ -26,7 +26,6 @@
 #include <snappy/snappy.h>
 #include <snappy/snappy-sinksource.h>
 #include <vector>
-#include <iostream>
 
 namespace capnproto {
 
@@ -179,6 +178,7 @@ void SnappyOutputStream::write(const void* src, size_t size) {
       if (size < available) break;
       memcpy(bufferPos, src, available);
       size -= available;
+      src = reinterpret_cast<const byte*>(src) + available;
       bufferPos = buffer.end();
       flush();
     }
