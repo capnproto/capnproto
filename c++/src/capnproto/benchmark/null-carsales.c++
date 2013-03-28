@@ -27,7 +27,7 @@ namespace capnproto {
 namespace benchmark {
 namespace null {
 
-enum class Color {
+enum class Color: uint8_t {
   BLACK,
   WHITE,
   RED,
@@ -41,38 +41,55 @@ enum class Color {
 constexpr uint COLOR_RANGE = static_cast<uint>(Color::SILVER) + 1;
 
 struct Wheel {
-  uint16_t diameter;
   float airPressure;
+  uint16_t diameter;
   bool snowTires;
 };
 
 struct Engine {
+  uint32_t cc;
   uint16_t horsepower;
   uint8_t cylinders;
-  uint32_t cc;
-  bool usesGas;
-  bool usesElectric;
+  uint8_t bits;
+  inline bool usesGas()      const { return bits & 1; }
+  inline bool usesElectric() const { return bits & 2; }
+
+  inline void setBits(bool usesGas, bool usesElectric) {
+    bits = (uint8_t)usesGas | ((uint8_t)usesElectric << 1);
+  }
 };
 
 struct Car {
+  // SORT FIELDS BY SIZE since we need "theoretical best" memory usage
+  Engine engine;
+  List<Wheel> wheels;
   const char* make;
   const char* model;
-  Color color;
-  uint8_t seats;
-  uint8_t doors;
-  List<Wheel> wheels;
+  float fuelCapacity;
+  float fuelLevel;
+  uint32_t weight;
   uint16_t length;
   uint16_t width;
   uint16_t height;
-  uint32_t weight;
-  Engine engine;
-  float fuelCapacity;
-  float fuelLevel;
-  bool hasPowerWindows;
-  bool hasPowerSteering;
-  bool hasCruiseControl;
+  Color color;
+  uint8_t seats;
+  uint8_t doors;
   uint8_t cupHolders;
-  bool hasNavSystem;
+
+  uint8_t bits;
+
+  inline bool hasPowerWindows()  const { return bits & 1; }
+  inline bool hasPowerSteering() const { return bits & 2; }
+  inline bool hasCruiseControl() const { return bits & 4; }
+  inline bool hasNavSystem()     const { return bits & 8; }
+
+  inline void setBits(bool hasPowerWindows, bool hasPowerSteering,
+                      bool hasCruiseControl, bool hasNavSystem) {
+    bits = (uint8_t)hasPowerWindows
+         | ((uint8_t)hasPowerSteering << 1)
+         | ((uint8_t)hasCruiseControl << 2)
+         | ((uint8_t)hasNavSystem << 3);
+  }
 };
 
 
@@ -92,8 +109,8 @@ uint64_t carValue(const Car& car) {
 
   auto engine = car.engine;
   result += engine.horsepower * 40;
-  if (engine.usesElectric) {
-    if (engine.usesGas) {
+  if (engine.usesElectric()) {
+    if (engine.usesGas()) {
       // hybrid
       result += 5000;
     } else {
@@ -101,10 +118,10 @@ uint64_t carValue(const Car& car) {
     }
   }
 
-  result += car.hasPowerWindows ? 100 : 0;
-  result += car.hasPowerSteering ? 200 : 0;
-  result += car.hasCruiseControl ? 400 : 0;
-  result += car.hasNavSystem ? 2000 : 0;
+  result += car.hasPowerWindows() ? 100 : 0;
+  result += car.hasPowerSteering() ? 200 : 0;
+  result += car.hasCruiseControl() ? 400 : 0;
+  result += car.hasNavSystem() ? 2000 : 0;
 
   result += car.cupHolders * 25;
 
@@ -138,14 +155,16 @@ void randomCar(Car* car) {
   car->engine.horsepower = 100 * fastRand(400);
   car->engine.cylinders = 4 + 2 * fastRand(3);
   car->engine.cc = 800 + fastRand(10000);
+  car->engine.setBits(true, fastRand(2));
 
   car->fuelCapacity = 10.0 + fastRandDouble(30.0);
   car->fuelLevel = fastRandDouble(car->fuelCapacity);
-  car->hasPowerWindows = fastRand(2);
-  car->hasPowerSteering = fastRand(2);
-  car->hasCruiseControl = fastRand(2);
+  bool hasPowerWindows = fastRand(2);
+  bool hasPowerSteering = fastRand(2);
+  bool hasCruiseControl = fastRand(2);
   car->cupHolders = fastRand(12);
-  car->hasNavSystem = fastRand(2);
+  bool hasNavSystem = fastRand(2);
+  car->setBits(hasPowerWindows, hasPowerSteering, hasCruiseControl, hasNavSystem);
 }
 
 class CarSalesTestCase {

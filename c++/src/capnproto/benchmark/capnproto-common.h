@@ -27,7 +27,9 @@
 #include "common.h"
 #include <capnproto/serialize.h>
 #include <capnproto/serialize-packed.h>
+#if HAVE_SNAPPY
 #include <capnproto/serialize-snappy.h>
+#endif  // HAVE_SNAPPY
 #include <thread>
 
 namespace capnproto {
@@ -96,6 +98,7 @@ struct Packed {
   }
 };
 
+#if HAVE_SNAPPY
 static byte snappyReadBuffer[SNAPPY_BUFFER_SIZE];
 static byte snappyWriteBuffer[SNAPPY_BUFFER_SIZE];
 static byte snappyCompressedBuffer[SNAPPY_COMPRESSED_BUFFER_SIZE];
@@ -120,6 +123,7 @@ struct SnappyCompressed {
         arrayPtr(snappyCompressedBuffer, SNAPPY_COMPRESSED_BUFFER_SIZE));
   }
 };
+#endif  // HAVE_SNAPPY
 
 // =======================================================================================
 
@@ -395,7 +399,9 @@ struct BenchmarkMethods {
 struct BenchmarkTypes {
   typedef capnp::Uncompressed Uncompressed;
   typedef capnp::Packed Packed;
+#if HAVE_SNAPPY
   typedef capnp::SnappyCompressed SnappyCompressed;
+#endif  // HAVE_SNAPPY
 
   typedef capnp::UseScratch ReusableResources;
   typedef capnp::NoScratch SingleUseResources;

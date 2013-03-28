@@ -29,6 +29,4 @@
 #include "wire-format.h"
 #include "list.h"
 
-#include "descriptor.h"    // TODO:  Eliminate this.
-
 #endif  // CAPNPROTO_GENERATED_HEADER_SUPPORT_H_

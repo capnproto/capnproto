@@ -92,6 +92,8 @@ void randomCar(Car* car) {
   engine->set_horsepower(100 * fastRand(400));
   engine->set_cylinders(4 + 2 * fastRand(3));
   engine->set_cc(800 + fastRand(10000));
+  engine->set_uses_gas(true);
+  engine->set_uses_electric(fastRand(2));
 
   car->set_fuel_capacity(10.0 + fastRandDouble(30.0));
   car->set_fuel_level(fastRandDouble(car->fuel_capacity()));

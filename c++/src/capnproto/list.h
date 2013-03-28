@@ -25,7 +25,6 @@
 #define CAPNPROTO_LIST_H_
 
 #include "wire-format.h"
-#include "descriptor.h"     // only for FieldSize; TODO:  Eliminate this
 #include <initializer_list>
 
 namespace capnproto {

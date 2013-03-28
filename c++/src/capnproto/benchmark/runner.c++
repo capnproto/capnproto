@@ -78,7 +78,8 @@ Times currentTimes() {
 }
 
 struct TestResult {
-  uint64_t throughput;
+  uint64_t objectSize;
+  uint64_t messageSize;
   Times time;
 };
 
@@ -237,7 +238,8 @@ TestResult runTest(Product product, TestCase testCase, Mode mode, Reuse reuse,
   // Calculate results.
 
   TestResult result;
-  result.throughput = throughput;
+  result.objectSize = mode == Mode::OBJECT_SIZE ? throughput : 0;
+  result.messageSize = mode == Mode::OBJECT_SIZE ? 0 : throughput;
   result.time.real = asNanosecs(end) - asNanosecs(start);
   result.time.user = asNanosecs(usage.ru_utime);
   result.time.sys = asNanosecs(usage.ru_stime);
@@ -246,20 +248,20 @@ TestResult runTest(Product product, TestCase testCase, Mode mode, Reuse reuse,
 }
 
 void reportTableHeader() {
-  cout << setw(50) << right << "obj size or"
-       << endl;
   cout << setw(40) << left << "Test"
+       << setw(10) << right << "obj size"
        << setw(10) << right << "I/O bytes"
        << setw(10) << right << "wall ns"
        << setw(10) << right << "user ns"
        << setw(10) << right << "sys ns"
        << endl;
-  cout << setfill('=') << setw(80) << "" << setfill(' ') << endl;
+  cout << setfill('=') << setw(90) << "" << setfill(' ') << endl;
 }
 
 void reportResults(const char* name, uint64_t iters, TestResult results) {
   cout << setw(40) << left << name
-       << setw(10) << right << (results.throughput / iters)
+       << setw(10) << right << (results.objectSize / iters)
+       << setw(10) << right << (results.messageSize / iters)
        << setw(10) << right << (results.time.real / iters)
        << setw(10) << right << (results.time.user / iters)
        << setw(10) << right << (results.time.sys / iters)
@@ -267,12 +269,12 @@ void reportResults(const char* name, uint64_t iters, TestResult results) {
 }
 
 void reportComparisonHeader() {
-  cout << setw(35) << left << "Overhead type"
+  cout << setw(40) << left << "Measure"
        << setw(15) << right << "Protobuf"
        << setw(15) << right << "Cap'n Proto"
        << setw(15) << right << "Improvement"
        << endl;
-  cout << setfill('=') << setw(80) << "" << setfill(' ') << endl;
+  cout << setfill('=') << setw(85) << "" << setfill(' ') << endl;
 }
 
 class Gain {
@@ -300,7 +302,7 @@ ostream& operator<<(ostream& os, Gain gain) {
 
 void reportComparison(const char* name, double base, double protobuf, double capnproto,
                       uint64_t iters) {
-  cout << setw(35) << left << name
+  cout << setw(40) << left << name
        << setw(14) << right << Gain(base, protobuf)
        << setw(14) << right << Gain(base, capnproto);
 
@@ -310,7 +312,7 @@ void reportComparison(const char* name, double base, double protobuf, double cap
 
 void reportComparison(const char* name, const char* unit, double protobuf, double capnproto,
                       uint64_t iters) {
-  cout << setw(35) << left << name
+  cout << setw(40) << left << name
        << setw(15-strlen(unit)) << fixed << right << setprecision(2) << (protobuf / iters) << unit
        << setw(15-strlen(unit)) << fixed << right << setprecision(2) << (capnproto / iters) << unit;
 
@@ -320,7 +322,7 @@ void reportComparison(const char* name, const char* unit, double protobuf, doubl
 
 void reportIntComparison(const char* name, const char* unit, uint64_t protobuf, uint64_t capnproto,
                          uint64_t iters) {
-  cout << setw(35) << left << name
+  cout << setw(40) << left << name
        << setw(15-strlen(unit)) << right << (protobuf / iters) << unit
        << setw(15-strlen(unit)) << right << (capnproto / iters) << unit;
 
@@ -352,7 +354,6 @@ int main(int argc, char* argv[]) {
 
   TestCase testCase = TestCase::CATRANK;
   Mode mode = Mode::PIPE_SYNC;
-  Reuse reuse = Reuse::YES;
   Compression compression = Compression::NONE;
   uint64_t iters = 1;
 
@@ -368,10 +369,6 @@ int main(int argc, char* argv[]) {
       testCase = TestCase::EVAL;
     } else if (arg == "carsales") {
       testCase = TestCase::CARSALES;
-    } else if (arg == "no-reuse") {
-      reuse = Reuse::NO;
-    } else if (arg == "packed") {
-      compression = Compression::PACKED;
     } else if (arg == "snappy") {
       compression = Compression::SNAPPY;
     } else {
@@ -380,6 +377,7 @@ int main(int argc, char* argv[]) {
     }
   }
 
+  // Scale iterations to something reasonable for each case.
   switch (testCase) {
     case TestCase::EVAL:
       iters *= 100000;
@@ -413,23 +411,18 @@ int main(int argc, char* argv[]) {
       // Can't happen.
       break;
     case Mode::BYTES:
-      cout << "* client and server in the same process (passing bytes in memory)" << endl;
+      cout << "* in-memory I/O" << endl;
+      cout << "  * with client an server in the same thread" << endl;
       break;
     case Mode::PIPE_SYNC:
-      cout << "* client and server passing messages over pipes" << endl;
-      cout << "* client sending one request at a time" << endl;
+      cout << "* pipe I/O" << endl;
+      cout << "  * with client and server in separate processes" << endl;
+      cout << "  * client waits for each response before sending next request" << endl;
       break;
     case Mode::PIPE_ASYNC:
-      cout << "* client and server passing messages over pipes" << endl;
-      cout << "* client saturating pipe with requests without waiting for responses" << endl;
-      break;
-  }
-  switch (reuse) {
-    case Reuse::YES:
-      cout << "* ideal object reuse" << endl;
-      break;
-    case Reuse::NO:
-      cout << "* no object reuse" << endl;
+      cout << "* pipe I/O" << endl;
+      cout << "  * with client and server in separate processes" << endl;
+      cout << "  * client sends as many simultaneous requests as it can" << endl;
       break;
   }
   switch (compression) {
@@ -445,54 +438,88 @@ int main(int argc, char* argv[]) {
       break;
   }
 
+  cout << endl;
+
   reportTableHeader();
 
   TestResult nullCase = runTest(
-      Product::NULLCASE, testCase, Mode::OBJECTS, reuse, compression, iters);
+      Product::NULLCASE, testCase, Mode::OBJECT_SIZE, Reuse::YES, compression, iters);
   reportResults("Theoretical best pass-by-object", iters, nullCase);
 
   TestResult protobufBase = runTest(
-      Product::PROTOBUF, testCase, Mode::OBJECTS, reuse, compression, iters);
-  protobufBase.throughput = runTest(
-      Product::PROTOBUF, testCase, Mode::OBJECT_SIZE, reuse, compression, iters).throughput;
+      Product::PROTOBUF, testCase, Mode::OBJECTS, Reuse::YES, compression, iters);
+  protobufBase.objectSize = runTest(
+      Product::PROTOBUF, testCase, Mode::OBJECT_SIZE, Reuse::YES, compression, iters).objectSize;
   reportResults("Protobuf pass-by-object", iters, protobufBase);
 
   TestResult capnpBase = runTest(
-      Product::CAPNPROTO, testCase, Mode::OBJECTS, reuse, compression, iters);
-  capnpBase.throughput = runTest(
-      Product::CAPNPROTO, testCase, Mode::OBJECT_SIZE, reuse, compression, iters).throughput;
+      Product::CAPNPROTO, testCase, Mode::OBJECTS, Reuse::YES, compression, iters);
+  capnpBase.objectSize = runTest(
+      Product::CAPNPROTO, testCase, Mode::OBJECT_SIZE, Reuse::YES, compression, iters).objectSize;
   reportResults("Cap'n Proto pass-by-object", iters, capnpBase);
 
-  TestResult protobuf = runTest(
-      Product::PROTOBUF, testCase, mode, reuse, compression, iters);
-  reportResults("Protobuf pass-by-I/O", iters, protobuf);
+  TestResult nullCaseNoReuse = runTest(
+      Product::NULLCASE, testCase, Mode::OBJECT_SIZE, Reuse::NO, compression, iters);
+  reportResults("Theoretical best w/o object reuse", iters, nullCaseNoReuse);
 
+  TestResult protobufNoReuse = runTest(
+      Product::PROTOBUF, testCase, Mode::OBJECTS, Reuse::NO, compression, iters);
+  protobufNoReuse.objectSize = runTest(
+      Product::PROTOBUF, testCase, Mode::OBJECT_SIZE, Reuse::NO, compression, iters).objectSize;
+  reportResults("Protobuf w/o object reuse", iters, protobufNoReuse);
+
+  TestResult capnpNoReuse = runTest(
+      Product::CAPNPROTO, testCase, Mode::OBJECTS, Reuse::NO, compression, iters);
+  capnpNoReuse.objectSize = runTest(
+      Product::CAPNPROTO, testCase, Mode::OBJECT_SIZE, Reuse::NO, compression, iters).objectSize;
+  reportResults("Cap'n Proto w/o object reuse", iters, capnpNoReuse);
+
+  TestResult protobuf = runTest(
+      Product::PROTOBUF, testCase, mode, Reuse::YES, compression, iters);
+  protobuf.objectSize = protobufBase.objectSize;
+  reportResults("Protobuf I/O", iters, protobuf);
   TestResult capnp = runTest(
-      Product::CAPNPROTO, testCase, mode, reuse, compression, iters);
-  reportResults("Cap'n Proto pass-by-I/O", iters, capnp);
+      Product::CAPNPROTO, testCase, mode, Reuse::YES, compression, iters);
+  capnp.objectSize = capnpBase.objectSize;
+  reportResults("Cap'n Proto I/O", iters, capnp);
+  TestResult capnpPacked = runTest(
+      Product::CAPNPROTO, testCase, mode, Reuse::YES, Compression::PACKED, iters);
+  capnpPacked.objectSize = capnpBase.objectSize;
+  reportResults("Cap'n Proto packed I/O", iters, capnpPacked);
 
   cout << endl;
 
   reportComparisonHeader();
-  reportComparison("memory",
-      nullCase.throughput, protobufBase.throughput, capnpBase.throughput, iters);
-  reportComparison("object manipulation",
-      nullCase.time.cpu(), protobufBase.time.cpu(), capnpBase.time.cpu(), iters);
-  reportComparison("I/O time", "us",
+  reportComparison("memory overhead (vs ideal)",
+      nullCase.objectSize, protobufBase.objectSize, capnpBase.objectSize, iters);
+  reportComparison("memory overhead w/o object reuse",
+      nullCaseNoReuse.objectSize, protobufNoReuse.objectSize, capnpNoReuse.objectSize, iters);
+  reportComparison("object manipulation time (us)", "",
+      ((int64_t)protobufBase.time.cpu() - (int64_t)nullCase.time.cpu()) / 1000.0,
+      ((int64_t)capnpBase.time.cpu() - (int64_t)nullCase.time.cpu()) / 1000.0, iters);
+  reportComparison("object manipulation time w/o reuse (us)", "",
+      ((int64_t)protobufNoReuse.time.cpu() - (int64_t)nullCaseNoReuse.time.cpu()) / 1000.0,
+      ((int64_t)capnpNoReuse.time.cpu() - (int64_t)nullCaseNoReuse.time.cpu()) / 1000.0, iters);
+  reportComparison("I/O time (us)", "",
       ((int64_t)protobuf.time.cpu() - (int64_t)protobufBase.time.cpu()) / 1000.0,
       ((int64_t)capnp.time.cpu() - (int64_t)capnpBase.time.cpu()) / 1000.0, iters);
+  reportComparison("packed I/O time (us)", "",
+      ((int64_t)protobuf.time.cpu() - (int64_t)protobufBase.time.cpu()) / 1000.0,
+      ((int64_t)capnpPacked.time.cpu() - (int64_t)capnpBase.time.cpu()) / 1000.0, iters);
 
-  reportIntComparison("bandwidth", "B", protobuf.throughput, capnp.throughput, iters);
+  reportIntComparison("message size (bytes)", "", protobuf.messageSize, capnp.messageSize, iters);
+  reportIntComparison("packed message size (bytes)", "",
+                      protobuf.messageSize, capnpPacked.messageSize, iters);
 
-  reportComparison("binary size", "kB",
+  reportComparison("binary size (KiB)", "",
       fileSize("protobuf-" + std::string(testCaseName(testCase))) / 1024.0,
       fileSize("capnproto-" + std::string(testCaseName(testCase))) / 1024.0, 1);
-  reportComparison("generated code size", "kB",
+  reportComparison("generated code size (KiB)", "",
       fileSize(std::string(testCaseName(testCase)) + ".pb.cc") / 1024.0
       + fileSize(std::string(testCaseName(testCase)) + ".pb.h") / 1024.0,
       fileSize(std::string(testCaseName(testCase)) + ".capnp.c++") / 1024.0
       + fileSize(std::string(testCaseName(testCase)) + ".capnp.h") / 1024.0, 1);
-  reportComparison("generated obj size", "kB",
+  reportComparison("generated obj size (KiB)", "",
       fileSize(std::string(testCaseName(testCase)) + ".pb.o") / 1024.0,
       fileSize(std::string(testCaseName(testCase)) + ".capnp.o") / 1024.0, 1);
 

@@ -254,9 +254,11 @@ uint64_t doBenchmark3(const std::string& mode, const std::string& reuse,
   } else if (compression == "packed") {
     return doBenchmark2<BenchmarkTypes, TestCase, typename BenchmarkTypes::Packed>(
         mode, reuse, iters);
+#if HAVE_SNAPPY
   } else if (compression == "snappy") {
     return doBenchmark2<BenchmarkTypes, TestCase, typename BenchmarkTypes::SnappyCompressed>(
         mode, reuse, iters);
+#endif  // HAVE_SNAPPY
   } else {
     fprintf(stderr, "Unknown compression mode: %s\n", compression.c_str());
     exit(1);

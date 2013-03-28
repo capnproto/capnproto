@@ -65,24 +65,35 @@ struct List {
 // =======================================================================================
 
 struct SingleUseObjects {
-  template <typename ObjectType>
-  struct Object {
-    struct Reusable {};
-    struct SingleUse {
-      ObjectType value;
-      inline SingleUse(Reusable&) {}
-    };
+  class ObjectSizeCounter {
+  public:
+    ObjectSizeCounter(uint64_t iters): counter(0) {}
+
+    void add(uint64_t wordCount) {
+      counter += wordCount;
+    }
+
+    uint64_t get() { return counter; }
+
+  private:
+    uint64_t counter;
   };
 };
 
 struct ReusableObjects {
-  template <typename ObjectType>
-  struct Object {
-    typedef ObjectType Reusable;
-    struct SingleUse {
-      ObjectType& value;
-      inline SingleUse(Reusable& reusable): value(reusable) {}
-    };
+  class ObjectSizeCounter {
+  public:
+    ObjectSizeCounter(uint64_t iters): iters(iters), maxSize(0) {}
+
+    void add(size_t wordCount) {
+      maxSize = std::max(wordCount, maxSize);
+    }
+
+    uint64_t get() { return iters * maxSize; }
+
+  private:
+    uint64_t iters;
+    size_t maxSize;
   };
 };
 
@@ -120,7 +131,7 @@ struct BenchmarkMethods {
   }
 
   static uint64_t passByObject(uint64_t iters, bool countObjectSize) {
-    uint64_t throughput = 0;
+    typename ReuseStrategy::ObjectSizeCounter sizeCounter(iters);
 
     for (; iters > 0; --iters) {
       arenaPos = arena;
@@ -134,10 +145,10 @@ struct BenchmarkMethods {
         throw std::logic_error("Incorrect response.");
       }
 
-      throughput += (arenaPos - arena) * sizeof(arena[0]);
+      sizeCounter.add((arenaPos - arena) * sizeof(arena[0]));
     }
 
-    return throughput;
+    return sizeCounter.get();
   }
 
   static uint64_t passByBytes(uint64_t iters) {
@@ -149,10 +160,12 @@ struct BenchmarkMethods {
 struct BenchmarkTypes {
   typedef void Uncompressed;
   typedef void Packed;
+#if HAVE_SNAPPY
   typedef void SnappyCompressed;
+#endif  // HAVE_SNAPPY
 
-  typedef void ReusableResources;
-  typedef void SingleUseResources;
+  typedef ReusableObjects ReusableResources;
+  typedef SingleUseObjects SingleUseResources;
 
   template <typename TestCase, typename ReuseStrategy, typename Compression>
   struct BenchmarkMethods: public null::BenchmarkMethods<TestCase, ReuseStrategy, Compression> {};

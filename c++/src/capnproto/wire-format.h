@@ -37,10 +37,6 @@
 namespace capnproto {
 namespace internal {
 
-class FieldDescriptor;
-typedef Id<uint8_t, FieldDescriptor> FieldNumber;
-enum class FieldSize: uint8_t;
-
 class StructBuilder;
 class StructReader;
 class ListBuilder;
@@ -49,6 +45,82 @@ struct WireReference;
 struct WireHelpers;
 class SegmentReader;
 class SegmentBuilder;
+
+class FieldDescriptor;
+typedef Id<uint8_t, FieldDescriptor> FieldNumber;
+enum class FieldSize: uint8_t;
+
+enum class FieldSize: uint8_t {
+  // TODO:  Rename to FieldLayout or maybe ValueLayout.
+
+  VOID = 0,
+  BIT = 1,
+  BYTE = 2,
+  TWO_BYTES = 3,
+  FOUR_BYTES = 4,
+  EIGHT_BYTES = 5,
+
+  REFERENCE = 6,  // Indicates that the field lives in the reference segment, not the data segment.
+
+  INLINE_COMPOSITE = 7
+  // A composite type of fixed width.  This serves two purposes:
+  // 1) For lists of composite types where all the elements would have the exact same width,
+  //    allocating a list of references which in turn point at the elements would waste space.  We
+  //    can avoid a layer of indirection by placing all the elements in a flat sequence, and only
+  //    indicating the element properties (e.g. field count for structs) once.
+  //
+  //    Specifically, a list reference indicating INLINE_COMPOSITE element size actually points to
+  //    a "tag" describing one element.  This tag is formatted like a wire reference, but the
+  //    "offset" instead stores the element count of the list.  The flat list of elements appears
+  //    immediately after the tag.  In the list reference itself, the element count is replaced with
+  //    a word count for the whole list (excluding tag).  This allows the tag and elements to be
+  //    precached in a single step rather than two sequential steps.
+  //
+  //    It is NOT intended to be possible to substitute an INLINE_COMPOSITE list for a REFERENCE
+  //    list or vice-versa without breaking recipients.  Recipients expect one or the other
+  //    depending on the message definition.
+  //
+  //    However, it IS allowed to substitute an INLINE_COMPOSITE list -- specifically, of structs --
+  //    when a list was expected, or vice versa, with the assumption that the first field of the
+  //    struct (field number zero) correspond to the element type.  This allows a list of
+  //    primitives to be upgraded to a list of structs, avoiding the need to use parallel arrays
+  //    when you realize that you need to attach some extra information to each element of some
+  //    primitive list.
+  //
+  // 2) For struct fields of composite types where the field's total size is known at compile time,
+  //    we can embed the field directly into the parent struct to avoid indirection through a
+  //    reference.  However, this means that the field size can never change -- e.g. if it is a
+  //    struct, new fields cannot be added to it.  It's unclear if this is really useful so at this
+  //    time it is not supported.
+};
+
+typedef decltype(BITS / ELEMENTS) BitsPerElement;
+
+namespace internal {
+  static constexpr BitsPerElement BITS_PER_ELEMENT_TABLE[8] = {
+      0 * BITS / ELEMENTS,
+      1 * BITS / ELEMENTS,
+      8 * BITS / ELEMENTS,
+      16 * BITS / ELEMENTS,
+      32 * BITS / ELEMENTS,
+      64 * BITS / ELEMENTS,
+      64 * BITS / ELEMENTS,
+      0 * BITS / ELEMENTS
+  };
+}
+
+inline constexpr BitsPerElement bitsPerElement(FieldSize size) {
+  return internal::BITS_PER_ELEMENT_TABLE[static_cast<int>(size)];
+}
+
+template <int wordCount>
+union AlignedData {
+  // Useful for declaring static constant data blobs as an array of bytes, but forcing those
+  // bytes to be word-aligned.
+
+  uint8_t bytes[wordCount * sizeof(word)];
+  word words[wordCount];
+};
 
 // -------------------------------------------------------------------
 

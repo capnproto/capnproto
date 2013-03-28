@@ -23,7 +23,6 @@
 
 #include "wire-format.h"
 #include "arena.h"
-#include "descriptor.h"
 #include <string.h>
 #include <limits>
 

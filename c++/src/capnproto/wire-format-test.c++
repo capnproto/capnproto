@@ -22,7 +22,6 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "wire-format.h"
-#include "descriptor.h"
 #include "message.h"
 #include "arena.h"
 #include <gtest/gtest.h>

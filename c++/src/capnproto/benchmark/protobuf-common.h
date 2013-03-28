@@ -24,8 +24,10 @@
 #include "common.h"
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <thread>
+#if HAVE_SNAPPY
 #include <snappy/snappy.h>
 #include <snappy/snappy-sinksource.h>
+#endif  // HAVE_SNAPPY
 
 namespace capnproto {
 namespace benchmark {
@@ -121,6 +123,8 @@ struct Uncompressed {
 // arrays in some static scratch space.  This probably gives protobufs an edge that it doesn't
 // deserve.
 
+#if HAVE_SNAPPY
+
 static char scratch[1 << 20];
 static char scratch2[1 << 20];
 
@@ -157,6 +161,8 @@ struct SnappyCompressed {
 
   static void flush(OutputStream*) {}
 };
+
+#endif  // HAVE_SNAPPY
 
 // =======================================================================================
 
@@ -337,7 +343,9 @@ struct BenchmarkMethods {
 struct BenchmarkTypes {
   typedef protobuf::Uncompressed Uncompressed;
   typedef protobuf::Uncompressed Packed;
+#if HAVE_SNAPPY
   typedef protobuf::SnappyCompressed SnappyCompressed;
+#endif  // HAVE_SNAPPY
 
   typedef protobuf::ReusableMessages ReusableResources;
   typedef protobuf::SingleUseMessages SingleUseResources;

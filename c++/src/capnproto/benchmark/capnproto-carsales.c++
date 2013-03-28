@@ -93,6 +93,8 @@ void randomCar(Car::Builder car) {
   engine.setHorsepower(100 * fastRand(400));
   engine.setCylinders(4 + 2 * fastRand(3));
   engine.setCc(800 + fastRand(10000));
+  engine.setUsesGas(true);
+  engine.setUsesElectric(fastRand(2));
 
   car.setFuelCapacity(10.0 + fastRandDouble(30.0));
   car.setFuelLevel(fastRandDouble(car.getFuelCapacity()));
