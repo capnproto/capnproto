@@ -1,5 +1,7 @@
 ## Process this file with automake to produce Makefile.in
 
+ACLOCAL_AMFLAGS = -I m4
+
 AUTOMAKE_OPTIONS = foreign
 
 AM_CXXFLAGS = -I$(srcdir)/src
@@ -9,7 +11,8 @@ EXTRA_DIST =                                                                 \
   INSTALL.txt                                                                \
   COPYING.txt                                                                \
   CONTRIBUTORS.txt                                                           \
-  CHANGES.txt
+  CHANGES.txt                                                                \
+  $(capnpc_inputs)
 
 CLEANFILES = $(capnpc_outputs) test_capnpc_middleman
 
@@ -32,6 +35,9 @@ MAINTAINERCLEANFILES =   \
   m4/ltversion.m4        \
   m4/lt~obsolete.m4      \
   m4/ltoptions.m4
+
+maintainer-clean-local:
+	-rm -rf build-aux
 
 nobase_include_HEADERS =                                       \
   src/capnproto/macros.h                                       \
@@ -76,13 +82,17 @@ capnpc_outputs =                                               \
   src/capnproto/test.capnp.c++                                 \
   src/capnproto/test.capnp.h
 
-BUILT_SOURCES = $(capnpc_outputs)
-
-test_capnpc_middleman:# $(capnpc_inputs)
-	$(CAPNPC) $^
+# This should depend on $(capnpc_inputs), but then make mysteriously complains
+# about a cyclic dependency.  I don't know where it is coming from.  I rummaged
+# around in the generated Makefile a bit but couldn't figure it out.  I give
+# up.  Automake is terrible.
+test_capnpc_middleman:
+	$(CAPNPC) $(capnpc_inputs)
 	touch test_capnpc_middleman
 
 $(capnpc_outputs): test_capnpc_middleman
+
+BUILT_SOURCES = $(capnpc_outputs)
 
 check_PROGRAMS = capnproto-test
 capnproto_test_LDADD = -lgtest -lgtest_main libcapnproto.a
