@@ -25,17 +25,9 @@
 #include <gtest/gtest.h>
 #include <iostream>
 #include <string>
+#include "test-util.h"
 
 namespace capnproto {
-
-std::ostream& operator<<(std::ostream& os, const Data::Reader& value) {
-  return os.write(value.data(), value.size());
-}
-
-std::ostream& operator<<(std::ostream& os, const Data::Builder& value) {
-  return os.write(value.data(), value.size());
-}
-
 namespace {
 
 TEST(Blob, Text) {

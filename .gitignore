@@ -1,0 +1,22 @@
+# Kenton's personal backup script.
+/backup.sh
+
+# Eclipse-generated stuff.
+.cproject
+.project
+.settings
+.dist-buildwrapper
+/c++/gen/
+
+# Code you may want to map in from elsewhere.
+/c++/src/base
+/c++/src/capnproto/compilerbin
+/c++/src/ekam
+/c++/src/os
+/c++/src/protobuf
+/c++/src/snappy
+
+# Ekam build artifacts.
+/c++/tmp/
+/c++/bin/
+

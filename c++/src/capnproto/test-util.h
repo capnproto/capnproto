@@ -25,8 +25,27 @@
 #define CAPNPROTO_TEST_UTIL_H_
 
 #include "test.capnp.h"
+#include <iostream>
+#include "blob.h"
 
 namespace capnproto {
+
+inline std::ostream& operator<<(std::ostream& os, const Data::Reader& value) {
+  return os.write(value.data(), value.size());
+}
+inline std::ostream& operator<<(std::ostream& os, const Data::Builder& value) {
+  return os.write(value.data(), value.size());
+}
+inline std::ostream& operator<<(std::ostream& os, const Text::Reader& value) {
+  return os.write(value.data(), value.size());
+}
+inline std::ostream& operator<<(std::ostream& os, const Text::Builder& value) {
+  return os.write(value.data(), value.size());
+}
+inline std::ostream& operator<<(std::ostream& os, Void) {
+  return os << "void";
+}
+
 namespace internal {
 
 void initTestMessage(TestAllTypes::Builder builder);

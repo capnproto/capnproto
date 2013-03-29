@@ -26,7 +26,6 @@
 
 namespace capnproto {
 namespace internal {
-
 namespace {
 
 template <typename Builder>
