@@ -1,0 +1,224 @@
+---
+layout: page
+---
+
+# Encoding Spec
+
+## NOT FINALIZED
+
+The Cap'n Proto encoding is still evolving.  In fact, as of this writing, the format described
+by this spec is newer than what is actually implemented.
+
+## 64-bit Words
+
+For the purpose of Cap'n Proto, a "word" is defined as 8 bytes, or 64 bits.  Since alignment of
+data is important, all objects are aligned to word boundaries, and sizes are usually expressed in
+terms of words.
+
+## Messages
+
+The unit of communication in Cap'n Proto is a "message".  A message is a tree of objects, with
+the root always being a struct.
+
+Physically, messages may be split into several "segments", each of which is a flat blob of bytes.
+Typically, a segment must be loaded into a contiguous block of memory before it can be accessed,
+so that the relative pointers within the segment can be followed quickly.  However, when a message
+has multiple segments, it does not matter where those segments are located in memory relative to
+each other; inter-segment pointers are encoded differently, as we'll see later.
+
+Ideally, every message would have only one segment.  However, there are a few reasons why splitting
+a message into multiple segments may be convenient:
+
+* It can be difficult to predict how large a message might be until you start writing it, and you
+  can't start writing it until you have a segment to write to.  If it turns out the segment you
+  allocated isn't big enough, you can allocate additional segments without the need to relocate the
+  data you've already written.
+* Allocating excessively large blocks of memory can make life difficult for memory allocators,
+  especially on 32-bit systems with limited address space.
+
+The first word of the first segment of the message is always a pointer pointing to the message's
+root struct.
+
+Note that users of Cap'n Proto never need to understand segments; this is all taken care of
+automatically by the runtime library.
+
+## Built-in Types
+
+The built-in primitive types are encoded as follows:
+
+* `Void`:  Not encoded at all.  It has only one possible value thus carries no information.
+* `Bool`:  One bit.  1 = true, 0 = false.
+* Integers:  Encoded in little-endian format.  Signed integers use two's complement.
+* Floating-points:  Encoded in little-endian IEEE-754 format.
+
+Primitive types must always be aligned to a multiple of their size.  Note that since the size of
+a `Bool` is one bit, this means eight `Bool` values can be encoded in a single byte -- this differs
+from C++, where the `bool` type takes a whole byte.
+
+The built-in blob types are encoded as follows:
+
+* `Data`:  Encoded as a pointer, identical to `List(UInt8)`.
+* `Text`:  Like `Data`, but the content must be valid UTF-8, the last byte of the content must be
+  zero, and no other byte of the content can be zero.
+
+## Enums
+
+Enums are encoded the same as 16-bit integers.
+
+## Lists
+
+A list value is encoded as a pointer to a flat array of values.
+
+    lsb                       list pointer                        msb
+    +-+-----------------------------+--+----------------------------+
+    |A|             B               |C |             D              |
+    +-+-----------------------------+--+----------------------------+
+
+    A (2 bits) = 01, to indicate that this is a list pointer.
+    B (30 bits) = Offset, in words, from the start of the pointer to the
+        start of the list.  Signed.
+    C (3 bits) = Size of each element:
+        0 = 0 (e.g. List(Void))
+        1 = 1 bit
+        2 = 1 byte
+        3 = 2 bytes
+        4 = 4 bytes
+        5 = 8 bytes (non-pointer)
+        6 = 8 bytes (pointer)
+        7 = composite (see below)
+    D (29 bits) = Number of elements in the list, except when C is 7
+        (see below).
+
+The pointed-to values are tightly-packed.  In particular, `Bool`s are packed bit-by-bit in
+little-endian order (the first bit is the least-significant bit of the first byte).
+
+When C = 7, the elements of the list are fixed-width composite values -- usually, structs.  In
+this case, the list content is prefixed by a "tag" word that describes each individual element.
+The tag has the same layout as a struct pointer, except that the pointer offset (B) instead
+indicates the number of elements in the list.  Meanwhile, section (D) of the list pointer -- which
+normally would store this element count -- instead stores the total number of _words_ in the list
+(not counting the tag word).  The reason we store a word count in the pointer rather than an element
+count is to ensure that the extents of the list's location can always be determined by inspecting
+the pointer alone, without having to look at the tag; this may allow more-efficient prefetching in
+some use cases.  The reason we don't store struct lists as a list of pointers is because doing so
+would take significantly more space (an extra pointer per element) and may be less cache-friendly.
+
+In the future, we could consider implementing matrixes using the "composite" element type, with the
+elements being fixed-size lists rather than structs.  In this case, the tag would look like a list
+pointer rather than a struct pointer.  As of this writing, no such feature has been implemented.
+
+## Structs
+
+A struct value is encoded as a pointer to its content.  The content is split into two sections:
+data and pointers, with the pointer section appearing immediately after the data section.  This
+split allows structs to be traversed (e.g., copied) without knowing their type.
+
+A struct pointer looks like this:
+
+    lsb                      struct pointer                       msb
+    +-+-----------------------------+---------------+---------------+
+    |A|             B               |       C       |       D       |
+    +-+-----------------------------+---------------+---------------+
+
+    A (2 bits) = 00, to indicate that this is a struct pointer.
+    B (30 bits) = Offset, in words, from the start of the pointer to the
+        start of the struct's data section.  Signed.
+    C (16 bits) = Size of the struct's data section, in words.
+    D (16 bits) = Size of the struct's pointer section, in words.
+
+### Field Positioning
+
+Ignoring unions, the layout of fields within the struct is determined by the following algorithm:
+
+    For each field of the struct, ordered by field number {
+        If the field is a pointer {
+            Add it to the end of the pointer section.
+        } else if the data section layout so far includes padding large
+                enough and properly-aligned to hold this field {
+            Replace the padding space with the new field, preferring to
+                put the field as close to the beginning of the section as
+                possible.
+        } else {
+            Add one word to the end of the data section.
+            Place the new field at the beginning of the new word.
+            Mark the rest of the new word as padding.
+        }
+    }
+
+Keep in mind that `Bool` fields are bit-aligned, so multiple booleans will be packed into a
+single byte.  As always, little-endian ordering is the standard -- the first boolean will be
+located at the least-significant bit of its byte.
+
+When unions are present, add the following logic:
+
+    For each field and union of the struct, ordered by field number {
+        If this is a union, not a field {
+            Treat it like a 16-bit field, representing the union tag.
+                (See no-union logic, above.)
+        } else if this field is a member of a union {
+            If an earlier member of the union is in the same section as
+                    this field and it combined with any following padding
+                    is at least as large as the new field {
+                Give the new field the same offset, so they overlap.
+            } else {
+                Assign a new offset to this field as if it were not a union
+                    member at all.  (See no-union logic, above.)
+            }
+        } else {
+            Treat it as a regular field.  (See no-union logic, above.)
+        }
+    }
+
+Note that in the worst case, the members of a union could end up using 23 bytes plus one bit (one
+pointer plus data section locations of 64, 32, 16, 8, and 1 bits).  This is an unfortunate side
+effect of the desire to pack fields in the smallest space where they will fit and the need to
+maintain backwards-compatibility as fields are added.  The worst case should be rare in practice.
+
+### Default Values
+
+A default struct is always all-zeros.  To achieve this, fields in the data section are stored xor'd
+with their defined default values.  An all-zero pointer is considered "null" (since otherwise it
+would point at itself, which makes no sense); accessor methods for pointer fields check for null
+and return a pointer to their default value in this case.
+
+There are several reasons why this is desirable:
+
+* Cap'n Proto messages are often "packed" with a simple compression algorithm that deflates
+  zero-value bytes.
+* Newly-allocated structs only need to be zero-initialized, which is fast and requires no knowledge
+  of the struct type except its size.
+* If a newly-added field is placed in space that was previously padding, messages written by old
+  binaries that do not know about this field will still have its default value set correctly --
+  because it is always zero.
+
+## Inter-Segment Pointers
+
+When a pointer needs to point to a different segment, offsets no longer work.  We instead encode
+the pointer as a "far pointer", which looks like this:
+
+    lsb                        far pointer                        msb
+    +-+-----------------------------+-------------------------------+
+    |A|             B               |               C               |
+    +-+-----------------------------+-------------------------------+
+
+    A (2 bits) = 02, to indicate that this is a far pointer.
+    B (30 bits) = Offset, in words, from the start of the target segment
+        to the location of the far-pointer landing-pad within that
+        segment.
+    C (32 bits) = ID of the target segment.  (Segments are numbered
+        sequentially starting from zero.)
+
+The "landing pad" of a far pointer is normally just another pointer, which in turn points to the
+actual object.
+
+However, if the "landing pad" pointer is itself another far pointer, then it is interpreted
+differently:  This far pointer points to the start of the object's _content_, located in some other
+segment.  The landing pad is itself immediately followed by a tag word.  The tag word looks exactly
+like an intra-segment pointer to the target object would look, except that the offset is always
+zero.
+
+The reason for the convoluted double-far convention is to make it possible to form a new pointer
+to an object in a segment that is full.  If you can't allocate even one word in the segment where
+the target resides, then you will need to allocate a landing pad in some other segment, and use
+this double-far approach.  This should be exceedingly rare in practice since pointers are normally
+set to point to _new_ objects.

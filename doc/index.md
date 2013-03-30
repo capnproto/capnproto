@@ -24,7 +24,7 @@ embedded as pointers. Pointers are offset-based rather than absolute so that mes
 position-independent. Integers use little-endian byte order because most CPUs are little-endian,
 and even big-endian CPUs usually have instructions for reading little-endian data.
 
-**_Doesn't that back backwards-compatibility hard?_**
+**_Doesn't that make backwards-compatibility hard?_**
 
 Not at all! New fields are always added to the end of a struct (or replace padding space), so
 existing field positions are unchanged. The recipient simply needs to do a bounds check when
@@ -34,7 +34,7 @@ always knows how to arrange them for backwards-compatibility.
 **_Won't fixed-width integers, unset optional fields, and padding waste space on the wire?_**
 
 Yes. However, since all these extra bytes are zeros, when bandwidth matters, we can apply an
-extremely fast compression scheme to remove them. Cap'n Proto calls this "packing"; the message,
+extremely fast compression scheme to remove them. Cap'n Proto calls this "packing" the message;
 it achieves similar (better, even) message sizes to protobuf encoding, and it's still faster.
 
 When bandwidth really matters, you should apply general-purpose compression, like
@@ -59,10 +59,10 @@ Glad you asked!
   process can be just as fast and easy as calling another thread.
 * **Arena allocation:** Manipulating Protobuf objects tends to be bogged down by memory
   allocation, unless you are very careful about object reuse. Cap'n Proto objects are always
-  allocated in an "arena"; or "region"; style, which is faster and promotes cache locality.
+  allocated in an "arena" or "region" style, which is faster and promotes cache locality.
 * **Tiny generated code:** Protobuf generates dedicated parsing and serialization code for every
   message type, and this code tends to be enormous. Cap'n Proto generated code is smaller by an
-  order of magnitude or more.
+  order of magnitude or more.  In fact, usually it's no more than some inline accessor methods!
 * **Tiny runtime library:** Due to the simplicity of the Cap'n Proto format, the runtime library
   can be much smaller.
 
@@ -73,16 +73,4 @@ version 2, which is the version that Google released open source. Cap'n Proto is
 years of experience working on Protobufs, listening to user feedback, and thinking about how
 things could be done better.
 
-I am no longer employed by Google. Cap'n Proto is not affiliated with Google or any other company.
-
-**_Tell me about the RPC system._**
-
-_As of this writing, the RPC system is not yet implemented._
-
-Cap'n Proto defines a [capability-based](http://en.wikipedia.org/wiki/Capability-based_security)
-RPC protocol. In such a system, any message passed over the wire can itself contain references to
-callable objects. Passing such a reference over the wire implies granting the recipient permission
-to call the referenced object -- until a reference is sent, the recipient has no way of addressing
-it in order to form a request to it, or even knowing that it exists.
-
-Such a system makes it very easy to define stateful, secure object-oriented protocols.
+I no longer work for Google. Cap'n Proto is not affiliated with Google or any other company.

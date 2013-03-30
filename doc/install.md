@@ -15,8 +15,9 @@ many essential features:
 * **Stability:** The Cap'n Proto format is still changing. Any data written today probably won't
   be understood by future versions. Additionally, the programming interface is still evolving, so
   code written today probably won't work with future versions.
-* **Performance:** While already beating the pants off other systems, Cap'n Proto has not yet
-  undergone serious profiling and optimization.
+* **Performance:** While Cap'n Proto is inherently fast by design, the implementation has not yet
+  undergone serious profiling and optimization.  Currenlty it only beats Protobufs in realistic-ish
+  end-to-end benchmarks by, like, 2x-5x.  We can do better.
 * **RPC:** The RPC protocol has not yet been specified, much less implemented.
 * **Support for languages other than C++:** Hasn't been started yet.
 
@@ -56,8 +57,8 @@ code without instructions.  It also supports continuous builds, where it watches
 changes (via inotify) and immediately rebuilds as necessary.  Instant feedback is key to
 productivity, so I really like using Ekam.
 
-Unfortunately it's very much unfinished.  It works (for me), but it is very quirky.  It only works
-on Linux, and is best used together with Eclipse.
+Unfortunately it's very much unfinished.  It works (for me), but it is quirky and rough around the
+edges.  It only works on Linux, and is best used together with Eclipse.
 
 The Cap'n Proto repo includes a script which will attempt to set up Ekam for you.
 
@@ -65,8 +66,8 @@ The Cap'n Proto repo includes a script which will attempt to set up Ekam for you
     cd capnproto/c++
     ./setup-ekam.sh
 
-If all goes well, this downloads the Ekam code into `.ekam` and adds some symlinks under src.
-It also imports the [Google Test](https://googletest.googlecode.com) and
+If all goes well, this downloads the Ekam code into a directory called `.ekam` and adds some
+symlinks under src.  It also imports the [Google Test](https://googletest.googlecode.com) and
 [Protobuf](http://protobuf.googlecode.com) source code, so you can compile tests and benchmarks.
 
 Once Ekam is installed, you can do:
