@@ -21,6 +21,9 @@
 /c++/tmp/
 /c++/bin/
 
+# setup-ekam.sh
+/c++/.ekam
+
 # Jekyll-generated site
 /doc/_site
 
