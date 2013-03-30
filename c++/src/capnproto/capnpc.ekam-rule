@@ -40,7 +40,7 @@ if test "$INTERCEPTOR" = ""; then
   exit 1
 fi
 
-echo findProvider file:capnproto-compiler
+echo findProvider file:capnpc
 read CAPNPC
 
 if test "$CAPNPC" = ""; then
