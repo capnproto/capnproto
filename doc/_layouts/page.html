@@ -41,6 +41,32 @@
           <li><a href="otherlang.html">Other Languages</a></li>
         </ul>
       </section>
+      <script type="text/javascript">
+        // Highlight the current page in the sidebar, and make the sidebar items easy to click.
+        (function () {
+          var pathname = document.location.pathname;
+          var last = pathname.lastIndexOf('/');
+          var filename = pathname.substring(last);
+
+          if (filename == "/") {
+            filename = "/index.html";
+          }
+
+          var menu = document.getElementById("menu");
+          var items = menu.getElementsByTagName("li");
+          for (var i = 0; i < items.length; i++) {
+            var href = items[i].getElementsByTagName("a")[0].href;
+            if (href.lastIndexOf(filename) >= 0) {
+              items[i].className = "selected";
+            }
+            items[i].onclick = (function(url) {
+              return function() {
+                window.location.href = url;
+              }
+            })(href);
+          }
+        })();
+      </script>
       <section id="main_content" class="inner">
         {{ content }}
       </section>

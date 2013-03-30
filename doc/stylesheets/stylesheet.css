@@ -80,7 +80,7 @@ h1 {
 
 h2 {
   padding-bottom: 10px;
-  font-size: 32px;
+  font-size: 28px;
   background: url('../images/bg_hr.png') repeat-x bottom;
 }
 
@@ -200,17 +200,16 @@ blockquote {
 }
 
 ul, ol, dl {
-  margin-bottom: 15px
+  margin-bottom: 15px;
+  padding-left: 30px;
 }
 
 ul li {
-  list-style: inside;
-  padding-left: 20px;
+  list-style: outside;
 }
 
 ol li {
-  list-style: decimal inside;
-  padding-left: 20px;
+  list-style: decimal outside;
 }
 
 dl dt {
@@ -434,6 +433,7 @@ Small Device Styles
 
 /*******************************************************************************
 Sidbar style borrowed from cldoc by jessevdk, because I thought it looked good.
+I modified it a little bit to make the links more clickable.
 *******************************************************************************/
 
 div.maruku_toc {
@@ -478,7 +478,11 @@ div.maruku_toc {
   color: #fff;
 }
 
+#menu li:hover {
+  background-color: #2a2a2a;
+  cursor: pointer;
+}
 
-#menu a:hover {
+#menu li:hover a {
   color: #eee;
 }

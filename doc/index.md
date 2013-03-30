@@ -68,7 +68,10 @@ Glad you asked!
 
 **_Why do you pick on Protocol Buffers so much?_**
 
-Because it's easy to pick on myself. :) I, Kenton Varda, was the primary author of Protocol Buffers version 2, which is the version that Google released open source. Cap'n Proto is the result of years of experience working on Protobufs, listening to user feedback, and thinking about how things could be done better.
+Because it's easy to pick on myself. :) I, Kenton Varda, was the primary author of Protocol Buffers
+version 2, which is the version that Google released open source. Cap'n Proto is the result of
+years of experience working on Protobufs, listening to user feedback, and thinking about how
+things could be done better.
 
 I am no longer employed by Google. Cap'n Proto is not affiliated with Google or any other company.
 
@@ -76,18 +79,10 @@ I am no longer employed by Google. Cap'n Proto is not affiliated with Google or 
 
 _As of this writing, the RPC system is not yet implemented._
 
-Cap'n Proto defines a [capability-based](http://en.wikipedia.org/wiki/Capability-based_security) RPC protocol. In such a system, any message passed over the wire can itself contain references to callable objects. Passing such a reference over the wire implies granting the recipient permission to call the referenced object -- until a reference is sent, the recipient has no way of addressing it in order to form a request to it, or even knowing that it exists.
+Cap'n Proto defines a [capability-based](http://en.wikipedia.org/wiki/Capability-based_security)
+RPC protocol. In such a system, any message passed over the wire can itself contain references to
+callable objects. Passing such a reference over the wire implies granting the recipient permission
+to call the referenced object -- until a reference is sent, the recipient has no way of addressing
+it in order to form a request to it, or even knowing that it exists.
 
 Such a system makes it very easy to define stateful, secure object-oriented protocols.
-
-# Cap'n Proto is EXPERIMENTAL
-
-As of this writing, Cap'n Proto is in the very early stages of development. It is still missing many essential features:
-
-* **Security:** There are almost certainly a few exploitable security bugs in the Cap'n Proto code. You should not use Cap'n Proto on untrusted data until a proper security review has been completed.
-* **Stability:** The Cap'n Proto format is still changing. Any data written today probably won't be understood by future versions. Additionally, the programming interface is still evolving, so code written today probably won't work with future versions.
-* **Performance:** While already beating the pants off other systems, Cap'n Proto has not yet undergone serious profiling and optimization.
-* **RPC:** The RPC protocol has not yet been specified, much less implemented.
-* **Support for languages other than C++:** Hasn't been started yet.
-
-Would you like to contribute? Join the [discussion group](https://groups.google.com/group/capnproto) and let us know!
