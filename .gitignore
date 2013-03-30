@@ -4,6 +4,7 @@
 # Eclipse-generated stuff.
 .cproject
 .project
+.pydevproject
 .settings
 .dist-buildwrapper
 /c++/gen/
@@ -19,4 +20,7 @@
 # Ekam build artifacts.
 /c++/tmp/
 /c++/bin/
+
+# Jekyll-generated site
+/doc/_site
 
