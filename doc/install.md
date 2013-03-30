@@ -24,9 +24,27 @@ Therefore, you should only be installing Cap'n Proto at this time if you just wa
 with it or help develop it.  If so, great!  Please report your findings to the
 [discussion group](https://groups.google.com/group/capnproto).
 
+## Installing the Cap'n Proto Compiler
+
+`capnpc`, which takes `.capnp` files and generates source code for them (e.g. in C++), is itself
+written in Haskell.
+
+First, install [Cabal](http://www.haskell.org/cabal/), e.g. on Ubuntu:
+
+    sudo apt-get install cabal-install
+
+Now you can check out, build, and install `capnpc` like so:
+
+    git clone https://github.com/kentonv/capnproto.git
+    cd capnproto/compiler
+    cabal install capnproto-compiler.cabal
+
+Be sure that the Cabal bin directory (typically `$HOME/.cabal/bin`) is in your `PATH` before you
+attempt to build the C++ runtime.
+
 ## Installing the C++ Runtime
 
-### Recent Compiler Needed
+### GCC 4.7 Needed
 
 If you are using GCC, you MUST use at least version 4.7 as Cap'n Proto uses recently-implemented
 C++11 features.  If you are using some other compiler...  good luck.

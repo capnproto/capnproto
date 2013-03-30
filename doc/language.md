@@ -195,7 +195,9 @@ struct FileInfo {
 }
 
 interface File {
-  read @0 (startAt :UInt64, amount :UInt64) :Data;
+  read @0 (startAt :UInt64 = 0, amount :UInt64 = 0xffffffffffffffff) :Data;
+  # Default params = read entire file.
+
   write @1 (startAt :UInt64, data :Data) :Void;
   truncate @2 (size :UInt64) :Void;
 }
@@ -288,6 +290,26 @@ struct Foo {
   baz @0 :Baz;
 }
 {% endhighlight %}
+
+## Evolving Your Protocol
+
+A protocol can be changed in the following ways without breaking backwards-compatibility:
+
+* New types, constants, and aliases can be added anywhere, since they obviously don't affect the
+  encoding of any existing type.
+* New fields, values, and methods may be added to structs, enums, and interfaces, respectively,
+  with the numbering rules described earlier.
+* New parameters may be added to a method.  The new parameters must be added to the end of the
+  parameter list and must have default values.
+* Any symbolic name can be changed, as long as the ordinal numbers stay the same.
+* A field of type `List(T)`, where `T` is NOT a struct type, may be changed to type `List(U)`,
+  where `U` is a struct type whose field number 0 is of type `T`.  This rule is useful when you
+  realize too late that you need to attach some extra data to each element of your list.  Without
+  this rule, you would be stuck defining parallel lists, which are ugly.
+
+Any other change should be assumed NOT to be safe.  Also, these rules only apply to the Cap'n Proto
+native encoding.  It is sometimes useful to transcode Cap'n Proto types to other formats, like
+JSON, which may have different rules (e.g., field names cannot change in JSON).
 
 ## Running the Compiler
 
