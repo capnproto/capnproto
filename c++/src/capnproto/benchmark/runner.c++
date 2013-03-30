@@ -495,17 +495,17 @@ int main(int argc, char* argv[]) {
   reportComparison("memory overhead w/o object reuse",
       nullCaseNoReuse.objectSize, protobufNoReuse.objectSize, capnpNoReuse.objectSize, iters);
   reportComparison("object manipulation time (us)", "",
-      ((int64_t)protobufBase.time.cpu() - (int64_t)nullCase.time.cpu()) / 1000.0,
-      ((int64_t)capnpBase.time.cpu() - (int64_t)nullCase.time.cpu()) / 1000.0, iters);
+      ((int64_t)protobufBase.time.user - (int64_t)nullCase.time.user) / 1000.0,
+      ((int64_t)capnpBase.time.user - (int64_t)nullCase.time.user) / 1000.0, iters);
   reportComparison("object manipulation time w/o reuse (us)", "",
-      ((int64_t)protobufNoReuse.time.cpu() - (int64_t)nullCaseNoReuse.time.cpu()) / 1000.0,
-      ((int64_t)capnpNoReuse.time.cpu() - (int64_t)nullCaseNoReuse.time.cpu()) / 1000.0, iters);
+      ((int64_t)protobufNoReuse.time.user - (int64_t)nullCaseNoReuse.time.user) / 1000.0,
+      ((int64_t)capnpNoReuse.time.user - (int64_t)nullCaseNoReuse.time.user) / 1000.0, iters);
   reportComparison("I/O time (us)", "",
-      ((int64_t)protobuf.time.cpu() - (int64_t)protobufBase.time.cpu()) / 1000.0,
-      ((int64_t)capnp.time.cpu() - (int64_t)capnpBase.time.cpu()) / 1000.0, iters);
+      ((int64_t)protobuf.time.user - (int64_t)protobufBase.time.user) / 1000.0,
+      ((int64_t)capnp.time.user - (int64_t)capnpBase.time.user) / 1000.0, iters);
   reportComparison("packed I/O time (us)", "",
-      ((int64_t)protobuf.time.cpu() - (int64_t)protobufBase.time.cpu()) / 1000.0,
-      ((int64_t)capnpPacked.time.cpu() - (int64_t)capnpBase.time.cpu()) / 1000.0, iters);
+      ((int64_t)protobuf.time.user - (int64_t)protobufBase.time.user) / 1000.0,
+      ((int64_t)capnpPacked.time.user - (int64_t)capnpBase.time.user) / 1000.0, iters);
 
   reportIntComparison("message size (bytes)", "", protobuf.messageSize, capnp.messageSize, iters);
   reportIntComparison("packed message size (bytes)", "",
