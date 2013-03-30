@@ -4,7 +4,7 @@ cabal-version:  >=1.2
 build-type:     Simple
 author:         kenton
 
-executable capnproto-compiler
+executable capnpc
   hs-source-dirs:  src
   main-is:         Main.hs
   build-depends:
