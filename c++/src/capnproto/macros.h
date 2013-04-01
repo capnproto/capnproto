@@ -28,7 +28,11 @@
 
 #ifdef __GNUC__
 #ifndef __GXX_EXPERIMENTAL_CXX0X__
-#warning Did you forget to enable C++11?  Make sure to pass -std=gnu++11 to GCC.
+#warning "Did you forget to enable C++11?  Make sure to pass -std=gnu++11 to GCC."
+#endif
+
+#if __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 7)
+#warning "Cap'n Proto requires at least GCC 4.7."
 #endif
 #endif
 
