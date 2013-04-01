@@ -5,13 +5,14 @@
     <meta charset='utf-8' />
     <meta http-equiv="X-UA-Compatible" content="chrome=1" />
     <meta name="description" content="Capnproto : Cap'n Proto serialization/RPC system" />
+    <meta name="viewport" content="width=480">
 
     <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
 
     <title>Cap'n Proto</title>
   </head>
 
-  <body>
+  <body class="desktop">
 
     <!-- HEADER -->
     <div id="header_wrap" class="outer">
@@ -31,6 +32,8 @@
 
     <!-- MAIN CONTENT -->
     <div id="main_content_wrap" class="outer">
+      <div id="corner_hack"><div> </div></div>
+
       <section id="menu">
         <ul>
           <li><a href="index.html">Introduction</a></li>
@@ -43,7 +46,8 @@
         </ul>
       </section>
       <script type="text/javascript">
-        // Highlight the current page in the sidebar, and make the sidebar items easy to click.
+        // Highlight the current page in the sidebar, make the sidebar items easy to click, and
+        // make the sidebar float when scrolled, unless there isn't enough space.
         (function () {
           var pathname = document.location.pathname;
           var last = pathname.lastIndexOf('/');
@@ -54,17 +58,50 @@
           }
 
           var menu = document.getElementById("menu");
+          var setMenuLayout = function() {
+            if (window.innerWidth < 1170) {
+              document.body.className = "narrow";
+              menu.className = "";
+            } else if (window.scrollY < 219 || window.innerHeight < menu.clientHeight + 20) {
+              document.body.className = "wide";
+              menu.className = "";
+            } else {
+              document.body.className = "wide";
+              menu.className = "floating";
+            }
+          };
+          setMenuLayout();
+          window.onresize = setMenuLayout;
+          window.onscroll = setMenuLayout;
+
           var items = menu.getElementsByTagName("li");
           for (var i = 0; i < items.length; i++) {
-            var href = items[i].getElementsByTagName("a")[0].href;
+            var link = items[i].getElementsByTagName("a")[0];
+            var href = link.href;
             if (href.lastIndexOf(filename) >= 0) {
+              var parent = link.parentNode;
+              parent.removeChild(link);
+              var p = document.createElement("p");
+              p.appendChild(document.createTextNode(link.innerText || link.textContent));
+              p.onclick = (function(url) {
+                return function(event) {
+                  window.location.href = url;
+                  event.stopPropagation();
+                }
+              })(href + "#main_content");
+              parent.appendChild(p);
               items[i].className = "selected";
+              var toc = document.createElement("ul");
+              toc.id = "toc";
+              items[i].appendChild(toc);
+            } else {
+              items[i].onclick = (function(url) {
+                return function(event) {
+                  window.location.href = url;
+                  event.stopPropagation();
+                }
+              })(href);
             }
-            items[i].onclick = (function(url) {
-              return function() {
-                window.location.href = url;
-              }
-            })(href);
           }
         })();
       </script>
@@ -73,11 +110,11 @@
 <img src='images/infinity-times-faster.png' style='width:334px; height:306px; float: right;' />
 <p>Cap&#8217;n Proto is an insanely fast data interchange format and capability-based RPC system. Think JSON, except binary. Or think <a href='http://protobuf.googlecode.com'>Protocol Buffers</a>, except faster. In fact, in benchmarks, Cap&#8217;n Proto is INFINITY TIMES faster than Protocol Buffers.</p>
 
-<p>This benchmark is, of course, silly. It is only measuring the time to encode and decode a message in memory. Cap&#8217;n Proto gets a perfect score because <em>there is no encoding/decoding step</em>. The Cap&#8217;n Proto encoding is appropriate both as a data interchange format and an in-memory representation, so once your structure is built, you can simply write the bytes straight out to disk!</p>
+<p>This benchmark is, of course, unfair. It is only measuring the time to encode and decode a message in memory. Cap&#8217;n Proto gets a perfect score because <em>there is no encoding/decoding step</em>. The Cap&#8217;n Proto encoding is appropriate both as a data interchange format and an in-memory representation, so once your structure is built, you can simply write the bytes straight out to disk!</p>
 
 <p><strong><em>But doesn&#8217;t that mean the encoding is platform-specific?</em></strong></p>
 
-<p>NO! The encoding is defined byte-for-byte independently of any platform. However, it is designed to be efficiently manipulated on common modern CPUs. Data is arranged like a compiler would arrange a struct &#8211; with fixed widths, fixed offsets, and proper alignment. Variable-sized elements are embedded as pointers. Pointers are offset-based rather than absolute so that messages are position-independent. Integers use little-endian byte order because most CPUs are little-endian, and even big-endian CPUs usually have instructions for reading little-endian data.</p>
+<p>NO! The encoding is defined byte-for-byte independent of any platform. However, it is designed to be efficiently manipulated on common modern CPUs. Data is arranged like a compiler would arrange a struct &#8211; with fixed widths, fixed offsets, and proper alignment. Variable-sized elements are embedded as pointers. Pointers are offset-based rather than absolute so that messages are position-independent. Integers use little-endian byte order because most CPUs are little-endian, and even big-endian CPUs usually have instructions for reading little-endian data.</p>
 
 <p><strong><em>Doesn&#8217;t that make backwards-compatibility hard?</em></strong></p>
 
@@ -116,6 +153,15 @@
 <p>Because it&#8217;s easy to pick on myself. :) I, Kenton Varda, was the primary author of Protocol Buffers version 2, which is the version that Google released open source. Cap&#8217;n Proto is the result of years of experience working on Protobufs, listening to user feedback, and thinking about how things could be done better.</p>
 
 <p>I no longer work for Google. Cap&#8217;n Proto is not affiliated with Google or any other company.</p>
+
+<p><strong><em>OK, how do I get started?</em></strong></p>
+
+<p>At this time, Cap&#8217;n Proto is not ready for production use. If you&#8217;d like to help it get there, let us know on the <a href='https://groups.google.com/group/capnproto'>discussion group</a>. If you&#8217;d just like to know when it&#8217;s ready, add yourself to the <a href='https://groups.google.com/group/capnproto-announce'>announcement list</a>.</p>
+<div style='float: right'>
+<a class='github_link' href='https://github.com/kentonv/capnproto' style='color: #fff'>Develop</a>
+<a class='groups_link' href='https://groups.google.com/group/capnproto' style='color: #fff'>Discuss</a>
+<a class='groups_link' href='https://groups.google.com/group/capnproto-announce' style='color: #fff'>Stay Updated</a>
+</div><div style='clear: right;'> </div>
         <div style="clear: left;"></div>
       </section>
     </div>
@@ -128,16 +174,66 @@
       </footer>
     </div>
 
-              <script type="text/javascript">
-            var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
-            document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
-          </script>
-          <script type="text/javascript">
-            try {
-              var pageTracker = _gat._getTracker("UA-39711112-1");
-            pageTracker._trackPageview();
-            } catch(err) {}
-          </script>
+    <script type="text/javascript">
+      // Inject a table of contents into the sidebar.
+      (function() {
+        var toc = document.getElementById("toc");
+        if (toc) {
+          var content = document.getElementById("main_content").childNodes;
+          var headings = [];
+
+          for (var i = 0; i < content.length; i++) {
+            if (content[i].tagName == "H2" ||
+                content[i].tagName == "H3" ||
+                content[i].tagName == "H4") {
+              headings.push(content[i]);
+            }
+          }
+
+          var levels = [toc];
+          for (var i in headings) {
+            var hl = headings[i].tagName.slice(1) - 1;
+            while (hl > levels.length) {
+              var parent = levels[levels.length - 1];
+              var item = parent.childNodes[parent.childNodes.length - 1];
+              var sublist = document.createElement("ul");
+              item.appendChild(sublist);
+              levels.push(sublist);
+            }
+            while (hl < levels.length) {
+              levels.pop();
+            }
+
+            var parent = levels[levels.length - 1];
+            var item = document.createElement("li");
+            var p = document.createElement("p");
+            var link = document.createElement("a");
+            link.appendChild(document.createTextNode(headings[i].innerText || headings[i].textContent));
+            link.href = "#" + headings[i].id;
+            p.appendChild(link);
+            p.onclick = (function(url) {
+              return function(event) {
+                window.location.href = url;
+                event.stopPropagation();
+              }
+            })(link.href);
+            item.appendChild(p);
+            parent.appendChild(item);
+          }
+        }
+      })()
+    </script>
+
+    <script type="text/javascript">
+      var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+      document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+    </script>
+    <script type="text/javascript">
+      try {
+        var pageTracker = _gat._getTracker("UA-39711112-1");
+        pageTracker._trackPageview();
+      } catch(err) {}
+    </script>
 
 
   </body>

@@ -5,13 +5,14 @@
     <meta charset='utf-8' />
     <meta http-equiv="X-UA-Compatible" content="chrome=1" />
     <meta name="description" content="Capnproto : Cap'n Proto serialization/RPC system" />
+    <meta name="viewport" content="width=480">
 
     <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
 
     <title>Cap'n Proto</title>
   </head>
 
-  <body>
+  <body class="desktop">
 
     <!-- HEADER -->
     <div id="header_wrap" class="outer">
@@ -31,6 +32,8 @@
 
     <!-- MAIN CONTENT -->
     <div id="main_content_wrap" class="outer">
+      <div id="corner_hack"><div> </div></div>
+
       <section id="menu">
         <ul>
           <li><a href="index.html">Introduction</a></li>
@@ -43,7 +46,8 @@
         </ul>
       </section>
       <script type="text/javascript">
-        // Highlight the current page in the sidebar, and make the sidebar items easy to click.
+        // Highlight the current page in the sidebar, make the sidebar items easy to click, and
+        // make the sidebar float when scrolled, unless there isn't enough space.
         (function () {
           var pathname = document.location.pathname;
           var last = pathname.lastIndexOf('/');
@@ -54,17 +58,50 @@
           }
 
           var menu = document.getElementById("menu");
+          var setMenuLayout = function() {
+            if (window.innerWidth < 1170) {
+              document.body.className = "narrow";
+              menu.className = "";
+            } else if (window.scrollY < 219 || window.innerHeight < menu.clientHeight + 20) {
+              document.body.className = "wide";
+              menu.className = "";
+            } else {
+              document.body.className = "wide";
+              menu.className = "floating";
+            }
+          };
+          setMenuLayout();
+          window.onresize = setMenuLayout;
+          window.onscroll = setMenuLayout;
+
           var items = menu.getElementsByTagName("li");
           for (var i = 0; i < items.length; i++) {
-            var href = items[i].getElementsByTagName("a")[0].href;
+            var link = items[i].getElementsByTagName("a")[0];
+            var href = link.href;
             if (href.lastIndexOf(filename) >= 0) {
+              var parent = link.parentNode;
+              parent.removeChild(link);
+              var p = document.createElement("p");
+              p.appendChild(document.createTextNode(link.innerText || link.textContent));
+              p.onclick = (function(url) {
+                return function(event) {
+                  window.location.href = url;
+                  event.stopPropagation();
+                }
+              })(href + "#main_content");
+              parent.appendChild(p);
               items[i].className = "selected";
+              var toc = document.createElement("ul");
+              toc.id = "toc";
+              items[i].appendChild(toc);
+            } else {
+              items[i].onclick = (function(url) {
+                return function(event) {
+                  window.location.href = url;
+                  event.stopPropagation();
+                }
+              })(href);
             }
-            items[i].onclick = (function(url) {
-              return function() {
-                window.location.href = url;
-              }
-            })(href);
           }
         })();
       </script>
@@ -328,16 +365,66 @@
       </footer>
     </div>
 
-              <script type="text/javascript">
-            var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
-            document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
-          </script>
-          <script type="text/javascript">
-            try {
-              var pageTracker = _gat._getTracker("UA-39711112-1");
-            pageTracker._trackPageview();
-            } catch(err) {}
-          </script>
+    <script type="text/javascript">
+      // Inject a table of contents into the sidebar.
+      (function() {
+        var toc = document.getElementById("toc");
+        if (toc) {
+          var content = document.getElementById("main_content").childNodes;
+          var headings = [];
+
+          for (var i = 0; i < content.length; i++) {
+            if (content[i].tagName == "H2" ||
+                content[i].tagName == "H3" ||
+                content[i].tagName == "H4") {
+              headings.push(content[i]);
+            }
+          }
+
+          var levels = [toc];
+          for (var i in headings) {
+            var hl = headings[i].tagName.slice(1) - 1;
+            while (hl > levels.length) {
+              var parent = levels[levels.length - 1];
+              var item = parent.childNodes[parent.childNodes.length - 1];
+              var sublist = document.createElement("ul");
+              item.appendChild(sublist);
+              levels.push(sublist);
+            }
+            while (hl < levels.length) {
+              levels.pop();
+            }
+
+            var parent = levels[levels.length - 1];
+            var item = document.createElement("li");
+            var p = document.createElement("p");
+            var link = document.createElement("a");
+            link.appendChild(document.createTextNode(headings[i].innerText || headings[i].textContent));
+            link.href = "#" + headings[i].id;
+            p.appendChild(link);
+            p.onclick = (function(url) {
+              return function(event) {
+                window.location.href = url;
+                event.stopPropagation();
+              }
+            })(link.href);
+            item.appendChild(p);
+            parent.appendChild(item);
+          }
+        }
+      })()
+    </script>
+
+    <script type="text/javascript">
+      var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+      document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+    </script>
+    <script type="text/javascript">
+      try {
+        var pageTracker = _gat._getTracker("UA-39711112-1");
+        pageTracker._trackPageview();
+      } catch(err) {}
+    </script>
 
 
   </body>

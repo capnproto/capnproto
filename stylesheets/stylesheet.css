@@ -175,7 +175,9 @@ pre, code {
 }
 
 pre {
-  width: 100%;
+  width: -moz-calc(100% - 20px);
+  width: -webkit-calc(100% - 20px);
+  width: calc(100% - 20px);
   padding: 10px;
   box-shadow: 0 0 10px rgba(0,0,0,.1);
   overflow: auto;
@@ -307,13 +309,29 @@ Full-Width Styles
   border-bottom-right-radius: 2px;
 }
 
-.prominent_link {
-	display: block;
-	float: right;
+.groups_link {
+	display: inline-block;
   z-index: 10;
   padding: 10px 50px 10px 10px;
+  margin: 5px;
   color: #fff;
   background: url('../images/groups-logo.png') #0090ff no-repeat 95% 50%;
+  background-color: #0090ff;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(0,0,0,.5);
+  border-top-left-radius: 2px;
+  border-top-right-radius: 2px;
+  border-bottom-left-radius: 2px;
+  border-bottom-right-radius: 2px;
+}
+
+.github_link {
+  display: inline-block;
+  z-index: 10;
+  padding: 10px 50px 10px 10px;
+  margin: 5px;
+  color: #fff;
+  background: url('../images/blacktocat.png') #0090ff no-repeat 95% 50%;
   background-color: #0090ff;
   font-weight: 700;
   box-shadow: 0 0 10px rgba(0,0,0,.5);
@@ -454,32 +472,63 @@ Small Device Styles
   }
 
   code, pre {
-    min-width: 320px;
-    max-width: 480px;
     font-size: 11px;
   }
 
+  #forkme_banner {
+    right: 215px;
+  }
 }
 
 
-/*******************************************************************************
-Sidbar style borrowed from cldoc by jessevdk, because I thought it looked good.
-I modified it a little bit to make the links more clickable.
-*******************************************************************************/
-
-div.maruku_toc {
-  position: absolute;
-  left: 0;
+.wide #corner_hack {
+	position: absolute;
+	left: 0px;
+	top: 209px;
+  right: 0px;
+  height: 10px;
+  background: #212121;
 }
 
-#menu {
-  float: left;
+.wide #corner_hack>div {
+  margin-left: 249px;
+  height: 10px;
+  border-radius: 10px 0px 0px 0px;
+  background: #f2f2f2;
+  border-top: 1px solid #111;
+  border-left: 1px solid #111;
+}
+
+.wide #menu {
+	position: absolute;
+	left: 0px;
+	top: 219px;
+	width: 250px;
+	z-index: 10;
+}
+
+.wide #menu.floating {
+  position: fixed;
+  top: 0px;
+}
+
+.narrow #menu {
+  position: relative;
+  max-width: 640px;
+  padding: 50px 10px 0px 10px;
+  margin: 0 auto;
+}
+
+@media screen and (max-width: 480px) {
+  .narrow #menu {
+    min-width: 320px;
+    max-width: 480px;
+  }
 }
 
 #menu ul {
   padding: 0;
   margin: 0;
-  margin-top: 30px;
 }
 
 #menu li {
@@ -488,13 +537,21 @@ div.maruku_toc {
   list-style-type: none;
   background-color: #212121;
 }
-
-#menu li:first-child {
-  border-radius: 0px 10px 0px 0px;
+#menu>ul>li {
+  border-right: 1px solid #111;
 }
 
-#menu li:last-child {
+.wide #menu>ul>li:last-child {
   border-radius: 0px 0px 10px 0px;
+  border-bottom: 1px solid #111;
+}
+
+.narrow #menu>ul>li:first-child {
+  border-radius: 10px 10px 0px 0px;
+}
+
+.narrow #menu>ul>li:last-child {
+  border-radius: 0px 0px 10px 10px;
 }
 
 #menu a {
@@ -503,17 +560,57 @@ div.maruku_toc {
 
 #menu li.selected {
   background-color: #2a2a2a;
+  color: #fff;
 }
 
 #menu li.selected a {
   color: #fff;
 }
 
-#menu li:hover {
+#menu>ul>li:hover {
   background-color: #2a2a2a;
   cursor: pointer;
 }
 
-#menu li:hover a {
+#menu>ul>li.selected:hover {
+  background-color: #2a2a2a;
+  cursor: auto;
+}
+
+#menu>ul>li.selected:hover {
+  cursor: auto;
+}
+
+#menu>ul>li:hover a {
   color: #eee;
+}
+
+#menu>ul>li.selected:hover a {
+  color: #fff;
+}
+
+ul#toc {
+  background-color: #2a2a2a;
+  margin: 0;
+  font-size: 80%;
+}
+
+#toc ul {
+  margin: 0;
+  padding: 0;
+}
+
+#toc li {
+  padding: 0 0 0 15px;
+  background-color: #2a2a2a;
+}
+
+#menu p {
+  padding: 2px 0 2px 15px;
+  margin: 0;
+  text-indent: -15px;
+}
+#menu p:hover {
+  background-color: #313131;
+  cursor: pointer;
 }
