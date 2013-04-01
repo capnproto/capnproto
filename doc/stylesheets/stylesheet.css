@@ -208,6 +208,31 @@ ul li {
   list-style: outside;
 }
 
+/*
+#toc {
+  background-color: #fff;
+  padding: 10px;
+  border-radius: 2px;
+  -moz-border-radius: 2px;
+  -webkit-border-radius: 2px;
+
+  box-shadow: 0 0 5px #ebebeb;
+  -webkit-box-shadow: 0 0 5px #ebebeb;
+  -moz-box-shadow: 0 0 5px #ebebeb;
+  -o-box-shadow: 0 0 5px #ebebeb;
+  -ms-box-shadow: 0 0 5px #ebebeb;
+}
+
+#toc li {
+	list-style: none
+}
+
+#toc ul {
+	padding-bottom: 0;
+	margin-bottom: 0;
+}
+*/
+
 ol li {
   list-style: decimal outside;
 }
@@ -463,23 +488,35 @@ Small Device Styles
 
 
 /*******************************************************************************
-Sidbar style borrowed from cldoc by jessevdk, because I thought it looked good.
-I modified it a little bit to make the links more clickable.
+Sidbar style based on cldoc by jessevdk, because I thought it looked good.
+I modified it heavily, though.
 *******************************************************************************/
 
-div.maruku_toc {
-  position: absolute;
-  left: 0;
+#menu.desktop {
+	position: fixed;
+	left: 0px;
+	top: 230px;
+	width: 250px;
+	z-index: 10;
 }
 
-#menu {
-  float: left;
+#menu.mobile {
+  position: relative;
+  max-width: 640px;
+  padding: 100px 10px 20px 10px;
+  margin: 0 auto;
+}
+
+@media screen and (max-width: 480px) {
+  #menu.mobile {
+    min-width: 320px;
+    max-width: 480px;
+  }
 }
 
 #menu ul {
   padding: 0;
   margin: 0;
-  margin-top: 30px;
 }
 
 #menu li {
@@ -489,12 +526,20 @@ div.maruku_toc {
   background-color: #212121;
 }
 
-#menu li:first-child {
+#menu.desktop>ul>li:first-child {
   border-radius: 0px 10px 0px 0px;
 }
 
-#menu li:last-child {
+#menu.desktop>ul>li:last-child {
   border-radius: 0px 0px 10px 0px;
+}
+
+#menu.mobile>ul>li:first-child {
+  border-radius: 10px 10px 0px 0px;
+}
+
+#menu.mobile>ul>li:last-child {
+  border-radius: 0px 0px 10px 10px;
 }
 
 #menu a {
@@ -503,17 +548,57 @@ div.maruku_toc {
 
 #menu li.selected {
   background-color: #2a2a2a;
+  color: #fff;
 }
 
 #menu li.selected a {
   color: #fff;
 }
 
-#menu li:hover {
+#menu>ul>li:hover {
   background-color: #2a2a2a;
   cursor: pointer;
 }
 
-#menu li:hover a {
+#menu>ul>li.selected:hover {
+  background-color: #2a2a2a;
+  cursor: auto;
+}
+
+#menu>ul>li.selected:hover {
+  cursor: auto;
+}
+
+#menu>ul>li:hover a {
   color: #eee;
+}
+
+#menu>ul>li.selected:hover a {
+  color: #fff;
+}
+
+ul#toc {
+  background-color: #2a2a2a;
+  margin: 0;
+  font-size: 80%;
+}
+
+#toc ul {
+  margin: 0;
+  padding: 0;
+}
+
+#toc li {
+  padding: 0 0 0 15px;
+  background-color: #2a2a2a;
+}
+
+#menu p {
+  padding: 2px 0 2px 15px;
+  margin: 0;
+  text-indent: -15px;
+}
+#menu p:hover {
+  background-color: #313131;
+  cursor: pointer;
 }

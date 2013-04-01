@@ -10,14 +10,14 @@ Cap'n Proto is an insanely fast data interchange format and capability-based RPC
 JSON, except binary. Or think [Protocol Buffers](http://protobuf.googlecode.com), except faster.
 In fact, in benchmarks, Cap'n Proto is INFINITY TIMES faster than Protocol Buffers.
 
-This benchmark is, of course, silly. It is only measuring the time to encode and decode a message
+This benchmark is, of course, unfair. It is only measuring the time to encode and decode a message
 in memory. Cap'n Proto gets a perfect score because _there is no encoding/decoding step_. The Cap'n
 Proto encoding is appropriate both as a data interchange format and an in-memory representation, so
 once your structure is built, you can simply write the bytes straight out to disk!
 
 **_But doesn't that mean the encoding is platform-specific?_**
 
-NO! The encoding is defined byte-for-byte independently of any platform. However, it is designed to
+NO! The encoding is defined byte-for-byte independent of any platform. However, it is designed to
 be efficiently manipulated on common modern CPUs. Data is arranged like a compiler would arrange a
 struct -- with fixed widths, fixed offsets, and proper alignment. Variable-sized elements are
 embedded as pointers. Pointers are offset-based rather than absolute so that messages are

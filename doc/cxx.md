@@ -44,7 +44,7 @@ void writeAddressBook(int fd) {
   Person::Builder bob = people[1];
   bob.setId(456);
   bob.setName("Bob");
-  bob.setEmail("alice@example.com");
+  bob.setEmail("bob@example.com");
 
   writePackedMessageToFd(fd, message);
 }

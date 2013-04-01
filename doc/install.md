@@ -4,7 +4,7 @@ layout: page
 
 # Installation
 
-## Cap'n Proto is not ready yet
+<p style="font-size: 125%; font-weight: bold;">Note: Cap'n Proto is not ready yet</p>
 
 <a class="prominent_link" style="color: #fff"
 href="https://groups.google.com/group/capnproto-announce">Sign Up for Updates</a>
