@@ -7,6 +7,8 @@ if [ "x$(git status --porcelain)" != "x" ]; then
   exit 1
 fi
 
+echo "Checking out doc branch in ./.gh-pages..."
+
 if [ ! -e .gh-pages ]; then
   git clone -b gh-pages https://github.com/kentonv/capnproto.git .gh-pages
   cd .gh-pages
@@ -22,7 +24,7 @@ fi
 
 cd ..
 
-exit 0
+echo "Regenerating site..."
 
 rm -rf _site .gh-pages/*
 
