@@ -222,3 +222,58 @@ to an object in a segment that is full.  If you can't allocate even one word in 
 the target resides, then you will need to allocate a landing pad in some other segment, and use
 this double-far approach.  This should be exceedingly rare in practice since pointers are normally
 set to point to _new_ objects.
+
+## Serialization Over a Stream
+
+When transmitting a message, the segments must be framed in some way, i.e. to communicate the
+number of segments and their sizes before communicating the actual data.  The best framing approach
+may differ depending on the medium -- for example, messages read via `mmap` or shared memory may
+call for different approach than messages sent over a socket or a pipe.  Cap'n Proto does not
+attempt to specify a framing format for every situation.  However, since byte streams are by far
+the most common transmission medium, Cap'n Proto does define and implement a recommended framing
+format for them.
+
+When transmitting over a stream, the following should be sent.  All integers are unsigned and
+little-endian.
+
+* (4 bytes) The number of segments, minus one (since there is always at least one segment).
+* (N * 4 bytes) The size of each segment, in words.
+* (0 or 4 bytes) Padding up to a multiple of words.
+* The content of each segment, in order.
+
+## Packing
+
+For cases where bandwidth usage matters, Cap'n Proto defines a simple compression scheme called
+"packing".  This scheme is based on the observation that Cap'n Proto messages contain lots of
+zero bytes: padding bytes, unset fields, and high-order bytes of small-valued integers.
+
+In packed format, each word of the message is reduced to a tag byte followed by zero to eight
+content bytes.  The bits of the tag byte correspond to the bytes of the unpacked word, with the
+least-significant bit corresponding to the first byte.  Each zero bit indicates that the
+corresponding byte is zero.  The non-zero bytes are packed following the tag.
+
+For example, here is some typical Cap'n Proto data (a struct pointer (offset = 2, data size = 3,
+pointer count = 2) followed by a text pointer (offset = 6, length = 53)) and its packed form:
+
+    unpacked (hex):  08 00 00 00 03 00 02 00   19 00 00 00 aa 01 00 00
+    packed (hex):  51 08 03 02   31 19 aa 01
+
+In addition to the above, there are two tag values which are treated specially:  0x00 and 0xff.
+
+* 0x00:  The tag is followed by a single byte which indicates a count of consecutive zero-valued
+  words, minus 1.  E.g. if the tag 0x00 is followed by 0x05, the sequence unpacks to 6 words of
+  zero.
+* 0xff:  The tag is followed by the bytes of the word as described above, but after those bytes is
+  another byte with value N.  Following that byte is N unpacked words that should be copied
+  directly.  These unpacked words may or may not contain zeros -- it is up to the compressor to
+  decide when to end the unpacked span and return to packing each word.  The purpose of this rule
+  is to minimize the impact of packing on data that doesn't contain any zeros -- in particular,
+  long text blobs.  Because of this rule, the worst-case space overhead of packing is 2 bytes per
+  2 KiB of input (256 words = 2KiB).
+
+## Compression
+
+When Cap'n Proto messages may contain repetitive data (especially, large text blobs), it makes sense
+to apply a standard compression algorithm in addition to packing.  When CPU time is also still
+important, we recommend Google's [Snappy](https://code.google.com/p/snappy/).  Otherwise,
+[zlib](http://www.zlib.net) is probably a good choice.

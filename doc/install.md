@@ -4,7 +4,10 @@ layout: page
 
 # Installation
 
-## Cap'n Proto IS NOT READY
+## Cap'n Proto is not ready yet
+
+<a class="prominent_link" style="color: #fff"
+href="https://groups.google.com/group/capnproto-announce">Sign Up for Updates</a>
 
 As of this writing, Cap'n Proto is in the very early stages of development. It is still missing
 many essential features:
@@ -20,10 +23,13 @@ many essential features:
   end-to-end benchmarks by, like, 2x-5x.  We can do better.
 * **RPC:** The RPC protocol has not yet been specified, much less implemented.
 * **Support for languages other than C++:** Hasn't been started yet.
+* Many other little things.
 
-Therefore, you should only be installing Cap'n Proto at this time if you just want to play around
-with it or help develop it.  If so, great!  Please report your findings to the
-[discussion group](https://groups.google.com/group/capnproto).
+Therefore, these instructions are for those that would like to hack on Cap'n Proto.  If that's you,
+you should join the [discussion group](https://groups.google.com/group/capnproto)!
+
+Or, if you just want to know when it's ready, add yourself to the
+[announce list](https://groups.google.com/group/capnproto-announce).
 
 ## Installing the Cap'n Proto Compiler
 
@@ -58,7 +64,8 @@ changes (via inotify) and immediately rebuilds as necessary.  Instant feedback i
 productivity, so I really like using Ekam.
 
 Unfortunately it's very much unfinished.  It works (for me), but it is quirky and rough around the
-edges.  It only works on Linux, and is best used together with Eclipse.
+edges.  It only works on Linux, and is best used together with Eclipse.  If you find it
+unacceptable, scroll down to the Automake instructions, below.
 
 The Cap'n Proto repo includes a script which will attempt to set up Ekam for you.
 
@@ -73,6 +80,14 @@ symlinks under src.  It also imports the [Google Test](https://googletest.google
 Once Ekam is installed, you can do:
 
     make -f Makefile.ekam continuous
+
+This will build everything it can and run tests.  If successful, the benchmarks will be built
+and saved in `tmp/capnproto/benchmark`.  Try running `tmp/capnproto/benchmark/runner`.
+
+Note that Ekam will fail to build some things and output a bunch of error messages.  You should
+be able to ignore any errors that originate outside of the `capnproto` directory -- these are just
+parts of other packages like Google Test that Ekam doesn't fully know how to build, but aren't
+needed by Cap'n Proto anyway.
 
 If you use Eclipse, you should use the Ekam Eclipse plugin to get build results fed back into your
 editor.  Build the plugin like so:
@@ -113,3 +128,6 @@ If setting up Ekam is too much work for you, you can also build with Automake.
        autoreconf -i
        ./configure
        make check
+       sudo make install
+
+This will install libcapnproto.a in /usr/local/lib and headers in /usr/local/include/capnproto.

@@ -54,7 +54,7 @@ Some notes:
 
 ### Comments
 
-Comments are indicated by hash signs and extend to the end of the line;
+Comments are indicated by hash signs and extend to the end of the line:
 
 {% highlight capnp %}
 # This is a comment.
@@ -310,13 +310,3 @@ A protocol can be changed in the following ways without breaking backwards-compa
 Any other change should be assumed NOT to be safe.  Also, these rules only apply to the Cap'n Proto
 native encoding.  It is sometimes useful to transcode Cap'n Proto types to other formats, like
 JSON, which may have different rules (e.g., field names cannot change in JSON).
-
-## Running the Compiler
-
-Simply run:
-
-    capnpc person.capnp
-
-This will create `person.capnp.h` and `person.capnp.c++` in the same directory as `person.capnp`.
-
-_TODO: This will become more complicated later as we add support for more languages and such._
