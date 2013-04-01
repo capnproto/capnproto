@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="description" content="Capnproto : Cap'n Proto serialization/RPC system" />
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>Cap'n Proto</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="discuss_banner" href="https://groups.google.com/group/capnproto">Discuss on Groups</a>
+          <a id="forkme_banner" href="https://github.com/kentonv/capnproto">View on GitHub</a>
+
+          <h1 id="project_title">Cap'n Proto</h1>
+          <h2 id="project_tagline">Cap'n Proto serialization/RPC system</h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/kentonv/capnproto/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/kentonv/capnproto/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="menu">
+        <ul>
+          <li><a href="index.html">Introduction</a></li>
+          <li><a href="install.html">Installation</a></li>
+          <li><a href="language.html">Defining Types</a></li>
+          <li><a href="encoding.html">Encoding</a></li>
+          <li><a href="rpc.html">RPC Protocol</a></li>
+          <li><a href="cxx.html">C++ Runtime</a></li>
+          <li><a href="otherlang.html">Other Languages</a></li>
+        </ul>
+      </section>
+      <script type="text/javascript">
+        // Highlight the current page in the sidebar, and make the sidebar items easy to click.
+        (function () {
+          var pathname = document.location.pathname;
+          var last = pathname.lastIndexOf('/');
+          var filename = pathname.substring(last);
+
+          if (filename == "/") {
+            filename = "/index.html";
+          }
+
+          var menu = document.getElementById("menu");
+          var items = menu.getElementsByTagName("li");
+          for (var i = 0; i < items.length; i++) {
+            var href = items[i].getElementsByTagName("a")[0].href;
+            if (href.lastIndexOf(filename) >= 0) {
+              items[i].className = "selected";
+            }
+            items[i].onclick = (function(url) {
+              return function() {
+                window.location.href = url;
+              }
+            })(href);
+          }
+        })();
+      </script>
+      <section id="main_content" class="inner">
+        <h1 id='encoding_spec'>Encoding Spec</h1>
+
+<h2 id='not_finalized'>NOT FINALIZED</h2>
+
+<p>The Cap&#8217;n Proto encoding is still evolving. In fact, as of this writing, the format described by this spec is newer than what is actually implemented.</p>
+
+<h2 id='64bit_words'>64-bit Words</h2>
+
+<p>For the purpose of Cap&#8217;n Proto, a &#8220;word&#8221; is defined as 8 bytes, or 64 bits. Since alignment of data is important, all objects are aligned to word boundaries, and sizes are usually expressed in terms of words.</p>
+
+<h2 id='messages'>Messages</h2>
+
+<p>The unit of communication in Cap&#8217;n Proto is a &#8220;message&#8221;. A message is a tree of objects, with the root always being a struct.</p>
+
+<p>Physically, messages may be split into several &#8220;segments&#8221;, each of which is a flat blob of bytes. Typically, a segment must be loaded into a contiguous block of memory before it can be accessed, so that the relative pointers within the segment can be followed quickly. However, when a message has multiple segments, it does not matter where those segments are located in memory relative to each other; inter-segment pointers are encoded differently, as we&#8217;ll see later.</p>
+
+<p>Ideally, every message would have only one segment. However, there are a few reasons why splitting a message into multiple segments may be convenient:</p>
+
+<ul>
+<li>It can be difficult to predict how large a message might be until you start writing it, and you can&#8217;t start writing it until you have a segment to write to. If it turns out the segment you allocated isn&#8217;t big enough, you can allocate additional segments without the need to relocate the data you&#8217;ve already written.</li>
+
+<li>Allocating excessively large blocks of memory can make life difficult for memory allocators, especially on 32-bit systems with limited address space.</li>
+</ul>
+
+<p>The first word of the first segment of the message is always a pointer pointing to the message&#8217;s root struct.</p>
+
+<p>Note that users of Cap&#8217;n Proto never need to understand segments; this is all taken care of automatically by the runtime library.</p>
+
+<h2 id='builtin_types'>Built-in Types</h2>
+
+<p>The built-in primitive types are encoded as follows:</p>
+
+<ul>
+<li><code>Void</code>: Not encoded at all. It has only one possible value thus carries no information.</li>
+
+<li><code>Bool</code>: One bit. 1 = true, 0 = false.</li>
+
+<li>Integers: Encoded in little-endian format. Signed integers use two&#8217;s complement.</li>
+
+<li>Floating-points: Encoded in little-endian IEEE-754 format.</li>
+</ul>
+
+<p>Primitive types must always be aligned to a multiple of their size. Note that since the size of a <code>Bool</code> is one bit, this means eight <code>Bool</code> values can be encoded in a single byte &#8211; this differs from C++, where the <code>bool</code> type takes a whole byte.</p>
+
+<p>The built-in blob types are encoded as follows:</p>
+
+<ul>
+<li><code>Data</code>: Encoded as a pointer, identical to <code>List(UInt8)</code>.</li>
+
+<li><code>Text</code>: Like <code>Data</code>, but the content must be valid UTF-8, the last byte of the content must be zero, and no other byte of the content can be zero.</li>
+</ul>
+
+<h2 id='enums'>Enums</h2>
+
+<p>Enums are encoded the same as 16-bit integers.</p>
+
+<h2 id='lists'>Lists</h2>
+
+<p>A list value is encoded as a pointer to a flat array of values.</p>
+
+<pre><code>lsb                       list pointer                        msb
++-+-----------------------------+--+----------------------------+
+|A|             B               |C |             D              |
++-+-----------------------------+--+----------------------------+
+
+A (2 bits) = 01, to indicate that this is a list pointer.
+B (30 bits) = Offset, in words, from the start of the pointer to the
+    start of the list.  Signed.
+C (3 bits) = Size of each element:
+    0 = 0 (e.g. List(Void))
+    1 = 1 bit
+    2 = 1 byte
+    3 = 2 bytes
+    4 = 4 bytes
+    5 = 8 bytes (non-pointer)
+    6 = 8 bytes (pointer)
+    7 = composite (see below)
+D (29 bits) = Number of elements in the list, except when C is 7
+    (see below).</code></pre>
+
+<p>The pointed-to values are tightly-packed. In particular, <code>Bool</code>s are packed bit-by-bit in little-endian order (the first bit is the least-significant bit of the first byte).</p>
+
+<p>When C = 7, the elements of the list are fixed-width composite values &#8211; usually, structs. In this case, the list content is prefixed by a &#8220;tag&#8221; word that describes each individual element. The tag has the same layout as a struct pointer, except that the pointer offset (B) instead indicates the number of elements in the list. Meanwhile, section (D) of the list pointer &#8211; which normally would store this element count &#8211; instead stores the total number of <em>words</em> in the list (not counting the tag word). The reason we store a word count in the pointer rather than an element count is to ensure that the extents of the list&#8217;s location can always be determined by inspecting the pointer alone, without having to look at the tag; this may allow more-efficient prefetching in some use cases. The reason we don&#8217;t store struct lists as a list of pointers is because doing so would take significantly more space (an extra pointer per element) and may be less cache-friendly.</p>
+
+<p>In the future, we could consider implementing matrixes using the &#8220;composite&#8221; element type, with the elements being fixed-size lists rather than structs. In this case, the tag would look like a list pointer rather than a struct pointer. As of this writing, no such feature has been implemented.</p>
+
+<h2 id='structs'>Structs</h2>
+
+<p>A struct value is encoded as a pointer to its content. The content is split into two sections: data and pointers, with the pointer section appearing immediately after the data section. This split allows structs to be traversed (e.g., copied) without knowing their type.</p>
+
+<p>A struct pointer looks like this:</p>
+
+<pre><code>lsb                      struct pointer                       msb
++-+-----------------------------+---------------+---------------+
+|A|             B               |       C       |       D       |
++-+-----------------------------+---------------+---------------+
+
+A (2 bits) = 00, to indicate that this is a struct pointer.
+B (30 bits) = Offset, in words, from the start of the pointer to the
+    start of the struct&#39;s data section.  Signed.
+C (16 bits) = Size of the struct&#39;s data section, in words.
+D (16 bits) = Size of the struct&#39;s pointer section, in words.</code></pre>
+
+<h3 id='field_positioning'>Field Positioning</h3>
+
+<p>Ignoring unions, the layout of fields within the struct is determined by the following algorithm:</p>
+
+<pre><code>For each field of the struct, ordered by field number {
+    If the field is a pointer {
+        Add it to the end of the pointer section.
+    } else if the data section layout so far includes padding large
+            enough and properly-aligned to hold this field {
+        Replace the padding space with the new field, preferring to
+            put the field as close to the beginning of the section as
+            possible.
+    } else {
+        Add one word to the end of the data section.
+        Place the new field at the beginning of the new word.
+        Mark the rest of the new word as padding.
+    }
+}</code></pre>
+
+<p>Keep in mind that <code>Bool</code> fields are bit-aligned, so multiple booleans will be packed into a single byte. As always, little-endian ordering is the standard &#8211; the first boolean will be located at the least-significant bit of its byte.</p>
+
+<p>When unions are present, add the following logic:</p>
+
+<pre><code>For each field and union of the struct, ordered by field number {
+    If this is a union, not a field {
+        Treat it like a 16-bit field, representing the union tag.
+            (See no-union logic, above.)
+    } else if this field is a member of a union {
+        If an earlier member of the union is in the same section as
+                this field and it combined with any following padding
+                is at least as large as the new field {
+            Give the new field the same offset, so they overlap.
+        } else {
+            Assign a new offset to this field as if it were not a union
+                member at all.  (See no-union logic, above.)
+        }
+    } else {
+        Treat it as a regular field.  (See no-union logic, above.)
+    }
+}</code></pre>
+
+<p>Note that in the worst case, the members of a union could end up using 23 bytes plus one bit (one pointer plus data section locations of 64, 32, 16, 8, and 1 bits). This is an unfortunate side effect of the desire to pack fields in the smallest space where they will fit and the need to maintain backwards-compatibility as fields are added. The worst case should be rare in practice.</p>
+
+<h3 id='default_values'>Default Values</h3>
+
+<p>A default struct is always all-zeros. To achieve this, fields in the data section are stored xor&#8217;d with their defined default values. An all-zero pointer is considered &#8220;null&#8221; (since otherwise it would point at itself, which makes no sense); accessor methods for pointer fields check for null and return a pointer to their default value in this case.</p>
+
+<p>There are several reasons why this is desirable:</p>
+
+<ul>
+<li>Cap&#8217;n Proto messages are often &#8220;packed&#8221; with a simple compression algorithm that deflates zero-value bytes.</li>
+
+<li>Newly-allocated structs only need to be zero-initialized, which is fast and requires no knowledge of the struct type except its size.</li>
+
+<li>If a newly-added field is placed in space that was previously padding, messages written by old binaries that do not know about this field will still have its default value set correctly &#8211; because it is always zero.</li>
+</ul>
+
+<h2 id='intersegment_pointers'>Inter-Segment Pointers</h2>
+
+<p>When a pointer needs to point to a different segment, offsets no longer work. We instead encode the pointer as a &#8220;far pointer&#8221;, which looks like this:</p>
+
+<pre><code>lsb                        far pointer                        msb
++-+-----------------------------+-------------------------------+
+|A|             B               |               C               |
++-+-----------------------------+-------------------------------+
+
+A (2 bits) = 02, to indicate that this is a far pointer.
+B (30 bits) = Offset, in words, from the start of the target segment
+    to the location of the far-pointer landing-pad within that
+    segment.
+C (32 bits) = ID of the target segment.  (Segments are numbered
+    sequentially starting from zero.)</code></pre>
+
+<p>The &#8220;landing pad&#8221; of a far pointer is normally just another pointer, which in turn points to the actual object.</p>
+
+<p>However, if the &#8220;landing pad&#8221; pointer is itself another far pointer, then it is interpreted differently: This far pointer points to the start of the object&#8217;s <em>content</em>, located in some other segment. The landing pad is itself immediately followed by a tag word. The tag word looks exactly like an intra-segment pointer to the target object would look, except that the offset is always zero.</p>
+
+<p>The reason for the convoluted double-far convention is to make it possible to form a new pointer to an object in a segment that is full. If you can&#8217;t allocate even one word in the segment where the target resides, then you will need to allocate a landing pad in some other segment, and use this double-far approach. This should be exceedingly rare in practice since pointers are normally set to point to <em>new</em> objects.</p>
+
+<h2 id='serialization_over_a_stream'>Serialization Over a Stream</h2>
+
+<p>When transmitting a message, the segments must be framed in some way, i.e. to communicate the number of segments and their sizes before communicating the actual data. The best framing approach may differ depending on the medium &#8211; for example, messages read via <code>mmap</code> or shared memory may call for different approach than messages sent over a socket or a pipe. Cap&#8217;n Proto does not attempt to specify a framing format for every situation. However, since byte streams are by far the most common transmission medium, Cap&#8217;n Proto does define and implement a recommended framing format for them.</p>
+
+<p>When transmitting over a stream, the following should be sent. All integers are unsigned and little-endian.</p>
+
+<ul>
+<li>(4 bytes) The number of segments, minus one (since there is always at least one segment).</li>
+
+<li>(N * 4 bytes) The size of each segment, in words.</li>
+
+<li>(0 or 4 bytes) Padding up to a multiple of words.</li>
+
+<li>The content of each segment, in order.</li>
+</ul>
+
+<h2 id='packing'>Packing</h2>
+
+<p>For cases where bandwidth usage matters, Cap&#8217;n Proto defines a simple compression scheme called &#8220;packing&#8221;. This scheme is based on the observation that Cap&#8217;n Proto messages contain lots of zero bytes: padding bytes, unset fields, and high-order bytes of small-valued integers.</p>
+
+<p>In packed format, each word of the message is reduced to a tag byte followed by zero to eight content bytes. The bits of the tag byte correspond to the bytes of the unpacked word, with the least-significant bit corresponding to the first byte. Each zero bit indicates that the corresponding byte is zero. The non-zero bytes are packed following the tag.</p>
+
+<p>For example, here is some typical Cap&#8217;n Proto data (a struct pointer (offset = 2, data size = 3, pointer count = 2) followed by a text pointer (offset = 6, length = 53)) and its packed form:</p>
+
+<pre><code>unpacked (hex):  08 00 00 00 03 00 02 00   19 00 00 00 aa 01 00 00
+packed (hex):  51 08 03 02   31 19 aa 01</code></pre>
+
+<p>In addition to the above, there are two tag values which are treated specially: 0x00 and 0xff.</p>
+
+<ul>
+<li>0x00: The tag is followed by a single byte which indicates a count of consecutive zero-valued words, minus 1. E.g. if the tag 0x00 is followed by 0x05, the sequence unpacks to 6 words of zero.</li>
+
+<li>0xff: The tag is followed by the bytes of the word as described above, but after those bytes is another byte with value N. Following that byte is N unpacked words that should be copied directly. These unpacked words may or may not contain zeros &#8211; it is up to the compressor to decide when to end the unpacked span and return to packing each word. The purpose of this rule is to minimize the impact of packing on data that doesn&#8217;t contain any zeros &#8211; in particular, long text blobs. Because of this rule, the worst-case space overhead of packing is 2 bytes per 2 KiB of input (256 words = 2KiB).</li>
+</ul>
+
+<h2 id='compression'>Compression</h2>
+
+<p>When Cap&#8217;n Proto messages may contain repetitive data (especially, large text blobs), it makes sense to apply a standard compression algorithm in addition to packing. When CPU time is also still important, we recommend Google&#8217;s <a href='https://code.google.com/p/snappy/'>Snappy</a>. Otherwise, <a href='http://www.zlib.net'>zlib</a> is probably a good choice.</p>
+        <div style="clear: left;"></div>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">Cap'n Proto maintained by <a href="https://github.com/kentonv">kentonv</a></p>
+        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+              <script type="text/javascript">
+            var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+            document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+          </script>
+          <script type="text/javascript">
+            try {
+              var pageTracker = _gat._getTracker("UA-39711112-1");
+            pageTracker._trackPageview();
+            } catch(err) {}
+          </script>
+
+
+  </body>
+</html>

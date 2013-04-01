@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="description" content="Capnproto : Cap'n Proto serialization/RPC system" />
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>Cap'n Proto</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="discuss_banner" href="https://groups.google.com/group/capnproto">Discuss on Groups</a>
+          <a id="forkme_banner" href="https://github.com/kentonv/capnproto">View on GitHub</a>
+
+          <h1 id="project_title">Cap'n Proto</h1>
+          <h2 id="project_tagline">Cap'n Proto serialization/RPC system</h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/kentonv/capnproto/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/kentonv/capnproto/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="menu">
+        <ul>
+          <li><a href="index.html">Introduction</a></li>
+          <li><a href="install.html">Installation</a></li>
+          <li><a href="language.html">Defining Types</a></li>
+          <li><a href="encoding.html">Encoding</a></li>
+          <li><a href="rpc.html">RPC Protocol</a></li>
+          <li><a href="cxx.html">C++ Runtime</a></li>
+          <li><a href="otherlang.html">Other Languages</a></li>
+        </ul>
+      </section>
+      <script type="text/javascript">
+        // Highlight the current page in the sidebar, and make the sidebar items easy to click.
+        (function () {
+          var pathname = document.location.pathname;
+          var last = pathname.lastIndexOf('/');
+          var filename = pathname.substring(last);
+
+          if (filename == "/") {
+            filename = "/index.html";
+          }
+
+          var menu = document.getElementById("menu");
+          var items = menu.getElementsByTagName("li");
+          for (var i = 0; i < items.length; i++) {
+            var href = items[i].getElementsByTagName("a")[0].href;
+            if (href.lastIndexOf(filename) >= 0) {
+              items[i].className = "selected";
+            }
+            items[i].onclick = (function(url) {
+              return function() {
+                window.location.href = url;
+              }
+            })(href);
+          }
+        })();
+      </script>
+      <section id="main_content" class="inner">
+        <h1 id='installation'>Installation</h1>
+
+<h2 id='capn_proto_is_not_ready_yet'>Cap&#8217;n Proto is not ready yet</h2>
+<a class='prominent_link' href='https://groups.google.com/group/capnproto-announce' style='color: #fff'>Sign Up for Updates</a>
+<p>As of this writing, Cap&#8217;n Proto is in the very early stages of development. It is still missing many essential features:</p>
+
+<ul>
+<li><strong>Security:</strong> There are almost certainly a few exploitable security bugs in the Cap&#8217;n Proto code. You should not use Cap&#8217;n Proto on untrusted data until a proper security review has been completed.</li>
+
+<li><strong>Stability:</strong> The Cap&#8217;n Proto format is still changing. Any data written today probably won&#8217;t be understood by future versions. Additionally, the programming interface is still evolving, so code written today probably won&#8217;t work with future versions.</li>
+
+<li><strong>Performance:</strong> While Cap&#8217;n Proto is inherently fast by design, the implementation has not yet undergone serious profiling and optimization. Currenlty it only beats Protobufs in realistic-ish end-to-end benchmarks by, like, 2x-5x. We can do better.</li>
+
+<li><strong>RPC:</strong> The RPC protocol has not yet been specified, much less implemented.</li>
+
+<li><strong>Support for languages other than C++:</strong> Hasn&#8217;t been started yet.</li>
+
+<li>Many other little things.</li>
+</ul>
+
+<p>Therefore, these instructions are for those that would like to hack on Cap&#8217;n Proto. If that&#8217;s you, you should join the <a href='https://groups.google.com/group/capnproto'>discussion group</a>!</p>
+
+<p>Or, if you just want to know when it&#8217;s ready, add yourself to the <a href='https://groups.google.com/group/capnproto-announce'>announce list</a>.</p>
+
+<h2 id='installing_the_capn_proto_compiler'>Installing the Cap&#8217;n Proto Compiler</h2>
+
+<p><code>capnpc</code>, which takes <code>.capnp</code> files and generates source code for them (e.g. in C++), is itself written in Haskell.</p>
+
+<p>First, install <a href='http://www.haskell.org/cabal/'>Cabal</a>, e.g. on Ubuntu:</p>
+
+<pre><code>sudo apt-get install cabal-install</code></pre>
+
+<p>Now you can check out, build, and install <code>capnpc</code> like so:</p>
+
+<pre><code>git clone https://github.com/kentonv/capnproto.git
+cd capnproto/compiler
+cabal install capnproto-compiler.cabal</code></pre>
+
+<p>Be sure that the Cabal bin directory (typically <code>$HOME/.cabal/bin</code>) is in your <code>PATH</code> before you attempt to build the C++ runtime.</p>
+
+<h2 id='installing_the_c_runtime'>Installing the C++ Runtime</h2>
+
+<h3 id='gcc_47_needed'>GCC 4.7 Needed</h3>
+
+<p>If you are using GCC, you MUST use at least version 4.7 as Cap&#8217;n Proto uses recently-implemented C++11 features. If you are using some other compiler&#8230; good luck.</p>
+
+<h3 id='building_with_ekam'>Building with Ekam</h3>
+
+<p>Ekam is a build system I wrote a while back that automatically figures out how to build your C++ code without instructions. It also supports continuous builds, where it watches the filesystem for changes (via inotify) and immediately rebuilds as necessary. Instant feedback is key to productivity, so I really like using Ekam.</p>
+
+<p>Unfortunately it&#8217;s very much unfinished. It works (for me), but it is quirky and rough around the edges. It only works on Linux, and is best used together with Eclipse. If you find it unacceptable, scroll down to the Automake instructions, below.</p>
+
+<p>The Cap&#8217;n Proto repo includes a script which will attempt to set up Ekam for you.</p>
+
+<pre><code>git clone https://github.com/kentonv/capnproto.git
+cd capnproto/c++
+./setup-ekam.sh</code></pre>
+
+<p>If all goes well, this downloads the Ekam code into a directory called <code>.ekam</code> and adds some symlinks under src. It also imports the <a href='https://googletest.googlecode.com'>Google Test</a> and <a href='http://protobuf.googlecode.com'>Protobuf</a> source code, so you can compile tests and benchmarks.</p>
+
+<p>Once Ekam is installed, you can do:</p>
+
+<pre><code>make -f Makefile.ekam continuous</code></pre>
+
+<p>This will build everything it can and run tests. If successful, the benchmarks will be built and saved in <code>tmp/capnproto/benchmark</code>. Try running <code>tmp/capnproto/benchmark/runner</code>.</p>
+
+<p>Note that Ekam will fail to build some things and output a bunch of error messages. You should be able to ignore any errors that originate outside of the <code>capnproto</code> directory &#8211; these are just parts of other packages like Google Test that Ekam doesn&#8217;t fully know how to build, but aren&#8217;t needed by Cap&#8217;n Proto anyway.</p>
+
+<p>If you use Eclipse, you should use the Ekam Eclipse plugin to get build results fed back into your editor. Build the plugin like so:</p>
+
+<ol>
+<li>Open the <code>.ekam/eclipse</code> directory as an Eclipse project.</li>
+
+<li>File -&gt; Export -&gt; Plug-in Development -&gt; Deployable Plug-ins and Fragments.</li>
+
+<li>Choose the Ekam Dashboard project and export to your Eclipse directory, or export to another directory and copy the files into your Eclipse directory.</li>
+
+<li>Restart Eclipse.</li>
+
+<li>Make sure you have some sort of project in your work space containing your Ekam source tree. It should be rooted at the directory containing &#8220;src&#8221;, &#8220;tmp&#8221;, etc. The plugin will mark errors within this project.</li>
+
+<li>Window -&gt; Show View -&gt; Other -&gt; Ekam -&gt; Ekam Dashboard</li>
+</ol>
+
+<p>The dashboard view lets you browse the whole tree and also populates your editor with error markers.</p>
+
+<h3 id='building_with_automake'>Building With Automake</h3>
+
+<p>If setting up Ekam is too much work for you, you can also build with Automake.</p>
+
+<ol>
+<li>
+<p>Make sure the <a href='https://googletest.googlecode.com/'>Google Test</a> headers are in your include path and <code>libgtest.a</code> and <code>libgtest_main.a</code> are in your library path. Google Test has apparently decided that <code>make install</code> is evil so you have to do this somewhat manually. :(</p>
+
+<pre><code>wget https://googletest.googlecode.com/files/gtest-1.6.0.zip
+unzip gtest-1.6.0.zip
+cd gtest-1.6.0
+./configure
+make
+cp -r include/gtest $PREFIX/include/gtest
+cp ./lib/.libs/*.a $PREFIX/lib</code></pre>
+</li>
+
+<li>
+<p>Clone and build the Cap&#8217;n Proto code.</p>
+
+<pre><code>git clone https://github.com/kentonv/capnproto.git
+cd capnproto/c++
+autoreconf -i
+./configure
+make check
+sudo make install</code></pre>
+</li>
+</ol>
+
+<p>This will install libcapnproto.a in /usr/local/lib and headers in /usr/local/include/capnproto.</p>
+        <div style="clear: left;"></div>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">Cap'n Proto maintained by <a href="https://github.com/kentonv">kentonv</a></p>
+        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+              <script type="text/javascript">
+            var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+            document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+          </script>
+          <script type="text/javascript">
+            try {
+              var pageTracker = _gat._getTracker("UA-39711112-1");
+            pageTracker._trackPageview();
+            } catch(err) {}
+          </script>
+
+
+  </body>
+</html>

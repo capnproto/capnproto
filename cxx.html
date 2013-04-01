@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="description" content="Capnproto : Cap'n Proto serialization/RPC system" />
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>Cap'n Proto</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="discuss_banner" href="https://groups.google.com/group/capnproto">Discuss on Groups</a>
+          <a id="forkme_banner" href="https://github.com/kentonv/capnproto">View on GitHub</a>
+
+          <h1 id="project_title">Cap'n Proto</h1>
+          <h2 id="project_tagline">Cap'n Proto serialization/RPC system</h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/kentonv/capnproto/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/kentonv/capnproto/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="menu">
+        <ul>
+          <li><a href="index.html">Introduction</a></li>
+          <li><a href="install.html">Installation</a></li>
+          <li><a href="language.html">Defining Types</a></li>
+          <li><a href="encoding.html">Encoding</a></li>
+          <li><a href="rpc.html">RPC Protocol</a></li>
+          <li><a href="cxx.html">C++ Runtime</a></li>
+          <li><a href="otherlang.html">Other Languages</a></li>
+        </ul>
+      </section>
+      <script type="text/javascript">
+        // Highlight the current page in the sidebar, and make the sidebar items easy to click.
+        (function () {
+          var pathname = document.location.pathname;
+          var last = pathname.lastIndexOf('/');
+          var filename = pathname.substring(last);
+
+          if (filename == "/") {
+            filename = "/index.html";
+          }
+
+          var menu = document.getElementById("menu");
+          var items = menu.getElementsByTagName("li");
+          for (var i = 0; i < items.length; i++) {
+            var href = items[i].getElementsByTagName("a")[0].href;
+            if (href.lastIndexOf(filename) >= 0) {
+              items[i].className = "selected";
+            }
+            items[i].onclick = (function(url) {
+              return function() {
+                window.location.href = url;
+              }
+            })(href);
+          }
+        })();
+      </script>
+      <section id="main_content" class="inner">
+        <h1 id='c_runtime'>C++ Runtime</h1>
+
+<p>The Cap&#8217;n Proto C++ runtime implementation provides an easy-to-use interface for manipulating messages backed by fast pointer arithmetic.</p>
+
+<h2 id='example_usage'>Example Usage</h2>
+
+<p>For the Cap&#8217;n Proto definition:</p>
+<div class='highlight'><pre><code class='capnp'><span class='k'>struct</span> <span class='n'>Person</span> {
+  <span class='n'>id</span> <span class='nd'>@0</span> <span class='nc'>:UInt32</span>;
+  <span class='n'>name</span> <span class='nd'>@1</span> <span class='nc'>:Text</span>;
+  <span class='n'>email</span> <span class='nd'>@2</span> <span class='nc'>:Text</span>;
+}
+
+<span class='k'>struct</span> <span class='n'>AddressBook</span> {
+  <span class='n'>people</span> <span class='nd'>@0</span> <span class='nc'>:List(Person)</span>;
+}
+</code></pre></div>
+<p>You might write code like:</p>
+<div class='highlight'><pre><code class='c++'><span class='cp'>#include &quot;addressbook.capnp.h&quot;</span>
+<span class='cp'>#include &lt;capnproto/message.h&gt;</span>
+<span class='cp'>#include &lt;capnproto/serialize-packed.h&gt;</span>
+
+<span class='kt'>void</span> <span class='n'>writeAddressBook</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>fd</span><span class='p'>)</span> <span class='p'>{</span>
+  <span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>MallocMessageBuilder</span> <span class='n'>message</span><span class='p'>;</span>
+
+  <span class='n'>AddressBook</span><span class='o'>::</span><span class='n'>Builder</span> <span class='n'>addressBook</span> <span class='o'>=</span> <span class='n'>message</span><span class='p'>.</span><span class='n'>initRoot</span><span class='o'>&lt;</span><span class='n'>AddressBook</span><span class='o'>&gt;</span><span class='p'>();</span>
+  <span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='n'>Person</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>people</span> <span class='o'>=</span> <span class='n'>addressBook</span><span class='p'>.</span><span class='n'>initPeople</span><span class='p'>(</span><span class='mi'>2</span><span class='p'>);</span>
+
+  <span class='n'>Person</span><span class='o'>::</span><span class='n'>Builder</span> <span class='n'>alice</span> <span class='o'>=</span> <span class='n'>people</span><span class='p'>[</span><span class='mi'>0</span><span class='p'>];</span>
+  <span class='n'>alice</span><span class='p'>.</span><span class='n'>setId</span><span class='p'>(</span><span class='mi'>123</span><span class='p'>);</span>
+  <span class='n'>alice</span><span class='p'>.</span><span class='n'>setName</span><span class='p'>(</span><span class='s'>&quot;Alice&quot;</span><span class='p'>);</span>
+  <span class='n'>alice</span><span class='p'>.</span><span class='n'>setEmail</span><span class='p'>(</span><span class='s'>&quot;alice@example.com&quot;</span><span class='p'>);</span>
+
+  <span class='n'>Person</span><span class='o'>::</span><span class='n'>Builder</span> <span class='n'>bob</span> <span class='o'>=</span> <span class='n'>people</span><span class='p'>[</span><span class='mi'>1</span><span class='p'>];</span>
+  <span class='n'>bob</span><span class='p'>.</span><span class='n'>setId</span><span class='p'>(</span><span class='mi'>456</span><span class='p'>);</span>
+  <span class='n'>bob</span><span class='p'>.</span><span class='n'>setName</span><span class='p'>(</span><span class='s'>&quot;Bob&quot;</span><span class='p'>);</span>
+  <span class='n'>bob</span><span class='p'>.</span><span class='n'>setEmail</span><span class='p'>(</span><span class='s'>&quot;alice@example.com&quot;</span><span class='p'>);</span>
+
+  <span class='n'>writePackedMessageToFd</span><span class='p'>(</span><span class='n'>fd</span><span class='p'>,</span> <span class='n'>message</span><span class='p'>);</span>
+<span class='p'>}</span>
+
+<span class='kt'>void</span> <span class='n'>printAddressBook</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>fd</span><span class='p'>)</span> <span class='p'>{</span>
+  <span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>PackedFdMessageReader</span> <span class='n'>message</span><span class='p'>(</span><span class='n'>fd</span><span class='p'>);</span>
+
+  <span class='n'>AddressBook</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>addressBook</span> <span class='o'>=</span> <span class='n'>message</span><span class='p'>.</span><span class='n'>getRoot</span><span class='o'>&lt;</span><span class='n'>AddressBook</span><span class='o'>&gt;</span><span class='p'>();</span>
+
+  <span class='k'>for</span> <span class='p'>(</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>person</span> <span class='o'>:</span> <span class='n'>addressBook</span><span class='p'>.</span><span class='n'>getPeople</span><span class='p'>())</span> <span class='p'>{</span>
+    <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>person</span><span class='p'>.</span><span class='n'>getName</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;: &quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>person</span><span class='p'>.</span><span class='n'>getEmail</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+  <span class='p'>}</span>
+<span class='p'>}</span>
+</code></pre></div>
+<h2 id='c_feature_usage_c11_exceptions'>C++ Feature Usage: C++11, Exceptions</h2>
+
+<p>This implementation makes use of C++11 features. If you are using GCC, you will need at least version 4.7 to compile Cap&#8217;n Proto, with <code>--std=gnu++0x</code>. Other compilers have not been tested at this time. In general, you do not need to understand C++11 features to <em>use</em> Cap&#8217;n Proto; it all happens under the hood.</p>
+
+<p>This implementation prefers to handle errors using exceptions. Exceptions are only used in circumstances that should never occur in normal opertaion. For example, exceptions are thrown on assertion failures (indicating bugs in the code), network failures (indicating incorrect configuration), and invalid input. Exceptions thrown by Cap&#8217;n Proto are never part of the interface and never need to be caught in correct usage. The purpose of throwing exceptions is to allow higher-level code a chance to recover from unexpected circumstances without disrupting other work happening in the same process. For example, a server that handles requests from multiple clients should, on exception, return an error to the client that caused the exception and close that connection, but should continue handling other connections normally.</p>
+
+<p>When Cap&#8217;n Proto code might throw an exception from a destructor, it first checks <code>std::uncaught_exception()</code> to ensure that this is safe. If another exception is already active, the new exception is assumed to be a side-effect of the main exception, and is either silently swallowed or reported on a side channel.</p>
+
+<p>In recognition of the fact that some teams prefer not to use exceptions, and that even enabling exceptions in the compiler introduces overhead, Cap&#8217;n Proto allows you to disable them entirely by registering your own exception callback. The callback will be called in place of throwing an exception. The callback may abort the process, and is required to do so in certain circumstances (e.g. when a fatal bug is detected). If the callback returns normally, Cap&#8217;n Proto will attempt to continue by inventing &#8220;safe&#8221; values. This will lead to garbage output, but at least the program will not crash. Your exception callback should set some sort of a flag indicating that an error occurred, and somewhere up the stack you should check for that flag and cancel the operation. (TODO: Document how to register this callback; this is not actually implemented as of this writing.)</p>
+
+<h2 id='generating_code'>Generating Code</h2>
+
+<p>To generate C++ code from your <code>.capnp</code> <a href='language.html'>interface definition</a>, run:</p>
+
+<pre><code>capnpc myproto.capnp</code></pre>
+
+<p>This will create <code>myproto.capnp.h</code> and <code>myproto.capnp.c++</code> in the same directory as <code>myproto.capnp</code>.</p>
+
+<p><em>TODO: This will become more complicated later as we add support for more languages and such.</em></p>
+
+<h2 id='primitive_types'>Primitive Types</h2>
+
+<p>Primitive types map to the obvious C++ types:</p>
+
+<ul>
+<li><code>Bool</code> -&gt; <code>bool</code></li>
+
+<li><code>IntNN</code> -&gt; <code>intNN_t</code></li>
+
+<li><code>UIntNN</code> -&gt; <code>uintNN_t</code></li>
+
+<li><code>Float32</code> -&gt; <code>float</code></li>
+
+<li><code>Float64</code> -&gt; <code>double</code></li>
+
+<li><code>Void</code> -&gt; <code>::capnproto::Void</code> (An enum with one value: <code>::capnproto::Void::VOID</code>)</li>
+</ul>
+
+<h2 id='structs'>Structs</h2>
+
+<p>For each struct <code>Foo</code> in your interface, a C++ type named <code>Foo</code> generated. This type itself is really just a namespace; it contains two important inner classes: <code>Reader</code> and <code>Builder</code>.</p>
+
+<p><code>Reader</code> represents a read-only instance of <code>Foo</code> while <code>Builder</code> represents a writable instance (usually, one that you are building). Both classes behave like pointers, in that you can pass them by value and they do not own the underlying data that they operate on. In other words, <code>Foo::Builder</code> is like a pointer to a <code>Foo</code> while <code>Foo::Reader</code> is like a const pointer to a <code>Foo</code>.</p>
+
+<p>For every field <code>bar</code> defined in <code>Foo</code>, <code>Foo::Reader</code> has a method <code>getBar()</code>. For primitive types, <code>get</code> just returns the type, but for structs, lists, and blobs, it returns a <code>Reader</code> for the type.</p>
+<div class='highlight'><pre><code class='c++'><span class='c1'>// Example Reader methods:</span>
+
+<span class='c1'>// myPrimitiveField @0 :Int32;</span>
+<span class='n'>int32_t</span> <span class='n'>getMyPrimitiveField</span><span class='p'>();</span>
+
+<span class='c1'>// myTextField @1 :Text;</span>
+<span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>Text</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>getMyTextField</span><span class='p'>();</span>
+<span class='c1'>// (Note that Text::Reader may be implicitly cast to const char* and</span>
+<span class='c1'>// std::string.)</span>
+
+<span class='c1'>// myStructField @2 :MyStruct;</span>
+<span class='n'>MyStruct</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>getMyStructField</span><span class='p'>();</span>
+
+<span class='c1'>// myListField @3 :List(Float64);</span>
+<span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;</span> <span class='n'>getMyListField</span><span class='p'>();</span>
+</code></pre></div>
+<p><code>Foo::Builder</code>, meanwhile, has two or three methods for each field <code>bar</code>:</p>
+
+<ul>
+<li><code>getBar()</code>: For primitives, returns the value. For composites, returns a Builder for the composite. If a composite field has not been initialized (its pointer is null), it will be initialized to a copy of the field&#8217;s default value before returning.</li>
+
+<li><code>setBar(x)</code>: For primitives, sets the value to X. For composites, sets the value to a copy of x, which must be a Reader for the type.</li>
+
+<li><code>initBar(n)</code>: Only for lists (including blobs). Sets the field to a newly-allocated list of size n and returns a Builder for it. The elements of the list are initialized to their empty state (zero for numbers, default values for structs).</li>
+
+<li><code>initBar()</code>: Only for structs. Sets the field to a newly-allocated struct and returns a Builder for it. Note that the newly-allocated struct is initialized to the default value for the struct&#8217;s <em>type</em> (i.e., all-zero) rather than the default value for the field <code>bar</code> (if it has one).</li>
+</ul>
+<div class='highlight'><pre><code class='c++'><span class='c1'>// Example Builder methods:</span>
+
+<span class='c1'>// myPrimitiveField @0 :Int32;</span>
+<span class='n'>int32_t</span> <span class='n'>getMyPrimitiveField</span><span class='p'>();</span>
+<span class='kt'>void</span> <span class='n'>setMyPrimitiveField</span><span class='p'>(</span><span class='n'>int32_t</span> <span class='n'>value</span><span class='p'>);</span>
+
+<span class='c1'>// myTextField @1 :Text;</span>
+<span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>Text</span><span class='o'>::</span><span class='n'>Builder</span> <span class='n'>getMyTextField</span><span class='p'>();</span>
+<span class='kt'>void</span> <span class='n'>setMyTextField</span><span class='p'>(</span><span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>Text</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>value</span><span class='p'>);</span>
+<span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>Text</span><span class='o'>::</span><span class='n'>Builder</span> <span class='n'>initMyTextField</span><span class='p'>(</span><span class='n'>size_t</span> <span class='n'>size</span><span class='p'>);</span>
+<span class='c1'>// (Note that Text::Reader is implicitly constructable from const char*</span>
+<span class='c1'>// and std::string, and Text::Builder can be implicitly cast to</span>
+<span class='c1'>// these types.)</span>
+
+<span class='c1'>// myStructField @2 :MyStruct;</span>
+<span class='n'>MyStruct</span><span class='o'>::</span><span class='n'>Builder</span> <span class='n'>getMyStructField</span><span class='p'>();</span>
+<span class='kt'>void</span> <span class='n'>setMyStructField</span><span class='p'>(</span><span class='n'>MyStruct</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>value</span><span class='p'>);</span>
+<span class='n'>MyStruct</span><span class='o'>::</span><span class='n'>Builder</span> <span class='n'>initMyStructField</span><span class='p'>();</span>
+
+<span class='c1'>// myListField @3 :List(Float64);</span>
+<span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>getMyListField</span><span class='p'>();</span>
+<span class='kt'>void</span> <span class='n'>setMyListField</span><span class='p'>(</span><span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;::</span><span class='n'>Reader</span> <span class='n'>value</span><span class='p'>);</span>
+<span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>initMyListField</span><span class='p'>(</span><span class='n'>size_t</span> <span class='n'>size</span><span class='p'>);</span>
+</code></pre></div>
+<h2 id='lists'>Lists</h2>
+
+<p>Lists are represented by the type <code>capnproto::List&lt;T&gt;</code>, where <code>T</code> is any of the primitive types, any Cap&#8217;n Proto user-defined type, <code>capnproto::Text</code>, <code>capnproto::Data</code>, or <code>capnproto::List&lt;T&gt;</code>.</p>
+
+<p>The type <code>List&lt;T&gt;</code> itself is not instantiatable, but has two inner classes: <code>Reader</code> and <code>Builder</code>. As with structs, these types behave like pointers to read-only and read-write data, respectively.</p>
+
+<p>Both <code>Reader</code> and <code>Builder</code> implement <code>size()</code>, <code>operator[]</code>, <code>begin()</code>, and <code>end()</code>, as good C++ containers should. Note, though, that <code>operator[]</code> is read-only &#8211; you cannot use it to assign the element, because that would require returning a reference, which is impossible because the underlying data may not be in your CPU&#8217;s native format (e.g., wrong byte order). Instead, to assign an element of a list, you must use <code>builder.set(index, value)</code>.</p>
+
+<p>For <code>List&lt;Foo&gt;</code> where <code>Foo</code> is a non-primitive type, the type returned by <code>operator[]</code> and <code>iterator::operator*()</code> is <code>Foo::Reader</code> (for <code>List&lt;Foo&gt;::Reader</code>) or <code>Foo::Builder</code> (for <code>List&lt;Foo&gt;::Builder</code>). The builder&#8217;s <code>set</code> method takes a <code>Foo::Reader</code> as its second parameter.</p>
+
+<p>For lists of lists or lists of blobs, the builder also has a method <code>init(index, size)</code> which sets the element at the given index to a newly-allocated value with the given size and returns a builder for it. Struct lists do not have an <code>init</code> method because all elements are initialized to empty values when the list is created.</p>
+
+<h2 id='enums'>Enums</h2>
+
+<p>Cap&#8217;n Proto enums become C++11 &#8220;enum classes&#8221;. That means, they behave like any other enum, but the enum&#8217;s values are scoped within the type. E.g. for an enum <code>Foo</code> with value <code>bar</code>, you must refer to the value as <code>Foo::BAR</code>. The enum class&#8217;s base type is <code>uint16_t</code>.</p>
+
+<p>To match prevaling C++ style, an enum&#8217;s value names are converted to UPPERCASE_WITH_UNDERSCORES (whereas in the definition language you&#8217;d write them in camelCase).</p>
+
+<p>Keep in mind when writing <code>switch</code> blocks that an enum read off the wire may have a numeric value that is not listed in its definition. This may be the case if the sender is using a newer version of the protocol, or if the message is corrupt or malicious.</p>
+
+<h2 id='blobs_text_and_data'>Blobs (Text and Data)</h2>
+
+<p>Blobs are manipulated using the classes <code>capnproto::Text</code> and <code>capnproto::Data</code>. These classes are, again, just containers for inner classes <code>Reader</code> and <code>Builder</code>. These classes are iterable and implement <code>data()</code>, <code>size()</code>, and <code>operator[]</code> methods, similar to <code>std::string</code>. <code>Builder::operator[]</code> even returns a reference (unlike with <code>List&lt;T&gt;</code>). <code>Text::Reader</code> additionally has a method <code>c_str()</code> which returns a NUL-terminated <code>const char*</code>.</p>
+
+<p>These classes strive to be easy to convert to other common representations of raw data. Blob readers and builders can be implicitly converted to any class which takes <code>(const char*, size_t)</code> as its constructor parameters, and from any class which has <code>const char* data()</code> and <code>size_t size()</code> methods (in particular, <code>std::string</code>). Text readers and builders can additionally be implicitly converted to and from NUL-terminated <code>const char*</code>s.</p>
+
+<p>Because of this, callers often don&#8217;t need to know anything about the blob classes. If you use <code>std::string</code> to represent blobs in your own code, or NUL-terminated character arrays for text, just pretend that&#8217;s what Cap&#8217;n Proto uses too.</p>
+
+<h2 id='interfaces'>Interfaces</h2>
+
+<p>Interfaces (RPC) are not yet implemented at this time.</p>
+
+<h2 id='messages_and_io'>Messages and I/O</h2>
+
+<p>To create a new message, you must start by creating a <code>capnproto::MessageBuilder</code> (<code>capnproto/message.h</code>). This is an abstract type which you can implement yourself, but most users will want to use <code>capnproto::MallocMessageBuilder</code>. Once your message is constructed, write it to a file descriptor <code>capnproto::writeMessageToFd(fd, builder)</code> (<code>capnproto/serialize.h</code>) or <code>capnproto::writePackedMessageToFd(fd, builder)</code> (<code>capnproto/serialize-packed.h</code>).</p>
+
+<p>To read a message, you must create a <code>capnproto::MessageReader</code>, which is another abstract type. Implementations are specific to the import source. You can use <code>capnproto::StreamFdMessageReader</code> (<code>capnproto/serialize.h</code>) or <code>capnproto::PackedFdMessageReader</code> (<code>capnproto/serialize-packed.h</code>) to read from file descriptors; both take the file descriptor as a constructor argument.</p>
+
+<p>Note that if your stream contains additional data after the message, <code>PackedFdMessageReader</code> may accidentally read some of that data, since it does buffered I/O. To make this work correctly, you will need to set up a multi-use buffered stream. Buffered I/O may also be a good idea with <code>StreamFdMessageReader</code> and also when writing, for performance reasons. See <code>capnproto/io.h</code> for details.</p>
+
+<p>There is an <a href='#example_usage'>example</a> of all this at the beginning of this page.</p>
+
+<h2 id='reference'>Reference</h2>
+
+<p>The runtime library contains lots of useful features not described on this page. For now, the best reference is the header files. See:</p>
+
+<pre><code>capnproto/list.h
+capnproto/blob.h
+capnproto/io.h
+capnproto/serialized.h
+capnproto/serialized-packed.h</code></pre>
+        <div style="clear: left;"></div>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">Cap'n Proto maintained by <a href="https://github.com/kentonv">kentonv</a></p>
+        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+              <script type="text/javascript">
+            var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+            document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+          </script>
+          <script type="text/javascript">
+            try {
+              var pageTracker = _gat._getTracker("UA-39711112-1");
+            pageTracker._trackPageview();
+            } catch(err) {}
+          </script>
+
+
+  </body>
+</html>

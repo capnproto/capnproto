@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="description" content="Capnproto : Cap'n Proto serialization/RPC system" />
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>Cap'n Proto</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="discuss_banner" href="https://groups.google.com/group/capnproto">Discuss on Groups</a>
+          <a id="forkme_banner" href="https://github.com/kentonv/capnproto">View on GitHub</a>
+
+          <h1 id="project_title">Cap'n Proto</h1>
+          <h2 id="project_tagline">Cap'n Proto serialization/RPC system</h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/kentonv/capnproto/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/kentonv/capnproto/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="menu">
+        <ul>
+          <li><a href="index.html">Introduction</a></li>
+          <li><a href="install.html">Installation</a></li>
+          <li><a href="language.html">Defining Types</a></li>
+          <li><a href="encoding.html">Encoding</a></li>
+          <li><a href="rpc.html">RPC Protocol</a></li>
+          <li><a href="cxx.html">C++ Runtime</a></li>
+          <li><a href="otherlang.html">Other Languages</a></li>
+        </ul>
+      </section>
+      <script type="text/javascript">
+        // Highlight the current page in the sidebar, and make the sidebar items easy to click.
+        (function () {
+          var pathname = document.location.pathname;
+          var last = pathname.lastIndexOf('/');
+          var filename = pathname.substring(last);
+
+          if (filename == "/") {
+            filename = "/index.html";
+          }
+
+          var menu = document.getElementById("menu");
+          var items = menu.getElementsByTagName("li");
+          for (var i = 0; i < items.length; i++) {
+            var href = items[i].getElementsByTagName("a")[0].href;
+            if (href.lastIndexOf(filename) >= 0) {
+              items[i].className = "selected";
+            }
+            items[i].onclick = (function(url) {
+              return function() {
+                window.location.href = url;
+              }
+            })(href);
+          }
+        })();
+      </script>
+      <section id="main_content" class="inner">
+        <h1 id='other_languages'>Other Languages</h1>
+
+<p>Currently, Cap&#8217;n Proto is implemented only in C++. We&#8217;d like to support many more languages in the future!</p>
+
+<p>If you&#8217;d like to own the implementation of Cap&#8217;n Proto in some particular language, <a href='https://groups.google.com/group/capnproto'>let us know</a>!</p>
+        <div style="clear: left;"></div>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">Cap'n Proto maintained by <a href="https://github.com/kentonv">kentonv</a></p>
+        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+              <script type="text/javascript">
+            var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+            document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+          </script>
+          <script type="text/javascript">
+            try {
+              var pageTracker = _gat._getTracker("UA-39711112-1");
+            pageTracker._trackPageview();
+            } catch(err) {}
+          </script>
+
+
+  </body>
+</html>
