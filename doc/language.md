@@ -40,9 +40,8 @@ struct Date {
 
 Some notes:
 
-* Types come after names. This makes sense because the name is usually the thing you are looking
-  for when you read the code, so it should be up front where it is easiest to see, not hidden later
-  on the line. Sorry, C got it wrong.
+* Types come after names. The name is by far the most important thing to see, especially when
+  quickly skimming, so we put it up front where it is most visible.  Sorry, C got it wrong.
 * The `@N` annotations show how the protocol evolved over time, so that the system can make sure
   to maintain compatibility with older versions. Fields (and enum values, and interface methods)
   must be numbered consecutively starting from zero in the order in which they were added. In this
@@ -95,7 +94,7 @@ The following types are automatically defined:
 
 Notes:
 
-* The `Void` type has exactly one possible value, and thus can be encoded in zero bytes. It is
+* The `Void` type has exactly one possible value, and thus can be encoded in zero bits. It is
   rarely used, but can be useful as a union member.
 * `Text` is always UTF-8 encoded and NUL-terminated.
 * `Data` is a completely arbitrary sequence of bytes.
@@ -142,6 +141,7 @@ struct Person {
   employer @6 in employment :Company;
   school @7 in employment :School;
   selfEmployed @8 in employment :Void;
+  # We assume that a person is only one of these.
 }
 {% endhighlight %}
 
@@ -149,12 +149,13 @@ Notes:
 
 * Unions are numbered in the same number space as other fields. Remember that the purpose of the
   numbers is to indicate the evolution order of the struct. The system needs to know when the union
-  was declared relative to the fields in it. Also note that at most one element of the union is
-  allowed to have a number less than the union's number, as unionizing two or more existing fields
-  would change their layout.
+  was declared relative to the fields in it. Also note that no more than one element of the union is
+  allowed to have a number less than the union's number, as unionizing two or more pre-existing
+  fields would change their layout.
 
 * Notice that we used the "useless" `Void` type here. We don't have any extra information to store
-  for the `unemployed` or `selfEmployed` cases, but we still want the union to have tags for them.
+  for the `unemployed` or `selfEmployed` cases, but we still want the union to distinguish these
+  states from others.
 
 ### Enums
 
@@ -204,7 +205,7 @@ interface File {
 {% endhighlight %}
 
 Notice something interesting here: `FileInfo` is a struct, but it contains a `File`, which is an
-interface. Structs (and primitive types) are passed by value, but interfaces are passed by
+interface. Structs (and primitive types) are passed over RPC by value, but interfaces are passed by
 reference. So when `Directory.open` is called remotely, the content of a `FileInfo` (including
 values for `name` and `size`) is transmitted back, but for the `file` field, only the address of
 some remote `File` object is sent.
@@ -218,7 +219,8 @@ reference to an object inherently represents a "capability" to access it.
 
 ### Constants
 
-You can define constants in Cap'n Proto. Constants can have any value.
+You can define constants in Cap'n Proto.  These don't affect what is sent on the wire, but they
+will be included in the generated code.
 
 {% highlight capnp %}
 const pi :Float32 = 3.14159;
@@ -237,11 +239,11 @@ struct Foo {
   struct Bar {
     #...
   }
-  bar@0 :Bar;
+  bar @0 :Bar;
 }
 
 struct Baz {
-  bar@0 :Foo.Bar;
+  bar @0 :Foo.Bar;
 }
 {% endhighlight %}
 
@@ -250,12 +252,12 @@ If typing long scopes becomes cumbersome, you can use `using` to declare an alia
 {% highlight capnp %}
 struct Qux {
   using Foo.Bar;
-  bar@0 :Bar;
+  bar @0 :Bar;
 }
 
 struct Corge {
   using T = Foo.Bar;
-  bar@0 :T;
+  bar @0 :T;
 }
 {% endhighlight %}
 
@@ -266,7 +268,7 @@ An `import` expression names the scope of some other file:
 {% highlight capnp %}
 struct Foo {
   # Use type "Baz" defined in bar.capnp.
-  baz@0 :import "bar.capnp".Baz;
+  baz @0 :import "bar.capnp".Baz;
 }
 {% endhighlight %}
 
@@ -277,7 +279,7 @@ using Bar = import "bar.capnp";
 
 struct Foo {
   # Use type "Baz" defined in bar.capnp.
-  baz@0 :Bar.Baz;
+  baz @0 :Bar.Baz;
 }
 {% endhighlight %}
 
@@ -302,10 +304,11 @@ A protocol can be changed in the following ways without breaking backwards-compa
 * New parameters may be added to a method.  The new parameters must be added to the end of the
   parameter list and must have default values.
 * Any symbolic name can be changed, as long as the ordinal numbers stay the same.
+* Types definitions can be moved to different scopes.
 * A field of type `List(T)`, where `T` is NOT a struct type, may be changed to type `List(U)`,
-  where `U` is a struct type whose field number 0 is of type `T`.  This rule is useful when you
+  where `U` is a struct type whose `@0` field is of type `T`.  This rule is useful when you
   realize too late that you need to attach some extra data to each element of your list.  Without
-  this rule, you would be stuck defining parallel lists, which are ugly.
+  this rule, you would be stuck defining parallel lists, which are ugly and error-prone.
 
 Any other change should be assumed NOT to be safe.  Also, these rules only apply to the Cap'n Proto
 native encoding.  It is sometimes useful to transcode Cap'n Proto types to other formats, like

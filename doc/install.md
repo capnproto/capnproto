@@ -65,7 +65,7 @@ productivity, so I really like using Ekam.
 
 Unfortunately it's very much unfinished.  It works (for me), but it is quirky and rough around the
 edges.  It only works on Linux, and is best used together with Eclipse.  If you find it
-unacceptable, scroll down to the Automake instructions, below.
+unacceptable, scroll down to the [Automake instructions](#building_with_automake).
 
 The Cap'n Proto repo includes a script which will attempt to set up Ekam for you.
 
@@ -79,18 +79,61 @@ symlinks under src.  It also imports the [Google Test](https://googletest.google
 
 Once Ekam is installed, you can do:
 
-    make -f Makefile.ekam continuous
+    make -f Makefile.ekam once
 
-This will build everything it can and run tests.  If successful, the benchmarks will be built
-and saved in `tmp/capnproto/benchmark`.  Try running `tmp/capnproto/benchmark/runner`.
+This will build everything it can and run tests.
 
 Note that Ekam will fail to build some things and output a bunch of error messages.  You should
 be able to ignore any errors that originate outside of the `capnproto` directory -- these are just
 parts of other packages like Google Test that Ekam doesn't fully know how to build, but aren't
 needed by Cap'n Proto anyway.
 
+### Running the Benchmarks
+
+Before getting into benchmarks, let me be frank:  performance varies wildly by use case, and no
+benchmark is going to properly reflect the big picture.  If performance is critical to your use
+case, you should write a benchmark specific to your case, and test multiple serialization
+technologies.  Don't assume anything.  If you find Cap'n Proto performs sub-optimally, though,
+[tell us about it](https://groups.google.com/group/capnproto).
+
+That said, Cap'n Proto does have a small suite of silly benchmarks used to validate changes.
+
+The Ekam build will put the benchmark binaries in `tmp/capnproto/benchmark`.
+
+    tmp/capnproto/benchmark
+
+This runs the default test case, CatRank.  CatRank simulates a search engine scoring algorithm
+which promotes pages that discuss cats (and demotes ones discussing dogs).  A list of up to 1000
+random search results with URLs, scores, and snippets is sent to the server, which searches the
+snippets for instances of "cat" and "dog", adjusts their scores accordingly, then returns the new
+result list sorted by score.
+
+This test case is very string-heavy.  Cap'n Proto performs well due to its zero-copy strings, but
+packing the message doesn't help much.
+
+    tmp/capnproto/benchmark eval
+
+In this test case, the client generates a random, deeply-nested arithmetic expression for the
+server to evaluate.  This case is a pathologically bad case for Cap'n Proto as it involves lots of
+pointers with relatively little actual data.  When packing is enabled it actually loses to
+Protobufs by a little bit on CPU time (as of this writing, at least; it'll probably get better with
+optimization).
+
+    tmp/capnproto/benchmark carsales
+
+This test case involves sending to the server a description of a bunch of cars, and asks the server
+to decide how much the lot is worth.  This case is very number-heavy, and because of this
+Cap'n Proto's "packed" mode really shines.
+
+### Developing with Ekam
+
+If you intend to do some development, you should build `continuous` or `continuous-opt` instead
+of `once`.  These modes will build everything, then watch the source tree for changes and rebuild
+as necessary.  `continuous` does a debug build while `continuous-opt` optimizes; the former is best
+while developing but don't run the benchmarks in debug mode!
+
 If you use Eclipse, you should use the Ekam Eclipse plugin to get build results fed back into your
-editor.  Build the plugin like so:
+editor while building in continuous mode.  Build the plugin like so:
 
 1. Open the `.ekam/eclipse` directory as an Eclipse project.
 2. File -> Export -> Plug-in Development -> Deployable Plug-ins and Fragments.
@@ -102,10 +145,10 @@ editor.  Build the plugin like so:
    within this project.
 6. Window -> Show View -> Other -> Ekam -> Ekam Dashboard
 
-The dashboard view lets you browse the whole tree and also populates your editor with error
-markers.
+The dashboard view lets you browse the whole tree of build actions and also populates your editor
+with error markers.
 
-### Building With Automake
+### Building with Automake
 
 If setting up Ekam is too much work for you, you can also build with Automake.
 
@@ -117,17 +160,22 @@ If setting up Ekam is too much work for you, you can also build with Automake.
        unzip gtest-1.6.0.zip
        cd gtest-1.6.0
        ./configure
-       make
-       cp -r include/gtest $PREFIX/include/gtest
-       cp ./lib/.libs/*.a $PREFIX/lib
+       make -j4
+       mkdir -p ~/gtest-install/include
+       mkdir -p ~/gtest-install/lib
+       cp -r include/gtest ~/gtest-install/include/gtest
+       cp ./lib/.libs/*.a ~/gtest-install/lib
 
 2. Clone and build the Cap'n Proto code.
 
        git clone https://github.com/kentonv/capnproto.git
        cd capnproto/c++
        autoreconf -i
-       ./configure
-       make check
+       CXXFLAGS="-O2 -DNDEBUG -I$HOME/gtest-install/include" \
+           LDFLAGS="-L$HOME/gtest-install/lib" \
+           ./configure
+       make -j4 check
        sudo make install
 
-This will install libcapnproto.a in /usr/local/lib and headers in /usr/local/include/capnproto.
+This will install `libcapnproto.a` in `/usr/local/lib` and headers in
+`/usr/local/include/capnproto`.

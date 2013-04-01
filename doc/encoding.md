@@ -12,8 +12,8 @@ by this spec is newer than what is actually implemented.
 ## 64-bit Words
 
 For the purpose of Cap'n Proto, a "word" is defined as 8 bytes, or 64 bits.  Since alignment of
-data is important, all objects are aligned to word boundaries, and sizes are usually expressed in
-terms of words.
+data is important, all objects (structs, lists, and blobs) are aligned to word boundaries, and
+sizes are usually expressed in terms of words.
 
 ## Messages
 
@@ -39,9 +39,6 @@ a message into multiple segments may be convenient:
 The first word of the first segment of the message is always a pointer pointing to the message's
 root struct.
 
-Note that users of Cap'n Proto never need to understand segments; this is all taken care of
-automatically by the runtime library.
-
 ## Built-in Types
 
 The built-in primitive types are encoded as follows:
@@ -59,11 +56,13 @@ The built-in blob types are encoded as follows:
 
 * `Data`:  Encoded as a pointer, identical to `List(UInt8)`.
 * `Text`:  Like `Data`, but the content must be valid UTF-8, the last byte of the content must be
-  zero, and no other byte of the content can be zero.
+  zero, and no other byte of the content can be zero.  Note that the NUL terminator is included in
+  the size sent on the wire, but the runtime library should not count it in any size reported to
+  the application.
 
 ## Enums
 
-Enums are encoded the same as 16-bit integers.
+Enums are encoded the same as `UInt16`.
 
 ## Lists
 
@@ -74,9 +73,9 @@ A list value is encoded as a pointer to a flat array of values.
     |A|             B               |C |             D              |
     +-+-----------------------------+--+----------------------------+
 
-    A (2 bits) = 01, to indicate that this is a list pointer.
+    A (2 bits) = 1, to indicate that this is a list pointer.
     B (30 bits) = Offset, in words, from the start of the pointer to the
-        start of the list.  Signed.
+        start of the first element of the list.  Signed.
     C (3 bits) = Size of each element:
         0 = 0 (e.g. List(Void))
         1 = 1 bit
@@ -120,7 +119,7 @@ A struct pointer looks like this:
     |A|             B               |       C       |       D       |
     +-+-----------------------------+---------------+---------------+
 
-    A (2 bits) = 00, to indicate that this is a struct pointer.
+    A (2 bits) = 0, to indicate that this is a struct pointer.
     B (30 bits) = Offset, in words, from the start of the pointer to the
         start of the struct's data section.  Signed.
     C (16 bits) = Size of the struct's data section, in words.
@@ -133,8 +132,8 @@ Ignoring unions, the layout of fields within the struct is determined by the fol
     For each field of the struct, ordered by field number {
         If the field is a pointer {
             Add it to the end of the pointer section.
-        } else if the data section layout so far includes padding large
-                enough and properly-aligned to hold this field {
+        } else if the data section layout so far includes properly-aligned
+                padding large enough to hold this field {
             Replace the padding space with the new field, preferring to
                 put the field as close to the beginning of the section as
                 possible.
@@ -165,14 +164,15 @@ When unions are present, add the following logic:
                     member at all.  (See no-union logic, above.)
             }
         } else {
-            Treat it as a regular field.  (See no-union logic, above.)
+            Assign an offset as normal.  (See no-union logic, above.)
         }
     }
 
 Note that in the worst case, the members of a union could end up using 23 bytes plus one bit (one
 pointer plus data section locations of 64, 32, 16, 8, and 1 bits).  This is an unfortunate side
 effect of the desire to pack fields in the smallest space where they will fit and the need to
-maintain backwards-compatibility as fields are added.  The worst case should be rare in practice.
+maintain backwards-compatibility as fields are added.  The worst case should be rare in practice,
+and can be avoided entirely by always declaring a union's largest member first.
 
 ### Default Values
 
@@ -201,7 +201,7 @@ the pointer as a "far pointer", which looks like this:
     |A|             B               |               C               |
     +-+-----------------------------+-------------------------------+
 
-    A (2 bits) = 02, to indicate that this is a far pointer.
+    A (2 bits) = 2, to indicate that this is a far pointer.
     B (30 bits) = Offset, in words, from the start of the target segment
         to the location of the far-pointer landing-pad within that
         segment.
@@ -221,14 +221,14 @@ The reason for the convoluted double-far convention is to make it possible to fo
 to an object in a segment that is full.  If you can't allocate even one word in the segment where
 the target resides, then you will need to allocate a landing pad in some other segment, and use
 this double-far approach.  This should be exceedingly rare in practice since pointers are normally
-set to point to _new_ objects.
+set to point to new objects, not existing ones.
 
 ## Serialization Over a Stream
 
 When transmitting a message, the segments must be framed in some way, i.e. to communicate the
 number of segments and their sizes before communicating the actual data.  The best framing approach
 may differ depending on the medium -- for example, messages read via `mmap` or shared memory may
-call for different approach than messages sent over a socket or a pipe.  Cap'n Proto does not
+call for a different approach than messages sent over a socket or a pipe.  Cap'n Proto does not
 attempt to specify a framing format for every situation.  However, since byte streams are by far
 the most common transmission medium, Cap'n Proto does define and implement a recommended framing
 format for them.
@@ -238,7 +238,7 @@ little-endian.
 
 * (4 bytes) The number of segments, minus one (since there is always at least one segment).
 * (N * 4 bytes) The size of each segment, in words.
-* (0 or 4 bytes) Padding up to a multiple of words.
+* (0 or 4 bytes) Padding up to the next word boundary.
 * The content of each segment, in order.
 
 ## Packing
@@ -271,9 +271,33 @@ In addition to the above, there are two tag values which are treated specially: 
   long text blobs.  Because of this rule, the worst-case space overhead of packing is 2 bytes per
   2 KiB of input (256 words = 2KiB).
 
+Packing is normally applied on top of the standard stream framing described in the previous
+section.
+
 ## Compression
 
 When Cap'n Proto messages may contain repetitive data (especially, large text blobs), it makes sense
-to apply a standard compression algorithm in addition to packing.  When CPU time is also still
-important, we recommend Google's [Snappy](https://code.google.com/p/snappy/).  Otherwise,
-[zlib](http://www.zlib.net) is probably a good choice.
+to apply a standard compression algorithm in addition to packing.  When CPU time is scarce, we
+recommend Google's [Snappy](https://code.google.com/p/snappy/).  Otherwise,
+[zlib](http://www.zlib.net) is slower but will compress more.
+
+## Security Notes
+
+A naive implementation of a Cap'n Proto reader may be vulnerable to DoS attacks based on two types
+of malicious input:
+
+* A message containing cyclic (or even just overlapping) pointers can cause the reader to go into
+  an infinite loop while traversing the content.
+* A message with deeply-nested objects can cause a stack overflow in typical code which processes
+  messages recursively.
+
+To defend against these attacks, every Cap'n Proto implementation should implemented the following
+restrictions by default:
+
+* As the application traverses the message, each time a pointer is dereferenced, a counter should
+  be incremented by the size of the data to which it points.  If this counter goes over some limit,
+  an error should be raised, and/or default values should be returned.  The C++ implementation
+  currently defaults to a limit of 64MiB, but allows the caller to set a different limit if desired.
+* As the application traverses the message, the pointer depth should be tracked.  Again, if it goes
+  over some limit, an error should be raised.  The C++ implementation currently defaults to a limit
+  of 64 pointers, but allows the caller to set a different limit.

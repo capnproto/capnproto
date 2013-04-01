@@ -64,18 +64,17 @@ void printAddressBook(int fd) {
 
 This implementation makes use of C++11 features.  If you are using GCC, you will need at least
 version 4.7 to compile Cap'n Proto, with `--std=gnu++0x`.  Other compilers have not been tested at
-this time.  In general, you do not need to understand C++11 features to _use_ Cap'n Proto; it all
-happens under the hood.
+this time.
 
 This implementation prefers to handle errors using exceptions.  Exceptions are only used in
 circumstances that should never occur in normal opertaion.  For example, exceptions are thrown
-on assertion failures (indicating bugs in the code), network failures (indicating incorrect
-configuration), and invalid input.  Exceptions thrown by Cap'n Proto are never part of the
-interface and never need to be caught in correct usage.  The purpose of throwing exceptions is to
-allow higher-level code a chance to recover from unexpected circumstances without disrupting other
-work happening in the same process.  For example, a server that handles requests from multiple
-clients should, on exception, return an error to the client that caused the exception and close
-that connection, but should continue handling other connections normally.
+on assertion failures (indicating bugs in the code), network failures, and invalid input.
+Exceptions thrown by Cap'n Proto are never part of the interface and never need to be caught in
+correct usage.  The purpose of throwing exceptions is to allow higher-level code a chance to
+recover from unexpected circumstances without disrupting other work happening in the same process.
+For example, a server that handles requests from multiple clients should, on exception, return an
+error to the client that caused the exception and close that connection, but should continue
+handling other connections normally.
 
 When Cap'n Proto code might throw an exception from a destructor, it first checks
 `std::uncaught_exception()` to ensure that this is safe.  If another exception is already active,
@@ -86,7 +85,7 @@ In recognition of the fact that some teams prefer not to use exceptions, and tha
 exceptions in the compiler introduces overhead, Cap'n Proto allows you to disable them entirely
 by registering your own exception callback.  The callback will be called in place of throwing an
 exception.  The callback may abort the process, and is required to do so in certain circumstances
-(e.g. when a fatal bug is detected).  If the callback returns normally, Cap'n Proto will attempt
+(when a fatal bug is detected).  If the callback returns normally, Cap'n Proto will attempt
 to continue by inventing "safe" values.  This will lead to garbage output, but at least the program
 will not crash.  Your exception callback should set some sort of a flag indicating that an error
 occurred, and somewhere up the stack you should check for that flag and cancel the operation.
@@ -100,6 +99,7 @@ To generate C++ code from your `.capnp` [interface definition](language.html), r
     capnpc myproto.capnp
 
 This will create `myproto.capnp.h` and `myproto.capnp.c++` in the same directory as `myproto.capnp`.
+(Currently, it also dumps some debug info to stdout, e.g. the offset of each field.)
 
 _TODO: This will become more complicated later as we add support for more languages and such._
 
@@ -149,11 +149,11 @@ MyStruct::Reader getMyStructField();
 `Foo::Builder`, meanwhile, has two or three methods for each field `bar`:
 
 * `getBar()`:  For primitives, returns the value.  For composites, returns a Builder for the
-  composite.  If a composite field has not been initialized (its pointer is null), it will be
-  initialized to a copy of the field's default value before returning.
+  composite.  If a composite field has not been initialized (i.e. this is the first time it has
+  been accessed), it will be initialized to a copy of the field's default value before returning.
 * `setBar(x)`:  For primitives, sets the value to X.  For composites, sets the value to a copy of
   x, which must be a Reader for the type.
-* `initBar(n)`:  Only for lists (including blobs).  Sets the field to a newly-allocated list
+* `initBar(n)`:  Only for lists and blobs.  Sets the field to a newly-allocated list or blob
   of size n and returns a Builder for it.  The elements of the list are initialized to their empty
   state (zero for numbers, default values for structs).
 * `initBar()`:  Only for structs.  Sets the field to a newly-allocated struct and returns a
@@ -190,7 +190,8 @@ void setMyListField(::capnproto::List<double>::Reader value);
 ## Lists
 
 Lists are represented by the type `capnproto::List<T>`, where `T` is any of the primitive types,
-any Cap'n Proto user-defined type, `capnproto::Text`, `capnproto::Data`, or `capnproto::List<T>`.
+any Cap'n Proto user-defined type, `capnproto::Text`, `capnproto::Data`, or `capnproto::List<U>`
+(to form a list of lists).
 
 The type `List<T>` itself is not instantiatable, but has two inner classes: `Reader` and `Builder`.
 As with structs, these types behave like pointers to read-only and read-write data, respectively.
@@ -213,16 +214,18 @@ values when the list is created.
 
 ## Enums
 
-Cap'n Proto enums become C++11 "enum classes".  That means, they behave like any other enum, but
+Cap'n Proto enums become C++11 "enum classes".  That means they behave like any other enum, but
 the enum's values are scoped within the type.  E.g. for an enum `Foo` with value `bar`, you must
-refer to the value as `Foo::BAR`.  The enum class's base type is `uint16_t`.
+refer to the value as `Foo::BAR`.
 
 To match prevaling C++ style, an enum's value names are converted to UPPERCASE_WITH_UNDERSCORES
 (whereas in the definition language you'd write them in camelCase).
 
 Keep in mind when writing `switch` blocks that an enum read off the wire may have a numeric
 value that is not listed in its definition.  This may be the case if the sender is using a newer
-version of the protocol, or if the message is corrupt or malicious.
+version of the protocol, or if the message is corrupt or malicious.  In C++11, enums are allowed
+to have any value that is within the range of their base type, which for Cap'n Proto enums is
+`uint16_t`.
 
 ## Blobs (Text and Data)
 
@@ -252,11 +255,11 @@ Interfaces (RPC) are not yet implemented at this time.
 To create a new message, you must start by creating a `capnproto::MessageBuilder`
 (`capnproto/message.h`).  This is an abstract type which you can implement yourself, but most users
 will want to use `capnproto::MallocMessageBuilder`.  Once your message is constructed, write it to
-a file descriptor `capnproto::writeMessageToFd(fd, builder)` (`capnproto/serialize.h`) or
+a file descriptor with `capnproto::writeMessageToFd(fd, builder)` (`capnproto/serialize.h`) or
 `capnproto::writePackedMessageToFd(fd, builder)` (`capnproto/serialize-packed.h`).
 
 To read a message, you must create a `capnproto::MessageReader`, which is another abstract type.
-Implementations are specific to the import source.  You can use `capnproto::StreamFdMessageReader`
+Implementations are specific to the data source.  You can use `capnproto::StreamFdMessageReader`
 (`capnproto/serialize.h`) or `capnproto::PackedFdMessageReader` (`capnproto/serialize-packed.h`)
 to read from file descriptors; both take the file descriptor as a constructor argument.
 

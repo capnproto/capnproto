@@ -279,6 +279,10 @@ Full-Width Styles
   margin: 0 auto;
 }
 
+body.normal #main_content.inner {
+  margin: 0 auto 0 250px;
+}
+
 #discuss_banner {
   display: block;
   position: absolute;
@@ -481,7 +485,7 @@ Small Device Styles
 }
 
 
-.wide #corner_hack {
+body.wide #corner_hack, body.normal #corner_hack {
 	position: absolute;
 	left: 0px;
 	top: 209px;
@@ -490,7 +494,7 @@ Small Device Styles
   background: #212121;
 }
 
-.wide #corner_hack>div {
+body.wide #corner_hack>div, body.normal #corner_hack>div {
   margin-left: 249px;
   height: 10px;
   border-radius: 10px 0px 0px 0px;
@@ -499,7 +503,7 @@ Small Device Styles
   border-left: 1px solid #111;
 }
 
-.wide #menu {
+body.wide #menu, body.normal #menu {
 	position: absolute;
 	left: 0px;
 	top: 219px;
@@ -507,12 +511,12 @@ Small Device Styles
 	z-index: 10;
 }
 
-.wide #menu.floating {
+body.wide #menu.floating, body.normal #menu.floating {
   position: fixed;
   top: 0px;
 }
 
-.narrow #menu {
+body.narrow #menu {
   position: relative;
   max-width: 640px;
   padding: 50px 10px 0px 10px;
@@ -520,7 +524,7 @@ Small Device Styles
 }
 
 @media screen and (max-width: 480px) {
-  .narrow #menu {
+  body.narrow #menu {
     min-width: 320px;
     max-width: 480px;
   }
@@ -541,16 +545,16 @@ Small Device Styles
   border-right: 1px solid #111;
 }
 
-.wide #menu>ul>li:last-child {
+body.wide #menu>ul>li:last-child, body.normal #menu>ul>li:last-child {
   border-radius: 0px 0px 10px 0px;
   border-bottom: 1px solid #111;
 }
 
-.narrow #menu>ul>li:first-child {
+body.narrow #menu>ul>li:first-child {
   border-radius: 10px 10px 0px 0px;
 }
 
-.narrow #menu>ul>li:last-child {
+body.narrow #menu>ul>li:last-child {
   border-radius: 0px 0px 10px 10px;
 }
 
