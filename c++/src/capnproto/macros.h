@@ -26,6 +26,12 @@
 
 #include <inttypes.h>
 
+#ifdef __GNUC__
+#ifndef __GXX_EXPERIMENTAL_CXX0X__
+#warning Did you forget to enable C++11?  Make sure to pass -std=gnu++11 to GCC.
+#endif
+#endif
+
 namespace capnproto {
 
 #define CAPNPROTO_DISALLOW_COPY(classname) \

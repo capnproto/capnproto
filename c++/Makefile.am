@@ -39,7 +39,9 @@ MAINTAINERCLEANFILES =   \
 maintainer-clean-local:
 	-rm -rf build-aux
 
-nobase_include_HEADERS =                                       \
+includecapnpdir = $(includedir)/capnproto
+
+includecapnp_HEADERS =                                         \
   src/capnproto/macros.h                                       \
   src/capnproto/type-safety.h                                  \
   src/capnproto/blob.h                                         \
