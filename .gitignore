@@ -27,3 +27,6 @@
 # Jekyll-generated site
 /doc/_site
 
+# Checkout of gh-pages made by /doc/push-site.sh
+/doc/.gh-pages
+

@@ -5,13 +5,14 @@
     <meta charset='utf-8' />
     <meta http-equiv="X-UA-Compatible" content="chrome=1" />
     <meta name="description" content="Capnproto : Cap'n Proto serialization/RPC system" />
+    <meta name="viewport" content="width=480">
 
     <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
 
     <title>Cap'n Proto</title>
   </head>
 
-  <body>
+  <body class="desktop">
 
     <!-- HEADER -->
     <div id="header_wrap" class="outer">
@@ -31,7 +32,9 @@
 
     <!-- MAIN CONTENT -->
     <div id="main_content_wrap" class="outer">
-      <section id="menu" class="desktop">
+      <div id="corner_hack"><div> </div></div>
+
+      <section id="menu">
         <ul>
           <li><a href="index.html">Introduction</a></li>
           <li><a href="install.html">Installation</a></li>
@@ -43,7 +46,8 @@
         </ul>
       </section>
       <script type="text/javascript">
-        // Highlight the current page in the sidebar, and make the sidebar items easy to click.
+        // Highlight the current page in the sidebar, make the sidebar items easy to click, and
+        // make the sidebar float when scrolled, unless there isn't enough space.
         (function () {
           var pathname = document.location.pathname;
           var last = pathname.lastIndexOf('/');
@@ -55,19 +59,20 @@
 
           var menu = document.getElementById("menu");
           var setMenuLayout = function() {
-            if (window.innerWidth < 1150) {
-              menu.className = "mobile";
-              menu.style.position = "relative";
-            } else if (window.innerHeight < 900) {
-              menu.className = "desktop";
-              menu.style.position = "absolute";
+            if (window.innerWidth < 1170) {
+              document.body.className = "narrow";
+              menu.className = "";
+            } else if (window.scrollY < 219 || window.innerHeight < menu.clientHeight + 20) {
+              document.body.className = "wide";
+              menu.className = "";
             } else {
-              menu.className = "desktop";
-              menu.style.position = "fixed";
+              document.body.className = "wide";
+              menu.className = "floating";
             }
           };
           setMenuLayout();
           window.onresize = setMenuLayout;
+          window.onscroll = setMenuLayout;
 
           var items = menu.getElementsByTagName("li");
           for (var i = 0; i < items.length; i++) {
@@ -83,7 +88,7 @@
                   window.location.href = url;
                   event.stopPropagation();
                 }
-              })(href);
+              })(href + "#main_content");
               parent.appendChild(p);
               items[i].className = "selected";
               var toc = document.createElement("ul");
@@ -115,6 +120,7 @@
     </div>
 
     <script type="text/javascript">
+      // Inject a table of contents into the sidebar.
       (function() {
         var toc = document.getElementById("toc");
         if (toc) {

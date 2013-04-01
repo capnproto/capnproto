@@ -175,7 +175,9 @@ pre, code {
 }
 
 pre {
-  width: 100%;
+  width: -moz-calc(100% - 20px);
+  width: -webkit-calc(100% - 20px);
+  width: calc(100% - 20px);
   padding: 10px;
   box-shadow: 0 0 10px rgba(0,0,0,.1);
   overflow: auto;
@@ -207,31 +209,6 @@ ul, ol, dl {
 ul li {
   list-style: outside;
 }
-
-/*
-#toc {
-  background-color: #fff;
-  padding: 10px;
-  border-radius: 2px;
-  -moz-border-radius: 2px;
-  -webkit-border-radius: 2px;
-
-  box-shadow: 0 0 5px #ebebeb;
-  -webkit-box-shadow: 0 0 5px #ebebeb;
-  -moz-box-shadow: 0 0 5px #ebebeb;
-  -o-box-shadow: 0 0 5px #ebebeb;
-  -ms-box-shadow: 0 0 5px #ebebeb;
-}
-
-#toc li {
-	list-style: none
-}
-
-#toc ul {
-	padding-bottom: 0;
-	margin-bottom: 0;
-}
-*/
 
 ol li {
   list-style: decimal outside;
@@ -332,13 +309,29 @@ Full-Width Styles
   border-bottom-right-radius: 2px;
 }
 
-.prominent_link {
-	display: block;
-	float: right;
+.groups_link {
+	display: inline-block;
   z-index: 10;
   padding: 10px 50px 10px 10px;
+  margin: 5px;
   color: #fff;
   background: url('../images/groups-logo.png') #0090ff no-repeat 95% 50%;
+  background-color: #0090ff;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(0,0,0,.5);
+  border-top-left-radius: 2px;
+  border-top-right-radius: 2px;
+  border-bottom-left-radius: 2px;
+  border-bottom-right-radius: 2px;
+}
+
+.github_link {
+  display: inline-block;
+  z-index: 10;
+  padding: 10px 50px 10px 10px;
+  margin: 5px;
+  color: #fff;
+  background: url('../images/blacktocat.png') #0090ff no-repeat 95% 50%;
   background-color: #0090ff;
   font-weight: 700;
   box-shadow: 0 0 10px rgba(0,0,0,.5);
@@ -479,36 +472,55 @@ Small Device Styles
   }
 
   code, pre {
-    min-width: 320px;
-    max-width: 480px;
     font-size: 11px;
   }
 
+  #forkme_banner {
+    right: 215px;
+  }
 }
 
 
-/*******************************************************************************
-Sidbar style based on cldoc by jessevdk, because I thought it looked good.
-I modified it heavily, though.
-*******************************************************************************/
-
-#menu.desktop {
-	position: fixed;
+.wide #corner_hack {
+	position: absolute;
 	left: 0px;
-	top: 230px;
+	top: 209px;
+  right: 0px;
+  height: 10px;
+  background: #212121;
+}
+
+.wide #corner_hack>div {
+  margin-left: 249px;
+  height: 10px;
+  border-radius: 10px 0px 0px 0px;
+  background: #f2f2f2;
+  border-top: 1px solid #111;
+  border-left: 1px solid #111;
+}
+
+.wide #menu {
+	position: absolute;
+	left: 0px;
+	top: 219px;
 	width: 250px;
 	z-index: 10;
 }
 
-#menu.mobile {
+.wide #menu.floating {
+  position: fixed;
+  top: 0px;
+}
+
+.narrow #menu {
   position: relative;
   max-width: 640px;
-  padding: 100px 10px 20px 10px;
+  padding: 50px 10px 0px 10px;
   margin: 0 auto;
 }
 
 @media screen and (max-width: 480px) {
-  #menu.mobile {
+  .narrow #menu {
     min-width: 320px;
     max-width: 480px;
   }
@@ -525,20 +537,20 @@ I modified it heavily, though.
   list-style-type: none;
   background-color: #212121;
 }
-
-#menu.desktop>ul>li:first-child {
-  border-radius: 0px 10px 0px 0px;
+#menu>ul>li {
+  border-right: 1px solid #111;
 }
 
-#menu.desktop>ul>li:last-child {
+.wide #menu>ul>li:last-child {
   border-radius: 0px 0px 10px 0px;
+  border-bottom: 1px solid #111;
 }
 
-#menu.mobile>ul>li:first-child {
+.narrow #menu>ul>li:first-child {
   border-radius: 10px 10px 0px 0px;
 }
 
-#menu.mobile>ul>li:last-child {
+.narrow #menu>ul>li:last-child {
   border-radius: 0px 0px 10px 10px;
 }
 

@@ -6,8 +6,8 @@ layout: page
 
 <p style="font-size: 125%; font-weight: bold;">Note: Cap'n Proto is not ready yet</p>
 
-<a class="prominent_link" style="color: #fff"
-href="https://groups.google.com/group/capnproto-announce">Sign Up for Updates</a>
+<div style="float: right"><a class="groups_link" style="color: #fff"
+href="https://groups.google.com/group/capnproto-announce">Sign Up for Updates</a></div>
 
 As of this writing, Cap'n Proto is in the very early stages of development. It is still missing
 many essential features:
