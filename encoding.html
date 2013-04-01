@@ -59,15 +59,21 @@
 
           var menu = document.getElementById("menu");
           var setMenuLayout = function() {
-            if (window.innerWidth < 1170) {
+            if (window.innerWidth < 900) {
               document.body.className = "narrow";
               menu.className = "";
-            } else if (window.scrollY < 219 || window.innerHeight < menu.clientHeight + 20) {
-              document.body.className = "wide";
-              menu.className = "";
             } else {
-              document.body.className = "wide";
-              menu.className = "floating";
+              if (window.innerWidth < 1170) {
+                document.body.className = "normal";
+              } else {
+                document.body.className = "wide";
+              }
+
+              if (window.scrollY < 219 || window.innerHeight < menu.clientHeight + 20) {
+                menu.className = "";
+              } else {
+                menu.className = "floating";
+              }
             }
           };
           setMenuLayout();
@@ -114,7 +120,7 @@
 
 <h2 id='64bit_words'>64-bit Words</h2>
 
-<p>For the purpose of Cap&#8217;n Proto, a &#8220;word&#8221; is defined as 8 bytes, or 64 bits. Since alignment of data is important, all objects are aligned to word boundaries, and sizes are usually expressed in terms of words.</p>
+<p>For the purpose of Cap&#8217;n Proto, a &#8220;word&#8221; is defined as 8 bytes, or 64 bits. Since alignment of data is important, all objects (structs, lists, and blobs) are aligned to word boundaries, and sizes are usually expressed in terms of words.</p>
 
 <h2 id='messages'>Messages</h2>
 
@@ -131,8 +137,6 @@
 </ul>
 
 <p>The first word of the first segment of the message is always a pointer pointing to the message&#8217;s root struct.</p>
-
-<p>Note that users of Cap&#8217;n Proto never need to understand segments; this is all taken care of automatically by the runtime library.</p>
 
 <h2 id='builtin_types'>Built-in Types</h2>
 
@@ -155,12 +159,12 @@
 <ul>
 <li><code>Data</code>: Encoded as a pointer, identical to <code>List(UInt8)</code>.</li>
 
-<li><code>Text</code>: Like <code>Data</code>, but the content must be valid UTF-8, the last byte of the content must be zero, and no other byte of the content can be zero.</li>
+<li><code>Text</code>: Like <code>Data</code>, but the content must be valid UTF-8, the last byte of the content must be zero, and no other byte of the content can be zero. Note that the NUL terminator is included in the size sent on the wire, but the runtime library should not count it in any size reported to the application.</li>
 </ul>
 
 <h2 id='enums'>Enums</h2>
 
-<p>Enums are encoded the same as 16-bit integers.</p>
+<p>Enums are encoded the same as <code>UInt16</code>.</p>
 
 <h2 id='lists'>Lists</h2>
 
@@ -171,9 +175,9 @@
 |A|             B               |C |             D              |
 +-+-----------------------------+--+----------------------------+
 
-A (2 bits) = 01, to indicate that this is a list pointer.
+A (2 bits) = 1, to indicate that this is a list pointer.
 B (30 bits) = Offset, in words, from the start of the pointer to the
-    start of the list.  Signed.
+    start of the first element of the list.  Signed.
 C (3 bits) = Size of each element:
     0 = 0 (e.g. List(Void))
     1 = 1 bit
@@ -203,7 +207,7 @@ D (29 bits) = Number of elements in the list, except when C is 7
 |A|             B               |       C       |       D       |
 +-+-----------------------------+---------------+---------------+
 
-A (2 bits) = 00, to indicate that this is a struct pointer.
+A (2 bits) = 0, to indicate that this is a struct pointer.
 B (30 bits) = Offset, in words, from the start of the pointer to the
     start of the struct&#39;s data section.  Signed.
 C (16 bits) = Size of the struct&#39;s data section, in words.
@@ -216,8 +220,8 @@ D (16 bits) = Size of the struct&#39;s pointer section, in words.</code></pre>
 <pre><code>For each field of the struct, ordered by field number {
     If the field is a pointer {
         Add it to the end of the pointer section.
-    } else if the data section layout so far includes padding large
-            enough and properly-aligned to hold this field {
+    } else if the data section layout so far includes properly-aligned
+            padding large enough to hold this field {
         Replace the padding space with the new field, preferring to
             put the field as close to the beginning of the section as
             possible.
@@ -246,11 +250,11 @@ D (16 bits) = Size of the struct&#39;s pointer section, in words.</code></pre>
                 member at all.  (See no-union logic, above.)
         }
     } else {
-        Treat it as a regular field.  (See no-union logic, above.)
+        Assign an offset as normal.  (See no-union logic, above.)
     }
 }</code></pre>
 
-<p>Note that in the worst case, the members of a union could end up using 23 bytes plus one bit (one pointer plus data section locations of 64, 32, 16, 8, and 1 bits). This is an unfortunate side effect of the desire to pack fields in the smallest space where they will fit and the need to maintain backwards-compatibility as fields are added. The worst case should be rare in practice.</p>
+<p>Note that in the worst case, the members of a union could end up using 23 bytes plus one bit (one pointer plus data section locations of 64, 32, 16, 8, and 1 bits). This is an unfortunate side effect of the desire to pack fields in the smallest space where they will fit and the need to maintain backwards-compatibility as fields are added. The worst case should be rare in practice, and can be avoided entirely by always declaring a union&#8217;s largest member first.</p>
 
 <h3 id='default_values'>Default Values</h3>
 
@@ -275,7 +279,7 @@ D (16 bits) = Size of the struct&#39;s pointer section, in words.</code></pre>
 |A|             B               |               C               |
 +-+-----------------------------+-------------------------------+
 
-A (2 bits) = 02, to indicate that this is a far pointer.
+A (2 bits) = 2, to indicate that this is a far pointer.
 B (30 bits) = Offset, in words, from the start of the target segment
     to the location of the far-pointer landing-pad within that
     segment.
@@ -286,11 +290,11 @@ C (32 bits) = ID of the target segment.  (Segments are numbered
 
 <p>However, if the &#8220;landing pad&#8221; pointer is itself another far pointer, then it is interpreted differently: This far pointer points to the start of the object&#8217;s <em>content</em>, located in some other segment. The landing pad is itself immediately followed by a tag word. The tag word looks exactly like an intra-segment pointer to the target object would look, except that the offset is always zero.</p>
 
-<p>The reason for the convoluted double-far convention is to make it possible to form a new pointer to an object in a segment that is full. If you can&#8217;t allocate even one word in the segment where the target resides, then you will need to allocate a landing pad in some other segment, and use this double-far approach. This should be exceedingly rare in practice since pointers are normally set to point to <em>new</em> objects.</p>
+<p>The reason for the convoluted double-far convention is to make it possible to form a new pointer to an object in a segment that is full. If you can&#8217;t allocate even one word in the segment where the target resides, then you will need to allocate a landing pad in some other segment, and use this double-far approach. This should be exceedingly rare in practice since pointers are normally set to point to new objects, not existing ones.</p>
 
 <h2 id='serialization_over_a_stream'>Serialization Over a Stream</h2>
 
-<p>When transmitting a message, the segments must be framed in some way, i.e. to communicate the number of segments and their sizes before communicating the actual data. The best framing approach may differ depending on the medium &#8211; for example, messages read via <code>mmap</code> or shared memory may call for different approach than messages sent over a socket or a pipe. Cap&#8217;n Proto does not attempt to specify a framing format for every situation. However, since byte streams are by far the most common transmission medium, Cap&#8217;n Proto does define and implement a recommended framing format for them.</p>
+<p>When transmitting a message, the segments must be framed in some way, i.e. to communicate the number of segments and their sizes before communicating the actual data. The best framing approach may differ depending on the medium &#8211; for example, messages read via <code>mmap</code> or shared memory may call for a different approach than messages sent over a socket or a pipe. Cap&#8217;n Proto does not attempt to specify a framing format for every situation. However, since byte streams are by far the most common transmission medium, Cap&#8217;n Proto does define and implement a recommended framing format for them.</p>
 
 <p>When transmitting over a stream, the following should be sent. All integers are unsigned and little-endian.</p>
 
@@ -299,7 +303,7 @@ C (32 bits) = ID of the target segment.  (Segments are numbered
 
 <li>(N * 4 bytes) The size of each segment, in words.</li>
 
-<li>(0 or 4 bytes) Padding up to a multiple of words.</li>
+<li>(0 or 4 bytes) Padding up to the next word boundary.</li>
 
 <li>The content of each segment, in order.</li>
 </ul>
@@ -323,9 +327,29 @@ packed (hex):  51 08 03 02   31 19 aa 01</code></pre>
 <li>0xff: The tag is followed by the bytes of the word as described above, but after those bytes is another byte with value N. Following that byte is N unpacked words that should be copied directly. These unpacked words may or may not contain zeros &#8211; it is up to the compressor to decide when to end the unpacked span and return to packing each word. The purpose of this rule is to minimize the impact of packing on data that doesn&#8217;t contain any zeros &#8211; in particular, long text blobs. Because of this rule, the worst-case space overhead of packing is 2 bytes per 2 KiB of input (256 words = 2KiB).</li>
 </ul>
 
+<p>Packing is normally applied on top of the standard stream framing described in the previous section.</p>
+
 <h2 id='compression'>Compression</h2>
 
-<p>When Cap&#8217;n Proto messages may contain repetitive data (especially, large text blobs), it makes sense to apply a standard compression algorithm in addition to packing. When CPU time is also still important, we recommend Google&#8217;s <a href='https://code.google.com/p/snappy/'>Snappy</a>. Otherwise, <a href='http://www.zlib.net'>zlib</a> is probably a good choice.</p>
+<p>When Cap&#8217;n Proto messages may contain repetitive data (especially, large text blobs), it makes sense to apply a standard compression algorithm in addition to packing. When CPU time is scarce, we recommend Google&#8217;s <a href='https://code.google.com/p/snappy/'>Snappy</a>. Otherwise, <a href='http://www.zlib.net'>zlib</a> is slower but will compress more.</p>
+
+<h2 id='security_notes'>Security Notes</h2>
+
+<p>A naive implementation of a Cap&#8217;n Proto reader may be vulnerable to DoS attacks based on two types of malicious input:</p>
+
+<ul>
+<li>A message containing cyclic (or even just overlapping) pointers can cause the reader to go into an infinite loop while traversing the content.</li>
+
+<li>A message with deeply-nested objects can cause a stack overflow in typical code which processes messages recursively.</li>
+</ul>
+
+<p>To defend against these attacks, every Cap&#8217;n Proto implementation should implemented the following restrictions by default:</p>
+
+<ul>
+<li>As the application traverses the message, each time a pointer is dereferenced, a counter should be incremented by the size of the data to which it points. If this counter goes over some limit, an error should be raised, and/or default values should be returned. The C++ implementation currently defaults to a limit of 64MiB, but allows the caller to set a different limit if desired.</li>
+
+<li>As the application traverses the message, the pointer depth should be tracked. Again, if it goes over some limit, an error should be raised. The C++ implementation currently defaults to a limit of 64 pointers, but allows the caller to set a different limit.</li>
+</ul>
         <div style="clear: left;"></div>
       </section>
     </div>
@@ -385,6 +409,9 @@ packed (hex):  51 08 03 02   31 19 aa 01</code></pre>
             parent.appendChild(item);
           }
         }
+
+        var menu = document.getElementById("menu");
+        document.getElementById("main_content").style.minHeight = menu.clientHeight + 100 + "px";
       })()
     </script>
 

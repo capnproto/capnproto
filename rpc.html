@@ -59,15 +59,21 @@
 
           var menu = document.getElementById("menu");
           var setMenuLayout = function() {
-            if (window.innerWidth < 1170) {
+            if (window.innerWidth < 900) {
               document.body.className = "narrow";
               menu.className = "";
-            } else if (window.scrollY < 219 || window.innerHeight < menu.clientHeight + 20) {
-              document.body.className = "wide";
-              menu.className = "";
             } else {
-              document.body.className = "wide";
-              menu.className = "floating";
+              if (window.innerWidth < 1170) {
+                document.body.className = "normal";
+              } else {
+                document.body.className = "wide";
+              }
+
+              if (window.scrollY < 219 || window.innerHeight < menu.clientHeight + 20) {
+                menu.className = "";
+              } else {
+                menu.className = "floating";
+              }
             }
           };
           setMenuLayout();
@@ -180,6 +186,9 @@
             parent.appendChild(item);
           }
         }
+
+        var menu = document.getElementById("menu");
+        document.getElementById("main_content").style.minHeight = menu.clientHeight + 100 + "px";
       })()
     </script>
 

@@ -59,15 +59,21 @@
 
           var menu = document.getElementById("menu");
           var setMenuLayout = function() {
-            if (window.innerWidth < 1170) {
+            if (window.innerWidth < 900) {
               document.body.className = "narrow";
               menu.className = "";
-            } else if (window.scrollY < 219 || window.innerHeight < menu.clientHeight + 20) {
-              document.body.className = "wide";
-              menu.className = "";
             } else {
-              document.body.className = "wide";
-              menu.className = "floating";
+              if (window.innerWidth < 1170) {
+                document.body.className = "normal";
+              } else {
+                document.body.className = "wide";
+              }
+
+              if (window.scrollY < 219 || window.innerHeight < menu.clientHeight + 20) {
+                menu.className = "";
+              } else {
+                menu.className = "floating";
+              }
             }
           };
           setMenuLayout();
@@ -154,7 +160,7 @@ cabal install capnproto-compiler.cabal</code></pre>
 
 <p>Ekam is a build system I wrote a while back that automatically figures out how to build your C++ code without instructions. It also supports continuous builds, where it watches the filesystem for changes (via inotify) and immediately rebuilds as necessary. Instant feedback is key to productivity, so I really like using Ekam.</p>
 
-<p>Unfortunately it&#8217;s very much unfinished. It works (for me), but it is quirky and rough around the edges. It only works on Linux, and is best used together with Eclipse. If you find it unacceptable, scroll down to the Automake instructions, below.</p>
+<p>Unfortunately it&#8217;s very much unfinished. It works (for me), but it is quirky and rough around the edges. It only works on Linux, and is best used together with Eclipse. If you find it unacceptable, scroll down to the <a href='#building_with_automake'>Automake instructions</a>.</p>
 
 <p>The Cap&#8217;n Proto repo includes a script which will attempt to set up Ekam for you.</p>
 
@@ -166,13 +172,39 @@ cd capnproto/c++
 
 <p>Once Ekam is installed, you can do:</p>
 
-<pre><code>make -f Makefile.ekam continuous</code></pre>
+<pre><code>make -f Makefile.ekam once</code></pre>
 
-<p>This will build everything it can and run tests. If successful, the benchmarks will be built and saved in <code>tmp/capnproto/benchmark</code>. Try running <code>tmp/capnproto/benchmark/runner</code>.</p>
+<p>This will build everything it can and run tests.</p>
 
 <p>Note that Ekam will fail to build some things and output a bunch of error messages. You should be able to ignore any errors that originate outside of the <code>capnproto</code> directory &#8211; these are just parts of other packages like Google Test that Ekam doesn&#8217;t fully know how to build, but aren&#8217;t needed by Cap&#8217;n Proto anyway.</p>
 
-<p>If you use Eclipse, you should use the Ekam Eclipse plugin to get build results fed back into your editor. Build the plugin like so:</p>
+<h3 id='running_the_benchmarks'>Running the Benchmarks</h3>
+
+<p>Before getting into benchmarks, let me be frank: performance varies wildly by use case, and no benchmark is going to properly reflect the big picture. If performance is critical to your use case, you should write a benchmark specific to your case, and test multiple serialization technologies. Don&#8217;t assume anything. If you find Cap&#8217;n Proto performs sub-optimally, though, <a href='https://groups.google.com/group/capnproto'>tell us about it</a>.</p>
+
+<p>That said, Cap&#8217;n Proto does have a small suite of silly benchmarks used to validate changes.</p>
+
+<p>The Ekam build will put the benchmark binaries in <code>tmp/capnproto/benchmark</code>.</p>
+
+<pre><code>tmp/capnproto/benchmark</code></pre>
+
+<p>This runs the default test case, CatRank. CatRank simulates a search engine scoring algorithm which promotes pages that discuss cats (and demotes ones discussing dogs). A list of up to 1000 random search results with URLs, scores, and snippets is sent to the server, which searches the snippets for instances of &#8220;cat&#8221; and &#8220;dog&#8221;, adjusts their scores accordingly, then returns the new result list sorted by score.</p>
+
+<p>This test case is very string-heavy. Cap&#8217;n Proto performs well due to its zero-copy strings, but packing the message doesn&#8217;t help much.</p>
+
+<pre><code>tmp/capnproto/benchmark eval</code></pre>
+
+<p>In this test case, the client generates a random, deeply-nested arithmetic expression for the server to evaluate. This case is a pathologically bad case for Cap&#8217;n Proto as it involves lots of pointers with relatively little actual data. When packing is enabled it actually loses to Protobufs by a little bit on CPU time (as of this writing, at least; it&#8217;ll probably get better with optimization).</p>
+
+<pre><code>tmp/capnproto/benchmark carsales</code></pre>
+
+<p>This test case involves sending to the server a description of a bunch of cars, and asks the server to decide how much the lot is worth. This case is very number-heavy, and because of this Cap&#8217;n Proto&#8217;s &#8220;packed&#8221; mode really shines.</p>
+
+<h3 id='developing_with_ekam'>Developing with Ekam</h3>
+
+<p>If you intend to do some development, you should build <code>continuous</code> or <code>continuous-opt</code> instead of <code>once</code>. These modes will build everything, then watch the source tree for changes and rebuild as necessary. <code>continuous</code> does a debug build while <code>continuous-opt</code> optimizes; the former is best while developing but don&#8217;t run the benchmarks in debug mode!</p>
+
+<p>If you use Eclipse, you should use the Ekam Eclipse plugin to get build results fed back into your editor while building in continuous mode. Build the plugin like so:</p>
 
 <ol>
 <li>Open the <code>.ekam/eclipse</code> directory as an Eclipse project.</li>
@@ -188,9 +220,9 @@ cd capnproto/c++
 <li>Window -&gt; Show View -&gt; Other -&gt; Ekam -&gt; Ekam Dashboard</li>
 </ol>
 
-<p>The dashboard view lets you browse the whole tree and also populates your editor with error markers.</p>
+<p>The dashboard view lets you browse the whole tree of build actions and also populates your editor with error markers.</p>
 
-<h3 id='building_with_automake'>Building With Automake</h3>
+<h3 id='building_with_automake'>Building with Automake</h3>
 
 <p>If setting up Ekam is too much work for you, you can also build with Automake.</p>
 
@@ -202,9 +234,11 @@ cd capnproto/c++
 unzip gtest-1.6.0.zip
 cd gtest-1.6.0
 ./configure
-make
-cp -r include/gtest $PREFIX/include/gtest
-cp ./lib/.libs/*.a $PREFIX/lib</code></pre>
+make -j4
+mkdir -p ~/gtest-install/include
+mkdir -p ~/gtest-install/lib
+cp -r include/gtest ~/gtest-install/include/gtest
+cp ./lib/.libs/*.a ~/gtest-install/lib</code></pre>
 </li>
 
 <li>
@@ -213,13 +247,15 @@ cp ./lib/.libs/*.a $PREFIX/lib</code></pre>
 <pre><code>git clone https://github.com/kentonv/capnproto.git
 cd capnproto/c++
 autoreconf -i
-./configure
-make check
+CXXFLAGS=&quot;-O2 -DNDEBUG -I$HOME/gtest-install/include&quot; \
+    LDFLAGS=&quot;-L$HOME/gtest-install/lib&quot; \
+    ./configure
+make -j4 check
 sudo make install</code></pre>
 </li>
 </ol>
 
-<p>This will install libcapnproto.a in /usr/local/lib and headers in /usr/local/include/capnproto.</p>
+<p>This will install <code>libcapnproto.a</code> in <code>/usr/local/lib</code> and headers in <code>/usr/local/include/capnproto</code>.</p>
         <div style="clear: left;"></div>
       </section>
     </div>
@@ -279,6 +315,9 @@ sudo make install</code></pre>
             parent.appendChild(item);
           }
         }
+
+        var menu = document.getElementById("menu");
+        document.getElementById("main_content").style.minHeight = menu.clientHeight + 100 + "px";
       })()
     </script>
 

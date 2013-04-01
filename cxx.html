@@ -59,15 +59,21 @@
 
           var menu = document.getElementById("menu");
           var setMenuLayout = function() {
-            if (window.innerWidth < 1170) {
+            if (window.innerWidth < 900) {
               document.body.className = "narrow";
               menu.className = "";
-            } else if (window.scrollY < 219 || window.innerHeight < menu.clientHeight + 20) {
-              document.body.className = "wide";
-              menu.className = "";
             } else {
-              document.body.className = "wide";
-              menu.className = "floating";
+              if (window.innerWidth < 1170) {
+                document.body.className = "normal";
+              } else {
+                document.body.className = "wide";
+              }
+
+              if (window.scrollY < 219 || window.innerHeight < menu.clientHeight + 20) {
+                menu.className = "";
+              } else {
+                menu.className = "floating";
+              }
             }
           };
           setMenuLayout();
@@ -159,13 +165,13 @@
 </code></pre></div>
 <h2 id='c_feature_usage_c11_exceptions'>C++ Feature Usage: C++11, Exceptions</h2>
 
-<p>This implementation makes use of C++11 features. If you are using GCC, you will need at least version 4.7 to compile Cap&#8217;n Proto, with <code>--std=gnu++0x</code>. Other compilers have not been tested at this time. In general, you do not need to understand C++11 features to <em>use</em> Cap&#8217;n Proto; it all happens under the hood.</p>
+<p>This implementation makes use of C++11 features. If you are using GCC, you will need at least version 4.7 to compile Cap&#8217;n Proto, with <code>--std=gnu++0x</code>. Other compilers have not been tested at this time.</p>
 
-<p>This implementation prefers to handle errors using exceptions. Exceptions are only used in circumstances that should never occur in normal opertaion. For example, exceptions are thrown on assertion failures (indicating bugs in the code), network failures (indicating incorrect configuration), and invalid input. Exceptions thrown by Cap&#8217;n Proto are never part of the interface and never need to be caught in correct usage. The purpose of throwing exceptions is to allow higher-level code a chance to recover from unexpected circumstances without disrupting other work happening in the same process. For example, a server that handles requests from multiple clients should, on exception, return an error to the client that caused the exception and close that connection, but should continue handling other connections normally.</p>
+<p>This implementation prefers to handle errors using exceptions. Exceptions are only used in circumstances that should never occur in normal opertaion. For example, exceptions are thrown on assertion failures (indicating bugs in the code), network failures, and invalid input. Exceptions thrown by Cap&#8217;n Proto are never part of the interface and never need to be caught in correct usage. The purpose of throwing exceptions is to allow higher-level code a chance to recover from unexpected circumstances without disrupting other work happening in the same process. For example, a server that handles requests from multiple clients should, on exception, return an error to the client that caused the exception and close that connection, but should continue handling other connections normally.</p>
 
 <p>When Cap&#8217;n Proto code might throw an exception from a destructor, it first checks <code>std::uncaught_exception()</code> to ensure that this is safe. If another exception is already active, the new exception is assumed to be a side-effect of the main exception, and is either silently swallowed or reported on a side channel.</p>
 
-<p>In recognition of the fact that some teams prefer not to use exceptions, and that even enabling exceptions in the compiler introduces overhead, Cap&#8217;n Proto allows you to disable them entirely by registering your own exception callback. The callback will be called in place of throwing an exception. The callback may abort the process, and is required to do so in certain circumstances (e.g. when a fatal bug is detected). If the callback returns normally, Cap&#8217;n Proto will attempt to continue by inventing &#8220;safe&#8221; values. This will lead to garbage output, but at least the program will not crash. Your exception callback should set some sort of a flag indicating that an error occurred, and somewhere up the stack you should check for that flag and cancel the operation. (TODO: Document how to register this callback; this is not actually implemented as of this writing.)</p>
+<p>In recognition of the fact that some teams prefer not to use exceptions, and that even enabling exceptions in the compiler introduces overhead, Cap&#8217;n Proto allows you to disable them entirely by registering your own exception callback. The callback will be called in place of throwing an exception. The callback may abort the process, and is required to do so in certain circumstances (when a fatal bug is detected). If the callback returns normally, Cap&#8217;n Proto will attempt to continue by inventing &#8220;safe&#8221; values. This will lead to garbage output, but at least the program will not crash. Your exception callback should set some sort of a flag indicating that an error occurred, and somewhere up the stack you should check for that flag and cancel the operation. (TODO: Document how to register this callback; this is not actually implemented as of this writing.)</p>
 
 <h2 id='generating_code'>Generating Code</h2>
 
@@ -173,7 +179,7 @@
 
 <pre><code>capnpc myproto.capnp</code></pre>
 
-<p>This will create <code>myproto.capnp.h</code> and <code>myproto.capnp.c++</code> in the same directory as <code>myproto.capnp</code>.</p>
+<p>This will create <code>myproto.capnp.h</code> and <code>myproto.capnp.c++</code> in the same directory as <code>myproto.capnp</code>. (Currently, it also dumps some debug info to stdout, e.g. the offset of each field.)</p>
 
 <p><em>TODO: This will become more complicated later as we add support for more languages and such.</em></p>
 
@@ -221,11 +227,11 @@
 <p><code>Foo::Builder</code>, meanwhile, has two or three methods for each field <code>bar</code>:</p>
 
 <ul>
-<li><code>getBar()</code>: For primitives, returns the value. For composites, returns a Builder for the composite. If a composite field has not been initialized (its pointer is null), it will be initialized to a copy of the field&#8217;s default value before returning.</li>
+<li><code>getBar()</code>: For primitives, returns the value. For composites, returns a Builder for the composite. If a composite field has not been initialized (i.e. this is the first time it has been accessed), it will be initialized to a copy of the field&#8217;s default value before returning.</li>
 
 <li><code>setBar(x)</code>: For primitives, sets the value to X. For composites, sets the value to a copy of x, which must be a Reader for the type.</li>
 
-<li><code>initBar(n)</code>: Only for lists (including blobs). Sets the field to a newly-allocated list of size n and returns a Builder for it. The elements of the list are initialized to their empty state (zero for numbers, default values for structs).</li>
+<li><code>initBar(n)</code>: Only for lists and blobs. Sets the field to a newly-allocated list or blob of size n and returns a Builder for it. The elements of the list are initialized to their empty state (zero for numbers, default values for structs).</li>
 
 <li><code>initBar()</code>: Only for structs. Sets the field to a newly-allocated struct and returns a Builder for it. Note that the newly-allocated struct is initialized to the default value for the struct&#8217;s <em>type</em> (i.e., all-zero) rather than the default value for the field <code>bar</code> (if it has one).</li>
 </ul>
@@ -255,7 +261,7 @@
 </code></pre></div>
 <h2 id='lists'>Lists</h2>
 
-<p>Lists are represented by the type <code>capnproto::List&lt;T&gt;</code>, where <code>T</code> is any of the primitive types, any Cap&#8217;n Proto user-defined type, <code>capnproto::Text</code>, <code>capnproto::Data</code>, or <code>capnproto::List&lt;T&gt;</code>.</p>
+<p>Lists are represented by the type <code>capnproto::List&lt;T&gt;</code>, where <code>T</code> is any of the primitive types, any Cap&#8217;n Proto user-defined type, <code>capnproto::Text</code>, <code>capnproto::Data</code>, or <code>capnproto::List&lt;U&gt;</code> (to form a list of lists).</p>
 
 <p>The type <code>List&lt;T&gt;</code> itself is not instantiatable, but has two inner classes: <code>Reader</code> and <code>Builder</code>. As with structs, these types behave like pointers to read-only and read-write data, respectively.</p>
 
@@ -267,11 +273,11 @@
 
 <h2 id='enums'>Enums</h2>
 
-<p>Cap&#8217;n Proto enums become C++11 &#8220;enum classes&#8221;. That means, they behave like any other enum, but the enum&#8217;s values are scoped within the type. E.g. for an enum <code>Foo</code> with value <code>bar</code>, you must refer to the value as <code>Foo::BAR</code>. The enum class&#8217;s base type is <code>uint16_t</code>.</p>
+<p>Cap&#8217;n Proto enums become C++11 &#8220;enum classes&#8221;. That means they behave like any other enum, but the enum&#8217;s values are scoped within the type. E.g. for an enum <code>Foo</code> with value <code>bar</code>, you must refer to the value as <code>Foo::BAR</code>.</p>
 
 <p>To match prevaling C++ style, an enum&#8217;s value names are converted to UPPERCASE_WITH_UNDERSCORES (whereas in the definition language you&#8217;d write them in camelCase).</p>
 
-<p>Keep in mind when writing <code>switch</code> blocks that an enum read off the wire may have a numeric value that is not listed in its definition. This may be the case if the sender is using a newer version of the protocol, or if the message is corrupt or malicious.</p>
+<p>Keep in mind when writing <code>switch</code> blocks that an enum read off the wire may have a numeric value that is not listed in its definition. This may be the case if the sender is using a newer version of the protocol, or if the message is corrupt or malicious. In C++11, enums are allowed to have any value that is within the range of their base type, which for Cap&#8217;n Proto enums is <code>uint16_t</code>.</p>
 
 <h2 id='blobs_text_and_data'>Blobs (Text and Data)</h2>
 
@@ -287,9 +293,9 @@
 
 <h2 id='messages_and_io'>Messages and I/O</h2>
 
-<p>To create a new message, you must start by creating a <code>capnproto::MessageBuilder</code> (<code>capnproto/message.h</code>). This is an abstract type which you can implement yourself, but most users will want to use <code>capnproto::MallocMessageBuilder</code>. Once your message is constructed, write it to a file descriptor <code>capnproto::writeMessageToFd(fd, builder)</code> (<code>capnproto/serialize.h</code>) or <code>capnproto::writePackedMessageToFd(fd, builder)</code> (<code>capnproto/serialize-packed.h</code>).</p>
+<p>To create a new message, you must start by creating a <code>capnproto::MessageBuilder</code> (<code>capnproto/message.h</code>). This is an abstract type which you can implement yourself, but most users will want to use <code>capnproto::MallocMessageBuilder</code>. Once your message is constructed, write it to a file descriptor with <code>capnproto::writeMessageToFd(fd, builder)</code> (<code>capnproto/serialize.h</code>) or <code>capnproto::writePackedMessageToFd(fd, builder)</code> (<code>capnproto/serialize-packed.h</code>).</p>
 
-<p>To read a message, you must create a <code>capnproto::MessageReader</code>, which is another abstract type. Implementations are specific to the import source. You can use <code>capnproto::StreamFdMessageReader</code> (<code>capnproto/serialize.h</code>) or <code>capnproto::PackedFdMessageReader</code> (<code>capnproto/serialize-packed.h</code>) to read from file descriptors; both take the file descriptor as a constructor argument.</p>
+<p>To read a message, you must create a <code>capnproto::MessageReader</code>, which is another abstract type. Implementations are specific to the data source. You can use <code>capnproto::StreamFdMessageReader</code> (<code>capnproto/serialize.h</code>) or <code>capnproto::PackedFdMessageReader</code> (<code>capnproto/serialize-packed.h</code>) to read from file descriptors; both take the file descriptor as a constructor argument.</p>
 
 <p>Note that if your stream contains additional data after the message, <code>PackedFdMessageReader</code> may accidentally read some of that data, since it does buffered I/O. To make this work correctly, you will need to set up a multi-use buffered stream. Buffered I/O may also be a good idea with <code>StreamFdMessageReader</code> and also when writing, for performance reasons. See <code>capnproto/io.h</code> for details.</p>
 
@@ -363,6 +369,9 @@ capnproto/serialized-packed.h</code></pre>
             parent.appendChild(item);
           }
         }
+
+        var menu = document.getElementById("menu");
+        document.getElementById("main_content").style.minHeight = menu.clientHeight + 100 + "px";
       })()
     </script>
 

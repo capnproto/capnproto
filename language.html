@@ -59,15 +59,21 @@
 
           var menu = document.getElementById("menu");
           var setMenuLayout = function() {
-            if (window.innerWidth < 1170) {
+            if (window.innerWidth < 900) {
               document.body.className = "narrow";
               menu.className = "";
-            } else if (window.scrollY < 219 || window.innerHeight < menu.clientHeight + 20) {
-              document.body.className = "wide";
-              menu.className = "";
             } else {
-              document.body.className = "wide";
-              menu.className = "floating";
+              if (window.innerWidth < 1170) {
+                document.body.className = "normal";
+              } else {
+                document.body.className = "wide";
+              }
+
+              if (window.scrollY < 219 || window.innerHeight < menu.clientHeight + 20) {
+                menu.className = "";
+              } else {
+                menu.className = "floating";
+              }
             }
           };
           setMenuLayout();
@@ -139,7 +145,7 @@
 <p>Some notes:</p>
 
 <ul>
-<li>Types come after names. This makes sense because the name is usually the thing you are looking for when you read the code, so it should be up front where it is easiest to see, not hidden later on the line. Sorry, C got it wrong.</li>
+<li>Types come after names. The name is by far the most important thing to see, especially when quickly skimming, so we put it up front where it is most visible. Sorry, C got it wrong.</li>
 
 <li>The <code>@N</code> annotations show how the protocol evolved over time, so that the system can make sure to maintain compatibility with older versions. Fields (and enum values, and interface methods) must be numbered consecutively starting from zero in the order in which they were added. In this example, it looks like the <code>birthdate</code> field was added to the <code>Person</code> structure recently &#8211; its number is higher than the <code>email</code> and <code>phones</code> fields. Unlike Protobufs, you cannot skip numbers when defining fields &#8211; but there was never any reason to do so anyway.</li>
 </ul>
@@ -188,7 +194,7 @@
 <p>Notes:</p>
 
 <ul>
-<li>The <code>Void</code> type has exactly one possible value, and thus can be encoded in zero bytes. It is rarely used, but can be useful as a union member.</li>
+<li>The <code>Void</code> type has exactly one possible value, and thus can be encoded in zero bits. It is rarely used, but can be useful as a union member.</li>
 
 <li><code>Text</code> is always UTF-8 encoded and NUL-terminated.</li>
 
@@ -226,17 +232,18 @@
   <span class='n'>employer</span> <span class='nd'>@6</span> <span class='k'>in</span> <span class='n'>employment</span> <span class='nc'>:Company</span>;
   <span class='n'>school</span> <span class='nd'>@7</span> <span class='k'>in</span> <span class='n'>employment</span> <span class='nc'>:School</span>;
   <span class='n'>selfEmployed</span> <span class='nd'>@8</span> <span class='k'>in</span> <span class='n'>employment</span> <span class='nc'>:Void</span>;
+  <span class='c1'># We assume that a person is only one of these.</span>
 }
 </code></pre></div>
 <p>Notes:</p>
 
 <ul>
 <li>
-<p>Unions are numbered in the same number space as other fields. Remember that the purpose of the numbers is to indicate the evolution order of the struct. The system needs to know when the union was declared relative to the fields in it. Also note that at most one element of the union is allowed to have a number less than the union&#8217;s number, as unionizing two or more existing fields would change their layout.</p>
+<p>Unions are numbered in the same number space as other fields. Remember that the purpose of the numbers is to indicate the evolution order of the struct. The system needs to know when the union was declared relative to the fields in it. Also note that no more than one element of the union is allowed to have a number less than the union&#8217;s number, as unionizing two or more pre-existing fields would change their layout.</p>
 </li>
 
 <li>
-<p>Notice that we used the &#8220;useless&#8221; <code>Void</code> type here. We don&#8217;t have any extra information to store for the <code>unemployed</code> or <code>selfEmployed</code> cases, but we still want the union to have tags for them.</p>
+<p>Notice that we used the &#8220;useless&#8221; <code>Void</code> type here. We don&#8217;t have any extra information to store for the <code>unemployed</code> or <code>selfEmployed</code> cases, but we still want the union to distinguish these states from others.</p>
 </li>
 </ul>
 
@@ -278,13 +285,13 @@
   <span class='n'>truncate</span> <span class='nd'>@2</span> (<span class='n'>size</span> <span class='nc'>:UInt64</span>) <span class='nc'>:Void</span>;
 }
 </code></pre></div>
-<p>Notice something interesting here: <code>FileInfo</code> is a struct, but it contains a <code>File</code>, which is an interface. Structs (and primitive types) are passed by value, but interfaces are passed by reference. So when <code>Directory.open</code> is called remotely, the content of a <code>FileInfo</code> (including values for <code>name</code> and <code>size</code>) is transmitted back, but for the <code>file</code> field, only the address of some remote <code>File</code> object is sent.</p>
+<p>Notice something interesting here: <code>FileInfo</code> is a struct, but it contains a <code>File</code>, which is an interface. Structs (and primitive types) are passed over RPC by value, but interfaces are passed by reference. So when <code>Directory.open</code> is called remotely, the content of a <code>FileInfo</code> (including values for <code>name</code> and <code>size</code>) is transmitted back, but for the <code>file</code> field, only the address of some remote <code>File</code> object is sent.</p>
 
 <p>When an address of an object is transmitted, the RPC system automatically manages making sure that the recipient gets permission to call the addressed object &#8211; because if the recipient wasn&#8217;t meant to have access, the sender shouldn&#8217;t have sent the reference in the first place. This makes it very easy to develop secure protocols with Cap&#8217;n Proto &#8211; you almost don&#8217;t need to think about access control at all. This feature is what makes Cap&#8217;n Proto a &#8220;capability-based&#8221; RPC system &#8211; a reference to an object inherently represents a &#8220;capability&#8221; to access it.</p>
 
 <h3 id='constants'>Constants</h3>
 
-<p>You can define constants in Cap&#8217;n Proto. Constants can have any value.</p>
+<p>You can define constants in Cap&#8217;n Proto. These don&#8217;t affect what is sent on the wire, but they will be included in the generated code.</p>
 <div class='highlight'><pre><code class='capnp'><span class='k'>const</span> <span class='n'>pi</span> <span class='nc'>:Float32 </span><span class='l'>= 3.14159</span>;
 <span class='k'>const</span> <span class='n'>bob</span> <span class='nc'>:Person </span><span class='l'>= (name = &quot;Bob&quot;, email = &quot;bob@example.com&quot;)</span>;
 </code></pre></div>
@@ -295,22 +302,22 @@
   <span class='k'>struct</span> <span class='n'>Bar</span> {
     <span class='c1'>#...</span>
   }
-  <span class='n'>bar</span><span class='nd'>@0</span> <span class='nc'>:Bar</span>;
+  <span class='n'>bar</span> <span class='nd'>@0</span> <span class='nc'>:Bar</span>;
 }
 
 <span class='k'>struct</span> <span class='n'>Baz</span> {
-  <span class='n'>bar</span><span class='nd'>@0</span> <span class='nc'>:Foo.Bar</span>;
+  <span class='n'>bar</span> <span class='nd'>@0</span> <span class='nc'>:Foo.Bar</span>;
 }
 </code></pre></div>
 <p>If typing long scopes becomes cumbersome, you can use <code>using</code> to declare an alias.</p>
 <div class='highlight'><pre><code class='capnp'><span class='k'>struct</span> <span class='n'>Qux</span> {
   <span class='k'>using</span> <span class='n'>Foo.Bar</span>;
-  <span class='n'>bar</span><span class='nd'>@0</span> <span class='nc'>:Bar</span>;
+  <span class='n'>bar</span> <span class='nd'>@0</span> <span class='nc'>:Bar</span>;
 }
 
 <span class='k'>struct</span> <span class='n'>Corge</span> {
   <span class='k'>using</span> <span class='n'>T</span> <span class='l'>= Foo.Bar</span>;
-  <span class='n'>bar</span><span class='nd'>@0</span> <span class='nc'>:T</span>;
+  <span class='n'>bar</span> <span class='nd'>@0</span> <span class='nc'>:T</span>;
 }
 </code></pre></div>
 <h3 id='imports'>Imports</h3>
@@ -318,7 +325,7 @@
 <p>An <code>import</code> expression names the scope of some other file:</p>
 <div class='highlight'><pre><code class='capnp'><span class='k'>struct</span> <span class='n'>Foo</span> {
   <span class='c1'># Use type &quot;Baz&quot; defined in bar.capnp.</span>
-  <span class='n'>baz</span><span class='nd'>@0</span> <span class='nc'>:import &quot;bar.capnp&quot;.Baz</span>;
+  <span class='n'>baz</span> <span class='nd'>@0</span> <span class='nc'>:import &quot;bar.capnp&quot;.Baz</span>;
 }
 </code></pre></div>
 <p>Of course, typically it&#8217;s more readable to define an alias:</p>
@@ -326,7 +333,7 @@
 
 <span class='k'>struct</span> <span class='n'>Foo</span> {
   <span class='c1'># Use type &quot;Baz&quot; defined in bar.capnp.</span>
-  <span class='n'>baz</span><span class='nd'>@0</span> <span class='nc'>:Bar.Baz</span>;
+  <span class='n'>baz</span> <span class='nd'>@0</span> <span class='nc'>:Bar.Baz</span>;
 }
 </code></pre></div>
 <p>Or even:</p>
@@ -349,7 +356,9 @@
 
 <li>Any symbolic name can be changed, as long as the ordinal numbers stay the same.</li>
 
-<li>A field of type <code>List(T)</code>, where <code>T</code> is NOT a struct type, may be changed to type <code>List(U)</code>, where <code>U</code> is a struct type whose field number 0 is of type <code>T</code>. This rule is useful when you realize too late that you need to attach some extra data to each element of your list. Without this rule, you would be stuck defining parallel lists, which are ugly.</li>
+<li>Types definitions can be moved to different scopes.</li>
+
+<li>A field of type <code>List(T)</code>, where <code>T</code> is NOT a struct type, may be changed to type <code>List(U)</code>, where <code>U</code> is a struct type whose <code>@0</code> field is of type <code>T</code>. This rule is useful when you realize too late that you need to attach some extra data to each element of your list. Without this rule, you would be stuck defining parallel lists, which are ugly and error-prone.</li>
 </ul>
 
 <p>Any other change should be assumed NOT to be safe. Also, these rules only apply to the Cap&#8217;n Proto native encoding. It is sometimes useful to transcode Cap&#8217;n Proto types to other formats, like JSON, which may have different rules (e.g., field names cannot change in JSON).</p>
@@ -412,6 +421,9 @@
             parent.appendChild(item);
           }
         }
+
+        var menu = document.getElementById("menu");
+        document.getElementById("main_content").style.minHeight = menu.clientHeight + 100 + "px";
       })()
     </script>
 
