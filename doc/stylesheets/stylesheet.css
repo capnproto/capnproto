@@ -127,7 +127,6 @@ a {
 
 #main_content a:hover {
   color: #0069ba;
-  text-shadow: #0090ff 0px 0px 2px;
 }
 
 footer a:hover {
@@ -270,7 +269,7 @@ Full-Width Styles
 }
 
 body.normal #main_content.inner {
-  margin: 0 auto 0 250px;
+  margin: 0 auto 0 340px;
 }
 
 #discuss_banner {
@@ -278,6 +277,7 @@ body.normal #main_content.inner {
   position: absolute;
   top:0;
   right: 10px;
+  width: 147px;
   z-index: 10;
   padding: 10px 50px 10px 10px;
   color: #fff;
@@ -292,7 +292,7 @@ body.normal #main_content.inner {
   display: ;
   position: absolute;
   top:0;
-  right: 210px;
+  right: 230px;
   z-index: 10;
   padding: 10px 50px 10px 10px;
   color: #fff;
@@ -312,7 +312,6 @@ body.normal #main_content.inner {
   background: url('../images/groups-logo.png') #0090ff no-repeat 95% 50%;
   background-color: #0090ff;
   font-weight: 700;
-  box-shadow: 0 0 10px rgba(0,0,0,.5);
   border-top-left-radius: 2px;
   border-top-right-radius: 2px;
   border-bottom-left-radius: 2px;
@@ -328,7 +327,6 @@ body.normal #main_content.inner {
   background: url('../images/blacktocat.png') #0090ff no-repeat 95% 50%;
   background-color: #0090ff;
   font-weight: 700;
-  box-shadow: 0 0 10px rgba(0,0,0,.5);
   border-top-left-radius: 2px;
   border-top-right-radius: 2px;
   border-bottom-left-radius: 2px;
@@ -466,13 +464,17 @@ Small Device Styles
   #forkme_banner {
     right: 215px;
   }
+
+  #discuss_banner {
+    width: 132px;
+  }
 }
 
 #infinitely_faster img{
   position: absolute;
   left: 600px;
   top: 266px;
-  z-index: 10; 
+  z-index: 10;
   max-width:222px;
 }
 
