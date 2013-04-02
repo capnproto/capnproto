@@ -127,7 +127,6 @@ a {
 
 #main_content a:hover {
   color: #0069ba;
-  text-shadow: #0090ff 0px 0px 2px;
 }
 
 footer a:hover {
@@ -147,15 +146,6 @@ img {
   position: relative;
   margin: 0 auto;
   max-width: 739px;
-  padding: 5px;
-  margin: 10px 0 10px 0;
-  border: 1px solid #ebebeb;
-
-  box-shadow: 0 0 5px #ebebeb;
-  -webkit-box-shadow: 0 0 5px #ebebeb;
-  -moz-box-shadow: 0 0 5px #ebebeb;
-  -o-box-shadow: 0 0 5px #ebebeb;
-  -ms-box-shadow: 0 0 5px #ebebeb;
 }
 
 pre, code {
@@ -261,7 +251,6 @@ form {
 img {
   width: 100%;
   max-width: 100%;
-  background-color: white;
 }
 
 /*******************************************************************************
@@ -280,7 +269,7 @@ Full-Width Styles
 }
 
 body.normal #main_content.inner {
-  margin: 0 auto 0 250px;
+  margin: 0 auto 0 340px;
 }
 
 #discuss_banner {
@@ -288,10 +277,11 @@ body.normal #main_content.inner {
   position: absolute;
   top:0;
   right: 10px;
+  width: 147px;
   z-index: 10;
   padding: 10px 50px 10px 10px;
   color: #fff;
-  background: url('../images/groups-logo.png') #0090ff no-repeat 95% 50%;
+  background: url('../images/groups-logo.png') #333 no-repeat 95% 50%;
   font-weight: 700;
   box-shadow: 0 0 10px rgba(0,0,0,.5);
   border-bottom-left-radius: 2px;
@@ -299,14 +289,14 @@ body.normal #main_content.inner {
 }
 
 #forkme_banner {
-  display: block;
+  display: ;
   position: absolute;
   top:0;
   right: 230px;
   z-index: 10;
   padding: 10px 50px 10px 10px;
   color: #fff;
-  background: url('../images/blacktocat.png') #0090ff no-repeat 95% 50%;
+  background: url('../images/blacktocat.png') #333 no-repeat 95% 50%;
   font-weight: 700;
   box-shadow: 0 0 10px rgba(0,0,0,.5);
   border-bottom-left-radius: 2px;
@@ -314,7 +304,7 @@ body.normal #main_content.inner {
 }
 
 .groups_link {
-	display: inline-block;
+  display: inline-block;
   z-index: 10;
   padding: 10px 50px 10px 10px;
   margin: 5px;
@@ -322,7 +312,6 @@ body.normal #main_content.inner {
   background: url('../images/groups-logo.png') #0090ff no-repeat 95% 50%;
   background-color: #0090ff;
   font-weight: 700;
-  box-shadow: 0 0 10px rgba(0,0,0,.5);
   border-top-left-radius: 2px;
   border-top-right-radius: 2px;
   border-bottom-left-radius: 2px;
@@ -338,7 +327,6 @@ body.normal #main_content.inner {
   background: url('../images/blacktocat.png') #0090ff no-repeat 95% 50%;
   background-color: #0090ff;
   font-weight: 700;
-  box-shadow: 0 0 10px rgba(0,0,0,.5);
   border-top-left-radius: 2px;
   border-top-right-radius: 2px;
   border-bottom-left-radius: 2px;
@@ -346,12 +334,7 @@ body.normal #main_content.inner {
 }
 
 #header_wrap {
-  background: #212121;
-  background: -moz-linear-gradient(top, #373737, #212121);
-  background: -webkit-linear-gradient(top, #373737, #212121);
-  background: -ms-linear-gradient(top, #373737, #212121);
-  background: -o-linear-gradient(top, #373737, #212121);
-  background: linear-gradient(top, #373737, #212121);
+  background: #C42727;
 }
 
 #header_wrap .inner {
@@ -378,9 +361,8 @@ body.normal #main_content.inner {
   position: absolute;
   width: 210px;
   z-index: 10;
-  bottom: -40px;
-  right: 0;
-  height: 70px;
+  top: 50px;
+  right: 0px;
   background: url('../images/icon_download.png') no-repeat 0% 90%;
 }
 
@@ -482,13 +464,28 @@ Small Device Styles
   #forkme_banner {
     right: 215px;
   }
+
+  #discuss_banner {
+    width: 132px;
+  }
 }
 
+#infinitely_faster img{
+  position: absolute;
+  left: 600px;
+  top: 266px;
+  z-index: 10;
+  max-width:222px;
+}
+
+body.narrow #infinitely_faster{
+  display:none;
+}
 
 body.wide #corner_hack, body.normal #corner_hack {
-	position: absolute;
-	left: 0px;
-	top: 209px;
+  position: absolute;
+  left: 0px;
+  top: 209px;
   right: 0px;
   height: 10px;
   background: #212121;
@@ -504,16 +501,16 @@ body.wide #corner_hack>div, body.normal #corner_hack>div {
 }
 
 body.wide #menu, body.normal #menu {
-	position: absolute;
-	left: 0px;
-	top: 219px;
-	width: 250px;
-	z-index: 10;
+  position: absolute;
+  left: 50px;
+  top: 460px;
+  width: 250px;
+  z-index: 10;
 }
 
 body.wide #menu.floating, body.normal #menu.floating {
   position: fixed;
-  top: 0px;
+  top: 50px;
 }
 
 body.narrow #menu {
@@ -546,8 +543,13 @@ body.narrow #menu {
 }
 
 body.wide #menu>ul>li:last-child, body.normal #menu>ul>li:last-child {
-  border-radius: 0px 0px 10px 0px;
+  border-radius: 0px 0px 10px 10px;
   border-bottom: 1px solid #111;
+}
+
+body.wide #menu>ul>li:first-child, body.normal #menu>ul>li:first-child {
+  border-radius: 10px 10px 0px 0px;
+  border-top: 1px solid #111;
 }
 
 body.narrow #menu>ul>li:first-child {

@@ -16,23 +16,18 @@
 
     <!-- HEADER -->
     <div id="header_wrap" class="outer">
-        <header class="inner">
-          <a id="discuss_banner" href="https://groups.google.com/group/capnproto">Discuss on Groups</a>
-          <a id="forkme_banner" href="https://github.com/kentonv/capnproto">View on GitHub</a>
-
-          <h1 id="project_title">Cap'n Proto</h1>
-          <h2 id="project_tagline">Cap'n Proto serialization/RPC system</h2>
-
-            <section id="downloads">
-              <a class="zip_download_link" href="https://github.com/kentonv/capnproto/zipball/master">Download this project as a .zip file</a>
-              <a class="tar_download_link" href="https://github.com/kentonv/capnproto/tarball/master">Download this project as a tar.gz file</a>
-            </section>
-        </header>
+      <header class="inner">
+        <img src="images/captain_proto.png">
+        <div id="infinitely_faster">
+          <img src="images/infinitely_faster.png">
+        </div>
+      </header>
+      <a id="discuss_banner" href="https://groups.google.com/group/capnproto">Discuss on Groups</a>
+      <a id="forkme_banner" href="https://github.com/kentonv/capnproto">View on GitHub</a>
     </div>
 
     <!-- MAIN CONTENT -->
     <div id="main_content_wrap" class="outer">
-      <div id="corner_hack"><div> </div></div>
 
       <section id="menu">
         <ul>
@@ -63,13 +58,13 @@
               document.body.className = "narrow";
               menu.className = "";
             } else {
-              if (window.innerWidth < 1170) {
+              if (document.body.clientWidth < 1340) {
                 document.body.className = "normal";
               } else {
                 document.body.className = "wide";
               }
 
-              if (window.scrollY < 219 || window.innerHeight < menu.clientHeight + 20) {
+              if (window.scrollY < 410 || window.innerHeight < menu.clientHeight + 100) {
                 menu.className = "";
               } else {
                 menu.className = "floating";
@@ -318,7 +313,7 @@ capnproto/serialized-packed.h</code></pre>
     <div id="footer_wrap" class="outer">
       <footer class="inner">
         <p class="copyright">Cap'n Proto maintained by <a href="https://github.com/kentonv">kentonv</a></p>
-        <p>Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+        <p>Design by <a href="http://www.starfruit-cafe.net/blog">sailorhg</a> ∙ Published with <a href="http://pages.github.com">GitHub Pages</a></p>
       </footer>
     </div>
 
