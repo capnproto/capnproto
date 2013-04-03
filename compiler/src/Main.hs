@@ -40,23 +40,22 @@ main = do
     let lang = head args
     putStrLn lang
     let files = tail args
-    handleFiles (generateCode lang) files
+    handleFiles (generatorFnFor lang) files
 
-handleFiles codeGenerator files = case codeGenerator of
-    Right fn -> mapM_ (handleFile fn) files
-    Left str -> putStrLn str
+handleFiles (Right fn) files = mapM_ (handleFile fn) files
+handleFiles (Left str) _ = putStrLn str
 
-handleFile codeGenerator filename = do
+handleFile generateCode filename = do
     text <- readFile filename
     case parseAndCompileFile filename text of
         Active desc [] -> do
             print desc
-	    codeGenerator desc filename
+            generateCode desc filename
 
         Active _ e -> mapM_ printError (List.sortBy compareErrors e)
         Failed e -> mapM_ printError (List.sortBy compareErrors e)
 
-generateCode lang = case lang of
+generatorFnFor lang = case lang of
     "c++" -> Right (\desc filename -> do
        header <- generateCxxHeader desc
        LZ.writeFile (filename ++ ".h") header
