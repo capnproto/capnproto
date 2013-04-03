@@ -37,9 +37,7 @@ import CxxGenerator
 main::IO()
 main = do
     args <- getArgs
-    let lang = head args
-    putStrLn lang
-    let files = tail args
+    let (lang : files) = args
     handleFiles (generatorFnFor lang) files
 
 handleFiles (Right fn) files = mapM_ (handleFile fn) files
