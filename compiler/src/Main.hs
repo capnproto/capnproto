@@ -36,21 +36,33 @@ import CxxGenerator
 
 main::IO()
 main = do
-    files <- getArgs
-    mapM_ handleFile files
+    args <- getArgs
+    let lang = head args
+    putStrLn lang
+    let files = tail args
+    handleFiles (generateCode lang) files
 
-handleFile filename = do
+handleFiles codeGenerator files = case codeGenerator of
+    Right fn -> mapM_ (handleFile fn) files
+    Left str -> putStrLn str
+
+handleFile codeGenerator filename = do
     text <- readFile filename
     case parseAndCompileFile filename text of
         Active desc [] -> do
             print desc
-            header <- generateCxxHeader desc
-            LZ.writeFile (filename ++ ".h") header
-            source <- generateCxxSource desc
-            LZ.writeFile (filename ++ ".c++") source
+	    codeGenerator desc filename
 
         Active _ e -> mapM_ printError (List.sortBy compareErrors e)
         Failed e -> mapM_ printError (List.sortBy compareErrors e)
+
+generateCode lang = case lang of
+    "c++" -> Right (\desc filename -> do
+       header <- generateCxxHeader desc
+       LZ.writeFile (filename ++ ".h") header
+       source <- generateCxxSource desc
+       LZ.writeFile (filename ++ ".c++") source)
+    _    -> Left "Only c++ is supported for now"
 
 compareErrors a b = compare (errorPos a) (errorPos b)
 
