@@ -36,8 +36,7 @@ import CxxGenerator
 
 main::IO()
 main = do
-    args <- getArgs
-    let (lang : files) = args
+    (lang : files) <- getArgs
     handleFiles (generatorFnFor lang) files
 
 handleFiles (Right fn) files = mapM_ (handleFile fn) files
@@ -59,7 +58,7 @@ generatorFnFor lang = case lang of
        LZ.writeFile (filename ++ ".h") header
        source <- generateCxxSource desc
        LZ.writeFile (filename ++ ".c++") source)
-    _    -> Left "Only c++ is supported for now"
+    _     -> Left "Only c++ is supported for now"
 
 compareErrors a b = compare (errorPos a) (errorPos b)
 
