@@ -180,9 +180,9 @@ and can be avoided entirely by always declaring a union's largest member first.
 ### Default Values
 
 A default struct is always all-zeros.  To achieve this, fields in the data section are stored xor'd
-with their defined default values.  An all-zero pointer is considered "null" (since otherwise it
-would point at itself, which makes no sense); accessor methods for pointer fields check for null
-and return a pointer to their default value in this case.
+with their defined default values.  An all-zero pointer is considered "null" (such a pointer would
+otherwise point to a zero-size struct, which might as well be considered null); accessor methods
+for pointer fields check for null and return a pointer to their default value in this case.
 
 There are several reasons why this is desirable:
 
