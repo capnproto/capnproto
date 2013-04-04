@@ -22,11 +22,11 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 enum Operation {
-  add = 0;
-  subtract = 1;
-  multiply = 2;
-  divide = 3;
-  modulus = 4;
+  add @0;
+  subtract @1;
+  multiply @2;
+  divide @3;
+  modulus @4;
 }
 
 struct Expression {

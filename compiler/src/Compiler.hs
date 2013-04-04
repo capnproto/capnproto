@@ -298,10 +298,10 @@ requireSequentialNumbering kind items = Active () (loop undefined (-1) sortedIte
         message = printf "Skipped number %d.  %s must be numbered sequentially starting \
                          \from zero." (prev + 1) kind
 
-requireFieldNumbersInRange fieldNums =
-    Active () [ fieldNumError num pos | Located pos num <- fieldNums, num > maxFieldNumber ] where
-        fieldNumError num = newErrorMessage (Message
-            (printf "Field number %d too large; maximum is %d." num maxFieldNumber))
+requireOrdinalsInRange ordinals =
+    Active () [ ordinalError num pos | Located pos num <- ordinals, num > maxOrdinal ] where
+        ordinalError num = newErrorMessage (Message
+            (printf "Ordinal %d too large; maximum is %d." num maxOrdinal))
 
 requireNoDuplicateNames :: [Declaration] -> Status()
 requireNoDuplicateNames decls = Active () (loop (List.sort locatedNames)) where
@@ -497,7 +497,9 @@ compileDecl scope (EnumDecl (Located _ name) decls) =
     CompiledMemberStatus name (feedback (\desc -> do
         (members, memberMap, options, statements) <- compileChildDecls desc decls
         requireNoDuplicateNames decls
-        requireSequentialNumbering "Enum values" [ num | EnumValueDecl _ num _ <- decls ]
+        let numbers = [ num | EnumValueDecl _ num _ <- decls ]
+        requireSequentialNumbering "Enum values" numbers
+        requireOrdinalsInRange numbers
         return (DescEnum EnumDesc
             { enumName = name
             , enumParent = scope
@@ -527,7 +529,7 @@ compileDecl scope (StructDecl (Located _ name) decls) =
         let fieldNums = [ num | FieldDecl _ num _ _ _ _ <- decls ] ++
                         [ num | UnionDecl _ num _ <- decls ]
         requireSequentialNumbering "Fields" fieldNums
-        requireFieldNumbersInRange fieldNums
+        requireOrdinalsInRange fieldNums
         return (let
             fields = [d | DescField d <- members]
             unions = [d | DescUnion d <- members]
@@ -611,7 +613,9 @@ compileDecl scope (InterfaceDecl (Located _ name) decls) =
     CompiledMemberStatus name (feedback (\desc -> do
         (members, memberMap, options, statements) <- compileChildDecls desc decls
         requireNoDuplicateNames decls
-        requireSequentialNumbering "Methods" [ num | MethodDecl _ num _ _ _ <- decls ]
+        let numbers = [ num | MethodDecl _ num _ _ _ <- decls ]
+        requireSequentialNumbering "Methods" numbers
+        requireOrdinalsInRange numbers
         return (DescInterface InterfaceDesc
             { interfaceName = name
             , interfaceParent = scope

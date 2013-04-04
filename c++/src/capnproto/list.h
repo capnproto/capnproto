@@ -30,7 +30,19 @@
 namespace capnproto {
 
 namespace internal {
-template <typename T> struct IsPrimitive;
+
+template <typename T>
+class IsPrimitive {
+  typedef char no;
+  typedef long yes;
+
+  template <typename U> static no test(typename U::Reader*);
+  template <typename U> static yes test(...);
+
+public:
+  static constexpr bool value = sizeof(test<T>(nullptr)) == sizeof(yes);
+};
+
 }  // namespace internal
 
 template <typename T, bool isPrimitive = internal::IsPrimitive<T>::value>
@@ -38,39 +50,33 @@ struct List;
 
 namespace internal {
 
-template <typename T> struct IsPrimitive { static constexpr bool value = false; };
+template <size_t size> struct FieldSizeForByteSize;
+template <> struct FieldSizeForByteSize<1> { static constexpr FieldSize value = FieldSize::BYTE; };
+template <> struct FieldSizeForByteSize<2> { static constexpr FieldSize value = FieldSize::TWO_BYTES; };
+template <> struct FieldSizeForByteSize<4> { static constexpr FieldSize value = FieldSize::FOUR_BYTES; };
+template <> struct FieldSizeForByteSize<8> { static constexpr FieldSize value = FieldSize::EIGHT_BYTES; };
 
-template <> struct IsPrimitive<Void>     { static constexpr bool value = true; };
-template <> struct IsPrimitive<bool>     { static constexpr bool value = true; };
-template <> struct IsPrimitive<int8_t>   { static constexpr bool value = true; };
-template <> struct IsPrimitive<int16_t>  { static constexpr bool value = true; };
-template <> struct IsPrimitive<int32_t>  { static constexpr bool value = true; };
-template <> struct IsPrimitive<int64_t>  { static constexpr bool value = true; };
-template <> struct IsPrimitive<uint8_t>  { static constexpr bool value = true; };
-template <> struct IsPrimitive<uint16_t> { static constexpr bool value = true; };
-template <> struct IsPrimitive<uint32_t> { static constexpr bool value = true; };
-template <> struct IsPrimitive<uint64_t> { static constexpr bool value = true; };
-template <> struct IsPrimitive<float>    { static constexpr bool value = true; };
-template <> struct IsPrimitive<double>   { static constexpr bool value = true; };
-template <typename T, bool b> struct IsPrimitive<List<T, b>> {
-  static constexpr bool value = IsPrimitive<T>::value;
+template <typename T> struct FieldSizeForType {
+  static constexpr FieldSize value = IsPrimitive<T>::value ?
+      // Primitive types that aren't special-cased below can be determined from sizeof().
+      FieldSizeForByteSize<sizeof(T)>::value :
+
+      // Non-primitive types that aren't special-cased below are presumed to be structs.
+      FieldSize::INLINE_COMPOSITE;
 };
 
-template <typename T> struct FieldSizeForType { static constexpr FieldSize value = FieldSize::INLINE_COMPOSITE; };
+// Void and bool are special.
+template <> struct FieldSizeForType<Void> { static constexpr FieldSize value = FieldSize::VOID; };
+template <> struct FieldSizeForType<bool> { static constexpr FieldSize value = FieldSize::BIT; };
 
-template <> struct FieldSizeForType<Void>     { static constexpr FieldSize value = FieldSize::VOID; };
-template <> struct FieldSizeForType<bool>     { static constexpr FieldSize value = FieldSize::BIT; };
-template <> struct FieldSizeForType<int8_t>   { static constexpr FieldSize value = FieldSize::BYTE; };
-template <> struct FieldSizeForType<int16_t>  { static constexpr FieldSize value = FieldSize::TWO_BYTES; };
-template <> struct FieldSizeForType<int32_t>  { static constexpr FieldSize value = FieldSize::FOUR_BYTES; };
-template <> struct FieldSizeForType<int64_t>  { static constexpr FieldSize value = FieldSize::EIGHT_BYTES; };
-template <> struct FieldSizeForType<uint8_t>  { static constexpr FieldSize value = FieldSize::BYTE; };
-template <> struct FieldSizeForType<uint16_t> { static constexpr FieldSize value = FieldSize::TWO_BYTES; };
-template <> struct FieldSizeForType<uint32_t> { static constexpr FieldSize value = FieldSize::FOUR_BYTES; };
-template <> struct FieldSizeForType<uint64_t> { static constexpr FieldSize value = FieldSize::EIGHT_BYTES; };
-template <> struct FieldSizeForType<float>    { static constexpr FieldSize value = FieldSize::FOUR_BYTES; };
-template <> struct FieldSizeForType<double>   { static constexpr FieldSize value = FieldSize::EIGHT_BYTES; };
+// Lists and blobs are references, not structs.
 template <typename T, bool b> struct FieldSizeForType<List<T, b>> {
+  static constexpr FieldSize value = FieldSize::REFERENCE;
+};
+template <> struct FieldSizeForType<Text> {
+  static constexpr FieldSize value = FieldSize::REFERENCE;
+};
+template <> struct FieldSizeForType<Data> {
   static constexpr FieldSize value = FieldSize::REFERENCE;
 };
 

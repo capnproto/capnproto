@@ -25,11 +25,8 @@ module Parser (parseFile) where
 
 import Text.Parsec hiding (tokens)
 import Text.Parsec.Error(newErrorMessage, Message(Message))
-import Text.Parsec.Pos(newPos)
-import Text.Printf(printf)
 import Token
 import Grammar
-import Semantics(maxFieldNumber, maxMethodNumber)
 import Lexer (lexer)
 import Control.Monad.Identity
 
@@ -147,21 +144,11 @@ typeExpression = do
     suffixes <- option [] (parenthesizedList typeExpression)
     return (TypeExpression name suffixes)
 
-nameWithOrdinal :: Integer -> TokenParser (Located String, Located Integer)
-nameWithOrdinal maxNumber = do
+nameWithOrdinal :: TokenParser (Located String, Located Integer)
+nameWithOrdinal = do
     name <- located varIdentifier
     atSign
     ordinal <- located literalInt
-    if locatedValue ordinal > maxNumber - 32 && locatedValue ordinal <= maxNumber
-        then exclamationPoint
-         <|> failNonFatal (locatedPos ordinal)
-                 (printf "%d is nearing maximum of %d.  Be sure to plan for future extensibility \
-                         \before you run out of numbers, e.g. by declaring a new nested type which \
-                         \can hold future declarations.  To acknowledge this warning, add an \
-                         \exclamation point after the number, i.e.:  %s@%d!"
-                         (locatedValue ordinal) maxNumber (locatedValue name)
-                         (locatedValue ordinal))
-        else optional exclamationPoint
     return (name, ordinal)
 
 topLine :: Maybe [Located Statement] -> TokenParser Declaration
@@ -199,9 +186,7 @@ enumLine Nothing = optionDecl <|> enumValueDecl []
 enumLine (Just statements) = enumValueDecl statements
 
 enumValueDecl statements = do
-    name <- located varIdentifier
-    equalsSign
-    value <- located literalInt
+    (name, value) <- nameWithOrdinal
     children <- parseBlock enumValueLine statements
     return (EnumValueDecl name value children)
 
@@ -221,7 +206,7 @@ structLine (Just statements) = typeDecl statements <|> unionDecl statements <|> 
 
 unionDecl statements = do
     unionKeyword
-    (name, ordinal) <- nameWithOrdinal maxFieldNumber
+    (name, ordinal) <- nameWithOrdinal
     children <- parseBlock unionLine statements
     return (UnionDecl name ordinal children)
 
@@ -230,7 +215,7 @@ unionLine Nothing = optionDecl <|> fieldDecl []
 unionLine (Just statements) = fieldDecl statements
 
 fieldDecl statements = do
-    (name, ordinal) <- nameWithOrdinal maxFieldNumber
+    (name, ordinal) <- nameWithOrdinal
     union <- optionMaybe (inKeyword >> located varIdentifier)
     colon
     t <- typeExpression
@@ -273,7 +258,7 @@ interfaceLine Nothing = optionDecl <|> constantDecl <|> methodDecl []
 interfaceLine (Just statements) = typeDecl statements <|> methodDecl statements
 
 methodDecl statements = do
-    (name, ordinal) <- nameWithOrdinal maxMethodNumber
+    (name, ordinal) <- nameWithOrdinal
     params <- parenthesizedList paramDecl
     colon
     t <- typeExpression

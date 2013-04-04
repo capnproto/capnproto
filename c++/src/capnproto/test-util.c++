@@ -65,6 +65,7 @@ void genericInitTestMessage(Builder builder) {
       subSubBuilder.setTextField("nested");
       subSubBuilder.initStructField().setTextField("really nested");
     }
+    subBuilder.setEnumField(TestEnum::BAZ);
 
     subBuilder.setVoidList({Void::VOID, Void::VOID, Void::VOID});
     subBuilder.setBoolList({false, true, false, true, true});
@@ -81,14 +82,15 @@ void genericInitTestMessage(Builder builder) {
     subBuilder.setFloat64List({0, 123456789012345, 1e306, -1e306, 1e-306, -1e-306});
     subBuilder.setTextList({"quux", "corge", "grault"});
     subBuilder.setDataList({"garply", "waldo", "fred"});
-
     {
       auto listBuilder = subBuilder.initStructList(3);
       listBuilder[0].setTextField("x structlist 1");
       listBuilder[1].setTextField("x structlist 2");
       listBuilder[2].setTextField("x structlist 3");
     }
+    subBuilder.setEnumList({TestEnum::QUX, TestEnum::BAR, TestEnum::GRAULT});
   }
+  builder.setEnumField(TestEnum::CORGE);
 
   builder.initVoidList(6);
   builder.setBoolList({true, false, false, true});
@@ -104,13 +106,13 @@ void genericInitTestMessage(Builder builder) {
   builder.setFloat64List({7777.75, 1111.125});
   builder.setTextList({"plugh", "xyzzy", "thud"});
   builder.setDataList({"oops", "exhausted", "rfc3092"});
-
   {
     auto listBuilder = builder.initStructList(3);
     listBuilder[0].setTextField("structlist 1");
     listBuilder[1].setTextField("structlist 2");
     listBuilder[2].setTextField("structlist 3");
   }
+  builder.setEnumList({TestEnum::FOO, TestEnum::GARPLY});
 }
 
 template <typename T, typename U>
@@ -174,6 +176,7 @@ void genericCheckTestMessage(Reader reader) {
       EXPECT_EQ("nested", subSubReader.getTextField());
       EXPECT_EQ("really nested", subSubReader.getStructField().getTextField());
     }
+    EXPECT_EQ(TestEnum::BAZ, subReader.getEnumField());
 
     checkList(subReader.getVoidList(), {Void::VOID, Void::VOID, Void::VOID});
     checkList(subReader.getBoolList(), {false, true, false, true, true});
@@ -190,7 +193,6 @@ void genericCheckTestMessage(Reader reader) {
     checkList(subReader.getFloat64List(), {0.0, 123456789012345.0, 1e306, -1e306, 1e-306, -1e-306});
     checkList(subReader.getTextList(), {"quux", "corge", "grault"});
     checkList(subReader.getDataList(), {"garply", "waldo", "fred"});
-
     {
       auto listReader = subReader.getStructList();
       ASSERT_EQ(3u, listReader.size());
@@ -198,7 +200,9 @@ void genericCheckTestMessage(Reader reader) {
       EXPECT_EQ("x structlist 2", listReader[1].getTextField());
       EXPECT_EQ("x structlist 3", listReader[2].getTextField());
     }
+    checkList(subReader.getEnumList(), {TestEnum::QUX, TestEnum::BAR, TestEnum::GRAULT});
   }
+  EXPECT_EQ(TestEnum::CORGE, reader.getEnumField());
 
   EXPECT_EQ(6u, reader.getVoidList().size());
   checkList(reader.getBoolList(), {true, false, false, true});
@@ -214,7 +218,6 @@ void genericCheckTestMessage(Reader reader) {
   checkList(reader.getFloat64List(), {7777.75, 1111.125});
   checkList(reader.getTextList(), {"plugh", "xyzzy", "thud"});
   checkList(reader.getDataList(), {"oops", "exhausted", "rfc3092"});
-
   {
     auto listReader = reader.getStructList();
     ASSERT_EQ(3u, listReader.size());
@@ -222,6 +225,7 @@ void genericCheckTestMessage(Reader reader) {
     EXPECT_EQ("structlist 2", listReader[1].getTextField());
     EXPECT_EQ("structlist 3", listReader[2].getTextField());
   }
+  checkList(reader.getEnumList(), {TestEnum::FOO, TestEnum::GARPLY});
 }
 
 template <typename Reader>

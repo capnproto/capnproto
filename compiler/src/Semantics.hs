@@ -33,13 +33,9 @@ import Text.Printf(printf)
 import Control.Monad(join)
 import Util(delimit)
 
--- Field counts are 8-bit, therefore there cannot be more than 255 fields, therefore the max field
--- number is 254.
-maxFieldNumber = 254 :: Integer
-
--- Limiting method counts is not as important technically, but obviously it would be insane to have
--- anywhere near 2^16 methods.
-maxMethodNumber = 65534 :: Integer
+-- Field counts are 16-bit, therefore there cannot be more than 65535 fields, therefore the max
+-- ordinal is 65534.
+maxOrdinal = 65534 :: Integer
 
 type ByteString = [Word8]
 
@@ -404,7 +400,7 @@ descToCode indent (DescConstant desc) = printf "%sconst %s: %s = %s;\n" indent
 descToCode indent (DescEnum desc) = printf "%senum %s%s" indent
     (enumName desc)
     (blockCode indent (enumStatements desc))
-descToCode indent (DescEnumValue desc) = printf "%s%s = %d%s" indent
+descToCode indent (DescEnumValue desc) = printf "%s%s @%d%s" indent
     (enumValueName desc) (enumValueNumber desc) (maybeBlockCode indent $ enumValueStatements desc)
 descToCode indent (DescStruct desc) = printf "%sstruct %s%s" indent
     (structName desc)

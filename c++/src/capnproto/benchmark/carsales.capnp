@@ -51,15 +51,15 @@ struct Car {
 }
 
 enum Color {
-  black = 0;
-  white = 1;
-  red = 2;
-  green = 3;
-  blue = 4;
-  cyan = 5;
-  magenta = 6;
-  yellow = 7;
-  silver = 8;
+  black @0;
+  white @1;
+  red @2;
+  green @3;
+  blue @4;
+  cyan @5;
+  magenta @6;
+  yellow @7;
+  silver @8;
 }
 
 struct Wheel {

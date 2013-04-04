@@ -21,6 +21,17 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+enum TestEnum {
+  foo @0;
+  bar @1;
+  baz @2;
+  qux @3;
+  quux @4;
+  corge @5;
+  grault @6;
+  garply @7;
+}
+
 struct TestAllTypes {
   voidField      @0  : Void;
   boolField      @1  : Bool;
@@ -37,7 +48,7 @@ struct TestAllTypes {
   textField      @12 : Text;
   dataField      @13 : Data;
   structField    @14 : TestAllTypes;
-  enumField      @15 : Void;  # TODO
+  enumField      @15 : TestEnum;
   interfaceField @16 : Void;  # TODO
 
   voidList      @17 : List(Void);
@@ -55,7 +66,7 @@ struct TestAllTypes {
   textList      @29 : List(Text);
   dataList      @30 : List(Data);
   structList    @31 : List(TestAllTypes);
-  enumList      @32 : Void;  # TODO
+  enumList      @32 : List(TestEnum);
   interfaceList @33 : Void;  # TODO
 }
 
@@ -92,7 +103,7 @@ struct TestDefaults {
       structField    = (
           textField = "nested",
           structField = (textField = "really nested")),
-      # enumField      = TODO
+      enumField      = baz,
       # interfaceField can't have a default
 
       voidList      = [void, void, void],
@@ -112,11 +123,11 @@ struct TestDefaults {
       structList    = [
           (textField = "x structlist 1"),
           (textField = "x structlist 2"),
-          (textField = "x structlist 3")]
-      # enumList      = TODO
+          (textField = "x structlist 3")],
+      enumList      = [qux, bar, grault]
       # interfaceList can't have a default
       );
-  enumField      @15 : Void;  # TODO
+  enumField      @15 : TestEnum = corge;
   interfaceField @16 : Void;  # TODO
 
   voidList      @17 : List(Void)    = [void, void, void, void, void, void];
@@ -137,6 +148,6 @@ struct TestDefaults {
       (textField = "structlist 1"),
       (textField = "structlist 2"),
       (textField = "structlist 3")];
-  enumList      @32 : List(Void);  # TODO
+  enumList      @32 : List(TestEnum) = [foo, garply];
   interfaceList @33 : List(Void);  # TODO
 }
