@@ -154,7 +154,7 @@
 <ul>
 <li><code>Data</code>: Encoded as a pointer, identical to <code>List(UInt8)</code>.</li>
 
-<li><code>Text</code>: Like <code>Data</code>, but the content must be valid UTF-8, the last byte of the content must be zero, and no other byte of the content can be zero. Note that the NUL terminator is included in the size sent on the wire, but the runtime library should not count it in any size reported to the application.</li>
+<li><code>Text</code>: Like <code>Data</code>, but the content must be valid UTF-8, and the last byte of the content must be zero. The encoding allows bytes other than the last to be zero, but some applications (especially ones written in languages that use NUL-terminated strings) may truncate at the first zero. If a particular text field is explicitly intended to support zero bytes, it should document this, but otherwise senders should assume that zero bytes are not allowed to be safe. Note that the NUL terminator is included in the size sent on the wire, but the runtime library should not count it in any size reported to the application.</li>
 </ul>
 
 <h2 id='enums'>Enums</h2>
