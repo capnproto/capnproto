@@ -171,7 +171,7 @@
 +-+-----------------------------+--+----------------------------+
 
 A (2 bits) = 1, to indicate that this is a list pointer.
-B (30 bits) = Offset, in words, from the start of the pointer to the
+B (30 bits) = Offset, in words, from the end of the pointer to the
     start of the first element of the list.  Signed.
 C (3 bits) = Size of each element:
     0 = 0 (e.g. List(Void))
@@ -203,7 +203,7 @@ D (29 bits) = Number of elements in the list, except when C is 7
 +-+-----------------------------+---------------+---------------+
 
 A (2 bits) = 0, to indicate that this is a struct pointer.
-B (30 bits) = Offset, in words, from the start of the pointer to the
+B (30 bits) = Offset, in words, from the end of the pointer to the
     start of the struct&#39;s data section.  Signed.
 C (16 bits) = Size of the struct&#39;s data section, in words.
 D (16 bits) = Size of the struct&#39;s pointer section, in words.</code></pre>
@@ -253,7 +253,7 @@ D (16 bits) = Size of the struct&#39;s pointer section, in words.</code></pre>
 
 <h3 id='default_values'>Default Values</h3>
 
-<p>A default struct is always all-zeros. To achieve this, fields in the data section are stored xor&#8217;d with their defined default values. An all-zero pointer is considered &#8220;null&#8221; (since otherwise it would point at itself, which makes no sense); accessor methods for pointer fields check for null and return a pointer to their default value in this case.</p>
+<p>A default struct is always all-zeros. To achieve this, fields in the data section are stored xor&#8217;d with their defined default values. An all-zero pointer is considered &#8220;null&#8221; (such a pointer would otherwise point to a zero-size struct, which might as well be considered null); accessor methods for pointer fields check for null and return a pointer to their default value in this case.</p>
 
 <p>There are several reasons why this is desirable:</p>
 
