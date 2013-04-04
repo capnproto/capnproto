@@ -45,7 +45,9 @@ struct WireReference {
   //
   // Actually this is not terribly common.  The "offset" could actually be different things
   // depending on the context:
-  // - For a regular (e.g. struct/list) reference, a signed word offset from the reference pointer.
+  // - For a regular (e.g. struct/list) reference, a signed word offset from the word immediately
+  //   following the reference pointer.  (The off-by-one means the offset is more often zero, saving
+  //   bytes on the wire when packed.)
   // - For an inline composite list tag (not really a reference, but structured similarly), an
   //   element count.
   // - For a FAR reference, an unsigned offset into the target segment.
@@ -70,19 +72,19 @@ struct WireReference {
 
   WireValue<uint32_t> offsetAndKind;
 
-  CAPNPROTO_ALWAYS_INLINE(bool isNull() const) { return offsetAndKind.get() == 0; }
   CAPNPROTO_ALWAYS_INLINE(Kind kind() const) {
     return static_cast<Kind>(offsetAndKind.get() & 3);
   }
 
   CAPNPROTO_ALWAYS_INLINE(word* target()) {
-    return reinterpret_cast<word*>(this) + (static_cast<int32_t>(offsetAndKind.get()) >> 2);
+    return reinterpret_cast<word*>(this) + 1 + (static_cast<int32_t>(offsetAndKind.get()) >> 2);
   }
   CAPNPROTO_ALWAYS_INLINE(const word* target() const) {
-    return reinterpret_cast<const word*>(this) + (static_cast<int32_t>(offsetAndKind.get()) >> 2);
+    return reinterpret_cast<const word*>(this) + 1 +
+        (static_cast<int32_t>(offsetAndKind.get()) >> 2);
   }
   CAPNPROTO_ALWAYS_INLINE(void setKindAndTarget(Kind kind, word* target)) {
-    offsetAndKind.set(((target - reinterpret_cast<word*>(this)) << 2) | kind);
+    offsetAndKind.set(((target - reinterpret_cast<word*>(this) - 1) << 2) | kind);
   }
 
   CAPNPROTO_ALWAYS_INLINE(ElementCount inlineCompositeListElementCount() const) {
@@ -113,21 +115,19 @@ struct WireReference {
   // Part of reference that depends on the kind.
 
   union {
+    uint32_t upper32Bits;
+
     struct {
-      WireValue<FieldNumber> fieldCount;
-      WireValue<WordCount8> dataSize;
-      WireValue<WireReferenceCount8> refCount;
-      WireValue<uint8_t> reserved0;
+      WireValue<WordCount16> dataSize;
+      WireValue<WireReferenceCount16> refCount;
 
       inline WordCount wordSize() const {
         return dataSize.get() + refCount.get() * WORDS_PER_REFERENCE;
       }
 
-      CAPNPROTO_ALWAYS_INLINE(void set(FieldNumber fc, WordCount ds, WireReferenceCount rc)) {
-        fieldCount.set(fc);
+      CAPNPROTO_ALWAYS_INLINE(void set(WordCount ds, WireReferenceCount rc)) {
         dataSize.set(ds);
         refCount.set(rc);
-        reserved0.set(0);
       }
     } structRef;
     // Also covers capabilities.
@@ -167,6 +167,14 @@ struct WireReference {
       }
     } farRef;
   };
+
+  CAPNPROTO_ALWAYS_INLINE(bool isNull() const) {
+    // If the upper 32 bits are zero, this is a pointer to an empty struct.  We consider that to be
+    // our "null" value.
+    // TODO:  Maybe this would be faster, but violates aliasing rules; does it matter?:
+    //    return *reinterpret_cast<const uint64_t*>(this) == 0;
+    return (offsetAndKind.get() == 0) & (upper32Bits == 0);
+  }
 };
 static_assert(sizeof(WireReference) == sizeof(word),
     "capnproto::WireReference is not exactly one word.  This will probably break everything.");
@@ -314,8 +322,7 @@ struct WireHelpers {
           copyStruct(segment, dstPtr, srcPtr, src->structRef.dataSize.get(),
                      src->structRef.refCount.get());
 
-          dst->structRef.set(src->structRef.fieldCount.get(), src->structRef.dataSize.get(),
-                             src->structRef.refCount.get());
+          dst->structRef.set(src->structRef.dataSize.get(), src->structRef.refCount.get());
           return dstPtr;
         }
       }
@@ -408,8 +415,7 @@ struct WireHelpers {
         defaultRef->structRef.dataSize.get() * BYTES_PER_WORD / BYTES);
 
     // Initialize the reference.
-    ref->structRef.set(defaultRef->structRef.fieldCount.get(), defaultRef->structRef.dataSize.get(),
-                       defaultRef->structRef.refCount.get());
+    ref->structRef.set(defaultRef->structRef.dataSize.get(), defaultRef->structRef.refCount.get());
 
     // Build the StructBuilder.
     return StructBuilder(segment, ptr,
@@ -428,9 +434,6 @@ struct WireHelpers {
 
       CAPNPROTO_DEBUG_ASSERT(ref->kind() == WireReference::STRUCT,
           "Called getStruct{Field,Element}() but existing reference is not a struct.");
-      CAPNPROTO_DEBUG_ASSERT(
-          ref->structRef.fieldCount.get() == defaultRef->structRef.fieldCount.get(),
-          "Trying to update struct with incorrect field count.");
       CAPNPROTO_DEBUG_ASSERT(
           ref->structRef.dataSize.get() == defaultRef->structRef.dataSize.get(),
           "Trying to update struct with incorrect data size.");
@@ -482,7 +485,6 @@ struct WireHelpers {
     reinterpret_cast<WireReference*>(ptr)->setKindAndInlineCompositeListElementCount(
         WireReference::STRUCT, elementCount);
     reinterpret_cast<WireReference*>(ptr)->structRef.set(
-        defaultRef->structRef.fieldCount.get(),
         defaultRef->structRef.dataSize.get(),
         defaultRef->structRef.refCount.get());
     ptr += REFERENCE_SIZE_IN_WORDS;
@@ -651,7 +653,6 @@ struct WireHelpers {
 
     return StructReader(
         segment, ptr, reinterpret_cast<const WireReference*>(ptr + ref->structRef.dataSize.get()),
-        ref->structRef.fieldCount.get(),
         ref->structRef.dataSize.get(),
         ref->structRef.refCount.get(),
         0 * BITS, nestingLimit - 1);
@@ -776,10 +777,7 @@ struct WireHelpers {
       }
 
       return ListReader(segment, ptr, size, wordsPerElement * BITS_PER_WORD,
-          tag->structRef.fieldCount.get(),
-          tag->structRef.dataSize.get(),
-          tag->structRef.refCount.get(),
-          nestingLimit - 1);
+          tag->structRef.dataSize.get(), tag->structRef.refCount.get(), nestingLimit - 1);
 
     } else {
       // The elements of the list are NOT structs.
@@ -830,8 +828,8 @@ struct WireHelpers {
             break;
         }
 
-        return ListReader(segment, ptr, ref->listRef.elementCount(), step, FieldNumber(1),
-            dataSize, referenceCount, nestingLimit - 1);
+        return ListReader(segment, ptr, ref->listRef.elementCount(), step,
+                          dataSize, referenceCount, nestingLimit - 1);
       } else {
         CAPNPROTO_ASSERT(segment != nullptr, "Trusted message had incompatible list element type.");
         segment->getArena()->reportInvalidData("A list had incompatible element type.");
@@ -1008,17 +1006,14 @@ Data::Builder StructBuilder::getDataField(
 }
 
 StructReader StructBuilder::asReader() const {
-  // HACK:  We just give maxed-out field, data size, and reference counts because they are only
+  // HACK:  We just give maxed-out data size and reference counts because they are only
   // used for checking for field presence.
-  static_assert(sizeof(WireReference::structRef.fieldCount) == 1,
-      "Has the maximum field count changed?");
-  static_assert(sizeof(WireReference::structRef.dataSize) == 1,
+  static_assert(sizeof(WireReference::structRef.dataSize) == 2,
       "Has the maximum data size changed?");
-  static_assert(sizeof(WireReference::structRef.refCount) == 1,
+  static_assert(sizeof(WireReference::structRef.refCount) == 2,
       "Has the maximum reference count changed?");
   return StructReader(segment, data, references,
-      FieldNumber(0xff), 0xff * WORDS, 0xff * REFERENCES,
-      0 * BITS, std::numeric_limits<int>::max());
+      0xffff * WORDS, 0xffff * REFERENCES, 0 * BITS, std::numeric_limits<int>::max());
 }
 
 StructReader StructReader::readRootTrusted(const word* location, const word* defaultValue) {
@@ -1122,11 +1117,10 @@ ListReader ListBuilder::asReader(FieldSize elementSize) const {
                     std::numeric_limits<int>::max());
 }
 
-ListReader ListBuilder::asReader(FieldNumber fieldCount, WordCount dataSize,
-                                 WireReferenceCount referenceCount) const {
+ListReader ListBuilder::asReader(WordCount dataSize, WireReferenceCount referenceCount) const {
   return ListReader(segment, ptr, elementCount,
       (dataSize + referenceCount * WORDS_PER_REFERENCE) * BITS_PER_WORD / ELEMENTS,
-      fieldCount, dataSize, referenceCount, std::numeric_limits<int>::max());
+      dataSize, referenceCount, std::numeric_limits<int>::max());
 }
 
 StructReader ListReader::getStructElement(ElementCount index, const word* defaultValue) const {
@@ -1140,8 +1134,7 @@ StructReader ListReader::getStructElement(ElementCount index, const word* defaul
     return StructReader(
         segment, structPtr,
         reinterpret_cast<const WireReference*>(structPtr + structDataSize * BYTES_PER_WORD),
-        structFieldCount, structDataSize, structReferenceCount, indexBit % BITS_PER_BYTE,
-        nestingLimit - 1);
+        structDataSize, structReferenceCount, indexBit % BITS_PER_BYTE, nestingLimit - 1);
   }
 }
 

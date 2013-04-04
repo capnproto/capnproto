@@ -39,8 +39,8 @@ namespace {
 
 TEST(WireFormat, SimpleRawDataStruct) {
   AlignedData<2> data = {{
-    // Struct ref, offset = 1, fieldCount = 1, dataSize = 1, referenceCount = 0
-    0x04, 0x00, 0x00, 0x00, 0x01, 0x01, 0x00, 0x00,
+    // Struct ref, offset = 1, dataSize = 1, referenceCount = 0
+    0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
     // Content for the data segment.
     0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef
   }};
@@ -81,28 +81,15 @@ TEST(WireFormat, SimpleRawDataStruct) {
   EXPECT_TRUE (reader.getDataField<bool>(63 * ELEMENTS, true ));
   EXPECT_FALSE(reader.getDataField<bool>(64 * ELEMENTS, false));
   EXPECT_TRUE (reader.getDataField<bool>(64 * ELEMENTS, true ));
-
-  // Field number guards.
-  EXPECT_EQ(0xefcdab89u,
-      reader.getDataFieldCheckingNumber<uint32_t>(FieldNumber(0), 1 * ELEMENTS, 321u));
-  EXPECT_EQ(321u,
-      reader.getDataFieldCheckingNumber<uint32_t>(FieldNumber(1), 1 * ELEMENTS, 321u));
-
-  EXPECT_TRUE (reader.getDataFieldCheckingNumber<bool>(FieldNumber(0), 0 * ELEMENTS, false));
-  EXPECT_TRUE (reader.getDataFieldCheckingNumber<bool>(FieldNumber(0), 0 * ELEMENTS, true ));
-  EXPECT_FALSE(reader.getDataFieldCheckingNumber<bool>(FieldNumber(0), 1 * ELEMENTS, false));
-  EXPECT_FALSE(reader.getDataFieldCheckingNumber<bool>(FieldNumber(0), 1 * ELEMENTS, true ));
-  EXPECT_FALSE(reader.getDataFieldCheckingNumber<bool>(FieldNumber(1), 0 * ELEMENTS, false));
-  EXPECT_TRUE (reader.getDataFieldCheckingNumber<bool>(FieldNumber(1), 0 * ELEMENTS, true ));
 }
 
-static const AlignedData<2> STRUCT_DEFAULT = {{8,0,0,0,16,2,4,0,  0}};
+static const AlignedData<6> STRUCT_DEFAULT = {{0,0,0,0,2,0,4,0,  0}};
 
-static const AlignedData<2> SUBSTRUCT_DEFAULT = {{8,0,0,0,1,1,0,0,  0,0,0,0,0,0,0,0}};
+static const AlignedData<2> SUBSTRUCT_DEFAULT = {{0,0,0,0,1,0,0,0,  0,0,0,0,0,0,0,0}};
 static const AlignedData<3> STRUCTLIST_ELEMENT_DEFAULT =
-    {{8,0,0,0,1,1,1,0,  0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0}};
+    {{0,0,0,0,1,0,1,0,  0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0}};
 static const AlignedData<2> STRUCTLIST_ELEMENT_SUBSTRUCT_DEFAULT =
-    {{8,0,0,0,1,1,0,0,  0,0,0,0,0,0,0,0}};
+    {{0,0,0,0,1,0,0,0,  0,0,0,0,0,0,0,0}};
 
 static void setupStruct(StructBuilder builder) {
   builder.setDataField<uint64_t>(0 * ELEMENTS, 0x1011121314151617ull);

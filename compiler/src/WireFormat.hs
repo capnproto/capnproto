@@ -93,7 +93,7 @@ encodeData size = loop 0 where
     popBits _ rest = ([], rest)
 
 encodeReferences :: Integer -> Integer -> [(Integer, TypeDesc, ValueDesc)] -> ([Word8], [Word8])
-encodeReferences o size = loop 0 (o + size) where
+encodeReferences o size = loop 0 (o + size - 1) where
     loop idx offset ((pos, t, v):rest) | idx == pos = let
         (ref, obj) = case (t, v) of
             (StructType desc, StructValueDesc assignments) -> let
@@ -134,10 +134,8 @@ encodeStructList o desc elements = loop (o + eSize * genericLength elements) ele
 
 encodeStructReference desc offset =
     bytes (offset * 4 + structTag) 4 ++
-    [ fromIntegral (length (structFields desc) + length (structUnions desc))
-    , fromIntegral $ packingDataSize $ structPacking desc
-    , fromIntegral $ packingReferenceCount $ structPacking desc
-    , 0 ]
+    bytes (packingDataSize $ structPacking desc) 2 ++
+    bytes (packingReferenceCount $ structPacking desc) 2
 
 encodeListReference elemSize@(SizeInlineComposite ds rc) elementCount offset =
     bytes (offset * 4 + listTag) 4 ++
@@ -234,8 +232,8 @@ encodeList elementType elements = case elementSize elementType of
 
 encodeMessage (StructType desc) (StructValueDesc assignments) = let
     (dataBytes, refBytes, childBytes) = encodeStruct desc assignments 0
-    in concat [encodeStructReference desc (1::Integer), dataBytes, refBytes, childBytes]
+    in concat [encodeStructReference desc (0::Integer), dataBytes, refBytes, childBytes]
 encodeMessage (ListType elementType) (ListDesc elements) =
-    encodeListReference (elementSize elementType) (genericLength elements) (1::Integer) ++
+    encodeListReference (elementSize elementType) (genericLength elements) (0::Integer) ++
     encodeList elementType elements
 encodeMessage _ _ = error "Not a message."

@@ -77,7 +77,7 @@ A list value is encoded as a pointer to a flat array of values.
     +-+-----------------------------+--+----------------------------+
 
     A (2 bits) = 1, to indicate that this is a list pointer.
-    B (30 bits) = Offset, in words, from the start of the pointer to the
+    B (30 bits) = Offset, in words, from the end of the pointer to the
         start of the first element of the list.  Signed.
     C (3 bits) = Size of each element:
         0 = 0 (e.g. List(Void))
@@ -123,7 +123,7 @@ A struct pointer looks like this:
     +-+-----------------------------+---------------+---------------+
 
     A (2 bits) = 0, to indicate that this is a struct pointer.
-    B (30 bits) = Offset, in words, from the start of the pointer to the
+    B (30 bits) = Offset, in words, from the end of the pointer to the
         start of the struct's data section.  Signed.
     C (16 bits) = Size of the struct's data section, in words.
     D (16 bits) = Size of the struct's pointer section, in words.

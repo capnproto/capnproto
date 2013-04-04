@@ -100,6 +100,9 @@ Array<word> messageToFlatArray(ArrayPtr<const ArrayPtr<const word>> segments) {
   internal::WireValue<uint32_t>* table =
       reinterpret_cast<internal::WireValue<uint32_t>*>(result.begin());
 
+  // We write the segment count - 1 because this makes the first word zero for single-segment
+  // messages, improving compression.  We don't bother doing this with segment sizes because
+  // one-word segments are rare anyway.
   table[0].set(segments.size() - 1);
 
   for (uint i = 0; i < segments.size(); i++) {
@@ -219,6 +222,9 @@ void writeMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> seg
 
   internal::WireValue<uint32_t> table[(segments.size() + 2) & ~size_t(1)];
 
+  // We write the segment count - 1 because this makes the first word zero for single-segment
+  // messages, improving compression.  We don't bother doing this with segment sizes because
+  // one-word segments are rare anyway.
   table[0].set(segments.size() - 1);
   for (uint i = 0; i < segments.size(); i++) {
     table[i + 1].set(segments[i].size());

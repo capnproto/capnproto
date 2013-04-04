@@ -231,7 +231,7 @@ private:
 class StructReader {
 public:
   inline StructReader()
-      : segment(nullptr), data(nullptr), references(nullptr), fieldCount(0), dataSize(0),
+      : segment(nullptr), data(nullptr), references(nullptr), dataSize(0),
         referenceCount(0), bit0Offset(0 * BITS), nestingLimit(0) {}
 
   static StructReader readRootTrusted(const word* location, const word* defaultValue);
@@ -244,14 +244,6 @@ public:
   // Get the data field value of the given type at the given offset.  The offset is measured in
   // multiples of the field size, determined by the type.  Returns the default value if the offset
   // is past the end of the struct's data segment.
-
-  template <typename T>
-  CAPNPROTO_ALWAYS_INLINE(T getDataFieldCheckingNumber(
-      FieldNumber fieldNumber, ElementCount offset, typename NoInfer<T>::Type defaultValue) const);
-  // Like getDataField() but also returns the default if the field number not less than the field
-  // count.  This is needed in cases where the field was packed into a hole preceding other fields
-  // with later numbers, and therefore the offset being in-bounds alone does not prove that the
-  // struct contains the field.
 
   StructReader getStructField(WireReferenceCount refIndex, const word* defaultValue) const;
   // Get the struct field at the given index in the reference segment, or the default value if not
@@ -277,7 +269,6 @@ private:
   const void* data;
   const WireReference* references;
 
-  FieldNumber fieldCount;              // Number of fields the struct is reported to have.
   WordCount8 dataSize;                 // Size of data segment.
   WireReferenceCount8 referenceCount;  // Size of the reference segment.
 
@@ -291,9 +282,9 @@ private:
   // Once this reaches zero, further pointers will be pruned.
 
   inline StructReader(SegmentReader* segment, const void* data, const WireReference* references,
-                      FieldNumber fieldCount, WordCount dataSize, WireReferenceCount referenceCount,
+                      WordCount dataSize, WireReferenceCount referenceCount,
                       BitCount bit0Offset, int nestingLimit)
-      : segment(segment), data(data), references(references), fieldCount(fieldCount),
+      : segment(segment), data(data), references(references),
         dataSize(dataSize), referenceCount(referenceCount), bit0Offset(bit0Offset),
         nestingLimit(nestingLimit) {}
 
@@ -358,8 +349,7 @@ public:
   ListReader asReader(FieldSize elementSize) const;
   // Get a ListReader pointing at the same memory.  Use this version only for non-struct lists.
 
-  ListReader asReader(FieldNumber fieldCount, WordCount dataSize,
-                      WireReferenceCount referenceCount) const;
+  ListReader asReader(WordCount dataSize, WireReferenceCount referenceCount) const;
   // Get a ListReader pointing at the same memory.  Use this version only for struct lists.
 
 private:
@@ -378,7 +368,7 @@ class ListReader {
 public:
   inline ListReader()
       : segment(nullptr), ptr(nullptr), elementCount(0),
-        stepBits(0 * BITS / ELEMENTS), structFieldCount(0), structDataSize(0),
+        stepBits(0 * BITS / ELEMENTS), structDataSize(0),
         structReferenceCount(0), nestingLimit(0) {}
 
   inline ElementCount size();
@@ -414,10 +404,9 @@ private:
   // if the sender upgraded a data list to a struct list.  It will always be aligned properly for
   // the type.  Unsigned so that division by a constant power of 2 is efficient.
 
-  FieldNumber structFieldCount;
   WordCount structDataSize;
   WireReferenceCount structReferenceCount;
-  // If the elements are structs, the properties of the struct.  The field and reference counts are
+  // If the elements are structs, the properties of the struct.  The reference count is
   // only used to check for field presence; the data size is also used to compute the reference
   // pointer.
 
@@ -428,15 +417,14 @@ private:
   inline ListReader(SegmentReader* segment, const void* ptr, ElementCount elementCount,
                     decltype(BITS / ELEMENTS) stepBits, int nestingLimit)
       : segment(segment), ptr(ptr), elementCount(elementCount), stepBits(stepBits),
-        structFieldCount(0), structDataSize(0), structReferenceCount(0),
+        structDataSize(0), structReferenceCount(0),
         nestingLimit(nestingLimit) {}
   inline ListReader(SegmentReader* segment, const void* ptr, ElementCount elementCount,
-                    decltype(BITS / ELEMENTS) stepBits,
-                    FieldNumber structFieldCount, WordCount structDataSize,
+                    decltype(BITS / ELEMENTS) stepBits, WordCount structDataSize,
                     WireReferenceCount structReferenceCount, int nestingLimit)
       : segment(segment), ptr(ptr), elementCount(elementCount), stepBits(stepBits),
-        structFieldCount(structFieldCount), structDataSize(structDataSize),
-        structReferenceCount(structReferenceCount), nestingLimit(nestingLimit) {}
+        structDataSize(structDataSize), structReferenceCount(structReferenceCount),
+        nestingLimit(nestingLimit) {}
 
   friend class StructReader;
   friend class ListBuilder;
@@ -509,41 +497,6 @@ inline bool StructReader::getDataField<bool>(ElementCount offset, bool defaultVa
 
 template <>
 inline Void StructReader::getDataField<Void>(ElementCount offset, Void defaultValue) const {
-  return Void::VOID;
-}
-
-template <typename T>
-T StructReader::getDataFieldCheckingNumber(
-    FieldNumber fieldNumber, ElementCount offset, typename NoInfer<T>::Type defaultValue) const {
-  // Intentionally use & rather than && to reduce branches.
-  if ((fieldNumber < fieldCount) &
-      (offset * bytesPerElement<T>() < dataSize * BYTES_PER_WORD)) {
-    return reinterpret_cast<const WireValue<T>*>(data)[offset / ELEMENTS].get();
-  } else {
-    return defaultValue;
-  }
-}
-
-template <>
-inline bool StructReader::getDataFieldCheckingNumber<bool>(
-    FieldNumber fieldNumber, ElementCount offset, bool defaultValue) const {
-  BitCount boffset = offset * (1 * BITS / ELEMENTS);
-
-  // This branch should always be optimized away when inlining.
-  if (boffset == 0 * BITS) boffset = bit0Offset;
-
-  // Intentionally use & rather than && to reduce branches.
-  if ((fieldNumber < fieldCount) & (boffset < dataSize * BITS_PER_WORD)) {
-    const byte* b = reinterpret_cast<const byte*>(data) + boffset / BITS_PER_BYTE;
-    return (*reinterpret_cast<const uint8_t*>(b) & (1 << (boffset % BITS_PER_BYTE / BITS))) != 0;
-  } else {
-    return defaultValue;
-  }
-}
-
-template <>
-inline Void StructReader::getDataFieldCheckingNumber<Void>(
-    FieldNumber fieldNumber, ElementCount offset, Void defaultValue) const {
   return Void::VOID;
 }
 

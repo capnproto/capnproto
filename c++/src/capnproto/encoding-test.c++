@@ -98,7 +98,7 @@ TEST(Encoding, DefaultInitializationMultiSegment) {
 }
 
 TEST(Encoding, DefaultsFromEmptyMessage) {
-  AlignedData<1> emptyMessage = {{4, 0, 0, 0, 0, 0, 0, 0}};
+  AlignedData<1> emptyMessage = {{0, 0, 0, 0, 0, 0, 0, 0}};
 
   ArrayPtr<const word> segments[1] = {arrayPtr(emptyMessage.words, 1)};
   SegmentArrayMessageReader reader(arrayPtr(segments, 1));

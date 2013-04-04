@@ -388,8 +388,10 @@ TEST(Packed, RoundTripAllZero) {
   PackedMessageReader reader(pipe);
   checkTestMessageAllZero(reader.getRoot<TestAllTypes>());
 
-  // Most of the bytes are the segment table and root reference.
-  EXPECT_LE(pipe.getData().size(), 9u);
+  // Segment table packs to 2 bytes.
+  // Root reference packs to 3 bytes.
+  // Content packs to 2 bytes (zero span).
+  EXPECT_LE(pipe.getData().size(), 7u);
 }
 
 TEST(Packed, RoundTripAllZeroScratchSpace) {
