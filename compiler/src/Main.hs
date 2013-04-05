@@ -24,6 +24,7 @@
 module Main ( main ) where
 
 import System.Environment
+import System.Console.GetOpt
 import Compiler
 import Util(delimit)
 import Text.Parsec.Pos
@@ -31,13 +32,27 @@ import Text.Parsec.Error
 import Text.Printf(printf)
 import qualified Data.List as List
 import qualified Data.ByteString.Lazy.Char8 as LZ
+import Data.List
+import Data.Maybe
+import Semantics
 
 import CxxGenerator
 
 main::IO()
 main = do
-    (lang : files) <- getArgs
-    handleFiles (generatorFnFor lang) files
+    let options = [Option ['o'] ["output"] (ReqArg id "FILE") "Where to send the files"]
+    args <- getArgs
+    let tup = getOpt RequireOrder options args
+    let (optionResults, files, _) = tup
+    let langDirs = catMaybes (map splitAtEquals optionResults)
+    handleFilesLangs (generatorFnsFor langDirs) files
+
+splitAtEquals :: String -> Maybe (String, String)
+splitAtEquals str = do
+    holder <- (elemIndex '=' str)
+    Just((splitAt holder str))
+
+handleFilesLangs eithers files = mapM_ (\x -> handleFiles x files) eithers
 
 handleFiles (Right fn) files = mapM_ (handleFile fn) files
 handleFiles (Left str) _ = putStrLn str
@@ -52,12 +67,17 @@ handleFile generateCode filename = do
         Active _ e -> mapM_ printError (List.sortBy compareErrors e)
         Failed e -> mapM_ printError (List.sortBy compareErrors e)
 
-generatorFnFor lang = case lang of
+generatorFnsFor :: [(String, String)] -> [Either String (FileDesc -> FilePath -> (IO ()))]
+generatorFnsFor langDirs = do
+    map (\langDir -> generatorFnFor (fst langDir) (tail (snd langDir)))langDirs
+
+generatorFnFor :: String -> String -> Either String (FileDesc -> FilePath -> (IO ()))
+generatorFnFor lang dir = case lang of
     "c++" -> Right (\desc filename -> do
        header <- generateCxxHeader desc
-       LZ.writeFile (filename ++ ".h") header
+       LZ.writeFile (dir ++ "/" ++ filename ++ ".h") header
        source <- generateCxxSource desc
-       LZ.writeFile (filename ++ ".c++") source)
+       LZ.writeFile (dir ++ "/" ++ filename ++ ".c++") source)
     _     -> Left "Only c++ is supported for now"
 
 compareErrors a b = compare (errorPos a) (errorPos b)
