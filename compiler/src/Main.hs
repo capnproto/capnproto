@@ -24,6 +24,7 @@
 module Main ( main ) where
 
 import System.Environment
+import System.Console.GetOpt
 import Compiler
 import Util(delimit)
 import Text.Parsec.Pos
@@ -31,26 +32,53 @@ import Text.Parsec.Error
 import Text.Printf(printf)
 import qualified Data.List as List
 import qualified Data.ByteString.Lazy.Char8 as LZ
+import Data.List
+import Data.Maybe
+import Semantics
 
 import CxxGenerator
 
 main::IO()
 main = do
-    files <- getArgs
-    mapM_ handleFile files
+    let options = [Option ['o'] ["output"] (ReqArg id "FILE") "Where to send the files"]
+    args <- getArgs
+    let tup = getOpt RequireOrder options args
+    let (optionResults, files, _) = tup
+    let langDirs = catMaybes (map splitAtEquals optionResults)
+    handleFilesLangs (generatorFnsFor langDirs) files
 
-handleFile filename = do
+splitAtEquals :: String -> Maybe (String, String)
+splitAtEquals str = do
+    holder <- (elemIndex '=' str)
+    Just((splitAt holder str))
+
+handleFilesLangs eithers files = mapM_ (\x -> handleFiles x files) eithers
+
+handleFiles (Right fn) files = mapM_ (handleFile fn) files
+handleFiles (Left str) _ = putStrLn str
+
+handleFile generateCode filename = do
     text <- readFile filename
     case parseAndCompileFile filename text of
         Active desc [] -> do
             print desc
-            header <- generateCxxHeader desc
-            LZ.writeFile (filename ++ ".h") header
-            source <- generateCxxSource desc
-            LZ.writeFile (filename ++ ".c++") source
+            generateCode desc filename
 
         Active _ e -> mapM_ printError (List.sortBy compareErrors e)
         Failed e -> mapM_ printError (List.sortBy compareErrors e)
+
+generatorFnsFor :: [(String, String)] -> [Either String (FileDesc -> FilePath -> (IO ()))]
+generatorFnsFor langDirs = do
+    map (\langDir -> generatorFnFor (fst langDir) (tail (snd langDir)))langDirs
+
+generatorFnFor :: String -> String -> Either String (FileDesc -> FilePath -> (IO ()))
+generatorFnFor lang dir = case lang of
+    "c++" -> Right (\desc filename -> do
+       header <- generateCxxHeader desc
+       LZ.writeFile (dir ++ "/" ++ filename ++ ".h") header
+       source <- generateCxxSource desc
+       LZ.writeFile (dir ++ "/" ++ filename ++ ".c++") source)
+    _     -> Left "Only c++ is supported for now"
 
 compareErrors a b = compare (errorPos a) (errorPos b)
 
