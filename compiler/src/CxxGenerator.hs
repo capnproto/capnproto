@@ -23,7 +23,7 @@
 
 {-# LANGUAGE TemplateHaskell #-}
 
-module CxxGenerator(generateCxxHeader, generateCxxSource) where
+module CxxGenerator(generateCxx) where
 
 import qualified Data.ByteString.UTF8 as ByteStringUTF8
 import Data.FileEmbed(embedFile)
@@ -244,3 +244,8 @@ hastacheConfig = MuConfig
 
 generateCxxHeader file = hastacheStr hastacheConfig (encodeStr headerTemplate) (fileContext file)
 generateCxxSource file = hastacheStr hastacheConfig (encodeStr srcTemplate) (fileContext file)
+
+generateCxx file = do
+    header <- generateCxxHeader file
+    source <- generateCxxSource file
+    return [(fileName file ++ ".h", header), (fileName file ++ ".c++", source)]

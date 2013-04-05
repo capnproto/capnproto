@@ -19,8 +19,8 @@ executable capnpc
                    hastache,
                    array,
                    data-binary-ieee754,
-                   filepath
-  -- When profiling is needed, add: -prof -fprof-auto -osuf p_o -hisuf p_hi
+                   filepath,
+                   directory
   ghc-options:     -Wall -fno-warn-missing-signatures
   other-modules:
                    Lexer,

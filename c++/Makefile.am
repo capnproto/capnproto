@@ -89,7 +89,7 @@ capnpc_outputs =                                               \
 # around in the generated Makefile a bit but couldn't figure it out.  I give
 # up.  Automake is terrible.
 test_capnpc_middleman:
-	$(CAPNPC) $(capnpc_inputs)
+	$(CAPNPC) -oc++ $(capnpc_inputs)
 	touch test_capnpc_middleman
 
 $(capnpc_outputs): test_capnpc_middleman

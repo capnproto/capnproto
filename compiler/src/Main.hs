@@ -25,66 +25,112 @@ module Main ( main ) where
 
 import System.Environment
 import System.Console.GetOpt
+import System.Exit(exitFailure, exitSuccess)
+import System.IO(hPutStr, stderr)
+import System.FilePath(takeDirectory)
+import System.Directory(createDirectoryIfMissing, doesDirectoryExist)
+import Control.Monad
 import Compiler
 import Util(delimit)
 import Text.Parsec.Pos
 import Text.Parsec.Error
 import Text.Printf(printf)
 import qualified Data.List as List
+import qualified Data.Map as Map
 import qualified Data.ByteString.Lazy.Char8 as LZ
-import Data.List
-import Data.Maybe
 import Semantics
 
-import CxxGenerator
+import CxxGenerator(generateCxx)
 
-main::IO()
+type GeneratorFn = FileDesc -> IO [(FilePath, LZ.ByteString)]
+
+generatorFns = Map.fromList [ ("c++", generateCxx) ]
+
+data Opt = OutputOpt String (Maybe GeneratorFn) FilePath
+         | VerboseOpt
+         | HelpOpt
+
+main :: IO ()
 main = do
-    let options = [Option ['o'] ["output"] (ReqArg id "FILE") "Where to send the files"]
+    let optionDescs =
+         [ Option "o" ["output"] (ReqArg parseOutputArg "LANG[:DIR]")
+             ("Generate output for language LANG\n\
+              \to directory DIR (default: current\n\
+              \directory).  LANG may be any of:\n\
+              \  " ++ unwords (Map.keys generatorFns))
+         , Option "v" ["verbose"] (NoArg VerboseOpt) "Write information about parsed files."
+         , Option "h" ["help"] (NoArg HelpOpt) "Print usage info and exit."
+         ]
+    let usage = usageInfo
+         "capnpc [OPTION]... [FILE]...\n\
+         \Generate source code based on Cap'n Proto definition FILEs.\n"
+         optionDescs
     args <- getArgs
-    let tup = getOpt RequireOrder options args
-    let (optionResults, files, _) = tup
-    let langDirs = catMaybes (map splitAtEquals optionResults)
-    handleFilesLangs (generatorFnsFor langDirs) files
+    let (options, files, optErrs) = getOpt Permute optionDescs args
+    let langErrs = map (printf "Unknown output language: %s\n")
+                       [lang | OutputOpt lang Nothing _ <- options]
+    let errs = optErrs ++ langErrs
+    unless (null errs) (do
+        mapM_ (hPutStr stderr) errs
+        hPutStr stderr usage
+        exitFailure)
 
-splitAtEquals :: String -> Maybe (String, String)
-splitAtEquals str = do
-    holder <- (elemIndex '=' str)
-    Just((splitAt holder str))
+    when (null options) (do
+        hPutStr stderr "Nothing to do.\n"
+        hPutStr stderr usage
+        exitFailure)
 
-handleFilesLangs eithers files = mapM_ (\x -> handleFiles x files) eithers
+    let isHelp = not $ null [opt | opt@HelpOpt <- options]
 
-handleFiles (Right fn) files = mapM_ (handleFile fn) files
-handleFiles (Left str) _ = putStrLn str
+    when isHelp (do
+        putStr usage
+        exitSuccess)
 
-handleFile generateCode filename = do
+    let isVerbose = not $ null [opt | opt@VerboseOpt <- options]
+    let outputs = [(fn, dir) | OutputOpt _ (Just fn) dir <- options]
+
+    let verifyDirectoryExists dir = do
+        exists <- doesDirectoryExist dir
+        unless exists (do
+            hPutStr stderr $ printf "no such directory: %s\n" dir
+            exitFailure)
+    mapM_ verifyDirectoryExists [dir | (_, dir) <- outputs]
+
+    mapM_ (handleFile outputs isVerbose) files
+
+parseOutputArg :: String -> Opt
+parseOutputArg str = case List.elemIndex ':' str of
+    Just i -> let (lang, _:dir) = splitAt i str in OutputOpt lang (Map.lookup lang generatorFns) dir
+    Nothing -> OutputOpt str (Map.lookup str generatorFns) "."
+
+handleFile :: [(GeneratorFn, FilePath)] -> Bool -> FilePath -> IO ()
+handleFile outputs isVerbose filename = do
     text <- readFile filename
     case parseAndCompileFile filename text of
         Active desc [] -> do
-            print desc
-            generateCode desc filename
+            when isVerbose (print desc)
 
-        Active _ e -> mapM_ printError (List.sortBy compareErrors e)
-        Failed e -> mapM_ printError (List.sortBy compareErrors e)
+            let write dir (name, content) = do
+                let outFilename = dir ++ "/" ++ name
+                createDirectoryIfMissing True $ takeDirectory outFilename
+                LZ.writeFile outFilename content
+            let generate (generatorFn, dir) = do
+                files <- generatorFn desc
+                mapM_ (write dir) files
+            mapM_ generate outputs
 
-generatorFnsFor :: [(String, String)] -> [Either String (FileDesc -> FilePath -> (IO ()))]
-generatorFnsFor langDirs = do
-    map (\langDir -> generatorFnFor (fst langDir) (tail (snd langDir)))langDirs
-
-generatorFnFor :: String -> String -> Either String (FileDesc -> FilePath -> (IO ()))
-generatorFnFor lang dir = case lang of
-    "c++" -> Right (\desc filename -> do
-       header <- generateCxxHeader desc
-       LZ.writeFile (dir ++ "/" ++ filename ++ ".h") header
-       source <- generateCxxSource desc
-       LZ.writeFile (dir ++ "/" ++ filename ++ ".c++") source)
-    _     -> Left "Only c++ is supported for now"
+        Active _ e -> do
+            mapM_ printError (List.sortBy compareErrors e)
+            exitFailure
+        Failed e -> do
+            mapM_ printError (List.sortBy compareErrors e)
+            exitFailure
 
 compareErrors a b = compare (errorPos a) (errorPos b)
 
 -- TODO:  This is a fairly hacky way to make showErrorMessages' output not suck.  We could do better
 --   by interpreting the error structure ourselves.
-printError e = printf "%s:%d:%d: %s\n" f l c m' where
+printError e = hPutStr stderr $ printf "%s:%d:%d: %s\n" f l c m' where
     pos = errorPos e
     f = sourceName pos
     l = sourceLine pos

@@ -389,7 +389,9 @@ data CompiledStatement = CompiledMember Desc
 
 -- TODO:  Print options as well as members.  Will be ugly-ish.
 descToCode :: String -> Desc -> String
-descToCode indent (DescFile desc) = concatMap (statementToCode indent) (fileStatements desc)
+descToCode indent (DescFile desc) = printf "# %s\n%s"
+    (fileName desc)
+    (concatMap (statementToCode indent) (fileStatements desc))
 descToCode indent (DescAlias desc) = printf "%susing %s = %s;\n" indent
     (aliasName desc)
     (descQualifiedName (aliasParent desc) (aliasTarget desc))
