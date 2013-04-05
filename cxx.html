@@ -172,11 +172,9 @@
 
 <p>To generate C++ code from your <code>.capnp</code> <a href='language.html'>interface definition</a>, run:</p>
 
-<pre><code>capnpc myproto.capnp</code></pre>
+<pre><code>capnpc -oc++ myproto.capnp</code></pre>
 
-<p>This will create <code>myproto.capnp.h</code> and <code>myproto.capnp.c++</code> in the same directory as <code>myproto.capnp</code>. (Currently, it also dumps some debug info to stdout, e.g. the offset of each field.)</p>
-
-<p><em>TODO: This will become more complicated later as we add support for more languages and such.</em></p>
+<p>This will create <code>myproto.capnp.h</code> and <code>myproto.capnp.c++</code> in the same directory as <code>myproto.capnp</code>.</p>
 
 <h2 id='primitive_types'>Primitive Types</h2>
 
