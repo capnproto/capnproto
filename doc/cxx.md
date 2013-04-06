@@ -67,7 +67,7 @@ version 4.7 to compile Cap'n Proto, with `--std=gnu++0x`.  Other compilers have 
 this time.
 
 This implementation prefers to handle errors using exceptions.  Exceptions are only used in
-circumstances that should never occur in normal opertaion.  For example, exceptions are thrown
+circumstances that should never occur in normal operation.  For example, exceptions are thrown
 on assertion failures (indicating bugs in the code), network failures, and invalid input.
 Exceptions thrown by Cap'n Proto are never part of the interface and never need to be caught in
 correct usage.  The purpose of throwing exceptions is to allow higher-level code a chance to
