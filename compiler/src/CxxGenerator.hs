@@ -29,6 +29,7 @@ import qualified Data.ByteString.UTF8 as ByteStringUTF8
 import Data.FileEmbed(embedFile)
 import Data.Word(Word8)
 import qualified Data.Digest.MD5 as MD5
+import Data.Binary.IEEE754(floatToWord, doubleToWord)
 import Text.Printf(printf)
 import Text.Hastache
 import Text.Hastache.Context
@@ -106,50 +107,47 @@ cxxFieldSizeString Size64 = "EIGHT_BYTES";
 cxxFieldSizeString SizeReference = "REFERENCE";
 cxxFieldSizeString (SizeInlineComposite _ _) = "INLINE_COMPOSITE";
 
-cxxValueString VoidDesc = " ::capnproto::Void::VOID"
-cxxValueString (BoolDesc    b) = if b then "true" else "false"
-cxxValueString (Int8Desc    i) = show i
-cxxValueString (Int16Desc   i) = show i
-cxxValueString (Int32Desc   i) = show i
-cxxValueString (Int64Desc   i) = show i ++ "ll"
-cxxValueString (UInt8Desc   i) = show i
-cxxValueString (UInt16Desc  i) = show i
-cxxValueString (UInt32Desc  i) = show i ++ "u"
-cxxValueString (UInt64Desc  i) = show i ++ "llu"
-cxxValueString (Float32Desc x) = show x ++ "f"
-cxxValueString (Float64Desc x) = show x
-cxxValueString (EnumValueValueDesc v) =
-    cxxTypeString (EnumType $ enumValueParent v) ++ "::" ++
-    toUpperCaseWithUnderscores (enumValueName v)
-cxxValueString (TextDesc _) = error "No default value literal for aggregate type."
-cxxValueString (DataDesc _) = error "No default value literal for aggregate type."
-cxxValueString (StructValueDesc _) = error "No default value literal for aggregate type."
-cxxValueString (ListDesc _) = error "No default value literal for aggregate type."
+isDefaultZero VoidDesc = True
+isDefaultZero (BoolDesc    b) = not b
+isDefaultZero (Int8Desc    i) = i == 0
+isDefaultZero (Int16Desc   i) = i == 0
+isDefaultZero (Int32Desc   i) = i == 0
+isDefaultZero (Int64Desc   i) = i == 0
+isDefaultZero (UInt8Desc   i) = i == 0
+isDefaultZero (UInt16Desc  i) = i == 0
+isDefaultZero (UInt32Desc  i) = i == 0
+isDefaultZero (UInt64Desc  i) = i == 0
+isDefaultZero (Float32Desc x) = x == 0
+isDefaultZero (Float64Desc x) = x == 0
+isDefaultZero (EnumValueValueDesc v) = enumValueNumber v == 0
+isDefaultZero (TextDesc _) = error "Can't call isDefaultZero on aggregate types."
+isDefaultZero (DataDesc _) = error "Can't call isDefaultZero on aggregate types."
+isDefaultZero (StructValueDesc _) = error "Can't call isDefaultZero on aggregate types."
+isDefaultZero (ListDesc _) = error "Can't call isDefaultZero on aggregate types."
+
+defaultMask VoidDesc = "0"
+defaultMask (BoolDesc    b) = if b then "true" else "false"
+defaultMask (Int8Desc    i) = show i
+defaultMask (Int16Desc   i) = show i
+defaultMask (Int32Desc   i) = show i
+defaultMask (Int64Desc   i) = show i ++ "ll"
+defaultMask (UInt8Desc   i) = show i
+defaultMask (UInt16Desc  i) = show i
+defaultMask (UInt32Desc  i) = show i ++ "u"
+defaultMask (UInt64Desc  i) = show i ++ "llu"
+defaultMask (Float32Desc x) = show (floatToWord x) ++ "u"
+defaultMask (Float64Desc x) = show (doubleToWord x) ++ "ul"
+defaultMask (EnumValueValueDesc v) = show (enumValueNumber v)
+defaultMask (TextDesc _) = error "Can't call defaultMask on aggregate types."
+defaultMask (DataDesc _) = error "Can't call defaultMask on aggregate types."
+defaultMask (StructValueDesc _) = error "Can't call defaultMask on aggregate types."
+defaultMask (ListDesc _) = error "Can't call defaultMask on aggregate types."
 
 defaultValueBytes _ (TextDesc s) = Just (UTF8.encode s ++ [0])
 defaultValueBytes _ (DataDesc d) = Just d
 defaultValueBytes t v@(StructValueDesc _) = Just $ encodeMessage t v
 defaultValueBytes t v@(ListDesc _) = Just $ encodeMessage t v
 defaultValueBytes _ _ = Nothing
-
-cxxDefaultDefault (BuiltinType BuiltinVoid) = " ::capnproto::Void::VOID"
-cxxDefaultDefault (BuiltinType BuiltinBool) = "false"
-cxxDefaultDefault (BuiltinType BuiltinInt8) = "0"
-cxxDefaultDefault (BuiltinType BuiltinInt16) = "0"
-cxxDefaultDefault (BuiltinType BuiltinInt32) = "0"
-cxxDefaultDefault (BuiltinType BuiltinInt64) = "0"
-cxxDefaultDefault (BuiltinType BuiltinUInt8) = "0"
-cxxDefaultDefault (BuiltinType BuiltinUInt16) = "0"
-cxxDefaultDefault (BuiltinType BuiltinUInt32) = "0"
-cxxDefaultDefault (BuiltinType BuiltinUInt64) = "0"
-cxxDefaultDefault (BuiltinType BuiltinFloat32) = "0"
-cxxDefaultDefault (BuiltinType BuiltinFloat64) = "0"
-cxxDefaultDefault (BuiltinType BuiltinText) = "\"\""
-cxxDefaultDefault (EnumType desc) = cxxValueString $ EnumValueValueDesc $ head $ enumValues desc
-cxxDefaultDefault (BuiltinType BuiltinData) = error "No default value literal for aggregate type."
-cxxDefaultDefault (StructType _) = error "No default value literal for aggregate type."
-cxxDefaultDefault (InterfaceType _) = error "No default value literal for aggregate type."
-cxxDefaultDefault (ListType _) = error "No default value literal for aggregate type."
 
 elementType (ListType t) = t
 elementType _ = error "Called elementType on non-list."
@@ -197,9 +195,9 @@ fieldContext parent desc = mkStrContext context where
     context "fieldType" = MuVariable $ cxxTypeString $ fieldType desc
     context "fieldBlobType" = MuVariable $ blobTypeString $ fieldType desc
     context "fieldOffset" = MuVariable $ fieldOffset desc
-    context "fieldDefaultValue" = case fieldDefaultValue desc of
-        Just v -> MuVariable $ cxxValueString v
-        Nothing -> MuVariable $ cxxDefaultDefault $ fieldType desc
+    context "fieldDefaultMask" = case fieldDefaultValue desc of
+        Nothing -> MuVariable ""
+        Just v -> MuVariable (if isDefaultZero v then "" else ", " ++ defaultMask v)
     context "fieldElementSize" =
         MuVariable $ cxxFieldSizeString $ elementSize $ elementType $ fieldType desc
     context "fieldElementType" =
@@ -212,8 +210,6 @@ structContext parent desc = mkStrContext context where
     context "structDataSize" = MuVariable $ packingDataSize $ structPacking desc
     context "structReferenceCount" = MuVariable $ packingReferenceCount $ structPacking desc
     context "structChildren" = MuList []  -- TODO
-    context "structDefault" = MuList [defaultBytesContext context (StructType desc)
-        (encodeMessage (StructType desc) (StructValueDesc []))]
     context s = parent s
 
 fileContext desc = mkStrContext context where

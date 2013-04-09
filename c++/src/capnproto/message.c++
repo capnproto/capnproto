@@ -38,7 +38,7 @@ MessageReader::~MessageReader() {
   }
 }
 
-internal::StructReader MessageReader::getRoot(const word* defaultValue) {
+internal::StructReader MessageReader::getRootInternal() {
   if (!allocatedArena) {
     static_assert(sizeof(internal::ReaderArena) <= sizeof(arenaSpace),
         "arenaSpace is too small to hold a ReaderArena.  Please increase it.  This will break "
@@ -51,10 +51,9 @@ internal::StructReader MessageReader::getRoot(const word* defaultValue) {
   if (segment == nullptr ||
       !segment->containsInterval(segment->getStartPtr(), segment->getStartPtr() + 1)) {
     arena()->reportInvalidData("Message did not contain a root pointer.");
-    return internal::StructReader::readRootTrusted(defaultValue, defaultValue);
+    return internal::StructReader::readEmpty();
   } else {
-    return internal::StructReader::readRoot(
-        segment->getStartPtr(), defaultValue, segment, options.nestingLimit);
+    return internal::StructReader::readRoot(segment->getStartPtr(), segment, options.nestingLimit);
   }
 }
 
@@ -88,16 +87,16 @@ internal::SegmentBuilder* MessageBuilder::getRootSegment() {
   }
 }
 
-internal::StructBuilder MessageBuilder::initRoot(const word* defaultValue) {
+internal::StructBuilder MessageBuilder::initRoot(internal::StructSize size) {
   internal::SegmentBuilder* rootSegment = getRootSegment();
   return internal::StructBuilder::initRoot(
-      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), defaultValue);
+      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), size);
 }
 
-internal::StructBuilder MessageBuilder::getRoot(const word* defaultValue) {
+internal::StructBuilder MessageBuilder::getRoot(internal::StructSize size) {
   internal::SegmentBuilder* rootSegment = getRootSegment();
   return internal::StructBuilder::getRoot(
-      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), defaultValue);
+      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), size);
 }
 
 ArrayPtr<const ArrayPtr<const word>> MessageBuilder::getSegmentsForOutput() {

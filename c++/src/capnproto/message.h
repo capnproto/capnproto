@@ -144,7 +144,7 @@ private:
   bool allocatedArena;
 
   internal::ReaderArena* arena() { return reinterpret_cast<internal::ReaderArena*>(arenaSpace); }
-  internal::StructReader getRoot(const word* defaultValue);
+  internal::StructReader getRootInternal();
 };
 
 class MessageBuilder {
@@ -175,8 +175,8 @@ private:
 
   internal::BuilderArena* arena() { return reinterpret_cast<internal::BuilderArena*>(arenaSpace); }
   internal::SegmentBuilder* getRootSegment();
-  internal::StructBuilder initRoot(const word* defaultValue);
-  internal::StructBuilder getRoot(const word* defaultValue);
+  internal::StructBuilder initRoot(internal::StructSize size);
+  internal::StructBuilder getRoot(internal::StructSize size);
 };
 
 template <typename RootType>
@@ -297,23 +297,22 @@ inline const ReaderOptions& MessageReader::getOptions() {
 
 template <typename RootType>
 inline typename RootType::Reader MessageReader::getRoot() {
-  return typename RootType::Reader(getRoot(RootType::DEFAULT.words));
+  return typename RootType::Reader(getRootInternal());
 }
 
 template <typename RootType>
 inline typename RootType::Builder MessageBuilder::initRoot() {
-  return typename RootType::Builder(initRoot(RootType::DEFAULT.words));
+  return typename RootType::Builder(initRoot(RootType::STRUCT_SIZE));
 }
 
 template <typename RootType>
 inline typename RootType::Builder MessageBuilder::getRoot() {
-  return typename RootType::Builder(getRoot(RootType::DEFAULT.words));
+  return typename RootType::Builder(getRoot(RootType::STRUCT_SIZE));
 }
 
 template <typename RootType>
 typename RootType::Reader readMessageTrusted(const word* data) {
-  return typename RootType::Reader(internal::StructReader::readRootTrusted(
-      data, RootType::DEFAULT.words));
+  return typename RootType::Reader(internal::StructReader::readRootTrusted(data));
 }
 
 }  // namespace capnproto

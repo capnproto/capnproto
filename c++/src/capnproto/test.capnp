@@ -67,7 +67,7 @@ struct TestAllTypes {
   dataList      @30 : List(Data);
   structList    @31 : List(TestAllTypes);
   enumList      @32 : List(TestEnum);
-  interfaceList @33 : Void;  # TODO
+  interfaceList @33 : List(Void);  # TODO
 }
 
 struct TestDefaults {

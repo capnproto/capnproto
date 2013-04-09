@@ -123,6 +123,91 @@ union AlignedData {
   word words[wordCount];
 };
 
+struct StructSize {
+  WordCount16 data;
+  WireReferenceCount16 pointers;
+
+  inline constexpr WordCount total() const { return data + pointers * WORDS_PER_REFERENCE; }
+
+  StructSize() = default;
+  inline constexpr StructSize(WordCount data, WireReferenceCount pointers)
+      : data(data), pointers(pointers) {}
+};
+
+template <typename T>
+class IsEnum {
+  // Detects whether a primitive value is an enum.
+
+  typedef char no;
+  typedef long yes;
+
+  static no test(int i);
+  static yes test(...);
+
+public:
+  static constexpr bool value = sizeof(test(T())) == sizeof(yes);
+};
+
+// -------------------------------------------------------------------
+// Masking of default values
+
+template <typename T, bool isEnum = IsEnum<T>::value> struct MaskType { typedef T Type; };
+template <typename T> struct MaskType<T, false> { typedef T Type; };
+template <typename T> struct MaskType<T, true> { typedef uint16_t Type; };
+template <> struct MaskType<float, false> { typedef uint32_t Type; };
+template <> struct MaskType<double, false> { typedef uint64_t Type; };
+
+template <typename T>
+CAPNPROTO_ALWAYS_INLINE(
+    typename MaskType<T>::Type mask(T value, typename MaskType<T>::Type mask));
+template <typename T>
+CAPNPROTO_ALWAYS_INLINE(
+    T unmask(typename MaskType<T>::Type value, typename MaskType<T>::Type mask));
+
+template <typename T>
+inline typename MaskType<T>::Type mask(T value, typename MaskType<T>::Type mask) {
+  return static_cast<typename MaskType<T>::Type>(value) ^ mask;
+}
+
+template <>
+inline uint32_t mask<float>(float value, uint32_t mask) {
+  uint32_t i;
+  static_assert(sizeof(i) == sizeof(value), "float is not 32 bits?");
+  memcpy(&i, &value, sizeof(value));
+  return i ^ mask;
+}
+
+template <>
+inline uint64_t mask<double>(double value, uint64_t mask) {
+  uint64_t i;
+  static_assert(sizeof(i) == sizeof(value), "double is not 64 bits?");
+  memcpy(&i, &value, sizeof(value));
+  return i ^ mask;
+}
+
+template <typename T>
+inline T unmask(typename MaskType<T>::Type value, typename MaskType<T>::Type mask) {
+  return static_cast<T>(value ^ mask);
+}
+
+template <>
+inline float unmask<float>(uint32_t value, uint32_t mask) {
+  value ^= mask;
+  float result;
+  static_assert(sizeof(result) == sizeof(value), "float is not 32 bits?");
+  memcpy(&result, &value, sizeof(value));
+  return result;
+}
+
+template <>
+inline double unmask<double>(uint64_t value, uint64_t mask) {
+  value ^= mask;
+  double result;
+  static_assert(sizeof(result) == sizeof(value), "double is not 64 bits?");
+  memcpy(&result, &value, sizeof(value));
+  return result;
+}
+
 // -------------------------------------------------------------------
 
 template <typename T>
@@ -154,8 +239,8 @@ class StructBuilder {
 public:
   inline StructBuilder(): segment(nullptr), data(nullptr), references(nullptr) {}
 
-  static StructBuilder initRoot(SegmentBuilder* segment, word* location, const word* defaultValue);
-  static StructBuilder getRoot(SegmentBuilder* segment, word* location, const word* defaultValue);
+  static StructBuilder initRoot(SegmentBuilder* segment, word* location, StructSize size);
+  static StructBuilder getRoot(SegmentBuilder* segment, word* location, StructSize size);
 
   template <typename T>
   CAPNPROTO_ALWAYS_INLINE(T getDataField(ElementCount offset) const);
@@ -163,21 +248,33 @@ public:
   // multiples of the field size, determined by the type.
 
   template <typename T>
+  CAPNPROTO_ALWAYS_INLINE(T getDataField(
+      ElementCount offset, typename MaskType<T>::Type mask) const);
+  // Like getDataField() but applies the given XOR mask to the data on load.  Used for reading
+  // fields with non-zero default values.
+
+  template <typename T>
   CAPNPROTO_ALWAYS_INLINE(void setDataField(
       ElementCount offset, typename NoInfer<T>::Type value) const);
   // Sets the data field value at the given offset.
 
-  StructBuilder initStructField(WireReferenceCount refIndex, const word* typeDefaultValue) const;
+  template <typename T>
+  CAPNPROTO_ALWAYS_INLINE(void setDataField(
+      ElementCount offset, typename NoInfer<T>::Type value, typename MaskType<T>::Type mask) const);
+  // Like setDataField() but applies the given XOR mask before storing.  Used for writing fields
+  // with non-zero default values.
+
+  StructBuilder initStructField(WireReferenceCount refIndex, StructSize size) const;
   // Initializes the struct field at the given index in the reference segment.  If it is already
   // initialized, the previous value is discarded or overwritten.  The struct is initialized to
-  // match the given default value (a trusted message).  This must be the default value for the
-  // *type*, not the specific field, and in particular its reference segment is expected to be
-  // all nulls (only the data segment is copied).  Use getStructField() if you want the struct
-  // to be initialized as a copy of the field's default value (which may have non-null references).
+  // the type's default state (all-zero).  Use getStructField() if you want the struct to be
+  // initialized as a copy of the field's default value (which may have non-null references).
 
-  StructBuilder getStructField(WireReferenceCount refIndex, const word* defaultValue) const;
+  StructBuilder getStructField(WireReferenceCount refIndex, StructSize size,
+                               const word* defaultValue) const;
   // Gets the struct field at the given index in the reference segment.  If the field is not already
-  // initialized, it is initialized as a deep copy of the given default value (a trusted message).
+  // initialized, it is initialized as a deep copy of the given default value (a trusted message),
+  // or to the empty state if defaultValue is nullptr.
 
   ListBuilder initListField(WireReferenceCount refIndex, FieldSize elementSize,
                             ElementCount elementCount) const;
@@ -185,11 +282,9 @@ public:
   // segment, and return a pointer to it.  All elements are initialized to zero.
 
   ListBuilder initStructListField(WireReferenceCount refIndex, ElementCount elementCount,
-                                  const word* elementDefaultValue) const;
+                                  StructSize size) const;
   // Allocates a new list of the given size for the field at the given index in the reference
-  // segment, and return a pointer to it.  Each element is initialized as a copy of
-  // elementDefaultValue.  As with initStructField(), this should be the default value for the
-  // *type*, with all-null references.
+  // segment, and return a pointer to it.  Each element is initialized to its empty state.
 
   ListBuilder getListField(WireReferenceCount refIndex, const word* defaultValue) const;
   // Gets the already-allocated list field for the given reference index.  If the list is not
@@ -234,21 +329,27 @@ public:
       : segment(nullptr), data(nullptr), references(nullptr), dataSize(0),
         referenceCount(0), bit0Offset(0 * BITS), nestingLimit(0) {}
 
-  static StructReader readRootTrusted(const word* location, const word* defaultValue);
-  static StructReader readRoot(const word* location, const word* defaultValue,
-                               SegmentReader* segment, int nestingLimit);
+  static StructReader readRootTrusted(const word* location);
+  static StructReader readRoot(const word* location, SegmentReader* segment, int nestingLimit);
+  static StructReader readEmpty();
+
+  template <typename T>
+  CAPNPROTO_ALWAYS_INLINE(T getDataField(ElementCount offset) const);
+  // Get the data field value of the given type at the given offset.  The offset is measured in
+  // multiples of the field size, determined by the type.  Returns zero if the offset is past the
+  // end of the struct's data segment.
 
   template <typename T>
   CAPNPROTO_ALWAYS_INLINE(
-      T getDataField(ElementCount offset, typename NoInfer<T>::Type defaultValue) const);
-  // Get the data field value of the given type at the given offset.  The offset is measured in
-  // multiples of the field size, determined by the type.  Returns the default value if the offset
-  // is past the end of the struct's data segment.
+      T getDataField(ElementCount offset, typename MaskType<T>::Type mask) const);
+  // Like getDataField(offset), but applies the given XOR mask to the result.  Used for reading
+  // fields with non-zero default values.
 
   StructReader getStructField(WireReferenceCount refIndex, const word* defaultValue) const;
   // Get the struct field at the given index in the reference segment, or the default value if not
   // initialized.  defaultValue will be interpreted as a trusted message -- it must point at a
-  // struct reference, which in turn points at the struct value.
+  // struct reference, which in turn points at the struct value.  The default value is allowed to
+  // be null, in which case an empty struct is used.
 
   ListReader getListField(WireReferenceCount refIndex, FieldSize expectedElementSize,
                           const word* defaultValue) const;
@@ -322,11 +423,9 @@ public:
   // to zero.
 
   ListBuilder initStructListElement(WireReferenceCount index, ElementCount elementCount,
-                                    const word* elementDefaultValue) const;
+                                    StructSize size) const;
   // Allocates a new list of the given size for the field at the given index in the reference
-  // segment, and return a pointer to it.  Each element is initialized as a copy of
-  // elementDefaultValue.  As with StructBuilder::initStructListElement(), this should be the
-  // default value for the *type*, with all-null references.
+  // segment, and return a pointer to it.  Each element is initialized to its empty state.
 
   ListBuilder getListElement(WireReferenceCount index) const;
   // Get the existing list element at the given index.  Returns an empty list if the element is
@@ -378,7 +477,7 @@ public:
   CAPNPROTO_ALWAYS_INLINE(T getDataElement(ElementCount index) const);
   // Get the element of the given type at the given index.
 
-  StructReader getStructElement(ElementCount index, const word* defaultValue) const;
+  StructReader getStructElement(ElementCount index) const;
   // Get the struct element at the given index.
 
   ListReader getListElement(WireReferenceCount index, FieldSize expectedElementSize) const;
@@ -452,6 +551,11 @@ inline Void StructBuilder::getDataField<Void>(ElementCount offset) const {
 }
 
 template <typename T>
+inline T StructBuilder::getDataField(ElementCount offset, typename MaskType<T>::Type mask) const {
+  return unmask<T>(getDataField<typename MaskType<T>::Type>(offset), mask);
+}
+
+template <typename T>
 inline void StructBuilder::setDataField(
     ElementCount offset, typename NoInfer<T>::Type value) const {
   reinterpret_cast<WireValue<T>*>(data)[offset / ELEMENTS].set(value);
@@ -469,19 +573,25 @@ inline void StructBuilder::setDataField<bool>(ElementCount offset, bool value) c
 template <>
 inline void StructBuilder::setDataField<Void>(ElementCount offset, Void value) const {}
 
+template <typename T>
+inline void StructBuilder::setDataField(
+    ElementCount offset, typename NoInfer<T>::Type value, typename MaskType<T>::Type m) const {
+  setDataField<typename MaskType<T>::Type>(offset, mask<T>(value, m));
+}
+
 // -------------------------------------------------------------------
 
 template <typename T>
-T StructReader::getDataField(ElementCount offset, typename NoInfer<T>::Type defaultValue) const {
+T StructReader::getDataField(ElementCount offset) const {
   if (offset * bytesPerElement<T>() < dataSize * BYTES_PER_WORD) {
     return reinterpret_cast<const WireValue<T>*>(data)[offset / ELEMENTS].get();
   } else {
-    return defaultValue;
+    return static_cast<T>(0);
   }
 }
 
 template <>
-inline bool StructReader::getDataField<bool>(ElementCount offset, bool defaultValue) const {
+inline bool StructReader::getDataField<bool>(ElementCount offset) const {
   BitCount boffset = offset * (1 * BITS / ELEMENTS);
 
   // This branch should always be optimized away when inlining.
@@ -491,13 +601,18 @@ inline bool StructReader::getDataField<bool>(ElementCount offset, bool defaultVa
     const byte* b = reinterpret_cast<const byte*>(data) + boffset / BITS_PER_BYTE;
     return (*reinterpret_cast<const uint8_t*>(b) & (1 << (boffset % BITS_PER_BYTE / BITS))) != 0;
   } else {
-    return defaultValue;
+    return false;
   }
 }
 
 template <>
-inline Void StructReader::getDataField<Void>(ElementCount offset, Void defaultValue) const {
+inline Void StructReader::getDataField<Void>(ElementCount offset) const {
   return Void::VOID;
+}
+
+template <typename T>
+T StructReader::getDataField(ElementCount offset, typename MaskType<T>::Type mask) const {
+  return unmask<T>(getDataField<typename MaskType<T>::Type>(offset), mask);
 }
 
 // -------------------------------------------------------------------

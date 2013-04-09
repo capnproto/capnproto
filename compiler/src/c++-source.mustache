@@ -32,13 +32,7 @@ namespace {{namespaceName}} {
 {{/fileNamespaces}}
 
 {{#fileStructs}}
-constexpr ::capnproto::WordCount {{structName}}::DATA_SIZE;
-constexpr ::capnproto::WireReferenceCount {{structName}}::REFERENCE_COUNT;
-{{#structDefault}}
-const ::capnproto::internal::AlignedData<{{defaultWordCount}}> {{structName}}::DEFAULT = {
-  { {{defaultByteList}} }
-};
-{{/structDefault}}
+constexpr ::capnproto::internal::StructSize {{structName}}::STRUCT_SIZE;
 
 {{#structFields}}
 {{#fieldDefaultBytes}}

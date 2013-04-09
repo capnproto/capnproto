@@ -25,8 +25,7 @@ module WireFormat(encodeMessage) where
 
 import Data.List(sortBy, genericLength, genericReplicate)
 import Data.Word
-import Data.Bits(shiftL, shiftR, Bits, setBit)
-import qualified Data.Set as Set
+import Data.Bits(shiftL, shiftR, Bits, setBit, xor)
 import Semantics
 import Data.Binary.IEEE754(floatToWord, doubleToWord)
 import qualified Codec.Binary.UTF8.String as UTF8
@@ -69,27 +68,34 @@ encodeDataValue (EnumValueValueDesc v) = bytes (enumValueNumber v) 2
 encodeDataValue (StructValueDesc _) = error "Not fixed-width data."
 encodeDataValue (ListDesc _) = error "Not fixed-width data."
 
-packBits :: Bits a => Int -> [Bool] -> a
-packBits _ [] = 0
-packBits offset (True:bits) = setBit (packBits (offset + 1) bits) offset
-packBits offset (False:bits) = packBits (offset + 1) bits
+encodeMaskedDataValue v Nothing = encodeDataValue v
+encodeMaskedDataValue v (Just d) = zipWith xor (encodeDataValue v) (encodeDataValue d)
 
-encodeData :: Integer -> [(Integer, TypeDesc, ValueDesc)] -> [Word8]
+packBits :: Bits a => Int -> [(Bool, Maybe Bool)] -> a
+packBits _ [] = 0
+packBits offset ((True, Nothing):bits) = setBit (packBits (offset + 1) bits) offset
+packBits offset ((False, Nothing):bits) = packBits (offset + 1) bits
+packBits offset ((b, Just d):bits) = packBits offset ((b /= d, Nothing):bits)
+
+-- The tuples are (offsetInBits, type, value, defaultValue) for each field to encode.
+encodeData :: Integer -> [(Integer, TypeDesc, ValueDesc, Maybe ValueDesc)] -> [Word8]
 encodeData size = loop 0 where
     loop bit [] | bit == size = []
     loop bit [] | bit > size = error "Data values overran size."
     loop bit [] = 0:loop (bit + 8) []
-    loop bit rest@((valuePos, _, BoolDesc _):_) | valuePos == bit = let
+    loop bit rest@((valuePos, _, BoolDesc _, _):_) | valuePos == bit = let
         (bits, rest2) = popBits (bit + 8) rest
         in packBits 0 bits : loop (bit + 8) rest2
-    loop bit ((valuePos, _, value):rest) | valuePos == bit =
-        encodeDataValue value ++ loop (bit + sizeInBits (fieldValueSize value)) rest
-    loop bit rest@((valuePos, _, _):_) | valuePos > bit = 0 : loop (bit + 8) rest
+    loop bit ((valuePos, _, value, defaultValue):rest) | valuePos == bit =
+        encodeMaskedDataValue value defaultValue ++
+        loop (bit + sizeInBits (fieldValueSize value)) rest
+    loop bit rest@((valuePos, _, _, _):_) | valuePos > bit = 0 : loop (bit + 8) rest
     loop _ _ = error "Data values were out-of-order."
 
-    popBits limit ((valuePos, _, BoolDesc b):rest) | valuePos < limit = let
+    popBits limit ((valuePos, _, BoolDesc b, d):rest) | valuePos < limit = let
         (restBits, rest2) = popBits limit rest
-        in (b:restBits, rest2)
+        defaultB = fmap (\(BoolDesc b2) -> b2) d
+        in ((b, defaultB):restBits, rest2)
     popBits _ rest = ([], rest)
 
 encodeReferences :: Integer -> Integer -> [(Integer, TypeDesc, ValueDesc)] -> ([Word8], [Word8])
@@ -156,10 +162,6 @@ fieldSizeEnum (SizeInlineComposite _ _) = 7
 structTag = 0
 listTag = 1
 
--- Is this field a non-retroactive member of a union?  If so, its default value is not written.
-isNonRetroUnionMember (FieldDesc {fieldNumber = n, fieldUnion = Just u}) = n > unionNumber u
-isNonRetroUnionMember _ = False
-
 -- What is this union's default tag value?  If there is a retroactive field, it is that field's
 -- number, otherwise it is the union's number (meaning no field set).
 unionDefault desc = UInt8Desc $ fromIntegral $
@@ -168,49 +170,24 @@ unionDefault desc = UInt8Desc $ fromIntegral $
 -- childOffset = number of words between the last reference and the location where children will
 -- be allocated.
 encodeStruct desc assignments childOffset = (dataBytes, referenceBytes, children) where
-    explicitlyAssignedNums = Set.fromList [fieldNumber f | (f, _) <- assignments]
-    explicitlyAssignedUnions = Set.fromList
-        [unionNumber u | (FieldDesc {fieldUnion = Just u}, _) <- assignments]
-
-    -- Was this field explicitly assigned, or was another member of the same union explicitly
-    -- assigned?  If so, its default value is not written.
-    isExplicitlyAssigned (FieldDesc {fieldNumber = n, fieldUnion = u}) =
-        Set.member n explicitlyAssignedNums ||
-        maybe False (flip Set.member explicitlyAssignedUnions . unionNumber) u
-
     -- Values explicitly assigned.
-    explicitValues = [(fieldOffset f, fieldType f, v) | (f, v) <- assignments]
-
-    -- Values from defaults.
-    defaultValues = [(o, fieldType field, v)
-        | field@(FieldDesc { fieldOffset = o, fieldDefaultValue = Just v}) <- structFields desc
-        -- Don't include default values for fields that were explicitly assigned.
-        , not $ isExplicitlyAssigned field
-        -- Don't encode defaults for union members since they'd overwrite each other, and anyway
-        -- they wouldn't be valid unless the union tag specified them, which by default it doesn't,
-        -- except of course in the case of retroactively-added fields.  So do include retro fields.
-        , not $ isNonRetroUnionMember field
-        -- Don't encode defaults for references.  Setting them to null has the same effect.
-        , isDataFieldSize $ fieldValueSize v ]
+    explicitValues = [(fieldOffset f, fieldType f, v, fieldDefaultValue f) | (f, v) <- assignments]
 
     -- Values of union tags.
-    unionValues = [(unionTagOffset u, BuiltinType BuiltinUInt8, UInt8Desc $ fromIntegral n)
+    unionValues = [(unionTagOffset u, BuiltinType BuiltinUInt8, UInt8Desc $ fromIntegral n,
+                      Just $ unionDefault u)
                   | (FieldDesc {fieldUnion = Just u, fieldNumber = n}, _) <- assignments]
 
-    -- Default values of union tags.
-    unionDefaultValues = [(unionTagOffset u, BuiltinType BuiltinUInt8, unionDefault u)
-                         | u <- structUnions desc
-                         , not $ Set.member (unionNumber u) explicitlyAssignedUnions]
-
-    allValues = explicitValues ++ defaultValues ++ unionValues ++ unionDefaultValues
-    allData = [ (o * sizeInBits (fieldValueSize v), t, v)
-              | (o, t, v) <- allValues, isDataFieldSize $ fieldValueSize v ]
-    allReferences = [ (o, t, v) | (o, t, v) <- allValues
+    allValues = explicitValues ++ unionValues
+    allData = [ (o * sizeInBits (fieldValueSize v), t, v, d)
+              | (o, t, v, d) <- allValues, isDataFieldSize $ fieldValueSize v ]
+    allReferences = [ (o, t, v) | (o, t, v, _) <- allValues
                     , not $ isDataFieldSize $ fieldValueSize v ]
 
-    sortedData = sortBy compareValues allData
-    sortedReferences = sortBy compareValues allReferences
-    compareValues (o1, _, _) (o2, _, _) = compare o1 o2
+    sortedData = sortBy compareDataValues allData
+    compareDataValues (o1, _, _, _) (o2, _, _, _) = compare o1 o2
+    sortedReferences = sortBy compareReferenceValues allReferences
+    compareReferenceValues (o1, _, _) (o2, _, _) = compare o1 o2
 
     dataBytes = encodeData (packingDataSize (structPacking desc) * 64) sortedData
     (referenceBytes, children) = encodeReferences childOffset
@@ -228,7 +205,7 @@ encodeList elementType elements = case elementSize elementType of
         (refBytes, childBytes) = encodeReferences 0 (genericLength elements)
                                $ zipWith (\i v -> (i, elementType, v)) [0..] elements
     size -> encodeData (roundUpToMultiple 64 (genericLength elements * sizeInBits size))
-          $ zipWith (\i v -> (i * sizeInBits size, elementType, v)) [0..] elements
+          $ zipWith (\i v -> (i * sizeInBits size, elementType, v, Nothing)) [0..] elements
 
 encodeMessage (StructType desc) (StructValueDesc assignments) = let
     (dataBytes, refBytes, childBytes) = encodeStruct desc assignments 0

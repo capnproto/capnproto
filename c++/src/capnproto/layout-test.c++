@@ -45,45 +45,57 @@ TEST(WireFormat, SimpleRawDataStruct) {
     0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef
   }};
 
-  StructReader reader = StructReader::readRootTrusted(data.words, data.words);
+  StructReader reader = StructReader::readRootTrusted(data.words);
 
-  EXPECT_EQ(0xefcdab8967452301ull, reader.getDataField<uint64_t>(0 * ELEMENTS, 321u));
+  EXPECT_EQ(0xefcdab8967452301ull, reader.getDataField<uint64_t>(0 * ELEMENTS));
+  EXPECT_EQ(0u, reader.getDataField<uint64_t>(1 * ELEMENTS));
+  EXPECT_EQ(0x67452301u, reader.getDataField<uint32_t>(0 * ELEMENTS));
+  EXPECT_EQ(0xefcdab89u, reader.getDataField<uint32_t>(1 * ELEMENTS));
+  EXPECT_EQ(0u, reader.getDataField<uint32_t>(2 * ELEMENTS));
+  EXPECT_EQ(0x2301u, reader.getDataField<uint16_t>(0 * ELEMENTS));
+  EXPECT_EQ(0x6745u, reader.getDataField<uint16_t>(1 * ELEMENTS));
+  EXPECT_EQ(0xab89u, reader.getDataField<uint16_t>(2 * ELEMENTS));
+  EXPECT_EQ(0xefcdu, reader.getDataField<uint16_t>(3 * ELEMENTS));
+  EXPECT_EQ(0u, reader.getDataField<uint16_t>(4 * ELEMENTS));
+
+  EXPECT_EQ(321u ^ 0xefcdab8967452301ull, reader.getDataField<uint64_t>(0 * ELEMENTS, 321u));
+  EXPECT_EQ(321u ^ 0x67452301u, reader.getDataField<uint32_t>(0 * ELEMENTS, 321u));
+  EXPECT_EQ(321u ^ 0x2301u, reader.getDataField<uint16_t>(0 * ELEMENTS, 321u));
   EXPECT_EQ(321u, reader.getDataField<uint64_t>(1 * ELEMENTS, 321u));
-  EXPECT_EQ(0x67452301u, reader.getDataField<uint32_t>(0 * ELEMENTS, 321u));
-  EXPECT_EQ(0xefcdab89u, reader.getDataField<uint32_t>(1 * ELEMENTS, 321u));
   EXPECT_EQ(321u, reader.getDataField<uint32_t>(2 * ELEMENTS, 321u));
-  EXPECT_EQ(0x2301u, reader.getDataField<uint16_t>(0 * ELEMENTS, 321u));
-  EXPECT_EQ(0x6745u, reader.getDataField<uint16_t>(1 * ELEMENTS, 321u));
-  EXPECT_EQ(0xab89u, reader.getDataField<uint16_t>(2 * ELEMENTS, 321u));
-  EXPECT_EQ(0xefcdu, reader.getDataField<uint16_t>(3 * ELEMENTS, 321u));
   EXPECT_EQ(321u, reader.getDataField<uint16_t>(4 * ELEMENTS, 321u));
 
   // Bits
+  EXPECT_TRUE (reader.getDataField<bool>(0 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(1 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(2 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(3 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(4 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(5 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(6 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(7 * ELEMENTS));
+
+  EXPECT_TRUE (reader.getDataField<bool>( 8 * ELEMENTS));
+  EXPECT_TRUE (reader.getDataField<bool>( 9 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(10 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(11 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(12 * ELEMENTS));
+  EXPECT_TRUE (reader.getDataField<bool>(13 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(14 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(15 * ELEMENTS));
+
+  EXPECT_TRUE (reader.getDataField<bool>(63 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(64 * ELEMENTS));
+
   EXPECT_TRUE (reader.getDataField<bool>(0 * ELEMENTS, false));
   EXPECT_FALSE(reader.getDataField<bool>(1 * ELEMENTS, false));
-  EXPECT_FALSE(reader.getDataField<bool>(2 * ELEMENTS, false));
-  EXPECT_FALSE(reader.getDataField<bool>(3 * ELEMENTS, false));
-  EXPECT_FALSE(reader.getDataField<bool>(4 * ELEMENTS, false));
-  EXPECT_FALSE(reader.getDataField<bool>(5 * ELEMENTS, false));
-  EXPECT_FALSE(reader.getDataField<bool>(6 * ELEMENTS, false));
-  EXPECT_FALSE(reader.getDataField<bool>(7 * ELEMENTS, false));
-
-  EXPECT_TRUE (reader.getDataField<bool>( 8 * ELEMENTS, false));
-  EXPECT_TRUE (reader.getDataField<bool>( 9 * ELEMENTS, false));
-  EXPECT_FALSE(reader.getDataField<bool>(10 * ELEMENTS, false));
-  EXPECT_FALSE(reader.getDataField<bool>(11 * ELEMENTS, false));
-  EXPECT_FALSE(reader.getDataField<bool>(12 * ELEMENTS, false));
-  EXPECT_TRUE (reader.getDataField<bool>(13 * ELEMENTS, false));
-  EXPECT_FALSE(reader.getDataField<bool>(14 * ELEMENTS, false));
-  EXPECT_FALSE(reader.getDataField<bool>(15 * ELEMENTS, false));
-
   EXPECT_TRUE (reader.getDataField<bool>(63 * ELEMENTS, false));
-  EXPECT_TRUE (reader.getDataField<bool>(63 * ELEMENTS, true ));
   EXPECT_FALSE(reader.getDataField<bool>(64 * ELEMENTS, false));
-  EXPECT_TRUE (reader.getDataField<bool>(64 * ELEMENTS, true ));
+  EXPECT_FALSE(reader.getDataField<bool>(0 * ELEMENTS, true));
+  EXPECT_TRUE (reader.getDataField<bool>(1 * ELEMENTS, true));
+  EXPECT_FALSE(reader.getDataField<bool>(63 * ELEMENTS, true));
+  EXPECT_TRUE (reader.getDataField<bool>(64 * ELEMENTS, true));
 }
-
-static const AlignedData<6> STRUCT_DEFAULT = {{0,0,0,0,2,0,4,0,  0}};
 
 static const AlignedData<2> SUBSTRUCT_DEFAULT = {{0,0,0,0,1,0,0,0,  0,0,0,0,0,0,0,0}};
 static const AlignedData<3> STRUCTLIST_ELEMENT_DEFAULT =
@@ -106,7 +118,8 @@ static void setupStruct(StructBuilder builder) {
   builder.setDataField<bool>(127 * ELEMENTS, false);
 
   {
-    StructBuilder subStruct = builder.initStructField(0 * REFERENCES, SUBSTRUCT_DEFAULT.words);
+    StructBuilder subStruct = builder.initStructField(
+        0 * REFERENCES, StructSize(1 * WORDS, 0 * REFERENCES));
     subStruct.setDataField<uint32_t>(0 * ELEMENTS, 123);
   }
 
@@ -120,12 +133,12 @@ static void setupStruct(StructBuilder builder) {
 
   {
     ListBuilder list = builder.initStructListField(
-        2 * REFERENCES, 4 * ELEMENTS, STRUCTLIST_ELEMENT_DEFAULT.words);
+        2 * REFERENCES, 4 * ELEMENTS, StructSize(1 * WORDS, 1 * REFERENCES));
     EXPECT_EQ(4 * ELEMENTS, list.size());
     for (int i = 0; i < 4; i++) {
       StructBuilder element = list.getStructElement(i * ELEMENTS, 2 * WORDS / ELEMENTS, 1 * WORDS);
       element.setDataField<int32_t>(0 * ELEMENTS, 300 + i);
-      element.initStructField(0 * REFERENCES, STRUCTLIST_ELEMENT_SUBSTRUCT_DEFAULT.words)
+      element.initStructField(0 * REFERENCES, StructSize(1 * WORDS, 0 * REFERENCES))
              .setDataField<int32_t>(0 * ELEMENTS, 400 + i);
     }
   }
@@ -159,7 +172,8 @@ static void checkStruct(StructBuilder builder) {
   EXPECT_FALSE(builder.getDataField<bool>(127 * ELEMENTS));
 
   {
-    StructBuilder subStruct = builder.getStructField(0 * REFERENCES, SUBSTRUCT_DEFAULT.words);
+    StructBuilder subStruct = builder.getStructField(
+        0 * REFERENCES, StructSize(1 * WORDS, 0 * REFERENCES), SUBSTRUCT_DEFAULT.words);
     EXPECT_EQ(123u, subStruct.getDataField<uint32_t>(0 * ELEMENTS));
   }
 
@@ -178,7 +192,8 @@ static void checkStruct(StructBuilder builder) {
       StructBuilder element = list.getStructElement(i * ELEMENTS, 2 * WORDS / ELEMENTS, 1 * WORDS);
       EXPECT_EQ(300 + i, element.getDataField<int32_t>(0 * ELEMENTS));
       EXPECT_EQ(400 + i,
-          element.getStructField(0 * REFERENCES, STRUCTLIST_ELEMENT_SUBSTRUCT_DEFAULT.words)
+          element.getStructField(0 * REFERENCES, StructSize(1 * WORDS, 0 * REFERENCES),
+                                 STRUCTLIST_ELEMENT_SUBSTRUCT_DEFAULT.words)
               .getDataField<int32_t>(0 * ELEMENTS));
     }
   }
@@ -197,22 +212,22 @@ static void checkStruct(StructBuilder builder) {
 }
 
 static void checkStruct(StructReader reader) {
-  EXPECT_EQ(0x1011121314151617ull, reader.getDataField<uint64_t>(0 * ELEMENTS, 1616));
-  EXPECT_EQ(0x20212223u, reader.getDataField<uint32_t>(2 * ELEMENTS, 1616));
-  EXPECT_EQ(0x3031u, reader.getDataField<uint16_t>(6 * ELEMENTS, 1616));
-  EXPECT_EQ(0x40u, reader.getDataField<uint8_t>(14 * ELEMENTS, 16));
-  EXPECT_FALSE(reader.getDataField<bool>(120 * ELEMENTS, false));
-  EXPECT_FALSE(reader.getDataField<bool>(121 * ELEMENTS, false));
-  EXPECT_TRUE (reader.getDataField<bool>(122 * ELEMENTS, false));
-  EXPECT_FALSE(reader.getDataField<bool>(123 * ELEMENTS, false));
-  EXPECT_TRUE (reader.getDataField<bool>(124 * ELEMENTS, false));
-  EXPECT_TRUE (reader.getDataField<bool>(125 * ELEMENTS, false));
-  EXPECT_TRUE (reader.getDataField<bool>(126 * ELEMENTS, false));
-  EXPECT_FALSE(reader.getDataField<bool>(127 * ELEMENTS, false));
+  EXPECT_EQ(0x1011121314151617ull, reader.getDataField<uint64_t>(0 * ELEMENTS));
+  EXPECT_EQ(0x20212223u, reader.getDataField<uint32_t>(2 * ELEMENTS));
+  EXPECT_EQ(0x3031u, reader.getDataField<uint16_t>(6 * ELEMENTS));
+  EXPECT_EQ(0x40u, reader.getDataField<uint8_t>(14 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(120 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(121 * ELEMENTS));
+  EXPECT_TRUE (reader.getDataField<bool>(122 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(123 * ELEMENTS));
+  EXPECT_TRUE (reader.getDataField<bool>(124 * ELEMENTS));
+  EXPECT_TRUE (reader.getDataField<bool>(125 * ELEMENTS));
+  EXPECT_TRUE (reader.getDataField<bool>(126 * ELEMENTS));
+  EXPECT_FALSE(reader.getDataField<bool>(127 * ELEMENTS));
 
   {
     StructReader subStruct = reader.getStructField(0 * REFERENCES, SUBSTRUCT_DEFAULT.words);
-    EXPECT_EQ(123u, subStruct.getDataField<uint32_t>(0 * ELEMENTS, 456));
+    EXPECT_EQ(123u, subStruct.getDataField<uint32_t>(0 * ELEMENTS));
   }
 
   {
@@ -227,11 +242,11 @@ static void checkStruct(StructReader reader) {
     ListReader list = reader.getListField(2 * REFERENCES, FieldSize::INLINE_COMPOSITE, nullptr);
     ASSERT_EQ(4 * ELEMENTS, list.size());
     for (int i = 0; i < 4; i++) {
-      StructReader element = list.getStructElement(i * ELEMENTS, STRUCTLIST_ELEMENT_DEFAULT.words);
-      EXPECT_EQ(300 + i, element.getDataField<int32_t>(0 * ELEMENTS, 1616));
+      StructReader element = list.getStructElement(i * ELEMENTS);
+      EXPECT_EQ(300 + i, element.getDataField<int32_t>(0 * ELEMENTS));
       EXPECT_EQ(400 + i,
           element.getStructField(0 * REFERENCES, STRUCTLIST_ELEMENT_SUBSTRUCT_DEFAULT.words)
-              .getDataField<int32_t>(0 * ELEMENTS, 1616));
+              .getDataField<int32_t>(0 * ELEMENTS));
     }
   }
 
@@ -255,7 +270,8 @@ TEST(WireFormat, StructRoundTrip_OneSegment) {
   SegmentBuilder* segment = arena.getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
 
-  StructBuilder builder = StructBuilder::initRoot(segment, rootLocation, STRUCT_DEFAULT.words);
+  StructBuilder builder = StructBuilder::initRoot(
+      segment, rootLocation, StructSize(2 * WORDS, 4 * REFERENCES));
   setupStruct(builder);
 
   // word count:
@@ -280,8 +296,8 @@ TEST(WireFormat, StructRoundTrip_OneSegment) {
 
   checkStruct(builder);
   checkStruct(builder.asReader());
-  checkStruct(StructReader::readRootTrusted(segment->getStartPtr(), nullptr));
-  checkStruct(StructReader::readRoot(segment->getStartPtr(), nullptr, segment, 4));
+  checkStruct(StructReader::readRootTrusted(segment->getStartPtr()));
+  checkStruct(StructReader::readRoot(segment->getStartPtr(), segment, 4));
 }
 
 TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
@@ -290,7 +306,8 @@ TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
   SegmentBuilder* segment = arena.getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
 
-  StructBuilder builder = StructBuilder::initRoot(segment, rootLocation, STRUCT_DEFAULT.words);
+  StructBuilder builder = StructBuilder::initRoot(
+      segment, rootLocation, StructSize(2 * WORDS, 4 * REFERENCES));
   setupStruct(builder);
 
   // Verify that we made 15 segments.
@@ -317,7 +334,7 @@ TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
 
   checkStruct(builder);
   checkStruct(builder.asReader());
-  checkStruct(StructReader::readRoot(segment->getStartPtr(), nullptr, segment, 4));
+  checkStruct(StructReader::readRoot(segment->getStartPtr(), segment, 4));
 }
 
 TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
@@ -326,7 +343,8 @@ TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
   SegmentBuilder* segment = arena.getSegmentWithAvailable(1 * WORDS);
   word* rootLocation = segment->allocate(1 * WORDS);
 
-  StructBuilder builder = StructBuilder::initRoot(segment, rootLocation, STRUCT_DEFAULT.words);
+  StructBuilder builder = StructBuilder::initRoot(
+      segment, rootLocation, StructSize(2 * WORDS, 4 * REFERENCES));
   setupStruct(builder);
 
   // Verify that we made 6 segments.
@@ -344,7 +362,7 @@ TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
 
   checkStruct(builder);
   checkStruct(builder.asReader());
-  checkStruct(StructReader::readRoot(segment->getStartPtr(), nullptr, segment, 4));
+  checkStruct(StructReader::readRoot(segment->getStartPtr(), segment, 4));
 }
 
 }  // namespace

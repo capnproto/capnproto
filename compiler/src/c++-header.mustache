@@ -41,12 +41,9 @@ struct {{structName}} {
   struct {{structChildName}};
 {{/structChildren}}
 
-  static constexpr ::capnproto::WordCount DATA_SIZE = {{structDataSize}} * ::capnproto::WORDS;
-  static constexpr ::capnproto::WireReferenceCount REFERENCE_COUNT =
-      {{structReferenceCount}} * ::capnproto::REFERENCES;
-{{#structDefault}}
-  static const ::capnproto::internal::AlignedData<{{defaultWordCount}}> DEFAULT;
-{{/structDefault}}
+  static constexpr ::capnproto::internal::StructSize STRUCT_SIZE =
+      ::capnproto::internal::StructSize({{structDataSize}} * ::capnproto::WORDS,
+                                        {{structReferenceCount}} * ::capnproto::REFERENCES);
 {{#structFields}}
 {{#fieldDefaultBytes}}
   static const ::capnproto::internal::AlignedData<{{defaultWordCount}}> DEFAULT_{{fieldUpperCase}};
@@ -140,7 +137,7 @@ private:
 {{#fieldIsPrimitive}}
 inline {{fieldType}} {{structName}}::Reader::get{{fieldTitleCase}}() {
   return _reader.getDataField<{{fieldType}}>(
-      {{fieldOffset}} * ::capnproto::ELEMENTS, {{fieldDefaultValue}});
+      {{fieldOffset}} * ::capnproto::ELEMENTS{{fieldDefaultMask}});
 }
 {{/fieldIsPrimitive}}
 {{#fieldIsBlob}}
@@ -159,7 +156,7 @@ inline {{fieldType}}::Reader {{structName}}::Reader::get{{fieldTitleCase}}() {
   return {{fieldType}}::Reader(_reader.getStructField(
       {{fieldOffset}} * ::capnproto::REFERENCES,
       {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}.words{{/fieldDefaultBytes}}
-      {{^fieldDefaultBytes}}{{fieldType}}::DEFAULT.words{{/fieldDefaultBytes}}));
+      {{^fieldDefaultBytes}}nullptr{{/fieldDefaultBytes}}));
 }
 {{/fieldIsStruct}}
 {{#fieldIsList}}
@@ -179,11 +176,12 @@ inline {{fieldType}}::Reader {{structName}}::Reader::get{{fieldTitleCase}}() {
 // {{structName}}.{{fieldDecl}}
 {{#fieldIsPrimitive}}
 inline {{fieldType}} {{structName}}::Builder::get{{fieldTitleCase}}() {
-  return _builder.getDataField<{{fieldType}}>({{fieldOffset}} * ::capnproto::ELEMENTS);
+  return _builder.getDataField<{{fieldType}}>(
+      {{fieldOffset}} * ::capnproto::ELEMENTS{{fieldDefaultMask}});
 }
 inline void {{structName}}::Builder::set{{fieldTitleCase}}({{fieldType}} value) {
   return _builder.setDataField<{{fieldType}}>(
-      {{fieldOffset}} * ::capnproto::ELEMENTS, value);
+      {{fieldOffset}} * ::capnproto::ELEMENTS, value{{fieldDefaultMask}});
 }
 {{/fieldIsPrimitive}}
 {{#fieldIsBlob}}
@@ -205,14 +203,14 @@ inline {{fieldType}}::Builder {{structName}}::Builder::init{{fieldTitleCase}}(un
 {{#fieldIsStruct}}
 inline {{fieldType}}::Builder {{structName}}::Builder::init{{fieldTitleCase}}() {
   return {{fieldType}}::Builder(_builder.initStructField(
-      {{fieldOffset}} * ::capnproto::REFERENCES, {{fieldType}}::DEFAULT.words));
+      {{fieldOffset}} * ::capnproto::REFERENCES, {{fieldType}}::STRUCT_SIZE));
 }
 inline {{fieldType}}::Builder {{structName}}::Builder::get{{fieldTitleCase}}() {
   {{! TODO:  Support per-field default values. }}
   return {{fieldType}}::Builder(_builder.getStructField(
-      {{fieldOffset}} * ::capnproto::REFERENCES,
+      {{fieldOffset}} * ::capnproto::REFERENCES, {{fieldType}}::STRUCT_SIZE,
       {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}.words{{/fieldDefaultBytes}}
-      {{^fieldDefaultBytes}}{{fieldType}}::DEFAULT.words{{/fieldDefaultBytes}}));
+      {{^fieldDefaultBytes}}nullptr{{/fieldDefaultBytes}}));
 }
 {{/fieldIsStruct}}
 {{#fieldIsNonStructList}}
@@ -249,7 +247,7 @@ inline void {{structName}}::Builder::set{{fieldTitleCase}}(
 inline {{fieldType}}::Builder {{structName}}::Builder::init{{fieldTitleCase}}(unsigned int size) {
   return {{fieldType}}::Builder(_builder.initStructListField(
       {{fieldOffset}} * ::capnproto::REFERENCES, size * ::capnproto::ELEMENTS,
-      {{fieldElementType}}::DEFAULT.words));
+      {{fieldElementType}}::STRUCT_SIZE));
 }
 inline {{fieldType}}::Builder {{structName}}::Builder::get{{fieldTitleCase}}() {
   return {{fieldType}}::Builder(_builder.getListField(

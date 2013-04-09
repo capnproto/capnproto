@@ -216,7 +216,7 @@ struct List<T, false> {
 
     inline uint size() { return reader.size() / ELEMENTS; }
     inline typename T::Reader operator[](uint index) {
-      return typename T::Reader(reader.getStructElement(index * ELEMENTS, T::DEFAULT.words));
+      return typename T::Reader(reader.getStructElement(index * ELEMENTS));
     }
 
     typedef internal::IndexingIterator<Reader, typename T::Reader> iterator;
@@ -235,8 +235,7 @@ struct List<T, false> {
     inline uint size() { return builder.size() / ELEMENTS; }
     inline typename T::Builder operator[](uint index) {
       return typename T::Builder(builder.getStructElement(index * ELEMENTS,
-          (T::DATA_SIZE + T::REFERENCE_COUNT * WORDS_PER_REFERENCE) / ELEMENTS,
-          T::DATA_SIZE));
+          T::STRUCT_SIZE.total() / ELEMENTS, T::STRUCT_SIZE.data));
     }
 
     typedef internal::IndexingIterator<Builder, typename T::Builder> iterator;
