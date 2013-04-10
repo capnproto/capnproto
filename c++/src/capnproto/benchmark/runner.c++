@@ -277,6 +277,15 @@ void reportComparisonHeader() {
   cout << setfill('=') << setw(85) << "" << setfill(' ') << endl;
 }
 
+void reportOldNewComparisonHeader() {
+  cout << setw(40) << left << "Measure"
+       << setw(15) << right << "Old"
+       << setw(15) << right << "New"
+       << setw(15) << right << "Improvement"
+       << endl;
+  cout << setfill('=') << setw(85) << "" << setfill(' ') << endl;
+}
+
 class Gain {
 public:
   Gain(double oldValue, double newValue)
@@ -343,6 +352,11 @@ size_t fileSize(const std::string& name) {
 int main(int argc, char* argv[]) {
   char* path = argv[0];
   char* slashpos = strrchr(path, '/');
+  char origDir[1024];
+  if (getcwd(origDir, sizeof(origDir)) == nullptr) {
+    perror("getcwd");
+    return 1;
+  }
   if (slashpos != nullptr) {
     *slashpos = '\0';
     if (chdir(path) < 0) {
@@ -356,6 +370,7 @@ int main(int argc, char* argv[]) {
   Mode mode = Mode::PIPE_SYNC;
   Compression compression = Compression::NONE;
   uint64_t iters = 1;
+  const char* oldDir = nullptr;
 
   for (int i = 1; i < argc; i++) {
     string arg = argv[i];
@@ -371,6 +386,13 @@ int main(int argc, char* argv[]) {
       testCase = TestCase::CARSALES;
     } else if (arg == "snappy") {
       compression = Compression::SNAPPY;
+    } else if (arg == "-c") {
+      ++i;
+      if (i == argc) {
+        fprintf(stderr, "-c requires argument.\n");
+        return 1;
+      }
+      oldDir = argv[i];
     } else {
       fprintf(stderr, "Unknown option: %s\n", argv[i]);
       return 1;
@@ -478,6 +500,7 @@ int main(int argc, char* argv[]) {
       Product::PROTOBUF, testCase, mode, Reuse::YES, compression, iters);
   protobuf.objectSize = protobufBase.objectSize;
   reportResults("Protobuf I/O", iters, protobuf);
+
   TestResult capnp = runTest(
       Product::CAPNPROTO, testCase, mode, Reuse::YES, compression, iters);
   capnp.objectSize = capnpBase.objectSize;
@@ -486,6 +509,59 @@ int main(int argc, char* argv[]) {
       Product::CAPNPROTO, testCase, mode, Reuse::YES, Compression::PACKED, iters);
   capnpPacked.objectSize = capnpBase.objectSize;
   reportResults("Cap'n Proto packed I/O", iters, capnpPacked);
+
+  size_t protobufBinarySize = fileSize("protobuf-" + std::string(testCaseName(testCase)));
+  size_t capnpBinarySize = fileSize("capnproto-" + std::string(testCaseName(testCase)));
+  size_t protobufCodeSize = fileSize(std::string(testCaseName(testCase)) + ".pb.cc")
+                          + fileSize(std::string(testCaseName(testCase)) + ".pb.h");
+  size_t capnpCodeSize = fileSize(std::string(testCaseName(testCase)) + ".capnp.c++")
+                       + fileSize(std::string(testCaseName(testCase)) + ".capnp.h");
+  size_t protobufObjSize = fileSize(std::string(testCaseName(testCase)) + ".pb.o");
+  size_t capnpObjSize = fileSize(std::string(testCaseName(testCase)) + ".capnp.o");
+
+  TestResult oldCapnpBase;
+  TestResult oldCapnpNoReuse;
+  TestResult oldCapnp;
+  TestResult oldCapnpPacked;
+  size_t oldCapnpBinarySize = 0;
+  size_t oldCapnpCodeSize = 0;
+  size_t oldCapnpObjSize = 0;
+  if (oldDir != nullptr) {
+    if (chdir(origDir) < 0) {
+      perror("chdir");
+      return 1;
+    }
+    if (chdir(oldDir) < 0) {
+      perror(oldDir);
+      return 1;
+    }
+    oldCapnpBase = runTest(
+        Product::CAPNPROTO, testCase, Mode::OBJECTS, Reuse::YES, compression, iters);
+    oldCapnpBase.objectSize = runTest(
+        Product::CAPNPROTO, testCase, Mode::OBJECT_SIZE, Reuse::YES, compression, iters)
+        .objectSize;
+    reportResults("Old Cap'n Proto pass-by-object", iters, oldCapnpBase);
+
+    oldCapnpNoReuse = runTest(
+        Product::CAPNPROTO, testCase, Mode::OBJECTS, Reuse::NO, compression, iters);
+    oldCapnpNoReuse.objectSize = runTest(
+        Product::CAPNPROTO, testCase, Mode::OBJECT_SIZE, Reuse::NO, compression, iters).objectSize;
+    reportResults("Old Cap'n Proto w/o object reuse", iters, oldCapnpNoReuse);
+
+    oldCapnp = runTest(
+        Product::CAPNPROTO, testCase, mode, Reuse::YES, compression, iters);
+    oldCapnp.objectSize = oldCapnpBase.objectSize;
+    reportResults("Old Cap'n Proto I/O", iters, oldCapnp);
+    oldCapnpPacked = runTest(
+        Product::CAPNPROTO, testCase, mode, Reuse::YES, Compression::PACKED, iters);
+    oldCapnpPacked.objectSize = oldCapnpBase.objectSize;
+    reportResults("Old Cap'n Proto packed I/O", iters, oldCapnpPacked);
+
+    oldCapnpBinarySize = fileSize("capnproto-" + std::string(testCaseName(testCase)));
+    oldCapnpCodeSize = fileSize(std::string(testCaseName(testCase)) + ".capnp.c++")
+                     + fileSize(std::string(testCaseName(testCase)) + ".capnp.h");
+    oldCapnpObjSize = fileSize(std::string(testCaseName(testCase)) + ".capnp.o");
+  }
 
   cout << endl;
 
@@ -512,16 +588,43 @@ int main(int argc, char* argv[]) {
                       protobuf.messageSize, capnpPacked.messageSize, iters);
 
   reportComparison("binary size (KiB)", "",
-      fileSize("protobuf-" + std::string(testCaseName(testCase))) / 1024.0,
-      fileSize("capnproto-" + std::string(testCaseName(testCase))) / 1024.0, 1);
+      protobufBinarySize / 1024.0, capnpBinarySize / 1024.0, 1);
   reportComparison("generated code size (KiB)", "",
-      fileSize(std::string(testCaseName(testCase)) + ".pb.cc") / 1024.0
-      + fileSize(std::string(testCaseName(testCase)) + ".pb.h") / 1024.0,
-      fileSize(std::string(testCaseName(testCase)) + ".capnp.c++") / 1024.0
-      + fileSize(std::string(testCaseName(testCase)) + ".capnp.h") / 1024.0, 1);
+      protobufCodeSize / 1024.0, capnpCodeSize / 1024.0, 1);
   reportComparison("generated obj size (KiB)", "",
-      fileSize(std::string(testCaseName(testCase)) + ".pb.o") / 1024.0,
-      fileSize(std::string(testCaseName(testCase)) + ".capnp.o") / 1024.0, 1);
+      protobufObjSize / 1024.0, capnpObjSize / 1024.0, 1);
+
+  cout << endl;
+  reportOldNewComparisonHeader();
+  if (oldDir != nullptr) {
+    reportComparison("memory overhead",
+        nullCase.objectSize, oldCapnpBase.objectSize, capnpBase.objectSize, iters);
+    reportComparison("memory overhead w/o object reuse",
+        nullCaseNoReuse.objectSize, oldCapnpNoReuse.objectSize, capnpNoReuse.objectSize, iters);
+    reportComparison("object manipulation time (us)", "",
+        ((int64_t)oldCapnpBase.time.user - (int64_t)nullCase.time.user) / 1000.0,
+        ((int64_t)capnpBase.time.user - (int64_t)nullCase.time.user) / 1000.0, iters);
+    reportComparison("object manipulation time w/o reuse (us)", "",
+        ((int64_t)oldCapnpNoReuse.time.user - (int64_t)nullCaseNoReuse.time.user) / 1000.0,
+        ((int64_t)capnpNoReuse.time.user - (int64_t)nullCaseNoReuse.time.user) / 1000.0, iters);
+    reportComparison("I/O time (us)", "",
+        ((int64_t)oldCapnp.time.user - (int64_t)oldCapnpBase.time.user) / 1000.0,
+        ((int64_t)capnp.time.user - (int64_t)capnpBase.time.user) / 1000.0, iters);
+    reportComparison("packed I/O time (us)", "",
+        ((int64_t)oldCapnpPacked.time.user - (int64_t)oldCapnpBase.time.user) / 1000.0,
+        ((int64_t)capnpPacked.time.user - (int64_t)capnpBase.time.user) / 1000.0, iters);
+
+    reportIntComparison("message size (bytes)", "", oldCapnp.messageSize, capnp.messageSize, iters);
+    reportIntComparison("packed message size (bytes)", "",
+                        oldCapnpPacked.messageSize, capnpPacked.messageSize, iters);
+
+    reportComparison("binary size (KiB)", "",
+        oldCapnpBinarySize / 1024.0, capnpBinarySize / 1024.0, 1);
+    reportComparison("generated code size (KiB)", "",
+        oldCapnpCodeSize / 1024.0, capnpCodeSize / 1024.0, 1);
+    reportComparison("generated obj size (KiB)", "",
+        oldCapnpObjSize / 1024.0, capnpObjSize / 1024.0, 1);
+  }
 
   return 0;
 }

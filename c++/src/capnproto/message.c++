@@ -195,42 +195,52 @@ struct MallocMessageBuilder::MoreSegments {
 MallocMessageBuilder::MallocMessageBuilder(
     uint firstSegmentWords, AllocationStrategy allocationStrategy)
     : nextSize(firstSegmentWords), allocationStrategy(allocationStrategy),
-      ownFirstSegment(true), firstSegment(nullptr) {}
+      ownFirstSegment(true), returnedFirstSegment(false), firstSegment(nullptr) {}
 
 MallocMessageBuilder::MallocMessageBuilder(
     ArrayPtr<word> firstSegment, AllocationStrategy allocationStrategy)
     : nextSize(firstSegment.size()), allocationStrategy(allocationStrategy),
-      ownFirstSegment(false), firstSegment(firstSegment.begin()) {}
+      ownFirstSegment(false), returnedFirstSegment(false), firstSegment(firstSegment.begin()) {
+  CAPNPROTO_ASSERT(firstSegment.size() > 0, "First segment size must be non-zero.");
+
+  // Checking just the first word should catch most cases of failing to zero the segment.
+  CAPNPROTO_ASSERT(*reinterpret_cast<uint64_t*>(firstSegment.begin()) == 0,
+                   "First segment must be zeroed.");
+}
 
 MallocMessageBuilder::~MallocMessageBuilder() {
-  if (ownFirstSegment) {
-    free(firstSegment);
-  } else {
-    ArrayPtr<const ArrayPtr<const word>> segments = getSegmentsForOutput();
-    if (segments.size() > 0) {
-      CAPNPROTO_ASSERT(segments[0].begin() == firstSegment,
-          "First segment in getSegmentsForOutput() is not the first segment allocated?");
-      memset(firstSegment, 0, segments[0].size() * sizeof(word));
+  if (returnedFirstSegment) {
+    if (ownFirstSegment) {
+      free(firstSegment);
+    } else {
+      // Must zero first segment.
+      ArrayPtr<const ArrayPtr<const word>> segments = getSegmentsForOutput();
+      if (segments.size() > 0) {
+        CAPNPROTO_ASSERT(segments[0].begin() == firstSegment,
+            "First segment in getSegmentsForOutput() is not the first segment allocated?");
+        memset(firstSegment, 0, segments[0].size() * sizeof(word));
+      }
     }
-  }
-  if (moreSegments != nullptr) {
-    for (void* ptr: moreSegments->segments) {
-      free(ptr);
+
+    if (moreSegments != nullptr) {
+      for (void* ptr: moreSegments->segments) {
+        free(ptr);
+      }
     }
   }
 }
 
 ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
-  if (!ownFirstSegment) {
+  if (!returnedFirstSegment && !ownFirstSegment) {
     ArrayPtr<word> result = arrayPtr(reinterpret_cast<word*>(firstSegment), nextSize);
-    firstSegment = nullptr;
-    ownFirstSegment = true;
     if (result.size() >= minimumSize) {
+      returnedFirstSegment = true;
       return result;
     }
     // If the provided first segment wasn't big enough, we discard it and proceed to allocate
     // our own.  This never happens in practice since minimumSize is always 1 for the first
     // segment.
+    ownFirstSegment = true;
   }
 
   uint size = std::max(minimumSize, nextSize);
@@ -240,8 +250,11 @@ ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
     throw std::bad_alloc();
   }
 
-  if (firstSegment == nullptr) {
+  if (!returnedFirstSegment) {
     firstSegment = result;
+    returnedFirstSegment = true;
+
+    // After the first segment, we want nextSize to equal the total size allocated so far.
     if (allocationStrategy == AllocationStrategy::GROW_HEURISTICALLY) nextSize = size;
   } else {
     if (moreSegments == nullptr) {

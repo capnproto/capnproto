@@ -242,19 +242,21 @@ struct BenchmarkMethods {
     typename Compression::BufferedInput bufferedInput(inputStream);
 
     CountingOutputStream output(outputFd);
-    typename ReuseStrategy::ScratchSpace scratch;
+    typename ReuseStrategy::ScratchSpace builderScratch;
+    typename ReuseStrategy::ScratchSpace readerScratch;
 
     for (; iters > 0; --iters) {
       typename TestCase::Expectation expected;
       {
-        typename ReuseStrategy::MessageBuilder builder(scratch);
+        typename ReuseStrategy::MessageBuilder builder(builderScratch);
         expected = TestCase::setupRequest(
             builder.template initRoot<typename TestCase::Request>());
         Compression::write(output, builder);
       }
 
       {
-        typename ReuseStrategy::template MessageReader<Compression> reader(bufferedInput, scratch);
+        typename ReuseStrategy::template MessageReader<Compression> reader(
+            bufferedInput, readerScratch);
         if (!TestCase::checkResponse(
             reader.template getRoot<typename TestCase::Response>(), expected)) {
           throw std::logic_error("Incorrect response.");

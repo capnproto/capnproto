@@ -282,6 +282,8 @@ private:
   AllocationStrategy allocationStrategy;
 
   bool ownFirstSegment;
+  bool returnedFirstSegment;
+
   void* firstSegment;
 
   struct MoreSegments;
