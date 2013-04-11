@@ -252,6 +252,35 @@ TEST(Encoding, UnionLayout) {
   EXPECT_EQ(UnionState({0,0,0,4}, 384), initUnion(&TestUnion::Builder::setU3f0s64));
 }
 
+TEST(Encoding, UnionDefault) {
+  MallocMessageBuilder builder;
+  TestUnionDefaults::Reader reader = builder.getRoot<TestUnionDefaults>().asReader();
+
+  {
+    auto field = reader.getS16s8s64s8Set();
+    EXPECT_EQ(TestUnion::Union0::U0F0S16, field.whichUnion0());
+    EXPECT_EQ(TestUnion::Union1::U1F0S8 , field.whichUnion1());
+    EXPECT_EQ(TestUnion::Union2::U2F0S64, field.whichUnion2());
+    EXPECT_EQ(TestUnion::Union3::U3F0S8 , field.whichUnion3());
+    EXPECT_EQ(321, field.getU0f0s16());
+    EXPECT_EQ(123, field.getU1f0s8());
+    EXPECT_EQ(12345678901234567ll, field.getU2f0s64());
+    EXPECT_EQ(55, field.getU3f0s8());
+  }
+
+  {
+    auto field = reader.getS0sps1s32Set();
+    EXPECT_EQ(TestUnion::Union0::U0F1S0 , field.whichUnion0());
+    EXPECT_EQ(TestUnion::Union1::U1F0SP , field.whichUnion1());
+    EXPECT_EQ(TestUnion::Union2::U2F0S1 , field.whichUnion2());
+    EXPECT_EQ(TestUnion::Union3::U3F0S32, field.whichUnion3());
+    EXPECT_EQ(Void::VOID, field.getU0f1s0());
+    EXPECT_EQ("foo", field.getU1f0sp());
+    EXPECT_EQ(true, field.getU2f0s1());
+    EXPECT_EQ(12345678, field.getU3f0s32());
+  }
+}
+
 }  // namespace
 }  // namespace internal
 }  // namespace capnproto

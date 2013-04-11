@@ -210,7 +210,7 @@ compileValue pos (StructType desc) (RecordFieldValue fields) = do
     -- Check for multiple assignments in the same union.
     _ <- let
         dupes = findDupesBy (\(_, u) -> unionName u)
-            [(f, u) | (f@(FieldDesc {fieldUnion = Just u}), _) <- assignments]
+            [(f, u) | (f@(FieldDesc {fieldUnion = Just (u, _)}), _) <- assignments]
         errors = map dupUnionError dupes
         dupUnionError [] = error "empty group?"
         dupUnionError dupFields@((_, u):_) = makeError pos (printf
@@ -322,7 +322,7 @@ requireNoDuplicateNames decls = Active () (loop (List.sort locatedNames)) where
 
 fieldInUnion name f = case fieldUnion f of
     Nothing -> False
-    Just x -> unionName x == name
+    Just (x, _) -> unionName x == name
 
 requireNoMoreThanOneFieldNumberLessThan name pos num fields = Active () errors where
     retroFields = [fieldName f | f <- fields, fieldNumber f < num]
@@ -437,7 +437,7 @@ packField fieldDesc state unionState =
         Nothing -> let
             (offset, newState) = packValue (fieldSize $ fieldType fieldDesc) state
             in (offset, newState, unionState)
-        Just unionDesc -> let
+        Just (unionDesc, _) -> let
             n = unionNumber unionDesc
             oldUnionPacking = fromMaybe initialUnionPackingState (Map.lookup n unionState)
             (offset, newUnionPacking, newState) =
@@ -577,9 +577,9 @@ compileDecl scope (StructDecl (Located _ name) decls) =
 compileDecl (DescStruct parent) (UnionDecl (Located _ name) (Located numPos number) decls) =
     CompiledMemberStatus name (feedback (\desc -> do
         (_, _, options, statements) <- compileChildDecls desc decls
-        let compareFieldNumbers a b = compare (fieldNumber a) (fieldNumber b)
-            fields = List.sortBy compareFieldNumbers
-                [f | f <- structFields parent, fieldInUnion name f]
+        let fields = [f | f <- structFields parent, fieldInUnion name f]
+            orderedFieldNumbers = List.sort $ map fieldNumber fields
+            discriminantMap = Map.fromList $ zip orderedFieldNumbers [0..]
         requireNoMoreThanOneFieldNumberLessThan name numPos number fields
         return (let
             (tagOffset, tagPacking) = structFieldPackingMap parent ! number
@@ -592,6 +592,7 @@ compileDecl (DescStruct parent) (UnionDecl (Located _ name) (Located numPos numb
             , unionFields = fields
             , unionOptions = options
             , unionStatements = statements
+            , unionFieldDiscriminantMap = discriminantMap
             })))
 compileDecl _ (UnionDecl (Located pos name) _ _) =
     CompiledMemberStatus name (makeError pos "Unions can only appear inside structs.")
@@ -605,7 +606,7 @@ compileDecl scope@(DescStruct parent)
                 udesc <- maybeError (descMember n scope) p
                     (printf "No union '%s' defined in '%s'." n (structName parent))
                 case udesc of
-                    DescUnion d -> return (Just d)
+                    DescUnion d -> return (Just (d, unionFieldDiscriminantMap d ! number))
                     _ -> makeError p (printf "'%s' is not a union." n)
         typeDesc <- compileType scope typeExp
         defaultDesc <- case defaultValue of

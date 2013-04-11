@@ -226,3 +226,10 @@ struct TestUnion {
   u3f0s1 @46 in union3: Bool;
   u2f0s1 @45 in union2: Bool;
 }
+
+struct TestUnionDefaults {
+  s16s8s64s8Set @0 :TestUnion =
+      (u0f0s16 = 321, u1f0s8 = 123, u2f0s64 = 12345678901234567, u3f0s8 = 55);
+  s0sps1s32Set @1 :TestUnion =
+      (u0f1s0 = void, u1f0sp = "foo", u2f0s1 = true, u3f0s32 = 12345678);
+}

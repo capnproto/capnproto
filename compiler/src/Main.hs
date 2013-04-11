@@ -130,7 +130,7 @@ compareErrors a b = compare (errorPos a) (errorPos b)
 
 -- TODO:  This is a fairly hacky way to make showErrorMessages' output not suck.  We could do better
 --   by interpreting the error structure ourselves.
-printError e = hPutStr stderr $ printf "%s:%d:%d: %s\n" f l c m' where
+printError e = hPutStr stderr $ printf "%s:%d:%d: error: %s\n" f l c m' where
     pos = errorPos e
     f = sourceName pos
     l = sourceLine pos

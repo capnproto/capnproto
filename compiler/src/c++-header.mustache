@@ -55,7 +55,7 @@ struct {{structName}} {
   // {{unionDecl}}
   enum class {{unionTitleCase}}: uint16_t {
 {{#unionFields}}
-    {{fieldUpperCase}},
+    {{fieldUpperCase}} = {{fieldUnionDiscriminant}},
 {{/unionFields}}
   };
 {{/structUnions}}

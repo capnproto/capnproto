@@ -321,9 +321,12 @@ data UnionDesc = UnionDesc
     , unionNumber :: Integer
     , unionTagOffset :: Integer
     , unionTagPacking :: PackingState
-    , unionFields :: [FieldDesc]  -- ordered by field number
+    , unionFields :: [FieldDesc]
     , unionOptions :: OptionMap
     , unionStatements :: [CompiledStatement]
+
+    -- Maps field numbers to discriminants for all fields in the union.
+    , unionFieldDiscriminantMap :: Map.Map Integer Integer
     }
 
 unionHasRetro desc = case unionFields desc of
@@ -336,7 +339,7 @@ data FieldDesc = FieldDesc
     , fieldNumber :: Integer
     , fieldOffset :: Integer
     , fieldPacking :: PackingState    -- PackingState for the struct *if* this were the final field.
-    , fieldUnion :: Maybe UnionDesc
+    , fieldUnion :: Maybe (UnionDesc, Integer)  -- Integer is value of union discriminant.
     , fieldType :: TypeDesc
     , fieldDefaultValue :: Maybe ValueDesc
     , fieldOptions :: OptionMap
@@ -408,7 +411,7 @@ descToCode indent (DescStruct desc) = printf "%sstruct %s%s" indent
     (blockCode indent (structStatements desc))
 descToCode indent (DescField desc) = printf "%s%s@%d%s: %s%s;  # %s\n" indent
     (fieldName desc) (fieldNumber desc)
-    (case fieldUnion desc of { Nothing -> ""; Just u -> " in " ++ unionName u})
+    (case fieldUnion desc of { Nothing -> ""; Just (u, _) -> " in " ++ unionName u})
     (typeName (DescStruct (fieldParent desc)) (fieldType desc))
     (case fieldDefaultValue desc of { Nothing -> ""; Just v -> " = " ++ valueString v; })
     (case fieldSize $ fieldType desc of

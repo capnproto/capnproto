@@ -140,10 +140,10 @@ struct WireReference {
       WireValue<uint32_t> elementSizeAndCount;
 
       CAPNPROTO_ALWAYS_INLINE(FieldSize elementSize() const) {
-        return static_cast<FieldSize>(elementSizeAndCount.get() >> 29);
+        return static_cast<FieldSize>(elementSizeAndCount.get() & 7);
       }
       CAPNPROTO_ALWAYS_INLINE(ElementCount elementCount() const) {
-        return (elementSizeAndCount.get() & 0x1fffffffu) * ELEMENTS;
+        return (elementSizeAndCount.get() >> 3) * ELEMENTS;
       }
       CAPNPROTO_ALWAYS_INLINE(WordCount inlineCompositeWordCount() const) {
         return elementCount() * (1 * WORDS / ELEMENTS);
@@ -152,14 +152,14 @@ struct WireReference {
       CAPNPROTO_ALWAYS_INLINE(void set(FieldSize es, ElementCount ec)) {
         CAPNPROTO_DEBUG_ASSERT(ec < (1 << 29) * ELEMENTS,
             "Lists are limited to 2**29 elements.");
-        elementSizeAndCount.set((static_cast<int>(es) << 29) | (ec / ELEMENTS));
+        elementSizeAndCount.set(((ec / ELEMENTS) << 3) | static_cast<int>(es));
       }
 
       CAPNPROTO_ALWAYS_INLINE(void setInlineComposite(WordCount wc)) {
         CAPNPROTO_DEBUG_ASSERT(wc < (1 << 29) * WORDS,
             "Inline composite lists are limited to 2**29 words.");
-        elementSizeAndCount.set(
-            (static_cast<int>(FieldSize::INLINE_COMPOSITE) << 29) | (wc / WORDS));
+        elementSizeAndCount.set(((wc / WORDS) << 3) |
+                                static_cast<int>(FieldSize::INLINE_COMPOSITE));
       }
     } listRef;
 

@@ -205,7 +205,10 @@ fieldContext parent desc = mkStrContext context where
     context "fieldElementType" =
         MuVariable $ cxxTypeString $ elementType $ fieldType desc
     context "fieldUnion" = case fieldUnion desc of
-        Just u -> MuList [unionContext context u]
+        Just (u, _) -> MuList [unionContext context u]
+        Nothing -> muNull
+    context "fieldUnionDiscriminant" = case fieldUnion desc of
+        Just (_, n) -> MuVariable n
         Nothing -> muNull
     context s = parent s
 

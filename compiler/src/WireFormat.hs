@@ -145,10 +145,10 @@ encodeStructReference desc offset =
 
 encodeListReference elemSize@(SizeInlineComposite ds rc) elementCount offset =
     bytes (offset * 4 + listTag) 4 ++
-    bytes (shiftL (fieldSizeEnum elemSize) 29 + elementCount * (ds + rc)) 4
+    bytes (fieldSizeEnum elemSize + shiftL (elementCount * (ds + rc)) 3) 4
 encodeListReference elemSize elementCount offset =
     bytes (offset * 4 + listTag) 4 ++
-    bytes (shiftL (fieldSizeEnum elemSize) 29 + elementCount) 4
+    bytes (fieldSizeEnum elemSize + shiftL elementCount 3) 4
 
 fieldSizeEnum Size0 = 0
 fieldSizeEnum Size1 = 1
@@ -162,11 +162,6 @@ fieldSizeEnum (SizeInlineComposite _ _) = 7
 structTag = 0
 listTag = 1
 
--- What is this union's default tag value?  If there is a retroactive field, it is that field's
--- number, otherwise it is the union's number (meaning no field set).
-unionDefault desc = UInt8Desc $ fromIntegral $
-    max (minimum $ map fieldNumber $ unionFields desc) (unionNumber desc)
-
 -- childOffset = number of words between the last reference and the location where children will
 -- be allocated.
 encodeStruct desc assignments childOffset = (dataBytes, referenceBytes, children) where
@@ -174,9 +169,9 @@ encodeStruct desc assignments childOffset = (dataBytes, referenceBytes, children
     explicitValues = [(fieldOffset f, fieldType f, v, fieldDefaultValue f) | (f, v) <- assignments]
 
     -- Values of union tags.
-    unionValues = [(unionTagOffset u, BuiltinType BuiltinUInt8, UInt8Desc $ fromIntegral n,
-                      Just $ unionDefault u)
-                  | (FieldDesc {fieldUnion = Just u, fieldNumber = n}, _) <- assignments]
+    unionValues = [(unionTagOffset u, BuiltinType BuiltinUInt16, UInt16Desc $ fromIntegral n,
+                      Nothing)
+                  | (FieldDesc {fieldUnion = Just (u, n)}, _) <- assignments]
 
     allValues = explicitValues ++ unionValues
     allData = [ (o * sizeInBits (fieldValueSize v), t, v, d)
