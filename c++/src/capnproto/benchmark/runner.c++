@@ -594,9 +594,10 @@ int main(int argc, char* argv[]) {
   reportComparison("generated obj size (KiB)", "",
       protobufObjSize / 1024.0, capnpObjSize / 1024.0, 1);
 
-  cout << endl;
-  reportOldNewComparisonHeader();
   if (oldDir != nullptr) {
+    cout << endl;
+    reportOldNewComparisonHeader();
+
     reportComparison("memory overhead",
         nullCase.objectSize, oldCapnpBase.objectSize, capnpBase.objectSize, iters);
     reportComparison("memory overhead w/o object reuse",
