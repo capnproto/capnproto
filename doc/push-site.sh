@@ -49,7 +49,6 @@ echo
 if [ "$YESNO" == "y" ]; then
   git push
   cd ..
-  rm -rf .gh-pages
 else
   echo "Did not push.  You may want to delete .gh-pages."
 fi

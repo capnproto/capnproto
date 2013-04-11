@@ -8,13 +8,16 @@ layout: page
 
 The Cap'n Proto encoding is still evolving.  Anything in this document could still change.
 
-## 64-bit Words
+## Organization
+
+### 64-bit Words
 
 For the purpose of Cap'n Proto, a "word" is defined as 8 bytes, or 64 bits.  Since alignment of
 data is important, all objects (structs, lists, and blobs) are aligned to word boundaries, and
-sizes are usually expressed in terms of words.
+sizes are usually expressed in terms of words.  (Primitive values are aligned to a multiple of
+their size within a struct or list.)
 
-## Messages
+### Messages
 
 The unit of communication in Cap'n Proto is a "message".  A message is a tree of objects, with
 the root always being a struct.
@@ -38,7 +41,21 @@ a message into multiple segments may be convenient:
 The first word of the first segment of the message is always a pointer pointing to the message's
 root struct.
 
-## Built-in Types
+### Objects
+
+Each segment in a message contains a series of objects.  For the purpose of Cap'n Proto, an "object"
+is any value which may have a pointer pointing to it.  Pointers can only point to the beginning of
+objects, not into the middle, and no more than one pointer can point at each object.  Thus, objects
+and the pointers connecting them form a tree, not a graph.  An object is itself composed of
+primitive data values and pointers, in a layout that depends on the kind of object.
+
+At the moment, there are three kinds of objects:  structs, lists, and far-pointer landing pads.
+Blobs might also be considered to be a kind of object, but are encoded identically to lists of
+bytes.
+
+## Value Encoding
+
+### Primitive Values
 
 The built-in primitive types are encoded as follows:
 
@@ -51,6 +68,14 @@ Primitive types must always be aligned to a multiple of their size.  Note that s
 a `Bool` is one bit, this means eight `Bool` values can be encoded in a single byte -- this differs
 from C++, where the `bool` type takes a whole byte.
 
+### Enums
+
+Enums are encoded the same as `UInt16`.
+
+## Object Encoding
+
+### Blobs
+
 The built-in blob types are encoded as follows:
 
 * `Data`:  Encoded as a pointer, identical to `List(UInt8)`.
@@ -62,11 +87,7 @@ The built-in blob types are encoded as follows:
   Note that the NUL terminator is included in the size sent on the wire, but the runtime library
   should not count it in any size reported to the application.
 
-## Enums
-
-Enums are encoded the same as `UInt16`.
-
-## Lists
+### Lists
 
 A list value is encoded as a pointer to a flat array of values.
 
@@ -108,7 +129,7 @@ In the future, we could consider implementing matrixes using the "composite" ele
 elements being fixed-size lists rather than structs.  In this case, the tag would look like a list
 pointer rather than a struct pointer.  As of this writing, no such feature has been implemented.
 
-## Structs
+### Structs
 
 A struct value is encoded as a pointer to its content.  The content is split into two sections:
 data and pointers, with the pointer section appearing immediately after the data section.  This
@@ -127,7 +148,7 @@ A struct pointer looks like this:
     C (16 bits) = Size of the struct's data section, in words.
     D (16 bits) = Size of the struct's pointer section, in words.
 
-### Field Positioning
+#### Field Positioning
 
 Ignoring unions, the layout of fields within the struct is determined by the following algorithm:
 
@@ -177,7 +198,7 @@ effect of the desire to pack fields in the smallest space where they will fit an
 maintain backwards-compatibility as fields are added.  The worst case should be rare in practice,
 and can be avoided entirely by always declaring a union's largest member first.
 
-### Default Values
+#### Default Values
 
 A default struct is always all-zeros.  To achieve this, fields in the data section are stored xor'd
 with their defined default values.  An all-zero pointer is considered "null" (such a pointer would
@@ -194,7 +215,7 @@ There are several reasons why this is desirable:
   binaries that do not know about this field will still have its default value set correctly --
   because it is always zero.
 
-## Inter-Segment Pointers
+### Inter-Segment Pointers
 
 When a pointer needs to point to a different segment, offsets no longer work.  We instead encode
 the pointer as a "far pointer", which looks like this:
@@ -246,7 +267,7 @@ little-endian.
 * (0 or 4 bytes) Padding up to the next word boundary.
 * The content of each segment, in order.
 
-## Packing
+### Packing
 
 For cases where bandwidth usage matters, Cap'n Proto defines a simple compression scheme called
 "packing".  This scheme is based on the observation that Cap'n Proto messages contain lots of
@@ -279,7 +300,7 @@ In addition to the above, there are two tag values which are treated specially: 
 Packing is normally applied on top of the standard stream framing described in the previous
 section.
 
-## Compression
+### Compression
 
 When Cap'n Proto messages may contain repetitive data (especially, large text blobs), it makes sense
 to apply a standard compression algorithm in addition to packing.  When CPU time is scarce, we
