@@ -95,20 +95,19 @@ struct WireReference {
     offsetAndKind.set(((elementCount / ELEMENTS) << 2) | kind);
   }
 
-  CAPNPROTO_ALWAYS_INLINE(WordCount positionInSegment() const) {
+  CAPNPROTO_ALWAYS_INLINE(WordCount farPositionInSegment() const) {
     CAPNPROTO_DEBUG_ASSERT(kind() == FAR,
         "positionInSegment() should only be called on FAR references.");
-    return (offsetAndKind.get() >> 2) * WORDS;
+    return (offsetAndKind.get() >> 3) * WORDS;
   }
-  CAPNPROTO_ALWAYS_INLINE(void setKindAndPositionInSegment(Kind kind, WordCount pos)) {
-    offsetAndKind.set(((pos / WORDS) << 2) | kind);
+  CAPNPROTO_ALWAYS_INLINE(bool isDoubleFar() const) {
+    CAPNPROTO_DEBUG_ASSERT(kind() == FAR,
+        "isDoubleFar() should only be called on FAR references.");
+    return (offsetAndKind.get() >> 2) & 1;
   }
-
-  CAPNPROTO_ALWAYS_INLINE(bool landingPadIsFollowedByAnotherReference() const) {
-    return (offsetAndKind.get() & ~3) != 0;
-  }
-  CAPNPROTO_ALWAYS_INLINE(void setLandingPad(Kind kind, bool followedByAnotherReference)) {
-    offsetAndKind.set((static_cast<uint32_t>(followedByAnotherReference) << 2) | kind);
+  CAPNPROTO_ALWAYS_INLINE(void setFar(bool isDoubleFar, WordCount pos)) {
+    offsetAndKind.set(((pos / WORDS) << 3) | (static_cast<uint32_t>(isDoubleFar) << 2) |
+                      static_cast<uint32_t>(Kind::FAR));
   }
 
   // -----------------------------------------------------------------
@@ -218,12 +217,12 @@ struct WireHelpers {
       ptr = segment->allocate(amountPlusRef);
 
       // Set up the original reference to be a far reference to the new segment.
-      ref->setKindAndPositionInSegment(WireReference::FAR, segment->getOffsetTo(ptr));
+      ref->setFar(false, segment->getOffsetTo(ptr));
       ref->farRef.set(segment->getSegmentId());
 
       // Initialize the landing pad to indicate that the data immediately follows the pad.
       ref = reinterpret_cast<WireReference*>(ptr);
-      ref->setLandingPad(kind, false);
+      ref->setKindAndTarget(kind, ptr + REFERENCE_SIZE_IN_WORDS);
 
       // Allocated space follows new reference.
       return ptr + REFERENCE_SIZE_IN_WORDS;
@@ -236,16 +235,19 @@ struct WireHelpers {
   static CAPNPROTO_ALWAYS_INLINE(word* followFars(WireReference*& ref, SegmentBuilder*& segment)) {
     if (ref->kind() == WireReference::FAR) {
       segment = segment->getArena()->getSegment(ref->farRef.segmentId.get());
-      ref = reinterpret_cast<WireReference*>(segment->getPtrUnchecked(ref->positionInSegment()));
-      if (ref->landingPadIsFollowedByAnotherReference()) {
-        // Target lives elsewhere.  Another far reference follows.
-        WireReference* far2 = ref + 1;
-        segment = segment->getArena()->getSegment(far2->farRef.segmentId.get());
-        return segment->getPtrUnchecked(far2->positionInSegment());
-      } else {
-        // Target immediately follows landing pad.
-        return reinterpret_cast<word*>(ref + 1);
+      WireReference* pad =
+          reinterpret_cast<WireReference*>(segment->getPtrUnchecked(ref->farPositionInSegment()));
+      if (!ref->isDoubleFar()) {
+        ref = pad;
+        return pad->target();
       }
+
+      // Landing pad is another far pointer.  It is followed by a tag describing the pointed-to
+      // object.
+      ref = pad + 1;
+
+      segment = segment->getArena()->getSegment(pad->farRef.segmentId.get());
+      return segment->getPtrUnchecked(pad->farPositionInSegment());
     } else {
       return ref->target();
     }
@@ -254,41 +256,37 @@ struct WireHelpers {
   static CAPNPROTO_ALWAYS_INLINE(
       const word* followFars(const WireReference*& ref, SegmentReader*& segment)) {
     if (ref->kind() == WireReference::FAR) {
+      // Look up the segment containing the landing pad.
       segment = segment->getArena()->tryGetSegment(ref->farRef.segmentId.get());
       if (CAPNPROTO_EXPECT_FALSE(segment == nullptr)) {
         return nullptr;
       }
 
-      const word* ptr = segment->getStartPtr() + ref->positionInSegment();
-      if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(
-          ptr, ptr + REFERENCE_SIZE_IN_WORDS))) {
+      // Find the landing pad and check that it is within bounds.
+      const word* ptr = segment->getStartPtr() + ref->farPositionInSegment();
+      WordCount padWords = (1 + ref->isDoubleFar()) * REFERENCE_SIZE_IN_WORDS;
+      if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr + padWords))) {
         return nullptr;
       }
 
-      ref = reinterpret_cast<const WireReference*>(ptr);
+      const WireReference* pad = reinterpret_cast<const WireReference*>(ptr);
 
-      if (ref->landingPadIsFollowedByAnotherReference()) {
-        // Target is in another castle.  Another far reference follows.
-        const WireReference* far2 = ref + 1;
-        segment = segment->getArena()->tryGetSegment(far2->farRef.segmentId.get());
-        if (CAPNPROTO_EXPECT_FALSE(segment == nullptr)) {
-          return nullptr;
-        }
-        if (CAPNPROTO_EXPECT_FALSE(far2->kind() != WireReference::FAR)) {
-          return nullptr;
-        }
-
-        ptr = segment->getStartPtr() + far2->positionInSegment();
-        if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(
-            ptr, ptr + REFERENCE_SIZE_IN_WORDS))) {
-          return nullptr;
-        }
-
-        return ptr;
-      } else {
-        // Target immediately follows landing pad.
-        return reinterpret_cast<const word*>(ref + 1);
+      // If this is not a double-far then the landing pad is our final pointer.
+      if (!ref->isDoubleFar()) {
+        ref = pad;
+        return pad->target();
       }
+
+      // Landing pad is another far pointer.  It is followed by a tag describing the pointed-to
+      // object.
+      ref = pad + 1;
+
+      segment = segment->getArena()->tryGetSegment(pad->farRef.segmentId.get());
+      if (CAPNPROTO_EXPECT_FALSE(segment == nullptr)) {
+        return nullptr;
+      }
+
+      return segment->getStartPtr() + pad->farPositionInSegment();
     } else {
       return ref->target();
     }

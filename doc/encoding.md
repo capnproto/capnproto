@@ -201,25 +201,27 @@ When a pointer needs to point to a different segment, offsets no longer work.  W
 the pointer as a "far pointer", which looks like this:
 
     lsb                        far pointer                        msb
-    +-+-----------------------------+-------------------------------+
-    |A|             B               |               C               |
-    +-+-----------------------------+-------------------------------+
+    +-+-+---------------------------+-------------------------------+
+    |A|B|            C              |               D               |
+    +-+-+---------------------------+-------------------------------+
 
     A (2 bits) = 2, to indicate that this is a far pointer.
-    B (30 bits) = Offset, in words, from the start of the target segment
+    B (1 bit) = 0 if the landing pad is one word, 1 if it is two words.
+        See explanation below.
+    C (30 bits) = Offset, in words, from the start of the target segment
         to the location of the far-pointer landing-pad within that
-        segment.
-    C (32 bits) = ID of the target segment.  (Segments are numbered
+        segment.  Unsigned.
+    D (32 bits) = ID of the target segment.  (Segments are numbered
         sequentially starting from zero.)
 
-The "landing pad" of a far pointer is normally just another pointer, which in turn points to the
-actual object.
+If B == 0, then the "landing pad" of a far pointer is normally just another pointer, which in turn
+points to the actual object.
 
-However, if the "landing pad" pointer is itself another far pointer, then it is interpreted
-differently:  This far pointer points to the start of the object's _content_, located in some other
-segment.  The landing pad is itself immediately followed by a tag word.  The tag word looks exactly
-like an intra-segment pointer to the target object would look, except that the offset is always
-zero.
+If B == 1, then the "landing pad" is itself another far pointer that is interpreted differently:
+This far pointer (which always has B = 0) points to the start of the object's _content_, located in
+some other segment.  The landing pad is itself immediately followed by a tag word.  The tag word
+looks exactly like an intra-segment pointer to the target object would look, except that the offset
+is always zero.
 
 The reason for the convoluted double-far convention is to make it possible to form a new pointer
 to an object in a segment that is full.  If you can't allocate even one word in the segment where
