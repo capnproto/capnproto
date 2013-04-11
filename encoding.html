@@ -239,7 +239,8 @@ D (16 bits) = Size of the struct&#39;s pointer section, in words.</code></pre>
         If an earlier member of the union is in the same section as
                 this field and it combined with any following padding
                 is at least as large as the new field {
-            Give the new field the same offset, so they overlap.
+            Give the new field the same offset and the highest-numbered
+                such previous field, so they overlap.
         } else {
             Assign a new offset to this field as if it were not a union
                 member at all.  (See no-union logic, above.)
@@ -270,20 +271,22 @@ D (16 bits) = Size of the struct&#39;s pointer section, in words.</code></pre>
 <p>When a pointer needs to point to a different segment, offsets no longer work. We instead encode the pointer as a &#8220;far pointer&#8221;, which looks like this:</p>
 
 <pre><code>lsb                        far pointer                        msb
-+-+-----------------------------+-------------------------------+
-|A|             B               |               C               |
-+-+-----------------------------+-------------------------------+
++-+-+---------------------------+-------------------------------+
+|A|B|            C              |               D               |
++-+-+---------------------------+-------------------------------+
 
 A (2 bits) = 2, to indicate that this is a far pointer.
-B (30 bits) = Offset, in words, from the start of the target segment
+B (1 bit) = 0 if the landing pad is one word, 1 if it is two words.
+    See explanation below.
+C (30 bits) = Offset, in words, from the start of the target segment
     to the location of the far-pointer landing-pad within that
-    segment.
-C (32 bits) = ID of the target segment.  (Segments are numbered
+    segment.  Unsigned.
+D (32 bits) = ID of the target segment.  (Segments are numbered
     sequentially starting from zero.)</code></pre>
 
-<p>The &#8220;landing pad&#8221; of a far pointer is normally just another pointer, which in turn points to the actual object.</p>
+<p>If B == 0, then the &#8220;landing pad&#8221; of a far pointer is normally just another pointer, which in turn points to the actual object.</p>
 
-<p>However, if the &#8220;landing pad&#8221; pointer is itself another far pointer, then it is interpreted differently: This far pointer points to the start of the object&#8217;s <em>content</em>, located in some other segment. The landing pad is itself immediately followed by a tag word. The tag word looks exactly like an intra-segment pointer to the target object would look, except that the offset is always zero.</p>
+<p>If B == 1, then the &#8220;landing pad&#8221; is itself another far pointer that is interpreted differently: This far pointer (which always has B = 0) points to the start of the object&#8217;s <em>content</em>, located in some other segment. The landing pad is itself immediately followed by a tag word. The tag word looks exactly like an intra-segment pointer to the target object would look, except that the offset is always zero.</p>
 
 <p>The reason for the convoluted double-far convention is to make it possible to form a new pointer to an object in a segment that is full. If you can&#8217;t allocate even one word in the segment where the target resides, then you will need to allocate a landing pad in some other segment, and use this double-far approach. This should be exceedingly rare in practice since pointers are normally set to point to new objects, not existing ones.</p>
 
