@@ -6,8 +6,7 @@ layout: page
 
 ## NOT FINALIZED
 
-The Cap'n Proto encoding is still evolving.  In fact, as of this writing, the format described
-by this spec is newer than what is actually implemented.
+The Cap'n Proto encoding is still evolving.  Anything in this document could still change.
 
 ## 64-bit Words
 
