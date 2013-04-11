@@ -111,13 +111,15 @@
 
 <h2 id='not_finalized'>NOT FINALIZED</h2>
 
-<p>The Cap&#8217;n Proto encoding is still evolving. In fact, as of this writing, the format described by this spec is newer than what is actually implemented.</p>
+<p>The Cap&#8217;n Proto encoding is still evolving. Anything in this document could still change.</p>
 
-<h2 id='64bit_words'>64-bit Words</h2>
+<h2 id='organization'>Organization</h2>
 
-<p>For the purpose of Cap&#8217;n Proto, a &#8220;word&#8221; is defined as 8 bytes, or 64 bits. Since alignment of data is important, all objects (structs, lists, and blobs) are aligned to word boundaries, and sizes are usually expressed in terms of words.</p>
+<h3 id='64bit_words'>64-bit Words</h3>
 
-<h2 id='messages'>Messages</h2>
+<p>For the purpose of Cap&#8217;n Proto, a &#8220;word&#8221; is defined as 8 bytes, or 64 bits. Since alignment of data is important, all objects (structs, lists, and blobs) are aligned to word boundaries, and sizes are usually expressed in terms of words. (Primitive values are aligned to a multiple of their size within a struct or list.)</p>
+
+<h3 id='messages'>Messages</h3>
 
 <p>The unit of communication in Cap&#8217;n Proto is a &#8220;message&#8221;. A message is a tree of objects, with the root always being a struct.</p>
 
@@ -133,7 +135,15 @@
 
 <p>The first word of the first segment of the message is always a pointer pointing to the message&#8217;s root struct.</p>
 
-<h2 id='builtin_types'>Built-in Types</h2>
+<h3 id='objects'>Objects</h3>
+
+<p>Each segment in a message contains a series of objects. For the purpose of Cap&#8217;n Proto, an &#8220;object&#8221; is any value which may have a pointer pointing to it. Pointers can only point to the beginning of objects, not into the middle, and no more than one pointer can point at each object. Thus, objects and the pointers connecting them form a tree, not a graph. An object is itself composed of primitive data values and pointers, in a layout that depends on the kind of object.</p>
+
+<p>At the moment, there are three kinds of objects: structs, lists, and far-pointer landing pads. Blobs might also be considered to be a kind of object, but are encoded identically to lists of bytes.</p>
+
+<h2 id='value_encoding'>Value Encoding</h2>
+
+<h3 id='primitive_values'>Primitive Values</h3>
 
 <p>The built-in primitive types are encoded as follows:</p>
 
@@ -149,6 +159,14 @@
 
 <p>Primitive types must always be aligned to a multiple of their size. Note that since the size of a <code>Bool</code> is one bit, this means eight <code>Bool</code> values can be encoded in a single byte &#8211; this differs from C++, where the <code>bool</code> type takes a whole byte.</p>
 
+<h3 id='enums'>Enums</h3>
+
+<p>Enums are encoded the same as <code>UInt16</code>.</p>
+
+<h2 id='object_encoding'>Object Encoding</h2>
+
+<h3 id='blobs'>Blobs</h3>
+
 <p>The built-in blob types are encoded as follows:</p>
 
 <ul>
@@ -157,11 +175,7 @@
 <li><code>Text</code>: Like <code>Data</code>, but the content must be valid UTF-8, and the last byte of the content must be zero. The encoding allows bytes other than the last to be zero, but some applications (especially ones written in languages that use NUL-terminated strings) may truncate at the first zero. If a particular text field is explicitly intended to support zero bytes, it should document this, but otherwise senders should assume that zero bytes are not allowed to be safe. Note that the NUL terminator is included in the size sent on the wire, but the runtime library should not count it in any size reported to the application.</li>
 </ul>
 
-<h2 id='enums'>Enums</h2>
-
-<p>Enums are encoded the same as <code>UInt16</code>.</p>
-
-<h2 id='lists'>Lists</h2>
+<h3 id='lists'>Lists</h3>
 
 <p>A list value is encoded as a pointer to a flat array of values.</p>
 
@@ -191,7 +205,7 @@ D (29 bits) = Number of elements in the list, except when C is 7
 
 <p>In the future, we could consider implementing matrixes using the &#8220;composite&#8221; element type, with the elements being fixed-size lists rather than structs. In this case, the tag would look like a list pointer rather than a struct pointer. As of this writing, no such feature has been implemented.</p>
 
-<h2 id='structs'>Structs</h2>
+<h3 id='structs'>Structs</h3>
 
 <p>A struct value is encoded as a pointer to its content. The content is split into two sections: data and pointers, with the pointer section appearing immediately after the data section. This split allows structs to be traversed (e.g., copied) without knowing their type.</p>
 
@@ -208,7 +222,7 @@ B (30 bits) = Offset, in words, from the end of the pointer to the
 C (16 bits) = Size of the struct&#39;s data section, in words.
 D (16 bits) = Size of the struct&#39;s pointer section, in words.</code></pre>
 
-<h3 id='field_positioning'>Field Positioning</h3>
+<h4 id='field_positioning'>Field Positioning</h4>
 
 <p>Ignoring unions, the layout of fields within the struct is determined by the following algorithm:</p>
 
@@ -252,7 +266,7 @@ D (16 bits) = Size of the struct&#39;s pointer section, in words.</code></pre>
 
 <p>Note that in the worst case, the members of a union could end up using 23 bytes plus one bit (one pointer plus data section locations of 64, 32, 16, 8, and 1 bits). This is an unfortunate side effect of the desire to pack fields in the smallest space where they will fit and the need to maintain backwards-compatibility as fields are added. The worst case should be rare in practice, and can be avoided entirely by always declaring a union&#8217;s largest member first.</p>
 
-<h3 id='default_values'>Default Values</h3>
+<h4 id='default_values'>Default Values</h4>
 
 <p>A default struct is always all-zeros. To achieve this, fields in the data section are stored xor&#8217;d with their defined default values. An all-zero pointer is considered &#8220;null&#8221; (such a pointer would otherwise point to a zero-size struct, which might as well be considered null); accessor methods for pointer fields check for null and return a pointer to their default value in this case.</p>
 
@@ -266,7 +280,7 @@ D (16 bits) = Size of the struct&#39;s pointer section, in words.</code></pre>
 <li>If a newly-added field is placed in space that was previously padding, messages written by old binaries that do not know about this field will still have its default value set correctly &#8211; because it is always zero.</li>
 </ul>
 
-<h2 id='intersegment_pointers'>Inter-Segment Pointers</h2>
+<h3 id='intersegment_pointers'>Inter-Segment Pointers</h3>
 
 <p>When a pointer needs to point to a different segment, offsets no longer work. We instead encode the pointer as a &#8220;far pointer&#8221;, which looks like this:</p>
 
@@ -306,7 +320,7 @@ D (32 bits) = ID of the target segment.  (Segments are numbered
 <li>The content of each segment, in order.</li>
 </ul>
 
-<h2 id='packing'>Packing</h2>
+<h3 id='packing'>Packing</h3>
 
 <p>For cases where bandwidth usage matters, Cap&#8217;n Proto defines a simple compression scheme called &#8220;packing&#8221;. This scheme is based on the observation that Cap&#8217;n Proto messages contain lots of zero bytes: padding bytes, unset fields, and high-order bytes of small-valued integers.</p>
 
@@ -327,7 +341,7 @@ packed (hex):  51 08 03 02   31 19 aa 01</code></pre>
 
 <p>Packing is normally applied on top of the standard stream framing described in the previous section.</p>
 
-<h2 id='compression'>Compression</h2>
+<h3 id='compression'>Compression</h3>
 
 <p>When Cap&#8217;n Proto messages may contain repetitive data (especially, large text blobs), it makes sense to apply a standard compression algorithm in addition to packing. When CPU time is scarce, we recommend Google&#8217;s <a href='https://code.google.com/p/snappy/'>Snappy</a>. Otherwise, <a href='http://www.zlib.net'>zlib</a> is slower but will compress more.</p>
 
