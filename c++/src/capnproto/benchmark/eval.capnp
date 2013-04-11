@@ -32,15 +32,13 @@ enum Operation {
 struct Expression {
   op@0: Operation;
 
-  # TODO:  Use unions once fully-implemented.
+  union left @1;
+  leftValue@2 in left: Int32;
+  leftExpression@3 in left: Expression;
 
-  leftIsValue@1: Bool;
-  leftValue@2: Int32;
-  leftExpression@3: Expression;
-
-  rightIsValue@4: Bool;
-  rightValue@5: Int32;
-  rightExpression@6: Expression;
+  union right @4;
+  rightValue@5 in right: Int32;
+  rightExpression@6 in right: Expression;
 }
 
 struct EvaluationResult {

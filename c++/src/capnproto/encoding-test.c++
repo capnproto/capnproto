@@ -107,6 +107,151 @@ TEST(Encoding, DefaultsFromEmptyMessage) {
   checkTestMessage(readMessageTrusted<TestDefaults>(emptyMessage.words));
 }
 
+#ifdef NDEBUG
+#define EXPECT_DEBUG_ANY_THROW(EXP)
+#else
+#define EXPECT_DEBUG_ANY_THROW EXPECT_ANY_THROW
+#endif
+
+TEST(Encoding, Unions) {
+  MallocMessageBuilder builder;
+  TestUnion::Builder root = builder.getRoot<TestUnion>();
+
+  EXPECT_EQ(TestUnion::Union0::U0F0S0, root.whichUnion0());
+  EXPECT_EQ(Void::VOID, root.getU0f0s0());
+  EXPECT_DEBUG_ANY_THROW(root.getU0f0s1());
+
+  root.setU0f0s1(true);
+  EXPECT_EQ(TestUnion::Union0::U0F0S1, root.whichUnion0());
+  EXPECT_TRUE(root.getU0f0s1());
+  EXPECT_DEBUG_ANY_THROW(root.getU0f0s0());
+
+  root.setU0f0s8(123);
+  EXPECT_EQ(TestUnion::Union0::U0F0S8, root.whichUnion0());
+  EXPECT_EQ(123, root.getU0f0s8());
+  EXPECT_DEBUG_ANY_THROW(root.getU0f0s1());
+}
+
+struct UnionState {
+  uint discriminants[4];
+  int dataOffset;
+
+  UnionState(std::initializer_list<uint> discriminants, int dataOffset)
+      : dataOffset(dataOffset) {
+    memcpy(this->discriminants, discriminants.begin(), sizeof(discriminants));
+  }
+
+  bool operator==(const UnionState& other) const {
+    for (uint i = 0; i < 4; i++) {
+      if (discriminants[i] != other.discriminants[i]) {
+        return false;
+      }
+    }
+
+    return dataOffset == other.dataOffset;
+  }
+};
+
+std::ostream& operator<<(std::ostream& os, const UnionState& us) {
+  os << "UnionState({";
+
+  for (uint i = 0; i < 4; i++) {
+    if (i > 0) os << ", ";
+    os << us.discriminants[i];
+  }
+
+  return os << "}, " << us.dataOffset << ")";
+}
+
+template <typename T> T one() { return static_cast<T>(1); }
+template <> Text::Reader one() { return "1"; }
+template <> Void one() { return Void::VOID; }
+
+template <typename T>
+UnionState initUnion(void (TestUnion::Builder::*setter)(T value)) {
+  // Use the given setter to initialize the given union field and then return a struct indicating
+  // the location of the data that was written as well as the values of the four union
+  // discriminants.
+
+  MallocMessageBuilder builder;
+  (builder.getRoot<TestUnion>().*setter)(one<T>());
+  ArrayPtr<const word> segment = builder.getSegmentsForOutput()[0];
+
+  CAPNPROTO_ASSERT(segment.size() > 2, "bug");
+
+  // Find the offset of the first set bit after the union discriminants.
+  int offset = 0;
+  for (const uint8_t* p = reinterpret_cast<const uint8_t*>(segment.begin() + 2);
+       p < reinterpret_cast<const uint8_t*>(segment.end()); p++) {
+    if (*p != 0) {
+      uint8_t bits = *p;
+      while ((bits & 1) == 0) {
+        ++offset;
+        bits >>= 1;
+      }
+      goto found;
+    }
+    offset += 8;
+  }
+  offset = -1;
+
+found:
+  const uint8_t* discriminants = reinterpret_cast<const uint8_t*>(segment.begin() + 1);
+  return UnionState({discriminants[0], discriminants[2], discriminants[4], discriminants[6]},
+                    offset);
+}
+
+TEST(Encoding, UnionLayout) {
+  EXPECT_EQ(UnionState({ 0,0,0,0},  -1), initUnion(&TestUnion::Builder::setU0f0s0));
+  EXPECT_EQ(UnionState({ 1,0,0,0},   0), initUnion(&TestUnion::Builder::setU0f0s1));
+  EXPECT_EQ(UnionState({ 2,0,0,0},   0), initUnion(&TestUnion::Builder::setU0f0s8));
+  EXPECT_EQ(UnionState({ 3,0,0,0},   0), initUnion(&TestUnion::Builder::setU0f0s16));
+  EXPECT_EQ(UnionState({ 4,0,0,0},   0), initUnion(&TestUnion::Builder::setU0f0s32));
+  EXPECT_EQ(UnionState({ 5,0,0,0},   0), initUnion(&TestUnion::Builder::setU0f0s64));
+  EXPECT_EQ(UnionState({ 6,0,0,0}, 448), initUnion(&TestUnion::Builder::setU0f0sp));
+
+  EXPECT_EQ(UnionState({ 7,0,0,0},  -1), initUnion(&TestUnion::Builder::setU0f1s0));
+  EXPECT_EQ(UnionState({ 8,0,0,0},   0), initUnion(&TestUnion::Builder::setU0f1s1));
+  EXPECT_EQ(UnionState({ 9,0,0,0},   0), initUnion(&TestUnion::Builder::setU0f1s8));
+  EXPECT_EQ(UnionState({10,0,0,0},   0), initUnion(&TestUnion::Builder::setU0f1s16));
+  EXPECT_EQ(UnionState({11,0,0,0},   0), initUnion(&TestUnion::Builder::setU0f1s32));
+  EXPECT_EQ(UnionState({12,0,0,0},   0), initUnion(&TestUnion::Builder::setU0f1s64));
+  EXPECT_EQ(UnionState({13,0,0,0}, 448), initUnion(&TestUnion::Builder::setU0f1sp));
+
+  EXPECT_EQ(UnionState({0, 0,0,0},  -1), initUnion(&TestUnion::Builder::setU1f0s0));
+  EXPECT_EQ(UnionState({0, 1,0,0},  65), initUnion(&TestUnion::Builder::setU1f0s1));
+  EXPECT_EQ(UnionState({0, 2,0,0},  65), initUnion(&TestUnion::Builder::setU1f1s1));
+  EXPECT_EQ(UnionState({0, 3,0,0},  72), initUnion(&TestUnion::Builder::setU1f0s8));
+  EXPECT_EQ(UnionState({0, 4,0,0},  72), initUnion(&TestUnion::Builder::setU1f1s8));
+  EXPECT_EQ(UnionState({0, 5,0,0},  80), initUnion(&TestUnion::Builder::setU1f0s16));
+  EXPECT_EQ(UnionState({0, 6,0,0},  80), initUnion(&TestUnion::Builder::setU1f1s16));
+  EXPECT_EQ(UnionState({0, 7,0,0},  96), initUnion(&TestUnion::Builder::setU1f0s32));
+  EXPECT_EQ(UnionState({0, 8,0,0},  96), initUnion(&TestUnion::Builder::setU1f1s32));
+  EXPECT_EQ(UnionState({0, 9,0,0}, 128), initUnion(&TestUnion::Builder::setU1f0s64));
+  EXPECT_EQ(UnionState({0,10,0,0}, 128), initUnion(&TestUnion::Builder::setU1f1s64));
+  EXPECT_EQ(UnionState({0,11,0,0}, 512), initUnion(&TestUnion::Builder::setU1f0sp));
+  EXPECT_EQ(UnionState({0,12,0,0}, 512), initUnion(&TestUnion::Builder::setU1f1sp));
+
+  EXPECT_EQ(UnionState({0,13,0,0},  -1), initUnion(&TestUnion::Builder::setU1f2s0));
+  EXPECT_EQ(UnionState({0,14,0,0}, 128), initUnion(&TestUnion::Builder::setU1f2s1));
+  EXPECT_EQ(UnionState({0,15,0,0}, 128), initUnion(&TestUnion::Builder::setU1f2s8));
+  EXPECT_EQ(UnionState({0,16,0,0}, 128), initUnion(&TestUnion::Builder::setU1f2s16));
+  EXPECT_EQ(UnionState({0,17,0,0}, 128), initUnion(&TestUnion::Builder::setU1f2s32));
+  EXPECT_EQ(UnionState({0,18,0,0}, 128), initUnion(&TestUnion::Builder::setU1f2s64));
+  EXPECT_EQ(UnionState({0,19,0,0}, 512), initUnion(&TestUnion::Builder::setU1f2sp));
+
+  EXPECT_EQ(UnionState({0,0,0,0}, 192), initUnion(&TestUnion::Builder::setU2f0s1));
+  EXPECT_EQ(UnionState({0,0,0,0}, 193), initUnion(&TestUnion::Builder::setU3f0s1));
+  EXPECT_EQ(UnionState({0,0,1,0}, 200), initUnion(&TestUnion::Builder::setU2f0s8));
+  EXPECT_EQ(UnionState({0,0,0,1}, 208), initUnion(&TestUnion::Builder::setU3f0s8));
+  EXPECT_EQ(UnionState({0,0,2,0}, 224), initUnion(&TestUnion::Builder::setU2f0s16));
+  EXPECT_EQ(UnionState({0,0,0,2}, 240), initUnion(&TestUnion::Builder::setU3f0s16));
+  EXPECT_EQ(UnionState({0,0,3,0}, 256), initUnion(&TestUnion::Builder::setU2f0s32));
+  EXPECT_EQ(UnionState({0,0,0,3}, 288), initUnion(&TestUnion::Builder::setU3f0s32));
+  EXPECT_EQ(UnionState({0,0,4,0}, 320), initUnion(&TestUnion::Builder::setU2f0s64));
+  EXPECT_EQ(UnionState({0,0,0,4}, 384), initUnion(&TestUnion::Builder::setU3f0s64));
+}
+
 }  // namespace
 }  // namespace internal
 }  // namespace capnproto

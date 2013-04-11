@@ -366,44 +366,68 @@ packValue Size1 s@(PackingState { packingHole1 = h1 }) =
     (h1, s { packingHole1 = if mod (h1 + 1) 8 == 0 then 0 else h1 + 1 })
 packValue Size0 s = (0, s)
 
-initialUnionPackingState = UnionPackingState Nothing Nothing Nothing
+initialUnionPackingState = UnionPackingState Nothing Nothing
 
 packUnionizedValue :: FieldSize             -- Size of field to pack.
-                   -> Bool                  -- Whether the field is retroactively unionized.
                    -> UnionPackingState     -- Current layout of the union
                    -> PackingState          -- Current layout of the struct.
                    -> (Integer, UnionPackingState, PackingState)
-packUnionizedValue (SizeInlineComposite _ _) _ _ _ = error "Can't put inline composite into union."
-packUnionizedValue Size0 _ u s = (0, u, s)
+packUnionizedValue (SizeInlineComposite _ _) _ _ = error "Can't put inline composite into union."
+packUnionizedValue Size0 u s = (0, u, s)
 
 -- Pack reference when we already have a reference slot allocated.
-packUnionizedValue SizeReference _ u@(UnionPackingState _ (Just offset) _) s = (offset, u, s)
+packUnionizedValue SizeReference u@(UnionPackingState _ (Just offset)) s = (offset, u, s)
 
 -- Pack reference when we don't have a reference slot.
-packUnionizedValue SizeReference _ (UnionPackingState d Nothing retro) s = (offset, u2, s2) where
+packUnionizedValue SizeReference (UnionPackingState d Nothing) s = (offset, u2, s2) where
     (offset, s2) = packValue SizeReference s
-    u2 = UnionPackingState d (Just offset) retro
+    u2 = UnionPackingState d (Just offset)
 
--- Pack data that fits into the retro slot.
-packUnionizedValue size _ u@(UnionPackingState _ _ (Just (offset, retroSize))) s
-    | sizeInBits retroSize >= sizeInBits size =
-        (offset * div (sizeInBits retroSize) (sizeInBits size), u, s)
+-- Pack data.
+packUnionizedValue size (UnionPackingState d r) s =
+    case packUnionizedData (fromMaybe (0, Size0) d) s size of
+        Just (offset, slotOffset, slotSize, s2) ->
+            (offset, UnionPackingState (Just (slotOffset, slotSize)) r, s2)
+        Nothing -> let
+            (offset, s2) = packValue size s
+            in (offset, UnionPackingState (Just (offset, size)) r, s2)
 
--- Pack data when a data word has been allocated.
-packUnionizedValue size _ u@(UnionPackingState (Just offset) _ _) s =
-    (offset * div 64 (sizeInBits size), u, s)
+packUnionizedData :: (Integer, FieldSize)        -- existing slot to expand
+                  -> PackingState                -- existing packing state
+                  -> FieldSize                   -- desired field size
+                  -> Maybe (Integer,       -- Offset of the new field (in multiples of field size).
+                            Integer,       -- New offset of the slot (in multiples of slot size).
+                            FieldSize,     -- New size of the slot.
+                            PackingState)  -- New struct packing state.
 
--- Pack retroactive data when no data word has been allocated.
-packUnionizedValue size True (UnionPackingState Nothing r Nothing) s =
-    (offset, u2, s2) where
-        (offset, s2) = packValue size s
-        u2 = UnionPackingState Nothing r (Just (offset, size))
+-- Don't try to allocate space for voids.
+packUnionizedData (slotOffset, slotSize) state Size0 = Just (0, slotOffset, slotSize, state)
 
--- Pack non-retroactive data when no data word has been allocated.
-packUnionizedValue size _ (UnionPackingState Nothing r retro) s =
-    (offset * div 64 (sizeInBits size), u2, s2) where
-        (offset, s2) = packValue Size64 s
-        u2 = UnionPackingState (Just offset) r retro
+-- If slot is bigger than desired size, no expansion is needed.
+packUnionizedData (slotOffset, slotSize) state desiredSize
+    | sizeInBits slotSize >= sizeInBits desiredSize =
+    Just (div (sizeInBits slotSize) (sizeInBits desiredSize) * slotOffset,
+          slotOffset, slotSize, state)
+
+-- If slot is a bit, and it is the first bit in its byte, and the bit hole immediately follows
+-- expand it to a byte.
+packUnionizedData (slotOffset, Size1) p@(PackingState { packingHole1 = hole }) desiredSize
+    | mod slotOffset 8 == 0 && hole == slotOffset + 1 =
+        packUnionizedData (div slotOffset 8, Size8) (p { packingHole1 = 0 }) desiredSize
+
+-- If slot is size N, and the next N bits are padding, expand.
+packUnionizedData (slotOffset, Size8) p@(PackingState { packingHole8 = hole }) desiredSize
+    | hole == slotOffset + 1 =
+        packUnionizedData (div slotOffset 2, Size16) (p { packingHole8 = 0 }) desiredSize
+packUnionizedData (slotOffset, Size16) p@(PackingState { packingHole16 = hole }) desiredSize
+    | hole == slotOffset + 1 =
+        packUnionizedData (div slotOffset 2, Size32) (p { packingHole16 = 0 }) desiredSize
+packUnionizedData (slotOffset, Size32) p@(PackingState { packingHole32 = hole }) desiredSize
+    | hole == slotOffset + 1 =
+        packUnionizedData (div slotOffset 2, Size64) (p { packingHole32 = 0 }) desiredSize
+
+-- Otherwise, we fail.
+packUnionizedData _ _ _ = Nothing
 
 -- Determine the offset for the given field, and update the packing states to include the field.
 packField :: FieldDesc -> PackingState -> Map.Map Integer UnionPackingState
@@ -416,9 +440,8 @@ packField fieldDesc state unionState =
         Just unionDesc -> let
             n = unionNumber unionDesc
             oldUnionPacking = fromMaybe initialUnionPackingState (Map.lookup n unionState)
-            isRetro = fieldNumber fieldDesc < unionNumber unionDesc
             (offset, newUnionPacking, newState) =
-                packUnionizedValue (fieldSize $ fieldType fieldDesc) isRetro oldUnionPacking state
+                packUnionizedValue (fieldSize $ fieldType fieldDesc) oldUnionPacking state
             newUnionState = Map.insert n newUnionPacking unionState
             in (offset, newState, newUnionState)
 
@@ -427,7 +450,7 @@ packField fieldDesc state unionState =
 packUnion :: UnionDesc -> PackingState -> Map.Map Integer UnionPackingState
           -> (Integer, PackingState, Map.Map Integer UnionPackingState)
 packUnion _ state unionState = (offset, newState, unionState) where
-    (offset, newState) = packValue Size8 state
+    (offset, newState) = packValue Size16 state
 
 packFields :: [FieldDesc] -> [UnionDesc]
     -> (PackingState, Map.Map Integer UnionPackingState, Map.Map Integer (Integer, PackingState))
@@ -533,7 +556,7 @@ compileDecl scope (StructDecl (Located _ name) decls) =
         return (let
             fields = [d | DescField d <- members]
             unions = [d | DescUnion d <- members]
-            (packing, unionPackingMap, fieldPackingMap) = packFields fields unions
+            (packing, _, fieldPackingMap) = packFields fields unions
             in DescStruct StructDesc
             { structName = name
             , structParent = scope
@@ -549,26 +572,23 @@ compileDecl scope (StructDecl (Located _ name) decls) =
             , structMemberMap = memberMap
             , structStatements = statements
             , structFieldPackingMap = fieldPackingMap
-            , structUnionPackingMap = unionPackingMap
             })))
 
 compileDecl (DescStruct parent) (UnionDecl (Located _ name) (Located numPos number) decls) =
     CompiledMemberStatus name (feedback (\desc -> do
         (_, _, options, statements) <- compileChildDecls desc decls
-        let fields = [f | f <- structFields parent, fieldInUnion name f]
+        let compareFieldNumbers a b = compare (fieldNumber a) (fieldNumber b)
+            fields = List.sortBy compareFieldNumbers
+                [f | f <- structFields parent, fieldInUnion name f]
         requireNoMoreThanOneFieldNumberLessThan name numPos number fields
         return (let
             (tagOffset, tagPacking) = structFieldPackingMap parent ! number
-            unionPacking = structUnionPackingMap parent ! number
             in DescUnion UnionDesc
             { unionName = name
             , unionParent = parent
             , unionNumber = number
             , unionTagOffset = tagOffset
             , unionTagPacking = tagPacking
-            , unionDataOffset = unionPackDataOffset unionPacking
-            , unionReferenceOffset = unionPackReferenceOffset unionPacking
-            , unionRetroactiveSlot = unionPackRetroactiveSlot unionPacking
             , unionFields = fields
             , unionOptions = options
             , unionStatements = statements

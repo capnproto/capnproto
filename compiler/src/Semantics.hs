@@ -162,9 +162,8 @@ packingSize PackingState { packingDataSize = ds, packingReferenceCount = rc } = 
 --   this is the piece that had been allocated to that field, and is now retroactively part of the
 --   union.
 data UnionPackingState = UnionPackingState
-    { unionPackDataOffset :: Maybe Integer
+    { unionPackDataOffset :: Maybe (Integer, FieldSize)
     , unionPackReferenceOffset :: Maybe Integer
-    , unionPackRetroactiveSlot :: Maybe (Integer, FieldSize)
     }
 
 data FieldSize = Size0 | Size1 | Size8 | Size16 | Size32 | Size64 | SizeReference
@@ -310,11 +309,10 @@ data StructDesc = StructDesc
     , structMemberMap :: MemberMap
     , structStatements :: [CompiledStatement]
 
-    -- Don't use these directly, use the members of FieldDesc and UnionDesc.
-    -- These fields are exposed here only because I was too lazy to create a way to pass them on
+    -- Don't use this directly, use the members of FieldDesc and UnionDesc.
+    -- This field is exposed here only because I was too lazy to create a way to pass it on
     -- the side when compiling members of a struct.
     , structFieldPackingMap :: Map.Map Integer (Integer, PackingState)
-    , structUnionPackingMap :: Map.Map Integer UnionPackingState
     }
 
 data UnionDesc = UnionDesc
@@ -323,13 +321,14 @@ data UnionDesc = UnionDesc
     , unionNumber :: Integer
     , unionTagOffset :: Integer
     , unionTagPacking :: PackingState
-    , unionDataOffset :: Maybe Integer
-    , unionReferenceOffset :: Maybe Integer
-    , unionRetroactiveSlot :: Maybe (Integer, FieldSize)
-    , unionFields :: [FieldDesc]
+    , unionFields :: [FieldDesc]  -- ordered by field number
     , unionOptions :: OptionMap
     , unionStatements :: [CompiledStatement]
     }
+
+unionHasRetro desc = case unionFields desc of
+    [] -> False
+    f:_ -> fieldNumber f < unionNumber desc
 
 data FieldDesc = FieldDesc
     { fieldName :: String
@@ -422,7 +421,7 @@ descToCode indent (DescField desc) = printf "%s%s@%d%s: %s%s;  # %s\n" indent
 --    (maybeBlockCode indent $ fieldStatements desc)
 descToCode indent (DescUnion desc) = printf "%sunion %s@%d;  # [%d, %d)\n" indent
     (unionName desc) (unionNumber desc)
-    (unionTagOffset desc * 8) (unionTagOffset desc * 8 + 8)
+    (unionTagOffset desc * 16) (unionTagOffset desc * 16 + 16)
 --    (maybeBlockCode indent $ unionStatements desc)
 descToCode indent (DescInterface desc) = printf "%sinterface %s%s" indent
     (interfaceName desc)

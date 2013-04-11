@@ -35,7 +35,6 @@ int32_t makeExpression(Expression::Builder exp, uint depth) {
   uint32_t left, right;
 
   if (fastRand(8) < depth) {
-    exp.setLeftIsValue(true);
     left = fastRand(128) + 1;
     exp.setLeftValue(left);
   } else {
@@ -43,7 +42,6 @@ int32_t makeExpression(Expression::Builder exp, uint depth) {
   }
 
   if (fastRand(8) < depth) {
-    exp.setRightIsValue(true);
     right = fastRand(128) + 1;
     exp.setRightValue(right);
   } else {
@@ -66,18 +64,24 @@ int32_t makeExpression(Expression::Builder exp, uint depth) {
 }
 
 int32_t evaluateExpression(Expression::Reader exp) {
-  int32_t left, right;
+  int32_t left = 0, right = 0;
 
-  if (exp.getLeftIsValue()) {
-    left = exp.getLeftValue();
-  } else {
-    left = evaluateExpression(exp.getLeftExpression());
+  switch (exp.whichLeft()) {
+    case Expression::Left::LEFT_VALUE:
+      left = exp.getLeftValue();
+      break;
+    case Expression::Left::LEFT_EXPRESSION:
+      left = evaluateExpression(exp.getLeftExpression());
+      break;
   }
 
-  if (exp.getRightIsValue()) {
-    right = exp.getRightValue();
-  } else {
-    right = evaluateExpression(exp.getRightExpression());
+  switch (exp.whichRight()) {
+    case Expression::Right::RIGHT_VALUE:
+      right = exp.getRightValue();
+      break;
+    case Expression::Right::RIGHT_EXPRESSION:
+      right = evaluateExpression(exp.getRightExpression());
+      break;
   }
 
   switch (exp.getOp()) {

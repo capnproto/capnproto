@@ -151,3 +151,78 @@ struct TestDefaults {
   enumList      @32 : List(TestEnum) = [foo, garply];
   interfaceList @33 : List(Void);  # TODO
 }
+
+struct TestUnion {
+  union union0 @0;
+  union union1 @1;
+  union union2 @2;
+  union union3 @3;
+
+  # Pack union 0 under ideal conditions: there is no unused padding space prior to it.
+  u0f0s0  @4 in union0: Void;
+  u0f0s1  @5 in union0: Bool;
+  u0f0s8  @6 in union0: Int8;
+  u0f0s16 @7 in union0: Int16;
+  u0f0s32 @8 in union0: Int32;
+  u0f0s64 @9 in union0: Int64;
+  u0f0sp  @10 in union0: Text;
+
+  # Pack more stuff into union1 -- should go in same space.
+  u0f1s0  @11 in union0: Void;
+  u0f1s1  @12 in union0: Bool;
+  u0f1s8  @13 in union0: Int8;
+  u0f1s16 @14 in union0: Int16;
+  u0f1s32 @15 in union0: Int32;
+  u0f1s64 @16 in union0: Int64;
+  u0f1sp  @17 in union0: Text;
+
+  # Pack one bit in order to make pathological situation for union1.
+  bit0 @18: Bool;
+
+  # Pack pathologically bad case.  Each field takes up new space.
+  u1f0s0  @19 in union1: Void;
+  u1f0s1  @20 in union1: Bool;
+  u1f1s1  @21 in union1: Bool;
+  u1f0s8  @22 in union1: Int8;
+  u1f1s8  @23 in union1: Int8;
+  u1f0s16 @24 in union1: Int16;
+  u1f1s16 @25 in union1: Int16;
+  u1f0s32 @26 in union1: Int32;
+  u1f1s32 @27 in union1: Int32;
+  u1f0s64 @28 in union1: Int64;
+  u1f1s64 @29 in union1: Int64;
+  u1f0sp  @30 in union1: Text;
+  u1f1sp  @31 in union1: Text;
+
+  # Pack more stuff into union1 -- should go into same space as u1f0s64.
+  u1f2s0  @32 in union1: Void;
+  u1f2s1  @33 in union1: Bool;
+  u1f2s8  @34 in union1: Int8;
+  u1f2s16 @35 in union1: Int16;
+  u1f2s32 @36 in union1: Int32;
+  u1f2s64 @37 in union1: Int64;
+  u1f2sp  @38 in union1: Text;
+
+  # Fill in the rest of that bitfield from earlier.
+  bit2 @39: Bool;
+  bit3 @40: Bool;
+  bit4 @41: Bool;
+  bit5 @42: Bool;
+  bit6 @43: Bool;
+  bit7 @44: Bool;
+  byte0 @49: UInt8;
+
+  # Interleave two unions to be really annoying.
+  # Also declare in reverse order to make sure union discriminant values are sorted by field number
+  # and not by declaration order.
+  u3f0s64 @55 in union3: Int64;
+  u2f0s64 @54 in union2: Int64;
+  u3f0s32 @53 in union3: Int32;
+  u2f0s32 @52 in union2: Int32;
+  u3f0s16 @51 in union3: Int16;
+  u2f0s16 @50 in union2: Int16;
+  u3f0s8 @48 in union3: Int8;
+  u2f0s8 @47 in union2: Int8;
+  u3f0s1 @46 in union3: Bool;
+  u2f0s1 @45 in union2: Bool;
+}

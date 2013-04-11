@@ -161,7 +161,8 @@ When unions are present, add the following logic:
             If an earlier member of the union is in the same section as
                     this field and it combined with any following padding
                     is at least as large as the new field {
-                Give the new field the same offset, so they overlap.
+                Give the new field the same offset and the highest-numbered
+                    such previous field, so they overlap.
             } else {
                 Assign a new offset to this field as if it were not a union
                     member at all.  (See no-union logic, above.)

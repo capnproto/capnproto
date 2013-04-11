@@ -30,6 +30,7 @@ namespace {
 
 TEST(Message, MallocBuilderWithFirstSegment) {
   word scratch[16];
+  memset(scratch, 0, sizeof(scratch));
   MallocMessageBuilder builder(arrayPtr(scratch, 16), AllocationStrategy::FIXED_SIZE);
 
   ArrayPtr<word> segment = builder.allocateSegment(1);

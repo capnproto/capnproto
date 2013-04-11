@@ -176,9 +176,11 @@ defaultBytesContext parent t bytes = mkStrContext context where
         _ -> error "defaultBlobSize used on non-blob."
     context s = parent s
 
+descDecl desc = head $ lines $ descToCode "" desc
+
 fieldContext parent desc = mkStrContext context where
     context "fieldName" = MuVariable $ fieldName desc
-    context "fieldDecl" = MuVariable $ descToCode "" (DescField desc)
+    context "fieldDecl" = MuVariable $ descDecl $ DescField desc
     context "fieldTitleCase" = MuVariable $ toTitleCase $ fieldName desc
     context "fieldUpperCase" = MuVariable $ toUpperCaseWithUnderscores $ fieldName desc
     context "fieldIsPrimitive" = MuBool $ isPrimitive $ fieldType desc
@@ -202,11 +204,24 @@ fieldContext parent desc = mkStrContext context where
         MuVariable $ cxxFieldSizeString $ elementSize $ elementType $ fieldType desc
     context "fieldElementType" =
         MuVariable $ cxxTypeString $ elementType $ fieldType desc
+    context "fieldUnion" = case fieldUnion desc of
+        Just u -> MuList [unionContext context u]
+        Nothing -> muNull
+    context s = parent s
+
+unionContext parent desc = mkStrContext context where
+    context "unionName" = MuVariable $ unionName desc
+    context "unionDecl" = MuVariable $ descDecl $ DescUnion desc
+    context "unionTitleCase" = MuVariable $ toTitleCase $ unionName desc
+    context "unionTagOffset" = MuVariable $ unionTagOffset desc
+    context "unionFields" = MuList $ map (fieldContext context) $ unionFields desc
+    context "unionHasRetro" = MuBool $ unionHasRetro desc
     context s = parent s
 
 structContext parent desc = mkStrContext context where
     context "structName" = MuVariable $ structName desc
     context "structFields" = MuList $ map (fieldContext context) $ structFields desc
+    context "structUnions" = MuList $ map (unionContext context) $ structUnions desc
     context "structDataSize" = MuVariable $ packingDataSize $ structPacking desc
     context "structReferenceCount" = MuVariable $ packingReferenceCount $ structPacking desc
     context "structChildren" = MuList []  -- TODO
