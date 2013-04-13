@@ -140,6 +140,9 @@ InputStreamMessageReader::InputStreamMessageReader(
 
   size_t totalWords = segment0Size;
 
+  // Reject messages with too many segments for security reasons.
+  CAPNPROTO_ASSERT(segmentCount < 512, "Message has too many segments.");
+
   // Read sizes for all segments except the first.  Include padding if necessary.
   internal::WireValue<uint32_t> moreSizes[segmentCount & ~1];
   if (segmentCount > 1) {
@@ -148,6 +151,13 @@ InputStreamMessageReader::InputStreamMessageReader(
       totalWords += moreSizes[i].get();
     }
   }
+
+  // Don't accept a message which the receiver couldn't possibly traverse without hitting the
+  // traversal limit.  Without this check, a malicious client could transmit a very large segment
+  // size to make the receiver allocate excessive space and possibly crash.
+  CAPNPROTO_ASSERT(totalWords <= options.traversalLimitInWords,
+                   "Message is too large.  To increase the limit on the receiving end, see "
+                   "capnproto::ReaderOptions.");
 
   if (scratchSpace.size() < totalWords) {
     // TODO:  Consider allocating each segment as a separate chunk to reduce memory fragmentation.

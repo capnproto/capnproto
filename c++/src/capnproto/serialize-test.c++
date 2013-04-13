@@ -287,6 +287,41 @@ TEST(Serialize, FileDescriptors) {
   }
 }
 
+TEST(Serialize, RejectTooManySegments) {
+  Array<word> data = newArray<word>(8192);
+  WireValue<uint32_t>* table = reinterpret_cast<WireValue<uint32_t>*>(data.begin());
+  table[0].set(1024);
+  for (uint i = 0; i < 1024; i++) {
+    table[i+1].set(1);
+  }
+  TestInputStream input(data.asPtr(), false);
+
+  try {
+    InputStreamMessageReader reader(input);
+    ADD_FAILURE() << "Should have thrown an exception.";
+  } catch (...) {
+    // expected
+  }
+}
+
+TEST(Serialize, RejectHugeMessage) {
+  // A message whose root struct contains two words of data!
+  AlignedData<4> data = {{0,0,0,0,3,0,0,0, 0,0,0,0,2,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0}};
+
+  TestInputStream input(arrayPtr(data.words, 4), false);
+
+  // We'll set the traversal limit to 2 words so our 3-word message is too big.
+  ReaderOptions options;
+  options.traversalLimitInWords = 2;
+
+  try {
+    InputStreamMessageReader reader(input, options);
+    ADD_FAILURE() << "Should have thrown an exception.";
+  } catch (...) {
+    // expected
+  }
+}
+
 // TODO:  Test error cases.
 
 }  // namespace
