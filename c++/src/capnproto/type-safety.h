@@ -30,6 +30,7 @@
 
 #include "macros.h"
 #include <cstddef>
+#include <string.h>
 
 namespace capnproto {
 
@@ -51,8 +52,24 @@ struct NoInfer {
   typedef T Type;
 };
 
+template <typename T> struct RemoveReference { typedef T Type; };
+template <typename T> struct RemoveReference<T&> { typedef T Type; };
+template<typename> struct IsLvalueReference { static constexpr bool value = false; };
+template<typename T> struct IsLvalueReference<T&> { static constexpr bool value = true; };
+
+// #including <utility> just for std::move() and std::forward() is excessive.  Instead, we
+// re-define them here.
+
 template<typename T> constexpr T&& move(T& t) noexcept { return static_cast<T&&>(t); }
-// Like std::move.  Unfortunately, #including <utility> brings in tons of unnecessary stuff.
+
+template<typename T>
+constexpr T&& forward(typename RemoveReference<T>::Type& t) noexcept {
+  return static_cast<T&&>(t);
+}
+template<typename T> constexpr T&& forward(typename RemoveReference<T>::Type&& t) noexcept {
+  static_assert(!IsLvalueReference<T>::value, "Attempting to forward rvalue as lvalue reference.");
+  return static_cast<T&&>(t);
+}
 
 // =======================================================================================
 // ArrayPtr
@@ -63,10 +80,10 @@ class ArrayPtr {
   // and passing by value only copies the pointer, not the target.
 
 public:
-  inline ArrayPtr(): ptr(nullptr), size_(0) {}
-  inline ArrayPtr(std::nullptr_t): ptr(nullptr), size_(0) {}
-  inline ArrayPtr(T* ptr, std::size_t size): ptr(ptr), size_(size) {}
-  inline ArrayPtr(T* begin, T* end): ptr(begin), size_(end - begin) {}
+  inline constexpr ArrayPtr(): ptr(nullptr), size_(0) {}
+  inline constexpr ArrayPtr(std::nullptr_t): ptr(nullptr), size_(0) {}
+  inline constexpr ArrayPtr(T* ptr, std::size_t size): ptr(ptr), size_(size) {}
+  inline constexpr ArrayPtr(T* begin, T* end): ptr(begin), size_(end - begin) {}
 
   inline operator ArrayPtr<const T>() {
     return ArrayPtr<const T>(ptr, size_);
@@ -97,15 +114,20 @@ private:
 };
 
 template <typename T>
-inline ArrayPtr<T> arrayPtr(T* ptr, size_t size) {
+inline constexpr ArrayPtr<T> arrayPtr(T* ptr, size_t size) {
   // Use this function to construct ArrayPtrs without writing out the type name.
   return ArrayPtr<T>(ptr, size);
 }
 
 template <typename T>
-inline ArrayPtr<T> arrayPtr(T* begin, T* end) {
+inline constexpr ArrayPtr<T> arrayPtr(T* begin, T* end) {
   // Use this function to construct ArrayPtrs without writing out the type name.
   return ArrayPtr<T>(begin, end);
+}
+
+inline constexpr ArrayPtr<const char> arrayPtr(const char* s) {
+  // Use this function to construct an ArrayPtr from a NUL-terminated string, especially a literal.
+  return arrayPtr(s, strlen(s));
 }
 
 template <typename T>
@@ -125,6 +147,9 @@ public:
   inline ~Array() noexcept { delete[] ptr; }
 
   inline operator ArrayPtr<T>() {
+    return ArrayPtr<T>(ptr, size_);
+  }
+  inline operator ArrayPtr<const T>() const {
     return ArrayPtr<T>(ptr, size_);
   }
   inline ArrayPtr<T> asPtr() {
@@ -147,8 +172,8 @@ public:
     return ArrayPtr<T>(ptr + start, end - start);
   }
 
-  inline bool operator==(std::nullptr_t) { return ptr == nullptr; }
-  inline bool operator!=(std::nullptr_t) { return ptr != nullptr; }
+  inline bool operator==(std::nullptr_t) { return size_ == 0; }
+  inline bool operator!=(std::nullptr_t) { return size_ != 0; }
 
   inline Array& operator=(std::nullptr_t) {
     delete[] ptr;
@@ -168,18 +193,71 @@ public:
 
 private:
   T* ptr;
-  std::size_t size_;
+  size_t size_;
 
   inline explicit Array(std::size_t size): ptr(new T[size]), size_(size) {}
+  inline Array(T* ptr, size_t size): ptr(ptr), size_(size) {}
 
   template <typename U>
   friend Array<U> newArray(size_t size);
+
+  template <typename U>
+  friend class ArrayBuilder;
 };
 
 template <typename T>
 inline Array<T> newArray(size_t size) {
   return Array<T>(size);
 }
+
+template <typename T>
+class ArrayBuilder {
+  union Slot { T value; char dummy; };
+  static_assert(sizeof(Slot) == sizeof(T), "union is bigger than content?");
+
+public:
+  explicit ArrayBuilder(size_t size): ptr(new Slot[size]), pos(ptr), endPtr(ptr + size) {}
+  ~ArrayBuilder() {
+    for (Slot* p = ptr; p < pos; ++p) {
+      p->value.~T();
+    }
+    delete [] ptr;
+  }
+
+  template <typename... Params>
+  void add(Params&&... params) {
+    CAPNPROTO_DEBUG_ASSERT(pos < endPtr, "Added too many elements to ArrayBuilder.");
+    new(&pos->value) T(forward<Params>(params)...);
+    ++pos;
+  }
+
+  template <typename Container>
+  void addAll(Container&& container) {
+    Slot* __restrict__ pos_ = pos;
+    auto i = container.begin();
+    auto end = container.end();
+    while (i != end) {
+      pos_++->value = *i++;
+    }
+    pos = pos_;
+  }
+
+  Array<T> finish() {
+    // We could allow partial builds if Array<T> used a deleter callback, but that would make
+    // Array<T> bigger for no benefit most of the time.
+    CAPNPROTO_DEBUG_ASSERT(pos == endPtr, "ArrayBuilder::finish() called prematurely.");
+    Array<T> result(reinterpret_cast<T*>(ptr), pos - ptr);
+    ptr = nullptr;
+    pos = nullptr;
+    endPtr = nullptr;
+    return result;
+  }
+
+private:
+  Slot* ptr;
+  Slot* pos;
+  Slot* endPtr;
+};
 
 // =======================================================================================
 // IDs

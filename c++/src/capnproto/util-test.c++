@@ -21,21 +21,25 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define CAPNPROTO_PRIVATE
-#include "macros.h"
-#include "exception.h"
-#include <unistd.h>
-#include <stdio.h>
-#include "exception.h"
 #include "util.h"
+#include <gtest/gtest.h>
+#include <string>
 
 namespace capnproto {
 namespace internal {
+namespace {
 
-void assertionFailure(const char* file, int line, const char* expectation, const char* message) {
-  throw Exception(Exception::Nature::LOCAL_BUG, Exception::Durability::PERMANENT,
-                  file, line, str(expectation));
+std::string arrayToStr(Array<char> arr) {
+  return std::string(arr.begin(), arr.size());
 }
 
+TEST(Util, Foo) {
+  EXPECT_EQ("foobar", arrayToStr(str("foo", "bar")));
+  EXPECT_EQ("1 2 3 4", arrayToStr(str(1, " ", 2u, " ", 3l, " ", 4ll)));
+  EXPECT_EQ("1.5 foo 1e15 bar -3", arrayToStr(str(1.5f, " foo ", 1e15, " bar ", -3)));
+  EXPECT_EQ("foo", arrayToStr(str('f', 'o', 'o')));
+}
+
+}  // namespace
 }  // namespace internal
 }  // namespace capnproto

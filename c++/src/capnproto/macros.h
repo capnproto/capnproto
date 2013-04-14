@@ -55,8 +55,10 @@ namespace internal {
 #define CAPNPROTO_ALWAYS_INLINE(prototype) inline prototype __attribute__((always_inline))
 // Force a function to always be inlined.  Apply only to the prototype, not to the definition.
 
+#define CAPNPROTO_NORETURN __attribute__((noreturn));
+
 void assertionFailure(const char* file, int line, const char* expectation, const char* message)
-    __attribute__((noreturn));
+    CAPNPROTO_NORETURN;
 
 #define CAPNPROTO_ASSERT(condition, message) \
     if (CAPNPROTO_EXPECT_TRUE(condition)); else ::capnproto::internal::assertionFailure(\
