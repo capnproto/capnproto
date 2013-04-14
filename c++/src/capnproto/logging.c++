@@ -126,7 +126,7 @@ static Array<char> makeDescription(const char* condition, const char* macroArgs,
   }
 }
 
-void Log::logInternal(const char* file, uint line, Severity severity, const char* macroArgs,
+void Log::logInternal(const char* file, int line, Severity severity, const char* macroArgs,
                       ArrayPtr<Array<char>> argValues) {
   getExceptionCallback()->logMessage(
       str(severity, ": ", file, ":", line, ": ",
@@ -134,7 +134,7 @@ void Log::logInternal(const char* file, uint line, Severity severity, const char
 }
 
 void Log::recoverableFaultInternal(
-    const char* file, uint line, Exception::Nature nature,
+    const char* file, int line, Exception::Nature nature,
     const char* condition, const char* macroArgs, ArrayPtr<Array<char>> argValues) {
   getExceptionCallback()->onRecoverableException(
       Exception(nature, Exception::Durability::PERMANENT, file, line,
@@ -142,7 +142,7 @@ void Log::recoverableFaultInternal(
 }
 
 void Log::fatalFaultInternal(
-    const char* file, uint line, Exception::Nature nature,
+    const char* file, int line, Exception::Nature nature,
     const char* condition, const char* macroArgs, ArrayPtr<Array<char>> argValues) {
   getExceptionCallback()->onFatalException(
       Exception(nature, Exception::Durability::PERMANENT, file, line,

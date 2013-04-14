@@ -48,28 +48,28 @@ public:
   static inline void setLogLevel(Severity severity) { minSeverity = severity; }
 
   template <typename... Params>
-  static void log(const char* file, uint line, Severity severity, const char* macroArgs,
+  static void log(const char* file, int line, Severity severity, const char* macroArgs,
                   Params&&... params);
 
   template <typename... Params>
-  static void recoverableFault(const char* file, uint line, Exception::Nature nature,
+  static void recoverableFault(const char* file, int line, Exception::Nature nature,
                                const char* condition, const char* macroArgs, Params&&... params);
 
   template <typename... Params>
-  static void fatalFault(const char* file, uint line, Exception::Nature nature,
+  static void fatalFault(const char* file, int line, Exception::Nature nature,
                          const char* condition, const char* macroArgs, Params&&... params)
                          CAPNPROTO_NORETURN;
 
 private:
   static Severity minSeverity;
 
-  static void logInternal(const char* file, uint line, Severity severity, const char* macroArgs,
+  static void logInternal(const char* file, int line, Severity severity, const char* macroArgs,
                           ArrayPtr<Array<char>> argValues);
   static void recoverableFaultInternal(
-      const char* file, uint line, Exception::Nature nature,
+      const char* file, int line, Exception::Nature nature,
       const char* condition, const char* macroArgs, ArrayPtr<Array<char>> argValues);
   static void fatalFaultInternal(
-      const char* file, uint line, Exception::Nature nature,
+      const char* file, int line, Exception::Nature nature,
       const char* condition, const char* macroArgs, ArrayPtr<Array<char>> argValues)
       CAPNPROTO_NORETURN;
 };
@@ -113,14 +113,14 @@ ArrayPtr<const char> operator*(const Stringifier&, Log::Severity severity);
 #endif
 
 template <typename... Params>
-void Log::log(const char* file, uint line, Severity severity, const char* macroArgs,
+void Log::log(const char* file, int line, Severity severity, const char* macroArgs,
               Params&&... params) {
   Array<char> argValues[sizeof...(Params)] = {str(params)...};
   logInternal(file, line, severity, macroArgs, arrayPtr(argValues, sizeof...(Params)));
 }
 
 template <typename... Params>
-void Log::recoverableFault(const char* file, uint line, Exception::Nature nature,
+void Log::recoverableFault(const char* file, int line, Exception::Nature nature,
                            const char* condition, const char* macroArgs, Params&&... params) {
   Array<char> argValues[sizeof...(Params)] = {str(params)...};
   recoverableFaultInternal(file, line, nature, condition, macroArgs,
@@ -128,7 +128,7 @@ void Log::recoverableFault(const char* file, uint line, Exception::Nature nature
 }
 
 template <typename... Params>
-void Log::fatalFault(const char* file, uint line, Exception::Nature nature,
+void Log::fatalFault(const char* file, int line, Exception::Nature nature,
                      const char* condition, const char* macroArgs, Params&&... params) {
   Array<char> argValues[sizeof...(Params)] = {str(params)...};
   fatalFaultInternal(file, line, nature, condition, macroArgs,

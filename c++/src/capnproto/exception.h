@@ -60,6 +60,12 @@ public:
   Exception(const Exception& other) noexcept;
   ~Exception() noexcept;
 
+  const char* getFile() const { return file; }
+  int getLine() const { return line; }
+  Nature getNature() const { return nature; }
+  Durability getDurability() const { return durability; }
+  ArrayPtr<const char> getDescription() const { return description; }
+
   const char* what() const noexcept override;
 
 private:
