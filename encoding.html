@@ -292,7 +292,7 @@ D (16 bits) = Size of the struct&#39;s pointer section, in words.</code></pre>
 A (2 bits) = 2, to indicate that this is a far pointer.
 B (1 bit) = 0 if the landing pad is one word, 1 if it is two words.
     See explanation below.
-C (30 bits) = Offset, in words, from the start of the target segment
+C (29 bits) = Offset, in words, from the start of the target segment
     to the location of the far-pointer landing-pad within that
     segment.  Unsigned.
 D (32 bits) = ID of the target segment.  (Segments are numbered
