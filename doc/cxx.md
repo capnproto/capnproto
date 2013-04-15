@@ -277,3 +277,47 @@ best reference is the header files.  See:
     capnproto/io.h
     capnproto/serialized.h
     capnproto/serialized-packed.h
+
+## Lessons Learned from Protocol Buffers
+
+The author of Cap'n Proto's C++ implementation also wrote (in the past) verison 2 of Google's
+Protocol Buffers.  As a result, Cap'n Proto's implementation benefits from a number of lessons
+learned the hard way:
+
+* Protobuf generated code is enormous due to the parsing and serializing code generated for every
+  class.  This actually poses a significant problem in practice -- there exist server binaries
+  containing literally hundreds of megabytes of compiled protobuf code.  Cap'n Proto generated code,
+  on the other hand, is almost entirely inlined accessors.  The only things that go into `.capnp.o`
+  files are default values for pointer fields, and only if they have non-empty defaults (which are
+  unusual).  (Eventually, the object files may also contain type descriptors, but those should also
+  be small.)
+
+* The C++ Protobuf implementation used lots of dynamic initialization code (that runs before
+  `main()`) to do things like register types in global tables.  This proved problematic for
+  programs which linked in lots of protocols but needed to start up quickly.  Cap'n Proto does not
+  use any dynamic initializers anywhere, period.
+
+* The C++ Protobuf implementation makes heavy use of STL in its interface and implementation.
+  The proliferation of template instantiations gives the Protobuf runtime library a large footprint,
+  and using STL in the interface can lead to weird ABI problems and slow compiles.  Cap'n Proto
+  does not use any STL containers in its interface and makes sparing use in its implementation.
+  As a result, the Cap'n Proto runtime library is very small, and code that uses it compiles
+  quickly.
+
+* The in-memory representation of messages in Protobuf-C++ involves many heap objects.  Each
+  message is an object, each non-primitive repeated field allocates an array of pointers to more
+  objects, and each string may actually add two heap objects.  Cap'n Proto by its nature uses
+  arena allocation, so the entire message is allocated in a few contiguous segments.  This means
+  Cap'n Proto spends very little time allocating memory, stores messages more compactly, and avoids
+  memory fragmentation.
+
+* Related to the last point, Protobuf-C++ relies heavily on object reuse for performance.
+  Building or parsing into a newly-allocated Protobuf object is significantly slower than using
+  an existing one.  However, the memory usage of a Protobuf object will tend to grow the more times
+  it is reused, particularly if it is used to parse messages of many different "shapes", so the
+  objects need to be deleted and re-allocated from time to time.  All this makes tuning Protobufs
+  fairly tedious.  In contrast, enabling memory reuse with Cap'n Proto is as simple as providing
+  a byte buffer to use as scratch space when you build or read in a message.  Provide enough scratch
+  space to hold the entire message and Cap'n Proto won't allocate any memory.  Or don't -- since
+  Cap'n Proto doesn't do much allocation in the first place, the benefits of scratch space are
+  small.
