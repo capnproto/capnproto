@@ -233,3 +233,26 @@ struct TestUnionDefaults {
   s0sps1s32Set @1 :TestUnion =
       (u0f1s0 = void, u1f0sp = "foo", u2f0s1 = true, u3f0s32 = 12345678);
 }
+
+struct TestNestedTypes {
+  enum NestedEnum {
+    foo @0;
+    bar @1;
+  }
+
+  struct NestedStruct {
+    enum NestedEnum {
+      baz @0;
+      qux @1;
+      quux @2;
+    }
+
+    outerNestedEnum @0 :TestNestedTypes.NestedEnum = bar;
+    innerNestedEnum @1 :NestedEnum = quux;
+  }
+
+  nestedStruct @0 :NestedStruct;
+
+  outerNestedEnum @1 :NestedEnum = bar;
+  innerNestedEnum @2 :NestedStruct.NestedEnum = quux;
+}

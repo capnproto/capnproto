@@ -31,18 +31,20 @@ Template for generated C++ source files.
 namespace {{namespaceName}} {
 {{/fileNamespaces}}
 
-{{#fileStructs}}
-constexpr ::capnproto::internal::StructSize {{structName}}::STRUCT_SIZE;
+{{#fileTypes}}
+{{#typeStruct}}
+constexpr ::capnproto::internal::StructSize {{structFullName}}::STRUCT_SIZE;
 
 {{#structFields}}
 {{#fieldDefaultBytes}}
 const ::capnproto::internal::AlignedData<{{defaultWordCount}}>
-    {{structName}}::DEFAULT_{{fieldUpperCase}} = {
+    {{structFullName}}::DEFAULT_{{fieldUpperCase}} = {
   { {{defaultByteList}} }
 };
 {{/fieldDefaultBytes}}
 {{/structFields}}
-{{/fileStructs}}
+{{/typeStruct}}
+{{/fileTypes}}
 
 {{#fileNamespaces}}
 }  // namespace

@@ -283,6 +283,20 @@ TEST(Encoding, UnionDefault) {
   }
 }
 
+TEST(Encoding, NestedTypes) {
+  // This is more of a test of the generated code than the encoding.
+
+  MallocMessageBuilder builder;
+  TestNestedTypes::Reader reader = builder.getRoot<TestNestedTypes>().asReader();
+
+  EXPECT_EQ(TestNestedTypes::NestedEnum::BAR, reader.getOuterNestedEnum());
+  EXPECT_EQ(TestNestedTypes::NestedStruct::NestedEnum::QUUX, reader.getInnerNestedEnum());
+
+  TestNestedTypes::NestedStruct::Reader nested = reader.getNestedStruct();
+  EXPECT_EQ(TestNestedTypes::NestedEnum::BAR, nested.getOuterNestedEnum());
+  EXPECT_EQ(TestNestedTypes::NestedStruct::NestedEnum::QUUX, nested.getInnerNestedEnum());
+}
+
 }  // namespace
 }  // namespace internal
 }  // namespace capnproto

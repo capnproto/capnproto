@@ -29,6 +29,8 @@ import qualified Data.ByteString.UTF8 as ByteStringUTF8
 import Data.FileEmbed(embedFile)
 import Data.Word(Word8)
 import qualified Data.Digest.MD5 as MD5
+import qualified Data.Map as Map
+import Data.Maybe(catMaybes)
 import Data.Binary.IEEE754(floatToWord, doubleToWord)
 import Text.Printf(printf)
 import Text.Hastache
@@ -43,6 +45,28 @@ import WireFormat
 -- MuNothing isn't considered a false value for the purpose of {{#variable}} expansion.  Use this
 -- instead.
 muNull = MuBool False;
+
+-- There is no way to make a MuType from a singular MuContext, i.e. for optional sub-contexts.
+-- Using a single-element list has the same effect, though.
+muJust c = MuList [c]
+
+fullName desc = scopePrefix (descParent desc) ++ descName desc
+
+scopePrefix (DescFile _) = ""
+scopePrefix desc = fullName desc ++ "::"
+
+globalName (DescFile _) = " "  -- TODO: namespaces
+globalName desc = globalName (descParent desc) ++ "::" ++ descName desc
+
+-- Flatten the descriptor tree in pre-order, returning struct and interface descriptors only.  We
+-- skip enums because they are always declared directly in their parent scope.
+flattenTypes :: [Desc] -> [Desc]
+flattenTypes [] = []
+flattenTypes (d@(DescStruct s):rest) = d:(flattenTypes children ++ flattenTypes rest) where
+    children = catMaybes $ Map.elems $ structMemberMap s
+flattenTypes (d@(DescInterface i):rest) = d:(flattenTypes children ++ flattenTypes rest) where
+    children = catMaybes $ Map.elems $ interfaceMemberMap i
+flattenTypes (_:rest) = flattenTypes rest
 
 hashString :: String -> String
 hashString str =
@@ -93,9 +117,9 @@ cxxTypeString (BuiltinType BuiltinFloat32) = "float"
 cxxTypeString (BuiltinType BuiltinFloat64) = "double"
 cxxTypeString (BuiltinType BuiltinText) = " ::capnproto::Text"
 cxxTypeString (BuiltinType BuiltinData) = " ::capnproto::Data"
-cxxTypeString (EnumType desc) = enumName desc               -- TODO: full name
-cxxTypeString (StructType desc) = structName desc           -- TODO: full name
-cxxTypeString (InterfaceType desc) = interfaceName desc     -- TODO: full name
+cxxTypeString (EnumType desc) = globalName $ DescEnum desc
+cxxTypeString (StructType desc) = globalName $ DescStruct desc
+cxxTypeString (InterfaceType desc) = globalName $ DescInterface desc
 cxxTypeString (ListType t) = concat [" ::capnproto::List<", cxxTypeString t, ">"]
 
 cxxFieldSizeString Size0 = "VOID";
@@ -192,7 +216,7 @@ fieldContext parent desc = mkStrContext context where
     context "fieldIsStructList" = MuBool $ isStructList $ fieldType desc
     context "fieldDefaultBytes" =
         case fieldDefaultValue desc >>= defaultValueBytes (fieldType desc) of
-            Just v -> MuList [defaultBytesContext context (fieldType desc) v]
+            Just v -> muJust $ defaultBytesContext context (fieldType desc) v
             Nothing -> muNull
     context "fieldType" = MuVariable $ cxxTypeString $ fieldType desc
     context "fieldBlobType" = MuVariable $ blobTypeString $ fieldType desc
@@ -205,7 +229,7 @@ fieldContext parent desc = mkStrContext context where
     context "fieldElementType" =
         MuVariable $ cxxTypeString $ elementType $ fieldType desc
     context "fieldUnion" = case fieldUnion desc of
-        Just (u, _) -> MuList [unionContext context u]
+        Just (u, _) -> muJust $ unionContext context u
         Nothing -> muNull
     context "fieldUnionDiscriminant" = case fieldUnion desc of
         Just (_, n) -> MuVariable n
@@ -221,23 +245,44 @@ unionContext parent desc = mkStrContext context where
     context "unionHasRetro" = MuBool $ unionHasRetro desc
     context s = parent s
 
+childContext parent name = mkStrContext context where
+    context "nestedName" = MuVariable name
+    context s = parent s
+
 structContext parent desc = mkStrContext context where
     context "structName" = MuVariable $ structName desc
+    context "structFullName" = MuVariable $ fullName (DescStruct desc)
     context "structFields" = MuList $ map (fieldContext context) $ structFields desc
     context "structUnions" = MuList $ map (unionContext context) $ structUnions desc
     context "structDataSize" = MuVariable $ packingDataSize $ structPacking desc
     context "structReferenceCount" = MuVariable $ packingReferenceCount $ structPacking desc
-    context "structChildren" = MuList []  -- TODO
+    context "structNestedEnums" =
+        MuList $ map (enumContext context) $ structNestedEnums desc
+    context "structNestedStructs" =
+        MuList $ map (childContext context . structName) $ structNestedStructs desc
+    context "structNestedInterfaces" =
+        MuList $ map (childContext context . interfaceName) $ structNestedInterfaces desc
+    context s = parent s
+
+typeContext parent desc = mkStrContext context where
+    context "typeStruct" = case desc of
+        DescStruct d -> muJust $ structContext context d
+        _ -> muNull
+    context "typeEnum" = case desc of
+        DescEnum d -> muJust $ enumContext context d
+        _ -> muNull
     context s = parent s
 
 fileContext desc = mkStrContext context where
+    flattenedMembers = flattenTypes $ catMaybes $ Map.elems $ fileMemberMap desc
+
     context "fileName" = MuVariable $ fileName desc
     context "fileBasename" = MuVariable $ takeBaseName $ fileName desc
     context "fileIncludeGuard" = MuVariable $
         "CAPNPROTO_INCLUDED_" ++ hashString (fileName desc)
     context "fileNamespaces" = MuList []  -- TODO
     context "fileEnums" = MuList $ map (enumContext context) $ fileEnums desc
-    context "fileStructs" = MuList $ map (structContext context) $ fileStructs desc
+    context "fileTypes" = MuList $ map (typeContext context) flattenedMembers
     context s = error ("Template variable not defined: " ++ s)
 
 headerTemplate :: String
