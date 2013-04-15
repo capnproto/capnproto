@@ -129,31 +129,10 @@ public:
   virtual SegmentReader* tryGetSegment(SegmentId id) = 0;
   // Gets the segment with the given ID, or return nullptr if no such segment exists.
 
-  virtual void reportInvalidData(const char* description) = 0;
-  // Called to report that the message data is invalid.
-  //
-  // Implementations should, ideally, report the error to the sender, if possible.  They may also
-  // want to write a debug message, etc.
-  //
-  // Implementations may choose to throw an exception in order to cut short further processing of
-  // the message.  If no exception is thrown, then the caller will attempt to work around the
-  // invalid data by using a default value instead.  This is good enough to guard against
-  // maliciously-crafted messages (the sender could just as easily have sent a perfectly-valid
-  // message containing the default value), but in the case of accidentally-corrupted messages this
-  // behavior may propagate the corruption.
-  //
-  // TODO:  Give more information about the error, e.g. the segment and offset at which the invalid
-  //   data was encountered, any relevant type/field names if known, etc.
-
   virtual void reportReadLimitReached() = 0;
-  // Called to report that the read limit has been reached.  See ReadLimiter, below.
-  //
-  // As with reportInvalidData(), this may throw an exception, and if it doesn't, default values
-  // will be used in place of the actual message data.
-  //
-  // If this method returns rather that throwing, many other errors are likely to be reported as
-  // a side-effect of reading being blocked.  The Arena should ignore all further errors
-  // after this call.
+  // Called to report that the read limit has been reached.  See ReadLimiter, below.  This invokes
+  // the VALIDATE_INPUT() macro which may throw an exception; if it return normally, the caller
+  // will need to continue with default values.
 
   // TODO:  Methods to deal with bundled capabilities.
 };
@@ -166,13 +145,11 @@ public:
 
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
-  void reportInvalidData(const char* description) override;
   void reportReadLimitReached() override;
 
 private:
   MessageReader* message;
   ReadLimiter readLimiter;
-  bool ignoreErrors;
 
   // Optimize for single-segment messages so that small messages are handled quickly.
   SegmentReader segment0;
@@ -203,7 +180,6 @@ public:
 
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
-  void reportInvalidData(const char* description) override;
   void reportReadLimitReached() override;
 
 private:

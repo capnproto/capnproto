@@ -50,13 +50,13 @@ internal::StructReader MessageReader::getRootInternal() {
   }
 
   internal::SegmentReader* segment = arena()->tryGetSegment(SegmentId(0));
-  if (segment == nullptr ||
-      !segment->containsInterval(segment->getStartPtr(), segment->getStartPtr() + 1)) {
-    arena()->reportInvalidData("Message did not contain a root pointer.");
+  VALIDATE_INPUT(segment != nullptr &&
+      segment->containsInterval(segment->getStartPtr(), segment->getStartPtr() + 1),
+      "Message did not contain a root pointer.") {
     return internal::StructReader::readEmpty();
-  } else {
-    return internal::StructReader::readRoot(segment->getStartPtr(), segment, options.nestingLimit);
   }
+
+  return internal::StructReader::readRoot(segment->getStartPtr(), segment, options.nestingLimit);
 }
 
 // -------------------------------------------------------------------
@@ -107,53 +107,6 @@ ArrayPtr<const ArrayPtr<const word>> MessageBuilder::getSegmentsForOutput() {
   } else {
     return nullptr;
   }
-}
-
-// =======================================================================================
-
-ErrorReporter::~ErrorReporter() {}
-
-class ThrowingErrorReporter: public ErrorReporter {
-public:
-  virtual ~ThrowingErrorReporter() {}
-
-  void reportError(const char* description) override {
-    FAIL_VALIDATE_INPUT("Invalid Cap'n Proto message", description);
-  }
-};
-
-ErrorReporter* getThrowingErrorReporter() {
-  static ThrowingErrorReporter instance;
-  return &instance;
-}
-
-class StderrErrorReporter: public ErrorReporter {
-public:
-  virtual ~StderrErrorReporter() {}
-
-  void reportError(const char* description) override {
-    std::string message("ERROR: Cap'n Proto message was invalid: ");
-    message += description;
-    message += '\n';
-    write(STDERR_FILENO, message.data(), message.size());
-  }
-};
-
-ErrorReporter* getStderrErrorReporter() {
-  static StderrErrorReporter instance;
-  return &instance;
-}
-
-class IgnoringErrorReporter: public ErrorReporter {
-public:
-  virtual ~IgnoringErrorReporter() {}
-
-  void reportError(const char* description) override {}
-};
-
-ErrorReporter* getIgnoringErrorReporter() {
-  static IgnoringErrorReporter instance;
-  return &instance;
 }
 
 // =======================================================================================

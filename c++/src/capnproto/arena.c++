@@ -39,7 +39,6 @@ Arena::~Arena() {}
 ReaderArena::ReaderArena(MessageReader* message)
     : message(message),
       readLimiter(message->getOptions().traversalLimitInWords * WORDS),
-      ignoreErrors(false),
       segment0(this, SegmentId(0), message->getSegment(0), &readLimiter) {}
 
 ReaderArena::~ReaderArena() {}
@@ -79,21 +78,8 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
   return slot->get();
 }
 
-void ReaderArena::reportInvalidData(const char* description) {
-  if (!ignoreErrors) {
-    message->getOptions().errorReporter->reportError(description);
-  }
-}
-
 void ReaderArena::reportReadLimitReached() {
-  if (!ignoreErrors) {
-    message->getOptions().errorReporter->reportError(
-        "Exceeded message traversal limit.  See capnproto::ReaderOptions.");
-
-    // Ignore further errors since they are likely repeats or caused by the read limit being
-    // reached.
-    ignoreErrors = true;
-  }
+  FAIL_VALIDATE_INPUT("Exceeded message traversal limit.  See capnproto::ReaderOptions.");
 }
 
 // =======================================================================================
@@ -204,14 +190,9 @@ SegmentReader* BuilderArena::tryGetSegment(SegmentId id) {
   }
 }
 
-void BuilderArena::reportInvalidData(const char* description) {
-  // TODO:  Better error reporting.
-  fprintf(stderr, "BuilderArena: Parse error: %s\n", description);
-}
-
 void BuilderArena::reportReadLimitReached() {
-  // TODO:  Better error reporting.
-  fputs("BuilderArena: Exceeded read limit.\n", stderr);
+  FAIL_RECOVERABLE_CHECK(
+      "Read limit reached for BuilderArena, but it should have been unlimited.") {}
 }
 
 }  // namespace internal

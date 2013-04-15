@@ -258,14 +258,15 @@ struct WireHelpers {
     if (ref->kind() == WireReference::FAR) {
       // Look up the segment containing the landing pad.
       segment = segment->getArena()->tryGetSegment(ref->farRef.segmentId.get());
-      if (CAPNPROTO_EXPECT_FALSE(segment == nullptr)) {
+      VALIDATE_INPUT(segment != nullptr, "Message contains far pointer to unknown segment.") {
         return nullptr;
       }
 
       // Find the landing pad and check that it is within bounds.
       const word* ptr = segment->getStartPtr() + ref->farPositionInSegment();
       WordCount padWords = (1 + ref->isDoubleFar()) * REFERENCE_SIZE_IN_WORDS;
-      if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr + padWords))) {
+      VALIDATE_INPUT(segment->containsInterval(ptr, ptr + padWords),
+                     "Message contains out-of-bounds far pointer.") {
         return nullptr;
       }
 
@@ -282,7 +283,8 @@ struct WireHelpers {
       ref = pad + 1;
 
       segment = segment->getArena()->tryGetSegment(pad->farRef.segmentId.get());
-      if (CAPNPROTO_EXPECT_FALSE(segment == nullptr)) {
+      VALIDATE_INPUT(segment != nullptr,
+                     "Message contains double-far pointer to unknown segment.") {
         return nullptr;
       }
 
@@ -608,28 +610,24 @@ struct WireHelpers {
       ref = reinterpret_cast<const WireReference*>(defaultValue);
       ptr = ref->target();
     } else if (segment != nullptr) {
-      if (CAPNPROTO_EXPECT_FALSE(nestingLimit == 0)) {
-        segment->getArena()->reportInvalidData(
-            "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.");
+      VALIDATE_INPUT(nestingLimit > 0,
+            "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.") {
         goto useDefault;
       }
 
       ptr = followFars(ref, segment);
       if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
-        segment->getArena()->reportInvalidData(
-            "Message contains invalid far reference.");
+        // Already reported the error.
         goto useDefault;
       }
 
-      if (CAPNPROTO_EXPECT_FALSE(ref->kind() != WireReference::STRUCT)) {
-        segment->getArena()->reportInvalidData(
-            "Message contains non-struct reference where struct reference was expected.");
+      VALIDATE_INPUT(ref->kind() == WireReference::STRUCT,
+            "Message contains non-struct reference where struct reference was expected.") {
         goto useDefault;
       }
 
-      if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr + ref->structRef.wordSize()))){
-        segment->getArena()->reportInvalidData(
-            "Message contained out-of-bounds struct reference.");
+      VALIDATE_INPUT(segment->containsInterval(ptr, ptr + ref->structRef.wordSize()),
+            "Message contained out-of-bounds struct reference.") {
         goto useDefault;
       }
     } else {
@@ -657,22 +655,19 @@ struct WireHelpers {
       ref = reinterpret_cast<const WireReference*>(defaultValue);
       ptr = ref->target();
     } else if (segment != nullptr) {
-      if (CAPNPROTO_EXPECT_FALSE(nestingLimit == 0)) {
-        segment->getArena()->reportInvalidData(
-            "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.");
+      VALIDATE_INPUT(nestingLimit > 0,
+            "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.") {
         goto useDefault;
       }
 
       ptr = followFars(ref, segment);
       if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
-        segment->getArena()->reportInvalidData(
-            "Message contains invalid far reference.");
+        // Already reported error.
         goto useDefault;
       }
 
-      if (CAPNPROTO_EXPECT_FALSE(ref->kind() != WireReference::LIST)) {
-        segment->getArena()->reportInvalidData(
-            "Message contains non-list reference where list reference was expected.");
+      VALIDATE_INPUT(ref->kind() == WireReference::LIST,
+            "Message contains non-list reference where list reference was expected.") {
         goto useDefault;
       }
     } else {
@@ -691,25 +686,21 @@ struct WireHelpers {
       ptr += REFERENCE_SIZE_IN_WORDS;
 
       if (segment != nullptr) {
-        if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(
-            ptr - REFERENCE_SIZE_IN_WORDS, ptr + wordCount))) {
-          segment->getArena()->reportInvalidData(
-              "Message contains out-of-bounds list reference.");
+        VALIDATE_INPUT(segment->containsInterval(ptr - REFERENCE_SIZE_IN_WORDS, ptr + wordCount),
+              "Message contains out-of-bounds list reference.") {
           goto useDefault;
         }
 
-        if (CAPNPROTO_EXPECT_FALSE(tag->kind() != WireReference::STRUCT)) {
-          segment->getArena()->reportInvalidData(
-              "INLINE_COMPOSITE lists of non-STRUCT type are not supported.");
+        VALIDATE_INPUT(tag->kind() == WireReference::STRUCT,
+              "INLINE_COMPOSITE lists of non-STRUCT type are not supported.") {
           goto useDefault;
         }
 
         size = tag->inlineCompositeListElementCount();
         wordsPerElement = tag->structRef.wordSize() / ELEMENTS;
 
-        if (CAPNPROTO_EXPECT_FALSE(size * wordsPerElement > wordCount)) {
-          segment->getArena()->reportInvalidData(
-              "INLINE_COMPOSITE list's elements overrun its word count.");
+        VALIDATE_INPUT(size * wordsPerElement <= wordCount,
+              "INLINE_COMPOSITE list's elements overrun its word count.") {
           goto useDefault;
         }
 
@@ -719,10 +710,8 @@ struct WireHelpers {
         // if it were a primitive list without branching.
 
         // Check whether the size is compatible.
-        bool compatible = false;
         switch (expectedElementSize) {
           case FieldSize::VOID:
-            compatible = true;
             break;
 
           case FieldSize::BIT:
@@ -730,7 +719,10 @@ struct WireHelpers {
           case FieldSize::TWO_BYTES:
           case FieldSize::FOUR_BYTES:
           case FieldSize::EIGHT_BYTES:
-            compatible = tag->structRef.dataSize.get() > 0 * WORDS;
+            VALIDATE_INPUT(tag->structRef.dataSize.get() > 0 * WORDS,
+                  "Expected a primitive list, but got a list of pointer-only structs.") {
+              goto useDefault;
+            }
             break;
 
           case FieldSize::REFERENCE:
@@ -738,17 +730,14 @@ struct WireHelpers {
             // in the struct is the reference we were looking for, we want to munge the pointer to
             // point at the first element's reference segment.
             ptr += tag->structRef.dataSize.get();
-            compatible = tag->structRef.refCount.get() > 0 * REFERENCES;
+            VALIDATE_INPUT(tag->structRef.refCount.get() > 0 * REFERENCES,
+                  "Expected a pointer list, but got a list of data-only structs.") {
+              goto useDefault;
+            }
             break;
 
           case FieldSize::INLINE_COMPOSITE:
-            compatible = true;
             break;
-        }
-
-        if (CAPNPROTO_EXPECT_FALSE(!compatible)) {
-          segment->getArena()->reportInvalidData("A list had incompatible element type.");
-          goto useDefault;
         }
 
       } else {
@@ -770,10 +759,9 @@ struct WireHelpers {
       decltype(BITS/ELEMENTS) step = bitsPerElement(ref->listRef.elementSize());
 
       if (segment != nullptr) {
-        if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr +
-            roundUpToWords(ElementCount64(ref->listRef.elementCount()) * step)))) {
-          segment->getArena()->reportInvalidData(
-              "Message contained out-of-bounds list reference.");
+        VALIDATE_INPUT(segment->containsInterval(ptr, ptr +
+              roundUpToWords(ElementCount64(ref->listRef.elementCount()) * step)),
+              "Message contained out-of-bounds list reference.") {
           goto useDefault;
         }
       }
@@ -818,7 +806,6 @@ struct WireHelpers {
                           dataSize, referenceCount, nestingLimit - 1);
       } else {
         PRECOND(segment != nullptr, "Trusted message had incompatible list element type.");
-        segment->getArena()->reportInvalidData("A list had incompatible element type.");
         goto useDefault;
       }
     }
@@ -839,39 +826,34 @@ struct WireHelpers {
                           ref->listRef.elementCount() / ELEMENTS - 1);
     } else {
       const word* ptr = followFars(ref, segment);
-      uint size = ref->listRef.elementCount() / ELEMENTS;
 
       if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
-        segment->getArena()->reportInvalidData(
-            "Message contains invalid far reference.");
+        // Already reported error.
         goto useDefault;
       }
 
-      if (CAPNPROTO_EXPECT_FALSE(ref->kind() != WireReference::LIST)) {
-        segment->getArena()->reportInvalidData(
-            "Message contains non-list reference where text was expected.");
+      uint size = ref->listRef.elementCount() / ELEMENTS;
+
+      VALIDATE_INPUT(ref->kind() == WireReference::LIST,
+            "Message contains non-list reference where text was expected.") {
         goto useDefault;
       }
 
-      if (CAPNPROTO_EXPECT_FALSE(ref->listRef.elementSize() != FieldSize::BYTE)) {
-        segment->getArena()->reportInvalidData(
-            "Message contains list reference of non-bytes where text was expected.");
+      VALIDATE_INPUT(ref->listRef.elementSize() == FieldSize::BYTE,
+            "Message contains list reference of non-bytes where text was expected.") {
         goto useDefault;
       }
 
-      if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr +
-          roundUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))))) {
-        segment->getArena()->reportInvalidData(
-            "Message contained out-of-bounds text reference.");
+      VALIDATE_INPUT(segment->containsInterval(ptr, ptr +
+            roundUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))),
+            "Message contained out-of-bounds text reference.") {
         goto useDefault;
       }
 
       const char* cptr = reinterpret_cast<const char*>(ptr);
       --size;  // NUL terminator
 
-      if (CAPNPROTO_EXPECT_FALSE(cptr[size] != '\0')) {
-        segment->getArena()->reportInvalidData(
-            "Message contains text that is not NUL-terminated.");
+      VALIDATE_INPUT(cptr[size] == '\0', "Message contains text that is not NUL-terminated.") {
         goto useDefault;
       }
 
@@ -891,30 +873,27 @@ struct WireHelpers {
                         ref->listRef.elementCount() / ELEMENTS);
     } else {
       const word* ptr = followFars(ref, segment);
-      uint size = ref->listRef.elementCount() / ELEMENTS;
 
       if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
-        segment->getArena()->reportInvalidData(
-            "Message contains invalid far reference.");
+        // Already reported error.
         goto useDefault;
       }
 
-      if (CAPNPROTO_EXPECT_FALSE(ref->kind() != WireReference::LIST)) {
-        segment->getArena()->reportInvalidData(
-            "Message contains non-list reference where data was expected.");
+      uint size = ref->listRef.elementCount() / ELEMENTS;
+
+      VALIDATE_INPUT(ref->kind() == WireReference::LIST,
+            "Message contains non-list reference where data was expected.") {
         goto useDefault;
       }
 
-      if (CAPNPROTO_EXPECT_FALSE(ref->listRef.elementSize() != FieldSize::BYTE)) {
-        segment->getArena()->reportInvalidData(
-            "Message contains list reference of non-bytes where data was expected.");
+      VALIDATE_INPUT(ref->listRef.elementSize() == FieldSize::BYTE,
+            "Message contains list reference of non-bytes where data was expected.") {
         goto useDefault;
       }
 
-      if (CAPNPROTO_EXPECT_FALSE(!segment->containsInterval(ptr, ptr +
-          roundUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))))) {
-        segment->getArena()->reportInvalidData(
-            "Message contained out-of-bounds data reference.");
+      VALIDATE_INPUT(segment->containsInterval(ptr, ptr +
+            roundUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))),
+            "Message contained out-of-bounds data reference.") {
         goto useDefault;
       }
 
@@ -1009,8 +988,8 @@ StructReader StructReader::readRootTrusted(const word* location) {
 
 StructReader StructReader::readRoot(
     const word* location, SegmentReader* segment, int nestingLimit) {
-  if (!segment->containsInterval(location, location + REFERENCE_SIZE_IN_WORDS)) {
-    segment->getArena()->reportInvalidData("Root location out-of-bounds.");
+  VALIDATE_INPUT(segment->containsInterval(location, location + REFERENCE_SIZE_IN_WORDS),
+                 "Root location out-of-bounds.") {
     location = nullptr;
   }
 
@@ -1115,18 +1094,17 @@ ListReader ListBuilder::asReader(WordCount dataSize, WireReferenceCount referenc
 }
 
 StructReader ListReader::getStructElement(ElementCount index) const {
-  if (CAPNPROTO_EXPECT_FALSE((segment != nullptr) & (nestingLimit == 0))) {
-    segment->getArena()->reportInvalidData(
-        "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.");
+  VALIDATE_INPUT((segment == nullptr) | (nestingLimit > 0),
+        "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.") {
     return StructReader::readEmpty();
-  } else {
-    BitCount64 indexBit = ElementCount64(index) * stepBits;
-    const byte* structPtr = reinterpret_cast<const byte*>(ptr) + indexBit / BITS_PER_BYTE;
-    return StructReader(
-        segment, structPtr,
-        reinterpret_cast<const WireReference*>(structPtr + structDataSize * BYTES_PER_WORD),
-        structDataSize, structReferenceCount, indexBit % BITS_PER_BYTE, nestingLimit - 1);
   }
+
+  BitCount64 indexBit = ElementCount64(index) * stepBits;
+  const byte* structPtr = reinterpret_cast<const byte*>(ptr) + indexBit / BITS_PER_BYTE;
+  return StructReader(
+      segment, structPtr,
+      reinterpret_cast<const WireReference*>(structPtr + structDataSize * BYTES_PER_WORD),
+      structDataSize, structReferenceCount, indexBit % BITS_PER_BYTE, nestingLimit - 1);
 }
 
 ListReader ListReader::getListElement(

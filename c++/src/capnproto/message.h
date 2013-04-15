@@ -42,38 +42,6 @@ typedef Id<uint32_t, Segment> SegmentId;
 
 // =======================================================================================
 
-class ErrorReporter {
-  // Abstract interface for a class which receives notification of errors found in an input message.
-
-public:
-  virtual ~ErrorReporter();
-
-  virtual void reportError(const char* description) = 0;
-  // Reports an error discovered while validating a message.  This happens lazily, as the message
-  // is traversed.  E.g., it can happen when a get() accessor is called for a sub-struct or list,
-  // and that object is found to be out-of-bounds or has the wrong type.
-  //
-  // This method can throw an exception.  If it does not, then the getter that was called will
-  // return the default value.  Returning a default value is sufficient to prevent invalid messages
-  // from being a security threat, since an attacker could always construct a valid message
-  // containing the default value to get the same effect.  However, returning a default value is
-  // not ideal when handling messages that were accidentally corrupted -- it may lead to the wrong
-  // behavior, e.g. storing the wrong data to disk, which could cause further problems down the
-  // road.  Therefore, throwing an exception is preferred -- if your code is exception-safe, of
-  // course.
-};
-
-ErrorReporter* getThrowingErrorReporter();
-// Returns a singleton ErrorReporter which throws an exception (deriving from std::exception) on
-// error.
-
-ErrorReporter* getStderrErrorReporter();
-// Returns a singleton ErrorReporter which prints a message to stderr on error, then replaces the
-// invalid data with the default value.
-
-ErrorReporter* getIgnoringErrorReporter();
-// Returns a singleton ErrorReporter which silently replaces invalid data with its default value.
-
 struct ReaderOptions {
   // Options controlling how data is read.
 
@@ -107,9 +75,6 @@ struct ReaderOptions {
   // overflow by sending a very-deeply-nested (or even cyclic) message, without the message even
   // being very large.  The default limit of 64 is probably low enough to prevent any chance of
   // stack overflow, yet high enough that it is never a problem in practice.
-
-  ErrorReporter* errorReporter = getThrowingErrorReporter();
-  // How to report errors.
 };
 
 class MessageReader {

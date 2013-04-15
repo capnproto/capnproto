@@ -41,8 +41,7 @@ FlatArrayMessageReader::FlatArrayMessageReader(ArrayPtr<const word> array, Reade
   uint segmentCount = table[0].get() + 1;
   size_t offset = segmentCount / 2u + 1u;
 
-  if (array.size() < offset) {
-    options.errorReporter->reportError("Message ends prematurely in segment table.");
+  VALIDATE_INPUT(array.size() >= offset, "Message ends prematurely in segment table.") {
     return;
   }
 
@@ -52,8 +51,8 @@ FlatArrayMessageReader::FlatArrayMessageReader(ArrayPtr<const word> array, Reade
 
   uint segmentSize = table[1].get();
 
-  if (array.size() < offset + segmentSize) {
-    options.errorReporter->reportError("Message ends prematurely in first segment.");
+  VALIDATE_INPUT(array.size() >= offset + segmentSize,
+                 "Message ends prematurely in first segment.") {
     return;
   }
 
@@ -66,9 +65,8 @@ FlatArrayMessageReader::FlatArrayMessageReader(ArrayPtr<const word> array, Reade
     for (uint i = 1; i < segmentCount; i++) {
       uint segmentSize = table[i + 1].get();
 
-      if (array.size() < offset + segmentSize) {
+      VALIDATE_INPUT(array.size() >= offset + segmentSize, "Message ends prematurely.") {
         moreSegments = nullptr;
-        options.errorReporter->reportError("Message ends prematurely.");
         return;
       }
 
