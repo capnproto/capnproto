@@ -20,7 +20,8 @@ executable capnpc
                    array,
                    data-binary-ieee754,
                    filepath,
-                   directory
+                   directory,
+                   syb
   ghc-options:     -Wall -fno-warn-missing-signatures
   other-modules:
                    Lexer,
@@ -31,5 +32,5 @@ executable capnpc
                    Semantics,
                    Util,
                    CxxGenerator,
+                   JsonGenerator,
                    WireFormat
-
