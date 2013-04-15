@@ -89,8 +89,7 @@ exception.  The callback may abort the process, and is required to do so in cert
 to continue by inventing "safe" values.  This will lead to garbage output, but at least the program
 will not crash.  Your exception callback should set some sort of a flag indicating that an error
 occurred, and somewhere up the stack you should check for that flag and cancel the operation.
-(TODO: Document how to register this callback; this is not actually implemented as of this
-writing.)
+See the header `capnproto/exception.h` for details on how to register an exception callback.
 
 ## Generating Code
 
