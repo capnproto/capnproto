@@ -23,6 +23,7 @@
 
 module Parser (parseFile) where
 
+import Data.Generics
 import Text.Parsec hiding (tokens)
 import Text.Parsec.Error(newErrorMessage, Message(Message))
 import Token
@@ -72,14 +73,13 @@ located p = do
     t <- p
     return (Located (locatedPos (head input)) t)
 
--- Hmm, boilerplate is not supposed to happen in Haskell.
-matchIdentifier t        = case locatedValue t of { (Identifier        v) -> Just v; _ -> Nothing }
-matchTypeIdentifier t    = case locatedValue t of { (TypeIdentifier    v) -> Just v; _ -> Nothing }
-matchParenthesizedList t = case locatedValue t of { (ParenthesizedList v) -> Just v; _ -> Nothing }
-matchBracketedList t     = case locatedValue t of { (BracketedList     v) -> Just v; _ -> Nothing }
-matchLiteralInt t        = case locatedValue t of { (LiteralInt        v) -> Just v; _ -> Nothing }
-matchLiteralFloat t      = case locatedValue t of { (LiteralFloat      v) -> Just v; _ -> Nothing }
-matchLiteralString t     = case locatedValue t of { (LiteralString     v) -> Just v; _ -> Nothing }
+matchUnary :: (Data a, Data b) => (a -> b) -> Located b -> Maybe a
+matchUnary c t = if toConstr(c undefined) == toConstr(v)
+        then Just $ gmapQi 0 (undefined `mkQ` id) v
+        else Nothing
+    where v = locatedValue t
+matchIdentifier = matchUnary Identifier
+matchTypeIdentifier = matchUnary TypeIdentifier
 matchLiteralBool t = case locatedValue t of
     TrueKeyword -> Just True
     FalseKeyword -> Just False
@@ -98,10 +98,10 @@ anyIdentifier = tokenParser matchIdentifier
             <|> tokenParser matchTypeIdentifier
             <?> "identifier"
 
-literalInt = tokenParser matchLiteralInt <?> "integer"
-literalFloat = tokenParser matchLiteralFloat <?> "floating-point number"
-literalString = tokenParser matchLiteralString <?> "string"
-literalBool = tokenParser matchLiteralBool <?> "boolean"
+literalInt = tokenParser (matchUnary LiteralInt) <?> "integer"
+literalFloat = tokenParser (matchUnary LiteralFloat) <?> "floating-point number"
+literalString = tokenParser (matchUnary LiteralString) <?> "string"
+literalBool = tokenParser (matchLiteralBool) <?> "boolean"
 literalVoid = tokenParser (matchSimpleToken VoidKeyword) <?> "\"void\""
 
 atSign = tokenParser (matchSimpleToken AtSign) <?> "\"@\""
@@ -121,10 +121,10 @@ interfaceKeyword = tokenParser (matchSimpleToken InterfaceKeyword) <?> "\"interf
 optionKeyword = tokenParser (matchSimpleToken OptionKeyword) <?> "\"option\""
 
 parenthesizedList parser = do
-    items <- tokenParser matchParenthesizedList
+    items <- tokenParser (matchUnary ParenthesizedList)
     parseList parser items
 bracketedList parser = do
-    items <- tokenParser matchBracketedList
+    items <- tokenParser (matchUnary BracketedList)
     parseList parser items
 
 declNameBase :: TokenParser DeclName
