@@ -44,6 +44,7 @@ includecapnpdir = $(includedir)/capnproto
 includecapnp_HEADERS =                                         \
   src/capnproto/macros.h                                       \
   src/capnproto/type-safety.h                                  \
+  src/capnproto/exception.h                                    \
   src/capnproto/blob.h                                         \
   src/capnproto/layout.h                                       \
   src/capnproto/list.h                                         \
@@ -61,6 +62,11 @@ lib_LIBRARIES = libcapnproto.a
 libcapnproto_a_SOURCES=                                        \
   src/capnproto/macros.c++                                     \
   src/capnproto/type-safety.c++                                \
+  src/capnproto/exception.c++                                  \
+  src/capnproto/util.h                                         \
+  src/capnproto/util.c++                                       \
+  src/capnproto/logging.h                                      \
+  src/capnproto/logging.c++                                    \
   src/capnproto/blob.c++                                       \
   src/capnproto/arena.h                                        \
   src/capnproto/arena.c++                                      \
@@ -101,6 +107,8 @@ capnproto_test_LDADD = -lgtest -lgtest_main libcapnproto.a
 capnproto_test_SOURCES =                                       \
   src/capnproto/type-safety-test.c++                           \
   src/capnproto/blob-test.c++                                  \
+  src/capnproto/util-test.c++                                  \
+  src/capnproto/logging-test.c++                               \
   src/capnproto/layout-test.c++                                \
   src/capnproto/message-test.c++                               \
   src/capnproto/encoding-test.c++                              \
