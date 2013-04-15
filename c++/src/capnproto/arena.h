@@ -21,8 +21,12 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// THIS HEADER IS NOT INCLUDABLE BY CLIENTS, even generated code.  It is entirely internal to the
-// library, which means we can safely #include STL stuff.
+#ifndef CAPNPROTO_ARENA_H_
+#define CAPNPROTO_ARENA_H_
+
+#ifndef CAPNPROTO_PRIVATE
+#error "This header is only meant to be included by Cap'n Proto's own source code."
+#endif
 
 #include <vector>
 #include <memory>
@@ -30,9 +34,6 @@
 #include "macros.h"
 #include "type-safety.h"
 #include "message.h"
-
-#ifndef CAPNPROTO_ARENA_H_
-#define CAPNPROTO_ARENA_H_
 
 namespace capnproto {
 namespace internal {
