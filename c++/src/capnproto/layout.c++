@@ -21,7 +21,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#define CAPNPROTO_PRIVATE
 #include "layout.h"
+#include "logging.h"
 #include "arena.h"
 #include <string.h>
 #include <limits>
@@ -96,12 +98,12 @@ struct WireReference {
   }
 
   CAPNPROTO_ALWAYS_INLINE(WordCount farPositionInSegment() const) {
-    CAPNPROTO_DEBUG_ASSERT(kind() == FAR,
+    DPRECOND(kind() == FAR,
         "positionInSegment() should only be called on FAR references.");
     return (offsetAndKind.get() >> 3) * WORDS;
   }
   CAPNPROTO_ALWAYS_INLINE(bool isDoubleFar() const) {
-    CAPNPROTO_DEBUG_ASSERT(kind() == FAR,
+    DPRECOND(kind() == FAR,
         "isDoubleFar() should only be called on FAR references.");
     return (offsetAndKind.get() >> 2) & 1;
   }
@@ -149,14 +151,12 @@ struct WireReference {
       }
 
       CAPNPROTO_ALWAYS_INLINE(void set(FieldSize es, ElementCount ec)) {
-        CAPNPROTO_DEBUG_ASSERT(ec < (1 << 29) * ELEMENTS,
-            "Lists are limited to 2**29 elements.");
+        DPRECOND(ec < (1 << 29) * ELEMENTS, "Lists are limited to 2**29 elements.");
         elementSizeAndCount.set(((ec / ELEMENTS) << 3) | static_cast<int>(es));
       }
 
       CAPNPROTO_ALWAYS_INLINE(void setInlineComposite(WordCount wc)) {
-        CAPNPROTO_DEBUG_ASSERT(wc < (1 << 29) * WORDS,
-            "Inline composite lists are limited to 2**29 words.");
+        DPRECOND(wc < (1 << 29) * WORDS, "Inline composite lists are limited to 2**29 words.");
         elementSizeAndCount.set(((wc / WORDS) << 3) |
                                 static_cast<int>(FieldSize::INLINE_COMPOSITE));
       }
@@ -379,7 +379,7 @@ struct WireHelpers {
             const word* srcElement = srcPtr + REFERENCE_SIZE_IN_WORDS;
             word* dstElement = dstPtr + REFERENCE_SIZE_IN_WORDS;
 
-            CAPNPROTO_ASSERT(srcTag->kind() == WireReference::STRUCT,
+            CHECK(srcTag->kind() == WireReference::STRUCT,
                 "INLINE_COMPOSITE of lists is not yet supported.");
 
             uint n = srcTag->inlineCompositeListElementCount() / ELEMENTS;
@@ -395,7 +395,7 @@ struct WireHelpers {
         break;
       }
       default:
-        CAPNPROTO_ASSERT(false, "Copy source message contained unexpected kind.");
+        FAIL_PRECOND("Copy source message contained unexpected kind.");
         break;
     }
 
@@ -430,12 +430,12 @@ struct WireHelpers {
     } else {
       ptr = followFars(ref, segment);
 
-      CAPNPROTO_DEBUG_ASSERT(ref->kind() == WireReference::STRUCT,
+      DPRECOND(ref->kind() == WireReference::STRUCT,
           "Called getStruct{Field,Element}() but existing reference is not a struct.");
-      CAPNPROTO_DEBUG_ASSERT(
+      DPRECOND(
           ref->structRef.dataSize.get() == size.data,
           "Trying to update struct with incorrect data size.");
-      CAPNPROTO_DEBUG_ASSERT(
+      DPRECOND(
           ref->structRef.refCount.get() == size.pointers,
           "Trying to update struct with incorrect reference count.");
     }
@@ -446,7 +446,7 @@ struct WireHelpers {
   static CAPNPROTO_ALWAYS_INLINE(ListBuilder initListReference(
       WireReference* ref, SegmentBuilder* segment, ElementCount elementCount,
       FieldSize elementSize)) {
-    CAPNPROTO_DEBUG_ASSERT(elementSize != FieldSize::INLINE_COMPOSITE,
+    DPRECOND(elementSize != FieldSize::INLINE_COMPOSITE,
         "Should have called initStructListReference() instead.");
 
     // Calculate size of the list.
@@ -499,14 +499,14 @@ struct WireHelpers {
     } else {
       ptr = followFars(ref, segment);
 
-      CAPNPROTO_ASSERT(ref->kind() == WireReference::LIST,
+      PRECOND(ref->kind() == WireReference::LIST,
           "Called getList{Field,Element}() but existing reference is not a list.");
     }
 
     if (ref->listRef.elementSize() == FieldSize::INLINE_COMPOSITE) {
       // Read the tag to get the actual element count.
       WireReference* tag = reinterpret_cast<WireReference*>(ptr);
-      CAPNPROTO_ASSERT(tag->kind() == WireReference::STRUCT,
+      PRECOND(tag->kind() == WireReference::STRUCT,
           "INLINE_COMPOSITE list with non-STRUCT elements not supported.");
       ElementCount elementCount = tag->inlineCompositeListElementCount();
 
@@ -547,9 +547,9 @@ struct WireHelpers {
     } else {
       word* ptr = followFars(ref, segment);
 
-      CAPNPROTO_ASSERT(ref->kind() == WireReference::LIST,
+      PRECOND(ref->kind() == WireReference::LIST,
           "Called getText{Field,Element}() but existing reference is not a list.");
-      CAPNPROTO_ASSERT(ref->listRef.elementSize() == FieldSize::BYTE,
+      PRECOND(ref->listRef.elementSize() == FieldSize::BYTE,
           "Called getText{Field,Element}() but existing list reference is not byte-sized.");
 
       // Subtract 1 from the size for the NUL terminator.
@@ -584,9 +584,9 @@ struct WireHelpers {
     } else {
       word* ptr = followFars(ref, segment);
 
-      CAPNPROTO_ASSERT(ref->kind() == WireReference::LIST,
+      PRECOND(ref->kind() == WireReference::LIST,
           "Called getData{Field,Element}() but existing reference is not a list.");
-      CAPNPROTO_ASSERT(ref->listRef.elementSize() == FieldSize::BYTE,
+      PRECOND(ref->listRef.elementSize() == FieldSize::BYTE,
           "Called getData{Field,Element}() but existing list reference is not byte-sized.");
 
       return Data::Builder(reinterpret_cast<char*>(ptr), ref->listRef.elementCount() / ELEMENTS);
@@ -810,14 +810,14 @@ struct WireHelpers {
             break;
 
           case FieldSize::INLINE_COMPOSITE:
-            CAPNPROTO_ASSERT(false, "can't get here");
+            FAIL_CHECK();
             break;
         }
 
         return ListReader(segment, ptr, ref->listRef.elementCount(), step,
                           dataSize, referenceCount, nestingLimit - 1);
       } else {
-        CAPNPROTO_ASSERT(segment != nullptr, "Trusted message had incompatible list element type.");
+        PRECOND(segment != nullptr, "Trusted message had incompatible list element type.");
         segment->getArena()->reportInvalidData("A list had incompatible element type.");
         goto useDefault;
       }
@@ -1102,7 +1102,7 @@ Data::Builder ListBuilder::getDataElement(WireReferenceCount index) const {
 
 ListReader ListBuilder::asReader(FieldSize elementSize) const {
   // TODO:  For INLINE_COMPOSITE I suppose we could just check the tag?
-  CAPNPROTO_ASSERT(elementSize != FieldSize::INLINE_COMPOSITE,
+  PRECOND(elementSize != FieldSize::INLINE_COMPOSITE,
       "Need to call the other asReader() overload for INLINE_COMPOSITE lists.");
   return ListReader(segment, ptr, elementCount, bitsPerElement(elementSize),
                     std::numeric_limits<int>::max());

@@ -72,7 +72,7 @@ public:
   inline const char operator[](uint index) const { return bytes[index]; }
 
   inline Reader slice(uint start, uint end) const {
-    CAPNPROTO_DEBUG_ASSERT(start <= end && end <= size_, "Out-of-bounds slice.");
+    CAPNPROTO_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds slice.");
     return Reader(bytes + start, end - start);
   }
 
@@ -110,20 +110,19 @@ class Text::Reader: public Data::Reader {
 public:
   inline Reader(): Data::Reader("", 0) {}
   inline Reader(const char* text): Data::Reader(text, strlen(text)) {
-    CAPNPROTO_DEBUG_ASSERT(text[size()] == '\0', "Text must be NUL-terminated.");
+    CAPNPROTO_INLINE_DPRECOND(text[size()] == '\0', "Text must be NUL-terminated.");
   }
   inline Reader(char* text): Data::Reader(text, strlen(text)) {
-    CAPNPROTO_DEBUG_ASSERT(text[size()] == '\0', "Text must be NUL-terminated.");
+    CAPNPROTO_INLINE_DPRECOND(text[size()] == '\0', "Text must be NUL-terminated.");
   }
   inline Reader(const char* text, uint size): Data::Reader(text, size) {
-    CAPNPROTO_DEBUG_ASSERT(text[size] == '\0', "Text must be NUL-terminated.");
+    CAPNPROTO_INLINE_DPRECOND(text[size] == '\0', "Text must be NUL-terminated.");
   }
 
   template <typename T>
   inline Reader(const T& other): Data::Reader(other.c_str(), other.size()) {
     // Primarily intended for converting from std::string.
-    CAPNPROTO_DEBUG_ASSERT(data()[size()] == '\0',
-        "Text must be NUL-terminated.");
+    CAPNPROTO_INLINE_DPRECOND(data()[size()] == '\0', "Text must be NUL-terminated.");
   }
 
   inline const char* c_str() const { return data(); }
@@ -153,7 +152,7 @@ public:
   inline char& operator[](uint index) const { return bytes[index]; }
 
   inline Builder slice(uint start, uint end) const {
-    CAPNPROTO_DEBUG_ASSERT(start <= end && end <= size_, "Out-of-bounds slice.");
+    CAPNPROTO_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds slice.");
     return Builder(bytes + start, end - start);
   }
 
@@ -172,7 +171,7 @@ public:
 
   template <typename T>
   inline void copyFrom(const T& other) const {
-    CAPNPROTO_DEBUG_ASSERT(size() == other.size(), "Sizes must match to copy.");
+    CAPNPROTO_INLINE_DPRECOND(size() == other.size(), "Sizes must match to copy.");
     memcpy(bytes, other.data(), other.size());
   }
   inline void copyFrom(const void* other) const {

@@ -25,10 +25,12 @@
 #include "logging.h"
 #include <stdlib.h>
 #include <ctype.h>
+#include <string.h>
+#include <errno.h>
 
 namespace capnproto {
 
-Log::Severity Log::minSeverity = Log::Severity::WARNING;
+Log::Severity Log::minSeverity = Log::Severity::INFO;
 
 ArrayPtr<const char> operator*(const Stringifier&, Log::Severity severity) {
   static const char* SEVERITY_STRINGS[] = {
@@ -42,8 +44,16 @@ ArrayPtr<const char> operator*(const Stringifier&, Log::Severity severity) {
   return arrayPtr(s, strlen(s));
 }
 
-static Array<char> makeDescription(const char* condition, const char* macroArgs,
-                                   ArrayPtr<Array<char>> argValues) {
+namespace {
+
+enum DescriptionStyle {
+  LOG,
+  ASSERTION,
+  SYSCALL
+};
+
+static Array<char> makeDescription(DescriptionStyle style, const char* code, int errorNumber,
+                                   const char* macroArgs, ArrayPtr<Array<char>> argValues) {
   ArrayPtr<const char> argNames[argValues.size()];
 
   if (argValues.size() > 0) {
@@ -89,18 +99,58 @@ static Array<char> makeDescription(const char* condition, const char* macroArgs,
     }
   }
 
+  if (style == SYSCALL) {
+    // Strip off leading "foo = " from code, since callers will sometimes write things like:
+    //   ssize_t n;
+    //   RECOVERABLE_SYSCALL(n = read(fd, buffer, sizeof(buffer))) { return ""; }
+    //   return std::string(buffer, n);
+    const char* equalsPos = strchr(code, '=');
+    if (equalsPos != nullptr && equalsPos[1] != '=') {
+      code = equalsPos + 1;
+      while (isspace(*code)) ++code;
+    }
+  }
+
   {
     ArrayPtr<const char> expected = arrayPtr("expected ");
-    ArrayPtr<const char> conditionArray = condition == nullptr ? nullptr : arrayPtr(condition);
+    ArrayPtr<const char> codeArray = style == LOG ? nullptr : arrayPtr(code);
     ArrayPtr<const char> sep = arrayPtr(" = ");
     ArrayPtr<const char> delim = arrayPtr("; ");
+    ArrayPtr<const char> colon = arrayPtr(": ");
+
+    if (style == ASSERTION && strcmp(code, "false") == 0) {
+      // Don't print "expected false", that's silly.
+      style = LOG;
+    }
+
+    ArrayPtr<const char> sysErrorArray;
+#if __USE_GNU
+    char buffer[256];
+    if (style == SYSCALL) {
+      sysErrorArray = arrayPtr(strerror_r(errorNumber, buffer, sizeof(buffer)));
+    }
+#else
+    // TODO:  Other unixes should have strerror_r but it may have a different signature.  Port for
+    //   thread-safety.
+    sysErrorArray = arrayPtr(strerror(errorNumber));
+#endif
 
     size_t totalSize = 0;
-    if (condition != nullptr) {
-      totalSize += expected.size() + conditionArray.size();
+    switch (style) {
+      case LOG:
+        break;
+      case ASSERTION:
+        totalSize += expected.size() + codeArray.size();
+        break;
+      case SYSCALL:
+        totalSize += codeArray.size() + colon.size() + sysErrorArray.size();
+        break;
     }
+
     for (size_t i = 0; i < argValues.size(); i++) {
-      if (i > 0 || condition != nullptr) totalSize += delim.size();
+      if (i > 0 || style != LOG) {
+        totalSize += delim.size();
+      }
       if (argNames[i].size() > 0 && argNames[i][0] != '\"') {
         totalSize += argNames[i].size() + sep.size();
       }
@@ -109,12 +159,23 @@ static Array<char> makeDescription(const char* condition, const char* macroArgs,
 
     ArrayBuilder<char> result(totalSize);
 
-    if (condition != nullptr) {
-      result.addAll(expected);
-      result.addAll(conditionArray);
+    switch (style) {
+      case LOG:
+        break;
+      case ASSERTION:
+        result.addAll(expected);
+        result.addAll(codeArray);
+        break;
+      case SYSCALL:
+        result.addAll(codeArray);
+        result.addAll(colon);
+        result.addAll(sysErrorArray);
+        break;
     }
     for (size_t i = 0; i < argValues.size(); i++) {
-      if (i > 0 || condition != nullptr) result.addAll(delim);
+      if (i > 0 || style != LOG) {
+        result.addAll(delim);
+      }
       if (argNames[i].size() > 0 && argNames[i][0] != '\"') {
         result.addAll(argNames[i]);
         result.addAll(sep);
@@ -126,11 +187,13 @@ static Array<char> makeDescription(const char* condition, const char* macroArgs,
   }
 }
 
+}  // namespace
+
 void Log::logInternal(const char* file, int line, Severity severity, const char* macroArgs,
                       ArrayPtr<Array<char>> argValues) {
   getExceptionCallback()->logMessage(
       str(severity, ": ", file, ":", line, ": ",
-          makeDescription(nullptr, macroArgs, argValues), '\n'));
+          makeDescription(LOG, nullptr, 0, macroArgs, argValues), '\n'));
 }
 
 void Log::recoverableFaultInternal(
@@ -138,7 +201,7 @@ void Log::recoverableFaultInternal(
     const char* condition, const char* macroArgs, ArrayPtr<Array<char>> argValues) {
   getExceptionCallback()->onRecoverableException(
       Exception(nature, Exception::Durability::PERMANENT, file, line,
-                makeDescription(condition, macroArgs, argValues)));
+                makeDescription(ASSERTION, condition, 0, macroArgs, argValues)));
 }
 
 void Log::fatalFaultInternal(
@@ -146,8 +209,30 @@ void Log::fatalFaultInternal(
     const char* condition, const char* macroArgs, ArrayPtr<Array<char>> argValues) {
   getExceptionCallback()->onFatalException(
       Exception(nature, Exception::Durability::PERMANENT, file, line,
-                makeDescription(condition, macroArgs, argValues)));
+                makeDescription(ASSERTION, condition, 0, macroArgs, argValues)));
   abort();
+}
+
+void Log::recoverableFailedSyscallInternal(
+    const char* file, int line, const char* call,
+    int errorNumber, const char* macroArgs, ArrayPtr<Array<char>> argValues) {
+  getExceptionCallback()->onRecoverableException(
+      Exception(Exception::Nature::OS_ERROR, Exception::Durability::PERMANENT, file, line,
+                makeDescription(SYSCALL, call, errorNumber, macroArgs, argValues)));
+}
+
+void Log::fatalFailedSyscallInternal(
+    const char* file, int line, const char* call,
+    int errorNumber, const char* macroArgs, ArrayPtr<Array<char>> argValues) {
+  getExceptionCallback()->onFatalException(
+      Exception(Exception::Nature::OS_ERROR, Exception::Durability::PERMANENT, file, line,
+                makeDescription(SYSCALL, call, errorNumber, macroArgs, argValues)));
+  abort();
+}
+
+int Log::getOsErrorNumber() {
+  int result = errno;
+  return result == EINTR ? -1 : result;
 }
 
 }  // namespace capnproto

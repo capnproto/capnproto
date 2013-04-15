@@ -21,24 +21,14 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#define CAPNPROTO_PRIVATE
 #include "io.h"
-#include <errno.h>
+#include "logging.h"
 #include <unistd.h>
 #include <sys/uio.h>
 #include <string>
-#include <string.h>
 
 namespace capnproto {
-
-class PrematureEofException: public std::exception {
-public:
-  PrematureEofException() {}
-  ~PrematureEofException() noexcept {}
-
-  const char* what() const noexcept override {
-    return "Stream ended prematurely.";
-  }
-};
 
 InputStream::~InputStream() {}
 OutputStream::~OutputStream() {}
@@ -198,17 +188,18 @@ ArrayPtr<const byte> ArrayInputStream::getReadBuffer() {
 
 size_t ArrayInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
   size_t n = std::min(maxBytes, array.size());
-  if (n < minBytes) {
-    throw PrematureEofException();
+  size_t result = n;
+  VALIDATE_INPUT(n >= minBytes, "ArrayInputStream ended prematurely.") {
+    result = minBytes;  // garbage
   }
   memcpy(dst, array.begin(), n);
   array = array.slice(n, array.size());
-  return n;
+  return result;
 }
 
 void ArrayInputStream::skip(size_t bytes) {
-  if (array.size() < bytes) {
-    throw PrematureEofException();
+  VALIDATE_INPUT(array.size() >= bytes, "ArrayInputStream ended prematurely.") {
+    bytes = array.size();
   }
   array = array.slice(bytes, array.size());
 }
@@ -227,8 +218,8 @@ void ArrayOutputStream::write(const void* src, size_t size) {
     // Oh goody, the caller wrote directly into our buffer.
     fillPos += size;
   } else {
-    CAPNPROTO_ASSERT(size <= (size_t)(array.end() - fillPos),
-                     "ArrayOutputStream's array is not big enough.");
+    PRECOND(size <= (size_t)(array.end() - fillPos),
+            "ArrayOutputStream's backing array was not large enough for the data written.");
     memcpy(fillPos, src, size);
     fillPos += size;
   }
@@ -236,31 +227,9 @@ void ArrayOutputStream::write(const void* src, size_t size) {
 
 // =======================================================================================
 
-class OsException: public std::exception {
-public:
-  OsException(const char* function, int error) {
-    char buffer[256];
-    message = function;
-    message += ": ";
-    message.append(strerror_r(error, buffer, sizeof(buffer)));
-  }
-  ~OsException() noexcept {}
-
-  const char* what() const noexcept override {
-    return message.c_str();
-  }
-
-private:
-  std::string message;
-};
-
 AutoCloseFd::~AutoCloseFd() {
   if (fd >= 0 && close(fd) < 0) {
-    if (std::uncaught_exception()) {
-      // TODO:  Devise some way to report secondary errors during unwind.
-    } else {
-      throw OsException("close", errno);
-    }
+    FAIL_RECOVERABLE_SYSCALL("close", errno, fd);
   }
 }
 
@@ -272,21 +241,10 @@ size_t FdInputStream::read(void* buffer, size_t minBytes, size_t maxBytes) {
   byte* max = pos + maxBytes;
 
   while (pos < min) {
-    ssize_t n = ::read(fd, pos, max - pos);
-    if (n <= 0) {
-      if (n < 0) {
-        int error = errno;
-        if (error == EINTR) {
-          continue;
-        } else {
-          throw OsException("read", error);
-        }
-      } else if (n == 0) {
-        throw PrematureEofException();
-      }
-      return false;
+    ssize_t n = SYSCALL(::read(fd, pos, max - pos), fd);
+    VALIDATE_INPUT(n > 0, "Premature EOF") {
+      return minBytes;
     }
-
     pos += n;
   }
 
@@ -299,16 +257,8 @@ void FdOutputStream::write(const void* buffer, size_t size) {
   const char* pos = reinterpret_cast<const char*>(buffer);
 
   while (size > 0) {
-    ssize_t n = ::write(fd, pos, size);
-    if (n <= 0) {
-      CAPNPROTO_ASSERT(n < 0, "write() returned zero.");
-      int error = errno;
-      if (error == EINTR) {
-        continue;
-      } else {
-        throw OsException("write", error);
-      }
-    }
+    ssize_t n = SYSCALL(::write(fd, pos, size), fd);
+    CHECK(n > 0, "write() returned zero.");
     pos += n;
     size -= n;
   }
@@ -331,14 +281,8 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   }
 
   while (current < iov.end()) {
-    ssize_t n = ::writev(fd, current, iov.end() - current);
-
-    if (n <= 0) {
-      if (n <= 0) {
-        CAPNPROTO_ASSERT(n < 0, "write() returned zero.");
-        throw OsException("writev", errno);
-      }
-    }
+    ssize_t n = SYSCALL(::writev(fd, current, iov.end() - current), fd);
+    CHECK(n > 0, "writev() returned zero.");
 
     while (static_cast<size_t>(n) >= current->iov_len) {
       n -= current->iov_len;

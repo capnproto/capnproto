@@ -24,6 +24,10 @@
 #ifndef CAPNPROTO_UTIL_H_
 #define CAPNPROTO_UTIL_H_
 
+#ifndef CAPNPROTO_PRIVATE
+#error "This header is only meant to be included by Cap'n Proto's own source code."
+#endif
+
 #include <initializer_list>
 #include <utility>
 #include <type_traits>
@@ -39,6 +43,8 @@ namespace capnproto {
 
 template <typename T, size_t fixedSize>
 class FixedArray {
+  // A fixed-width array whose storage is allocated inline rather than on the heap.
+
 public:
   inline size_t size() const { return fixedSize; }
   inline T* begin() { return content; }
@@ -62,6 +68,9 @@ private:
 
 template <typename T, size_t fixedSize>
 class CappedArray {
+  // Like `FixedArray` but can be dynamically resized as long as the size does not exceed the limit
+  // specified by the template parameter.
+
 public:
   inline constexpr CappedArray(): currentSize(fixedSize) {}
   inline explicit constexpr CappedArray(size_t s): currentSize(s) {}
@@ -82,8 +91,10 @@ private:
   T content[fixedSize];
 };
 
-template <typename T>
-Array<T> iterableToArray(T&& a) {
+template <typename T, typename Container>
+Array<T> iterableToArray(Container&& a) {
+  // Converts an arbitrary iterable container into an array of the given element type.
+
   Array<T> result = newArray<T>(a.size());
   auto i = a.iterator();
   auto end = a.end();
@@ -135,7 +146,15 @@ Element* fill(Element* __restrict__ target, First&& first, Rest&&... rest) {
 
 template <typename Element, typename... Params>
 Array<Element> concat(Params&&... params) {
+  // Concatenate a bunch of containers into a single Array.  The containers can be anything that
+  // is iterable and whose elements can be converted to `Element`.
+
+#ifdef __CDT_PARSER__
+  // Eclipse reports a bogus error on `size()`.
+  Array<Element> result;
+#else
   Array<Element> result = newArray<Element>(sum({params.size()...}));
+#endif
   fill(result.begin(), std::forward<Params>(params)...);
   return result;
 }
@@ -153,9 +172,10 @@ struct Stringifier {
   //
   // A more usual way to accomplish what we're doing here would be to require that you define
   // a function like `toString(T)` and then rely on argument-dependent lookup.  However, this has
-  // the problem that it pollutes other people's namespaces and even the global namespace.
-  // Declaring `operator*` with `Stringifier` as the left operand does not harm any other
-  // namespaces.
+  // the problem that it pollutes other people's namespaces and even the global namespace.  For
+  // example, some other project may already have functions called `toString` which do something
+  // different.  Declaring `operator*` with `Stringifier` as the left operand cannot conflict with
+  // anything.
 
   inline ArrayPtr<const char> operator*(ArrayPtr<const char> s) const { return s; }
   inline ArrayPtr<const char> operator*(const char* s) const { return arrayPtr(s, strlen(s)); }
@@ -181,6 +201,12 @@ static constexpr Stringifier STR;
 
 template <typename... Params>
 Array<char> str(Params&&... params) {
+  // Magic function which builds a string from a bunch of arbitrary values.  Example:
+  //     str(1, " / ", 2, " = ", 0.5)
+  // returns:
+  //     "1 / 2 = 0.5"
+  // To teach `str` how to stringify a type, see `Stringifier`.
+
   return concat<char>(STR * std::forward<Params>(params)...);
 }
 

@@ -23,18 +23,23 @@
 
 #define CAPNPROTO_PRIVATE
 #include "macros.h"
-#include "exception.h"
-#include <unistd.h>
-#include <stdio.h>
-#include "exception.h"
-#include "util.h"
+#include "logging.h"
+#include <stdlib.h>
 
 namespace capnproto {
 namespace internal {
 
-void assertionFailure(const char* file, int line, const char* expectation, const char* message) {
-  throw Exception(Exception::Nature::LOCAL_BUG, Exception::Durability::PERMANENT,
-                  file, line, str(expectation));
+void inlinePreconditionFailure(const char* file, int line, const char* expectation,
+                               const char* macroArgs, const char* message) {
+  if (message == nullptr) {
+    Log::fatalFault(file, line, Exception::Nature::PRECONDITION, expectation, macroArgs);
+  } else {
+    Log::fatalFault(file, line, Exception::Nature::PRECONDITION, expectation, macroArgs, message);
+  }
+
+  // GCC prints a warning that this function returns even though Log::fatalFault() is clearly
+  // marked noreturn.  Make the warning go away by calling abort()...
+  abort();
 }
 
 }  // namespace internal

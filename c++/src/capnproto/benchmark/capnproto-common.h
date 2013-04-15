@@ -24,9 +24,11 @@
 #ifndef CAPNPROTO_BENCHMARK_CAPNPROTO_COMMON_H_
 #define CAPNPROTO_BENCHMARK_CAPNPROTO_COMMON_H_
 
+#define CAPNPROTO_PRIVATE
 #include "common.h"
 #include <capnproto/serialize.h>
 #include <capnproto/serialize-packed.h>
+#include <capnproto/logging.h>
 #if HAVE_SNAPPY
 #include <capnproto/serialize-snappy.h>
 #endif  // HAVE_SNAPPY
@@ -179,7 +181,7 @@ struct UseScratch {
     word* words;
 
     ScratchSpace() {
-      CAPNPROTO_ASSERT(scratchCounter < 6, "Too many scratch spaces needed at once.");
+      PRECOND(scratchCounter < 6, "Too many scratch spaces needed at once.");
       words = scratchSpace + scratchCounter++ * SCRATCH_SIZE;
     }
     ~ScratchSpace() {

@@ -57,19 +57,22 @@ namespace internal {
 
 #define CAPNPROTO_NORETURN __attribute__((noreturn));
 
-void assertionFailure(const char* file, int line, const char* expectation, const char* message)
-    CAPNPROTO_NORETURN;
+void inlinePreconditionFailure(
+    const char* file, int line, const char* expectation, const char* macroArgs,
+    const char* message = nullptr) CAPNPROTO_NORETURN;
 
-#define CAPNPROTO_ASSERT(condition, message) \
-    if (CAPNPROTO_EXPECT_TRUE(condition)); else ::capnproto::internal::assertionFailure(\
-        __FILE__, __LINE__, #condition, message)
+#define CAPNPROTO_INLINE_PRECOND(condition, ...) \
+    if (CAPNPROTO_EXPECT_TRUE(condition)); else ::capnproto::internal::inlinePreconditionFailure( \
+        __FILE__, __LINE__, #condition, #__VA_ARGS__, ##__VA_ARGS__)
+// Version of PRECOND() which is safe to use in headers that are #included by users.  Used to check
+// preconditions inside inline methods.  CAPNPROTO_INLINE_DPRECOND is particularly useful in that
+// it will be enabled depending on whether the application is compiled in debug mode rather than
+// whether libcapnproto is.
 
-// CAPNPROTO_ASSERT is just like assert() except it avoids polluting the global namespace with an
-// unqualified macro name and it throws an exception (derived from std::exception).
 #ifdef NDEBUG
-#define CAPNPROTO_DEBUG_ASSERT(condition, message)
+#define CAPNPROTO_INLINE_DPRECOND(...)
 #else
-#define CAPNPROTO_DEBUG_ASSERT(condition, message) CAPNPROTO_ASSERT(condition, message)
+#define CAPNPROTO_INLINE_DPRECOND CAPNPROTO_INLINE_PRECOND
 #endif
 
 // Allocate an array, preferably on the stack, unless it is too big.  On GCC this will use

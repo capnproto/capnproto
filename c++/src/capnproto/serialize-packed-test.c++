@@ -21,8 +21,10 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "test.capnp.h"
+#define CAPNPROTO_PRIVATE
 #include "serialize-packed.h"
+#include "test.capnp.h"
+#include "logging.h"
 #include <gtest/gtest.h>
 #include <string>
 #include <stdlib.h>
@@ -60,7 +62,7 @@ public:
   }
 
   size_t read(void* buffer, size_t minBytes, size_t maxBytes) override {
-    CAPNPROTO_ASSERT(maxBytes <= data.size() - readPos, "Overran end of stream.");
+    CHECK(maxBytes <= data.size() - readPos, "Overran end of stream.");
     size_t amount = std::min(maxBytes, std::max(minBytes, preferredReadSize));
     memcpy(buffer, data.data() + readPos, amount);
     readPos += amount;
@@ -68,7 +70,7 @@ public:
   }
 
   void skip(size_t bytes) override {
-    CAPNPROTO_ASSERT(bytes <= data.size() - readPos, "Overran end of stream.");
+    CHECK(bytes <= data.size() - readPos, "Overran end of stream.");
     readPos += bytes;
   }
 

@@ -21,7 +21,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#define CAPNPROTO_PRIVATE
 #include "serialize-packed.h"
+#include "logging.h"
 #include "layout.h"
 #include <vector>
 
@@ -37,23 +39,25 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
     return 0;
   }
 
-  CAPNPROTO_DEBUG_ASSERT(minBytes % sizeof(word) == 0,
-                         "PackedInputStream reads must be word-aligned.");
-  CAPNPROTO_DEBUG_ASSERT(maxBytes % sizeof(word) == 0,
-                         "PackedInputStream reads must be word-aligned.");
+  DPRECOND(minBytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
+  DPRECOND(maxBytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
 
   uint8_t* __restrict__ out = reinterpret_cast<uint8_t*>(dst);
   uint8_t* const outEnd = reinterpret_cast<uint8_t*>(dst) + maxBytes;
   uint8_t* const outMin = reinterpret_cast<uint8_t*>(dst) + minBytes;
 
   ArrayPtr<const byte> buffer = inner.getReadBuffer();
-  CAPNPROTO_ASSERT(buffer.size() > 0, "Premature end of packed input.");
+  VALIDATE_INPUT(buffer.size() > 0, "Premature end of packed input.") {
+    return minBytes;  // garbage
+  }
   const uint8_t* __restrict__ in = reinterpret_cast<const uint8_t*>(buffer.begin());
 
 #define REFRESH_BUFFER() \
   inner.skip(buffer.size()); \
   buffer = inner.getReadBuffer(); \
-  CAPNPROTO_ASSERT(buffer.size() > 0, "Premature end of packed input."); \
+  VALIDATE_INPUT(buffer.size() > 0, "Premature end of packed input.") { \
+    return minBytes;  /* garbage */ \
+  } \
   in = reinterpret_cast<const uint8_t*>(buffer.begin())
 
 #define BUFFER_END (reinterpret_cast<const uint8_t*>(buffer.end()))
@@ -62,8 +66,8 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
   for (;;) {
     uint8_t tag;
 
-    CAPNPROTO_DEBUG_ASSERT((out - reinterpret_cast<uint8_t*>(dst)) % sizeof(word) == 0,
-                           "Output pointer should always be aligned here.");
+    DCHECK((out - reinterpret_cast<uint8_t*>(dst)) % sizeof(word) == 0,
+           "Output pointer should always be aligned here.");
 
     if (BUFFER_REMAINING < 10) {
       if (out >= outMin) {
@@ -118,24 +122,26 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
     }
 
     if (tag == 0) {
-      CAPNPROTO_DEBUG_ASSERT(BUFFER_REMAINING > 0,
-          "Bug in this function:  Should always have non-empty buffer here.");
+      DCHECK(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
 
       uint runLength = *in++ * sizeof(word);
 
-      CAPNPROTO_ASSERT(runLength <= outEnd - out,
-          "Packed input did not end cleanly on a segment boundary.");
+      VALIDATE_INPUT(runLength <= outEnd - out,
+          "Packed input did not end cleanly on a segment boundary.") {
+        return std::max<size_t>(minBytes, out - reinterpret_cast<uint8_t*>(dst));  // garbage
+      }
       memset(out, 0, runLength);
       out += runLength;
 
     } else if (tag == 0xffu) {
-      CAPNPROTO_DEBUG_ASSERT(BUFFER_REMAINING > 0,
-          "Bug in this function:  Should always have non-empty buffer here.");
+      DCHECK(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
 
       uint runLength = *in++ * sizeof(word);
 
-      CAPNPROTO_ASSERT(runLength <= outEnd - out,
-          "Packed input did not end cleanly on a segment boundary.");
+      VALIDATE_INPUT(runLength <= outEnd - out,
+          "Packed input did not end cleanly on a segment boundary.") {
+        return std::max<size_t>(minBytes, out - reinterpret_cast<uint8_t*>(dst));  // garbage
+      }
 
       uint inRemaining = BUFFER_REMAINING;
       if (inRemaining >= runLength) {
@@ -171,8 +177,9 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
     }
   }
 
-  CAPNPROTO_ASSERT(false, "Can't get here.");
-  return 0;
+  FAIL_CHECK("Can't get here.");
+
+#undef REFRESH_BUFFER
 }
 
 void PackedInputStream::skip(size_t bytes) {
@@ -182,11 +189,16 @@ void PackedInputStream::skip(size_t bytes) {
     return;
   }
 
-  CAPNPROTO_DEBUG_ASSERT(bytes % sizeof(word) == 0,
-                         "PackedInputStream reads must be word-aligned.");
+  DPRECOND(bytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
 
   ArrayPtr<const byte> buffer = inner.getReadBuffer();
   const uint8_t* __restrict__ in = reinterpret_cast<const uint8_t*>(buffer.begin());
+
+#define REFRESH_BUFFER() \
+  inner.skip(buffer.size()); \
+  buffer = inner.getReadBuffer(); \
+  VALIDATE_INPUT(buffer.size() > 0, "Premature end of packed input.") return; \
+  in = reinterpret_cast<const uint8_t*>(buffer.begin())
 
   for (;;) {
     uint8_t tag;
@@ -235,24 +247,26 @@ void PackedInputStream::skip(size_t bytes) {
     }
 
     if (tag == 0) {
-      CAPNPROTO_DEBUG_ASSERT(BUFFER_REMAINING > 0,
-          "Bug in this function:  Should always have non-empty buffer here.");
+      DCHECK(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
 
       uint runLength = *in++ * sizeof(word);
 
-      CAPNPROTO_ASSERT(runLength <= bytes,
-          "Packed input did not end cleanly on a segment boundary.");
+      VALIDATE_INPUT(runLength <= bytes,
+          "Packed input did not end cleanly on a segment boundary.") {
+        return;
+      }
 
       bytes -= runLength;
 
     } else if (tag == 0xffu) {
-      CAPNPROTO_DEBUG_ASSERT(BUFFER_REMAINING > 0,
-          "Bug in this function:  Should always have non-empty buffer here.");
+      DCHECK(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
 
       uint runLength = *in++ * sizeof(word);
 
-      CAPNPROTO_ASSERT(runLength <= bytes,
-          "Packed input did not end cleanly on a segment boundary.");
+      VALIDATE_INPUT(runLength <= bytes,
+          "Packed input did not end cleanly on a segment boundary.") {
+        return;
+      }
 
       bytes -= runLength;
 
@@ -283,7 +297,7 @@ void PackedInputStream::skip(size_t bytes) {
     }
   }
 
-  CAPNPROTO_ASSERT(false, "Can't get here.");
+  FAIL_CHECK("Can't get here.");
 }
 
 // -------------------------------------------------------------------

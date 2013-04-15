@@ -21,7 +21,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#define CAPNPROTO_PRIVATE
 #include "util.h"
+#include "logging.h"
 #include <stdio.h>
 #include <float.h>
 #include <limits>
@@ -104,8 +106,6 @@ namespace {
 //    an issue, we could re-implement this in terms of their
 //    implementation.
 // ----------------------------------------------------------------------
-
-#define GOOGLE_DCHECK(cond) CAPNPROTO_DEBUG_ASSERT(cond, "Bug in code here.");
 
 #ifdef _WIN32
 // MSVC has only _snprintf, not snprintf.
@@ -200,7 +200,7 @@ char* DoubleToBuffer(double value, char* buffer) {
 
   // The snprintf should never overflow because the buffer is significantly
   // larger than the precision we asked for.
-  GOOGLE_DCHECK(snprintf_result > 0 && snprintf_result < kDoubleToBufferSize);
+  DCHECK(snprintf_result > 0 && snprintf_result < kDoubleToBufferSize);
 
   // We need to make parsed_value volatile in order to force the compiler to
   // write it out to the stack.  Otherwise, it may keep the value in a
@@ -214,7 +214,7 @@ char* DoubleToBuffer(double value, char* buffer) {
       snprintf(buffer, kDoubleToBufferSize, "%.*g", DBL_DIG+2, value);
 
     // Should never overflow; see above.
-    GOOGLE_DCHECK(snprintf_result > 0 && snprintf_result < kDoubleToBufferSize);
+    DCHECK(snprintf_result > 0 && snprintf_result < kDoubleToBufferSize);
   }
 
   DelocalizeRadix(buffer);
@@ -256,7 +256,7 @@ char* FloatToBuffer(float value, char* buffer) {
 
   // The snprintf should never overflow because the buffer is significantly
   // larger than the precision we asked for.
-  GOOGLE_DCHECK(snprintf_result > 0 && snprintf_result < kFloatToBufferSize);
+  DCHECK(snprintf_result > 0 && snprintf_result < kFloatToBufferSize);
 
   float parsed_value;
   if (!safe_strtof(buffer, &parsed_value) || parsed_value != value) {
@@ -264,7 +264,7 @@ char* FloatToBuffer(float value, char* buffer) {
       snprintf(buffer, kFloatToBufferSize, "%.*g", FLT_DIG+2, value);
 
     // Should never overflow; see above.
-    GOOGLE_DCHECK(snprintf_result > 0 && snprintf_result < kFloatToBufferSize);
+    DCHECK(snprintf_result > 0 && snprintf_result < kFloatToBufferSize);
   }
 
   DelocalizeRadix(buffer);

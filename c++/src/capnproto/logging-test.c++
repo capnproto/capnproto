@@ -27,6 +27,9 @@
 #include <gtest/gtest.h>
 #include <string>
 #include <stdio.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
 
 namespace capnproto {
 namespace internal {
@@ -111,6 +114,35 @@ TEST(Logging, Log) {
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": precondition not met: expected "
             "1 == 2; i = 123; hi; str = foo\n", mockCallback.text);
   mockCallback.text.clear();
+
+  EXPECT_THROW(CHECK(false, "foo"), MockException); line = __LINE__;
+  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: foo\n",
+            mockCallback.text);
+  mockCallback.text.clear();
+}
+
+TEST(Logging, Syscall) {
+  MockExceptionCallback mockCallback;
+  MockExceptionCallback::ScopedRegistration reg(&mockCallback);
+  int line;
+
+  int i = 123;
+  const char* str = "foo";
+
+  int fd = SYSCALL(dup(STDIN_FILENO));
+  SYSCALL(close(fd));
+  EXPECT_THROW(SYSCALL(close(fd), i, "bar", str), MockException); line = __LINE__;
+  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": error from OS: close(fd): "
+            + strerror(EBADF) + "; i = 123; bar; str = foo\n", mockCallback.text);
+  mockCallback.text.clear();
+
+  int result = 0;
+  bool recovered = false;
+  RECOVERABLE_SYSCALL(result = close(fd), i, "bar", str) { recovered = true; } line = __LINE__;
+  EXPECT_EQ("recoverable exception: " + fileLine(__FILE__, line) + ": error from OS: close(fd): "
+            + strerror(EBADF) + "; i = 123; bar; str = foo\n", mockCallback.text);
+  EXPECT_LT(result, 0);
+  EXPECT_TRUE(recovered);
 }
 
 }  // namespace

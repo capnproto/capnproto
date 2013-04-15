@@ -21,7 +21,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#define CAPNPROTO_PRIVATE
 #include "serialize-snappy.h"
+#include "logging.h"
 #include "layout.h"
 #include <snappy/snappy.h>
 #include <snappy/snappy-sinksource.h>
@@ -38,7 +40,7 @@ public:
   // implements snappy::Source ---------------------------------------
 
   size_t Available() const override {
-    CAPNPROTO_ASSERT(false, "Snappy doesn't actually call this.");
+    FAIL_CHECK("Snappy doesn't actually call this.");
     return 0;
   }
 
@@ -104,10 +106,12 @@ void SnappyInputStream::skip(size_t bytes) {
 void SnappyInputStream::refill() {
   uint32_t length = 0;
   InputStreamSnappySource snappySource(inner);
-  CAPNPROTO_ASSERT(
+  VALIDATE_INPUT(
       snappy::RawUncompress(
           &snappySource, reinterpret_cast<char*>(buffer.begin()), buffer.size(), &length),
-      "Snappy decompression failed.");
+      "Snappy decompression failed.") {
+    length = 1;  // garbage
+  }
 
   bufferAvailable = buffer.slice(0, length);
 }
@@ -117,8 +121,7 @@ void SnappyInputStream::refill() {
 SnappyOutputStream::SnappyOutputStream(
     OutputStream& inner, ArrayPtr<byte> buffer, ArrayPtr<byte> compressedBuffer)
     : inner(inner) {
-  CAPNPROTO_DEBUG_ASSERT(
-      SNAPPY_COMPRESSED_BUFFER_SIZE >= snappy::MaxCompressedLength(snappy::kBlockSize),
+  DCHECK(SNAPPY_COMPRESSED_BUFFER_SIZE >= snappy::MaxCompressedLength(snappy::kBlockSize),
       "snappy::MaxCompressedLength() changed?");
 
   if (buffer.size() < SNAPPY_BUFFER_SIZE) {
@@ -156,7 +159,7 @@ void SnappyOutputStream::flush() {
     snappy::UncheckedByteArraySink sink(reinterpret_cast<char*>(compressedBuffer.begin()));
 
     size_t n = snappy::Compress(&source, &sink);
-    CAPNPROTO_ASSERT(n <= compressedBuffer.size(),
+    CHECK(n <= compressedBuffer.size(),
         "Critical security bug:  Snappy compression overran its output buffer.");
     inner.write(compressedBuffer.begin(), n);
 

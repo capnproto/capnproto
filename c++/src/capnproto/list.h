@@ -193,10 +193,12 @@ struct List<T, true> {
       for (; i != end && pos < size(); ++i) {
         set(pos, *i);
       }
-      CAPNPROTO_DEBUG_ASSERT(pos == size() && i == end, "copyFrom() argument had different size.");
+      CAPNPROTO_INLINE_DPRECOND(pos == size() && i == end,
+                               "List::copyFrom() argument had different size.");
     }
     void copyFrom(std::initializer_list<T> other) {
-      CAPNPROTO_DEBUG_ASSERT(other.size() == size(), "copyFrom() argument had different size.");
+      CAPNPROTO_INLINE_DPRECOND(other.size() == size(),
+                               "List::copyFrom() argument had different size.");
       for (uint i = 0; i < other.size(); i++) {
         set(i, other.begin()[i]);
       }
@@ -398,10 +400,12 @@ struct List<Data, false> {
       for (; i != end && pos < size(); ++i) {
         set(pos, *i);
       }
-      CAPNPROTO_DEBUG_ASSERT(pos == size() && i == end, "copyFrom() argument had different size.");
+      CAPNPROTO_INLINE_DPRECOND(pos == size() && i == end,
+                                "List::copyFrom() argument had different size.");
     }
     void copyFrom(std::initializer_list<Data::Reader> other) {
-      CAPNPROTO_DEBUG_ASSERT(other.size() == size(), "copyFrom() argument had different size.");
+      CAPNPROTO_INLINE_DPRECOND(other.size() == size(),
+                                "List::copyFrom() argument had different size.");
       for (uint i = 0; i < other.size(); i++) {
         set(i, other.begin()[i]);
       }
@@ -460,10 +464,12 @@ struct List<Text, false> {
       for (; i != end && pos < size(); ++i) {
         set(pos, *i);
       }
-      CAPNPROTO_DEBUG_ASSERT(pos == size() && i == end, "copyFrom() argument had different size.");
+      CAPNPROTO_INLINE_DPRECOND(pos == size() && i == end,
+                                "List::copyFrom() argument had different size.");
     }
     void copyFrom(std::initializer_list<Text::Reader> other) {
-      CAPNPROTO_DEBUG_ASSERT(other.size() == size(), "copyFrom() argument had different size.");
+      CAPNPROTO_INLINE_DPRECOND(other.size() == size(),
+                                "List::copyFrom() argument had different size.");
       for (uint i = 0; i < other.size(); i++) {
         set(i, other.begin()[i]);
       }

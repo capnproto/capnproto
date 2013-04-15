@@ -21,7 +21,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#define CAPNPROTO_PRIVATE
 #include "message.h"
+#include "logging.h"
 #include "arena.h"
 #include "stdlib.h"
 #include <exception>
@@ -78,10 +80,10 @@ internal::SegmentBuilder* MessageBuilder::getRootSegment() {
 
     WordCount refSize = 1 * REFERENCES * WORDS_PER_REFERENCE;
     internal::SegmentBuilder* segment = arena()->getSegmentWithAvailable(refSize);
-    CAPNPROTO_ASSERT(segment->getSegmentId() == SegmentId(0),
+    CHECK(segment->getSegmentId() == SegmentId(0),
         "First allocated word of new arena was not in segment ID 0.");
     word* location = segment->allocate(refSize);
-    CAPNPROTO_ASSERT(location == segment->getPtrUnchecked(0 * WORDS),
+    CHECK(location == segment->getPtrUnchecked(0 * WORDS),
         "First allocated word of new arena was not the first word in its segment.");
     return segment;
   }
@@ -111,28 +113,12 @@ ArrayPtr<const ArrayPtr<const word>> MessageBuilder::getSegmentsForOutput() {
 
 ErrorReporter::~ErrorReporter() {}
 
-class ParseException: public std::exception {
-public:
-  ParseException(std::string message)
-      : message(message) {}
-  ~ParseException() noexcept {}
-
-  const char* what() const noexcept override {
-    return message.c_str();
-  }
-
-private:
-  std::string message;
-};
-
 class ThrowingErrorReporter: public ErrorReporter {
 public:
   virtual ~ThrowingErrorReporter() {}
 
   void reportError(const char* description) override {
-    std::string message("Cap'n Proto message was invalid: ");
-    message += description;
-    throw ParseException(std::move(message));
+    FAIL_VALIDATE_INPUT("Invalid Cap'n Proto message", description);
   }
 };
 
@@ -201,11 +187,11 @@ MallocMessageBuilder::MallocMessageBuilder(
     ArrayPtr<word> firstSegment, AllocationStrategy allocationStrategy)
     : nextSize(firstSegment.size()), allocationStrategy(allocationStrategy),
       ownFirstSegment(false), returnedFirstSegment(false), firstSegment(firstSegment.begin()) {
-  CAPNPROTO_ASSERT(firstSegment.size() > 0, "First segment size must be non-zero.");
+  PRECOND(firstSegment.size() > 0, "First segment size must be non-zero.");
 
   // Checking just the first word should catch most cases of failing to zero the segment.
-  CAPNPROTO_ASSERT(*reinterpret_cast<uint64_t*>(firstSegment.begin()) == 0,
-                   "First segment must be zeroed.");
+  PRECOND(*reinterpret_cast<uint64_t*>(firstSegment.begin()) == 0,
+          "First segment must be zeroed.");
 }
 
 MallocMessageBuilder::~MallocMessageBuilder() {
@@ -216,7 +202,7 @@ MallocMessageBuilder::~MallocMessageBuilder() {
       // Must zero first segment.
       ArrayPtr<const ArrayPtr<const word>> segments = getSegmentsForOutput();
       if (segments.size() > 0) {
-        CAPNPROTO_ASSERT(segments[0].begin() == firstSegment,
+        CHECK(segments[0].begin() == firstSegment,
             "First segment in getSegmentsForOutput() is not the first segment allocated?");
         memset(firstSegment, 0, segments[0].size() * sizeof(word));
       }
@@ -247,7 +233,7 @@ ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
 
   void* result = calloc(size, sizeof(word));
   if (result == nullptr) {
-    throw std::bad_alloc();
+    FAIL_SYSCALL("calloc(size, sizeof(word))", ENOMEM, size);
   }
 
   if (!returnedFirstSegment) {

@@ -32,6 +32,12 @@ namespace capnproto {
 class Exception: public std::exception {
   // Exception thrown in case of fatal errors.
 
+#ifdef __CDT_PARSER__
+  // For some reason Eclipse gets confused by the definition of Nature if it's the first thing
+  // in the class.
+  typedef void WorkAroundCdtBug;
+#endif
+
 public:
   enum class Nature {
     // What kind of failure?  This is informational, not intended for programmatic use.
@@ -42,6 +48,7 @@ public:
     PRECONDITION,
     LOCAL_BUG,
     INPUT,
+    OS_ERROR,
     NETWORK_FAILURE,
     OTHER
 

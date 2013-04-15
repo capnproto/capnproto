@@ -21,8 +21,10 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#define CAPNPROTO_PRIVATE
 #include "serialize.h"
 #include "layout.h"
+#include "logging.h"
 
 namespace capnproto {
 
@@ -87,7 +89,7 @@ ArrayPtr<const word> FlatArrayMessageReader::getSegment(uint id) {
 }
 
 Array<word> messageToFlatArray(ArrayPtr<const ArrayPtr<const word>> segments) {
-  CAPNPROTO_ASSERT(segments.size() > 0, "Tried to serialize uninitialized message.");
+  PRECOND(segments.size() > 0, "Tried to serialize uninitialized message.");
 
   size_t totalSize = segments.size() / 2 + 1;
 
@@ -121,7 +123,7 @@ Array<word> messageToFlatArray(ArrayPtr<const ArrayPtr<const word>> segments) {
     dst += segment.size();
   }
 
-  CAPNPROTO_DEBUG_ASSERT(dst == result.end(), "Buffer overrun/underrun bug in code above.");
+  DCHECK(dst == result.end(), "Buffer overrun/underrun bug in code above.");
 
   return move(result);
 }
@@ -141,7 +143,10 @@ InputStreamMessageReader::InputStreamMessageReader(
   size_t totalWords = segment0Size;
 
   // Reject messages with too many segments for security reasons.
-  CAPNPROTO_ASSERT(segmentCount < 512, "Message has too many segments.");
+  VALIDATE_INPUT(segmentCount < 512, "Message has too many segments.") {
+    segmentCount = 1;
+    segment0Size = 1;
+  }
 
   // Read sizes for all segments except the first.  Include padding if necessary.
   internal::WireValue<uint32_t> moreSizes[segmentCount & ~1];
@@ -155,9 +160,13 @@ InputStreamMessageReader::InputStreamMessageReader(
   // Don't accept a message which the receiver couldn't possibly traverse without hitting the
   // traversal limit.  Without this check, a malicious client could transmit a very large segment
   // size to make the receiver allocate excessive space and possibly crash.
-  CAPNPROTO_ASSERT(totalWords <= options.traversalLimitInWords,
-                   "Message is too large.  To increase the limit on the receiving end, see "
-                   "capnproto::ReaderOptions.");
+  VALIDATE_INPUT(totalWords <= options.traversalLimitInWords,
+        "Message is too large.  To increase the limit on the receiving end, see "
+        "capnproto::ReaderOptions.") {
+    segmentCount = 1;
+    segment0Size = std::min<size_t>(segment0Size, options.traversalLimitInWords);
+    totalWords = segment0Size;
+  }
 
   if (scratchSpace.size() < totalWords) {
     // TODO:  Consider allocating each segment as a separate chunk to reduce memory fragmentation.
@@ -228,7 +237,7 @@ ArrayPtr<const word> InputStreamMessageReader::getSegment(uint id) {
 // -------------------------------------------------------------------
 
 void writeMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> segments) {
-  CAPNPROTO_ASSERT(segments.size() > 0, "Tried to serialize uninitialized message.");
+  PRECOND(segments.size() > 0, "Tried to serialize uninitialized message.");
 
   internal::WireValue<uint32_t> table[(segments.size() + 2) & ~size_t(1)];
 

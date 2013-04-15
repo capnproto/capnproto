@@ -21,6 +21,70 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// This file declares convenient macros for debug logging and error handling.  The macros make
+// it excessively easy to extract useful context information from code.  Example:
+//
+//     CHECK(a == b, a, b, "a and b must be the same.");
+//
+// On failure, this will throw an exception whose description looks like:
+//
+//     myfile.c++:43: bug in code: expected a == b; a = 14; b = 72; a and b must be the same.
+//
+// As you can see, all arguments after the first provide additional context.
+//
+// The macros available are:
+//
+// * `LOG(severity, ...)`:  Just writes a log message, to stderr by default (but you can intercept
+//   messages by implementing an ExceptionCallback).  `severity` is `INFO`, `WARNING`, `ERROR`, or
+//   `FATAL`.  If the severity is not higher than the global logging threshold, nothing will be
+//   written and in fact the log message won't even be evaluated.
+//
+// * `CHECK(condition, ...)`:  Throws an exception if `condition` is false, or aborts if exceptions
+//   are disabled.  This macro should be used to check for bugs in the surrounding code and its
+//   dependencies, but NOT to check for invalid input.
+//
+// * `PRECOND(condition, ...)`:  Like `CHECK` but used to check preconditions -- i.e. to validate
+//   parameters passed from a caller.  A failure indicates that the caller is buggy.
+//
+// * `RECOVERABLE_CHECK(condition, ...) { ... }`:  Like `CHECK` except that if exceptions are
+//   disabled, instead of aborting, the following code block will be executed.  This block should
+//   do whatever it can to fill in dummy values so that the code can continue executing, even if
+//   this means the eventual output will be garbage.
+//
+// * `RECOVERABLE_PRECOND(condition, ...) { ... }`:  Like `RECOVERABLE_CHECK` and `PRECOND`.
+//
+// * `VALIDATE_INPUT(condition, ...) { ... }`:  Like `RECOVERABLE_PRECOND` but used to validate
+//   input that may have come from the user or some other untrusted source.  Recoverability is
+//   required in this case.
+//
+// * `SYSCALL(code, ...)`:  Executes `code` assuming it makes a system call.  A negative return
+//   value is considered an error.  EINTR is handled by retrying.  Other errors are handled by
+//   throwing an exception.  The macro also returns the call's result.  For example, the following
+//   calls `open()` and includes the file name in any error message:
+//
+//       int fd = SYSCALL(open(filename, O_RDONLY), filename);
+//
+// * `RECOVERABLE_SYSCALL(code, ...) { ... }`:  Like `RECOVERABLE_CHECK` and `SYSCALL`.  Note that
+//   unfortunately this macro cannot return a value since it implements control flow, but you can
+//   assign to a variable *inside* the parameter instead:
+//
+//       int fd;
+//       RECOVERABLE_SYSCALL(fd = open(filename, O_RDONLY), filename) {
+//         // Failed.  Open /dev/null instead.
+//         fd = SYSCALL(open("/dev/null", O_RDONLY));
+//       }
+//
+// Notes:
+// * Do not write expressions with side-effects in the message content part of the macro, as the
+//   message will not necessarily be evaluated.
+// * For every macro `FOO` above except `LOG`, there is also a `FAIL_FOO` macro used to report
+//   failures that already happened.  For the macros that check a boolean condition, `FAIL_FOO`
+//   omits the first parameter and behaves like it was `false`.  `FAIL_SYSCALL` and
+//   `FAIL_RECOVERABLE_SYSCALL` take a string and an OS error number as the first two parameters.
+//   The string should be the name of the failed system call.
+// * For every macro `FOO` above, there is a `DFOO` version (or `RECOVERABLE_DFOO`) which is only
+//   executed in debug mode.  When `NDEBUG` is defined, these macros expand to nothing.
+
 #ifndef CAPNPROTO_LOGGING_H_
 #define CAPNPROTO_LOGGING_H_
 
@@ -45,7 +109,10 @@ public:
   };
 
   static inline bool shouldLog(Severity severity) { return severity >= minSeverity; }
+  // Returns whether messages of the given severity should be logged.
+
   static inline void setLogLevel(Severity severity) { minSeverity = severity; }
+  // Set the minimum message severity which will be logged.
 
   template <typename... Params>
   static void log(const char* file, int line, Severity severity, const char* macroArgs,
@@ -60,6 +127,24 @@ public:
                          const char* condition, const char* macroArgs, Params&&... params)
                          CAPNPROTO_NORETURN;
 
+  template <typename Call, typename... Params>
+  static bool recoverableSyscall(Call&& call, const char* file, int line, const char* callText,
+                                 const char* macroArgs, Params&&... params);
+
+  template <typename Call, typename... Params>
+  static auto syscall(Call&& call, const char* file, int line, const char* callText,
+                      const char* macroArgs, Params&&... params) -> decltype(call());
+
+  template <typename... Params>
+  static void reportFailedRecoverableSyscall(
+      int errorNumber, const char* file, int line, const char* callText,
+      const char* macroArgs, Params&&... params);
+
+  template <typename... Params>
+  static void reportFailedSyscall(
+      int errorNumber, const char* file, int line, const char* callText,
+      const char* macroArgs, Params&&... params);
+
 private:
   static Severity minSeverity;
 
@@ -72,6 +157,16 @@ private:
       const char* file, int line, Exception::Nature nature,
       const char* condition, const char* macroArgs, ArrayPtr<Array<char>> argValues)
       CAPNPROTO_NORETURN;
+  static void recoverableFailedSyscallInternal(
+      const char* file, int line, const char* call,
+      int errorNumber, const char* macroArgs, ArrayPtr<Array<char>> argValues);
+  static void fatalFailedSyscallInternal(
+      const char* file, int line, const char* call,
+      int errorNumber, const char* macroArgs, ArrayPtr<Array<char>> argValues)
+      CAPNPROTO_NORETURN;
+
+  static int getOsErrorNumber();
+  // Get the error code of the last error (e.g. from errno).  Returns -1 on EINTR.
 };
 
 ArrayPtr<const char> operator*(const Stringifier&, Log::Severity severity);
@@ -97,6 +192,37 @@ ArrayPtr<const char> operator*(const Stringifier&, Log::Severity severity);
 #define PRECOND(...) FAULT(PRECONDITION, __VA_ARGS__)
 #define RECOVERABLE_PRECOND(...) RECOVERABLE_FAULT(PRECONDITION, __VA_ARGS__)
 #define VALIDATE_INPUT(...) RECOVERABLE_FAULT(INPUT, __VA_ARGS__)
+
+#define FAIL_CHECK(...) CHECK(false, ##__VA_ARGS__)
+#define FAIL_RECOVERABLE_CHECK(...) RECOVERABLE_CHECK(false, ##__VA_ARGS__)
+#define FAIL_PRECOND(...) PRECOND(false, ##__VA_ARGS__)
+#define FAIL_RECOVERABLE_PRECOND(...) RECOVERABLE_PRECOND(false, ##__VA_ARGS__)
+#define FAIL_VALIDATE_INPUT(...) VALIDATE_INPUT(false, ##__VA_ARGS__)
+
+#define SYSCALL(call, ...) \
+  ::capnproto::Log::syscall( \
+      [&](){return (call);}, __FILE__, __LINE__, #call, #__VA_ARGS__, ##__VA_ARGS__)
+
+#define RECOVERABLE_SYSCALL(call, ...) \
+  if (::capnproto::Log::recoverableSyscall( \
+      [&](){return (call);}, __FILE__, __LINE__, #call, #__VA_ARGS__, ##__VA_ARGS__)) {} \
+  else
+
+#define FAIL_SYSCALL(code, errorNumber, ...) \
+  do { \
+    /* make sure to read error number before doing anything else that could change it */ \
+    int _errorNumber = errorNumber; \
+    ::capnproto::Log::reportFailedSyscall( \
+        _errorNumber, __FILE__, __LINE__, #code, #__VA_ARGS__, ##__VA_ARGS__); \
+  } while (false)
+
+#define FAIL_RECOVERABLE_SYSCALL(code, errorNumber, ...) \
+  do { \
+    /* make sure to read error number before doing anything else that could change it */ \
+    int _errorNumber = errorNumber; \
+    ::capnproto::Log::reportFailedRecoverableSyscall( \
+        _errorNumber, __FILE__, __LINE__, #code, #__VA_ARGS__, ##__VA_ARGS__); \
+  } while (false)
 
 #ifdef NDEBUG
 #define DLOG(...) do {} while (false)
@@ -133,6 +259,59 @@ void Log::fatalFault(const char* file, int line, Exception::Nature nature,
   Array<char> argValues[sizeof...(Params)] = {str(params)...};
   fatalFaultInternal(file, line, nature, condition, macroArgs,
                      arrayPtr(argValues, sizeof...(Params)));
+}
+
+template <typename Call, typename... Params>
+bool Log::recoverableSyscall(Call&& call, const char* file, int line, const char* callText,
+                             const char* macroArgs, Params&&... params) {
+  int result;
+  while ((result = call()) < 0) {
+    int errorNum = getOsErrorNumber();
+    // getOsErrorNumber() returns -1 to indicate EINTR
+    if (errorNum != -1) {
+      Array<char> argValues[sizeof...(Params)] = {str(params)...};
+      recoverableFailedSyscallInternal(file, line, callText, errorNum,
+                                       macroArgs, arrayPtr(argValues, sizeof...(Params)));
+      return false;
+    }
+  }
+  return true;
+}
+
+#ifndef __CDT_PARSER__  // Eclipse dislikes the late return spec.
+template <typename Call, typename... Params>
+auto Log::syscall(Call&& call, const char* file, int line, const char* callText,
+                  const char* macroArgs, Params&&... params) -> decltype(call()) {
+  decltype(call()) result;
+  while ((result = call()) < 0) {
+    int errorNum = getOsErrorNumber();
+    // getOsErrorNumber() returns -1 to indicate EINTR
+    if (errorNum != -1) {
+      Array<char> argValues[sizeof...(Params)] = {str(params)...};
+      fatalFailedSyscallInternal(file, line, callText, errorNum,
+                                 macroArgs, arrayPtr(argValues, sizeof...(Params)));
+    }
+  }
+  return result;
+}
+#endif
+
+template <typename... Params>
+void Log::reportFailedRecoverableSyscall(
+    int errorNumber, const char* file, int line, const char* callText,
+    const char* macroArgs, Params&&... params) {
+  Array<char> argValues[sizeof...(Params)] = {str(params)...};
+  recoverableFailedSyscallInternal(file, line, callText, errorNumber, macroArgs,
+                                   arrayPtr(argValues, sizeof...(Params)));
+}
+
+template <typename... Params>
+void Log::reportFailedSyscall(
+    int errorNumber, const char* file, int line, const char* callText,
+    const char* macroArgs, Params&&... params) {
+  Array<char> argValues[sizeof...(Params)] = {str(params)...};
+  fatalFailedSyscallInternal(file, line, callText, errorNumber, macroArgs,
+                             arrayPtr(argValues, sizeof...(Params)));
 }
 
 }  // namespace capnproto

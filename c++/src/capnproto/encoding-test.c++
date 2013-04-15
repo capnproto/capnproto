@@ -21,8 +21,10 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#define CAPNPROTO_PRIVATE
 #include "test.capnp.h"
 #include "message.h"
+#include "logging.h"
 #include <gtest/gtest.h>
 #include "test-util.h"
 
@@ -177,7 +179,7 @@ UnionState initUnion(void (TestUnion::Builder::*setter)(T value)) {
   (builder.getRoot<TestUnion>().*setter)(one<T>());
   ArrayPtr<const word> segment = builder.getSegmentsForOutput()[0];
 
-  CAPNPROTO_ASSERT(segment.size() > 2, "bug");
+  CHECK(segment.size() > 2, segment.size());
 
   // Find the offset of the first set bit after the union discriminants.
   int offset = 0;

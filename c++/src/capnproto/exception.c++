@@ -34,6 +34,7 @@ ArrayPtr<const char> operator*(const Stringifier&, Exception::Nature nature) {
     "precondition not met",
     "bug in code",
     "invalid input data",
+    "error from OS",
     "network failure",
     "error"
   };
@@ -96,15 +97,19 @@ ExceptionCallback::~ExceptionCallback() {
 
 void ExceptionCallback::onRecoverableException(Exception&& exception) {
 #if __GNUC__ && !__EXCEPTIONS
-  Log::writeRaw(str(exception.what(), '\n'));
+  logMessage(str(exception.what(), '\n'));
 #else
-  throw std::move(exception);
+  if (std::uncaught_exception()) {
+    logMessage(str("unwind: ", exception.what(), '\n'));
+  } else {
+    throw std::move(exception);
+  }
 #endif
 }
 
 void ExceptionCallback::onFatalException(Exception&& exception) {
 #if __GNUC__ && !__EXCEPTIONS
-  Log::writeRaw(str(exception.what(), '\n'));
+  logMessage(str(exception.what(), '\n'));
 #else
   throw std::move(exception);
 #endif

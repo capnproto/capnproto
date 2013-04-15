@@ -21,8 +21,10 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#define CAPNPROTO_PRIVATE
 #include "arena.h"
 #include "message.h"
+#include "logging.h"
 #include <vector>
 #include <string.h>
 #include <stdio.h>
@@ -170,9 +172,9 @@ ArrayPtr<const ArrayPtr<const word>> BuilderArena::getSegmentsForOutput() {
       return arrayPtr(&segment0ForOutput, 1);
     }
   } else {
-    CAPNPROTO_DEBUG_ASSERT(moreSegments->forOutput.size() == moreSegments->builders.size() + 1,
-        "Bug in capnproto::internal::BuilderArena:  moreSegments->forOutput wasn't resized "
-        "correctly when the last builder was added.");
+    DCHECK(moreSegments->forOutput.size() == moreSegments->builders.size() + 1,
+        "moreSegments->forOutput wasn't resized correctly when the last builder was added.",
+        moreSegments->forOutput.size(), moreSegments->builders.size());
 
     ArrayPtr<ArrayPtr<const word>> result(
         &moreSegments->forOutput[0], moreSegments->forOutput.size());

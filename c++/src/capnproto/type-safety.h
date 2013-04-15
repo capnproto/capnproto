@@ -91,7 +91,7 @@ public:
 
   inline std::size_t size() const { return size_; }
   inline T& operator[](std::size_t index) const {
-    CAPNPROTO_DEBUG_ASSERT(index < size_, "Out-of-bounds ArrayPtr access.");
+    CAPNPROTO_INLINE_DPRECOND(index < size_, "Out-of-bounds ArrayPtr access.");
     return ptr[index];
   }
 
@@ -101,7 +101,7 @@ public:
   inline T& back() const { return *(ptr + size_ - 1); }
 
   inline ArrayPtr slice(size_t start, size_t end) {
-    CAPNPROTO_DEBUG_ASSERT(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
+    CAPNPROTO_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
     return ArrayPtr(ptr + start, end - start);
   }
 
@@ -158,7 +158,7 @@ public:
 
   inline std::size_t size() const { return size_; }
   inline T& operator[](std::size_t index) const {
-    CAPNPROTO_DEBUG_ASSERT(index < size_, "Out-of-bounds Array access.");
+    CAPNPROTO_INLINE_DPRECOND(index < size_, "Out-of-bounds Array access.");
     return ptr[index];
   }
 
@@ -168,7 +168,7 @@ public:
   inline T& back() const { return *(ptr + size_ - 1); }
 
   inline ArrayPtr<T> slice(size_t start, size_t end) {
-    CAPNPROTO_DEBUG_ASSERT(start <= end && end <= size_, "Out-of-bounds Array::slice().");
+    CAPNPROTO_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds Array::slice().");
     return ArrayPtr<T>(ptr + start, end - start);
   }
 
@@ -226,7 +226,7 @@ public:
 
   template <typename... Params>
   void add(Params&&... params) {
-    CAPNPROTO_DEBUG_ASSERT(pos < endPtr, "Added too many elements to ArrayBuilder.");
+    CAPNPROTO_INLINE_DPRECOND(pos < endPtr, "Added too many elements to ArrayBuilder.");
     new(&pos->value) T(forward<Params>(params)...);
     ++pos;
   }
@@ -245,7 +245,7 @@ public:
   Array<T> finish() {
     // We could allow partial builds if Array<T> used a deleter callback, but that would make
     // Array<T> bigger for no benefit most of the time.
-    CAPNPROTO_DEBUG_ASSERT(pos == endPtr, "ArrayBuilder::finish() called prematurely.");
+    CAPNPROTO_INLINE_DPRECOND(pos == endPtr, "ArrayBuilder::finish() called prematurely.");
     Array<T> result(reinterpret_cast<T*>(ptr), pos - ptr);
     ptr = nullptr;
     pos = nullptr;
