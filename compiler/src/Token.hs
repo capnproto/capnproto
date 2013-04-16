@@ -21,12 +21,15 @@
 -- (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 -- SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+{-# LANGUAGE DeriveDataTypeable #-}
+
 module Token where
 
+import Data.Generics
 import Text.Parsec.Pos (SourcePos, sourceLine, sourceColumn)
 import Text.Printf (printf)
 
-data Located t = Located { locatedPos :: SourcePos, locatedValue :: t }
+data Located t = Located { locatedPos :: SourcePos, locatedValue :: t } deriving (Typeable, Data)
 
 instance Show t => Show (Located t) where
     show (Located pos x) = printf "%d:%d:%s" (sourceLine pos) (sourceColumn pos) (show x)
@@ -37,7 +40,7 @@ instance Eq a => Eq (Located a) where
 instance Ord a => Ord (Located a) where
     compare (Located _ a) (Located _ b) = compare a b
 
-data TokenSequence = TokenSequence [Located Token] SourcePos deriving(Show, Eq)
+data TokenSequence = TokenSequence [Located Token] SourcePos deriving(Data, Typeable, Show, Eq)
 
 data Token = Identifier String
            | TypeIdentifier String
@@ -69,7 +72,7 @@ data Token = Identifier String
            | UnionKeyword
            | InterfaceKeyword
            | OptionKeyword
-           deriving (Show, Eq)
+           deriving (Data, Typeable, Show, Eq)
 
 data Statement = Line TokenSequence
                | Block TokenSequence [Located Statement]
