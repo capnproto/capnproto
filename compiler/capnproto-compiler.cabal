@@ -32,5 +32,4 @@ executable capnpc
                    Semantics,
                    Util,
                    CxxGenerator,
-                   JsonGenerator,
                    WireFormat
