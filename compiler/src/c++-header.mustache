@@ -233,7 +233,7 @@ inline {{fieldType}} {{typeFullName}}::Builder::get{{fieldTitleCase}}() {
   return _builder.getDataField<{{fieldType}}>(
       {{fieldOffset}} * ::capnproto::ELEMENTS{{fieldDefaultMask}});
 }
-inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}({{fieldType}} value) {
+inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}({{fieldType}} value{{fieldSetterDefault}}) {
 {{#fieldUnion}}
   _builder.setDataField<{{unionTitleCase}}::Which>(
       {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});

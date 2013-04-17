@@ -135,23 +135,24 @@ union declarations do not look like types.
 struct Person {
   # ...
 
-  union employment @4;
-
-  unemployed @5 in employment :Void;
-  employer @6 in employment :Company;
-  school @7 in employment :School;
-  selfEmployed @8 in employment :Void;
-  # We assume that a person is only one of these.
+  employment @4 union {
+    unemployed @5 :Void;
+    employer @6 :Company;
+    school @7 :School;
+    selfEmployed @8 :Void;
+    # We assume that a person is only one of these.
+  }
 }
 {% endhighlight %}
 
 Notes:
 
-* Unions are numbered in the same number space as other fields. Remember that the purpose of the
-  numbers is to indicate the evolution order of the struct. The system needs to know when the union
-  was declared relative to the fields in it. Also note that no more than one element of the union is
-  allowed to have a number less than the union's number, as unionizing two or more pre-existing
-  fields would change their layout.
+* Unions and their members are numbered in the same number space as fields of the containing
+  struct. Remember that the purpose of the numbers is to indicate the evolution order of the
+  struct. The system needs to know when the union and each of its members was declared relative to
+  the non-union fields. Also note that no more than one element of the union is allowed to have a
+  number less than the union's number, as unionizing two or more pre-existing fields would change
+  their layout.
 
 * Notice that we used the "useless" `Void` type here. We don't have any extra information to store
   for the `unemployed` or `selfEmployed` cases, but we still want the union to distinguish these

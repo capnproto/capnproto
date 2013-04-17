@@ -16,6 +16,26 @@ struct Person {
   id @0 :UInt32;
   name @1 :Text;
   email @2 :Text;
+  phones @3 :List(PhoneNumber);
+
+  struct PhoneNumber {
+    number @0 :Text;
+    type @1 :Type;
+
+    enum Type {
+      mobile @0;
+      home @1;
+      work @2;
+    }
+  }
+
+  employment @4 union {
+    unemployed @5 :Void;
+    employer @6 :Text;
+    school @7 :Text;
+    selfEmployed @8 :Void;
+    # We assume that a person is only one of these.
+  }
 }
 
 struct AddressBook {
@@ -29,6 +49,7 @@ You might write code like:
 #include "addressbook.capnp.h"
 #include <capnproto/message.h>
 #include <capnproto/serialize-packed.h>
+#include <iostream>
 
 void writeAddressBook(int fd) {
   ::capnproto::MallocMessageBuilder message;
@@ -40,11 +61,23 @@ void writeAddressBook(int fd) {
   alice.setId(123);
   alice.setName("Alice");
   alice.setEmail("alice@example.com");
+  // Type shown for explanation purposes; normally you'd use auto.
+  capnproto::List<Person::PhoneNumber>::Builder alicePhones =
+      alice.initPhones(1);
+  alicePhones[0].setNumber("555-1212");
+  alicePhones[0].setType(Person::PhoneNumber::Type::MOBILE);
+  alice.getEmployment().setSchool("MIT");
 
   Person::Builder bob = people[1];
   bob.setId(456);
   bob.setName("Bob");
   bob.setEmail("bob@example.com");
+  auto bobPhones = bob.initPhones(2);
+  bobPhones[0].setNumber("555-4567");
+  bobPhones[0].setType(Person::PhoneNumber::Type::HOME);
+  bobPhones[1].setNumber("555-7654");
+  bobPhones[1].setType(Person::PhoneNumber::Type::WORK);
+  bob.getEmployment().setUnemployed();
 
   writePackedMessageToFd(fd, message);
 }
@@ -56,6 +89,33 @@ void printAddressBook(int fd) {
 
   for (Person::Reader person : addressBook.getPeople()) {
     std::cout << person.getName() << ": " << person.getEmail() << std::endl;
+    for (Person::PhoneNumber::Reader phone: person.getPhones()) {
+      const char* typeName = "UNKNOWN";
+      switch (phone.getType()) {
+        case Person::PhoneNumber::Type::MOBILE: typeName = "mobile"; break;
+        case Person::PhoneNumber::Type::HOME: typeName = "home"; break;
+        case Person::PhoneNumber::Type::WORK: typeName = "work"; break;
+      }
+      std::cout << "  " << typeName << " phone: "
+                << phone.getNumber() << std::endl;
+    }
+    Person::Employment::Reader employment = person.getEmployment();
+    switch (employment.which()) {
+      case Person::Employment::UNEMPLOYED:
+        std::cout << "  unemployed" << std::endl;
+        break;
+      case Person::Employment::EMPLOYER:
+        std::cout << "  employer: "
+                  << employment.getEmployer() << std::endl;
+        break;
+      case Person::Employment::SCHOOL:
+        std::cout << "  student at: "
+                  << employment.getSchool() << std::endl;
+        break;
+      case Person::Employment::SELF_EMPLOYED:
+        std::cout << "  self-employed" << std::endl;
+        break;
+    }
   }
 }
 {% endhighlight %}
@@ -182,6 +242,17 @@ MyStruct::Builder initMyStructField();
 void setMyListField(::capnproto::List<double>::Reader value);
 ::capnproto::List<double>::Builder initMyListField(size_t size);
 {% endhighlight %}
+
+## Unions
+
+For each union `foo` declared in the struct, the struct's reader and builder have a method
+`getFoo()` which returns a reader/builder for the union.  The union reader/builder has accessors
+for each field exactly like a struct's accessors.  It also has an accessor `which()` which returns
+an enum indicating which member of the union is currently set.  Setting any member of the union
+updates the value returned by `which()`.  Getting a member other than the currently-set member
+crashes in debug mode or returns garbage when `NDEBUG` is defined.
+
+See the [example](#example_usage) at the top of the page for an example of unions.
 
 ## Lists
 

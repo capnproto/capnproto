@@ -236,6 +236,9 @@ fieldContext parent desc = mkStrContext context where
     context "fieldUnionDiscriminant" = case fieldUnion desc of
         Just (_, n) -> MuVariable n
         Nothing -> muNull
+    context "fieldSetterDefault" = case fieldType desc of
+        BuiltinType BuiltinVoid -> MuVariable " = ::capnproto::Void::VOID"
+        _ -> MuVariable ""
     context s = parent s
 
 unionContext parent desc = mkStrContext context where

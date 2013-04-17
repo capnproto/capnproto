@@ -31,6 +31,7 @@ namespace {
 template <typename Builder>
 void genericInitTestMessage(Builder builder) {
   builder.setVoidField(Void::VOID);
+  builder.setVoidField();  // Means the same as above.
   builder.setBoolField(true);
   builder.setInt8Field(-123);
   builder.setInt16Field(-12345);
