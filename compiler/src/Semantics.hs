@@ -134,7 +134,12 @@ valueString (TextDesc    s) = show s
 valueString (DataDesc    s) = show (map (chr . fromIntegral) s)
 valueString (EnumValueValueDesc v) = enumValueName v
 valueString (StructValueDesc l) = "(" ++  delimit ", " (map assignmentString l) ++ ")" where
-    assignmentString (field, value) = fieldName field ++ " = " ++ valueString value
+    assignmentString (field, value) = case fieldUnion field of
+        Nothing -> fieldName field ++ " = " ++ valueString value
+        Just (u, _) -> unionName u ++ " = " ++ fieldName field ++
+            (case value of
+                StructValueDesc _ -> valueString value
+                _ -> "(" ++ valueString value ++ ")")
 valueString (ListDesc l) = "[" ++ delimit ", " (map valueString l) ++ "]" where
 
 data TypeDesc = BuiltinType BuiltinType
@@ -323,15 +328,12 @@ data UnionDesc = UnionDesc
     , unionTagPacking :: PackingState
     , unionFields :: [FieldDesc]
     , unionOptions :: OptionMap
+    , unionMemberMap :: MemberMap
     , unionStatements :: [CompiledStatement]
 
     -- Maps field numbers to discriminants for all fields in the union.
     , unionFieldDiscriminantMap :: Map.Map Integer Integer
     }
-
-unionHasRetro desc = case unionFields desc of
-    [] -> False
-    f:_ -> fieldNumber f < unionNumber desc
 
 data FieldDesc = FieldDesc
     { fieldName :: String
@@ -343,7 +345,6 @@ data FieldDesc = FieldDesc
     , fieldType :: TypeDesc
     , fieldDefaultValue :: Maybe ValueDesc
     , fieldOptions :: OptionMap
-    , fieldStatements :: [CompiledStatement]
     }
 
 data InterfaceDesc = InterfaceDesc
@@ -401,14 +402,16 @@ descToCode indent (DescConstant desc) = printf "%sconst %s: %s = %s;\n" indent
     (constantName desc)
     (typeName (constantParent desc) (constantType desc))
     (valueString (constantValue desc))
-descToCode indent (DescEnum desc) = printf "%senum %s%s" indent
+descToCode indent (DescEnum desc) = printf "%senum %s {\n%s%s}\n" indent
     (enumName desc)
     (blockCode indent (enumStatements desc))
+    indent
 descToCode indent (DescEnumValue desc) = printf "%s%s @%d%s" indent
     (enumValueName desc) (enumValueNumber desc) (maybeBlockCode indent $ enumValueStatements desc)
-descToCode indent (DescStruct desc) = printf "%sstruct %s%s" indent
+descToCode indent (DescStruct desc) = printf "%sstruct %s {\n%s%s}\n" indent
     (structName desc)
     (blockCode indent (structStatements desc))
+    indent
 descToCode indent (DescField desc) = printf "%s%s@%d%s: %s%s;  # %s\n" indent
     (fieldName desc) (fieldNumber desc)
     (case fieldUnion desc of { Nothing -> ""; Just (u, _) -> " in " ++ unionName u})
@@ -421,14 +424,15 @@ descToCode indent (DescField desc) = printf "%s%s@%d%s: %s%s;  # %s\n" indent
             bits = sizeInBits s
             offset = fieldOffset desc
             in printf "bits[%d, %d)" (offset * bits) ((offset + 1) * bits))
---    (maybeBlockCode indent $ fieldStatements desc)
-descToCode indent (DescUnion desc) = printf "%sunion %s@%d;  # [%d, %d)\n" indent
+descToCode indent (DescUnion desc) = printf "%sunion %s@%d {  # [%d, %d)\n%s%s}\n" indent
     (unionName desc) (unionNumber desc)
     (unionTagOffset desc * 16) (unionTagOffset desc * 16 + 16)
---    (maybeBlockCode indent $ unionStatements desc)
-descToCode indent (DescInterface desc) = printf "%sinterface %s%s" indent
+    (blockCode indent $ unionStatements desc)
+    indent
+descToCode indent (DescInterface desc) = printf "%sinterface %s {\n%s%s}\n" indent
     (interfaceName desc)
     (blockCode indent (interfaceStatements desc))
+    indent
 descToCode indent (DescMethod desc) = printf "%s%s@%d(%s): %s%s" indent
     (methodName desc) (methodNumber desc)
     (delimit ", " (map paramToCode (methodParams desc)))
@@ -451,12 +455,10 @@ statementToCode indent (CompiledOption desc) = printf "%s%s.%s = %s;\n" indent
 
 maybeBlockCode :: String -> [CompiledStatement] -> String
 maybeBlockCode _ [] = ";\n"
-maybeBlockCode indent statements = blockCode indent statements
+maybeBlockCode indent statements = printf " {\n%s%s}\n" (blockCode indent statements) indent
 
 blockCode :: String -> [CompiledStatement] -> String
-blockCode indent statements = printf " {\n%s%s}\n"
-    (concatMap (statementToCode ("  " ++ indent)) statements)
-    indent
+blockCode indent = concatMap (statementToCode ("  " ++ indent))
 
 instance Show FileDesc where { show desc = descToCode "" (DescFile desc) }
 instance Show AliasDesc where { show desc = descToCode "" (DescAlias desc) }

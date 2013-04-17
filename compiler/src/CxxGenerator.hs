@@ -58,12 +58,14 @@ scopePrefix desc = fullName desc ++ "::"
 globalName (DescFile _) = " "  -- TODO: namespaces
 globalName desc = globalName (descParent desc) ++ "::" ++ descName desc
 
--- Flatten the descriptor tree in pre-order, returning struct and interface descriptors only.  We
--- skip enums because they are always declared directly in their parent scope.
+-- Flatten the descriptor tree in pre-order, returning struct, union, and interface descriptors
+-- only.  We skip enums because they are always declared directly in their parent scope.
 flattenTypes :: [Desc] -> [Desc]
 flattenTypes [] = []
 flattenTypes (d@(DescStruct s):rest) = d:(flattenTypes children ++ flattenTypes rest) where
     children = catMaybes $ Map.elems $ structMemberMap s
+flattenTypes (d@(DescUnion u):rest) = d:(flattenTypes children ++ flattenTypes rest) where
+    children = catMaybes $ Map.elems $ unionMemberMap u
 flattenTypes (d@(DescInterface i):rest) = d:(flattenTypes children ++ flattenTypes rest) where
     children = catMaybes $ Map.elems $ interfaceMemberMap i
 flattenTypes (_:rest) = flattenTypes rest
@@ -237,12 +239,21 @@ fieldContext parent desc = mkStrContext context where
     context s = parent s
 
 unionContext parent desc = mkStrContext context where
+    titleCase = toTitleCase $ unionName desc
+
+    context "typeStruct" = MuBool False
+    context "typeUnion" = MuBool True
+    context "typeName" = MuVariable titleCase
+    context "typeFullName" = context "unionFullName"
+    context "typeFields" = context "unionFields"
+
     context "unionName" = MuVariable $ unionName desc
+    context "unionFullName" = MuVariable $ fullName (DescStruct $ unionParent desc) ++
+                             "::" ++ titleCase
     context "unionDecl" = MuVariable $ descDecl $ DescUnion desc
-    context "unionTitleCase" = MuVariable $ toTitleCase $ unionName desc
+    context "unionTitleCase" = MuVariable titleCase
     context "unionTagOffset" = MuVariable $ unionTagOffset desc
     context "unionFields" = MuList $ map (fieldContext context) $ unionFields desc
-    context "unionHasRetro" = MuBool $ unionHasRetro desc
     context s = parent s
 
 childContext parent name = mkStrContext context where
@@ -250,6 +261,12 @@ childContext parent name = mkStrContext context where
     context s = parent s
 
 structContext parent desc = mkStrContext context where
+    context "typeStruct" = MuBool True
+    context "typeUnion" = MuBool False
+    context "typeName" = context "structName"
+    context "typeFullName" = context "structFullName"
+    context "typeFields" = context "structFields"
+
     context "structName" = MuVariable $ structName desc
     context "structFullName" = MuVariable $ fullName (DescStruct desc)
     context "structFields" = MuList $ map (fieldContext context) $ structFields desc
@@ -265,8 +282,9 @@ structContext parent desc = mkStrContext context where
     context s = parent s
 
 typeContext parent desc = mkStrContext context where
-    context "typeStruct" = case desc of
+    context "typeStructOrUnion" = case desc of
         DescStruct d -> muJust $ structContext context d
+        DescUnion u -> muJust $ unionContext context u
         _ -> muNull
     context "typeEnum" = case desc of
         DescEnum d -> muJust $ enumContext context d

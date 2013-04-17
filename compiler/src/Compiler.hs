@@ -169,6 +169,14 @@ compileFieldAssignment desc (Located namePos name, Located valPos val) =
     case lookupMember name (structMemberMap desc) of
         Just (DescField field) ->
             fmap (\x -> (field, x)) (compileValue valPos (fieldType field) val)
+        Just (DescUnion union) -> case val of
+            UnionFieldValue uName uVal ->
+                case lookupMember uName (unionMemberMap union) of
+                    Just (DescField field) ->
+                        fmap (\x -> (field, x)) (compileValue valPos (fieldType field) uVal)
+                    _ -> makeError namePos (printf "Union %s has no member %s."
+                        (unionName union) uName)
+            _ -> makeExpectError valPos "union value"
         _ -> makeError namePos (printf "Struct %s has no field %s." (structName desc) name)
 
 compileValue :: SourcePos -> TypeDesc -> FieldValue -> Status ValueDesc
@@ -334,6 +342,11 @@ requireNoMoreThanOneFieldNumberLessThan name pos num fields = Active () errors w
         then []
         else [newErrorMessage (Message message) pos]
 
+extractFieldNumbers :: [Declaration] -> [Located Integer]
+extractFieldNumbers decls = concat
+    ([ num | FieldDecl _ num _ _ <- decls ]
+    :[ num:extractFieldNumbers uDecls | UnionDecl _ num uDecls <- decls ])
+
 ------------------------------------------------------------------------------------------
 
 initialPackingState = PackingState 0 0 0 0 0 0
@@ -455,8 +468,10 @@ packUnion _ state unionState = (offset, newState, unionState) where
 packFields :: [FieldDesc] -> [UnionDesc]
     -> (PackingState, Map.Map Integer UnionPackingState, Map.Map Integer (Integer, PackingState))
 packFields fields unions = (finalState, finalUnionState, Map.fromList packedItems) where
-    items = [(fieldNumber d, packField d) | d <- fields] ++
-            [(unionNumber d, packUnion d) | d <- unions]
+    items = concat (
+        [(fieldNumber d, packField d) | d <- fields]:
+        [(unionNumber d, packUnion d):[(fieldNumber d2, packField d2) | d2 <- unionFields d]
+        | d <- unions])
 
     itemsByNumber = List.sortBy compareNumbers items
     compareNumbers (a, _) (b, _) = compare a b
@@ -549,8 +564,7 @@ compileDecl scope (StructDecl (Located _ name) decls) =
     CompiledMemberStatus name (feedback (\desc -> do
         (members, memberMap, options, statements) <- compileChildDecls desc decls
         requireNoDuplicateNames decls
-        let fieldNums = [ num | FieldDecl _ num _ _ _ _ <- decls ] ++
-                        [ num | UnionDecl _ num _ <- decls ]
+        let fieldNums = extractFieldNumbers decls
         requireSequentialNumbering "Fields" fieldNums
         requireOrdinalsInRange fieldNums
         return (let
@@ -576,8 +590,8 @@ compileDecl scope (StructDecl (Located _ name) decls) =
 
 compileDecl (DescStruct parent) (UnionDecl (Located _ name) (Located numPos number) decls) =
     CompiledMemberStatus name (feedback (\desc -> do
-        (_, _, options, statements) <- compileChildDecls desc decls
-        let fields = [f | f <- structFields parent, fieldInUnion name f]
+        (members, memberMap, options, statements) <- compileChildDecls desc decls
+        let fields = [f | DescField f <- members]
             orderedFieldNumbers = List.sort $ map fieldNumber fields
             discriminantMap = Map.fromList $ zip orderedFieldNumbers [0..]
         requireNoMoreThanOneFieldNumberLessThan name numPos number fields
@@ -591,28 +605,27 @@ compileDecl (DescStruct parent) (UnionDecl (Located _ name) (Located numPos numb
             , unionTagPacking = tagPacking
             , unionFields = fields
             , unionOptions = options
+            , unionMemberMap = memberMap
             , unionStatements = statements
             , unionFieldDiscriminantMap = discriminantMap
             })))
 compileDecl _ (UnionDecl (Located pos name) _ _) =
     CompiledMemberStatus name (makeError pos "Unions can only appear inside structs.")
 
-compileDecl scope@(DescStruct parent)
-            (FieldDecl (Located _ name) (Located _ number) union typeExp defaultValue decls) =
-    CompiledMemberStatus name (feedback (\desc -> do
-        unionDesc <- case union of
-            Nothing -> return Nothing
-            Just (Located p n) -> do
-                udesc <- maybeError (descMember n scope) p
-                    (printf "No union '%s' defined in '%s'." n (structName parent))
-                case udesc of
-                    DescUnion d -> return (Just (d, unionFieldDiscriminantMap d ! number))
-                    _ -> makeError p (printf "'%s' is not a union." n)
+compileDecl scope
+            (FieldDecl (Located pos name) (Located _ number) typeExp defaultValue) =
+    CompiledMemberStatus name (do
+        parent <- case scope of
+            DescStruct s -> return s
+            DescUnion u -> return (unionParent u)
+            _ -> makeError pos "Fields can only appear inside structs."
+        let unionDesc = case scope of
+                DescUnion u -> Just (u, unionFieldDiscriminantMap u ! number)
+                _ -> Nothing
         typeDesc <- compileType scope typeExp
         defaultDesc <- case defaultValue of
-            Just (Located pos value) -> fmap Just (compileValue pos typeDesc value)
+            Just (Located defaultPos value) -> fmap Just (compileValue defaultPos typeDesc value)
             Nothing -> return Nothing
-        (_, _, options, statements) <- compileChildDecls desc decls
         return (let
             (offset, packing) = structFieldPackingMap parent ! number
             in DescField FieldDesc
@@ -624,11 +637,8 @@ compileDecl scope@(DescStruct parent)
             , fieldUnion = unionDesc
             , fieldType = typeDesc
             , fieldDefaultValue = defaultDesc
-            , fieldOptions = options
-            , fieldStatements = statements
-            })))
-compileDecl _ (FieldDecl (Located pos name) _ _ _ _ _) =
-    CompiledMemberStatus name (makeError pos "Fields can only appear inside structs.")
+            , fieldOptions = Map.empty  -- TODO
+            }))
 
 compileDecl scope (InterfaceDecl (Located _ name) decls) =
     CompiledMemberStatus name (feedback (\desc -> do

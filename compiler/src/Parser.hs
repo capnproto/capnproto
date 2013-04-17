@@ -74,7 +74,7 @@ located p = do
     return (Located (locatedPos (head input)) t)
 
 matchUnary :: (Data a, Data b) => (a -> b) -> Located b -> Maybe a
-matchUnary c t = if toConstr(c undefined) == toConstr(v)
+matchUnary c t = if toConstr (c undefined) == toConstr v
         then Just $ gmapQi 0 (undefined `mkQ` id) v
         else Nothing
     where v = locatedValue t
@@ -101,7 +101,7 @@ anyIdentifier = tokenParser matchIdentifier
 literalInt = tokenParser (matchUnary LiteralInt) <?> "integer"
 literalFloat = tokenParser (matchUnary LiteralFloat) <?> "floating-point number"
 literalString = tokenParser (matchUnary LiteralString) <?> "string"
-literalBool = tokenParser (matchLiteralBool) <?> "boolean"
+literalBool = tokenParser matchLiteralBool <?> "boolean"
 literalVoid = tokenParser (matchSimpleToken VoidKeyword) <?> "\"void\""
 
 atSign = tokenParser (matchSimpleToken AtSign) <?> "\"@\""
@@ -109,8 +109,6 @@ colon = tokenParser (matchSimpleToken Colon) <?> "\":\""
 period = tokenParser (matchSimpleToken Period) <?> "\".\""
 equalsSign = tokenParser (matchSimpleToken EqualsSign) <?> "\"=\""
 minusSign = tokenParser (matchSimpleToken MinusSign) <?> "\"=\""
-exclamationPoint = tokenParser (matchSimpleToken ExclamationPoint) <?> "\"!\""
-inKeyword = tokenParser (matchSimpleToken InKeyword) <?> "\"in\""
 importKeyword = tokenParser (matchSimpleToken ImportKeyword) <?> "\"import\""
 usingKeyword = tokenParser (matchSimpleToken UsingKeyword) <?> "\"using\""
 constKeyword = tokenParser (matchSimpleToken ConstKeyword) <?> "\"const\""
@@ -123,6 +121,11 @@ optionKeyword = tokenParser (matchSimpleToken OptionKeyword) <?> "\"option\""
 parenthesizedList parser = do
     items <- tokenParser (matchUnary ParenthesizedList)
     parseList parser items
+parenthesized parser = do
+    items <- tokenParser (matchUnary ParenthesizedList)
+    unless (length items == 1) (fail "Expected exactly one item in parentheses.")
+    [result] <- parseList parser items
+    return result
 bracketedList parser = do
     items <- tokenParser (matchUnary BracketedList)
     parseList parser items
@@ -201,27 +204,25 @@ structDecl statements = do
     return (StructDecl name children)
 
 structLine :: Maybe [Located Statement] -> TokenParser Declaration
-structLine Nothing = optionDecl <|> constantDecl <|> unionDecl [] <|> fieldDecl []
-structLine (Just statements) = typeDecl statements <|> unionDecl statements <|> fieldDecl statements
+structLine Nothing = optionDecl <|> constantDecl <|> fieldDecl
+structLine (Just statements) = typeDecl statements <|> unionDecl statements <|> unionDecl statements
 
 unionDecl statements = do
-    unionKeyword
     (name, ordinal) <- nameWithOrdinal
+    unionKeyword
     children <- parseBlock unionLine statements
     return (UnionDecl name ordinal children)
 
 unionLine :: Maybe [Located Statement] -> TokenParser Declaration
-unionLine Nothing = optionDecl <|> fieldDecl []
-unionLine (Just statements) = fieldDecl statements
+unionLine Nothing = optionDecl <|> fieldDecl
+unionLine (Just _) = fail "Blocks not allowed here."
 
-fieldDecl statements = do
+fieldDecl = do
     (name, ordinal) <- nameWithOrdinal
-    union <- optionMaybe (inKeyword >> located varIdentifier)
     colon
     t <- typeExpression
     value <- optionMaybe (equalsSign >> located fieldValue)
-    children <- parseBlock fieldLine statements
-    return (FieldDecl name ordinal union t value children)
+    return (FieldDecl name ordinal t value)
 
 negativeFieldValue = liftM (IntegerFieldValue . negate) literalInt
                  <|> liftM (FloatFieldValue . negate) literalFloat
@@ -231,21 +232,23 @@ fieldValue = (literalVoid >> return VoidFieldValue)
          <|> liftM IntegerFieldValue literalInt
          <|> liftM FloatFieldValue literalFloat
          <|> liftM StringFieldValue literalString
-         <|> liftM IdentifierFieldValue varIdentifier
+         <|> enumOrUnionFieldValue
          <|> liftM ListFieldValue (bracketedList (located fieldValue))
          <|> liftM RecordFieldValue (parenthesizedList fieldAssignment)
          <|> (minusSign >> negativeFieldValue)
          <?> "default value"
+
+enumOrUnionFieldValue = do
+    name <- varIdentifier
+    liftM (UnionFieldValue name) (try (parenthesized fieldValue))
+        <|> liftM (UnionFieldValue name . RecordFieldValue) (parenthesizedList fieldAssignment)
+        <|> return (IdentifierFieldValue name)
 
 fieldAssignment = do
     name <- located varIdentifier
     equalsSign
     value <- located fieldValue
     return (name, value)
-
-fieldLine :: Maybe [Located Statement] -> TokenParser Declaration
-fieldLine Nothing = optionDecl
-fieldLine (Just _) = fail "Blocks not allowed here."
 
 interfaceDecl statements = do
     interfaceKeyword

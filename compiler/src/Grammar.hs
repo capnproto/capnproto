@@ -42,6 +42,7 @@ data FieldValue = VoidFieldValue
                 | IdentifierFieldValue String
                 | ListFieldValue [Located FieldValue]
                 | RecordFieldValue [(Located String, Located FieldValue)]
+                | UnionFieldValue String FieldValue
                 deriving (Show)
 
 data Declaration = AliasDecl (Located String) DeclName
@@ -49,8 +50,8 @@ data Declaration = AliasDecl (Located String) DeclName
                  | EnumDecl (Located String) [Declaration]
                  | EnumValueDecl (Located String) (Located Integer) [Declaration]
                  | StructDecl (Located String) [Declaration]
-                 | FieldDecl (Located String) (Located Integer) (Maybe (Located String))
-                             TypeExpression (Maybe (Located FieldValue)) [Declaration]
+                 | FieldDecl (Located String) (Located Integer)
+                             TypeExpression (Maybe (Located FieldValue))
                  | UnionDecl (Located String) (Located Integer) [Declaration]
                  | InterfaceDecl (Located String) [Declaration]
                  | MethodDecl (Located String) (Located Integer)
@@ -65,7 +66,7 @@ declarationName (ConstantDecl n _ _)    = Just n
 declarationName (EnumDecl n _)          = Just n
 declarationName (EnumValueDecl n _ _)   = Just n
 declarationName (StructDecl n _)        = Just n
-declarationName (FieldDecl n _ _ _ _ _) = Just n
+declarationName (FieldDecl n _ _ _)     = Just n
 declarationName (UnionDecl n _ _)       = Just n
 declarationName (InterfaceDecl n _)     = Just n
 declarationName (MethodDecl n _ _ _ _)  = Just n
