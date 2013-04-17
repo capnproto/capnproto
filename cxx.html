@@ -33,7 +33,7 @@
         <ul>
           <li><a href="index.html">Introduction</a></li>
           <li><a href="install.html">Installation</a></li>
-          <li><a href="language.html">Defining Types</a></li>
+          <li><a href="language.html">Schema Language</a></li>
           <li><a href="encoding.html">Encoding</a></li>
           <li><a href="rpc.html">RPC Protocol</a></li>
           <li><a href="cxx.html">C++ Runtime</a></li>
@@ -118,6 +118,26 @@
   <span class='n'>id</span> <span class='nd'>@0</span> <span class='nc'>:UInt32</span>;
   <span class='n'>name</span> <span class='nd'>@1</span> <span class='nc'>:Text</span>;
   <span class='n'>email</span> <span class='nd'>@2</span> <span class='nc'>:Text</span>;
+  <span class='n'>phones</span> <span class='nd'>@3</span> <span class='nc'>:List(PhoneNumber)</span>;
+
+  <span class='k'>struct</span> <span class='n'>PhoneNumber</span> {
+    <span class='n'>number</span> <span class='nd'>@0</span> <span class='nc'>:Text</span>;
+    <span class='n'>type</span> <span class='nd'>@1</span> <span class='nc'>:Type</span>;
+
+    <span class='k'>enum</span> <span class='n'>Type</span> {
+      <span class='n'>mobile</span> <span class='nd'>@0</span>;
+      <span class='n'>home</span> <span class='nd'>@1</span>;
+      <span class='n'>work</span> <span class='nd'>@2</span>;
+    }
+  }
+
+  <span class='n'>employment</span> <span class='nd'>@4</span> <span class='k'>union</span> {
+    <span class='n'>unemployed</span> <span class='nd'>@5</span> <span class='nc'>:Void</span>;
+    <span class='n'>employer</span> <span class='nd'>@6</span> <span class='nc'>:Text</span>;
+    <span class='n'>school</span> <span class='nd'>@7</span> <span class='nc'>:Text</span>;
+    <span class='n'>selfEmployed</span> <span class='nd'>@8</span> <span class='nc'>:Void</span>;
+    <span class='c1'># We assume that a person is only one of these.</span>
+  }
 }
 
 <span class='k'>struct</span> <span class='n'>AddressBook</span> {
@@ -128,6 +148,7 @@
 <div class='highlight'><pre><code class='c++'><span class='cp'>#include &quot;addressbook.capnp.h&quot;</span>
 <span class='cp'>#include &lt;capnproto/message.h&gt;</span>
 <span class='cp'>#include &lt;capnproto/serialize-packed.h&gt;</span>
+<span class='cp'>#include &lt;iostream&gt;</span>
 
 <span class='kt'>void</span> <span class='n'>writeAddressBook</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>fd</span><span class='p'>)</span> <span class='p'>{</span>
   <span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>MallocMessageBuilder</span> <span class='n'>message</span><span class='p'>;</span>
@@ -139,11 +160,23 @@
   <span class='n'>alice</span><span class='p'>.</span><span class='n'>setId</span><span class='p'>(</span><span class='mi'>123</span><span class='p'>);</span>
   <span class='n'>alice</span><span class='p'>.</span><span class='n'>setName</span><span class='p'>(</span><span class='s'>&quot;Alice&quot;</span><span class='p'>);</span>
   <span class='n'>alice</span><span class='p'>.</span><span class='n'>setEmail</span><span class='p'>(</span><span class='s'>&quot;alice@example.com&quot;</span><span class='p'>);</span>
+  <span class='c1'>// Type shown for explanation purposes; normally you&#39;d use auto.</span>
+  <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>alicePhones</span> <span class='o'>=</span>
+      <span class='n'>alice</span><span class='p'>.</span><span class='n'>initPhones</span><span class='p'>(</span><span class='mi'>1</span><span class='p'>);</span>
+  <span class='n'>alicePhones</span><span class='p'>[</span><span class='mi'>0</span><span class='p'>].</span><span class='n'>setNumber</span><span class='p'>(</span><span class='s'>&quot;555-1212&quot;</span><span class='p'>);</span>
+  <span class='n'>alicePhones</span><span class='p'>[</span><span class='mi'>0</span><span class='p'>].</span><span class='n'>setType</span><span class='p'>(</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>::</span><span class='n'>Type</span><span class='o'>::</span><span class='n'>MOBILE</span><span class='p'>);</span>
+  <span class='n'>alice</span><span class='p'>.</span><span class='n'>getEmployment</span><span class='p'>().</span><span class='n'>setSchool</span><span class='p'>(</span><span class='s'>&quot;MIT&quot;</span><span class='p'>);</span>
 
   <span class='n'>Person</span><span class='o'>::</span><span class='n'>Builder</span> <span class='n'>bob</span> <span class='o'>=</span> <span class='n'>people</span><span class='p'>[</span><span class='mi'>1</span><span class='p'>];</span>
   <span class='n'>bob</span><span class='p'>.</span><span class='n'>setId</span><span class='p'>(</span><span class='mi'>456</span><span class='p'>);</span>
   <span class='n'>bob</span><span class='p'>.</span><span class='n'>setName</span><span class='p'>(</span><span class='s'>&quot;Bob&quot;</span><span class='p'>);</span>
   <span class='n'>bob</span><span class='p'>.</span><span class='n'>setEmail</span><span class='p'>(</span><span class='s'>&quot;bob@example.com&quot;</span><span class='p'>);</span>
+  <span class='k'>auto</span> <span class='n'>bobPhones</span> <span class='o'>=</span> <span class='n'>bob</span><span class='p'>.</span><span class='n'>initPhones</span><span class='p'>(</span><span class='mi'>2</span><span class='p'>);</span>
+  <span class='n'>bobPhones</span><span class='p'>[</span><span class='mi'>0</span><span class='p'>].</span><span class='n'>setNumber</span><span class='p'>(</span><span class='s'>&quot;555-4567&quot;</span><span class='p'>);</span>
+  <span class='n'>bobPhones</span><span class='p'>[</span><span class='mi'>0</span><span class='p'>].</span><span class='n'>setType</span><span class='p'>(</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>::</span><span class='n'>Type</span><span class='o'>::</span><span class='n'>HOME</span><span class='p'>);</span>
+  <span class='n'>bobPhones</span><span class='p'>[</span><span class='mi'>1</span><span class='p'>].</span><span class='n'>setNumber</span><span class='p'>(</span><span class='s'>&quot;555-7654&quot;</span><span class='p'>);</span>
+  <span class='n'>bobPhones</span><span class='p'>[</span><span class='mi'>1</span><span class='p'>].</span><span class='n'>setType</span><span class='p'>(</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>::</span><span class='n'>Type</span><span class='o'>::</span><span class='n'>WORK</span><span class='p'>);</span>
+  <span class='n'>bob</span><span class='p'>.</span><span class='n'>getEmployment</span><span class='p'>().</span><span class='n'>setUnemployed</span><span class='p'>();</span>
 
   <span class='n'>writePackedMessageToFd</span><span class='p'>(</span><span class='n'>fd</span><span class='p'>,</span> <span class='n'>message</span><span class='p'>);</span>
 <span class='p'>}</span>
@@ -155,6 +188,33 @@
 
   <span class='k'>for</span> <span class='p'>(</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>person</span> <span class='o'>:</span> <span class='n'>addressBook</span><span class='p'>.</span><span class='n'>getPeople</span><span class='p'>())</span> <span class='p'>{</span>
     <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>person</span><span class='p'>.</span><span class='n'>getName</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;: &quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>person</span><span class='p'>.</span><span class='n'>getEmail</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+    <span class='k'>for</span> <span class='p'>(</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>::</span><span class='n'>Reader</span> <span class='nl'>phone:</span> <span class='n'>person</span><span class='p'>.</span><span class='n'>getPhones</span><span class='p'>())</span> <span class='p'>{</span>
+      <span class='k'>const</span> <span class='kt'>char</span><span class='o'>*</span> <span class='n'>typeName</span> <span class='o'>=</span> <span class='s'>&quot;UNKNOWN&quot;</span><span class='p'>;</span>
+      <span class='k'>switch</span> <span class='p'>(</span><span class='n'>phone</span><span class='p'>.</span><span class='n'>getType</span><span class='p'>())</span> <span class='p'>{</span>
+        <span class='k'>case</span> <span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>::</span><span class='n'>Type</span><span class='o'>::</span><span class='nl'>MOBILE:</span> <span class='n'>typeName</span> <span class='o'>=</span> <span class='s'>&quot;mobile&quot;</span><span class='p'>;</span> <span class='k'>break</span><span class='p'>;</span>
+        <span class='k'>case</span> <span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>::</span><span class='n'>Type</span><span class='o'>::</span><span class='nl'>HOME:</span> <span class='n'>typeName</span> <span class='o'>=</span> <span class='s'>&quot;home&quot;</span><span class='p'>;</span> <span class='k'>break</span><span class='p'>;</span>
+        <span class='k'>case</span> <span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>::</span><span class='n'>Type</span><span class='o'>::</span><span class='nl'>WORK:</span> <span class='n'>typeName</span> <span class='o'>=</span> <span class='s'>&quot;work&quot;</span><span class='p'>;</span> <span class='k'>break</span><span class='p'>;</span>
+      <span class='p'>}</span>
+      <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;  &quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>typeName</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot; phone: &quot;</span>
+                <span class='o'>&lt;&lt;</span> <span class='n'>phone</span><span class='p'>.</span><span class='n'>getNumber</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+    <span class='p'>}</span>
+    <span class='n'>Person</span><span class='o'>::</span><span class='n'>Employment</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>employment</span> <span class='o'>=</span> <span class='n'>person</span><span class='p'>.</span><span class='n'>getEmployment</span><span class='p'>();</span>
+    <span class='k'>switch</span> <span class='p'>(</span><span class='n'>employment</span><span class='p'>.</span><span class='n'>which</span><span class='p'>())</span> <span class='p'>{</span>
+      <span class='k'>case</span> <span class='n'>Person</span><span class='o'>::</span><span class='n'>Employment</span><span class='o'>::</span><span class='nl'>UNEMPLOYED:</span>
+        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;  unemployed&quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+        <span class='k'>break</span><span class='p'>;</span>
+      <span class='k'>case</span> <span class='n'>Person</span><span class='o'>::</span><span class='n'>Employment</span><span class='o'>::</span><span class='nl'>EMPLOYER:</span>
+        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;  employer: &quot;</span>
+                  <span class='o'>&lt;&lt;</span> <span class='n'>employment</span><span class='p'>.</span><span class='n'>getEmployer</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+        <span class='k'>break</span><span class='p'>;</span>
+      <span class='k'>case</span> <span class='n'>Person</span><span class='o'>::</span><span class='n'>Employment</span><span class='o'>::</span><span class='nl'>SCHOOL:</span>
+        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;  student at: &quot;</span>
+                  <span class='o'>&lt;&lt;</span> <span class='n'>employment</span><span class='p'>.</span><span class='n'>getSchool</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+        <span class='k'>break</span><span class='p'>;</span>
+      <span class='k'>case</span> <span class='n'>Person</span><span class='o'>::</span><span class='n'>Employment</span><span class='o'>::</span><span class='nl'>SELF_EMPLOYED:</span>
+        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;  self-employed&quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+        <span class='k'>break</span><span class='p'>;</span>
+    <span class='p'>}</span>
   <span class='p'>}</span>
 <span class='p'>}</span>
 </code></pre></div>
@@ -252,6 +312,12 @@
 <span class='kt'>void</span> <span class='n'>setMyListField</span><span class='p'>(</span><span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;::</span><span class='n'>Reader</span> <span class='n'>value</span><span class='p'>);</span>
 <span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>initMyListField</span><span class='p'>(</span><span class='n'>size_t</span> <span class='n'>size</span><span class='p'>);</span>
 </code></pre></div>
+<h2 id='unions'>Unions</h2>
+
+<p>For each union <code>foo</code> declared in the struct, the struct&#8217;s reader and builder have a method <code>getFoo()</code> which returns a reader/builder for the union. The union reader/builder has accessors for each field exactly like a struct&#8217;s accessors. It also has an accessor <code>which()</code> which returns an enum indicating which member of the union is currently set. Setting any member of the union updates the value returned by <code>which()</code>. Getting a member other than the currently-set member crashes in debug mode or returns garbage when <code>NDEBUG</code> is defined.</p>
+
+<p>See the <a href='#example_usage'>example</a> at the top of the page for an example of unions.</p>
+
 <h2 id='lists'>Lists</h2>
 
 <p>Lists are represented by the type <code>capnproto::List&lt;T&gt;</code>, where <code>T</code> is any of the primitive types, any Cap&#8217;n Proto user-defined type, <code>capnproto::Text</code>, <code>capnproto::Data</code>, or <code>capnproto::List&lt;U&gt;</code> (to form a list of lists).</p>

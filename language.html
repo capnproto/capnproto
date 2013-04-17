@@ -33,7 +33,7 @@
         <ul>
           <li><a href="index.html">Introduction</a></li>
           <li><a href="install.html">Installation</a></li>
-          <li><a href="language.html">Defining Types</a></li>
+          <li><a href="language.html">Schema Language</a></li>
           <li><a href="encoding.html">Encoding</a></li>
           <li><a href="rpc.html">RPC Protocol</a></li>
           <li><a href="cxx.html">C++ Runtime</a></li>
@@ -221,20 +221,20 @@
 <div class='highlight'><pre><code class='capnp'><span class='k'>struct</span> <span class='n'>Person</span> {
   <span class='c1'># ...</span>
 
-  <span class='k'>union</span> <span class='n'>employment</span> <span class='nd'>@4</span>;
-
-  <span class='n'>unemployed</span> <span class='nd'>@5</span> <span class='k'>in</span> <span class='n'>employment</span> <span class='nc'>:Void</span>;
-  <span class='n'>employer</span> <span class='nd'>@6</span> <span class='k'>in</span> <span class='n'>employment</span> <span class='nc'>:Company</span>;
-  <span class='n'>school</span> <span class='nd'>@7</span> <span class='k'>in</span> <span class='n'>employment</span> <span class='nc'>:School</span>;
-  <span class='n'>selfEmployed</span> <span class='nd'>@8</span> <span class='k'>in</span> <span class='n'>employment</span> <span class='nc'>:Void</span>;
-  <span class='c1'># We assume that a person is only one of these.</span>
+  <span class='n'>employment</span> <span class='nd'>@4</span> <span class='k'>union</span> {
+    <span class='n'>unemployed</span> <span class='nd'>@5</span> <span class='nc'>:Void</span>;
+    <span class='n'>employer</span> <span class='nd'>@6</span> <span class='nc'>:Company</span>;
+    <span class='n'>school</span> <span class='nd'>@7</span> <span class='nc'>:School</span>;
+    <span class='n'>selfEmployed</span> <span class='nd'>@8</span> <span class='nc'>:Void</span>;
+    <span class='c1'># We assume that a person is only one of these.</span>
+  }
 }
 </code></pre></div>
 <p>Notes:</p>
 
 <ul>
 <li>
-<p>Unions are numbered in the same number space as other fields. Remember that the purpose of the numbers is to indicate the evolution order of the struct. The system needs to know when the union was declared relative to the fields in it. Also note that no more than one element of the union is allowed to have a number less than the union&#8217;s number, as unionizing two or more pre-existing fields would change their layout.</p>
+<p>Unions and their members are numbered in the same number space as fields of the containing struct. Remember that the purpose of the numbers is to indicate the evolution order of the struct. The system needs to know when the union and each of its members was declared relative to the non-union fields. Also note that no more than one element of the union is allowed to have a number less than the union&#8217;s number, as unionizing two or more pre-existing fields would change their layout.</p>
 </li>
 
 <li>
