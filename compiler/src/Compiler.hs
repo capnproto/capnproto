@@ -29,6 +29,7 @@ import Token(Located(Located))
 import Parser(parseFile)
 import qualified Data.Map as Map
 import Data.Map((!))
+import qualified Data.Set as Set
 import qualified Data.List as List
 import Data.Maybe(mapMaybe, fromMaybe)
 import Text.Parsec.Pos(SourcePos, newPos)
@@ -699,13 +700,13 @@ compileParam scope (name, typeExp, defaultValue) = do
         Nothing -> return Nothing
     return (name, typeDesc, defaultDesc)
 
-compileFile name decls =
+compileFile name decls importMap =
     feedback (\desc -> do
         (members, memberMap, options, statements) <- compileChildDecls (DescFile desc) decls
         requireNoDuplicateNames decls
         return FileDesc
             { fileName = name
-            , fileImports = []
+            , fileImports = Map.elems importMap
             , fileAliases    = [d | DescAlias     d <- members]
             , fileConstants  = [d | DescConstant  d <- members]
             , fileEnums      = [d | DescEnum      d <- members]
@@ -713,16 +714,49 @@ compileFile name decls =
             , fileInterfaces = [d | DescInterface d <- members]
             , fileOptions = options
             , fileMemberMap = memberMap
-            , fileImportMap = undefined
+            , fileImportMap = importMap
             , fileStatements = statements
             })
 
-parseAndCompileFile filename text = result where
-    (decls, parseErrors) = parseFile filename text
-    -- Here we're doing the copmile step even if there were errors in parsing, and just combining
-    -- all the errors together.  This may allow the user to fix more errors per compiler iteration,
-    -- but it might also be confusing if a parse error causes a subsequent compile error, especially
-    -- if the compile error ends up being on a line before the parse error (e.g. there's a parse
-    -- error in a type definition, causing a not-defined error on a field trying to use that type).
-    -- TODO:  Re-evaluate after getting some experience on whether this is annoing.
-    result = statusAddErrors parseErrors (compileFile filename decls)
+dedup :: Ord a => [a] -> [a]
+dedup = Set.toList . Set.fromList
+
+parseAndCompileFile :: Monad m
+                    => FilePath                                -- Name of this file.
+                    -> String                                  -- Content of this file.
+                    -> (String -> m (Either FileDesc String))  -- Callback to import other files.
+                    -> m (Status FileDesc)                     -- Compiled file and/or errors.
+parseAndCompileFile filename text importCallback = do
+    let (decls, parseErrors) = parseFile filename text
+        importNames = dedup $ concatMap declImports decls
+        doImport (Located pos name) = do
+            result <- importCallback name
+            case result of
+                Left desc -> return (succeed (name, desc))
+                Right err -> return
+                    (makeError pos (printf "Couldn't import \"%s\": %s" name err))
+
+    importStatuses <- mapM doImport importNames
+
+    return (do
+        -- We are now in the Status monad.
+
+        -- Report errors from parsing.
+        -- We do the compile step even if there were errors in parsing, and just combine all the
+        -- errors together.  This may allow the user to fix more errors per compiler iteration, but
+        -- it might also be confusing if a parse error causes a subsequent compile error,
+        -- especially if the compile error ends up being on a line before the parse error (e.g.
+        -- there's a parse error in a type definition, causing a not-defined error on a field
+        -- trying to use that type).
+        -- TODO:  Re-evaluate after getting some experience on whether this is annoing.
+        Active () parseErrors
+
+        -- Report errors from imports.
+        -- Similar to the above, we're continuing with compiling even if imports fail, but the
+        -- problem above probably doesn't occur in this case since global imports usually appear
+        -- at the top of the file anyway.  The only annoyance is seeing a long error log because
+        -- of one bad import.
+        imports <- doAll importStatuses
+
+        -- Compile the file!
+        compileFile filename decls $ Map.fromList imports)

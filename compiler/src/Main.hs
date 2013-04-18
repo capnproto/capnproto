@@ -27,9 +27,13 @@ import System.Environment
 import System.Console.GetOpt
 import System.Exit(exitFailure, exitSuccess)
 import System.IO(hPutStr, stderr)
-import System.FilePath(takeDirectory)
+import System.FilePath(takeDirectory, combine)
 import System.Directory(createDirectoryIfMissing, doesDirectoryExist)
 import Control.Monad
+import Control.Monad.IO.Class(liftIO)
+import Control.Exception(IOException, catch)
+import Control.Monad.Trans.State(StateT, state, modify, execStateT)
+import Prelude hiding (catch)
 import Compiler
 import Util(delimit)
 import Text.Parsec.Pos
@@ -96,35 +100,77 @@ main = do
             exitFailure)
     mapM_ verifyDirectoryExists [dir | (_, dir) <- outputs]
 
-    mapM_ (handleFile outputs isVerbose) files
+    CompilerState failed _ <-
+        execStateT (mapM_ (handleFile outputs isVerbose) files) (CompilerState False Map.empty)
+    when failed exitFailure
 
 parseOutputArg :: String -> Opt
 parseOutputArg str = case List.elemIndex ':' str of
     Just i -> let (lang, _:dir) = splitAt i str in OutputOpt lang (Map.lookup lang generatorFns) dir
     Nothing -> OutputOpt str (Map.lookup str generatorFns) "."
 
-handleFile :: [(GeneratorFn, FilePath)] -> Bool -> FilePath -> IO ()
-handleFile outputs isVerbose filename = do
-    text <- readFile filename
-    case parseAndCompileFile filename text of
+data ImportState = ImportInProgress | ImportFailed | ImportSucceeded FileDesc
+type ImportStateMap = Map.Map String ImportState
+data CompilerState = CompilerState Bool ImportStateMap
+type CompilerMonad a = StateT CompilerState IO a
+
+importFile :: Bool -> FilePath -> CompilerMonad (Either FileDesc String)
+importFile isVerbose filename = do
+    fileState <- state (\s@(CompilerState f m) -> case Map.lookup filename m of
+        d@Nothing -> (d, CompilerState f (Map.insert filename ImportInProgress m))
+        d -> (d, s))
+
+    case fileState of
+        Just ImportFailed -> return $ Right "File contained errors."
+        Just ImportInProgress -> return $ Right "File cyclically imports itself."
+        Just (ImportSucceeded d) -> return $ Left d
+        Nothing -> do
+            result <- readAndParseFile isVerbose filename
+            modify (\(CompilerState f m) -> case result of
+                Left desc -> CompilerState f (Map.insert filename (ImportSucceeded desc) m)
+                Right _ -> CompilerState True (Map.insert filename ImportFailed m))
+            return result
+
+readAndParseFile isVerbose filename = do
+    textOrError <- liftIO $ catch (fmap Left $ readFile filename)
+        (\ex -> return $ Right $ show (ex :: IOException))
+
+    case textOrError of
+        Right err -> return $ Right err
+        Left text -> parseFile isVerbose filename text
+
+parseFile isVerbose filename text = do
+    let importCallback name = do
+            let path = tail $ combine ('/':filename) name
+            importFile isVerbose path
+
+    status <- parseAndCompileFile filename text importCallback
+    case status of
         Active desc [] -> do
-            when isVerbose (print desc)
-
-            let write dir (name, content) = do
-                let outFilename = dir ++ "/" ++ name
-                createDirectoryIfMissing True $ takeDirectory outFilename
-                LZ.writeFile outFilename content
-            let generate (generatorFn, dir) = do
-                files <- generatorFn desc
-                mapM_ (write dir) files
-            mapM_ generate outputs
-
+            when isVerbose (liftIO $ print desc)
+            return $ Left desc
         Active _ e -> do
-            mapM_ printError (List.sortBy compareErrors e)
-            exitFailure
+            liftIO $ mapM_ printError (List.sortBy compareErrors e)
+            return $ Right "File contained errors."
         Failed e -> do
-            mapM_ printError (List.sortBy compareErrors e)
-            exitFailure
+            liftIO $ mapM_ printError (List.sortBy compareErrors e)
+            return $ Right "File contained errors."
+
+handleFile :: [(GeneratorFn, FilePath)] -> Bool -> FilePath -> CompilerMonad ()
+handleFile outputs isVerbose filename = do
+    result <- importFile isVerbose filename
+
+    case result of
+        Right _ -> return ()
+        Left desc -> do
+            let write dir (name, content) = do
+                    let outFilename = dir ++ "/" ++ name
+                    createDirectoryIfMissing True $ takeDirectory outFilename
+                    LZ.writeFile outFilename content
+                generate (generatorFn, dir) = do
+                    files <- generatorFn desc
+                    mapM_ (write dir) files
+            liftIO $ mapM_ generate outputs
 
 compareErrors a b = compare (errorPos a) (errorPos b)
 

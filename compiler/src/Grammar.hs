@@ -24,6 +24,7 @@
 module Grammar where
 
 import Token (Located)
+import Data.Maybe (maybeToList)
 
 data DeclName = AbsoluteName (Located String)
               | RelativeName (Located String)
@@ -31,8 +32,18 @@ data DeclName = AbsoluteName (Located String)
               | MemberName DeclName (Located String)
               deriving (Show)
 
+declNameImport :: DeclName -> Maybe (Located String)
+declNameImport (AbsoluteName _) = Nothing
+declNameImport (RelativeName _) = Nothing
+declNameImport (ImportName s) = Just s
+declNameImport (MemberName parent _) = declNameImport parent
+
 data TypeExpression = TypeExpression DeclName [TypeExpression]
                     deriving (Show)
+
+typeImports :: TypeExpression -> [Located String]
+typeImports (TypeExpression name params) =
+    maybeToList (declNameImport name) ++ concatMap typeImports params
 
 data FieldValue = VoidFieldValue
                 | BoolFieldValue Bool
@@ -71,3 +82,17 @@ declarationName (UnionDecl n _ _)       = Just n
 declarationName (InterfaceDecl n _)     = Just n
 declarationName (MethodDecl n _ _ _ _)  = Just n
 declarationName (OptionDecl _ _)        = Nothing
+
+declImports :: Declaration -> [Located String]
+declImports (AliasDecl _ name) = maybeToList $ declNameImport name
+declImports (ConstantDecl _ t _) = typeImports t
+declImports (EnumDecl _ decls) = concatMap declImports decls
+declImports (EnumValueDecl _ _ decls) = concatMap declImports decls
+declImports (StructDecl _ decls) = concatMap declImports decls
+declImports (FieldDecl _ _ t _) = typeImports t
+declImports (UnionDecl _ _ decls) = concatMap declImports decls
+declImports (InterfaceDecl _ decls) = concatMap declImports decls
+declImports (MethodDecl _ _ params t decls) =
+    concat [paramsImports, typeImports t, concatMap declImports decls] where
+        paramsImports = concat [typeImports pt | (_, pt, _) <- params]
+declImports (OptionDecl name _) = maybeToList $ declNameImport name

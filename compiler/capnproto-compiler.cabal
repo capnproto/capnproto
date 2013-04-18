@@ -21,7 +21,8 @@ executable capnpc
                    data-binary-ieee754,
                    filepath,
                    directory,
-                   syb
+                   syb,
+                   transformers
   ghc-options:     -Wall -fno-warn-missing-signatures
   other-modules:
                    Lexer,
