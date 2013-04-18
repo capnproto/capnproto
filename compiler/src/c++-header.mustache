@@ -25,10 +25,19 @@
 Template for generated C++ header files.
 }}// Generated code, DO NOT EDIT
 
-#include <capnproto/generated-header-support.h>
-
 #ifndef {{fileIncludeGuard}}
 #define {{fileIncludeGuard}}
+
+#include <capnproto/generated-header-support.h>
+{{#fileImports}}
+{{#importIsSystem}}
+#include <{{importFilename}}.h>
+{{/importIsSystem}}
+{{^importIsSystem}}
+#include "{{importFilename}}.h"
+{{/importIsSystem}}
+{{/fileImports}}
+
 {{#fileNamespaces}}
 namespace {{namespaceName}} {
 {{/fileNamespaces}}

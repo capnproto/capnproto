@@ -25,7 +25,6 @@ module Parser (parseFile) where
 
 import Data.Generics
 import Text.Parsec hiding (tokens)
-import Text.Parsec.Error(newErrorMessage, Message(Message))
 import Token
 import Grammar
 import Lexer (lexer)
@@ -289,10 +288,6 @@ optionDecl = do
 extractErrors :: Either ParseError (a, [ParseError]) -> [ParseError]
 extractErrors (Left err) = [err]
 extractErrors (Right (_, errors)) = errors
-
-failNonFatal :: SourcePos -> String -> TokenParser ()
-failNonFatal pos msg = modifyState (newError:) where
-    newError = newErrorMessage (Message msg) pos
 
 parseList parser items = do
     let results = map (parseCollectingErrors parser) items

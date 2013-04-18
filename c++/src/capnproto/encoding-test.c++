@@ -22,7 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define CAPNPROTO_PRIVATE
-#include "test.capnp.h"
+#include "test-import.capnp.h"
 #include "message.h"
 #include "logging.h"
 #include <gtest/gtest.h>
@@ -299,6 +299,15 @@ TEST(Encoding, NestedTypes) {
   TestNestedTypes::NestedStruct::Reader nested = reader.getNestedStruct();
   EXPECT_EQ(TestNestedTypes::NestedEnum::BAR, nested.getOuterNestedEnum());
   EXPECT_EQ(TestNestedTypes::NestedStruct::NestedEnum::QUUX, nested.getInnerNestedEnum());
+}
+
+TEST(Encoding, Imports) {
+  // Also just testing the generated code.
+
+  MallocMessageBuilder builder;
+  TestImport::Builder root = builder.getRoot<TestImport>();
+  initTestMessage(root.initField());
+  checkTestMessage(root.asReader().getField());
 }
 
 }  // namespace

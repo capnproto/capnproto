@@ -721,6 +721,20 @@ compileFile name decls importMap =
 dedup :: Ord a => [a] -> [a]
 dedup = Set.toList . Set.fromList
 
+emptyFileDesc filename = FileDesc
+    { fileName = filename
+    , fileImports = []
+    , fileAliases = []
+    , fileConstants = []
+    , fileEnums = []
+    , fileStructs = []
+    , fileInterfaces = []
+    , fileOptions = Map.empty
+    , fileMemberMap = Map.empty
+    , fileImportMap = Map.empty
+    , fileStatements = []
+    }
+
 parseAndCompileFile :: Monad m
                     => FilePath                                -- Name of this file.
                     -> String                                  -- Content of this file.
@@ -733,7 +747,7 @@ parseAndCompileFile filename text importCallback = do
             result <- importCallback name
             case result of
                 Left desc -> return (succeed (name, desc))
-                Right err -> return
+                Right err -> return $ recover (name, emptyFileDesc name)
                     (makeError pos (printf "Couldn't import \"%s\": %s" name err))
 
     importStatuses <- mapM doImport importNames

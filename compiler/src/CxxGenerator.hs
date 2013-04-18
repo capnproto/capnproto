@@ -294,6 +294,15 @@ typeContext parent desc = mkStrContext context where
         _ -> muNull
     context s = parent s
 
+importContext parent ('/':filename) = mkStrContext context where
+    context "importFilename" = MuVariable filename
+    context "importIsSystem" = MuBool True
+    context s = parent s
+importContext parent filename = mkStrContext context where
+    context "importFilename" = MuVariable filename
+    context "importIsSystem" = MuBool False
+    context s = parent s
+
 fileContext desc = mkStrContext context where
     flattenedMembers = flattenTypes $ catMaybes $ Map.elems $ fileMemberMap desc
 
@@ -304,6 +313,7 @@ fileContext desc = mkStrContext context where
     context "fileNamespaces" = MuList []  -- TODO
     context "fileEnums" = MuList $ map (enumContext context) $ fileEnums desc
     context "fileTypes" = MuList $ map (typeContext context) flattenedMembers
+    context "fileImports" = MuList $ map (importContext context) $ Map.keys $ fileImportMap desc
     context s = error ("Template variable not defined: " ++ s)
 
 headerTemplate :: String

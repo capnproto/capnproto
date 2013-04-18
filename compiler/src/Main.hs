@@ -27,8 +27,8 @@ import System.Environment
 import System.Console.GetOpt
 import System.Exit(exitFailure, exitSuccess)
 import System.IO(hPutStr, stderr)
-import System.FilePath(takeDirectory, combine)
-import System.Directory(createDirectoryIfMissing, doesDirectoryExist)
+import System.FilePath(takeDirectory)
+import System.Directory(createDirectoryIfMissing, doesDirectoryExist, doesFileExist)
 import Control.Monad
 import Control.Monad.IO.Class(liftIO)
 import Control.Exception(IOException, catch)
@@ -50,14 +50,17 @@ type GeneratorFn = FileDesc -> IO [(FilePath, LZ.ByteString)]
 
 generatorFns = Map.fromList [ ("c++", generateCxx) ]
 
-data Opt = OutputOpt String (Maybe GeneratorFn) FilePath
+data Opt = SearchPathOpt FilePath
+         | OutputOpt String (Maybe GeneratorFn) FilePath
          | VerboseOpt
          | HelpOpt
 
 main :: IO ()
 main = do
     let optionDescs =
-         [ Option "o" ["output"] (ReqArg parseOutputArg "LANG[:DIR]")
+         [ Option "I" ["import-path"] (ReqArg SearchPathOpt "DIR")
+             "Search DIR for absolute imports."
+         , Option "o" ["output"] (ReqArg parseOutputArg "LANG[:DIR]")
              ("Generate output for language LANG\n\
               \to directory DIR (default: current\n\
               \directory).  LANG may be any of:\n\
@@ -92,6 +95,7 @@ main = do
 
     let isVerbose = not $ null [opt | opt@VerboseOpt <- options]
     let outputs = [(fn, dir) | OutputOpt _ (Just fn) dir <- options]
+    let searchPath = [dir | SearchPathOpt dir <- options]
 
     let verifyDirectoryExists dir = do
         exists <- doesDirectoryExist dir
@@ -101,7 +105,8 @@ main = do
     mapM_ verifyDirectoryExists [dir | (_, dir) <- outputs]
 
     CompilerState failed _ <-
-        execStateT (mapM_ (handleFile outputs isVerbose) files) (CompilerState False Map.empty)
+        execStateT (mapM_ (handleFile outputs isVerbose searchPath) files)
+                   (CompilerState False Map.empty)
     when failed exitFailure
 
 parseOutputArg :: String -> Opt
@@ -109,13 +114,56 @@ parseOutputArg str = case List.elemIndex ':' str of
     Just i -> let (lang, _:dir) = splitAt i str in OutputOpt lang (Map.lookup lang generatorFns) dir
     Nothing -> OutputOpt str (Map.lookup str generatorFns) "."
 
+-- As always, here I am, writing my own path manipulation routines, because the ones in the
+-- standard lib don't do what I want.
+canonicalizePath :: [String] -> [String]
+-- An empty string anywhere other than the beginning must be caused by multiple consecutive /'s.
+canonicalizePath (a:"":rest) = canonicalizePath (a:rest)
+-- An empty string at the beginning means this is an absolute path.
+canonicalizePath ("":rest) = "":canonicalizePath rest
+-- "." is redundant.
+canonicalizePath (".":rest) = canonicalizePath rest
+-- ".." at the beginning of the path refers to the parent of the root directory.  Arguably this
+-- is illegal but let's at least make sure that "../../foo" doesn't canonicalize to "foo"!
+canonicalizePath ("..":rest) = "..":canonicalizePath rest
+-- ".." cancels out the previous path component.  Technically this does NOT match what the OS would
+-- do in the presence of symlinks:  `foo/bar/..` is NOT `foo` if `bar` is a symlink.  But, in
+-- practice, the user almost certainly wants symlinks to behave exactly the same as if the
+-- directory had been copied into place.
+canonicalizePath (_:"..":rest) = canonicalizePath rest
+-- In all other cases, just proceed on.
+canonicalizePath (a:rest) = a:canonicalizePath rest
+-- All done.
+canonicalizePath [] = []
+
+splitPath = loop [] where
+    loop part ('/':text) = List.reverse part : loop [] text
+    loop part (c:text) = loop (c:part) text
+    loop part [] = [List.reverse part]
+
+relativePath from searchPath relative = let
+    splitFrom = canonicalizePath $ splitPath from
+    splitRelative = canonicalizePath $ splitPath relative
+    splitSearchPath = map splitPath searchPath
+    -- TODO:  Should we explicitly disallow "/../foo"?
+    resultPath = if head splitRelative == ""
+        then map (++ tail splitRelative) splitSearchPath
+        else [canonicalizePath (init splitFrom ++ splitRelative)]
+    in map (List.intercalate "/") resultPath
+
+firstExisting :: [FilePath] -> IO (Maybe FilePath)
+firstExisting paths = do
+    bools <- mapM doesFileExist paths
+    let existing = [path | (True, path) <- zip bools paths]
+    return (if null existing then Nothing else Just (head existing))
+
 data ImportState = ImportInProgress | ImportFailed | ImportSucceeded FileDesc
 type ImportStateMap = Map.Map String ImportState
 data CompilerState = CompilerState Bool ImportStateMap
 type CompilerMonad a = StateT CompilerState IO a
 
-importFile :: Bool -> FilePath -> CompilerMonad (Either FileDesc String)
-importFile isVerbose filename = do
+importFile :: Bool -> [FilePath] -> FilePath -> CompilerMonad (Either FileDesc String)
+importFile isVerbose searchPath filename = do
     fileState <- state (\s@(CompilerState f m) -> case Map.lookup filename m of
         d@Nothing -> (d, CompilerState f (Map.insert filename ImportInProgress m))
         d -> (d, s))
@@ -125,24 +173,27 @@ importFile isVerbose filename = do
         Just ImportInProgress -> return $ Right "File cyclically imports itself."
         Just (ImportSucceeded d) -> return $ Left d
         Nothing -> do
-            result <- readAndParseFile isVerbose filename
+            result <- readAndParseFile isVerbose searchPath filename
             modify (\(CompilerState f m) -> case result of
                 Left desc -> CompilerState f (Map.insert filename (ImportSucceeded desc) m)
                 Right _ -> CompilerState True (Map.insert filename ImportFailed m))
             return result
 
-readAndParseFile isVerbose filename = do
+readAndParseFile isVerbose searchPath filename = do
     textOrError <- liftIO $ catch (fmap Left $ readFile filename)
         (\ex -> return $ Right $ show (ex :: IOException))
 
     case textOrError of
         Right err -> return $ Right err
-        Left text -> parseFile isVerbose filename text
+        Left text -> parseFile isVerbose searchPath filename text
 
-parseFile isVerbose filename text = do
+parseFile isVerbose searchPath filename text = do
     let importCallback name = do
-            let path = tail $ combine ('/':filename) name
-            importFile isVerbose path
+            let candidates = relativePath filename searchPath name
+            maybePath <- liftIO $ firstExisting candidates
+            case maybePath of
+                Nothing -> return $ Right "File not found."
+                Just path -> importFile isVerbose searchPath path
 
     status <- parseAndCompileFile filename text importCallback
     case status of
@@ -156,9 +207,9 @@ parseFile isVerbose filename text = do
             liftIO $ mapM_ printError (List.sortBy compareErrors e)
             return $ Right "File contained errors."
 
-handleFile :: [(GeneratorFn, FilePath)] -> Bool -> FilePath -> CompilerMonad ()
-handleFile outputs isVerbose filename = do
-    result <- importFile isVerbose filename
+handleFile :: [(GeneratorFn, FilePath)] -> Bool -> [FilePath] -> FilePath -> CompilerMonad ()
+handleFile outputs isVerbose searchPath filename = do
+    result <- importFile isVerbose searchPath filename
 
     case result of
         Right _ -> return ()
