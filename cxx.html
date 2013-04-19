@@ -360,6 +360,18 @@
 
 <p>There is an <a href='#example_usage'>example</a> of all this at the beginning of this page.</p>
 
+<h2 id='setting_a_namespace'>Setting a Namespace</h2>
+
+<p>You probably want your generated types to live in a C++ namespace. You will need to import <code>/capnproto/c++.capnp</code> and use the <code>namespace</code> annotation it defines:</p>
+<div class='highlight'><pre><code class='capnp'><span class='n'>Cxx</span> <span class='l'>= import &quot;/capnproto/c++.capnp&quot;</span>;
+<span class='na'>$Cxx.namespace(&quot;foo::bar::baz&quot;)</span>;
+</code></pre></div>
+<p>Note that for this to work, <code>capnproto/c++.capnp</code> must be located in the search path specified with <code>-I</code> options. This file is found in the Cap&#8217;n Proto source repo, so you could invoke <code>capnpc</code> like so:</p>
+
+<pre><code>capnpc -I$CAPNPROTO_GIT_ROOT/c++/src -oc++ myproto.capnp</code></pre>
+
+<p>As of this writing, the file is not automatically installed anywhere, but in the future it will be.</p>
+
 <h2 id='reference'>Reference</h2>
 
 <p>The runtime library contains lots of useful features not described on this page. For now, the best reference is the header files. See:</p>

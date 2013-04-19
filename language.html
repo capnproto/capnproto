@@ -338,6 +338,57 @@
   <span class='n'>baz</span> <span class='nd'>@0</span> <span class='nc'>:Baz</span>;
 }
 </code></pre></div>
+<p>The above imports specify relative paths. If the path begins with a <code>/</code>, it is absolute &#8211; in this case, <code>capnpc</code> searches for the file in each of the search path directories specified with <code>-I</code>.</p>
+
+<h3 id='annotations'>Annotations</h3>
+
+<p>Sometimes you want to attach extra information to parts of your protocol that isn&#8217;t part of the Cap&#8217;n Proto language. This information might control details of a particular code generator, or you might even read it at run time to assist in some kind of dynamic message processing. For example, you might create a field annotation which means &#8220;hide from the public&#8221;, and when you send a message to an external user, you might invoke some code first that iterates over your message and removes all of these hidden fields.</p>
+
+<p>You may declare annotations and use them like so:</p>
+<div class='highlight'><pre><code class='capnp'><span class='c1'># Declare an annotation &#39;foo&#39; which applies to struct and enum types.</span>
+<span class='k'>annotation</span> <span class='n'>foo</span>(<span class='k'>struct</span>, <span class='k'>enum</span>) <span class='nc'>:Text</span>;
+
+<span class='c1'># Apply &#39;foo&#39; to to MyType.</span>
+<span class='k'>struct</span> <span class='n'>MyType</span> <span class='na'>$foo(&quot;bar&quot;) </span>{
+  <span class='c1'># ...</span>
+}
+</code></pre></div>
+<p>The possible targets for an annotation are: <code>file</code>, <code>struct</code>, <code>field</code>, <code>union</code>, <code>enum</code>, <code>enumerant</code>, <code>interface</code>, <code>method</code>, <code>parameter</code>, <code>annotation</code>, <code>const</code>. You may also specify <code>*</code> to cover them all.</p>
+<div class='highlight'><pre><code class='capnp'><span class='c1'># &#39;baz&#39; can annotate anything!</span>
+<span class='k'>annotation</span> <span class='n'>baz</span>(*) <span class='nc'>:Int32</span>;
+
+<span class='na'>$baz(1)</span>;  <span class='c1'># Annotate the file.</span>
+
+<span class='k'>struct</span> <span class='n'>MyStruct</span> <span class='na'>$baz(2) </span>{
+  <span class='n'>myField</span> <span class='nd'>@0</span> <span class='nc'>:Text </span><span class='l'>= &quot;default&quot; </span><span class='na'>$baz(3)</span>;
+  <span class='n'>myUnion</span> <span class='nd'>@1</span> <span class='k'>union</span> <span class='na'>$baz(4) </span>{
+    <span class='c1'># ...</span>
+  }
+}
+
+<span class='k'>enum</span> <span class='n'>MyEnum</span> <span class='na'>$baz(5) </span>{
+  <span class='n'>myEnumerant</span> <span class='nd'>@0</span> <span class='na'>$baz(6)</span>;
+}
+
+<span class='k'>interface</span> <span class='n'>MyInterface</span> <span class='na'>$baz(7) </span>{
+  <span class='n'>myMethod</span>(<span class='n'>myParam</span> <span class='nc'>:Text </span><span class='na'>$baz(9)</span>) <span class='nc'>:Void </span><span class='na'>$baz(8)</span>;
+}
+
+<span class='k'>annotation</span> <span class='n'>myAnnotation</span>(<span class='k'>struct</span>) <span class='nc'>:Int32 </span><span class='na'>$baz(10)</span>;
+<span class='k'>const</span> <span class='n'>myConst</span> <span class='nc'>:Int32 </span><span class='l'>= 123 </span><span class='na'>$baz(11)</span>;
+</code></pre></div>
+<p><code>Void</code> annotations can omit the value. Struct-typed annotations are also allowed.</p>
+<div class='highlight'><pre><code class='capnp'><span class='k'>annotation</span> <span class='n'>qux</span>(<span class='k'>struct</span>, <span class='n'>field</span>) <span class='nc'>:Void</span>;
+
+<span class='k'>struct</span> <span class='n'>MyStruct</span> <span class='na'>$qux </span>{
+  <span class='n'>string</span> <span class='na'>$0 </span><span class='nc'>:Text </span><span class='na'>$qux</span>;
+  <span class='n'>number</span> <span class='na'>$1 </span><span class='nc'>:Int32 </span><span class='na'>$qux</span>;
+}
+
+<span class='k'>annotation</span> <span class='n'>corge</span>(<span class='n'>file</span>) <span class='nc'>:MyStruct</span>;
+
+<span class='na'>$corge(string = &quot;hello&quot;, number = 123)</span>;
+</code></pre></div>
 <h2 id='evolving_your_protocol'>Evolving Your Protocol</h2>
 
 <p>A protocol can be changed in the following ways without breaking backwards-compatibility:</p>
