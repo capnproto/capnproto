@@ -30,7 +30,7 @@ import Data.FileEmbed(embedFile)
 import Data.Word(Word8)
 import qualified Data.Digest.MD5 as MD5
 import qualified Data.Map as Map
-import Data.Maybe(catMaybes)
+import Data.Maybe(catMaybes, fromMaybe)
 import Data.Binary.IEEE754(floatToWord, doubleToWord)
 import Text.Printf(printf)
 import Text.Hastache
@@ -50,12 +50,20 @@ muNull = MuBool False;
 -- Using a single-element list has the same effect, though.
 muJust c = MuList [c]
 
+namespaceAnnotationId = "v3JF2GP4Supe9JSSJ3pnSdUqhJI.namespace"
+
+fileNamespace desc = fmap testAnnotation $ Map.lookup namespaceAnnotationId $ fileAnnotations desc
+
+testAnnotation (_, TextDesc x) = x
+testAnnotation (desc, _) =
+    error "Annotation was supposed to be text, but wasn't: " ++ annotationName desc
+
 fullName desc = scopePrefix (descParent desc) ++ descName desc
 
 scopePrefix (DescFile _) = ""
 scopePrefix desc = fullName desc ++ "::"
 
-globalName (DescFile _) = " "  -- TODO: namespaces
+globalName (DescFile desc) = maybe " " (" ::" ++) $ fileNamespace desc
 globalName desc = globalName (descParent desc) ++ "::" ++ descName desc
 
 -- Flatten the descriptor tree in pre-order, returning struct, union, and interface descriptors
@@ -303,14 +311,20 @@ importContext parent filename = mkStrContext context where
     context "importIsSystem" = MuBool False
     context s = parent s
 
+namespaceContext parent part = mkStrContext context where
+    context "namespaceName" = MuVariable part
+    context s = parent s
+
 fileContext desc = mkStrContext context where
     flattenedMembers = flattenTypes $ catMaybes $ Map.elems $ fileMemberMap desc
+
+    namespace = maybe [] (splitOn "::") $ fileNamespace desc
 
     context "fileName" = MuVariable $ fileName desc
     context "fileBasename" = MuVariable $ takeBaseName $ fileName desc
     context "fileIncludeGuard" = MuVariable $
-        "CAPNPROTO_INCLUDED_" ++ hashString (fileName desc)
-    context "fileNamespaces" = MuList []  -- TODO
+        "CAPNPROTO_INCLUDED_" ++ hashString (fileName desc ++ ':':fromMaybe "" (fileId desc))
+    context "fileNamespaces" = MuList $ map (namespaceContext context) namespace
     context "fileEnums" = MuList $ map (enumContext context) $ fileEnums desc
     context "fileTypes" = MuList $ map (typeContext context) flattenedMembers
     context "fileImports" = MuList $ map (importContext context) $ Map.keys $ fileImportMap desc

@@ -21,6 +21,10 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+using Cxx = import "c++.capnp";
+
+$Cxx.namespace("capnproto::test");
+
 enum TestEnum {
   foo @0;
   bar @1;

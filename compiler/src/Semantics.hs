@@ -39,8 +39,6 @@ import Grammar(AnnotationTarget(..))
 -- ordinal is 65534.
 maxOrdinal = 65534 :: Integer
 
-idId = "com.capnproto.compiler.builtin.id"
-
 type ByteString = [Word8]
 
 data Desc = DescFile FileDesc
@@ -57,6 +55,7 @@ data Desc = DescFile FileDesc
           | DescAnnotation AnnotationDesc
           | DescBuiltinType BuiltinType
           | DescBuiltinList
+          | DescBuiltinId
 
 descName (DescFile      _) = "(top-level)"
 descName (DescAlias     d) = aliasName d
@@ -72,6 +71,31 @@ descName (DescParam     d) = paramName d
 descName (DescAnnotation d) = annotationName d
 descName (DescBuiltinType d) = builtinTypeName d
 descName DescBuiltinList = "List"
+descName DescBuiltinId = "id"
+
+descId (DescFile      d) = fileId d
+descId (DescAlias     _) = Nothing
+descId (DescConstant  d) = constantId d
+descId (DescEnum      d) = enumId d
+descId (DescEnumValue d) = enumValueId d
+descId (DescStruct    d) = structId d
+descId (DescUnion     d) = unionId d
+descId (DescField     d) = fieldId d
+descId (DescInterface d) = interfaceId d
+descId (DescMethod    d) = methodId d
+descId (DescParam     d) = paramId d
+descId (DescAnnotation d) = annotationId d
+descId (DescBuiltinType _) = Nothing
+descId DescBuiltinList = Nothing
+descId DescBuiltinId = Just "0U0T3e_SnatEfk6UcH2tcjTt1E0"
+
+-- Gets the ID if explicitly defined, or generates it by appending ".name" to the parent's ID.
+-- If no ancestor has an ID, still returns Nothing.
+descAutoId d = case descId d of
+    Just i -> Just i
+    Nothing -> case d of
+        DescFile _ -> Nothing
+        _ -> fmap (++ '.':descName d) $ descAutoId $ descParent d
 
 descParent (DescFile      _) = error "File descriptor has no parent."
 descParent (DescAlias     d) = aliasParent d
@@ -87,6 +111,23 @@ descParent (DescParam     d) = DescMethod (paramParent d)
 descParent (DescAnnotation d) = annotationParent d
 descParent (DescBuiltinType _) = error "Builtin type has no parent."
 descParent DescBuiltinList = error "Builtin type has no parent."
+descParent DescBuiltinId = error "Builtin annotation has no parent."
+
+descAnnotations (DescFile      d) = fileAnnotations d
+descAnnotations (DescAlias     _) = Map.empty
+descAnnotations (DescConstant  d) = constantAnnotations d
+descAnnotations (DescEnum      d) = enumAnnotations d
+descAnnotations (DescEnumValue d) = enumValueAnnotations d
+descAnnotations (DescStruct    d) = structAnnotations d
+descAnnotations (DescUnion     d) = unionAnnotations d
+descAnnotations (DescField     d) = fieldAnnotations d
+descAnnotations (DescInterface d) = interfaceAnnotations d
+descAnnotations (DescMethod    d) = methodAnnotations d
+descAnnotations (DescParam     d) = paramAnnotations d
+descAnnotations (DescAnnotation d) = annotationAnnotations d
+descAnnotations (DescBuiltinType _) = Map.empty
+descAnnotations DescBuiltinList = Map.empty
+descAnnotations DescBuiltinId = Map.empty
 
 type MemberMap = Map.Map String (Maybe Desc)
 
@@ -264,6 +305,7 @@ descQualifiedName scope desc = descQualifiedName (descParent scope) desc
 
 data FileDesc = FileDesc
     { fileName :: String
+    , fileId :: Maybe String
     , fileImports :: [FileDesc]
     , fileAliases :: [AliasDesc]
     , fileConstants :: [ConstantDesc]
@@ -284,6 +326,7 @@ data AliasDesc = AliasDesc
 
 data ConstantDesc = ConstantDesc
     { constantName :: String
+    , constantId :: Maybe String
     , constantParent :: Desc
     , constantType :: TypeDesc
     , constantAnnotations :: AnnotationMap
@@ -292,6 +335,7 @@ data ConstantDesc = ConstantDesc
 
 data EnumDesc = EnumDesc
     { enumName :: String
+    , enumId :: Maybe String
     , enumParent :: Desc
     , enumValues :: [EnumValueDesc]
     , enumAnnotations :: AnnotationMap
@@ -301,6 +345,7 @@ data EnumDesc = EnumDesc
 
 data EnumValueDesc = EnumValueDesc
     { enumValueName :: String
+    , enumValueId :: Maybe String
     , enumValueParent :: EnumDesc
     , enumValueNumber :: Integer
     , enumValueAnnotations :: AnnotationMap
@@ -308,6 +353,7 @@ data EnumValueDesc = EnumValueDesc
 
 data StructDesc = StructDesc
     { structName :: String
+    , structId :: Maybe String
     , structParent :: Desc
     , structPacking :: PackingState
     , structFields :: [FieldDesc]
@@ -329,6 +375,7 @@ data StructDesc = StructDesc
 
 data UnionDesc = UnionDesc
     { unionName :: String
+    , unionId :: Maybe String
     , unionParent :: StructDesc
     , unionNumber :: Integer
     , unionTagOffset :: Integer
@@ -344,6 +391,7 @@ data UnionDesc = UnionDesc
 
 data FieldDesc = FieldDesc
     { fieldName :: String
+    , fieldId :: Maybe String
     , fieldParent :: StructDesc
     , fieldNumber :: Integer
     , fieldOffset :: Integer
@@ -356,6 +404,7 @@ data FieldDesc = FieldDesc
 
 data InterfaceDesc = InterfaceDesc
     { interfaceName :: String
+    , interfaceId :: Maybe String
     , interfaceParent :: Desc
     , interfaceMethods :: [MethodDesc]
     , interfaceNestedAliases :: [AliasDesc]
@@ -370,6 +419,7 @@ data InterfaceDesc = InterfaceDesc
 
 data MethodDesc = MethodDesc
     { methodName :: String
+    , methodId :: Maybe String
     , methodParent :: InterfaceDesc
     , methodNumber :: Integer
     , methodParams :: [ParamDesc]
@@ -379,6 +429,7 @@ data MethodDesc = MethodDesc
 
 data ParamDesc = ParamDesc
     { paramName :: String
+    , paramId :: Maybe String
     , paramParent :: MethodDesc
     , paramNumber :: Integer
     , paramType :: TypeDesc
@@ -391,43 +442,47 @@ data AnnotationDesc = AnnotationDesc
     , annotationParent :: Desc
     , annotationType :: TypeDesc
     , annotationAnnotations :: AnnotationMap
+    , annotationId :: Maybe String
     , annotationTargets :: Set.Set AnnotationTarget
     }
 
 type AnnotationMap = Map.Map String (AnnotationDesc, ValueDesc)
 
 descToCode :: String -> Desc -> String
-descToCode indent self@(DescFile desc) = printf "# %s\n%s%s"
+descToCode indent self@(DescFile desc) = printf "# %s\n%s%s%s"
     (fileName desc)
-    (concatMap ((++ ";\n") . annotationCode (descParent self)) $ Map.toList $ fileAnnotations desc)
+    (case fileId desc of
+        Just i -> printf "$id(%s);\n" $ show i
+        Nothing -> "")
+    (concatMap ((++ ";\n") . annotationCode self) $ Map.toList $ fileAnnotations desc)
     (concatMap (descToCode indent) (fileStatements desc))
 descToCode indent (DescAlias desc) = printf "%susing %s = %s;\n" indent
     (aliasName desc)
     (descQualifiedName (aliasParent desc) (aliasTarget desc))
-descToCode indent self@(DescConstant desc) = printf "%sconst %s: %s%s = %s;\n" indent
+descToCode indent self@(DescConstant desc) = printf "%sconst %s: %s = %s%s;\n" indent
     (constantName desc)
     (typeName (descParent self) (constantType desc))
-    (annotationsCode (descParent self) $ constantAnnotations desc)
     (valueString (constantValue desc))
+    (annotationsCode self)
 descToCode indent self@(DescEnum desc) = printf "%senum %s%s {\n%s%s}\n" indent
     (enumName desc)
-    (annotationsCode (descParent self) $ enumAnnotations desc)
+    (annotationsCode self)
     (blockCode indent (enumStatements desc))
     indent
 descToCode indent self@(DescEnumValue desc) = printf "%s%s @%d%s;\n" indent
     (enumValueName desc) (enumValueNumber desc)
-    (annotationsCode (descParent self) $ enumValueAnnotations desc)
+    (annotationsCode self)
 descToCode indent self@(DescStruct desc) = printf "%sstruct %s%s {\n%s%s}\n" indent
     (structName desc)
-    (annotationsCode (descParent self) $ structAnnotations desc)
+    (annotationsCode self)
     (blockCode indent (structStatements desc))
     indent
 descToCode indent self@(DescField desc) = printf "%s%s@%d%s: %s%s%s;  # %s\n" indent
     (fieldName desc) (fieldNumber desc)
     (case fieldUnion desc of { Nothing -> ""; Just (u, _) -> " in " ++ unionName u})
     (typeName (descParent self) (fieldType desc))
-    (annotationsCode (descParent self) $ fieldAnnotations desc)
     (case fieldDefaultValue desc of { Nothing -> ""; Just v -> " = " ++ valueString v; })
+    (annotationsCode self)
     (case fieldSize $ fieldType desc of
         SizeReference -> printf "ref[%d]" $ fieldOffset desc
         SizeInlineComposite _ _ -> "??"
@@ -437,34 +492,35 @@ descToCode indent self@(DescField desc) = printf "%s%s@%d%s: %s%s%s;  # %s\n" in
             in printf "bits[%d, %d)" (offset * bits) ((offset + 1) * bits))
 descToCode indent self@(DescUnion desc) = printf "%sunion %s@%d%s {  # [%d, %d)\n%s%s}\n" indent
     (unionName desc) (unionNumber desc)
-    (annotationsCode (descParent self) $ unionAnnotations desc)
+    (annotationsCode self)
     (unionTagOffset desc * 16) (unionTagOffset desc * 16 + 16)
     (blockCode indent $ unionStatements desc)
     indent
 descToCode indent self@(DescInterface desc) = printf "%sinterface %s%s {\n%s%s}\n" indent
     (interfaceName desc)
-    (annotationsCode (descParent self) $ interfaceAnnotations desc)
+    (annotationsCode self)
     (blockCode indent (interfaceStatements desc))
     indent
 descToCode indent self@(DescMethod desc) = printf "%s%s@%d(%s): %s%s" indent
     (methodName desc) (methodNumber desc)
     (delimit ", " (map (descToCode indent . DescParam) (methodParams desc)))
     (typeName (descParent self) (methodReturnType desc))
-    (annotationsCode (descParent self) $ methodAnnotations desc)
+    (annotationsCode self)
 descToCode _ self@(DescParam desc) = printf "%s: %s%s%s"
     (paramName desc)
     (typeName (descParent self) (paramType desc))
-    (annotationsCode (descParent self) $ paramAnnotations desc)
     (case paramDefaultValue desc of
         Just v -> printf " = %s" $ valueString v
         Nothing -> "")
-descToCode indent self@(DescAnnotation desc) = printf "%sannotation %s: %s%s on(%s);\n" indent
+    (annotationsCode self)
+descToCode indent self@(DescAnnotation desc) = printf "%sannotation %s: %s on(%s)%s;\n" indent
     (annotationName desc)
     (typeName (descParent self) (annotationType desc))
-    (annotationsCode (descParent self) $ annotationAnnotations desc)
     (delimit ", " $ map show $ Set.toList $ annotationTargets desc)
+    (annotationsCode self)
 descToCode _ (DescBuiltinType _) = error "Can't print code for builtin type."
 descToCode _ DescBuiltinList = error "Can't print code for builtin type."
+descToCode _ DescBuiltinId = error "Can't print code for builtin annotation."
 
 maybeBlockCode :: String -> [Desc] -> String
 maybeBlockCode _ [] = ";\n"
@@ -476,12 +532,15 @@ blockCode indent = concatMap (descToCode ("  " ++ indent))
 annotationCode :: Desc -> (String, (AnnotationDesc, ValueDesc)) -> String
 annotationCode scope (_, (desc, VoidDesc)) =
     printf "$%s" (descQualifiedName scope (DescAnnotation desc))
-annotationCode _ (annId, (desc, val)) | annId == idId =
-    printf "$id(%s)" (valueString val)
 annotationCode scope (_, (desc, val)) =
     printf "$%s(%s)" (descQualifiedName scope (DescAnnotation desc)) (valueString val)
 
-annotationsCode scope = concatMap ((' ':) . annotationCode scope) . Map.toList
+annotationsCode desc = let
+    nonIds = concatMap ((' ':) . annotationCode (descParent desc)) $ Map.toList
+           $ descAnnotations desc
+    in case descId desc of
+        Just i -> printf " $id(%s)%s" (show i) nonIds
+        Nothing -> nonIds
 
 instance Show FileDesc where { show desc = descToCode "" (DescFile desc) }
 instance Show AliasDesc where { show desc = descToCode "" (DescAlias desc) }

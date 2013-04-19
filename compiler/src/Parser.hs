@@ -184,9 +184,9 @@ constantDecl = do
     name <- located varIdentifier
     colon
     typeName <- typeExpression
-    annotations <- many annotation
     equalsSign
     value <- located fieldValue
+    annotations <- many annotation
     return (ConstantDecl name typeName annotations value)
 
 typeDecl statements = enumDecl statements
@@ -235,8 +235,8 @@ fieldDecl = do
     (name, ordinal) <- nameWithOrdinal
     colon
     t <- typeExpression
-    annotations <- many annotation
     value <- optionMaybe (equalsSign >> located fieldValue)
+    annotations <- many annotation
     return (FieldDecl name ordinal t annotations value)
 
 negativeFieldValue = liftM (IntegerFieldValue . negate) literalInt
@@ -288,8 +288,8 @@ paramDecl = do
     name <- varIdentifier
     colon
     t <- typeExpression
-    annotations <- many annotation
     value <- optionMaybe (equalsSign >> located fieldValue)
+    annotations <- many annotation
     return (ParamDecl name t annotations value)
 
 annotationDecl = do
@@ -297,10 +297,10 @@ annotationDecl = do
     name <- located varIdentifier
     colon
     t <- typeExpression
-    annotations <- many annotation
     onKeyword
     targets <- try (parenthesized asterisk >> return allAnnotationTargets)
            <|> parenthesizedList annotationTarget
+    annotations <- many annotation
     return (AnnotationDecl name t annotations targets)
 allAnnotationTargets = [minBound::AnnotationTarget .. maxBound::AnnotationTarget]
 

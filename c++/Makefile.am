@@ -84,10 +84,13 @@ libcapnproto_a_SOURCES=                                        \
 # Tests ==============================================================
 
 capnpc_inputs =                                                \
+  src/capnproto/c++.capnp                                      \
   src/capnproto/test.capnp                                     \
   src/capnproto/test-import.capnp
 
 capnpc_outputs =                                               \
+  src/capnproto/c++.capnp.c++                                  \
+  src/capnproto/c++.capnp.h                                    \
   src/capnproto/test.capnp.c++                                 \
   src/capnproto/test.capnp.h                                   \
   src/capnproto/test-import.capnp.c++                          \

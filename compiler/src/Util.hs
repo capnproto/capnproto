@@ -24,12 +24,19 @@
 module Util where
 
 import Data.Char (isUpper, toUpper)
-import Data.List (intercalate)
+import Data.List (intercalate, isPrefixOf)
 
 --delimit _ [] = ""
 --delimit delimiter (h:t) = h ++ concatMap (delimiter ++) t
 delimit = intercalate
 
+splitOn :: String -> String -> [String]
+splitOn _ "" = [""]
+splitOn delimiter text | delimiter `isPrefixOf` text =
+    []:splitOn delimiter (drop (length delimiter) text)
+splitOn delimiter (c:rest) = let (first:more) = splitOn delimiter rest in (c:first):more
+
+-- Splits "camelCase" into ["camel", "Case"]
 splitName :: String -> [String]
 splitName (a:rest@(b:_)) | isUpper b = [a]:splitName rest
 splitName (a:rest) = case splitName rest of
