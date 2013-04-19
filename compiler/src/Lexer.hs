@@ -48,7 +48,7 @@ keywords =
     , (StructKeyword, "struct")
     , (UnionKeyword, "union")
     , (InterfaceKeyword, "interface")
-    , (OptionKeyword, "option")
+    , (AnnotationKeyword, "annotation")
     ]
 
 languageDef :: T.LanguageDef st
@@ -114,15 +114,17 @@ tokenSequence = do
 token :: Parser Token
 token = keyword
     <|> identifier
-    <|> liftM ParenthesizedList  (parens (sepBy tokenSequence (symbol ",")))
-    <|> liftM BracketedList      (brackets (sepBy tokenSequence (symbol ",")))
-    <|> liftM toLiteral          naturalOrFloat
-    <|> liftM LiteralString      stringLiteral
-    <|> liftM (const AtSign)     (symbol "@")
-    <|> liftM (const Colon)      (symbol ":")
-    <|> liftM (const Period)     (symbol ".")
-    <|> liftM (const EqualsSign) (symbol "=")
-    <|> liftM (const MinusSign)  (symbol "-")
+    <|> liftM ParenthesizedList   (parens (sepBy tokenSequence (symbol ",")))
+    <|> liftM BracketedList       (brackets (sepBy tokenSequence (symbol ",")))
+    <|> liftM toLiteral           naturalOrFloat
+    <|> liftM LiteralString       stringLiteral
+    <|> liftM (const AtSign)      (symbol "@")
+    <|> liftM (const Colon)       (symbol ":")
+    <|> liftM (const DollarSign)  (symbol "$")
+    <|> liftM (const Period)      (symbol ".")
+    <|> liftM (const EqualsSign)  (symbol "=")
+    <|> liftM (const MinusSign)   (symbol "-")
+    <|> liftM (const Asterisk)    (symbol "*")
     <|> liftM (const ExclamationPoint) (symbol "!")
     <?> "token"
 

@@ -27,6 +27,7 @@ import Grammar
 import Semantics
 import Token(Located(Located))
 import Parser(parseFile)
+import Control.Monad(unless)
 import qualified Data.Map as Map
 import Data.Map((!))
 import qualified Data.Set as Set
@@ -153,7 +154,27 @@ lookupDesc scope name = lookupDesc (descParent scope) name
 builtinTypeMap :: Map.Map String Desc
 builtinTypeMap = Map.fromList
     ([(builtinTypeName t, DescBuiltinType t) | t <- builtinTypes] ++
-     [("List", DescBuiltinList)])
+     [("List", DescBuiltinList), ("id", DescAnnotation builtinId)])
+
+builtinId = AnnotationDesc
+    { annotationName = "id"
+    , annotationParent = DescFile FileDesc
+        { fileName = "capnproto-builtins.capnp"
+        , fileImports = []
+        , fileAliases = []
+        , fileConstants = []
+        , fileEnums = []
+        , fileStructs = []
+        , fileInterfaces = []
+        , fileAnnotations = Map.empty
+        , fileMemberMap = Map.fromList [("id", Just $ DescAnnotation builtinId)]
+        , fileImportMap = Map.empty
+        , fileStatements = [DescAnnotation builtinId]
+        }
+    , annotationType = BuiltinType BuiltinText
+    , annotationAnnotations = Map.fromList [(idId, (builtinId, TextDesc idId))]
+    , annotationTargets = Set.fromList [minBound::AnnotationTarget .. maxBound::AnnotationTarget]
+    }
 
 ------------------------------------------------------------------------------------------
 
@@ -283,6 +304,31 @@ compileType scope (TypeExpression n (param:moreParams)) = do
                 else makeError (declNamePos n) "'List' requires exactly one type parameter."
         _ -> makeError (declNamePos n) "Only the type 'List' can have type parameters."
 
+compileAnnotation :: Desc -> AnnotationTarget -> Annotation -> Status (AnnotationDesc, ValueDesc)
+compileAnnotation scope kind (Annotation name (Located pos value)) = do
+    nameDesc <- lookupDesc scope name
+    annDesc <- case nameDesc of
+        DescAnnotation a -> return a
+        _ -> makeError (declNamePos name)
+           $ printf "'%s' is not an annotation." (declNameString name)
+    unless (Set.member kind (annotationTargets annDesc))
+        (makeError (declNamePos name)
+        $ printf "'%s' cannot be used on %s." (declNameString name) (show kind))
+    compiledValue <- compileValue pos (annotationType annDesc) value
+    return (annDesc, compiledValue)
+
+compileAnnotationMap :: Desc -> AnnotationTarget -> [Annotation] -> Status AnnotationMap
+compileAnnotationMap scope kind annotations = do
+    compiled <- doAll $ map (compileAnnotation scope kind) annotations
+
+    -- Makes a map entry for the annotation keyed by ID.  Throws out annotations with no ID.
+    let makeMapEntry ann@(desc, _) =
+            case Map.lookup idId $ annotationAnnotations desc of
+                Just (_, TextDesc globalId) -> Just (globalId, ann)
+                _ -> Nothing
+
+    return $ Map.fromList $ mapMaybe makeMapEntry compiled
+
 ------------------------------------------------------------------------------------------
 
 findDupesBy :: Ord a => (b -> a) -> [b] -> [[b]]
@@ -345,8 +391,8 @@ requireNoMoreThanOneFieldNumberLessThan name pos num fields = Active () errors w
 
 extractFieldNumbers :: [Declaration] -> [Located Integer]
 extractFieldNumbers decls = concat
-    ([ num | FieldDecl _ num _ _ <- decls ]
-    :[ num:extractFieldNumbers uDecls | UnionDecl _ num uDecls <- decls ])
+    ([ num | FieldDecl _ num _ _ _ <- decls ]
+    :[ num:extractFieldNumbers uDecls | UnionDecl _ num _ uDecls <- decls ])
 
 ------------------------------------------------------------------------------------------
 
@@ -486,34 +532,22 @@ packFields fields unions = (finalState, finalUnionState, Map.fromList packedItem
 
 ------------------------------------------------------------------------------------------
 
--- For CompiledMemberStatus, the second parameter contains members that should be inserted into the
--- parent's map, e.g. fields defined in a union which should be considered members of the parent
--- struct as well.  Usually (except in the case of unions) this map is empty.
-data CompiledStatementStatus = CompiledMemberStatus String (Status Desc)
-                             | CompiledOptionStatus (Status OptionAssignmentDesc)
+data CompiledStatementStatus = CompiledStatementStatus String (Status Desc)
 
-toCompiledStatement :: CompiledStatementStatus -> Maybe CompiledStatement
-toCompiledStatement (CompiledMemberStatus _ (Active desc _)) = Just (CompiledMember desc)
-toCompiledStatement (CompiledOptionStatus (Active desc _)) = Just (CompiledOption desc)
-toCompiledStatement _ = Nothing
-
-compiledErrors (CompiledMemberStatus _ status) = statusErrors status
-compiledErrors (CompiledOptionStatus status) = statusErrors status
+compiledErrors (CompiledStatementStatus _ status) = statusErrors status
 
 compileChildDecls :: Desc -> [Declaration]
-                  -> Status ([Desc], MemberMap, OptionMap, [CompiledStatement])
-compileChildDecls desc decls = Active (members, memberMap, options, statements) errors where
+                  -> Status ([Desc], MemberMap)
+compileChildDecls desc decls = Active (members, memberMap) errors where
     compiledDecls = map (compileDecl desc) decls
     memberMap = Map.fromList memberPairs
     members = [member | (_, Just member) <- memberPairs]
-    memberPairs = [(name, statusToMaybe status) | CompiledMemberStatus name status <- compiledDecls]
-    options = Map.fromList [(optionName (optionAssignmentOption o), o)
-                           | CompiledOptionStatus (Active o _) <- compiledDecls]
+    memberPairs = [(name, statusToMaybe status)
+                  | CompiledStatementStatus name status <- compiledDecls]
     errors = concatMap compiledErrors compiledDecls
-    statements = mapMaybe toCompiledStatement compiledDecls
 
 compileDecl scope (AliasDecl (Located _ name) target) =
-    CompiledMemberStatus name (do
+    CompiledStatementStatus name (do
         targetDesc <- lookupDesc scope target
         return (DescAlias AliasDesc
             { aliasName = name
@@ -521,53 +555,57 @@ compileDecl scope (AliasDecl (Located _ name) target) =
             , aliasTarget = targetDesc
             }))
 
-compileDecl scope (ConstantDecl (Located _ name) t (Located valuePos value)) =
-    CompiledMemberStatus name (do
+compileDecl scope (ConstantDecl (Located _ name) t annotations (Located valuePos value)) =
+    CompiledStatementStatus name (do
         typeDesc <- compileType scope t
         valueDesc <- compileValue valuePos typeDesc value
+        compiledAnnotations <- compileAnnotationMap scope ConstantAnnotation annotations
         return (DescConstant ConstantDesc
             { constantName = name
             , constantParent = scope
             , constantType = typeDesc
             , constantValue = valueDesc
+            , constantAnnotations = compiledAnnotations
             }))
 
-compileDecl scope (EnumDecl (Located _ name) decls) =
-    CompiledMemberStatus name (feedback (\desc -> do
-        (members, memberMap, options, statements) <- compileChildDecls desc decls
+compileDecl scope (EnumDecl (Located _ name) annotations decls) =
+    CompiledStatementStatus name (feedback (\desc -> do
+        (members, memberMap) <- compileChildDecls desc decls
         requireNoDuplicateNames decls
         let numbers = [ num | EnumValueDecl _ num _ <- decls ]
         requireSequentialNumbering "Enum values" numbers
         requireOrdinalsInRange numbers
+        compiledAnnotations <- compileAnnotationMap scope EnumAnnotation annotations
         return (DescEnum EnumDesc
             { enumName = name
             , enumParent = scope
             , enumValues = [d | DescEnumValue d <- members]
-            , enumOptions = options
+            , enumAnnotations = compiledAnnotations
             , enumMemberMap = memberMap
-            , enumStatements = statements
+            , enumStatements = members
             })))
 
-compileDecl (DescEnum parent) (EnumValueDecl (Located _ name) (Located _ number) decls) =
-    CompiledMemberStatus name (feedback (\desc -> do
-        (_, _, options, statements) <- compileChildDecls desc decls
+compileDecl scope@(DescEnum parent)
+            (EnumValueDecl (Located _ name) (Located _ number) annotations) =
+    CompiledStatementStatus name (do
+        compiledAnnotations <- compileAnnotationMap scope EnumValueAnnotation annotations
         return (DescEnumValue EnumValueDesc
             { enumValueName = name
             , enumValueParent = parent
             , enumValueNumber = number
-            , enumValueOptions = options
-            , enumValueStatements = statements
-            })))
+            , enumValueAnnotations = compiledAnnotations
+            }))
 compileDecl _ (EnumValueDecl (Located pos name) _ _) =
-    CompiledMemberStatus name (makeError pos "Enum values can only appear inside enums.")
+    CompiledStatementStatus name (makeError pos "Enum values can only appear inside enums.")
 
-compileDecl scope (StructDecl (Located _ name) decls) =
-    CompiledMemberStatus name (feedback (\desc -> do
-        (members, memberMap, options, statements) <- compileChildDecls desc decls
+compileDecl scope (StructDecl (Located _ name) annotations decls) =
+    CompiledStatementStatus name (feedback (\desc -> do
+        (members, memberMap) <- compileChildDecls desc decls
         requireNoDuplicateNames decls
         let fieldNums = extractFieldNumbers decls
         requireSequentialNumbering "Fields" fieldNums
         requireOrdinalsInRange fieldNums
+        compiledAnnotations <- compileAnnotationMap scope StructAnnotation annotations
         return (let
             fields = [d | DescField d <- members]
             unions = [d | DescUnion d <- members]
@@ -583,19 +621,21 @@ compileDecl scope (StructDecl (Located _ name) decls) =
             , structNestedEnums      = [d | DescEnum      d <- members]
             , structNestedStructs    = [d | DescStruct    d <- members]
             , structNestedInterfaces = [d | DescInterface d <- members]
-            , structOptions = options
+            , structAnnotations = compiledAnnotations
             , structMemberMap = memberMap
-            , structStatements = statements
+            , structStatements = members
             , structFieldPackingMap = fieldPackingMap
             })))
 
-compileDecl (DescStruct parent) (UnionDecl (Located _ name) (Located numPos number) decls) =
-    CompiledMemberStatus name (feedback (\desc -> do
-        (members, memberMap, options, statements) <- compileChildDecls desc decls
+compileDecl scope@(DescStruct parent)
+            (UnionDecl (Located _ name) (Located numPos number) annotations decls) =
+    CompiledStatementStatus name (feedback (\desc -> do
+        (members, memberMap) <- compileChildDecls desc decls
         let fields = [f | DescField f <- members]
             orderedFieldNumbers = List.sort $ map fieldNumber fields
             discriminantMap = Map.fromList $ zip orderedFieldNumbers [0..]
         requireNoMoreThanOneFieldNumberLessThan name numPos number fields
+        compiledAnnotations <- compileAnnotationMap scope UnionAnnotation annotations
         return (let
             (tagOffset, tagPacking) = structFieldPackingMap parent ! number
             in DescUnion UnionDesc
@@ -605,17 +645,17 @@ compileDecl (DescStruct parent) (UnionDecl (Located _ name) (Located numPos numb
             , unionTagOffset = tagOffset
             , unionTagPacking = tagPacking
             , unionFields = fields
-            , unionOptions = options
+            , unionAnnotations = compiledAnnotations
             , unionMemberMap = memberMap
-            , unionStatements = statements
+            , unionStatements = members
             , unionFieldDiscriminantMap = discriminantMap
             })))
-compileDecl _ (UnionDecl (Located pos name) _ _) =
-    CompiledMemberStatus name (makeError pos "Unions can only appear inside structs.")
+compileDecl _ (UnionDecl (Located pos name) _ _ _) =
+    CompiledStatementStatus name (makeError pos "Unions can only appear inside structs.")
 
 compileDecl scope
-            (FieldDecl (Located pos name) (Located _ number) typeExp defaultValue) =
-    CompiledMemberStatus name (do
+            (FieldDecl (Located pos name) (Located _ number) typeExp annotations defaultValue) =
+    CompiledStatementStatus name (do
         parent <- case scope of
             DescStruct s -> return s
             DescUnion u -> return (unionParent u)
@@ -627,6 +667,7 @@ compileDecl scope
         defaultDesc <- case defaultValue of
             Just (Located defaultPos value) -> fmap Just (compileValue defaultPos typeDesc value)
             Nothing -> return Nothing
+        compiledAnnotations <- compileAnnotationMap scope FieldAnnotation annotations
         return (let
             (offset, packing) = structFieldPackingMap parent ! number
             in DescField FieldDesc
@@ -638,16 +679,17 @@ compileDecl scope
             , fieldUnion = unionDesc
             , fieldType = typeDesc
             , fieldDefaultValue = defaultDesc
-            , fieldOptions = Map.empty  -- TODO
+            , fieldAnnotations = compiledAnnotations
             }))
 
-compileDecl scope (InterfaceDecl (Located _ name) decls) =
-    CompiledMemberStatus name (feedback (\desc -> do
-        (members, memberMap, options, statements) <- compileChildDecls desc decls
+compileDecl scope (InterfaceDecl (Located _ name) annotations decls) =
+    CompiledStatementStatus name (feedback (\desc -> do
+        (members, memberMap) <- compileChildDecls desc decls
         requireNoDuplicateNames decls
         let numbers = [ num | MethodDecl _ num _ _ _ <- decls ]
         requireSequentialNumbering "Methods" numbers
         requireOrdinalsInRange numbers
+        compiledAnnotations <- compileAnnotationMap scope InterfaceAnnotation annotations
         return (DescInterface InterfaceDesc
             { interfaceName = name
             , interfaceParent = scope
@@ -657,53 +699,62 @@ compileDecl scope (InterfaceDecl (Located _ name) decls) =
             , interfaceNestedEnums      = [d | DescEnum      d <- members]
             , interfaceNestedStructs    = [d | DescStruct    d <- members]
             , interfaceNestedInterfaces = [d | DescInterface d <- members]
-            , interfaceOptions = options
+            , interfaceAnnotations = compiledAnnotations
             , interfaceMemberMap = memberMap
-            , interfaceStatements = statements
+            , interfaceStatements = members
             })))
 
 compileDecl scope@(DescInterface parent)
-            (MethodDecl (Located _ name) (Located _ number) params returnType decls) =
-    CompiledMemberStatus name (feedback (\desc -> do
-        paramDescs <- doAll (map (compileParam scope) params)
+            (MethodDecl (Located _ name) (Located _ number) params returnType annotations) =
+    CompiledStatementStatus name (feedback (\desc -> do
+        paramDescs <- doAll (map (compileParam desc) (zip [0..] params))
         returnTypeDesc <- compileType scope returnType
-        (_, _, options, statements) <- compileChildDecls desc decls
+        compiledAnnotations <- compileAnnotationMap scope MethodAnnotation annotations
         return (DescMethod MethodDesc
             { methodName = name
             , methodParent = parent
             , methodNumber = number
             , methodParams = paramDescs
             , methodReturnType = returnTypeDesc
-            , methodOptions = options
-            , methodStatements = statements
+            , methodAnnotations = compiledAnnotations
             })))
 compileDecl _ (MethodDecl (Located pos name) _ _ _ _) =
-    CompiledMemberStatus name (makeError pos "Methods can only appear inside interfaces.")
+    CompiledStatementStatus name (makeError pos "Methods can only appear inside interfaces.")
 
-compileDecl scope (OptionDecl name (Located valuePos value)) =
-    CompiledOptionStatus (do
-        uncheckedOptionDesc <- lookupDesc scope name
-        optionDesc <- case uncheckedOptionDesc of
-            (DescOption d) -> return d
-            _ -> makeError (declNamePos name) (printf "'%s' is not an option." (declNameString name))
-        valueDesc <- compileValue valuePos (optionType optionDesc) value
-        return OptionAssignmentDesc
-            { optionAssignmentParent = scope
-            , optionAssignmentOption = optionDesc
-            , optionAssignmentValue = valueDesc
-            })
+compileDecl scope (AnnotationDecl (Located _ name) typeExp annotations targets) =
+    CompiledStatementStatus name (do
+        typeDesc <- compileType scope typeExp
+        compiledAnnotations <- compileAnnotationMap scope AnnotationAnnotation annotations
+        return (DescAnnotation AnnotationDesc
+            { annotationName = name
+            , annotationParent = scope
+            , annotationType = typeDesc
+            , annotationAnnotations = compiledAnnotations
+            , annotationTargets = Set.fromList targets
+            }))
 
-compileParam scope (name, typeExp, defaultValue) = do
+compileParam scope@(DescMethod parent)
+             (ordinal, ParamDecl name typeExp annotations defaultValue) = do
     typeDesc <- compileType scope typeExp
     defaultDesc <- case defaultValue of
         Just (Located pos value) -> fmap Just (compileValue pos typeDesc value)
         Nothing -> return Nothing
-    return (name, typeDesc, defaultDesc)
+    compiledAnnotations <- compileAnnotationMap scope ParamAnnotation annotations
+    return ParamDesc
+        { paramName = name
+        , paramParent = parent
+        , paramNumber = ordinal
+        , paramType = typeDesc
+        , paramDefaultValue = defaultDesc
+        , paramAnnotations = compiledAnnotations
+        }
+compileParam _ _ = error "scope of parameter was not a method"
 
-compileFile name decls importMap =
+compileFile name decls annotations importMap =
     feedback (\desc -> do
-        (members, memberMap, options, statements) <- compileChildDecls (DescFile desc) decls
+        (members, memberMap) <- compileChildDecls (DescFile desc) decls
         requireNoDuplicateNames decls
+        compiledAnnotations <- compileAnnotationMap (DescFile desc) FileAnnotation annotations
         return FileDesc
             { fileName = name
             , fileImports = Map.elems importMap
@@ -712,10 +763,10 @@ compileFile name decls importMap =
             , fileEnums      = [d | DescEnum      d <- members]
             , fileStructs    = [d | DescStruct    d <- members]
             , fileInterfaces = [d | DescInterface d <- members]
-            , fileOptions = options
+            , fileAnnotations = compiledAnnotations
             , fileMemberMap = memberMap
             , fileImportMap = importMap
-            , fileStatements = statements
+            , fileStatements = members
             })
 
 dedup :: Ord a => [a] -> [a]
@@ -729,7 +780,7 @@ emptyFileDesc filename = FileDesc
     , fileEnums = []
     , fileStructs = []
     , fileInterfaces = []
-    , fileOptions = Map.empty
+    , fileAnnotations = Map.empty
     , fileMemberMap = Map.empty
     , fileImportMap = Map.empty
     , fileStatements = []
@@ -741,7 +792,7 @@ parseAndCompileFile :: Monad m
                     -> (String -> m (Either FileDesc String))  -- Callback to import other files.
                     -> m (Status FileDesc)                     -- Compiled file and/or errors.
 parseAndCompileFile filename text importCallback = do
-    let (decls, parseErrors) = parseFile filename text
+    let (decls, annotations, parseErrors) = parseFile filename text
         importNames = dedup $ concatMap declImports decls
         doImport (Located pos name) = do
             result <- importCallback name
@@ -773,4 +824,4 @@ parseAndCompileFile filename text importCallback = do
         imports <- doAll importStatuses
 
         -- Compile the file!
-        compileFile filename decls $ Map.fromList imports)
+        compileFile filename decls annotations $ Map.fromList imports)

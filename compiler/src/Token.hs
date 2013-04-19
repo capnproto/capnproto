@@ -54,9 +54,11 @@ data Token = Identifier String
            | FalseKeyword
            | AtSign
            | Colon
+           | DollarSign
            | Period
            | EqualsSign
            | MinusSign
+           | Asterisk
            | ExclamationPoint
            | InKeyword
            | OfKeyword    -- We reserve some common, short English words for use as future keywords.
@@ -71,7 +73,7 @@ data Token = Identifier String
            | StructKeyword
            | UnionKeyword
            | InterfaceKeyword
-           | OptionKeyword
+           | AnnotationKeyword
            deriving (Data, Typeable, Show, Eq)
 
 data Statement = Line TokenSequence

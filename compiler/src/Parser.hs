@@ -42,9 +42,11 @@ tokenErrorString (LiteralFloat f) = "float literal " ++ show f
 tokenErrorString (LiteralString s) = "string literal " ++  show s
 tokenErrorString AtSign = "\"@\""
 tokenErrorString Colon = "\":\""
+tokenErrorString DollarSign = "\"$\""
 tokenErrorString Period = "\".\""
 tokenErrorString EqualsSign = "\"=\""
 tokenErrorString MinusSign = "\"-\""
+tokenErrorString Asterisk = "\"*\""
 tokenErrorString ExclamationPoint = "\"!\""
 tokenErrorString VoidKeyword = "keyword \"void\""
 tokenErrorString TrueKeyword = "keyword \"true\""
@@ -62,7 +64,7 @@ tokenErrorString EnumKeyword = "keyword \"enum\""
 tokenErrorString StructKeyword = "keyword \"struct\""
 tokenErrorString UnionKeyword = "keyword \"union\""
 tokenErrorString InterfaceKeyword = "keyword \"interface\""
-tokenErrorString OptionKeyword = "keyword \"option\""
+tokenErrorString AnnotationKeyword = "keyword \"annotation\""
 
 type TokenParser = Parsec [Located Token] [ParseError]
 
@@ -105,9 +107,11 @@ literalVoid = tokenParser (matchSimpleToken VoidKeyword) <?> "\"void\""
 
 atSign = tokenParser (matchSimpleToken AtSign) <?> "\"@\""
 colon = tokenParser (matchSimpleToken Colon) <?> "\":\""
+dollarSign = tokenParser (matchSimpleToken DollarSign) <?> "\"$\""
 period = tokenParser (matchSimpleToken Period) <?> "\".\""
 equalsSign = tokenParser (matchSimpleToken EqualsSign) <?> "\"=\""
-minusSign = tokenParser (matchSimpleToken MinusSign) <?> "\"=\""
+minusSign = tokenParser (matchSimpleToken MinusSign) <?> "\"-\""
+asterisk = tokenParser (matchSimpleToken Asterisk) <?> "\"*\""
 importKeyword = tokenParser (matchSimpleToken ImportKeyword) <?> "\"import\""
 usingKeyword = tokenParser (matchSimpleToken UsingKeyword) <?> "\"using\""
 constKeyword = tokenParser (matchSimpleToken ConstKeyword) <?> "\"const\""
@@ -115,7 +119,8 @@ enumKeyword = tokenParser (matchSimpleToken EnumKeyword) <?> "\"enum\""
 structKeyword = tokenParser (matchSimpleToken StructKeyword) <?> "\"struct\""
 unionKeyword = tokenParser (matchSimpleToken UnionKeyword) <?> "\"union\""
 interfaceKeyword = tokenParser (matchSimpleToken InterfaceKeyword) <?> "\"interface\""
-optionKeyword = tokenParser (matchSimpleToken OptionKeyword) <?> "\"option\""
+annotationKeyword = tokenParser (matchSimpleToken AnnotationKeyword) <?> "\"annotation\""
+onKeyword = tokenParser (matchSimpleToken OnKeyword) <?> "\"on\""
 
 parenthesizedList parser = do
     items <- tokenParser (matchUnary ParenthesizedList)
@@ -153,9 +158,19 @@ nameWithOrdinal = do
     ordinal <- located literalInt
     return (name, ordinal)
 
-topLine :: Maybe [Located Statement] -> TokenParser Declaration
-topLine Nothing = optionDecl <|> aliasDecl <|> constantDecl
-topLine (Just statements) = typeDecl statements
+annotation :: TokenParser Annotation
+annotation = do
+    dollarSign
+    name <- declName
+    value <- located (try (parenthesized fieldValue)
+                  <|> liftM RecordFieldValue (parenthesizedList fieldAssignment)
+                  <|> return VoidFieldValue)
+    return (Annotation name value)
+
+topLine :: Maybe [Located Statement] -> TokenParser (Either Declaration Annotation)
+topLine Nothing = liftM Left (aliasDecl <|> constantDecl <|> annotationDecl)
+              <|> liftM Right annotation
+topLine (Just statements) = liftM Left $ typeDecl statements
 
 aliasDecl = do
     usingKeyword
@@ -169,9 +184,10 @@ constantDecl = do
     name <- located varIdentifier
     colon
     typeName <- typeExpression
+    annotations <- many annotation
     equalsSign
     value <- located fieldValue
-    return (ConstantDecl name typeName value)
+    return (ConstantDecl name typeName annotations value)
 
 typeDecl statements = enumDecl statements
                   <|> structDecl statements
@@ -180,48 +196,48 @@ typeDecl statements = enumDecl statements
 enumDecl statements = do
     enumKeyword
     name <- located typeIdentifier
+    annotations <- many annotation
     children <- parseBlock enumLine statements
-    return (EnumDecl name children)
+    return (EnumDecl name annotations children)
 
 enumLine :: Maybe [Located Statement] -> TokenParser Declaration
-enumLine Nothing = optionDecl <|> enumValueDecl []
-enumLine (Just statements) = enumValueDecl statements
+enumLine Nothing = enumValueDecl
+enumLine (Just _) = fail "Blocks not allowed here."
 
-enumValueDecl statements = do
+enumValueDecl = do
     (name, value) <- nameWithOrdinal
-    children <- parseBlock enumValueLine statements
-    return (EnumValueDecl name value children)
-
-enumValueLine :: Maybe [Located Statement] -> TokenParser Declaration
-enumValueLine Nothing = optionDecl
-enumValueLine (Just _) = fail "Blocks not allowed here."
+    annotations <- many annotation
+    return (EnumValueDecl name value annotations)
 
 structDecl statements = do
     structKeyword
     name <- located typeIdentifier
+    annotations <- many annotation
     children <- parseBlock structLine statements
-    return (StructDecl name children)
+    return (StructDecl name annotations children)
 
 structLine :: Maybe [Located Statement] -> TokenParser Declaration
-structLine Nothing = optionDecl <|> constantDecl <|> fieldDecl
+structLine Nothing = constantDecl <|> fieldDecl <|> annotationDecl
 structLine (Just statements) = typeDecl statements <|> unionDecl statements <|> unionDecl statements
 
 unionDecl statements = do
     (name, ordinal) <- nameWithOrdinal
     unionKeyword
+    annotations <- many annotation
     children <- parseBlock unionLine statements
-    return (UnionDecl name ordinal children)
+    return (UnionDecl name ordinal annotations children)
 
 unionLine :: Maybe [Located Statement] -> TokenParser Declaration
-unionLine Nothing = optionDecl <|> fieldDecl
+unionLine Nothing = fieldDecl
 unionLine (Just _) = fail "Blocks not allowed here."
 
 fieldDecl = do
     (name, ordinal) <- nameWithOrdinal
     colon
     t <- typeExpression
+    annotations <- many annotation
     value <- optionMaybe (equalsSign >> located fieldValue)
-    return (FieldDecl name ordinal t value)
+    return (FieldDecl name ordinal t annotations value)
 
 negativeFieldValue = liftM (IntegerFieldValue . negate) literalInt
                  <|> liftM (FloatFieldValue . negate) literalFloat
@@ -252,38 +268,61 @@ fieldAssignment = do
 interfaceDecl statements = do
     interfaceKeyword
     name <- located typeIdentifier
+    annotations <- many annotation
     children <- parseBlock interfaceLine statements
-    return (InterfaceDecl name children)
+    return (InterfaceDecl name annotations children)
 
 interfaceLine :: Maybe [Located Statement] -> TokenParser Declaration
-interfaceLine Nothing = optionDecl <|> constantDecl <|> methodDecl []
-interfaceLine (Just statements) = typeDecl statements <|> methodDecl statements
+interfaceLine Nothing = constantDecl <|> methodDecl <|> annotationDecl
+interfaceLine (Just statements) = typeDecl statements
 
-methodDecl statements = do
+methodDecl = do
     (name, ordinal) <- nameWithOrdinal
     params <- parenthesizedList paramDecl
     colon
     t <- typeExpression
-    children <- parseBlock methodLine statements
-    return (MethodDecl name ordinal params t children)
+    annotations <- many annotation
+    return (MethodDecl name ordinal params t annotations)
 
 paramDecl = do
     name <- varIdentifier
     colon
     t <- typeExpression
+    annotations <- many annotation
     value <- optionMaybe (equalsSign >> located fieldValue)
-    return (name, t, value)
+    return (ParamDecl name t annotations value)
 
-methodLine :: Maybe [Located Statement] -> TokenParser Declaration
-methodLine Nothing = optionDecl
-methodLine (Just _) = fail "Blocks not allowed here."
+annotationDecl = do
+    annotationKeyword
+    name <- located varIdentifier
+    colon
+    t <- typeExpression
+    annotations <- many annotation
+    onKeyword
+    targets <- try (parenthesized asterisk >> return allAnnotationTargets)
+           <|> parenthesizedList annotationTarget
+    return (AnnotationDecl name t annotations targets)
+allAnnotationTargets = [minBound::AnnotationTarget .. maxBound::AnnotationTarget]
 
-optionDecl = do
-    optionKeyword
-    name <- declName
-    equalsSign
-    value <- located fieldValue
-    return (OptionDecl name value)
+annotationTarget = (constKeyword >> return ConstantAnnotation)
+               <|> (enumKeyword >> return EnumAnnotation)
+               <|> (structKeyword >> return StructAnnotation)
+               <|> (unionKeyword >> return UnionAnnotation)
+               <|> (interfaceKeyword >> return InterfaceAnnotation)
+               <|> (annotationKeyword >> return AnnotationAnnotation)
+               <|> (do
+                   name <- varIdentifier
+                   case name of
+                       "file" -> return FileAnnotation
+                       "enumerant" -> return EnumValueAnnotation
+                       "field" -> return FieldAnnotation
+                       "method" -> return MethodAnnotation
+                       "parameter" -> return ParamAnnotation
+                       _ -> fail "" <?> annotationTargetList)
+               <?> annotationTargetList
+
+annotationTargetList = "const, enum, enumerant, struct, field, union, interface, method, \
+                       \parameter, or annotation"
 
 extractErrors :: Either ParseError (a, [ParseError]) -> [ParseError]
 extractErrors (Left err) = [err]
@@ -322,21 +361,23 @@ parseCollectingErrors parser tokenSequence = runParser parser' [] "" tokens wher
         errors <- getState
         return (result, errors)
 
-parseStatement :: (Maybe [Located Statement] -> TokenParser Declaration)
+parseStatement :: (Maybe [Located Statement] -> TokenParser a)
                -> Located Statement
-               -> Either ParseError (Declaration, [ParseError])
+               -> Either ParseError (a, [ParseError])
 parseStatement parser (Located _ (Line tokens)) =
     parseCollectingErrors (parser Nothing) tokens
 parseStatement parser (Located _ (Block tokens statements)) =
     parseCollectingErrors (parser (Just statements)) tokens
 
-parseFileTokens :: [Located Statement] -> ([Declaration], [ParseError])
-parseFileTokens statements = (decls, errors) where
+parseFileTokens :: [Located Statement] -> ([Declaration], [Annotation], [ParseError])
+parseFileTokens statements = (decls, annotations, errors) where
+    results :: [Either ParseError (Either Declaration Annotation, [ParseError])]
     results = map (parseStatement topLine) statements
     errors = concatMap extractErrors results
-    decls = [ result | Right (result, _) <- results ]
+    decls = [ decl | Right (Left decl, _) <- results ]
+    annotations = [ ann | Right (Right ann, _) <- results ]
 
-parseFile :: String -> String -> ([Declaration], [ParseError])
+parseFile :: String -> String -> ([Declaration], [Annotation], [ParseError])
 parseFile filename text = case parse lexer filename text of
-    Left e -> ([], [e])
+    Left e -> ([], [], [e])
     Right statements -> parseFileTokens statements
