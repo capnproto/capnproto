@@ -84,11 +84,14 @@ libcapnproto_a_SOURCES=                                        \
 # Tests ==============================================================
 
 capnpc_inputs =                                                \
-  src/capnproto/test.capnp
+  src/capnproto/test.capnp                                     \
+  src/capnproto/test-import.capnp
 
 capnpc_outputs =                                               \
   src/capnproto/test.capnp.c++                                 \
-  src/capnproto/test.capnp.h
+  src/capnproto/test.capnp.h                                   \
+  src/capnproto/test-import.capnp.c++                          \
+  src/capnproto/test-import.capnp.h
 
 # This should depend on $(capnpc_inputs), but then make mysteriously complains
 # about a cyclic dependency.  I don't know where it is coming from.  I rummaged
