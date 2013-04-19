@@ -49,4 +49,4 @@ fi
 
 # When exception stack traces are needed, add: +RTS -xc -RTS
 LD_PRELOAD=$INTERCEPTOR DYLD_FORCE_FLAT_NAMESPACE= DYLD_INSERT_LIBRARIES=$INTERCEPTOR \
-$CAPNPC -oc++ "$INPUT" 3>&1 4<&0 >&2
+$CAPNPC -I. -oc++ "$INPUT" 3>&1 4<&0 >&2

@@ -24,4 +24,4 @@
 $id("v3JF2GP4Supe9JSSJ3pnSdUqhJI");
 $namespace("capnproto::annotations");
 
-annotation namespace: Text on(file);
+annotation namespace(file): Text;

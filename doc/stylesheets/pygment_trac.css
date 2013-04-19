@@ -72,3 +72,4 @@
 .highlight .capnp .nd { color: #0099FF; font-weight: normal; } /* @N */
 .highlight .capnp .l { color: #003399; } /* = value */
 .highlight .capnp .nc { color: #009900; font-weight: normal; } /* :Type */
+.highlight .capnp .na { color: #999900; font-weight: normal; } /* $x */

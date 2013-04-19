@@ -338,6 +338,25 @@ details.
 
 There is an [example](#example_usage) of all this at the beginning of this page.
 
+## Setting a Namespace
+
+You probably want your generated types to live in a C++ namespace.  You will need to import
+`/capnproto/c++.capnp` and use the `namespace` annotation it defines:
+
+{% highlight capnp %}
+Cxx = import "/capnproto/c++.capnp";
+$Cxx.namespace("foo::bar::baz");
+{% endhighlight %}
+
+Note that for this to work, `capnproto/c++.capnp` must be located in the search path specified with
+`-I` options.  This file is found in the Cap'n Proto source repo, so you could invoke `capnpc` like
+so:
+
+    capnpc -I$CAPNPROTO_GIT_ROOT/c++/src -oc++ myproto.capnp
+
+As of this writing, the file is not automatically installed anywhere, but in the future it will
+be.
+
 ## Reference
 
 The runtime library contains lots of useful features not described on this page.  For now, the

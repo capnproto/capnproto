@@ -14,14 +14,14 @@ class CapnpLexer(RegexLexer):
             (r'@[0-9]*', Name.Decorator),
             (r'=', Literal, 'expression'),
             (r':', Name.Class, 'type'),
-            (r'@[0-9]*', Token.Annotation),
-            (r'(struct|enum|interface|union|import|using|const|option|in|of|on|as|with|from)\b',
+            (r'\$', Name.Attribute, 'annotation'),
+            (r'(struct|enum|interface|union|import|using|const|annotation|in|of|on|as|with|from)\b',
                 Token.Keyword),
             (r'[a-zA-Z0-9_.]+', Token.Name),
-            (r'[^#@=:a-zA-Z0-9_]+', Text),
+            (r'[^#@=:$a-zA-Z0-9_]+', Text),
         ],
         'type': [
-            (r'[^][=;,()]+', Name.Class),
+            (r'[^][=;,(){}$]+', Name.Class),
             (r'[[(]', Name.Class, 'parentype'),
             (r'', Name.Class, '#pop')
         ],
@@ -32,7 +32,7 @@ class CapnpLexer(RegexLexer):
             (r'', Name.Class, '#pop')
         ],
         'expression': [
-            (r'[^][;,()]+', Literal),
+            (r'[^][;,(){}$]+', Literal),
             (r'[[(]', Literal, 'parenexp'),
             (r'', Literal, '#pop')
         ],
@@ -41,6 +41,17 @@ class CapnpLexer(RegexLexer):
             (r'[[(]', Literal, '#push'),
             (r'[])]', Literal, '#pop'),
             (r'', Literal, '#pop')
+        ],
+        'annotation': [
+            (r'[^][;,(){}=:]+', Name.Attribute),
+            (r'[[(]', Name.Attribute, 'annexp'),
+            (r'', Name.Attribute, '#pop')
+        ],
+        'annexp': [
+            (r'[^][;()]+', Name.Attribute),
+            (r'[[(]', Name.Attribute, '#push'),
+            (r'[])]', Name.Attribute, '#pop'),
+            (r'', Name.Attribute, '#pop')
         ],
     }
 

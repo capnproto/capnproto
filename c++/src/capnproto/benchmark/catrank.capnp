@@ -21,6 +21,9 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+using Cxx = import "/capnproto/c++.capnp";
+$Cxx.namespace("capnproto::benchmark::capnp");
+
 struct SearchResultList {
   results@0: List(SearchResult);
 }

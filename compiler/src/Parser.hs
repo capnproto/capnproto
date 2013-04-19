@@ -295,11 +295,10 @@ paramDecl = do
 annotationDecl = do
     annotationKeyword
     name <- located varIdentifier
-    colon
-    t <- typeExpression
-    onKeyword
     targets <- try (parenthesized asterisk >> return allAnnotationTargets)
            <|> parenthesizedList annotationTarget
+    colon
+    t <- typeExpression
     annotations <- many annotation
     return (AnnotationDecl name t annotations targets)
 allAnnotationTargets = [minBound::AnnotationTarget .. maxBound::AnnotationTarget]

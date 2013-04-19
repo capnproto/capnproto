@@ -294,6 +294,75 @@ struct Foo {
 }
 {% endhighlight %}
 
+The above imports specify relative paths.  If the path begins with a `/`, it is absolute -- in
+this case, `capnpc` searches for the file in each of the search path directories specified with
+`-I`.
+
+### Annotations
+
+Sometimes you want to attach extra information to parts of your protocol that isn't part of the
+Cap'n Proto language.  This information might control details of a particular code generator, or
+you might even read it at run time to assist in some kind of dynamic message processing.  For
+example, you might create a field annotation which means "hide from the public", and when you send
+a message to an external user, you might invoke some code first that iterates over your message and
+removes all of these hidden fields.
+
+You may declare annotations and use them like so:
+
+{% highlight capnp %}
+# Declare an annotation 'foo' which applies to struct and enum types.
+annotation foo(struct, enum) :Text;
+
+# Apply 'foo' to to MyType.
+struct MyType $foo("bar") {
+  # ...
+}
+{% endhighlight %}
+
+The possible targets for an annotation are: `file`, `struct`, `field`, `union`, `enum`, `enumerant`,
+`interface`, `method`, `parameter`, `annotation`, `const`.  You may also specify `*` to cover them
+all.
+
+{% highlight capnp %}
+# 'baz' can annotate anything!
+annotation baz(*) :Int32;
+
+$baz(1);  # Annotate the file.
+
+struct MyStruct $baz(2) {
+  myField @0 :Text = "default" $baz(3);
+  myUnion @1 union $baz(4) {
+    # ...
+  }
+}
+
+enum MyEnum $baz(5) {
+  myEnumerant @0 $baz(6);
+}
+
+interface MyInterface $baz(7) {
+  myMethod(myParam :Text $baz(9)) :Void $baz(8);
+}
+
+annotation myAnnotation(struct) :Int32 $baz(10);
+const myConst :Int32 = 123 $baz(11);
+{% endhighlight %}
+
+`Void` annotations can omit the value.  Struct-typed annotations are also allowed.
+
+{% highlight capnp %}
+annotation qux(struct, field) :Void;
+
+struct MyStruct $qux {
+  string $0 :Text $qux;
+  number $1 :Int32 $qux;
+}
+
+annotation corge(file) :MyStruct;
+
+$corge(string = "hello", number = 123);
+{% endhighlight %}
+
 ## Evolving Your Protocol
 
 A protocol can be changed in the following ways without breaking backwards-compatibility:
