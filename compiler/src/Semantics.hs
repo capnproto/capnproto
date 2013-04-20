@@ -335,15 +335,10 @@ data FileDesc = FileDesc
     -- Set of imports which are used at runtime, i.e. not just for annotations.
     -- The set contains file names matching files in fileImports.
     , fileRuntimeImports :: Set.Set String
-    , fileUsings :: [UsingDesc]
-    , fileConstants :: [ConstantDesc]
-    , fileEnums :: [EnumDesc]
-    , fileStructs :: [StructDesc]
-    , fileInterfaces :: [InterfaceDesc]
     , fileAnnotations :: AnnotationMap
     , fileMemberMap :: MemberMap
     , fileImportMap :: Map.Map String FileDesc
-    , fileStatements :: [Desc]
+    , fileMembers :: [Desc]
     }
 
 data UsingDesc = UsingDesc
@@ -372,10 +367,10 @@ data EnumDesc = EnumDesc
     , enumerants :: [EnumerantDesc]
     , enumAnnotations :: AnnotationMap
     , enumMemberMap :: MemberMap
-    , enumStatements :: [Desc]
+    , enumMembers :: [Desc]
     }
 
-enumRuntimeImports desc = concatMap descRuntimeImports $ enumStatements desc
+enumRuntimeImports desc = concatMap descRuntimeImports $ enumMembers desc
 
 data EnumerantDesc = EnumerantDesc
     { enumerantName :: String
@@ -394,14 +389,9 @@ data StructDesc = StructDesc
     , structPacking :: PackingState
     , structFields :: [FieldDesc]
     , structUnions :: [UnionDesc]
-    , structNestedUsings :: [UsingDesc]
-    , structNestedConstants :: [ConstantDesc]
-    , structNestedEnums :: [EnumDesc]
-    , structNestedStructs :: [StructDesc]
-    , structNestedInterfaces :: [InterfaceDesc]
     , structAnnotations :: AnnotationMap
     , structMemberMap :: MemberMap
-    , structStatements :: [Desc]
+    , structMembers :: [Desc]
 
     -- Don't use this directly, use the members of FieldDesc and UnionDesc.
     -- This field is exposed here only because I was too lazy to create a way to pass it on
@@ -409,7 +399,7 @@ data StructDesc = StructDesc
     , structFieldPackingMap :: Map.Map Integer (Integer, PackingState)
     }
 
-structRuntimeImports desc = concatMap descRuntimeImports $ structStatements desc
+structRuntimeImports desc = concatMap descRuntimeImports $ structMembers desc
 
 data UnionDesc = UnionDesc
     { unionName :: String
@@ -421,13 +411,13 @@ data UnionDesc = UnionDesc
     , unionFields :: [FieldDesc]
     , unionAnnotations :: AnnotationMap
     , unionMemberMap :: MemberMap
-    , unionStatements :: [Desc]
+    , unionMembers :: [Desc]
 
     -- Maps field numbers to discriminants for all fields in the union.
     , unionFieldDiscriminantMap :: Map.Map Integer Integer
     }
 
-unionRuntimeImports desc = concatMap descRuntimeImports $ unionStatements desc
+unionRuntimeImports desc = concatMap descRuntimeImports $ unionMembers desc
 
 data FieldDesc = FieldDesc
     { fieldName :: String
@@ -449,17 +439,12 @@ data InterfaceDesc = InterfaceDesc
     , interfaceId :: Maybe String
     , interfaceParent :: Desc
     , interfaceMethods :: [MethodDesc]
-    , interfaceNestedUsings :: [UsingDesc]
-    , interfaceNestedConstants :: [ConstantDesc]
-    , interfaceNestedEnums :: [EnumDesc]
-    , interfaceNestedStructs :: [StructDesc]
-    , interfaceNestedInterfaces :: [InterfaceDesc]
     , interfaceAnnotations :: AnnotationMap
     , interfaceMemberMap :: MemberMap
-    , interfaceStatements :: [Desc]
+    , interfaceMembers :: [Desc]
     }
 
-interfaceRuntimeImports desc = concatMap descRuntimeImports $ interfaceStatements desc
+interfaceRuntimeImports desc = concatMap descRuntimeImports $ interfaceMembers desc
 
 data MethodDesc = MethodDesc
     { methodName :: String
@@ -506,7 +491,7 @@ descToCode indent self@(DescFile desc) = printf "# %s\n%s%s%s"
         Just i -> printf "$id(%s);\n" $ show i
         Nothing -> "")
     (concatMap ((++ ";\n") . annotationCode self) $ Map.toList $ fileAnnotations desc)
-    (concatMap (descToCode indent) (fileStatements desc))
+    (concatMap (descToCode indent) (fileMembers desc))
 descToCode indent (DescUsing desc) = printf "%susing %s = %s;\n" indent
     (usingName desc)
     (descQualifiedName (usingParent desc) (usingTarget desc))
@@ -518,7 +503,7 @@ descToCode indent self@(DescConstant desc) = printf "%sconst %s: %s = %s%s;\n" i
 descToCode indent self@(DescEnum desc) = printf "%senum %s%s {\n%s%s}\n" indent
     (enumName desc)
     (annotationsCode self)
-    (blockCode indent (enumStatements desc))
+    (blockCode indent (enumMembers desc))
     indent
 descToCode indent self@(DescEnumerant desc) = printf "%s%s @%d%s;\n" indent
     (enumerantName desc) (enumerantNumber desc)
@@ -526,7 +511,7 @@ descToCode indent self@(DescEnumerant desc) = printf "%s%s @%d%s;\n" indent
 descToCode indent self@(DescStruct desc) = printf "%sstruct %s%s {\n%s%s}\n" indent
     (structName desc)
     (annotationsCode self)
-    (blockCode indent (structStatements desc))
+    (blockCode indent (structMembers desc))
     indent
 descToCode indent self@(DescField desc) = printf "%s%s@%d%s: %s%s%s;  # %s\n" indent
     (fieldName desc) (fieldNumber desc)
@@ -545,12 +530,12 @@ descToCode indent self@(DescUnion desc) = printf "%sunion %s@%d%s {  # [%d, %d)\
     (unionName desc) (unionNumber desc)
     (annotationsCode self)
     (unionTagOffset desc * 16) (unionTagOffset desc * 16 + 16)
-    (blockCode indent $ unionStatements desc)
+    (blockCode indent $ unionMembers desc)
     indent
 descToCode indent self@(DescInterface desc) = printf "%sinterface %s%s {\n%s%s}\n" indent
     (interfaceName desc)
     (annotationsCode self)
-    (blockCode indent (interfaceStatements desc))
+    (blockCode indent (interfaceMembers desc))
     indent
 descToCode indent self@(DescMethod desc) = printf "%s%s@%d(%s): %s%s" indent
     (methodName desc) (methodNumber desc)

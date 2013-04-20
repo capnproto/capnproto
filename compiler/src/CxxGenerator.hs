@@ -286,11 +286,11 @@ structContext parent desc = mkStrContext context where
     context "structDataSize" = MuVariable $ packingDataSize $ structPacking desc
     context "structReferenceCount" = MuVariable $ packingReferenceCount $ structPacking desc
     context "structNestedEnums" =
-        MuList $ map (enumContext context) $ structNestedEnums desc
+        MuList $ map (enumContext context) [m | DescEnum m <- structMembers desc]
     context "structNestedStructs" =
-        MuList $ map (childContext context . structName) $ structNestedStructs desc
+        MuList $ map (childContext context . structName) [m | DescStruct m <- structMembers desc]
     context "structNestedInterfaces" =
-        MuList $ map (childContext context . interfaceName) $ structNestedInterfaces desc
+        MuList $ map (childContext context . interfaceName) [m | DescInterface m <- structMembers desc]
     context s = parent s
 
 typeContext parent desc = mkStrContext context where
@@ -328,7 +328,7 @@ fileContext desc = mkStrContext context where
     context "fileIncludeGuard" = MuVariable $
         "CAPNPROTO_INCLUDED_" ++ hashString (fileName desc ++ ':':fromMaybe "" (fileId desc))
     context "fileNamespaces" = MuList $ map (namespaceContext context) namespace
-    context "fileEnums" = MuList $ map (enumContext context) $ fileEnums desc
+    context "fileEnums" = MuList $ map (enumContext context) [e | DescEnum e <- fileMembers desc]
     context "fileTypes" = MuList $ map (typeContext context) flattenedMembers
     context "fileImports" = MuList $ map (importContext context . fst)
                           $ filter isImportUsed $ Map.toList $ fileImportMap desc

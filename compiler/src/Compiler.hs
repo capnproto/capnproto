@@ -21,7 +21,7 @@
 -- (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 -- SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-module Compiler where
+module Compiler (Status(..), parseAndCompileFile) where
 
 import Grammar
 import Semantics
@@ -256,14 +256,6 @@ compileValue pos (EnumType _) _ = makeExpectError pos "enumerant name"
 compileValue pos (StructType _) _ = makeExpectError pos "parenthesized list of field assignments"
 compileValue pos (InterfaceType _) _ = makeError pos "Interfaces can't have default values."
 compileValue pos (ListType _) _ = makeExpectError pos "list"
-
-makeFileMemberMap :: FileDesc -> Map.Map String Desc
-makeFileMemberMap desc = Map.fromList allMembers where
-    allMembers = [ (usingName     m, DescUsing     m) | m <- fileUsings     desc ]
-              ++ [ (constantName  m, DescConstant  m) | m <- fileConstants  desc ]
-              ++ [ (enumName      m, DescEnum      m) | m <- fileEnums      desc ]
-              ++ [ (structName    m, DescStruct    m) | m <- fileStructs    desc ]
-              ++ [ (interfaceName m, DescInterface m) | m <- fileInterfaces desc ]
 
 descAsType _ (DescEnum desc) = succeed (EnumType desc)
 descAsType _ (DescStruct desc) = succeed (StructType desc)
@@ -595,7 +587,7 @@ compileDecl scope (EnumDecl (Located _ name) annotations decls) =
             , enumerants = [d | DescEnumerant d <- members]
             , enumAnnotations = compiledAnnotations
             , enumMemberMap = memberMap
-            , enumStatements = members
+            , enumMembers = members
             })))
 
 compileDecl scope@(DescEnum parent)
@@ -631,14 +623,9 @@ compileDecl scope (StructDecl (Located _ name) annotations decls) =
             , structPacking = packing
             , structFields = fields
             , structUnions = unions
-            , structNestedUsings     = [d | DescUsing     d <- members]
-            , structNestedConstants  = [d | DescConstant  d <- members]
-            , structNestedEnums      = [d | DescEnum      d <- members]
-            , structNestedStructs    = [d | DescStruct    d <- members]
-            , structNestedInterfaces = [d | DescInterface d <- members]
             , structAnnotations = compiledAnnotations
             , structMemberMap = memberMap
-            , structStatements = members
+            , structMembers = members
             , structFieldPackingMap = fieldPackingMap
             })))
 
@@ -663,7 +650,7 @@ compileDecl scope@(DescStruct parent)
             , unionFields = fields
             , unionAnnotations = compiledAnnotations
             , unionMemberMap = memberMap
-            , unionStatements = members
+            , unionMembers = members
             , unionFieldDiscriminantMap = discriminantMap
             })))
 compileDecl _ (UnionDecl (Located pos name) _ _ _) =
@@ -711,15 +698,10 @@ compileDecl scope (InterfaceDecl (Located _ name) annotations decls) =
             { interfaceName = name
             , interfaceId = theId
             , interfaceParent = scope
-            , interfaceMethods          = [d | DescMethod    d <- members]
-            , interfaceNestedUsings     = [d | DescUsing     d <- members]
-            , interfaceNestedConstants  = [d | DescConstant  d <- members]
-            , interfaceNestedEnums      = [d | DescEnum      d <- members]
-            , interfaceNestedStructs    = [d | DescStruct    d <- members]
-            , interfaceNestedInterfaces = [d | DescInterface d <- members]
+            , interfaceMethods = [d | DescMethod    d <- members]
             , interfaceAnnotations = compiledAnnotations
             , interfaceMemberMap = memberMap
-            , interfaceStatements = members
+            , interfaceMembers = members
             })))
 
 compileDecl scope@(DescInterface parent)
@@ -783,15 +765,10 @@ compileFile name decls annotations importMap =
             , fileImports = Map.elems importMap
             , fileRuntimeImports =
                 Set.fromList $ map fileName $ concatMap descRuntimeImports members
-            , fileUsings     = [d | DescUsing     d <- members]
-            , fileConstants  = [d | DescConstant  d <- members]
-            , fileEnums      = [d | DescEnum      d <- members]
-            , fileStructs    = [d | DescStruct    d <- members]
-            , fileInterfaces = [d | DescInterface d <- members]
             , fileAnnotations = compiledAnnotations
             , fileMemberMap = memberMap
             , fileImportMap = importMap
-            , fileStatements = members
+            , fileMembers = members
             })
 
 dedup :: Ord a => [a] -> [a]
@@ -802,15 +779,10 @@ emptyFileDesc filename = FileDesc
     , fileId = Nothing
     , fileImports = []
     , fileRuntimeImports = Set.empty
-    , fileUsings = []
-    , fileConstants = []
-    , fileEnums = []
-    , fileStructs = []
-    , fileInterfaces = []
     , fileAnnotations = Map.empty
     , fileMemberMap = Map.empty
     , fileImportMap = Map.empty
-    , fileStatements = []
+    , fileMembers = []
     }
 
 parseAndCompileFile :: Monad m
