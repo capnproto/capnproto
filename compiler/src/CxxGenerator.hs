@@ -153,7 +153,7 @@ isDefaultZero (UInt32Desc  i) = i == 0
 isDefaultZero (UInt64Desc  i) = i == 0
 isDefaultZero (Float32Desc x) = x == 0
 isDefaultZero (Float64Desc x) = x == 0
-isDefaultZero (EnumValueValueDesc v) = enumValueNumber v == 0
+isDefaultZero (EnumerantValueDesc v) = enumerantNumber v == 0
 isDefaultZero (TextDesc _) = error "Can't call isDefaultZero on aggregate types."
 isDefaultZero (DataDesc _) = error "Can't call isDefaultZero on aggregate types."
 isDefaultZero (StructValueDesc _) = error "Can't call isDefaultZero on aggregate types."
@@ -171,7 +171,7 @@ defaultMask (UInt32Desc  i) = show i ++ "u"
 defaultMask (UInt64Desc  i) = show i ++ "llu"
 defaultMask (Float32Desc x) = show (floatToWord x) ++ "u"
 defaultMask (Float64Desc x) = show (doubleToWord x) ++ "ul"
-defaultMask (EnumValueValueDesc v) = show (enumValueNumber v)
+defaultMask (EnumerantValueDesc v) = show (enumerantNumber v)
 defaultMask (TextDesc _) = error "Can't call defaultMask on aggregate types."
 defaultMask (DataDesc _) = error "Can't call defaultMask on aggregate types."
 defaultMask (StructValueDesc _) = error "Can't call defaultMask on aggregate types."
@@ -189,14 +189,14 @@ elementType _ = error "Called elementType on non-list."
 repeatedlyTake _ [] = []
 repeatedlyTake n l = take n l : repeatedlyTake n (drop n l)
 
-enumValueContext parent desc = mkStrContext context where
-    context "enumValueName" = MuVariable $ toUpperCaseWithUnderscores $ enumValueName desc
-    context "enumValueNumber" = MuVariable $ enumValueNumber desc
+enumerantContext parent desc = mkStrContext context where
+    context "enumerantName" = MuVariable $ toUpperCaseWithUnderscores $ enumerantName desc
+    context "enumerantNumber" = MuVariable $ enumerantNumber desc
     context s = parent s
 
 enumContext parent desc = mkStrContext context where
     context "enumName" = MuVariable $ enumName desc
-    context "enumValues" = MuList $ map (enumValueContext context) $ enumValues desc
+    context "enumerants" = MuList $ map (enumerantContext context) $ enumerants desc
     context s = parent s
 
 defaultBytesContext :: Monad m => (String -> MuType m) -> TypeDesc -> [Word8] -> MuContext m

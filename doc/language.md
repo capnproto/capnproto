@@ -43,7 +43,7 @@ Some notes:
 * Types come after names. The name is by far the most important thing to see, especially when
   quickly skimming, so we put it up front where it is most visible.  Sorry, C got it wrong.
 * The `@N` annotations show how the protocol evolved over time, so that the system can make sure
-  to maintain compatibility with older versions. Fields (and enum values, and interface methods)
+  to maintain compatibility with older versions. Fields (and enumerants, and interface methods)
   must be numbered consecutively starting from zero in the order in which they were added. In this
   example, it looks like the `birthdate` field was added to the `Person` structure recently -- its
   number is higher than the `email` and `phones` fields. Unlike Protobufs, you cannot skip numbers
@@ -172,7 +172,7 @@ enum Rfc3092Variable {
 }
 {% endhighlight %}
 
-Like fields, enum values must be numbered sequentially starting from zero. In languages where
+Like fields, enumerants must be numbered sequentially starting from zero. In languages where
 enums have numeric values, these numbers will be used, but in general Cap'n Proto enums should not
 be considered numeric.
 

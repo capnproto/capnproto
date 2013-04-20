@@ -202,7 +202,7 @@ compileValue _ (BuiltinType BuiltinData) (StringFieldValue x) =
 
 compileValue pos (EnumType desc) (IdentifierFieldValue name) =
     case lookupMember name (enumMemberMap desc) of
-        Just (DescEnumValue value) -> succeed (EnumValueValueDesc value)
+        Just (DescEnumerant value) -> succeed (EnumerantValueDesc value)
         _ -> makeError pos (printf "Enum type '%s' has no value '%s'." (enumName desc) name)
 
 compileValue pos (StructType desc) (RecordFieldValue fields) = do
@@ -248,7 +248,7 @@ compileValue pos (BuiltinType BuiltinFloat64) _ = makeExpectError pos "number"
 compileValue pos (BuiltinType BuiltinText) _ = makeExpectError pos "string"
 compileValue pos (BuiltinType BuiltinData) _ = makeExpectError pos "string"
 
-compileValue pos (EnumType _) _ = makeExpectError pos "enum value name"
+compileValue pos (EnumType _) _ = makeExpectError pos "enumerant name"
 compileValue pos (StructType _) _ = makeExpectError pos "parenthesized list of field assignments"
 compileValue pos (InterfaceType _) _ = makeError pos "Interfaces can't have default values."
 compileValue pos (ListType _) _ = makeExpectError pos "list"
@@ -580,33 +580,33 @@ compileDecl scope (EnumDecl (Located _ name) annotations decls) =
     CompiledStatementStatus name (feedback (\desc -> do
         (members, memberMap) <- compileChildDecls desc decls
         requireNoDuplicateNames decls
-        let numbers = [ num | EnumValueDecl _ num _ <- decls ]
-        requireSequentialNumbering "Enum values" numbers
+        let numbers = [ num | EnumerantDecl _ num _ <- decls ]
+        requireSequentialNumbering "Enumerants" numbers
         requireOrdinalsInRange numbers
         (theId, compiledAnnotations) <- compileAnnotations scope EnumAnnotation annotations
         return (DescEnum EnumDesc
             { enumName = name
             , enumId = theId
             , enumParent = scope
-            , enumValues = [d | DescEnumValue d <- members]
+            , enumerants = [d | DescEnumerant d <- members]
             , enumAnnotations = compiledAnnotations
             , enumMemberMap = memberMap
             , enumStatements = members
             })))
 
 compileDecl scope@(DescEnum parent)
-            (EnumValueDecl (Located _ name) (Located _ number) annotations) =
+            (EnumerantDecl (Located _ name) (Located _ number) annotations) =
     CompiledStatementStatus name (do
-        (theId, compiledAnnotations) <- compileAnnotations scope EnumValueAnnotation annotations
-        return (DescEnumValue EnumValueDesc
-            { enumValueName = name
-            , enumValueId = theId
-            , enumValueParent = parent
-            , enumValueNumber = number
-            , enumValueAnnotations = compiledAnnotations
+        (theId, compiledAnnotations) <- compileAnnotations scope EnumerantAnnotation annotations
+        return (DescEnumerant EnumerantDesc
+            { enumerantName = name
+            , enumerantId = theId
+            , enumerantParent = parent
+            , enumerantNumber = number
+            , enumerantAnnotations = compiledAnnotations
             }))
-compileDecl _ (EnumValueDecl (Located pos name) _ _) =
-    CompiledStatementStatus name (makeError pos "Enum values can only appear inside enums.")
+compileDecl _ (EnumerantDecl (Located pos name) _ _) =
+    CompiledStatementStatus name (makeError pos "Enumerants can only appear inside enums.")
 
 compileDecl scope (StructDecl (Located _ name) annotations decls) =
     CompiledStatementStatus name (feedback (\desc -> do

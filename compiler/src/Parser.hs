@@ -120,7 +120,6 @@ structKeyword = tokenParser (matchSimpleToken StructKeyword) <?> "\"struct\""
 unionKeyword = tokenParser (matchSimpleToken UnionKeyword) <?> "\"union\""
 interfaceKeyword = tokenParser (matchSimpleToken InterfaceKeyword) <?> "\"interface\""
 annotationKeyword = tokenParser (matchSimpleToken AnnotationKeyword) <?> "\"annotation\""
-onKeyword = tokenParser (matchSimpleToken OnKeyword) <?> "\"on\""
 
 parenthesizedList parser = do
     items <- tokenParser (matchUnary ParenthesizedList)
@@ -201,13 +200,13 @@ enumDecl statements = do
     return (EnumDecl name annotations children)
 
 enumLine :: Maybe [Located Statement] -> TokenParser Declaration
-enumLine Nothing = enumValueDecl
+enumLine Nothing = enumerantDecl
 enumLine (Just _) = fail "Blocks not allowed here."
 
-enumValueDecl = do
+enumerantDecl = do
     (name, value) <- nameWithOrdinal
     annotations <- many annotation
-    return (EnumValueDecl name value annotations)
+    return (EnumerantDecl name value annotations)
 
 structDecl statements = do
     structKeyword
@@ -313,7 +312,7 @@ annotationTarget = (constKeyword >> return ConstantAnnotation)
                    name <- varIdentifier
                    case name of
                        "file" -> return FileAnnotation
-                       "enumerant" -> return EnumValueAnnotation
+                       "enumerant" -> return EnumerantAnnotation
                        "field" -> return FieldAnnotation
                        "method" -> return MethodAnnotation
                        "parameter" -> return ParamAnnotation

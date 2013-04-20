@@ -68,7 +68,7 @@ paramImports (ParamDecl _ t ann _) = typeImports t ++ concatMap annotationImport
 data AnnotationTarget = FileAnnotation
                       | ConstantAnnotation
                       | EnumAnnotation
-                      | EnumValueAnnotation
+                      | EnumerantAnnotation
                       | StructAnnotation
                       | FieldAnnotation
                       | UnionAnnotation
@@ -82,7 +82,7 @@ instance Show AnnotationTarget where
     show FileAnnotation = "file"
     show ConstantAnnotation = "const"
     show EnumAnnotation = "enum"
-    show EnumValueAnnotation = "enumerant"
+    show EnumerantAnnotation = "enumerant"
     show StructAnnotation = "struct"
     show FieldAnnotation = "field"
     show UnionAnnotation = "union"
@@ -94,7 +94,7 @@ instance Show AnnotationTarget where
 data Declaration = AliasDecl (Located String) DeclName
                  | ConstantDecl (Located String) TypeExpression [Annotation] (Located FieldValue)
                  | EnumDecl (Located String) [Annotation] [Declaration]
-                 | EnumValueDecl (Located String) (Located Integer) [Annotation]
+                 | EnumerantDecl (Located String) (Located Integer) [Annotation]
                  | StructDecl (Located String) [Annotation] [Declaration]
                  | FieldDecl (Located String) (Located Integer)
                              TypeExpression [Annotation] (Maybe (Located FieldValue))
@@ -109,7 +109,7 @@ declarationName :: Declaration -> Maybe (Located String)
 declarationName (AliasDecl n _)          = Just n
 declarationName (ConstantDecl n _ _ _)   = Just n
 declarationName (EnumDecl n _ _)         = Just n
-declarationName (EnumValueDecl n _ _)    = Just n
+declarationName (EnumerantDecl n _ _)    = Just n
 declarationName (StructDecl n _ _)       = Just n
 declarationName (FieldDecl n _ _ _ _)    = Just n
 declarationName (UnionDecl n _ _ _)      = Just n
@@ -121,7 +121,7 @@ declImports :: Declaration -> [Located String]
 declImports (AliasDecl _ name) = maybeToList (declNameImport name)
 declImports (ConstantDecl _ t ann _) = typeImports t ++ concatMap annotationImports ann
 declImports (EnumDecl _ ann decls) = concatMap annotationImports ann ++ concatMap declImports decls
-declImports (EnumValueDecl _ _ ann) = concatMap annotationImports ann
+declImports (EnumerantDecl _ _ ann) = concatMap annotationImports ann
 declImports (StructDecl _ ann decls) = concatMap annotationImports ann ++
                                        concatMap declImports decls
 declImports (FieldDecl _ _ t ann _) = typeImports t ++ concatMap annotationImports ann

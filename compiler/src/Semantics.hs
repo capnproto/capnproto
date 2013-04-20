@@ -45,7 +45,7 @@ data Desc = DescFile FileDesc
           | DescAlias AliasDesc
           | DescConstant ConstantDesc
           | DescEnum EnumDesc
-          | DescEnumValue EnumValueDesc
+          | DescEnumerant EnumerantDesc
           | DescStruct StructDesc
           | DescUnion UnionDesc
           | DescField FieldDesc
@@ -61,7 +61,7 @@ descName (DescFile      _) = "(top-level)"
 descName (DescAlias     d) = aliasName d
 descName (DescConstant  d) = constantName d
 descName (DescEnum      d) = enumName d
-descName (DescEnumValue d) = enumValueName d
+descName (DescEnumerant d) = enumerantName d
 descName (DescStruct    d) = structName d
 descName (DescUnion     d) = unionName d
 descName (DescField     d) = fieldName d
@@ -77,7 +77,7 @@ descId (DescFile      d) = fileId d
 descId (DescAlias     _) = Nothing
 descId (DescConstant  d) = constantId d
 descId (DescEnum      d) = enumId d
-descId (DescEnumValue d) = enumValueId d
+descId (DescEnumerant d) = enumerantId d
 descId (DescStruct    d) = structId d
 descId (DescUnion     d) = unionId d
 descId (DescField     d) = fieldId d
@@ -101,7 +101,7 @@ descParent (DescFile      _) = error "File descriptor has no parent."
 descParent (DescAlias     d) = aliasParent d
 descParent (DescConstant  d) = constantParent d
 descParent (DescEnum      d) = enumParent d
-descParent (DescEnumValue d) = DescEnum (enumValueParent d)
+descParent (DescEnumerant d) = DescEnum (enumerantParent d)
 descParent (DescStruct    d) = structParent d
 descParent (DescUnion     d) = DescStruct (unionParent d)
 descParent (DescField     d) = DescStruct (fieldParent d)
@@ -117,7 +117,7 @@ descAnnotations (DescFile      d) = fileAnnotations d
 descAnnotations (DescAlias     _) = Map.empty
 descAnnotations (DescConstant  d) = constantAnnotations d
 descAnnotations (DescEnum      d) = enumAnnotations d
-descAnnotations (DescEnumValue d) = enumValueAnnotations d
+descAnnotations (DescEnumerant d) = enumerantAnnotations d
 descAnnotations (DescStruct    d) = structAnnotations d
 descAnnotations (DescUnion     d) = unionAnnotations d
 descAnnotations (DescField     d) = fieldAnnotations d
@@ -161,7 +161,7 @@ data ValueDesc = VoidDesc
                | Float64Desc Double
                | TextDesc String
                | DataDesc ByteString
-               | EnumValueValueDesc EnumValueDesc
+               | EnumerantValueDesc EnumerantDesc
                | StructValueDesc [(FieldDesc, ValueDesc)]
                | ListDesc [ValueDesc]
                deriving (Show)
@@ -180,7 +180,7 @@ valueString (Float32Desc x) = show x
 valueString (Float64Desc x) = show x
 valueString (TextDesc    s) = show s
 valueString (DataDesc    s) = show (map (chr . fromIntegral) s)
-valueString (EnumValueValueDesc v) = enumValueName v
+valueString (EnumerantValueDesc v) = enumerantName v
 valueString (StructValueDesc l) = "(" ++  delimit ", " (map assignmentString l) ++ ")" where
     assignmentString (field, value) = case fieldUnion field of
         Nothing -> fieldName field ++ " = " ++ valueString value
@@ -259,7 +259,7 @@ fieldValueSize (Float32Desc _) = Size32
 fieldValueSize (Float64Desc _) = Size64
 fieldValueSize (TextDesc _) = SizeReference
 fieldValueSize (DataDesc _) = SizeReference
-fieldValueSize (EnumValueValueDesc _) = Size16
+fieldValueSize (EnumerantValueDesc _) = Size16
 fieldValueSize (StructValueDesc _) = SizeReference
 fieldValueSize (ListDesc _) = SizeReference
 
@@ -337,18 +337,18 @@ data EnumDesc = EnumDesc
     { enumName :: String
     , enumId :: Maybe String
     , enumParent :: Desc
-    , enumValues :: [EnumValueDesc]
+    , enumerants :: [EnumerantDesc]
     , enumAnnotations :: AnnotationMap
     , enumMemberMap :: MemberMap
     , enumStatements :: [Desc]
     }
 
-data EnumValueDesc = EnumValueDesc
-    { enumValueName :: String
-    , enumValueId :: Maybe String
-    , enumValueParent :: EnumDesc
-    , enumValueNumber :: Integer
-    , enumValueAnnotations :: AnnotationMap
+data EnumerantDesc = EnumerantDesc
+    { enumerantName :: String
+    , enumerantId :: Maybe String
+    , enumerantParent :: EnumDesc
+    , enumerantNumber :: Integer
+    , enumerantAnnotations :: AnnotationMap
     }
 
 data StructDesc = StructDesc
@@ -469,8 +469,8 @@ descToCode indent self@(DescEnum desc) = printf "%senum %s%s {\n%s%s}\n" indent
     (annotationsCode self)
     (blockCode indent (enumStatements desc))
     indent
-descToCode indent self@(DescEnumValue desc) = printf "%s%s @%d%s;\n" indent
-    (enumValueName desc) (enumValueNumber desc)
+descToCode indent self@(DescEnumerant desc) = printf "%s%s @%d%s;\n" indent
+    (enumerantName desc) (enumerantNumber desc)
     (annotationsCode self)
 descToCode indent self@(DescStruct desc) = printf "%sstruct %s%s {\n%s%s}\n" indent
     (structName desc)
@@ -546,7 +546,7 @@ instance Show FileDesc where { show desc = descToCode "" (DescFile desc) }
 instance Show AliasDesc where { show desc = descToCode "" (DescAlias desc) }
 instance Show ConstantDesc where { show desc = descToCode "" (DescConstant desc) }
 instance Show EnumDesc where { show desc = descToCode "" (DescEnum desc) }
-instance Show EnumValueDesc where { show desc = descToCode "" (DescEnumValue desc) }
+instance Show EnumerantDesc where { show desc = descToCode "" (DescEnumerant desc) }
 instance Show StructDesc where { show desc = descToCode "" (DescStruct desc) }
 instance Show FieldDesc where { show desc = descToCode "" (DescField desc) }
 instance Show InterfaceDesc where { show desc = descToCode "" (DescInterface desc) }

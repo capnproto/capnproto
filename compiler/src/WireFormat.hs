@@ -64,7 +64,7 @@ encodeDataValue (Float32Desc v) = bytes (floatToWord v) 4
 encodeDataValue (Float64Desc v) = bytes (doubleToWord v) 8
 encodeDataValue (TextDesc _) = error "Not fixed-width data."
 encodeDataValue (DataDesc _) = error "Not fixed-width data."
-encodeDataValue (EnumValueValueDesc v) = bytes (enumValueNumber v) 2
+encodeDataValue (EnumerantValueDesc v) = bytes (enumerantNumber v) 2
 encodeDataValue (StructValueDesc _) = error "Not fixed-width data."
 encodeDataValue (ListDesc _) = error "Not fixed-width data."
 

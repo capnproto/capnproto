@@ -61,9 +61,9 @@ struct {{typeFullName}} {
 {{#structNestedEnums}}
 
   enum class {{enumName}}: uint16_t {
-{{#enumValues}}
-    {{enumValueName}} = {{enumValueNumber}},
-{{/enumValues}}
+{{#enumerants}}
+    {{enumerantName}} = {{enumerantNumber}},
+{{/enumerants}}
   };
 {{/structNestedEnums}}
 
@@ -93,9 +93,9 @@ struct {{typeFullName}} {
 {{#fileEnums}}
 
 enum class {{enumName}}: uint16_t {
-{{#enumValues}}
-  {{enumValueName}} = {{enumValueNumber}},
-{{/enumValues}}
+{{#enumerants}}
+  {{enumerantName}} = {{enumerantNumber}},
+{{/enumerants}}
 };
 {{/fileEnums}}
 {{! =========================================================================================== }}
