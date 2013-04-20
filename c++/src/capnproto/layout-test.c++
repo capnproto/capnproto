@@ -99,8 +99,6 @@ TEST(WireFormat, SimpleRawDataStruct) {
 }
 
 static const AlignedData<2> SUBSTRUCT_DEFAULT = {{0,0,0,0,1,0,0,0,  0,0,0,0,0,0,0,0}};
-static const AlignedData<3> STRUCTLIST_ELEMENT_DEFAULT =
-    {{0,0,0,0,1,0,1,0,  0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0}};
 static const AlignedData<2> STRUCTLIST_ELEMENT_SUBSTRUCT_DEFAULT =
     {{0,0,0,0,1,0,0,0,  0,0,0,0,0,0,0,0}};
 

@@ -178,6 +178,7 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
   }
 
   FAIL_CHECK("Can't get here.");
+  return 0;  // GCC knows FAIL_CHECK doesn't return, but Eclipse CDT still warns...
 
 #undef REFRESH_BUFFER
 }
