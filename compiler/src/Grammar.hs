@@ -91,7 +91,7 @@ instance Show AnnotationTarget where
     show ParamAnnotation = "param"
     show AnnotationAnnotation = "annotation"
 
-data Declaration = AliasDecl (Located String) DeclName
+data Declaration = UsingDecl (Located String) DeclName
                  | ConstantDecl (Located String) TypeExpression [Annotation] (Located FieldValue)
                  | EnumDecl (Located String) [Annotation] [Declaration]
                  | EnumerantDecl (Located String) (Located Integer) [Annotation]
@@ -106,7 +106,7 @@ data Declaration = AliasDecl (Located String) DeclName
                  deriving (Show)
 
 declarationName :: Declaration -> Maybe (Located String)
-declarationName (AliasDecl n _)          = Just n
+declarationName (UsingDecl n _)          = Just n
 declarationName (ConstantDecl n _ _ _)   = Just n
 declarationName (EnumDecl n _ _)         = Just n
 declarationName (EnumerantDecl n _ _)    = Just n
@@ -118,7 +118,7 @@ declarationName (MethodDecl n _ _ _ _)   = Just n
 declarationName (AnnotationDecl n _ _ _) = Just n
 
 declImports :: Declaration -> [Located String]
-declImports (AliasDecl _ name) = maybeToList (declNameImport name)
+declImports (UsingDecl _ name) = maybeToList (declNameImport name)
 declImports (ConstantDecl _ t ann _) = typeImports t ++ concatMap annotationImports ann
 declImports (EnumDecl _ ann decls) = concatMap annotationImports ann ++ concatMap declImports decls
 declImports (EnumerantDecl _ _ ann) = concatMap annotationImports ann

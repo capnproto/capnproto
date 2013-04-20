@@ -42,7 +42,7 @@ maxOrdinal = 65534 :: Integer
 type ByteString = [Word8]
 
 data Desc = DescFile FileDesc
-          | DescAlias AliasDesc
+          | DescUsing UsingDesc
           | DescConstant ConstantDesc
           | DescEnum EnumDesc
           | DescEnumerant EnumerantDesc
@@ -58,7 +58,7 @@ data Desc = DescFile FileDesc
           | DescBuiltinId
 
 descName (DescFile      _) = "(top-level)"
-descName (DescAlias     d) = aliasName d
+descName (DescUsing     d) = usingName d
 descName (DescConstant  d) = constantName d
 descName (DescEnum      d) = enumName d
 descName (DescEnumerant d) = enumerantName d
@@ -74,7 +74,7 @@ descName DescBuiltinList = "List"
 descName DescBuiltinId = "id"
 
 descId (DescFile      d) = fileId d
-descId (DescAlias     _) = Nothing
+descId (DescUsing     _) = Nothing
 descId (DescConstant  d) = constantId d
 descId (DescEnum      d) = enumId d
 descId (DescEnumerant d) = enumerantId d
@@ -98,7 +98,7 @@ descAutoId d = case descId d of
         _ -> fmap (++ '.':descName d) $ descAutoId $ descParent d
 
 descParent (DescFile      _) = error "File descriptor has no parent."
-descParent (DescAlias     d) = aliasParent d
+descParent (DescUsing     d) = usingParent d
 descParent (DescConstant  d) = constantParent d
 descParent (DescEnum      d) = enumParent d
 descParent (DescEnumerant d) = DescEnum (enumerantParent d)
@@ -114,7 +114,7 @@ descParent DescBuiltinList = error "Builtin type has no parent."
 descParent DescBuiltinId = error "Builtin annotation has no parent."
 
 descAnnotations (DescFile      d) = fileAnnotations d
-descAnnotations (DescAlias     _) = Map.empty
+descAnnotations (DescUsing     _) = Map.empty
 descAnnotations (DescConstant  d) = constantAnnotations d
 descAnnotations (DescEnum      d) = enumAnnotations d
 descAnnotations (DescEnumerant d) = enumerantAnnotations d
@@ -291,9 +291,9 @@ typeName scope (ListType t) = "List(" ++ typeName scope t ++ ")"
 -- This could be made fancier in a couple ways:
 -- 1) Drop the common prefix between scope and desc to form a minimal relative name.  Note that
 --    we'll need to check for shadowing.
--- 2) Examine aliases visible in the current scope to see if they refer to a prefix of the target
+-- 2) Examine `using`s visible in the current scope to see if they refer to a prefix of the target
 --    symbol, and use them if so.  A particularly important case of this is imports -- typically
---    the import will have an alias in the file scope.
+--    the import will have a `using` in the file scope.
 descQualifiedName :: Desc -> Desc -> String
 descQualifiedName (DescFile scope) (DescFile desc) =
     if fileName scope == fileName desc
@@ -307,7 +307,7 @@ data FileDesc = FileDesc
     { fileName :: String
     , fileId :: Maybe String
     , fileImports :: [FileDesc]
-    , fileAliases :: [AliasDesc]
+    , fileUsings :: [UsingDesc]
     , fileConstants :: [ConstantDesc]
     , fileEnums :: [EnumDesc]
     , fileStructs :: [StructDesc]
@@ -318,10 +318,10 @@ data FileDesc = FileDesc
     , fileStatements :: [Desc]
     }
 
-data AliasDesc = AliasDesc
-    { aliasName :: String
-    , aliasParent :: Desc
-    , aliasTarget :: Desc
+data UsingDesc = UsingDesc
+    { usingName :: String
+    , usingParent :: Desc
+    , usingTarget :: Desc
     }
 
 data ConstantDesc = ConstantDesc
@@ -358,7 +358,7 @@ data StructDesc = StructDesc
     , structPacking :: PackingState
     , structFields :: [FieldDesc]
     , structUnions :: [UnionDesc]
-    , structNestedAliases :: [AliasDesc]
+    , structNestedUsings :: [UsingDesc]
     , structNestedConstants :: [ConstantDesc]
     , structNestedEnums :: [EnumDesc]
     , structNestedStructs :: [StructDesc]
@@ -407,7 +407,7 @@ data InterfaceDesc = InterfaceDesc
     , interfaceId :: Maybe String
     , interfaceParent :: Desc
     , interfaceMethods :: [MethodDesc]
-    , interfaceNestedAliases :: [AliasDesc]
+    , interfaceNestedUsings :: [UsingDesc]
     , interfaceNestedConstants :: [ConstantDesc]
     , interfaceNestedEnums :: [EnumDesc]
     , interfaceNestedStructs :: [StructDesc]
@@ -456,9 +456,9 @@ descToCode indent self@(DescFile desc) = printf "# %s\n%s%s%s"
         Nothing -> "")
     (concatMap ((++ ";\n") . annotationCode self) $ Map.toList $ fileAnnotations desc)
     (concatMap (descToCode indent) (fileStatements desc))
-descToCode indent (DescAlias desc) = printf "%susing %s = %s;\n" indent
-    (aliasName desc)
-    (descQualifiedName (aliasParent desc) (aliasTarget desc))
+descToCode indent (DescUsing desc) = printf "%susing %s = %s;\n" indent
+    (usingName desc)
+    (descQualifiedName (usingParent desc) (usingTarget desc))
 descToCode indent self@(DescConstant desc) = printf "%sconst %s: %s = %s%s;\n" indent
     (constantName desc)
     (typeName (descParent self) (constantType desc))
@@ -543,7 +543,7 @@ annotationsCode desc = let
         Nothing -> nonIds
 
 instance Show FileDesc where { show desc = descToCode "" (DescFile desc) }
-instance Show AliasDesc where { show desc = descToCode "" (DescAlias desc) }
+instance Show UsingDesc where { show desc = descToCode "" (DescUsing desc) }
 instance Show ConstantDesc where { show desc = descToCode "" (DescConstant desc) }
 instance Show EnumDesc where { show desc = descToCode "" (DescEnum desc) }
 instance Show EnumerantDesc where { show desc = descToCode "" (DescEnumerant desc) }

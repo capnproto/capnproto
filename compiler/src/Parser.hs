@@ -167,16 +167,16 @@ annotation = do
     return (Annotation name value)
 
 topLine :: Maybe [Located Statement] -> TokenParser (Either Declaration Annotation)
-topLine Nothing = liftM Left (aliasDecl <|> constantDecl <|> annotationDecl)
+topLine Nothing = liftM Left (usingDecl <|> constantDecl <|> annotationDecl)
               <|> liftM Right annotation
 topLine (Just statements) = liftM Left $ typeDecl statements
 
-aliasDecl = do
+usingDecl = do
     usingKeyword
     name <- located typeIdentifier
     equalsSign
     target <- declName
-    return (AliasDecl name target)
+    return (UsingDecl name target)
 
 constantDecl = do
     constKeyword

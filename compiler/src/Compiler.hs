@@ -115,7 +115,7 @@ descMember name (DescFile      d) = lookupMember name (fileMemberMap d)
 descMember name (DescEnum      d) = lookupMember name (enumMemberMap d)
 descMember name (DescStruct    d) = lookupMember name (structMemberMap d)
 descMember name (DescInterface d) = lookupMember name (interfaceMemberMap d)
-descMember name (DescAlias     d) = descMember name (aliasTarget d)
+descMember name (DescUsing     d) = descMember name (usingTarget d)
 descMember _ _ = Nothing
 
 -- | Lookup the given name in the scope of the given descriptor.
@@ -255,7 +255,7 @@ compileValue pos (ListType _) _ = makeExpectError pos "list"
 
 makeFileMemberMap :: FileDesc -> Map.Map String Desc
 makeFileMemberMap desc = Map.fromList allMembers where
-    allMembers = [ (aliasName     m, DescAlias     m) | m <- fileAliases    desc ]
+    allMembers = [ (usingName     m, DescUsing     m) | m <- fileUsings     desc ]
               ++ [ (constantName  m, DescConstant  m) | m <- fileConstants  desc ]
               ++ [ (enumName      m, DescEnum      m) | m <- fileEnums      desc ]
               ++ [ (structName    m, DescStruct    m) | m <- fileStructs    desc ]
@@ -265,7 +265,7 @@ descAsType _ (DescEnum desc) = succeed (EnumType desc)
 descAsType _ (DescStruct desc) = succeed (StructType desc)
 descAsType _ (DescInterface desc) = succeed (InterfaceType desc)
 descAsType _ (DescBuiltinType desc) = succeed (BuiltinType desc)
-descAsType name (DescAlias desc) = descAsType name (aliasTarget desc)
+descAsType name (DescUsing desc) = descAsType name (usingTarget desc)
 descAsType name DescBuiltinList = makeError (declNamePos name) message where
             message = printf "'List' requires exactly one type parameter." (declNameString name)
 descAsType name _ = makeError (declNamePos name) message where
@@ -553,13 +553,13 @@ compileChildDecls desc decls = Active (members, memberMap) errors where
                   | CompiledStatementStatus name status <- compiledDecls]
     errors = concatMap compiledErrors compiledDecls
 
-compileDecl scope (AliasDecl (Located _ name) target) =
+compileDecl scope (UsingDecl (Located _ name) target) =
     CompiledStatementStatus name (do
         targetDesc <- lookupDesc scope target
-        return (DescAlias AliasDesc
-            { aliasName = name
-            , aliasParent = scope
-            , aliasTarget = targetDesc
+        return (DescUsing UsingDesc
+            { usingName = name
+            , usingParent = scope
+            , usingTarget = targetDesc
             }))
 
 compileDecl scope (ConstantDecl (Located _ name) t annotations (Located valuePos value)) =
@@ -627,7 +627,7 @@ compileDecl scope (StructDecl (Located _ name) annotations decls) =
             , structPacking = packing
             , structFields = fields
             , structUnions = unions
-            , structNestedAliases    = [d | DescAlias     d <- members]
+            , structNestedUsings     = [d | DescUsing     d <- members]
             , structNestedConstants  = [d | DescConstant  d <- members]
             , structNestedEnums      = [d | DescEnum      d <- members]
             , structNestedStructs    = [d | DescStruct    d <- members]
@@ -708,7 +708,7 @@ compileDecl scope (InterfaceDecl (Located _ name) annotations decls) =
             , interfaceId = theId
             , interfaceParent = scope
             , interfaceMethods          = [d | DescMethod    d <- members]
-            , interfaceNestedAliases    = [d | DescAlias     d <- members]
+            , interfaceNestedUsings     = [d | DescUsing     d <- members]
             , interfaceNestedConstants  = [d | DescConstant  d <- members]
             , interfaceNestedEnums      = [d | DescEnum      d <- members]
             , interfaceNestedStructs    = [d | DescStruct    d <- members]
@@ -777,7 +777,7 @@ compileFile name decls annotations importMap =
             { fileName = name
             , fileId = theId
             , fileImports = Map.elems importMap
-            , fileAliases    = [d | DescAlias     d <- members]
+            , fileUsings     = [d | DescUsing     d <- members]
             , fileConstants  = [d | DescConstant  d <- members]
             , fileEnums      = [d | DescEnum      d <- members]
             , fileStructs    = [d | DescStruct    d <- members]
@@ -795,7 +795,7 @@ emptyFileDesc filename = FileDesc
     { fileName = filename
     , fileId = Nothing
     , fileImports = []
-    , fileAliases = []
+    , fileUsings = []
     , fileConstants = []
     , fileEnums = []
     , fileStructs = []
