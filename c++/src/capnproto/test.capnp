@@ -144,8 +144,8 @@ struct TestDefaults {
   uInt16List    @24 : List(UInt16)  = [33333, 44444];
   uInt32List    @25 : List(UInt32)  = [3333333333];
   uInt64List    @26 : List(UInt64)  = [11111111111111111111];
-  float32List   @27 : List(Float32) = [5555.5, 2222.25];
-  float64List   @28 : List(Float64) = [7777.75, 1111.125];
+  float32List   @27 : List(Float32) = [5555.5, inf, -inf, nan];
+  float64List   @28 : List(Float64) = [7777.75, inf, -inf, nan];
   textList      @29 : List(Text)    = ["plugh", "xyzzy", "thud"];
   dataList      @30 : List(Data)    = ["oops", "exhausted", "rfc3092"];
   structList    @31 : List(TestAllTypes) = [

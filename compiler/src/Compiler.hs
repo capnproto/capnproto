@@ -196,6 +196,14 @@ compileValue _ (BuiltinType BuiltinFloat32) (FloatFieldValue x) = succeed (Float
 compileValue _ (BuiltinType BuiltinFloat64) (FloatFieldValue x) = succeed (Float64Desc x)
 compileValue _ (BuiltinType BuiltinFloat32) (IntegerFieldValue x) = succeed (Float32Desc (realToFrac x))
 compileValue _ (BuiltinType BuiltinFloat64) (IntegerFieldValue x) = succeed (Float64Desc (realToFrac x))
+compileValue _ (BuiltinType BuiltinFloat32) (IdentifierFieldValue "inf") =
+    succeed $ Float32Desc $ realToFrac $ 1.0 / 0.0
+compileValue _ (BuiltinType BuiltinFloat64) (IdentifierFieldValue "inf") =
+    succeed $ Float64Desc $ 1.0 / 0.0
+compileValue _ (BuiltinType BuiltinFloat32) (IdentifierFieldValue "nan") =
+    succeed $ Float32Desc $ realToFrac $ 0.0 / 0.0
+compileValue _ (BuiltinType BuiltinFloat64) (IdentifierFieldValue "nan") =
+    succeed $ Float64Desc $ 0.0 / 0.0
 compileValue _ (BuiltinType BuiltinText) (StringFieldValue x) = succeed (TextDesc x)
 compileValue _ (BuiltinType BuiltinData) (StringFieldValue x) =
     succeed (DataDesc (map (fromIntegral . fromEnum) x))

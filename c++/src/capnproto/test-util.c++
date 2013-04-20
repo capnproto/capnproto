@@ -103,8 +103,14 @@ void genericInitTestMessage(Builder builder) {
   builder.setUInt16List({33333u, 44444u});
   builder.setUInt32List({3333333333u});
   builder.setUInt64List({11111111111111111111ull});
-  builder.setFloat32List({5555.5, 2222.25});
-  builder.setFloat64List({7777.75, 1111.125});
+  builder.setFloat32List({5555.5,
+                          std::numeric_limits<float>::infinity(),
+                          -std::numeric_limits<float>::infinity(),
+                          std::numeric_limits<float>::quiet_NaN()});
+  builder.setFloat64List({7777.75,
+                          std::numeric_limits<double>::infinity(),
+                          -std::numeric_limits<double>::infinity(),
+                          std::numeric_limits<double>::quiet_NaN()});
   builder.setTextList({"plugh", "xyzzy", "thud"});
   builder.setDataList({"oops", "exhausted", "rfc3092"});
   {
@@ -139,6 +145,9 @@ void checkList(T reader, std::initializer_list<double> expected) {
     EXPECT_DOUBLE_EQ(expected.begin()[i], reader[i]);
   }
 }
+
+inline bool isNaN(float f) { return f != f; }
+inline bool isNaN(double f) { return f != f; }
 
 template <typename Reader>
 void genericCheckTestMessage(Reader reader) {
@@ -215,8 +224,22 @@ void genericCheckTestMessage(Reader reader) {
   checkList(reader.getUInt16List(), {33333u, 44444u});
   checkList(reader.getUInt32List(), {3333333333u});
   checkList(reader.getUInt64List(), {11111111111111111111ull});
-  checkList(reader.getFloat32List(), {5555.5f, 2222.25f});
-  checkList(reader.getFloat64List(), {7777.75, 1111.125});
+  {
+    auto listReader = reader.getFloat32List();
+    ASSERT_EQ(4u, listReader.size());
+    EXPECT_EQ(5555.5f, listReader[0]);
+    EXPECT_EQ(std::numeric_limits<float>::infinity(), listReader[1]);
+    EXPECT_EQ(-std::numeric_limits<float>::infinity(), listReader[2]);
+    EXPECT_TRUE(isNaN(listReader[3]));
+  }
+  {
+    auto listReader = reader.getFloat64List();
+    ASSERT_EQ(4u, listReader.size());
+    EXPECT_EQ(7777.75, listReader[0]);
+    EXPECT_EQ(std::numeric_limits<double>::infinity(), listReader[1]);
+    EXPECT_EQ(-std::numeric_limits<double>::infinity(), listReader[2]);
+    EXPECT_TRUE(isNaN(listReader[3]));
+  }
   checkList(reader.getTextList(), {"plugh", "xyzzy", "thud"});
   checkList(reader.getDataList(), {"oops", "exhausted", "rfc3092"});
   {

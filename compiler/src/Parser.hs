@@ -121,6 +121,8 @@ unionKeyword = tokenParser (matchSimpleToken UnionKeyword) <?> "\"union\""
 interfaceKeyword = tokenParser (matchSimpleToken InterfaceKeyword) <?> "\"interface\""
 annotationKeyword = tokenParser (matchSimpleToken AnnotationKeyword) <?> "\"annotation\""
 
+exactIdentifier s = tokenParser (matchSimpleToken $ Identifier s) <?> "\"" ++ s ++ "\""
+
 parenthesizedList parser = do
     items <- tokenParser (matchUnary ParenthesizedList)
     parseList parser items
@@ -250,6 +252,7 @@ fieldDecl = do
 
 negativeFieldValue = liftM (IntegerFieldValue . negate) literalInt
                  <|> liftM (FloatFieldValue . negate) literalFloat
+                 <|> (exactIdentifier "inf" >> return (FloatFieldValue (-1.0 / 0.0)))
 
 fieldValue = (literalVoid >> return VoidFieldValue)
          <|> liftM BoolFieldValue literalBool
@@ -312,25 +315,17 @@ annotationDecl = do
     return (AnnotationDecl name t annotations targets)
 allAnnotationTargets = [minBound::AnnotationTarget .. maxBound::AnnotationTarget]
 
-annotationTarget = (constKeyword >> return ConstantAnnotation)
+annotationTarget = (exactIdentifier "file" >> return FileAnnotation)
+               <|> (constKeyword >> return ConstantAnnotation)
                <|> (enumKeyword >> return EnumAnnotation)
+               <|> (exactIdentifier "enumerant" >> return EnumerantAnnotation)
                <|> (structKeyword >> return StructAnnotation)
+               <|> (exactIdentifier "field" >> return FieldAnnotation)
                <|> (unionKeyword >> return UnionAnnotation)
                <|> (interfaceKeyword >> return InterfaceAnnotation)
+               <|> (exactIdentifier "method" >> return MethodAnnotation)
+               <|> (exactIdentifier "parameter" >> return ParamAnnotation)
                <|> (annotationKeyword >> return AnnotationAnnotation)
-               <|> (do
-                   name <- varIdentifier
-                   case name of
-                       "file" -> return FileAnnotation
-                       "enumerant" -> return EnumerantAnnotation
-                       "field" -> return FieldAnnotation
-                       "method" -> return MethodAnnotation
-                       "parameter" -> return ParamAnnotation
-                       _ -> fail "" <?> annotationTargetList)
-               <?> annotationTargetList
-
-annotationTargetList = "const, enum, enumerant, struct, field, union, interface, method, \
-                       \parameter, or annotation"
 
 extractErrors :: Either ParseError (a, [ParseError]) -> [ParseError]
 extractErrors (Left err) = [err]
