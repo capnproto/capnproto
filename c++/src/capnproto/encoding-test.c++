@@ -287,6 +287,10 @@ TEST(Encoding, UnionDefault) {
   }
 }
 
+// =======================================================================================
+// Tests of generated code, not really of the encoding.
+// TODO(cleanup):  Move to a different test?
+
 TEST(Encoding, NestedTypes) {
   // This is more of a test of the generated code than the encoding.
 
@@ -308,6 +312,13 @@ TEST(Encoding, Imports) {
   TestImport::Builder root = builder.getRoot<TestImport>();
   initTestMessage(root.initField());
   checkTestMessage(root.asReader().getField());
+}
+
+TEST(Encoding, Using) {
+  MallocMessageBuilder builder;
+  TestUsing::Reader reader = builder.getRoot<TestUsing>().asReader();
+  EXPECT_EQ(TestNestedTypes::NestedEnum::BAR, reader.getOuterNestedEnum());
+  EXPECT_EQ(TestNestedTypes::NestedStruct::NestedEnum::QUUX, reader.getInnerNestedEnum());
 }
 
 }  // namespace

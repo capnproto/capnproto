@@ -56,6 +56,7 @@ using ::capnproto::test::TestEnum;
 using ::capnproto::test::TestUnion;
 using ::capnproto::test::TestUnionDefaults;
 using ::capnproto::test::TestNestedTypes;
+using ::capnproto::test::TestUsing;
 
 void initTestMessage(test::TestAllTypes::Builder builder);
 void initTestMessage(test::TestDefaults::Builder builder);

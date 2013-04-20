@@ -173,9 +173,19 @@ topLine (Just statements) = liftM Left $ typeDecl statements
 
 usingDecl = do
     usingKeyword
-    name <- located typeIdentifier
-    equalsSign
+    maybeName <- optionMaybe $ try (do
+        name <- located typeIdentifier
+        equalsSign
+        return name)
     target <- declName
+    name <- let
+        inferredName = case target of
+            AbsoluteName s -> return s
+            RelativeName s -> return s
+            ImportName _ -> fail "When 'using' an 'import' you must specify a name, e.g.: \
+                                 \using Foo = import \"foo.capnp\";"
+            MemberName _ s -> return s
+        in maybe inferredName return maybeName
     return (UsingDecl name target)
 
 constantDecl = do
@@ -216,7 +226,7 @@ structDecl statements = do
     return (StructDecl name annotations children)
 
 structLine :: Maybe [Located Statement] -> TokenParser Declaration
-structLine Nothing = constantDecl <|> fieldDecl <|> annotationDecl
+structLine Nothing = usingDecl <|> constantDecl <|> fieldDecl <|> annotationDecl
 structLine (Just statements) = typeDecl statements <|> unionDecl statements <|> unionDecl statements
 
 unionDecl statements = do
@@ -272,7 +282,7 @@ interfaceDecl statements = do
     return (InterfaceDecl name annotations children)
 
 interfaceLine :: Maybe [Located Statement] -> TokenParser Declaration
-interfaceLine Nothing = constantDecl <|> methodDecl <|> annotationDecl
+interfaceLine Nothing = usingDecl <|> constantDecl <|> methodDecl <|> annotationDecl
 interfaceLine (Just statements) = typeDecl statements
 
 methodDecl = do

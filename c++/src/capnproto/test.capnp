@@ -266,3 +266,11 @@ struct TestNestedTypes {
   outerNestedEnum @1 :NestedEnum = bar;
   innerNestedEnum @2 :NestedStruct.NestedEnum = quux;
 }
+
+struct TestUsing {
+  using OuterNestedEnum = TestNestedTypes.NestedEnum;
+  using TestNestedTypes.NestedStruct.NestedEnum;
+
+  outerNestedEnum @1 :OuterNestedEnum = bar;
+  innerNestedEnum @0 :NestedEnum = quux;
+}
