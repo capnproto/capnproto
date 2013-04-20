@@ -30,6 +30,7 @@ import Data.FileEmbed(embedFile)
 import Data.Word(Word8)
 import qualified Data.Digest.MD5 as MD5
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.Maybe(catMaybes, fromMaybe)
 import Data.Binary.IEEE754(floatToWord, doubleToWord)
 import Text.Printf(printf)
@@ -320,6 +321,8 @@ fileContext desc = mkStrContext context where
 
     namespace = maybe [] (splitOn "::") $ fileNamespace desc
 
+    isImportUsed (_, dep) = Set.member (fileName dep) (fileRuntimeImports desc)
+
     context "fileName" = MuVariable $ fileName desc
     context "fileBasename" = MuVariable $ takeBaseName $ fileName desc
     context "fileIncludeGuard" = MuVariable $
@@ -327,7 +330,8 @@ fileContext desc = mkStrContext context where
     context "fileNamespaces" = MuList $ map (namespaceContext context) namespace
     context "fileEnums" = MuList $ map (enumContext context) $ fileEnums desc
     context "fileTypes" = MuList $ map (typeContext context) flattenedMembers
-    context "fileImports" = MuList $ map (importContext context) $ Map.keys $ fileImportMap desc
+    context "fileImports" = MuList $ map (importContext context . fst)
+                          $ filter isImportUsed $ Map.toList $ fileImportMap desc
     context s = error ("Template variable not defined: " ++ s)
 
 headerTemplate :: String

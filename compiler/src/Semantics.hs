@@ -113,6 +113,9 @@ descParent (DescBuiltinType _) = error "Builtin type has no parent."
 descParent DescBuiltinList = error "Builtin type has no parent."
 descParent DescBuiltinId = error "Builtin annotation has no parent."
 
+descFile (DescFile d) = d
+descFile desc = descFile $ descParent desc
+
 descAnnotations (DescFile      d) = fileAnnotations d
 descAnnotations (DescUsing     _) = Map.empty
 descAnnotations (DescConstant  d) = constantAnnotations d
@@ -128,6 +131,22 @@ descAnnotations (DescAnnotation d) = annotationAnnotations d
 descAnnotations (DescBuiltinType _) = Map.empty
 descAnnotations DescBuiltinList = Map.empty
 descAnnotations DescBuiltinId = Map.empty
+
+descRuntimeImports (DescFile      d) = error "Not to be called on files."
+descRuntimeImports (DescUsing     d) = usingRuntimeImports d
+descRuntimeImports (DescConstant  d) = constantRuntimeImports d
+descRuntimeImports (DescEnum      d) = enumRuntimeImports d
+descRuntimeImports (DescEnumerant d) = enumerantRuntimeImports d
+descRuntimeImports (DescStruct    d) = structRuntimeImports d
+descRuntimeImports (DescUnion     d) = unionRuntimeImports d
+descRuntimeImports (DescField     d) = fieldRuntimeImports d
+descRuntimeImports (DescInterface d) = interfaceRuntimeImports d
+descRuntimeImports (DescMethod    d) = methodRuntimeImports d
+descRuntimeImports (DescParam     d) = paramRuntimeImports d
+descRuntimeImports (DescAnnotation d) = annotationRuntimeImports d
+descRuntimeImports (DescBuiltinType _) = []
+descRuntimeImports DescBuiltinList = []
+descRuntimeImports DescBuiltinId = []
 
 type MemberMap = Map.Map String (Maybe Desc)
 
@@ -195,6 +214,12 @@ data TypeDesc = BuiltinType BuiltinType
               | StructType StructDesc
               | InterfaceType InterfaceDesc
               | ListType TypeDesc
+
+typeRuntimeImports (BuiltinType _) = []
+typeRuntimeImports (EnumType d) = [descFile (DescEnum d)]
+typeRuntimeImports (StructType d) = [descFile (DescStruct d)]
+typeRuntimeImports (InterfaceType d) = [descFile (DescInterface d)]
+typeRuntimeImports (ListType d) = typeRuntimeImports d
 
 data PackingState = PackingState
     { packingHole1 :: Integer
@@ -307,6 +332,9 @@ data FileDesc = FileDesc
     { fileName :: String
     , fileId :: Maybe String
     , fileImports :: [FileDesc]
+    -- Set of imports which are used at runtime, i.e. not just for annotations.
+    -- The set contains file names matching files in fileImports.
+    , fileRuntimeImports :: Set.Set String
     , fileUsings :: [UsingDesc]
     , fileConstants :: [ConstantDesc]
     , fileEnums :: [EnumDesc]
@@ -324,6 +352,8 @@ data UsingDesc = UsingDesc
     , usingTarget :: Desc
     }
 
+usingRuntimeImports _ = []
+
 data ConstantDesc = ConstantDesc
     { constantName :: String
     , constantId :: Maybe String
@@ -332,6 +362,8 @@ data ConstantDesc = ConstantDesc
     , constantAnnotations :: AnnotationMap
     , constantValue :: ValueDesc
     }
+
+constantRuntimeImports desc = typeRuntimeImports $ constantType desc
 
 data EnumDesc = EnumDesc
     { enumName :: String
@@ -343,6 +375,8 @@ data EnumDesc = EnumDesc
     , enumStatements :: [Desc]
     }
 
+enumRuntimeImports desc = concatMap descRuntimeImports $ enumStatements desc
+
 data EnumerantDesc = EnumerantDesc
     { enumerantName :: String
     , enumerantId :: Maybe String
@@ -350,6 +384,8 @@ data EnumerantDesc = EnumerantDesc
     , enumerantNumber :: Integer
     , enumerantAnnotations :: AnnotationMap
     }
+
+enumerantRuntimeImports _ = []
 
 data StructDesc = StructDesc
     { structName :: String
@@ -373,6 +409,8 @@ data StructDesc = StructDesc
     , structFieldPackingMap :: Map.Map Integer (Integer, PackingState)
     }
 
+structRuntimeImports desc = concatMap descRuntimeImports $ structStatements desc
+
 data UnionDesc = UnionDesc
     { unionName :: String
     , unionId :: Maybe String
@@ -389,6 +427,8 @@ data UnionDesc = UnionDesc
     , unionFieldDiscriminantMap :: Map.Map Integer Integer
     }
 
+unionRuntimeImports desc = concatMap descRuntimeImports $ unionStatements desc
+
 data FieldDesc = FieldDesc
     { fieldName :: String
     , fieldId :: Maybe String
@@ -401,6 +441,8 @@ data FieldDesc = FieldDesc
     , fieldDefaultValue :: Maybe ValueDesc
     , fieldAnnotations :: AnnotationMap
     }
+
+fieldRuntimeImports desc = typeRuntimeImports $ fieldType desc
 
 data InterfaceDesc = InterfaceDesc
     { interfaceName :: String
@@ -417,6 +459,8 @@ data InterfaceDesc = InterfaceDesc
     , interfaceStatements :: [Desc]
     }
 
+interfaceRuntimeImports desc = concatMap descRuntimeImports $ interfaceStatements desc
+
 data MethodDesc = MethodDesc
     { methodName :: String
     , methodId :: Maybe String
@@ -426,6 +470,9 @@ data MethodDesc = MethodDesc
     , methodReturnType :: TypeDesc
     , methodAnnotations :: AnnotationMap
     }
+
+methodRuntimeImports desc = typeRuntimeImports (methodReturnType desc) ++
+                            concatMap paramRuntimeImports (methodParams desc)
 
 data ParamDesc = ParamDesc
     { paramName :: String
@@ -437,6 +484,8 @@ data ParamDesc = ParamDesc
     , paramAnnotations :: AnnotationMap
     }
 
+paramRuntimeImports desc = typeRuntimeImports $ paramType desc
+
 data AnnotationDesc = AnnotationDesc
     { annotationName :: String
     , annotationParent :: Desc
@@ -445,6 +494,8 @@ data AnnotationDesc = AnnotationDesc
     , annotationId :: Maybe String
     , annotationTargets :: Set.Set AnnotationTarget
     }
+
+annotationRuntimeImports desc = typeRuntimeImports $ annotationType desc
 
 type AnnotationMap = Map.Map String (AnnotationDesc, ValueDesc)
 

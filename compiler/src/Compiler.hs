@@ -785,6 +785,8 @@ compileFile name decls annotations importMap =
             { fileName = name
             , fileId = theId
             , fileImports = Map.elems importMap
+            , fileRuntimeImports =
+                Set.fromList $ map fileName $ concatMap descRuntimeImports members
             , fileUsings     = [d | DescUsing     d <- members]
             , fileConstants  = [d | DescConstant  d <- members]
             , fileEnums      = [d | DescEnum      d <- members]
