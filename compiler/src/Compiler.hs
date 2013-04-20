@@ -805,6 +805,7 @@ emptyFileDesc filename = FileDesc
     { fileName = filename
     , fileId = Nothing
     , fileImports = []
+    , fileRuntimeImports = Set.empty
     , fileUsings = []
     , fileConstants = []
     , fileEnums = []
