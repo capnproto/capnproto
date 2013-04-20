@@ -142,7 +142,7 @@
 <ul>
 <li>Types come after names. The name is by far the most important thing to see, especially when quickly skimming, so we put it up front where it is most visible. Sorry, C got it wrong.</li>
 
-<li>The <code>@N</code> annotations show how the protocol evolved over time, so that the system can make sure to maintain compatibility with older versions. Fields (and enum values, and interface methods) must be numbered consecutively starting from zero in the order in which they were added. In this example, it looks like the <code>birthdate</code> field was added to the <code>Person</code> structure recently &#8211; its number is higher than the <code>email</code> and <code>phones</code> fields. Unlike Protobufs, you cannot skip numbers when defining fields &#8211; but there was never any reason to do so anyway.</li>
+<li>The <code>@N</code> annotations show how the protocol evolved over time, so that the system can make sure to maintain compatibility with older versions. Fields (and enumerants, and interface methods) must be numbered consecutively starting from zero in the order in which they were added. In this example, it looks like the <code>birthdate</code> field was added to the <code>Person</code> structure recently &#8211; its number is higher than the <code>email</code> and <code>phones</code> fields. Unlike Protobufs, you cannot skip numbers when defining fields &#8211; but there was never any reason to do so anyway.</li>
 </ul>
 
 <h2 id='language_reference'>Language Reference</h2>
@@ -253,7 +253,7 @@
   <span class='c1'># ...</span>
 }
 </code></pre></div>
-<p>Like fields, enum values must be numbered sequentially starting from zero. In languages where enums have numeric values, these numbers will be used, but in general Cap&#8217;n Proto enums should not be considered numeric.</p>
+<p>Like fields, enumerants must be numbered sequentially starting from zero. In languages where enums have numeric values, these numbers will be used, but in general Cap&#8217;n Proto enums should not be considered numeric.</p>
 
 <h3 id='interfaces'>Interfaces</h3>
 
