@@ -161,7 +161,10 @@ lookupDesc scope name = lookupDesc (descParent scope) name
 builtinTypeMap :: Map.Map String Desc
 builtinTypeMap = Map.fromList
     ([(builtinTypeName t, DescBuiltinType t) | t <- builtinTypes] ++
-     [("List", DescBuiltinList), ("Inline", DescBuiltinInline), ("id", DescBuiltinId)])
+     [("List", DescBuiltinList),
+      ("Inline", DescBuiltinInline),
+      ("InlineList", DescBuiltinInlineList),
+      ("id", DescBuiltinId)])
 
 ------------------------------------------------------------------------------------------
 
@@ -246,6 +249,12 @@ compileValue pos (InlineStructType desc) v = compileValue pos (StructType desc) 
 compileValue _ (ListType t) (ListFieldValue l) =
     fmap ListDesc (doAll [ compileValue vpos t v | Located vpos v <- l ])
 
+compileValue pos (InlineListType t s) (ListFieldValue l) = do
+    elements <- doAll [ compileValue vpos t v | Located vpos v <- l ]
+    when (List.genericLength elements /= s) $
+        makeError pos $ printf "Fixed-size list must have exactly %d elements." s
+    return $ ListDesc elements
+
 compileValue pos (BuiltinType BuiltinVoid) _ = makeError pos "Void fields cannot have values."
 compileValue pos (BuiltinType BuiltinBool) _ = makeExpectError pos "boolean"
 compileValue pos (BuiltinType BuiltinInt8) _ = makeExpectError pos "integer"
@@ -263,9 +272,9 @@ compileValue pos (BuiltinType BuiltinData) _ = makeExpectError pos "string"
 
 compileValue pos (EnumType _) _ = makeExpectError pos "enumerant name"
 compileValue pos (StructType _) _ = makeExpectError pos "parenthesized list of field assignments"
-compileValue pos (InlineStructType _) _ = makeExpectError pos "parenthesized list of field assignments"
 compileValue pos (InterfaceType _) _ = makeError pos "Interfaces can't have default values."
 compileValue pos (ListType _) _ = makeExpectError pos "list"
+compileValue pos (InlineListType _ _) _ = makeExpectError pos "list"
 
 descAsType _ (DescEnum desc) = succeed (EnumType desc)
 descAsType _ (DescStruct desc) = succeed (StructType desc)
@@ -276,33 +285,39 @@ descAsType name DescBuiltinList = makeError (declNamePos name) message where
             message = printf "'List' requires exactly one type parameter." (declNameString name)
 descAsType name DescBuiltinInline = makeError (declNamePos name) message where
             message = printf "'Inline' requires exactly one type parameter." (declNameString name)
+descAsType name DescBuiltinInlineList = makeError (declNamePos name) message where
+            message = printf "'InlineList' requires exactly one type parameter." (declNameString name)
 descAsType name _ = makeError (declNamePos name) message where
             message = printf "'%s' is not a type." (declNameString name)
 
 compileType :: Desc -> TypeExpression -> Status TypeDesc
-compileType scope (TypeExpression n []) = do
-    desc <- lookupDesc scope n
-    descAsType n desc
-compileType scope (TypeExpression n (param:moreParams)) = do
+compileType scope (TypeExpression n params) = do
     desc <- lookupDesc scope n
     case desc of
-        DescBuiltinList ->
-            if null moreParams
-                then fmap ListType (compileType scope param)
-                else makeError (declNamePos n) "'List' requires exactly one type parameter."
-        DescBuiltinInline ->
-            if null moreParams
-                then do
-                    inner <- compileType scope param
-                    case inner of
-                        StructType s -> if structIsFixedWidth s
-                            then return (InlineStructType s)
-                            else makeError (declNamePos n) $
-                                printf "'%s' cannot be inlined because it is not fixed-width."
-                                       (structName s)
-                        _ -> makeError (declNamePos n) "'Inline' parameter must be a struct type."
-                else makeError (declNamePos n) "'Inline' requires exactly one type parameter."
-        _ -> makeError (declNamePos n) "Only the type 'List' can have type parameters."
+        DescBuiltinList -> case params of
+            [TypeParameterType param] -> fmap ListType (compileType scope param)
+            _ -> makeError (declNamePos n) "'List' requires exactly one type parameter."
+        DescBuiltinInline -> case params of
+            [TypeParameterType param] -> do
+                inner <- compileType scope param
+                case inner of
+                    StructType s -> if structIsFixedWidth s
+                        then return (InlineStructType s)
+                        else makeError (declNamePos n) $
+                            printf "'%s' cannot be inlined because it is not fixed-width."
+                                   (structName s)
+                    _ -> makeError (declNamePos n) "'Inline' parameter must be a struct type."
+            _ -> makeError (declNamePos n) "'Inline' requires exactly one type parameter."
+        DescBuiltinInlineList -> case params of
+            [TypeParameterType param, TypeParameterInteger size] -> do
+                inner <- compileType scope param
+                return $ InlineListType inner size
+            _ -> makeError (declNamePos n)
+                "'InlineList' requires exactly two type parameters: a type and a size."
+        _ -> case params of
+            [] -> descAsType n desc
+            _ -> makeError (declNamePos n) $
+                printf "'%s' doesn't take parameters." (declNameString n)
 
 compileAnnotation :: Desc -> AnnotationTarget -> Annotation
                   -> Status (Maybe AnnotationDesc, ValueDesc)

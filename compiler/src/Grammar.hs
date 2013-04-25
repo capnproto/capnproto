@@ -38,12 +38,19 @@ declNameImport (RelativeName _) = Nothing
 declNameImport (ImportName s) = Just s
 declNameImport (MemberName parent _) = declNameImport parent
 
-data TypeExpression = TypeExpression DeclName [TypeExpression]
+data TypeParameter = TypeParameterType TypeExpression
+                   | TypeParameterInteger Integer
+                   deriving (Show)
+data TypeExpression = TypeExpression DeclName [TypeParameter]
                     deriving (Show)
+
+typeParameterImports :: TypeParameter -> [Located String]
+typeParameterImports (TypeParameterType t) = typeImports t
+typeParameterImports (TypeParameterInteger _) = []
 
 typeImports :: TypeExpression -> [Located String]
 typeImports (TypeExpression name params) =
-    maybeToList (declNameImport name) ++ concatMap typeImports params
+    maybeToList (declNameImport name) ++ concatMap typeParameterImports params
 
 data Annotation = Annotation DeclName (Located FieldValue) deriving(Show)
 

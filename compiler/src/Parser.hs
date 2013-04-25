@@ -149,10 +149,14 @@ declName = do
     members <- many (period >> located anyIdentifier)
     return (foldl MemberName base members :: DeclName)
 
+typeParameter :: TokenParser TypeParameter
+typeParameter = liftM TypeParameterInteger literalInt
+            <|> liftM TypeParameterType typeExpression
+
 typeExpression :: TokenParser TypeExpression
 typeExpression = do
     name <- declName
-    suffixes <- option [] (parenthesizedList typeExpression)
+    suffixes <- option [] (parenthesizedList typeParameter)
     return (TypeExpression name suffixes)
 
 nameWithOrdinal :: TokenParser (Located String, Located Integer)

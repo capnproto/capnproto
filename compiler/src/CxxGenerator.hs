@@ -91,6 +91,7 @@ isPrimitive (StructType _) = False
 isPrimitive (InlineStructType _) = False
 isPrimitive (InterfaceType _) = False
 isPrimitive (ListType _) = False
+isPrimitive (InlineListType _ _) = False
 
 isBlob (BuiltinType BuiltinText) = True
 isBlob (BuiltinType BuiltinData) = True
@@ -254,7 +255,7 @@ fieldContext parent desc = mkStrContext context where
         Nothing -> MuVariable ""
         Just v -> MuVariable (if isDefaultZero v then "" else ", " ++ defaultMask v)
     context "fieldElementSize" =
-        MuVariable $ cxxFieldSizeString $ elementSize $ elementType $ fieldType desc
+        MuVariable $ cxxFieldSizeString $ fieldSize $ elementType $ fieldType desc
     context "fieldElementType" =
         MuVariable $ cxxTypeString $ elementType $ fieldType desc
     context "fieldUnion" = case fieldUnion desc of

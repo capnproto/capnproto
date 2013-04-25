@@ -56,6 +56,7 @@ data Desc = DescFile FileDesc
           | DescBuiltinType BuiltinType
           | DescBuiltinList
           | DescBuiltinInline
+          | DescBuiltinInlineList
           | DescBuiltinId
 
 descName (DescFile      _) = "(top-level)"
@@ -73,6 +74,7 @@ descName (DescAnnotation d) = annotationName d
 descName (DescBuiltinType d) = builtinTypeName d
 descName DescBuiltinList = "List"
 descName DescBuiltinInline = "Inline"
+descName DescBuiltinInlineList = "InlineList"
 descName DescBuiltinId = "id"
 
 descId (DescFile      d) = fileId d
@@ -90,6 +92,7 @@ descId (DescAnnotation d) = annotationId d
 descId (DescBuiltinType _) = Nothing
 descId DescBuiltinList = Nothing
 descId DescBuiltinInline = Nothing
+descId DescBuiltinInlineList = Nothing
 descId DescBuiltinId = Just "0U0T3e_SnatEfk6UcH2tcjTt1E0"
 
 -- Gets the ID if explicitly defined, or generates it by appending ".name" to the parent's ID.
@@ -115,6 +118,7 @@ descParent (DescAnnotation d) = annotationParent d
 descParent (DescBuiltinType _) = error "Builtin type has no parent."
 descParent DescBuiltinList = error "Builtin type has no parent."
 descParent DescBuiltinInline = error "Builtin type has no parent."
+descParent DescBuiltinInlineList = error "Builtin type has no parent."
 descParent DescBuiltinId = error "Builtin annotation has no parent."
 
 descFile (DescFile d) = d
@@ -135,6 +139,7 @@ descAnnotations (DescAnnotation d) = annotationAnnotations d
 descAnnotations (DescBuiltinType _) = Map.empty
 descAnnotations DescBuiltinList = Map.empty
 descAnnotations DescBuiltinInline = Map.empty
+descAnnotations DescBuiltinInlineList = Map.empty
 descAnnotations DescBuiltinId = Map.empty
 
 descRuntimeImports (DescFile      _) = error "Not to be called on files."
@@ -152,6 +157,7 @@ descRuntimeImports (DescAnnotation d) = annotationRuntimeImports d
 descRuntimeImports (DescBuiltinType _) = []
 descRuntimeImports DescBuiltinList = []
 descRuntimeImports DescBuiltinInline = []
+descRuntimeImports DescBuiltinInlineList = []
 descRuntimeImports DescBuiltinId = []
 
 type MemberMap = Map.Map String (Maybe Desc)
@@ -221,6 +227,7 @@ data TypeDesc = BuiltinType BuiltinType
               | InlineStructType StructDesc
               | InterfaceType InterfaceDesc
               | ListType TypeDesc
+              | InlineListType TypeDesc Integer
 
 typeRuntimeImports (BuiltinType _) = []
 typeRuntimeImports (EnumType d) = [descFile (DescEnum d)]
@@ -228,6 +235,7 @@ typeRuntimeImports (StructType d) = [descFile (DescStruct d)]
 typeRuntimeImports (InlineStructType d) = [descFile (DescStruct d)]
 typeRuntimeImports (InterfaceType d) = [descFile (DescInterface d)]
 typeRuntimeImports (ListType d) = typeRuntimeImports d
+typeRuntimeImports (InlineListType d _) = typeRuntimeImports d
 
 data DataSectionSize = DataSection1 | DataSection8 | DataSection16 | DataSection32
                      | DataSectionWords Integer
@@ -310,19 +318,24 @@ fieldSize (InlineStructType StructDesc { structDataSize = ds, structPointerCount
     SizeInlineComposite ds ps
 fieldSize (InterfaceType _) = SizeReference
 fieldSize (ListType _) = SizeReference
-
-elementSize (StructType StructDesc { structDataSize = DataSection1, structPointerCount = 0 }) =
-    SizeData Size1
-elementSize (StructType StructDesc { structDataSize = DataSection8, structPointerCount = 0 }) =
-    SizeData Size8
-elementSize (StructType StructDesc { structDataSize = DataSection16, structPointerCount = 0 }) =
-    SizeData Size16
-elementSize (StructType StructDesc { structDataSize = DataSection32, structPointerCount = 0 }) =
-    SizeData Size32
-elementSize (StructType StructDesc { structDataSize = ds, structPointerCount = pc }) =
-    SizeInlineComposite ds pc
-elementSize (InlineStructType s) = elementSize (StructType s)
-elementSize t = fieldSize t
+fieldSize (InlineListType element size) = let
+    minDataSectionForBits bits
+        | bits <= 1 = DataSection1
+        | bits <= 8 = DataSection8
+        | bits <= 16 = DataSection16
+        | bits <= 32 = DataSection32
+        | otherwise = DataSectionWords $ div (bits + 63) 64
+    dataSection = case fieldSize element of
+        SizeVoid -> DataSectionWords 0
+        SizeData s -> minDataSectionForBits $ dataSizeInBits s * size
+        SizeReference -> DataSectionWords 0
+        SizeInlineComposite ds _ -> minDataSectionForBits $ dataSectionBits ds
+    pointerCount = case fieldSize element of
+        SizeVoid -> 0
+        SizeData _ -> 0
+        SizeReference -> size
+        SizeInlineComposite _ pc -> pc
+    in SizeInlineComposite dataSection pointerCount
 
 -- Render the type descriptor's name as a string, appropriate for use in the given scope.
 typeName :: Desc -> TypeDesc -> String
@@ -332,6 +345,7 @@ typeName scope (StructType desc) = descQualifiedName scope (DescStruct desc)
 typeName scope (InlineStructType desc) = descQualifiedName scope (DescStruct desc)
 typeName scope (InterfaceType desc) = descQualifiedName scope (DescInterface desc)
 typeName scope (ListType t) = "List(" ++ typeName scope t ++ ")"
+typeName scope (InlineListType t s) = printf "InlineList(%s, %d)" (typeName scope t) s
 
 -- Computes the qualified name for the given descriptor within the given scope.
 -- At present the scope is only used to determine whether the target is in the same file.  If
@@ -589,6 +603,7 @@ descToCode indent self@(DescAnnotation desc) = printf "%sannotation %s: %s on(%s
 descToCode _ (DescBuiltinType _) = error "Can't print code for builtin type."
 descToCode _ DescBuiltinList = error "Can't print code for builtin type."
 descToCode _ DescBuiltinInline = error "Can't print code for builtin type."
+descToCode _ DescBuiltinInlineList = error "Can't print code for builtin type."
 descToCode _ DescBuiltinId = error "Can't print code for builtin annotation."
 
 maybeBlockCode :: String -> [Desc] -> String
