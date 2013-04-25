@@ -24,6 +24,7 @@
 module Parser (parseFile) where
 
 import Data.Generics
+import Data.Maybe(fromMaybe)
 import Text.Parsec hiding (tokens)
 import Token
 import Grammar
@@ -65,6 +66,7 @@ tokenErrorString StructKeyword = "keyword \"struct\""
 tokenErrorString UnionKeyword = "keyword \"union\""
 tokenErrorString InterfaceKeyword = "keyword \"interface\""
 tokenErrorString AnnotationKeyword = "keyword \"annotation\""
+tokenErrorString FixedKeyword = "keyword \"fixed\""
 
 type TokenParser = Parsec [Located Token] [ParseError]
 
@@ -120,6 +122,7 @@ structKeyword = tokenParser (matchSimpleToken StructKeyword) <?> "\"struct\""
 unionKeyword = tokenParser (matchSimpleToken UnionKeyword) <?> "\"union\""
 interfaceKeyword = tokenParser (matchSimpleToken InterfaceKeyword) <?> "\"interface\""
 annotationKeyword = tokenParser (matchSimpleToken AnnotationKeyword) <?> "\"annotation\""
+fixedKeyword = tokenParser (matchSimpleToken FixedKeyword) <?> "\"fixed\""
 
 exactIdentifier s = tokenParser (matchSimpleToken $ Identifier s) <?> "\"" ++ s ++ "\""
 
@@ -223,9 +226,39 @@ enumerantDecl = do
 structDecl statements = do
     structKeyword
     name <- located typeIdentifier
+    fixed <- optionMaybe fixedSpec
     annotations <- many annotation
     children <- parseBlock structLine statements
-    return (StructDecl name annotations children)
+    return (StructDecl name fixed annotations children)
+
+fixedSpec = do
+    fixedKeyword
+    Located pos sizes <- located $ parenthesizedList fixedSize
+    (dataSize, pointerSize) <- foldM combineFixedSizes (Nothing, Nothing) sizes
+    return $ Located pos (fromMaybe 0 dataSize, fromMaybe 0 pointerSize)
+
+data FixedSize = FixedData Integer | FixedPointers Integer
+
+combineFixedSizes :: (Maybe Integer, Maybe Integer) -> FixedSize
+                  -> TokenParser (Maybe Integer, Maybe Integer)
+combineFixedSizes (Nothing, p) (FixedData d) = return (Just d, p)
+combineFixedSizes (Just _, _) (FixedData _) =
+    fail "Multiple data section size specifications."
+combineFixedSizes (d, Nothing) (FixedPointers p) = return (d, Just p)
+combineFixedSizes (_, Just _) (FixedPointers _) =
+    fail "Multiple pointer section size specifications."
+
+fixedSize = do
+    size <- literalInt
+    (exactIdentifier "bit" >> return (FixedData size))
+        <|> (exactIdentifier "bits" >> return (FixedData size))
+        <|> (exactIdentifier "byte" >> return (FixedData (8 * size)))
+        <|> (exactIdentifier "bytes" >> return (FixedData (8 * size)))
+        <|> (exactIdentifier "word" >> return (FixedData (64 * size)))
+        <|> (exactIdentifier "words" >> return (FixedData (64 * size)))
+        <|> (exactIdentifier "pointer" >> return (FixedPointers size))
+        <|> (exactIdentifier "pointers" >> return (FixedPointers size))
+        <?> "\"bits\", \"bytes\", \"words\", or \"pointers\""
 
 structLine :: Maybe [Located Statement] -> TokenParser Declaration
 structLine Nothing = usingDecl <|> constantDecl <|> fieldDecl <|> annotationDecl

@@ -28,6 +28,11 @@
 // as does other parts of the Cap'n proto library which provide a higher-level interface for
 // dynamic introspection.
 
+#ifdef __CDT_PARSER__
+// Eclipse keeps thinking this is pre-defined for no apparent reason.
+#undef CAPNPROTO_LAYOUT_H_
+#endif
+
 #ifndef CAPNPROTO_LAYOUT_H_
 #define CAPNPROTO_LAYOUT_H_
 
@@ -91,8 +96,8 @@ enum class FieldSize: uint8_t {
   // 2) For struct fields of composite types where the field's total size is known at compile time,
   //    we can embed the field directly into the parent struct to avoid indirection through a
   //    reference.  However, this means that the field size can never change -- e.g. if it is a
-  //    struct, new fields cannot be added to it.  It's unclear if this is really useful so at this
-  //    time it is not supported.
+  //    struct, new fields cannot be added to it.  The field's struct type is therefore required to
+  //    be declared "inline" with a fixed width.
 };
 
 typedef decltype(BITS / ELEMENTS) BitsPerElement;
@@ -276,6 +281,17 @@ public:
   // initialized, it is initialized as a deep copy of the given default value (a trusted message),
   // or to the empty state if defaultValue is nullptr.
 
+  CAPNPROTO_ALWAYS_INLINE(StructBuilder initInlineStructField(
+      BitCount dataOffset, BitCount inlineDataSize,
+      WireReferenceCount refIndex, WireReferenceCount inlineRefCount) const);
+  // Initialize an inlined struct field, given the position and size of the data and pointer
+  // sections.
+
+  CAPNPROTO_ALWAYS_INLINE(StructBuilder getInlineStructField(
+      BitCount dataOffset, BitCount inlineDataSize,
+      WireReferenceCount refIndex, WireReferenceCount inlineRefCount) const);
+  // Gets an inlined struct field, given the position and size of the data and pointer sections.
+
   ListBuilder initListField(WireReferenceCount refIndex, FieldSize elementSize,
                             ElementCount elementCount) const;
   // Allocates a new list of the given size for the field at the given index in the reference
@@ -313,11 +329,16 @@ public:
 
 private:
   SegmentBuilder* segment;     // Memory segment in which the struct resides.
-  word* data;                  // Pointer to the encoded data.
+  void* data;                  // Pointer to the encoded data.
   WireReference* references;   // Pointer to the encoded references.
 
-  inline StructBuilder(SegmentBuilder* segment, word* data, WireReference* references)
-      : segment(segment), data(data), references(references) {}
+  BitCount8 bit0Offset;
+  // A special hack:  When accessing a boolean with field number zero, pretend its offset is this
+  // instead of the usual zero.  This is needed to support 1-bit inline structs.
+
+  inline StructBuilder(SegmentBuilder* segment, void* data, WireReference* references,
+                       BitCount8 bit0Offset)
+      : segment(segment), data(data), references(references), bit0Offset(bit0Offset) {}
 
   friend class ListBuilder;
   friend struct WireHelpers;
@@ -351,6 +372,11 @@ public:
   // struct reference, which in turn points at the struct value.  The default value is allowed to
   // be null, in which case an empty struct is used.
 
+  CAPNPROTO_ALWAYS_INLINE(StructReader getInlineStructField(
+      BitCount dataOffset, BitCount inlineDataSize,
+      WireReferenceCount refIndex, WireReferenceCount inlineRefCount) const);
+  // Gets an inlined struct field, given the position and size of the data and pointer sections.
+
   ListReader getListField(WireReferenceCount refIndex, FieldSize expectedElementSize,
                           const word* defaultValue) const;
   // Get the list field at the given index in the reference segment, or the default value if not
@@ -370,20 +396,21 @@ private:
   const void* data;
   const WireReference* references;
 
-  WordCount8 dataSize;                 // Size of data segment.
-  WireReferenceCount8 referenceCount;  // Size of the reference segment.
+  BitCount32 dataSize;                 // Size of data segment.
+  WireReferenceCount16 referenceCount;  // Size of the reference segment.
 
   BitCount8 bit0Offset;
   // A special hack:  When accessing a boolean with field number zero, pretend its offset is this
   // instead of the usual zero.  This is needed to allow a boolean list to be upgraded to a list
-  // of structs.
+  // of structs, and to support 1-bit inline structs.
 
   int nestingLimit;
   // Limits the depth of message structures to guard against stack-overflow-based DoS attacks.
   // Once this reaches zero, further pointers will be pruned.
+  // TODO:  Limit to 8 bits for better alignment?
 
   inline StructReader(SegmentReader* segment, const void* data, const WireReference* references,
-                      WordCount dataSize, WireReferenceCount referenceCount,
+                      BitCount dataSize, WireReferenceCount referenceCount,
                       BitCount bit0Offset, int nestingLimit)
       : segment(segment), data(data), references(references),
         dataSize(dataSize), referenceCount(referenceCount), bit0Offset(bit0Offset),
@@ -448,7 +475,7 @@ public:
   ListReader asReader(FieldSize elementSize) const;
   // Get a ListReader pointing at the same memory.  Use this version only for non-struct lists.
 
-  ListReader asReader(WordCount dataSize, WireReferenceCount referenceCount) const;
+  ListReader asReader(BitCount dataSize, WireReferenceCount referenceCount) const;
   // Get a ListReader pointing at the same memory.  Use this version only for struct lists.
 
 private:
@@ -503,7 +530,7 @@ private:
   // if the sender upgraded a data list to a struct list.  It will always be aligned properly for
   // the type.  Unsigned so that division by a constant power of 2 is efficient.
 
-  WordCount structDataSize;
+  BitCount structDataSize;
   WireReferenceCount structReferenceCount;
   // If the elements are structs, the properties of the struct.  The reference count is
   // only used to check for field presence; the data size is also used to compute the reference
@@ -519,7 +546,7 @@ private:
         structDataSize(0), structReferenceCount(0),
         nestingLimit(nestingLimit) {}
   inline ListReader(SegmentReader* segment, const void* ptr, ElementCount elementCount,
-                    decltype(BITS / ELEMENTS) stepBits, WordCount structDataSize,
+                    decltype(BITS / ELEMENTS) stepBits, BitCount structDataSize,
                     WireReferenceCount structReferenceCount, int nestingLimit)
       : segment(segment), ptr(ptr), elementCount(elementCount), stepBits(stepBits),
         structDataSize(structDataSize), structReferenceCount(structReferenceCount),
@@ -541,6 +568,10 @@ inline T StructBuilder::getDataField(ElementCount offset) const {
 template <>
 inline bool StructBuilder::getDataField<bool>(ElementCount offset) const {
   BitCount boffset = offset * (1 * BITS / ELEMENTS);
+
+  // This branch should always be optimized away when inlining.
+  if (boffset == 0 * BITS) boffset = bit0Offset;
+
   byte* b = reinterpret_cast<byte*>(data) + boffset / BITS_PER_BYTE;
   return (*reinterpret_cast<uint8_t*>(b) & (1 << (boffset % BITS_PER_BYTE / BITS))) != 0;
 }
@@ -564,6 +595,10 @@ inline void StructBuilder::setDataField(
 template <>
 inline void StructBuilder::setDataField<bool>(ElementCount offset, bool value) const {
   BitCount boffset = offset * (1 * BITS / ELEMENTS);
+
+  // This branch should always be optimized away when inlining.
+  if (boffset == 0 * BITS) boffset = bit0Offset;
+
   byte* b = reinterpret_cast<byte*>(data) + boffset / BITS_PER_BYTE;
   uint bitnum = boffset % BITS_PER_BYTE / BITS;
   *reinterpret_cast<uint8_t*>(b) = (*reinterpret_cast<uint8_t*>(b) & ~(1 << bitnum))
@@ -579,11 +614,37 @@ inline void StructBuilder::setDataField(
   setDataField<typename MaskType<T>::Type>(offset, mask<T>(value, m));
 }
 
+inline StructBuilder StructBuilder::initInlineStructField(
+    BitCount dataOffset, BitCount inlineDataSize,
+    WireReferenceCount refIndex, WireReferenceCount inlineRefCount) const {
+  // This branch should be optimized away.
+  if (inlineDataSize == 1 * BITS) {
+    setDataField<bool>(dataOffset / (1 * BITS / ELEMENTS), false);
+  } else {
+    memset(reinterpret_cast<byte*>(data) + dataOffset / BITS_PER_BYTE / BYTES,
+           0, inlineDataSize / BITS_PER_BYTE / BYTES);
+  }
+  memset(reinterpret_cast<word*>(references) + refIndex * WORDS_PER_REFERENCE,
+         0, inlineRefCount * WORDS_PER_REFERENCE * BYTES_PER_WORD / BYTES);
+  return getInlineStructField(dataOffset, inlineDataSize, refIndex, inlineRefCount);
+}
+
+inline StructBuilder StructBuilder::getInlineStructField(
+    BitCount dataOffset, BitCount inlineDataSize,
+    WireReferenceCount refIndex, WireReferenceCount inlineRefCount) const {
+  return StructBuilder(
+      segment, reinterpret_cast<byte*>(data) + dataOffset / BITS_PER_BYTE,
+      // WireReference is incomplete here so we have to cast around...  Bah.
+      reinterpret_cast<WireReference*>(
+          reinterpret_cast<word*>(references) + refIndex * WORDS_PER_REFERENCE),
+      dataOffset == 0 * BITS ? BitCount(bit0Offset) : dataOffset % BITS_PER_BYTE);
+}
+
 // -------------------------------------------------------------------
 
 template <typename T>
 T StructReader::getDataField(ElementCount offset) const {
-  if (offset * bytesPerElement<T>() < dataSize * BYTES_PER_WORD) {
+  if (offset * capnproto::bitsPerElement<T>() < dataSize) {
     return reinterpret_cast<const WireValue<T>*>(data)[offset / ELEMENTS].get();
   } else {
     return static_cast<T>(0);
@@ -597,7 +658,7 @@ inline bool StructReader::getDataField<bool>(ElementCount offset) const {
   // This branch should always be optimized away when inlining.
   if (boffset == 0 * BITS) boffset = bit0Offset;
 
-  if (boffset < dataSize * BITS_PER_WORD) {
+  if (boffset < dataSize) {
     const byte* b = reinterpret_cast<const byte*>(data) + boffset / BITS_PER_BYTE;
     return (*reinterpret_cast<const uint8_t*>(b) & (1 << (boffset % BITS_PER_BYTE / BITS))) != 0;
   } else {
@@ -613,6 +674,19 @@ inline Void StructReader::getDataField<Void>(ElementCount offset) const {
 template <typename T>
 T StructReader::getDataField(ElementCount offset, typename MaskType<T>::Type mask) const {
   return unmask<T>(getDataField<typename MaskType<T>::Type>(offset), mask);
+}
+
+inline StructReader StructReader::getInlineStructField(
+    BitCount dataOffset, BitCount inlineDataSize,
+    WireReferenceCount refIndex, WireReferenceCount inlineRefCount) const {
+  return StructReader(
+      segment, reinterpret_cast<const byte*>(data) + dataOffset / BITS_PER_BYTE,
+      // WireReference is incomplete here so we have to cast around...  Bah.
+      reinterpret_cast<const WireReference*>(
+          reinterpret_cast<const word*>(references) + refIndex * WORDS_PER_REFERENCE),
+      dataSize, inlineRefCount,
+      dataOffset == 0 * BITS ? BitCount(bit0Offset) : dataOffset % BITS_PER_BYTE,
+      nestingLimit);
 }
 
 // -------------------------------------------------------------------

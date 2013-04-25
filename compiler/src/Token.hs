@@ -74,6 +74,7 @@ data Token = Identifier String
            | UnionKeyword
            | InterfaceKeyword
            | AnnotationKeyword
+           | FixedKeyword
            deriving (Data, Typeable, Show, Eq)
 
 data Statement = Line TokenSequence

@@ -651,6 +651,11 @@ inline constexpr decltype(BYTES / ELEMENTS) bytesPerElement() {
   return sizeof(T) * BYTES / ELEMENTS;
 }
 
+template <typename T>
+inline constexpr decltype(BITS / ELEMENTS) bitsPerElement() {
+  return sizeof(T) * 8 * BITS / ELEMENTS;
+}
+
 #ifndef __CDT_PARSER__
 
 template <typename T, typename U>

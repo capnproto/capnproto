@@ -88,6 +88,7 @@ hashString str =
 isPrimitive t@(BuiltinType _) = not $ isBlob t
 isPrimitive (EnumType _) = True
 isPrimitive (StructType _) = False
+isPrimitive (InlineStructType _) = False
 isPrimitive (InterfaceType _) = False
 isPrimitive (ListType _) = False
 
@@ -96,7 +97,11 @@ isBlob (BuiltinType BuiltinData) = True
 isBlob _ = False
 
 isStruct (StructType _) = True
+isStruct (InlineStructType _) = True
 isStruct _ = False
+
+isInlineStruct (InlineStructType _) = True
+isInlineStruct _ = False
 
 isList (ListType _) = True
 isList _ = False
@@ -130,17 +135,29 @@ cxxTypeString (BuiltinType BuiltinText) = " ::capnproto::Text"
 cxxTypeString (BuiltinType BuiltinData) = " ::capnproto::Data"
 cxxTypeString (EnumType desc) = globalName $ DescEnum desc
 cxxTypeString (StructType desc) = globalName $ DescStruct desc
+cxxTypeString (InlineStructType desc) = globalName $ DescStruct desc
 cxxTypeString (InterfaceType desc) = globalName $ DescInterface desc
 cxxTypeString (ListType t) = concat [" ::capnproto::List<", cxxTypeString t, ">"]
 
-cxxFieldSizeString Size0 = "VOID";
-cxxFieldSizeString Size1 = "BIT";
-cxxFieldSizeString Size8 = "BYTE";
-cxxFieldSizeString Size16 = "TWO_BYTES";
-cxxFieldSizeString Size32 = "FOUR_BYTES";
-cxxFieldSizeString Size64 = "EIGHT_BYTES";
+cxxFieldSizeString SizeVoid = "VOID";
+cxxFieldSizeString (SizeData Size1) = "BIT";
+cxxFieldSizeString (SizeData Size8) = "BYTE";
+cxxFieldSizeString (SizeData Size16) = "TWO_BYTES";
+cxxFieldSizeString (SizeData Size32) = "FOUR_BYTES";
+cxxFieldSizeString (SizeData Size64) = "EIGHT_BYTES";
 cxxFieldSizeString SizeReference = "REFERENCE";
 cxxFieldSizeString (SizeInlineComposite _ _) = "INLINE_COMPOSITE";
+
+fieldOffsetInteger VoidOffset = "0"
+fieldOffsetInteger (DataOffset _ o) = show o
+fieldOffsetInteger (PointerOffset o) = show o
+fieldOffsetInteger (InlineCompositeOffset d p ds ps) = let
+    bitSize = dataSectionBits ds
+    bitOffset = case ds of
+        DataSectionWords _ -> d * 64
+        _ -> d * bitSize
+    in printf "%d * ::capnproto::BITS, %d * ::capnproto::BITS, \
+              \%d * ::capnproto::REFERENCES, %d * ::capnproto::REFERENCES" bitOffset bitSize p ps
 
 isDefaultZero VoidDesc = True
 isDefaultZero (BoolDesc    b) = not b
@@ -221,6 +238,7 @@ fieldContext parent desc = mkStrContext context where
     context "fieldIsPrimitive" = MuBool $ isPrimitive $ fieldType desc
     context "fieldIsBlob" = MuBool $ isBlob $ fieldType desc
     context "fieldIsStruct" = MuBool $ isStruct $ fieldType desc
+    context "fieldIsInlineStruct" = MuBool $ isInlineStruct $ fieldType desc
     context "fieldIsList" = MuBool $ isList $ fieldType desc
     context "fieldIsNonStructList" = MuBool $ isNonStructList $ fieldType desc
     context "fieldIsPrimitiveList" = MuBool $ isPrimitiveList $ fieldType desc
@@ -231,7 +249,7 @@ fieldContext parent desc = mkStrContext context where
             Nothing -> muNull
     context "fieldType" = MuVariable $ cxxTypeString $ fieldType desc
     context "fieldBlobType" = MuVariable $ blobTypeString $ fieldType desc
-    context "fieldOffset" = MuVariable $ fieldOffset desc
+    context "fieldOffset" = MuVariable $ fieldOffsetInteger $ fieldOffset desc
     context "fieldDefaultMask" = case fieldDefaultValue desc of
         Nothing -> MuVariable ""
         Just v -> MuVariable (if isDefaultZero v then "" else ", " ++ defaultMask v)
@@ -283,8 +301,8 @@ structContext parent desc = mkStrContext context where
     context "structFullName" = MuVariable $ fullName (DescStruct desc)
     context "structFields" = MuList $ map (fieldContext context) $ structFields desc
     context "structUnions" = MuList $ map (unionContext context) $ structUnions desc
-    context "structDataSize" = MuVariable $ packingDataSize $ structPacking desc
-    context "structReferenceCount" = MuVariable $ packingReferenceCount $ structPacking desc
+    context "structDataSize" = MuVariable $ dataSectionWordSize $ structDataSize desc
+    context "structReferenceCount" = MuVariable $ structPointerCount desc
     context "structNestedEnums" =
         MuList $ map (enumContext context) [m | DescEnum m <- structMembers desc]
     context "structNestedStructs" =

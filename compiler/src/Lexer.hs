@@ -49,6 +49,7 @@ keywords =
     , (UnionKeyword, "union")
     , (InterfaceKeyword, "interface")
     , (AnnotationKeyword, "annotation")
+    , (FixedKeyword, "fixed")
     ]
 
 languageDef :: T.LanguageDef st

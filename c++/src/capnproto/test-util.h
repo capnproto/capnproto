@@ -57,6 +57,9 @@ using ::capnproto::test::TestUnion;
 using ::capnproto::test::TestUnionDefaults;
 using ::capnproto::test::TestNestedTypes;
 using ::capnproto::test::TestUsing;
+using ::capnproto::test::TestInlineLayout;
+using ::capnproto::test::TestInlineUnions;
+using ::capnproto::test::TestInlineDefaults;
 
 void initTestMessage(test::TestAllTypes::Builder builder);
 void initTestMessage(test::TestDefaults::Builder builder);

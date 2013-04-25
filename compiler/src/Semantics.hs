@@ -55,6 +55,7 @@ data Desc = DescFile FileDesc
           | DescAnnotation AnnotationDesc
           | DescBuiltinType BuiltinType
           | DescBuiltinList
+          | DescBuiltinInline
           | DescBuiltinId
 
 descName (DescFile      _) = "(top-level)"
@@ -71,6 +72,7 @@ descName (DescParam     d) = paramName d
 descName (DescAnnotation d) = annotationName d
 descName (DescBuiltinType d) = builtinTypeName d
 descName DescBuiltinList = "List"
+descName DescBuiltinInline = "Inline"
 descName DescBuiltinId = "id"
 
 descId (DescFile      d) = fileId d
@@ -87,6 +89,7 @@ descId (DescParam     d) = paramId d
 descId (DescAnnotation d) = annotationId d
 descId (DescBuiltinType _) = Nothing
 descId DescBuiltinList = Nothing
+descId DescBuiltinInline = Nothing
 descId DescBuiltinId = Just "0U0T3e_SnatEfk6UcH2tcjTt1E0"
 
 -- Gets the ID if explicitly defined, or generates it by appending ".name" to the parent's ID.
@@ -111,6 +114,7 @@ descParent (DescParam     d) = DescMethod (paramParent d)
 descParent (DescAnnotation d) = annotationParent d
 descParent (DescBuiltinType _) = error "Builtin type has no parent."
 descParent DescBuiltinList = error "Builtin type has no parent."
+descParent DescBuiltinInline = error "Builtin type has no parent."
 descParent DescBuiltinId = error "Builtin annotation has no parent."
 
 descFile (DescFile d) = d
@@ -130,9 +134,10 @@ descAnnotations (DescParam     d) = paramAnnotations d
 descAnnotations (DescAnnotation d) = annotationAnnotations d
 descAnnotations (DescBuiltinType _) = Map.empty
 descAnnotations DescBuiltinList = Map.empty
+descAnnotations DescBuiltinInline = Map.empty
 descAnnotations DescBuiltinId = Map.empty
 
-descRuntimeImports (DescFile      d) = error "Not to be called on files."
+descRuntimeImports (DescFile      _) = error "Not to be called on files."
 descRuntimeImports (DescUsing     d) = usingRuntimeImports d
 descRuntimeImports (DescConstant  d) = constantRuntimeImports d
 descRuntimeImports (DescEnum      d) = enumRuntimeImports d
@@ -146,6 +151,7 @@ descRuntimeImports (DescParam     d) = paramRuntimeImports d
 descRuntimeImports (DescAnnotation d) = annotationRuntimeImports d
 descRuntimeImports (DescBuiltinType _) = []
 descRuntimeImports DescBuiltinList = []
+descRuntimeImports DescBuiltinInline = []
 descRuntimeImports DescBuiltinId = []
 
 type MemberMap = Map.Map String (Maybe Desc)
@@ -212,101 +218,118 @@ valueString (ListDesc l) = "[" ++ delimit ", " (map valueString l) ++ "]" where
 data TypeDesc = BuiltinType BuiltinType
               | EnumType EnumDesc
               | StructType StructDesc
+              | InlineStructType StructDesc
               | InterfaceType InterfaceDesc
               | ListType TypeDesc
 
 typeRuntimeImports (BuiltinType _) = []
 typeRuntimeImports (EnumType d) = [descFile (DescEnum d)]
 typeRuntimeImports (StructType d) = [descFile (DescStruct d)]
+typeRuntimeImports (InlineStructType d) = [descFile (DescStruct d)]
 typeRuntimeImports (InterfaceType d) = [descFile (DescInterface d)]
 typeRuntimeImports (ListType d) = typeRuntimeImports d
 
-data PackingState = PackingState
-    { packingHole1 :: Integer
-    , packingHole8 :: Integer
-    , packingHole16 :: Integer
-    , packingHole32 :: Integer
-    , packingDataSize :: Integer
-    , packingReferenceCount :: Integer
-    }
+data DataSectionSize = DataSection1 | DataSection8 | DataSection16 | DataSection32
+                     | DataSectionWords Integer
 
-packingSize PackingState { packingDataSize = ds, packingReferenceCount = rc } = ds + rc
+dataSectionWordSize ds = case ds of
+    DataSectionWords w -> w
+    _ -> 1
 
--- Represents the current packing state of a union.  The parameters are:
--- - The offset of a 64-bit word in the data segment allocated to the union.
--- - The offset of a reference allocated to the union.
--- - The offset of a smaller piece of the data segment allocated to the union.  Such a smaller
---   piece exists if one field in the union has lower number than the union itself -- in this case,
---   this is the piece that had been allocated to that field, and is now retroactively part of the
---   union.
-data UnionPackingState = UnionPackingState
-    { unionPackDataOffset :: Maybe (Integer, FieldSize)
-    , unionPackReferenceOffset :: Maybe Integer
-    }
+dataSectionAlignment DataSection1 = Size1
+dataSectionAlignment DataSection8 = Size8
+dataSectionAlignment DataSection16 = Size16
+dataSectionAlignment DataSection32 = Size32
+dataSectionAlignment (DataSectionWords _) = Size64
 
-data FieldSize = Size0 | Size1 | Size8 | Size16 | Size32 | Size64 | SizeReference
-               | SizeInlineComposite Integer Integer
+dataSectionBits DataSection1 = 1
+dataSectionBits DataSection8 = 8
+dataSectionBits DataSection16 = 16
+dataSectionBits DataSection32 = 32
+dataSectionBits (DataSectionWords w) = w * 64
 
-isDataFieldSize SizeReference = False
-isDataFieldSize (SizeInlineComposite _ _) = False
-isDataFieldSize _ = True
+dataSizeToSectionSize Size1 = DataSection1
+dataSizeToSectionSize Size8 = DataSection8
+dataSizeToSectionSize Size16 = DataSection16
+dataSizeToSectionSize Size32 = DataSection32
+dataSizeToSectionSize Size64 = DataSectionWords 1
 
-fieldSize (BuiltinType BuiltinVoid) = Size0
-fieldSize (BuiltinType BuiltinBool) = Size1
-fieldSize (BuiltinType BuiltinInt8) = Size8
-fieldSize (BuiltinType BuiltinInt16) = Size16
-fieldSize (BuiltinType BuiltinInt32) = Size32
-fieldSize (BuiltinType BuiltinInt64) = Size64
-fieldSize (BuiltinType BuiltinUInt8) = Size8
-fieldSize (BuiltinType BuiltinUInt16) = Size16
-fieldSize (BuiltinType BuiltinUInt32) = Size32
-fieldSize (BuiltinType BuiltinUInt64) = Size64
-fieldSize (BuiltinType BuiltinFloat32) = Size32
-fieldSize (BuiltinType BuiltinFloat64) = Size64
+dataSectionSizeString DataSection1 = "1 bits"
+dataSectionSizeString DataSection8 = "8 bits"
+dataSectionSizeString DataSection16 = "16 bits"
+dataSectionSizeString DataSection32 = "32 bits"
+dataSectionSizeString (DataSectionWords n) = show n ++ " words"
+
+data DataSize = Size1 | Size8 | Size16 | Size32 | Size64 deriving(Eq, Ord, Enum)
+
+dataSizeInBits :: DataSize -> Integer
+dataSizeInBits Size1 = 1
+dataSizeInBits Size8 = 8
+dataSizeInBits Size16 = 16
+dataSizeInBits Size32 = 32
+dataSizeInBits Size64 = 64
+
+data FieldSize = SizeVoid
+               | SizeData DataSize
+               | SizeReference
+               | SizeInlineComposite DataSectionSize Integer
+
+data FieldOffset = VoidOffset
+                 | DataOffset DataSize Integer
+                 | PointerOffset Integer
+                 | InlineCompositeOffset
+                     { inlineCompositeDataOffset :: Integer
+                     , inlineCompositePointerOffset :: Integer
+                     , inlineCompositeDataSize :: DataSectionSize
+                     , inlineCompositePointerSize :: Integer
+                     }
+
+offsetToSize :: FieldOffset -> FieldSize
+offsetToSize VoidOffset = SizeVoid
+offsetToSize (DataOffset s _) = SizeData s
+offsetToSize (PointerOffset _) = SizeReference
+offsetToSize (InlineCompositeOffset _ _ d p) = SizeInlineComposite d p
+
+fieldSize (BuiltinType BuiltinVoid) = SizeVoid
+fieldSize (BuiltinType BuiltinBool) = SizeData Size1
+fieldSize (BuiltinType BuiltinInt8) = SizeData Size8
+fieldSize (BuiltinType BuiltinInt16) = SizeData Size16
+fieldSize (BuiltinType BuiltinInt32) = SizeData Size32
+fieldSize (BuiltinType BuiltinInt64) = SizeData Size64
+fieldSize (BuiltinType BuiltinUInt8) = SizeData Size8
+fieldSize (BuiltinType BuiltinUInt16) = SizeData Size16
+fieldSize (BuiltinType BuiltinUInt32) = SizeData Size32
+fieldSize (BuiltinType BuiltinUInt64) = SizeData Size64
+fieldSize (BuiltinType BuiltinFloat32) = SizeData Size32
+fieldSize (BuiltinType BuiltinFloat64) = SizeData Size64
 fieldSize (BuiltinType BuiltinText) = SizeReference
 fieldSize (BuiltinType BuiltinData) = SizeReference
-fieldSize (EnumType _) = Size16  -- TODO: ??
+fieldSize (EnumType _) = SizeData Size16
 fieldSize (StructType _) = SizeReference
+fieldSize (InlineStructType StructDesc { structDataSize = ds, structPointerCount = ps }) =
+    SizeInlineComposite ds ps
 fieldSize (InterfaceType _) = SizeReference
 fieldSize (ListType _) = SizeReference
 
-fieldValueSize VoidDesc = Size0
-fieldValueSize (BoolDesc _) = Size1
-fieldValueSize (Int8Desc _) = Size8
-fieldValueSize (Int16Desc _) = Size16
-fieldValueSize (Int32Desc _) = Size32
-fieldValueSize (Int64Desc _) = Size64
-fieldValueSize (UInt8Desc _) = Size8
-fieldValueSize (UInt16Desc _) = Size16
-fieldValueSize (UInt32Desc _) = Size32
-fieldValueSize (UInt64Desc _) = Size64
-fieldValueSize (Float32Desc _) = Size32
-fieldValueSize (Float64Desc _) = Size64
-fieldValueSize (TextDesc _) = SizeReference
-fieldValueSize (DataDesc _) = SizeReference
-fieldValueSize (EnumerantValueDesc _) = Size16
-fieldValueSize (StructValueDesc _) = SizeReference
-fieldValueSize (ListDesc _) = SizeReference
-
-elementSize (StructType StructDesc { structPacking =
-        PackingState { packingDataSize = ds, packingReferenceCount = rc } }) =
-    SizeInlineComposite ds rc
+elementSize (StructType StructDesc { structDataSize = DataSection1, structPointerCount = 0 }) =
+    SizeData Size1
+elementSize (StructType StructDesc { structDataSize = DataSection8, structPointerCount = 0 }) =
+    SizeData Size8
+elementSize (StructType StructDesc { structDataSize = DataSection16, structPointerCount = 0 }) =
+    SizeData Size16
+elementSize (StructType StructDesc { structDataSize = DataSection32, structPointerCount = 0 }) =
+    SizeData Size32
+elementSize (StructType StructDesc { structDataSize = ds, structPointerCount = pc }) =
+    SizeInlineComposite ds pc
+elementSize (InlineStructType s) = elementSize (StructType s)
 elementSize t = fieldSize t
-
-sizeInBits Size0 = 0
-sizeInBits Size1 = 1
-sizeInBits Size8 = 8
-sizeInBits Size16 = 16
-sizeInBits Size32 = 32
-sizeInBits Size64 = 64
-sizeInBits SizeReference = 64
-sizeInBits (SizeInlineComposite d r) = (d + r) * 64
 
 -- Render the type descriptor's name as a string, appropriate for use in the given scope.
 typeName :: Desc -> TypeDesc -> String
 typeName _ (BuiltinType t) = builtinTypeName t  -- TODO:  Check for shadowing.
 typeName scope (EnumType desc) = descQualifiedName scope (DescEnum desc)
 typeName scope (StructType desc) = descQualifiedName scope (DescStruct desc)
+typeName scope (InlineStructType desc) = descQualifiedName scope (DescStruct desc)
 typeName scope (InterfaceType desc) = descQualifiedName scope (DescInterface desc)
 typeName scope (ListType t) = "List(" ++ typeName scope t ++ ")"
 
@@ -386,7 +409,9 @@ data StructDesc = StructDesc
     { structName :: String
     , structId :: Maybe String
     , structParent :: Desc
-    , structPacking :: PackingState
+    , structDataSize :: DataSectionSize
+    , structPointerCount :: Integer
+    , structIsFixedWidth :: Bool
     , structFields :: [FieldDesc]
     , structUnions :: [UnionDesc]
     , structAnnotations :: AnnotationMap
@@ -396,7 +421,7 @@ data StructDesc = StructDesc
     -- Don't use this directly, use the members of FieldDesc and UnionDesc.
     -- This field is exposed here only because I was too lazy to create a way to pass it on
     -- the side when compiling members of a struct.
-    , structFieldPackingMap :: Map.Map Integer (Integer, PackingState)
+    , structFieldPackingMap :: Map.Map Integer FieldOffset
     }
 
 structRuntimeImports desc = concatMap descRuntimeImports $ structMembers desc
@@ -407,7 +432,6 @@ data UnionDesc = UnionDesc
     , unionParent :: StructDesc
     , unionNumber :: Integer
     , unionTagOffset :: Integer
-    , unionTagPacking :: PackingState
     , unionFields :: [FieldDesc]
     , unionAnnotations :: AnnotationMap
     , unionMemberMap :: MemberMap
@@ -424,8 +448,7 @@ data FieldDesc = FieldDesc
     , fieldId :: Maybe String
     , fieldParent :: StructDesc
     , fieldNumber :: Integer
-    , fieldOffset :: Integer
-    , fieldPacking :: PackingState    -- PackingState for the struct *if* this were the final field.
+    , fieldOffset :: FieldOffset
     , fieldUnion :: Maybe (UnionDesc, Integer)  -- Integer is value of union discriminant.
     , fieldType :: TypeDesc
     , fieldDefaultValue :: Maybe ValueDesc
@@ -508,8 +531,13 @@ descToCode indent self@(DescEnum desc) = printf "%senum %s%s {\n%s%s}\n" indent
 descToCode indent self@(DescEnumerant desc) = printf "%s%s @%d%s;\n" indent
     (enumerantName desc) (enumerantNumber desc)
     (annotationsCode self)
-descToCode indent self@(DescStruct desc) = printf "%sstruct %s%s {\n%s%s}\n" indent
+descToCode indent self@(DescStruct desc) = printf "%sstruct %s%s%s {\n%s%s}\n" indent
     (structName desc)
+    (if structIsFixedWidth desc
+        then printf " fixed(%s, %d pointers) "
+            (dataSectionSizeString $ structDataSize desc)
+            (structPointerCount desc)
+        else "")
     (annotationsCode self)
     (blockCode indent (structMembers desc))
     indent
@@ -519,12 +547,16 @@ descToCode indent self@(DescField desc) = printf "%s%s@%d%s: %s%s%s;  # %s\n" in
     (typeName (descParent self) (fieldType desc))
     (case fieldDefaultValue desc of { Nothing -> ""; Just v -> " = " ++ valueString v; })
     (annotationsCode self)
-    (case fieldSize $ fieldType desc of
-        SizeReference -> printf "ref[%d]" $ fieldOffset desc
-        SizeInlineComposite _ _ -> "??"
-        s -> let
-            bits = sizeInBits s
-            offset = fieldOffset desc
+    (case fieldOffset desc of
+        PointerOffset o -> printf "ptr[%d]" o
+        InlineCompositeOffset dataOffset pointerOffset dataSize pointerSize ->
+            let dataBitOffset = dataOffset * dataSizeInBits (dataSectionAlignment dataSize)
+            in printf "bits[%d, %d), ptrs[%d, %d)"
+                dataBitOffset (dataBitOffset + dataSectionBits dataSize)
+                pointerOffset (pointerOffset + pointerSize)
+        VoidOffset -> "(none)"
+        DataOffset dataSize offset -> let
+            bits = dataSizeInBits dataSize
             in printf "bits[%d, %d)" (offset * bits) ((offset + 1) * bits))
 descToCode indent self@(DescUnion desc) = printf "%sunion %s@%d%s {  # [%d, %d)\n%s%s}\n" indent
     (unionName desc) (unionNumber desc)
@@ -556,6 +588,7 @@ descToCode indent self@(DescAnnotation desc) = printf "%sannotation %s: %s on(%s
     (annotationsCode self)
 descToCode _ (DescBuiltinType _) = error "Can't print code for builtin type."
 descToCode _ DescBuiltinList = error "Can't print code for builtin type."
+descToCode _ DescBuiltinInline = error "Can't print code for builtin type."
 descToCode _ DescBuiltinId = error "Can't print code for builtin annotation."
 
 maybeBlockCode :: String -> [Desc] -> String

@@ -415,7 +415,7 @@ struct WireHelpers {
     ref->structRef.set(size);
 
     // Build the StructBuilder.
-    return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + size.data));
+    return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + size.data), 0 * BITS);
   }
 
   static CAPNPROTO_ALWAYS_INLINE(StructBuilder getWritableStructReference(
@@ -442,7 +442,7 @@ struct WireHelpers {
           "Trying to update struct with incorrect reference count.");
     }
 
-    return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + size.data));
+    return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + size.data), 0 * BITS);
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListBuilder initListReference(
@@ -603,7 +603,7 @@ struct WireHelpers {
     if (ref == nullptr || ref->isNull()) {
     useDefault:
       if (defaultValue == nullptr) {
-        return StructReader(nullptr, nullptr, nullptr, 0 * WORDS, 0 * REFERENCES, 0 * BITS,
+        return StructReader(nullptr, nullptr, nullptr, 0 * BITS, 0 * REFERENCES, 0 * BITS,
                             std::numeric_limits<int>::max());
       }
       segment = nullptr;
@@ -637,7 +637,7 @@ struct WireHelpers {
 
     return StructReader(
         segment, ptr, reinterpret_cast<const WireReference*>(ptr + ref->structRef.dataSize.get()),
-        ref->structRef.dataSize.get(),
+        ref->structRef.dataSize.get() * BITS_PER_WORD,
         ref->structRef.refCount.get(),
         0 * BITS, nestingLimit - 1);
   }
@@ -752,7 +752,8 @@ struct WireHelpers {
       }
 
       return ListReader(segment, ptr, size, wordsPerElement * BITS_PER_WORD,
-          tag->structRef.dataSize.get(), tag->structRef.refCount.get(), nestingLimit - 1);
+          tag->structRef.dataSize.get() * BITS_PER_WORD,
+          tag->structRef.refCount.get(), nestingLimit - 1);
 
     } else {
       // The elements of the list are NOT structs.
@@ -774,28 +775,17 @@ struct WireHelpers {
         // old version of the protocol.  We need to verify that the struct's first field matches
         // what the sender sent us.
 
-        WordCount dataSize;
-        WireReferenceCount referenceCount;
+        BitCount dataSize = 0 * BITS;
+        WireReferenceCount referenceCount = 0 * REFERENCES;
 
         switch (ref->listRef.elementSize()) {
-          case FieldSize::VOID:
-            dataSize = 0 * WORDS;
-            referenceCount = 0 * REFERENCES;
-            break;
-
-          case FieldSize::BIT:
-          case FieldSize::BYTE:
-          case FieldSize::TWO_BYTES:
-          case FieldSize::FOUR_BYTES:
-          case FieldSize::EIGHT_BYTES:
-            dataSize = 1 * WORDS;
-            referenceCount = 0 * REFERENCES;
-            break;
-
-          case FieldSize::REFERENCE:
-            dataSize = 0 * WORDS;
-            referenceCount = 1 * REFERENCES;
-            break;
+          case FieldSize::VOID: break;
+          case FieldSize::BIT: dataSize = 1 * BITS; break;
+          case FieldSize::BYTE: dataSize = 8 * BITS; break;
+          case FieldSize::TWO_BYTES: dataSize = 16 * BITS; break;
+          case FieldSize::FOUR_BYTES: dataSize = 32 * BITS; break;
+          case FieldSize::EIGHT_BYTES: dataSize = 64 * BITS; break;
+          case FieldSize::REFERENCE: referenceCount = 1 * REFERENCES; break;
 
           case FieldSize::INLINE_COMPOSITE:
             FAIL_CHECK();
@@ -978,7 +968,7 @@ StructReader StructBuilder::asReader() const {
   static_assert(sizeof(WireReference::structRef.refCount) == 2,
       "Has the maximum reference count changed?");
   return StructReader(segment, data, references,
-      0xffff * WORDS, 0xffff * REFERENCES, 0 * BITS, std::numeric_limits<int>::max());
+      0xffffffff * BITS, 0xffff * REFERENCES, 0 * BITS, std::numeric_limits<int>::max());
 }
 
 StructReader StructReader::readRootTrusted(const word* location) {
@@ -998,7 +988,7 @@ StructReader StructReader::readRoot(
 }
 
 StructReader StructReader::readEmpty() {
-  return StructReader(nullptr, nullptr, nullptr, 0 * WORDS, 0 * REFERENCES, 0 * BITS,
+  return StructReader(nullptr, nullptr, nullptr, 0 * BITS, 0 * REFERENCES, 0 * BITS,
                       std::numeric_limits<int>::max());
 }
 
@@ -1031,7 +1021,7 @@ StructBuilder ListBuilder::getStructElement(
     ElementCount index, decltype(WORDS/ELEMENTS) elementSize, WordCount structDataSize) const {
   word* structPtr = ptr + elementSize * index;
   return StructBuilder(segment, structPtr,
-      reinterpret_cast<WireReference*>(structPtr + structDataSize));
+      reinterpret_cast<WireReference*>(structPtr + structDataSize), 0 * BITS);
 }
 
 ListBuilder ListBuilder::initListElement(
@@ -1087,9 +1077,9 @@ ListReader ListBuilder::asReader(FieldSize elementSize) const {
                     std::numeric_limits<int>::max());
 }
 
-ListReader ListBuilder::asReader(WordCount dataSize, WireReferenceCount referenceCount) const {
+ListReader ListBuilder::asReader(BitCount dataSize, WireReferenceCount referenceCount) const {
   return ListReader(segment, ptr, elementCount,
-      (dataSize + referenceCount * WORDS_PER_REFERENCE) * BITS_PER_WORD / ELEMENTS,
+      (dataSize + referenceCount * WORDS_PER_REFERENCE * BITS_PER_WORD) / ELEMENTS,
       dataSize, referenceCount, std::numeric_limits<int>::max());
 }
 
@@ -1103,7 +1093,7 @@ StructReader ListReader::getStructElement(ElementCount index) const {
   const byte* structPtr = reinterpret_cast<const byte*>(ptr) + indexBit / BITS_PER_BYTE;
   return StructReader(
       segment, structPtr,
-      reinterpret_cast<const WireReference*>(structPtr + structDataSize * BYTES_PER_WORD),
+      reinterpret_cast<const WireReference*>(structPtr + structDataSize / BITS_PER_BYTE),
       structDataSize, structReferenceCount, indexBit % BITS_PER_BYTE, nestingLimit - 1);
 }
 

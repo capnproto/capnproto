@@ -295,6 +295,7 @@ inline {{fieldType}}::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(
 {{/fieldIsBlob}}
 {{! ------------------------------------------------------------------------------------------- }}
 {{#fieldIsStruct}}
+{{^fieldIsInlineStruct}}
 inline {{fieldType}}::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
 {{#fieldUnion}}
   CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
@@ -324,6 +325,34 @@ inline {{fieldType}}::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}()
       {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}.words{{/fieldDefaultBytes}}
       {{^fieldDefaultBytes}}nullptr{{/fieldDefaultBytes}}));
 }
+{{/fieldIsInlineStruct}}
+{{#fieldIsInlineStruct}}
+inline {{fieldType}}::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
+{{#fieldUnion}}
+  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                            "Must check which() before get()ing a union member.");
+{{/fieldUnion}}
+  return {{fieldType}}::Reader(_reader.getInlineStructField(
+      {{fieldOffset}}));
+}
+
+inline {{fieldType}}::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}() {
+{{#fieldUnion}}
+  _builder.setDataField<{{unionTitleCase}}::Which>(
+      {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
+{{/fieldUnion}}
+  return {{fieldType}}::Builder(_builder.initInlineStructField(
+      {{fieldOffset}}));
+}
+inline {{fieldType}}::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}() {
+{{#fieldUnion}}
+  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                            "Must check which() before get()ing a union member.");
+{{/fieldUnion}}
+  return {{fieldType}}::Builder(_builder.getInlineStructField(
+      {{fieldOffset}}));
+}
+{{/fieldIsInlineStruct}}
 {{/fieldIsStruct}}
 {{! ------------------------------------------------------------------------------------------- }}
 {{#fieldIsList}}

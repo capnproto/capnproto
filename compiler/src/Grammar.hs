@@ -95,7 +95,8 @@ data Declaration = UsingDecl (Located String) DeclName
                  | ConstantDecl (Located String) TypeExpression [Annotation] (Located FieldValue)
                  | EnumDecl (Located String) [Annotation] [Declaration]
                  | EnumerantDecl (Located String) (Located Integer) [Annotation]
-                 | StructDecl (Located String) [Annotation] [Declaration]
+                 | StructDecl (Located String) (Maybe (Located (Integer, Integer)))
+                              [Annotation] [Declaration]
                  | FieldDecl (Located String) (Located Integer)
                              TypeExpression [Annotation] (Maybe (Located FieldValue))
                  | UnionDecl (Located String) (Located Integer) [Annotation] [Declaration]
@@ -110,7 +111,7 @@ declarationName (UsingDecl n _)          = Just n
 declarationName (ConstantDecl n _ _ _)   = Just n
 declarationName (EnumDecl n _ _)         = Just n
 declarationName (EnumerantDecl n _ _)    = Just n
-declarationName (StructDecl n _ _)       = Just n
+declarationName (StructDecl n _ _ _)     = Just n
 declarationName (FieldDecl n _ _ _ _)    = Just n
 declarationName (UnionDecl n _ _ _)      = Just n
 declarationName (InterfaceDecl n _ _)    = Just n
@@ -122,8 +123,8 @@ declImports (UsingDecl _ name) = maybeToList (declNameImport name)
 declImports (ConstantDecl _ t ann _) = typeImports t ++ concatMap annotationImports ann
 declImports (EnumDecl _ ann decls) = concatMap annotationImports ann ++ concatMap declImports decls
 declImports (EnumerantDecl _ _ ann) = concatMap annotationImports ann
-declImports (StructDecl _ ann decls) = concatMap annotationImports ann ++
-                                       concatMap declImports decls
+declImports (StructDecl _ _ ann decls) = concatMap annotationImports ann ++
+                                         concatMap declImports decls
 declImports (FieldDecl _ _ t ann _) = typeImports t ++ concatMap annotationImports ann
 declImports (UnionDecl _ _ ann decls) = concatMap annotationImports ann ++
                                         concatMap declImports decls

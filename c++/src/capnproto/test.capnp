@@ -213,7 +213,6 @@ struct TestUnion {
   bit5 @42: Bool;
   bit6 @43: Bool;
   bit7 @44: Bool;
-  byte0 @49: UInt8;
 
   # Interleave two unions to be really annoying.
   # Also declare in reverse order to make sure union discriminant values are sorted by field number
@@ -233,6 +232,8 @@ struct TestUnion {
     u3f0s8 @48: Int8;
     u3f0s1 @46: Bool;
   }
+
+  byte0 @49: UInt8;
 }
 
 struct TestUnionDefaults {
@@ -273,4 +274,141 @@ struct TestUsing {
 
   outerNestedEnum @1 :OuterNestedEnum = bar;
   innerNestedEnum @0 :NestedEnum = quux;
+}
+
+struct TestInline0 fixed(0 bits) {}
+struct TestInline1 fixed(1 bits) { f @0: Bool; }
+struct TestInline8 fixed(8 bits) { f0 @0: Bool; f1 @1: Bool; f2 @2: Bool; }
+struct TestInline16 fixed(16 bits) { f0 @0: UInt8; f1 @1: UInt8; }
+struct TestInline32 fixed(32 bits) { f0 @0: UInt8; f1 @1: UInt16; }
+struct TestInline64 fixed(64 bits) { f0 @0: UInt8; f1 @1: UInt32; }
+struct TestInline128 fixed(2 words) { f0 @0: UInt64; f1 @1: UInt64; }
+struct TestInline192 fixed(3 words) { f0 @0: UInt64; f1 @1: UInt64; f2 @2: UInt64; }
+
+struct TestInline0p fixed(0 bits, 1 pointers) { f @0 :Inline(TestInline0); p0 @1 :Text; }
+struct TestInline1p fixed(1 bits, 1 pointers) { f @0 :Inline(TestInline1); p0 @1 :Text; }
+struct TestInline8p fixed(8 bits, 1 pointers) { f @0 :Inline(TestInline8); p0 @1 :Text; }
+struct TestInline16p fixed(16 bits, 2 pointers) { f @0 :Inline(TestInline16); p0 @1 :Text; p1 @2 :Text; }
+struct TestInline32p fixed(32 bits, 2 pointers) { f @0 :Inline(TestInline32); p0 @1 :Text; p1 @2 :Text; }
+struct TestInline64p fixed(64 bits, 2 pointers) { f @0 :Inline(TestInline64); p0 @1 :Text; p1 @2 :Text; }
+struct TestInline128p fixed(2 words, 3 pointers) { f @0 :Inline(TestInline128); p0 @1 :Text; p1 @2 :Text; p2 @3 :Text; }
+struct TestInline192p fixed(3 words, 3 pointers) { f @0 :Inline(TestInline192); p0 @1 :Text; p1 @2 :Text; p2 @3 :Text; }
+
+struct TestInlineLayout {
+  f0 @0 :Inline(TestInline0);
+  f1 @1 :Inline(TestInline1);
+  f8 @2 :Inline(TestInline8);
+  f16 @3 :Inline(TestInline16);
+  f32 @4 :Inline(TestInline32);
+  f64 @5 :Inline(TestInline64);
+  f128 @6 :Inline(TestInline128);
+  f192 @7 :Inline(TestInline192);
+
+  f0p @8 :Inline(TestInline0p);
+  f1p @9 :Inline(TestInline1p);
+  f8p @10 :Inline(TestInline8p);
+  f16p @11 :Inline(TestInline16p);
+  f32p @12 :Inline(TestInline32p);
+  f64p @13 :Inline(TestInline64p);
+  f128p @14 :Inline(TestInline128p);
+  f192p @15 :Inline(TestInline192p);
+
+  f1Offset @16 :Inline(TestInline1);
+  bit @17 :Bool;
+}
+
+struct TestInlineUnions {
+  union0 @0 union {
+    f0 @4 :Inline(TestInline0);
+    f1 @5 :Inline(TestInline1);
+    f8 @6 :Inline(TestInline8);
+    f16 @7 :Inline(TestInline16);
+    f32 @8 :Inline(TestInline32);
+    f64 @9 :Inline(TestInline64);
+    f128 @10 :Inline(TestInline128);
+    f192 @11 :Inline(TestInline192);
+
+    f0p @12 :Inline(TestInline0p);
+    f1p @13 :Inline(TestInline1p);
+    f8p @14 :Inline(TestInline8p);
+    f16p @15 :Inline(TestInline16p);
+    f32p @16 :Inline(TestInline32p);
+    f64p @17 :Inline(TestInline64p);
+    f128p @18 :Inline(TestInline128p);
+    f192p @19 :Inline(TestInline192p);
+  }
+
+  # Pack one bit in order to make pathological situation for union1.
+  bit0 @20: Bool;
+
+  union1 @1 union {
+    f0 @21 :Inline(TestInline0);
+    f1 @22 :Inline(TestInline1);
+    f8 @23 :Inline(TestInline8);
+    f16 @24 :Inline(TestInline16);
+    f32 @25 :Inline(TestInline32);
+    f64 @26 :Inline(TestInline64);
+    f128 @27 :Inline(TestInline128);
+    f192 @28 :Inline(TestInline192);
+  }
+
+  # Fill in the rest of that bitfield from earlier.
+  bit2 @29: Bool;
+  bit3 @30: Bool;
+  bit4 @31: Bool;
+  bit5 @32: Bool;
+  bit6 @33: Bool;
+  bit7 @34: Bool;
+
+  # Interleave two unions to be really annoying.
+  union2 @2 union {
+    f1p @35 :Inline(TestInline1p);
+    f8p @37 :Inline(TestInline8p);
+    f16p @40 :Inline(TestInline16p);
+    f32p @42 :Inline(TestInline32p);
+    f64p @44 :Inline(TestInline64p);
+    f128p @46 :Inline(TestInline128p);
+    f192p @48 :Inline(TestInline192p);
+  }
+
+  union3 @3 union {
+    f1p @36 :Inline(TestInline1p);
+    f8p @38 :Inline(TestInline8p);
+    f16p @41 :Inline(TestInline16p);
+    f32p @43 :Inline(TestInline32p);
+    f64p @45 :Inline(TestInline64p);
+    f128p @47 :Inline(TestInline128p);
+    f192p @49 :Inline(TestInline192p);
+  }
+
+  byte0 @39: UInt8;
+}
+
+struct TestInlineDefaults {
+  normal @0 :TestInlineLayout = (
+      f0 = (),
+      f1 = (f = true),
+      f8 = (f0 = true, f1 = false, f2 = true),
+      f16 = (f0 = 123, f1 = 45),
+      f32 = (f0 = 67, f1 = 8901),
+      f64 = (f0 = 234, f1 = 567890123),
+      f128 = (f0 = 1234567890123, f1 = 4567890123456),
+      f192 = (f0 = 7890123456789, f1 = 2345678901234, f2 = 5678901234567),
+
+      f0p = (p0 = "foo"),
+      f1p = (f = (f = false), p0 = "bar"),
+      f8p = (f = (f0 = true, f1 = true, f2 = false), p0 = "baz"),
+      f16p = (f = (f0 = 98, f1 = 76), p0 = "qux", p1 = "quux"),
+      f32p = (f = (f0 = 54, f1 = 32109), p0 = "corge", p1 = "grault"),
+      f64p = (f = (f0 = 87, f1 = 654321098), p0 = "garply", p1 = "waldo"),
+      f128p = (f = (f0 = 7654321098765, f1 = 4321098765432),
+               p0 = "fred", p1 = "plugh", p2 = "xyzzy"),
+      f192p = (f = (f0 = 1098765432109, f1 = 8765432109876, f2 = 5432109876543),
+               p0 = "thud", p1 = "foobar", p2 = "barbaz"));
+
+  unions @1 :TestInlineUnions = (
+      union0 = f32(f0 = 67, f1 = 8901),
+      union1 = f128(f0 = 1234567890123, f1 = 4567890123456),
+      union2 = f1p(p0 = "foo"),
+      union3 = f16p(f = (f0 = 98, f1 = 76), p0 = "qux", p1 = "quux"));
 }

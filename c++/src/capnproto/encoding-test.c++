@@ -165,19 +165,14 @@ std::ostream& operator<<(std::ostream& os, const UnionState& us) {
   return os << "}, " << us.dataOffset << ")";
 }
 
-template <typename T> T one() { return static_cast<T>(1); }
-template <> Text::Reader one() { return "1"; }
-template <> Void one() { return Void::VOID; }
-
-template <typename T, typename U>
-UnionState initUnion(U (TestUnion::Builder::*unionGetter)(),
-                     void (U::Builder::*setter)(T value)) {
+template <typename StructType, typename Func>
+UnionState initUnion(Func&& initializer) {
   // Use the given setter to initialize the given union field and then return a struct indicating
   // the location of the data that was written as well as the values of the four union
   // discriminants.
 
   MallocMessageBuilder builder;
-  ((builder.getRoot<TestUnion>().*unionGetter)().*setter)(one<T>());
+  initializer(builder.getRoot<StructType>());
   ArrayPtr<const word> segment = builder.getSegmentsForOutput()[0];
 
   CHECK(segment.size() > 2, segment.size());
@@ -204,58 +199,60 @@ found:
                     offset);
 }
 
-#define INIT_UNION(unionName, fieldName) \
-  initUnion(&TestUnion::Builder::get##unionName, &TestUnion::unionName::Builder::set##fieldName)
-
 TEST(Encoding, UnionLayout) {
-  EXPECT_EQ(UnionState({ 0,0,0,0},  -1), INIT_UNION(Union0, U0f0s0));
-  EXPECT_EQ(UnionState({ 1,0,0,0},   0), INIT_UNION(Union0, U0f0s1));
-  EXPECT_EQ(UnionState({ 2,0,0,0},   0), INIT_UNION(Union0, U0f0s8));
-  EXPECT_EQ(UnionState({ 3,0,0,0},   0), INIT_UNION(Union0, U0f0s16));
-  EXPECT_EQ(UnionState({ 4,0,0,0},   0), INIT_UNION(Union0, U0f0s32));
-  EXPECT_EQ(UnionState({ 5,0,0,0},   0), INIT_UNION(Union0, U0f0s64));
-  EXPECT_EQ(UnionState({ 6,0,0,0}, 448), INIT_UNION(Union0, U0f0sp));
+#define INIT_UNION(setter) \
+  initUnion<TestUnion>([](TestUnion::Builder b) {b.setter;})
 
-  EXPECT_EQ(UnionState({ 7,0,0,0},  -1), INIT_UNION(Union0, U0f1s0));
-  EXPECT_EQ(UnionState({ 8,0,0,0},   0), INIT_UNION(Union0, U0f1s1));
-  EXPECT_EQ(UnionState({ 9,0,0,0},   0), INIT_UNION(Union0, U0f1s8));
-  EXPECT_EQ(UnionState({10,0,0,0},   0), INIT_UNION(Union0, U0f1s16));
-  EXPECT_EQ(UnionState({11,0,0,0},   0), INIT_UNION(Union0, U0f1s32));
-  EXPECT_EQ(UnionState({12,0,0,0},   0), INIT_UNION(Union0, U0f1s64));
-  EXPECT_EQ(UnionState({13,0,0,0}, 448), INIT_UNION(Union0, U0f1sp));
+  EXPECT_EQ(UnionState({ 0,0,0,0},  -1), INIT_UNION(getUnion0().setU0f0s0(Void::VOID)));
+  EXPECT_EQ(UnionState({ 1,0,0,0},   0), INIT_UNION(getUnion0().setU0f0s1(1)));
+  EXPECT_EQ(UnionState({ 2,0,0,0},   0), INIT_UNION(getUnion0().setU0f0s8(1)));
+  EXPECT_EQ(UnionState({ 3,0,0,0},   0), INIT_UNION(getUnion0().setU0f0s16(1)));
+  EXPECT_EQ(UnionState({ 4,0,0,0},   0), INIT_UNION(getUnion0().setU0f0s32(1)));
+  EXPECT_EQ(UnionState({ 5,0,0,0},   0), INIT_UNION(getUnion0().setU0f0s64(1)));
+  EXPECT_EQ(UnionState({ 6,0,0,0}, 448), INIT_UNION(getUnion0().setU0f0sp("1")));
 
-  EXPECT_EQ(UnionState({0, 0,0,0},  -1), INIT_UNION(Union1, U1f0s0));
-  EXPECT_EQ(UnionState({0, 1,0,0},  65), INIT_UNION(Union1, U1f0s1));
-  EXPECT_EQ(UnionState({0, 2,0,0},  65), INIT_UNION(Union1, U1f1s1));
-  EXPECT_EQ(UnionState({0, 3,0,0},  72), INIT_UNION(Union1, U1f0s8));
-  EXPECT_EQ(UnionState({0, 4,0,0},  72), INIT_UNION(Union1, U1f1s8));
-  EXPECT_EQ(UnionState({0, 5,0,0},  80), INIT_UNION(Union1, U1f0s16));
-  EXPECT_EQ(UnionState({0, 6,0,0},  80), INIT_UNION(Union1, U1f1s16));
-  EXPECT_EQ(UnionState({0, 7,0,0},  96), INIT_UNION(Union1, U1f0s32));
-  EXPECT_EQ(UnionState({0, 8,0,0},  96), INIT_UNION(Union1, U1f1s32));
-  EXPECT_EQ(UnionState({0, 9,0,0}, 128), INIT_UNION(Union1, U1f0s64));
-  EXPECT_EQ(UnionState({0,10,0,0}, 128), INIT_UNION(Union1, U1f1s64));
-  EXPECT_EQ(UnionState({0,11,0,0}, 512), INIT_UNION(Union1, U1f0sp));
-  EXPECT_EQ(UnionState({0,12,0,0}, 512), INIT_UNION(Union1, U1f1sp));
+  EXPECT_EQ(UnionState({ 7,0,0,0},  -1), INIT_UNION(getUnion0().setU0f1s0(Void::VOID)));
+  EXPECT_EQ(UnionState({ 8,0,0,0},   0), INIT_UNION(getUnion0().setU0f1s1(1)));
+  EXPECT_EQ(UnionState({ 9,0,0,0},   0), INIT_UNION(getUnion0().setU0f1s8(1)));
+  EXPECT_EQ(UnionState({10,0,0,0},   0), INIT_UNION(getUnion0().setU0f1s16(1)));
+  EXPECT_EQ(UnionState({11,0,0,0},   0), INIT_UNION(getUnion0().setU0f1s32(1)));
+  EXPECT_EQ(UnionState({12,0,0,0},   0), INIT_UNION(getUnion0().setU0f1s64(1)));
+  EXPECT_EQ(UnionState({13,0,0,0}, 448), INIT_UNION(getUnion0().setU0f1sp("1")));
 
-  EXPECT_EQ(UnionState({0,13,0,0},  -1), INIT_UNION(Union1, U1f2s0));
-  EXPECT_EQ(UnionState({0,14,0,0}, 128), INIT_UNION(Union1, U1f2s1));
-  EXPECT_EQ(UnionState({0,15,0,0}, 128), INIT_UNION(Union1, U1f2s8));
-  EXPECT_EQ(UnionState({0,16,0,0}, 128), INIT_UNION(Union1, U1f2s16));
-  EXPECT_EQ(UnionState({0,17,0,0}, 128), INIT_UNION(Union1, U1f2s32));
-  EXPECT_EQ(UnionState({0,18,0,0}, 128), INIT_UNION(Union1, U1f2s64));
-  EXPECT_EQ(UnionState({0,19,0,0}, 512), INIT_UNION(Union1, U1f2sp));
+  EXPECT_EQ(UnionState({0, 0,0,0},  -1), INIT_UNION(getUnion1().setU1f0s0(Void::VOID)));
+  EXPECT_EQ(UnionState({0, 1,0,0},  65), INIT_UNION(getUnion1().setU1f0s1(1)));
+  EXPECT_EQ(UnionState({0, 2,0,0},  65), INIT_UNION(getUnion1().setU1f1s1(1)));
+  EXPECT_EQ(UnionState({0, 3,0,0},  72), INIT_UNION(getUnion1().setU1f0s8(1)));
+  EXPECT_EQ(UnionState({0, 4,0,0},  72), INIT_UNION(getUnion1().setU1f1s8(1)));
+  EXPECT_EQ(UnionState({0, 5,0,0},  80), INIT_UNION(getUnion1().setU1f0s16(1)));
+  EXPECT_EQ(UnionState({0, 6,0,0},  80), INIT_UNION(getUnion1().setU1f1s16(1)));
+  EXPECT_EQ(UnionState({0, 7,0,0},  96), INIT_UNION(getUnion1().setU1f0s32(1)));
+  EXPECT_EQ(UnionState({0, 8,0,0},  96), INIT_UNION(getUnion1().setU1f1s32(1)));
+  EXPECT_EQ(UnionState({0, 9,0,0}, 128), INIT_UNION(getUnion1().setU1f0s64(1)));
+  EXPECT_EQ(UnionState({0,10,0,0}, 128), INIT_UNION(getUnion1().setU1f1s64(1)));
+  EXPECT_EQ(UnionState({0,11,0,0}, 512), INIT_UNION(getUnion1().setU1f0sp("1")));
+  EXPECT_EQ(UnionState({0,12,0,0}, 512), INIT_UNION(getUnion1().setU1f1sp("1")));
 
-  EXPECT_EQ(UnionState({0,0,0,0}, 192), INIT_UNION(Union2, U2f0s1));
-  EXPECT_EQ(UnionState({0,0,0,0}, 193), INIT_UNION(Union3, U3f0s1));
-  EXPECT_EQ(UnionState({0,0,1,0}, 200), INIT_UNION(Union2, U2f0s8));
-  EXPECT_EQ(UnionState({0,0,0,1}, 208), INIT_UNION(Union3, U3f0s8));
-  EXPECT_EQ(UnionState({0,0,2,0}, 224), INIT_UNION(Union2, U2f0s16));
-  EXPECT_EQ(UnionState({0,0,0,2}, 240), INIT_UNION(Union3, U3f0s16));
-  EXPECT_EQ(UnionState({0,0,3,0}, 256), INIT_UNION(Union2, U2f0s32));
-  EXPECT_EQ(UnionState({0,0,0,3}, 288), INIT_UNION(Union3, U3f0s32));
-  EXPECT_EQ(UnionState({0,0,4,0}, 320), INIT_UNION(Union2, U2f0s64));
-  EXPECT_EQ(UnionState({0,0,0,4}, 384), INIT_UNION(Union3, U3f0s64));
+  EXPECT_EQ(UnionState({0,13,0,0},  -1), INIT_UNION(getUnion1().setU1f2s0(Void::VOID)));
+  EXPECT_EQ(UnionState({0,14,0,0}, 128), INIT_UNION(getUnion1().setU1f2s1(1)));
+  EXPECT_EQ(UnionState({0,15,0,0}, 128), INIT_UNION(getUnion1().setU1f2s8(1)));
+  EXPECT_EQ(UnionState({0,16,0,0}, 128), INIT_UNION(getUnion1().setU1f2s16(1)));
+  EXPECT_EQ(UnionState({0,17,0,0}, 128), INIT_UNION(getUnion1().setU1f2s32(1)));
+  EXPECT_EQ(UnionState({0,18,0,0}, 128), INIT_UNION(getUnion1().setU1f2s64(1)));
+  EXPECT_EQ(UnionState({0,19,0,0}, 512), INIT_UNION(getUnion1().setU1f2sp("1")));
+
+  EXPECT_EQ(UnionState({0,0,0,0}, 192), INIT_UNION(getUnion2().setU2f0s1(1)));
+  EXPECT_EQ(UnionState({0,0,0,0}, 193), INIT_UNION(getUnion3().setU3f0s1(1)));
+  EXPECT_EQ(UnionState({0,0,1,0}, 200), INIT_UNION(getUnion2().setU2f0s8(1)));
+  EXPECT_EQ(UnionState({0,0,0,1}, 208), INIT_UNION(getUnion3().setU3f0s8(1)));
+  EXPECT_EQ(UnionState({0,0,2,0}, 224), INIT_UNION(getUnion2().setU2f0s16(1)));
+  EXPECT_EQ(UnionState({0,0,0,2}, 240), INIT_UNION(getUnion3().setU3f0s16(1)));
+  EXPECT_EQ(UnionState({0,0,3,0}, 256), INIT_UNION(getUnion2().setU2f0s32(1)));
+  EXPECT_EQ(UnionState({0,0,0,3}, 288), INIT_UNION(getUnion3().setU3f0s32(1)));
+  EXPECT_EQ(UnionState({0,0,4,0}, 320), INIT_UNION(getUnion2().setU2f0s64(1)));
+  EXPECT_EQ(UnionState({0,0,0,4}, 384), INIT_UNION(getUnion3().setU3f0s64(1)));
+
+#undef INIT_UNION
 }
 
 TEST(Encoding, UnionDefault) {
@@ -284,6 +281,318 @@ TEST(Encoding, UnionDefault) {
     EXPECT_EQ("foo", field.getUnion1().getU1f0sp());
     EXPECT_EQ(true, field.getUnion2().getU2f0s1());
     EXPECT_EQ(12345678, field.getUnion3().getU3f0s32());
+  }
+}
+
+// =======================================================================================
+
+TEST(Encoding, InlineStructUnionLayout) {
+  uint ptrOffset = TestInlineUnions::STRUCT_SIZE.data * BITS_PER_WORD / BITS - 64;
+  auto ptr = [=](uint i) { return ptrOffset + i * 64; };
+
+#define INIT_UNION(setter) \
+  initUnion<TestInlineUnions>([](TestInlineUnions::Builder b) {b.setter;})
+
+  EXPECT_EQ(UnionState({ 0,0,0,0},  -1), INIT_UNION(getUnion0().initF0()));
+  EXPECT_EQ(UnionState({ 1,0,0,0},   0), INIT_UNION(getUnion0().initF1().setF(1)));
+  EXPECT_EQ(UnionState({ 2,0,0,0},   0), INIT_UNION(getUnion0().initF8().setF0(true)));
+  EXPECT_EQ(UnionState({ 3,0,0,0},   0), INIT_UNION(getUnion0().initF16().setF0(1)));
+  EXPECT_EQ(UnionState({ 4,0,0,0},   0), INIT_UNION(getUnion0().initF32().setF0(1)));
+  EXPECT_EQ(UnionState({ 5,0,0,0},   0), INIT_UNION(getUnion0().initF64().setF0(1)));
+  EXPECT_EQ(UnionState({ 6,0,0,0},   0), INIT_UNION(getUnion0().initF128().setF0(1)));
+  EXPECT_EQ(UnionState({ 7,0,0,0},   0), INIT_UNION(getUnion0().initF192().setF0(1)));
+
+  EXPECT_EQ(UnionState({ 8,0,0,0},  -1), INIT_UNION(getUnion0().initF0p().initF()));
+  EXPECT_EQ(UnionState({ 9,0,0,0},   0), INIT_UNION(getUnion0().initF1p().initF().setF(1)));
+  EXPECT_EQ(UnionState({10,0,0,0},   0), INIT_UNION(getUnion0().initF8p().initF().setF0(true)));
+  EXPECT_EQ(UnionState({11,0,0,0},   0), INIT_UNION(getUnion0().initF16p().initF().setF0(1)));
+  EXPECT_EQ(UnionState({12,0,0,0},   0), INIT_UNION(getUnion0().initF32p().initF().setF0(1)));
+  EXPECT_EQ(UnionState({13,0,0,0},   0), INIT_UNION(getUnion0().initF64p().initF().setF0(1)));
+  EXPECT_EQ(UnionState({14,0,0,0},   0), INIT_UNION(getUnion0().initF128p().initF().setF0(1)));
+  EXPECT_EQ(UnionState({15,0,0,0},   0), INIT_UNION(getUnion0().initF192p().initF().setF0(1)));
+
+  EXPECT_EQ(UnionState({ 8,0,0,0}, ptr(0)), INIT_UNION(getUnion0().initF0p().setP0("1")));
+  EXPECT_EQ(UnionState({ 9,0,0,0}, ptr(0)), INIT_UNION(getUnion0().initF1p().setP0("1")));
+  EXPECT_EQ(UnionState({10,0,0,0}, ptr(0)), INIT_UNION(getUnion0().initF8p().setP0("1")));
+  EXPECT_EQ(UnionState({11,0,0,0}, ptr(0)), INIT_UNION(getUnion0().initF16p().setP0("1")));
+  EXPECT_EQ(UnionState({12,0,0,0}, ptr(0)), INIT_UNION(getUnion0().initF32p().setP0("1")));
+  EXPECT_EQ(UnionState({13,0,0,0}, ptr(0)), INIT_UNION(getUnion0().initF64p().setP0("1")));
+  EXPECT_EQ(UnionState({14,0,0,0}, ptr(0)), INIT_UNION(getUnion0().initF128p().setP0("1")));
+  EXPECT_EQ(UnionState({15,0,0,0}, ptr(0)), INIT_UNION(getUnion0().initF192p().setP0("1")));
+
+  EXPECT_EQ(UnionState({0, 0,0,0},  -1), INIT_UNION(getUnion1().initF0()));
+  EXPECT_EQ(UnionState({0, 1,0,0}, 193), INIT_UNION(getUnion1().initF1().setF(1)));
+  EXPECT_EQ(UnionState({0, 2,0,0}, 200), INIT_UNION(getUnion1().initF8().setF0(true)));
+  EXPECT_EQ(UnionState({0, 3,0,0}, 208), INIT_UNION(getUnion1().initF16().setF0(1)));
+  EXPECT_EQ(UnionState({0, 4,0,0}, 224), INIT_UNION(getUnion1().initF32().setF0(1)));
+  EXPECT_EQ(UnionState({0, 5,0,0}, 256), INIT_UNION(getUnion1().initF64().setF0(1)));
+  EXPECT_EQ(UnionState({0, 6,0,0}, 256), INIT_UNION(getUnion1().initF128().setF0(1)));
+  EXPECT_EQ(UnionState({0, 7,0,0}, 256), INIT_UNION(getUnion1().initF192().setF0(1)));
+
+  EXPECT_EQ(UnionState({0,0, 0,0}, 448), INIT_UNION(getUnion2().initF1p().initF().setF(1)));
+  EXPECT_EQ(UnionState({0,0,0, 0}, 449), INIT_UNION(getUnion3().initF1p().initF().setF(1)));
+  EXPECT_EQ(UnionState({0,0, 1,0}, 456), INIT_UNION(getUnion2().initF8p().initF().setF0(true)));
+  EXPECT_EQ(UnionState({0,0,0, 1}, 464), INIT_UNION(getUnion3().initF8p().initF().setF0(true)));
+  EXPECT_EQ(UnionState({0,0, 2,0}, 480), INIT_UNION(getUnion2().initF16p().initF().setF0(1)));
+  EXPECT_EQ(UnionState({0,0,0, 2}, 496), INIT_UNION(getUnion3().initF16p().initF().setF0(1)));
+  EXPECT_EQ(UnionState({0,0, 3,0}, 512), INIT_UNION(getUnion2().initF32p().initF().setF0(1)));
+  EXPECT_EQ(UnionState({0,0,0, 3}, 544), INIT_UNION(getUnion3().initF32p().initF().setF0(1)));
+  EXPECT_EQ(UnionState({0,0, 4,0}, 576), INIT_UNION(getUnion2().initF64p().initF().setF0(1)));
+  EXPECT_EQ(UnionState({0,0,0, 4}, 640), INIT_UNION(getUnion3().initF64p().initF().setF0(1)));
+  EXPECT_EQ(UnionState({0,0, 5,0}, 704), INIT_UNION(getUnion2().initF128p().initF().setF0(1)));
+  EXPECT_EQ(UnionState({0,0,0, 5}, 832), INIT_UNION(getUnion3().initF128p().initF().setF0(1)));
+  EXPECT_EQ(UnionState({0,0, 6,0}, 960), INIT_UNION(getUnion2().initF192p().initF().setF0(1)));
+  EXPECT_EQ(UnionState({0,0,0, 6},1152), INIT_UNION(getUnion3().initF192p().initF().setF0(1)));
+
+  EXPECT_EQ(UnionState({0,0, 0,0}, ptr( 3)), INIT_UNION(getUnion2().initF1p().setP0("1")));
+  EXPECT_EQ(UnionState({0,0,0, 0}, ptr( 4)), INIT_UNION(getUnion3().initF1p().setP0("1")));
+  EXPECT_EQ(UnionState({0,0, 1,0}, ptr( 3)), INIT_UNION(getUnion2().initF8p().setP0("1")));
+  EXPECT_EQ(UnionState({0,0,0, 1}, ptr( 4)), INIT_UNION(getUnion3().initF8p().setP0("1")));
+  EXPECT_EQ(UnionState({0,0, 2,0}, ptr( 5)), INIT_UNION(getUnion2().initF16p().setP0("1")));
+  EXPECT_EQ(UnionState({0,0,0, 2}, ptr( 7)), INIT_UNION(getUnion3().initF16p().setP0("1")));
+  EXPECT_EQ(UnionState({0,0, 3,0}, ptr( 5)), INIT_UNION(getUnion2().initF32p().setP0("1")));
+  EXPECT_EQ(UnionState({0,0,0, 3}, ptr( 7)), INIT_UNION(getUnion3().initF32p().setP0("1")));
+  EXPECT_EQ(UnionState({0,0, 4,0}, ptr( 5)), INIT_UNION(getUnion2().initF64p().setP0("1")));
+  EXPECT_EQ(UnionState({0,0,0, 4}, ptr( 7)), INIT_UNION(getUnion3().initF64p().setP0("1")));
+  EXPECT_EQ(UnionState({0,0, 5,0}, ptr( 9)), INIT_UNION(getUnion2().initF128p().setP0("1")));
+  EXPECT_EQ(UnionState({0,0,0, 5}, ptr(12)), INIT_UNION(getUnion3().initF128p().setP0("1")));
+  EXPECT_EQ(UnionState({0,0, 6,0}, ptr( 9)), INIT_UNION(getUnion2().initF192p().setP0("1")));
+  EXPECT_EQ(UnionState({0,0,0, 6}, ptr(12)), INIT_UNION(getUnion3().initF192p().setP0("1")));
+
+#undef INIT_UNION
+}
+
+TEST(Encoding, InitInlineStruct) {
+  MallocMessageBuilder builder;
+  auto root = builder.getRoot<TestInlineLayout>();
+
+  // Set as many bits as we can.
+  root.initF1().setF(true);
+  root.initF1Offset().setF(true);
+  root.setBit(true);
+  root.initF8().setF0(true);
+  root.getF8().setF1(true);
+  root.getF8().setF2(true);
+  root.initF16().setF0(0xffu);
+  root.getF16().setF1(0xffu);
+  root.initF32().setF0(0xffu);
+  root.getF32().setF1(0xffffu);
+  root.initF64().setF0(0xffu);
+  root.getF64().setF1(0xffffffffu);
+  root.initF128().setF0(0xffffffffffffffffull);
+  root.getF128().setF1(0xffffffffffffffffull);
+  root.initF192().setF0(0xffffffffffffffffull);
+  root.getF192().setF1(0xffffffffffffffffull);
+  root.getF192().setF2(0xffffffffffffffffull);
+
+  root.initF0p().setP0("foo");
+  root.initF1p().setP0("foo");
+  root.getF1p().initF().setF(true);
+  root.initF8p().setP0("foo");
+  root.initF16p().setP0("foo");
+  root.getF16p().setP1("foo");
+  root.initF32p().setP0("foo");
+  root.getF32p().setP1("foo");
+  root.initF64p().setP0("foo");
+  root.getF64p().setP1("foo");
+  root.initF128p().setP0("foo");
+  root.getF128p().setP1("foo");
+  root.getF128p().setP2("foo");
+  root.initF192p().setP0("foo");
+  root.getF192p().setP1("foo");
+  root.getF192p().setP2("foo");
+
+  // Now try re-initializing each thing and making sure the surrounding things aren't modified.
+  EXPECT_FALSE(root.initF1().getF());
+  EXPECT_TRUE(root.getF1Offset().getF());
+  root.getF1().setF(true);
+
+  EXPECT_FALSE(root.initF1Offset().getF());
+  EXPECT_TRUE(root.getF1().getF());
+  EXPECT_TRUE(root.getBit());
+  EXPECT_TRUE(root.getF8().getF0());
+  root.getF1Offset().setF(true);
+
+  EXPECT_FALSE(root.initF8().getF0());
+  EXPECT_FALSE(root.getF8().getF1());
+  EXPECT_FALSE(root.getF8().getF2());
+  EXPECT_TRUE(root.getF1().getF());
+  EXPECT_TRUE(root.getBit());
+  EXPECT_EQ(0xffu, root.getF16().getF0());
+  root.initF8().setF0(true);
+  root.getF8().setF1(true);
+  root.getF8().setF2(true);
+
+  EXPECT_EQ(0u, root.initF16().getF0());
+  EXPECT_EQ(0u, root.getF16().getF1());
+  EXPECT_TRUE(root.getF8().getF0());
+  EXPECT_TRUE(root.getF8().getF1());
+  EXPECT_TRUE(root.getF8().getF2());
+  EXPECT_EQ(0xffu, root.getF32().getF0());
+  root.getF16().setF0(0xffu);
+  root.getF16().setF1(0xffu);
+
+  EXPECT_EQ(0u, root.initF32().getF0());
+  EXPECT_EQ(0u, root.getF32().getF1());
+  EXPECT_EQ(0xffu, root.getF16().getF0());
+  EXPECT_EQ(0xffu, root.getF16().getF1());
+  EXPECT_EQ(0xffu, root.getF64().getF0());
+  root.getF32().setF0(0xffu);
+  root.getF32().setF1(0xffffu);
+
+  EXPECT_EQ(0u, root.initF64().getF0());
+  EXPECT_EQ(0u, root.getF64().getF1());
+  EXPECT_EQ(0xffu, root.getF32().getF0());
+  EXPECT_EQ(0xffffu, root.getF32().getF1());
+  EXPECT_EQ(0xffffffffffffffffull, root.getF128().getF0());
+  root.getF64().setF0(0xffu);
+  root.getF64().setF1(0xffffffffu);
+
+  EXPECT_EQ(0u, root.initF128().getF0());
+  EXPECT_EQ(0u, root.getF128().getF1());
+  EXPECT_EQ(0xffu, root.getF64().getF0());
+  EXPECT_EQ(0xffffffffu, root.getF64().getF1());
+  EXPECT_EQ(0xffffffffffffffffull, root.getF192().getF0());
+  root.getF128().setF0(0xffffffffffffffffull);
+  root.getF128().setF1(0xffffffffffffffffull);
+
+  EXPECT_EQ(0u, root.initF192().getF0());
+  EXPECT_EQ(0u, root.getF192().getF1());
+  EXPECT_EQ(0u, root.getF192().getF2());
+  EXPECT_EQ(0xffffffffffffffffull, root.getF128().getF0());
+  EXPECT_EQ(0xffffffffffffffffull, root.getF128().getF1());
+  EXPECT_TRUE(root.getF1p().getF().getF());
+  root.getF192().setF0(0xffffffffffffffffull);
+  root.getF192().setF1(0xffffffffffffffffull);
+  root.getF192().setF2(0xffffffffffffffffull);
+
+  EXPECT_EQ("", root.initF0p().getP0());
+  EXPECT_EQ("foo", root.getF1p().getP0());
+  root.getF0p().setP0("foo");
+
+  EXPECT_EQ("", root.initF1p().getP0());
+  EXPECT_EQ("foo", root.getF0p().getP0());
+  EXPECT_EQ("foo", root.getF8p().getP0());
+  root.getF1p().setP0("foo");
+
+  EXPECT_EQ("", root.initF8p().getP0());
+  EXPECT_EQ("foo", root.getF1p().getP0());
+  EXPECT_EQ("foo", root.getF16p().getP0());
+  root.initF8p().setP0("foo");
+
+  EXPECT_EQ("", root.initF16p().getP0());
+  EXPECT_EQ("", root.getF16p().getP1());
+  EXPECT_EQ("foo", root.getF8p().getP0());
+  EXPECT_EQ("foo", root.getF32p().getP0());
+  root.initF16p().setP0("foo");
+  root.getF16p().setP1("foo");
+
+  EXPECT_EQ("", root.initF32p().getP0());
+  EXPECT_EQ("", root.getF32p().getP1());
+  EXPECT_EQ("foo", root.getF16p().getP1());
+  EXPECT_EQ("foo", root.getF64p().getP0());
+  root.initF32p().setP0("foo");
+  root.getF32p().setP1("foo");
+
+  EXPECT_EQ("", root.initF64p().getP0());
+  EXPECT_EQ("", root.getF64p().getP1());
+  EXPECT_EQ("foo", root.getF32p().getP1());
+  EXPECT_EQ("foo", root.getF128p().getP0());
+  root.initF64p().setP0("foo");
+  root.getF64p().setP1("foo");
+
+  EXPECT_EQ("", root.initF128p().getP0());
+  EXPECT_EQ("", root.getF128p().getP1());
+  EXPECT_EQ("", root.getF128p().getP2());
+  EXPECT_EQ("foo", root.getF64p().getP1());
+  EXPECT_EQ("foo", root.getF192p().getP0());
+  root.initF128p().setP0("foo");
+  root.getF128p().setP1("foo");
+  root.getF128p().setP2("foo");
+
+  EXPECT_EQ("", root.initF192p().getP0());
+  EXPECT_EQ("", root.getF192p().getP1());
+  EXPECT_EQ("", root.getF192p().getP2());
+  EXPECT_EQ("foo", root.getF128p().getP2());
+  root.initF192p().setP0("foo");
+  root.getF192p().setP1("foo");
+  root.getF192p().setP2("foo");
+}
+
+TEST(Encoding, InlineDefaults) {
+  MallocMessageBuilder builder;
+  TestInlineDefaults::Reader reader = builder.getRoot<TestInlineDefaults>().asReader();
+
+  {
+    auto normal = reader.getNormal();
+    EXPECT_TRUE(normal.getF1().getF());
+    EXPECT_TRUE(normal.getF8().getF0());
+    EXPECT_FALSE(normal.getF8().getF1());
+    EXPECT_TRUE(normal.getF8().getF2());
+    EXPECT_EQ(123u, normal.getF16().getF0());
+    EXPECT_EQ(45u, normal.getF16().getF1());
+    EXPECT_EQ(67u, normal.getF32().getF0());
+    EXPECT_EQ(8901u, normal.getF32().getF1());
+    EXPECT_EQ(234u, normal.getF64().getF0());
+    EXPECT_EQ(567890123u, normal.getF64().getF1());
+    EXPECT_EQ(1234567890123ull, normal.getF128().getF0());
+    EXPECT_EQ(4567890123456ull, normal.getF128().getF1());
+    EXPECT_EQ(7890123456789ull, normal.getF192().getF0());
+    EXPECT_EQ(2345678901234ull, normal.getF192().getF1());
+    EXPECT_EQ(5678901234567ull, normal.getF192().getF2());
+
+    EXPECT_FALSE(normal.getF1p().getF().getF());
+    EXPECT_TRUE(normal.getF8p().getF().getF0());
+    EXPECT_TRUE(normal.getF8p().getF().getF1());
+    EXPECT_FALSE(normal.getF8p().getF().getF2());
+    EXPECT_EQ(98u, normal.getF16p().getF().getF0());
+    EXPECT_EQ(76u, normal.getF16p().getF().getF1());
+    EXPECT_EQ(54u, normal.getF32p().getF().getF0());
+    EXPECT_EQ(32109u, normal.getF32p().getF().getF1());
+    EXPECT_EQ(87u, normal.getF64p().getF().getF0());
+    EXPECT_EQ(654321098u, normal.getF64p().getF().getF1());
+    EXPECT_EQ(7654321098765ull, normal.getF128p().getF().getF0());
+    EXPECT_EQ(4321098765432ull, normal.getF128p().getF().getF1());
+    EXPECT_EQ(1098765432109ull, normal.getF192p().getF().getF0());
+    EXPECT_EQ(8765432109876ull, normal.getF192p().getF().getF1());
+    EXPECT_EQ(5432109876543ull, normal.getF192p().getF().getF2());
+
+    EXPECT_EQ("foo", normal.getF0p().getP0());
+    EXPECT_EQ("bar", normal.getF1p().getP0());
+    EXPECT_EQ("baz", normal.getF8p().getP0());
+    EXPECT_EQ("qux", normal.getF16p().getP0());
+    EXPECT_EQ("quux", normal.getF16p().getP1());
+    EXPECT_EQ("corge", normal.getF32p().getP0());
+    EXPECT_EQ("grault", normal.getF32p().getP1());
+    EXPECT_EQ("garply", normal.getF64p().getP0());
+    EXPECT_EQ("waldo", normal.getF64p().getP1());
+    EXPECT_EQ("fred", normal.getF128p().getP0());
+    EXPECT_EQ("plugh", normal.getF128p().getP1());
+    EXPECT_EQ("xyzzy", normal.getF128p().getP2());
+    EXPECT_EQ("thud", normal.getF192p().getP0());
+    EXPECT_EQ("foobar", normal.getF192p().getP1());
+    EXPECT_EQ("barbaz", normal.getF192p().getP2());
+  }
+
+  {
+    auto unions = reader.getUnions();
+
+    ASSERT_EQ(TestInlineUnions::Union0::F32, unions.getUnion0().which());
+    EXPECT_EQ(67u, unions.getUnion0().getF32().getF0());
+    EXPECT_EQ(8901u, unions.getUnion0().getF32().getF1());
+
+    ASSERT_EQ(TestInlineUnions::Union1::F128, unions.getUnion1().which());
+    EXPECT_EQ(1234567890123ull, unions.getUnion1().getF128().getF0());
+    EXPECT_EQ(4567890123456ull, unions.getUnion1().getF128().getF1());
+
+    ASSERT_EQ(TestInlineUnions::Union2::F1P, unions.getUnion2().which());
+    EXPECT_EQ("foo", unions.getUnion2().getF1p().getP0());
+
+    ASSERT_EQ(TestInlineUnions::Union3::F16P, unions.getUnion3().which());
+    EXPECT_EQ(98u, unions.getUnion3().getF16p().getF().getF0());
+    EXPECT_EQ(76u, unions.getUnion3().getF16p().getF().getF1());
+    EXPECT_EQ("qux", unions.getUnion3().getF16p().getP0());
+    EXPECT_EQ("quux", unions.getUnion3().getF16p().getP1());
   }
 }
 

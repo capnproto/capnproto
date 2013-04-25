@@ -4,6 +4,13 @@ cabal-version:  >=1.2
 build-type:     Simple
 author:         kenton
 
+-- How to get stack traces:
+-- 1. Compile normally and do not clean.
+-- 2. Add "-prof -fprof-auto -osuf .prof.o" to ghc-options and compile again.
+--    (TODO:  Figure out how to add these through "cabal configure" instead of by editing
+--    this file.  --enable-executable-profiling alone doesn't appear to get the job done.)
+-- 3. Run with +RTS -xc -RTS on the command line.
+
 executable capnpc
   hs-source-dirs:  src
   main-is:         Main.hs
