@@ -413,6 +413,8 @@ struct TestInlineLists {
 }
 
 struct TestStructLists {
+  # Small structs, when encoded as list, will be encoded as primitive lists rather than struct
+  # lists, to save space.
   struct Struct0  { f @0 :Void; }
   struct Struct1  { f @0 :Bool; }
   struct Struct8  { f @0 :UInt8; }
