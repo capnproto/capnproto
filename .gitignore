@@ -30,3 +30,5 @@
 # Checkout of gh-pages made by /doc/push-site.sh
 /doc/.gh-pages
 
+# cabal-install artifacts
+/compiler/dist/
