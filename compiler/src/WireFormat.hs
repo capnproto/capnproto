@@ -29,6 +29,7 @@ import Data.Bits(shiftL, shiftR, Bits, setBit, xor)
 import Data.Function(on)
 import Semantics
 import Data.Binary.IEEE754(floatToWord, doubleToWord)
+import Text.Printf(printf)
 import qualified Codec.Binary.UTF8.String as UTF8
 
 byte :: (Integral a, Bits a) => a -> Int -> Word8
@@ -45,6 +46,7 @@ padToWord b = let
 
 data EncodedData = EncodedBit Bool
                  | EncodedBytes [Word8]
+                 deriving(Show)
 
 xorData (EncodedBit a) (EncodedBit b) = EncodedBit (a /= b)
 xorData (EncodedBytes a) (EncodedBytes b) = EncodedBytes (zipWith xor a b)
@@ -92,7 +94,7 @@ encodePointerValue _ _ = error "Unknown pointer type."
 packBytes :: Integer                     -- Total size of array to pack, in bits.
           -> [(Integer, EncodedData)]    -- (offset, data) pairs to pack.  Must be in order.
           -> [Word8]
-packBytes size = padToWord . loop 0 where
+packBytes size items = padToWord $ loop 0 items where
     loop :: Integer -> [(Integer, EncodedData)] -> [Word8]
     loop bit [] | bit <= size = genericReplicate (div (size - bit + 7) 8) 0
     loop bit [] | bit > size = error "Data values overran size."
@@ -103,7 +105,8 @@ packBytes size = padToWord . loop 0 where
     loop bit ((_, EncodedBit False):rest) = loop bit rest
     loop bit ((offset, EncodedBytes encoded):rest) | offset == bit =
         encoded ++ loop (bit + genericLength encoded * 8) rest
-    loop _ _ = error "Data values overlapped."
+    loop bit rest = error
+        (printf "Data values overlapped @%d: %s\n\n%s" bit (show rest) (show items))
 
 bytesToWords i = if mod i 8 == 0 then div i 8
     else error "Byte count did not divide evenly into words."

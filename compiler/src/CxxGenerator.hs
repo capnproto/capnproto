@@ -105,16 +105,23 @@ isInlineStruct (InlineStructType _) = True
 isInlineStruct _ = False
 
 isList (ListType _) = True
+isList (InlineListType _ _) = True
 isList _ = False
 
 isNonStructList (ListType t) = not $ isStruct t
+isNonStructList (InlineListType t _) = not $ isStruct t
 isNonStructList _ = False
 
 isPrimitiveList (ListType t) = isPrimitive t
+isPrimitiveList (InlineListType t _) = isPrimitive t
 isPrimitiveList _ = False
 
 isStructList (ListType t) = isStruct t
+isStructList (InlineListType t _) = isStruct t
 isStructList _ = False
+
+isInlineList (InlineListType _ _) = True
+isInlineList _ = False
 
 blobTypeString (BuiltinType BuiltinText) = "Text"
 blobTypeString (BuiltinType BuiltinData) = "Data"
@@ -139,6 +146,7 @@ cxxTypeString (StructType desc) = globalName $ DescStruct desc
 cxxTypeString (InlineStructType desc) = globalName $ DescStruct desc
 cxxTypeString (InterfaceType desc) = globalName $ DescInterface desc
 cxxTypeString (ListType t) = concat [" ::capnproto::List<", cxxTypeString t, ">"]
+cxxTypeString (InlineListType t _) = concat [" ::capnproto::List<", cxxTypeString t, ">"]
 
 cxxFieldSizeString SizeVoid = "VOID";
 cxxFieldSizeString (SizeData Size1) = "BIT";
@@ -203,6 +211,7 @@ defaultValueBytes t v@(ListDesc _) = Just $ encodeMessage t v
 defaultValueBytes _ _ = Nothing
 
 elementType (ListType t) = t
+elementType (InlineListType t _) = t
 elementType _ = error "Called elementType on non-list."
 
 repeatedlyTake _ [] = []
@@ -244,6 +253,7 @@ fieldContext parent desc = mkStrContext context where
     context "fieldIsNonStructList" = MuBool $ isNonStructList $ fieldType desc
     context "fieldIsPrimitiveList" = MuBool $ isPrimitiveList $ fieldType desc
     context "fieldIsStructList" = MuBool $ isStructList $ fieldType desc
+    context "fieldIsInlineList" = MuBool $ isInlineList $ fieldType desc
     context "fieldDefaultBytes" =
         case fieldDefaultValue desc >>= defaultValueBytes (fieldType desc) of
             Just v -> muJust $ defaultBytesContext context (fieldType desc) v
@@ -251,6 +261,23 @@ fieldContext parent desc = mkStrContext context where
     context "fieldType" = MuVariable $ cxxTypeString $ fieldType desc
     context "fieldBlobType" = MuVariable $ blobTypeString $ fieldType desc
     context "fieldOffset" = MuVariable $ fieldOffsetInteger $ fieldOffset desc
+    context "fieldInlineListSize" = case fieldType desc of
+        InlineListType _ n -> MuVariable n
+        _ -> muNull
+    context "fieldInlineDataOffset" = case fieldOffset desc of
+        InlineCompositeOffset off _ size _ ->
+            MuVariable (off * dataSizeInBits (dataSectionAlignment size))
+        _ -> muNull
+    context "fieldInlineDataSize" = case fieldOffset desc of
+        InlineCompositeOffset _ _ size _ ->
+            MuVariable $ dataSectionBits size
+        _ -> muNull
+    context "fieldInlinePointerOffset" = case fieldOffset desc of
+        InlineCompositeOffset _ off _ _ -> MuVariable off
+        _ -> muNull
+    context "fieldInlinePointerSize" = case fieldOffset desc of
+        InlineCompositeOffset _ _ _ size -> MuVariable size
+        _ -> muNull
     context "fieldDefaultMask" = case fieldDefaultValue desc of
         Nothing -> MuVariable ""
         Just v -> MuVariable (if isDefaultZero v then "" else ", " ++ defaultMask v)
@@ -303,6 +330,7 @@ structContext parent desc = mkStrContext context where
     context "structFields" = MuList $ map (fieldContext context) $ structFields desc
     context "structUnions" = MuList $ map (unionContext context) $ structUnions desc
     context "structDataSize" = MuVariable $ dataSectionWordSize $ structDataSize desc
+    context "structDataBits" = MuVariable $ dataSectionBits $ structDataSize desc
     context "structReferenceCount" = MuVariable $ structPointerCount desc
     context "structNestedEnums" =
         MuList $ map (enumContext context) [m | DescEnum m <- structMembers desc]

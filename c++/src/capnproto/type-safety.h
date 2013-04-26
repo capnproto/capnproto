@@ -326,6 +326,21 @@ public:
         unit1PerUnit2 * other.unit1PerUnit2);
   }
 
+  template <typename OtherNumber, typename Unit3>
+  inline constexpr UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit3, Unit2>
+      operator/(UnitRatio<OtherNumber, Unit1, Unit3> other) {
+    // (U1 / U2) / (U1 / U3) = U3 / U2
+    return UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit3, Unit2>(
+        unit1PerUnit2 / other.unit1PerUnit2);
+  }
+  template <typename OtherNumber, typename Unit3>
+  inline constexpr UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit1, Unit3>
+      operator/(UnitRatio<OtherNumber, Unit3, Unit2> other) {
+    // (U1 / U2) / (U3 / U2) = U1 / U3
+    return UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit1, Unit3>(
+        unit1PerUnit2 / other.unit1PerUnit2);
+  }
+
 private:
   Number unit1PerUnit2;
 

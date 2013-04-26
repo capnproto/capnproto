@@ -594,6 +594,184 @@ TEST(Encoding, InlineDefaults) {
     EXPECT_EQ("qux", unions.getUnion3().getF16p().getP0());
     EXPECT_EQ("quux", unions.getUnion3().getF16p().getP1());
   }
+
+  {
+    auto lists = reader.getLists();
+
+    ASSERT_EQ(2u, lists.getVoidList().size());
+    ASSERT_EQ(3u, lists.getBoolList().size());
+    ASSERT_EQ(4u, lists.getUInt8List().size());
+    ASSERT_EQ(5u, lists.getUInt16List().size());
+    ASSERT_EQ(6u, lists.getUInt32List().size());
+    ASSERT_EQ(7u, lists.getUInt64List().size());
+    ASSERT_EQ(8u, lists.getTextList().size());
+
+    ASSERT_EQ(2u, lists.getStructList0().size());
+    ASSERT_EQ(3u, lists.getStructList1().size());
+    ASSERT_EQ(4u, lists.getStructList8().size());
+    ASSERT_EQ(2u, lists.getStructList16().size());
+    ASSERT_EQ(3u, lists.getStructList32().size());
+    ASSERT_EQ(4u, lists.getStructList64().size());
+    ASSERT_EQ(2u, lists.getStructList128().size());
+    ASSERT_EQ(3u, lists.getStructList192().size());
+
+    ASSERT_EQ(4u, lists.getStructList0p().size());
+    ASSERT_EQ(2u, lists.getStructList1p().size());
+    ASSERT_EQ(3u, lists.getStructList8p().size());
+    ASSERT_EQ(4u, lists.getStructList16p().size());
+    ASSERT_EQ(2u, lists.getStructList32p().size());
+    ASSERT_EQ(3u, lists.getStructList64p().size());
+    ASSERT_EQ(4u, lists.getStructList128p().size());
+    ASSERT_EQ(2u, lists.getStructList192p().size());
+
+    EXPECT_EQ(Void::VOID, lists.getVoidList()[0]);
+    EXPECT_EQ(Void::VOID, lists.getVoidList()[1]);
+    EXPECT_FALSE(lists.getBoolList()[0]);
+    EXPECT_TRUE(lists.getBoolList()[1]);
+    EXPECT_FALSE(lists.getBoolList()[2]);
+    EXPECT_EQ(12u, lists.getUInt8List()[0]);
+    EXPECT_EQ(34u, lists.getUInt8List()[1]);
+    EXPECT_EQ(56u, lists.getUInt8List()[2]);
+    EXPECT_EQ(78u, lists.getUInt8List()[3]);
+    EXPECT_EQ(1234u, lists.getUInt16List()[0]);
+    EXPECT_EQ(5678u, lists.getUInt16List()[1]);
+    EXPECT_EQ(9012u, lists.getUInt16List()[2]);
+    EXPECT_EQ(3456u, lists.getUInt16List()[3]);
+    EXPECT_EQ(7890u, lists.getUInt16List()[4]);
+    EXPECT_EQ(123456789u, lists.getUInt32List()[0]);
+    EXPECT_EQ(234567890u, lists.getUInt32List()[1]);
+    EXPECT_EQ(345678901u, lists.getUInt32List()[2]);
+    EXPECT_EQ(456789012u, lists.getUInt32List()[3]);
+    EXPECT_EQ(567890123u, lists.getUInt32List()[4]);
+    EXPECT_EQ(678901234u, lists.getUInt32List()[5]);
+    for (uint i = 0; i < 7; i++) {
+      EXPECT_EQ(i + 1, lists.getUInt64List()[i]);
+    }
+    EXPECT_EQ("foo", lists.getTextList()[0]);
+    EXPECT_EQ("bar", lists.getTextList()[1]);
+    EXPECT_EQ("baz", lists.getTextList()[2]);
+    EXPECT_EQ("qux", lists.getTextList()[3]);
+    EXPECT_EQ("quux", lists.getTextList()[4]);
+    EXPECT_EQ("corge", lists.getTextList()[5]);
+    EXPECT_EQ("grault", lists.getTextList()[6]);
+    EXPECT_EQ("garply", lists.getTextList()[7]);
+
+    EXPECT_EQ(Void::VOID, lists.getStructList0()[0].getF());
+    EXPECT_EQ(Void::VOID, lists.getStructList0()[1].getF());
+
+    EXPECT_TRUE(lists.getStructList1()[0].getF());
+    EXPECT_FALSE(lists.getStructList1()[1].getF());
+//    EXPECT_TRUE(lists.getStructList1()[2].getF());
+
+    EXPECT_TRUE (lists.getStructList8()[0].getF0());
+    EXPECT_FALSE(lists.getStructList8()[0].getF1());
+    EXPECT_FALSE(lists.getStructList8()[0].getF2());
+    EXPECT_FALSE(lists.getStructList8()[1].getF0());
+    EXPECT_TRUE (lists.getStructList8()[1].getF1());
+    EXPECT_FALSE(lists.getStructList8()[1].getF2());
+    EXPECT_TRUE (lists.getStructList8()[2].getF0());
+    EXPECT_TRUE (lists.getStructList8()[2].getF1());
+    EXPECT_FALSE(lists.getStructList8()[2].getF2());
+    EXPECT_FALSE(lists.getStructList8()[3].getF0());
+    EXPECT_FALSE(lists.getStructList8()[3].getF1());
+    EXPECT_TRUE (lists.getStructList8()[3].getF2());
+
+    EXPECT_EQ(12u, lists.getStructList16()[0].getF0());
+    EXPECT_EQ(34u, lists.getStructList16()[0].getF1());
+    EXPECT_EQ(56u, lists.getStructList16()[1].getF0());
+    EXPECT_EQ(78u, lists.getStructList16()[1].getF1());
+
+    EXPECT_EQ(90u, lists.getStructList32()[0].getF0());
+    EXPECT_EQ(12345u, lists.getStructList32()[0].getF1());
+    EXPECT_EQ(67u, lists.getStructList32()[1].getF0());
+    EXPECT_EQ(8901u, lists.getStructList32()[1].getF1());
+    EXPECT_EQ(23u, lists.getStructList32()[2].getF0());
+    EXPECT_EQ(45678u, lists.getStructList32()[2].getF1());
+
+    EXPECT_EQ(90u, lists.getStructList64()[0].getF0());
+    EXPECT_EQ(123456789u, lists.getStructList64()[0].getF1());
+    EXPECT_EQ(12u, lists.getStructList64()[1].getF0());
+    EXPECT_EQ(345678901u, lists.getStructList64()[1].getF1());
+    EXPECT_EQ(234u, lists.getStructList64()[2].getF0());
+    EXPECT_EQ(567890123u, lists.getStructList64()[2].getF1());
+    EXPECT_EQ(45u, lists.getStructList64()[3].getF0());
+    EXPECT_EQ(678901234u, lists.getStructList64()[3].getF1());
+
+    EXPECT_EQ(56789012345678ull, lists.getStructList128()[0].getF0());
+    EXPECT_EQ(90123456789012ull, lists.getStructList128()[0].getF1());
+    EXPECT_EQ(34567890123456ull, lists.getStructList128()[1].getF0());
+    EXPECT_EQ(78901234567890ull, lists.getStructList128()[1].getF1());
+
+    EXPECT_EQ(1234567890123ull, lists.getStructList192()[0].getF0());
+    EXPECT_EQ(4567890123456ull, lists.getStructList192()[0].getF1());
+    EXPECT_EQ(7890123456789ull, lists.getStructList192()[0].getF2());
+    EXPECT_EQ( 123456789012ull, lists.getStructList192()[1].getF0());
+    EXPECT_EQ(3456789012345ull, lists.getStructList192()[1].getF1());
+    EXPECT_EQ(6789012345678ull, lists.getStructList192()[1].getF2());
+    EXPECT_EQ(9012345678901ull, lists.getStructList192()[2].getF0());
+    EXPECT_EQ(2345678901234ull, lists.getStructList192()[2].getF1());
+    EXPECT_EQ(5678901234567ull, lists.getStructList192()[2].getF2());
+
+    EXPECT_EQ("foo", lists.getStructList0p()[0].getP0());
+    EXPECT_EQ("bar", lists.getStructList0p()[1].getP0());
+    EXPECT_EQ("baz", lists.getStructList0p()[2].getP0());
+    EXPECT_EQ("qux", lists.getStructList0p()[3].getP0());
+
+    EXPECT_TRUE(lists.getStructList1p()[0].getF().getF());
+    EXPECT_EQ("quux", lists.getStructList1p()[0].getP0());
+    EXPECT_EQ("corge", lists.getStructList1p()[1].getP0());
+
+    EXPECT_TRUE(lists.getStructList8p()[0].getF().getF0());
+    EXPECT_EQ("grault", lists.getStructList8p()[0].getP0());
+    EXPECT_EQ("garply", lists.getStructList8p()[1].getP0());
+    EXPECT_EQ("waldo", lists.getStructList8p()[2].getP0());
+
+    EXPECT_EQ(123u, lists.getStructList16p()[0].getF().getF0());
+    EXPECT_EQ("fred", lists.getStructList16p()[0].getP0());
+    EXPECT_EQ("plugh", lists.getStructList16p()[0].getP1());
+    EXPECT_EQ("xyzzy", lists.getStructList16p()[1].getP0());
+    EXPECT_EQ("thud", lists.getStructList16p()[1].getP1());
+    EXPECT_EQ("foobar", lists.getStructList16p()[2].getP0());
+    EXPECT_EQ("barbaz", lists.getStructList16p()[2].getP1());
+    EXPECT_EQ("bazqux", lists.getStructList16p()[3].getP0());
+    EXPECT_EQ("quxquux", lists.getStructList16p()[3].getP1());
+
+    EXPECT_EQ(12345u, lists.getStructList32p()[0].getF().getF1());
+    EXPECT_EQ("quuxcorge", lists.getStructList32p()[0].getP0());
+    EXPECT_EQ("corgegrault", lists.getStructList32p()[0].getP1());
+    EXPECT_EQ("graultgarply", lists.getStructList32p()[1].getP0());
+    EXPECT_EQ("garplywaldo", lists.getStructList32p()[1].getP1());
+
+    EXPECT_EQ(123456789u, lists.getStructList64p()[0].getF().getF1());
+    EXPECT_EQ("waldofred", lists.getStructList64p()[0].getP0());
+    EXPECT_EQ("fredplugh", lists.getStructList64p()[0].getP1());
+    EXPECT_EQ("plughxyzzy", lists.getStructList64p()[1].getP0());
+    EXPECT_EQ("xyzzythud", lists.getStructList64p()[1].getP1());
+    EXPECT_EQ("thudfoo", lists.getStructList64p()[2].getP0());
+    EXPECT_EQ("foofoo", lists.getStructList64p()[2].getP1());
+
+    EXPECT_EQ(123456789012345ull, lists.getStructList128p()[0].getF().getF1());
+    EXPECT_EQ("foobaz", lists.getStructList128p()[0].getP0());
+    EXPECT_EQ("fooqux", lists.getStructList128p()[0].getP1());
+    EXPECT_EQ("foocorge", lists.getStructList128p()[0].getP2());
+    EXPECT_EQ("barbaz", lists.getStructList128p()[1].getP0());
+    EXPECT_EQ("barqux", lists.getStructList128p()[1].getP1());
+    EXPECT_EQ("barcorge", lists.getStructList128p()[1].getP2());
+    EXPECT_EQ("bazbaz", lists.getStructList128p()[2].getP0());
+    EXPECT_EQ("bazqux", lists.getStructList128p()[2].getP1());
+    EXPECT_EQ("bazcorge", lists.getStructList128p()[2].getP2());
+    EXPECT_EQ("quxbaz", lists.getStructList128p()[3].getP0());
+    EXPECT_EQ("quxqux", lists.getStructList128p()[3].getP1());
+    EXPECT_EQ("quxcorge", lists.getStructList128p()[3].getP2());
+
+    EXPECT_EQ(123456789012345ull, lists.getStructList192p()[0].getF().getF2());
+    EXPECT_EQ("corgebaz", lists.getStructList192p()[0].getP0());
+    EXPECT_EQ("corgequx", lists.getStructList192p()[0].getP1());
+    EXPECT_EQ("corgecorge", lists.getStructList192p()[0].getP2());
+    EXPECT_EQ("graultbaz", lists.getStructList192p()[1].getP0());
+    EXPECT_EQ("graultqux", lists.getStructList192p()[1].getP1());
+    EXPECT_EQ("graultcorge", lists.getStructList192p()[1].getP2());
+  }
 }
 
 // =======================================================================================

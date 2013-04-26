@@ -69,7 +69,8 @@ struct {{typeFullName}} {
 
   static constexpr ::capnproto::internal::StructSize STRUCT_SIZE =
       ::capnproto::internal::StructSize({{structDataSize}} * ::capnproto::WORDS,
-                                        {{structReferenceCount}} * ::capnproto::REFERENCES);
+                                        {{structReferenceCount}} * ::capnproto::REFERENCES,
+                                        {{structDataBits}} * ::capnproto::BITS);
 
 {{/typeStruct}}
 {{#typeUnion}}
@@ -172,7 +173,12 @@ public:
   inline {{fieldType}}::Builder get{{fieldTitleCase}}();
 {{/fieldIsStruct}}
 {{#fieldIsNonStructList}}
+{{#fieldIsInlineList}}
+  inline {{fieldType}}::Builder init{{fieldTitleCase}}();
+{{/fieldIsInlineList}}
+{{^fieldIsInlineList}}
   inline {{fieldType}}::Builder init{{fieldTitleCase}}(unsigned int size);
+{{/fieldIsInlineList}}
   inline {{fieldType}}::Builder get{{fieldTitleCase}}();
   template <typename _t>
   inline void set{{fieldTitleCase}}(const _t& other);
@@ -184,7 +190,12 @@ public:
 {{/fieldIsPrimitiveList}}
 {{/fieldIsNonStructList}}
 {{#fieldIsStructList}}
+{{#fieldIsInlineList}}
+  inline {{fieldType}}::Builder init{{fieldTitleCase}}();
+{{/fieldIsInlineList}}
+{{^fieldIsInlineList}}
   inline {{fieldType}}::Builder init{{fieldTitleCase}}(unsigned int size);
+{{/fieldIsInlineList}}
   inline {{fieldType}}::Builder get{{fieldTitleCase}}();
 {{/fieldIsStructList}}
 {{/typeFields}}
@@ -356,6 +367,75 @@ inline {{fieldType}}::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}()
 {{/fieldIsStruct}}
 {{! ------------------------------------------------------------------------------------------- }}
 {{#fieldIsNonStructList}}
+{{#fieldIsInlineList}}
+{{#fieldIsPrimitiveList}}
+inline {{fieldType}}::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
+{{#fieldUnion}}
+  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                            "Must check which() before get()ing a union member.");
+{{/fieldUnion}}
+  return {{fieldType}}::Reader(_reader.getInlineDataListField(
+      {{fieldInlineDataOffset}} * ::capnproto::BITS,
+      {{fieldInlineListSize}} * ::capnproto::ELEMENTS,
+      ::capnproto::internal::FieldSize::{{fieldElementSize}}));
+}
+
+inline {{fieldType}}::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}() {
+{{#fieldUnion}}
+  _builder.setDataField<{{unionTitleCase}}::Which>(
+      {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
+{{/fieldUnion}}
+  return {{fieldType}}::Builder(_builder.initInlineDataListField(
+      {{fieldInlineDataOffset}} * ::capnproto::BITS,
+      {{fieldInlineDataSize}} * ::capnproto::BITS,
+      {{fieldInlineListSize}} * ::capnproto::ELEMENTS,
+      ::capnproto::internal::FieldSize::{{fieldElementSize}}));
+}
+inline {{fieldType}}::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}() {
+{{#fieldUnion}}
+  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                            "Must check which() before get()ing a union member.");
+{{/fieldUnion}}
+  return {{fieldType}}::Builder(_builder.getInlineDataListField(
+      {{fieldInlineDataOffset}} * ::capnproto::BITS,
+      {{fieldInlineListSize}} * ::capnproto::ELEMENTS,
+      ::capnproto::internal::FieldSize::{{fieldElementSize}}));
+}
+{{/fieldIsPrimitiveList}}
+{{^fieldIsPrimitiveList}}
+inline {{fieldType}}::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
+{{#fieldUnion}}
+  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                            "Must check which() before get()ing a union member.");
+{{/fieldUnion}}
+  return {{fieldType}}::Reader(_reader.getInlinePointerListField(
+      {{fieldInlinePointerOffset}} * ::capnproto::REFERENCES,
+      {{fieldInlineListSize}} * ::capnproto::ELEMENTS));
+}
+
+inline {{fieldType}}::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}() {
+{{#fieldUnion}}
+  _builder.setDataField<{{unionTitleCase}}::Which>(
+      {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
+{{/fieldUnion}}
+  return {{fieldType}}::Builder(_builder.initInlinePointerListField(
+      {{fieldInlinePointerOffset}} * ::capnproto::REFERENCES,
+      {{fieldInlinePointerSize}} * ::capnproto::REFERENCES,
+      {{fieldInlineListSize}} * ::capnproto::ELEMENTS));
+}
+inline {{fieldType}}::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}() {
+{{#fieldUnion}}
+  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                            "Must check which() before get()ing a union member.");
+{{/fieldUnion}}
+  return {{fieldType}}::Builder(_builder.getInlinePointerListField(
+      {{fieldInlinePointerOffset}} * ::capnproto::REFERENCES,
+      {{fieldInlineListSize}} * ::capnproto::ELEMENTS));
+}
+{{/fieldIsPrimitiveList}}
+{{/fieldIsInlineList}}
+{{! --------------------------------- }}
+{{^fieldIsInlineList}}
 inline {{fieldType}}::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
 {{#fieldUnion}}
   CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
@@ -388,15 +468,17 @@ inline {{fieldType}}::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}()
       {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}.words{{/fieldDefaultBytes}}
       {{^fieldDefaultBytes}}nullptr{{/fieldDefaultBytes}}));
 }
+{{/fieldIsInlineList}}
+{{! --------------------------------- }}
+
 template <typename _t>
 inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}(const _t& other) {
 {{#fieldUnion}}
   _builder.setDataField<{{unionTitleCase}}::Which>(
       {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
-  init{{fieldTitleCase}}(other.size()).copyFrom(other);
+  init{{fieldTitleCase}}({{^fieldIsInlineList}}other.size(){{/fieldIsInlineList}}).copyFrom(other);
 }
-{{! ------------------------------------------------------------------------------------------- }}
 {{#fieldIsPrimitiveList}}
 inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}(
     std::initializer_list<{{fieldElementType}}> other) {
@@ -404,10 +486,9 @@ inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}(
   _builder.setDataField<{{unionTitleCase}}::Which>(
       {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
-  init{{fieldTitleCase}}(other.size()).copyFrom(other);
+  init{{fieldTitleCase}}({{^fieldIsInlineList}}other.size(){{/fieldIsInlineList}}).copyFrom(other);
 }
 {{/fieldIsPrimitiveList}}
-{{! ------------------------------------------------------------------------------------------- }}
 {{^fieldIsPrimitiveList}}
 inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}(
     std::initializer_list<{{fieldElementType}}::Reader> other) {
@@ -415,12 +496,49 @@ inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}(
   _builder.setDataField<{{unionTitleCase}}::Which>(
       {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
-  init{{fieldTitleCase}}(other.size()).copyFrom(other);
+  init{{fieldTitleCase}}({{^fieldIsInlineList}}other.size(){{/fieldIsInlineList}}).copyFrom(other);
 }
 {{/fieldIsPrimitiveList}}
 {{/fieldIsNonStructList}}
 {{! ------------------------------------------------------------------------------------------- }}
 {{#fieldIsStructList}}
+{{#fieldIsInlineList}}
+inline {{fieldType}}::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
+{{#fieldUnion}}
+  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                            "Must check which() before get()ing a union member.");
+{{/fieldUnion}}
+  return {{fieldType}}::Reader(_reader.getInlineStructListField(
+      {{fieldInlineDataOffset}} * ::capnproto::BITS,
+      {{fieldInlinePointerOffset}} * ::capnproto::REFERENCES,
+      {{fieldInlineListSize}} * ::capnproto::ELEMENTS,
+      {{fieldElementType}}::STRUCT_SIZE));
+}
+
+inline {{fieldType}}::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}() {
+{{#fieldUnion}}
+  _builder.setDataField<{{unionTitleCase}}::Which>(
+      {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
+{{/fieldUnion}}
+  return {{fieldType}}::Builder(_builder.initInlineStructListField(
+      {{fieldInlineDataOffset}} * ::capnproto::BITS,
+      {{fieldInlinePointerOffset}} * ::capnproto::REFERENCES,
+      {{fieldInlineListSize}} * ::capnproto::ELEMENTS,
+      {{fieldElementType}}::STRUCT_SIZE));
+}
+inline {{fieldType}}::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}() {
+{{#fieldUnion}}
+  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                            "Must check which() before get()ing a union member.");
+{{/fieldUnion}}
+  return {{fieldType}}::Builder(_builder.getInlineStructListField(
+      {{fieldInlineDataOffset}} * ::capnproto::BITS,
+      {{fieldInlinePointerOffset}} * ::capnproto::REFERENCES,
+      {{fieldInlineListSize}} * ::capnproto::ELEMENTS,
+      {{fieldElementType}}::STRUCT_SIZE));
+}
+{{/fieldIsInlineList}}
+{{^fieldIsInlineList}}
 inline {{fieldType}}::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
 {{#fieldUnion}}
   CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
@@ -452,6 +570,7 @@ inline {{fieldType}}::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}()
       {{#fieldDefaultBytes}}DEFAULT_{{fieldUpperCase}}.words{{/fieldDefaultBytes}}
       {{^fieldDefaultBytes}}nullptr{{/fieldDefaultBytes}}));
 }
+{{/fieldIsInlineList}}
 {{/fieldIsStructList}}
 {{/typeFields}}
 {{/typeStructOrUnion}}

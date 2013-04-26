@@ -236,8 +236,7 @@ struct List<T, false> {
 
     inline uint size() { return builder.size() / ELEMENTS; }
     inline typename T::Builder operator[](uint index) {
-      return typename T::Builder(builder.getStructElement(index * ELEMENTS,
-          T::STRUCT_SIZE.total() / ELEMENTS, T::STRUCT_SIZE.data));
+      return typename T::Builder(builder.getStructElement(index * ELEMENTS, T::STRUCT_SIZE));
     }
 
     typedef internal::IndexingIterator<Builder, typename T::Builder> iterator;
@@ -282,11 +281,11 @@ struct List<List<T>, true> {
 
     inline uint size() { return builder.size() / ELEMENTS; }
     inline typename List<T>::Builder operator[](uint index) {
-      return typename List<T>::Builder(builder.getListElement(index * REFERENCES));
+      return typename List<T>::Builder(builder.getListElement(index * ELEMENTS));
     }
     inline typename List<T>::Builder init(uint index, uint size) {
       return typename List<T>::Builder(builder.initListElement(
-          index * REFERENCES, internal::FieldSizeForType<T>::value, size * ELEMENTS));
+          index * ELEMENTS, internal::FieldSizeForType<T>::value, size * ELEMENTS));
     }
 
     typedef internal::IndexingIterator<Builder, typename List<T>::Builder> iterator;
@@ -312,7 +311,7 @@ struct List<List<T>, false> {
 
     inline uint size() { return reader.size() / ELEMENTS; }
     inline typename List<T>::Reader operator[](uint index) {
-      return typename List<T>::Reader(reader.getListElement(index * REFERENCES,
+      return typename List<T>::Reader(reader.getListElement(index * ELEMENTS,
           internal::FieldSizeForType<T>::value));
     }
 
@@ -331,11 +330,11 @@ struct List<List<T>, false> {
 
     inline uint size() { return builder.size() / ELEMENTS; }
     inline typename List<T>::Builder operator[](uint index) {
-      return typename List<T>::Builder(builder.getListElement(index * REFERENCES));
+      return typename List<T>::Builder(builder.getListElement(index * ELEMENTS));
     }
     inline typename List<T>::Builder init(uint index, uint size) {
       return typename List<T>::Builder(builder.initStructListElement(
-          index * REFERENCES, size * ELEMENTS, T::DEFAULT.words));
+          index * ELEMENTS, size * ELEMENTS, T::DEFAULT.words));
     }
 
     typedef internal::IndexingIterator<Builder, typename List<T>::Builder> iterator;
@@ -361,7 +360,7 @@ struct List<Data, false> {
 
     inline uint size() { return reader.size() / ELEMENTS; }
     inline Data::Reader operator[](uint index) {
-      return reader.getDataElement(index * REFERENCES);
+      return reader.getDataElement(index * ELEMENTS);
     }
 
     typedef internal::IndexingIterator<Reader, Data::Reader> iterator;
@@ -379,13 +378,13 @@ struct List<Data, false> {
 
     inline uint size() { return builder.size() / ELEMENTS; }
     inline Data::Builder operator[](uint index) {
-      return builder.getDataElement(index * REFERENCES);
+      return builder.getDataElement(index * ELEMENTS);
     }
     inline void set(uint index, Data::Reader value) {
-      builder.setDataElement(index * REFERENCES, value);
+      builder.setDataElement(index * ELEMENTS, value);
     }
     inline Data::Builder init(uint index, uint size) {
-      return builder.initDataElement(index * REFERENCES, size * BYTES);
+      return builder.initDataElement(index * ELEMENTS, size * BYTES);
     }
 
     typedef internal::IndexingIterator<Builder, Data::Builder> iterator;
@@ -425,7 +424,7 @@ struct List<Text, false> {
 
     inline uint size() { return reader.size() / ELEMENTS; }
     inline Text::Reader operator[](uint index) {
-      return reader.getTextElement(index * REFERENCES);
+      return reader.getTextElement(index * ELEMENTS);
     }
 
     typedef internal::IndexingIterator<Reader, Text::Reader> iterator;
@@ -443,13 +442,13 @@ struct List<Text, false> {
 
     inline uint size() { return builder.size() / ELEMENTS; }
     inline Text::Builder operator[](uint index) {
-      return builder.getTextElement(index * REFERENCES);
+      return builder.getTextElement(index * ELEMENTS);
     }
     inline void set(uint index, Text::Reader value) {
-      builder.setTextElement(index * REFERENCES, value);
+      builder.setTextElement(index * ELEMENTS, value);
     }
     inline Text::Builder init(uint index, uint size) {
-      return builder.initTextElement(index * REFERENCES, size * BYTES);
+      return builder.initTextElement(index * ELEMENTS, size * BYTES);
     }
 
     typedef internal::IndexingIterator<Builder, Text::Builder> iterator;

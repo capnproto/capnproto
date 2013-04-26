@@ -320,6 +320,7 @@ fieldSize (InterfaceType _) = SizeReference
 fieldSize (ListType _) = SizeReference
 fieldSize (InlineListType element size) = let
     minDataSectionForBits bits
+        | bits <= 0 = DataSectionWords 0
         | bits <= 1 = DataSection1
         | bits <= 8 = DataSection8
         | bits <= 16 = DataSection16
@@ -329,12 +330,12 @@ fieldSize (InlineListType element size) = let
         SizeVoid -> DataSectionWords 0
         SizeData s -> minDataSectionForBits $ dataSizeInBits s * size
         SizeReference -> DataSectionWords 0
-        SizeInlineComposite ds _ -> minDataSectionForBits $ dataSectionBits ds
+        SizeInlineComposite ds _ -> minDataSectionForBits $ dataSectionBits ds * size
     pointerCount = case fieldSize element of
         SizeVoid -> 0
         SizeData _ -> 0
         SizeReference -> size
-        SizeInlineComposite _ pc -> pc
+        SizeInlineComposite _ pc -> pc * size
     in SizeInlineComposite dataSection pointerCount
 
 -- Render the type descriptor's name as a string, appropriate for use in the given scope.

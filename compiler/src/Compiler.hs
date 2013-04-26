@@ -295,7 +295,13 @@ compileType scope (TypeExpression n params) = do
     desc <- lookupDesc scope n
     case desc of
         DescBuiltinList -> case params of
-            [TypeParameterType param] -> fmap ListType (compileType scope param)
+            [TypeParameterType param] ->  do
+                inner <- compileType scope param
+                case inner of
+                    InlineStructType _ -> makeError (declNamePos n)
+                        "Don't declare list elements 'Inline'.  The regular encoding for struct \
+                        \lists already inlines the elements."
+                    _ -> return (ListType inner)
             _ -> makeError (declNamePos n) "'List' requires exactly one type parameter."
         DescBuiltinInline -> case params of
             [TypeParameterType param] -> do
@@ -311,7 +317,18 @@ compileType scope (TypeExpression n params) = do
         DescBuiltinInlineList -> case params of
             [TypeParameterType param, TypeParameterInteger size] -> do
                 inner <- compileType scope param
-                return $ InlineListType inner size
+                case inner of
+                    InlineStructType _ -> makeError (declNamePos n)
+                        "Don't declare list elements 'Inline'.  The regular encoding for struct \
+                        \lists already inlines the elements."
+                    StructType s -> if structIsFixedWidth s
+                        then return (InlineListType (InlineStructType s) size)
+                        else makeError (declNamePos n) $
+                            printf "'%s' cannot be inlined because it is not fixed-width."
+                                   (structName s)
+                    InlineListType _ _ -> makeError (declNamePos n)
+                        "InlineList of InlineList not currently supported."
+                    _ -> return $ InlineListType inner size
             _ -> makeError (declNamePos n)
                 "'InlineList' requires exactly two type parameters: a type and a size."
         _ -> case params of
