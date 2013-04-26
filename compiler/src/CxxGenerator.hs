@@ -161,12 +161,12 @@ fieldOffsetInteger VoidOffset = "0"
 fieldOffsetInteger (DataOffset _ o) = show o
 fieldOffsetInteger (PointerOffset o) = show o
 fieldOffsetInteger (InlineCompositeOffset d p ds ps) = let
-    bitSize = dataSectionBits ds
-    bitOffset = case ds of
-        DataSectionWords _ -> d * 64
-        _ -> d * bitSize
-    in printf "%d * ::capnproto::BITS, %d * ::capnproto::BITS, \
-              \%d * ::capnproto::REFERENCES, %d * ::capnproto::REFERENCES" bitOffset bitSize p ps
+    byteSize = div (dataSectionBits ds) 8
+    byteOffset = case ds of
+        DataSectionWords _ -> d * 8
+        _ -> d * byteSize
+    in printf "%d * ::capnproto::BYTES, %d * ::capnproto::BYTES, \
+              \%d * ::capnproto::REFERENCES, %d * ::capnproto::REFERENCES" byteOffset byteSize p ps
 
 isDefaultZero VoidDesc = True
 isDefaultZero (BoolDesc    b) = not b
@@ -266,11 +266,11 @@ fieldContext parent desc = mkStrContext context where
         _ -> muNull
     context "fieldInlineDataOffset" = case fieldOffset desc of
         InlineCompositeOffset off _ size _ ->
-            MuVariable (off * dataSizeInBits (dataSectionAlignment size))
+            MuVariable (off * div (dataSizeInBits (dataSectionAlignment size)) 8)
         _ -> muNull
     context "fieldInlineDataSize" = case fieldOffset desc of
         InlineCompositeOffset _ _ size _ ->
-            MuVariable $ dataSectionBits size
+            MuVariable $ div (dataSectionBits size) 8
         _ -> muNull
     context "fieldInlinePointerOffset" = case fieldOffset desc of
         InlineCompositeOffset _ off _ _ -> MuVariable off
@@ -330,7 +330,7 @@ structContext parent desc = mkStrContext context where
     context "structFields" = MuList $ map (fieldContext context) $ structFields desc
     context "structUnions" = MuList $ map (unionContext context) $ structUnions desc
     context "structDataSize" = MuVariable $ dataSectionWordSize $ structDataSize desc
-    context "structDataBits" = MuVariable $ dataSectionBits $ structDataSize desc
+    context "structDataBytes" = MuVariable (div (dataSectionBits (structDataSize desc)) 8)
     context "structReferenceCount" = MuVariable $ structPointerCount desc
     context "structNestedEnums" =
         MuList $ map (enumContext context) [m | DescEnum m <- structMembers desc]

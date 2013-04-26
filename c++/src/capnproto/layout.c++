@@ -415,7 +415,7 @@ struct WireHelpers {
     ref->structRef.set(size);
 
     // Build the StructBuilder.
-    return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + size.data), 0 * BITS,
+    return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + size.data),
                          size.pointers);
   }
 
@@ -443,7 +443,7 @@ struct WireHelpers {
           "Trying to update struct with incorrect reference count.");
     }
 
-    return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + size.data), 0 * BITS,
+    return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + size.data),
                          size.pointers);
   }
 
@@ -466,7 +466,7 @@ struct WireHelpers {
 
     // Build the ListBuilder.
     return ListBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr),
-                       step, step / BITS_PER_REFERENCE, elementCount);
+                       step / BITS_PER_BYTE, step / BITS_PER_REFERENCE, elementCount);
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListBuilder initStructListReference(
@@ -479,13 +479,12 @@ struct WireHelpers {
       if (elementSize.pointers == 1 * REFERENCES) {
         primitiveElementSize = FieldSize::REFERENCE;
       } else {
-        switch (elementSize.dataBits / BITS) {
+        switch (elementSize.dataBytes / BYTES) {
           case 0: primitiveElementSize = FieldSize::VOID; break;
-          case 1: primitiveElementSize = FieldSize::BIT; break;
-          case 8: primitiveElementSize = FieldSize::BYTE; break;
-          case 16: primitiveElementSize = FieldSize::TWO_BYTES; break;
-          case 32: primitiveElementSize = FieldSize::FOUR_BYTES; break;
-          case 64: primitiveElementSize = FieldSize::EIGHT_BYTES; break;
+          case 1: primitiveElementSize = FieldSize::BYTE; break;
+          case 2: primitiveElementSize = FieldSize::TWO_BYTES; break;
+          case 4: primitiveElementSize = FieldSize::FOUR_BYTES; break;
+          case 8: primitiveElementSize = FieldSize::EIGHT_BYTES; break;
           default: FAIL_PRECOND("Invalid struct size."); break;
         }
       }
@@ -510,7 +509,7 @@ struct WireHelpers {
 
     // Build the ListBuilder.
     return ListBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + elementSize.data),
-                       wordsPerElement * BITS_PER_WORD, wordsPerElement / WORDS_PER_REFERENCE,
+                       wordsPerElement * BYTES_PER_WORD, wordsPerElement / WORDS_PER_REFERENCE,
                        elementCount);
   }
 
@@ -521,7 +520,7 @@ struct WireHelpers {
 
     if (ref->isNull()) {
       if (defaultValue == nullptr) {
-        return ListBuilder(segment, nullptr, nullptr, 0 * BITS / ELEMENTS,
+        return ListBuilder(segment, nullptr, nullptr, 0 * BYTES / ELEMENTS,
                            0 * REFERENCES / ELEMENTS, 0 * ELEMENTS);
       }
       ptr = copyMessage(segment, ref, defaultRef);
@@ -543,12 +542,12 @@ struct WireHelpers {
       WireReference* pointers = reinterpret_cast<WireReference*>(
           data + tag->structRef.dataSize.get());
       auto step = tag->structRef.wordSize() / ELEMENTS;
-      return ListBuilder(segment, data, pointers, step * BITS_PER_WORD, step / WORDS_PER_REFERENCE,
+      return ListBuilder(segment, data, pointers, step * BYTES_PER_WORD, step / WORDS_PER_REFERENCE,
                          tag->inlineCompositeListElementCount());
     } else {
-      decltype(BITS/ELEMENTS) step = bitsPerElement(ref->listRef.elementSize());
+      auto step = bytesPerElement(ref->listRef.elementSize());
       return ListBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr),
-                         step, step / BITS_PER_REFERENCE,
+                         step, step / BYTES_PER_REFERENCE,
                          ref->listRef.elementCount());
     }
   }
@@ -637,7 +636,7 @@ struct WireHelpers {
     if (ref == nullptr || ref->isNull()) {
     useDefault:
       if (defaultValue == nullptr) {
-        return StructReader(nullptr, nullptr, nullptr, 0 * BITS, 0 * REFERENCES, 0 * BITS,
+        return StructReader(nullptr, nullptr, nullptr, 0 * BYTES, 0 * REFERENCES,
                             std::numeric_limits<int>::max());
       }
       segment = nullptr;
@@ -671,9 +670,9 @@ struct WireHelpers {
 
     return StructReader(
         segment, ptr, reinterpret_cast<const WireReference*>(ptr + ref->structRef.dataSize.get()),
-        ref->structRef.dataSize.get() * BITS_PER_WORD,
+        ref->structRef.dataSize.get() * BYTES_PER_WORD,
         ref->structRef.refCount.get(),
-        0 * BITS, nestingLimit - 1);
+        nestingLimit - 1);
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListReader readListReference(
@@ -684,7 +683,7 @@ struct WireHelpers {
     useDefault:
       if (defaultValue == nullptr) {
         return ListReader(nullptr, nullptr, nullptr, 0 * ELEMENTS,
-                          0 * BITS / ELEMENTS, 0 * REFERENCES / ELEMENTS,
+                          0 * BYTES / ELEMENTS, 0 * REFERENCES / ELEMENTS,
                           nestingLimit - 1);
       }
       segment = nullptr;
@@ -751,6 +750,11 @@ struct WireHelpers {
             break;
 
           case FieldSize::BIT:
+            FAIL_VALIDATE_INPUT("Expected a bit list, but got a list of structs.") {
+              goto useDefault;
+            }
+            break;
+
           case FieldSize::BYTE:
           case FieldSize::TWO_BYTES:
           case FieldSize::FOUR_BYTES:
@@ -790,13 +794,13 @@ struct WireHelpers {
       return ListReader(
           segment, ptr,
           reinterpret_cast<const WireReference*>(ptr + tag->structRef.dataSize.get()),
-          size, wordsPerElement * BITS_PER_WORD, wordsPerElement / WORDS_PER_REFERENCE,
-          tag->structRef.dataSize.get() * BITS_PER_WORD,
+          size, wordsPerElement * BYTES_PER_WORD, wordsPerElement / WORDS_PER_REFERENCE,
+          tag->structRef.dataSize.get() * BYTES_PER_WORD,
           tag->structRef.refCount.get(), nestingLimit - 1);
 
     } else {
       // The elements of the list are NOT structs.
-      decltype(BITS/ELEMENTS) step = bitsPerElement(ref->listRef.elementSize());
+      auto step = bitsPerElement(ref->listRef.elementSize());
 
       if (segment != nullptr) {
         VALIDATE_INPUT(segment->containsInterval(ptr, ptr +
@@ -808,25 +812,30 @@ struct WireHelpers {
 
       if (ref->listRef.elementSize() == expectedElementSize) {
         return ListReader(segment, ptr, reinterpret_cast<const WireReference*>(ptr),
-                          ref->listRef.elementCount(), step, step / BITS_PER_REFERENCE,
-                          nestingLimit - 1);
+                          ref->listRef.elementCount(), step / BITS_PER_BYTE,
+                          step / BITS_PER_REFERENCE, nestingLimit - 1);
       } else if (expectedElementSize == FieldSize::INLINE_COMPOSITE) {
         // We were expecting a struct list, but we received a list of some other type.  Perhaps a
         // non-struct list was recently upgraded to a struct list, but the sender is using the
         // old version of the protocol.  We need to verify that the struct's first field matches
         // what the sender sent us.
 
-        BitCount dataSize = 0 * BITS;
+        ByteCount dataSize = 0 * BYTES;
         WireReferenceCount referenceCount = 0 * REFERENCES;
 
         switch (ref->listRef.elementSize()) {
           case FieldSize::VOID: break;
-          case FieldSize::BIT: dataSize = 1 * BITS; break;
-          case FieldSize::BYTE: dataSize = 8 * BITS; break;
-          case FieldSize::TWO_BYTES: dataSize = 16 * BITS; break;
-          case FieldSize::FOUR_BYTES: dataSize = 32 * BITS; break;
-          case FieldSize::EIGHT_BYTES: dataSize = 64 * BITS; break;
+          case FieldSize::BYTE: dataSize = 1 * BYTES; break;
+          case FieldSize::TWO_BYTES: dataSize = 2 * BYTES; break;
+          case FieldSize::FOUR_BYTES: dataSize = 4 * BYTES; break;
+          case FieldSize::EIGHT_BYTES: dataSize = 8 * BYTES; break;
           case FieldSize::REFERENCE: referenceCount = 1 * REFERENCES; break;
+
+          case FieldSize::BIT:
+            FAIL_VALIDATE_INPUT("Message contained a bit list where a struct list was expected.") {
+              dataSize = 0 * BYTES;
+            }
+            break;
 
           case FieldSize::INLINE_COMPOSITE:
             FAIL_CHECK();
@@ -834,8 +843,8 @@ struct WireHelpers {
         }
 
         return ListReader(segment, ptr, reinterpret_cast<const WireReference*>(ptr),
-                          ref->listRef.elementCount(), step, step / BITS_PER_REFERENCE,
-                          dataSize, referenceCount, nestingLimit - 1);
+                          ref->listRef.elementCount(), step / BITS_PER_BYTE,
+                          step / BITS_PER_REFERENCE, dataSize, referenceCount, nestingLimit - 1);
       } else {
         PRECOND(segment != nullptr, "Trusted message had incompatible list element type.");
         goto useDefault;
@@ -1010,7 +1019,7 @@ StructReader StructBuilder::asReader() const {
   static_assert(sizeof(WireReference::structRef.refCount) == 2,
       "Has the maximum reference count changed?");
   return StructReader(segment, data, references,
-      0xffffffff * BITS, 0xffff * REFERENCES, 0 * BITS, std::numeric_limits<int>::max());
+      0xffffffff * BYTES, 0xffff * REFERENCES, std::numeric_limits<int>::max());
 }
 
 StructReader StructReader::readRootTrusted(const word* location) {
@@ -1030,7 +1039,7 @@ StructReader StructReader::readRoot(
 }
 
 StructReader StructReader::readEmpty() {
-  return StructReader(nullptr, nullptr, nullptr, 0 * BITS, 0 * REFERENCES, 0 * BITS,
+  return StructReader(nullptr, nullptr, nullptr, 0 * BYTES, 0 * REFERENCES,
                       std::numeric_limits<int>::max());
 }
 
@@ -1061,11 +1070,10 @@ Data::Reader StructReader::getDataField(
 
 StructBuilder ListBuilder::getStructElement(ElementCount index, StructSize elementSize) const {
   // TODO:  Inline this method?
-  BitCount64 indexBit = ElementCount64(index) * stepBits;
-  byte* structData = reinterpret_cast<byte*>(data) + indexBit / BITS_PER_BYTE;
+  ByteCount indexByte = ElementCount64(index) * stepBytes;
+  byte* structData = reinterpret_cast<byte*>(data) + indexByte;
   WireReference* structPointers = pointers + index * stepPointers;
-  return StructBuilder(segment, structData, structPointers, indexBit % BITS_PER_BYTE,
-                       elementSize.pointers);
+  return StructBuilder(segment, structData, structPointers, elementSize.pointers);
 }
 
 ListBuilder ListBuilder::initListElement(
@@ -1117,13 +1125,13 @@ ListReader ListBuilder::asReader(FieldSize elementSize) const {
   // TODO:  For INLINE_COMPOSITE I suppose we could just check the tag?
   PRECOND(elementSize != FieldSize::INLINE_COMPOSITE,
       "Need to call the other asReader() overload for INLINE_COMPOSITE lists.");
-  return ListReader(segment, data, pointers, elementCount, stepBits, stepPointers,
+  return ListReader(segment, data, pointers, elementCount, stepBytes, stepPointers,
                     std::numeric_limits<int>::max());
 }
 
 ListReader ListBuilder::asReader(StructSize elementSize) const {
-  return ListReader(segment, data, pointers, elementCount, stepBits, stepPointers,
-                    elementSize.dataBits, elementSize.pointers, std::numeric_limits<int>::max());
+  return ListReader(segment, data, pointers, elementCount, stepBytes, stepPointers,
+                    elementSize.dataBytes, elementSize.pointers, std::numeric_limits<int>::max());
 }
 
 StructReader ListReader::getStructElement(ElementCount index) const {
@@ -1133,11 +1141,11 @@ StructReader ListReader::getStructElement(ElementCount index) const {
     return StructReader::readEmpty();
   }
 
-  BitCount64 indexBit = ElementCount64(index) * stepBits;
-  const byte* structData = reinterpret_cast<const byte*>(data) + indexBit / BITS_PER_BYTE;
+  ByteCount indexByte = index * stepBytes;
+  const byte* structData = reinterpret_cast<const byte*>(data) + indexByte;
   return StructReader(
       segment, structData, pointers + index * stepPointers,
-      structDataSize, structReferenceCount, indexBit % BITS_PER_BYTE, nestingLimit - 1);
+      structDataSize, structReferenceCount, nestingLimit - 1);
 }
 
 ListReader ListReader::getListElement(

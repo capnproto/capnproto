@@ -682,7 +682,8 @@ packUnion :: UnionDesc -> PackingState -> Map.Map Integer UnionPackingState
 packUnion _ state unionState = (DataOffset Size16 offset, newState, unionState) where
     (offset, newState) = packData Size16 state
 
-stripHolesFromFirstWord Size1 _ = Size1  -- Nothing left to strip.
+stripHolesFromFirstWord Size1 _ = error "can't get this far"
+stripHolesFromFirstWord Size8 _ = Size8  -- Don't reduce to less than a byte.
 stripHolesFromFirstWord size holes = let
     nextSize = pred size
     in case Map.lookup nextSize holes of
@@ -717,13 +718,12 @@ enforceFixed Nothing sizes = return sizes
 enforceFixed (Just (Located pos (requestedDataSize, requestedPointerCount)))
         (actualDataSize, actualPointerCount) = do
     validatedRequestedDataSize <- case requestedDataSize of
-        1 -> return DataSection1
         8 -> return DataSection8
         16 -> return DataSection16
         32 -> return DataSection32
         s | mod s 64 == 0 -> return $ DataSectionWords $ div s 64
         _ -> makeError pos $ printf "Struct data section size must be a whole number of words \
-                                    \or 0, 1, 8, 16, or 32 bits."
+                                    \or 0, 1, 2, 4, or 8 bytes."
 
     recover () $ when (dataSectionBits actualDataSize > dataSectionBits validatedRequestedDataSize) $
         makeError pos $ printf "Struct data section size is %s which exceeds specified maximum of \

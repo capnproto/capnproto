@@ -263,9 +263,9 @@ dataSizeToSectionSize Size32 = DataSection32
 dataSizeToSectionSize Size64 = DataSectionWords 1
 
 dataSectionSizeString DataSection1 = "1 bits"
-dataSectionSizeString DataSection8 = "8 bits"
-dataSectionSizeString DataSection16 = "16 bits"
-dataSectionSizeString DataSection32 = "32 bits"
+dataSectionSizeString DataSection8 = "1 bytes"
+dataSectionSizeString DataSection16 = "2 bytes"
+dataSectionSizeString DataSection32 = "4 bytes"
 dataSectionSizeString (DataSectionWords n) = show n ++ " words"
 
 data DataSize = Size1 | Size8 | Size16 | Size32 | Size64 deriving(Eq, Ord, Enum)
@@ -319,9 +319,9 @@ fieldSize (InlineStructType StructDesc { structDataSize = ds, structPointerCount
 fieldSize (InterfaceType _) = SizeReference
 fieldSize (ListType _) = SizeReference
 fieldSize (InlineListType element size) = let
+    -- We intentionally do not allow single-bit lists because most CPUs cannot address bits.
     minDataSectionForBits bits
         | bits <= 0 = DataSectionWords 0
-        | bits <= 1 = DataSection1
         | bits <= 8 = DataSection8
         | bits <= 16 = DataSection16
         | bits <= 32 = DataSection32

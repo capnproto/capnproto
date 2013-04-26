@@ -276,27 +276,25 @@ struct TestUsing {
   innerNestedEnum @0 :NestedEnum = quux;
 }
 
-struct TestInline0 fixed(0 bits) { f @0: Void; }
-struct TestInline1 fixed(1 bits) { f @0: Bool; }
-struct TestInline8 fixed(8 bits) { f0 @0: Bool; f1 @1: Bool; f2 @2: Bool; }
-struct TestInline16 fixed(16 bits) { f0 @0: UInt8; f1 @1: UInt8; }
-struct TestInline32 fixed(32 bits) { f0 @0: UInt8; f1 @1: UInt16; }
-struct TestInline64 fixed(64 bits) { f0 @0: UInt8; f1 @1: UInt32; }
+struct TestInline0 fixed() { f @0: Void; }
+struct TestInline8 fixed(1 bytes) { f0 @0: Bool; f1 @1: Bool; f2 @2: Bool; }
+struct TestInline16 fixed(2 bytes) { f0 @0: UInt8; f1 @1: UInt8; }
+struct TestInline32 fixed(4 bytes) { f0 @0: UInt8; f1 @1: UInt16; }
+struct TestInline64 fixed(8 bytes) { f0 @0: UInt8; f1 @1: UInt32; }
 struct TestInline128 fixed(2 words) { f0 @0: UInt64; f1 @1: UInt64; }
 struct TestInline192 fixed(3 words) { f0 @0: UInt64; f1 @1: UInt64; f2 @2: UInt64; }
 
-struct TestInline0p fixed(0 bits, 1 pointers) { f @0 :Inline(TestInline0); p0 @1 :Text; }
-struct TestInline1p fixed(1 bits, 1 pointers) { f @0 :Inline(TestInline1); p0 @1 :Text; }
-struct TestInline8p fixed(8 bits, 1 pointers) { f @0 :Inline(TestInline8); p0 @1 :Text; }
-struct TestInline16p fixed(16 bits, 2 pointers) { f @0 :Inline(TestInline16); p0 @1 :Text; p1 @2 :Text; }
-struct TestInline32p fixed(32 bits, 2 pointers) { f @0 :Inline(TestInline32); p0 @1 :Text; p1 @2 :Text; }
-struct TestInline64p fixed(64 bits, 2 pointers) { f @0 :Inline(TestInline64); p0 @1 :Text; p1 @2 :Text; }
+struct TestInline0p fixed(1 pointers) { f @0 :Inline(TestInline0); p0 @1 :Text; }
+struct TestInline8p fixed(1 bytes, 1 pointers) { f @0 :Inline(TestInline8); p0 @1 :Text; }
+struct TestInline16p fixed(2 bytes, 2 pointers) { f @0 :Inline(TestInline16); p0 @1 :Text; p1 @2 :Text; }
+struct TestInline32p fixed(4 bytes, 2 pointers) { f @0 :Inline(TestInline32); p0 @1 :Text; p1 @2 :Text; }
+struct TestInline64p fixed(8 bytes, 2 pointers) { f @0 :Inline(TestInline64); p0 @1 :Text; p1 @2 :Text; }
 struct TestInline128p fixed(2 words, 3 pointers) { f @0 :Inline(TestInline128); p0 @1 :Text; p1 @2 :Text; p2 @3 :Text; }
 struct TestInline192p fixed(3 words, 3 pointers) { f @0 :Inline(TestInline192); p0 @1 :Text; p1 @2 :Text; p2 @3 :Text; }
 
 struct TestInlineLayout {
   f0 @0 :Inline(TestInline0);
-  f1 @1 :Inline(TestInline1);
+  pad1 @1 :UInt8;
   f8 @2 :Inline(TestInline8);
   f16 @3 :Inline(TestInline16);
   f32 @4 :Inline(TestInline32);
@@ -305,22 +303,20 @@ struct TestInlineLayout {
   f192 @7 :Inline(TestInline192);
 
   f0p @8 :Inline(TestInline0p);
-  f1p @9 :Inline(TestInline1p);
-  f8p @10 :Inline(TestInline8p);
-  f16p @11 :Inline(TestInline16p);
-  f32p @12 :Inline(TestInline32p);
-  f64p @13 :Inline(TestInline64p);
-  f128p @14 :Inline(TestInline128p);
-  f192p @15 :Inline(TestInline192p);
-
-  f1Offset @16 :Inline(TestInline1);
-  bit @17 :Bool;
+  pad2 @9 :UInt8;
+  padP @10 :Text;
+  f8p @11 :Inline(TestInline8p);
+  f16p @12 :Inline(TestInline16p);
+  f32p @13 :Inline(TestInline32p);
+  f64p @14 :Inline(TestInline64p);
+  f128p @15 :Inline(TestInline128p);
+  f192p @16 :Inline(TestInline192p);
 }
 
 struct TestInlineUnions {
   union0 @0 union {
     f0 @4 :Inline(TestInline0);
-    f1 @5 :Inline(TestInline1);
+    f1 @5 :Bool;    # There used to be a TestInline1 but it was decided to be a bad idea.
     f8 @6 :Inline(TestInline8);
     f16 @7 :Inline(TestInline16);
     f32 @8 :Inline(TestInline32);
@@ -329,7 +325,7 @@ struct TestInlineUnions {
     f192 @11 :Inline(TestInline192);
 
     f0p @12 :Inline(TestInline0p);
-    f1p @13 :Inline(TestInline1p);
+    f1p @13 :Bool;
     f8p @14 :Inline(TestInline8p);
     f16p @15 :Inline(TestInline16p);
     f32p @16 :Inline(TestInline32p);
@@ -343,7 +339,7 @@ struct TestInlineUnions {
 
   union1 @1 union {
     f0 @21 :Inline(TestInline0);
-    f1 @22 :Inline(TestInline1);
+    f1 @22 :Bool;
     f8 @23 :Inline(TestInline8);
     f16 @24 :Inline(TestInline16);
     f32 @25 :Inline(TestInline32);
@@ -362,7 +358,7 @@ struct TestInlineUnions {
 
   # Interleave two unions to be really annoying.
   union2 @2 union {
-    f1p @35 :Inline(TestInline1p);
+    f1p @35 :Bool;
     f8p @37 :Inline(TestInline8p);
     f16p @40 :Inline(TestInline16p);
     f32p @42 :Inline(TestInline32p);
@@ -372,7 +368,7 @@ struct TestInlineUnions {
   }
 
   union3 @3 union {
-    f1p @36 :Inline(TestInline1p);
+    f1p @36 :Bool;
     f8p @38 :Inline(TestInline8p);
     f16p @41 :Inline(TestInline16p);
     f32p @43 :Inline(TestInline32p);
@@ -394,7 +390,7 @@ struct TestInlineLists {
   textList      @ 6 : InlineList(Text, 8);
 
   structList0   @ 7 : InlineList(TestInline0, 2);
-  structList1   @ 8 : InlineList(TestInline1, 3);
+  structList1   @ 8 : InlineList(Bool, 3);
   structList8   @ 9 : InlineList(TestInline8, 4);
   structList16  @10 : InlineList(TestInline16, 2);
   structList32  @11 : InlineList(TestInline32, 3);
@@ -403,7 +399,7 @@ struct TestInlineLists {
   structList192 @14 : InlineList(TestInline192, 3);
 
   structList0p   @15 : InlineList(TestInline0p, 4);
-  structList1p   @16 : InlineList(TestInline1p, 2);
+  structList1p   @16 : InlineList(Bool, 2);
   structList8p   @17 : InlineList(TestInline8p, 3);
   structList16p  @18 : InlineList(TestInline16p, 4);
   structList32p  @19 : InlineList(TestInline32p, 2);
@@ -435,7 +431,6 @@ struct TestStructLists {
 struct TestInlineDefaults {
   normal @0 :TestInlineLayout = (
       f0 = (f = void),
-      f1 = (f = true),
       f8 = (f0 = true, f1 = false, f2 = true),
       f16 = (f0 = 123, f1 = 45),
       f32 = (f0 = 67, f1 = 8901),
@@ -444,7 +439,6 @@ struct TestInlineDefaults {
       f192 = (f0 = 7890123456789, f1 = 2345678901234, f2 = 5678901234567),
 
       f0p = (p0 = "foo"),
-      f1p = (f = (f = false), p0 = "bar"),
       f8p = (f = (f0 = true, f1 = true, f2 = false), p0 = "baz"),
       f16p = (f = (f0 = 98, f1 = 76), p0 = "qux", p1 = "quux"),
       f32p = (f = (f0 = 54, f1 = 32109), p0 = "corge", p1 = "grault"),
@@ -457,7 +451,7 @@ struct TestInlineDefaults {
   unions @1 :TestInlineUnions = (
       union0 = f32(f0 = 67, f1 = 8901),
       union1 = f128(f0 = 1234567890123, f1 = 4567890123456),
-      union2 = f1p(p0 = "foo"),
+      union2 = f8p(p0 = "foo"),
       union3 = f16p(f = (f0 = 98, f1 = 76), p0 = "qux", p1 = "quux"));
 
   lists @2 :TestInlineLists = (
@@ -470,7 +464,6 @@ struct TestInlineDefaults {
       textList      = ["foo", "bar", "baz", "qux", "quux", "corge", "grault", "garply"],
 
       structList0 = [(f = void), ()],
-      structList1 = [(f = true), (f = false), (f = true)],
       structList8 = [(f0 =  true, f1 = false, f2 = false),
                      (f0 = false, f1 =  true, f2 = false),
                      (f0 =  true, f1 =  true, f2 = false),
@@ -487,7 +480,6 @@ struct TestInlineDefaults {
 
       structList0p = [(f = (f = void), p0 = "foo"), (p0 = "bar"),
                       (f = (), p0 = "baz"), (p0 = "qux")],
-      structList1p = [(f = (f = true), p0 = "quux"), (p0 = "corge")],
       structList8p = [(f = (f0 = true), p0 = "grault"), (p0 = "garply"), (p0 = "waldo")],
       structList16p = [(f = (f0 = 123), p0 = "fred", p1 = "plugh"),
                        (p0 = "xyzzy", p1 = "thud"),

@@ -294,7 +294,6 @@ TEST(Encoding, InlineStructUnionLayout) {
   initUnion<TestInlineUnions>([](TestInlineUnions::Builder b) {b.setter;})
 
   EXPECT_EQ(UnionState({ 0,0,0,0},  -1), INIT_UNION(getUnion0().initF0()));
-  EXPECT_EQ(UnionState({ 1,0,0,0},   0), INIT_UNION(getUnion0().initF1().setF(1)));
   EXPECT_EQ(UnionState({ 2,0,0,0},   0), INIT_UNION(getUnion0().initF8().setF0(true)));
   EXPECT_EQ(UnionState({ 3,0,0,0},   0), INIT_UNION(getUnion0().initF16().setF0(1)));
   EXPECT_EQ(UnionState({ 4,0,0,0},   0), INIT_UNION(getUnion0().initF32().setF0(1)));
@@ -303,7 +302,6 @@ TEST(Encoding, InlineStructUnionLayout) {
   EXPECT_EQ(UnionState({ 7,0,0,0},   0), INIT_UNION(getUnion0().initF192().setF0(1)));
 
   EXPECT_EQ(UnionState({ 8,0,0,0},  -1), INIT_UNION(getUnion0().initF0p().initF()));
-  EXPECT_EQ(UnionState({ 9,0,0,0},   0), INIT_UNION(getUnion0().initF1p().initF().setF(1)));
   EXPECT_EQ(UnionState({10,0,0,0},   0), INIT_UNION(getUnion0().initF8p().initF().setF0(true)));
   EXPECT_EQ(UnionState({11,0,0,0},   0), INIT_UNION(getUnion0().initF16p().initF().setF0(1)));
   EXPECT_EQ(UnionState({12,0,0,0},   0), INIT_UNION(getUnion0().initF32p().initF().setF0(1)));
@@ -312,7 +310,6 @@ TEST(Encoding, InlineStructUnionLayout) {
   EXPECT_EQ(UnionState({15,0,0,0},   0), INIT_UNION(getUnion0().initF192p().initF().setF0(1)));
 
   EXPECT_EQ(UnionState({ 8,0,0,0}, ptr(0)), INIT_UNION(getUnion0().initF0p().setP0("1")));
-  EXPECT_EQ(UnionState({ 9,0,0,0}, ptr(0)), INIT_UNION(getUnion0().initF1p().setP0("1")));
   EXPECT_EQ(UnionState({10,0,0,0}, ptr(0)), INIT_UNION(getUnion0().initF8p().setP0("1")));
   EXPECT_EQ(UnionState({11,0,0,0}, ptr(0)), INIT_UNION(getUnion0().initF16p().setP0("1")));
   EXPECT_EQ(UnionState({12,0,0,0}, ptr(0)), INIT_UNION(getUnion0().initF32p().setP0("1")));
@@ -321,7 +318,6 @@ TEST(Encoding, InlineStructUnionLayout) {
   EXPECT_EQ(UnionState({15,0,0,0}, ptr(0)), INIT_UNION(getUnion0().initF192p().setP0("1")));
 
   EXPECT_EQ(UnionState({0, 0,0,0},  -1), INIT_UNION(getUnion1().initF0()));
-  EXPECT_EQ(UnionState({0, 1,0,0}, 193), INIT_UNION(getUnion1().initF1().setF(1)));
   EXPECT_EQ(UnionState({0, 2,0,0}, 200), INIT_UNION(getUnion1().initF8().setF0(true)));
   EXPECT_EQ(UnionState({0, 3,0,0}, 208), INIT_UNION(getUnion1().initF16().setF0(1)));
   EXPECT_EQ(UnionState({0, 4,0,0}, 224), INIT_UNION(getUnion1().initF32().setF0(1)));
@@ -329,8 +325,6 @@ TEST(Encoding, InlineStructUnionLayout) {
   EXPECT_EQ(UnionState({0, 6,0,0}, 256), INIT_UNION(getUnion1().initF128().setF0(1)));
   EXPECT_EQ(UnionState({0, 7,0,0}, 256), INIT_UNION(getUnion1().initF192().setF0(1)));
 
-  EXPECT_EQ(UnionState({0,0, 0,0}, 448), INIT_UNION(getUnion2().initF1p().initF().setF(1)));
-  EXPECT_EQ(UnionState({0,0,0, 0}, 449), INIT_UNION(getUnion3().initF1p().initF().setF(1)));
   EXPECT_EQ(UnionState({0,0, 1,0}, 456), INIT_UNION(getUnion2().initF8p().initF().setF0(true)));
   EXPECT_EQ(UnionState({0,0,0, 1}, 464), INIT_UNION(getUnion3().initF8p().initF().setF0(true)));
   EXPECT_EQ(UnionState({0,0, 2,0}, 480), INIT_UNION(getUnion2().initF16p().initF().setF0(1)));
@@ -344,8 +338,6 @@ TEST(Encoding, InlineStructUnionLayout) {
   EXPECT_EQ(UnionState({0,0, 6,0}, 960), INIT_UNION(getUnion2().initF192p().initF().setF0(1)));
   EXPECT_EQ(UnionState({0,0,0, 6},1152), INIT_UNION(getUnion3().initF192p().initF().setF0(1)));
 
-  EXPECT_EQ(UnionState({0,0, 0,0}, ptr( 3)), INIT_UNION(getUnion2().initF1p().setP0("1")));
-  EXPECT_EQ(UnionState({0,0,0, 0}, ptr( 4)), INIT_UNION(getUnion3().initF1p().setP0("1")));
   EXPECT_EQ(UnionState({0,0, 1,0}, ptr( 3)), INIT_UNION(getUnion2().initF8p().setP0("1")));
   EXPECT_EQ(UnionState({0,0,0, 1}, ptr( 4)), INIT_UNION(getUnion3().initF8p().setP0("1")));
   EXPECT_EQ(UnionState({0,0, 2,0}, ptr( 5)), INIT_UNION(getUnion2().initF16p().setP0("1")));
@@ -367,9 +359,7 @@ TEST(Encoding, InitInlineStruct) {
   auto root = builder.getRoot<TestInlineLayout>();
 
   // Set as many bits as we can.
-  root.initF1().setF(true);
-  root.initF1Offset().setF(true);
-  root.setBit(true);
+  root.setPad1(0xffu);
   root.initF8().setF0(true);
   root.getF8().setF1(true);
   root.getF8().setF2(true);
@@ -386,8 +376,8 @@ TEST(Encoding, InitInlineStruct) {
   root.getF192().setF2(0xffffffffffffffffull);
 
   root.initF0p().setP0("foo");
-  root.initF1p().setP0("foo");
-  root.getF1p().initF().setF(true);
+  root.setPad2(0xffu);
+  root.setPadP("foo");
   root.initF8p().setP0("foo");
   root.initF16p().setP0("foo");
   root.getF16p().setP1("foo");
@@ -403,21 +393,10 @@ TEST(Encoding, InitInlineStruct) {
   root.getF192p().setP2("foo");
 
   // Now try re-initializing each thing and making sure the surrounding things aren't modified.
-  EXPECT_FALSE(root.initF1().getF());
-  EXPECT_TRUE(root.getF1Offset().getF());
-  root.getF1().setF(true);
-
-  EXPECT_FALSE(root.initF1Offset().getF());
-  EXPECT_TRUE(root.getF1().getF());
-  EXPECT_TRUE(root.getBit());
-  EXPECT_TRUE(root.getF8().getF0());
-  root.getF1Offset().setF(true);
-
   EXPECT_FALSE(root.initF8().getF0());
   EXPECT_FALSE(root.getF8().getF1());
   EXPECT_FALSE(root.getF8().getF2());
-  EXPECT_TRUE(root.getF1().getF());
-  EXPECT_TRUE(root.getBit());
+  EXPECT_EQ(0xffu, root.getPad1());
   EXPECT_EQ(0xffu, root.getF16().getF0());
   root.initF8().setF0(true);
   root.getF8().setF1(true);
@@ -461,22 +440,17 @@ TEST(Encoding, InitInlineStruct) {
   EXPECT_EQ(0u, root.getF192().getF2());
   EXPECT_EQ(0xffffffffffffffffull, root.getF128().getF0());
   EXPECT_EQ(0xffffffffffffffffull, root.getF128().getF1());
-  EXPECT_TRUE(root.getF1p().getF().getF());
+  EXPECT_EQ(0xffu, root.getPad2());
   root.getF192().setF0(0xffffffffffffffffull);
   root.getF192().setF1(0xffffffffffffffffull);
   root.getF192().setF2(0xffffffffffffffffull);
 
   EXPECT_EQ("", root.initF0p().getP0());
-  EXPECT_EQ("foo", root.getF1p().getP0());
+  EXPECT_EQ("foo", root.getPadP());
   root.getF0p().setP0("foo");
 
-  EXPECT_EQ("", root.initF1p().getP0());
-  EXPECT_EQ("foo", root.getF0p().getP0());
-  EXPECT_EQ("foo", root.getF8p().getP0());
-  root.getF1p().setP0("foo");
-
   EXPECT_EQ("", root.initF8p().getP0());
-  EXPECT_EQ("foo", root.getF1p().getP0());
+  EXPECT_EQ("foo", root.getPadP());
   EXPECT_EQ("foo", root.getF16p().getP0());
   root.initF8p().setP0("foo");
 
@@ -525,7 +499,6 @@ TEST(Encoding, InlineDefaults) {
 
   {
     auto normal = reader.getNormal();
-    EXPECT_TRUE(normal.getF1().getF());
     EXPECT_TRUE(normal.getF8().getF0());
     EXPECT_FALSE(normal.getF8().getF1());
     EXPECT_TRUE(normal.getF8().getF2());
@@ -541,7 +514,6 @@ TEST(Encoding, InlineDefaults) {
     EXPECT_EQ(2345678901234ull, normal.getF192().getF1());
     EXPECT_EQ(5678901234567ull, normal.getF192().getF2());
 
-    EXPECT_FALSE(normal.getF1p().getF().getF());
     EXPECT_TRUE(normal.getF8p().getF().getF0());
     EXPECT_TRUE(normal.getF8p().getF().getF1());
     EXPECT_FALSE(normal.getF8p().getF().getF2());
@@ -558,7 +530,6 @@ TEST(Encoding, InlineDefaults) {
     EXPECT_EQ(5432109876543ull, normal.getF192p().getF().getF2());
 
     EXPECT_EQ("foo", normal.getF0p().getP0());
-    EXPECT_EQ("bar", normal.getF1p().getP0());
     EXPECT_EQ("baz", normal.getF8p().getP0());
     EXPECT_EQ("qux", normal.getF16p().getP0());
     EXPECT_EQ("quux", normal.getF16p().getP1());
@@ -584,9 +555,6 @@ TEST(Encoding, InlineDefaults) {
     ASSERT_EQ(TestInlineUnions::Union1::F128, unions.getUnion1().which());
     EXPECT_EQ(1234567890123ull, unions.getUnion1().getF128().getF0());
     EXPECT_EQ(4567890123456ull, unions.getUnion1().getF128().getF1());
-
-    ASSERT_EQ(TestInlineUnions::Union2::F1P, unions.getUnion2().which());
-    EXPECT_EQ("foo", unions.getUnion2().getF1p().getP0());
 
     ASSERT_EQ(TestInlineUnions::Union3::F16P, unions.getUnion3().which());
     EXPECT_EQ(98u, unions.getUnion3().getF16p().getF().getF0());
@@ -659,10 +627,6 @@ TEST(Encoding, InlineDefaults) {
     EXPECT_EQ(Void::VOID, lists.getStructList0()[0].getF());
     EXPECT_EQ(Void::VOID, lists.getStructList0()[1].getF());
 
-    EXPECT_TRUE(lists.getStructList1()[0].getF());
-    EXPECT_FALSE(lists.getStructList1()[1].getF());
-//    EXPECT_TRUE(lists.getStructList1()[2].getF());
-
     EXPECT_TRUE (lists.getStructList8()[0].getF0());
     EXPECT_FALSE(lists.getStructList8()[0].getF1());
     EXPECT_FALSE(lists.getStructList8()[0].getF2());
@@ -716,10 +680,6 @@ TEST(Encoding, InlineDefaults) {
     EXPECT_EQ("bar", lists.getStructList0p()[1].getP0());
     EXPECT_EQ("baz", lists.getStructList0p()[2].getP0());
     EXPECT_EQ("qux", lists.getStructList0p()[3].getP0());
-
-    EXPECT_TRUE(lists.getStructList1p()[0].getF().getF());
-    EXPECT_EQ("quux", lists.getStructList1p()[0].getP0());
-    EXPECT_EQ("corge", lists.getStructList1p()[1].getP0());
 
     EXPECT_TRUE(lists.getStructList8p()[0].getF().getF0());
     EXPECT_EQ("grault", lists.getStructList8p()[0].getP0());

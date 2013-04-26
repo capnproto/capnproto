@@ -101,6 +101,7 @@ enum class FieldSize: uint8_t {
 };
 
 typedef decltype(BITS / ELEMENTS) BitsPerElement;
+typedef decltype(BYTES / ELEMENTS) BytesPerElement;
 
 namespace internal {
   static constexpr BitsPerElement BITS_PER_ELEMENT_TABLE[8] = {
@@ -119,6 +120,13 @@ inline constexpr BitsPerElement bitsPerElement(FieldSize size) {
   return internal::BITS_PER_ELEMENT_TABLE[static_cast<int>(size)];
 }
 
+inline constexpr BytesPerElement bytesPerElement(FieldSize size) {
+  // BIT gets rounded down to zero bytes.  This is OK because bytesPerElement() is only used in
+  // cases where this doesn't matter, e.g. for computing stepBytes which is ignored by bit ops
+  // anyway.
+  return bitsPerElement(size) / BITS_PER_BYTE;
+}
+
 template <int wordCount>
 union AlignedData {
   // Useful for declaring static constant data blobs as an array of bytes, but forcing those
@@ -132,15 +140,15 @@ struct StructSize {
   WordCount16 data;
   WireReferenceCount16 pointers;
 
-  BitCount32 dataBits;
-  // If data == 1 word, dataBits may be 1, 8, 16, 32, or 64.  Otherwise, it is data * BITS_PER_WORD.
-  // This is used when packing inline structs.
+  ByteCount32 dataBytes;
+  // Number of bytes in the data section.  Must be data * 8 except when data == 1 in which case
+  // this can be 1, 2, 4, or 8.
 
   inline constexpr WordCount total() const { return data + pointers * WORDS_PER_REFERENCE; }
 
   StructSize() = default;
-  inline constexpr StructSize(WordCount data, WireReferenceCount pointers, BitCount dataBits)
-      : data(data), pointers(pointers), dataBits(dataBits) {}
+  inline constexpr StructSize(WordCount data, WireReferenceCount pointers, ByteCount dataBytes)
+      : data(data), pointers(pointers), dataBytes(dataBytes) {}
 };
 
 template <typename T>
@@ -286,13 +294,13 @@ public:
   // or to the empty state if defaultValue is nullptr.
 
   CAPNPROTO_ALWAYS_INLINE(StructBuilder initInlineStructField(
-      BitCount dataOffset, BitCount inlineDataSize,
+      ByteCount dataOffset, ByteCount inlineDataSize,
       WireReferenceCount refIndex, WireReferenceCount inlineRefCount) const);
   // Initialize an inlined struct field, given the position and size of the data and pointer
   // sections.
 
   CAPNPROTO_ALWAYS_INLINE(StructBuilder getInlineStructField(
-      BitCount dataOffset, BitCount inlineDataSize,
+      ByteCount dataOffset, ByteCount inlineDataSize,
       WireReferenceCount refIndex, WireReferenceCount inlineRefCount) const);
   // Gets an inlined struct field, given the position and size of the data and pointer sections.
 
@@ -312,7 +320,7 @@ public:
   // message).  If the default value is null, an empty list is used.
 
   CAPNPROTO_ALWAYS_INLINE(ListBuilder initInlineDataListField(
-      BitCount offset, BitCount inlineSize,
+      ByteCount offset, ByteCount inlineSize,
       ElementCount elementCount, FieldSize elementSize) const);
   // Initialize an inline list field.
 
@@ -322,12 +330,12 @@ public:
   // Initialize an inline list field.
 
   CAPNPROTO_ALWAYS_INLINE(ListBuilder initInlineStructListField(
-      BitCount dataOffset, WireReferenceCount ptrOffset, ElementCount elementCount,
+      ByteCount dataOffset, WireReferenceCount ptrOffset, ElementCount elementCount,
       StructSize elementSize) const);
   // Initialize an inline struct list field.
 
   CAPNPROTO_ALWAYS_INLINE(ListBuilder getInlineDataListField(
-      BitCount offset, ElementCount elementCount, FieldSize elementSize) const);
+      ByteCount offset, ElementCount elementCount, FieldSize elementSize) const);
   // Get an already-initialized inline list field.
 
   CAPNPROTO_ALWAYS_INLINE(ListBuilder getInlinePointerListField(
@@ -335,7 +343,7 @@ public:
   // Get an already-initialized inline list field.
 
   CAPNPROTO_ALWAYS_INLINE(ListBuilder getInlineStructListField(
-      BitCount dataOffset, WireReferenceCount ptrOffset, ElementCount elementCount,
+      ByteCount dataOffset, WireReferenceCount ptrOffset, ElementCount elementCount,
       StructSize elementSize) const);
   // Get an already-initialized inline struct list field.
 
@@ -366,16 +374,12 @@ private:
   void* data;                  // Pointer to the encoded data.
   WireReference* references;   // Pointer to the encoded references.
 
-  BitCount8 bit0Offset;
-  // A special hack:  When accessing a boolean with field number zero, pretend its offset is this
-  // instead of the usual zero.  This is needed to support 1-bit inline structs.
-
   WireReferenceCount16 referenceCount;
   // Size of the pointer segment, available only for the sake of computing size of List(Inline(T)).
 
   inline StructBuilder(SegmentBuilder* segment, void* data, WireReference* references,
-                       BitCount8 bit0Offset, WireReferenceCount referenceCount)
-      : segment(segment), data(data), references(references), bit0Offset(bit0Offset),
+                       WireReferenceCount referenceCount)
+      : segment(segment), data(data), references(references),
         referenceCount(referenceCount) {}
 
   friend class ListBuilder;
@@ -386,7 +390,7 @@ class StructReader {
 public:
   inline StructReader()
       : segment(nullptr), data(nullptr), references(nullptr), dataSize(0),
-        referenceCount(0), bit0Offset(0 * BITS), nestingLimit(0) {}
+        referenceCount(0), nestingLimit(0) {}
 
   static StructReader readRootTrusted(const word* location);
   static StructReader readRoot(const word* location, SegmentReader* segment, int nestingLimit);
@@ -411,7 +415,7 @@ public:
   // be null, in which case an empty struct is used.
 
   CAPNPROTO_ALWAYS_INLINE(StructReader getInlineStructField(
-      BitCount dataOffset, BitCount inlineDataSize,
+      ByteCount dataOffset, ByteCount inlineDataSize,
       WireReferenceCount refIndex, WireReferenceCount inlineRefCount) const);
   // Gets an inlined struct field, given the position and size of the data and pointer sections.
 
@@ -421,7 +425,7 @@ public:
   // initialized.  The default value is allowed to be null, in which case an empty list is used.
 
   CAPNPROTO_ALWAYS_INLINE(ListReader getInlineDataListField(
-      BitCount offset, ElementCount elementCount, FieldSize elementSize) const);
+      ByteCount offset, ElementCount elementCount, FieldSize elementSize) const);
   // Get an inline list field.
 
   CAPNPROTO_ALWAYS_INLINE(ListReader getInlinePointerListField(
@@ -429,7 +433,7 @@ public:
   // Get an inline list field.
 
   CAPNPROTO_ALWAYS_INLINE(ListReader getInlineStructListField(
-      BitCount dataOffset, WireReferenceCount ptrOffset, ElementCount elementCount,
+      ByteCount dataOffset, WireReferenceCount ptrOffset, ElementCount elementCount,
       StructSize elementSize) const);
   // Get an inline struct list field.
 
@@ -449,13 +453,8 @@ private:
   const void* data;
   const WireReference* references;
 
-  BitCount32 dataSize;                 // Size of data segment.
+  ByteCount32 dataSize;                 // Size of data segment.
   WireReferenceCount16 referenceCount;  // Size of the reference segment.
-
-  BitCount8 bit0Offset;
-  // A special hack:  When accessing a boolean with field number zero, pretend its offset is this
-  // instead of the usual zero.  This is needed to allow a boolean list to be upgraded to a list
-  // of structs, and to support 1-bit inline structs.
 
   int nestingLimit;
   // Limits the depth of message structures to guard against stack-overflow-based DoS attacks.
@@ -463,10 +462,9 @@ private:
   // TODO:  Limit to 8 bits for better alignment?
 
   inline StructReader(SegmentReader* segment, const void* data, const WireReference* references,
-                      BitCount dataSize, WireReferenceCount referenceCount,
-                      BitCount bit0Offset, int nestingLimit)
+                      ByteCount dataSize, WireReferenceCount referenceCount, int nestingLimit)
       : segment(segment), data(data), references(references),
-        dataSize(dataSize), referenceCount(referenceCount), bit0Offset(bit0Offset),
+        dataSize(dataSize), referenceCount(referenceCount),
         nestingLimit(nestingLimit) {}
 
   friend class ListReader;
@@ -480,7 +478,7 @@ class ListBuilder {
 public:
   inline ListBuilder()
       : segment(nullptr), data(nullptr), pointers(nullptr), elementCount(0 * ELEMENTS),
-        stepBits(0 * BITS / ELEMENTS), stepPointers(0 * REFERENCES / ELEMENTS) {}
+        stepBytes(0 * BYTES / ELEMENTS), stepPointers(0 * REFERENCES / ELEMENTS) {}
 
   inline ElementCount size();
   // The number of elements in the list.
@@ -540,15 +538,16 @@ private:
 
   ElementCount elementCount;  // Number of elements in the list.
 
-  decltype(BITS / ELEMENTS) stepBits;
+  decltype(BYTES / ELEMENTS) stepBytes;
   decltype(REFERENCES / ELEMENTS) stepPointers;
   // The distance between elements.  Can be tricky e.g. for inlined struct lists.
+  // Bit lists ignore stepBytes -- they are always tightly-packed.
 
   inline ListBuilder(SegmentBuilder* segment, void* data, WireReference* pointers,
-                     decltype(BITS / ELEMENTS) stepBits,
+                     decltype(BYTES / ELEMENTS) stepBytes,
                      decltype(REFERENCES / ELEMENTS) stepPointers, ElementCount size)
       : segment(segment), data(data), pointers(pointers), elementCount(size),
-        stepBits(stepBits), stepPointers(stepPointers) {}
+        stepBytes(stepBytes), stepPointers(stepPointers) {}
 
   friend class StructBuilder;
   friend struct WireHelpers;
@@ -558,7 +557,7 @@ class ListReader {
 public:
   inline ListReader()
       : segment(nullptr), data(nullptr), pointers(nullptr), elementCount(0),
-        stepBits(0 * BITS / ELEMENTS), stepPointers(0 * REFERENCES / ELEMENTS),
+        stepBytes(0 * BYTES / ELEMENTS), stepPointers(0 * REFERENCES / ELEMENTS),
         structDataSize(0), structReferenceCount(0), nestingLimit(0) {}
 
   inline ElementCount size();
@@ -589,11 +588,12 @@ private:
 
   ElementCount elementCount;  // Number of elements in the list.
 
-  decltype(BITS / ELEMENTS) stepBits;
+  decltype(BYTES / ELEMENTS) stepBytes;
   decltype(REFERENCES / ELEMENTS) stepPointers;
   // The distance between elements.  Can be tricky e.g. for inlined struct lists.
+  // Bit lists ignore stepBytes -- they are always tightly-packed.
 
-  BitCount structDataSize;
+  ByteCount structDataSize;
   WireReferenceCount structReferenceCount;
   // If the elements are structs, the properties of the struct.
 
@@ -602,17 +602,17 @@ private:
   // Once this reaches zero, further pointers will be pruned.
 
   inline ListReader(SegmentReader* segment, const void* data, const WireReference* pointers,
-                    ElementCount elementCount, decltype(BITS / ELEMENTS) stepBits,
+                    ElementCount elementCount, decltype(BYTES / ELEMENTS) stepBytes,
                     decltype(REFERENCES / ELEMENTS) stepPointers, int nestingLimit)
       : segment(segment), data(data), pointers(pointers), elementCount(elementCount),
-        stepBits(stepBits), stepPointers(stepPointers), structDataSize(0), structReferenceCount(0),
-        nestingLimit(nestingLimit) {}
+        stepBytes(stepBytes), stepPointers(stepPointers), structDataSize(0),
+        structReferenceCount(0), nestingLimit(nestingLimit) {}
   inline ListReader(SegmentReader* segment, const void* data, const WireReference* pointers,
-                    ElementCount elementCount, decltype(BITS / ELEMENTS) stepBits,
-                    decltype(REFERENCES / ELEMENTS) stepPointers, BitCount structDataSize,
+                    ElementCount elementCount, decltype(BYTES / ELEMENTS) stepBytes,
+                    decltype(REFERENCES / ELEMENTS) stepPointers, ByteCount structDataSize,
                     WireReferenceCount structReferenceCount, int nestingLimit)
       : segment(segment), data(data), pointers(pointers), elementCount(elementCount),
-        stepBits(stepBits), stepPointers(stepPointers), structDataSize(structDataSize),
+        stepBytes(stepBytes), stepPointers(stepPointers), structDataSize(structDataSize),
         structReferenceCount(structReferenceCount), nestingLimit(nestingLimit) {}
 
   friend class StructReader;
@@ -631,10 +631,6 @@ inline T StructBuilder::getDataField(ElementCount offset) const {
 template <>
 inline bool StructBuilder::getDataField<bool>(ElementCount offset) const {
   BitCount boffset = offset * (1 * BITS / ELEMENTS);
-
-  // This branch should always be optimized away when inlining.
-  if (boffset == 0 * BITS) boffset = bit0Offset;
-
   byte* b = reinterpret_cast<byte*>(data) + boffset / BITS_PER_BYTE;
   return (*reinterpret_cast<uint8_t*>(b) & (1 << (boffset % BITS_PER_BYTE / BITS))) != 0;
 }
@@ -658,10 +654,6 @@ inline void StructBuilder::setDataField(
 template <>
 inline void StructBuilder::setDataField<bool>(ElementCount offset, bool value) const {
   BitCount boffset = offset * (1 * BITS / ELEMENTS);
-
-  // This branch should always be optimized away when inlining.
-  if (boffset == 0 * BITS) boffset = bit0Offset;
-
   byte* b = reinterpret_cast<byte*>(data) + boffset / BITS_PER_BYTE;
   uint bitnum = boffset % BITS_PER_BYTE / BITS;
   *reinterpret_cast<uint8_t*>(b) = (*reinterpret_cast<uint8_t*>(b) & ~(1 << bitnum))
@@ -678,37 +670,29 @@ inline void StructBuilder::setDataField(
 }
 
 inline StructBuilder StructBuilder::initInlineStructField(
-    BitCount dataOffset, BitCount inlineDataSize,
+    ByteCount dataOffset, ByteCount inlineDataSize,
     WireReferenceCount refIndex, WireReferenceCount inlineRefCount) const {
-  // This branch should be optimized away.
-  if (inlineDataSize == 1 * BITS) {
-    setDataField<bool>(dataOffset / (1 * BITS / ELEMENTS), false);
-  } else {
-    memset(reinterpret_cast<byte*>(data) + dataOffset / BITS_PER_BYTE / BYTES,
-           0, inlineDataSize / BITS_PER_BYTE / BYTES);
-  }
+  memset(reinterpret_cast<byte*>(data) + dataOffset, 0, inlineDataSize / BYTES);
   memset(reinterpret_cast<word*>(references) + refIndex * WORDS_PER_REFERENCE,
          0, inlineRefCount * WORDS_PER_REFERENCE * BYTES_PER_WORD / BYTES);
   return getInlineStructField(dataOffset, inlineDataSize, refIndex, inlineRefCount);
 }
 
 inline StructBuilder StructBuilder::getInlineStructField(
-    BitCount dataOffset, BitCount inlineDataSize,
+    ByteCount dataOffset, ByteCount inlineDataSize,
     WireReferenceCount refIndex, WireReferenceCount inlineRefCount) const {
   return StructBuilder(
-      segment, reinterpret_cast<byte*>(data) + dataOffset / BITS_PER_BYTE,
+      segment, reinterpret_cast<byte*>(data) + dataOffset,
       // WireReference is incomplete here so we have to cast around...  Bah.
       reinterpret_cast<WireReference*>(
           reinterpret_cast<word*>(references) + refIndex * WORDS_PER_REFERENCE),
-      dataOffset == 0 * BITS ? BitCount(bit0Offset) : dataOffset % BITS_PER_BYTE,
       inlineRefCount);
 }
 
 inline ListBuilder StructBuilder::initInlineDataListField(
-    BitCount offset, BitCount inlineSize,
+    ByteCount offset, ByteCount inlineSize,
     ElementCount elementCount, FieldSize elementSize) const {
-  memset(reinterpret_cast<byte*>(data) + offset / BITS_PER_BYTE, 0,
-         inlineSize / BITS_PER_BYTE / BYTES);
+  memset(reinterpret_cast<byte*>(data) + offset, 0, inlineSize / BYTES);
   return getInlineDataListField(offset, elementCount, elementSize);
 }
 
@@ -721,20 +705,20 @@ inline ListBuilder StructBuilder::initInlinePointerListField(
 }
 
 inline ListBuilder StructBuilder::initInlineStructListField(
-    BitCount dataOffset, WireReferenceCount ptrOffset, ElementCount elementCount,
+    ByteCount dataOffset, WireReferenceCount ptrOffset, ElementCount elementCount,
     StructSize elementSize) const {
-  memset(reinterpret_cast<byte*>(data) + dataOffset / BITS_PER_BYTE, 0,
-         elementSize.dataBits / BITS_PER_BYTE / BYTES);
+  memset(reinterpret_cast<byte*>(data) + dataOffset, 0,
+         elementSize.dataBytes / BYTES);
   memset(reinterpret_cast<word*>(references) + ptrOffset * WORDS_PER_REFERENCE, 0,
          elementSize.pointers * BYTES_PER_REFERENCE / BYTES);
   return getInlineStructListField(dataOffset, ptrOffset, elementCount, elementSize);
 }
 
 inline ListBuilder StructBuilder::getInlineDataListField(
-    BitCount offset, ElementCount elementCount, FieldSize elementSize) const {
+    ByteCount offset, ElementCount elementCount, FieldSize elementSize) const {
   return ListBuilder(
-      segment, reinterpret_cast<byte*>(data) + offset / BITS_PER_BYTE, nullptr,
-      bitsPerElement(elementSize), 0 * REFERENCES / ELEMENTS, elementCount);
+      segment, reinterpret_cast<byte*>(data) + offset, nullptr,
+      bytesPerElement(elementSize), 0 * REFERENCES / ELEMENTS, elementCount);
 }
 
 inline ListBuilder StructBuilder::getInlinePointerListField(
@@ -743,17 +727,17 @@ inline ListBuilder StructBuilder::getInlinePointerListField(
       segment, nullptr,
       reinterpret_cast<WireReference*>(
           reinterpret_cast<word*>(references) + offset * WORDS_PER_REFERENCE),
-      0 * BITS / ELEMENTS, 1 * REFERENCES / ELEMENTS, elementCount);
+      0 * BYTES / ELEMENTS, 1 * REFERENCES / ELEMENTS, elementCount);
 }
 
 inline ListBuilder StructBuilder::getInlineStructListField(
-    BitCount dataOffset, WireReferenceCount ptrOffset, ElementCount elementCount,
+    ByteCount dataOffset, WireReferenceCount ptrOffset, ElementCount elementCount,
     StructSize elementSize) const {
   return ListBuilder(
-      segment, reinterpret_cast<byte*>(data) + dataOffset / BITS_PER_BYTE,
+      segment, reinterpret_cast<byte*>(data) + dataOffset,
       reinterpret_cast<WireReference*>(
           reinterpret_cast<word*>(references) + ptrOffset * WORDS_PER_REFERENCE),
-      elementSize.dataBits / ELEMENTS, elementSize.pointers / ELEMENTS,
+      elementSize.dataBytes / ELEMENTS, elementSize.pointers / ELEMENTS,
       elementCount);
 }
 
@@ -761,7 +745,7 @@ inline ListBuilder StructBuilder::getInlineStructListField(
 
 template <typename T>
 T StructReader::getDataField(ElementCount offset) const {
-  if ((offset + 1 * ELEMENTS) * capnproto::bitsPerElement<T>() <= dataSize) {
+  if ((offset + 1 * ELEMENTS) * capnproto::bytesPerElement<T>() <= dataSize) {
     return reinterpret_cast<const WireValue<T>*>(data)[offset / ELEMENTS].get();
   } else {
     return static_cast<T>(0);
@@ -771,11 +755,7 @@ T StructReader::getDataField(ElementCount offset) const {
 template <>
 inline bool StructReader::getDataField<bool>(ElementCount offset) const {
   BitCount boffset = offset * (1 * BITS / ELEMENTS);
-
-  // This branch should always be optimized away when inlining.
-  if (boffset == 0 * BITS) boffset = bit0Offset;
-
-  if (boffset < dataSize) {
+  if (boffset < dataSize * BITS_PER_BYTE) {
     const byte* b = reinterpret_cast<const byte*>(data) + boffset / BITS_PER_BYTE;
     return (*reinterpret_cast<const uint8_t*>(b) & (1 << (boffset % BITS_PER_BYTE / BITS))) != 0;
   } else {
@@ -794,23 +774,22 @@ T StructReader::getDataField(ElementCount offset, typename MaskType<T>::Type mas
 }
 
 inline StructReader StructReader::getInlineStructField(
-    BitCount dataOffset, BitCount inlineDataSize,
+    ByteCount dataOffset, ByteCount inlineDataSize,
     WireReferenceCount refIndex, WireReferenceCount inlineRefCount) const {
   return StructReader(
-      segment, reinterpret_cast<const byte*>(data) + dataOffset / BITS_PER_BYTE,
+      segment, reinterpret_cast<const byte*>(data) + dataOffset,
       // WireReference is incomplete here so we have to cast around...  Bah.
       reinterpret_cast<const WireReference*>(
           reinterpret_cast<const word*>(references) + refIndex * WORDS_PER_REFERENCE),
       dataSize, inlineRefCount,
-      dataOffset == 0 * BITS ? BitCount(bit0Offset) : dataOffset % BITS_PER_BYTE,
       nestingLimit);
 }
 
 inline ListReader StructReader::getInlineDataListField(
-    BitCount offset, ElementCount elementCount, FieldSize elementSize) const {
+    ByteCount offset, ElementCount elementCount, FieldSize elementSize) const {
   return ListReader(
-      segment, reinterpret_cast<const byte*>(data) + offset / BITS_PER_BYTE, nullptr,
-      elementCount, bitsPerElement(elementSize), 0 * REFERENCES / ELEMENTS,
+      segment, reinterpret_cast<const byte*>(data) + offset, nullptr,
+      elementCount, bytesPerElement(elementSize), 0 * REFERENCES / ELEMENTS,
       nestingLimit);
 }
 
@@ -820,19 +799,19 @@ inline ListReader StructReader::getInlinePointerListField(
       segment, nullptr,
       reinterpret_cast<const WireReference*>(
           reinterpret_cast<const word*>(references) + offset * WORDS_PER_REFERENCE),
-      elementCount, 0 * BITS / ELEMENTS, 1 * REFERENCES / ELEMENTS,
+      elementCount, 0 * BYTES / ELEMENTS, 1 * REFERENCES / ELEMENTS,
       nestingLimit);
 }
 
 inline ListReader StructReader::getInlineStructListField(
-    BitCount dataOffset, WireReferenceCount ptrOffset, ElementCount elementCount,
+    ByteCount dataOffset, WireReferenceCount ptrOffset, ElementCount elementCount,
     StructSize elementSize) const {
   return ListReader(
-      segment, reinterpret_cast<const byte*>(data) + dataOffset / BITS_PER_BYTE,
+      segment, reinterpret_cast<const byte*>(data) + dataOffset,
       reinterpret_cast<const WireReference*>(
           reinterpret_cast<const word*>(references) + ptrOffset * WORDS_PER_REFERENCE),
-      elementCount, elementSize.dataBits / ELEMENTS, elementSize.pointers / ELEMENTS,
-      elementSize.dataBits, elementSize.pointers, nestingLimit);
+      elementCount, elementSize.dataBytes / ELEMENTS, elementSize.pointers / ELEMENTS,
+      elementSize.dataBytes, elementSize.pointers, nestingLimit);
 }
 
 // -------------------------------------------------------------------
@@ -842,12 +821,13 @@ inline ElementCount ListBuilder::size() { return elementCount; }
 template <typename T>
 inline T ListBuilder::getDataElement(ElementCount index) const {
   return reinterpret_cast<WireValue<T>*>(
-      reinterpret_cast<byte*>(data) + index * stepBits / BITS_PER_BYTE)->get();
+      reinterpret_cast<byte*>(data) + index * stepBytes)->get();
 }
 
 template <>
 inline bool ListBuilder::getDataElement<bool>(ElementCount index) const {
-  BitCount bindex = index * stepBits;
+  // Ignore stepBytes for bit lists because bit lists cannot be upgraded to struct lists.
+  BitCount bindex = index * (1 * BITS / ELEMENTS);
   byte* b = reinterpret_cast<byte*>(data) + bindex / BITS_PER_BYTE;
   return (*reinterpret_cast<uint8_t*>(b) & (1 << (bindex % BITS_PER_BYTE / BITS))) != 0;
 }
@@ -860,12 +840,13 @@ inline Void ListBuilder::getDataElement<Void>(ElementCount index) const {
 template <typename T>
 inline void ListBuilder::setDataElement(ElementCount index, typename NoInfer<T>::Type value) const {
   reinterpret_cast<WireValue<T>*>(
-      reinterpret_cast<byte*>(data) + index * stepBits / BITS_PER_BYTE)->set(value);
+      reinterpret_cast<byte*>(data) + index * stepBytes)->set(value);
 }
 
 template <>
 inline void ListBuilder::setDataElement<bool>(ElementCount index, bool value) const {
-  BitCount bindex = index * stepBits;
+  // Ignore stepBytes for bit lists because bit lists cannot be upgraded to struct lists.
+  BitCount bindex = index * (1 * BITS / ELEMENTS);
   byte* b = reinterpret_cast<byte*>(data) + bindex / BITS_PER_BYTE;
   uint bitnum = bindex % BITS_PER_BYTE / BITS;
   *reinterpret_cast<uint8_t*>(b) = (*reinterpret_cast<uint8_t*>(b) & ~(1 << bitnum))
@@ -882,12 +863,13 @@ inline ElementCount ListReader::size() { return elementCount; }
 template <typename T>
 inline T ListReader::getDataElement(ElementCount index) const {
   return reinterpret_cast<const WireValue<T>*>(
-      reinterpret_cast<const byte*>(data) + index * stepBits / BITS_PER_BYTE)->get();
+      reinterpret_cast<const byte*>(data) + index * stepBytes)->get();
 }
 
 template <>
 inline bool ListReader::getDataElement<bool>(ElementCount index) const {
-  BitCount bindex = index * stepBits;
+  // Ignore stepBytes for bit lists because bit lists cannot be upgraded to struct lists.
+  BitCount bindex = index * (1 * BITS / ELEMENTS);
   const byte* b = reinterpret_cast<const byte*>(data) + bindex / BITS_PER_BYTE;
   return (*reinterpret_cast<const uint8_t*>(b) & (1 << (bindex % BITS_PER_BYTE / BITS))) != 0;
 }
