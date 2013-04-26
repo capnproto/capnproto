@@ -412,6 +412,24 @@ struct TestInlineLists {
   structList192p @22 : InlineList(TestInline192p, 2);
 }
 
+struct TestStructLists {
+  struct Struct0  { f @0 :Void; }
+  struct Struct1  { f @0 :Bool; }
+  struct Struct8  { f @0 :UInt8; }
+  struct Struct16 { f @0 :UInt16; }
+  struct Struct32 { f @0 :UInt32; }
+  struct Struct64 { f @0 :UInt64; }
+  struct StructP  { f @0 :Text; }
+
+  list0  @0 :List(Struct0);
+  list1  @1 :List(Struct1);
+  list8  @2 :List(Struct8);
+  list16 @3 :List(Struct16);
+  list32 @4 :List(Struct32);
+  list64 @5 :List(Struct64);
+  listP  @6 :List(StructP);
+}
+
 struct TestInlineDefaults {
   normal @0 :TestInlineLayout = (
       f0 = (f = void),
@@ -485,6 +503,14 @@ struct TestInlineDefaults {
                         (p0 = "quxbaz", p1 = "quxqux", p2 = "quxcorge")],
       structList192p = [(f = (f2 = 123456789012345),
                          p0 = "corgebaz", p1 = "corgequx", p2 = "corgecorge"),
-                        (p0 = "graultbaz", p1 = "graultqux", p2 = "graultcorge")]
-      );
+                        (p0 = "graultbaz", p1 = "graultqux", p2 = "graultcorge")]);
+
+  structLists @3 :TestStructLists = (
+      list0  = [(f = void), (f = void)],
+      list1  = [(f = true), (f = false)],
+      list8  = [(f = 123), (f = 45)],
+      list16 = [(f = 12345), (f = 6789)],
+      list32 = [(f = 123456789), (f = 234567890)],
+      list64 = [(f = 1234567890123456), (f = 2345678901234567)],
+      listP  = [(f = "foo"), (f = "bar")]);
 }

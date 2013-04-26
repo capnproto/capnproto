@@ -772,6 +772,74 @@ TEST(Encoding, InlineDefaults) {
     EXPECT_EQ("graultqux", lists.getStructList192p()[1].getP1());
     EXPECT_EQ("graultcorge", lists.getStructList192p()[1].getP2());
   }
+
+  {
+    auto sl = reader.getStructLists();
+
+    ASSERT_EQ(2u, sl.getList0().size());
+    ASSERT_EQ(2u, sl.getList1().size());
+    ASSERT_EQ(2u, sl.getList8().size());
+    ASSERT_EQ(2u, sl.getList16().size());
+    ASSERT_EQ(2u, sl.getList32().size());
+    ASSERT_EQ(2u, sl.getList64().size());
+    ASSERT_EQ(2u, sl.getListP().size());
+
+    EXPECT_EQ(Void::VOID, sl.getList0()[0].getF());
+    EXPECT_EQ(Void::VOID, sl.getList0()[1].getF());
+    EXPECT_TRUE(sl.getList1()[0].getF());
+    EXPECT_FALSE(sl.getList1()[1].getF());
+    EXPECT_EQ(123u, sl.getList8()[0].getF());
+    EXPECT_EQ(45u, sl.getList8()[1].getF());
+    EXPECT_EQ(12345u, sl.getList16()[0].getF());
+    EXPECT_EQ(6789u, sl.getList16()[1].getF());
+    EXPECT_EQ(123456789u, sl.getList32()[0].getF());
+    EXPECT_EQ(234567890u, sl.getList32()[1].getF());
+    EXPECT_EQ(1234567890123456u, sl.getList64()[0].getF());
+    EXPECT_EQ(2345678901234567u, sl.getList64()[1].getF());
+    EXPECT_EQ("foo", sl.getListP()[0].getF());
+    EXPECT_EQ("bar", sl.getListP()[1].getF());
+  }
+}
+
+TEST(Encoding, SmallStructLists) {
+  // In this test, we will manually initialize TestInlineDefaults.structLists to match the default
+  // value and verify that we end up with the same encoding that the compiler produces.
+
+  MallocMessageBuilder builder;
+  auto root = builder.getRoot<TestInlineDefaults>();
+  auto sl = root.initStructLists();
+
+  // Verify that all the lists are actually empty.
+  EXPECT_EQ(0u, sl.getList0 ().size());
+  EXPECT_EQ(0u, sl.getList1 ().size());
+  EXPECT_EQ(0u, sl.getList8 ().size());
+  EXPECT_EQ(0u, sl.getList16().size());
+  EXPECT_EQ(0u, sl.getList32().size());
+  EXPECT_EQ(0u, sl.getList64().size());
+  EXPECT_EQ(0u, sl.getListP ().size());
+
+  { auto l = sl.initList0 (2); l[0].setF(Void::VOID);        l[1].setF(Void::VOID); }
+  { auto l = sl.initList1 (2); l[0].setF(true);              l[1].setF(false); }
+  { auto l = sl.initList8 (2); l[0].setF(123u);              l[1].setF(45u); }
+  { auto l = sl.initList16(2); l[0].setF(12345u);            l[1].setF(6789u); }
+  { auto l = sl.initList32(2); l[0].setF(123456789u);        l[1].setF(234567890u); }
+  { auto l = sl.initList64(2); l[0].setF(1234567890123456u); l[1].setF(2345678901234567u); }
+  { auto l = sl.initListP (2); l[0].setF("foo");             l[1].setF("bar"); }
+
+  ArrayPtr<const word> segment = builder.getSegmentsForOutput()[0];
+
+  // Initialize another message such that it copies the default value for that field.
+  MallocMessageBuilder defaultBuilder;
+  defaultBuilder.getRoot<TestInlineDefaults>().getStructLists();
+  ArrayPtr<const word> defaultSegment = defaultBuilder.getSegmentsForOutput()[0];
+
+  // Should match...
+  EXPECT_EQ(defaultSegment.size(), segment.size());
+
+  for (size_t i = 0; i < std::min(segment.size(), defaultSegment.size()); i++) {
+    EXPECT_EQ(reinterpret_cast<const uint64_t*>(defaultSegment.begin())[i],
+              reinterpret_cast<const uint64_t*>(segment.begin())[i]);
+  }
 }
 
 // =======================================================================================
