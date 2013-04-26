@@ -507,7 +507,7 @@ demoteOffset Size1 _ = error "can't split bit"
 demoteOffset Size8 i = i * 8
 demoteOffset _ i = i * 2
 
-data UnionSlot sizeType = UnionSlot { unionSlotSize :: sizeType, unionSlotOffset :: Integer }
+data UnionSlot sizeType = UnionSlot sizeType Integer   -- size, offset
 data UnionPackingState = UnionPackingState
     { unionDataSlot :: UnionSlot DataSectionSize
     , unionPointerSlot :: UnionSlot Integer }
