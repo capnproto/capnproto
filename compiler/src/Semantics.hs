@@ -57,6 +57,7 @@ data Desc = DescFile FileDesc
           | DescBuiltinList
           | DescBuiltinInline
           | DescBuiltinInlineList
+          | DescBuiltinInlineData
           | DescBuiltinId
 
 descName (DescFile      _) = "(top-level)"
@@ -75,6 +76,7 @@ descName (DescBuiltinType d) = builtinTypeName d
 descName DescBuiltinList = "List"
 descName DescBuiltinInline = "Inline"
 descName DescBuiltinInlineList = "InlineList"
+descName DescBuiltinInlineData = "InlineData"
 descName DescBuiltinId = "id"
 
 descId (DescFile      d) = fileId d
@@ -93,6 +95,7 @@ descId (DescBuiltinType _) = Nothing
 descId DescBuiltinList = Nothing
 descId DescBuiltinInline = Nothing
 descId DescBuiltinInlineList = Nothing
+descId DescBuiltinInlineData = Nothing
 descId DescBuiltinId = Just "0U0T3e_SnatEfk6UcH2tcjTt1E0"
 
 -- Gets the ID if explicitly defined, or generates it by appending ".name" to the parent's ID.
@@ -119,6 +122,7 @@ descParent (DescBuiltinType _) = error "Builtin type has no parent."
 descParent DescBuiltinList = error "Builtin type has no parent."
 descParent DescBuiltinInline = error "Builtin type has no parent."
 descParent DescBuiltinInlineList = error "Builtin type has no parent."
+descParent DescBuiltinInlineData = error "Builtin type has no parent."
 descParent DescBuiltinId = error "Builtin annotation has no parent."
 
 descFile (DescFile d) = d
@@ -140,6 +144,7 @@ descAnnotations (DescBuiltinType _) = Map.empty
 descAnnotations DescBuiltinList = Map.empty
 descAnnotations DescBuiltinInline = Map.empty
 descAnnotations DescBuiltinInlineList = Map.empty
+descAnnotations DescBuiltinInlineData = Map.empty
 descAnnotations DescBuiltinId = Map.empty
 
 descRuntimeImports (DescFile      _) = error "Not to be called on files."
@@ -158,6 +163,7 @@ descRuntimeImports (DescBuiltinType _) = []
 descRuntimeImports DescBuiltinList = []
 descRuntimeImports DescBuiltinInline = []
 descRuntimeImports DescBuiltinInlineList = []
+descRuntimeImports DescBuiltinInlineData = []
 descRuntimeImports DescBuiltinId = []
 
 type MemberMap = Map.Map String (Maybe Desc)
@@ -228,6 +234,7 @@ data TypeDesc = BuiltinType BuiltinType
               | InterfaceType InterfaceDesc
               | ListType TypeDesc
               | InlineListType TypeDesc Integer
+              | InlineDataType Integer
 
 typeRuntimeImports (BuiltinType _) = []
 typeRuntimeImports (EnumType d) = [descFile (DescEnum d)]
@@ -236,6 +243,7 @@ typeRuntimeImports (InlineStructType d) = [descFile (DescStruct d)]
 typeRuntimeImports (InterfaceType d) = [descFile (DescInterface d)]
 typeRuntimeImports (ListType d) = typeRuntimeImports d
 typeRuntimeImports (InlineListType d _) = typeRuntimeImports d
+typeRuntimeImports (InlineDataType _) = []
 
 data DataSectionSize = DataSection1 | DataSection8 | DataSection16 | DataSection32
                      | DataSectionWords Integer
@@ -337,6 +345,12 @@ fieldSize (InlineListType element size) = let
         SizeReference -> size
         SizeInlineComposite _ pc -> pc * size
     in SizeInlineComposite dataSection pointerCount
+fieldSize (InlineDataType size)
+    | size <= 0 = SizeInlineComposite (DataSectionWords 0) 0
+    | size <= 1 = SizeInlineComposite DataSection8 0
+    | size <= 2 = SizeInlineComposite DataSection16 0
+    | size <= 4 = SizeInlineComposite DataSection32 0
+    | otherwise = SizeInlineComposite (DataSectionWords (div (size + 7) 8)) 0
 
 -- Render the type descriptor's name as a string, appropriate for use in the given scope.
 typeName :: Desc -> TypeDesc -> String
@@ -347,6 +361,7 @@ typeName scope (InlineStructType desc) = descQualifiedName scope (DescStruct des
 typeName scope (InterfaceType desc) = descQualifiedName scope (DescInterface desc)
 typeName scope (ListType t) = "List(" ++ typeName scope t ++ ")"
 typeName scope (InlineListType t s) = printf "InlineList(%s, %d)" (typeName scope t) s
+typeName scope (InlineDataType s) = printf "InlineData(%d)" s
 
 -- Computes the qualified name for the given descriptor within the given scope.
 -- At present the scope is only used to determine whether the target is in the same file.  If
@@ -605,6 +620,7 @@ descToCode _ (DescBuiltinType _) = error "Can't print code for builtin type."
 descToCode _ DescBuiltinList = error "Can't print code for builtin type."
 descToCode _ DescBuiltinInline = error "Can't print code for builtin type."
 descToCode _ DescBuiltinInlineList = error "Can't print code for builtin type."
+descToCode _ DescBuiltinInlineData = error "Can't print code for builtin type."
 descToCode _ DescBuiltinId = error "Can't print code for builtin annotation."
 
 maybeBlockCode :: String -> [Desc] -> String

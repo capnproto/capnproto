@@ -164,6 +164,7 @@ builtinTypeMap = Map.fromList
      [("List", DescBuiltinList),
       ("Inline", DescBuiltinInline),
       ("InlineList", DescBuiltinInlineList),
+      ("InlineData", DescBuiltinInlineData),
       ("id", DescBuiltinId)])
 
 ------------------------------------------------------------------------------------------
@@ -255,6 +256,12 @@ compileValue pos (InlineListType t s) (ListFieldValue l) = do
         makeError pos $ printf "Fixed-size list must have exactly %d elements." s
     return $ ListDesc elements
 
+compileValue pos (InlineDataType s) (StringFieldValue x) = let
+    bytes = map (fromIntegral . fromEnum) x
+    in if List.genericLength bytes == s
+        then succeed $ DataDesc bytes
+        else makeError pos $ printf "Fixed-size data must have exactly %d bytes." s
+
 compileValue pos (BuiltinType BuiltinVoid) _ = makeError pos "Void fields cannot have values."
 compileValue pos (BuiltinType BuiltinBool) _ = makeExpectError pos "boolean"
 compileValue pos (BuiltinType BuiltinInt8) _ = makeExpectError pos "integer"
@@ -275,6 +282,7 @@ compileValue pos (StructType _) _ = makeExpectError pos "parenthesized list of f
 compileValue pos (InterfaceType _) _ = makeError pos "Interfaces can't have default values."
 compileValue pos (ListType _) _ = makeExpectError pos "list"
 compileValue pos (InlineListType _ _) _ = makeExpectError pos "list"
+compileValue pos (InlineDataType _) _ = makeExpectError pos "string"
 
 descAsType _ (DescEnum desc) = succeed (EnumType desc)
 descAsType _ (DescStruct desc) = succeed (StructType desc)
@@ -286,7 +294,9 @@ descAsType name DescBuiltinList = makeError (declNamePos name) message where
 descAsType name DescBuiltinInline = makeError (declNamePos name) message where
             message = printf "'Inline' requires exactly one type parameter." (declNameString name)
 descAsType name DescBuiltinInlineList = makeError (declNamePos name) message where
-            message = printf "'InlineList' requires exactly one type parameter." (declNameString name)
+            message = printf "'InlineList' requires exactly two type parameters." (declNameString name)
+descAsType name DescBuiltinInlineData = makeError (declNamePos name) message where
+            message = printf "'InlineData' requires exactly one type parameter." (declNameString name)
 descAsType name _ = makeError (declNamePos name) message where
             message = printf "'%s' is not a type." (declNameString name)
 
@@ -328,9 +338,15 @@ compileType scope (TypeExpression n params) = do
                                    (structName s)
                     InlineListType _ _ -> makeError (declNamePos n)
                         "InlineList of InlineList not currently supported."
+                    InlineDataType _ -> makeError (declNamePos n)
+                        "InlineList of InlineData not currently supported."
                     _ -> return $ InlineListType inner size
             _ -> makeError (declNamePos n)
                 "'InlineList' requires exactly two type parameters: a type and a size."
+        DescBuiltinInlineData -> case params of
+            [TypeParameterInteger size] -> return $ InlineDataType size
+            _ -> makeError (declNamePos n)
+                "'InlineData' requires exactly one type parameter: the byte size of the data."
         _ -> case params of
             [] -> descAsType n desc
             _ -> makeError (declNamePos n) $
@@ -880,6 +896,10 @@ compileDecl scope
                 result <- fmap Just (compileValue defaultPos typeDesc value)
                 recover () (case typeDesc of
                     InlineStructType _ ->
+                        makeError defaultPos "Inline fields cannot have default values."
+                    InlineListType _ _ ->
+                        makeError defaultPos "Inline fields cannot have default values."
+                    InlineDataType _ ->
                         makeError defaultPos "Inline fields cannot have default values."
                     _ -> return ())
                 return result

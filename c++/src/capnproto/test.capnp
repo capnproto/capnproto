@@ -23,7 +23,9 @@
 
 using Cxx = import "c++.capnp";
 
-$Cxx.namespace("capnproto::test");
+# Use a namespace likely to cause trouble if the generated code doesn't use fully-qualified
+# names for stuff in the capnproto namespace.
+$Cxx.namespace("capnproto_test::capnproto::test");
 
 enum TestEnum {
   foo @0;
@@ -406,6 +408,8 @@ struct TestInlineLists {
   structList64p  @20 : InlineList(TestInline64p, 3);
   structList128p @21 : InlineList(TestInline128p, 4);
   structList192p @22 : InlineList(TestInline192p, 2);
+
+  data @23 :InlineData(5);
 }
 
 struct TestStructLists {
@@ -426,6 +430,22 @@ struct TestStructLists {
   list32 @4 :List(Struct32);
   list64 @5 :List(Struct64);
   listP  @6 :List(StructP);
+}
+
+struct TestListLists {
+  int32ListList @0 :List(List(Int32));
+  textListList @1 :List(List(Text));
+  structListList @2 :List(List(TestAllTypes));
+
+  int32InlineListList @3 :List(InlineList(Int32, 7));
+  textInlineListList @4 :List(InlineList(Text, 5));
+  structInlineListList @5 :List(InlineList(TestInline32p, 3));
+  inlineDataList @6 :List(InlineData(9));
+
+  int32InlineListListList @7 :List(List(InlineList(Int32, 2)));
+  textInlineListListList @8 :List(List(InlineList(Text, 5)));
+  structInlineListListList @9 :List(List(InlineList(TestInline32p, 3)));
+  inlineDataListList @10 :List(List(InlineData(3)));
 }
 
 struct TestInlineDefaults {
@@ -497,7 +517,9 @@ struct TestInlineDefaults {
                         (p0 = "quxbaz", p1 = "quxqux", p2 = "quxcorge")],
       structList192p = [(f = (f2 = 123456789012345),
                          p0 = "corgebaz", p1 = "corgequx", p2 = "corgecorge"),
-                        (p0 = "graultbaz", p1 = "graultqux", p2 = "graultcorge")]);
+                        (p0 = "graultbaz", p1 = "graultqux", p2 = "graultcorge")],
+
+      data = "12345");
 
   structLists @3 :TestStructLists = (
       list0  = [(f = void), (f = void)],
@@ -507,4 +529,30 @@ struct TestInlineDefaults {
       list32 = [(f = 123456789), (f = 234567890)],
       list64 = [(f = 1234567890123456), (f = 2345678901234567)],
       listP  = [(f = "foo"), (f = "bar")]);
+
+  listLists @4 :TestListLists = (
+      int32ListList = [[1, 2, 3], [4, 5], [12341234]],
+      textListList = [["foo", "bar"], ["baz"], ["qux", "corge"]],
+      structListList = [[(int32Field = 123), (int32Field = 456)], [(int32Field = 789)]],
+
+      int32InlineListList = [[1, 2, 3, 4, 5, 6, 123456789], [987654321, 6, 5, 4, 3, 2, 1]],
+      textInlineListList = [["grault1", "grault2", "grault3", "grault4", "grault5"],
+                            ["garply1", "garply2", "garply3", "garply4", "garply5"],
+                            ["waldo1", "waldo2", "waldo3", "waldo4", "waldo5"]],
+      structInlineListList =
+          [[(f=(f1=123), p0="fred1"), (f=(f1=456), p0="fred2"), (f=(f1=789), p0="fred3")],
+           [(f=(f1=321), p0="plugh1"), (f=(f1=654), p0="plugh2"), (f=(f1=987), p0="plugh3")],
+           [(f=(f1=111), p0="thud1"), (f=(f1=222), p0="thud2"), (f=(f1=333), p0="thud3")]],
+      inlineDataList = ["123456789", "234567890", "345678901", "456789012", "567890123"],
+
+      int32InlineListListList = [[[1, 2], [3, 4], [5, 6]], [[7, 8], [9, 10]], [[1234567,7654321]]],
+      textInlineListListList = [[["1", "2", "3", "4", "5"],
+                                 ["foo", "bar", "baz", "qux", "corge"]],
+                                [["z", "y", "x", "w", "v"]]],
+      structInlineListListList =
+          [[[(f=(f1=123), p0="fred1"), (f=(f1=456), p0="fred2"), (f=(f1=789), p0="fred3")],
+            [(f=(f1=321), p0="plugh1"), (f=(f1=654), p0="plugh2"), (f=(f1=987), p0="plugh3")]],
+           [[(f=(f1=111), p0="thud1"), (f=(f1=222), p0="thud2"), (f=(f1=333), p0="thud3")]]],
+
+      inlineDataListList = [["foo", "bar", "baz"], ["123", "234"]]);
 }

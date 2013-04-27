@@ -48,30 +48,35 @@ inline std::ostream& operator<<(std::ostream& os, Void) {
 
 namespace internal {
 
-// Explicitly import each of these to make sure they're really located in capnproto::test and not,
-// say, the global namespace.
-using ::capnproto::test::TestAllTypes;
-using ::capnproto::test::TestDefaults;
-using ::capnproto::test::TestEnum;
-using ::capnproto::test::TestUnion;
-using ::capnproto::test::TestUnionDefaults;
-using ::capnproto::test::TestNestedTypes;
-using ::capnproto::test::TestUsing;
-using ::capnproto::test::TestInlineLayout;
-using ::capnproto::test::TestInlineUnions;
-using ::capnproto::test::TestInlineDefaults;
+namespace test = capnproto_test::capnproto::test;
 
-void initTestMessage(test::TestAllTypes::Builder builder);
-void initTestMessage(test::TestDefaults::Builder builder);
+// We don't use "using namespace" to pull these in because then things would still compile
+// correctly if they were generated in the global namespace.
+using ::capnproto_test::capnproto::test::TestAllTypes;
+using ::capnproto_test::capnproto::test::TestDefaults;
+using ::capnproto_test::capnproto::test::TestEnum;
+using ::capnproto_test::capnproto::test::TestUnion;
+using ::capnproto_test::capnproto::test::TestUnionDefaults;
+using ::capnproto_test::capnproto::test::TestNestedTypes;
+using ::capnproto_test::capnproto::test::TestUsing;
+using ::capnproto_test::capnproto::test::TestInlineLayout;
+using ::capnproto_test::capnproto::test::TestInlineUnions;
+using ::capnproto_test::capnproto::test::TestInlineDefaults;
 
-void checkTestMessage(test::TestAllTypes::Builder builder);
-void checkTestMessage(test::TestDefaults::Builder builder);
+void initTestMessage(TestAllTypes::Builder builder);
+void initTestMessage(TestDefaults::Builder builder);
+void initTestMessage(TestInlineDefaults::Builder builder);
 
-void checkTestMessage(test::TestAllTypes::Reader reader);
-void checkTestMessage(test::TestDefaults::Reader reader);
+void checkTestMessage(TestAllTypes::Builder builder);
+void checkTestMessage(TestDefaults::Builder builder);
+void checkTestMessage(TestInlineDefaults::Builder builder);
 
-void checkTestMessageAllZero(test::TestAllTypes::Builder builder);
-void checkTestMessageAllZero(test::TestAllTypes::Reader reader);
+void checkTestMessage(TestAllTypes::Reader reader);
+void checkTestMessage(TestDefaults::Reader reader);
+void checkTestMessage(TestInlineDefaults::Reader reader);
+
+void checkTestMessageAllZero(TestAllTypes::Builder builder);
+void checkTestMessageAllZero(TestAllTypes::Reader reader);
 
 }  // namespace internal
 }  // namespace capnproto

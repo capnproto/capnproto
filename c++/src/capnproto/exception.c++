@@ -26,6 +26,8 @@
 #include "util.h"
 #include "logging.h"
 #include <unistd.h>
+#include <execinfo.h>
+#include <stdlib.h>
 
 namespace capnproto {
 
@@ -59,10 +61,15 @@ Exception::Exception(Nature nature, Durability durability, const char* file, int
       description(move(description)) {
   bool hasDescription = this->description != nullptr;
 
+  void* trace[16];
+  int traceCount = backtrace(trace, 16);
+  ArrayPtr<void*> traceArray = arrayPtr(trace, traceCount);
+
   // Must be careful to NUL-terminate this.
   whatStr = str(file, ":", line, ": ", nature,
                 durability == Durability::TEMPORARY ? " (temporary)" : "",
-                hasDescription ? ": " : "", this->description, '\0');
+                hasDescription ? ": " : "", this->description,
+                "\nstack: ", strArray(traceArray, " "), '\0');
 }
 
 Exception::Exception(const Exception& other) noexcept

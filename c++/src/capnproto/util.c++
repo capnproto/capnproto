@@ -47,6 +47,7 @@ STRINGIFY_INT(long, "%ld");
 STRINGIFY_INT(unsigned long, "%lu");
 STRINGIFY_INT(long long, "%lld");
 STRINGIFY_INT(unsigned long long, "%llu");
+STRINGIFY_INT(const void*, "%p");
 
 #undef STRINGIFY_INT
 

@@ -40,6 +40,11 @@ struct Text {
   class Builder;
 };
 
+template <size_t size>
+struct InlineData: public Data {};
+// Alias for Data used specifically for InlineData fields.  This primarily exists so that
+// List<InlineData<n>> can be specialized.
+
 class Data::Reader {
   // Points to a blob of bytes.  The usual Reader rules apply -- Data::Reader behaves like a simple
   // pointer which does not own its target, can be passed by value, etc.

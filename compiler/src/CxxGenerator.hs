@@ -92,10 +92,15 @@ isPrimitive (InlineStructType _) = False
 isPrimitive (InterfaceType _) = False
 isPrimitive (ListType _) = False
 isPrimitive (InlineListType _ _) = False
+isPrimitive (InlineDataType _) = False
 
 isBlob (BuiltinType BuiltinText) = True
 isBlob (BuiltinType BuiltinData) = True
+isBlob (InlineDataType _) = True
 isBlob _ = False
+
+isInlineBlob (InlineDataType _) = True
+isInlineBlob _ = False
 
 isStruct (StructType _) = True
 isStruct (InlineStructType _) = True
@@ -116,6 +121,18 @@ isPrimitiveList (ListType t) = isPrimitive t
 isPrimitiveList (InlineListType t _) = isPrimitive t
 isPrimitiveList _ = False
 
+isPointerElement (InlineDataType _) = False
+isPointerElement t = not (isPrimitive t || isStruct t || isInlineList t)
+
+isPointerList (ListType t) = isPointerElement t
+isPointerList (InlineListType t _) = isPointerElement t
+isPointerList _ = False
+
+isInlineBlobList (ListType t) = isInlineBlob t
+isInlineBlobList _ = False
+
+isStructList (ListType t@(InlineListType _ _)) = isStructList t
+isStructList (InlineListType t@(InlineListType _ _) _) = isStructList t
 isStructList (ListType t) = isStruct t
 isStructList (InlineListType t _) = isStruct t
 isStructList _ = False
@@ -125,7 +142,19 @@ isInlineList _ = False
 
 blobTypeString (BuiltinType BuiltinText) = "Text"
 blobTypeString (BuiltinType BuiltinData) = "Data"
+blobTypeString (InlineDataType _) = "Data"
+blobTypeString (ListType t) = blobTypeString t
+blobTypeString (InlineListType t _) = blobTypeString t
 blobTypeString _ = error "Not a blob."
+
+inlineMultiplier (InlineListType t s) = s * inlineMultiplier t
+inlineMultiplier (InlineDataType s) = s
+inlineMultiplier _ = 1
+
+listInlineMultiplierString (ListType t) = case inlineMultiplier t of
+    1 -> ""
+    s -> " * " ++ show s
+listInlineMultiplierString _ = error "Not a list."
 
 cxxTypeString (BuiltinType BuiltinVoid) = " ::capnproto::Void"
 cxxTypeString (BuiltinType BuiltinBool) = "bool"
@@ -146,7 +175,10 @@ cxxTypeString (StructType desc) = globalName $ DescStruct desc
 cxxTypeString (InlineStructType desc) = globalName $ DescStruct desc
 cxxTypeString (InterfaceType desc) = globalName $ DescInterface desc
 cxxTypeString (ListType t) = concat [" ::capnproto::List<", cxxTypeString t, ">"]
-cxxTypeString (InlineListType t _) = concat [" ::capnproto::List<", cxxTypeString t, ">"]
+cxxTypeString (InlineListType t s) =
+    concat [" ::capnproto::InlineList<", cxxTypeString t, ", ", show s, ">"]
+cxxTypeString (InlineDataType s) =
+    concat [" ::capnproto::InlineData<", show s, ">"]
 
 cxxFieldSizeString SizeVoid = "VOID";
 cxxFieldSizeString (SizeData Size1) = "BIT";
@@ -214,6 +246,10 @@ elementType (ListType t) = t
 elementType (InlineListType t _) = t
 elementType _ = error "Called elementType on non-list."
 
+inlineElementType (ListType t@(InlineListType _ _)) = inlineElementType t
+inlineElementType (InlineListType t@(InlineListType _ _) _) = inlineElementType t
+inlineElementType t = elementType t
+
 repeatedlyTake _ [] = []
 repeatedlyTake n l = take n l : repeatedlyTake n (drop n l)
 
@@ -247,11 +283,14 @@ fieldContext parent desc = mkStrContext context where
     context "fieldUpperCase" = MuVariable $ toUpperCaseWithUnderscores $ fieldName desc
     context "fieldIsPrimitive" = MuBool $ isPrimitive $ fieldType desc
     context "fieldIsBlob" = MuBool $ isBlob $ fieldType desc
+    context "fieldIsInlineBlob" = MuBool $ isInlineBlob $ fieldType desc
     context "fieldIsStruct" = MuBool $ isStruct $ fieldType desc
     context "fieldIsInlineStruct" = MuBool $ isInlineStruct $ fieldType desc
     context "fieldIsList" = MuBool $ isList $ fieldType desc
     context "fieldIsNonStructList" = MuBool $ isNonStructList $ fieldType desc
     context "fieldIsPrimitiveList" = MuBool $ isPrimitiveList $ fieldType desc
+    context "fieldIsPointerList" = MuBool $ isPointerList $ fieldType desc
+    context "fieldIsInlineBlobList" = MuBool $ isInlineBlobList $ fieldType desc
     context "fieldIsStructList" = MuBool $ isStructList $ fieldType desc
     context "fieldIsInlineList" = MuBool $ isInlineList $ fieldType desc
     context "fieldDefaultBytes" =
@@ -263,6 +302,7 @@ fieldContext parent desc = mkStrContext context where
     context "fieldOffset" = MuVariable $ fieldOffsetInteger $ fieldOffset desc
     context "fieldInlineListSize" = case fieldType desc of
         InlineListType _ n -> MuVariable n
+        InlineDataType n -> MuVariable n
         _ -> muNull
     context "fieldInlineDataOffset" = case fieldOffset desc of
         InlineCompositeOffset off _ size _ ->
@@ -278,13 +318,16 @@ fieldContext parent desc = mkStrContext context where
     context "fieldInlinePointerSize" = case fieldOffset desc of
         InlineCompositeOffset _ _ _ size -> MuVariable size
         _ -> muNull
+    context "fieldInlineMultiplier" = MuVariable $ listInlineMultiplierString $ fieldType desc
     context "fieldDefaultMask" = case fieldDefaultValue desc of
         Nothing -> MuVariable ""
         Just v -> MuVariable (if isDefaultZero v then "" else ", " ++ defaultMask v)
     context "fieldElementSize" =
-        MuVariable $ cxxFieldSizeString $ fieldSize $ elementType $ fieldType desc
+        MuVariable $ cxxFieldSizeString $ fieldSize $ inlineElementType $ fieldType desc
     context "fieldElementType" =
         MuVariable $ cxxTypeString $ elementType $ fieldType desc
+    context "fieldInlineElementType" =
+        MuVariable $ cxxTypeString $ inlineElementType $ fieldType desc
     context "fieldUnion" = case fieldUnion desc of
         Just (u, _) -> muJust $ unionContext context u
         Nothing -> muNull

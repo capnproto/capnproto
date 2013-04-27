@@ -45,13 +45,27 @@ public:
 
   void onRecoverableException(Exception&& exception) override {
     text += "recoverable exception: ";
-    text += exception.what();
+    // Only take the first line of "what" because the second line is a stack trace.
+    const char* what = exception.what();
+    const char* end = strchr(what, '\n');
+    if (end == nullptr) {
+      text += exception.what();
+    } else {
+      text.append(what, end);
+    }
     text += '\n';
   }
 
   void onFatalException(Exception&& exception) override {
     text += "fatal exception: ";
-    text += exception.what();
+    // Only take the first line of "what" because the second line is a stack trace.
+    const char* what = exception.what();
+    const char* end = strchr(what, '\n');
+    if (end == nullptr) {
+      text += exception.what();
+    } else {
+      text.append(what, end);
+    }
     text += '\n';
     throw MockException();
   }

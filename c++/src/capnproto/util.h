@@ -125,21 +125,11 @@ template <typename Element>
 Element* fill(Element* ptr) { return ptr; }
 
 template <typename Element, typename First, typename... Rest>
-Element* fill(Element* __restrict__ target, First& first, Rest&&... rest) {
+Element* fill(Element* __restrict__ target, const First& first, Rest&&... rest) {
   auto i = first.begin();
   auto end = first.end();
   while (i != end) {
     *target++ = *i++;
-  }
-  return fill(target, std::forward<Rest>(rest)...);
-}
-
-template <typename Element, typename First, typename... Rest>
-Element* fill(Element* __restrict__ target, First&& first, Rest&&... rest) {
-  auto i = first.begin();
-  auto end = first.end();
-  while (i != end) {
-    *target++ = std::move(*i++);
   }
   return fill(target, std::forward<Rest>(rest)...);
 }
@@ -196,6 +186,10 @@ struct Stringifier {
   CappedArray<char, sizeof(unsigned long long) * 4> operator*(unsigned long long i) const;
   CappedArray<char, 24> operator*(float f) const;
   CappedArray<char, 32> operator*(double f) const;
+  CappedArray<char, sizeof(const void*) * 4> operator*(const void* s) const;
+
+  template <typename T>
+  Array<char> operator*(ArrayPtr<T> arr) const;
 };
 static constexpr Stringifier STR;
 
@@ -208,6 +202,34 @@ Array<char> str(Params&&... params) {
   // To teach `str` how to stringify a type, see `Stringifier`.
 
   return concat<char>(STR * std::forward<Params>(params)...);
+}
+
+template <typename T>
+Array<char> strArray(ArrayPtr<T> arr, const char* delim) {
+  size_t delimLen = strlen(delim);
+  decltype(STR * arr[0]) pieces[arr.size()];
+  size_t size = 0;
+  for (size_t i = 0; i < arr.size(); i++) {
+    if (i > 0) size += delimLen;
+    pieces[i] = STR * arr[i];
+    size += pieces[i].size();
+  }
+
+  Array<char> result = newArray<char>(size);
+  char* pos = result.begin();
+  for (size_t i = 0; i < arr.size(); i++) {
+    if (i > 0) {
+      memcpy(pos, delim, delimLen);
+      pos += delimLen;
+    }
+    pos = fill(pos, pieces[i]);
+  }
+  return result;
+}
+
+template <typename T>
+inline Array<char> Stringifier::operator*(ArrayPtr<T> arr) const {
+  return strArray(arr, ", ");
 }
 
 }  // namespace capnproto
