@@ -29,4 +29,70 @@
 #include "layout.h"
 #include "list.h"
 
+namespace capnproto {
+namespace internal {
+
+template <typename T>
+struct PointerHelpers {
+  static inline typename T::Reader get(StructReader reader, WireReferenceCount index) {
+    return typename T::Reader(reader.getStructField(index, nullptr));
+  }
+  static inline typename T::Builder get(StructBuilder builder, WireReferenceCount index) {
+    return typename T::Builder(builder.getStructField(index, T::STRUCT_SIZE, nullptr));
+  }
+  static inline typename T::Builder init(StructBuilder builder, WireReferenceCount index) {
+    return typename T::Builder(builder.initStructField(index, T::STRUCT_SIZE));
+  }
+};
+
+template <typename T>
+struct PointerHelpers<List<T>> {
+  static inline typename List<T>::Reader get(StructReader reader, WireReferenceCount index) {
+    return typename List<T>::Reader(List<T>::getAsFieldOf(reader, index));
+  }
+  static inline typename List<T>::Builder get(StructBuilder builder, WireReferenceCount index) {
+    return typename List<T>::Builder(List<T>::getAsFieldOf(builder, index));
+  }
+  static inline typename List<T>::Builder init(
+      StructBuilder builder, WireReferenceCount index, int size) {
+    return typename List<T>::Builder(List<T>::initAsFieldOf(builder, index, size));
+  }
+};
+
+template <>
+struct PointerHelpers<Text> {
+  static inline Text::Reader get(StructReader reader, WireReferenceCount index) {
+    return reader.getTextField(index, nullptr, 0 * BYTES);
+  }
+  static inline Text::Builder get(StructBuilder builder, WireReferenceCount index) {
+    return builder.getTextField(index, nullptr, 0 * BYTES);
+  }
+  static inline void set(StructBuilder builder, WireReferenceCount index, Text::Reader value) {
+    builder.setTextField(index, value);
+  }
+  static inline Text::Builder init(StructBuilder builder, WireReferenceCount index, int size) {
+    return builder.initTextField(index, size * BYTES);
+  }
+};
+
+template <>
+struct PointerHelpers<Data> {
+  static inline Data::Reader get(StructReader reader, WireReferenceCount index) {
+    return reader.getDataField(index, nullptr, 0 * BYTES);
+  }
+  static inline Data::Builder get(StructBuilder builder, WireReferenceCount index) {
+    return builder.getDataField(index, nullptr, 0 * BYTES);
+  }
+  static inline void set(StructBuilder builder, WireReferenceCount index, Data::Reader value) {
+    builder.setDataField(index, value);
+  }
+  static inline Data::Builder init(StructBuilder builder, WireReferenceCount index, int size) {
+    return builder.initDataField(index, size * BYTES);
+  }
+};
+
+}  // namespace internal
+
+}  // namespace capnproto
+
 #endif  // CAPNPROTO_GENERATED_HEADER_SUPPORT_H_

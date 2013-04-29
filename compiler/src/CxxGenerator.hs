@@ -85,6 +85,7 @@ hashString str =
     MD5.hash $
     UTF8.encode str
 
+isPrimitive (BuiltinType BuiltinObject) = False
 isPrimitive t@(BuiltinType _) = not $ isBlob t
 isPrimitive (EnumType _) = True
 isPrimitive (StructType _) = False
@@ -140,6 +141,9 @@ isStructList _ = False
 isInlineList (InlineListType _ _) = True
 isInlineList _ = False
 
+isGenericObject (BuiltinType BuiltinObject) = True
+isGenericObject _ = False
+
 blobTypeString (BuiltinType BuiltinText) = "Text"
 blobTypeString (BuiltinType BuiltinData) = "Data"
 blobTypeString (InlineDataType _) = "Data"
@@ -170,6 +174,7 @@ cxxTypeString (BuiltinType BuiltinFloat32) = "float"
 cxxTypeString (BuiltinType BuiltinFloat64) = "double"
 cxxTypeString (BuiltinType BuiltinText) = " ::capnproto::Text"
 cxxTypeString (BuiltinType BuiltinData) = " ::capnproto::Data"
+cxxTypeString (BuiltinType BuiltinObject) = " ::capnproto::Object"
 cxxTypeString (EnumType desc) = globalName $ DescEnum desc
 cxxTypeString (StructType desc) = globalName $ DescStruct desc
 cxxTypeString (InlineStructType desc) = globalName $ DescStruct desc
@@ -293,6 +298,7 @@ fieldContext parent desc = mkStrContext context where
     context "fieldIsInlineBlobList" = MuBool $ isInlineBlobList $ fieldType desc
     context "fieldIsStructList" = MuBool $ isStructList $ fieldType desc
     context "fieldIsInlineList" = MuBool $ isInlineList $ fieldType desc
+    context "fieldIsGenericObject" = MuBool $ isGenericObject $ fieldType desc
     context "fieldDefaultBytes" =
         case fieldDefaultValue desc >>= defaultValueBytes (fieldType desc) of
             Just v -> muJust $ defaultBytesContext context (fieldType desc) v

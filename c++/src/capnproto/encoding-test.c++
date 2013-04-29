@@ -133,6 +133,91 @@ TEST(Encoding, DefaultsFromEmptyMessage) {
   checkTestMessage(readMessageTrusted<TestDefaults>(emptyMessage.words));
 }
 
+TEST(Encoding, GenericObjects) {
+  MallocMessageBuilder builder;
+  auto root = builder.getRoot<test::TestObject>();
+
+  initTestMessage(root.initObjectField<TestAllTypes>());
+  checkTestMessage(root.getObjectField<TestAllTypes>());
+  checkTestMessage(root.asReader().getObjectField<TestAllTypes>());
+
+  root.setObjectField<Text>("foo");
+  EXPECT_EQ("foo", root.getObjectField<Text>());
+  EXPECT_EQ("foo", root.asReader().getObjectField<Text>());
+
+  root.setObjectField<Data>("foo");
+  EXPECT_EQ("foo", root.getObjectField<Data>());
+  EXPECT_EQ("foo", root.asReader().getObjectField<Data>());
+
+  {
+    {
+      List<uint32_t>::Builder list = root.initObjectField<List<uint32_t>>(3);
+      ASSERT_EQ(3u, list.size());
+      list.copyFrom({123, 456, 789});
+    }
+
+    {
+      List<uint32_t>::Builder list = root.getObjectField<List<uint32_t>>();
+      ASSERT_EQ(3u, list.size());
+      EXPECT_EQ(123u, list[0]);
+      EXPECT_EQ(456u, list[1]);
+      EXPECT_EQ(789u, list[2]);
+    }
+
+    {
+      List<uint32_t>::Reader list = root.asReader().getObjectField<List<uint32_t>>();
+      ASSERT_EQ(3u, list.size());
+      EXPECT_EQ(123u, list[0]);
+      EXPECT_EQ(456u, list[1]);
+      EXPECT_EQ(789u, list[2]);
+    }
+  }
+
+  {
+    {
+      List<Text>::Builder list = root.initObjectField<List<Text>>(2);
+      ASSERT_EQ(2u, list.size());
+      list.copyFrom({"foo", "bar"});
+    }
+
+    {
+      List<Text>::Builder list = root.getObjectField<List<Text>>();
+      ASSERT_EQ(2u, list.size());
+      EXPECT_EQ("foo", list[0]);
+      EXPECT_EQ("bar", list[1]);
+    }
+
+    {
+      List<Text>::Reader list = root.asReader().getObjectField<List<Text>>();
+      ASSERT_EQ(2u, list.size());
+      EXPECT_EQ("foo", list[0]);
+      EXPECT_EQ("bar", list[1]);
+    }
+  }
+
+  {
+    {
+      List<TestAllTypes>::Builder list = root.initObjectField<List<TestAllTypes>>(2);
+      ASSERT_EQ(2u, list.size());
+      initTestMessage(list[0]);
+    }
+
+    {
+      List<TestAllTypes>::Builder list = root.getObjectField<List<TestAllTypes>>();
+      ASSERT_EQ(2u, list.size());
+      checkTestMessage(list[0]);
+      checkTestMessageAllZero(list[1]);
+    }
+
+    {
+      List<TestAllTypes>::Reader list = root.asReader().getObjectField<List<TestAllTypes>>();
+      ASSERT_EQ(2u, list.size());
+      checkTestMessage(list[0]);
+      checkTestMessageAllZero(list[1]);
+    }
+  }
+}
+
 #ifdef NDEBUG
 #define EXPECT_DEBUG_ANY_THROW(EXP)
 #else

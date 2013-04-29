@@ -276,10 +276,14 @@ compileValue pos (BuiltinType BuiltinFloat32) _ = makeExpectError pos "number"
 compileValue pos (BuiltinType BuiltinFloat64) _ = makeExpectError pos "number"
 compileValue pos (BuiltinType BuiltinText) _ = makeExpectError pos "string"
 compileValue pos (BuiltinType BuiltinData) _ = makeExpectError pos "string"
+compileValue pos (BuiltinType BuiltinObject) _ =
+    -- TODO(someday):  We could arguably design a syntax where you specify the type followed by
+    --   the value, but it seems not worth the effort.
+    makeError pos "Can't specify literal value for 'Object'."
 
 compileValue pos (EnumType _) _ = makeExpectError pos "enumerant name"
 compileValue pos (StructType _) _ = makeExpectError pos "parenthesized list of field assignments"
-compileValue pos (InterfaceType _) _ = makeError pos "Interfaces can't have default values."
+compileValue pos (InterfaceType _) _ = makeError pos "Can't specify literal value for interface."
 compileValue pos (ListType _) _ = makeExpectError pos "list"
 compileValue pos (InlineListType _ _) _ = makeExpectError pos "list"
 compileValue pos (InlineDataType _) _ = makeExpectError pos "string"
@@ -313,6 +317,9 @@ compileType scope (TypeExpression n params) = do
                         \lists already inlines the elements."
                     InlineListType (BuiltinType BuiltinBool) _ -> makeError (declNamePos n)
                         "List(InlineList(Bool, n)) not supported due to implementation difficulty."
+                    BuiltinType BuiltinObject -> makeError (declNamePos n)
+                        "List(Object) not supported.  Just use Object, or create a struct with \
+                        \one field of type 'Object' and use a List of that."
                     _ -> return (ListType inner)
             _ -> makeError (declNamePos n) "'List' requires exactly one type parameter."
         DescBuiltinInline -> case params of
@@ -342,6 +349,8 @@ compileType scope (TypeExpression n params) = do
                         "InlineList of InlineList not currently supported."
                     InlineDataType _ -> makeError (declNamePos n)
                         "InlineList of InlineData not currently supported."
+                    BuiltinType BuiltinObject -> makeError (declNamePos n)
+                        "InlineList(Object) not supported."
                     _ -> return $ InlineListType inner size
             _ -> makeError (declNamePos n)
                 "'InlineList' requires exactly two type parameters: a type and a size."

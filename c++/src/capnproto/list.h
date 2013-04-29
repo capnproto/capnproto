@@ -43,6 +43,9 @@ public:
   static constexpr bool value = sizeof(test<T>(nullptr)) == sizeof(yes);
 };
 
+template <typename t>
+struct PointerHelpers;
+
 }  // namespace internal
 
 template <typename T, bool isPrimitive = internal::IsPrimitive<T>::value>
@@ -228,8 +231,24 @@ private:
       internal::ListReader& reader, uint index) {
     return reader.getListElement(index * ELEMENTS, internal::FieldSizeForType<T>::value);
   }
+
+  inline static internal::ListBuilder initAsFieldOf(
+      internal::StructBuilder& builder, WireReferenceCount index, uint size) {
+    return builder.initListField(index, internal::FieldSizeForType<T>::value, size * ELEMENTS);
+  }
+  inline static internal::ListBuilder getAsFieldOf(
+      internal::StructBuilder& builder, WireReferenceCount index) {
+    return builder.getListField(index, nullptr);
+  }
+  inline static internal::ListReader getAsFieldOf(
+      internal::StructReader& reader, WireReferenceCount index) {
+    return reader.getListField(index, internal::FieldSizeForType<T>::value, nullptr);
+  }
+
   template <typename U, bool b>
   friend class List;
+  template <typename U>
+  friend struct internal::PointerHelpers;
 };
 
 template <typename T>
@@ -291,8 +310,24 @@ private:
       internal::ListReader& reader, uint index) {
     return reader.getListElement(index * ELEMENTS, internal::FieldSize::INLINE_COMPOSITE);
   }
+
+  inline static internal::ListBuilder initAsFieldOf(
+      internal::StructBuilder& builder, WireReferenceCount index, uint size) {
+    return builder.initStructListField(index, size * ELEMENTS, T::STRUCT_SIZE);
+  }
+  inline static internal::ListBuilder getAsFieldOf(
+      internal::StructBuilder& builder, WireReferenceCount index) {
+    return builder.getListField(index, nullptr);
+  }
+  inline static internal::ListReader getAsFieldOf(
+      internal::StructReader& reader, WireReferenceCount index) {
+    return reader.getListField(index, internal::FieldSize::INLINE_COMPOSITE, nullptr);
+  }
+
   template <typename U, bool b>
   friend class List;
+  template <typename U>
+  friend struct internal::PointerHelpers;
 };
 
 template <typename T>
@@ -357,8 +392,24 @@ private:
       internal::ListReader& reader, uint index) {
     return reader.getListElement(index * ELEMENTS, internal::FieldSize::REFERENCE);
   }
+
+  inline static internal::ListBuilder initAsFieldOf(
+      internal::StructBuilder& builder, WireReferenceCount index, uint size) {
+    return builder.initListField(index, internal::FieldSize::REFERENCE, size * ELEMENTS);
+  }
+  inline static internal::ListBuilder getAsFieldOf(
+      internal::StructBuilder& builder, WireReferenceCount index) {
+    return builder.getListField(index, nullptr);
+  }
+  inline static internal::ListReader getAsFieldOf(
+      internal::StructReader& reader, WireReferenceCount index) {
+    return reader.getListField(index, internal::FieldSize::REFERENCE, nullptr);
+  }
+
   template <typename U, bool b>
   friend class List;
+  template <typename U>
+  friend struct internal::PointerHelpers;
 };
 
 template <typename T, size_t subSize>
@@ -415,14 +466,30 @@ private:
   }
   inline static internal::ListBuilder getAsElementOf(
       internal::ListBuilder& builder, uint index) {
-    return builder.getListElement(index * ELEMENTS);
+    return List<T>::getAsElementOf(builder, index);
   }
   inline static internal::ListReader getAsElementOf(
       internal::ListReader& reader, uint index) {
-    return reader.getListElement(index * ELEMENTS, internal::FieldSizeForType<T>::value);
+    return List<T>::getAsElementOf(reader, index);
   }
+
+  inline static internal::ListBuilder initAsFieldOf(
+      internal::StructBuilder& builder, WireReferenceCount index, uint size) {
+    return List<T>::initAsFieldOf(builder, index, size * subSize);
+  }
+  inline static internal::ListBuilder getAsFieldOf(
+      internal::StructBuilder& builder, WireReferenceCount index) {
+    return List<T>::getAsFieldOf(builder, index);
+  }
+  inline static internal::ListReader getAsFieldOf(
+      internal::StructReader& reader, WireReferenceCount index) {
+    return List<T>::getAsFieldOf(reader, index);
+  }
+
   template <typename U, bool b>
   friend class List;
+  template <typename U>
+  friend struct internal::PointerHelpers;
 };
 
 template <>
@@ -502,13 +569,29 @@ private:
       internal::ListReader& reader, uint index) {
     return reader.getListElement(index * ELEMENTS, internal::FieldSize::REFERENCE);
   }
+
+  inline static internal::ListBuilder initAsFieldOf(
+      internal::StructBuilder& builder, WireReferenceCount index, uint size) {
+    return builder.initListField(index, internal::FieldSize::REFERENCE, size * ELEMENTS);
+  }
+  inline static internal::ListBuilder getAsFieldOf(
+      internal::StructBuilder& builder, WireReferenceCount index) {
+    return builder.getListField(index, nullptr);
+  }
+  inline static internal::ListReader getAsFieldOf(
+      internal::StructReader& reader, WireReferenceCount index) {
+    return reader.getListField(index, internal::FieldSize::REFERENCE, nullptr);
+  }
+
   template <typename U, bool b>
   friend class List;
+  template <typename U>
+  friend struct internal::PointerHelpers;
 };
 
 template <size_t subSize>
 struct List<InlineData<subSize>, false> {
-  // List of inline lists.
+  // List of inline data.
 
   class Reader {
   public:
@@ -583,8 +666,24 @@ private:
       internal::ListReader& reader, uint index) {
     return reader.getDataElement(index * ELEMENTS);
   }
+
+  inline static internal::ListBuilder initAsFieldOf(
+      internal::StructBuilder& builder, WireReferenceCount index, uint size) {
+    return builder.initDataField(index, size * subSize * BYTES);
+  }
+  inline static internal::ListBuilder getAsFieldOf(
+      internal::StructBuilder& builder, WireReferenceCount index) {
+    return builder.getDataField(index, nullptr, 0 * BYTES);
+  }
+  inline static internal::ListReader getAsFieldOf(
+      internal::StructReader& reader, WireReferenceCount index) {
+    return reader.getDataField(index, nullptr, 0 * BYTES);
+  }
+
   template <typename U, bool b>
   friend class List;
+  template <typename U>
+  friend struct internal::PointerHelpers;
 };
 
 template <>
@@ -664,8 +763,24 @@ private:
       internal::ListReader& reader, uint index) {
     return reader.getListElement(index * ELEMENTS, internal::FieldSize::REFERENCE);
   }
+
+  inline static internal::ListBuilder initAsFieldOf(
+      internal::StructBuilder& builder, WireReferenceCount index, uint size) {
+    return builder.initListField(index, internal::FieldSize::REFERENCE, size * ELEMENTS);
+  }
+  inline static internal::ListBuilder getAsFieldOf(
+      internal::StructBuilder& builder, WireReferenceCount index) {
+    return builder.getListField(index, nullptr);
+  }
+  inline static internal::ListReader getAsFieldOf(
+      internal::StructReader& reader, WireReferenceCount index) {
+    return reader.getListField(index, internal::FieldSize::REFERENCE, nullptr);
+  }
+
   template <typename U, bool b>
   friend class List;
+  template <typename U>
+  friend struct internal::PointerHelpers;
 };
 
 }  // namespace capnproto

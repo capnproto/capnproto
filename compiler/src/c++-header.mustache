@@ -133,6 +133,9 @@ public:
 {{#fieldIsList}}
   inline {{fieldType}}::Reader get{{fieldTitleCase}}();
 {{/fieldIsList}}
+{{#fieldIsGenericObject}}
+  template <typename T> inline typename T::Reader get{{fieldTitleCase}}();
+{{/fieldIsGenericObject}}
 {{/typeFields}}
 private:
   ::capnproto::internal::StructReader _reader;
@@ -189,6 +192,12 @@ public:
   inline void set{{fieldTitleCase}}(std::initializer_list<{{fieldElementType}}::Reader> other);
 {{/fieldIsPrimitiveList}}
 {{/fieldIsList}}
+{{#fieldIsGenericObject}}
+  template <typename T> inline typename T::Builder get{{fieldTitleCase}}();
+  template <typename T> inline void set{{fieldTitleCase}}(const typename T::Reader& value);
+  template <typename T> inline typename T::Builder init{{fieldTitleCase}}();
+  template <typename T> inline typename T::Builder init{{fieldTitleCase}}(unsigned int size);
+{{/fieldIsGenericObject}}
 {{/typeFields}}
 private:
   ::capnproto::internal::StructBuilder _builder;
@@ -636,6 +645,38 @@ inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}(
 {{/fieldIsPrimitiveList}}
 {{/fieldIsList}}
 {{! ------------------------------------------------------------------------------------------- }}
+{{#fieldIsGenericObject}}
+template <typename T>
+inline typename T::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
+  return ::capnproto::internal::PointerHelpers<T>::get(
+      _reader, {{fieldOffset}} * ::capnproto::REFERENCES);
+}
+
+template <typename T>
+inline typename T::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}() {
+  return ::capnproto::internal::PointerHelpers<T>::get(
+      _builder, {{fieldOffset}} * ::capnproto::REFERENCES);
+}
+
+template <typename T>
+inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}(const typename T::Reader& value) {
+  return ::capnproto::internal::PointerHelpers<T>::set(
+      _builder, {{fieldOffset}} * ::capnproto::REFERENCES, value);
+}
+
+template <typename T>
+inline typename T::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}() {
+  return ::capnproto::internal::PointerHelpers<T>::init(
+      _builder, {{fieldOffset}} * ::capnproto::REFERENCES);
+}
+
+template <typename T>
+inline typename T::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(unsigned int size) {
+  return ::capnproto::internal::PointerHelpers<T>::init(
+      _builder, {{fieldOffset}} * ::capnproto::REFERENCES, size);
+}
+
+{{/fieldIsGenericObject}}
 {{/typeFields}}
 {{/typeStructOrUnion}}
 {{/fileTypes}}

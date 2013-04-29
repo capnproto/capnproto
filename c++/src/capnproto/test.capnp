@@ -158,6 +158,10 @@ struct TestDefaults {
   interfaceList @33 : List(Void);  # TODO
 }
 
+struct TestObject {
+  objectField @0 :Object;
+}
+
 struct TestUnion {
   union0 @0 union {
     # Pack union 0 under ideal conditions: there is no unused padding space prior to it.

@@ -184,6 +184,7 @@ data BuiltinType = BuiltinVoid | BuiltinBool
                  | BuiltinUInt8 | BuiltinUInt16 | BuiltinUInt32 | BuiltinUInt64
                  | BuiltinFloat32 | BuiltinFloat64
                  | BuiltinText | BuiltinData
+                 | BuiltinObject
                  deriving (Show, Enum, Bounded, Eq)
 
 builtinTypes = [minBound::BuiltinType .. maxBound::BuiltinType]
@@ -333,6 +334,7 @@ fieldSize (BuiltinType BuiltinFloat32) = SizeData Size32
 fieldSize (BuiltinType BuiltinFloat64) = SizeData Size64
 fieldSize (BuiltinType BuiltinText) = SizeReference
 fieldSize (BuiltinType BuiltinData) = SizeReference
+fieldSize (BuiltinType BuiltinObject) = SizeReference
 fieldSize (EnumType _) = SizeData Size16
 fieldSize (StructType _) = SizeReference
 fieldSize (InlineStructType StructDesc { structDataSize = ds, structPointerCount = ps }) =
