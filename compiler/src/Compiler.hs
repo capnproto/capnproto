@@ -311,6 +311,8 @@ compileType scope (TypeExpression n params) = do
                     InlineStructType _ -> makeError (declNamePos n)
                         "Don't declare list elements 'Inline'.  The regular encoding for struct \
                         \lists already inlines the elements."
+                    InlineListType (BuiltinType BuiltinBool) _ -> makeError (declNamePos n)
+                        "List(InlineList(Bool, n)) not supported due to implementation difficulty."
                     _ -> return (ListType inner)
             _ -> makeError (declNamePos n) "'List' requires exactly one type parameter."
         DescBuiltinInline -> case params of
