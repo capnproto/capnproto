@@ -536,6 +536,237 @@ TEST(Encoding, BuildInlineDefaults) {
   checkTestMessage(root.asReader());
 }
 
+TEST(Encoding, InlineNotPresent) {
+  // Test that getting an inline field of a zero-sized struct works.  This simulates what happens
+  // when a new inline field is added to a struct, then old data lacking that field is received.
+
+  AlignedData<1> emptyMessage = {{0, 0, 0, 0, 0, 0, 0, 0}};
+  ArrayPtr<const word> segments[1] = {arrayPtr(emptyMessage.words, 1)};
+  SegmentArrayMessageReader reader(arrayPtr(segments, 1));
+
+  {
+    auto normal = reader.getRoot<test::TestInlineLayout>();
+
+    EXPECT_FALSE(normal.getF8().getF0());
+    EXPECT_FALSE(normal.getF8().getF1());
+    EXPECT_FALSE(normal.getF8().getF2());
+    EXPECT_EQ(0u, normal.getF16().getF0());
+    EXPECT_EQ(0u, normal.getF16().getF1());
+    EXPECT_EQ(0u, normal.getF32().getF0());
+    EXPECT_EQ(0u, normal.getF32().getF1());
+    EXPECT_EQ(0u, normal.getF64().getF0());
+    EXPECT_EQ(0u, normal.getF64().getF1());
+    EXPECT_EQ(0u, normal.getF128().getF0());
+    EXPECT_EQ(0u, normal.getF128().getF1());
+    EXPECT_EQ(0u, normal.getF192().getF0());
+    EXPECT_EQ(0u, normal.getF192().getF1());
+    EXPECT_EQ(0u, normal.getF192().getF2());
+
+    EXPECT_FALSE(normal.getF8p().getF().getF0());
+    EXPECT_FALSE(normal.getF8p().getF().getF1());
+    EXPECT_FALSE(normal.getF8p().getF().getF2());
+    EXPECT_EQ(0u, normal.getF16p().getF().getF0());
+    EXPECT_EQ(0u, normal.getF16p().getF().getF1());
+    EXPECT_EQ(0u, normal.getF32p().getF().getF0());
+    EXPECT_EQ(0u, normal.getF32p().getF().getF1());
+    EXPECT_EQ(0u, normal.getF64p().getF().getF0());
+    EXPECT_EQ(0u, normal.getF64p().getF().getF1());
+    EXPECT_EQ(0u, normal.getF128p().getF().getF0());
+    EXPECT_EQ(0u, normal.getF128p().getF().getF1());
+    EXPECT_EQ(0u, normal.getF192p().getF().getF0());
+    EXPECT_EQ(0u, normal.getF192p().getF().getF1());
+    EXPECT_EQ(0u, normal.getF192p().getF().getF2());
+
+    EXPECT_EQ("", normal.getF0p().getP0());
+    EXPECT_EQ("", normal.getF8p().getP0());
+    EXPECT_EQ("", normal.getF16p().getP0());
+    EXPECT_EQ("", normal.getF16p().getP1());
+    EXPECT_EQ("", normal.getF32p().getP0());
+    EXPECT_EQ("", normal.getF32p().getP1());
+    EXPECT_EQ("", normal.getF64p().getP0());
+    EXPECT_EQ("", normal.getF64p().getP1());
+    EXPECT_EQ("", normal.getF128p().getP0());
+    EXPECT_EQ("", normal.getF128p().getP1());
+    EXPECT_EQ("", normal.getF128p().getP2());
+    EXPECT_EQ("", normal.getF192p().getP0());
+    EXPECT_EQ("", normal.getF192p().getP1());
+    EXPECT_EQ("", normal.getF192p().getP2());
+  }
+
+  {
+    auto lists = reader.getRoot<test::TestInlineLists>();
+
+    // Inline lists have fixed size even when "empty".
+    ASSERT_EQ(2u, lists.getVoidList().size());
+    ASSERT_EQ(3u, lists.getBoolList().size());
+    ASSERT_EQ(4u, lists.getUInt8List().size());
+    ASSERT_EQ(5u, lists.getUInt16List().size());
+    ASSERT_EQ(6u, lists.getUInt32List().size());
+    ASSERT_EQ(7u, lists.getUInt64List().size());
+    ASSERT_EQ(8u, lists.getTextList().size());
+
+    ASSERT_EQ(2u, lists.getStructList0().size());
+    ASSERT_EQ(3u, lists.getStructList1().size());
+    ASSERT_EQ(4u, lists.getStructList8().size());
+    ASSERT_EQ(2u, lists.getStructList16().size());
+    ASSERT_EQ(3u, lists.getStructList32().size());
+    ASSERT_EQ(4u, lists.getStructList64().size());
+    ASSERT_EQ(2u, lists.getStructList128().size());
+    ASSERT_EQ(3u, lists.getStructList192().size());
+
+    ASSERT_EQ(4u, lists.getStructList0p().size());
+    ASSERT_EQ(2u, lists.getStructList1p().size());
+    ASSERT_EQ(3u, lists.getStructList8p().size());
+    ASSERT_EQ(4u, lists.getStructList16p().size());
+    ASSERT_EQ(2u, lists.getStructList32p().size());
+    ASSERT_EQ(3u, lists.getStructList64p().size());
+    ASSERT_EQ(4u, lists.getStructList128p().size());
+    ASSERT_EQ(2u, lists.getStructList192p().size());
+
+    EXPECT_EQ(Void::VOID, lists.getVoidList()[0]);
+    EXPECT_EQ(Void::VOID, lists.getVoidList()[1]);
+    EXPECT_FALSE(lists.getBoolList()[0]);
+    EXPECT_FALSE(lists.getBoolList()[1]);
+    EXPECT_FALSE(lists.getBoolList()[2]);
+    EXPECT_EQ(0u, lists.getUInt8List()[0]);
+    EXPECT_EQ(0u, lists.getUInt8List()[1]);
+    EXPECT_EQ(0u, lists.getUInt8List()[2]);
+    EXPECT_EQ(0u, lists.getUInt8List()[3]);
+    EXPECT_EQ(0u, lists.getUInt16List()[0]);
+    EXPECT_EQ(0u, lists.getUInt16List()[1]);
+    EXPECT_EQ(0u, lists.getUInt16List()[2]);
+    EXPECT_EQ(0u, lists.getUInt16List()[3]);
+    EXPECT_EQ(0u, lists.getUInt16List()[4]);
+    EXPECT_EQ(0u, lists.getUInt32List()[0]);
+    EXPECT_EQ(0u, lists.getUInt32List()[1]);
+    EXPECT_EQ(0u, lists.getUInt32List()[2]);
+    EXPECT_EQ(0u, lists.getUInt32List()[3]);
+    EXPECT_EQ(0u, lists.getUInt32List()[4]);
+    EXPECT_EQ(0u, lists.getUInt32List()[5]);
+    for (uint i = 0; i < 7; i++) {
+      EXPECT_EQ(0u, lists.getUInt64List()[i]);
+    }
+    EXPECT_EQ("", lists.getTextList()[0]);
+    EXPECT_EQ("", lists.getTextList()[1]);
+    EXPECT_EQ("", lists.getTextList()[2]);
+    EXPECT_EQ("", lists.getTextList()[3]);
+    EXPECT_EQ("", lists.getTextList()[4]);
+    EXPECT_EQ("", lists.getTextList()[5]);
+    EXPECT_EQ("", lists.getTextList()[6]);
+    EXPECT_EQ("", lists.getTextList()[7]);
+
+    EXPECT_EQ(Void::VOID, lists.getStructList0()[0].getF());
+    EXPECT_EQ(Void::VOID, lists.getStructList0()[1].getF());
+
+    EXPECT_FALSE(lists.getStructList8()[0].getF0());
+    EXPECT_FALSE(lists.getStructList8()[0].getF1());
+    EXPECT_FALSE(lists.getStructList8()[0].getF2());
+    EXPECT_FALSE(lists.getStructList8()[1].getF0());
+    EXPECT_FALSE(lists.getStructList8()[1].getF1());
+    EXPECT_FALSE(lists.getStructList8()[1].getF2());
+    EXPECT_FALSE(lists.getStructList8()[2].getF0());
+    EXPECT_FALSE(lists.getStructList8()[2].getF1());
+    EXPECT_FALSE(lists.getStructList8()[2].getF2());
+    EXPECT_FALSE(lists.getStructList8()[3].getF0());
+    EXPECT_FALSE(lists.getStructList8()[3].getF1());
+    EXPECT_FALSE(lists.getStructList8()[3].getF2());
+
+    EXPECT_EQ(0u, lists.getStructList16()[0].getF0());
+    EXPECT_EQ(0u, lists.getStructList16()[0].getF1());
+    EXPECT_EQ(0u, lists.getStructList16()[1].getF0());
+    EXPECT_EQ(0u, lists.getStructList16()[1].getF1());
+
+    EXPECT_EQ(0u, lists.getStructList32()[0].getF0());
+    EXPECT_EQ(0u, lists.getStructList32()[0].getF1());
+    EXPECT_EQ(0u, lists.getStructList32()[1].getF0());
+    EXPECT_EQ(0u, lists.getStructList32()[1].getF1());
+    EXPECT_EQ(0u, lists.getStructList32()[2].getF0());
+    EXPECT_EQ(0u, lists.getStructList32()[2].getF1());
+
+    EXPECT_EQ(0u, lists.getStructList64()[0].getF0());
+    EXPECT_EQ(0u, lists.getStructList64()[0].getF1());
+    EXPECT_EQ(0u, lists.getStructList64()[1].getF0());
+    EXPECT_EQ(0u, lists.getStructList64()[1].getF1());
+    EXPECT_EQ(0u, lists.getStructList64()[2].getF0());
+    EXPECT_EQ(0u, lists.getStructList64()[2].getF1());
+    EXPECT_EQ(0u, lists.getStructList64()[3].getF0());
+    EXPECT_EQ(0u, lists.getStructList64()[3].getF1());
+
+    EXPECT_EQ(0ull, lists.getStructList128()[0].getF0());
+    EXPECT_EQ(0ull, lists.getStructList128()[0].getF1());
+    EXPECT_EQ(0ull, lists.getStructList128()[1].getF0());
+    EXPECT_EQ(0ull, lists.getStructList128()[1].getF1());
+
+    EXPECT_EQ(0ull, lists.getStructList192()[0].getF0());
+    EXPECT_EQ(0ull, lists.getStructList192()[0].getF1());
+    EXPECT_EQ(0ull, lists.getStructList192()[0].getF2());
+    EXPECT_EQ(0ull, lists.getStructList192()[1].getF0());
+    EXPECT_EQ(0ull, lists.getStructList192()[1].getF1());
+    EXPECT_EQ(0ull, lists.getStructList192()[1].getF2());
+    EXPECT_EQ(0ull, lists.getStructList192()[2].getF0());
+    EXPECT_EQ(0ull, lists.getStructList192()[2].getF1());
+    EXPECT_EQ(0ull, lists.getStructList192()[2].getF2());
+
+    EXPECT_EQ("", lists.getStructList0p()[0].getP0());
+    EXPECT_EQ("", lists.getStructList0p()[1].getP0());
+    EXPECT_EQ("", lists.getStructList0p()[2].getP0());
+    EXPECT_EQ("", lists.getStructList0p()[3].getP0());
+
+    EXPECT_FALSE(lists.getStructList8p()[0].getF().getF0());
+    EXPECT_EQ("", lists.getStructList8p()[0].getP0());
+    EXPECT_EQ("", lists.getStructList8p()[1].getP0());
+    EXPECT_EQ("", lists.getStructList8p()[2].getP0());
+
+    EXPECT_EQ(0u, lists.getStructList16p()[0].getF().getF0());
+    EXPECT_EQ("", lists.getStructList16p()[0].getP0());
+    EXPECT_EQ("", lists.getStructList16p()[0].getP1());
+    EXPECT_EQ("", lists.getStructList16p()[1].getP0());
+    EXPECT_EQ("", lists.getStructList16p()[1].getP1());
+    EXPECT_EQ("", lists.getStructList16p()[2].getP0());
+    EXPECT_EQ("", lists.getStructList16p()[2].getP1());
+    EXPECT_EQ("", lists.getStructList16p()[3].getP0());
+    EXPECT_EQ("", lists.getStructList16p()[3].getP1());
+
+    EXPECT_EQ(0u, lists.getStructList32p()[0].getF().getF1());
+    EXPECT_EQ("", lists.getStructList32p()[0].getP0());
+    EXPECT_EQ("", lists.getStructList32p()[0].getP1());
+    EXPECT_EQ("", lists.getStructList32p()[1].getP0());
+    EXPECT_EQ("", lists.getStructList32p()[1].getP1());
+
+    EXPECT_EQ(0u, lists.getStructList64p()[0].getF().getF1());
+    EXPECT_EQ("", lists.getStructList64p()[0].getP0());
+    EXPECT_EQ("", lists.getStructList64p()[0].getP1());
+    EXPECT_EQ("", lists.getStructList64p()[1].getP0());
+    EXPECT_EQ("", lists.getStructList64p()[1].getP1());
+    EXPECT_EQ("", lists.getStructList64p()[2].getP0());
+    EXPECT_EQ("", lists.getStructList64p()[2].getP1());
+
+    EXPECT_EQ(0ull, lists.getStructList128p()[0].getF().getF1());
+    EXPECT_EQ("", lists.getStructList128p()[0].getP0());
+    EXPECT_EQ("", lists.getStructList128p()[0].getP1());
+    EXPECT_EQ("", lists.getStructList128p()[0].getP2());
+    EXPECT_EQ("", lists.getStructList128p()[1].getP0());
+    EXPECT_EQ("", lists.getStructList128p()[1].getP1());
+    EXPECT_EQ("", lists.getStructList128p()[1].getP2());
+    EXPECT_EQ("", lists.getStructList128p()[2].getP0());
+    EXPECT_EQ("", lists.getStructList128p()[2].getP1());
+    EXPECT_EQ("", lists.getStructList128p()[2].getP2());
+    EXPECT_EQ("", lists.getStructList128p()[3].getP0());
+    EXPECT_EQ("", lists.getStructList128p()[3].getP1());
+    EXPECT_EQ("", lists.getStructList128p()[3].getP2());
+
+    EXPECT_EQ(0ull, lists.getStructList192p()[0].getF().getF2());
+    EXPECT_EQ("", lists.getStructList192p()[0].getP0());
+    EXPECT_EQ("", lists.getStructList192p()[0].getP1());
+    EXPECT_EQ("", lists.getStructList192p()[0].getP2());
+    EXPECT_EQ("", lists.getStructList192p()[1].getP0());
+    EXPECT_EQ("", lists.getStructList192p()[1].getP1());
+    EXPECT_EQ("", lists.getStructList192p()[1].getP2());
+
+    EXPECT_EQ(Data::Reader(std::string(5, '\0')), lists.getData());
+  }
+}
+
 TEST(Encoding, SmallStructLists) {
   // In this test, we will manually initialize TestInlineDefaults.structLists to match the default
   // value and verify that we end up with the same encoding that the compiler produces.

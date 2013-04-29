@@ -27,9 +27,18 @@
 #include "arena.h"
 #include <string.h>
 #include <limits>
+#include <stdlib.h>
 
 namespace capnproto {
 namespace internal {
+
+namespace {
+
+// This zero array is used only as a default value for inlined fields, which are limited
+// to no more than 64 words.
+static const AlignedData<64> ZERO = {{0}};
+
+}  // namespace
 
 // =======================================================================================
 
@@ -193,14 +202,16 @@ static_assert(REFERENCES * BITS_PER_REFERENCE / BITS_PER_BYTE / BYTES == sizeof(
 struct WireHelpers {
   static CAPNPROTO_ALWAYS_INLINE(WordCount roundUpToWords(BitCount64 bits)) {
     static_assert(sizeof(word) == 8, "This code assumes 64-bit words.");
-    uint64_t bits2 = bits / BITS;
-    return ((bits2 >> 6) + ((bits2 & 63) != 0)) * WORDS;
+    return (bits + 63 * BITS) / BITS_PER_WORD;
   }
 
   static CAPNPROTO_ALWAYS_INLINE(WordCount roundUpToWords(ByteCount bytes)) {
     static_assert(sizeof(word) == 8, "This code assumes 64-bit words.");
-    uint bytes2 = bytes / BYTES;
-    return ((bytes2 >> 3) + ((bytes2 & 7) != 0)) * WORDS;
+    return (bytes + 7 * BYTES) / BYTES_PER_WORD;
+  }
+
+  static CAPNPROTO_ALWAYS_INLINE(ByteCount roundUpToBytes(BitCount bits)) {
+    return (bits + 7 * BITS) / BITS_PER_BYTE;
   }
 
   static CAPNPROTO_ALWAYS_INLINE(word* allocate(
@@ -944,6 +955,7 @@ struct WireHelpers {
 };
 
 // =======================================================================================
+// StructBuilder
 
 StructBuilder StructBuilder::initRoot(
     SegmentBuilder* segment, word* location, StructSize size) {
@@ -1022,6 +1034,9 @@ StructReader StructBuilder::asReader() const {
       0xffffffff * BYTES, 0xffff * REFERENCES, std::numeric_limits<int>::max());
 }
 
+// =======================================================================================
+// StructReader
+
 StructReader StructReader::readRootTrusted(const word* location) {
   return WireHelpers::readStructReference(nullptr, reinterpret_cast<const WireReference*>(location),
                                           nullptr, std::numeric_limits<int>::max());
@@ -1049,11 +1064,75 @@ StructReader StructReader::getStructField(
   return WireHelpers::readStructReference(segment, ref, defaultValue, nestingLimit);
 }
 
+StructReader StructReader::getInlineStructField(
+    ByteCount dataOffset, ByteCount inlineDataSize,
+    WireReferenceCount refIndex, WireReferenceCount inlineRefCount) const {
+  if (dataOffset + inlineDataSize <= dataSize &&
+      refIndex + inlineRefCount <= referenceCount) {
+    return StructReader(
+        segment, reinterpret_cast<const byte*>(data) + dataOffset,
+        // WireReference is incomplete here so we have to cast around...  Bah.
+        reinterpret_cast<const WireReference*>(
+            reinterpret_cast<const word*>(references) + refIndex * WORDS_PER_REFERENCE),
+        inlineDataSize, inlineRefCount,
+        nestingLimit);
+  } else {
+    // Return empty struct.
+    return StructReader();
+  }
+}
+
 ListReader StructReader::getListField(
     WireReferenceCount refIndex, FieldSize expectedElementSize, const word* defaultValue) const {
   const WireReference* ref = refIndex >= referenceCount ? nullptr : references + refIndex;
   return WireHelpers::readListReference(
       segment, ref, defaultValue, expectedElementSize, nestingLimit);
+}
+
+ListReader StructReader::getInlineDataListField(
+    ByteCount offset, ElementCount elementCount, FieldSize elementSize) const {
+  if (offset + WireHelpers::roundUpToBytes(
+      elementCount * bitsPerElement(elementSize)) <= dataSize) {
+    return ListReader(
+        segment, reinterpret_cast<const byte*>(data) + offset, nullptr,
+        elementCount, bytesPerElement(elementSize), 0 * REFERENCES / ELEMENTS,
+        nestingLimit);
+  } else {
+    // Return zeros.
+    return ListReader(elementCount);
+  }
+}
+
+ListReader StructReader::getInlinePointerListField(
+    WireReferenceCount offset, ElementCount elementCount) const {
+  if (offset + elementCount * (1 * REFERENCES / ELEMENTS) <= referenceCount) {
+    return ListReader(
+        segment, nullptr,
+        reinterpret_cast<const WireReference*>(
+            reinterpret_cast<const word*>(references) + offset * WORDS_PER_REFERENCE),
+        elementCount, 0 * BYTES / ELEMENTS, 1 * REFERENCES / ELEMENTS,
+        nestingLimit);
+  } else {
+    // Return nulls.
+    return ListReader(elementCount);
+  }
+}
+
+ListReader StructReader::getInlineStructListField(
+    ByteCount dataOffset, WireReferenceCount ptrOffset, ElementCount elementCount,
+    StructSize elementSize) const {
+  if (dataOffset + elementSize.dataBytes <= dataSize &&
+      ptrOffset + elementSize.pointers <= referenceCount) {
+    return ListReader(
+        segment, reinterpret_cast<const byte*>(data) + dataOffset,
+        reinterpret_cast<const WireReference*>(
+            reinterpret_cast<const word*>(references) + ptrOffset * WORDS_PER_REFERENCE),
+        elementCount, elementSize.dataBytes / ELEMENTS, elementSize.pointers / ELEMENTS,
+        elementSize.dataBytes, elementSize.pointers, nestingLimit);
+  } else {
+    // Return empty structs.
+    return ListReader(elementCount);
+  }
 }
 
 Text::Reader StructReader::getTextField(
@@ -1067,6 +1146,20 @@ Data::Reader StructReader::getDataField(
   const WireReference* ref = refIndex >= referenceCount ? nullptr : references + refIndex;
   return WireHelpers::readDataReference(segment, ref, defaultValue, defaultSize);
 }
+
+Data::Reader StructReader::getInlineDataField(ByteCount offset, ByteCount size) const {
+  // TODO(soon):  Bounds check!  Needs to fall back to some common zero'd region.
+  if (offset + size <= dataSize) {
+    return Data::Reader(reinterpret_cast<const char*>(reinterpret_cast<const byte*>(data) + offset),
+                        size / BYTES);
+  } else {
+    CHECK(size < sizeof(ZERO) * BYTES);
+    return Data::Reader(reinterpret_cast<const char*>(ZERO.bytes), size / BYTES);
+  }
+}
+
+// =======================================================================================
+// ListBuilder
 
 StructBuilder ListBuilder::getStructElement(ElementCount index, StructSize elementSize) const {
   // TODO:  Inline this method?
@@ -1133,6 +1226,15 @@ ListReader ListBuilder::asReader(StructSize elementSize) const {
   return ListReader(segment, data, pointers, elementCount, stepBytes, stepPointers,
                     elementSize.dataBytes, elementSize.pointers, std::numeric_limits<int>::max());
 }
+
+// =======================================================================================
+// ListReader
+
+ListReader::ListReader(ElementCount elementCount)
+    : segment(nullptr), data(ZERO.bytes),
+      pointers(reinterpret_cast<const WireReference*>(data)), elementCount(elementCount),
+      stepBytes(0 * BYTES / ELEMENTS), stepPointers(0 * REFERENCES / ELEMENTS),
+      structDataSize(0), structReferenceCount(0), nestingLimit(0) {}
 
 StructReader ListReader::getStructElement(ElementCount index) const {
   // TODO:  Inline this method?

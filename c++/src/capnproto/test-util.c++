@@ -1152,6 +1152,139 @@ void genericCheckInlineDefaults(Reader reader) {
   }
 }
 
+template <typename Builder>
+void genericInitEmptyInlineLists(Builder builder) {
+  // Initialize all inline lists in TestInlineDefaults to "empty" values, of the same sizes that
+  // genericInitInlineDefaults() would create.
+
+  builder.initNormal();
+
+  {
+    auto lists = builder.initLists();
+
+    ASSERT_EQ(2u, lists.getVoidList().size());
+    ASSERT_EQ(3u, lists.getBoolList().size());
+    ASSERT_EQ(4u, lists.getUInt8List().size());
+    ASSERT_EQ(5u, lists.getUInt16List().size());
+    ASSERT_EQ(6u, lists.getUInt32List().size());
+    ASSERT_EQ(7u, lists.getUInt64List().size());
+    ASSERT_EQ(8u, lists.getTextList().size());
+
+    ASSERT_EQ(2u, lists.getStructList0().size());
+    ASSERT_EQ(3u, lists.getStructList1().size());
+    ASSERT_EQ(4u, lists.getStructList8().size());
+    ASSERT_EQ(2u, lists.getStructList16().size());
+    ASSERT_EQ(3u, lists.getStructList32().size());
+    ASSERT_EQ(4u, lists.getStructList64().size());
+    ASSERT_EQ(2u, lists.getStructList128().size());
+    ASSERT_EQ(3u, lists.getStructList192().size());
+
+    ASSERT_EQ(4u, lists.getStructList0p().size());
+    ASSERT_EQ(2u, lists.getStructList1p().size());
+    ASSERT_EQ(3u, lists.getStructList8p().size());
+    ASSERT_EQ(4u, lists.getStructList16p().size());
+    ASSERT_EQ(2u, lists.getStructList32p().size());
+    ASSERT_EQ(3u, lists.getStructList64p().size());
+    ASSERT_EQ(4u, lists.getStructList128p().size());
+    ASSERT_EQ(2u, lists.getStructList192p().size());
+  }
+
+  {
+    auto sl = builder.initStructLists();
+
+    sl.initList0(2);
+    sl.initList1(2);
+    sl.initList8(2);
+    sl.initList16(2);
+    sl.initList32(2);
+    sl.initList64(2);
+    sl.initListP(2);
+  }
+
+  {
+    auto ll = builder.initListLists();
+
+    {
+      auto l = ll.initInt32ListList(3);
+      l.init(0, 3);
+      l.init(1, 2);
+      l.init(2, 1);
+    }
+
+    {
+      auto l = ll.initTextListList(3);
+      l.init(0, 2);
+      l.init(1, 1);
+      l.init(2, 2);
+    }
+
+    {
+      auto l = ll.initStructListList(2);
+      l.init(0, 2);
+      l.init(1, 1);
+    }
+
+    {
+      auto l = ll.initInt32InlineListList(2);
+      EXPECT_EQ(7u, l[0].size());
+      EXPECT_EQ(7u, l[1].size());
+    }
+
+    {
+      auto l = ll.initTextInlineListList(3);
+      EXPECT_EQ(5u, l[0].size());
+      EXPECT_EQ(5u, l[1].size());
+      EXPECT_EQ(5u, l[2].size());
+    }
+
+    {
+      auto l = ll.initStructInlineListList(3);
+      EXPECT_EQ(3u, l[0].size());
+      EXPECT_EQ(3u, l[1].size());
+      EXPECT_EQ(3u, l[2].size());
+    }
+
+    ll.initInlineDataList(5);
+
+    {
+      auto l = ll.initInt32InlineListListList(3);
+      l.init(0, 3);
+      l.init(1, 2);
+      l.init(2, 1);
+      EXPECT_EQ(2u, l[0][0].size());
+      EXPECT_EQ(2u, l[0][1].size());
+      EXPECT_EQ(2u, l[0][2].size());
+      EXPECT_EQ(2u, l[1][0].size());
+      EXPECT_EQ(2u, l[1][1].size());
+      EXPECT_EQ(2u, l[2][0].size());
+    }
+
+    {
+      auto l = ll.initTextInlineListListList(2);
+      l.init(0, 2);
+      l.init(1, 1);
+      EXPECT_EQ(5u, l[0][0].size());
+      EXPECT_EQ(5u, l[0][1].size());
+      EXPECT_EQ(5u, l[1][0].size());
+    }
+
+    {
+      auto l = ll.initStructInlineListListList(2);
+      l.init(0, 2);
+      l.init(1, 1);
+      EXPECT_EQ(3u, l[0][0].size());
+      EXPECT_EQ(3u, l[0][1].size());
+      EXPECT_EQ(3u, l[1][0].size());
+    }
+
+    {
+      auto l = ll.initInlineDataListList(2);
+      l.init(0, 3);
+      l.init(1, 2);
+    }
+  }
+}
+
 }  // namespace
 
 void initTestMessage(TestAllTypes::Builder builder) { genericInitTestMessage(builder); }

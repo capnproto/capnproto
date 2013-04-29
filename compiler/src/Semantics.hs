@@ -39,6 +39,14 @@ import Grammar(AnnotationTarget(..))
 -- ordinal is 65534.
 maxOrdinal = 65534 :: Integer
 
+-- Inline fields can be 64 words.  (This limit is relied upon by implementations which may need
+-- to produce some sort of default value when an inlined field is not actually present in the
+-- struct.)
+maxInlineFieldBits = 64 * 64 :: Integer
+
+maxStructDataWords = 65536 :: Integer
+maxStructPointers = 65536 :: Integer
+
 type ByteString = [Word8]
 
 data Desc = DescFile FileDesc
@@ -290,6 +298,11 @@ data FieldSize = SizeVoid
                | SizeReference
                | SizeInlineComposite DataSectionSize Integer
 
+fieldSizeInBits SizeVoid = 0
+fieldSizeInBits (SizeData d) = dataSizeInBits d
+fieldSizeInBits SizeReference = 64
+fieldSizeInBits (SizeInlineComposite ds pc) = dataSectionBits ds + pc * 64
+
 data FieldOffset = VoidOffset
                  | DataOffset DataSize Integer
                  | PointerOffset Integer
@@ -361,7 +374,7 @@ typeName scope (InlineStructType desc) = descQualifiedName scope (DescStruct des
 typeName scope (InterfaceType desc) = descQualifiedName scope (DescInterface desc)
 typeName scope (ListType t) = "List(" ++ typeName scope t ++ ")"
 typeName scope (InlineListType t s) = printf "InlineList(%s, %d)" (typeName scope t) s
-typeName scope (InlineDataType s) = printf "InlineData(%d)" s
+typeName _ (InlineDataType s) = printf "InlineData(%d)" s
 
 -- Computes the qualified name for the given descriptor within the given scope.
 -- At present the scope is only used to determine whether the target is in the same file.  If

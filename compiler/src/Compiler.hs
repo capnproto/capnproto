@@ -752,6 +752,13 @@ enforceFixed (Just (Located pos (requestedDataSize, requestedPointerCount)))
             \backwards-compatibility."
             actualPointerCount requestedPointerCount
 
+    recover () $ when (dataSectionBits actualDataSize > maxStructDataWords * 64) $
+        makeError pos $ printf "Struct is too big.  Maximum data section size is %d bytes."
+            (maxStructDataWords * 8)
+    recover () $ when (actualPointerCount > maxStructPointers) $
+        makeError pos $ printf "Struct is too big.  Maximum pointer section size is %d."
+            maxStructPointers
+
     return (validatedRequestedDataSize, requestedPointerCount)
 
 ------------------------------------------------------------------------------------------
@@ -891,6 +898,9 @@ compileDecl scope
                 DescUnion u -> Just (u, unionFieldDiscriminantMap u ! number)
                 _ -> Nothing
         typeDesc <- compileType scope typeExp
+        recover () $ when (fieldSizeInBits (fieldSize typeDesc) > maxInlineFieldBits) $
+            makeError pos $ printf "Inlined fields cannot exceed %d bytes."
+            (div maxInlineFieldBits 8)
         defaultDesc <- case defaultValue of
             Just (Located defaultPos value) -> do
                 result <- fmap Just (compileValue defaultPos typeDesc value)
