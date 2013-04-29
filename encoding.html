@@ -201,9 +201,13 @@ D (29 bits) = Number of elements in the list, except when C is 7
 
 <p>The pointed-to values are tightly-packed. In particular, <code>Bool</code>s are packed bit-by-bit in little-endian order (the first bit is the least-significant bit of the first byte).</p>
 
+<p>Lists of structs use the smallest element size in which the struct can fit, except that single-bit structs are not allowed. So, a list of structs that each contain two <code>UInt8</code> fields and nothing else could be encoded with C = 3 (2-byte elements). A list of structs that each contain a single <code>Text</code> field would be encoded as C = 6 (pointer elements). A list structs which are each more than one word in size must be be encoded using C = 7 (composite).</p>
+
 <p>When C = 7, the elements of the list are fixed-width composite values &#8211; usually, structs. In this case, the list content is prefixed by a &#8220;tag&#8221; word that describes each individual element. The tag has the same layout as a struct pointer, except that the pointer offset (B) instead indicates the number of elements in the list. Meanwhile, section (D) of the list pointer &#8211; which normally would store this element count &#8211; instead stores the total number of <em>words</em> in the list (not counting the tag word). The reason we store a word count in the pointer rather than an element count is to ensure that the extents of the list&#8217;s location can always be determined by inspecting the pointer alone, without having to look at the tag; this may allow more-efficient prefetching in some use cases. The reason we don&#8217;t store struct lists as a list of pointers is because doing so would take significantly more space (an extra pointer per element) and may be less cache-friendly.</p>
 
 <p>In the future, we could consider implementing matrixes using the &#8220;composite&#8221; element type, with the elements being fixed-size lists rather than structs. In this case, the tag would look like a list pointer rather than a struct pointer. As of this writing, no such feature has been implemented.</p>
+
+<p>Notice that because a small struct is encoded as if it were a primitive value, this means that if you have a field of type <code>List(T)</code> where <code>T</code> is a primitive or blob type (other than <code>Bool</code>), it is possible to change that field to <code>List(U)</code> where <code>U</code> is a struct whose <code>@0</code> field has type <code>T</code>, without breaking backwards-compatibility. This comes in handy when you discover too late that you need to associate some extra data with each value in a primitive list &#8211; instead of using parallel lists (eww), you can just replace it with a struct list.</p>
 
 <h3 id='structs'>Structs</h3>
 
@@ -223,6 +227,8 @@ C (16 bits) = Size of the struct&#39;s data section, in words.
 D (16 bits) = Size of the struct&#39;s pointer section, in words.</code></pre>
 
 <h4 id='field_positioning'>Field Positioning</h4>
+
+<p><em>WARNING: You should not attempt to implement the following algorithm. The compiled schemas produced by the Cap&#8217;n Proto compiler are already populated with offset information, so code generators and other consumers of compiled schemas should never need to compute them manually. The algorithm is complicated and easy to get wrong, so it is best to rely on the canonical implementation.</em></p>
 
 <p>Ignoring unions, the layout of fields within the struct is determined by the following algorithm:</p>
 
@@ -265,6 +271,8 @@ D (16 bits) = Size of the struct&#39;s pointer section, in words.</code></pre>
 }</code></pre>
 
 <p>Note that in the worst case, the members of a union could end up using 23 bytes plus one bit (one pointer plus data section locations of 64, 32, 16, 8, and 1 bits). This is an unfortunate side effect of the desire to pack fields in the smallest space where they will fit and the need to maintain backwards-compatibility as fields are added. The worst case should be rare in practice, and can be avoided entirely by always declaring a union&#8217;s largest member first.</p>
+
+<p>Inline fields add yet more complication. An inline field may contain some data and some pointers, which are positioned independently. If the data part is non-empty but is less than one word, it is rounded up to the nearest of 1, 2, or 4 bytes and treated the same as a field of that size. Otherwise, it is added to the end of the data section. Any pointers are added to the end of the pointer section. When an inline field appears inside a union, it will attempt to overlap with a previous union member just like any other field would &#8211; but note that because inline fields can have non-power-of-two sizes, such unions can get arbitrarily large, and care should be taken not to interleave union field numbers with non-union field numbers due to the problems described in the previous paragraph.</p>
 
 <h4 id='default_values'>Default Values</h4>
 

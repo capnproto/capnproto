@@ -112,6 +112,10 @@
 <p>Currently, Cap&#8217;n Proto is implemented only in C++. We&#8217;d like to support many more languages in the future!</p>
 
 <p>If you&#8217;d like to own the implementation of Cap&#8217;n Proto in some particular language, <a href='https://groups.google.com/group/capnproto'>let us know</a>!</p>
+
+<p><strong>You should e-mail the list <em>before</em> you start hacking.</strong> We don&#8217;t bite, and we&#8217;ll probably have useful tips that will save you time. :)</p>
+
+<p><strong>Do not implement your own schema parser.</strong> The schema language is more compilcated than it looks, and the algorithm to determine offsets of fields is subtle. If you reuse <code>capnpc</code>&#8217;s parser, you won&#8217;t risk getting these wrong, and you won&#8217;t have to spend time keeping your parser up-to-date. It will soon be possible to write code generator &#8220;plugins&#8221; for <code>capnpc</code> in any language, not just Haskell. (A guide will be added here when this is implemented.)</p>
         <div style="clear: left;"></div>
       </section>
     </div>
