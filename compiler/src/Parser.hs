@@ -255,13 +255,9 @@ combineFixedSizes (_, Just _) (FixedPointers _) =
 fixedSize = do
     size <- literalInt
     -- We do not allow single-bit structs because most CPUs cannot address bits.
-    (exactIdentifier "byte" >> return (FixedData (8 * size)))
-        <|> (exactIdentifier "bytes" >> return (FixedData (8 * size)))
-        <|> (exactIdentifier "word" >> return (FixedData (64 * size)))
-        <|> (exactIdentifier "words" >> return (FixedData (64 * size)))
-        <|> (exactIdentifier "pointer" >> return (FixedPointers size))
+    (exactIdentifier "bytes" >> return (FixedData (8 * size)))
         <|> (exactIdentifier "pointers" >> return (FixedPointers size))
-        <?> "\"bytes\", \"words\", or \"pointers\""
+        <?> "\"bytes\" or \"pointers\""
 
 structLine :: Maybe [Located Statement] -> TokenParser Declaration
 structLine Nothing = usingDecl <|> constantDecl <|> fieldDecl <|> annotationDecl

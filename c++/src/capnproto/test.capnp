@@ -283,16 +283,16 @@ struct TestInline8 fixed(1 bytes) { f0 @0: Bool; f1 @1: Bool; f2 @2: Bool; }
 struct TestInline16 fixed(2 bytes) { f0 @0: UInt8; f1 @1: UInt8; }
 struct TestInline32 fixed(4 bytes) { f0 @0: UInt8; f1 @1: UInt16; }
 struct TestInline64 fixed(8 bytes) { f0 @0: UInt8; f1 @1: UInt32; }
-struct TestInline128 fixed(2 words) { f0 @0: UInt64; f1 @1: UInt64; }
-struct TestInline192 fixed(3 words) { f0 @0: UInt64; f1 @1: UInt64; f2 @2: UInt64; }
+struct TestInline128 fixed(16 bytes) { f0 @0: UInt64; f1 @1: UInt64; }
+struct TestInline192 fixed(24 bytes) { f0 @0: UInt64; f1 @1: UInt64; f2 @2: UInt64; }
 
 struct TestInline0p fixed(1 pointers) { f @0 :Inline(TestInline0); p0 @1 :Text; }
 struct TestInline8p fixed(1 bytes, 1 pointers) { f @0 :Inline(TestInline8); p0 @1 :Text; }
 struct TestInline16p fixed(2 bytes, 2 pointers) { f @0 :Inline(TestInline16); p0 @1 :Text; p1 @2 :Text; }
 struct TestInline32p fixed(4 bytes, 2 pointers) { f @0 :Inline(TestInline32); p0 @1 :Text; p1 @2 :Text; }
 struct TestInline64p fixed(8 bytes, 2 pointers) { f @0 :Inline(TestInline64); p0 @1 :Text; p1 @2 :Text; }
-struct TestInline128p fixed(2 words, 3 pointers) { f @0 :Inline(TestInline128); p0 @1 :Text; p1 @2 :Text; p2 @3 :Text; }
-struct TestInline192p fixed(3 words, 3 pointers) { f @0 :Inline(TestInline192); p0 @1 :Text; p1 @2 :Text; p2 @3 :Text; }
+struct TestInline128p fixed(16 bytes, 3 pointers) { f @0 :Inline(TestInline128); p0 @1 :Text; p1 @2 :Text; p2 @3 :Text; }
+struct TestInline192p fixed(24 bytes, 3 pointers) { f @0 :Inline(TestInline192); p0 @1 :Text; p1 @2 :Text; p2 @3 :Text; }
 
 struct TestInlineLayout {
   f0 @0 :Inline(TestInline0);

@@ -278,11 +278,11 @@ dataSizeToSectionSize Size16 = DataSection16
 dataSizeToSectionSize Size32 = DataSection32
 dataSizeToSectionSize Size64 = DataSectionWords 1
 
-dataSectionSizeString DataSection1 = "1 bits"
+dataSectionSizeString DataSection1 = error "Data section for display can't be 1 bit."
 dataSectionSizeString DataSection8 = "1 bytes"
 dataSectionSizeString DataSection16 = "2 bytes"
 dataSectionSizeString DataSection32 = "4 bytes"
-dataSectionSizeString (DataSectionWords n) = show n ++ " words"
+dataSectionSizeString (DataSectionWords n) = show (n * 8) ++ " bytes"
 
 data DataSize = Size1 | Size8 | Size16 | Size32 | Size64 deriving(Eq, Ord, Enum)
 

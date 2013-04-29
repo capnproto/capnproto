@@ -738,8 +738,8 @@ enforceFixed (Just (Located pos (requestedDataSize, requestedPointerCount)))
         16 -> return DataSection16
         32 -> return DataSection32
         s | mod s 64 == 0 -> return $ DataSectionWords $ div s 64
-        _ -> makeError pos $ printf "Struct data section size must be a whole number of words \
-                                    \or 0, 1, 2, 4, or 8 bytes."
+        _ -> makeError pos $ printf "Struct data section size must be 0, 1, 2, 4, or a multiple of \
+                                    \8 bytes."
 
     recover () $ when (dataSectionBits actualDataSize > dataSectionBits validatedRequestedDataSize) $
         makeError pos $ printf "Struct data section size is %s which exceeds specified maximum of \
