@@ -114,6 +114,12 @@ A list value is encoded as a pointer to a flat array of values.
 The pointed-to values are tightly-packed.  In particular, `Bool`s are packed bit-by-bit in
 little-endian order (the first bit is the least-significant bit of the first byte).
 
+Lists of structs use the smallest element size in which the struct can fit, except that single-bit
+structs are not allowed.  So, a list of structs that each contain two `UInt8` fields and nothing
+else could be encoded with C = 3 (2-byte elements).  A list of structs that each contain a single
+`Text` field would be encoded as C = 6 (pointer elements).  A list structs which are each more than
+one word in size must be be encoded using C = 7 (composite).
+
 When C = 7, the elements of the list are fixed-width composite values -- usually, structs.  In
 this case, the list content is prefixed by a "tag" word that describes each individual element.
 The tag has the same layout as a struct pointer, except that the pointer offset (B) instead
@@ -128,6 +134,13 @@ would take significantly more space (an extra pointer per element) and may be le
 In the future, we could consider implementing matrixes using the "composite" element type, with the
 elements being fixed-size lists rather than structs.  In this case, the tag would look like a list
 pointer rather than a struct pointer.  As of this writing, no such feature has been implemented.
+
+Notice that because a small struct is encoded as if it were a primitive value, this means that
+if you have a field of type `List(T)` where `T` is a primitive or blob type (other than `Bool`), it
+is possible to change that field to `List(U)` where `U` is a struct whose `@0` field has type `T`,
+without breaking backwards-compatibility.  This comes in handy when you discover too late that you
+need to associate some extra data with each value in a primitive list -- instead of using parallel
+lists (eww), you can just replace it with a struct list.
 
 ### Structs
 
@@ -149,6 +162,12 @@ A struct pointer looks like this:
     D (16 bits) = Size of the struct's pointer section, in words.
 
 #### Field Positioning
+
+_WARNING:  You should not attempt to implement the following algorithm.  The compiled schemas
+produced by the Cap'n Proto compiler are already populated with offset information, so code
+generators and other consumers of compiled schemas should never need to compute them manually.
+The algorithm is complicated and easy to get wrong, so it is best to rely on the canonical
+implementation._
 
 Ignoring unions, the layout of fields within the struct is determined by the following algorithm:
 
@@ -197,6 +216,16 @@ pointer plus data section locations of 64, 32, 16, 8, and 1 bits).  This is an u
 effect of the desire to pack fields in the smallest space where they will fit and the need to
 maintain backwards-compatibility as fields are added.  The worst case should be rare in practice,
 and can be avoided entirely by always declaring a union's largest member first.
+
+Inline fields add yet more complication.  An inline field may contain some data and some pointers,
+which are positioned independently.  If the data part is non-empty but is less than one word, it is
+rounded up to the nearest of 1, 2, or 4 bytes and treated the same as a field of that size.
+Otherwise, it is added to the end of the data section.  Any pointers are added to the end of the
+pointer section.  When an inline field appears inside a union, it will attempt to overlap with a
+previous union member just like any other field would -- but note that because inline fields can
+have non-power-of-two sizes, such unions can get arbitrarily large, and care should be taken not
+to interleave union field numbers with non-union field numbers due to the problems described in
+the previous paragraph.
 
 #### Default Values
 

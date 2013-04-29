@@ -363,6 +363,64 @@ annotation corge(file) :MyStruct;
 $corge(string = "hello", number = 123);
 {% endhighlight %}
 
+## Advanced Topics
+
+### Inlining Structs
+
+Say you have a small struct which you know will never add new fields.  For efficiency, you may want
+instance of this struct to be "inlined" into larger structs where it is used.  This saves eight
+bytes of space per usage (the size of a pointer) and may improve cache locality.
+
+To inline a struct, you must first declare that it has fixed-width, and specify the sizes of its
+data and pointer sections:
+
+{% highlight capnp %}
+struct Point16 fixed(4 bytes) {
+  x @0 :UInt16;
+  y @1 :UInt16;
+}
+
+struct Name fixed(2 pointers) {
+  first @0 :Text;
+  last @1 :Text;
+}
+
+struct TextWithHash fixed(8 bytes, 1 pointers) {
+  hash @0 :UInt64;
+  text @1 :Text;
+}
+{% endhighlight %}
+
+The compiler will produce an error if the specified size is too small to hold the defined fields,
+so if you are unsure how much space you need, simply delcare your struct `fixed()` and the compiler
+will tell you.
+
+Once you have a fixed-width struct, you must explicitly declare it `Inline` at the usage site:
+
+{% highlight capnp %}
+struct Foo {
+  a @0 :Point16;          # NOT inlined
+  b @1 :Inline(Point16);  # inlined!
+}
+{% endhighlight %}
+
+### Inlining Lists and Data
+
+You may also inline fixed-length lists and data.
+
+{% highlight capnp %}
+struct Foo {
+  sha1Hash @0 :InlineData(20);  # 160-bit fixed-width.
+
+  vertex3 @1 :InlineList(Float32, 3);  # x, y, and z coordinates.
+
+  vertexList @2 :List(InlineList(Float32, 3));
+  # Much more efficient than List(List(Float32))!
+}
+{% endhighlight %}
+
+At this time, there is no `InlineText` because text almost always has variable length.
+
 ## Evolving Your Protocol
 
 A protocol can be changed in the following ways without breaking backwards-compatibility:
@@ -375,10 +433,15 @@ A protocol can be changed in the following ways without breaking backwards-compa
   parameter list and must have default values.
 * Any symbolic name can be changed, as long as the ordinal numbers stay the same.
 * Types definitions can be moved to different scopes.
-* A field of type `List(T)`, where `T` is NOT a struct type, may be changed to type `List(U)`,
-  where `U` is a struct type whose `@0` field is of type `T`.  This rule is useful when you
-  realize too late that you need to attach some extra data to each element of your list.  Without
-  this rule, you would be stuck defining parallel lists, which are ugly and error-prone.
+* A field of type `List(T)`, where `T` is a primitive type (except `Bool`), non-inline blob, or
+  non-inline list, may be changed to type `List(U)`, where `U` is a struct type whose `@0` field is
+  of type `T`.  This rule is useful when you realize too late that you need to attach some extra
+  data to each element of your list.  Without this rule, you would be stuck defining parallel
+  lists, which are ugly and error-prone.  (`List(Bool)` does not support this transformation
+  because it would be difficult to implement given that booleans are packed 8 to the byte.)
+* A struct that is not already `fixed` can be made `fixed`.  However, once a struct is declared
+  `fixed`, the declaration cannot be removed or changed, as this would change the layout of `Inline`
+  uses of the struct.
 
 Any other change should be assumed NOT to be safe.  Also, these rules only apply to the Cap'n Proto
 native encoding.  It is sometimes useful to transcode Cap'n Proto types to other formats, like
