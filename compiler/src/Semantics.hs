@@ -66,7 +66,6 @@ data Desc = DescFile FileDesc
           | DescBuiltinInline
           | DescBuiltinInlineList
           | DescBuiltinInlineData
-          | DescBuiltinId
 
 descName (DescFile      _) = "(top-level)"
 descName (DescUsing     d) = usingName d
@@ -85,34 +84,13 @@ descName DescBuiltinList = "List"
 descName DescBuiltinInline = "Inline"
 descName DescBuiltinInlineList = "InlineList"
 descName DescBuiltinInlineData = "InlineData"
-descName DescBuiltinId = "id"
 
 descId (DescFile      d) = fileId d
-descId (DescUsing     _) = Nothing
-descId (DescConstant  d) = constantId d
 descId (DescEnum      d) = enumId d
-descId (DescEnumerant d) = enumerantId d
 descId (DescStruct    d) = structId d
-descId (DescUnion     d) = unionId d
-descId (DescField     d) = fieldId d
 descId (DescInterface d) = interfaceId d
-descId (DescMethod    d) = methodId d
-descId (DescParam     d) = paramId d
 descId (DescAnnotation d) = annotationId d
-descId (DescBuiltinType _) = Nothing
-descId DescBuiltinList = Nothing
-descId DescBuiltinInline = Nothing
-descId DescBuiltinInlineList = Nothing
-descId DescBuiltinInlineData = Nothing
-descId DescBuiltinId = Just "0U0T3e_SnatEfk6UcH2tcjTt1E0"
-
--- Gets the ID if explicitly defined, or generates it by appending ".name" to the parent's ID.
--- If no ancestor has an ID, still returns Nothing.
-descAutoId d = case descId d of
-    Just i -> Just i
-    Nothing -> case d of
-        DescFile _ -> Nothing
-        _ -> fmap (++ '.':descName d) $ descAutoId $ descParent d
+descId _ = error "This construct does not have an ID."
 
 descParent (DescFile      _) = error "File descriptor has no parent."
 descParent (DescUsing     d) = usingParent d
@@ -131,7 +109,6 @@ descParent DescBuiltinList = error "Builtin type has no parent."
 descParent DescBuiltinInline = error "Builtin type has no parent."
 descParent DescBuiltinInlineList = error "Builtin type has no parent."
 descParent DescBuiltinInlineData = error "Builtin type has no parent."
-descParent DescBuiltinId = error "Builtin annotation has no parent."
 
 descFile (DescFile d) = d
 descFile desc = descFile $ descParent desc
@@ -153,7 +130,6 @@ descAnnotations DescBuiltinList = Map.empty
 descAnnotations DescBuiltinInline = Map.empty
 descAnnotations DescBuiltinInlineList = Map.empty
 descAnnotations DescBuiltinInlineData = Map.empty
-descAnnotations DescBuiltinId = Map.empty
 
 descRuntimeImports (DescFile      _) = error "Not to be called on files."
 descRuntimeImports (DescUsing     d) = usingRuntimeImports d
@@ -172,7 +148,6 @@ descRuntimeImports DescBuiltinList = []
 descRuntimeImports DescBuiltinInline = []
 descRuntimeImports DescBuiltinInlineList = []
 descRuntimeImports DescBuiltinInlineData = []
-descRuntimeImports DescBuiltinId = []
 
 type MemberMap = Map.Map String (Maybe Desc)
 
@@ -398,7 +373,7 @@ descQualifiedName scope desc = descQualifiedName (descParent scope) desc
 
 data FileDesc = FileDesc
     { fileName :: String
-    , fileId :: Maybe String
+    , fileId :: Word64
     , fileImports :: [FileDesc]
     -- Set of imports which are used at runtime, i.e. not just for annotations.
     -- The set contains file names matching files in fileImports.
@@ -419,7 +394,6 @@ usingRuntimeImports _ = []
 
 data ConstantDesc = ConstantDesc
     { constantName :: String
-    , constantId :: Maybe String
     , constantParent :: Desc
     , constantType :: TypeDesc
     , constantAnnotations :: AnnotationMap
@@ -430,7 +404,7 @@ constantRuntimeImports desc = typeRuntimeImports $ constantType desc
 
 data EnumDesc = EnumDesc
     { enumName :: String
-    , enumId :: Maybe String
+    , enumId :: Word64
     , enumParent :: Desc
     , enumerants :: [EnumerantDesc]
     , enumAnnotations :: AnnotationMap
@@ -442,7 +416,6 @@ enumRuntimeImports desc = concatMap descRuntimeImports $ enumMembers desc
 
 data EnumerantDesc = EnumerantDesc
     { enumerantName :: String
-    , enumerantId :: Maybe String
     , enumerantParent :: EnumDesc
     , enumerantNumber :: Integer
     , enumerantAnnotations :: AnnotationMap
@@ -452,7 +425,7 @@ enumerantRuntimeImports _ = []
 
 data StructDesc = StructDesc
     { structName :: String
-    , structId :: Maybe String
+    , structId :: Word64
     , structParent :: Desc
     , structDataSize :: DataSectionSize
     , structPointerCount :: Integer
@@ -473,7 +446,6 @@ structRuntimeImports desc = concatMap descRuntimeImports $ structMembers desc
 
 data UnionDesc = UnionDesc
     { unionName :: String
-    , unionId :: Maybe String
     , unionParent :: StructDesc
     , unionNumber :: Integer
     , unionTagOffset :: Integer
@@ -490,7 +462,6 @@ unionRuntimeImports desc = concatMap descRuntimeImports $ unionMembers desc
 
 data FieldDesc = FieldDesc
     { fieldName :: String
-    , fieldId :: Maybe String
     , fieldParent :: StructDesc
     , fieldNumber :: Integer
     , fieldOffset :: FieldOffset
@@ -504,7 +475,7 @@ fieldRuntimeImports desc = typeRuntimeImports $ fieldType desc
 
 data InterfaceDesc = InterfaceDesc
     { interfaceName :: String
-    , interfaceId :: Maybe String
+    , interfaceId :: Word64
     , interfaceParent :: Desc
     , interfaceMethods :: [MethodDesc]
     , interfaceAnnotations :: AnnotationMap
@@ -516,7 +487,6 @@ interfaceRuntimeImports desc = concatMap descRuntimeImports $ interfaceMembers d
 
 data MethodDesc = MethodDesc
     { methodName :: String
-    , methodId :: Maybe String
     , methodParent :: InterfaceDesc
     , methodNumber :: Integer
     , methodParams :: [ParamDesc]
@@ -529,7 +499,6 @@ methodRuntimeImports desc = typeRuntimeImports (methodReturnType desc) ++
 
 data ParamDesc = ParamDesc
     { paramName :: String
-    , paramId :: Maybe String
     , paramParent :: MethodDesc
     , paramNumber :: Integer
     , paramType :: TypeDesc
@@ -544,20 +513,18 @@ data AnnotationDesc = AnnotationDesc
     , annotationParent :: Desc
     , annotationType :: TypeDesc
     , annotationAnnotations :: AnnotationMap
-    , annotationId :: Maybe String
+    , annotationId :: Word64
     , annotationTargets :: Set.Set AnnotationTarget
     }
 
 annotationRuntimeImports desc = typeRuntimeImports $ annotationType desc
 
-type AnnotationMap = Map.Map String (AnnotationDesc, ValueDesc)
+type AnnotationMap = Map.Map Word64 (AnnotationDesc, ValueDesc)
 
 descToCode :: String -> Desc -> String
-descToCode indent self@(DescFile desc) = printf "# %s\n%s%s%s"
+descToCode indent self@(DescFile desc) = printf "# %s\n@0x%016x;\n%s%s"
     (fileName desc)
-    (case fileId desc of
-        Just i -> printf "$id(%s);\n" $ show i
-        Nothing -> "")
+    (fileId desc)
     (concatMap ((++ ";\n") . annotationCode self) $ Map.toList $ fileAnnotations desc)
     (concatMap (descToCode indent) (fileMembers desc))
 descToCode indent (DescUsing desc) = printf "%susing %s = %s;\n" indent
@@ -568,16 +535,18 @@ descToCode indent self@(DescConstant desc) = printf "%sconst %s: %s = %s%s;\n" i
     (typeName (descParent self) (constantType desc))
     (valueString (constantValue desc))
     (annotationsCode self)
-descToCode indent self@(DescEnum desc) = printf "%senum %s%s {\n%s%s}\n" indent
+descToCode indent self@(DescEnum desc) = printf "%senum %s @0x%016x%s {\n%s%s}\n" indent
     (enumName desc)
+    (enumId desc)
     (annotationsCode self)
     (blockCode indent (enumMembers desc))
     indent
 descToCode indent self@(DescEnumerant desc) = printf "%s%s @%d%s;\n" indent
     (enumerantName desc) (enumerantNumber desc)
     (annotationsCode self)
-descToCode indent self@(DescStruct desc) = printf "%sstruct %s%s%s {\n%s%s}\n" indent
+descToCode indent self@(DescStruct desc) = printf "%sstruct %s @0x%016x%s%s {\n%s%s}\n" indent
     (structName desc)
+    (structId desc)
     (if structIsFixedWidth desc
         then printf " fixed(%s, %d pointers) "
             (dataSectionSizeString $ structDataSize desc)
@@ -609,8 +578,9 @@ descToCode indent self@(DescUnion desc) = printf "%sunion %s@%d%s {  # [%d, %d)\
     (unionTagOffset desc * 16) (unionTagOffset desc * 16 + 16)
     (blockCode indent $ unionMembers desc)
     indent
-descToCode indent self@(DescInterface desc) = printf "%sinterface %s%s {\n%s%s}\n" indent
+descToCode indent self@(DescInterface desc) = printf "%sinterface %s @0x%016x%s {\n%s%s}\n" indent
     (interfaceName desc)
+    (interfaceId desc)
     (annotationsCode self)
     (blockCode indent (interfaceMembers desc))
     indent
@@ -626,8 +596,9 @@ descToCode _ self@(DescParam desc) = printf "%s: %s%s%s"
         Just v -> printf " = %s" $ valueString v
         Nothing -> "")
     (annotationsCode self)
-descToCode indent self@(DescAnnotation desc) = printf "%sannotation %s: %s on(%s)%s;\n" indent
+descToCode indent self@(DescAnnotation desc) = printf "%sannotation %s @0x%016x: %s on(%s)%s;\n" indent
     (annotationName desc)
+    (annotationId desc)
     (typeName (descParent self) (annotationType desc))
     (delimit ", " $ map show $ Set.toList $ annotationTargets desc)
     (annotationsCode self)
@@ -636,7 +607,6 @@ descToCode _ DescBuiltinList = error "Can't print code for builtin type."
 descToCode _ DescBuiltinInline = error "Can't print code for builtin type."
 descToCode _ DescBuiltinInlineList = error "Can't print code for builtin type."
 descToCode _ DescBuiltinInlineData = error "Can't print code for builtin type."
-descToCode _ DescBuiltinId = error "Can't print code for builtin annotation."
 
 maybeBlockCode :: String -> [Desc] -> String
 maybeBlockCode _ [] = ";\n"
@@ -645,18 +615,14 @@ maybeBlockCode indent statements = printf " {\n%s%s}\n" (blockCode indent statem
 blockCode :: String -> [Desc] -> String
 blockCode indent = concatMap (descToCode ("  " ++ indent))
 
-annotationCode :: Desc -> (String, (AnnotationDesc, ValueDesc)) -> String
+annotationCode :: Desc -> (Word64, (AnnotationDesc, ValueDesc)) -> String
 annotationCode scope (_, (desc, VoidDesc)) =
     printf "$%s" (descQualifiedName scope (DescAnnotation desc))
 annotationCode scope (_, (desc, val)) =
     printf "$%s(%s)" (descQualifiedName scope (DescAnnotation desc)) (valueString val)
 
-annotationsCode desc = let
-    nonIds = concatMap ((' ':) . annotationCode (descParent desc)) $ Map.toList
-           $ descAnnotations desc
-    in case descId desc of
-        Just i -> printf " $id(%s)%s" (show i) nonIds
-        Nothing -> nonIds
+annotationsCode desc = concatMap ((' ':) . annotationCode (descParent desc)) $ Map.toList
+                     $ descAnnotations desc
 
 instance Show FileDesc where { show desc = descToCode "" (DescFile desc) }
 instance Show UsingDesc where { show desc = descToCode "" (DescUsing desc) }

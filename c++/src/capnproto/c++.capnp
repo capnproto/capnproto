@@ -21,7 +21,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-$id("v3JF2GP4Supe9JSSJ3pnSdUqhJI");
+@0xbdf87d7bb8304e81;
 $namespace("capnproto::annotations");
 
 annotation namespace(file): Text;

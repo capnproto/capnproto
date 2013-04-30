@@ -31,7 +31,7 @@ import Data.Word(Word8)
 import qualified Data.Digest.MD5 as MD5
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Maybe(catMaybes, fromMaybe)
+import Data.Maybe(catMaybes)
 import Data.Binary.IEEE754(floatToWord, doubleToWord)
 import Text.Printf(printf)
 import Text.Hastache
@@ -51,7 +51,7 @@ muNull = MuBool False;
 -- Using a single-element list has the same effect, though.
 muJust c = MuList [c]
 
-namespaceAnnotationId = "v3JF2GP4Supe9JSSJ3pnSdUqhJI.namespace"
+namespaceAnnotationId = 0xb9c6f99ebf805f2c
 
 fileNamespace desc = fmap testAnnotation $ Map.lookup namespaceAnnotationId $ fileAnnotations desc
 
@@ -422,7 +422,7 @@ fileContext desc = mkStrContext context where
     context "fileName" = MuVariable $ fileName desc
     context "fileBasename" = MuVariable $ takeBaseName $ fileName desc
     context "fileIncludeGuard" = MuVariable $
-        "CAPNPROTO_INCLUDED_" ++ hashString (fileName desc ++ ':':fromMaybe "" (fileId desc))
+        "CAPNPROTO_INCLUDED_" ++ hashString (fileName desc ++ ':':show (fileId desc))
     context "fileNamespaces" = MuList $ map (namespaceContext context) namespace
     context "fileEnums" = MuList $ map (enumContext context) [e | DescEnum e <- fileMembers desc]
     context "fileTypes" = MuList $ map (typeContext context) flattenedMembers

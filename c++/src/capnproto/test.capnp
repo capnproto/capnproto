@@ -21,6 +21,8 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+@0xd508eebdc2dc42b8;
+
 using Cxx = import "c++.capnp";
 
 # Use a namespace likely to cause trouble if the generated code doesn't use fully-qualified

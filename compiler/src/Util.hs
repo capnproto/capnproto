@@ -25,6 +25,8 @@ module Util where
 
 import Data.Char (isUpper, toUpper)
 import Data.List (intercalate, isPrefixOf)
+import Data.Bits(shiftR, Bits)
+import Data.Word(Word8)
 
 --delimit _ [] = ""
 --delimit delimiter (h:t) = h ++ concatMap (delimiter ++) t
@@ -50,3 +52,8 @@ toTitleCase [] = []
 
 toUpperCaseWithUnderscores :: String -> String
 toUpperCaseWithUnderscores name = delimit "_" $ map (map toUpper) $ splitName name
+
+intToBytes :: (Integral a, Bits a) => a -> Int -> [Word8]
+intToBytes i count = map (byte i) [0..(count - 1)] where
+    byte :: (Integral a, Bits a) => a -> Int -> Word8
+    byte i2 amount = fromIntegral (shiftR i2 (amount * 8))

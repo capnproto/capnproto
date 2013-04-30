@@ -29,7 +29,8 @@ executable capnpc
                    filepath,
                    directory,
                    syb,
-                   transformers
+                   transformers,
+                   entropy
   ghc-options:     -Wall -fno-warn-missing-signatures
   other-modules:
                    Lexer,

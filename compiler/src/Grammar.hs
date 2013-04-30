@@ -25,6 +25,7 @@ module Grammar where
 
 import Token (Located)
 import Data.Maybe (maybeToList)
+import Data.Word (Word64)
 
 data DeclName = AbsoluteName (Located String)
               | RelativeName (Located String)
@@ -100,43 +101,45 @@ instance Show AnnotationTarget where
 
 data Declaration = UsingDecl (Located String) DeclName
                  | ConstantDecl (Located String) TypeExpression [Annotation] (Located FieldValue)
-                 | EnumDecl (Located String) [Annotation] [Declaration]
+                 | EnumDecl (Located String) (Maybe (Located Word64)) [Annotation] [Declaration]
                  | EnumerantDecl (Located String) (Located Integer) [Annotation]
-                 | StructDecl (Located String) (Maybe (Located (Integer, Integer)))
-                              [Annotation] [Declaration]
+                 | StructDecl (Located String) (Maybe (Located Word64))
+                              (Maybe (Located (Integer, Integer))) [Annotation] [Declaration]
                  | FieldDecl (Located String) (Located Integer)
                              TypeExpression [Annotation] (Maybe (Located FieldValue))
                  | UnionDecl (Located String) (Located Integer) [Annotation] [Declaration]
-                 | InterfaceDecl (Located String) [Annotation] [Declaration]
+                 | InterfaceDecl (Located String) (Maybe (Located Word64))
+                                 [Annotation] [Declaration]
                  | MethodDecl (Located String) (Located Integer) [ParamDecl]
                               TypeExpression [Annotation]
-                 | AnnotationDecl (Located String) TypeExpression [Annotation] [AnnotationTarget]
+                 | AnnotationDecl (Located String) (Maybe (Located Word64)) TypeExpression
+                                  [Annotation] [AnnotationTarget]
                  deriving (Show)
 
 declarationName :: Declaration -> Maybe (Located String)
-declarationName (UsingDecl n _)          = Just n
-declarationName (ConstantDecl n _ _ _)   = Just n
-declarationName (EnumDecl n _ _)         = Just n
-declarationName (EnumerantDecl n _ _)    = Just n
-declarationName (StructDecl n _ _ _)     = Just n
-declarationName (FieldDecl n _ _ _ _)    = Just n
-declarationName (UnionDecl n _ _ _)      = Just n
-declarationName (InterfaceDecl n _ _)    = Just n
-declarationName (MethodDecl n _ _ _ _)   = Just n
-declarationName (AnnotationDecl n _ _ _) = Just n
+declarationName (UsingDecl n _)            = Just n
+declarationName (ConstantDecl n _ _ _)     = Just n
+declarationName (EnumDecl n _ _ _)         = Just n
+declarationName (EnumerantDecl n _ _)      = Just n
+declarationName (StructDecl n _ _ _ _)     = Just n
+declarationName (FieldDecl n _ _ _ _)      = Just n
+declarationName (UnionDecl n _ _ _)        = Just n
+declarationName (InterfaceDecl n _ _ _)    = Just n
+declarationName (MethodDecl n _ _ _ _)     = Just n
+declarationName (AnnotationDecl n _ _ _ _) = Just n
 
 declImports :: Declaration -> [Located String]
 declImports (UsingDecl _ name) = maybeToList (declNameImport name)
 declImports (ConstantDecl _ t ann _) = typeImports t ++ concatMap annotationImports ann
-declImports (EnumDecl _ ann decls) = concatMap annotationImports ann ++ concatMap declImports decls
+declImports (EnumDecl _ _ ann decls) = concatMap annotationImports ann ++ concatMap declImports decls
 declImports (EnumerantDecl _ _ ann) = concatMap annotationImports ann
-declImports (StructDecl _ _ ann decls) = concatMap annotationImports ann ++
-                                         concatMap declImports decls
+declImports (StructDecl _ _ _ ann decls) = concatMap annotationImports ann ++
+                                           concatMap declImports decls
 declImports (FieldDecl _ _ t ann _) = typeImports t ++ concatMap annotationImports ann
 declImports (UnionDecl _ _ ann decls) = concatMap annotationImports ann ++
                                         concatMap declImports decls
-declImports (InterfaceDecl _ ann decls) = concatMap annotationImports ann ++
-                                          concatMap declImports decls
+declImports (InterfaceDecl _ _ ann decls) = concatMap annotationImports ann ++
+                                            concatMap declImports decls
 declImports (MethodDecl _ _ params t ann) =
     concat [concatMap paramImports params, typeImports t, concatMap annotationImports ann]
-declImports (AnnotationDecl _ t ann _) = typeImports t ++ concatMap annotationImports ann
+declImports (AnnotationDecl _ _ t ann _) = typeImports t ++ concatMap annotationImports ann

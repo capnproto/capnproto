@@ -25,18 +25,21 @@ module Compiler (Status(..), parseAndCompileFile) where
 
 import Grammar
 import Semantics
-import Token(Located(Located), locatedPos, locatedValue)
+import Token(Located(Located), locatedValue)
 import Parser(parseFile)
-import Control.Monad(when, unless)
+import Control.Monad(when, unless, liftM)
 import qualified Data.Map as Map
 import Data.Map((!))
 import qualified Data.Set as Set
 import qualified Data.List as List
-import Data.Maybe(mapMaybe, fromMaybe, listToMaybe, catMaybes, isJust)
+import Data.Maybe(mapMaybe, fromMaybe, isJust, isNothing)
+import Data.Word(Word64, Word8)
 import Text.Parsec.Pos(SourcePos, newPos)
 import Text.Parsec.Error(ParseError, newErrorMessage, Message(Message, Expect))
 import Text.Printf(printf)
-import Util(delimit)
+import qualified Data.Digest.MD5 as MD5
+import qualified Codec.Binary.UTF8.String as UTF8
+import Util(delimit, intToBytes)
 
 ------------------------------------------------------------------------------------------
 -- Error helpers
@@ -164,8 +167,7 @@ builtinTypeMap = Map.fromList
      [("List", DescBuiltinList),
       ("Inline", DescBuiltinInline),
       ("InlineList", DescBuiltinInlineList),
-      ("InlineData", DescBuiltinInlineData),
-      ("id", DescBuiltinId)])
+      ("InlineData", DescBuiltinInlineData)])
 
 ------------------------------------------------------------------------------------------
 
@@ -364,43 +366,30 @@ compileType scope (TypeExpression n params) = do
                 printf "'%s' doesn't take parameters." (declNameString n)
 
 compileAnnotation :: Desc -> AnnotationTarget -> Annotation
-                  -> Status (Maybe AnnotationDesc, ValueDesc)
+                  -> Status (AnnotationDesc, ValueDesc)
 compileAnnotation scope kind (Annotation name (Located pos value)) = do
     nameDesc <- lookupDesc scope name
     case nameDesc of
-        DescBuiltinId -> do
-            compiledValue <- compileValue pos (BuiltinType BuiltinText) value
-            return (Nothing, compiledValue)
         DescAnnotation annDesc -> do
             unless (Set.member kind (annotationTargets annDesc))
                 (makeError (declNamePos name)
                 $ printf "'%s' cannot be used on %s." (declNameString name) (show kind))
             compiledValue <- compileValue pos (annotationType annDesc) value
-            return (Just annDesc, compiledValue)
+            return (annDesc, compiledValue)
         _ -> makeError (declNamePos name)
            $ printf "'%s' is not an annotation." (declNameString name)
 
 compileAnnotations :: Desc -> AnnotationTarget -> [Annotation]
-                   -> Status (Maybe String, AnnotationMap)  -- (id, other annotations)
+                   -> Status AnnotationMap
 compileAnnotations scope kind annotations = do
     let compileLocated ann@(Annotation name _) =
             fmap (Located $ declNamePos name) $ compileAnnotation scope kind ann
 
     compiled <- doAll $ map compileLocated annotations
 
-    -- Makes a map entry for the annotation keyed by ID.  Throws out annotations with no ID.
-    let ids = [ Located pos i | Located pos (Nothing, TextDesc i) <- compiled ]
-        theId = fmap locatedValue $ listToMaybe ids
-        dupIds = map (flip makeError "Duplicate annotation 'id'." . locatedPos) $ List.drop 1 ids
-
-        -- For the annotations other than "id", we want to build a map keyed by annotation ID.
-        -- We drop any annotation that doesn't have an ID.
-        locatedEntries = catMaybes
-            [ annotationById pos (desc, v) | Located pos (Just desc, v) <- compiled ]
-        annotationById pos ann@(desc, _) =
-            case descAutoId (DescAnnotation desc) of
-                Just globalId -> Just (Located pos (globalId, ann))
-                Nothing -> Nothing
+    -- Makes a map entry for the annotation keyed by ID.
+    let locatedEntries = [ Located pos (annotationId desc, (desc, v))
+                         | Located pos (desc, v) <- compiled ]
 
         -- TODO(cleanup):  Generalize duplicate detection.
         sortedLocatedEntries = detectDup $ List.sortBy compareIds locatedEntries
@@ -411,9 +400,16 @@ compileAnnotations scope kind annotations = do
         detectDup [] = []
 
     finalEntries <- doAll sortedLocatedEntries
-    _ <- doAll dupIds
 
-    return (theId, Map.fromList finalEntries)
+    return $ Map.fromList finalEntries
+
+childId :: String -> Maybe (Located Word64) -> Desc -> Word64
+childId _ (Just (Located _ myId)) _ = myId
+childId name Nothing parent = let
+    hash = MD5.hash (intToBytes (descId parent) 8 ++ UTF8.encode name)
+    addByte :: Word64 -> Word8 -> Word64
+    addByte b v = b * 256 + fromIntegral v
+    in foldl addByte 0 (take 8 hash)
 
 ------------------------------------------------------------------------------------------
 
@@ -801,27 +797,26 @@ compileDecl scope (ConstantDecl (Located _ name) t annotations (Located valuePos
     CompiledStatementStatus name (do
         typeDesc <- compileType scope t
         valueDesc <- compileValue valuePos typeDesc value
-        (theId, compiledAnnotations) <- compileAnnotations scope ConstantAnnotation annotations
+        compiledAnnotations <- compileAnnotations scope ConstantAnnotation annotations
         return (DescConstant ConstantDesc
             { constantName = name
-            , constantId = theId
             , constantParent = scope
             , constantType = typeDesc
             , constantValue = valueDesc
             , constantAnnotations = compiledAnnotations
             }))
 
-compileDecl scope (EnumDecl (Located _ name) annotations decls) =
+compileDecl scope (EnumDecl (Located _ name) maybeTypeId annotations decls) =
     CompiledStatementStatus name (feedback (\desc -> do
         (members, memberMap) <- compileChildDecls desc decls
         requireNoDuplicateNames decls
         let numbers = [ num | EnumerantDecl _ num _ <- decls ]
         requireSequentialNumbering "Enumerants" numbers
         requireOrdinalsInRange numbers
-        (theId, compiledAnnotations) <- compileAnnotations scope EnumAnnotation annotations
+        compiledAnnotations <- compileAnnotations scope EnumAnnotation annotations
         return (DescEnum EnumDesc
             { enumName = name
-            , enumId = theId
+            , enumId = childId name maybeTypeId scope
             , enumParent = scope
             , enumerants = [d | DescEnumerant d <- members]
             , enumAnnotations = compiledAnnotations
@@ -832,10 +827,9 @@ compileDecl scope (EnumDecl (Located _ name) annotations decls) =
 compileDecl scope@(DescEnum parent)
             (EnumerantDecl (Located _ name) (Located _ number) annotations) =
     CompiledStatementStatus name (do
-        (theId, compiledAnnotations) <- compileAnnotations scope EnumerantAnnotation annotations
+        compiledAnnotations <- compileAnnotations scope EnumerantAnnotation annotations
         return (DescEnumerant EnumerantDesc
             { enumerantName = name
-            , enumerantId = theId
             , enumerantParent = parent
             , enumerantNumber = number
             , enumerantAnnotations = compiledAnnotations
@@ -843,14 +837,14 @@ compileDecl scope@(DescEnum parent)
 compileDecl _ (EnumerantDecl (Located pos name) _ _) =
     CompiledStatementStatus name (makeError pos "Enumerants can only appear inside enums.")
 
-compileDecl scope (StructDecl (Located _ name) isFixed annotations decls) =
+compileDecl scope (StructDecl (Located _ name) maybeTypeId isFixed annotations decls) =
     CompiledStatementStatus name (feedback (\desc -> do
         (members, memberMap) <- compileChildDecls desc decls
         requireNoDuplicateNames decls
         let fieldNums = extractFieldNumbers decls
         requireSequentialNumbering "Fields" fieldNums
         requireOrdinalsInRange fieldNums
-        (theId, compiledAnnotations) <- compileAnnotations scope StructAnnotation annotations
+        compiledAnnotations <- compileAnnotations scope StructAnnotation annotations
         let (dataSize, pointerCount, fieldPackingMap) = packFields fields unions
             fields = [d | DescField d <- members]
             unions = [d | DescUnion d <- members]
@@ -859,7 +853,7 @@ compileDecl scope (StructDecl (Located _ name) isFixed annotations decls) =
         return (let
             in DescStruct StructDesc
             { structName = name
-            , structId = theId
+            , structId = childId name maybeTypeId scope
             , structParent = scope
             , structDataSize = finalDataSize
             , structPointerCount = finalPointerCount
@@ -880,12 +874,11 @@ compileDecl scope@(DescStruct parent)
             orderedFieldNumbers = List.sort $ map fieldNumber fields
             discriminantMap = Map.fromList $ zip orderedFieldNumbers [0..]
         requireNoMoreThanOneFieldNumberLessThan name numPos number fields
-        (theId, compiledAnnotations) <- compileAnnotations scope UnionAnnotation annotations
+        compiledAnnotations <- compileAnnotations scope UnionAnnotation annotations
         return (let
             DataOffset Size16 tagOffset = structFieldPackingMap parent ! number
             in DescUnion UnionDesc
             { unionName = name
-            , unionId = theId
             , unionParent = parent
             , unionNumber = number
             , unionTagOffset = tagOffset
@@ -925,11 +918,10 @@ compileDecl scope
                     _ -> return ())
                 return result
             Nothing -> return Nothing
-        (theId, compiledAnnotations) <- compileAnnotations scope FieldAnnotation annotations
+        compiledAnnotations <- compileAnnotations scope FieldAnnotation annotations
         return (let
             in DescField FieldDesc
             { fieldName = name
-            , fieldId = theId
             , fieldParent = parent
             , fieldNumber = number
             , fieldOffset = structFieldPackingMap parent ! number
@@ -939,17 +931,17 @@ compileDecl scope
             , fieldAnnotations = compiledAnnotations
             }))
 
-compileDecl scope (InterfaceDecl (Located _ name) annotations decls) =
+compileDecl scope (InterfaceDecl (Located _ name) maybeTypeId annotations decls) =
     CompiledStatementStatus name (feedback (\desc -> do
         (members, memberMap) <- compileChildDecls desc decls
         requireNoDuplicateNames decls
         let numbers = [ num | MethodDecl _ num _ _ _ <- decls ]
         requireSequentialNumbering "Methods" numbers
         requireOrdinalsInRange numbers
-        (theId, compiledAnnotations) <- compileAnnotations scope InterfaceAnnotation annotations
+        compiledAnnotations <- compileAnnotations scope InterfaceAnnotation annotations
         return (DescInterface InterfaceDesc
             { interfaceName = name
-            , interfaceId = theId
+            , interfaceId = childId name maybeTypeId scope
             , interfaceParent = scope
             , interfaceMethods = [d | DescMethod    d <- members]
             , interfaceAnnotations = compiledAnnotations
@@ -962,10 +954,9 @@ compileDecl scope@(DescInterface parent)
     CompiledStatementStatus name (feedback (\desc -> do
         paramDescs <- doAll (map (compileParam desc) (zip [0..] params))
         returnTypeDesc <- compileType scope returnType
-        (theId, compiledAnnotations) <- compileAnnotations scope MethodAnnotation annotations
+        compiledAnnotations <- compileAnnotations scope MethodAnnotation annotations
         return (DescMethod MethodDesc
             { methodName = name
-            , methodId = theId
             , methodParent = parent
             , methodNumber = number
             , methodParams = paramDescs
@@ -975,13 +966,13 @@ compileDecl scope@(DescInterface parent)
 compileDecl _ (MethodDecl (Located pos name) _ _ _ _) =
     CompiledStatementStatus name (makeError pos "Methods can only appear inside interfaces.")
 
-compileDecl scope (AnnotationDecl (Located _ name) typeExp annotations targets) =
+compileDecl scope (AnnotationDecl (Located _ name) maybeTypeId typeExp annotations targets) =
     CompiledStatementStatus name (do
         typeDesc <- compileType scope typeExp
-        (theId, compiledAnnotations) <- compileAnnotations scope AnnotationAnnotation annotations
+        compiledAnnotations <- compileAnnotations scope AnnotationAnnotation annotations
         return (DescAnnotation AnnotationDesc
             { annotationName = name
-            , annotationId = theId
+            , annotationId = childId name maybeTypeId scope
             , annotationParent = scope
             , annotationType = typeDesc
             , annotationAnnotations = compiledAnnotations
@@ -994,10 +985,9 @@ compileParam scope@(DescMethod parent)
     defaultDesc <- case defaultValue of
         Just (Located pos value) -> fmap Just (compileValue pos typeDesc value)
         Nothing -> return Nothing
-    (theId, compiledAnnotations) <- compileAnnotations scope ParamAnnotation annotations
+    compiledAnnotations <- compileAnnotations scope ParamAnnotation annotations
     return ParamDesc
         { paramName = name
-        , paramId = theId
         , paramParent = parent
         , paramNumber = ordinal
         , paramType = typeDesc
@@ -1006,15 +996,14 @@ compileParam scope@(DescMethod parent)
         }
 compileParam _ _ = error "scope of parameter was not a method"
 
-compileFile name decls annotations importMap =
+compileFile name theId decls annotations importMap =
     feedback (\desc -> do
         (members, memberMap) <- compileChildDecls (DescFile desc) decls
         requireNoDuplicateNames decls
-        (theId, compiledAnnotations)
-            <- compileAnnotations (DescFile desc) FileAnnotation annotations
+        compiledAnnotations <- compileAnnotations (DescFile desc) FileAnnotation annotations
         return FileDesc
             { fileName = name
-            , fileId = theId
+            , fileId = locatedValue theId
             , fileImports = Map.elems importMap
             , fileRuntimeImports =
                 Set.fromList $ map fileName $ concatMap descRuntimeImports members
@@ -1029,7 +1018,7 @@ dedup = Set.toList . Set.fromList
 
 emptyFileDesc filename = FileDesc
     { fileName = filename
-    , fileId = Nothing
+    , fileId = 0x0
     , fileImports = []
     , fileRuntimeImports = Set.empty
     , fileAnnotations = Map.empty
@@ -1042,9 +1031,10 @@ parseAndCompileFile :: Monad m
                     => FilePath                                -- Name of this file.
                     -> String                                  -- Content of this file.
                     -> (String -> m (Either FileDesc String))  -- Callback to import other files.
+                    -> m Word64                                -- Callback to generate a random id.
                     -> m (Status FileDesc)                     -- Compiled file and/or errors.
-parseAndCompileFile filename text importCallback = do
-    let (decls, annotations, parseErrors) = parseFile filename text
+parseAndCompileFile filename text importCallback randomCallback = do
+    let (maybeFileId, decls, annotations, parseErrors) = parseFile filename text
         importNames = dedup $ concatMap declImports decls
         doImport (Located pos name) = do
             result <- importCallback name
@@ -1054,6 +1044,11 @@ parseAndCompileFile filename text importCallback = do
                     (makeError pos (printf "Couldn't import \"%s\": %s" name err))
 
     importStatuses <- mapM doImport importNames
+
+    let dummyPos = newPos filename 1 1
+    theFileId <- case maybeFileId of
+        Nothing -> liftM (Located dummyPos) randomCallback
+        Just i -> return i
 
     return (do
         -- We are now in the Status monad.
@@ -1075,5 +1070,11 @@ parseAndCompileFile filename text importCallback = do
         -- of one bad import.
         imports <- doAll importStatuses
 
+        -- Report lack of an id.
+        when (isNothing maybeFileId) $
+            makeError dummyPos $
+                printf "File does not declare an ID.  I've generated one for you.  Add this line \
+                       \to your file: @0x%016x;" (locatedValue theFileId)
+
         -- Compile the file!
-        compileFile filename decls annotations $ Map.fromList imports)
+        compileFile filename theFileId decls annotations $ Map.fromList imports)

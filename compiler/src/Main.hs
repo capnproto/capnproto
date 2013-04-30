@@ -29,8 +29,9 @@ import System.Exit(exitFailure, exitSuccess)
 import System.IO(hPutStr, stderr)
 import System.FilePath(takeDirectory)
 import System.Directory(createDirectoryIfMissing, doesDirectoryExist, doesFileExist)
+import System.Entropy(getEntropy)
 import Control.Monad
-import Control.Monad.IO.Class(liftIO)
+import Control.Monad.IO.Class(MonadIO, liftIO)
 import Control.Exception(IOException, catch)
 import Control.Monad.Trans.State(StateT, state, modify, execStateT)
 import Prelude hiding (catch)
@@ -42,6 +43,8 @@ import Text.Printf(printf)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.ByteString.Lazy.Char8 as LZ
+import Data.ByteString(unpack)
+import Data.Word(Word64, Word8)
 import Semantics
 
 import CxxGenerator(generateCxx)
@@ -54,6 +57,7 @@ data Opt = SearchPathOpt FilePath
          | OutputOpt String (Maybe GeneratorFn) FilePath
          | VerboseOpt
          | HelpOpt
+         | GenIdOpt
 
 main :: IO ()
 main = do
@@ -66,6 +70,7 @@ main = do
               \directory).  LANG may be any of:\n\
               \  " ++ unwords (Map.keys generatorFns))
          , Option "v" ["verbose"] (NoArg VerboseOpt) "Write information about parsed files."
+         , Option "i" ["generate-id"] (NoArg GenIdOpt) "Generate a new unique ID."
          , Option "h" ["help"] (NoArg HelpOpt) "Print usage info and exit."
          ]
     let usage = usageInfo
@@ -88,9 +93,14 @@ main = do
         exitFailure)
 
     let isHelp = not $ null [opt | opt@HelpOpt <- options]
-
     when isHelp (do
         putStr usage
+        exitSuccess)
+
+    let isGenId = not $ null [opt | opt@GenIdOpt <- options]
+    when isGenId (do
+        i <- generateId
+        _ <- printf "@0x%016x\n" i
         exitSuccess)
 
     let isVerbose = not $ null [opt | opt@VerboseOpt <- options]
@@ -187,6 +197,16 @@ readAndParseFile isVerbose searchPath filename = do
         Right err -> return $ Right err
         Left text -> parseFile isVerbose searchPath filename text
 
+generateId :: MonadIO m => m Word64
+generateId = do
+    byteString <- liftIO $ getEntropy 8
+    let i | ix < 2^(63::Integer) = ix + 2^(63::Integer)
+          | otherwise = ix
+        ix = foldl addByte 0 (unpack byteString)
+        addByte :: Word64 -> Word8 -> Word64
+        addByte b v = b * 256 + fromIntegral v
+    return i
+
 parseFile isVerbose searchPath filename text = do
     let importCallback name = do
             let candidates = relativePath filename searchPath name
@@ -195,7 +215,7 @@ parseFile isVerbose searchPath filename text = do
                 Nothing -> return $ Right "File not found."
                 Just path -> importFile isVerbose searchPath path
 
-    status <- parseAndCompileFile filename text importCallback
+    status <- parseAndCompileFile filename text importCallback generateId
     case status of
         Active desc [] -> do
             when isVerbose (liftIO $ print desc)

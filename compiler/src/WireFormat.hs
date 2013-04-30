@@ -25,18 +25,13 @@ module WireFormat(encodeMessage) where
 
 import Data.List(sortBy, genericLength, genericReplicate)
 import Data.Word
-import Data.Bits(shiftL, shiftR, Bits, setBit, xor)
+import Data.Bits(shiftL, Bits, setBit, xor)
 import Data.Function(on)
 import Semantics
 import Data.Binary.IEEE754(floatToWord, doubleToWord)
 import Text.Printf(printf)
 import qualified Codec.Binary.UTF8.String as UTF8
-
-byte :: (Integral a, Bits a) => a -> Int -> Word8
-byte i amount = fromIntegral (shiftR i (amount * 8))
-
-bytes :: (Integral a, Bits a) => a -> Int -> [Word8]
-bytes i count = map (byte i) [0..(count - 1)]
+import Util(intToBytes)
 
 padToWord b = let
     trailing = mod (length b) 8
@@ -55,19 +50,19 @@ xorData _ _ = error "Value type mismatch when xor'ing."
 encodeDataValue :: TypeDesc -> ValueDesc -> EncodedData
 encodeDataValue _ VoidDesc = EncodedBytes []
 encodeDataValue _ (BoolDesc v) = EncodedBit v
-encodeDataValue _ (Int8Desc v) = EncodedBytes $ bytes v 1
-encodeDataValue _ (Int16Desc v) = EncodedBytes $ bytes v 2
-encodeDataValue _ (Int32Desc v) = EncodedBytes $ bytes v 4
-encodeDataValue _ (Int64Desc v) = EncodedBytes $ bytes v 8
-encodeDataValue _ (UInt8Desc v) = EncodedBytes $ bytes v 1
-encodeDataValue _ (UInt16Desc v) = EncodedBytes $ bytes v 2
-encodeDataValue _ (UInt32Desc v) = EncodedBytes $ bytes v 4
-encodeDataValue _ (UInt64Desc v) = EncodedBytes $ bytes v 8
-encodeDataValue _ (Float32Desc v) = EncodedBytes $ bytes (floatToWord v) 4
-encodeDataValue _ (Float64Desc v) = EncodedBytes $ bytes (doubleToWord v) 8
+encodeDataValue _ (Int8Desc v) = EncodedBytes $ intToBytes v 1
+encodeDataValue _ (Int16Desc v) = EncodedBytes $ intToBytes v 2
+encodeDataValue _ (Int32Desc v) = EncodedBytes $ intToBytes v 4
+encodeDataValue _ (Int64Desc v) = EncodedBytes $ intToBytes v 8
+encodeDataValue _ (UInt8Desc v) = EncodedBytes $ intToBytes v 1
+encodeDataValue _ (UInt16Desc v) = EncodedBytes $ intToBytes v 2
+encodeDataValue _ (UInt32Desc v) = EncodedBytes $ intToBytes v 4
+encodeDataValue _ (UInt64Desc v) = EncodedBytes $ intToBytes v 8
+encodeDataValue _ (Float32Desc v) = EncodedBytes $ intToBytes (floatToWord v) 4
+encodeDataValue _ (Float64Desc v) = EncodedBytes $ intToBytes (doubleToWord v) 8
 encodeDataValue _ (TextDesc _) = error "Not fixed-width data."
 encodeDataValue _ (DataDesc _) = error "Not fixed-width data."
-encodeDataValue _ (EnumerantValueDesc v) = EncodedBytes $ bytes (enumerantNumber v) 2
+encodeDataValue _ (EnumerantValueDesc v) = EncodedBytes $ intToBytes (enumerantNumber v) 2
 encodeDataValue _ (StructValueDesc _) = error "Not fixed-width data."
 encodeDataValue _ (ListDesc _) = error "Not fixed-width data."
 
@@ -132,23 +127,23 @@ packPointers size items o = loop 0 items (o + size - 1) where
     loop idx [] _ = (genericReplicate ((size - idx) * 8) 0, [])
 
 encodeStructReference desc offset =
-    bytes (offset * 4 + structTag) 4 ++
-    bytes (dataSectionWordSize $ structDataSize desc) 2 ++
-    bytes (structPointerCount desc) 2
+    intToBytes (offset * 4 + structTag) 4 ++
+    intToBytes (dataSectionWordSize $ structDataSize desc) 2 ++
+    intToBytes (structPointerCount desc) 2
 
 encodeInlineStructListReference elementDataSize elementPointerCount elementCount offset = let
     dataBits = dataSectionBits elementDataSize * elementCount
     dataWords = div (dataBits + 63) 64
-    in bytes (offset * 4 + structTag) 4 ++
-       bytes dataWords 2 ++
-       bytes (elementPointerCount * elementCount) 2
+    in intToBytes (offset * 4 + structTag) 4 ++
+       intToBytes dataWords 2 ++
+       intToBytes (elementPointerCount * elementCount) 2
 
 encodeListReference elemSize@(SizeInlineComposite ds rc) elementCount offset =
-    bytes (offset * 4 + listTag) 4 ++
-    bytes (fieldSizeEnum elemSize + shiftL (elementCount * (dataSectionWordSize ds + rc)) 3) 4
+    intToBytes (offset * 4 + listTag) 4 ++
+    intToBytes (fieldSizeEnum elemSize + shiftL (elementCount * (dataSectionWordSize ds + rc)) 3) 4
 encodeListReference elemSize elementCount offset =
-    bytes (offset * 4 + listTag) 4 ++
-    bytes (fieldSizeEnum elemSize + shiftL elementCount 3) 4
+    intToBytes (offset * 4 + listTag) 4 ++
+    intToBytes (fieldSizeEnum elemSize + shiftL elementCount 3) 4
 
 fieldSizeEnum SizeVoid = 0
 fieldSizeEnum (SizeData Size1) = 1
