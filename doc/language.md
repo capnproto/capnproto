@@ -391,10 +391,12 @@ annotation qux @0xf8a1bedf44c89f00 (field) :Text;
 {% endhighlight %}
 
 If you omit the ID for a type or annotation, one will be assigned automatically.  This default
-ID is derived from the declaration's name combined with the ID of the parent scope (i.e. the file
-ID for top-level declarations or the outer type's ID for nested declarations).  In general, you
-would only specify an explicit ID for a declaration if that declaration has been renamed or moved
-and you want the ID to stay the same for backwards-compatibility.
+ID is derived by taking the first 8 bytes of the MD5 hash of the parent scope's ID concatenated
+with the declaration's name (where the parent scope means the file for top-level delarations, or
+the outer type for nested declarations).  You can see the automatically-generated IDs by running
+`capnpc -v` on a file.  In general, you would only specify an explicit ID for a declaration if that
+declaration has been renamed or moved and you want the ID to stay the same for
+backwards-compatibility.
 
 IDs exist to provide a relatively short yet unambiguous way to refer to a type or annotation from
 another context.  They may be used for representing schemas, for tagging dynamically-typed fields,
