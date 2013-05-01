@@ -22,6 +22,8 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 using Cxx = import "/capnproto/c++.capnp";
+
+@0xe12dc4c3e70e9eda;
 $Cxx.namespace("capnproto::benchmark::capnp");
 
 enum Operation {

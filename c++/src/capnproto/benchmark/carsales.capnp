@@ -22,6 +22,8 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 using Cxx = import "/capnproto/c++.capnp";
+
+@0xff75ddc6a36723c9;
 $Cxx.namespace("capnproto::benchmark::capnp");
 
 struct ParkingLot {
