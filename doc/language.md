@@ -407,6 +407,11 @@ but this would have some important disadvantages in the context of Cap'n Proto:
   distributed system with many different binaries using different versions of protocols.
 * Fully-qualified type names may be large and waste space when transmitted on the wire.
 
+Note that IDs are 64-bit (actually, 63-bit, as the first bit is always 1).  Random collisions
+are possible, but unlikely -- there would have to be on the order of a billion types before this
+becomes a real concern.  Collisions from misuse (e.g. copying an example without changing the ID)
+are much more likely.
+
 ## Advanced Topics
 
 ### Dynamically-typed Fields
