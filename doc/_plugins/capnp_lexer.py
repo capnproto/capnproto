@@ -11,7 +11,7 @@ class CapnpLexer(RegexLexer):
     tokens = {
         'root': [
             (r'#.*?$', Comment.Single),
-            (r'@[0-9]*', Name.Decorator),
+            (r'@[0-9a-zA-Z]*', Name.Decorator),
             (r'=', Literal, 'expression'),
             (r':', Name.Class, 'type'),
             (r'\$', Name.Attribute, 'annotation'),
