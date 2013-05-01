@@ -424,6 +424,8 @@
 <li>Fully-qualified type names may be large and waste space when transmitted on the wire.</li>
 </ul>
 
+<p>Note that IDs are 64-bit (actually, 63-bit, as the first bit is always 1). Random collisions are possible, but unlikely &#8211; there would have to be on the order of a billion types before this becomes a real concern. Collisions from misuse (e.g. copying an example without changing the ID) are much more likely.</p>
+
 <h2 id='advanced_topics'>Advanced Topics</h2>
 
 <h3 id='dynamicallytyped_fields'>Dynamically-typed Fields</h3>
