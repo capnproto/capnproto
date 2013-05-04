@@ -51,10 +51,6 @@ struct PointerHelpers;
 template <typename T, bool isPrimitive = internal::IsPrimitive<T>::value>
 struct List;
 
-template <typename T, size_t size>
-struct InlineList: public List<T> {};
-// Alias for List.  Primarily exists so that we can specialize List<InlineList<...>>.
-
 namespace internal {
 
 template <size_t size> struct FieldSizeForByteSize;
@@ -412,86 +408,6 @@ private:
   friend struct internal::PointerHelpers;
 };
 
-template <typename T, size_t subSize>
-struct List<InlineList<T, subSize>, false> {
-  // List of inline lists.
-
-  class Reader {
-  public:
-    Reader() = default;
-    inline explicit Reader(internal::ListReader reader): reader(reader) {}
-
-    inline uint size() { return reader.size() / ELEMENTS / subSize; }
-    inline typename List<T>::Reader operator[](uint index) {
-      return typename List<T>::Reader(reader.slice(
-          index * subSize * ELEMENTS, subSize * ELEMENTS));
-    }
-
-    typedef internal::IndexingIterator<Reader, typename List<T>::Reader> iterator;
-    inline iterator begin() { return iterator(this, 0); }
-    inline iterator end() { return iterator(this, size()); }
-
-  private:
-    internal::ListReader reader;
-  };
-
-  class Builder {
-  public:
-    Builder() = default;
-    inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
-
-    inline uint size() { return builder.size() / ELEMENTS / subSize; }
-    inline typename List<T>::Builder operator[](uint index) {
-      return typename List<T>::Builder(builder.slice(
-          index * subSize * ELEMENTS, subSize * ELEMENTS));
-    }
-
-    typedef internal::IndexingIterator<Builder, typename List<T>::Builder> iterator;
-    inline iterator begin() { return iterator(this, 0); }
-    inline iterator end() { return iterator(this, size()); }
-
-    template <typename Other>
-    void copyFrom(const Other& other);
-    void copyFrom(std::initializer_list<typename List<T>::Reader> other);
-    // TODO
-
-  private:
-    internal::ListBuilder builder;
-  };
-
-private:
-  inline static internal::ListBuilder initAsElementOf(
-      internal::ListBuilder& builder, uint index, uint size) {
-    return List<T>::initAsElementOf(builder, index, size * subSize);
-  }
-  inline static internal::ListBuilder getAsElementOf(
-      internal::ListBuilder& builder, uint index) {
-    return List<T>::getAsElementOf(builder, index);
-  }
-  inline static internal::ListReader getAsElementOf(
-      internal::ListReader& reader, uint index) {
-    return List<T>::getAsElementOf(reader, index);
-  }
-
-  inline static internal::ListBuilder initAsFieldOf(
-      internal::StructBuilder& builder, WireReferenceCount index, uint size) {
-    return List<T>::initAsFieldOf(builder, index, size * subSize);
-  }
-  inline static internal::ListBuilder getAsFieldOf(
-      internal::StructBuilder& builder, WireReferenceCount index) {
-    return List<T>::getAsFieldOf(builder, index);
-  }
-  inline static internal::ListReader getAsFieldOf(
-      internal::StructReader& reader, WireReferenceCount index) {
-    return List<T>::getAsFieldOf(reader, index);
-  }
-
-  template <typename U, bool b>
-  friend class List;
-  template <typename U>
-  friend struct internal::PointerHelpers;
-};
-
 template <>
 struct List<Data, false> {
   class Reader {
@@ -581,103 +497,6 @@ private:
   inline static internal::ListReader getAsFieldOf(
       internal::StructReader& reader, WireReferenceCount index) {
     return reader.getListField(index, internal::FieldSize::REFERENCE, nullptr);
-  }
-
-  template <typename U, bool b>
-  friend class List;
-  template <typename U>
-  friend struct internal::PointerHelpers;
-};
-
-template <size_t subSize>
-struct List<InlineData<subSize>, false> {
-  // List of inline data.
-
-  class Reader {
-  public:
-    Reader() = default;
-    inline explicit Reader(Data::Reader reader): reader(reader) {}
-
-    inline uint size() { return reader.size() / subSize; }
-    inline typename Data::Reader operator[](uint index) {
-      return typename Data::Reader(reader.slice(
-          index * subSize, index * subSize + subSize));
-    }
-
-    typedef internal::IndexingIterator<Reader, typename Data::Reader> iterator;
-    inline iterator begin() { return iterator(this, 0); }
-    inline iterator end() { return iterator(this, size()); }
-
-  private:
-    Data::Reader reader;
-  };
-
-  class Builder {
-  public:
-    Builder() = default;
-    inline explicit Builder(Data::Builder builder): builder(builder) {}
-
-    inline uint size() { return builder.size() / subSize; }
-    inline typename Data::Builder operator[](uint index) {
-      return typename Data::Builder(builder.slice(
-          index * subSize, index * subSize + subSize));
-    }
-    inline void set(uint index, Data::Reader value) {
-      (*this)[index].copyFrom(value);
-    }
-
-    typedef internal::IndexingIterator<Builder, typename Data::Builder> iterator;
-    inline iterator begin() { return iterator(this, 0); }
-    inline iterator end() { return iterator(this, size()); }
-
-    template <typename Other>
-    void copyFrom(const Other& other) {
-      auto i = other.begin();
-      auto end = other.end();
-      uint pos = 0;
-      for (; i != end && pos < size(); ++i) {
-        set(pos, *i);
-      }
-      CAPNPROTO_INLINE_DPRECOND(pos == size() && i == end,
-                                "List::copyFrom() argument had different size.");
-    }
-    void copyFrom(std::initializer_list<Data::Reader> other) {
-      CAPNPROTO_INLINE_DPRECOND(other.size() == size(),
-                                "List::copyFrom() argument had different size.");
-      for (uint i = 0; i < other.size(); i++) {
-        set(i, other.begin()[i]);
-      }
-    }
-
-  private:
-    Data::Builder builder;
-  };
-
-private:
-  inline static Data::Builder initAsElementOf(
-      internal::ListBuilder& builder, uint index, uint size) {
-    return builder.initDataElement(index * ELEMENTS, size * subSize * BYTES);
-  }
-  inline static Data::Builder getAsElementOf(
-      internal::ListBuilder& builder, uint index) {
-    return builder.getDataElement(index * ELEMENTS);
-  }
-  inline static Data::Reader getAsElementOf(
-      internal::ListReader& reader, uint index) {
-    return reader.getDataElement(index * ELEMENTS);
-  }
-
-  inline static internal::ListBuilder initAsFieldOf(
-      internal::StructBuilder& builder, WireReferenceCount index, uint size) {
-    return builder.initDataField(index, size * subSize * BYTES);
-  }
-  inline static internal::ListBuilder getAsFieldOf(
-      internal::StructBuilder& builder, WireReferenceCount index) {
-    return builder.getDataField(index, nullptr, 0 * BYTES);
-  }
-  inline static internal::ListReader getAsFieldOf(
-      internal::StructReader& reader, WireReferenceCount index) {
-    return reader.getDataField(index, nullptr, 0 * BYTES);
   }
 
   template <typename U, bool b>

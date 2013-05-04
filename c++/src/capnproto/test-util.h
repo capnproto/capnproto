@@ -59,21 +59,19 @@ using ::capnproto_test::capnproto::test::TestUnion;
 using ::capnproto_test::capnproto::test::TestUnionDefaults;
 using ::capnproto_test::capnproto::test::TestNestedTypes;
 using ::capnproto_test::capnproto::test::TestUsing;
-using ::capnproto_test::capnproto::test::TestInlineLayout;
-using ::capnproto_test::capnproto::test::TestInlineUnions;
-using ::capnproto_test::capnproto::test::TestInlineDefaults;
+using ::capnproto_test::capnproto::test::TestListDefaults;
 
 void initTestMessage(TestAllTypes::Builder builder);
 void initTestMessage(TestDefaults::Builder builder);
-void initTestMessage(TestInlineDefaults::Builder builder);
+void initTestMessage(TestListDefaults::Builder builder);
 
 void checkTestMessage(TestAllTypes::Builder builder);
 void checkTestMessage(TestDefaults::Builder builder);
-void checkTestMessage(TestInlineDefaults::Builder builder);
+void checkTestMessage(TestListDefaults::Builder builder);
 
 void checkTestMessage(TestAllTypes::Reader reader);
 void checkTestMessage(TestDefaults::Reader reader);
-void checkTestMessage(TestInlineDefaults::Reader reader);
+void checkTestMessage(TestListDefaults::Reader reader);
 
 void checkTestMessageAllZero(TestAllTypes::Builder builder);
 void checkTestMessageAllZero(TestAllTypes::Reader reader);

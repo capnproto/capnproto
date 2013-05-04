@@ -284,141 +284,7 @@ struct TestUsing {
   innerNestedEnum @0 :NestedEnum = quux;
 }
 
-struct TestInline0 fixed() { f @0: Void; }
-struct TestInline8 fixed(1 bytes) { f0 @0: Bool; f1 @1: Bool; f2 @2: Bool; }
-struct TestInline16 fixed(2 bytes) { f0 @0: UInt8; f1 @1: UInt8; }
-struct TestInline32 fixed(4 bytes) { f0 @0: UInt8; f1 @1: UInt16; }
-struct TestInline64 fixed(8 bytes) { f0 @0: UInt8; f1 @1: UInt32; }
-struct TestInline128 fixed(16 bytes) { f0 @0: UInt64; f1 @1: UInt64; }
-struct TestInline192 fixed(24 bytes) { f0 @0: UInt64; f1 @1: UInt64; f2 @2: UInt64; }
-
-struct TestInline0p fixed(1 pointers) { f @0 :Inline(TestInline0); p0 @1 :Text; }
-struct TestInline8p fixed(1 bytes, 1 pointers) { f @0 :Inline(TestInline8); p0 @1 :Text; }
-struct TestInline16p fixed(2 bytes, 2 pointers) { f @0 :Inline(TestInline16); p0 @1 :Text; p1 @2 :Text; }
-struct TestInline32p fixed(4 bytes, 2 pointers) { f @0 :Inline(TestInline32); p0 @1 :Text; p1 @2 :Text; }
-struct TestInline64p fixed(8 bytes, 2 pointers) { f @0 :Inline(TestInline64); p0 @1 :Text; p1 @2 :Text; }
-struct TestInline128p fixed(16 bytes, 3 pointers) { f @0 :Inline(TestInline128); p0 @1 :Text; p1 @2 :Text; p2 @3 :Text; }
-struct TestInline192p fixed(24 bytes, 3 pointers) { f @0 :Inline(TestInline192); p0 @1 :Text; p1 @2 :Text; p2 @3 :Text; }
-
-struct TestInlineLayout {
-  f0 @0 :Inline(TestInline0);
-  pad1 @1 :UInt8;
-  f8 @2 :Inline(TestInline8);
-  f16 @3 :Inline(TestInline16);
-  f32 @4 :Inline(TestInline32);
-  f64 @5 :Inline(TestInline64);
-  f128 @6 :Inline(TestInline128);
-  f192 @7 :Inline(TestInline192);
-
-  f0p @8 :Inline(TestInline0p);
-  pad2 @9 :UInt8;
-  padP @10 :Text;
-  f8p @11 :Inline(TestInline8p);
-  f16p @12 :Inline(TestInline16p);
-  f32p @13 :Inline(TestInline32p);
-  f64p @14 :Inline(TestInline64p);
-  f128p @15 :Inline(TestInline128p);
-  f192p @16 :Inline(TestInline192p);
-}
-
-struct TestInlineUnions {
-  union0 @0 union {
-    f0 @4 :Inline(TestInline0);
-    f1 @5 :Bool;    # There used to be a TestInline1 but it was decided to be a bad idea.
-    f8 @6 :Inline(TestInline8);
-    f16 @7 :Inline(TestInline16);
-    f32 @8 :Inline(TestInline32);
-    f64 @9 :Inline(TestInline64);
-    f128 @10 :Inline(TestInline128);
-    f192 @11 :Inline(TestInline192);
-
-    f0p @12 :Inline(TestInline0p);
-    f1p @13 :Bool;
-    f8p @14 :Inline(TestInline8p);
-    f16p @15 :Inline(TestInline16p);
-    f32p @16 :Inline(TestInline32p);
-    f64p @17 :Inline(TestInline64p);
-    f128p @18 :Inline(TestInline128p);
-    f192p @19 :Inline(TestInline192p);
-  }
-
-  # Pack one bit in order to make pathological situation for union1.
-  bit0 @20: Bool;
-
-  union1 @1 union {
-    f0 @21 :Inline(TestInline0);
-    f1 @22 :Bool;
-    f8 @23 :Inline(TestInline8);
-    f16 @24 :Inline(TestInline16);
-    f32 @25 :Inline(TestInline32);
-    f64 @26 :Inline(TestInline64);
-    f128 @27 :Inline(TestInline128);
-    f192 @28 :Inline(TestInline192);
-  }
-
-  # Fill in the rest of that bitfield from earlier.
-  bit2 @29: Bool;
-  bit3 @30: Bool;
-  bit4 @31: Bool;
-  bit5 @32: Bool;
-  bit6 @33: Bool;
-  bit7 @34: Bool;
-
-  # Interleave two unions to be really annoying.
-  union2 @2 union {
-    f1p @35 :Bool;
-    f8p @37 :Inline(TestInline8p);
-    f16p @40 :Inline(TestInline16p);
-    f32p @42 :Inline(TestInline32p);
-    f64p @44 :Inline(TestInline64p);
-    f128p @46 :Inline(TestInline128p);
-    f192p @48 :Inline(TestInline192p);
-  }
-
-  union3 @3 union {
-    f1p @36 :Bool;
-    f8p @38 :Inline(TestInline8p);
-    f16p @41 :Inline(TestInline16p);
-    f32p @43 :Inline(TestInline32p);
-    f64p @45 :Inline(TestInline64p);
-    f128p @47 :Inline(TestInline128p);
-    f192p @49 :Inline(TestInline192p);
-  }
-
-  byte0 @39: UInt8;
-}
-
-struct TestInlineLists {
-  voidList      @ 0 : InlineList(Void, 2);
-  boolList      @ 1 : InlineList(Bool, 3);
-  uInt8List     @ 2 : InlineList(UInt8, 4);
-  uInt16List    @ 3 : InlineList(UInt16, 5);
-  uInt32List    @ 4 : InlineList(UInt32, 6);
-  uInt64List    @ 5 : InlineList(UInt64, 7);
-  textList      @ 6 : InlineList(Text, 8);
-
-  structList0   @ 7 : InlineList(TestInline0, 2);
-  structList1   @ 8 : InlineList(Bool, 3);
-  structList8   @ 9 : InlineList(TestInline8, 4);
-  structList16  @10 : InlineList(TestInline16, 2);
-  structList32  @11 : InlineList(TestInline32, 3);
-  structList64  @12 : InlineList(TestInline64, 4);
-  structList128 @13 : InlineList(TestInline128, 2);
-  structList192 @14 : InlineList(TestInline192, 3);
-
-  structList0p   @15 : InlineList(TestInline0p, 4);
-  structList1p   @16 : InlineList(Bool, 2);
-  structList8p   @17 : InlineList(TestInline8p, 3);
-  structList16p  @18 : InlineList(TestInline16p, 4);
-  structList32p  @19 : InlineList(TestInline32p, 2);
-  structList64p  @20 : InlineList(TestInline64p, 3);
-  structList128p @21 : InlineList(TestInline128p, 4);
-  structList192p @22 : InlineList(TestInline192p, 2);
-
-  data @23 :InlineData(5);
-}
-
-struct TestStructLists {
+struct TestLists {
   # Small structs, when encoded as list, will be encoded as primitive lists rather than struct
   # lists, to save space.
   struct Struct0  { f @0 :Void; }
@@ -436,129 +302,22 @@ struct TestStructLists {
   list32 @4 :List(Struct32);
   list64 @5 :List(Struct64);
   listP  @6 :List(StructP);
+
+  int32ListList @7 :List(List(Int32));
+  textListList @8 :List(List(Text));
+  structListList @9 :List(List(TestAllTypes));
 }
 
-struct TestListLists {
-  int32ListList @0 :List(List(Int32));
-  textListList @1 :List(List(Text));
-  structListList @2 :List(List(TestAllTypes));
-
-  int32InlineListList @3 :List(InlineList(Int32, 7));
-  textInlineListList @4 :List(InlineList(Text, 5));
-  structInlineListList @5 :List(InlineList(TestInline32p, 3));
-  inlineDataList @6 :List(InlineData(9));
-
-  int32InlineListListList @7 :List(List(InlineList(Int32, 2)));
-  textInlineListListList @8 :List(List(InlineList(Text, 5)));
-  structInlineListListList @9 :List(List(InlineList(TestInline32p, 3)));
-  inlineDataListList @10 :List(List(InlineData(3)));
-}
-
-struct TestInlineDefaults {
-  normal @0 :TestInlineLayout = (
-      f0 = (f = void),
-      f8 = (f0 = true, f1 = false, f2 = true),
-      f16 = (f0 = 123, f1 = 45),
-      f32 = (f0 = 67, f1 = 8901),
-      f64 = (f0 = 234, f1 = 567890123),
-      f128 = (f0 = 1234567890123, f1 = 4567890123456),
-      f192 = (f0 = 7890123456789, f1 = 2345678901234, f2 = 5678901234567),
-
-      f0p = (p0 = "foo"),
-      f8p = (f = (f0 = true, f1 = true, f2 = false), p0 = "baz"),
-      f16p = (f = (f0 = 98, f1 = 76), p0 = "qux", p1 = "quux"),
-      f32p = (f = (f0 = 54, f1 = 32109), p0 = "corge", p1 = "grault"),
-      f64p = (f = (f0 = 87, f1 = 654321098), p0 = "garply", p1 = "waldo"),
-      f128p = (f = (f0 = 7654321098765, f1 = 4321098765432),
-               p0 = "fred", p1 = "plugh", p2 = "xyzzy"),
-      f192p = (f = (f0 = 1098765432109, f1 = 8765432109876, f2 = 5432109876543),
-               p0 = "thud", p1 = "foobar", p2 = "barbaz"));
-
-  unions @1 :TestInlineUnions = (
-      union0 = f32(f0 = 67, f1 = 8901),
-      union1 = f128(f0 = 1234567890123, f1 = 4567890123456),
-      union2 = f8p(p0 = "foo"),
-      union3 = f16p(f = (f0 = 98, f1 = 76), p0 = "qux", p1 = "quux"));
-
-  lists @2 :TestInlineLists = (
-      voidList      = [void, void],
-      boolList      = [false, true, false],
-      uInt8List     = [12, 34, 56, 78],
-      uInt16List    = [1234, 5678, 9012, 3456, 7890],
-      uInt32List    = [123456789, 234567890, 345678901, 456789012, 567890123, 678901234],
-      uInt64List    = [1, 2, 3, 4, 5, 6, 7],
-      textList      = ["foo", "bar", "baz", "qux", "quux", "corge", "grault", "garply"],
-
-      structList0 = [(f = void), ()],
-      structList8 = [(f0 =  true, f1 = false, f2 = false),
-                     (f0 = false, f1 =  true, f2 = false),
-                     (f0 =  true, f1 =  true, f2 = false),
-                     (f0 = false, f1 = false, f2 =  true)],
-      structList16 = [(f0 = 12, f1 = 34), (f0 = 56, f1 = 78)],
-      structList32 = [(f0 = 90, f1 = 12345), (f0 = 67, f1 = 8901), (f0 = 23, f1 = 45678)],
-      structList64 = [(f0 = 90, f1 = 123456789), (f0 = 12, f1 = 345678901),
-                      (f0 = 234, f1 = 567890123), (f0 = 45, f1 = 678901234)],
-      structList128 = [(f0 = 56789012345678, f1 = 90123456789012),
-                       (f0 = 34567890123456, f1 = 78901234567890)],
-      structList192 = [(f0 = 1234567890123, f1 = 4567890123456, f2 = 7890123456789),
-                       (f0 =  123456789012, f1 = 3456789012345, f2 = 6789012345678),
-                       (f0 = 9012345678901, f1 = 2345678901234, f2 = 5678901234567)],
-
-      structList0p = [(f = (f = void), p0 = "foo"), (p0 = "bar"),
-                      (f = (), p0 = "baz"), (p0 = "qux")],
-      structList8p = [(f = (f0 = true), p0 = "grault"), (p0 = "garply"), (p0 = "waldo")],
-      structList16p = [(f = (f0 = 123), p0 = "fred", p1 = "plugh"),
-                       (p0 = "xyzzy", p1 = "thud"),
-                       (p0 = "foobar", p1 = "barbaz"),
-                       (p0 = "bazqux", p1 = "quxquux")],
-      structList32p = [(f = (f1 = 12345), p0 = "quuxcorge", p1 = "corgegrault"),
-                       (p0 = "graultgarply", p1 = "garplywaldo")],
-      structList64p = [(f = (f1 = 123456789), p0 = "waldofred", p1 = "fredplugh"),
-                       (p0 = "plughxyzzy", p1 = "xyzzythud"),
-                       (p0 = "thudfoo", p1 = "foofoo")],
-      structList128p = [(f = (f1 = 123456789012345),
-                         p0 = "foobaz", p1 = "fooqux", p2 = "foocorge"),
-                        (p0 = "barbaz", p1 = "barqux", p2 = "barcorge"),
-                        (p0 = "bazbaz", p1 = "bazqux", p2 = "bazcorge"),
-                        (p0 = "quxbaz", p1 = "quxqux", p2 = "quxcorge")],
-      structList192p = [(f = (f2 = 123456789012345),
-                         p0 = "corgebaz", p1 = "corgequx", p2 = "corgecorge"),
-                        (p0 = "graultbaz", p1 = "graultqux", p2 = "graultcorge")],
-
-      data = "12345");
-
-  structLists @3 :TestStructLists = (
+struct TestListDefaults {
+  lists @0 :TestLists = (
       list0  = [(f = void), (f = void)],
       list1  = [(f = true), (f = false)],
       list8  = [(f = 123), (f = 45)],
       list16 = [(f = 12345), (f = 6789)],
       list32 = [(f = 123456789), (f = 234567890)],
       list64 = [(f = 1234567890123456), (f = 2345678901234567)],
-      listP  = [(f = "foo"), (f = "bar")]);
-
-  listLists @4 :TestListLists = (
+      listP  = [(f = "foo"), (f = "bar")],
       int32ListList = [[1, 2, 3], [4, 5], [12341234]],
       textListList = [["foo", "bar"], ["baz"], ["qux", "corge"]],
-      structListList = [[(int32Field = 123), (int32Field = 456)], [(int32Field = 789)]],
-
-      int32InlineListList = [[1, 2, 3, 4, 5, 6, 123456789], [987654321, 6, 5, 4, 3, 2, 1]],
-      textInlineListList = [["grault1", "grault2", "grault3", "grault4", "grault5"],
-                            ["garply1", "garply2", "garply3", "garply4", "garply5"],
-                            ["waldo1", "waldo2", "waldo3", "waldo4", "waldo5"]],
-      structInlineListList =
-          [[(f=(f1=123), p0="fred1"), (f=(f1=456), p0="fred2"), (f=(f1=789), p0="fred3")],
-           [(f=(f1=321), p0="plugh1"), (f=(f1=654), p0="plugh2"), (f=(f1=987), p0="plugh3")],
-           [(f=(f1=111), p0="thud1"), (f=(f1=222), p0="thud2"), (f=(f1=333), p0="thud3")]],
-      inlineDataList = ["123456789", "234567890", "345678901", "456789012", "567890123"],
-
-      int32InlineListListList = [[[1, 2], [3, 4], [5, 6]], [[7, 8], [9, 10]], [[1234567,7654321]]],
-      textInlineListListList = [[["1", "2", "3", "4", "5"],
-                                 ["foo", "bar", "baz", "qux", "corge"]],
-                                [["z", "y", "x", "w", "v"]]],
-      structInlineListListList =
-          [[[(f=(f1=123), p0="fred1"), (f=(f1=456), p0="fred2"), (f=(f1=789), p0="fred3")],
-            [(f=(f1=321), p0="plugh1"), (f=(f1=654), p0="plugh2"), (f=(f1=987), p0="plugh3")]],
-           [[(f=(f1=111), p0="thud1"), (f=(f1=222), p0="thud2"), (f=(f1=333), p0="thud3")]]],
-
-      inlineDataListList = [["foo", "bar", "baz"], ["123", "234"]]);
+      structListList = [[(int32Field = 123), (int32Field = 456)], [(int32Field = 789)]]);
 }

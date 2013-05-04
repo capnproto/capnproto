@@ -164,10 +164,13 @@ lookupDesc scope name = lookupDesc (descParent scope) name
 builtinTypeMap :: Map.Map String Desc
 builtinTypeMap = Map.fromList
     ([(builtinTypeName t, DescBuiltinType t) | t <- builtinTypes] ++
-     [("List", DescBuiltinList),
-      ("Inline", DescBuiltinInline),
-      ("InlineList", DescBuiltinInlineList),
-      ("InlineData", DescBuiltinInlineData)])
+     [ ("List", DescBuiltinList)
+{- Inlines have been disabled for now because they added too much complication.
+     , ("Inline", DescBuiltinInline)
+     , ("InlineList", DescBuiltinInlineList)
+     , ("InlineData", DescBuiltinInlineData)
+-}
+     ])
 
 ------------------------------------------------------------------------------------------
 
