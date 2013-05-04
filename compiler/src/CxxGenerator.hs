@@ -449,7 +449,10 @@ hastacheConfig = MuConfig
 generateCxxHeader file = hastacheStr hastacheConfig (encodeStr headerTemplate) (fileContext file)
 generateCxxSource file = hastacheStr hastacheConfig (encodeStr srcTemplate) (fileContext file)
 
-generateCxx file = do
-    header <- generateCxxHeader file
-    source <- generateCxxSource file
-    return [(fileName file ++ ".h", header), (fileName file ++ ".c++", source)]
+generateCxx files _ = do
+    let handleFile file = do
+            header <- generateCxxHeader file
+            source <- generateCxxSource file
+            return [(fileName file ++ ".h", header), (fileName file ++ ".c++", source)]
+    results <- mapM handleFile files
+    return $ concat results

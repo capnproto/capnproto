@@ -30,7 +30,8 @@ executable capnpc
                    directory,
                    syb,
                    transformers,
-                   entropy
+                   entropy,
+                   process
   ghc-options:     -Wall -fno-warn-missing-signatures
   other-modules:
                    Lexer,

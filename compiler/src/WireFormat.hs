@@ -21,17 +21,22 @@
 -- (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 -- SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-module WireFormat(encodeMessage) where
+module WireFormat(encodeMessage, encodeSchema) where
 
 import Data.List(sortBy, genericLength, genericReplicate)
 import Data.Word
 import Data.Bits(shiftL, Bits, setBit, xor)
 import Data.Function(on)
+import Data.Maybe(mapMaybe, listToMaybe, isNothing)
+import Data.List(findIndices)
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Semantics
 import Data.Binary.IEEE754(floatToWord, doubleToWord)
 import Text.Printf(printf)
 import qualified Codec.Binary.UTF8.String as UTF8
 import Util(intToBytes)
+import Grammar(AnnotationTarget(..))
 
 padToWord b = let
     trailing = mod (length b) 8
@@ -77,7 +82,8 @@ encodePointerValue _ (DataDesc d) =
     (encodeListReference (SizeData Size8) (genericLength d), padToWord d)
 encodePointerValue (StructType desc) (StructValueDesc assignments) = let
     (dataBytes, refBytes, childBytes) = encodeStruct desc assignments 0
-    in (encodeStructReference desc, concat [dataBytes, refBytes, childBytes])
+    in (encodeStructReference (structDataSize desc, structPointerCount desc),
+        concat [dataBytes, refBytes, childBytes])
 encodePointerValue (InlineStructType _) _ =
     error "Tried to encode inline struct as a pointer."
 encodePointerValue (ListType elementType) (ListDesc items) = encodeList elementType items
@@ -126,17 +132,10 @@ packPointers size items o = loop 0 items (o + size - 1) where
         in (genericReplicate (padCount * 8) 0 ++ restPtrs, restChildren)
     loop idx [] _ = (genericReplicate ((size - idx) * 8) 0, [])
 
-encodeStructReference desc offset =
+encodeStructReference (dataSize, pointerCount) offset =
     intToBytes (offset * 4 + structTag) 4 ++
-    intToBytes (dataSectionWordSize $ structDataSize desc) 2 ++
-    intToBytes (structPointerCount desc) 2
-
-encodeInlineStructListReference elementDataSize elementPointerCount elementCount offset = let
-    dataBits = dataSectionBits elementDataSize * elementCount
-    dataWords = div (dataBits + 63) 64
-    in intToBytes (offset * 4 + structTag) 4 ++
-       intToBytes dataWords 2 ++
-       intToBytes (elementPointerCount * elementCount) 2
+    intToBytes (dataSectionWordSize dataSize) 2 ++
+    intToBytes pointerCount 2
 
 encodeListReference elemSize@(SizeInlineComposite ds rc) elementCount offset =
     intToBytes (offset * 4 + listTag) 4 ++
@@ -242,7 +241,7 @@ encodeList (StructType desc@StructDesc {
 -- Encode a list of any other sort of struct.
 encodeList (StructType desc) elements = let
     count = genericLength elements
-    tag = encodeStructReference desc count
+    tag = encodeStructReference (structDataSize desc, structPointerCount desc) count
     eSize = dataSectionWordSize (structDataSize desc) + structPointerCount desc
     structElems = [v | StructValueDesc v <- elements]
     (elemBytes, childBytes) = loop (eSize * genericLength structElems) structElems
@@ -340,8 +339,373 @@ inlineStructListPointerSectionValues elementDesc elements = do
 
 encodeMessage (StructType desc) (StructValueDesc assignments) = let
     (dataBytes, refBytes, childBytes) = encodeStruct desc assignments 0
-    in concat [encodeStructReference desc (0::Integer), dataBytes, refBytes, childBytes]
+    in concat [encodeStructReference (structDataSize desc, structPointerCount desc) (0::Integer),
+               dataBytes, refBytes, childBytes]
 encodeMessage (ListType elementType) (ListDesc elements) = let
     (ptr, listBytes) = encodeList elementType elements
     in ptr (0::Integer) ++ listBytes
 encodeMessage _ _ = error "Not a message."
+
+------------------------------------------------------------------------------------------
+
+type EncodedPtr = (Integer -> [Word8], [Word8])
+
+encodeSchema :: [FileDesc] -> [FileDesc] -> [Word8]
+encodeSchema requestedFiles allFiles = encRoot where
+    encUInt64 = EncodedBytes . flip intToBytes 8
+    encUInt32 = EncodedBytes . flip intToBytes 4
+    encUInt16 :: (Integral a, Bits a) => a -> EncodedData
+    encUInt16 = EncodedBytes . flip intToBytes 2
+    encText :: String -> EncodedPtr
+    encText v = encodePointerValue (BuiltinType BuiltinText) (TextDesc v)
+
+    encDataList :: DataSize -> [EncodedData] -> EncodedPtr
+    encDataList elementSize elements = let
+        elemBits = dataSizeInBits elementSize
+        bytes = packBytes (elemBits * genericLength elements)
+              $ zip [0,elemBits..] elements
+        in (encodeListReference (SizeData elementSize) (genericLength elements), bytes)
+
+    encPtrList :: [EncodedPtr] -> EncodedPtr
+    encPtrList elements = let
+        (ptrBytes, childBytes) = packPointers (genericLength elements) (zip [0..] elements) 0
+        in (encodeListReference SizeReference (genericLength elements), ptrBytes ++ childBytes)
+
+    encStructList :: (DataSectionSize, Integer)
+                  -> [([(Integer, EncodedData)], [(Integer, EncodedPtr)])]
+                  -> EncodedPtr
+    encStructList elementSize@(dataSize, pointerCount) elements = let
+        count = genericLength elements
+        tag = encodeStructReference elementSize count
+        eSize = dataSectionWordSize dataSize + pointerCount
+        (elemBytes, childBytes) = loop (eSize * genericLength elements) elements
+        loop _ [] = ([], [])
+        loop offset ((dataValues, ptrValues):rest) = let
+            offsetFromElementEnd = offset - eSize
+            (dataBytes, ptrBytes, childBytes2) =
+                encStructBody elementSize dataValues ptrValues offsetFromElementEnd
+            childLen = genericLength childBytes2
+            childWordLen = if mod childLen 8 == 0
+                then div childLen 8
+                else error "Child not word-aligned."
+            (restBytes, restChildren) = loop (offsetFromElementEnd + childWordLen) rest
+            in (concat [dataBytes, ptrBytes, restBytes], childBytes2 ++ restChildren)
+        in (encodeListReference (SizeInlineComposite dataSize pointerCount) (genericLength elements),
+            concat [tag, elemBytes, childBytes])
+
+    encStructBody :: (DataSectionSize, Integer)
+                  -> [(Integer, EncodedData)]
+                  -> [(Integer, EncodedPtr)]
+                  -> Integer
+                  -> ([Word8], [Word8], [Word8])
+    encStructBody (dataSize, pointerCount) dataValues ptrValues offsetFromElementEnd = let
+        dataBytes = packBytes (dataSectionBits dataSize) dataValues
+        (ptrBytes, childBytes) = packPointers pointerCount ptrValues offsetFromElementEnd
+        in (dataBytes, ptrBytes, childBytes)
+
+    encStruct :: (DataSectionSize, Integer)
+              -> ([(Integer, EncodedData)], [(Integer, EncodedPtr)])
+              -> EncodedPtr
+    encStruct size (dataValues, ptrValues) = let
+        (dataBytes, ptrBytes, childBytes) = encStructBody size dataValues ptrValues 0
+        in (encodeStructReference size, concat [dataBytes, ptrBytes, childBytes])
+
+    ---------------------------------------------
+
+    isNodeDesc (DescFile _) = True
+    isNodeDesc (DescStruct _) = True
+    isNodeDesc (DescEnum _) = True
+    isNodeDesc (DescInterface _) = True
+    isNodeDesc (DescConstant _) = True
+    isNodeDesc (DescAnnotation _) = True
+    isNodeDesc _ = False
+
+    descNestedNodes (DescFile      d) = filter isNodeDesc $ fileMembers d
+    descNestedNodes (DescStruct    d) = filter isNodeDesc $ structMembers d
+    descNestedNodes (DescInterface d) = filter isNodeDesc $ interfaceMembers d
+    descNestedNodes _ = []
+
+    flattenDescs desc = desc : concatMap flattenDescs (descNestedNodes desc)
+
+    allDescs = concatMap flattenDescs $ map DescFile allFiles
+
+    ---------------------------------------------
+
+    encRoot = let
+        ptrVal = encStruct codeGeneratorRequestSize encCodeGeneratorRequest
+        (ptrBytes, childBytes) = packPointers 1 [(0, ptrVal)] 0
+        segment = ptrBytes ++ childBytes
+        in concat [[0,0,0,0], intToBytes (div (length segment) 8) 4, segment]
+
+    codeGeneratorRequestSize = (DataSectionWords 0, 2)
+    encCodeGeneratorRequest = (dataValues, ptrValues) where
+        dataValues = []
+        ptrValues = [ (0, encStructList nodeSize $ map encNode allDescs)
+                    , (1, encDataList Size64 $ map (encUInt64 . fileId) requestedFiles)
+                    ]
+
+    typeSize = (DataSectionWords 2, 1)
+    encType t = (dataValues, ptrValues) where
+        dataValues = [ (0, encUInt16 discrim)
+                     , (64, encUInt64 typeId)
+                     ]
+        ptrValues = case listElementType of
+            Nothing -> []
+            Just et -> [ (0, encStruct typeSize $ encType et) ]
+
+        (discrim, typeId, listElementType) = case t of
+            BuiltinType BuiltinVoid -> (0::Word16, 0, Nothing)
+            BuiltinType BuiltinBool -> (1, 0, Nothing)
+            BuiltinType BuiltinInt8 -> (2, 0, Nothing)
+            BuiltinType BuiltinInt16 -> (3, 0, Nothing)
+            BuiltinType BuiltinInt32 -> (4, 0, Nothing)
+            BuiltinType BuiltinInt64 -> (5, 0, Nothing)
+            BuiltinType BuiltinUInt8 -> (6, 0, Nothing)
+            BuiltinType BuiltinUInt16 -> (7, 0, Nothing)
+            BuiltinType BuiltinUInt32 -> (8, 0, Nothing)
+            BuiltinType BuiltinUInt64 -> (9, 0, Nothing)
+            BuiltinType BuiltinFloat32 -> (10, 0, Nothing)
+            BuiltinType BuiltinFloat64 -> (11, 0, Nothing)
+            BuiltinType BuiltinText -> (12, 0, Nothing)
+            BuiltinType BuiltinData -> (13, 0, Nothing)
+            BuiltinType BuiltinObject -> (18, 0, Nothing)
+            ListType et -> (14, 0, Just et)
+            EnumType d -> (15, enumId d, Nothing)
+            StructType d -> (16, structId d, Nothing)
+            InterfaceType d -> (17, interfaceId d, Nothing)
+            InlineStructType _ -> error "Inline types not currently supported by codegen plugins."
+            InlineListType _ _ -> error "Inline types not currently supported by codegen plugins."
+            InlineDataType _ -> error "Inline types not currently supported by codegen plugins."
+
+    valueSize = (DataSectionWords 2, 1)
+    encValue t maybeValue = (dataValues, ptrValues) where
+        dataValues = (0, encUInt16 discrim) : (case (maybeValue, fieldSize t) of
+            (Nothing, _) -> []
+            (_, SizeVoid) -> []
+            (Just value, SizeData _) -> [ (64, encodeDataValue t value) ]
+            (_, SizeReference) -> []
+            (_, SizeInlineComposite _ _) ->
+                error "Inline types not currently supported by codegen plugins.")
+        ptrValues = case (maybeValue, fieldSize t) of
+            (Nothing, _) -> []
+            (_, SizeVoid) -> []
+            (_, SizeData _) -> []
+            (Just value, SizeReference) -> [ (0, encodePointerValue t value) ]
+            (_, SizeInlineComposite _ _) ->
+                error "Inline types not currently supported by codegen plugins."
+
+        discrim = case t of
+            BuiltinType BuiltinVoid -> 9::Word16
+            BuiltinType BuiltinBool -> 1
+            BuiltinType BuiltinInt8 -> 2
+            BuiltinType BuiltinInt16 -> 3
+            BuiltinType BuiltinInt32 -> 4
+            BuiltinType BuiltinInt64 -> 5
+            BuiltinType BuiltinUInt8 -> 6
+            BuiltinType BuiltinUInt16 -> 7
+            BuiltinType BuiltinUInt32 -> 8
+            BuiltinType BuiltinUInt64 -> 0
+            BuiltinType BuiltinFloat32 -> 10
+            BuiltinType BuiltinFloat64 -> 11
+            BuiltinType BuiltinText -> 12
+            BuiltinType BuiltinData -> 13
+            BuiltinType BuiltinObject -> 19
+            ListType _ -> 14
+            EnumType _ -> 15
+            StructType _ -> 16
+            InterfaceType _ -> 17
+            InlineStructType _ -> error "Inline types not currently supported by codegen plugins."
+            InlineListType _ _ -> error "Inline types not currently supported by codegen plugins."
+            InlineDataType _ -> error "Inline types not currently supported by codegen plugins."
+
+    annotationSize = (DataSectionWords 1, 1)
+    encAnnotation (annId, (desc, value)) = (dataValues, ptrValues) where
+        dataValues = [ (0, encUInt64 annId) ]
+        ptrValues = [ (0, encStruct valueSize $ encValue (annotationType desc) (Just value)) ]
+
+    encAnnotationList annotations =
+        encStructList annotationSize $ map encAnnotation $ Map.toList annotations
+
+    nodeSize = (DataSectionWords 3, 4)
+    encNode :: Desc -> ([(Integer, EncodedData)], [(Integer, EncodedPtr)])
+    encNode desc = (dataValues, ptrValues) where
+        dataValues = [ (0, encUInt64 $ descId desc)
+                     , (64, encUInt64 $ scopedId desc)
+                     , (128, encUInt16 discrim)
+                     ]
+        ptrValues = [ (0, encText $ displayName desc)
+                    , (1, encStructList nestedNodeSize $ map encNestedNode $ descNestedNodes desc)
+                    , (2, encAnnotationList $ descAnnotations desc)
+                    , (3, encStruct bodySize body)
+                    ]
+
+        (discrim, bodySize, body) = case desc of
+            DescFile d -> (0::Word16, fileNodeSize, encFileNode d)
+            DescStruct d -> (1, structNodeSize, encStructNode d)
+            DescEnum d -> (2, enumNodeSize, encEnumNode d)
+            DescInterface d -> (3, interfaceNodeSize, encInterfaceNode d)
+            DescConstant d -> (4, constNodeSize, encConstNode d)
+            DescAnnotation d -> (5, annotationNodeSize, encAnnotationNode d)
+            _ -> error "Not a node type."
+
+    displayName (DescFile f) = fileName f
+    displayName desc = concat [fileName (descFile desc), ":", descName desc]
+
+    nestedNodeSize = (DataSectionWords 1, 1)
+    encNestedNode desc = (dataValues, ptrValues) where
+        dataValues = [ (0, encUInt64 $ descId desc) ]
+        ptrValues = [ (0, encText $ descName desc) ]
+
+    scopedId (DescFile _) = 0
+    scopedId desc = descId $ descParent desc
+
+    fileNodeSize = (DataSectionWords 0, 1)
+    encFileNode desc = (dataValues, ptrValues) where
+        dataValues = []
+        ptrValues = [ (0, encStructList importSize $ map encImport $ Map.toList $ fileImportMap desc) ]
+
+        importSize = (DataSectionWords 1, 1)
+        encImport (impName, impFile) = (dataValues2, ptrValues2) where
+            dataValues2 = [ (0, encUInt64 $ fileId impFile) ]
+            ptrValues2 = [ (0, encText impName) ]
+
+    structNodeSize = (DataSectionWords 1, 1)
+    encStructNode desc = (dataValues, ptrValues) where
+        dataValues = [ (0, encUInt16 $ dataSectionWordSize $ structDataSize desc)
+                     , (16, encUInt16 $ structPointerCount desc)
+                     , (32, encUInt16 (fieldSizeEnum preferredListEncoding::Word16))
+                     ]
+        ptrValues = [ (0, encStructList memberSize $ map encMember $
+                              sortMembers $ structMembers desc) ]
+
+        preferredListEncoding = case (structDataSize desc, structPointerCount desc) of
+            (DataSectionWords 0, 0) -> SizeVoid
+            (DataSectionWords 0, 1) -> SizeReference
+            (DataSection1, 0) -> SizeData Size1
+            (DataSection8, 0) -> SizeData Size8
+            (DataSection16, 0) -> SizeData Size16
+            (DataSection32, 0) -> SizeData Size32
+            (DataSectionWords 1, 0) -> SizeData Size64
+            (ds, pc) -> SizeInlineComposite ds pc
+
+        -- Extract just the field and union members, annotate them with ordinals and code order,
+        -- and then sort by ordinal.
+        sortMembers members = sortBy (compare `on` (fst . snd)) $ zip [0::Word16 ..]
+                            $ mapMaybe selectFieldOrUnion members
+        selectFieldOrUnion d@(DescField f) = Just (fieldNumber f, d)
+        selectFieldOrUnion d@(DescUnion u) = Just (unionNumber u, d)
+        selectFieldOrUnion _ = Nothing
+
+        memberSize = (DataSectionWords 1, 3)
+        encMember (codeOrder, (_, DescField field)) = (dataValues2, ptrValues2) where
+            dataValues2 = [ (0, encUInt16 $ fieldNumber field)
+                          , (16, encUInt16 codeOrder)
+                          , (32, encUInt16 (0::Word16))  -- discriminant
+                          ]
+            ptrValues2 = [ (0, encText $ fieldName field)
+                         , (1, encAnnotationList $ fieldAnnotations field)
+                         , (2, encStruct (DataSection32, 2) (dataValues3, ptrValues3))
+                         ]
+
+            -- StructNode.Field
+            dataValues3 = [ (0, encUInt32 $ offsetToInt $ fieldOffset field) ]
+            ptrValues3 = [ (0, encStruct typeSize $ encType $ fieldType field)
+                         , (1, encStruct valueSize $ encValue (fieldType field) $
+                                   fieldDefaultValue field)
+                         ]
+
+            offsetToInt VoidOffset = 0
+            offsetToInt (DataOffset _ i) = i
+            offsetToInt (PointerOffset i) = i
+            offsetToInt (InlineCompositeOffset {}) =
+                error "Inline types not currently supported by codegen plugins."
+
+        encMember (codeOrder, (_, DescUnion union)) = (dataValues2, ptrValues2) where
+            dataValues2 = [ (0, encUInt16 $ unionNumber union)
+                          , (16, encUInt16 codeOrder)
+                          , (32, encUInt16 (1::Word16))  -- discriminant
+                          ]
+            ptrValues2 = [ (0, encText $ unionName union)
+                         , (1, encAnnotationList $ unionAnnotations union)
+                         , (2, encStruct (DataSection32, 1) (dataValues3, ptrValues3))
+                         ]
+
+            -- StructNode.Union
+            dataValues3 = [ (0, encUInt32 $ unionTagOffset union) ]
+            ptrValues3 = [ (0, encStructList memberSize $ map encMember $ sortMembers $
+                                   unionMembers union) ]
+        encMember _ = error "Not a field or union?"
+
+    enumNodeSize = (DataSectionWords 0, 1)
+    encEnumNode desc = (dataValues, ptrValues) where
+        dataValues = []
+        ptrValues = [ (0, encStructList enumerantSize $ map encEnumerant sortedEnumerants) ]
+
+        sortedEnumerants = sortBy (compare `on` (enumerantNumber . snd))
+                         $ zip [0::Word16 ..] $ enumerants desc
+
+        enumerantSize = (DataSection16, 2)
+        encEnumerant (codeOrder, enumerant) = (dataValues2, ptrValues2) where
+            dataValues2 = [ (0, encUInt16 codeOrder) ]
+            ptrValues2 = [ (0, encText $ enumerantName enumerant)
+                         , (1, encAnnotationList $ enumerantAnnotations enumerant)
+                         ]
+
+    interfaceNodeSize = (DataSectionWords 0, 1)
+    encInterfaceNode desc = (dataValues, ptrValues) where
+        dataValues = []
+        ptrValues = [ (0, encStructList methodSize $ map encMethod sortedMethods) ]
+
+        sortedMethods = sortBy (compare `on` (methodNumber . snd))
+                      $ zip [0::Word16 ..] $ interfaceMethods desc
+
+        methodSize = (DataSection32, 4)
+        encMethod (codeOrder, method) = (dataValues2, ptrValues2) where
+            dataValues2 = [ (0, encUInt16 codeOrder)
+                          , (16, encUInt16 requiredParamCount) ]
+            ptrValues2 = [ (0, encText $ methodName method)
+                         , (1, encStructList paramSize $ map encParam $ methodParams method)
+                         , (2, encStruct typeSize $ encType $ methodReturnType method)
+                         , (3, encAnnotationList $ methodAnnotations method)
+                         ]
+
+            paramIndicesWithoutDefaults =
+                findIndices (isNothing . paramDefaultValue) $ methodParams method
+            requiredParamCount = maybe 0 (+1) $ listToMaybe
+                               $ reverse paramIndicesWithoutDefaults
+
+        paramSize = (DataSectionWords 0, 4)
+        encParam param = (dataValues2, ptrValues2) where
+            dataValues2 = []
+            ptrValues2 = [ (0, encText $ paramName param)
+                         , (1, encStruct typeSize $ encType $ paramType param)
+                         , (2, encStruct valueSize $ encValue (paramType param) $
+                                   paramDefaultValue param)
+                         , (3, encAnnotationList $ paramAnnotations param)
+                         ]
+
+    constNodeSize = (DataSectionWords 0, 2)
+    encConstNode desc = (dataValues, ptrValues) where
+        dataValues = []
+        ptrValues = [ (0, encStruct typeSize $ encType $ constantType desc)
+                    , (1, encStruct valueSize $ encValue (constantType desc) $ Just $
+                              constantValue desc)
+                    ]
+
+    annotationNodeSize = (DataSection16, 1)
+    encAnnotationNode desc = (dataValues, ptrValues) where
+        dataValues = [ (0, encTarget FileAnnotation)
+                     , (1, encTarget ConstantAnnotation)
+                     , (2, encTarget EnumAnnotation)
+                     , (3, encTarget EnumerantAnnotation)
+                     , (4, encTarget StructAnnotation)
+                     , (5, encTarget FieldAnnotation)
+                     , (6, encTarget UnionAnnotation)
+                     , (7, encTarget InterfaceAnnotation)
+                     , (8, encTarget MethodAnnotation)
+                     , (9, encTarget ParamAnnotation)
+                     , (10, encTarget AnnotationAnnotation)
+                     ]
+        ptrValues = [ (0, encStruct typeSize $ encType $ annotationType desc) ]
+
+        encTarget t = EncodedBit $ Set.member t $ annotationTargets desc

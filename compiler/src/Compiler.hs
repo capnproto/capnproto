@@ -800,6 +800,7 @@ compileDecl scope (ConstantDecl (Located _ name) t annotations (Located valuePos
         compiledAnnotations <- compileAnnotations scope ConstantAnnotation annotations
         return (DescConstant ConstantDesc
             { constantName = name
+            , constantId = childId name Nothing scope
             , constantParent = scope
             , constantType = typeDesc
             , constantValue = valueDesc

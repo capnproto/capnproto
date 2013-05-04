@@ -89,6 +89,7 @@ descId (DescFile      d) = fileId d
 descId (DescEnum      d) = enumId d
 descId (DescStruct    d) = structId d
 descId (DescInterface d) = interfaceId d
+descId (DescConstant  d) = constantId d
 descId (DescAnnotation d) = annotationId d
 descId _ = error "This construct does not have an ID."
 
@@ -363,6 +364,14 @@ typeName _ (InlineDataType s) = printf "InlineData(%d)" s
 --    symbol, and use them if so.  A particularly important case of this is imports -- typically
 --    the import will have a `using` in the file scope.
 descQualifiedName :: Desc -> Desc -> String
+
+-- Builtin descs can be aliased with "using", so we need to support them.
+descQualifiedName _ (DescBuiltinType t) = builtinTypeName t
+descQualifiedName _ DescBuiltinList = "List"
+descQualifiedName _ DescBuiltinInline = "Inline"
+descQualifiedName _ DescBuiltinInlineList = "InlineList"
+descQualifiedName _ DescBuiltinInlineData = "InlineData"
+
 descQualifiedName (DescFile scope) (DescFile desc) =
     if fileName scope == fileName desc
         then ""
@@ -394,6 +403,7 @@ usingRuntimeImports _ = []
 
 data ConstantDesc = ConstantDesc
     { constantName :: String
+    , constantId :: Word64
     , constantParent :: Desc
     , constantType :: TypeDesc
     , constantAnnotations :: AnnotationMap
@@ -544,20 +554,22 @@ descToCode indent self@(DescEnum desc) = printf "%senum %s @0x%016x%s {\n%s%s}\n
 descToCode indent self@(DescEnumerant desc) = printf "%s%s @%d%s;\n" indent
     (enumerantName desc) (enumerantNumber desc)
     (annotationsCode self)
-descToCode indent self@(DescStruct desc) = printf "%sstruct %s @0x%016x%s%s {\n%s%s}\n" indent
-    (structName desc)
-    (structId desc)
-    (if structIsFixedWidth desc
-        then printf " fixed(%s, %d pointers) "
-            (dataSectionSizeString $ structDataSize desc)
-            (structPointerCount desc)
-        else "")
-    (annotationsCode self)
-    (blockCode indent (structMembers desc))
-    indent
-descToCode indent self@(DescField desc) = printf "%s%s@%d%s: %s%s%s;  # %s\n" indent
+descToCode indent self@(DescStruct desc) =
+    printf "%sstruct %s @0x%016x%s%s {  # %d bytes, %d pointers\n%s%s}\n" indent
+        (structName desc)
+        (structId desc)
+        (if structIsFixedWidth desc
+            then printf " fixed(%s, %d pointers) "
+                (dataSectionSizeString $ structDataSize desc)
+                (structPointerCount desc)
+            else "")
+        (annotationsCode self)
+        (div (dataSectionBits $ structDataSize desc) 8)
+        (structPointerCount desc)
+        (blockCode indent (structMembers desc))
+        indent
+descToCode indent self@(DescField desc) = printf "%s%s@%d: %s%s%s;  # %s%s\n" indent
     (fieldName desc) (fieldNumber desc)
-    (case fieldUnion desc of { Nothing -> ""; Just (u, _) -> " in " ++ unionName u})
     (typeName (descParent self) (fieldType desc))
     (case fieldDefaultValue desc of { Nothing -> ""; Just v -> " = " ++ valueString v; })
     (annotationsCode self)
@@ -572,6 +584,8 @@ descToCode indent self@(DescField desc) = printf "%s%s@%d%s: %s%s%s;  # %s\n" in
         DataOffset dataSize offset -> let
             bits = dataSizeInBits dataSize
             in printf "bits[%d, %d)" (offset * bits) ((offset + 1) * bits))
+    (case fieldUnion desc of { Nothing -> ""; Just (_, i) -> printf ", union tag = %d" i})
+
 descToCode indent self@(DescUnion desc) = printf "%sunion %s@%d%s {  # [%d, %d)\n%s%s}\n" indent
     (unionName desc) (unionNumber desc)
     (annotationsCode self)
@@ -596,11 +610,11 @@ descToCode _ self@(DescParam desc) = printf "%s: %s%s%s"
         Just v -> printf " = %s" $ valueString v
         Nothing -> "")
     (annotationsCode self)
-descToCode indent self@(DescAnnotation desc) = printf "%sannotation %s @0x%016x: %s on(%s)%s;\n" indent
+descToCode indent self@(DescAnnotation desc) = printf "%sannotation %s @0x%016x(%s): %s%s;\n" indent
     (annotationName desc)
     (annotationId desc)
-    (typeName (descParent self) (annotationType desc))
     (delimit ", " $ map show $ Set.toList $ annotationTargets desc)
+    (typeName (descParent self) (annotationType desc))
     (annotationsCode self)
 descToCode _ (DescBuiltinType _) = error "Can't print code for builtin type."
 descToCode _ DescBuiltinList = error "Can't print code for builtin type."

@@ -167,6 +167,12 @@ static typename RootType::Reader readMessageTrusted(const word* data);
 // a message MyMessage, you can read its default value like so:
 //    MyMessage::Reader reader = Message<MyMessage>::ReadTrusted(MyMessage::DEFAULT.words);
 
+template <typename Type>
+static typename Type::Reader defaultValue();
+// Get a default instance of the given struct or list type.
+//
+// TODO(cleanup):  Find a better home for this function?
+
 // =======================================================================================
 
 class SegmentArrayMessageReader: public MessageReader {
@@ -280,6 +286,12 @@ inline typename RootType::Builder MessageBuilder::getRoot() {
 template <typename RootType>
 typename RootType::Reader readMessageTrusted(const word* data) {
   return typename RootType::Reader(internal::StructReader::readRootTrusted(data));
+}
+
+template <typename Type>
+static typename Type::Reader defaultValue() {
+  // TODO(soon):  Correctly handle lists.  Maybe primitives too?
+  return typename Type::Reader(internal::StructReader());
 }
 
 }  // namespace capnproto

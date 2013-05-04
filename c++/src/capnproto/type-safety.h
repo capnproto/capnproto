@@ -212,7 +212,19 @@ inline Array<T> newArray(size_t size) {
 
 template <typename T>
 class ArrayBuilder {
-  union Slot { T value; char dummy; };
+  // TODO(cleanup):  This class doesn't work for non-primitive types because Slot is not
+  //   constructable.  Giving Slot a constructor/destructor means arrays of it have to be tagged
+  //   so operator delete can run the destructors.  If we reinterpret_cast the array to an array
+  //   of T and delete it as that type, operator delete gets very upset.
+  //
+  //   Perhaps we should bite the bullet and make the Array family do manual memory allocation,
+  //   bypassing the rather-stupid C++ array new/delete operators which store a redundant copy of
+  //   the size anyway.
+
+  union Slot {
+    T value;
+    char dummy;
+  };
   static_assert(sizeof(Slot) == sizeof(T), "union is bigger than content?");
 
 public:
