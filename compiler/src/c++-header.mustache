@@ -68,9 +68,10 @@ struct {{typeFullName}} {
 {{/structNestedEnums}}
 
   static constexpr ::capnproto::internal::StructSize STRUCT_SIZE =
-      ::capnproto::internal::StructSize({{structDataSize}} * ::capnproto::WORDS,
-                                        {{structReferenceCount}} * ::capnproto::REFERENCES,
-                                        {{structDataBytes}} * ::capnproto::BYTES);
+      ::capnproto::internal::StructSize(
+          {{structDataSize}} * ::capnproto::WORDS,
+          {{structReferenceCount}} * ::capnproto::REFERENCES,
+          ::capnproto::internal::FieldSize::{{structPreferredListEncoding}});
 
 {{/typeStruct}}
 {{#typeUnion}}

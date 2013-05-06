@@ -28,11 +28,6 @@
 // as does other parts of the Cap'n proto library which provide a higher-level interface for
 // dynamic introspection.
 
-#ifdef __CDT_PARSER__
-// Eclipse keeps thinking this is pre-defined for no apparent reason.
-#undef CAPNPROTO_LAYOUT_H_
-#endif
-
 #ifndef CAPNPROTO_LAYOUT_H_
 #define CAPNPROTO_LAYOUT_H_
 
@@ -137,15 +132,17 @@ struct StructSize {
   WordCount16 data;
   WireReferenceCount16 pointers;
 
-  ByteCount32 dataBytes;
-  // Number of bytes in the data section.  Must be data * 8 except when data == 1 in which case
-  // this can be 1, 2, 4, or 8.
+  FieldSize preferredListEncoding;
+  // Preferred size to use when encoding a list of this struct.  This is INLINE_COMPOSITE if and
+  // only if the struct is larger than one word; otherwise the struct list can be encoded more
+  // efficiently by encoding it as if it were some primitive type.
 
   inline constexpr WordCount total() const { return data + pointers * WORDS_PER_REFERENCE; }
 
   StructSize() = default;
-  inline constexpr StructSize(WordCount data, WireReferenceCount pointers, ByteCount dataBytes)
-      : data(data), pointers(pointers), dataBytes(dataBytes) {}
+  inline constexpr StructSize(WordCount data, WireReferenceCount pointers,
+                              FieldSize preferredListEncoding)
+      : data(data), pointers(pointers), preferredListEncoding(preferredListEncoding) {}
 };
 
 template <typename T>
@@ -325,20 +322,13 @@ public:
   StructReader asReader() const;
   // Gets a StructReader pointing at the same memory.
 
-  WireReferenceCount getReferenceCount() { return referenceCount; }
-
 private:
   SegmentBuilder* segment;     // Memory segment in which the struct resides.
   void* data;                  // Pointer to the encoded data.
   WireReference* references;   // Pointer to the encoded references.
 
-  WireReferenceCount16 referenceCount;
-  // Size of the pointer segment, available only for the sake of computing size of List(Inline(T)).
-
-  inline StructBuilder(SegmentBuilder* segment, void* data, WireReference* references,
-                       WireReferenceCount referenceCount)
-      : segment(segment), data(data), references(references),
-        referenceCount(referenceCount) {}
+  inline StructBuilder(SegmentBuilder* segment, void* data, WireReference* references)
+      : segment(segment), data(data), references(references) {}
 
   friend class ListBuilder;
   friend struct WireHelpers;
@@ -393,7 +383,10 @@ private:
   const void* data;
   const WireReference* references;
 
-  ByteCount32 dataSize;                 // Size of data segment.
+  ByteCount32 dataSize;
+  // Size of data segment.  We use a byte count rather than a word count to more easily handle the
+  // case of struct lists encoded with less than a word per element.
+
   WireReferenceCount16 referenceCount;  // Size of the reference segment.
 
   int nestingLimit;
@@ -417,8 +410,8 @@ private:
 class ListBuilder {
 public:
   inline ListBuilder()
-      : segment(nullptr), data(nullptr), pointers(nullptr), elementCount(0 * ELEMENTS),
-        stepBytes(0 * BYTES / ELEMENTS), stepPointers(0 * REFERENCES / ELEMENTS) {}
+      : segment(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
+        stepBytes(0 * BYTES / ELEMENTS) {}
 
   inline ElementCount size();
   // The number of elements in the list.
@@ -449,10 +442,6 @@ public:
   // Get the existing list element at the given index.  Returns an empty list if the element is
   // not initialized.
 
-  CAPNPROTO_ALWAYS_INLINE(ListBuilder slice(ElementCount start, ElementCount length) const);
-  // Get a list pointing at a slice of this list.  WARNING:  The second parameter is a length, not
-  // an end index, because this is what is most convenient at the only call site.
-
   Text::Builder initTextElement(ElementCount index, ByteCount size) const;
   // Initialize the text element to the given size in bytes (not including NUL terminator) and
   // return a Text::Builder which can be used to fill in the content.
@@ -477,22 +466,18 @@ public:
 private:
   SegmentBuilder* segment;  // Memory segment in which the list resides.
 
-  void* data;
-  WireReference* pointers;
-  // Pointers to list content.
+  byte* ptr;  // Pointer to list content.
 
   ElementCount elementCount;  // Number of elements in the list.
 
   decltype(BYTES / ELEMENTS) stepBytes;
-  decltype(REFERENCES / ELEMENTS) stepPointers;
-  // The distance between elements.  Can be tricky e.g. for inlined struct lists.
+  // The distance between elements.
   // Bit lists ignore stepBytes -- they are always tightly-packed.
 
-  inline ListBuilder(SegmentBuilder* segment, void* data, WireReference* pointers,
-                     decltype(BYTES / ELEMENTS) stepBytes,
-                     decltype(REFERENCES / ELEMENTS) stepPointers, ElementCount size)
-      : segment(segment), data(data), pointers(pointers), elementCount(size),
-        stepBytes(stepBytes), stepPointers(stepPointers) {}
+  inline ListBuilder(SegmentBuilder* segment, void* ptr,
+                     decltype(BYTES / ELEMENTS) stepBytes, ElementCount size)
+      : segment(segment), ptr(reinterpret_cast<byte*>(ptr)),
+        elementCount(size), stepBytes(stepBytes) {}
 
   friend class StructBuilder;
   friend struct WireHelpers;
@@ -501,8 +486,7 @@ private:
 class ListReader {
 public:
   inline ListReader()
-      : segment(nullptr), data(nullptr), pointers(nullptr), elementCount(0),
-        stepBytes(0 * BYTES / ELEMENTS), stepPointers(0 * REFERENCES / ELEMENTS),
+      : segment(nullptr), ptr(nullptr), elementCount(0), stepBytes(0 * BYTES / ELEMENTS),
         structDataSize(0), structReferenceCount(0), nestingLimit(0) {}
 
   inline ElementCount size();
@@ -518,10 +502,6 @@ public:
   ListReader getListElement(ElementCount index, FieldSize expectedElementSize) const;
   // Get the list element at the given index.
 
-  CAPNPROTO_ALWAYS_INLINE(ListReader slice(ElementCount start, ElementCount length) const);
-  // Get a list pointing at a slice of this list.  WARNING:  The second parameter is a length, not
-  // an end index, because this is what is most convenient at the only call site.
-
   Text::Reader getTextElement(ElementCount index) const;
   // Get the text element.  If it is not initialized, returns an empty Text::Reader.
 
@@ -531,15 +511,12 @@ public:
 private:
   SegmentReader* segment;  // Memory segment in which the list resides.
 
-  const void* data;
-  const WireReference* pointers;
-  // Pointers to list content.
+  const byte* ptr;  // Pointer to list content.
 
   ElementCount elementCount;  // Number of elements in the list.
 
   decltype(BYTES / ELEMENTS) stepBytes;
-  decltype(REFERENCES / ELEMENTS) stepPointers;
-  // The distance between elements.  Can be tricky e.g. for inlined struct lists.
+  // The distance between elements.
   // Bit lists ignore stepBytes -- they are always tightly-packed.
 
   ByteCount structDataSize;
@@ -550,18 +527,18 @@ private:
   // Limits the depth of message structures to guard against stack-overflow-based DoS attacks.
   // Once this reaches zero, further pointers will be pruned.
 
-  inline ListReader(SegmentReader* segment, const void* data, const WireReference* pointers,
+  inline ListReader(SegmentReader* segment, const void* ptr,
                     ElementCount elementCount, decltype(BYTES / ELEMENTS) stepBytes,
-                    decltype(REFERENCES / ELEMENTS) stepPointers, int nestingLimit)
-      : segment(segment), data(data), pointers(pointers), elementCount(elementCount),
-        stepBytes(stepBytes), stepPointers(stepPointers), structDataSize(0),
-        structReferenceCount(0), nestingLimit(nestingLimit) {}
-  inline ListReader(SegmentReader* segment, const void* data, const WireReference* pointers,
+                    int nestingLimit)
+      : segment(segment), ptr(reinterpret_cast<const byte*>(ptr)), elementCount(elementCount),
+        stepBytes(stepBytes), structDataSize(0), structReferenceCount(0),
+        nestingLimit(nestingLimit) {}
+  inline ListReader(SegmentReader* segment, const void* ptr,
                     ElementCount elementCount, decltype(BYTES / ELEMENTS) stepBytes,
-                    decltype(REFERENCES / ELEMENTS) stepPointers, ByteCount structDataSize,
-                    WireReferenceCount structReferenceCount, int nestingLimit)
-      : segment(segment), data(data), pointers(pointers), elementCount(elementCount),
-        stepBytes(stepBytes), stepPointers(stepPointers), structDataSize(structDataSize),
+                    ByteCount structDataSize, WireReferenceCount structReferenceCount,
+                    int nestingLimit)
+      : segment(segment), ptr(reinterpret_cast<const byte*>(ptr)), elementCount(elementCount),
+        stepBytes(stepBytes), structDataSize(structDataSize),
         structReferenceCount(structReferenceCount), nestingLimit(nestingLimit) {}
 
   friend class StructReader;
@@ -656,15 +633,14 @@ inline ElementCount ListBuilder::size() { return elementCount; }
 
 template <typename T>
 inline T ListBuilder::getDataElement(ElementCount index) const {
-  return reinterpret_cast<WireValue<T>*>(
-      reinterpret_cast<byte*>(data) + index * stepBytes)->get();
+  return reinterpret_cast<WireValue<T>*>(ptr + index * stepBytes)->get();
 }
 
 template <>
 inline bool ListBuilder::getDataElement<bool>(ElementCount index) const {
   // Ignore stepBytes for bit lists because bit lists cannot be upgraded to struct lists.
   BitCount bindex = index * (1 * BITS / ELEMENTS);
-  byte* b = reinterpret_cast<byte*>(data) + bindex / BITS_PER_BYTE;
+  byte* b = ptr + bindex / BITS_PER_BYTE;
   return (*reinterpret_cast<uint8_t*>(b) & (1 << (bindex % BITS_PER_BYTE / BITS))) != 0;
 }
 
@@ -675,15 +651,14 @@ inline Void ListBuilder::getDataElement<Void>(ElementCount index) const {
 
 template <typename T>
 inline void ListBuilder::setDataElement(ElementCount index, typename NoInfer<T>::Type value) const {
-  reinterpret_cast<WireValue<T>*>(
-      reinterpret_cast<byte*>(data) + index * stepBytes)->set(value);
+  reinterpret_cast<WireValue<T>*>(ptr + index * stepBytes)->set(value);
 }
 
 template <>
 inline void ListBuilder::setDataElement<bool>(ElementCount index, bool value) const {
   // Ignore stepBytes for bit lists because bit lists cannot be upgraded to struct lists.
   BitCount bindex = index * (1 * BITS / ELEMENTS);
-  byte* b = reinterpret_cast<byte*>(data) + bindex / BITS_PER_BYTE;
+  byte* b = ptr + bindex / BITS_PER_BYTE;
   uint bitnum = bindex % BITS_PER_BYTE / BITS;
   *reinterpret_cast<uint8_t*>(b) = (*reinterpret_cast<uint8_t*>(b) & ~(1 << bitnum))
                                  | (static_cast<uint8_t>(value) << bitnum);
@@ -692,43 +667,26 @@ inline void ListBuilder::setDataElement<bool>(ElementCount index, bool value) co
 template <>
 inline void ListBuilder::setDataElement<Void>(ElementCount index, Void value) const {}
 
-inline ListBuilder ListBuilder::slice(ElementCount start, ElementCount length) const {
-  return ListBuilder(segment,
-      reinterpret_cast<byte*>(data) + start * stepBytes,
-      reinterpret_cast<WireReference*>(
-          reinterpret_cast<word*>(pointers) + start * stepPointers * WORDS_PER_REFERENCE),
-      stepBytes, stepPointers, length);
-}
-
 // -------------------------------------------------------------------
 
 inline ElementCount ListReader::size() { return elementCount; }
 
 template <typename T>
 inline T ListReader::getDataElement(ElementCount index) const {
-  return reinterpret_cast<const WireValue<T>*>(
-      reinterpret_cast<const byte*>(data) + index * stepBytes)->get();
+  return reinterpret_cast<const WireValue<T>*>(ptr + index * stepBytes)->get();
 }
 
 template <>
 inline bool ListReader::getDataElement<bool>(ElementCount index) const {
   // Ignore stepBytes for bit lists because bit lists cannot be upgraded to struct lists.
   BitCount bindex = index * (1 * BITS / ELEMENTS);
-  const byte* b = reinterpret_cast<const byte*>(data) + bindex / BITS_PER_BYTE;
+  const byte* b = ptr + bindex / BITS_PER_BYTE;
   return (*reinterpret_cast<const uint8_t*>(b) & (1 << (bindex % BITS_PER_BYTE / BITS))) != 0;
 }
 
 template <>
 inline Void ListReader::getDataElement<Void>(ElementCount index) const {
   return Void::VOID;
-}
-
-inline ListReader ListReader::slice(ElementCount start, ElementCount length) const {
-  return ListReader(segment,
-      reinterpret_cast<const byte*>(data) + start * stepBytes,
-      reinterpret_cast<const WireReference*>(
-          reinterpret_cast<const word*>(pointers) + start * stepPointers * WORDS_PER_REFERENCE),
-      length, stepBytes, stepPointers, structDataSize, structReferenceCount, nestingLimit);
 }
 
 }  // namespace internal

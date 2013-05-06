@@ -379,8 +379,16 @@ structContext parent desc = mkStrContext context where
     context "structFields" = MuList $ map (fieldContext context) $ structFields desc
     context "structUnions" = MuList $ map (unionContext context) $ structUnions desc
     context "structDataSize" = MuVariable $ dataSectionWordSize $ structDataSize desc
-    context "structDataBytes" = MuVariable (div (dataSectionBits (structDataSize desc)) 8)
     context "structReferenceCount" = MuVariable $ structPointerCount desc
+    context "structPreferredListEncoding" = case (structDataSize desc, structPointerCount desc) of
+        (DataSectionWords 0, 0) -> MuVariable "VOID"
+        (DataSection1, 0) -> MuVariable "BYTE"
+        (DataSection8, 0) -> MuVariable "BYTE"
+        (DataSection16, 0) -> MuVariable "TWO_BYTES"
+        (DataSection32, 0) -> MuVariable "FOUR_BYTES"
+        (DataSectionWords 1, 0) -> MuVariable "EIGHT_BYTES"
+        (DataSectionWords 0, 1) -> MuVariable "REFERENCE"
+        _ -> MuVariable "INLINE_COMPOSITE"
     context "structNestedEnums" =
         MuList $ map (enumContext context) [m | DescEnum m <- structMembers desc]
     context "structNestedStructs" =

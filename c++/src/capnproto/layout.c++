@@ -418,8 +418,7 @@ struct WireHelpers {
     ref->structRef.set(size);
 
     // Build the StructBuilder.
-    return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + size.data),
-                         size.pointers);
+    return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + size.data));
   }
 
   static CAPNPROTO_ALWAYS_INLINE(StructBuilder getWritableStructReference(
@@ -446,8 +445,7 @@ struct WireHelpers {
           "Trying to update struct with incorrect reference count.");
     }
 
-    return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + size.data),
-                         size.pointers);
+    return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + size.data));
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListBuilder initListReference(
@@ -456,6 +454,8 @@ struct WireHelpers {
     DPRECOND(elementSize != FieldSize::INLINE_COMPOSITE,
         "Should have called initStructListReference() instead.");
 
+    // Note:  Use bitsPerElement(), not bytesPerElement(), to handle bit lists correctly when
+    //   computing wordCount.  After that, the step is not used for bit lists.
     auto step = bitsPerElement(elementSize);
 
     // Calculate size of the list.
@@ -468,30 +468,18 @@ struct WireHelpers {
     ref->listRef.set(elementSize, elementCount);
 
     // Build the ListBuilder.
-    return ListBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr),
-                       step / BITS_PER_BYTE, step / BITS_PER_REFERENCE, elementCount);
+    return ListBuilder(segment, ptr, step / BITS_PER_BYTE, elementCount);
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListBuilder initStructListReference(
       WireReference* ref, SegmentBuilder* segment, ElementCount elementCount,
       StructSize elementSize)) {
-    if ((elementSize.pointers == 0 * REFERENCES && elementSize.data <= 1 * WORDS) ||
-        (elementSize.pointers == 1 * REFERENCES && elementSize.data == 0 * WORDS)) {
-      // Small data-only struct.  Allocate a list of primitives instead.
-      FieldSize primitiveElementSize = FieldSize::VOID;
-      if (elementSize.pointers == 1 * REFERENCES) {
-        primitiveElementSize = FieldSize::REFERENCE;
-      } else {
-        switch (elementSize.dataBytes / BYTES) {
-          case 0: primitiveElementSize = FieldSize::VOID; break;
-          case 1: primitiveElementSize = FieldSize::BYTE; break;
-          case 2: primitiveElementSize = FieldSize::TWO_BYTES; break;
-          case 4: primitiveElementSize = FieldSize::FOUR_BYTES; break;
-          case 8: primitiveElementSize = FieldSize::EIGHT_BYTES; break;
-          default: FAIL_PRECOND("Invalid struct size."); break;
-        }
-      }
-      return initListReference(ref, segment, elementCount, primitiveElementSize);
+    if (elementSize.preferredListEncoding != FieldSize::INLINE_COMPOSITE) {
+      // Small data-only struct.  Allocate a list of primitives instead.  Don't ever pack as
+      // individual bits, though; we don't support that.
+      return initListReference(ref, segment, elementCount,
+                               elementSize.preferredListEncoding == FieldSize::BIT ?
+                                   FieldSize::BYTE : elementSize.preferredListEncoding);
     }
 
     auto wordsPerElement = elementSize.total() / ELEMENTS;
@@ -511,9 +499,7 @@ struct WireHelpers {
     ptr += REFERENCE_SIZE_IN_WORDS;
 
     // Build the ListBuilder.
-    return ListBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + elementSize.data),
-                       wordsPerElement * BYTES_PER_WORD, wordsPerElement / WORDS_PER_REFERENCE,
-                       elementCount);
+    return ListBuilder(segment, ptr, wordsPerElement * BYTES_PER_WORD, elementCount);
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListBuilder getWritableListReference(
@@ -523,8 +509,7 @@ struct WireHelpers {
 
     if (ref->isNull()) {
       if (defaultValue == nullptr) {
-        return ListBuilder(segment, nullptr, nullptr, 0 * BYTES / ELEMENTS,
-                           0 * REFERENCES / ELEMENTS, 0 * ELEMENTS);
+        return ListBuilder();
       }
       ptr = copyMessage(segment, ref, defaultRef);
     } else {
@@ -541,17 +526,11 @@ struct WireHelpers {
           "INLINE_COMPOSITE list with non-STRUCT elements not supported.");
 
       // First list element is at tag + 1 reference.
-      word* data = reinterpret_cast<word*>(tag + 1);
-      WireReference* pointers = reinterpret_cast<WireReference*>(
-          data + tag->structRef.dataSize.get());
-      auto step = tag->structRef.wordSize() / ELEMENTS;
-      return ListBuilder(segment, data, pointers, step * BYTES_PER_WORD, step / WORDS_PER_REFERENCE,
+      return ListBuilder(segment, tag + 1, tag->structRef.wordSize() * BYTES_PER_WORD / ELEMENTS,
                          tag->inlineCompositeListElementCount());
     } else {
       auto step = bytesPerElement(ref->listRef.elementSize());
-      return ListBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr),
-                         step, step / BYTES_PER_REFERENCE,
-                         ref->listRef.elementCount());
+      return ListBuilder(segment, ptr, step, ref->listRef.elementCount());
     }
   }
 
@@ -685,9 +664,7 @@ struct WireHelpers {
     if (ref == nullptr || ref->isNull()) {
     useDefault:
       if (defaultValue == nullptr) {
-        return ListReader(nullptr, nullptr, nullptr, 0 * ELEMENTS,
-                          0 * BYTES / ELEMENTS, 0 * REFERENCES / ELEMENTS,
-                          nestingLimit - 1);
+        return ListReader();
       }
       segment = nullptr;
       ref = reinterpret_cast<const WireReference*>(defaultValue);
@@ -795,9 +772,7 @@ struct WireHelpers {
       }
 
       return ListReader(
-          segment, ptr,
-          reinterpret_cast<const WireReference*>(ptr + tag->structRef.dataSize.get()),
-          size, wordsPerElement * BYTES_PER_WORD, wordsPerElement / WORDS_PER_REFERENCE,
+          segment, ptr, size, wordsPerElement * BYTES_PER_WORD,
           tag->structRef.dataSize.get() * BYTES_PER_WORD,
           tag->structRef.refCount.get(), nestingLimit - 1);
 
@@ -814,9 +789,8 @@ struct WireHelpers {
       }
 
       if (ref->listRef.elementSize() == expectedElementSize) {
-        return ListReader(segment, ptr, reinterpret_cast<const WireReference*>(ptr),
-                          ref->listRef.elementCount(), step / BITS_PER_BYTE,
-                          step / BITS_PER_REFERENCE, nestingLimit - 1);
+        return ListReader(segment, ptr, ref->listRef.elementCount(), step / BITS_PER_BYTE,
+                          nestingLimit - 1);
       } else if (expectedElementSize == FieldSize::INLINE_COMPOSITE) {
         // We were expecting a struct list, but we received a list of some other type.  Perhaps a
         // non-struct list was recently upgraded to a struct list, but the sender is using the
@@ -845,9 +819,8 @@ struct WireHelpers {
             break;
         }
 
-        return ListReader(segment, ptr, reinterpret_cast<const WireReference*>(ptr),
-                          ref->listRef.elementCount(), step / BITS_PER_BYTE,
-                          step / BITS_PER_REFERENCE, dataSize, referenceCount, nestingLimit - 1);
+        return ListReader(segment, ptr, ref->listRef.elementCount(), step / BITS_PER_BYTE,
+                          dataSize, referenceCount, nestingLimit - 1);
       } else {
         PRECOND(segment != nullptr, "Trusted message had incompatible list element type.");
         goto useDefault;
@@ -1080,102 +1053,124 @@ Data::Reader StructReader::getDataField(
 
 StructBuilder ListBuilder::getStructElement(ElementCount index, StructSize elementSize) const {
   // TODO:  Inline this method?
-  ByteCount indexByte = ElementCount64(index) * stepBytes;
-  byte* structData = reinterpret_cast<byte*>(data) + indexByte;
-  WireReference* structPointers = pointers + index * stepPointers;
-  return StructBuilder(segment, structData, structPointers, elementSize.pointers);
+  byte* structData = ptr + index * stepBytes;
+  return StructBuilder(segment, structData,
+      reinterpret_cast<WireReference*>(structData) + elementSize.data / WORDS_PER_REFERENCE);
 }
 
 ListBuilder ListBuilder::initListElement(
     ElementCount index, FieldSize elementSize, ElementCount elementCount) const {
   return WireHelpers::initListReference(
-      pointers + index * stepPointers, segment,
-      elementCount, elementSize);
+      reinterpret_cast<WireReference*>(ptr + index * stepBytes),
+      segment, elementCount, elementSize);
 }
 
 ListBuilder ListBuilder::initStructListElement(
     ElementCount index, ElementCount elementCount, StructSize elementSize) const {
   return WireHelpers::initStructListReference(
-      pointers + index * stepPointers, segment,
-      elementCount, elementSize);
+      reinterpret_cast<WireReference*>(ptr + index * stepBytes),
+      segment, elementCount, elementSize);
 }
 
 ListBuilder ListBuilder::getListElement(ElementCount index) const {
   return WireHelpers::getWritableListReference(
-      pointers + index * stepPointers, segment, nullptr);
+      reinterpret_cast<WireReference*>(ptr + index * stepBytes), segment, nullptr);
 }
 
 Text::Builder ListBuilder::initTextElement(ElementCount index, ByteCount size) const {
   return WireHelpers::initTextReference(
-      pointers + index * stepPointers, segment, size);
+      reinterpret_cast<WireReference*>(ptr + index * stepBytes), segment, size);
 }
 void ListBuilder::setTextElement(ElementCount index, Text::Reader value) const {
   WireHelpers::setTextReference(
-      pointers + index * stepPointers, segment, value);
+      reinterpret_cast<WireReference*>(ptr + index * stepBytes), segment, value);
 }
 Text::Builder ListBuilder::getTextElement(ElementCount index) const {
   return WireHelpers::getWritableTextReference(
-      pointers + index * stepPointers, segment, "", 0 * BYTES);
+      reinterpret_cast<WireReference*>(ptr + index * stepBytes), segment, "", 0 * BYTES);
 }
 
 Data::Builder ListBuilder::initDataElement(ElementCount index, ByteCount size) const {
   return WireHelpers::initDataReference(
-      pointers + index * stepPointers, segment, size);
+      reinterpret_cast<WireReference*>(ptr + index * stepBytes), segment, size);
 }
 void ListBuilder::setDataElement(ElementCount index, Data::Reader value) const {
   WireHelpers::setDataReference(
-      pointers + index * stepPointers, segment, value);
+      reinterpret_cast<WireReference*>(ptr + index * stepBytes), segment, value);
 }
 Data::Builder ListBuilder::getDataElement(ElementCount index) const {
   return WireHelpers::getWritableDataReference(
-      pointers + index * stepPointers, segment, nullptr, 0 * BYTES);
+      reinterpret_cast<WireReference*>(ptr + index * stepBytes), segment, nullptr, 0 * BYTES);
 }
 
 ListReader ListBuilder::asReader(FieldSize elementSize) const {
   // TODO:  For INLINE_COMPOSITE I suppose we could just check the tag?
   PRECOND(elementSize != FieldSize::INLINE_COMPOSITE,
       "Need to call the other asReader() overload for INLINE_COMPOSITE lists.");
-  return ListReader(segment, data, pointers, elementCount, stepBytes, stepPointers,
-                    std::numeric_limits<int>::max());
+  return ListReader(segment, ptr, elementCount, stepBytes, std::numeric_limits<int>::max());
 }
 
 ListReader ListBuilder::asReader(StructSize elementSize) const {
-  return ListReader(segment, data, pointers, elementCount, stepBytes, stepPointers,
-                    elementSize.dataBytes, elementSize.pointers, std::numeric_limits<int>::max());
+  DCHECK(stepBytes * ELEMENTS >= elementSize.data * BYTES_PER_WORD ||
+         (elementSize.data == 1 * WORDS &&
+          elementSize.preferredListEncoding != FieldSize::INLINE_COMPOSITE &&
+          elementSize.preferredListEncoding != FieldSize::REFERENCE &&
+          stepBytes == bytesPerElement(elementSize.preferredListEncoding)),
+         "Assumptions used here did not hold.");
+
+  return ListReader(segment, ptr, elementCount, stepBytes,
+                    std::min(stepBytes * ELEMENTS, elementSize.data * BYTES_PER_WORD),
+                    elementSize.pointers,
+                    std::numeric_limits<int>::max());
 }
 
 // =======================================================================================
 // ListReader
 
 StructReader ListReader::getStructElement(ElementCount index) const {
-  // TODO:  Inline this method?
   VALIDATE_INPUT((segment == nullptr) | (nestingLimit > 0),
         "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.") {
     return StructReader::readEmpty();
   }
 
   ByteCount indexByte = index * stepBytes;
-  const byte* structData = reinterpret_cast<const byte*>(data) + indexByte;
+  const byte* structData = ptr + indexByte;
+  const WireReference* structPointers =
+      reinterpret_cast<const WireReference*>(structData + structDataSize);
+
+  // This check should pass if there are no bugs in the list pointer validation code.
+  DCHECK(structReferenceCount == 0 * REFERENCES ||
+         (uintptr_t)structPointers % sizeof(WireReference) == 0,
+         "Pointer segment of struct list element not aligned.");
+
   return StructReader(
-      segment, structData, pointers + index * stepPointers,
+      segment, structData, structPointers,
       structDataSize, structReferenceCount, nestingLimit - 1);
+}
+
+static const WireReference* checkAlignment(const void* ptr) {
+  DCHECK((uintptr_t)ptr % sizeof(WireReference) == 0,
+         "Pointer segment of struct list element not aligned.");
+  return reinterpret_cast<const WireReference*>(ptr);
 }
 
 ListReader ListReader::getListElement(
     ElementCount index, FieldSize expectedElementSize) const {
   return WireHelpers::readListReference(
-      segment, pointers + index * stepPointers,
+      segment, checkAlignment(ptr + index * stepBytes),
       nullptr, expectedElementSize, nestingLimit);
 }
 
 Text::Reader ListReader::getTextElement(ElementCount index) const {
   return WireHelpers::readTextReference(
-      segment, pointers + index * stepPointers, "", 0 * BYTES);
+      segment, checkAlignment(ptr + index * stepBytes),
+      "", 0 * BYTES);
 }
 
 Data::Reader ListReader::getDataElement(ElementCount index) const {
   return WireHelpers::readDataReference(
-      segment, pointers + index * stepPointers, nullptr, 0 * BYTES);
+      segment, checkAlignment(ptr + index * stepBytes),
+      nullptr, 0 * BYTES);
 }
 
 }  // namespace internal

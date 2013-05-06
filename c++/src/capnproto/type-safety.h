@@ -353,6 +353,15 @@ public:
         unit1PerUnit2 / other.unit1PerUnit2);
   }
 
+  template <typename OtherNumber>
+  inline decltype(Number(1) / OtherNumber(1))
+      operator/(UnitRatio<OtherNumber, Unit1, Unit2> other) const {
+    return unit1PerUnit2 / other.unit1PerUnit2;
+  }
+
+  inline bool operator==(UnitRatio other) const { return unit1PerUnit2 == other.unit1PerUnit2; }
+  inline bool operator!=(UnitRatio other) const { return unit1PerUnit2 != other.unit1PerUnit2; }
+
 private:
   Number unit1PerUnit2;
 
