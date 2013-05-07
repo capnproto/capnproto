@@ -610,6 +610,49 @@ struct WireHelpers {
     }
   }
 
+  static CAPNPROTO_ALWAYS_INLINE(ObjectBuilder getWritableObjectReference(
+      SegmentBuilder* segment, WireReference* ref, const word* defaultValue)) {
+    word* ptr;
+
+    if (ref->isNull()) {
+      if (defaultValue == nullptr) {
+        return ObjectBuilder();
+      } else {
+        ptr = copyMessage(segment, ref, reinterpret_cast<const WireReference*>(defaultValue));
+      }
+    } else {
+      ptr = followFars(ref, segment);
+    }
+
+    if (ref->kind() == WireReference::LIST) {
+      if (ref->listRef.elementSize() == FieldSize::INLINE_COMPOSITE) {
+        // Read the tag to get the actual element count.
+        WireReference* tag = reinterpret_cast<WireReference*>(ptr);
+        PRECOND(tag->kind() == WireReference::STRUCT,
+            "INLINE_COMPOSITE list with non-STRUCT elements not supported.");
+
+        // First list element is at tag + 1 reference.
+        return ObjectBuilder(
+            ListBuilder(segment, tag + 1, tag->structRef.wordSize() * BYTES_PER_WORD / ELEMENTS,
+                        tag->inlineCompositeListElementCount()),
+            FieldSize::INLINE_COMPOSITE);
+      } else {
+        auto step = bytesPerElement(ref->listRef.elementSize());
+        return ObjectBuilder(
+            ListBuilder(segment, ptr, step, ref->listRef.elementCount()),
+            ref->listRef.elementSize());
+      }
+    } else {
+      return ObjectBuilder(
+          StructBuilder(segment, ptr,
+                        reinterpret_cast<WireReference*>(ptr + ref->structRef.dataSize.get())),
+          ref->structRef.dataSize.get() * BYTES_PER_WORD,
+          ref->structRef.refCount.get());
+    }
+  }
+
+  // -----------------------------------------------------------------
+
   static CAPNPROTO_ALWAYS_INLINE(StructReader readStructReference(
       SegmentReader* segment, const WireReference* ref, const word* defaultValue,
       int nestingLimit)) {
@@ -783,7 +826,7 @@ struct WireHelpers {
       if (segment != nullptr) {
         VALIDATE_INPUT(segment->containsInterval(ptr, ptr +
               roundUpToWords(ElementCount64(ref->listRef.elementCount()) * step)),
-              "Message contained out-of-bounds list reference.") {
+              "Message contains out-of-bounds list reference.") {
           goto useDefault;
         }
       }
@@ -917,6 +960,118 @@ struct WireHelpers {
       return Data::Reader(reinterpret_cast<const char*>(ptr), size);
     }
   }
+
+  static CAPNPROTO_ALWAYS_INLINE(ObjectReader readObjectReference(
+      SegmentReader* segment, const WireReference* ref,
+      const word* defaultValue, int nestingLimit)) {
+    // We can't really reuse readStructReference() and readListReference() because they are designed
+    // for the case where we are expecting a specific type, and they do validation around that,
+    // whereas this method is for the case where we accept any pointer.
+
+    const word* ptr;
+    if (ref == nullptr || ref->isNull()) {
+    useDefault:
+      if (defaultValue == nullptr) {
+        return ObjectReader();
+      }
+      segment = nullptr;
+      ref = reinterpret_cast<const WireReference*>(defaultValue);
+      ptr = ref->target();
+    } else if (segment != nullptr) {
+      ptr = WireHelpers::followFars(ref, segment);
+      if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
+        // Already reported the error.
+        goto useDefault;
+      }
+    } else {
+      ptr = ref->target();
+    }
+
+    switch (ref->kind()) {
+      case WireReference::STRUCT:
+        if (segment != nullptr) {
+          VALIDATE_INPUT(nestingLimit > 0,
+                "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.") {
+            goto useDefault;
+          }
+
+          VALIDATE_INPUT(segment->containsInterval(ptr, ptr + ref->structRef.wordSize()),
+                "Message contained out-of-bounds struct reference.") {
+            goto useDefault;
+          }
+        }
+        return ObjectReader(
+            StructReader(segment, ptr,
+                         reinterpret_cast<const WireReference*>(ptr + ref->structRef.dataSize.get()),
+                         ref->structRef.dataSize.get() * BYTES_PER_WORD,
+                         ref->structRef.refCount.get(),
+                         nestingLimit - 1));
+      case WireReference::LIST: {
+        FieldSize elementSize = ref->listRef.elementSize();
+
+        if (segment != nullptr) {
+          VALIDATE_INPUT(nestingLimit > 0,
+                "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.") {
+            goto useDefault;
+          }
+        }
+
+        if (elementSize == FieldSize::INLINE_COMPOSITE) {
+          WordCount wordCount = ref->listRef.inlineCompositeWordCount();
+          const WireReference* tag = reinterpret_cast<const WireReference*>(ptr);
+          ptr += REFERENCE_SIZE_IN_WORDS;
+
+          if (segment != nullptr) {
+            VALIDATE_INPUT(segment->containsInterval(ptr - REFERENCE_SIZE_IN_WORDS,
+                                                     ptr + wordCount),
+                "Message contains out-of-bounds list reference.") {
+              goto useDefault;
+            }
+
+            VALIDATE_INPUT(tag->kind() == WireReference::STRUCT,
+                  "INLINE_COMPOSITE lists of non-STRUCT type are not supported.") {
+              goto useDefault;
+            }
+          }
+
+          ElementCount elementCount = tag->inlineCompositeListElementCount();
+          auto wordsPerElement = tag->structRef.wordSize() / ELEMENTS;
+
+          if (segment != nullptr) {
+            VALIDATE_INPUT(wordsPerElement * elementCount <= wordCount,
+                "INLINE_COMPOSITE list's elements overrun its word count.");
+          }
+
+          return ObjectReader(
+              ListReader(segment, ptr, elementCount, wordsPerElement * BYTES_PER_WORD,
+                         tag->structRef.dataSize.get() * BYTES_PER_WORD,
+                         tag->structRef.refCount.get(), nestingLimit - 1),
+              elementSize);
+        } else {
+          decltype(BITS / ELEMENTS) step = bitsPerElement(elementSize);
+          ElementCount elementCount = ref->listRef.elementCount();
+          WordCount wordCount = roundUpToWords(ElementCount64(elementCount) * step);
+
+          if (segment != nullptr) {
+            VALIDATE_INPUT(segment->containsInterval(ptr, ptr + wordCount),
+                  "Message contains out-of-bounds list reference.") {
+              goto useDefault;
+            }
+          }
+
+          return ObjectReader(
+              ListReader(segment, ptr, elementCount, step / BITS_PER_BYTE,
+                  elementSize == FieldSize::REFERENCE ? 0 * BYTES : step * ELEMENTS / BITS_PER_BYTE,
+                  elementSize == FieldSize::REFERENCE ? 1 * REFERENCES : 0 * REFERENCES,
+                  nestingLimit - 1),
+              elementSize);
+        }
+      }
+      default:
+        FAIL_VALIDATE_INPUT("Message contained invalid pointer.") {}
+        goto useDefault;
+    }
+  }
 };
 
 // =======================================================================================
@@ -988,6 +1143,11 @@ Data::Builder StructBuilder::getDataField(
       references + refIndex, segment, defaultValue, defaultSize);
 }
 
+ObjectBuilder StructBuilder::getObjectField(
+    WireReferenceCount refIndex, const word* defaultValue) const {
+  return WireHelpers::getWritableObjectReference(segment, references + refIndex, defaultValue);
+}
+
 StructReader StructBuilder::asReader() const {
   // HACK:  We just give maxed-out data size and reference counts because they are only
   // used for checking for field presence.
@@ -1048,6 +1208,12 @@ Data::Reader StructReader::getDataField(
   return WireHelpers::readDataReference(segment, ref, defaultValue, defaultSize);
 }
 
+ObjectReader StructReader::getObjectField(
+    WireReferenceCount refIndex, const word* defaultValue) const {
+  return WireHelpers::readObjectReference(
+      segment, references + refIndex, defaultValue, nestingLimit);
+}
+
 // =======================================================================================
 // ListBuilder
 
@@ -1101,6 +1267,11 @@ void ListBuilder::setDataElement(ElementCount index, Data::Reader value) const {
 Data::Builder ListBuilder::getDataElement(ElementCount index) const {
   return WireHelpers::getWritableDataReference(
       reinterpret_cast<WireReference*>(ptr + index * stepBytes), segment, nullptr, 0 * BYTES);
+}
+
+ObjectBuilder ListBuilder::getObjectElement(ElementCount index, const word* defaultValue) const {
+  return WireHelpers::getWritableObjectReference(
+      segment, reinterpret_cast<WireReference*>(ptr + index * stepBytes), defaultValue);
 }
 
 ListReader ListBuilder::asReader(FieldSize elementSize) const {
@@ -1171,6 +1342,11 @@ Data::Reader ListReader::getDataElement(ElementCount index) const {
   return WireHelpers::readDataReference(
       segment, checkAlignment(ptr + index * stepBytes),
       nullptr, 0 * BYTES);
+}
+
+ObjectReader ListReader::getObjectElement(ElementCount index, const word* defaultValue) const {
+  return WireHelpers::readObjectReference(
+      segment, checkAlignment(ptr + index * stepBytes), defaultValue, nestingLimit);
 }
 
 }  // namespace internal

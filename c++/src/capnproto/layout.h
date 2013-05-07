@@ -42,6 +42,8 @@ class StructBuilder;
 class StructReader;
 class ListBuilder;
 class ListReader;
+class ObjectBuilder;
+class ObjectReader;
 struct WireReference;
 struct WireHelpers;
 class SegmentReader;
@@ -49,7 +51,6 @@ class SegmentBuilder;
 
 class FieldDescriptor;
 typedef Id<uint8_t, FieldDescriptor> FieldNumber;
-enum class FieldSize: uint8_t;
 
 enum class FieldSize: uint8_t {
   // TODO:  Rename to FieldLayout or maybe ValueLayout.
@@ -319,6 +320,9 @@ public:
                              const void* defaultValue, ByteCount defaultSize) const;
   // Same as *Text*, but for data blobs.
 
+  ObjectBuilder getObjectField(WireReferenceCount refIndex, const word* defaultValue) const;
+  // Read a pointer of arbitrary type.
+
   StructReader asReader() const;
   // Gets a StructReader pointing at the same memory.
 
@@ -374,6 +378,9 @@ public:
   Data::Reader getDataField(WireReferenceCount refIndex,
                             const void* defaultValue, ByteCount defaultSize) const;
   // Gets the data field, or the given default value if not initialized.
+
+  ObjectReader getObjectField(WireReferenceCount refIndex, const word* defaultValue) const;
+  // Read a pointer of arbitrary type.
 
   WireReferenceCount getReferenceCount() { return referenceCount; }
 
@@ -457,6 +464,9 @@ public:
   Data::Builder getDataElement(ElementCount index) const;
   // Like *Text*() but for Data.
 
+  ObjectBuilder getObjectElement(ElementCount index, const word* defaultValue) const;
+  // Gets a pointer element of arbitrary type.
+
   ListReader asReader(FieldSize elementSize) const;
   // Get a ListReader pointing at the same memory.  Use this version only for non-struct lists.
 
@@ -508,6 +518,9 @@ public:
   Data::Reader getDataElement(ElementCount index) const;
   // Get the data element.  If it is not initialized, returns an empty Data::Reader.
 
+  ObjectReader getObjectElement(ElementCount index, const word* defaultValue) const;
+  // Gets a pointer element of arbitrary type.
+
 private:
   SegmentReader* segment;  // Memory segment in which the list resides.
 
@@ -544,6 +557,69 @@ private:
   friend class StructReader;
   friend class ListBuilder;
   friend struct WireHelpers;
+};
+
+// -------------------------------------------------------------------
+
+struct ObjectBuilder {
+  // A reader for any kind of object.
+
+  enum Kind {
+    NULL_POINTER,   // Object was read from a null pointer.
+    STRUCT,
+    LIST
+  };
+
+  Kind kind;
+
+  FieldSize listElementSize;
+  // Only set if kind == LIST.  This would be part of the union, except that then ObjectReader would
+  // end up larger overall.
+
+  WireReferenceCount16 structPointerSectionSize;
+  ByteCount32 structDataSectionSize;
+  // For kind == STRUCT, the size of the struct.  For kind == LIST, the size of each element of the
+  // list, unless listElementSize == BIT.
+
+  union {
+    StructBuilder structBuilder;
+    ListBuilder listBuilder;
+  };
+
+  ObjectBuilder(): kind(NULL_POINTER), structBuilder() {}
+  ObjectBuilder(StructBuilder structBuilder, ByteCount32 dataSectionSize,
+                WireReferenceCount16 pointerSectionSize)
+      : kind(STRUCT), structPointerSectionSize(pointerSectionSize),
+        structDataSectionSize(dataSectionSize), structBuilder(structBuilder) {}
+  ObjectBuilder(ListBuilder listBuilderBuilder, FieldSize elementSize)
+      : kind(LIST), listElementSize(elementSize), listBuilder(listBuilder) {}
+};
+
+struct ObjectReader {
+  // A reader for any kind of object.
+
+  enum Kind {
+    NULL_POINTER,   // Object was read from a null pointer.
+    STRUCT,
+    LIST
+  };
+
+  Kind kind;
+
+  FieldSize listElementSize;
+  // Only set if kind == LIST.  This would be part of the union, except that then ObjectReader would
+  // end up larger overall.
+
+  union {
+    StructReader structReader;
+    ListReader listReader;
+  };
+
+  ObjectReader(): kind(NULL_POINTER), structReader() {}
+  ObjectReader(StructReader structReader)
+      : kind(STRUCT), structReader(structReader) {}
+  ObjectReader(ListReader listReader, FieldSize elementSize)
+      : kind(LIST), listElementSize(elementSize), listReader(listReader) {}
 };
 
 // =======================================================================================

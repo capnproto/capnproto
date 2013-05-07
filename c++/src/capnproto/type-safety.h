@@ -54,8 +54,8 @@ struct NoInfer {
 
 template <typename T> struct RemoveReference { typedef T Type; };
 template <typename T> struct RemoveReference<T&> { typedef T Type; };
-template<typename> struct IsLvalueReference { static constexpr bool value = false; };
-template<typename T> struct IsLvalueReference<T&> { static constexpr bool value = true; };
+template <typename> struct IsLvalueReference { static constexpr bool value = false; };
+template <typename T> struct IsLvalueReference<T&> { static constexpr bool value = true; };
 
 // #including <utility> just for std::move() and std::forward() is excessive.  Instead, we
 // re-define them here.
@@ -70,6 +70,164 @@ template<typename T> constexpr T&& forward(typename RemoveReference<T>::Type&& t
   static_assert(!IsLvalueReference<T>::value, "Attempting to forward rvalue as lvalue reference.");
   return static_cast<T&&>(t);
 }
+
+template <typename T>
+T instance() noexcept;
+// Like std::declval, but doesn't transform T into an rvalue reference.  If you want that, specify
+// instance<T&&>().
+
+// =======================================================================================
+// Maybe
+
+template <typename T>
+class Maybe {
+public:
+  Maybe(): isSet(false) {}
+  Maybe(T&& t)
+      : isSet(true) {
+    new (&value) T(move(t));
+  }
+  Maybe(const T& t)
+      : isSet(true) {
+    new (&value) T(t);
+  }
+  Maybe(Maybe&& other) noexcept(noexcept(T(capnproto::move(other.value))))
+      : isSet(other.isSet) {
+    if (isSet) {
+      new (&value) T(move(other.value));
+    }
+  }
+  Maybe(const Maybe& other)
+      : isSet(other.isSet) {
+    if (isSet) {
+      new (&value) T(other.value);
+    }
+  }
+  Maybe(std::nullptr_t): isSet(false) {}
+
+  ~Maybe() {
+    if (isSet) {
+      value.~T();
+    }
+  }
+
+  template <typename... Params>
+  inline void init(Params&&... params) {
+    if (isSet) {
+      value.~T();
+    }
+    isSet = true;
+    new (&value) T(capnproto::forward(params)...);
+  }
+
+  inline T& operator*() { return value; }
+  inline const T& operator*() const { return value; }
+  inline T* operator->() { return &value; }
+  inline const T* operator->() const { return &value; }
+
+  inline Maybe& operator=(Maybe&& other) {
+    if (&other != this) {
+      if (isSet) {
+        value.~T();
+      }
+      isSet = other.isSet;
+      if (isSet) {
+        new (&value) T(move(other.value));
+      }
+    }
+    return *this;
+  }
+
+  inline Maybe& operator=(const Maybe& other) {
+    if (&other != this) {
+      if (isSet) {
+        value.~T();
+      }
+      isSet = other.isSet;
+      if (isSet) {
+        new (&value) T(other.value);
+      }
+    }
+    return *this;
+  }
+
+  bool operator==(const Maybe& other) const {
+    if (isSet == other.isSet) {
+      if (isSet) {
+        return value == other.value;
+      } else {
+        return true;
+      }
+    }
+    return false;
+  }
+  inline bool operator!=(const Maybe& other) const { return !(*this == other); }
+
+  inline bool operator==(std::nullptr_t) const { return !isSet; }
+  inline bool operator!=(std::nullptr_t) const { return isSet; }
+
+  template <typename Func>
+  auto map(const Func& func) const -> Maybe<decltype(func(instance<const T&>()))> {
+    // Construct a new Maybe by applying the given function to the Maybe's value.
+
+    if (isSet) {
+      return func(value);
+    } else {
+      return nullptr;
+    }
+  }
+
+  template <typename Func>
+  auto map(const Func& func) -> Maybe<decltype(func(instance<T&>()))> {
+    // Construct a new Maybe by applying the given function to the Maybe's value.
+
+    if (isSet) {
+      return func(value);
+    } else {
+      return nullptr;
+    }
+  }
+
+  template <typename Func>
+  auto moveMap(const Func& func) -> Maybe<decltype(func(instance<T&&>()))> {
+    // Like map() but allows the function to take an rvalue reference to the value.
+
+    if (isSet) {
+      return func(capnproto::move(value));
+    } else {
+      return nullptr;
+    }
+  }
+
+private:
+  bool isSet;
+  union {
+    T value;
+  };
+};
+
+template <typename T>
+class Maybe<T&> {
+public:
+  Maybe(): ptr(nullptr) {}
+  Maybe(T& t): ptr(&t) {}
+  Maybe(std::nullptr_t): ptr(nullptr) {}
+
+  ~Maybe() noexcept {}
+
+  inline T& operator*() { return *ptr; }
+  inline const T& operator*() const { return *ptr; }
+  inline T* operator->() { return ptr; }
+  inline const T* operator->() const { return ptr; }
+
+  inline bool operator==(const Maybe& other) const { return ptr == other.ptr; }
+  inline bool operator!=(const Maybe& other) const { return ptr != other.ptr; }
+  inline bool operator==(std::nullptr_t) const { return ptr == nullptr; }
+  inline bool operator!=(std::nullptr_t) const { return ptr != nullptr; }
+
+private:
+  T* ptr;
+};
 
 // =======================================================================================
 // ArrayPtr

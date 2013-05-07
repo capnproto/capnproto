@@ -79,7 +79,7 @@ public:
   inline SegmentReader(Arena* arena, SegmentId id, ArrayPtr<const word> ptr,
                        ReadLimiter* readLimiter);
 
-  CAPNPROTO_ALWAYS_INLINE(bool containsInterval(const word* from, const word* to));
+  CAPNPROTO_ALWAYS_INLINE(bool containsInterval(const void* from, const void* to));
 
   inline Arena* getArena();
   inline SegmentId getSegmentId();
@@ -223,9 +223,12 @@ inline SegmentReader::SegmentReader(Arena* arena, SegmentId id, ArrayPtr<const w
                                     ReadLimiter* readLimiter)
     : arena(arena), id(id), ptr(ptr), readLimiter(readLimiter) {}
 
-inline bool SegmentReader::containsInterval(const word* from, const word* to) {
+inline bool SegmentReader::containsInterval(const void* from, const void* to) {
   return from >= this->ptr.begin() && to <= this->ptr.end() &&
-      readLimiter->canRead(intervalLength(from, to), arena);
+      readLimiter->canRead(
+          intervalLength(reinterpret_cast<const byte*>(from),
+                         reinterpret_cast<const byte*>(to)) / BYTES_PER_WORD,
+          arena);
 }
 
 inline Arena* SegmentReader::getArena() { return arena; }

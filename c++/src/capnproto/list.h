@@ -43,13 +43,37 @@ public:
   static constexpr bool value = sizeof(test<T>(nullptr)) == sizeof(yes);
 };
 
+template <typename T>
+constexpr bool isPrimitive() { return IsPrimitive<T>::value; }
+
+template <typename T, bool isPrimitive = isPrimitive<T>()>
+struct MaybeReaderBuilder {};
+template <typename T>
+struct MaybeReaderBuilder<T, true> {
+  typedef T Reader;
+  typedef T Builder;
+};
+template <typename T>
+struct MaybeReaderBuilder<T, false> {
+  typedef typename T::Reader Reader;
+  typedef typename T::Builder Builder;
+};
+
 template <typename t>
 struct PointerHelpers;
 
 }  // namespace internal
 
-template <typename T, bool isPrimitive = internal::IsPrimitive<T>::value>
+template <typename T, bool isPrimitive = internal::isPrimitive<T>()>
 struct List;
+
+template <typename T>
+using ReaderFor = typename internal::MaybeReaderBuilder<T>::Reader;
+// The type returned by List<T>::Reader::operator[].
+
+template <typename T>
+using BuilderFor = typename internal::MaybeReaderBuilder<T>::Reader;
+// The type returned by List<T>::Builder::operator[].
 
 namespace internal {
 
@@ -60,7 +84,7 @@ template <> struct FieldSizeForByteSize<4> { static constexpr FieldSize value = 
 template <> struct FieldSizeForByteSize<8> { static constexpr FieldSize value = FieldSize::EIGHT_BYTES; };
 
 template <typename T> struct FieldSizeForType {
-  static constexpr FieldSize value = IsPrimitive<T>::value ?
+  static constexpr FieldSize value = isPrimitive<T>() ?
       // Primitive types that aren't special-cased below can be determined from sizeof().
       FieldSizeForByteSize<sizeof(T)>::value :
 
