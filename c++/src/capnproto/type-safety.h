@@ -462,6 +462,19 @@ struct Id {
 // =======================================================================================
 // Units
 
+template <typename T> constexpr bool isIntegral() { return false; }
+template <> constexpr bool isIntegral<char>() { return true; }
+template <> constexpr bool isIntegral<signed char>() { return true; }
+template <> constexpr bool isIntegral<short>() { return true; }
+template <> constexpr bool isIntegral<int>() { return true; }
+template <> constexpr bool isIntegral<long>() { return true; }
+template <> constexpr bool isIntegral<long long>() { return true; }
+template <> constexpr bool isIntegral<unsigned char>() { return true; }
+template <> constexpr bool isIntegral<unsigned short>() { return true; }
+template <> constexpr bool isIntegral<unsigned int>() { return true; }
+template <> constexpr bool isIntegral<unsigned long>() { return true; }
+template <> constexpr bool isIntegral<unsigned long long>() { return true; }
+
 template <typename Number, typename Unit1, typename Unit2>
 class UnitRatio {
   // A multiplier used to convert Quantities of one unit to Quantities of another unit.  See
@@ -469,6 +482,8 @@ class UnitRatio {
   //
   // Construct this type by dividing one Quantity by another of a different unit.  Use this type
   // by multiplying it by a Quantity, or dividing a Quantity by it.
+
+  static_assert(isIntegral<Number>(), "Underlying type for UnitRatio must be integer.");
 
 public:
   inline UnitRatio() {}
@@ -529,12 +544,14 @@ private:
   friend class UnitRatio;
 
   template <typename N1, typename N2, typename U1, typename U2>
-  friend inline constexpr decltype(N1(1) * N2(1)) operator*(N1, UnitRatio<N2, U1, U2>);
+  friend inline constexpr UnitRatio<decltype(N1(1) * N2(1)), U1, U2>
+      operator*(N1, UnitRatio<N2, U1, U2>);
 };
 
 template <typename N1, typename N2, typename U1, typename U2>
-inline constexpr decltype(N1(1) * N2(1)) operator*(N1 n, UnitRatio<N2, U1, U2> r) {
-  return n * r.unit1PerUnit2;
+inline constexpr UnitRatio<decltype(N1(1) * N2(1)), U1, U2>
+    operator*(N1 n, UnitRatio<N2, U1, U2> r) {
+  return UnitRatio<decltype(N1(1) * N2(1)), U1, U2>(n * r.unit1PerUnit2);
 }
 
 template <typename Number, typename Unit>
@@ -581,6 +598,8 @@ class Quantity {
   //     waitFor(3 * MINUTES);
   //   }
 
+  static_assert(isIntegral<Number>(), "Underlying type for Quantity must be integer.");
+
 public:
   inline constexpr Quantity() {}
 
@@ -605,11 +624,13 @@ public:
   template <typename OtherNumber>
   inline constexpr Quantity<decltype(Number(1) * OtherNumber(1)), Unit>
       operator*(OtherNumber other) const {
+    static_assert(isIntegral<OtherNumber>(), "Multiplied Quantity by non-integer.");
     return Quantity<decltype(Number(1) * other), Unit>(value * other);
   }
   template <typename OtherNumber>
   inline constexpr Quantity<decltype(Number(1) / OtherNumber(1)), Unit>
       operator/(OtherNumber other) const {
+    static_assert(isIntegral<OtherNumber>(), "Divided Quantity by non-integer.");
     return Quantity<decltype(Number(1) / other), Unit>(value / other);
   }
   template <typename OtherNumber>

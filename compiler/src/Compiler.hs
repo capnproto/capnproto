@@ -708,8 +708,7 @@ packUnion :: UnionDesc -> PackingState -> Map.Map Integer UnionPackingState
 packUnion _ state unionState = (DataOffset Size16 offset, newState, unionState) where
     (offset, newState) = packData Size16 state
 
-stripHolesFromFirstWord Size1 _ = error "can't get this far"
-stripHolesFromFirstWord Size8 _ = Size8  -- Don't reduce to less than a byte.
+stripHolesFromFirstWord Size1 _ = Size1  -- Stop at a bit.
 stripHolesFromFirstWord size holes = let
     nextSize = pred size
     in case Map.lookup nextSize holes of
@@ -744,6 +743,7 @@ enforceFixed Nothing sizes = return sizes
 enforceFixed (Just (Located pos (requestedDataSize, requestedPointerCount)))
         (actualDataSize, actualPointerCount) = do
     validatedRequestedDataSize <- case requestedDataSize of
+        1 -> return DataSection1
         8 -> return DataSection8
         16 -> return DataSection16
         32 -> return DataSection32

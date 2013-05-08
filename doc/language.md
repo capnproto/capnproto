@@ -489,12 +489,11 @@ A protocol can be changed in the following ways without breaking backwards-compa
   parameter list and must have default values.
 * Any symbolic name can be changed, as long as the ordinal numbers stay the same.
 * Types definitions can be moved to different scopes.
-* A field of type `List(T)`, where `T` is a primitive type (except `Bool`), non-inline blob, or
+* A field of type `List(T)`, where `T` is a primitive type, non-inline blob, or
   non-inline list, may be changed to type `List(U)`, where `U` is a struct type whose `@0` field is
   of type `T`.  This rule is useful when you realize too late that you need to attach some extra
   data to each element of your list.  Without this rule, you would be stuck defining parallel
-  lists, which are ugly and error-prone.  (`List(Bool)` does not support this transformation
-  because it would be difficult to implement given that booleans are packed 8 to the byte.)
+  lists, which are ugly and error-prone.
 * A struct that is not already `fixed` can be made `fixed`.  However, once a struct is declared
   `fixed`, the declaration cannot be removed or changed, as this would change the layout of `Inline`
   uses of the struct.

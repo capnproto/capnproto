@@ -382,7 +382,7 @@ structContext parent desc = mkStrContext context where
     context "structReferenceCount" = MuVariable $ structPointerCount desc
     context "structPreferredListEncoding" = case (structDataSize desc, structPointerCount desc) of
         (DataSectionWords 0, 0) -> MuVariable "VOID"
-        (DataSection1, 0) -> MuVariable "BYTE"
+        (DataSection1, 0) -> MuVariable "BIT"
         (DataSection8, 0) -> MuVariable "BYTE"
         (DataSection16, 0) -> MuVariable "TWO_BYTES"
         (DataSection32, 0) -> MuVariable "FOUR_BYTES"

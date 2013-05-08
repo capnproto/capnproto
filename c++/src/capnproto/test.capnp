@@ -308,10 +308,16 @@ struct TestLists {
   structListList @9 :List(List(TestAllTypes));
 }
 
+struct TestFieldZeroIsBit {
+  bit @0 :Bool;
+  secondBit @1 :Bool = true;
+  thirdField @2 :UInt8 = 123;
+}
+
 struct TestListDefaults {
   lists @0 :TestLists = (
       list0  = [(f = void), (f = void)],
-      list1  = [(f = true), (f = false)],
+      list1  = [(f = true), (f = false), (f = true), (f = true)],
       list8  = [(f = 123), (f = 45)],
       list16 = [(f = 12345), (f = 6789)],
       list32 = [(f = 123456789), (f = 234567890)],

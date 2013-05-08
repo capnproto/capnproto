@@ -53,7 +53,7 @@ internal::StructReader MessageReader::getRootInternal() {
   VALIDATE_INPUT(segment != nullptr &&
       segment->containsInterval(segment->getStartPtr(), segment->getStartPtr() + 1),
       "Message did not contain a root pointer.") {
-    return internal::StructReader::readEmpty();
+    return internal::StructReader();
   }
 
   return internal::StructReader::readRoot(segment->getStartPtr(), segment, options.nestingLimit);

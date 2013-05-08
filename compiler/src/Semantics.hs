@@ -318,9 +318,9 @@ fieldSize (InlineStructType StructDesc { structDataSize = ds, structPointerCount
 fieldSize (InterfaceType _) = SizeReference
 fieldSize (ListType _) = SizeReference
 fieldSize (InlineListType element size) = let
-    -- We intentionally do not allow single-bit lists because most CPUs cannot address bits.
     minDataSectionForBits bits
         | bits <= 0 = DataSectionWords 0
+        | bits <= 1 = DataSection1
         | bits <= 8 = DataSection8
         | bits <= 16 = DataSection16
         | bits <= 32 = DataSection32

@@ -435,7 +435,8 @@ TEST(Encoding, SmallStructLists) {
   EXPECT_EQ(0u, sl.getStructListList().size());
 
   { auto l = sl.initList0 (2); l[0].setF(Void::VOID);        l[1].setF(Void::VOID); }
-  { auto l = sl.initList1 (2); l[0].setF(true);              l[1].setF(false); }
+  { auto l = sl.initList1 (4); l[0].setF(true);              l[1].setF(false);
+                               l[2].setF(true);              l[3].setF(true); }
   { auto l = sl.initList8 (2); l[0].setF(123u);              l[1].setF(45u); }
   { auto l = sl.initList16(2); l[0].setF(12345u);            l[1].setF(6789u); }
   { auto l = sl.initList32(2); l[0].setF(123456789u);        l[1].setF(234567890u); }
@@ -480,6 +481,139 @@ TEST(Encoding, SmallStructLists) {
     EXPECT_EQ(reinterpret_cast<const uint64_t*>(defaultSegment.begin())[i],
               reinterpret_cast<const uint64_t*>(segment.begin())[i]);
   }
+}
+
+// =======================================================================================
+
+TEST(Encoding, ListUpgrade) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestObject>();
+
+  root.initObjectField<List<uint16_t>>(3).copyFrom({12, 34, 56});
+
+  checkList(root.getObjectField<List<uint8_t>>(), {12, 34, 56});
+
+  {
+    auto l = root.getObjectField<List<test::TestLists::Struct8>>();
+    ASSERT_EQ(3u, l.size());
+    EXPECT_EQ(12u, l[0].getF());
+    EXPECT_EQ(34u, l[1].getF());
+    EXPECT_EQ(56u, l[2].getF());
+  }
+
+  checkList(root.getObjectField<List<uint16_t>>(), {12, 34, 56});
+
+  auto reader = root.asReader();
+
+  checkList(reader.getObjectField<List<uint8_t>>(), {12, 34, 56});
+
+  {
+    auto l = reader.getObjectField<List<test::TestLists::Struct8>>();
+    ASSERT_EQ(3u, l.size());
+    EXPECT_EQ(12u, l[0].getF());
+    EXPECT_EQ(34u, l[1].getF());
+    EXPECT_EQ(56u, l[2].getF());
+  }
+
+  try {
+    reader.getObjectField<List<uint32_t>>();
+    ADD_FAILURE() << "Expected exception.";
+  } catch (const Exception& e) {
+    // expected
+  }
+
+  {
+    auto l = reader.getObjectField<List<test::TestLists::Struct32>>();
+    ASSERT_EQ(3u, l.size());
+
+    // These should return default values because the structs aren't big enough.
+    EXPECT_EQ(0u, l[0].getF());
+    EXPECT_EQ(0u, l[1].getF());
+    EXPECT_EQ(0u, l[2].getF());
+  }
+
+  checkList(reader.getObjectField<List<uint16_t>>(), {12, 34, 56});
+}
+
+TEST(Encoding, BitListDowngrade) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestObject>();
+
+  root.initObjectField<List<uint16_t>>(4).copyFrom({0x1201u, 0x3400u, 0x5601u, 0x7801u});
+
+  checkList(root.getObjectField<List<bool>>(), {true, false, true, true});
+
+  {
+    auto l = root.getObjectField<List<test::TestLists::Struct1>>();
+    ASSERT_EQ(4u, l.size());
+    EXPECT_TRUE(l[0].getF());
+    EXPECT_FALSE(l[1].getF());
+    EXPECT_TRUE(l[2].getF());
+    EXPECT_TRUE(l[3].getF());
+  }
+
+  checkList(root.getObjectField<List<uint16_t>>(), {0x1201u, 0x3400u, 0x5601u, 0x7801u});
+
+  auto reader = root.asReader();
+
+  checkList(reader.getObjectField<List<bool>>(), {true, false, true, true});
+
+  {
+    auto l = reader.getObjectField<List<test::TestLists::Struct1>>();
+    ASSERT_EQ(4u, l.size());
+    EXPECT_TRUE(l[0].getF());
+    EXPECT_FALSE(l[1].getF());
+    EXPECT_TRUE(l[2].getF());
+    EXPECT_TRUE(l[3].getF());
+  }
+
+  checkList(reader.getObjectField<List<uint16_t>>(), {0x1201u, 0x3400u, 0x5601u, 0x7801u});
+}
+
+TEST(Encoding, BitListUpgrade) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestObject>();
+
+  root.initObjectField<List<bool>>(4).copyFrom({true, false, true, true});
+
+  {
+    auto l = root.getObjectField<List<test::TestFieldZeroIsBit>>();
+    ASSERT_EQ(4u, l.size());
+    EXPECT_TRUE(l[0].getBit());
+    EXPECT_FALSE(l[1].getBit());
+    EXPECT_TRUE(l[2].getBit());
+    EXPECT_TRUE(l[3].getBit());
+  }
+
+  auto reader = root.asReader();
+
+  try {
+    reader.getObjectField<List<uint8_t>>();
+    ADD_FAILURE() << "Expected exception.";
+  } catch (const Exception& e) {
+    // expected
+  }
+
+  {
+    auto l = reader.getObjectField<List<test::TestFieldZeroIsBit>>();
+    ASSERT_EQ(4u, l.size());
+    EXPECT_TRUE(l[0].getBit());
+    EXPECT_FALSE(l[1].getBit());
+    EXPECT_TRUE(l[2].getBit());
+    EXPECT_TRUE(l[3].getBit());
+
+    // Other fields are defaulted.
+    EXPECT_TRUE(l[0].getSecondBit());
+    EXPECT_TRUE(l[1].getSecondBit());
+    EXPECT_TRUE(l[2].getSecondBit());
+    EXPECT_TRUE(l[3].getSecondBit());
+    EXPECT_EQ(123u, l[0].getThirdField());
+    EXPECT_EQ(123u, l[1].getThirdField());
+    EXPECT_EQ(123u, l[2].getThirdField());
+    EXPECT_EQ(123u, l[3].getThirdField());
+  }
+
+  checkList(reader.getObjectField<List<bool>>(), {true, false, true, true});
 }
 
 // =======================================================================================

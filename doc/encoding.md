@@ -114,11 +114,12 @@ A list value is encoded as a pointer to a flat array of values.
 The pointed-to values are tightly-packed.  In particular, `Bool`s are packed bit-by-bit in
 little-endian order (the first bit is the least-significant bit of the first byte).
 
-Lists of structs use the smallest element size in which the struct can fit, except that single-bit
-structs are not allowed.  So, a list of structs that each contain two `UInt8` fields and nothing
-else could be encoded with C = 3 (2-byte elements).  A list of structs that each contain a single
-`Text` field would be encoded as C = 6 (pointer elements).  A list structs which are each more than
-one word in size must be be encoded using C = 7 (composite).
+Lists of structs use the smallest element size in which the struct can fit.  So, a
+list of structs that each contain two `UInt8` fields and nothing else could be encoded with C = 3
+(2-byte elements).  A list of structs that each contain a single `Text` field would be encoded as
+C = 6 (pointer elements).  A list of structs that each contain a single `Bool` field would be
+encoded using C = 1 (1-bit elements).  A list structs which are each more than one word in size
+must be be encoded using C = 7 (composite).
 
 When C = 7, the elements of the list are fixed-width composite values -- usually, structs.  In
 this case, the list content is prefixed by a "tag" word that describes each individual element.
@@ -136,7 +137,7 @@ elements being fixed-size lists rather than structs.  In this case, the tag woul
 pointer rather than a struct pointer.  As of this writing, no such feature has been implemented.
 
 Notice that because a small struct is encoded as if it were a primitive value, this means that
-if you have a field of type `List(T)` where `T` is a primitive or blob type (other than `Bool`), it
+if you have a field of type `List(T)` where `T` is a primitive or blob type, it
 is possible to change that field to `List(U)` where `U` is a struct whose `@0` field has type `T`,
 without breaking backwards-compatibility.  This comes in handy when you discover too late that you
 need to associate some extra data with each value in a primitive list -- instead of using parallel

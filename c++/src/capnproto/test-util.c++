@@ -329,7 +329,7 @@ void genericInitListDefaults(Builder builder) {
   auto lists = builder.initLists();
 
   lists.initList0(2);
-  lists.initList1(2);
+  lists.initList1(4);
   lists.initList8(2);
   lists.initList16(2);
   lists.initList32(2);
@@ -340,6 +340,8 @@ void genericInitListDefaults(Builder builder) {
   lists.getList0()[1].setF(Void::VOID);
   lists.getList1()[0].setF(true);
   lists.getList1()[1].setF(false);
+  lists.getList1()[2].setF(true);
+  lists.getList1()[3].setF(true);
   lists.getList8()[0].setF(123u);
   lists.getList8()[1].setF(45u);
   lists.getList16()[0].setF(12345u);
@@ -380,7 +382,7 @@ void genericCheckListDefaults(Reader reader) {
   auto lists = reader.getLists();
 
   ASSERT_EQ(2u, lists.getList0().size());
-  ASSERT_EQ(2u, lists.getList1().size());
+  ASSERT_EQ(4u, lists.getList1().size());
   ASSERT_EQ(2u, lists.getList8().size());
   ASSERT_EQ(2u, lists.getList16().size());
   ASSERT_EQ(2u, lists.getList32().size());
@@ -391,6 +393,8 @@ void genericCheckListDefaults(Reader reader) {
   EXPECT_EQ(Void::VOID, lists.getList0()[1].getF());
   EXPECT_TRUE(lists.getList1()[0].getF());
   EXPECT_FALSE(lists.getList1()[1].getF());
+  EXPECT_TRUE(lists.getList1()[2].getF());
+  EXPECT_TRUE(lists.getList1()[3].getF());
   EXPECT_EQ(123u, lists.getList8()[0].getF());
   EXPECT_EQ(45u, lists.getList8()[1].getF());
   EXPECT_EQ(12345u, lists.getList16()[0].getF());
