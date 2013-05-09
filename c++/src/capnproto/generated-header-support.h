@@ -41,10 +41,10 @@ struct PointerHelpers {
     return typename T::Reader(reader.getStructField(index, nullptr));
   }
   static inline typename T::Builder get(StructBuilder builder, WireReferenceCount index) {
-    return typename T::Builder(builder.getStructField(index, T::STRUCT_SIZE, nullptr));
+    return typename T::Builder(builder.getStructField(index, structSize<T>(), nullptr));
   }
   static inline typename T::Builder init(StructBuilder builder, WireReferenceCount index) {
-    return typename T::Builder(builder.initStructField(index, T::STRUCT_SIZE));
+    return typename T::Builder(builder.initStructField(index, structSize<T>()));
   }
 };
 
@@ -65,36 +65,36 @@ struct PointerHelpers<List<T>> {
 template <>
 struct PointerHelpers<Text> {
   static inline Text::Reader get(StructReader reader, WireReferenceCount index) {
-    return reader.getTextField(index, nullptr, 0 * BYTES);
+    return reader.getBlobField<Text>(index, nullptr, 0 * BYTES);
   }
   static inline Text::Builder get(StructBuilder builder, WireReferenceCount index) {
-    return builder.getTextField(index, nullptr, 0 * BYTES);
+    return builder.getBlobField<Text>(index, nullptr, 0 * BYTES);
   }
   static inline void set(StructBuilder builder, WireReferenceCount index, Text::Reader value) {
-    builder.setTextField(index, value);
+    builder.setBlobField<Text>(index, value);
   }
   static inline Text::Builder init(StructBuilder builder, WireReferenceCount index, int size) {
-    return builder.initTextField(index, size * BYTES);
+    return builder.initBlobField<Text>(index, size * BYTES);
   }
 };
 
 template <>
 struct PointerHelpers<Data> {
   static inline Data::Reader get(StructReader reader, WireReferenceCount index) {
-    return reader.getDataField(index, nullptr, 0 * BYTES);
+    return reader.getBlobField<Data>(index, nullptr, 0 * BYTES);
   }
   static inline Data::Builder get(StructBuilder builder, WireReferenceCount index) {
-    return builder.getDataField(index, nullptr, 0 * BYTES);
+    return builder.getBlobField<Data>(index, nullptr, 0 * BYTES);
   }
   static inline void set(StructBuilder builder, WireReferenceCount index, Data::Reader value) {
-    builder.setDataField(index, value);
+    builder.setBlobField<Data>(index, value);
   }
   static inline Data::Builder init(StructBuilder builder, WireReferenceCount index, int size) {
-    return builder.initDataField(index, size * BYTES);
+    return builder.initBlobField<Data>(index, size * BYTES);
   }
 };
 
-#ifdef CAPNPROTO_PRIVATE
+#if defined(CAPNPROTO_PRIVATE) || defined(__CDT_PARSER__)
 
 struct TrustedMessage {
   typedef const word* Reader;
@@ -115,5 +115,16 @@ struct PointerHelpers<TrustedMessage> {
 
 }  // namespace internal
 }  // namespace capnproto
+
+#define CAPNPROTO_DECLARE_ENUM(type) \
+    template <> struct KindOf<type> { static constexpr Kind kind = Kind::ENUM; }
+#define CAPNPROTO_DECLARE_STRUCT(type, dataWordSize, pointerCount, preferredElementEncoding) \
+    template <> struct KindOf<type> { static constexpr Kind kind = Kind::STRUCT; }; \
+    template <> struct StructSizeFor<type> { \
+      static constexpr StructSize value = StructSize( \
+          dataWordSize * WORDS, pointerCount * REFERENCES, FieldSize::preferredElementEncoding); \
+    }
+#define CAPNPROTO_DECLARE_INTERFACE(type) \
+    template <> struct KindOf<type> { static constexpr Kind kind = Kind::INTERFACE; }
 
 #endif  // CAPNPROTO_GENERATED_HEADER_SUPPORT_H_

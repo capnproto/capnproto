@@ -81,7 +81,7 @@ T instance() noexcept;
 // definition.  So...
 
 namespace internal {
-struct PlacementNew {} placementNew;
+struct PlacementNew {};
 }  // namespace internal;
 } // namespace capnproto
 
@@ -93,7 +93,7 @@ namespace capnproto {
 
 template <typename T, typename... Params>
 void constructAt(T* location, Params&&... params) {
-  new (internal::placementNew, location) T(capnproto::forward<Params>(params)...);
+  new (internal::PlacementNew(), location) T(capnproto::forward<Params>(params)...);
 }
 
 // =======================================================================================

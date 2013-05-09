@@ -49,8 +49,7 @@ struct WireHelpers;
 class SegmentReader;
 class SegmentBuilder;
 
-class FieldDescriptor;
-typedef Id<uint8_t, FieldDescriptor> FieldNumber;
+// =============================================================================
 
 enum class FieldSize: uint8_t {
   // TODO:  Rename to FieldLayout or maybe ValueLayout.
@@ -117,6 +116,48 @@ inline constexpr PointersPerElement pointersPerElement(FieldSize size) {
   return size == FieldSize::REFERENCE ? 1 * REFERENCES / ELEMENTS : 0 * REFERENCES / ELEMENTS;
 }
 
+}  // namespace internal
+
+enum class Kind: uint8_t {
+  PRIMITIVE,
+  BLOB,
+  ENUM,
+  STRUCT,
+  INTERFACE,
+  LIST,
+  UNKNOWN
+};
+
+namespace internal {
+
+template <typename T> struct KindOf { static constexpr Kind kind = Kind::UNKNOWN; };
+
+template <> struct KindOf<Void> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct KindOf<bool> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct KindOf<int8_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct KindOf<int16_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct KindOf<int32_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct KindOf<int64_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct KindOf<uint8_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct KindOf<uint16_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct KindOf<uint32_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct KindOf<uint64_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct KindOf<float> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct KindOf<double> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct KindOf<Text> { static constexpr Kind kind = Kind::BLOB; };
+template <> struct KindOf<Data> { static constexpr Kind kind = Kind::BLOB; };
+
+}  // namespace internal
+
+template <typename T>
+inline constexpr Kind kind() {
+  return internal::KindOf<T>::kind;
+}
+
+// =============================================================================
+
+namespace internal {
+
 template <int wordCount>
 union AlignedData {
   // Useful for declaring static constant data blobs as an array of bytes, but forcing those
@@ -143,39 +184,40 @@ struct StructSize {
       : data(data), pointers(pointers), preferredListEncoding(preferredListEncoding) {}
 };
 
+template <typename T> struct StructSizeFor;
+// Specialized for every struct type with member:  static constexpr StructSize value"
+
 template <typename T>
-class IsEnum {
-  // Detects whether a primitive value is an enum.
-
-  typedef char no;
-  typedef long yes;
-
-  static no test(int i);
-  static yes test(...);
-
-public:
-  static constexpr bool value = sizeof(test(T())) == sizeof(yes);
-};
+inline constexpr StructSize structSize() {
+  return StructSizeFor<T>::value;
+}
 
 // -------------------------------------------------------------------
 // Masking of default values
 
-template <typename T, bool isEnum = IsEnum<T>::value> struct MaskType { typedef T Type; };
-template <typename T> struct MaskType<T, false> { typedef T Type; };
-template <typename T> struct MaskType<T, true> { typedef uint16_t Type; };
-template <> struct MaskType<float, false> { typedef uint32_t Type; };
-template <> struct MaskType<double, false> { typedef uint64_t Type; };
+template <typename T, Kind kind = kind<T>()> struct MaskType;
+template <typename T> struct MaskType<T, Kind::PRIMITIVE> { typedef T Type; };
+template <typename T> struct MaskType<T, Kind::ENUM> { typedef uint16_t Type; };
+template <> struct MaskType<float, Kind::PRIMITIVE> { typedef uint32_t Type; };
+template <> struct MaskType<double, Kind::PRIMITIVE> { typedef uint64_t Type; };
+
+template <typename T> struct MaskType<T, Kind::UNKNOWN> {
+  // Union discriminants end up here.
+  static_assert(sizeof(T) == 2, "Don't know how to mask this type.");
+  typedef uint16_t Type;
+};
 
 template <typename T>
-CAPNPROTO_ALWAYS_INLINE(
-    typename MaskType<T>::Type mask(T value, typename MaskType<T>::Type mask));
-template <typename T>
-CAPNPROTO_ALWAYS_INLINE(
-    T unmask(typename MaskType<T>::Type value, typename MaskType<T>::Type mask));
+using Mask = typename MaskType<T>::Type;
 
 template <typename T>
-inline typename MaskType<T>::Type mask(T value, typename MaskType<T>::Type mask) {
-  return static_cast<typename MaskType<T>::Type>(value) ^ mask;
+CAPNPROTO_ALWAYS_INLINE(Mask<T> mask(T value, Mask<T> mask));
+template <typename T>
+CAPNPROTO_ALWAYS_INLINE(T unmask(Mask<T> value, Mask<T> mask));
+
+template <typename T>
+inline Mask<T> mask(T value, Mask<T> mask) {
+  return static_cast<Mask<T> >(value) ^ mask;
 }
 
 template <>
@@ -195,7 +237,7 @@ inline uint64_t mask<double>(double value, uint64_t mask) {
 }
 
 template <typename T>
-inline T unmask(typename MaskType<T>::Type value, typename MaskType<T>::Type mask) {
+inline T unmask(Mask<T> value, Mask<T> mask) {
   return static_cast<T>(value ^ mask);
 }
 
@@ -261,8 +303,7 @@ public:
   // multiples of the field size, determined by the type.
 
   template <typename T>
-  CAPNPROTO_ALWAYS_INLINE(T getDataField(
-      ElementCount offset, typename MaskType<T>::Type mask) const);
+  CAPNPROTO_ALWAYS_INLINE(T getDataField(ElementCount offset, Mask<T> mask) const);
   // Like getDataField() but applies the given XOR mask to the data on load.  Used for reading
   // fields with non-zero default values.
 
@@ -273,7 +314,7 @@ public:
 
   template <typename T>
   CAPNPROTO_ALWAYS_INLINE(void setDataField(
-      ElementCount offset, typename NoInfer<T>::Type value, typename MaskType<T>::Type mask) const);
+      ElementCount offset, typename NoInfer<T>::Type value, Mask<T> mask) const);
   // Like setDataField() but applies the given XOR mask before storing.  Used for writing fields
   // with non-zero default values.
 
@@ -304,30 +345,22 @@ public:
   // already allocated, it is allocated as a deep copy of the given default value (a trusted
   // message).  If the default value is null, an empty list is used.
 
-  Text::Builder initTextField(WireReferenceCount refIndex, ByteCount size) const;
-  // Initialize the text field to the given size in bytes (not including NUL terminator) and return
-  // a Text::Builder which can be used to fill in the content.
+  template <typename T>
+  typename T::Builder initBlobField(WireReferenceCount refIndex, ByteCount size) const;
+  // Initialize a Text or Data field to the given size in bytes (not including NUL terminator for
+  // Text) and return a Text::Builder which can be used to fill in the content.
 
-  void setTextField(WireReferenceCount refIndex, Text::Reader value) const;
-  // Set the text field to a copy of the given text.
+  template <typename T>
+  void setBlobField(WireReferenceCount refIndex, typename T::Reader value) const;
+  // Set the blob field to a copy of the given blob.
 
-  Text::Builder getTextField(WireReferenceCount refIndex,
-                             const void* defaultValue, ByteCount defaultSize) const;
-  // Get the text field.  If it is not initialized, initialize it to a copy of the given default.
-
-  Data::Builder initDataField(WireReferenceCount refIndex, ByteCount size) const;
-  void setDataField(WireReferenceCount refIndex, Data::Reader value) const;
-  Data::Builder getDataField(WireReferenceCount refIndex,
-                             const void* defaultValue, ByteCount defaultSize) const;
-  // Same as *Text*, but for data blobs.
+  template <typename T>
+  typename T::Builder getBlobField(WireReferenceCount refIndex,
+                                   const void* defaultValue, ByteCount defaultSize) const;
+  // Get the blob field.  If it is not initialized, initialize it to a copy of the given default.
 
   ObjectBuilder getObjectField(WireReferenceCount refIndex, const word* defaultValue) const;
   // Read a pointer of arbitrary type.
-
-  const word* getTrustedPointer(WireReferenceCount refIndex) const;
-  // If this is a trusted message, get a word* pointing at the location of the pointer.  This
-  // word* can actually be passed to readTrusted() to read the designated sub-object later.  If
-  // this isn't a trusted message, throws an exception.
 
   StructReader asReader() const;
   // Gets a StructReader pointing at the same memory.
@@ -378,7 +411,7 @@ public:
 
   template <typename T>
   CAPNPROTO_ALWAYS_INLINE(
-      T getDataField(ElementCount offset, typename MaskType<T>::Type mask) const);
+      T getDataField(ElementCount offset, Mask<T> mask) const);
   // Like getDataField(offset), but applies the given XOR mask to the result.  Used for reading
   // fields with non-zero default values.
 
@@ -393,18 +426,18 @@ public:
   // Get the list field at the given index in the reference segment, or the default value if not
   // initialized.  The default value is allowed to be null, in which case an empty list is used.
 
-  Text::Reader getTextField(WireReferenceCount refIndex,
-                            const void* defaultValue, ByteCount defaultSize) const;
-  // Gets the text field, or the given default value if not initialized.
-
-  Data::Reader getDataField(WireReferenceCount refIndex,
-                            const void* defaultValue, ByteCount defaultSize) const;
-  // Gets the data field, or the given default value if not initialized.
+  template <typename T>
+  typename T::Reader getBlobField(WireReferenceCount refIndex,
+                                  const void* defaultValue, ByteCount defaultSize) const;
+  // Gets the text or data field, or the given default value if not initialized.
 
   ObjectReader getObjectField(WireReferenceCount refIndex, const word* defaultValue) const;
   // Read a pointer of arbitrary type.
 
-  WireReferenceCount getReferenceCount() { return referenceCount; }
+  const word* getTrustedPointer(WireReferenceCount refIndex) const;
+  // If this is a trusted message, get a word* pointing at the location of the pointer.  This
+  // word* can actually be passed to readTrusted() to read the designated sub-object later.  If
+  // this isn't a trusted message, throws an exception.
 
 private:
   SegmentReader* segment;  // Memory segment in which the struct resides.
@@ -486,20 +519,18 @@ public:
   // Get the existing list element at the given index.  Returns an empty list if the element is
   // not initialized.
 
-  Text::Builder initTextElement(ElementCount index, ByteCount size) const;
-  // Initialize the text element to the given size in bytes (not including NUL terminator) and
-  // return a Text::Builder which can be used to fill in the content.
+  template <typename T>
+  typename T::Builder initBlobElement(ElementCount index, ByteCount size) const;
+  // Initialize a Text or Data element to the given size in bytes (not including NUL terminator for
+  // Text) and return a Text::Builder which can be used to fill in the content.
 
-  void setTextElement(ElementCount index, Text::Reader value) const;
-  // Set the text element to a copy of the given text.
+  template <typename T>
+  void setBlobElement(ElementCount index, typename T::Reader value) const;
+  // Set the blob element to a copy of the given blob.
 
-  Text::Builder getTextElement(ElementCount index) const;
-  // Get the text element.  If it is not initialized, returns an empty Text::Builder.
-
-  Data::Builder initDataElement(ElementCount index, ByteCount size) const;
-  void setDataElement(ElementCount index, Data::Reader value) const;
-  Data::Builder getDataElement(ElementCount index) const;
-  // Like *Text*() but for Data.
+  template <typename T>
+  typename T::Builder getBlobElement(ElementCount index) const;
+  // Get the blob element.  If it is not initialized, return an empty blob builder.
 
   ObjectBuilder getObjectElement(ElementCount index, const word* defaultValue) const;
   // Gets a pointer element of arbitrary type.
@@ -556,11 +587,9 @@ public:
   ListReader getListElement(ElementCount index, FieldSize expectedElementSize) const;
   // Get the list element at the given index.
 
-  Text::Reader getTextElement(ElementCount index) const;
-  // Get the text element.  If it is not initialized, returns an empty Text::Reader.
-
-  Data::Reader getDataElement(ElementCount index) const;
-  // Get the data element.  If it is not initialized, returns an empty Data::Reader.
+  template <typename T>
+  typename T::Reader getBlobElement(ElementCount index) const;
+  // Gets the text or data field.  If it is not initialized, returns an empty blob reader.
 
   ObjectReader getObjectElement(ElementCount index, const word* defaultValue) const;
   // Gets a pointer element of arbitrary type.
@@ -666,8 +695,8 @@ inline Void StructBuilder::getDataField<Void>(ElementCount offset) const {
 }
 
 template <typename T>
-inline T StructBuilder::getDataField(ElementCount offset, typename MaskType<T>::Type mask) const {
-  return unmask<T>(getDataField<typename MaskType<T>::Type>(offset), mask);
+inline T StructBuilder::getDataField(ElementCount offset, Mask<T> mask) const {
+  return unmask<T>(getDataField<Mask<T> >(offset), mask);
 }
 
 template <typename T>
@@ -692,8 +721,8 @@ inline void StructBuilder::setDataField<Void>(ElementCount offset, Void value) c
 
 template <typename T>
 inline void StructBuilder::setDataField(
-    ElementCount offset, typename NoInfer<T>::Type value, typename MaskType<T>::Type m) const {
-  setDataField<typename MaskType<T>::Type>(offset, mask<T>(value, m));
+    ElementCount offset, typename NoInfer<T>::Type value, Mask<T> m) const {
+  setDataField<Mask<T> >(offset, mask<T>(value, m));
 }
 
 // -------------------------------------------------------------------
@@ -732,8 +761,8 @@ inline Void StructReader::getDataField<Void>(ElementCount offset) const {
 }
 
 template <typename T>
-T StructReader::getDataField(ElementCount offset, typename MaskType<T>::Type mask) const {
-  return unmask<T>(getDataField<typename MaskType<T>::Type>(offset), mask);
+T StructReader::getDataField(ElementCount offset, Mask<T> mask) const {
+  return unmask<T>(getDataField<Mask<T> >(offset), mask);
 }
 
 // -------------------------------------------------------------------
@@ -804,6 +833,25 @@ template <>
 inline Void ListReader::getDataElement<Void>(ElementCount index) const {
   return Void::VOID;
 }
+
+// These are defined in the source file.
+template <> typename Text::Builder StructBuilder::initBlobField<Text>(WireReferenceCount refIndex, ByteCount size) const;
+template <> void StructBuilder::setBlobField<Text>(WireReferenceCount refIndex, typename Text::Reader value) const;
+template <> typename Text::Builder StructBuilder::getBlobField<Text>(WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const;
+template <> typename Text::Reader StructReader::getBlobField<Text>(WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const;
+template <> typename Text::Builder ListBuilder::initBlobElement<Text>(ElementCount index, ByteCount size) const;
+template <> void ListBuilder::setBlobElement<Text>(ElementCount index, typename Text::Reader value) const;
+template <> typename Text::Builder ListBuilder::getBlobElement<Text>(ElementCount index) const;
+template <> typename Text::Reader ListReader::getBlobElement<Text>(ElementCount index) const;
+
+template <> typename Data::Builder StructBuilder::initBlobField<Data>(WireReferenceCount refIndex, ByteCount size) const;
+template <> void StructBuilder::setBlobField<Data>(WireReferenceCount refIndex, typename Data::Reader value) const;
+template <> typename Data::Builder StructBuilder::getBlobField<Data>(WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const;
+template <> typename Data::Reader StructReader::getBlobField<Data>(WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const;
+template <> typename Data::Builder ListBuilder::initBlobElement<Data>(ElementCount index, ByteCount size) const;
+template <> void ListBuilder::setBlobElement<Data>(ElementCount index, typename Data::Reader value) const;
+template <> typename Data::Builder ListBuilder::getBlobElement<Data>(ElementCount index) const;
+template <> typename Data::Reader ListReader::getBlobElement<Data>(ElementCount index) const;
 
 }  // namespace internal
 }  // namespace capnproto

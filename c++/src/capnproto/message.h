@@ -275,12 +275,12 @@ inline typename RootType::Reader MessageReader::getRoot() {
 
 template <typename RootType>
 inline typename RootType::Builder MessageBuilder::initRoot() {
-  return typename RootType::Builder(initRoot(RootType::STRUCT_SIZE));
+  return typename RootType::Builder(initRoot(internal::structSize<RootType>()));
 }
 
 template <typename RootType>
 inline typename RootType::Builder MessageBuilder::getRoot() {
-  return typename RootType::Builder(getRoot(RootType::STRUCT_SIZE));
+  return typename RootType::Builder(getRoot(internal::structSize<RootType>()));
 }
 
 template <typename RootType>

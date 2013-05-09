@@ -34,8 +34,6 @@ namespace {{namespaceName}} {
 {{#fileTypes}}
 {{#typeStructOrUnion}}
 {{#typeStruct}}
-constexpr ::capnproto::internal::StructSize {{structFullName}}::STRUCT_SIZE;
-
 {{#structFields}}
 {{#fieldDefaultBytes}}
 const ::capnproto::internal::AlignedData<{{defaultWordCount}}>

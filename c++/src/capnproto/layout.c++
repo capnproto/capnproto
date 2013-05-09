@@ -1119,25 +1119,31 @@ ListBuilder StructBuilder::getListField(
       references + refIndex, segment, defaultValue);
 }
 
-Text::Builder StructBuilder::initTextField(WireReferenceCount refIndex, ByteCount size) const {
+template <>
+Text::Builder StructBuilder::initBlobField<Text>(WireReferenceCount refIndex, ByteCount size) const {
   return WireHelpers::initTextReference(references + refIndex, segment, size);
 }
-void StructBuilder::setTextField(WireReferenceCount refIndex, Text::Reader value) const {
+template <>
+void StructBuilder::setBlobField<Text>(WireReferenceCount refIndex, Text::Reader value) const {
   WireHelpers::setTextReference(references + refIndex, segment, value);
 }
-Text::Builder StructBuilder::getTextField(
+template <>
+Text::Builder StructBuilder::getBlobField<Text>(
     WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const {
   return WireHelpers::getWritableTextReference(
       references + refIndex, segment, defaultValue, defaultSize);
 }
 
-Data::Builder StructBuilder::initDataField(WireReferenceCount refIndex, ByteCount size) const {
+template <>
+Data::Builder StructBuilder::initBlobField<Data>(WireReferenceCount refIndex, ByteCount size) const {
   return WireHelpers::initDataReference(references + refIndex, segment, size);
 }
-void StructBuilder::setDataField(WireReferenceCount refIndex, Data::Reader value) const {
+template <>
+void StructBuilder::setBlobField<Data>(WireReferenceCount refIndex, Data::Reader value) const {
   WireHelpers::setDataReference(references + refIndex, segment, value);
 }
-Data::Builder StructBuilder::getDataField(
+template <>
+Data::Builder StructBuilder::getBlobField<Data>(
     WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const {
   return WireHelpers::getWritableDataReference(
       references + refIndex, segment, defaultValue, defaultSize);
@@ -1146,11 +1152,6 @@ Data::Builder StructBuilder::getDataField(
 ObjectBuilder StructBuilder::getObjectField(
     WireReferenceCount refIndex, const word* defaultValue) const {
   return WireHelpers::getWritableObjectReference(segment, references + refIndex, defaultValue);
-}
-
-const word* StructBuilder::getTrustedPointer(WireReferenceCount refIndex) const {
-  PRECOND(segment == nullptr, "getTrustedPointer() only allowed on trusted messages.");
-  return reinterpret_cast<const word*>(references + refIndex);
 }
 
 StructReader StructBuilder::asReader() const {
@@ -1190,13 +1191,15 @@ ListReader StructReader::getListField(
       segment, ref, defaultValue, expectedElementSize, nestingLimit);
 }
 
-Text::Reader StructReader::getTextField(
+template <>
+Text::Reader StructReader::getBlobField<Text>(
     WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const {
   const WireReference* ref = refIndex >= referenceCount ? nullptr : references + refIndex;
   return WireHelpers::readTextReference(segment, ref, defaultValue, defaultSize);
 }
 
-Data::Reader StructReader::getDataField(
+template <>
+Data::Reader StructReader::getBlobField<Data>(
     WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const {
   const WireReference* ref = refIndex >= referenceCount ? nullptr : references + refIndex;
   return WireHelpers::readDataReference(segment, ref, defaultValue, defaultSize);
@@ -1206,6 +1209,11 @@ ObjectReader StructReader::getObjectField(
     WireReferenceCount refIndex, const word* defaultValue) const {
   return WireHelpers::readObjectReference(
       segment, references + refIndex, defaultValue, nestingLimit);
+}
+
+const word* StructReader::getTrustedPointer(WireReferenceCount refIndex) const {
+  PRECOND(segment == nullptr, "getTrustedPointer() only allowed on trusted messages.");
+  return reinterpret_cast<const word*>(references + refIndex);
 }
 
 // =======================================================================================
@@ -1269,28 +1277,34 @@ ListBuilder ListBuilder::getListElement(ElementCount index) const {
       reinterpret_cast<WireReference*>(ptr + index * step / BITS_PER_BYTE), segment, nullptr);
 }
 
-Text::Builder ListBuilder::initTextElement(ElementCount index, ByteCount size) const {
+template <>
+Text::Builder ListBuilder::initBlobElement<Text>(ElementCount index, ByteCount size) const {
   return WireHelpers::initTextReference(
       reinterpret_cast<WireReference*>(ptr + index * step / BITS_PER_BYTE), segment, size);
 }
-void ListBuilder::setTextElement(ElementCount index, Text::Reader value) const {
+template <>
+void ListBuilder::setBlobElement<Text>(ElementCount index, Text::Reader value) const {
   WireHelpers::setTextReference(
       reinterpret_cast<WireReference*>(ptr + index * step / BITS_PER_BYTE), segment, value);
 }
-Text::Builder ListBuilder::getTextElement(ElementCount index) const {
+template <>
+Text::Builder ListBuilder::getBlobElement<Text>(ElementCount index) const {
   return WireHelpers::getWritableTextReference(
       reinterpret_cast<WireReference*>(ptr + index * step / BITS_PER_BYTE), segment, "", 0 * BYTES);
 }
 
-Data::Builder ListBuilder::initDataElement(ElementCount index, ByteCount size) const {
+template <>
+Data::Builder ListBuilder::initBlobElement<Data>(ElementCount index, ByteCount size) const {
   return WireHelpers::initDataReference(
       reinterpret_cast<WireReference*>(ptr + index * step / BITS_PER_BYTE), segment, size);
 }
-void ListBuilder::setDataElement(ElementCount index, Data::Reader value) const {
+template <>
+void ListBuilder::setBlobElement<Data>(ElementCount index, Data::Reader value) const {
   WireHelpers::setDataReference(
       reinterpret_cast<WireReference*>(ptr + index * step / BITS_PER_BYTE), segment, value);
 }
-Data::Builder ListBuilder::getDataElement(ElementCount index) const {
+template <>
+Data::Builder ListBuilder::getBlobElement<Data>(ElementCount index) const {
   return WireHelpers::getWritableDataReference(
       reinterpret_cast<WireReference*>(ptr + index * step / BITS_PER_BYTE), segment, nullptr,
       0 * BYTES);
@@ -1375,13 +1389,15 @@ ListReader ListReader::getListElement(
       nullptr, expectedElementSize, nestingLimit);
 }
 
-Text::Reader ListReader::getTextElement(ElementCount index) const {
+template <>
+Text::Reader ListReader::getBlobElement<Text>(ElementCount index) const {
   return WireHelpers::readTextReference(
       segment, checkAlignment(ptr + index * step / BITS_PER_BYTE),
       "", 0 * BYTES);
 }
 
-Data::Reader ListReader::getDataElement(ElementCount index) const {
+template <>
+Data::Reader ListReader::getBlobElement<Data>(ElementCount index) const {
   return WireHelpers::readDataReference(
       segment, checkAlignment(ptr + index * step / BITS_PER_BYTE),
       nullptr, 0 * BYTES);
