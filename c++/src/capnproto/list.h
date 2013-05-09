@@ -72,7 +72,7 @@ using ReaderFor = typename internal::MaybeReaderBuilder<T>::Reader;
 // The type returned by List<T>::Reader::operator[].
 
 template <typename T>
-using BuilderFor = typename internal::MaybeReaderBuilder<T>::Reader;
+using BuilderFor = typename internal::MaybeReaderBuilder<T>::Builder;
 // The type returned by List<T>::Builder::operator[].
 
 namespace internal {

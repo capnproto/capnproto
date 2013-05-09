@@ -251,6 +251,10 @@ public:
   static StructBuilder initRoot(SegmentBuilder* segment, word* location, StructSize size);
   static StructBuilder getRoot(SegmentBuilder* segment, word* location, StructSize size);
 
+  inline BitCount getDataSectionSize() const { return dataSize; }
+  inline WireReferenceCount getPointerSectionSize() const { return referenceCount; }
+  inline Data::Builder getDataSectionAsBlob();
+
   template <typename T>
   CAPNPROTO_ALWAYS_INLINE(T getDataField(ElementCount offset) const);
   // Gets the data field value of the given type at the given offset.  The offset is measured in
@@ -320,6 +324,11 @@ public:
   ObjectBuilder getObjectField(WireReferenceCount refIndex, const word* defaultValue) const;
   // Read a pointer of arbitrary type.
 
+  const word* getTrustedPointer(WireReferenceCount refIndex) const;
+  // If this is a trusted message, get a word* pointing at the location of the pointer.  This
+  // word* can actually be passed to readTrusted() to read the designated sub-object later.  If
+  // this isn't a trusted message, throws an exception.
+
   StructReader asReader() const;
   // Gets a StructReader pointing at the same memory.
 
@@ -356,6 +365,10 @@ public:
 
   static StructReader readRootTrusted(const word* location);
   static StructReader readRoot(const word* location, SegmentReader* segment, int nestingLimit);
+
+  inline BitCount getDataSectionSize() const { return dataSize; }
+  inline WireReferenceCount getPointerSectionSize() const { return referenceCount; }
+  inline Data::Reader getDataSectionAsBlob();
 
   template <typename T>
   CAPNPROTO_ALWAYS_INLINE(T getDataField(ElementCount offset) const);
@@ -443,6 +456,10 @@ public:
   inline ElementCount size();
   // The number of elements in the list.
 
+  Text::Builder asText();
+  Data::Builder asData();
+  // Reinterpret the list as a blob.  Throws an exception if the elements are not byte-sized.
+
   template <typename T>
   CAPNPROTO_ALWAYS_INLINE(T getDataElement(ElementCount index) const);
   // Get the element of the given type at the given index.
@@ -525,6 +542,10 @@ public:
   inline ElementCount size();
   // The number of elements in the list.
 
+  Text::Reader asText();
+  Data::Reader asData();
+  // Reinterpret the list as a blob.  Throws an exception if the elements are not byte-sized.
+
   template <typename T>
   CAPNPROTO_ALWAYS_INLINE(T getDataElement(ElementCount index) const);
   // Get the element of the given type at the given index.
@@ -578,54 +599,52 @@ private:
 
 // -------------------------------------------------------------------
 
+enum class ObjectKind {
+  NULL_POINTER,   // Object was read from a null pointer.
+  STRUCT,
+  LIST
+};
+
 struct ObjectBuilder {
   // A reader for any kind of object.
 
-  enum Kind {
-    NULL_POINTER,   // Object was read from a null pointer.
-    STRUCT,
-    LIST
-  };
-
-  Kind kind;
+  ObjectKind kind;
 
   union {
     StructBuilder structBuilder;
     ListBuilder listBuilder;
   };
 
-  ObjectBuilder(): kind(NULL_POINTER), structBuilder() {}
+  ObjectBuilder(): kind(ObjectKind::NULL_POINTER), structBuilder() {}
   ObjectBuilder(StructBuilder structBuilder)
-      : kind(STRUCT), structBuilder(structBuilder) {}
+      : kind(ObjectKind::STRUCT), structBuilder(structBuilder) {}
   ObjectBuilder(ListBuilder listBuilderBuilder)
-      : kind(LIST), listBuilder(listBuilder) {}
+      : kind(ObjectKind::LIST), listBuilder(listBuilder) {}
 };
 
 struct ObjectReader {
   // A reader for any kind of object.
 
-  enum Kind {
-    NULL_POINTER,   // Object was read from a null pointer.
-    STRUCT,
-    LIST
-  };
-
-  Kind kind;
+  ObjectKind kind;
 
   union {
     StructReader structReader;
     ListReader listReader;
   };
 
-  ObjectReader(): kind(NULL_POINTER), structReader() {}
+  ObjectReader(): kind(ObjectKind::NULL_POINTER), structReader() {}
   ObjectReader(StructReader structReader)
-      : kind(STRUCT), structReader(structReader) {}
+      : kind(ObjectKind::STRUCT), structReader(structReader) {}
   ObjectReader(ListReader listReader)
-      : kind(LIST), listReader(listReader) {}
+      : kind(ObjectKind::LIST), listReader(listReader) {}
 };
 
 // =======================================================================================
 // Internal implementation details...
+
+inline Data::Builder StructBuilder::getDataSectionAsBlob() {
+  return Data::Builder(reinterpret_cast<char*>(data), dataSize / BITS_PER_BYTE / BYTES);
+}
 
 template <typename T>
 inline T StructBuilder::getDataField(ElementCount offset) const {
@@ -678,6 +697,10 @@ inline void StructBuilder::setDataField(
 }
 
 // -------------------------------------------------------------------
+
+inline Data::Reader StructReader::getDataSectionAsBlob() {
+  return Data::Reader(reinterpret_cast<const char*>(data), dataSize / BITS_PER_BYTE / BYTES);
+}
 
 template <typename T>
 T StructReader::getDataField(ElementCount offset) const {

@@ -30,6 +30,9 @@
 #include "list.h"
 
 namespace capnproto {
+
+class DynamicStruct;  // So that it can be declared a friend.
+
 namespace internal {
 
 template <typename T>
@@ -91,8 +94,26 @@ struct PointerHelpers<Data> {
   }
 };
 
-}  // namespace internal
+#ifdef CAPNPROTO_PRIVATE
 
+struct TrustedMessage {
+  typedef const word* Reader;
+};
+
+template <>
+struct PointerHelpers<TrustedMessage> {
+  // Reads an Object field as a trusted message pointer.  Requires that the containing message is
+  // itself trusted.  This hack is currently private.  It is used to locate default values within
+  // encoded schemas.
+
+  static inline const word* get(StructReader reader, WireReferenceCount index) {
+    return reader.getTrustedPointer(index);
+  }
+};
+
+#endif
+
+}  // namespace internal
 }  // namespace capnproto
 
 #endif  // CAPNPROTO_GENERATED_HEADER_SUPPORT_H_

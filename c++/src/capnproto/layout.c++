@@ -908,6 +908,10 @@ struct WireHelpers {
         goto useDefault;
       }
 
+      VALIDATE_INPUT(size > 0, "Message contains text that is not NUL-terminated.") {
+        goto useDefault;
+      }
+
       const char* cptr = reinterpret_cast<const char*>(ptr);
       --size;  // NUL terminator
 
@@ -1144,6 +1148,11 @@ ObjectBuilder StructBuilder::getObjectField(
   return WireHelpers::getWritableObjectReference(segment, references + refIndex, defaultValue);
 }
 
+const word* StructBuilder::getTrustedPointer(WireReferenceCount refIndex) const {
+  PRECOND(segment == nullptr, "getTrustedPointer() only allowed on trusted messages.");
+  return reinterpret_cast<const word*>(references + refIndex);
+}
+
 StructReader StructBuilder::asReader() const {
   return StructReader(segment, data, references,
       dataSize, referenceCount, bit0Offset, std::numeric_limits<int>::max());
@@ -1201,6 +1210,37 @@ ObjectReader StructReader::getObjectField(
 
 // =======================================================================================
 // ListBuilder
+
+Text::Builder ListBuilder::asText() {
+  VALIDATE_INPUT(structDataSize == 8 * BITS && structReferenceCount == 0 * REFERENCES,
+      "Expected Text, got list of non-bytes.") {
+    return Text::Builder();
+  }
+
+  size_t size = elementCount / ELEMENTS;
+
+  VALIDATE_INPUT(size > 0, "Message contains text that is not NUL-terminated.") {
+    return Text::Builder();
+  }
+
+  char* cptr = reinterpret_cast<char*>(ptr);
+  --size;  // NUL terminator
+
+  VALIDATE_INPUT(cptr[size] == '\0', "Message contains text that is not NUL-terminated.") {
+    return Text::Builder();
+  }
+
+  return Text::Builder(cptr, size);
+}
+
+Data::Builder ListBuilder::asData() {
+  VALIDATE_INPUT(structDataSize == 8 * BITS && structReferenceCount == 0 * REFERENCES,
+      "Expected Text, got list of non-bytes.") {
+    return Data::Builder();
+  }
+
+  return Data::Builder(reinterpret_cast<char*>(ptr), elementCount / ELEMENTS);
+}
 
 StructBuilder ListBuilder::getStructElement(ElementCount index, StructSize elementSize) const {
   BitCount64 indexBit = ElementCount64(index) * step;
@@ -1268,6 +1308,37 @@ ListReader ListBuilder::asReader() const {
 
 // =======================================================================================
 // ListReader
+
+Text::Reader ListReader::asText() {
+  VALIDATE_INPUT(structDataSize == 8 * BITS && structReferenceCount == 0 * REFERENCES,
+      "Expected Text, got list of non-bytes.") {
+    return Text::Reader();
+  }
+
+  size_t size = elementCount / ELEMENTS;
+
+  VALIDATE_INPUT(size > 0, "Message contains text that is not NUL-terminated.") {
+    return Text::Reader();
+  }
+
+  const char* cptr = reinterpret_cast<const char*>(ptr);
+  --size;  // NUL terminator
+
+  VALIDATE_INPUT(cptr[size] == '\0', "Message contains text that is not NUL-terminated.") {
+    return Text::Reader();
+  }
+
+  return Text::Reader(cptr, size);
+}
+
+Data::Reader ListReader::asData() {
+  VALIDATE_INPUT(structDataSize == 8 * BITS && structReferenceCount == 0 * REFERENCES,
+      "Expected Text, got list of non-bytes.") {
+    return Data::Reader();
+  }
+
+  return Data::Reader(reinterpret_cast<const char*>(ptr), elementCount / ELEMENTS);
+}
 
 StructReader ListReader::getStructElement(ElementCount index) const {
   VALIDATE_INPUT((segment == nullptr) | (nestingLimit > 0),

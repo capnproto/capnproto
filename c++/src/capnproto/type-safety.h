@@ -76,6 +76,26 @@ T instance() noexcept;
 // Like std::declval, but doesn't transform T into an rvalue reference.  If you want that, specify
 // instance<T&&>().
 
+// #including <new> pulls in a lot of crap, but we want placement news.  But operator new cannot
+// be defined in a namespace, and defining it globally conflicts with the standard library
+// definition.  So...
+
+namespace internal {
+struct PlacementNew {} placementNew;
+}  // namespace internal;
+} // namespace capnproto
+
+inline void* operator new(std::size_t, capnproto::internal::PlacementNew, void* __p) noexcept {
+  return __p;
+}
+
+namespace capnproto {
+
+template <typename T, typename... Params>
+void constructAt(T* location, Params&&... params) {
+  new (internal::placementNew, location) T(capnproto::forward<Params>(params)...);
+}
+
 // =======================================================================================
 // Maybe
 
@@ -85,22 +105,22 @@ public:
   Maybe(): isSet(false) {}
   Maybe(T&& t)
       : isSet(true) {
-    new (&value) T(move(t));
+    constructAt(&value, capnproto::move(t));
   }
   Maybe(const T& t)
       : isSet(true) {
-    new (&value) T(t);
+    constructAt(&value, t);
   }
   Maybe(Maybe&& other) noexcept(noexcept(T(capnproto::move(other.value))))
       : isSet(other.isSet) {
     if (isSet) {
-      new (&value) T(move(other.value));
+      constructAt(&value, capnproto::move(other.value));
     }
   }
   Maybe(const Maybe& other)
       : isSet(other.isSet) {
     if (isSet) {
-      new (&value) T(other.value);
+      constructAt(&value, other.value);
     }
   }
   Maybe(std::nullptr_t): isSet(false) {}
@@ -117,7 +137,7 @@ public:
       value.~T();
     }
     isSet = true;
-    new (&value) T(capnproto::forward(params)...);
+    constructAt(&value, capnproto::forward(params)...);
   }
 
   inline T& operator*() { return value; }
@@ -132,7 +152,7 @@ public:
       }
       isSet = other.isSet;
       if (isSet) {
-        new (&value) T(move(other.value));
+        constructAt(&value, capnproto::move(other.value));
       }
     }
     return *this;
@@ -145,7 +165,7 @@ public:
       }
       isSet = other.isSet;
       if (isSet) {
-        new (&value) T(other.value);
+        constructAt(&value, other.value);
       }
     }
     return *this;
