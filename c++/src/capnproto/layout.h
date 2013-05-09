@@ -486,7 +486,7 @@ public:
       : segment(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
         step(0 * BITS / ELEMENTS) {}
 
-  inline ElementCount size();
+  inline ElementCount size() const;
   // The number of elements in the list.
 
   Text::Builder asText();
@@ -570,7 +570,7 @@ public:
       : segment(nullptr), ptr(nullptr), elementCount(0), step(0 * BITS / ELEMENTS),
         structDataSize(0), structReferenceCount(0), nestingLimit(0) {}
 
-  inline ElementCount size();
+  inline ElementCount size() const;
   // The number of elements in the list.
 
   Text::Reader asText();
@@ -767,7 +767,7 @@ T StructReader::getDataField(ElementCount offset, Mask<T> mask) const {
 
 // -------------------------------------------------------------------
 
-inline ElementCount ListBuilder::size() { return elementCount; }
+inline ElementCount ListBuilder::size() const { return elementCount; }
 
 template <typename T>
 inline T ListBuilder::getDataElement(ElementCount index) const {
@@ -814,7 +814,7 @@ inline void ListBuilder::setDataElement<Void>(ElementCount index, Void value) co
 
 // -------------------------------------------------------------------
 
-inline ElementCount ListReader::size() { return elementCount; }
+inline ElementCount ListReader::size() const { return elementCount; }
 
 template <typename T>
 inline T ListReader::getDataElement(ElementCount index) const {

@@ -287,6 +287,9 @@ fieldContext parent desc = mkStrContext context where
     context "fieldTitleCase" = MuVariable $ toTitleCase $ fieldName desc
     context "fieldUpperCase" = MuVariable $ toUpperCaseWithUnderscores $ fieldName desc
     context "fieldIsPrimitive" = MuBool $ isPrimitive $ fieldType desc
+
+    context "fieldIsListOrBlob" = MuBool $ isBlob (fieldType desc) || isList (fieldType desc)
+
     context "fieldIsBlob" = MuBool $ isBlob $ fieldType desc
     context "fieldIsInlineBlob" = MuBool $ isInlineBlob $ fieldType desc
     context "fieldIsStruct" = MuBool $ isStruct $ fieldType desc
@@ -332,6 +335,11 @@ fieldContext parent desc = mkStrContext context where
         MuVariable $ cxxFieldSizeString $ fieldSize $ inlineElementType $ fieldType desc
     context "fieldElementType" =
         MuVariable $ cxxTypeString $ elementType $ fieldType desc
+    context "fieldElementReaderType" = MuVariable readerString where
+        readerString = if isPrimitiveList $ fieldType desc
+            then tString
+            else tString ++ "::Reader"
+        tString = cxxTypeString $ elementType $ fieldType desc
     context "fieldInlineElementType" =
         MuVariable $ cxxTypeString $ inlineElementType $ fieldType desc
     context "fieldUnion" = case fieldUnion desc of
