@@ -33,6 +33,11 @@ namespace capnproto {
 
 class DynamicStruct;  // So that it can be declared a friend.
 
+template <typename T>
+inline constexpr uint64_t typeId();
+// typeId<MyType>() returns the type ID as defined in the schema.  Works with structs, enums, and
+// interfaces.
+
 namespace internal {
 
 template <typename T>
@@ -118,18 +123,26 @@ struct PointerHelpers<TrustedMessage> {
 
 #endif
 
+struct RawSchema {
+  const word* encodedNode;
+  const RawSchema* dependencies;
+};
+
+template <typename T>
+inline constexpr const RawSchema& rawSchema();
+
 }  // namespace internal
 }  // namespace capnproto
 
-#define CAPNPROTO_DECLARE_ENUM(type) \
+#define CAPNPROTO_DECLARE_ENUM(type, id) \
     template <> struct KindOf<type> { static constexpr Kind kind = Kind::ENUM; }
-#define CAPNPROTO_DECLARE_STRUCT(type, dataWordSize, pointerCount, preferredElementEncoding) \
+#define CAPNPROTO_DECLARE_STRUCT(type, id, dataWordSize, pointerCount, preferredElementEncoding) \
     template <> struct KindOf<type> { static constexpr Kind kind = Kind::STRUCT; }; \
     template <> struct StructSizeFor<type> { \
       static constexpr StructSize value = StructSize( \
           dataWordSize * WORDS, pointerCount * REFERENCES, FieldSize::preferredElementEncoding); \
     }
-#define CAPNPROTO_DECLARE_INTERFACE(type) \
+#define CAPNPROTO_DECLARE_INTERFACE(type, id) \
     template <> struct KindOf<type> { static constexpr Kind kind = Kind::INTERFACE; }
 
 #endif  // CAPNPROTO_GENERATED_HEADER_SUPPORT_H_

@@ -105,16 +105,18 @@ namespace internal {
 {{#typeStructOrUnion}}
 {{#typeStruct}}
 CAPNPROTO_DECLARE_STRUCT(
-    ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{typeFullName}},
+    ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{typeFullName}}, {{structId}},
     {{structDataSize}}, {{structReferenceCount}}, {{structPreferredListEncoding}});
 {{#structNestedEnums}}
-CAPNPROTO_DECLARE_ENUM(::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{typeFullName}}::{{enumName}});
+CAPNPROTO_DECLARE_ENUM(
+    ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{typeFullName}}::{{enumName}}, {{enumId}});
 {{/structNestedEnums}}
 {{/typeStruct}}
 {{/typeStructOrUnion}}
 {{/fileTypes}}
 {{#fileEnums}}
-CAPNPROTO_DECLARE_ENUM(::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{enumName}});
+CAPNPROTO_DECLARE_ENUM(
+    ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{enumName}}, {{enumId}});
 {{/fileEnums}}
 }  // namespace capnproto
 }  // namespace internal

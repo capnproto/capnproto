@@ -265,6 +265,7 @@ enumerantContext parent desc = mkStrContext context where
 
 enumContext parent desc = mkStrContext context where
     context "enumName" = MuVariable $ enumName desc
+    context "enumId" = MuVariable (printf "0x%16x" (enumId desc) ::String)
     context "enumerants" = MuList $ map (enumerantContext context) $ enumerants desc
     context s = parent s
 
@@ -383,6 +384,7 @@ structContext parent desc = mkStrContext context where
     context "typeFields" = context "structFields"
 
     context "structName" = MuVariable $ structName desc
+    context "structId" = MuVariable (printf "0x%16x" (structId desc) ::String)
     context "structFullName" = MuVariable $ fullName (DescStruct desc)
     context "structFields" = MuList $ map (fieldContext context) $ structFields desc
     context "structUnions" = MuList $ map (unionContext context) $ structUnions desc
