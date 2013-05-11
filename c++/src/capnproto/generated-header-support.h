@@ -31,6 +31,8 @@
 
 namespace capnproto {
 
+class SchemaPool;   // Needs to be declared for dynamic Object accessors.
+
 class DynamicStruct;  // So that it can be declared a friend.
 
 template <typename T>
@@ -52,7 +54,7 @@ struct PointerHelpers<T, Kind::STRUCT> {
   }
   static inline void set(StructBuilder builder, WireReferenceCount index,
                          typename T::Reader value) {
-    // TODO(soon)
+    // TODO(now):  schemaless copy
     CAPNPROTO_INLINE_PRECOND(false, "Not implemented:  set() for struct fields.");
   }
   static inline typename T::Builder init(StructBuilder builder, WireReferenceCount index) {

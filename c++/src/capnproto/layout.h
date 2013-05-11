@@ -502,7 +502,7 @@ public:
       ElementCount index, typename NoInfer<T>::Type value) const);
   // Set the element at the given index.
 
-  StructBuilder getStructElement(ElementCount index, StructSize elementSize) const;
+  StructBuilder getStructElement(ElementCount index) const;
   // Get the struct element at the given index.
 
   ListBuilder initListElement(
@@ -532,7 +532,7 @@ public:
   typename T::Builder getBlobElement(ElementCount index) const;
   // Get the blob element.  If it is not initialized, return an empty blob builder.
 
-  ObjectBuilder getObjectElement(ElementCount index, const word* defaultValue) const;
+  ObjectBuilder getObjectElement(ElementCount index) const;
   // Gets a pointer element of arbitrary type.
 
   ListReader asReader() const;
@@ -591,7 +591,7 @@ public:
   typename T::Reader getBlobElement(ElementCount index) const;
   // Gets the text or data field.  If it is not initialized, returns an empty blob reader.
 
-  ObjectReader getObjectElement(ElementCount index, const word* defaultValue) const;
+  ObjectReader getObjectElement(ElementCount index) const;
   // Gets a pointer element of arbitrary type.
 
 private:

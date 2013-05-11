@@ -1250,11 +1250,11 @@ Data::Builder ListBuilder::asData() {
   return Data::Builder(reinterpret_cast<char*>(ptr), elementCount / ELEMENTS);
 }
 
-StructBuilder ListBuilder::getStructElement(ElementCount index, StructSize elementSize) const {
+StructBuilder ListBuilder::getStructElement(ElementCount index) const {
   BitCount64 indexBit = ElementCount64(index) * step;
   byte* structData = ptr + indexBit / BITS_PER_BYTE;
   return StructBuilder(segment, structData,
-      reinterpret_cast<WireReference*>(structData) + elementSize.data / WORDS_PER_REFERENCE,
+      reinterpret_cast<WireReference*>(structData + structDataSize / BITS_PER_BYTE),
       structDataSize, structReferenceCount, indexBit % BITS_PER_BYTE);
 }
 
@@ -1310,9 +1310,9 @@ Data::Builder ListBuilder::getBlobElement<Data>(ElementCount index) const {
       0 * BYTES);
 }
 
-ObjectBuilder ListBuilder::getObjectElement(ElementCount index, const word* defaultValue) const {
+ObjectBuilder ListBuilder::getObjectElement(ElementCount index) const {
   return WireHelpers::getWritableObjectReference(
-      segment, reinterpret_cast<WireReference*>(ptr + index * step / BITS_PER_BYTE), defaultValue);
+      segment, reinterpret_cast<WireReference*>(ptr + index * step / BITS_PER_BYTE), nullptr);
 }
 
 ListReader ListBuilder::asReader() const {
@@ -1403,9 +1403,9 @@ Data::Reader ListReader::getBlobElement<Data>(ElementCount index) const {
       nullptr, 0 * BYTES);
 }
 
-ObjectReader ListReader::getObjectElement(ElementCount index, const word* defaultValue) const {
+ObjectReader ListReader::getObjectElement(ElementCount index) const {
   return WireHelpers::readObjectReference(
-      segment, checkAlignment(ptr + index * step / BITS_PER_BYTE), defaultValue, nestingLimit);
+      segment, checkAlignment(ptr + index * step / BITS_PER_BYTE), nullptr, nestingLimit);
 }
 
 }  // namespace internal

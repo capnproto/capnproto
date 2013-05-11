@@ -138,7 +138,7 @@ static void setupStruct(StructBuilder builder) {
         2 * REFERENCES, 4 * ELEMENTS, STRUCTLIST_ELEMENT_SIZE);
     EXPECT_EQ(4 * ELEMENTS, list.size());
     for (int i = 0; i < 4; i++) {
-      StructBuilder element = list.getStructElement(i * ELEMENTS, STRUCTLIST_ELEMENT_SIZE);
+      StructBuilder element = list.getStructElement(i * ELEMENTS);
       element.setDataField<int32_t>(0 * ELEMENTS, 300 + i);
       element.initStructField(0 * REFERENCES,
                               StructSize(1 * WORDS, 0 * REFERENCES, FieldSize::EIGHT_BYTES))
@@ -193,7 +193,7 @@ static void checkStruct(StructBuilder builder) {
     ListBuilder list = builder.getListField(2 * REFERENCES, nullptr);
     ASSERT_EQ(4 * ELEMENTS, list.size());
     for (int i = 0; i < 4; i++) {
-      StructBuilder element = list.getStructElement(i * ELEMENTS, STRUCTLIST_ELEMENT_SIZE);
+      StructBuilder element = list.getStructElement(i * ELEMENTS);
       EXPECT_EQ(300 + i, element.getDataField<int32_t>(0 * ELEMENTS));
       EXPECT_EQ(400 + i,
           element.getStructField(0 * REFERENCES,

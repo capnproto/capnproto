@@ -45,6 +45,9 @@ class ReaderArena;
 class BuilderArena;
 class ReadLimiter;
 
+class Segment;
+typedef Id<uint32_t, Segment> SegmentId;
+
 class ReadLimiter {
   // Used to keep track of how much data has been processed from a message, and cut off further
   // processing if and when a particular limit is reached.  This is primarily intended to guard

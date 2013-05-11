@@ -219,6 +219,11 @@ struct StructNode {
   }
 
   struct Field {
+    index @3 :UInt16;
+    # The index of this field within the containing struct or union's member list.  This is
+    # redundant information, but it can be useful for the dynamic API which uses Field pointers as
+    # identifiers.
+
     offset @0 :UInt32;
     # Offset, in units of the field's size, from the beginning of the section in which the field
     # resides.  E.g. for a UInt32 field, multiply this by 4 to get the byte offset from the

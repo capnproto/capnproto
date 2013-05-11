@@ -37,8 +37,7 @@ namespace internal {
   class BuilderArena;
 }
 
-class Segment;
-typedef Id<uint32_t, Segment> SegmentId;
+class SchemaPool;
 
 // =======================================================================================
 
@@ -97,6 +96,13 @@ public:
 
   template <typename RootType>
   typename RootType::Reader getRoot();
+  // Get the root struct of the message, interpreting it as the given struct type.
+
+  template <typename RootType>
+  typename RootType::Reader getRoot(const SchemaPool& pool, uint64_t typeId);
+  // Dynamically interpret the root struct of the message using the type with the given ID.
+  // RootType in this case must be DynamicStruct, and you must #include <capnproto/dynamic.h> to
+  // use this.
 
 private:
   ReaderOptions options;
@@ -125,8 +131,23 @@ public:
 
   template <typename RootType>
   typename RootType::Builder initRoot();
+  // Initialize the root struct of the message as the given struct type.
+
   template <typename RootType>
   typename RootType::Builder getRoot();
+  // Get the root struct of the message, interpreting it as the given struct type.
+
+  template <typename RootType>
+  typename RootType::Builder getRoot(const SchemaPool& pool, uint64_t typeId);
+  // Dynamically interpret the root struct of the message using the type with the given ID.
+  // RootType in this case must be DynamicStruct, and you must #include <capnproto/dynamic.h> to
+  // use this.
+
+  template <typename RootType>
+  typename RootType::Builder initRoot(const SchemaPool& pool, uint64_t typeId);
+  // Dynamically init the root struct of the message using the type with the given ID.
+  // RootType in this case must be DynamicStruct, and you must #include <capnproto/dynamic.h> to
+  // use this.
 
   ArrayPtr<const ArrayPtr<const word>> getSegmentsForOutput();
 
@@ -270,16 +291,19 @@ inline const ReaderOptions& MessageReader::getOptions() {
 
 template <typename RootType>
 inline typename RootType::Reader MessageReader::getRoot() {
+  static_assert(kind<RootType>() == Kind::STRUCT, "Root type must be a Cap'n Proto struct type.");
   return typename RootType::Reader(getRootInternal());
 }
 
 template <typename RootType>
 inline typename RootType::Builder MessageBuilder::initRoot() {
+  static_assert(kind<RootType>() == Kind::STRUCT, "Root type must be a Cap'n Proto struct type.");
   return typename RootType::Builder(initRoot(internal::structSize<RootType>()));
 }
 
 template <typename RootType>
 inline typename RootType::Builder MessageBuilder::getRoot() {
+  static_assert(kind<RootType>() == Kind::STRUCT, "Root type must be a Cap'n Proto struct type.");
   return typename RootType::Builder(getRoot(internal::structSize<RootType>()));
 }
 

@@ -49,7 +49,7 @@ internal::StructReader MessageReader::getRootInternal() {
     allocatedArena = true;
   }
 
-  internal::SegmentReader* segment = arena()->tryGetSegment(SegmentId(0));
+  internal::SegmentReader* segment = arena()->tryGetSegment(internal::SegmentId(0));
   VALIDATE_INPUT(segment != nullptr &&
       segment->containsInterval(segment->getStartPtr(), segment->getStartPtr() + 1),
       "Message did not contain a root pointer.") {
@@ -70,7 +70,7 @@ MessageBuilder::~MessageBuilder() {
 
 internal::SegmentBuilder* MessageBuilder::getRootSegment() {
   if (allocatedArena) {
-    return arena()->getSegment(SegmentId(0));
+    return arena()->getSegment(internal::SegmentId(0));
   } else {
     static_assert(sizeof(internal::BuilderArena) <= sizeof(arenaSpace),
         "arenaSpace is too small to hold a BuilderArena.  Please increase it.  This will break "
@@ -80,7 +80,7 @@ internal::SegmentBuilder* MessageBuilder::getRootSegment() {
 
     WordCount refSize = 1 * REFERENCES * WORDS_PER_REFERENCE;
     internal::SegmentBuilder* segment = arena()->getSegmentWithAvailable(refSize);
-    CHECK(segment->getSegmentId() == SegmentId(0),
+    CHECK(segment->getSegmentId() == internal::SegmentId(0),
         "First allocated word of new arena was not in segment ID 0.");
     word* location = segment->allocate(refSize);
     CHECK(location == segment->getPtrUnchecked(0 * WORDS),

@@ -297,8 +297,7 @@ struct List<T, Kind::STRUCT> {
 
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline typename T::Builder operator[](uint index) const {
-      return typename T::Builder(builder.getStructElement(
-          index * ELEMENTS, internal::structSize<T>()));
+      return typename T::Builder(builder.getStructElement(index * ELEMENTS));
     }
 
     typedef internal::IndexingIterator<Builder, typename T::Builder> iterator;
