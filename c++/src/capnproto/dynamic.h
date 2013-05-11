@@ -45,6 +45,22 @@ class MessageReader;
 class MessageBuilder;
 
 struct DynamicValue {
+  enum Type {
+    VOID,
+    BOOL,
+    INT,
+    UINT,
+    FLOAT,
+    TEXT,
+    DATA,
+    LIST,
+    ENUM,
+    STRUCT,
+    UNION,
+    INTERFACE,
+    OBJECT
+  };
+
   class Reader;
   class Builder;
 };
@@ -269,7 +285,7 @@ public:
   Reader() = default;
 
   template <typename T>
-  inline typename T::Reader as() { return asImpl<T>::apply(*this); }
+  inline typename T::Reader as() { return AsImpl<T>::apply(*this); }
   // Convert the object to the given struct, list, or blob type.
 
   DynamicStruct::Reader asStruct(schema::Node::Reader schema);
@@ -282,7 +298,7 @@ private:
   inline Reader(const SchemaPool* pool, internal::ObjectReader reader)
       : pool(pool), reader(reader) {}
 
-  template <typename T, Kind kind = kind<T>()> struct asImpl;
+  template <typename T, Kind kind = kind<T>()> struct AsImpl;
   // Implementation backing the as() method.  Needs to be a struct to allow partial
   // specialization.  Has a method apply() which does the work.
 
@@ -298,7 +314,7 @@ public:
   Builder() = default;
 
   template <typename T>
-  inline typename T::Builder as() { return asImpl<T>::apply(*this); }
+  inline typename T::Builder as() { return AsImpl<T>::apply(*this); }
   // Convert the object to the given struct, list, or blob type.
 
   DynamicStruct::Builder asStruct(schema::Node::Reader schema);
@@ -311,7 +327,7 @@ private:
   inline Builder(const SchemaPool* pool, internal::ObjectBuilder builder)
       : pool(pool), builder(builder) {}
 
-  template <typename T, Kind kind = kind<T>()> struct asImpl;
+  template <typename T, Kind kind = kind<T>()> struct AsImpl;
   // Implementation backing the as() method.  Needs to be a struct to allow partial
   // specialization.  Has a method apply() which does the work.
 
@@ -635,125 +651,128 @@ struct MaybeReaderBuilder<DynamicList, Kind::UNKNOWN> {
 
 class DynamicValue::Reader {
 public:
-  inline Reader(Void voidValue = Void::VOID);
-  inline Reader(bool boolValue);
-  inline Reader(int8_t int8Value);
-  inline Reader(int16_t int16Value);
-  inline Reader(int32_t int32Value);
-  inline Reader(int64_t int64Value);
-  inline Reader(uint8_t uint8Value);
-  inline Reader(uint16_t uint16Value);
-  inline Reader(uint32_t uint32Value);
-  inline Reader(uint64_t uint64Value);
-  inline Reader(float float32Value);
-  inline Reader(double float64Value);
-  inline Reader(Text::Reader textValue);
-  inline Reader(Data::Reader dataValue);
-  inline Reader(DynamicList::Reader listValue);
-  inline Reader(DynamicEnum enumValue);
-  inline Reader(DynamicStruct::Reader structValue);
-  inline Reader(DynamicObject::Reader objectValue);
+  inline Reader(Void value = Void::VOID);
+  inline Reader(bool value);
+  inline Reader(char value);
+  inline Reader(signed char value);
+  inline Reader(short value);
+  inline Reader(int value);
+  inline Reader(long value);
+  inline Reader(long long value);
+  inline Reader(unsigned char value);
+  inline Reader(unsigned short value);
+  inline Reader(unsigned int value);
+  inline Reader(unsigned long value);
+  inline Reader(unsigned long long value);
+  inline Reader(float value);
+  inline Reader(double value);
+  inline Reader(Text::Reader value);
+  inline Reader(Data::Reader value);
+  inline Reader(DynamicList::Reader value);
+  inline Reader(DynamicEnum value);
+  inline Reader(DynamicStruct::Reader value);
+  inline Reader(DynamicUnion::Reader value);
+  inline Reader(DynamicObject::Reader value);
 
   template <typename T>
-  inline ReaderFor<T> as() { return asImpl<T>::apply(*this); }
-  // Use to interpret the value as some type.  Allowed types are:
+  inline ReaderFor<T> as() { return AsImpl<T>::apply(*this); }
+  // Use to interpret the value as some Cap'n Proto type.  Allowed types are:
   // - Void, bool, [u]int{8,16,32,64}_t, float, double, any enum:  Returns the raw value.
   // - Text, Data, any struct type:  Returns the corresponding Reader.
   // - List<T> for any T listed above:  Returns List<T>::Reader.
   // - DynamicEnum:  Returns DynamicEnum.
-  // - DynamicStruct, DynamicList, DynamicObject:  Returns the corresponding Reader.
-  // If the requested type does not match the underlying data, the result is unspecified:  it may
-  // throw an exception, it may return a garbage value, or it may return a composite value that
-  // when traversed throws exceptions or returns garbage values.  Under none of these
-  // circumstances will the program crash.
+  // - DynamicStruct, DynamicList, DynamicObject, DynamicUnion:  Returns the corresponding Reader.
+  //
+  // DynamicValue allows various implicit conversions:
+  // - Any integer can be converted to any other integer type so long as the actual value is within
+  //   the new type's range.
+  // - Floating-point types can be converted to integers as long as no information would be lost
+  //   in the conversion.
+  // - Integers can be converted to floating points.  This may lose information, but won't throw.
+  // - Float32/Float64 can be converted between each other.  Converting Float64 -> Float32 may lose
+  //   information, but won't throw.
+  //
+  // Any other conversion attempt will throw an exception.
 
-  inline schema::Type::Body::Which getType() { return type; }
+  inline Type getType() { return type; }
   // Get the type of this value.
 
 private:
-  schema::Type::Body::Which type;
+  Type type;
 
   union {
     Void voidValue;
     bool boolValue;
-    int8_t int8Value;
-    int16_t int16Value;
-    int32_t int32Value;
-    int64_t int64Value;
-    uint8_t uint8Value;
-    uint16_t uint16Value;
-    uint32_t uint32Value;
-    uint64_t uint64Value;
-    float float32Value;
-    double float64Value;
+    int64_t intValue;
+    uint64_t uintValue;
+    double floatValue;
     Text::Reader textValue;
     Data::Reader dataValue;
     DynamicList::Reader listValue;
     DynamicEnum enumValue;
     DynamicStruct::Reader structValue;
+    DynamicUnion::Reader unionValue;
     DynamicObject::Reader objectValue;
   };
 
-  template <typename T, Kind kind = kind<T>()> struct asImpl;
+  template <typename T, Kind kind = kind<T>()> struct AsImpl;
   // Implementation backing the as() method.  Needs to be a struct to allow partial
   // specialization.  Has a method apply() which does the work.
 };
 
 class DynamicValue::Builder {
 public:
-  inline Builder(Void voidValue = Void::VOID);
-  inline Builder(bool boolValue);
-  inline Builder(int8_t int8Value);
-  inline Builder(int16_t int16Value);
-  inline Builder(int32_t int32Value);
-  inline Builder(int64_t int64Value);
-  inline Builder(uint8_t uint8Value);
-  inline Builder(uint16_t uint16Value);
-  inline Builder(uint32_t uint32Value);
-  inline Builder(uint64_t uint64Value);
-  inline Builder(float float32Value);
-  inline Builder(double float64Value);
-  inline Builder(Text::Builder textValue);
-  inline Builder(Data::Builder dataValue);
-  inline Builder(DynamicList::Builder listValue);
-  inline Builder(DynamicEnum enumValue);
-  inline Builder(DynamicStruct::Builder structValue);
-  inline Builder(DynamicObject::Builder objectValue);
+  inline Builder(Void value = Void::VOID);
+  inline Builder(bool value);
+  inline Builder(char value);
+  inline Builder(signed char value);
+  inline Builder(short value);
+  inline Builder(int value);
+  inline Builder(long value);
+  inline Builder(long long value);
+  inline Builder(unsigned char value);
+  inline Builder(unsigned short value);
+  inline Builder(unsigned int value);
+  inline Builder(unsigned long value);
+  inline Builder(unsigned long long value);
+  inline Builder(float value);
+  inline Builder(double value);
+  inline Builder(Text::Builder value);
+  inline Builder(Data::Builder value);
+  inline Builder(DynamicList::Builder value);
+  inline Builder(DynamicEnum value);
+  inline Builder(DynamicStruct::Builder value);
+  inline Builder(DynamicUnion::Builder value);
+  inline Builder(DynamicObject::Builder value);
 
   template <typename T>
-  inline BuilderFor<T> as() { return asImpl<T>::apply(*this); }
+  inline BuilderFor<T> as() { return AsImpl<T>::apply(*this); }
   // See DynamicValue::Reader::as().
 
-  inline schema::Type::Body::Which getType() { return type; }
+  inline Type getType() { return type; }
   // Get the type of this value.
 
   Reader asReader();
 
 private:
-  schema::Type::Body::Which type;
+  Type type;
 
   union {
     Void voidValue;
     bool boolValue;
-    int8_t int8Value;
-    int16_t int16Value;
-    int32_t int32Value;
-    int64_t int64Value;
-    uint8_t uint8Value;
-    uint16_t uint16Value;
-    uint32_t uint32Value;
-    uint64_t uint64Value;
-    float float32Value;
-    double float64Value;
+    int64_t intValue;
+    uint64_t uintValue;
+    double floatValue;
     Text::Builder textValue;
     Data::Builder dataValue;
     DynamicList::Builder listValue;
     DynamicEnum enumValue;
     DynamicStruct::Builder structValue;
+    DynamicUnion::Builder unionValue;
     DynamicObject::Builder objectValue;
   };
 
-  template <typename T, Kind kind = kind<T>()> struct asImpl;
+  template <typename T, Kind kind = kind<T>()> struct AsImpl;
   // Implementation backing the as() method.  Needs to be a struct to allow partial
   // specialization.  Has a method apply() which does the work.
 };
@@ -831,17 +850,52 @@ BuilderFor<DynamicTypeFor<FromBuilder<T>>> SchemaPool::toDynamic(T&& value) cons
   return ToDynamicImpl<FromBuilder<T>>::apply(this, value);
 }
 
+#define CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(cppType, typeTag, fieldName) \
+inline DynamicValue::Reader::Reader(cppType value) \
+    : type(typeTag), fieldName##Value(value) {} \
+inline DynamicValue::Builder::Builder(cppType value) \
+    : type(typeTag), fieldName##Value(value) {}
+
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Void, VOID, void);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(bool, BOOL, bool);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(char, INT, int);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(signed char, INT, int);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(short, INT, int);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(int, INT, int);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(long, INT, int);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(long long, INT, int);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned char, UINT, uint);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned short, UINT, uint);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned int, UINT, uint);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned long, UINT, uint);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned long long, UINT, uint);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(float, FLOAT, float);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(double, FLOAT, float);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicEnum, ENUM, enum);
+#undef CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR
+
+#define CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(cppType, typeTag, fieldName) \
+inline DynamicValue::Reader::Reader(cppType::Reader value) \
+    : type(typeTag), fieldName##Value(value) {} \
+inline DynamicValue::Builder::Builder(cppType::Builder value) \
+    : type(typeTag), fieldName##Value(value) {}
+
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Text, TEXT, text);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Data, DATA, data);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicList, LIST, list);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicStruct, STRUCT, struct);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicUnion, UNION, union);
+CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicObject, OBJECT, object);
+
+#undef CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR
+
 #define CAPNPROTO_DECLARE_TYPE(name, discrim, typeName) \
-inline DynamicValue::Reader::Reader(ReaderFor<typeName> name##Value) \
-    : type(schema::Type::Body::discrim##_TYPE), name##Value(name##Value) {} \
-inline DynamicValue::Builder::Builder(BuilderFor<typeName> name##Value) \
-    : type(schema::Type::Body::discrim##_TYPE), name##Value(name##Value) {} \
 template <> \
-struct DynamicValue::Reader::asImpl<typeName> { \
+struct DynamicValue::Reader::AsImpl<typeName> { \
   static ReaderFor<typeName> apply(Reader reader); \
 }; \
 template <> \
-struct DynamicValue::Builder::asImpl<typeName> { \
+struct DynamicValue::Builder::AsImpl<typeName> { \
   static BuilderFor<typeName> apply(Builder builder); \
 };
 
@@ -864,57 +918,54 @@ CAPNPROTO_DECLARE_TYPE(list, LIST, DynamicList)
 CAPNPROTO_DECLARE_TYPE(struct, STRUCT, DynamicStruct)
 CAPNPROTO_DECLARE_TYPE(enum, ENUM, DynamicEnum)
 CAPNPROTO_DECLARE_TYPE(object, OBJECT, DynamicObject)
+CAPNPROTO_DECLARE_TYPE(union, UNION, DynamicUnion)
 #undef CAPNPROTO_DECLARE_TYPE
 
 // CAPNPROTO_DECLARE_TYPE(Void) causes gcc 4.7 to segfault.  If I do it manually and remove the
 // ReaderFor<> and BuilderFor<> wrappers, it works.
-inline DynamicValue::Reader::Reader(Void voidValue) \
-    : type(schema::Type::Body::VOID_TYPE), voidValue(voidValue) {} \
-inline DynamicValue::Builder::Builder(Void voidValue) \
-    : type(schema::Type::Body::VOID_TYPE), voidValue(voidValue) {} \
 template <>
-struct DynamicValue::Reader::asImpl<Void> {
+struct DynamicValue::Reader::AsImpl<Void> {
   static Void apply(Reader reader);
 };
 template <>
-struct DynamicValue::Builder::asImpl<Void> {
+struct DynamicValue::Builder::AsImpl<Void> {
   static Void apply(Builder builder);
 };
 
 template <typename T>
-struct DynamicValue::Reader::asImpl<T, Kind::ENUM> {
+struct DynamicValue::Reader::AsImpl<T, Kind::ENUM> {
   static T apply(Reader reader) {
     return reader.as<DynamicEnum>().as<T>();
   }
 };
 template <typename T>
-struct DynamicValue::Builder::asImpl<T, Kind::ENUM> {
+struct DynamicValue::Builder::AsImpl<T, Kind::ENUM> {
   static T apply(Builder builder) {
     return builder.as<DynamicEnum>().as<T>();
   }
 };
 
 template <typename T>
-struct DynamicValue::Reader::asImpl<T, Kind::STRUCT> {
+struct DynamicValue::Reader::AsImpl<T, Kind::STRUCT> {
   static T apply(Reader reader) {
     return reader.as<DynamicStruct>().as<T>();
   }
 };
 template <typename T>
-struct DynamicValue::Builder::asImpl<T, Kind::STRUCT> {
+struct DynamicValue::Builder::AsImpl<T, Kind::STRUCT> {
   static T apply(Builder builder) {
     return builder.as<DynamicStruct>().as<T>();
   }
 };
 
 template <typename T>
-struct DynamicValue::Reader::asImpl<T, Kind::LIST> {
+struct DynamicValue::Reader::AsImpl<T, Kind::LIST> {
   static T apply(Reader reader) {
     return reader.as<DynamicList>().as<T>();
   }
 };
 template <typename T>
-struct DynamicValue::Builder::asImpl<T, Kind::LIST> {
+struct DynamicValue::Builder::AsImpl<T, Kind::LIST> {
   static T apply(Builder builder) {
     return builder.as<DynamicList>().as<T>();
   }
@@ -923,26 +974,26 @@ struct DynamicValue::Builder::asImpl<T, Kind::LIST> {
 // -------------------------------------------------------------------
 
 template <typename T>
-struct DynamicObject::Reader::asImpl<T, Kind::STRUCT> {
+struct DynamicObject::Reader::AsImpl<T, Kind::STRUCT> {
   static T apply(Reader reader) {
     return reader.asStruct(typeId<T>()).as<T>();
   }
 };
 template <typename T>
-struct DynamicObject::Builder::asImpl<T, Kind::STRUCT> {
+struct DynamicObject::Builder::AsImpl<T, Kind::STRUCT> {
   static T apply(Builder builder) {
     return builder.asStruct(typeId<T>()).as<T>();
   }
 };
 
 template <typename T>
-struct DynamicObject::Reader::asImpl<List<T>, Kind::LIST> {
+struct DynamicObject::Reader::AsImpl<List<T>, Kind::LIST> {
   static T apply(Reader reader) {
     return reader.asList(internal::ListSchemaForElement<T>::schema).as<T>();
   }
 };
 template <typename T>
-struct DynamicObject::Builder::asImpl<List<T>, Kind::LIST> {
+struct DynamicObject::Builder::AsImpl<List<T>, Kind::LIST> {
   static T apply(Builder builder) {
     return builder.asList(internal::ListSchemaForElement<T>::schema).as<T>();
   }

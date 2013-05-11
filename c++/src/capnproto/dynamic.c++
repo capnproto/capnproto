@@ -85,11 +85,27 @@ void SchemaPool::addNoCopy(schema::Node::Reader node) {
   // TODO(soon):  Check if node is in base.
   // TODO(soon):  Check if existing node came from generated code.
 
-  auto entry = std::make_pair(node.getId(), node);
+  uint64_t id = node.getId();
+  auto entry = std::make_pair(id, node);
   auto ins = impl->nodeMap.insert(entry);
   if (!ins.second) {
     // TODO(soon):  Check for compatibility.
     FAIL_CHECK("TODO:  Check schema compatibility when adding.");
+  }
+
+  switch (node.getBody().which()) {
+    case schema::Node::Body::STRUCT_NODE:
+      for (auto member: node.getBody().getStructNode().getMembers()) {
+        impl->memberMap[std::pair<uint64_t, Text::Reader>(id, member.getName())] = member;
+      }
+      break;
+    case schema::Node::Body::ENUM_NODE:
+      for (auto enumerant: node.getBody().getEnumNode().getEnumerants()) {
+        impl->enumerantMap[std::pair<uint64_t, Text::Reader>(id, enumerant.getName())] = enumerant;
+      }
+      break;
+    default:
+      break;
   }
 }
 
@@ -645,7 +661,7 @@ void DynamicStruct::Builder::setFieldImpl(
     case schema::Type::Body::discrim##_TYPE: \
       builder.setDataField<type>( \
           field.getOffset() * ELEMENTS, value.as<type>(), \
-          bitCast<internal::Mask<type> >(dval.get##titleCase##Value()));
+          bitCast<internal::Mask<type> >(dval.get##titleCase##Value())); \
       break;
 
     HANDLE_TYPE(BOOL, Bool, bool)
@@ -1133,16 +1149,104 @@ void DynamicList::Builder::verifySchema(internal::ListSchema schema) {
 
 // =======================================================================================
 
+namespace {
+
+template <typename T>
+T signedToUnsigned(long long value) {
+  VALIDATE_INPUT(value >= 0 && T(value) == value,
+                 "Value out-of-range for requested type.", value) {
+    // Use it anyway.
+  }
+  return value;
+}
+
+template <>
+uint64_t signedToUnsigned<uint64_t>(long long value) {
+  VALIDATE_INPUT(value >= 0, "Value out-of-range for requested type.", value) {
+    // Use it anyway.
+  }
+  return value;
+}
+
+template <typename T>
+T unsignedToSigned(unsigned long long value) {
+  VALIDATE_INPUT(T(value) >= 0 && (unsigned long long)T(value) == value,
+                 "Value out-of-range for requested type.", value) {
+    // Use it anyway.
+  }
+  return value;
+}
+
+template <>
+int64_t unsignedToSigned<int64_t>(unsigned long long value) {
+  VALIDATE_INPUT(int64_t(value) >= 0, "Value out-of-range for requested type.", value) {
+    // Use it anyway.
+  }
+  return value;
+}
+
+template <typename T, typename U>
+T checkRoundTrip(U value) {
+  VALIDATE_INPUT(T(value) == value,
+                 "Value out-of-range for requested type.", value) {
+    // Use it anyway.
+  }
+  return value;
+}
+
+}  // namespace
+
+#define HANDLE_NUMERIC_TYPE(typeName, ifInt, ifUint, ifFloat) \
+typeName DynamicValue::Reader::AsImpl<typeName>::apply(Reader reader) { \
+  switch (reader.type) { \
+    case INT: \
+      return ifInt<typeName>(reader.intValue); \
+    case UINT: \
+      return ifUint<typeName>(reader.uintValue); \
+    case FLOAT: \
+      return ifFloat<typeName>(reader.floatValue); \
+    default: \
+      FAIL_VALIDATE_INPUT("Type mismatch when using DynamicValue::Reader::as()."); \
+      return 0; \
+  } \
+} \
+typeName DynamicValue::Builder::AsImpl<typeName>::apply(Builder builder) { \
+  switch (builder.type) { \
+    case INT: \
+      return ifInt<typeName>(builder.intValue); \
+    case UINT: \
+      return ifUint<typeName>(builder.uintValue); \
+    case FLOAT: \
+      return ifFloat<typeName>(builder.floatValue); \
+    default: \
+      FAIL_VALIDATE_INPUT("Type mismatch when using DynamicValue::Builder::as()."); \
+      return 0; \
+  } \
+}
+
+HANDLE_NUMERIC_TYPE(int8_t, checkRoundTrip, unsignedToSigned, checkRoundTrip)
+HANDLE_NUMERIC_TYPE(int16_t, checkRoundTrip, unsignedToSigned, checkRoundTrip)
+HANDLE_NUMERIC_TYPE(int32_t, checkRoundTrip, unsignedToSigned, checkRoundTrip)
+HANDLE_NUMERIC_TYPE(int64_t, implicit_cast, unsignedToSigned, checkRoundTrip)
+HANDLE_NUMERIC_TYPE(uint8_t, signedToUnsigned, checkRoundTrip, checkRoundTrip)
+HANDLE_NUMERIC_TYPE(uint16_t, signedToUnsigned, checkRoundTrip, checkRoundTrip)
+HANDLE_NUMERIC_TYPE(uint32_t, signedToUnsigned, checkRoundTrip, checkRoundTrip)
+HANDLE_NUMERIC_TYPE(uint64_t, signedToUnsigned, implicit_cast, checkRoundTrip)
+HANDLE_NUMERIC_TYPE(float, implicit_cast, implicit_cast, implicit_cast)
+HANDLE_NUMERIC_TYPE(double, implicit_cast, implicit_cast, implicit_cast)
+
+#undef HANDLE_NUMERIC_TYPE
+
 #define HANDLE_TYPE(name, discrim, typeName) \
-ReaderFor<typeName> DynamicValue::Reader::asImpl<typeName>::apply(Reader reader) { \
-  VALIDATE_INPUT(reader.type == schema::Type::Body::discrim##_TYPE, \
+ReaderFor<typeName> DynamicValue::Reader::AsImpl<typeName>::apply(Reader reader) { \
+  VALIDATE_INPUT(reader.type == discrim, \
       "Type mismatch when using DynamicValue::Reader::as().") { \
     return ReaderFor<typeName>(); \
   } \
   return reader.name##Value; \
 } \
-BuilderFor<typeName> DynamicValue::Builder::asImpl<typeName>::apply(Builder builder) { \
-  VALIDATE_INPUT(builder.type == schema::Type::Body::discrim##_TYPE, \
+BuilderFor<typeName> DynamicValue::Builder::AsImpl<typeName>::apply(Builder builder) { \
+  VALIDATE_INPUT(builder.type == discrim, \
       "Type mismatch when using DynamicValue::Builder::as().") { \
     return BuilderFor<typeName>(); \
   } \
@@ -1151,16 +1255,6 @@ BuilderFor<typeName> DynamicValue::Builder::asImpl<typeName>::apply(Builder buil
 
 //HANDLE_TYPE(void, VOID, Void)
 HANDLE_TYPE(bool, BOOL, bool)
-HANDLE_TYPE(int8, INT8, int8_t)
-HANDLE_TYPE(int16, INT16, int16_t)
-HANDLE_TYPE(int32, INT32, int32_t)
-HANDLE_TYPE(int64, INT64, int64_t)
-HANDLE_TYPE(uint8, UINT8, uint8_t)
-HANDLE_TYPE(uint16, UINT16, uint16_t)
-HANDLE_TYPE(uint32, UINT32, uint32_t)
-HANDLE_TYPE(uint64, UINT64, uint64_t)
-HANDLE_TYPE(float32, FLOAT32, float)
-HANDLE_TYPE(float64, FLOAT64, double)
 
 HANDLE_TYPE(text, TEXT, Text)
 HANDLE_TYPE(data, DATA, Data)
@@ -1168,19 +1262,20 @@ HANDLE_TYPE(list, LIST, DynamicList)
 HANDLE_TYPE(struct, STRUCT, DynamicStruct)
 HANDLE_TYPE(enum, ENUM, DynamicEnum)
 HANDLE_TYPE(object, OBJECT, DynamicObject)
+HANDLE_TYPE(union, UNION, DynamicUnion)
 
 #undef HANDLE_TYPE
 
 // As in the header, HANDLE_TYPE(void, VOID, Void) crashes GCC 4.7.
-Void DynamicValue::Reader::asImpl<Void>::apply(Reader reader) {
-  VALIDATE_INPUT(reader.type == schema::Type::Body::VOID_TYPE,
+Void DynamicValue::Reader::AsImpl<Void>::apply(Reader reader) {
+  VALIDATE_INPUT(reader.type == VOID,
       "Type mismatch when using DynamicValue::Reader::as().") {
     return Void();
   }
   return reader.voidValue;
 }
-Void DynamicValue::Builder::asImpl<Void>::apply(Builder builder) {
-  VALIDATE_INPUT(builder.type == schema::Type::Body::VOID_TYPE,
+Void DynamicValue::Builder::AsImpl<Void>::apply(Builder builder) {
+  VALIDATE_INPUT(builder.type == VOID,
       "Type mismatch when using DynamicValue::Builder::as().") {
     return Void();
   }
