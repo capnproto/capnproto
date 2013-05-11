@@ -25,7 +25,7 @@
 #include "dynamic.h"
 #include "logging.h"
 #include <unordered_map>
-#include <string>
+#include <unordered_set>
 
 namespace capnproto {
 
@@ -52,15 +52,29 @@ struct SchemaPool::Impl {
   std::unordered_map<std::pair<uint64_t, Text::Reader>, schema::EnumNode::Enumerant::Reader,
                      IdTextHash>
       enumerantMap;
+  std::unordered_set<uint64_t> compiledTypeIds;
 };
+
+SchemaPool::SchemaPool(): impl(new Impl) {}
 
 SchemaPool::~SchemaPool() {
   delete impl;
 }
 
 // TODO(now):  Implement this.  Need to copy, ick.
-void add(schema::Node::Reader node) {
+void SchemaPool::add(schema::Node::Reader node) {
   FAIL_CHECK("Not implemented: copying/validating schemas.");
+}
+
+void SchemaPool::add(const internal::RawSchema& rawSchema) {
+  auto node = readMessageTrusted<schema::Node>(rawSchema.encodedNode);
+  if (impl->compiledTypeIds.insert(node.getId()).second) {
+    addNoCopy(node);
+    for (const internal::RawSchema*const* dep = rawSchema.dependencies;
+         *dep != nullptr; ++dep) {
+      add(**dep);
+    }
+  }
 }
 
 void SchemaPool::addNoCopy(schema::Node::Reader node) {
@@ -79,8 +93,41 @@ void SchemaPool::addNoCopy(schema::Node::Reader node) {
   }
 }
 
-bool SchemaPool::has(uint64_t id) const {
-  return (impl != nullptr && impl->nodeMap.count(id) != 0) || (base != nullptr && base->has(id));
+Maybe<schema::Node::Reader> SchemaPool::tryGetNode(uint64_t id) const {
+  auto iter = impl->nodeMap.find(id);
+  if (iter == impl->nodeMap.end()) {
+    return nullptr;
+  } else {
+    return iter->second;
+  }
+}
+
+schema::Node::Reader SchemaPool::getNode(uint64_t id) const {
+  auto maybeNode = tryGetNode(id);
+  PRECOND(maybeNode != nullptr, "Requested node ID not found in SchemaPool", hex(id));
+  return *maybeNode;
+}
+
+schema::Node::Reader SchemaPool::getStruct(uint64_t id) const {
+  auto node = getNode(id);
+  PRECOND(node.getBody().which() == schema::Node::Body::STRUCT_NODE,
+          "Looking for a struct node, but this node ID refers to something else.",
+          node.getBody().which());
+  return node;
+}
+schema::Node::Reader SchemaPool::getEnum(uint64_t id) const {
+  auto node = getNode(id);
+  PRECOND(node.getBody().which() == schema::Node::Body::ENUM_NODE,
+          "Looking for a enum node, but this node ID refers to something else.",
+          node.getBody().which());
+  return node;
+}
+schema::Node::Reader SchemaPool::getInterface(uint64_t id) const {
+  auto node = getNode(id);
+  PRECOND(node.getBody().which() == schema::Node::Body::INTERFACE_NODE,
+          "Looking for a interface node, but this node ID refers to something else.",
+          node.getBody().which());
+  return node;
 }
 
 // =======================================================================================
@@ -141,7 +188,7 @@ internal::FieldSize elementSizeFor(schema::Type::Body::Which elementType) {
     case schema::Type::Body::ENUM_TYPE: return internal::FieldSize::TWO_BYTES;
     case schema::Type::Body::STRUCT_TYPE: return internal::FieldSize::INLINE_COMPOSITE;
     case schema::Type::Body::INTERFACE_TYPE: return internal::FieldSize::REFERENCE;
-    case schema::Type::Body::OBJECT_TYPE: FAIL_CHECK("List(Object) not supported.");
+    case schema::Type::Body::OBJECT_TYPE: FAIL_CHECK("List(Object) not supported."); break;
   }
   FAIL_CHECK("Can't get here.");
   return internal::FieldSize::VOID;
@@ -155,6 +202,35 @@ inline internal::StructSize structSizeFromSchema(schema::StructNode::Reader sche
 }
 
 }  // namespace
+
+namespace internal {
+
+ListSchema::ListSchema(schema::Type::Reader elementType): nestingDepth(0) {
+  auto etypeBody = elementType.getBody();
+  while (etypeBody.which() == schema::Type::Body::LIST_TYPE) {
+    ++nestingDepth;
+    etypeBody = etypeBody.getListType().getBody();
+  }
+
+  this->elementType = etypeBody.which();
+
+  switch (etypeBody.which()) {
+    case schema::Type::Body::STRUCT_TYPE:
+      this->elementTypeId = etypeBody.getStructType();
+      break;
+    case schema::Type::Body::ENUM_TYPE:
+      this->elementTypeId = etypeBody.getEnumType();
+      break;
+    case schema::Type::Body::INTERFACE_TYPE:
+      this->elementTypeId = etypeBody.getInterfaceType();
+      break;
+    default:
+      this->elementTypeId = 0;
+      break;
+  }
+}
+
+}  // namespace internal
 
 // =======================================================================================
 
@@ -189,9 +265,9 @@ uint16_t DynamicEnum::asImpl(uint64_t requestedTypeId) {
 
 // =======================================================================================
 
-DynamicStruct::Reader DynamicObject::Reader::toStruct(schema::Node::Reader schema) {
+DynamicStruct::Reader DynamicObject::Reader::asStruct(schema::Node::Reader schema) {
   PRECOND(schema.getBody().which() == schema::Node::Body::STRUCT_NODE,
-          "toStruct() passed a non-struct schema.");
+          "asStruct() passed a non-struct schema.");
   if (reader.kind == internal::ObjectKind::NULL_POINTER) {
     return DynamicStruct::Reader(pool, schema, internal::StructReader());
   }
@@ -200,9 +276,9 @@ DynamicStruct::Reader DynamicObject::Reader::toStruct(schema::Node::Reader schem
   }
   return DynamicStruct::Reader(pool, schema, reader.structReader);
 }
-DynamicStruct::Builder DynamicObject::Builder::toStruct(schema::Node::Reader schema) {
+DynamicStruct::Builder DynamicObject::Builder::asStruct(schema::Node::Reader schema) {
   PRECOND(schema.getBody().which() == schema::Node::Body::STRUCT_NODE,
-          "toStruct() passed a non-struct schema.");
+          "asStruct() passed a non-struct schema.");
   if (builder.kind == internal::ObjectKind::NULL_POINTER) {
     return DynamicStruct::Builder(pool, schema, internal::StructBuilder());
   }
@@ -212,21 +288,21 @@ DynamicStruct::Builder DynamicObject::Builder::toStruct(schema::Node::Reader sch
   return DynamicStruct::Builder(pool, schema, builder.structBuilder);
 }
 
-DynamicStruct::Reader DynamicObject::Reader::toStruct(uint64_t typeId) {
-  return toStruct(pool->getStruct(typeId));
+DynamicStruct::Reader DynamicObject::Reader::asStruct(uint64_t typeId) {
+  return asStruct(pool->getStruct(typeId));
 }
-DynamicStruct::Builder DynamicObject::Builder::toStruct(uint64_t typeId) {
-  return toStruct(pool->getStruct(typeId));
-}
-
-DynamicList::Reader DynamicObject::Reader::toList(schema::Type::Reader elementType) {
-  return toList(internal::ListSchema(elementType));
-}
-DynamicList::Builder DynamicObject::Builder::toList(schema::Type::Reader elementType) {
-  return toList(internal::ListSchema(elementType));
+DynamicStruct::Builder DynamicObject::Builder::asStruct(uint64_t typeId) {
+  return asStruct(pool->getStruct(typeId));
 }
 
-DynamicList::Reader DynamicObject::Reader::toList(internal::ListSchema schema) {
+DynamicList::Reader DynamicObject::Reader::asList(schema::Type::Reader elementType) {
+  return asList(internal::ListSchema(elementType));
+}
+DynamicList::Builder DynamicObject::Builder::asList(schema::Type::Reader elementType) {
+  return asList(internal::ListSchema(elementType));
+}
+
+DynamicList::Reader DynamicObject::Reader::asList(internal::ListSchema schema) {
   if (reader.kind == internal::ObjectKind::NULL_POINTER) {
     return DynamicList::Reader(pool, schema, internal::ListReader());
   }
@@ -235,7 +311,7 @@ DynamicList::Reader DynamicObject::Reader::toList(internal::ListSchema schema) {
   }
   return DynamicList::Reader(pool, schema, reader.listReader);
 }
-DynamicList::Builder DynamicObject::Builder::toList(internal::ListSchema schema) {
+DynamicList::Builder DynamicObject::Builder::asList(internal::ListSchema schema) {
   if (builder.kind == internal::ObjectKind::NULL_POINTER) {
     return DynamicList::Builder(pool, schema, internal::ListBuilder());
   }
@@ -775,6 +851,7 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) {
 
       case schema::Type::Body::LIST_TYPE:
         FAIL_CHECK("elementType should not be LIST_TYPE when depth == 0.");
+        return DynamicValue::Reader();
 
       case schema::Type::Body::STRUCT_TYPE:
         return DynamicValue::Reader(DynamicStruct::Reader(

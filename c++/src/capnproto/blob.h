@@ -55,6 +55,8 @@ class Data::Reader {
   // also be implicitly constructed from a NUL-terminated char*.
 
 public:
+  typedef Data Reads;
+
   inline Reader(): bytes(nullptr), size_(0) {}
   inline Reader(const char* bytes): bytes(bytes), size_(strlen(bytes)) {}
   inline Reader(char* bytes): bytes(bytes), size_(strlen(bytes)) {}
@@ -113,6 +115,8 @@ class Text::Reader: public Data::Reader {
   // such as std::string.
 
 public:
+  typedef Text Reads;
+
   inline Reader(): Data::Reader("", 0) {}
   inline Reader(const char* text): Data::Reader(text, strlen(text)) {
     CAPNPROTO_INLINE_DPRECOND(text[size()] == '\0', "Text must be NUL-terminated.");
@@ -139,6 +143,8 @@ class Data::Builder {
   // other types.
 
 public:
+  typedef Data Builds;
+
   inline Builder(): bytes(nullptr), size_(0) {}
   inline Builder(char* bytes, uint size): bytes(bytes), size_(size) {}
 
@@ -194,6 +200,8 @@ class Text::Builder: public Data::Builder {
   // so it is never necessary for the caller to do so.
 
 public:
+  typedef Text Builds;
+
   inline Builder(): Data::Builder(nulstr, 0) {}
   inline Builder(char* text, uint size): Data::Builder(text, size) { text[size] = '\0'; }
 

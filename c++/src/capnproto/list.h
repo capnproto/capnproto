@@ -62,6 +62,14 @@ template <typename T>
 using BuilderFor = typename internal::MaybeReaderBuilder<T>::Builder;
 // The type returned by List<T>::Builder::operator[].
 
+template <typename T>
+using FromReader = typename RemoveReference<T>::Reads;
+// FromReader<MyType::Reader> = MyType (for any Cap'n Proto type).
+
+template <typename T>
+using FromBuilder = typename RemoveReference<T>::Builds;
+// FromBuilder<MyType::Builder> = MyType (for any Cap'n Proto type).
+
 namespace internal {
 
 template <typename T, Kind k> struct KindOf<List<T, k>> { static constexpr Kind kind = Kind::LIST; };
@@ -169,6 +177,8 @@ struct List<T, Kind::PRIMITIVE> {
 
   class Reader {
   public:
+    typedef List<T> Reads;
+
     Reader() = default;
     inline explicit Reader(internal::ListReader reader): reader(reader) {}
 
@@ -187,6 +197,8 @@ struct List<T, Kind::PRIMITIVE> {
 
   class Builder {
   public:
+    typedef List<T> Builds;
+
     Builder() = default;
     inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
 
@@ -274,6 +286,8 @@ struct List<T, Kind::STRUCT> {
 
   class Reader {
   public:
+    typedef List<T> Reads;
+
     Reader() = default;
     inline explicit Reader(internal::ListReader reader): reader(reader) {}
 
@@ -292,6 +306,8 @@ struct List<T, Kind::STRUCT> {
 
   class Builder {
   public:
+    typedef List<T> Builds;
+
     Builder() = default;
     inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
 
@@ -353,6 +369,8 @@ struct List<List<T>, Kind::LIST> {
 
   class Reader {
   public:
+    typedef List<List<T>> Reads;
+
     Reader() = default;
     inline explicit Reader(internal::ListReader reader): reader(reader) {}
 
@@ -371,6 +389,8 @@ struct List<List<T>, Kind::LIST> {
 
   class Builder {
   public:
+    typedef List<List<T>> Builds;
+
     Builder() = default;
     inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
 
@@ -433,6 +453,8 @@ template <typename T>
 struct List<T, Kind::BLOB> {
   class Reader {
   public:
+    typedef List<T> Reads;
+
     Reader() = default;
     inline explicit Reader(internal::ListReader reader): reader(reader) {}
 
@@ -451,6 +473,8 @@ struct List<T, Kind::BLOB> {
 
   class Builder {
   public:
+    typedef List<T> Builds;
+
     Builder() = default;
     inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
 

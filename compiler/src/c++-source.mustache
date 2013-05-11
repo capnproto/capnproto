@@ -49,3 +49,26 @@ const ::capnproto::internal::AlignedData<{{defaultWordCount}}>
 {{#fileNamespaces}}
 }  // namespace
 {{/fileNamespaces}}
+
+namespace capnproto {
+namespace schemas {
+
+{{#fileTypes}}
+{{#typeSchema}}
+static const ::capnproto::internal::AlignedData<{{schemaWordCount}}> b_{{schemaId}} = {
+  { {{schemaBytes}} }
+};
+static const ::capnproto::internal::RawSchema* const d_{{schemaId}}[] = {
+{{#schemaDependencies}}
+  &s_{{dependencyId}},
+{{/schemaDependencies}}
+  nullptr
+};
+const ::capnproto::internal::RawSchema s_{{schemaId}} = {
+  b_{{schemaId}}.words, d_{{schemaId}}
+};
+{{/typeSchema}}
+{{/fileTypes}}
+
+}  // namespace schemas
+}  // namespace capnproto

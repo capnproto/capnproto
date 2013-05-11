@@ -66,6 +66,14 @@ struct DynamicList {
   class Builder;
 };
 
+template <Kind k> struct DynamicTypeFor_;
+template <> struct DynamicTypeFor_<Kind::ENUM> { typedef DynamicEnum Type; };
+template <> struct DynamicTypeFor_<Kind::STRUCT> { typedef DynamicStruct Type; };
+template <> struct DynamicTypeFor_<Kind::LIST> { typedef DynamicList Type; };
+
+template <typename T>
+using DynamicTypeFor = typename DynamicTypeFor_<kind<T>()>::Type;
+
 class SchemaPool {
   // Class representing a pool of schema data which is indexed for convenient traversal.
   //
@@ -74,21 +82,9 @@ class SchemaPool {
   //   This will make it easier to deal with ownership and to batch-add related nodes.
 
 public:
-  SchemaPool(): base(nullptr), impl(nullptr) {}
-  // Constructs an empty pool.
-
-  explicit SchemaPool(const SchemaPool& base): base(&base), impl(nullptr) {}
-  // Constructs a pool that extends the given base pool.  The behavior is similar to copying the
-  // base pool, except that memory is shared.  The base pool must outlive the new pool.
-  //
-  // The purpose of this is to allow a pool to be shared by multiple threads.  The from*() methods
-  // may add new schema nodes to the pool if they aren't already present, and therefore they are
-  // not thread-safe.  However, if you create a shared pool that contains all the types you need,
-  // then it is reasonably efficient to create a fresh SchemaPool on the stack extending the shared
-  // pool each time you need to manipulate a type dynamically.  If the shared pool ends up
-  // containing everything that is needed, then the extension pool won't allocate any memory at all.
-
+  SchemaPool();
   ~SchemaPool();
+  CAPNPROTO_DISALLOW_COPY(SchemaPool);
 
   void add(schema::Node::Reader node);
   // Add a schema node.  It will be copied and validated, throwing an exception if invalid.  If
@@ -97,20 +93,15 @@ public:
   // an exception will be thrown.
 
   template <typename T>
-  void add();
+  inline void add() { add(internal::rawSchema<T>()); }
   // Add schema for the given compiled-in type and all of its transitive dependencies, including
   // nested nodes, but NOT necessarily including annotation definitions (because those are not
   // always compiled in) or parent scopes (because adding parent scopes would necessarily mean
   // adding all types in the file and in all transitive imports, which may be much more than you
   // want).
 
-  bool has(uint64_t typeId) const;
-
-  template <typename T> DynamicEnum fromEnum(T&& value);
-  template <typename T> DynamicStruct::Reader fromStructReader(T&& reader);
-  template <typename T> DynamicStruct::Builder fromStructBuilder(T&& builder);
-  template <typename T> DynamicList::Reader fromListReader(T&& reader);
-  template <typename T> DynamicList::Builder fromListBuilder(T&& builder);
+  Maybe<schema::Node::Reader> tryGetNode(uint64_t id) const;
+  // Try to look up the node, but return nullptr if it's unknown.
 
   schema::Node::Reader getNode(uint64_t id) const;
   // Look up the node with the given ID, throwing an exception if not found.
@@ -120,15 +111,31 @@ public:
   schema::Node::Reader getInterface(uint64_t id) const;
   // Like getNode() but also throws if the kind is not as requested.
 
+  template <typename T>
+  ReaderFor<DynamicTypeFor<FromReader<T>>> toDynamic(T&& value) const;
+  template <typename T>
+  BuilderFor<DynamicTypeFor<FromBuilder<T>>> toDynamic(T&& value) const;
+  // Convert an arbitrary struct or list reader or builder type into the equivalent dynamic type.
+  // Example:
+  //     DynamicStruct::Reader foo = pool.toDynamic(myType.getFoo());
+
+  template <typename T> DynamicEnum fromEnum(T&& value) const;
+  template <typename T> DynamicStruct::Reader fromStructReader(T&& reader) const;
+  template <typename T> DynamicStruct::Builder fromStructBuilder(T&& builder) const;
+  template <typename T> DynamicList::Reader fromListReader(T&& reader) const;
+  template <typename T> DynamicList::Builder fromListBuilder(T&& builder) const;
+  // Convert native types to dynamic types.
+
 private:
   struct Impl;
 
-  const SchemaPool* base;
   Impl* impl;
 
-  SchemaPool& operator=(const SchemaPool&) = delete;
-
+  void add(const internal::RawSchema& rawSchema);
   void addNoCopy(schema::Node::Reader node);
+
+  template <typename T, Kind k = kind<T>()>
+  struct ToDynamicImpl;
 
   friend class DynamicEnum;
   friend struct DynamicStruct;
@@ -265,8 +272,8 @@ public:
   inline typename T::Reader as() { return asImpl<T>::apply(*this); }
   // Convert the object to the given struct, list, or blob type.
 
-  DynamicStruct::Reader toStruct(schema::Node::Reader schema);
-  DynamicList::Reader toList(schema::Type::Reader elementType);
+  DynamicStruct::Reader asStruct(schema::Node::Reader schema);
+  DynamicList::Reader asList(schema::Type::Reader elementType);
 
 private:
   const SchemaPool* pool;
@@ -279,8 +286,8 @@ private:
   // Implementation backing the as() method.  Needs to be a struct to allow partial
   // specialization.  Has a method apply() which does the work.
 
-  DynamicStruct::Reader toStruct(uint64_t typeId);
-  DynamicList::Reader toList(internal::ListSchema schema);
+  DynamicStruct::Reader asStruct(uint64_t typeId);
+  DynamicList::Reader asList(internal::ListSchema schema);
 
   friend struct DynamicStruct;
   friend struct DynamicList;
@@ -294,8 +301,8 @@ public:
   inline typename T::Builder as() { return asImpl<T>::apply(*this); }
   // Convert the object to the given struct, list, or blob type.
 
-  DynamicStruct::Builder toStruct(schema::Node::Reader schema);
-  DynamicList::Builder toList(schema::Type::Reader elementType);
+  DynamicStruct::Builder asStruct(schema::Node::Reader schema);
+  DynamicList::Builder asList(schema::Type::Reader elementType);
 
 private:
   const SchemaPool* pool;
@@ -308,8 +315,8 @@ private:
   // Implementation backing the as() method.  Needs to be a struct to allow partial
   // specialization.  Has a method apply() which does the work.
 
-  DynamicStruct::Builder toStruct(uint64_t typeId);
-  DynamicList::Builder toList(internal::ListSchema schema);
+  DynamicStruct::Builder asStruct(uint64_t typeId);
+  DynamicList::Builder asList(internal::ListSchema schema);
 
   friend struct DynamicStruct;
   friend struct DynamicList;
@@ -413,6 +420,7 @@ private:
   friend struct DynamicList;
   friend class MessageReader;
   friend class MessageBuilder;
+  friend class SchemaPool;
 };
 
 class DynamicStruct::Builder {
@@ -491,6 +499,7 @@ private:
   friend struct DynamicList;
   friend class MessageReader;
   friend class MessageBuilder;
+  friend class SchemaPool;
 };
 
 // -------------------------------------------------------------------
@@ -542,6 +551,7 @@ private:
   friend struct DynamicStruct;
   friend struct DynamicObject;
   friend class DynamicList::Builder;
+  friend class SchemaPool;
 };
 
 class DynamicList::Builder {
@@ -587,6 +597,7 @@ private:
   friend struct internal::PointerHelpers;
   friend struct DynamicStruct;
   friend struct DynamicObject;
+  friend class SchemaPool;
 };
 
 // -------------------------------------------------------------------
@@ -791,6 +802,35 @@ struct PointerHelpers<DynamicList, Kind::UNKNOWN> {
 // =======================================================================================
 // Inline implementation details.
 
+template <typename T>
+struct SchemaPool::ToDynamicImpl<T, Kind::STRUCT> {
+  static inline DynamicStruct::Reader apply(const SchemaPool* pool, typename T::Reader value) {
+    return DynamicStruct::Reader(pool, pool->getStruct(typeId<T>()), value._reader);
+  }
+  static inline DynamicStruct::Builder apply(const SchemaPool* pool, typename T::Builder value) {
+    return DynamicStruct::Builder(pool, pool->getStruct(typeId<T>()), value._builder);
+  }
+};
+
+template <typename T>
+struct SchemaPool::ToDynamicImpl<T, Kind::LIST> {
+  static inline DynamicList::Reader apply(const SchemaPool* pool, typename T::Reader value) {
+    return DynamicList::Reader(pool, internal::ListSchemaFor<T>::schema, value.reader);
+  }
+  static inline DynamicList::Builder apply(const SchemaPool* pool, typename T::Builder value) {
+    return DynamicList::Builder(pool, internal::ListSchemaFor<T>::schema, value.builder);
+  }
+};
+
+template <typename T>
+ReaderFor<DynamicTypeFor<FromReader<T>>> SchemaPool::toDynamic(T&& value) const {
+  return ToDynamicImpl<FromReader<T>>::apply(this, value);
+}
+template <typename T>
+BuilderFor<DynamicTypeFor<FromBuilder<T>>> SchemaPool::toDynamic(T&& value) const {
+  return ToDynamicImpl<FromBuilder<T>>::apply(this, value);
+}
+
 #define CAPNPROTO_DECLARE_TYPE(name, discrim, typeName) \
 inline DynamicValue::Reader::Reader(ReaderFor<typeName> name##Value) \
     : type(schema::Type::Body::discrim##_TYPE), name##Value(name##Value) {} \
@@ -885,26 +925,26 @@ struct DynamicValue::Builder::asImpl<T, Kind::LIST> {
 template <typename T>
 struct DynamicObject::Reader::asImpl<T, Kind::STRUCT> {
   static T apply(Reader reader) {
-    return reader.toStruct(typeId<T>()).as<T>();
+    return reader.asStruct(typeId<T>()).as<T>();
   }
 };
 template <typename T>
 struct DynamicObject::Builder::asImpl<T, Kind::STRUCT> {
   static T apply(Builder builder) {
-    return builder.toStruct(typeId<T>()).as<T>();
+    return builder.asStruct(typeId<T>()).as<T>();
   }
 };
 
 template <typename T>
 struct DynamicObject::Reader::asImpl<List<T>, Kind::LIST> {
   static T apply(Reader reader) {
-    return reader.toList(internal::ListSchemaForElement<T>::schema).as<T>();
+    return reader.asList(internal::ListSchemaForElement<T>::schema).as<T>();
   }
 };
 template <typename T>
 struct DynamicObject::Builder::asImpl<List<T>, Kind::LIST> {
   static T apply(Builder builder) {
-    return builder.toList(internal::ListSchemaForElement<T>::schema).as<T>();
+    return builder.asList(internal::ListSchemaForElement<T>::schema).as<T>();
   }
 };
 

@@ -350,8 +350,12 @@ encodeMessage _ _ = error "Not a message."
 
 type EncodedPtr = (Integer -> [Word8], [Word8])
 
-encodeSchema :: [FileDesc] -> [FileDesc] -> [Word8]
-encodeSchema requestedFiles allFiles = encRoot where
+-- Given the list of requested files and the list of all files including transitive imports,
+-- returns a tuple containing the appropriate encoded CodeGeneratorRequest as well as a list
+-- of ((typeId, displayName), encodedNode), where encodedNode is the encoded schema node
+-- appropriate for reading as a "trusted message".
+encodeSchema :: [FileDesc] -> [FileDesc] -> ([Word8], [((Word64, String), [Word8])])
+encodeSchema requestedFiles allFiles = (encRoot, nodesForEmbedding) where
     encUInt64 = EncodedBytes . flip intToBytes 8
     encUInt32 = EncodedBytes . flip intToBytes 4
     encUInt16 :: (Integral a, Bits a) => a -> EncodedData
@@ -366,10 +370,11 @@ encodeSchema requestedFiles allFiles = encRoot where
               $ zip [0,elemBits..] elements
         in (encodeListReference (SizeData elementSize) (genericLength elements), bytes)
 
-    encPtrList :: [EncodedPtr] -> EncodedPtr
-    encPtrList elements = let
-        (ptrBytes, childBytes) = packPointers (genericLength elements) (zip [0..] elements) 0
-        in (encodeListReference SizeReference (genericLength elements), ptrBytes ++ childBytes)
+    -- Not used, but maybe useful in the future.
+    --encPtrList :: [EncodedPtr] -> EncodedPtr
+    --encPtrList elements = let
+    --    (ptrBytes, childBytes) = packPointers (genericLength elements) (zip [0..] elements) 0
+    --    in (encodeListReference SizeReference (genericLength elements), ptrBytes ++ childBytes)
 
     encStructList :: (DataSectionSize, Integer)
                   -> [([(Integer, EncodedData)], [(Integer, EncodedPtr)])]
@@ -429,6 +434,10 @@ encodeSchema requestedFiles allFiles = encRoot where
 
     allDescs = concatMap flattenDescs $ map DescFile allFiles
 
+    allNodes = map encNode allDescs
+
+    nodesForEmbedding = map encodeNodeForEmbedding allNodes
+
     ---------------------------------------------
 
     encRoot = let
@@ -437,10 +446,15 @@ encodeSchema requestedFiles allFiles = encRoot where
         segment = ptrBytes ++ childBytes
         in concat [[0,0,0,0], intToBytes (div (length segment) 8) 4, segment]
 
+    encodeNodeForEmbedding ((typeId, name), node) = let
+        ptrVal = encStruct nodeSize node
+        (ptrBytes, childBytes) = packPointers 1 [(0, ptrVal)] 0
+        in ((typeId, name), ptrBytes ++ childBytes)
+
     codeGeneratorRequestSize = (DataSectionWords 0, 2)
     encCodeGeneratorRequest = (dataValues, ptrValues) where
         dataValues = []
-        ptrValues = [ (0, encStructList nodeSize $ map encNode allDescs)
+        ptrValues = [ (0, encStructList nodeSize $ map snd allNodes)
                     , (1, encDataList Size64 $ map (encUInt64 . fileId) requestedFiles)
                     ]
 
@@ -527,17 +541,19 @@ encodeSchema requestedFiles allFiles = encRoot where
         encStructList annotationSize $ map encAnnotation $ Map.toList annotations
 
     nodeSize = (DataSectionWords 3, 4)
-    encNode :: Desc -> ([(Integer, EncodedData)], [(Integer, EncodedPtr)])
-    encNode desc = (dataValues, ptrValues) where
+    encNode :: Desc -> ((Word64, String), ([(Integer, EncodedData)], [(Integer, EncodedPtr)]))
+    encNode desc = ((descId desc, dname), (dataValues, ptrValues)) where
         dataValues = [ (0, encUInt64 $ descId desc)
                      , (64, encUInt64 $ scopedId desc)
                      , (128, encUInt16 discrim)
                      ]
-        ptrValues = [ (0, encText $ displayName desc)
+        ptrValues = [ (0, encText dname)
                     , (1, encStructList nestedNodeSize $ map encNestedNode $ descNestedNodes desc)
                     , (2, encAnnotationList $ descAnnotations desc)
                     , (3, encStruct bodySize body)
                     ]
+
+        dname = displayName desc
 
         (discrim, bodySize, body) = case desc of
             DescFile d -> (0::Word16, fileNodeSize, encFileNode d)
@@ -604,7 +620,7 @@ encodeSchema requestedFiles allFiles = encRoot where
                           ]
             ptrValues2 = [ (0, encText $ fieldName field)
                          , (1, encAnnotationList $ fieldAnnotations field)
-                         , (2, encStruct (DataSection32, 2) (dataValues3, ptrValues3))
+                         , (2, encStruct (DataSectionWords 1, 2) (dataValues3, ptrValues3))
                          ]
 
             -- StructNode.Field

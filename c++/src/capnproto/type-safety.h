@@ -52,10 +52,13 @@ struct NoInfer {
   typedef T Type;
 };
 
-template <typename T> struct RemoveReference { typedef T Type; };
-template <typename T> struct RemoveReference<T&> { typedef T Type; };
+template <typename T> struct RemoveReference_ { typedef T Type; };
+template <typename T> struct RemoveReference_<T&> { typedef T Type; };
 template <typename> struct IsLvalueReference { static constexpr bool value = false; };
 template <typename T> struct IsLvalueReference<T&> { static constexpr bool value = true; };
+
+template <typename T>
+using RemoveReference = typename RemoveReference_<T>::Type;
 
 // #including <utility> just for std::move() and std::forward() is excessive.  Instead, we
 // re-define them here.
@@ -63,10 +66,10 @@ template <typename T> struct IsLvalueReference<T&> { static constexpr bool value
 template<typename T> constexpr T&& move(T& t) noexcept { return static_cast<T&&>(t); }
 
 template<typename T>
-constexpr T&& forward(typename RemoveReference<T>::Type& t) noexcept {
+constexpr T&& forward(RemoveReference<T>& t) noexcept {
   return static_cast<T&&>(t);
 }
-template<typename T> constexpr T&& forward(typename RemoveReference<T>::Type&& t) noexcept {
+template<typename T> constexpr T&& forward(RemoveReference<T>&& t) noexcept {
   static_assert(!IsLvalueReference<T>::value, "Attempting to forward rvalue as lvalue reference.");
   return static_cast<T&&>(t);
 }

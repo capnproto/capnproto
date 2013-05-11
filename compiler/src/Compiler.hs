@@ -40,6 +40,7 @@ import Text.Printf(printf)
 import qualified Data.Digest.MD5 as MD5
 import qualified Codec.Binary.UTF8.String as UTF8
 import Util(delimit, intToBytes)
+import Data.Bits(setBit)
 
 ------------------------------------------------------------------------------------------
 -- Error helpers
@@ -412,7 +413,7 @@ childId name Nothing parent = let
     hash = MD5.hash (intToBytes (descId parent) 8 ++ UTF8.encode name)
     addByte :: Word64 -> Word8 -> Word64
     addByte b v = b * 256 + fromIntegral v
-    in foldl addByte 0 (take 8 hash)
+    in flip setBit 63 $ foldl addByte 0 (take 8 hash)
 
 ------------------------------------------------------------------------------------------
 

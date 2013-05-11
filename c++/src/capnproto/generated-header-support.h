@@ -35,11 +35,6 @@ class SchemaPool;   // Needs to be declared for dynamic Object accessors.
 
 class DynamicStruct;  // So that it can be declared a friend.
 
-template <typename T>
-inline constexpr uint64_t typeId();
-// typeId<MyType>() returns the type ID as defined in the schema.  Works with structs, enums, and
-// interfaces.
-
 namespace internal {
 
 template <typename T>
@@ -127,24 +122,50 @@ struct PointerHelpers<TrustedMessage> {
 
 struct RawSchema {
   const word* encodedNode;
-  const RawSchema* dependencies;
+  const RawSchema* const* dependencies;
 };
 
 template <typename T>
-inline constexpr const RawSchema& rawSchema();
+struct RawSchemaFor;
+
+template <typename T>
+inline const RawSchema& rawSchema() {
+  return RawSchemaFor<T>::getSchema();
+}
+
+template <typename T>
+struct TypeIdFor;
 
 }  // namespace internal
+
+template <typename T>
+inline constexpr uint64_t typeId() { return internal::TypeIdFor<T>::typeId; }
+// typeId<MyType>() returns the type ID as defined in the schema.  Works with structs, enums, and
+// interfaces.
+
 }  // namespace capnproto
 
 #define CAPNPROTO_DECLARE_ENUM(type, id) \
-    template <> struct KindOf<type> { static constexpr Kind kind = Kind::ENUM; }
+    template <> struct KindOf<type> { static constexpr Kind kind = Kind::ENUM; }; \
+    template <> struct TypeIdFor<type> { static constexpr uint64_t typeId = 0x##id; }; \
+    template <> struct RawSchemaFor<type> { \
+      static inline const RawSchema& getSchema() { return schemas::s_##id; } \
+    }
 #define CAPNPROTO_DECLARE_STRUCT(type, id, dataWordSize, pointerCount, preferredElementEncoding) \
     template <> struct KindOf<type> { static constexpr Kind kind = Kind::STRUCT; }; \
     template <> struct StructSizeFor<type> { \
       static constexpr StructSize value = StructSize( \
           dataWordSize * WORDS, pointerCount * REFERENCES, FieldSize::preferredElementEncoding); \
+    }; \
+    template <> struct TypeIdFor<type> { static constexpr uint64_t typeId = 0x##id; }; \
+    template <> struct RawSchemaFor<type> { \
+      static inline const RawSchema& getSchema() { return schemas::s_##id; } \
     }
 #define CAPNPROTO_DECLARE_INTERFACE(type, id) \
-    template <> struct KindOf<type> { static constexpr Kind kind = Kind::INTERFACE; }
+    template <> struct KindOf<type> { static constexpr Kind kind = Kind::INTERFACE; }; \
+    template <> struct TypeIdFor<type> { static constexpr uint64_t typeId = 0x##id; }; \
+    template <> struct RawSchemaFor<type> { \
+      static inline const RawSchema& getSchema() { return schemas::s_##id; } \
+    }
 
 #endif  // CAPNPROTO_GENERATED_HEADER_SUPPORT_H_

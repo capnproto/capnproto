@@ -100,6 +100,13 @@ enum class {{enumName}}: uint16_t {
 {{/fileNamespaces}}
 
 namespace capnproto {
+namespace schemas {
+{{#fileTypes}}
+{{#typeSchema}}
+extern const ::capnproto::internal::RawSchema s_{{schemaId}};
+{{/typeSchema}}
+{{/fileTypes}}
+}  // namespace schemas
 namespace internal {
 {{#fileTypes}}
 {{#typeStructOrUnion}}
@@ -131,6 +138,8 @@ namespace {{namespaceName}} {
 
 class {{typeFullName}}::Reader {
 public:
+  typedef {{typeName}} Reads;
+
   Reader() = default;
   inline explicit Reader(::capnproto::internal::StructReader base): _reader(base) {}
 {{#typeStruct}}
@@ -163,11 +172,14 @@ public:
 {{/typeFields}}
 private:
   ::capnproto::internal::StructReader _reader;
+  friend class ::capnproto::SchemaPool;
 };
 {{! ------------------------------------------------------------------------------------------- }}
 
 class {{typeFullName}}::Builder {
 public:
+  typedef {{typeName}} Builds;
+
   Builder() = default;
   inline explicit Builder(::capnproto::internal::StructBuilder base): _builder(base) {}
   inline operator Reader() { return Reader(_builder.asReader()); }
@@ -220,6 +232,7 @@ public:
 {{/typeFields}}
 private:
   ::capnproto::internal::StructBuilder _builder;
+  friend class ::capnproto::SchemaPool;
 };
 {{/typeStructOrUnion}}
 {{/fileTypes}}

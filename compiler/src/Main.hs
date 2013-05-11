@@ -48,12 +48,13 @@ import qualified Data.ByteString.Lazy.Char8 as LZ
 import Data.ByteString(unpack, pack, hPut)
 import Data.Word(Word64, Word8)
 import Data.Maybe(fromMaybe, catMaybes)
+import Data.Function(on)
 import Semantics
 import WireFormat(encodeSchema)
 
 import CxxGenerator(generateCxx)
 
-type GeneratorFn = [FileDesc] -> [FileDesc] -> IO [(FilePath, LZ.ByteString)]
+type GeneratorFn = [FileDesc] -> [Word8] -> Map.Map Word64 [Word8] -> IO [(FilePath, LZ.ByteString)]
 
 generatorFns :: Map.Map String GeneratorFn
 generatorFns = Map.fromList [ ("c++", generateCxx) ]
@@ -120,7 +121,24 @@ main = do
         evalStateT (handleFiles isVerbose searchPath files)
                    (CompilerState False Map.empty)
 
-    mapM_ (doOutput requestedFiles allFiles) outputs
+    let (schema, schemaNodes) = encodeSchema requestedFiles allFiles
+        toEntry ((i, _), node) = (i, node)
+        schemaMap = Map.fromList $ map toEntry schemaNodes
+        areDupes (i, _) (j, _) = i == j
+        dupes = filter (\x -> length x > 1) $ List.groupBy areDupes
+              $ List.sortBy (compare `on` fst) $ map fst schemaNodes
+
+    unless (null dupes) (do
+        hPutStr stderr $ concat
+            ("Duplicate type / delcaration IDs detected:\n":
+             map (concatMap (uncurry $ printf "  @0x%016x %s\n")) dupes)
+        hPutStr stderr
+            "IDs (16-digit hex strings prefixed with @0x) must be unique.  Sorry I'm not\n\
+            \able to be more specific about where the duplicates were seen, but it should\n\
+            \be easy enough to grep, right?"
+        exitFailure)
+
+    mapM_ (doOutput requestedFiles schema schemaMap) outputs
 
     when failed exitFailure
 
@@ -140,8 +158,7 @@ parseOutputArg str = let
 
 pluginName lang = if '/' `elem` lang then lang else "capnpc-" ++ lang
 
-callPlugin lang wd descs transitiveImports = do
-    let schema = encodeSchema descs transitiveImports
+callPlugin lang wd _ schema _ = do
     (Just hin, _, _, p) <- createProcess (proc (pluginName lang) [])
         { std_in = CreatePipe, cwd = wd }
     hSetBinaryMode hin True
@@ -271,13 +288,13 @@ handleFile isVerbose searchPath filename = do
         Right _ -> return Nothing
         Left desc -> return $ Just desc
 
-doOutput requestedFiles allFiles output = do
+doOutput requestedFiles schema schemaMap output = do
     let write dir (name, content) = do
             let outFilename = dir ++ "/" ++ name
             createDirectoryIfMissing True $ takeDirectory outFilename
             LZ.writeFile outFilename content
         generate (generatorFn, dir) = do
-            files <- generatorFn requestedFiles allFiles
+            files <- generatorFn requestedFiles schema schemaMap
             mapM_ (write dir) files
     liftIO $ generate output
 
