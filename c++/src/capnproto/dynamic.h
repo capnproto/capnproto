@@ -131,16 +131,13 @@ public:
   ReaderFor<DynamicTypeFor<FromReader<T>>> toDynamic(T&& value) const;
   template <typename T>
   BuilderFor<DynamicTypeFor<FromBuilder<T>>> toDynamic(T&& value) const;
-  // Convert an arbitrary struct or list reader or builder type into the equivalent dynamic type.
+  template <typename T>
+  DynamicTypeFor<TypeIfEnum<T>> toDynamic(T&& value) const;
+  // Convert an arbitrary struct or list reader or builder type, or an enum type, into the
+  // equivalent dynamic type.
   // Example:
-  //     DynamicStruct::Reader foo = pool.toDynamic(myType.getFoo());
-
-  template <typename T> DynamicEnum fromEnum(T&& value) const;
-  template <typename T> DynamicStruct::Reader fromStructReader(T&& reader) const;
-  template <typename T> DynamicStruct::Builder fromStructBuilder(T&& builder) const;
-  template <typename T> DynamicList::Reader fromListReader(T&& reader) const;
-  template <typename T> DynamicList::Builder fromListBuilder(T&& builder) const;
-  // Convert native types to dynamic types.
+  //     // myStruct has a field named foo that has struct type.
+  //     DynamicStruct::Reader foo = pool.toDynamic(myStruct.getFoo());
 
 private:
   struct Impl;
@@ -276,6 +273,7 @@ private:
 
   friend struct DynamicStruct;
   friend struct DynamicList;
+  friend class SchemaPool;
 };
 
 // -------------------------------------------------------------------
@@ -344,7 +342,8 @@ class DynamicUnion::Reader {
 public:
   Reader() = default;
 
-  schema::StructNode::Union::Reader getSchema() { return schema; }
+  schema::StructNode::Member::Reader getMemberSchema() { return schema; }
+  schema::StructNode::Union::Reader getSchema();
 
   Maybe<schema::StructNode::Member::Reader> which();
   // Returns which field is set, or nullptr if an unknown field is set (i.e. the schema is old, and
@@ -355,10 +354,10 @@ public:
 
 private:
   const SchemaPool* pool;
-  schema::StructNode::Union::Reader schema;
+  schema::StructNode::Member::Reader schema;
   internal::StructReader reader;
 
-  inline Reader(const SchemaPool* pool, schema::StructNode::Union::Reader schema,
+  inline Reader(const SchemaPool* pool, schema::StructNode::Member::Reader schema,
                 internal::StructReader reader)
       : pool(pool), schema(schema), reader(reader) {}
 
@@ -369,23 +368,24 @@ class DynamicUnion::Builder {
 public:
   Builder() = default;
 
-  schema::StructNode::Union::Reader getSchema() { return schema; }
+  schema::StructNode::Member::Reader getMemberSchema() { return schema; }
+  schema::StructNode::Union::Reader getSchema();
 
   Maybe<schema::StructNode::Member::Reader> which();
   // Returns which field is set, or nullptr if an unknown field is set (i.e. the schema is old, and
   // the underlying data has the union set to a member we don't know about).
 
   DynamicValue::Builder get();
-  void set(schema::StructNode::Field::Reader field, DynamicValue::Reader value);
-  DynamicValue::Builder init(schema::StructNode::Field::Reader field);
-  DynamicValue::Builder init(schema::StructNode::Field::Reader field, uint size);
+  void set(schema::StructNode::Member::Reader member, DynamicValue::Reader value);
+  DynamicValue::Builder init(schema::StructNode::Member::Reader member);
+  DynamicValue::Builder init(schema::StructNode::Member::Reader member, uint size);
 
 private:
   const SchemaPool* pool;
-  schema::StructNode::Union::Reader schema;
+  schema::StructNode::Member::Reader schema;
   internal::StructBuilder builder;
 
-  inline Builder(const SchemaPool* pool, schema::StructNode::Union::Reader schema,
+  inline Builder(const SchemaPool* pool, schema::StructNode::Member::Reader schema,
                  internal::StructBuilder builder)
       : pool(pool), schema(schema), builder(builder) {}
 
@@ -408,11 +408,11 @@ public:
   Maybe<schema::StructNode::Member::Reader> findMemberByName(Text::Reader name);
   // Looks up the member with the given name, or returns nullptr if no such member exists.
 
-  DynamicValue::Reader getField(schema::StructNode::Field::Reader field);
-  // Returns the value of the given field.
+  DynamicValue::Reader get(schema::StructNode::Member::Reader member);
+  // Read the given member value.
 
-  DynamicUnion::Reader getUnion(schema::StructNode::Union::Reader un);
-  // Returns the value of the given union.
+  DynamicValue::Reader get(Text::Reader name);
+  // Shortcut to read a member by name.  Throws an exception if no such member exists.
 
 private:
   const SchemaPool* pool;
@@ -424,9 +424,9 @@ private:
 
   void verifyTypeId(uint64_t id);
 
-  static DynamicValue::Reader getFieldImpl(
+  static DynamicValue::Reader getImpl(
       const SchemaPool* pool, internal::StructReader reader,
-      schema::StructNode::Field::Reader field);
+      schema::StructNode::Member::Reader member);
 
   template <typename T>
   friend struct internal::PointerHelpers;
@@ -453,24 +453,32 @@ public:
   Maybe<schema::StructNode::Member::Reader> findMemberByName(Text::Reader name);
   // Looks up the member with the given name, or returns nullptr if no such member exists.
 
-  DynamicValue::Builder getField(schema::StructNode::Field::Reader field);
-  // Returns the value of the given field.
+  DynamicValue::Builder get(schema::StructNode::Member::Reader member);
+  // Read the given member value.
 
-  void setField(schema::StructNode::Field::Reader field, DynamicValue::Reader value);
-  // Sets the value of the given field.
+  void set(schema::StructNode::Member::Reader member, DynamicValue::Reader value);
+  // Set the given member value.
 
-  DynamicValue::Builder initField(schema::StructNode::Field::Reader field);
-  DynamicValue::Builder initField(schema::StructNode::Field::Reader field, uint size);
-  // Initialize a struct or list field by field schema.
+  DynamicValue::Builder init(schema::StructNode::Member::Reader member);
+  DynamicValue::Builder init(schema::StructNode::Member::Reader member, uint size);
+  // Init a struct, list, or blob field.
 
-  DynamicValue::Builder initObjectField(schema::StructNode::Field::Reader field,
-                                        schema::Type::Reader type);
-  DynamicValue::Builder initObjectField(schema::StructNode::Field::Reader field,
-                                        schema::Type::Reader type, uint size);
-  // Initialize an Object-typed field.  You must specify the type to initialize as.
+  DynamicValue::Builder initObject(schema::StructNode::Member::Reader member,
+                                   schema::Type::Reader type);
+  DynamicValue::Builder initObject(schema::StructNode::Member::Reader member,
+                                   schema::Type::Reader type, uint size);
+  // Init an object field.  You must specify the type.  The provided Type::Reader can point to a
+  // temporary message; it will not be accessed again after the method returns.  Of course, if it
+  // refers to any other types by ID, those types must be present in the SchemaPool.
 
-  DynamicUnion::Builder getUnion(schema::StructNode::Union::Reader un);
-  // Returns the value of the given union.
+  DynamicValue::Builder get(Text::Reader name);
+  void set(Text::Reader name, DynamicValue::Reader value);
+  void set(Text::Reader name, std::initializer_list<DynamicValue::Reader> value);
+  DynamicValue::Builder init(Text::Reader name);
+  DynamicValue::Builder init(Text::Reader name, uint size);
+  DynamicValue::Builder initObject(Text::Reader name, schema::Type::Reader type);
+  DynamicValue::Builder initObject(Text::Reader name, schema::Type::Reader type, uint size);
+  // Shortcuts to access members by name.  These throw exceptions if no such field exists.
 
   void copyFrom(Reader other);
 
@@ -487,18 +495,18 @@ private:
 
   void verifyTypeId(uint64_t id);
 
-  static DynamicValue::Builder getFieldImpl(
+  static DynamicValue::Builder getImpl(
       const SchemaPool* pool, internal::StructBuilder builder,
-      schema::StructNode::Field::Reader field);
-  static void setFieldImpl(
+      schema::StructNode::Member::Reader member);
+  static void setImpl(
       const SchemaPool* pool, internal::StructBuilder builder,
-      schema::StructNode::Field::Reader field, DynamicValue::Reader value);
-  static DynamicValue::Builder initFieldImpl(
+      schema::StructNode::Member::Reader member, DynamicValue::Reader value);
+  static DynamicValue::Builder initImpl(
       const SchemaPool* pool, internal::StructBuilder builder,
-      schema::StructNode::Field::Reader field, uint size);
-  static DynamicValue::Builder initFieldImpl(
+      schema::StructNode::Member::Reader member, uint size);
+  static DynamicValue::Builder initImpl(
       const SchemaPool* pool, internal::StructBuilder builder,
-      schema::StructNode::Field::Reader field);
+      schema::StructNode::Member::Reader member);
   static DynamicValue::Builder initFieldImpl(
       const SchemaPool* pool, internal::StructBuilder builder,
       schema::StructNode::Field::Reader field,
@@ -590,6 +598,7 @@ public:
   inline iterator end() { return iterator(this, size()); }
 
   void copyFrom(Reader other);
+  void copyFrom(std::initializer_list<DynamicValue::Reader> value);
 
   Reader asReader();
 
@@ -849,6 +858,10 @@ template <typename T>
 BuilderFor<DynamicTypeFor<FromBuilder<T>>> SchemaPool::toDynamic(T&& value) const {
   return ToDynamicImpl<FromBuilder<T>>::apply(this, value);
 }
+template <typename T>
+DynamicTypeFor<TypeIfEnum<T>> SchemaPool::toDynamic(T&& value) const {
+  return DynamicEnum(this, getEnum(typeId<T>()), static_cast<uint16_t>(value));
+}
 
 #define CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(cppType, typeTag, fieldName) \
 inline DynamicValue::Reader::Reader(cppType value) \
@@ -1016,25 +1029,25 @@ typename T::Builder DynamicStruct::Builder::as() {
   return typename T::Builder(builder);
 }
 
-inline DynamicValue::Reader DynamicStruct::Reader::getField(
-    schema::StructNode::Field::Reader field) {
-  return getFieldImpl(pool, reader, field);
+inline DynamicValue::Reader DynamicStruct::Reader::get(
+    schema::StructNode::Member::Reader member) {
+  return getImpl(pool, reader, member);
 }
-inline DynamicValue::Builder DynamicStruct::Builder::getField(
-    schema::StructNode::Field::Reader field) {
-  return getFieldImpl(pool, builder, field);
+inline DynamicValue::Builder DynamicStruct::Builder::get(
+    schema::StructNode::Member::Reader member) {
+  return getImpl(pool, builder, member);
 }
-inline void DynamicStruct::Builder::setField(
-    schema::StructNode::Field::Reader field, DynamicValue::Reader value) {
-  return setFieldImpl(pool, builder, field, value);
+inline void DynamicStruct::Builder::set(
+    schema::StructNode::Member::Reader member, DynamicValue::Reader value) {
+  return setImpl(pool, builder, member, value);
 }
-inline DynamicValue::Builder DynamicStruct::Builder::initField(
-    schema::StructNode::Field::Reader field) {
-  return initFieldImpl(pool, builder, field);
+inline DynamicValue::Builder DynamicStruct::Builder::init(
+    schema::StructNode::Member::Reader member) {
+  return initImpl(pool, builder, member);
 }
-inline DynamicValue::Builder DynamicStruct::Builder::initField(
-    schema::StructNode::Field::Reader field, uint size) {
-  return initFieldImpl(pool, builder, field, size);
+inline DynamicValue::Builder DynamicStruct::Builder::init(
+    schema::StructNode::Member::Reader member, uint size) {
+  return initImpl(pool, builder, member, size);
 }
 
 inline DynamicStruct::Reader DynamicStruct::Builder::asReader() {

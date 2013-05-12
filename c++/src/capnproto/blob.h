@@ -67,10 +67,6 @@ public:
   // Primarily intended for converting from std::string.
 
   template <typename T>
-  inline operator T() const { return T(bytes, size_); }
-  // Primarily intended for converting to std::string.
-
-  template <typename T>
   inline T as() const { return T(bytes, size_); }
   // Explicitly converts to the desired type, which must have a (const char*, size) constructor.
 

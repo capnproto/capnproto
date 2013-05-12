@@ -70,6 +70,12 @@ template <typename T>
 using FromBuilder = typename RemoveReference<T>::Builds;
 // FromBuilder<MyType::Builder> = MyType (for any Cap'n Proto type).
 
+template <typename T, Kind k = kind<T>()> struct TypeIfEnum_;
+template <typename T> struct TypeIfEnum_<T, Kind::ENUM> { typedef T Type; };
+
+template <typename T>
+using TypeIfEnum = typename TypeIfEnum_<RemoveReference<T>>::Type;
+
 namespace internal {
 
 template <typename T, Kind k> struct KindOf<List<T, k>> { static constexpr Kind kind = Kind::LIST; };
@@ -229,11 +235,11 @@ struct List<T, Kind::PRIMITIVE> {
         set(pos, *i);
       }
       CAPNPROTO_INLINE_DPRECOND(pos == size() && i == end,
-                               "List::copyFrom() argument had different size.");
+                                "List::copyFrom() argument had different size.");
     }
     void copyFrom(std::initializer_list<T> other) {
       CAPNPROTO_INLINE_DPRECOND(other.size() == size(),
-                               "List::copyFrom() argument had different size.");
+                                "List::copyFrom() argument had different size.");
       for (uint i = 0; i < other.size(); i++) {
         set(i, other.begin()[i]);
       }

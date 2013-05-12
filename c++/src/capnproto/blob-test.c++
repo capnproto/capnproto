@@ -39,7 +39,7 @@ TEST(Blob, Text) {
   EXPECT_STREQ("foo", text.data());
   EXPECT_EQ(3u, text.size());
 
-  std::string str2 = text;
+  std::string str2 = text.as<std::string>();
   EXPECT_EQ("foo", str2);
 
   Text::Reader text2 = "bar";
@@ -62,7 +62,7 @@ TEST(Blob, Data) {
   EXPECT_EQ("foo", data);
   EXPECT_EQ(3u, data.size());
 
-  std::string str2 = data;
+  std::string str2 = data.as<std::string>();
   EXPECT_EQ("foo", str2);
 
   Data::Reader data2 = "bar";

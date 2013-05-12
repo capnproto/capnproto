@@ -617,15 +617,15 @@ encodeSchema requestedFiles allFiles = (encRoot, nodesForEmbedding) where
             dataValues2 = [ (0, encUInt16 $ fieldNumber field)
                           , (16, encUInt16 codeOrder)
                           , (32, encUInt16 (0::Word16))  -- discriminant
+                          , (48, encUInt16 index)
                           ]
             ptrValues2 = [ (0, encText $ fieldName field)
                          , (1, encAnnotationList $ fieldAnnotations field)
-                         , (2, encStruct (DataSectionWords 1, 2) (dataValues3, ptrValues3))
+                         , (2, encStruct (DataSection32, 2) (dataValues3, ptrValues3))
                          ]
 
             -- StructNode.Field
-            dataValues3 = [ (0, encUInt32 $ offsetToInt $ fieldOffset field)
-                          , (32, encUInt16 index) ]
+            dataValues3 = [ (0, encUInt32 $ offsetToInt $ fieldOffset field) ]
             ptrValues3 = [ (0, encStruct typeSize $ encType $ fieldType field)
                          , (1, encStruct valueSize $ encValue (fieldType field) $
                                    fieldDefaultValue field)
@@ -637,10 +637,11 @@ encodeSchema requestedFiles allFiles = (encRoot, nodesForEmbedding) where
             offsetToInt (InlineCompositeOffset {}) =
                 error "Inline types not currently supported by codegen plugins."
 
-        encMember _ (codeOrder, (_, DescUnion union)) = (dataValues2, ptrValues2) where
+        encMember index (codeOrder, (_, DescUnion union)) = (dataValues2, ptrValues2) where
             dataValues2 = [ (0, encUInt16 $ unionNumber union)
                           , (16, encUInt16 codeOrder)
                           , (32, encUInt16 (1::Word16))  -- discriminant
+                          , (48, encUInt16 index)
                           ]
             ptrValues2 = [ (0, encText $ unionName union)
                          , (1, encAnnotationList $ unionAnnotations union)
