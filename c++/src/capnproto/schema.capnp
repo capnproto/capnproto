@@ -198,11 +198,6 @@ struct StructNode {
 
     ordinal @1 :UInt16;
 
-    index @7 :UInt16;
-    # The index of this member within the containing struct or union's member list.  This is
-    # redundant information, but it can be useful for the dynamic API which has methods that take
-    # a Member pointer to specify on which member to act.
-
     codeOrder @2 :UInt16;
     # Indicates where this member appeared in the code, relative to other members.
     # Code ordering may have semantic relevance -- programmers tend to place related fields

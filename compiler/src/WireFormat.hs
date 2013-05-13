@@ -591,7 +591,7 @@ encodeSchema requestedFiles allFiles = (encRoot, nodesForEmbedding) where
                      , (16, encUInt16 $ structPointerCount desc)
                      , (32, encUInt16 (fieldSizeEnum preferredListEncoding::Word16))
                      ]
-        ptrValues = [ (0, encStructList memberSize $ zipWith encMember [0::Word16 ..] $
+        ptrValues = [ (0, encStructList memberSize $ map encMember $
                               sortMembers $ structMembers desc) ]
 
         preferredListEncoding = case (structDataSize desc, structPointerCount desc) of
@@ -613,11 +613,10 @@ encodeSchema requestedFiles allFiles = (encRoot, nodesForEmbedding) where
         selectFieldOrUnion _ = Nothing
 
         memberSize = (DataSectionWords 1, 3)
-        encMember index (codeOrder, (_, DescField field)) = (dataValues2, ptrValues2) where
+        encMember (codeOrder, (_, DescField field)) = (dataValues2, ptrValues2) where
             dataValues2 = [ (0, encUInt16 $ fieldNumber field)
                           , (16, encUInt16 codeOrder)
                           , (32, encUInt16 (0::Word16))  -- discriminant
-                          , (48, encUInt16 index)
                           ]
             ptrValues2 = [ (0, encText $ fieldName field)
                          , (1, encAnnotationList $ fieldAnnotations field)
@@ -637,11 +636,10 @@ encodeSchema requestedFiles allFiles = (encRoot, nodesForEmbedding) where
             offsetToInt (InlineCompositeOffset {}) =
                 error "Inline types not currently supported by codegen plugins."
 
-        encMember index (codeOrder, (_, DescUnion union)) = (dataValues2, ptrValues2) where
+        encMember (codeOrder, (_, DescUnion union)) = (dataValues2, ptrValues2) where
             dataValues2 = [ (0, encUInt16 $ unionNumber union)
                           , (16, encUInt16 codeOrder)
                           , (32, encUInt16 (1::Word16))  -- discriminant
-                          , (48, encUInt16 index)
                           ]
             ptrValues2 = [ (0, encText $ unionName union)
                          , (1, encAnnotationList $ unionAnnotations union)
@@ -650,9 +648,9 @@ encodeSchema requestedFiles allFiles = (encRoot, nodesForEmbedding) where
 
             -- StructNode.Union
             dataValues3 = [ (0, encUInt32 $ unionTagOffset union) ]
-            ptrValues3 = [ (0, encStructList memberSize $ zipWith encMember [0..] $ sortMembers $
+            ptrValues3 = [ (0, encStructList memberSize $ map encMember $ sortMembers $
                                    unionMembers union) ]
-        encMember _ _ = error "Not a field or union?"
+        encMember _ = error "Not a field or union?"
 
     enumNodeSize = (DataSectionWords 0, 1)
     encEnumNode desc = (dataValues, ptrValues) where
