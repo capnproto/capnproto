@@ -164,6 +164,18 @@ struct TestObject {
   objectField @0 :Object;
 }
 
+struct TestOutOfOrder {
+  foo @3 :Text;
+  bar @2 :Text;
+  baz @8 :Text;
+  qux @0 :Text;
+  quux @6 :Text;
+  corge @4 :Text;
+  grault @1 :Text;
+  garply @7 :Text;
+  waldo @5 :Text;
+}
+
 struct TestUnion {
   union0 @0 union {
     # Pack union 0 under ideal conditions: there is no unused padding space prior to it.

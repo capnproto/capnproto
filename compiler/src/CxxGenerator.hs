@@ -32,9 +32,10 @@ import qualified Data.Digest.MD5 as MD5
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import qualified Data.List as List
-import Data.Maybe(catMaybes)
+import Data.Maybe(catMaybes, mapMaybe)
 import Data.Binary.IEEE754(floatToWord, doubleToWord)
 import Data.Map((!))
+import Data.Function(on)
 import Text.Printf(printf)
 import Text.Hastache
 import Text.Hastache.Context
@@ -277,9 +278,45 @@ descDependencies (DescMethod d) =
     concat $ typeDependencies (methodReturnType d) : map paramDependencies (methodParams d)
 descDependencies _ = []
 
+memberIndexes :: Int -> [(Int, Int)]
+memberIndexes unionIndex = zip (repeat unionIndex) [0..]
+
+memberTable (DescStruct desc) = let
+    -- Fields and unions of the struct.
+    topMembers = zip (memberIndexes 0) $ mapMaybe memberName
+               $ List.sortBy (compare `on` ordinal) $ structMembers desc
+
+    -- Fields of each union.
+    innerMembers = zipWith indexedUnionMembers [1..]
+                 $ List.sortBy (compare `on` unionNumber) $ structUnions desc
+
+    ordinal (DescField f) = fieldNumber f
+    ordinal (DescUnion u) = unionNumber u
+    ordinal _ = 65536  -- doesn't really matter what this is; will be filtered out later
+
+    memberName (DescField f) = Just $ fieldName f
+    memberName (DescUnion u) = Just $ unionName u
+    memberName _ = Nothing
+
+    indexedUnionMembers i u = zip (memberIndexes i) $ mapMaybe memberName
+                            $ List.sortBy (compare `on` ordinal) $ unionMembers u
+
+    in concat $ topMembers : innerMembers
+
+memberTable (DescEnum desc) = zip (memberIndexes 0) $ map enumerantName
+    $ List.sortBy (compare `on` enumerantNumber) $ enumerants desc
+memberTable (DescInterface desc) = zip (memberIndexes 0) $ map methodName
+    $ List.sortBy (compare `on` methodNumber) $ interfaceMethods desc
+memberTable _ = []
+
 outerFileContext schemaNodes = fileContext where
     schemaDepContext parent i = mkStrContext context where
         context "dependencyId" = MuVariable (printf "%016x" i :: String)
+        context s = parent s
+
+    schemaMemberByNameContext parent (ui, mi) = mkStrContext context where
+        context "memberUnionIndex" = MuVariable ui
+        context "memberIndex" = MuVariable mi
         context s = parent s
 
     schemaContext parent desc = mkStrContext context where
@@ -289,11 +326,18 @@ outerFileContext schemaNodes = fileContext where
 
         depIds = map head $ List.group $ List.sort $ descDependencies desc
 
+        membersByName = map fst $ List.sortBy (compare `on` memberByNameKey) $ memberTable desc
+        memberByNameKey ((unionIndex, _), name) = (unionIndex, name)
+
         context "schemaWordCount" = MuVariable $ div (length node + 7) 8
         context "schemaBytes" = MuVariable $ delimit ",\n    " codeLines
         context "schemaId" = MuVariable (printf "%016x" (descId desc) :: String)
+        context "schemaDependencyCount" = MuVariable $ length depIds
         context "schemaDependencies" =
             MuList $ map (schemaDepContext context) depIds
+        context "schemaMemberCount" = MuVariable $ length membersByName
+        context "schemaMembersByName" =
+            MuList $ map (schemaMemberByNameContext context) membersByName
         context s = parent s
 
     enumerantContext parent desc = mkStrContext context where

@@ -78,5 +78,42 @@ TEST(Blob, Data) {
   EXPECT_EQ(Data::Reader("az"), builder.slice(1, 3));
 }
 
+TEST(Blob, Compare) {
+  EXPECT_TRUE (Data::Reader("foo") == Data::Reader("foo"));
+  EXPECT_FALSE(Data::Reader("foo") != Data::Reader("foo"));
+  EXPECT_TRUE (Data::Reader("foo") <= Data::Reader("foo"));
+  EXPECT_TRUE (Data::Reader("foo") >= Data::Reader("foo"));
+  EXPECT_FALSE(Data::Reader("foo") <  Data::Reader("foo"));
+  EXPECT_FALSE(Data::Reader("foo") >  Data::Reader("foo"));
+
+  EXPECT_FALSE(Data::Reader("foo") == Data::Reader("bar"));
+  EXPECT_TRUE (Data::Reader("foo") != Data::Reader("bar"));
+  EXPECT_FALSE(Data::Reader("foo") <= Data::Reader("bar"));
+  EXPECT_TRUE (Data::Reader("foo") >= Data::Reader("bar"));
+  EXPECT_FALSE(Data::Reader("foo") <  Data::Reader("bar"));
+  EXPECT_TRUE (Data::Reader("foo") >  Data::Reader("bar"));
+
+  EXPECT_FALSE(Data::Reader("bar") == Data::Reader("foo"));
+  EXPECT_TRUE (Data::Reader("bar") != Data::Reader("foo"));
+  EXPECT_TRUE (Data::Reader("bar") <= Data::Reader("foo"));
+  EXPECT_FALSE(Data::Reader("bar") >= Data::Reader("foo"));
+  EXPECT_TRUE (Data::Reader("bar") <  Data::Reader("foo"));
+  EXPECT_FALSE(Data::Reader("bar") >  Data::Reader("foo"));
+
+  EXPECT_FALSE(Data::Reader("foobar") == Data::Reader("foo"));
+  EXPECT_TRUE (Data::Reader("foobar") != Data::Reader("foo"));
+  EXPECT_FALSE(Data::Reader("foobar") <= Data::Reader("foo"));
+  EXPECT_TRUE (Data::Reader("foobar") >= Data::Reader("foo"));
+  EXPECT_FALSE(Data::Reader("foobar") <  Data::Reader("foo"));
+  EXPECT_TRUE (Data::Reader("foobar") >  Data::Reader("foo"));
+
+  EXPECT_FALSE(Data::Reader("foo") == Data::Reader("foobar"));
+  EXPECT_TRUE (Data::Reader("foo") != Data::Reader("foobar"));
+  EXPECT_TRUE (Data::Reader("foo") <= Data::Reader("foobar"));
+  EXPECT_FALSE(Data::Reader("foo") >= Data::Reader("foobar"));
+  EXPECT_TRUE (Data::Reader("foo") <  Data::Reader("foobar"));
+  EXPECT_FALSE(Data::Reader("foo") >  Data::Reader("foobar"));
+}
+
 }  // namespace
 }  // namespace capnproto

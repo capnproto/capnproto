@@ -121,8 +121,29 @@ struct PointerHelpers<TrustedMessage> {
 #endif
 
 struct RawSchema {
+  // The generated code defines a constant RawSchema for every compiled declaration.
+  //
+  // This is an internal structure which could change in the future.
+
   const word* encodedNode;
+  // Encoded SchemaNode, readable via readMessageTrusted<schema::Node>(encodedNode).
+
   const RawSchema* const* dependencies;
+  // Pointers to other types on which this one depends, sorted by ID.
+  // TODO(someday):  Make this a hashtable.
+
+  struct MemberInfo {
+    uint16_t unionIndex;  // 0 = not in a union, >0 = parent union's index + 1
+    uint16_t index;       // index of the member
+  };
+
+  const MemberInfo* membersByName;
+  // Indexes of members sorted by name.  Used to implement name lookup.
+  // TODO(someday):  Make this a hashtable.
+
+  uint32_t dependencyCount;
+  uint32_t memberCount;
+  // Sizes of above tables.
 };
 
 template <typename T>

@@ -114,12 +114,8 @@ public:
   typedef Text Reads;
 
   inline Reader(): Data::Reader("", 0) {}
-  inline Reader(const char* text): Data::Reader(text, strlen(text)) {
-    CAPNPROTO_INLINE_DPRECOND(text[size()] == '\0', "Text must be NUL-terminated.");
-  }
-  inline Reader(char* text): Data::Reader(text, strlen(text)) {
-    CAPNPROTO_INLINE_DPRECOND(text[size()] == '\0', "Text must be NUL-terminated.");
-  }
+  inline Reader(const char* text): Data::Reader(text, strlen(text)) {}
+  inline Reader(char* text): Data::Reader(text, strlen(text)) {}
   inline Reader(const char* text, uint size): Data::Reader(text, size) {
     CAPNPROTO_INLINE_DPRECOND(text[size] == '\0', "Text must be NUL-terminated.");
   }
