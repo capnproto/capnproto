@@ -281,17 +281,11 @@ void DynamicUnion::Builder::setObjectDiscriminant(StructSchema::Member member) {
 
 // =======================================================================================
 
-void DynamicStruct::Reader::verifyTypeId(uint64_t id) {
-  VALIDATE_INPUT(id == schema.getProto().getId(),
-                 "Type mismatch when using DynamicStruct::Reader::as().") {
-    // Go on with bad type ID.
-  }
+void DynamicStruct::Reader::verifySchema(StructSchema expected) {
+  PRECOND(schema == expected, "Type mismatch when using DynamicStruct::Reader::as().");
 }
-void DynamicStruct::Builder::verifyTypeId(uint64_t id) {
-  VALIDATE_INPUT(id == schema.getProto().getId(),
-                 "Type mismatch when using DynamicStruct::Builder::as().") {
-    // Go on with bad type ID.
-  }
+void DynamicStruct::Builder::verifySchema(StructSchema expected) {
+  PRECOND(schema == expected, "Type mismatch when using DynamicStruct::Builder::as().");
 }
 
 DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Member member) {

@@ -267,7 +267,7 @@ private:
   inline Reader(StructSchema schema, internal::StructReader reader)
       : schema(schema), reader(reader) {}
 
-  void verifyTypeId(uint64_t id);
+  void verifySchema(StructSchema expected);
 
   static DynamicValue::Reader getImpl(internal::StructReader reader, StructSchema::Member member);
 
@@ -344,7 +344,7 @@ private:
   inline Builder(StructSchema schema, internal::StructBuilder builder)
       : schema(schema), builder(builder) {}
 
-  void verifyTypeId(uint64_t id);
+  void verifySchema(StructSchema expected);
 
   static DynamicValue::Builder getImpl(
       internal::StructBuilder builder, StructSchema::Member member);
@@ -858,14 +858,14 @@ template <typename T>
 typename T::Reader DynamicStruct::Reader::as() {
   static_assert(kind<T>() == Kind::STRUCT,
                 "DynamicStruct::Reader::as<T>() can only convert to struct types.");
-  verifyTypeId(typeId<T>());
+  verifySchema(Schema::from<T>());
   return typename T::Reader(reader);
 }
 template <typename T>
 typename T::Builder DynamicStruct::Builder::as() {
   static_assert(kind<T>() == Kind::STRUCT,
                 "DynamicStruct::Builder::as<T>() can only convert to struct types.");
-  verifyTypeId(typeId<T>());
+  verifySchema(Schema::from<T>());
   return typename T::Builder(builder);
 }
 
