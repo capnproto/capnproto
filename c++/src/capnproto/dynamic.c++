@@ -24,8 +24,6 @@
 #define CAPNPROTO_PRIVATE
 #include "dynamic.h"
 #include "logging.h"
-#include <unordered_map>
-#include <unordered_set>
 
 namespace capnproto {
 
@@ -122,7 +120,7 @@ uint16_t DynamicEnum::asImpl(uint64_t requestedTypeId) {
 
 // =======================================================================================
 
-DynamicStruct::Reader DynamicObject::Reader::as(StructSchema schema) {
+DynamicStruct::Reader DynamicObject::as(StructSchema schema) {
   if (reader.kind == internal::ObjectKind::NULL_POINTER) {
     return DynamicStruct::Reader(schema, internal::StructReader());
   }
@@ -131,17 +129,8 @@ DynamicStruct::Reader DynamicObject::Reader::as(StructSchema schema) {
   }
   return DynamicStruct::Reader(schema, reader.structReader);
 }
-DynamicStruct::Builder DynamicObject::Builder::as(StructSchema schema) {
-  if (builder.kind == internal::ObjectKind::NULL_POINTER) {
-    return DynamicStruct::Builder(schema, internal::StructBuilder());
-  }
-  VALIDATE_INPUT(builder.kind == internal::ObjectKind::STRUCT, "Object is not a struct.") {
-    return DynamicStruct::Builder(schema, internal::StructBuilder());
-  }
-  return DynamicStruct::Builder(schema, builder.structBuilder);
-}
 
-DynamicList::Reader DynamicObject::Reader::as(ListSchema schema) {
+DynamicList::Reader DynamicObject::as(ListSchema schema) {
   if (reader.kind == internal::ObjectKind::NULL_POINTER) {
     return DynamicList::Reader(schema, internal::ListReader());
   }
@@ -150,21 +139,12 @@ DynamicList::Reader DynamicObject::Reader::as(ListSchema schema) {
   }
   return DynamicList::Reader(schema, reader.listReader);
 }
-DynamicList::Builder DynamicObject::Builder::as(ListSchema schema) {
-  if (builder.kind == internal::ObjectKind::NULL_POINTER) {
-    return DynamicList::Builder(schema, internal::ListBuilder());
-  }
-  VALIDATE_INPUT(builder.kind == internal::ObjectKind::LIST, "Object is not a list.") {
-    return DynamicList::Builder(schema, internal::ListBuilder());
-  }
-  return DynamicList::Builder(schema, builder.listBuilder);
-}
 
 // =======================================================================================
 
 Maybe<StructSchema::Member> DynamicUnion::Reader::which() {
   auto members = schema.getMembers();
-  uint16_t discrim = reader.getDataField<uint32_t>(
+  uint16_t discrim = reader.getDataField<uint16_t>(
       schema.getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS);
 
   if (discrim < members.size()) {
@@ -175,7 +155,7 @@ Maybe<StructSchema::Member> DynamicUnion::Reader::which() {
 }
 Maybe<StructSchema::Member> DynamicUnion::Builder::which() {
   auto members = schema.getMembers();
-  uint16_t discrim = builder.getDataField<uint32_t>(
+  uint16_t discrim = builder.getDataField<uint16_t>(
       schema.getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS);
 
   if (discrim < members.size()) {
@@ -186,50 +166,117 @@ Maybe<StructSchema::Member> DynamicUnion::Builder::which() {
 }
 
 DynamicValue::Reader DynamicUnion::Reader::get() {
-  auto w = which();
-  RECOVERABLE_PRECOND(w != nullptr, "Can't get() unknown union value.") {
-    return DynamicValue::Reader();
-  }
-  CHECK(w->getProto().getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
-        "Unsupported union member type.");
-  return DynamicValue::Reader(DynamicStruct::Reader::getImpl(reader, *w));
+  return DynamicValue::Reader(DynamicStruct::Reader::getImpl(reader, checkIsKnown()));
 }
 
 DynamicValue::Builder DynamicUnion::Builder::get() {
-  auto w = which();
-  RECOVERABLE_PRECOND(w != nullptr, "Can't get() unknown union value.") {
-    return DynamicValue::Builder();
-  }
-  CHECK(w->getProto().getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
-        "Unsupported union member type.");
-  return DynamicValue::Builder(DynamicStruct::Builder::getImpl(builder, *w));
+  return DynamicValue::Builder(DynamicStruct::Builder::getImpl(builder, checkIsKnown()));
 }
 
 void DynamicUnion::Builder::set(StructSchema::Member member, DynamicValue::Reader value) {
-  auto containingUnion = member.getContainingUnion();
-  RECOVERABLE_PRECOND(containingUnion != nullptr && *containingUnion == schema,
-                      "`member` is not a member of this union.") {
-    return;
-  }
-
-  builder.setDataField<uint16_t>(
-      schema.getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS,
-      member.getIndex());
+  setDiscriminant(member);
   DynamicStruct::Builder::setImpl(builder, member, value);
 }
 
 DynamicValue::Builder DynamicUnion::Builder::init(StructSchema::Member member) {
-  builder.setDataField<uint16_t>(
-      schema.getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS,
-      member.getIndex());
+  setDiscriminant(member);
   return DynamicStruct::Builder::initImpl(builder, member);
 }
 
 DynamicValue::Builder DynamicUnion::Builder::init(StructSchema::Member member, uint size) {
+  setDiscriminant(member);
+  return DynamicStruct::Builder::initImpl(builder, member, size);
+}
+
+DynamicStruct::Builder DynamicUnion::Builder::getObject(StructSchema schema) {
+  return DynamicStruct::Builder::getObjectImpl(builder, checkIsObject(), schema);
+}
+DynamicList::Builder DynamicUnion::Builder::getObject(ListSchema schema) {
+  return DynamicStruct::Builder::getObjectImpl(builder, checkIsObject(), schema);
+}
+Text::Builder DynamicUnion::Builder::getObjectAsText() {
+  return DynamicStruct::Builder::getObjectAsTextImpl(builder, checkIsObject());
+}
+Data::Builder DynamicUnion::Builder::getObjectAsData() {
+  return DynamicStruct::Builder::getObjectAsDataImpl(builder, checkIsObject());
+}
+DynamicStruct::Builder DynamicUnion::Builder::initObject(
+    StructSchema::Member member, StructSchema type) {
+  setObjectDiscriminant(member);
+  return DynamicStruct::Builder::initFieldImpl(builder, member, type);
+}
+DynamicList::Builder DynamicUnion::Builder::initObject(
+    StructSchema::Member member, ListSchema type, uint size) {
+  setObjectDiscriminant(member);
+  return DynamicStruct::Builder::initFieldImpl(builder, member, type, size);
+}
+Text::Builder DynamicUnion::Builder::initObjectAsText(StructSchema::Member member, uint size) {
+  setObjectDiscriminant(member);
+  return DynamicStruct::Builder::initFieldAsTextImpl(builder, member, size);
+}
+Data::Builder DynamicUnion::Builder::initObjectAsData(StructSchema::Member member, uint size) {
+  setObjectDiscriminant(member);
+  return DynamicStruct::Builder::initFieldAsDataImpl(builder, member, size);
+}
+
+void DynamicUnion::Builder::set(Text::Reader name, DynamicValue::Reader value) {
+  set(schema.getMemberByName(name), value);
+}
+DynamicValue::Builder DynamicUnion::Builder::init(Text::Reader name) {
+  return init(schema.getMemberByName(name));
+}
+DynamicValue::Builder DynamicUnion::Builder::init(Text::Reader name, uint size) {
+  return init(schema.getMemberByName(name), size);
+}
+DynamicStruct::Builder DynamicUnion::Builder::initObject(Text::Reader name, StructSchema type) {
+  return initObject(schema.getMemberByName(name), type);
+}
+DynamicList::Builder DynamicUnion::Builder::initObject(
+    Text::Reader name, ListSchema type, uint size) {
+  return initObject(schema.getMemberByName(name), type, size);
+}
+Text::Builder DynamicUnion::Builder::initObjectAsText(Text::Reader name, uint size) {
+  return initObjectAsText(schema.getMemberByName(name), size);
+}
+Data::Builder DynamicUnion::Builder::initObjectAsData(Text::Reader name, uint size) {
+  return initObjectAsData(schema.getMemberByName(name), size);
+}
+
+StructSchema::Member DynamicUnion::Reader::checkIsKnown() {
+  auto w = which();
+  PRECOND(w != nullptr, "Can't get() unknown union value.");
+  CHECK(w->getProto().getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
+        "Unsupported union member type.");
+  return *w;
+}
+StructSchema::Member DynamicUnion::Builder::checkIsKnown() {
+  auto w = which();
+  PRECOND(w != nullptr, "Can't get() unknown union value.");
+  CHECK(w->getProto().getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
+        "Unsupported union member type.");
+  return *w;
+}
+
+StructSchema::Member DynamicUnion::Builder::checkIsObject() {
+  auto result = checkIsKnown();
+  PRECOND(result.getProto().getBody().getFieldMember().getType().getBody().which() ==
+          schema::Type::Body::OBJECT_TYPE, "Expected Object.");
+  return result;
+}
+
+void DynamicUnion::Builder::setDiscriminant(StructSchema::Member member) {
+  auto containingUnion = member.getContainingUnion();
+  PRECOND(containingUnion != nullptr && *containingUnion == schema,
+          "`member` is not a member of this union.");
   builder.setDataField<uint16_t>(
       schema.getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS,
       member.getIndex());
-  return DynamicStruct::Builder::initImpl(builder, member, size);
+}
+
+void DynamicUnion::Builder::setObjectDiscriminant(StructSchema::Member member) {
+  PRECOND(member.getProto().getBody().getFieldMember().getType().getBody().which() ==
+          schema::Type::Body::OBJECT_TYPE, "Expected Object.");
+  setDiscriminant(member);
 }
 
 // =======================================================================================
@@ -268,19 +315,94 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Member member, 
           "`member` is not a member of this struct.");
   return initImpl(builder, member, size);
 }
-DynamicStruct::Builder DynamicStruct::Builder::initObject(
+
+DynamicStruct::Builder DynamicStruct::Builder::getObject(
     StructSchema::Member member, StructSchema type) {
   PRECOND(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_PRECOND("Can't init() a union.  get() it first and then init() one of its members.");
+      FAIL_PRECOND("Expected an Object.");
       return DynamicStruct::Builder();
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getProto().getBody().getFieldMember();
       PRECOND(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
-              "Expected an Object.  (To dynamically initialize a non-Object field, do not "
-              "pass an element type to initObjectField().)");
+              "Expected an Object.");
+      return getObjectImpl(builder, member, type);
+    }
+  }
+
+  FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
+  return DynamicStruct::Builder();
+}
+DynamicList::Builder DynamicStruct::Builder::getObject(
+    StructSchema::Member member, ListSchema type) {
+  PRECOND(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  switch (member.getProto().getBody().which()) {
+    case schema::StructNode::Member::Body::UNION_MEMBER:
+      FAIL_PRECOND("Expected an Object.");
+      return DynamicList::Builder();
+
+    case schema::StructNode::Member::Body::FIELD_MEMBER: {
+      auto field = member.getProto().getBody().getFieldMember();
+      PRECOND(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
+              "Expected an Object.");
+      return getObjectImpl(builder, member, type);
+    }
+  }
+
+  FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
+  return DynamicList::Builder();
+}
+Text::Builder DynamicStruct::Builder::getObjectAsText(StructSchema::Member member) {
+  PRECOND(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  switch (member.getProto().getBody().which()) {
+    case schema::StructNode::Member::Body::UNION_MEMBER:
+      FAIL_PRECOND("Expected an Object.");
+      return Text::Builder();
+
+    case schema::StructNode::Member::Body::FIELD_MEMBER: {
+      auto field = member.getProto().getBody().getFieldMember();
+      PRECOND(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
+              "Expected an Object.");
+      return getObjectAsDataImpl(builder, member);
+    }
+  }
+
+  FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
+  return Text::Builder();
+}
+Data::Builder DynamicStruct::Builder::getObjectAsData(StructSchema::Member member) {
+  PRECOND(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  switch (member.getProto().getBody().which()) {
+    case schema::StructNode::Member::Body::UNION_MEMBER:
+      FAIL_PRECOND("Expected an Object.");
+      return Data::Builder();
+
+    case schema::StructNode::Member::Body::FIELD_MEMBER: {
+      auto field = member.getProto().getBody().getFieldMember();
+      PRECOND(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
+              "Expected an Object.");
+      return getObjectAsDataImpl(builder, member);
+    }
+  }
+
+  FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
+  return Data::Builder();
+}
+
+DynamicStruct::Builder DynamicStruct::Builder::initObject(
+    StructSchema::Member member, StructSchema type) {
+  PRECOND(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  switch (member.getProto().getBody().which()) {
+    case schema::StructNode::Member::Body::UNION_MEMBER:
+      FAIL_PRECOND("Expected an Object.");
+      return DynamicStruct::Builder();
+
+    case schema::StructNode::Member::Body::FIELD_MEMBER: {
+      auto field = member.getProto().getBody().getFieldMember();
+      PRECOND(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
+              "Expected an Object.");
       return initFieldImpl(builder, member, type);
     }
   }
@@ -293,14 +415,13 @@ DynamicList::Builder DynamicStruct::Builder::initObject(
   PRECOND(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_PRECOND("Can't init() a union.  get() it first and then init() one of its members.");
+      FAIL_PRECOND("Expected an Object.");
       return DynamicList::Builder();
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getProto().getBody().getFieldMember();
       PRECOND(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
-              "Expected an Object.  (To dynamically initialize a non-Object field, do not "
-              "pass a struct schema to initObjectField().)");
+              "Expected an Object.");
       return initFieldImpl(builder, member, type, size);
     }
   }
@@ -312,14 +433,13 @@ Text::Builder DynamicStruct::Builder::initObjectAsText(StructSchema::Member memb
   PRECOND(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_PRECOND("Can't init() a union.  get() it first and then init() one of its members.");
+      FAIL_PRECOND("Expected an Object.");
       return Text::Builder();
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getProto().getBody().getFieldMember();
       PRECOND(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
-              "Expected an Object.  (To dynamically initialize a non-Object field, do not "
-              "pass a struct schema to initObjectField().)");
+              "Expected an Object.");
       return initFieldAsDataImpl(builder, member, size);
     }
   }
@@ -331,14 +451,13 @@ Data::Builder DynamicStruct::Builder::initObjectAsData(StructSchema::Member memb
   PRECOND(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_PRECOND("Can't init() a union.  get() it first and then init() one of its members.");
+      FAIL_PRECOND("Expected an Object.");
       return Data::Builder();
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getProto().getBody().getFieldMember();
       PRECOND(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
-              "Expected an Object.  (To dynamically initialize a non-Object field, do not "
-              "pass a struct schema to initObjectField().)");
+              "Expected an Object.");
       return initFieldAsDataImpl(builder, member, size);
     }
   }
@@ -348,73 +467,50 @@ Data::Builder DynamicStruct::Builder::initObjectAsData(StructSchema::Member memb
 }
 
 DynamicValue::Reader DynamicStruct::Reader::get(Text::Reader name) {
-  auto member = schema.findMemberByName(name);
-  RECOVERABLE_PRECOND(member != nullptr, "struct has no such member", name) {
-    return DynamicValue::Reader();
-  }
-  return getImpl(reader, *member);
+  return getImpl(reader, schema.getMemberByName(name));
 }
 DynamicValue::Builder DynamicStruct::Builder::get(Text::Reader name) {
-  auto member = schema.findMemberByName(name);
-  RECOVERABLE_PRECOND(member != nullptr, "struct has no such member", name) {
-    return DynamicValue::Builder();
-  }
-  return getImpl(builder, *member);
+  return getImpl(builder, schema.getMemberByName(name));
 }
 void DynamicStruct::Builder::set(Text::Reader name, DynamicValue::Reader value) {
-  auto member = schema.findMemberByName(name);
-  RECOVERABLE_PRECOND(member != nullptr, "struct has no such member", name) {
-    return;
-  }
-  return setImpl(builder, *member, value);
+  setImpl(builder, schema.getMemberByName(name), value);
 }
 void DynamicStruct::Builder::set(Text::Reader name,
                                  std::initializer_list<DynamicValue::Reader> value) {
   init(name, value.size()).as<DynamicList>().copyFrom(value);
 }
 DynamicValue::Builder DynamicStruct::Builder::init(Text::Reader name) {
-  auto member = schema.findMemberByName(name);
-  RECOVERABLE_PRECOND(member != nullptr, "struct has no such member", name) {
-    return DynamicValue::Builder();
-  }
-  return initImpl(builder, *member);
+  return initImpl(builder, schema.getMemberByName(name));
 }
 DynamicValue::Builder DynamicStruct::Builder::init(Text::Reader name, uint size) {
-  auto member = schema.findMemberByName(name);
-  RECOVERABLE_PRECOND(member != nullptr, "struct has no such member", name) {
-    return DynamicValue::Builder();
-  }
-  return initImpl(builder, *member, size);
+  return initImpl(builder, schema.getMemberByName(name), size);
+}
+DynamicStruct::Builder DynamicStruct::Builder::getObject(
+    Text::Reader name, StructSchema type) {
+  return getObject(schema.getMemberByName(name), type);
+}
+DynamicList::Builder DynamicStruct::Builder::getObject(Text::Reader name, ListSchema type) {
+  return getObject(schema.getMemberByName(name), type);
+}
+Text::Builder DynamicStruct::Builder::getObjectAsText(Text::Reader name) {
+  return getObjectAsText(schema.getMemberByName(name));
+}
+Data::Builder DynamicStruct::Builder::getObjectAsData(Text::Reader name) {
+  return getObjectAsText(schema.getMemberByName(name));
 }
 DynamicStruct::Builder DynamicStruct::Builder::initObject(
     Text::Reader name, StructSchema type) {
-  auto member = schema.findMemberByName(name);
-  RECOVERABLE_PRECOND(member != nullptr, "struct has no such member", name) {
-    return DynamicStruct::Builder();
-  }
-  return initObject(*member, type);
+  return initObject(schema.getMemberByName(name), type);
 }
 DynamicList::Builder DynamicStruct::Builder::initObject(
     Text::Reader name, ListSchema type, uint size) {
-  auto member = schema.findMemberByName(name);
-  RECOVERABLE_PRECOND(member != nullptr, "struct has no such member", name) {
-    return DynamicList::Builder();
-  }
-  return initObject(*member, type, size);
+  return initObject(schema.getMemberByName(name), type, size);
 }
 Text::Builder DynamicStruct::Builder::initObjectAsText(Text::Reader name, uint size) {
-  auto member = schema.findMemberByName(name);
-  RECOVERABLE_PRECOND(member != nullptr, "struct has no such member", name) {
-    return Text::Builder();
-  }
-  return initObjectAsText(*member, size);
+  return initObjectAsText(schema.getMemberByName(name), size);
 }
 Data::Builder DynamicStruct::Builder::initObjectAsData(Text::Reader name, uint size) {
-  auto member = schema.findMemberByName(name);
-  RECOVERABLE_PRECOND(member != nullptr, "struct has no such member", name) {
-    return Data::Builder();
-  }
-  return initObjectAsText(*member, size);
+  return initObjectAsText(schema.getMemberByName(name), size);
 }
 
 void DynamicStruct::Builder::copyFrom(Reader other) {
@@ -497,7 +593,7 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
         }
 
         case schema::Type::Body::OBJECT_TYPE: {
-          return DynamicValue::Reader(DynamicObject::Reader(
+          return DynamicValue::Reader(DynamicObject(
               reader.getObjectField(field.getOffset() * REFERENCES,
                                     dval.getObjectValue<internal::TrustedMessage>())));
         }
@@ -573,13 +669,11 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
                                          typedDval.data(), typedDval.size() * BYTES));
         }
 
-        case schema::Type::Body::LIST_TYPE: {
-          auto elementType = type.getListType();
+        case schema::Type::Body::LIST_TYPE:
           return DynamicValue::Builder(DynamicList::Builder(
-              ListSchema::of(elementType, member.getContainingStruct()),
+              ListSchema::of(type.getListType(), member.getContainingStruct()),
               builder.getListField(field.getOffset() * REFERENCES,
                                    dval.getListValue<internal::TrustedMessage>())));
-        }
 
         case schema::Type::Body::STRUCT_TYPE: {
           auto structSchema =
@@ -593,9 +687,10 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
         }
 
         case schema::Type::Body::OBJECT_TYPE: {
-          return DynamicValue::Builder(DynamicObject::Builder(
-              builder.getObjectField(field.getOffset() * REFERENCES,
-                                     dval.getObjectValue<internal::TrustedMessage>())));
+          return DynamicValue::Builder(DynamicObject(
+              builder.asReader().getObjectField(
+                  field.getOffset() * REFERENCES,
+                  dval.getObjectValue<internal::TrustedMessage>())));
         }
 
         case schema::Type::Body::INTERFACE_TYPE:
@@ -610,6 +705,30 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
 
   FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
   return DynamicValue::Builder();
+}
+DynamicStruct::Builder DynamicStruct::Builder::getObjectImpl(
+    internal::StructBuilder builder, StructSchema::Member field, StructSchema type) {
+  return DynamicStruct::Builder(type,
+      builder.getStructField(
+          field.getProto().getBody().getFieldMember().getOffset() * REFERENCES,
+          structSizeFromSchema(type), nullptr));
+}
+DynamicList::Builder DynamicStruct::Builder::getObjectImpl(
+    internal::StructBuilder builder, StructSchema::Member field, ListSchema type) {
+  return DynamicList::Builder(type,
+      builder.getListField(
+          field.getProto().getBody().getFieldMember().getOffset() * REFERENCES,
+          nullptr));
+}
+Text::Builder DynamicStruct::Builder::getObjectAsTextImpl(
+    internal::StructBuilder builder, StructSchema::Member field) {
+  return builder.getBlobField<Text>(
+      field.getProto().getBody().getFieldMember().getOffset() * REFERENCES, nullptr, 0 * BYTES);
+}
+Data::Builder DynamicStruct::Builder::getObjectAsDataImpl(
+    internal::StructBuilder builder, StructSchema::Member field) {
+  return builder.getBlobField<Data>(
+      field.getProto().getBody().getFieldMember().getOffset() * REFERENCES, nullptr, 0 * BYTES);
 }
 
 void DynamicStruct::Builder::setImpl(
@@ -841,7 +960,7 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) {
           schema.getEnumElementType(), reader.getDataElement<uint16_t>(index * ELEMENTS)));
 
     case schema::Type::Body::OBJECT_TYPE:
-      return DynamicValue::Reader(DynamicObject::Reader(
+      return DynamicValue::Reader(DynamicObject(
           reader.getObjectElement(index * ELEMENTS)));
 
     case schema::Type::Body::INTERFACE_TYPE:
@@ -1158,7 +1277,6 @@ BuilderFor<typeName> DynamicValue::Builder::AsImpl<typeName>::apply(Builder buil
 HANDLE_TYPE(bool, BOOL, bool)
 
 HANDLE_TYPE(text, TEXT, Text)
-HANDLE_TYPE(data, DATA, Data)
 HANDLE_TYPE(list, LIST, DynamicList)
 HANDLE_TYPE(struct, STRUCT, DynamicStruct)
 HANDLE_TYPE(enum, ENUM, DynamicEnum)
@@ -1166,6 +1284,30 @@ HANDLE_TYPE(object, OBJECT, DynamicObject)
 HANDLE_TYPE(union, UNION, DynamicUnion)
 
 #undef HANDLE_TYPE
+
+Data::Reader DynamicValue::Reader::AsImpl<Data>::apply(Reader reader) {
+  if (reader.type == TEXT) {
+    // Implicitly convert from text.
+    return reader.textValue;
+  }
+  VALIDATE_INPUT(reader.type == DATA,
+      "Type mismatch when using DynamicValue::Reader::as().") {
+    return Data::Reader();
+  }
+  return reader.dataValue;
+}
+Data::Builder DynamicValue::Builder::AsImpl<Data>::apply(Builder builder) {
+  if (builder.type == TEXT) {
+    // Implicitly convert from text.
+    return builder.textValue;
+  }
+  VALIDATE_INPUT(builder.type == DATA,
+      "Type mismatch when using DynamicValue::Builder::as().") {
+    return Data::Builder();
+  }
+  return builder.dataValue;
+}
+
 
 // As in the header, HANDLE_TYPE(void, VOID, Void) crashes GCC 4.7.
 Void DynamicValue::Reader::AsImpl<Void>::apply(Reader reader) {

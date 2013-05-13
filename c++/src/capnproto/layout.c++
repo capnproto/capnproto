@@ -427,7 +427,8 @@ struct WireHelpers {
     word* ptr;
 
     if (ref->isNull()) {
-      if (defaultValue == nullptr) {
+      if (defaultValue == nullptr ||
+          reinterpret_cast<const WireReference*>(defaultValue)->isNull()) {
         ptr = allocate(ref, segment, size.total(), WireReference::STRUCT);
         ref->structRef.set(size);
       } else {
@@ -508,7 +509,8 @@ struct WireHelpers {
     word* ptr;
 
     if (ref->isNull()) {
-      if (defaultValue == nullptr) {
+      if (defaultValue == nullptr ||
+          reinterpret_cast<const WireReference*>(defaultValue)->isNull()) {
         return ListBuilder();
       }
       ptr = copyMessage(segment, ref, defaultRef);
@@ -619,7 +621,8 @@ struct WireHelpers {
     word* ptr;
 
     if (ref->isNull()) {
-      if (defaultValue == nullptr) {
+      if (defaultValue == nullptr ||
+          reinterpret_cast<const WireReference*>(defaultValue)->isNull()) {
         return ObjectBuilder();
       } else {
         ptr = copyMessage(segment, ref, reinterpret_cast<const WireReference*>(defaultValue));
@@ -668,7 +671,8 @@ struct WireHelpers {
 
     if (ref == nullptr || ref->isNull()) {
     useDefault:
-      if (defaultValue == nullptr) {
+      if (defaultValue == nullptr ||
+          reinterpret_cast<const WireReference*>(defaultValue)->isNull()) {
         return StructReader(nullptr, nullptr, nullptr, 0 * BITS, 0 * REFERENCES, 0 * BITS,
                             std::numeric_limits<int>::max());
       }
@@ -714,7 +718,8 @@ struct WireHelpers {
     const word* ptr;
     if (ref == nullptr || ref->isNull()) {
     useDefault:
-      if (defaultValue == nullptr) {
+      if (defaultValue == nullptr ||
+          reinterpret_cast<const WireReference*>(defaultValue)->isNull()) {
         return ListReader();
       }
       segment = nullptr;
@@ -874,7 +879,8 @@ struct WireHelpers {
       const void* defaultValue, ByteCount defaultSize)) {
     if (ref == nullptr || ref->isNull()) {
     useDefault:
-      if (defaultValue == nullptr) {
+      if (defaultValue == nullptr ||
+          reinterpret_cast<const WireReference*>(defaultValue)->isNull()) {
         defaultValue = "";
       }
       return Text::Reader(reinterpret_cast<const char*>(defaultValue), defaultSize / BYTES);
@@ -973,7 +979,8 @@ struct WireHelpers {
     const word* ptr;
     if (ref == nullptr || ref->isNull()) {
     useDefault:
-      if (defaultValue == nullptr) {
+      if (defaultValue == nullptr ||
+          reinterpret_cast<const WireReference*>(defaultValue)->isNull()) {
         return ObjectReader();
       }
       segment = nullptr;

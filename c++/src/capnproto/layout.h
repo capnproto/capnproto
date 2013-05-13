@@ -647,7 +647,7 @@ struct ObjectBuilder {
   ObjectBuilder(): kind(ObjectKind::NULL_POINTER), structBuilder() {}
   ObjectBuilder(StructBuilder structBuilder)
       : kind(ObjectKind::STRUCT), structBuilder(structBuilder) {}
-  ObjectBuilder(ListBuilder listBuilderBuilder)
+  ObjectBuilder(ListBuilder listBuilder)
       : kind(ObjectKind::LIST), listBuilder(listBuilder) {}
 };
 

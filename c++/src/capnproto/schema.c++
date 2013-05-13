@@ -122,6 +122,12 @@ Maybe<StructSchema::Member> StructSchema::findMemberByName(Text::Reader name) co
   return findSchemaMemberByName(raw, name, 0, getMembers());
 }
 
+StructSchema::Member StructSchema::getMemberByName(Text::Reader name) const {
+  Maybe<StructSchema::Member> member = findMemberByName(name);
+  PRECOND(member != nullptr, "struct has no such member", name);
+  return *member;
+}
+
 Maybe<StructSchema::Union> StructSchema::Member::getContainingUnion() const {
   if (unionIndex == 0) return nullptr;
   return parent.getMembers()[unionIndex - 1].asUnion();
@@ -142,6 +148,12 @@ Maybe<StructSchema::Member> StructSchema::Union::findMemberByName(Text::Reader n
   return findSchemaMemberByName(parent.raw, name, index + 1, getMembers());
 }
 
+StructSchema::Member StructSchema::Union::getMemberByName(Text::Reader name) const {
+  Maybe<StructSchema::Member> member = findMemberByName(name);
+  PRECOND(member != nullptr, "struct has no such member", name);
+  return *member;
+}
+
 // -------------------------------------------------------------------
 
 EnumSchema::EnumerantList EnumSchema::getEnumerants() const {
@@ -152,6 +164,12 @@ Maybe<EnumSchema::Enumerant> EnumSchema::findEnumerantByName(Text::Reader name) 
   return findSchemaMemberByName(raw, name, 0, getEnumerants());
 }
 
+EnumSchema::Enumerant EnumSchema::getEnumerantByName(Text::Reader name) const {
+  Maybe<EnumSchema::Enumerant> enumerant = findEnumerantByName(name);
+  PRECOND(enumerant != nullptr, "enum has no such enumerant", name);
+  return *enumerant;
+}
+
 // -------------------------------------------------------------------
 
 InterfaceSchema::MethodList InterfaceSchema::getMethods() const {
@@ -160,6 +178,12 @@ InterfaceSchema::MethodList InterfaceSchema::getMethods() const {
 
 Maybe<InterfaceSchema::Method> InterfaceSchema::findMethodByName(Text::Reader name) const {
   return findSchemaMemberByName(raw, name, 0, getMethods());
+}
+
+InterfaceSchema::Method InterfaceSchema::getMethodByName(Text::Reader name) const {
+  Maybe<InterfaceSchema::Method> method = findMethodByName(name);
+  PRECOND(method != nullptr, "interface has no such method", name);
+  return *method;
 }
 
 // =======================================================================================

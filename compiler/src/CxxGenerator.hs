@@ -498,7 +498,7 @@ outerFileContext schemaNodes = fileContext where
             DescEnum d -> muJust $ enumContext context d
             _ -> muNull
         context "typeSchema" = case desc of
-            DescUnion u -> muNull
+            DescUnion _ -> muNull
             _ -> muJust $ schemaContext context desc
         context s = parent s
 

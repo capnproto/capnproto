@@ -523,7 +523,7 @@ encodeSchema requestedFiles allFiles = (encRoot, nodesForEmbedding) where
             BuiltinType BuiltinFloat64 -> 11
             BuiltinType BuiltinText -> 12
             BuiltinType BuiltinData -> 13
-            BuiltinType BuiltinObject -> 19
+            BuiltinType BuiltinObject -> 18
             ListType _ -> 14
             EnumType _ -> 15
             StructType _ -> 16

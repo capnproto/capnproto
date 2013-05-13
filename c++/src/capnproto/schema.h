@@ -100,7 +100,11 @@ public:
   class MemberList;
 
   MemberList getMembers() const;
+
   Maybe<Member> findMemberByName(Text::Reader name) const;
+
+  Member getMemberByName(Text::Reader name) const;
+  // Like findMemberByName() but throws an exception on failure.
 
 private:
   StructSchema(const internal::RawSchema* raw): Schema(raw) {}
@@ -148,7 +152,11 @@ public:
   Union() = default;
 
   MemberList getMembers() const;
+
   Maybe<Member> findMemberByName(Text::Reader name) const;
+
+  Member getMemberByName(Text::Reader name) const;
+  // Like findMemberByName() but throws an exception on failure.
 
 private:
   inline Union(const Member& base): Member(base) {}
@@ -187,7 +195,11 @@ public:
   class EnumerantList;
 
   EnumerantList getEnumerants() const;
+
   Maybe<Enumerant> findEnumerantByName(Text::Reader name) const;
+
+  Enumerant getEnumerantByName(Text::Reader name) const;
+  // Like findEnumerantByName() but throws an exception on failure.
 
 private:
   EnumSchema(const internal::RawSchema* raw): Schema(raw) {}
@@ -250,7 +262,11 @@ public:
   class MethodList;
 
   MethodList getMethods() const;
+
   Maybe<Method> findMethodByName(Text::Reader name) const;
+
+  Method getMethodByName(Text::Reader name) const;
+  // Like findMethodByName() but throws an exception on failure.
 
 private:
   InterfaceSchema(const internal::RawSchema* raw): Schema(raw) {}

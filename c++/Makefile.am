@@ -49,6 +49,8 @@ includecapnp_HEADERS =                                         \
   src/capnproto/layout.h                                       \
   src/capnproto/list.h                                         \
   src/capnproto/message.h                                      \
+  src/capnproto/schema.h                                       \
+  src/capnproto/dynamic.h                                      \
   src/capnproto/io.h                                           \
   src/capnproto/serialize.h                                    \
   src/capnproto/serialize-packed.h                             \
@@ -73,6 +75,8 @@ libcapnproto_a_SOURCES=                                        \
   src/capnproto/layout.c++                                     \
   src/capnproto/list.c++                                       \
   src/capnproto/message.c++                                    \
+  src/capnproto/schema.c++                                     \
+  src/capnproto/dynamic.c++                                    \
   src/capnproto/io.c++                                         \
   src/capnproto/serialize.c++                                  \
   src/capnproto/serialize-packed.c++
@@ -117,6 +121,8 @@ capnproto_test_SOURCES =                                       \
   src/capnproto/logging-test.c++                               \
   src/capnproto/layout-test.c++                                \
   src/capnproto/message-test.c++                               \
+  src/capnproto/schema-test.c++                                \
+  src/capnproto/dynamic-test.c++                               \
   src/capnproto/encoding-test.c++                              \
   src/capnproto/serialize-test.c++                             \
   src/capnproto/serialize-packed-test.c++                      \
