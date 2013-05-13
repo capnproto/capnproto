@@ -99,7 +99,7 @@ public:
   class Union;
   class MemberList;
 
-  MemberList members() const;
+  MemberList getMembers() const;
   Maybe<Member> findMemberByName(Text::Reader name) const;
 
 private:
@@ -147,7 +147,7 @@ class StructSchema::Union: public Member {
 public:
   Union() = default;
 
-  MemberList members() const;
+  MemberList getMembers() const;
   Maybe<Member> findMemberByName(Text::Reader name) const;
 
 private:
@@ -181,10 +181,12 @@ private:
 
 class EnumSchema: public Schema {
 public:
+  EnumSchema() = default;
+
   class Enumerant;
   class EnumerantList;
 
-  EnumerantList enumerants() const;
+  EnumerantList getEnumerants() const;
   Maybe<Enumerant> findEnumerantByName(Text::Reader name) const;
 
 private:
@@ -242,10 +244,12 @@ private:
 
 class InterfaceSchema: public Schema {
 public:
+  InterfaceSchema() = default;
+
   class Method;
   class MethodList;
 
-  MethodList methods() const;
+  MethodList getMethods() const;
   Maybe<Method> findMethodByName(Text::Reader name) const;
 
 private:
@@ -332,6 +336,9 @@ public:
   // Get the schema for complex element types.  Each of these throws an exception if the element
   // type is not of the requested kind.
 
+  inline bool operator==(const ListSchema& other) const;
+  inline bool operator!=(const ListSchema& other) const { return !(*this == other); }
+
 private:
   schema::Type::Body::Which elementType;
   uint8_t nestingDepth;  // 0 for T, 1 for List(T), 2 for List(List(T)), ...
@@ -398,6 +405,11 @@ inline ListSchema ListSchema::of(ListSchema elementType) {
 
 inline schema::Type::Body::Which ListSchema::whichElementType() const {
   return nestingDepth == 0 ? elementType : schema::Type::Body::LIST_TYPE;
+}
+
+inline bool ListSchema::operator==(const ListSchema& other) const {
+  return elementType == other.elementType && nestingDepth == other.nestingDepth &&
+      elementSchema == other.elementSchema;
 }
 
 template <typename T>

@@ -67,9 +67,9 @@ TEST(Schema, Structs) {
   EXPECT_ANY_THROW(schema.asEnum());
   EXPECT_ANY_THROW(schema.asInterface());
 
-  ASSERT_EQ(schema.members().size(),
+  ASSERT_EQ(schema.getMembers().size(),
             schema.getProto().getBody().getStructNode().getMembers().size());
-  StructSchema::Member member = schema.members()[0];
+  StructSchema::Member member = schema.getMembers()[0];
   EXPECT_EQ("voidField", member.getProto().getName());
   EXPECT_TRUE(member.getContainingStruct() == schema);
   EXPECT_TRUE(member.getContainingUnion() == nullptr);
@@ -79,7 +79,7 @@ TEST(Schema, Structs) {
   Maybe<StructSchema::Member> lookup = schema.findMemberByName("voidField");
   ASSERT_TRUE(lookup != nullptr);
   EXPECT_TRUE(*lookup == member);
-  EXPECT_TRUE(*lookup != schema.members()[1]);
+  EXPECT_TRUE(*lookup != schema.getMembers()[1]);
 
   EXPECT_TRUE(schema.findMemberByName("noSuchField") == nullptr);
 
@@ -95,15 +95,15 @@ TEST(Schema, FieldLookupOutOfOrder) {
   // file.
   auto schema = Schema::from<test::TestOutOfOrder>().asStruct();
 
-  EXPECT_EQ("qux", schema.members()[0].getProto().getName());
-  EXPECT_EQ("grault", schema.members()[1].getProto().getName());
-  EXPECT_EQ("bar", schema.members()[2].getProto().getName());
-  EXPECT_EQ("foo", schema.members()[3].getProto().getName());
-  EXPECT_EQ("corge", schema.members()[4].getProto().getName());
-  EXPECT_EQ("waldo", schema.members()[5].getProto().getName());
-  EXPECT_EQ("quux", schema.members()[6].getProto().getName());
-  EXPECT_EQ("garply", schema.members()[7].getProto().getName());
-  EXPECT_EQ("baz", schema.members()[8].getProto().getName());
+  EXPECT_EQ("qux", schema.getMembers()[0].getProto().getName());
+  EXPECT_EQ("grault", schema.getMembers()[1].getProto().getName());
+  EXPECT_EQ("bar", schema.getMembers()[2].getProto().getName());
+  EXPECT_EQ("foo", schema.getMembers()[3].getProto().getName());
+  EXPECT_EQ("corge", schema.getMembers()[4].getProto().getName());
+  EXPECT_EQ("waldo", schema.getMembers()[5].getProto().getName());
+  EXPECT_EQ("quux", schema.getMembers()[6].getProto().getName());
+  EXPECT_EQ("garply", schema.getMembers()[7].getProto().getName());
+  EXPECT_EQ("baz", schema.getMembers()[8].getProto().getName());
 
   EXPECT_EQ(3, schema.findMemberByName("foo")->getProto().getOrdinal());
   EXPECT_EQ(2, schema.findMemberByName("bar")->getProto().getOrdinal());
@@ -160,16 +160,16 @@ TEST(Schema, Enums) {
   EXPECT_ANY_THROW(schema.asInterface());
   EXPECT_TRUE(schema.asEnum() == schema);
 
-  ASSERT_EQ(schema.enumerants().size(),
+  ASSERT_EQ(schema.getEnumerants().size(),
             schema.getProto().getBody().getEnumNode().getEnumerants().size());
-  EnumSchema::Enumerant enumerant = schema.enumerants()[0];
+  EnumSchema::Enumerant enumerant = schema.getEnumerants()[0];
   EXPECT_EQ("foo", enumerant.getProto().getName());
   EXPECT_TRUE(enumerant.getContainingEnum() == schema);
 
   Maybe<EnumSchema::Enumerant> lookup = schema.findEnumerantByName("foo");
   ASSERT_TRUE(lookup != nullptr);
   EXPECT_TRUE(*lookup == enumerant);
-  EXPECT_TRUE(*lookup != schema.enumerants()[1]);
+  EXPECT_TRUE(*lookup != schema.getEnumerants()[1]);
 
   EXPECT_TRUE(schema.findEnumerantByName("noSuchEnumerant") == nullptr);
 

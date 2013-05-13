@@ -166,13 +166,14 @@ public:
 {{/fieldIsPrimitive}}
 {{#fieldIsGenericObject}}
   template <typename T> inline typename T::Reader get{{fieldTitleCase}}();
-  template <typename T, typename... Params> inline typename T::Reader get{{fieldTitleCase}}(
-      const ::capnproto::SchemaPool& pool, Params&&... params);
+  template <typename T, typename Param> inline typename T::Reader
+      get{{fieldTitleCase}}(Param&& param);
 {{/fieldIsGenericObject}}
 {{/typeFields}}
 private:
   ::capnproto::internal::StructReader _reader;
-  friend class ::capnproto::SchemaPool;
+  template <typename T, ::capnproto::Kind k>
+  friend struct ::capnproto::ToDynamic_;
 };
 {{! ------------------------------------------------------------------------------------------- }}
 
@@ -220,19 +221,17 @@ public:
 {{/fieldIsPrimitive}}
 {{#fieldIsGenericObject}}
   template <typename T> inline typename T::Builder get{{fieldTitleCase}}();
+  template <typename T, typename Param> inline typename T::Builder
+      get{{fieldTitleCase}}(Param&& param);
   template <typename T> inline void set{{fieldTitleCase}}(typename T::Reader value);
-  template <typename T> inline typename T::Builder init{{fieldTitleCase}}();
-  template <typename T> inline typename T::Builder init{{fieldTitleCase}}(unsigned int size);
-
-  template <typename T, typename... Params> inline typename T::Builder get{{fieldTitleCase}}(
-      const ::capnproto::SchemaPool& pool, Params&&... params);
-  template <typename T, typename... Params> inline typename T::Builder init{{fieldTitleCase}}(
-      const ::capnproto::SchemaPool& pool, Params&&... params);
+  template <typename T, typename... Params> inline typename T::Builder
+      init{{fieldTitleCase}}(Params&&... params);
 {{/fieldIsGenericObject}}
 {{/typeFields}}
 private:
   ::capnproto::internal::StructBuilder _builder;
-  friend class ::capnproto::SchemaPool;
+  template <typename T, ::capnproto::Kind k>
+  friend struct ::capnproto::ToDynamic_;
 };
 {{/typeStructOrUnion}}
 {{/fileTypes}}
@@ -384,6 +383,26 @@ inline typename T::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}() {
       _builder, {{fieldOffset}} * ::capnproto::REFERENCES);
 }
 
+template <typename T, typename Param>
+inline typename T::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}(Param&& param) {
+{{#fieldUnion}}
+  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                            "Must check which() before get()ing a union member.");
+{{/fieldUnion}}
+  return ::capnproto::internal::PointerHelpers<T>::getDynamic(
+      _reader, {{fieldOffset}} * ::capnproto::REFERENCES, ::capnproto::forward<Param>(param));
+}
+
+template <typename T, typename Param>
+inline typename T::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}(Param&& param) {
+{{#fieldUnion}}
+  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                            "Must check which() before get()ing a union member.");
+{{/fieldUnion}}
+  return ::capnproto::internal::PointerHelpers<T>::getDynamic(
+      _builder, {{fieldOffset}} * ::capnproto::REFERENCES, ::capnproto::forward<Param>(param));
+}
+
 template <typename T>
 inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}(typename T::Reader value) {
 {{#fieldUnion}}
@@ -394,60 +413,14 @@ inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}(typename T::Reader 
       _builder, {{fieldOffset}} * ::capnproto::REFERENCES, value);
 }
 
-template <typename T>
-inline typename T::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}() {
+template <typename T, typename... Params>
+inline typename T::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(Params&&... params) {
 {{#fieldUnion}}
   _builder.setDataField<{{unionTitleCase}}::Which>(
       {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<T>::init(
-      _builder, {{fieldOffset}} * ::capnproto::REFERENCES);
-}
-
-template <typename T>
-inline typename T::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(unsigned int size) {
-{{#fieldUnion}}
-  _builder.setDataField<{{unionTitleCase}}::Which>(
-      {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
-{{/fieldUnion}}
-  return ::capnproto::internal::PointerHelpers<T>::init(
-      _builder, {{fieldOffset}} * ::capnproto::REFERENCES, size);
-}
-
-template <typename T, typename... Params>
-inline typename T::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}(
-    const ::capnproto::SchemaPool& pool, Params&&... params) {
-{{#fieldUnion}}
-  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
-                            "Must check which() before get()ing a union member.");
-{{/fieldUnion}}
-  return ::capnproto::internal::PointerHelpers<T>::get(
-      _reader, {{fieldOffset}} * ::capnproto::REFERENCES,
-      pool, ::capnproto::forward<Params>(params)...);
-}
-
-template <typename T, typename... Params>
-inline typename T::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}(
-    const ::capnproto::SchemaPool& pool, Params&&... params) {
-{{#fieldUnion}}
-  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
-                            "Must check which() before get()ing a union member.");
-{{/fieldUnion}}
-  return ::capnproto::internal::PointerHelpers<T>::get(
-      _builder, {{fieldOffset}} * ::capnproto::REFERENCES,
-      pool, ::capnproto::forward<Params>(params)...);
-}
-
-template <typename T, typename... Params>
-inline typename T::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(
-    const ::capnproto::SchemaPool& pool, Params&&... params) {
-{{#fieldUnion}}
-  _builder.setDataField<{{unionTitleCase}}::Which>(
-      {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
-{{/fieldUnion}}
-  return ::capnproto::internal::PointerHelpers<T>::init(
-      _builder, {{fieldOffset}} * ::capnproto::REFERENCES,
-      pool, ::capnproto::forward<Params>(params)...);
+      _builder, {{fieldOffset}} * ::capnproto::REFERENCES, ::capnproto::forward<Params>(params)...);
 }
 
 {{/fieldIsGenericObject}}

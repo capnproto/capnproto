@@ -35,7 +35,7 @@
 #ifndef CAPNPROTO_DYNAMIC_H_
 #define CAPNPROTO_DYNAMIC_H_
 
-#include "schema.capnp.h"
+#include "schema.h"
 #include "layout.h"
 #include "message.h"
 
@@ -90,152 +90,12 @@ template <> struct DynamicTypeFor_<Kind::LIST> { typedef DynamicList Type; };
 template <typename T>
 using DynamicTypeFor = typename DynamicTypeFor_<kind<T>()>::Type;
 
-class SchemaPool {
-  // Class representing a pool of schema data which is indexed for convenient traversal.
-  //
-  // TODO(someday):  Allow registration of a callback to look up missing nodes.  The callback
-  //   should not return a value, but instead should receive a pointer to the pool to populate.
-  //   This will make it easier to deal with ownership and to batch-add related nodes.
-
-public:
-  SchemaPool();
-  ~SchemaPool();
-  CAPNPROTO_DISALLOW_COPY(SchemaPool);
-
-  void add(schema::Node::Reader node);
-  // Add a schema node.  It will be copied and validated, throwing an exception if invalid.  If
-  // another node with the same ID already exists, the nodes will be compared for compatibility
-  // and the definition determined to be "newer" will be kept.  If the nodes are not compatible,
-  // an exception will be thrown.
-
-  template <typename T>
-  inline void add() { add(internal::rawSchema<T>()); }
-  // Add schema for the given compiled-in type and all of its transitive dependencies, including
-  // nested nodes, but NOT necessarily including annotation definitions (because those are not
-  // always compiled in) or parent scopes (because adding parent scopes would necessarily mean
-  // adding all types in the file and in all transitive imports, which may be much more than you
-  // want).
-
-  Maybe<schema::Node::Reader> tryGetNode(uint64_t id) const;
-  // Try to look up the node, but return nullptr if it's unknown.
-
-  schema::Node::Reader getNode(uint64_t id) const;
-  // Look up the node with the given ID, throwing an exception if not found.
-
-  schema::Node::Reader getStruct(uint64_t id) const;
-  schema::Node::Reader getEnum(uint64_t id) const;
-  schema::Node::Reader getInterface(uint64_t id) const;
-  // Like getNode() but also throws if the kind is not as requested.
-
-  template <typename T>
-  ReaderFor<DynamicTypeFor<FromReader<T>>> toDynamic(T&& value) const;
-  template <typename T>
-  BuilderFor<DynamicTypeFor<FromBuilder<T>>> toDynamic(T&& value) const;
-  template <typename T>
-  DynamicTypeFor<TypeIfEnum<T>> toDynamic(T&& value) const;
-  // Convert an arbitrary struct or list reader or builder type, or an enum type, into the
-  // equivalent dynamic type.
-  // Example:
-  //     // myStruct has a field named foo that has struct type.
-  //     DynamicStruct::Reader foo = pool.toDynamic(myStruct.getFoo());
-
-private:
-  struct Impl;
-
-  Impl* impl;
-
-  void add(const internal::RawSchema& rawSchema);
-  void addNoCopy(schema::Node::Reader node);
-
-  template <typename T, Kind k = kind<T>()>
-  struct ToDynamicImpl;
-
-  friend class DynamicEnum;
-  friend struct DynamicStruct;
-  friend struct DynamicList;
-  friend struct DynamicObject;
-};
-
-// -------------------------------------------------------------------
-
-namespace internal {
-
-struct ListSchema {
-  // Hack for determining/specifying the schema for a List without having to construct a Cap'n Proto
-  // message.
-
-  schema::Type::Body::Which elementType;
-  uint8_t nestingDepth;  // 0 for T, 1 for List(T), 2 for List(List(T)), ...
-  uint64_t elementTypeId;
-
-  constexpr ListSchema(schema::Type::Body::Which elementType)
-      : elementType(elementType), nestingDepth(0), elementTypeId(0) {}
-  constexpr ListSchema(schema::Type::Body::Which elementType, uint64_t elementTypeId)
-      : elementType(elementType), nestingDepth(0), elementTypeId(elementTypeId) {}
-  constexpr ListSchema(schema::Type::Body::Which elementType, uint8_t nestingDepth,
-                       uint64_t elementTypeId)
-      : elementType(elementType), nestingDepth(nestingDepth), elementTypeId(elementTypeId) {}
-
-  ListSchema(schema::Type::Reader elementType);
-  // Construct from an actual schema.
-
-  constexpr ListSchema deeper() {
-    return ListSchema(elementType, nestingDepth + 1, elementTypeId);
-  }
-};
-
-template <typename ElementType, Kind kind = kind<ElementType>()>
-struct ListSchemaForElement;
-
-#define CAPNPROTO_DECLARE_TYPE(discrim, typeName) \
-template <> \
-struct ListSchemaForElement<List<typeName>> { \
-  static constexpr ListSchema type = ListSchema(schema::Type::Body::discrim##_TYPE); \
-};
-
-CAPNPROTO_DECLARE_TYPE(VOID, Void)
-CAPNPROTO_DECLARE_TYPE(BOOL, bool)
-CAPNPROTO_DECLARE_TYPE(INT8, int8_t)
-CAPNPROTO_DECLARE_TYPE(INT16, int16_t)
-CAPNPROTO_DECLARE_TYPE(INT32, int32_t)
-CAPNPROTO_DECLARE_TYPE(INT64, int64_t)
-CAPNPROTO_DECLARE_TYPE(UINT8, uint8_t)
-CAPNPROTO_DECLARE_TYPE(UINT16, uint16_t)
-CAPNPROTO_DECLARE_TYPE(UINT32, uint32_t)
-CAPNPROTO_DECLARE_TYPE(UINT64, uint64_t)
-CAPNPROTO_DECLARE_TYPE(FLOAT32, float)
-CAPNPROTO_DECLARE_TYPE(FLOAT64, double)
-
-CAPNPROTO_DECLARE_TYPE(TEXT, Text)
-CAPNPROTO_DECLARE_TYPE(DATA, Data)
-CAPNPROTO_DECLARE_TYPE(LIST, DynamicList)
-
-#undef CAPNPROTO_DECLARE_TYPE
-
 template <typename T>
-struct ListSchemaForElement<T, Kind::ENUM> {
-  static constexpr ListSchema type = ListSchema(schema::Type::Body::ENUM_TYPE, typeId<T>());
-};
+ReaderFor<DynamicTypeFor<FromReader<T>>> toDynamic(T&& value);
 template <typename T>
-struct ListSchemaForElement<T, Kind::STRUCT> {
-  static constexpr ListSchema type = ListSchema(schema::Type::Body::STRUCT_TYPE, typeId<T>());
-};
+BuilderFor<DynamicTypeFor<FromBuilder<T>>> toDynamic(T&& value);
 template <typename T>
-struct ListSchemaForElement<T, Kind::INTERFACE> {
-  static constexpr ListSchema type = ListSchema(schema::Type::Body::INTERFACE_TYPE, typeId<T>());
-};
-
-template <typename T>
-struct ListSchemaForElement<List<T>, Kind::LIST> {
-  static constexpr ListSchema type = ListSchemaForElement<T>::schema.deeper();
-};
-
-template <typename T>
-struct ListSchemaFor;
-template <typename T>
-struct ListSchemaFor<List<T>>: public ListSchemaForElement<T> {};
-
-} // namespace internal
+DynamicTypeFor<TypeIfEnum<T>> toDynamic(T&& value);
 
 // -------------------------------------------------------------------
 
@@ -247,33 +107,29 @@ public:
   inline T as() { return static_cast<T>(asImpl(typeId<T>())); }
   // Cast to a native enum type.
 
-  schema::Node::Reader getSchemaNode() { return schema; }
-  schema::EnumNode::Reader getSchema();
+  inline EnumSchema getSchema() { return schema; }
 
-  Maybe<schema::EnumNode::Enumerant::Reader> getEnumerant();
+  Maybe<EnumSchema::Enumerant> getEnumerant();
   // Get which enumerant this enum value represents.  Returns nullptr if the numeric value does not
   // correspond to any enumerant in the schema -- this can happen if the data was built using a
   // newer schema that has more values defined.
-
-  Maybe<schema::EnumNode::Enumerant::Reader> findEnumerantByName(Text::Reader name);
-  // Search this enum's type for an enumerant with the given name.
 
   inline uint16_t getRaw() { return value; }
   // Returns the raw underlying enum value.
 
 private:
-  const SchemaPool* pool;
-  schema::Node::Reader schema;
+  EnumSchema schema;
   uint16_t value;
 
-  inline DynamicEnum(const SchemaPool* pool, schema::Node::Reader schema, uint16_t value)
-      : pool(pool), schema(schema), value(value) {}
+  inline DynamicEnum(EnumSchema schema, uint16_t value)
+      : schema(schema), value(value) {}
 
   uint16_t asImpl(uint64_t requestedTypeId);
 
   friend struct DynamicStruct;
   friend struct DynamicList;
-  friend class SchemaPool;
+  template <typename T>
+  friend DynamicTypeFor<TypeIfEnum<T>> toDynamic(T&& value);
 };
 
 // -------------------------------------------------------------------
@@ -286,22 +142,17 @@ public:
   inline typename T::Reader as() { return AsImpl<T>::apply(*this); }
   // Convert the object to the given struct, list, or blob type.
 
-  DynamicStruct::Reader asStruct(schema::Node::Reader schema);
-  DynamicList::Reader asList(schema::Type::Reader elementType);
+  DynamicStruct::Reader as(StructSchema schema);
+  DynamicList::Reader as(ListSchema schema);
 
 private:
-  const SchemaPool* pool;
   internal::ObjectReader reader;
 
-  inline Reader(const SchemaPool* pool, internal::ObjectReader reader)
-      : pool(pool), reader(reader) {}
+  inline Reader(internal::ObjectReader reader): reader(reader) {}
 
   template <typename T, Kind kind = kind<T>()> struct AsImpl;
   // Implementation backing the as() method.  Needs to be a struct to allow partial
   // specialization.  Has a method apply() which does the work.
-
-  DynamicStruct::Reader asStruct(uint64_t typeId);
-  DynamicList::Reader asList(internal::ListSchema schema);
 
   friend struct DynamicStruct;
   friend struct DynamicList;
@@ -315,22 +166,17 @@ public:
   inline typename T::Builder as() { return AsImpl<T>::apply(*this); }
   // Convert the object to the given struct, list, or blob type.
 
-  DynamicStruct::Builder asStruct(schema::Node::Reader schema);
-  DynamicList::Builder asList(schema::Type::Reader elementType);
+  DynamicStruct::Builder as(StructSchema schema);
+  DynamicList::Builder as(ListSchema schema);
 
 private:
-  const SchemaPool* pool;
   internal::ObjectBuilder builder;
 
-  inline Builder(const SchemaPool* pool, internal::ObjectBuilder builder)
-      : pool(pool), builder(builder) {}
+  inline Builder(internal::ObjectBuilder builder): builder(builder) {}
 
   template <typename T, Kind kind = kind<T>()> struct AsImpl;
   // Implementation backing the as() method.  Needs to be a struct to allow partial
   // specialization.  Has a method apply() which does the work.
-
-  DynamicStruct::Builder asStruct(uint64_t typeId);
-  DynamicList::Builder asList(internal::ListSchema schema);
 
   friend struct DynamicStruct;
   friend struct DynamicList;
@@ -342,24 +188,22 @@ class DynamicUnion::Reader {
 public:
   Reader() = default;
 
-  schema::StructNode::Member::Reader getMemberSchema() { return schema; }
-  schema::StructNode::Union::Reader getSchema();
+  inline StructSchema::Union getSchema() { return schema; }
 
-  Maybe<schema::StructNode::Member::Reader> which();
+  Maybe<StructSchema::Member> which();
   // Returns which field is set, or nullptr if an unknown field is set (i.e. the schema is old, and
   // the underlying data has the union set to a member we don't know about).
 
   DynamicValue::Reader get();
-  // Get the value of whichever field of the union is set.
+  // Get the value of whichever field of the union is set.  Throws an exception if which() returns
+  // nullptr.
 
 private:
-  const SchemaPool* pool;
-  schema::StructNode::Member::Reader schema;
+  StructSchema::Union schema;
   internal::StructReader reader;
 
-  inline Reader(const SchemaPool* pool, schema::StructNode::Member::Reader schema,
-                internal::StructReader reader)
-      : pool(pool), schema(schema), reader(reader) {}
+  inline Reader(StructSchema::Union schema, internal::StructReader reader)
+      : schema(schema), reader(reader) {}
 
   friend struct DynamicStruct;
 };
@@ -368,26 +212,23 @@ class DynamicUnion::Builder {
 public:
   Builder() = default;
 
-  schema::StructNode::Member::Reader getMemberSchema() { return schema; }
-  schema::StructNode::Union::Reader getSchema();
+  inline StructSchema::Union getSchema() { return schema; }
 
-  Maybe<schema::StructNode::Member::Reader> which();
+  Maybe<StructSchema::Member> which();
   // Returns which field is set, or nullptr if an unknown field is set (i.e. the schema is old, and
   // the underlying data has the union set to a member we don't know about).
 
   DynamicValue::Builder get();
-  void set(schema::StructNode::Member::Reader member, DynamicValue::Reader value);
-  DynamicValue::Builder init(schema::StructNode::Member::Reader member);
-  DynamicValue::Builder init(schema::StructNode::Member::Reader member, uint size);
+  void set(StructSchema::Member member, DynamicValue::Reader value);
+  DynamicValue::Builder init(StructSchema::Member member);
+  DynamicValue::Builder init(StructSchema::Member member, uint size);
 
 private:
-  const SchemaPool* pool;
-  schema::StructNode::Member::Reader schema;
+  StructSchema::Union schema;
   internal::StructBuilder builder;
 
-  inline Builder(const SchemaPool* pool, schema::StructNode::Member::Reader schema,
-                 internal::StructBuilder builder)
-      : pool(pool), schema(schema), builder(builder) {}
+  inline Builder(StructSchema::Union schema, internal::StructBuilder builder)
+      : schema(schema), builder(builder) {}
 
   friend struct DynamicStruct;
 };
@@ -402,31 +243,24 @@ public:
   typename T::Reader as();
   // Convert the dynamic struct to its compiled-in type.
 
-  schema::Node::Reader getSchemaNode() { return schema; }
-  schema::StructNode::Reader getSchema();
+  inline StructSchema getSchema() { return schema; }
 
-  Maybe<schema::StructNode::Member::Reader> findMemberByName(Text::Reader name);
-  // Looks up the member with the given name, or returns nullptr if no such member exists.
-
-  DynamicValue::Reader get(schema::StructNode::Member::Reader member);
+  DynamicValue::Reader get(StructSchema::Member member);
   // Read the given member value.
 
   DynamicValue::Reader get(Text::Reader name);
   // Shortcut to read a member by name.  Throws an exception if no such member exists.
 
 private:
-  const SchemaPool* pool;
-  schema::Node::Reader schema;
+  StructSchema schema;
   internal::StructReader reader;
 
-  inline Reader(const SchemaPool* pool, schema::Node::Reader schema, internal::StructReader reader)
-      : pool(pool), schema(schema), reader(reader) {}
+  inline Reader(StructSchema schema, internal::StructReader reader)
+      : schema(schema), reader(reader) {}
 
   void verifyTypeId(uint64_t id);
 
-  static DynamicValue::Reader getImpl(
-      const SchemaPool* pool, internal::StructReader reader,
-      schema::StructNode::Member::Reader member);
+  static DynamicValue::Reader getImpl(internal::StructReader reader, StructSchema::Member member);
 
   template <typename T>
   friend struct internal::PointerHelpers;
@@ -436,7 +270,8 @@ private:
   friend struct DynamicList;
   friend class MessageReader;
   friend class MessageBuilder;
-  friend class SchemaPool;
+  template <typename T, ::capnproto::Kind k>
+  friend struct ::capnproto::ToDynamic_;
 };
 
 class DynamicStruct::Builder {
@@ -447,37 +282,33 @@ public:
   typename T::Builder as();
   // Cast to a particular struct type.
 
-  schema::Node::Reader getSchemaNode() { return schema; }
-  schema::StructNode::Reader getSchema();
+  inline StructSchema getSchema() { return schema; }
 
-  Maybe<schema::StructNode::Member::Reader> findMemberByName(Text::Reader name);
-  // Looks up the member with the given name, or returns nullptr if no such member exists.
-
-  DynamicValue::Builder get(schema::StructNode::Member::Reader member);
+  DynamicValue::Builder get(StructSchema::Member member);
   // Read the given member value.
 
-  void set(schema::StructNode::Member::Reader member, DynamicValue::Reader value);
+  void set(StructSchema::Member member, DynamicValue::Reader value);
   // Set the given member value.
 
-  DynamicValue::Builder init(schema::StructNode::Member::Reader member);
-  DynamicValue::Builder init(schema::StructNode::Member::Reader member, uint size);
+  DynamicValue::Builder init(StructSchema::Member member);
+  DynamicValue::Builder init(StructSchema::Member member, uint size);
   // Init a struct, list, or blob field.
 
-  DynamicValue::Builder initObject(schema::StructNode::Member::Reader member,
-                                   schema::Type::Reader type);
-  DynamicValue::Builder initObject(schema::StructNode::Member::Reader member,
-                                   schema::Type::Reader type, uint size);
-  // Init an object field.  You must specify the type.  The provided Type::Reader can point to a
-  // temporary message; it will not be accessed again after the method returns.  Of course, if it
-  // refers to any other types by ID, those types must be present in the SchemaPool.
+  DynamicStruct::Builder initObject(StructSchema::Member member, StructSchema type);
+  DynamicList::Builder initObject(StructSchema::Member member, ListSchema type, uint size);
+  Text::Builder initObjectAsText(StructSchema::Member member, uint size);
+  Data::Builder initObjectAsData(StructSchema::Member member, uint size);
+  // Init an object field.  You must specify the type.
 
   DynamicValue::Builder get(Text::Reader name);
   void set(Text::Reader name, DynamicValue::Reader value);
   void set(Text::Reader name, std::initializer_list<DynamicValue::Reader> value);
   DynamicValue::Builder init(Text::Reader name);
   DynamicValue::Builder init(Text::Reader name, uint size);
-  DynamicValue::Builder initObject(Text::Reader name, schema::Type::Reader type);
-  DynamicValue::Builder initObject(Text::Reader name, schema::Type::Reader type, uint size);
+  DynamicStruct::Builder initObject(Text::Reader name, StructSchema type);
+  DynamicList::Builder initObject(Text::Reader name, ListSchema type, uint size);
+  Text::Builder initObjectAsText(Text::Reader name, uint size);
+  Data::Builder initObjectAsData(Text::Reader name, uint size);
   // Shortcuts to access members by name.  These throw exceptions if no such field exists.
 
   void copyFrom(Reader other);
@@ -485,36 +316,30 @@ public:
   Reader asReader();
 
 private:
-  const SchemaPool* pool;
-  schema::Node::Reader schema;
+  StructSchema schema;
   internal::StructBuilder builder;
 
-  inline Builder(const SchemaPool* pool, schema::Node::Reader schema,
-                 internal::StructBuilder builder)
-      : pool(pool), schema(schema), builder(builder) {}
+  inline Builder(StructSchema schema, internal::StructBuilder builder)
+      : schema(schema), builder(builder) {}
 
   void verifyTypeId(uint64_t id);
 
   static DynamicValue::Builder getImpl(
-      const SchemaPool* pool, internal::StructBuilder builder,
-      schema::StructNode::Member::Reader member);
+      internal::StructBuilder builder, StructSchema::Member member);
   static void setImpl(
-      const SchemaPool* pool, internal::StructBuilder builder,
-      schema::StructNode::Member::Reader member, DynamicValue::Reader value);
+      internal::StructBuilder builder, StructSchema::Member member, DynamicValue::Reader value);
   static DynamicValue::Builder initImpl(
-      const SchemaPool* pool, internal::StructBuilder builder,
-      schema::StructNode::Member::Reader member, uint size);
+      internal::StructBuilder builder, StructSchema::Member member, uint size);
   static DynamicValue::Builder initImpl(
-      const SchemaPool* pool, internal::StructBuilder builder,
-      schema::StructNode::Member::Reader member);
-  static DynamicValue::Builder initFieldImpl(
-      const SchemaPool* pool, internal::StructBuilder builder,
-      schema::StructNode::Field::Reader field,
-      schema::Type::Reader type, uint size);
-  static DynamicValue::Builder initFieldImpl(
-      const SchemaPool* pool, internal::StructBuilder builder,
-      schema::StructNode::Field::Reader field,
-      schema::Type::Reader type);
+      internal::StructBuilder builder, StructSchema::Member member);
+  static DynamicStruct::Builder initFieldImpl(
+      internal::StructBuilder builder, StructSchema::Member field, StructSchema type);
+  static DynamicList::Builder initFieldImpl(
+      internal::StructBuilder builder, StructSchema::Member field, ListSchema type, uint size);
+  static Text::Builder initFieldAsTextImpl(
+      internal::StructBuilder builder, StructSchema::Member field, uint size);
+  static Data::Builder initFieldAsDataImpl(
+      internal::StructBuilder builder, StructSchema::Member field, uint size);
 
   template <typename T>
   friend struct internal::PointerHelpers;
@@ -523,7 +348,8 @@ private:
   friend struct DynamicList;
   friend class MessageReader;
   friend class MessageBuilder;
-  friend class SchemaPool;
+  template <typename T, ::capnproto::Kind k>
+  friend struct ::capnproto::ToDynamic_;
 };
 
 // -------------------------------------------------------------------
@@ -531,12 +357,13 @@ private:
 class DynamicList::Reader {
 public:
   Reader() = default;
-  inline explicit Reader(internal::ListReader reader): reader(reader) {}
 
   template <typename T>
   typename T::Reader as();
   // Try to convert to any List<T>, Data, or Text.  Throws an exception if the underlying data
   // can't possibly represent the requested type.
+
+  inline ListSchema getSchema() { return schema; }
 
   inline uint size() { return reader.size() / ELEMENTS; }
   DynamicValue::Reader operator[](uint index);
@@ -546,47 +373,32 @@ public:
   inline iterator end() { return iterator(this, size()); }
 
 private:
-  const SchemaPool* pool;
-
-  // We don't encode the element type as schema::Type::Reader because we want to be able to
-  // construct DynamicList from List<T> without knowing of any particular field that has type
-  // List<T>, and we don't want to construct a fresh schema object every time this happens.
-
-  schema::Type::Body::Which elementType;  // cannot be list
-  uint depth;
-  // Number of types elementType must be wrapped in List() to get the actual element type, e.g.
-  // List(List(List(Bool))) has depth = 2.
-
-  schema::Node::Reader elementSchema;  // if elementType is struct/enum/interface
-
+  ListSchema schema;
   internal::ListReader reader;
 
-  Reader(const SchemaPool* pool, schema::Type::Reader elementType, internal::ListReader reader);
-  Reader(const SchemaPool* pool, internal::ListSchema schema, internal::ListReader reader);
-  Reader(const SchemaPool* pool, schema::Type::Body::Which elementType, uint depth,
-         schema::Node::Reader elementSchema, internal::ListReader reader)
-      : pool(pool), elementType(elementType), depth(depth), elementSchema(elementSchema),
-        reader(reader) {}
+  Reader(ListSchema schema, internal::ListReader reader): schema(schema), reader(reader) {}
 
-  void verifySchema(internal::ListSchema schema);
+  void verifySchema(ListSchema expectedSchema);
 
   template <typename T>
   friend struct internal::PointerHelpers;
   friend struct DynamicStruct;
   friend struct DynamicObject;
   friend class DynamicList::Builder;
-  friend class SchemaPool;
+  template <typename T, ::capnproto::Kind k>
+  friend struct ::capnproto::ToDynamic_;
 };
 
 class DynamicList::Builder {
 public:
   Builder() = default;
-  inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
 
   template <typename T>
   typename T::Builder as();
   // Try to convert to any List<T>, Data, or Text.  Throws an exception if the underlying data
   // can't possibly represent the requested type.
+
+  inline ListSchema getSchema() { return schema; }
 
   inline uint size() { return builder.size() / ELEMENTS; }
   DynamicValue::Builder operator[](uint index);
@@ -603,26 +415,19 @@ public:
   Reader asReader();
 
 private:
-  const SchemaPool* pool;
-  schema::Type::Body::Which elementType;
-  uint depth;
-  schema::Node::Reader elementSchema;
+  ListSchema schema;
   internal::ListBuilder builder;
 
-  Builder(const SchemaPool* pool, schema::Type::Reader elementType, internal::ListBuilder builder);
-  Builder(const SchemaPool* pool, internal::ListSchema schema, internal::ListBuilder builder);
-  Builder(const SchemaPool* pool, schema::Type::Body::Which elementType, uint depth,
-          schema::Node::Reader elementSchema, internal::ListBuilder builder)
-      : pool(pool), elementType(elementType), depth(depth), elementSchema(elementSchema),
-        builder(builder) {}
+  Builder(ListSchema schema, internal::ListBuilder builder): schema(schema), builder(builder) {}
 
-  void verifySchema(internal::ListSchema schema);
+  void verifySchema(ListSchema expectedSchema);
 
   template <typename T>
   friend struct internal::PointerHelpers;
   friend struct DynamicStruct;
   friend struct DynamicObject;
-  friend class SchemaPool;
+  template <typename T, ::capnproto::Kind k>
+  friend struct ::capnproto::ToDynamic_;
 };
 
 // -------------------------------------------------------------------
@@ -791,38 +596,42 @@ private:
 // generated Object accessors.
 
 template <>
-DynamicStruct::Reader MessageReader::getRoot<DynamicStruct>(
-    const SchemaPool& pool, uint64_t typeId);
+DynamicStruct::Reader MessageReader::getRoot<DynamicStruct>(StructSchema schema);
 template <>
-DynamicStruct::Builder MessageBuilder::initRoot<DynamicStruct>(
-    const SchemaPool& pool, uint64_t typeId);
+DynamicStruct::Builder MessageBuilder::initRoot<DynamicStruct>(StructSchema schema);
 template <>
-DynamicStruct::Builder MessageBuilder::getRoot<DynamicStruct>(
-    const SchemaPool& pool, uint64_t typeId);
+DynamicStruct::Builder MessageBuilder::getRoot<DynamicStruct>(StructSchema schema);
 
 namespace internal {
 
 template <>
 struct PointerHelpers<DynamicStruct, Kind::UNKNOWN> {
-  static DynamicStruct::Reader get(StructReader reader, WireReferenceCount index,
-                                   const SchemaPool& pool, uint64_t typeId);
-  static DynamicStruct::Builder get(StructBuilder builder, WireReferenceCount index,
-                                    const SchemaPool& pool, uint64_t typeId);
-  static void set(StructBuilder builder, WireReferenceCount index, DynamicStruct::Reader value);
-  static DynamicStruct::Builder init(StructBuilder builder, WireReferenceCount index,
-                                     const SchemaPool& pool, uint64_t typeId);
+  // getDynamic() is used when an Object's get() accessor is passed arguments, because for
+  // non-dynamic types PointerHelpers::get() takes a default value as the third argument, and we
+  // don't want people to accidentally be able to provide their own default value.
+  static DynamicStruct::Reader getDynamic(
+      StructReader reader, WireReferenceCount index, StructSchema schema);
+  static DynamicStruct::Builder getDynamic(
+      StructBuilder builder, WireReferenceCount index, StructSchema schema);
+  static void set(
+      StructBuilder builder, WireReferenceCount index, DynamicStruct::Reader value);
+  static DynamicStruct::Builder init(
+      StructBuilder builder, WireReferenceCount index, StructSchema schema);
 };
 
 template <>
 struct PointerHelpers<DynamicList, Kind::UNKNOWN> {
-  static DynamicList::Reader get(StructReader reader, WireReferenceCount index,
-                                 const SchemaPool& pool, schema::Type::Reader elementType);
-  static DynamicList::Builder get(StructBuilder builder, WireReferenceCount index,
-                                  const SchemaPool& pool, schema::Type::Reader elementType);
-  static void set(StructBuilder builder, WireReferenceCount index, DynamicList::Reader value);
-  static DynamicList::Builder init(StructBuilder builder, WireReferenceCount index,
-                                   const SchemaPool& pool, schema::Type::Reader elementType,
-                                   uint size);
+  // getDynamic() is used when an Object's get() accessor is passed arguments, because for
+  // non-dynamic types PointerHelpers::get() takes a default value as the third argument, and we
+  // don't want people to accidentally be able to provide their own default value.
+  static DynamicList::Reader getDynamic(
+      StructReader reader, WireReferenceCount index, ListSchema schema);
+  static DynamicList::Builder getDynamic(
+      StructBuilder builder, WireReferenceCount index, ListSchema schema);
+  static void set(
+      StructBuilder builder, WireReferenceCount index, DynamicList::Reader value);
+  static DynamicList::Builder init(
+      StructBuilder builder, WireReferenceCount index, ListSchema schema, uint size);
 };
 
 }  // namespace internal
@@ -831,36 +640,36 @@ struct PointerHelpers<DynamicList, Kind::UNKNOWN> {
 // Inline implementation details.
 
 template <typename T>
-struct SchemaPool::ToDynamicImpl<T, Kind::STRUCT> {
-  static inline DynamicStruct::Reader apply(const SchemaPool* pool, typename T::Reader value) {
-    return DynamicStruct::Reader(pool, pool->getStruct(typeId<T>()), value._reader);
+struct ToDynamic_<T, Kind::STRUCT> {
+  static inline DynamicStruct::Reader apply(typename T::Reader value) {
+    return DynamicStruct::Reader(Schema::from<T>(), value._reader);
   }
-  static inline DynamicStruct::Builder apply(const SchemaPool* pool, typename T::Builder value) {
-    return DynamicStruct::Builder(pool, pool->getStruct(typeId<T>()), value._builder);
-  }
-};
-
-template <typename T>
-struct SchemaPool::ToDynamicImpl<T, Kind::LIST> {
-  static inline DynamicList::Reader apply(const SchemaPool* pool, typename T::Reader value) {
-    return DynamicList::Reader(pool, internal::ListSchemaFor<T>::schema, value.reader);
-  }
-  static inline DynamicList::Builder apply(const SchemaPool* pool, typename T::Builder value) {
-    return DynamicList::Builder(pool, internal::ListSchemaFor<T>::schema, value.builder);
+  static inline DynamicStruct::Builder apply(typename T::Builder value) {
+    return DynamicStruct::Builder(Schema::from<T>(), value._builder);
   }
 };
 
 template <typename T>
-ReaderFor<DynamicTypeFor<FromReader<T>>> SchemaPool::toDynamic(T&& value) const {
-  return ToDynamicImpl<FromReader<T>>::apply(this, value);
+struct ToDynamic_<T, Kind::LIST> {
+  static inline DynamicList::Reader apply(typename T::Reader value) {
+    return DynamicList::Reader(Schema::from<T>(), value.reader);
+  }
+  static inline DynamicList::Builder apply(typename T::Builder value) {
+    return DynamicList::Builder(Schema::from<T>(), value.builder);
+  }
+};
+
+template <typename T>
+ReaderFor<DynamicTypeFor<FromReader<T>>> toDynamic(T&& value) {
+  return ToDynamic_<FromReader<T>>::apply(value);
 }
 template <typename T>
-BuilderFor<DynamicTypeFor<FromBuilder<T>>> SchemaPool::toDynamic(T&& value) const {
-  return ToDynamicImpl<FromBuilder<T>>::apply(this, value);
+BuilderFor<DynamicTypeFor<FromBuilder<T>>> toDynamic(T&& value) {
+  return ToDynamic_<FromBuilder<T>>::apply(value);
 }
 template <typename T>
-DynamicTypeFor<TypeIfEnum<T>> SchemaPool::toDynamic(T&& value) const {
-  return DynamicEnum(this, getEnum(typeId<T>()), static_cast<uint16_t>(value));
+DynamicTypeFor<TypeIfEnum<T>> toDynamic(T&& value) {
+  return DynamicEnum(Schema::from<T>(), static_cast<uint16_t>(value));
 }
 
 #define CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(cppType, typeTag, fieldName) \
@@ -989,26 +798,26 @@ struct DynamicValue::Builder::AsImpl<T, Kind::LIST> {
 template <typename T>
 struct DynamicObject::Reader::AsImpl<T, Kind::STRUCT> {
   static T apply(Reader reader) {
-    return reader.asStruct(typeId<T>()).as<T>();
+    return reader.as(Schema::from<T>()).as<T>();
   }
 };
 template <typename T>
 struct DynamicObject::Builder::AsImpl<T, Kind::STRUCT> {
   static T apply(Builder builder) {
-    return builder.asStruct(typeId<T>()).as<T>();
+    return builder.as(Schema::from<T>()).as<T>();
   }
 };
 
 template <typename T>
-struct DynamicObject::Reader::AsImpl<List<T>, Kind::LIST> {
+struct DynamicObject::Reader::AsImpl<T, Kind::LIST> {
   static T apply(Reader reader) {
-    return reader.asList(internal::ListSchemaForElement<T>::schema).as<T>();
+    return reader.as(Schema::from<T>()).as<T>();
   }
 };
 template <typename T>
-struct DynamicObject::Builder::AsImpl<List<T>, Kind::LIST> {
+struct DynamicObject::Builder::AsImpl<T, Kind::LIST> {
   static T apply(Builder builder) {
-    return builder.asList(internal::ListSchemaForElement<T>::schema).as<T>();
+    return builder.as(Schema::from<T>()).as<T>();
   }
 };
 
@@ -1029,29 +838,8 @@ typename T::Builder DynamicStruct::Builder::as() {
   return typename T::Builder(builder);
 }
 
-inline DynamicValue::Reader DynamicStruct::Reader::get(
-    schema::StructNode::Member::Reader member) {
-  return getImpl(pool, reader, member);
-}
-inline DynamicValue::Builder DynamicStruct::Builder::get(
-    schema::StructNode::Member::Reader member) {
-  return getImpl(pool, builder, member);
-}
-inline void DynamicStruct::Builder::set(
-    schema::StructNode::Member::Reader member, DynamicValue::Reader value) {
-  return setImpl(pool, builder, member, value);
-}
-inline DynamicValue::Builder DynamicStruct::Builder::init(
-    schema::StructNode::Member::Reader member) {
-  return initImpl(pool, builder, member);
-}
-inline DynamicValue::Builder DynamicStruct::Builder::init(
-    schema::StructNode::Member::Reader member, uint size) {
-  return initImpl(pool, builder, member, size);
-}
-
 inline DynamicStruct::Reader DynamicStruct::Builder::asReader() {
-  return DynamicStruct::Reader(pool, schema, builder.asReader());
+  return DynamicStruct::Reader(schema, builder.asReader());
 }
 
 // -------------------------------------------------------------------
@@ -1060,14 +848,14 @@ template <typename T>
 typename T::Reader DynamicList::Reader::as() {
   static_assert(kind<T>() == Kind::LIST,
                 "DynamicStruct::Reader::as<T>() can only convert to list types.");
-  verifySchema(internal::ListSchemaFor<T>::schema);
+  verifySchema(Schema::from<T>());
   return typename T::Reader(reader);
 }
 template <typename T>
 typename T::Builder DynamicList::Builder::as() {
   static_assert(kind<T>() == Kind::LIST,
                 "DynamicStruct::Builder::as<T>() can only convert to list types.");
-  verifySchema(internal::ListSchemaFor<T>::schema);
+  verifySchema(Schema::from<T>());
   return typename T::Builder(builder);
 }
 

@@ -114,17 +114,17 @@ auto findSchemaMemberByName(const internal::RawSchema* raw, Text::Reader name,
 
 }  // namespace
 
-StructSchema::MemberList StructSchema::members() const {
+StructSchema::MemberList StructSchema::getMembers() const {
   return MemberList(*this, 0, getProto().getBody().getStructNode().getMembers());
 }
 
 Maybe<StructSchema::Member> StructSchema::findMemberByName(Text::Reader name) const {
-  return findSchemaMemberByName(raw, name, 0, members());
+  return findSchemaMemberByName(raw, name, 0, getMembers());
 }
 
 Maybe<StructSchema::Union> StructSchema::Member::getContainingUnion() const {
   if (unionIndex == 0) return nullptr;
-  return parent.members()[unionIndex - 1].asUnion();
+  return parent.getMembers()[unionIndex - 1].asUnion();
 }
 
 StructSchema::Union StructSchema::Member::asUnion() const {
@@ -134,32 +134,32 @@ StructSchema::Union StructSchema::Member::asUnion() const {
   return Union(*this);
 }
 
-StructSchema::MemberList StructSchema::Union::members() const {
+StructSchema::MemberList StructSchema::Union::getMembers() const {
   return MemberList(parent, index + 1, proto.getBody().getUnionMember().getMembers());
 }
 
 Maybe<StructSchema::Member> StructSchema::Union::findMemberByName(Text::Reader name) const {
-  return findSchemaMemberByName(parent.raw, name, index + 1, members());
+  return findSchemaMemberByName(parent.raw, name, index + 1, getMembers());
 }
 
 // -------------------------------------------------------------------
 
-EnumSchema::EnumerantList EnumSchema::enumerants() const {
+EnumSchema::EnumerantList EnumSchema::getEnumerants() const {
   return EnumerantList(*this, getProto().getBody().getEnumNode().getEnumerants());
 }
 
 Maybe<EnumSchema::Enumerant> EnumSchema::findEnumerantByName(Text::Reader name) const {
-  return findSchemaMemberByName(raw, name, 0, enumerants());
+  return findSchemaMemberByName(raw, name, 0, getEnumerants());
 }
 
 // -------------------------------------------------------------------
 
-InterfaceSchema::MethodList InterfaceSchema::methods() const {
+InterfaceSchema::MethodList InterfaceSchema::getMethods() const {
   return MethodList(*this, getProto().getBody().getInterfaceNode().getMethods());
 }
 
 Maybe<InterfaceSchema::Method> InterfaceSchema::findMethodByName(Text::Reader name) const {
-  return findSchemaMemberByName(raw, name, 0, methods());
+  return findSchemaMemberByName(raw, name, 0, getMethods());
 }
 
 // =======================================================================================

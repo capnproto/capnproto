@@ -31,7 +31,8 @@
 
 namespace capnproto {
 
-class SchemaPool;   // Needs to be declared for dynamic Object accessors.
+template <typename T, Kind k = kind<T>()>
+struct ToDynamic_;   // Defined in dynamic.h, needs to be declared as everyone's friend.
 
 class DynamicStruct;  // So that it can be declared a friend.
 

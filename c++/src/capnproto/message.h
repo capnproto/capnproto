@@ -37,7 +37,7 @@ namespace internal {
   class BuilderArena;
 }
 
-class SchemaPool;
+class StructSchema;
 
 // =======================================================================================
 
@@ -99,8 +99,8 @@ public:
   // Get the root struct of the message, interpreting it as the given struct type.
 
   template <typename RootType>
-  typename RootType::Reader getRoot(const SchemaPool& pool, uint64_t typeId);
-  // Dynamically interpret the root struct of the message using the type with the given ID.
+  typename RootType::Reader getRoot(StructSchema schema);
+  // Dynamically interpret the root struct of the message using the given schema.
   // RootType in this case must be DynamicStruct, and you must #include <capnproto/dynamic.h> to
   // use this.
 
@@ -138,14 +138,14 @@ public:
   // Get the root struct of the message, interpreting it as the given struct type.
 
   template <typename RootType>
-  typename RootType::Builder getRoot(const SchemaPool& pool, uint64_t typeId);
-  // Dynamically interpret the root struct of the message using the type with the given ID.
+  typename RootType::Builder getRoot(StructSchema schema);
+  // Dynamically interpret the root struct of the message using the given schema.
   // RootType in this case must be DynamicStruct, and you must #include <capnproto/dynamic.h> to
   // use this.
 
   template <typename RootType>
-  typename RootType::Builder initRoot(const SchemaPool& pool, uint64_t typeId);
-  // Dynamically init the root struct of the message using the type with the given ID.
+  typename RootType::Builder initRoot(StructSchema schema);
+  // Dynamically init the root struct of the message using the given schema.
   // RootType in this case must be DynamicStruct, and you must #include <capnproto/dynamic.h> to
   // use this.
 
