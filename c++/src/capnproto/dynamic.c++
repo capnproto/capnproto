@@ -925,7 +925,7 @@ Data::Builder DynamicStruct::Builder::initFieldAsDataImpl(
 
 // =======================================================================================
 
-DynamicValue::Reader DynamicList::Reader::operator[](uint index) {
+DynamicValue::Reader DynamicList::Reader::operator[](uint index) const {
   PRECOND(index < size(), "List index out-of-bounds.");
 
   switch (schema.whichElementType()) {
@@ -980,7 +980,7 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) {
   return DynamicValue::Reader();
 }
 
-DynamicValue::Builder DynamicList::Builder::operator[](uint index) {
+DynamicValue::Builder DynamicList::Builder::operator[](uint index) const {
   PRECOND(index < size(), "List index out-of-bounds.");
 
   switch (schema.whichElementType()) {

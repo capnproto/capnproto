@@ -397,14 +397,14 @@ public:
   // Try to convert to any List<T>, Data, or Text.  Throws an exception if the underlying data
   // can't possibly represent the requested type.
 
-  inline ListSchema getSchema() { return schema; }
+  inline ListSchema getSchema() const { return schema; }
 
-  inline uint size() { return reader.size() / ELEMENTS; }
-  DynamicValue::Reader operator[](uint index);
+  inline uint size() const { return reader.size() / ELEMENTS; }
+  DynamicValue::Reader operator[](uint index) const;
 
   typedef internal::IndexingIterator<Reader, DynamicValue::Reader> iterator;
-  inline iterator begin() { return iterator(this, 0); }
-  inline iterator end() { return iterator(this, size()); }
+  inline iterator begin() const { return iterator(this, 0); }
+  inline iterator end() const { return iterator(this, size()); }
 
 private:
   ListSchema schema;
@@ -435,10 +435,10 @@ public:
   // Try to convert to any List<T>, Data, or Text.  Throws an exception if the underlying data
   // can't possibly represent the requested type.
 
-  inline ListSchema getSchema() { return schema; }
+  inline ListSchema getSchema() const { return schema; }
 
-  inline uint size() { return builder.size() / ELEMENTS; }
-  DynamicValue::Builder operator[](uint index);
+  inline uint size() const { return builder.size() / ELEMENTS; }
+  DynamicValue::Builder operator[](uint index) const;
   void set(uint index, DynamicValue::Reader value);
   DynamicValue::Builder init(uint index, uint size);
 
