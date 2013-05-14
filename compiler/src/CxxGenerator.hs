@@ -287,8 +287,8 @@ memberTable (DescStruct desc) = let
                $ List.sortBy (compare `on` ordinal) $ structMembers desc
 
     -- Fields of each union.
-    innerMembers = zipWith indexedUnionMembers [1..]
-                 $ List.sortBy (compare `on` unionNumber) $ structUnions desc
+    innerMembers = catMaybes $ zipWith indexedUnionMembers [1..]
+                 $ List.sortBy (compare `on` ordinal) $ structMembers desc
 
     ordinal (DescField f) = fieldNumber f
     ordinal (DescUnion u) = unionNumber u
@@ -298,8 +298,10 @@ memberTable (DescStruct desc) = let
     memberName (DescUnion u) = Just $ unionName u
     memberName _ = Nothing
 
-    indexedUnionMembers i u = zip (memberIndexes i) $ mapMaybe memberName
-                            $ List.sortBy (compare `on` ordinal) $ unionMembers u
+    indexedUnionMembers i (DescUnion u) =
+        Just $ zip (memberIndexes i) $ mapMaybe memberName $
+            List.sortBy (compare `on` ordinal) $ unionMembers u
+    indexedUnionMembers _ _ = Nothing
 
     in concat $ topMembers : innerMembers
 

@@ -733,6 +733,14 @@ TEST(DynamicApi, ConversionFailures) {
   EXPECT_ANY_THROW(root.set("boolField", 1));
 }
 
+TEST(DynamicApi, LateUnion) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<DynamicStruct>(Schema::from<test::TestLateUnion>());
+
+  root.get("theUnion").as<DynamicUnion>().set("qux", "hello");
+  EXPECT_EQ("hello", root.as<test::TestLateUnion>().getTheUnion().getQux());
+}
+
 }  // namespace
 }  // namespace internal
 }  // namespace capnproto

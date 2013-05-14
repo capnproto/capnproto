@@ -339,3 +339,18 @@ struct TestListDefaults {
       textListList = [["foo", "bar"], ["baz"], ["qux", "corge"]],
       structListList = [[(int32Field = 123), (int32Field = 456)], [(int32Field = 789)]]);
 }
+
+struct TestLateUnion {
+  # Test what happens if the unions are the first ordinals in the struct.  At one point this was
+  # broken for the dynamic API.
+
+  foo @0 :Int32;
+  bar @1 :Text;
+  baz @2 :Int16;
+
+  theUnion @3 union {
+    qux @4 :Text;
+    corge @5 :List(Int32);
+    grault @6 :Float32;
+  }
+}

@@ -150,7 +150,7 @@ Maybe<StructSchema::Member> StructSchema::Union::findMemberByName(Text::Reader n
 
 StructSchema::Member StructSchema::Union::getMemberByName(Text::Reader name) const {
   Maybe<StructSchema::Member> member = findMemberByName(name);
-  PRECOND(member != nullptr, "struct has no such member", name);
+  PRECOND(member != nullptr, "union has no such member", name);
   return *member;
 }
 
