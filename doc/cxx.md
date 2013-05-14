@@ -369,7 +369,191 @@ into the binary at all, but only discovered at runtime.
 
 The C++ API supports inspecting schemas at runtime via the interface defined in
 `capnproto/schema.h`, and dynamically reading and writing instances of arbitrary types via
-`capnproto/dynamic.h`.  Here's the example from the beginning of this file written in
+`capnproto/dynamic.h`.  Here's the example from the beginning of this file rewritten in terms
+of the dynamic API:
+
+{% highlight c++ %}
+#include "addressbook.capnp.h"
+#include <capnproto/message.h>
+#include <capnproto/serialize-packed.h>
+#include <iostream>
+#include <capnproto/schema.h>
+#include <capnproto/dynamic.h>
+
+using capnproto::DynamicValue;
+using capnproto::DynamicStruct;
+using capnproto::DynamicEnum;
+using capnproto::DynamicList;
+using capnproto::DynamicUnion;
+using capnproto::List;
+using capnproto::Maybe;
+using capnproto::Schema;
+using capnproto::StructSchema;
+using capnproto::EnumSchema;
+
+using capnproto::Void;
+using capnproto::Text;
+using capnproto::MallocMessageBuilder;
+using capnproto::PackedFdMessageReader;
+
+void dynamicWriteAddressBook(int fd, StructSchema schema) {
+  // Write a message using the dynamic API to set each
+  // field by text name.  This isn't something you'd
+  // normally want to do; it's just for illustration.
+
+  MallocMessageBuilder message;
+
+  // Types shown for explanation purposes; normally you'd
+  // use auto.
+  DynamicStruct::Builder addressBook =
+      message.initRoot<DynamicStruct>(schema);
+
+  DynamicList::Builder people =
+      addressBook.init("people", 2).as<DynamicList>();
+
+  DynamicStruct::Builder alice =
+      people[0].as<DynamicStruct>();
+  alice.set("id", 123);
+  alice.set("name", "Alice");
+  alice.set("email", "alice@example.com");
+  auto alicePhones = alice.init("phones", 1).as<DynamicList>();
+  auto phone0 = alicePhones[0].as<DynamicStruct>();
+  phone0.set("number", "555-1212");
+  phone0.set("type", "mobile");
+  alice.get("employment").as<DynamicUnion>()
+       .set("school", "MIT");
+
+  auto bob = people[1].as<DynamicStruct>();
+  bob.set("id", 456);
+  bob.set("name", "Bob");
+  bob.set("email", "bob@example.com");
+
+  // Some magic:  We can convert a dynamic sub-value back to
+  // the native type with as<T>()!
+  List<Person::PhoneNumber>::Builder bobPhones =
+      bob.init("phones", 2).as<List<Person::PhoneNumber>>();
+  bobPhones[0].setNumber("555-4567");
+  bobPhones[0].setType(Person::PhoneNumber::Type::HOME);
+  bobPhones[1].setNumber("555-7654");
+  bobPhones[1].setType(Person::PhoneNumber::Type::WORK);
+  bob.get("employment").as<DynamicUnion>()
+     .set("unemployed", Void::VOID);
+
+  writePackedMessageToFd(fd, message);
+}
+
+void dynamicPrintValue(DynamicValue::Reader value) {
+  // Print an arbitrary message via the dynamic API by
+  // iterating over the schema.  Look at the handling
+  // of STRUCT in particular.
+
+  switch (value.getType()) {
+    case DynamicValue::VOID:
+      std::cout << "";
+      break;
+    case DynamicValue::BOOL:
+      std::cout << (value.as<bool>() ? "true" : "false");
+      break;
+    case DynamicValue::INT:
+      std::cout << value.as<int64_t>();
+      break;
+    case DynamicValue::UINT:
+      std::cout << value.as<uint64_t>();
+      break;
+    case DynamicValue::FLOAT:
+      std::cout << value.as<double>();
+      break;
+    case DynamicValue::TEXT:
+      std::cout << '\"' << value.as<Text>().c_str() << '\"';
+      break;
+    case DynamicValue::LIST: {
+      std::cout << "[";
+      bool first = true;
+      for (auto element: value.as<DynamicList>()) {
+        if (first) {
+          first = false;
+        } else {
+          std::cout << ", ";
+        }
+        dynamicPrintValue(element);
+      }
+      std::cout << "]";
+      break;
+    }
+    case DynamicValue::ENUM: {
+      auto enumValue = value.as<DynamicEnum>();
+      Maybe<EnumSchema::Enumerant> enumerant =
+          enumValue.getEnumerant();
+      if (enumerant == nullptr) {
+        // Unknown enum value; output raw number.
+        std::cout << enumValue.getRaw();
+      } else {
+        std::cout <<
+            enumerant->getProto().getName().c_str();
+      }
+      break;
+    }
+    case DynamicValue::STRUCT: {
+      std::cout << "(";
+      auto structValue = value.as<DynamicStruct>();
+      bool first = true;
+      for (auto member:
+           structValue.getSchema().getMembers()) {
+        if (first) {
+          first = false;
+        } else {
+          std::cout << ", ";
+        }
+        std::cout << member.getProto().getName().c_str()
+                  << " = ";
+        dynamicPrintValue(structValue.get(member));
+      }
+      std::cout << ")";
+      break;
+    }
+    case DynamicValue::UNION: {
+      auto unionValue = value.as<DynamicUnion>();
+      Maybe<StructSchema::Member> tag = unionValue.which();
+      if (tag == nullptr) {
+        // Unknown union member; must have come from newer
+        // version of the protocol.
+        std::cout << "?";
+      } else {
+        std::cout << tag->getProto().getName() << "(";
+        dynamicPrintValue(unionValue.get());
+        std::cout << ")";
+      }
+      break;
+    }
+    default:
+      // There are other types, we aren't handling them.
+      std::cout << "?";
+      break;
+  }
+}
+
+void dynamicPrintMessage(int fd, StructSchema schema) {
+  PackedFdMessageReader message(fd);
+  dynamicPrintValue(message.getRoot<DynamicStruct>(schema));
+  std::cout << std::endl;
+}
+{% endhighlight %}
+
+Notes about the dynamic API:
+
+* You can implicitly cast any compiled Cap'n Proto struct reader/builder type directly to
+  `DynamicStruct::Reader`/`DynamicStruct::Builder`.  Similarly with `List<T>` and `DynamicList`,
+  and even enum types and `DynamicEnum`.  Finally, all valid Cap'n Proto field types may be
+  implicitly converted to `DynamicValue`.
+
+* Unlike with Protobufs, there is no "global registry" of compiled-in types.  To get the schema
+  for a compiled-in type, use `capnproto::Schema::from<MyType>()`.
+
+* Unlike with Protobufs, the overhead of supporting reflection is small.  Generated `.capnp.c++`
+  files contain only some embedded const data structures describing the schema, no code at all,
+  and the runtime library support code is relatively small.  Moreover, if you do not use the
+  dynamic API or the schema API, you do not even need to link their implementations into your
+  executable.
 
 ## Reference
 

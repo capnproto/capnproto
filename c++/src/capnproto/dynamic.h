@@ -602,6 +602,9 @@ public:
   inline Builder(DynamicUnion::Builder value);
   inline Builder(DynamicObject value);
 
+  template <typename T, typename EnableIf = decltype(toDynamic(instance<T>()))>
+  inline Builder(T value): Builder(toDynamic(value)) {}
+
   template <typename T>
   inline BuilderFor<T> as() { return AsImpl<T>::apply(*this); }
   // See DynamicValue::Reader::as().
