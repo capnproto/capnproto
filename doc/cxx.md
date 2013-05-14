@@ -12,8 +12,6 @@ messages backed by fast pointer arithmetic.
 For the Cap'n Proto definition:
 
 {% highlight capnp %}
-@0x9eb32e19f86ee174;
-
 struct Person {
   id @0 :UInt32;
   name @1 :Text;
