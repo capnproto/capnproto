@@ -716,6 +716,23 @@ TEST(DynamicApi, UnionsWrite) {
   EXPECT_EQ(1234567890123456789ll, reader.getUnion3().getU3f0s64());
 }
 
+TEST(DynamicApi, ConversionFailures) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<DynamicStruct>(Schema::from<TestAllTypes>());
+
+  root.set("int8Field", 123);
+  EXPECT_ANY_THROW(root.set("int8Field", 1234));
+
+  root.set("uInt32Field", 1);
+  EXPECT_ANY_THROW(root.set("uInt32Field", -1));
+
+  root.set("int16Field", 5);
+  EXPECT_ANY_THROW(root.set("int16Field", 0.5));
+
+  root.set("boolField", true);
+  EXPECT_ANY_THROW(root.set("boolField", 1));
+}
+
 }  // namespace
 }  // namespace internal
 }  // namespace capnproto
