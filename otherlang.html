@@ -107,69 +107,43 @@
         })();
       </script>
       <section id="main_content" class="inner">
-        <h1>Other Languages</h1>
+        <h1 id='other_languages'>Other Languages</h1>
 
-<p>Cap&#39;n Proto&#39;s reference implementation is in C++.  Implementations in other languages are
-maintained by respective authors and have not been reviewed by me
-(<a href="https://github.com/kentonv">@kentonv</a>).  Here are some implementations I&#39;m aware of:</p>
+<p>Cap&#8217;n Proto&#8217;s reference implementation is in C++. Implementations in other languages are maintained by respective authors and have not been reviewed by me (<a href='https://github.com/kentonv'>@kentonv</a>). Here are some implementations I&#8217;m aware of:</p>
 
 <ul>
-<li><a href="https://github.com/jmckaskill/go-capnproto">C and Go</a> by
-<a href="https://github.com/jmckaskill">@jmckaskill</a></li>
-<li><a href="https://github.com/jparyani/capnproto">Boost Python wrappers for Cap&#39;n Proto C++</a> by
-<a href="https://github.com/jparyani">@jparyani</a></li>
+<li><a href='https://github.com/jmckaskill/go-capnproto'>C and Go</a> by <a href='https://github.com/jmckaskill'>@jmckaskill</a></li>
+
+<li><a href='https://github.com/jparyani/capnproto'>Boost Python wrappers for Cap&#8217;n Proto C++</a> by <a href='https://github.com/jparyani'>@jparyani</a></li>
 </ul>
 
-<h2>Contribute Your Own!</h2>
+<h2 id='contribute_your_own'>Contribute Your Own!</h2>
 
-<p>We&#39;d like to support many more languages in the future!</p>
+<p>We&#8217;d like to support many more languages in the future!</p>
 
-<p>If you&#39;d like to own the implementation of Cap&#39;n Proto in some particular language,
-<a href="https://groups.google.com/group/capnproto">let us know</a>!</p>
+<p>If you&#8217;d like to own the implementation of Cap&#8217;n Proto in some particular language, <a href='https://groups.google.com/group/capnproto'>let us know</a>!</p>
 
-<p><strong>You should e-mail the list <em>before</em> you start hacking.</strong>  We don&#39;t bite, and we&#39;ll probably have
-useful tips that will save you time.  :)</p>
+<p><strong>You should e-mail the list <em>before</em> you start hacking.</strong> We don&#8217;t bite, and we&#8217;ll probably have useful tips that will save you time. :)</p>
 
-<p><strong>Do not implement your own schema parser.</strong>  The schema language is more complicated than it
-looks, and the algorithm to determine offsets of fields is subtle.  If you reuse <code>capnpc</code>&#39;s parser,
-you won&#39;t risk getting these wrong, and you won&#39;t have to spend time keeping your parser up-to-date.
-In fact, you can still write your code generator in any language you want, using compiler plugins!</p>
+<p><strong>Do not implement your own schema parser.</strong> The schema language is more complicated than it looks, and the algorithm to determine offsets of fields is subtle. If you reuse <code>capnpc</code>&#8217;s parser, you won&#8217;t risk getting these wrong, and you won&#8217;t have to spend time keeping your parser up-to-date. In fact, you can still write your code generator in any language you want, using compiler plugins!</p>
 
-<h3>How to Write Compiler Plugins</h3>
+<h3 id='how_to_write_compiler_plugins'>How to Write Compiler Plugins</h3>
 
-<p>The Cap&#39;n Proto compiler / code generator binary, <code>capnpc</code>, supports a &quot;plugin&quot; interface for
-custom code generators.  Plugins are independent executables (written in any language) which read
-a description of the schema from standard input and then generate the necessary code.  The
-description is itself a Cap&#39;n Proto message, defined by
-<a href="https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnproto/schema.capnp">schema.capnp</a>
-(the file will move to a better location eventually).  Specifically, the plugin receives a
-<code>CodeGeneratorRequest</code>, using
-<a href="http://kentonv.github.io/capnproto/encoding.html#serialization_over_a_stream">standard serialization</a>
-(not packed).</p>
+<p>The Cap&#8217;n Proto compiler / code generator binary, <code>capnpc</code>, supports a &#8220;plugin&#8221; interface for custom code generators. Plugins are independent executables (written in any language) which read a description of the schema from standard input and then generate the necessary code. The description is itself a Cap&#8217;n Proto message, defined by <a href='https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnproto/schema.capnp'>schema.capnp</a> (the file will move to a better location eventually). Specifically, the plugin receives a <code>CodeGeneratorRequest</code>, using <a href='http://kentonv.github.io/capnproto/encoding.html#serialization_over_a_stream'>standard serialization</a> (not packed).</p>
 
-<p>Of course, because the input to a plugin is itself in Cap&#39;n Proto format, if you write your
-plugin directly in the language you wish to support, you may have a bootstrapping problem:  you
-somehow need to generate code for <code>schema.capnp</code> before you write your code generator.  Luckily,
-because of the simplicity of the Cap&#39;n Proto format, it is generally not too hard to do this by
-hand.  Remember that you can use <code>capnpc -v schema.capnp</code> to get a dump of the sizes and offsets
-of all structs and fields defined in the file.</p>
+<p>Of course, because the input to a plugin is itself in Cap&#8217;n Proto format, if you write your plugin directly in the language you wish to support, you may have a bootstrapping problem: you somehow need to generate code for <code>schema.capnp</code> before you write your code generator. Luckily, because of the simplicity of the Cap&#8217;n Proto format, it is generally not too hard to do this by hand. Remember that you can use <code>capnpc -v schema.capnp</code> to get a dump of the sizes and offsets of all structs and fields defined in the file.</p>
 
-<p><code>capnpc</code> normally looks for plugins in <code>$PATH</code> with the name <code>capnpc-[language]</code>.  However, if the
-language name given on the command line contains a slash character, <code>capnpc</code> assumes that it is an
-exact path to the plugin executable, and does not search <code>$PATH</code>.  Examples:</p>
-<div class="highlight"><pre><code class="text language-text" data-lang="text"># Searches $PATH for executable &quot;capnpc-mylang&quot;.
+<p><code>capnpc</code> normally looks for plugins in <code>$PATH</code> with the name <code>capnpc-[language]</code>. However, if the language name given on the command line contains a slash character, <code>capnpc</code> assumes that it is an exact path to the plugin executable, and does not search <code>$PATH</code>. Examples:</p>
+
+<pre><code># Searches $PATH for executable &quot;capnpc-mylang&quot;.
 capnpc -o mylang addressbook.capnp
 
 # Uses plugin executable &quot;myplugin&quot; from the current directory.
-capnpc -o ./myplugin addressbook.capnp
-</code></pre></div>
-<p>If the user specifies an output directory, the compiler will run the plugin with that directory
-as the working directory, so you do not need to worry about this.</p>
+capnpc -o ./myplugin addressbook.capnp</code></pre>
 
-<p><a href="https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnproto/compiler/capnpc-capnp.c%2B%2B">This example plugin</a>
-writes the schema back to standard output in Cap&#39;n Proto schema language, similar to what
-<code>capnpc -v</code> does.</p>
+<p>If the user specifies an output directory, the compiler will run the plugin with that directory as the working directory, so you do not need to worry about this.</p>
 
+<p><a href='https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnproto/compiler/capnpc-capnp.c%2B%2B'>This example plugin</a> writes the schema back to standard output in Cap&#8217;n Proto schema language, similar to what <code>capnpc -v</code> does.</p>
         <div style="clear: left;"></div>
       </section>
     </div>

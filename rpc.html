@@ -107,29 +107,21 @@
         })();
       </script>
       <section id="main_content" class="inner">
-        <h1>RPC Protocol</h1>
+        <h1 id='rpc_protocol'>RPC Protocol</h1>
 
-<p>The Cap&#39;n Proto RPC protocol is not yet defined.  See the language spec&#39;s
-<a href="language.html#interfaces">section on interfaces</a> for a hint of what it will do.</p>
+<p>The Cap&#8217;n Proto RPC protocol is not yet defined. See the language spec&#8217;s <a href='language.html#interfaces'>section on interfaces</a> for a hint of what it will do.</p>
 
 <p>Here are some misc planned / hoped-for features:</p>
 
 <ul>
-<li><p><strong>Shared memory IPC:</strong>  When instructed to communicate over a Unix domain socket, Cap&#39;n Proto may
-automatically negotiate to use shared memory, by creating a temporary file and then sending a
-file descriptor across the socket.  Once messages are being allocated in shared memory, RPCs
-can be initiated by merely signaling a <a href="http://man7.org/linux/man-pages/man2/futex.2.html">futex</a>
-(on Linux, at least), which ought to be ridiculously fast.</p></li>
-<li><p><strong>Promise Pipelining:</strong>  When an RPC will return a reference to a new remote object, the client
-will be able to initiate calls to the returned object before the initial RPC has actually
-completed.  Essentially, the client says to the server: &quot;Call method <code>foo</code> of the object to be
-returned by RPC id N.&quot;  Obviously, if the original RPC fails, the dependent call also fails.
-Otherwise, the server can start executing the dependent call as soon as the original call
-completes, without the need for a network round-trip.  In the object-capability programming
-language <a href="http://en.wikipedia.org/wiki/E_(programming_language)">E</a> this is known as
-<a href="http://en.wikipedia.org/wiki/Futures_and_promises#Promise_pipelining">promise pipelining</a>.</p></li>
-</ul>
+<li>
+<p><strong>Shared memory IPC:</strong> When instructed to communicate over a Unix domain socket, Cap&#8217;n Proto may automatically negotiate to use shared memory, by creating a temporary file and then sending a file descriptor across the socket. Once messages are being allocated in shared memory, RPCs can be initiated by merely signaling a <a href='http://man7.org/linux/man-pages/man2/futex.2.html'>futex</a> (on Linux, at least), which ought to be ridiculously fast.</p>
+</li>
 
+<li>
+<p><strong>Promise Pipelining:</strong> When an RPC will return a reference to a new remote object, the client will be able to initiate calls to the returned object before the initial RPC has actually completed. Essentially, the client says to the server: &#8220;Call method <code>foo</code> of the object to be returned by RPC id N.&#8221; Obviously, if the original RPC fails, the dependent call also fails. Otherwise, the server can start executing the dependent call as soon as the original call completes, without the need for a network round-trip. In the object-capability programming language <a href='http://en.wikipedia.org/wiki/E_(programming_language)'>E</a> this is known as <a href='http://en.wikipedia.org/wiki/Futures_and_promises#Promise_pipelining'>promise pipelining</a>.</p>
+</li>
+</ul>
         <div style="clear: left;"></div>
       </section>
     </div>
