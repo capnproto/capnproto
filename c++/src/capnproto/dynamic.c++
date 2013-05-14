@@ -111,9 +111,9 @@ Maybe<EnumSchema::Enumerant> DynamicEnum::getEnumerant() {
 }
 
 uint16_t DynamicEnum::asImpl(uint64_t requestedTypeId) {
-  VALIDATE_INPUT(requestedTypeId == schema.getProto().getId(),
-                 "Type mismatch in DynamicEnum.as().") {
-    // Go on with value.
+  RECOVERABLE_PRECOND(requestedTypeId == schema.getProto().getId(),
+                      "Type mismatch in DynamicEnum.as().") {
+    // use it anyway
   }
   return value;
 }
@@ -124,7 +124,8 @@ DynamicStruct::Reader DynamicObject::as(StructSchema schema) {
   if (reader.kind == internal::ObjectKind::NULL_POINTER) {
     return DynamicStruct::Reader(schema, internal::StructReader());
   }
-  VALIDATE_INPUT(reader.kind == internal::ObjectKind::STRUCT, "Object is not a struct.") {
+  RECOVERABLE_PRECOND(reader.kind == internal::ObjectKind::STRUCT, "Object is not a struct.") {
+    // Return default struct.
     return DynamicStruct::Reader(schema, internal::StructReader());
   }
   return DynamicStruct::Reader(schema, reader.structReader);
@@ -134,7 +135,8 @@ DynamicList::Reader DynamicObject::as(ListSchema schema) {
   if (reader.kind == internal::ObjectKind::NULL_POINTER) {
     return DynamicList::Reader(schema, internal::ListReader());
   }
-  VALIDATE_INPUT(reader.kind == internal::ObjectKind::LIST, "Object is not a list.") {
+  RECOVERABLE_PRECOND(reader.kind == internal::ObjectKind::LIST, "Object is not a list.") {
+    // Return empty list.
     return DynamicList::Reader(schema, internal::ListReader());
   }
   return DynamicList::Reader(schema, reader.listReader);
@@ -316,7 +318,7 @@ DynamicStruct::Builder DynamicStruct::Builder::getObject(
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
       FAIL_PRECOND("Expected an Object.");
-      return DynamicStruct::Builder();
+      break;
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getProto().getBody().getFieldMember();
@@ -335,7 +337,7 @@ DynamicList::Builder DynamicStruct::Builder::getObject(
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
       FAIL_PRECOND("Expected an Object.");
-      return DynamicList::Builder();
+      break;
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getProto().getBody().getFieldMember();
@@ -731,9 +733,10 @@ void DynamicStruct::Builder::setImpl(
     case schema::StructNode::Member::Body::UNION_MEMBER: {
       auto src = value.as<DynamicUnion>();
       auto which = src.which();
-      VALIDATE_INPUT(which != nullptr,
+      RECOVERABLE_PRECOND(which != nullptr,
           "Trying to copy a union value, but the union's discriminant is not recognized.  It "
           "was probably constructed using a newer version of the schema.") {
+        // Just don't copy anything.
         return;
       }
 
@@ -826,7 +829,7 @@ DynamicValue::Builder DynamicStruct::Builder::initImpl(
     internal::StructBuilder builder, StructSchema::Member member, uint size) {
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_VALIDATE_INPUT(
+      FAIL_PRECOND(
           "Can't init() a union.  get() it first and then init() one of its members.");
       break;
 
@@ -841,7 +844,7 @@ DynamicValue::Builder DynamicStruct::Builder::initImpl(
         case schema::Type::Body::DATA_TYPE:
           return initFieldAsDataImpl(builder, member, size);
         default:
-          FAIL_VALIDATE_INPUT(
+          FAIL_PRECOND(
               "init() with size is only valid for list, text, or data fields.", type.which());
           break;
       }
@@ -857,16 +860,14 @@ DynamicValue::Builder DynamicStruct::Builder::initImpl(
     internal::StructBuilder builder, StructSchema::Member member) {
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_VALIDATE_INPUT(
+      FAIL_PRECOND(
           "Can't init() a union.  get() it first and then init() one of its members.");
       break;
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto type = member.getProto().getBody().getFieldMember().getType().getBody();
-      VALIDATE_INPUT(type.which() == schema::Type::Body::STRUCT_TYPE,
-                     "init() without a size is only valid for struct fields.") {
-        break;
-      }
+      PRECOND(type.which() == schema::Type::Body::STRUCT_TYPE,
+              "init() without a size is only valid for struct fields.");
       return initFieldImpl(builder, member,
           member.getContainingStruct().getDependency(type.getStructType()).asStruct());
     }
@@ -1019,7 +1020,9 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) {
 }
 
 void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
-  PRECOND(index < size(), "List index out-of-bounds.");
+  RECOVERABLE_PRECOND(index < size(), "List index out-of-bounds.") {
+    return;
+  }
 
   switch (schema.whichElementType()) {
 #define HANDLE_TYPE(name, discrim, typeName) \
@@ -1064,14 +1067,16 @@ void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
 
     case schema::Type::Body::ENUM_TYPE: {
       auto enumValue = value.as<DynamicEnum>();
-      VALIDATE_INPUT(schema.getEnumElementType() == enumValue.getSchema(),
-                     "Type mismatch when using DynamicList::Builder::set().");
+      RECOVERABLE_PRECOND(schema.getEnumElementType() == enumValue.getSchema(),
+                          "Type mismatch when using DynamicList::Builder::set().") {
+        return;
+      }
       builder.setDataElement<uint16_t>(index * ELEMENTS, value.as<DynamicEnum>().getRaw());
       break;
     }
 
     case schema::Type::Body::OBJECT_TYPE:
-      FAIL_CHECK("List(Object) not supported.");
+      FAIL_RECOVERABLE_CHECK("List(Object) not supported.");
       break;
 
     case schema::Type::Body::INTERFACE_TYPE:
@@ -1099,8 +1104,8 @@ DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
     case schema::Type::Body::ENUM_TYPE:
     case schema::Type::Body::STRUCT_TYPE:
     case schema::Type::Body::INTERFACE_TYPE:
-      FAIL_VALIDATE_INPUT("Expected a list or blob.");
-      return DynamicValue::Builder();
+      FAIL_PRECOND("Expected a list or blob.");
+      break;
 
     case schema::Type::Body::TEXT_TYPE:
       return DynamicValue::Builder(builder.initBlobElement<Text>(index * ELEMENTS, size * BYTES));
@@ -1153,12 +1158,12 @@ DynamicList::Reader DynamicList::Builder::asReader() {
 }
 
 void DynamicList::Reader::verifySchema(ListSchema expectedSchema) {
-  VALIDATE_INPUT(schema == expectedSchema,
-                 "Type mismatch when using DynamicList::Reader::as().");
+  PRECOND(schema == expectedSchema,
+          "Type mismatch when using DynamicList::Reader::as().");
 }
 void DynamicList::Builder::verifySchema(ListSchema expectedSchema) {
-  VALIDATE_INPUT(schema == expectedSchema,
-                 "Type mismatch when using DynamicList::Reader::as().");
+  PRECOND(schema == expectedSchema,
+          "Type mismatch when using DynamicList::Reader::as().");
 }
 
 // =======================================================================================
@@ -1167,8 +1172,8 @@ namespace {
 
 template <typename T>
 T signedToUnsigned(long long value) {
-  VALIDATE_INPUT(value >= 0 && T(value) == value,
-                 "Value out-of-range for requested type.", value) {
+  RECOVERABLE_PRECOND(value >= 0 && T(value) == value,
+                      "Value out-of-range for requested type.", value) {
     // Use it anyway.
   }
   return value;
@@ -1176,7 +1181,7 @@ T signedToUnsigned(long long value) {
 
 template <>
 uint64_t signedToUnsigned<uint64_t>(long long value) {
-  VALIDATE_INPUT(value >= 0, "Value out-of-range for requested type.", value) {
+  RECOVERABLE_PRECOND(value >= 0, "Value out-of-range for requested type.", value) {
     // Use it anyway.
   }
   return value;
@@ -1184,8 +1189,8 @@ uint64_t signedToUnsigned<uint64_t>(long long value) {
 
 template <typename T>
 T unsignedToSigned(unsigned long long value) {
-  VALIDATE_INPUT(T(value) >= 0 && (unsigned long long)T(value) == value,
-                 "Value out-of-range for requested type.", value) {
+  RECOVERABLE_PRECOND(T(value) >= 0 && (unsigned long long)T(value) == value,
+                      "Value out-of-range for requested type.", value) {
     // Use it anyway.
   }
   return value;
@@ -1193,7 +1198,7 @@ T unsignedToSigned(unsigned long long value) {
 
 template <>
 int64_t unsignedToSigned<int64_t>(unsigned long long value) {
-  VALIDATE_INPUT(int64_t(value) >= 0, "Value out-of-range for requested type.", value) {
+  RECOVERABLE_PRECOND(int64_t(value) >= 0, "Value out-of-range for requested type.", value) {
     // Use it anyway.
   }
   return value;
@@ -1201,8 +1206,7 @@ int64_t unsignedToSigned<int64_t>(unsigned long long value) {
 
 template <typename T, typename U>
 T checkRoundTrip(U value) {
-  VALIDATE_INPUT(T(value) == value,
-                 "Value out-of-range for requested type.", value) {
+  RECOVERABLE_PRECOND(T(value) == value, "Value out-of-range for requested type.", value) {
     // Use it anyway.
   }
   return value;
@@ -1220,7 +1224,9 @@ typeName DynamicValue::Reader::AsImpl<typeName>::apply(Reader reader) { \
     case FLOAT: \
       return ifFloat<typeName>(reader.floatValue); \
     default: \
-      FAIL_VALIDATE_INPUT("Type mismatch when using DynamicValue::Reader::as()."); \
+      FAIL_RECOVERABLE_PRECOND("Type mismatch when using DynamicValue::Reader::as().") { \
+        /* use zero */ \
+      } \
       return 0; \
   } \
 } \
@@ -1233,7 +1239,9 @@ typeName DynamicValue::Builder::AsImpl<typeName>::apply(Builder builder) { \
     case FLOAT: \
       return ifFloat<typeName>(builder.floatValue); \
     default: \
-      FAIL_VALIDATE_INPUT("Type mismatch when using DynamicValue::Builder::as()."); \
+      FAIL_RECOVERABLE_PRECOND("Type mismatch when using DynamicValue::Builder::as().") { \
+        /* use zero */ \
+      } \
       return 0; \
   } \
 }
@@ -1253,17 +1261,13 @@ HANDLE_NUMERIC_TYPE(double, implicit_cast, implicit_cast, implicit_cast)
 
 #define HANDLE_TYPE(name, discrim, typeName) \
 ReaderFor<typeName> DynamicValue::Reader::AsImpl<typeName>::apply(Reader reader) { \
-  VALIDATE_INPUT(reader.type == discrim, \
-      "Type mismatch when using DynamicValue::Reader::as().") { \
-    return ReaderFor<typeName>(); \
-  } \
+  PRECOND(reader.type == discrim, \
+      "Type mismatch when using DynamicValue::Reader::as()."); \
   return reader.name##Value; \
 } \
 BuilderFor<typeName> DynamicValue::Builder::AsImpl<typeName>::apply(Builder builder) { \
-  VALIDATE_INPUT(builder.type == discrim, \
-      "Type mismatch when using DynamicValue::Builder::as().") { \
-    return BuilderFor<typeName>(); \
-  } \
+  PRECOND(builder.type == discrim, \
+      "Type mismatch when using DynamicValue::Builder::as()."); \
   return builder.name##Value; \
 }
 
@@ -1284,7 +1288,7 @@ Data::Reader DynamicValue::Reader::AsImpl<Data>::apply(Reader reader) {
     // Implicitly convert from text.
     return reader.textValue;
   }
-  VALIDATE_INPUT(reader.type == DATA,
+  RECOVERABLE_PRECOND(reader.type == DATA,
       "Type mismatch when using DynamicValue::Reader::as().") {
     return Data::Reader();
   }
@@ -1295,24 +1299,23 @@ Data::Builder DynamicValue::Builder::AsImpl<Data>::apply(Builder builder) {
     // Implicitly convert from text.
     return builder.textValue;
   }
-  VALIDATE_INPUT(builder.type == DATA,
+  RECOVERABLE_PRECOND(builder.type == DATA,
       "Type mismatch when using DynamicValue::Builder::as().") {
     return Data::Builder();
   }
   return builder.dataValue;
 }
 
-
 // As in the header, HANDLE_TYPE(void, VOID, Void) crashes GCC 4.7.
 Void DynamicValue::Reader::AsImpl<Void>::apply(Reader reader) {
-  VALIDATE_INPUT(reader.type == VOID,
+  RECOVERABLE_PRECOND(reader.type == VOID,
       "Type mismatch when using DynamicValue::Reader::as().") {
     return Void();
   }
   return reader.voidValue;
 }
 Void DynamicValue::Builder::AsImpl<Void>::apply(Builder builder) {
-  VALIDATE_INPUT(builder.type == VOID,
+  RECOVERABLE_PRECOND(builder.type == VOID,
       "Type mismatch when using DynamicValue::Builder::as().") {
     return Void();
   }
