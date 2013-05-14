@@ -28,7 +28,7 @@ echo "Regenerating site..."
 
 rm -rf _site .gh-pages/*
 
-jekyll --pygments --no-lsi --safe
+jekyll build --safe
 cp -r _site/* .gh-pages
 
 REV="$(git rev-parse HEAD)"
