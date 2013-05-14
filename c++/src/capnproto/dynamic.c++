@@ -775,11 +775,24 @@ void DynamicStruct::Builder::setImpl(
 
 #undef HANDLE_TYPE
 
-        case schema::Type::Body::ENUM_TYPE:
-          builder.setDataField<uint16_t>(
-              field.getOffset() * ELEMENTS, value.as<DynamicEnum>().getRaw(),
-              dval.getEnumValue());
+        case schema::Type::Body::ENUM_TYPE: {
+          uint16_t rawValue;
+          auto enumSchema = member.getContainingStruct().getDependency(type.getEnumType()).asEnum();
+          if (value.getType() == DynamicValue::TEXT) {
+            // Convert from text.
+            rawValue = enumSchema.getEnumerantByName(value.as<Text>()).getOrdinal();
+          } else {
+            DynamicEnum enumValue = value.as<DynamicEnum>();
+            RECOVERABLE_PRECOND(enumValue.getSchema() == enumSchema,
+                                "Type mismatch when using DynamicList::Builder::set().") {
+              return;
+            }
+            rawValue = enumValue.getRaw();
+          }
+          builder.setDataField<uint16_t>(field.getOffset() * ELEMENTS, rawValue,
+                                         dval.getEnumValue());
           return;
+        }
 
         case schema::Type::Body::TEXT_TYPE:
           builder.setBlobField<Text>(field.getOffset() * REFERENCES, value.as<Text>());
@@ -1066,12 +1079,19 @@ void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
       break;
 
     case schema::Type::Body::ENUM_TYPE: {
-      auto enumValue = value.as<DynamicEnum>();
-      RECOVERABLE_PRECOND(schema.getEnumElementType() == enumValue.getSchema(),
-                          "Type mismatch when using DynamicList::Builder::set().") {
-        return;
+      uint16_t rawValue;
+      if (value.getType() == DynamicValue::TEXT) {
+        // Convert from text.
+        rawValue = schema.getEnumElementType().getEnumerantByName(value.as<Text>()).getOrdinal();
+      } else {
+        DynamicEnum enumValue = value.as<DynamicEnum>();
+        RECOVERABLE_PRECOND(schema.getEnumElementType() == enumValue.getSchema(),
+                            "Type mismatch when using DynamicList::Builder::set().") {
+          return;
+        }
+        rawValue = enumValue.getRaw();
       }
-      builder.setDataElement<uint16_t>(index * ELEMENTS, value.as<DynamicEnum>().getRaw());
+      builder.setDataElement<uint16_t>(index * ELEMENTS, rawValue);
       break;
     }
 

@@ -114,9 +114,9 @@ void dynamicInitTestMessage(DynamicStruct::Builder builder) {
       listBuilder[1].as<DynamicStruct>().set("textField", "x structlist 2");
       listBuilder[2].as<DynamicStruct>().set("textField", "x structlist 3");
     }
-    subBuilder.set("enumList", {TestEnum::QUX, TestEnum::BAR, TestEnum::GRAULT});
+    subBuilder.set("enumList", {TestEnum::QUX, "bar", "grault"});
   }
-  builder.set("enumField", TestEnum::CORGE);
+  builder.set("enumField", "corge");
 
   builder.init("voidList", 6);
   builder.set("boolList", {true, false, false, true});

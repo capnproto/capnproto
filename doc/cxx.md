@@ -12,6 +12,8 @@ messages backed by fast pointer arithmetic.
 For the Cap'n Proto definition:
 
 {% highlight capnp %}
+@0x9eb32e19f86ee174;
+
 struct Person {
   id @0 :UInt32;
   name @1 :Text;
@@ -357,6 +359,18 @@ so:
 As of this writing, the file is not automatically installed anywhere, but in the future it will
 be.
 
+## Dynamic Reflection
+
+Sometimes you want to write generic code that operates on arbitrary types, iterating over the
+fields or looking them up by name.  For example, you might want to write code that encodes
+arbitrary Cap'n Proto types in JSON format.  This requires something like "reflection", but C++
+does not offer reflection.  Also, you might even want to operate on types that aren't compiled
+into the binary at all, but only discovered at runtime.
+
+The C++ API supports inspecting schemas at runtime via the interface defined in
+`capnproto/schema.h`, and dynamically reading and writing instances of arbitrary types via
+`capnproto/dynamic.h`.  Here's the example from the beginning of this file written in
+
 ## Reference
 
 The runtime library contains lots of useful features not described on this page.  For now, the
@@ -365,8 +379,11 @@ best reference is the header files.  See:
     capnproto/list.h
     capnproto/blob.h
     capnproto/io.h
+    capnproto/message.h
     capnproto/serialized.h
     capnproto/serialized-packed.h
+    capnproto/schema.h
+    capnproto/dynamic.h
 
 ## Lessons Learned from Protocol Buffers
 

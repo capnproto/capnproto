@@ -537,7 +537,7 @@ public:
   // - DynamicEnum, DynamicObject:  Returns the corresponding type.
   // - DynamicStruct, DynamicList, DynamicUnion:  Returns the corresponding Reader.
   //
-  // DynamicValue allows various implicit conversions:
+  // DynamicValue allows various implicit conversions, mostly just to make the interface friendlier.
   // - Any integer can be converted to any other integer type so long as the actual value is within
   //   the new type's range.
   // - Floating-point types can be converted to integers as long as no information would be lost
@@ -546,6 +546,8 @@ public:
   // - Float32/Float64 can be converted between each other.  Converting Float64 -> Float32 may lose
   //   information, but won't throw.
   // - Text can be converted to Data (but not vice-versa).
+  // - Text can be converted to an enum, if the Text matches one of the enumerant names (but not
+  //   vice-versa).
   //
   // Any other conversion attempt will throw an exception.
 
