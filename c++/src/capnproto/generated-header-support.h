@@ -40,64 +40,64 @@ namespace internal {
 
 template <typename T>
 struct PointerHelpers<T, Kind::STRUCT> {
-  static inline typename T::Reader get(StructReader reader, WireReferenceCount index,
+  static inline typename T::Reader get(StructReader reader, WirePointerCount index,
                                        const word* defaultValue = nullptr) {
     return typename T::Reader(reader.getStructField(index, defaultValue));
   }
-  static inline typename T::Builder get(StructBuilder builder, WireReferenceCount index,
+  static inline typename T::Builder get(StructBuilder builder, WirePointerCount index,
                                         const word* defaultValue = nullptr) {
     return typename T::Builder(builder.getStructField(index, structSize<T>(), defaultValue));
   }
-  static inline void set(StructBuilder builder, WireReferenceCount index,
+  static inline void set(StructBuilder builder, WirePointerCount index,
                          typename T::Reader value) {
     // TODO(now):  schemaless copy
     CAPNPROTO_INLINE_PRECOND(false, "Not implemented:  set() for struct fields.");
   }
-  static inline typename T::Builder init(StructBuilder builder, WireReferenceCount index) {
+  static inline typename T::Builder init(StructBuilder builder, WirePointerCount index) {
     return typename T::Builder(builder.initStructField(index, structSize<T>()));
   }
 };
 
 template <typename T>
 struct PointerHelpers<List<T>, Kind::LIST> {
-  static inline typename List<T>::Reader get(StructReader reader, WireReferenceCount index,
+  static inline typename List<T>::Reader get(StructReader reader, WirePointerCount index,
                                              const word* defaultValue = nullptr) {
     return typename List<T>::Reader(List<T>::getAsFieldOf(reader, index, defaultValue));
   }
-  static inline typename List<T>::Builder get(StructBuilder builder, WireReferenceCount index,
+  static inline typename List<T>::Builder get(StructBuilder builder, WirePointerCount index,
                                               const word* defaultValue = nullptr) {
     return typename List<T>::Builder(List<T>::getAsFieldOf(builder, index, defaultValue));
   }
-  static inline void set(StructBuilder builder, WireReferenceCount index,
+  static inline void set(StructBuilder builder, WirePointerCount index,
                          typename List<T>::Reader value) {
     init(builder, index, value.size()).copyFrom(value);
   }
-  static inline void set(StructBuilder builder, WireReferenceCount index,
+  static inline void set(StructBuilder builder, WirePointerCount index,
                          std::initializer_list<ReaderFor<T>> value) {
     init(builder, index, value.size()).copyFrom(value);
   }
   static inline typename List<T>::Builder init(
-      StructBuilder builder, WireReferenceCount index, uint size) {
+      StructBuilder builder, WirePointerCount index, uint size) {
     return typename List<T>::Builder(List<T>::initAsFieldOf(builder, index, size));
   }
 };
 
 template <typename T>
 struct PointerHelpers<T, Kind::BLOB> {
-  static inline typename T::Reader get(StructReader reader, WireReferenceCount index,
+  static inline typename T::Reader get(StructReader reader, WirePointerCount index,
                                        const void* defaultValue = nullptr,
                                        uint defaultBytes = 0) {
     return reader.getBlobField<T>(index, defaultValue, defaultBytes * BYTES);
   }
-  static inline typename T::Builder get(StructBuilder builder, WireReferenceCount index,
+  static inline typename T::Builder get(StructBuilder builder, WirePointerCount index,
                                         const void* defaultValue = nullptr,
                                         uint defaultBytes = 0) {
     return builder.getBlobField<T>(index, defaultValue, defaultBytes * BYTES);
   }
-  static inline void set(StructBuilder builder, WireReferenceCount index, typename T::Reader value) {
+  static inline void set(StructBuilder builder, WirePointerCount index, typename T::Reader value) {
     builder.setBlobField<T>(index, value);
   }
-  static inline typename T::Builder init(StructBuilder builder, WireReferenceCount index, uint size) {
+  static inline typename T::Builder init(StructBuilder builder, WirePointerCount index, uint size) {
     return builder.initBlobField<T>(index, size * BYTES);
   }
 };
@@ -114,7 +114,7 @@ struct PointerHelpers<TrustedMessage> {
   // itself trusted.  This hack is currently private.  It is used to locate default values within
   // encoded schemas.
 
-  static inline const word* get(StructReader reader, WireReferenceCount index) {
+  static inline const word* get(StructReader reader, WirePointerCount index) {
     return reader.getTrustedPointer(index);
   }
 };
@@ -177,7 +177,7 @@ inline constexpr uint64_t typeId() { return internal::TypeIdFor<T>::typeId; }
     template <> struct KindOf<type> { static constexpr Kind kind = Kind::STRUCT; }; \
     template <> struct StructSizeFor<type> { \
       static constexpr StructSize value = StructSize( \
-          dataWordSize * WORDS, pointerCount * REFERENCES, FieldSize::preferredElementEncoding); \
+          dataWordSize * WORDS, pointerCount * POINTERS, FieldSize::preferredElementEncoding); \
     }; \
     template <> struct TypeIdFor<type> { static constexpr uint64_t typeId = 0x##id; }; \
     template <> struct RawSchemaFor<type> { \

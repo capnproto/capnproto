@@ -78,11 +78,11 @@ internal::SegmentBuilder* MessageBuilder::getRootSegment() {
     new(arena()) internal::BuilderArena(this);
     allocatedArena = true;
 
-    WordCount refSize = 1 * REFERENCES * WORDS_PER_REFERENCE;
-    internal::SegmentBuilder* segment = arena()->getSegmentWithAvailable(refSize);
+    WordCount ptrSize = 1 * POINTERS * WORDS_PER_POINTER;
+    internal::SegmentBuilder* segment = arena()->getSegmentWithAvailable(ptrSize);
     CHECK(segment->getSegmentId() == internal::SegmentId(0),
         "First allocated word of new arena was not in segment ID 0.");
-    word* location = segment->allocate(refSize);
+    word* location = segment->allocate(ptrSize);
     CHECK(location == segment->getPtrUnchecked(0 * WORDS),
         "First allocated word of new arena was not the first word in its segment.");
     return segment;

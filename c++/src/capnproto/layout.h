@@ -44,7 +44,7 @@ class ListBuilder;
 class ListReader;
 class ObjectBuilder;
 class ObjectReader;
-struct WireReference;
+struct WirePointer;
 struct WireHelpers;
 class SegmentReader;
 class SegmentBuilder;
@@ -61,23 +61,23 @@ enum class FieldSize: uint8_t {
   FOUR_BYTES = 4,
   EIGHT_BYTES = 5,
 
-  REFERENCE = 6,  // Indicates that the field lives in the reference segment, not the data segment.
+  POINTER = 6,  // Indicates that the field lives in the pointer segment, not the data segment.
 
   INLINE_COMPOSITE = 7
   // A composite type of fixed width.  This serves two purposes:
   // 1) For lists of composite types where all the elements would have the exact same width,
-  //    allocating a list of references which in turn point at the elements would waste space.  We
+  //    allocating a list of pointers which in turn point at the elements would waste space.  We
   //    can avoid a layer of indirection by placing all the elements in a flat sequence, and only
   //    indicating the element properties (e.g. field count for structs) once.
   //
-  //    Specifically, a list reference indicating INLINE_COMPOSITE element size actually points to
-  //    a "tag" describing one element.  This tag is formatted like a wire reference, but the
+  //    Specifically, a list pointer indicating INLINE_COMPOSITE element size actually points to
+  //    a "tag" describing one element.  This tag is formatted like a wire pointer, but the
   //    "offset" instead stores the element count of the list.  The flat list of elements appears
-  //    immediately after the tag.  In the list reference itself, the element count is replaced with
+  //    immediately after the tag.  In the list pointer itself, the element count is replaced with
   //    a word count for the whole list (excluding tag).  This allows the tag and elements to be
   //    precached in a single step rather than two sequential steps.
   //
-  //    It is NOT intended to be possible to substitute an INLINE_COMPOSITE list for a REFERENCE
+  //    It is NOT intended to be possible to substitute an INLINE_COMPOSITE list for a POINTER
   //    list or vice-versa without breaking recipients.  Recipients expect one or the other
   //    depending on the message definition.
   //
@@ -93,7 +93,7 @@ enum class FieldSize: uint8_t {
 };
 
 typedef decltype(BITS / ELEMENTS) BitsPerElement;
-typedef decltype(REFERENCES / ELEMENTS) PointersPerElement;
+typedef decltype(POINTERS / ELEMENTS) PointersPerElement;
 
 namespace internal {
   static constexpr BitsPerElement BITS_PER_ELEMENT_TABLE[8] = {
@@ -113,7 +113,7 @@ inline constexpr BitsPerElement dataBitsPerElement(FieldSize size) {
 }
 
 inline constexpr PointersPerElement pointersPerElement(FieldSize size) {
-  return size == FieldSize::REFERENCE ? 1 * REFERENCES / ELEMENTS : 0 * REFERENCES / ELEMENTS;
+  return size == FieldSize::POINTER ? 1 * POINTERS / ELEMENTS : 0 * POINTERS / ELEMENTS;
 }
 
 }  // namespace internal
@@ -169,17 +169,17 @@ union AlignedData {
 
 struct StructSize {
   WordCount16 data;
-  WireReferenceCount16 pointers;
+  WirePointerCount16 pointers;
 
   FieldSize preferredListEncoding;
   // Preferred size to use when encoding a list of this struct.  This is INLINE_COMPOSITE if and
   // only if the struct is larger than one word; otherwise the struct list can be encoded more
   // efficiently by encoding it as if it were some primitive type.
 
-  inline constexpr WordCount total() const { return data + pointers * WORDS_PER_REFERENCE; }
+  inline constexpr WordCount total() const { return data + pointers * WORDS_PER_POINTER; }
 
   StructSize() = default;
-  inline constexpr StructSize(WordCount data, WireReferenceCount pointers,
+  inline constexpr StructSize(WordCount data, WirePointerCount pointers,
                               FieldSize preferredListEncoding)
       : data(data), pointers(pointers), preferredListEncoding(preferredListEncoding) {}
 };
@@ -288,13 +288,13 @@ private:
 
 class StructBuilder {
 public:
-  inline StructBuilder(): segment(nullptr), data(nullptr), references(nullptr), bit0Offset(0) {}
+  inline StructBuilder(): segment(nullptr), data(nullptr), pointers(nullptr), bit0Offset(0) {}
 
   static StructBuilder initRoot(SegmentBuilder* segment, word* location, StructSize size);
   static StructBuilder getRoot(SegmentBuilder* segment, word* location, StructSize size);
 
   inline BitCount getDataSectionSize() const { return dataSize; }
-  inline WireReferenceCount getPointerSectionSize() const { return referenceCount; }
+  inline WirePointerCount getPointerSectionSize() const { return pointerCount; }
   inline Data::Builder getDataSectionAsBlob();
 
   template <typename T>
@@ -318,48 +318,48 @@ public:
   // Like setDataField() but applies the given XOR mask before storing.  Used for writing fields
   // with non-zero default values.
 
-  StructBuilder initStructField(WireReferenceCount refIndex, StructSize size) const;
-  // Initializes the struct field at the given index in the reference segment.  If it is already
+  StructBuilder initStructField(WirePointerCount ptrIndex, StructSize size) const;
+  // Initializes the struct field at the given index in the pointer segment.  If it is already
   // initialized, the previous value is discarded or overwritten.  The struct is initialized to
   // the type's default state (all-zero).  Use getStructField() if you want the struct to be
-  // initialized as a copy of the field's default value (which may have non-null references).
+  // initialized as a copy of the field's default value (which may have non-null pointers).
 
-  StructBuilder getStructField(WireReferenceCount refIndex, StructSize size,
+  StructBuilder getStructField(WirePointerCount ptrIndex, StructSize size,
                                const word* defaultValue) const;
-  // Gets the struct field at the given index in the reference segment.  If the field is not already
+  // Gets the struct field at the given index in the pointer segment.  If the field is not already
   // initialized, it is initialized as a deep copy of the given default value (a trusted message),
   // or to the empty state if defaultValue is nullptr.
 
-  ListBuilder initListField(WireReferenceCount refIndex, FieldSize elementSize,
+  ListBuilder initListField(WirePointerCount ptrIndex, FieldSize elementSize,
                             ElementCount elementCount) const;
-  // Allocates a new list of the given size for the field at the given index in the reference
+  // Allocates a new list of the given size for the field at the given index in the pointer
   // segment, and return a pointer to it.  All elements are initialized to zero.
 
-  ListBuilder initStructListField(WireReferenceCount refIndex, ElementCount elementCount,
+  ListBuilder initStructListField(WirePointerCount ptrIndex, ElementCount elementCount,
                                   StructSize size) const;
-  // Allocates a new list of the given size for the field at the given index in the reference
+  // Allocates a new list of the given size for the field at the given index in the pointer
   // segment, and return a pointer to it.  Each element is initialized to its empty state.
 
-  ListBuilder getListField(WireReferenceCount refIndex, const word* defaultValue) const;
-  // Gets the already-allocated list field for the given reference index.  If the list is not
+  ListBuilder getListField(WirePointerCount ptrIndex, const word* defaultValue) const;
+  // Gets the already-allocated list field for the given pointer index.  If the list is not
   // already allocated, it is allocated as a deep copy of the given default value (a trusted
   // message).  If the default value is null, an empty list is used.
 
   template <typename T>
-  typename T::Builder initBlobField(WireReferenceCount refIndex, ByteCount size) const;
+  typename T::Builder initBlobField(WirePointerCount ptrIndex, ByteCount size) const;
   // Initialize a Text or Data field to the given size in bytes (not including NUL terminator for
   // Text) and return a Text::Builder which can be used to fill in the content.
 
   template <typename T>
-  void setBlobField(WireReferenceCount refIndex, typename T::Reader value) const;
+  void setBlobField(WirePointerCount ptrIndex, typename T::Reader value) const;
   // Set the blob field to a copy of the given blob.
 
   template <typename T>
-  typename T::Builder getBlobField(WireReferenceCount refIndex,
+  typename T::Builder getBlobField(WirePointerCount ptrIndex,
                                    const void* defaultValue, ByteCount defaultSize) const;
   // Get the blob field.  If it is not initialized, initialize it to a copy of the given default.
 
-  ObjectBuilder getObjectField(WireReferenceCount refIndex, const word* defaultValue) const;
+  ObjectBuilder getObjectField(WirePointerCount ptrIndex, const word* defaultValue) const;
   // Read a pointer of arbitrary type.
 
   StructReader asReader() const;
@@ -368,23 +368,23 @@ public:
 private:
   SegmentBuilder* segment;     // Memory segment in which the struct resides.
   void* data;                  // Pointer to the encoded data.
-  WireReference* references;   // Pointer to the encoded references.
+  WirePointer* pointers;   // Pointer to the encoded pointers.
 
   BitCount32 dataSize;
   // Size of data segment.  We use a bit count rather than a word count to more easily handle the
   // case of struct lists encoded with less than a word per element.
 
-  WireReferenceCount16 referenceCount;  // Size of the reference segment.
+  WirePointerCount16 pointerCount;  // Size of the pointer segment.
 
   BitCount8 bit0Offset;
   // A special hack:  If dataSize == 1 bit, then bit0Offset is the offset of that bit within the
   // byte pointed to by `data`.  In all other cases, this is zero.  This is needed to implement
   // struct lists where each struct is one bit.
 
-  inline StructBuilder(SegmentBuilder* segment, void* data, WireReference* references,
-                       BitCount dataSize, WireReferenceCount referenceCount, BitCount8 bit0Offset)
-      : segment(segment), data(data), references(references),
-        dataSize(dataSize), referenceCount(referenceCount), bit0Offset(bit0Offset) {}
+  inline StructBuilder(SegmentBuilder* segment, void* data, WirePointer* pointers,
+                       BitCount dataSize, WirePointerCount pointerCount, BitCount8 bit0Offset)
+      : segment(segment), data(data), pointers(pointers),
+        dataSize(dataSize), pointerCount(pointerCount), bit0Offset(bit0Offset) {}
 
   friend class ListBuilder;
   friend struct WireHelpers;
@@ -393,14 +393,14 @@ private:
 class StructReader {
 public:
   inline StructReader()
-      : segment(nullptr), data(nullptr), references(nullptr), dataSize(0),
-        referenceCount(0), bit0Offset(0), nestingLimit(0) {}
+      : segment(nullptr), data(nullptr), pointers(nullptr), dataSize(0),
+        pointerCount(0), bit0Offset(0), nestingLimit(0) {}
 
   static StructReader readRootTrusted(const word* location);
   static StructReader readRoot(const word* location, SegmentReader* segment, int nestingLimit);
 
   inline BitCount getDataSectionSize() const { return dataSize; }
-  inline WireReferenceCount getPointerSectionSize() const { return referenceCount; }
+  inline WirePointerCount getPointerSectionSize() const { return pointerCount; }
   inline Data::Reader getDataSectionAsBlob();
 
   template <typename T>
@@ -415,26 +415,26 @@ public:
   // Like getDataField(offset), but applies the given XOR mask to the result.  Used for reading
   // fields with non-zero default values.
 
-  StructReader getStructField(WireReferenceCount refIndex, const word* defaultValue) const;
-  // Get the struct field at the given index in the reference segment, or the default value if not
+  StructReader getStructField(WirePointerCount ptrIndex, const word* defaultValue) const;
+  // Get the struct field at the given index in the pointer segment, or the default value if not
   // initialized.  defaultValue will be interpreted as a trusted message -- it must point at a
-  // struct reference, which in turn points at the struct value.  The default value is allowed to
+  // struct pointer, which in turn points at the struct value.  The default value is allowed to
   // be null, in which case an empty struct is used.
 
-  ListReader getListField(WireReferenceCount refIndex, FieldSize expectedElementSize,
+  ListReader getListField(WirePointerCount ptrIndex, FieldSize expectedElementSize,
                           const word* defaultValue) const;
-  // Get the list field at the given index in the reference segment, or the default value if not
+  // Get the list field at the given index in the pointer segment, or the default value if not
   // initialized.  The default value is allowed to be null, in which case an empty list is used.
 
   template <typename T>
-  typename T::Reader getBlobField(WireReferenceCount refIndex,
+  typename T::Reader getBlobField(WirePointerCount ptrIndex,
                                   const void* defaultValue, ByteCount defaultSize) const;
   // Gets the text or data field, or the given default value if not initialized.
 
-  ObjectReader getObjectField(WireReferenceCount refIndex, const word* defaultValue) const;
+  ObjectReader getObjectField(WirePointerCount ptrIndex, const word* defaultValue) const;
   // Read a pointer of arbitrary type.
 
-  const word* getTrustedPointer(WireReferenceCount refIndex) const;
+  const word* getTrustedPointer(WirePointerCount ptrIndex) const;
   // If this is a trusted message, get a word* pointing at the location of the pointer.  This
   // word* can actually be passed to readTrusted() to read the designated sub-object later.  If
   // this isn't a trusted message, throws an exception.
@@ -443,13 +443,13 @@ private:
   SegmentReader* segment;  // Memory segment in which the struct resides.
 
   const void* data;
-  const WireReference* references;
+  const WirePointer* pointers;
 
   BitCount32 dataSize;
   // Size of data segment.  We use a bit count rather than a word count to more easily handle the
   // case of struct lists encoded with less than a word per element.
 
-  WireReferenceCount16 referenceCount;  // Size of the reference segment.
+  WirePointerCount16 pointerCount;  // Size of the pointer segment.
 
   BitCount8 bit0Offset;
   // A special hack:  If dataSize == 1 bit, then bit0Offset is the offset of that bit within the
@@ -466,11 +466,11 @@ private:
   // Once this reaches zero, further pointers will be pruned.
   // TODO:  Limit to 8 bits for better alignment?
 
-  inline StructReader(SegmentReader* segment, const void* data, const WireReference* references,
-                      BitCount dataSize, WireReferenceCount referenceCount, BitCount8 bit0Offset,
+  inline StructReader(SegmentReader* segment, const void* data, const WirePointer* pointers,
+                      BitCount dataSize, WirePointerCount pointerCount, BitCount8 bit0Offset,
                       int nestingLimit)
-      : segment(segment), data(data), references(references),
-        dataSize(dataSize), referenceCount(referenceCount), bit0Offset(bit0Offset),
+      : segment(segment), data(data), pointers(pointers),
+        dataSize(dataSize), pointerCount(pointerCount), bit0Offset(bit0Offset),
         nestingLimit(nestingLimit) {}
 
   friend class ListReader;
@@ -512,7 +512,7 @@ public:
 
   ListBuilder initStructListElement(ElementCount index, ElementCount elementCount,
                                     StructSize size) const;
-  // Allocates a new list of the given size for the field at the given index in the reference
+  // Allocates a new list of the given size for the field at the given index in the pointer
   // segment, and return a pointer to it.  Each element is initialized to its empty state.
 
   ListBuilder getListElement(ElementCount index) const;
@@ -549,16 +549,16 @@ private:
   // The distance between elements.
 
   BitCount32 structDataSize;
-  WireReferenceCount16 structReferenceCount;
+  WirePointerCount16 structPointerCount;
   // The struct properties to use when interpreting the elements as structs.  All lists can be
   // interpreted as struct lists, so these are always filled in.
 
   inline ListBuilder(SegmentBuilder* segment, void* ptr,
                      decltype(BITS / ELEMENTS) step, ElementCount size,
-                     BitCount structDataSize, WireReferenceCount structReferenceCount)
+                     BitCount structDataSize, WirePointerCount structPointerCount)
       : segment(segment), ptr(reinterpret_cast<byte*>(ptr)),
         elementCount(size), step(step), structDataSize(structDataSize),
-        structReferenceCount(structReferenceCount) {}
+        structPointerCount(structPointerCount) {}
 
   friend class StructBuilder;
   friend struct WireHelpers;
@@ -568,7 +568,7 @@ class ListReader {
 public:
   inline ListReader()
       : segment(nullptr), ptr(nullptr), elementCount(0), step(0 * BITS / ELEMENTS),
-        structDataSize(0), structReferenceCount(0), nestingLimit(0) {}
+        structDataSize(0), structPointerCount(0), nestingLimit(0) {}
 
   inline ElementCount size() const;
   // The number of elements in the list.
@@ -605,7 +605,7 @@ private:
   // The distance between elements.
 
   BitCount32 structDataSize;
-  WireReferenceCount16 structReferenceCount;
+  WirePointerCount16 structPointerCount;
   // The struct properties to use when interpreting the elements as structs.  All lists can be
   // interpreted as struct lists, so these are always filled in.
 
@@ -615,11 +615,11 @@ private:
 
   inline ListReader(SegmentReader* segment, const void* ptr,
                     ElementCount elementCount, decltype(BITS / ELEMENTS) step,
-                    BitCount structDataSize, WireReferenceCount structReferenceCount,
+                    BitCount structDataSize, WirePointerCount structPointerCount,
                     int nestingLimit)
       : segment(segment), ptr(reinterpret_cast<const byte*>(ptr)), elementCount(elementCount),
         step(step), structDataSize(structDataSize),
-        structReferenceCount(structReferenceCount), nestingLimit(nestingLimit) {}
+        structPointerCount(structPointerCount), nestingLimit(nestingLimit) {}
 
   friend class StructReader;
   friend class ListBuilder;
@@ -835,19 +835,19 @@ inline Void ListReader::getDataElement<Void>(ElementCount index) const {
 }
 
 // These are defined in the source file.
-template <> typename Text::Builder StructBuilder::initBlobField<Text>(WireReferenceCount refIndex, ByteCount size) const;
-template <> void StructBuilder::setBlobField<Text>(WireReferenceCount refIndex, typename Text::Reader value) const;
-template <> typename Text::Builder StructBuilder::getBlobField<Text>(WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const;
-template <> typename Text::Reader StructReader::getBlobField<Text>(WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const;
+template <> typename Text::Builder StructBuilder::initBlobField<Text>(WirePointerCount ptrIndex, ByteCount size) const;
+template <> void StructBuilder::setBlobField<Text>(WirePointerCount ptrIndex, typename Text::Reader value) const;
+template <> typename Text::Builder StructBuilder::getBlobField<Text>(WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) const;
+template <> typename Text::Reader StructReader::getBlobField<Text>(WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) const;
 template <> typename Text::Builder ListBuilder::initBlobElement<Text>(ElementCount index, ByteCount size) const;
 template <> void ListBuilder::setBlobElement<Text>(ElementCount index, typename Text::Reader value) const;
 template <> typename Text::Builder ListBuilder::getBlobElement<Text>(ElementCount index) const;
 template <> typename Text::Reader ListReader::getBlobElement<Text>(ElementCount index) const;
 
-template <> typename Data::Builder StructBuilder::initBlobField<Data>(WireReferenceCount refIndex, ByteCount size) const;
-template <> void StructBuilder::setBlobField<Data>(WireReferenceCount refIndex, typename Data::Reader value) const;
-template <> typename Data::Builder StructBuilder::getBlobField<Data>(WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const;
-template <> typename Data::Reader StructReader::getBlobField<Data>(WireReferenceCount refIndex, const void* defaultValue, ByteCount defaultSize) const;
+template <> typename Data::Builder StructBuilder::initBlobField<Data>(WirePointerCount ptrIndex, ByteCount size) const;
+template <> void StructBuilder::setBlobField<Data>(WirePointerCount ptrIndex, typename Data::Reader value) const;
+template <> typename Data::Builder StructBuilder::getBlobField<Data>(WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) const;
+template <> typename Data::Reader StructReader::getBlobField<Data>(WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) const;
 template <> typename Data::Builder ListBuilder::initBlobElement<Data>(ElementCount index, ByteCount size) const;
 template <> void ListBuilder::setBlobElement<Data>(ElementCount index, typename Data::Reader value) const;
 template <> typename Data::Builder ListBuilder::getBlobElement<Data>(ElementCount index) const;

@@ -481,26 +481,26 @@ extractFieldNumbers decls = concat
 data PackingState = PackingState
     { packingHoles :: Map.Map DataSize Integer
     , packingDataSize :: Integer
-    , packingReferenceCount :: Integer
+    , packingPointerCount :: Integer
     }
 
 initialPackingState = PackingState Map.empty 0 0
 
 packValue :: FieldSize -> PackingState -> (FieldOffset, PackingState)
 packValue SizeVoid s = (VoidOffset, s)
-packValue SizeReference s@(PackingState { packingReferenceCount = rc }) =
-    (PointerOffset rc, s { packingReferenceCount = rc + 1 })
+packValue SizePointer s@(PackingState { packingPointerCount = rc }) =
+    (PointerOffset rc, s { packingPointerCount = rc + 1 })
 packValue (SizeInlineComposite (DataSectionWords inlineDs) inlineRc)
-          s@(PackingState { packingDataSize = ds, packingReferenceCount = rc }) =
+          s@(PackingState { packingDataSize = ds, packingPointerCount = rc }) =
     (InlineCompositeOffset ds rc (DataSectionWords inlineDs) inlineRc,
         s { packingDataSize = ds + inlineDs
-          , packingReferenceCount = rc + inlineRc })
+          , packingPointerCount = rc + inlineRc })
 packValue (SizeInlineComposite inlineDs inlineRc)
-          s@(PackingState { packingReferenceCount = rc }) = let
+          s@(PackingState { packingPointerCount = rc }) = let
     size = (dataSectionAlignment inlineDs)
     (offset, s2) = packData size s
     in (InlineCompositeOffset offset rc inlineDs inlineRc,
-        s2 { packingReferenceCount = rc + inlineRc })
+        s2 { packingPointerCount = rc + inlineRc })
 packValue (SizeData size) s = let (o, s2) = packData size s in (DataOffset size o, s2)
 
 packData :: DataSize -> PackingState -> (Integer, PackingState)
@@ -569,14 +569,14 @@ packUnionizedValue (SizeData size) (UnionPackingState (UnionSlot slotSize slotOf
         Nothing -> packUnionizedValue (SizeData size)
             (UnionPackingState (UnionSlot (DataSectionWords 0) 0) p) s
 
--- Pack reference when we don't have a reference slot.
-packUnionizedValue SizeReference u@(UnionPackingState _ (UnionSlot 0 _)) s = let
-    (PointerOffset offset, s2) = packValue SizeReference s
+-- Pack pointer when we don't have a pointer slot.
+packUnionizedValue SizePointer u@(UnionPackingState _ (UnionSlot 0 _)) s = let
+    (PointerOffset offset, s2) = packValue SizePointer s
     u2 = u { unionPointerSlot = UnionSlot 1 offset }
     in (PointerOffset offset, u2, s2)
 
--- Pack reference when we already have a reference slot allocated.
-packUnionizedValue SizeReference u@(UnionPackingState _ (UnionSlot _ offset)) s =
+-- Pack pointer when we already have a pointer slot allocated.
+packUnionizedValue SizePointer u@(UnionPackingState _ (UnionSlot _ offset)) s =
     (PointerOffset offset, u, s)
 
 -- Pack inline composite.
@@ -621,14 +621,14 @@ packUnionizedValue (SizeInlineComposite dataSize pointerCount)
     -- Pack the pointer section.
     (pointerOffset, u3, s3)
         | pointerCount <= pointerSlotSize = (pointerSlotOffset, u2, s2)
-        | pointerSlotOffset + pointerSlotSize == packingReferenceCount s2 =
+        | pointerSlotOffset + pointerSlotSize == packingPointerCount s2 =
             (pointerSlotOffset,
             u2 { unionPointerSlot = UnionSlot pointerCount pointerSlotOffset },
-            s2 { packingReferenceCount = pointerSlotOffset + pointerCount })
+            s2 { packingPointerCount = pointerSlotOffset + pointerCount })
         | otherwise =
-            (packingReferenceCount s2,
-            u2 { unionPointerSlot = UnionSlot pointerCount (packingReferenceCount s2) },
-            s2 { packingReferenceCount = packingReferenceCount s2 + pointerCount })
+            (packingPointerCount s2,
+            u2 { unionPointerSlot = UnionSlot pointerCount (packingPointerCount s2) },
+            s2 { packingPointerCount = packingPointerCount s2 + pointerCount })
 
     combinedOffset = InlineCompositeOffset
         { inlineCompositeDataOffset = dataOffset
@@ -738,7 +738,7 @@ packFields fields unions = let
             then dataSizeToSectionSize $ stripHolesFromFirstWord Size64 $ packingHoles finalState
             else DataSectionWords $ packingDataSize finalState
 
-    in (dataSectionSize, packingReferenceCount finalState, Map.fromList packedItems)
+    in (dataSectionSize, packingPointerCount finalState, Map.fromList packedItems)
 
 enforceFixed Nothing sizes = return sizes
 enforceFixed (Just (Located pos (requestedDataSize, requestedPointerCount)))

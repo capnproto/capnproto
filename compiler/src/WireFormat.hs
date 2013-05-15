@@ -77,13 +77,13 @@ encodeMaskedDataValue t v (Just d) = xorData (encodeDataValue t v) (encodeDataVa
 encodePointerValue :: TypeDesc -> ValueDesc -> (Integer -> [Word8], [Word8])
 encodePointerValue _ (TextDesc text) = let
     encoded = UTF8.encode text ++ [0]
-    in (encodeListReference (SizeData Size8) (genericLength encoded), padToWord encoded)
+    in (encodeListPointer (SizeData Size8) (genericLength encoded), padToWord encoded)
 encodePointerValue _ (DataDesc d) =
-    (encodeListReference (SizeData Size8) (genericLength d), padToWord d)
+    (encodeListPointer (SizeData Size8) (genericLength d), padToWord d)
 encodePointerValue (StructType desc) (StructValueDesc assignments) = let
-    (dataBytes, refBytes, childBytes) = encodeStruct desc assignments 0
-    in (encodeStructReference (structDataSize desc, structPointerCount desc),
-        concat [dataBytes, refBytes, childBytes])
+    (dataBytes, ptrBytes, childBytes) = encodeStruct desc assignments 0
+    in (encodeStructPointer (structDataSize desc, structPointerCount desc),
+        concat [dataBytes, ptrBytes, childBytes])
 encodePointerValue (InlineStructType _) _ =
     error "Tried to encode inline struct as a pointer."
 encodePointerValue (ListType elementType) (ListDesc items) = encodeList elementType items
@@ -132,15 +132,15 @@ packPointers size items o = loop 0 items (o + size - 1) where
         in (genericReplicate (padCount * 8) 0 ++ restPtrs, restChildren)
     loop idx [] _ = (genericReplicate ((size - idx) * 8) 0, [])
 
-encodeStructReference (dataSize, pointerCount) offset =
+encodeStructPointer (dataSize, pointerCount) offset =
     intToBytes (offset * 4 + structTag) 4 ++
     intToBytes (dataSectionWordSize dataSize) 2 ++
     intToBytes pointerCount 2
 
-encodeListReference elemSize@(SizeInlineComposite ds rc) elementCount offset =
+encodeListPointer elemSize@(SizeInlineComposite ds rc) elementCount offset =
     intToBytes (offset * 4 + listTag) 4 ++
     intToBytes (fieldSizeEnum elemSize + shiftL (elementCount * (dataSectionWordSize ds + rc)) 3) 4
-encodeListReference elemSize elementCount offset =
+encodeListPointer elemSize elementCount offset =
     intToBytes (offset * 4 + listTag) 4 ++
     intToBytes (fieldSizeEnum elemSize + shiftL elementCount 3) 4
 
@@ -150,13 +150,13 @@ fieldSizeEnum (SizeData Size8) = 2
 fieldSizeEnum (SizeData Size16) = 3
 fieldSizeEnum (SizeData Size32) = 4
 fieldSizeEnum (SizeData Size64) = 5
-fieldSizeEnum SizeReference = 6
+fieldSizeEnum SizePointer = 6
 fieldSizeEnum (SizeInlineComposite _ _) = 7
 
 structTag = 0
 listTag = 1
 
--- childOffset = number of words between the last reference and the location where children will
+-- childOffset = number of words between the last pointer and the location where children will
 -- be allocated.
 encodeStruct desc assignments childOffset = let
     dataSize = dataSectionBits $ structDataSize desc
@@ -224,38 +224,38 @@ encodeList :: TypeDesc                  -- Type of each element.
 -- Encode a list of empty structs as void.
 encodeList (StructType StructDesc {
         structDataSize = DataSectionWords 0, structPointerCount = 0 }) elements =
-    (encodeListReference SizeVoid (genericLength elements), [])
+    (encodeListPointer SizeVoid (genericLength elements), [])
 
 -- Encode a list of sub-word data-only structs as a list of primitives.
 encodeList (StructType desc@StructDesc { structDataSize = ds, structPointerCount = 0 }) elements
         | dataSectionBits ds <= 64 = let
-    in (encodeListReference (SizeData $ dataSectionAlignment ds) (genericLength elements),
+    in (encodeListPointer (SizeData $ dataSectionAlignment ds) (genericLength elements),
         inlineStructListDataSection desc elements)
 
 -- Encode a list of single-pointer structs as a list of pointers.
 encodeList (StructType desc@StructDesc {
         structDataSize = DataSectionWords 0, structPointerCount = 1 }) elements = let
-    (refBytes, childBytes) = inlineStructListPointerSection desc elements
-    in (encodeListReference SizeReference (genericLength elements), refBytes ++ childBytes)
+    (ptrBytes, childBytes) = inlineStructListPointerSection desc elements
+    in (encodeListPointer SizePointer (genericLength elements), ptrBytes ++ childBytes)
 
 -- Encode a list of any other sort of struct.
 encodeList (StructType desc) elements = let
     count = genericLength elements
-    tag = encodeStructReference (structDataSize desc, structPointerCount desc) count
+    tag = encodeStructPointer (structDataSize desc, structPointerCount desc) count
     eSize = dataSectionWordSize (structDataSize desc) + structPointerCount desc
     structElems = [v | StructValueDesc v <- elements]
     (elemBytes, childBytes) = loop (eSize * genericLength structElems) structElems
     loop _ [] = ([], [])
     loop offset (element:rest) = let
         offsetFromElementEnd = offset - eSize
-        (dataBytes, refBytes, childBytes2) = encodeStruct desc element offsetFromElementEnd
+        (dataBytes, ptrBytes, childBytes2) = encodeStruct desc element offsetFromElementEnd
         childLen = genericLength childBytes2
         childWordLen = if mod childLen 8 == 0
             then div childLen 8
             else error "Child not word-aligned."
         (restBytes, restChildren) = loop (offsetFromElementEnd + childWordLen) rest
-        in (dataBytes ++ refBytes ++ restBytes, childBytes2 ++ restChildren)
-    in (encodeListReference (SizeInlineComposite (structDataSize desc) (structPointerCount desc))
+        in (dataBytes ++ ptrBytes ++ restBytes, childBytes2 ++ restChildren)
+    in (encodeListPointer (SizeInlineComposite (structDataSize desc) (structPointerCount desc))
                             (genericLength elements),
         concat [tag, elemBytes, childBytes])
 
@@ -280,14 +280,14 @@ encodeList elementType elements = let
     dataBytes = case eSize of
         SizeVoid -> []
         SizeInlineComposite _ _ -> error "All inline composites should have been handled above."
-        SizeReference -> refBytes ++ childBytes where
+        SizePointer -> ptrBytes ++ childBytes where
             encodedElements = zip [0..] $ map (encodePointerValue elementType) elements
-            (refBytes, childBytes) = packPointers (genericLength elements) encodedElements 0
+            (ptrBytes, childBytes) = packPointers (genericLength elements) encodedElements 0
         SizeData size -> let
             bits = dataSizeInBits size
             encodedElements = zip [0,bits..] $ map (encodeDataValue elementType) elements
             in packBytes (genericLength elements * bits) encodedElements
-    in (encodeListReference eSize (genericLength elements), dataBytes)
+    in (encodeListPointer eSize (genericLength elements), dataBytes)
 
 ---------------------------------------------
 
@@ -298,7 +298,7 @@ inlineListDataSectionValues elementType elements = case fieldSize elementType of
         InlineListType t _ -> inlineListDataSectionValues t (concat [l | ListDesc l <- elements])
         InlineDataType _ -> [(0, EncodedBytes $ concat [l | DataDesc l <- elements])]
         _ -> error "Unknown inline composite type."
-    SizeReference -> []
+    SizePointer -> []
     SizeData size -> let
         bits = dataSizeInBits size
         in zip [0,bits..] $ map (encodeDataValue elementType) elements
@@ -310,7 +310,7 @@ inlineListPointerSectionValues elementType elements = case fieldSize elementType
         InlineListType t _ -> inlineListPointerSectionValues t (concat [l | ListDesc l <- elements])
         InlineDataType _ -> []
         _ -> error "Unknown inline composite type."
-    SizeReference -> zip [0..] $ map (encodePointerValue elementType) elements
+    SizePointer -> zip [0..] $ map (encodePointerValue elementType) elements
     SizeData _ -> []
 
 inlineStructListDataSection elementDesc elements =
@@ -338,9 +338,9 @@ inlineStructListPointerSectionValues elementDesc elements = do
 ------------------------------------------------------------------------------------------
 
 encodeMessage (StructType desc) (StructValueDesc assignments) = let
-    (dataBytes, refBytes, childBytes) = encodeStruct desc assignments 0
-    in concat [encodeStructReference (structDataSize desc, structPointerCount desc) (0::Integer),
-               dataBytes, refBytes, childBytes]
+    (dataBytes, ptrBytes, childBytes) = encodeStruct desc assignments 0
+    in concat [encodeStructPointer (structDataSize desc, structPointerCount desc) (0::Integer),
+               dataBytes, ptrBytes, childBytes]
 encodeMessage (ListType elementType) (ListDesc elements) = let
     (ptr, listBytes) = encodeList elementType elements
     in ptr (0::Integer) ++ listBytes
@@ -368,20 +368,20 @@ encodeSchema requestedFiles allFiles = (encRoot, nodesForEmbedding) where
         elemBits = dataSizeInBits elementSize
         bytes = packBytes (elemBits * genericLength elements)
               $ zip [0,elemBits..] elements
-        in (encodeListReference (SizeData elementSize) (genericLength elements), bytes)
+        in (encodeListPointer (SizeData elementSize) (genericLength elements), bytes)
 
     -- Not used, but maybe useful in the future.
     --encPtrList :: [EncodedPtr] -> EncodedPtr
     --encPtrList elements = let
     --    (ptrBytes, childBytes) = packPointers (genericLength elements) (zip [0..] elements) 0
-    --    in (encodeListReference SizeReference (genericLength elements), ptrBytes ++ childBytes)
+    --    in (encodeListPointer SizePointer (genericLength elements), ptrBytes ++ childBytes)
 
     encStructList :: (DataSectionSize, Integer)
                   -> [([(Integer, EncodedData)], [(Integer, EncodedPtr)])]
                   -> EncodedPtr
     encStructList elementSize@(dataSize, pointerCount) elements = let
         count = genericLength elements
-        tag = encodeStructReference elementSize count
+        tag = encodeStructPointer elementSize count
         eSize = dataSectionWordSize dataSize + pointerCount
         (elemBytes, childBytes) = loop (eSize * genericLength elements) elements
         loop _ [] = ([], [])
@@ -395,7 +395,7 @@ encodeSchema requestedFiles allFiles = (encRoot, nodesForEmbedding) where
                 else error "Child not word-aligned."
             (restBytes, restChildren) = loop (offsetFromElementEnd + childWordLen) rest
             in (concat [dataBytes, ptrBytes, restBytes], childBytes2 ++ restChildren)
-        in (encodeListReference (SizeInlineComposite dataSize pointerCount) (genericLength elements),
+        in (encodeListPointer (SizeInlineComposite dataSize pointerCount) (genericLength elements),
             concat [tag, elemBytes, childBytes])
 
     encStructBody :: (DataSectionSize, Integer)
@@ -413,7 +413,7 @@ encodeSchema requestedFiles allFiles = (encRoot, nodesForEmbedding) where
               -> EncodedPtr
     encStruct size (dataValues, ptrValues) = let
         (dataBytes, ptrBytes, childBytes) = encStructBody size dataValues ptrValues 0
-        in (encodeStructReference size, concat [dataBytes, ptrBytes, childBytes])
+        in (encodeStructPointer size, concat [dataBytes, ptrBytes, childBytes])
 
     ---------------------------------------------
 
@@ -497,14 +497,14 @@ encodeSchema requestedFiles allFiles = (encRoot, nodesForEmbedding) where
             (Nothing, _) -> []
             (_, SizeVoid) -> []
             (Just value, SizeData _) -> [ (64, encodeDataValue t value) ]
-            (_, SizeReference) -> []
+            (_, SizePointer) -> []
             (_, SizeInlineComposite _ _) ->
                 error "Inline types not currently supported by codegen plugins.")
         ptrValues = case (maybeValue, fieldSize t) of
             (Nothing, _) -> []
             (_, SizeVoid) -> []
             (_, SizeData _) -> []
-            (Just value, SizeReference) -> [ (0, encodePointerValue t value) ]
+            (Just value, SizePointer) -> [ (0, encodePointerValue t value) ]
             (_, SizeInlineComposite _ _) ->
                 error "Inline types not currently supported by codegen plugins."
 
@@ -596,7 +596,7 @@ encodeSchema requestedFiles allFiles = (encRoot, nodesForEmbedding) where
 
         preferredListEncoding = case (structDataSize desc, structPointerCount desc) of
             (DataSectionWords 0, 0) -> SizeVoid
-            (DataSectionWords 0, 1) -> SizeReference
+            (DataSectionWords 0, 1) -> SizePointer
             (DataSection1, 0) -> SizeData Size1
             (DataSection8, 0) -> SizeData Size8
             (DataSection16, 0) -> SizeData Size16

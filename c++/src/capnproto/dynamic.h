@@ -656,13 +656,13 @@ struct PointerHelpers<DynamicStruct, Kind::UNKNOWN> {
   // non-dynamic types PointerHelpers::get() takes a default value as the third argument, and we
   // don't want people to accidentally be able to provide their own default value.
   static DynamicStruct::Reader getDynamic(
-      StructReader reader, WireReferenceCount index, StructSchema schema);
+      StructReader reader, WirePointerCount index, StructSchema schema);
   static DynamicStruct::Builder getDynamic(
-      StructBuilder builder, WireReferenceCount index, StructSchema schema);
+      StructBuilder builder, WirePointerCount index, StructSchema schema);
   static void set(
-      StructBuilder builder, WireReferenceCount index, DynamicStruct::Reader value);
+      StructBuilder builder, WirePointerCount index, DynamicStruct::Reader value);
   static DynamicStruct::Builder init(
-      StructBuilder builder, WireReferenceCount index, StructSchema schema);
+      StructBuilder builder, WirePointerCount index, StructSchema schema);
 };
 
 template <>
@@ -671,13 +671,13 @@ struct PointerHelpers<DynamicList, Kind::UNKNOWN> {
   // non-dynamic types PointerHelpers::get() takes a default value as the third argument, and we
   // don't want people to accidentally be able to provide their own default value.
   static DynamicList::Reader getDynamic(
-      StructReader reader, WireReferenceCount index, ListSchema schema);
+      StructReader reader, WirePointerCount index, ListSchema schema);
   static DynamicList::Builder getDynamic(
-      StructBuilder builder, WireReferenceCount index, ListSchema schema);
+      StructBuilder builder, WirePointerCount index, ListSchema schema);
   static void set(
-      StructBuilder builder, WireReferenceCount index, DynamicList::Reader value);
+      StructBuilder builder, WirePointerCount index, DynamicList::Reader value);
   static DynamicList::Builder init(
-      StructBuilder builder, WireReferenceCount index, ListSchema schema, uint size);
+      StructBuilder builder, WirePointerCount index, ListSchema schema, uint size);
 };
 
 }  // namespace internal

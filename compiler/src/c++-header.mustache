@@ -113,7 +113,7 @@ namespace internal {
 {{#typeStruct}}
 CAPNPROTO_DECLARE_STRUCT(
     ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{typeFullName}}, {{structId}},
-    {{structDataSize}}, {{structReferenceCount}}, {{structPreferredListEncoding}});
+    {{structDataSize}}, {{structPointerCount}}, {{structPreferredListEncoding}});
 {{#structNestedEnums}}
 CAPNPROTO_DECLARE_ENUM(
     ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{typeFullName}}::{{enumName}}, {{enumId}});
@@ -302,7 +302,7 @@ inline {{fieldType}}::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
                             "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<{{fieldType}}>::get(
-      _reader, {{fieldOffset}} * ::capnproto::REFERENCES{{#fieldDefaultBytes}},
+      _reader, {{fieldOffset}} * ::capnproto::POINTERS{{#fieldDefaultBytes}},
       DEFAULT_{{fieldUpperCase}}.words{{#fieldIsBlob}}, {{defaultBlobSize}}{{/fieldIsBlob}}{{/fieldDefaultBytes}});
 }
 
@@ -312,7 +312,7 @@ inline {{fieldType}}::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}()
                             "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<{{fieldType}}>::get(
-      _builder, {{fieldOffset}} * ::capnproto::REFERENCES{{#fieldDefaultBytes}},
+      _builder, {{fieldOffset}} * ::capnproto::POINTERS{{#fieldDefaultBytes}},
       DEFAULT_{{fieldUpperCase}}.words{{#fieldIsBlob}}, {{defaultBlobSize}}{{/fieldIsBlob}}{{/fieldDefaultBytes}});
 }
 
@@ -322,7 +322,7 @@ inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}({{fieldType}}::Read
       {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
   ::capnproto::internal::PointerHelpers<{{fieldType}}>::set(
-      _builder, {{fieldOffset}} * ::capnproto::REFERENCES, value);
+      _builder, {{fieldOffset}} * ::capnproto::POINTERS, value);
 }
 
 {{#fieldIsList}}
@@ -333,7 +333,7 @@ inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}(
       {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
   ::capnproto::internal::PointerHelpers<{{fieldType}}>::set(
-      _builder, {{fieldOffset}} * ::capnproto::REFERENCES, value);
+      _builder, {{fieldOffset}} * ::capnproto::POINTERS, value);
 }
 
 {{/fieldIsList}}
@@ -344,7 +344,7 @@ inline {{fieldType}}::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(
       {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<{{fieldType}}>::init(
-      _builder, {{fieldOffset}} * ::capnproto::REFERENCES, size);
+      _builder, {{fieldOffset}} * ::capnproto::POINTERS, size);
 }
 
 {{/fieldIsListOrBlob}}
@@ -355,7 +355,7 @@ inline {{fieldType}}::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(
       {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<{{fieldType}}>::init(
-      _builder, {{fieldOffset}} * ::capnproto::REFERENCES);
+      _builder, {{fieldOffset}} * ::capnproto::POINTERS);
 }
 
 {{/fieldIsStruct}}
@@ -370,7 +370,7 @@ inline typename T::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
                             "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<T>::get(
-      _reader, {{fieldOffset}} * ::capnproto::REFERENCES);
+      _reader, {{fieldOffset}} * ::capnproto::POINTERS);
 }
 
 template <typename T>
@@ -380,7 +380,7 @@ inline typename T::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}() {
                             "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<T>::get(
-      _builder, {{fieldOffset}} * ::capnproto::REFERENCES);
+      _builder, {{fieldOffset}} * ::capnproto::POINTERS);
 }
 
 template <typename T, typename Param>
@@ -390,7 +390,7 @@ inline typename T::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}(Param&
                             "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<T>::getDynamic(
-      _reader, {{fieldOffset}} * ::capnproto::REFERENCES, ::capnproto::forward<Param>(param));
+      _reader, {{fieldOffset}} * ::capnproto::POINTERS, ::capnproto::forward<Param>(param));
 }
 
 template <typename T, typename Param>
@@ -400,7 +400,7 @@ inline typename T::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}(Para
                             "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<T>::getDynamic(
-      _builder, {{fieldOffset}} * ::capnproto::REFERENCES, ::capnproto::forward<Param>(param));
+      _builder, {{fieldOffset}} * ::capnproto::POINTERS, ::capnproto::forward<Param>(param));
 }
 
 template <typename T>
@@ -410,7 +410,7 @@ inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}(typename T::Reader 
       {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
   ::capnproto::internal::PointerHelpers<T>::set(
-      _builder, {{fieldOffset}} * ::capnproto::REFERENCES, value);
+      _builder, {{fieldOffset}} * ::capnproto::POINTERS, value);
 }
 
 template <typename T, typename... Params>
@@ -420,7 +420,7 @@ inline typename T::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(Par
       {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<T>::init(
-      _builder, {{fieldOffset}} * ::capnproto::REFERENCES, ::capnproto::forward<Params>(params)...);
+      _builder, {{fieldOffset}} * ::capnproto::POINTERS, ::capnproto::forward<Params>(params)...);
 }
 
 {{/fieldIsGenericObject}}

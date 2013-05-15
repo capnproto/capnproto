@@ -94,22 +94,22 @@ template <typename T> struct FieldSizeForType {
       kind<T>() == Kind::STRUCT ? FieldSize::INLINE_COMPOSITE :
 
       // Everything else is a pointer.
-      FieldSize::REFERENCE;
+      FieldSize::POINTER;
 };
 
 // Void and bool are special.
 template <> struct FieldSizeForType<Void> { static constexpr FieldSize value = FieldSize::VOID; };
 template <> struct FieldSizeForType<bool> { static constexpr FieldSize value = FieldSize::BIT; };
 
-// Lists and blobs are references, not structs.
+// Lists and blobs are pointers, not structs.
 template <typename T, bool b> struct FieldSizeForType<List<T, b>> {
-  static constexpr FieldSize value = FieldSize::REFERENCE;
+  static constexpr FieldSize value = FieldSize::POINTER;
 };
 template <> struct FieldSizeForType<Text> {
-  static constexpr FieldSize value = FieldSize::REFERENCE;
+  static constexpr FieldSize value = FieldSize::POINTER;
 };
 template <> struct FieldSizeForType<Data> {
-  static constexpr FieldSize value = FieldSize::REFERENCE;
+  static constexpr FieldSize value = FieldSize::POINTER;
 };
 
 template <typename T>
@@ -265,15 +265,15 @@ private:
   }
 
   inline static internal::ListBuilder initAsFieldOf(
-      internal::StructBuilder& builder, WireReferenceCount index, uint size) {
+      internal::StructBuilder& builder, WirePointerCount index, uint size) {
     return builder.initListField(index, internal::FieldSizeForType<T>::value, size * ELEMENTS);
   }
   inline static internal::ListBuilder getAsFieldOf(
-      internal::StructBuilder& builder, WireReferenceCount index, const word* defaultValue) {
+      internal::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
     return builder.getListField(index, defaultValue);
   }
   inline static internal::ListReader getAsFieldOf(
-      internal::StructReader& reader, WireReferenceCount index, const word* defaultValue) {
+      internal::StructReader& reader, WirePointerCount index, const word* defaultValue) {
     return reader.getListField(index, internal::FieldSizeForType<T>::value, defaultValue);
   }
 
@@ -351,15 +351,15 @@ private:
   }
 
   inline static internal::ListBuilder initAsFieldOf(
-      internal::StructBuilder& builder, WireReferenceCount index, uint size) {
+      internal::StructBuilder& builder, WirePointerCount index, uint size) {
     return builder.initStructListField(index, size * ELEMENTS, internal::structSize<T>());
   }
   inline static internal::ListBuilder getAsFieldOf(
-      internal::StructBuilder& builder, WireReferenceCount index, const word* defaultValue) {
+      internal::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
     return builder.getListField(index, defaultValue);
   }
   inline static internal::ListReader getAsFieldOf(
-      internal::StructReader& reader, WireReferenceCount index, const word* defaultValue) {
+      internal::StructReader& reader, WirePointerCount index, const word* defaultValue) {
     return reader.getListField(index, internal::FieldSize::INLINE_COMPOSITE, defaultValue);
   }
 
@@ -425,7 +425,7 @@ private:
   inline static internal::ListBuilder initAsElementOf(
       const internal::ListBuilder& builder, uint index, uint size) {
     return builder.initListElement(
-        index * ELEMENTS, internal::FieldSize::REFERENCE, size * ELEMENTS);
+        index * ELEMENTS, internal::FieldSize::POINTER, size * ELEMENTS);
   }
   inline static internal::ListBuilder getAsElementOf(
       const internal::ListBuilder& builder, uint index) {
@@ -433,20 +433,20 @@ private:
   }
   inline static internal::ListReader getAsElementOf(
       const internal::ListReader& reader, uint index) {
-    return reader.getListElement(index * ELEMENTS, internal::FieldSize::REFERENCE);
+    return reader.getListElement(index * ELEMENTS, internal::FieldSize::POINTER);
   }
 
   inline static internal::ListBuilder initAsFieldOf(
-      internal::StructBuilder& builder, WireReferenceCount index, uint size) {
-    return builder.initListField(index, internal::FieldSize::REFERENCE, size * ELEMENTS);
+      internal::StructBuilder& builder, WirePointerCount index, uint size) {
+    return builder.initListField(index, internal::FieldSize::POINTER, size * ELEMENTS);
   }
   inline static internal::ListBuilder getAsFieldOf(
-      internal::StructBuilder& builder, WireReferenceCount index, const word* defaultValue) {
+      internal::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
     return builder.getListField(index, defaultValue);
   }
   inline static internal::ListReader getAsFieldOf(
-      internal::StructReader& reader, WireReferenceCount index, const word* defaultValue) {
-    return reader.getListField(index, internal::FieldSize::REFERENCE, defaultValue);
+      internal::StructReader& reader, WirePointerCount index, const word* defaultValue) {
+    return reader.getListField(index, internal::FieldSize::POINTER, defaultValue);
   }
 
   template <typename U, Kind k>
@@ -526,7 +526,7 @@ private:
   inline static internal::ListBuilder initAsElementOf(
       const internal::ListBuilder& builder, uint index, uint size) {
     return builder.initListElement(
-        index * ELEMENTS, internal::FieldSize::REFERENCE, size * ELEMENTS);
+        index * ELEMENTS, internal::FieldSize::POINTER, size * ELEMENTS);
   }
   inline static internal::ListBuilder getAsElementOf(
       const internal::ListBuilder& builder, uint index) {
@@ -534,20 +534,20 @@ private:
   }
   inline static internal::ListReader getAsElementOf(
       const internal::ListReader& reader, uint index) {
-    return reader.getListElement(index * ELEMENTS, internal::FieldSize::REFERENCE);
+    return reader.getListElement(index * ELEMENTS, internal::FieldSize::POINTER);
   }
 
   inline static internal::ListBuilder initAsFieldOf(
-      internal::StructBuilder& builder, WireReferenceCount index, uint size) {
-    return builder.initListField(index, internal::FieldSize::REFERENCE, size * ELEMENTS);
+      internal::StructBuilder& builder, WirePointerCount index, uint size) {
+    return builder.initListField(index, internal::FieldSize::POINTER, size * ELEMENTS);
   }
   inline static internal::ListBuilder getAsFieldOf(
-      internal::StructBuilder& builder, WireReferenceCount index, const word* defaultValue) {
+      internal::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
     return builder.getListField(index, defaultValue);
   }
   inline static internal::ListReader getAsFieldOf(
-      internal::StructReader& reader, WireReferenceCount index, const word* defaultValue) {
-    return reader.getListField(index, internal::FieldSize::REFERENCE, defaultValue);
+      internal::StructReader& reader, WirePointerCount index, const word* defaultValue) {
+    return reader.getListField(index, internal::FieldSize::POINTER, defaultValue);
   }
 
   template <typename U, Kind k>

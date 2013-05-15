@@ -272,12 +272,12 @@ dataSizeInBits Size64 = 64
 
 data FieldSize = SizeVoid
                | SizeData DataSize
-               | SizeReference
+               | SizePointer
                | SizeInlineComposite DataSectionSize Integer
 
 fieldSizeInBits SizeVoid = 0
 fieldSizeInBits (SizeData d) = dataSizeInBits d
-fieldSizeInBits SizeReference = 64
+fieldSizeInBits SizePointer = 64
 fieldSizeInBits (SizeInlineComposite ds pc) = dataSectionBits ds + pc * 64
 
 data FieldOffset = VoidOffset
@@ -293,7 +293,7 @@ data FieldOffset = VoidOffset
 offsetToSize :: FieldOffset -> FieldSize
 offsetToSize VoidOffset = SizeVoid
 offsetToSize (DataOffset s _) = SizeData s
-offsetToSize (PointerOffset _) = SizeReference
+offsetToSize (PointerOffset _) = SizePointer
 offsetToSize (InlineCompositeOffset _ _ d p) = SizeInlineComposite d p
 
 fieldSize (BuiltinType BuiltinVoid) = SizeVoid
@@ -308,15 +308,15 @@ fieldSize (BuiltinType BuiltinUInt32) = SizeData Size32
 fieldSize (BuiltinType BuiltinUInt64) = SizeData Size64
 fieldSize (BuiltinType BuiltinFloat32) = SizeData Size32
 fieldSize (BuiltinType BuiltinFloat64) = SizeData Size64
-fieldSize (BuiltinType BuiltinText) = SizeReference
-fieldSize (BuiltinType BuiltinData) = SizeReference
-fieldSize (BuiltinType BuiltinObject) = SizeReference
+fieldSize (BuiltinType BuiltinText) = SizePointer
+fieldSize (BuiltinType BuiltinData) = SizePointer
+fieldSize (BuiltinType BuiltinObject) = SizePointer
 fieldSize (EnumType _) = SizeData Size16
-fieldSize (StructType _) = SizeReference
+fieldSize (StructType _) = SizePointer
 fieldSize (InlineStructType StructDesc { structDataSize = ds, structPointerCount = ps }) =
     SizeInlineComposite ds ps
-fieldSize (InterfaceType _) = SizeReference
-fieldSize (ListType _) = SizeReference
+fieldSize (InterfaceType _) = SizePointer
+fieldSize (ListType _) = SizePointer
 fieldSize (InlineListType element size) = let
     minDataSectionForBits bits
         | bits <= 0 = DataSectionWords 0
@@ -328,12 +328,12 @@ fieldSize (InlineListType element size) = let
     dataSection = case fieldSize element of
         SizeVoid -> DataSectionWords 0
         SizeData s -> minDataSectionForBits $ dataSizeInBits s * size
-        SizeReference -> DataSectionWords 0
+        SizePointer -> DataSectionWords 0
         SizeInlineComposite ds _ -> minDataSectionForBits $ dataSectionBits ds * size
     pointerCount = case fieldSize element of
         SizeVoid -> 0
         SizeData _ -> 0
-        SizeReference -> size
+        SizePointer -> size
         SizeInlineComposite _ pc -> pc * size
     in SizeInlineComposite dataSection pointerCount
 fieldSize (InlineDataType size)

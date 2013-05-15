@@ -195,7 +195,7 @@ cxxFieldSizeString (SizeData Size8) = "BYTE";
 cxxFieldSizeString (SizeData Size16) = "TWO_BYTES";
 cxxFieldSizeString (SizeData Size32) = "FOUR_BYTES";
 cxxFieldSizeString (SizeData Size64) = "EIGHT_BYTES";
-cxxFieldSizeString SizeReference = "REFERENCE";
+cxxFieldSizeString SizePointer = "POINTER";
 cxxFieldSizeString (SizeInlineComposite _ _) = "INLINE_COMPOSITE";
 
 fieldOffsetInteger VoidOffset = "0"
@@ -207,7 +207,7 @@ fieldOffsetInteger (InlineCompositeOffset d p ds ps) = let
         DataSectionWords _ -> d * 8
         _ -> d * byteSize
     in printf "%d * ::capnproto::BYTES, %d * ::capnproto::BYTES, \
-              \%d * ::capnproto::REFERENCES, %d * ::capnproto::REFERENCES" byteOffset byteSize p ps
+              \%d * ::capnproto::POINTERS, %d * ::capnproto::POINTERS" byteOffset byteSize p ps
 
 isDefaultZero VoidDesc = True
 isDefaultZero (BoolDesc    b) = not b
@@ -473,7 +473,7 @@ outerFileContext schemaNodes = fileContext where
         context "structFields" = MuList $ map (fieldContext context) $ structFields desc
         context "structUnions" = MuList $ map (unionContext context) $ structUnions desc
         context "structDataSize" = MuVariable $ dataSectionWordSize $ structDataSize desc
-        context "structReferenceCount" = MuVariable $ structPointerCount desc
+        context "structPointerCount" = MuVariable $ structPointerCount desc
         context "structPreferredListEncoding" = case (structDataSize desc, structPointerCount desc) of
             (DataSectionWords 0, 0) -> MuVariable "VOID"
             (DataSection1, 0) -> MuVariable "BIT"
@@ -481,7 +481,7 @@ outerFileContext schemaNodes = fileContext where
             (DataSection16, 0) -> MuVariable "TWO_BYTES"
             (DataSection32, 0) -> MuVariable "FOUR_BYTES"
             (DataSectionWords 1, 0) -> MuVariable "EIGHT_BYTES"
-            (DataSectionWords 0, 1) -> MuVariable "REFERENCE"
+            (DataSectionWords 0, 1) -> MuVariable "POINTER"
             _ -> MuVariable "INLINE_COMPOSITE"
         context "structNestedEnums" =
             MuList $ map (enumContext context) [m | DescEnum m <- structMembers desc]

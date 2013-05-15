@@ -77,12 +77,12 @@ internal::FieldSize elementSizeFor(schema::Type::Body::Which elementType) {
     case schema::Type::Body::FLOAT32_TYPE: return internal::FieldSize::FOUR_BYTES;
     case schema::Type::Body::FLOAT64_TYPE: return internal::FieldSize::EIGHT_BYTES;
 
-    case schema::Type::Body::TEXT_TYPE: return internal::FieldSize::REFERENCE;
-    case schema::Type::Body::DATA_TYPE: return internal::FieldSize::REFERENCE;
-    case schema::Type::Body::LIST_TYPE: return internal::FieldSize::REFERENCE;
+    case schema::Type::Body::TEXT_TYPE: return internal::FieldSize::POINTER;
+    case schema::Type::Body::DATA_TYPE: return internal::FieldSize::POINTER;
+    case schema::Type::Body::LIST_TYPE: return internal::FieldSize::POINTER;
     case schema::Type::Body::ENUM_TYPE: return internal::FieldSize::TWO_BYTES;
     case schema::Type::Body::STRUCT_TYPE: return internal::FieldSize::INLINE_COMPOSITE;
-    case schema::Type::Body::INTERFACE_TYPE: return internal::FieldSize::REFERENCE;
+    case schema::Type::Body::INTERFACE_TYPE: return internal::FieldSize::POINTER;
     case schema::Type::Body::OBJECT_TYPE: FAIL_CHECK("List(Object) not supported."); break;
   }
   FAIL_CHECK("Can't get here.");
@@ -93,7 +93,7 @@ inline internal::StructSize structSizeFromSchema(StructSchema schema) {
   auto node = schema.getProto().getBody().getStructNode();
   return internal::StructSize(
       node.getDataSectionWordSize() * WORDS,
-      node.getPointerSectionSize() * REFERENCES,
+      node.getPointerSectionSize() * POINTERS,
       static_cast<internal::FieldSize>(node.getPreferredListEncoding()));
 }
 
@@ -561,14 +561,14 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
         case schema::Type::Body::TEXT_TYPE: {
           Text::Reader typedDval = dval.getTextValue();
           return DynamicValue::Reader(
-              reader.getBlobField<Text>(field.getOffset() * REFERENCES,
+              reader.getBlobField<Text>(field.getOffset() * POINTERS,
                                         typedDval.data(), typedDval.size() * BYTES));
         }
 
         case schema::Type::Body::DATA_TYPE: {
           Data::Reader typedDval = dval.getDataValue();
           return DynamicValue::Reader(
-              reader.getBlobField<Data>(field.getOffset() * REFERENCES,
+              reader.getBlobField<Data>(field.getOffset() * POINTERS,
                                         typedDval.data(), typedDval.size() * BYTES));
         }
 
@@ -576,7 +576,7 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
           auto elementType = type.getListType();
           return DynamicValue::Reader(DynamicList::Reader(
               ListSchema::of(elementType, member.getContainingStruct()),
-              reader.getListField(field.getOffset() * REFERENCES,
+              reader.getListField(field.getOffset() * POINTERS,
                                   elementSizeFor(elementType.getBody().which()),
                                   dval.getListValue<internal::TrustedMessage>())));
         }
@@ -584,13 +584,13 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
         case schema::Type::Body::STRUCT_TYPE: {
           return DynamicValue::Reader(DynamicStruct::Reader(
               member.getContainingStruct().getDependency(type.getStructType()).asStruct(),
-              reader.getStructField(field.getOffset() * REFERENCES,
+              reader.getStructField(field.getOffset() * POINTERS,
                                     dval.getStructValue<internal::TrustedMessage>())));
         }
 
         case schema::Type::Body::OBJECT_TYPE: {
           return DynamicValue::Reader(DynamicObject(
-              reader.getObjectField(field.getOffset() * REFERENCES,
+              reader.getObjectField(field.getOffset() * POINTERS,
                                     dval.getObjectValue<internal::TrustedMessage>())));
         }
 
@@ -654,21 +654,21 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
         case schema::Type::Body::TEXT_TYPE: {
           Text::Reader typedDval = dval.getTextValue();
           return DynamicValue::Builder(
-              builder.getBlobField<Text>(field.getOffset() * REFERENCES,
+              builder.getBlobField<Text>(field.getOffset() * POINTERS,
                                          typedDval.data(), typedDval.size() * BYTES));
         }
 
         case schema::Type::Body::DATA_TYPE: {
           Data::Reader typedDval = dval.getDataValue();
           return DynamicValue::Builder(
-              builder.getBlobField<Data>(field.getOffset() * REFERENCES,
+              builder.getBlobField<Data>(field.getOffset() * POINTERS,
                                          typedDval.data(), typedDval.size() * BYTES));
         }
 
         case schema::Type::Body::LIST_TYPE:
           return DynamicValue::Builder(DynamicList::Builder(
               ListSchema::of(type.getListType(), member.getContainingStruct()),
-              builder.getListField(field.getOffset() * REFERENCES,
+              builder.getListField(field.getOffset() * POINTERS,
                                    dval.getListValue<internal::TrustedMessage>())));
 
         case schema::Type::Body::STRUCT_TYPE: {
@@ -677,7 +677,7 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
           return DynamicValue::Builder(DynamicStruct::Builder(
               structSchema,
               builder.getStructField(
-                  field.getOffset() * REFERENCES,
+                  field.getOffset() * POINTERS,
                   structSizeFromSchema(structSchema),
                   dval.getStructValue<internal::TrustedMessage>())));
         }
@@ -685,7 +685,7 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
         case schema::Type::Body::OBJECT_TYPE: {
           return DynamicValue::Builder(DynamicObject(
               builder.asReader().getObjectField(
-                  field.getOffset() * REFERENCES,
+                  field.getOffset() * POINTERS,
                   dval.getObjectValue<internal::TrustedMessage>())));
         }
 
@@ -706,25 +706,25 @@ DynamicStruct::Builder DynamicStruct::Builder::getObjectImpl(
     internal::StructBuilder builder, StructSchema::Member field, StructSchema type) {
   return DynamicStruct::Builder(type,
       builder.getStructField(
-          field.getProto().getBody().getFieldMember().getOffset() * REFERENCES,
+          field.getProto().getBody().getFieldMember().getOffset() * POINTERS,
           structSizeFromSchema(type), nullptr));
 }
 DynamicList::Builder DynamicStruct::Builder::getObjectImpl(
     internal::StructBuilder builder, StructSchema::Member field, ListSchema type) {
   return DynamicList::Builder(type,
       builder.getListField(
-          field.getProto().getBody().getFieldMember().getOffset() * REFERENCES,
+          field.getProto().getBody().getFieldMember().getOffset() * POINTERS,
           nullptr));
 }
 Text::Builder DynamicStruct::Builder::getObjectAsTextImpl(
     internal::StructBuilder builder, StructSchema::Member field) {
   return builder.getBlobField<Text>(
-      field.getProto().getBody().getFieldMember().getOffset() * REFERENCES, nullptr, 0 * BYTES);
+      field.getProto().getBody().getFieldMember().getOffset() * POINTERS, nullptr, 0 * BYTES);
 }
 Data::Builder DynamicStruct::Builder::getObjectAsDataImpl(
     internal::StructBuilder builder, StructSchema::Member field) {
   return builder.getBlobField<Data>(
-      field.getProto().getBody().getFieldMember().getOffset() * REFERENCES, nullptr, 0 * BYTES);
+      field.getProto().getBody().getFieldMember().getOffset() * POINTERS, nullptr, 0 * BYTES);
 }
 
 void DynamicStruct::Builder::setImpl(
@@ -795,11 +795,11 @@ void DynamicStruct::Builder::setImpl(
         }
 
         case schema::Type::Body::TEXT_TYPE:
-          builder.setBlobField<Text>(field.getOffset() * REFERENCES, value.as<Text>());
+          builder.setBlobField<Text>(field.getOffset() * POINTERS, value.as<Text>());
           return;
 
         case schema::Type::Body::DATA_TYPE:
-          builder.setBlobField<Data>(field.getOffset() * REFERENCES, value.as<Data>());
+          builder.setBlobField<Data>(field.getOffset() * POINTERS, value.as<Data>());
           return;
 
         case schema::Type::Body::LIST_TYPE: {
@@ -893,7 +893,7 @@ DynamicStruct::Builder DynamicStruct::Builder::initFieldImpl(
     internal::StructBuilder builder, StructSchema::Member field, StructSchema type) {
   return DynamicStruct::Builder(
       type, builder.initStructField(
-          field.getProto().getBody().getFieldMember().getOffset() * REFERENCES,
+          field.getProto().getBody().getFieldMember().getOffset() * POINTERS,
           structSizeFromSchema(type)));
 }
 DynamicList::Builder DynamicStruct::Builder::initFieldImpl(
@@ -902,12 +902,12 @@ DynamicList::Builder DynamicStruct::Builder::initFieldImpl(
   if (type.whichElementType() == schema::Type::Body::STRUCT_TYPE) {
     return DynamicList::Builder(
         type, builder.initStructListField(
-            field.getProto().getBody().getFieldMember().getOffset() * REFERENCES, size * ELEMENTS,
+            field.getProto().getBody().getFieldMember().getOffset() * POINTERS, size * ELEMENTS,
             structSizeFromSchema(type.getStructElementType())));
   } else {
     return DynamicList::Builder(
         type, builder.initListField(
-            field.getProto().getBody().getFieldMember().getOffset() * REFERENCES,
+            field.getProto().getBody().getFieldMember().getOffset() * POINTERS,
             elementSizeFor(type.whichElementType()),
             size * ELEMENTS));
   }
@@ -915,12 +915,12 @@ DynamicList::Builder DynamicStruct::Builder::initFieldImpl(
 Text::Builder DynamicStruct::Builder::initFieldAsTextImpl(
     internal::StructBuilder builder, StructSchema::Member field, uint size) {
   return builder.initBlobField<Text>(
-      field.getProto().getBody().getFieldMember().getOffset() * REFERENCES, size * BYTES);
+      field.getProto().getBody().getFieldMember().getOffset() * POINTERS, size * BYTES);
 }
 Data::Builder DynamicStruct::Builder::initFieldAsDataImpl(
     internal::StructBuilder builder, StructSchema::Member field, uint size) {
   return builder.initBlobField<Data>(
-      field.getProto().getBody().getFieldMember().getOffset() * REFERENCES, size * BYTES);
+      field.getProto().getBody().getFieldMember().getOffset() * POINTERS, size * BYTES);
 }
 
 // =======================================================================================
@@ -1362,41 +1362,41 @@ DynamicStruct::Builder MessageBuilder::getRoot<DynamicStruct>(StructSchema schem
 namespace internal {
 
 DynamicStruct::Reader PointerHelpers<DynamicStruct, Kind::UNKNOWN>::getDynamic(
-    StructReader reader, WireReferenceCount index, StructSchema schema) {
+    StructReader reader, WirePointerCount index, StructSchema schema) {
   return DynamicStruct::Reader(schema, reader.getStructField(index, nullptr));
 }
 DynamicStruct::Builder PointerHelpers<DynamicStruct, Kind::UNKNOWN>::getDynamic(
-    StructBuilder builder, WireReferenceCount index, StructSchema schema) {
+    StructBuilder builder, WirePointerCount index, StructSchema schema) {
   return DynamicStruct::Builder(schema, builder.getStructField(
       index, structSizeFromSchema(schema), nullptr));
 }
 void PointerHelpers<DynamicStruct, Kind::UNKNOWN>::set(
-    StructBuilder builder, WireReferenceCount index, DynamicStruct::Reader value) {
+    StructBuilder builder, WirePointerCount index, DynamicStruct::Reader value) {
   // TODO(now):  schemaless copy
   FAIL_CHECK("Unimplemented: copyFrom()");
 }
 DynamicStruct::Builder PointerHelpers<DynamicStruct, Kind::UNKNOWN>::init(
-    StructBuilder builder, WireReferenceCount index, StructSchema schema) {
+    StructBuilder builder, WirePointerCount index, StructSchema schema) {
   return DynamicStruct::Builder(schema,
       builder.initStructField(index, structSizeFromSchema(schema)));
 }
 
 DynamicList::Reader PointerHelpers<DynamicList, Kind::UNKNOWN>::getDynamic(
-    StructReader reader, WireReferenceCount index, ListSchema schema) {
+    StructReader reader, WirePointerCount index, ListSchema schema) {
   return DynamicList::Reader(schema,
       reader.getListField(index, elementSizeFor(schema.whichElementType()), nullptr));
 }
 DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::getDynamic(
-    StructBuilder builder, WireReferenceCount index, ListSchema schema) {
+    StructBuilder builder, WirePointerCount index, ListSchema schema) {
   return DynamicList::Builder(schema, builder.getListField(index, nullptr));
 }
 void PointerHelpers<DynamicList, Kind::UNKNOWN>::set(
-    StructBuilder builder, WireReferenceCount index, DynamicList::Reader value) {
+    StructBuilder builder, WirePointerCount index, DynamicList::Reader value) {
   // TODO(now):  schemaless copy
   FAIL_CHECK("Unimplemented: copyFrom()");
 }
 DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::init(
-    StructBuilder builder, WireReferenceCount index, ListSchema schema, uint size) {
+    StructBuilder builder, WirePointerCount index, ListSchema schema, uint size) {
   if (schema.whichElementType() == schema::Type::Body::STRUCT_TYPE) {
     return DynamicList::Builder(schema,
         builder.initStructListField(index, size * ELEMENTS,

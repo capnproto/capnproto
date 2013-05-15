@@ -787,7 +787,7 @@ class word { uint64_t content; CAPNPROTO_DISALLOW_COPY(word); public: word() = d
 static_assert(sizeof(byte) == 1, "uint8_t is not one byte?");
 static_assert(sizeof(word) == 8, "uint64_t is not 8 bytes?");
 
-namespace internal { class BitLabel; class ElementLabel; class WireReference; }
+namespace internal { class BitLabel; class ElementLabel; class WirePointer; }
 
 #ifndef CAPNPROTO_DEBUG_TYPES
 #define CAPNPROTO_DEBUG_TYPES 1
@@ -828,11 +828,11 @@ typedef Quantity<uint16_t, internal::ElementLabel> ElementCount16;
 typedef Quantity<uint32_t, internal::ElementLabel> ElementCount32;
 typedef Quantity<uint64_t, internal::ElementLabel> ElementCount64;
 
-typedef Quantity<uint, internal::WireReference> WireReferenceCount;
-typedef Quantity<uint8_t, internal::WireReference> WireReferenceCount8;
-typedef Quantity<uint16_t, internal::WireReference> WireReferenceCount16;
-typedef Quantity<uint32_t, internal::WireReference> WireReferenceCount32;
-typedef Quantity<uint64_t, internal::WireReference> WireReferenceCount64;
+typedef Quantity<uint, internal::WirePointer> WirePointerCount;
+typedef Quantity<uint8_t, internal::WirePointer> WirePointerCount8;
+typedef Quantity<uint16_t, internal::WirePointer> WirePointerCount16;
+typedef Quantity<uint32_t, internal::WirePointer> WirePointerCount32;
+typedef Quantity<uint64_t, internal::WirePointer> WirePointerCount64;
 
 #else
 
@@ -860,11 +860,11 @@ typedef uint16_t ElementCount16;
 typedef uint32_t ElementCount32;
 typedef uint64_t ElementCount64;
 
-typedef uint WireReferenceCount;
-typedef uint8_t WireReferenceCount8;
-typedef uint16_t WireReferenceCount16;
-typedef uint32_t WireReferenceCount32;
-typedef uint64_t WireReferenceCount64;
+typedef uint WirePointerCount;
+typedef uint8_t WirePointerCount8;
+typedef uint16_t WirePointerCount16;
+typedef uint32_t WirePointerCount32;
+typedef uint64_t WirePointerCount64;
 
 #endif
 
@@ -872,17 +872,17 @@ constexpr BitCount BITS = unit<BitCount>();
 constexpr ByteCount BYTES = unit<ByteCount>();
 constexpr WordCount WORDS = unit<WordCount>();
 constexpr ElementCount ELEMENTS = unit<ElementCount>();
-constexpr WireReferenceCount REFERENCES = unit<WireReferenceCount>();
+constexpr WirePointerCount POINTERS = unit<WirePointerCount>();
 
 constexpr auto BITS_PER_BYTE = 8 * BITS / BYTES;
 constexpr auto BITS_PER_WORD = 64 * BITS / WORDS;
 constexpr auto BYTES_PER_WORD = 8 * BYTES / WORDS;
 
-constexpr auto BITS_PER_REFERENCE = 64 * BITS / REFERENCES;
-constexpr auto BYTES_PER_REFERENCE = 8 * BYTES / REFERENCES;
-constexpr auto WORDS_PER_REFERENCE = 1 * WORDS / REFERENCES;
+constexpr auto BITS_PER_POINTER = 64 * BITS / POINTERS;
+constexpr auto BYTES_PER_POINTER = 8 * BYTES / POINTERS;
+constexpr auto WORDS_PER_POINTER = 1 * WORDS / POINTERS;
 
-constexpr WordCount REFERENCE_SIZE_IN_WORDS = 1 * REFERENCES * WORDS_PER_REFERENCE;
+constexpr WordCount POINTER_SIZE_IN_WORDS = 1 * POINTERS * WORDS_PER_POINTER;
 
 template <typename T>
 inline constexpr decltype(BYTES / ELEMENTS) bytesPerElement() {
