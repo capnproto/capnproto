@@ -616,6 +616,255 @@ TEST(Encoding, BitListUpgrade) {
   checkList(reader.getObjectField<List<bool>>(), {true, false, true, true});
 }
 
+TEST(Encoding, UpgradeStructInBuilder) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestObject>();
+
+  {
+    auto oldVersion = root.initObjectField<test::TestOldVersion>();
+    oldVersion.setOld1(123);
+    oldVersion.setOld2("foo");
+    auto sub = oldVersion.initOld3();
+    sub.setOld1(456);
+    sub.setOld2("bar");
+  }
+
+  size_t size = builder.getSegmentsForOutput()[0].size();
+  size_t size2;
+
+  {
+    auto newVersion = root.getObjectField<test::TestNewVersion>();
+
+    // Size should have increased due to re-allocating the struct.
+    size_t size1 = builder.getSegmentsForOutput()[0].size();
+    EXPECT_GT(size1, size);
+
+    auto sub = newVersion.getOld3();
+
+    // Size should have increased due to re-allocating the sub-struct.
+    size2 = builder.getSegmentsForOutput()[0].size();
+    EXPECT_GT(size2, size1);
+
+    // Check contents.
+    EXPECT_EQ(123, newVersion.getOld1());
+    EXPECT_EQ("foo", newVersion.getOld2());
+    EXPECT_EQ(987, newVersion.getNew1());
+    EXPECT_EQ("baz", newVersion.getNew2());
+
+    EXPECT_EQ(456, sub.getOld1());
+    EXPECT_EQ("bar", sub.getOld2());
+    EXPECT_EQ(987, sub.getNew1());
+    EXPECT_EQ("baz", sub.getNew2());
+
+    newVersion.setOld1(234);
+    newVersion.setOld2("qux");
+    newVersion.setNew1(321);
+    newVersion.setNew2("quux");
+
+    sub.setOld1(567);
+    sub.setOld2("corge");
+    sub.setNew1(654);
+    sub.setNew2("grault");
+  }
+
+  // We set four small text fields and implicitly initialized two to defaults, so the size should
+  // have raised by six words.
+  size_t size3 = builder.getSegmentsForOutput()[0].size();
+  EXPECT_EQ(size2 + 6, size3);
+
+  {
+    // Go back to old version.  It should have the values set on the new version.
+    auto oldVersion = root.getObjectField<test::TestOldVersion>();
+    EXPECT_EQ(234, oldVersion.getOld1());
+    EXPECT_EQ("qux", oldVersion.getOld2());
+
+    auto sub = oldVersion.getOld3();
+    EXPECT_EQ(567, sub.getOld1());
+    EXPECT_EQ("corge", sub.getOld2());
+
+    // Overwrite the old fields.  The new fields should remain intact.
+    oldVersion.setOld1(345);
+    oldVersion.setOld2("garply");
+    sub.setOld1(678);
+    sub.setOld2("waldo");
+  }
+
+  // We set two small text fields, so the size should have raised by two words.
+  size_t size4 = builder.getSegmentsForOutput()[0].size();
+  EXPECT_EQ(size3 + 2, size4);
+
+  {
+    // Back to the new version again.
+    auto newVersion = root.getObjectField<test::TestNewVersion>();
+    EXPECT_EQ(345, newVersion.getOld1());
+    EXPECT_EQ("garply", newVersion.getOld2());
+    EXPECT_EQ(321, newVersion.getNew1());
+    EXPECT_EQ("quux", newVersion.getNew2());
+
+    auto sub = newVersion.getOld3();
+    EXPECT_EQ(678, sub.getOld1());
+    EXPECT_EQ("waldo", sub.getOld2());
+    EXPECT_EQ(654, sub.getNew1());
+    EXPECT_EQ("grault", sub.getNew2());
+  }
+
+  // Size should not have changed because we didn't write anything and the structs were already
+  // the right size.
+  EXPECT_EQ(size4, builder.getSegmentsForOutput()[0].size());
+}
+
+TEST(Encoding, UpgradeStructInBuilderMultiSegment) {
+  // Exactly like the previous test, except that we force multiple segments.  Since we force a
+  // separate segment for every object, every pointer is a far pointer, and far pointers are easily
+  // transferred, so this is acutally not such a complicated case.
+
+  MallocMessageBuilder builder(0, AllocationStrategy::FIXED_SIZE);
+  auto root = builder.initRoot<test::TestObject>();
+
+  // Start with a 1-word first segment and the root object in the second segment.
+  size_t size = builder.getSegmentsForOutput().size();
+  EXPECT_EQ(2u, size);
+
+  {
+    auto oldVersion = root.initObjectField<test::TestOldVersion>();
+    oldVersion.setOld1(123);
+    oldVersion.setOld2("foo");
+    auto sub = oldVersion.initOld3();
+    sub.setOld1(456);
+    sub.setOld2("bar");
+  }
+
+  // Allocated two structs and two strings.
+  size_t size2 = builder.getSegmentsForOutput().size();
+  EXPECT_EQ(size + 4, size2);
+
+  size_t size4;
+
+  {
+    auto newVersion = root.getObjectField<test::TestNewVersion>();
+
+    // Allocated a new struct.
+    size_t size3 = builder.getSegmentsForOutput().size();
+    EXPECT_EQ(size2 + 1, size3);
+
+    auto sub = newVersion.getOld3();
+
+    // Allocated another new struct for its string field.
+    size4 = builder.getSegmentsForOutput().size();
+    EXPECT_EQ(size3 + 1, size4);
+
+    // Check contents.
+    EXPECT_EQ(123, newVersion.getOld1());
+    EXPECT_EQ("foo", newVersion.getOld2());
+    EXPECT_EQ(987, newVersion.getNew1());
+    EXPECT_EQ("baz", newVersion.getNew2());
+
+    EXPECT_EQ(456, sub.getOld1());
+    EXPECT_EQ("bar", sub.getOld2());
+    EXPECT_EQ(987, sub.getNew1());
+    EXPECT_EQ("baz", sub.getNew2());
+
+    newVersion.setOld1(234);
+    newVersion.setOld2("qux");
+    newVersion.setNew1(321);
+    newVersion.setNew2("quux");
+
+    sub.setOld1(567);
+    sub.setOld2("corge");
+    sub.setNew1(654);
+    sub.setNew2("grault");
+  }
+
+  // Set four strings and implicitly initialized two.
+  size_t size5 = builder.getSegmentsForOutput().size();
+  EXPECT_EQ(size4 + 6, size5);
+
+  {
+    // Go back to old version.  It should have the values set on the new version.
+    auto oldVersion = root.getObjectField<test::TestOldVersion>();
+    EXPECT_EQ(234, oldVersion.getOld1());
+    EXPECT_EQ("qux", oldVersion.getOld2());
+
+    auto sub = oldVersion.getOld3();
+    EXPECT_EQ(567, sub.getOld1());
+    EXPECT_EQ("corge", sub.getOld2());
+
+    // Overwrite the old fields.  The new fields should remain intact.
+    oldVersion.setOld1(345);
+    oldVersion.setOld2("garply");
+    sub.setOld1(678);
+    sub.setOld2("waldo");
+  }
+
+  // Set two new strings.
+  size_t size6 = builder.getSegmentsForOutput().size();
+  EXPECT_EQ(size5 + 2, size6);
+
+  {
+    // Back to the new version again.
+    auto newVersion = root.getObjectField<test::TestNewVersion>();
+    EXPECT_EQ(345, newVersion.getOld1());
+    EXPECT_EQ("garply", newVersion.getOld2());
+    EXPECT_EQ(321, newVersion.getNew1());
+    EXPECT_EQ("quux", newVersion.getNew2());
+
+    auto sub = newVersion.getOld3();
+    EXPECT_EQ(678, sub.getOld1());
+    EXPECT_EQ("waldo", sub.getOld2());
+    EXPECT_EQ(654, sub.getNew1());
+    EXPECT_EQ("grault", sub.getNew2());
+  }
+
+  // Size should not have changed because we didn't write anything and the structs were already
+  // the right size.
+  EXPECT_EQ(size6, builder.getSegmentsForOutput().size());
+}
+
+TEST(Encoding, UpgradeStructInBuilderFarPointers) {
+  // Force allocation of a Far pointer.
+
+  MallocMessageBuilder builder(7, AllocationStrategy::FIXED_SIZE);
+  auto root = builder.initRoot<test::TestObject>();
+
+  root.initObjectField<test::TestOldVersion>().setOld2("foo");
+
+  // We should have allocated all but one word of the first segment.
+  EXPECT_EQ(1u, builder.getSegmentsForOutput().size());
+  EXPECT_EQ(6u, builder.getSegmentsForOutput()[0].size());
+
+  // Now if we upgrade...
+  EXPECT_EQ("foo", root.getObjectField<test::TestNewVersion>().getOld2());
+
+  // We should have allocated the new struct in a new segment, but allocated the far pointer
+  // landing pad back in the first segment.
+  ASSERT_EQ(2u, builder.getSegmentsForOutput().size());
+  EXPECT_EQ(7u, builder.getSegmentsForOutput()[0].size());
+  EXPECT_EQ(6u, builder.getSegmentsForOutput()[1].size());
+}
+
+TEST(Encoding, UpgradeStructInBuilderDoubleFarPointers) {
+  // Force allocation of a double-Far pointer.
+
+  MallocMessageBuilder builder(6, AllocationStrategy::FIXED_SIZE);
+  auto root = builder.initRoot<test::TestObject>();
+
+  root.initObjectField<test::TestOldVersion>().setOld2("foo");
+
+  // We should have allocated all of the first segment.
+  EXPECT_EQ(1u, builder.getSegmentsForOutput().size());
+  EXPECT_EQ(6u, builder.getSegmentsForOutput()[0].size());
+
+  // Now if we upgrade...
+  EXPECT_EQ("foo", root.getObjectField<test::TestNewVersion>().getOld2());
+
+  // We should have allocated the new struct in a new segment, and also allocated the far pointer
+  // landing pad in yet another segment.
+  ASSERT_EQ(3u, builder.getSegmentsForOutput().size());
+  EXPECT_EQ(6u, builder.getSegmentsForOutput()[0].size());
+  EXPECT_EQ(6u, builder.getSegmentsForOutput()[1].size());
+  EXPECT_EQ(2u, builder.getSegmentsForOutput()[2].size());
+}
+
 // =======================================================================================
 // Tests of generated code, not really of the encoding.
 // TODO(cleanup):  Move to a different test?

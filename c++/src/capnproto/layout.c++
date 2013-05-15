@@ -89,6 +89,9 @@ struct WireReference {
   CAPNPROTO_ALWAYS_INLINE(void setKindAndTarget(Kind kind, word* target)) {
     offsetAndKind.set(((target - reinterpret_cast<word*>(this) - 1) << 2) | kind);
   }
+  CAPNPROTO_ALWAYS_INLINE(void setKindWithZeroOffset(Kind kind)) {
+    offsetAndKind.set(kind);
+  }
 
   CAPNPROTO_ALWAYS_INLINE(ElementCount inlineCompositeListElementCount() const) {
     return (offsetAndKind.get() >> 2) * ELEMENTS;
@@ -314,9 +317,10 @@ struct WireHelpers {
     }
   }
 
-  // Not always-inline because it's recursive.
   static word* copyMessage(
       SegmentBuilder*& segment, WireReference*& dst, const WireReference* src) {
+    // Not always-inline because it's recursive.
+
     switch (src->kind()) {
       case WireReference::STRUCT: {
         if (src->isNull()) {
@@ -407,6 +411,54 @@ struct WireHelpers {
     return nullptr;
   }
 
+  static void transferPointer(SegmentBuilder* dstSegment, WireReference* dst,
+                              SegmentBuilder* srcSegment, WireReference* src) {
+    // Make *dst point to the same object as *src.  Both must reside in the same message, but can
+    // be in different segments.  Not always-inline because this is rarely used.
+
+    if (src->isNull()) {
+      memset(dst, 0, sizeof(WireReference));
+    } else if (src->kind() == WireReference::FAR) {
+      // Far pointers are position-independent, so we can just copy.
+      memcpy(dst, src, sizeof(WireReference));
+    } else if (dstSegment == srcSegment) {
+      // Same segment, so create a direct reference.
+      dst->setKindAndTarget(src->kind(), src->target());
+
+      // We can just copy the upper 32 bits.  (Use memcpy() to comply with aliasing rules.)
+      memcpy(&dst->upper32Bits, &src->upper32Bits, sizeof(src->upper32Bits));
+    } else {
+      // Need to create a far pointer.  Try to allocate it in the same segment as the source, so
+      // that it doesn't need to be a double-far.
+
+      WireReference* landingPad =
+          reinterpret_cast<WireReference*>(srcSegment->allocate(1 * WORDS));
+      if (landingPad == nullptr) {
+        // Darn, need a double-far.
+        SegmentBuilder* farSegment = srcSegment->getArena()->getSegmentWithAvailable(2 * WORDS);
+        landingPad = reinterpret_cast<WireReference*>(farSegment->allocate(2 * WORDS));
+        DCHECK(landingPad != nullptr,
+            "getSegmentWithAvailable() returned segment without space available.");
+
+        landingPad[0].setFar(false, srcSegment->getOffsetTo(src->target()));
+        landingPad[0].farRef.segmentId.set(srcSegment->getSegmentId());
+
+        landingPad[1].setKindWithZeroOffset(src->kind());
+        memcpy(&landingPad[1].upper32Bits, &src->upper32Bits, sizeof(src->upper32Bits));
+
+        dst->setFar(true, farSegment->getOffsetTo(reinterpret_cast<word*>(landingPad)));
+        dst->farRef.set(farSegment->getSegmentId());
+      } else {
+        // Simple landing pad is just a pointer.
+        landingPad->setKindAndTarget(src->kind(), src->target());
+        memcpy(&landingPad->upper32Bits, &src->upper32Bits, sizeof(src->upper32Bits));
+
+        dst->setFar(false, srcSegment->getOffsetTo(reinterpret_cast<word*>(landingPad)));
+        dst->farRef.set(srcSegment->getSegmentId());
+      }
+    }
+  }
+
   // -----------------------------------------------------------------
 
   static CAPNPROTO_ALWAYS_INLINE(StructBuilder initStructReference(
@@ -427,6 +479,7 @@ struct WireHelpers {
     word* ptr;
 
     if (ref->isNull()) {
+    useDefault:
       if (defaultValue == nullptr ||
           reinterpret_cast<const WireReference*>(defaultValue)->isNull()) {
         ptr = allocate(ref, segment, size.total(), WireReference::STRUCT);
@@ -434,21 +487,52 @@ struct WireHelpers {
       } else {
         ptr = copyMessage(segment, ref, reinterpret_cast<const WireReference*>(defaultValue));
       }
+      return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + size.data),
+                           size.data * BITS_PER_WORD, size.pointers, 0 * BITS);
     } else {
-      ptr = followFars(ref, segment);
+      WireReference* oldRef = ref;
+      SegmentBuilder* oldSegment = segment;
+      word* oldPtr = followFars(oldRef, oldSegment);
 
-      DPRECOND(ref->kind() == WireReference::STRUCT,
-          "Called getStruct{Field,Element}() but existing reference is not a struct.");
-      DPRECOND(
-          ref->structRef.dataSize.get() == size.data,
-          "Trying to update struct with incorrect data size.");
-      DPRECOND(
-          ref->structRef.refCount.get() == size.pointers,
-          "Trying to update struct with incorrect reference count.");
+      VALIDATE_INPUT(oldRef->kind() == WireReference::STRUCT,
+          "Message contains non-struct reference where struct reference was expected.") {
+        goto useDefault;
+      }
+
+      WordCount oldDataSize = oldRef->structRef.dataSize.get();
+      WireReferenceCount oldPointerCount = oldRef->structRef.refCount.get();
+      WireReference* oldPointerSection =
+          reinterpret_cast<WireReference*>(oldPtr + oldDataSize);
+
+      if (oldDataSize < size.data || oldPointerCount < size.pointers) {
+        // The space allocated for this struct is too small.  Unlike with readers, we can't just
+        // run with it and do bounds checks at access time, because how would we handle writes?
+        // Instead, we have to copy the struct to a new space now.
+
+        WordCount newDataSize = std::max<WordCount>(oldDataSize, size.data);
+        WireReferenceCount newPointerCount =
+            std::max<WireReferenceCount>(oldPointerCount, size.pointers);
+        WordCount totalSize = newDataSize + newPointerCount * WORDS_PER_REFERENCE;
+
+        ptr = allocate(ref, segment, totalSize, WireReference::STRUCT);
+        ref->structRef.set(newDataSize, newPointerCount);
+
+        // Copy data section.
+        memcpy(ptr, oldPtr, oldDataSize * BYTES_PER_WORD / BYTES);
+
+        // Copy pointer section.
+        WireReference* newPointerSection = reinterpret_cast<WireReference*>(ptr + newDataSize);
+        for (uint i = 0; i < oldPointerCount / REFERENCES; i++) {
+          transferPointer(segment, newPointerSection + i, oldSegment, oldPointerSection + i);
+        }
+
+        return StructBuilder(segment, ptr, newPointerSection, newDataSize * BITS_PER_WORD,
+                             newPointerCount, 0 * BITS);
+      } else {
+        return StructBuilder(oldSegment, oldPtr, oldPointerSection, oldDataSize * BITS_PER_WORD,
+                             oldPointerCount, 0 * BITS);
+      }
     }
-
-    return StructBuilder(segment, ptr, reinterpret_cast<WireReference*>(ptr + size.data),
-                         size.data * BITS_PER_WORD, size.pointers, 0 * BITS);
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListBuilder initListReference(

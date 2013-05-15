@@ -354,3 +354,19 @@ struct TestLateUnion {
     grault @6 :Float32;
   }
 }
+
+struct TestOldVersion {
+  # A subset of TestNewVersion.
+  old1 @0 :Int32;
+  old2 @1 :Text;
+  old3 @2 :TestOldVersion;
+}
+
+struct TestNewVersion {
+  # A superset of TestOldVersion.
+  old1 @0 :Int32;
+  old2 @1 :Text;
+  old3 @2 :TestNewVersion;
+  new1 @3 :Int64 = 987;
+  new2 @4 :Text = "baz";
+}

@@ -52,8 +52,13 @@ namespace internal {
 // expect the condition to be true/false enough of the time that it's worth hard-coding branch
 // prediction.
 
+#ifdef NDEBUG
 #define CAPNPROTO_ALWAYS_INLINE(prototype) inline prototype __attribute__((always_inline))
 // Force a function to always be inlined.  Apply only to the prototype, not to the definition.
+#else
+#define CAPNPROTO_ALWAYS_INLINE(prototype) inline prototype
+// Don't force inline in debug mode.
+#endif
 
 #define CAPNPROTO_NORETURN __attribute__((noreturn));
 
