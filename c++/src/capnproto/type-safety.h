@@ -519,6 +519,19 @@ public:
   inline constexpr UnitRatio(const UnitRatio<OtherNumber, Unit1, Unit2>& other)
       : unit1PerUnit2(other.unit1PerUnit2) {}
 
+  template <typename OtherNumber>
+  inline constexpr UnitRatio<decltype(Number(1)+OtherNumber(1)), Unit1, Unit2>
+      operator+(UnitRatio<OtherNumber, Unit1, Unit2> other) {
+    return UnitRatio<decltype(Number(1)+OtherNumber(1)), Unit1, Unit2>(
+        unit1PerUnit2 + other.unit1PerUnit2);
+  }
+  template <typename OtherNumber>
+  inline constexpr UnitRatio<decltype(Number(1)-OtherNumber(1)), Unit1, Unit2>
+      operator-(UnitRatio<OtherNumber, Unit1, Unit2> other) {
+    return UnitRatio<decltype(Number(1)-OtherNumber(1)), Unit1, Unit2>(
+        unit1PerUnit2 - other.unit1PerUnit2);
+  }
+
   template <typename OtherNumber, typename Unit3>
   inline constexpr UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit3, Unit2>
       operator*(UnitRatio<OtherNumber, Unit3, Unit1> other) {

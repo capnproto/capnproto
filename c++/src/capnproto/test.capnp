@@ -357,14 +357,14 @@ struct TestLateUnion {
 
 struct TestOldVersion {
   # A subset of TestNewVersion.
-  old1 @0 :Int32;
+  old1 @0 :Int64;
   old2 @1 :Text;
   old3 @2 :TestOldVersion;
 }
 
 struct TestNewVersion {
   # A superset of TestOldVersion.
-  old1 @0 :Int32;
+  old1 @0 :Int64;
   old2 @1 :Text;
   old3 @2 :TestNewVersion;
   new1 @3 :Int64 = 987;

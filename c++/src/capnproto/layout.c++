@@ -588,39 +588,363 @@ struct WireHelpers {
   }
 
   static CAPNPROTO_ALWAYS_INLINE(ListBuilder getWritableListPointer(
-      WirePointer* ref, SegmentBuilder* segment, const word* defaultValue)) {
-    const WirePointer* defaultRef = reinterpret_cast<const WirePointer*>(defaultValue);
-    word* ptr;
+      WirePointer* origRef, SegmentBuilder* origSegment, FieldSize elementSize,
+      const word* defaultValue)) {
+    DPRECOND(elementSize != FieldSize::INLINE_COMPOSITE,
+             "Use getStructList{Element,Field}() for structs.");
 
-    if (ref->isNull()) {
+    if (origRef->isNull()) {
+    useDefault:
       if (defaultValue == nullptr ||
           reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
+        memset(origRef, 0, sizeof(*origRef));
         return ListBuilder();
       }
-      ptr = copyMessage(segment, ref, defaultRef);
-    } else {
-      ptr = followFars(ref, segment);
+      word* ptr = copyMessage(origSegment, origRef,
+                              reinterpret_cast<const WirePointer*>(defaultValue));
 
-      PRECOND(ref->kind() == WirePointer::LIST,
-          "Called getList{Field,Element}() but existing pointer is not a list.");
-    }
-
-    if (ref->listRef.elementSize() == FieldSize::INLINE_COMPOSITE) {
-      // Read the tag to get the actual element count.
-      WirePointer* tag = reinterpret_cast<WirePointer*>(ptr);
-      PRECOND(tag->kind() == WirePointer::STRUCT,
-          "INLINE_COMPOSITE list with non-STRUCT elements not supported.");
-
-      // First list element is at tag + 1 pointer.
-      return ListBuilder(segment, tag + 1, tag->structRef.wordSize() * BITS_PER_WORD / ELEMENTS,
-                         tag->inlineCompositeListElementCount(),
-                         tag->structRef.dataSize.get() * BITS_PER_WORD,
-                         tag->structRef.ptrCount.get());
-    } else {
-      BitCount dataSize = dataBitsPerElement(ref->listRef.elementSize()) * ELEMENTS;
-      WirePointerCount pointerCount = pointersPerElement(ref->listRef.elementSize()) * ELEMENTS;
+      BitCount dataSize = dataBitsPerElement(elementSize) * ELEMENTS;
+      WirePointerCount pointerCount = pointersPerElement(elementSize) * ELEMENTS;
       auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
-      return ListBuilder(segment, ptr, step, ref->listRef.elementCount(), dataSize, pointerCount);
+      return ListBuilder(origSegment, ptr, step, origRef->listRef.elementCount(),
+                         dataSize, pointerCount);
+
+    } else {
+      // The pointer is already initialized.  We must verify that it has the right size.  Unlike
+      // in getWritableStructListReference(), we never need to "upgrade" the data, because this
+      // method is called only for non-struct lists, and there is no allowed upgrade path *to*
+      // a non-struct list, only *from* them.
+
+      WirePointer* ref = origRef;
+      SegmentBuilder* segment = origSegment;
+      word* ptr = followFars(ref, segment);
+
+      VALIDATE_INPUT(ref->kind() == WirePointer::LIST,
+          "Called getList{Field,Element}() but existing pointer is not a list.") {
+        goto useDefault;
+      }
+
+      FieldSize oldSize = ref->listRef.elementSize();
+
+      if (oldSize == FieldSize::INLINE_COMPOSITE) {
+        // The existing element size is INLINE_COMPOSITE, which means that it is at least two
+        // words, which makes it bigger than the expected element size.  Since fields can only
+        // grow when upgraded, the existing data must have been written with a newer version of
+        // the protocol.  We therefore never need to upgrade the data in this case, but we do
+        // need to validate that it is a valid upgrade from what we expected.
+
+        // Read the tag to get the actual element count.
+        WirePointer* tag = reinterpret_cast<WirePointer*>(ptr);
+        PRECOND(tag->kind() == WirePointer::STRUCT,
+            "INLINE_COMPOSITE list with non-STRUCT elements not supported.");
+        ptr += POINTER_SIZE_IN_WORDS;
+
+        WordCount dataSize = tag->structRef.dataSize.get();
+        WirePointerCount pointerCount = tag->structRef.ptrCount.get();
+
+        switch (elementSize) {
+          case FieldSize::VOID:
+            // Anything is a valid upgrade from Void.
+            break;
+
+          case FieldSize::BIT:
+          case FieldSize::BYTE:
+          case FieldSize::TWO_BYTES:
+          case FieldSize::FOUR_BYTES:
+          case FieldSize::EIGHT_BYTES:
+            VALIDATE_INPUT(dataSize >= 1 * WORDS,
+                "Existing list value is incompatible with expected type.");
+            break;
+
+          case FieldSize::POINTER:
+            VALIDATE_INPUT(pointerCount >= 1 * POINTERS,
+                "Existing list value is incompatible with expected type.");
+            // Adjust the pointer to point at the reference segment.
+            ptr += dataSize;
+            break;
+
+          case FieldSize::INLINE_COMPOSITE:
+            FAIL_CHECK("Can't get here.");
+            break;
+        }
+
+        // OK, looks valid.
+
+        return ListBuilder(segment, ptr,
+                           tag->structRef.wordSize() * BITS_PER_WORD / ELEMENTS,
+                           tag->inlineCompositeListElementCount(),
+                           dataSize * BITS_PER_WORD, pointerCount);
+      } else {
+        BitCount dataSize = dataBitsPerElement(oldSize) * ELEMENTS;
+        WirePointerCount pointerCount = pointersPerElement(oldSize) * ELEMENTS;
+
+        VALIDATE_INPUT(dataSize >= dataBitsPerElement(elementSize) * ELEMENTS,
+            "Existing list value is incompatible with expected type.");
+        VALIDATE_INPUT(pointerCount >= pointersPerElement(elementSize) * ELEMENTS,
+            "Existing list value is incompatible with expected type.");
+
+        auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
+        return ListBuilder(segment, ptr, step, ref->listRef.elementCount(),
+                           dataSize, pointerCount);
+      }
+    }
+  }
+
+  static CAPNPROTO_ALWAYS_INLINE(ListBuilder getWritableStructListPointer(
+      WirePointer* origRef, SegmentBuilder* origSegment, StructSize elementSize,
+      const word* defaultValue)) {
+    if (origRef->isNull()) {
+    useDefault:
+      if (defaultValue == nullptr ||
+          reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
+        memset(origRef, 0, sizeof(*origRef));
+        return ListBuilder();
+      }
+      word* ptr = copyMessage(origSegment, origRef,
+                              reinterpret_cast<const WirePointer*>(defaultValue));
+
+      // Assume the default value is valid.
+      if (elementSize.preferredListEncoding == FieldSize::INLINE_COMPOSITE) {
+        WirePointer* tag = reinterpret_cast<WirePointer*>(ptr);
+        return ListBuilder(origSegment, tag + 1, elementSize.total() * BITS_PER_WORD / ELEMENTS,
+                           tag->inlineCompositeListElementCount(),
+                           elementSize.data * BITS_PER_WORD,
+                           elementSize.pointers);
+      } else {
+        BitCount dataSize = dataBitsPerElement(elementSize.preferredListEncoding) * ELEMENTS;
+        WirePointerCount pointerCount =
+            pointersPerElement(elementSize.preferredListEncoding) * ELEMENTS;
+        auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
+
+        return ListBuilder(origSegment, ptr, step, origRef->listRef.elementCount(),
+                           dataSize, pointerCount);
+      }
+
+    } else {
+      // The pointer is already initialized.  We must verify that it has the right size and
+      // potentially upgrade it if not.
+
+      WirePointer* oldRef = origRef;
+      SegmentBuilder* oldSegment = origSegment;
+      word* oldPtr = followFars(oldRef, oldSegment);
+
+      VALIDATE_INPUT(oldRef->kind() == WirePointer::LIST,
+          "Called getList{Field,Element}() but existing pointer is not a list.") {
+        goto useDefault;
+      }
+
+      FieldSize oldSize = oldRef->listRef.elementSize();
+
+      if (oldSize == FieldSize::INLINE_COMPOSITE) {
+        // Existing list is INLINE_COMPOSITE, but we need to verify that the sizes match.
+
+        WirePointer* oldTag = reinterpret_cast<WirePointer*>(oldPtr);
+        oldPtr += POINTER_SIZE_IN_WORDS;
+        VALIDATE_INPUT(oldTag->kind() == WirePointer::STRUCT,
+            "INLINE_COMPOSITE list with non-STRUCT elements not supported.") {
+          goto useDefault;
+        }
+
+        WordCount oldDataSize = oldTag->structRef.dataSize.get();
+        WirePointerCount oldPointerCount = oldTag->structRef.ptrCount.get();
+        auto oldStep = (oldDataSize + oldPointerCount * WORDS_PER_POINTER) / ELEMENTS;
+        ElementCount elementCount = oldTag->inlineCompositeListElementCount();
+
+        if (oldDataSize >= elementSize.data && oldPointerCount >= elementSize.pointers) {
+          // Old size is at least as large as we need.  Ship it.
+          return ListBuilder(oldSegment, oldPtr, oldStep * BITS_PER_WORD, elementCount,
+                             oldDataSize * BITS_PER_WORD, oldPointerCount);
+        }
+
+        // The structs in this list are smaller than expected, probably written using an older
+        // version of the protocol.  We need to make a copy and expand them.
+
+        WordCount newDataSize = std::max<WordCount>(oldDataSize, elementSize.data);
+        WirePointerCount newPointerCount =
+            std::max<WirePointerCount>(oldPointerCount, elementSize.pointers);
+        auto newStep = (newDataSize + newPointerCount * WORDS_PER_POINTER) / ELEMENTS;
+        WordCount totalSize = newStep * elementCount;
+
+        word* newPtr = allocate(origRef, origSegment, totalSize + POINTER_SIZE_IN_WORDS,
+                                WirePointer::LIST);
+        origRef->listRef.setInlineComposite(totalSize);
+
+        WirePointer* newTag = reinterpret_cast<WirePointer*>(newPtr);
+        newTag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, elementCount);
+        newTag->structRef.set(newDataSize, newPointerCount);
+        newPtr += POINTER_SIZE_IN_WORDS;
+
+        word* src = oldPtr;
+        word* dst = newPtr;
+        for (uint i = 0; i < elementCount / ELEMENTS; i++) {
+          // Copy data section.
+          memcpy(dst, src, oldDataSize * BYTES_PER_WORD / BYTES);
+
+          // Copy pointer section.
+          WirePointer* newPointerSection = reinterpret_cast<WirePointer*>(dst + newDataSize);
+          WirePointer* oldPointerSection = reinterpret_cast<WirePointer*>(src + oldDataSize);
+          for (uint i = 0; i < oldPointerCount / POINTERS; i++) {
+            transferPointer(origSegment, newPointerSection + i, oldSegment, oldPointerSection + i);
+          }
+
+          dst += newStep * (1 * ELEMENTS);
+          src += oldStep * (1 * ELEMENTS);
+        }
+
+        return ListBuilder(origSegment, newPtr, newStep * BITS_PER_WORD, elementCount,
+                           newDataSize * BITS_PER_WORD, newPointerCount);
+      } else if (oldSize == elementSize.preferredListEncoding) {
+        // Old size matches exactly.
+
+        auto dataSize = dataBitsPerElement(oldSize);
+        auto pointerCount = pointersPerElement(oldSize);
+        auto step = dataSize + pointerCount * BITS_PER_POINTER;
+
+        return ListBuilder(oldSegment, oldPtr, step, oldRef->listRef.elementCount(),
+                           dataSize * (1 * ELEMENTS), pointerCount * (1 * ELEMENTS));
+      } else {
+        switch (elementSize.preferredListEncoding) {
+          case FieldSize::VOID:
+            // No expectations.
+            break;
+          case FieldSize::POINTER:
+            VALIDATE_INPUT(oldSize == FieldSize::POINTER || oldSize == FieldSize::VOID,
+                           "Struct list has incompatible element size.") {
+              goto useDefault;
+            }
+            break;
+          case FieldSize::INLINE_COMPOSITE:
+            // Old size can be anything.
+            break;
+          case FieldSize::BIT:
+          case FieldSize::BYTE:
+          case FieldSize::TWO_BYTES:
+          case FieldSize::FOUR_BYTES:
+          case FieldSize::EIGHT_BYTES:
+            // Preferred size is data-only.
+            VALIDATE_INPUT(oldSize != FieldSize::POINTER,
+                           "Struct list has incompatible element size.") {
+              goto useDefault;
+            }
+            break;
+        }
+
+        // OK, the old size is compatible with the preferred, but is not exactly the same.  We may
+        // need to upgrade it.
+
+        BitCount oldDataSize = dataBitsPerElement(oldSize) * ELEMENTS;
+        WirePointerCount oldPointerCount = pointersPerElement(oldSize) * ELEMENTS;
+        auto oldStep = (oldDataSize + oldPointerCount * BITS_PER_POINTER) / ELEMENTS;
+        ElementCount elementCount = oldRef->listRef.elementCount();
+
+        if (oldSize >= elementSize.preferredListEncoding) {
+          // The old size is at least as large as the preferred, so we don't need to upgrade.
+          return ListBuilder(oldSegment, oldPtr, oldStep, elementCount,
+                             oldDataSize, oldPointerCount);
+        }
+
+        // Upgrade is necessary.
+
+        if (oldSize == FieldSize::VOID) {
+          // Nothing to copy, just allocate a new list.
+          return initStructListPointer(origRef, origSegment, elementCount, elementSize);
+        } else if (elementSize.preferredListEncoding == FieldSize::INLINE_COMPOSITE) {
+          // Upgrading to an inline composite list.
+
+          WordCount newDataSize = elementSize.data;
+          WirePointerCount newPointerCount = elementSize.pointers;
+
+          if (oldSize == FieldSize::POINTER) {
+            newPointerCount = std::max(newPointerCount, 1 * POINTERS);
+          } else {
+            // Old list contains data elements, so we need at least 1 word of data.
+            newDataSize = std::max(newDataSize, 1 * WORDS);
+          }
+
+          auto newStep = (newDataSize + newPointerCount * WORDS_PER_POINTER) / ELEMENTS;
+          WordCount totalWords = elementCount * newStep;
+
+          word* newPtr = allocate(origRef, origSegment, totalWords + POINTER_SIZE_IN_WORDS,
+                                  WirePointer::LIST);
+          origRef->listRef.setInlineComposite(totalWords);
+
+          WirePointer* tag = reinterpret_cast<WirePointer*>(newPtr);
+          tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, elementCount);
+          tag->structRef.set(newDataSize, newPointerCount);
+          newPtr += POINTER_SIZE_IN_WORDS;
+
+          if (oldSize == FieldSize::POINTER) {
+            WirePointer* dst = reinterpret_cast<WirePointer*>(newPtr + newDataSize);
+            WirePointer* src = reinterpret_cast<WirePointer*>(oldPtr);
+            for (uint i = 0; i < elementCount / ELEMENTS; i++) {
+              transferPointer(origSegment, dst, oldSegment, src);
+              dst += newStep / WORDS_PER_POINTER * (1 * ELEMENTS);
+              ++src;
+            }
+          } else if (oldSize == FieldSize::BIT) {
+            word* dst = newPtr;
+            char* src = reinterpret_cast<char*>(oldPtr);
+            for (uint i = 0; i < elementCount / ELEMENTS; i++) {
+              *reinterpret_cast<char*>(dst) = (src[i/8] >> (i%8)) & 1;
+              dst += newStep * (1 * ELEMENTS);
+            }
+          } else {
+            word* dst = newPtr;
+            char* src = reinterpret_cast<char*>(oldPtr);
+            ByteCount oldByteStep = oldDataSize / BITS_PER_BYTE;
+            for (uint i = 0; i < elementCount / ELEMENTS; i++) {
+              memcpy(dst, src, oldByteStep / BYTES);
+              src += oldByteStep / BYTES;
+              dst += newStep * (1 * ELEMENTS);
+            }
+          }
+
+          return ListBuilder(origSegment, newPtr, newStep * BITS_PER_WORD, elementCount,
+                             newDataSize * BITS_PER_WORD, newPointerCount);
+
+        } else {
+          // If oldSize were POINTER or EIGHT_BYTES then the preferred size must be
+          // INLINE_COMPOSITE because any other compatible size would not require an upgrade.
+          CHECK(oldSize < FieldSize::EIGHT_BYTES);
+
+          // If the preferred size were BIT then oldSize must be VOID, but we handled that case
+          // above.
+          CHECK(elementSize.preferredListEncoding >= FieldSize::BIT);
+
+          // OK, so the expected list elements are all data and between 1 byte and 1 word each,
+          // and the old element are data between 1 bit and 4 bytes.  We're upgrading from one
+          // primitive data type to another, larger one.
+
+          BitCount newDataSize =
+              dataBitsPerElement(elementSize.preferredListEncoding) * ELEMENTS;
+
+          WordCount totalWords =
+              roundUpToWords(BitCount64(newDataSize) * (elementCount / ELEMENTS));
+
+          word* newPtr = allocate(origRef, origSegment, totalWords, WirePointer::LIST);
+          origRef->listRef.set(elementSize.preferredListEncoding, elementCount);
+
+          char* newBytePtr = reinterpret_cast<char*>(newPtr);
+          char* oldBytePtr = reinterpret_cast<char*>(oldPtr);
+          ByteCount newDataByteSize = newDataSize / BITS_PER_BYTE;
+          if (oldSize == FieldSize::BIT) {
+            for (uint i = 0; i < elementCount / ELEMENTS; i++) {
+              *newBytePtr = (oldBytePtr[i/8] >> (i%8)) & 1;
+              newBytePtr += newDataByteSize / BYTES;
+            }
+          } else {
+            ByteCount oldDataByteSize = oldDataSize / BITS_PER_BYTE;
+            for (uint i = 0; i < elementCount / ELEMENTS; i++) {
+              memcpy(newBytePtr, oldBytePtr, oldDataByteSize / BYTES);
+              oldBytePtr += oldDataByteSize / BYTES;
+              newBytePtr += newDataByteSize / BYTES;
+            }
+          }
+
+          return ListBuilder(origSegment, newPtr, newDataSize / ELEMENTS, elementCount,
+                             newDataSize, 0 * POINTERS);
+        }
+      }
     }
   }
 
@@ -1205,9 +1529,15 @@ ListBuilder StructBuilder::initStructListField(
 }
 
 ListBuilder StructBuilder::getListField(
-    WirePointerCount ptrIndex, const word* defaultValue) const {
+    WirePointerCount ptrIndex, FieldSize elementSize, const word* defaultValue) const {
   return WireHelpers::getWritableListPointer(
-      pointers + ptrIndex, segment, defaultValue);
+      pointers + ptrIndex, segment, elementSize, defaultValue);
+}
+
+ListBuilder StructBuilder::getStructListField(
+    WirePointerCount ptrIndex, StructSize elementSize, const word* defaultValue) const {
+  return WireHelpers::getWritableStructListPointer(
+      pointers + ptrIndex, segment, elementSize, defaultValue);
 }
 
 template <>
@@ -1363,9 +1693,16 @@ ListBuilder ListBuilder::initStructListElement(
       segment, elementCount, elementSize);
 }
 
-ListBuilder ListBuilder::getListElement(ElementCount index) const {
+ListBuilder ListBuilder::getListElement(ElementCount index, FieldSize elementSize) const {
   return WireHelpers::getWritableListPointer(
-      reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment, nullptr);
+      reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment,
+      elementSize, nullptr);
+}
+
+ListBuilder ListBuilder::getStructListElement(ElementCount index, StructSize elementSize) const {
+  return WireHelpers::getWritableStructListPointer(
+      reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment,
+      elementSize, nullptr);
 }
 
 template <>

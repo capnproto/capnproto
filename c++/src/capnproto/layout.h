@@ -54,6 +54,11 @@ class SegmentBuilder;
 enum class FieldSize: uint8_t {
   // TODO:  Rename to FieldLayout or maybe ValueLayout.
 
+  // Notice that each member of this enum, when representing a list element size, represents a
+  // size that is greater than or equal to the previous members, since INLINE_COMPOSITE is used
+  // only for multi-word structs.  This is important because it allows us to compare FieldSize
+  // values for the purpose of deciding when we need to upgrade a list.
+
   VOID = 0,
   BIT = 1,
   BYTE = 2,
@@ -340,8 +345,17 @@ public:
   // Allocates a new list of the given size for the field at the given index in the pointer
   // segment, and return a pointer to it.  Each element is initialized to its empty state.
 
-  ListBuilder getListField(WirePointerCount ptrIndex, const word* defaultValue) const;
-  // Gets the already-allocated list field for the given pointer index.  If the list is not
+  ListBuilder getListField(WirePointerCount ptrIndex, FieldSize elementSize,
+                           const word* defaultValue) const;
+  // Gets the already-allocated list field for the given pointer index, ensuring that the list is
+  // suitable for storing non-struct elements of the given size.  If the list is not already
+  // allocated, it is allocated as a deep copy of the given default value (a trusted message).  If
+  // the default value is null, an empty list is used.
+
+  ListBuilder getStructListField(WirePointerCount ptrIndex, StructSize elementSize,
+                                 const word* defaultValue) const;
+  // Gets the already-allocated list field for the given pointer index, ensuring that the list
+  // is suitable for storing struct elements of the given size.  If the list is not
   // already allocated, it is allocated as a deep copy of the given default value (a trusted
   // message).  If the default value is null, an empty list is used.
 
@@ -515,9 +529,15 @@ public:
   // Allocates a new list of the given size for the field at the given index in the pointer
   // segment, and return a pointer to it.  Each element is initialized to its empty state.
 
-  ListBuilder getListElement(ElementCount index) const;
-  // Get the existing list element at the given index.  Returns an empty list if the element is
-  // not initialized.
+  ListBuilder getListElement(ElementCount index, FieldSize elementSize) const;
+  // Get the existing list element at the given index, making sure it is suitable for storing
+  // non-struct elements of the given size.  Returns an empty list if the element is not
+  // initialized.
+
+  ListBuilder getStructListElement(ElementCount index, StructSize elementSize) const;
+  // Get the existing list element at the given index, making sure it is suitable for storing
+  // struct elements of the given size.  Returns an empty list if the element is not
+  // initialized.
 
   template <typename T>
   typename T::Builder initBlobElement(ElementCount index, ByteCount size) const;

@@ -577,12 +577,12 @@ TEST(Encoding, BitListUpgrade) {
   root.initObjectField<List<bool>>(4).copyFrom({true, false, true, true});
 
   {
-    auto l = root.getObjectField<List<test::TestFieldZeroIsBit>>();
+    auto l = root.getObjectField<List<test::TestLists::Struct1>>();
     ASSERT_EQ(4u, l.size());
-    EXPECT_TRUE(l[0].getBit());
-    EXPECT_FALSE(l[1].getBit());
-    EXPECT_TRUE(l[2].getBit());
-    EXPECT_TRUE(l[3].getBit());
+    EXPECT_TRUE(l[0].getF());
+    EXPECT_FALSE(l[1].getF());
+    EXPECT_TRUE(l[2].getF());
+    EXPECT_TRUE(l[3].getF());
   }
 
   auto reader = root.asReader();
@@ -863,6 +863,292 @@ TEST(Encoding, UpgradeStructInBuilderDoubleFarPointers) {
   EXPECT_EQ(6u, builder.getSegmentsForOutput()[0].size());
   EXPECT_EQ(6u, builder.getSegmentsForOutput()[1].size());
   EXPECT_EQ(2u, builder.getSegmentsForOutput()[2].size());
+}
+
+void checkList(List<test::TestNewVersion>::Builder builder,
+               std::initializer_list<int64_t> expectedData,
+               std::initializer_list<Text::Reader> expectedPointers) {
+  ASSERT_EQ(expectedData.size(), builder.size());
+  for (uint i = 0; i < expectedData.size(); i++) {
+    EXPECT_EQ(expectedData.begin()[i], builder[i].getOld1());
+    EXPECT_EQ(expectedPointers.begin()[i], builder[i].getOld2());
+
+    // Other fields shouldn't be set.
+    EXPECT_EQ(0, builder[i].asReader().getOld3().getOld1());
+    EXPECT_EQ("", builder[i].asReader().getOld3().getOld2());
+    EXPECT_EQ(987, builder[i].getNew1());
+    EXPECT_EQ("baz", builder[i].getNew2());
+  }
+}
+
+void checkUpgradedList(test::TestObject::Builder root,
+                       std::initializer_list<int64_t> expectedData,
+                       std::initializer_list<Text::Reader> expectedPointers) {
+  {
+    auto builder = root.getObjectField<List<test::TestNewVersion>>();
+
+    ASSERT_EQ(expectedData.size(), builder.size());
+    for (uint i = 0; i < expectedData.size(); i++) {
+      EXPECT_EQ(expectedData.begin()[i], builder[i].getOld1());
+      EXPECT_EQ(expectedPointers.begin()[i], builder[i].getOld2());
+
+      // Other fields shouldn't be set.
+      EXPECT_EQ(0, builder[i].asReader().getOld3().getOld1());
+      EXPECT_EQ("", builder[i].asReader().getOld3().getOld2());
+      EXPECT_EQ(987, builder[i].getNew1());
+      EXPECT_EQ("baz", builder[i].getNew2());
+
+      // Write some new data.
+      builder[i].setOld1(i * 123);
+      builder[i].setOld2(str("qux", i, '\0').begin());
+      builder[i].setNew1(i * 456);
+      builder[i].setNew2(str("corge", i, '\0').begin());
+    }
+  }
+
+  // Read the newly-written data as TestOldVersion to ensure it was updated.
+  {
+    auto builder = root.getObjectField<List<test::TestOldVersion>>();
+
+    ASSERT_EQ(expectedData.size(), builder.size());
+    for (uint i = 0; i < expectedData.size(); i++) {
+      EXPECT_EQ(i * 123, builder[i].getOld1());
+      EXPECT_EQ(Text::Reader(str("qux", i, "\0").begin()), builder[i].getOld2());
+    }
+  }
+
+  // Also read back as TestNewVersion again.
+  {
+    auto builder = root.getObjectField<List<test::TestNewVersion>>();
+
+    ASSERT_EQ(expectedData.size(), builder.size());
+    for (uint i = 0; i < expectedData.size(); i++) {
+      EXPECT_EQ(i * 123, builder[i].getOld1());
+      EXPECT_EQ(Text::Reader(str("qux", i, '\0').begin()), builder[i].getOld2());
+      EXPECT_EQ(i * 456, builder[i].getNew1());
+      EXPECT_EQ(Text::Reader(str("corge", i, '\0').begin()), builder[i].getNew2());
+    }
+  }
+}
+
+TEST(Encoding, UpgradeListInBuilder) {
+  // Test every damned list upgrade.
+
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestObject>();
+
+  // -----------------------------------------------------------------
+
+  root.initObjectField<List<Void>>(4);
+  checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+  EXPECT_ANY_THROW(root.getObjectField<List<bool>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint8_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint16_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint32_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint64_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<Text>>());
+  checkList(root.getObjectField<List<test::TestNewVersion>>(), {0, 0, 0, 0}, {"", "", "", ""});
+
+  // -----------------------------------------------------------------
+
+  root.initObjectField<List<bool>>(4).copyFrom({true, false, true, true});
+  checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+  checkList(root.getObjectField<List<bool>>(), {true, false, true, true});
+  EXPECT_ANY_THROW(root.getObjectField<List<uint8_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint16_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint32_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint64_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<Text>>());
+  checkUpgradedList(root, {1, 0, 1, 1}, {"", "", "", ""});
+
+  // -----------------------------------------------------------------
+
+  root.initObjectField<List<uint8_t>>(4).copyFrom({0x12, 0x23, 0x33, 0x44});
+  checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+  checkList(root.getObjectField<List<bool>>(), {false, true, true, false});
+  checkList(root.getObjectField<List<uint8_t>>(), {0x12, 0x23, 0x33, 0x44});
+  EXPECT_ANY_THROW(root.getObjectField<List<uint16_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint32_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint64_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<Text>>());
+  checkUpgradedList(root, {0x12, 0x23, 0x33, 0x44}, {"", "", "", ""});
+
+  // -----------------------------------------------------------------
+
+  root.initObjectField<List<uint16_t>>(4).copyFrom({0x5612, 0x7823, 0xab33, 0xcd44});
+  checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+  checkList(root.getObjectField<List<bool>>(), {false, true, true, false});
+  checkList(root.getObjectField<List<uint8_t>>(), {0x12, 0x23, 0x33, 0x44});
+  checkList(root.getObjectField<List<uint16_t>>(), {0x5612, 0x7823, 0xab33, 0xcd44});
+  EXPECT_ANY_THROW(root.getObjectField<List<uint32_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint64_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<Text>>());
+  checkUpgradedList(root, {0x5612, 0x7823, 0xab33, 0xcd44}, {"", "", "", ""});
+
+  // -----------------------------------------------------------------
+
+  root.initObjectField<List<uint32_t>>(4).copyFrom({0x17595612, 0x29347823, 0x5923ab32, 0x1a39cd45});
+  checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+  checkList(root.getObjectField<List<bool>>(), {false, true, false, true});
+  checkList(root.getObjectField<List<uint8_t>>(), {0x12, 0x23, 0x32, 0x45});
+  checkList(root.getObjectField<List<uint16_t>>(), {0x5612, 0x7823, 0xab32, 0xcd45});
+  checkList(root.getObjectField<List<uint32_t>>(), {0x17595612u, 0x29347823u, 0x5923ab32u, 0x1a39cd45u});
+  EXPECT_ANY_THROW(root.getObjectField<List<uint64_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<Text>>());
+  checkUpgradedList(root, {0x17595612, 0x29347823, 0x5923ab32, 0x1a39cd45}, {"", "", "", ""});
+
+  // -----------------------------------------------------------------
+
+  root.initObjectField<List<uint64_t>>(2).copyFrom({0x1234abcd8735fe21, 0x7173bc0e1923af36});
+  checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID});
+  checkList(root.getObjectField<List<bool>>(), {true, false});
+  checkList(root.getObjectField<List<uint8_t>>(), {0x21, 0x36});
+  checkList(root.getObjectField<List<uint16_t>>(), {0xfe21, 0xaf36});
+  checkList(root.getObjectField<List<uint32_t>>(), {0x8735fe21u, 0x1923af36u});
+  checkList(root.getObjectField<List<uint64_t>>(), {0x1234abcd8735fe21ull, 0x7173bc0e1923af36ull});
+  EXPECT_ANY_THROW(root.getObjectField<List<Text>>());
+  checkUpgradedList(root, {0x1234abcd8735fe21ull, 0x7173bc0e1923af36ull}, {"", ""});
+
+  // -----------------------------------------------------------------
+
+  root.initObjectField<List<Text>>(3).copyFrom({"foo", "bar", "baz"});
+  checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID});
+  EXPECT_ANY_THROW(root.getObjectField<List<bool>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint8_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint16_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint32_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint64_t>>());
+  checkList(root.getObjectField<List<Text>>(), {"foo", "bar", "baz"});
+  checkUpgradedList(root, {0, 0, 0}, {"foo", "bar", "baz"});
+
+  // -----------------------------------------------------------------
+
+  root.initObjectField<List<Text>>(3).copyFrom({"foo", "bar", "baz"});
+  checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID});
+  EXPECT_ANY_THROW(root.getObjectField<List<bool>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint8_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint16_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint32_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint64_t>>());
+  checkList(root.getObjectField<List<Text>>(), {"foo", "bar", "baz"});
+  checkUpgradedList(root, {0, 0, 0}, {"foo", "bar", "baz"});
+
+  // -----------------------------------------------------------------
+
+  {
+    auto l = root.initObjectField<List<test::TestOldVersion>>(3);
+    l[0].setOld1(0x1234567890abcdef);
+    l[1].setOld1(0x234567890abcdef1);
+    l[2].setOld1(0x34567890abcdef12);
+    l[0].setOld2("foo");
+    l[1].setOld2("bar");
+    l[2].setOld2("baz");
+  }
+
+  checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID});
+  checkList(root.getObjectField<List<bool>>(), {true, true, false});
+  checkList(root.getObjectField<List<uint8_t>>(), {0xefu, 0xf1u, 0x12u});
+  checkList(root.getObjectField<List<uint16_t>>(), {0xcdefu, 0xdef1u, 0xef12u});
+  checkList(root.getObjectField<List<uint32_t>>(), {0x90abcdefu, 0x0abcdef1u, 0xabcdef12u});
+  checkList(root.getObjectField<List<uint64_t>>(),
+            {0x1234567890abcdefull, 0x234567890abcdef1ull, 0x34567890abcdef12ull});
+  checkList(root.getObjectField<List<Text>>(), {"foo", "bar", "baz"});
+  checkUpgradedList(root, {0x1234567890abcdefull, 0x234567890abcdef1ull, 0x34567890abcdef12ull},
+                          {"foo", "bar", "baz"});
+
+  // -----------------------------------------------------------------
+  // OK, now we've tested upgrading every primitive list to every primitive list, every primitive
+  // list to a multi-word struct, and a multi-word struct to every primitive list.  But we haven't
+  // tried upgrading primitive lists to sub-word structs.
+
+  // Upgrade from bool.
+  root.initObjectField<List<bool>>(4).copyFrom({true, false, true, true});
+  {
+    auto l = root.getObjectField<List<test::TestLists::Struct16>>();
+    ASSERT_EQ(4u, l.size());
+    EXPECT_EQ(1u, l[0].getF());
+    EXPECT_EQ(0u, l[1].getF());
+    EXPECT_EQ(1u, l[2].getF());
+    EXPECT_EQ(1u, l[3].getF());
+    l[0].setF(12573);
+    l[1].setF(3251);
+    l[2].setF(9238);
+    l[3].setF(5832);
+  }
+  checkList(root.getObjectField<List<bool>>(), {true, true, false, false});
+  checkList(root.getObjectField<List<uint16_t>>(), {12573u, 3251u, 9238u, 5832u});
+  EXPECT_ANY_THROW(root.getObjectField<List<uint32_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint64_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<Text>>());
+
+  // Upgrade from multi-byte, sub-word data.
+  root.initObjectField<List<uint16_t>>(4).copyFrom({12u, 34u, 56u, 78u});
+  {
+    auto l = root.getObjectField<List<test::TestLists::Struct32>>();
+    ASSERT_EQ(4u, l.size());
+    EXPECT_EQ(12u, l[0].getF());
+    EXPECT_EQ(34u, l[1].getF());
+    EXPECT_EQ(56u, l[2].getF());
+    EXPECT_EQ(78u, l[3].getF());
+    l[0].setF(0x65ac1235u);
+    l[1].setF(0x13f12879u);
+    l[2].setF(0x33423082u);
+    l[3].setF(0x12988948u);
+  }
+  checkList(root.getObjectField<List<bool>>(), {true, true, false, false});
+  checkList(root.getObjectField<List<uint8_t>>(), {0x35u, 0x79u, 0x82u, 0x48u});
+  checkList(root.getObjectField<List<uint16_t>>(), {0x1235u, 0x2879u, 0x3082u, 0x8948u});
+  checkList(root.getObjectField<List<uint32_t>>(),
+            {0x65ac1235u, 0x13f12879u, 0x33423082u, 0x12988948u});
+  EXPECT_ANY_THROW(root.getObjectField<List<uint64_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<Text>>());
+
+  // Upgrade from void -> data struct
+  root.initObjectField<List<Void>>(4).copyFrom({Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+  {
+    auto l = root.getObjectField<List<test::TestLists::Struct16>>();
+    ASSERT_EQ(4u, l.size());
+    EXPECT_EQ(0u, l[0].getF());
+    EXPECT_EQ(0u, l[1].getF());
+    EXPECT_EQ(0u, l[2].getF());
+    EXPECT_EQ(0u, l[3].getF());
+    l[0].setF(12573);
+    l[1].setF(3251);
+    l[2].setF(9238);
+    l[3].setF(5832);
+  }
+  checkList(root.getObjectField<List<bool>>(), {true, true, false, false});
+  checkList(root.getObjectField<List<uint16_t>>(), {12573u, 3251u, 9238u, 5832u});
+  EXPECT_ANY_THROW(root.getObjectField<List<uint32_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint64_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<Text>>());
+
+  // Upgrade from void -> pointer struct
+  root.initObjectField<List<Void>>(4).copyFrom({Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+  {
+    auto l = root.getObjectField<List<test::TestLists::StructP>>();
+    ASSERT_EQ(4u, l.size());
+    EXPECT_EQ("", l[0].getF());
+    EXPECT_EQ("", l[1].getF());
+    EXPECT_EQ("", l[2].getF());
+    EXPECT_EQ("", l[3].getF());
+    l[0].setF("foo");
+    l[1].setF("bar");
+    l[2].setF("baz");
+    l[3].setF("qux");
+  }
+  EXPECT_ANY_THROW(root.getObjectField<List<bool>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint16_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint32_t>>());
+  EXPECT_ANY_THROW(root.getObjectField<List<uint64_t>>());
+  checkList(root.getObjectField<List<Text>>(), {"foo", "bar", "baz", "qux"});
+
+  // Verify that we cannot "side-grade" a pointer list to a data struct list, or a data list to
+  // a pointer struct list.
+  root.initObjectField<List<Text>>(4).copyFrom({"foo", "bar", "baz", "qux"});
+  EXPECT_ANY_THROW(root.getObjectField<List<test::TestLists::Struct32>>());
+  root.initObjectField<List<uint32_t>>(4).copyFrom({12, 34, 56, 78});
+  EXPECT_ANY_THROW(root.getObjectField<List<Text>>());
 }
 
 // =======================================================================================

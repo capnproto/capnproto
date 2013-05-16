@@ -665,11 +665,20 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
                                          typedDval.data(), typedDval.size() * BYTES));
         }
 
-        case schema::Type::Body::LIST_TYPE:
-          return DynamicValue::Builder(DynamicList::Builder(
-              ListSchema::of(type.getListType(), member.getContainingStruct()),
-              builder.getListField(field.getOffset() * POINTERS,
-                                   dval.getListValue<internal::TrustedMessage>())));
+        case schema::Type::Body::LIST_TYPE: {
+          ListSchema listType = ListSchema::of(type.getListType(), member.getContainingStruct());
+          if (listType.whichElementType() == schema::Type::Body::STRUCT_TYPE) {
+            return DynamicValue::Builder(DynamicList::Builder(listType,
+                builder.getStructListField(field.getOffset() * POINTERS,
+                                           structSizeFromSchema(listType.getStructElementType()),
+                                           dval.getListValue<internal::TrustedMessage>())));
+          } else {
+            return DynamicValue::Builder(DynamicList::Builder(listType,
+                builder.getListField(field.getOffset() * POINTERS,
+                                     elementSizeFor(listType.whichElementType()),
+                                     dval.getListValue<internal::TrustedMessage>())));
+          }
+        }
 
         case schema::Type::Body::STRUCT_TYPE: {
           auto structSchema =
@@ -711,10 +720,19 @@ DynamicStruct::Builder DynamicStruct::Builder::getObjectImpl(
 }
 DynamicList::Builder DynamicStruct::Builder::getObjectImpl(
     internal::StructBuilder builder, StructSchema::Member field, ListSchema type) {
-  return DynamicList::Builder(type,
-      builder.getListField(
-          field.getProto().getBody().getFieldMember().getOffset() * POINTERS,
-          nullptr));
+  if (type.whichElementType() == schema::Type::Body::STRUCT_TYPE) {
+    return DynamicList::Builder(type,
+        builder.getStructListField(
+            field.getProto().getBody().getFieldMember().getOffset() * POINTERS,
+            structSizeFromSchema(type.getStructElementType()),
+            nullptr));
+  } else {
+    return DynamicList::Builder(type,
+        builder.getListField(
+            field.getProto().getBody().getFieldMember().getOffset() * POINTERS,
+            elementSizeFor(type.whichElementType()),
+            nullptr));
+  }
 }
 Text::Builder DynamicStruct::Builder::getObjectAsTextImpl(
     internal::StructBuilder builder, StructSchema::Member field) {
@@ -1007,9 +1025,20 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) const {
     case schema::Type::Body::DATA_TYPE:
       return DynamicValue::Builder(builder.getBlobElement<Data>(index * ELEMENTS));
 
-    case schema::Type::Body::LIST_TYPE:
-      return DynamicValue::Builder(DynamicList::Builder(
-          schema.getListElementType(), builder.getListElement(index * ELEMENTS)));
+    case schema::Type::Body::LIST_TYPE: {
+      ListSchema elementType = schema.getListElementType();
+      if (elementType.whichElementType() == schema::Type::Body::STRUCT_TYPE) {
+        return DynamicValue::Builder(DynamicList::Builder(elementType,
+            builder.getStructListElement(
+                index * ELEMENTS,
+                structSizeFromSchema(elementType.getStructElementType()))));
+      } else {
+        return DynamicValue::Builder(DynamicList::Builder(elementType,
+            builder.getListElement(
+                index * ELEMENTS,
+                elementSizeFor(elementType.whichElementType()))));
+      }
+    }
 
     case schema::Type::Body::STRUCT_TYPE:
       return DynamicValue::Builder(DynamicStruct::Builder(
@@ -1388,7 +1417,15 @@ DynamicList::Reader PointerHelpers<DynamicList, Kind::UNKNOWN>::getDynamic(
 }
 DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::getDynamic(
     StructBuilder builder, WirePointerCount index, ListSchema schema) {
-  return DynamicList::Builder(schema, builder.getListField(index, nullptr));
+  if (schema.whichElementType() == schema::Type::Body::STRUCT_TYPE) {
+    return DynamicList::Builder(schema,
+        builder.getStructListField(index,
+            structSizeFromSchema(schema.getStructElementType()),
+            nullptr));
+  } else {
+    return DynamicList::Builder(schema,
+        builder.getListField(index, elementSizeFor(schema.whichElementType()), nullptr));
+  }
 }
 void PointerHelpers<DynamicList, Kind::UNKNOWN>::set(
     StructBuilder builder, WirePointerCount index, DynamicList::Reader value) {

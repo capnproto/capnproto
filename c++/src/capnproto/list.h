@@ -257,7 +257,7 @@ private:
   }
   inline static internal::ListBuilder getAsElementOf(
       const internal::ListBuilder& builder, uint index) {
-    return builder.getListElement(index * ELEMENTS);
+    return builder.getListElement(index * ELEMENTS, internal::FieldSizeForType<T>::value);
   }
   inline static internal::ListReader getAsElementOf(
       const internal::ListReader& reader, uint index) {
@@ -270,7 +270,7 @@ private:
   }
   inline static internal::ListBuilder getAsFieldOf(
       internal::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
-    return builder.getListField(index, defaultValue);
+    return builder.getListField(index, internal::FieldSizeForType<T>::value, defaultValue);
   }
   inline static internal::ListReader getAsFieldOf(
       internal::StructReader& reader, WirePointerCount index, const word* defaultValue) {
@@ -343,7 +343,7 @@ private:
   }
   inline static internal::ListBuilder getAsElementOf(
       const internal::ListBuilder& builder, uint index) {
-    return builder.getListElement(index * ELEMENTS);
+    return builder.getStructListElement(index * ELEMENTS, internal::structSize<T>());
   }
   inline static internal::ListReader getAsElementOf(
       const internal::ListReader& reader, uint index) {
@@ -356,7 +356,7 @@ private:
   }
   inline static internal::ListBuilder getAsFieldOf(
       internal::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
-    return builder.getListField(index, defaultValue);
+    return builder.getStructListField(index, internal::structSize<T>(), defaultValue);
   }
   inline static internal::ListReader getAsFieldOf(
       internal::StructReader& reader, WirePointerCount index, const word* defaultValue) {
@@ -429,7 +429,7 @@ private:
   }
   inline static internal::ListBuilder getAsElementOf(
       const internal::ListBuilder& builder, uint index) {
-    return builder.getListElement(index * ELEMENTS);
+    return builder.getListElement(index * ELEMENTS, internal::FieldSize::POINTER);
   }
   inline static internal::ListReader getAsElementOf(
       const internal::ListReader& reader, uint index) {
@@ -442,7 +442,7 @@ private:
   }
   inline static internal::ListBuilder getAsFieldOf(
       internal::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
-    return builder.getListField(index, defaultValue);
+    return builder.getListField(index, internal::FieldSize::POINTER, defaultValue);
   }
   inline static internal::ListReader getAsFieldOf(
       internal::StructReader& reader, WirePointerCount index, const word* defaultValue) {
@@ -530,7 +530,7 @@ private:
   }
   inline static internal::ListBuilder getAsElementOf(
       const internal::ListBuilder& builder, uint index) {
-    return builder.getListElement(index * ELEMENTS);
+    return builder.getListElement(index * ELEMENTS, internal::FieldSize::POINTER);
   }
   inline static internal::ListReader getAsElementOf(
       const internal::ListReader& reader, uint index) {
@@ -543,7 +543,7 @@ private:
   }
   inline static internal::ListBuilder getAsFieldOf(
       internal::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
-    return builder.getListField(index, defaultValue);
+    return builder.getListField(index, internal::FieldSize::POINTER, defaultValue);
   }
   inline static internal::ListReader getAsFieldOf(
       internal::StructReader& reader, WirePointerCount index, const word* defaultValue) {

@@ -182,7 +182,7 @@ static void checkStruct(StructBuilder builder) {
   }
 
   {
-    ListBuilder list = builder.getListField(1 * POINTERS, nullptr);
+    ListBuilder list = builder.getListField(1 * POINTERS, FieldSize::FOUR_BYTES, nullptr);
     ASSERT_EQ(3 * ELEMENTS, list.size());
     EXPECT_EQ(200, list.getDataElement<int32_t>(0 * ELEMENTS));
     EXPECT_EQ(201, list.getDataElement<int32_t>(1 * ELEMENTS));
@@ -190,7 +190,7 @@ static void checkStruct(StructBuilder builder) {
   }
 
   {
-    ListBuilder list = builder.getListField(2 * POINTERS, nullptr);
+    ListBuilder list = builder.getStructListField(2 * POINTERS, STRUCTLIST_ELEMENT_SIZE, nullptr);
     ASSERT_EQ(4 * ELEMENTS, list.size());
     for (int i = 0; i < 4; i++) {
       StructBuilder element = list.getStructElement(i * ELEMENTS);
@@ -204,10 +204,10 @@ static void checkStruct(StructBuilder builder) {
   }
 
   {
-    ListBuilder list = builder.getListField(3 * POINTERS, nullptr);
+    ListBuilder list = builder.getListField(3 * POINTERS, FieldSize::POINTER, nullptr);
     ASSERT_EQ(5 * ELEMENTS, list.size());
     for (uint i = 0; i < 5; i++) {
-      ListBuilder element = list.getListElement(i * ELEMENTS);
+      ListBuilder element = list.getListElement(i * ELEMENTS, FieldSize::TWO_BYTES);
       ASSERT_EQ((i + 1) * ELEMENTS, element.size());
       for (uint j = 0; j <= i; j++) {
         EXPECT_EQ(500u + j, element.getDataElement<uint16_t>(j * ELEMENTS));
