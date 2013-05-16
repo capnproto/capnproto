@@ -509,12 +509,6 @@ Data::Builder DynamicStruct::Builder::initObjectAsData(Text::Reader name, uint s
   return initObjectAsText(schema.getMemberByName(name), size);
 }
 
-void DynamicStruct::Builder::copyFrom(Reader other) {
-  // TODO(now): copyFrom on StructBuilder.
-  // TODO(now): don't forget to check types match.
-  FAIL_CHECK("Unimplemented: copyFrom()");
-}
-
 DynamicValue::Reader DynamicStruct::Reader::getImpl(
     internal::StructReader reader, StructSchema::Member member) {
   switch (member.getProto().getBody().which()) {
@@ -821,25 +815,17 @@ void DynamicStruct::Builder::setImpl(
           return;
 
         case schema::Type::Body::LIST_TYPE: {
-          // TODO(now):  We need to do a schemaless copy to avoid losing information if the values
-          //   are larger than what the schema defines.
-          auto listValue = value.as<DynamicList>();
-          initImpl(builder, member, listValue.size())
-              .as<DynamicList>().copyFrom(listValue);
+          builder.setListField(field.getOffset() * POINTERS, value.as<DynamicList>().reader);
           return;
         }
 
         case schema::Type::Body::STRUCT_TYPE: {
-          // TODO(now):  We need to do a schemaless copy to avoid losing information if the values
-          //   are larger than what the schema defines.
-          initImpl(builder, member).as<DynamicStruct>()
-              .copyFrom(value.as<DynamicStruct>());
+          builder.setStructField(field.getOffset() * POINTERS, value.as<DynamicStruct>().reader);
           return;
         }
 
         case schema::Type::Body::OBJECT_TYPE: {
-          // TODO(now):  Perform schemaless copy.
-          FAIL_CHECK("TODO");
+          builder.setObjectField(field.getOffset() * POINTERS, value.as<DynamicObject>().reader);
           return;
         }
 
@@ -1094,17 +1080,15 @@ void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
       break;
 
     case schema::Type::Body::LIST_TYPE: {
-      // TODO(now):  Perform schemaless copy.
-      auto listValue = value.as<DynamicList>();
-      init(index, listValue.size()).as<DynamicList>().copyFrom(listValue);
+      builder.setListElement(index * ELEMENTS, value.as<DynamicList>().reader);
       break;
     }
 
     case schema::Type::Body::STRUCT_TYPE:
-      // Note we can't do a schemaless copy here because the space is already allocated.
-      DynamicStruct::Builder(
-          schema.getStructElementType(), builder.getStructElement(index * ELEMENTS))
-          .copyFrom(value.as<DynamicStruct>());
+      // Not supported for the same reason List<struct> doesn't support it -- the space for the
+      // element is already allocated, and if it's smaller than the input value the copy would
+      // have to be lossy.
+      FAIL_RECOVERABLE_CHECK("DynamicList of structs does not support set().");
       break;
 
     case schema::Type::Body::ENUM_TYPE: {
@@ -1186,12 +1170,6 @@ DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
 
   FAIL_CHECK("switch() missing case.", schema.whichElementType());
   return DynamicValue::Builder();
-}
-
-void DynamicList::Builder::copyFrom(Reader other) {
-  // TODO(now): copyFrom on ListBuilder.
-  // TODO(now): don't forget to check types match.
-  FAIL_CHECK("Unimplemented: copyFrom()");
 }
 
 void DynamicList::Builder::copyFrom(std::initializer_list<DynamicValue::Reader> value) {
@@ -1401,8 +1379,7 @@ DynamicStruct::Builder PointerHelpers<DynamicStruct, Kind::UNKNOWN>::getDynamic(
 }
 void PointerHelpers<DynamicStruct, Kind::UNKNOWN>::set(
     StructBuilder builder, WirePointerCount index, DynamicStruct::Reader value) {
-  // TODO(now):  schemaless copy
-  FAIL_CHECK("Unimplemented: copyFrom()");
+  builder.setStructField(index, value.reader);
 }
 DynamicStruct::Builder PointerHelpers<DynamicStruct, Kind::UNKNOWN>::init(
     StructBuilder builder, WirePointerCount index, StructSchema schema) {
@@ -1429,8 +1406,7 @@ DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::getDynamic(
 }
 void PointerHelpers<DynamicList, Kind::UNKNOWN>::set(
     StructBuilder builder, WirePointerCount index, DynamicList::Reader value) {
-  // TODO(now):  schemaless copy
-  FAIL_CHECK("Unimplemented: copyFrom()");
+  builder.setListField(index, value.reader);
 }
 DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::init(
     StructBuilder builder, WirePointerCount index, ListSchema schema, uint size) {

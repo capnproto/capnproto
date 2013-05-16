@@ -1070,6 +1070,104 @@ struct WireHelpers {
     }
   }
 
+  static void setStructPointer(SegmentBuilder* segment, WirePointer* ref, StructReader value) {
+    WordCount dataSize = roundUpToWords(value.dataSize);
+    WordCount totalSize = dataSize + value.pointerCount * WORDS_PER_POINTER;
+
+    word* ptr = allocate(ref, segment, totalSize, WirePointer::STRUCT);
+    ref->structRef.set(dataSize, value.pointerCount);
+
+    if (value.dataSize == 1 * BITS) {
+      *reinterpret_cast<char*>(ptr) = value.getDataField<bool>(0 * ELEMENTS);
+    } else {
+      memcpy(ptr, value.data, value.dataSize / BITS_PER_BYTE / BYTES);
+    }
+
+    WirePointer* pointerSection = reinterpret_cast<WirePointer*>(ptr + dataSize);
+    for (uint i = 0; i < value.pointerCount / POINTERS; i++) {
+      setObjectPointer(segment, pointerSection + i, readObjectPointer(
+          value.segment, value.pointers + i, nullptr, value.nestingLimit));
+    }
+  }
+
+  static void setListPointer(SegmentBuilder* segment, WirePointer* ref, ListReader value) {
+    WordCount totalSize = roundUpToWords(value.elementCount * value.step);
+
+    if (value.step * ELEMENTS <= BITS_PER_WORD * WORDS) {
+      // List of non-structs.
+      word* ptr = allocate(ref, segment, totalSize, WirePointer::LIST);
+
+      if (value.structPointerCount == 1 * POINTERS) {
+        // List of pointers.
+        ref->listRef.set(FieldSize::POINTER, value.elementCount);
+        for (uint i = 0; i < value.elementCount / ELEMENTS; i++) {
+          setObjectPointer(segment, reinterpret_cast<WirePointer*>(ptr) + i, readObjectPointer(
+              value.segment, reinterpret_cast<const WirePointer*>(value.ptr) + i,
+              nullptr, value.nestingLimit));
+        }
+      } else {
+        // List of data.
+        FieldSize elementSize = FieldSize::VOID;
+        switch (value.step * ELEMENTS / BITS) {
+          case 0: elementSize = FieldSize::VOID; break;
+          case 1: elementSize = FieldSize::BIT; break;
+          case 8: elementSize = FieldSize::BYTE; break;
+          case 16: elementSize = FieldSize::TWO_BYTES; break;
+          case 32: elementSize = FieldSize::FOUR_BYTES; break;
+          case 64: elementSize = FieldSize::EIGHT_BYTES; break;
+          default:
+            FAIL_CHECK("invalid list step size", value.step * ELEMENTS / BITS);
+            break;
+        }
+
+        ref->listRef.set(elementSize, value.elementCount);
+        memcpy(ptr, value.ptr, totalSize * BYTES_PER_WORD / BYTES);
+      }
+    } else {
+      // List of structs.
+      word* ptr = allocate(ref, segment, totalSize + POINTER_SIZE_IN_WORDS, WirePointer::LIST);
+      ref->listRef.setInlineComposite(totalSize);
+
+      WordCount dataSize = roundUpToWords(value.structDataSize);
+      WirePointerCount pointerCount = value.structPointerCount;
+
+      WirePointer* tag = reinterpret_cast<WirePointer*>(ptr);
+      tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, value.elementCount);
+      tag->structRef.set(dataSize, pointerCount);
+      ptr += POINTER_SIZE_IN_WORDS;
+
+      const word* src = reinterpret_cast<const word*>(value.ptr);
+      for (uint i = 0; i < value.elementCount / ELEMENTS; i++) {
+        memcpy(ptr, src, value.structDataSize / BITS_PER_BYTE / BYTES);
+        ptr += dataSize;
+        src += dataSize;
+
+        for (uint j = 0; j < pointerCount / POINTERS; j++) {
+          setObjectPointer(segment, reinterpret_cast<WirePointer*>(ptr), readObjectPointer(
+              value.segment, reinterpret_cast<const WirePointer*>(src), nullptr,
+              value.nestingLimit));
+          ptr += POINTER_SIZE_IN_WORDS;
+          src += POINTER_SIZE_IN_WORDS;
+        }
+      }
+    }
+  }
+
+  static CAPNPROTO_ALWAYS_INLINE(void setObjectPointer(
+      SegmentBuilder* segment, WirePointer* ref, ObjectReader value)) {
+    switch (value.kind) {
+      case ObjectKind::NULL_POINTER:
+        memset(ref, 0, sizeof(*ref));
+        break;
+      case ObjectKind::STRUCT:
+        setStructPointer(segment, ref, value.structReader);
+        break;
+      case ObjectKind::LIST:
+        setListPointer(segment, ref, value.listReader);
+        break;
+    }
+  }
+
   // -----------------------------------------------------------------
 
   static CAPNPROTO_ALWAYS_INLINE(StructReader readStructPointer(
@@ -1377,12 +1475,15 @@ struct WireHelpers {
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(ObjectReader readObjectPointer(
+  static ObjectReader readObjectPointer(
       SegmentReader* segment, const WirePointer* ref,
-      const word* defaultValue, int nestingLimit)) {
+      const word* defaultValue, int nestingLimit) {
     // We can't really reuse readStructPointer() and readListPointer() because they are designed
     // for the case where we are expecting a specific type, and they do validation around that,
     // whereas this method is for the case where we accept any pointer.
+    //
+    // Not always-inline because it is called from several places in the copying code, and anyway
+    // is relatively rarely used.
 
     const word* ptr;
     if (ref == nullptr || ref->isNull()) {
@@ -1498,6 +1599,10 @@ StructBuilder StructBuilder::initRoot(
       reinterpret_cast<WirePointer*>(location), segment, size);
 }
 
+void StructBuilder::setRoot(SegmentBuilder* segment, word* location, StructReader value) {
+  return WireHelpers::setStructPointer(segment, reinterpret_cast<WirePointer*>(location), value);
+}
+
 StructBuilder StructBuilder::getRoot(
     SegmentBuilder* segment, word* location, StructSize size) {
   return WireHelpers::getWritableStructPointer(
@@ -1573,6 +1678,18 @@ Data::Builder StructBuilder::getBlobField<Data>(
 ObjectBuilder StructBuilder::getObjectField(
     WirePointerCount ptrIndex, const word* defaultValue) const {
   return WireHelpers::getWritableObjectPointer(segment, pointers + ptrIndex, defaultValue);
+}
+
+void StructBuilder::setStructField(WirePointerCount ptrIndex, StructReader value) const {
+  return WireHelpers::setStructPointer(segment, pointers + ptrIndex, value);
+}
+
+void StructBuilder::setListField(WirePointerCount ptrIndex, ListReader value) const {
+  return WireHelpers::setListPointer(segment, pointers + ptrIndex, value);
+}
+
+void StructBuilder::setObjectField(WirePointerCount ptrIndex, ObjectReader value) const {
+  return WireHelpers::setObjectPointer(segment, pointers + ptrIndex, value);
 }
 
 StructReader StructBuilder::asReader() const {
@@ -1741,6 +1858,16 @@ Data::Builder ListBuilder::getBlobElement<Data>(ElementCount index) const {
 ObjectBuilder ListBuilder::getObjectElement(ElementCount index) const {
   return WireHelpers::getWritableObjectPointer(
       segment, reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), nullptr);
+}
+
+void ListBuilder::setListElement(ElementCount index, ListReader value) const {
+  return WireHelpers::setListPointer(
+      segment, reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), value);
+}
+
+void ListBuilder::setObjectElement(ElementCount index, ObjectReader value) const {
+  return WireHelpers::setObjectPointer(
+      segment, reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), value);
 }
 
 ListReader ListBuilder::asReader() const {

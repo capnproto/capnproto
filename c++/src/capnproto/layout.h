@@ -296,6 +296,7 @@ public:
   inline StructBuilder(): segment(nullptr), data(nullptr), pointers(nullptr), bit0Offset(0) {}
 
   static StructBuilder initRoot(SegmentBuilder* segment, word* location, StructSize size);
+  static void setRoot(SegmentBuilder* segment, word* location, StructReader value);
   static StructBuilder getRoot(SegmentBuilder* segment, word* location, StructSize size);
 
   inline BitCount getDataSectionSize() const { return dataSize; }
@@ -375,6 +376,11 @@ public:
 
   ObjectBuilder getObjectField(WirePointerCount ptrIndex, const word* defaultValue) const;
   // Read a pointer of arbitrary type.
+
+  void setStructField(WirePointerCount ptrIndex, StructReader value) const;
+  void setListField(WirePointerCount ptrIndex, ListReader value) const;
+  void setObjectField(WirePointerCount ptrIndex, ObjectReader value) const;
+  // Sets a pointer field to a deep copy of the given value.
 
   StructReader asReader() const;
   // Gets a StructReader pointing at the same memory.
@@ -554,6 +560,10 @@ public:
 
   ObjectBuilder getObjectElement(ElementCount index) const;
   // Gets a pointer element of arbitrary type.
+
+  void setListElement(ElementCount index, ListReader value) const;
+  void setObjectElement(ElementCount index, ObjectReader value) const;
+  // Sets a pointer element to a deep copy of the given value.
 
   ListReader asReader() const;
   // Get a ListReader pointing at the same memory.

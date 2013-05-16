@@ -31,6 +31,8 @@
 
 namespace capnproto {
 
+class MessageBuilder;  // So that it can be declared a friend.
+
 template <typename T, Kind k = kind<T>()>
 struct ToDynamic_;   // Defined in dynamic.h, needs to be declared as everyone's friend.
 
@@ -50,8 +52,7 @@ struct PointerHelpers<T, Kind::STRUCT> {
   }
   static inline void set(StructBuilder builder, WirePointerCount index,
                          typename T::Reader value) {
-    // TODO(now):  schemaless copy
-    CAPNPROTO_INLINE_PRECOND(false, "Not implemented:  set() for struct fields.");
+    builder.setStructField(index, value._reader);
   }
   static inline typename T::Builder init(StructBuilder builder, WirePointerCount index) {
     return typename T::Builder(builder.initStructField(index, structSize<T>()));
@@ -70,11 +71,15 @@ struct PointerHelpers<List<T>, Kind::LIST> {
   }
   static inline void set(StructBuilder builder, WirePointerCount index,
                          typename List<T>::Reader value) {
-    init(builder, index, value.size()).copyFrom(value);
+    builder.setListField(index, value.reader);
   }
-  static inline void set(StructBuilder builder, WirePointerCount index,
-                         std::initializer_list<ReaderFor<T>> value) {
-    init(builder, index, value.size()).copyFrom(value);
+  template <typename U>
+  static void set(StructBuilder builder, WirePointerCount index, std::initializer_list<U> value) {
+    auto l = init(builder, index, value.size());
+    uint i = 0;
+    for (auto& element: value) {
+      l.set(i++, element);
+    }
   }
   static inline typename List<T>::Builder init(
       StructBuilder builder, WirePointerCount index, uint size) {

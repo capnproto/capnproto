@@ -333,8 +333,6 @@ public:
   Data::Builder initObjectAsData(Text::Reader name, uint size);
   // Shortcuts to access members by name.  These throw exceptions if no such field exists.
 
-  void copyFrom(Reader other);
-
   Reader asReader();
 
 private:
@@ -446,7 +444,6 @@ public:
   inline iterator begin() { return iterator(this, 0); }
   inline iterator end() { return iterator(this, size()); }
 
-  void copyFrom(Reader other);
   void copyFrom(std::initializer_list<DynamicValue::Reader> value);
 
   Reader asReader();

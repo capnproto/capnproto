@@ -150,11 +150,7 @@ TEST(Encoding, GenericObjects) {
   EXPECT_EQ("foo", root.asReader().getObjectField<Data>());
 
   {
-    {
-      List<uint32_t>::Builder list = root.initObjectField<List<uint32_t>>(3);
-      ASSERT_EQ(3u, list.size());
-      list.copyFrom({123, 456, 789});
-    }
+    root.setObjectField<List<uint32_t>>({123, 456, 789});
 
     {
       List<uint32_t>::Builder list = root.getObjectField<List<uint32_t>>();
@@ -174,11 +170,7 @@ TEST(Encoding, GenericObjects) {
   }
 
   {
-    {
-      List<Text>::Builder list = root.initObjectField<List<Text>>(2);
-      ASSERT_EQ(2u, list.size());
-      list.copyFrom({"foo", "bar"});
-    }
+    root.setObjectField<List<Text>>({"foo", "bar"});
 
     {
       List<Text>::Builder list = root.getObjectField<List<Text>>();
@@ -445,16 +437,16 @@ TEST(Encoding, SmallStructLists) {
 
   {
     auto l = sl.initInt32ListList(3);
-    l.init(0, 3).copyFrom({1, 2, 3});
-    l.init(1, 2).copyFrom({4, 5});
-    l.init(2, 1).copyFrom({12341234});
+    l.set(0, {1, 2, 3});
+    l.set(1, {4, 5});
+    l.set(2, {12341234});
   }
 
   {
     auto l = sl.initTextListList(3);
-    l.init(0, 2).copyFrom({"foo", "bar"});
-    l.init(1, 1).copyFrom({"baz"});
-    l.init(2, 2).copyFrom({"qux", "corge"});
+    l.set(0, {"foo", "bar"});
+    l.set(1, {"baz"});
+    l.set(2, {"qux", "corge"});
   }
 
   {
@@ -489,7 +481,7 @@ TEST(Encoding, ListUpgrade) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<test::TestObject>();
 
-  root.initObjectField<List<uint16_t>>(3).copyFrom({12, 34, 56});
+  root.setObjectField<List<uint16_t>>({12, 34, 56});
 
   checkList(root.getObjectField<List<uint8_t>>(), {12, 34, 56});
 
@@ -539,7 +531,7 @@ TEST(Encoding, BitListDowngrade) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<test::TestObject>();
 
-  root.initObjectField<List<uint16_t>>(4).copyFrom({0x1201u, 0x3400u, 0x5601u, 0x7801u});
+  root.setObjectField<List<uint16_t>>({0x1201u, 0x3400u, 0x5601u, 0x7801u});
 
   checkList(root.getObjectField<List<bool>>(), {true, false, true, true});
 
@@ -574,7 +566,7 @@ TEST(Encoding, BitListUpgrade) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<test::TestObject>();
 
-  root.initObjectField<List<bool>>(4).copyFrom({true, false, true, true});
+  root.setObjectField<List<bool>>({true, false, true, true});
 
   {
     auto l = root.getObjectField<List<test::TestLists::Struct1>>();
@@ -939,7 +931,7 @@ TEST(Encoding, UpgradeListInBuilder) {
 
   // -----------------------------------------------------------------
 
-  root.initObjectField<List<Void>>(4);
+  root.setObjectField<List<Void>>({Void::VOID, Void::VOID, Void::VOID, Void::VOID});
   checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID, Void::VOID});
   EXPECT_ANY_THROW(root.getObjectField<List<bool>>());
   EXPECT_ANY_THROW(root.getObjectField<List<uint8_t>>());
@@ -951,7 +943,7 @@ TEST(Encoding, UpgradeListInBuilder) {
 
   // -----------------------------------------------------------------
 
-  root.initObjectField<List<bool>>(4).copyFrom({true, false, true, true});
+  root.setObjectField<List<bool>>({true, false, true, true});
   checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID, Void::VOID});
   checkList(root.getObjectField<List<bool>>(), {true, false, true, true});
   EXPECT_ANY_THROW(root.getObjectField<List<uint8_t>>());
@@ -963,7 +955,7 @@ TEST(Encoding, UpgradeListInBuilder) {
 
   // -----------------------------------------------------------------
 
-  root.initObjectField<List<uint8_t>>(4).copyFrom({0x12, 0x23, 0x33, 0x44});
+  root.setObjectField<List<uint8_t>>({0x12, 0x23, 0x33, 0x44});
   checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID, Void::VOID});
   checkList(root.getObjectField<List<bool>>(), {false, true, true, false});
   checkList(root.getObjectField<List<uint8_t>>(), {0x12, 0x23, 0x33, 0x44});
@@ -975,7 +967,7 @@ TEST(Encoding, UpgradeListInBuilder) {
 
   // -----------------------------------------------------------------
 
-  root.initObjectField<List<uint16_t>>(4).copyFrom({0x5612, 0x7823, 0xab33, 0xcd44});
+  root.setObjectField<List<uint16_t>>({0x5612, 0x7823, 0xab33, 0xcd44});
   checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID, Void::VOID});
   checkList(root.getObjectField<List<bool>>(), {false, true, true, false});
   checkList(root.getObjectField<List<uint8_t>>(), {0x12, 0x23, 0x33, 0x44});
@@ -987,7 +979,7 @@ TEST(Encoding, UpgradeListInBuilder) {
 
   // -----------------------------------------------------------------
 
-  root.initObjectField<List<uint32_t>>(4).copyFrom({0x17595612, 0x29347823, 0x5923ab32, 0x1a39cd45});
+  root.setObjectField<List<uint32_t>>({0x17595612, 0x29347823, 0x5923ab32, 0x1a39cd45});
   checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID, Void::VOID});
   checkList(root.getObjectField<List<bool>>(), {false, true, false, true});
   checkList(root.getObjectField<List<uint8_t>>(), {0x12, 0x23, 0x32, 0x45});
@@ -999,7 +991,7 @@ TEST(Encoding, UpgradeListInBuilder) {
 
   // -----------------------------------------------------------------
 
-  root.initObjectField<List<uint64_t>>(2).copyFrom({0x1234abcd8735fe21, 0x7173bc0e1923af36});
+  root.setObjectField<List<uint64_t>>({0x1234abcd8735fe21, 0x7173bc0e1923af36});
   checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID});
   checkList(root.getObjectField<List<bool>>(), {true, false});
   checkList(root.getObjectField<List<uint8_t>>(), {0x21, 0x36});
@@ -1011,7 +1003,7 @@ TEST(Encoding, UpgradeListInBuilder) {
 
   // -----------------------------------------------------------------
 
-  root.initObjectField<List<Text>>(3).copyFrom({"foo", "bar", "baz"});
+  root.setObjectField<List<Text>>({"foo", "bar", "baz"});
   checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID});
   EXPECT_ANY_THROW(root.getObjectField<List<bool>>());
   EXPECT_ANY_THROW(root.getObjectField<List<uint8_t>>());
@@ -1023,7 +1015,7 @@ TEST(Encoding, UpgradeListInBuilder) {
 
   // -----------------------------------------------------------------
 
-  root.initObjectField<List<Text>>(3).copyFrom({"foo", "bar", "baz"});
+  root.setObjectField<List<Text>>({"foo", "bar", "baz"});
   checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID});
   EXPECT_ANY_THROW(root.getObjectField<List<bool>>());
   EXPECT_ANY_THROW(root.getObjectField<List<uint8_t>>());
@@ -1062,7 +1054,7 @@ TEST(Encoding, UpgradeListInBuilder) {
   // tried upgrading primitive lists to sub-word structs.
 
   // Upgrade from bool.
-  root.initObjectField<List<bool>>(4).copyFrom({true, false, true, true});
+  root.setObjectField<List<bool>>({true, false, true, true});
   {
     auto l = root.getObjectField<List<test::TestLists::Struct16>>();
     ASSERT_EQ(4u, l.size());
@@ -1082,7 +1074,7 @@ TEST(Encoding, UpgradeListInBuilder) {
   EXPECT_ANY_THROW(root.getObjectField<List<Text>>());
 
   // Upgrade from multi-byte, sub-word data.
-  root.initObjectField<List<uint16_t>>(4).copyFrom({12u, 34u, 56u, 78u});
+  root.setObjectField<List<uint16_t>>({12u, 34u, 56u, 78u});
   {
     auto l = root.getObjectField<List<test::TestLists::Struct32>>();
     ASSERT_EQ(4u, l.size());
@@ -1104,7 +1096,7 @@ TEST(Encoding, UpgradeListInBuilder) {
   EXPECT_ANY_THROW(root.getObjectField<List<Text>>());
 
   // Upgrade from void -> data struct
-  root.initObjectField<List<Void>>(4).copyFrom({Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+  root.setObjectField<List<Void>>({Void::VOID, Void::VOID, Void::VOID, Void::VOID});
   {
     auto l = root.getObjectField<List<test::TestLists::Struct16>>();
     ASSERT_EQ(4u, l.size());
@@ -1124,7 +1116,7 @@ TEST(Encoding, UpgradeListInBuilder) {
   EXPECT_ANY_THROW(root.getObjectField<List<Text>>());
 
   // Upgrade from void -> pointer struct
-  root.initObjectField<List<Void>>(4).copyFrom({Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+  root.setObjectField<List<Void>>({Void::VOID, Void::VOID, Void::VOID, Void::VOID});
   {
     auto l = root.getObjectField<List<test::TestLists::StructP>>();
     ASSERT_EQ(4u, l.size());
@@ -1145,9 +1137,9 @@ TEST(Encoding, UpgradeListInBuilder) {
 
   // Verify that we cannot "side-grade" a pointer list to a data struct list, or a data list to
   // a pointer struct list.
-  root.initObjectField<List<Text>>(4).copyFrom({"foo", "bar", "baz", "qux"});
+  root.setObjectField<List<Text>>({"foo", "bar", "baz", "qux"});
   EXPECT_ANY_THROW(root.getObjectField<List<test::TestLists::Struct32>>());
-  root.initObjectField<List<uint32_t>>(4).copyFrom({12, 34, 56, 78});
+  root.setObjectField<List<uint32_t>>({12, 34, 56, 78});
   EXPECT_ANY_THROW(root.getObjectField<List<Text>>());
 }
 
@@ -1183,6 +1175,74 @@ TEST(Encoding, Using) {
   TestUsing::Reader reader = builder.getRoot<TestUsing>().asReader();
   EXPECT_EQ(TestNestedTypes::NestedEnum::BAR, reader.getOuterNestedEnum());
   EXPECT_EQ(TestNestedTypes::NestedStruct::NestedEnum::QUUX, reader.getInnerNestedEnum());
+}
+
+TEST(Encoding, StructSetters) {
+  MallocMessageBuilder builder;
+  auto root = builder.getRoot<TestAllTypes>();
+  initTestMessage(root);
+
+  {
+    MallocMessageBuilder builder2;
+    builder2.setRoot(root.asReader());
+    checkTestMessage(builder2.getRoot<TestAllTypes>());
+  }
+
+  {
+    MallocMessageBuilder builder2;
+    auto root2 = builder2.getRoot<TestAllTypes>();
+    root2.setStructField(root);
+    checkTestMessage(root2.getStructField());
+  }
+
+  {
+    MallocMessageBuilder builder2;
+    auto root2 = builder2.getRoot<test::TestObject>();
+    root2.setObjectField<test::TestAllTypes>(root);
+    checkTestMessage(root2.getObjectField<test::TestAllTypes>());
+  }
+}
+
+TEST(Encoding, ListSetters) {
+  MallocMessageBuilder builder;
+  auto root = builder.getRoot<TestListDefaults>();
+  initTestMessage(root);
+
+  {
+    MallocMessageBuilder builder2;
+    auto root2 = builder2.getRoot<TestListDefaults>();
+
+    root2.getLists().setList0(root.getLists().getList0());
+    root2.getLists().setList1(root.getLists().getList1());
+    root2.getLists().setList8(root.getLists().getList8());
+    root2.getLists().setList16(root.getLists().getList16());
+    root2.getLists().setList32(root.getLists().getList32());
+    root2.getLists().setList64(root.getLists().getList64());
+    root2.getLists().setListP(root.getLists().getListP());
+
+    {
+      auto dst = root2.getLists().initInt32ListList(3);
+      auto src = root.getLists().getInt32ListList();
+      dst.set(0, src[0]);
+      dst.set(1, src[1]);
+      dst.set(2, src[2]);
+    }
+
+    {
+      auto dst = root2.getLists().initTextListList(3);
+      auto src = root.getLists().getTextListList();
+      dst.set(0, src[0]);
+      dst.set(1, src[1]);
+      dst.set(2, src[2]);
+    }
+
+    {
+      auto dst = root2.getLists().initStructListList(2);
+      auto src = root.getLists().getStructListList();
+      dst.set(0, src[0]);
+      dst.set(1, src[1]);
+    }
+  }
 }
 
 }  // namespace

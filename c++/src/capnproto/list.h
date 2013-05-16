@@ -199,6 +199,10 @@ struct List<T, Kind::PRIMITIVE> {
 
   private:
     internal::ListReader reader;
+    template <typename U, Kind K>
+    friend struct internal::PointerHelpers;
+    template <typename U, Kind K>
+    friend struct List;
   };
 
   class Builder {
@@ -207,6 +211,9 @@ struct List<T, Kind::PRIMITIVE> {
 
     Builder() = default;
     inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
+
+    inline operator Reader() { return Reader(builder.asReader()); }
+    inline Reader asReader() { return Reader(builder.asReader()); }
 
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline T operator[](uint index) const {
@@ -225,25 +232,6 @@ struct List<T, Kind::PRIMITIVE> {
     typedef internal::IndexingIterator<Builder, T> iterator;
     inline iterator begin() const { return iterator(this, 0); }
     inline iterator end() const { return iterator(this, size()); }
-
-    template <typename Other>
-    void copyFrom(const Other& other) {
-      auto i = other.begin();
-      auto end = other.end();
-      uint pos = 0;
-      for (; i != end && pos < size(); ++i) {
-        set(pos, *i);
-      }
-      CAPNPROTO_INLINE_DPRECOND(pos == size() && i == end,
-                                "List::copyFrom() argument had different size.");
-    }
-    void copyFrom(std::initializer_list<T> other) {
-      CAPNPROTO_INLINE_DPRECOND(other.size() == size(),
-                                "List::copyFrom() argument had different size.");
-      for (uint i = 0; i < other.size(); i++) {
-        set(i, other.begin()[i]);
-      }
-    }
 
   private:
     internal::ListBuilder builder;
@@ -308,6 +296,10 @@ struct List<T, Kind::STRUCT> {
 
   private:
     internal::ListReader reader;
+    template <typename U, Kind K>
+    friend struct internal::PointerHelpers;
+    template <typename U, Kind K>
+    friend struct List;
   };
 
   class Builder {
@@ -317,19 +309,22 @@ struct List<T, Kind::STRUCT> {
     Builder() = default;
     inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
 
+    inline operator Reader() { return Reader(builder.asReader()); }
+    inline Reader asReader() { return Reader(builder.asReader()); }
+
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline typename T::Builder operator[](uint index) const {
       return typename T::Builder(builder.getStructElement(index * ELEMENTS));
     }
 
+    // There are no init() or set() methods for lists of structs because the elements of the list
+    // are inlined and are initialized when the list is initialized.  This means that init() would
+    // be redundant, and set() would risk data loss if the input struct were from a newer version
+    // of teh protocol.
+
     typedef internal::IndexingIterator<Builder, typename T::Builder> iterator;
     inline iterator begin() const { return iterator(this, 0); }
     inline iterator end() const { return iterator(this, size()); }
-
-    template <typename Other>
-    void copyFrom(const Other& other);
-    void copyFrom(std::initializer_list<typename T::Reader> other);
-    // TODO
 
   private:
     internal::ListBuilder builder;
@@ -391,6 +386,10 @@ struct List<List<T>, Kind::LIST> {
 
   private:
     internal::ListReader reader;
+    template <typename U, Kind K>
+    friend struct internal::PointerHelpers;
+    template <typename U, Kind K>
+    friend struct List;
   };
 
   class Builder {
@@ -400,6 +399,9 @@ struct List<List<T>, Kind::LIST> {
     Builder() = default;
     inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
 
+    inline operator Reader() { return Reader(builder.asReader()); }
+    inline Reader asReader() { return Reader(builder.asReader()); }
+
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline typename List<T>::Builder operator[](uint index) const {
       return typename List<T>::Builder(List<T>::getAsElementOf(builder, index));
@@ -407,15 +409,20 @@ struct List<List<T>, Kind::LIST> {
     inline typename List<T>::Builder init(uint index, uint size) {
       return typename List<T>::Builder(List<T>::initAsElementOf(builder, index, size));
     }
+    inline void set(uint index, typename List<T>::Reader value) {
+      builder.setListElement(index * ELEMENTS, value.reader);
+    }
+    void set(uint index, std::initializer_list<ReaderFor<T>> value) {
+      auto l = init(index, value.size());
+      uint i = 0;
+      for (auto& element: value) {
+        l.set(i++, element);
+      }
+    }
 
     typedef internal::IndexingIterator<Builder, typename List<T>::Builder> iterator;
     inline iterator begin() const { return iterator(this, 0); }
     inline iterator end() const { return iterator(this, size()); }
-
-    template <typename Other>
-    void copyFrom(const Other& other);
-    void copyFrom(std::initializer_list<typename List<T>::Reader> other);
-    // TODO
 
   private:
     internal::ListBuilder builder;
@@ -475,6 +482,10 @@ struct List<T, Kind::BLOB> {
 
   private:
     internal::ListReader reader;
+    template <typename U, Kind K>
+    friend struct internal::PointerHelpers;
+    template <typename U, Kind K>
+    friend struct List;
   };
 
   class Builder {
@@ -483,6 +494,9 @@ struct List<T, Kind::BLOB> {
 
     Builder() = default;
     inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
+
+    inline operator Reader() { return Reader(builder.asReader()); }
+    inline Reader asReader() { return Reader(builder.asReader()); }
 
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline typename T::Builder operator[](uint index) const {
@@ -498,25 +512,6 @@ struct List<T, Kind::BLOB> {
     typedef internal::IndexingIterator<Builder, typename T::Builder> iterator;
     inline iterator begin() const { return iterator(this, 0); }
     inline iterator end() const { return iterator(this, size()); }
-
-    template <typename Other>
-    void copyFrom(const Other& other) {
-      auto i = other.begin();
-      auto end = other.end();
-      uint pos = 0;
-      for (; i != end && pos < size(); ++i) {
-        set(pos, *i);
-      }
-      CAPNPROTO_INLINE_DPRECOND(pos == size() && i == end,
-                                "List::copyFrom() argument had different size.");
-    }
-    void copyFrom(std::initializer_list<typename T::Reader> other) {
-      CAPNPROTO_INLINE_DPRECOND(other.size() == size(),
-                                "List::copyFrom() argument had different size.");
-      for (uint i = 0; i < other.size(); i++) {
-        set(i, other.begin()[i]);
-      }
-    }
 
   private:
     internal::ListBuilder builder;

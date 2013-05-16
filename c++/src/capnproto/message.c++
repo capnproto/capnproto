@@ -95,6 +95,12 @@ internal::StructBuilder MessageBuilder::initRoot(internal::StructSize size) {
       rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), size);
 }
 
+void MessageBuilder::setRootInternal(internal::StructReader reader) {
+  internal::SegmentBuilder* rootSegment = getRootSegment();
+  internal::StructBuilder::setRoot(
+      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), reader);
+}
+
 internal::StructBuilder MessageBuilder::getRoot(internal::StructSize size) {
   internal::SegmentBuilder* rootSegment = getRootSegment();
   return internal::StructBuilder::getRoot(

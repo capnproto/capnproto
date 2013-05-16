@@ -355,16 +355,16 @@ void genericInitListDefaults(Builder builder) {
 
   {
     auto l = lists.initInt32ListList(3);
-    l.init(0, 3).copyFrom({1, 2, 3});
-    l.init(1, 2).copyFrom({4, 5});
-    l.init(2, 1).copyFrom({12341234});
+    l.set(0, {1, 2, 3});
+    l.set(1, {4, 5});
+    l.set(2, {12341234});
   }
 
   {
     auto l = lists.initTextListList(3);
-    l.init(0, 2).copyFrom({"foo", "bar"});
-    l.init(1, 1).copyFrom({"baz"});
-    l.init(2, 2).copyFrom({"qux", "corge"});
+    l.set(0, {"foo", "bar"});
+    l.set(1, {"baz"});
+    l.set(2, {"qux", "corge"});
   }
 
   {

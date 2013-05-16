@@ -27,6 +27,8 @@
 #include "type-safety.h"
 #include "layout.h"
 
+#include "list.h"  // TODO(cleanup):  For FromReader.  Move elsewhere?
+
 #ifndef CAPNPROTO_MESSAGE_H_
 #define CAPNPROTO_MESSAGE_H_
 
@@ -133,6 +135,10 @@ public:
   typename RootType::Builder initRoot();
   // Initialize the root struct of the message as the given struct type.
 
+  template <typename Reader>
+  void setRoot(Reader&& value);
+  // Set the root struct to a deep copy of the given struct.
+
   template <typename RootType>
   typename RootType::Builder getRoot();
   // Get the root struct of the message, interpreting it as the given struct type.
@@ -162,6 +168,7 @@ private:
   internal::BuilderArena* arena() { return reinterpret_cast<internal::BuilderArena*>(arenaSpace); }
   internal::SegmentBuilder* getRootSegment();
   internal::StructBuilder initRoot(internal::StructSize size);
+  void setRootInternal(internal::StructReader reader);
   internal::StructBuilder getRoot(internal::StructSize size);
 };
 
@@ -299,6 +306,13 @@ template <typename RootType>
 inline typename RootType::Builder MessageBuilder::initRoot() {
   static_assert(kind<RootType>() == Kind::STRUCT, "Root type must be a Cap'n Proto struct type.");
   return typename RootType::Builder(initRoot(internal::structSize<RootType>()));
+}
+
+template <typename Reader>
+inline void MessageBuilder::setRoot(Reader&& value) {
+  typedef FromReader<Reader> RootType;
+  static_assert(kind<RootType>() == Kind::STRUCT, "Root type must be a Cap'n Proto struct type.");
+  setRootInternal(value._reader);
 }
 
 template <typename RootType>
