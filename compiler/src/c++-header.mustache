@@ -143,6 +143,10 @@ public:
   Reader() = default;
   inline explicit Reader(::capnproto::internal::StructReader base): _reader(base) {}
 {{#typeStruct}}
+
+  ::capnproto::String debugString() {
+    return ::capnproto::internal::debugString<{{typeName}}>(_reader);
+  }
 {{#structUnions}}
 
   // {{unionDecl}}
@@ -189,6 +193,8 @@ public:
   inline operator Reader() { return Reader(_builder.asReader()); }
   inline Reader asReader() { return *this; }
 {{#typeStruct}}
+
+  ::capnproto::String debugString() { return asReader().debugString(); }
 {{#structUnions}}
 
   // {{unionDecl}}

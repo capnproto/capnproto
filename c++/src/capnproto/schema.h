@@ -112,6 +112,7 @@ private:
     return StructSchema(&internal::rawSchema<T>());
   }
   friend class Schema;
+  friend String internal::debugString(StructReader reader, const RawSchema& schema);
 };
 
 class StructSchema::Member {

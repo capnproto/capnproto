@@ -382,6 +382,8 @@ public:
   void setObjectField(WirePointerCount ptrIndex, ObjectReader value) const;
   // Sets a pointer field to a deep copy of the given value.
 
+  bool isPointerFieldNull(WirePointerCount ptrIndex) const;
+
   StructReader asReader() const;
   // Gets a StructReader pointing at the same memory.
 
@@ -458,6 +460,8 @@ public:
   // If this is a trusted message, get a word* pointing at the location of the pointer.  This
   // word* can actually be passed to readTrusted() to read the designated sub-object later.  If
   // this isn't a trusted message, throws an exception.
+
+  bool isPointerFieldNull(WirePointerCount ptrIndex) const;
 
 private:
   SegmentReader* segment;  // Memory segment in which the struct resides.

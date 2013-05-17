@@ -25,4 +25,13 @@
 
 namespace capnproto {
 
+String::String(const char* value): content(newArray<char>(strlen(value) + 1)) {
+  strcpy(content.begin(), value);
+}
+
+String::String(const char* value, size_t length): content(newArray<char>(length + 1)) {
+  memcpy(content.begin(), value, length);
+  content[length] = '\0';
+}
+
 }  // namespace capnproto

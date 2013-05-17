@@ -72,8 +72,8 @@ void genericInitTestMessage(Builder builder) {
     subBuilder.setBoolList({false, true, false, true, true});
     subBuilder.setInt8List({12, -34, -0x80, 0x7f});
     subBuilder.setInt16List({1234, -5678, -0x8000, 0x7fff});
-    subBuilder.setInt32List({12345678, -90123456, -0x8000000, 0x7ffffff});
-    // gcc warns on -0x800...ll and the only work-around I could find was to do -0x7ff...ll-1.
+    // gcc warns on -0x800... and the only work-around I could find was to do -0x7ff...-1.
+    subBuilder.setInt32List({12345678, -90123456, -0x7fffffff - 1, 0x7fffffff});
     subBuilder.setInt64List({123456789012345ll, -678901234567890ll, -0x7fffffffffffffffll-1, 0x7fffffffffffffffll});
     subBuilder.setUInt8List({12u, 34u, 0u, 0xffu});
     subBuilder.setUInt16List({1234u, 5678u, 0u, 0xffffu});
@@ -192,8 +192,8 @@ void genericCheckTestMessage(Reader reader) {
     checkList(subReader.getBoolList(), {false, true, false, true, true});
     checkList(subReader.getInt8List(), {12, -34, -0x80, 0x7f});
     checkList(subReader.getInt16List(), {1234, -5678, -0x8000, 0x7fff});
-    checkList(subReader.getInt32List(), {12345678, -90123456, -0x8000000, 0x7ffffff});
-    // gcc warns on -0x800...ll and the only work-around I could find was to do -0x7ff...ll-1.
+    // gcc warns on -0x800... and the only work-around I could find was to do -0x7ff...-1.
+    checkList(subReader.getInt32List(), {12345678, -90123456, -0x7fffffff - 1, 0x7fffffff});
     checkList(subReader.getInt64List(), {123456789012345ll, -678901234567890ll, -0x7fffffffffffffffll-1, 0x7fffffffffffffffll});
     checkList(subReader.getUInt8List(), {12u, 34u, 0u, 0xffu});
     checkList(subReader.getUInt16List(), {1234u, 5678u, 0u, 0xffffu});

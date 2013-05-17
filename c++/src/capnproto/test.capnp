@@ -118,7 +118,7 @@ struct TestDefaults {
       boolList      = [false, true, false, true, true],
       int8List      = [12, -34, -0x80, 0x7f],
       int16List     = [1234, -5678, -0x8000, 0x7fff],
-      int32List     = [12345678, -90123456, -0x8000000, 0x7ffffff],
+      int32List     = [12345678, -90123456, -0x80000000, 0x7fffffff],
       int64List     = [123456789012345, -678901234567890, -0x8000000000000000, 0x7fffffffffffffff],
       uInt8List     = [12, 34, 0, 0xff],
       uInt16List    = [1234, 5678, 0, 0xffff],

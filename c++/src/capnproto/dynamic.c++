@@ -298,6 +298,140 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Member member) {
   PRECOND(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   return getImpl(builder, member);
 }
+
+bool DynamicStruct::Reader::has(StructSchema::Member member) {
+  PRECOND(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+
+  auto body = member.getProto().getBody();
+  switch (body.which()) {
+    case schema::StructNode::Member::Body::UNION_MEMBER: {
+      auto u = body.getUnionMember();
+      if (reader.getDataField<uint16_t>(u.getDiscriminantOffset() * ELEMENTS) != 0) {
+        // Union has non-default member set.
+        return true;
+      }
+      auto members = member.asUnion().getMembers();
+      if (members.size() == 0) {
+        // Union has no defined members.  This should probably be disallowed?
+        return false;
+      }
+
+      // The union has the default member set, so now the question is whether that member is set
+      // to its default value.  So, continue on with the function using that member.
+      member = members[0];
+      break;
+    }
+
+    case schema::StructNode::Member::Body::FIELD_MEMBER:
+      // Continue to below.
+      break;
+  }
+
+  auto field = member.getProto().getBody().getFieldMember();
+  auto type = field.getType().getBody();
+
+  switch (type.which()) {
+    case schema::Type::Body::VOID_TYPE:
+      return false;
+
+#define HANDLE_TYPE(discrim, type) \
+    case schema::Type::Body::discrim##_TYPE: \
+      return reader.getDataField<type>(field.getOffset() * ELEMENTS) != 0;
+
+    HANDLE_TYPE(BOOL, bool)
+    HANDLE_TYPE(INT8, uint8_t)
+    HANDLE_TYPE(INT16, uint16_t)
+    HANDLE_TYPE(INT32, uint32_t)
+    HANDLE_TYPE(INT64, uint64_t)
+    HANDLE_TYPE(UINT8, uint8_t)
+    HANDLE_TYPE(UINT16, uint16_t)
+    HANDLE_TYPE(UINT32, uint32_t)
+    HANDLE_TYPE(UINT64, uint64_t)
+    HANDLE_TYPE(FLOAT32, uint32_t)
+    HANDLE_TYPE(FLOAT64, uint64_t)
+    HANDLE_TYPE(ENUM, uint16_t)
+
+#undef HANDLE_TYPE
+
+    case schema::Type::Body::TEXT_TYPE:
+    case schema::Type::Body::DATA_TYPE:
+    case schema::Type::Body::LIST_TYPE:
+    case schema::Type::Body::STRUCT_TYPE:
+    case schema::Type::Body::OBJECT_TYPE:
+    case schema::Type::Body::INTERFACE_TYPE:
+      return !reader.isPointerFieldNull(field.getOffset() * POINTERS);
+  }
+
+  FAIL_CHECK("switch() missing case.", type.which());
+  return false;
+}
+bool DynamicStruct::Builder::has(StructSchema::Member member) {
+  PRECOND(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+
+  auto body = member.getProto().getBody();
+  switch (body.which()) {
+    case schema::StructNode::Member::Body::UNION_MEMBER: {
+      auto u = body.getUnionMember();
+      if (builder.getDataField<uint16_t>(u.getDiscriminantOffset() * ELEMENTS) != 0) {
+        // Union has non-default member set.
+        return true;
+      }
+      auto members = member.asUnion().getMembers();
+      if (members.size() == 0) {
+        // Union has no defined members.  This should probably be disallowed?
+        return false;
+      }
+
+      // The union has the default member set, so now the question is whether that member is set
+      // to its default value.  So, continue on with the function using that member.
+      member = members[0];
+      break;
+    }
+
+    case schema::StructNode::Member::Body::FIELD_MEMBER:
+      // Continue to below.
+      break;
+  }
+
+  auto field = member.getProto().getBody().getFieldMember();
+  auto type = field.getType().getBody();
+
+  switch (type.which()) {
+    case schema::Type::Body::VOID_TYPE:
+      return false;
+
+#define HANDLE_TYPE(discrim, type) \
+    case schema::Type::Body::discrim##_TYPE: \
+      return builder.getDataField<type>(field.getOffset() * ELEMENTS) != 0;
+
+    HANDLE_TYPE(BOOL, bool)
+    HANDLE_TYPE(INT8, uint8_t)
+    HANDLE_TYPE(INT16, uint16_t)
+    HANDLE_TYPE(INT32, uint32_t)
+    HANDLE_TYPE(INT64, uint64_t)
+    HANDLE_TYPE(UINT8, uint8_t)
+    HANDLE_TYPE(UINT16, uint16_t)
+    HANDLE_TYPE(UINT32, uint32_t)
+    HANDLE_TYPE(UINT64, uint64_t)
+    HANDLE_TYPE(FLOAT32, uint32_t)
+    HANDLE_TYPE(FLOAT64, uint64_t)
+    HANDLE_TYPE(ENUM, uint16_t)
+
+#undef HANDLE_TYPE
+
+    case schema::Type::Body::TEXT_TYPE:
+    case schema::Type::Body::DATA_TYPE:
+    case schema::Type::Body::LIST_TYPE:
+    case schema::Type::Body::STRUCT_TYPE:
+    case schema::Type::Body::OBJECT_TYPE:
+    case schema::Type::Body::INTERFACE_TYPE:
+      return !builder.isPointerFieldNull(field.getOffset() * POINTERS);
+  }
+
+  FAIL_CHECK("switch() missing case.", type.which());
+  return false;
+}
+
 void DynamicStruct::Builder::set(StructSchema::Member member, DynamicValue::Reader value) {
   PRECOND(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   return setImpl(builder, member, value);
@@ -467,6 +601,12 @@ DynamicValue::Reader DynamicStruct::Reader::get(Text::Reader name) {
 }
 DynamicValue::Builder DynamicStruct::Builder::get(Text::Reader name) {
   return getImpl(builder, schema.getMemberByName(name));
+}
+bool DynamicStruct::Reader::has(Text::Reader name) {
+  return has(schema.getMemberByName(name));
+}
+bool DynamicStruct::Builder::has(Text::Reader name) {
+  return has(schema.getMemberByName(name));
 }
 void DynamicStruct::Builder::set(Text::Reader name, DynamicValue::Reader value) {
   setImpl(builder, schema.getMemberByName(name), value);

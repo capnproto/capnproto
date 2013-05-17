@@ -180,6 +180,7 @@ struct Stringifier {
   template<size_t n>
   inline ArrayPtr<const char> operator*(const CappedArray<char, n>& s) const { return s; }
   inline ArrayPtr<const char> operator*(const char* s) const { return arrayPtr(s, strlen(s)); }
+  inline ArrayPtr<const char> operator*(const String& s) const { return s.asArray(); }
 
   inline FixedArray<char, 1> operator*(char c) const {
     FixedArray<char, 1> result;

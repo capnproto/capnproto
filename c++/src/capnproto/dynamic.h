@@ -257,8 +257,14 @@ public:
   DynamicValue::Reader get(StructSchema::Member member);
   // Read the given member value.
 
+  bool has(StructSchema::Member member);
+  // Tests whether the given member is set to its default value.  For pointer values, this does
+  // not actually traverse the value comparing it with the default, but simply returns true if the
+  // pointer is non-null.
+
   DynamicValue::Reader get(Text::Reader name);
-  // Shortcut to read a member by name.  Throws an exception if no such member exists.
+  bool has(Text::Reader name);
+  // Shortcuts to access members by name.  These throw exceptions if no such member exists.
 
 private:
   StructSchema schema;
@@ -281,6 +287,7 @@ private:
   friend class MessageBuilder;
   template <typename T, ::capnproto::Kind k>
   friend struct ::capnproto::ToDynamic_;
+  friend String internal::debugString(StructReader reader, const RawSchema& schema);
 };
 
 class DynamicStruct::Builder {
@@ -298,6 +305,11 @@ public:
 
   DynamicValue::Builder get(StructSchema::Member member);
   // Read the given member value.
+
+  bool has(StructSchema::Member member);
+  // Tests whether the given member is set to its default value.  For pointer values, this does
+  // not actually traverse the value comparing it with the default, but simply returns true if the
+  // pointer is non-null.
 
   void set(StructSchema::Member member, DynamicValue::Reader value);
   // Set the given member value.
@@ -319,6 +331,7 @@ public:
   // Init an object field.  You must specify the type.
 
   DynamicValue::Builder get(Text::Reader name);
+  bool has(Text::Reader name);
   void set(Text::Reader name, DynamicValue::Reader value);
   void set(Text::Reader name, std::initializer_list<DynamicValue::Reader> value);
   DynamicValue::Builder init(Text::Reader name);
@@ -331,7 +344,7 @@ public:
   DynamicList::Builder initObject(Text::Reader name, ListSchema type, uint size);
   Text::Builder initObjectAsText(Text::Reader name, uint size);
   Data::Builder initObjectAsData(Text::Reader name, uint size);
-  // Shortcuts to access members by name.  These throw exceptions if no such field exists.
+  // Shortcuts to access members by name.  These throw exceptions if no such member exists.
 
   Reader asReader();
 

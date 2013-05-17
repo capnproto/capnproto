@@ -1836,6 +1836,10 @@ void StructBuilder::setObjectField(WirePointerCount ptrIndex, ObjectReader value
   return WireHelpers::setObjectPointer(segment, pointers + ptrIndex, value);
 }
 
+bool StructBuilder::isPointerFieldNull(WirePointerCount ptrIndex) const {
+  return (pointers + ptrIndex)->isNull();
+}
+
 StructReader StructBuilder::asReader() const {
   return StructReader(segment, data, pointers,
       dataSize, pointerCount, bit0Offset, std::numeric_limits<int>::max());
@@ -1896,6 +1900,10 @@ ObjectReader StructReader::getObjectField(
 const word* StructReader::getTrustedPointer(WirePointerCount ptrIndex) const {
   PRECOND(segment == nullptr, "getTrustedPointer() only allowed on trusted messages.");
   return reinterpret_cast<const word*>(pointers + ptrIndex);
+}
+
+bool StructReader::isPointerFieldNull(WirePointerCount ptrIndex) const {
+  return (pointers + ptrIndex)->isNull();
 }
 
 // =======================================================================================

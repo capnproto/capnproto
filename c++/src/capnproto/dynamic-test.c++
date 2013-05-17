@@ -97,8 +97,8 @@ void dynamicInitTestMessage(DynamicStruct::Builder builder) {
     subBuilder.set("boolList", {false, true, false, true, true});
     subBuilder.set("int8List", {12, -34, -0x80, 0x7f});
     subBuilder.set("int16List", {1234, -5678, -0x8000, 0x7fff});
-    subBuilder.set("int32List", {12345678, -90123456, -0x8000000, 0x7ffffff});
-    // gcc warns on -0x800...ll and the only work-around I could find was to do -0x7ff...ll-1.
+    // gcc warns on -0x800... and the only work-around I could find was to do -0x7ff...-1.
+    subBuilder.set("int32List", {12345678, -90123456, -0x7fffffff - 1, 0x7fffffff});
     subBuilder.set("int64List", {123456789012345ll, -678901234567890ll, -0x7fffffffffffffffll-1, 0x7fffffffffffffffll});
     subBuilder.set("uInt8List", {12u, 34u, 0u, 0xffu});
     subBuilder.set("uInt16List", {1234u, 5678u, 0u, 0xffffu});
@@ -218,8 +218,8 @@ void dynamicCheckTestMessage(Reader reader) {
     checkList<bool>(subReader.get("boolList"), {false, true, false, true, true});
     checkList<int8_t>(subReader.get("int8List"), {12, -34, -0x80, 0x7f});
     checkList<int16_t>(subReader.get("int16List"), {1234, -5678, -0x8000, 0x7fff});
-    checkList<int32_t>(subReader.get("int32List"), {12345678, -90123456, -0x8000000, 0x7ffffff});
-    // gcc warns on -0x800...ll and the only work-around I could find was to do -0x7ff...ll-1.
+    // gcc warns on -0x800... and the only work-around I could find was to do -0x7ff...-1.
+    checkList<int32_t>(subReader.get("int32List"), {12345678, -90123456, -0x7fffffff-1, 0x7fffffff});
     checkList<int64_t>(subReader.get("int64List"), {123456789012345ll, -678901234567890ll, -0x7fffffffffffffffll-1, 0x7fffffffffffffffll});
     checkList<uint8_t>(subReader.get("uInt8List"), {12u, 34u, 0u, 0xffu});
     checkList<uint16_t>(subReader.get("uInt16List"), {1234u, 5678u, 0u, 0xffffu});
@@ -739,6 +739,21 @@ TEST(DynamicApi, LateUnion) {
 
   root.get("theUnion").as<DynamicUnion>().set("qux", "hello");
   EXPECT_EQ("hello", root.as<test::TestLateUnion>().getTheUnion().getQux());
+}
+
+TEST(DynamicApi, Has) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<DynamicStruct>(Schema::from<test::TestDefaults>());
+
+  EXPECT_FALSE(root.has("int32Field"));
+  root.set("int32Field", 123);
+  EXPECT_TRUE(root.has("int32Field"));
+  root.set("int32Field", -12345678);
+  EXPECT_FALSE(root.has("int32Field"));
+
+  EXPECT_FALSE(root.has("structField"));
+  root.init("structField");
+  EXPECT_TRUE(root.has("structField"));
 }
 
 }  // namespace

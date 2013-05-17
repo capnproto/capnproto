@@ -92,6 +92,9 @@ public:
   inline bool operator< (const Reader& other) const { return !(other <= *this); }
   inline bool operator> (const Reader& other) const { return !(*this <= other); }
 
+  inline const char* begin() const { return bytes; }
+  inline const char* end() const { return bytes + size_; }
+
 private:
   const char* bytes;
   uint size_;
@@ -180,6 +183,9 @@ public:
   inline void copyFrom(const void* other) const {
     memcpy(bytes, other, size_);
   }
+
+  inline char* begin() const { return bytes; }
+  inline char* end() const { return bytes + size_; }
 
 private:
   char* bytes;
