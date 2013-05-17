@@ -476,10 +476,9 @@ struct WireHelpers {
 
   static CAPNPROTO_ALWAYS_INLINE(StructBuilder getWritableStructPointer(
       WirePointer* ref, SegmentBuilder* segment, StructSize size, const word* defaultValue)) {
-    word* ptr;
-
     if (ref->isNull()) {
     useDefault:
+      word* ptr;
       if (defaultValue == nullptr ||
           reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
         ptr = allocate(ref, segment, size.total(), WirePointer::STRUCT);
@@ -514,7 +513,7 @@ struct WireHelpers {
             std::max<WirePointerCount>(oldPointerCount, size.pointers);
         WordCount totalSize = newDataSize + newPointerCount * WORDS_PER_POINTER;
 
-        ptr = allocate(ref, segment, totalSize, WirePointer::STRUCT);
+        word* ptr = allocate(ref, segment, totalSize, WirePointer::STRUCT);
         ref->structRef.set(newDataSize, newPointerCount);
 
         // Copy data section.
@@ -525,6 +524,14 @@ struct WireHelpers {
         for (uint i = 0; i < oldPointerCount / POINTERS; i++) {
           transferPointer(segment, newPointerSection + i, oldSegment, oldPointerSection + i);
         }
+
+        // Zero out old location.  This has two purposes:
+        // 1) We don't want to leak the original contents of the struct when the message is written
+        //    out as it may contain secrets that the caller intends to remove from the new copy.
+        // 2) Zeros will be deflated by packing, making this dead memory almost-free if it ever
+        //    hits the wire.
+        memset(oldPtr, 0,
+               (oldDataSize + oldPointerCount * WORDS_PER_POINTER) * BYTES_PER_WORD / BYTES);
 
         return StructBuilder(segment, ptr, newPointerSection, newDataSize * BITS_PER_WORD,
                              newPointerCount, 0 * BITS);
@@ -597,7 +604,6 @@ struct WireHelpers {
     useDefault:
       if (defaultValue == nullptr ||
           reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
-        memset(origRef, 0, sizeof(*origRef));
         return ListBuilder();
       }
       word* ptr = copyMessage(origSegment, origRef,
@@ -697,7 +703,6 @@ struct WireHelpers {
     useDefault:
       if (defaultValue == nullptr ||
           reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
-        memset(origRef, 0, sizeof(*origRef));
         return ListBuilder();
       }
       word* ptr = copyMessage(origSegment, origRef,
@@ -790,6 +795,9 @@ struct WireHelpers {
           dst += newStep * (1 * ELEMENTS);
           src += oldStep * (1 * ELEMENTS);
         }
+
+        // Zero out old location.  See explanation in getWritableStructPointer().
+        memset(oldPtr, 0, oldStep * elementCount * BYTES_PER_WORD / BYTES);
 
         return ListBuilder(origSegment, newPtr, newStep * BITS_PER_WORD, elementCount,
                            newDataSize * BITS_PER_WORD, newPointerCount);
@@ -899,6 +907,9 @@ struct WireHelpers {
             }
           }
 
+          // Zero out old location.  See explanation in getWritableStructPointer().
+          memset(oldPtr, 0, roundUpToBytes(oldStep * elementCount) / BYTES);
+
           return ListBuilder(origSegment, newPtr, newStep * BITS_PER_WORD, elementCount,
                              newDataSize * BITS_PER_WORD, newPointerCount);
 
@@ -940,6 +951,9 @@ struct WireHelpers {
               newBytePtr += newDataByteSize / BYTES;
             }
           }
+
+          // Zero out old location.  See explanation in getWritableStructPointer().
+          memset(oldPtr, 0, roundUpToBytes(oldStep * elementCount) / BYTES);
 
           return ListBuilder(origSegment, newPtr, newDataSize / ELEMENTS, elementCount,
                              newDataSize, 0 * POINTERS);
