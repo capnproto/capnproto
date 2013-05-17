@@ -331,7 +331,7 @@ struct WireHelpers {
         break;
       }
       case WirePointer::RESERVED_3:
-        FAIL_CHECK("Don't know how to handle RESERVED_3.");
+        FAIL_RECOVERABLE_CHECK("Don't know how to handle RESERVED_3.") {}
         break;
     }
   }
@@ -397,10 +397,10 @@ struct WireHelpers {
         break;
       }
       case WirePointer::FAR:
-        FAIL_CHECK("Unexpected FAR pointer.");
+        FAIL_RECOVERABLE_CHECK("Unexpected FAR pointer.") {}
         break;
       case WirePointer::RESERVED_3:
-        FAIL_CHECK("Don't know how to handle RESERVED_3.");
+        FAIL_RECOVERABLE_CHECK("Don't know how to handle RESERVED_3.") {}
         break;
     }
   }
