@@ -1286,6 +1286,24 @@ TEST(Encoding, ListSetters) {
   }
 }
 
+TEST(Encoding, ZeroOldObject) {
+  MallocMessageBuilder builder;
+
+  auto root = builder.initRoot<TestAllTypes>();
+  initTestMessage(root);
+
+  auto oldRoot = root.asReader();
+  checkTestMessage(oldRoot);
+
+  auto oldSub = oldRoot.getStructField();
+  auto oldSub2 = oldRoot.getStructList()[0];
+
+  root = builder.initRoot<TestAllTypes>();
+  checkTestMessageAllZero(oldRoot);
+  checkTestMessageAllZero(oldSub);
+  checkTestMessageAllZero(oldSub2);
+}
+
 }  // namespace
 }  // namespace internal
 }  // namespace capnproto
