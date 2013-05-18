@@ -29,7 +29,7 @@
 namespace capnproto {
 
 schema::Node::Reader Schema::getProto() const {
-  return readMessageTrusted<schema::Node>(raw->encodedNode);
+  return readMessageUnchecked<schema::Node>(raw->encodedNode);
 }
 
 Schema Schema::getDependency(uint64_t id) const {

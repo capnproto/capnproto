@@ -211,7 +211,7 @@ struct WireHelpers {
 
   static CAPNPROTO_ALWAYS_INLINE(bool boundsCheck(
       SegmentReader* segment, const word* start, const word* end)) {
-    // If segment is null, this is a trusted message, so all pointers have been checked already.
+    // If segment is null, this is an unchecked message, so we don't do bounds checks.
     return segment == nullptr || segment->containsInterval(start, end);
   }
 
@@ -269,7 +269,7 @@ struct WireHelpers {
 
   static CAPNPROTO_ALWAYS_INLINE(
       const word* followFars(const WirePointer*& ref, SegmentReader*& segment)) {
-    // If the segment is null, this is a trusted message, so there are no FAR pointers.
+    // If the segment is null, this is an unchecked message, so there are no FAR pointers.
     if (segment != nullptr && ref->kind() == WirePointer::FAR) {
       // Look up the segment containing the landing pad.
       segment = segment->getArena()->tryGetSegment(ref->farRef.segmentId.get());
@@ -1901,7 +1901,7 @@ StructReader StructBuilder::asReader() const {
 // =======================================================================================
 // StructReader
 
-StructReader StructReader::readRootTrusted(const word* location) {
+StructReader StructReader::readRootUnchecked(const word* location) {
   return WireHelpers::readStructPointer(nullptr, reinterpret_cast<const WirePointer*>(location),
                                         nullptr, std::numeric_limits<int>::max());
 }
@@ -1950,8 +1950,8 @@ ObjectReader StructReader::getObjectField(
       segment, pointers + ptrIndex, defaultValue, nestingLimit);
 }
 
-const word* StructReader::getTrustedPointer(WirePointerCount ptrIndex) const {
-  PRECOND(segment == nullptr, "getTrustedPointer() only allowed on trusted messages.");
+const word* StructReader::getUncheckedPointer(WirePointerCount ptrIndex) const {
+  PRECOND(segment == nullptr, "getUncheckedPointer() only allowed on unchecked messages.");
   return reinterpret_cast<const word*>(pointers + ptrIndex);
 }
 

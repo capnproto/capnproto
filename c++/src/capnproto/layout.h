@@ -333,7 +333,7 @@ public:
   StructBuilder getStructField(WirePointerCount ptrIndex, StructSize size,
                                const word* defaultValue) const;
   // Gets the struct field at the given index in the pointer segment.  If the field is not already
-  // initialized, it is initialized as a deep copy of the given default value (a trusted message),
+  // initialized, it is initialized as a deep copy of the given default value (a flat message),
   // or to the empty state if defaultValue is nullptr.
 
   ListBuilder initListField(WirePointerCount ptrIndex, FieldSize elementSize,
@@ -350,14 +350,14 @@ public:
                            const word* defaultValue) const;
   // Gets the already-allocated list field for the given pointer index, ensuring that the list is
   // suitable for storing non-struct elements of the given size.  If the list is not already
-  // allocated, it is allocated as a deep copy of the given default value (a trusted message).  If
+  // allocated, it is allocated as a deep copy of the given default value (a flat message).  If
   // the default value is null, an empty list is used.
 
   ListBuilder getStructListField(WirePointerCount ptrIndex, StructSize elementSize,
                                  const word* defaultValue) const;
   // Gets the already-allocated list field for the given pointer index, ensuring that the list
   // is suitable for storing struct elements of the given size.  If the list is not
-  // already allocated, it is allocated as a deep copy of the given default value (a trusted
+  // already allocated, it is allocated as a deep copy of the given default value (a flat
   // message).  If the default value is null, an empty list is used.
 
   template <typename T>
@@ -418,7 +418,7 @@ public:
       : segment(nullptr), data(nullptr), pointers(nullptr), dataSize(0),
         pointerCount(0), bit0Offset(0), nestingLimit(0x7fffffff) {}
 
-  static StructReader readRootTrusted(const word* location);
+  static StructReader readRootUnchecked(const word* location);
   static StructReader readRoot(const word* location, SegmentReader* segment, int nestingLimit);
 
   inline BitCount getDataSectionSize() const { return dataSize; }
@@ -439,7 +439,7 @@ public:
 
   StructReader getStructField(WirePointerCount ptrIndex, const word* defaultValue) const;
   // Get the struct field at the given index in the pointer segment, or the default value if not
-  // initialized.  defaultValue will be interpreted as a trusted message -- it must point at a
+  // initialized.  defaultValue will be interpreted as a flat message -- it must point at a
   // struct pointer, which in turn points at the struct value.  The default value is allowed to
   // be null, in which case an empty struct is used.
 
@@ -456,10 +456,10 @@ public:
   ObjectReader getObjectField(WirePointerCount ptrIndex, const word* defaultValue) const;
   // Read a pointer of arbitrary type.
 
-  const word* getTrustedPointer(WirePointerCount ptrIndex) const;
-  // If this is a trusted message, get a word* pointing at the location of the pointer.  This
-  // word* can actually be passed to readTrusted() to read the designated sub-object later.  If
-  // this isn't a trusted message, throws an exception.
+  const word* getUncheckedPointer(WirePointerCount ptrIndex) const;
+  // If this is an unchecked message, get a word* pointing at the location of the pointer.  This
+  // word* can actually be passed to readUnchecked() to read the designated sub-object later.  If
+  // this isn't an unchecked message, throws an exception.
 
   bool isPointerFieldNull(WirePointerCount ptrIndex) const;
 

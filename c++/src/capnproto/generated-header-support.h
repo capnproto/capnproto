@@ -109,18 +109,18 @@ struct PointerHelpers<T, Kind::BLOB> {
 
 #if defined(CAPNPROTO_PRIVATE) || defined(__CDT_PARSER__)
 
-struct TrustedMessage {
+struct UncheckedMessage {
   typedef const word* Reader;
 };
 
 template <>
-struct PointerHelpers<TrustedMessage> {
-  // Reads an Object field as a trusted message pointer.  Requires that the containing message is
-  // itself trusted.  This hack is currently private.  It is used to locate default values within
+struct PointerHelpers<UncheckedMessage> {
+  // Reads an Object field as an unchecked message pointer.  Requires that the containing message is
+  // itself unchecked.  This hack is currently private.  It is used to locate default values within
   // encoded schemas.
 
   static inline const word* get(StructReader reader, WirePointerCount index) {
-    return reader.getTrustedPointer(index);
+    return reader.getUncheckedPointer(index);
   }
 };
 
@@ -132,7 +132,7 @@ struct RawSchema {
   // This is an internal structure which could change in the future.
 
   const word* encodedNode;
-  // Encoded SchemaNode, readable via readMessageTrusted<schema::Node>(encodedNode).
+  // Encoded SchemaNode, readable via readMessageUnchecked<schema::Node>(encodedNode).
 
   const RawSchema* const* dependencies;
   // Pointers to other types on which this one depends, sorted by ID.

@@ -712,20 +712,20 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
               ListSchema::of(elementType, member.getContainingStruct()),
               reader.getListField(field.getOffset() * POINTERS,
                                   elementSizeFor(elementType.getBody().which()),
-                                  dval.getListValue<internal::TrustedMessage>())));
+                                  dval.getListValue<internal::UncheckedMessage>())));
         }
 
         case schema::Type::Body::STRUCT_TYPE: {
           return DynamicValue::Reader(DynamicStruct::Reader(
               member.getContainingStruct().getDependency(type.getStructType()).asStruct(),
               reader.getStructField(field.getOffset() * POINTERS,
-                                    dval.getStructValue<internal::TrustedMessage>())));
+                                    dval.getStructValue<internal::UncheckedMessage>())));
         }
 
         case schema::Type::Body::OBJECT_TYPE: {
           return DynamicValue::Reader(DynamicObject(
               reader.getObjectField(field.getOffset() * POINTERS,
-                                    dval.getObjectValue<internal::TrustedMessage>())));
+                                    dval.getObjectValue<internal::UncheckedMessage>())));
         }
 
         case schema::Type::Body::INTERFACE_TYPE:
@@ -805,12 +805,12 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
             return DynamicValue::Builder(DynamicList::Builder(listType,
                 builder.getStructListField(field.getOffset() * POINTERS,
                                            structSizeFromSchema(listType.getStructElementType()),
-                                           dval.getListValue<internal::TrustedMessage>())));
+                                           dval.getListValue<internal::UncheckedMessage>())));
           } else {
             return DynamicValue::Builder(DynamicList::Builder(listType,
                 builder.getListField(field.getOffset() * POINTERS,
                                      elementSizeFor(listType.whichElementType()),
-                                     dval.getListValue<internal::TrustedMessage>())));
+                                     dval.getListValue<internal::UncheckedMessage>())));
           }
         }
 
@@ -822,14 +822,14 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
               builder.getStructField(
                   field.getOffset() * POINTERS,
                   structSizeFromSchema(structSchema),
-                  dval.getStructValue<internal::TrustedMessage>())));
+                  dval.getStructValue<internal::UncheckedMessage>())));
         }
 
         case schema::Type::Body::OBJECT_TYPE: {
           return DynamicValue::Builder(DynamicObject(
               builder.asReader().getObjectField(
                   field.getOffset() * POINTERS,
-                  dval.getObjectValue<internal::TrustedMessage>())));
+                  dval.getObjectValue<internal::UncheckedMessage>())));
         }
 
         case schema::Type::Body::INTERFACE_TYPE:

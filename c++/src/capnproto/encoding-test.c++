@@ -69,7 +69,7 @@ TEST(Encoding, AllTypes) {
 
   ASSERT_EQ(1u, builder.getSegmentsForOutput().size());
 
-  checkTestMessage(readMessageTrusted<TestAllTypes>(builder.getSegmentsForOutput()[0].begin()));
+  checkTestMessage(readMessageUnchecked<TestAllTypes>(builder.getSegmentsForOutput()[0].begin()));
 
   EXPECT_EQ(builder.getSegmentsForOutput()[0].size() - 1,  // -1 for root pointer
             reader.getRoot<TestAllTypes>().totalSizeInWords());
@@ -93,7 +93,7 @@ TEST(Encoding, Defaults) {
   SegmentArrayMessageReader reader(arrayPtr(segments, 1));
 
   checkTestMessage(reader.getRoot<TestDefaults>());
-  checkTestMessage(readMessageTrusted<TestDefaults>(nullRoot.words));
+  checkTestMessage(readMessageUnchecked<TestDefaults>(nullRoot.words));
 }
 
 TEST(Encoding, DefaultInitialization) {
@@ -133,7 +133,7 @@ TEST(Encoding, DefaultsFromEmptyMessage) {
   SegmentArrayMessageReader reader(arrayPtr(segments, 1));
 
   checkTestMessage(reader.getRoot<TestDefaults>());
-  checkTestMessage(readMessageTrusted<TestDefaults>(emptyMessage.words));
+  checkTestMessage(readMessageUnchecked<TestDefaults>(emptyMessage.words));
 }
 
 TEST(Encoding, GenericObjects) {

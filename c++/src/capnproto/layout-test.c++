@@ -46,7 +46,7 @@ TEST(WireFormat, SimpleRawDataStruct) {
     0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef
   }};
 
-  StructReader reader = StructReader::readRootTrusted(data.words);
+  StructReader reader = StructReader::readRootUnchecked(data.words);
 
   EXPECT_EQ(0xefcdab8967452301ull, reader.getDataField<uint64_t>(0 * ELEMENTS));
   EXPECT_EQ(0u, reader.getDataField<uint64_t>(1 * ELEMENTS));
@@ -301,7 +301,7 @@ TEST(WireFormat, StructRoundTrip_OneSegment) {
 
   checkStruct(builder);
   checkStruct(builder.asReader());
-  checkStruct(StructReader::readRootTrusted(segment->getStartPtr()));
+  checkStruct(StructReader::readRootUnchecked(segment->getStartPtr()));
   checkStruct(StructReader::readRoot(segment->getStartPtr(), segment, 4));
 }
 
