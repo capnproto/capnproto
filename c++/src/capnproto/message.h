@@ -170,6 +170,8 @@ private:
   internal::StructBuilder initRoot(internal::StructSize size);
   void setRootInternal(internal::StructReader reader);
   internal::StructBuilder getRoot(internal::StructSize size);
+
+  friend struct SchemaLoader;  // for a dirty hack, see schema-loader.c++.
 };
 
 template <typename RootType>

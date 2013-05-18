@@ -86,7 +86,7 @@ std::string fileLine(std::string file, int line) {
 
 TEST(Logging, Log) {
   MockExceptionCallback mockCallback;
-  MockExceptionCallback::ScopedRegistration reg(&mockCallback);
+  MockExceptionCallback::ScopedRegistration reg(mockCallback);
   int line;
 
   LOG(WARNING, "Hello world!"); line = __LINE__;
@@ -137,7 +137,7 @@ TEST(Logging, Log) {
 
 TEST(Logging, Syscall) {
   MockExceptionCallback mockCallback;
-  MockExceptionCallback::ScopedRegistration reg(&mockCallback);
+  MockExceptionCallback::ScopedRegistration reg(mockCallback);
   int line;
 
   int i = 123;

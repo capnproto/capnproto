@@ -76,6 +76,7 @@ struct {{typeFullName}} {
   };
 {{/typeUnion}}
 
+private:
 {{#typeFields}}
 {{#fieldDefaultBytes}}
   static const ::capnproto::internal::AlignedData<{{defaultWordCount}}> DEFAULT_{{fieldUpperCase}};
@@ -144,8 +145,11 @@ public:
   inline explicit Reader(::capnproto::internal::StructReader base): _reader(base) {}
 {{#typeStruct}}
 
-  ::capnproto::String debugString() {
+  inline ::capnproto::String debugString() {
     return ::capnproto::internal::debugString<{{typeName}}>(_reader);
+  }
+  inline size_t totalSizeInWords() {
+    return _reader.totalSize() / ::capnproto::WORDS;
   }
 {{#structUnions}}
 
@@ -194,7 +198,8 @@ public:
   inline Reader asReader() { return *this; }
 {{#typeStruct}}
 
-  ::capnproto::String debugString() { return asReader().debugString(); }
+  inline ::capnproto::String debugString() { return asReader().debugString(); }
+  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 {{#structUnions}}
 
   // {{unionDecl}}

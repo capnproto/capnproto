@@ -71,6 +71,10 @@ public:
 
   CAPNPROTO_ALWAYS_INLINE(bool canRead(WordCount amount, Arena* arena));
 
+  void unread(WordCount64 amount);
+  // Adds back some words to the limit.  Useful when the caller knows they are double-reading
+  // some data.
+
 private:
   WordCount64 limit;
 
@@ -92,6 +96,9 @@ public:
   inline WordCount getSize();
 
   inline ArrayPtr<const word> getArray();
+
+  inline void unread(WordCount64 amount);
+  // Add back some words to the ReadLimiter.
 
 private:
   Arena* arena;
@@ -242,6 +249,7 @@ inline WordCount SegmentReader::getOffsetTo(const word* ptr) {
 }
 inline WordCount SegmentReader::getSize() { return ptr.size() * WORDS; }
 inline ArrayPtr<const word> SegmentReader::getArray() { return ptr; }
+inline void SegmentReader::unread(WordCount64 amount) { readLimiter->unread(amount); }
 
 // -------------------------------------------------------------------
 

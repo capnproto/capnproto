@@ -131,18 +131,18 @@ public:
     // callback will be restored.
 
   public:
-    ScopedRegistration(ExceptionCallback* callback);
+    ScopedRegistration(ExceptionCallback& callback);
     ~ScopedRegistration();
 
-    inline ExceptionCallback* getCallback() { return callback; }
+    inline ExceptionCallback& getCallback() { return callback; }
 
   private:
-    ExceptionCallback* callback;
+    ExceptionCallback& callback;
     ScopedRegistration* old;
   };
 };
 
-ExceptionCallback* getExceptionCallback();
+ExceptionCallback& getExceptionCallback();
 // Returns the current exception callback.
 
 }  // namespace capnproto

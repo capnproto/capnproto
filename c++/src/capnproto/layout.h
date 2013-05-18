@@ -463,6 +463,13 @@ public:
 
   bool isPointerFieldNull(WirePointerCount ptrIndex) const;
 
+  WordCount64 totalSize() const;
+  // Return the total size of the struct and everything to which it points.  Does not count far
+  // pointer overhead.  This is useful for deciding how much space is needed to copy the struct
+  // into a flat array.  However, the caller is advised NOT to treat this value as secure.  Instead,
+  // use the result as a hint for allocating the first segment, do the copy, and then throw an
+  // exception if it overruns.
+
 private:
   SegmentReader* segment;  // Memory segment in which the struct resides.
 

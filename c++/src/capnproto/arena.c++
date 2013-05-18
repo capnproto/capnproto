@@ -34,6 +34,16 @@ namespace internal {
 
 Arena::~Arena() {}
 
+void ReadLimiter::unread(WordCount64 amount) {
+  // Be careful not to overflow here.  Since ReadLimiter has no thread-safety, it's possible that
+  // the limit value was not updated correctly for one or more reads, and therefore unread() could
+  // overflow it even if it is only unreading bytes that were acutally read.
+  WordCount64 newValue = limit + amount;
+  if (newValue > limit) {
+    limit = newValue;
+  }
+}
+
 // =======================================================================================
 
 ReaderArena::ReaderArena(MessageReader* message)

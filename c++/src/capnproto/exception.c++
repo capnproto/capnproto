@@ -141,7 +141,7 @@ void ExceptionCallback::useProcessWide() {
   globalCallback = this;
 }
 
-ExceptionCallback::ScopedRegistration::ScopedRegistration(ExceptionCallback* callback)
+ExceptionCallback::ScopedRegistration::ScopedRegistration(ExceptionCallback& callback)
     : callback(callback) {
   old = threadLocalCallback;
   threadLocalCallback = this;
@@ -151,11 +151,11 @@ ExceptionCallback::ScopedRegistration::~ScopedRegistration() {
   threadLocalCallback = old;
 }
 
-ExceptionCallback* getExceptionCallback() {
+ExceptionCallback& getExceptionCallback() {
   static ExceptionCallback defaultCallback;
   ExceptionCallback::ScopedRegistration* scoped = threadLocalCallback;
   return scoped != nullptr ? scoped->getCallback() :
-     globalCallback != nullptr ? globalCallback : &defaultCallback;
+     globalCallback != nullptr ? *globalCallback : defaultCallback;
 }
 
 }  // namespace capnproto

@@ -70,6 +70,9 @@ TEST(Encoding, AllTypes) {
   ASSERT_EQ(1u, builder.getSegmentsForOutput().size());
 
   checkTestMessage(readMessageTrusted<TestAllTypes>(builder.getSegmentsForOutput()[0].begin()));
+
+  EXPECT_EQ(builder.getSegmentsForOutput()[0].size() - 1,  // -1 for root pointer
+            reader.getRoot<TestAllTypes>().totalSizeInWords());
 }
 
 TEST(Encoding, AllTypesMultiSegment) {
