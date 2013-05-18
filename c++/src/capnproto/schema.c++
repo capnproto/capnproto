@@ -257,8 +257,8 @@ ListSchema ListSchema::of(schema::Type::Reader elementType, Schema context) {
       return ListSchema();
   }
 
-  FAIL_CHECK("missing switch case");
-  return ListSchema();
+  // Unknown type is acceptable.
+  return ListSchema(body.which());
 }
 
 StructSchema ListSchema::getStructElementType() const {

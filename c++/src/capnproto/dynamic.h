@@ -46,6 +46,11 @@ class MessageBuilder;
 
 struct DynamicValue {
   enum Type {
+    UNKNOWN,
+    // Means that the value has unknown type and content because it comes from a newer version of
+    // the schema, or from a newer version of Cap'n Proto that has new features that this version
+    // doesn't understand.
+
     VOID,
     BOOL,
     INT,
@@ -185,8 +190,6 @@ private:
   inline Reader(StructSchema::Union schema, internal::StructReader reader)
       : schema(schema), reader(reader) {}
 
-  StructSchema::Member checkIsKnown();
-
   friend struct DynamicStruct;
 };
 
@@ -231,7 +234,6 @@ private:
   inline Builder(StructSchema::Union schema, internal::StructBuilder builder)
       : schema(schema), builder(builder) {}
 
-  StructSchema::Member checkIsKnown();
   StructSchema::Member checkIsObject();
   void setDiscriminant(StructSchema::Member member);
   void setObjectDiscriminant(StructSchema::Member member);
@@ -511,7 +513,8 @@ struct MaybeReaderBuilder<DynamicList, Kind::UNKNOWN> {
 
 class DynamicValue::Reader {
 public:
-  inline Reader(Void value = Void::VOID);
+  inline Reader(std::nullptr_t n = nullptr);  // UNKNOWN
+  inline Reader(Void value);
   inline Reader(bool value);
   inline Reader(char value);
   inline Reader(signed char value);
@@ -589,7 +592,8 @@ private:
 
 class DynamicValue::Builder {
 public:
-  inline Builder(Void value = Void::VOID);
+  inline Builder(std::nullptr_t n = nullptr);  // UNKNOWN
+  inline Builder(Void value);
   inline Builder(bool value);
   inline Builder(char value);
   inline Builder(signed char value);
@@ -728,7 +732,10 @@ DynamicTypeFor<TypeIfEnum<T>> toDynamic(T&& value) {
   return DynamicEnum(Schema::from<RemoveReference<T>>(), static_cast<uint16_t>(value));
 }
 
-#define CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(cppType, typeTag, fieldName) \
+inline DynamicValue::Reader::Reader(std::nullptr_t n): type(UNKNOWN) {}
+inline DynamicValue::Builder::Builder(std::nullptr_t n): type(UNKNOWN) {}
+
+    #define CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(cppType, typeTag, fieldName) \
 inline DynamicValue::Reader::Reader(cppType value) \
     : type(typeTag), fieldName##Value(value) {} \
 inline DynamicValue::Builder::Builder(cppType value) \

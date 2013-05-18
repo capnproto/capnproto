@@ -85,7 +85,8 @@ internal::FieldSize elementSizeFor(schema::Type::Body::Which elementType) {
     case schema::Type::Body::INTERFACE_TYPE: return internal::FieldSize::POINTER;
     case schema::Type::Body::OBJECT_TYPE: FAIL_CHECK("List(Object) not supported."); break;
   }
-  FAIL_CHECK("Can't get here.");
+
+  // Unknown type.  Treat it as zero-size.
   return internal::FieldSize::VOID;
 }
 
@@ -168,11 +169,21 @@ Maybe<StructSchema::Member> DynamicUnion::Builder::which() {
 }
 
 DynamicValue::Reader DynamicUnion::Reader::get() {
-  return DynamicValue::Reader(DynamicStruct::Reader::getImpl(reader, checkIsKnown()));
+  auto w = which();
+  if (w == nullptr) {
+    return nullptr;
+  } else {
+    return DynamicValue::Reader(DynamicStruct::Reader::getImpl(reader, *w));
+  }
 }
 
 DynamicValue::Builder DynamicUnion::Builder::get() {
-  return DynamicValue::Builder(DynamicStruct::Builder::getImpl(builder, checkIsKnown()));
+  auto w = which();
+  if (w == nullptr) {
+    return nullptr;
+  } else {
+    return DynamicValue::Builder(DynamicStruct::Builder::getImpl(builder, *w));
+  }
 }
 
 void DynamicUnion::Builder::set(StructSchema::Member member, DynamicValue::Reader value) {
@@ -244,26 +255,14 @@ Data::Builder DynamicUnion::Builder::initObjectAsData(Text::Reader name, uint si
   return initObjectAsData(schema.getMemberByName(name), size);
 }
 
-StructSchema::Member DynamicUnion::Reader::checkIsKnown() {
-  auto w = which();
-  PRECOND(w != nullptr, "Can't get() unknown union value.");
-  CHECK(w->getProto().getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
-        "Unsupported union member type.");
-  return *w;
-}
-StructSchema::Member DynamicUnion::Builder::checkIsKnown() {
-  auto w = which();
-  PRECOND(w != nullptr, "Can't get() unknown union value.");
-  CHECK(w->getProto().getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
-        "Unsupported union member type.");
-  return *w;
-}
-
 StructSchema::Member DynamicUnion::Builder::checkIsObject() {
-  auto result = checkIsKnown();
-  PRECOND(result.getProto().getBody().getFieldMember().getType().getBody().which() ==
+  auto w = which();
+  PRECOND(w != nullptr, "Can't get() unknown union value.");
+  CHECK(w->getProto().getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
+        "Unsupported union member type.");
+  PRECOND(w->getProto().getBody().getFieldMember().getType().getBody().which() ==
           schema::Type::Body::OBJECT_TYPE, "Expected Object.");
-  return result;
+  return *w;
 }
 
 void DynamicUnion::Builder::setDiscriminant(StructSchema::Member member) {
@@ -362,7 +361,7 @@ bool DynamicStruct::Reader::has(StructSchema::Member member) {
       return !reader.isPointerFieldNull(field.getOffset() * POINTERS);
   }
 
-  FAIL_CHECK("switch() missing case.", type.which());
+  // Unknown type.  As far as we know, it isn't set.
   return false;
 }
 bool DynamicStruct::Builder::has(StructSchema::Member member) {
@@ -428,7 +427,7 @@ bool DynamicStruct::Builder::has(StructSchema::Member member) {
       return !builder.isPointerFieldNull(field.getOffset() * POINTERS);
   }
 
-  FAIL_CHECK("switch() missing case.", type.which());
+  // Unknown type.  As far as we know, it isn't set.
   return false;
 }
 
@@ -733,13 +732,12 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
           break;
       }
 
-      FAIL_CHECK("switch() missing case.", type.which());
-      return DynamicValue::Reader();
+      return nullptr;
     }
   }
 
   FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
-  return DynamicValue::Reader();
+  return nullptr;
 }
 
 DynamicValue::Builder DynamicStruct::Builder::getImpl(
@@ -837,13 +835,12 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
           break;
       }
 
-      FAIL_CHECK("switch() missing case.", type.which());
-      return DynamicValue::Builder();
+      return nullptr;
     }
   }
 
   FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
-  return DynamicValue::Builder();
+  return nullptr;
 }
 DynamicStruct::Builder DynamicStruct::Builder::getObjectImpl(
     internal::StructBuilder builder, StructSchema::Member field, StructSchema type) {
@@ -974,7 +971,7 @@ void DynamicStruct::Builder::setImpl(
           return;
       }
 
-      FAIL_CHECK("switch() missing case.", type.which());
+      FAIL_RECOVERABLE_PRECOND("can't set field of unknown type", type.which());
       return;
     }
   }
@@ -1117,11 +1114,10 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) const {
 
     case schema::Type::Body::INTERFACE_TYPE:
       FAIL_RECOVERABLE_CHECK("Interfaces not implemented.") {}
-      return DynamicValue::Reader();
+      return nullptr;
   }
 
-  FAIL_CHECK("switch() missing case.", schema.whichElementType());
-  return DynamicValue::Reader();
+  return nullptr;
 }
 
 DynamicValue::Builder DynamicList::Builder::operator[](uint index) const {
@@ -1176,15 +1172,14 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) const {
 
     case schema::Type::Body::OBJECT_TYPE:
       FAIL_CHECK("List(Object) not supported.");
-      break;
+      return nullptr;
 
     case schema::Type::Body::INTERFACE_TYPE:
       FAIL_RECOVERABLE_CHECK("Interfaces not implemented.") {}
-      return DynamicValue::Builder();
+      return nullptr;
   }
 
-  FAIL_CHECK("switch() missing case.", schema.whichElementType());
-  return DynamicValue::Builder();
+  return nullptr;
 }
 
 void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
@@ -1196,7 +1191,7 @@ void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
 #define HANDLE_TYPE(name, discrim, typeName) \
     case schema::Type::Body::discrim##_TYPE: \
       builder.setDataElement<typeName>(index * ELEMENTS, value.as<typeName>()); \
-      break;
+      return;
 
     HANDLE_TYPE(void, VOID, Void)
     HANDLE_TYPE(bool, BOOL, bool)
@@ -1214,14 +1209,14 @@ void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
 
     case schema::Type::Body::TEXT_TYPE:
       builder.setBlobElement<Text>(index * ELEMENTS, value.as<Text>());
-      break;
+      return;
     case schema::Type::Body::DATA_TYPE:
       builder.setBlobElement<Data>(index * ELEMENTS, value.as<Data>());
-      break;
+      return;
 
     case schema::Type::Body::LIST_TYPE: {
       builder.setListElement(index * ELEMENTS, value.as<DynamicList>().reader);
-      break;
+      return;
     }
 
     case schema::Type::Body::STRUCT_TYPE:
@@ -1229,7 +1224,7 @@ void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
       // element is already allocated, and if it's smaller than the input value the copy would
       // have to be lossy.
       FAIL_RECOVERABLE_CHECK("DynamicList of structs does not support set().");
-      break;
+      return;
 
     case schema::Type::Body::ENUM_TYPE: {
       uint16_t rawValue;
@@ -1245,17 +1240,19 @@ void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
         rawValue = enumValue.getRaw();
       }
       builder.setDataElement<uint16_t>(index * ELEMENTS, rawValue);
-      break;
+      return;
     }
 
     case schema::Type::Body::OBJECT_TYPE:
       FAIL_RECOVERABLE_CHECK("List(Object) not supported.");
-      break;
+      return;
 
     case schema::Type::Body::INTERFACE_TYPE:
       FAIL_RECOVERABLE_CHECK("Interfaces not implemented.") {}
-      break;
+      return;
   }
+
+  FAIL_RECOVERABLE_PRECOND("can't set element of unknown type", schema.whichElementType());
 }
 
 DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
@@ -1278,7 +1275,7 @@ DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
     case schema::Type::Body::STRUCT_TYPE:
     case schema::Type::Body::INTERFACE_TYPE:
       FAIL_PRECOND("Expected a list or blob.");
-      break;
+      return nullptr;
 
     case schema::Type::Body::TEXT_TYPE:
       return DynamicValue::Builder(builder.initBlobElement<Text>(index * ELEMENTS, size * BYTES));
@@ -1304,12 +1301,11 @@ DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
 
     case schema::Type::Body::OBJECT_TYPE: {
       FAIL_CHECK("List(Object) not supported.");
-      return DynamicValue::Builder();
+      return nullptr;
     }
   }
 
-  FAIL_CHECK("switch() missing case.", schema.whichElementType());
-  return DynamicValue::Builder();
+  return nullptr;
 }
 
 void DynamicList::Builder::copyFrom(std::initializer_list<DynamicValue::Reader> value) {

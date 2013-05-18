@@ -202,10 +202,9 @@ struct StructNode {
     # Indicates where this member appeared in the code, relative to other members.
     # Code ordering may have semantic relevance -- programmers tend to place related fields
     # together.  So, using code ordering makes sense in human-readable formats where ordering is
-    # otherwise irrelevant, like JSON.  The values of codeOrder are tightly-packed, so for unions
-    # and non-union fields the maximum value of codeOrder is count(fields) + count(unions).
-    # Fields that are members of a union are only ordered relative to the other members of that
-    # union, so the maximum value there is count(union.fields).
+    # otherwise irrelevant, like JSON.  The values of codeOrder are tightly-packed, so the maximum
+    # value is count(members) - 1.  Fields that are members of a union are only ordered relative to
+    # the other members of that union, so the maximum value there is count(union.members).
 
     annotations @3 :List(Annotation);
 
