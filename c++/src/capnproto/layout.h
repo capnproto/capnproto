@@ -416,7 +416,7 @@ class StructReader {
 public:
   inline StructReader()
       : segment(nullptr), data(nullptr), pointers(nullptr), dataSize(0),
-        pointerCount(0), bit0Offset(0), nestingLimit(0) {}
+        pointerCount(0), bit0Offset(0), nestingLimit(0x7fffffff) {}
 
   static StructReader readRootTrusted(const word* location);
   static StructReader readRoot(const word* location, SegmentReader* segment, int nestingLimit);
@@ -609,7 +609,7 @@ class ListReader {
 public:
   inline ListReader()
       : segment(nullptr), ptr(nullptr), elementCount(0), step(0 * BITS / ELEMENTS),
-        structDataSize(0), structPointerCount(0), nestingLimit(0) {}
+        structDataSize(0), structPointerCount(0), nestingLimit(0x7fffffff) {}
 
   inline ElementCount size() const;
   // The number of elements in the list.
