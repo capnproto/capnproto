@@ -74,6 +74,14 @@
 //         fd = SYSCALL(open("/dev/null", O_RDONLY));
 //       }
 //
+// * `CONTEXT(...)`:  Notes additional contextual information relevant to any exceptions thrown
+//   from within the current scope.  That is, until control exits the block in which CONTEXT()
+//   is used, if any exception is generated, it will contain the given information in its context
+//   chain.  This is helpful because it can otherwise be very difficult to come up with error
+//   messages that make sense within low-level helper code.  Note that the parameters to CONTEXT()
+//   are only evaluated if an exception is thrown.  This means that any variables used must remain
+//   valid until the end of the scope.
+//
 // Notes:
 // * Do not write expressions with side-effects in the message content part of the macro, as the
 //   message will not necessarily be evaluated.
@@ -145,6 +153,42 @@ public:
       int errorNumber, const char* file, int line, const char* callText,
       const char* macroArgs, Params&&... params);
 
+  class Context: public ExceptionCallback {
+  public:
+    Context();
+    virtual ~Context();
+    virtual void addTo(Exception& exception) = 0;
+
+    virtual void onRecoverableException(Exception&& exception) override;
+    virtual void onFatalException(Exception&& exception) override;
+    virtual void logMessage(ArrayPtr<const char> text) override;
+
+  private:
+    ExceptionCallback& next;
+    ScopedRegistration registration;
+  };
+
+  template <typename Func>
+  class ContextImpl: public Context {
+  public:
+    inline ContextImpl(Func&& func): func(capnproto::move(func)) {}
+
+    void addTo(Exception& exception) override {
+      func(exception);
+    }
+  private:
+    Func func;
+  };
+
+  template <typename Func>
+  static ContextImpl<RemoveReference<Func>> context(Func&& func) {
+    return ContextImpl<RemoveReference<Func>>(capnproto::forward<Func>(func));
+  }
+
+  template <typename... Params>
+  static void addContextTo(Exception& exception, const char* file,
+                           int line, const char* macroArgs, Params&&... params);
+
 private:
   static Severity minSeverity;
 
@@ -164,6 +208,8 @@ private:
       const char* file, int line, const char* call,
       int errorNumber, const char* macroArgs, ArrayPtr<Array<char>> argValues)
       CAPNPROTO_NORETURN;
+  static void addContextToInternal(Exception& exception, const char* file, int line,
+                                   const char* macroArgs, ArrayPtr<Array<char>> argValues);
 
   static int getOsErrorNumber();
   // Get the error code of the last error (e.g. from errno).  Returns -1 on EINTR.
@@ -223,6 +269,13 @@ ArrayPtr<const char> operator*(const Stringifier&, Log::Severity severity);
     ::capnproto::Log::reportFailedRecoverableSyscall( \
         _errorNumber, __FILE__, __LINE__, #code, #__VA_ARGS__, ##__VA_ARGS__); \
   } while (false)
+
+#define CONTEXT(...) \
+  auto _capnpLoggingContext = ::capnproto::Log::context( \
+      [&](::capnproto::Exception& exception) { \
+        return ::capnproto::Log::addContextTo(exception, \
+            __FILE__, __LINE__, #__VA_ARGS__, ##__VA_ARGS__); \
+      })
 
 #ifdef NDEBUG
 #define DLOG(...) do {} while (false)
@@ -312,6 +365,13 @@ void Log::reportFailedSyscall(
   Array<char> argValues[sizeof...(Params)] = {str(params)...};
   fatalFailedSyscallInternal(file, line, callText, errorNumber, macroArgs,
                              arrayPtr(argValues, sizeof...(Params)));
+}
+
+template <typename... Params>
+void Log::addContextTo(Exception& exception, const char* file, int line,
+                       const char* macroArgs, Params&&... params) {
+  Array<char> argValues[sizeof...(Params)] = {str(params)...};
+  addContextToInternal(exception, file, line, macroArgs, arrayPtr(argValues, sizeof...(Params)));
 }
 
 }  // namespace capnproto

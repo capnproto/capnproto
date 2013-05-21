@@ -59,27 +59,49 @@ Exception::Exception(Nature nature, Durability durability, const char* file, int
                      Array<char> description) noexcept
     : file(file), line(line), nature(nature), durability(durability),
       description(move(description)) {
-  bool hasDescription = this->description != nullptr;
-
-  void* trace[16];
-  int traceCount = backtrace(trace, 16);
-  ArrayPtr<void*> traceArray = arrayPtr(trace, traceCount);
-
-  // Must be careful to NUL-terminate this.
-  whatStr = str(file, ":", line, ": ", nature,
-                durability == Durability::TEMPORARY ? " (temporary)" : "",
-                hasDescription ? ": " : "", this->description,
-                "\nstack: ", strArray(traceArray, " "), '\0');
+  traceCount = backtrace(trace, 16);
 }
 
 Exception::Exception(const Exception& other) noexcept
     : file(other.file), line(other.line), nature(other.nature), durability(other.durability),
-      description(str(other.description)), whatStr(str(other.whatStr)) {}
+      description(str(other.description)), traceCount(other.traceCount) {
+  memcpy(trace, other.trace, sizeof(trace[0]) * traceCount);
+}
 
 Exception::~Exception() noexcept {}
 
+void Exception::wrapContext(const char* file, int line, Array<char>&& description) {
+  context = heap<Context>(file, line, move(description), move(context));
+}
+
 const char* Exception::what() const noexcept {
-  return whatStr.begin();
+  uint contextDepth = 0;
+
+  const Maybe<Own<Context>>* contextPtr = &context;
+  while (*contextPtr != nullptr) {
+    ++contextDepth;
+    contextPtr = &(***contextPtr).next;
+  }
+
+  Array<Array<char>> contextText = newArray<Array<char>>(contextDepth);
+
+  contextDepth = 0;
+  contextPtr = &context;
+  while (*contextPtr != nullptr) {
+    const Context& node = ***contextPtr;
+    contextText[contextDepth++] =
+        str(node.file, ":", node.line, ": context: ", node.description, "\n");
+    contextPtr = &node.next;
+  }
+
+  // Must be careful to NUL-terminate this.
+  whatBuffer = str(strArray(contextText, ""),
+                   file, ":", line, ": ", nature,
+                   durability == Durability::TEMPORARY ? " (temporary)" : "",
+                   this->description == nullptr ? "" : ": ", this->description,
+                   "\nstack: ", strArray(arrayPtr(trace, traceCount), " "), '\0');
+
+  return whatBuffer.begin();
 }
 
 // =======================================================================================

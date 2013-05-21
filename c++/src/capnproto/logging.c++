@@ -230,9 +230,31 @@ void Log::fatalFailedSyscallInternal(
   abort();
 }
 
+void Log::addContextToInternal(Exception& exception, const char* file, int line,
+                               const char* macroArgs, ArrayPtr<Array<char>> argValues) {
+  exception.wrapContext(file, line, makeDescription(LOG, nullptr, 0, macroArgs, argValues));
+}
+
 int Log::getOsErrorNumber() {
   int result = errno;
   return result == EINTR ? -1 : result;
+}
+
+Log::Context::Context(): next(getExceptionCallback()), registration(*this) {}
+Log::Context::~Context() {}
+
+void Log::Context::onRecoverableException(Exception&& exception) {
+  addTo(exception);
+  next.onRecoverableException(capnproto::move(exception));
+}
+void Log::Context::onFatalException(Exception&& exception) {
+  addTo(exception);
+  next.onFatalException(capnproto::move(exception));
+}
+void Log::Context::logMessage(ArrayPtr<const char> text) {
+  // TODO(someday):  We could do something like log the context and then indent all log messages
+  //   written until the end of the context.
+  next.logMessage(text);
 }
 
 }  // namespace capnproto

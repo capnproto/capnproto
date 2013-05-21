@@ -25,6 +25,8 @@
 
 namespace capnproto {
 
+Disposer::~Disposer() {}
+
 String::String(const char* value): content(newArray<char>(strlen(value) + 1)) {
   strcpy(content.begin(), value);
 }
