@@ -76,6 +76,12 @@ InterfaceSchema Schema::asInterface() const {
   return InterfaceSchema(raw);
 }
 
+void Schema::requireUsableAs(const internal::RawSchema* expected) {
+  PRECOND(raw == expected ||
+          (raw != nullptr && expected != nullptr && raw->canCastTo == expected),
+          "This schema is not compatible with the requested native type.");
+}
+
 // =======================================================================================
 
 namespace {
@@ -283,6 +289,12 @@ ListSchema ListSchema::getListElementType() const {
   PRECOND(nestingDepth > 0,
           "ListSchema::getListElementType(): The elements are not lists.");
   return ListSchema(elementType, nestingDepth - 1, elementSchema);
+}
+
+void ListSchema::requireUsableAs(ListSchema expected) {
+  PRECOND(elementType == expected.elementType && nestingDepth == expected.nestingDepth,
+          "This schema is not compatible with the requested native type.");
+  elementSchema.requireUsableAs(expected.elementSchema.raw);
 }
 
 }  // namespace capnproto

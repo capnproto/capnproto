@@ -275,8 +275,6 @@ private:
   inline Reader(StructSchema schema, internal::StructReader reader)
       : schema(schema), reader(reader) {}
 
-  void verifySchema(StructSchema expected);
-
   static DynamicValue::Reader getImpl(internal::StructReader reader, StructSchema::Member member);
 
   template <typename T>
@@ -357,8 +355,6 @@ private:
   inline Builder(StructSchema schema, internal::StructBuilder builder)
       : schema(schema), builder(builder) {}
 
-  void verifySchema(StructSchema expected);
-
   static DynamicValue::Builder getImpl(
       internal::StructBuilder builder, StructSchema::Member member);
   static DynamicStruct::Builder getObjectImpl(
@@ -425,8 +421,6 @@ private:
 
   Reader(ListSchema schema, internal::ListReader reader): schema(schema), reader(reader) {}
 
-  void verifySchema(ListSchema expectedSchema);
-
   template <typename T>
   friend struct internal::PointerHelpers;
   friend struct DynamicStruct;
@@ -468,8 +462,6 @@ private:
   internal::ListBuilder builder;
 
   Builder(ListSchema schema, internal::ListBuilder builder): schema(schema), builder(builder) {}
-
-  void verifySchema(ListSchema expectedSchema);
 
   template <typename T>
   friend struct internal::PointerHelpers;
@@ -880,14 +872,14 @@ template <typename T>
 typename T::Reader DynamicStruct::Reader::as() {
   static_assert(kind<T>() == Kind::STRUCT,
                 "DynamicStruct::Reader::as<T>() can only convert to struct types.");
-  verifySchema(Schema::from<T>());
+  schema.requireUsableAs<T>();
   return typename T::Reader(reader);
 }
 template <typename T>
 typename T::Builder DynamicStruct::Builder::as() {
   static_assert(kind<T>() == Kind::STRUCT,
                 "DynamicStruct::Builder::as<T>() can only convert to struct types.");
-  verifySchema(Schema::from<T>());
+  schema.requireUsableAs<T>();
   return typename T::Builder(builder);
 }
 
@@ -910,14 +902,14 @@ template <typename T>
 typename T::Reader DynamicList::Reader::as() {
   static_assert(kind<T>() == Kind::LIST,
                 "DynamicStruct::Reader::as<T>() can only convert to list types.");
-  verifySchema(Schema::from<T>());
+  schema.requireUsableAs<T>();
   return typename T::Reader(reader);
 }
 template <typename T>
 typename T::Builder DynamicList::Builder::as() {
   static_assert(kind<T>() == Kind::LIST,
                 "DynamicStruct::Builder::as<T>() can only convert to list types.");
-  verifySchema(Schema::from<T>());
+  schema.requireUsableAs<T>();
   return typename T::Builder(builder);
 }
 

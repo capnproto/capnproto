@@ -156,6 +156,7 @@ public:
   class Context: public ExceptionCallback {
   public:
     Context();
+    CAPNPROTO_DISALLOW_COPY(Context);
     virtual ~Context();
     virtual void addTo(Exception& exception) = 0;
 
@@ -171,19 +172,15 @@ public:
   template <typename Func>
   class ContextImpl: public Context {
   public:
-    inline ContextImpl(Func&& func): func(capnproto::move(func)) {}
+    inline ContextImpl(Func& func): func(func) {}
+    CAPNPROTO_DISALLOW_COPY(ContextImpl);
 
     void addTo(Exception& exception) override {
       func(exception);
     }
   private:
-    Func func;
+    Func& func;
   };
-
-  template <typename Func>
-  static ContextImpl<RemoveReference<Func>> context(Func&& func) {
-    return ContextImpl<RemoveReference<Func>>(capnproto::forward<Func>(func));
-  }
 
   template <typename... Params>
   static void addContextTo(Exception& exception, const char* file,
@@ -271,11 +268,11 @@ ArrayPtr<const char> operator*(const Stringifier&, Log::Severity severity);
   } while (false)
 
 #define CONTEXT(...) \
-  auto _capnpLoggingContext = ::capnproto::Log::context( \
-      [&](::capnproto::Exception& exception) { \
+  auto _capnpContextFunc = [&](::capnproto::Exception& exception) { \
         return ::capnproto::Log::addContextTo(exception, \
             __FILE__, __LINE__, #__VA_ARGS__, ##__VA_ARGS__); \
-      })
+      }; \
+  ::capnproto::Log::ContextImpl<decltype(_capnpContextFunc)> _capnpContext(_capnpContextFunc)
 
 #ifdef NDEBUG
 #define DLOG(...) do {} while (false)

@@ -27,6 +27,7 @@
 #include "test.capnp.h"
 #include <iostream>
 #include "blob.h"
+#include "dynamic.h"
 
 namespace capnproto {
 
@@ -75,6 +76,15 @@ void checkTestMessage(TestListDefaults::Reader reader);
 
 void checkTestMessageAllZero(TestAllTypes::Builder builder);
 void checkTestMessageAllZero(TestAllTypes::Reader reader);
+
+void initDynamicTestMessage(DynamicStruct::Builder builder);
+void initDynamicTestLists(DynamicStruct::Builder builder);
+void checkDynamicTestMessage(DynamicStruct::Builder builder);
+void checkDynamicTestLists(DynamicStruct::Builder builder);
+void checkDynamicTestMessage(DynamicStruct::Reader reader);
+void checkDynamicTestLists(DynamicStruct::Reader reader);
+void checkDynamicTestMessageAllZero(DynamicStruct::Builder builder);
+void checkDynamicTestMessageAllZero(DynamicStruct::Reader reader);
 
 }  // namespace internal
 }  // namespace capnproto

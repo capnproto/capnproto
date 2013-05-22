@@ -1956,7 +1956,7 @@ const word* StructReader::getUncheckedPointer(WirePointerCount ptrIndex) const {
 }
 
 bool StructReader::isPointerFieldNull(WirePointerCount ptrIndex) const {
-  return (pointers + ptrIndex)->isNull();
+  return ptrIndex >= pointerCount || (pointers + ptrIndex)->isNull();
 }
 
 WordCount64 StructReader::totalSize() const {

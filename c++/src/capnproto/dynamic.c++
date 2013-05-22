@@ -282,13 +282,6 @@ void DynamicUnion::Builder::setObjectDiscriminant(StructSchema::Member member) {
 
 // =======================================================================================
 
-void DynamicStruct::Reader::verifySchema(StructSchema expected) {
-  PRECOND(schema == expected, "Type mismatch when using DynamicStruct::Reader::as().");
-}
-void DynamicStruct::Builder::verifySchema(StructSchema expected) {
-  PRECOND(schema == expected, "Type mismatch when using DynamicStruct::Builder::as().");
-}
-
 DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Member member) {
   PRECOND(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   return getImpl(reader, member);
@@ -1318,15 +1311,6 @@ void DynamicList::Builder::copyFrom(std::initializer_list<DynamicValue::Reader> 
 
 DynamicList::Reader DynamicList::Builder::asReader() {
   return DynamicList::Reader(schema, builder.asReader());
-}
-
-void DynamicList::Reader::verifySchema(ListSchema expectedSchema) {
-  PRECOND(schema == expectedSchema,
-          "Type mismatch when using DynamicList::Reader::as().");
-}
-void DynamicList::Builder::verifySchema(ListSchema expectedSchema) {
-  PRECOND(schema == expectedSchema,
-          "Type mismatch when using DynamicList::Reader::as().");
 }
 
 // =======================================================================================

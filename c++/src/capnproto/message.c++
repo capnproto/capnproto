@@ -212,4 +212,20 @@ ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
   return arrayPtr(reinterpret_cast<word*>(result), size);
 }
 
+// -------------------------------------------------------------------
+
+FlatMessageBuilder::FlatMessageBuilder(ArrayPtr<word> array): array(array), allocated(false) {}
+FlatMessageBuilder::~FlatMessageBuilder() {}
+
+void FlatMessageBuilder::requireFilled() {
+  PRECOND(getSegmentsForOutput()[0].end() == array.end(),
+          "FlatMessageBuilder's buffer was too large.");
+}
+
+ArrayPtr<word> FlatMessageBuilder::allocateSegment(uint minimumSize) {
+  PRECOND(!allocated, "FlatMessageBuilder's buffer was not large enough.");
+  allocated = true;
+  return array;
+}
+
 }  // namespace capnproto

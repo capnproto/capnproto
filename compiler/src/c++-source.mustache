@@ -69,7 +69,8 @@ static const ::capnproto::internal::RawSchema::MemberInfo m_{{schemaId}}[] = {
 {{/schemaMembersByName}}
 };
 const ::capnproto::internal::RawSchema s_{{schemaId}} = {
-  b_{{schemaId}}.words, d_{{schemaId}}, m_{{schemaId}}, {{schemaDependencyCount}}, {{schemaMemberCount}}
+  b_{{schemaId}}.words, d_{{schemaId}}, m_{{schemaId}},
+  {{schemaDependencyCount}}, {{schemaMemberCount}}, nullptr
 };
 {{/typeSchema}}
 {{/fileTypes}}

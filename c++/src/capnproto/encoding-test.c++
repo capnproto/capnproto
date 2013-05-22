@@ -1307,6 +1307,34 @@ TEST(Encoding, ZeroOldObject) {
   checkTestMessageAllZero(oldSub2);
 }
 
+TEST(Encoding, Has) {
+  MallocMessageBuilder builder;
+
+  auto root = builder.initRoot<TestAllTypes>();
+
+  EXPECT_FALSE(root.hasTextField());
+  EXPECT_FALSE(root.hasDataField());
+  EXPECT_FALSE(root.hasStructField());
+  EXPECT_FALSE(root.hasInt32List());
+
+  EXPECT_FALSE(root.asReader().hasTextField());
+  EXPECT_FALSE(root.asReader().hasDataField());
+  EXPECT_FALSE(root.asReader().hasStructField());
+  EXPECT_FALSE(root.asReader().hasInt32List());
+
+  initTestMessage(root);
+
+  EXPECT_TRUE(root.hasTextField());
+  EXPECT_TRUE(root.hasDataField());
+  EXPECT_TRUE(root.hasStructField());
+  EXPECT_TRUE(root.hasInt32List());
+
+  EXPECT_TRUE(root.asReader().hasTextField());
+  EXPECT_TRUE(root.asReader().hasDataField());
+  EXPECT_TRUE(root.asReader().hasStructField());
+  EXPECT_TRUE(root.asReader().hasInt32List());
+}
+
 }  // namespace
 }  // namespace internal
 }  // namespace capnproto

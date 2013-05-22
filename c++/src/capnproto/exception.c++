@@ -66,9 +66,20 @@ Exception::Exception(const Exception& other) noexcept
     : file(other.file), line(other.line), nature(other.nature), durability(other.durability),
       description(str(other.description)), traceCount(other.traceCount) {
   memcpy(trace, other.trace, sizeof(trace[0]) * traceCount);
+
+  if (other.context != nullptr) {
+    context = heap<Context>(**other.context);
+  }
 }
 
 Exception::~Exception() noexcept {}
+
+Exception::Context::Context(const Context& other) noexcept
+    : file(other.file), line(other.line), description(str(other.description)) {
+  if (other.next != nullptr) {
+    next = heap<Context>(**other.next);
+  }
+}
 
 void Exception::wrapContext(const char* file, int line, Array<char>&& description) {
   context = heap<Context>(file, line, move(description), move(context));

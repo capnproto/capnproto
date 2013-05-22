@@ -30,6 +30,9 @@
 #include "../serialize.h"
 #include "../logging.h"
 #include "../io.h"
+#include "../schema-loader.h"
+#include "../dynamic.h"
+#include "../stringify.h"
 #include <unistd.h>
 #include <unordered_map>
 #include <vector>
@@ -207,18 +210,13 @@ inline Indent operator*(Stringifier, Indent i) { return i; }
 
 // =======================================================================================
 
-std::unordered_map<uint64_t, schema::Node::Reader> schemaMap;
+SchemaLoader schemaLoader;
 
-schema::Node::Reader findNode(uint64_t id) {
-  auto iter = schemaMap.find(id);
-  PRECOND(iter != schemaMap.end(), "Missing schema node.", hex(id));
-  return iter->second;
-}
-
-Text::Reader getUnqualifiedName(schema::Node::Reader node) {
-  auto parent = findNode(node.getScopeId());
-  for (auto nested: parent.getNestedNodes()) {
-    if (nested.getId() == node.getId()) {
+Text::Reader getUnqualifiedName(Schema schema) {
+  auto proto = schema.getProto();
+  auto parent = schemaLoader.get(proto.getScopeId());
+  for (auto nested: parent.getProto().getNestedNodes()) {
+    if (nested.getId() == proto.getId()) {
       return nested.getName();
     }
   }
@@ -226,39 +224,42 @@ Text::Reader getUnqualifiedName(schema::Node::Reader node) {
   return "(?)";
 }
 
-TextBlob nodeName(schema::Node::Reader target, schema::Node::Reader scope) {
-  std::vector<schema::Node::Reader> targetParents;
-  std::vector<schema::Node::Reader> scopeParts;
+TextBlob nodeName(Schema target, Schema scope) {
+  std::vector<Schema> targetParents;
+  std::vector<Schema> scopeParts;
 
   {
-    schema::Node::Reader parent = target;
-    while (parent.getScopeId() != 0) {
-      parent = findNode(parent.getScopeId());
+    Schema parent = target;
+    while (parent.getProto().getScopeId() != 0) {
+      parent = schemaLoader.get(parent.getProto().getScopeId());
       targetParents.push_back(parent);
     }
   }
 
   {
-    schema::Node::Reader parent = scope;
-    scopeParts.push_back(scope);
-    while (parent.getScopeId() != 0) {
-      parent = findNode(parent.getScopeId());
+    Schema parent = scope;
+    scopeParts.push_back(parent);
+    while (parent.getProto().getScopeId() != 0) {
+      parent = schemaLoader.get(parent.getProto().getScopeId());
       scopeParts.push_back(parent);
     }
   }
 
   // Remove common scope.
   while (!scopeParts.empty() && !targetParents.empty() &&
-         scopeParts.back().getId() == targetParents.back().getId()) {
+         scopeParts.back() == targetParents.back()) {
     scopeParts.pop_back();
     targetParents.pop_back();
   }
 
+  // TODO(someday):  This is broken in that we aren't checking for shadowing.
+
   TextBlob path = text();
   while (!targetParents.empty()) {
     auto part = targetParents.back();
-    if (part.getScopeId() == 0) {
-      path = text(move(path), "import \"", part.getDisplayName(), "\".");
+    auto proto = part.getProto();
+    if (proto.getScopeId() == 0) {
+      path = text(move(path), "import \"", proto.getDisplayName(), "\".");
     } else {
       path = text(move(path), getUnqualifiedName(part), ".");
     }
@@ -268,7 +269,7 @@ TextBlob nodeName(schema::Node::Reader target, schema::Node::Reader scope) {
   return text(move(path), getUnqualifiedName(target));
 }
 
-TextBlob genType(schema::Type::Reader type, schema::Node::Reader scope) {
+TextBlob genType(schema::Type::Reader type, Schema scope) {
   auto body = type.getBody();
   switch (body.which()) {
     case schema::Type::Body::VOID_TYPE: return text("Void");
@@ -287,10 +288,12 @@ TextBlob genType(schema::Type::Reader type, schema::Node::Reader scope) {
     case schema::Type::Body::DATA_TYPE: return text("Data");
     case schema::Type::Body::LIST_TYPE:
       return text("List(", genType(body.getListType(), scope), ")");
-    case schema::Type::Body::ENUM_TYPE: return nodeName(findNode(body.getEnumType()), scope);
-    case schema::Type::Body::STRUCT_TYPE: return nodeName(findNode(body.getStructType()), scope);
+    case schema::Type::Body::ENUM_TYPE:
+      return nodeName(scope.getDependency(body.getEnumType()), scope);
+    case schema::Type::Body::STRUCT_TYPE:
+      return nodeName(scope.getDependency(body.getStructType()), scope);
     case schema::Type::Body::INTERFACE_TYPE:
-      return nodeName(findNode(body.getInterfaceType()), scope);
+      return nodeName(scope.getDependency(body.getInterfaceType()), scope);
     case schema::Type::Body::OBJECT_TYPE: return text("Object");
   }
   return text();
@@ -336,18 +339,18 @@ bool isEmptyValue(schema::Value::Reader value) {
     case schema::Value::Body::UINT64_VALUE: return body.getUint64Value() == 0;
     case schema::Value::Body::FLOAT32_VALUE: return body.getFloat32Value() == 0;
     case schema::Value::Body::FLOAT64_VALUE: return body.getFloat64Value() == 0;
-    case schema::Value::Body::TEXT_VALUE: return body.getTextValue().size() == 0;
-    case schema::Value::Body::DATA_VALUE: return body.getDataValue().size() == 0;
-    case schema::Value::Body::LIST_VALUE: return true;  // TODO(soon): list values
+    case schema::Value::Body::TEXT_VALUE: return !body.hasTextValue();
+    case schema::Value::Body::DATA_VALUE: return !body.hasDataValue();
+    case schema::Value::Body::LIST_VALUE: return !body.hasListValue();
     case schema::Value::Body::ENUM_VALUE: return body.getEnumValue() == 0;
-    case schema::Value::Body::STRUCT_VALUE: return true;  // TODO(soon): struct values
+    case schema::Value::Body::STRUCT_VALUE: return !body.hasStructValue();
     case schema::Value::Body::INTERFACE_VALUE: return true;
     case schema::Value::Body::OBJECT_VALUE: return true;
   }
   return true;
 }
 
-TextBlob genValue(schema::Type::Reader type, schema::Value::Reader value) {
+TextBlob genValue(schema::Type::Reader type, schema::Value::Reader value, Schema scope) {
   auto body = value.getBody();
   switch (body.which()) {
     case schema::Value::Body::VOID_VALUE: return text("void");
@@ -362,25 +365,17 @@ TextBlob genValue(schema::Type::Reader type, schema::Value::Reader value) {
     case schema::Value::Body::UINT64_VALUE: return text(body.getUint64Value());
     case schema::Value::Body::FLOAT32_VALUE: return text(body.getFloat32Value());
     case schema::Value::Body::FLOAT64_VALUE: return text(body.getFloat64Value());
-    case schema::Value::Body::TEXT_VALUE: return text("TODO");  // TODO(soon):  escape strings
-    case schema::Value::Body::DATA_VALUE: return text("TODO");  // TODO(soon):  escape strings
+    case schema::Value::Body::TEXT_VALUE: return stringify(body.getTextValue());
+    case schema::Value::Body::DATA_VALUE: return stringify(body.getDataValue());
     case schema::Value::Body::LIST_VALUE: {
       PRECOND(type.getBody().which() == schema::Type::Body::LIST_TYPE, "type/value mismatch");
-      // TODO(soon):  Requires dynamic message reading.
-      return text("TODO");
-//      int i = 0;
-//      return text("[",
-//                  FOR_EACH(body.getListValue(), element) {
-//                    return text(i++ > 0 ? ", " : "",
-//                        genValue(type.getBody().getListType(), element));
-//                  },
-//                  "]");
+      auto value = body.getListValue<DynamicList>(
+          ListSchema::of(type.getBody().getListType(), scope));
+      return text(stringify(value));
     }
     case schema::Value::Body::ENUM_VALUE: {
       PRECOND(type.getBody().which() == schema::Type::Body::ENUM_TYPE, "type/value mismatch");
-      auto enumNode = findNode(type.getBody().getEnumType());
-      PRECOND(enumNode.getBody().which() == schema::Node::Body::ENUM_NODE,
-              "schema.Type claimed to be an enum, but referred to some other node type.");
+      auto enumNode = scope.getDependency(type.getBody().getEnumType()).asEnum().getProto();
       auto enumType = enumNode.getBody().getEnumNode();
       auto enumerants = enumType.getEnumerants();
       PRECOND(body.getEnumValue() < enumerants.size(),
@@ -389,8 +384,9 @@ TextBlob genValue(schema::Type::Reader type, schema::Value::Reader value) {
     }
     case schema::Value::Body::STRUCT_VALUE: {
       PRECOND(type.getBody().which() == schema::Type::Body::STRUCT_TYPE, "type/value mismatch");
-      // TODO(soon):  Requires dynamic message reading.
-      return text("TODO");
+      auto value = body.getStructValue<DynamicStruct>(
+          scope.getDependency(type.getBody().getStructType()).asStruct());
+      return text(stringify(value));
     }
     case schema::Value::Body::INTERFACE_VALUE: {
       return text("");
@@ -403,23 +399,24 @@ TextBlob genValue(schema::Type::Reader type, schema::Value::Reader value) {
 }
 
 TextBlob genAnnotation(schema::Annotation::Reader annotation,
-                       schema::Node::Reader scope,
+                       Schema scope,
                        const char* prefix = " ", const char* suffix = "") {
-  auto decl = findNode(annotation.getId());
-  auto body = decl.getBody();
+  auto decl = schemaLoader.get(annotation.getId());
+  auto body = decl.getProto().getBody();
   PRECOND(body.which() == schema::Node::Body::ANNOTATION_NODE);
   auto annDecl = body.getAnnotationNode();
 
   // TODO:  Don't use displayName.
   return text(prefix, "$", nodeName(decl, scope), "(",
-              genValue(annDecl.getType(), annotation.getValue()), ")", suffix);
+              genValue(annDecl.getType(), annotation.getValue(), scope), ")", suffix);
 }
 
-TextBlob genAnnotations(List<schema::Annotation>::Reader list, schema::Node::Reader scope) {
+TextBlob genAnnotations(List<schema::Annotation>::Reader list, Schema scope) {
   return FOR_EACH(list, ann) { return genAnnotation(ann, scope); };
 }
-TextBlob genAnnotations(schema::Node::Reader node) {
-  return genAnnotations(node.getAnnotations(), findNode(node.getScopeId()));
+TextBlob genAnnotations(Schema schema) {
+  auto proto = schema.getProto();
+  return genAnnotations(proto.getAnnotations(), schemaLoader.get(proto.getScopeId()));
 }
 
 const char* elementSizeName(schema::ElementSize size) {
@@ -437,7 +434,7 @@ const char* elementSizeName(schema::ElementSize size) {
 }
 
 TextBlob genStructMember(schema::StructNode::Member::Reader member,
-                   schema::Node::Reader scope, Indent indent, int unionTag = -1) {
+                         Schema scope, Indent indent, int unionTag = -1) {
   switch (member.getBody().which()) {
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getBody().getFieldMember();
@@ -445,7 +442,7 @@ TextBlob genStructMember(schema::StructNode::Member::Reader member,
       return text(indent, member.getName(), " @", member.getOrdinal(),
                   " :", genType(field.getType(), scope),
                   isEmptyValue(field.getDefaultValue()) ? text("") :
-                      text(" = ", genValue(field.getType(), field.getDefaultValue())),
+                      text(" = ", genValue(field.getType(), field.getDefaultValue(), scope)),
                   genAnnotations(member.getAnnotations(), scope),
                   ";  # ", size == -1 ? text("ptr[", field.getOffset(), "]")
                                       : text("bits[", field.getOffset() * size, ", ",
@@ -469,22 +466,23 @@ TextBlob genStructMember(schema::StructNode::Member::Reader member,
   return text();
 }
 
-TextBlob genNestedDecls(schema::Node::Reader node, Indent indent);
+TextBlob genNestedDecls(Schema schema, Indent indent);
 
-TextBlob genDecl(schema::Node::Reader node, Text::Reader name, uint64_t scopeId, Indent indent) {
-  if (node.getScopeId() != scopeId) {
+TextBlob genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent indent) {
+  auto proto = schema.getProto();
+  if (proto.getScopeId() != scopeId) {
     // This appears to be an alias for something declared elsewhere.
     FAIL_PRECOND("Aliases not implemented.");
   }
 
-  switch (node.getBody().which()) {
+  switch (proto.getBody().which()) {
     case schema::Node::Body::FILE_NODE:
       FAIL_PRECOND("Encountered nested file node.");
       break;
     case schema::Node::Body::STRUCT_NODE: {
-      auto body = node.getBody().getStructNode();
+      auto body = proto.getBody().getStructNode();
       return text(
-          indent, "struct ", name, " @0x", hex(node.getId()), genAnnotations(node), " {  # ",
+          indent, "struct ", name, " @0x", hex(proto.getId()), genAnnotations(schema), " {  # ",
           body.getDataSectionWordSize() * 8, " bytes, ",
           body.getPointerSectionSize(), " ptrs",
           body.getPreferredListEncoding() == schema::ElementSize::INLINE_COMPOSITE
@@ -492,28 +490,28 @@ TextBlob genDecl(schema::Node::Reader node, Text::Reader name, uint64_t scopeId,
               : text(", packed as ", elementSizeName(body.getPreferredListEncoding())),
           "\n",
           FOR_EACH(body.getMembers(), member) {
-            return genStructMember(member, node, indent.next());
+            return genStructMember(member, schema, indent.next());
           },
-          genNestedDecls(node, indent.next()),
+          genNestedDecls(schema, indent.next()),
           indent, "}\n");
     }
     case schema::Node::Body::ENUM_NODE: {
-      auto body = node.getBody().getEnumNode();
+      auto body = proto.getBody().getEnumNode();
       uint i = 0;
       return text(
-          indent, "enum ", name, " @0x", hex(node.getId()), genAnnotations(node), " {\n",
+          indent, "enum ", name, " @0x", hex(proto.getId()), genAnnotations(schema), " {\n",
           FOR_EACH(body.getEnumerants(), enumerant) {
             return text(indent.next(), enumerant.getName(), " @", i++,
-                        genAnnotations(enumerant.getAnnotations(), node), ";\n");
+                        genAnnotations(enumerant.getAnnotations(), schema), ";\n");
           },
-          genNestedDecls(node, indent.next()),
+          genNestedDecls(schema, indent.next()),
           indent, "}\n");
     }
     case schema::Node::Body::INTERFACE_NODE: {
-      auto body = node.getBody().getInterfaceNode();
+      auto body = proto.getBody().getInterfaceNode();
       uint i = 0;
       return text(
-          indent, "interface ", name, " @0x", hex(node.getId()), genAnnotations(node), " {\n",
+          indent, "interface ", name, " @0x", hex(proto.getId()), genAnnotations(schema), " {\n",
           FOR_EACH(body.getMethods(), method) {
             int j = 0;
             return text(
@@ -523,26 +521,26 @@ TextBlob genDecl(schema::Node::Reader node, Text::Reader name, uint64_t scopeId,
                       !isEmptyValue(param.getDefaultValue());
                   return text(
                       j++ > 0 ? ", " : "",
-                      param.getName(), ": ", genType(param.getType(), node),
+                      param.getName(), ": ", genType(param.getType(), schema),
                       hasDefault
-                          ? text(" = ", genValue(param.getType(), param.getDefaultValue()))
+                          ? text(" = ", genValue(param.getType(), param.getDefaultValue(), schema))
                           : text(),
-                      genAnnotations(param.getAnnotations(), node));
+                      genAnnotations(param.getAnnotations(), schema));
                 },
-                ") :", genType(method.getReturnType(), node),
-                genAnnotations(method.getAnnotations(), node), ";\n");
+                ") :", genType(method.getReturnType(), schema),
+                genAnnotations(method.getAnnotations(), schema), ";\n");
           },
-          genNestedDecls(node, indent.next()),
+          genNestedDecls(schema, indent.next()),
           indent, "}\n");
     }
     case schema::Node::Body::CONST_NODE: {
-      auto body = node.getBody().getConstNode();
+      auto body = proto.getBody().getConstNode();
       return text(
-          indent, "const ", name, " @0x", hex(node.getId()), " :", genType(body.getType(), node),
-          " = ", genValue(body.getType(), body.getValue()), ";\n");
+          indent, "const ", name, " @0x", hex(proto.getId()), " :", genType(body.getType(), schema),
+          " = ", genValue(body.getType(), body.getValue(), schema), ";\n");
     }
     case schema::Node::Body::ANNOTATION_NODE: {
-      auto body = node.getBody().getAnnotationNode();
+      auto body = proto.getBody().getAnnotationNode();
       CappedArray<const char*, 11> targets;
       uint i = 0;
       if (body.getTargetsFile()) targets[i++] = "file";
@@ -563,29 +561,31 @@ TextBlob genDecl(schema::Node::Reader node, Text::Reader name, uint64_t scopeId,
         targets.setSize(i);
       }
       return text(
-          indent, "annotation ", name, " @0x", hex(node.getId()),
+          indent, "annotation ", name, " @0x", hex(proto.getId()),
           " (", strArray(targets, ", "), ") :",
-          genType(body.getType(), node), genAnnotations(node), ";\n");
+          genType(body.getType(), schema), genAnnotations(schema), ";\n");
     }
   }
 
   return text();
 }
 
-TextBlob genNestedDecls(schema::Node::Reader node, Indent indent) {
-  return FOR_EACH(node.getNestedNodes(), nested) {
-    return genDecl(findNode(nested.getId()), nested.getName(), node.getId(), indent);
+TextBlob genNestedDecls(Schema schema, Indent indent) {
+  uint64_t id = schema.getProto().getId();
+  return FOR_EACH(schema.getProto().getNestedNodes(), nested) {
+    return genDecl(schemaLoader.get(nested.getId()), nested.getName(), id, indent);
   };
 }
 
-TextBlob genFile(schema::Node::Reader file) {
-  auto body = file.getBody();
+TextBlob genFile(Schema file) {
+  auto proto = file.getProto();
+  auto body = proto.getBody();
   PRECOND(body.which() == schema::Node::Body::FILE_NODE, "Expected a file node.", body.which());
 
   return text(
-    "# ", file.getDisplayName(), "\n",
-    "@0x", hex(file.getId()), ";\n",
-    FOR_EACH(file.getAnnotations(), ann) { return genAnnotation(ann, file, "", ";\n"); },
+    "# ", proto.getDisplayName(), "\n",
+    "@0x", hex(proto.getId()), ";\n",
+    FOR_EACH(proto.getAnnotations(), ann) { return genAnnotation(ann, file, "", ";\n"); },
     genNestedDecls(file, Indent(0)));
 }
 
@@ -596,14 +596,14 @@ int main(int argc, char* argv[]) {
   auto request = reader.getRoot<schema::CodeGeneratorRequest>();
 
   for (auto node: request.getNodes()) {
-    schemaMap[node.getId()] = node;
+    schemaLoader.load(node);
   }
 
   FdOutputStream rawOut(STDOUT_FILENO);
   BufferedOutputStreamWrapper out(rawOut);
 
   for (auto fileId: request.getRequestedFiles()) {
-    genFile(findNode(fileId)).writeTo(out);
+    genFile(schemaLoader.get(fileId)).writeTo(out);
   }
 
   return 0;

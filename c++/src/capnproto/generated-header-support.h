@@ -141,6 +141,9 @@ struct RawSchema {
   struct MemberInfo {
     uint16_t unionIndex;  // 0 = not in a union, >0 = parent union's index + 1
     uint16_t index;       // index of the member
+
+    MemberInfo() = default;
+    inline MemberInfo(uint16_t unionIndex, uint16_t index): unionIndex(unionIndex), index(index) {}
   };
 
   const MemberInfo* membersByName;
@@ -150,6 +153,11 @@ struct RawSchema {
   uint32_t dependencyCount;
   uint32_t memberCount;
   // Sizes of above tables.
+
+  const RawSchema* canCastTo;
+  // Points to the RawSchema of a compiled-in type to which it is safe to cast any DynamicValue
+  // with this schema.  This is null for all compiled-in types; it is only set by SchemaLoader on
+  // dynamically-loaded types.
 };
 
 template <typename T>

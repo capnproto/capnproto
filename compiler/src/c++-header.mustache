@@ -168,6 +168,7 @@ public:
   inline {{fieldType}} get{{fieldTitleCase}}();
 {{/fieldIsPrimitive}}
 {{^fieldIsPrimitive}}
+  inline bool has{{fieldTitleCase}}();
 {{^fieldIsGenericObject}}
   inline {{fieldType}}::Reader get{{fieldTitleCase}}();
 {{/fieldIsGenericObject}}
@@ -218,6 +219,7 @@ public:
   inline void set{{fieldTitleCase}}({{fieldType}} value);
 {{/fieldIsPrimitive}}
 {{^fieldIsPrimitive}}
+  inline bool has{{fieldTitleCase}}();
 {{^fieldIsGenericObject}}
   inline {{fieldType}}::Builder get{{fieldTitleCase}}();
   inline void set{{fieldTitleCase}}({{fieldType}}::Reader other);
@@ -310,8 +312,16 @@ inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}({{fieldType}} value
 }
 {{/fieldIsPrimitive}}
 {{! ------------------------------------------------------------------------------------------- }}
-{{^fieldIsGenericObject}}
 {{^fieldIsPrimitive}}
+inline bool {{typeFullName}}::Reader::has{{fieldTitleCase}}() {
+  return !_reader.isPointerFieldNull({{fieldOffset}} * ::capnproto::POINTERS);
+}
+
+inline bool {{typeFullName}}::Builder::has{{fieldTitleCase}}() {
+  return !_builder.isPointerFieldNull({{fieldOffset}} * ::capnproto::POINTERS);
+}
+
+{{^fieldIsGenericObject}}
 inline {{fieldType}}::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
 {{#fieldUnion}}
   CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
@@ -375,7 +385,6 @@ inline {{fieldType}}::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(
 }
 
 {{/fieldIsStruct}}
-{{/fieldIsPrimitive}}
 {{/fieldIsGenericObject}}
 {{! ------------------------------------------------------------------------------------------- }}
 {{#fieldIsGenericObject}}
@@ -450,6 +459,7 @@ inline typename T::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(Par
 }
 
 {{/fieldIsGenericObject}}
+{{/fieldIsPrimitive}}
 {{/typeFields}}
 {{/typeStructOrUnion}}
 {{/fileTypes}}

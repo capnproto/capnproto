@@ -75,6 +75,14 @@ public:
   // you want to check if two Schemas represent the same type (but possibly different versions of
   // it), compare their IDs instead.
 
+  template <typename T>
+  void requireUsableAs();
+  // Throws an exception if a value with this Schema cannot safely be cast to a native value of
+  // the given type.  This passes if either:
+  // - *this == from<T>()
+  // - This schema was loaded with SchemaLoader, the type ID matches typeId<T>(), and
+  //   loadCompiledTypeAndDependencies<T>() was called on the SchemaLoader.
+
 private:
   const internal::RawSchema* raw;
 
@@ -84,9 +92,13 @@ private:
     return Schema(&internal::rawSchema<T>());
   }
 
+  void requireUsableAs(const internal::RawSchema* expected);
+
   friend class StructSchema;
   friend class EnumSchema;
   friend class InterfaceSchema;
+  friend class ListSchema;
+  friend class SchemaLoader;
 };
 
 // -------------------------------------------------------------------
@@ -356,6 +368,9 @@ public:
   inline bool operator==(const ListSchema& other) const;
   inline bool operator!=(const ListSchema& other) const { return !(*this == other); }
 
+  template <typename T>
+  void requireUsableAs();
+
 private:
   schema::Type::Body::Which elementType;
   uint8_t nestingDepth;  // 0 for T, 1 for List(T), 2 for List(List(T)), ...
@@ -374,6 +389,8 @@ private:
   template <typename T> static inline ListSchema fromImpl() {
     return FromImpl<T>::get();
   }
+
+  void requireUsableAs(ListSchema expected);
 
   friend class Schema;
 };
@@ -395,6 +412,11 @@ template <> inline schema::Type::Body::Which Schema::from<float>() { return sche
 template <> inline schema::Type::Body::Which Schema::from<double>() { return schema::Type::Body::FLOAT64_TYPE; }
 template <> inline schema::Type::Body::Which Schema::from<Text>() { return schema::Type::Body::TEXT_TYPE; }
 template <> inline schema::Type::Body::Which Schema::from<Data>() { return schema::Type::Body::DATA_TYPE; }
+
+template <typename T>
+inline void Schema::requireUsableAs() {
+  requireUsableAs(&internal::rawSchema<T>());
+}
 
 inline bool StructSchema::Member::operator==(const Member& other) const {
   return parent == other.parent && unionIndex == other.unionIndex && index == other.index;
@@ -427,6 +449,13 @@ inline schema::Type::Body::Which ListSchema::whichElementType() const {
 inline bool ListSchema::operator==(const ListSchema& other) const {
   return elementType == other.elementType && nestingDepth == other.nestingDepth &&
       elementSchema == other.elementSchema;
+}
+
+template <typename T>
+inline void ListSchema::requireUsableAs() {
+  static_assert(kind<T>() == Kind::LIST,
+                "ListSchema::requireUsableAs<T>() requires T is a list type.");
+  requireUsableAs(Schema::from<T>());
 }
 
 template <typename T>

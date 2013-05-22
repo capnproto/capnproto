@@ -175,7 +175,7 @@ private:
 };
 
 template <typename RootType>
-static typename RootType::Reader readMessageUnchecked(const word* data);
+typename RootType::Reader readMessageUnchecked(const word* data);
 // IF THE INPUT IS INVALID, THIS MAY CRASH, CORRUPT MEMORY, CREATE A SECURITY HOLE IN YOUR APP,
 // MURDER YOUR FIRST-BORN CHILD, AND/OR BRING ABOUT ETERNAL DAMNATION ON ALL OF HUMANITY.  DO NOT
 // USE UNLESS YOU UNDERSTAND THE CONSEQUENCES.
@@ -198,12 +198,16 @@ static typename RootType::Reader readMessageUnchecked(const word* data);
 //    MyMessage::Reader reader = Message<MyMessage>::readMessageUnchecked(MyMessage::DEFAULT.words);
 //
 // To sanitize a message from an untrusted source such that it can be safely passed to
-// readMessageUnchecked(), construct a MessageBuilder whose first segment is large enough to store
-// the message, and then use MessageBuilder::setRoot() to copy the message in.  The process of
-// copying the message implicitly validates all pointers.
+// readMessageUnchecked(), use copyToUnchecked().
+
+template <typename Reader>
+void copyToUnchecked(Reader&& reader, ArrayPtr<word> uncheckedBuffer);
+// Copy the content of the given reader into the given buffer, such that it can safely be passed to
+// readMessageUnchecked().  The buffer's size must be exactly reader.totalSizeInWords() + 1,
+// otherwise an exception will be thrown.
 
 template <typename Type>
-static typename Type::Reader defaultValue();
+typename Type::Reader defaultValue();
 // Get a default instance of the given struct or list type.
 //
 // TODO(cleanup):  Find a better home for this function?
@@ -296,6 +300,25 @@ private:
   std::unique_ptr<MoreSegments> moreSegments;
 };
 
+class FlatMessageBuilder: public MessageBuilder {
+  // A message builder implementation which allocates from a single flat array, throwing an
+  // exception if it runs out of space.
+
+public:
+  explicit FlatMessageBuilder(ArrayPtr<word> array);
+  CAPNPROTO_DISALLOW_COPY(FlatMessageBuilder);
+  virtual ~FlatMessageBuilder();
+
+  void requireFilled();
+  // Throws an exception if the flat array is not exactly full.
+
+  virtual ArrayPtr<word> allocateSegment(uint minimumSize) override;
+
+private:
+  ArrayPtr<word> array;
+  bool allocated;
+};
+
 // =======================================================================================
 // implementation details
 
@@ -331,6 +354,13 @@ inline typename RootType::Builder MessageBuilder::getRoot() {
 template <typename RootType>
 typename RootType::Reader readMessageUnchecked(const word* data) {
   return typename RootType::Reader(internal::StructReader::readRootUnchecked(data));
+}
+
+template <typename Reader>
+void copyToUnchecked(Reader&& reader, ArrayPtr<word> uncheckedBuffer) {
+  FlatMessageBuilder builder(uncheckedBuffer);
+  builder.setRoot(capnproto::forward<Reader>(reader));
+  builder.requireFilled();
 }
 
 template <typename Type>

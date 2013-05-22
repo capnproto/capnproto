@@ -65,6 +65,7 @@ public:
   Exception(Nature nature, Durability durability, const char* file, int line,
             Array<char> description = nullptr) noexcept;
   Exception(const Exception& other) noexcept;
+  Exception(Exception&& other) = default;
   ~Exception() noexcept;
 
   const char* getFile() const { return file; }
@@ -83,6 +84,7 @@ public:
 
     Context(const char* file, int line, Array<char>&& description, Maybe<Own<Context>>&& next)
         : file(file), line(line), description(move(description)), next(move(next)) {}
+    Context(const Context& other) noexcept;
   };
 
   inline Maybe<const Context&> getContext() const {
@@ -125,6 +127,7 @@ class ExceptionCallback {
 
 public:
   ExceptionCallback();
+  CAPNPROTO_DISALLOW_COPY(ExceptionCallback);
   virtual ~ExceptionCallback();
 
   virtual void onRecoverableException(Exception&& exception);
@@ -160,6 +163,7 @@ public:
 
   public:
     ScopedRegistration(ExceptionCallback& callback);
+    CAPNPROTO_DISALLOW_COPY(ScopedRegistration);
     ~ScopedRegistration();
 
     inline ExceptionCallback& getCallback() { return callback; }
