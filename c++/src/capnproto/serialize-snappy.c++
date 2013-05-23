@@ -144,7 +144,7 @@ SnappyOutputStream::~SnappyOutputStream() {
       try {
         flush();
       } catch (...) {
-        // TODO: report secondary faults
+        // TODO(someday): report secondary faults
       }
     } else {
       flush();

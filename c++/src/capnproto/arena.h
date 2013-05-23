@@ -145,7 +145,7 @@ public:
   // the VALIDATE_INPUT() macro which may throw an exception; if it return normally, the caller
   // will need to continue with default values.
 
-  // TODO:  Methods to deal with bundled capabilities.
+  // TODO(someday):  Methods to deal with bundled capabilities.
 };
 
 class ReaderArena final: public Arena {
@@ -187,7 +187,7 @@ public:
   // portion of each segment, whereas tryGetSegment() returns something that includes
   // not-yet-allocated space.
 
-  // TODO:  Methods to deal with bundled capabilities.
+  // TODO(someday):  Methods to deal with bundled capabilities.
 
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
@@ -262,8 +262,8 @@ inline word* SegmentBuilder::allocate(WordCount amount) {
   if (amount > intervalLength(pos, ptr.end())) {
     return nullptr;
   } else {
-    // TODO:  Atomic increment, backtracking if we go over, would make this thread-safe.  How much
-    //   would it cost in the single-threaded case?  Is it free?  Benchmark it.
+    // TODO(someday):  Atomic increment, backtracking if we go over, would make this thread-safe.
+    //   How much would it cost in the single-threaded case?  Is it free?  Benchmark it.
     word* result = pos;
     pos += amount;
     return result;

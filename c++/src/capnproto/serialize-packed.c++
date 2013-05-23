@@ -382,7 +382,7 @@ void PackedOutputStream::write(const void* src, size_t size) {
       // Count the number of consecutive words in the input which have no more than a single
       // zero-byte.  We look for at least two zeros because that's the point where our compression
       // scheme becomes a net win.
-      // TODO:  Maybe look for three zeros?  Compressing a two-zero word is a loss if the
+      // TODO(perf):  Maybe look for three zeros?  Compressing a two-zero word is a loss if the
       //   following word has no zeros.
       const uint8_t* runStart = in;
 

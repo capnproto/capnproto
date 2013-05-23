@@ -29,7 +29,6 @@ namespace benchmark {
 namespace capnp {
 
 int32_t makeExpression(Expression::Builder exp, uint depth) {
-  // TODO:  Operation_RANGE or something.
   exp.setOp((Operation)(fastRand((int)Operation::MODULUS + 1)));
 
   uint32_t left, right;

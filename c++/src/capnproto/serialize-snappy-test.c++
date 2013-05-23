@@ -253,7 +253,7 @@ TEST(Snappy, RoundTripTwoMessages) {
   EXPECT_TRUE(pipe.allRead());
 }
 
-// TODO:  Test error cases.
+// TODO(test):  Test error cases.
 
 }  // namespace
 }  // namespace internal

@@ -324,7 +324,7 @@ TEST(Serialize, RejectHugeMessage) {
   }
 }
 
-// TODO:  Test error cases.
+// TODO(test):  Test error cases.
 
 }  // namespace
 }  // namespace internal

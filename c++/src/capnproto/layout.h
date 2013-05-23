@@ -52,7 +52,7 @@ class SegmentBuilder;
 // =============================================================================
 
 enum class FieldSize: uint8_t {
-  // TODO:  Rename to FieldLayout or maybe ValueLayout.
+  // TODO(cleanup):  Rename to FieldLayout or maybe ValueLayout.
 
   // Notice that each member of this enum, when representing a list element size, represents a
   // size that is greater than or equal to the previous members, since INLINE_COMPOSITE is used
@@ -271,7 +271,7 @@ class WireValue {
   // Wraps a primitive value as it appears on the wire.  Namely, values are little-endian on the
   // wire, because little-endian is the most common endianness in modern CPUs.
   //
-  // TODO:  On big-endian systems, inject byte-swapping here.  Most big-endian CPUs implement
+  // TODO(soon):  On big-endian systems, inject byte-swapping here.  Most big-endian CPUs implement
   //   dedicated instructions for this, so use those rather than writing a bunch of shifts and
   //   masks.  Note that GCC has e.g. __builtin__bswap32() for this.
   //
@@ -495,7 +495,7 @@ private:
   int nestingLimit;
   // Limits the depth of message structures to guard against stack-overflow-based DoS attacks.
   // Once this reaches zero, further pointers will be pruned.
-  // TODO:  Limit to 8 bits for better alignment?
+  // TODO(perf):  Limit to 8 bits for better alignment?
 
   inline StructReader(SegmentReader* segment, const void* data, const WirePointer* pointers,
                       BitCount dataSize, WirePointerCount pointerCount, BitCount8 bit0Offset,

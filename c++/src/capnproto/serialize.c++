@@ -167,7 +167,8 @@ InputStreamMessageReader::InputStreamMessageReader(
   }
 
   if (scratchSpace.size() < totalWords) {
-    // TODO:  Consider allocating each segment as a separate chunk to reduce memory fragmentation.
+    // TODO(perf):  Consider allocating each segment as a separate chunk to reduce memory
+    //   fragmentation.
     ownedSpace = newArray<word>(totalWords);
     scratchSpace = ownedSpace;
   }
@@ -203,7 +204,7 @@ InputStreamMessageReader::~InputStreamMessageReader() {
       try {
         inputStream.skip(allEnd - readPos);
       } catch (...) {
-        // TODO:  Devise some way to report secondary errors during unwind.
+        // TODO(someday):  Devise some way to report secondary errors during unwind.
       }
     } else {
       inputStream.skip(allEnd - readPos);

@@ -406,7 +406,6 @@ TextBlob genAnnotation(schema::Annotation::Reader annotation,
   PRECOND(body.which() == schema::Node::Body::ANNOTATION_NODE);
   auto annDecl = body.getAnnotationNode();
 
-  // TODO:  Don't use displayName.
   return text(prefix, "$", nodeName(decl, scope), "(",
               genValue(annDecl.getType(), annotation.getValue(), scope), ")", suffix);
 }

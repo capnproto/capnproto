@@ -73,7 +73,6 @@ void randomCar(Car::Builder car) {
   car.setMake(MAKES[fastRand(sizeof(MAKES) / sizeof(MAKES[0]))]);
   car.setModel(MODELS[fastRand(sizeof(MODELS) / sizeof(MODELS[0]))]);
 
-  // TODO: Color_RANGE or something.
   car.setColor((Color)fastRand((uint)Color::SILVER + 1));
   car.setSeats(2 + fastRand(6));
   car.setDoors(2 + fastRand(3));

@@ -127,13 +127,13 @@ private:
   sem_t semaphore;
 };
 
+// TODO(cleanup):  Use SYSCALL(), get rid of this exception class.
 class OsException: public std::exception {
 public:
   OsException(int error): error(error) {}
   ~OsException() noexcept {}
 
   const char* what() const noexcept override {
-    // TODO:  Use strerror_r or whatever for thread-safety.  Ugh.
     return strerror(error);
   }
 

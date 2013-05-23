@@ -178,7 +178,7 @@ struct WirePointer {
   CAPNPROTO_ALWAYS_INLINE(bool isNull() const) {
     // If the upper 32 bits are zero, this is a pointer to an empty struct.  We consider that to be
     // our "null" value.
-    // TODO:  Maybe this would be faster, but violates aliasing rules; does it matter?:
+    // TODO(perf):  Maybe this would be faster, but violates aliasing rules; does it matter?:
     //    return *reinterpret_cast<const uint64_t*>(this) == 0;
     return (offsetAndKind.get() == 0) & (upper32Bits == 0);
   }

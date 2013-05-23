@@ -62,9 +62,9 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
     }
   }
 
-  // TODO:  Lock a mutex so that reading is thread-safe.  Take a reader lock during the first
-  //   lookup, unlock it before calling getSegment(), then take a writer lock to update the map.
-  //   Bleh, lazy initialization is sad.
+  // TODO(someday):  Lock a mutex so that reading is thread-safe.  Take a reader lock during the
+  //   first lookup, unlock it before calling getSegment(), then take a writer lock to update the
+  //   map.  Bleh, lazy initialization is sad.
 
   if (moreSegments != nullptr) {
     auto iter = moreSegments->find(id.value);
@@ -108,8 +108,8 @@ SegmentBuilder* BuilderArena::getSegment(SegmentId id) {
 }
 
 SegmentBuilder* BuilderArena::getSegmentWithAvailable(WordCount minimumAvailable) {
-  // TODO:  Mutex-locking?  Do we want to allow people to build different parts of the same message
-  // in different threads?
+  // TODO(someday):  Mutex-locking?  Do we want to allow people to build different parts of the
+  //   same message in different threads?
 
   if (segment0.getArena() == nullptr) {
     // We're allocating the first segment.
@@ -127,12 +127,12 @@ SegmentBuilder* BuilderArena::getSegmentWithAvailable(WordCount minimumAvailable
     if (moreSegments == nullptr) {
       moreSegments = std::unique_ptr<MultiSegmentState>(new MultiSegmentState());
     } else {
-      // TODO:  Check for available space in more than just the last segment.  We don't want this
-      //   to be O(n), though, so we'll need to maintain some sort of table.  Complicating matters,
-      //   we want SegmentBuilders::allocate() to be fast, so we can't update any such table when
-      //   allocation actually happens.  Instead, we could have a priority queue based on the
-      //   last-known available size, and then re-check the size when we pop segments off it and
-      //   shove them to the back of the queue if they have become too small.
+      // TODO(perf):  Check for available space in more than just the last segment.  We don't
+      //   want this to be O(n), though, so we'll need to maintain some sort of table.  Complicating
+      //   matters, we want SegmentBuilders::allocate() to be fast, so we can't update any such
+      //   table when allocation actually happens.  Instead, we could have a priority queue based
+      //   on the last-known available size, and then re-check the size when we pop segments off it
+      //   and shove them to the back of the queue if they have become too small.
       if (moreSegments->builders.back()->available() >= minimumAvailable) {
         return moreSegments->builders.back().get();
       }

@@ -543,7 +543,7 @@ TEST(Packed, RoundTripHugeStringEvenSegmentCountLazy) {
   EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == std::string(5023, 'x'));
 }
 
-// TODO:  Test error cases.
+// TODO(test):  Test error cases.
 
 }  // namespace
 }  // namespace internal

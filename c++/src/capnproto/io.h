@@ -27,7 +27,6 @@
 #include <cstddef>
 #include "macros.h"
 #include "type-safety.h"
-#include <utility>  // for std::forward; TODO: pulls in too much stuff just for std::forward.
 
 namespace capnproto {
 
@@ -220,9 +219,6 @@ class AutoCloseFd {
   //
   // If your code is not exception-safe, you should not use AutoCloseFd.  In this case you will
   // have to call close() yourself and handle errors appropriately.
-  //
-  // TODO:  Create a general helper library for reporting/detecting secondary exceptions that
-  //   occurred during unwind of some primary exception.
 
 public:
   inline AutoCloseFd(): fd(-1) {}

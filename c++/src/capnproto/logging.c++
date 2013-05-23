@@ -130,8 +130,8 @@ static Array<char> makeDescription(DescriptionStyle style, const char* code, int
       sysErrorArray = arrayPtr(strerror_r(errorNumber, buffer, sizeof(buffer)));
     }
 #else
-    // TODO:  Other unixes should have strerror_r but it may have a different signature.  Port for
-    //   thread-safety.
+    // TODO(port):  Other unixes should have strerror_r but it may have a different signature.
+    //   Port for thread-safety.
     sysErrorArray = arrayPtr(strerror(errorNumber));
 #endif
 

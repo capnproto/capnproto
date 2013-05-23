@@ -129,7 +129,7 @@ BufferedOutputStreamWrapper::~BufferedOutputStreamWrapper() {
       try {
         inner.write(buffer.begin(), bufferPos - buffer.begin());
       } catch (...) {
-        // TODO:  Report secondary faults.
+        // TODO(someday):  Report secondary faults.
       }
     } else {
       flush();

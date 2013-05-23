@@ -987,9 +987,9 @@ namespace internal { class BitLabel; class ElementLabel; class WirePointer; }
 // also change symbol names, so it's important that the Cap'n proto library and any clients be
 // compiled with the same setting here.
 //
-// TODO:  Decide policy on this.  It may make sense to only use CAPNPROTO_DEBUG_TYPES when compiling
-//   Cap'n Proto's own tests, but disable it for all real builds, as clients may find this safety
-//   tiring.
+// TODO(soon):  Decide policy on this.  It may make sense to only use CAPNPROTO_DEBUG_TYPES when
+//   compiling Cap'n Proto's own tests, but disable it for all real builds, as clients may find
+//   this safety tiring.  Also, need to benchmark to verify there really is no perf hit.
 
 #endif
 

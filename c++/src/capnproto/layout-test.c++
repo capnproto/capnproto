@@ -256,7 +256,6 @@ static void checkStruct(StructReader reader) {
   }
 
   {
-    // TODO:  Use valid default value.
     ListReader list = reader.getListField(3 * POINTERS, FieldSize::POINTER, nullptr);
     ASSERT_EQ(5 * ELEMENTS, list.size());
     for (uint i = 0; i < 5; i++) {

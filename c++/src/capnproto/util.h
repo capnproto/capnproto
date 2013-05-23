@@ -40,7 +40,7 @@ namespace capnproto {
 // =======================================================================================
 // Arrays
 
-// TODO:  Move Array here?
+// TODO(cleanup):  Move these elsewhere, maybe an array.h.
 
 template <typename T, size_t fixedSize>
 class FixedArray {

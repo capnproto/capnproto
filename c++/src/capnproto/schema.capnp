@@ -235,10 +235,6 @@ struct StructNode {
     # Fields of this union, ordered by ordinal.  Currently all members are fields, but
     # consumers should skip member types that they don't understand.  The first member in this list
     # gets discriminant value zero, the next gets one, and so on.
-    #
-    # TODO(soon):  Discriminant zero should be reserved to mean "unset", unless the first field in
-    #   the union actually predates the union (it was retroactively unionized), in which case it
-    #   gets discriminant zero.
   }
 }
 

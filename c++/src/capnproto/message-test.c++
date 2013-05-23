@@ -46,7 +46,7 @@ TEST(Message, MallocBuilderWithFirstSegment) {
   EXPECT_EQ(16u, segment.size());
 }
 
-// TODO:  More tests.
+// TODO(test):  More tests.
 
 }  // namespace
 }  // namespace internal
