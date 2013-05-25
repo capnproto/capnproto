@@ -449,7 +449,7 @@ inline constexpr ArrayPtr<T> arrayPtr(T* begin, T* end) {
   return ArrayPtr<T>(begin, end);
 }
 
-inline constexpr ArrayPtr<const char> arrayPtr(const char* s) {
+inline ArrayPtr<const char> arrayPtr(const char* s) {
   // Use this function to construct an ArrayPtr from a NUL-terminated string, especially a literal.
   return arrayPtr(s, strlen(s));
 }
@@ -963,8 +963,8 @@ inline constexpr auto operator*(UnitRatio<Number1, Unit2, Unit> ratio,
 // =======================================================================================
 // Raw memory types and measures
 
-class byte { uint8_t  content; CAPNPROTO_DISALLOW_COPY(byte); public: byte() = default; };
-class word { uint64_t content; CAPNPROTO_DISALLOW_COPY(word); public: word() = default; };
+class byte { uint8_t  content CAPNPROTO_UNUSED_FOR_CLANG; CAPNPROTO_DISALLOW_COPY(byte); public: byte() = default; };
+class word { uint64_t content CAPNPROTO_UNUSED_FOR_CLANG; CAPNPROTO_DISALLOW_COPY(word); public: word() = default; };
 // byte and word are opaque types with sizes of 8 and 64 bits, respectively.  These types are useful
 // only to make pointer arithmetic clearer.  Since the contents are private, the only way to access
 // them is to first reinterpret_cast to some other pointer type.
@@ -978,7 +978,7 @@ class word { uint64_t content; CAPNPROTO_DISALLOW_COPY(word); public: word() = d
 static_assert(sizeof(byte) == 1, "uint8_t is not one byte?");
 static_assert(sizeof(word) == 8, "uint64_t is not 8 bytes?");
 
-namespace internal { class BitLabel; class ElementLabel; class WirePointer; }
+namespace internal { class BitLabel; class ElementLabel; struct WirePointer; }
 
 #ifndef CAPNPROTO_DEBUG_TYPES
 #define CAPNPROTO_DEBUG_TYPES 1

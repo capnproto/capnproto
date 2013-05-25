@@ -185,7 +185,7 @@ private:
   friend struct ::capnproto::ToDynamic_;
   template <typename T, ::capnproto::Kind k>
   friend struct ::capnproto::internal::PointerHelpers;
-  friend struct ::capnproto::MessageBuilder;
+  friend class ::capnproto::MessageBuilder;
 };
 {{! ------------------------------------------------------------------------------------------- }}
 

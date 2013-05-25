@@ -277,7 +277,7 @@ private:
 
   static DynamicValue::Reader getImpl(internal::StructReader reader, StructSchema::Member member);
 
-  template <typename T>
+  template <typename T, Kind K>
   friend struct internal::PointerHelpers;
   friend class DynamicUnion::Reader;
   friend class DynamicObject;
@@ -287,7 +287,8 @@ private:
   friend class MessageBuilder;
   template <typename T, ::capnproto::Kind k>
   friend struct ::capnproto::ToDynamic_;
-  friend String internal::debugString(StructReader reader, const RawSchema& schema);
+  friend String internal::debugString(
+      internal::StructReader reader, const internal::RawSchema& schema);
 };
 
 class DynamicStruct::Builder {
@@ -382,7 +383,7 @@ private:
   static Data::Builder initFieldAsDataImpl(
       internal::StructBuilder builder, StructSchema::Member field, uint size);
 
-  template <typename T>
+  template <typename T, Kind k>
   friend struct internal::PointerHelpers;
   friend class DynamicUnion::Builder;
   friend struct DynamicList;
@@ -421,7 +422,7 @@ private:
 
   Reader(ListSchema schema, internal::ListReader reader): schema(schema), reader(reader) {}
 
-  template <typename T>
+  template <typename T, Kind k>
   friend struct internal::PointerHelpers;
   friend struct DynamicStruct;
   friend class DynamicObject;
@@ -463,7 +464,7 @@ private:
 
   Builder(ListSchema schema, internal::ListBuilder builder): schema(schema), builder(builder) {}
 
-  template <typename T>
+  template <typename T, Kind k>
   friend struct internal::PointerHelpers;
   friend struct DynamicStruct;
   template <typename T, ::capnproto::Kind k>
@@ -855,14 +856,14 @@ struct DynamicValue::Builder::AsImpl<T, Kind::LIST> {
 template <typename T>
 struct DynamicObject::AsImpl<T, Kind::STRUCT> {
   static T apply(DynamicObject value) {
-    return value.as(Schema::from<T>()).as<T>();
+    return value.as(Schema::from<T>()).template as<T>();
   }
 };
 
 template <typename T>
 struct DynamicObject::AsImpl<T, Kind::LIST> {
   static T apply(DynamicObject value) {
-    return value.as(Schema::from<T>()).as<T>();
+    return value.as(Schema::from<T>()).template as<T>();
   }
 };
 

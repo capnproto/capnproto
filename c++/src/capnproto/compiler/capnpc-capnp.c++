@@ -579,7 +579,8 @@ TextBlob genNestedDecls(Schema schema, Indent indent) {
 TextBlob genFile(Schema file) {
   auto proto = file.getProto();
   auto body = proto.getBody();
-  PRECOND(body.which() == schema::Node::Body::FILE_NODE, "Expected a file node.", body.which());
+  PRECOND(body.which() == schema::Node::Body::FILE_NODE, "Expected a file node.",
+          (uint)body.which());
 
   return text(
     "# ", proto.getDisplayName(), "\n",

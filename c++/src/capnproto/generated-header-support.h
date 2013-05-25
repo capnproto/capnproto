@@ -36,7 +36,7 @@ class MessageBuilder;  // So that it can be declared a friend.
 template <typename T, Kind k = kind<T>()>
 struct ToDynamic_;   // Defined in dynamic.h, needs to be declared as everyone's friend.
 
-class DynamicStruct;  // So that it can be declared a friend.
+struct DynamicStruct;  // So that it can be declared a friend.
 
 namespace internal {
 
@@ -195,6 +195,9 @@ inline constexpr uint64_t typeId() { return internal::TypeIdFor<T>::typeId; }
     template <> struct RawSchemaFor<type> { \
       static inline const RawSchema& getSchema() { return schemas::s_##id; } \
     }
+#define CAPNPROTO_DEFINE_ENUM(type) \
+    constexpr Kind KindOf<type>::kind; \
+    constexpr uint64_t TypeIdFor<type>::typeId;
 #define CAPNPROTO_DECLARE_STRUCT(type, id, dataWordSize, pointerCount, preferredElementEncoding) \
     template <> struct KindOf<type> { static constexpr Kind kind = Kind::STRUCT; }; \
     template <> struct StructSizeFor<type> { \
@@ -205,11 +208,18 @@ inline constexpr uint64_t typeId() { return internal::TypeIdFor<T>::typeId; }
     template <> struct RawSchemaFor<type> { \
       static inline const RawSchema& getSchema() { return schemas::s_##id; } \
     }
+#define CAPNPROTO_DEFINE_STRUCT(type) \
+    constexpr Kind KindOf<type>::kind; \
+    constexpr StructSize StructSizeFor<type>::value; \
+    constexpr uint64_t TypeIdFor<type>::typeId;
 #define CAPNPROTO_DECLARE_INTERFACE(type, id) \
     template <> struct KindOf<type> { static constexpr Kind kind = Kind::INTERFACE; }; \
     template <> struct TypeIdFor<type> { static constexpr uint64_t typeId = 0x##id; }; \
     template <> struct RawSchemaFor<type> { \
       static inline const RawSchema& getSchema() { return schemas::s_##id; } \
     }
+#define CAPNPROTO_DEFINE_INTERFACE(type) \
+    constexpr Kind KindOf<type>::kind; \
+    constexpr uint64_t TypeIdFor<type>::typeId;
 
 #endif  // CAPNPROTO_GENERATED_HEADER_SUPPORT_H_

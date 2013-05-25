@@ -31,7 +31,11 @@
 #warning "Did you forget to enable C++11?  Make sure to pass -std=gnu++11 to GCC."
 #endif
 
-#if __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 7)
+#if __clang__
+#if __clang_major__ < 3 || (__clang_major__ == 3 && __clang_minor__ < 2)
+#warning "Cap'n Proto requires at least Clang 3.2."
+#endif
+#elif __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 7)
 #warning "Cap'n Proto requires at least GCC 4.7."
 #endif
 #endif
@@ -61,6 +65,13 @@ namespace internal {
 #endif
 
 #define CAPNPROTO_NORETURN __attribute__((noreturn));
+#define CAPNPROTO_UNUSED __attribute__((unused));
+
+#if __clang__
+#define CAPNPROTO_UNUSED_FOR_CLANG __attribute__((unused));
+#else
+#define CAPNPROTO_UNUSED_FOR_CLANG
+#endif
 
 void inlinePreconditionFailure(
     const char* file, int line, const char* expectation, const char* macroArgs,
@@ -82,7 +93,17 @@ void inlinePreconditionFailure(
 
 // Allocate an array, preferably on the stack, unless it is too big.  On GCC this will use
 // variable-sized arrays.  For other compilers we could just use a fixed-size array.
-#define CAPNPROTO_STACK_ARRAY(type, name, size, maxStack) \
+#if __clang__
+#define CAPNPROTO_STACK_ARRAY(type, name, size, minStack, maxStack) \
+  size_t name##_size = (size); \
+  bool name##_isOnStack = name##_size <= (minStack); \
+  type name##_stack[minStack]; \
+  ::capnproto::Array<type> name##_heap = name##_isOnStack ? \
+      nullptr : newArray<type>(name##_size); \
+  ::capnproto::ArrayPtr<type> name = name##_isOnStack ? \
+      arrayPtr(name##_stack, name##_size) : name##_heap
+#else
+#define CAPNPROTO_STACK_ARRAY(type, name, size, minStack, maxStack) \
   size_t name##_size = (size); \
   bool name##_isOnStack = name##_size <= (maxStack); \
   type name##_stack[name##_isOnStack ? size : 0]; \
@@ -90,6 +111,7 @@ void inlinePreconditionFailure(
       nullptr : newArray<type>(name##_size); \
   ::capnproto::ArrayPtr<type> name = name##_isOnStack ? \
       arrayPtr(name##_stack, name##_size) : name##_heap
+#endif
 
 }  // namespace internal
 

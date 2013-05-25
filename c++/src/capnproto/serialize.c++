@@ -252,7 +252,7 @@ void writeMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> seg
     table[segments.size() + 1].set(0);
   }
 
-  ArrayPtr<const byte> pieces[segments.size() + 1];
+  CAPNPROTO_STACK_ARRAY(ArrayPtr<const byte>, pieces, segments.size() + 1, 4, 32);
   pieces[0] = arrayPtr(reinterpret_cast<byte*>(table), sizeof(table));
 
   for (uint i = 0; i < segments.size(); i++) {
@@ -260,7 +260,7 @@ void writeMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> seg
                              reinterpret_cast<const byte*>(segments[i].end()));
   }
 
-  output.write(arrayPtr(pieces, segments.size() + 1));
+  output.write(pieces);
 }
 
 // =======================================================================================

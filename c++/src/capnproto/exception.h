@@ -114,7 +114,7 @@ private:
   mutable Array<char> whatBuffer;
 };
 
-class Stringifier;
+struct Stringifier;
 ArrayPtr<const char> operator*(const Stringifier&, Exception::Nature nature);
 ArrayPtr<const char> operator*(const Stringifier&, Exception::Durability durability);
 

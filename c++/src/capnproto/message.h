@@ -171,7 +171,7 @@ private:
   void setRootInternal(internal::StructReader reader);
   internal::StructBuilder getRoot(internal::StructSize size);
 
-  friend struct SchemaLoader;  // for a dirty hack, see schema-loader.c++.
+  friend class SchemaLoader;  // for a dirty hack, see schema-loader.c++.
 };
 
 template <typename RootType>
@@ -207,7 +207,7 @@ void copyToUnchecked(Reader&& reader, ArrayPtr<word> uncheckedBuffer);
 // otherwise an exception will be thrown.
 
 template <typename Type>
-typename Type::Reader defaultValue();
+static typename Type::Reader defaultValue();
 // Get a default instance of the given struct or list type.
 //
 // TODO(cleanup):  Find a better home for this function?

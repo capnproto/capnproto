@@ -266,7 +266,7 @@ private:
   }
 
   template <typename U, Kind k>
-  friend class List;
+  friend struct List;
   template <typename U, Kind K>
   friend struct internal::PointerHelpers;
 };
@@ -359,7 +359,7 @@ private:
   }
 
   template <typename U, Kind k>
-  friend class List;
+  friend struct List;
   template <typename U, Kind K>
   friend struct internal::PointerHelpers;
 };
@@ -457,7 +457,7 @@ private:
   }
 
   template <typename U, Kind k>
-  friend class List;
+  friend struct List;
   template <typename U, Kind K>
   friend struct internal::PointerHelpers;
 };
@@ -546,7 +546,7 @@ private:
   }
 
   template <typename U, Kind k>
-  friend class List;
+  friend struct List;
   template <typename U, Kind K>
   friend struct internal::PointerHelpers;
 };

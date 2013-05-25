@@ -17,6 +17,12 @@ continuous-opt:
 continuous-opt3:
 	CXX=g++-4.7 CXXFLAGS='-std=gnu++0x -O3 -DNDEBUG -Wall' LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
 
+continuous-clang:
+	CXX=clang++ CXXFLAGS='-fno-caret-diagnostics -std=c++1y -g -Wall' LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
+
+continuous-clang-opt:
+  CXX=clang++ CXXFLAGS='-fno-caret-diagnostics -std=c++11 -O2 -DNDEBUG -Wall' LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
+
 clean:
 	rm -rf bin lib tmp
 

@@ -37,18 +37,18 @@ inline T bitCast(U value) {
   static_assert(sizeof(T) == sizeof(U), "Size must match.");
   return value;
 }
-template <>
-inline float bitCast<float, uint32_t>(uint32_t value) {
-  float result;
-  memcpy(&result, &value, sizeof(value));
-  return result;
-}
-template <>
-inline double bitCast<double, uint64_t>(uint64_t value) {
-  double result;
-  memcpy(&result, &value, sizeof(value));
-  return result;
-}
+//template <>
+//inline float bitCast<float, uint32_t>(uint32_t value) {
+//  float result;
+//  memcpy(&result, &value, sizeof(value));
+//  return result;
+//}
+//template <>
+//inline double bitCast<double, uint64_t>(uint64_t value) {
+//  double result;
+//  memcpy(&result, &value, sizeof(value));
+//  return result;
+//}
 template <>
 inline uint32_t bitCast<uint32_t, float>(float value) {
   uint32_t result;
@@ -454,7 +454,7 @@ DynamicStruct::Builder DynamicStruct::Builder::getObject(
     }
   }
 
-  FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
+  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
   return DynamicStruct::Builder();
 }
 DynamicList::Builder DynamicStruct::Builder::getObject(
@@ -473,7 +473,7 @@ DynamicList::Builder DynamicStruct::Builder::getObject(
     }
   }
 
-  FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
+  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
   return DynamicList::Builder();
 }
 Text::Builder DynamicStruct::Builder::getObjectAsText(StructSchema::Member member) {
@@ -491,7 +491,7 @@ Text::Builder DynamicStruct::Builder::getObjectAsText(StructSchema::Member membe
     }
   }
 
-  FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
+  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
   return Text::Builder();
 }
 Data::Builder DynamicStruct::Builder::getObjectAsData(StructSchema::Member member) {
@@ -509,7 +509,7 @@ Data::Builder DynamicStruct::Builder::getObjectAsData(StructSchema::Member membe
     }
   }
 
-  FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
+  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
   return Data::Builder();
 }
 
@@ -529,7 +529,7 @@ DynamicStruct::Builder DynamicStruct::Builder::initObject(
     }
   }
 
-  FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
+  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
   return DynamicStruct::Builder();
 }
 DynamicList::Builder DynamicStruct::Builder::initObject(
@@ -548,7 +548,7 @@ DynamicList::Builder DynamicStruct::Builder::initObject(
     }
   }
 
-  FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
+  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
   return DynamicList::Builder();
 }
 Text::Builder DynamicStruct::Builder::initObjectAsText(StructSchema::Member member, uint size) {
@@ -566,7 +566,7 @@ Text::Builder DynamicStruct::Builder::initObjectAsText(StructSchema::Member memb
     }
   }
 
-  FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
+  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
   return Text::Builder();
 }
 Data::Builder DynamicStruct::Builder::initObjectAsData(StructSchema::Member member, uint size) {
@@ -584,7 +584,7 @@ Data::Builder DynamicStruct::Builder::initObjectAsData(StructSchema::Member memb
     }
   }
 
-  FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
+  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
   return Data::Builder();
 }
 
@@ -660,7 +660,7 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
         case schema::Type::Body::discrim##_TYPE: \
           return DynamicValue::Reader(reader.getDataField<type>( \
               field.getOffset() * ELEMENTS, \
-              bitCast<typename internal::MaskType<type>::Type>(dval.get##titleCase##Value())));
+              bitCast<internal::Mask<type>>(dval.get##titleCase##Value())));
 
         HANDLE_TYPE(BOOL, Bool, bool)
         HANDLE_TYPE(INT8, Int8, int8_t)
@@ -729,7 +729,7 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
     }
   }
 
-  FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
+  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
   return nullptr;
 }
 
@@ -752,7 +752,7 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
         case schema::Type::Body::discrim##_TYPE: \
           return DynamicValue::Builder(builder.getDataField<type>( \
               field.getOffset() * ELEMENTS, \
-              bitCast<typename internal::MaskType<type>::Type>(dval.get##titleCase##Value())));
+              bitCast<internal::Mask<type>>(dval.get##titleCase##Value())));
 
         HANDLE_TYPE(BOOL, Bool, bool)
         HANDLE_TYPE(INT8, Int8, int8_t)
@@ -832,7 +832,7 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
     }
   }
 
-  FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
+  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
   return nullptr;
 }
 DynamicStruct::Builder DynamicStruct::Builder::getObjectImpl(
@@ -964,12 +964,12 @@ void DynamicStruct::Builder::setImpl(
           return;
       }
 
-      FAIL_RECOVERABLE_PRECOND("can't set field of unknown type", type.which());
+      FAIL_RECOVERABLE_PRECOND("can't set field of unknown type", (uint)type.which());
       return;
     }
   }
 
-  FAIL_CHECK("switch() missing case.", member.getProto().getBody().which());
+  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
 }
 
 DynamicValue::Builder DynamicStruct::Builder::initImpl(
@@ -992,7 +992,7 @@ DynamicValue::Builder DynamicStruct::Builder::initImpl(
           return initFieldAsDataImpl(builder, member, size);
         default:
           FAIL_PRECOND(
-              "init() with size is only valid for list, text, or data fields.", type.which());
+              "init() with size is only valid for list, text, or data fields.", (uint)type.which());
           break;
       }
       break;
@@ -1245,7 +1245,7 @@ void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
       return;
   }
 
-  FAIL_RECOVERABLE_PRECOND("can't set element of unknown type", schema.whichElementType());
+  FAIL_RECOVERABLE_PRECOND("can't set element of unknown type", (uint)schema.whichElementType());
 }
 
 DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {

@@ -54,7 +54,7 @@ enum DescriptionStyle {
 
 static Array<char> makeDescription(DescriptionStyle style, const char* code, int errorNumber,
                                    const char* macroArgs, ArrayPtr<Array<char>> argValues) {
-  ArrayPtr<const char> argNames[argValues.size()];
+  CAPNPROTO_STACK_ARRAY(ArrayPtr<const char>, argNames, argValues.size(), 8, 64);
 
   if (argValues.size() > 0) {
     size_t index = 0;

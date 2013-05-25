@@ -74,6 +74,23 @@ const ::capnproto::internal::RawSchema s_{{schemaId}} = {
 };
 {{/typeSchema}}
 {{/fileTypes}}
-
 }  // namespace schemas
+namespace internal {
+{{#fileTypes}}
+{{#typeStructOrUnion}}
+{{#typeStruct}}
+CAPNPROTO_DEFINE_STRUCT(
+    ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{typeFullName}});
+{{#structNestedEnums}}
+CAPNPROTO_DEFINE_ENUM(
+    ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{typeFullName}}::{{enumName}});
+{{/structNestedEnums}}
+{{/typeStruct}}
+{{/typeStructOrUnion}}
+{{/fileTypes}}
+{{#fileEnums}}
+CAPNPROTO_DEFINE_ENUM(
+    ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{enumName}});
+{{/fileEnums}}
+}  // namespace internal
 }  // namespace capnproto

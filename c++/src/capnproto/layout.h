@@ -42,8 +42,8 @@ class StructBuilder;
 class StructReader;
 class ListBuilder;
 class ListReader;
-class ObjectBuilder;
-class ObjectReader;
+struct ObjectBuilder;
+struct ObjectReader;
 struct WirePointer;
 struct WireHelpers;
 class SegmentReader;
@@ -100,18 +100,16 @@ enum class FieldSize: uint8_t {
 typedef decltype(BITS / ELEMENTS) BitsPerElement;
 typedef decltype(POINTERS / ELEMENTS) PointersPerElement;
 
-namespace internal {
-  static constexpr BitsPerElement BITS_PER_ELEMENT_TABLE[8] = {
-      0 * BITS / ELEMENTS,
-      1 * BITS / ELEMENTS,
-      8 * BITS / ELEMENTS,
-      16 * BITS / ELEMENTS,
-      32 * BITS / ELEMENTS,
-      64 * BITS / ELEMENTS,
-      0 * BITS / ELEMENTS,
-      0 * BITS / ELEMENTS
-  };
-}
+static constexpr BitsPerElement BITS_PER_ELEMENT_TABLE[8] = {
+    0 * BITS / ELEMENTS,
+    1 * BITS / ELEMENTS,
+    8 * BITS / ELEMENTS,
+    16 * BITS / ELEMENTS,
+    32 * BITS / ELEMENTS,
+    64 * BITS / ELEMENTS,
+    0 * BITS / ELEMENTS,
+    0 * BITS / ELEMENTS
+};
 
 inline constexpr BitsPerElement dataBitsPerElement(FieldSize size) {
   return internal::BITS_PER_ELEMENT_TABLE[static_cast<int>(size)];

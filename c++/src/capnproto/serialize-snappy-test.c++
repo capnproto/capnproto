@@ -119,28 +119,28 @@ private:
   std::string::size_type readPos;
 };
 
-struct DisplayByteArray {
-  DisplayByteArray(const std::string& str)
-      : data(reinterpret_cast<const uint8_t*>(str.data())), size(str.size()) {}
-  DisplayByteArray(const std::initializer_list<uint8_t>& list)
-      : data(list.begin()), size(list.size()) {}
-
-  const uint8_t* data;
-  size_t size;
-};
-
-std::ostream& operator<<(std::ostream& os, const DisplayByteArray& bytes) {
-  os << "{ ";
-  for (size_t i = 0; i < bytes.size; i++) {
-    if (i > 0) {
-      os << ", ";
-    }
-    os << (uint)bytes.data[i];
-  }
-  os << " }";
-
-  return os;
-}
+//struct DisplayByteArray {
+//  DisplayByteArray(const std::string& str)
+//      : data(reinterpret_cast<const uint8_t*>(str.data())), size(str.size()) {}
+//  DisplayByteArray(const std::initializer_list<uint8_t>& list)
+//      : data(list.begin()), size(list.size()) {}
+//
+//  const uint8_t* data;
+//  size_t size;
+//};
+//
+//std::ostream& operator<<(std::ostream& os, const DisplayByteArray& bytes) {
+//  os << "{ ";
+//  for (size_t i = 0; i < bytes.size; i++) {
+//    if (i > 0) {
+//      os << ", ";
+//    }
+//    os << (uint)bytes.data[i];
+//  }
+//  os << " }";
+//
+//  return os;
+//}
 
 TEST(Snappy, RoundTrip) {
   TestMessageBuilder builder(1);

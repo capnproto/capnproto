@@ -209,7 +209,7 @@ struct Stringifier {
   template <typename T>
   Array<char> operator*(const Array<T>& arr) const;
 };
-static constexpr Stringifier STR;
+static constexpr Stringifier STR = Stringifier();
 
 CappedArray<char, sizeof(unsigned short) * 4> hex(unsigned short i);
 CappedArray<char, sizeof(unsigned int) * 4> hex(unsigned int i);
@@ -230,7 +230,7 @@ Array<char> str(Params&&... params) {
 template <typename T>
 Array<char> strArray(T&& arr, const char* delim) {
   size_t delimLen = strlen(delim);
-  decltype(STR * arr[0]) pieces[arr.size()];
+  CAPNPROTO_STACK_ARRAY(decltype(STR * arr[0]), pieces, arr.size(), 8, 32);
   size_t size = 0;
   for (size_t i = 0; i < arr.size(); i++) {
     if (i > 0) size += delimLen;

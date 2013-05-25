@@ -265,7 +265,7 @@ void FdOutputStream::write(const void* buffer, size_t size) {
 }
 
 void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
-  CAPNPROTO_STACK_ARRAY(struct iovec, iov, pieces.size(), 128);
+  CAPNPROTO_STACK_ARRAY(struct iovec, iov, pieces.size(), 16, 128);
 
   for (uint i = 0; i < pieces.size(); i++) {
     // writev() interface is not const-correct.  :(

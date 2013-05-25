@@ -84,7 +84,7 @@ public:
     nodeName = node.getDisplayName();
     dependencies.clear();
 
-    CONTEXT("validating schema node", nodeName, node.getBody().which());
+    CONTEXT("validating schema node", nodeName, (uint)node.getBody().which());
 
     switch (node.getBody().which()) {
       case schema::Node::Body::FILE_NODE:
@@ -211,9 +211,9 @@ private:
       }
     }
 
-    CAPNPROTO_STACK_ARRAY(bool, sawCodeOrder, members.size(), 256);
+    CAPNPROTO_STACK_ARRAY(bool, sawCodeOrder, members.size(), 32, 256);
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
-    CAPNPROTO_STACK_ARRAY(bool, sawOrdinal, ordinalCount, 256);
+    CAPNPROTO_STACK_ARRAY(bool, sawOrdinal, ordinalCount, 32, 256);
     memset(sawOrdinal.begin(), 0, sawOrdinal.size() * sizeof(sawOrdinal[0]));
 
     uint index = 0;
@@ -265,7 +265,7 @@ private:
                         "Schema invalid: Union discriminant out-of-bounds.");
 
         auto uMembers = u.getMembers();
-        CAPNPROTO_STACK_ARRAY(bool, uSawCodeOrder, uMembers.size(), 256);
+        CAPNPROTO_STACK_ARRAY(bool, uSawCodeOrder, uMembers.size(), 32, 256);
         memset(uSawCodeOrder.begin(), 0, uSawCodeOrder.size() * sizeof(uSawCodeOrder[0]));
 
         uint subIndex = 0;
@@ -285,7 +285,7 @@ private:
   void validate(schema::EnumNode::Reader enumNode) {
     auto enumerants = enumNode.getEnumerants();
 
-    CAPNPROTO_STACK_ARRAY(bool, sawCodeOrder, enumerants.size(), 256);
+    CAPNPROTO_STACK_ARRAY(bool, sawCodeOrder, enumerants.size(), 32, 256);
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
 
     uint index = 0;
@@ -302,7 +302,7 @@ private:
   void validate(schema::InterfaceNode::Reader interfaceNode) {
     auto methods = interfaceNode.getMethods();
 
-    CAPNPROTO_STACK_ARRAY(bool, sawCodeOrder, methods.size(), 256);
+    CAPNPROTO_STACK_ARRAY(bool, sawCodeOrder, methods.size(), 32, 256);
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
 
     uint index = 0;
@@ -422,7 +422,7 @@ private:
       auto node = readMessageUnchecked<schema::Node>(existing->encodedNode);
       VALIDATE_SCHEMA(node.getBody().which() == expectedKind,
           "expected a different kind of node for this ID",
-          id, expectedKind, node.getBody().which(), node.getDisplayName());
+          id, (uint)expectedKind, (uint)node.getBody().which(), node.getDisplayName());
       dependencies.insert(std::make_pair(id, existing));
       return;
     }
