@@ -108,7 +108,7 @@
       </script>
       <section id="main_content" class="inner">
         <h1 id='introduction'>Introduction</h1>
-<img src='images/infinity-times-faster.png' style='width:334px; height:306px; float: right;' />
+<img style='width:334px; height:306px; float: right;' src='images/infinity-times-faster.png' />
 <p>Cap&#8217;n Proto is an insanely fast data interchange format and capability-based RPC system. Think JSON, except binary. Or think <a href='http://protobuf.googlecode.com'>Protocol Buffers</a>, except faster. In fact, in benchmarks, Cap&#8217;n Proto is INFINITY TIMES faster than Protocol Buffers.</p>
 
 <p>This benchmark is, of course, unfair. It is only measuring the time to encode and decode a message in memory. Cap&#8217;n Proto gets a perfect score because <em>there is no encoding/decoding step</em>. The Cap&#8217;n Proto encoding is appropriate both as a data interchange format and an in-memory representation, so once your structure is built, you can simply write the bytes straight out to disk!</p>

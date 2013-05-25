@@ -220,7 +220,7 @@
 </code></pre></div>
 <h2 id='c_feature_usage_c11_exceptions'>C++ Feature Usage: C++11, Exceptions</h2>
 
-<p>This implementation makes use of C++11 features. If you are using GCC, you will need at least version 4.7 to compile Cap&#8217;n Proto, with <code>--std=gnu++0x</code>. Other compilers have not been tested at this time.</p>
+<p>This implementation makes use of C++11 features. If you are using GCC, you will need at least version 4.7 to compile Cap&#8217;n Proto. If you are using Clang, you will need at least version 3.2. These compilers required the flag <code>-std=c++11</code> to enable C++11 features &#8211; your code which <code>#include</code>s Cap&#8217;n Proto headers will need to be compiled with this flag. Other compilers have not been tested at this time.</p>
 
 <p>This implementation prefers to handle errors using exceptions. Exceptions are only used in circumstances that should never occur in normal operation. For example, exceptions are thrown on assertion failures (indicating bugs in the code), network failures, and invalid input. Exceptions thrown by Cap&#8217;n Proto are never part of the interface and never need to be caught in correct usage. The purpose of throwing exceptions is to allow higher-level code a chance to recover from unexpected circumstances without disrupting other work happening in the same process. For example, a server that handles requests from multiple clients should, on exception, return an error to the client that caused the exception and close that connection, but should continue handling other connections normally.</p>
 

@@ -147,9 +147,11 @@ cabal install capnproto-compiler.cabal</code></pre>
 
 <h2 id='installing_the_c_runtime'>Installing the C++ Runtime</h2>
 
-<h3 id='gcc_47_needed'>GCC 4.7 Needed</h3>
+<h3 id='gcc_47_or_clang_32_needed'>GCC 4.7 or Clang 3.2 Needed</h3>
 
-<p>If you are using GCC, you MUST use at least version 4.7 as Cap&#8217;n Proto uses recently-implemented C++11 features. If you are using some other compiler&#8230; good luck.</p>
+<p>If you are using GCC, you MUST use at least version 4.7 as Cap&#8217;n Proto uses recently-implemented C++11 features. If GCC 4.7 is installed but your system&#8217;s default GCC is older, you will probably need to set the environment variable <code>CXX=g++-4.7</code> before following the instructions below.</p>
+
+<p>If you are using Clang, you must use at least version 3.2. To use Clang, set the environment variable <code>CXX=clang++</code> before following any instructions below, otherwise <code>g++</code> is used by default.</p>
 
 <h3 id='building_with_ekam'>Building with Ekam</h3>
 
