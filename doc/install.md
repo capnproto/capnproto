@@ -54,9 +54,11 @@ attempt to build the C++ runtime.
 ### GCC 4.7 or Clang 3.2 Needed
 
 If you are using GCC, you MUST use at least version 4.7 as Cap'n Proto uses recently-implemented
-C++11 features.  If you are using Clang, you must use at least version 3.2.  To use Clang, set
-the environment variable `CXX=clang++` before following any instructions below, otherwise `g++` is
-used by default.
+C++11 features.  If GCC 4.7 is installed but your system's default GCC is older, you will probably
+need to set the environment variable `CXX=g++-4.7` before following the instructions below.
+
+If you are using Clang, you must use at least version 3.2.  To use Clang, set the environment
+variable `CXX=clang++` before following any instructions below, otherwise `g++` is used by default.
 
 ### Building with Ekam
 
