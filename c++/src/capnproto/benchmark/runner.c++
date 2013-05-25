@@ -519,6 +519,8 @@ int main(int argc, char* argv[]) {
   size_t protobufObjSize = fileSize(std::string(testCaseName(testCase)) + ".pb.o");
   size_t capnpObjSize = fileSize(std::string(testCaseName(testCase)) + ".capnp.o");
 
+  TestResult oldNullCase;
+  TestResult oldNullCaseNoReuse;
   TestResult oldCapnpBase;
   TestResult oldCapnpNoReuse;
   TestResult oldCapnp;
@@ -535,12 +537,21 @@ int main(int argc, char* argv[]) {
       perror(oldDir);
       return 1;
     }
+
+    oldNullCase = runTest(
+        Product::NULLCASE, testCase, Mode::OBJECT_SIZE, Reuse::YES, compression, iters);
+    reportResults("Old theoretical best pass-by-object", iters, nullCase);
+
     oldCapnpBase = runTest(
         Product::CAPNPROTO, testCase, Mode::OBJECTS, Reuse::YES, compression, iters);
     oldCapnpBase.objectSize = runTest(
         Product::CAPNPROTO, testCase, Mode::OBJECT_SIZE, Reuse::YES, compression, iters)
         .objectSize;
     reportResults("Old Cap'n Proto pass-by-object", iters, oldCapnpBase);
+
+    oldNullCaseNoReuse = runTest(
+        Product::NULLCASE, testCase, Mode::OBJECT_SIZE, Reuse::NO, compression, iters);
+    reportResults("Old theoretical best w/o object reuse", iters, oldNullCaseNoReuse);
 
     oldCapnpNoReuse = runTest(
         Product::CAPNPROTO, testCase, Mode::OBJECTS, Reuse::NO, compression, iters);
@@ -599,15 +610,15 @@ int main(int argc, char* argv[]) {
     reportOldNewComparisonHeader();
 
     reportComparison("memory overhead",
-        nullCase.objectSize, oldCapnpBase.objectSize, capnpBase.objectSize, iters);
+        oldNullCase.objectSize, oldCapnpBase.objectSize, capnpBase.objectSize, iters);
     reportComparison("memory overhead w/o object reuse",
-        nullCaseNoReuse.objectSize, oldCapnpNoReuse.objectSize, capnpNoReuse.objectSize, iters);
+        oldNullCaseNoReuse.objectSize, oldCapnpNoReuse.objectSize, capnpNoReuse.objectSize, iters);
     reportComparison("object manipulation time (us)", "",
-        ((int64_t)oldCapnpBase.time.user - (int64_t)nullCase.time.user) / 1000.0,
-        ((int64_t)capnpBase.time.user - (int64_t)nullCase.time.user) / 1000.0, iters);
+        ((int64_t)oldCapnpBase.time.user - (int64_t)oldNullCase.time.user) / 1000.0,
+        ((int64_t)capnpBase.time.user - (int64_t)oldNullCase.time.user) / 1000.0, iters);
     reportComparison("object manipulation time w/o reuse (us)", "",
-        ((int64_t)oldCapnpNoReuse.time.user - (int64_t)nullCaseNoReuse.time.user) / 1000.0,
-        ((int64_t)capnpNoReuse.time.user - (int64_t)nullCaseNoReuse.time.user) / 1000.0, iters);
+        ((int64_t)oldCapnpNoReuse.time.user - (int64_t)oldNullCaseNoReuse.time.user) / 1000.0,
+        ((int64_t)capnpNoReuse.time.user - (int64_t)oldNullCaseNoReuse.time.user) / 1000.0, iters);
     reportComparison("I/O time (us)", "",
         ((int64_t)oldCapnp.time.user - (int64_t)oldCapnpBase.time.user) / 1000.0,
         ((int64_t)capnp.time.user - (int64_t)capnpBase.time.user) / 1000.0, iters);

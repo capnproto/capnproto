@@ -123,8 +123,10 @@ void printAddressBook(int fd) {
 ## C++ Feature Usage:  C++11, Exceptions
 
 This implementation makes use of C++11 features.  If you are using GCC, you will need at least
-version 4.7 to compile Cap'n Proto, with `--std=gnu++0x`.  Other compilers have not been tested at
-this time.
+version 4.7 to compile Cap'n Proto.  If you are using Clang, you will need at least version 3.2.
+These compilers required the flag `-std=c++11` to enable C++11 features -- your code which
+`#include`s Cap'n Proto headers will need to be compiled with this flag.  Other compilers have not
+been tested at this time.
 
 This implementation prefers to handle errors using exceptions.  Exceptions are only used in
 circumstances that should never occur in normal operation.  For example, exceptions are thrown

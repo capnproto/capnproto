@@ -2,27 +2,28 @@
 
 EKAM=`which ekam || echo .ekam/bin/ekam`
 
+ifeq ($(CXX),clang++)
+  # Clang's verbose diagnostics don't play nice with the Ekam Eclipse plugin's error parsing,
+  # so disable them.
+  EXTRA_FLAG=-fno-caret-diagnostics
+else
+  EXTRA_FLAG=
+endif
+
 all:
 	echo "You probably accidentally told Eclipse to build.  Stopping."
 
 once:
-	CXX=g++-4.7 CXXFLAGS='-std=gnu++0x -O2 -DNDEBUG -Wall' LIBS='-lz -pthread' $(EKAM) -j6
+	CXXFLAGS="$(EXTRA_FLAG) -std=c++11 -O2 -DNDEBUG -Wall" LIBS='-lz -pthread' $(EKAM) -j6
 
 continuous:
-	CXX=g++-4.7 CXXFLAGS='-std=gnu++0x -g -Wall' LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
+	CXXFLAGS="$(EXTRA_FLAG) -std=c++11 -g -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
 
 continuous-opt:
-	CXX=g++-4.7 CXXFLAGS='-std=gnu++0x -O2 -DNDEBUG -Wall' LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
+	CXXFLAGS="$(EXTRA_FLAG) -std=c++11 -O2 -DNDEBUG -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
 
 continuous-opt3:
-	CXX=g++-4.7 CXXFLAGS='-std=gnu++0x -O3 -DNDEBUG -Wall' LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
-
-continuous-clang:
-	CXX=clang++ CXXFLAGS='-fno-caret-diagnostics -std=c++1y -g -Wall' LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
-
-continuous-clang-opt:
-  CXX=clang++ CXXFLAGS='-fno-caret-diagnostics -std=c++11 -O2 -DNDEBUG -Wall' LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
+	CXXFLAGS="$(EXTRA_FLAG) -std=c++11 -O3 -DNDEBUG -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
 
 clean:
 	rm -rf bin lib tmp
-
