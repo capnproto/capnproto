@@ -1,0 +1,4 @@
+The sole purpose of this directory is to allow GDB to find source files when
+debugging an executable compiled using Ekam, since the source locations found
+in the compiled binary will correspond to Ekam's virtual filesystem, not the
+real one.  This is a hack, and doesn't always work.
