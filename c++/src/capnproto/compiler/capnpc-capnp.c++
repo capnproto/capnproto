@@ -29,7 +29,7 @@
 #include "../schema.capnp.h"
 #include "../serialize.h"
 #include <kj/logging.h>
-#include "../io.h"
+#include <kj/io.h>
 #include "../schema-loader.h"
 #include "../dynamic.h"
 #include "../stringify.h"
@@ -47,7 +47,7 @@ public:
   TextBlob(Params&&... params);
   TextBlob(kj::Array<TextBlob>&& params);
 
-  void writeTo(OutputStream& out) const;
+  void writeTo(kj::OutputStream& out) const;
 
 private:
   kj::Array<char> text;
@@ -102,7 +102,7 @@ TextBlob::TextBlob(kj::Array<TextBlob>&& params) {
   }
 }
 
-void TextBlob::writeTo(OutputStream& out) const {
+void TextBlob::writeTo(kj::OutputStream& out) const {
   const char* pos = text.begin();
   for (auto& branch: branches) {
     out.write(pos, branch.pos - pos);
@@ -601,8 +601,8 @@ int main(int argc, char* argv[]) {
     schemaLoader.load(node);
   }
 
-  FdOutputStream rawOut(STDOUT_FILENO);
-  BufferedOutputStreamWrapper out(rawOut);
+  kj::FdOutputStream rawOut(STDOUT_FILENO);
+  kj::BufferedOutputStreamWrapper out(rawOut);
 
   for (auto fileId: request.getRequestedFiles()) {
     genFile(schemaLoader.get(fileId)).writeTo(out);

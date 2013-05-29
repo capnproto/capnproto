@@ -44,7 +44,7 @@
 #define CAPNPROTO_SERIALIZE_H_
 
 #include "message.h"
-#include "io.h"
+#include <kj/io.h>
 
 namespace capnproto {
 
@@ -74,7 +74,7 @@ kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> 
 
 class InputStreamMessageReader: public MessageReader {
 public:
-  InputStreamMessageReader(InputStream& inputStream,
+  InputStreamMessageReader(kj::InputStream& inputStream,
                            ReaderOptions options = ReaderOptions(),
                            kj::ArrayPtr<word> scratchSpace = nullptr);
   ~InputStreamMessageReader();
@@ -83,7 +83,7 @@ public:
   kj::ArrayPtr<const word> getSegment(uint id) override;
 
 private:
-  InputStream& inputStream;
+  kj::InputStream& inputStream;
   byte* readPos;
 
   // Optimize for single-segment case.
@@ -94,16 +94,16 @@ private:
   // Only if scratchSpace wasn't big enough.
 };
 
-void writeMessage(OutputStream& output, MessageBuilder& builder);
+void writeMessage(kj::OutputStream& output, MessageBuilder& builder);
 // Write the message to the given output stream.
 
-void writeMessage(OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
+void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 // Write the segment array to the given output stream.
 
 // =======================================================================================
 // Specializations for reading from / writing to file descriptors.
 
-class StreamFdMessageReader: private FdInputStream, public InputStreamMessageReader {
+class StreamFdMessageReader: private kj::FdInputStream, public InputStreamMessageReader {
   // A MessageReader that reads from a steam-based file descriptor.  For seekable file descriptors
   // (e.g. actual disk files), FdFileMessageReader is better, but this will still work.
 
@@ -113,7 +113,7 @@ public:
       : FdInputStream(fd), InputStreamMessageReader(*this, options, scratchSpace) {}
   // Read message from a file descriptor, without taking ownership of the descriptor.
 
-  StreamFdMessageReader(AutoCloseFd fd, ReaderOptions options = ReaderOptions(),
+  StreamFdMessageReader(kj::AutoCloseFd fd, ReaderOptions options = ReaderOptions(),
                         kj::ArrayPtr<word> scratchSpace = nullptr)
       : FdInputStream(kj::move(fd)), InputStreamMessageReader(*this, options, scratchSpace) {}
   // Read a message from a file descriptor, taking ownership of the descriptor.
@@ -142,7 +142,7 @@ inline kj::Array<word> messageToFlatArray(MessageBuilder& builder) {
   return messageToFlatArray(builder.getSegmentsForOutput());
 }
 
-inline void writeMessage(OutputStream& output, MessageBuilder& builder) {
+inline void writeMessage(kj::OutputStream& output, MessageBuilder& builder) {
   writeMessage(output, builder.getSegmentsForOutput());
 }
 

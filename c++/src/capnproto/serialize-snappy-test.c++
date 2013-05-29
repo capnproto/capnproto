@@ -65,7 +65,7 @@ private:
   uint desiredSegmentCount;
 };
 
-class TestPipe: public BufferedInputStream, public OutputStream {
+class TestPipe: public kj::BufferedInputStream, public kj::OutputStream {
 public:
   TestPipe()
       : preferredReadSize(std::numeric_limits<size_t>::max()), readPos(0) {}

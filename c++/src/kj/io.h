@@ -21,14 +21,14 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNPROTO_IO_H_
-#define CAPNPROTO_IO_H_
+#ifndef KJ_IO_H_
+#define KJ_IO_H_
 
 #include <cstddef>
-#include <kj/macros.h>
-#include "common.h"
+#include "macros.h"
+#include "type-safety.h"
 
-namespace capnproto {
+namespace kj {
 
 // =======================================================================================
 // Abstract interfaces
@@ -68,7 +68,7 @@ public:
   virtual void write(const void* buffer, size_t size) = 0;
   // Always writes the full size.  Throws exception on error.
 
-  virtual void write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces);
+  virtual void write(ArrayPtr<const ArrayPtr<const byte>> pieces);
   // Equivalent to write()ing each byte array in sequence, which is what the default implementation
   // does.  Override if you can do something better, e.g. use writev() to do the write in a single
   // syscall.
@@ -83,7 +83,7 @@ class BufferedInputStream: public InputStream {
 public:
   virtual ~BufferedInputStream();
 
-  virtual kj::ArrayPtr<const byte> getReadBuffer() = 0;
+  virtual ArrayPtr<const byte> getReadBuffer() = 0;
   // Get a direct pointer into the read buffer, which contains the next bytes in the input.  If the
   // caller consumes any bytes, it should then call skip() to indicate this.  This always returns a
   // non-empty buffer unless at EOF.
@@ -98,7 +98,7 @@ class BufferedOutputStream: public OutputStream {
 public:
   virtual ~BufferedOutputStream();
 
-  virtual kj::ArrayPtr<byte> getWriteBuffer() = 0;
+  virtual ArrayPtr<byte> getWriteBuffer() = 0;
   // Get a direct pointer into the write buffer.  The caller may choose to fill in some prefix of
   // this buffer and then pass it to write(), in which case write() may avoid a copy.  It is
   // incorrect to pass to write any slice of this buffer which is not a prefix.
@@ -117,7 +117,7 @@ class BufferedInputStreamWrapper: public BufferedInputStream {
   // but is not provided by the library at this time.
 
 public:
-  explicit BufferedInputStreamWrapper(InputStream& inner, kj::ArrayPtr<byte> buffer = nullptr);
+  explicit BufferedInputStreamWrapper(InputStream& inner, ArrayPtr<byte> buffer = nullptr);
   // Creates a buffered stream wrapping the given non-buffered stream.  No guarantee is made about
   // the position of the inner stream after a buffered wrapper has been created unless the entire
   // input is read.
@@ -129,15 +129,15 @@ public:
   ~BufferedInputStreamWrapper();
 
   // implements BufferedInputStream ----------------------------------
-  kj::ArrayPtr<const byte> getReadBuffer() override;
+  ArrayPtr<const byte> getReadBuffer() override;
   size_t read(void* buffer, size_t minBytes, size_t maxBytes) override;
   void skip(size_t bytes) override;
 
 private:
   InputStream& inner;
-  kj::Array<byte> ownedBuffer;
-  kj::ArrayPtr<byte> buffer;
-  kj::ArrayPtr<byte> bufferAvailable;
+  Array<byte> ownedBuffer;
+  ArrayPtr<byte> buffer;
+  ArrayPtr<byte> bufferAvailable;
 };
 
 class BufferedOutputStreamWrapper: public BufferedOutputStream {
@@ -145,7 +145,7 @@ class BufferedOutputStreamWrapper: public BufferedOutputStream {
   // underlying stream may be delayed until flush() is called or the wrapper is destroyed.
 
 public:
-  explicit BufferedOutputStreamWrapper(OutputStream& inner, kj::ArrayPtr<byte> buffer = nullptr);
+  explicit BufferedOutputStreamWrapper(OutputStream& inner, ArrayPtr<byte> buffer = nullptr);
   // Creates a buffered stream wrapping the given non-buffered stream.
   //
   // If the second parameter is non-null, the stream uses the given buffer instead of allocating
@@ -160,13 +160,13 @@ public:
   // that may be present in the underlying stream.
 
   // implements BufferedOutputStream ---------------------------------
-  kj::ArrayPtr<byte> getWriteBuffer() override;
+  ArrayPtr<byte> getWriteBuffer() override;
   void write(const void* buffer, size_t size) override;
 
 private:
   OutputStream& inner;
-  kj::Array<byte> ownedBuffer;
-  kj::ArrayPtr<byte> buffer;
+  Array<byte> ownedBuffer;
+  ArrayPtr<byte> buffer;
   byte* bufferPos;
 };
 
@@ -175,36 +175,36 @@ private:
 
 class ArrayInputStream: public BufferedInputStream {
 public:
-  explicit ArrayInputStream(kj::ArrayPtr<const byte> array);
+  explicit ArrayInputStream(ArrayPtr<const byte> array);
   KJ_DISALLOW_COPY(ArrayInputStream);
   ~ArrayInputStream();
 
   // implements BufferedInputStream ----------------------------------
-  kj::ArrayPtr<const byte> getReadBuffer() override;
+  ArrayPtr<const byte> getReadBuffer() override;
   size_t read(void* buffer, size_t minBytes, size_t maxBytes) override;
   void skip(size_t bytes) override;
 
 private:
-  kj::ArrayPtr<const byte> array;
+  ArrayPtr<const byte> array;
 };
 
 class ArrayOutputStream: public BufferedOutputStream {
 public:
-  explicit ArrayOutputStream(kj::ArrayPtr<byte> array);
+  explicit ArrayOutputStream(ArrayPtr<byte> array);
   KJ_DISALLOW_COPY(ArrayOutputStream);
   ~ArrayOutputStream();
 
-  kj::ArrayPtr<byte> getArray() {
+  ArrayPtr<byte> getArray() {
     // Get the portion of the array which has been filled in.
-    return kj::arrayPtr(array.begin(), fillPos);
+    return arrayPtr(array.begin(), fillPos);
   }
 
   // implements BufferedInputStream ----------------------------------
-  kj::ArrayPtr<byte> getWriteBuffer() override;
+  ArrayPtr<byte> getWriteBuffer() override;
   void write(const void* buffer, size_t size) override;
 
 private:
-  kj::ArrayPtr<byte> array;
+  ArrayPtr<byte> array;
   byte* fillPos;
 };
 
@@ -243,7 +243,7 @@ class FdInputStream: public InputStream {
 
 public:
   explicit FdInputStream(int fd): fd(fd) {};
-  explicit FdInputStream(AutoCloseFd fd): fd(fd), autoclose(kj::move(fd)) {}
+  explicit FdInputStream(AutoCloseFd fd): fd(fd), autoclose(move(fd)) {}
   KJ_DISALLOW_COPY(FdInputStream);
   ~FdInputStream();
 
@@ -259,18 +259,18 @@ class FdOutputStream: public OutputStream {
 
 public:
   explicit FdOutputStream(int fd): fd(fd) {};
-  explicit FdOutputStream(AutoCloseFd fd): fd(fd), autoclose(kj::move(fd)) {}
+  explicit FdOutputStream(AutoCloseFd fd): fd(fd), autoclose(move(fd)) {}
   KJ_DISALLOW_COPY(FdOutputStream);
   ~FdOutputStream();
 
   void write(const void* buffer, size_t size) override;
-  void write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override;
+  void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;
 
 private:
   int fd;
   AutoCloseFd autoclose;
 };
 
-}  // namespace capnproto
+}  // namespace kj
 
-#endif  // CAPNPROTO_IO_H_
+#endif  // KJ_IO_H_

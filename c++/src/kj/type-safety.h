@@ -35,6 +35,7 @@
 namespace kj {
 
 typedef unsigned int uint;
+typedef unsigned char byte;
 
 template <typename T>
 struct NoInfer_ {

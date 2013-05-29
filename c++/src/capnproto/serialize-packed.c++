@@ -31,7 +31,7 @@ namespace capnproto {
 
 namespace internal {
 
-PackedInputStream::PackedInputStream(BufferedInputStream& inner): inner(inner) {}
+PackedInputStream::PackedInputStream(kj::BufferedInputStream& inner): inner(inner) {}
 PackedInputStream::~PackedInputStream() {}
 
 size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
@@ -303,7 +303,7 @@ void PackedInputStream::skip(size_t bytes) {
 
 // -------------------------------------------------------------------
 
-PackedOutputStream::PackedOutputStream(BufferedOutputStream& inner)
+PackedOutputStream::PackedOutputStream(kj::BufferedOutputStream& inner)
     : inner(inner) {}
 PackedOutputStream::~PackedOutputStream() {}
 
@@ -437,7 +437,7 @@ void PackedOutputStream::write(const void* src, size_t size) {
 // =======================================================================================
 
 PackedMessageReader::PackedMessageReader(
-    BufferedInputStream& inputStream, ReaderOptions options, kj::ArrayPtr<word> scratchSpace)
+    kj::BufferedInputStream& inputStream, ReaderOptions options, kj::ArrayPtr<word> scratchSpace)
     : PackedInputStream(inputStream),
       InputStreamMessageReader(static_cast<PackedInputStream&>(*this), options, scratchSpace) {}
 
@@ -451,7 +451,7 @@ PackedFdMessageReader::PackedFdMessageReader(
                           options, scratchSpace) {}
 
 PackedFdMessageReader::PackedFdMessageReader(
-    AutoCloseFd fd, ReaderOptions options, kj::ArrayPtr<word> scratchSpace)
+    kj::AutoCloseFd fd, ReaderOptions options, kj::ArrayPtr<word> scratchSpace)
     : FdInputStream(kj::move(fd)),
       BufferedInputStreamWrapper(static_cast<FdInputStream&>(*this)),
       PackedMessageReader(static_cast<BufferedInputStreamWrapper&>(*this),
@@ -459,25 +459,26 @@ PackedFdMessageReader::PackedFdMessageReader(
 
 PackedFdMessageReader::~PackedFdMessageReader() {}
 
-void writePackedMessage(BufferedOutputStream& output,
+void writePackedMessage(kj::BufferedOutputStream& output,
                         kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   internal::PackedOutputStream packedOutput(output);
   writeMessage(packedOutput, segments);
 }
 
-void writePackedMessage(OutputStream& output,
+void writePackedMessage(kj::OutputStream& output,
                         kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
-  if (BufferedOutputStream* bufferedOutputPtr = dynamic_cast<BufferedOutputStream*>(&output)) {
+  if (kj::BufferedOutputStream* bufferedOutputPtr =
+      dynamic_cast<kj::BufferedOutputStream*>(&output)) {
     writePackedMessage(*bufferedOutputPtr, segments);
   } else {
     byte buffer[8192];
-    BufferedOutputStreamWrapper bufferedOutput(output, kj::arrayPtr(buffer, sizeof(buffer)));
+    kj::BufferedOutputStreamWrapper bufferedOutput(output, kj::arrayPtr(buffer, sizeof(buffer)));
     writePackedMessage(bufferedOutput, segments);
   }
 }
 
 void writePackedMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
-  FdOutputStream output(fd);
+  kj::FdOutputStream output(fd);
   writePackedMessage(output, segments);
 }
 

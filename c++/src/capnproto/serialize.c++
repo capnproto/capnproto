@@ -130,7 +130,7 @@ kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> 
 // =======================================================================================
 
 InputStreamMessageReader::InputStreamMessageReader(
-    InputStream& inputStream, ReaderOptions options, kj::ArrayPtr<word> scratchSpace)
+    kj::InputStream& inputStream, ReaderOptions options, kj::ArrayPtr<word> scratchSpace)
     : MessageReader(options), inputStream(inputStream), readPos(nullptr) {
   internal::WireValue<uint32_t> firstWord[2];
 
@@ -236,7 +236,7 @@ kj::ArrayPtr<const word> InputStreamMessageReader::getSegment(uint id) {
 
 // -------------------------------------------------------------------
 
-void writeMessage(OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   PRECOND(segments.size() > 0, "Tried to serialize uninitialized message.");
 
   internal::WireValue<uint32_t> table[(segments.size() + 2) & ~size_t(1)];
@@ -268,7 +268,7 @@ void writeMessage(OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<const wo
 StreamFdMessageReader::~StreamFdMessageReader() {}
 
 void writeMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
-  FdOutputStream stream(fd);
+  kj::FdOutputStream stream(fd);
   writeMessage(stream, segments);
 }
 

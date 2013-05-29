@@ -201,7 +201,7 @@ SnappyPackedMessageReader::SnappyPackedMessageReader(
 
 SnappyPackedMessageReader::~SnappyPackedMessageReader() {}
 
-void writeSnappyPackedMessage(OutputStream& output,
+void writeSnappyPackedMessage(kj::OutputStream& output,
                               kj::ArrayPtr<const kj::ArrayPtr<const word>> segments,
                               kj::ArrayPtr<byte> buffer, kj::ArrayPtr<byte> compressedBuffer) {
   SnappyOutputStream snappyOut(output, buffer, compressedBuffer);

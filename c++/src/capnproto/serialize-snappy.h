@@ -32,7 +32,7 @@ namespace capnproto {
 constexpr size_t SNAPPY_BUFFER_SIZE = 65536;
 constexpr size_t SNAPPY_COMPRESSED_BUFFER_SIZE = 76490;
 
-class SnappyInputStream: public BufferedInputStream {
+class SnappyInputStream: public kj::BufferedInputStream {
 public:
   explicit SnappyInputStream(BufferedInputStream& inner, kj::ArrayPtr<byte> buffer = nullptr);
   KJ_DISALLOW_COPY(SnappyInputStream);
@@ -54,7 +54,7 @@ private:
   void refill();
 };
 
-class SnappyOutputStream: public BufferedOutputStream {
+class SnappyOutputStream: public kj::BufferedOutputStream {
 public:
   explicit SnappyOutputStream(OutputStream& inner,
                               kj::ArrayPtr<byte> buffer = nullptr,
@@ -89,10 +89,10 @@ public:
   ~SnappyPackedMessageReader();
 };
 
-void writeSnappyPackedMessage(OutputStream& output, MessageBuilder& builder,
+void writeSnappyPackedMessage(kj::OutputStream& output, MessageBuilder& builder,
                               kj::ArrayPtr<byte> buffer = nullptr,
                               kj::ArrayPtr<byte> compressedBuffer = nullptr);
-void writeSnappyPackedMessage(OutputStream& output,
+void writeSnappyPackedMessage(kj::OutputStream& output,
                               kj::ArrayPtr<const kj::ArrayPtr<const word>> segments,
                               kj::ArrayPtr<byte> buffer = nullptr,
                               kj::ArrayPtr<byte> compressedBuffer = nullptr);
@@ -100,7 +100,7 @@ void writeSnappyPackedMessage(OutputStream& output,
 // =======================================================================================
 // inline stuff
 
-inline void writeSnappyPackedMessage(OutputStream& output, MessageBuilder& builder,
+inline void writeSnappyPackedMessage(kj::OutputStream& output, MessageBuilder& builder,
                                      kj::ArrayPtr<byte> buffer,
                                      kj::ArrayPtr<byte> compressedBuffer) {
   writeSnappyPackedMessage(output, builder.getSegmentsForOutput(), buffer, compressedBuffer);

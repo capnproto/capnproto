@@ -38,7 +38,7 @@ namespace capnproto {
 namespace benchmark {
 namespace capnp {
 
-class CountingOutputStream: public FdOutputStream {
+class CountingOutputStream: public kj::FdOutputStream {
 public:
   CountingOutputStream(int fd): FdOutputStream(fd), throughput(0) {}
 
@@ -60,7 +60,7 @@ public:
 // =======================================================================================
 
 struct Uncompressed {
-  typedef FdInputStream& BufferedInput;
+  typedef kj::FdInputStream& BufferedInput;
   typedef InputStreamMessageReader MessageReader;
 
   class ArrayMessageReader: public FlatArrayMessageReader {
@@ -73,16 +73,16 @@ struct Uncompressed {
           reinterpret_cast<const word*>(array.end())), options) {}
   };
 
-  static inline void write(OutputStream& output, MessageBuilder& builder) {
+  static inline void write(kj::OutputStream& output, MessageBuilder& builder) {
     writeMessage(output, builder);
   }
 };
 
 struct Packed {
-  typedef BufferedInputStreamWrapper BufferedInput;
+  typedef kj::BufferedInputStreamWrapper BufferedInput;
   typedef PackedMessageReader MessageReader;
 
-  class ArrayMessageReader: private ArrayInputStream, public PackedMessageReader {
+  class ArrayMessageReader: private kj::ArrayInputStream, public PackedMessageReader {
   public:
     ArrayMessageReader(kj::ArrayPtr<const byte> array,
                        ReaderOptions options = ReaderOptions(),
@@ -91,11 +91,11 @@ struct Packed {
         PackedMessageReader(*this, options, scratchSpace) {}
   };
 
-  static inline void write(OutputStream& output, MessageBuilder& builder) {
+  static inline void write(kj::OutputStream& output, MessageBuilder& builder) {
     writePackedMessage(output, builder);
   }
 
-  static inline void write(BufferedOutputStream& output, MessageBuilder& builder) {
+  static inline void write(kj::BufferedOutputStream& output, MessageBuilder& builder) {
     writePackedMessage(output, builder);
   }
 };
@@ -240,7 +240,7 @@ struct UseScratch {
 template <typename TestCase, typename ReuseStrategy, typename Compression>
 struct BenchmarkMethods {
   static uint64_t syncClient(int inputFd, int outputFd, uint64_t iters) {
-    FdInputStream inputStream(inputFd);
+    kj::FdInputStream inputStream(inputFd);
     typename Compression::BufferedInput bufferedInput(inputStream);
 
     CountingOutputStream output(outputFd);
@@ -288,7 +288,7 @@ struct BenchmarkMethods {
   static void asyncClientReceiver(
       int inputFd, ProducerConsumerQueue<typename TestCase::Expectation>* expectations,
       uint64_t iters) {
-    FdInputStream inputStream(inputFd);
+    kj::FdInputStream inputStream(inputFd);
     typename Compression::BufferedInput bufferedInput(inputStream);
 
     typename ReuseStrategy::ScratchSpace scratch;
@@ -312,7 +312,7 @@ struct BenchmarkMethods {
   }
 
   static uint64_t server(int inputFd, int outputFd, uint64_t iters) {
-    FdInputStream inputStream(inputFd);
+    kj::FdInputStream inputStream(inputFd);
     typename Compression::BufferedInput bufferedInput(inputStream);
 
     CountingOutputStream output(outputFd);
@@ -372,7 +372,7 @@ struct BenchmarkMethods {
       typename TestCase::Expectation expected = TestCase::setupRequest(
           requestBuilder.template initRoot<typename TestCase::Request>());
 
-      ArrayOutputStream requestOutput(kj::arrayPtr(
+      kj::ArrayOutputStream requestOutput(kj::arrayPtr(
           reinterpret_cast<byte*>(requestBytesScratch.words), SCRATCH_SIZE * sizeof(word)));
       Compression::write(requestOutput, requestBuilder);
       throughput += requestOutput.getArray().size();
@@ -383,7 +383,7 @@ struct BenchmarkMethods {
       TestCase::handleRequest(requestReader.template getRoot<typename TestCase::Request>(),
                               responseBuilder.template initRoot<typename TestCase::Response>());
 
-      ArrayOutputStream responseOutput(
+      kj::ArrayOutputStream responseOutput(
           kj::arrayPtr(reinterpret_cast<byte*>(responseBytesScratch.words),
                        SCRATCH_SIZE * sizeof(word)));
       Compression::write(responseOutput, responseBuilder);

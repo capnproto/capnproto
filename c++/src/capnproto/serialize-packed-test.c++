@@ -34,7 +34,7 @@ namespace capnproto {
 namespace internal {
 namespace {
 
-class TestPipe: public BufferedInputStream, public OutputStream {
+class TestPipe: public kj::BufferedInputStream, public kj::OutputStream {
 public:
   TestPipe()
       : preferredReadSize(std::numeric_limits<size_t>::max()), readPos(0) {}
@@ -116,7 +116,7 @@ void expectPacksTo(std::initializer_list<uint8_t> unpacked,
   // write
 
   {
-    BufferedOutputStreamWrapper bufferedOut(pipe);
+    kj::BufferedOutputStreamWrapper bufferedOut(pipe);
     PackedOutputStream packedOut(bufferedOut);
     packedOut.write(unpacked.begin(), unpacked.size());
   }
@@ -195,7 +195,7 @@ void expectPacksTo(std::initializer_list<uint8_t> unpacked,
   // write / read multiple
 
   {
-    BufferedOutputStreamWrapper bufferedOut(pipe);
+    kj::BufferedOutputStreamWrapper bufferedOut(pipe);
     PackedOutputStream packedOut(bufferedOut);
     for (uint i = 0; i < 5; i++) {
       packedOut.write(unpacked.begin(), unpacked.size());

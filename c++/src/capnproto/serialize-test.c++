@@ -95,7 +95,7 @@ TEST(Serialize, FlatArrayEvenSegmentCount) {
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
 
-class TestInputStream: public InputStream {
+class TestInputStream: public kj::InputStream {
 public:
   TestInputStream(kj::ArrayPtr<const word> data, bool lazy)
       : pos(reinterpret_cast<const char*>(data.begin())),
@@ -202,7 +202,7 @@ TEST(Serialize, InputStreamEvenSegmentCountLazy) {
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
 
-class TestOutputStream: public OutputStream {
+class TestOutputStream: public kj::OutputStream {
 public:
   TestOutputStream() {}
   ~TestOutputStream() {}
@@ -258,7 +258,7 @@ TEST(Serialize, WriteMessageEvenSegmentCount) {
 
 TEST(Serialize, FileDescriptors) {
   char filename[] = "/tmp/capnproto-serialize-test-XXXXXX";
-  AutoCloseFd tmpfile(mkstemp(filename));
+  kj::AutoCloseFd tmpfile(mkstemp(filename));
   ASSERT_GE(tmpfile.get(), 0);
 
   // Unlink the file so that it will be deleted on close.

@@ -21,14 +21,13 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define CAPNPROTO_PRIVATE
 #include "io.h"
-#include <kj/logging.h>
+#include "logging.h"
 #include <unistd.h>
 #include <sys/uio.h>
 #include <string>
 
-namespace capnproto {
+namespace kj {
 
 InputStream::~InputStream() {}
 OutputStream::~OutputStream() {}
@@ -44,7 +43,7 @@ void InputStream::skip(size_t bytes) {
   }
 }
 
-void OutputStream::write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
+void OutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   for (auto piece: pieces) {
     write(piece.begin(), piece.size());
   }
@@ -52,13 +51,13 @@ void OutputStream::write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
 
 // =======================================================================================
 
-BufferedInputStreamWrapper::BufferedInputStreamWrapper(InputStream& inner, kj::ArrayPtr<byte> buffer)
-    : inner(inner), ownedBuffer(buffer == nullptr ? kj::newArray<byte>(8192) : nullptr),
+BufferedInputStreamWrapper::BufferedInputStreamWrapper(InputStream& inner, ArrayPtr<byte> buffer)
+    : inner(inner), ownedBuffer(buffer == nullptr ? newArray<byte>(8192) : nullptr),
       buffer(buffer == nullptr ? ownedBuffer : buffer) {}
 
 BufferedInputStreamWrapper::~BufferedInputStreamWrapper() {}
 
-kj::ArrayPtr<const byte> BufferedInputStreamWrapper::getReadBuffer() {
+ArrayPtr<const byte> BufferedInputStreamWrapper::getReadBuffer() {
   if (bufferAvailable.size() == 0) {
     size_t n = inner.read(buffer.begin(), 1, buffer.size());
     bufferAvailable = buffer.slice(0, n);
@@ -117,9 +116,9 @@ void BufferedInputStreamWrapper::skip(size_t bytes) {
 
 // -------------------------------------------------------------------
 
-BufferedOutputStreamWrapper::BufferedOutputStreamWrapper(OutputStream& inner, kj::ArrayPtr<byte> buffer)
+BufferedOutputStreamWrapper::BufferedOutputStreamWrapper(OutputStream& inner, ArrayPtr<byte> buffer)
     : inner(inner),
-      ownedBuffer(buffer == nullptr ? kj::newArray<byte>(8192) : nullptr),
+      ownedBuffer(buffer == nullptr ? newArray<byte>(8192) : nullptr),
       buffer(buffer == nullptr ? ownedBuffer : buffer),
       bufferPos(this->buffer.begin()) {}
 
@@ -144,8 +143,8 @@ void BufferedOutputStreamWrapper::flush() {
   }
 }
 
-kj::ArrayPtr<byte> BufferedOutputStreamWrapper::getWriteBuffer() {
-  return kj::arrayPtr(bufferPos, buffer.end());
+ArrayPtr<byte> BufferedOutputStreamWrapper::getWriteBuffer() {
+  return arrayPtr(bufferPos, buffer.end());
 }
 
 void BufferedOutputStreamWrapper::write(const void* src, size_t size) {
@@ -179,10 +178,10 @@ void BufferedOutputStreamWrapper::write(const void* src, size_t size) {
 
 // =======================================================================================
 
-ArrayInputStream::ArrayInputStream(kj::ArrayPtr<const byte> array): array(array) {}
+ArrayInputStream::ArrayInputStream(ArrayPtr<const byte> array): array(array) {}
 ArrayInputStream::~ArrayInputStream() {}
 
-kj::ArrayPtr<const byte> ArrayInputStream::getReadBuffer() {
+ArrayPtr<const byte> ArrayInputStream::getReadBuffer() {
   return array;
 }
 
@@ -206,11 +205,11 @@ void ArrayInputStream::skip(size_t bytes) {
 
 // -------------------------------------------------------------------
 
-ArrayOutputStream::ArrayOutputStream(kj::ArrayPtr<byte> array): array(array), fillPos(array.begin()) {}
+ArrayOutputStream::ArrayOutputStream(ArrayPtr<byte> array): array(array), fillPos(array.begin()) {}
 ArrayOutputStream::~ArrayOutputStream() {}
 
-kj::ArrayPtr<byte> ArrayOutputStream::getWriteBuffer() {
-  return kj::arrayPtr(fillPos, array.end());
+ArrayPtr<byte> ArrayOutputStream::getWriteBuffer() {
+  return arrayPtr(fillPos, array.end());
 }
 
 void ArrayOutputStream::write(const void* src, size_t size) {
@@ -264,7 +263,7 @@ void FdOutputStream::write(const void* buffer, size_t size) {
   }
 }
 
-void FdOutputStream::write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) {
+void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   KJ_STACK_ARRAY(struct iovec, iov, pieces.size(), 16, 128);
 
   for (uint i = 0; i < pieces.size(); i++) {
@@ -296,4 +295,4 @@ void FdOutputStream::write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) 
   }
 }
 
-}  // namespace capnproto
+}  // namespace kj

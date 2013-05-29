@@ -30,12 +30,12 @@ namespace capnproto {
 
 namespace internal {
 
-class PackedInputStream: public InputStream {
+class PackedInputStream: public kj::InputStream {
   // An input stream that unpacks packed data with a picky constraint:  The caller must read data
   // in the exact same size and sequence as the data was written to PackedOutputStream.
 
 public:
-  explicit PackedInputStream(BufferedInputStream& inner);
+  explicit PackedInputStream(kj::BufferedInputStream& inner);
   KJ_DISALLOW_COPY(PackedInputStream);
   ~PackedInputStream();
 
@@ -44,12 +44,12 @@ public:
   void skip(size_t bytes) override;
 
 private:
-  BufferedInputStream& inner;
+  kj::BufferedInputStream& inner;
 };
 
-class PackedOutputStream: public OutputStream {
+class PackedOutputStream: public kj::OutputStream {
 public:
-  explicit PackedOutputStream(BufferedOutputStream& inner);
+  explicit PackedOutputStream(kj::BufferedOutputStream& inner);
   KJ_DISALLOW_COPY(PackedOutputStream);
   ~PackedOutputStream();
 
@@ -57,20 +57,20 @@ public:
   void write(const void* buffer, size_t bytes) override;
 
 private:
-  BufferedOutputStream& inner;
+  kj::BufferedOutputStream& inner;
 };
 
 }  // namespace internal
 
 class PackedMessageReader: private internal::PackedInputStream, public InputStreamMessageReader {
 public:
-  PackedMessageReader(BufferedInputStream& inputStream, ReaderOptions options = ReaderOptions(),
+  PackedMessageReader(kj::BufferedInputStream& inputStream, ReaderOptions options = ReaderOptions(),
                       kj::ArrayPtr<word> scratchSpace = nullptr);
   KJ_DISALLOW_COPY(PackedMessageReader);
   ~PackedMessageReader();
 };
 
-class PackedFdMessageReader: private FdInputStream, private BufferedInputStreamWrapper,
+class PackedFdMessageReader: private kj::FdInputStream, private kj::BufferedInputStreamWrapper,
                              public PackedMessageReader {
 public:
   PackedFdMessageReader(int fd, ReaderOptions options = ReaderOptions(),
@@ -79,7 +79,7 @@ public:
   // Note that if you want to reuse the descriptor after the reader is destroyed, you'll need to
   // seek it, since otherwise the position is unspecified.
 
-  PackedFdMessageReader(AutoCloseFd fd, ReaderOptions options = ReaderOptions(),
+  PackedFdMessageReader(kj::AutoCloseFd fd, ReaderOptions options = ReaderOptions(),
                         kj::ArrayPtr<word> scratchSpace = nullptr);
   // Read a message from a file descriptor, taking ownership of the descriptor.
 
@@ -88,13 +88,13 @@ public:
   ~PackedFdMessageReader();
 };
 
-void writePackedMessage(BufferedOutputStream& output, MessageBuilder& builder);
-void writePackedMessage(BufferedOutputStream& output,
+void writePackedMessage(kj::BufferedOutputStream& output, MessageBuilder& builder);
+void writePackedMessage(kj::BufferedOutputStream& output,
                         kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 // Write a packed message to a buffered output stream.
 
-void writePackedMessage(OutputStream& output, MessageBuilder& builder);
-void writePackedMessage(OutputStream& output,
+void writePackedMessage(kj::OutputStream& output, MessageBuilder& builder);
+void writePackedMessage(kj::OutputStream& output,
                         kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 // Write a packed message to an unbuffered output stream.  If you intend to write multiple messages
 // in succession, consider wrapping your output in a buffered stream in order to reduce system
@@ -107,11 +107,11 @@ void writePackedMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>>
 // =======================================================================================
 // inline stuff
 
-inline void writePackedMessage(BufferedOutputStream& output, MessageBuilder& builder) {
+inline void writePackedMessage(kj::BufferedOutputStream& output, MessageBuilder& builder) {
   writePackedMessage(output, builder.getSegmentsForOutput());
 }
 
-inline void writePackedMessage(OutputStream& output, MessageBuilder& builder) {
+inline void writePackedMessage(kj::OutputStream& output, MessageBuilder& builder) {
   writePackedMessage(output, builder.getSegmentsForOutput());
 }
 
