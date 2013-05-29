@@ -36,7 +36,7 @@ class PackedInputStream: public InputStream {
 
 public:
   explicit PackedInputStream(BufferedInputStream& inner);
-  CAPNPROTO_DISALLOW_COPY(PackedInputStream);
+  KJ_DISALLOW_COPY(PackedInputStream);
   ~PackedInputStream();
 
   // implements InputStream ------------------------------------------
@@ -50,7 +50,7 @@ private:
 class PackedOutputStream: public OutputStream {
 public:
   explicit PackedOutputStream(BufferedOutputStream& inner);
-  CAPNPROTO_DISALLOW_COPY(PackedOutputStream);
+  KJ_DISALLOW_COPY(PackedOutputStream);
   ~PackedOutputStream();
 
   // implements OutputStream -----------------------------------------
@@ -65,8 +65,8 @@ private:
 class PackedMessageReader: private internal::PackedInputStream, public InputStreamMessageReader {
 public:
   PackedMessageReader(BufferedInputStream& inputStream, ReaderOptions options = ReaderOptions(),
-                      ArrayPtr<word> scratchSpace = nullptr);
-  CAPNPROTO_DISALLOW_COPY(PackedMessageReader);
+                      kj::ArrayPtr<word> scratchSpace = nullptr);
+  KJ_DISALLOW_COPY(PackedMessageReader);
   ~PackedMessageReader();
 };
 
@@ -74,33 +74,34 @@ class PackedFdMessageReader: private FdInputStream, private BufferedInputStreamW
                              public PackedMessageReader {
 public:
   PackedFdMessageReader(int fd, ReaderOptions options = ReaderOptions(),
-                        ArrayPtr<word> scratchSpace = nullptr);
+                        kj::ArrayPtr<word> scratchSpace = nullptr);
   // Read message from a file descriptor, without taking ownership of the descriptor.
   // Note that if you want to reuse the descriptor after the reader is destroyed, you'll need to
   // seek it, since otherwise the position is unspecified.
 
   PackedFdMessageReader(AutoCloseFd fd, ReaderOptions options = ReaderOptions(),
-                        ArrayPtr<word> scratchSpace = nullptr);
+                        kj::ArrayPtr<word> scratchSpace = nullptr);
   // Read a message from a file descriptor, taking ownership of the descriptor.
 
-  CAPNPROTO_DISALLOW_COPY(PackedFdMessageReader);
+  KJ_DISALLOW_COPY(PackedFdMessageReader);
 
   ~PackedFdMessageReader();
 };
 
 void writePackedMessage(BufferedOutputStream& output, MessageBuilder& builder);
 void writePackedMessage(BufferedOutputStream& output,
-                        ArrayPtr<const ArrayPtr<const word>> segments);
+                        kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 // Write a packed message to a buffered output stream.
 
 void writePackedMessage(OutputStream& output, MessageBuilder& builder);
-void writePackedMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> segments);
+void writePackedMessage(OutputStream& output,
+                        kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 // Write a packed message to an unbuffered output stream.  If you intend to write multiple messages
 // in succession, consider wrapping your output in a buffered stream in order to reduce system
 // call overhead.
 
 void writePackedMessageToFd(int fd, MessageBuilder& builder);
-void writePackedMessageToFd(int fd, ArrayPtr<const ArrayPtr<const word>> segments);
+void writePackedMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 // Write a single packed message to the file descriptor.
 
 // =======================================================================================

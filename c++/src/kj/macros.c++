@@ -21,12 +21,12 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define CAPNPROTO_PRIVATE
+#define KJ_PRIVATE
 #include "macros.h"
 #include "logging.h"
 #include <stdlib.h>
 
-namespace capnproto {
+namespace kj {
 namespace internal {
 
 void inlinePreconditionFailure(const char* file, int line, const char* expectation,
@@ -43,4 +43,4 @@ void inlinePreconditionFailure(const char* file, int line, const char* expectati
 }
 
 }  // namespace internal
-}  // namespace capnproto
+}  // namespace kj

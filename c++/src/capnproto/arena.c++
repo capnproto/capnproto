@@ -24,7 +24,7 @@
 #define CAPNPROTO_PRIVATE
 #include "arena.h"
 #include "message.h"
-#include "logging.h"
+#include <kj/logging.h>
 #include <vector>
 #include <string.h>
 #include <stdio.h>
@@ -73,7 +73,7 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
     }
   }
 
-  ArrayPtr<const word> newSegment = message->getSegment(id.value);
+  kj::ArrayPtr<const word> newSegment = message->getSegment(id.value);
   if (newSegment == nullptr) {
     return nullptr;
   }
@@ -113,7 +113,7 @@ SegmentBuilder* BuilderArena::getSegmentWithAvailable(WordCount minimumAvailable
 
   if (segment0.getArena() == nullptr) {
     // We're allocating the first segment.
-    ArrayPtr<word> ptr = message->allocateSegment(minimumAvailable / WORDS);
+    kj::ArrayPtr<word> ptr = message->allocateSegment(minimumAvailable / WORDS);
 
     // Re-allocate segment0 in-place.  This is a bit of a hack, but we have not returned any
     // pointers to this segment yet, so it should be fine.
@@ -152,7 +152,7 @@ SegmentBuilder* BuilderArena::getSegmentWithAvailable(WordCount minimumAvailable
   }
 }
 
-ArrayPtr<const ArrayPtr<const word>> BuilderArena::getSegmentsForOutput() {
+kj::ArrayPtr<const kj::ArrayPtr<const word>> BuilderArena::getSegmentsForOutput() {
   // We shouldn't need to lock a mutex here because if this is called multiple times simultaneously,
   // we should only be overwriting the array with the exact same data.  If the number or size of
   // segments is actually changing due to an activity in another thread, then the caller has a
@@ -165,14 +165,14 @@ ArrayPtr<const ArrayPtr<const word>> BuilderArena::getSegmentsForOutput() {
     } else {
       // We have only one segment so far.
       segment0ForOutput = segment0.currentlyAllocated();
-      return arrayPtr(&segment0ForOutput, 1);
+      return kj::arrayPtr(&segment0ForOutput, 1);
     }
   } else {
     DCHECK(moreSegments->forOutput.size() == moreSegments->builders.size() + 1,
         "moreSegments->forOutput wasn't resized correctly when the last builder was added.",
         moreSegments->forOutput.size(), moreSegments->builders.size());
 
-    ArrayPtr<ArrayPtr<const word>> result(
+    kj::ArrayPtr<kj::ArrayPtr<const word>> result(
         &moreSegments->forOutput[0], moreSegments->forOutput.size());
     uint i = 0;
     result[i++] = segment0.currentlyAllocated();

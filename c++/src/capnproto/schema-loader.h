@@ -32,7 +32,7 @@ class SchemaLoader {
 public:
   SchemaLoader();
   ~SchemaLoader();
-  CAPNPROTO_DISALLOW_COPY(SchemaLoader);
+  KJ_DISALLOW_COPY(SchemaLoader);
 
   Schema get(uint64_t id) const;
   // Gets the schema for the given ID, throwing an exception if it isn't present.
@@ -40,7 +40,7 @@ public:
   // The returned schema may be invalidated if load() is called with a new schema for the same ID.
   // In general, you should not call load() while a schema from this loader is in-use.
 
-  Maybe<Schema> tryGet(uint64_t id) const;
+  kj::Maybe<Schema> tryGet(uint64_t id) const;
   // Like get() but doesn't throw.
 
   Schema load(schema::Node::Reader reader);
@@ -86,7 +86,7 @@ public:
   // type using as<T>(), you must call this method before constructing the DynamicValue.  Otherwise,
   // as<T>() will throw an exception complaining about type mismatch.
 
-  Array<Schema> getAllLoaded() const;
+  kj::Array<Schema> getAllLoaded() const;
   // Get a complete list of all loaded schema nodes.  It is particularly useful to call this after
   // loadCompiledTypeAndDependencies<T>() in order to get a flat list of all of T's transitive
   // dependencies.
@@ -95,7 +95,7 @@ private:
   class Validator;
   class CompatibilityChecker;
   class Impl;
-  Own<Impl> impl;
+  kj::Own<Impl> impl;
 
   void loadNative(const internal::RawSchema* nativeSchema);
 };

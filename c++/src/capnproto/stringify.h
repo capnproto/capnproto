@@ -28,7 +28,7 @@
 
 namespace capnproto {
 
-String stringify(DynamicValue::Reader value);
+kj::String stringify(DynamicValue::Reader value);
 // Stringify an arbitrary Cap'n Proto value.  Note that DynamicValue::Reader can be implicitly
 // constructed from any Cap'n Proto field type, so this will accept pretty much anything.
 

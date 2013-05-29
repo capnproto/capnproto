@@ -23,8 +23,8 @@
 
 #include <cstddef>
 #include <memory>
-#include "macros.h"
-#include "type-safety.h"
+#include <kj/macros.h>
+#include "common.h"
 #include "layout.h"
 
 #include "list.h"  // TODO(cleanup):  For FromReader.  Move elsewhere?
@@ -87,7 +87,7 @@ public:
 
   virtual ~MessageReader();
 
-  virtual ArrayPtr<const word> getSegment(uint id) = 0;
+  virtual kj::ArrayPtr<const word> getSegment(uint id) = 0;
   // Gets the segment with the given ID, or returns null if no such segment exists.
   //
   // Normally getSegment() will only be called once for each segment ID.  Subclasses can call
@@ -125,7 +125,7 @@ public:
   MessageBuilder();
   virtual ~MessageBuilder();
 
-  virtual ArrayPtr<word> allocateSegment(uint minimumSize) = 0;
+  virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) = 0;
   // Allocates an array of at least the given number of words, throwing an exception or crashing if
   // this is not possible.  It is expected that this method will usually return more space than
   // requested, and the caller should use that extra space as much as possible before allocating
@@ -155,7 +155,7 @@ public:
   // RootType in this case must be DynamicStruct, and you must #include <capnproto/dynamic.h> to
   // use this.
 
-  ArrayPtr<const ArrayPtr<const word>> getSegmentsForOutput();
+  kj::ArrayPtr<const kj::ArrayPtr<const word>> getSegmentsForOutput();
 
 private:
   // Space in which we can construct a BuilderArena.  We don't use BuilderArena directly here
@@ -201,7 +201,7 @@ typename RootType::Reader readMessageUnchecked(const word* data);
 // readMessageUnchecked(), use copyToUnchecked().
 
 template <typename Reader>
-void copyToUnchecked(Reader&& reader, ArrayPtr<word> uncheckedBuffer);
+void copyToUnchecked(Reader&& reader, kj::ArrayPtr<word> uncheckedBuffer);
 // Copy the content of the given reader into the given buffer, such that it can safely be passed to
 // readMessageUnchecked().  The buffer's size must be exactly reader.totalSizeInWords() + 1,
 // otherwise an exception will be thrown.
@@ -220,18 +220,18 @@ class SegmentArrayMessageReader: public MessageReader {
   // (although it would probably make more sense to call builder.getRoot().asReader() in that case).
 
 public:
-  SegmentArrayMessageReader(ArrayPtr<const ArrayPtr<const word>> segments,
+  SegmentArrayMessageReader(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments,
                             ReaderOptions options = ReaderOptions());
   // Creates a message pointing at the given segment array, without taking ownership of the
   // segments.  All arrays passed in must remain valid until the MessageReader is destroyed.
 
-  CAPNPROTO_DISALLOW_COPY(SegmentArrayMessageReader);
+  KJ_DISALLOW_COPY(SegmentArrayMessageReader);
   ~SegmentArrayMessageReader();
 
-  virtual ArrayPtr<const word> getSegment(uint id) override;
+  virtual kj::ArrayPtr<const word> getSegment(uint id) override;
 
 private:
-  ArrayPtr<const ArrayPtr<const word>> segments;
+  kj::ArrayPtr<const kj::ArrayPtr<const word>> segments;
 };
 
 enum class AllocationStrategy: uint8_t {
@@ -273,7 +273,7 @@ public:
   // The defaults have been chosen to be reasonable for most people, so don't change them unless you
   // have reason to believe you need to.
 
-  explicit MallocMessageBuilder(ArrayPtr<word> firstSegment,
+  explicit MallocMessageBuilder(kj::ArrayPtr<word> firstSegment,
       AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY);
   // This version always returns the given array for the first segment, and then proceeds with the
   // allocation strategy.  This is useful for optimization when building lots of small messages in
@@ -282,10 +282,10 @@ public:
   // firstSegment MUST be zero-initialized.  MallocMessageBuilder's destructor will write new zeros
   // over any space that was used so that it can be reused.
 
-  CAPNPROTO_DISALLOW_COPY(MallocMessageBuilder);
+  KJ_DISALLOW_COPY(MallocMessageBuilder);
   virtual ~MallocMessageBuilder();
 
-  virtual ArrayPtr<word> allocateSegment(uint minimumSize) override;
+  virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) override;
 
 private:
   uint nextSize;
@@ -305,17 +305,17 @@ class FlatMessageBuilder: public MessageBuilder {
   // exception if it runs out of space.
 
 public:
-  explicit FlatMessageBuilder(ArrayPtr<word> array);
-  CAPNPROTO_DISALLOW_COPY(FlatMessageBuilder);
+  explicit FlatMessageBuilder(kj::ArrayPtr<word> array);
+  KJ_DISALLOW_COPY(FlatMessageBuilder);
   virtual ~FlatMessageBuilder();
 
   void requireFilled();
   // Throws an exception if the flat array is not exactly full.
 
-  virtual ArrayPtr<word> allocateSegment(uint minimumSize) override;
+  virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) override;
 
 private:
-  ArrayPtr<word> array;
+  kj::ArrayPtr<word> array;
   bool allocated;
 };
 
@@ -357,9 +357,9 @@ typename RootType::Reader readMessageUnchecked(const word* data) {
 }
 
 template <typename Reader>
-void copyToUnchecked(Reader&& reader, ArrayPtr<word> uncheckedBuffer) {
+void copyToUnchecked(Reader&& reader, kj::ArrayPtr<word> uncheckedBuffer) {
   FlatMessageBuilder builder(uncheckedBuffer);
-  builder.setRoot(capnproto::forward<Reader>(reader));
+  builder.setRoot(kj::forward<Reader>(reader));
   builder.requireFilled();
 }
 

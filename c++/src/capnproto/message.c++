@@ -23,7 +23,7 @@
 
 #define CAPNPROTO_PRIVATE
 #include "message.h"
-#include "logging.h"
+#include <kj/logging.h>
 #include "arena.h"
 #include "stdlib.h"
 #include <exception>
@@ -107,7 +107,7 @@ internal::StructBuilder MessageBuilder::getRoot(internal::StructSize size) {
       rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), size);
 }
 
-ArrayPtr<const ArrayPtr<const word>> MessageBuilder::getSegmentsForOutput() {
+kj::ArrayPtr<const kj::ArrayPtr<const word>> MessageBuilder::getSegmentsForOutput() {
   if (allocatedArena) {
     return arena()->getSegmentsForOutput();
   } else {
@@ -118,12 +118,12 @@ ArrayPtr<const ArrayPtr<const word>> MessageBuilder::getSegmentsForOutput() {
 // =======================================================================================
 
 SegmentArrayMessageReader::SegmentArrayMessageReader(
-    ArrayPtr<const ArrayPtr<const word>> segments, ReaderOptions options)
+    kj::ArrayPtr<const kj::ArrayPtr<const word>> segments, ReaderOptions options)
     : MessageReader(options), segments(segments) {}
 
 SegmentArrayMessageReader::~SegmentArrayMessageReader() {}
 
-ArrayPtr<const word> SegmentArrayMessageReader::getSegment(uint id) {
+kj::ArrayPtr<const word> SegmentArrayMessageReader::getSegment(uint id) {
   if (id < segments.size()) {
     return segments[id];
   } else {
@@ -143,7 +143,7 @@ MallocMessageBuilder::MallocMessageBuilder(
       ownFirstSegment(true), returnedFirstSegment(false), firstSegment(nullptr) {}
 
 MallocMessageBuilder::MallocMessageBuilder(
-    ArrayPtr<word> firstSegment, AllocationStrategy allocationStrategy)
+    kj::ArrayPtr<word> firstSegment, AllocationStrategy allocationStrategy)
     : nextSize(firstSegment.size()), allocationStrategy(allocationStrategy),
       ownFirstSegment(false), returnedFirstSegment(false), firstSegment(firstSegment.begin()) {
   PRECOND(firstSegment.size() > 0, "First segment size must be non-zero.");
@@ -159,7 +159,7 @@ MallocMessageBuilder::~MallocMessageBuilder() {
       free(firstSegment);
     } else {
       // Must zero first segment.
-      ArrayPtr<const ArrayPtr<const word>> segments = getSegmentsForOutput();
+      kj::ArrayPtr<const kj::ArrayPtr<const word>> segments = getSegmentsForOutput();
       if (segments.size() > 0) {
         CHECK(segments[0].begin() == firstSegment,
             "First segment in getSegmentsForOutput() is not the first segment allocated?");
@@ -175,9 +175,9 @@ MallocMessageBuilder::~MallocMessageBuilder() {
   }
 }
 
-ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
+kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
   if (!returnedFirstSegment && !ownFirstSegment) {
-    ArrayPtr<word> result = arrayPtr(reinterpret_cast<word*>(firstSegment), nextSize);
+    kj::ArrayPtr<word> result = kj::arrayPtr(reinterpret_cast<word*>(firstSegment), nextSize);
     if (result.size() >= minimumSize) {
       returnedFirstSegment = true;
       return result;
@@ -209,12 +209,12 @@ ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
     if (allocationStrategy == AllocationStrategy::GROW_HEURISTICALLY) nextSize += size;
   }
 
-  return arrayPtr(reinterpret_cast<word*>(result), size);
+  return kj::arrayPtr(reinterpret_cast<word*>(result), size);
 }
 
 // -------------------------------------------------------------------
 
-FlatMessageBuilder::FlatMessageBuilder(ArrayPtr<word> array): array(array), allocated(false) {}
+FlatMessageBuilder::FlatMessageBuilder(kj::ArrayPtr<word> array): array(array), allocated(false) {}
 FlatMessageBuilder::~FlatMessageBuilder() {}
 
 void FlatMessageBuilder::requireFilled() {
@@ -222,7 +222,7 @@ void FlatMessageBuilder::requireFilled() {
           "FlatMessageBuilder's buffer was too large.");
 }
 
-ArrayPtr<word> FlatMessageBuilder::allocateSegment(uint minimumSize) {
+kj::ArrayPtr<word> FlatMessageBuilder::allocateSegment(uint minimumSize) {
   PRECOND(!allocated, "FlatMessageBuilder's buffer was not large enough.");
   allocated = true;
   return array;

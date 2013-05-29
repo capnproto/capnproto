@@ -47,7 +47,7 @@
 #define CAPNPROTO_PRIVATE
 #include "dynamic.h"
 #include "message.h"
-#include "logging.h"
+#include <kj/logging.h>
 #include <gtest/gtest.h>
 #include "test-util.h"
 
@@ -94,8 +94,8 @@ TEST(DynamicApi, Read) {
 
 TEST(DynamicApi, Defaults) {
   AlignedData<1> nullRoot = {{0, 0, 0, 0, 0, 0, 0, 0}};
-  ArrayPtr<const word> segments[1] = {arrayPtr(nullRoot.words, 1)};
-  SegmentArrayMessageReader reader(arrayPtr(segments, 1));
+  kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(nullRoot.words, 1)};
+  SegmentArrayMessageReader reader(kj::arrayPtr(segments, 1));
   auto root = reader.getRoot<DynamicStruct>(Schema::from<TestDefaults>());
   checkDynamicTestMessage(root);
 }
@@ -360,8 +360,8 @@ TEST(DynamicApi, Has) {
 
 TEST(DynamicApi, HasWhenEmpty) {
   AlignedData<1> nullRoot = {{0, 0, 0, 0, 0, 0, 0, 0}};
-  ArrayPtr<const word> segments[1] = {arrayPtr(nullRoot.words, 1)};
-  SegmentArrayMessageReader reader(arrayPtr(segments, 1));
+  kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(nullRoot.words, 1)};
+  SegmentArrayMessageReader reader(kj::arrayPtr(segments, 1));
   auto root = reader.getRoot<DynamicStruct>(Schema::from<TestDefaults>());
 
   EXPECT_FALSE(root.has("voidField"));

@@ -28,7 +28,7 @@
 #include "common.h"
 #include <capnproto/serialize.h>
 #include <capnproto/serialize-packed.h>
-#include <capnproto/logging.h>
+#include <kj/logging.h>
 #if HAVE_SNAPPY
 #include <capnproto/serialize-snappy.h>
 #endif  // HAVE_SNAPPY
@@ -49,7 +49,7 @@ public:
     throughput += size;
   }
 
-  void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override {
+  void write(kj::ArrayPtr<const kj::ArrayPtr<const byte>> pieces) override {
     FdOutputStream::write(pieces);
     for (auto& piece: pieces) {
       throughput += piece.size();
@@ -65,10 +65,10 @@ struct Uncompressed {
 
   class ArrayMessageReader: public FlatArrayMessageReader {
   public:
-    ArrayMessageReader(ArrayPtr<const byte> array,
+    ArrayMessageReader(kj::ArrayPtr<const byte> array,
                        ReaderOptions options = ReaderOptions(),
-                       ArrayPtr<word> scratchSpace = nullptr)
-      : FlatArrayMessageReader(arrayPtr(
+                       kj::ArrayPtr<word> scratchSpace = nullptr)
+      : FlatArrayMessageReader(kj::arrayPtr(
           reinterpret_cast<const word*>(array.begin()),
           reinterpret_cast<const word*>(array.end())), options) {}
   };
@@ -84,9 +84,9 @@ struct Packed {
 
   class ArrayMessageReader: private ArrayInputStream, public PackedMessageReader {
   public:
-    ArrayMessageReader(ArrayPtr<const byte> array,
+    ArrayMessageReader(kj::ArrayPtr<const byte> array,
                        ReaderOptions options = ReaderOptions(),
-                       ArrayPtr<word> scratchSpace = nullptr)
+                       kj::ArrayPtr<word> scratchSpace = nullptr)
       : ArrayInputStream(array),
         PackedMessageReader(*this, options, scratchSpace) {}
   };
@@ -111,18 +111,18 @@ struct SnappyCompressed {
 
   class ArrayMessageReader: private ArrayInputStream, public SnappyPackedMessageReader {
   public:
-    ArrayMessageReader(ArrayPtr<const byte> array,
+    ArrayMessageReader(kj::ArrayPtr<const byte> array,
                        ReaderOptions options = ReaderOptions(),
-                       ArrayPtr<word> scratchSpace = nullptr)
+                       kj::ArrayPtr<word> scratchSpace = nullptr)
       : ArrayInputStream(array),
         SnappyPackedMessageReader(static_cast<ArrayInputStream&>(*this), options, scratchSpace,
-                                  arrayPtr(snappyReadBuffer, SNAPPY_BUFFER_SIZE)) {}
+                                  kj::arrayPtr(snappyReadBuffer, SNAPPY_BUFFER_SIZE)) {}
   };
 
   static inline void write(OutputStream& output, MessageBuilder& builder) {
     writeSnappyPackedMessage(output, builder,
-        arrayPtr(snappyWriteBuffer, SNAPPY_BUFFER_SIZE),
-        arrayPtr(snappyCompressedBuffer, SNAPPY_COMPRESSED_BUFFER_SIZE));
+        kj::arrayPtr(snappyWriteBuffer, SNAPPY_BUFFER_SIZE),
+        kj::arrayPtr(snappyCompressedBuffer, SNAPPY_COMPRESSED_BUFFER_SIZE));
   }
 };
 #endif  // HAVE_SNAPPY
@@ -142,7 +142,7 @@ struct NoScratch {
   template <typename Compression>
   class ArrayMessageReader: public Compression::ArrayMessageReader {
   public:
-    inline ArrayMessageReader(ArrayPtr<const byte> input, ScratchSpace& scratch)
+    inline ArrayMessageReader(kj::ArrayPtr<const byte> input, ScratchSpace& scratch)
         : Compression::ArrayMessageReader(input) {}
   };
 
@@ -194,21 +194,21 @@ struct UseScratch {
   public:
     inline MessageReader(typename Compression::BufferedInput& input, ScratchSpace& scratch)
         : Compression::MessageReader(
-            input, ReaderOptions(), arrayPtr(scratch.words, SCRATCH_SIZE)) {}
+            input, ReaderOptions(), kj::arrayPtr(scratch.words, SCRATCH_SIZE)) {}
   };
 
   template <typename Compression>
   class ArrayMessageReader: public Compression::ArrayMessageReader {
   public:
-    inline ArrayMessageReader(ArrayPtr<const byte> input, ScratchSpace& scratch)
+    inline ArrayMessageReader(kj::ArrayPtr<const byte> input, ScratchSpace& scratch)
         : Compression::ArrayMessageReader(
-            input, ReaderOptions(), arrayPtr(scratch.words, SCRATCH_SIZE)) {}
+            input, ReaderOptions(), kj::arrayPtr(scratch.words, SCRATCH_SIZE)) {}
   };
 
   class MessageBuilder: public MallocMessageBuilder {
   public:
     inline MessageBuilder(ScratchSpace& scratch)
-        : MallocMessageBuilder(arrayPtr(scratch.words, SCRATCH_SIZE)) {}
+        : MallocMessageBuilder(kj::arrayPtr(scratch.words, SCRATCH_SIZE)) {}
   };
 
   class ObjectSizeCounter {
@@ -372,8 +372,8 @@ struct BenchmarkMethods {
       typename TestCase::Expectation expected = TestCase::setupRequest(
           requestBuilder.template initRoot<typename TestCase::Request>());
 
-      ArrayOutputStream requestOutput(arrayPtr(reinterpret_cast<byte*>(requestBytesScratch.words),
-                                               SCRATCH_SIZE * sizeof(word)));
+      ArrayOutputStream requestOutput(kj::arrayPtr(
+          reinterpret_cast<byte*>(requestBytesScratch.words), SCRATCH_SIZE * sizeof(word)));
       Compression::write(requestOutput, requestBuilder);
       throughput += requestOutput.getArray().size();
       typename ReuseStrategy::template ArrayMessageReader<Compression> requestReader(
@@ -383,8 +383,9 @@ struct BenchmarkMethods {
       TestCase::handleRequest(requestReader.template getRoot<typename TestCase::Request>(),
                               responseBuilder.template initRoot<typename TestCase::Response>());
 
-      ArrayOutputStream responseOutput(arrayPtr(reinterpret_cast<byte*>(responseBytesScratch.words),
-                                                SCRATCH_SIZE * sizeof(word)));
+      ArrayOutputStream responseOutput(
+          kj::arrayPtr(reinterpret_cast<byte*>(responseBytesScratch.words),
+                       SCRATCH_SIZE * sizeof(word)));
       Compression::write(responseOutput, responseBuilder);
       throughput += responseOutput.getArray().size();
       typename ReuseStrategy::template ArrayMessageReader<Compression> responseReader(

@@ -23,7 +23,7 @@
 
 #define CAPNPROTO_PRIVATE
 #include "serialize.h"
-#include "logging.h"
+#include <kj/logging.h>
 #include "test.capnp.h"
 #include <gtest/gtest.h>
 #include <string>
@@ -47,7 +47,7 @@ public:
     EXPECT_EQ(0u, desiredSegmentCount);
   }
 
-  ArrayPtr<word> allocateSegment(uint minimumSize) override {
+  kj::ArrayPtr<word> allocateSegment(uint minimumSize) override {
     if (desiredSegmentCount <= 1) {
       if (desiredSegmentCount < 1) {
         ADD_FAILURE() << "Allocated more segments than desired.";
@@ -69,7 +69,7 @@ TEST(Serialize, FlatArray) {
   TestMessageBuilder builder(1);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  Array<word> serialized = messageToFlatArray(builder);
+  kj::Array<word> serialized = messageToFlatArray(builder);
 
   FlatArrayMessageReader reader(serialized.asPtr());
   checkTestMessage(reader.getRoot<TestAllTypes>());
@@ -79,7 +79,7 @@ TEST(Serialize, FlatArrayOddSegmentCount) {
   TestMessageBuilder builder(7);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  Array<word> serialized = messageToFlatArray(builder);
+  kj::Array<word> serialized = messageToFlatArray(builder);
 
   FlatArrayMessageReader reader(serialized.asPtr());
   checkTestMessage(reader.getRoot<TestAllTypes>());
@@ -89,7 +89,7 @@ TEST(Serialize, FlatArrayEvenSegmentCount) {
   TestMessageBuilder builder(10);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  Array<word> serialized = messageToFlatArray(builder);
+  kj::Array<word> serialized = messageToFlatArray(builder);
 
   FlatArrayMessageReader reader(serialized.asPtr());
   checkTestMessage(reader.getRoot<TestAllTypes>());
@@ -97,7 +97,7 @@ TEST(Serialize, FlatArrayEvenSegmentCount) {
 
 class TestInputStream: public InputStream {
 public:
-  TestInputStream(ArrayPtr<const word> data, bool lazy)
+  TestInputStream(kj::ArrayPtr<const word> data, bool lazy)
       : pos(reinterpret_cast<const char*>(data.begin())),
         end(reinterpret_cast<const char*>(data.end())),
         lazy(lazy) {}
@@ -121,7 +121,7 @@ TEST(Serialize, InputStream) {
   TestMessageBuilder builder(1);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  Array<word> serialized = messageToFlatArray(builder);
+  kj::Array<word> serialized = messageToFlatArray(builder);
 
   TestInputStream stream(serialized.asPtr(), false);
   InputStreamMessageReader reader(stream, ReaderOptions());
@@ -133,11 +133,11 @@ TEST(Serialize, InputStreamScratchSpace) {
   TestMessageBuilder builder(1);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  Array<word> serialized = messageToFlatArray(builder);
+  kj::Array<word> serialized = messageToFlatArray(builder);
 
   word scratch[4096];
   TestInputStream stream(serialized.asPtr(), false);
-  InputStreamMessageReader reader(stream, ReaderOptions(), ArrayPtr<word>(scratch, 4096));
+  InputStreamMessageReader reader(stream, ReaderOptions(), kj::ArrayPtr<word>(scratch, 4096));
 
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
@@ -146,7 +146,7 @@ TEST(Serialize, InputStreamLazy) {
   TestMessageBuilder builder(1);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  Array<word> serialized = messageToFlatArray(builder);
+  kj::Array<word> serialized = messageToFlatArray(builder);
 
   TestInputStream stream(serialized.asPtr(), true);
   InputStreamMessageReader reader(stream, ReaderOptions());
@@ -158,7 +158,7 @@ TEST(Serialize, InputStreamOddSegmentCount) {
   TestMessageBuilder builder(7);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  Array<word> serialized = messageToFlatArray(builder);
+  kj::Array<word> serialized = messageToFlatArray(builder);
 
   TestInputStream stream(serialized.asPtr(), false);
   InputStreamMessageReader reader(stream, ReaderOptions());
@@ -170,7 +170,7 @@ TEST(Serialize, InputStreamOddSegmentCountLazy) {
   TestMessageBuilder builder(7);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  Array<word> serialized = messageToFlatArray(builder);
+  kj::Array<word> serialized = messageToFlatArray(builder);
 
   TestInputStream stream(serialized.asPtr(), true);
   InputStreamMessageReader reader(stream, ReaderOptions());
@@ -182,7 +182,7 @@ TEST(Serialize, InputStreamEvenSegmentCount) {
   TestMessageBuilder builder(10);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  Array<word> serialized = messageToFlatArray(builder);
+  kj::Array<word> serialized = messageToFlatArray(builder);
 
   TestInputStream stream(serialized.asPtr(), false);
   InputStreamMessageReader reader(stream, ReaderOptions());
@@ -194,7 +194,7 @@ TEST(Serialize, InputStreamEvenSegmentCountLazy) {
   TestMessageBuilder builder(10);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  Array<word> serialized = messageToFlatArray(builder);
+  kj::Array<word> serialized = messageToFlatArray(builder);
 
   TestInputStream stream(serialized.asPtr(), true);
   InputStreamMessageReader reader(stream, ReaderOptions());
@@ -211,7 +211,7 @@ public:
     data.append(reinterpret_cast<const char*>(buffer), size);
   }
 
-  const bool dataEquals(ArrayPtr<const word> other) {
+  const bool dataEquals(kj::ArrayPtr<const word> other) {
     return data ==
         std::string(reinterpret_cast<const char*>(other.begin()), other.size() * sizeof(word));
   }
@@ -224,7 +224,7 @@ TEST(Serialize, WriteMessage) {
   TestMessageBuilder builder(1);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  Array<word> serialized = messageToFlatArray(builder);
+  kj::Array<word> serialized = messageToFlatArray(builder);
 
   TestOutputStream output;
   writeMessage(output, builder);
@@ -236,7 +236,7 @@ TEST(Serialize, WriteMessageOddSegmentCount) {
   TestMessageBuilder builder(7);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  Array<word> serialized = messageToFlatArray(builder);
+  kj::Array<word> serialized = messageToFlatArray(builder);
 
   TestOutputStream output;
   writeMessage(output, builder);
@@ -248,7 +248,7 @@ TEST(Serialize, WriteMessageEvenSegmentCount) {
   TestMessageBuilder builder(10);
   initTestMessage(builder.initRoot<TestAllTypes>());
 
-  Array<word> serialized = messageToFlatArray(builder);
+  kj::Array<word> serialized = messageToFlatArray(builder);
 
   TestOutputStream output;
   writeMessage(output, builder);
@@ -290,7 +290,7 @@ TEST(Serialize, FileDescriptors) {
 }
 
 TEST(Serialize, RejectTooManySegments) {
-  Array<word> data = newArray<word>(8192);
+  kj::Array<word> data = kj::newArray<word>(8192);
   WireValue<uint32_t>* table = reinterpret_cast<WireValue<uint32_t>*>(data.begin());
   table[0].set(1024);
   for (uint i = 0; i < 1024; i++) {
@@ -310,7 +310,7 @@ TEST(Serialize, RejectHugeMessage) {
   // A message whose root struct contains two words of data!
   AlignedData<4> data = {{0,0,0,0,3,0,0,0, 0,0,0,0,2,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0}};
 
-  TestInputStream input(arrayPtr(data.words, 4), false);
+  TestInputStream input(kj::arrayPtr(data.words, 4), false);
 
   // We'll set the traversal limit to 2 words so our 3-word message is too big.
   ReaderOptions options;

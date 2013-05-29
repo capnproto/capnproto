@@ -29,8 +29,8 @@
 
 namespace capnproto {
   template <typename T, typename U>
-  std::ostream& operator<<(std::ostream& os, Quantity<T, U> value) {
-    return os << (value / unit<Quantity<T, U>>());
+  std::ostream& operator<<(std::ostream& os, kj::Quantity<T, U> value) {
+    return os << (value / kj::unit<kj::Quantity<T, U>>());
   }
 }
 
@@ -294,7 +294,7 @@ TEST(WireFormat, StructRoundTrip_OneSegment) {
   //         6 sub-lists (4x 1 word, 1x 2 words)
   // -----
   //   34
-  ArrayPtr<const ArrayPtr<const word>> segments = arena.getSegmentsForOutput();
+  kj::ArrayPtr<const kj::ArrayPtr<const word>> segments = arena.getSegmentsForOutput();
   ASSERT_EQ(1u, segments.size());
   EXPECT_EQ(34u, segments[0].size());
 
@@ -315,7 +315,7 @@ TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
   setupStruct(builder);
 
   // Verify that we made 15 segments.
-  ArrayPtr<const ArrayPtr<const word>> segments = arena.getSegmentsForOutput();
+  kj::ArrayPtr<const kj::ArrayPtr<const word>> segments = arena.getSegmentsForOutput();
   ASSERT_EQ(15u, segments.size());
 
   // Check that each segment has the expected size.  Recall that the first word of each segment will
@@ -352,7 +352,7 @@ TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
   setupStruct(builder);
 
   // Verify that we made 6 segments.
-  ArrayPtr<const ArrayPtr<const word>> segments = arena.getSegmentsForOutput();
+  kj::ArrayPtr<const kj::ArrayPtr<const word>> segments = arena.getSegmentsForOutput();
   ASSERT_EQ(6u, segments.size());
 
   // Check that each segment has the expected size.  Recall that each object will be prefixed by an

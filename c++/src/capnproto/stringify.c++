@@ -23,7 +23,7 @@
 
 #define CAPNPROTO_PRIVATE
 #include "stringify.h"
-#include "logging.h"
+#include <kj/logging.h>
 #include <sstream>
 
 // TODO(cleanup):  Rewrite this using something other than iostream?
@@ -58,10 +58,10 @@ static void print(std::ostream& os, DynamicValue::Reader value,
       break;
     case DynamicValue::FLOAT: {
       if (which == schema::Type::Body::FLOAT32_TYPE) {
-        auto buf = STR * value.as<float>();
+        auto buf = kj::STR * value.as<float>();
         os.write(buf.begin(), buf.size());
       } else {
-        auto buf = STR * value.as<double>();
+        auto buf = kj::STR * value.as<double>();
         os.write(buf.begin(), buf.size());
       }
       break;
@@ -111,7 +111,7 @@ static void print(std::ostream& os, DynamicValue::Reader value,
     }
     case DynamicValue::ENUM: {
       auto enumValue = value.as<DynamicEnum>();
-      Maybe<EnumSchema::Enumerant> enumerant =
+      kj::Maybe<EnumSchema::Enumerant> enumerant =
           enumValue.getEnumerant();
       if (enumerant == nullptr) {
         // Unknown enum value; output raw number.
@@ -151,7 +151,7 @@ static void print(std::ostream& os, DynamicValue::Reader value,
     }
     case DynamicValue::UNION: {
       auto unionValue = value.as<DynamicUnion>();
-      Maybe<StructSchema::Member> tag = unionValue.which();
+      kj::Maybe<StructSchema::Member> tag = unionValue.which();
       if (tag == nullptr) {
         // Unknown union member; must have come from newer
         // version of the protocol.
@@ -175,16 +175,16 @@ static void print(std::ostream& os, DynamicValue::Reader value,
 
 }  // namespace
 
-String stringify(DynamicValue::Reader value) {
+kj::String stringify(DynamicValue::Reader value) {
   std::stringstream out;
   print(out, value, schema::Type::Body::STRUCT_TYPE);
   auto content = out.str();
-  return String(content.data(), content.size());
+  return kj::String(content.data(), content.size());
 }
 
 namespace internal {
 
-String debugString(StructReader reader, const RawSchema& schema) {
+kj::String debugString(StructReader reader, const RawSchema& schema) {
   return stringify(DynamicStruct::Reader(StructSchema(&schema), reader));
 }
 

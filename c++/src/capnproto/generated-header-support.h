@@ -171,12 +171,12 @@ inline const RawSchema& rawSchema() {
 template <typename T>
 struct TypeIdFor;
 
-String debugString(StructReader reader, const RawSchema& schema);
+kj::String debugString(StructReader reader, const RawSchema& schema);
 // Declared here so that we can declare inline debugString() methods on generated types.
 // Defined in stringify.c++, which depends on dynamic.c++, which is allowed not to be linked in.
 
 template <typename T>
-inline String debugString(StructReader reader) {
+inline kj::String debugString(StructReader reader) {
   return debugString(reader, rawSchema<T>());
 }
 

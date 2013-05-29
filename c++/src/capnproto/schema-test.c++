@@ -76,7 +76,7 @@ TEST(Schema, Structs) {
 
   EXPECT_ANY_THROW(member.asUnion());
 
-  Maybe<StructSchema::Member> lookup = schema.findMemberByName("voidField");
+  kj::Maybe<StructSchema::Member> lookup = schema.findMemberByName("voidField");
   ASSERT_TRUE(lookup != nullptr);
   EXPECT_TRUE(*lookup == member);
   EXPECT_TRUE(*lookup != schema.getMembers()[1]);
@@ -166,7 +166,7 @@ TEST(Schema, Enums) {
   EXPECT_EQ("foo", enumerant.getProto().getName());
   EXPECT_TRUE(enumerant.getContainingEnum() == schema);
 
-  Maybe<EnumSchema::Enumerant> lookup = schema.findEnumerantByName("foo");
+  kj::Maybe<EnumSchema::Enumerant> lookup = schema.findEnumerantByName("foo");
   ASSERT_TRUE(lookup != nullptr);
   EXPECT_TRUE(*lookup == enumerant);
   EXPECT_TRUE(*lookup != schema.getEnumerants()[1]);

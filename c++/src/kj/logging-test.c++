@@ -21,7 +21,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define CAPNPROTO_PRIVATE
+#define KJ_PRIVATE
 #include "logging.h"
 #include "exception.h"
 #include <gtest/gtest.h>
@@ -31,7 +31,7 @@
 #include <errno.h>
 #include <string.h>
 
-namespace capnproto {
+namespace kj {
 namespace internal {
 namespace {
 
@@ -200,4 +200,4 @@ TEST(Logging, Context) {
 
 }  // namespace
 }  // namespace internal
-}  // namespace capnproto
+}  // namespace kj

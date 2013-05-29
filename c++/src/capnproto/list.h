@@ -63,18 +63,18 @@ using BuilderFor = typename internal::MaybeReaderBuilder<T>::Builder;
 // The type returned by List<T>::Builder::operator[].
 
 template <typename T>
-using FromReader = typename RemoveReference<T>::Reads;
+using FromReader = typename kj::RemoveReference<T>::Reads;
 // FromReader<MyType::Reader> = MyType (for any Cap'n Proto type).
 
 template <typename T>
-using FromBuilder = typename RemoveReference<T>::Builds;
+using FromBuilder = typename kj::RemoveReference<T>::Builds;
 // FromBuilder<MyType::Builder> = MyType (for any Cap'n Proto type).
 
 template <typename T, Kind k = kind<T>()> struct TypeIfEnum_;
 template <typename T> struct TypeIfEnum_<T, Kind::ENUM> { typedef T Type; };
 
 template <typename T>
-using TypeIfEnum = typename TypeIfEnum_<RemoveReference<T>>::Type;
+using TypeIfEnum = typename TypeIfEnum_<kj::RemoveReference<T>>::Type;
 
 namespace internal {
 
@@ -120,7 +120,7 @@ class TemporaryPointer {
   // able to return a real pointer to its member.
 
 public:
-  TemporaryPointer(T&& value): value(move(value)) {}
+  TemporaryPointer(T&& value): value(kj::move(value)) {}
   TemporaryPointer(const T& value): value(value) {}
 
   inline T* operator->() { return &value; }

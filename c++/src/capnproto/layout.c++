@@ -23,7 +23,7 @@
 
 #define CAPNPROTO_PRIVATE
 #include "layout.h"
-#include "logging.h"
+#include <kj/logging.h>
 #include "arena.h"
 #include <string.h>
 #include <limits>
@@ -75,43 +75,43 @@ struct WirePointer {
 
   WireValue<uint32_t> offsetAndKind;
 
-  CAPNPROTO_ALWAYS_INLINE(Kind kind() const) {
+  KJ_ALWAYS_INLINE(Kind kind() const) {
     return static_cast<Kind>(offsetAndKind.get() & 3);
   }
 
-  CAPNPROTO_ALWAYS_INLINE(word* target()) {
+  KJ_ALWAYS_INLINE(word* target()) {
     return reinterpret_cast<word*>(this) + 1 + (static_cast<int32_t>(offsetAndKind.get()) >> 2);
   }
-  CAPNPROTO_ALWAYS_INLINE(const word* target() const) {
+  KJ_ALWAYS_INLINE(const word* target() const) {
     return reinterpret_cast<const word*>(this) + 1 +
         (static_cast<int32_t>(offsetAndKind.get()) >> 2);
   }
-  CAPNPROTO_ALWAYS_INLINE(void setKindAndTarget(Kind kind, word* target)) {
+  KJ_ALWAYS_INLINE(void setKindAndTarget(Kind kind, word* target)) {
     offsetAndKind.set(((target - reinterpret_cast<word*>(this) - 1) << 2) | kind);
   }
-  CAPNPROTO_ALWAYS_INLINE(void setKindWithZeroOffset(Kind kind)) {
+  KJ_ALWAYS_INLINE(void setKindWithZeroOffset(Kind kind)) {
     offsetAndKind.set(kind);
   }
 
-  CAPNPROTO_ALWAYS_INLINE(ElementCount inlineCompositeListElementCount() const) {
+  KJ_ALWAYS_INLINE(ElementCount inlineCompositeListElementCount() const) {
     return (offsetAndKind.get() >> 2) * ELEMENTS;
   }
-  CAPNPROTO_ALWAYS_INLINE(void setKindAndInlineCompositeListElementCount(
+  KJ_ALWAYS_INLINE(void setKindAndInlineCompositeListElementCount(
       Kind kind, ElementCount elementCount)) {
     offsetAndKind.set(((elementCount / ELEMENTS) << 2) | kind);
   }
 
-  CAPNPROTO_ALWAYS_INLINE(WordCount farPositionInSegment() const) {
+  KJ_ALWAYS_INLINE(WordCount farPositionInSegment() const) {
     DPRECOND(kind() == FAR,
         "positionInSegment() should only be called on FAR pointers.");
     return (offsetAndKind.get() >> 3) * WORDS;
   }
-  CAPNPROTO_ALWAYS_INLINE(bool isDoubleFar() const) {
+  KJ_ALWAYS_INLINE(bool isDoubleFar() const) {
     DPRECOND(kind() == FAR,
         "isDoubleFar() should only be called on FAR pointers.");
     return (offsetAndKind.get() >> 2) & 1;
   }
-  CAPNPROTO_ALWAYS_INLINE(void setFar(bool isDoubleFar, WordCount pos)) {
+  KJ_ALWAYS_INLINE(void setFar(bool isDoubleFar, WordCount pos)) {
     offsetAndKind.set(((pos / WORDS) << 3) | (static_cast<uint32_t>(isDoubleFar) << 2) |
                       static_cast<uint32_t>(Kind::FAR));
   }
@@ -130,11 +130,11 @@ struct WirePointer {
         return dataSize.get() + ptrCount.get() * WORDS_PER_POINTER;
       }
 
-      CAPNPROTO_ALWAYS_INLINE(void set(WordCount ds, WirePointerCount rc)) {
+      KJ_ALWAYS_INLINE(void set(WordCount ds, WirePointerCount rc)) {
         dataSize.set(ds);
         ptrCount.set(rc);
       }
-      CAPNPROTO_ALWAYS_INLINE(void set(StructSize size)) {
+      KJ_ALWAYS_INLINE(void set(StructSize size)) {
         dataSize.set(size.data);
         ptrCount.set(size.pointers);
       }
@@ -144,22 +144,22 @@ struct WirePointer {
     struct {
       WireValue<uint32_t> elementSizeAndCount;
 
-      CAPNPROTO_ALWAYS_INLINE(FieldSize elementSize() const) {
+      KJ_ALWAYS_INLINE(FieldSize elementSize() const) {
         return static_cast<FieldSize>(elementSizeAndCount.get() & 7);
       }
-      CAPNPROTO_ALWAYS_INLINE(ElementCount elementCount() const) {
+      KJ_ALWAYS_INLINE(ElementCount elementCount() const) {
         return (elementSizeAndCount.get() >> 3) * ELEMENTS;
       }
-      CAPNPROTO_ALWAYS_INLINE(WordCount inlineCompositeWordCount() const) {
+      KJ_ALWAYS_INLINE(WordCount inlineCompositeWordCount() const) {
         return elementCount() * (1 * WORDS / ELEMENTS);
       }
 
-      CAPNPROTO_ALWAYS_INLINE(void set(FieldSize es, ElementCount ec)) {
+      KJ_ALWAYS_INLINE(void set(FieldSize es, ElementCount ec)) {
         DPRECOND(ec < (1 << 29) * ELEMENTS, "Lists are limited to 2**29 elements.");
         elementSizeAndCount.set(((ec / ELEMENTS) << 3) | static_cast<int>(es));
       }
 
-      CAPNPROTO_ALWAYS_INLINE(void setInlineComposite(WordCount wc)) {
+      KJ_ALWAYS_INLINE(void setInlineComposite(WordCount wc)) {
         DPRECOND(wc < (1 << 29) * WORDS, "Inline composite lists are limited to 2**29 words.");
         elementSizeAndCount.set(((wc / WORDS) << 3) |
                                 static_cast<int>(FieldSize::INLINE_COMPOSITE));
@@ -169,13 +169,13 @@ struct WirePointer {
     struct {
       WireValue<SegmentId> segmentId;
 
-      CAPNPROTO_ALWAYS_INLINE(void set(SegmentId si)) {
+      KJ_ALWAYS_INLINE(void set(SegmentId si)) {
         segmentId.set(si);
       }
     } farRef;
   };
 
-  CAPNPROTO_ALWAYS_INLINE(bool isNull() const) {
+  KJ_ALWAYS_INLINE(bool isNull() const) {
     // If the upper 32 bits are zero, this is a pointer to an empty struct.  We consider that to be
     // our "null" value.
     // TODO(perf):  Maybe this would be faster, but violates aliasing rules; does it matter?:
@@ -195,27 +195,27 @@ static_assert(POINTERS * BITS_PER_POINTER / BITS_PER_BYTE / BYTES == sizeof(Wire
 // =======================================================================================
 
 struct WireHelpers {
-  static CAPNPROTO_ALWAYS_INLINE(WordCount roundUpToWords(BitCount64 bits)) {
+  static KJ_ALWAYS_INLINE(WordCount roundUpToWords(BitCount64 bits)) {
     static_assert(sizeof(word) == 8, "This code assumes 64-bit words.");
     return (bits + 63 * BITS) / BITS_PER_WORD;
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(WordCount roundUpToWords(ByteCount bytes)) {
+  static KJ_ALWAYS_INLINE(WordCount roundUpToWords(ByteCount bytes)) {
     static_assert(sizeof(word) == 8, "This code assumes 64-bit words.");
     return (bytes + 7 * BYTES) / BYTES_PER_WORD;
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(ByteCount roundUpToBytes(BitCount bits)) {
+  static KJ_ALWAYS_INLINE(ByteCount roundUpToBytes(BitCount bits)) {
     return (bits + 7 * BITS) / BITS_PER_BYTE;
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(bool boundsCheck(
+  static KJ_ALWAYS_INLINE(bool boundsCheck(
       SegmentReader* segment, const word* start, const word* end)) {
     // If segment is null, this is an unchecked message, so we don't do bounds checks.
     return segment == nullptr || segment->containsInterval(start, end);
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(word* allocate(
+  static KJ_ALWAYS_INLINE(word* allocate(
       WirePointer*& ref, SegmentBuilder*& segment, WordCount amount,
       WirePointer::Kind kind)) {
     if (!ref->isNull()) zeroObject(segment, ref);
@@ -246,7 +246,7 @@ struct WireHelpers {
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(word* followFars(WirePointer*& ref, SegmentBuilder*& segment)) {
+  static KJ_ALWAYS_INLINE(word* followFars(WirePointer*& ref, SegmentBuilder*& segment)) {
     if (ref->kind() == WirePointer::FAR) {
       segment = segment->getArena()->getSegment(ref->farRef.segmentId.get());
       WirePointer* pad =
@@ -267,7 +267,7 @@ struct WireHelpers {
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(
+  static KJ_ALWAYS_INLINE(
       const word* followFars(const WirePointer*& ref, SegmentReader*& segment)) {
     // If the segment is null, this is an unchecked message, so there are no FAR pointers.
     if (segment != nullptr && ref->kind() == WirePointer::FAR) {
@@ -412,7 +412,7 @@ struct WireHelpers {
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(
+  static KJ_ALWAYS_INLINE(
       void zeroPointerAndFars(SegmentBuilder* segment, WirePointer* ref)) {
     // Zero out the pointer itself and, if it is a far pointer, zero the landing pad as well, but
     // do not zero the object body.  Used when upgrading.
@@ -554,7 +554,7 @@ struct WireHelpers {
 
   // -----------------------------------------------------------------
 
-  static CAPNPROTO_ALWAYS_INLINE(
+  static KJ_ALWAYS_INLINE(
       void copyStruct(SegmentBuilder* segment, word* dst, const word* src,
                       WordCount dataSize, WirePointerCount pointerCount)) {
     memcpy(dst, src, dataSize * BYTES_PER_WORD / BYTES);
@@ -713,7 +713,7 @@ struct WireHelpers {
 
   // -----------------------------------------------------------------
 
-  static CAPNPROTO_ALWAYS_INLINE(StructBuilder initStructPointer(
+  static KJ_ALWAYS_INLINE(StructBuilder initStructPointer(
       WirePointer* ref, SegmentBuilder* segment, StructSize size)) {
     // Allocate space for the new struct.  Newly-allocated space is automatically zeroed.
     word* ptr = allocate(ref, segment, size.total(), WirePointer::STRUCT);
@@ -726,7 +726,7 @@ struct WireHelpers {
                          size.data * BITS_PER_WORD, size.pointers, 0 * BITS);
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(StructBuilder getWritableStructPointer(
+  static KJ_ALWAYS_INLINE(StructBuilder getWritableStructPointer(
       WirePointer* ref, SegmentBuilder* segment, StructSize size, const word* defaultValue)) {
     if (ref->isNull()) {
     useDefault:
@@ -793,7 +793,7 @@ struct WireHelpers {
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(ListBuilder initListPointer(
+  static KJ_ALWAYS_INLINE(ListBuilder initListPointer(
       WirePointer* ref, SegmentBuilder* segment, ElementCount elementCount,
       FieldSize elementSize)) {
     DPRECOND(elementSize != FieldSize::INLINE_COMPOSITE,
@@ -816,7 +816,7 @@ struct WireHelpers {
     return ListBuilder(segment, ptr, step, elementCount, dataSize, pointerCount);
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(ListBuilder initStructListPointer(
+  static KJ_ALWAYS_INLINE(ListBuilder initStructListPointer(
       WirePointer* ref, SegmentBuilder* segment, ElementCount elementCount,
       StructSize elementSize)) {
     if (elementSize.preferredListEncoding != FieldSize::INLINE_COMPOSITE) {
@@ -845,7 +845,7 @@ struct WireHelpers {
                        elementSize.data * BITS_PER_WORD, elementSize.pointers);
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(ListBuilder getWritableListPointer(
+  static KJ_ALWAYS_INLINE(ListBuilder getWritableListPointer(
       WirePointer* origRef, SegmentBuilder* origSegment, FieldSize elementSize,
       const word* defaultValue)) {
     DPRECOND(elementSize != FieldSize::INLINE_COMPOSITE,
@@ -940,7 +940,7 @@ struct WireHelpers {
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(ListBuilder getWritableStructListPointer(
+  static KJ_ALWAYS_INLINE(ListBuilder getWritableStructListPointer(
       WirePointer* origRef, SegmentBuilder* origSegment, StructSize elementSize,
       const word* defaultValue)) {
     if (origRef->isNull()) {
@@ -1196,7 +1196,7 @@ struct WireHelpers {
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(Text::Builder initTextPointer(
+  static KJ_ALWAYS_INLINE(Text::Builder initTextPointer(
       WirePointer* ref, SegmentBuilder* segment, ByteCount size)) {
     // The byte list must include a NUL terminator.
     ByteCount byteSize = size + 1 * BYTES;
@@ -1211,12 +1211,12 @@ struct WireHelpers {
     return Text::Builder(reinterpret_cast<char*>(ptr), size / BYTES);
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(void setTextPointer(
+  static KJ_ALWAYS_INLINE(void setTextPointer(
       WirePointer* ref, SegmentBuilder* segment, Text::Reader value)) {
     initTextPointer(ref, segment, value.size() * BYTES).copyFrom(value);
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(Text::Builder getWritableTextPointer(
+  static KJ_ALWAYS_INLINE(Text::Builder getWritableTextPointer(
       WirePointer* ref, SegmentBuilder* segment,
       const void* defaultValue, ByteCount defaultSize)) {
     if (ref->isNull()) {
@@ -1236,7 +1236,7 @@ struct WireHelpers {
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(Data::Builder initDataPointer(
+  static KJ_ALWAYS_INLINE(Data::Builder initDataPointer(
       WirePointer* ref, SegmentBuilder* segment, ByteCount size)) {
     // Allocate the space.
     word* ptr = allocate(ref, segment, roundUpToWords(size), WirePointer::LIST);
@@ -1248,12 +1248,12 @@ struct WireHelpers {
     return Data::Builder(reinterpret_cast<char*>(ptr), size / BYTES);
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(void setDataPointer(
+  static KJ_ALWAYS_INLINE(void setDataPointer(
       WirePointer* ref, SegmentBuilder* segment, Data::Reader value)) {
     initDataPointer(ref, segment, value.size() * BYTES).copyFrom(value);
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(Data::Builder getWritableDataPointer(
+  static KJ_ALWAYS_INLINE(Data::Builder getWritableDataPointer(
       WirePointer* ref, SegmentBuilder* segment,
       const void* defaultValue, ByteCount defaultSize)) {
     if (ref->isNull()) {
@@ -1272,7 +1272,7 @@ struct WireHelpers {
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(ObjectBuilder getWritableObjectPointer(
+  static KJ_ALWAYS_INLINE(ObjectBuilder getWritableObjectPointer(
       SegmentBuilder* segment, WirePointer* ref, const word* defaultValue)) {
     word* ptr;
 
@@ -1401,7 +1401,7 @@ struct WireHelpers {
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(void setObjectPointer(
+  static KJ_ALWAYS_INLINE(void setObjectPointer(
       SegmentBuilder* segment, WirePointer* ref, ObjectReader value)) {
     switch (value.kind) {
       case ObjectKind::NULL_POINTER:
@@ -1418,7 +1418,7 @@ struct WireHelpers {
 
   // -----------------------------------------------------------------
 
-  static CAPNPROTO_ALWAYS_INLINE(StructReader readStructPointer(
+  static KJ_ALWAYS_INLINE(StructReader readStructPointer(
       SegmentReader* segment, const WirePointer* ref, const word* defaultValue,
       int nestingLimit)) {
     if (ref == nullptr || ref->isNull()) {
@@ -1438,7 +1438,7 @@ struct WireHelpers {
     }
 
     const word* ptr = followFars(ref, segment);
-    if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
+    if (KJ_EXPECT_FALSE(ptr == nullptr)) {
       // Already reported the error.
       goto useDefault;
     }
@@ -1460,7 +1460,7 @@ struct WireHelpers {
         0 * BITS, nestingLimit - 1);
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(ListReader readListPointer(
+  static KJ_ALWAYS_INLINE(ListReader readListPointer(
       SegmentReader* segment, const WirePointer* ref, const word* defaultValue,
       FieldSize expectedElementSize, int nestingLimit)) {
     if (ref == nullptr || ref->isNull()) {
@@ -1480,7 +1480,7 @@ struct WireHelpers {
     }
 
     const word* ptr = followFars(ref, segment);
-    if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
+    if (KJ_EXPECT_FALSE(ptr == nullptr)) {
       // Already reported error.
       goto useDefault;
     }
@@ -1602,7 +1602,7 @@ struct WireHelpers {
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(Text::Reader readTextPointer(
+  static KJ_ALWAYS_INLINE(Text::Reader readTextPointer(
       SegmentReader* segment, const WirePointer* ref,
       const void* defaultValue, ByteCount defaultSize)) {
     if (ref == nullptr || ref->isNull()) {
@@ -1612,7 +1612,7 @@ struct WireHelpers {
     } else {
       const word* ptr = followFars(ref, segment);
 
-      if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
+      if (KJ_EXPECT_FALSE(ptr == nullptr)) {
         // Already reported error.
         goto useDefault;
       }
@@ -1650,7 +1650,7 @@ struct WireHelpers {
     }
   }
 
-  static CAPNPROTO_ALWAYS_INLINE(Data::Reader readDataPointer(
+  static KJ_ALWAYS_INLINE(Data::Reader readDataPointer(
       SegmentReader* segment, const WirePointer* ref,
       const void* defaultValue, ByteCount defaultSize)) {
     if (ref == nullptr || ref->isNull()) {
@@ -1659,7 +1659,7 @@ struct WireHelpers {
     } else {
       const word* ptr = followFars(ref, segment);
 
-      if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
+      if (KJ_EXPECT_FALSE(ptr == nullptr)) {
         // Already reported error.
         goto useDefault;
       }
@@ -1708,7 +1708,7 @@ struct WireHelpers {
     }
 
     const word* ptr = WireHelpers::followFars(ref, segment);
-    if (CAPNPROTO_EXPECT_FALSE(ptr == nullptr)) {
+    if (KJ_EXPECT_FALSE(ptr == nullptr)) {
       // Already reported the error.
       goto useDefault;
     }

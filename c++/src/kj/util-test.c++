@@ -21,19 +21,26 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "type-safety.h"
+#define KJ_PRIVATE
+#include "util.h"
+#include <gtest/gtest.h>
+#include <string>
 
-namespace capnproto {
+namespace kj {
+namespace internal {
+namespace {
 
-Disposer::~Disposer() {}
-
-String::String(const char* value): content(newArray<char>(strlen(value) + 1)) {
-  strcpy(content.begin(), value);
+std::string arrayToStr(Array<char> arr) {
+  return std::string(arr.begin(), arr.size());
 }
 
-String::String(const char* value, size_t length): content(newArray<char>(length + 1)) {
-  memcpy(content.begin(), value, length);
-  content[length] = '\0';
+TEST(Util, Foo) {
+  EXPECT_EQ("foobar", arrayToStr(str("foo", "bar")));
+  EXPECT_EQ("1 2 3 4", arrayToStr(str(1, " ", 2u, " ", 3l, " ", 4ll)));
+  EXPECT_EQ("1.5 foo 1e15 bar -3", arrayToStr(str(1.5f, " foo ", 1e15, " bar ", -3)));
+  EXPECT_EQ("foo", arrayToStr(str('f', 'o', 'o')));
 }
 
-}  // namespace capnproto
+}  // namespace
+}  // namespace internal
+}  // namespace kj

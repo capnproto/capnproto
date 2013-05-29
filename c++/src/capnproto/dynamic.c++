@@ -23,14 +23,14 @@
 
 #define CAPNPROTO_PRIVATE
 #include "dynamic.h"
-#include "logging.h"
+#include <kj/logging.h>
 
 namespace capnproto {
 
 namespace {
 
 template <typename T, typename U>
-CAPNPROTO_ALWAYS_INLINE(T bitCast(U value));
+KJ_ALWAYS_INLINE(T bitCast(U value));
 
 template <typename T, typename U>
 inline T bitCast(U value) {
@@ -102,7 +102,7 @@ inline internal::StructSize structSizeFromSchema(StructSchema schema) {
 
 // =======================================================================================
 
-Maybe<EnumSchema::Enumerant> DynamicEnum::getEnumerant() {
+kj::Maybe<EnumSchema::Enumerant> DynamicEnum::getEnumerant() {
   auto enumerants = schema.getEnumerants();
   if (value < enumerants.size()) {
     return enumerants[value];
@@ -145,7 +145,7 @@ DynamicList::Reader DynamicObject::as(ListSchema schema) {
 
 // =======================================================================================
 
-Maybe<StructSchema::Member> DynamicUnion::Reader::which() {
+kj::Maybe<StructSchema::Member> DynamicUnion::Reader::which() {
   auto members = schema.getMembers();
   uint16_t discrim = reader.getDataField<uint16_t>(
       schema.getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS);
@@ -156,7 +156,7 @@ Maybe<StructSchema::Member> DynamicUnion::Reader::which() {
     return nullptr;
   }
 }
-Maybe<StructSchema::Member> DynamicUnion::Builder::which() {
+kj::Maybe<StructSchema::Member> DynamicUnion::Builder::which() {
   auto members = schema.getMembers();
   uint16_t discrim = builder.getDataField<uint16_t>(
       schema.getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS);
@@ -1396,13 +1396,13 @@ typeName DynamicValue::Builder::AsImpl<typeName>::apply(Builder builder) { \
 HANDLE_NUMERIC_TYPE(int8_t, checkRoundTrip, unsignedToSigned, checkRoundTrip)
 HANDLE_NUMERIC_TYPE(int16_t, checkRoundTrip, unsignedToSigned, checkRoundTrip)
 HANDLE_NUMERIC_TYPE(int32_t, checkRoundTrip, unsignedToSigned, checkRoundTrip)
-HANDLE_NUMERIC_TYPE(int64_t, implicit_cast, unsignedToSigned, checkRoundTrip)
+HANDLE_NUMERIC_TYPE(int64_t, kj::implicit_cast, unsignedToSigned, checkRoundTrip)
 HANDLE_NUMERIC_TYPE(uint8_t, signedToUnsigned, checkRoundTrip, checkRoundTrip)
 HANDLE_NUMERIC_TYPE(uint16_t, signedToUnsigned, checkRoundTrip, checkRoundTrip)
 HANDLE_NUMERIC_TYPE(uint32_t, signedToUnsigned, checkRoundTrip, checkRoundTrip)
-HANDLE_NUMERIC_TYPE(uint64_t, signedToUnsigned, implicit_cast, checkRoundTrip)
-HANDLE_NUMERIC_TYPE(float, implicit_cast, implicit_cast, implicit_cast)
-HANDLE_NUMERIC_TYPE(double, implicit_cast, implicit_cast, implicit_cast)
+HANDLE_NUMERIC_TYPE(uint64_t, signedToUnsigned, kj::implicit_cast, checkRoundTrip)
+HANDLE_NUMERIC_TYPE(float, kj::implicit_cast, kj::implicit_cast, kj::implicit_cast)
+HANDLE_NUMERIC_TYPE(double, kj::implicit_cast, kj::implicit_cast, kj::implicit_cast)
 
 #undef HANDLE_NUMERIC_TYPE
 

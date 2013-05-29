@@ -93,17 +93,13 @@
 // * For every macro `FOO` above, there is a `DFOO` version (or `RECOVERABLE_DFOO`) which is only
 //   executed in debug mode.  When `NDEBUG` is defined, these macros expand to nothing.
 
-#ifndef CAPNPROTO_LOGGING_H_
-#define CAPNPROTO_LOGGING_H_
-
-#ifndef CAPNPROTO_PRIVATE
-#error "This header is only meant to be included by Cap'n Proto's own source code."
-#endif
+#ifndef KJ_LOGGING_H_
+#define KJ_LOGGING_H_
 
 #include "util.h"
 #include "exception.h"
 
-namespace capnproto {
+namespace kj {
 
 class Log {
 public:
@@ -133,7 +129,7 @@ public:
   template <typename... Params>
   static void fatalFault(const char* file, int line, Exception::Nature nature,
                          const char* condition, const char* macroArgs, Params&&... params)
-                         CAPNPROTO_NORETURN;
+                         KJ_NORETURN;
 
   template <typename Call, typename... Params>
   static bool recoverableSyscall(Call&& call, const char* file, int line, const char* callText,
@@ -156,7 +152,7 @@ public:
   class Context: public ExceptionCallback {
   public:
     Context();
-    CAPNPROTO_DISALLOW_COPY(Context);
+    KJ_DISALLOW_COPY(Context);
     virtual ~Context();
     virtual void addTo(Exception& exception) = 0;
 
@@ -173,7 +169,7 @@ public:
   class ContextImpl: public Context {
   public:
     inline ContextImpl(Func& func): func(func) {}
-    CAPNPROTO_DISALLOW_COPY(ContextImpl);
+    KJ_DISALLOW_COPY(ContextImpl);
 
     void addTo(Exception& exception) override {
       func(exception);
@@ -197,14 +193,14 @@ private:
   static void fatalFaultInternal(
       const char* file, int line, Exception::Nature nature,
       const char* condition, const char* macroArgs, ArrayPtr<Array<char>> argValues)
-      CAPNPROTO_NORETURN;
+      KJ_NORETURN;
   static void recoverableFailedSyscallInternal(
       const char* file, int line, const char* call,
       int errorNumber, const char* macroArgs, ArrayPtr<Array<char>> argValues);
   static void fatalFailedSyscallInternal(
       const char* file, int line, const char* call,
       int errorNumber, const char* macroArgs, ArrayPtr<Array<char>> argValues)
-      CAPNPROTO_NORETURN;
+      KJ_NORETURN;
   static void addContextToInternal(Exception& exception, const char* file, int line,
                                    const char* macroArgs, ArrayPtr<Array<char>> argValues);
 
@@ -215,19 +211,19 @@ private:
 ArrayPtr<const char> operator*(const Stringifier&, Log::Severity severity);
 
 #define LOG(severity, ...) \
-  if (!::capnproto::Log::shouldLog(::capnproto::Log::Severity::severity)) {} else \
-    ::capnproto::Log::log(__FILE__, __LINE__, ::capnproto::Log::Severity::severity, \
+  if (!::kj::Log::shouldLog(::kj::Log::Severity::severity)) {} else \
+    ::kj::Log::log(__FILE__, __LINE__, ::kj::Log::Severity::severity, \
                           #__VA_ARGS__, __VA_ARGS__)
 
 #define FAULT(nature, cond, ...) \
-  if (CAPNPROTO_EXPECT_TRUE(cond)) {} else \
-    ::capnproto::Log::fatalFault(__FILE__, __LINE__, \
-        ::capnproto::Exception::Nature::nature, #cond, #__VA_ARGS__, ##__VA_ARGS__)
+  if (KJ_EXPECT_TRUE(cond)) {} else \
+    ::kj::Log::fatalFault(__FILE__, __LINE__, \
+        ::kj::Exception::Nature::nature, #cond, #__VA_ARGS__, ##__VA_ARGS__)
 
 #define RECOVERABLE_FAULT(nature, cond, ...) \
-  if (CAPNPROTO_EXPECT_TRUE(cond)) {} else \
-    if (::capnproto::Log::recoverableFault(__FILE__, __LINE__, \
-            ::capnproto::Exception::Nature::nature, #cond, #__VA_ARGS__, ##__VA_ARGS__), false) {} \
+  if (KJ_EXPECT_TRUE(cond)) {} else \
+    if (::kj::Log::recoverableFault(__FILE__, __LINE__, \
+            ::kj::Exception::Nature::nature, #cond, #__VA_ARGS__, ##__VA_ARGS__), false) {} \
     else
 
 #define CHECK(...) FAULT(LOCAL_BUG, __VA_ARGS__)
@@ -243,11 +239,11 @@ ArrayPtr<const char> operator*(const Stringifier&, Log::Severity severity);
 #define FAIL_VALIDATE_INPUT(...) VALIDATE_INPUT(false, ##__VA_ARGS__)
 
 #define SYSCALL(call, ...) \
-  ::capnproto::Log::syscall( \
+  ::kj::Log::syscall( \
       [&](){return (call);}, __FILE__, __LINE__, #call, #__VA_ARGS__, ##__VA_ARGS__)
 
 #define RECOVERABLE_SYSCALL(call, ...) \
-  if (::capnproto::Log::recoverableSyscall( \
+  if (::kj::Log::recoverableSyscall( \
       [&](){return (call);}, __FILE__, __LINE__, #call, #__VA_ARGS__, ##__VA_ARGS__)) {} \
   else
 
@@ -255,7 +251,7 @@ ArrayPtr<const char> operator*(const Stringifier&, Log::Severity severity);
   do { \
     /* make sure to read error number before doing anything else that could change it */ \
     int _errorNumber = errorNumber; \
-    ::capnproto::Log::reportFailedSyscall( \
+    ::kj::Log::reportFailedSyscall( \
         _errorNumber, __FILE__, __LINE__, #code, #__VA_ARGS__, ##__VA_ARGS__); \
   } while (false)
 
@@ -263,16 +259,16 @@ ArrayPtr<const char> operator*(const Stringifier&, Log::Severity severity);
   do { \
     /* make sure to read error number before doing anything else that could change it */ \
     int _errorNumber = errorNumber; \
-    ::capnproto::Log::reportFailedRecoverableSyscall( \
+    ::kj::Log::reportFailedRecoverableSyscall( \
         _errorNumber, __FILE__, __LINE__, #code, #__VA_ARGS__, ##__VA_ARGS__); \
   } while (false)
 
 #define CONTEXT(...) \
-  auto _capnpContextFunc = [&](::capnproto::Exception& exception) { \
-        return ::capnproto::Log::addContextTo(exception, \
+  auto _kjContextFunc = [&](::kj::Exception& exception) { \
+        return ::kj::Log::addContextTo(exception, \
             __FILE__, __LINE__, #__VA_ARGS__, ##__VA_ARGS__); \
       }; \
-  ::capnproto::Log::ContextImpl<decltype(_capnpContextFunc)> _capnpContext(_capnpContextFunc)
+  ::kj::Log::ContextImpl<decltype(_kjContextFunc)> _kjContext(_kjContextFunc)
 
 #ifdef NDEBUG
 #define DLOG(...) do {} while (false)
@@ -371,6 +367,6 @@ void Log::addContextTo(Exception& exception, const char* file, int line,
   addContextToInternal(exception, file, line, macroArgs, arrayPtr(argValues, sizeof...(Params)));
 }
 
-}  // namespace capnproto
+}  // namespace kj
 
-#endif  // CAPNPROTO_LOGGING_H_
+#endif  // KJ_LOGGING_H_

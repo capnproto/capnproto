@@ -27,8 +27,8 @@
 #include <map>
 #include "message.h"
 #include "arena.h"
-#include "logging.h"
-#include "exception.h"
+#include <kj/logging.h>
+#include <kj/exception.h>
 
 namespace capnproto {
 
@@ -44,7 +44,7 @@ public:
   // Create a dummy empty schema of the given kind for the given id and load it.
 
   internal::RawSchema* tryGet(uint64_t typeId) const;
-  Array<Schema> getAllLoaded() const;
+  kj::Array<Schema> getAllLoaded() const;
 
   template <typename T>
   T* allocate(size_t count = 1) {
@@ -211,9 +211,9 @@ private:
       }
     }
 
-    CAPNPROTO_STACK_ARRAY(bool, sawCodeOrder, members.size(), 32, 256);
+    KJ_STACK_ARRAY(bool, sawCodeOrder, members.size(), 32, 256);
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
-    CAPNPROTO_STACK_ARRAY(bool, sawOrdinal, ordinalCount, 32, 256);
+    KJ_STACK_ARRAY(bool, sawOrdinal, ordinalCount, 32, 256);
     memset(sawOrdinal.begin(), 0, sawOrdinal.size() * sizeof(sawOrdinal[0]));
 
     uint index = 0;
@@ -230,7 +230,7 @@ private:
   }
 
   void validate(schema::StructNode::Member::Reader member,
-                ArrayPtr<bool> sawCodeOrder, ArrayPtr<bool> sawOrdinal,
+                kj::ArrayPtr<bool> sawCodeOrder, kj::ArrayPtr<bool> sawOrdinal,
                 uint dataSizeInBits, uint pointerCount,
                 uint unionIndex, uint index) {
     validateMemberName(member.getName(), unionIndex, index);
@@ -265,7 +265,7 @@ private:
                         "Schema invalid: Union discriminant out-of-bounds.");
 
         auto uMembers = u.getMembers();
-        CAPNPROTO_STACK_ARRAY(bool, uSawCodeOrder, uMembers.size(), 32, 256);
+        KJ_STACK_ARRAY(bool, uSawCodeOrder, uMembers.size(), 32, 256);
         memset(uSawCodeOrder.begin(), 0, uSawCodeOrder.size() * sizeof(uSawCodeOrder[0]));
 
         uint subIndex = 0;
@@ -285,7 +285,7 @@ private:
   void validate(schema::EnumNode::Reader enumNode) {
     auto enumerants = enumNode.getEnumerants();
 
-    CAPNPROTO_STACK_ARRAY(bool, sawCodeOrder, enumerants.size(), 32, 256);
+    KJ_STACK_ARRAY(bool, sawCodeOrder, enumerants.size(), 32, 256);
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
 
     uint index = 0;
@@ -302,7 +302,7 @@ private:
   void validate(schema::InterfaceNode::Reader interfaceNode) {
     auto methods = interfaceNode.getMethods();
 
-    CAPNPROTO_STACK_ARRAY(bool, sawCodeOrder, methods.size(), 32, 256);
+    KJ_STACK_ARRAY(bool, sawCodeOrder, methods.size(), 32, 256);
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
 
     uint index = 0;
@@ -429,7 +429,7 @@ private:
 
     // TODO(cleanup):  str() really needs to return something NUL-terminated...
     dependencies.insert(std::make_pair(id, loader.loadEmpty(
-        id, str("(unknown type used by ", nodeName , ")", '\0').begin(), expectedKind)));
+        id, kj::str("(unknown type used by ", nodeName , ")", '\0').begin(), expectedKind)));
   }
 
 #undef VALIDATE_SCHEMA
@@ -812,11 +812,11 @@ private:
 
     word scratch[32];
     memset(scratch, 0, sizeof(scratch));
-    MallocMessageBuilder builder(arrayPtr(scratch, sizeof(scratch)));
+    MallocMessageBuilder builder(kj::arrayPtr(scratch, sizeof(scratch)));
     auto node = builder.initRoot<schema::Node>();
     node.setId(structTypeId);
     // TODO(cleanup):  str() really needs to return something NUL-terminated...
-    node.setDisplayName(str("(unknown type used in ", nodeName, ")", '\0').begin());
+    node.setDisplayName(kj::str("(unknown type used in ", nodeName, ")", '\0').begin());
     auto structNode = node.getBody().initStructNode();
 
     switch (type.getBody().which()) {
@@ -984,7 +984,7 @@ internal::RawSchema* SchemaLoader::Impl::load(schema::Node::Reader reader) {
   // Make a copy of the node which can be used unchecked.
   size_t size = reader.totalSizeInWords() + 1;
   word* validated = allocate<word>(size);
-  copyToUnchecked(reader, arrayPtr(validated, size));
+  copyToUnchecked(reader, kj::arrayPtr(validated, size));
 
   // Validate the copy.
   Validator validator(*this);
@@ -1067,7 +1067,7 @@ internal::RawSchema* SchemaLoader::Impl::loadEmpty(
     uint64_t id, Text::Reader name, schema::Node::Body::Which kind) {
   word scratch[32];
   memset(scratch, 0, sizeof(scratch));
-  MallocMessageBuilder builder(arrayPtr(scratch, sizeof(scratch)));
+  MallocMessageBuilder builder(kj::arrayPtr(scratch, sizeof(scratch)));
   auto node = builder.initRoot<schema::Node>();
   node.setId(id);
   node.setDisplayName(name);
@@ -1095,8 +1095,8 @@ internal::RawSchema* SchemaLoader::Impl::tryGet(uint64_t typeId) const {
   }
 }
 
-Array<Schema> SchemaLoader::Impl::getAllLoaded() const {
-  Array<Schema> result = newArray<Schema>(schemas.size());
+kj::Array<Schema> SchemaLoader::Impl::getAllLoaded() const {
+  kj::Array<Schema> result = kj::newArray<Schema>(schemas.size());
   size_t i = 0;
   for (auto& schema: schemas) {
     result[i++] = Schema(schema.second);
@@ -1106,7 +1106,7 @@ Array<Schema> SchemaLoader::Impl::getAllLoaded() const {
 
 // =======================================================================================
 
-SchemaLoader::SchemaLoader(): impl(heap<Impl>()) {}
+SchemaLoader::SchemaLoader(): impl(kj::heap<Impl>()) {}
 SchemaLoader::~SchemaLoader() {}
 
 Schema SchemaLoader::get(uint64_t id) const {
@@ -1115,7 +1115,7 @@ Schema SchemaLoader::get(uint64_t id) const {
   return Schema(raw);
 }
 
-Maybe<Schema> SchemaLoader::tryGet(uint64_t id) const {
+kj::Maybe<Schema> SchemaLoader::tryGet(uint64_t id) const {
   internal::RawSchema* raw = impl->tryGet(id);
   if (raw == nullptr) {
     return nullptr;
@@ -1128,7 +1128,7 @@ Schema SchemaLoader::load(schema::Node::Reader reader) {
   return Schema(impl->load(reader));
 }
 
-Array<Schema> SchemaLoader::getAllLoaded() const {
+kj::Array<Schema> SchemaLoader::getAllLoaded() const {
   return impl->getAllLoaded();
 }
 

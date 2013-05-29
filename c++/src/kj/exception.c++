@@ -21,7 +21,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define CAPNPROTO_PRIVATE
+#define KJ_PRIVATE
 #include "exception.h"
 #include "util.h"
 #include "logging.h"
@@ -29,7 +29,7 @@
 #include <execinfo.h>
 #include <stdlib.h>
 
-namespace capnproto {
+namespace kj {
 
 ArrayPtr<const char> operator*(const Stringifier&, Exception::Nature nature) {
   static const char* NATURE_STRINGS[] = {
@@ -191,4 +191,4 @@ ExceptionCallback& getExceptionCallback() {
      globalCallback != nullptr ? *globalCallback : defaultCallback;
 }
 
-}  // namespace capnproto
+}  // namespace kj

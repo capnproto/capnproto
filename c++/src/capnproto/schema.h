@@ -113,7 +113,7 @@ public:
 
   MemberList getMembers() const;
 
-  Maybe<Member> findMemberByName(Text::Reader name) const;
+  kj::Maybe<Member> findMemberByName(Text::Reader name) const;
 
   Member getMemberByName(Text::Reader name) const;
   // Like findMemberByName() but throws an exception on failure.
@@ -124,7 +124,7 @@ private:
     return StructSchema(&internal::rawSchema<T>());
   }
   friend class Schema;
-  friend String internal::debugString(
+  friend kj::String internal::debugString(
       internal::StructReader reader, const internal::RawSchema& schema);
 };
 
@@ -138,7 +138,7 @@ public:
   inline uint getIndex() const { return index; }
   // Get the index of this member within the containing struct or union.
 
-  Maybe<Union> getContainingUnion() const;
+  kj::Maybe<Union> getContainingUnion() const;
   // If this a member of a union, gets the containing union schema.
 
   Union asUnion() const;
@@ -167,7 +167,7 @@ public:
 
   MemberList getMembers() const;
 
-  Maybe<Member> findMemberByName(Text::Reader name) const;
+  kj::Maybe<Member> findMemberByName(Text::Reader name) const;
 
   Member getMemberByName(Text::Reader name) const;
   // Like findMemberByName() but throws an exception on failure.
@@ -210,7 +210,7 @@ public:
 
   EnumerantList getEnumerants() const;
 
-  Maybe<Enumerant> findEnumerantByName(Text::Reader name) const;
+  kj::Maybe<Enumerant> findEnumerantByName(Text::Reader name) const;
 
   Enumerant getEnumerantByName(Text::Reader name) const;
   // Like findEnumerantByName() but throws an exception on failure.
@@ -277,7 +277,7 @@ public:
 
   MethodList getMethods() const;
 
-  Maybe<Method> findMethodByName(Text::Reader name) const;
+  kj::Maybe<Method> findMethodByName(Text::Reader name) const;
 
   Method getMethodByName(Text::Reader name) const;
   // Like findMethodByName() but throws an exception on failure.

@@ -53,21 +53,21 @@ class FlatArrayMessageReader: public MessageReader {
   // for extremely fast parsing.
 
 public:
-  FlatArrayMessageReader(ArrayPtr<const word> array, ReaderOptions options = ReaderOptions());
+  FlatArrayMessageReader(kj::ArrayPtr<const word> array, ReaderOptions options = ReaderOptions());
   // The array must remain valid until the MessageReader is destroyed.
 
-  ArrayPtr<const word> getSegment(uint id) override;
+  kj::ArrayPtr<const word> getSegment(uint id) override;
 
 private:
   // Optimize for single-segment case.
-  ArrayPtr<const word> segment0;
-  Array<ArrayPtr<const word>> moreSegments;
+  kj::ArrayPtr<const word> segment0;
+  kj::Array<kj::ArrayPtr<const word>> moreSegments;
 };
 
-Array<word> messageToFlatArray(MessageBuilder& builder);
+kj::Array<word> messageToFlatArray(MessageBuilder& builder);
 // Constructs a flat array containing the entire content of the given message.
 
-Array<word> messageToFlatArray(ArrayPtr<const ArrayPtr<const word>> segments);
+kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 // Version of messageToFlatArray that takes a raw segment array.
 
 // =======================================================================================
@@ -76,28 +76,28 @@ class InputStreamMessageReader: public MessageReader {
 public:
   InputStreamMessageReader(InputStream& inputStream,
                            ReaderOptions options = ReaderOptions(),
-                           ArrayPtr<word> scratchSpace = nullptr);
+                           kj::ArrayPtr<word> scratchSpace = nullptr);
   ~InputStreamMessageReader();
 
   // implements MessageReader ----------------------------------------
-  ArrayPtr<const word> getSegment(uint id) override;
+  kj::ArrayPtr<const word> getSegment(uint id) override;
 
 private:
   InputStream& inputStream;
   byte* readPos;
 
   // Optimize for single-segment case.
-  ArrayPtr<const word> segment0;
-  Array<ArrayPtr<const word>> moreSegments;
+  kj::ArrayPtr<const word> segment0;
+  kj::Array<kj::ArrayPtr<const word>> moreSegments;
 
-  Array<word> ownedSpace;
+  kj::Array<word> ownedSpace;
   // Only if scratchSpace wasn't big enough.
 };
 
 void writeMessage(OutputStream& output, MessageBuilder& builder);
 // Write the message to the given output stream.
 
-void writeMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> segments);
+void writeMessage(OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 // Write the segment array to the given output stream.
 
 // =======================================================================================
@@ -109,13 +109,13 @@ class StreamFdMessageReader: private FdInputStream, public InputStreamMessageRea
 
 public:
   StreamFdMessageReader(int fd, ReaderOptions options = ReaderOptions(),
-                        ArrayPtr<word> scratchSpace = nullptr)
+                        kj::ArrayPtr<word> scratchSpace = nullptr)
       : FdInputStream(fd), InputStreamMessageReader(*this, options, scratchSpace) {}
   // Read message from a file descriptor, without taking ownership of the descriptor.
 
   StreamFdMessageReader(AutoCloseFd fd, ReaderOptions options = ReaderOptions(),
-                        ArrayPtr<word> scratchSpace = nullptr)
-      : FdInputStream(move(fd)), InputStreamMessageReader(*this, options, scratchSpace) {}
+                        kj::ArrayPtr<word> scratchSpace = nullptr)
+      : FdInputStream(kj::move(fd)), InputStreamMessageReader(*this, options, scratchSpace) {}
   // Read a message from a file descriptor, taking ownership of the descriptor.
 
   ~StreamFdMessageReader();
@@ -128,7 +128,7 @@ void writeMessageToFd(int fd, MessageBuilder& builder);
 // you catch this exception at the call site.  If throwing an exception is not acceptable, you
 // can implement your own OutputStream with arbitrary error handling and then use writeMessage().
 
-void writeMessageToFd(int fd, ArrayPtr<const ArrayPtr<const word>> segments);
+void writeMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 // Write the segment array to the given file descriptor.
 //
 // This function throws an exception on any I/O error.  If your code is not exception-safe, be sure
@@ -138,7 +138,7 @@ void writeMessageToFd(int fd, ArrayPtr<const ArrayPtr<const word>> segments);
 // =======================================================================================
 // inline stuff
 
-inline Array<word> messageToFlatArray(MessageBuilder& builder) {
+inline kj::Array<word> messageToFlatArray(MessageBuilder& builder) {
   return messageToFlatArray(builder.getSegmentsForOutput());
 }
 

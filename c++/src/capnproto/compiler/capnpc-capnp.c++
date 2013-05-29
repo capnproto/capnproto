@@ -28,7 +28,7 @@
 
 #include "../schema.capnp.h"
 #include "../serialize.h"
-#include "../logging.h"
+#include <kj/logging.h>
 #include "../io.h"
 #include "../schema-loader.h"
 #include "../dynamic.h"
@@ -45,14 +45,14 @@ public:
   TextBlob() = default;
   template <typename... Params>
   TextBlob(Params&&... params);
-  TextBlob(Array<TextBlob>&& params);
+  TextBlob(kj::Array<TextBlob>&& params);
 
   void writeTo(OutputStream& out) const;
 
 private:
-  Array<char> text;
+  kj::Array<char> text;
   struct Branch;
-  Array<Branch> branches;
+  kj::Array<Branch> branches;
 
   void allocate(size_t textSize, size_t branchCount);
   template <typename First, typename... Rest>
@@ -67,11 +67,11 @@ private:
   void fill(char* textPos, Branch* branchesPos, TextBlob&& first, Rest&&... rest);
 
   template <typename T>
-  auto toContainer(T&& t) -> decltype(STR * t) {
-    return STR * t;
+  auto toContainer(T&& t) -> decltype(kj::STR * t) {
+    return kj::STR * t;
   }
   TextBlob&& toContainer(TextBlob&& t) {
-    return move(t);
+    return kj::move(t);
   }
   TextBlob& toContainer(TextBlob& t) {
     return t;
@@ -91,14 +91,14 @@ struct TextBlob::Branch {
 
 template <typename... Params>
 TextBlob::TextBlob(Params&&... params) {
-  init(toContainer(capnproto::forward<Params>(params))...);
+  init(toContainer(kj::forward<Params>(params))...);
 }
 
-TextBlob::TextBlob(Array<TextBlob>&& params) {
-  branches = newArray<Branch>(params.size());
+TextBlob::TextBlob(kj::Array<TextBlob>&& params) {
+  branches = kj::newArray<Branch>(params.size());
   for (size_t i = 0; i < params.size(); i++) {
     branches[i].pos = nullptr;
-    branches[i].content = move(params[i]);
+    branches[i].content = kj::move(params[i]);
   }
 }
 
@@ -113,19 +113,19 @@ void TextBlob::writeTo(OutputStream& out) const {
 }
 
 void TextBlob::allocate(size_t textSize, size_t branchCount) {
-  text = newArray<char>(textSize);
-  branches = newArray<Branch>(branchCount);
+  text = kj::newArray<char>(textSize);
+  branches = kj::newArray<Branch>(branchCount);
 }
 
 template <typename First, typename... Rest>
 void TextBlob::allocate(size_t textSize, size_t branchCount, const First& first, Rest&&... rest) {
-  allocate(textSize + first.size(), branchCount, capnproto::forward<Rest>(rest)...);
+  allocate(textSize + first.size(), branchCount, kj::forward<Rest>(rest)...);
 }
 
 template <typename... Rest>
 void TextBlob::allocate(size_t textSize, size_t branchCount,
                         const TextBlob& first, Rest&&... rest) {
-  allocate(textSize, branchCount + 1, capnproto::forward<Rest>(rest)...);
+  allocate(textSize, branchCount + 1, kj::forward<Rest>(rest)...);
 }
 
 void TextBlob::fill(char* textPos, Branch* branchesPos) {
@@ -135,42 +135,42 @@ void TextBlob::fill(char* textPos, Branch* branchesPos) {
 
 template <typename First, typename... Rest>
 void TextBlob::fill(char* textPos, Branch* branchesPos, First&& first, Rest&&... rest) {
-  textPos = capnproto::fill(textPos, capnproto::forward<First>(first));
-  fill(textPos, branchesPos, capnproto::forward<Rest>(rest)...);
+  textPos = kj::fill(textPos, kj::forward<First>(first));
+  fill(textPos, branchesPos, kj::forward<Rest>(rest)...);
 }
 
 template <typename... Rest>
 void TextBlob::fill(char* textPos, Branch* branchesPos, TextBlob&& first, Rest&&... rest) {
   branchesPos->pos = textPos;
-  branchesPos->content = move(first);
+  branchesPos->content = kj::move(first);
   ++branchesPos;
-  fill(textPos, branchesPos, capnproto::forward<Rest>(rest)...);
+  fill(textPos, branchesPos, kj::forward<Rest>(rest)...);
 }
 
 template <typename... Params>
 void TextBlob::init(Params&&... params) {
   allocate(0, 0, params...);
-  fill(text.begin(), branches.begin(), capnproto::forward<Params>(params)...);
+  fill(text.begin(), branches.begin(), kj::forward<Params>(params)...);
 }
 
 template <typename... Params>
 TextBlob text(Params&&... params) {
-  return TextBlob(capnproto::forward<Params>(params)...);
+  return TextBlob(kj::forward<Params>(params)...);
 }
 
 template <typename List, typename Func>
 TextBlob forText(List&& list, Func&& func) {
-  Array<TextBlob> items = newArray<TextBlob>(list.size());
+  kj::Array<TextBlob> items = kj::newArray<TextBlob>(list.size());
   for (size_t i = 0; i < list.size(); i++) {
     items[i] = func(list[i]);
   }
-  return TextBlob(capnproto::move(items));
+  return TextBlob(kj::move(items));
 }
 
 template <typename T>
 struct ForTextHack {
   T list;
-  ForTextHack(T list): list(capnproto::forward<T>(list)) {}
+  ForTextHack(T list): list(kj::forward<T>(list)) {}
   template <typename Func>
   TextBlob operator*(Func&& func) {
     return forText(list, func);
@@ -206,7 +206,7 @@ struct Indent {
   inline Iterator end() const { return Iterator(amount); }
 };
 
-inline Indent operator*(Stringifier, Indent i) { return i; }
+inline Indent operator*(kj::Stringifier, Indent i) { return i; }
 
 // =======================================================================================
 
@@ -259,14 +259,14 @@ TextBlob nodeName(Schema target, Schema scope) {
     auto part = targetParents.back();
     auto proto = part.getProto();
     if (proto.getScopeId() == 0) {
-      path = text(move(path), "import \"", proto.getDisplayName(), "\".");
+      path = text(kj::move(path), "import \"", proto.getDisplayName(), "\".");
     } else {
-      path = text(move(path), getUnqualifiedName(part), ".");
+      path = text(kj::move(path), getUnqualifiedName(part), ".");
     }
     targetParents.pop_back();
   }
 
-  return text(move(path), getUnqualifiedName(target));
+  return text(kj::move(path), getUnqualifiedName(target));
 }
 
 TextBlob genType(schema::Type::Reader type, Schema scope) {
@@ -481,7 +481,7 @@ TextBlob genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent inde
     case schema::Node::Body::STRUCT_NODE: {
       auto body = proto.getBody().getStructNode();
       return text(
-          indent, "struct ", name, " @0x", hex(proto.getId()), genAnnotations(schema), " {  # ",
+          indent, "struct ", name, " @0x", kj::hex(proto.getId()), genAnnotations(schema), " {  # ",
           body.getDataSectionWordSize() * 8, " bytes, ",
           body.getPointerSectionSize(), " ptrs",
           body.getPreferredListEncoding() == schema::ElementSize::INLINE_COMPOSITE
@@ -498,7 +498,7 @@ TextBlob genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent inde
       auto body = proto.getBody().getEnumNode();
       uint i = 0;
       return text(
-          indent, "enum ", name, " @0x", hex(proto.getId()), genAnnotations(schema), " {\n",
+          indent, "enum ", name, " @0x", kj::hex(proto.getId()), genAnnotations(schema), " {\n",
           FOR_EACH(body.getEnumerants(), enumerant) {
             return text(indent.next(), enumerant.getName(), " @", i++,
                         genAnnotations(enumerant.getAnnotations(), schema), ";\n");
@@ -510,7 +510,8 @@ TextBlob genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent inde
       auto body = proto.getBody().getInterfaceNode();
       uint i = 0;
       return text(
-          indent, "interface ", name, " @0x", hex(proto.getId()), genAnnotations(schema), " {\n",
+          indent, "interface ", name, " @0x", kj::hex(proto.getId()),
+          genAnnotations(schema), " {\n",
           FOR_EACH(body.getMethods(), method) {
             int j = 0;
             return text(
@@ -535,12 +536,13 @@ TextBlob genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent inde
     case schema::Node::Body::CONST_NODE: {
       auto body = proto.getBody().getConstNode();
       return text(
-          indent, "const ", name, " @0x", hex(proto.getId()), " :", genType(body.getType(), schema),
-          " = ", genValue(body.getType(), body.getValue(), schema), ";\n");
+          indent, "const ", name, " @0x", kj::hex(proto.getId()), " :",
+          genType(body.getType(), schema), " = ",
+          genValue(body.getType(), body.getValue(), schema), ";\n");
     }
     case schema::Node::Body::ANNOTATION_NODE: {
       auto body = proto.getBody().getAnnotationNode();
-      CappedArray<const char*, 11> targets;
+      kj::CappedArray<const char*, 11> targets;
       uint i = 0;
       if (body.getTargetsFile()) targets[i++] = "file";
       if (body.getTargetsConst()) targets[i++] = "const";
@@ -560,7 +562,7 @@ TextBlob genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent inde
         targets.setSize(i);
       }
       return text(
-          indent, "annotation ", name, " @0x", hex(proto.getId()),
+          indent, "annotation ", name, " @0x", kj::hex(proto.getId()),
           " (", strArray(targets, ", "), ") :",
           genType(body.getType(), schema), genAnnotations(schema), ";\n");
     }
@@ -584,7 +586,7 @@ TextBlob genFile(Schema file) {
 
   return text(
     "# ", proto.getDisplayName(), "\n",
-    "@0x", hex(proto.getId()), ";\n",
+    "@0x", kj::hex(proto.getId()), ";\n",
     FOR_EACH(proto.getAnnotations(), ann) { return genAnnotation(ann, file, "", ";\n"); },
     genNestedDecls(file, Indent(0)));
 }

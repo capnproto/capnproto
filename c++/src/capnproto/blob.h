@@ -24,8 +24,8 @@
 #ifndef CAPNPROTO_BLOB_H_
 #define CAPNPROTO_BLOB_H_
 
-#include "macros.h"
-#include "type-safety.h"
+#include <kj/macros.h>
+#include "common.h"
 #include <string.h>
 
 namespace capnproto {
@@ -75,7 +75,7 @@ public:
   inline const char operator[](uint index) const { return bytes[index]; }
 
   inline Reader slice(uint start, uint end) const {
-    CAPNPROTO_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds slice.");
+    KJ_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds slice.");
     return Reader(bytes + start, end - start);
   }
 
@@ -120,13 +120,13 @@ public:
   inline Reader(const char* text): Data::Reader(text, strlen(text)) {}
   inline Reader(char* text): Data::Reader(text, strlen(text)) {}
   inline Reader(const char* text, uint size): Data::Reader(text, size) {
-    CAPNPROTO_INLINE_DPRECOND(text[size] == '\0', "Text must be NUL-terminated.");
+    KJ_INLINE_DPRECOND(text[size] == '\0', "Text must be NUL-terminated.");
   }
 
   template <typename T>
   inline Reader(const T& other): Data::Reader(other.c_str(), other.size()) {
     // Primarily intended for converting from std::string.
-    CAPNPROTO_INLINE_DPRECOND(data()[size()] == '\0', "Text must be NUL-terminated.");
+    KJ_INLINE_DPRECOND(data()[size()] == '\0', "Text must be NUL-terminated.");
   }
 
   inline const char* c_str() const { return data(); }
@@ -158,7 +158,7 @@ public:
   inline char& operator[](uint index) const { return bytes[index]; }
 
   inline Builder slice(uint start, uint end) const {
-    CAPNPROTO_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds slice.");
+    KJ_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds slice.");
     return Builder(bytes + start, end - start);
   }
 
@@ -177,7 +177,7 @@ public:
 
   template <typename T>
   inline void copyFrom(const T& other) const {
-    CAPNPROTO_INLINE_DPRECOND(size() == other.size(), "Sizes must match to copy.");
+    KJ_INLINE_DPRECOND(size() == other.size(), "Sizes must match to copy.");
     memcpy(bytes, other.data(), other.size());
   }
   inline void copyFrom(const void* other) const {

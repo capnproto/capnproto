@@ -21,13 +21,13 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNPROTO_EXCEPTION_H_
-#define CAPNPROTO_EXCEPTION_H_
+#ifndef KJ_EXCEPTION_H_
+#define KJ_EXCEPTION_H_
 
 #include <exception>
 #include "type-safety.h"
 
-namespace capnproto {
+namespace kj {
 
 class Exception: public std::exception {
   // Exception thrown in case of fatal errors.
@@ -127,23 +127,23 @@ class ExceptionCallback {
 
 public:
   ExceptionCallback();
-  CAPNPROTO_DISALLOW_COPY(ExceptionCallback);
+  KJ_DISALLOW_COPY(ExceptionCallback);
   virtual ~ExceptionCallback();
 
   virtual void onRecoverableException(Exception&& exception);
   // Called when an exception has been raised, but the calling code has the ability to continue by
   // producing garbage output.  This method _should_ throw the exception, but is allowed to simply
   // return if garbage output is acceptable.  The default implementation throws an exception unless
-  // Cap'n Proto was compiled with -fno-exceptions, in which case it logs an error and returns.
+  // the library was compiled with -fno-exceptions, in which case it logs an error and returns.
 
   virtual void onFatalException(Exception&& exception);
   // Called when an exception has been raised and the calling code cannot continue.  If this method
   // returns normally, abort() will be called.  The method must throw the exception to avoid
-  // aborting.  The default implementation throws an exception unless Cap'n Proto was compiled with
+  // aborting.  The default implementation throws an exception unless the library was compiled with
   // -fno-exceptions, in which case it logs an error and returns.
 
   virtual void logMessage(ArrayPtr<const char> text);
-  // Called when Cap'n Proto wants to log some debug text.  The text always ends in a newline if
+  // Called when something wants to log some debug text.  The text always ends in a newline if
   // it is non-empty.  The default implementation writes the text to stderr.
 
   void useProcessWide();
@@ -163,7 +163,7 @@ public:
 
   public:
     ScopedRegistration(ExceptionCallback& callback);
-    CAPNPROTO_DISALLOW_COPY(ScopedRegistration);
+    KJ_DISALLOW_COPY(ScopedRegistration);
     ~ScopedRegistration();
 
     inline ExceptionCallback& getCallback() { return callback; }
@@ -177,6 +177,6 @@ public:
 ExceptionCallback& getExceptionCallback();
 // Returns the current exception callback.
 
-}  // namespace capnproto
+}  // namespace kj
 
-#endif  // CAPNPROTO_EXCEPTION_H_
+#endif  // KJ_EXCEPTION_H_

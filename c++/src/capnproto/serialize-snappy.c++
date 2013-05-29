@@ -23,7 +23,7 @@
 
 #define CAPNPROTO_PRIVATE
 #include "serialize-snappy.h"
-#include "logging.h"
+#include <kj/logging.h>
 #include "layout.h"
 #include <snappy/snappy.h>
 #include <snappy/snappy-sinksource.h>
@@ -45,7 +45,7 @@ public:
   }
 
   const char* Peek(size_t* len) override {
-    ArrayPtr<const byte> buffer = inputStream.getReadBuffer();
+    kj::ArrayPtr<const byte> buffer = inputStream.getReadBuffer();
     *len = buffer.size();
     return reinterpret_cast<const char*>(buffer.begin());
   }
@@ -58,10 +58,10 @@ private:
   BufferedInputStream& inputStream;
 };
 
-SnappyInputStream::SnappyInputStream(BufferedInputStream& inner, ArrayPtr<byte> buffer)
+SnappyInputStream::SnappyInputStream(BufferedInputStream& inner, kj::ArrayPtr<byte> buffer)
     : inner(inner) {
   if (buffer.size() < SNAPPY_BUFFER_SIZE) {
-    ownedBuffer = newArray<byte>(SNAPPY_BUFFER_SIZE);
+    ownedBuffer = kj::newArray<byte>(SNAPPY_BUFFER_SIZE);
     buffer = ownedBuffer;
   }
   this->buffer = buffer;
@@ -69,7 +69,7 @@ SnappyInputStream::SnappyInputStream(BufferedInputStream& inner, ArrayPtr<byte> 
 
 SnappyInputStream::~SnappyInputStream() {}
 
-ArrayPtr<const byte> SnappyInputStream::getReadBuffer() {
+kj::ArrayPtr<const byte> SnappyInputStream::getReadBuffer() {
   if (bufferAvailable.size() == 0) {
     refill();
   }
@@ -119,20 +119,20 @@ void SnappyInputStream::refill() {
 // =======================================================================================
 
 SnappyOutputStream::SnappyOutputStream(
-    OutputStream& inner, ArrayPtr<byte> buffer, ArrayPtr<byte> compressedBuffer)
+    OutputStream& inner, kj::ArrayPtr<byte> buffer, kj::ArrayPtr<byte> compressedBuffer)
     : inner(inner) {
   DCHECK(SNAPPY_COMPRESSED_BUFFER_SIZE >= snappy::MaxCompressedLength(snappy::kBlockSize),
       "snappy::MaxCompressedLength() changed?");
 
   if (buffer.size() < SNAPPY_BUFFER_SIZE) {
-    ownedBuffer = newArray<byte>(SNAPPY_BUFFER_SIZE);
+    ownedBuffer = kj::newArray<byte>(SNAPPY_BUFFER_SIZE);
     buffer = ownedBuffer;
   }
   this->buffer = buffer;
   bufferPos = buffer.begin();
 
   if (compressedBuffer.size() < SNAPPY_COMPRESSED_BUFFER_SIZE) {
-    ownedCompressedBuffer = newArray<byte>(SNAPPY_COMPRESSED_BUFFER_SIZE);
+    ownedCompressedBuffer = kj::newArray<byte>(SNAPPY_COMPRESSED_BUFFER_SIZE);
     compressedBuffer = ownedCompressedBuffer;
   }
   this->compressedBuffer = compressedBuffer;
@@ -167,8 +167,8 @@ void SnappyOutputStream::flush() {
   }
 }
 
-ArrayPtr<byte> SnappyOutputStream::getWriteBuffer() {
-  return arrayPtr(bufferPos, buffer.end());
+kj::ArrayPtr<byte> SnappyOutputStream::getWriteBuffer() {
+  return kj::arrayPtr(bufferPos, buffer.end());
 }
 
 void SnappyOutputStream::write(const void* src, size_t size) {
@@ -195,14 +195,15 @@ void SnappyOutputStream::write(const void* src, size_t size) {
 
 SnappyPackedMessageReader::SnappyPackedMessageReader(
     BufferedInputStream& inputStream, ReaderOptions options,
-    ArrayPtr<word> scratchSpace, ArrayPtr<byte> buffer)
+    kj::ArrayPtr<word> scratchSpace, kj::ArrayPtr<byte> buffer)
     : SnappyInputStream(inputStream, buffer),
       PackedMessageReader(static_cast<SnappyInputStream&>(*this), options, scratchSpace) {}
 
 SnappyPackedMessageReader::~SnappyPackedMessageReader() {}
 
-void writeSnappyPackedMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> segments,
-                              ArrayPtr<byte> buffer, ArrayPtr<byte> compressedBuffer) {
+void writeSnappyPackedMessage(OutputStream& output,
+                              kj::ArrayPtr<const kj::ArrayPtr<const word>> segments,
+                              kj::ArrayPtr<byte> buffer, kj::ArrayPtr<byte> compressedBuffer) {
   SnappyOutputStream snappyOut(output, buffer, compressedBuffer);
   writePackedMessage(snappyOut, segments);
 }

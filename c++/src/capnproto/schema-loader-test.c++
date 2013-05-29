@@ -25,7 +25,7 @@
 #include "schema-loader.h"
 #include <gtest/gtest.h>
 #include "test-util.h"
-#include "logging.h"
+#include <kj/logging.h>
 
 namespace capnproto {
 namespace internal {

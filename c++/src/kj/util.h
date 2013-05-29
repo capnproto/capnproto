@@ -21,21 +21,16 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNPROTO_UTIL_H_
-#define CAPNPROTO_UTIL_H_
-
-#ifndef CAPNPROTO_PRIVATE
-#error "This header is only meant to be included by Cap'n Proto's own source code."
-#endif
+#ifndef KJ_UTIL_H_
+#define KJ_UTIL_H_
 
 #include <initializer_list>
 #include <utility>
 #include <type_traits>
 #include "type-safety.h"
-#include "blob.h"
 #include <string.h>
 
-namespace capnproto {
+namespace kj {
 
 // =======================================================================================
 // Arrays
@@ -188,9 +183,9 @@ struct Stringifier {
     return result;
   }
 
-  inline ArrayPtr<const char> operator*(Text::Reader text) const {
-    return arrayPtr(text.data(), text.size());
-  }
+//  inline ArrayPtr<const char> operator*(Text::Reader text) const {
+//    return arrayPtr(text.data(), text.size());
+//  }
 
   CappedArray<char, sizeof(short) * 4> operator*(short i) const;
   CappedArray<char, sizeof(unsigned short) * 4> operator*(unsigned short i) const;
@@ -230,7 +225,7 @@ Array<char> str(Params&&... params) {
 template <typename T>
 Array<char> strArray(T&& arr, const char* delim) {
   size_t delimLen = strlen(delim);
-  CAPNPROTO_STACK_ARRAY(decltype(STR * arr[0]), pieces, arr.size(), 8, 32);
+  KJ_STACK_ARRAY(decltype(STR * arr[0]), pieces, arr.size(), 8, 32);
   size_t size = 0;
   for (size_t i = 0; i < arr.size(); i++) {
     if (i > 0) size += delimLen;
@@ -271,6 +266,6 @@ auto mapArray(T&& arr, Func&& func) -> Array<decltype(func(arr[0]))> {
   return result;
 }
 
-}  // namespace capnproto
+}  // namespace kj
 
-#endif  // CAPNPROTO_UTIL_H_
+#endif  // KJ_UTIL_H_

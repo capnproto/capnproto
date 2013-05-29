@@ -21,8 +21,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNPROTO_MACROS_H_
-#define CAPNPROTO_MACROS_H_
+#ifndef KJ_MACROS_H_
+#define KJ_MACROS_H_
 
 #include <inttypes.h>
 
@@ -33,84 +33,84 @@
 
 #if __clang__
 #if __clang_major__ < 3 || (__clang_major__ == 3 && __clang_minor__ < 2)
-#warning "Cap'n Proto requires at least Clang 3.2."
+#warning "This library requires at least Clang 3.2."
 #endif
 #elif __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 7)
-#warning "Cap'n Proto requires at least GCC 4.7."
+#warning "This library requires at least GCC 4.7."
 #endif
 #endif
 
-namespace capnproto {
+namespace kj {
 
-#define CAPNPROTO_DISALLOW_COPY(classname) \
+#define KJ_DISALLOW_COPY(classname) \
   classname(const classname&) = delete; \
   classname& operator=(const classname&) = delete
 
 namespace internal {
 
-#define CAPNPROTO_OFFSETOF(type, member) __builtin_offsetof(type, member)
+#define KJ_OFFSETOF(type, member) __builtin_offsetof(type, member)
 
-#define CAPNPROTO_EXPECT_TRUE(condition) __builtin_expect(condition, true)
-#define CAPNPROTO_EXPECT_FALSE(condition) __builtin_expect(condition, false)
+#define KJ_EXPECT_TRUE(condition) __builtin_expect(condition, true)
+#define KJ_EXPECT_FALSE(condition) __builtin_expect(condition, false)
 // Branch prediction macros.  Evaluates to the condition given, but also tells the compiler that we
 // expect the condition to be true/false enough of the time that it's worth hard-coding branch
 // prediction.
 
 #ifdef NDEBUG
-#define CAPNPROTO_ALWAYS_INLINE(prototype) inline prototype __attribute__((always_inline))
+#define KJ_ALWAYS_INLINE(prototype) inline prototype __attribute__((always_inline))
 // Force a function to always be inlined.  Apply only to the prototype, not to the definition.
 #else
-#define CAPNPROTO_ALWAYS_INLINE(prototype) inline prototype
+#define KJ_ALWAYS_INLINE(prototype) inline prototype
 // Don't force inline in debug mode.
 #endif
 
-#define CAPNPROTO_NORETURN __attribute__((noreturn));
-#define CAPNPROTO_UNUSED __attribute__((unused));
+#define KJ_NORETURN __attribute__((noreturn));
+#define KJ_UNUSED __attribute__((unused));
 
 #if __clang__
-#define CAPNPROTO_UNUSED_FOR_CLANG __attribute__((unused));
+#define KJ_UNUSED_FOR_CLANG __attribute__((unused));
 #else
-#define CAPNPROTO_UNUSED_FOR_CLANG
+#define KJ_UNUSED_FOR_CLANG
 #endif
 
 void inlinePreconditionFailure(
     const char* file, int line, const char* expectation, const char* macroArgs,
-    const char* message = nullptr) CAPNPROTO_NORETURN;
+    const char* message = nullptr) KJ_NORETURN;
 
-#define CAPNPROTO_INLINE_PRECOND(condition, ...) \
-    if (CAPNPROTO_EXPECT_TRUE(condition)); else ::capnproto::internal::inlinePreconditionFailure( \
+#define KJ_INLINE_PRECOND(condition, ...) \
+    if (KJ_EXPECT_TRUE(condition)); else ::kj::internal::inlinePreconditionFailure( \
         __FILE__, __LINE__, #condition, #__VA_ARGS__, ##__VA_ARGS__)
 // Version of PRECOND() which is safe to use in headers that are #included by users.  Used to check
-// preconditions inside inline methods.  CAPNPROTO_INLINE_DPRECOND is particularly useful in that
+// preconditions inside inline methods.  KJ_INLINE_DPRECOND is particularly useful in that
 // it will be enabled depending on whether the application is compiled in debug mode rather than
-// whether libcapnproto is.
+// whether libkj is.
 
 #ifdef NDEBUG
-#define CAPNPROTO_INLINE_DPRECOND(...)
+#define KJ_INLINE_DPRECOND(...)
 #else
-#define CAPNPROTO_INLINE_DPRECOND CAPNPROTO_INLINE_PRECOND
+#define KJ_INLINE_DPRECOND KJ_INLINE_PRECOND
 #endif
 
 // Allocate an array, preferably on the stack, unless it is too big.  On GCC this will use
 // variable-sized arrays.  For other compilers we could just use a fixed-size array.
 #if __clang__
-#define CAPNPROTO_STACK_ARRAY(type, name, size, minStack, maxStack) \
+#define KJ_STACK_ARRAY(type, name, size, minStack, maxStack) \
   size_t name##_size = (size); \
   bool name##_isOnStack = name##_size <= (minStack); \
   type name##_stack[minStack]; \
-  ::capnproto::Array<type> name##_heap = name##_isOnStack ? \
-      nullptr : newArray<type>(name##_size); \
-  ::capnproto::ArrayPtr<type> name = name##_isOnStack ? \
-      arrayPtr(name##_stack, name##_size) : name##_heap
+  ::kj::Array<type> name##_heap = name##_isOnStack ? \
+      nullptr : kj::newArray<type>(name##_size); \
+  ::kj::ArrayPtr<type> name = name##_isOnStack ? \
+      kj::arrayPtr(name##_stack, name##_size) : name##_heap
 #else
-#define CAPNPROTO_STACK_ARRAY(type, name, size, minStack, maxStack) \
+#define KJ_STACK_ARRAY(type, name, size, minStack, maxStack) \
   size_t name##_size = (size); \
   bool name##_isOnStack = name##_size <= (maxStack); \
   type name##_stack[name##_isOnStack ? size : 0]; \
-  ::capnproto::Array<type> name##_heap = name##_isOnStack ? \
-      nullptr : newArray<type>(name##_size); \
-  ::capnproto::ArrayPtr<type> name = name##_isOnStack ? \
-      arrayPtr(name##_stack, name##_size) : name##_heap
+  ::kj::Array<type> name##_heap = name##_isOnStack ? \
+      nullptr : kj::newArray<type>(name##_size); \
+  ::kj::ArrayPtr<type> name = name##_isOnStack ? \
+      kj::arrayPtr(name##_stack, name##_size) : name##_heap
 #endif
 
 }  // namespace internal
@@ -120,6 +120,6 @@ T implicit_cast(U u) {
   return u;
 }
 
-}  // namespace capnproto
+}  // namespace kj
 
-#endif  // CAPNPROTO_MACROS_H_
+#endif  // KJ_MACROS_H_

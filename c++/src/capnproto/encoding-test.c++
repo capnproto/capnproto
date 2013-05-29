@@ -24,7 +24,7 @@
 #define CAPNPROTO_PRIVATE
 #include "test-import.capnp.h"
 #include "message.h"
-#include "logging.h"
+#include <kj/logging.h>
 #include <gtest/gtest.h>
 #include "test-util.h"
 
@@ -89,8 +89,8 @@ TEST(Encoding, AllTypesMultiSegment) {
 
 TEST(Encoding, Defaults) {
   AlignedData<1> nullRoot = {{0, 0, 0, 0, 0, 0, 0, 0}};
-  ArrayPtr<const word> segments[1] = {arrayPtr(nullRoot.words, 1)};
-  SegmentArrayMessageReader reader(arrayPtr(segments, 1));
+  kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(nullRoot.words, 1)};
+  SegmentArrayMessageReader reader(kj::arrayPtr(segments, 1));
 
   checkTestMessage(reader.getRoot<TestDefaults>());
   checkTestMessage(readMessageUnchecked<TestDefaults>(nullRoot.words));
@@ -129,8 +129,8 @@ TEST(Encoding, DefaultInitializationMultiSegment) {
 TEST(Encoding, DefaultsFromEmptyMessage) {
   AlignedData<1> emptyMessage = {{0, 0, 0, 0, 0, 0, 0, 0}};
 
-  ArrayPtr<const word> segments[1] = {arrayPtr(emptyMessage.words, 1)};
-  SegmentArrayMessageReader reader(arrayPtr(segments, 1));
+  kj::ArrayPtr<const word> segments[1] = {kj::arrayPtr(emptyMessage.words, 1)};
+  SegmentArrayMessageReader reader(kj::arrayPtr(segments, 1));
 
   checkTestMessage(reader.getRoot<TestDefaults>());
   checkTestMessage(readMessageUnchecked<TestDefaults>(emptyMessage.words));
@@ -277,7 +277,7 @@ UnionState initUnion(Func&& initializer) {
 
   MallocMessageBuilder builder;
   initializer(builder.getRoot<StructType>());
-  ArrayPtr<const word> segment = builder.getSegmentsForOutput()[0];
+  kj::ArrayPtr<const word> segment = builder.getSegmentsForOutput()[0];
 
   CHECK(segment.size() > 2, segment.size());
 
@@ -462,12 +462,12 @@ TEST(Encoding, SmallStructLists) {
     l[1][0].setInt32Field(789);
   }
 
-  ArrayPtr<const word> segment = builder.getSegmentsForOutput()[0];
+  kj::ArrayPtr<const word> segment = builder.getSegmentsForOutput()[0];
 
   // Initialize another message such that it copies the default value for that field.
   MallocMessageBuilder defaultBuilder;
   defaultBuilder.getRoot<TestListDefaults>().getLists();
-  ArrayPtr<const word> defaultSegment = defaultBuilder.getSegmentsForOutput()[0];
+  kj::ArrayPtr<const word> defaultSegment = defaultBuilder.getSegmentsForOutput()[0];
 
   // Should match...
   EXPECT_EQ(defaultSegment.size(), segment.size());
@@ -513,7 +513,7 @@ TEST(Encoding, ListUpgrade) {
   try {
     reader.getObjectField<List<uint32_t>>();
     ADD_FAILURE() << "Expected exception.";
-  } catch (const Exception& e) {
+  } catch (const kj::Exception& e) {
     // expected
   }
 
@@ -585,7 +585,7 @@ TEST(Encoding, BitListUpgrade) {
   try {
     reader.getObjectField<List<uint8_t>>();
     ADD_FAILURE() << "Expected exception.";
-  } catch (const Exception& e) {
+  } catch (const kj::Exception& e) {
     // expected
   }
 
@@ -899,9 +899,9 @@ void checkUpgradedList(test::TestObject::Builder root,
 
       // Write some new data.
       builder[i].setOld1(i * 123);
-      builder[i].setOld2(str("qux", i, '\0').begin());
+      builder[i].setOld2(kj::str("qux", i, '\0').begin());
       builder[i].setNew1(i * 456);
-      builder[i].setNew2(str("corge", i, '\0').begin());
+      builder[i].setNew2(kj::str("corge", i, '\0').begin());
     }
   }
 
@@ -912,7 +912,7 @@ void checkUpgradedList(test::TestObject::Builder root,
     ASSERT_EQ(expectedData.size(), builder.size());
     for (uint i = 0; i < expectedData.size(); i++) {
       EXPECT_EQ(i * 123, builder[i].getOld1());
-      EXPECT_EQ(Text::Reader(str("qux", i, "\0").begin()), builder[i].getOld2());
+      EXPECT_EQ(Text::Reader(kj::str("qux", i, "\0").begin()), builder[i].getOld2());
     }
   }
 
@@ -923,9 +923,9 @@ void checkUpgradedList(test::TestObject::Builder root,
     ASSERT_EQ(expectedData.size(), builder.size());
     for (uint i = 0; i < expectedData.size(); i++) {
       EXPECT_EQ(i * 123, builder[i].getOld1());
-      EXPECT_EQ(Text::Reader(str("qux", i, '\0').begin()), builder[i].getOld2());
+      EXPECT_EQ(Text::Reader(kj::str("qux", i, '\0').begin()), builder[i].getOld2());
       EXPECT_EQ(i * 456, builder[i].getNew1());
-      EXPECT_EQ(Text::Reader(str("corge", i, '\0').begin()), builder[i].getNew2());
+      EXPECT_EQ(Text::Reader(kj::str("corge", i, '\0').begin()), builder[i].getNew2());
     }
   }
 }

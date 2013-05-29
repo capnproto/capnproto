@@ -145,7 +145,7 @@ public:
   inline explicit Reader(::capnproto::internal::StructReader base): _reader(base) {}
 {{#typeStruct}}
 
-  inline ::capnproto::String debugString() {
+  inline ::kj::String debugString() {
     return ::capnproto::internal::debugString<{{typeName}}>(_reader);
   }
   inline size_t totalSizeInWords() {
@@ -199,7 +199,7 @@ public:
   inline Reader asReader() { return *this; }
 {{#typeStruct}}
 
-  inline ::capnproto::String debugString() { return asReader().debugString(); }
+  inline ::kj::String debugString() { return asReader().debugString(); }
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 {{#structUnions}}
 
@@ -287,8 +287,8 @@ inline {{unionFullName}}::Which {{unionFullName}}::Builder::which() {
 {{#fieldIsPrimitive}}
 inline {{fieldType}} {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
 {{#fieldUnion}}
-  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
-                            "Must check which() before get()ing a union member.");
+  KJ_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                     "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return _reader.getDataField<{{fieldType}}>(
       {{fieldOffset}} * ::capnproto::ELEMENTS{{fieldDefaultMask}});
@@ -296,8 +296,8 @@ inline {{fieldType}} {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
 
 inline {{fieldType}} {{typeFullName}}::Builder::get{{fieldTitleCase}}() {
 {{#fieldUnion}}
-  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
-                            "Must check which() before get()ing a union member.");
+  KJ_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                     "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return _builder.getDataField<{{fieldType}}>(
       {{fieldOffset}} * ::capnproto::ELEMENTS{{fieldDefaultMask}});
@@ -324,8 +324,8 @@ inline bool {{typeFullName}}::Builder::has{{fieldTitleCase}}() {
 {{^fieldIsGenericObject}}
 inline {{fieldType}}::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
 {{#fieldUnion}}
-  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
-                            "Must check which() before get()ing a union member.");
+  KJ_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                     "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<{{fieldType}}>::get(
       _reader, {{fieldOffset}} * ::capnproto::POINTERS{{#fieldDefaultBytes}},
@@ -334,8 +334,8 @@ inline {{fieldType}}::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
 
 inline {{fieldType}}::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}() {
 {{#fieldUnion}}
-  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
-                            "Must check which() before get()ing a union member.");
+  KJ_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                     "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<{{fieldType}}>::get(
       _builder, {{fieldOffset}} * ::capnproto::POINTERS{{#fieldDefaultBytes}},
@@ -391,8 +391,8 @@ inline {{fieldType}}::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(
 template <typename T>
 inline typename T::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
 {{#fieldUnion}}
-  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
-                            "Must check which() before get()ing a union member.");
+  KJ_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                     "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<T>::get(
       _reader, {{fieldOffset}} * ::capnproto::POINTERS);
@@ -401,8 +401,8 @@ inline typename T::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() {
 template <typename T>
 inline typename T::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}() {
 {{#fieldUnion}}
-  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
-                            "Must check which() before get()ing a union member.");
+  KJ_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                     "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<T>::get(
       _builder, {{fieldOffset}} * ::capnproto::POINTERS);
@@ -411,21 +411,21 @@ inline typename T::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}() {
 template <typename T, typename Param>
 inline typename T::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}(Param&& param) {
 {{#fieldUnion}}
-  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
-                            "Must check which() before get()ing a union member.");
+  KJ_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                     "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<T>::getDynamic(
-      _reader, {{fieldOffset}} * ::capnproto::POINTERS, ::capnproto::forward<Param>(param));
+      _reader, {{fieldOffset}} * ::capnproto::POINTERS, ::kj::forward<Param>(param));
 }
 
 template <typename T, typename Param>
 inline typename T::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}(Param&& param) {
 {{#fieldUnion}}
-  CAPNPROTO_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
-                            "Must check which() before get()ing a union member.");
+  KJ_INLINE_DPRECOND(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+                     "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<T>::getDynamic(
-      _builder, {{fieldOffset}} * ::capnproto::POINTERS, ::capnproto::forward<Param>(param));
+      _builder, {{fieldOffset}} * ::capnproto::POINTERS, ::kj::forward<Param>(param));
 }
 
 template <typename T>
@@ -455,7 +455,7 @@ inline typename T::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(Par
       {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<T>::init(
-      _builder, {{fieldOffset}} * ::capnproto::POINTERS, ::capnproto::forward<Params>(params)...);
+      _builder, {{fieldOffset}} * ::capnproto::POINTERS, ::kj::forward<Params>(params)...);
 }
 
 {{/fieldIsGenericObject}}

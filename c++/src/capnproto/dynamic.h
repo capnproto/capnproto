@@ -114,7 +114,7 @@ public:
 
   inline EnumSchema getSchema() { return schema; }
 
-  Maybe<EnumSchema::Enumerant> getEnumerant();
+  kj::Maybe<EnumSchema::Enumerant> getEnumerant();
   // Get which enumerant this enum value represents.  Returns nullptr if the numeric value does not
   // correspond to any enumerant in the schema -- this can happen if the data was built using a
   // newer schema that has more values defined.
@@ -175,7 +175,7 @@ public:
 
   inline StructSchema::Union getSchema() { return schema; }
 
-  Maybe<StructSchema::Member> which();
+  kj::Maybe<StructSchema::Member> which();
   // Returns which field is set, or nullptr if an unknown field is set (i.e. the schema is old, and
   // the underlying data has the union set to a member we don't know about).
 
@@ -199,7 +199,7 @@ public:
 
   inline StructSchema::Union getSchema() { return schema; }
 
-  Maybe<StructSchema::Member> which();
+  kj::Maybe<StructSchema::Member> which();
   // Returns which field is set, or nullptr if an unknown field is set (i.e. the schema is old, and
   // the underlying data has the union set to a member we don't know about).
 
@@ -287,7 +287,7 @@ private:
   friend class MessageBuilder;
   template <typename T, ::capnproto::Kind k>
   friend struct ::capnproto::ToDynamic_;
-  friend String internal::debugString(
+  friend kj::String internal::debugString(
       internal::StructReader reader, const internal::RawSchema& schema);
 };
 
@@ -531,7 +531,7 @@ public:
   inline Reader(DynamicUnion::Reader value);
   inline Reader(DynamicObject value);
 
-  template <typename T, typename EnableIf = decltype(toDynamic(instance<T>()))>
+  template <typename T, typename EnableIf = decltype(toDynamic(kj::instance<T>()))>
   inline Reader(T value): Reader(toDynamic(value)) {}
 
   template <typename T>
@@ -609,7 +609,7 @@ public:
   inline Builder(DynamicUnion::Builder value);
   inline Builder(DynamicObject value);
 
-  template <typename T, typename EnableIf = decltype(toDynamic(instance<T>()))>
+  template <typename T, typename EnableIf = decltype(toDynamic(kj::instance<T>()))>
   inline Builder(T value): Builder(toDynamic(value)) {}
 
   template <typename T>
@@ -722,7 +722,7 @@ BuilderFor<DynamicTypeFor<FromBuilder<T>>> toDynamic(T&& value) {
 }
 template <typename T>
 DynamicTypeFor<TypeIfEnum<T>> toDynamic(T&& value) {
-  return DynamicEnum(Schema::from<RemoveReference<T>>(), static_cast<uint16_t>(value));
+  return DynamicEnum(Schema::from<kj::RemoveReference<T>>(), static_cast<uint16_t>(value));
 }
 
 inline DynamicValue::Reader::Reader(std::nullptr_t n): type(UNKNOWN) {}

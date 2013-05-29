@@ -25,7 +25,7 @@
 #include <gtest/gtest.h>
 #include <iostream>
 
-namespace capnproto {
+namespace kj {
 namespace {
 
 class Bytes;
@@ -64,4 +64,4 @@ TEST(UnitMeasure, Basics) {
 }
 
 }  // namespace
-}  // namespace capnproto
+}  // namespace kj

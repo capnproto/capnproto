@@ -25,32 +25,26 @@
 // time, but should then be optimized down to basic primitives (usually, integers) by the
 // compiler.
 
-#ifndef CAPNPROTO_TYPE_SAFETY_H_
-#define CAPNPROTO_TYPE_SAFETY_H_
+#ifndef KJ_TYPE_SAFETY_H_
+#define KJ_TYPE_SAFETY_H_
 
 #include "macros.h"
 #include <cstddef>
 #include <string.h>
 
-namespace capnproto {
+namespace kj {
 
 typedef unsigned int uint;
 
-enum class Void {
-  // Type used for Void fields.  There is only one value.  Using C++'s "void" type creates a bunch
-  // of issues since it behaves differently from other types.
-  VOID
-};
 template <typename T>
-inline T& operator<<(T& os, Void) { return os << "void"; }
-
-template <typename T>
-struct NoInfer {
+struct NoInfer_ {
   // Use NoInfer<T>::Type in place of T for a template function parameter to prevent inference of
   // the type based on the parameter value.  There's something in the standard library for this but
   // I didn't want to #include type_traits or whatever.
   typedef T Type;
 };
+template <typename T>
+using NoInfer = typename NoInfer_<T>::Type;
 
 template <typename T> struct RemoveReference_ { typedef T Type; };
 template <typename T> struct RemoveReference_<T&> { typedef T Type; };
@@ -86,17 +80,17 @@ T instance() noexcept;
 namespace internal {
 struct PlacementNew {};
 }  // namespace internal;
-} // namespace capnproto
+} // namespace kj
 
-inline void* operator new(std::size_t, capnproto::internal::PlacementNew, void* __p) noexcept {
+inline void* operator new(std::size_t, kj::internal::PlacementNew, void* __p) noexcept {
   return __p;
 }
 
-namespace capnproto {
+namespace kj {
 
 template <typename T, typename... Params>
 void constructAt(T* location, Params&&... params) {
-  new (internal::PlacementNew(), location) T(capnproto::forward<Params>(params)...);
+  new (internal::PlacementNew(), location) T(kj::forward<Params>(params)...);
 }
 
 // =======================================================================================
@@ -108,16 +102,16 @@ public:
   Maybe(): isSet(false) {}
   Maybe(T&& t)
       : isSet(true) {
-    constructAt(&value, capnproto::move(t));
+    constructAt(&value, kj::move(t));
   }
   Maybe(const T& t)
       : isSet(true) {
     constructAt(&value, t);
   }
-  Maybe(Maybe&& other) noexcept(noexcept(T(capnproto::move(other.value))))
+  Maybe(Maybe&& other) noexcept(noexcept(T(kj::move(other.value))))
       : isSet(other.isSet) {
     if (isSet) {
-      constructAt(&value, capnproto::move(other.value));
+      constructAt(&value, kj::move(other.value));
     }
   }
   Maybe(const Maybe& other)
@@ -127,10 +121,10 @@ public:
     }
   }
   template <typename U>
-  Maybe(Maybe<U>&& other) noexcept(noexcept(T(capnproto::move(other.value))))
+  Maybe(Maybe<U>&& other) noexcept(noexcept(T(kj::move(other.value))))
       : isSet(other.isSet) {
     if (isSet) {
-      constructAt(&value, capnproto::move(other.value));
+      constructAt(&value, kj::move(other.value));
     }
   }
   template <typename U>
@@ -161,7 +155,7 @@ public:
       value.~T();
     }
     isSet = true;
-    constructAt(&value, capnproto::forward(params)...);
+    constructAt(&value, kj::forward(params)...);
   }
 
   inline T& operator*() { return value; }
@@ -176,7 +170,7 @@ public:
       }
       isSet = other.isSet;
       if (isSet) {
-        constructAt(&value, capnproto::move(other.value));
+        constructAt(&value, kj::move(other.value));
       }
     }
     return *this;
@@ -237,7 +231,7 @@ public:
     // Like map() but allows the function to take an rvalue reference to the value.
 
     if (isSet) {
-      return func(capnproto::move(value));
+      return func(kj::move(value));
     } else {
       return nullptr;
     }
@@ -324,7 +318,7 @@ class Own {
   // - The deleter is made polymorphic by virtual call rather than by template.  This is a much
   //   more powerful default -- it allows any random module to decide to use a custom allocator.
   //   This could be accomplished with unique_ptr by forcing everyone to use e.g.
-  //   std::unique_ptr<T, capnproto::Disposer&>, but at that point we've lost basically any benefit
+  //   std::unique_ptr<T, kj::Disposer&>, but at that point we've lost basically any benefit
   //   of interoperating with std::unique_ptr anyway.
 
 public:
@@ -376,7 +370,7 @@ template <typename T>
 class HeapValue final: public Disposer {
 public:
   template <typename... Params>
-  inline HeapValue(Params&&... params): value(capnproto::forward<Params>(params)...) {}
+  inline HeapValue(Params&&... params): value(kj::forward<Params>(params)...) {}
 
   virtual void dispose(void*) override { delete this; }
 
@@ -391,7 +385,7 @@ Own<T> heap(Params&&... params) {
   // exact heap implementation is unspecified -- for now it is operator new, but you should not
   // assume anything.
 
-  auto result = new internal::HeapValue<T>(capnproto::forward<Params>(params)...);
+  auto result = new internal::HeapValue<T>(kj::forward<Params>(params)...);
   return Own<T>(&result->value, result);
 }
 
@@ -415,7 +409,7 @@ public:
 
   inline std::size_t size() const { return size_; }
   inline T& operator[](std::size_t index) const {
-    CAPNPROTO_INLINE_DPRECOND(index < size_, "Out-of-bounds ArrayPtr access.");
+    KJ_INLINE_DPRECOND(index < size_, "Out-of-bounds ArrayPtr access.");
     return ptr[index];
   }
 
@@ -425,7 +419,7 @@ public:
   inline T& back() const { return *(ptr + size_ - 1); }
 
   inline ArrayPtr slice(size_t start, size_t end) {
-    CAPNPROTO_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
+    KJ_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
     return ArrayPtr(ptr + start, end - start);
   }
 
@@ -467,7 +461,7 @@ public:
     other.size_ = 0;
   }
 
-  CAPNPROTO_DISALLOW_COPY(Array);
+  KJ_DISALLOW_COPY(Array);
   inline ~Array() noexcept { delete[] ptr; }
 
   inline operator ArrayPtr<T>() {
@@ -482,7 +476,7 @@ public:
 
   inline std::size_t size() const { return size_; }
   inline T& operator[](std::size_t index) const {
-    CAPNPROTO_INLINE_DPRECOND(index < size_, "Out-of-bounds Array access.");
+    KJ_INLINE_DPRECOND(index < size_, "Out-of-bounds Array access.");
     return ptr[index];
   }
 
@@ -492,11 +486,11 @@ public:
   inline T& back() const { return *(ptr + size_ - 1); }
 
   inline ArrayPtr<T> slice(size_t start, size_t end) {
-    CAPNPROTO_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds Array::slice().");
+    KJ_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds Array::slice().");
     return ArrayPtr<T>(ptr + start, end - start);
   }
   inline ArrayPtr<const T> slice(size_t start, size_t end) const {
-    CAPNPROTO_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds Array::slice().");
+    KJ_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds Array::slice().");
     return ArrayPtr<const T>(ptr + start, end - start);
   }
 
@@ -566,7 +560,7 @@ public:
 
   template <typename... Params>
   void add(Params&&... params) {
-    CAPNPROTO_INLINE_DPRECOND(pos < endPtr, "Added too many elements to ArrayBuilder.");
+    KJ_INLINE_DPRECOND(pos < endPtr, "Added too many elements to ArrayBuilder.");
     new(&pos->value) T(forward<Params>(params)...);
     ++pos;
   }
@@ -585,7 +579,7 @@ public:
   Array<T> finish() {
     // We could allow partial builds if Array<T> used a deleter callback, but that would make
     // Array<T> bigger for no benefit most of the time.
-    CAPNPROTO_INLINE_DPRECOND(pos == endPtr, "ArrayBuilder::finish() called prematurely.");
+    KJ_INLINE_DPRECOND(pos == endPtr, "ArrayBuilder::finish() called prematurely.");
     Array<T> result(reinterpret_cast<T*>(ptr), pos - ptr);
     ptr = nullptr;
     pos = nullptr;
@@ -960,176 +954,6 @@ inline constexpr auto operator*(UnitRatio<Number1, Unit2, Unit> ratio,
   return measure * ratio;
 }
 
-// =======================================================================================
-// Raw memory types and measures
+}  // namespace kj
 
-class byte { uint8_t  content CAPNPROTO_UNUSED_FOR_CLANG; CAPNPROTO_DISALLOW_COPY(byte); public: byte() = default; };
-class word { uint64_t content CAPNPROTO_UNUSED_FOR_CLANG; CAPNPROTO_DISALLOW_COPY(word); public: word() = default; };
-// byte and word are opaque types with sizes of 8 and 64 bits, respectively.  These types are useful
-// only to make pointer arithmetic clearer.  Since the contents are private, the only way to access
-// them is to first reinterpret_cast to some other pointer type.
-//
-// Coping is disallowed because you should always use memcpy().  Otherwise, you may run afoul of
-// aliasing rules (particularly when copying words).
-//
-// A pointer of type word* should always be word-aligned even if won't actually be dereferenced as
-// that type.
-
-static_assert(sizeof(byte) == 1, "uint8_t is not one byte?");
-static_assert(sizeof(word) == 8, "uint64_t is not 8 bytes?");
-
-namespace internal { class BitLabel; class ElementLabel; struct WirePointer; }
-
-#ifndef CAPNPROTO_DEBUG_TYPES
-#define CAPNPROTO_DEBUG_TYPES 1
-// Set this to zero to degrade all the "count" types below to being plain integers.  All the code
-// should still operate exactly the same, we just lose compile-time checking.  Note that this will
-// also change symbol names, so it's important that the Cap'n proto library and any clients be
-// compiled with the same setting here.
-//
-// TODO(soon):  Decide policy on this.  It may make sense to only use CAPNPROTO_DEBUG_TYPES when
-//   compiling Cap'n Proto's own tests, but disable it for all real builds, as clients may find
-//   this safety tiring.  Also, need to benchmark to verify there really is no perf hit.
-
-#endif
-
-#if CAPNPROTO_DEBUG_TYPES
-
-typedef Quantity<uint, internal::BitLabel> BitCount;
-typedef Quantity<uint8_t, internal::BitLabel> BitCount8;
-typedef Quantity<uint16_t, internal::BitLabel> BitCount16;
-typedef Quantity<uint32_t, internal::BitLabel> BitCount32;
-typedef Quantity<uint64_t, internal::BitLabel> BitCount64;
-
-typedef Quantity<uint, byte> ByteCount;
-typedef Quantity<uint8_t, byte> ByteCount8;
-typedef Quantity<uint16_t, byte> ByteCount16;
-typedef Quantity<uint32_t, byte> ByteCount32;
-typedef Quantity<uint64_t, byte> ByteCount64;
-
-typedef Quantity<uint, word> WordCount;
-typedef Quantity<uint8_t, word> WordCount8;
-typedef Quantity<uint16_t, word> WordCount16;
-typedef Quantity<uint32_t, word> WordCount32;
-typedef Quantity<uint64_t, word> WordCount64;
-
-typedef Quantity<uint, internal::ElementLabel> ElementCount;
-typedef Quantity<uint8_t, internal::ElementLabel> ElementCount8;
-typedef Quantity<uint16_t, internal::ElementLabel> ElementCount16;
-typedef Quantity<uint32_t, internal::ElementLabel> ElementCount32;
-typedef Quantity<uint64_t, internal::ElementLabel> ElementCount64;
-
-typedef Quantity<uint, internal::WirePointer> WirePointerCount;
-typedef Quantity<uint8_t, internal::WirePointer> WirePointerCount8;
-typedef Quantity<uint16_t, internal::WirePointer> WirePointerCount16;
-typedef Quantity<uint32_t, internal::WirePointer> WirePointerCount32;
-typedef Quantity<uint64_t, internal::WirePointer> WirePointerCount64;
-
-#else
-
-typedef uint BitCount;
-typedef uint8_t BitCount8;
-typedef uint16_t BitCount16;
-typedef uint32_t BitCount32;
-typedef uint64_t BitCount64;
-
-typedef uint ByteCount;
-typedef uint8_t ByteCount8;
-typedef uint16_t ByteCount16;
-typedef uint32_t ByteCount32;
-typedef uint64_t ByteCount64;
-
-typedef uint WordCount;
-typedef uint8_t WordCount8;
-typedef uint16_t WordCount16;
-typedef uint32_t WordCount32;
-typedef uint64_t WordCount64;
-
-typedef uint ElementCount;
-typedef uint8_t ElementCount8;
-typedef uint16_t ElementCount16;
-typedef uint32_t ElementCount32;
-typedef uint64_t ElementCount64;
-
-typedef uint WirePointerCount;
-typedef uint8_t WirePointerCount8;
-typedef uint16_t WirePointerCount16;
-typedef uint32_t WirePointerCount32;
-typedef uint64_t WirePointerCount64;
-
-#endif
-
-constexpr BitCount BITS = unit<BitCount>();
-constexpr ByteCount BYTES = unit<ByteCount>();
-constexpr WordCount WORDS = unit<WordCount>();
-constexpr ElementCount ELEMENTS = unit<ElementCount>();
-constexpr WirePointerCount POINTERS = unit<WirePointerCount>();
-
-constexpr auto BITS_PER_BYTE = 8 * BITS / BYTES;
-constexpr auto BITS_PER_WORD = 64 * BITS / WORDS;
-constexpr auto BYTES_PER_WORD = 8 * BYTES / WORDS;
-
-constexpr auto BITS_PER_POINTER = 64 * BITS / POINTERS;
-constexpr auto BYTES_PER_POINTER = 8 * BYTES / POINTERS;
-constexpr auto WORDS_PER_POINTER = 1 * WORDS / POINTERS;
-
-constexpr WordCount POINTER_SIZE_IN_WORDS = 1 * POINTERS * WORDS_PER_POINTER;
-
-template <typename T>
-inline constexpr decltype(BYTES / ELEMENTS) bytesPerElement() {
-  return sizeof(T) * BYTES / ELEMENTS;
-}
-
-template <typename T>
-inline constexpr decltype(BITS / ELEMENTS) bitsPerElement() {
-  return sizeof(T) * 8 * BITS / ELEMENTS;
-}
-
-#ifndef __CDT_PARSER__
-
-template <typename T, typename U>
-inline constexpr U* operator+(U* ptr, Quantity<T, U> offset) {
-  return ptr + offset / unit<Quantity<T, U>>();
-}
-template <typename T, typename U>
-inline constexpr const U* operator+(const U* ptr, Quantity<T, U> offset) {
-  return ptr + offset / unit<Quantity<T, U>>();
-}
-template <typename T, typename U>
-inline constexpr U* operator+=(U*& ptr, Quantity<T, U> offset) {
-  return ptr = ptr + offset / unit<Quantity<T, U>>();
-}
-template <typename T, typename U>
-inline constexpr const U* operator+=(const U*& ptr, Quantity<T, U> offset) {
-  return ptr = ptr + offset / unit<Quantity<T, U>>();
-}
-
-template <typename T, typename U>
-inline constexpr U* operator-(U* ptr, Quantity<T, U> offset) {
-  return ptr - offset / unit<Quantity<T, U>>();
-}
-template <typename T, typename U>
-inline constexpr const U* operator-(const U* ptr, Quantity<T, U> offset) {
-  return ptr - offset / unit<Quantity<T, U>>();
-}
-template <typename T, typename U>
-inline constexpr U* operator-=(U*& ptr, Quantity<T, U> offset) {
-  return ptr = ptr - offset / unit<Quantity<T, U>>();
-}
-template <typename T, typename U>
-inline constexpr const U* operator-=(const U*& ptr, Quantity<T, U> offset) {
-  return ptr = ptr - offset / unit<Quantity<T, U>>();
-}
-
-#endif
-
-inline constexpr ByteCount intervalLength(const byte* a, const byte* b) {
-  return uint(b - a) * BYTES;
-}
-inline constexpr WordCount intervalLength(const word* a, const word* b) {
-  return uint(b - a) * WORDS;
-}
-
-}  // namespace capnproto
-
-#endif  // CAPNPROTO_TYPE_SAFETY_H_
+#endif  // KJ_TYPE_SAFETY_H_

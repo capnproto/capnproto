@@ -21,7 +21,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define CAPNPROTO_PRIVATE
+#define KJ_PRIVATE
 #include "util.h"
 #include "logging.h"
 #include <stdio.h>
@@ -30,7 +30,7 @@
 #include <errno.h>
 #include <stdlib.h>
 
-namespace capnproto {
+namespace kj {
 
 #define STRINGIFY_INT(type, format) \
 CappedArray<char, sizeof(type) * 4> Stringifier::operator*(type i) const { \
@@ -301,4 +301,4 @@ CappedArray<char, kDoubleToBufferSize> Stringifier::operator*(double f) const {
   return result;
 }
 
-}  // namespace capnproto
+}  // namespace kj

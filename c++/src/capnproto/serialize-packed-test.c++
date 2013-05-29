@@ -24,7 +24,7 @@
 #define CAPNPROTO_PRIVATE
 #include "serialize-packed.h"
 #include "test.capnp.h"
-#include "logging.h"
+#include <kj/logging.h>
 #include <gtest/gtest.h>
 #include <string>
 #include <stdlib.h>
@@ -74,9 +74,9 @@ public:
     readPos += bytes;
   }
 
-  ArrayPtr<const byte> getReadBuffer() override {
+  kj::ArrayPtr<const byte> getReadBuffer() override {
     size_t amount = std::min(data.size() - readPos, preferredReadSize);
-    return arrayPtr(reinterpret_cast<const byte*>(data.data() + readPos), amount);
+    return kj::arrayPtr(reinterpret_cast<const byte*>(data.data() + readPos), amount);
   }
 
 private:
@@ -260,7 +260,7 @@ public:
     EXPECT_EQ(0u, desiredSegmentCount);
   }
 
-  ArrayPtr<word> allocateSegment(uint minimumSize) override {
+  kj::ArrayPtr<word> allocateSegment(uint minimumSize) override {
     if (desiredSegmentCount <= 1) {
       if (desiredSegmentCount < 1) {
         ADD_FAILURE() << "Allocated more segments than desired.";
@@ -297,7 +297,7 @@ TEST(Packed, RoundTripScratchSpace) {
   writePackedMessage(pipe, builder);
 
   word scratch[1024];
-  PackedMessageReader reader(pipe, ReaderOptions(), ArrayPtr<word>(scratch, 1024));
+  PackedMessageReader reader(pipe, ReaderOptions(), kj::ArrayPtr<word>(scratch, 1024));
   checkTestMessage(reader.getRoot<TestAllTypes>());
 }
 
@@ -404,7 +404,7 @@ TEST(Packed, RoundTripAllZeroScratchSpace) {
   writePackedMessage(pipe, builder);
 
   word scratch[1024];
-  PackedMessageReader reader(pipe, ReaderOptions(), ArrayPtr<word>(scratch, 1024));
+  PackedMessageReader reader(pipe, ReaderOptions(), kj::ArrayPtr<word>(scratch, 1024));
   checkTestMessageAllZero(reader.getRoot<TestAllTypes>());
 }
 
@@ -484,7 +484,7 @@ TEST(Packed, RoundTripHugeStringScratchSpace) {
   writePackedMessage(pipe, builder);
 
   word scratch[1024];
-  PackedMessageReader reader(pipe, ReaderOptions(), ArrayPtr<word>(scratch, 1024));
+  PackedMessageReader reader(pipe, ReaderOptions(), kj::ArrayPtr<word>(scratch, 1024));
   EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == std::string(5023, 'x'));
 }
 

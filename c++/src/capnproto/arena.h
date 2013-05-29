@@ -31,8 +31,8 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
-#include "macros.h"
-#include "type-safety.h"
+#include <kj/macros.h>
+#include "common.h"
 #include "message.h"
 
 namespace capnproto {
@@ -46,7 +46,7 @@ class BuilderArena;
 class ReadLimiter;
 
 class Segment;
-typedef Id<uint32_t, Segment> SegmentId;
+typedef kj::Id<uint32_t, Segment> SegmentId;
 
 class ReadLimiter {
   // Used to keep track of how much data has been processed from a message, and cut off further
@@ -69,7 +69,7 @@ public:
 
   inline void reset(WordCount64 limit);
 
-  CAPNPROTO_ALWAYS_INLINE(bool canRead(WordCount amount, Arena* arena));
+  KJ_ALWAYS_INLINE(bool canRead(WordCount amount, Arena* arena));
 
   void unread(WordCount64 amount);
   // Adds back some words to the limit.  Useful when the caller knows they are double-reading
@@ -78,15 +78,15 @@ public:
 private:
   WordCount64 limit;
 
-  CAPNPROTO_DISALLOW_COPY(ReadLimiter);
+  KJ_DISALLOW_COPY(ReadLimiter);
 };
 
 class SegmentReader {
 public:
-  inline SegmentReader(Arena* arena, SegmentId id, ArrayPtr<const word> ptr,
+  inline SegmentReader(Arena* arena, SegmentId id, kj::ArrayPtr<const word> ptr,
                        ReadLimiter* readLimiter);
 
-  CAPNPROTO_ALWAYS_INLINE(bool containsInterval(const void* from, const void* to));
+  KJ_ALWAYS_INLINE(bool containsInterval(const void* from, const void* to));
 
   inline Arena* getArena();
   inline SegmentId getSegmentId();
@@ -95,7 +95,7 @@ public:
   inline WordCount getOffsetTo(const word* ptr);
   inline WordCount getSize();
 
-  inline ArrayPtr<const word> getArray();
+  inline kj::ArrayPtr<const word> getArray();
 
   inline void unread(WordCount64 amount);
   // Add back some words to the ReadLimiter.
@@ -103,34 +103,34 @@ public:
 private:
   Arena* arena;
   SegmentId id;
-  ArrayPtr<const word> ptr;
+  kj::ArrayPtr<const word> ptr;
   ReadLimiter* readLimiter;
 
-  CAPNPROTO_DISALLOW_COPY(SegmentReader);
+  KJ_DISALLOW_COPY(SegmentReader);
 
   friend class SegmentBuilder;
 };
 
 class SegmentBuilder: public SegmentReader {
 public:
-  inline SegmentBuilder(BuilderArena* arena, SegmentId id, ArrayPtr<word> ptr,
+  inline SegmentBuilder(BuilderArena* arena, SegmentId id, kj::ArrayPtr<word> ptr,
                         ReadLimiter* readLimiter);
 
-  CAPNPROTO_ALWAYS_INLINE(word* allocate(WordCount amount));
+  KJ_ALWAYS_INLINE(word* allocate(WordCount amount));
   inline word* getPtrUnchecked(WordCount offset);
 
   inline BuilderArena* getArena();
 
   inline WordCount available();
 
-  inline ArrayPtr<const word> currentlyAllocated();
+  inline kj::ArrayPtr<const word> currentlyAllocated();
 
   inline void reset();
 
 private:
   word* pos;
 
-  CAPNPROTO_DISALLOW_COPY(SegmentBuilder);
+  KJ_DISALLOW_COPY(SegmentBuilder);
 };
 
 class Arena {
@@ -152,7 +152,7 @@ class ReaderArena final: public Arena {
 public:
   ReaderArena(MessageReader* message);
   ~ReaderArena();
-  CAPNPROTO_DISALLOW_COPY(ReaderArena);
+  KJ_DISALLOW_COPY(ReaderArena);
 
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
@@ -173,7 +173,7 @@ class BuilderArena final: public Arena {
 public:
   BuilderArena(MessageBuilder* message);
   ~BuilderArena();
-  CAPNPROTO_DISALLOW_COPY(BuilderArena);
+  KJ_DISALLOW_COPY(BuilderArena);
 
   SegmentBuilder* getSegment(SegmentId id);
   // Get the segment with the given id.  Crashes or throws an exception if no such segment exists.
@@ -182,7 +182,7 @@ public:
   // Get a segment which has at least the given amount of space available, allocating it if
   // necessary.  Crashes or throws an exception if there is not enough memory.
 
-  ArrayPtr<const ArrayPtr<const word>> getSegmentsForOutput();
+  kj::ArrayPtr<const kj::ArrayPtr<const word>> getSegmentsForOutput();
   // Get an array of all the segments, suitable for writing out.  This only returns the allocated
   // portion of each segment, whereas tryGetSegment() returns something that includes
   // not-yet-allocated space.
@@ -198,11 +198,11 @@ private:
   ReadLimiter dummyLimiter;
 
   SegmentBuilder segment0;
-  ArrayPtr<const word> segment0ForOutput;
+  kj::ArrayPtr<const word> segment0ForOutput;
 
   struct MultiSegmentState {
     std::vector<std::unique_ptr<SegmentBuilder>> builders;
-    std::vector<ArrayPtr<const word>> forOutput;
+    std::vector<kj::ArrayPtr<const word>> forOutput;
   };
   std::unique_ptr<MultiSegmentState> moreSegments;
 };
@@ -218,7 +218,7 @@ inline ReadLimiter::ReadLimiter(WordCount64 limit): limit(limit) {}
 inline void ReadLimiter::reset(WordCount64 limit) { this->limit = limit; }
 
 inline bool ReadLimiter::canRead(WordCount amount, Arena* arena) {
-  if (CAPNPROTO_EXPECT_FALSE(amount > limit)) {
+  if (KJ_EXPECT_FALSE(amount > limit)) {
     arena->reportReadLimitReached();
     return false;
   } else {
@@ -229,7 +229,7 @@ inline bool ReadLimiter::canRead(WordCount amount, Arena* arena) {
 
 // -------------------------------------------------------------------
 
-inline SegmentReader::SegmentReader(Arena* arena, SegmentId id, ArrayPtr<const word> ptr,
+inline SegmentReader::SegmentReader(Arena* arena, SegmentId id, kj::ArrayPtr<const word> ptr,
                                     ReadLimiter* readLimiter)
     : arena(arena), id(id), ptr(ptr), readLimiter(readLimiter) {}
 
@@ -248,13 +248,13 @@ inline WordCount SegmentReader::getOffsetTo(const word* ptr) {
   return intervalLength(this->ptr.begin(), ptr);
 }
 inline WordCount SegmentReader::getSize() { return ptr.size() * WORDS; }
-inline ArrayPtr<const word> SegmentReader::getArray() { return ptr; }
+inline kj::ArrayPtr<const word> SegmentReader::getArray() { return ptr; }
 inline void SegmentReader::unread(WordCount64 amount) { readLimiter->unread(amount); }
 
 // -------------------------------------------------------------------
 
 inline SegmentBuilder::SegmentBuilder(
-    BuilderArena* arena, SegmentId id, ArrayPtr<word> ptr, ReadLimiter* readLimiter)
+    BuilderArena* arena, SegmentId id, kj::ArrayPtr<word> ptr, ReadLimiter* readLimiter)
     : SegmentReader(arena, id, ptr, readLimiter),
       pos(ptr.begin()) {}
 
@@ -286,8 +286,8 @@ inline WordCount SegmentBuilder::available() {
   return intervalLength(pos, ptr.end());
 }
 
-inline ArrayPtr<const word> SegmentBuilder::currentlyAllocated() {
-  return arrayPtr(ptr.begin(), pos - ptr.begin());
+inline kj::ArrayPtr<const word> SegmentBuilder::currentlyAllocated() {
+  return kj::arrayPtr(ptr.begin(), pos - ptr.begin());
 }
 
 inline void SegmentBuilder::reset() {

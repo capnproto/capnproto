@@ -31,8 +31,8 @@
 #ifndef CAPNPROTO_LAYOUT_H_
 #define CAPNPROTO_LAYOUT_H_
 
-#include "macros.h"
-#include "type-safety.h"
+#include <kj/macros.h>
+#include "common.h"
 #include "blob.h"
 
 namespace capnproto {
@@ -214,9 +214,9 @@ template <typename T>
 using Mask = typename MaskType<T>::Type;
 
 template <typename T>
-CAPNPROTO_ALWAYS_INLINE(Mask<T> mask(T value, Mask<T> mask));
+KJ_ALWAYS_INLINE(Mask<T> mask(T value, Mask<T> mask));
 template <typename T>
-CAPNPROTO_ALWAYS_INLINE(T unmask(Mask<T> value, Mask<T> mask));
+KJ_ALWAYS_INLINE(T unmask(Mask<T> value, Mask<T> mask));
 
 template <typename T>
 inline Mask<T> mask(T value, Mask<T> mask) {
@@ -280,10 +280,10 @@ class WireValue {
 
 public:
   WireValue() = default;
-  CAPNPROTO_ALWAYS_INLINE(WireValue(T value)): value(value) {}
+  KJ_ALWAYS_INLINE(WireValue(T value)): value(value) {}
 
-  CAPNPROTO_ALWAYS_INLINE(T get() const) { return value; }
-  CAPNPROTO_ALWAYS_INLINE(void set(T newValue)) { value = newValue; }
+  KJ_ALWAYS_INLINE(T get() const) { return value; }
+  KJ_ALWAYS_INLINE(void set(T newValue)) { value = newValue; }
 
 private:
   T value;
@@ -302,23 +302,23 @@ public:
   inline Data::Builder getDataSectionAsBlob();
 
   template <typename T>
-  CAPNPROTO_ALWAYS_INLINE(T getDataField(ElementCount offset) const);
+  KJ_ALWAYS_INLINE(T getDataField(ElementCount offset) const);
   // Gets the data field value of the given type at the given offset.  The offset is measured in
   // multiples of the field size, determined by the type.
 
   template <typename T>
-  CAPNPROTO_ALWAYS_INLINE(T getDataField(ElementCount offset, Mask<T> mask) const);
+  KJ_ALWAYS_INLINE(T getDataField(ElementCount offset, Mask<T> mask) const);
   // Like getDataField() but applies the given XOR mask to the data on load.  Used for reading
   // fields with non-zero default values.
 
   template <typename T>
-  CAPNPROTO_ALWAYS_INLINE(void setDataField(
-      ElementCount offset, typename NoInfer<T>::Type value) const);
+  KJ_ALWAYS_INLINE(void setDataField(
+      ElementCount offset, kj::NoInfer<T> value) const);
   // Sets the data field value at the given offset.
 
   template <typename T>
-  CAPNPROTO_ALWAYS_INLINE(void setDataField(
-      ElementCount offset, typename NoInfer<T>::Type value, Mask<T> mask) const);
+  KJ_ALWAYS_INLINE(void setDataField(
+      ElementCount offset, kj::NoInfer<T> value, Mask<T> mask) const);
   // Like setDataField() but applies the given XOR mask before storing.  Used for writing fields
   // with non-zero default values.
 
@@ -424,13 +424,13 @@ public:
   inline Data::Reader getDataSectionAsBlob();
 
   template <typename T>
-  CAPNPROTO_ALWAYS_INLINE(T getDataField(ElementCount offset) const);
+  KJ_ALWAYS_INLINE(T getDataField(ElementCount offset) const);
   // Get the data field value of the given type at the given offset.  The offset is measured in
   // multiples of the field size, determined by the type.  Returns zero if the offset is past the
   // end of the struct's data segment.
 
   template <typename T>
-  CAPNPROTO_ALWAYS_INLINE(
+  KJ_ALWAYS_INLINE(
       T getDataField(ElementCount offset, Mask<T> mask) const);
   // Like getDataField(offset), but applies the given XOR mask to the result.  Used for reading
   // fields with non-zero default values.
@@ -523,12 +523,12 @@ public:
   // Reinterpret the list as a blob.  Throws an exception if the elements are not byte-sized.
 
   template <typename T>
-  CAPNPROTO_ALWAYS_INLINE(T getDataElement(ElementCount index) const);
+  KJ_ALWAYS_INLINE(T getDataElement(ElementCount index) const);
   // Get the element of the given type at the given index.
 
   template <typename T>
-  CAPNPROTO_ALWAYS_INLINE(void setDataElement(
-      ElementCount index, typename NoInfer<T>::Type value) const);
+  KJ_ALWAYS_INLINE(void setDataElement(
+      ElementCount index, kj::NoInfer<T> value) const);
   // Set the element at the given index.
 
   StructBuilder getStructElement(ElementCount index) const;
@@ -617,7 +617,7 @@ public:
   // Reinterpret the list as a blob.  Throws an exception if the elements are not byte-sized.
 
   template <typename T>
-  CAPNPROTO_ALWAYS_INLINE(T getDataElement(ElementCount index) const);
+  KJ_ALWAYS_INLINE(T getDataElement(ElementCount index) const);
   // Get the element of the given type at the given index.
 
   StructReader getStructElement(ElementCount index) const;
@@ -740,7 +740,7 @@ inline T StructBuilder::getDataField(ElementCount offset, Mask<T> mask) const {
 
 template <typename T>
 inline void StructBuilder::setDataField(
-    ElementCount offset, typename NoInfer<T>::Type value) const {
+    ElementCount offset, kj::NoInfer<T> value) const {
   reinterpret_cast<WireValue<T>*>(data)[offset / ELEMENTS].set(value);
 }
 
@@ -760,7 +760,7 @@ inline void StructBuilder::setDataField<Void>(ElementCount offset, Void value) c
 
 template <typename T>
 inline void StructBuilder::setDataField(
-    ElementCount offset, typename NoInfer<T>::Type value, Mask<T> m) const {
+    ElementCount offset, kj::NoInfer<T> value, Mask<T> m) const {
   setDataField<Mask<T> >(offset, mask<T>(value, m));
 }
 
@@ -834,7 +834,7 @@ inline Void ListBuilder::getDataElement<Void>(ElementCount index) const {
 }
 
 template <typename T>
-inline void ListBuilder::setDataElement(ElementCount index, typename NoInfer<T>::Type value) const {
+inline void ListBuilder::setDataElement(ElementCount index, kj::NoInfer<T> value) const {
   reinterpret_cast<WireValue<T>*>(ptr + index * step / BITS_PER_BYTE)->set(value);
 }
 

@@ -21,14 +21,14 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define CAPNPROTO_PRIVATE
+#define KJ_PRIVATE
 #include "logging.h"
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
 #include <errno.h>
 
-namespace capnproto {
+namespace kj {
 
 Log::Severity Log::minSeverity = Log::Severity::INFO;
 
@@ -54,7 +54,7 @@ enum DescriptionStyle {
 
 static Array<char> makeDescription(DescriptionStyle style, const char* code, int errorNumber,
                                    const char* macroArgs, ArrayPtr<Array<char>> argValues) {
-  CAPNPROTO_STACK_ARRAY(ArrayPtr<const char>, argNames, argValues.size(), 8, 64);
+  KJ_STACK_ARRAY(ArrayPtr<const char>, argNames, argValues.size(), 8, 64);
 
   if (argValues.size() > 0) {
     size_t index = 0;
@@ -245,11 +245,11 @@ Log::Context::~Context() {}
 
 void Log::Context::onRecoverableException(Exception&& exception) {
   addTo(exception);
-  next.onRecoverableException(capnproto::move(exception));
+  next.onRecoverableException(kj::move(exception));
 }
 void Log::Context::onFatalException(Exception&& exception) {
   addTo(exception);
-  next.onFatalException(capnproto::move(exception));
+  next.onFatalException(kj::move(exception));
 }
 void Log::Context::logMessage(ArrayPtr<const char> text) {
   // TODO(someday):  We could do something like log the context and then indent all log messages
@@ -257,4 +257,4 @@ void Log::Context::logMessage(ArrayPtr<const char> text) {
   next.logMessage(text);
 }
 
-}  // namespace capnproto
+}  // namespace kj

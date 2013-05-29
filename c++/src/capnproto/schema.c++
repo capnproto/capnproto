@@ -24,7 +24,7 @@
 #define CAPNPROTO_PRIVATE
 #include "schema.h"
 #include "message.h"
-#include "logging.h"
+#include <kj/logging.h>
 
 namespace capnproto {
 
@@ -89,7 +89,7 @@ namespace {
 template <typename List>
 auto findSchemaMemberByName(const internal::RawSchema* raw, Text::Reader name,
                             uint unionIndex, List&& list)
-    -> Maybe<RemoveReference<decltype(list[0])>> {
+    -> kj::Maybe<kj::RemoveReference<decltype(list[0])>> {
   uint lower = 0;
   uint upper = raw->memberCount;
 
@@ -124,17 +124,17 @@ StructSchema::MemberList StructSchema::getMembers() const {
   return MemberList(*this, 0, getProto().getBody().getStructNode().getMembers());
 }
 
-Maybe<StructSchema::Member> StructSchema::findMemberByName(Text::Reader name) const {
+kj::Maybe<StructSchema::Member> StructSchema::findMemberByName(Text::Reader name) const {
   return findSchemaMemberByName(raw, name, 0, getMembers());
 }
 
 StructSchema::Member StructSchema::getMemberByName(Text::Reader name) const {
-  Maybe<StructSchema::Member> member = findMemberByName(name);
+  kj::Maybe<StructSchema::Member> member = findMemberByName(name);
   PRECOND(member != nullptr, "struct has no such member", name);
   return *member;
 }
 
-Maybe<StructSchema::Union> StructSchema::Member::getContainingUnion() const {
+kj::Maybe<StructSchema::Union> StructSchema::Member::getContainingUnion() const {
   if (unionIndex == 0) return nullptr;
   return parent.getMembers()[unionIndex - 1].asUnion();
 }
@@ -150,12 +150,12 @@ StructSchema::MemberList StructSchema::Union::getMembers() const {
   return MemberList(parent, index + 1, proto.getBody().getUnionMember().getMembers());
 }
 
-Maybe<StructSchema::Member> StructSchema::Union::findMemberByName(Text::Reader name) const {
+kj::Maybe<StructSchema::Member> StructSchema::Union::findMemberByName(Text::Reader name) const {
   return findSchemaMemberByName(parent.raw, name, index + 1, getMembers());
 }
 
 StructSchema::Member StructSchema::Union::getMemberByName(Text::Reader name) const {
-  Maybe<StructSchema::Member> member = findMemberByName(name);
+  kj::Maybe<StructSchema::Member> member = findMemberByName(name);
   PRECOND(member != nullptr, "union has no such member", name);
   return *member;
 }
@@ -166,12 +166,12 @@ EnumSchema::EnumerantList EnumSchema::getEnumerants() const {
   return EnumerantList(*this, getProto().getBody().getEnumNode().getEnumerants());
 }
 
-Maybe<EnumSchema::Enumerant> EnumSchema::findEnumerantByName(Text::Reader name) const {
+kj::Maybe<EnumSchema::Enumerant> EnumSchema::findEnumerantByName(Text::Reader name) const {
   return findSchemaMemberByName(raw, name, 0, getEnumerants());
 }
 
 EnumSchema::Enumerant EnumSchema::getEnumerantByName(Text::Reader name) const {
-  Maybe<EnumSchema::Enumerant> enumerant = findEnumerantByName(name);
+  kj::Maybe<EnumSchema::Enumerant> enumerant = findEnumerantByName(name);
   PRECOND(enumerant != nullptr, "enum has no such enumerant", name);
   return *enumerant;
 }
@@ -182,12 +182,12 @@ InterfaceSchema::MethodList InterfaceSchema::getMethods() const {
   return MethodList(*this, getProto().getBody().getInterfaceNode().getMethods());
 }
 
-Maybe<InterfaceSchema::Method> InterfaceSchema::findMethodByName(Text::Reader name) const {
+kj::Maybe<InterfaceSchema::Method> InterfaceSchema::findMethodByName(Text::Reader name) const {
   return findSchemaMemberByName(raw, name, 0, getMethods());
 }
 
 InterfaceSchema::Method InterfaceSchema::getMethodByName(Text::Reader name) const {
-  Maybe<InterfaceSchema::Method> method = findMethodByName(name);
+  kj::Maybe<InterfaceSchema::Method> method = findMethodByName(name);
   PRECOND(method != nullptr, "interface has no such method", name);
   return *method;
 }

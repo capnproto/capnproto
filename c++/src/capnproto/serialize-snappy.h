@@ -34,12 +34,12 @@ constexpr size_t SNAPPY_COMPRESSED_BUFFER_SIZE = 76490;
 
 class SnappyInputStream: public BufferedInputStream {
 public:
-  explicit SnappyInputStream(BufferedInputStream& inner, ArrayPtr<byte> buffer = nullptr);
-  CAPNPROTO_DISALLOW_COPY(SnappyInputStream);
+  explicit SnappyInputStream(BufferedInputStream& inner, kj::ArrayPtr<byte> buffer = nullptr);
+  KJ_DISALLOW_COPY(SnappyInputStream);
   ~SnappyInputStream();
 
   // implements BufferedInputStream ----------------------------------
-  ArrayPtr<const byte> getReadBuffer() override;
+  kj::ArrayPtr<const byte> getReadBuffer() override;
   size_t read(void* buffer, size_t minBytes, size_t maxBytes) override;
   void skip(size_t bytes) override;
 
@@ -47,9 +47,9 @@ private:
   class InputStreamSnappySource;
 
   BufferedInputStream& inner;
-  Array<byte> ownedBuffer;
-  ArrayPtr<byte> buffer;
-  ArrayPtr<byte> bufferAvailable;
+  kj::Array<byte> ownedBuffer;
+  kj::ArrayPtr<byte> buffer;
+  kj::ArrayPtr<byte> bufferAvailable;
 
   void refill();
 };
@@ -57,9 +57,9 @@ private:
 class SnappyOutputStream: public BufferedOutputStream {
 public:
   explicit SnappyOutputStream(OutputStream& inner,
-                              ArrayPtr<byte> buffer = nullptr,
-                              ArrayPtr<byte> compressedBuffer = nullptr);
-  CAPNPROTO_DISALLOW_COPY(SnappyOutputStream);
+                              kj::ArrayPtr<byte> buffer = nullptr,
+                              kj::ArrayPtr<byte> compressedBuffer = nullptr);
+  KJ_DISALLOW_COPY(SnappyOutputStream);
   ~SnappyOutputStream();
 
   void flush();
@@ -67,41 +67,42 @@ public:
   // hurt compression, of course, by forcing the current block to end prematurely.
 
   // implements BufferedOutputStream ---------------------------------
-  ArrayPtr<byte> getWriteBuffer() override;
+  kj::ArrayPtr<byte> getWriteBuffer() override;
   void write(const void* buffer, size_t size) override;
 
 private:
   OutputStream& inner;
 
-  Array<byte> ownedBuffer;
-  ArrayPtr<byte> buffer;
+  kj::Array<byte> ownedBuffer;
+  kj::ArrayPtr<byte> buffer;
   byte* bufferPos;
 
-  Array<byte> ownedCompressedBuffer;
-  ArrayPtr<byte> compressedBuffer;
+  kj::Array<byte> ownedCompressedBuffer;
+  kj::ArrayPtr<byte> compressedBuffer;
 };
 
 class SnappyPackedMessageReader: private SnappyInputStream, public PackedMessageReader {
 public:
   SnappyPackedMessageReader(
       BufferedInputStream& inputStream, ReaderOptions options = ReaderOptions(),
-      ArrayPtr<word> scratchSpace = nullptr, ArrayPtr<byte> buffer = nullptr);
+      kj::ArrayPtr<word> scratchSpace = nullptr, kj::ArrayPtr<byte> buffer = nullptr);
   ~SnappyPackedMessageReader();
 };
 
 void writeSnappyPackedMessage(OutputStream& output, MessageBuilder& builder,
-                              ArrayPtr<byte> buffer = nullptr,
-                              ArrayPtr<byte> compressedBuffer = nullptr);
-void writeSnappyPackedMessage(OutputStream& output, ArrayPtr<const ArrayPtr<const word>> segments,
-                              ArrayPtr<byte> buffer = nullptr,
-                              ArrayPtr<byte> compressedBuffer = nullptr);
+                              kj::ArrayPtr<byte> buffer = nullptr,
+                              kj::ArrayPtr<byte> compressedBuffer = nullptr);
+void writeSnappyPackedMessage(OutputStream& output,
+                              kj::ArrayPtr<const kj::ArrayPtr<const word>> segments,
+                              kj::ArrayPtr<byte> buffer = nullptr,
+                              kj::ArrayPtr<byte> compressedBuffer = nullptr);
 
 // =======================================================================================
 // inline stuff
 
 inline void writeSnappyPackedMessage(OutputStream& output, MessageBuilder& builder,
-                                     ArrayPtr<byte> buffer,
-                                     ArrayPtr<byte> compressedBuffer) {
+                                     kj::ArrayPtr<byte> buffer,
+                                     kj::ArrayPtr<byte> compressedBuffer) {
   writeSnappyPackedMessage(output, builder.getSegmentsForOutput(), buffer, compressedBuffer);
 }
 
