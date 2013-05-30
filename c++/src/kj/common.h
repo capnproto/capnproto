@@ -48,6 +48,8 @@
       #warning "This library requires at least GCC 4.7."
     #endif
   #endif
+#elif defined(_MSC_VER)
+  #warning "As of June 2013, Visual Studio's C++11 support was hopelessly behind what is needed to compile this code."
 #endif
 
 // =======================================================================================
@@ -60,19 +62,29 @@ typedef unsigned char byte;
 // =======================================================================================
 // Common macros, especially for common yet compiler-specific features.
 
-#ifndef KJ_NO_RTTI
-  #ifdef __GNUC__
-    #if !__GXX_RTTI
-      #define KJ_NO_RTTI
-    #endif
+// Detect whether RTTI and exceptions are enabled, assuming they are unless we have specific
+// evidence to the contrary.  Clients can always define KJ_NO_RTTI or KJ_NO_EXCEPTIONS explicitly
+// to override these checks.
+#ifdef __GNUC__
+  #if !defined(KJ_NO_RTTI) && !__GXX_RTTI
+    #define KJ_NO_RTTI 1
+  #endif
+  #if !defined(KJ_NO_EXCEPTIONS) && !__EXCEPTIONS
+    #define KJ_NO_EXCEPTIONS 1
+  #endif
+#elif defined(_MSC_VER)
+  #if !defined(KJ_NO_RTTI) && !defined(_CPPRTTI)
+    #define KJ_NO_RTTI 1
+  #endif
+  #if !defined(KJ_NO_EXCEPTIONS) && !defined(_CPPUNWIND)
+    #define KJ_NO_EXCEPTIONS 1
   #endif
 #endif
 
 #define KJ_DISALLOW_COPY(classname) \
   classname(const classname&) = delete; \
   classname& operator=(const classname&) = delete
-
-#define KJ_OFFSETOF(type, member) __builtin_offsetof(type, member)
+// Deletes the implicit copy constructor and assignment operator.
 
 #define KJ_EXPECT_TRUE(condition) __builtin_expect(condition, true)
 #define KJ_EXPECT_FALSE(condition) __builtin_expect(condition, false)
@@ -80,7 +92,7 @@ typedef unsigned char byte;
 // expect the condition to be true/false enough of the time that it's worth hard-coding branch
 // prediction.
 
-#ifdef NDEBUG
+#if defined(NDEBUG) && !__NO_INLINE__
 #define KJ_ALWAYS_INLINE(prototype) inline prototype __attribute__((always_inline))
 // Force a function to always be inlined.  Apply only to the prototype, not to the definition.
 #else

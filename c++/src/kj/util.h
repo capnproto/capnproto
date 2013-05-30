@@ -183,10 +183,6 @@ struct Stringifier {
     return result;
   }
 
-//  inline ArrayPtr<const char> operator*(Text::Reader text) const {
-//    return arrayPtr(text.data(), text.size());
-//  }
-
   CappedArray<char, sizeof(short) * 4> operator*(short i) const;
   CappedArray<char, sizeof(unsigned short) * 4> operator*(unsigned short i) const;
   CappedArray<char, sizeof(int) * 4> operator*(int i) const;

@@ -144,7 +144,7 @@ ExceptionCallback::~ExceptionCallback() {
 }
 
 void ExceptionCallback::onRecoverableException(Exception&& exception) {
-#if __GNUC__ && !__EXCEPTIONS
+#if KJ_NO_EXCEPTIONS
   logMessage(str(exception.what(), '\n'));
 #else
   if (std::uncaught_exception()) {
@@ -156,7 +156,7 @@ void ExceptionCallback::onRecoverableException(Exception&& exception) {
 }
 
 void ExceptionCallback::onFatalException(Exception&& exception) {
-#if __GNUC__ && !__EXCEPTIONS
+#if KJ_NO_EXCEPTIONS
   logMessage(str(exception.what(), '\n'));
 #else
   throw std::move(exception);
