@@ -28,51 +28,11 @@
 #ifndef KJ_TYPE_SAFETY_H_
 #define KJ_TYPE_SAFETY_H_
 
-#include "macros.h"
+#include "common.h"
 #include <cstddef>
 #include <string.h>
 
 namespace kj {
-
-typedef unsigned int uint;
-typedef unsigned char byte;
-
-template <typename T>
-struct NoInfer_ {
-  // Use NoInfer<T>::Type in place of T for a template function parameter to prevent inference of
-  // the type based on the parameter value.  There's something in the standard library for this but
-  // I didn't want to #include type_traits or whatever.
-  typedef T Type;
-};
-template <typename T>
-using NoInfer = typename NoInfer_<T>::Type;
-
-template <typename T> struct RemoveReference_ { typedef T Type; };
-template <typename T> struct RemoveReference_<T&> { typedef T Type; };
-template <typename> struct IsLvalueReference { static constexpr bool value = false; };
-template <typename T> struct IsLvalueReference<T&> { static constexpr bool value = true; };
-
-template <typename T>
-using RemoveReference = typename RemoveReference_<T>::Type;
-
-// #including <utility> just for std::move() and std::forward() is excessive.  Instead, we
-// re-define them here.
-
-template<typename T> constexpr T&& move(T& t) noexcept { return static_cast<T&&>(t); }
-
-template<typename T>
-constexpr T&& forward(RemoveReference<T>& t) noexcept {
-  return static_cast<T&&>(t);
-}
-template<typename T> constexpr T&& forward(RemoveReference<T>&& t) noexcept {
-  static_assert(!IsLvalueReference<T>::value, "Attempting to forward rvalue as lvalue reference.");
-  return static_cast<T&&>(t);
-}
-
-template <typename T>
-T instance() noexcept;
-// Like std::declval, but doesn't transform T into an rvalue reference.  If you want that, specify
-// instance<T&&>().
 
 // #including <new> pulls in a lot of crap, but we want placement news.  But operator new cannot
 // be defined in a namespace, and defining it globally conflicts with the standard library
@@ -91,7 +51,7 @@ namespace kj {
 
 template <typename T, typename... Params>
 void constructAt(T* location, Params&&... params) {
-  new (internal::PlacementNew(), location) T(kj::forward<Params>(params)...);
+  new (internal::PlacementNew(), location) T(kj::fwd<Params>(params)...);
 }
 
 // =======================================================================================
@@ -103,16 +63,16 @@ public:
   Maybe(): isSet(false) {}
   Maybe(T&& t)
       : isSet(true) {
-    constructAt(&value, kj::move(t));
+    constructAt(&value, kj::mv(t));
   }
   Maybe(const T& t)
       : isSet(true) {
     constructAt(&value, t);
   }
-  Maybe(Maybe&& other) noexcept(noexcept(T(kj::move(other.value))))
+  Maybe(Maybe&& other) noexcept(noexcept(T(kj::mv(other.value))))
       : isSet(other.isSet) {
     if (isSet) {
-      constructAt(&value, kj::move(other.value));
+      constructAt(&value, kj::mv(other.value));
     }
   }
   Maybe(const Maybe& other)
@@ -122,10 +82,10 @@ public:
     }
   }
   template <typename U>
-  Maybe(Maybe<U>&& other) noexcept(noexcept(T(kj::move(other.value))))
+  Maybe(Maybe<U>&& other) noexcept(noexcept(T(kj::mv(other.value))))
       : isSet(other.isSet) {
     if (isSet) {
-      constructAt(&value, kj::move(other.value));
+      constructAt(&value, kj::mv(other.value));
     }
   }
   template <typename U>
@@ -156,7 +116,7 @@ public:
       value.~T();
     }
     isSet = true;
-    constructAt(&value, kj::forward(params)...);
+    constructAt(&value, kj::fwd(params)...);
   }
 
   inline T& operator*() { return value; }
@@ -171,7 +131,7 @@ public:
       }
       isSet = other.isSet;
       if (isSet) {
-        constructAt(&value, kj::move(other.value));
+        constructAt(&value, kj::mv(other.value));
       }
     }
     return *this;
@@ -232,7 +192,7 @@ public:
     // Like map() but allows the function to take an rvalue reference to the value.
 
     if (isSet) {
-      return func(kj::move(value));
+      return func(kj::mv(value));
     } else {
       return nullptr;
     }
@@ -371,7 +331,7 @@ template <typename T>
 class HeapValue final: public Disposer {
 public:
   template <typename... Params>
-  inline HeapValue(Params&&... params): value(kj::forward<Params>(params)...) {}
+  inline HeapValue(Params&&... params): value(kj::fwd<Params>(params)...) {}
 
   virtual void dispose(void*) override { delete this; }
 
@@ -386,7 +346,7 @@ Own<T> heap(Params&&... params) {
   // exact heap implementation is unspecified -- for now it is operator new, but you should not
   // assume anything.
 
-  auto result = new internal::HeapValue<T>(kj::forward<Params>(params)...);
+  auto result = new internal::HeapValue<T>(kj::fwd<Params>(params)...);
   return Own<T>(&result->value, result);
 }
 
@@ -562,7 +522,7 @@ public:
   template <typename... Params>
   void add(Params&&... params) {
     KJ_INLINE_DPRECOND(pos < endPtr, "Added too many elements to ArrayBuilder.");
-    new(&pos->value) T(forward<Params>(params)...);
+    new(&pos->value) T(kj::fwd<Params>(params)...);
     ++pos;
   }
 

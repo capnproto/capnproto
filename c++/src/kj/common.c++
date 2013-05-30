@@ -21,8 +21,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define KJ_PRIVATE
-#include "macros.h"
+#include "common.h"
 #include "logging.h"
 #include <stdlib.h>
 

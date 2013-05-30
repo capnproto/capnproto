@@ -1396,13 +1396,13 @@ typeName DynamicValue::Builder::AsImpl<typeName>::apply(Builder builder) { \
 HANDLE_NUMERIC_TYPE(int8_t, checkRoundTrip, unsignedToSigned, checkRoundTrip)
 HANDLE_NUMERIC_TYPE(int16_t, checkRoundTrip, unsignedToSigned, checkRoundTrip)
 HANDLE_NUMERIC_TYPE(int32_t, checkRoundTrip, unsignedToSigned, checkRoundTrip)
-HANDLE_NUMERIC_TYPE(int64_t, kj::implicit_cast, unsignedToSigned, checkRoundTrip)
+HANDLE_NUMERIC_TYPE(int64_t, kj::upcast, unsignedToSigned, checkRoundTrip)
 HANDLE_NUMERIC_TYPE(uint8_t, signedToUnsigned, checkRoundTrip, checkRoundTrip)
 HANDLE_NUMERIC_TYPE(uint16_t, signedToUnsigned, checkRoundTrip, checkRoundTrip)
 HANDLE_NUMERIC_TYPE(uint32_t, signedToUnsigned, checkRoundTrip, checkRoundTrip)
-HANDLE_NUMERIC_TYPE(uint64_t, signedToUnsigned, kj::implicit_cast, checkRoundTrip)
-HANDLE_NUMERIC_TYPE(float, kj::implicit_cast, kj::implicit_cast, kj::implicit_cast)
-HANDLE_NUMERIC_TYPE(double, kj::implicit_cast, kj::implicit_cast, kj::implicit_cast)
+HANDLE_NUMERIC_TYPE(uint64_t, signedToUnsigned, kj::upcast, checkRoundTrip)
+HANDLE_NUMERIC_TYPE(float, kj::upcast, kj::upcast, kj::upcast)
+HANDLE_NUMERIC_TYPE(double, kj::upcast, kj::upcast, kj::upcast)
 
 #undef HANDLE_NUMERIC_TYPE
 

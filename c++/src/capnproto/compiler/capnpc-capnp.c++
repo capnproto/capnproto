@@ -71,7 +71,7 @@ private:
     return kj::STR * t;
   }
   TextBlob&& toContainer(TextBlob&& t) {
-    return kj::move(t);
+    return kj::mv(t);
   }
   TextBlob& toContainer(TextBlob& t) {
     return t;
@@ -91,14 +91,14 @@ struct TextBlob::Branch {
 
 template <typename... Params>
 TextBlob::TextBlob(Params&&... params) {
-  init(toContainer(kj::forward<Params>(params))...);
+  init(toContainer(kj::fwd<Params>(params))...);
 }
 
 TextBlob::TextBlob(kj::Array<TextBlob>&& params) {
   branches = kj::newArray<Branch>(params.size());
   for (size_t i = 0; i < params.size(); i++) {
     branches[i].pos = nullptr;
-    branches[i].content = kj::move(params[i]);
+    branches[i].content = kj::mv(params[i]);
   }
 }
 
@@ -119,13 +119,13 @@ void TextBlob::allocate(size_t textSize, size_t branchCount) {
 
 template <typename First, typename... Rest>
 void TextBlob::allocate(size_t textSize, size_t branchCount, const First& first, Rest&&... rest) {
-  allocate(textSize + first.size(), branchCount, kj::forward<Rest>(rest)...);
+  allocate(textSize + first.size(), branchCount, kj::fwd<Rest>(rest)...);
 }
 
 template <typename... Rest>
 void TextBlob::allocate(size_t textSize, size_t branchCount,
                         const TextBlob& first, Rest&&... rest) {
-  allocate(textSize, branchCount + 1, kj::forward<Rest>(rest)...);
+  allocate(textSize, branchCount + 1, kj::fwd<Rest>(rest)...);
 }
 
 void TextBlob::fill(char* textPos, Branch* branchesPos) {
@@ -135,27 +135,27 @@ void TextBlob::fill(char* textPos, Branch* branchesPos) {
 
 template <typename First, typename... Rest>
 void TextBlob::fill(char* textPos, Branch* branchesPos, First&& first, Rest&&... rest) {
-  textPos = kj::fill(textPos, kj::forward<First>(first));
-  fill(textPos, branchesPos, kj::forward<Rest>(rest)...);
+  textPos = kj::fill(textPos, kj::fwd<First>(first));
+  fill(textPos, branchesPos, kj::fwd<Rest>(rest)...);
 }
 
 template <typename... Rest>
 void TextBlob::fill(char* textPos, Branch* branchesPos, TextBlob&& first, Rest&&... rest) {
   branchesPos->pos = textPos;
-  branchesPos->content = kj::move(first);
+  branchesPos->content = kj::mv(first);
   ++branchesPos;
-  fill(textPos, branchesPos, kj::forward<Rest>(rest)...);
+  fill(textPos, branchesPos, kj::fwd<Rest>(rest)...);
 }
 
 template <typename... Params>
 void TextBlob::init(Params&&... params) {
   allocate(0, 0, params...);
-  fill(text.begin(), branches.begin(), kj::forward<Params>(params)...);
+  fill(text.begin(), branches.begin(), kj::fwd<Params>(params)...);
 }
 
 template <typename... Params>
 TextBlob text(Params&&... params) {
-  return TextBlob(kj::forward<Params>(params)...);
+  return TextBlob(kj::fwd<Params>(params)...);
 }
 
 template <typename List, typename Func>
@@ -164,13 +164,13 @@ TextBlob forText(List&& list, Func&& func) {
   for (size_t i = 0; i < list.size(); i++) {
     items[i] = func(list[i]);
   }
-  return TextBlob(kj::move(items));
+  return TextBlob(kj::mv(items));
 }
 
 template <typename T>
 struct ForTextHack {
   T list;
-  ForTextHack(T list): list(kj::forward<T>(list)) {}
+  ForTextHack(T list): list(kj::fwd<T>(list)) {}
   template <typename Func>
   TextBlob operator*(Func&& func) {
     return forText(list, func);
@@ -259,14 +259,14 @@ TextBlob nodeName(Schema target, Schema scope) {
     auto part = targetParents.back();
     auto proto = part.getProto();
     if (proto.getScopeId() == 0) {
-      path = text(kj::move(path), "import \"", proto.getDisplayName(), "\".");
+      path = text(kj::mv(path), "import \"", proto.getDisplayName(), "\".");
     } else {
-      path = text(kj::move(path), getUnqualifiedName(part), ".");
+      path = text(kj::mv(path), getUnqualifiedName(part), ".");
     }
     targetParents.pop_back();
   }
 
-  return text(kj::move(path), getUnqualifiedName(target));
+  return text(kj::mv(path), getUnqualifiedName(target));
 }
 
 TextBlob genType(schema::Type::Reader type, Schema scope) {

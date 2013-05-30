@@ -120,7 +120,7 @@ class TemporaryPointer {
   // able to return a real pointer to its member.
 
 public:
-  TemporaryPointer(T&& value): value(kj::move(value)) {}
+  TemporaryPointer(T&& value): value(kj::mv(value)) {}
   TemporaryPointer(const T& value): value(value) {}
 
   inline T* operator->() { return &value; }

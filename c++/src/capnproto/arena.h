@@ -31,7 +31,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
-#include <kj/macros.h>
+#include <kj/common.h>
 #include "common.h"
 #include "message.h"
 

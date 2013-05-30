@@ -245,11 +245,11 @@ Log::Context::~Context() {}
 
 void Log::Context::onRecoverableException(Exception&& exception) {
   addTo(exception);
-  next.onRecoverableException(kj::move(exception));
+  next.onRecoverableException(kj::mv(exception));
 }
 void Log::Context::onFatalException(Exception&& exception) {
   addTo(exception);
-  next.onFatalException(kj::move(exception));
+  next.onFatalException(kj::mv(exception));
 }
 void Log::Context::logMessage(ArrayPtr<const char> text) {
   // TODO(someday):  We could do something like log the context and then indent all log messages

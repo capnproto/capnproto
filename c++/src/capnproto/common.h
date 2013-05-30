@@ -29,6 +29,7 @@
 #define CAPNPROTO_COMMON_H_
 
 #include <kj/type-safety.h>
+#include <inttypes.h>
 
 namespace capnproto {
 

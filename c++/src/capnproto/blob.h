@@ -24,7 +24,7 @@
 #ifndef CAPNPROTO_BLOB_H_
 #define CAPNPROTO_BLOB_H_
 
-#include <kj/macros.h>
+#include <kj/common.h>
 #include "common.h"
 #include <string.h>
 

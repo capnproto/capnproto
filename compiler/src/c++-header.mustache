@@ -415,7 +415,7 @@ inline typename T::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}(Param&
                      "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<T>::getDynamic(
-      _reader, {{fieldOffset}} * ::capnproto::POINTERS, ::kj::forward<Param>(param));
+      _reader, {{fieldOffset}} * ::capnproto::POINTERS, ::kj::fwd<Param>(param));
 }
 
 template <typename T, typename Param>
@@ -425,7 +425,7 @@ inline typename T::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}(Para
                      "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<T>::getDynamic(
-      _builder, {{fieldOffset}} * ::capnproto::POINTERS, ::kj::forward<Param>(param));
+      _builder, {{fieldOffset}} * ::capnproto::POINTERS, ::kj::fwd<Param>(param));
 }
 
 template <typename T>
@@ -455,7 +455,7 @@ inline typename T::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(Par
       {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
   return ::capnproto::internal::PointerHelpers<T>::init(
-      _builder, {{fieldOffset}} * ::capnproto::POINTERS, ::kj::forward<Params>(params)...);
+      _builder, {{fieldOffset}} * ::capnproto::POINTERS, ::kj::fwd<Params>(params)...);
 }
 
 {{/fieldIsGenericObject}}

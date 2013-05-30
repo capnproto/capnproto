@@ -83,7 +83,7 @@ public:
     Maybe<Own<Context>> next;
 
     Context(const char* file, int line, Array<char>&& description, Maybe<Own<Context>>&& next)
-        : file(file), line(line), description(move(description)), next(move(next)) {}
+        : file(file), line(line), description(mv(description)), next(mv(next)) {}
     Context(const Context& other) noexcept;
   };
 

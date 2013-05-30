@@ -25,7 +25,7 @@
 #define KJ_IO_H_
 
 #include <cstddef>
-#include "macros.h"
+#include "common.h"
 #include "type-safety.h"
 
 namespace kj {
@@ -243,7 +243,7 @@ class FdInputStream: public InputStream {
 
 public:
   explicit FdInputStream(int fd): fd(fd) {};
-  explicit FdInputStream(AutoCloseFd fd): fd(fd), autoclose(move(fd)) {}
+  explicit FdInputStream(AutoCloseFd fd): fd(fd), autoclose(mv(fd)) {}
   KJ_DISALLOW_COPY(FdInputStream);
   ~FdInputStream();
 
@@ -259,7 +259,7 @@ class FdOutputStream: public OutputStream {
 
 public:
   explicit FdOutputStream(int fd): fd(fd) {};
-  explicit FdOutputStream(AutoCloseFd fd): fd(fd), autoclose(move(fd)) {}
+  explicit FdOutputStream(AutoCloseFd fd): fd(fd), autoclose(mv(fd)) {}
   KJ_DISALLOW_COPY(FdOutputStream);
   ~FdOutputStream();
 

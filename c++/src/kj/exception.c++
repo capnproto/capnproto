@@ -58,7 +58,7 @@ ArrayPtr<const char> operator*(const Stringifier&, Exception::Durability durabil
 Exception::Exception(Nature nature, Durability durability, const char* file, int line,
                      Array<char> description) noexcept
     : file(file), line(line), nature(nature), durability(durability),
-      description(move(description)) {
+      description(mv(description)) {
   traceCount = backtrace(trace, 16);
 }
 
@@ -82,7 +82,7 @@ Exception::Context::Context(const Context& other) noexcept
 }
 
 void Exception::wrapContext(const char* file, int line, Array<char>&& description) {
-  context = heap<Context>(file, line, move(description), move(context));
+  context = heap<Context>(file, line, mv(description), mv(context));
 }
 
 const char* Exception::what() const noexcept {

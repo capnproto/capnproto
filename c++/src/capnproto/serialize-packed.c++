@@ -452,7 +452,7 @@ PackedFdMessageReader::PackedFdMessageReader(
 
 PackedFdMessageReader::PackedFdMessageReader(
     kj::AutoCloseFd fd, ReaderOptions options, kj::ArrayPtr<word> scratchSpace)
-    : FdInputStream(kj::move(fd)),
+    : FdInputStream(kj::mv(fd)),
       BufferedInputStreamWrapper(static_cast<FdInputStream&>(*this)),
       PackedMessageReader(static_cast<BufferedInputStreamWrapper&>(*this),
                           options, scratchSpace) {}

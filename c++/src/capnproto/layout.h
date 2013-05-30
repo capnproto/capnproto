@@ -31,7 +31,7 @@
 #ifndef CAPNPROTO_LAYOUT_H_
 #define CAPNPROTO_LAYOUT_H_
 
-#include <kj/macros.h>
+#include <kj/common.h>
 #include "common.h"
 #include "blob.h"
 

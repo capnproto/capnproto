@@ -23,7 +23,7 @@
 
 #include <cstddef>
 #include <memory>
-#include <kj/macros.h>
+#include <kj/common.h>
 #include "common.h"
 #include "layout.h"
 
@@ -359,7 +359,7 @@ typename RootType::Reader readMessageUnchecked(const word* data) {
 template <typename Reader>
 void copyToUnchecked(Reader&& reader, kj::ArrayPtr<word> uncheckedBuffer) {
   FlatMessageBuilder builder(uncheckedBuffer);
-  builder.setRoot(kj::forward<Reader>(reader));
+  builder.setRoot(kj::fwd<Reader>(reader));
   builder.requireFilled();
 }
 
