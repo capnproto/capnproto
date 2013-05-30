@@ -169,20 +169,18 @@ kj::Maybe<StructSchema::Member> DynamicUnion::Builder::which() {
 }
 
 DynamicValue::Reader DynamicUnion::Reader::get() {
-  auto w = which();
-  if (w == nullptr) {
-    return nullptr;
-  } else {
+  KJ_IF_MAYBE(w, which()) {
     return DynamicValue::Reader(DynamicStruct::Reader::getImpl(reader, *w));
+  } else {
+    return nullptr;
   }
 }
 
 DynamicValue::Builder DynamicUnion::Builder::get() {
-  auto w = which();
-  if (w == nullptr) {
-    return nullptr;
-  } else {
+  KJ_IF_MAYBE(w, which()) {
     return DynamicValue::Builder(DynamicStruct::Builder::getImpl(builder, *w));
+  } else {
+    return nullptr;
   }
 }
 
@@ -256,22 +254,26 @@ Data::Builder DynamicUnion::Builder::initObjectAsData(Text::Reader name, uint si
 }
 
 StructSchema::Member DynamicUnion::Builder::checkIsObject() {
-  auto w = which();
-  PRECOND(w != nullptr, "Can't get() unknown union value.");
-  CHECK(w->getProto().getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
-        "Unsupported union member type.");
-  PRECOND(w->getProto().getBody().getFieldMember().getType().getBody().which() ==
-          schema::Type::Body::OBJECT_TYPE, "Expected Object.");
-  return *w;
+  KJ_IF_MAYBE(w, which()) {
+    CHECK(w->getProto().getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
+          "Unsupported union member type.");
+    PRECOND(w->getProto().getBody().getFieldMember().getType().getBody().which() ==
+            schema::Type::Body::OBJECT_TYPE, "Expected Object.");
+    return *w;
+  } else {
+    FAIL_PRECOND("Can't get() unknown union value.");
+  }
 }
 
 void DynamicUnion::Builder::setDiscriminant(StructSchema::Member member) {
-  auto containingUnion = member.getContainingUnion();
-  PRECOND(containingUnion != nullptr && *containingUnion == schema,
-          "`member` is not a member of this union.");
-  builder.setDataField<uint16_t>(
-      schema.getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS,
-      member.getIndex());
+  KJ_IF_MAYBE(containingUnion, member.getContainingUnion()) {
+    PRECOND(*containingUnion == schema, "`member` is not a member of this union.");
+    builder.setDataField<uint16_t>(
+        schema.getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS,
+        member.getIndex());
+  } else {
+    FAIL_PRECOND("`member` is not a member of this union.");
+  }
 }
 
 void DynamicUnion::Builder::setObjectDiscriminant(StructSchema::Member member) {
@@ -874,16 +876,17 @@ void DynamicStruct::Builder::setImpl(
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER: {
       auto src = value.as<DynamicUnion>();
-      auto which = src.which();
-      RECOVERABLE_PRECOND(which != nullptr,
-          "Trying to copy a union value, but the union's discriminant is not recognized.  It "
-          "was probably constructed using a newer version of the schema.") {
-        // Just don't copy anything.
+      KJ_IF_MAYBE(which, src.which()) {
+        getImpl(builder, member).as<DynamicUnion>().set(member, src.get());
         return;
+      } else {
+        FAIL_RECOVERABLE_PRECOND(
+            "Trying to copy a union value, but the union's discriminant is not recognized.  It "
+            "was probably constructed using a newer version of the schema.") {
+          // Just don't copy anything.
+          return;
+        }
       }
-
-      getImpl(builder, member).as<DynamicUnion>().set(member, src.get());
-      return;
     }
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {

@@ -76,10 +76,9 @@ TEST(Schema, Structs) {
 
   EXPECT_ANY_THROW(member.asUnion());
 
-  kj::Maybe<StructSchema::Member> lookup = schema.findMemberByName("voidField");
-  ASSERT_TRUE(lookup != nullptr);
-  EXPECT_TRUE(*lookup == member);
-  EXPECT_TRUE(*lookup != schema.getMembers()[1]);
+  StructSchema::Member lookup = schema.getMemberByName("voidField");
+  EXPECT_TRUE(lookup == member);
+  EXPECT_TRUE(lookup != schema.getMembers()[1]);
 
   EXPECT_TRUE(schema.findMemberByName("noSuchField") == nullptr);
 
@@ -105,15 +104,15 @@ TEST(Schema, FieldLookupOutOfOrder) {
   EXPECT_EQ("garply", schema.getMembers()[7].getProto().getName());
   EXPECT_EQ("baz", schema.getMembers()[8].getProto().getName());
 
-  EXPECT_EQ(3, schema.findMemberByName("foo")->getProto().getOrdinal());
-  EXPECT_EQ(2, schema.findMemberByName("bar")->getProto().getOrdinal());
-  EXPECT_EQ(8, schema.findMemberByName("baz")->getProto().getOrdinal());
-  EXPECT_EQ(0, schema.findMemberByName("qux")->getProto().getOrdinal());
-  EXPECT_EQ(6, schema.findMemberByName("quux")->getProto().getOrdinal());
-  EXPECT_EQ(4, schema.findMemberByName("corge")->getProto().getOrdinal());
-  EXPECT_EQ(1, schema.findMemberByName("grault")->getProto().getOrdinal());
-  EXPECT_EQ(7, schema.findMemberByName("garply")->getProto().getOrdinal());
-  EXPECT_EQ(5, schema.findMemberByName("waldo")->getProto().getOrdinal());
+  EXPECT_EQ(3, schema.getMemberByName("foo").getProto().getOrdinal());
+  EXPECT_EQ(2, schema.getMemberByName("bar").getProto().getOrdinal());
+  EXPECT_EQ(8, schema.getMemberByName("baz").getProto().getOrdinal());
+  EXPECT_EQ(0, schema.getMemberByName("qux").getProto().getOrdinal());
+  EXPECT_EQ(6, schema.getMemberByName("quux").getProto().getOrdinal());
+  EXPECT_EQ(4, schema.getMemberByName("corge").getProto().getOrdinal());
+  EXPECT_EQ(1, schema.getMemberByName("grault").getProto().getOrdinal());
+  EXPECT_EQ(7, schema.getMemberByName("garply").getProto().getOrdinal());
+  EXPECT_EQ(5, schema.getMemberByName("waldo").getProto().getOrdinal());
 }
 
 TEST(Schema, Unions) {
@@ -122,21 +121,18 @@ TEST(Schema, Unions) {
   EXPECT_TRUE(schema.findMemberByName("bit0") != nullptr);
   EXPECT_TRUE(schema.findMemberByName("u1f0s8") == nullptr);
 
-  auto maybeUnion1 = schema.findMemberByName("union1");
-  ASSERT_TRUE(maybeUnion1 != nullptr);
-
-  auto union1 = maybeUnion1->asUnion();
+  auto union1 = schema.getMemberByName("union1").asUnion();
   EXPECT_TRUE(union1.findMemberByName("bin0") == nullptr);
   EXPECT_TRUE(union1.getContainingUnion() == nullptr);
 
-  auto maybeU1f0s8 = union1.findMemberByName("u1f0s8");
-  ASSERT_TRUE(maybeU1f0s8 != nullptr);
-
-  auto u1f0s8 = *maybeU1f0s8;
-
+  auto u1f0s8 = union1.getMemberByName("u1f0s8");
   EXPECT_EQ("u1f0s8", u1f0s8.getProto().getName());
   EXPECT_TRUE(u1f0s8.getContainingStruct() == schema);
-  EXPECT_TRUE(*u1f0s8.getContainingUnion() == union1);
+  KJ_IF_MAYBE(containing, u1f0s8.getContainingUnion()) {
+    EXPECT_TRUE(*containing == union1);
+  } else {
+    ADD_FAILURE() << "u1f0s8.getContainingUnion() returned null";
+  }
 
   EXPECT_TRUE(union1.findMemberByName("u1f1s8") != nullptr);
   EXPECT_TRUE(union1.findMemberByName("u1f0s32") != nullptr);
@@ -166,10 +162,9 @@ TEST(Schema, Enums) {
   EXPECT_EQ("foo", enumerant.getProto().getName());
   EXPECT_TRUE(enumerant.getContainingEnum() == schema);
 
-  kj::Maybe<EnumSchema::Enumerant> lookup = schema.findEnumerantByName("foo");
-  ASSERT_TRUE(lookup != nullptr);
-  EXPECT_TRUE(*lookup == enumerant);
-  EXPECT_TRUE(*lookup != schema.getEnumerants()[1]);
+  EnumSchema::Enumerant lookup = schema.getEnumerantByName("foo");
+  EXPECT_TRUE(lookup == enumerant);
+  EXPECT_TRUE(lookup != schema.getEnumerants()[1]);
 
   EXPECT_TRUE(schema.findEnumerantByName("noSuchEnumerant") == nullptr);
 
@@ -259,8 +254,7 @@ TEST(Schema, Lists) {
 
   {
     auto context = Schema::from<TestAllTypes>();
-    auto type = context.findMemberByName("enumList")
-        ->getProto().getBody().getFieldMember().getType();
+    auto type = context.getMemberByName("enumList").getProto().getBody().getFieldMember().getType();
 
     ListSchema schema = ListSchema::of(type.getBody().getListType(), context);
     EXPECT_EQ(schema::Type::Body::ENUM_TYPE, schema.whichElementType());

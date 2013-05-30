@@ -25,6 +25,8 @@
 //
 // This defines very simple utilities that are widely applicable.
 
+#include <stddef.h>
+
 #ifndef KJ_COMMON_H_
 #define KJ_COMMON_H_
 
@@ -57,6 +59,14 @@ typedef unsigned char byte;
 
 // =======================================================================================
 // Common macros, especially for common yet compiler-specific features.
+
+#ifndef KJ_NO_RTTI
+  #ifdef __GNUC__
+    #if !__GXX_RTTI
+      #define KJ_NO_RTTI
+    #endif
+  #endif
+#endif
 
 #define KJ_DISALLOW_COPY(classname) \
   classname(const classname&) = delete; \
@@ -184,6 +194,263 @@ template<typename T> constexpr T&& fwd(RemoveReference<T>&& t) noexcept {
 }
 
 // =======================================================================================
+// Manually invoking constructors and destructors
+//
+// ctor(x, ...) and dtor(x) invoke x's constructor or destructor, respectively.
+
+// We want placement new, but we don't want to #include <new>.  operator new cannot be defined in
+// a namespace, and defining it globally conflicts with the definition in <new>.  So we have to
+// define a dummy type and an operator new that uses it.
+
+namespace internal {
+struct PlacementNew {};
+}  // namespace internal
+} // namespace kj
+
+inline void* operator new(size_t, kj::internal::PlacementNew, void* __p) noexcept {
+  return __p;
+}
+
+namespace kj {
+
+template <typename T, typename... Params>
+inline void ctor(T& location, Params&&... params) {
+  new (internal::PlacementNew(), &location) T(kj::fwd<Params>(params)...);
+}
+
+template <typename T>
+inline void dtor(T& location) {
+  location.~T();
+}
+
+// =======================================================================================
+// Maybe
+//
+// Use in cases where you want to indicate that a value may be null.  Using Maybe<T&> instead of T*
+// forces the caller to handle the null case in order to satisfy the compiler, thus reliably
+// preventing null pointer dereferences at runtime.
+//
+// Maybe<T> can be implicitly constructed from T and from nullptr.  Additionally, it can be
+// implicitly constructed from T*, in which case the pointer is checked for nullness at runtime.
+// To read the value of a Maybe<T>, do:
+//
+//    KJ_IF_MAYBE(value, someFuncReturningMaybe()) {
+//      doSomething(*value);
+//    } else {
+//      maybeWasNull();
+//    }
+//
+// KJ_IF_MAYBE's first parameter is a variable name which will be defined within the following
+// block.  The variable will behave like a (guaranteed non-null) pointer to the Maybe's value,
+// though it may or may not actually be a pointer.
+//
+// Note that Maybe<T&> actually just wraps a pointer, whereas Maybe<T> wraps a T and a boolean
+// indicating nullness.
+
+template <typename T>
+class Maybe;
+
+namespace internal {
+
+template <typename T>
+class NullableValue {
+  // Class whose interface behaves much like T*, but actually contains an instance of T and a
+  // boolean flag indicating nullness.
+
+public:
+  inline NullableValue(NullableValue&& other) noexcept(noexcept(T(instance<T&&>())))
+      : isSet(other.isSet) {
+    if (isSet) {
+      ctor(value, kj::mv(other.value));
+    }
+  }
+  inline NullableValue(const NullableValue& other)
+      : isSet(other.isSet) {
+    if (isSet) {
+      ctor(value, other.value);
+    }
+  }
+  inline ~NullableValue() {
+    if (isSet) {
+      dtor(value);
+    }
+  }
+
+  inline T& operator*() { return value; }
+  inline const T& operator*() const { return value; }
+  inline T* operator->() { return &value; }
+  inline const T* operator->() const { return &value; }
+  inline operator T*() { return isSet ? &value : nullptr; }
+  inline operator const T*() const { return isSet ? &value : nullptr; }
+
+private:  // internal interface used by friends only
+  inline NullableValue() noexcept: isSet(false) {}
+  inline NullableValue(T&& t) noexcept(noexcept(T(instance<T&&>())))
+      : isSet(true) {
+    ctor(value, kj::mv(t));
+  }
+  inline NullableValue(const T& t)
+      : isSet(true) {
+    ctor(value, t);
+  }
+  inline NullableValue(const T* t)
+      : isSet(t != nullptr) {
+    if (isSet) ctor(value, *t);
+  }
+  template <typename U>
+  inline NullableValue(NullableValue<U>&& other) noexcept(noexcept(T(instance<U&&>())))
+      : isSet(other.isSet) {
+    if (isSet) {
+      ctor(value, kj::mv(other.value));
+    }
+  }
+  template <typename U>
+  inline NullableValue(const NullableValue<U>& other)
+      : isSet(other.isSet) {
+    if (isSet) {
+      ctor(value, other.value);
+    }
+  }
+  template <typename U>
+  inline NullableValue(const NullableValue<U&>& other)
+      : isSet(other.isSet) {
+    if (isSet) {
+      ctor(value, *other.ptr);
+    }
+  }
+  inline NullableValue(decltype(nullptr)): isSet(false) {}
+
+  inline NullableValue& operator=(NullableValue&& other) {
+    if (&other != this) {
+      if (isSet) {
+        dtor(value);
+      }
+      isSet = other.isSet;
+      if (isSet) {
+        ctor(value, kj::mv(other.value));
+      }
+    }
+    return *this;
+  }
+
+  inline NullableValue& operator=(const NullableValue& other) {
+    if (&other != this) {
+      if (isSet) {
+        dtor(value);
+      }
+      isSet = other.isSet;
+      if (isSet) {
+        ctor(value, other.value);
+      }
+    }
+    return *this;
+  }
+
+  inline bool operator==(decltype(nullptr)) const { return !isSet; }
+  inline bool operator!=(decltype(nullptr)) const { return isSet; }
+
+private:
+  bool isSet;
+  union {
+    T value;
+  };
+
+  friend class kj::Maybe<T>;
+  template <typename U>
+  friend NullableValue<U>&& readMaybe(Maybe<U>&& maybe);
+};
+
+template <typename T>
+inline NullableValue<T>&& readMaybe(Maybe<T>&& maybe) { return kj::mv(maybe.ptr); }
+template <typename T>
+inline T* readMaybe(Maybe<T>& maybe) { return maybe.ptr; }
+template <typename T>
+inline const T* readMaybe(const Maybe<T>& maybe) { return maybe.ptr; }
+template <typename T>
+inline T* readMaybe(Maybe<T&>&& maybe) { return maybe.ptr; }
+template <typename T>
+inline T* readMaybe(const Maybe<T&>& maybe) { return maybe.ptr; }
+
+}  // namespace internal
+
+#define KJ_IF_MAYBE(name, exp) if (auto name = ::kj::internal::readMaybe(exp))
+
+template <typename T>
+class Maybe {
+public:
+  Maybe(): ptr(nullptr) {}
+  Maybe(T&& t) noexcept(noexcept(T(instance<T&&>()))): ptr(kj::mv(t)) {}
+  Maybe(const T& t): ptr(t) {}
+  Maybe(const T* t) noexcept: ptr(t) {}
+  Maybe(Maybe&& other) noexcept(noexcept(T(instance<T&&>()))): ptr(kj::mv(other.ptr)) {}
+  Maybe(const Maybe& other): ptr(other.ptr) {}
+
+  template <typename U>
+  Maybe(Maybe<U>&& other) noexcept(noexcept(T(instance<U&&>()))) {
+    KJ_IF_MAYBE(val, kj::mv(other)) {
+      ptr = *val;
+    }
+  }
+  template <typename U>
+  Maybe(const Maybe<U>& other) {
+    KJ_IF_MAYBE(val, other) {
+      ptr = *val;
+    }
+  }
+
+  Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
+
+  inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
+  inline Maybe& operator=(const Maybe& other) { ptr = other.ptr; return *this; }
+
+  inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
+  inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
+
+  ~Maybe() noexcept {}
+
+private:
+  internal::NullableValue<T> ptr;
+
+  template <typename U>
+  friend class Maybe;
+  template <typename U>
+  friend internal::NullableValue<U>&& internal::readMaybe(Maybe<U>&& maybe);
+  template <typename U>
+  friend U* internal::readMaybe(Maybe<U>& maybe);
+  template <typename U>
+  friend const U* internal::readMaybe(const Maybe<U>& maybe);
+};
+
+template <typename T>
+class Maybe<T&> {
+public:
+  Maybe(): ptr(nullptr) {}
+  Maybe(T& t) noexcept: ptr(&t) {}
+  Maybe(T* t) noexcept: ptr(t) {}
+  Maybe(const Maybe& other) noexcept: ptr(other.ptr) {}
+  template <typename U>
+  Maybe(const Maybe<U&>& other): ptr(other.ptr) {}
+  Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
+
+  inline Maybe& operator=(const Maybe& other) { ptr = other.ptr; return *this; }
+
+  inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
+  inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
+
+  ~Maybe() noexcept {}
+
+private:
+  T* ptr;
+
+  template <typename U>
+  friend class Maybe;
+  template <typename U>
+  friend U* internal::readMaybe(Maybe<U&>&& maybe);
+  template <typename U>
+  friend U* internal::readMaybe(const Maybe<U&>& maybe);
+};
+
+// =======================================================================================
 // Upcast/downcast
 
 template <typename To, typename From>
@@ -194,17 +461,23 @@ To upcast(From&& from) {
 }
 
 template <typename To, typename From>
-To dynamicDowncastIfAvailable(From* from) {
+Maybe<To&> dynamicDowncastIfAvailable(From& from) {
   // If RTTI is disabled, always returns nullptr.  Otherwise, works like dynamic_cast.  Useful
   // in situations where dynamic_cast could allow an optimization, but isn't strictly necessary
   // for correctness.  It is highly recommended that you try to arrange all your dynamic_casts
   // this way, as a dynamic_cast that is necessary for correctness implies a flaw in the interface
   // design.
 
+  // Force a compile error if To is not a subtype of From.  Cross-casting is rare; if it is needed
+  // we should have a separate cast function like dynamicCrosscastIfAvailable().
+  if (false) {
+    kj::upcast<From*>(upcast<RemoveReference<To>*>(nullptr));
+  }
+
 #if KJ_NO_RTTI
   return nullptr;
 #else
-  return dynamic_cast<To>(from);
+  return dynamic_cast<RemoveReference<To>*>(&from);
 #endif
 }
 
@@ -229,9 +502,9 @@ To downcast(From* from) {
 }
 
 template <typename To, typename From>
-To downcast(From&& from) {
+To downcast(From& from) {
   // Reference version of downcast().
-  return *kj::downcast<To*>(&from);
+  return *kj::downcast<RemoveReference<To>*>(&from);
 }
 
 }  // namespace kj

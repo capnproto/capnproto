@@ -111,13 +111,11 @@ static void print(std::ostream& os, DynamicValue::Reader value,
     }
     case DynamicValue::ENUM: {
       auto enumValue = value.as<DynamicEnum>();
-      kj::Maybe<EnumSchema::Enumerant> enumerant =
-          enumValue.getEnumerant();
-      if (enumerant == nullptr) {
+      KJ_IF_MAYBE(enumerant, enumValue.getEnumerant()) {
+        os << enumerant->getProto().getName().c_str();
+      } else {
         // Unknown enum value; output raw number.
         os << enumValue.getRaw();
-      } else {
-        os << enumerant->getProto().getName().c_str();
       }
       break;
     }
@@ -151,16 +149,15 @@ static void print(std::ostream& os, DynamicValue::Reader value,
     }
     case DynamicValue::UNION: {
       auto unionValue = value.as<DynamicUnion>();
-      kj::Maybe<StructSchema::Member> tag = unionValue.which();
-      if (tag == nullptr) {
-        // Unknown union member; must have come from newer
-        // version of the protocol.
-        os << "?";
-      } else {
+      KJ_IF_MAYBE(tag, unionValue.which()) {
         os << tag->getProto().getName() << "(";
         print(os, unionValue.get(),
               tag->getProto().getBody().getFieldMember().getType().getBody().which());
         os << ")";
+      } else {
+        // Unknown union member; must have come from newer
+        // version of the protocol.
+        os << "?";
       }
       break;
     }

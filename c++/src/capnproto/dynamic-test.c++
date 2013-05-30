@@ -228,6 +228,13 @@ TEST(DynamicApi, DynamicGenericObjects) {
   }
 }
 
+#define EXPECT_MAYBE_EQ(name, exp, expected, actual) \
+  KJ_IF_MAYBE(name, exp) { \
+    EXPECT_EQ(expected, actual); \
+  } else { \
+    FAIL() << "Maybe was empty."; \
+  }
+
 TEST(DynamicApi, UnionsRead) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<TestUnion>();
@@ -241,26 +248,22 @@ TEST(DynamicApi, UnionsRead) {
     auto dynamic = toDynamic(root.asReader());
     {
       auto u = dynamic.get("union0").as<DynamicUnion>();
-      ASSERT_TRUE(u.which() != nullptr);
-      EXPECT_EQ("u0f1s32", u.which()->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u0f1s32", w->getProto().getName());
       EXPECT_EQ(1234567, u.get().as<int32_t>());
     }
     {
       auto u = dynamic.get("union1").as<DynamicUnion>();
-      ASSERT_TRUE(u.which() != nullptr);
-      EXPECT_EQ("u1f1sp", u.which()->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u1f1sp", w->getProto().getName());
       EXPECT_EQ("foo", u.get().as<Text>());
     }
     {
       auto u = dynamic.get("union2").as<DynamicUnion>();
-      ASSERT_TRUE(u.which() != nullptr);
-      EXPECT_EQ("u2f0s1", u.which()->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u2f0s1", w->getProto().getName());
       EXPECT_TRUE(u.get().as<bool>());
     }
     {
       auto u = dynamic.get("union3").as<DynamicUnion>();
-      ASSERT_TRUE(u.which() != nullptr);
-      EXPECT_EQ("u3f0s64", u.which()->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u3f0s64", w->getProto().getName());
       EXPECT_EQ(1234567890123456789ll, u.get().as<int64_t>());
     }
   }
@@ -270,26 +273,22 @@ TEST(DynamicApi, UnionsRead) {
     auto dynamic = toDynamic(root);
     {
       auto u = dynamic.get("union0").as<DynamicUnion>();
-      ASSERT_TRUE(u.which() != nullptr);
-      EXPECT_EQ("u0f1s32", u.which()->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u0f1s32", w->getProto().getName());
       EXPECT_EQ(1234567, u.get().as<int32_t>());
     }
     {
       auto u = dynamic.get("union1").as<DynamicUnion>();
-      ASSERT_TRUE(u.which() != nullptr);
-      EXPECT_EQ("u1f1sp", u.which()->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u1f1sp", w->getProto().getName());
       EXPECT_EQ("foo", u.get().as<Text>());
     }
     {
       auto u = dynamic.get("union2").as<DynamicUnion>();
-      ASSERT_TRUE(u.which() != nullptr);
-      EXPECT_EQ("u2f0s1", u.which()->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u2f0s1", w->getProto().getName());
       EXPECT_TRUE(u.get().as<bool>());
     }
     {
       auto u = dynamic.get("union3").as<DynamicUnion>();
-      ASSERT_TRUE(u.which() != nullptr);
-      EXPECT_EQ("u3f0s64", u.which()->getProto().getName());
+      EXPECT_MAYBE_EQ(w, u.which(), "u3f0s64", w->getProto().getName());
       EXPECT_EQ(1234567890123456789ll, u.get().as<int64_t>());
     }
   }

@@ -368,13 +368,20 @@ void checkList(T reader, std::initializer_list<ReaderFor<Element>> expected) {
   }
 }
 
+Text::Reader name(DynamicEnum e) {
+  KJ_IF_MAYBE(schema, e.getEnumerant()) {
+    return schema->getProto().getName();
+  } else {
+    return "(unknown enumerant)";
+  }
+}
+
 template <typename T>
 void checkEnumList(T reader, std::initializer_list<const char*> expected) {
   auto list = reader.as<DynamicList>();
   ASSERT_EQ(expected.size(), list.size());
   for (uint i = 0; i < expected.size(); i++) {
-    EXPECT_EQ(expected.begin()[i],
-              list[i].as<DynamicEnum>().getEnumerant()->getProto().getName());
+    EXPECT_EQ(expected.begin()[i], name(list[i].as<DynamicEnum>()));
   }
 }
 
@@ -416,8 +423,7 @@ void dynamicCheckTestMessage(Reader reader) {
       EXPECT_EQ("really nested", subSubReader.get("structField").as<DynamicStruct>()
                                              .get("textField").as<Text>());
     }
-    EXPECT_EQ("baz",
-              subReader.get("enumField").as<DynamicEnum>().getEnumerant()->getProto().getName());
+    EXPECT_EQ("baz", name(subReader.get("enumField").as<DynamicEnum>()));
 
     checkList<Void>(subReader.get("voidList"), {Void::VOID, Void::VOID, Void::VOID});
     checkList<bool>(subReader.get("boolList"), {false, true, false, true, true});
@@ -443,8 +449,7 @@ void dynamicCheckTestMessage(Reader reader) {
     }
     checkEnumList(subReader.get("enumList"), {"qux", "bar", "grault"});
   }
-  EXPECT_EQ("corge",
-            reader.get("enumField").as<DynamicEnum>().getEnumerant()->getProto().getName());
+  EXPECT_EQ("corge", name(reader.get("enumField").as<DynamicEnum>()));
 
   EXPECT_EQ(6u, reader.get("voidList").as<DynamicList>().size());
   checkList<bool>(reader.get("boolList"), {true, false, false, true});

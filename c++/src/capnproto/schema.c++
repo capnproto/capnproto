@@ -129,9 +129,11 @@ kj::Maybe<StructSchema::Member> StructSchema::findMemberByName(Text::Reader name
 }
 
 StructSchema::Member StructSchema::getMemberByName(Text::Reader name) const {
-  kj::Maybe<StructSchema::Member> member = findMemberByName(name);
-  PRECOND(member != nullptr, "struct has no such member", name);
-  return *member;
+  KJ_IF_MAYBE(member, findMemberByName(name)) {
+    return *member;
+  } else {
+    FAIL_PRECOND("struct has no such member", name);
+  }
 }
 
 kj::Maybe<StructSchema::Union> StructSchema::Member::getContainingUnion() const {
@@ -155,9 +157,11 @@ kj::Maybe<StructSchema::Member> StructSchema::Union::findMemberByName(Text::Read
 }
 
 StructSchema::Member StructSchema::Union::getMemberByName(Text::Reader name) const {
-  kj::Maybe<StructSchema::Member> member = findMemberByName(name);
-  PRECOND(member != nullptr, "union has no such member", name);
-  return *member;
+  KJ_IF_MAYBE(member, findMemberByName(name)) {
+    return *member;
+  } else {
+    FAIL_PRECOND("union has no such member", name);
+  }
 }
 
 // -------------------------------------------------------------------
@@ -171,9 +175,11 @@ kj::Maybe<EnumSchema::Enumerant> EnumSchema::findEnumerantByName(Text::Reader na
 }
 
 EnumSchema::Enumerant EnumSchema::getEnumerantByName(Text::Reader name) const {
-  kj::Maybe<EnumSchema::Enumerant> enumerant = findEnumerantByName(name);
-  PRECOND(enumerant != nullptr, "enum has no such enumerant", name);
-  return *enumerant;
+  KJ_IF_MAYBE(enumerant, findEnumerantByName(name)) {
+    return *enumerant;
+  } else {
+    FAIL_PRECOND("enum has no such enumerant", name);
+  }
 }
 
 // -------------------------------------------------------------------
@@ -187,9 +193,11 @@ kj::Maybe<InterfaceSchema::Method> InterfaceSchema::findMethodByName(Text::Reade
 }
 
 InterfaceSchema::Method InterfaceSchema::getMethodByName(Text::Reader name) const {
-  kj::Maybe<InterfaceSchema::Method> method = findMethodByName(name);
-  PRECOND(method != nullptr, "interface has no such method", name);
-  return *method;
+  KJ_IF_MAYBE(method, findMethodByName(name)) {
+    return *method;
+  } else {
+    FAIL_PRECOND("interface has no such method", name);
+  }
 }
 
 // =======================================================================================

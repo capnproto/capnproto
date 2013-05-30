@@ -88,10 +88,10 @@ public:
   };
 
   inline Maybe<const Context&> getContext() const {
-    if (context == nullptr) {
-      return nullptr;
+    KJ_IF_MAYBE(c, context) {
+      return **c;
     } else {
-      return **context;
+      return nullptr;
     }
   }
 

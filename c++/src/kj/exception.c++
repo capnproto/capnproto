@@ -67,8 +67,8 @@ Exception::Exception(const Exception& other) noexcept
       description(str(other.description)), traceCount(other.traceCount) {
   memcpy(trace, other.trace, sizeof(trace[0]) * traceCount);
 
-  if (other.context != nullptr) {
-    context = heap<Context>(**other.context);
+  KJ_IF_MAYBE(c, other.context) {
+    context = heap<Context>(**c);
   }
 }
 
@@ -76,8 +76,8 @@ Exception::~Exception() noexcept {}
 
 Exception::Context::Context(const Context& other) noexcept
     : file(other.file), line(other.line), description(str(other.description)) {
-  if (other.next != nullptr) {
-    next = heap<Context>(**other.next);
+  KJ_IF_MAYBE(n, other.next) {
+    next = heap<Context>(**n);
   }
 }
 
@@ -89,20 +89,28 @@ const char* Exception::what() const noexcept {
   uint contextDepth = 0;
 
   const Maybe<Own<Context>>* contextPtr = &context;
-  while (*contextPtr != nullptr) {
-    ++contextDepth;
-    contextPtr = &(***contextPtr).next;
+  for (;;) {
+    KJ_IF_MAYBE(c, *contextPtr) {
+      ++contextDepth;
+      contextPtr = &(*c)->next;
+    } else {
+      break;
+    }
   }
 
   Array<Array<char>> contextText = newArray<Array<char>>(contextDepth);
 
   contextDepth = 0;
   contextPtr = &context;
-  while (*contextPtr != nullptr) {
-    const Context& node = ***contextPtr;
-    contextText[contextDepth++] =
-        str(node.file, ":", node.line, ": context: ", node.description, "\n");
-    contextPtr = &node.next;
+  for (;;) {
+    KJ_IF_MAYBE(c, *contextPtr) {
+      const Context& node = **c;
+      contextText[contextDepth++] =
+          str(node.file, ":", node.line, ": context: ", node.description, "\n");
+      contextPtr = &node.next;
+    } else {
+      break;
+    }
   }
 
   // Must be careful to NUL-terminate this.
