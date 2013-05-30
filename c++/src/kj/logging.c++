@@ -112,11 +112,11 @@ static Array<char> makeDescription(DescriptionStyle style, const char* code, int
   }
 
   {
-    ArrayPtr<const char> expected = arrayPtr("expected ");
-    ArrayPtr<const char> codeArray = style == LOG ? nullptr : arrayPtr(code);
-    ArrayPtr<const char> sep = arrayPtr(" = ");
-    ArrayPtr<const char> delim = arrayPtr("; ");
-    ArrayPtr<const char> colon = arrayPtr(": ");
+    ArrayPtr<const char> expected = stringPtr("expected ");
+    ArrayPtr<const char> codeArray = style == LOG ? nullptr : stringPtr(code);
+    ArrayPtr<const char> sep = stringPtr(" = ");
+    ArrayPtr<const char> delim = stringPtr("; ");
+    ArrayPtr<const char> colon = stringPtr(": ");
 
     if (style == ASSERTION && strcmp(code, "false") == 0) {
       // Don't print "expected false", that's silly.
@@ -127,7 +127,7 @@ static Array<char> makeDescription(DescriptionStyle style, const char* code, int
 #if __USE_GNU
     char buffer[256];
     if (style == SYSCALL) {
-      sysErrorArray = arrayPtr(strerror_r(errorNumber, buffer, sizeof(buffer)));
+      sysErrorArray = stringPtr(strerror_r(errorNumber, buffer, sizeof(buffer)));
     }
 #else
     // TODO(port):  Other unixes should have strerror_r but it may have a different signature.

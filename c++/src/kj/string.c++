@@ -21,8 +21,17 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "type-safety.h"
+#include "string.h"
 
 namespace kj {
+
+String::String(const char* value): content(newArray<char>(strlen(value) + 1)) {
+  strcpy(content.begin(), value);
+}
+
+String::String(const char* value, size_t length): content(newArray<char>(length + 1)) {
+  memcpy(content.begin(), value, length);
+  content[length] = '\0';
+}
 
 }  // namespace kj

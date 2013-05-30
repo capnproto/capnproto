@@ -26,7 +26,7 @@
 
 #include <cstddef>
 #include "common.h"
-#include "type-safety.h"
+#include "array.h"
 
 namespace kj {
 

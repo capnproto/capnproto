@@ -27,7 +27,8 @@
 #include <initializer_list>
 #include <utility>
 #include <type_traits>
-#include "type-safety.h"
+#include "array.h"
+#include "string.h"
 #include <string.h>
 
 namespace kj {

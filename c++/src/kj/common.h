@@ -462,6 +462,63 @@ private:
   friend U* internal::readMaybe(const Maybe<U&>& maybe);
 };
 
+
+// =======================================================================================
+// ArrayPtr
+//
+// So common that we put it in common.h rather than array.h.
+
+template <typename T>
+class ArrayPtr {
+  // A pointer to an array.  Includes a size.  Like any pointer, it doesn't own the target data,
+  // and passing by value only copies the pointer, not the target.
+
+public:
+  inline constexpr ArrayPtr(): ptr(nullptr), size_(0) {}
+  inline constexpr ArrayPtr(decltype(nullptr)): ptr(nullptr), size_(0) {}
+  inline constexpr ArrayPtr(T* ptr, size_t size): ptr(ptr), size_(size) {}
+  inline constexpr ArrayPtr(T* begin, T* end): ptr(begin), size_(end - begin) {}
+
+  inline operator ArrayPtr<const T>() {
+    return ArrayPtr<const T>(ptr, size_);
+  }
+
+  inline size_t size() const { return size_; }
+  inline T& operator[](size_t index) const {
+    KJ_INLINE_DPRECOND(index < size_, "Out-of-bounds ArrayPtr access.");
+    return ptr[index];
+  }
+
+  inline T* begin() const { return ptr; }
+  inline T* end() const { return ptr + size_; }
+  inline T& front() const { return *ptr; }
+  inline T& back() const { return *(ptr + size_ - 1); }
+
+  inline ArrayPtr slice(size_t start, size_t end) {
+    KJ_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
+    return ArrayPtr(ptr + start, end - start);
+  }
+
+  inline bool operator==(decltype(nullptr)) { return size_ == 0; }
+  inline bool operator!=(decltype(nullptr)) { return size_ != 0; }
+
+private:
+  T* ptr;
+  size_t size_;
+};
+
+template <typename T>
+inline constexpr ArrayPtr<T> arrayPtr(T* ptr, size_t size) {
+  // Use this function to construct ArrayPtrs without writing out the type name.
+  return ArrayPtr<T>(ptr, size);
+}
+
+template <typename T>
+inline constexpr ArrayPtr<T> arrayPtr(T* begin, T* end) {
+  // Use this function to construct ArrayPtrs without writing out the type name.
+  return ArrayPtr<T>(begin, end);
+}
+
 // =======================================================================================
 // Upcast/downcast
 

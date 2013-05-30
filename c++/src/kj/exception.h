@@ -25,7 +25,7 @@
 #define KJ_EXCEPTION_H_
 
 #include <exception>
-#include "type-safety.h"
+#include "array.h"
 
 namespace kj {
 

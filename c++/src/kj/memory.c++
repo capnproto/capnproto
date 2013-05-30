@@ -21,8 +21,10 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "type-safety.h"
+#include "memory.h"
 
 namespace kj {
+
+Disposer::~Disposer() {}
 
 }  // namespace kj

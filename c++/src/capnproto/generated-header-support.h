@@ -28,6 +28,7 @@
 
 #include "layout.h"
 #include "list.h"
+#include <kj/string.h>
 
 namespace capnproto {
 
