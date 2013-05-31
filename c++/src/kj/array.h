@@ -156,14 +156,6 @@ namespace internal {
 
 class HeapArrayDisposer final: public ArrayDisposer {
 public:
-  static void* allocateImpl(size_t elementSize, size_t elementCount, size_t capacity,
-                            void (*constructElement)(void*), void (*destroyElement)(void*));
-  // Allocates and constructs the array.  Both function pointers are null if the constructor is
-  // trivial, otherwise destroyElement is null if the constructor doesn't throw.
-
-  virtual void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
-                           size_t capacity, void (*destroyElement)(void*)) const override;
-
   template <typename T>
   static T* allocate(size_t count);
   template <typename T>
@@ -172,6 +164,14 @@ public:
   static const HeapArrayDisposer instance;
 
 private:
+  static void* allocateImpl(size_t elementSize, size_t elementCount, size_t capacity,
+                            void (*constructElement)(void*), void (*destroyElement)(void*));
+  // Allocates and constructs the array.  Both function pointers are null if the constructor is
+  // trivial, otherwise destroyElement is null if the constructor doesn't throw.
+
+  virtual void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
+                           size_t capacity, void (*destroyElement)(void*)) const override;
+
   template <typename T, bool hasTrivialConstructor = __has_trivial_constructor(T),
                         bool hasNothrowConstructor = __has_nothrow_constructor(T)>
   struct Allocate_;
@@ -188,6 +188,11 @@ inline Array<T> heapArray(size_t size) {
   return Array<T>(internal::HeapArrayDisposer::allocate<T>(size), size,
                   internal::HeapArrayDisposer::instance);
 }
+
+template <typename T> Array<T> heapArray(const T* content, size_t size);
+template <typename T> Array<T> heapArray(ArrayPtr<const T> content);
+template <typename T, typename Iterator> Array<T> heapArray(Iterator begin, Iterator end);
+// Allocate a heap arary containing a copy of the given content.
 
 // =======================================================================================
 // ArrayBuilder
@@ -460,6 +465,27 @@ template <typename T>
 template <typename Iterator>
 void ArrayBuilder<T>::addAll(Iterator start, Iterator end) {
   pos = internal::copyConstructArray(pos, start, end);
+}
+
+template <typename T>
+Array<T> heapArray(const T* content, size_t size) {
+  ArrayBuilder<T> builder = heapArrayBuilder<T>(size);
+  builder.addAll(content, content + size);
+  return builder.finish();
+}
+
+template <typename T>
+Array<T> heapArray(ArrayPtr<const T> content) {
+  ArrayBuilder<T> builder = heapArrayBuilder<T>(content.size());
+  builder.addAll(content);
+  return builder.finish();
+}
+
+template <typename T, typename Iterator> Array<T>
+heapArray(Iterator begin, Iterator end) {
+  ArrayBuilder<T> builder = heapArrayBuilder<T>(end - begin);
+  builder.addAll(begin, end);
+  return builder.finish();
 }
 
 }  // namespace kj

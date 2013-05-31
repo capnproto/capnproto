@@ -181,6 +181,14 @@ template <typename T> struct IsLvalueReference_<T&> { static constexpr bool valu
 template <typename T>
 inline constexpr bool isLvalueReference() { return IsLvalueReference_<T>::value; }
 
+template <typename T> struct Decay_ { typedef T Type; };
+template <typename T> struct Decay_<T&> { typedef typename Decay_<T>::Type Type; };
+template <typename T> struct Decay_<T&&> { typedef typename Decay_<T>::Type Type; };
+template <typename T> struct Decay_<T[]> { typedef typename Decay_<T*>::Type Type; };
+template <typename T> struct Decay_<const T> { typedef typename Decay_<T>::Type Type; };
+template <typename T> struct Decay_<volatile T> { typedef typename Decay_<T>::Type Type; };
+template <typename T> using Decay = typename Decay_<T>::Type;
+
 template <typename T>
 T instance() noexcept;
 // Like std::declval, but doesn't transform T into an rvalue reference.  If you want that, specify
@@ -494,7 +502,7 @@ public:
   inline T& front() const { return *ptr; }
   inline T& back() const { return *(ptr + size_ - 1); }
 
-  inline ArrayPtr slice(size_t start, size_t end) {
+  inline ArrayPtr slice(size_t start, size_t end) const {
     KJ_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
     return ArrayPtr(ptr + start, end - start);
   }

@@ -21,7 +21,6 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define KJ_PRIVATE
 #include "logging.h"
 #include <stdlib.h>
 #include <ctype.h>
@@ -52,8 +51,8 @@ enum DescriptionStyle {
   SYSCALL
 };
 
-static Array<char> makeDescription(DescriptionStyle style, const char* code, int errorNumber,
-                                   const char* macroArgs, ArrayPtr<Array<char>> argValues) {
+static String makeDescription(DescriptionStyle style, const char* code, int errorNumber,
+                              const char* macroArgs, ArrayPtr<String> argValues) {
   KJ_STACK_ARRAY(ArrayPtr<const char>, argNames, argValues.size(), 8, 64);
 
   if (argValues.size() > 0) {
@@ -112,22 +111,22 @@ static Array<char> makeDescription(DescriptionStyle style, const char* code, int
   }
 
   {
-    ArrayPtr<const char> expected = stringPtr("expected ");
-    ArrayPtr<const char> codeArray = style == LOG ? nullptr : stringPtr(code);
-    ArrayPtr<const char> sep = stringPtr(" = ");
-    ArrayPtr<const char> delim = stringPtr("; ");
-    ArrayPtr<const char> colon = stringPtr(": ");
+    StringPtr expected = "expected ";
+    StringPtr codeArray = style == LOG ? nullptr : StringPtr(code);
+    StringPtr sep = " = ";
+    StringPtr delim = "; ";
+    StringPtr colon = ": ";
 
     if (style == ASSERTION && strcmp(code, "false") == 0) {
       // Don't print "expected false", that's silly.
       style = LOG;
     }
 
-    ArrayPtr<const char> sysErrorArray;
+    StringPtr sysErrorArray;
 #if __USE_GNU
     char buffer[256];
     if (style == SYSCALL) {
-      sysErrorArray = stringPtr(strerror_r(errorNumber, buffer, sizeof(buffer)));
+      sysErrorArray = strerror_r(errorNumber, buffer, sizeof(buffer));
     }
 #else
     // TODO(port):  Other unixes should have strerror_r but it may have a different signature.
@@ -157,40 +156,37 @@ static Array<char> makeDescription(DescriptionStyle style, const char* code, int
       totalSize += argValues[i].size();
     }
 
-    ArrayBuilder<char> result = heapArrayBuilder<char>(totalSize);
+    String result = heapString(totalSize);
+    char* pos = result.begin();
 
     switch (style) {
       case LOG:
         break;
       case ASSERTION:
-        result.addAll(expected);
-        result.addAll(codeArray);
+        pos = fill(pos, expected, codeArray);
         break;
       case SYSCALL:
-        result.addAll(codeArray);
-        result.addAll(colon);
-        result.addAll(sysErrorArray);
+        pos = fill(pos, codeArray, colon, sysErrorArray);
         break;
     }
     for (size_t i = 0; i < argValues.size(); i++) {
       if (i > 0 || style != LOG) {
-        result.addAll(delim);
+        pos = fill(pos, delim);
       }
       if (argNames[i].size() > 0 && argNames[i][0] != '\"') {
-        result.addAll(argNames[i]);
-        result.addAll(sep);
+        pos = fill(pos, argNames[i], sep);
       }
-      result.addAll(argValues[i]);
+      pos = fill(pos, argValues[i]);
     }
 
-    return result.finish();
+    return result;
   }
 }
 
 }  // namespace
 
 void Log::logInternal(const char* file, int line, Severity severity, const char* macroArgs,
-                      ArrayPtr<Array<char>> argValues) {
+                      ArrayPtr<String> argValues) {
   getExceptionCallback().logMessage(
       str(severity, ": ", file, ":", line, ": ",
           makeDescription(LOG, nullptr, 0, macroArgs, argValues), '\n'));
@@ -198,7 +194,7 @@ void Log::logInternal(const char* file, int line, Severity severity, const char*
 
 void Log::recoverableFaultInternal(
     const char* file, int line, Exception::Nature nature,
-    const char* condition, const char* macroArgs, ArrayPtr<Array<char>> argValues) {
+    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
   getExceptionCallback().onRecoverableException(
       Exception(nature, Exception::Durability::PERMANENT, file, line,
                 makeDescription(ASSERTION, condition, 0, macroArgs, argValues)));
@@ -206,7 +202,7 @@ void Log::recoverableFaultInternal(
 
 void Log::fatalFaultInternal(
     const char* file, int line, Exception::Nature nature,
-    const char* condition, const char* macroArgs, ArrayPtr<Array<char>> argValues) {
+    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
   getExceptionCallback().onFatalException(
       Exception(nature, Exception::Durability::PERMANENT, file, line,
                 makeDescription(ASSERTION, condition, 0, macroArgs, argValues)));
@@ -215,7 +211,7 @@ void Log::fatalFaultInternal(
 
 void Log::recoverableFailedSyscallInternal(
     const char* file, int line, const char* call,
-    int errorNumber, const char* macroArgs, ArrayPtr<Array<char>> argValues) {
+    int errorNumber, const char* macroArgs, ArrayPtr<String> argValues) {
   getExceptionCallback().onRecoverableException(
       Exception(Exception::Nature::OS_ERROR, Exception::Durability::PERMANENT, file, line,
                 makeDescription(SYSCALL, call, errorNumber, macroArgs, argValues)));
@@ -223,7 +219,7 @@ void Log::recoverableFailedSyscallInternal(
 
 void Log::fatalFailedSyscallInternal(
     const char* file, int line, const char* call,
-    int errorNumber, const char* macroArgs, ArrayPtr<Array<char>> argValues) {
+    int errorNumber, const char* macroArgs, ArrayPtr<String> argValues) {
   getExceptionCallback().onFatalException(
       Exception(Exception::Nature::OS_ERROR, Exception::Durability::PERMANENT, file, line,
                 makeDescription(SYSCALL, call, errorNumber, macroArgs, argValues)));
@@ -231,7 +227,7 @@ void Log::fatalFailedSyscallInternal(
 }
 
 void Log::addContextToInternal(Exception& exception, const char* file, int line,
-                               const char* macroArgs, ArrayPtr<Array<char>> argValues) {
+                               const char* macroArgs, ArrayPtr<String> argValues) {
   exception.wrapContext(file, line, makeDescription(LOG, nullptr, 0, macroArgs, argValues));
 }
 
@@ -251,7 +247,7 @@ void Log::Context::onFatalException(Exception&& exception) {
   addTo(exception);
   next.onFatalException(kj::mv(exception));
 }
-void Log::Context::logMessage(ArrayPtr<const char> text) {
+void Log::Context::logMessage(StringPtr text) {
   // TODO(someday):  We could do something like log the context and then indent all log messages
   //   written until the end of the context.
   next.logMessage(text);

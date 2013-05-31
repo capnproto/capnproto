@@ -21,7 +21,6 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define KJ_PRIVATE
 #include "util.h"
 #include <gtest/gtest.h>
 #include <string>
@@ -30,15 +29,11 @@ namespace kj {
 namespace internal {
 namespace {
 
-std::string arrayToStr(Array<char> arr) {
-  return std::string(arr.begin(), arr.size());
-}
-
 TEST(Util, Foo) {
-  EXPECT_EQ("foobar", arrayToStr(str("foo", "bar")));
-  EXPECT_EQ("1 2 3 4", arrayToStr(str(1, " ", 2u, " ", 3l, " ", 4ll)));
-  EXPECT_EQ("1.5 foo 1e15 bar -3", arrayToStr(str(1.5f, " foo ", 1e15, " bar ", -3)));
-  EXPECT_EQ("foo", arrayToStr(str('f', 'o', 'o')));
+  EXPECT_EQ("foobar", str("foo", "bar"));
+  EXPECT_EQ("1 2 3 4", str(1, " ", 2u, " ", 3l, " ", 4ll));
+  EXPECT_EQ("1.5 foo 1e15 bar -3", str(1.5f, " foo ", 1e15, " bar ", -3));
+  EXPECT_EQ("foo", str('f', 'o', 'o'));
 }
 
 }  // namespace

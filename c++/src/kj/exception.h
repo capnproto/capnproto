@@ -27,6 +27,7 @@
 #include <exception>
 #include "memory.h"
 #include "array.h"
+#include "string.h"
 
 namespace kj {
 
@@ -64,7 +65,7 @@ public:
   };
 
   Exception(Nature nature, Durability durability, const char* file, int line,
-            Array<char> description = nullptr) noexcept;
+            String description = nullptr) noexcept;
   Exception(const Exception& other) noexcept;
   Exception(Exception&& other) = default;
   ~Exception() noexcept;
@@ -80,10 +81,10 @@ public:
 
     const char* file;
     int line;
-    Array<char> description;
+    String description;
     Maybe<Own<Context>> next;
 
-    Context(const char* file, int line, Array<char>&& description, Maybe<Own<Context>>&& next)
+    Context(const char* file, int line, String&& description, Maybe<Own<Context>>&& next)
         : file(file), line(line), description(mv(description)), next(mv(next)) {}
     Context(const Context& other) noexcept;
   };
@@ -96,7 +97,7 @@ public:
     }
   }
 
-  void wrapContext(const char* file, int line, Array<char>&& description);
+  void wrapContext(const char* file, int line, String&& description);
   // Wraps the context in a new node.  This becomes the head node returned by getContext() -- it
   // is expected that contexts will be added in reverse order as the exception passes up the
   // callback stack.
@@ -108,11 +109,11 @@ private:
   int line;
   Nature nature;
   Durability durability;
-  Array<char> description;
+  String description;
   Maybe<Own<Context>> context;
   void* trace[16];
   uint traceCount;
-  mutable Array<char> whatBuffer;
+  mutable String whatBuffer;
 };
 
 struct Stringifier;
@@ -143,7 +144,7 @@ public:
   // aborting.  The default implementation throws an exception unless the library was compiled with
   // -fno-exceptions, in which case it logs an error and returns.
 
-  virtual void logMessage(ArrayPtr<const char> text);
+  virtual void logMessage(StringPtr text);
   // Called when something wants to log some debug text.  The text always ends in a newline if
   // it is non-empty.  The default implementation writes the text to stderr.
 

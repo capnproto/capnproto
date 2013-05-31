@@ -176,7 +176,7 @@ kj::String stringify(DynamicValue::Reader value) {
   std::stringstream out;
   print(out, value, schema::Type::Body::STRUCT_TYPE);
   auto content = out.str();
-  return kj::String(content.data(), content.size());
+  return kj::heapString(content.data(), content.size());
 }
 
 namespace internal {

@@ -22,16 +22,20 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "string.h"
+#include "logging.h"
 
 namespace kj {
 
-String::String(const char* value): content(heapArray<char>(strlen(value) + 1)) {
-  strcpy(content.begin(), value);
+String heapString(size_t size) {
+  char* buffer = internal::HeapArrayDisposer::allocate<char>(size + 1);
+  buffer[size] = '\0';
+  return String(buffer, size, internal::HeapArrayDisposer::instance);
 }
 
-String::String(const char* value, size_t length): content(heapArray<char>(length + 1)) {
-  memcpy(content.begin(), value, length);
-  content[length] = '\0';
+String heapString(const char* value, size_t size) {
+  char* buffer = internal::HeapArrayDisposer::allocate<char>(size + 1);
+  memcpy(buffer, value, size + 1);
+  return String(buffer, size, internal::HeapArrayDisposer::instance);
 }
 
 }  // namespace kj

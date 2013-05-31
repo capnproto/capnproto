@@ -21,7 +21,6 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define KJ_PRIVATE
 #include "exception.h"
 #include "util.h"
 #include "logging.h"
@@ -56,7 +55,7 @@ ArrayPtr<const char> operator*(const Stringifier&, Exception::Durability durabil
 }
 
 Exception::Exception(Nature nature, Durability durability, const char* file, int line,
-                     Array<char> description) noexcept
+                     String description) noexcept
     : file(file), line(line), nature(nature), durability(durability),
       description(mv(description)) {
   traceCount = backtrace(trace, 16);
@@ -68,7 +67,7 @@ Exception::Exception(const Exception& other) noexcept
   memcpy(trace, other.trace, sizeof(trace[0]) * traceCount);
 
   KJ_IF_MAYBE(c, other.context) {
-    context = heap<Context>(**c);
+    context = heap(**c);
   }
 }
 
@@ -77,11 +76,11 @@ Exception::~Exception() noexcept {}
 Exception::Context::Context(const Context& other) noexcept
     : file(other.file), line(other.line), description(str(other.description)) {
   KJ_IF_MAYBE(n, other.next) {
-    next = heap<Context>(**n);
+    next = heap(**n);
   }
 }
 
-void Exception::wrapContext(const char* file, int line, Array<char>&& description) {
+void Exception::wrapContext(const char* file, int line, String&& description) {
   context = heap<Context>(file, line, mv(description), mv(context));
 }
 
@@ -98,7 +97,7 @@ const char* Exception::what() const noexcept {
     }
   }
 
-  Array<Array<char>> contextText = heapArray<Array<char>>(contextDepth);
+  Array<String> contextText = heapArray<String>(contextDepth);
 
   contextDepth = 0;
   contextPtr = &context;
@@ -118,7 +117,7 @@ const char* Exception::what() const noexcept {
                    file, ":", line, ": ", nature,
                    durability == Durability::TEMPORARY ? " (temporary)" : "",
                    this->description == nullptr ? "" : ": ", this->description,
-                   "\nstack: ", strArray(arrayPtr(trace, traceCount), " "), '\0');
+                   "\nstack: ", strArray(arrayPtr(trace, traceCount), " "));
 
   return whatBuffer.begin();
 }
@@ -163,14 +162,14 @@ void ExceptionCallback::onFatalException(Exception&& exception) {
 #endif
 }
 
-void ExceptionCallback::logMessage(ArrayPtr<const char> text) {
+void ExceptionCallback::logMessage(StringPtr text) {
   while (text != nullptr) {
     ssize_t n = write(STDERR_FILENO, text.begin(), text.size());
     if (n <= 0) {
       // stderr is broken.  Give up.
       return;
     }
-    text = text.slice(n, text.size());
+    text = text.slice(n);
   }
 }
 

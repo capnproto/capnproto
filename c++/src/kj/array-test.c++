@@ -283,5 +283,24 @@ TEST(Array, AraryBuilderAddAll) {
   EXPECT_EQ(0, TestObject::copiedCount);
 }
 
+TEST(Array, HeapCopy) {
+  {
+    Array<char> copy = heapArray("foo", 3);
+    EXPECT_EQ(3u, copy.size());
+    EXPECT_EQ("foo", std::string(copy.begin(), 3));
+  }
+  {
+    Array<char> copy = heapArray(ArrayPtr<const char>("bar", 3));
+    EXPECT_EQ(3u, copy.size());
+    EXPECT_EQ("bar", std::string(copy.begin(), 3));
+  }
+  {
+    const char* ptr = "baz";
+    Array<char> copy = heapArray<char>(ptr, ptr + 3);
+    EXPECT_EQ(3u, copy.size());
+    EXPECT_EQ("baz", std::string(copy.begin(), 3));
+  }
+}
+
 }  // namespace
 }  // namespace kj

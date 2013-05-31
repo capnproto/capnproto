@@ -158,7 +158,7 @@ public:
 
     virtual void onRecoverableException(Exception&& exception) override;
     virtual void onFatalException(Exception&& exception) override;
-    virtual void logMessage(ArrayPtr<const char> text) override;
+    virtual void logMessage(StringPtr text) override;
 
   private:
     ExceptionCallback& next;
@@ -186,23 +186,23 @@ private:
   static Severity minSeverity;
 
   static void logInternal(const char* file, int line, Severity severity, const char* macroArgs,
-                          ArrayPtr<Array<char>> argValues);
+                          ArrayPtr<String> argValues);
   static void recoverableFaultInternal(
       const char* file, int line, Exception::Nature nature,
-      const char* condition, const char* macroArgs, ArrayPtr<Array<char>> argValues);
+      const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
   static void fatalFaultInternal(
       const char* file, int line, Exception::Nature nature,
-      const char* condition, const char* macroArgs, ArrayPtr<Array<char>> argValues)
+      const char* condition, const char* macroArgs, ArrayPtr<String> argValues)
       KJ_NORETURN;
   static void recoverableFailedSyscallInternal(
       const char* file, int line, const char* call,
-      int errorNumber, const char* macroArgs, ArrayPtr<Array<char>> argValues);
+      int errorNumber, const char* macroArgs, ArrayPtr<String> argValues);
   static void fatalFailedSyscallInternal(
       const char* file, int line, const char* call,
-      int errorNumber, const char* macroArgs, ArrayPtr<Array<char>> argValues)
+      int errorNumber, const char* macroArgs, ArrayPtr<String> argValues)
       KJ_NORETURN;
   static void addContextToInternal(Exception& exception, const char* file, int line,
-                                   const char* macroArgs, ArrayPtr<Array<char>> argValues);
+                                   const char* macroArgs, ArrayPtr<String> argValues);
 
   static int getOsErrorNumber();
   // Get the error code of the last error (e.g. from errno).  Returns -1 on EINTR.
@@ -287,14 +287,14 @@ ArrayPtr<const char> operator*(const Stringifier&, Log::Severity severity);
 template <typename... Params>
 void Log::log(const char* file, int line, Severity severity, const char* macroArgs,
               Params&&... params) {
-  Array<char> argValues[sizeof...(Params)] = {str(params)...};
+  String argValues[sizeof...(Params)] = {str(params)...};
   logInternal(file, line, severity, macroArgs, arrayPtr(argValues, sizeof...(Params)));
 }
 
 template <typename... Params>
 void Log::recoverableFault(const char* file, int line, Exception::Nature nature,
                            const char* condition, const char* macroArgs, Params&&... params) {
-  Array<char> argValues[sizeof...(Params)] = {str(params)...};
+  String argValues[sizeof...(Params)] = {str(params)...};
   recoverableFaultInternal(file, line, nature, condition, macroArgs,
                            arrayPtr(argValues, sizeof...(Params)));
 }
@@ -302,7 +302,7 @@ void Log::recoverableFault(const char* file, int line, Exception::Nature nature,
 template <typename... Params>
 void Log::fatalFault(const char* file, int line, Exception::Nature nature,
                      const char* condition, const char* macroArgs, Params&&... params) {
-  Array<char> argValues[sizeof...(Params)] = {str(params)...};
+  String argValues[sizeof...(Params)] = {str(params)...};
   fatalFaultInternal(file, line, nature, condition, macroArgs,
                      arrayPtr(argValues, sizeof...(Params)));
 }
@@ -315,7 +315,7 @@ bool Log::recoverableSyscall(Call&& call, const char* file, int line, const char
     int errorNum = getOsErrorNumber();
     // getOsErrorNumber() returns -1 to indicate EINTR
     if (errorNum != -1) {
-      Array<char> argValues[sizeof...(Params)] = {str(params)...};
+      String argValues[sizeof...(Params)] = {str(params)...};
       recoverableFailedSyscallInternal(file, line, callText, errorNum,
                                        macroArgs, arrayPtr(argValues, sizeof...(Params)));
       return false;
@@ -333,7 +333,7 @@ auto Log::syscall(Call&& call, const char* file, int line, const char* callText,
     int errorNum = getOsErrorNumber();
     // getOsErrorNumber() returns -1 to indicate EINTR
     if (errorNum != -1) {
-      Array<char> argValues[sizeof...(Params)] = {str(params)...};
+      String argValues[sizeof...(Params)] = {str(params)...};
       fatalFailedSyscallInternal(file, line, callText, errorNum,
                                  macroArgs, arrayPtr(argValues, sizeof...(Params)));
     }
@@ -346,7 +346,7 @@ template <typename... Params>
 void Log::reportFailedRecoverableSyscall(
     int errorNumber, const char* file, int line, const char* callText,
     const char* macroArgs, Params&&... params) {
-  Array<char> argValues[sizeof...(Params)] = {str(params)...};
+  String argValues[sizeof...(Params)] = {str(params)...};
   recoverableFailedSyscallInternal(file, line, callText, errorNumber, macroArgs,
                                    arrayPtr(argValues, sizeof...(Params)));
 }
@@ -355,7 +355,7 @@ template <typename... Params>
 void Log::reportFailedSyscall(
     int errorNumber, const char* file, int line, const char* callText,
     const char* macroArgs, Params&&... params) {
-  Array<char> argValues[sizeof...(Params)] = {str(params)...};
+  String argValues[sizeof...(Params)] = {str(params)...};
   fatalFailedSyscallInternal(file, line, callText, errorNumber, macroArgs,
                              arrayPtr(argValues, sizeof...(Params)));
 }
@@ -363,7 +363,7 @@ void Log::reportFailedSyscall(
 template <typename... Params>
 void Log::addContextTo(Exception& exception, const char* file, int line,
                        const char* macroArgs, Params&&... params) {
-  Array<char> argValues[sizeof...(Params)] = {str(params)...};
+  String argValues[sizeof...(Params)] = {str(params)...};
   addContextToInternal(exception, file, line, macroArgs, arrayPtr(argValues, sizeof...(Params)));
 }
 

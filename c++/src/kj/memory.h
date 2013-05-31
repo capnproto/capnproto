@@ -156,6 +156,17 @@ Own<T> heap(Params&&... params) {
   return Own<T>(new T(kj::fwd<Params>(params)...), internal::HeapDisposer<T>::instance);
 }
 
+template <typename T>
+Own<Decay<T>> heap(T&& orig) {
+  // Allocate a copy (or move) of the argument on the heap.
+  //
+  // The purpose of this overload is to allow you to omit the template parameter as there is only
+  // one argument and the purpose is to copy it.
+
+  typedef Decay<T> T2;
+  return Own<T2>(new T2(kj::fwd<T>(orig)), internal::HeapDisposer<T2>::instance);
+}
+
 // =======================================================================================
 // Inline implementation details
 

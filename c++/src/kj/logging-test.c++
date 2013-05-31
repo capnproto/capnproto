@@ -21,7 +21,6 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#define KJ_PRIVATE
 #include "logging.h"
 #include "exception.h"
 #include <gtest/gtest.h>
@@ -70,7 +69,7 @@ public:
     throw MockException();
   }
 
-  void logMessage(ArrayPtr<const char> text) override {
+  void logMessage(StringPtr text) override {
     this->text += "log message: ";
     this->text.append(text.begin(), text.end());
   }

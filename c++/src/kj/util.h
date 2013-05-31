@@ -124,11 +124,10 @@ inline size_t sum(std::initializer_list<size_t> nums) {
   return result;
 }
 
-template <typename Element>
-Element* fill(Element* ptr) { return ptr; }
+inline char* fill(char* ptr) { return ptr; }
 
-template <typename Element, typename First, typename... Rest>
-Element* fill(Element* __restrict__ target, const First& first, Rest&&... rest) {
+template <typename First, typename... Rest>
+char* fill(char* __restrict__ target, const First& first, Rest&&... rest) {
   auto i = first.begin();
   auto end = first.end();
   while (i != end) {
@@ -137,23 +136,17 @@ Element* fill(Element* __restrict__ target, const First& first, Rest&&... rest) 
   return fill(target, std::forward<Rest>(rest)...);
 }
 
-template <typename Element, typename... Params>
-Array<Element> concat(Params&&... params) {
+template <typename... Params>
+String concat(Params&&... params) {
   // Concatenate a bunch of containers into a single Array.  The containers can be anything that
   // is iterable and whose elements can be converted to `Element`.
 
-#ifdef __CDT_PARSER__
-  // Eclipse reports a bogus error on `size()`.
-  Array<Element> result;
-#else
-  Array<Element> result = heapArray<Element>(sum({params.size()...}));
-#endif
+  String result = heapString(sum({params.size()...}));
   fill(result.begin(), std::forward<Params>(params)...);
   return result;
 }
 
-template <typename Element>
-Array<Element> concat(Array<Element>&& arr) {
+inline String concat(String&& arr) {
   return std::move(arr);
 }
 
@@ -177,6 +170,7 @@ struct Stringifier {
   inline ArrayPtr<const char> operator*(const CappedArray<char, n>& s) const { return s; }
   inline ArrayPtr<const char> operator*(const char* s) const { return arrayPtr(s, strlen(s)); }
   inline ArrayPtr<const char> operator*(const String& s) const { return s.asArray(); }
+  inline ArrayPtr<const char> operator*(const StringPtr& s) const { return s.asArray(); }
 
   inline FixedArray<char, 1> operator*(char c) const {
     FixedArray<char, 1> result;
@@ -209,18 +203,18 @@ CappedArray<char, sizeof(unsigned long) * 4> hex(unsigned long i);
 CappedArray<char, sizeof(unsigned long long) * 4> hex(unsigned long long i);
 
 template <typename... Params>
-Array<char> str(Params&&... params) {
+String str(Params&&... params) {
   // Magic function which builds a string from a bunch of arbitrary values.  Example:
   //     str(1, " / ", 2, " = ", 0.5)
   // returns:
   //     "1 / 2 = 0.5"
   // To teach `str` how to stringify a type, see `Stringifier`.
 
-  return concat<char>(STR * std::forward<Params>(params)...);
+  return concat(STR * std::forward<Params>(params)...);
 }
 
 template <typename T>
-Array<char> strArray(T&& arr, const char* delim) {
+String strArray(T&& arr, const char* delim) {
   size_t delimLen = strlen(delim);
   KJ_STACK_ARRAY(decltype(STR * arr[0]), pieces, arr.size(), 8, 32);
   size_t size = 0;
@@ -230,7 +224,7 @@ Array<char> strArray(T&& arr, const char* delim) {
     size += pieces[i].size();
   }
 
-  Array<char> result = heapArray<char>(size);
+  String result = heapString(size);
   char* pos = result.begin();
   for (size_t i = 0; i < arr.size(); i++) {
     if (i > 0) {
