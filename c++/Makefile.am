@@ -65,7 +65,7 @@ includekjdir = $(includedir)/capnproto
 
 includekj_HEADERS =                                            \
   src/kj/common.h                                              \
-  src/kj/type-safety.h                                         \
+  src/kj/units.h                                               \
   src/kj/memory.h                                              \
   src/kj/array.h                                               \
   src/kj/string.h                                              \
@@ -95,7 +95,7 @@ lib_LIBRARIES = libcapnproto.a
 
 libcapnproto_a_SOURCES=                                        \
   src/kj/common.c++                                            \
-  src/kj/type-safety.c++                                       \
+  src/kj/units.c++                                             \
   src/kj/memory.c++                                            \
   src/kj/array.c++                                             \
   src/kj/string.c++                                            \
@@ -153,7 +153,7 @@ capnproto_test_SOURCES =                                       \
   src/kj/common-test.c++                                       \
   src/kj/logging-test.c++                                      \
   src/kj/string-test.c++                                       \
-  src/kj/type-safety-test.c++                                  \
+  src/kj/units-test.c++                                        \
   src/capnproto/blob-test.c++                                  \
   src/capnproto/layout-test.c++                                \
   src/capnproto/message-test.c++                               \

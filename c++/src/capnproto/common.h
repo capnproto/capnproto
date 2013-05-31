@@ -28,7 +28,7 @@
 #ifndef CAPNPROTO_COMMON_H_
 #define CAPNPROTO_COMMON_H_
 
-#include <kj/type-safety.h>
+#include <kj/units.h>
 #include <inttypes.h>
 
 namespace capnproto {

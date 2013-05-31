@@ -63,7 +63,7 @@ struct Id {
 };
 
 // =======================================================================================
-// Units
+// Quantity and UnitRatio -- implement unit analysis via the type system
 
 template <typename T> constexpr bool isIntegral() { return false; }
 template <> constexpr bool isIntegral<char>() { return true; }
