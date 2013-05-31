@@ -126,6 +126,7 @@ enum class Kind: uint8_t {
   BLOB,
   ENUM,
   STRUCT,
+  UNION,
   INTERFACE,
   LIST,
   UNKNOWN

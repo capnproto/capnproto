@@ -855,6 +855,9 @@ compileDecl scope (StructDecl (Located _ name) maybeTypeId isFixed annotations d
             unions = [d | DescUnion d <- members]
         (finalDataSize, finalPointerCount) <-
             recover (dataSize, pointerCount) $ enforceFixed isFixed (dataSize, pointerCount)
+        let memberByNumber d@(DescField f) = Just (fieldNumber f, d)
+            memberByNumber d@(DescUnion u) = Just (unionNumber u, d)
+            memberByNumber _ = Nothing
         return (let
             in DescStruct StructDesc
             { structName = name
@@ -867,6 +870,7 @@ compileDecl scope (StructDecl (Located _ name) maybeTypeId isFixed annotations d
             , structUnions = unions
             , structAnnotations = compiledAnnotations
             , structMemberMap = memberMap
+            , structMembersByNumber = Map.fromList $ mapMaybe memberByNumber members
             , structMembers = members
             , structFieldPackingMap = fieldPackingMap
             })))

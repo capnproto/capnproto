@@ -116,9 +116,8 @@ private:
   mutable String whatBuffer;
 };
 
-struct Stringifier;
-ArrayPtr<const char> operator*(const Stringifier&, Exception::Nature nature);
-ArrayPtr<const char> operator*(const Stringifier&, Exception::Durability durability);
+ArrayPtr<const char> KJ_STRINGIFY(Exception::Nature nature);
+ArrayPtr<const char> KJ_STRINGIFY(Exception::Durability durability);
 
 class ExceptionCallback {
   // If you don't like C++ exceptions, you may implement and register an ExceptionCallback in order

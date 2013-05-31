@@ -45,11 +45,17 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define CAPNPROTO_PRIVATE
-#include "stringify.h"
 #include "message.h"
+#include "dynamic.h"
 #include <kj/logging.h>
 #include <gtest/gtest.h>
 #include "test-util.h"
+
+namespace kj {
+  inline std::ostream& operator<<(std::ostream& os, const kj::String& s) {
+    return os.write(s.begin(), s.size());
+  }
+}
 
 namespace capnproto {
 namespace internal {
@@ -59,11 +65,11 @@ TEST(Stringify, DebugString) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<TestAllTypes>();
 
-  EXPECT_STREQ("()", root.debugString().cStr());
+  EXPECT_EQ("()", kj::str(root));
 
   initTestMessage(root);
 
-  EXPECT_STREQ("("
+  EXPECT_EQ("("
       "boolField = true, "
       "int8Field = -123, "
       "int16Field = -12345, "
@@ -134,17 +140,39 @@ TEST(Stringify, DebugString) {
                     "(textField = \"structlist 2\"), "
                     "(textField = \"structlist 3\")], "
       "enumList = [foo, garply])",
-      root.debugString().cStr());
+      kj::str(root));
+}
+
+TEST(Stringify, Unions) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestUnion>();
+
+  root.getUnion0().setU0f0s16(321);
+  root.getUnion1().setU1f0sp("foo");
+  root.getUnion2().setU2f0s1(true);
+  root.getUnion3().setU3f0s64(123456789012345678ll);
+
+  EXPECT_EQ("("
+      "union0 = u0f0s16(321), "
+      "union1 = u1f0sp(\"foo\"), "
+      "union2 = u2f0s1(true), "
+      "union3 = u3f0s64(123456789012345678))",
+      kj::str(root));
+
+  EXPECT_EQ("u0f0s16(321)", kj::str(root.getUnion0()));
+  EXPECT_EQ("u1f0sp(\"foo\")", kj::str(root.getUnion1()));
+  EXPECT_EQ("u2f0s1(true)", kj::str(root.getUnion2()));
+  EXPECT_EQ("u3f0s64(123456789012345678)", kj::str(root.getUnion3()));
 }
 
 TEST(Stringify, MoreValues) {
-  EXPECT_STREQ("123", stringify(123).cStr());
-  EXPECT_STREQ("1.23e47", stringify(123e45).cStr());
-  EXPECT_STREQ("\"foo\"", stringify("foo").cStr());
-  EXPECT_STREQ("\"\\a\\b\\n\\t\\\"\"", stringify("\a\b\n\t\"").cStr());
+  EXPECT_EQ("123", kj::str(DynamicValue::Reader(123)));
+  EXPECT_EQ("1.23e47", kj::str(DynamicValue::Reader(123e45)));
+  EXPECT_EQ("\"foo\"", kj::str(DynamicValue::Reader("foo")));
+  EXPECT_EQ("\"\\a\\b\\n\\t\\\"\"", kj::str(DynamicValue::Reader("\a\b\n\t\"")));
 
-  EXPECT_STREQ("foo", stringify(TestEnum::FOO).cStr());
-  EXPECT_STREQ("123", stringify(static_cast<TestEnum>(123)).cStr());
+  EXPECT_EQ("foo", kj::str(DynamicValue::Reader(TestEnum::FOO)));
+  EXPECT_EQ("123", kj::str(DynamicValue::Reader(static_cast<TestEnum>(123))));
 }
 
 }  // namespace

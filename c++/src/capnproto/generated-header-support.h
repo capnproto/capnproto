@@ -172,13 +172,29 @@ inline const RawSchema& rawSchema() {
 template <typename T>
 struct TypeIdFor;
 
-kj::String debugString(StructReader reader, const RawSchema& schema);
-// Declared here so that we can declare inline debugString() methods on generated types.
+template <typename T>
+struct UnionMemberIndexFor;
+template <typename T>
+inline uint unionMemberIndex() { return UnionMemberIndexFor<T>::value; }
+
+template <typename T>
+struct UnionParentTypeFor;
+template <typename T>
+using UnionParentType = typename UnionParentTypeFor<T>::Type;
+
+kj::String structString(StructReader reader, const RawSchema& schema);
+kj::String unionString(StructReader reader, const RawSchema& schema, uint memberIndex);
+// Declared here so that we can declare inline stringify methods on generated types.
 // Defined in stringify.c++, which depends on dynamic.c++, which is allowed not to be linked in.
 
 template <typename T>
-inline kj::String debugString(StructReader reader) {
-  return debugString(reader, rawSchema<T>());
+inline kj::String structString(StructReader reader) {
+  return structString(reader, rawSchema<T>());
+}
+
+template <typename T>
+inline kj::String unionString(StructReader reader) {
+  return unionString(reader, rawSchema<UnionParentType<T>>(), unionMemberIndex<T>());
 }
 
 }  // namespace internal
@@ -199,6 +215,7 @@ inline constexpr uint64_t typeId() { return internal::TypeIdFor<T>::typeId; }
 #define CAPNPROTO_DEFINE_ENUM(type) \
     constexpr Kind KindOf<type>::kind; \
     constexpr uint64_t TypeIdFor<type>::typeId;
+
 #define CAPNPROTO_DECLARE_STRUCT(type, id, dataWordSize, pointerCount, preferredElementEncoding) \
     template <> struct KindOf<type> { static constexpr Kind kind = Kind::STRUCT; }; \
     template <> struct StructSizeFor<type> { \
@@ -213,6 +230,15 @@ inline constexpr uint64_t typeId() { return internal::TypeIdFor<T>::typeId; }
     constexpr Kind KindOf<type>::kind; \
     constexpr StructSize StructSizeFor<type>::value; \
     constexpr uint64_t TypeIdFor<type>::typeId;
+
+#define CAPNPROTO_DECLARE_UNION(type, parentType, memberIndex) \
+    template <> struct KindOf<type> { static constexpr Kind kind = Kind::UNION; }; \
+    template <> struct UnionMemberIndexFor<type> { static constexpr uint value = memberIndex; }; \
+    template <> struct UnionParentTypeFor<type> { typedef parentType Type; }
+#define CAPNPROTO_DEFINE_UNION(type) \
+    constexpr Kind KindOf<type>::kind; \
+    constexpr uint UnionMemberIndexFor<type>::value;
+
 #define CAPNPROTO_DECLARE_INTERFACE(type, id) \
     template <> struct KindOf<type> { static constexpr Kind kind = Kind::INTERFACE; }; \
     template <> struct TypeIdFor<type> { static constexpr uint64_t typeId = 0x##id; }; \

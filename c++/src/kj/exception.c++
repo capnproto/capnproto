@@ -22,7 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "exception.h"
-#include "util.h"
+#include "string.h"
 #include "logging.h"
 #include <unistd.h>
 #include <execinfo.h>
@@ -30,7 +30,7 @@
 
 namespace kj {
 
-ArrayPtr<const char> operator*(const Stringifier&, Exception::Nature nature) {
+ArrayPtr<const char> KJ_STRINGIFY(Exception::Nature nature) {
   static const char* NATURE_STRINGS[] = {
     "precondition not met",
     "bug in code",
@@ -44,7 +44,7 @@ ArrayPtr<const char> operator*(const Stringifier&, Exception::Nature nature) {
   return arrayPtr(s, strlen(s));
 }
 
-ArrayPtr<const char> operator*(const Stringifier&, Exception::Durability durability) {
+ArrayPtr<const char> KJ_STRINGIFY(Exception::Durability durability) {
   static const char* DURABILITY_STRINGS[] = {
     "temporary",
     "permanent"
@@ -149,7 +149,7 @@ void ExceptionCallback::onRecoverableException(Exception&& exception) {
   if (std::uncaught_exception()) {
     logMessage(str("unwind: ", exception.what(), '\n'));
   } else {
-    throw std::move(exception);
+    throw kj::mv(exception);
   }
 #endif
 }
@@ -158,7 +158,7 @@ void ExceptionCallback::onFatalException(Exception&& exception) {
 #if KJ_NO_EXCEPTIONS
   logMessage(str(exception.what(), '\n'));
 #else
-  throw std::move(exception);
+  throw kj::mv(exception);
 #endif
 }
 

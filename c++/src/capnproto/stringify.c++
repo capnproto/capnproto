@@ -22,7 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define CAPNPROTO_PRIVATE
-#include "stringify.h"
+#include "dynamic.h"
 #include <kj/logging.h>
 #include <sstream>
 
@@ -58,10 +58,10 @@ static void print(std::ostream& os, DynamicValue::Reader value,
       break;
     case DynamicValue::FLOAT: {
       if (which == schema::Type::Body::FLOAT32_TYPE) {
-        auto buf = kj::STR * value.as<float>();
+        auto buf = kj::toCharSequence(value.as<float>());
         os.write(buf.begin(), buf.size());
       } else {
-        auto buf = kj::STR * value.as<double>();
+        auto buf = kj::toCharSequence(value.as<double>());
         os.write(buf.begin(), buf.size());
       }
       break;
@@ -170,8 +170,6 @@ static void print(std::ostream& os, DynamicValue::Reader value,
   }
 }
 
-}  // namespace
-
 kj::String stringify(DynamicValue::Reader value) {
   std::stringstream out;
   print(out, value, schema::Type::Body::STRUCT_TYPE);
@@ -179,10 +177,28 @@ kj::String stringify(DynamicValue::Reader value) {
   return kj::heapString(content.data(), content.size());
 }
 
+}  // namespace
+
+kj::String KJ_STRINGIFY(DynamicValue::Reader value) { return stringify(value); }
+kj::String KJ_STRINGIFY(DynamicValue::Builder value) { return stringify(value.asReader()); }
+kj::String KJ_STRINGIFY(DynamicEnum value) { return stringify(value); }
+kj::String KJ_STRINGIFY(DynamicObject value) { return stringify(value); }
+kj::String KJ_STRINGIFY(DynamicUnion::Reader value) { return stringify(value); }
+kj::String KJ_STRINGIFY(DynamicUnion::Builder value) { return stringify(value.asReader()); }
+kj::String KJ_STRINGIFY(DynamicStruct::Reader value) { return stringify(value); }
+kj::String KJ_STRINGIFY(DynamicStruct::Builder value) { return stringify(value.asReader()); }
+kj::String KJ_STRINGIFY(DynamicList::Reader value) { return stringify(value); }
+kj::String KJ_STRINGIFY(DynamicList::Builder value) { return stringify(value.asReader()); }
+
 namespace internal {
 
-kj::String debugString(StructReader reader, const RawSchema& schema) {
+kj::String structString(StructReader reader, const RawSchema& schema) {
   return stringify(DynamicStruct::Reader(StructSchema(&schema), reader));
+}
+
+kj::String unionString(StructReader reader, const RawSchema& schema, uint memberIndex) {
+  return stringify(DynamicUnion::Reader(
+      StructSchema(&schema).getMembers()[memberIndex].asUnion(), reader));
 }
 
 }  // namespace internal

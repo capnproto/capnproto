@@ -444,6 +444,7 @@ data StructDesc = StructDesc
     , structUnions :: [UnionDesc]
     , structAnnotations :: AnnotationMap
     , structMemberMap :: MemberMap
+    , structMembersByNumber :: Map.Map Integer Desc  -- top-level members only
     , structMembers :: [Desc]
 
     -- Don't use this directly, use the members of FieldDesc and UnionDesc.

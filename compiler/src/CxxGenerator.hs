@@ -440,6 +440,8 @@ outerFileContext schemaNodes = fileContext where
 
     unionContext parent desc = mkStrContext context where
         titleCase = toTitleCase $ unionName desc
+        
+        unionIndex = Map.findIndex (unionNumber desc) $ structMembersByNumber $ unionParent desc
 
         context "typeStruct" = MuBool False
         context "typeUnion" = MuBool True
@@ -454,6 +456,7 @@ outerFileContext schemaNodes = fileContext where
         context "unionTitleCase" = MuVariable titleCase
         context "unionTagOffset" = MuVariable $ unionTagOffset desc
         context "unionFields" = MuList $ map (fieldContext context) $ unionFields desc
+        context "unionIndex" = MuVariable unionIndex
         context s = parent s
 
     childContext parent name = mkStrContext context where

@@ -42,8 +42,7 @@ TEST(SchemaLoader, Load) {
   Schema struct8Schema = loader.load(Schema::from<test::TestLists::Struct8>().getProto());
   Schema structPSchema = loader.load(Schema::from<test::TestLists::StructP>().getProto());
 
-  EXPECT_STREQ(nativeSchema.getProto().debugString().cStr(),
-               testListsSchema.getProto().debugString().cStr());
+  EXPECT_EQ(kj::str(nativeSchema.getProto()), kj::str(testListsSchema.getProto()));
 
   EXPECT_FALSE(testListsSchema == nativeSchema);
   EXPECT_FALSE(struct32Schema == Schema::from<test::TestLists::Struct32>());
@@ -165,8 +164,8 @@ TEST(SchemaLoader, Upgrade) {
 
   StructSchema schema = loader.get(typeId<test::TestOldVersion>()).asStruct();
 
-  EXPECT_STREQ(Schema::from<test::TestOldVersion>().getProto().debugString().cStr(),
-               schema.getProto().debugString().cStr());
+  EXPECT_EQ(kj::str(Schema::from<test::TestOldVersion>().getProto()),
+            kj::str(schema.getProto()));
 
   loadUnderAlternateTypeId<test::TestNewVersion>(loader, typeId<test::TestOldVersion>());
 
@@ -185,8 +184,7 @@ TEST(SchemaLoader, Downgrade) {
 
   StructSchema schema = loader.get(typeId<test::TestNewVersion>()).asStruct();
 
-  EXPECT_STREQ(Schema::from<test::TestNewVersion>().getProto().debugString().cStr(),
-               schema.getProto().debugString().cStr());
+  EXPECT_EQ(kj::str(Schema::from<test::TestNewVersion>().getProto()), kj::str(schema.getProto()));
 
   loadUnderAlternateTypeId<test::TestOldVersion>(loader, typeId<test::TestNewVersion>());
 

@@ -119,6 +119,11 @@ CAPNPROTO_DECLARE_STRUCT(
 CAPNPROTO_DECLARE_ENUM(
     ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{typeFullName}}::{{enumName}}, {{enumId}});
 {{/structNestedEnums}}
+{{#structUnions}}
+CAPNPROTO_DECLARE_UNION(
+    ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{structFullName}}::{{unionTitleCase}},
+    ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{structFullName}}, {{unionIndex}});
+{{/structUnions}}
 {{/typeStruct}}
 {{/typeStructOrUnion}}
 {{/fileTypes}}
@@ -145,9 +150,6 @@ public:
   inline explicit Reader(::capnproto::internal::StructReader base): _reader(base) {}
 {{#typeStruct}}
 
-  inline ::kj::String debugString() {
-    return ::capnproto::internal::debugString<{{typeName}}>(_reader);
-  }
   inline size_t totalSizeInWords() {
     return _reader.totalSize() / ::capnproto::WORDS;
   }
@@ -186,7 +188,18 @@ private:
   template <typename T, ::capnproto::Kind k>
   friend struct ::capnproto::internal::PointerHelpers;
   friend class ::capnproto::MessageBuilder;
+  friend ::kj::String KJ_STRINGIFY({{typeFullName}}::Reader reader);
 };
+
+inline ::kj::String KJ_STRINGIFY({{typeFullName}}::Reader reader) {
+{{#typeStruct}}
+  return ::capnproto::internal::structString<{{typeFullName}}>(reader._reader);
+{{/typeStruct}}
+{{#typeUnion}}
+  return ::capnproto::internal::unionString<{{typeFullName}}>(reader._reader);
+{{/typeUnion}}
+}
+
 {{! ------------------------------------------------------------------------------------------- }}
 
 class {{typeFullName}}::Builder {
@@ -199,7 +212,6 @@ public:
   inline Reader asReader() { return *this; }
 {{#typeStruct}}
 
-  inline ::kj::String debugString() { return asReader().debugString(); }
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 {{#structUnions}}
 
@@ -250,7 +262,17 @@ private:
   ::capnproto::internal::StructBuilder _builder;
   template <typename T, ::capnproto::Kind k>
   friend struct ::capnproto::ToDynamic_;
+  friend ::kj::String KJ_STRINGIFY({{typeFullName}}::Builder builder);
 };
+
+inline ::kj::String KJ_STRINGIFY({{typeFullName}}::Builder builder) {
+{{#typeStruct}}
+  return ::capnproto::internal::structString<{{typeFullName}}>(builder._builder.asReader());
+{{/typeStruct}}
+{{#typeUnion}}
+  return ::capnproto::internal::unionString<{{typeFullName}}>(builder._builder.asReader());
+{{/typeUnion}}
+}
 {{/typeStructOrUnion}}
 {{/fileTypes}}
 {{! =========================================================================================== }}

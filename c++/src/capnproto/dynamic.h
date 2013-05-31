@@ -191,6 +191,9 @@ private:
       : schema(schema), reader(reader) {}
 
   friend struct DynamicStruct;
+  friend class DynamicUnion::Builder;
+  friend kj::String internal::unionString(
+      internal::StructReader reader, const internal::RawSchema& schema, uint memberIndex);
 };
 
 class DynamicUnion::Builder {
@@ -226,6 +229,8 @@ public:
   Text::Builder initObjectAsText(Text::Reader name, uint size);
   Data::Builder initObjectAsData(Text::Reader name, uint size);
   // Convenience methods that identify the member by text name.
+
+  Reader asReader();
 
 private:
   StructSchema::Union schema;
@@ -287,7 +292,7 @@ private:
   friend class MessageBuilder;
   template <typename T, ::capnproto::Kind k>
   friend struct ::capnproto::ToDynamic_;
-  friend kj::String internal::debugString(
+  friend kj::String internal::structString(
       internal::StructReader reader, const internal::RawSchema& schema);
 };
 
@@ -644,6 +649,17 @@ private:
   // specialization.  Has a method apply() which does the work.
 };
 
+kj::String KJ_STRINGIFY(DynamicValue::Reader value);
+kj::String KJ_STRINGIFY(DynamicValue::Builder value);
+kj::String KJ_STRINGIFY(DynamicEnum value);
+kj::String KJ_STRINGIFY(DynamicObject value);
+kj::String KJ_STRINGIFY(DynamicUnion::Reader value);
+kj::String KJ_STRINGIFY(DynamicUnion::Builder value);
+kj::String KJ_STRINGIFY(DynamicStruct::Reader value);
+kj::String KJ_STRINGIFY(DynamicStruct::Builder value);
+kj::String KJ_STRINGIFY(DynamicList::Reader value);
+kj::String KJ_STRINGIFY(DynamicList::Builder value);
+
 // -------------------------------------------------------------------
 // Inject the ability to use DynamicStruct for message roots and Dynamic{Struct,List} for
 // generated Object accessors.
@@ -866,6 +882,12 @@ struct DynamicObject::AsImpl<T, Kind::LIST> {
     return value.as(Schema::from<T>()).template as<T>();
   }
 };
+
+// -------------------------------------------------------------------
+
+inline DynamicUnion::Reader DynamicUnion::Builder::asReader() {
+  return DynamicUnion::Reader(schema, builder.asReader());
+}
 
 // -------------------------------------------------------------------
 

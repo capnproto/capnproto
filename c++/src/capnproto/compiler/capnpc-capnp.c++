@@ -32,7 +32,6 @@
 #include <kj/io.h>
 #include "../schema-loader.h"
 #include "../dynamic.h"
-#include "../stringify.h"
 #include <unistd.h>
 #include <unordered_map>
 #include <vector>
@@ -67,8 +66,8 @@ private:
   void fill(char* textPos, Branch* branchesPos, TextBlob&& first, Rest&&... rest);
 
   template <typename T>
-  auto toContainer(T&& t) -> decltype(kj::STR * t) {
-    return kj::STR * t;
+  auto toContainer(T&& t) -> decltype(kj::toCharSequence(kj::fwd(t))) {
+    return kj::toCharSequence(kj::fwd(t));
   }
   TextBlob&& toContainer(TextBlob&& t) {
     return kj::mv(t);
@@ -135,7 +134,7 @@ void TextBlob::fill(char* textPos, Branch* branchesPos) {
 
 template <typename First, typename... Rest>
 void TextBlob::fill(char* textPos, Branch* branchesPos, First&& first, Rest&&... rest) {
-  textPos = kj::fill(textPos, kj::fwd<First>(first));
+  textPos = kj::internal::fill(textPos, kj::fwd<First>(first));
   fill(textPos, branchesPos, kj::fwd<Rest>(rest)...);
 }
 
@@ -205,8 +204,6 @@ struct Indent {
   inline Iterator begin() const { return Iterator(0); }
   inline Iterator end() const { return Iterator(amount); }
 };
-
-inline Indent operator*(kj::Stringifier, Indent i) { return i; }
 
 // =======================================================================================
 
@@ -365,13 +362,13 @@ TextBlob genValue(schema::Type::Reader type, schema::Value::Reader value, Schema
     case schema::Value::Body::UINT64_VALUE: return text(body.getUint64Value());
     case schema::Value::Body::FLOAT32_VALUE: return text(body.getFloat32Value());
     case schema::Value::Body::FLOAT64_VALUE: return text(body.getFloat64Value());
-    case schema::Value::Body::TEXT_VALUE: return stringify(body.getTextValue());
-    case schema::Value::Body::DATA_VALUE: return stringify(body.getDataValue());
+    case schema::Value::Body::TEXT_VALUE: return text(DynamicValue::Reader(body.getTextValue()));
+    case schema::Value::Body::DATA_VALUE: return text(DynamicValue::Reader(body.getDataValue()));
     case schema::Value::Body::LIST_VALUE: {
       PRECOND(type.getBody().which() == schema::Type::Body::LIST_TYPE, "type/value mismatch");
       auto value = body.getListValue<DynamicList>(
           ListSchema::of(type.getBody().getListType(), scope));
-      return text(stringify(value));
+      return text(value);
     }
     case schema::Value::Body::ENUM_VALUE: {
       PRECOND(type.getBody().which() == schema::Type::Body::ENUM_TYPE, "type/value mismatch");
@@ -386,7 +383,7 @@ TextBlob genValue(schema::Type::Reader type, schema::Value::Reader value, Schema
       PRECOND(type.getBody().which() == schema::Type::Body::STRUCT_TYPE, "type/value mismatch");
       auto value = body.getStructValue<DynamicStruct>(
           scope.getDependency(type.getBody().getStructType()).asStruct());
-      return text(stringify(value));
+      return text(value);
     }
     case schema::Value::Body::INTERFACE_VALUE: {
       return text("");

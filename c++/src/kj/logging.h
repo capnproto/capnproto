@@ -96,7 +96,7 @@
 #ifndef KJ_LOGGING_H_
 #define KJ_LOGGING_H_
 
-#include "util.h"
+#include "string.h"
 #include "exception.h"
 
 namespace kj {
@@ -208,7 +208,7 @@ private:
   // Get the error code of the last error (e.g. from errno).  Returns -1 on EINTR.
 };
 
-ArrayPtr<const char> operator*(const Stringifier&, Log::Severity severity);
+ArrayPtr<const char> KJ_STRINGIFY(Log::Severity severity);
 
 #define LOG(severity, ...) \
   if (!::kj::Log::shouldLog(::kj::Log::Severity::severity)) {} else \

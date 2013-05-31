@@ -25,6 +25,7 @@
 #define CAPNPROTO_BLOB_H_
 
 #include <kj/common.h>
+#include <kj/string.h>
 #include "common.h"
 #include <string.h>
 
@@ -133,6 +134,11 @@ public:
   inline operator const char*() const { return data(); }
 };
 
+inline kj::StringPtr KJ_STRINGIFY(Text::Reader reader) {
+  // TODO(soon):  Use size().
+  return reader.c_str();
+}
+
 class Data::Builder {
   // Like Data::Reader except the pointers aren't const, and it can't be implicitly constructed from
   // other types.
@@ -187,6 +193,8 @@ public:
   inline char* begin() const { return bytes; }
   inline char* end() const { return bytes + size_; }
 
+  inline Data::Reader asReader() { return Data::Reader(bytes, size_); }
+
 private:
   char* bytes;
   uint size_;
@@ -207,9 +215,16 @@ public:
   inline operator char*() const { return data(); }
   inline operator const char*() const { return data(); }
 
+  inline Text::Reader asReader() { return Text::Reader(begin(), size()); }
+
 private:
   static char nulstr[1];
 };
+
+inline kj::StringPtr KJ_STRINGIFY(Text::Builder builder) {
+  // TODO(soon):  Use size().
+  return builder.c_str();
+}
 
 inline bool operator==(const char* a, Data::Reader  b) { return Data::Reader(a) == b; }
 inline bool operator==(const char* a, Data::Builder b) { return Data::Reader(a) == (Data::Reader)b; }

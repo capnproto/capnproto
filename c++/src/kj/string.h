@@ -24,6 +24,7 @@
 #ifndef KJ_STRING_H_
 #define KJ_STRING_H_
 
+#include <initializer_list>
 #include "array.h"
 #include <string.h>
 
@@ -139,6 +140,177 @@ String heapString(const char* value, size_t size);
 String heapString(StringPtr value);
 String heapString(ArrayPtr<const char> value);
 // Allocates a copy of the given value on the heap.
+
+// =======================================================================================
+// Magic str() function which transforms parameters to text and concatenates them into one big
+// String.
+
+namespace internal {
+
+inline size_t sum(std::initializer_list<size_t> nums) {
+  size_t result = 0;
+  for (auto num: nums) {
+    result += num;
+  }
+  return result;
+}
+
+inline char* fill(char* ptr) { return ptr; }
+
+template <typename First, typename... Rest>
+char* fill(char* __restrict__ target, const First& first, Rest&&... rest) {
+  auto i = first.begin();
+  auto end = first.end();
+  while (i != end) {
+    *target++ = *i++;
+  }
+  return fill(target, kj::fwd<Rest>(rest)...);
+}
+
+template <typename... Params>
+String concat(Params&&... params) {
+  // Concatenate a bunch of containers into a single Array.  The containers can be anything that
+  // is iterable and whose elements can be converted to `char`.
+
+  String result = heapString(sum({params.size()...}));
+  fill(result.begin(), kj::fwd<Params>(params)...);
+  return result;
+}
+
+inline String concat(String&& arr) {
+  return kj::mv(arr);
+}
+
+struct Stringifier {
+  // This is a dummy type with only one instance: STR (below).  To make an arbitrary type
+  // stringifiable, define `operator*(Stringifier, T)` to return an iterable container of `char`.
+  // The container type must have a `size()` method.  Be sure to declare the operator in the same
+  // namespace as `T` **or** in the global scope.
+  //
+  // A more usual way to accomplish what we're doing here would be to require that you define
+  // a function like `toString(T)` and then rely on argument-dependent lookup.  However, this has
+  // the problem that it pollutes other people's namespaces and even the global namespace.  For
+  // example, some other project may already have functions called `toString` which do something
+  // different.  Declaring `operator*` with `Stringifier` as the left operand cannot conflict with
+  // anything.
+
+  inline ArrayPtr<const char> operator*(ArrayPtr<const char> s) const { return s; }
+  inline ArrayPtr<const char> operator*(const Array<const char>& s) const { return s; }
+  inline ArrayPtr<const char> operator*(const Array<char>& s) const { return s; }
+  template<size_t n>
+  inline ArrayPtr<const char> operator*(const CappedArray<char, n>& s) const { return s; }
+  inline ArrayPtr<const char> operator*(const char* s) const { return arrayPtr(s, strlen(s)); }
+  inline ArrayPtr<const char> operator*(const String& s) const { return s.asArray(); }
+  inline ArrayPtr<const char> operator*(const StringPtr& s) const { return s.asArray(); }
+
+  inline FixedArray<char, 1> operator*(char c) const {
+    FixedArray<char, 1> result;
+    result[0] = c;
+    return result;
+  }
+
+  StringPtr operator*(bool b) const;
+
+  CappedArray<char, sizeof(short) * 4> operator*(short i) const;
+  CappedArray<char, sizeof(unsigned short) * 4> operator*(unsigned short i) const;
+  CappedArray<char, sizeof(int) * 4> operator*(int i) const;
+  CappedArray<char, sizeof(unsigned int) * 4> operator*(unsigned int i) const;
+  CappedArray<char, sizeof(long) * 4> operator*(long i) const;
+  CappedArray<char, sizeof(unsigned long) * 4> operator*(unsigned long i) const;
+  CappedArray<char, sizeof(long long) * 4> operator*(long long i) const;
+  CappedArray<char, sizeof(unsigned long long) * 4> operator*(unsigned long long i) const;
+  CappedArray<char, 24> operator*(float f) const;
+  CappedArray<char, 32> operator*(double f) const;
+  CappedArray<char, sizeof(const void*) * 4> operator*(const void* s) const;
+
+  template <typename T>
+  Array<char> operator*(ArrayPtr<T> arr) const;
+  template <typename T>
+  Array<char> operator*(const Array<T>& arr) const;
+};
+static constexpr Stringifier STR = Stringifier();
+
+}  // namespace internal
+
+template <typename T>
+auto toCharSequence(T&& value) -> decltype(internal::STR * kj::fwd<T>(value)) {
+  // Returns an iterable of chars that represent a textual representation of the value, suitable
+  // for debugging.
+  //
+  // Most users should use str() instead, but toCharSequence() may occasionally be useful to avoid
+  // heap allocation overhead that str() implies.
+  //
+  // To specialize this function for your type, see KJ_STRINGIFY.
+
+  return internal::STR * kj::fwd<T>(value);
+}
+
+CappedArray<char, sizeof(unsigned short) * 4> hex(unsigned short i);
+CappedArray<char, sizeof(unsigned int) * 4> hex(unsigned int i);
+CappedArray<char, sizeof(unsigned long) * 4> hex(unsigned long i);
+CappedArray<char, sizeof(unsigned long long) * 4> hex(unsigned long long i);
+
+template <typename... Params>
+String str(Params&&... params) {
+  // Magic function which builds a string from a bunch of arbitrary values.  Example:
+  //     str(1, " / ", 2, " = ", 0.5)
+  // returns:
+  //     "1 / 2 = 0.5"
+  // To teach `str` how to stringify a type, see `Stringifier`.
+
+  return internal::concat(toCharSequence(kj::fwd<Params>(params))...);
+}
+
+inline String str(String&& s) { return mv(s); }
+// Overload to prevent redundant allocation.
+
+template <typename T>
+String strArray(T&& arr, const char* delim) {
+  size_t delimLen = strlen(delim);
+  KJ_STACK_ARRAY(decltype(internal::STR * arr[0]), pieces, arr.size(), 8, 32);
+  size_t size = 0;
+  for (size_t i = 0; i < arr.size(); i++) {
+    if (i > 0) size += delimLen;
+    pieces[i] = internal::STR * arr[i];
+    size += pieces[i].size();
+  }
+
+  String result = heapString(size);
+  char* pos = result.begin();
+  for (size_t i = 0; i < arr.size(); i++) {
+    if (i > 0) {
+      memcpy(pos, delim, delimLen);
+      pos += delimLen;
+    }
+    pos = internal::fill(pos, pieces[i]);
+  }
+  return result;
+}
+
+namespace internal {
+
+template <typename T>
+inline Array<char> Stringifier::operator*(ArrayPtr<T> arr) const {
+  return strArray(arr, ", ");
+}
+
+template <typename T>
+inline Array<char> Stringifier::operator*(const Array<T>& arr) const {
+  return strArray(arr, ", ");
+}
+
+}  // namespace internal
+
+#define KJ_STRINGIFY(...) operator*(::kj::internal::Stringifier, __VA_ARGS__)
+// Defines a stringifier for a custom type.  Example:
+//
+//    class Foo {...};
+//    inline StringPtr KJ_STRINGIFY(const Foo& foo) { return foo.name(); }
+//
+// This allows Foo to be passed to str().
+//
+// The function should be declared either in the same namespace as the target type or in the global
+// namespace.  It can return any type which is an iterable container of chars.
 
 // =======================================================================================
 // Inline implementation details.

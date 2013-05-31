@@ -189,6 +189,14 @@ template <typename T> struct Decay_<const T> { typedef typename Decay_<T>::Type 
 template <typename T> struct Decay_<volatile T> { typedef typename Decay_<T>::Type Type; };
 template <typename T> using Decay = typename Decay_<T>::Type;
 
+template <bool b> struct EnableIf_;
+template <> struct EnableIf_<true> { typedef void Type; };
+template <bool b> using EnableIf = typename EnableIf_<b>::Type;
+// Use like:
+//
+//     template <typename T, typename = EnableIf<isValid<T>()>
+//     void func(T&& t);
+
 template <typename T>
 T instance() noexcept;
 // Like std::declval, but doesn't transform T into an rvalue reference.  If you want that, specify

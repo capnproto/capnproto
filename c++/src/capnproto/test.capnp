@@ -353,6 +353,12 @@ struct TestLateUnion {
     corge @5 :List(Int32);
     grault @6 :Float32;
   }
+
+  anotherUnion @7 union {
+    qux @8 :Text;
+    corge @9 :List(Int32);
+    grault @10 :Float32;
+  }
 }
 
 struct TestOldVersion {

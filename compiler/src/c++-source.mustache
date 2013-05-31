@@ -85,6 +85,10 @@ CAPNPROTO_DEFINE_STRUCT(
 CAPNPROTO_DEFINE_ENUM(
     ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{typeFullName}}::{{enumName}});
 {{/structNestedEnums}}
+{{#structUnions}}
+CAPNPROTO_DEFINE_UNION(
+    ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{structFullName}}::{{unionTitleCase}});
+{{/structUnions}}
 {{/typeStruct}}
 {{/typeStructOrUnion}}
 {{/fileTypes}}

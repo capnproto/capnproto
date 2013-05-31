@@ -1318,6 +1318,27 @@ DynamicList::Reader DynamicList::Builder::asReader() {
 
 // =======================================================================================
 
+DynamicValue::Reader DynamicValue::Builder::asReader() {
+  switch (type) {
+    case UNKNOWN: return Reader();
+    case VOID: return Reader(voidValue);
+    case BOOL: return Reader(boolValue);
+    case INT: return Reader(intValue);
+    case UINT: return Reader(uintValue);
+    case FLOAT: return Reader(floatValue);
+    case TEXT: return Reader(textValue.asReader());
+    case DATA: return Reader(dataValue.asReader());
+    case LIST: return Reader(listValue.asReader());
+    case ENUM: return Reader(enumValue);
+    case STRUCT: return Reader(structValue.asReader());
+    case UNION: return Reader(unionValue.asReader());
+    case INTERFACE: FAIL_CHECK("Interfaces not implemented."); return Reader();
+    case OBJECT: return Reader(objectValue);
+  }
+  FAIL_CHECK("Missing switch case.");
+  return Reader();
+}
+
 namespace {
 
 template <typename T>

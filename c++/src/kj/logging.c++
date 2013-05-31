@@ -31,7 +31,7 @@ namespace kj {
 
 Log::Severity Log::minSeverity = Log::Severity::INFO;
 
-ArrayPtr<const char> operator*(const Stringifier&, Log::Severity severity) {
+ArrayPtr<const char> KJ_STRINGIFY(Log::Severity severity) {
   static const char* SEVERITY_STRINGS[] = {
     "info",
     "warning",
@@ -163,20 +163,20 @@ static String makeDescription(DescriptionStyle style, const char* code, int erro
       case LOG:
         break;
       case ASSERTION:
-        pos = fill(pos, expected, codeArray);
+        pos = internal::fill(pos, expected, codeArray);
         break;
       case SYSCALL:
-        pos = fill(pos, codeArray, colon, sysErrorArray);
+        pos = internal::fill(pos, codeArray, colon, sysErrorArray);
         break;
     }
     for (size_t i = 0; i < argValues.size(); i++) {
       if (i > 0 || style != LOG) {
-        pos = fill(pos, delim);
+        pos = internal::fill(pos, delim);
       }
       if (argNames[i].size() > 0 && argNames[i][0] != '\"') {
-        pos = fill(pos, argNames[i], sep);
+        pos = internal::fill(pos, argNames[i], sep);
       }
-      pos = fill(pos, argValues[i]);
+      pos = internal::fill(pos, argValues[i]);
     }
 
     return result;
