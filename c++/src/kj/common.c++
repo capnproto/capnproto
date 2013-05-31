@@ -23,7 +23,6 @@
 
 #include "common.h"
 #include "logging.h"
-#include <stdlib.h>
 
 namespace kj {
 namespace internal {
@@ -35,10 +34,6 @@ void inlinePreconditionFailure(const char* file, int line, const char* expectati
   } else {
     Log::fatalFault(file, line, Exception::Nature::PRECONDITION, expectation, macroArgs, message);
   }
-
-  // GCC prints a warning that this function returns even though Log::fatalFault() is clearly
-  // marked noreturn.  Make the warning go away by calling abort()...
-  abort();
 }
 
 }  // namespace internal

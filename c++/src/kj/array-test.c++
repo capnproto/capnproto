@@ -153,7 +153,7 @@ TEST(Array, AraryBuilder) {
   {
     ArrayBuilder<TestObject> builder = heapArrayBuilder<TestObject>(32);
 
-    for (uint i = 0; i < 32; i++) {
+    for (int i = 0; i < 32; i++) {
       EXPECT_EQ(i, TestObject::count);
       builder.add();
     }

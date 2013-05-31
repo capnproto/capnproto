@@ -24,7 +24,7 @@
 #ifndef KJ_IO_H_
 #define KJ_IO_H_
 
-#include <cstddef>
+#include <stddef.h>
 #include "common.h"
 #include "array.h"
 
@@ -222,7 +222,7 @@ class AutoCloseFd {
 
 public:
   inline AutoCloseFd(): fd(-1) {}
-  inline AutoCloseFd(std::nullptr_t): fd(-1) {}
+  inline AutoCloseFd(decltype(nullptr)): fd(-1) {}
   inline explicit AutoCloseFd(int fd): fd(fd) {}
   inline AutoCloseFd(AutoCloseFd&& other): fd(other.fd) { other.fd = -1; }
   KJ_DISALLOW_COPY(AutoCloseFd);
@@ -231,8 +231,8 @@ public:
   inline operator int() { return fd; }
   inline int get() { return fd; }
 
-  inline bool operator==(std::nullptr_t) { return fd < 0; }
-  inline bool operator!=(std::nullptr_t) { return fd >= 0; }
+  inline bool operator==(decltype(nullptr)) { return fd < 0; }
+  inline bool operator!=(decltype(nullptr)) { return fd >= 0; }
 
 private:
   int fd;

@@ -29,8 +29,6 @@
 #define KJ_TYPE_SAFETY_H_
 
 #include "common.h"
-#include <cstddef>
-#include <string.h>
 
 namespace kj {
 

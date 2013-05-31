@@ -25,7 +25,7 @@
 #include "logging.h"
 #include <unistd.h>
 #include <sys/uio.h>
-#include <string>
+#include <algorithm>
 
 namespace kj {
 
