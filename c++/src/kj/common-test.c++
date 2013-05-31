@@ -173,8 +173,10 @@ TEST(Common, Downcast) {
 
   EXPECT_EQ(&bar, &downcast<Bar&>(foo));
   EXPECT_EQ(&bar, downcast<Bar*>(&foo));
+#if !defined(NDEBUG) && !KJ_NO_RTTI
   EXPECT_ANY_THROW(downcast<Baz&>(foo));
   EXPECT_ANY_THROW(downcast<Baz*>(&foo));
+#endif
 
 #if KJ_NO_RTTI
   EXPECT_TRUE(dynamicDowncastIfAvailable<Bar&>(foo) == nullptr);

@@ -61,11 +61,20 @@ capnpc_middleman:
 $(capnpc_outputs): capnpc_middleman
 
 includecapnpdir = $(includedir)/capnproto
+includekjdir = $(includedir)/capnproto
 
+includekj_HEADERS =                                            \
+  src/kj/common.h                                              \
+  src/kj/type-safety.h                                         \
+  src/kj/memory.h                                              \
+  src/kj/array.h                                               \
+  src/kj/string.h                                              \
+  src/kj/exception.h                                           \
+  src/kj/logging.h                                             \
+  src/kj/io.h
+  
 includecapnp_HEADERS =                                         \
-  src/capnproto/macros.h                                       \
-  src/capnproto/type-safety.h                                  \
-  src/capnproto/exception.h                                    \
+  src/capnproto/common.h                                       \
   src/capnproto/blob.h                                         \
   src/capnproto/layout.h                                       \
   src/capnproto/list.h                                         \
@@ -73,8 +82,6 @@ includecapnp_HEADERS =                                         \
   src/capnproto/schema.h                                       \
   src/capnproto/schema-loader.h                                \
   src/capnproto/dynamic.h                                      \
-  src/capnproto/stringify.h                                    \
-  src/capnproto/io.h                                           \
   src/capnproto/serialize.h                                    \
   src/capnproto/serialize-packed.h                             \
   src/capnproto/generated-header-support.h
@@ -87,13 +94,14 @@ nodist_includecapnp_HEADERS =                                  \
 lib_LIBRARIES = libcapnproto.a
 
 libcapnproto_a_SOURCES=                                        \
-  src/capnproto/macros.c++                                     \
-  src/capnproto/type-safety.c++                                \
-  src/capnproto/exception.c++                                  \
-  src/capnproto/util.h                                         \
-  src/capnproto/util.c++                                       \
-  src/capnproto/logging.h                                      \
-  src/capnproto/logging.c++                                    \
+  src/kj/common.c++                                            \
+  src/kj/type-safety.c++                                       \
+  src/kj/memory.c++                                            \
+  src/kj/array.c++                                             \
+  src/kj/string.c++                                            \
+  src/kj/exception.c++                                         \
+  src/kj/logging.c++                                           \
+  src/kj/io.c++                                                \
   src/capnproto/blob.c++                                       \
   src/capnproto/arena.h                                        \
   src/capnproto/arena.c++                                      \
@@ -104,7 +112,6 @@ libcapnproto_a_SOURCES=                                        \
   src/capnproto/schema-loader.c++                              \
   src/capnproto/dynamic.c++                                    \
   src/capnproto/stringify.c++                                  \
-  src/capnproto/io.c++                                         \
   src/capnproto/serialize.c++                                  \
   src/capnproto/serialize-packed.c++
 nodist_libcapnproto_a_SOURCES =                                \
@@ -113,6 +120,7 @@ nodist_libcapnproto_a_SOURCES =                                \
 # Source files intentionally not included in the dist at this time:
 #  src/capnproto/serialize-snappy*
 #  src/capnproto/benchmark/...
+#  src/capnproto/compiler/...
 
 # Tests ==============================================================
 
@@ -141,10 +149,12 @@ BUILT_SOURCES = $(test_capnpc_outputs) $(capnpc_outputs)
 check_PROGRAMS = capnproto-test
 capnproto_test_LDADD = -lgtest -lgtest_main libcapnproto.a
 capnproto_test_SOURCES =                                       \
-  src/capnproto/type-safety-test.c++                           \
+  src/kj/array-test.c++                                        \
+  src/kj/common-test.c++                                       \
+  src/kj/logging-test.c++                                      \
+  src/kj/string-test.c++                                       \
+  src/kj/type-safety-test.c++                                  \
   src/capnproto/blob-test.c++                                  \
-  src/capnproto/util-test.c++                                  \
-  src/capnproto/logging-test.c++                               \
   src/capnproto/layout-test.c++                                \
   src/capnproto/message-test.c++                               \
   src/capnproto/schema-test.c++                                \
