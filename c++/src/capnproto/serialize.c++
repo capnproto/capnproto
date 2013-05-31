@@ -61,7 +61,7 @@ FlatArrayMessageReader::FlatArrayMessageReader(
   offset += segmentSize;
 
   if (segmentCount > 1) {
-    moreSegments = kj::newArray<kj::ArrayPtr<const word>>(segmentCount - 1);
+    moreSegments = kj::heapArray<kj::ArrayPtr<const word>>(segmentCount - 1);
 
     for (uint i = 1; i < segmentCount; i++) {
       uint segmentSize = table[i + 1].get();
@@ -96,7 +96,7 @@ kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> 
     totalSize += segment.size();
   }
 
-  kj::Array<word> result = kj::newArray<word>(totalSize);
+  kj::Array<word> result = kj::heapArray<word>(totalSize);
 
   internal::WireValue<uint32_t>* table =
       reinterpret_cast<internal::WireValue<uint32_t>*>(result.begin());
@@ -170,14 +170,14 @@ InputStreamMessageReader::InputStreamMessageReader(
   if (scratchSpace.size() < totalWords) {
     // TODO(perf):  Consider allocating each segment as a separate chunk to reduce memory
     //   fragmentation.
-    ownedSpace = kj::newArray<word>(totalWords);
+    ownedSpace = kj::heapArray<word>(totalWords);
     scratchSpace = ownedSpace;
   }
 
   segment0 = scratchSpace.slice(0, segment0Size);
 
   if (segmentCount > 1) {
-    moreSegments = kj::newArray<kj::ArrayPtr<const word>>(segmentCount - 1);
+    moreSegments = kj::heapArray<kj::ArrayPtr<const word>>(segmentCount - 1);
     size_t offset = segment0Size;
 
     for (uint i = 0; i < segmentCount - 1; i++) {

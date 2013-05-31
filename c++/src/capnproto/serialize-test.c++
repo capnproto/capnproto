@@ -290,7 +290,7 @@ TEST(Serialize, FileDescriptors) {
 }
 
 TEST(Serialize, RejectTooManySegments) {
-  kj::Array<word> data = kj::newArray<word>(8192);
+  kj::Array<word> data = kj::heapArray<word>(8192);
   WireValue<uint32_t>* table = reinterpret_cast<WireValue<uint32_t>*>(data.begin());
   table[0].set(1024);
   for (uint i = 0; i < 1024; i++) {

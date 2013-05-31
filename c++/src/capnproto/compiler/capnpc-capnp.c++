@@ -95,7 +95,7 @@ TextBlob::TextBlob(Params&&... params) {
 }
 
 TextBlob::TextBlob(kj::Array<TextBlob>&& params) {
-  branches = kj::newArray<Branch>(params.size());
+  branches = kj::heapArray<Branch>(params.size());
   for (size_t i = 0; i < params.size(); i++) {
     branches[i].pos = nullptr;
     branches[i].content = kj::mv(params[i]);
@@ -113,8 +113,8 @@ void TextBlob::writeTo(kj::OutputStream& out) const {
 }
 
 void TextBlob::allocate(size_t textSize, size_t branchCount) {
-  text = kj::newArray<char>(textSize);
-  branches = kj::newArray<Branch>(branchCount);
+  text = kj::heapArray<char>(textSize);
+  branches = kj::heapArray<Branch>(branchCount);
 }
 
 template <typename First, typename... Rest>
@@ -160,7 +160,7 @@ TextBlob text(Params&&... params) {
 
 template <typename List, typename Func>
 TextBlob forText(List&& list, Func&& func) {
-  kj::Array<TextBlob> items = kj::newArray<TextBlob>(list.size());
+  kj::Array<TextBlob> items = kj::heapArray<TextBlob>(list.size());
   for (size_t i = 0; i < list.size(); i++) {
     items[i] = func(list[i]);
   }

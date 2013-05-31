@@ -25,6 +25,7 @@
 #define CAPNPROTO_SCHEMA_LOADER_H_
 
 #include "schema.h"
+#include <kj/memory.h>
 
 namespace capnproto {
 

@@ -25,29 +25,62 @@
 #define KJ_ARRAY_H_
 
 #include "common.h"
-#include "memory.h"
 #include <string.h>
 
 namespace kj {
+
+// =======================================================================================
+// ArrayDisposer -- Implementation details.
+
+class ArrayDisposer {
+  // Much like Disposer from memory.h.
+
+protected:
+  virtual ~ArrayDisposer();
+
+  virtual void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
+                           size_t capacity, void (*destroyElement)(void*)) const = 0;
+  // Disposes of the array.  `destroyElement` invokes the destructor of each element, or is nullptr
+  // if the elements have trivial destructors.  `capacity` is the amount of space that was
+  // allocated while `elementCount` is the number of elements that were actually constructed;
+  // these are always the same number for Array<T> but may be different when using ArrayBuilder<T>.
+
+public:
+
+  template <typename T>
+  void dispose(T* firstElement, size_t elementCount, size_t capacity) const;
+  // Helper wrapper around disposeImpl().
+  //
+  // Callers must not call dispose() on the same array twice, even if the first call throws
+  // an exception.
+
+private:
+  template <typename T, bool hasTrivialDestructor = __has_trivial_destructor(T)>
+  struct Dispose_;
+};
 
 // =======================================================================================
 // Array
 
 template <typename T>
 class Array {
-  // An owned array which will automatically be deleted in the destructor.  Can be moved, but not
-  // copied.
+  // An owned array which will automatically be disposed of (using an ArrayDisposer) in the
+  // destructor.  Can be moved, but not copied.  Much like Own<T>, but for arrays rather than
+  // single objects.
 
 public:
   inline Array(): ptr(nullptr), size_(0) {}
   inline Array(decltype(nullptr)): ptr(nullptr), size_(0) {}
-  inline Array(Array&& other) noexcept: ptr(other.ptr), size_(other.size_) {
+  inline Array(Array&& other) noexcept
+      : ptr(other.ptr), size_(other.size_), disposer(other.disposer) {
     other.ptr = nullptr;
     other.size_ = 0;
   }
+  inline Array(T* firstElement, size_t size, const ArrayDisposer& disposer)
+      : ptr(firstElement), size_(size), disposer(&disposer) {}
 
   KJ_DISALLOW_COPY(Array);
-  inline ~Array() noexcept { delete[] ptr; }
+  inline ~Array() noexcept { dispose(); }
 
   inline operator ArrayPtr<T>() {
     return ArrayPtr<T>(ptr, size_);
@@ -65,10 +98,14 @@ public:
     return ptr[index];
   }
 
-  inline T* begin() const { return ptr; }
-  inline T* end() const { return ptr + size_; }
-  inline T& front() const { return *ptr; }
-  inline T& back() const { return *(ptr + size_ - 1); }
+  inline const T* begin() const { return ptr; }
+  inline const T* end() const { return ptr + size_; }
+  inline const T& front() const { return *ptr; }
+  inline const T& back() const { return *(ptr + size_ - 1); }
+  inline T* begin() { return ptr; }
+  inline T* end() { return ptr + size_; }
+  inline T& front() { return *ptr; }
+  inline T& back() { return *(ptr + size_ - 1); }
 
   inline ArrayPtr<T> slice(size_t start, size_t end) {
     KJ_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds Array::slice().");
@@ -83,16 +120,15 @@ public:
   inline bool operator!=(decltype(nullptr)) const { return size_ != 0; }
 
   inline Array& operator=(decltype(nullptr)) {
-    delete[] ptr;
-    ptr = nullptr;
-    size_ = 0;
+    dispose();
     return *this;
   }
 
   inline Array& operator=(Array&& other) {
-    delete[] ptr;
+    dispose();
     ptr = other.ptr;
     size_ = other.size_;
+    disposer = other.disposer;
     other.ptr = nullptr;
     other.size_ = 0;
     return *this;
@@ -101,20 +137,56 @@ public:
 private:
   T* ptr;
   size_t size_;
+  const ArrayDisposer* disposer;
 
-  inline explicit Array(size_t size): ptr(new T[size]), size_(size) {}
-  inline Array(T* ptr, size_t size): ptr(ptr), size_(size) {}
-
-  template <typename U>
-  friend Array<U> newArray(size_t size);
-
-  template <typename U>
-  friend class ArrayBuilder;
+  inline void dispose() {
+    // Make sure that if an exception is thrown, we are left with a null ptr, so we won't possibly
+    // dispose again.
+    T* ptrCopy = ptr;
+    size_t sizeCopy = size_;
+    if (ptrCopy != nullptr) {
+      ptr = nullptr;
+      size_ = 0;
+      disposer->dispose(ptrCopy, sizeCopy, sizeCopy);
+    }
+  }
 };
 
+namespace internal {
+
+class HeapArrayDisposer final: public ArrayDisposer {
+public:
+  static void* allocateImpl(size_t elementSize, size_t elementCount, size_t capacity,
+                            void (*constructElement)(void*), void (*destroyElement)(void*));
+  // Allocates and constructs the array.  Both function pointers are null if the constructor is
+  // trivial, otherwise destroyElement is null if the constructor doesn't throw.
+
+  virtual void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
+                           size_t capacity, void (*destroyElement)(void*)) const override;
+
+  template <typename T>
+  static T* allocate(size_t count);
+  template <typename T>
+  static T* allocateUninitialized(size_t count);
+
+  static const HeapArrayDisposer instance;
+
+private:
+  template <typename T, bool hasTrivialConstructor = __has_trivial_constructor(T),
+                        bool hasNothrowConstructor = __has_nothrow_constructor(T)>
+  struct Allocate_;
+
+  struct ExceptionGuard;
+};
+
+}  // namespace internal
+
 template <typename T>
-inline Array<T> newArray(size_t size) {
-  return Array<T>(size);
+inline Array<T> heapArray(size_t size) {
+  // Much like `heap<T>()` from memory.h, allocates a new array on the heap.
+
+  return Array<T>(internal::HeapArrayDisposer::allocate<T>(size), size,
+                  internal::HeapArrayDisposer::instance);
 }
 
 // =======================================================================================
@@ -122,53 +194,90 @@ inline Array<T> newArray(size_t size) {
 
 template <typename T>
 class ArrayBuilder {
-  // TODO(cleanup):  This class doesn't work for non-primitive types because Slot is not
-  //   constructable.  Giving Slot a constructor/destructor means arrays of it have to be tagged
-  //   so operator delete can run the destructors.  If we reinterpret_cast the array to an array
-  //   of T and delete it as that type, operator delete gets very upset.
-  //
-  //   Perhaps we should bite the bullet and make the Array family do manual memory allocation,
-  //   bypassing the rather-stupid C++ array new/delete operators which store a redundant copy of
-  //   the size anyway.
-
-  union Slot {
-    T value;
-    char dummy;
-  };
-  static_assert(sizeof(Slot) == sizeof(T), "union is bigger than content?");
+  // Class which lets you build an Array<T> specifying the exact constructor arguments for each
+  // element, rather than starting by default-constructing them.
 
 public:
-  explicit ArrayBuilder(size_t size): ptr(new Slot[size]), pos(ptr), endPtr(ptr + size) {}
-  ~ArrayBuilder() {
-    for (Slot* p = ptr; p < pos; ++p) {
-      p->value.~T();
-    }
-    delete [] ptr;
+  ArrayBuilder(): ptr(nullptr), pos(nullptr), endPtr(nullptr) {}
+  ArrayBuilder(decltype(nullptr)): ptr(nullptr), pos(nullptr), endPtr(nullptr) {}
+  explicit ArrayBuilder(T* firstElement, size_t capacity, const ArrayDisposer& disposer)
+      : ptr(firstElement), pos(firstElement), endPtr(firstElement + capacity),
+        disposer(&disposer) {}
+  ArrayBuilder(ArrayBuilder&& other)
+      : ptr(other.ptr), pos(other.pos), endPtr(other.endPtr), disposer(other.disposer) {
+    other.ptr = nullptr;
+    other.pos = nullptr;
+    other.endPtr = nullptr;
+  }
+  KJ_DISALLOW_COPY(ArrayBuilder);
+  inline ~ArrayBuilder() { dispose(); }
+
+  inline operator ArrayPtr<T>() {
+    return arrayPtr(ptr, pos);
+  }
+  inline operator ArrayPtr<const T>() const {
+    return arrayPtr(ptr, pos);
+  }
+  inline ArrayPtr<T> asPtr() {
+    return arrayPtr(ptr, pos);
+  }
+
+  inline size_t size() const { return pos - ptr; }
+  inline size_t capacity() const { return endPtr - ptr; }
+  inline T& operator[](size_t index) const {
+    KJ_INLINE_DPRECOND(index < pos - ptr, "Out-of-bounds Array access.");
+    return ptr[index];
+  }
+
+  inline const T* begin() const { return ptr; }
+  inline const T* end() const { return pos; }
+  inline const T& front() const { return *ptr; }
+  inline const T& back() const { return *(pos - 1); }
+  inline T* begin() { return ptr; }
+  inline T* end() { return pos; }
+  inline T& front() { return *ptr; }
+  inline T& back() { return *(pos - 1); }
+
+  ArrayBuilder& operator=(ArrayBuilder&& other) {
+    dispose();
+    ptr = other.ptr;
+    pos = other.pos;
+    endPtr = other.endPtr;
+    disposer = other.disposer;
+    other.ptr = nullptr;
+    other.pos = nullptr;
+    other.endPtr = nullptr;
+    return *this;
+  }
+  ArrayBuilder& operator=(decltype(nullptr)) {
+    dispose();
+    return *this;
   }
 
   template <typename... Params>
   void add(Params&&... params) {
     KJ_INLINE_DPRECOND(pos < endPtr, "Added too many elements to ArrayBuilder.");
-    new(&pos->value) T(kj::fwd<Params>(params)...);
+    ctor(*pos, kj::fwd<Params>(params)...);
     ++pos;
   }
 
   template <typename Container>
   void addAll(Container&& container) {
-    Slot* __restrict__ pos_ = pos;
-    auto i = container.begin();
-    auto end = container.end();
-    while (i != end) {
-      pos_++->value = *i++;
-    }
-    pos = pos_;
+    addAll(container.begin(), container.end());
   }
 
+  template <typename Iterator>
+  void addAll(Iterator start, Iterator end);
+
   Array<T> finish() {
-    // We could allow partial builds if Array<T> used a deleter callback, but that would make
-    // Array<T> bigger for no benefit most of the time.
+    // We could safely remove this check as long as HeapArrayDisposer relies on operator delete
+    // (which doesn't need to know the original capacity) or if we created a custom disposer for
+    // ArrayBuilder which stores the capacity in a prefix.  But that would mean we can't allow
+    // arbitrary disposers with ArrayBuilder in the future, and anyway this check might catch bugs.
+    // Probably we should just create a new Vector-like data structure if we want to allow building
+    // of arrays without knowing the final size in advance.
     KJ_INLINE_DPRECOND(pos == endPtr, "ArrayBuilder::finish() called prematurely.");
-    Array<T> result(reinterpret_cast<T*>(ptr), pos - ptr);
+    Array<T> result(reinterpret_cast<T*>(ptr), pos - ptr, internal::HeapArrayDisposer::instance);
     ptr = nullptr;
     pos = nullptr;
     endPtr = nullptr;
@@ -176,10 +285,182 @@ public:
   }
 
 private:
-  Slot* ptr;
-  Slot* pos;
-  Slot* endPtr;
+  T* ptr;
+  T* pos;
+  T* endPtr;
+  const ArrayDisposer* disposer;
+
+  inline void dispose() {
+    // Make sure that if an exception is thrown, we are left with a null ptr, so we won't possibly
+    // dispose again.
+    T* ptrCopy = ptr;
+    T* posCopy = pos;
+    T* endCopy = endPtr;
+    if (ptrCopy != nullptr) {
+      ptr = nullptr;
+      pos = nullptr;
+      endPtr = nullptr;
+      disposer->dispose(ptrCopy, posCopy - ptrCopy, endCopy - ptrCopy);
+    }
+  }
 };
+
+template <typename T>
+inline ArrayBuilder<T> heapArrayBuilder(size_t size) {
+  // Like `heapArray<T>()` but does not default-construct the elements.  You must construct them
+  // manually by calling `add()`.
+
+  return ArrayBuilder<T>(internal::HeapArrayDisposer::allocateUninitialized<T>(size), size,
+                         internal::HeapArrayDisposer::instance);
+}
+
+// =======================================================================================
+// Inline implementation details
+
+template <typename T>
+struct ArrayDisposer::Dispose_<T, true> {
+  static void dispose(T* firstElement, size_t elementCount, size_t capacity,
+                      const ArrayDisposer& disposer) {
+    disposer.disposeImpl(firstElement, sizeof(T), elementCount, capacity, nullptr);
+  }
+};
+template <typename T>
+struct ArrayDisposer::Dispose_<T, false> {
+  static void destruct(void* ptr) {
+    kj::dtor(*reinterpret_cast<T*>(ptr));
+  }
+
+  static void dispose(T* firstElement, size_t elementCount, size_t capacity,
+                      const ArrayDisposer& disposer) {
+    disposer.disposeImpl(firstElement, sizeof(T), elementCount, capacity, &destruct);
+  }
+};
+
+template <typename T>
+void ArrayDisposer::dispose(T* firstElement, size_t elementCount, size_t capacity) const {
+  Dispose_<T>::dispose(firstElement, elementCount, capacity, *this);
+}
+
+namespace internal {
+
+template <typename T>
+struct HeapArrayDisposer::Allocate_<T, true, true> {
+  static T* allocate(size_t elementCount, size_t capacity) {
+    return reinterpret_cast<T*>(allocateImpl(
+        sizeof(T), elementCount, capacity, nullptr, nullptr));
+  }
+};
+template <typename T>
+struct HeapArrayDisposer::Allocate_<T, false, true> {
+  static void construct(void* ptr) {
+    kj::ctor(*reinterpret_cast<T*>(ptr));
+  }
+  static T* allocate(size_t elementCount, size_t capacity) {
+    return reinterpret_cast<T*>(allocateImpl(
+        sizeof(T), elementCount, capacity, &construct, nullptr));
+  }
+};
+template <typename T>
+struct HeapArrayDisposer::Allocate_<T, false, false> {
+  static void construct(void* ptr) {
+    kj::ctor(*reinterpret_cast<T*>(ptr));
+  }
+  static void destruct(void* ptr) {
+    kj::dtor(*reinterpret_cast<T*>(ptr));
+  }
+  static T* allocate(size_t elementCount, size_t capacity) {
+    return reinterpret_cast<T*>(allocateImpl(
+        sizeof(T), elementCount, capacity, &construct, &destruct));
+  }
+};
+
+template <typename T>
+T* HeapArrayDisposer::allocate(size_t count) {
+  return Allocate_<T>::allocate(count, count);
+}
+
+template <typename T>
+T* HeapArrayDisposer::allocateUninitialized(size_t count) {
+  return Allocate_<T, true, true>::allocate(0, count);
+}
+
+template <typename Element, typename Iterator,
+          bool trivial = __has_trivial_copy(Element) && __has_trivial_assign(Element)>
+struct CopyConstructArray_;
+
+template <typename T>
+struct CopyConstructArray_<T, T*, true> {
+  static inline T* apply(T* __restrict__ pos, T* start, T* end) {
+    memcpy(pos, start, end - start);
+    return pos + (end - start);
+  }
+};
+
+template <typename T>
+struct CopyConstructArray_<T, const T*, true> {
+  static inline T* apply(T* __restrict__ pos, const T* start, const T* end) {
+    memcpy(pos, start, end - start);
+    return pos + (end - start);
+  }
+};
+
+template <typename T, typename Iterator>
+struct CopyConstructArray_<T, Iterator, true> {
+  static inline T* apply(T* __restrict__ pos, Iterator start, Iterator end) {
+    // Since both the copy constructor and assignment operator are trivial, we know that assignment
+    // is equivalent to copy-constructing.  So we can make this case somewhat easier for the
+    // compiler to optimize.
+    while (start != end) {
+      *pos++ = *start++;
+    }
+    return pos;
+  }
+};
+
+template <typename T, typename Iterator>
+struct CopyConstructArray_<T, Iterator, false> {
+  struct ExceptionGuard {
+    T* start;
+    T* pos;
+    inline explicit ExceptionGuard(T* pos): start(pos), pos(pos) {}
+    ~ExceptionGuard() {
+      while (pos > start) {
+        dtor(*--pos);
+      }
+    }
+  };
+
+  static T* apply(T* __restrict__ pos, Iterator start, Iterator end) {
+    if (noexcept(T(instance<const T&>()))) {
+      while (start != end) {
+        ctor(*pos++, upcast<const T&>(*start++));
+      }
+      return pos;
+    } else {
+      // Crap.  This is complicated.
+      ExceptionGuard guard(pos);
+      while (start != end) {
+        ctor(*guard.pos, upcast<const T&>(*start++));
+        ++guard.pos;
+      }
+      guard.start = guard.pos;
+      return guard.pos;
+    }
+  }
+};
+
+template <typename T, typename Iterator>
+inline T* copyConstructArray(T* dst, Iterator start, Iterator end) {
+  return CopyConstructArray_<T, RemoveReference<Iterator>>::apply(dst, start, end);
+}
+
+}  // namespace internal
+
+template <typename T>
+template <typename Iterator>
+void ArrayBuilder<T>::addAll(Iterator start, Iterator end) {
+  pos = internal::copyConstructArray(pos, start, end);
+}
 
 }  // namespace kj
 

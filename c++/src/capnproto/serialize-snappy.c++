@@ -61,7 +61,7 @@ private:
 SnappyInputStream::SnappyInputStream(BufferedInputStream& inner, kj::ArrayPtr<byte> buffer)
     : inner(inner) {
   if (buffer.size() < SNAPPY_BUFFER_SIZE) {
-    ownedBuffer = kj::newArray<byte>(SNAPPY_BUFFER_SIZE);
+    ownedBuffer = kj::heapArray<byte>(SNAPPY_BUFFER_SIZE);
     buffer = ownedBuffer;
   }
   this->buffer = buffer;
@@ -125,14 +125,14 @@ SnappyOutputStream::SnappyOutputStream(
       "snappy::MaxCompressedLength() changed?");
 
   if (buffer.size() < SNAPPY_BUFFER_SIZE) {
-    ownedBuffer = kj::newArray<byte>(SNAPPY_BUFFER_SIZE);
+    ownedBuffer = kj::heapArray<byte>(SNAPPY_BUFFER_SIZE);
     buffer = ownedBuffer;
   }
   this->buffer = buffer;
   bufferPos = buffer.begin();
 
   if (compressedBuffer.size() < SNAPPY_COMPRESSED_BUFFER_SIZE) {
-    ownedCompressedBuffer = kj::newArray<byte>(SNAPPY_COMPRESSED_BUFFER_SIZE);
+    ownedCompressedBuffer = kj::heapArray<byte>(SNAPPY_COMPRESSED_BUFFER_SIZE);
     compressedBuffer = ownedCompressedBuffer;
   }
   this->compressedBuffer = compressedBuffer;

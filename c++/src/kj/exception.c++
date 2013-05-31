@@ -98,7 +98,7 @@ const char* Exception::what() const noexcept {
     }
   }
 
-  Array<Array<char>> contextText = newArray<Array<char>>(contextDepth);
+  Array<Array<char>> contextText = heapArray<Array<char>>(contextDepth);
 
   contextDepth = 0;
   contextPtr = &context;

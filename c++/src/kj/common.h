@@ -145,7 +145,7 @@ void inlinePreconditionFailure(
   bool name##_isOnStack = name##_size <= (minStack); \
   type name##_stack[minStack]; \
   ::kj::Array<type> name##_heap = name##_isOnStack ? \
-      nullptr : kj::newArray<type>(name##_size); \
+      nullptr : kj::heapArray<type>(name##_size); \
   ::kj::ArrayPtr<type> name = name##_isOnStack ? \
       kj::arrayPtr(name##_stack, name##_size) : name##_heap
 #else
@@ -154,7 +154,7 @@ void inlinePreconditionFailure(
   bool name##_isOnStack = name##_size <= (maxStack); \
   type name##_stack[name##_isOnStack ? size : 0]; \
   ::kj::Array<type> name##_heap = name##_isOnStack ? \
-      nullptr : kj::newArray<type>(name##_size); \
+      nullptr : kj::heapArray<type>(name##_size); \
   ::kj::ArrayPtr<type> name = name##_isOnStack ? \
       kj::arrayPtr(name##_stack, name##_size) : name##_heap
 #endif

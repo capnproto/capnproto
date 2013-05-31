@@ -98,7 +98,7 @@ template <typename T, typename Container>
 Array<T> iterableToArray(Container&& a) {
   // Converts an arbitrary iterable container into an array of the given element type.
 
-  Array<T> result = newArray<T>(a.size());
+  Array<T> result = heapArray<T>(a.size());
   auto i = a.iterator();
   auto end = a.end();
   T* __restrict__ ptr = result.begin();
@@ -146,7 +146,7 @@ Array<Element> concat(Params&&... params) {
   // Eclipse reports a bogus error on `size()`.
   Array<Element> result;
 #else
-  Array<Element> result = newArray<Element>(sum({params.size()...}));
+  Array<Element> result = heapArray<Element>(sum({params.size()...}));
 #endif
   fill(result.begin(), std::forward<Params>(params)...);
   return result;
@@ -230,7 +230,7 @@ Array<char> strArray(T&& arr, const char* delim) {
     size += pieces[i].size();
   }
 
-  Array<char> result = newArray<char>(size);
+  Array<char> result = heapArray<char>(size);
   char* pos = result.begin();
   for (size_t i = 0; i < arr.size(); i++) {
     if (i > 0) {
@@ -255,7 +255,7 @@ inline Array<char> Stringifier::operator*(const Array<T>& arr) const {
 template <typename T, typename Func>
 auto mapArray(T&& arr, Func&& func) -> Array<decltype(func(arr[0]))> {
   // TODO(cleanup):  Use ArrayBuilder.
-  Array<decltype(func(arr[0]))> result = newArray<decltype(func(arr[0]))>(arr.size());
+  Array<decltype(func(arr[0]))> result = heapArray<decltype(func(arr[0]))>(arr.size());
   size_t pos = 0;
   for (auto& element: arr) {
     result[pos++] = func(element);

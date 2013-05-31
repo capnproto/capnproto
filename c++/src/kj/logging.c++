@@ -157,7 +157,7 @@ static Array<char> makeDescription(DescriptionStyle style, const char* code, int
       totalSize += argValues[i].size();
     }
 
-    ArrayBuilder<char> result(totalSize);
+    ArrayBuilder<char> result = heapArrayBuilder<char>(totalSize);
 
     switch (style) {
       case LOG:

@@ -52,7 +52,7 @@ void OutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
 // =======================================================================================
 
 BufferedInputStreamWrapper::BufferedInputStreamWrapper(InputStream& inner, ArrayPtr<byte> buffer)
-    : inner(inner), ownedBuffer(buffer == nullptr ? newArray<byte>(8192) : nullptr),
+    : inner(inner), ownedBuffer(buffer == nullptr ? heapArray<byte>(8192) : nullptr),
       buffer(buffer == nullptr ? ownedBuffer : buffer) {}
 
 BufferedInputStreamWrapper::~BufferedInputStreamWrapper() {}
@@ -118,7 +118,7 @@ void BufferedInputStreamWrapper::skip(size_t bytes) {
 
 BufferedOutputStreamWrapper::BufferedOutputStreamWrapper(OutputStream& inner, ArrayPtr<byte> buffer)
     : inner(inner),
-      ownedBuffer(buffer == nullptr ? newArray<byte>(8192) : nullptr),
+      ownedBuffer(buffer == nullptr ? heapArray<byte>(8192) : nullptr),
       buffer(buffer == nullptr ? ownedBuffer : buffer),
       bufferPos(this->buffer.begin()) {}
 

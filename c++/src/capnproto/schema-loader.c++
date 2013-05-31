@@ -1096,7 +1096,7 @@ internal::RawSchema* SchemaLoader::Impl::tryGet(uint64_t typeId) const {
 }
 
 kj::Array<Schema> SchemaLoader::Impl::getAllLoaded() const {
-  kj::Array<Schema> result = kj::newArray<Schema>(schemas.size());
+  kj::Array<Schema> result = kj::heapArray<Schema>(schemas.size());
   size_t i = 0;
   for (auto& schema: schemas) {
     result[i++] = Schema(schema.second);

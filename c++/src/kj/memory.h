@@ -29,27 +29,40 @@
 namespace kj {
 
 // =======================================================================================
+// Disposer -- Implementation details.
 
 class Disposer {
-  // Abstract interface for a thing that disposes of some other object.  Often, it makes sense to
-  // decouple an object from the knowledge of how to dispose of it.
+  // Abstract interface for a thing that "disposes" of objects, where "disposing" usually means
+  // calling the destructor followed by freeing the underlying memory.  `Own<T>` encapsulates an
+  // object pointer with corresponding Disposer.
+  //
+  // Few developers will ever touch this interface.  It is primarily useful for those implementing
+  // custom memory allocators.
 
 protected:
   virtual ~Disposer();
 
+  virtual void disposeImpl(void* pointer) const = 0;
+  // Disposes of the object, given a pointer to the beginning of the object.  If the object is
+  // polymorphic, this pointer is determined by dynamic_cast<void*>().  For non-polymorphic types,
+  // Own<T> does not allow any casting, so the pointer exactly matches the original one given to
+  // Own<T>.
+
 public:
-  virtual void dispose(void* interiorPointer) = 0;
-  // Disposes of the object that this Disposer owns, and possibly disposes of the disposer itself.
+
+  template <typename T>
+  void dispose(T* object) const;
+  // Helper wrapper around disposeImpl().
   //
-  // Callers must assume that the Disposer itself is no longer valid once this returns -- e.g. it
-  // might delete itself.  Callers must in particular be sure not to call the Disposer again even
-  // when dispose() throws an exception.
+  // If T is polymorphic, calls `disposeImpl(dynamic_cast<void*>(object))`, otherwise calls
+  // `disposeImpl(upcast<void*>(object))`.
   //
-  // `interiorPointer` points somewhere inside of the object -- NOT necessarily at the beginning,
-  // especially in the presence of multiple inheritance.  Most implementations should ignore the
-  // pointer, though a tricky memory allocator could get away with sharing one Disposer among
-  // multiple objects if it can figure out how to find the beginning of the object given an
-  // arbitrary interior pointer.
+  // Callers must not call dispose() on the same pointer twice, even if the first call throws
+  // an exception.
+
+private:
+  template <typename T, bool polymorphic = __is_polymorphic(T)>
+  struct Dispose_;
 };
 
 // =======================================================================================
@@ -64,11 +77,12 @@ class Own {
   // This is much like std::unique_ptr, except:
   // - You cannot release().  An owned object is not necessarily allocated with new (see next
   //   point), so it would be hard to use release() correctly.
-  // - The deleter is made polymorphic by virtual call rather than by template.  This is a much
-  //   more powerful default -- it allows any random module to decide to use a custom allocator.
-  //   This could be accomplished with unique_ptr by forcing everyone to use e.g.
-  //   std::unique_ptr<T, kj::Disposer&>, but at that point we've lost basically any benefit
-  //   of interoperating with std::unique_ptr anyway.
+  // - The deleter is made polymorphic by virtual call rather than by template.  This is much
+  //   more powerful -- it allows the use of custom allocators, freelists, etc.  This could
+  //   _almost_ be accomplished with unique_ptr by forcing everyone to use something like
+  //   std::unique_ptr<T, kj::Deleter>, except that things get hairy in the presence of multiple
+  //   inheritance and upcasting, and anyway if you force everyone to use a custom deleter
+  //   then you've lost any benefit to interoperating with the "standard" unique_ptr.
 
 public:
   Own(const Own& other) = delete;
@@ -76,8 +90,12 @@ public:
       : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
   template <typename U>
   inline Own(Own<U>&& other) noexcept
-      : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
-  inline Own(T* ptr, Disposer* disposer) noexcept: disposer(disposer), ptr(ptr) {}
+      : disposer(other.disposer), ptr(other.ptr) {
+    static_assert(__is_polymorphic(T),
+        "Casting owned pointers requires that the target type is polymorphic.");
+    other.ptr = nullptr;
+  }
+  inline Own(T* ptr, const Disposer& disposer) noexcept: disposer(&disposer), ptr(ptr) {}
 
   ~Own() noexcept { dispose(); }
 
@@ -99,13 +117,13 @@ public:
   inline operator const T*() const { return ptr; }
 
 private:
-  Disposer* disposer;  // Only valid if ptr != nullptr.
+  const Disposer* disposer;  // Only valid if ptr != nullptr.
   T* ptr;
 
   inline void dispose() {
     // Make sure that if an exception is thrown, we are left with a null ptr, so we won't possibly
     // dispose again.
-    void* ptrCopy = ptr;
+    T* ptrCopy = ptr;
     if (ptrCopy != nullptr) {
       ptr = nullptr;
       disposer->dispose(ptrCopy);
@@ -116,15 +134,15 @@ private:
 namespace internal {
 
 template <typename T>
-class HeapValue final: public Disposer {
+class HeapDisposer final: public Disposer {
 public:
-  template <typename... Params>
-  inline HeapValue(Params&&... params): value(kj::fwd<Params>(params)...) {}
+  virtual void disposeImpl(void* pointer) const override { delete reinterpret_cast<T*>(pointer); }
 
-  virtual void dispose(void*) override { delete this; }
-
-  T value;
+  static const HeapDisposer instance;
 };
+
+template <typename T>
+const HeapDisposer<T> HeapDisposer<T>::instance = HeapDisposer<T>();
 
 }  // namespace internal
 
@@ -132,10 +150,34 @@ template <typename T, typename... Params>
 Own<T> heap(Params&&... params) {
   // heap<T>(...) allocates a T on the heap, forwarding the parameters to its constructor.  The
   // exact heap implementation is unspecified -- for now it is operator new, but you should not
-  // assume anything.
+  // assume this.  (Since we know the object size at delete time, we could actually implement an
+  // allocator that is more efficient than operator new.)
 
-  auto result = new internal::HeapValue<T>(kj::fwd<Params>(params)...);
-  return Own<T>(&result->value, result);
+  return Own<T>(new T(kj::fwd<Params>(params)...), internal::HeapDisposer<T>::instance);
+}
+
+// =======================================================================================
+// Inline implementation details
+
+template <typename T>
+struct Disposer::Dispose_<T, true> {
+  static void dispose(T* object, const Disposer& disposer) {
+    // Note that dynamic_cast<void*> does not require RTTI to be enabled, because the offset to
+    // the top of the object is in the vtable -- as it obviously needs to be to correctly implement
+    // operator delete.
+    disposer.disposeImpl(dynamic_cast<void*>(object));
+  }
+};
+template <typename T>
+struct Disposer::Dispose_<T, false> {
+  static void dispose(T* object, const Disposer& disposer) {
+    disposer.disposeImpl(static_cast<void*>(object));
+  }
+};
+
+template <typename T>
+void Disposer::dispose(T* object) const {
+  Dispose_<T>::dispose(object, *this);
 }
 
 }  // namespace kj

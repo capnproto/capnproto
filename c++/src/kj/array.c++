@@ -22,7 +22,87 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "array.h"
+#include <iostream>
 
 namespace kj {
 
+ArrayDisposer::~ArrayDisposer() {}
+
+namespace internal {
+
+struct HeapArrayDisposer::ExceptionGuard {
+  byte* pos;
+  size_t elementSize;
+  size_t elementCount;
+  size_t constructedCount;
+  void (*destroyElement)(void*);
+
+  ExceptionGuard(void* ptr, size_t elementSize, size_t elementCount,
+                 void (*destroyElement)(void*))
+      : pos(reinterpret_cast<byte*>(ptr) + elementSize * elementCount),
+        elementSize(elementSize), elementCount(elementCount),
+        destroyElement(destroyElement) {}
+
+  ~ExceptionGuard() {
+    if (pos != nullptr) {
+      destroyAll();
+      operator delete(pos);
+    }
+  }
+
+  void destroyAll() {
+    while (elementCount > 0) {
+      pos -= elementSize;
+      --elementCount;
+      destroyElement(pos);
+    }
+  }
+};
+
+void* HeapArrayDisposer::allocateImpl(size_t elementSize, size_t elementCount, size_t capacity,
+                                      void (*constructElement)(void*),
+                                      void (*destroyElement)(void*)) {
+  void* result = operator new(elementSize * capacity);
+
+  if (constructElement == nullptr) {
+    // Nothing to do.
+  } else if (destroyElement == nullptr) {
+    byte* pos = reinterpret_cast<byte*>(result);
+    while (elementCount > 0) {
+      constructElement(pos);
+      pos += elementSize;
+      --elementCount;
+    }
+  } else {
+    ExceptionGuard guard(result, elementSize, 0, destroyElement);
+    while (guard.elementCount < elementCount) {
+      constructElement(guard.pos);
+      guard.pos += elementSize;
+      ++guard.elementCount;
+    }
+    guard.pos = nullptr;
+  }
+
+  return result;
+}
+
+void HeapArrayDisposer::disposeImpl(
+    void* firstElement, size_t elementSize, size_t elementCount, size_t capacity,
+    void (*destroyElement)(void*)) const {
+  // Note that capacity is ignored since operator delete() doesn't care about it.
+
+  if (destroyElement == nullptr) {
+    operator delete(firstElement);
+  } else {
+    ExceptionGuard guard(firstElement, elementSize, elementCount, destroyElement);
+    guard.destroyAll();
+
+    // If an exception is thrown, we'll continue the destruction process in ExceptionGuard's
+    // destructor.  If _that_ throws an exception, the program terminates according to C++ rules.
+  }
+}
+
+const HeapArrayDisposer HeapArrayDisposer::instance = HeapArrayDisposer();
+
+}  // namespace internal
 }  // namespace kj

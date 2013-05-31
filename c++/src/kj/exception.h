@@ -25,6 +25,7 @@
 #define KJ_EXCEPTION_H_
 
 #include <exception>
+#include "memory.h"
 #include "array.h"
 
 namespace kj {
