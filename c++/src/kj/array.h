@@ -194,6 +194,11 @@ template <typename T> Array<T> heapArray(ArrayPtr<const T> content);
 template <typename T, typename Iterator> Array<T> heapArray(Iterator begin, Iterator end);
 // Allocate a heap arary containing a copy of the given content.
 
+template <typename T, typename Container>
+Array<T> heapArrayFromIterable(Container&& a) { return heapArray(a.begin(), a.end()); }
+template <typename T>
+Array<T> heapArrayFromIterable(Array<T>&& a) { return mv(a); }
+
 // =======================================================================================
 // ArrayBuilder
 
@@ -318,6 +323,67 @@ inline ArrayBuilder<T> heapArrayBuilder(size_t size) {
   return ArrayBuilder<T>(internal::HeapArrayDisposer::allocateUninitialized<T>(size), size,
                          internal::HeapArrayDisposer::instance);
 }
+
+// =======================================================================================
+// Inline Arrays
+
+template <typename T, size_t fixedSize>
+class FixedArray {
+  // A fixed-width array whose storage is allocated inline rather than on the heap.
+
+public:
+  inline size_t size() const { return fixedSize; }
+  inline T* begin() { return content; }
+  inline T* end() { return content + fixedSize; }
+  inline const T* begin() const { return content; }
+  inline const T* end() const { return content + fixedSize; }
+
+  inline operator ArrayPtr<T>() {
+    return arrayPtr(content, fixedSize);
+  }
+  inline operator ArrayPtr<const T>() const {
+    return arrayPtr(content, fixedSize);
+  }
+
+  inline T& operator[](size_t index) { return content[index]; }
+  inline const T& operator[](size_t index) const { return content[index]; }
+
+private:
+  T content[fixedSize];
+};
+
+template <typename T, size_t fixedSize>
+class CappedArray {
+  // Like `FixedArray` but can be dynamically resized as long as the size does not exceed the limit
+  // specified by the template parameter.
+  //
+  // TODO(someday):  Don't construct elements past currentSize?
+
+public:
+  inline constexpr CappedArray(): currentSize(fixedSize) {}
+  inline explicit constexpr CappedArray(size_t s): currentSize(s) {}
+
+  inline size_t size() const { return currentSize; }
+  inline void setSize(size_t s) { currentSize = s; }
+  inline T* begin() { return content; }
+  inline T* end() { return content + currentSize; }
+  inline const T* begin() const { return content; }
+  inline const T* end() const { return content + currentSize; }
+
+  inline operator ArrayPtr<T>() {
+    return arrayPtr(content, currentSize);
+  }
+  inline operator ArrayPtr<const T>() const {
+    return arrayPtr(content, currentSize);
+  }
+
+  inline T& operator[](size_t index) { return content[index]; }
+  inline const T& operator[](size_t index) const { return content[index]; }
+
+private:
+  size_t currentSize;
+  T content[fixedSize];
+};
 
 // =======================================================================================
 // Inline implementation details
