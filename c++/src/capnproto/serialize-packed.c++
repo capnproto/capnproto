@@ -39,8 +39,8 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
     return 0;
   }
 
-  DPRECOND(minBytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
-  DPRECOND(maxBytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
+  DREQUIRE(minBytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
+  DREQUIRE(maxBytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
 
   uint8_t* __restrict__ out = reinterpret_cast<uint8_t*>(dst);
   uint8_t* const outEnd = reinterpret_cast<uint8_t*>(dst) + maxBytes;
@@ -190,7 +190,7 @@ void PackedInputStream::skip(size_t bytes) {
     return;
   }
 
-  DPRECOND(bytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
+  DREQUIRE(bytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
 
   kj::ArrayPtr<const byte> buffer = inner.getReadBuffer();
   const uint8_t* __restrict__ in = reinterpret_cast<const uint8_t*>(buffer.begin());

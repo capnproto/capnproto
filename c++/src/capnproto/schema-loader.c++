@@ -447,7 +447,7 @@ public:
     CONTEXT("checking compatibility with previously-loaded node of the same id",
             existingNode.getDisplayName());
 
-    DPRECOND(existingNode.getId() == replacement.getId());
+    DREQUIRE(existingNode.getId() == replacement.getId());
 
     nodeName = existingNode.getDisplayName();
     compatibility = EQUIVALENT;
@@ -1026,7 +1026,7 @@ internal::RawSchema* SchemaLoader::Impl::loadNative(const internal::RawSchema* n
   if (slot == nullptr) {
     slot = allocate<internal::RawSchema>();
   } else if (slot->canCastTo != nullptr) {
-    PRECOND(slot->canCastTo == nativeSchema,
+    REQUIRE(slot->canCastTo == nativeSchema,
         "two different compiled-in type have the same type ID",
         reader.getId(), reader.getDisplayName(),
         readMessageUnchecked<schema::Node>(slot->canCastTo->encodedNode).getDisplayName());
@@ -1079,7 +1079,7 @@ internal::RawSchema* SchemaLoader::Impl::loadEmpty(
     case schema::Node::Body::FILE_NODE:
     case schema::Node::Body::CONST_NODE:
     case schema::Node::Body::ANNOTATION_NODE:
-      FAIL_PRECOND("Not a type.");
+      FAIL_REQUIRE("Not a type.");
       break;
   }
 
@@ -1111,7 +1111,7 @@ SchemaLoader::~SchemaLoader() {}
 
 Schema SchemaLoader::get(uint64_t id) const {
   internal::RawSchema* raw = impl->tryGet(id);
-  PRECOND(raw != nullptr, "no schema node loaded for id", id);
+  REQUIRE(raw != nullptr, "no schema node loaded for id", id);
   return Schema(raw);
 }
 

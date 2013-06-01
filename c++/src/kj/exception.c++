@@ -174,7 +174,7 @@ void ExceptionCallback::logMessage(StringPtr text) {
 }
 
 void ExceptionCallback::useProcessWide() {
-  RECOVERABLE_PRECOND(globalCallback == nullptr,
+  RECOVERABLE_REQUIRE(globalCallback == nullptr,
       "Can't register multiple global ExceptionCallbacks at once.") {
     return;
   }

@@ -27,8 +27,8 @@
 namespace kj {
 namespace internal {
 
-void inlinePreconditionFailure(const char* file, int line, const char* expectation,
-                               const char* macroArgs, const char* message) {
+void inlineRequireFailure(const char* file, int line, const char* expectation,
+                          const char* macroArgs, const char* message) {
   if (message == nullptr) {
     Log::fatalFault(file, line, Exception::Nature::PRECONDITION, expectation, macroArgs);
   } else {

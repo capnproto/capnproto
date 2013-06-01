@@ -113,24 +113,22 @@ typedef unsigned char byte;
 
 namespace internal {
 
-void inlinePreconditionFailure(
+void inlineRequireFailure(
     const char* file, int line, const char* expectation, const char* macroArgs,
     const char* message = nullptr) KJ_NORETURN;
 
 }  // namespace internal
 
-#define KJ_INLINE_PRECOND(condition, ...) \
-    if (KJ_EXPECT_TRUE(condition)); else ::kj::internal::inlinePreconditionFailure( \
+#ifdef NDEBUG
+#define KJ_IREQUIRE(condition, ...)
+#else
+#define KJ_IREQUIRE(condition, ...) \
+    if (KJ_EXPECT_TRUE(condition)); else ::kj::internal::inlineRequireFailure( \
         __FILE__, __LINE__, #condition, #__VA_ARGS__, ##__VA_ARGS__)
-// Version of PRECOND() which is safe to use in headers that are #included by users.  Used to check
+// Version of REQUIRE() which is safe to use in headers that are #included by users.  Used to check
 // preconditions inside inline methods.  KJ_INLINE_DPRECOND is particularly useful in that
 // it will be enabled depending on whether the application is compiled in debug mode rather than
 // whether libkj is.
-
-#ifdef NDEBUG
-#define KJ_INLINE_DPRECOND(...)
-#else
-#define KJ_INLINE_DPRECOND KJ_INLINE_PRECOND
 #endif
 
 // #define KJ_STACK_ARRAY(type, name, size, minStack, maxStack)
@@ -501,7 +499,7 @@ public:
 
   inline size_t size() const { return size_; }
   inline T& operator[](size_t index) const {
-    KJ_INLINE_DPRECOND(index < size_, "Out-of-bounds ArrayPtr access.");
+    KJ_IREQUIRE(index < size_, "Out-of-bounds ArrayPtr access.");
     return ptr[index];
   }
 
@@ -511,7 +509,7 @@ public:
   inline T& back() const { return *(ptr + size_ - 1); }
 
   inline ArrayPtr slice(size_t start, size_t end) const {
-    KJ_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
+    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
     return ArrayPtr(ptr + start, end - start);
   }
 
@@ -578,9 +576,8 @@ To downcast(From* from) {
   }
 
 #if !KJ_NO_RTTI
-  KJ_INLINE_DPRECOND(
-      from == nullptr || dynamic_cast<To>(from) != nullptr,
-      "Value cannot be downcast() to requested type.");
+  KJ_IREQUIRE(from == nullptr || dynamic_cast<To>(from) != nullptr,
+              "Value cannot be downcast() to requested type.");
 #endif
 
   return static_cast<To>(from);

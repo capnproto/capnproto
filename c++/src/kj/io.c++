@@ -217,7 +217,7 @@ void ArrayOutputStream::write(const void* src, size_t size) {
     // Oh goody, the caller wrote directly into our buffer.
     fillPos += size;
   } else {
-    PRECOND(size <= (size_t)(array.end() - fillPos),
+    REQUIRE(size <= (size_t)(array.end() - fillPos),
             "ArrayOutputStream's backing array was not large enough for the data written.");
     memcpy(fillPos, src, size);
     fillPos += size;

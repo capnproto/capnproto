@@ -43,7 +43,7 @@
 //   are disabled.  This macro should be used to check for bugs in the surrounding code and its
 //   dependencies, but NOT to check for invalid input.
 //
-// * `PRECOND(condition, ...)`:  Like `CHECK` but used to check preconditions -- i.e. to validate
+// * `REQUIRE(condition, ...)`:  Like `CHECK` but used to check preconditions -- e.g. to validate
 //   parameters passed from a caller.  A failure indicates that the caller is buggy.
 //
 // * `RECOVERABLE_CHECK(condition, ...) { ... }`:  Like `CHECK` except that if exceptions are
@@ -51,7 +51,7 @@
 //   do whatever it can to fill in dummy values so that the code can continue executing, even if
 //   this means the eventual output will be garbage.
 //
-// * `RECOVERABLE_PRECOND(condition, ...) { ... }`:  Like `RECOVERABLE_CHECK` and `PRECOND`.
+// * `RECOVERABLE_REQUIRE(condition, ...) { ... }`:  Like `RECOVERABLE_CHECK` and `REQUIRE`.
 //
 // * `VALIDATE_INPUT(condition, ...) { ... }`:  Like `RECOVERABLE_PRECOND` but used to validate
 //   input that may have come from the user or some other untrusted source.  Recoverability is
@@ -228,14 +228,14 @@ ArrayPtr<const char> KJ_STRINGIFY(Log::Severity severity);
 
 #define CHECK(...) FAULT(LOCAL_BUG, __VA_ARGS__)
 #define RECOVERABLE_CHECK(...) RECOVERABLE_FAULT(LOCAL_BUG, __VA_ARGS__)
-#define PRECOND(...) FAULT(PRECONDITION, __VA_ARGS__)
-#define RECOVERABLE_PRECOND(...) RECOVERABLE_FAULT(PRECONDITION, __VA_ARGS__)
+#define REQUIRE(...) FAULT(PRECONDITION, __VA_ARGS__)
+#define RECOVERABLE_REQUIRE(...) RECOVERABLE_FAULT(PRECONDITION, __VA_ARGS__)
 #define VALIDATE_INPUT(...) RECOVERABLE_FAULT(INPUT, __VA_ARGS__)
 
 #define FAIL_CHECK(...) CHECK(false, ##__VA_ARGS__)
 #define FAIL_RECOVERABLE_CHECK(...) RECOVERABLE_CHECK(false, ##__VA_ARGS__)
-#define FAIL_PRECOND(...) PRECOND(false, ##__VA_ARGS__)
-#define FAIL_RECOVERABLE_PRECOND(...) RECOVERABLE_PRECOND(false, ##__VA_ARGS__)
+#define FAIL_REQUIRE(...) REQUIRE(false, ##__VA_ARGS__)
+#define FAIL_RECOVERABLE_REQUIRE(...) RECOVERABLE_REQUIRE(false, ##__VA_ARGS__)
 #define FAIL_VALIDATE_INPUT(...) VALIDATE_INPUT(false, ##__VA_ARGS__)
 
 #define SYSCALL(call, ...) \
@@ -274,14 +274,14 @@ ArrayPtr<const char> KJ_STRINGIFY(Log::Severity severity);
 #define DLOG(...) do {} while (false)
 #define DCHECK(...) do {} while (false)
 #define RECOVERABLE_DCHECK(...) do {} while (false)
-#define DPRECOND(...) do {} while (false)
-#define RECOVERABLE_DPRECOND(...) do {} while (false)
+#define DREQUIRE(...) do {} while (false)
+#define RECOVERABLE_DREQUIRE(...) do {} while (false)
 #else
 #define DLOG LOG
 #define DCHECK CHECK
 #define RECOVERABLE_DCHECK RECOVERABLE_CHECK
-#define DPRECOND PRECOND
-#define RECOVERABLE_DPRECOND RECOVERABLE_PRECOND
+#define DREQUIRE REQUIRE
+#define RECOVERABLE_DREQUIRE RECOVERABLE_REQUIRE
 #endif
 
 template <typename... Params>

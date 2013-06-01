@@ -365,7 +365,7 @@ inline const char* String::end() const { return content == nullptr ? nullptr : c
 
 inline String::String(char* value, size_t size, const ArrayDisposer& disposer)
     : content(value, size + 1, disposer) {
-  KJ_INLINE_DPRECOND(value[size] == '\0', "String must be NUL-terminated.");
+  KJ_IREQUIRE(value[size] == '\0', "String must be NUL-terminated.");
 }
 
 inline String heapString(const char* value) {

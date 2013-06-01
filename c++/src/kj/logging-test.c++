@@ -123,7 +123,7 @@ TEST(Logging, Log) {
             "1 == 2; i = 123; hi; str = foo\n", mockCallback.text);
   mockCallback.text.clear();
 
-  EXPECT_THROW(PRECOND(1 == 2, i, "hi", str), MockException); line = __LINE__;
+  EXPECT_THROW(REQUIRE(1 == 2, i, "hi", str), MockException); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": precondition not met: expected "
             "1 == 2; i = 123; hi; str = foo\n", mockCallback.text);
   mockCallback.text.clear();

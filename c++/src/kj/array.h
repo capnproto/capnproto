@@ -94,7 +94,7 @@ public:
 
   inline size_t size() const { return size_; }
   inline T& operator[](size_t index) const {
-    KJ_INLINE_DPRECOND(index < size_, "Out-of-bounds Array access.");
+    KJ_IREQUIRE(index < size_, "Out-of-bounds Array access.");
     return ptr[index];
   }
 
@@ -108,11 +108,11 @@ public:
   inline T& back() { return *(ptr + size_ - 1); }
 
   inline ArrayPtr<T> slice(size_t start, size_t end) {
-    KJ_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds Array::slice().");
+    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().");
     return ArrayPtr<T>(ptr + start, end - start);
   }
   inline ArrayPtr<const T> slice(size_t start, size_t end) const {
-    KJ_INLINE_DPRECOND(start <= end && end <= size_, "Out-of-bounds Array::slice().");
+    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds Array::slice().");
     return ArrayPtr<const T>(ptr + start, end - start);
   }
 
@@ -235,7 +235,7 @@ public:
   inline size_t size() const { return pos - ptr; }
   inline size_t capacity() const { return endPtr - ptr; }
   inline T& operator[](size_t index) const {
-    KJ_INLINE_DPRECOND(index < pos - ptr, "Out-of-bounds Array access.");
+    KJ_IREQUIRE(index < pos - ptr, "Out-of-bounds Array access.");
     return ptr[index];
   }
 
@@ -266,7 +266,7 @@ public:
 
   template <typename... Params>
   void add(Params&&... params) {
-    KJ_INLINE_DPRECOND(pos < endPtr, "Added too many elements to ArrayBuilder.");
+    KJ_IREQUIRE(pos < endPtr, "Added too many elements to ArrayBuilder.");
     ctor(*pos, kj::fwd<Params>(params)...);
     ++pos;
   }
@@ -286,7 +286,7 @@ public:
     // arbitrary disposers with ArrayBuilder in the future, and anyway this check might catch bugs.
     // Probably we should just create a new Vector-like data structure if we want to allow building
     // of arrays without knowing the final size in advance.
-    KJ_INLINE_DPRECOND(pos == endPtr, "ArrayBuilder::finish() called prematurely.");
+    KJ_IREQUIRE(pos == endPtr, "ArrayBuilder::finish() called prematurely.");
     Array<T> result(reinterpret_cast<T*>(ptr), pos - ptr, internal::HeapArrayDisposer::instance);
     ptr = nullptr;
     pos = nullptr;

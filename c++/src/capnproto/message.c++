@@ -146,10 +146,10 @@ MallocMessageBuilder::MallocMessageBuilder(
     kj::ArrayPtr<word> firstSegment, AllocationStrategy allocationStrategy)
     : nextSize(firstSegment.size()), allocationStrategy(allocationStrategy),
       ownFirstSegment(false), returnedFirstSegment(false), firstSegment(firstSegment.begin()) {
-  PRECOND(firstSegment.size() > 0, "First segment size must be non-zero.");
+  REQUIRE(firstSegment.size() > 0, "First segment size must be non-zero.");
 
   // Checking just the first word should catch most cases of failing to zero the segment.
-  PRECOND(*reinterpret_cast<uint64_t*>(firstSegment.begin()) == 0,
+  REQUIRE(*reinterpret_cast<uint64_t*>(firstSegment.begin()) == 0,
           "First segment must be zeroed.");
 }
 
@@ -218,12 +218,12 @@ FlatMessageBuilder::FlatMessageBuilder(kj::ArrayPtr<word> array): array(array), 
 FlatMessageBuilder::~FlatMessageBuilder() {}
 
 void FlatMessageBuilder::requireFilled() {
-  PRECOND(getSegmentsForOutput()[0].end() == array.end(),
+  REQUIRE(getSegmentsForOutput()[0].end() == array.end(),
           "FlatMessageBuilder's buffer was too large.");
 }
 
 kj::ArrayPtr<word> FlatMessageBuilder::allocateSegment(uint minimumSize) {
-  PRECOND(!allocated, "FlatMessageBuilder's buffer was not large enough.");
+  REQUIRE(!allocated, "FlatMessageBuilder's buffer was not large enough.");
   allocated = true;
   return array;
 }
