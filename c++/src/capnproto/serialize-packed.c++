@@ -66,7 +66,7 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
   for (;;) {
     uint8_t tag;
 
-    DCHECK((out - reinterpret_cast<uint8_t*>(dst)) % sizeof(word) == 0,
+    DASSERT((out - reinterpret_cast<uint8_t*>(dst)) % sizeof(word) == 0,
            "Output pointer should always be aligned here.");
 
     if (BUFFER_REMAINING < 10) {
@@ -122,7 +122,7 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
     }
 
     if (tag == 0) {
-      DCHECK(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
+      DASSERT(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
 
       uint runLength = *in++ * sizeof(word);
 
@@ -134,7 +134,7 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
       out += runLength;
 
     } else if (tag == 0xffu) {
-      DCHECK(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
+      DASSERT(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
 
       uint runLength = *in++ * sizeof(word);
 
@@ -177,8 +177,8 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
     }
   }
 
-  FAIL_CHECK("Can't get here.");
-  return 0;  // GCC knows FAIL_CHECK doesn't return, but Eclipse CDT still warns...
+  FAIL_ASSERT("Can't get here.");
+  return 0;  // GCC knows FAIL_ASSERT doesn't return, but Eclipse CDT still warns...
 
 #undef REFRESH_BUFFER
 }
@@ -248,7 +248,7 @@ void PackedInputStream::skip(size_t bytes) {
     }
 
     if (tag == 0) {
-      DCHECK(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
+      DASSERT(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
 
       uint runLength = *in++ * sizeof(word);
 
@@ -260,7 +260,7 @@ void PackedInputStream::skip(size_t bytes) {
       bytes -= runLength;
 
     } else if (tag == 0xffu) {
-      DCHECK(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
+      DASSERT(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
 
       uint runLength = *in++ * sizeof(word);
 
@@ -298,7 +298,7 @@ void PackedInputStream::skip(size_t bytes) {
     }
   }
 
-  FAIL_CHECK("Can't get here.");
+  FAIL_ASSERT("Can't get here.");
 }
 
 // -------------------------------------------------------------------

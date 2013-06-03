@@ -101,24 +101,24 @@ TEST(Logging, Log) {
             mockCallback.text);
   mockCallback.text.clear();
 
-  CHECK(1 == 1);
-  EXPECT_THROW(CHECK(1 == 2), MockException); line = __LINE__;
+  ASSERT(1 == 1);
+  EXPECT_THROW(ASSERT(1 == 2), MockException); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: expected "
             "1 == 2\n", mockCallback.text);
   mockCallback.text.clear();
 
-  RECOVERABLE_CHECK(1 == 1) {
+  RECOVERABLE_ASSERT(1 == 1) {
     ADD_FAILURE() << "Shouldn't call recovery code when check passes.";
   };
 
   bool recovered = false;
-  RECOVERABLE_CHECK(1 == 2, "1 is not 2") { recovered = true; } line = __LINE__;
+  RECOVERABLE_ASSERT(1 == 2, "1 is not 2") { recovered = true; } line = __LINE__;
   EXPECT_EQ("recoverable exception: " + fileLine(__FILE__, line) + ": bug in code: expected "
             "1 == 2; 1 is not 2\n", mockCallback.text);
   EXPECT_TRUE(recovered);
   mockCallback.text.clear();
 
-  EXPECT_THROW(CHECK(1 == 2, i, "hi", str), MockException); line = __LINE__;
+  EXPECT_THROW(ASSERT(1 == 2, i, "hi", str), MockException); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: expected "
             "1 == 2; i = 123; hi; str = foo\n", mockCallback.text);
   mockCallback.text.clear();
@@ -128,7 +128,7 @@ TEST(Logging, Log) {
             "1 == 2; i = 123; hi; str = foo\n", mockCallback.text);
   mockCallback.text.clear();
 
-  EXPECT_THROW(CHECK(false, "foo"), MockException); line = __LINE__;
+  EXPECT_THROW(ASSERT(false, "foo"), MockException); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: foo\n",
             mockCallback.text);
   mockCallback.text.clear();
@@ -164,7 +164,7 @@ TEST(Logging, Context) {
 
   {
     CONTEXT("foo"); int cline = __LINE__;
-    EXPECT_THROW(FAIL_CHECK("bar"), MockException); int line = __LINE__;
+    EXPECT_THROW(FAIL_ASSERT("bar"), MockException); int line = __LINE__;
 
     EXPECT_EQ("fatal exception: " + fileLine(__FILE__, cline) + ": context: foo\n"
               + fileLine(__FILE__, line) + ": bug in code: bar\n",
@@ -175,7 +175,7 @@ TEST(Logging, Context) {
       int i = 123;
       const char* str = "qux";
       CONTEXT("baz", i, "corge", str); int cline2 = __LINE__;
-      EXPECT_THROW(FAIL_CHECK("bar"), MockException); line = __LINE__;
+      EXPECT_THROW(FAIL_ASSERT("bar"), MockException); line = __LINE__;
 
       EXPECT_EQ("fatal exception: " + fileLine(__FILE__, cline) + ": context: foo\n"
                 + fileLine(__FILE__, cline2) + ": context: baz; i = 123; corge; str = qux\n"
@@ -186,7 +186,7 @@ TEST(Logging, Context) {
 
     {
       CONTEXT("grault"); int cline2 = __LINE__;
-      EXPECT_THROW(FAIL_CHECK("bar"), MockException); line = __LINE__;
+      EXPECT_THROW(FAIL_ASSERT("bar"), MockException); line = __LINE__;
 
       EXPECT_EQ("fatal exception: " + fileLine(__FILE__, cline) + ": context: foo\n"
                 + fileLine(__FILE__, cline2) + ": context: grault\n"

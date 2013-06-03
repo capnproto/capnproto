@@ -83,7 +83,7 @@ internal::FieldSize elementSizeFor(schema::Type::Body::Which elementType) {
     case schema::Type::Body::ENUM_TYPE: return internal::FieldSize::TWO_BYTES;
     case schema::Type::Body::STRUCT_TYPE: return internal::FieldSize::INLINE_COMPOSITE;
     case schema::Type::Body::INTERFACE_TYPE: return internal::FieldSize::POINTER;
-    case schema::Type::Body::OBJECT_TYPE: FAIL_CHECK("List(Object) not supported."); break;
+    case schema::Type::Body::OBJECT_TYPE: FAIL_ASSERT("List(Object) not supported."); break;
   }
 
   // Unknown type.  Treat it as zero-size.
@@ -255,7 +255,7 @@ Data::Builder DynamicUnion::Builder::initObjectAsData(Text::Reader name, uint si
 
 StructSchema::Member DynamicUnion::Builder::checkIsObject() {
   KJ_IF_MAYBE(w, which()) {
-    CHECK(w->getProto().getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
+    ASSERT(w->getProto().getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
           "Unsupported union member type.");
     REQUIRE(w->getProto().getBody().getFieldMember().getType().getBody().which() ==
             schema::Type::Body::OBJECT_TYPE, "Expected Object.");
@@ -456,7 +456,7 @@ DynamicStruct::Builder DynamicStruct::Builder::getObject(
     }
   }
 
-  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
+  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return DynamicStruct::Builder();
 }
 DynamicList::Builder DynamicStruct::Builder::getObject(
@@ -475,7 +475,7 @@ DynamicList::Builder DynamicStruct::Builder::getObject(
     }
   }
 
-  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
+  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return DynamicList::Builder();
 }
 Text::Builder DynamicStruct::Builder::getObjectAsText(StructSchema::Member member) {
@@ -493,7 +493,7 @@ Text::Builder DynamicStruct::Builder::getObjectAsText(StructSchema::Member membe
     }
   }
 
-  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
+  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return Text::Builder();
 }
 Data::Builder DynamicStruct::Builder::getObjectAsData(StructSchema::Member member) {
@@ -511,7 +511,7 @@ Data::Builder DynamicStruct::Builder::getObjectAsData(StructSchema::Member membe
     }
   }
 
-  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
+  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return Data::Builder();
 }
 
@@ -531,7 +531,7 @@ DynamicStruct::Builder DynamicStruct::Builder::initObject(
     }
   }
 
-  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
+  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return DynamicStruct::Builder();
 }
 DynamicList::Builder DynamicStruct::Builder::initObject(
@@ -550,7 +550,7 @@ DynamicList::Builder DynamicStruct::Builder::initObject(
     }
   }
 
-  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
+  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return DynamicList::Builder();
 }
 Text::Builder DynamicStruct::Builder::initObjectAsText(StructSchema::Member member, uint size) {
@@ -568,7 +568,7 @@ Text::Builder DynamicStruct::Builder::initObjectAsText(StructSchema::Member memb
     }
   }
 
-  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
+  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return Text::Builder();
 }
 Data::Builder DynamicStruct::Builder::initObjectAsData(StructSchema::Member member, uint size) {
@@ -586,7 +586,7 @@ Data::Builder DynamicStruct::Builder::initObjectAsData(StructSchema::Member memb
     }
   }
 
-  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
+  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return Data::Builder();
 }
 
@@ -723,7 +723,7 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
         }
 
         case schema::Type::Body::INTERFACE_TYPE:
-          FAIL_CHECK("Interfaces not yet implemented.");
+          FAIL_ASSERT("Interfaces not yet implemented.");
           break;
       }
 
@@ -731,7 +731,7 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
     }
   }
 
-  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
+  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return nullptr;
 }
 
@@ -826,7 +826,7 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
         }
 
         case schema::Type::Body::INTERFACE_TYPE:
-          FAIL_CHECK("Interfaces not yet implemented.");
+          FAIL_ASSERT("Interfaces not yet implemented.");
           break;
       }
 
@@ -834,7 +834,7 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
     }
   }
 
-  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
+  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return nullptr;
 }
 DynamicStruct::Builder DynamicStruct::Builder::getObjectImpl(
@@ -963,7 +963,7 @@ void DynamicStruct::Builder::setImpl(
         }
 
         case schema::Type::Body::INTERFACE_TYPE:
-          FAIL_CHECK("Interfaces not yet implemented.");
+          FAIL_ASSERT("Interfaces not yet implemented.");
           return;
       }
 
@@ -972,7 +972,7 @@ void DynamicStruct::Builder::setImpl(
     }
   }
 
-  FAIL_CHECK("switch() missing case.", (uint)member.getProto().getBody().which());
+  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
 }
 
 DynamicValue::Builder DynamicStruct::Builder::initImpl(
@@ -1109,7 +1109,7 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) const {
           reader.getObjectElement(index * ELEMENTS)));
 
     case schema::Type::Body::INTERFACE_TYPE:
-      FAIL_RECOVERABLE_CHECK("Interfaces not implemented.") {}
+      FAIL_RECOVERABLE_ASSERT("Interfaces not implemented.") {}
       return nullptr;
   }
 
@@ -1167,11 +1167,11 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) const {
           schema.getEnumElementType(), builder.getDataElement<uint16_t>(index * ELEMENTS)));
 
     case schema::Type::Body::OBJECT_TYPE:
-      FAIL_CHECK("List(Object) not supported.");
+      FAIL_ASSERT("List(Object) not supported.");
       return nullptr;
 
     case schema::Type::Body::INTERFACE_TYPE:
-      FAIL_RECOVERABLE_CHECK("Interfaces not implemented.") {}
+      FAIL_RECOVERABLE_ASSERT("Interfaces not implemented.") {}
       return nullptr;
   }
 
@@ -1219,7 +1219,7 @@ void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
       // Not supported for the same reason List<struct> doesn't support it -- the space for the
       // element is already allocated, and if it's smaller than the input value the copy would
       // have to be lossy.
-      FAIL_RECOVERABLE_CHECK("DynamicList of structs does not support set().");
+      FAIL_RECOVERABLE_ASSERT("DynamicList of structs does not support set().");
       return;
 
     case schema::Type::Body::ENUM_TYPE: {
@@ -1240,11 +1240,11 @@ void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
     }
 
     case schema::Type::Body::OBJECT_TYPE:
-      FAIL_RECOVERABLE_CHECK("List(Object) not supported.");
+      FAIL_RECOVERABLE_ASSERT("List(Object) not supported.");
       return;
 
     case schema::Type::Body::INTERFACE_TYPE:
-      FAIL_RECOVERABLE_CHECK("Interfaces not implemented.") {}
+      FAIL_RECOVERABLE_ASSERT("Interfaces not implemented.") {}
       return;
   }
 
@@ -1296,7 +1296,7 @@ DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
     }
 
     case schema::Type::Body::OBJECT_TYPE: {
-      FAIL_CHECK("List(Object) not supported.");
+      FAIL_ASSERT("List(Object) not supported.");
       return nullptr;
     }
   }
@@ -1332,10 +1332,10 @@ DynamicValue::Reader DynamicValue::Builder::asReader() {
     case ENUM: return Reader(enumValue);
     case STRUCT: return Reader(structValue.asReader());
     case UNION: return Reader(unionValue.asReader());
-    case INTERFACE: FAIL_CHECK("Interfaces not implemented."); return Reader();
+    case INTERFACE: FAIL_ASSERT("Interfaces not implemented."); return Reader();
     case OBJECT: return Reader(objectValue);
   }
-  FAIL_CHECK("Missing switch case.");
+  FAIL_ASSERT("Missing switch case.");
   return Reader();
 }
 

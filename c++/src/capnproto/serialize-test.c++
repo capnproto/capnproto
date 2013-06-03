@@ -104,7 +104,7 @@ public:
   ~TestInputStream() {}
 
   size_t read(void* buffer, size_t minBytes, size_t maxBytes) override {
-    CHECK(maxBytes <= size_t(end - pos), "Overran end of stream.");
+    ASSERT(maxBytes <= size_t(end - pos), "Overran end of stream.");
     size_t amount = lazy ? minBytes : maxBytes;
     memcpy(buffer, pos, amount);
     pos += amount;

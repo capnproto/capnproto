@@ -24,7 +24,7 @@
 // This file declares convenient macros for debug logging and error handling.  The macros make
 // it excessively easy to extract useful context information from code.  Example:
 //
-//     CHECK(a == b, a, b, "a and b must be the same.");
+//     ASSERT(a == b, a, b, "a and b must be the same.");
 //
 // On failure, this will throw an exception whose description looks like:
 //
@@ -39,19 +39,19 @@
 //   `FATAL`.  If the severity is not higher than the global logging threshold, nothing will be
 //   written and in fact the log message won't even be evaluated.
 //
-// * `CHECK(condition, ...)`:  Throws an exception if `condition` is false, or aborts if exceptions
+// * `ASSERT(condition, ...)`:  Throws an exception if `condition` is false, or aborts if exceptions
 //   are disabled.  This macro should be used to check for bugs in the surrounding code and its
 //   dependencies, but NOT to check for invalid input.
 //
-// * `REQUIRE(condition, ...)`:  Like `CHECK` but used to check preconditions -- e.g. to validate
+// * `REQUIRE(condition, ...)`:  Like `ASSERT` but used to check preconditions -- e.g. to validate
 //   parameters passed from a caller.  A failure indicates that the caller is buggy.
 //
-// * `RECOVERABLE_CHECK(condition, ...) { ... }`:  Like `CHECK` except that if exceptions are
+// * `RECOVERABLE_ASSERT(condition, ...) { ... }`:  Like `ASSERT` except that if exceptions are
 //   disabled, instead of aborting, the following code block will be executed.  This block should
 //   do whatever it can to fill in dummy values so that the code can continue executing, even if
 //   this means the eventual output will be garbage.
 //
-// * `RECOVERABLE_REQUIRE(condition, ...) { ... }`:  Like `RECOVERABLE_CHECK` and `REQUIRE`.
+// * `RECOVERABLE_REQUIRE(condition, ...) { ... }`:  Like `RECOVERABLE_ASSERT` and `REQUIRE`.
 //
 // * `VALIDATE_INPUT(condition, ...) { ... }`:  Like `RECOVERABLE_PRECOND` but used to validate
 //   input that may have come from the user or some other untrusted source.  Recoverability is
@@ -64,7 +64,7 @@
 //
 //       int fd = SYSCALL(open(filename, O_RDONLY), filename);
 //
-// * `RECOVERABLE_SYSCALL(code, ...) { ... }`:  Like `RECOVERABLE_CHECK` and `SYSCALL`.  Note that
+// * `RECOVERABLE_SYSCALL(code, ...) { ... }`:  Like `RECOVERABLE_ASSERT` and `SYSCALL`.  Note that
 //   unfortunately this macro cannot return a value since it implements control flow, but you can
 //   assign to a variable *inside* the parameter instead:
 //
@@ -226,14 +226,14 @@ ArrayPtr<const char> KJ_STRINGIFY(Log::Severity severity);
             ::kj::Exception::Nature::nature, #cond, #__VA_ARGS__, ##__VA_ARGS__), false) {} \
     else
 
-#define CHECK(...) FAULT(LOCAL_BUG, __VA_ARGS__)
-#define RECOVERABLE_CHECK(...) RECOVERABLE_FAULT(LOCAL_BUG, __VA_ARGS__)
+#define ASSERT(...) FAULT(LOCAL_BUG, __VA_ARGS__)
+#define RECOVERABLE_ASSERT(...) RECOVERABLE_FAULT(LOCAL_BUG, __VA_ARGS__)
 #define REQUIRE(...) FAULT(PRECONDITION, __VA_ARGS__)
 #define RECOVERABLE_REQUIRE(...) RECOVERABLE_FAULT(PRECONDITION, __VA_ARGS__)
 #define VALIDATE_INPUT(...) RECOVERABLE_FAULT(INPUT, __VA_ARGS__)
 
-#define FAIL_CHECK(...) CHECK(false, ##__VA_ARGS__)
-#define FAIL_RECOVERABLE_CHECK(...) RECOVERABLE_CHECK(false, ##__VA_ARGS__)
+#define FAIL_ASSERT(...) ASSERT(false, ##__VA_ARGS__)
+#define FAIL_RECOVERABLE_ASSERT(...) RECOVERABLE_ASSERT(false, ##__VA_ARGS__)
 #define FAIL_REQUIRE(...) REQUIRE(false, ##__VA_ARGS__)
 #define FAIL_RECOVERABLE_REQUIRE(...) RECOVERABLE_REQUIRE(false, ##__VA_ARGS__)
 #define FAIL_VALIDATE_INPUT(...) VALIDATE_INPUT(false, ##__VA_ARGS__)
@@ -272,14 +272,14 @@ ArrayPtr<const char> KJ_STRINGIFY(Log::Severity severity);
 
 #ifdef NDEBUG
 #define DLOG(...) do {} while (false)
-#define DCHECK(...) do {} while (false)
-#define RECOVERABLE_DCHECK(...) do {} while (false)
+#define DASSERT(...) do {} while (false)
+#define RECOVERABLE_DASSERT(...) do {} while (false)
 #define DREQUIRE(...) do {} while (false)
 #define RECOVERABLE_DREQUIRE(...) do {} while (false)
 #else
 #define DLOG LOG
-#define DCHECK CHECK
-#define RECOVERABLE_DCHECK RECOVERABLE_CHECK
+#define DASSERT ASSERT
+#define RECOVERABLE_DASSERT RECOVERABLE_ASSERT
 #define DREQUIRE REQUIRE
 #define RECOVERABLE_DREQUIRE RECOVERABLE_REQUIRE
 #endif

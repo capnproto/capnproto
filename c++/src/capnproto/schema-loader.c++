@@ -119,7 +119,7 @@ public:
     for (auto& dep: dependencies) {
       result[pos++] = dep.second;
     }
-    DCHECK(pos == *count);
+    DASSERT(pos == *count);
     return result;
   }
 
@@ -131,7 +131,7 @@ public:
     for (auto& member: members) {
       result[pos++] = internal::RawSchema::MemberInfo(member.first.first, member.second);
     }
-    DCHECK(pos == *count);
+    DASSERT(pos == *count);
     return result;
   }
 
@@ -934,7 +934,7 @@ private:
                                  schema::Value::Reader replacement) {
     // Note that we test default compatibility only after testing type compatibility, and default
     // values have already been validated as matching their types, so this should pass.
-    RECOVERABLE_CHECK(value.getBody().which() == replacement.getBody().which()) {
+    RECOVERABLE_ASSERT(value.getBody().which() == replacement.getBody().which()) {
       compatibility = INCOMPATIBLE;
       return;
     }

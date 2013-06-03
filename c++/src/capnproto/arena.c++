@@ -168,7 +168,7 @@ kj::ArrayPtr<const kj::ArrayPtr<const word>> BuilderArena::getSegmentsForOutput(
       return kj::arrayPtr(&segment0ForOutput, 1);
     }
   } else {
-    DCHECK(moreSegments->forOutput.size() == moreSegments->builders.size() + 1,
+    DASSERT(moreSegments->forOutput.size() == moreSegments->builders.size() + 1,
         "moreSegments->forOutput wasn't resized correctly when the last builder was added.",
         moreSegments->forOutput.size(), moreSegments->builders.size());
 
@@ -201,7 +201,7 @@ SegmentReader* BuilderArena::tryGetSegment(SegmentId id) {
 }
 
 void BuilderArena::reportReadLimitReached() {
-  FAIL_RECOVERABLE_CHECK(
+  FAIL_RECOVERABLE_ASSERT(
       "Read limit reached for BuilderArena, but it should have been unlimited.") {}
 }
 

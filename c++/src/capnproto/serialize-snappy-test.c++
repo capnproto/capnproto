@@ -96,7 +96,7 @@ public:
   }
 
   size_t read(void* buffer, size_t minBytes, size_t maxBytes) override {
-    CHECK(maxBytes <= data.size() - readPos, "Overran end of stream.");
+    ASSERT(maxBytes <= data.size() - readPos, "Overran end of stream.");
     size_t amount = std::min(maxBytes, std::max(minBytes, preferredReadSize));
     memcpy(buffer, data.data() + readPos, amount);
     readPos += amount;
@@ -104,7 +104,7 @@ public:
   }
 
   void skip(size_t bytes) override {
-    CHECK(bytes <= data.size() - readPos, "Overran end of stream.");
+    ASSERT(bytes <= data.size() - readPos, "Overran end of stream.");
     readPos += bytes;
   }
 

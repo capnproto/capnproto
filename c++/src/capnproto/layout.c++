@@ -338,7 +338,7 @@ struct WireHelpers {
         break;
       }
       case WirePointer::RESERVED_3:
-        FAIL_RECOVERABLE_CHECK("Don't know how to handle RESERVED_3.") {}
+        FAIL_RECOVERABLE_ASSERT("Don't know how to handle RESERVED_3.") {}
         break;
     }
   }
@@ -380,7 +380,7 @@ struct WireHelpers {
           case FieldSize::INLINE_COMPOSITE: {
             WirePointer* elementTag = reinterpret_cast<WirePointer*>(ptr);
 
-            CHECK(elementTag->kind() == WirePointer::STRUCT,
+            ASSERT(elementTag->kind() == WirePointer::STRUCT,
                   "Don't know how to handle non-STRUCT inline composite.");
             WordCount dataSize = elementTag->structRef.dataSize.get();
             WirePointerCount pointerCount = elementTag->structRef.ptrCount.get();
@@ -404,10 +404,10 @@ struct WireHelpers {
         break;
       }
       case WirePointer::FAR:
-        FAIL_RECOVERABLE_CHECK("Unexpected FAR pointer.") {}
+        FAIL_RECOVERABLE_ASSERT("Unexpected FAR pointer.") {}
         break;
       case WirePointer::RESERVED_3:
-        FAIL_RECOVERABLE_CHECK("Don't know how to handle RESERVED_3.") {}
+        FAIL_RECOVERABLE_ASSERT("Don't know how to handle RESERVED_3.") {}
         break;
     }
   }
@@ -538,7 +538,7 @@ struct WireHelpers {
         break;
       }
       case WirePointer::FAR:
-        FAIL_RECOVERABLE_CHECK("Unexpected FAR pointer.") {
+        FAIL_RECOVERABLE_ASSERT("Unexpected FAR pointer.") {
           break;
         }
         break;
@@ -640,7 +640,7 @@ struct WireHelpers {
             const word* srcElement = srcPtr + POINTER_SIZE_IN_WORDS;
             word* dstElement = dstPtr + POINTER_SIZE_IN_WORDS;
 
-            CHECK(srcTag->kind() == WirePointer::STRUCT,
+            ASSERT(srcTag->kind() == WirePointer::STRUCT,
                 "INLINE_COMPOSITE of lists is not yet supported.");
 
             uint n = srcTag->inlineCompositeListElementCount() / ELEMENTS;
@@ -689,7 +689,7 @@ struct WireHelpers {
         // Darn, need a double-far.
         SegmentBuilder* farSegment = srcSegment->getArena()->getSegmentWithAvailable(2 * WORDS);
         landingPad = reinterpret_cast<WirePointer*>(farSegment->allocate(2 * WORDS));
-        DCHECK(landingPad != nullptr,
+        DASSERT(landingPad != nullptr,
             "getSegmentWithAvailable() returned segment without space available.");
 
         landingPad[0].setFar(false, srcSegment->getOffsetTo(src->target()));
@@ -915,7 +915,7 @@ struct WireHelpers {
           break;
 
         case FieldSize::INLINE_COMPOSITE:
-          FAIL_CHECK("Can't get here.");
+          FAIL_ASSERT("Can't get here.");
           break;
       }
 
@@ -1148,11 +1148,11 @@ struct WireHelpers {
       } else {
         // If oldSize were POINTER or EIGHT_BYTES then the preferred size must be
         // INLINE_COMPOSITE because any other compatible size would not require an upgrade.
-        CHECK(oldSize < FieldSize::EIGHT_BYTES);
+        ASSERT(oldSize < FieldSize::EIGHT_BYTES);
 
         // If the preferred size were BIT then oldSize must be VOID, but we handled that case
         // above.
-        CHECK(elementSize.preferredListEncoding >= FieldSize::BIT);
+        ASSERT(elementSize.preferredListEncoding >= FieldSize::BIT);
 
         // OK, so the expected list elements are all data and between 1 byte and 1 word each,
         // and the old element are data between 1 bit and 4 bytes.  We're upgrading from one
@@ -1364,7 +1364,7 @@ struct WireHelpers {
           case 32: elementSize = FieldSize::FOUR_BYTES; break;
           case 64: elementSize = FieldSize::EIGHT_BYTES; break;
           default:
-            FAIL_CHECK("invalid list step size", value.step * ELEMENTS / BITS);
+            FAIL_ASSERT("invalid list step size", value.step * ELEMENTS / BITS);
             break;
         }
 
@@ -2142,7 +2142,7 @@ StructReader ListReader::getStructElement(ElementCount index) const {
       reinterpret_cast<const WirePointer*>(structData + structDataSize / BITS_PER_BYTE);
 
   // This check should pass if there are no bugs in the list pointer validation code.
-  DCHECK(structPointerCount == 0 * POINTERS ||
+  DASSERT(structPointerCount == 0 * POINTERS ||
          (uintptr_t)structPointers % sizeof(WirePointer) == 0,
          "Pointer segment of struct list element not aligned.");
 
@@ -2153,7 +2153,7 @@ StructReader ListReader::getStructElement(ElementCount index) const {
 }
 
 static const WirePointer* checkAlignment(const void* ptr) {
-  DCHECK((uintptr_t)ptr % sizeof(WirePointer) == 0,
+  DASSERT((uintptr_t)ptr % sizeof(WirePointer) == 0,
          "Pointer segment of struct list element not aligned.");
   return reinterpret_cast<const WirePointer*>(ptr);
 }

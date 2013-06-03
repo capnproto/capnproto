@@ -122,7 +122,7 @@ kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> 
     dst += segment.size();
   }
 
-  DCHECK(dst == result.end(), "Buffer overrun/underrun bug in code above.");
+  DASSERT(dst == result.end(), "Buffer overrun/underrun bug in code above.");
 
   return kj::mv(result);
 }

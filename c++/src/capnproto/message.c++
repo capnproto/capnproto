@@ -80,10 +80,10 @@ internal::SegmentBuilder* MessageBuilder::getRootSegment() {
 
     WordCount ptrSize = 1 * POINTERS * WORDS_PER_POINTER;
     internal::SegmentBuilder* segment = arena()->getSegmentWithAvailable(ptrSize);
-    CHECK(segment->getSegmentId() == internal::SegmentId(0),
+    ASSERT(segment->getSegmentId() == internal::SegmentId(0),
         "First allocated word of new arena was not in segment ID 0.");
     word* location = segment->allocate(ptrSize);
-    CHECK(location == segment->getPtrUnchecked(0 * WORDS),
+    ASSERT(location == segment->getPtrUnchecked(0 * WORDS),
         "First allocated word of new arena was not the first word in its segment.");
     return segment;
   }
@@ -161,7 +161,7 @@ MallocMessageBuilder::~MallocMessageBuilder() {
       // Must zero first segment.
       kj::ArrayPtr<const kj::ArrayPtr<const word>> segments = getSegmentsForOutput();
       if (segments.size() > 0) {
-        CHECK(segments[0].begin() == firstSegment,
+        ASSERT(segments[0].begin() == firstSegment,
             "First segment in getSegmentsForOutput() is not the first segment allocated?");
         memset(firstSegment, 0, segments[0].size() * sizeof(word));
       }

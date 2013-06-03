@@ -128,8 +128,8 @@ void TextBlob::allocate(size_t textSize, size_t branchCount,
 }
 
 void TextBlob::fill(char* textPos, Branch* branchesPos) {
-  CHECK(textPos == text.end(), textPos - text.end());
-  CHECK(branchesPos == branches.end(), branchesPos - branches.end());
+  ASSERT(textPos == text.end(), textPos - text.end());
+  ASSERT(branchesPos == branches.end(), branchesPos - branches.end());
 }
 
 template <typename First, typename... Rest>
