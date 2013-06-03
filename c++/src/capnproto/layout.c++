@@ -102,12 +102,12 @@ struct WirePointer {
   }
 
   KJ_ALWAYS_INLINE(WordCount farPositionInSegment() const) {
-    DREQUIRE(kind() == FAR,
+    KJ_DREQUIRE(kind() == FAR,
         "positionInSegment() should only be called on FAR pointers.");
     return (offsetAndKind.get() >> 3) * WORDS;
   }
   KJ_ALWAYS_INLINE(bool isDoubleFar() const) {
-    DREQUIRE(kind() == FAR,
+    KJ_DREQUIRE(kind() == FAR,
         "isDoubleFar() should only be called on FAR pointers.");
     return (offsetAndKind.get() >> 2) & 1;
   }
@@ -155,12 +155,12 @@ struct WirePointer {
       }
 
       KJ_ALWAYS_INLINE(void set(FieldSize es, ElementCount ec)) {
-        DREQUIRE(ec < (1 << 29) * ELEMENTS, "Lists are limited to 2**29 elements.");
+        KJ_DREQUIRE(ec < (1 << 29) * ELEMENTS, "Lists are limited to 2**29 elements.");
         elementSizeAndCount.set(((ec / ELEMENTS) << 3) | static_cast<int>(es));
       }
 
       KJ_ALWAYS_INLINE(void setInlineComposite(WordCount wc)) {
-        DREQUIRE(wc < (1 << 29) * WORDS, "Inline composite lists are limited to 2**29 words.");
+        KJ_DREQUIRE(wc < (1 << 29) * WORDS, "Inline composite lists are limited to 2**29 words.");
         elementSizeAndCount.set(((wc / WORDS) << 3) |
                                 static_cast<int>(FieldSize::INLINE_COMPOSITE));
       }
@@ -380,7 +380,7 @@ struct WireHelpers {
           case FieldSize::INLINE_COMPOSITE: {
             WirePointer* elementTag = reinterpret_cast<WirePointer*>(ptr);
 
-            ASSERT(elementTag->kind() == WirePointer::STRUCT,
+            KJ_ASSERT(elementTag->kind() == WirePointer::STRUCT,
                   "Don't know how to handle non-STRUCT inline composite.");
             WordCount dataSize = elementTag->structRef.dataSize.get();
             WirePointerCount pointerCount = elementTag->structRef.ptrCount.get();
@@ -553,6 +553,7 @@ struct WireHelpers {
   }
 
   // -----------------------------------------------------------------
+  // Copy from an unchecked message.
 
   static KJ_ALWAYS_INLINE(
       void copyStruct(SegmentBuilder* segment, word* dst, const word* src,
@@ -640,7 +641,7 @@ struct WireHelpers {
             const word* srcElement = srcPtr + POINTER_SIZE_IN_WORDS;
             word* dstElement = dstPtr + POINTER_SIZE_IN_WORDS;
 
-            ASSERT(srcTag->kind() == WirePointer::STRUCT,
+            KJ_ASSERT(srcTag->kind() == WirePointer::STRUCT,
                 "INLINE_COMPOSITE of lists is not yet supported.");
 
             uint n = srcTag->inlineCompositeListElementCount() / ELEMENTS;
@@ -656,7 +657,7 @@ struct WireHelpers {
         break;
       }
       default:
-        FAIL_REQUIRE("Copy source message contained unexpected kind.");
+        KJ_FAIL_REQUIRE("Copy source message contained unexpected kind.");
         break;
     }
 
@@ -689,7 +690,7 @@ struct WireHelpers {
         // Darn, need a double-far.
         SegmentBuilder* farSegment = srcSegment->getArena()->getSegmentWithAvailable(2 * WORDS);
         landingPad = reinterpret_cast<WirePointer*>(farSegment->allocate(2 * WORDS));
-        DASSERT(landingPad != nullptr,
+        KJ_DASSERT(landingPad != nullptr,
             "getSegmentWithAvailable() returned segment without space available.");
 
         landingPad[0].setFar(false, srcSegment->getOffsetTo(src->target()));
@@ -796,7 +797,7 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(ListBuilder initListPointer(
       WirePointer* ref, SegmentBuilder* segment, ElementCount elementCount,
       FieldSize elementSize)) {
-    DREQUIRE(elementSize != FieldSize::INLINE_COMPOSITE,
+    KJ_DREQUIRE(elementSize != FieldSize::INLINE_COMPOSITE,
         "Should have called initStructListPointer() instead.");
 
     BitCount dataSize = dataBitsPerElement(elementSize) * ELEMENTS;
@@ -848,7 +849,7 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(ListBuilder getWritableListPointer(
       WirePointer* origRef, SegmentBuilder* origSegment, FieldSize elementSize,
       const word* defaultValue)) {
-    DREQUIRE(elementSize != FieldSize::INLINE_COMPOSITE,
+    KJ_DREQUIRE(elementSize != FieldSize::INLINE_COMPOSITE,
              "Use getStructList{Element,Field}() for structs.");
 
     if (origRef->isNull()) {
@@ -886,7 +887,7 @@ struct WireHelpers {
 
       // Read the tag to get the actual element count.
       WirePointer* tag = reinterpret_cast<WirePointer*>(ptr);
-      REQUIRE(tag->kind() == WirePointer::STRUCT,
+      KJ_REQUIRE(tag->kind() == WirePointer::STRUCT,
           "INLINE_COMPOSITE list with non-STRUCT elements not supported.");
       ptr += POINTER_SIZE_IN_WORDS;
 
@@ -915,7 +916,7 @@ struct WireHelpers {
           break;
 
         case FieldSize::INLINE_COMPOSITE:
-          FAIL_ASSERT("Can't get here.");
+          KJ_FAIL_ASSERT("Can't get here.");
           break;
       }
 
@@ -1148,11 +1149,11 @@ struct WireHelpers {
       } else {
         // If oldSize were POINTER or EIGHT_BYTES then the preferred size must be
         // INLINE_COMPOSITE because any other compatible size would not require an upgrade.
-        ASSERT(oldSize < FieldSize::EIGHT_BYTES);
+        KJ_ASSERT(oldSize < FieldSize::EIGHT_BYTES);
 
         // If the preferred size were BIT then oldSize must be VOID, but we handled that case
         // above.
-        ASSERT(elementSize.preferredListEncoding >= FieldSize::BIT);
+        KJ_ASSERT(elementSize.preferredListEncoding >= FieldSize::BIT);
 
         // OK, so the expected list elements are all data and between 1 byte and 1 word each,
         // and the old element are data between 1 bit and 4 bytes.  We're upgrading from one
@@ -1226,9 +1227,9 @@ struct WireHelpers {
     } else {
       word* ptr = followFars(ref, segment);
 
-      REQUIRE(ref->kind() == WirePointer::LIST,
+      KJ_REQUIRE(ref->kind() == WirePointer::LIST,
           "Called getText{Field,Element}() but existing pointer is not a list.");
-      REQUIRE(ref->listRef.elementSize() == FieldSize::BYTE,
+      KJ_REQUIRE(ref->listRef.elementSize() == FieldSize::BYTE,
           "Called getText{Field,Element}() but existing list pointer is not byte-sized.");
 
       // Subtract 1 from the size for the NUL terminator.
@@ -1263,9 +1264,9 @@ struct WireHelpers {
     } else {
       word* ptr = followFars(ref, segment);
 
-      REQUIRE(ref->kind() == WirePointer::LIST,
+      KJ_REQUIRE(ref->kind() == WirePointer::LIST,
           "Called getData{Field,Element}() but existing pointer is not a list.");
-      REQUIRE(ref->listRef.elementSize() == FieldSize::BYTE,
+      KJ_REQUIRE(ref->listRef.elementSize() == FieldSize::BYTE,
           "Called getData{Field,Element}() but existing list pointer is not byte-sized.");
 
       return Data::Builder(reinterpret_cast<char*>(ptr), ref->listRef.elementCount() / ELEMENTS);
@@ -1291,7 +1292,7 @@ struct WireHelpers {
       if (ref->listRef.elementSize() == FieldSize::INLINE_COMPOSITE) {
         // Read the tag to get the actual element count.
         WirePointer* tag = reinterpret_cast<WirePointer*>(ptr);
-        REQUIRE(tag->kind() == WirePointer::STRUCT,
+        KJ_REQUIRE(tag->kind() == WirePointer::STRUCT,
             "INLINE_COMPOSITE list with non-STRUCT elements not supported.");
 
         // First list element is at tag + 1 pointer.
@@ -1364,7 +1365,7 @@ struct WireHelpers {
           case 32: elementSize = FieldSize::FOUR_BYTES; break;
           case 64: elementSize = FieldSize::EIGHT_BYTES; break;
           default:
-            FAIL_ASSERT("invalid list step size", value.step * ELEMENTS / BITS);
+            KJ_FAIL_ASSERT("invalid list step size", value.step * ELEMENTS / BITS);
             break;
         }
 
@@ -1951,7 +1952,7 @@ ObjectReader StructReader::getObjectField(
 }
 
 const word* StructReader::getUncheckedPointer(WirePointerCount ptrIndex) const {
-  REQUIRE(segment == nullptr, "getUncheckedPointer() only allowed on unchecked messages.");
+  KJ_REQUIRE(segment == nullptr, "getUncheckedPointer() only allowed on unchecked messages.");
   return reinterpret_cast<const word*>(pointers + ptrIndex);
 }
 
@@ -2142,7 +2143,7 @@ StructReader ListReader::getStructElement(ElementCount index) const {
       reinterpret_cast<const WirePointer*>(structData + structDataSize / BITS_PER_BYTE);
 
   // This check should pass if there are no bugs in the list pointer validation code.
-  DASSERT(structPointerCount == 0 * POINTERS ||
+  KJ_DASSERT(structPointerCount == 0 * POINTERS ||
          (uintptr_t)structPointers % sizeof(WirePointer) == 0,
          "Pointer segment of struct list element not aligned.");
 
@@ -2153,7 +2154,7 @@ StructReader ListReader::getStructElement(ElementCount index) const {
 }
 
 static const WirePointer* checkAlignment(const void* ptr) {
-  DASSERT((uintptr_t)ptr % sizeof(WirePointer) == 0,
+  KJ_DASSERT((uintptr_t)ptr % sizeof(WirePointer) == 0,
          "Pointer segment of struct list element not aligned.");
   return reinterpret_cast<const WirePointer*>(ptr);
 }

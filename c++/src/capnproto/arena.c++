@@ -168,7 +168,7 @@ kj::ArrayPtr<const kj::ArrayPtr<const word>> BuilderArena::getSegmentsForOutput(
       return kj::arrayPtr(&segment0ForOutput, 1);
     }
   } else {
-    DASSERT(moreSegments->forOutput.size() == moreSegments->builders.size() + 1,
+    KJ_DASSERT(moreSegments->forOutput.size() == moreSegments->builders.size() + 1,
         "moreSegments->forOutput wasn't resized correctly when the last builder was added.",
         moreSegments->forOutput.size(), moreSegments->builders.size());
 

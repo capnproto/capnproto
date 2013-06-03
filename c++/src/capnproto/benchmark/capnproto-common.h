@@ -181,7 +181,7 @@ struct UseScratch {
     word* words;
 
     ScratchSpace() {
-      REQUIRE(scratchCounter < 6, "Too many scratch spaces needed at once.");
+      KJ_REQUIRE(scratchCounter < 6, "Too many scratch spaces needed at once.");
       words = scratchSpace + scratchCounter++ * SCRATCH_SIZE;
     }
     ~ScratchSpace() {

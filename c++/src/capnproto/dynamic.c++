@@ -83,7 +83,7 @@ internal::FieldSize elementSizeFor(schema::Type::Body::Which elementType) {
     case schema::Type::Body::ENUM_TYPE: return internal::FieldSize::TWO_BYTES;
     case schema::Type::Body::STRUCT_TYPE: return internal::FieldSize::INLINE_COMPOSITE;
     case schema::Type::Body::INTERFACE_TYPE: return internal::FieldSize::POINTER;
-    case schema::Type::Body::OBJECT_TYPE: FAIL_ASSERT("List(Object) not supported."); break;
+    case schema::Type::Body::OBJECT_TYPE: KJ_FAIL_ASSERT("List(Object) not supported."); break;
   }
 
   // Unknown type.  Treat it as zero-size.
@@ -255,29 +255,29 @@ Data::Builder DynamicUnion::Builder::initObjectAsData(Text::Reader name, uint si
 
 StructSchema::Member DynamicUnion::Builder::checkIsObject() {
   KJ_IF_MAYBE(w, which()) {
-    ASSERT(w->getProto().getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
+    KJ_ASSERT(w->getProto().getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
           "Unsupported union member type.");
-    REQUIRE(w->getProto().getBody().getFieldMember().getType().getBody().which() ==
+    KJ_REQUIRE(w->getProto().getBody().getFieldMember().getType().getBody().which() ==
             schema::Type::Body::OBJECT_TYPE, "Expected Object.");
     return *w;
   } else {
-    FAIL_REQUIRE("Can't get() unknown union value.");
+    KJ_FAIL_REQUIRE("Can't get() unknown union value.");
   }
 }
 
 void DynamicUnion::Builder::setDiscriminant(StructSchema::Member member) {
   KJ_IF_MAYBE(containingUnion, member.getContainingUnion()) {
-    REQUIRE(*containingUnion == schema, "`member` is not a member of this union.");
+    KJ_REQUIRE(*containingUnion == schema, "`member` is not a member of this union.");
     builder.setDataField<uint16_t>(
         schema.getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS,
         member.getIndex());
   } else {
-    FAIL_REQUIRE("`member` is not a member of this union.");
+    KJ_FAIL_REQUIRE("`member` is not a member of this union.");
   }
 }
 
 void DynamicUnion::Builder::setObjectDiscriminant(StructSchema::Member member) {
-  REQUIRE(member.getProto().getBody().getFieldMember().getType().getBody().which() ==
+  KJ_REQUIRE(member.getProto().getBody().getFieldMember().getType().getBody().which() ==
           schema::Type::Body::OBJECT_TYPE, "Expected Object.");
   setDiscriminant(member);
 }
@@ -285,16 +285,16 @@ void DynamicUnion::Builder::setObjectDiscriminant(StructSchema::Member member) {
 // =======================================================================================
 
 DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Member member) {
-  REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   return getImpl(reader, member);
 }
 DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Member member) {
-  REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   return getImpl(builder, member);
 }
 
 bool DynamicStruct::Reader::has(StructSchema::Member member) {
-  REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
 
   auto body = member.getProto().getBody();
   switch (body.which()) {
@@ -360,7 +360,7 @@ bool DynamicStruct::Reader::has(StructSchema::Member member) {
   return false;
 }
 bool DynamicStruct::Builder::has(StructSchema::Member member) {
-  REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
 
   auto body = member.getProto().getBody();
   switch (body.which()) {
@@ -427,166 +427,166 @@ bool DynamicStruct::Builder::has(StructSchema::Member member) {
 }
 
 void DynamicStruct::Builder::set(StructSchema::Member member, DynamicValue::Reader value) {
-  REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   return setImpl(builder, member, value);
 }
 DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Member member) {
-  REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   return initImpl(builder, member);
 }
 DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Member member, uint size) {
-  REQUIRE(member.getContainingStruct() == schema,
+  KJ_REQUIRE(member.getContainingStruct() == schema,
           "`member` is not a member of this struct.");
   return initImpl(builder, member, size);
 }
 
 DynamicStruct::Builder DynamicStruct::Builder::getObject(
     StructSchema::Member member, StructSchema type) {
-  REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_REQUIRE("Expected an Object.");
+      KJ_FAIL_REQUIRE("Expected an Object.");
       break;
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getProto().getBody().getFieldMember();
-      REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
+      KJ_REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
               "Expected an Object.");
       return getObjectImpl(builder, member, type);
     }
   }
 
-  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
+  KJ_FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return DynamicStruct::Builder();
 }
 DynamicList::Builder DynamicStruct::Builder::getObject(
     StructSchema::Member member, ListSchema type) {
-  REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_REQUIRE("Expected an Object.");
+      KJ_FAIL_REQUIRE("Expected an Object.");
       break;
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getProto().getBody().getFieldMember();
-      REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
+      KJ_REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
               "Expected an Object.");
       return getObjectImpl(builder, member, type);
     }
   }
 
-  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
+  KJ_FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return DynamicList::Builder();
 }
 Text::Builder DynamicStruct::Builder::getObjectAsText(StructSchema::Member member) {
-  REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_REQUIRE("Expected an Object.");
+      KJ_FAIL_REQUIRE("Expected an Object.");
       return Text::Builder();
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getProto().getBody().getFieldMember();
-      REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
+      KJ_REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
               "Expected an Object.");
       return getObjectAsDataImpl(builder, member);
     }
   }
 
-  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
+  KJ_FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return Text::Builder();
 }
 Data::Builder DynamicStruct::Builder::getObjectAsData(StructSchema::Member member) {
-  REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_REQUIRE("Expected an Object.");
+      KJ_FAIL_REQUIRE("Expected an Object.");
       return Data::Builder();
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getProto().getBody().getFieldMember();
-      REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
+      KJ_REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
               "Expected an Object.");
       return getObjectAsDataImpl(builder, member);
     }
   }
 
-  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
+  KJ_FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return Data::Builder();
 }
 
 DynamicStruct::Builder DynamicStruct::Builder::initObject(
     StructSchema::Member member, StructSchema type) {
-  REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_REQUIRE("Expected an Object.");
+      KJ_FAIL_REQUIRE("Expected an Object.");
       return DynamicStruct::Builder();
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getProto().getBody().getFieldMember();
-      REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
+      KJ_REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
               "Expected an Object.");
       return initFieldImpl(builder, member, type);
     }
   }
 
-  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
+  KJ_FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return DynamicStruct::Builder();
 }
 DynamicList::Builder DynamicStruct::Builder::initObject(
     StructSchema::Member member, ListSchema type, uint size) {
-  REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_REQUIRE("Expected an Object.");
+      KJ_FAIL_REQUIRE("Expected an Object.");
       return DynamicList::Builder();
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getProto().getBody().getFieldMember();
-      REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
+      KJ_REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
               "Expected an Object.");
       return initFieldImpl(builder, member, type, size);
     }
   }
 
-  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
+  KJ_FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return DynamicList::Builder();
 }
 Text::Builder DynamicStruct::Builder::initObjectAsText(StructSchema::Member member, uint size) {
-  REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_REQUIRE("Expected an Object.");
+      KJ_FAIL_REQUIRE("Expected an Object.");
       return Text::Builder();
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getProto().getBody().getFieldMember();
-      REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
+      KJ_REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
               "Expected an Object.");
       return initFieldAsDataImpl(builder, member, size);
     }
   }
 
-  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
+  KJ_FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return Text::Builder();
 }
 Data::Builder DynamicStruct::Builder::initObjectAsData(StructSchema::Member member, uint size) {
-  REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_REQUIRE("Expected an Object.");
+      KJ_FAIL_REQUIRE("Expected an Object.");
       return Data::Builder();
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getProto().getBody().getFieldMember();
-      REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
+      KJ_REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
               "Expected an Object.");
       return initFieldAsDataImpl(builder, member, size);
     }
   }
 
-  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
+  KJ_FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return Data::Builder();
 }
 
@@ -723,7 +723,7 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
         }
 
         case schema::Type::Body::INTERFACE_TYPE:
-          FAIL_ASSERT("Interfaces not yet implemented.");
+          KJ_FAIL_ASSERT("Interfaces not yet implemented.");
           break;
       }
 
@@ -731,7 +731,7 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
     }
   }
 
-  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
+  KJ_FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return nullptr;
 }
 
@@ -826,7 +826,7 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
         }
 
         case schema::Type::Body::INTERFACE_TYPE:
-          FAIL_ASSERT("Interfaces not yet implemented.");
+          KJ_FAIL_ASSERT("Interfaces not yet implemented.");
           break;
       }
 
@@ -834,7 +834,7 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
     }
   }
 
-  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
+  KJ_FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
   return nullptr;
 }
 DynamicStruct::Builder DynamicStruct::Builder::getObjectImpl(
@@ -963,7 +963,7 @@ void DynamicStruct::Builder::setImpl(
         }
 
         case schema::Type::Body::INTERFACE_TYPE:
-          FAIL_ASSERT("Interfaces not yet implemented.");
+          KJ_FAIL_ASSERT("Interfaces not yet implemented.");
           return;
       }
 
@@ -972,14 +972,14 @@ void DynamicStruct::Builder::setImpl(
     }
   }
 
-  FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
+  KJ_FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
 }
 
 DynamicValue::Builder DynamicStruct::Builder::initImpl(
     internal::StructBuilder builder, StructSchema::Member member, uint size) {
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_REQUIRE(
+      KJ_FAIL_REQUIRE(
           "Can't init() a union.  get() it first and then init() one of its members.");
       break;
 
@@ -994,7 +994,7 @@ DynamicValue::Builder DynamicStruct::Builder::initImpl(
         case schema::Type::Body::DATA_TYPE:
           return initFieldAsDataImpl(builder, member, size);
         default:
-          FAIL_REQUIRE(
+          KJ_FAIL_REQUIRE(
               "init() with size is only valid for list, text, or data fields.", (uint)type.which());
           break;
       }
@@ -1010,13 +1010,13 @@ DynamicValue::Builder DynamicStruct::Builder::initImpl(
     internal::StructBuilder builder, StructSchema::Member member) {
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      FAIL_REQUIRE(
+      KJ_FAIL_REQUIRE(
           "Can't init() a union.  get() it first and then init() one of its members.");
       break;
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto type = member.getProto().getBody().getFieldMember().getType().getBody();
-      REQUIRE(type.which() == schema::Type::Body::STRUCT_TYPE,
+      KJ_REQUIRE(type.which() == schema::Type::Body::STRUCT_TYPE,
               "init() without a size is only valid for struct fields.");
       return initFieldImpl(builder, member,
           member.getContainingStruct().getDependency(type.getStructType()).asStruct());
@@ -1063,7 +1063,7 @@ Data::Builder DynamicStruct::Builder::initFieldAsDataImpl(
 // =======================================================================================
 
 DynamicValue::Reader DynamicList::Reader::operator[](uint index) const {
-  REQUIRE(index < size(), "List index out-of-bounds.");
+  KJ_REQUIRE(index < size(), "List index out-of-bounds.");
 
   switch (schema.whichElementType()) {
 #define HANDLE_TYPE(name, discrim, typeName) \
@@ -1117,7 +1117,7 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) const {
 }
 
 DynamicValue::Builder DynamicList::Builder::operator[](uint index) const {
-  REQUIRE(index < size(), "List index out-of-bounds.");
+  KJ_REQUIRE(index < size(), "List index out-of-bounds.");
 
   switch (schema.whichElementType()) {
 #define HANDLE_TYPE(name, discrim, typeName) \
@@ -1167,7 +1167,7 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) const {
           schema.getEnumElementType(), builder.getDataElement<uint16_t>(index * ELEMENTS)));
 
     case schema::Type::Body::OBJECT_TYPE:
-      FAIL_ASSERT("List(Object) not supported.");
+      KJ_FAIL_ASSERT("List(Object) not supported.");
       return nullptr;
 
     case schema::Type::Body::INTERFACE_TYPE:
@@ -1252,7 +1252,7 @@ void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
 }
 
 DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
-  REQUIRE(index < this->size(), "List index out-of-bounds.");
+  KJ_REQUIRE(index < this->size(), "List index out-of-bounds.");
 
   switch (schema.whichElementType()) {
     case schema::Type::Body::VOID_TYPE:
@@ -1270,7 +1270,7 @@ DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
     case schema::Type::Body::ENUM_TYPE:
     case schema::Type::Body::STRUCT_TYPE:
     case schema::Type::Body::INTERFACE_TYPE:
-      FAIL_REQUIRE("Expected a list or blob.");
+      KJ_FAIL_REQUIRE("Expected a list or blob.");
       return nullptr;
 
     case schema::Type::Body::TEXT_TYPE:
@@ -1296,7 +1296,7 @@ DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
     }
 
     case schema::Type::Body::OBJECT_TYPE: {
-      FAIL_ASSERT("List(Object) not supported.");
+      KJ_FAIL_ASSERT("List(Object) not supported.");
       return nullptr;
     }
   }
@@ -1305,7 +1305,7 @@ DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
 }
 
 void DynamicList::Builder::copyFrom(std::initializer_list<DynamicValue::Reader> value) {
-  REQUIRE(value.size() == size(), "DynamicList::copyFrom() argument had different size.");
+  KJ_REQUIRE(value.size() == size(), "DynamicList::copyFrom() argument had different size.");
   uint i = 0;
   for (auto element: value) {
     set(i++, element);
@@ -1332,10 +1332,10 @@ DynamicValue::Reader DynamicValue::Builder::asReader() {
     case ENUM: return Reader(enumValue);
     case STRUCT: return Reader(structValue.asReader());
     case UNION: return Reader(unionValue.asReader());
-    case INTERFACE: FAIL_ASSERT("Interfaces not implemented."); return Reader();
+    case INTERFACE: KJ_FAIL_ASSERT("Interfaces not implemented."); return Reader();
     case OBJECT: return Reader(objectValue);
   }
-  FAIL_ASSERT("Missing switch case.");
+  KJ_FAIL_ASSERT("Missing switch case.");
   return Reader();
 }
 
@@ -1432,12 +1432,12 @@ HANDLE_NUMERIC_TYPE(double, kj::upcast, kj::upcast, kj::upcast)
 
 #define HANDLE_TYPE(name, discrim, typeName) \
 ReaderFor<typeName> DynamicValue::Reader::AsImpl<typeName>::apply(Reader reader) { \
-  REQUIRE(reader.type == discrim, \
+  KJ_REQUIRE(reader.type == discrim, \
       "Type mismatch when using DynamicValue::Reader::as()."); \
   return reader.name##Value; \
 } \
 BuilderFor<typeName> DynamicValue::Builder::AsImpl<typeName>::apply(Builder builder) { \
-  REQUIRE(builder.type == discrim, \
+  KJ_REQUIRE(builder.type == discrim, \
       "Type mismatch when using DynamicValue::Builder::as()."); \
   return builder.name##Value; \
 }

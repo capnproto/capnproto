@@ -217,7 +217,7 @@ void ArrayOutputStream::write(const void* src, size_t size) {
     // Oh goody, the caller wrote directly into our buffer.
     fillPos += size;
   } else {
-    REQUIRE(size <= (size_t)(array.end() - fillPos),
+    KJ_REQUIRE(size <= (size_t)(array.end() - fillPos),
             "ArrayOutputStream's backing array was not large enough for the data written.");
     memcpy(fillPos, src, size);
     fillPos += size;
@@ -240,7 +240,7 @@ size_t FdInputStream::read(void* buffer, size_t minBytes, size_t maxBytes) {
   byte* max = pos + maxBytes;
 
   while (pos < min) {
-    ssize_t n = SYSCALL(::read(fd, pos, max - pos), fd);
+    ssize_t n = KJ_SYSCALL(::read(fd, pos, max - pos), fd);
     VALIDATE_INPUT(n > 0, "Premature EOF") {
       return minBytes;
     }
@@ -256,8 +256,8 @@ void FdOutputStream::write(const void* buffer, size_t size) {
   const char* pos = reinterpret_cast<const char*>(buffer);
 
   while (size > 0) {
-    ssize_t n = SYSCALL(::write(fd, pos, size), fd);
-    ASSERT(n > 0, "write() returned zero.");
+    ssize_t n = KJ_SYSCALL(::write(fd, pos, size), fd);
+    KJ_ASSERT(n > 0, "write() returned zero.");
     pos += n;
     size -= n;
   }
@@ -280,8 +280,8 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   }
 
   while (current < iov.end()) {
-    ssize_t n = SYSCALL(::writev(fd, current, iov.end() - current), fd);
-    ASSERT(n > 0, "writev() returned zero.");
+    ssize_t n = KJ_SYSCALL(::writev(fd, current, iov.end() - current), fd);
+    KJ_ASSERT(n > 0, "writev() returned zero.");
 
     while (static_cast<size_t>(n) >= current->iov_len) {
       n -= current->iov_len;

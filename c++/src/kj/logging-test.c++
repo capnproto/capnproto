@@ -88,7 +88,7 @@ TEST(Logging, Log) {
   MockExceptionCallback::ScopedRegistration reg(mockCallback);
   int line;
 
-  LOG(WARNING, "Hello world!"); line = __LINE__;
+  KJ_LOG(WARNING, "Hello world!"); line = __LINE__;
   EXPECT_EQ("log message: warning: " + fileLine(__FILE__, line) + ": Hello world!\n",
             mockCallback.text);
   mockCallback.text.clear();
@@ -96,13 +96,13 @@ TEST(Logging, Log) {
   int i = 123;
   const char* str = "foo";
 
-  LOG(ERROR, i, str); line = __LINE__;
+  KJ_LOG(ERROR, i, str); line = __LINE__;
   EXPECT_EQ("log message: error: " + fileLine(__FILE__, line) + ": i = 123; str = foo\n",
             mockCallback.text);
   mockCallback.text.clear();
 
-  ASSERT(1 == 1);
-  EXPECT_THROW(ASSERT(1 == 2), MockException); line = __LINE__;
+  KJ_ASSERT(1 == 1);
+  EXPECT_THROW(KJ_ASSERT(1 == 2), MockException); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: expected "
             "1 == 2\n", mockCallback.text);
   mockCallback.text.clear();
@@ -118,17 +118,17 @@ TEST(Logging, Log) {
   EXPECT_TRUE(recovered);
   mockCallback.text.clear();
 
-  EXPECT_THROW(ASSERT(1 == 2, i, "hi", str), MockException); line = __LINE__;
+  EXPECT_THROW(KJ_ASSERT(1 == 2, i, "hi", str), MockException); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: expected "
             "1 == 2; i = 123; hi; str = foo\n", mockCallback.text);
   mockCallback.text.clear();
 
-  EXPECT_THROW(REQUIRE(1 == 2, i, "hi", str), MockException); line = __LINE__;
+  EXPECT_THROW(KJ_REQUIRE(1 == 2, i, "hi", str), MockException); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": precondition not met: expected "
             "1 == 2; i = 123; hi; str = foo\n", mockCallback.text);
   mockCallback.text.clear();
 
-  EXPECT_THROW(ASSERT(false, "foo"), MockException); line = __LINE__;
+  EXPECT_THROW(KJ_ASSERT(false, "foo"), MockException); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: foo\n",
             mockCallback.text);
   mockCallback.text.clear();
@@ -142,9 +142,9 @@ TEST(Logging, Syscall) {
   int i = 123;
   const char* str = "foo";
 
-  int fd = SYSCALL(dup(STDIN_FILENO));
-  SYSCALL(close(fd));
-  EXPECT_THROW(SYSCALL(close(fd), i, "bar", str), MockException); line = __LINE__;
+  int fd = KJ_SYSCALL(dup(STDIN_FILENO));
+  KJ_SYSCALL(close(fd));
+  EXPECT_THROW(KJ_SYSCALL(close(fd), i, "bar", str), MockException); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": error from OS: close(fd): "
             + strerror(EBADF) + "; i = 123; bar; str = foo\n", mockCallback.text);
   mockCallback.text.clear();
@@ -163,8 +163,8 @@ TEST(Logging, Context) {
   MockExceptionCallback::ScopedRegistration reg(mockCallback);
 
   {
-    CONTEXT("foo"); int cline = __LINE__;
-    EXPECT_THROW(FAIL_ASSERT("bar"), MockException); int line = __LINE__;
+    KJ_CONTEXT("foo"); int cline = __LINE__;
+    EXPECT_THROW(KJ_FAIL_ASSERT("bar"), MockException); int line = __LINE__;
 
     EXPECT_EQ("fatal exception: " + fileLine(__FILE__, cline) + ": context: foo\n"
               + fileLine(__FILE__, line) + ": bug in code: bar\n",
@@ -174,8 +174,8 @@ TEST(Logging, Context) {
     {
       int i = 123;
       const char* str = "qux";
-      CONTEXT("baz", i, "corge", str); int cline2 = __LINE__;
-      EXPECT_THROW(FAIL_ASSERT("bar"), MockException); line = __LINE__;
+      KJ_CONTEXT("baz", i, "corge", str); int cline2 = __LINE__;
+      EXPECT_THROW(KJ_FAIL_ASSERT("bar"), MockException); line = __LINE__;
 
       EXPECT_EQ("fatal exception: " + fileLine(__FILE__, cline) + ": context: foo\n"
                 + fileLine(__FILE__, cline2) + ": context: baz; i = 123; corge; str = qux\n"
@@ -185,8 +185,8 @@ TEST(Logging, Context) {
     }
 
     {
-      CONTEXT("grault"); int cline2 = __LINE__;
-      EXPECT_THROW(FAIL_ASSERT("bar"), MockException); line = __LINE__;
+      KJ_CONTEXT("grault"); int cline2 = __LINE__;
+      EXPECT_THROW(KJ_FAIL_ASSERT("bar"), MockException); line = __LINE__;
 
       EXPECT_EQ("fatal exception: " + fileLine(__FILE__, cline) + ": context: foo\n"
                 + fileLine(__FILE__, cline2) + ": context: grault\n"

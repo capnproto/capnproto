@@ -51,33 +51,33 @@ Schema Schema::getDependency(uint64_t id) const {
     }
   }
 
-  FAIL_REQUIRE("Requested ID not found in dependency table.", id);
+  KJ_FAIL_REQUIRE("Requested ID not found in dependency table.", id);
   return Schema();
 }
 
 StructSchema Schema::asStruct() const {
-  REQUIRE(getProto().getBody().which() == schema::Node::Body::STRUCT_NODE,
+  KJ_REQUIRE(getProto().getBody().which() == schema::Node::Body::STRUCT_NODE,
           "Tried to use non-struct schema as a struct.",
           getProto().getDisplayName());
   return StructSchema(raw);
 }
 
 EnumSchema Schema::asEnum() const {
-  REQUIRE(getProto().getBody().which() == schema::Node::Body::ENUM_NODE,
+  KJ_REQUIRE(getProto().getBody().which() == schema::Node::Body::ENUM_NODE,
           "Tried to use non-enum schema as an enum.",
           getProto().getDisplayName());
   return EnumSchema(raw);
 }
 
 InterfaceSchema Schema::asInterface() const {
-  REQUIRE(getProto().getBody().which() == schema::Node::Body::INTERFACE_NODE,
+  KJ_REQUIRE(getProto().getBody().which() == schema::Node::Body::INTERFACE_NODE,
           "Tried to use non-interface schema as an interface.",
           getProto().getDisplayName());
   return InterfaceSchema(raw);
 }
 
 void Schema::requireUsableAs(const internal::RawSchema* expected) {
-  REQUIRE(raw == expected ||
+  KJ_REQUIRE(raw == expected ||
           (raw != nullptr && expected != nullptr && raw->canCastTo == expected),
           "This schema is not compatible with the requested native type.");
 }
@@ -132,7 +132,7 @@ StructSchema::Member StructSchema::getMemberByName(Text::Reader name) const {
   KJ_IF_MAYBE(member, findMemberByName(name)) {
     return *member;
   } else {
-    FAIL_REQUIRE("struct has no such member", name);
+    KJ_FAIL_REQUIRE("struct has no such member", name);
   }
 }
 
@@ -142,7 +142,7 @@ kj::Maybe<StructSchema::Union> StructSchema::Member::getContainingUnion() const 
 }
 
 StructSchema::Union StructSchema::Member::asUnion() const {
-  REQUIRE(proto.getBody().which() == schema::StructNode::Member::Body::UNION_MEMBER,
+  KJ_REQUIRE(proto.getBody().which() == schema::StructNode::Member::Body::UNION_MEMBER,
           "Tried to use non-union struct member as a union.",
           parent.getProto().getDisplayName(), proto.getName());
   return Union(*this);
@@ -160,7 +160,7 @@ StructSchema::Member StructSchema::Union::getMemberByName(Text::Reader name) con
   KJ_IF_MAYBE(member, findMemberByName(name)) {
     return *member;
   } else {
-    FAIL_REQUIRE("union has no such member", name);
+    KJ_FAIL_REQUIRE("union has no such member", name);
   }
 }
 
@@ -178,7 +178,7 @@ EnumSchema::Enumerant EnumSchema::getEnumerantByName(Text::Reader name) const {
   KJ_IF_MAYBE(enumerant, findEnumerantByName(name)) {
     return *enumerant;
   } else {
-    FAIL_REQUIRE("enum has no such enumerant", name);
+    KJ_FAIL_REQUIRE("enum has no such enumerant", name);
   }
 }
 
@@ -196,7 +196,7 @@ InterfaceSchema::Method InterfaceSchema::getMethodByName(Text::Reader name) cons
   KJ_IF_MAYBE(method, findMethodByName(name)) {
     return *method;
   } else {
-    FAIL_REQUIRE("interface has no such method", name);
+    KJ_FAIL_REQUIRE("interface has no such method", name);
   }
 }
 
@@ -224,11 +224,11 @@ ListSchema ListSchema::of(schema::Type::Body::Which primitiveType) {
     case schema::Type::Body::ENUM_TYPE:
     case schema::Type::Body::INTERFACE_TYPE:
     case schema::Type::Body::LIST_TYPE:
-      FAIL_REQUIRE("Must use one of the other ListSchema::of() overloads for complex types.");
+      KJ_FAIL_REQUIRE("Must use one of the other ListSchema::of() overloads for complex types.");
       break;
 
     case schema::Type::Body::OBJECT_TYPE:
-      FAIL_REQUIRE("List(Object) not supported.");
+      KJ_FAIL_REQUIRE("List(Object) not supported.");
       break;
   }
 
@@ -267,7 +267,7 @@ ListSchema ListSchema::of(schema::Type::Reader elementType, Schema context) {
       return of(of(body.getListType(), context));
 
     case schema::Type::Body::OBJECT_TYPE:
-      FAIL_REQUIRE("List(Object) not supported.");
+      KJ_FAIL_REQUIRE("List(Object) not supported.");
       return ListSchema();
   }
 
@@ -276,31 +276,31 @@ ListSchema ListSchema::of(schema::Type::Reader elementType, Schema context) {
 }
 
 StructSchema ListSchema::getStructElementType() const {
-  REQUIRE(nestingDepth == 0 && elementType == schema::Type::Body::STRUCT_TYPE,
+  KJ_REQUIRE(nestingDepth == 0 && elementType == schema::Type::Body::STRUCT_TYPE,
           "ListSchema::getStructElementType(): The elements are not structs.");
   return elementSchema.asStruct();
 }
 
 EnumSchema ListSchema::getEnumElementType() const {
-  REQUIRE(nestingDepth == 0 && elementType == schema::Type::Body::ENUM_TYPE,
+  KJ_REQUIRE(nestingDepth == 0 && elementType == schema::Type::Body::ENUM_TYPE,
           "ListSchema::getEnumElementType(): The elements are not enums.");
   return elementSchema.asEnum();
 }
 
 InterfaceSchema ListSchema::getInterfaceElementType() const {
-  REQUIRE(nestingDepth == 0 && elementType == schema::Type::Body::INTERFACE_TYPE,
+  KJ_REQUIRE(nestingDepth == 0 && elementType == schema::Type::Body::INTERFACE_TYPE,
           "ListSchema::getInterfaceElementType(): The elements are not interfaces.");
   return elementSchema.asInterface();
 }
 
 ListSchema ListSchema::getListElementType() const {
-  REQUIRE(nestingDepth > 0,
+  KJ_REQUIRE(nestingDepth > 0,
           "ListSchema::getListElementType(): The elements are not lists.");
   return ListSchema(elementType, nestingDepth - 1, elementSchema);
 }
 
 void ListSchema::requireUsableAs(ListSchema expected) {
-  REQUIRE(elementType == expected.elementType && nestingDepth == expected.nestingDepth,
+  KJ_REQUIRE(elementType == expected.elementType && nestingDepth == expected.nestingDepth,
           "This schema is not compatible with the requested native type.");
   elementSchema.requireUsableAs(expected.elementSchema.raw);
 }

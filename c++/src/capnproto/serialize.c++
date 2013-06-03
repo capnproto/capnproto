@@ -88,7 +88,7 @@ kj::ArrayPtr<const word> FlatArrayMessageReader::getSegment(uint id) {
 }
 
 kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
-  REQUIRE(segments.size() > 0, "Tried to serialize uninitialized message.");
+  KJ_REQUIRE(segments.size() > 0, "Tried to serialize uninitialized message.");
 
   size_t totalSize = segments.size() / 2 + 1;
 
@@ -122,7 +122,7 @@ kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> 
     dst += segment.size();
   }
 
-  DASSERT(dst == result.end(), "Buffer overrun/underrun bug in code above.");
+  KJ_DASSERT(dst == result.end(), "Buffer overrun/underrun bug in code above.");
 
   return kj::mv(result);
 }
@@ -237,7 +237,7 @@ kj::ArrayPtr<const word> InputStreamMessageReader::getSegment(uint id) {
 // -------------------------------------------------------------------
 
 void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
-  REQUIRE(segments.size() > 0, "Tried to serialize uninitialized message.");
+  KJ_REQUIRE(segments.size() > 0, "Tried to serialize uninitialized message.");
 
   internal::WireValue<uint32_t> table[(segments.size() + 2) & ~size_t(1)];
 

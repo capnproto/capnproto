@@ -84,7 +84,7 @@ public:
     nodeName = node.getDisplayName();
     dependencies.clear();
 
-    CONTEXT("validating schema node", nodeName, (uint)node.getBody().which());
+    KJ_CONTEXT("validating schema node", nodeName, (uint)node.getBody().which());
 
     switch (node.getBody().which()) {
       case schema::Node::Body::FILE_NODE:
@@ -119,7 +119,7 @@ public:
     for (auto& dep: dependencies) {
       result[pos++] = dep.second;
     }
-    DASSERT(pos == *count);
+    KJ_DASSERT(pos == *count);
     return result;
   }
 
@@ -131,7 +131,7 @@ public:
     for (auto& member: members) {
       result[pos++] = internal::RawSchema::MemberInfo(member.first.first, member.second);
     }
-    DASSERT(pos == *count);
+    KJ_DASSERT(pos == *count);
     return result;
   }
 
@@ -218,7 +218,7 @@ private:
 
     uint index = 0;
     for (auto member: members) {
-      CONTEXT("validating struct member", member.getName());
+      KJ_CONTEXT("validating struct member", member.getName());
       validate(member, sawCodeOrder, sawOrdinal, dataSizeInBits, pointerCount, 0, index++);
     }
   }
@@ -270,7 +270,7 @@ private:
 
         uint subIndex = 0;
         for (auto uMember: uMembers) {
-          CONTEXT("validating union member", uMember.getName());
+          KJ_CONTEXT("validating union member", uMember.getName());
           VALIDATE_SCHEMA(
               uMember.getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
               "Union members must be fields.");
@@ -307,7 +307,7 @@ private:
 
     uint index = 0;
     for (auto method: methods) {
-      CONTEXT("validating method", method.getName());
+      KJ_CONTEXT("validating method", method.getName());
       validateMemberName(method.getName(), 0, index++);
 
       VALIDATE_SCHEMA(method.getCodeOrder() < methods.size() &&
@@ -317,7 +317,7 @@ private:
 
       auto params = method.getParams();
       for (auto param: params) {
-        CONTEXT("validating parameter", param.getName());
+        KJ_CONTEXT("validating parameter", param.getName());
         uint dummy1;
         bool dummy2;
         validate(param.getType(), param.getDefaultValue(), &dummy1, &dummy2);
@@ -444,10 +444,10 @@ public:
 
   bool shouldReplace(schema::Node::Reader existingNode, schema::Node::Reader replacement,
                      bool replacementIsNative) {
-    CONTEXT("checking compatibility with previously-loaded node of the same id",
-            existingNode.getDisplayName());
+    KJ_CONTEXT("checking compatibility with previously-loaded node of the same id",
+               existingNode.getDisplayName());
 
-    DREQUIRE(existingNode.getId() == replacement.getId());
+    KJ_DREQUIRE(existingNode.getId() == replacement.getId());
 
     nodeName = existingNode.getDisplayName();
     compatibility = EQUIVALENT;
@@ -593,7 +593,7 @@ private:
 
   void checkCompatibility(schema::StructNode::Member::Reader member,
                           schema::StructNode::Member::Reader replacement) {
-    CONTEXT("comparing struct member", member.getName());
+    KJ_CONTEXT("comparing struct member", member.getName());
 
     switch (member.getBody().which()) {
       case schema::StructNode::Member::Body::FIELD_MEMBER: {
@@ -665,7 +665,7 @@ private:
 
   void checkCompatibility(schema::InterfaceNode::Method::Reader method,
                           schema::InterfaceNode::Method::Reader replacement) {
-    CONTEXT("comparing method", method.getName());
+    KJ_CONTEXT("comparing method", method.getName());
 
     auto params = method.getParams();
     auto replacementParams = replacement.getParams();
@@ -681,7 +681,7 @@ private:
       auto param = params[i];
       auto replacementParam = replacementParams[i];
 
-      CONTEXT("comparing parameter", param.getName());
+      KJ_CONTEXT("comparing parameter", param.getName());
 
       checkCompatibility(param.getType(), replacementParam.getType(),
                          NO_UPGRADE_TO_STRUCT);
@@ -1026,7 +1026,7 @@ internal::RawSchema* SchemaLoader::Impl::loadNative(const internal::RawSchema* n
   if (slot == nullptr) {
     slot = allocate<internal::RawSchema>();
   } else if (slot->canCastTo != nullptr) {
-    REQUIRE(slot->canCastTo == nativeSchema,
+    KJ_REQUIRE(slot->canCastTo == nativeSchema,
         "two different compiled-in type have the same type ID",
         reader.getId(), reader.getDisplayName(),
         readMessageUnchecked<schema::Node>(slot->canCastTo->encodedNode).getDisplayName());
@@ -1079,7 +1079,7 @@ internal::RawSchema* SchemaLoader::Impl::loadEmpty(
     case schema::Node::Body::FILE_NODE:
     case schema::Node::Body::CONST_NODE:
     case schema::Node::Body::ANNOTATION_NODE:
-      FAIL_REQUIRE("Not a type.");
+      KJ_FAIL_REQUIRE("Not a type.");
       break;
   }
 
@@ -1111,7 +1111,7 @@ SchemaLoader::~SchemaLoader() {}
 
 Schema SchemaLoader::get(uint64_t id) const {
   internal::RawSchema* raw = impl->tryGet(id);
-  REQUIRE(raw != nullptr, "no schema node loaded for id", id);
+  KJ_REQUIRE(raw != nullptr, "no schema node loaded for id", id);
   return Schema(raw);
 }
 

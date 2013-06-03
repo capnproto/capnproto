@@ -33,11 +33,11 @@ namespace {
 struct TestObject {
   TestObject() {
     index = count;
-    ASSERT(index != throwAt);
+    KJ_ASSERT(index != throwAt);
     ++count;
   }
   TestObject(const TestObject& other) {
-    ASSERT(other.index != throwAt);
+    KJ_ASSERT(other.index != throwAt);
     index = -1;
     copiedCount++;
   }
@@ -47,7 +47,7 @@ struct TestObject {
     } else {
       --count;
       EXPECT_EQ(index, count);
-      ASSERT(count != throwAt);
+      KJ_ASSERT(count != throwAt);
     }
   }
 

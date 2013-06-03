@@ -128,8 +128,8 @@ void TextBlob::allocate(size_t textSize, size_t branchCount,
 }
 
 void TextBlob::fill(char* textPos, Branch* branchesPos) {
-  ASSERT(textPos == text.end(), textPos - text.end());
-  ASSERT(branchesPos == branches.end(), branchesPos - branches.end());
+  KJ_ASSERT(textPos == text.end(), textPos - text.end());
+  KJ_ASSERT(branchesPos == branches.end(), branchesPos - branches.end());
 }
 
 template <typename First, typename... Rest>
@@ -217,7 +217,7 @@ Text::Reader getUnqualifiedName(Schema schema) {
       return nested.getName();
     }
   }
-  FAIL_REQUIRE("A schema Node's supposed scope did not contain the node as a NestedNode.");
+  KJ_FAIL_REQUIRE("A schema Node's supposed scope did not contain the node as a NestedNode.");
   return "(?)";
 }
 
@@ -365,22 +365,22 @@ TextBlob genValue(schema::Type::Reader type, schema::Value::Reader value, Schema
     case schema::Value::Body::TEXT_VALUE: return text(DynamicValue::Reader(body.getTextValue()));
     case schema::Value::Body::DATA_VALUE: return text(DynamicValue::Reader(body.getDataValue()));
     case schema::Value::Body::LIST_VALUE: {
-      REQUIRE(type.getBody().which() == schema::Type::Body::LIST_TYPE, "type/value mismatch");
+      KJ_REQUIRE(type.getBody().which() == schema::Type::Body::LIST_TYPE, "type/value mismatch");
       auto value = body.getListValue<DynamicList>(
           ListSchema::of(type.getBody().getListType(), scope));
       return text(value);
     }
     case schema::Value::Body::ENUM_VALUE: {
-      REQUIRE(type.getBody().which() == schema::Type::Body::ENUM_TYPE, "type/value mismatch");
+      KJ_REQUIRE(type.getBody().which() == schema::Type::Body::ENUM_TYPE, "type/value mismatch");
       auto enumNode = scope.getDependency(type.getBody().getEnumType()).asEnum().getProto();
       auto enumType = enumNode.getBody().getEnumNode();
       auto enumerants = enumType.getEnumerants();
-      REQUIRE(body.getEnumValue() < enumerants.size(),
+      KJ_REQUIRE(body.getEnumValue() < enumerants.size(),
               "Enum value out-of-range.", body.getEnumValue(), enumNode.getDisplayName());
       return text(enumerants[body.getEnumValue()].getName());
     }
     case schema::Value::Body::STRUCT_VALUE: {
-      REQUIRE(type.getBody().which() == schema::Type::Body::STRUCT_TYPE, "type/value mismatch");
+      KJ_REQUIRE(type.getBody().which() == schema::Type::Body::STRUCT_TYPE, "type/value mismatch");
       auto value = body.getStructValue<DynamicStruct>(
           scope.getDependency(type.getBody().getStructType()).asStruct());
       return text(value);
@@ -400,7 +400,7 @@ TextBlob genAnnotation(schema::Annotation::Reader annotation,
                        const char* prefix = " ", const char* suffix = "") {
   auto decl = schemaLoader.get(annotation.getId());
   auto body = decl.getProto().getBody();
-  REQUIRE(body.which() == schema::Node::Body::ANNOTATION_NODE);
+  KJ_REQUIRE(body.which() == schema::Node::Body::ANNOTATION_NODE);
   auto annDecl = body.getAnnotationNode();
 
   return text(prefix, "$", nodeName(decl, scope), "(",
@@ -468,12 +468,12 @@ TextBlob genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent inde
   auto proto = schema.getProto();
   if (proto.getScopeId() != scopeId) {
     // This appears to be an alias for something declared elsewhere.
-    FAIL_REQUIRE("Aliases not implemented.");
+    KJ_FAIL_REQUIRE("Aliases not implemented.");
   }
 
   switch (proto.getBody().which()) {
     case schema::Node::Body::FILE_NODE:
-      FAIL_REQUIRE("Encountered nested file node.");
+      KJ_FAIL_REQUIRE("Encountered nested file node.");
       break;
     case schema::Node::Body::STRUCT_NODE: {
       auto body = proto.getBody().getStructNode();
@@ -578,7 +578,7 @@ TextBlob genNestedDecls(Schema schema, Indent indent) {
 TextBlob genFile(Schema file) {
   auto proto = file.getProto();
   auto body = proto.getBody();
-  REQUIRE(body.which() == schema::Node::Body::FILE_NODE, "Expected a file node.",
+  KJ_REQUIRE(body.which() == schema::Node::Body::FILE_NODE, "Expected a file node.",
           (uint)body.which());
 
   return text(

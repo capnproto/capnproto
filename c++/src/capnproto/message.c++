@@ -80,10 +80,10 @@ internal::SegmentBuilder* MessageBuilder::getRootSegment() {
 
     WordCount ptrSize = 1 * POINTERS * WORDS_PER_POINTER;
     internal::SegmentBuilder* segment = arena()->getSegmentWithAvailable(ptrSize);
-    ASSERT(segment->getSegmentId() == internal::SegmentId(0),
+    KJ_ASSERT(segment->getSegmentId() == internal::SegmentId(0),
         "First allocated word of new arena was not in segment ID 0.");
     word* location = segment->allocate(ptrSize);
-    ASSERT(location == segment->getPtrUnchecked(0 * WORDS),
+    KJ_ASSERT(location == segment->getPtrUnchecked(0 * WORDS),
         "First allocated word of new arena was not the first word in its segment.");
     return segment;
   }
@@ -146,10 +146,10 @@ MallocMessageBuilder::MallocMessageBuilder(
     kj::ArrayPtr<word> firstSegment, AllocationStrategy allocationStrategy)
     : nextSize(firstSegment.size()), allocationStrategy(allocationStrategy),
       ownFirstSegment(false), returnedFirstSegment(false), firstSegment(firstSegment.begin()) {
-  REQUIRE(firstSegment.size() > 0, "First segment size must be non-zero.");
+  KJ_REQUIRE(firstSegment.size() > 0, "First segment size must be non-zero.");
 
   // Checking just the first word should catch most cases of failing to zero the segment.
-  REQUIRE(*reinterpret_cast<uint64_t*>(firstSegment.begin()) == 0,
+  KJ_REQUIRE(*reinterpret_cast<uint64_t*>(firstSegment.begin()) == 0,
           "First segment must be zeroed.");
 }
 
@@ -161,7 +161,7 @@ MallocMessageBuilder::~MallocMessageBuilder() {
       // Must zero first segment.
       kj::ArrayPtr<const kj::ArrayPtr<const word>> segments = getSegmentsForOutput();
       if (segments.size() > 0) {
-        ASSERT(segments[0].begin() == firstSegment,
+        KJ_ASSERT(segments[0].begin() == firstSegment,
             "First segment in getSegmentsForOutput() is not the first segment allocated?");
         memset(firstSegment, 0, segments[0].size() * sizeof(word));
       }
@@ -218,12 +218,12 @@ FlatMessageBuilder::FlatMessageBuilder(kj::ArrayPtr<word> array): array(array), 
 FlatMessageBuilder::~FlatMessageBuilder() {}
 
 void FlatMessageBuilder::requireFilled() {
-  REQUIRE(getSegmentsForOutput()[0].end() == array.end(),
+  KJ_REQUIRE(getSegmentsForOutput()[0].end() == array.end(),
           "FlatMessageBuilder's buffer was too large.");
 }
 
 kj::ArrayPtr<word> FlatMessageBuilder::allocateSegment(uint minimumSize) {
-  REQUIRE(!allocated, "FlatMessageBuilder's buffer was not large enough.");
+  KJ_REQUIRE(!allocated, "FlatMessageBuilder's buffer was not large enough.");
   allocated = true;
   return array;
 }

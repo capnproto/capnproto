@@ -125,8 +125,8 @@ void inlineRequireFailure(
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_EXPECT_TRUE(condition)); else ::kj::internal::inlineRequireFailure( \
         __FILE__, __LINE__, #condition, #__VA_ARGS__, ##__VA_ARGS__)
-// Version of REQUIRE() which is safe to use in headers that are #included by users.  Used to check
-// preconditions inside inline methods.  KJ_INLINE_DPRECOND is particularly useful in that
+// Version of KJ_REQUIRE() which is safe to use in headers that are #included by users.  Used to
+// check preconditions inside inline methods.  KJ_INLINE_DPRECOND is particularly useful in that
 // it will be enabled depending on whether the application is compiled in debug mode rather than
 // whether libkj is.
 #endif

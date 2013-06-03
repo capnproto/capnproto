@@ -40,7 +40,7 @@ public:
   // implements snappy::Source ---------------------------------------
 
   size_t Available() const override {
-    FAIL_ASSERT("Snappy doesn't actually call this.");
+    KJ_FAIL_ASSERT("Snappy doesn't actually call this.");
     return 0;
   }
 
@@ -121,7 +121,7 @@ void SnappyInputStream::refill() {
 SnappyOutputStream::SnappyOutputStream(
     OutputStream& inner, kj::ArrayPtr<byte> buffer, kj::ArrayPtr<byte> compressedBuffer)
     : inner(inner) {
-  DASSERT(SNAPPY_COMPRESSED_BUFFER_SIZE >= snappy::MaxCompressedLength(snappy::kBlockSize),
+  KJ_DASSERT(SNAPPY_COMPRESSED_BUFFER_SIZE >= snappy::MaxCompressedLength(snappy::kBlockSize),
       "snappy::MaxCompressedLength() changed?");
 
   if (buffer.size() < SNAPPY_BUFFER_SIZE) {
@@ -159,7 +159,7 @@ void SnappyOutputStream::flush() {
     snappy::UncheckedByteArraySink sink(reinterpret_cast<char*>(compressedBuffer.begin()));
 
     size_t n = snappy::Compress(&source, &sink);
-    ASSERT(n <= compressedBuffer.size(),
+    KJ_ASSERT(n <= compressedBuffer.size(),
         "Critical security bug:  Snappy compression overran its output buffer.");
     inner.write(compressedBuffer.begin(), n);
 

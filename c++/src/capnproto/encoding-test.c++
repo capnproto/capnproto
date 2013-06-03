@@ -279,7 +279,7 @@ UnionState initUnion(Func&& initializer) {
   initializer(builder.getRoot<StructType>());
   kj::ArrayPtr<const word> segment = builder.getSegmentsForOutput()[0];
 
-  ASSERT(segment.size() > 2, segment.size());
+  KJ_ASSERT(segment.size() > 2, segment.size());
 
   // Find the offset of the first set bit after the union discriminants.
   int offset = 0;

@@ -39,8 +39,8 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
     return 0;
   }
 
-  DREQUIRE(minBytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
-  DREQUIRE(maxBytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
+  KJ_DREQUIRE(minBytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
+  KJ_DREQUIRE(maxBytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
 
   uint8_t* __restrict__ out = reinterpret_cast<uint8_t*>(dst);
   uint8_t* const outEnd = reinterpret_cast<uint8_t*>(dst) + maxBytes;
@@ -66,7 +66,7 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
   for (;;) {
     uint8_t tag;
 
-    DASSERT((out - reinterpret_cast<uint8_t*>(dst)) % sizeof(word) == 0,
+    KJ_DASSERT((out - reinterpret_cast<uint8_t*>(dst)) % sizeof(word) == 0,
            "Output pointer should always be aligned here.");
 
     if (BUFFER_REMAINING < 10) {
@@ -122,7 +122,7 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
     }
 
     if (tag == 0) {
-      DASSERT(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
+      KJ_DASSERT(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
 
       uint runLength = *in++ * sizeof(word);
 
@@ -134,7 +134,7 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
       out += runLength;
 
     } else if (tag == 0xffu) {
-      DASSERT(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
+      KJ_DASSERT(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
 
       uint runLength = *in++ * sizeof(word);
 
@@ -177,8 +177,8 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
     }
   }
 
-  FAIL_ASSERT("Can't get here.");
-  return 0;  // GCC knows FAIL_ASSERT doesn't return, but Eclipse CDT still warns...
+  KJ_FAIL_ASSERT("Can't get here.");
+  return 0;  // GCC knows KJ_FAIL_ASSERT doesn't return, but Eclipse CDT still warns...
 
 #undef REFRESH_BUFFER
 }
@@ -190,7 +190,7 @@ void PackedInputStream::skip(size_t bytes) {
     return;
   }
 
-  DREQUIRE(bytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
+  KJ_DREQUIRE(bytes % sizeof(word) == 0, "PackedInputStream reads must be word-aligned.");
 
   kj::ArrayPtr<const byte> buffer = inner.getReadBuffer();
   const uint8_t* __restrict__ in = reinterpret_cast<const uint8_t*>(buffer.begin());
@@ -248,7 +248,7 @@ void PackedInputStream::skip(size_t bytes) {
     }
 
     if (tag == 0) {
-      DASSERT(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
+      KJ_DASSERT(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
 
       uint runLength = *in++ * sizeof(word);
 
@@ -260,7 +260,7 @@ void PackedInputStream::skip(size_t bytes) {
       bytes -= runLength;
 
     } else if (tag == 0xffu) {
-      DASSERT(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
+      KJ_DASSERT(BUFFER_REMAINING > 0, "Should always have non-empty buffer here.");
 
       uint runLength = *in++ * sizeof(word);
 
@@ -298,7 +298,7 @@ void PackedInputStream::skip(size_t bytes) {
     }
   }
 
-  FAIL_ASSERT("Can't get here.");
+  KJ_FAIL_ASSERT("Can't get here.");
 }
 
 // -------------------------------------------------------------------
