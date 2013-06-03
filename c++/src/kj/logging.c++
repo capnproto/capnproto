@@ -129,9 +129,11 @@ static String makeDescription(DescriptionStyle style, const char* code, int erro
       sysErrorArray = strerror_r(errorNumber, buffer, sizeof(buffer));
     }
 #else
-    // TODO(port):  Other unixes should have strerror_r but it may have a different signature.
-    //   Port for thread-safety.
-    sysErrorArray = arrayPtr(strerror(errorNumber));
+    char buffer[256];
+    if (style == SYSCALL) {
+      strerror_r(errorNumber, buffer, sizeof(buffer));
+      sysErrorArray = buffer;
+    }
 #endif
 
     size_t totalSize = 0;

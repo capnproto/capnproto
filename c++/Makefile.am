@@ -61,7 +61,7 @@ capnpc_middleman:
 $(capnpc_outputs): capnpc_middleman
 
 includecapnpdir = $(includedir)/capnproto
-includekjdir = $(includedir)/capnproto
+includekjdir = $(includedir)/kj
 
 includekj_HEADERS =                                            \
   src/kj/common.h                                              \
