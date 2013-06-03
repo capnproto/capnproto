@@ -153,6 +153,13 @@ will not crash.  Your exception callback should set some sort of a flag indicati
 occurred, and somewhere up the stack you should check for that flag and cancel the operation.
 See the header `capnproto/exception.h` for details on how to register an exception callback.
 
+## KJ Library
+
+Cap'n Proto is built on top of a basic utility library called KJ.  The two were actually developed
+together -- KJ is simply the stuff which is not specific to Cap'n Proto serialization, and may be
+useful to others independently of Cap'n Proto.  For now, the the two are distributed together.  The
+name "KJ" has no particular meaning; it was chosen to be short and easy-to-type.
+
 ## Generating Code
 
 To generate C++ code from your `.capnp` [interface definition](language.html), run:
@@ -386,7 +393,6 @@ using capnproto::DynamicEnum;
 using capnproto::DynamicList;
 using capnproto::DynamicUnion;
 using capnproto::List;
-using capnproto::Maybe;
 using capnproto::Schema;
 using capnproto::StructSchema;
 using capnproto::EnumSchema;
@@ -482,14 +488,12 @@ void dynamicPrintValue(DynamicValue::Reader value) {
     }
     case DynamicValue::ENUM: {
       auto enumValue = value.as<DynamicEnum>();
-      Maybe<EnumSchema::Enumerant> enumerant =
-          enumValue.getEnumerant();
-      if (enumerant == nullptr) {
-        // Unknown enum value; output raw number.
-        std::cout << enumValue.getRaw();
-      } else {
+      KJ_IF_MAYBE(enumerant, enumValue.getEnumerant()) {
         std::cout <<
             enumerant->getProto().getName().c_str();
+      } else {
+        // Unknown enum value; output raw number.
+        std::cout << enumValue.getRaw();
       }
       break;
     }
@@ -513,15 +517,14 @@ void dynamicPrintValue(DynamicValue::Reader value) {
     }
     case DynamicValue::UNION: {
       auto unionValue = value.as<DynamicUnion>();
-      Maybe<StructSchema::Member> tag = unionValue.which();
-      if (tag == nullptr) {
-        // Unknown union member; must have come from newer
-        // version of the protocol.
-        std::cout << "?";
-      } else {
+      KJ_IF_MAYBE(tag, unionValue.which()) {
         std::cout << tag->getProto().getName() << "(";
         dynamicPrintValue(unionValue.get());
         std::cout << ")";
+      } else {
+        // Unknown union member; must have come from newer
+        // version of the protocol.
+        std::cout << "?";
       }
       break;
     }
@@ -562,11 +565,11 @@ best reference is the header files.  See:
 
     capnproto/list.h
     capnproto/blob.h
-    capnproto/io.h
     capnproto/message.h
-    capnproto/serialized.h
-    capnproto/serialized-packed.h
+    capnproto/serialize.h
+    capnproto/serialize-packed.h
     capnproto/schema.h
+    capnproto/schema-loader.h
     capnproto/dynamic.h
 
 ## Lessons Learned from Protocol Buffers
