@@ -98,8 +98,8 @@
 // * For every macro `FOO` above, there is a `DFOO` version (or `RECOVERABLE_DFOO`) which is only
 //   executed in debug mode.  When `NDEBUG` is defined, these macros expand to nothing.
 
-#ifndef KJ_LOGGING_H_
-#define KJ_LOGGING_H_
+#ifndef KJ_DEBUG_H_
+#define KJ_DEBUG_H_
 
 #include "string.h"
 #include "exception.h"
@@ -296,4 +296,4 @@ void Log::addContextTo(Exception& exception, const char* file, int line,
 
 }  // namespace kj
 
-#endif  // KJ_LOGGING_H_
+#endif  // KJ_DEBUG_H_

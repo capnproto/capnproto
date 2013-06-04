@@ -25,8 +25,8 @@
 // time, but should then be optimized down to basic primitives (usually, integers) by the
 // compiler.
 
-#ifndef KJ_TYPE_SAFETY_H_
-#define KJ_TYPE_SAFETY_H_
+#ifndef KJ_UNITS_H_
+#define KJ_UNITS_H_
 
 #include "common.h"
 
@@ -364,4 +364,4 @@ inline constexpr auto operator*(UnitRatio<Number1, Unit2, Unit> ratio,
 
 }  // namespace kj
 
-#endif  // KJ_TYPE_SAFETY_H_
+#endif  // KJ_UNITS_H_
