@@ -47,7 +47,7 @@
 #define CAPNPROTO_PRIVATE
 #include "message.h"
 #include "dynamic.h"
-#include <kj/logging.h>
+#include <kj/debug.h>
 #include <gtest/gtest.h>
 #include "test-util.h"
 

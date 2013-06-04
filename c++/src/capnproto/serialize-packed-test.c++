@@ -24,7 +24,7 @@
 #define CAPNPROTO_PRIVATE
 #include "serialize-packed.h"
 #include "test.capnp.h"
-#include <kj/logging.h>
+#include <kj/debug.h>
 #include <gtest/gtest.h>
 #include <string>
 #include <stdlib.h>

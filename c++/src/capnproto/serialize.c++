@@ -24,7 +24,7 @@
 #define CAPNPROTO_PRIVATE
 #include "serialize.h"
 #include "layout.h"
-#include <kj/logging.h>
+#include <kj/debug.h>
 
 namespace capnproto {
 

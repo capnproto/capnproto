@@ -24,7 +24,7 @@
 #define CAPNPROTO_PRIVATE
 #include "arena.h"
 #include "message.h"
-#include <kj/logging.h>
+#include <kj/debug.h>
 #include <vector>
 #include <string.h>
 #include <stdio.h>

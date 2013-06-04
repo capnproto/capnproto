@@ -27,7 +27,7 @@
 #include <map>
 #include "message.h"
 #include "arena.h"
-#include <kj/logging.h>
+#include <kj/debug.h>
 #include <kj/exception.h>
 
 namespace capnproto {

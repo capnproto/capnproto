@@ -23,7 +23,7 @@
 
 #define CAPNPROTO_PRIVATE
 #include "layout.h"
-#include <kj/logging.h>
+#include <kj/debug.h>
 #include "arena.h"
 #include <string.h>
 #include <limits>

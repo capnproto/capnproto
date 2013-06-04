@@ -28,7 +28,7 @@
 
 #include "../schema.capnp.h"
 #include "../serialize.h"
-#include <kj/logging.h>
+#include <kj/debug.h>
 #include <kj/io.h>
 #include "../schema-loader.h"
 #include "../dynamic.h"

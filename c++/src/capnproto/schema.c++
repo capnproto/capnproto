@@ -24,7 +24,7 @@
 #define CAPNPROTO_PRIVATE
 #include "schema.h"
 #include "message.h"
-#include <kj/logging.h>
+#include <kj/debug.h>
 
 namespace capnproto {
 

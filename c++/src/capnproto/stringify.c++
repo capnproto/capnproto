@@ -23,7 +23,7 @@
 
 #define CAPNPROTO_PRIVATE
 #include "dynamic.h"
-#include <kj/logging.h>
+#include <kj/debug.h>
 #include <sstream>
 
 // TODO(cleanup):  Rewrite this using something other than iostream?

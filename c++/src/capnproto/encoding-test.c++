@@ -24,7 +24,7 @@
 #define CAPNPROTO_PRIVATE
 #include "test-import.capnp.h"
 #include "message.h"
-#include <kj/logging.h>
+#include <kj/debug.h>
 #include <gtest/gtest.h>
 #include "test-util.h"
 

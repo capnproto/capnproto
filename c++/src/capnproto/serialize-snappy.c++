@@ -23,7 +23,7 @@
 
 #define CAPNPROTO_PRIVATE
 #include "serialize-snappy.h"
-#include <kj/logging.h>
+#include <kj/debug.h>
 #include "layout.h"
 #include <snappy/snappy.h>
 #include <snappy/snappy-sinksource.h>

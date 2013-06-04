@@ -22,7 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "io.h"
-#include "logging.h"
+#include "debug.h"
 #include <unistd.h>
 #include <sys/uio.h>
 #include <algorithm>

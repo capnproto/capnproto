@@ -23,7 +23,7 @@
 
 #define CAPNPROTO_PRIVATE
 #include "serialize-packed.h"
-#include <kj/logging.h>
+#include <kj/debug.h>
 #include "layout.h"
 #include <vector>
 

@@ -23,7 +23,7 @@
 
 #include "array.h"
 #include <gtest/gtest.h>
-#include "logging.h"
+#include "debug.h"
 #include <string>
 #include <list>
 

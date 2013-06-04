@@ -28,7 +28,7 @@
 #include "common.h"
 #include <capnproto/serialize.h>
 #include <capnproto/serialize-packed.h>
-#include <kj/logging.h>
+#include <kj/debug.h>
 #if HAVE_SNAPPY
 #include <capnproto/serialize-snappy.h>
 #endif  // HAVE_SNAPPY

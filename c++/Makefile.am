@@ -70,9 +70,9 @@ includekj_HEADERS =                                            \
   src/kj/array.h                                               \
   src/kj/string.h                                              \
   src/kj/exception.h                                           \
-  src/kj/logging.h                                             \
+  src/kj/debug.h                                               \
   src/kj/io.h
-  
+
 includecapnp_HEADERS =                                         \
   src/capnproto/common.h                                       \
   src/capnproto/blob.h                                         \
@@ -100,7 +100,7 @@ libcapnproto_a_SOURCES=                                        \
   src/kj/array.c++                                             \
   src/kj/string.c++                                            \
   src/kj/exception.c++                                         \
-  src/kj/logging.c++                                           \
+  src/kj/debug.c++                                             \
   src/kj/io.c++                                                \
   src/capnproto/blob.c++                                       \
   src/capnproto/arena.h                                        \
@@ -151,7 +151,7 @@ capnproto_test_LDADD = -lgtest -lgtest_main libcapnproto.a
 capnproto_test_SOURCES =                                       \
   src/kj/array-test.c++                                        \
   src/kj/common-test.c++                                       \
-  src/kj/logging-test.c++                                      \
+  src/kj/debug-test.c++                                        \
   src/kj/string-test.c++                                       \
   src/kj/units-test.c++                                        \
   src/capnproto/blob-test.c++                                  \

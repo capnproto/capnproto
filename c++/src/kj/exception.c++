@@ -23,7 +23,7 @@
 
 #include "exception.h"
 #include "string.h"
-#include "logging.h"
+#include "debug.h"
 #include <unistd.h>
 #include <execinfo.h>
 #include <stdlib.h>

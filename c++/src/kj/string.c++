@@ -22,7 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "string.h"
-#include "logging.h"
+#include "debug.h"
 #include <stdio.h>
 #include <float.h>
 #include <limits>
