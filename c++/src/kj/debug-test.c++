@@ -46,8 +46,8 @@ public:
   void onRecoverableException(Exception&& exception) override {
     text += "recoverable exception: ";
     auto what = str(exception);
-    // Discard the last line of "what" because it is a stack trace.
-    const char* end = strrchr(what.cStr(), '\n');
+    // Discard the stack trace.
+    const char* end = strstr(what.cStr(), "\nstack: ");
     if (end == nullptr) {
       text += what.cStr();
     } else {
@@ -59,8 +59,8 @@ public:
   void onFatalException(Exception&& exception) override {
     text += "fatal exception: ";
     auto what = str(exception);
-    // Discard the last line of "what" because it is a stack trace.
-    const char* end = strrchr(what.cStr(), '\n');
+    // Discard the stack trace.
+    const char* end = strstr(what.cStr(), "\nstack: ");
     if (end == nullptr) {
       text += what.cStr();
     } else {

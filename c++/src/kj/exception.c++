@@ -29,7 +29,60 @@
 #include <stdlib.h>
 #include <exception>
 
+#if defined(__linux__) && !defined(NDEBUG)
+#include <stdio.h>
+#endif
+
 namespace kj {
+
+namespace {
+
+String getStackSymbols(ArrayPtr<void* const> trace) {
+#if defined(__linux__) && !defined(NDEBUG)
+  // Get executable name from /proc/self/exe, then pass it and the stack trace to addr2line to
+  // get file/line pairs.
+
+  char exe[512];
+  ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe));
+  if (n < 0 || n >= sizeof(exe)) {
+    return nullptr;
+  }
+  exe[n] = '\0';
+
+  String lines[6];
+
+  FILE* p = popen(str("addr2line -e ", exe, ' ', strArray(trace, " ")).cStr(), "r");
+  if (p == nullptr) {
+    return nullptr;
+  }
+
+  char line[512];
+  size_t i = 0;
+  while (i < KJ_ARRAY_SIZE(lines) && fgets(line, sizeof(line), p) != nullptr) {
+    // Don't include exception-handling infrastructure in stack trace.
+    if (i == 0 &&
+        (strstr(line, "kj/exception.") != nullptr ||
+         strstr(line, "kj/debug.") != nullptr)) {
+      continue;
+    }
+
+    size_t len = strlen(line);
+    if (len > 0 && line[len-1] == '\n') line[len-1] = '\0';
+    lines[i++] = str("\n", line);
+  }
+
+  // Skip remaining input.
+  while (fgets(line, sizeof(line), p) != nullptr) {}
+
+  pclose(p);
+
+  return strArray(arrayPtr(lines, i), "");
+#else
+  return nullptr;
+#endif
+}
+
+}  // namespace
 
 ArrayPtr<const char> KJ_STRINGIFY(Exception::Nature nature) {
   static const char* NATURE_STRINGS[] = {
@@ -87,7 +140,7 @@ String KJ_STRINGIFY(const Exception& e) {
              e.getFile(), ":", e.getLine(), ": ", e.getNature(),
              e.getDurability() == Exception::Durability::TEMPORARY ? " (temporary)" : "",
              e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
-             "\nstack: ", strArray(e.getStackTrace(), " "));
+             "\nstack: ", strArray(e.getStackTrace(), " "), getStackSymbols(e.getStackTrace()));
 }
 
 Exception::Exception(Nature nature, Durability durability, const char* file, int line,

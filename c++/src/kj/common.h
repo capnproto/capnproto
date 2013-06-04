@@ -157,6 +157,8 @@ void inlineRequireFailure(
       kj::arrayPtr(name##_stack, name##_size) : name##_heap
 #endif
 
+#define KJ_ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
+
 // =======================================================================================
 // Template metaprogramming helpers.
 
