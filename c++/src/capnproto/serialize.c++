@@ -42,7 +42,7 @@ FlatArrayMessageReader::FlatArrayMessageReader(
   uint segmentCount = table[0].get() + 1;
   size_t offset = segmentCount / 2u + 1u;
 
-  VALIDATE_INPUT(array.size() >= offset, "Message ends prematurely in segment table.") {
+  KJ_REQUIRE(array.size() >= offset, "Message ends prematurely in segment table.") {
     return;
   }
 
@@ -52,8 +52,8 @@ FlatArrayMessageReader::FlatArrayMessageReader(
 
   uint segmentSize = table[1].get();
 
-  VALIDATE_INPUT(array.size() >= offset + segmentSize,
-                 "Message ends prematurely in first segment.") {
+  KJ_REQUIRE(array.size() >= offset + segmentSize,
+             "Message ends prematurely in first segment.") {
     return;
   }
 
@@ -66,7 +66,7 @@ FlatArrayMessageReader::FlatArrayMessageReader(
     for (uint i = 1; i < segmentCount; i++) {
       uint segmentSize = table[i + 1].get();
 
-      VALIDATE_INPUT(array.size() >= offset + segmentSize, "Message ends prematurely.") {
+      KJ_REQUIRE(array.size() >= offset + segmentSize, "Message ends prematurely.") {
         moreSegments = nullptr;
         return;
       }
@@ -142,9 +142,10 @@ InputStreamMessageReader::InputStreamMessageReader(
   size_t totalWords = segment0Size;
 
   // Reject messages with too many segments for security reasons.
-  VALIDATE_INPUT(segmentCount < 512, "Message has too many segments.") {
+  KJ_REQUIRE(segmentCount < 512, "Message has too many segments.") {
     segmentCount = 1;
     segment0Size = 1;
+    break;
   }
 
   // Read sizes for all segments except the first.  Include padding if necessary.
@@ -159,12 +160,13 @@ InputStreamMessageReader::InputStreamMessageReader(
   // Don't accept a message which the receiver couldn't possibly traverse without hitting the
   // traversal limit.  Without this check, a malicious client could transmit a very large segment
   // size to make the receiver allocate excessive space and possibly crash.
-  VALIDATE_INPUT(totalWords <= options.traversalLimitInWords,
-        "Message is too large.  To increase the limit on the receiving end, see "
-        "capnproto::ReaderOptions.") {
+  KJ_REQUIRE(totalWords <= options.traversalLimitInWords,
+             "Message is too large.  To increase the limit on the receiving end, see "
+             "capnproto::ReaderOptions.") {
     segmentCount = 1;
     segment0Size = std::min<size_t>(segment0Size, options.traversalLimitInWords);
     totalWords = segment0Size;
+    break;
   }
 
   if (scratchSpace.size() < totalWords) {

@@ -106,11 +106,12 @@ void SnappyInputStream::skip(size_t bytes) {
 void SnappyInputStream::refill() {
   uint32_t length = 0;
   InputStreamSnappySource snappySource(inner);
-  VALIDATE_INPUT(
+  KJ_REQUIRE(
       snappy::RawUncompress(
           &snappySource, reinterpret_cast<char*>(buffer.begin()), buffer.size(), &length),
       "Snappy decompression failed.") {
     length = 1;  // garbage
+    break;
   }
 
   bufferAvailable = buffer.slice(0, length);

@@ -112,9 +112,10 @@ kj::Maybe<EnumSchema::Enumerant> DynamicEnum::getEnumerant() {
 }
 
 uint16_t DynamicEnum::asImpl(uint64_t requestedTypeId) {
-  RECOVERABLE_REQUIRE(requestedTypeId == schema.getProto().getId(),
-                      "Type mismatch in DynamicEnum.as().") {
+  KJ_REQUIRE(requestedTypeId == schema.getProto().getId(),
+             "Type mismatch in DynamicEnum.as().") {
     // use it anyway
+    break;
   }
   return value;
 }
@@ -125,7 +126,7 @@ DynamicStruct::Reader DynamicObject::as(StructSchema schema) {
   if (reader.kind == internal::ObjectKind::NULL_POINTER) {
     return DynamicStruct::Reader(schema, internal::StructReader());
   }
-  RECOVERABLE_REQUIRE(reader.kind == internal::ObjectKind::STRUCT, "Object is not a struct.") {
+  KJ_REQUIRE(reader.kind == internal::ObjectKind::STRUCT, "Object is not a struct.") {
     // Return default struct.
     return DynamicStruct::Reader(schema, internal::StructReader());
   }
@@ -136,7 +137,7 @@ DynamicList::Reader DynamicObject::as(ListSchema schema) {
   if (reader.kind == internal::ObjectKind::NULL_POINTER) {
     return DynamicList::Reader(schema, internal::ListReader());
   }
-  RECOVERABLE_REQUIRE(reader.kind == internal::ObjectKind::LIST, "Object is not a list.") {
+  KJ_REQUIRE(reader.kind == internal::ObjectKind::LIST, "Object is not a list.") {
     // Return empty list.
     return DynamicList::Reader(schema, internal::ListReader());
   }
@@ -880,7 +881,7 @@ void DynamicStruct::Builder::setImpl(
         getImpl(builder, member).as<DynamicUnion>().set(member, src.get());
         return;
       } else {
-        FAIL_RECOVERABLE_REQUIRE(
+        KJ_FAIL_REQUIRE(
             "Trying to copy a union value, but the union's discriminant is not recognized.  It "
             "was probably constructed using a newer version of the schema.") {
           // Just don't copy anything.
@@ -928,8 +929,8 @@ void DynamicStruct::Builder::setImpl(
             rawValue = enumSchema.getEnumerantByName(value.as<Text>()).getOrdinal();
           } else {
             DynamicEnum enumValue = value.as<DynamicEnum>();
-            RECOVERABLE_REQUIRE(enumValue.getSchema() == enumSchema,
-                                "Type mismatch when using DynamicList::Builder::set().") {
+            KJ_REQUIRE(enumValue.getSchema() == enumSchema,
+                       "Type mismatch when using DynamicList::Builder::set().") {
               return;
             }
             rawValue = enumValue.getRaw();
@@ -967,8 +968,9 @@ void DynamicStruct::Builder::setImpl(
           return;
       }
 
-      FAIL_RECOVERABLE_REQUIRE("can't set field of unknown type", (uint)type.which());
-      return;
+      KJ_FAIL_REQUIRE("can't set field of unknown type", (uint)type.which()) {
+        return;
+      }
     }
   }
 
@@ -1109,8 +1111,9 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) const {
           reader.getObjectElement(index * ELEMENTS)));
 
     case schema::Type::Body::INTERFACE_TYPE:
-      FAIL_RECOVERABLE_ASSERT("Interfaces not implemented.") {}
-      return nullptr;
+      KJ_FAIL_ASSERT("Interfaces not implemented.") {
+        return nullptr;
+      }
   }
 
   return nullptr;
@@ -1171,15 +1174,16 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) const {
       return nullptr;
 
     case schema::Type::Body::INTERFACE_TYPE:
-      FAIL_RECOVERABLE_ASSERT("Interfaces not implemented.") {}
-      return nullptr;
+      KJ_FAIL_ASSERT("Interfaces not implemented.") {
+        return nullptr;
+      }
   }
 
   return nullptr;
 }
 
 void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
-  RECOVERABLE_REQUIRE(index < size(), "List index out-of-bounds.") {
+  KJ_REQUIRE(index < size(), "List index out-of-bounds.") {
     return;
   }
 
@@ -1219,8 +1223,9 @@ void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
       // Not supported for the same reason List<struct> doesn't support it -- the space for the
       // element is already allocated, and if it's smaller than the input value the copy would
       // have to be lossy.
-      FAIL_RECOVERABLE_ASSERT("DynamicList of structs does not support set().");
-      return;
+      KJ_FAIL_ASSERT("DynamicList of structs does not support set().") {
+        return;
+      }
 
     case schema::Type::Body::ENUM_TYPE: {
       uint16_t rawValue;
@@ -1229,8 +1234,8 @@ void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
         rawValue = schema.getEnumElementType().getEnumerantByName(value.as<Text>()).getOrdinal();
       } else {
         DynamicEnum enumValue = value.as<DynamicEnum>();
-        RECOVERABLE_REQUIRE(schema.getEnumElementType() == enumValue.getSchema(),
-                            "Type mismatch when using DynamicList::Builder::set().") {
+        KJ_REQUIRE(schema.getEnumElementType() == enumValue.getSchema(),
+                   "Type mismatch when using DynamicList::Builder::set().") {
           return;
         }
         rawValue = enumValue.getRaw();
@@ -1240,15 +1245,19 @@ void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
     }
 
     case schema::Type::Body::OBJECT_TYPE:
-      FAIL_RECOVERABLE_ASSERT("List(Object) not supported.");
-      return;
+      KJ_FAIL_ASSERT("List(Object) not supported.") {
+        return;
+      }
 
     case schema::Type::Body::INTERFACE_TYPE:
-      FAIL_RECOVERABLE_ASSERT("Interfaces not implemented.") {}
-      return;
+      KJ_FAIL_ASSERT("Interfaces not implemented.") {
+        return;
+      }
   }
 
-  FAIL_RECOVERABLE_REQUIRE("can't set element of unknown type", (uint)schema.whichElementType());
+  KJ_FAIL_REQUIRE("can't set element of unknown type", (uint)schema.whichElementType()) {
+    return;
+  }
 }
 
 DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
@@ -1343,42 +1352,46 @@ namespace {
 
 template <typename T>
 T signedToUnsigned(long long value) {
-  RECOVERABLE_REQUIRE(value >= 0 && T(value) == value,
-                      "Value out-of-range for requested type.", value) {
+  KJ_REQUIRE(value >= 0 && T(value) == value, "Value out-of-range for requested type.", value) {
     // Use it anyway.
+    break;
   }
   return value;
 }
 
 template <>
 uint64_t signedToUnsigned<uint64_t>(long long value) {
-  RECOVERABLE_REQUIRE(value >= 0, "Value out-of-range for requested type.", value) {
+  KJ_REQUIRE(value >= 0, "Value out-of-range for requested type.", value) {
     // Use it anyway.
+    break;
   }
   return value;
 }
 
 template <typename T>
 T unsignedToSigned(unsigned long long value) {
-  RECOVERABLE_REQUIRE(T(value) >= 0 && (unsigned long long)T(value) == value,
-                      "Value out-of-range for requested type.", value) {
+  KJ_REQUIRE(T(value) >= 0 && (unsigned long long)T(value) == value,
+             "Value out-of-range for requested type.", value) {
     // Use it anyway.
+    break;
   }
   return value;
 }
 
 template <>
 int64_t unsignedToSigned<int64_t>(unsigned long long value) {
-  RECOVERABLE_REQUIRE(int64_t(value) >= 0, "Value out-of-range for requested type.", value) {
+  KJ_REQUIRE(int64_t(value) >= 0, "Value out-of-range for requested type.", value) {
     // Use it anyway.
+    break;
   }
   return value;
 }
 
 template <typename T, typename U>
 T checkRoundTrip(U value) {
-  RECOVERABLE_REQUIRE(T(value) == value, "Value out-of-range for requested type.", value) {
+  KJ_REQUIRE(T(value) == value, "Value out-of-range for requested type.", value) {
     // Use it anyway.
+    break;
   }
   return value;
 }
@@ -1395,10 +1408,9 @@ typeName DynamicValue::Reader::AsImpl<typeName>::apply(Reader reader) { \
     case FLOAT: \
       return ifFloat<typeName>(reader.floatValue); \
     default: \
-      FAIL_RECOVERABLE_REQUIRE("Type mismatch when using DynamicValue::Reader::as().") { \
-        /* use zero */ \
+      KJ_FAIL_REQUIRE("Type mismatch when using DynamicValue::Reader::as().") { \
+        return 0; \
       } \
-      return 0; \
   } \
 } \
 typeName DynamicValue::Builder::AsImpl<typeName>::apply(Builder builder) { \
@@ -1410,10 +1422,9 @@ typeName DynamicValue::Builder::AsImpl<typeName>::apply(Builder builder) { \
     case FLOAT: \
       return ifFloat<typeName>(builder.floatValue); \
     default: \
-      FAIL_RECOVERABLE_REQUIRE("Type mismatch when using DynamicValue::Builder::as().") { \
-        /* use zero */ \
+      KJ_FAIL_REQUIRE("Type mismatch when using DynamicValue::Builder::as().") { \
+        return 0; \
       } \
-      return 0; \
   } \
 }
 
@@ -1459,8 +1470,7 @@ Data::Reader DynamicValue::Reader::AsImpl<Data>::apply(Reader reader) {
     // Implicitly convert from text.
     return reader.textValue;
   }
-  RECOVERABLE_REQUIRE(reader.type == DATA,
-      "Type mismatch when using DynamicValue::Reader::as().") {
+  KJ_REQUIRE(reader.type == DATA, "Type mismatch when using DynamicValue::Reader::as().") {
     return Data::Reader();
   }
   return reader.dataValue;
@@ -1470,8 +1480,7 @@ Data::Builder DynamicValue::Builder::AsImpl<Data>::apply(Builder builder) {
     // Implicitly convert from text.
     return builder.textValue;
   }
-  RECOVERABLE_REQUIRE(builder.type == DATA,
-      "Type mismatch when using DynamicValue::Builder::as().") {
+  KJ_REQUIRE(builder.type == DATA, "Type mismatch when using DynamicValue::Builder::as().") {
     return Data::Builder();
   }
   return builder.dataValue;
@@ -1479,15 +1488,13 @@ Data::Builder DynamicValue::Builder::AsImpl<Data>::apply(Builder builder) {
 
 // As in the header, HANDLE_TYPE(void, VOID, Void) crashes GCC 4.7.
 Void DynamicValue::Reader::AsImpl<Void>::apply(Reader reader) {
-  RECOVERABLE_REQUIRE(reader.type == VOID,
-      "Type mismatch when using DynamicValue::Reader::as().") {
+  KJ_REQUIRE(reader.type == VOID, "Type mismatch when using DynamicValue::Reader::as().") {
     return Void();
   }
   return reader.voidValue;
 }
 Void DynamicValue::Builder::AsImpl<Void>::apply(Builder builder) {
-  RECOVERABLE_REQUIRE(builder.type == VOID,
-      "Type mismatch when using DynamicValue::Builder::as().") {
+  KJ_REQUIRE(builder.type == VOID, "Type mismatch when using DynamicValue::Builder::as().") {
     return Void();
   }
   return builder.voidValue;

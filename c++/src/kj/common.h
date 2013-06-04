@@ -30,7 +30,7 @@
 #ifndef KJ_COMMON_H_
 #define KJ_COMMON_H_
 
-#if __cplusplus < 201103L
+#if __cplusplus < 201103L && !__CDT_PARSER__
   #error "This code requires C++11. Either your compiler does not support it or it is not enabled."
   #ifdef __GNUC__
     // Compiler claims compatibility with GCC, so presumably supports -std.

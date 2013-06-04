@@ -36,43 +36,48 @@
 //
 // * `KJ_LOG(severity, ...)`:  Just writes a log message, to stderr by default (but you can
 //   intercept messages by implementing an ExceptionCallback).  `severity` is `INFO`, `WARNING`,
-//   `ERROR`, or `FATAL`.  If the severity is not higher than the global logging threshold, nothing
-//   will be written and in fact the log message won't even be evaluated.
+//   `ERROR`, or `FATAL`.  By default, `INFO` logs are not written, but for command-line apps the
+//   user should be able to pass a flag like `--verbose` to enable them.  Other log levels are
+//   enabled by default.  Log messages -- like exceptions -- can be intercepted by registering an
+//   ExceptionCallback.
+//
+// * `KJ_DBG(...)`:  Like `KJ_LOG`, but intended specifically for temporary log lines added while
+//   debugging a particular problem.  Calls to `KJ_DBG` should always be deleted before committing
+//   code.  It is suggested that you set up a pre-commit hook that checks for this.
 //
 // * `KJ_ASSERT(condition, ...)`:  Throws an exception if `condition` is false, or aborts if
 //   exceptions are disabled.  This macro should be used to check for bugs in the surrounding code
-//   and its dependencies, but NOT to check for invalid input.
+//   and its dependencies, but NOT to check for invalid input.  The macro may be followed by a
+//   brace-delimited code block; if so, the block will be executed in the case where the assertion
+//   fails, before throwing the exception.  If control jumps out of the block (e.g. with "break",
+//   "return", or "goto"), then the error is considered "recoverable" -- in this case, if
+//   exceptions are disabled, execution will continue normally rather than aborting (but if
+//   exceptions are enabled, an exception will still be thrown on exiting the block). A "break"
+//   statement in particular will jump to the code immediately after the block (it does not break
+//   any surrounding loop or switch).  Example:
+//
+//       KJ_ASSERT(value >= 0, "Value cannot be negative.", value) {
+//         // Assertion failed.  Set value to zero to "recover".
+//         value = 0;
+//         // Don't abort if exceptions are disabled.  Continue normally.
+//         // (Still throw an exception if they are enabled, though.)
+//         break;
+//       }
+//       // When exceptions are disabled, we'll get here even if the assertion fails.
+//       // Otherwise, we get here only if the assertion passes.
 //
 // * `KJ_REQUIRE(condition, ...)`:  Like `KJ_ASSERT` but used to check preconditions -- e.g. to
 //   validate parameters passed from a caller.  A failure indicates that the caller is buggy.
 //
-// * `RECOVERABLE_ASSERT(condition, ...) { ... }`:  Like `KJ_ASSERT` except that if exceptions are
-//   disabled, instead of aborting, the following code block will be executed.  This block should
-//   do whatever it can to fill in dummy values so that the code can continue executing, even if
-//   this means the eventual output will be garbage.
-//
-// * `RECOVERABLE_REQUIRE(condition, ...) { ... }`:  Like `RECOVERABLE_ASSERT` and `KJ_REQUIRE`.
-//
-// * `VALIDATE_INPUT(condition, ...) { ... }`:  Like `RECOVERABLE_PRECOND` but used to validate
-//   input that may have come from the user or some other untrusted source.  Recoverability is
-//   required in this case.
-//
-// * `KJ_SYSCALL(code, ...)`:  Executes `code` assuming it makes a system call.  A negative return
-//   value is considered an error.  EINTR is handled by retrying.  Other errors are handled by
-//   throwing an exception.  The macro also returns the call's result.  For example, the following
-//   calls `open()` and includes the file name in any error message:
-//
-//       int fd = KJ_SYSCALL(open(filename, O_RDONLY), filename);
-//
-// * `RECOVERABLE_SYSCALL(code, ...) { ... }`:  Like `RECOVERABLE_ASSERT` and `SYSCALL`.  Note that
-//   unfortunately this macro cannot return a value since it implements control flow, but you can
-//   assign to a variable *inside* the parameter instead:
+// * `KJ_SYSCALL(code, ...)`:  Executes `code` assuming it makes a system call.  A negative result
+//   is considered an error, with error code reported via `errno`.  EINTR is handled by retrying.
+//   Other errors are handled by throwing an exception.  If you need to examine the return code,
+//   assign it to a variable like so:
 //
 //       int fd;
-//       RECOVERABLE_SYSCALL(fd = open(filename, O_RDONLY), filename) {
-//         // Failed.  Open /dev/null instead.
-//         fd = SYSCALL(open("/dev/null", O_RDONLY));
-//       }
+//       KJ_SYSCALL(fd = open(filename, O_RDONLY), filename);
+//
+//   `KJ_SYSCALL` can be followed by a recovery block, just like `KJ_ASSERT`.
 //
 // * `KJ_CONTEXT(...)`:  Notes additional contextual information relevant to any exceptions thrown
 //   from within the current scope.  That is, until control exits the block in which KJ_CONTEXT()
@@ -102,12 +107,17 @@
 namespace kj {
 
 class Log {
+  // Mostly-internal
+
 public:
   enum class Severity {
-    INFO,      // Information useful for debugging.  No problem detected.
+    INFO,      // Information describing what the code is up to, which users may request to see
+               // with a flag like `--verbose`.  Does not indicate a problem.  Not printed by
+               // default; you must call setLogLevel(INFO) to enable.
     WARNING,   // A problem was detected but execution can continue with correct output.
     ERROR,     // Something is wrong, but execution can continue with garbage output.
-    FATAL      // Something went wrong, and execution cannot continue.
+    FATAL,     // Something went wrong, and execution cannot continue.
+    DEBUG      // Temporary debug logging.  See KJ_DBG.
 
     // Make sure to update the stringifier if you add a new severity level.
   };
@@ -122,32 +132,35 @@ public:
   static void log(const char* file, int line, Severity severity, const char* macroArgs,
                   Params&&... params);
 
-  template <typename... Params>
-  static void recoverableFault(const char* file, int line, Exception::Nature nature,
-                               const char* condition, const char* macroArgs, Params&&... params);
+  class Fault {
+  public:
+    template <typename... Params>
+    Fault(const char* file, int line, Exception::Nature nature, int errorNumber,
+          const char* condition, const char* macroArgs, Params&&... params);
+    ~Fault() noexcept(false);
 
-  template <typename... Params>
-  static void fatalFault(const char* file, int line, Exception::Nature nature,
-                         const char* condition, const char* macroArgs, Params&&... params)
-                         KJ_NORETURN;
+    void fatal() KJ_NORETURN;
+    // Throw the exception.
 
-  template <typename Call, typename... Params>
-  static bool recoverableSyscall(Call&& call, const char* file, int line, const char* callText,
-                                 const char* macroArgs, Params&&... params);
+  private:
+    void init(const char* file, int line, Exception::Nature nature, int errorNumber,
+              const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
 
-  template <typename Call, typename... Params>
-  static auto syscall(Call&& call, const char* file, int line, const char* callText,
-                      const char* macroArgs, Params&&... params) -> decltype(call());
+    Exception* exception;
+  };
 
-  template <typename... Params>
-  static void reportFailedRecoverableSyscall(
-      int errorNumber, const char* file, int line, const char* callText,
-      const char* macroArgs, Params&&... params);
+  class SyscallResult {
+  public:
+    inline SyscallResult(int errorNumber): errorNumber(errorNumber) {}
+    inline operator void*() { return errorNumber == 0 ? this : nullptr; }
+    inline int getErrorNumber() { return errorNumber; }
 
-  template <typename... Params>
-  static void reportFailedSyscall(
-      int errorNumber, const char* file, int line, const char* callText,
-      const char* macroArgs, Params&&... params);
+  private:
+    int errorNumber;
+  };
+
+  template <typename Call>
+  static SyscallResult syscall(Call&& call);
 
   class Context: public ExceptionCallback {
   public:
@@ -187,20 +200,6 @@ private:
 
   static void logInternal(const char* file, int line, Severity severity, const char* macroArgs,
                           ArrayPtr<String> argValues);
-  static void recoverableFaultInternal(
-      const char* file, int line, Exception::Nature nature,
-      const char* condition, const char* macroArgs, ArrayPtr<String> argValues);
-  static void fatalFaultInternal(
-      const char* file, int line, Exception::Nature nature,
-      const char* condition, const char* macroArgs, ArrayPtr<String> argValues)
-      KJ_NORETURN;
-  static void recoverableFailedSyscallInternal(
-      const char* file, int line, const char* call,
-      int errorNumber, const char* macroArgs, ArrayPtr<String> argValues);
-  static void fatalFailedSyscallInternal(
-      const char* file, int line, const char* call,
-      int errorNumber, const char* macroArgs, ArrayPtr<String> argValues)
-      KJ_NORETURN;
   static void addContextToInternal(Exception& exception, const char* file, int line,
                                    const char* macroArgs, ArrayPtr<String> argValues);
 
@@ -215,53 +214,33 @@ ArrayPtr<const char> KJ_STRINGIFY(Log::Severity severity);
     ::kj::Log::log(__FILE__, __LINE__, ::kj::Log::Severity::severity, \
                           #__VA_ARGS__, __VA_ARGS__)
 
-#define KJ_FAULT(nature, cond, ...) \
+#define KJ_DBG(...) KJ_LOG(DEBUG, ##__VA_ARGS__)
+
+#define _kJ_FAULT(nature, cond, ...) \
   if (KJ_EXPECT_TRUE(cond)) {} else \
-    ::kj::Log::fatalFault(__FILE__, __LINE__, \
-        ::kj::Exception::Nature::nature, #cond, #__VA_ARGS__, ##__VA_ARGS__)
+    for (::kj::Log::Fault f(__FILE__, __LINE__, ::kj::Exception::Nature::nature, 0, \
+                            #cond, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
 
-#define RECOVERABLE_FAULT(nature, cond, ...) \
-  if (KJ_EXPECT_TRUE(cond)) {} else \
-    if (::kj::Log::recoverableFault(__FILE__, __LINE__, \
-            ::kj::Exception::Nature::nature, #cond, #__VA_ARGS__, ##__VA_ARGS__), false) {} \
-    else
+#define _kJ_FAIL_FAULT(nature, ...) \
+  for (::kj::Log::Fault f(__FILE__, __LINE__, ::kj::Exception::Nature::nature, 0, \
+                          nullptr, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
 
-#define KJ_ASSERT(...) KJ_FAULT(LOCAL_BUG, __VA_ARGS__)
-#define RECOVERABLE_ASSERT(...) RECOVERABLE_FAULT(LOCAL_BUG, __VA_ARGS__)
-#define KJ_REQUIRE(...) KJ_FAULT(PRECONDITION, __VA_ARGS__)
-#define RECOVERABLE_REQUIRE(...) RECOVERABLE_FAULT(PRECONDITION, __VA_ARGS__)
-#define VALIDATE_INPUT(...) RECOVERABLE_FAULT(INPUT, __VA_ARGS__)
+#define KJ_ASSERT(...) _kJ_FAULT(LOCAL_BUG, ##__VA_ARGS__)
+#define KJ_REQUIRE(...) _kJ_FAULT(PRECONDITION, ##__VA_ARGS__)
 
-#define KJ_FAIL_ASSERT(...) KJ_ASSERT(false, ##__VA_ARGS__)
-#define FAIL_RECOVERABLE_ASSERT(...) RECOVERABLE_ASSERT(false, ##__VA_ARGS__)
-#define KJ_FAIL_REQUIRE(...) KJ_REQUIRE(false, ##__VA_ARGS__)
-#define FAIL_RECOVERABLE_REQUIRE(...) RECOVERABLE_REQUIRE(false, ##__VA_ARGS__)
-#define FAIL_VALIDATE_INPUT(...) VALIDATE_INPUT(false, ##__VA_ARGS__)
+#define KJ_FAIL_ASSERT(...) _kJ_FAIL_FAULT(LOCAL_BUG, ##__VA_ARGS__)
+#define KJ_FAIL_REQUIRE(...) _kJ_FAIL_FAULT(PRECONDITION, ##__VA_ARGS__)
 
 #define KJ_SYSCALL(call, ...) \
-  ::kj::Log::syscall( \
-      [&](){return (call);}, __FILE__, __LINE__, #call, #__VA_ARGS__, ##__VA_ARGS__)
-
-#define RECOVERABLE_SYSCALL(call, ...) \
-  if (::kj::Log::recoverableSyscall( \
-      [&](){return (call);}, __FILE__, __LINE__, #call, #__VA_ARGS__, ##__VA_ARGS__)) {} \
-  else
+  if (auto _kjSyscallResult = ::kj::Log::syscall([&](){return (call);})) {} else \
+    for (::kj::Log::Fault f( \
+             __FILE__, __LINE__, ::kj::Exception::Nature::OS_ERROR, \
+             _kjSyscallResult.getErrorNumber(), #call, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
 
 #define FAIL_SYSCALL(code, errorNumber, ...) \
-  do { \
-    /* make sure to read error number before doing anything else that could change it */ \
-    int _errorNumber = errorNumber; \
-    ::kj::Log::reportFailedSyscall( \
-        _errorNumber, __FILE__, __LINE__, #code, #__VA_ARGS__, ##__VA_ARGS__); \
-  } while (false)
-
-#define FAIL_RECOVERABLE_SYSCALL(code, errorNumber, ...) \
-  do { \
-    /* make sure to read error number before doing anything else that could change it */ \
-    int _errorNumber = errorNumber; \
-    ::kj::Log::reportFailedRecoverableSyscall( \
-        _errorNumber, __FILE__, __LINE__, #code, #__VA_ARGS__, ##__VA_ARGS__); \
-  } while (false)
+  for (::kj::Log::Fault f( \
+           __FILE__, __LINE__, ::kj::Exception::Nature::OS_ERROR, \
+           errorNumber, code, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
 
 #define KJ_CONTEXT(...) \
   auto _kjContextFunc = [&](::kj::Exception& exception) { \
@@ -273,15 +252,11 @@ ArrayPtr<const char> KJ_STRINGIFY(Log::Severity severity);
 #ifdef NDEBUG
 #define KJ_DLOG(...) do {} while (false)
 #define KJ_DASSERT(...) do {} while (false)
-#define KJ_RECOVERABLE_DASSERT(...) do {} while (false)
 #define KJ_DREQUIRE(...) do {} while (false)
-#define KJ_RECOVERABLE_DREQUIRE(...) do {} while (false)
 #else
 #define KJ_DLOG LOG
 #define KJ_DASSERT KJ_ASSERT
-#define KJ_RECOVERABLE_DASSERT RECOVERABLE_ASSERT
 #define KJ_DREQUIRE KJ_REQUIRE
-#define KJ_RECOVERABLE_DREQUIRE RECOVERABLE_REQUIRE
 #endif
 
 template <typename... Params>
@@ -292,72 +267,24 @@ void Log::log(const char* file, int line, Severity severity, const char* macroAr
 }
 
 template <typename... Params>
-void Log::recoverableFault(const char* file, int line, Exception::Nature nature,
-                           const char* condition, const char* macroArgs, Params&&... params) {
+Log::Fault::Fault(const char* file, int line, Exception::Nature nature, int errorNumber,
+                  const char* condition, const char* macroArgs, Params&&... params)
+    : exception(nullptr) {
   String argValues[sizeof...(Params)] = {str(params)...};
-  recoverableFaultInternal(file, line, nature, condition, macroArgs,
-                           arrayPtr(argValues, sizeof...(Params)));
+  init(file, line, nature, errorNumber, condition, macroArgs,
+       arrayPtr(argValues, sizeof...(Params)));
 }
 
-template <typename... Params>
-void Log::fatalFault(const char* file, int line, Exception::Nature nature,
-                     const char* condition, const char* macroArgs, Params&&... params) {
-  String argValues[sizeof...(Params)] = {str(params)...};
-  fatalFaultInternal(file, line, nature, condition, macroArgs,
-                     arrayPtr(argValues, sizeof...(Params)));
-}
-
-template <typename Call, typename... Params>
-bool Log::recoverableSyscall(Call&& call, const char* file, int line, const char* callText,
-                             const char* macroArgs, Params&&... params) {
-  int result;
-  while ((result = call()) < 0) {
+template <typename Call>
+Log::SyscallResult Log::syscall(Call&& call) {
+  while (call() < 0) {
     int errorNum = getOsErrorNumber();
     // getOsErrorNumber() returns -1 to indicate EINTR
     if (errorNum != -1) {
-      String argValues[sizeof...(Params)] = {str(params)...};
-      recoverableFailedSyscallInternal(file, line, callText, errorNum,
-                                       macroArgs, arrayPtr(argValues, sizeof...(Params)));
-      return false;
+      return SyscallResult(errorNum);
     }
   }
-  return true;
-}
-
-#ifndef __CDT_PARSER__  // Eclipse dislikes the late return spec.
-template <typename Call, typename... Params>
-auto Log::syscall(Call&& call, const char* file, int line, const char* callText,
-                  const char* macroArgs, Params&&... params) -> decltype(call()) {
-  decltype(call()) result;
-  while ((result = call()) < 0) {
-    int errorNum = getOsErrorNumber();
-    // getOsErrorNumber() returns -1 to indicate EINTR
-    if (errorNum != -1) {
-      String argValues[sizeof...(Params)] = {str(params)...};
-      fatalFailedSyscallInternal(file, line, callText, errorNum,
-                                 macroArgs, arrayPtr(argValues, sizeof...(Params)));
-    }
-  }
-  return result;
-}
-#endif
-
-template <typename... Params>
-void Log::reportFailedRecoverableSyscall(
-    int errorNumber, const char* file, int line, const char* callText,
-    const char* macroArgs, Params&&... params) {
-  String argValues[sizeof...(Params)] = {str(params)...};
-  recoverableFailedSyscallInternal(file, line, callText, errorNumber, macroArgs,
-                                   arrayPtr(argValues, sizeof...(Params)));
-}
-
-template <typename... Params>
-void Log::reportFailedSyscall(
-    int errorNumber, const char* file, int line, const char* callText,
-    const char* macroArgs, Params&&... params) {
-  String argValues[sizeof...(Params)] = {str(params)...};
-  fatalFailedSyscallInternal(file, line, callText, errorNumber, macroArgs,
-                             arrayPtr(argValues, sizeof...(Params)));
+  return SyscallResult(0);
 }
 
 template <typename... Params>

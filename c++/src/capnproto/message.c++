@@ -50,9 +50,9 @@ internal::StructReader MessageReader::getRootInternal() {
   }
 
   internal::SegmentReader* segment = arena()->tryGetSegment(internal::SegmentId(0));
-  VALIDATE_INPUT(segment != nullptr &&
-      segment->containsInterval(segment->getStartPtr(), segment->getStartPtr() + 1),
-      "Message did not contain a root pointer.") {
+  KJ_REQUIRE(segment != nullptr &&
+             segment->containsInterval(segment->getStartPtr(), segment->getStartPtr() + 1),
+             "Message did not contain a root pointer.") {
     return internal::StructReader();
   }
 

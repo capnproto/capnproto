@@ -47,7 +47,7 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
   uint8_t* const outMin = reinterpret_cast<uint8_t*>(dst) + minBytes;
 
   kj::ArrayPtr<const byte> buffer = inner.getReadBuffer();
-  VALIDATE_INPUT(buffer.size() > 0, "Premature end of packed input.") {
+  KJ_REQUIRE(buffer.size() > 0, "Premature end of packed input.") {
     return minBytes;  // garbage
   }
   const uint8_t* __restrict__ in = reinterpret_cast<const uint8_t*>(buffer.begin());
@@ -55,7 +55,7 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
 #define REFRESH_BUFFER() \
   inner.skip(buffer.size()); \
   buffer = inner.getReadBuffer(); \
-  VALIDATE_INPUT(buffer.size() > 0, "Premature end of packed input.") { \
+  KJ_REQUIRE(buffer.size() > 0, "Premature end of packed input.") { \
     return minBytes;  /* garbage */ \
   } \
   in = reinterpret_cast<const uint8_t*>(buffer.begin())
@@ -126,8 +126,8 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
 
       uint runLength = *in++ * sizeof(word);
 
-      VALIDATE_INPUT(runLength <= outEnd - out,
-          "Packed input did not end cleanly on a segment boundary.") {
+      KJ_REQUIRE(runLength <= outEnd - out,
+                 "Packed input did not end cleanly on a segment boundary.") {
         return std::max<size_t>(minBytes, out - reinterpret_cast<uint8_t*>(dst));  // garbage
       }
       memset(out, 0, runLength);
@@ -138,8 +138,8 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
 
       uint runLength = *in++ * sizeof(word);
 
-      VALIDATE_INPUT(runLength <= outEnd - out,
-          "Packed input did not end cleanly on a segment boundary.") {
+      KJ_REQUIRE(runLength <= outEnd - out,
+                 "Packed input did not end cleanly on a segment boundary.") {
         return std::max<size_t>(minBytes, out - reinterpret_cast<uint8_t*>(dst));  // garbage
       }
 
@@ -198,7 +198,7 @@ void PackedInputStream::skip(size_t bytes) {
 #define REFRESH_BUFFER() \
   inner.skip(buffer.size()); \
   buffer = inner.getReadBuffer(); \
-  VALIDATE_INPUT(buffer.size() > 0, "Premature end of packed input.") return; \
+  KJ_REQUIRE(buffer.size() > 0, "Premature end of packed input.") { return; } \
   in = reinterpret_cast<const uint8_t*>(buffer.begin())
 
   for (;;) {
@@ -252,8 +252,7 @@ void PackedInputStream::skip(size_t bytes) {
 
       uint runLength = *in++ * sizeof(word);
 
-      VALIDATE_INPUT(runLength <= bytes,
-          "Packed input did not end cleanly on a segment boundary.") {
+      KJ_REQUIRE(runLength <= bytes, "Packed input did not end cleanly on a segment boundary.") {
         return;
       }
 
@@ -264,8 +263,7 @@ void PackedInputStream::skip(size_t bytes) {
 
       uint runLength = *in++ * sizeof(word);
 
-      VALIDATE_INPUT(runLength <= bytes,
-          "Packed input did not end cleanly on a segment boundary.") {
+      KJ_REQUIRE(runLength <= bytes, "Packed input did not end cleanly on a segment boundary.") {
         return;
       }
 

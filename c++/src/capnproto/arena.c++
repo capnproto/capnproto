@@ -89,7 +89,9 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
 }
 
 void ReaderArena::reportReadLimitReached() {
-  FAIL_VALIDATE_INPUT("Exceeded message traversal limit.  See capnproto::ReaderOptions.");
+  KJ_FAIL_REQUIRE("Exceeded message traversal limit.  See capnproto::ReaderOptions.") {
+    return;
+  }
 }
 
 // =======================================================================================
@@ -201,8 +203,10 @@ SegmentReader* BuilderArena::tryGetSegment(SegmentId id) {
 }
 
 void BuilderArena::reportReadLimitReached() {
-  FAIL_RECOVERABLE_ASSERT(
-      "Read limit reached for BuilderArena, but it should have been unlimited.") {}
+  KJ_FAIL_ASSERT(
+      "Read limit reached for BuilderArena, but it should have been unlimited.") {
+    return;
+  }
 }
 
 }  // namespace internal

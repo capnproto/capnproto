@@ -32,9 +32,8 @@ namespace kj {
 
 ArrayPtr<const char> KJ_STRINGIFY(Exception::Nature nature) {
   static const char* NATURE_STRINGS[] = {
-    "precondition not met",
+    "requirement not met",
     "bug in code",
-    "invalid input data",
     "error from OS",
     "network failure",
     "error"
@@ -174,7 +173,7 @@ void ExceptionCallback::logMessage(StringPtr text) {
 }
 
 void ExceptionCallback::useProcessWide() {
-  RECOVERABLE_REQUIRE(globalCallback == nullptr,
+  KJ_REQUIRE(globalCallback == nullptr,
       "Can't register multiple global ExceptionCallbacks at once.") {
     return;
   }

@@ -30,9 +30,11 @@ namespace internal {
 void inlineRequireFailure(const char* file, int line, const char* expectation,
                           const char* macroArgs, const char* message) {
   if (message == nullptr) {
-    Log::fatalFault(file, line, Exception::Nature::PRECONDITION, expectation, macroArgs);
+    Log::Fault f(file, line, Exception::Nature::PRECONDITION, 0, expectation, macroArgs);
+    f.fatal();
   } else {
-    Log::fatalFault(file, line, Exception::Nature::PRECONDITION, expectation, macroArgs, message);
+    Log::Fault f(file, line, Exception::Nature::PRECONDITION, 0, expectation, macroArgs, message);
+    f.fatal();
   }
 }
 

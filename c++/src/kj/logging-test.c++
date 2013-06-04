@@ -101,18 +101,39 @@ TEST(Logging, Log) {
             mockCallback.text);
   mockCallback.text.clear();
 
+  KJ_DBG("Some debug text."); line = __LINE__;
+  EXPECT_EQ("log message: debug: " + fileLine(__FILE__, line) + ": Some debug text.\n",
+            mockCallback.text);
+  mockCallback.text.clear();
+
+  // INFO logging is disabled by default.
+  KJ_LOG(INFO, "Info."); line = __LINE__;
+  EXPECT_EQ("", mockCallback.text);
+  mockCallback.text.clear();
+
+  // Enable it.
+  Log::setLogLevel(Log::Severity::INFO);
+  KJ_LOG(INFO, "Some text."); line = __LINE__;
+  EXPECT_EQ("log message: info: " + fileLine(__FILE__, line) + ": Some text.\n",
+            mockCallback.text);
+  mockCallback.text.clear();
+
+  // Back to default.
+  Log::setLogLevel(Log::Severity::WARNING);
+
   KJ_ASSERT(1 == 1);
   EXPECT_THROW(KJ_ASSERT(1 == 2), MockException); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: expected "
             "1 == 2\n", mockCallback.text);
   mockCallback.text.clear();
 
-  RECOVERABLE_ASSERT(1 == 1) {
+  KJ_ASSERT(1 == 1) {
     ADD_FAILURE() << "Shouldn't call recovery code when check passes.";
+    break;
   };
 
   bool recovered = false;
-  RECOVERABLE_ASSERT(1 == 2, "1 is not 2") { recovered = true; } line = __LINE__;
+  KJ_ASSERT(1 == 2, "1 is not 2") { recovered = true; break; } line = __LINE__;
   EXPECT_EQ("recoverable exception: " + fileLine(__FILE__, line) + ": bug in code: expected "
             "1 == 2; 1 is not 2\n", mockCallback.text);
   EXPECT_TRUE(recovered);
@@ -124,11 +145,11 @@ TEST(Logging, Log) {
   mockCallback.text.clear();
 
   EXPECT_THROW(KJ_REQUIRE(1 == 2, i, "hi", str), MockException); line = __LINE__;
-  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": precondition not met: expected "
+  EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": requirement not met: expected "
             "1 == 2; i = 123; hi; str = foo\n", mockCallback.text);
   mockCallback.text.clear();
 
-  EXPECT_THROW(KJ_ASSERT(false, "foo"), MockException); line = __LINE__;
+  EXPECT_THROW(KJ_FAIL_ASSERT("foo"), MockException); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: foo\n",
             mockCallback.text);
   mockCallback.text.clear();
@@ -142,7 +163,8 @@ TEST(Logging, Syscall) {
   int i = 123;
   const char* str = "foo";
 
-  int fd = KJ_SYSCALL(dup(STDIN_FILENO));
+  int fd;
+  KJ_SYSCALL(fd = dup(STDIN_FILENO));
   KJ_SYSCALL(close(fd));
   EXPECT_THROW(KJ_SYSCALL(close(fd), i, "bar", str), MockException); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": error from OS: close(fd): "
@@ -151,7 +173,7 @@ TEST(Logging, Syscall) {
 
   int result = 0;
   bool recovered = false;
-  RECOVERABLE_SYSCALL(result = close(fd), i, "bar", str) { recovered = true; } line = __LINE__;
+  KJ_SYSCALL(result = close(fd), i, "bar", str) { recovered = true; break; } line = __LINE__;
   EXPECT_EQ("recoverable exception: " + fileLine(__FILE__, line) + ": error from OS: close(fd): "
             + strerror(EBADF) + "; i = 123; bar; str = foo\n", mockCallback.text);
   EXPECT_LT(result, 0);

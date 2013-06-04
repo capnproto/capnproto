@@ -273,15 +273,15 @@ struct WireHelpers {
     if (segment != nullptr && ref->kind() == WirePointer::FAR) {
       // Look up the segment containing the landing pad.
       segment = segment->getArena()->tryGetSegment(ref->farRef.segmentId.get());
-      VALIDATE_INPUT(segment != nullptr, "Message contains far pointer to unknown segment.") {
+      KJ_REQUIRE(segment != nullptr, "Message contains far pointer to unknown segment.") {
         return nullptr;
       }
 
       // Find the landing pad and check that it is within bounds.
       const word* ptr = segment->getStartPtr() + ref->farPositionInSegment();
       WordCount padWords = (1 + ref->isDoubleFar()) * POINTER_SIZE_IN_WORDS;
-      VALIDATE_INPUT(boundsCheck(segment, ptr, ptr + padWords),
-                     "Message contains out-of-bounds far pointer.") {
+      KJ_REQUIRE(boundsCheck(segment, ptr, ptr + padWords),
+                 "Message contains out-of-bounds far pointer.") {
         return nullptr;
       }
 
@@ -298,8 +298,7 @@ struct WireHelpers {
       ref = pad + 1;
 
       segment = segment->getArena()->tryGetSegment(pad->farRef.segmentId.get());
-      VALIDATE_INPUT(segment != nullptr,
-                     "Message contains double-far pointer to unknown segment.") {
+      KJ_REQUIRE(segment != nullptr, "Message contains double-far pointer to unknown segment.") {
         return nullptr;
       }
 
@@ -338,7 +337,9 @@ struct WireHelpers {
         break;
       }
       case WirePointer::RESERVED_3:
-        FAIL_RECOVERABLE_ASSERT("Don't know how to handle RESERVED_3.") {}
+        KJ_FAIL_ASSERT("Don't know how to handle RESERVED_3.") {
+          break;
+        }
         break;
     }
   }
@@ -404,10 +405,14 @@ struct WireHelpers {
         break;
       }
       case WirePointer::FAR:
-        FAIL_RECOVERABLE_ASSERT("Unexpected FAR pointer.") {}
+        KJ_FAIL_ASSERT("Unexpected FAR pointer.") {
+          break;
+        }
         break;
       case WirePointer::RESERVED_3:
-        FAIL_RECOVERABLE_ASSERT("Don't know how to handle RESERVED_3.") {}
+        KJ_FAIL_ASSERT("Don't know how to handle RESERVED_3.") {
+          break;
+        }
         break;
     }
   }
@@ -435,7 +440,7 @@ struct WireHelpers {
       return 0 * WORDS;
     }
 
-    VALIDATE_INPUT(nestingLimit > 0, "Message is too deeply-nested.") {
+    KJ_REQUIRE(nestingLimit > 0, "Message is too deeply-nested.") {
       return 0 * WORDS;
     }
     --nestingLimit;
@@ -446,9 +451,9 @@ struct WireHelpers {
 
     switch (ref->kind()) {
       case WirePointer::STRUCT: {
-        VALIDATE_INPUT(boundsCheck(segment, ptr, ptr + ref->structRef.wordSize()),
-                       "Message contained out-of-bounds struct pointer.") {
-          break;
+        KJ_REQUIRE(boundsCheck(segment, ptr, ptr + ref->structRef.wordSize()),
+                   "Message contained out-of-bounds struct pointer.") {
+          return result;
         }
         result += ref->structRef.wordSize();
 
@@ -473,9 +478,9 @@ struct WireHelpers {
             WordCount totalWords = roundUpToWords(
                 ElementCount64(ref->listRef.elementCount()) *
                 dataBitsPerElement(ref->listRef.elementSize()));
-            VALIDATE_INPUT(boundsCheck(segment, ptr, ptr + totalWords),
-                           "Message contained out-of-bounds list pointer.") {
-              break;
+            KJ_REQUIRE(boundsCheck(segment, ptr, ptr + totalWords),
+                       "Message contained out-of-bounds list pointer.") {
+              return result;
             }
             result += totalWords;
             break;
@@ -483,9 +488,9 @@ struct WireHelpers {
           case FieldSize::POINTER: {
             WirePointerCount count = ref->listRef.elementCount() * (POINTERS / ELEMENTS);
 
-            VALIDATE_INPUT(boundsCheck(segment, ptr, ptr + count * WORDS_PER_POINTER),
-                           "Message contained out-of-bounds list pointer.") {
-              break;
+            KJ_REQUIRE(boundsCheck(segment, ptr, ptr + count * WORDS_PER_POINTER),
+                       "Message contained out-of-bounds list pointer.") {
+              return result;
             }
 
             result += count * WORDS_PER_POINTER;
@@ -498,10 +503,9 @@ struct WireHelpers {
           }
           case FieldSize::INLINE_COMPOSITE: {
             WordCount wordCount = ref->listRef.inlineCompositeWordCount();
-            VALIDATE_INPUT(
-                boundsCheck(segment, ptr, ptr + wordCount + POINTER_SIZE_IN_WORDS),
-                "Message contained out-of-bounds list pointer.") {
-              break;
+            KJ_REQUIRE(boundsCheck(segment, ptr, ptr + wordCount + POINTER_SIZE_IN_WORDS),
+                       "Message contained out-of-bounds list pointer.") {
+              return result;
             }
 
             result += wordCount + POINTER_SIZE_IN_WORDS;
@@ -509,14 +513,14 @@ struct WireHelpers {
             const WirePointer* elementTag = reinterpret_cast<const WirePointer*>(ptr);
             ElementCount count = elementTag->inlineCompositeListElementCount();
 
-            VALIDATE_INPUT(elementTag->kind() == WirePointer::STRUCT,
-                "Don't know how to handle non-STRUCT inline composite.") {
-              break;
+            KJ_REQUIRE(elementTag->kind() == WirePointer::STRUCT,
+                       "Don't know how to handle non-STRUCT inline composite.") {
+              return result;
             }
 
-            VALIDATE_INPUT(elementTag->structRef.wordSize() / ELEMENTS * count <= wordCount,
-                "Struct list pointer's elements overran size.") {
-              break;
+            KJ_REQUIRE(elementTag->structRef.wordSize() / ELEMENTS * count <= wordCount,
+                       "Struct list pointer's elements overran size.") {
+              return result;
             }
 
             WordCount dataSize = elementTag->structRef.dataSize.get();
@@ -538,13 +542,13 @@ struct WireHelpers {
         break;
       }
       case WirePointer::FAR:
-        FAIL_RECOVERABLE_ASSERT("Unexpected FAR pointer.") {
+        KJ_FAIL_ASSERT("Unexpected FAR pointer.") {
           break;
         }
         break;
       case WirePointer::RESERVED_3:
-        FAIL_VALIDATE_INPUT("Don't know how to handle RESERVED_3.") {
-          break;
+        KJ_FAIL_REQUIRE("Don't know how to handle RESERVED_3.") {
+          return result;
         }
         break;
     }
@@ -743,7 +747,7 @@ struct WireHelpers {
     SegmentBuilder* oldSegment = segment;
     word* oldPtr = followFars(oldRef, oldSegment);
 
-    VALIDATE_INPUT(oldRef->kind() == WirePointer::STRUCT,
+    KJ_REQUIRE(oldRef->kind() == WirePointer::STRUCT,
         "Message contains non-struct pointer where struct pointer was expected.") {
       goto useDefault;
     }
@@ -871,7 +875,7 @@ struct WireHelpers {
     SegmentBuilder* segment = origSegment;
     word* ptr = followFars(ref, segment);
 
-    VALIDATE_INPUT(ref->kind() == WirePointer::LIST,
+    KJ_REQUIRE(ref->kind() == WirePointer::LIST,
         "Called getList{Field,Element}() but existing pointer is not a list.") {
       goto useDefault;
     }
@@ -904,13 +908,17 @@ struct WireHelpers {
         case FieldSize::TWO_BYTES:
         case FieldSize::FOUR_BYTES:
         case FieldSize::EIGHT_BYTES:
-          VALIDATE_INPUT(dataSize >= 1 * WORDS,
-              "Existing list value is incompatible with expected type.");
+          KJ_REQUIRE(dataSize >= 1 * WORDS,
+                     "Existing list value is incompatible with expected type.") {
+            goto useDefault;
+          }
           break;
 
         case FieldSize::POINTER:
-          VALIDATE_INPUT(pointerCount >= 1 * POINTERS,
-              "Existing list value is incompatible with expected type.");
+          KJ_REQUIRE(pointerCount >= 1 * POINTERS,
+                     "Existing list value is incompatible with expected type.") {
+            goto useDefault;
+          }
           // Adjust the pointer to point at the reference segment.
           ptr += dataSize;
           break;
@@ -930,10 +938,14 @@ struct WireHelpers {
       BitCount dataSize = dataBitsPerElement(oldSize) * ELEMENTS;
       WirePointerCount pointerCount = pointersPerElement(oldSize) * ELEMENTS;
 
-      VALIDATE_INPUT(dataSize >= dataBitsPerElement(elementSize) * ELEMENTS,
-          "Existing list value is incompatible with expected type.");
-      VALIDATE_INPUT(pointerCount >= pointersPerElement(elementSize) * ELEMENTS,
-          "Existing list value is incompatible with expected type.");
+      KJ_REQUIRE(dataSize >= dataBitsPerElement(elementSize) * ELEMENTS,
+                 "Existing list value is incompatible with expected type.") {
+        goto useDefault;
+      }
+      KJ_REQUIRE(pointerCount >= pointersPerElement(elementSize) * ELEMENTS,
+                 "Existing list value is incompatible with expected type.") {
+        goto useDefault;
+      }
 
       auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
       return ListBuilder(segment, ptr, step, ref->listRef.elementCount(),
@@ -960,8 +972,8 @@ struct WireHelpers {
     SegmentBuilder* oldSegment = origSegment;
     word* oldPtr = followFars(oldRef, oldSegment);
 
-    VALIDATE_INPUT(oldRef->kind() == WirePointer::LIST,
-        "Called getList{Field,Element}() but existing pointer is not a list.") {
+    KJ_REQUIRE(oldRef->kind() == WirePointer::LIST,
+               "Called getList{Field,Element}() but existing pointer is not a list.") {
       goto useDefault;
     }
 
@@ -972,8 +984,8 @@ struct WireHelpers {
 
       WirePointer* oldTag = reinterpret_cast<WirePointer*>(oldPtr);
       oldPtr += POINTER_SIZE_IN_WORDS;
-      VALIDATE_INPUT(oldTag->kind() == WirePointer::STRUCT,
-          "INLINE_COMPOSITE list with non-STRUCT elements not supported.") {
+      KJ_REQUIRE(oldTag->kind() == WirePointer::STRUCT,
+                 "INLINE_COMPOSITE list with non-STRUCT elements not supported.") {
         goto useDefault;
       }
 
@@ -1046,8 +1058,8 @@ struct WireHelpers {
           // No expectations.
           break;
         case FieldSize::POINTER:
-          VALIDATE_INPUT(oldSize == FieldSize::POINTER || oldSize == FieldSize::VOID,
-                         "Struct list has incompatible element size.") {
+          KJ_REQUIRE(oldSize == FieldSize::POINTER || oldSize == FieldSize::VOID,
+                     "Struct list has incompatible element size.") {
             goto useDefault;
           }
           break;
@@ -1060,8 +1072,8 @@ struct WireHelpers {
         case FieldSize::FOUR_BYTES:
         case FieldSize::EIGHT_BYTES:
           // Preferred size is data-only.
-          VALIDATE_INPUT(oldSize != FieldSize::POINTER,
-                         "Struct list has incompatible element size.") {
+          KJ_REQUIRE(oldSize != FieldSize::POINTER,
+                     "Struct list has incompatible element size.") {
             goto useDefault;
           }
           break;
@@ -1433,8 +1445,8 @@ struct WireHelpers {
       defaultValue = nullptr;  // If the default value is itself invalid, don't use it again.
     }
 
-    VALIDATE_INPUT(nestingLimit > 0,
-          "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.") {
+    KJ_REQUIRE(nestingLimit > 0,
+               "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.") {
       goto useDefault;
     }
 
@@ -1444,13 +1456,13 @@ struct WireHelpers {
       goto useDefault;
     }
 
-    VALIDATE_INPUT(ref->kind() == WirePointer::STRUCT,
-          "Message contains non-struct pointer where struct pointer was expected.") {
+    KJ_REQUIRE(ref->kind() == WirePointer::STRUCT,
+               "Message contains non-struct pointer where struct pointer was expected.") {
       goto useDefault;
     }
 
-    VALIDATE_INPUT(boundsCheck(segment, ptr, ptr + ref->structRef.wordSize()),
-          "Message contained out-of-bounds struct pointer.") {
+    KJ_REQUIRE(boundsCheck(segment, ptr, ptr + ref->structRef.wordSize()),
+               "Message contained out-of-bounds struct pointer.") {
       goto useDefault;
     }
 
@@ -1475,8 +1487,8 @@ struct WireHelpers {
       defaultValue = nullptr;  // If the default value is itself invalid, don't use it again.
     }
 
-    VALIDATE_INPUT(nestingLimit > 0,
-          "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.") {
+    KJ_REQUIRE(nestingLimit > 0,
+               "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.") {
       goto useDefault;
     }
 
@@ -1486,8 +1498,8 @@ struct WireHelpers {
       goto useDefault;
     }
 
-    VALIDATE_INPUT(ref->kind() == WirePointer::LIST,
-          "Message contains non-list pointer where list pointer was expected.") {
+    KJ_REQUIRE(ref->kind() == WirePointer::LIST,
+               "Message contains non-list pointer where list pointer was expected.") {
       goto useDefault;
     }
 
@@ -1501,21 +1513,21 @@ struct WireHelpers {
       const WirePointer* tag = reinterpret_cast<const WirePointer*>(ptr);
       ptr += POINTER_SIZE_IN_WORDS;
 
-      VALIDATE_INPUT(boundsCheck(segment, ptr - POINTER_SIZE_IN_WORDS, ptr + wordCount),
-            "Message contains out-of-bounds list pointer.") {
+      KJ_REQUIRE(boundsCheck(segment, ptr - POINTER_SIZE_IN_WORDS, ptr + wordCount),
+                 "Message contains out-of-bounds list pointer.") {
         goto useDefault;
       }
 
-      VALIDATE_INPUT(tag->kind() == WirePointer::STRUCT,
-            "INLINE_COMPOSITE lists of non-STRUCT type are not supported.") {
+      KJ_REQUIRE(tag->kind() == WirePointer::STRUCT,
+                 "INLINE_COMPOSITE lists of non-STRUCT type are not supported.") {
         goto useDefault;
       }
 
       size = tag->inlineCompositeListElementCount();
       wordsPerElement = tag->structRef.wordSize() / ELEMENTS;
 
-      VALIDATE_INPUT(size * wordsPerElement <= wordCount,
-            "INLINE_COMPOSITE list's elements overrun its word count.") {
+      KJ_REQUIRE(size * wordsPerElement <= wordCount,
+                 "INLINE_COMPOSITE list's elements overrun its word count.") {
         goto useDefault;
       }
 
@@ -1530,7 +1542,7 @@ struct WireHelpers {
           break;
 
         case FieldSize::BIT:
-          FAIL_VALIDATE_INPUT("Expected a bit list, but got a list of structs.") {
+          KJ_FAIL_REQUIRE("Expected a bit list, but got a list of structs.") {
             goto useDefault;
           }
           break;
@@ -1539,8 +1551,8 @@ struct WireHelpers {
         case FieldSize::TWO_BYTES:
         case FieldSize::FOUR_BYTES:
         case FieldSize::EIGHT_BYTES:
-          VALIDATE_INPUT(tag->structRef.dataSize.get() > 0 * WORDS,
-                "Expected a primitive list, but got a list of pointer-only structs.") {
+          KJ_REQUIRE(tag->structRef.dataSize.get() > 0 * WORDS,
+                     "Expected a primitive list, but got a list of pointer-only structs.") {
             goto useDefault;
           }
           break;
@@ -1550,8 +1562,8 @@ struct WireHelpers {
           // in the struct is the pointer we were looking for, we want to munge the pointer to
           // point at the first element's pointer segment.
           ptr += tag->structRef.dataSize.get();
-          VALIDATE_INPUT(tag->structRef.ptrCount.get() > 0 * POINTERS,
-                "Expected a pointer list, but got a list of data-only structs.") {
+          KJ_REQUIRE(tag->structRef.ptrCount.get() > 0 * POINTERS,
+                     "Expected a pointer list, but got a list of data-only structs.") {
             goto useDefault;
           }
           break;
@@ -1573,9 +1585,9 @@ struct WireHelpers {
           pointersPerElement(ref->listRef.elementSize()) * ELEMENTS;
       auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
 
-      VALIDATE_INPUT(boundsCheck(segment, ptr, ptr +
-            roundUpToWords(ElementCount64(ref->listRef.elementCount()) * step)),
-            "Message contains out-of-bounds list pointer.") {
+      KJ_REQUIRE(boundsCheck(segment, ptr, ptr +
+                     roundUpToWords(ElementCount64(ref->listRef.elementCount()) * step)),
+                 "Message contains out-of-bounds list pointer.") {
         goto useDefault;
       }
 
@@ -1589,12 +1601,12 @@ struct WireHelpers {
       WirePointerCount expectedPointersPerElement =
           pointersPerElement(expectedElementSize) * ELEMENTS;
 
-      VALIDATE_INPUT(expectedDataBitsPerElement <= dataSize,
-          "Message contained list with incompatible element type.") {
+      KJ_REQUIRE(expectedDataBitsPerElement <= dataSize,
+                 "Message contained list with incompatible element type.") {
         goto useDefault;
       }
-      VALIDATE_INPUT(expectedPointersPerElement <= pointerCount,
-          "Message contained list with incompatible element type.") {
+      KJ_REQUIRE(expectedPointersPerElement <= pointerCount,
+                 "Message contained list with incompatible element type.") {
         goto useDefault;
       }
 
@@ -1620,30 +1632,30 @@ struct WireHelpers {
 
       uint size = ref->listRef.elementCount() / ELEMENTS;
 
-      VALIDATE_INPUT(ref->kind() == WirePointer::LIST,
-            "Message contains non-list pointer where text was expected.") {
+      KJ_REQUIRE(ref->kind() == WirePointer::LIST,
+                 "Message contains non-list pointer where text was expected.") {
         goto useDefault;
       }
 
-      VALIDATE_INPUT(ref->listRef.elementSize() == FieldSize::BYTE,
-            "Message contains list pointer of non-bytes where text was expected.") {
+      KJ_REQUIRE(ref->listRef.elementSize() == FieldSize::BYTE,
+                 "Message contains list pointer of non-bytes where text was expected.") {
         goto useDefault;
       }
 
-      VALIDATE_INPUT(boundsCheck(segment, ptr, ptr +
-            roundUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))),
-            "Message contained out-of-bounds text pointer.") {
+      KJ_REQUIRE(boundsCheck(segment, ptr, ptr +
+                     roundUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))),
+                 "Message contained out-of-bounds text pointer.") {
         goto useDefault;
       }
 
-      VALIDATE_INPUT(size > 0, "Message contains text that is not NUL-terminated.") {
+      KJ_REQUIRE(size > 0, "Message contains text that is not NUL-terminated.") {
         goto useDefault;
       }
 
       const char* cptr = reinterpret_cast<const char*>(ptr);
       --size;  // NUL terminator
 
-      VALIDATE_INPUT(cptr[size] == '\0', "Message contains text that is not NUL-terminated.") {
+      KJ_REQUIRE(cptr[size] == '\0', "Message contains text that is not NUL-terminated.") {
         goto useDefault;
       }
 
@@ -1667,19 +1679,19 @@ struct WireHelpers {
 
       uint size = ref->listRef.elementCount() / ELEMENTS;
 
-      VALIDATE_INPUT(ref->kind() == WirePointer::LIST,
-            "Message contains non-list pointer where data was expected.") {
+      KJ_REQUIRE(ref->kind() == WirePointer::LIST,
+                 "Message contains non-list pointer where data was expected.") {
         goto useDefault;
       }
 
-      VALIDATE_INPUT(ref->listRef.elementSize() == FieldSize::BYTE,
-            "Message contains list pointer of non-bytes where data was expected.") {
+      KJ_REQUIRE(ref->listRef.elementSize() == FieldSize::BYTE,
+                 "Message contains list pointer of non-bytes where data was expected.") {
         goto useDefault;
       }
 
-      VALIDATE_INPUT(boundsCheck(segment, ptr, ptr +
-            roundUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))),
-            "Message contained out-of-bounds data pointer.") {
+      KJ_REQUIRE(boundsCheck(segment, ptr, ptr +
+                     roundUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))),
+                 "Message contained out-of-bounds data pointer.") {
         goto useDefault;
       }
 
@@ -1716,13 +1728,13 @@ struct WireHelpers {
 
     switch (ref->kind()) {
       case WirePointer::STRUCT:
-        VALIDATE_INPUT(nestingLimit > 0,
+        KJ_REQUIRE(nestingLimit > 0,
               "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.") {
           goto useDefault;
         }
 
-        VALIDATE_INPUT(boundsCheck(segment, ptr, ptr + ref->structRef.wordSize()),
-              "Message contained out-of-bounds struct pointer.") {
+        KJ_REQUIRE(boundsCheck(segment, ptr, ptr + ref->structRef.wordSize()),
+                   "Message contained out-of-bounds struct pointer.") {
           goto useDefault;
         }
         return ObjectReader(
@@ -1734,7 +1746,7 @@ struct WireHelpers {
       case WirePointer::LIST: {
         FieldSize elementSize = ref->listRef.elementSize();
 
-        VALIDATE_INPUT(nestingLimit > 0,
+        KJ_REQUIRE(nestingLimit > 0,
               "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.") {
           goto useDefault;
         }
@@ -1744,21 +1756,23 @@ struct WireHelpers {
           const WirePointer* tag = reinterpret_cast<const WirePointer*>(ptr);
           ptr += POINTER_SIZE_IN_WORDS;
 
-          VALIDATE_INPUT(boundsCheck(segment, ptr - POINTER_SIZE_IN_WORDS, ptr + wordCount),
-              "Message contains out-of-bounds list pointer.") {
+          KJ_REQUIRE(boundsCheck(segment, ptr - POINTER_SIZE_IN_WORDS, ptr + wordCount),
+                     "Message contains out-of-bounds list pointer.") {
             goto useDefault;
           }
 
-          VALIDATE_INPUT(tag->kind() == WirePointer::STRUCT,
-                "INLINE_COMPOSITE lists of non-STRUCT type are not supported.") {
+          KJ_REQUIRE(tag->kind() == WirePointer::STRUCT,
+                     "INLINE_COMPOSITE lists of non-STRUCT type are not supported.") {
             goto useDefault;
           }
 
           ElementCount elementCount = tag->inlineCompositeListElementCount();
           auto wordsPerElement = tag->structRef.wordSize() / ELEMENTS;
 
-          VALIDATE_INPUT(wordsPerElement * elementCount <= wordCount,
-              "INLINE_COMPOSITE list's elements overrun its word count.");
+          KJ_REQUIRE(wordsPerElement * elementCount <= wordCount,
+                     "INLINE_COMPOSITE list's elements overrun its word count.") {
+            goto useDefault;
+          }
 
           return ObjectReader(
               ListReader(segment, ptr, elementCount, wordsPerElement * BITS_PER_WORD,
@@ -1771,8 +1785,8 @@ struct WireHelpers {
           ElementCount elementCount = ref->listRef.elementCount();
           WordCount wordCount = roundUpToWords(ElementCount64(elementCount) * step);
 
-          VALIDATE_INPUT(boundsCheck(segment, ptr, ptr + wordCount),
-                "Message contains out-of-bounds list pointer.") {
+          KJ_REQUIRE(boundsCheck(segment, ptr, ptr + wordCount),
+                     "Message contains out-of-bounds list pointer.") {
             goto useDefault;
           }
 
@@ -1782,8 +1796,9 @@ struct WireHelpers {
         }
       }
       default:
-        FAIL_VALIDATE_INPUT("Message contained invalid pointer.") {}
-        goto useDefault;
+        KJ_FAIL_REQUIRE("Message contained invalid pointer.") {
+          goto useDefault;
+        }
     }
   }
 };
@@ -1909,8 +1924,8 @@ StructReader StructReader::readRootUnchecked(const word* location) {
 
 StructReader StructReader::readRoot(
     const word* location, SegmentReader* segment, int nestingLimit) {
-  VALIDATE_INPUT(WireHelpers::boundsCheck(segment, location, location + POINTER_SIZE_IN_WORDS),
-                 "Root location out-of-bounds.") {
+  KJ_REQUIRE(WireHelpers::boundsCheck(segment, location, location + POINTER_SIZE_IN_WORDS),
+             "Root location out-of-bounds.") {
     location = nullptr;
   }
 
@@ -1980,21 +1995,21 @@ WordCount64 StructReader::totalSize() const {
 // ListBuilder
 
 Text::Builder ListBuilder::asText() {
-  VALIDATE_INPUT(structDataSize == 8 * BITS && structPointerCount == 0 * POINTERS,
-      "Expected Text, got list of non-bytes.") {
+  KJ_REQUIRE(structDataSize == 8 * BITS && structPointerCount == 0 * POINTERS,
+             "Expected Text, got list of non-bytes.") {
     return Text::Builder();
   }
 
   size_t size = elementCount / ELEMENTS;
 
-  VALIDATE_INPUT(size > 0, "Message contains text that is not NUL-terminated.") {
+  KJ_REQUIRE(size > 0, "Message contains text that is not NUL-terminated.") {
     return Text::Builder();
   }
 
   char* cptr = reinterpret_cast<char*>(ptr);
   --size;  // NUL terminator
 
-  VALIDATE_INPUT(cptr[size] == '\0', "Message contains text that is not NUL-terminated.") {
+  KJ_REQUIRE(cptr[size] == '\0', "Message contains text that is not NUL-terminated.") {
     return Text::Builder();
   }
 
@@ -2002,8 +2017,8 @@ Text::Builder ListBuilder::asText() {
 }
 
 Data::Builder ListBuilder::asData() {
-  VALIDATE_INPUT(structDataSize == 8 * BITS && structPointerCount == 0 * POINTERS,
-      "Expected Text, got list of non-bytes.") {
+  KJ_REQUIRE(structDataSize == 8 * BITS && structPointerCount == 0 * POINTERS,
+             "Expected Text, got list of non-bytes.") {
     return Data::Builder();
   }
 
@@ -2101,21 +2116,21 @@ ListReader ListBuilder::asReader() const {
 // ListReader
 
 Text::Reader ListReader::asText() {
-  VALIDATE_INPUT(structDataSize == 8 * BITS && structPointerCount == 0 * POINTERS,
-      "Expected Text, got list of non-bytes.") {
+  KJ_REQUIRE(structDataSize == 8 * BITS && structPointerCount == 0 * POINTERS,
+             "Expected Text, got list of non-bytes.") {
     return Text::Reader();
   }
 
   size_t size = elementCount / ELEMENTS;
 
-  VALIDATE_INPUT(size > 0, "Message contains text that is not NUL-terminated.") {
+  KJ_REQUIRE(size > 0, "Message contains text that is not NUL-terminated.") {
     return Text::Reader();
   }
 
   const char* cptr = reinterpret_cast<const char*>(ptr);
   --size;  // NUL terminator
 
-  VALIDATE_INPUT(cptr[size] == '\0', "Message contains text that is not NUL-terminated.") {
+  KJ_REQUIRE(cptr[size] == '\0', "Message contains text that is not NUL-terminated.") {
     return Text::Reader();
   }
 
@@ -2123,8 +2138,8 @@ Text::Reader ListReader::asText() {
 }
 
 Data::Reader ListReader::asData() {
-  VALIDATE_INPUT(structDataSize == 8 * BITS && structPointerCount == 0 * POINTERS,
-      "Expected Text, got list of non-bytes.") {
+  KJ_REQUIRE(structDataSize == 8 * BITS && structPointerCount == 0 * POINTERS,
+             "Expected Text, got list of non-bytes.") {
     return Data::Reader();
   }
 
@@ -2132,8 +2147,8 @@ Data::Reader ListReader::asData() {
 }
 
 StructReader ListReader::getStructElement(ElementCount index) const {
-  VALIDATE_INPUT(nestingLimit > 0,
-        "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.") {
+  KJ_REQUIRE(nestingLimit > 0,
+             "Message is too deeply-nested or contains cycles.  See capnproto::ReadOptions.") {
     return StructReader();
   }
 

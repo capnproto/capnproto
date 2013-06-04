@@ -162,7 +162,9 @@ static void print(std::ostream& os, DynamicValue::Reader value,
       break;
     }
     case DynamicValue::INTERFACE:
-      FAIL_RECOVERABLE_ASSERT("Don't know how to print interfaces.") {}
+      KJ_FAIL_ASSERT("Don't know how to print interfaces.") {
+        break;
+      }
       break;
     case DynamicValue::OBJECT:
       os << "(opaque object)";

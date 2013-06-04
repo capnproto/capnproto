@@ -49,7 +49,6 @@ public:
 
     PRECONDITION,
     LOCAL_BUG,
-    INPUT,
     OS_ERROR,
     NETWORK_FAILURE,
     OTHER

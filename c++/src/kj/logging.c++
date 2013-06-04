@@ -29,14 +29,15 @@
 
 namespace kj {
 
-Log::Severity Log::minSeverity = Log::Severity::INFO;
+Log::Severity Log::minSeverity = Log::Severity::WARNING;
 
 ArrayPtr<const char> KJ_STRINGIFY(Log::Severity severity) {
   static const char* SEVERITY_STRINGS[] = {
     "info",
     "warning",
     "error",
-    "fatal"
+    "fatal",
+    "debug"
   };
 
   const char* s = SEVERITY_STRINGS[static_cast<uint>(severity)];
@@ -110,17 +111,16 @@ static String makeDescription(DescriptionStyle style, const char* code, int erro
     }
   }
 
+  if (style == ASSERTION && code == nullptr) {
+    style = LOG;
+  }
+
   {
     StringPtr expected = "expected ";
     StringPtr codeArray = style == LOG ? nullptr : StringPtr(code);
     StringPtr sep = " = ";
     StringPtr delim = "; ";
     StringPtr colon = ": ";
-
-    if (style == ASSERTION && strcmp(code, "false") == 0) {
-      // Don't print "expected false", that's silly.
-      style = LOG;
-    }
 
     StringPtr sysErrorArray;
 #if __USE_GNU
@@ -194,38 +194,28 @@ void Log::logInternal(const char* file, int line, Severity severity, const char*
           makeDescription(LOG, nullptr, 0, macroArgs, argValues), '\n'));
 }
 
-void Log::recoverableFaultInternal(
-    const char* file, int line, Exception::Nature nature,
-    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
-  getExceptionCallback().onRecoverableException(
-      Exception(nature, Exception::Durability::PERMANENT, file, line,
-                makeDescription(ASSERTION, condition, 0, macroArgs, argValues)));
+Log::Fault::~Fault() noexcept(false) {
+  if (exception != nullptr) {
+    Exception copy = mv(*exception);
+    delete exception;
+    getExceptionCallback().onRecoverableException(mv(copy));
+  }
 }
 
-void Log::fatalFaultInternal(
-    const char* file, int line, Exception::Nature nature,
-    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
-  getExceptionCallback().onFatalException(
-      Exception(nature, Exception::Durability::PERMANENT, file, line,
-                makeDescription(ASSERTION, condition, 0, macroArgs, argValues)));
+void Log::Fault::fatal() {
+  Exception copy = mv(*exception);
+  delete exception;
+  exception = nullptr;
+  getExceptionCallback().onFatalException(mv(copy));
   abort();
 }
 
-void Log::recoverableFailedSyscallInternal(
-    const char* file, int line, const char* call,
-    int errorNumber, const char* macroArgs, ArrayPtr<String> argValues) {
-  getExceptionCallback().onRecoverableException(
-      Exception(Exception::Nature::OS_ERROR, Exception::Durability::PERMANENT, file, line,
-                makeDescription(SYSCALL, call, errorNumber, macroArgs, argValues)));
-}
-
-void Log::fatalFailedSyscallInternal(
-    const char* file, int line, const char* call,
-    int errorNumber, const char* macroArgs, ArrayPtr<String> argValues) {
-  getExceptionCallback().onFatalException(
-      Exception(Exception::Nature::OS_ERROR, Exception::Durability::PERMANENT, file, line,
-                makeDescription(SYSCALL, call, errorNumber, macroArgs, argValues)));
-  abort();
+void Log::Fault::init(
+    const char* file, int line, Exception::Nature nature, int errorNumber,
+    const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
+  exception = new Exception(nature, Exception::Durability::PERMANENT, file, line,
+      makeDescription(nature == Exception::Nature::OS_ERROR ? SYSCALL : ASSERTION,
+                      condition, errorNumber, macroArgs, argValues));
 }
 
 void Log::addContextToInternal(Exception& exception, const char* file, int line,

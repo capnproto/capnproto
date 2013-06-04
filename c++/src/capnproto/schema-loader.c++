@@ -145,9 +145,9 @@ private:
   std::map<std::pair<uint, Text::Reader>, uint> members;
 
 #define VALIDATE_SCHEMA(condition, ...) \
-  VALIDATE_INPUT(condition, ##__VA_ARGS__) { isValid = false; return; }
+  KJ_REQUIRE(condition, ##__VA_ARGS__) { isValid = false; return; }
 #define FAIL_VALIDATE_SCHEMA(...) \
-  FAIL_VALIDATE_INPUT(__VA_ARGS__) { isValid = false; return; }
+  KJ_FAIL_REQUIRE(__VA_ARGS__) { isValid = false; return; }
 
   void validate(schema::FileNode::Reader fileNode) {
     // Nothing needs validation.
@@ -472,9 +472,9 @@ private:
   Compatibility compatibility;
 
 #define VALIDATE_SCHEMA(condition, ...) \
-  VALIDATE_INPUT(condition, ##__VA_ARGS__) { compatibility = INCOMPATIBLE; return; }
+  KJ_REQUIRE(condition, ##__VA_ARGS__) { compatibility = INCOMPATIBLE; return; }
 #define FAIL_VALIDATE_SCHEMA(...) \
-  FAIL_VALIDATE_INPUT(__VA_ARGS__) { compatibility = INCOMPATIBLE; return; }
+  KJ_FAIL_REQUIRE(__VA_ARGS__) { compatibility = INCOMPATIBLE; return; }
 
   void replacementIsNewer() {
     switch (compatibility) {
@@ -934,7 +934,7 @@ private:
                                  schema::Value::Reader replacement) {
     // Note that we test default compatibility only after testing type compatibility, and default
     // values have already been validated as matching their types, so this should pass.
-    RECOVERABLE_ASSERT(value.getBody().which() == replacement.getBody().which()) {
+    KJ_ASSERT(value.getBody().which() == replacement.getBody().which()) {
       compatibility = INCOMPATIBLE;
       return;
     }
