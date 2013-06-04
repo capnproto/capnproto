@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <sys/uio.h>
 #include <algorithm>
+#include <errno.h>
 
 namespace kj {
 
