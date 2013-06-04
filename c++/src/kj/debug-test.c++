@@ -70,8 +70,9 @@ public:
     throw MockException();
   }
 
-  void logMessage(StringPtr text) override {
+  void logMessage(const char* file, int line, int contextDepth, String&& text) override {
     this->text += "log message: ";
+    text = str(file, ":", line, ":+", contextDepth, ": ", mv(text));
     this->text.append(text.begin(), text.end());
   }
 };
@@ -86,11 +87,10 @@ std::string fileLine(std::string file, int line) {
 
 TEST(Logging, Log) {
   MockExceptionCallback mockCallback;
-  MockExceptionCallback::ScopedRegistration reg(mockCallback);
   int line;
 
   KJ_LOG(WARNING, "Hello world!"); line = __LINE__;
-  EXPECT_EQ("log message: warning: " + fileLine(__FILE__, line) + ": Hello world!\n",
+  EXPECT_EQ("log message: " + fileLine(__FILE__, line) + ":+0: warning: Hello world!\n",
             mockCallback.text);
   mockCallback.text.clear();
 
@@ -98,12 +98,12 @@ TEST(Logging, Log) {
   const char* str = "foo";
 
   KJ_LOG(ERROR, i, str); line = __LINE__;
-  EXPECT_EQ("log message: error: " + fileLine(__FILE__, line) + ": i = 123; str = foo\n",
+  EXPECT_EQ("log message: " + fileLine(__FILE__, line) + ":+0: error: i = 123; str = foo\n",
             mockCallback.text);
   mockCallback.text.clear();
 
   KJ_DBG("Some debug text."); line = __LINE__;
-  EXPECT_EQ("log message: debug: " + fileLine(__FILE__, line) + ": Some debug text.\n",
+  EXPECT_EQ("log message: " + fileLine(__FILE__, line) + ":+0: debug: Some debug text.\n",
             mockCallback.text);
   mockCallback.text.clear();
 
@@ -115,7 +115,7 @@ TEST(Logging, Log) {
   // Enable it.
   Log::setLogLevel(Log::Severity::INFO);
   KJ_LOG(INFO, "Some text."); line = __LINE__;
-  EXPECT_EQ("log message: info: " + fileLine(__FILE__, line) + ": Some text.\n",
+  EXPECT_EQ("log message: " + fileLine(__FILE__, line) + ":+0: info: Some text.\n",
             mockCallback.text);
   mockCallback.text.clear();
 
@@ -182,7 +182,6 @@ TEST(Logging, Catch) {
 
 TEST(Logging, Syscall) {
   MockExceptionCallback mockCallback;
-  MockExceptionCallback::ScopedRegistration reg(mockCallback);
   int line;
 
   int i = 123;
@@ -207,12 +206,17 @@ TEST(Logging, Syscall) {
 
 TEST(Logging, Context) {
   MockExceptionCallback mockCallback;
-  MockExceptionCallback::ScopedRegistration reg(mockCallback);
 
   {
     KJ_CONTEXT("foo"); int cline = __LINE__;
-    EXPECT_THROW(KJ_FAIL_ASSERT("bar"), MockException); int line = __LINE__;
 
+    KJ_LOG(WARNING, "blah"); int line = __LINE__;
+    EXPECT_EQ("log message: " + fileLine(__FILE__, cline) + ":+0: context: foo\n"
+              "log message: " + fileLine(__FILE__, line) + ":+1: warning: blah\n",
+              mockCallback.text);
+    mockCallback.text.clear();
+
+    EXPECT_THROW(KJ_FAIL_ASSERT("bar"), MockException); line = __LINE__;
     EXPECT_EQ("fatal exception: " + fileLine(__FILE__, cline) + ": context: foo\n"
               + fileLine(__FILE__, line) + ": bug in code: bar\n",
               mockCallback.text);
@@ -242,6 +246,11 @@ TEST(Logging, Context) {
       mockCallback.text.clear();
     }
   }
+}
+
+TEST(Logging, ExceptionCallbackMustBeOnStack) {
+  // TODO(cleanup):  Put in exception-test.c++, when it exists.
+  EXPECT_ANY_THROW(new ExceptionCallback);
 }
 
 }  // namespace

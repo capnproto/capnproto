@@ -138,6 +138,7 @@ String heapString(size_t size);
 String heapString(const char* value);
 String heapString(const char* value, size_t size);
 String heapString(StringPtr value);
+String heapString(const String& value);
 String heapString(ArrayPtr<const char> value);
 // Allocates a copy of the given value on the heap.
 
@@ -372,6 +373,9 @@ inline String heapString(const char* value) {
   return heapString(value, strlen(value));
 }
 inline String heapString(StringPtr value) {
+  return heapString(value.begin(), value.size());
+}
+inline String heapString(const String& value) {
   return heapString(value.begin(), value.size());
 }
 inline String heapString(ArrayPtr<const char> value) {

@@ -125,10 +125,16 @@ String KJ_STRINGIFY(const Exception& e);
 
 class ExceptionCallback {
   // If you don't like C++ exceptions, you may implement and register an ExceptionCallback in order
-  // to perform your own exception handling.
+  // to perform your own exception handling.  For example, a reasonable thing to do is to have
+  // onRecoverableException() set a flag indicating that an error occurred, and then check for that
+  // flag just before writing to storage and/or returning results to the user.  If the flag is set,
+  // discard whatever you have and return an error instead.
   //
-  // For example, a reasonable thing to do is to have onRecoverableException() set a flag
-  // indicating that an error occurred, and then check for that flag further up the stack.
+  // ExceptionCallbacks must always be allocated on the stack.  When an exception is thrown, the
+  // newest ExceptionCallback on the calling thread's stack is called.  The default implementation
+  // of each method calls the next-oldest ExceptionCallback for that thread.  Thus the callbacks
+  // behave a lot like try/catch blocks, except that they are called before any stack unwinding
+  // occurs.
 
 public:
   ExceptionCallback();
@@ -138,45 +144,34 @@ public:
   virtual void onRecoverableException(Exception&& exception);
   // Called when an exception has been raised, but the calling code has the ability to continue by
   // producing garbage output.  This method _should_ throw the exception, but is allowed to simply
-  // return if garbage output is acceptable.  The default implementation throws an exception unless
-  // the library was compiled with -fno-exceptions, in which case it logs an error and returns.
+  // return if garbage output is acceptable.
+  //
+  // The global default implementation throws an exception unless the library was compiled with
+  // -fno-exceptions, in which case it logs an error and returns.
 
   virtual void onFatalException(Exception&& exception);
   // Called when an exception has been raised and the calling code cannot continue.  If this method
   // returns normally, abort() will be called.  The method must throw the exception to avoid
-  // aborting.  The default implementation throws an exception unless the library was compiled with
+  // aborting.
+  //
+  // The global default implementation throws an exception unless the library was compiled with
   // -fno-exceptions, in which case it logs an error and returns.
 
-  virtual void logMessage(StringPtr text);
+  virtual void logMessage(const char* file, int line, int contextDepth, String&& text);
   // Called when something wants to log some debug text.  The text always ends in a newline if
-  // it is non-empty.  The default implementation writes the text to stderr.
-
-  void useProcessWide();
-  // Use this ExceptionCallback for all exceptions thrown from any thread in the process which
-  // doesn't otherwise have a thread-local callback.  When the ExceptionCallback is destroyed,
-  // the default behavior will be restored.  It is an error to set multiple process-wide callbacks
-  // at the same time.
+  // it is non-empty.  `contextDepth` indicates how many levels of context the message passed
+  // through; it may make sense to indent the message accordingly.
   //
-  // Note that to delete (and thus unregister) a global ExceptionCallback, you must ensure that
-  // no other threads might running code that could throw at that time.  It is probably best to
-  // leave the callback registered permanently.
+  // The global default implementation writes the text to stderr.
 
-  class ScopedRegistration {
-    // Allocate a ScopedRegistration on the stack to register you ExceptionCallback just within
-    // the current thread.  When the ScopedRegistration is destroyed, the previous thread-local
-    // callback will be restored.
+protected:
+  ExceptionCallback& next;
 
-  public:
-    ScopedRegistration(ExceptionCallback& callback);
-    KJ_DISALLOW_COPY(ScopedRegistration);
-    ~ScopedRegistration();
+private:
+  ExceptionCallback(ExceptionCallback& next);
 
-    inline ExceptionCallback& getCallback() { return callback; }
-
-  private:
-    ExceptionCallback& callback;
-    ScopedRegistration* old;
-  };
+  class RootExceptionCallback;
+  friend ExceptionCallback& getExceptionCallback();
 };
 
 ExceptionCallback& getExceptionCallback();

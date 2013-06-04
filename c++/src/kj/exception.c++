@@ -146,72 +146,135 @@ namespace {
 #define thread_local __thread
 #endif
 
-thread_local ExceptionCallback::ScopedRegistration* threadLocalCallback = nullptr;
-ExceptionCallback* globalCallback = nullptr;
+thread_local ExceptionCallback* threadLocalCallback = nullptr;
+
+class RepeatChar {
+  // A pseudo-sequence of characters that is actually just one character repeated.
+  //
+  // TODO(cleanup):  Put this somewhere reusable.  Maybe templatize it too.
+
+public:
+  inline RepeatChar(char c, uint size): c(c), size_(size) {}
+
+  class Iterator {
+  public:
+    Iterator() = default;
+    inline Iterator(char c, uint index): c(c), index(index) {}
+
+    inline Iterator& operator++() { ++index; return *this; }
+    inline Iterator operator++(int) { ++index; return Iterator(c, index - 1); }
+
+    inline char operator*() const { return c; }
+
+    inline bool operator==(const Iterator& other) const { return index == other.index; }
+    inline bool operator!=(const Iterator& other) const { return index != other.index; }
+
+  private:
+    char c;
+    uint index;
+  };
+
+  inline uint size() const { return size_; }
+  inline Iterator begin() const { return Iterator(c, 0); }
+  inline Iterator end() const { return Iterator(c, size_); }
+
+private:
+  char c;
+  uint size_;
+};
+inline RepeatChar KJ_STRINGIFY(RepeatChar value) { return value; }
 
 }  // namespace
 
-ExceptionCallback::ExceptionCallback() {}
+ExceptionCallback::ExceptionCallback(): next(getExceptionCallback()) {
+  char stackVar;
+  ptrdiff_t offset = reinterpret_cast<char*>(this) - &stackVar;
+  KJ_ASSERT(offset < 4096 && offset > -4096,
+            "ExceptionCallback must be allocated on the stack.");
+
+  threadLocalCallback = this;
+}
+
+ExceptionCallback::ExceptionCallback(ExceptionCallback& next): next(next) {}
+
 ExceptionCallback::~ExceptionCallback() {
-  if (globalCallback == this) {
-    globalCallback = nullptr;
+  if (&next != this) {
+    threadLocalCallback = &next;
   }
 }
 
 void ExceptionCallback::onRecoverableException(Exception&& exception) {
-#if KJ_NO_EXCEPTIONS
-  logMessage(str(exception.what(), '\n'));
-#else
-  if (std::uncaught_exception()) {
-    logMessage(str("unwind: ", ExceptionImpl(mv(exception)).what(), '\n'));
-  } else {
-    throw ExceptionImpl(mv(exception));
-  }
-#endif
+  next.onRecoverableException(mv(exception));
 }
 
 void ExceptionCallback::onFatalException(Exception&& exception) {
+  next.onFatalException(mv(exception));
+}
+
+void ExceptionCallback::logMessage(const char* file, int line, int contextDepth, String&& text) {
+  next.logMessage(file, line, contextDepth, mv(text));
+}
+
+class ExceptionCallback::RootExceptionCallback: public ExceptionCallback {
+public:
+  RootExceptionCallback(): ExceptionCallback(*this) {}
+
+  void onRecoverableException(Exception&& exception) override {
 #if KJ_NO_EXCEPTIONS
-  logMessage(str(exception.what(), '\n'));
+    logException(mv(exception));
 #else
-  throw ExceptionImpl(mv(exception));
-#endif
-}
-
-void ExceptionCallback::logMessage(StringPtr text) {
-  while (text != nullptr) {
-    ssize_t n = write(STDERR_FILENO, text.begin(), text.size());
-    if (n <= 0) {
-      // stderr is broken.  Give up.
-      return;
+    if (std::uncaught_exception()) {
+      // Throwing is probably dangerous.  Log instead.
+      logException(mv(exception));
+    } else {
+      throw ExceptionImpl(mv(exception));
     }
-    text = text.slice(n);
+#endif
   }
-}
 
-void ExceptionCallback::useProcessWide() {
-  KJ_REQUIRE(globalCallback == nullptr,
-      "Can't register multiple global ExceptionCallbacks at once.") {
-    return;
+  void onFatalException(Exception&& exception) override {
+#if KJ_NO_EXCEPTIONS
+    logException(mv(exception));
+#else
+    throw ExceptionImpl(mv(exception));
+#endif
   }
-  globalCallback = this;
-}
 
-ExceptionCallback::ScopedRegistration::ScopedRegistration(ExceptionCallback& callback)
-    : callback(callback) {
-  old = threadLocalCallback;
-  threadLocalCallback = this;
-}
+  void logMessage(const char* file, int line, int contextDepth, String&& text) override {
+    if (contextDepth > 0) {
+      text = str(RepeatChar('_', contextDepth), mv(text));
+    }
 
-ExceptionCallback::ScopedRegistration::~ScopedRegistration() {
-  threadLocalCallback = old;
-}
+    StringPtr textPtr = text;
+
+    while (text != nullptr) {
+      ssize_t n = write(STDERR_FILENO, textPtr.begin(), textPtr.size());
+      if (n <= 0) {
+        // stderr is broken.  Give up.
+        return;
+      }
+      textPtr = textPtr.slice(n);
+    }
+  }
+
+private:
+  void logException(Exception&& e) {
+    // We intentionally go back to the top exception callback on the stack because we don't want to
+    // bypass whatever log processing is in effect.
+    //
+    // We intentionally don't log the context since it should get re-added by the exception callback
+    // anyway.
+    getExceptionCallback().logMessage(e.getFile(), e.getLine(), 0, str(
+        e.getNature(), e.getDurability() == Exception::Durability::TEMPORARY ? " (temporary)" : "",
+        e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
+        "\nstack: ", strArray(e.getStackTrace(), " ")));
+  }
+};
 
 ExceptionCallback& getExceptionCallback() {
-  static ExceptionCallback defaultCallback;
-  ExceptionCallback::ScopedRegistration* scoped = threadLocalCallback;
-  return scoped != nullptr ? scoped->getCallback() :
-     globalCallback != nullptr ? *globalCallback : defaultCallback;
+  static ExceptionCallback::RootExceptionCallback defaultCallback;
+  ExceptionCallback* scoped = threadLocalCallback;
+  return scoped != nullptr ? *scoped : defaultCallback;
 }
 
 }  // namespace kj

@@ -167,15 +167,27 @@ public:
     Context();
     KJ_DISALLOW_COPY(Context);
     virtual ~Context();
-    virtual void addTo(Exception& exception) = 0;
+
+    struct Value {
+      const char* file;
+      int line;
+      String description;
+
+      inline Value(const char* file, int line, String&& description)
+          : file(file), line(line), description(mv(description)) {}
+    };
+
+    virtual Value evaluate() = 0;
 
     virtual void onRecoverableException(Exception&& exception) override;
     virtual void onFatalException(Exception&& exception) override;
-    virtual void logMessage(StringPtr text) override;
+    virtual void logMessage(const char* file, int line, int contextDepth, String&& text) override;
 
   private:
-    ExceptionCallback& next;
-    ScopedRegistration registration;
+    bool logged;
+    Maybe<Value> value;
+
+    Value ensureInitialized();
   };
 
   template <typename Func>
@@ -184,24 +196,22 @@ public:
     inline ContextImpl(Func& func): func(func) {}
     KJ_DISALLOW_COPY(ContextImpl);
 
-    void addTo(Exception& exception) override {
-      func(exception);
+    Value evaluate() override {
+      return func();
     }
   private:
     Func& func;
   };
 
   template <typename... Params>
-  static void addContextTo(Exception& exception, const char* file,
-                           int line, const char* macroArgs, Params&&... params);
+  static String makeContextDescription(const char* macroArgs, Params&&... params);
 
 private:
   static Severity minSeverity;
 
   static void logInternal(const char* file, int line, Severity severity, const char* macroArgs,
                           ArrayPtr<String> argValues);
-  static void addContextToInternal(Exception& exception, const char* file, int line,
-                                   const char* macroArgs, ArrayPtr<String> argValues);
+  static String makeContextDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues);
 
   static int getOsErrorNumber();
   // Get the error code of the last error (e.g. from errno).  Returns -1 on EINTR.
@@ -243,9 +253,9 @@ ArrayPtr<const char> KJ_STRINGIFY(Log::Severity severity);
            errorNumber, code, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
 
 #define KJ_CONTEXT(...) \
-  auto _kjContextFunc = [&](::kj::Exception& exception) { \
-        return ::kj::Log::addContextTo(exception, \
-            __FILE__, __LINE__, #__VA_ARGS__, ##__VA_ARGS__); \
+  auto _kjContextFunc = [&]() -> ::kj::Log::Context::Value { \
+        return ::kj::Log::Context::Value( \
+            __FILE__, __LINE__, ::kj::Log::makeContextDescription(#__VA_ARGS__, ##__VA_ARGS__)); \
       }; \
   ::kj::Log::ContextImpl<decltype(_kjContextFunc)> _kjContext(_kjContextFunc)
 
@@ -288,10 +298,9 @@ Log::SyscallResult Log::syscall(Call&& call) {
 }
 
 template <typename... Params>
-void Log::addContextTo(Exception& exception, const char* file, int line,
-                       const char* macroArgs, Params&&... params) {
+String Log::makeContextDescription(const char* macroArgs, Params&&... params) {
   String argValues[sizeof...(Params)] = {str(params)...};
-  addContextToInternal(exception, file, line, macroArgs, arrayPtr(argValues, sizeof...(Params)));
+  return makeContextDescriptionInternal(macroArgs, arrayPtr(argValues, sizeof...(Params)));
 }
 
 }  // namespace kj

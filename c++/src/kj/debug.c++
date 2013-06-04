@@ -93,8 +93,8 @@ static String makeDescription(DescriptionStyle style, const char* code, int erro
     ++index;
 
     if (index != argValues.size()) {
-      getExceptionCallback().logMessage(
-          str(__FILE__, ":", __LINE__, ": Failed to parse logging macro args into ",
+      getExceptionCallback().logMessage(__FILE__, __LINE__, 0,
+          str("Failed to parse logging macro args into ",
               argValues.size(), " names: ", macroArgs, '\n'));
     }
   }
@@ -189,9 +189,8 @@ static String makeDescription(DescriptionStyle style, const char* code, int erro
 
 void Log::logInternal(const char* file, int line, Severity severity, const char* macroArgs,
                       ArrayPtr<String> argValues) {
-  getExceptionCallback().logMessage(
-      str(severity, ": ", file, ":", line, ": ",
-          makeDescription(LOG, nullptr, 0, macroArgs, argValues), '\n'));
+  getExceptionCallback().logMessage(file, line, 0,
+      str(severity, ": ", makeDescription(LOG, nullptr, 0, macroArgs, argValues), '\n'));
 }
 
 Log::Fault::~Fault() noexcept(false) {
@@ -218,9 +217,8 @@ void Log::Fault::init(
                       condition, errorNumber, macroArgs, argValues));
 }
 
-void Log::addContextToInternal(Exception& exception, const char* file, int line,
-                               const char* macroArgs, ArrayPtr<String> argValues) {
-  exception.wrapContext(file, line, makeDescription(LOG, nullptr, 0, macroArgs, argValues));
+String Log::makeContextDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues) {
+  return makeDescription(LOG, nullptr, 0, macroArgs, argValues);
 }
 
 int Log::getOsErrorNumber() {
@@ -228,21 +226,37 @@ int Log::getOsErrorNumber() {
   return result == EINTR ? -1 : result;
 }
 
-Log::Context::Context(): next(getExceptionCallback()), registration(*this) {}
+Log::Context::Context(): logged(false) {}
 Log::Context::~Context() {}
 
+Log::Context::Value Log::Context::ensureInitialized() {
+  KJ_IF_MAYBE(v, value) {
+    return Value(v->file, v->line, heapString(v->description));
+  } else {
+    Value result = evaluate();
+    value = Value(result.file, result.line, heapString(result.description));
+    return result;
+  }
+}
+
 void Log::Context::onRecoverableException(Exception&& exception) {
-  addTo(exception);
+  Value v = ensureInitialized();
+  exception.wrapContext(v.file, v.line, mv(v.description));
   next.onRecoverableException(kj::mv(exception));
 }
 void Log::Context::onFatalException(Exception&& exception) {
-  addTo(exception);
+  Value v = ensureInitialized();
+  exception.wrapContext(v.file, v.line, mv(v.description));
   next.onFatalException(kj::mv(exception));
 }
-void Log::Context::logMessage(StringPtr text) {
-  // TODO(someday):  We could do something like log the context and then indent all log messages
-  //   written until the end of the context.
-  next.logMessage(text);
+void Log::Context::logMessage(const char* file, int line, int contextDepth, String&& text) {
+  if (!logged) {
+    Value v = ensureInitialized();
+    next.logMessage(v.file, v.line, 0, str("context: ", mv(v.description), '\n'));
+    logged = true;
+  }
+
+  next.logMessage(file, line, contextDepth + 1, mv(text));
 }
 
 }  // namespace kj
