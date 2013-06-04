@@ -104,11 +104,11 @@ typedef unsigned char byte;
 #define KJ_UNUSED __attribute__((unused));
 
 #if __clang__
-#define KJ_UNUSED_FOR_CLANG __attribute__((unused));
-// Clang reports "unused" warnings in some places where GCC does not even allow the "unused"
-// attribute.
+#define KJ_UNUSED_MEMBER __attribute__((unused));
+// Inhibits "unused" warning for member variables.  Only Clang produces such a warning, while GCC
+// complains if the attribute is set on members.
 #else
-#define KJ_UNUSED_FOR_CLANG
+#define KJ_UNUSED_MEMBER
 #endif
 
 namespace internal {

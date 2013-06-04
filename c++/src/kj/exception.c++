@@ -44,7 +44,7 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
 
   char exe[512];
   ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe));
-  if (n < 0 || n >= sizeof(exe)) {
+  if (n < 0 || n >= static_cast<ssize_t>(sizeof(exe))) {
     return nullptr;
   }
   exe[n] = '\0';

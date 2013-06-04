@@ -48,7 +48,7 @@ inline T& operator<<(T& os, Void) { return os << "void"; }
 
 using kj::byte;
 
-class word { uint64_t content KJ_UNUSED_FOR_CLANG; KJ_DISALLOW_COPY(word); public: word() = default; };
+class word { uint64_t content KJ_UNUSED_MEMBER; KJ_DISALLOW_COPY(word); public: word() = default; };
 // word is an opaque type with size of 64 bits.  This type is useful only to make pointer
 // arithmetic clearer.  Since the contents are private, the only way to access them is to first
 // reinterpret_cast to some other pointer type.
