@@ -29,6 +29,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <exception>
 
 namespace kj {
 namespace internal {
@@ -44,26 +45,26 @@ public:
 
   void onRecoverableException(Exception&& exception) override {
     text += "recoverable exception: ";
+    auto what = str(exception);
     // Discard the last line of "what" because it is a stack trace.
-    const char* what = exception.what();
-    const char* end = strrchr(what, '\n');
+    const char* end = strrchr(what.cStr(), '\n');
     if (end == nullptr) {
-      text += exception.what();
+      text += what.cStr();
     } else {
-      text.append(what, end);
+      text.append(what.cStr(), end);
     }
     text += '\n';
   }
 
   void onFatalException(Exception&& exception) override {
     text += "fatal exception: ";
+    auto what = str(exception);
     // Discard the last line of "what" because it is a stack trace.
-    const char* what = exception.what();
-    const char* end = strrchr(what, '\n');
+    const char* end = strrchr(what.cStr(), '\n');
     if (end == nullptr) {
-      text += exception.what();
+      text += what.cStr();
     } else {
-      text.append(what, end);
+      text.append(what.cStr(), end);
     }
     text += '\n';
     throw MockException();
@@ -153,6 +154,30 @@ TEST(Logging, Log) {
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: foo\n",
             mockCallback.text);
   mockCallback.text.clear();
+}
+
+TEST(Logging, Catch) {
+  int line;
+
+  // Catch as kj::Exception.
+  try {
+    line = __LINE__; KJ_FAIL_ASSERT("foo");
+    ADD_FAILURE() << "Expected exception.";
+  } catch (const Exception& e) {
+    String what = str(e);
+    std::string text(what.cStr(), strchr(what.cStr(), '\n') - what.cStr());
+    EXPECT_EQ(fileLine(__FILE__, line) + ": bug in code: foo", text);
+  }
+
+  // Catch as std::exception.
+  try {
+    line = __LINE__; KJ_FAIL_ASSERT("foo");
+    ADD_FAILURE() << "Expected exception.";
+  } catch (const std::exception& e) {
+    const char* what = e.what();
+    std::string text(what, strchr(what, '\n') - what);
+    EXPECT_EQ(fileLine(__FILE__, line) + ": bug in code: foo", text);
+  }
 }
 
 TEST(Logging, Syscall) {

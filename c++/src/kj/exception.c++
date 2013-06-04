@@ -27,6 +27,7 @@
 #include <unistd.h>
 #include <execinfo.h>
 #include <stdlib.h>
+#include <exception>
 
 namespace kj {
 
@@ -51,6 +52,42 @@ ArrayPtr<const char> KJ_STRINGIFY(Exception::Durability durability) {
 
   const char* s = DURABILITY_STRINGS[static_cast<uint>(durability)];
   return arrayPtr(s, strlen(s));
+}
+
+String KJ_STRINGIFY(const Exception& e) {
+  uint contextDepth = 0;
+
+  Maybe<const Exception::Context&> contextPtr = e.getContext();
+  for (;;) {
+    KJ_IF_MAYBE(c, contextPtr) {
+      ++contextDepth;
+      contextPtr = c->next.map(
+          [](const Own<Exception::Context>& c) -> const Exception::Context& { return *c; });
+    } else {
+      break;
+    }
+  }
+
+  Array<String> contextText = heapArray<String>(contextDepth);
+
+  contextDepth = 0;
+  contextPtr = e.getContext();
+  for (;;) {
+    KJ_IF_MAYBE(c, contextPtr) {
+      contextText[contextDepth++] =
+          str(c->file, ":", c->line, ": context: ", c->description, "\n");
+      contextPtr = c->next.map(
+          [](const Own<Exception::Context>& c) -> const Exception::Context& { return *c; });
+    } else {
+      break;
+    }
+  }
+
+  return str(strArray(contextText, ""),
+             e.getFile(), ":", e.getLine(), ": ", e.getNature(),
+             e.getDurability() == Exception::Durability::TEMPORARY ? " (temporary)" : "",
+             e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
+             "\nstack: ", strArray(e.getStackTrace(), " "));
 }
 
 Exception::Exception(Nature nature, Durability durability, const char* file, int line,
@@ -83,41 +120,21 @@ void Exception::wrapContext(const char* file, int line, String&& description) {
   context = heap<Context>(file, line, mv(description), mv(context));
 }
 
-const char* Exception::what() const noexcept {
-  uint contextDepth = 0;
-
-  const Maybe<Own<Context>>* contextPtr = &context;
-  for (;;) {
-    KJ_IF_MAYBE(c, *contextPtr) {
-      ++contextDepth;
-      contextPtr = &(*c)->next;
-    } else {
-      break;
-    }
+class ExceptionImpl: public Exception, public std::exception {
+public:
+  inline ExceptionImpl(Exception&& other): Exception(mv(other)) {}
+  ExceptionImpl(const ExceptionImpl& other): Exception(other) {
+    // No need to copy whatBuffer since it's just to hold the return value of what().
   }
 
-  Array<String> contextText = heapArray<String>(contextDepth);
+  const char* what() const noexcept override;
 
-  contextDepth = 0;
-  contextPtr = &context;
-  for (;;) {
-    KJ_IF_MAYBE(c, *contextPtr) {
-      const Context& node = **c;
-      contextText[contextDepth++] =
-          str(node.file, ":", node.line, ": context: ", node.description, "\n");
-      contextPtr = &node.next;
-    } else {
-      break;
-    }
-  }
+private:
+  mutable String whatBuffer;
+};
 
-  // Must be careful to NUL-terminate this.
-  whatBuffer = str(strArray(contextText, ""),
-                   file, ":", line, ": ", nature,
-                   durability == Durability::TEMPORARY ? " (temporary)" : "",
-                   this->description == nullptr ? "" : ": ", this->description,
-                   "\nstack: ", strArray(arrayPtr(trace, traceCount), " "));
-
+const char* ExceptionImpl::what() const noexcept {
+  whatBuffer = str(*this);
   return whatBuffer.begin();
 }
 
@@ -146,9 +163,9 @@ void ExceptionCallback::onRecoverableException(Exception&& exception) {
   logMessage(str(exception.what(), '\n'));
 #else
   if (std::uncaught_exception()) {
-    logMessage(str("unwind: ", exception.what(), '\n'));
+    logMessage(str("unwind: ", ExceptionImpl(mv(exception)).what(), '\n'));
   } else {
-    throw kj::mv(exception);
+    throw ExceptionImpl(mv(exception));
   }
 #endif
 }
@@ -157,7 +174,7 @@ void ExceptionCallback::onFatalException(Exception&& exception) {
 #if KJ_NO_EXCEPTIONS
   logMessage(str(exception.what(), '\n'));
 #else
-  throw kj::mv(exception);
+  throw ExceptionImpl(mv(exception));
 #endif
 }
 

@@ -24,15 +24,19 @@
 #ifndef KJ_EXCEPTION_H_
 #define KJ_EXCEPTION_H_
 
-#include <exception>
 #include "memory.h"
 #include "array.h"
 #include "string.h"
 
 namespace kj {
 
-class Exception: public std::exception {
+class ExceptionImpl;
+
+class Exception {
   // Exception thrown in case of fatal errors.
+  //
+  // Actually, a subclass of this which also implements std::exception will be thrown, but we hide
+  // that fact from the interface to avoid #including <exception>.
 
 #ifdef __CDT_PARSER__
   // For some reason Eclipse gets confused by the definition of Nature if it's the first thing
@@ -74,6 +78,7 @@ public:
   Nature getNature() const { return nature; }
   Durability getDurability() const { return durability; }
   ArrayPtr<const char> getDescription() const { return description; }
+  ArrayPtr<void* const> getStackTrace() const { return arrayPtr(trace, traceCount); }
 
   struct Context {
     // Describes a bit about what was going on when the exception was thrown.
@@ -101,8 +106,6 @@ public:
   // is expected that contexts will be added in reverse order as the exception passes up the
   // callback stack.
 
-  const char* what() const noexcept override;
-
 private:
   const char* file;
   int line;
@@ -112,11 +115,13 @@ private:
   Maybe<Own<Context>> context;
   void* trace[16];
   uint traceCount;
-  mutable String whatBuffer;
+
+  friend class ExceptionImpl;
 };
 
 ArrayPtr<const char> KJ_STRINGIFY(Exception::Nature nature);
 ArrayPtr<const char> KJ_STRINGIFY(Exception::Durability durability);
+String KJ_STRINGIFY(const Exception& e);
 
 class ExceptionCallback {
   // If you don't like C++ exceptions, you may implement and register an ExceptionCallback in order

@@ -426,13 +426,34 @@ public:
 
   Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
 
+  ~Maybe() noexcept {}
+
   inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
   inline Maybe& operator=(const Maybe& other) { ptr = other.ptr; return *this; }
 
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
 
-  ~Maybe() noexcept {}
+  template <typename Func>
+  auto map(Func&& f) -> Maybe<decltype(f(instance<T&>()))> {
+    if (ptr == nullptr) {
+      return nullptr;
+    } else {
+      return f(*ptr);
+    }
+  }
+
+  template <typename Func>
+  auto map(Func&& f) const -> Maybe<decltype(f(instance<const T&>()))> {
+    if (ptr == nullptr) {
+      return nullptr;
+    } else {
+      return f(*ptr);
+    }
+  }
+
+  // TODO(someday):  Once it's safe to require GCC 4.8, use ref qualifiers to provide a version of
+  //   map() that uses move semantics if *this is an rvalue.
 
 private:
   internal::NullableValue<T> ptr;
@@ -458,12 +479,21 @@ public:
   Maybe(const Maybe<U&>& other): ptr(other.ptr) {}
   Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
 
+  ~Maybe() noexcept {}
+
   inline Maybe& operator=(const Maybe& other) { ptr = other.ptr; return *this; }
 
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
 
-  ~Maybe() noexcept {}
+  template <typename Func>
+  auto map(Func&& f) -> Maybe<decltype(f(instance<T&>()))> {
+    if (ptr == nullptr) {
+      return nullptr;
+    } else {
+      return f(*ptr);
+    }
+  }
 
 private:
   T* ptr;
