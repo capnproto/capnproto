@@ -27,20 +27,20 @@
 #include <string>
 #include "test-util.h"
 
+// TODO(test):  This test is outdated -- it predates the retrofit of Text and Data on top of
+//   kj::ArrayPtr/kj::StringPtr.  Clean it up.
+
 namespace capnproto {
 namespace {
 
 TEST(Blob, Text) {
   std::string str = "foo";
-  Text::Reader text = str;
+  Text::Reader text = str.c_str();
 
   EXPECT_EQ("foo", text);
-  EXPECT_STREQ("foo", text.c_str());
-  EXPECT_STREQ("foo", text.data());
+  EXPECT_STREQ("foo", text.cStr());
+  EXPECT_STREQ("foo", text.begin());
   EXPECT_EQ(3u, text.size());
-
-  std::string str2 = text.as<std::string>();
-  EXPECT_EQ("foo", str2);
 
   Text::Reader text2 = "bar";
   EXPECT_EQ("bar", text2);
@@ -52,67 +52,67 @@ TEST(Blob, Text) {
   Text::Builder builder(c, 3);
   EXPECT_EQ("baz", builder);
 
-  EXPECT_EQ(Data::Reader("az"), builder.slice(1, 3));
+  EXPECT_EQ(kj::arrayPtr("az", 2), builder.slice(1, 3));
+}
+
+Data::Reader dataLit(const char* str) {
+  return Data::Reader(reinterpret_cast<const byte*>(str), strlen(str));
 }
 
 TEST(Blob, Data) {
-  std::string str = "foo";
-  Data::Reader data = str;
+  Data::Reader data = dataLit("foo");
 
-  EXPECT_EQ("foo", data);
+  EXPECT_EQ(dataLit("foo"), data);
   EXPECT_EQ(3u, data.size());
 
-  std::string str2 = data.as<std::string>();
-  EXPECT_EQ("foo", str2);
+  Data::Reader data2 = dataLit("bar");
+  EXPECT_EQ(dataLit("bar"), data2);
 
-  Data::Reader data2 = "bar";
-  EXPECT_EQ("bar", data2.as<std::string>());
-
-  char c[4] = "baz";
-  Data::Reader data3(c);
-  EXPECT_EQ("baz", data3.as<std::string>());
+  byte c[4] = "baz";
+  Data::Reader data3(c, 3);
+  EXPECT_EQ(dataLit("baz"), data3);
 
   Data::Builder builder(c, 3);
-  EXPECT_EQ("baz", builder.as<std::string>());
+  EXPECT_EQ(dataLit("baz"), builder);
 
-  EXPECT_EQ(Data::Reader("az"), builder.slice(1, 3));
+  EXPECT_EQ(dataLit("az"), builder.slice(1, 3));
 }
 
 TEST(Blob, Compare) {
-  EXPECT_TRUE (Data::Reader("foo") == Data::Reader("foo"));
-  EXPECT_FALSE(Data::Reader("foo") != Data::Reader("foo"));
-  EXPECT_TRUE (Data::Reader("foo") <= Data::Reader("foo"));
-  EXPECT_TRUE (Data::Reader("foo") >= Data::Reader("foo"));
-  EXPECT_FALSE(Data::Reader("foo") <  Data::Reader("foo"));
-  EXPECT_FALSE(Data::Reader("foo") >  Data::Reader("foo"));
+  EXPECT_TRUE (Text::Reader("foo") == Text::Reader("foo"));
+  EXPECT_FALSE(Text::Reader("foo") != Text::Reader("foo"));
+  EXPECT_TRUE (Text::Reader("foo") <= Text::Reader("foo"));
+  EXPECT_TRUE (Text::Reader("foo") >= Text::Reader("foo"));
+  EXPECT_FALSE(Text::Reader("foo") <  Text::Reader("foo"));
+  EXPECT_FALSE(Text::Reader("foo") >  Text::Reader("foo"));
 
-  EXPECT_FALSE(Data::Reader("foo") == Data::Reader("bar"));
-  EXPECT_TRUE (Data::Reader("foo") != Data::Reader("bar"));
-  EXPECT_FALSE(Data::Reader("foo") <= Data::Reader("bar"));
-  EXPECT_TRUE (Data::Reader("foo") >= Data::Reader("bar"));
-  EXPECT_FALSE(Data::Reader("foo") <  Data::Reader("bar"));
-  EXPECT_TRUE (Data::Reader("foo") >  Data::Reader("bar"));
+  EXPECT_FALSE(Text::Reader("foo") == Text::Reader("bar"));
+  EXPECT_TRUE (Text::Reader("foo") != Text::Reader("bar"));
+  EXPECT_FALSE(Text::Reader("foo") <= Text::Reader("bar"));
+  EXPECT_TRUE (Text::Reader("foo") >= Text::Reader("bar"));
+  EXPECT_FALSE(Text::Reader("foo") <  Text::Reader("bar"));
+  EXPECT_TRUE (Text::Reader("foo") >  Text::Reader("bar"));
 
-  EXPECT_FALSE(Data::Reader("bar") == Data::Reader("foo"));
-  EXPECT_TRUE (Data::Reader("bar") != Data::Reader("foo"));
-  EXPECT_TRUE (Data::Reader("bar") <= Data::Reader("foo"));
-  EXPECT_FALSE(Data::Reader("bar") >= Data::Reader("foo"));
-  EXPECT_TRUE (Data::Reader("bar") <  Data::Reader("foo"));
-  EXPECT_FALSE(Data::Reader("bar") >  Data::Reader("foo"));
+  EXPECT_FALSE(Text::Reader("bar") == Text::Reader("foo"));
+  EXPECT_TRUE (Text::Reader("bar") != Text::Reader("foo"));
+  EXPECT_TRUE (Text::Reader("bar") <= Text::Reader("foo"));
+  EXPECT_FALSE(Text::Reader("bar") >= Text::Reader("foo"));
+  EXPECT_TRUE (Text::Reader("bar") <  Text::Reader("foo"));
+  EXPECT_FALSE(Text::Reader("bar") >  Text::Reader("foo"));
 
-  EXPECT_FALSE(Data::Reader("foobar") == Data::Reader("foo"));
-  EXPECT_TRUE (Data::Reader("foobar") != Data::Reader("foo"));
-  EXPECT_FALSE(Data::Reader("foobar") <= Data::Reader("foo"));
-  EXPECT_TRUE (Data::Reader("foobar") >= Data::Reader("foo"));
-  EXPECT_FALSE(Data::Reader("foobar") <  Data::Reader("foo"));
-  EXPECT_TRUE (Data::Reader("foobar") >  Data::Reader("foo"));
+  EXPECT_FALSE(Text::Reader("foobar") == Text::Reader("foo"));
+  EXPECT_TRUE (Text::Reader("foobar") != Text::Reader("foo"));
+  EXPECT_FALSE(Text::Reader("foobar") <= Text::Reader("foo"));
+  EXPECT_TRUE (Text::Reader("foobar") >= Text::Reader("foo"));
+  EXPECT_FALSE(Text::Reader("foobar") <  Text::Reader("foo"));
+  EXPECT_TRUE (Text::Reader("foobar") >  Text::Reader("foo"));
 
-  EXPECT_FALSE(Data::Reader("foo") == Data::Reader("foobar"));
-  EXPECT_TRUE (Data::Reader("foo") != Data::Reader("foobar"));
-  EXPECT_TRUE (Data::Reader("foo") <= Data::Reader("foobar"));
-  EXPECT_FALSE(Data::Reader("foo") >= Data::Reader("foobar"));
-  EXPECT_TRUE (Data::Reader("foo") <  Data::Reader("foobar"));
-  EXPECT_FALSE(Data::Reader("foo") >  Data::Reader("foobar"));
+  EXPECT_FALSE(Text::Reader("foo") == Text::Reader("foobar"));
+  EXPECT_TRUE (Text::Reader("foo") != Text::Reader("foobar"));
+  EXPECT_TRUE (Text::Reader("foo") <= Text::Reader("foobar"));
+  EXPECT_FALSE(Text::Reader("foo") >= Text::Reader("foobar"));
+  EXPECT_TRUE (Text::Reader("foo") <  Text::Reader("foobar"));
+  EXPECT_FALSE(Text::Reader("foo") >  Text::Reader("foobar"));
 }
 
 }  // namespace

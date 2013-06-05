@@ -556,7 +556,6 @@ public:
   // - Integers can be converted to floating points.  This may lose information, but won't throw.
   // - Float32/Float64 can be converted between each other.  Converting Float64 -> Float32 may lose
   //   information, but won't throw.
-  // - Text can be converted to Data (but not vice-versa).
   // - Text can be converted to an enum, if the Text matches one of the enumerant names (but not
   //   vice-versa).
   //

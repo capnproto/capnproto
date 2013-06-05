@@ -44,7 +44,7 @@ void genericInitTestMessage(Builder builder) {
   builder.setFloat32Field(1234.5);
   builder.setFloat64Field(-123e45);
   builder.setTextField("foo");
-  builder.setDataField("bar");
+  builder.setDataField(data("bar"));
   {
     auto subBuilder = builder.initStructField();
     subBuilder.setVoidField(Void::VOID);
@@ -60,7 +60,7 @@ void genericInitTestMessage(Builder builder) {
     subBuilder.setFloat32Field(-1.25e-10);
     subBuilder.setFloat64Field(345);
     subBuilder.setTextField("baz");
-    subBuilder.setDataField("qux");
+    subBuilder.setDataField(data("qux"));
     {
       auto subSubBuilder = subBuilder.initStructField();
       subSubBuilder.setTextField("nested");
@@ -82,7 +82,7 @@ void genericInitTestMessage(Builder builder) {
     subBuilder.setFloat32List({0, 1234567, 1e37, -1e37, 1e-37, -1e-37});
     subBuilder.setFloat64List({0, 123456789012345, 1e306, -1e306, 1e-306, -1e-306});
     subBuilder.setTextList({"quux", "corge", "grault"});
-    subBuilder.setDataList({"garply", "waldo", "fred"});
+    subBuilder.setDataList({data("garply"), data("waldo"), data("fred")});
     {
       auto listBuilder = subBuilder.initStructList(3);
       listBuilder[0].setTextField("x structlist 1");
@@ -112,7 +112,7 @@ void genericInitTestMessage(Builder builder) {
                           -std::numeric_limits<double>::infinity(),
                           std::numeric_limits<double>::quiet_NaN()});
   builder.setTextList({"plugh", "xyzzy", "thud"});
-  builder.setDataList({"oops", "exhausted", "rfc3092"});
+  builder.setDataList({data("oops"), data("exhausted"), data("rfc3092")});
   {
     auto listBuilder = builder.initStructList(3);
     listBuilder[0].setTextField("structlist 1");
@@ -136,7 +136,7 @@ void dynamicInitTestMessage(DynamicStruct::Builder builder) {
   builder.set("float32Field", 1234.5);
   builder.set("float64Field", -123e45);
   builder.set("textField", "foo");
-  builder.set("dataField", "bar");
+  builder.set("dataField", data("bar"));
   {
     auto subBuilder = builder.init("structField").as<DynamicStruct>();
     subBuilder.set("voidField", Void::VOID);
@@ -152,7 +152,7 @@ void dynamicInitTestMessage(DynamicStruct::Builder builder) {
     subBuilder.set("float32Field", -1.25e-10);
     subBuilder.set("float64Field", 345);
     subBuilder.set("textField", "baz");
-    subBuilder.set("dataField", "qux");
+    subBuilder.set("dataField", data("qux"));
     {
       auto subSubBuilder = subBuilder.init("structField").as<DynamicStruct>();
       subSubBuilder.set("textField", "nested");
@@ -174,7 +174,7 @@ void dynamicInitTestMessage(DynamicStruct::Builder builder) {
     subBuilder.set("float32List", {0, 1234567, 1e37, -1e37, 1e-37, -1e-37});
     subBuilder.set("float64List", {0, 123456789012345, 1e306, -1e306, 1e-306, -1e-306});
     subBuilder.set("textList", {"quux", "corge", "grault"});
-    subBuilder.set("dataList", {"garply", "waldo", "fred"});
+    subBuilder.set("dataList", {data("garply"), data("waldo"), data("fred")});
     {
       auto listBuilder = subBuilder.init("structList", 3).as<DynamicList>();
       listBuilder[0].as<DynamicStruct>().set("textField", "x structlist 1");
@@ -204,7 +204,7 @@ void dynamicInitTestMessage(DynamicStruct::Builder builder) {
                           -std::numeric_limits<double>::infinity(),
                           std::numeric_limits<double>::quiet_NaN()});
   builder.set("textList", {"plugh", "xyzzy", "thud"});
-  builder.set("dataList", {"oops", "exhausted", "rfc3092"});
+  builder.set("dataList", {data("oops"), data("exhausted"), data("rfc3092")});
   {
     auto listBuilder = builder.init("structList", 3).as<DynamicList>();
     listBuilder[0].as<DynamicStruct>().set("textField", "structlist 1");
@@ -256,7 +256,7 @@ void genericCheckTestMessage(Reader reader) {
   EXPECT_FLOAT_EQ(1234.5f, reader.getFloat32Field());
   EXPECT_DOUBLE_EQ(-123e45, reader.getFloat64Field());
   EXPECT_EQ("foo", reader.getTextField());
-  EXPECT_EQ("bar", reader.getDataField());
+  EXPECT_EQ(data("bar"), reader.getDataField());
   {
     auto subReader = reader.getStructField();
     EXPECT_EQ(Void::VOID, subReader.getVoidField());
@@ -272,7 +272,7 @@ void genericCheckTestMessage(Reader reader) {
     EXPECT_FLOAT_EQ(-1.25e-10f, subReader.getFloat32Field());
     EXPECT_DOUBLE_EQ(345, subReader.getFloat64Field());
     EXPECT_EQ("baz", subReader.getTextField());
-    EXPECT_EQ("qux", subReader.getDataField());
+    EXPECT_EQ(data("qux"), subReader.getDataField());
     {
       auto subSubReader = subReader.getStructField();
       EXPECT_EQ("nested", subSubReader.getTextField());
@@ -294,7 +294,7 @@ void genericCheckTestMessage(Reader reader) {
     checkList(subReader.getFloat32List(), {0.0f, 1234567.0f, 1e37f, -1e37f, 1e-37f, -1e-37f});
     checkList(subReader.getFloat64List(), {0.0, 123456789012345.0, 1e306, -1e306, 1e-306, -1e-306});
     checkList(subReader.getTextList(), {"quux", "corge", "grault"});
-    checkList(subReader.getDataList(), {"garply", "waldo", "fred"});
+    checkList(subReader.getDataList(), {data("garply"), data("waldo"), data("fred")});
     {
       auto listReader = subReader.getStructList();
       ASSERT_EQ(3u, listReader.size());
@@ -333,7 +333,7 @@ void genericCheckTestMessage(Reader reader) {
     EXPECT_TRUE(isNaN(listReader[3]));
   }
   checkList(reader.getTextList(), {"plugh", "xyzzy", "thud"});
-  checkList(reader.getDataList(), {"oops", "exhausted", "rfc3092"});
+  checkList(reader.getDataList(), {data("oops"), data("exhausted"), data("rfc3092")});
   {
     auto listReader = reader.getStructList();
     ASSERT_EQ(3u, listReader.size());
@@ -400,7 +400,7 @@ void dynamicCheckTestMessage(Reader reader) {
   EXPECT_FLOAT_EQ(1234.5f, reader.get("float32Field").as<float>());
   EXPECT_DOUBLE_EQ(-123e45, reader.get("float64Field").as<double>());
   EXPECT_EQ("foo", reader.get("textField").as<Text>());
-  EXPECT_EQ("bar", reader.get("dataField").as<Data>());
+  EXPECT_EQ(data("bar"), reader.get("dataField").as<Data>());
   {
     auto subReader = reader.get("structField").as<DynamicStruct>();
     EXPECT_EQ(Void::VOID, subReader.get("voidField").as<Void>());
@@ -416,7 +416,7 @@ void dynamicCheckTestMessage(Reader reader) {
     EXPECT_FLOAT_EQ(-1.25e-10f, subReader.get("float32Field").as<float>());
     EXPECT_DOUBLE_EQ(345, subReader.get("float64Field").as<double>());
     EXPECT_EQ("baz", subReader.get("textField").as<Text>());
-    EXPECT_EQ("qux", subReader.get("dataField").as<Data>());
+    EXPECT_EQ(data("qux"), subReader.get("dataField").as<Data>());
     {
       auto subSubReader = subReader.get("structField").as<DynamicStruct>();
       EXPECT_EQ("nested", subSubReader.get("textField").as<Text>());
@@ -439,7 +439,7 @@ void dynamicCheckTestMessage(Reader reader) {
     checkList<float>(subReader.get("float32List"), {0.0f, 1234567.0f, 1e37f, -1e37f, 1e-37f, -1e-37f});
     checkList<double>(subReader.get("float64List"), {0.0, 123456789012345.0, 1e306, -1e306, 1e-306, -1e-306});
     checkList<Text>(subReader.get("textList"), {"quux", "corge", "grault"});
-    checkList<Data>(subReader.get("dataList"), {"garply", "waldo", "fred"});
+    checkList<Data>(subReader.get("dataList"), {data("garply"), data("waldo"), data("fred")});
     {
       auto listReader = subReader.get("structList").as<DynamicList>();
       ASSERT_EQ(3u, listReader.size());
@@ -478,7 +478,7 @@ void dynamicCheckTestMessage(Reader reader) {
     EXPECT_TRUE(isNaN(listReader[3].as<double>()));
   }
   checkList<Text>(reader.get("textList"), {"plugh", "xyzzy", "thud"});
-  checkList<Data>(reader.get("dataList"), {"oops", "exhausted", "rfc3092"});
+  checkList<Data>(reader.get("dataList"), {data("oops"), data("exhausted"), data("rfc3092")});
   {
     auto listReader = reader.get("structList").as<DynamicList>();
     ASSERT_EQ(3u, listReader.size());
@@ -506,7 +506,7 @@ void genericCheckTestMessageAllZero(Reader reader) {
   EXPECT_FLOAT_EQ(0, reader.getFloat32Field());
   EXPECT_DOUBLE_EQ(0, reader.getFloat64Field());
   EXPECT_EQ("", reader.getTextField());
-  EXPECT_EQ("", reader.getDataField());
+  EXPECT_EQ(data(""), reader.getDataField());
   {
     auto subReader = reader.getStructField();
     EXPECT_EQ(Void::VOID, subReader.getVoidField());
@@ -522,7 +522,7 @@ void genericCheckTestMessageAllZero(Reader reader) {
     EXPECT_FLOAT_EQ(0, subReader.getFloat32Field());
     EXPECT_DOUBLE_EQ(0, subReader.getFloat64Field());
     EXPECT_EQ("", subReader.getTextField());
-    EXPECT_EQ("", subReader.getDataField());
+    EXPECT_EQ(data(""), subReader.getDataField());
     {
       auto subSubReader = subReader.getStructField();
       EXPECT_EQ("", subSubReader.getTextField());
@@ -581,7 +581,7 @@ void dynamicCheckTestMessageAllZero(Reader reader) {
   EXPECT_FLOAT_EQ(0, reader.get("float32Field").as<float>());
   EXPECT_DOUBLE_EQ(0, reader.get("float64Field").as<double>());
   EXPECT_EQ("", reader.get("textField").as<Text>());
-  EXPECT_EQ("", reader.get("dataField").as<Data>());
+  EXPECT_EQ(data(""), reader.get("dataField").as<Data>());
   {
     auto subReader = reader.get("structField").as<DynamicStruct>();
     EXPECT_EQ(Void::VOID, subReader.get("voidField").as<Void>());
@@ -597,7 +597,7 @@ void dynamicCheckTestMessageAllZero(Reader reader) {
     EXPECT_FLOAT_EQ(0, subReader.get("float32Field").as<float>());
     EXPECT_DOUBLE_EQ(0, subReader.get("float64Field").as<double>());
     EXPECT_EQ("", subReader.get("textField").as<Text>());
-    EXPECT_EQ("", subReader.get("dataField").as<Data>());
+    EXPECT_EQ(data(""), subReader.get("dataField").as<Data>());
     {
       auto subSubReader = subReader.get("structField").as<DynamicStruct>();
       EXPECT_EQ("", subSubReader.get("textField").as<Text>());

@@ -466,81 +466,102 @@ TEST(Packed, RoundTripAllZeroEvenSegmentCountLazy) {
 // =======================================================================================
 
 TEST(Packed, RoundTripHugeString) {
+  kj::String huge = kj::heapString(5023);
+  memset(huge.begin(), 'x', 5023);
+
   TestMessageBuilder builder(1);
-  builder.initRoot<TestAllTypes>().setTextField(std::string(5023, 'x'));
+  builder.initRoot<TestAllTypes>().setTextField(huge);
 
   TestPipe pipe;
   writePackedMessage(pipe, builder);
 
   PackedMessageReader reader(pipe);
-  EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == std::string(5023, 'x'));
+  EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == huge);
 }
 
 TEST(Packed, RoundTripHugeStringScratchSpace) {
+  kj::String huge = kj::heapString(5023);
+  memset(huge.begin(), 'x', 5023);
+
   TestMessageBuilder builder(1);
-  builder.initRoot<TestAllTypes>().setTextField(std::string(5023, 'x'));
+  builder.initRoot<TestAllTypes>().setTextField(huge);
 
   TestPipe pipe;
   writePackedMessage(pipe, builder);
 
   word scratch[1024];
   PackedMessageReader reader(pipe, ReaderOptions(), kj::ArrayPtr<word>(scratch, 1024));
-  EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == std::string(5023, 'x'));
+  EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == huge);
 }
 
 TEST(Packed, RoundTripHugeStringLazy) {
+  kj::String huge = kj::heapString(5023);
+  memset(huge.begin(), 'x', 5023);
+
   TestMessageBuilder builder(1);
-  builder.initRoot<TestAllTypes>().setTextField(std::string(5023, 'x'));
+  builder.initRoot<TestAllTypes>().setTextField(huge);
 
   TestPipe pipe(1);
   writePackedMessage(pipe, builder);
 
   PackedMessageReader reader(pipe);
-  EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == std::string(5023, 'x'));
+  EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == huge);
 }
 
 TEST(Packed, RoundTripHugeStringOddSegmentCount) {
+  kj::String huge = kj::heapString(5023);
+  memset(huge.begin(), 'x', 5023);
+
   TestMessageBuilder builder(3);
-  builder.initRoot<TestAllTypes>().setTextField(std::string(5023, 'x'));
+  builder.initRoot<TestAllTypes>().setTextField(huge);
 
   TestPipe pipe;
   writePackedMessage(pipe, builder);
 
   PackedMessageReader reader(pipe);
-  EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == std::string(5023, 'x'));
+  EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == huge);
 }
 
 TEST(Packed, RoundTripHugeStringOddSegmentCountLazy) {
+  kj::String huge = kj::heapString(5023);
+  memset(huge.begin(), 'x', 5023);
+
   TestMessageBuilder builder(3);
-  builder.initRoot<TestAllTypes>().setTextField(std::string(5023, 'x'));
+  builder.initRoot<TestAllTypes>().setTextField(huge);
 
   TestPipe pipe(1);
   writePackedMessage(pipe, builder);
 
   PackedMessageReader reader(pipe);
-  EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == std::string(5023, 'x'));
+  EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == huge);
 }
 
 TEST(Packed, RoundTripHugeStringEvenSegmentCount) {
+  kj::String huge = kj::heapString(5023);
+  memset(huge.begin(), 'x', 5023);
+
   TestMessageBuilder builder(2);
-  builder.initRoot<TestAllTypes>().setTextField(std::string(5023, 'x'));
+  builder.initRoot<TestAllTypes>().setTextField(huge);
 
   TestPipe pipe;
   writePackedMessage(pipe, builder);
 
   PackedMessageReader reader(pipe);
-  EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == std::string(5023, 'x'));
+  EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == huge);
 }
 
 TEST(Packed, RoundTripHugeStringEvenSegmentCountLazy) {
+  kj::String huge = kj::heapString(5023);
+  memset(huge.begin(), 'x', 5023);
+
   TestMessageBuilder builder(2);
-  builder.initRoot<TestAllTypes>().setTextField(std::string(5023, 'x'));
+  builder.initRoot<TestAllTypes>().setTextField(huge);
 
   TestPipe pipe(1);
   writePackedMessage(pipe, builder);
 
   PackedMessageReader reader(pipe);
-  EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == std::string(5023, 'x'));
+  EXPECT_TRUE(reader.getRoot<TestAllTypes>().getTextField() == huge);
 }
 
 // TODO(test):  Test error cases.

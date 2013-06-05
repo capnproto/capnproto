@@ -490,7 +490,7 @@ Text::Builder DynamicStruct::Builder::getObjectAsText(StructSchema::Member membe
       auto field = member.getProto().getBody().getFieldMember();
       KJ_REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
               "Expected an Object.");
-      return getObjectAsDataImpl(builder, member);
+      return getObjectAsTextImpl(builder, member);
     }
   }
 
@@ -565,7 +565,7 @@ Text::Builder DynamicStruct::Builder::initObjectAsText(StructSchema::Member memb
       auto field = member.getProto().getBody().getFieldMember();
       KJ_REQUIRE(field.getType().getBody().which() == schema::Type::Body::OBJECT_TYPE,
               "Expected an Object.");
-      return initFieldAsDataImpl(builder, member, size);
+      return initFieldAsTextImpl(builder, member, size);
     }
   }
 
@@ -627,7 +627,7 @@ Text::Builder DynamicStruct::Builder::getObjectAsText(Text::Reader name) {
   return getObjectAsText(schema.getMemberByName(name));
 }
 Data::Builder DynamicStruct::Builder::getObjectAsData(Text::Reader name) {
-  return getObjectAsText(schema.getMemberByName(name));
+  return getObjectAsData(schema.getMemberByName(name));
 }
 DynamicStruct::Builder DynamicStruct::Builder::initObject(
     Text::Reader name, StructSchema type) {
@@ -641,7 +641,7 @@ Text::Builder DynamicStruct::Builder::initObjectAsText(Text::Reader name, uint s
   return initObjectAsText(schema.getMemberByName(name), size);
 }
 Data::Builder DynamicStruct::Builder::initObjectAsData(Text::Reader name, uint size) {
-  return initObjectAsText(schema.getMemberByName(name), size);
+  return initObjectAsData(schema.getMemberByName(name), size);
 }
 
 DynamicValue::Reader DynamicStruct::Reader::getImpl(
@@ -691,14 +691,14 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
           Text::Reader typedDval = dval.getTextValue();
           return DynamicValue::Reader(
               reader.getBlobField<Text>(field.getOffset() * POINTERS,
-                                        typedDval.data(), typedDval.size() * BYTES));
+                                        typedDval.begin(), typedDval.size() * BYTES));
         }
 
         case schema::Type::Body::DATA_TYPE: {
           Data::Reader typedDval = dval.getDataValue();
           return DynamicValue::Reader(
               reader.getBlobField<Data>(field.getOffset() * POINTERS,
-                                        typedDval.data(), typedDval.size() * BYTES));
+                                        typedDval.begin(), typedDval.size() * BYTES));
         }
 
         case schema::Type::Body::LIST_TYPE: {
@@ -783,14 +783,14 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
           Text::Reader typedDval = dval.getTextValue();
           return DynamicValue::Builder(
               builder.getBlobField<Text>(field.getOffset() * POINTERS,
-                                         typedDval.data(), typedDval.size() * BYTES));
+                                         typedDval.begin(), typedDval.size() * BYTES));
         }
 
         case schema::Type::Body::DATA_TYPE: {
           Data::Reader typedDval = dval.getDataValue();
           return DynamicValue::Builder(
               builder.getBlobField<Data>(field.getOffset() * POINTERS,
-                                         typedDval.data(), typedDval.size() * BYTES));
+                                         typedDval.begin(), typedDval.size() * BYTES));
         }
 
         case schema::Type::Body::LIST_TYPE: {
@@ -1457,6 +1457,7 @@ BuilderFor<typeName> DynamicValue::Builder::AsImpl<typeName>::apply(Builder buil
 HANDLE_TYPE(bool, BOOL, bool)
 
 HANDLE_TYPE(text, TEXT, Text)
+HANDLE_TYPE(data, DATA, Data)
 HANDLE_TYPE(list, LIST, DynamicList)
 HANDLE_TYPE(struct, STRUCT, DynamicStruct)
 HANDLE_TYPE(enum, ENUM, DynamicEnum)
@@ -1464,27 +1465,6 @@ HANDLE_TYPE(object, OBJECT, DynamicObject)
 HANDLE_TYPE(union, UNION, DynamicUnion)
 
 #undef HANDLE_TYPE
-
-Data::Reader DynamicValue::Reader::AsImpl<Data>::apply(Reader reader) {
-  if (reader.type == TEXT) {
-    // Implicitly convert from text.
-    return reader.textValue;
-  }
-  KJ_REQUIRE(reader.type == DATA, "Type mismatch when using DynamicValue::Reader::as().") {
-    return Data::Reader();
-  }
-  return reader.dataValue;
-}
-Data::Builder DynamicValue::Builder::AsImpl<Data>::apply(Builder builder) {
-  if (builder.type == TEXT) {
-    // Implicitly convert from text.
-    return builder.textValue;
-  }
-  KJ_REQUIRE(builder.type == DATA, "Type mismatch when using DynamicValue::Builder::as().") {
-    return Data::Builder();
-  }
-  return builder.dataValue;
-}
 
 // As in the header, HANDLE_TYPE(void, VOID, Void) crashes GCC 4.7.
 Void DynamicValue::Reader::AsImpl<Void>::apply(Reader reader) {

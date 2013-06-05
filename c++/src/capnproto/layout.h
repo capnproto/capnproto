@@ -712,7 +712,7 @@ struct ObjectReader {
 // Internal implementation details...
 
 inline Data::Builder StructBuilder::getDataSectionAsBlob() {
-  return Data::Builder(reinterpret_cast<char*>(data), dataSize / BITS_PER_BYTE / BYTES);
+  return Data::Builder(reinterpret_cast<byte*>(data), dataSize / BITS_PER_BYTE / BYTES);
 }
 
 template <typename T>
@@ -768,7 +768,7 @@ inline void StructBuilder::setDataField(
 // -------------------------------------------------------------------
 
 inline Data::Reader StructReader::getDataSectionAsBlob() {
-  return Data::Reader(reinterpret_cast<const char*>(data), dataSize / BITS_PER_BYTE / BYTES);
+  return Data::Reader(reinterpret_cast<const byte*>(data), dataSize / BITS_PER_BYTE / BYTES);
 }
 
 template <typename T>

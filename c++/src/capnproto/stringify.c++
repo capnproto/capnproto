@@ -69,7 +69,15 @@ static void print(std::ostream& os, DynamicValue::Reader value,
     case DynamicValue::TEXT:
     case DynamicValue::DATA: {
       os << '\"';
-      for (char c: value.as<Data>()) {
+      // TODO(someday):  Data probably shouldn't be printed as a string.
+      kj::ArrayPtr<const char> chars;
+      if (value.getType() == DynamicValue::DATA) {
+        auto reader = value.as<Data>();
+        chars = kj::arrayPtr(reinterpret_cast<const char*>(reader.begin()), reader.size());
+      } else {
+        chars = value.as<Text>();
+      }
+      for (char c: chars) {
         switch (c) {
           case '\a': os << "\\a"; break;
           case '\b': os << "\\b"; break;
@@ -112,7 +120,7 @@ static void print(std::ostream& os, DynamicValue::Reader value,
     case DynamicValue::ENUM: {
       auto enumValue = value.as<DynamicEnum>();
       KJ_IF_MAYBE(enumerant, enumValue.getEnumerant()) {
-        os << enumerant->getProto().getName().c_str();
+        os << enumerant->getProto().getName().cStr();
       } else {
         // Unknown enum value; output raw number.
         os << enumValue.getRaw();
@@ -130,7 +138,7 @@ static void print(std::ostream& os, DynamicValue::Reader value,
           } else {
             os << ", ";
           }
-          os << member.getProto().getName().c_str() << " = ";
+          os << member.getProto().getName().cStr() << " = ";
 
           auto memberBody = member.getProto().getBody();
           switch (memberBody.which()) {
@@ -150,7 +158,7 @@ static void print(std::ostream& os, DynamicValue::Reader value,
     case DynamicValue::UNION: {
       auto unionValue = value.as<DynamicUnion>();
       KJ_IF_MAYBE(tag, unionValue.which()) {
-        os << tag->getProto().getName() << "(";
+        os << tag->getProto().getName().cStr() << "(";
         print(os, unionValue.get(),
               tag->getProto().getBody().getFieldMember().getType().getBody().which());
         os << ")";

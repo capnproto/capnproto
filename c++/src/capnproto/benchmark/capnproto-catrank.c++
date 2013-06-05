@@ -58,8 +58,8 @@ public:
       static const char URL_PREFIX[] = "http://example.com/";
       auto url = result.initUrl(urlSize + sizeof(URL_PREFIX));
 
-      strcpy(url.data(), URL_PREFIX);
-      char* pos = url.data() + strlen(URL_PREFIX);
+      strcpy(url.begin(), URL_PREFIX);
+      char* pos = url.begin() + strlen(URL_PREFIX);
       for (int j = 0; j < urlSize; j++) {
         *pos++ = 'a' + fastRand(26);
       }
@@ -85,7 +85,7 @@ public:
         snippet.append(WORDS[fastRand(WORDS_COUNT)]);
       }
 
-      result.setSnippet(snippet);
+      result.setSnippet(Text::Reader(snippet.c_str(), snippet.size()));
     }
 
     return goodCount;
@@ -96,10 +96,10 @@ public:
 
     for (auto result: request.getResults()) {
       double score = result.getScore();
-      if (strstr(result.getSnippet().c_str(), " cat ") != nullptr) {
+      if (strstr(result.getSnippet().cStr(), " cat ") != nullptr) {
         score *= 10000;
       }
-      if (strstr(result.getSnippet().c_str(), " dog ") != nullptr) {
+      if (strstr(result.getSnippet().cStr(), " dog ") != nullptr) {
         score /= 10000;
       }
       scoredResults.emplace_back(score, result);

@@ -148,9 +148,9 @@ TEST(Encoding, GenericObjects) {
   EXPECT_EQ("foo", root.getObjectField<Text>());
   EXPECT_EQ("foo", root.asReader().getObjectField<Text>());
 
-  root.setObjectField<Data>("foo");
-  EXPECT_EQ("foo", root.getObjectField<Data>());
-  EXPECT_EQ("foo", root.asReader().getObjectField<Data>());
+  root.setObjectField<Data>(data("foo"));
+  EXPECT_EQ(data("foo"), root.getObjectField<Data>());
+  EXPECT_EQ(data("foo"), root.asReader().getObjectField<Data>());
 
   {
     root.setObjectField<List<uint32_t>>({123, 456, 789});

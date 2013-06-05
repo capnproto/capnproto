@@ -32,22 +32,26 @@
 namespace capnproto {
 
 inline std::ostream& operator<<(std::ostream& os, const Data::Reader& value) {
-  return os.write(value.data(), value.size());
+  return os.write(reinterpret_cast<const char*>(value.begin()), value.size());
 }
 inline std::ostream& operator<<(std::ostream& os, const Data::Builder& value) {
-  return os.write(value.data(), value.size());
+  return os.write(reinterpret_cast<char*>(value.begin()), value.size());
 }
 inline std::ostream& operator<<(std::ostream& os, const Text::Reader& value) {
-  return os.write(value.data(), value.size());
+  return os.write(value.begin(), value.size());
 }
 inline std::ostream& operator<<(std::ostream& os, const Text::Builder& value) {
-  return os.write(value.data(), value.size());
+  return os.write(value.begin(), value.size());
 }
 inline std::ostream& operator<<(std::ostream& os, Void) {
   return os << "void";
 }
 
 namespace internal {
+
+inline Data::Reader data(const char* str) {
+  return Data::Reader(reinterpret_cast<const byte*>(str), strlen(str));
+}
 
 namespace test = capnproto_test::capnproto::test;
 

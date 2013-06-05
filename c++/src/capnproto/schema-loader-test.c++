@@ -170,8 +170,8 @@ TEST(SchemaLoader, Upgrade) {
   loadUnderAlternateTypeId<test::TestNewVersion>(loader, typeId<test::TestOldVersion>());
 
   // The new version replaced the old.
-  EXPECT_STREQ(Schema::from<test::TestNewVersion>().getProto().getDisplayName(),
-               schema.getProto().getDisplayName());
+  EXPECT_EQ(Schema::from<test::TestNewVersion>().getProto().getDisplayName(),
+            schema.getProto().getDisplayName());
 
   // But it is still usable as the old version.
   schema.requireUsableAs<test::TestOldVersion>();
@@ -189,8 +189,8 @@ TEST(SchemaLoader, Downgrade) {
   loadUnderAlternateTypeId<test::TestOldVersion>(loader, typeId<test::TestNewVersion>());
 
   // We kept the new version, because the replacement was older.
-  EXPECT_STREQ(Schema::from<test::TestNewVersion>().getProto().getDisplayName(),
-               schema.getProto().getDisplayName());
+  EXPECT_EQ(Schema::from<test::TestNewVersion>().getProto().getDisplayName(),
+            schema.getProto().getDisplayName());
   schema.requireUsableAs<test::TestNewVersion>();
 }
 

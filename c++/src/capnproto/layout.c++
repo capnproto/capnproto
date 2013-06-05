@@ -1226,7 +1226,8 @@ struct WireHelpers {
 
   static KJ_ALWAYS_INLINE(void setTextPointer(
       WirePointer* ref, SegmentBuilder* segment, Text::Reader value)) {
-    initTextPointer(ref, segment, value.size() * BYTES).copyFrom(value);
+    memcpy(initTextPointer(ref, segment, value.size() * BYTES).begin(),
+           value.begin(), value.size());
   }
 
   static KJ_ALWAYS_INLINE(Text::Builder getWritableTextPointer(
@@ -1234,7 +1235,7 @@ struct WireHelpers {
       const void* defaultValue, ByteCount defaultSize)) {
     if (ref->isNull()) {
       Text::Builder builder = initTextPointer(ref, segment, defaultSize);
-      builder.copyFrom(defaultValue);
+      memcpy(builder.begin(), defaultValue, defaultSize / BYTES);
       return builder;
     } else {
       word* ptr = followFars(ref, segment);
@@ -1258,12 +1259,13 @@ struct WireHelpers {
     ref->listRef.set(FieldSize::BYTE, size * (1 * ELEMENTS / BYTES));
 
     // Build the Data::Builder.
-    return Data::Builder(reinterpret_cast<char*>(ptr), size / BYTES);
+    return Data::Builder(reinterpret_cast<byte*>(ptr), size / BYTES);
   }
 
   static KJ_ALWAYS_INLINE(void setDataPointer(
       WirePointer* ref, SegmentBuilder* segment, Data::Reader value)) {
-    initDataPointer(ref, segment, value.size() * BYTES).copyFrom(value);
+    memcpy(initDataPointer(ref, segment, value.size() * BYTES).begin(),
+           value.begin(), value.size());
   }
 
   static KJ_ALWAYS_INLINE(Data::Builder getWritableDataPointer(
@@ -1271,7 +1273,7 @@ struct WireHelpers {
       const void* defaultValue, ByteCount defaultSize)) {
     if (ref->isNull()) {
       Data::Builder builder = initDataPointer(ref, segment, defaultSize);
-      builder.copyFrom(defaultValue);
+      memcpy(builder.begin(), defaultValue, defaultSize / BYTES);
       return builder;
     } else {
       word* ptr = followFars(ref, segment);
@@ -1281,7 +1283,7 @@ struct WireHelpers {
       KJ_REQUIRE(ref->listRef.elementSize() == FieldSize::BYTE,
           "Called getData{Field,Element}() but existing list pointer is not byte-sized.");
 
-      return Data::Builder(reinterpret_cast<char*>(ptr), ref->listRef.elementCount() / ELEMENTS);
+      return Data::Builder(reinterpret_cast<byte*>(ptr), ref->listRef.elementCount() / ELEMENTS);
     }
   }
 
@@ -1668,7 +1670,7 @@ struct WireHelpers {
       const void* defaultValue, ByteCount defaultSize)) {
     if (ref == nullptr || ref->isNull()) {
     useDefault:
-      return Data::Reader(reinterpret_cast<const char*>(defaultValue), defaultSize / BYTES);
+      return Data::Reader(reinterpret_cast<const byte*>(defaultValue), defaultSize / BYTES);
     } else {
       const word* ptr = followFars(ref, segment);
 
@@ -1695,7 +1697,7 @@ struct WireHelpers {
         goto useDefault;
       }
 
-      return Data::Reader(reinterpret_cast<const char*>(ptr), size);
+      return Data::Reader(reinterpret_cast<const byte*>(ptr), size);
     }
   }
 
@@ -2022,7 +2024,7 @@ Data::Builder ListBuilder::asData() {
     return Data::Builder();
   }
 
-  return Data::Builder(reinterpret_cast<char*>(ptr), elementCount / ELEMENTS);
+  return Data::Builder(reinterpret_cast<byte*>(ptr), elementCount / ELEMENTS);
 }
 
 StructBuilder ListBuilder::getStructElement(ElementCount index) const {
@@ -2143,7 +2145,7 @@ Data::Reader ListReader::asData() {
     return Data::Reader();
   }
 
-  return Data::Reader(reinterpret_cast<const char*>(ptr), elementCount / ELEMENTS);
+  return Data::Reader(reinterpret_cast<const byte*>(ptr), elementCount / ELEMENTS);
 }
 
 StructReader ListReader::getStructElement(ElementCount index) const {

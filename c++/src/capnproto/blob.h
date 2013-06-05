@@ -41,204 +41,139 @@ struct Text {
   class Builder;
 };
 
-template <size_t size>
-struct InlineData: public Data {};
-// Alias for Data used specifically for InlineData fields.  This primarily exists so that
-// List<InlineData<n>> can be specialized.
-
-class Data::Reader {
+class Data::Reader: public kj::ArrayPtr<const byte> {
   // Points to a blob of bytes.  The usual Reader rules apply -- Data::Reader behaves like a simple
   // pointer which does not own its target, can be passed by value, etc.
-  //
-  // Data::Reader can be implicitly converted to any type which has a constructor that takes a
-  // (const char*, size) pair, and can be implicitly constructed from any type that has data()
-  // and size() methods.  Many types follow this pattern, such as std::string.  Data::Reader can
-  // also be implicitly constructed from a NUL-terminated char*.
 
 public:
   typedef Data Reads;
 
-  inline Reader(): bytes(nullptr), size_(0) {}
-  inline Reader(const char* bytes): bytes(bytes), size_(strlen(bytes)) {}
-  inline Reader(char* bytes): bytes(bytes), size_(strlen(bytes)) {}
-  inline Reader(const char* bytes, uint size): bytes(bytes), size_(size) {}
-
-  template <typename T>
-  inline Reader(const T& other): bytes(other.data()), size_(other.size()) {}
-  // Primarily intended for converting from std::string.
-
-  template <typename T>
-  inline T as() const { return T(bytes, size_); }
-  // Explicitly converts to the desired type, which must have a (const char*, size) constructor.
-
-  inline const char* data() const { return bytes; }
-  inline uint size() const { return size_; }
-  inline const char operator[](uint index) const { return bytes[index]; }
-
-  inline Reader slice(uint start, uint end) const {
-    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds slice.");
-    return Reader(bytes + start, end - start);
-  }
-
-  inline bool operator==(const Reader& other) const {
-    return size_ == other.size_ && memcmp(bytes, other.bytes, size_) == 0;
-  }
-  inline bool operator<=(const Reader& other) const {
-    bool shorter = size_ <= other.size_;
-    int cmp = memcmp(bytes, other.bytes, shorter ? size_ : other.size_);
-    return cmp < 0 ? true : cmp > 0 ? false : size_ <= other.size_;
-  }
-  inline bool operator!=(const Reader& other) const { return !(*this == other); }
-  inline bool operator>=(const Reader& other) const { return other <= *this; }
-  inline bool operator< (const Reader& other) const { return !(other <= *this); }
-  inline bool operator> (const Reader& other) const { return !(*this <= other); }
-
-  inline const char* begin() const { return bytes; }
-  inline const char* end() const { return bytes + size_; }
-
-private:
-  const char* bytes;
-  uint size_;
+  Reader() = default;
+  inline Reader(decltype(nullptr)): ArrayPtr<const byte>(nullptr) {}
+  inline Reader(const byte* value, size_t size): ArrayPtr<const byte>(value, size) {}
+  inline Reader(const kj::Array<const byte>& value): ArrayPtr<const byte>(value) {}
+  inline Reader(const ArrayPtr<const byte>& value): ArrayPtr<const byte>(value) {}
+  inline Reader(const kj::Array<byte>& value): ArrayPtr<const byte>(value) {}
+  inline Reader(const ArrayPtr<byte>& value): ArrayPtr<const byte>(value) {}
 };
 
-class Text::Reader: public Data::Reader {
+class Text::Reader: public kj::StringPtr {
   // Like Data::Reader, but points at NUL-terminated UTF-8 text.  The NUL terminator is not counted
   // in the size but must be present immediately after the last byte.
   //
   // Text::Reader's interface contract is that its data MUST be NUL-terminated.  The producer of
   // the Text::Reader must guarantee this, so that the consumer need not check.  The data SHOULD
   // also be valid UTF-8, but this is NOT guaranteed -- the consumer must verify if it cares.
-  //
-  // Text::Reader can be implicitly converted to and from const char*.  Additionally, it can be
-  // implicitly converted to any type that can be constructed from a (const char*, size) pair, as
-  // well as from any type which has c_str() and size() methods.  Many types follow this pattern,
-  // such as std::string.
 
 public:
   typedef Text Reads;
 
-  inline Reader(): Data::Reader("", 0) {}
-  inline Reader(const char* text): Data::Reader(text, strlen(text)) {}
-  inline Reader(char* text): Data::Reader(text, strlen(text)) {}
-  inline Reader(const char* text, uint size): Data::Reader(text, size) {
-    KJ_IREQUIRE(text[size] == '\0', "Text must be NUL-terminated.");
-  }
-
-  template <typename T>
-  inline Reader(const T& other): Data::Reader(other.c_str(), other.size()) {
-    // Primarily intended for converting from std::string.
-    KJ_IREQUIRE(data()[size()] == '\0', "Text must be NUL-terminated.");
-  }
-
-  inline const char* c_str() const { return data(); }
-  inline operator const char*() const { return data(); }
+  Reader() = default;
+  inline Reader(decltype(nullptr)): StringPtr(nullptr) {}
+  inline Reader(const char* value): StringPtr(value) {}
+  inline Reader(const char* value, size_t size): StringPtr(value, size) {}
+  inline Reader(const kj::String& value): StringPtr(value) {}
+  inline Reader(const StringPtr& value): StringPtr(value) {}
 };
 
-inline kj::StringPtr KJ_STRINGIFY(Text::Reader reader) {
-  // TODO(soon):  Use size().
-  return reader.c_str();
-}
-
-class Data::Builder {
-  // Like Data::Reader except the pointers aren't const, and it can't be implicitly constructed from
-  // other types.
+class Data::Builder: public kj::ArrayPtr<byte> {
+  // Like Data::Reader except the pointers aren't const.
 
 public:
   typedef Data Builds;
 
-  inline Builder(): bytes(nullptr), size_(0) {}
-  inline Builder(char* bytes, uint size): bytes(bytes), size_(size) {}
+  Builder() = default;
+  inline Builder(decltype(nullptr)): ArrayPtr<byte>(nullptr) {}
+  inline Builder(byte* value, size_t size): ArrayPtr<byte>(value, size) {}
+  inline Builder(kj::Array<byte>& value): ArrayPtr<byte>(value) {}
+  inline Builder(const ArrayPtr<byte>& value): ArrayPtr<byte>(value) {}
 
-  template <typename T>
-  inline operator T() const { return T(bytes, size_); }
-  // Primarily intended for converting to std::string.
-
-  inline operator Data::Reader() const { return Data::Reader(bytes, size_); }
-
-  template <typename T>
-  inline T as() const { return T(bytes, size_); }
-  // Explicitly converts to the desired type, which must have a (char*, size) constructor.
-
-  inline char* data() const { return bytes; }
-  inline uint size() const { return size_; }
-  inline char& operator[](uint index) const { return bytes[index]; }
-
-  inline Builder slice(uint start, uint end) const {
-    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds slice.");
-    return Builder(bytes + start, end - start);
-  }
-
-  inline bool operator==(const Builder& other) const {
-    return size_ == other.size_ && memcmp(bytes, other.bytes, size_) == 0;
-  }
-  inline bool operator<=(const Builder& other) const {
-    bool shorter = size_ <= other.size_;
-    int cmp = memcmp(bytes, other.bytes, shorter ? size_ : other.size_);
-    return cmp < 0 ? true : cmp > 0 ? false : size_ <= other.size_;
-  }
-  inline bool operator!=(const Builder& other) const { return !(*this == other); }
-  inline bool operator>=(const Builder& other) const { return other <= *this; }
-  inline bool operator< (const Builder& other) const { return !(other <= *this); }
-  inline bool operator> (const Builder& other) const { return !(*this <= other); }
-
-  template <typename T>
-  inline void copyFrom(const T& other) const {
-    KJ_IREQUIRE(size() == other.size(), "Sizes must match to copy.");
-    memcpy(bytes, other.data(), other.size());
-  }
-  inline void copyFrom(const void* other) const {
-    memcpy(bytes, other, size_);
-  }
-
-  inline char* begin() const { return bytes; }
-  inline char* end() const { return bytes + size_; }
-
-  inline Data::Reader asReader() { return Data::Reader(bytes, size_); }
-
-private:
-  char* bytes;
-  uint size_;
+  inline Data::Reader asReader() const { return Data::Reader(*this); }
 };
 
-class Text::Builder: public Data::Builder {
-  // Like Text::Reader except the pointers aren't const, and it can't be implicitly constructed from
-  // other types.  The Text::Builder automatically initializes the NUL terminator at construction,
-  // so it is never necessary for the caller to do so.
+class Text::Builder {
+  // Basically identical to kj::StringPtr, except that the contents are non-const.
 
 public:
-  typedef Text Builds;
+  inline Builder(): content(nulstr, 1) {}
+  inline Builder(decltype(nullptr)): content(nulstr, 1) {}
+  inline Builder(char* value): content(value, strlen(value) + 1) {}
+  inline Builder(char* value, size_t size): content(value, size + 1) {
+    KJ_IREQUIRE(value[size] == '\0', "StringPtr must be NUL-terminated.");
+  }
 
-  inline Builder(): Data::Builder(nulstr, 0) {}
-  inline Builder(char* text, uint size): Data::Builder(text, size) { text[size] = '\0'; }
+  inline Reader asReader() const { return Reader(content.begin(), content.size()); }
 
-  inline char* c_str() const { return data(); }
-  inline operator char*() const { return data(); }
-  inline operator const char*() const { return data(); }
+  inline operator kj::ArrayPtr<char>() const;
+  inline kj::ArrayPtr<char> asArray() const;
+  // Result does not include NUL terminator.
 
-  inline Text::Reader asReader() { return Text::Reader(begin(), size()); }
+  inline operator kj::StringPtr() const;
+  inline kj::StringPtr asString() const;
+
+  inline const char* cStr() const { return content.begin(); }
+  // Returns NUL-terminated string.
+
+  inline size_t size() const { return content.size() - 1; }
+  // Result does not include NUL terminator.
+
+  inline char operator[](size_t index) const { return content[index]; }
+
+  inline char* begin() const { return content.begin(); }
+  inline char* end() const { return content.end() - 1; }
+
+  inline bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
+  inline bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
+
+  inline bool operator==(Builder other) const { return asString() == other.asString(); }
+  inline bool operator!=(Builder other) const { return asString() == other.asString(); }
+  inline bool operator< (Builder other) const { return asString() <  other.asString(); }
+  inline bool operator> (Builder other) const { return asString() >  other.asString(); }
+  inline bool operator<=(Builder other) const { return asString() <= other.asString(); }
+  inline bool operator>=(Builder other) const { return asString() >= other.asString(); }
+
+  inline Builder slice(size_t start) const;
+  inline kj::ArrayPtr<char> slice(size_t start, size_t end) const;
+  // A string slice is only NUL-terminated if it is a suffix, so slice() has a one-parameter
+  // version that assumes end = size().
 
 private:
+  inline explicit Builder(kj::ArrayPtr<char> content): content(content) {}
+
+  kj::ArrayPtr<char> content;
+
   static char nulstr[1];
 };
 
 inline kj::StringPtr KJ_STRINGIFY(Text::Builder builder) {
-  // TODO(soon):  Use size().
-  return builder.c_str();
+  return builder.asString();
 }
 
-inline bool operator==(const char* a, Data::Reader  b) { return Data::Reader(a) == b; }
-inline bool operator==(const char* a, Data::Builder b) { return Data::Reader(a) == (Data::Reader)b; }
-inline bool operator==(Data::Reader a, Data::Builder b) { return a == (Data::Reader)b; }
-inline bool operator==(Data::Builder a, Data::Reader b) { return (Data::Reader)a == b; }
+inline bool operator==(const char* a, const Text::Builder& b) { return a == b.asString(); }
+inline bool operator!=(const char* a, const Text::Builder& b) { return a != b.asString(); }
 
-template <typename T>
-T& operator<<(T& os, Data::Reader value) { return os.write(value.data(), value.size()); }
-template <typename T>
-T& operator<<(T& os, Data::Builder value) { return os.write(value.data(), value.size()); }
-template <typename T>
-T& operator<<(T& os, Text::Reader value) { return os.write(value.data(), value.size()); }
-template <typename T>
-T& operator<<(T& os, Text::Builder value) { return os.write(value.data(), value.size()); }
+inline Text::Builder::operator kj::StringPtr() const {
+  return kj::StringPtr(content.begin(), content.size() - 1);
+}
+
+inline kj::StringPtr Text::Builder::asString() const {
+  return kj::StringPtr(content.begin(), content.size() - 1);
+}
+
+inline Text::Builder::operator kj::ArrayPtr<char>() const {
+  return content.slice(0, content.size() - 1);
+}
+
+inline kj::ArrayPtr<char> Text::Builder::asArray() const {
+  return content.slice(0, content.size() - 1);
+}
+
+inline Text::Builder Text::Builder::slice(size_t start) const {
+  return Text::Builder(content.slice(start, content.size()));
+}
+inline kj::ArrayPtr<char> Text::Builder::slice(size_t start, size_t end) const {
+  return content.slice(start, end);
+}
 
 }  // namespace capnproto
 
