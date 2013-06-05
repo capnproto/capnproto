@@ -49,7 +49,7 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
   }
   exe[n] = '\0';
 
-  String lines[6];
+  String lines[8];
 
   FILE* p = popen(str("addr2line -e ", exe, ' ', strArray(trace, " ")).cStr(), "r");
   if (p == nullptr) {
@@ -61,14 +61,15 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
   while (i < KJ_ARRAY_SIZE(lines) && fgets(line, sizeof(line), p) != nullptr) {
     // Don't include exception-handling infrastructure in stack trace.
     if (i == 0 &&
-        (strstr(line, "kj/exception.") != nullptr ||
+        (strstr(line, "kj/common.c++") != nullptr ||
+         strstr(line, "kj/exception.") != nullptr ||
          strstr(line, "kj/debug.") != nullptr)) {
       continue;
     }
 
     size_t len = strlen(line);
     if (len > 0 && line[len-1] == '\n') line[len-1] = '\0';
-    lines[i++] = str("\n", line);
+    lines[i++] = str("\n", line, ": called here");
   }
 
   // Skip remaining input.

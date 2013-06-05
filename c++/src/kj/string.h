@@ -45,6 +45,9 @@ public:
   inline StringPtr(): content("", 1) {}
   inline StringPtr(decltype(nullptr)): content("", 1) {}
   inline StringPtr(const char* value): content(value, strlen(value) + 1) {}
+  inline StringPtr(const char* value, size_t size): content(value, size + 1) {
+    KJ_IREQUIRE(value[size] == '\0', "StringPtr must be NUL-terminated.");
+  }
   inline StringPtr(const String& value);
 
   inline operator ArrayPtr<const char>() const;
@@ -65,8 +68,12 @@ public:
   inline bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
   inline bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
 
-  inline bool operator==(StringPtr other) const;
-  inline bool operator!=(StringPtr other) const { return !(*this == other); }
+  inline bool operator==(const StringPtr& other) const;
+  inline bool operator!=(const StringPtr& other) const { return !(*this == other); }
+  inline bool operator< (const StringPtr& other) const;
+  inline bool operator> (const StringPtr& other) const { return other < *this; }
+  inline bool operator<=(const StringPtr& other) const { return !(other < *this); }
+  inline bool operator>=(const StringPtr& other) const { return !(*this < other); }
 
   inline StringPtr slice(size_t start) const;
   inline ArrayPtr<const char> slice(size_t start, size_t end) const;
@@ -121,8 +128,8 @@ public:
   inline bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
   inline bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
 
-  inline bool operator==(StringPtr other) const { return StringPtr(*this) == other; }
-  inline bool operator!=(StringPtr other) const { return !(*this == other); }
+  inline bool operator==(const StringPtr& other) const { return StringPtr(*this) == other; }
+  inline bool operator!=(const StringPtr& other) const { return !(*this == other); }
 
 private:
   Array<char> content;
@@ -326,9 +333,16 @@ inline ArrayPtr<const char> StringPtr::asArray() const {
   return content.slice(0, content.size() - 1);
 }
 
-inline bool StringPtr::operator==(StringPtr other) const {
+inline bool StringPtr::operator==(const StringPtr& other) const {
   return content.size() == other.content.size() &&
       memcmp(content.begin(), other.content.begin(), content.size() - 1) == 0;
+}
+
+inline bool StringPtr::operator<(const StringPtr& other) const {
+  bool shorter = content.size() < other.content.size();
+  int cmp = memcmp(content.begin(), other.content.begin(),
+                   shorter ? content.size() : other.content.size());
+  return cmp < 0 || (cmp == 0 && shorter);
 }
 
 inline StringPtr StringPtr::slice(size_t start) const {

@@ -525,7 +525,10 @@ public:
   inline constexpr ArrayPtr(T* ptr, size_t size): ptr(ptr), size_(size) {}
   inline constexpr ArrayPtr(T* begin, T* end): ptr(begin), size_(end - begin) {}
 
-  inline operator ArrayPtr<const T>() {
+  inline operator ArrayPtr<const T>() const {
+    return ArrayPtr<const T>(ptr, size_);
+  }
+  inline ArrayPtr<const T> asConst() const {
     return ArrayPtr<const T>(ptr, size_);
   }
 
@@ -547,6 +550,15 @@ public:
 
   inline bool operator==(decltype(nullptr)) { return size_ == 0; }
   inline bool operator!=(decltype(nullptr)) { return size_ != 0; }
+
+  inline bool operator==(const ArrayPtr& other) const {
+    if (size_ != other.size_) return false;
+    for (size_t i = 0; i < size_; i++) {
+      if (ptr[i] != other[i]) return false;
+    }
+    return true;
+  }
+  inline bool operator!=(const ArrayPtr& other) const { return !(*this == other); }
 
 private:
   T* ptr;
