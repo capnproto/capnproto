@@ -25,6 +25,7 @@
 #include "serialize.h"
 #include "layout.h"
 #include <kj/debug.h>
+#include <exception>
 
 namespace capnproto {
 
@@ -164,7 +165,7 @@ InputStreamMessageReader::InputStreamMessageReader(
              "Message is too large.  To increase the limit on the receiving end, see "
              "capnproto::ReaderOptions.") {
     segmentCount = 1;
-    segment0Size = std::min<size_t>(segment0Size, options.traversalLimitInWords);
+    segment0Size = kj::min(segment0Size, options.traversalLimitInWords);
     totalWords = segment0Size;
     break;
   }

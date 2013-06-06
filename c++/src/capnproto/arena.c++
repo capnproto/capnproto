@@ -66,11 +66,13 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
   //   first lookup, unlock it before calling getSegment(), then take a writer lock to update the
   //   map.  Bleh, lazy initialization is sad.
 
-  if (moreSegments != nullptr) {
-    auto iter = moreSegments->find(id.value);
-    if (iter != moreSegments->end()) {
+  SegmentMap* segments = nullptr;
+  KJ_IF_MAYBE(s, moreSegments) {
+    auto iter = s->find(id.value);
+    if (iter != s->end()) {
       return iter->second.get();
     }
+    segments = s;
   }
 
   kj::ArrayPtr<const word> newSegment = message->getSegment(id.value);
@@ -80,12 +82,15 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
 
   if (moreSegments == nullptr) {
     // OK, the segment exists, so allocate the map.
-    moreSegments = std::unique_ptr<SegmentMap>(new SegmentMap);
+    auto s = kj::heap<SegmentMap>();
+    segments = s;
+    moreSegments = mv(s);
   }
 
-  std::unique_ptr<SegmentReader>* slot = &(*moreSegments)[id.value];
-  *slot = std::unique_ptr<SegmentReader>(new SegmentReader(this, id, newSegment, &readLimiter));
-  return slot->get();
+  auto segment = kj::heap<SegmentReader>(this, id, newSegment, &readLimiter);
+  SegmentReader* result = segment;
+  segments->insert(std::make_pair(id.value, mv(segment)));
+  return result;
 }
 
 void ReaderArena::reportReadLimitReached() {
@@ -101,11 +106,14 @@ BuilderArena::BuilderArena(MessageBuilder* message)
 BuilderArena::~BuilderArena() {}
 
 SegmentBuilder* BuilderArena::getSegment(SegmentId id) {
-  // This method is allowed to crash if the segment ID is not valid.
+  // This method is allowed to fail if the segment ID is not valid.
   if (id == SegmentId(0)) {
     return &segment0;
+  } else KJ_IF_MAYBE(s, moreSegments) {
+    KJ_REQUIRE(id.value - 1 < s->builders.size(), "invalid segment id", id.value);
+    return s->builders[id.value - 1].get();
   } else {
-    return moreSegments->builders[id.value - 1].get();
+    KJ_FAIL_REQUIRE("invalid segment id", id.value);
   }
 }
 
@@ -126,29 +134,33 @@ SegmentBuilder* BuilderArena::getSegmentWithAvailable(WordCount minimumAvailable
       return &segment0;
     }
 
-    if (moreSegments == nullptr) {
-      moreSegments = std::unique_ptr<MultiSegmentState>(new MultiSegmentState());
-    } else {
+    MultiSegmentState* segmentState;
+    KJ_IF_MAYBE(s, moreSegments) {
       // TODO(perf):  Check for available space in more than just the last segment.  We don't
       //   want this to be O(n), though, so we'll need to maintain some sort of table.  Complicating
       //   matters, we want SegmentBuilders::allocate() to be fast, so we can't update any such
       //   table when allocation actually happens.  Instead, we could have a priority queue based
       //   on the last-known available size, and then re-check the size when we pop segments off it
       //   and shove them to the back of the queue if they have become too small.
-      if (moreSegments->builders.back()->available() >= minimumAvailable) {
-        return moreSegments->builders.back().get();
+      if (s->builders.back()->available() >= minimumAvailable) {
+        return s->builders.back().get();
       }
+      segmentState = s;
+    } else {
+      auto newSegmentState = kj::heap<MultiSegmentState>();
+      segmentState = newSegmentState;
+      moreSegments = kj::mv(newSegmentState);
     }
 
-    std::unique_ptr<SegmentBuilder> newBuilder = std::unique_ptr<SegmentBuilder>(
-        new SegmentBuilder(this, SegmentId(moreSegments->builders.size() + 1),
-            message->allocateSegment(minimumAvailable / WORDS), &this->dummyLimiter));
+    kj::Own<SegmentBuilder> newBuilder = kj::heap<SegmentBuilder>(
+        this, SegmentId(segmentState->builders.size() + 1),
+        message->allocateSegment(minimumAvailable / WORDS), &this->dummyLimiter);
     SegmentBuilder* result = newBuilder.get();
-    moreSegments->builders.push_back(std::move(newBuilder));
+    segmentState->builders.push_back(kj::mv(newBuilder));
 
     // Keep forOutput the right size so that we don't have to re-allocate during
     // getSegmentsForOutput(), which callers might reasonably expect is a thread-safe method.
-    moreSegments->forOutput.resize(moreSegments->builders.size() + 1);
+    segmentState->forOutput.resize(segmentState->builders.size() + 1);
 
     return result;
   }
@@ -160,7 +172,20 @@ kj::ArrayPtr<const kj::ArrayPtr<const word>> BuilderArena::getSegmentsForOutput(
   // segments is actually changing due to an activity in another thread, then the caller has a
   // problem regardless of locking here.
 
-  if (moreSegments == nullptr) {
+  KJ_IF_MAYBE(segmentState, moreSegments) {
+    KJ_DASSERT(segmentState->forOutput.size() == segmentState->builders.size() + 1,
+        "segmentState->forOutput wasn't resized correctly when the last builder was added.",
+        segmentState->forOutput.size(), segmentState->builders.size());
+
+    kj::ArrayPtr<kj::ArrayPtr<const word>> result(
+        &segmentState->forOutput[0], segmentState->forOutput.size());
+    uint i = 0;
+    result[i++] = segment0.currentlyAllocated();
+    for (auto& builder: segmentState->builders) {
+      result[i++] = builder->currentlyAllocated();
+    }
+    return result;
+  } else {
     if (segment0.getArena() == nullptr) {
       // We haven't actually allocated any segments yet.
       return nullptr;
@@ -169,19 +194,6 @@ kj::ArrayPtr<const kj::ArrayPtr<const word>> BuilderArena::getSegmentsForOutput(
       segment0ForOutput = segment0.currentlyAllocated();
       return kj::arrayPtr(&segment0ForOutput, 1);
     }
-  } else {
-    KJ_DASSERT(moreSegments->forOutput.size() == moreSegments->builders.size() + 1,
-        "moreSegments->forOutput wasn't resized correctly when the last builder was added.",
-        moreSegments->forOutput.size(), moreSegments->builders.size());
-
-    kj::ArrayPtr<kj::ArrayPtr<const word>> result(
-        &moreSegments->forOutput[0], moreSegments->forOutput.size());
-    uint i = 0;
-    result[i++] = segment0.currentlyAllocated();
-    for (auto& builder: moreSegments->builders) {
-      result[i++] = builder->currentlyAllocated();
-    }
-    return result;
   }
 }
 
@@ -194,11 +206,12 @@ SegmentReader* BuilderArena::tryGetSegment(SegmentId id) {
       return &segment0;
     }
   } else {
-    if (moreSegments == nullptr || id.value > moreSegments->builders.size()) {
-      return nullptr;
-    } else {
-      return moreSegments->builders[id.value - 1].get();
+    KJ_IF_MAYBE(segmentState, moreSegments) {
+      if (id.value <= segmentState->builders.size()) {
+        return segmentState->builders[id.value - 1].get();
+      }
     }
+    return nullptr;
   }
 }
 

@@ -29,7 +29,6 @@
 #endif
 
 #include <vector>
-#include <memory>
 #include <unordered_map>
 #include <kj/common.h>
 #include "common.h"
@@ -165,8 +164,8 @@ private:
   // Optimize for single-segment messages so that small messages are handled quickly.
   SegmentReader segment0;
 
-  typedef std::unordered_map<uint, std::unique_ptr<SegmentReader>> SegmentMap;
-  std::unique_ptr<SegmentMap> moreSegments;
+  typedef std::unordered_map<uint, kj::Own<SegmentReader>> SegmentMap;
+  kj::Maybe<kj::Own<SegmentMap>> moreSegments;
 };
 
 class BuilderArena final: public Arena {
@@ -201,10 +200,10 @@ private:
   kj::ArrayPtr<const word> segment0ForOutput;
 
   struct MultiSegmentState {
-    std::vector<std::unique_ptr<SegmentBuilder>> builders;
+    std::vector<kj::Own<SegmentBuilder>> builders;
     std::vector<kj::ArrayPtr<const word>> forOutput;
   };
-  std::unique_ptr<MultiSegmentState> moreSegments;
+  kj::Maybe<kj::Own<MultiSegmentState>> moreSegments;
 };
 
 // =======================================================================================

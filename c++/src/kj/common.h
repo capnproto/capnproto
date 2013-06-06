@@ -275,6 +275,11 @@ template<typename T> constexpr T&& fwd(RemoveReference<T>&& t) noexcept {
   return static_cast<T&&>(t);
 }
 
+template <typename T, typename U>
+auto min(T&& a, U&& b) -> decltype(a < b ? a : b) { return a < b ? a : b; }
+template <typename T, typename U>
+auto max(T&& a, U&& b) -> decltype(a > b ? a : b) { return a > b ? a : b; }
+
 // =======================================================================================
 // Manually invoking constructors and destructors
 //
@@ -459,6 +464,10 @@ inline T* readMaybe(const Maybe<T&>& maybe) { return maybe.ptr; }
 
 template <typename T>
 class Maybe {
+  // A T, or nullptr.
+
+  // IF YOU CHANGE THIS CLASS:  Note that there is a specialization of it in memory.h.
+
 public:
   Maybe(): ptr(nullptr) {}
   Maybe(T&& t) noexcept(noexcept(T(instance<T&&>()))): ptr(kj::mv(t)) {}

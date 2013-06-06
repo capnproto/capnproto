@@ -21,9 +21,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <cstddef>
-#include <memory>
 #include <kj/common.h>
+#include <kj/memory.h>
 #include "common.h"
 #include "layout.h"
 
@@ -297,7 +296,7 @@ private:
   void* firstSegment;
 
   struct MoreSegments;
-  std::unique_ptr<MoreSegments> moreSegments;
+  kj::Maybe<kj::Own<MoreSegments>> moreSegments;
 };
 
 class FlatMessageBuilder: public MessageBuilder {

@@ -123,6 +123,11 @@ private:
   const Disposer* disposer;  // Only valid if ptr != nullptr.
   T* ptr;
 
+  inline explicit Own(decltype(nullptr)): disposer(nullptr), ptr(nullptr) {}
+  inline bool operator==(decltype(nullptr)) { return ptr == nullptr; }
+  inline bool operator!=(decltype(nullptr)) { return ptr != nullptr; }
+  // Only called by Maybe<Own<T>>.
+
   inline void dispose() {
     // Make sure that if an exception is thrown, we are left with a null ptr, so we won't possibly
     // dispose again.
@@ -135,6 +140,72 @@ private:
 
   template <typename U>
   friend class Own;
+  friend class Maybe<Own<T>>;
+};
+
+namespace internal {
+
+template <typename T>
+Own<T>&& readMaybe(Maybe<Own<T>>&& maybe) { return kj::mv(maybe.ptr); }
+template <typename T>
+T* readMaybe(Maybe<Own<T>>& maybe) { return maybe.ptr; }
+template <typename T>
+const T* readMaybe(const Maybe<Own<T>>& maybe) { return maybe.ptr; }
+
+}  // namespace internal
+
+template <typename T>
+class Maybe<Own<T>> {
+public:
+  inline Maybe(): ptr(nullptr) {}
+  inline Maybe(Own<T>&& t) noexcept: ptr(kj::mv(t)) {}
+  inline Maybe(Maybe&& other) noexcept: ptr(kj::mv(other.ptr)) {}
+
+  template <typename U>
+  inline Maybe(Maybe<Own<U>>&& other): ptr(mv(other.ptr)) {}
+
+  inline Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
+
+  inline operator Maybe<T&>() { return ptr.get(); }
+  inline operator Maybe<const T&>() const { return ptr.get(); }
+
+  inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
+
+  inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
+  inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
+
+  template <typename Func>
+  auto map(Func&& f) -> Maybe<decltype(f(instance<T&>()))> {
+    if (ptr == nullptr) {
+      return nullptr;
+    } else {
+      return f(*ptr);
+    }
+  }
+
+  template <typename Func>
+  auto map(Func&& f) const -> Maybe<decltype(f(instance<const T&>()))> {
+    if (ptr == nullptr) {
+      return nullptr;
+    } else {
+      return f(*ptr);
+    }
+  }
+
+  // TODO(someday):  Once it's safe to require GCC 4.8, use ref qualifiers to provide a version of
+  //   map() that uses move semantics if *this is an rvalue.
+
+private:
+  Own<T> ptr;
+
+  template <typename U>
+  friend class Maybe;
+  template <typename U>
+  friend Own<U>&& internal::readMaybe(Maybe<Own<U>>&& maybe);
+  template <typename U>
+  friend U* internal::readMaybe(Maybe<Own<U>>& maybe);
+  template <typename U>
+  friend const U* internal::readMaybe(const Maybe<Own<U>>& maybe);
 };
 
 namespace internal {

@@ -208,5 +208,25 @@ TEST(Common, Downcast) {
 #endif
 }
 
+TEST(Common, MinMax) {
+  EXPECT_EQ(5, kj::min(5, 9));
+  EXPECT_EQ(5, kj::min(9, 5));
+  EXPECT_EQ(5, kj::min(5, 5));
+  EXPECT_EQ(9, kj::max(5, 9));
+  EXPECT_EQ(9, kj::max(9, 5));
+  EXPECT_EQ(5, kj::min(5, 5));
+
+  // Hey look, we can handle the types mismatching.  Eat your heart out, std.
+  EXPECT_EQ(5, kj::min(5, 'a'));
+  EXPECT_EQ(5, kj::min('a', 5));
+  EXPECT_EQ('a', kj::max(5, 'a'));
+  EXPECT_EQ('a', kj::max('a', 5));
+
+  EXPECT_EQ('a', kj::min(1234567890123456789ll, 'a'));
+  EXPECT_EQ('a', kj::min('a', 1234567890123456789ll));
+  EXPECT_EQ(1234567890123456789ll, kj::max(1234567890123456789ll, 'a'));
+  EXPECT_EQ(1234567890123456789ll, kj::max('a', 1234567890123456789ll));
+}
+
 }  // namespace
 }  // namespace kj

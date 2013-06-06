@@ -95,7 +95,7 @@ public:
 
   inline Maybe<const Context&> getContext() const {
     KJ_IF_MAYBE(c, context) {
-      return **c;
+      return *c;
     } else {
       return nullptr;
     }

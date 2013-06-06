@@ -167,8 +167,8 @@ MallocMessageBuilder::~MallocMessageBuilder() {
       }
     }
 
-    if (moreSegments != nullptr) {
-      for (void* ptr: moreSegments->segments) {
+    KJ_IF_MAYBE(s, moreSegments) {
+      for (void* ptr: s->segments) {
         free(ptr);
       }
     }
@@ -202,10 +202,15 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
     // After the first segment, we want nextSize to equal the total size allocated so far.
     if (allocationStrategy == AllocationStrategy::GROW_HEURISTICALLY) nextSize = size;
   } else {
-    if (moreSegments == nullptr) {
-      moreSegments = std::unique_ptr<MoreSegments>(new MoreSegments);
+    MoreSegments* segments;
+    KJ_IF_MAYBE(s, moreSegments) {
+      segments = s;
+    } else {
+      auto newSegments = kj::heap<MoreSegments>();
+      segments = newSegments;
+      moreSegments = mv(newSegments);
     }
-    moreSegments->segments.push_back(result);
+    segments->segments.push_back(result);
     if (allocationStrategy == AllocationStrategy::GROW_HEURISTICALLY) nextSize += size;
   }
 

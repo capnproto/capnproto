@@ -115,8 +115,7 @@ String KJ_STRINGIFY(const Exception& e) {
   for (;;) {
     KJ_IF_MAYBE(c, contextPtr) {
       ++contextDepth;
-      contextPtr = c->next.map(
-          [](const Own<Exception::Context>& c) -> const Exception::Context& { return *c; });
+      contextPtr = c->next;
     } else {
       break;
     }
@@ -130,8 +129,7 @@ String KJ_STRINGIFY(const Exception& e) {
     KJ_IF_MAYBE(c, contextPtr) {
       contextText[contextDepth++] =
           str(c->file, ":", c->line, ": context: ", c->description, "\n");
-      contextPtr = c->next.map(
-          [](const Own<Exception::Context>& c) -> const Exception::Context& { return *c; });
+      contextPtr = c->next;
     } else {
       break;
     }
@@ -157,7 +155,7 @@ Exception::Exception(const Exception& other) noexcept
   memcpy(trace, other.trace, sizeof(trace[0]) * traceCount);
 
   KJ_IF_MAYBE(c, other.context) {
-    context = heap(**c);
+    context = heap(*c);
   }
 }
 
@@ -166,7 +164,7 @@ Exception::~Exception() noexcept {}
 Exception::Context::Context(const Context& other) noexcept
     : file(other.file), line(other.line), description(str(other.description)) {
   KJ_IF_MAYBE(n, other.next) {
-    next = heap(**n);
+    next = heap(*n);
   }
 }
 
