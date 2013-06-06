@@ -32,11 +32,13 @@
 namespace capnproto {
 
 struct Data {
+  Data() = delete;
   class Reader;
   class Builder;
 };
 
 struct Text {
+  Text() = delete;
   class Reader;
   class Builder;
 };

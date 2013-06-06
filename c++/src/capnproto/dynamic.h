@@ -45,6 +45,8 @@ class MessageReader;
 class MessageBuilder;
 
 struct DynamicValue {
+  DynamicValue() = delete;
+
   enum Type {
     UNKNOWN,
     // Means that the value has unknown type and content because it comes from a newer version of
@@ -72,14 +74,17 @@ struct DynamicValue {
 class DynamicEnum;
 class DynamicObject;
 struct DynamicUnion {
+  DynamicUnion() = delete;
   class Reader;
   class Builder;
 };
 struct DynamicStruct {
+  DynamicStruct() = delete;
   class Reader;
   class Builder;
 };
 struct DynamicList {
+  DynamicList() = delete;
   class Reader;
   class Builder;
 };

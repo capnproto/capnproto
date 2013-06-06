@@ -181,6 +181,8 @@ template <typename T>
 struct List<T, Kind::PRIMITIVE> {
   // List of primitives.
 
+  List() = delete;
+
   class Reader {
   public:
     typedef List<T> Reads;
@@ -278,6 +280,8 @@ template <typename T>
 struct List<T, Kind::STRUCT> {
   // List of structs.
 
+  List() = delete;
+
   class Reader {
   public:
     typedef List<T> Reads;
@@ -367,6 +371,8 @@ private:
 template <typename T>
 struct List<List<T>, Kind::LIST> {
   // List of lists.
+
+  List() = delete;
 
   class Reader {
   public:
@@ -464,6 +470,8 @@ private:
 
 template <typename T>
 struct List<T, Kind::BLOB> {
+  List() = delete;
+
   class Reader {
   public:
     typedef List<T> Reads;

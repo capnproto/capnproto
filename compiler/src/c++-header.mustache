@@ -46,6 +46,8 @@ namespace {{namespaceName}} {
 {{#typeStructOrUnion}}
 
 struct {{typeFullName}} {
+  {{typeName}}() = delete;
+
   class Reader;
   class Builder;
 {{#typeStruct}}
