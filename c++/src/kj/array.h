@@ -517,14 +517,14 @@ struct CopyConstructArray_<T, Iterator, false> {
   static T* apply(T* __restrict__ pos, Iterator start, Iterator end) {
     if (noexcept(T(instance<const T&>()))) {
       while (start != end) {
-        ctor(*pos++, upcast<const T&>(*start++));
+        ctor(*pos++, implicitCast<const T&>(*start++));
       }
       return pos;
     } else {
       // Crap.  This is complicated.
       ExceptionGuard guard(pos);
       while (start != end) {
-        ctor(*guard.pos, upcast<const T&>(*start++));
+        ctor(*guard.pos, implicitCast<const T&>(*start++));
         ++guard.pos;
       }
       guard.start = guard.pos;
@@ -535,7 +535,7 @@ struct CopyConstructArray_<T, Iterator, false> {
 
 template <typename T, typename Iterator>
 inline T* copyConstructArray(T* dst, Iterator start, Iterator end) {
-  return CopyConstructArray_<T, RemoveReference<Iterator>>::apply(dst, start, end);
+  return CopyConstructArray_<T, Decay<Iterator>>::apply(dst, start, end);
 }
 
 }  // namespace internal

@@ -162,19 +162,10 @@ void inlineRequireFailure(
 // =======================================================================================
 // Template metaprogramming helpers.
 
-template <typename T>
-struct NoInfer_ {
-  // Use NoInfer<T>::Type in place of T for a template function parameter to prevent inference of
-  // the type based on the parameter value.  There's something in the standard library for this but
-  // I didn't want to #include type_traits or whatever.
-  typedef T Type;
-};
-template <typename T>
-using NoInfer = typename NoInfer_<T>::Type;
-
-template <typename T> struct RemoveReference_ { typedef T Type; };
-template <typename T> struct RemoveReference_<T&> { typedef T Type; };
-template <typename T> using RemoveReference = typename RemoveReference_<T>::Type;
+template <typename T> struct NoInfer_ { typedef T Type; };
+template <typename T> using NoInfer = typename NoInfer_<T>::Type;
+// Use NoInfer<T>::Type in place of T for a template function parameter to prevent inference of
+// the type based on the parameter value.
 
 template <typename T> struct RemoveConst_ { typedef T Type; };
 template <typename T> struct RemoveConst_<const T> { typedef T Type; };
@@ -265,15 +256,7 @@ template <typename T, typename U> using EnableIfDifferent = typename EnableIfDif
 // when first encountered.
 
 template<typename T> constexpr T&& mv(T& t) noexcept { return static_cast<T&&>(t); }
-
-template<typename T>
-constexpr T&& fwd(RemoveReference<T>& t) noexcept {
-  return static_cast<T&&>(t);
-}
-template<typename T> constexpr T&& fwd(RemoveReference<T>&& t) noexcept {
-  static_assert(!isLvalueReference<T>(), "Attempting to forward rvalue as lvalue reference.");
-  return static_cast<T&&>(t);
-}
+template<typename T> constexpr T&& fwd(NoInfer<T>& t) noexcept { return static_cast<T&&>(t); }
 
 template <typename T, typename U>
 auto min(T&& a, U&& b) -> decltype(a < b ? a : b) { return a < b ? a : b; }
@@ -655,12 +638,12 @@ inline constexpr ArrayPtr<T> arrayPtr(T* begin, T* end) {
 }
 
 // =======================================================================================
-// Upcast/downcast
+// Casts
 
 template <typename To, typename From>
-To upcast(From&& from) {
-  // `upcast<T>(value)` casts `value` to type `T` only if the conversion is implicit.  Useful for
-  // e.g. resolving ambiguous overloads without sacrificing type-safety.
+To implicitCast(From&& from) {
+  // `implicitCast<T>(value)` casts `value` to type `T` only if the conversion is implicit.  Useful
+  // for e.g. resolving ambiguous overloads without sacrificing type-safety.
   return kj::fwd<From>(from);
 }
 
@@ -675,39 +658,32 @@ Maybe<To&> dynamicDowncastIfAvailable(From& from) {
   // Force a compile error if To is not a subtype of From.  Cross-casting is rare; if it is needed
   // we should have a separate cast function like dynamicCrosscastIfAvailable().
   if (false) {
-    kj::upcast<From*>(upcast<RemoveReference<To>*>(nullptr));
+    kj::implicitCast<From*>(kj::implicitCast<To*>(nullptr));
   }
 
 #if KJ_NO_RTTI
   return nullptr;
 #else
-  return dynamic_cast<RemoveReference<To>*>(&from);
+  return dynamic_cast<To*>(&from);
 #endif
 }
 
 template <typename To, typename From>
-To downcast(From* from) {
+To& downcast(From& from) {
   // Down-cast a value to a sub-type, asserting that the cast is valid.  In opt mode this is a
   // static_cast, but in debug mode (when RTTI is enabled) a dynamic_cast will be used to verify
   // that the value really has the requested type.
 
   // Force a compile error if To is not a subtype of From.
   if (false) {
-    kj::upcast<From*>(To());
+    kj::implicitCast<From*>(kj::implicitCast<To*>(nullptr));
   }
 
 #if !KJ_NO_RTTI
-  KJ_IREQUIRE(from == nullptr || dynamic_cast<To>(from) != nullptr,
-              "Value cannot be downcast() to requested type.");
+  KJ_IREQUIRE(dynamic_cast<To*>(&from) != nullptr, "Value cannot be downcast() to requested type.");
 #endif
 
-  return static_cast<To>(from);
-}
-
-template <typename To, typename From>
-To downcast(From& from) {
-  // Reference version of downcast().
-  return *kj::downcast<RemoveReference<To>*>(&from);
+  return static_cast<To&>(from);
 }
 
 }  // namespace kj

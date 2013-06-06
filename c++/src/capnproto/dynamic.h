@@ -743,7 +743,7 @@ BuilderFor<DynamicTypeFor<FromBuilder<T>>> toDynamic(T&& value) {
 }
 template <typename T>
 DynamicTypeFor<TypeIfEnum<T>> toDynamic(T&& value) {
-  return DynamicEnum(Schema::from<kj::RemoveReference<T>>(), static_cast<uint16_t>(value));
+  return DynamicEnum(Schema::from<kj::Decay<T>>(), static_cast<uint16_t>(value));
 }
 
 inline DynamicValue::Reader::Reader(std::nullptr_t n): type(UNKNOWN) {}

@@ -55,7 +55,7 @@ public:
   // Helper wrapper around disposeImpl().
   //
   // If T is polymorphic, calls `disposeImpl(dynamic_cast<void*>(object))`, otherwise calls
-  // `disposeImpl(upcast<void*>(object))`.
+  // `disposeImpl(implicitCast<void*>(object))`.
   //
   // Callers must not call dispose() on the same pointer twice, even if the first call throws
   // an exception.

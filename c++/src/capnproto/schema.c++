@@ -88,7 +88,7 @@ namespace {
 template <typename List>
 auto findSchemaMemberByName(const internal::RawSchema* raw, kj::StringPtr name,
                             uint unionIndex, List&& list)
-    -> kj::Maybe<kj::RemoveReference<decltype(list[0])>> {
+    -> kj::Maybe<kj::Decay<decltype(list[0])>> {
   uint lower = 0;
   uint upper = raw->memberCount;
 

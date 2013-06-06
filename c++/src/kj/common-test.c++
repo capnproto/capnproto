@@ -106,7 +106,7 @@ TEST(Common, Maybe) {
   }
 
   {
-    Maybe<int&> m = upcast<int*>(nullptr);
+    Maybe<int&> m = implicitCast<int*>(nullptr);
     EXPECT_TRUE(m == nullptr);
     EXPECT_FALSE(m != nullptr);
     KJ_IF_MAYBE(v, m) {
@@ -138,7 +138,7 @@ TEST(Common, Maybe) {
   }
 
   {
-    Maybe<int> m = upcast<int*>(nullptr);
+    Maybe<int> m = implicitCast<int*>(nullptr);
     EXPECT_TRUE(m == nullptr);
     EXPECT_FALSE(m != nullptr);
     KJ_IF_MAYBE(v, m) {
@@ -171,16 +171,23 @@ TEST(Common, MaybeConstness) {
 
 class Foo {
 public:
+  KJ_DISALLOW_COPY(Foo);
   virtual ~Foo() {}
+protected:
+  Foo() = default;
 };
 
 class Bar: public Foo {
 public:
+  Bar() = default;
+  KJ_DISALLOW_COPY(Bar);
   virtual ~Bar() {}
 };
 
 class Baz: public Foo {
 public:
+  Baz() = delete;
+  KJ_DISALLOW_COPY(Baz);
   virtual ~Baz() {}
 };
 
@@ -188,23 +195,21 @@ TEST(Common, Downcast) {
   Bar bar;
   Foo& foo = bar;
 
-  EXPECT_EQ(&bar, &downcast<Bar&>(foo));
-  EXPECT_EQ(&bar, downcast<Bar*>(&foo));
+  EXPECT_EQ(&bar, &downcast<Bar>(foo));
 #if !defined(NDEBUG) && !KJ_NO_RTTI
-  EXPECT_ANY_THROW(downcast<Baz&>(foo));
-  EXPECT_ANY_THROW(downcast<Baz*>(&foo));
+  EXPECT_ANY_THROW(downcast<Baz>(foo));
 #endif
 
 #if KJ_NO_RTTI
   EXPECT_TRUE(dynamicDowncastIfAvailable<Bar&>(foo) == nullptr);
   EXPECT_TRUE(dynamicDowncastIfAvailable<Baz&>(foo) == nullptr);
 #else
-  KJ_IF_MAYBE(m, dynamicDowncastIfAvailable<Bar&>(foo)) {
+  KJ_IF_MAYBE(m, dynamicDowncastIfAvailable<Bar>(foo)) {
     EXPECT_EQ(&bar, m);
   } else {
     ADD_FAILURE() << "Dynamic downcast returned null.";
   }
-  EXPECT_TRUE(dynamicDowncastIfAvailable<Baz&>(foo) == nullptr);
+  EXPECT_TRUE(dynamicDowncastIfAvailable<Baz>(foo) == nullptr);
 #endif
 }
 

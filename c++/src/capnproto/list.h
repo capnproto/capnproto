@@ -63,18 +63,18 @@ using BuilderFor = typename internal::MaybeReaderBuilder<T>::Builder;
 // The type returned by List<T>::Builder::operator[].
 
 template <typename T>
-using FromReader = typename kj::RemoveReference<T>::Reads;
+using FromReader = typename kj::Decay<T>::Reads;
 // FromReader<MyType::Reader> = MyType (for any Cap'n Proto type).
 
 template <typename T>
-using FromBuilder = typename kj::RemoveReference<T>::Builds;
+using FromBuilder = typename kj::Decay<T>::Builds;
 // FromBuilder<MyType::Builder> = MyType (for any Cap'n Proto type).
 
 template <typename T, Kind k = kind<T>()> struct TypeIfEnum_;
 template <typename T> struct TypeIfEnum_<T, Kind::ENUM> { typedef T Type; };
 
 template <typename T>
-using TypeIfEnum = typename TypeIfEnum_<kj::RemoveReference<T>>::Type;
+using TypeIfEnum = typename TypeIfEnum_<kj::Decay<T>>::Type;
 
 namespace internal {
 
