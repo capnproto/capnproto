@@ -47,22 +47,22 @@ You might write code like:
 
 {% highlight c++ %}
 #include "addressbook.capnp.h"
-#include <capnproto/message.h>
-#include <capnproto/serialize-packed.h>
+#include <capnp/message.h>
+#include <capnp/serialize-packed.h>
 #include <iostream>
 
 void writeAddressBook(int fd) {
-  ::capnproto::MallocMessageBuilder message;
+  ::capnp::MallocMessageBuilder message;
 
   AddressBook::Builder addressBook = message.initRoot<AddressBook>();
-  ::capnproto::List<Person>::Builder people = addressBook.initPeople(2);
+  ::capnp::List<Person>::Builder people = addressBook.initPeople(2);
 
   Person::Builder alice = people[0];
   alice.setId(123);
   alice.setName("Alice");
   alice.setEmail("alice@example.com");
   // Type shown for explanation purposes; normally you'd use auto.
-  capnproto::List<Person::PhoneNumber>::Builder alicePhones =
+  capnp::List<Person::PhoneNumber>::Builder alicePhones =
       alice.initPhones(1);
   alicePhones[0].setNumber("555-1212");
   alicePhones[0].setType(Person::PhoneNumber::Type::MOBILE);
@@ -83,7 +83,7 @@ void writeAddressBook(int fd) {
 }
 
 void printAddressBook(int fd) {
-  ::capnproto::PackedFdMessageReader message(fd);
+  ::capnp::PackedFdMessageReader message(fd);
 
   AddressBook::Reader addressBook = message.getRoot<AddressBook>();
 
@@ -151,7 +151,7 @@ exception.  The callback may abort the process, and is required to do so in cert
 to continue by inventing "safe" values.  This will lead to garbage output, but at least the program
 will not crash.  Your exception callback should set some sort of a flag indicating that an error
 occurred, and somewhere up the stack you should check for that flag and cancel the operation.
-See the header `capnproto/exception.h` for details on how to register an exception callback.
+See the header `capnp/exception.h` for details on how to register an exception callback.
 
 ## KJ Library
 
@@ -177,7 +177,7 @@ Primitive types map to the obvious C++ types:
 * `UIntNN` -> `uintNN_t`
 * `Float32` -> `float`
 * `Float64` -> `double`
-* `Void` -> `::capnproto::Void` (An enum with one value: `::capnproto::Void::VOID`)
+* `Void` -> `::capnp::Void` (An enum with one value: `::capnp::Void::VOID`)
 
 ## Structs
 
@@ -200,7 +200,7 @@ type.
 int32_t getMyPrimitiveField();
 
 // myTextField @1 :Text;
-::capnproto::Text::Reader getMyTextField();
+::capnp::Text::Reader getMyTextField();
 // (Note that Text::Reader may be implicitly cast to const char* and
 // std::string.)
 
@@ -208,7 +208,7 @@ int32_t getMyPrimitiveField();
 MyStruct::Reader getMyStructField();
 
 // myListField @3 :List(Float64);
-::capnproto::List<double> getMyListField();
+::capnp::List<double> getMyListField();
 {% endhighlight %}
 
 `Foo::Builder`, meanwhile, has two or three methods for each field `bar`:
@@ -234,9 +234,9 @@ int32_t getMyPrimitiveField();
 void setMyPrimitiveField(int32_t value);
 
 // myTextField @1 :Text;
-::capnproto::Text::Builder getMyTextField();
-void setMyTextField(::capnproto::Text::Reader value);
-::capnproto::Text::Builder initMyTextField(size_t size);
+::capnp::Text::Builder getMyTextField();
+void setMyTextField(::capnp::Text::Reader value);
+::capnp::Text::Builder initMyTextField(size_t size);
 // (Note that Text::Reader is implicitly constructable from const char*
 // and std::string, and Text::Builder can be implicitly cast to
 // these types.)
@@ -247,9 +247,9 @@ void setMyStructField(MyStruct::Reader value);
 MyStruct::Builder initMyStructField();
 
 // myListField @3 :List(Float64);
-::capnproto::List<double>::Builder getMyListField();
-void setMyListField(::capnproto::List<double>::Reader value);
-::capnproto::List<double>::Builder initMyListField(size_t size);
+::capnp::List<double>::Builder getMyListField();
+void setMyListField(::capnp::List<double>::Reader value);
+::capnp::List<double>::Builder initMyListField(size_t size);
 {% endhighlight %}
 
 ## Unions
@@ -265,8 +265,8 @@ See the [example](#example_usage) at the top of the page for an example of union
 
 ## Lists
 
-Lists are represented by the type `capnproto::List<T>`, where `T` is any of the primitive types,
-any Cap'n Proto user-defined type, `capnproto::Text`, `capnproto::Data`, or `capnproto::List<U>`
+Lists are represented by the type `capnp::List<T>`, where `T` is any of the primitive types,
+any Cap'n Proto user-defined type, `capnp::Text`, `capnp::Data`, or `capnp::List<U>`
 (to form a list of lists).
 
 The type `List<T>` itself is not instantiatable, but has two inner classes: `Reader` and `Builder`.
@@ -305,7 +305,7 @@ to have any value that is within the range of their base type, which for Cap'n P
 
 ## Blobs (Text and Data)
 
-Blobs are manipulated using the classes `capnproto::Text` and `capnproto::Data`.  These classes are,
+Blobs are manipulated using the classes `capnp::Text` and `capnp::Data`.  These classes are,
 again, just containers for inner classes `Reader` and `Builder`.  These classes are iterable and
 implement `data()`, `size()`, and `operator[]` methods, similar to `std::string`.
 `Builder::operator[]` even returns a reference (unlike with `List<T>`).  `Text::Reader`
@@ -328,21 +328,21 @@ Interfaces (RPC) are not yet implemented at this time.
 
 ## Messages and I/O
 
-To create a new message, you must start by creating a `capnproto::MessageBuilder`
-(`capnproto/message.h`).  This is an abstract type which you can implement yourself, but most users
-will want to use `capnproto::MallocMessageBuilder`.  Once your message is constructed, write it to
-a file descriptor with `capnproto::writeMessageToFd(fd, builder)` (`capnproto/serialize.h`) or
-`capnproto::writePackedMessageToFd(fd, builder)` (`capnproto/serialize-packed.h`).
+To create a new message, you must start by creating a `capnp::MessageBuilder`
+(`capnp/message.h`).  This is an abstract type which you can implement yourself, but most users
+will want to use `capnp::MallocMessageBuilder`.  Once your message is constructed, write it to
+a file descriptor with `capnp::writeMessageToFd(fd, builder)` (`capnp/serialize.h`) or
+`capnp::writePackedMessageToFd(fd, builder)` (`capnp/serialize-packed.h`).
 
-To read a message, you must create a `capnproto::MessageReader`, which is another abstract type.
-Implementations are specific to the data source.  You can use `capnproto::StreamFdMessageReader`
-(`capnproto/serialize.h`) or `capnproto::PackedFdMessageReader` (`capnproto/serialize-packed.h`)
+To read a message, you must create a `capnp::MessageReader`, which is another abstract type.
+Implementations are specific to the data source.  You can use `capnp::StreamFdMessageReader`
+(`capnp/serialize.h`) or `capnp::PackedFdMessageReader` (`capnp/serialize-packed.h`)
 to read from file descriptors; both take the file descriptor as a constructor argument.
 
 Note that if your stream contains additional data after the message, `PackedFdMessageReader` may
 accidentally read some of that data, since it does buffered I/O.  To make this work correctly, you
 will need to set up a multi-use buffered stream.  Buffered I/O may also be a good idea with
-`StreamFdMessageReader` and also when writing, for performance reasons.  See `capnproto/io.h` for
+`StreamFdMessageReader` and also when writing, for performance reasons.  See `capnp/io.h` for
 details.
 
 There is an [example](#example_usage) of all this at the beginning of this page.
@@ -350,14 +350,14 @@ There is an [example](#example_usage) of all this at the beginning of this page.
 ## Setting a Namespace
 
 You probably want your generated types to live in a C++ namespace.  You will need to import
-`/capnproto/c++.capnp` and use the `namespace` annotation it defines:
+`/capnp/c++.capnp` and use the `namespace` annotation it defines:
 
 {% highlight capnp %}
-Cxx = import "/capnproto/c++.capnp";
+Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("foo::bar::baz");
 {% endhighlight %}
 
-Note that for this to work, `capnproto/c++.capnp` must be located in the search path specified with
+Note that for this to work, `capnp/c++.capnp` must be located in the search path specified with
 `-I` options.  This file is found in the Cap'n Proto source repo, so you could invoke `capnpc` like
 so:
 
@@ -375,32 +375,32 @@ does not offer reflection.  Also, you might even want to operate on types that a
 into the binary at all, but only discovered at runtime.
 
 The C++ API supports inspecting schemas at runtime via the interface defined in
-`capnproto/schema.h`, and dynamically reading and writing instances of arbitrary types via
-`capnproto/dynamic.h`.  Here's the example from the beginning of this file rewritten in terms
+`capnp/schema.h`, and dynamically reading and writing instances of arbitrary types via
+`capnp/dynamic.h`.  Here's the example from the beginning of this file rewritten in terms
 of the dynamic API:
 
 {% highlight c++ %}
 #include "addressbook.capnp.h"
-#include <capnproto/message.h>
-#include <capnproto/serialize-packed.h>
+#include <capnp/message.h>
+#include <capnp/serialize-packed.h>
 #include <iostream>
-#include <capnproto/schema.h>
-#include <capnproto/dynamic.h>
+#include <capnp/schema.h>
+#include <capnp/dynamic.h>
 
-using capnproto::DynamicValue;
-using capnproto::DynamicStruct;
-using capnproto::DynamicEnum;
-using capnproto::DynamicList;
-using capnproto::DynamicUnion;
-using capnproto::List;
-using capnproto::Schema;
-using capnproto::StructSchema;
-using capnproto::EnumSchema;
+using capnp::DynamicValue;
+using capnp::DynamicStruct;
+using capnp::DynamicEnum;
+using capnp::DynamicList;
+using capnp::DynamicUnion;
+using capnp::List;
+using capnp::Schema;
+using capnp::StructSchema;
+using capnp::EnumSchema;
 
-using capnproto::Void;
-using capnproto::Text;
-using capnproto::MallocMessageBuilder;
-using capnproto::PackedFdMessageReader;
+using capnp::Void;
+using capnp::Text;
+using capnp::MallocMessageBuilder;
+using capnp::PackedFdMessageReader;
 
 void dynamicWriteAddressBook(int fd, StructSchema schema) {
   // Write a message using the dynamic API to set each
@@ -550,7 +550,7 @@ Notes about the dynamic API:
   implicitly converted to `DynamicValue`.
 
 * Unlike with Protobufs, there is no "global registry" of compiled-in types.  To get the schema
-  for a compiled-in type, use `capnproto::Schema::from<MyType>()`.
+  for a compiled-in type, use `capnp::Schema::from<MyType>()`.
 
 * Unlike with Protobufs, the overhead of supporting reflection is small.  Generated `.capnp.c++`
   files contain only some embedded const data structures describing the schema, no code at all,
@@ -563,14 +563,14 @@ Notes about the dynamic API:
 The runtime library contains lots of useful features not described on this page.  For now, the
 best reference is the header files.  See:
 
-    capnproto/list.h
-    capnproto/blob.h
-    capnproto/message.h
-    capnproto/serialize.h
-    capnproto/serialize-packed.h
-    capnproto/schema.h
-    capnproto/schema-loader.h
-    capnproto/dynamic.h
+    capnp/list.h
+    capnp/blob.h
+    capnp/message.h
+    capnp/serialize.h
+    capnp/serialize-packed.h
+    capnp/schema.h
+    capnp/schema-loader.h
+    capnp/dynamic.h
 
 ## Lessons Learned from Protocol Buffers
 
