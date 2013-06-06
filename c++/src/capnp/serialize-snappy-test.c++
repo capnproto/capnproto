@@ -30,7 +30,7 @@
 #include "test-util.h"
 
 namespace capnp {
-namespace internal {
+namespace _ {  // private
 namespace {
 
 class TestMessageBuilder: public MallocMessageBuilder {
@@ -255,5 +255,5 @@ TEST(Snappy, RoundTripTwoMessages) {
 // TODO(test):  Test error cases.
 
 }  // namespace
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp

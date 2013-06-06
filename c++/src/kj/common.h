@@ -111,19 +111,19 @@ typedef unsigned char byte;
 #define KJ_UNUSED_MEMBER
 #endif
 
-namespace internal {
+namespace _ {  // private
 
 void inlineRequireFailure(
     const char* file, int line, const char* expectation, const char* macroArgs,
     const char* message = nullptr) KJ_NORETURN;
 
-}  // namespace internal
+}  // namespace _ (private)
 
 #ifdef NDEBUG
 #define KJ_IREQUIRE(condition, ...)
 #else
 #define KJ_IREQUIRE(condition, ...) \
-    if (KJ_EXPECT_TRUE(condition)); else ::kj::internal::inlineRequireFailure( \
+    if (KJ_EXPECT_TRUE(condition)); else ::kj::_::inlineRequireFailure( \
         __FILE__, __LINE__, #condition, #__VA_ARGS__, ##__VA_ARGS__)
 // Version of KJ_REQUIRE() which is safe to use in headers that are #included by users.  Used to
 // check preconditions inside inline methods.  KJ_INLINE_DPRECOND is particularly useful in that
@@ -272,12 +272,12 @@ auto max(T&& a, U&& b) -> decltype(a > b ? a : b) { return a > b ? a : b; }
 // a namespace, and defining it globally conflicts with the definition in <new>.  So we have to
 // define a dummy type and an operator new that uses it.
 
-namespace internal {
+namespace _ {  // private
 struct PlacementNew {};
-}  // namespace internal
+}  // namespace _ (private)
 } // namespace kj
 
-inline void* operator new(size_t, kj::internal::PlacementNew, void* __p) noexcept {
+inline void* operator new(size_t, kj::_::PlacementNew, void* __p) noexcept {
   return __p;
 }
 
@@ -285,7 +285,7 @@ namespace kj {
 
 template <typename T, typename... Params>
 inline void ctor(T& location, Params&&... params) {
-  new (internal::PlacementNew(), &location) T(kj::fwd<Params>(params)...);
+  new (_::PlacementNew(), &location) T(kj::fwd<Params>(params)...);
 }
 
 template <typename T>
@@ -320,7 +320,7 @@ inline void dtor(T& location) {
 template <typename T>
 class Maybe;
 
-namespace internal {
+namespace _ {  // private
 
 template <typename T>
 class NullableValue {
@@ -441,9 +441,9 @@ inline T* readMaybe(Maybe<T&>&& maybe) { return maybe.ptr; }
 template <typename T>
 inline T* readMaybe(const Maybe<T&>& maybe) { return maybe.ptr; }
 
-}  // namespace internal
+}  // namespace _ (private)
 
-#define KJ_IF_MAYBE(name, exp) if (auto name = ::kj::internal::readMaybe(exp))
+#define KJ_IF_MAYBE(name, exp) if (auto name = ::kj::_::readMaybe(exp))
 
 template <typename T>
 class Maybe {
@@ -502,16 +502,16 @@ public:
   //   map() that uses move semantics if *this is an rvalue.
 
 private:
-  internal::NullableValue<T> ptr;
+  _::NullableValue<T> ptr;
 
   template <typename U>
   friend class Maybe;
   template <typename U>
-  friend internal::NullableValue<U>&& internal::readMaybe(Maybe<U>&& maybe);
+  friend _::NullableValue<U>&& _::readMaybe(Maybe<U>&& maybe);
   template <typename U>
-  friend U* internal::readMaybe(Maybe<U>& maybe);
+  friend U* _::readMaybe(Maybe<U>& maybe);
   template <typename U>
-  friend const U* internal::readMaybe(const Maybe<U>& maybe);
+  friend const U* _::readMaybe(const Maybe<U>& maybe);
 };
 
 template <typename T>
@@ -552,9 +552,9 @@ private:
   template <typename U>
   friend class Maybe;
   template <typename U>
-  friend U* internal::readMaybe(Maybe<U&>&& maybe);
+  friend U* _::readMaybe(Maybe<U&>&& maybe);
   template <typename U>
-  friend U* internal::readMaybe(const Maybe<U&>& maybe);
+  friend U* _::readMaybe(const Maybe<U&>& maybe);
 };
 
 // =======================================================================================

@@ -98,12 +98,12 @@ private:
   class Impl;
   kj::Own<Impl> impl;
 
-  void loadNative(const internal::RawSchema* nativeSchema);
+  void loadNative(const _::RawSchema* nativeSchema);
 };
 
 template <typename T>
 inline void SchemaLoader::loadCompiledTypeAndDependencies() {
-  loadNative(&internal::rawSchema<T>());
+  loadNative(&_::rawSchema<T>());
 }
 
 }  // namespace capnp

@@ -57,7 +57,7 @@ namespace kj {
 }
 
 namespace capnp {
-namespace internal {
+namespace _ {  // private
 namespace {
 
 TEST(Stringify, DebugString) {
@@ -175,5 +175,5 @@ TEST(Stringify, MoreValues) {
 }
 
 }  // namespace
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp

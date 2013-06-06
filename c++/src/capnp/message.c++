@@ -40,23 +40,23 @@ MessageReader::~MessageReader() {
   }
 }
 
-internal::StructReader MessageReader::getRootInternal() {
+_::StructReader MessageReader::getRootInternal() {
   if (!allocatedArena) {
-    static_assert(sizeof(internal::ReaderArena) <= sizeof(arenaSpace),
+    static_assert(sizeof(_::ReaderArena) <= sizeof(arenaSpace),
         "arenaSpace is too small to hold a ReaderArena.  Please increase it.  This will break "
         "ABI compatibility.");
-    new(arena()) internal::ReaderArena(this);
+    new(arena()) _::ReaderArena(this);
     allocatedArena = true;
   }
 
-  internal::SegmentReader* segment = arena()->tryGetSegment(internal::SegmentId(0));
+  _::SegmentReader* segment = arena()->tryGetSegment(_::SegmentId(0));
   KJ_REQUIRE(segment != nullptr &&
              segment->containsInterval(segment->getStartPtr(), segment->getStartPtr() + 1),
              "Message did not contain a root pointer.") {
-    return internal::StructReader();
+    return _::StructReader();
   }
 
-  return internal::StructReader::readRoot(segment->getStartPtr(), segment, options.nestingLimit);
+  return _::StructReader::readRoot(segment->getStartPtr(), segment, options.nestingLimit);
 }
 
 // -------------------------------------------------------------------
@@ -68,19 +68,19 @@ MessageBuilder::~MessageBuilder() {
   }
 }
 
-internal::SegmentBuilder* MessageBuilder::getRootSegment() {
+_::SegmentBuilder* MessageBuilder::getRootSegment() {
   if (allocatedArena) {
-    return arena()->getSegment(internal::SegmentId(0));
+    return arena()->getSegment(_::SegmentId(0));
   } else {
-    static_assert(sizeof(internal::BuilderArena) <= sizeof(arenaSpace),
+    static_assert(sizeof(_::BuilderArena) <= sizeof(arenaSpace),
         "arenaSpace is too small to hold a BuilderArena.  Please increase it.  This will break "
         "ABI compatibility.");
-    new(arena()) internal::BuilderArena(this);
+    new(arena()) _::BuilderArena(this);
     allocatedArena = true;
 
     WordCount ptrSize = 1 * POINTERS * WORDS_PER_POINTER;
-    internal::SegmentBuilder* segment = arena()->getSegmentWithAvailable(ptrSize);
-    KJ_ASSERT(segment->getSegmentId() == internal::SegmentId(0),
+    _::SegmentBuilder* segment = arena()->getSegmentWithAvailable(ptrSize);
+    KJ_ASSERT(segment->getSegmentId() == _::SegmentId(0),
         "First allocated word of new arena was not in segment ID 0.");
     word* location = segment->allocate(ptrSize);
     KJ_ASSERT(location == segment->getPtrUnchecked(0 * WORDS),
@@ -89,21 +89,21 @@ internal::SegmentBuilder* MessageBuilder::getRootSegment() {
   }
 }
 
-internal::StructBuilder MessageBuilder::initRoot(internal::StructSize size) {
-  internal::SegmentBuilder* rootSegment = getRootSegment();
-  return internal::StructBuilder::initRoot(
+_::StructBuilder MessageBuilder::initRoot(_::StructSize size) {
+  _::SegmentBuilder* rootSegment = getRootSegment();
+  return _::StructBuilder::initRoot(
       rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), size);
 }
 
-void MessageBuilder::setRootInternal(internal::StructReader reader) {
-  internal::SegmentBuilder* rootSegment = getRootSegment();
-  internal::StructBuilder::setRoot(
+void MessageBuilder::setRootInternal(_::StructReader reader) {
+  _::SegmentBuilder* rootSegment = getRootSegment();
+  _::StructBuilder::setRoot(
       rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), reader);
 }
 
-internal::StructBuilder MessageBuilder::getRoot(internal::StructSize size) {
-  internal::SegmentBuilder* rootSegment = getRootSegment();
-  return internal::StructBuilder::getRoot(
+_::StructBuilder MessageBuilder::getRoot(_::StructSize size) {
+  _::SegmentBuilder* rootSegment = getRootSegment();
+  return _::StructBuilder::getRoot(
       rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), size);
 }
 

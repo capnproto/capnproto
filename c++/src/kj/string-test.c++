@@ -26,7 +26,7 @@
 #include <string>
 
 namespace kj {
-namespace internal {
+namespace _ {  // private
 namespace {
 
 TEST(String, Str) {
@@ -37,5 +37,5 @@ TEST(String, Str) {
 }
 
 }  // namespace
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace kj

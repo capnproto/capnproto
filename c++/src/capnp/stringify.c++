@@ -199,7 +199,7 @@ kj::String KJ_STRINGIFY(const DynamicStruct::Builder& value) { return stringify(
 kj::String KJ_STRINGIFY(const DynamicList::Reader& value) { return stringify(value); }
 kj::String KJ_STRINGIFY(const DynamicList::Builder& value) { return stringify(value.asReader()); }
 
-namespace internal {
+namespace _ {  // private
 
 kj::String structString(StructReader reader, const RawSchema& schema) {
   return stringify(DynamicStruct::Reader(StructSchema(&schema), reader));
@@ -210,6 +210,6 @@ kj::String unionString(StructReader reader, const RawSchema& schema, uint member
       StructSchema(&schema).getMembers()[memberIndex].asUnion(), reader));
 }
 
-}  // namespace internal
+}  // namespace _ (private)
 
 }  // namespace capnp

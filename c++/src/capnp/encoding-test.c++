@@ -28,7 +28,7 @@
 #include "test-util.h"
 
 namespace capnp {
-namespace internal {
+namespace _ {  // private
 namespace {
 
 template <typename T, typename U>
@@ -1335,5 +1335,5 @@ TEST(Encoding, Has) {
 }
 
 }  // namespace
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp

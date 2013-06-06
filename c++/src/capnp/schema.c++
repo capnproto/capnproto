@@ -75,7 +75,7 @@ InterfaceSchema Schema::asInterface() const {
   return InterfaceSchema(raw);
 }
 
-void Schema::requireUsableAs(const internal::RawSchema* expected) const {
+void Schema::requireUsableAs(const _::RawSchema* expected) const {
   KJ_REQUIRE(raw == expected ||
           (raw != nullptr && expected != nullptr && raw->canCastTo == expected),
           "This schema is not compatible with the requested native type.");
@@ -86,7 +86,7 @@ void Schema::requireUsableAs(const internal::RawSchema* expected) const {
 namespace {
 
 template <typename List>
-auto findSchemaMemberByName(const internal::RawSchema* raw, kj::StringPtr name,
+auto findSchemaMemberByName(const _::RawSchema* raw, kj::StringPtr name,
                             uint unionIndex, List&& list)
     -> kj::Maybe<kj::Decay<decltype(list[0])>> {
   uint lower = 0;
@@ -95,7 +95,7 @@ auto findSchemaMemberByName(const internal::RawSchema* raw, kj::StringPtr name,
   while (lower < upper) {
     uint mid = (lower + upper) / 2;
 
-    const internal::RawSchema::MemberInfo& member = raw->membersByName[mid];
+    const _::RawSchema::MemberInfo& member = raw->membersByName[mid];
 
     if (member.unionIndex == unionIndex) {
       auto candidate = list[member.index];

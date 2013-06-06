@@ -62,7 +62,7 @@ class word { uint64_t content KJ_UNUSED_MEMBER; KJ_DISALLOW_COPY(word); public: 
 static_assert(sizeof(byte) == 1, "uint8_t is not one byte?");
 static_assert(sizeof(word) == 8, "uint64_t is not 8 bytes?");
 
-namespace internal { class BitLabel; class ElementLabel; struct WirePointer; }
+namespace _ { class BitLabel; class ElementLabel; struct WirePointer; }
 
 #ifndef KJ_DEBUG_TYPES
 #define KJ_DEBUG_TYPES 1
@@ -80,11 +80,11 @@ namespace internal { class BitLabel; class ElementLabel; struct WirePointer; }
 
 #if KJ_DEBUG_TYPES
 
-typedef kj::Quantity<uint, internal::BitLabel> BitCount;
-typedef kj::Quantity<uint8_t, internal::BitLabel> BitCount8;
-typedef kj::Quantity<uint16_t, internal::BitLabel> BitCount16;
-typedef kj::Quantity<uint32_t, internal::BitLabel> BitCount32;
-typedef kj::Quantity<uint64_t, internal::BitLabel> BitCount64;
+typedef kj::Quantity<uint, _::BitLabel> BitCount;
+typedef kj::Quantity<uint8_t, _::BitLabel> BitCount8;
+typedef kj::Quantity<uint16_t, _::BitLabel> BitCount16;
+typedef kj::Quantity<uint32_t, _::BitLabel> BitCount32;
+typedef kj::Quantity<uint64_t, _::BitLabel> BitCount64;
 
 typedef kj::Quantity<uint, byte> ByteCount;
 typedef kj::Quantity<uint8_t, byte> ByteCount8;
@@ -98,17 +98,17 @@ typedef kj::Quantity<uint16_t, word> WordCount16;
 typedef kj::Quantity<uint32_t, word> WordCount32;
 typedef kj::Quantity<uint64_t, word> WordCount64;
 
-typedef kj::Quantity<uint, internal::ElementLabel> ElementCount;
-typedef kj::Quantity<uint8_t, internal::ElementLabel> ElementCount8;
-typedef kj::Quantity<uint16_t, internal::ElementLabel> ElementCount16;
-typedef kj::Quantity<uint32_t, internal::ElementLabel> ElementCount32;
-typedef kj::Quantity<uint64_t, internal::ElementLabel> ElementCount64;
+typedef kj::Quantity<uint, _::ElementLabel> ElementCount;
+typedef kj::Quantity<uint8_t, _::ElementLabel> ElementCount8;
+typedef kj::Quantity<uint16_t, _::ElementLabel> ElementCount16;
+typedef kj::Quantity<uint32_t, _::ElementLabel> ElementCount32;
+typedef kj::Quantity<uint64_t, _::ElementLabel> ElementCount64;
 
-typedef kj::Quantity<uint, internal::WirePointer> WirePointerCount;
-typedef kj::Quantity<uint8_t, internal::WirePointer> WirePointerCount8;
-typedef kj::Quantity<uint16_t, internal::WirePointer> WirePointerCount16;
-typedef kj::Quantity<uint32_t, internal::WirePointer> WirePointerCount32;
-typedef kj::Quantity<uint64_t, internal::WirePointer> WirePointerCount64;
+typedef kj::Quantity<uint, _::WirePointer> WirePointerCount;
+typedef kj::Quantity<uint8_t, _::WirePointer> WirePointerCount8;
+typedef kj::Quantity<uint16_t, _::WirePointer> WirePointerCount16;
+typedef kj::Quantity<uint32_t, _::WirePointer> WirePointerCount32;
+typedef kj::Quantity<uint64_t, _::WirePointer> WirePointerCount64;
 
 #else
 

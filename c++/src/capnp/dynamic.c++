@@ -61,40 +61,40 @@ inline uint64_t bitCast<uint64_t, double>(double value) {
   return result;
 }
 
-internal::FieldSize elementSizeFor(schema::Type::Body::Which elementType) {
+_::FieldSize elementSizeFor(schema::Type::Body::Which elementType) {
   switch (elementType) {
-    case schema::Type::Body::VOID_TYPE: return internal::FieldSize::VOID;
-    case schema::Type::Body::BOOL_TYPE: return internal::FieldSize::BIT;
-    case schema::Type::Body::INT8_TYPE: return internal::FieldSize::BYTE;
-    case schema::Type::Body::INT16_TYPE: return internal::FieldSize::TWO_BYTES;
-    case schema::Type::Body::INT32_TYPE: return internal::FieldSize::FOUR_BYTES;
-    case schema::Type::Body::INT64_TYPE: return internal::FieldSize::EIGHT_BYTES;
-    case schema::Type::Body::UINT8_TYPE: return internal::FieldSize::BYTE;
-    case schema::Type::Body::UINT16_TYPE: return internal::FieldSize::TWO_BYTES;
-    case schema::Type::Body::UINT32_TYPE: return internal::FieldSize::FOUR_BYTES;
-    case schema::Type::Body::UINT64_TYPE: return internal::FieldSize::EIGHT_BYTES;
-    case schema::Type::Body::FLOAT32_TYPE: return internal::FieldSize::FOUR_BYTES;
-    case schema::Type::Body::FLOAT64_TYPE: return internal::FieldSize::EIGHT_BYTES;
+    case schema::Type::Body::VOID_TYPE: return _::FieldSize::VOID;
+    case schema::Type::Body::BOOL_TYPE: return _::FieldSize::BIT;
+    case schema::Type::Body::INT8_TYPE: return _::FieldSize::BYTE;
+    case schema::Type::Body::INT16_TYPE: return _::FieldSize::TWO_BYTES;
+    case schema::Type::Body::INT32_TYPE: return _::FieldSize::FOUR_BYTES;
+    case schema::Type::Body::INT64_TYPE: return _::FieldSize::EIGHT_BYTES;
+    case schema::Type::Body::UINT8_TYPE: return _::FieldSize::BYTE;
+    case schema::Type::Body::UINT16_TYPE: return _::FieldSize::TWO_BYTES;
+    case schema::Type::Body::UINT32_TYPE: return _::FieldSize::FOUR_BYTES;
+    case schema::Type::Body::UINT64_TYPE: return _::FieldSize::EIGHT_BYTES;
+    case schema::Type::Body::FLOAT32_TYPE: return _::FieldSize::FOUR_BYTES;
+    case schema::Type::Body::FLOAT64_TYPE: return _::FieldSize::EIGHT_BYTES;
 
-    case schema::Type::Body::TEXT_TYPE: return internal::FieldSize::POINTER;
-    case schema::Type::Body::DATA_TYPE: return internal::FieldSize::POINTER;
-    case schema::Type::Body::LIST_TYPE: return internal::FieldSize::POINTER;
-    case schema::Type::Body::ENUM_TYPE: return internal::FieldSize::TWO_BYTES;
-    case schema::Type::Body::STRUCT_TYPE: return internal::FieldSize::INLINE_COMPOSITE;
-    case schema::Type::Body::INTERFACE_TYPE: return internal::FieldSize::POINTER;
+    case schema::Type::Body::TEXT_TYPE: return _::FieldSize::POINTER;
+    case schema::Type::Body::DATA_TYPE: return _::FieldSize::POINTER;
+    case schema::Type::Body::LIST_TYPE: return _::FieldSize::POINTER;
+    case schema::Type::Body::ENUM_TYPE: return _::FieldSize::TWO_BYTES;
+    case schema::Type::Body::STRUCT_TYPE: return _::FieldSize::INLINE_COMPOSITE;
+    case schema::Type::Body::INTERFACE_TYPE: return _::FieldSize::POINTER;
     case schema::Type::Body::OBJECT_TYPE: KJ_FAIL_ASSERT("List(Object) not supported."); break;
   }
 
   // Unknown type.  Treat it as zero-size.
-  return internal::FieldSize::VOID;
+  return _::FieldSize::VOID;
 }
 
-inline internal::StructSize structSizeFromSchema(StructSchema schema) {
+inline _::StructSize structSizeFromSchema(StructSchema schema) {
   auto node = schema.getProto().getBody().getStructNode();
-  return internal::StructSize(
+  return _::StructSize(
       node.getDataSectionWordSize() * WORDS,
       node.getPointerSectionSize() * POINTERS,
-      static_cast<internal::FieldSize>(node.getPreferredListEncoding()));
+      static_cast<_::FieldSize>(node.getPreferredListEncoding()));
 }
 
 }  // namespace
@@ -122,23 +122,23 @@ uint16_t DynamicEnum::asImpl(uint64_t requestedTypeId) const {
 // =======================================================================================
 
 DynamicStruct::Reader DynamicObject::as(StructSchema schema) const {
-  if (reader.kind == internal::ObjectKind::NULL_POINTER) {
-    return DynamicStruct::Reader(schema, internal::StructReader());
+  if (reader.kind == _::ObjectKind::NULL_POINTER) {
+    return DynamicStruct::Reader(schema, _::StructReader());
   }
-  KJ_REQUIRE(reader.kind == internal::ObjectKind::STRUCT, "Object is not a struct.") {
+  KJ_REQUIRE(reader.kind == _::ObjectKind::STRUCT, "Object is not a struct.") {
     // Return default struct.
-    return DynamicStruct::Reader(schema, internal::StructReader());
+    return DynamicStruct::Reader(schema, _::StructReader());
   }
   return DynamicStruct::Reader(schema, reader.structReader);
 }
 
 DynamicList::Reader DynamicObject::as(ListSchema schema) const {
-  if (reader.kind == internal::ObjectKind::NULL_POINTER) {
-    return DynamicList::Reader(schema, internal::ListReader());
+  if (reader.kind == _::ObjectKind::NULL_POINTER) {
+    return DynamicList::Reader(schema, _::ListReader());
   }
-  KJ_REQUIRE(reader.kind == internal::ObjectKind::LIST, "Object is not a list.") {
+  KJ_REQUIRE(reader.kind == _::ObjectKind::LIST, "Object is not a list.") {
     // Return empty list.
-    return DynamicList::Reader(schema, internal::ListReader());
+    return DynamicList::Reader(schema, _::ListReader());
   }
   return DynamicList::Reader(schema, reader.listReader);
 }
@@ -644,7 +644,7 @@ Data::Builder DynamicStruct::Builder::initObjectAsData(kj::StringPtr name, uint 
 }
 
 DynamicValue::Reader DynamicStruct::Reader::getImpl(
-    internal::StructReader reader, StructSchema::Member member) {
+    _::StructReader reader, StructSchema::Member member) {
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
       return DynamicUnion::Reader(member.asUnion(), reader);
@@ -662,7 +662,7 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
         case schema::Type::Body::discrim##_TYPE: \
           return DynamicValue::Reader(reader.getDataField<type>( \
               field.getOffset() * ELEMENTS, \
-              bitCast<internal::Mask<type>>(dval.get##titleCase##Value())));
+              bitCast<_::Mask<type>>(dval.get##titleCase##Value())));
 
         HANDLE_TYPE(BOOL, Bool, bool)
         HANDLE_TYPE(INT8, Int8, int8_t)
@@ -706,20 +706,20 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
               ListSchema::of(elementType, member.getContainingStruct()),
               reader.getListField(field.getOffset() * POINTERS,
                                   elementSizeFor(elementType.getBody().which()),
-                                  dval.getListValue<internal::UncheckedMessage>())));
+                                  dval.getListValue<_::UncheckedMessage>())));
         }
 
         case schema::Type::Body::STRUCT_TYPE: {
           return DynamicValue::Reader(DynamicStruct::Reader(
               member.getContainingStruct().getDependency(type.getStructType()).asStruct(),
               reader.getStructField(field.getOffset() * POINTERS,
-                                    dval.getStructValue<internal::UncheckedMessage>())));
+                                    dval.getStructValue<_::UncheckedMessage>())));
         }
 
         case schema::Type::Body::OBJECT_TYPE: {
           return DynamicValue::Reader(DynamicObject(
               reader.getObjectField(field.getOffset() * POINTERS,
-                                    dval.getObjectValue<internal::UncheckedMessage>())));
+                                    dval.getObjectValue<_::UncheckedMessage>())));
         }
 
         case schema::Type::Body::INTERFACE_TYPE:
@@ -736,7 +736,7 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
 }
 
 DynamicValue::Builder DynamicStruct::Builder::getImpl(
-    internal::StructBuilder builder, StructSchema::Member member) {
+    _::StructBuilder builder, StructSchema::Member member) {
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
       return DynamicUnion::Builder(member.asUnion(), builder);
@@ -754,7 +754,7 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
         case schema::Type::Body::discrim##_TYPE: \
           return DynamicValue::Builder(builder.getDataField<type>( \
               field.getOffset() * ELEMENTS, \
-              bitCast<internal::Mask<type>>(dval.get##titleCase##Value())));
+              bitCast<_::Mask<type>>(dval.get##titleCase##Value())));
 
         HANDLE_TYPE(BOOL, Bool, bool)
         HANDLE_TYPE(INT8, Int8, int8_t)
@@ -798,12 +798,12 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
             return DynamicValue::Builder(DynamicList::Builder(listType,
                 builder.getStructListField(field.getOffset() * POINTERS,
                                            structSizeFromSchema(listType.getStructElementType()),
-                                           dval.getListValue<internal::UncheckedMessage>())));
+                                           dval.getListValue<_::UncheckedMessage>())));
           } else {
             return DynamicValue::Builder(DynamicList::Builder(listType,
                 builder.getListField(field.getOffset() * POINTERS,
                                      elementSizeFor(listType.whichElementType()),
-                                     dval.getListValue<internal::UncheckedMessage>())));
+                                     dval.getListValue<_::UncheckedMessage>())));
           }
         }
 
@@ -815,14 +815,14 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
               builder.getStructField(
                   field.getOffset() * POINTERS,
                   structSizeFromSchema(structSchema),
-                  dval.getStructValue<internal::UncheckedMessage>())));
+                  dval.getStructValue<_::UncheckedMessage>())));
         }
 
         case schema::Type::Body::OBJECT_TYPE: {
           return DynamicValue::Builder(DynamicObject(
               builder.asReader().getObjectField(
                   field.getOffset() * POINTERS,
-                  dval.getObjectValue<internal::UncheckedMessage>())));
+                  dval.getObjectValue<_::UncheckedMessage>())));
         }
 
         case schema::Type::Body::INTERFACE_TYPE:
@@ -838,14 +838,14 @@ DynamicValue::Builder DynamicStruct::Builder::getImpl(
   return nullptr;
 }
 DynamicStruct::Builder DynamicStruct::Builder::getObjectImpl(
-    internal::StructBuilder builder, StructSchema::Member field, StructSchema type) {
+    _::StructBuilder builder, StructSchema::Member field, StructSchema type) {
   return DynamicStruct::Builder(type,
       builder.getStructField(
           field.getProto().getBody().getFieldMember().getOffset() * POINTERS,
           structSizeFromSchema(type), nullptr));
 }
 DynamicList::Builder DynamicStruct::Builder::getObjectImpl(
-    internal::StructBuilder builder, StructSchema::Member field, ListSchema type) {
+    _::StructBuilder builder, StructSchema::Member field, ListSchema type) {
   if (type.whichElementType() == schema::Type::Body::STRUCT_TYPE) {
     return DynamicList::Builder(type,
         builder.getStructListField(
@@ -861,18 +861,18 @@ DynamicList::Builder DynamicStruct::Builder::getObjectImpl(
   }
 }
 Text::Builder DynamicStruct::Builder::getObjectAsTextImpl(
-    internal::StructBuilder builder, StructSchema::Member field) {
+    _::StructBuilder builder, StructSchema::Member field) {
   return builder.getBlobField<Text>(
       field.getProto().getBody().getFieldMember().getOffset() * POINTERS, nullptr, 0 * BYTES);
 }
 Data::Builder DynamicStruct::Builder::getObjectAsDataImpl(
-    internal::StructBuilder builder, StructSchema::Member field) {
+    _::StructBuilder builder, StructSchema::Member field) {
   return builder.getBlobField<Data>(
       field.getProto().getBody().getFieldMember().getOffset() * POINTERS, nullptr, 0 * BYTES);
 }
 
 void DynamicStruct::Builder::setImpl(
-    internal::StructBuilder builder, StructSchema::Member member,
+    _::StructBuilder builder, StructSchema::Member member,
     const DynamicValue::Reader& value) {
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER: {
@@ -904,7 +904,7 @@ void DynamicStruct::Builder::setImpl(
         case schema::Type::Body::discrim##_TYPE: \
           builder.setDataField<type>( \
               field.getOffset() * ELEMENTS, value.as<type>(), \
-              bitCast<internal::Mask<type> >(dval.get##titleCase##Value())); \
+              bitCast<_::Mask<type> >(dval.get##titleCase##Value())); \
           return;
 
         HANDLE_TYPE(BOOL, Bool, bool)
@@ -978,7 +978,7 @@ void DynamicStruct::Builder::setImpl(
 }
 
 DynamicValue::Builder DynamicStruct::Builder::initImpl(
-    internal::StructBuilder builder, StructSchema::Member member, uint size) {
+    _::StructBuilder builder, StructSchema::Member member, uint size) {
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
       KJ_FAIL_REQUIRE(
@@ -1009,7 +1009,7 @@ DynamicValue::Builder DynamicStruct::Builder::initImpl(
 }
 
 DynamicValue::Builder DynamicStruct::Builder::initImpl(
-    internal::StructBuilder builder, StructSchema::Member member) {
+    _::StructBuilder builder, StructSchema::Member member) {
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
       KJ_FAIL_REQUIRE(
@@ -1029,14 +1029,14 @@ DynamicValue::Builder DynamicStruct::Builder::initImpl(
   return getImpl(builder, member);
 }
 DynamicStruct::Builder DynamicStruct::Builder::initFieldImpl(
-    internal::StructBuilder builder, StructSchema::Member field, StructSchema type) {
+    _::StructBuilder builder, StructSchema::Member field, StructSchema type) {
   return DynamicStruct::Builder(
       type, builder.initStructField(
           field.getProto().getBody().getFieldMember().getOffset() * POINTERS,
           structSizeFromSchema(type)));
 }
 DynamicList::Builder DynamicStruct::Builder::initFieldImpl(
-    internal::StructBuilder builder, StructSchema::Member field,
+    _::StructBuilder builder, StructSchema::Member field,
     ListSchema type, uint size) {
   if (type.whichElementType() == schema::Type::Body::STRUCT_TYPE) {
     return DynamicList::Builder(
@@ -1052,12 +1052,12 @@ DynamicList::Builder DynamicStruct::Builder::initFieldImpl(
   }
 }
 Text::Builder DynamicStruct::Builder::initFieldAsTextImpl(
-    internal::StructBuilder builder, StructSchema::Member field, uint size) {
+    _::StructBuilder builder, StructSchema::Member field, uint size) {
   return builder.initBlobField<Text>(
       field.getProto().getBody().getFieldMember().getOffset() * POINTERS, size * BYTES);
 }
 Data::Builder DynamicStruct::Builder::initFieldAsDataImpl(
-    internal::StructBuilder builder, StructSchema::Member field, uint size) {
+    _::StructBuilder builder, StructSchema::Member field, uint size) {
   return builder.initBlobField<Data>(
       field.getProto().getBody().getFieldMember().getOffset() * POINTERS, size * BYTES);
 }
@@ -1497,7 +1497,7 @@ DynamicStruct::Builder MessageBuilder::getRoot<DynamicStruct>(StructSchema schem
   return DynamicStruct::Builder(schema, getRoot(structSizeFromSchema(schema)));
 }
 
-namespace internal {
+namespace _ {  // private
 
 DynamicStruct::Reader PointerHelpers<DynamicStruct, Kind::UNKNOWN>::getDynamic(
     StructReader reader, WirePointerCount index, StructSchema schema) {
@@ -1551,6 +1551,6 @@ DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::init(
   }
 }
 
-}  // namespace internal
+}  // namespace _ (private)
 
 }  // namespace capnp

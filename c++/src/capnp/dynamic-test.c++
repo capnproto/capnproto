@@ -51,7 +51,7 @@
 #include "test-util.h"
 
 namespace capnp {
-namespace internal {
+namespace _ {  // private
 namespace {
 
 template <typename Element, typename T>
@@ -379,5 +379,5 @@ TEST(DynamicApi, SetEnumFromNative) {
 }
 
 }  // namespace
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp

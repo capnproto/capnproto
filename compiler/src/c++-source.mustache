@@ -36,7 +36,7 @@ namespace {{namespaceName}} {
 {{#typeStruct}}
 {{#structFields}}
 {{#fieldDefaultBytes}}
-const ::capnp::internal::AlignedData<{{defaultWordCount}}>
+const ::capnp::_::AlignedData<{{defaultWordCount}}>
     {{structFullName}}::DEFAULT_{{fieldUpperCase}} = {
   { {{defaultByteList}} }
 };
@@ -55,27 +55,27 @@ namespace schemas {
 
 {{#fileTypes}}
 {{#typeSchema}}
-static const ::capnp::internal::AlignedData<{{schemaWordCount}}> b_{{schemaId}} = {
+static const ::capnp::_::AlignedData<{{schemaWordCount}}> b_{{schemaId}} = {
   { {{schemaBytes}} }
 };
-static const ::capnp::internal::RawSchema* const d_{{schemaId}}[] = {
+static const ::capnp::_::RawSchema* const d_{{schemaId}}[] = {
 {{#schemaDependencies}}
   &s_{{dependencyId}},
 {{/schemaDependencies}}
 };
-static const ::capnp::internal::RawSchema::MemberInfo m_{{schemaId}}[] = {
+static const ::capnp::_::RawSchema::MemberInfo m_{{schemaId}}[] = {
 {{#schemaMembersByName}}
   { {{memberUnionIndex}}, {{memberIndex}} },
 {{/schemaMembersByName}}
 };
-const ::capnp::internal::RawSchema s_{{schemaId}} = {
+const ::capnp::_::RawSchema s_{{schemaId}} = {
   b_{{schemaId}}.words, d_{{schemaId}}, m_{{schemaId}},
   {{schemaDependencyCount}}, {{schemaMemberCount}}, nullptr
 };
 {{/typeSchema}}
 {{/fileTypes}}
 }  // namespace schemas
-namespace internal {
+namespace _ {  // private
 {{#fileTypes}}
 {{#typeStructOrUnion}}
 {{#typeStruct}}
@@ -96,5 +96,5 @@ CAPNP_DEFINE_UNION(
 CAPNP_DEFINE_ENUM(
     ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{enumName}});
 {{/fileEnums}}
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp

@@ -33,7 +33,7 @@
 
 namespace capnp {
 
-namespace internal {
+namespace _ {  // private
   class ReaderArena;
   class BuilderArena;
 }
@@ -115,8 +115,8 @@ private:
   void* arenaSpace[15];
   bool allocatedArena;
 
-  internal::ReaderArena* arena() { return reinterpret_cast<internal::ReaderArena*>(arenaSpace); }
-  internal::StructReader getRootInternal();
+  _::ReaderArena* arena() { return reinterpret_cast<_::ReaderArena*>(arenaSpace); }
+  _::StructReader getRootInternal();
 };
 
 class MessageBuilder {
@@ -164,11 +164,11 @@ private:
   void* arenaSpace[15];
   bool allocatedArena = false;
 
-  internal::BuilderArena* arena() { return reinterpret_cast<internal::BuilderArena*>(arenaSpace); }
-  internal::SegmentBuilder* getRootSegment();
-  internal::StructBuilder initRoot(internal::StructSize size);
-  void setRootInternal(internal::StructReader reader);
-  internal::StructBuilder getRoot(internal::StructSize size);
+  _::BuilderArena* arena() { return reinterpret_cast<_::BuilderArena*>(arenaSpace); }
+  _::SegmentBuilder* getRootSegment();
+  _::StructBuilder initRoot(_::StructSize size);
+  void setRootInternal(_::StructReader reader);
+  _::StructBuilder getRoot(_::StructSize size);
 
   friend class SchemaLoader;  // for a dirty hack, see schema-loader.c++.
 };
@@ -334,7 +334,7 @@ inline typename RootType::Reader MessageReader::getRoot() {
 template <typename RootType>
 inline typename RootType::Builder MessageBuilder::initRoot() {
   static_assert(kind<RootType>() == Kind::STRUCT, "Root type must be a Cap'n Proto struct type.");
-  return typename RootType::Builder(initRoot(internal::structSize<RootType>()));
+  return typename RootType::Builder(initRoot(_::structSize<RootType>()));
 }
 
 template <typename Reader>
@@ -347,12 +347,12 @@ inline void MessageBuilder::setRoot(Reader&& value) {
 template <typename RootType>
 inline typename RootType::Builder MessageBuilder::getRoot() {
   static_assert(kind<RootType>() == Kind::STRUCT, "Root type must be a Cap'n Proto struct type.");
-  return typename RootType::Builder(getRoot(internal::structSize<RootType>()));
+  return typename RootType::Builder(getRoot(_::structSize<RootType>()));
 }
 
 template <typename RootType>
 typename RootType::Reader readMessageUnchecked(const word* data) {
-  return typename RootType::Reader(internal::StructReader::readRootUnchecked(data));
+  return typename RootType::Reader(_::StructReader::readRootUnchecked(data));
 }
 
 template <typename Reader>
@@ -365,7 +365,7 @@ void copyToUnchecked(Reader&& reader, kj::ArrayPtr<word> uncheckedBuffer) {
 template <typename Type>
 static typename Type::Reader defaultValue() {
   // TODO(soon):  Correctly handle lists.  Maybe primitives too?
-  return typename Type::Reader(internal::StructReader());
+  return typename Type::Reader(_::StructReader());
 }
 
 }  // namespace capnp

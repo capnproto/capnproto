@@ -32,15 +32,15 @@
 namespace kj {
 
 String heapString(size_t size) {
-  char* buffer = internal::HeapArrayDisposer::allocate<char>(size + 1);
+  char* buffer = _::HeapArrayDisposer::allocate<char>(size + 1);
   buffer[size] = '\0';
-  return String(buffer, size, internal::HeapArrayDisposer::instance);
+  return String(buffer, size, _::HeapArrayDisposer::instance);
 }
 
 String heapString(const char* value, size_t size) {
-  char* buffer = internal::HeapArrayDisposer::allocate<char>(size + 1);
+  char* buffer = _::HeapArrayDisposer::allocate<char>(size + 1);
   memcpy(buffer, value, size + 1);
-  return String(buffer, size, internal::HeapArrayDisposer::instance);
+  return String(buffer, size, _::HeapArrayDisposer::instance);
 }
 
 #define HEXIFY_INT(type, format) \
@@ -57,7 +57,7 @@ HEXIFY_INT(unsigned long long, "%llx");
 
 #undef HEXIFY_INT
 
-namespace internal {
+namespace _ {  // private
 
 StringPtr Stringifier::operator*(bool b) const {
   return b ? StringPtr("true") : StringPtr("false");
@@ -318,5 +318,5 @@ CappedArray<char, kDoubleToBufferSize> Stringifier::operator*(double f) const {
   return result;
 }
 
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace kj

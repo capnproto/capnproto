@@ -35,7 +35,7 @@ namespace capnp {
 }
 
 namespace capnp {
-namespace internal {
+namespace _ {  // private
 namespace {
 
 TEST(WireFormat, SimpleRawDataStruct) {
@@ -370,5 +370,5 @@ TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
 }
 
 }  // namespace
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp

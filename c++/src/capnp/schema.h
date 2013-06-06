@@ -84,15 +84,15 @@ public:
   //   loadCompiledTypeAndDependencies<T>() was called on the SchemaLoader.
 
 private:
-  const internal::RawSchema* raw;
+  const _::RawSchema* raw;
 
-  inline explicit Schema(const internal::RawSchema* raw): raw(raw) {}
+  inline explicit Schema(const _::RawSchema* raw): raw(raw) {}
 
   template <typename T> static inline Schema fromImpl() {
-    return Schema(&internal::rawSchema<T>());
+    return Schema(&_::rawSchema<T>());
   }
 
-  void requireUsableAs(const internal::RawSchema* expected) const;
+  void requireUsableAs(const _::RawSchema* expected) const;
 
   friend class StructSchema;
   friend class EnumSchema;
@@ -119,15 +119,15 @@ public:
   // Like findMemberByName() but throws an exception on failure.
 
 private:
-  StructSchema(const internal::RawSchema* raw): Schema(raw) {}
+  StructSchema(const _::RawSchema* raw): Schema(raw) {}
   template <typename T> static inline StructSchema fromImpl() {
-    return StructSchema(&internal::rawSchema<T>());
+    return StructSchema(&_::rawSchema<T>());
   }
   friend class Schema;
-  friend kj::String internal::structString(
-      internal::StructReader reader, const internal::RawSchema& schema);
-  friend kj::String internal::unionString(
-      internal::StructReader reader, const internal::RawSchema& schema, uint memberIndex);
+  friend kj::String _::structString(
+      _::StructReader reader, const _::RawSchema& schema);
+  friend kj::String _::unionString(
+      _::StructReader reader, const _::RawSchema& schema, uint memberIndex);
 };
 
 class StructSchema::Member {
@@ -185,7 +185,7 @@ public:
   inline uint size() const { return list.size(); }
   inline Member operator[](uint index) const { return Member(parent, unionIndex, index, list[index]); }
 
-  typedef internal::IndexingIterator<const MemberList, Member> Iterator;
+  typedef _::IndexingIterator<const MemberList, Member> Iterator;
   inline Iterator begin() const { return Iterator(this, 0); }
   inline Iterator end() const { return Iterator(this, size()); }
 
@@ -218,9 +218,9 @@ public:
   // Like findEnumerantByName() but throws an exception on failure.
 
 private:
-  EnumSchema(const internal::RawSchema* raw): Schema(raw) {}
+  EnumSchema(const _::RawSchema* raw): Schema(raw) {}
   template <typename T> static inline EnumSchema fromImpl() {
-    return EnumSchema(&internal::rawSchema<T>());
+    return EnumSchema(&_::rawSchema<T>());
   }
   friend class Schema;
 };
@@ -254,7 +254,7 @@ public:
   inline uint size() const { return list.size(); }
   inline Enumerant operator[](uint index) const { return Enumerant(parent, index, list[index]); }
 
-  typedef internal::IndexingIterator<const EnumerantList, Enumerant> Iterator;
+  typedef _::IndexingIterator<const EnumerantList, Enumerant> Iterator;
   inline Iterator begin() const { return Iterator(this, 0); }
   inline Iterator end() const { return Iterator(this, size()); }
 
@@ -285,9 +285,9 @@ public:
   // Like findMethodByName() but throws an exception on failure.
 
 private:
-  InterfaceSchema(const internal::RawSchema* raw): Schema(raw) {}
+  InterfaceSchema(const _::RawSchema* raw): Schema(raw) {}
   template <typename T> static inline InterfaceSchema fromImpl() {
-    return InterfaceSchema(&internal::rawSchema<T>());
+    return InterfaceSchema(&_::rawSchema<T>());
   }
   friend class Schema;
 };
@@ -322,7 +322,7 @@ public:
   inline uint size() const { return list.size(); }
   inline Method operator[](uint index) const { return Method(parent, index, list[index]); }
 
-  typedef internal::IndexingIterator<const MethodList, Method> Iterator;
+  typedef _::IndexingIterator<const MethodList, Method> Iterator;
   inline Iterator begin() const { return Iterator(this, 0); }
   inline Iterator end() const { return Iterator(this, size()); }
 
@@ -418,7 +418,7 @@ template <> inline schema::Type::Body::Which Schema::from<Data>() { return schem
 
 template <typename T>
 inline void Schema::requireUsableAs() const {
-  requireUsableAs(&internal::rawSchema<T>());
+  requireUsableAs(&_::rawSchema<T>());
 }
 
 inline bool StructSchema::Member::operator==(const Member& other) const {

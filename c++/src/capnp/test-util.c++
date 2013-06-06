@@ -25,7 +25,7 @@
 #include <gtest/gtest.h>
 
 namespace capnp {
-namespace internal {
+namespace _ {  // private
 namespace {
 
 template <typename Builder>
@@ -913,5 +913,5 @@ void checkDynamicTestMessageAllZero(DynamicStruct::Reader reader) {
   dynamicCheckTestMessageAllZero(reader);
 }
 
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp

@@ -28,7 +28,7 @@
 
 namespace capnp {
 
-namespace internal {
+namespace _ {  // private
 
 PackedInputStream::PackedInputStream(kj::BufferedInputStream& inner): inner(inner) {}
 PackedInputStream::~PackedInputStream() {}
@@ -429,7 +429,7 @@ void PackedOutputStream::write(const void* src, size_t size) {
   inner.write(buffer.begin(), reinterpret_cast<byte*>(out) - buffer.begin());
 }
 
-}  // namespace internal
+}  // namespace _ (private)
 
 // =======================================================================================
 
@@ -458,7 +458,7 @@ PackedFdMessageReader::~PackedFdMessageReader() {}
 
 void writePackedMessage(kj::BufferedOutputStream& output,
                         kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
-  internal::PackedOutputStream packedOutput(output);
+  _::PackedOutputStream packedOutput(output);
   writeMessage(packedOutput, segments);
 }
 

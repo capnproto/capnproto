@@ -30,7 +30,7 @@
 #include <stdio.h>
 
 namespace capnp {
-namespace internal {
+namespace _ {  // private
 
 Arena::~Arena() {}
 
@@ -222,5 +222,5 @@ void BuilderArena::reportReadLimitReached() {
   }
 }
 
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp

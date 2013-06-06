@@ -25,7 +25,7 @@
 #include <gtest/gtest.h>
 
 namespace capnp {
-namespace internal {
+namespace _ {  // private
 namespace {
 
 TEST(Message, MallocBuilderWithFirstSegment) {
@@ -49,5 +49,5 @@ TEST(Message, MallocBuilderWithFirstSegment) {
 // TODO(test):  More tests.
 
 }  // namespace
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp

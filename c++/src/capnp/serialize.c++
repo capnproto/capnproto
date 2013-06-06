@@ -36,8 +36,8 @@ FlatArrayMessageReader::FlatArrayMessageReader(
     return;
   }
 
-  const internal::WireValue<uint32_t>* table =
-      reinterpret_cast<const internal::WireValue<uint32_t>*>(array.begin());
+  const _::WireValue<uint32_t>* table =
+      reinterpret_cast<const _::WireValue<uint32_t>*>(array.begin());
 
   uint segmentCount = table[0].get() + 1;
   size_t offset = segmentCount / 2u + 1u;
@@ -98,8 +98,8 @@ kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> 
 
   kj::Array<word> result = kj::heapArray<word>(totalSize);
 
-  internal::WireValue<uint32_t>* table =
-      reinterpret_cast<internal::WireValue<uint32_t>*>(result.begin());
+  _::WireValue<uint32_t>* table =
+      reinterpret_cast<_::WireValue<uint32_t>*>(result.begin());
 
   // We write the segment count - 1 because this makes the first word zero for single-segment
   // messages, improving compression.  We don't bother doing this with segment sizes because
@@ -132,7 +132,7 @@ kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> 
 InputStreamMessageReader::InputStreamMessageReader(
     kj::InputStream& inputStream, ReaderOptions options, kj::ArrayPtr<word> scratchSpace)
     : MessageReader(options), inputStream(inputStream), readPos(nullptr) {
-  internal::WireValue<uint32_t> firstWord[2];
+  _::WireValue<uint32_t> firstWord[2];
 
   inputStream.read(firstWord, sizeof(firstWord));
 
@@ -149,7 +149,7 @@ InputStreamMessageReader::InputStreamMessageReader(
   }
 
   // Read sizes for all segments except the first.  Include padding if necessary.
-  internal::WireValue<uint32_t> moreSizes[segmentCount & ~1];
+  _::WireValue<uint32_t> moreSizes[segmentCount & ~1];
   if (segmentCount > 1) {
     inputStream.read(moreSizes, sizeof(moreSizes));
     for (uint i = 0; i < segmentCount - 1; i++) {
@@ -241,7 +241,7 @@ kj::ArrayPtr<const word> InputStreamMessageReader::getSegment(uint id) {
 void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   KJ_REQUIRE(segments.size() > 0, "Tried to serialize uninitialized message.");
 
-  internal::WireValue<uint32_t> table[(segments.size() + 2) & ~size_t(1)];
+  _::WireValue<uint32_t> table[(segments.size() + 2) & ~size_t(1)];
 
   // We write the segment count - 1 because this makes the first word zero for single-segment
   // messages, improving compression.  We don't bother doing this with segment sizes because

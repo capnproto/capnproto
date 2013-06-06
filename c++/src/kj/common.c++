@@ -25,7 +25,7 @@
 #include "debug.h"
 
 namespace kj {
-namespace internal {
+namespace _ {  // private
 
 void inlineRequireFailure(const char* file, int line, const char* expectation,
                           const char* macroArgs, const char* message) {
@@ -38,5 +38,5 @@ void inlineRequireFailure(const char* file, int line, const char* expectation,
   }
 }
 
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace kj

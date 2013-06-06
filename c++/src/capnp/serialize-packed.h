@@ -28,7 +28,7 @@
 
 namespace capnp {
 
-namespace internal {
+namespace _ {  // private
 
 class PackedInputStream: public kj::InputStream {
   // An input stream that unpacks packed data with a picky constraint:  The caller must read data
@@ -60,9 +60,9 @@ private:
   kj::BufferedOutputStream& inner;
 };
 
-}  // namespace internal
+}  // namespace _ (private)
 
-class PackedMessageReader: private internal::PackedInputStream, public InputStreamMessageReader {
+class PackedMessageReader: private _::PackedInputStream, public InputStreamMessageReader {
 public:
   PackedMessageReader(kj::BufferedInputStream& inputStream, ReaderOptions options = ReaderOptions(),
                       kj::ArrayPtr<word> scratchSpace = nullptr);

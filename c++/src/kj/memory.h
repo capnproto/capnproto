@@ -142,7 +142,7 @@ private:
   friend class Maybe<Own<T>>;
 };
 
-namespace internal {
+namespace _ {  // private
 
 template <typename T>
 Own<T>&& readMaybe(Maybe<Own<T>>&& maybe) { return kj::mv(maybe.ptr); }
@@ -151,7 +151,7 @@ T* readMaybe(Maybe<Own<T>>& maybe) { return maybe.ptr; }
 template <typename T>
 const T* readMaybe(const Maybe<Own<T>>& maybe) { return maybe.ptr; }
 
-}  // namespace internal
+}  // namespace _ (private)
 
 template <typename T>
 class Maybe<Own<T>> {
@@ -200,14 +200,14 @@ private:
   template <typename U>
   friend class Maybe;
   template <typename U>
-  friend Own<U>&& internal::readMaybe(Maybe<Own<U>>&& maybe);
+  friend Own<U>&& _::readMaybe(Maybe<Own<U>>&& maybe);
   template <typename U>
-  friend U* internal::readMaybe(Maybe<Own<U>>& maybe);
+  friend U* _::readMaybe(Maybe<Own<U>>& maybe);
   template <typename U>
-  friend const U* internal::readMaybe(const Maybe<Own<U>>& maybe);
+  friend const U* _::readMaybe(const Maybe<Own<U>>& maybe);
 };
 
-namespace internal {
+namespace _ {  // private
 
 template <typename T>
 class HeapDisposer final: public Disposer {
@@ -220,7 +220,7 @@ public:
 template <typename T>
 const HeapDisposer<T> HeapDisposer<T>::instance = HeapDisposer<T>();
 
-}  // namespace internal
+}  // namespace _ (private)
 
 template <typename T, typename... Params>
 Own<T> heap(Params&&... params) {
@@ -229,7 +229,7 @@ Own<T> heap(Params&&... params) {
   // assume this.  (Since we know the object size at delete time, we could actually implement an
   // allocator that is more efficient than operator new.)
 
-  return Own<T>(new T(kj::fwd<Params>(params)...), internal::HeapDisposer<T>::instance);
+  return Own<T>(new T(kj::fwd<Params>(params)...), _::HeapDisposer<T>::instance);
 }
 
 template <typename T>
@@ -240,7 +240,7 @@ Own<Decay<T>> heap(T&& orig) {
   // one argument and the purpose is to copy it.
 
   typedef Decay<T> T2;
-  return Own<T2>(new T2(kj::fwd<T>(orig)), internal::HeapDisposer<T2>::instance);
+  return Own<T2>(new T2(kj::fwd<T>(orig)), _::HeapDisposer<T2>::instance);
 }
 
 // =======================================================================================

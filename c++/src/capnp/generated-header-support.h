@@ -39,7 +39,7 @@ struct ToDynamic_;   // Defined in dynamic.h, needs to be declared as everyone's
 
 struct DynamicStruct;  // So that it can be declared a friend.
 
-namespace internal {
+namespace _ {  // private
 
 template <typename T>
 struct PointerHelpers<T, Kind::STRUCT> {
@@ -193,10 +193,10 @@ inline kj::String unionString(StructReader reader) {
   return unionString(reader, rawSchema<UnionParentType<T>>(), unionMemberIndex<T>());
 }
 
-}  // namespace internal
+}  // namespace _ (private)
 
 template <typename T>
-inline constexpr uint64_t typeId() { return internal::TypeId_<T>::typeId; }
+inline constexpr uint64_t typeId() { return _::TypeId_<T>::typeId; }
 // typeId<MyType>() returns the type ID as defined in the schema.  Works with structs, enums, and
 // interfaces.
 

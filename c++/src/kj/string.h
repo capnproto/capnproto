@@ -153,7 +153,7 @@ String heapString(ArrayPtr<const char> value);
 // Magic str() function which transforms parameters to text and concatenates them into one big
 // String.
 
-namespace internal {
+namespace _ {  // private
 
 inline size_t sum(std::initializer_list<size_t> nums) {
   size_t result = 0;
@@ -238,10 +238,10 @@ struct Stringifier {
 };
 static constexpr Stringifier STR = Stringifier();
 
-}  // namespace internal
+}  // namespace _ (private)
 
 template <typename T>
-auto toCharSequence(T&& value) -> decltype(internal::STR * kj::fwd<T>(value)) {
+auto toCharSequence(T&& value) -> decltype(_::STR * kj::fwd<T>(value)) {
   // Returns an iterable of chars that represent a textual representation of the value, suitable
   // for debugging.
   //
@@ -250,7 +250,7 @@ auto toCharSequence(T&& value) -> decltype(internal::STR * kj::fwd<T>(value)) {
   //
   // To specialize this function for your type, see KJ_STRINGIFY.
 
-  return internal::STR * kj::fwd<T>(value);
+  return _::STR * kj::fwd<T>(value);
 }
 
 CappedArray<char, sizeof(unsigned short) * 4> hex(unsigned short i);
@@ -266,7 +266,7 @@ String str(Params&&... params) {
   //     "1 / 2 = 0.5"
   // To teach `str` how to stringify a type, see `Stringifier`.
 
-  return internal::concat(toCharSequence(kj::fwd<Params>(params))...);
+  return _::concat(toCharSequence(kj::fwd<Params>(params))...);
 }
 
 inline String str(String&& s) { return mv(s); }
@@ -275,11 +275,11 @@ inline String str(String&& s) { return mv(s); }
 template <typename T>
 String strArray(T&& arr, const char* delim) {
   size_t delimLen = strlen(delim);
-  KJ_STACK_ARRAY(decltype(internal::STR * arr[0]), pieces, arr.size(), 8, 32);
+  KJ_STACK_ARRAY(decltype(_::STR * arr[0]), pieces, arr.size(), 8, 32);
   size_t size = 0;
   for (size_t i = 0; i < arr.size(); i++) {
     if (i > 0) size += delimLen;
-    pieces[i] = internal::STR * arr[i];
+    pieces[i] = _::STR * arr[i];
     size += pieces[i].size();
   }
 
@@ -290,12 +290,12 @@ String strArray(T&& arr, const char* delim) {
       memcpy(pos, delim, delimLen);
       pos += delimLen;
     }
-    pos = internal::fill(pos, pieces[i]);
+    pos = _::fill(pos, pieces[i]);
   }
   return result;
 }
 
-namespace internal {
+namespace _ {  // private
 
 template <typename T>
 inline Array<char> Stringifier::operator*(ArrayPtr<T> arr) const {
@@ -307,9 +307,9 @@ inline Array<char> Stringifier::operator*(const Array<T>& arr) const {
   return strArray(arr, ", ");
 }
 
-}  // namespace internal
+}  // namespace _ (private)
 
-#define KJ_STRINGIFY(...) operator*(::kj::internal::Stringifier, __VA_ARGS__)
+#define KJ_STRINGIFY(...) operator*(::kj::_::Stringifier, __VA_ARGS__)
 // Defines a stringifier for a custom type.  Example:
 //
 //    class Foo {...};

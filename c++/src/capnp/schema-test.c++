@@ -49,7 +49,7 @@
 #include "test-util.h"
 
 namespace capnp {
-namespace internal {
+namespace _ {  // private
 namespace {
 
 TEST(Schema, Structs) {
@@ -266,5 +266,5 @@ TEST(Schema, Lists) {
 }
 
 }  // namespace
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp

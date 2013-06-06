@@ -165,20 +165,20 @@ static String makeDescription(DescriptionStyle style, const char* code, int erro
       case LOG:
         break;
       case ASSERTION:
-        pos = internal::fill(pos, expected, codeArray);
+        pos = _::fill(pos, expected, codeArray);
         break;
       case SYSCALL:
-        pos = internal::fill(pos, codeArray, colon, sysErrorArray);
+        pos = _::fill(pos, codeArray, colon, sysErrorArray);
         break;
     }
     for (size_t i = 0; i < argValues.size(); i++) {
       if (i > 0 || style != LOG) {
-        pos = internal::fill(pos, delim);
+        pos = _::fill(pos, delim);
       }
       if (argNames[i].size() > 0 && argNames[i][0] != '\"') {
-        pos = internal::fill(pos, argNames[i], sep);
+        pos = _::fill(pos, argNames[i], sep);
       }
-      pos = internal::fill(pos, argValues[i]);
+      pos = _::fill(pos, argValues[i]);
     }
 
     return result;

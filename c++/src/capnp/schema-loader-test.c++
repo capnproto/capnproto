@@ -27,7 +27,7 @@
 #include <kj/debug.h>
 
 namespace capnp {
-namespace internal {
+namespace _ {  // private
 namespace {
 
 TEST(SchemaLoader, Load) {
@@ -217,5 +217,5 @@ TEST(SchemaLoader, Enumerate) {
 // TODO(test):  More extensively test upgrade/downgrade checks.
 
 }  // namespace
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp

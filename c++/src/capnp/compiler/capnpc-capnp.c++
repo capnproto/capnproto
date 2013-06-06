@@ -132,7 +132,7 @@ void TextBlob::fill(char* textPos, Branch* branchesPos) {
 
 template <typename First, typename... Rest>
 void TextBlob::fill(char* textPos, Branch* branchesPos, First&& first, Rest&&... rest) {
-  textPos = kj::internal::fill(textPos, kj::fwd<First>(first));
+  textPos = kj::_::fill(textPos, kj::fwd<First>(first));
   fill(textPos, branchesPos, kj::fwd<Rest>(rest)...);
 }
 

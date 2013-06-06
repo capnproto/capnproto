@@ -160,9 +160,9 @@ public:
   DynamicList::Reader as(ListSchema schema) const;
 
 private:
-  internal::ObjectReader reader;
+  _::ObjectReader reader;
 
-  inline DynamicObject(internal::ObjectReader reader): reader(reader) {}
+  inline DynamicObject(_::ObjectReader reader): reader(reader) {}
 
   template <typename T, Kind kind = kind<T>()> struct AsImpl;
   // Implementation backing the as() method.  Needs to be a struct to allow partial
@@ -190,15 +190,15 @@ public:
 
 private:
   StructSchema::Union schema;
-  internal::StructReader reader;
+  _::StructReader reader;
 
-  inline Reader(StructSchema::Union schema, internal::StructReader reader)
+  inline Reader(StructSchema::Union schema, _::StructReader reader)
       : schema(schema), reader(reader) {}
 
   friend struct DynamicStruct;
   friend class DynamicUnion::Builder;
-  friend kj::String internal::unionString(
-      internal::StructReader reader, const internal::RawSchema& schema, uint memberIndex);
+  friend kj::String _::unionString(
+      _::StructReader reader, const _::RawSchema& schema, uint memberIndex);
 };
 
 class DynamicUnion::Builder {
@@ -239,9 +239,9 @@ public:
 
 private:
   StructSchema::Union schema;
-  internal::StructBuilder builder;
+  _::StructBuilder builder;
 
-  inline Builder(StructSchema::Union schema, internal::StructBuilder builder)
+  inline Builder(StructSchema::Union schema, _::StructBuilder builder)
       : schema(schema), builder(builder) {}
 
   StructSchema::Member checkIsObject();
@@ -280,15 +280,15 @@ public:
 
 private:
   StructSchema schema;
-  internal::StructReader reader;
+  _::StructReader reader;
 
-  inline Reader(StructSchema schema, internal::StructReader reader)
+  inline Reader(StructSchema schema, _::StructReader reader)
       : schema(schema), reader(reader) {}
 
-  static DynamicValue::Reader getImpl(internal::StructReader reader, StructSchema::Member member);
+  static DynamicValue::Reader getImpl(_::StructReader reader, StructSchema::Member member);
 
   template <typename T, Kind K>
-  friend struct internal::PointerHelpers;
+  friend struct _::PointerHelpers;
   friend class DynamicUnion::Reader;
   friend class DynamicObject;
   friend class DynamicStruct::Builder;
@@ -297,8 +297,8 @@ private:
   friend class MessageBuilder;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
-  friend kj::String internal::structString(
-      internal::StructReader reader, const internal::RawSchema& schema);
+  friend kj::String _::structString(
+      _::StructReader reader, const _::RawSchema& schema);
 };
 
 class DynamicStruct::Builder {
@@ -361,41 +361,41 @@ public:
 
 private:
   StructSchema schema;
-  internal::StructBuilder builder;
+  _::StructBuilder builder;
 
-  inline Builder(StructSchema schema, internal::StructBuilder builder)
+  inline Builder(StructSchema schema, _::StructBuilder builder)
       : schema(schema), builder(builder) {}
 
   static DynamicValue::Builder getImpl(
-      internal::StructBuilder builder, StructSchema::Member member);
+      _::StructBuilder builder, StructSchema::Member member);
   static DynamicStruct::Builder getObjectImpl(
-      internal::StructBuilder builder, StructSchema::Member field, StructSchema type);
+      _::StructBuilder builder, StructSchema::Member field, StructSchema type);
   static DynamicList::Builder getObjectImpl(
-      internal::StructBuilder builder, StructSchema::Member field, ListSchema type);
+      _::StructBuilder builder, StructSchema::Member field, ListSchema type);
   static Text::Builder getObjectAsTextImpl(
-      internal::StructBuilder builder, StructSchema::Member field);
+      _::StructBuilder builder, StructSchema::Member field);
   static Data::Builder getObjectAsDataImpl(
-      internal::StructBuilder builder, StructSchema::Member field);
+      _::StructBuilder builder, StructSchema::Member field);
 
   static void setImpl(
-      internal::StructBuilder builder, StructSchema::Member member,
+      _::StructBuilder builder, StructSchema::Member member,
       const DynamicValue::Reader& value);
 
   static DynamicValue::Builder initImpl(
-      internal::StructBuilder builder, StructSchema::Member member, uint size);
+      _::StructBuilder builder, StructSchema::Member member, uint size);
   static DynamicValue::Builder initImpl(
-      internal::StructBuilder builder, StructSchema::Member member);
+      _::StructBuilder builder, StructSchema::Member member);
   static DynamicStruct::Builder initFieldImpl(
-      internal::StructBuilder builder, StructSchema::Member field, StructSchema type);
+      _::StructBuilder builder, StructSchema::Member field, StructSchema type);
   static DynamicList::Builder initFieldImpl(
-      internal::StructBuilder builder, StructSchema::Member field, ListSchema type, uint size);
+      _::StructBuilder builder, StructSchema::Member field, ListSchema type, uint size);
   static Text::Builder initFieldAsTextImpl(
-      internal::StructBuilder builder, StructSchema::Member field, uint size);
+      _::StructBuilder builder, StructSchema::Member field, uint size);
   static Data::Builder initFieldAsDataImpl(
-      internal::StructBuilder builder, StructSchema::Member field, uint size);
+      _::StructBuilder builder, StructSchema::Member field, uint size);
 
   template <typename T, Kind k>
-  friend struct internal::PointerHelpers;
+  friend struct _::PointerHelpers;
   friend class DynamicUnion::Builder;
   friend struct DynamicList;
   friend class MessageReader;
@@ -423,18 +423,18 @@ public:
   inline uint size() const { return reader.size() / ELEMENTS; }
   DynamicValue::Reader operator[](uint index) const;
 
-  typedef internal::IndexingIterator<const Reader, DynamicValue::Reader> Iterator;
+  typedef _::IndexingIterator<const Reader, DynamicValue::Reader> Iterator;
   inline Iterator begin() const { return Iterator(this, 0); }
   inline Iterator end() const { return Iterator(this, size()); }
 
 private:
   ListSchema schema;
-  internal::ListReader reader;
+  _::ListReader reader;
 
-  Reader(ListSchema schema, internal::ListReader reader): schema(schema), reader(reader) {}
+  Reader(ListSchema schema, _::ListReader reader): schema(schema), reader(reader) {}
 
   template <typename T, Kind k>
-  friend struct internal::PointerHelpers;
+  friend struct _::PointerHelpers;
   friend struct DynamicStruct;
   friend class DynamicObject;
   friend class DynamicList::Builder;
@@ -461,7 +461,7 @@ public:
   void set(uint index, const DynamicValue::Reader& value);
   DynamicValue::Builder init(uint index, uint size);
 
-  typedef internal::IndexingIterator<Builder, DynamicStruct::Builder> Iterator;
+  typedef _::IndexingIterator<Builder, DynamicStruct::Builder> Iterator;
   inline Iterator begin() { return Iterator(this, 0); }
   inline Iterator end() { return Iterator(this, size()); }
 
@@ -471,12 +471,12 @@ public:
 
 private:
   ListSchema schema;
-  internal::ListBuilder builder;
+  _::ListBuilder builder;
 
-  Builder(ListSchema schema, internal::ListBuilder builder): schema(schema), builder(builder) {}
+  Builder(ListSchema schema, _::ListBuilder builder): schema(schema), builder(builder) {}
 
   template <typename T, Kind k>
-  friend struct internal::PointerHelpers;
+  friend struct _::PointerHelpers;
   friend struct DynamicStruct;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
@@ -657,7 +657,7 @@ DynamicStruct::Builder MessageBuilder::initRoot<DynamicStruct>(StructSchema sche
 template <>
 DynamicStruct::Builder MessageBuilder::getRoot<DynamicStruct>(StructSchema schema);
 
-namespace internal {
+namespace _ {  // private
 
 template <>
 struct PointerHelpers<DynamicStruct, Kind::UNKNOWN> {
@@ -689,7 +689,7 @@ struct PointerHelpers<DynamicList, Kind::UNKNOWN> {
       StructBuilder builder, WirePointerCount index, ListSchema schema, uint size);
 };
 
-}  // namespace internal
+}  // namespace _ (private)
 
 // =======================================================================================
 // Inline implementation details.

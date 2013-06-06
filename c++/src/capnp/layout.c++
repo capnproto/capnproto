@@ -30,7 +30,7 @@
 #include <stdlib.h>
 
 namespace capnp {
-namespace internal {
+namespace _ {  // private
 
 // =======================================================================================
 
@@ -2202,5 +2202,5 @@ ObjectReader ListReader::getObjectElement(ElementCount index) const {
       segment, checkAlignment(ptr + index * step / BITS_PER_BYTE), nullptr, nestingLimit);
 }
 
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp

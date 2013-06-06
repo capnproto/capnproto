@@ -161,7 +161,7 @@ private:
   friend class Array;
 };
 
-namespace internal {
+namespace _ {  // private
 
 class HeapArrayDisposer final: public ArrayDisposer {
 public:
@@ -188,14 +188,14 @@ private:
   struct ExceptionGuard;
 };
 
-}  // namespace internal
+}  // namespace _ (private)
 
 template <typename T>
 inline Array<T> heapArray(size_t size) {
   // Much like `heap<T>()` from memory.h, allocates a new array on the heap.
 
-  return Array<T>(internal::HeapArrayDisposer::allocate<T>(size), size,
-                  internal::HeapArrayDisposer::instance);
+  return Array<T>(_::HeapArrayDisposer::allocate<T>(size), size,
+                  _::HeapArrayDisposer::instance);
 }
 
 template <typename T> Array<T> heapArray(const T* content, size_t size);
@@ -298,7 +298,7 @@ public:
     // Probably we should just create a new Vector-like data structure if we want to allow building
     // of arrays without knowing the final size in advance.
     KJ_IREQUIRE(pos == endPtr, "ArrayBuilder::finish() called prematurely.");
-    Array<T> result(reinterpret_cast<T*>(ptr), pos - ptr, internal::HeapArrayDisposer::instance);
+    Array<T> result(reinterpret_cast<T*>(ptr), pos - ptr, _::HeapArrayDisposer::instance);
     ptr = nullptr;
     pos = nullptr;
     endPtr = nullptr;
@@ -331,8 +331,8 @@ inline ArrayBuilder<T> heapArrayBuilder(size_t size) {
   // Like `heapArray<T>()` but does not default-construct the elements.  You must construct them
   // manually by calling `add()`.
 
-  return ArrayBuilder<T>(internal::HeapArrayDisposer::allocateUninitialized<RemoveConst<T>>(size),
-                         size, internal::HeapArrayDisposer::instance);
+  return ArrayBuilder<T>(_::HeapArrayDisposer::allocateUninitialized<RemoveConst<T>>(size),
+                         size, _::HeapArrayDisposer::instance);
 }
 
 // =======================================================================================
@@ -424,7 +424,7 @@ void ArrayDisposer::dispose(T* firstElement, size_t elementCount, size_t capacit
   Dispose_<T>::dispose(firstElement, elementCount, capacity, *this);
 }
 
-namespace internal {
+namespace _ {  // private
 
 template <typename T>
 struct HeapArrayDisposer::Allocate_<T, true, true> {
@@ -537,12 +537,12 @@ inline T* copyConstructArray(T* dst, Iterator start, Iterator end) {
   return CopyConstructArray_<T, Decay<Iterator>>::apply(dst, start, end);
 }
 
-}  // namespace internal
+}  // namespace _ (private)
 
 template <typename T>
 template <typename Iterator>
 void ArrayBuilder<T>::addAll(Iterator start, Iterator end) {
-  pos = internal::copyConstructArray(pos, start, end);
+  pos = _::copyConstructArray(pos, start, end);
 }
 
 template <typename T>

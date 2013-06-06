@@ -28,12 +28,12 @@
 #include <initializer_list>
 
 namespace capnp {
-namespace internal {
+namespace _ {  // private
 
 template <typename T, Kind k = kind<T>()>
 struct PointerHelpers;
 
-}  // namespace internal
+}  // namespace _ (private)
 
 template <typename T, Kind k = kind<T>()>
 struct List;
@@ -64,7 +64,7 @@ template <typename T> struct TypeIfEnum_<T, Kind::ENUM> { typedef T Type; };
 template <typename T>
 using TypeIfEnum = typename TypeIfEnum_<kj::Decay<T>>::Type;
 
-namespace internal {
+namespace _ {  // private
 
 template <typename T, Kind k> struct Kind_<List<T, k>> { static constexpr Kind kind = Kind::LIST; };
 
@@ -163,7 +163,7 @@ private:
       : container(container), index(index) {}
 };
 
-}  // namespace internal
+}  // namespace _ (private)
 
 template <typename T>
 struct List<T, Kind::PRIMITIVE> {
@@ -176,21 +176,21 @@ struct List<T, Kind::PRIMITIVE> {
     typedef List<T> Reads;
 
     Reader() = default;
-    inline explicit Reader(internal::ListReader reader): reader(reader) {}
+    inline explicit Reader(_::ListReader reader): reader(reader) {}
 
     inline uint size() const { return reader.size() / ELEMENTS; }
     inline T operator[](uint index) const {
       return reader.template getDataElement<T>(index * ELEMENTS);
     }
 
-    typedef internal::IndexingIterator<const Reader, T> Iterator;
+    typedef _::IndexingIterator<const Reader, T> Iterator;
     inline Iterator begin() const { return Iterator(this, 0); }
     inline Iterator end() const { return Iterator(this, size()); }
 
   private:
-    internal::ListReader reader;
+    _::ListReader reader;
     template <typename U, Kind K>
-    friend struct internal::PointerHelpers;
+    friend struct _::PointerHelpers;
     template <typename U, Kind K>
     friend struct List;
   };
@@ -200,7 +200,7 @@ struct List<T, Kind::PRIMITIVE> {
     typedef List<T> Builds;
 
     Builder() = default;
-    inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
+    inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
     inline operator Reader() { return Reader(builder.asReader()); }
     inline Reader asReader() { return Reader(builder.asReader()); }
@@ -219,46 +219,46 @@ struct List<T, Kind::PRIMITIVE> {
       builder.template setDataElement<T>(index * ELEMENTS, value);
     }
 
-    typedef internal::IndexingIterator<Builder, T> Iterator;
+    typedef _::IndexingIterator<Builder, T> Iterator;
     inline Iterator begin() { return Iterator(this, 0); }
     inline Iterator end() { return Iterator(this, size()); }
 
   private:
-    internal::ListBuilder builder;
+    _::ListBuilder builder;
   };
 
 private:
-  inline static internal::ListBuilder initAsElementOf(
-      internal::ListBuilder& builder, uint index, uint size) {
+  inline static _::ListBuilder initAsElementOf(
+      _::ListBuilder& builder, uint index, uint size) {
     return builder.initListElement(
-        index * ELEMENTS, internal::FieldSizeForType<T>::value, size * ELEMENTS);
+        index * ELEMENTS, _::FieldSizeForType<T>::value, size * ELEMENTS);
   }
-  inline static internal::ListBuilder getAsElementOf(
-      internal::ListBuilder& builder, uint index) {
-    return builder.getListElement(index * ELEMENTS, internal::FieldSizeForType<T>::value);
+  inline static _::ListBuilder getAsElementOf(
+      _::ListBuilder& builder, uint index) {
+    return builder.getListElement(index * ELEMENTS, _::FieldSizeForType<T>::value);
   }
-  inline static internal::ListReader getAsElementOf(
-      const internal::ListReader& reader, uint index) {
-    return reader.getListElement(index * ELEMENTS, internal::FieldSizeForType<T>::value);
+  inline static _::ListReader getAsElementOf(
+      const _::ListReader& reader, uint index) {
+    return reader.getListElement(index * ELEMENTS, _::FieldSizeForType<T>::value);
   }
 
-  inline static internal::ListBuilder initAsFieldOf(
-      internal::StructBuilder& builder, WirePointerCount index, uint size) {
-    return builder.initListField(index, internal::FieldSizeForType<T>::value, size * ELEMENTS);
+  inline static _::ListBuilder initAsFieldOf(
+      _::StructBuilder& builder, WirePointerCount index, uint size) {
+    return builder.initListField(index, _::FieldSizeForType<T>::value, size * ELEMENTS);
   }
-  inline static internal::ListBuilder getAsFieldOf(
-      internal::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
-    return builder.getListField(index, internal::FieldSizeForType<T>::value, defaultValue);
+  inline static _::ListBuilder getAsFieldOf(
+      _::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
+    return builder.getListField(index, _::FieldSizeForType<T>::value, defaultValue);
   }
-  inline static internal::ListReader getAsFieldOf(
-      const internal::StructReader& reader, WirePointerCount index, const word* defaultValue) {
-    return reader.getListField(index, internal::FieldSizeForType<T>::value, defaultValue);
+  inline static _::ListReader getAsFieldOf(
+      const _::StructReader& reader, WirePointerCount index, const word* defaultValue) {
+    return reader.getListField(index, _::FieldSizeForType<T>::value, defaultValue);
   }
 
   template <typename U, Kind k>
   friend struct List;
   template <typename U, Kind K>
-  friend struct internal::PointerHelpers;
+  friend struct _::PointerHelpers;
 };
 
 template <typename T>
@@ -275,21 +275,21 @@ struct List<T, Kind::STRUCT> {
     typedef List<T> Reads;
 
     Reader() = default;
-    inline explicit Reader(internal::ListReader reader): reader(reader) {}
+    inline explicit Reader(_::ListReader reader): reader(reader) {}
 
     inline uint size() const { return reader.size() / ELEMENTS; }
     inline typename T::Reader operator[](uint index) const {
       return typename T::Reader(reader.getStructElement(index * ELEMENTS));
     }
 
-    typedef internal::IndexingIterator<const Reader, typename T::Reader> Iterator;
+    typedef _::IndexingIterator<const Reader, typename T::Reader> Iterator;
     inline Iterator begin() const { return Iterator(this, 0); }
     inline Iterator end() const { return Iterator(this, size()); }
 
   private:
-    internal::ListReader reader;
+    _::ListReader reader;
     template <typename U, Kind K>
-    friend struct internal::PointerHelpers;
+    friend struct _::PointerHelpers;
     template <typename U, Kind K>
     friend struct List;
   };
@@ -299,7 +299,7 @@ struct List<T, Kind::STRUCT> {
     typedef List<T> Builds;
 
     Builder() = default;
-    inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
+    inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
     inline operator Reader() { return Reader(builder.asReader()); }
     inline Reader asReader() { return Reader(builder.asReader()); }
@@ -314,46 +314,46 @@ struct List<T, Kind::STRUCT> {
     // be redundant, and set() would risk data loss if the input struct were from a newer version
     // of teh protocol.
 
-    typedef internal::IndexingIterator<Builder, typename T::Builder> Iterator;
+    typedef _::IndexingIterator<Builder, typename T::Builder> Iterator;
     inline Iterator begin() { return Iterator(this, 0); }
     inline Iterator end() { return Iterator(this, size()); }
 
   private:
-    internal::ListBuilder builder;
+    _::ListBuilder builder;
   };
 
 private:
-  inline static internal::ListBuilder initAsElementOf(
-      internal::ListBuilder& builder, uint index, uint size) {
+  inline static _::ListBuilder initAsElementOf(
+      _::ListBuilder& builder, uint index, uint size) {
     return builder.initStructListElement(
-        index * ELEMENTS, size * ELEMENTS, internal::structSize<T>());
+        index * ELEMENTS, size * ELEMENTS, _::structSize<T>());
   }
-  inline static internal::ListBuilder getAsElementOf(
-      internal::ListBuilder& builder, uint index) {
-    return builder.getStructListElement(index * ELEMENTS, internal::structSize<T>());
+  inline static _::ListBuilder getAsElementOf(
+      _::ListBuilder& builder, uint index) {
+    return builder.getStructListElement(index * ELEMENTS, _::structSize<T>());
   }
-  inline static internal::ListReader getAsElementOf(
-      const internal::ListReader& reader, uint index) {
-    return reader.getListElement(index * ELEMENTS, internal::FieldSize::INLINE_COMPOSITE);
+  inline static _::ListReader getAsElementOf(
+      const _::ListReader& reader, uint index) {
+    return reader.getListElement(index * ELEMENTS, _::FieldSize::INLINE_COMPOSITE);
   }
 
-  inline static internal::ListBuilder initAsFieldOf(
-      internal::StructBuilder& builder, WirePointerCount index, uint size) {
-    return builder.initStructListField(index, size * ELEMENTS, internal::structSize<T>());
+  inline static _::ListBuilder initAsFieldOf(
+      _::StructBuilder& builder, WirePointerCount index, uint size) {
+    return builder.initStructListField(index, size * ELEMENTS, _::structSize<T>());
   }
-  inline static internal::ListBuilder getAsFieldOf(
-      internal::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
-    return builder.getStructListField(index, internal::structSize<T>(), defaultValue);
+  inline static _::ListBuilder getAsFieldOf(
+      _::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
+    return builder.getStructListField(index, _::structSize<T>(), defaultValue);
   }
-  inline static internal::ListReader getAsFieldOf(
-      const internal::StructReader& reader, WirePointerCount index, const word* defaultValue) {
-    return reader.getListField(index, internal::FieldSize::INLINE_COMPOSITE, defaultValue);
+  inline static _::ListReader getAsFieldOf(
+      const _::StructReader& reader, WirePointerCount index, const word* defaultValue) {
+    return reader.getListField(index, _::FieldSize::INLINE_COMPOSITE, defaultValue);
   }
 
   template <typename U, Kind k>
   friend struct List;
   template <typename U, Kind K>
-  friend struct internal::PointerHelpers;
+  friend struct _::PointerHelpers;
 };
 
 template <typename T>
@@ -367,21 +367,21 @@ struct List<List<T>, Kind::LIST> {
     typedef List<List<T>> Reads;
 
     Reader() = default;
-    inline explicit Reader(internal::ListReader reader): reader(reader) {}
+    inline explicit Reader(_::ListReader reader): reader(reader) {}
 
     inline uint size() const { return reader.size() / ELEMENTS; }
     inline typename List<T>::Reader operator[](uint index) const {
       return typename List<T>::Reader(List<T>::getAsElementOf(reader, index));
     }
 
-    typedef internal::IndexingIterator<const Reader, typename List<T>::Reader> Iterator;
+    typedef _::IndexingIterator<const Reader, typename List<T>::Reader> Iterator;
     inline Iterator begin() const { return Iterator(this, 0); }
     inline Iterator end() const { return Iterator(this, size()); }
 
   private:
-    internal::ListReader reader;
+    _::ListReader reader;
     template <typename U, Kind K>
-    friend struct internal::PointerHelpers;
+    friend struct _::PointerHelpers;
     template <typename U, Kind K>
     friend struct List;
   };
@@ -391,7 +391,7 @@ struct List<List<T>, Kind::LIST> {
     typedef List<List<T>> Builds;
 
     Builder() = default;
-    inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
+    inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
     inline operator Reader() { return Reader(builder.asReader()); }
     inline Reader asReader() { return Reader(builder.asReader()); }
@@ -414,46 +414,46 @@ struct List<List<T>, Kind::LIST> {
       }
     }
 
-    typedef internal::IndexingIterator<Builder, typename List<T>::Builder> Iterator;
+    typedef _::IndexingIterator<Builder, typename List<T>::Builder> Iterator;
     inline Iterator begin() { return Iterator(this, 0); }
     inline Iterator end() { return Iterator(this, size()); }
 
   private:
-    internal::ListBuilder builder;
+    _::ListBuilder builder;
   };
 
 private:
-  inline static internal::ListBuilder initAsElementOf(
-      internal::ListBuilder& builder, uint index, uint size) {
+  inline static _::ListBuilder initAsElementOf(
+      _::ListBuilder& builder, uint index, uint size) {
     return builder.initListElement(
-        index * ELEMENTS, internal::FieldSize::POINTER, size * ELEMENTS);
+        index * ELEMENTS, _::FieldSize::POINTER, size * ELEMENTS);
   }
-  inline static internal::ListBuilder getAsElementOf(
-      internal::ListBuilder& builder, uint index) {
-    return builder.getListElement(index * ELEMENTS, internal::FieldSize::POINTER);
+  inline static _::ListBuilder getAsElementOf(
+      _::ListBuilder& builder, uint index) {
+    return builder.getListElement(index * ELEMENTS, _::FieldSize::POINTER);
   }
-  inline static internal::ListReader getAsElementOf(
-      const internal::ListReader& reader, uint index) {
-    return reader.getListElement(index * ELEMENTS, internal::FieldSize::POINTER);
+  inline static _::ListReader getAsElementOf(
+      const _::ListReader& reader, uint index) {
+    return reader.getListElement(index * ELEMENTS, _::FieldSize::POINTER);
   }
 
-  inline static internal::ListBuilder initAsFieldOf(
-      internal::StructBuilder& builder, WirePointerCount index, uint size) {
-    return builder.initListField(index, internal::FieldSize::POINTER, size * ELEMENTS);
+  inline static _::ListBuilder initAsFieldOf(
+      _::StructBuilder& builder, WirePointerCount index, uint size) {
+    return builder.initListField(index, _::FieldSize::POINTER, size * ELEMENTS);
   }
-  inline static internal::ListBuilder getAsFieldOf(
-      internal::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
-    return builder.getListField(index, internal::FieldSize::POINTER, defaultValue);
+  inline static _::ListBuilder getAsFieldOf(
+      _::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
+    return builder.getListField(index, _::FieldSize::POINTER, defaultValue);
   }
-  inline static internal::ListReader getAsFieldOf(
-      const internal::StructReader& reader, WirePointerCount index, const word* defaultValue) {
-    return reader.getListField(index, internal::FieldSize::POINTER, defaultValue);
+  inline static _::ListReader getAsFieldOf(
+      const _::StructReader& reader, WirePointerCount index, const word* defaultValue) {
+    return reader.getListField(index, _::FieldSize::POINTER, defaultValue);
   }
 
   template <typename U, Kind k>
   friend struct List;
   template <typename U, Kind K>
-  friend struct internal::PointerHelpers;
+  friend struct _::PointerHelpers;
 };
 
 template <typename T>
@@ -465,21 +465,21 @@ struct List<T, Kind::BLOB> {
     typedef List<T> Reads;
 
     Reader() = default;
-    inline explicit Reader(internal::ListReader reader): reader(reader) {}
+    inline explicit Reader(_::ListReader reader): reader(reader) {}
 
     inline uint size() const { return reader.size() / ELEMENTS; }
     inline typename T::Reader operator[](uint index) const {
       return reader.getBlobElement<T>(index * ELEMENTS);
     }
 
-    typedef internal::IndexingIterator<const Reader, typename T::Reader> Iterator;
+    typedef _::IndexingIterator<const Reader, typename T::Reader> Iterator;
     inline Iterator begin() const { return Iterator(this, 0); }
     inline Iterator end() const { return Iterator(this, size()); }
 
   private:
-    internal::ListReader reader;
+    _::ListReader reader;
     template <typename U, Kind K>
-    friend struct internal::PointerHelpers;
+    friend struct _::PointerHelpers;
     template <typename U, Kind K>
     friend struct List;
   };
@@ -489,7 +489,7 @@ struct List<T, Kind::BLOB> {
     typedef List<T> Builds;
 
     Builder() = default;
-    inline explicit Builder(internal::ListBuilder builder): builder(builder) {}
+    inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
     inline operator Reader() { return Reader(builder.asReader()); }
     inline Reader asReader() { return Reader(builder.asReader()); }
@@ -505,46 +505,46 @@ struct List<T, Kind::BLOB> {
       return builder.initBlobElement<T>(index * ELEMENTS, size * BYTES);
     }
 
-    typedef internal::IndexingIterator<Builder, typename T::Builder> Iterator;
+    typedef _::IndexingIterator<Builder, typename T::Builder> Iterator;
     inline Iterator begin() { return Iterator(this, 0); }
     inline Iterator end() { return Iterator(this, size()); }
 
   private:
-    internal::ListBuilder builder;
+    _::ListBuilder builder;
   };
 
 private:
-  inline static internal::ListBuilder initAsElementOf(
-      internal::ListBuilder& builder, uint index, uint size) {
+  inline static _::ListBuilder initAsElementOf(
+      _::ListBuilder& builder, uint index, uint size) {
     return builder.initListElement(
-        index * ELEMENTS, internal::FieldSize::POINTER, size * ELEMENTS);
+        index * ELEMENTS, _::FieldSize::POINTER, size * ELEMENTS);
   }
-  inline static internal::ListBuilder getAsElementOf(
-      internal::ListBuilder& builder, uint index) {
-    return builder.getListElement(index * ELEMENTS, internal::FieldSize::POINTER);
+  inline static _::ListBuilder getAsElementOf(
+      _::ListBuilder& builder, uint index) {
+    return builder.getListElement(index * ELEMENTS, _::FieldSize::POINTER);
   }
-  inline static internal::ListReader getAsElementOf(
-      const internal::ListReader& reader, uint index) {
-    return reader.getListElement(index * ELEMENTS, internal::FieldSize::POINTER);
+  inline static _::ListReader getAsElementOf(
+      const _::ListReader& reader, uint index) {
+    return reader.getListElement(index * ELEMENTS, _::FieldSize::POINTER);
   }
 
-  inline static internal::ListBuilder initAsFieldOf(
-      internal::StructBuilder& builder, WirePointerCount index, uint size) {
-    return builder.initListField(index, internal::FieldSize::POINTER, size * ELEMENTS);
+  inline static _::ListBuilder initAsFieldOf(
+      _::StructBuilder& builder, WirePointerCount index, uint size) {
+    return builder.initListField(index, _::FieldSize::POINTER, size * ELEMENTS);
   }
-  inline static internal::ListBuilder getAsFieldOf(
-      internal::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
-    return builder.getListField(index, internal::FieldSize::POINTER, defaultValue);
+  inline static _::ListBuilder getAsFieldOf(
+      _::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
+    return builder.getListField(index, _::FieldSize::POINTER, defaultValue);
   }
-  inline static internal::ListReader getAsFieldOf(
-      const internal::StructReader& reader, WirePointerCount index, const word* defaultValue) {
-    return reader.getListField(index, internal::FieldSize::POINTER, defaultValue);
+  inline static _::ListReader getAsFieldOf(
+      const _::StructReader& reader, WirePointerCount index, const word* defaultValue) {
+    return reader.getListField(index, _::FieldSize::POINTER, defaultValue);
   }
 
   template <typename U, Kind k>
   friend struct List;
   template <typename U, Kind K>
-  friend struct internal::PointerHelpers;
+  friend struct _::PointerHelpers;
 };
 
 }  // namespace capnp

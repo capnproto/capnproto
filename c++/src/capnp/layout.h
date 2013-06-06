@@ -36,7 +36,7 @@
 #include "blob.h"
 
 namespace capnp {
-namespace internal {
+namespace _ {  // private
 
 class StructBuilder;
 class StructReader;
@@ -112,14 +112,14 @@ static constexpr BitsPerElement BITS_PER_ELEMENT_TABLE[8] = {
 };
 
 inline constexpr BitsPerElement dataBitsPerElement(FieldSize size) {
-  return internal::BITS_PER_ELEMENT_TABLE[static_cast<int>(size)];
+  return _::BITS_PER_ELEMENT_TABLE[static_cast<int>(size)];
 }
 
 inline constexpr PointersPerElement pointersPerElement(FieldSize size) {
   return size == FieldSize::POINTER ? 1 * POINTERS / ELEMENTS : 0 * POINTERS / ELEMENTS;
 }
 
-}  // namespace internal
+}  // namespace _ (private)
 
 enum class Kind: uint8_t {
   PRIMITIVE,
@@ -132,7 +132,7 @@ enum class Kind: uint8_t {
   UNKNOWN
 };
 
-namespace internal {
+namespace _ {  // private
 
 template <typename T> struct Kind_ { static constexpr Kind kind = Kind::UNKNOWN; };
 
@@ -151,16 +151,16 @@ template <> struct Kind_<double> { static constexpr Kind kind = Kind::PRIMITIVE;
 template <> struct Kind_<Text> { static constexpr Kind kind = Kind::BLOB; };
 template <> struct Kind_<Data> { static constexpr Kind kind = Kind::BLOB; };
 
-}  // namespace internal
+}  // namespace _ (private)
 
 template <typename T>
 inline constexpr Kind kind() {
-  return internal::Kind_<T>::kind;
+  return _::Kind_<T>::kind;
 }
 
 // =============================================================================
 
-namespace internal {
+namespace _ {  // private
 
 template <int wordCount>
 union AlignedData {
@@ -891,7 +891,7 @@ template <> void ListBuilder::setBlobElement<Data>(ElementCount index, typename 
 template <> typename Data::Builder ListBuilder::getBlobElement<Data>(ElementCount index);
 template <> typename Data::Reader ListReader::getBlobElement<Data>(ElementCount index) const;
 
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp
 
 #endif  // CAPNP_LAYOUT_H_

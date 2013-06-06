@@ -32,7 +32,7 @@
 #include <exception>
 
 namespace kj {
-namespace internal {
+namespace _ {  // private
 namespace {
 
 class MockException {};
@@ -254,5 +254,5 @@ TEST(Logging, ExceptionCallbackMustBeOnStack) {
 }
 
 }  // namespace
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace kj

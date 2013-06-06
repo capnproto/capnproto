@@ -27,7 +27,7 @@ namespace kj {
 
 ArrayDisposer::~ArrayDisposer() {}
 
-namespace internal {
+namespace _ {  // private
 
 struct HeapArrayDisposer::ExceptionGuard {
   byte* pos;
@@ -103,5 +103,5 @@ void HeapArrayDisposer::disposeImpl(
 
 const HeapArrayDisposer HeapArrayDisposer::instance = HeapArrayDisposer();
 
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace kj

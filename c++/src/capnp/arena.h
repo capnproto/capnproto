@@ -35,7 +35,7 @@
 #include "message.h"
 
 namespace capnp {
-namespace internal {
+namespace _ {  // private
 
 class SegmentReader;
 class SegmentBuilder;
@@ -295,7 +295,7 @@ inline void SegmentBuilder::reset() {
   pos = start;
 }
 
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp
 
 #endif  // CAPNP_ARENA_H_

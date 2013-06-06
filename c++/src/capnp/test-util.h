@@ -47,7 +47,7 @@ inline std::ostream& operator<<(std::ostream& os, Void) {
   return os << "void";
 }
 
-namespace internal {
+namespace _ {  // private
 
 inline Data::Reader data(const char* str) {
   return Data::Reader(reinterpret_cast<const byte*>(str), strlen(str));
@@ -90,7 +90,7 @@ void checkDynamicTestLists(DynamicStruct::Reader reader);
 void checkDynamicTestMessageAllZero(DynamicStruct::Builder builder);
 void checkDynamicTestMessageAllZero(DynamicStruct::Reader reader);
 
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp
 
 #endif  // TEST_UTIL_H_

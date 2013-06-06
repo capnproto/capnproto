@@ -30,7 +30,7 @@
 #include "test-util.h"
 
 namespace capnp {
-namespace internal {
+namespace _ {  // private
 namespace {
 
 class TestPipe: public kj::BufferedInputStream, public kj::OutputStream {
@@ -566,5 +566,5 @@ TEST(Packed, RoundTripHugeStringEvenSegmentCountLazy) {
 // TODO(test):  Test error cases.
 
 }  // namespace
-}  // namespace internal
+}  // namespace _ (private)
 }  // namespace capnp
