@@ -51,16 +51,6 @@ class SegmentBuilder;
 
 // =============================================================================
 
-struct DisallowConstCopy {
-  DisallowConstCopy() = default;
-  DisallowConstCopy(DisallowConstCopy&);
-  DisallowConstCopy(DisallowConstCopy&&) = default;
-  DisallowConstCopy& operator=(DisallowConstCopy&);
-  DisallowConstCopy& operator=(DisallowConstCopy&&) = default;
-};
-inline DisallowConstCopy::DisallowConstCopy(DisallowConstCopy&) = default;
-inline DisallowConstCopy& DisallowConstCopy::operator=(DisallowConstCopy&) = default;
-
 enum class FieldSize: uint8_t {
   // TODO(cleanup):  Rename to FieldLayout or maybe ValueLayout.
 
@@ -300,7 +290,7 @@ private:
   T value;
 };
 
-class StructBuilder: public DisallowConstCopy {
+class StructBuilder: public kj::DisallowConstCopy {
 public:
   inline StructBuilder(): segment(nullptr), data(nullptr), pointers(nullptr), bit0Offset(0) {}
 
@@ -520,7 +510,7 @@ private:
 
 // -------------------------------------------------------------------
 
-class ListBuilder: public DisallowConstCopy {
+class ListBuilder: public kj::DisallowConstCopy {
 public:
   inline ListBuilder()
       : segment(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),

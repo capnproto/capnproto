@@ -86,12 +86,12 @@ public:
   inline Builder(decltype(nullptr)): ArrayPtr<byte>(nullptr) {}
   inline Builder(byte* value, size_t size): ArrayPtr<byte>(value, size) {}
   inline Builder(kj::Array<byte>& value): ArrayPtr<byte>(value) {}
-  inline Builder(const ArrayPtr<byte>& value): ArrayPtr<byte>(value) {}
+  inline Builder(ArrayPtr<byte>& value): ArrayPtr<byte>(value) {}
 
   inline Data::Reader asReader() const { return Data::Reader(*this); }
 };
 
-class Text::Builder {
+class Text::Builder: public kj::DisallowConstCopy {
   // Basically identical to kj::StringPtr, except that the contents are non-const.
 
 public:
@@ -104,8 +104,10 @@ public:
 
   inline Reader asReader() const { return Reader(content.begin(), content.size()); }
 
-  inline operator kj::ArrayPtr<char>() const;
-  inline kj::ArrayPtr<char> asArray() const;
+  inline operator kj::ArrayPtr<char>();
+  inline kj::ArrayPtr<char> asArray();
+  inline operator kj::ArrayPtr<const char>() const;
+  inline kj::ArrayPtr<const char> asArray() const;
   // Result does not include NUL terminator.
 
   inline operator kj::StringPtr() const;
@@ -119,8 +121,10 @@ public:
 
   inline char operator[](size_t index) const { return content[index]; }
 
-  inline char* begin() const { return content.begin(); }
-  inline char* end() const { return content.end() - 1; }
+  inline char* begin() { return content.begin(); }
+  inline char* end() { return content.end() - 1; }
+  inline const char* begin() const { return content.begin(); }
+  inline const char* end() const { return content.end() - 1; }
 
   inline bool operator==(decltype(nullptr)) const { return content.size() <= 1; }
   inline bool operator!=(decltype(nullptr)) const { return content.size() > 1; }
@@ -132,8 +136,10 @@ public:
   inline bool operator<=(Builder other) const { return asString() <= other.asString(); }
   inline bool operator>=(Builder other) const { return asString() >= other.asString(); }
 
-  inline Builder slice(size_t start) const;
-  inline kj::ArrayPtr<char> slice(size_t start, size_t end) const;
+  inline kj::StringPtr slice(size_t start) const;
+  inline kj::ArrayPtr<const char> slice(size_t start, size_t end) const;
+  inline Builder slice(size_t start);
+  inline kj::ArrayPtr<char> slice(size_t start, size_t end);
   // A string slice is only NUL-terminated if it is a suffix, so slice() has a one-parameter
   // version that assumes end = size().
 
@@ -160,18 +166,33 @@ inline kj::StringPtr Text::Builder::asString() const {
   return kj::StringPtr(content.begin(), content.size() - 1);
 }
 
-inline Text::Builder::operator kj::ArrayPtr<char>() const {
+inline Text::Builder::operator kj::ArrayPtr<char>() {
   return content.slice(0, content.size() - 1);
 }
 
-inline kj::ArrayPtr<char> Text::Builder::asArray() const {
+inline kj::ArrayPtr<char> Text::Builder::asArray() {
   return content.slice(0, content.size() - 1);
 }
 
-inline Text::Builder Text::Builder::slice(size_t start) const {
+inline Text::Builder::operator kj::ArrayPtr<const char>() const {
+  return content.slice(0, content.size() - 1);
+}
+
+inline kj::ArrayPtr<const char> Text::Builder::asArray() const {
+  return content.slice(0, content.size() - 1);
+}
+
+inline kj::StringPtr Text::Builder::slice(size_t start) const {
+  return asReader().slice(start);
+}
+inline kj::ArrayPtr<const char> Text::Builder::slice(size_t start, size_t end) const {
+  return content.slice(start, end);
+}
+
+inline Text::Builder Text::Builder::slice(size_t start) {
   return Text::Builder(content.slice(start, content.size()));
 }
-inline kj::ArrayPtr<char> Text::Builder::slice(size_t start, size_t end) const {
+inline kj::ArrayPtr<char> Text::Builder::slice(size_t start, size_t end) {
   return content.slice(start, end);
 }
 

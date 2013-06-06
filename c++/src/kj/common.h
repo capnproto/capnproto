@@ -202,6 +202,56 @@ T instance() noexcept;
 // Like std::declval, but doesn't transform T into an rvalue reference.  If you want that, specify
 // instance<T&&>().
 
+struct DisallowConstCopy {
+  // Inherit from this, or declare a member variable of this type, to prevent the class from being
+  // copyable from a const reference -- instead, it will only be copyable from non-const references.
+  // This is useful for enforcing transitive constness of contained pointers.
+  //
+  // For example, say you have a type T which contains a pointer.  T has non-const methods which
+  // modify the value at that pointer, but T's const methods are designed to allow reading only.
+  // Unfortunately, if T has a regular copy constructor, someone can simply make a copy of T and
+  // then use it to modify the pointed-to value.  However, if T inherits DisallowConstCopy, then
+  // callers will only be able to copy non-const instances of T.  Ideally, there is some
+  // parallel type ImmutableT which is like a version of T that only has const methods, and can
+  // be copied from a const T.
+  //
+  // Note that due to C++ rules about implicit copy constructors and assignment operators, any
+  // type that contains or inherits from a type that disallows const copies will also automatically
+  // disallow const copies.  Hey, cool, that's exactly what we want.
+
+  DisallowConstCopy() = default;
+  DisallowConstCopy(DisallowConstCopy&);
+  DisallowConstCopy(DisallowConstCopy&&) = default;
+  DisallowConstCopy& operator=(DisallowConstCopy&);
+  DisallowConstCopy& operator=(DisallowConstCopy&&) = default;
+};
+
+// Apparently these cannot be defaulted inside the class due to some obscure C++ rule.
+inline DisallowConstCopy::DisallowConstCopy(DisallowConstCopy&) = default;
+inline DisallowConstCopy& DisallowConstCopy::operator=(DisallowConstCopy&) = default;
+
+template <typename T>
+struct DisallowConstCopyIfNotConst: public DisallowConstCopy {
+  // Inherit from this when implementing a template that contains a pointer to T and which should
+  // enforce transitive constness.  If T is a const type, this has no effect.  Otherwise, it is
+  // an alias for DisallowConstCopy.
+};
+
+template <typename T>
+struct DisallowConstCopyIfNotConst<const T> {};
+
+template <typename T> struct EnableIfNotConst_ { typedef T Type; };
+template <typename T> struct EnableIfNotConst_<const T>;
+template <typename T> using EnableIfNotConst = typename EnableIfNotConst_<T>::Type;
+
+template <typename T> struct EnableIfConst_;
+template <typename T> struct EnableIfConst_<const T> { typedef T Type; };
+template <typename T> using EnableIfConst = typename EnableIfConst_<T>::Type;
+
+template <typename T, typename U> struct EnableIfDifferent_ { typedef int Type; };
+template <typename T> struct EnableIfDifferent_<T, T> {};
+template <typename T, typename U> using EnableIfDifferent = typename EnableIfDifferent_<T, U>::Type;
+
 // =======================================================================================
 // Equivalents to std::move() and std::forward(), since these are very commonly needed and the
 // std header <utility> pulls in lots of other stuff.
@@ -428,8 +478,6 @@ public:
 
   Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
 
-  ~Maybe() noexcept {}
-
   inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
   inline Maybe& operator=(const Maybe& other) { ptr = other.ptr; return *this; }
 
@@ -471,19 +519,24 @@ private:
 };
 
 template <typename T>
-class Maybe<T&> {
+class Maybe<T&>: public DisallowConstCopyIfNotConst<T> {
 public:
-  Maybe(): ptr(nullptr) {}
+  Maybe() noexcept: ptr(nullptr) {}
   Maybe(T& t) noexcept: ptr(&t) {}
   Maybe(T* t) noexcept: ptr(t) {}
-  Maybe(const Maybe& other) noexcept: ptr(other.ptr) {}
+
   template <typename U>
-  Maybe(const Maybe<U&>& other): ptr(other.ptr) {}
-  Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
+  inline Maybe(Maybe<U&>& other) noexcept: ptr(other.ptr) {}
+  template <typename U>
+  inline Maybe(const Maybe<const U&>& other) noexcept: ptr(other.ptr) {}
+  inline Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
 
-  ~Maybe() noexcept {}
-
-  inline Maybe& operator=(const Maybe& other) { ptr = other.ptr; return *this; }
+  inline Maybe& operator=(T& other) noexcept { ptr = &other; }
+  inline Maybe& operator=(T* other) noexcept { ptr = other; }
+  template <typename U>
+  inline Maybe& operator=(Maybe<U&>& other) noexcept { ptr = other.ptr; return *this; }
+  template <typename U>
+  inline Maybe& operator=(const Maybe<const U&>& other) noexcept { ptr = other.ptr; return *this; }
 
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
@@ -508,14 +561,13 @@ private:
   friend U* internal::readMaybe(const Maybe<U&>& maybe);
 };
 
-
 // =======================================================================================
 // ArrayPtr
 //
 // So common that we put it in common.h rather than array.h.
 
 template <typename T>
-class ArrayPtr {
+class ArrayPtr: public DisallowConstCopyIfNotConst<T> {
   // A pointer to an array.  Includes a size.  Like any pointer, it doesn't own the target data,
   // and passing by value only copies the pointer, not the target.
 
@@ -533,23 +585,35 @@ public:
   }
 
   inline size_t size() const { return size_; }
-  inline T& operator[](size_t index) const {
+  inline const T& operator[](size_t index) const {
+    KJ_IREQUIRE(index < size_, "Out-of-bounds ArrayPtr access.");
+    return ptr[index];
+  }
+  inline T& operator[](size_t index) {
     KJ_IREQUIRE(index < size_, "Out-of-bounds ArrayPtr access.");
     return ptr[index];
   }
 
-  inline T* begin() const { return ptr; }
-  inline T* end() const { return ptr + size_; }
-  inline T& front() const { return *ptr; }
-  inline T& back() const { return *(ptr + size_ - 1); }
+  inline T* begin() { return ptr; }
+  inline T* end() { return ptr + size_; }
+  inline T& front() { return *ptr; }
+  inline T& back() { return *(ptr + size_ - 1); }
+  inline const T* begin() const { return ptr; }
+  inline const T* end() const { return ptr + size_; }
+  inline const T& front() const { return *ptr; }
+  inline const T& back() const { return *(ptr + size_ - 1); }
 
-  inline ArrayPtr slice(size_t start, size_t end) const {
+  inline ArrayPtr<const T> slice(size_t start, size_t end) const {
+    KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
+    return ArrayPtr<const T>(ptr + start, end - start);
+  }
+  inline ArrayPtr slice(size_t start, size_t end) {
     KJ_IREQUIRE(start <= end && end <= size_, "Out-of-bounds ArrayPtr::slice().");
     return ArrayPtr(ptr + start, end - start);
   }
 
-  inline bool operator==(decltype(nullptr)) { return size_ == 0; }
-  inline bool operator!=(decltype(nullptr)) { return size_ != 0; }
+  inline bool operator==(decltype(nullptr)) const { return size_ == 0; }
+  inline bool operator!=(decltype(nullptr)) const { return size_ != 0; }
 
   inline bool operator==(const ArrayPtr& other) const {
     if (size_ != other.size_) return false;

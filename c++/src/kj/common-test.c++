@@ -152,6 +152,23 @@ TEST(Common, Maybe) {
   }
 }
 
+TEST(Common, MaybeConstness) {
+  int i;
+
+  Maybe<int&> mi = i;
+  const Maybe<int&> cmi = mi;
+//  const Maybe<int&> cmi2 = cmi;    // shouldn't compile!  Transitive const violation.
+  Maybe<const int&> mci = mi;
+  const Maybe<const int&> cmci = mci;
+  const Maybe<const int&> cmci2 = cmci;
+
+  KJ_IF_MAYBE(i2, cmci2) {
+    EXPECT_EQ(&i, i2);
+  } else {
+    ADD_FAILURE();
+  }
+}
+
 class Foo {
 public:
   virtual ~Foo() {}
