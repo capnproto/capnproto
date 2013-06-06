@@ -158,25 +158,25 @@ struct RawSchema {
 };
 
 template <typename T>
-struct RawSchemaFor;
+struct RawSchema_;
 
 template <typename T>
 inline const RawSchema& rawSchema() {
-  return RawSchemaFor<T>::getSchema();
+  return RawSchema_<T>::get();
 }
 
 template <typename T>
-struct TypeIdFor;
+struct TypeId_;
 
 template <typename T>
-struct UnionMemberIndexFor;
+struct UnionMemberIndex_;
 template <typename T>
-inline uint unionMemberIndex() { return UnionMemberIndexFor<T>::value; }
+inline uint unionMemberIndex() { return UnionMemberIndex_<T>::value; }
 
 template <typename T>
-struct UnionParentTypeFor;
+struct UnionParentType_;
 template <typename T>
-using UnionParentType = typename UnionParentTypeFor<T>::Type;
+using UnionParentType = typename UnionParentType_<T>::Type;
 
 kj::String structString(StructReader reader, const RawSchema& schema);
 kj::String unionString(StructReader reader, const RawSchema& schema, uint memberIndex);
@@ -196,53 +196,53 @@ inline kj::String unionString(StructReader reader) {
 }  // namespace internal
 
 template <typename T>
-inline constexpr uint64_t typeId() { return internal::TypeIdFor<T>::typeId; }
+inline constexpr uint64_t typeId() { return internal::TypeId_<T>::typeId; }
 // typeId<MyType>() returns the type ID as defined in the schema.  Works with structs, enums, and
 // interfaces.
 
 }  // namespace capnproto
 
 #define CAPNPROTO_DECLARE_ENUM(type, id) \
-    template <> struct KindOf<type> { static constexpr Kind kind = Kind::ENUM; }; \
-    template <> struct TypeIdFor<type> { static constexpr uint64_t typeId = 0x##id; }; \
-    template <> struct RawSchemaFor<type> { \
-      static inline const RawSchema& getSchema() { return schemas::s_##id; } \
+    template <> struct Kind_<type> { static constexpr Kind kind = Kind::ENUM; }; \
+    template <> struct TypeId_<type> { static constexpr uint64_t typeId = 0x##id; }; \
+    template <> struct RawSchema_<type> { \
+      static inline const RawSchema& get() { return schemas::s_##id; } \
     }
 #define CAPNPROTO_DEFINE_ENUM(type) \
-    constexpr Kind KindOf<type>::kind; \
-    constexpr uint64_t TypeIdFor<type>::typeId;
+    constexpr Kind Kind_<type>::kind; \
+    constexpr uint64_t TypeId_<type>::typeId;
 
 #define CAPNPROTO_DECLARE_STRUCT(type, id, dataWordSize, pointerCount, preferredElementEncoding) \
-    template <> struct KindOf<type> { static constexpr Kind kind = Kind::STRUCT; }; \
-    template <> struct StructSizeFor<type> { \
+    template <> struct Kind_<type> { static constexpr Kind kind = Kind::STRUCT; }; \
+    template <> struct StructSize_<type> { \
       static constexpr StructSize value = StructSize( \
           dataWordSize * WORDS, pointerCount * POINTERS, FieldSize::preferredElementEncoding); \
     }; \
-    template <> struct TypeIdFor<type> { static constexpr uint64_t typeId = 0x##id; }; \
-    template <> struct RawSchemaFor<type> { \
-      static inline const RawSchema& getSchema() { return schemas::s_##id; } \
+    template <> struct TypeId_<type> { static constexpr uint64_t typeId = 0x##id; }; \
+    template <> struct RawSchema_<type> { \
+      static inline const RawSchema& get() { return schemas::s_##id; } \
     }
 #define CAPNPROTO_DEFINE_STRUCT(type) \
-    constexpr Kind KindOf<type>::kind; \
-    constexpr StructSize StructSizeFor<type>::value; \
-    constexpr uint64_t TypeIdFor<type>::typeId;
+    constexpr Kind Kind_<type>::kind; \
+    constexpr StructSize StructSize_<type>::value; \
+    constexpr uint64_t TypeId_<type>::typeId;
 
 #define CAPNPROTO_DECLARE_UNION(type, parentType, memberIndex) \
-    template <> struct KindOf<type> { static constexpr Kind kind = Kind::UNION; }; \
-    template <> struct UnionMemberIndexFor<type> { static constexpr uint value = memberIndex; }; \
-    template <> struct UnionParentTypeFor<type> { typedef parentType Type; }
+    template <> struct Kind_<type> { static constexpr Kind kind = Kind::UNION; }; \
+    template <> struct UnionMemberIndex_<type> { static constexpr uint value = memberIndex; }; \
+    template <> struct UnionParentType_<type> { typedef parentType Type; }
 #define CAPNPROTO_DEFINE_UNION(type) \
-    constexpr Kind KindOf<type>::kind; \
-    constexpr uint UnionMemberIndexFor<type>::value;
+    constexpr Kind Kind_<type>::kind; \
+    constexpr uint UnionMemberIndex_<type>::value;
 
 #define CAPNPROTO_DECLARE_INTERFACE(type, id) \
-    template <> struct KindOf<type> { static constexpr Kind kind = Kind::INTERFACE; }; \
-    template <> struct TypeIdFor<type> { static constexpr uint64_t typeId = 0x##id; }; \
-    template <> struct RawSchemaFor<type> { \
-      static inline const RawSchema& getSchema() { return schemas::s_##id; } \
+    template <> struct Kind_<type> { static constexpr Kind kind = Kind::INTERFACE; }; \
+    template <> struct TypeId_<type> { static constexpr uint64_t typeId = 0x##id; }; \
+    template <> struct RawSchema_<type> { \
+      static inline const RawSchema& get() { return schemas::s_##id; } \
     }
 #define CAPNPROTO_DEFINE_INTERFACE(type) \
-    constexpr Kind KindOf<type>::kind; \
-    constexpr uint64_t TypeIdFor<type>::typeId;
+    constexpr Kind Kind_<type>::kind; \
+    constexpr uint64_t TypeId_<type>::typeId;
 
 #endif  // CAPNPROTO_GENERATED_HEADER_SUPPORT_H_

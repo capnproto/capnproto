@@ -30,36 +30,24 @@
 namespace capnproto {
 namespace internal {
 
-template <typename T, Kind kind = kind<T>()>
-struct MaybeReaderBuilder {
-  typedef typename T::Reader Reader;
-  typedef typename T::Builder Builder;
-};
-template <typename T>
-struct MaybeReaderBuilder<T, Kind::PRIMITIVE> {
-  typedef T Reader;
-  typedef T Builder;
-};
-template <typename T>
-struct MaybeReaderBuilder<T, Kind::ENUM> {
-  typedef T Reader;
-  typedef T Builder;
-};
-
 template <typename T, Kind k = kind<T>()>
 struct PointerHelpers;
 
 }  // namespace internal
 
-template <typename T, Kind kind = kind<T>()>
+template <typename T, Kind k = kind<T>()>
 struct List;
 
-template <typename T>
-using ReaderFor = typename internal::MaybeReaderBuilder<T>::Reader;
+template <typename T, Kind k = kind<T>()> struct ReaderFor_ { typedef typename T::Reader Type; };
+template <typename T> struct ReaderFor_<T, Kind::PRIMITIVE> { typedef T Type; };
+template <typename T> struct ReaderFor_<T, Kind::ENUM> { typedef T Type; };
+template <typename T> using ReaderFor = typename ReaderFor_<T>::Type;
 // The type returned by List<T>::Reader::operator[].
 
-template <typename T>
-using BuilderFor = typename internal::MaybeReaderBuilder<T>::Builder;
+template <typename T, Kind k = kind<T>()> struct BuilderFor_ { typedef typename T::Builder Type; };
+template <typename T> struct BuilderFor_<T, Kind::PRIMITIVE> { typedef T Type; };
+template <typename T> struct BuilderFor_<T, Kind::ENUM> { typedef T Type; };
+template <typename T> using BuilderFor = typename BuilderFor_<T>::Type;
 // The type returned by List<T>::Builder::operator[].
 
 template <typename T>
@@ -78,7 +66,7 @@ using TypeIfEnum = typename TypeIfEnum_<kj::Decay<T>>::Type;
 
 namespace internal {
 
-template <typename T, Kind k> struct KindOf<List<T, k>> { static constexpr Kind kind = Kind::LIST; };
+template <typename T, Kind k> struct Kind_<List<T, k>> { static constexpr Kind kind = Kind::LIST; };
 
 template <size_t size> struct FieldSizeForByteSize;
 template <> struct FieldSizeForByteSize<1> { static constexpr FieldSize value = FieldSize::BYTE; };

@@ -484,36 +484,17 @@ private:
 
 // -------------------------------------------------------------------
 
-namespace internal {
-
 // Make sure ReaderFor<T> and BuilderFor<T> work for DynamicEnum, DynamicObject, DynamicStruct, and
 // DynamicList, so that we can define DynamicValue::as().
 
-template <>
-struct MaybeReaderBuilder<DynamicEnum, Kind::UNKNOWN> {
-  typedef DynamicEnum Reader;
-  typedef DynamicEnum Builder;
-};
-
-template <>
-struct MaybeReaderBuilder<DynamicObject, Kind::UNKNOWN> {
-  typedef DynamicObject Reader;
-  typedef DynamicObject Builder;
-};
-
-template <>
-struct MaybeReaderBuilder<DynamicStruct, Kind::UNKNOWN> {
-  typedef DynamicStruct::Reader Reader;
-  typedef DynamicStruct::Builder Builder;
-};
-
-template <>
-struct MaybeReaderBuilder<DynamicList, Kind::UNKNOWN> {
-  typedef DynamicList::Reader Reader;
-  typedef DynamicList::Builder Builder;
-};
-
-}  // namespace internal
+template <> struct ReaderFor_ <DynamicEnum, Kind::UNKNOWN> { typedef DynamicEnum Type; };
+template <> struct BuilderFor_<DynamicEnum, Kind::UNKNOWN> { typedef DynamicEnum Type; };
+template <> struct ReaderFor_ <DynamicObject, Kind::UNKNOWN> { typedef DynamicObject Type; };
+template <> struct BuilderFor_<DynamicObject, Kind::UNKNOWN> { typedef DynamicObject Type; };
+template <> struct ReaderFor_ <DynamicStruct, Kind::UNKNOWN> { typedef DynamicStruct::Reader Type; };
+template <> struct BuilderFor_<DynamicStruct, Kind::UNKNOWN> { typedef DynamicStruct::Builder Type; };
+template <> struct ReaderFor_ <DynamicList, Kind::UNKNOWN> { typedef DynamicList::Reader Type; };
+template <> struct BuilderFor_<DynamicList, Kind::UNKNOWN> { typedef DynamicList::Builder Type; };
 
 class DynamicValue::Reader {
 public:

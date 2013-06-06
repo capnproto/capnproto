@@ -134,28 +134,28 @@ enum class Kind: uint8_t {
 
 namespace internal {
 
-template <typename T> struct KindOf { static constexpr Kind kind = Kind::UNKNOWN; };
+template <typename T> struct Kind_ { static constexpr Kind kind = Kind::UNKNOWN; };
 
-template <> struct KindOf<Void> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct KindOf<bool> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct KindOf<int8_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct KindOf<int16_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct KindOf<int32_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct KindOf<int64_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct KindOf<uint8_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct KindOf<uint16_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct KindOf<uint32_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct KindOf<uint64_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct KindOf<float> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct KindOf<double> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct KindOf<Text> { static constexpr Kind kind = Kind::BLOB; };
-template <> struct KindOf<Data> { static constexpr Kind kind = Kind::BLOB; };
+template <> struct Kind_<Void> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<bool> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<int8_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<int16_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<int32_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<int64_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<uint8_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<uint16_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<uint32_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<uint64_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<float> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<double> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<Text> { static constexpr Kind kind = Kind::BLOB; };
+template <> struct Kind_<Data> { static constexpr Kind kind = Kind::BLOB; };
 
 }  // namespace internal
 
 template <typename T>
 inline constexpr Kind kind() {
-  return internal::KindOf<T>::kind;
+  return internal::Kind_<T>::kind;
 }
 
 // =============================================================================
@@ -188,31 +188,31 @@ struct StructSize {
       : data(data), pointers(pointers), preferredListEncoding(preferredListEncoding) {}
 };
 
-template <typename T> struct StructSizeFor;
+template <typename T> struct StructSize_;
 // Specialized for every struct type with member:  static constexpr StructSize value"
 
 template <typename T>
 inline constexpr StructSize structSize() {
-  return StructSizeFor<T>::value;
+  return StructSize_<T>::value;
 }
 
 // -------------------------------------------------------------------
 // Masking of default values
 
-template <typename T, Kind kind = kind<T>()> struct MaskType;
-template <typename T> struct MaskType<T, Kind::PRIMITIVE> { typedef T Type; };
-template <typename T> struct MaskType<T, Kind::ENUM> { typedef uint16_t Type; };
-template <> struct MaskType<float, Kind::PRIMITIVE> { typedef uint32_t Type; };
-template <> struct MaskType<double, Kind::PRIMITIVE> { typedef uint64_t Type; };
+template <typename T, Kind kind = kind<T>()> struct Mask_;
+template <typename T> struct Mask_<T, Kind::PRIMITIVE> { typedef T Type; };
+template <typename T> struct Mask_<T, Kind::ENUM> { typedef uint16_t Type; };
+template <> struct Mask_<float, Kind::PRIMITIVE> { typedef uint32_t Type; };
+template <> struct Mask_<double, Kind::PRIMITIVE> { typedef uint64_t Type; };
 
-template <typename T> struct MaskType<T, Kind::UNKNOWN> {
+template <typename T> struct Mask_<T, Kind::UNKNOWN> {
   // Union discriminants end up here.
   static_assert(sizeof(T) == 2, "Don't know how to mask this type.");
   typedef uint16_t Type;
 };
 
 template <typename T>
-using Mask = typename MaskType<T>::Type;
+using Mask = typename Mask_<T>::Type;
 
 template <typename T>
 KJ_ALWAYS_INLINE(Mask<T> mask(T value, Mask<T> mask));
