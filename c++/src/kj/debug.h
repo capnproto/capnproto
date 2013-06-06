@@ -106,10 +106,62 @@
 
 namespace kj {
 
-class Log {
-  // Mostly-internal
+#define KJ_LOG(severity, ...) \
+  if (!::kj::_::Debug::shouldLog(::kj::_::Debug::Severity::severity)) {} else \
+    ::kj::_::Debug::log(__FILE__, __LINE__, ::kj::_::Debug::Severity::severity, \
+                        #__VA_ARGS__, __VA_ARGS__)
 
+#define KJ_DBG(...) KJ_LOG(DEBUG, ##__VA_ARGS__)
+
+#define _kJ_FAULT(nature, cond, ...) \
+  if (KJ_EXPECT_TRUE(cond)) {} else \
+    for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Nature::nature, 0, \
+                                 #cond, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+
+#define _kJ_FAIL_FAULT(nature, ...) \
+  for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Nature::nature, 0, \
+                               nullptr, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+
+#define KJ_ASSERT(...) _kJ_FAULT(LOCAL_BUG, ##__VA_ARGS__)
+#define KJ_REQUIRE(...) _kJ_FAULT(PRECONDITION, ##__VA_ARGS__)
+
+#define KJ_FAIL_ASSERT(...) _kJ_FAIL_FAULT(LOCAL_BUG, ##__VA_ARGS__)
+#define KJ_FAIL_REQUIRE(...) _kJ_FAIL_FAULT(PRECONDITION, ##__VA_ARGS__)
+
+#define KJ_SYSCALL(call, ...) \
+  if (auto _kjSyscallResult = ::kj::_::Debug::syscall([&](){return (call);})) {} else \
+    for (::kj::_::Debug::Fault f( \
+             __FILE__, __LINE__, ::kj::Exception::Nature::OS_ERROR, \
+             _kjSyscallResult.getErrorNumber(), #call, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+
+#define FAIL_SYSCALL(code, errorNumber, ...) \
+  for (::kj::_::Debug::Fault f( \
+           __FILE__, __LINE__, ::kj::Exception::Nature::OS_ERROR, \
+           errorNumber, code, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+
+#define KJ_CONTEXT(...) \
+  auto _kjContextFunc = [&]() -> ::kj::_::Debug::Context::Value { \
+        return ::kj::_::Debug::Context::Value(__FILE__, __LINE__, \
+            ::kj::_::Debug::makeContextDescription(#__VA_ARGS__, ##__VA_ARGS__)); \
+      }; \
+  ::kj::_::Debug::ContextImpl<decltype(_kjContextFunc)> _kjContext(_kjContextFunc)
+
+#ifdef NDEBUG
+#define KJ_DLOG(...) do {} while (false)
+#define KJ_DASSERT(...) do {} while (false)
+#define KJ_DREQUIRE(...) do {} while (false)
+#else
+#define KJ_DLOG LOG
+#define KJ_DASSERT KJ_ASSERT
+#define KJ_DREQUIRE KJ_REQUIRE
+#endif
+
+namespace _ {  // private
+
+class Debug {
 public:
+  Debug() = delete;
+
   enum class Severity {
     INFO,      // Information describing what the code is up to, which users may request to see
                // with a flag like `--verbose`.  Does not indicate a problem.  Not printed by
@@ -127,6 +179,8 @@ public:
 
   static inline void setLogLevel(Severity severity) { minSeverity = severity; }
   // Set the minimum message severity which will be logged.
+  //
+  // TODO(someday):  Expose publicly.
 
   template <typename... Params>
   static void log(const char* file, int line, Severity severity, const char* macroArgs,
@@ -217,68 +271,18 @@ private:
   // Get the error code of the last error (e.g. from errno).  Returns -1 on EINTR.
 };
 
-ArrayPtr<const char> KJ_STRINGIFY(Log::Severity severity);
-
-#define KJ_LOG(severity, ...) \
-  if (!::kj::Log::shouldLog(::kj::Log::Severity::severity)) {} else \
-    ::kj::Log::log(__FILE__, __LINE__, ::kj::Log::Severity::severity, \
-                          #__VA_ARGS__, __VA_ARGS__)
-
-#define KJ_DBG(...) KJ_LOG(DEBUG, ##__VA_ARGS__)
-
-#define _kJ_FAULT(nature, cond, ...) \
-  if (KJ_EXPECT_TRUE(cond)) {} else \
-    for (::kj::Log::Fault f(__FILE__, __LINE__, ::kj::Exception::Nature::nature, 0, \
-                            #cond, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
-
-#define _kJ_FAIL_FAULT(nature, ...) \
-  for (::kj::Log::Fault f(__FILE__, __LINE__, ::kj::Exception::Nature::nature, 0, \
-                          nullptr, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
-
-#define KJ_ASSERT(...) _kJ_FAULT(LOCAL_BUG, ##__VA_ARGS__)
-#define KJ_REQUIRE(...) _kJ_FAULT(PRECONDITION, ##__VA_ARGS__)
-
-#define KJ_FAIL_ASSERT(...) _kJ_FAIL_FAULT(LOCAL_BUG, ##__VA_ARGS__)
-#define KJ_FAIL_REQUIRE(...) _kJ_FAIL_FAULT(PRECONDITION, ##__VA_ARGS__)
-
-#define KJ_SYSCALL(call, ...) \
-  if (auto _kjSyscallResult = ::kj::Log::syscall([&](){return (call);})) {} else \
-    for (::kj::Log::Fault f( \
-             __FILE__, __LINE__, ::kj::Exception::Nature::OS_ERROR, \
-             _kjSyscallResult.getErrorNumber(), #call, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
-
-#define FAIL_SYSCALL(code, errorNumber, ...) \
-  for (::kj::Log::Fault f( \
-           __FILE__, __LINE__, ::kj::Exception::Nature::OS_ERROR, \
-           errorNumber, code, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
-
-#define KJ_CONTEXT(...) \
-  auto _kjContextFunc = [&]() -> ::kj::Log::Context::Value { \
-        return ::kj::Log::Context::Value( \
-            __FILE__, __LINE__, ::kj::Log::makeContextDescription(#__VA_ARGS__, ##__VA_ARGS__)); \
-      }; \
-  ::kj::Log::ContextImpl<decltype(_kjContextFunc)> _kjContext(_kjContextFunc)
-
-#ifdef NDEBUG
-#define KJ_DLOG(...) do {} while (false)
-#define KJ_DASSERT(...) do {} while (false)
-#define KJ_DREQUIRE(...) do {} while (false)
-#else
-#define KJ_DLOG LOG
-#define KJ_DASSERT KJ_ASSERT
-#define KJ_DREQUIRE KJ_REQUIRE
-#endif
+ArrayPtr<const char> KJ_STRINGIFY(Debug::Severity severity);
 
 template <typename... Params>
-void Log::log(const char* file, int line, Severity severity, const char* macroArgs,
-              Params&&... params) {
+void Debug::log(const char* file, int line, Severity severity, const char* macroArgs,
+                Params&&... params) {
   String argValues[sizeof...(Params)] = {str(params)...};
   logInternal(file, line, severity, macroArgs, arrayPtr(argValues, sizeof...(Params)));
 }
 
 template <typename... Params>
-Log::Fault::Fault(const char* file, int line, Exception::Nature nature, int errorNumber,
-                  const char* condition, const char* macroArgs, Params&&... params)
+Debug::Fault::Fault(const char* file, int line, Exception::Nature nature, int errorNumber,
+                    const char* condition, const char* macroArgs, Params&&... params)
     : exception(nullptr) {
   String argValues[sizeof...(Params)] = {str(params)...};
   init(file, line, nature, errorNumber, condition, macroArgs,
@@ -286,7 +290,7 @@ Log::Fault::Fault(const char* file, int line, Exception::Nature nature, int erro
 }
 
 template <typename Call>
-Log::SyscallResult Log::syscall(Call&& call) {
+Debug::SyscallResult Debug::syscall(Call&& call) {
   while (call() < 0) {
     int errorNum = getOsErrorNumber();
     // getOsErrorNumber() returns -1 to indicate EINTR
@@ -298,11 +302,12 @@ Log::SyscallResult Log::syscall(Call&& call) {
 }
 
 template <typename... Params>
-String Log::makeContextDescription(const char* macroArgs, Params&&... params) {
+String Debug::makeContextDescription(const char* macroArgs, Params&&... params) {
   String argValues[sizeof...(Params)] = {str(params)...};
   return makeContextDescriptionInternal(macroArgs, arrayPtr(argValues, sizeof...(Params)));
 }
 
+}  // namespace _ (private)
 }  // namespace kj
 
 #endif  // KJ_DEBUG_H_

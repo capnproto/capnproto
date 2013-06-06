@@ -28,10 +28,11 @@
 #include <errno.h>
 
 namespace kj {
+namespace _ {  // private
 
-Log::Severity Log::minSeverity = Log::Severity::WARNING;
+Debug::Severity Debug::minSeverity = Debug::Severity::WARNING;
 
-ArrayPtr<const char> KJ_STRINGIFY(Log::Severity severity) {
+ArrayPtr<const char> KJ_STRINGIFY(Debug::Severity severity) {
   static const char* SEVERITY_STRINGS[] = {
     "info",
     "warning",
@@ -187,13 +188,13 @@ static String makeDescription(DescriptionStyle style, const char* code, int erro
 
 }  // namespace
 
-void Log::logInternal(const char* file, int line, Severity severity, const char* macroArgs,
-                      ArrayPtr<String> argValues) {
+void Debug::logInternal(const char* file, int line, Severity severity, const char* macroArgs,
+                        ArrayPtr<String> argValues) {
   getExceptionCallback().logMessage(file, line, 0,
       str(severity, ": ", makeDescription(LOG, nullptr, 0, macroArgs, argValues), '\n'));
 }
 
-Log::Fault::~Fault() noexcept(false) {
+Debug::Fault::~Fault() noexcept(false) {
   if (exception != nullptr) {
     Exception copy = mv(*exception);
     delete exception;
@@ -201,7 +202,7 @@ Log::Fault::~Fault() noexcept(false) {
   }
 }
 
-void Log::Fault::fatal() {
+void Debug::Fault::fatal() {
   Exception copy = mv(*exception);
   delete exception;
   exception = nullptr;
@@ -209,7 +210,7 @@ void Log::Fault::fatal() {
   abort();
 }
 
-void Log::Fault::init(
+void Debug::Fault::init(
     const char* file, int line, Exception::Nature nature, int errorNumber,
     const char* condition, const char* macroArgs, ArrayPtr<String> argValues) {
   exception = new Exception(nature, Exception::Durability::PERMANENT, file, line,
@@ -217,19 +218,19 @@ void Log::Fault::init(
                       condition, errorNumber, macroArgs, argValues));
 }
 
-String Log::makeContextDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues) {
+String Debug::makeContextDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues) {
   return makeDescription(LOG, nullptr, 0, macroArgs, argValues);
 }
 
-int Log::getOsErrorNumber() {
+int Debug::getOsErrorNumber() {
   int result = errno;
   return result == EINTR ? -1 : result;
 }
 
-Log::Context::Context(): logged(false) {}
-Log::Context::~Context() {}
+Debug::Context::Context(): logged(false) {}
+Debug::Context::~Context() {}
 
-Log::Context::Value Log::Context::ensureInitialized() {
+Debug::Context::Value Debug::Context::ensureInitialized() {
   KJ_IF_MAYBE(v, value) {
     return Value(v->file, v->line, heapString(v->description));
   } else {
@@ -239,17 +240,17 @@ Log::Context::Value Log::Context::ensureInitialized() {
   }
 }
 
-void Log::Context::onRecoverableException(Exception&& exception) {
+void Debug::Context::onRecoverableException(Exception&& exception) {
   Value v = ensureInitialized();
   exception.wrapContext(v.file, v.line, mv(v.description));
   next.onRecoverableException(kj::mv(exception));
 }
-void Log::Context::onFatalException(Exception&& exception) {
+void Debug::Context::onFatalException(Exception&& exception) {
   Value v = ensureInitialized();
   exception.wrapContext(v.file, v.line, mv(v.description));
   next.onFatalException(kj::mv(exception));
 }
-void Log::Context::logMessage(const char* file, int line, int contextDepth, String&& text) {
+void Debug::Context::logMessage(const char* file, int line, int contextDepth, String&& text) {
   if (!logged) {
     Value v = ensureInitialized();
     next.logMessage(v.file, v.line, 0, str("context: ", mv(v.description), '\n'));
@@ -259,4 +260,5 @@ void Log::Context::logMessage(const char* file, int line, int contextDepth, Stri
   next.logMessage(file, line, contextDepth + 1, mv(text));
 }
 
+}  // namespace _ (private)
 }  // namespace kj

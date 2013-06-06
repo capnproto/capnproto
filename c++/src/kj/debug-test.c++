@@ -113,14 +113,14 @@ TEST(Logging, Log) {
   mockCallback.text.clear();
 
   // Enable it.
-  Log::setLogLevel(Log::Severity::INFO);
+  Debug::setLogLevel(Debug::Severity::INFO);
   KJ_LOG(INFO, "Some text."); line = __LINE__;
   EXPECT_EQ("log message: " + fileLine(__FILE__, line) + ":+0: info: Some text.\n",
             mockCallback.text);
   mockCallback.text.clear();
 
   // Back to default.
-  Log::setLogLevel(Log::Severity::WARNING);
+  Debug::setLogLevel(Debug::Severity::WARNING);
 
   KJ_ASSERT(1 == 1);
   EXPECT_THROW(KJ_ASSERT(1 == 2), MockException); line = __LINE__;
