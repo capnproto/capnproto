@@ -302,5 +302,26 @@ TEST(Array, HeapCopy) {
   }
 }
 
+TEST(Array, OwnConst) {
+  ArrayBuilder<int> builder = heapArrayBuilder<int>(2);
+  int x[2] = {123, 234};
+  builder.addAll(x, x + 2);
+
+  Array<int> i = builder.finish(); //heapArray<int>({123, 234});
+  ASSERT_EQ(2u, i.size());
+  EXPECT_EQ(123, i[0]);
+  EXPECT_EQ(234, i[1]);
+
+  Array<const int> ci = mv(i);
+  ASSERT_EQ(2u, ci.size());
+  EXPECT_EQ(123, ci[0]);
+  EXPECT_EQ(234, ci[1]);
+
+  Array<const int> ci2 = heapArray<const int>({345, 456});
+  ASSERT_EQ(2u, ci2.size());
+  EXPECT_EQ(345, ci2[0]);
+  EXPECT_EQ(456, ci2[1]);
+}
+
 }  // namespace
 }  // namespace kj

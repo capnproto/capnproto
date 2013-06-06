@@ -26,6 +26,7 @@
 
 #include "common.h"
 #include <string.h>
+#include <initializer_list>
 
 namespace kj {
 
@@ -72,6 +73,12 @@ public:
   inline Array(): ptr(nullptr), size_(0) {}
   inline Array(decltype(nullptr)): ptr(nullptr), size_(0) {}
   inline Array(Array&& other) noexcept
+      : ptr(other.ptr), size_(other.size_), disposer(other.disposer) {
+    other.ptr = nullptr;
+    other.size_ = 0;
+  }
+  template <typename = EnableIfConst<T>>
+  inline Array(Array<RemoveConst<T>>&& other) noexcept
       : ptr(other.ptr), size_(other.size_), disposer(other.disposer) {
     other.ptr = nullptr;
     other.size_ = 0;
@@ -150,6 +157,9 @@ private:
       disposer->dispose(ptrCopy, sizeCopy, sizeCopy);
     }
   }
+
+  template <typename U>
+  friend class Array;
 };
 
 namespace internal {
@@ -192,7 +202,8 @@ inline Array<T> heapArray(size_t size) {
 template <typename T> Array<T> heapArray(const T* content, size_t size);
 template <typename T> Array<T> heapArray(ArrayPtr<const T> content);
 template <typename T, typename Iterator> Array<T> heapArray(Iterator begin, Iterator end);
-// Allocate a heap arary containing a copy of the given content.
+template <typename T> Array<T> heapArray(std::initializer_list<T> init);
+// Allocate a heap array containing a copy of the given content.
 
 template <typename T, typename Container>
 Array<T> heapArrayFromIterable(Container&& a) { return heapArray(a.begin(), a.end()); }
@@ -210,7 +221,8 @@ class ArrayBuilder {
 public:
   ArrayBuilder(): ptr(nullptr), pos(nullptr), endPtr(nullptr) {}
   ArrayBuilder(decltype(nullptr)): ptr(nullptr), pos(nullptr), endPtr(nullptr) {}
-  explicit ArrayBuilder(T* firstElement, size_t capacity, const ArrayDisposer& disposer)
+  explicit ArrayBuilder(RemoveConst<T>* firstElement, size_t capacity,
+                        const ArrayDisposer& disposer)
       : ptr(firstElement), pos(firstElement), endPtr(firstElement + capacity),
         disposer(&disposer) {}
   ArrayBuilder(ArrayBuilder&& other)
@@ -296,7 +308,7 @@ public:
 
 private:
   T* ptr;
-  T* pos;
+  RemoveConst<T>* pos;
   T* endPtr;
   const ArrayDisposer* disposer;
 
@@ -320,8 +332,8 @@ inline ArrayBuilder<T> heapArrayBuilder(size_t size) {
   // Like `heapArray<T>()` but does not default-construct the elements.  You must construct them
   // manually by calling `add()`.
 
-  return ArrayBuilder<T>(internal::HeapArrayDisposer::allocateUninitialized<T>(size), size,
-                         internal::HeapArrayDisposer::instance);
+  return ArrayBuilder<T>(internal::HeapArrayDisposer::allocateUninitialized<RemoveConst<T>>(size),
+                         size, internal::HeapArrayDisposer::instance);
 }
 
 // =======================================================================================
@@ -392,7 +404,8 @@ template <typename T>
 struct ArrayDisposer::Dispose_<T, true> {
   static void dispose(T* firstElement, size_t elementCount, size_t capacity,
                       const ArrayDisposer& disposer) {
-    disposer.disposeImpl(firstElement, sizeof(T), elementCount, capacity, nullptr);
+    disposer.disposeImpl(const_cast<RemoveConst<T>*>(firstElement),
+                         sizeof(T), elementCount, capacity, nullptr);
   }
 };
 template <typename T>
@@ -462,7 +475,7 @@ struct CopyConstructArray_;
 template <typename T>
 struct CopyConstructArray_<T, T*, true> {
   static inline T* apply(T* __restrict__ pos, T* start, T* end) {
-    memcpy(pos, start, end - start);
+    memcpy(pos, start, reinterpret_cast<byte*>(end) - reinterpret_cast<byte*>(start));
     return pos + (end - start);
   }
 };
@@ -470,7 +483,7 @@ struct CopyConstructArray_<T, T*, true> {
 template <typename T>
 struct CopyConstructArray_<T, const T*, true> {
   static inline T* apply(T* __restrict__ pos, const T* start, const T* end) {
-    memcpy(pos, start, end - start);
+    memcpy(pos, start, reinterpret_cast<const byte*>(end) - reinterpret_cast<const byte*>(start));
     return pos + (end - start);
   }
 };
@@ -552,6 +565,11 @@ heapArray(Iterator begin, Iterator end) {
   ArrayBuilder<T> builder = heapArrayBuilder<T>(end - begin);
   builder.addAll(begin, end);
   return builder.finish();
+}
+
+template <typename T>
+inline Array<T> heapArray(std::initializer_list<T> init) {
+  return heapArray<T>(init.begin(), init.end());
 }
 
 }  // namespace kj

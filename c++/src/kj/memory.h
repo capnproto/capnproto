@@ -88,6 +88,9 @@ public:
   Own(const Own& other) = delete;
   inline Own(Own&& other) noexcept
       : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
+  template <typename = EnableIfConst<T>>
+  inline Own(Own<RemoveConst<T>>&& other) noexcept
+      : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
   template <typename U>
   inline Own(Own<U>&& other) noexcept
       : disposer(other.disposer), ptr(other.ptr) {
@@ -126,9 +129,12 @@ private:
     T* ptrCopy = ptr;
     if (ptrCopy != nullptr) {
       ptr = nullptr;
-      disposer->dispose(ptrCopy);
+      disposer->dispose(const_cast<RemoveConst<T>*>(ptrCopy));
     }
   }
+
+  template <typename U>
+  friend class Own;
 };
 
 namespace internal {

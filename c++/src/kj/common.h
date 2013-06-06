@@ -176,6 +176,10 @@ template <typename T> struct RemoveReference_ { typedef T Type; };
 template <typename T> struct RemoveReference_<T&> { typedef T Type; };
 template <typename T> using RemoveReference = typename RemoveReference_<T>::Type;
 
+template <typename T> struct RemoveConst_ { typedef T Type; };
+template <typename T> struct RemoveConst_<const T> { typedef T Type; };
+template <typename T> using RemoveConst = typename RemoveConst_<T>::Type;
+
 template <typename> struct IsLvalueReference_ { static constexpr bool value = false; };
 template <typename T> struct IsLvalueReference_<T&> { static constexpr bool value = true; };
 template <typename T>
