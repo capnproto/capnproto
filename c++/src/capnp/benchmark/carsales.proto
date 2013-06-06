@@ -21,14 +21,59 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-package capnproto.benchmark.protobuf;
+package capnp.benchmark.protobuf;
 
-message SearchResultList {
-  repeated SearchResult result = 1;
+message ParkingLot {
+  repeated Car car = 1;
 }
 
-message SearchResult {
-  optional string url = 1;
-  optional double score = 2;
-  optional string snippet = 3;
+message TotalValue {
+  required uint64 amount = 1;
+}
+
+message Car {
+  optional string make = 1;
+  optional string model = 2;
+  optional Color color = 3;
+  optional uint32 seats = 4;
+  optional uint32 doors = 5;
+  repeated Wheel wheel = 6;
+  optional uint32 length = 7;
+  optional uint32 width = 8;
+  optional uint32 height = 9;
+  optional uint32 weight = 10;
+  optional Engine engine = 11;
+  optional float fuel_capacity = 12;
+  optional float fuel_level = 13;
+  optional bool has_power_windows = 14;
+  optional bool has_power_steering = 15;
+  optional bool has_cruise_control = 16;
+  optional uint32 cup_holders = 17;
+  optional bool has_nav_system = 18;
+}
+
+enum Color {
+  BLACK = 0;
+  WHITE = 1;
+  RED = 2;
+  GREEN = 3;
+  BLUE = 4;
+  CYAN = 5;
+  MAGENTA = 6;
+  YELLOW = 7;
+  SILVER = 8;
+}
+
+message Wheel {
+  optional uint32 diameter = 1;
+  optional float air_pressure = 2;
+  optional bool snow_tires = 3;
+}
+
+message Engine {
+  optional uint32 horsepower = 1;
+  optional uint32 cylinders = 2;
+  optional uint32 cc = 3;
+  optional bool uses_gas = 4;
+  optional bool uses_electric = 5;
 }
