@@ -146,22 +146,22 @@
 </code></pre></div>
 <p>You might write code like:</p>
 <div class='highlight'><pre><code class='c++'><span class='cp'>#include &quot;addressbook.capnp.h&quot;</span>
-<span class='cp'>#include &lt;capnproto/message.h&gt;</span>
-<span class='cp'>#include &lt;capnproto/serialize-packed.h&gt;</span>
+<span class='cp'>#include &lt;capnp/message.h&gt;</span>
+<span class='cp'>#include &lt;capnp/serialize-packed.h&gt;</span>
 <span class='cp'>#include &lt;iostream&gt;</span>
 
 <span class='kt'>void</span> <span class='nf'>writeAddressBook</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>fd</span><span class='p'>)</span> <span class='p'>{</span>
-  <span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>MallocMessageBuilder</span> <span class='n'>message</span><span class='p'>;</span>
+  <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>MallocMessageBuilder</span> <span class='n'>message</span><span class='p'>;</span>
 
   <span class='n'>AddressBook</span><span class='o'>::</span><span class='n'>Builder</span> <span class='n'>addressBook</span> <span class='o'>=</span> <span class='n'>message</span><span class='p'>.</span><span class='n'>initRoot</span><span class='o'>&lt;</span><span class='n'>AddressBook</span><span class='o'>&gt;</span><span class='p'>();</span>
-  <span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='n'>Person</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>people</span> <span class='o'>=</span> <span class='n'>addressBook</span><span class='p'>.</span><span class='n'>initPeople</span><span class='p'>(</span><span class='mi'>2</span><span class='p'>);</span>
+  <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='n'>Person</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>people</span> <span class='o'>=</span> <span class='n'>addressBook</span><span class='p'>.</span><span class='n'>initPeople</span><span class='p'>(</span><span class='mi'>2</span><span class='p'>);</span>
 
   <span class='n'>Person</span><span class='o'>::</span><span class='n'>Builder</span> <span class='n'>alice</span> <span class='o'>=</span> <span class='n'>people</span><span class='p'>[</span><span class='mi'>0</span><span class='p'>];</span>
   <span class='n'>alice</span><span class='p'>.</span><span class='n'>setId</span><span class='p'>(</span><span class='mi'>123</span><span class='p'>);</span>
   <span class='n'>alice</span><span class='p'>.</span><span class='n'>setName</span><span class='p'>(</span><span class='s'>&quot;Alice&quot;</span><span class='p'>);</span>
   <span class='n'>alice</span><span class='p'>.</span><span class='n'>setEmail</span><span class='p'>(</span><span class='s'>&quot;alice@example.com&quot;</span><span class='p'>);</span>
   <span class='c1'>// Type shown for explanation purposes; normally you&#39;d use auto.</span>
-  <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>alicePhones</span> <span class='o'>=</span>
+  <span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>alicePhones</span> <span class='o'>=</span>
       <span class='n'>alice</span><span class='p'>.</span><span class='n'>initPhones</span><span class='p'>(</span><span class='mi'>1</span><span class='p'>);</span>
   <span class='n'>alicePhones</span><span class='p'>[</span><span class='mi'>0</span><span class='p'>].</span><span class='n'>setNumber</span><span class='p'>(</span><span class='s'>&quot;555-1212&quot;</span><span class='p'>);</span>
   <span class='n'>alicePhones</span><span class='p'>[</span><span class='mi'>0</span><span class='p'>].</span><span class='n'>setType</span><span class='p'>(</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>::</span><span class='n'>Type</span><span class='o'>::</span><span class='n'>MOBILE</span><span class='p'>);</span>
@@ -182,7 +182,7 @@
 <span class='p'>}</span>
 
 <span class='kt'>void</span> <span class='nf'>printAddressBook</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>fd</span><span class='p'>)</span> <span class='p'>{</span>
-  <span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>PackedFdMessageReader</span> <span class='n'>message</span><span class='p'>(</span><span class='n'>fd</span><span class='p'>);</span>
+  <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>PackedFdMessageReader</span> <span class='n'>message</span><span class='p'>(</span><span class='n'>fd</span><span class='p'>);</span>
 
   <span class='n'>AddressBook</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>addressBook</span> <span class='o'>=</span> <span class='n'>message</span><span class='p'>.</span><span class='n'>getRoot</span><span class='o'>&lt;</span><span class='n'>AddressBook</span><span class='o'>&gt;</span><span class='p'>();</span>
 
@@ -226,7 +226,11 @@
 
 <p>When Cap&#8217;n Proto code might throw an exception from a destructor, it first checks <code>std::uncaught_exception()</code> to ensure that this is safe. If another exception is already active, the new exception is assumed to be a side-effect of the main exception, and is either silently swallowed or reported on a side channel.</p>
 
-<p>In recognition of the fact that some teams prefer not to use exceptions, and that even enabling exceptions in the compiler introduces overhead, Cap&#8217;n Proto allows you to disable them entirely by registering your own exception callback. The callback will be called in place of throwing an exception. The callback may abort the process, and is required to do so in certain circumstances (when a fatal bug is detected). If the callback returns normally, Cap&#8217;n Proto will attempt to continue by inventing &#8220;safe&#8221; values. This will lead to garbage output, but at least the program will not crash. Your exception callback should set some sort of a flag indicating that an error occurred, and somewhere up the stack you should check for that flag and cancel the operation. See the header <code>capnproto/exception.h</code> for details on how to register an exception callback.</p>
+<p>In recognition of the fact that some teams prefer not to use exceptions, and that even enabling exceptions in the compiler introduces overhead, Cap&#8217;n Proto allows you to disable them entirely by registering your own exception callback. The callback will be called in place of throwing an exception. The callback may abort the process, and is required to do so in certain circumstances (when a fatal bug is detected). If the callback returns normally, Cap&#8217;n Proto will attempt to continue by inventing &#8220;safe&#8221; values. This will lead to garbage output, but at least the program will not crash. Your exception callback should set some sort of a flag indicating that an error occurred, and somewhere up the stack you should check for that flag and cancel the operation. See the header <code>capnp/exception.h</code> for details on how to register an exception callback.</p>
+
+<h2 id='kj_library'>KJ Library</h2>
+
+<p>Cap&#8217;n Proto is built on top of a basic utility library called KJ. The two were actually developed together &#8211; KJ is simply the stuff which is not specific to Cap&#8217;n Proto serialization, and may be useful to others independently of Cap&#8217;n Proto. For now, the the two are distributed together. The name &#8220;KJ&#8221; has no particular meaning; it was chosen to be short and easy-to-type.</p>
 
 <h2 id='generating_code'>Generating Code</h2>
 
@@ -251,7 +255,7 @@
 
 <li><code>Float64</code> -&gt; <code>double</code></li>
 
-<li><code>Void</code> -&gt; <code>::capnproto::Void</code> (An enum with one value: <code>::capnproto::Void::VOID</code>)</li>
+<li><code>Void</code> -&gt; <code>::capnp::Void</code> (An enum with one value: <code>::capnp::Void::VOID</code>)</li>
 </ul>
 
 <h2 id='structs'>Structs</h2>
@@ -267,7 +271,7 @@
 <span class='kt'>int32_t</span> <span class='nf'>getMyPrimitiveField</span><span class='p'>();</span>
 
 <span class='c1'>// myTextField @1 :Text;</span>
-<span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>Text</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>getMyTextField</span><span class='p'>();</span>
+<span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>Text</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>getMyTextField</span><span class='p'>();</span>
 <span class='c1'>// (Note that Text::Reader may be implicitly cast to const char* and</span>
 <span class='c1'>// std::string.)</span>
 
@@ -275,7 +279,7 @@
 <span class='n'>MyStruct</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>getMyStructField</span><span class='p'>();</span>
 
 <span class='c1'>// myListField @3 :List(Float64);</span>
-<span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;</span> <span class='n'>getMyListField</span><span class='p'>();</span>
+<span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;</span> <span class='n'>getMyListField</span><span class='p'>();</span>
 </code></pre></div>
 <p><code>Foo::Builder</code>, meanwhile, has two or three methods for each field <code>bar</code>:</p>
 
@@ -295,9 +299,9 @@
 <span class='kt'>void</span> <span class='nf'>setMyPrimitiveField</span><span class='p'>(</span><span class='kt'>int32_t</span> <span class='n'>value</span><span class='p'>);</span>
 
 <span class='c1'>// myTextField @1 :Text;</span>
-<span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>Text</span><span class='o'>::</span><span class='n'>Builder</span> <span class='n'>getMyTextField</span><span class='p'>();</span>
-<span class='kt'>void</span> <span class='nf'>setMyTextField</span><span class='p'>(</span><span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>Text</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>value</span><span class='p'>);</span>
-<span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>Text</span><span class='o'>::</span><span class='n'>Builder</span> <span class='n'>initMyTextField</span><span class='p'>(</span><span class='kt'>size_t</span> <span class='n'>size</span><span class='p'>);</span>
+<span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>Text</span><span class='o'>::</span><span class='n'>Builder</span> <span class='n'>getMyTextField</span><span class='p'>();</span>
+<span class='kt'>void</span> <span class='nf'>setMyTextField</span><span class='p'>(</span><span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>Text</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>value</span><span class='p'>);</span>
+<span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>Text</span><span class='o'>::</span><span class='n'>Builder</span> <span class='n'>initMyTextField</span><span class='p'>(</span><span class='kt'>size_t</span> <span class='n'>size</span><span class='p'>);</span>
 <span class='c1'>// (Note that Text::Reader is implicitly constructable from const char*</span>
 <span class='c1'>// and std::string, and Text::Builder can be implicitly cast to</span>
 <span class='c1'>// these types.)</span>
@@ -308,9 +312,9 @@
 <span class='n'>MyStruct</span><span class='o'>::</span><span class='n'>Builder</span> <span class='n'>initMyStructField</span><span class='p'>();</span>
 
 <span class='c1'>// myListField @3 :List(Float64);</span>
-<span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>getMyListField</span><span class='p'>();</span>
-<span class='kt'>void</span> <span class='nf'>setMyListField</span><span class='p'>(</span><span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;::</span><span class='n'>Reader</span> <span class='n'>value</span><span class='p'>);</span>
-<span class='o'>::</span><span class='n'>capnproto</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>initMyListField</span><span class='p'>(</span><span class='kt'>size_t</span> <span class='n'>size</span><span class='p'>);</span>
+<span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>getMyListField</span><span class='p'>();</span>
+<span class='kt'>void</span> <span class='nf'>setMyListField</span><span class='p'>(</span><span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;::</span><span class='n'>Reader</span> <span class='n'>value</span><span class='p'>);</span>
+<span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>initMyListField</span><span class='p'>(</span><span class='kt'>size_t</span> <span class='n'>size</span><span class='p'>);</span>
 </code></pre></div>
 <h2 id='unions'>Unions</h2>
 
@@ -320,7 +324,7 @@
 
 <h2 id='lists'>Lists</h2>
 
-<p>Lists are represented by the type <code>capnproto::List&lt;T&gt;</code>, where <code>T</code> is any of the primitive types, any Cap&#8217;n Proto user-defined type, <code>capnproto::Text</code>, <code>capnproto::Data</code>, or <code>capnproto::List&lt;U&gt;</code> (to form a list of lists).</p>
+<p>Lists are represented by the type <code>capnp::List&lt;T&gt;</code>, where <code>T</code> is any of the primitive types, any Cap&#8217;n Proto user-defined type, <code>capnp::Text</code>, <code>capnp::Data</code>, or <code>capnp::List&lt;U&gt;</code> (to form a list of lists).</p>
 
 <p>The type <code>List&lt;T&gt;</code> itself is not instantiatable, but has two inner classes: <code>Reader</code> and <code>Builder</code>. As with structs, these types behave like pointers to read-only and read-write data, respectively.</p>
 
@@ -340,7 +344,7 @@
 
 <h2 id='blobs_text_and_data'>Blobs (Text and Data)</h2>
 
-<p>Blobs are manipulated using the classes <code>capnproto::Text</code> and <code>capnproto::Data</code>. These classes are, again, just containers for inner classes <code>Reader</code> and <code>Builder</code>. These classes are iterable and implement <code>data()</code>, <code>size()</code>, and <code>operator[]</code> methods, similar to <code>std::string</code>. <code>Builder::operator[]</code> even returns a reference (unlike with <code>List&lt;T&gt;</code>). <code>Text::Reader</code> additionally has a method <code>c_str()</code> which returns a NUL-terminated <code>const char*</code>.</p>
+<p>Blobs are manipulated using the classes <code>capnp::Text</code> and <code>capnp::Data</code>. These classes are, again, just containers for inner classes <code>Reader</code> and <code>Builder</code>. These classes are iterable and implement <code>data()</code>, <code>size()</code>, and <code>operator[]</code> methods, similar to <code>std::string</code>. <code>Builder::operator[]</code> even returns a reference (unlike with <code>List&lt;T&gt;</code>). <code>Text::Reader</code> additionally has a method <code>c_str()</code> which returns a NUL-terminated <code>const char*</code>.</p>
 
 <p>These classes strive to be easy to convert to other common representations of raw data. Blob readers and builders can be implicitly converted to any class which takes <code>(const char*, size_t)</code> as its constructor parameters, and from any class which has <code>const char* data()</code> and <code>size_t size()</code> methods (in particular, <code>std::string</code>). Text readers and builders can additionally be implicitly converted to and from NUL-terminated <code>const char*</code>s.</p>
 
@@ -352,21 +356,21 @@
 
 <h2 id='messages_and_io'>Messages and I/O</h2>
 
-<p>To create a new message, you must start by creating a <code>capnproto::MessageBuilder</code> (<code>capnproto/message.h</code>). This is an abstract type which you can implement yourself, but most users will want to use <code>capnproto::MallocMessageBuilder</code>. Once your message is constructed, write it to a file descriptor with <code>capnproto::writeMessageToFd(fd, builder)</code> (<code>capnproto/serialize.h</code>) or <code>capnproto::writePackedMessageToFd(fd, builder)</code> (<code>capnproto/serialize-packed.h</code>).</p>
+<p>To create a new message, you must start by creating a <code>capnp::MessageBuilder</code> (<code>capnp/message.h</code>). This is an abstract type which you can implement yourself, but most users will want to use <code>capnp::MallocMessageBuilder</code>. Once your message is constructed, write it to a file descriptor with <code>capnp::writeMessageToFd(fd, builder)</code> (<code>capnp/serialize.h</code>) or <code>capnp::writePackedMessageToFd(fd, builder)</code> (<code>capnp/serialize-packed.h</code>).</p>
 
-<p>To read a message, you must create a <code>capnproto::MessageReader</code>, which is another abstract type. Implementations are specific to the data source. You can use <code>capnproto::StreamFdMessageReader</code> (<code>capnproto/serialize.h</code>) or <code>capnproto::PackedFdMessageReader</code> (<code>capnproto/serialize-packed.h</code>) to read from file descriptors; both take the file descriptor as a constructor argument.</p>
+<p>To read a message, you must create a <code>capnp::MessageReader</code>, which is another abstract type. Implementations are specific to the data source. You can use <code>capnp::StreamFdMessageReader</code> (<code>capnp/serialize.h</code>) or <code>capnp::PackedFdMessageReader</code> (<code>capnp/serialize-packed.h</code>) to read from file descriptors; both take the file descriptor as a constructor argument.</p>
 
-<p>Note that if your stream contains additional data after the message, <code>PackedFdMessageReader</code> may accidentally read some of that data, since it does buffered I/O. To make this work correctly, you will need to set up a multi-use buffered stream. Buffered I/O may also be a good idea with <code>StreamFdMessageReader</code> and also when writing, for performance reasons. See <code>capnproto/io.h</code> for details.</p>
+<p>Note that if your stream contains additional data after the message, <code>PackedFdMessageReader</code> may accidentally read some of that data, since it does buffered I/O. To make this work correctly, you will need to set up a multi-use buffered stream. Buffered I/O may also be a good idea with <code>StreamFdMessageReader</code> and also when writing, for performance reasons. See <code>capnp/io.h</code> for details.</p>
 
 <p>There is an <a href='#example_usage'>example</a> of all this at the beginning of this page.</p>
 
 <h2 id='setting_a_namespace'>Setting a Namespace</h2>
 
-<p>You probably want your generated types to live in a C++ namespace. You will need to import <code>/capnproto/c++.capnp</code> and use the <code>namespace</code> annotation it defines:</p>
-<div class='highlight'><pre><code class='capnp'><span class='n'>Cxx</span> <span class='l'>= import &quot;/capnproto/c++.capnp&quot;</span>;
+<p>You probably want your generated types to live in a C++ namespace. You will need to import <code>/capnp/c++.capnp</code> and use the <code>namespace</code> annotation it defines:</p>
+<div class='highlight'><pre><code class='capnp'><span class='n'>Cxx</span> <span class='l'>= import &quot;/capnp/c++.capnp&quot;</span>;
 <span class='na'>$Cxx.namespace(&quot;foo::bar::baz&quot;)</span>;
 </code></pre></div>
-<p>Note that for this to work, <code>capnproto/c++.capnp</code> must be located in the search path specified with <code>-I</code> options. This file is found in the Cap&#8217;n Proto source repo, so you could invoke <code>capnpc</code> like so:</p>
+<p>Note that for this to work, <code>capnp/c++.capnp</code> must be located in the search path specified with <code>-I</code> options. This file is found in the Cap&#8217;n Proto source repo, so you could invoke <code>capnpc</code> like so:</p>
 
 <pre><code>capnpc -I$CAPNPROTO_GIT_ROOT/c++/src -oc++ myproto.capnp</code></pre>
 
@@ -376,29 +380,28 @@
 
 <p>Sometimes you want to write generic code that operates on arbitrary types, iterating over the fields or looking them up by name. For example, you might want to write code that encodes arbitrary Cap&#8217;n Proto types in JSON format. This requires something like &#8220;reflection&#8221;, but C++ does not offer reflection. Also, you might even want to operate on types that aren&#8217;t compiled into the binary at all, but only discovered at runtime.</p>
 
-<p>The C++ API supports inspecting schemas at runtime via the interface defined in <code>capnproto/schema.h</code>, and dynamically reading and writing instances of arbitrary types via <code>capnproto/dynamic.h</code>. Here&#8217;s the example from the beginning of this file rewritten in terms of the dynamic API:</p>
+<p>The C++ API supports inspecting schemas at runtime via the interface defined in <code>capnp/schema.h</code>, and dynamically reading and writing instances of arbitrary types via <code>capnp/dynamic.h</code>. Here&#8217;s the example from the beginning of this file rewritten in terms of the dynamic API:</p>
 <div class='highlight'><pre><code class='c++'><span class='cp'>#include &quot;addressbook.capnp.h&quot;</span>
-<span class='cp'>#include &lt;capnproto/message.h&gt;</span>
-<span class='cp'>#include &lt;capnproto/serialize-packed.h&gt;</span>
+<span class='cp'>#include &lt;capnp/message.h&gt;</span>
+<span class='cp'>#include &lt;capnp/serialize-packed.h&gt;</span>
 <span class='cp'>#include &lt;iostream&gt;</span>
-<span class='cp'>#include &lt;capnproto/schema.h&gt;</span>
-<span class='cp'>#include &lt;capnproto/dynamic.h&gt;</span>
+<span class='cp'>#include &lt;capnp/schema.h&gt;</span>
+<span class='cp'>#include &lt;capnp/dynamic.h&gt;</span>
 
-<span class='k'>using</span> <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>DynamicValue</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>DynamicStruct</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>DynamicEnum</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>DynamicList</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>DynamicUnion</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>List</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>Maybe</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>Schema</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>StructSchema</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>EnumSchema</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicValue</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicStruct</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicEnum</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicList</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicUnion</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>Schema</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>StructSchema</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>EnumSchema</span><span class='p'>;</span>
 
-<span class='k'>using</span> <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>Void</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>Text</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>MallocMessageBuilder</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnproto</span><span class='o'>::</span><span class='n'>PackedFdMessageReader</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>Void</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>Text</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>MallocMessageBuilder</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>PackedFdMessageReader</span><span class='p'>;</span>
 
 <span class='kt'>void</span> <span class='nf'>dynamicWriteAddressBook</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>fd</span><span class='p'>,</span> <span class='n'>StructSchema</span> <span class='n'>schema</span><span class='p'>)</span> <span class='p'>{</span>
   <span class='c1'>// Write a message using the dynamic API to set each</span>
@@ -486,14 +489,12 @@
     <span class='p'>}</span>
     <span class='k'>case</span> <span class='n'>DynamicValue</span>:<span class='o'>:</span><span class='n'>ENUM</span><span class='o'>:</span> <span class='p'>{</span>
       <span class='k'>auto</span> <span class='n'>enumValue</span> <span class='o'>=</span> <span class='n'>value</span><span class='p'>.</span><span class='n'>as</span><span class='o'>&lt;</span><span class='n'>DynamicEnum</span><span class='o'>&gt;</span><span class='p'>();</span>
-      <span class='n'>Maybe</span><span class='o'>&lt;</span><span class='n'>EnumSchema</span><span class='o'>::</span><span class='n'>Enumerant</span><span class='o'>&gt;</span> <span class='n'>enumerant</span> <span class='o'>=</span>
-          <span class='n'>enumValue</span><span class='p'>.</span><span class='n'>getEnumerant</span><span class='p'>();</span>
-      <span class='k'>if</span> <span class='p'>(</span><span class='n'>enumerant</span> <span class='o'>==</span> <span class='n'>nullptr</span><span class='p'>)</span> <span class='p'>{</span>
-        <span class='c1'>// Unknown enum value; output raw number.</span>
-        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>enumValue</span><span class='p'>.</span><span class='n'>getRaw</span><span class='p'>();</span>
-      <span class='p'>}</span> <span class='k'>else</span> <span class='p'>{</span>
+      <span class='n'>KJ_IF_MAYBE</span><span class='p'>(</span><span class='n'>enumerant</span><span class='p'>,</span> <span class='n'>enumValue</span><span class='p'>.</span><span class='n'>getEnumerant</span><span class='p'>())</span> <span class='p'>{</span>
         <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span>
             <span class='n'>enumerant</span><span class='o'>-&gt;</span><span class='n'>getProto</span><span class='p'>().</span><span class='n'>getName</span><span class='p'>().</span><span class='n'>c_str</span><span class='p'>();</span>
+      <span class='p'>}</span> <span class='k'>else</span> <span class='p'>{</span>
+        <span class='c1'>// Unknown enum value; output raw number.</span>
+        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>enumValue</span><span class='p'>.</span><span class='n'>getRaw</span><span class='p'>();</span>
       <span class='p'>}</span>
       <span class='k'>break</span><span class='p'>;</span>
     <span class='p'>}</span>
@@ -517,15 +518,14 @@
     <span class='p'>}</span>
     <span class='k'>case</span> <span class='n'>DynamicValue</span>:<span class='o'>:</span><span class='n'>UNION</span><span class='o'>:</span> <span class='p'>{</span>
       <span class='k'>auto</span> <span class='n'>unionValue</span> <span class='o'>=</span> <span class='n'>value</span><span class='p'>.</span><span class='n'>as</span><span class='o'>&lt;</span><span class='n'>DynamicUnion</span><span class='o'>&gt;</span><span class='p'>();</span>
-      <span class='n'>Maybe</span><span class='o'>&lt;</span><span class='n'>StructSchema</span><span class='o'>::</span><span class='n'>Member</span><span class='o'>&gt;</span> <span class='n'>tag</span> <span class='o'>=</span> <span class='n'>unionValue</span><span class='p'>.</span><span class='n'>which</span><span class='p'>();</span>
-      <span class='k'>if</span> <span class='p'>(</span><span class='n'>tag</span> <span class='o'>==</span> <span class='n'>nullptr</span><span class='p'>)</span> <span class='p'>{</span>
-        <span class='c1'>// Unknown union member; must have come from newer</span>
-        <span class='c1'>// version of the protocol.</span>
-        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;?&quot;</span><span class='p'>;</span>
-      <span class='p'>}</span> <span class='k'>else</span> <span class='p'>{</span>
+      <span class='n'>KJ_IF_MAYBE</span><span class='p'>(</span><span class='n'>tag</span><span class='p'>,</span> <span class='n'>unionValue</span><span class='p'>.</span><span class='n'>which</span><span class='p'>())</span> <span class='p'>{</span>
         <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>tag</span><span class='o'>-&gt;</span><span class='n'>getProto</span><span class='p'>().</span><span class='n'>getName</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;(&quot;</span><span class='p'>;</span>
         <span class='n'>dynamicPrintValue</span><span class='p'>(</span><span class='n'>unionValue</span><span class='p'>.</span><span class='n'>get</span><span class='p'>());</span>
         <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;)&quot;</span><span class='p'>;</span>
+      <span class='p'>}</span> <span class='k'>else</span> <span class='p'>{</span>
+        <span class='c1'>// Unknown union member; must have come from newer</span>
+        <span class='c1'>// version of the protocol.</span>
+        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;?&quot;</span><span class='p'>;</span>
       <span class='p'>}</span>
       <span class='k'>break</span><span class='p'>;</span>
     <span class='p'>}</span>
@@ -550,7 +550,7 @@
 </li>
 
 <li>
-<p>Unlike with Protobufs, there is no &#8220;global registry&#8221; of compiled-in types. To get the schema for a compiled-in type, use <code>capnproto::Schema::from&lt;MyType&gt;()</code>.</p>
+<p>Unlike with Protobufs, there is no &#8220;global registry&#8221; of compiled-in types. To get the schema for a compiled-in type, use <code>capnp::Schema::from&lt;MyType&gt;()</code>.</p>
 </li>
 
 <li>
@@ -562,14 +562,14 @@
 
 <p>The runtime library contains lots of useful features not described on this page. For now, the best reference is the header files. See:</p>
 
-<pre><code>capnproto/list.h
-capnproto/blob.h
-capnproto/io.h
-capnproto/message.h
-capnproto/serialized.h
-capnproto/serialized-packed.h
-capnproto/schema.h
-capnproto/dynamic.h</code></pre>
+<pre><code>capnp/list.h
+capnp/blob.h
+capnp/message.h
+capnp/serialize.h
+capnp/serialize-packed.h
+capnp/schema.h
+capnp/schema-loader.h
+capnp/dynamic.h</code></pre>
 
 <h2 id='lessons_learned_from_protocol_buffers'>Lessons Learned from Protocol Buffers</h2>
 
