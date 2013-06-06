@@ -34,7 +34,7 @@ namespace {
 
 static const char HEXDIGITS[] = "0123456789abcdef";
 
-static void print(std::ostream& os, DynamicValue::Reader value,
+static void print(std::ostream& os, const DynamicValue::Reader& value,
                   schema::Type::Body::Which which) {
   // Print an arbitrary message via the dynamic API by
   // iterating over the schema.  Look at the handling
@@ -189,16 +189,16 @@ kj::String stringify(DynamicValue::Reader value) {
 
 }  // namespace
 
-kj::String KJ_STRINGIFY(DynamicValue::Reader value) { return stringify(value); }
-kj::String KJ_STRINGIFY(DynamicValue::Builder value) { return stringify(value.asReader()); }
+kj::String KJ_STRINGIFY(const DynamicValue::Reader& value) { return stringify(value); }
+kj::String KJ_STRINGIFY(const DynamicValue::Builder& value) { return stringify(value.asReader()); }
 kj::String KJ_STRINGIFY(DynamicEnum value) { return stringify(value); }
-kj::String KJ_STRINGIFY(DynamicObject value) { return stringify(value); }
-kj::String KJ_STRINGIFY(DynamicUnion::Reader value) { return stringify(value); }
-kj::String KJ_STRINGIFY(DynamicUnion::Builder value) { return stringify(value.asReader()); }
-kj::String KJ_STRINGIFY(DynamicStruct::Reader value) { return stringify(value); }
-kj::String KJ_STRINGIFY(DynamicStruct::Builder value) { return stringify(value.asReader()); }
-kj::String KJ_STRINGIFY(DynamicList::Reader value) { return stringify(value); }
-kj::String KJ_STRINGIFY(DynamicList::Builder value) { return stringify(value.asReader()); }
+kj::String KJ_STRINGIFY(const DynamicObject& value) { return stringify(value); }
+kj::String KJ_STRINGIFY(const DynamicUnion::Reader& value) { return stringify(value); }
+kj::String KJ_STRINGIFY(const DynamicUnion::Builder& value) { return stringify(value.asReader()); }
+kj::String KJ_STRINGIFY(const DynamicStruct::Reader& value) { return stringify(value); }
+kj::String KJ_STRINGIFY(const DynamicStruct::Builder& value) { return stringify(value.asReader()); }
+kj::String KJ_STRINGIFY(const DynamicList::Reader& value) { return stringify(value); }
+kj::String KJ_STRINGIFY(const DynamicList::Builder& value) { return stringify(value.asReader()); }
 
 namespace internal {
 

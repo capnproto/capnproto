@@ -36,11 +36,11 @@ class SchemaLoader::Impl {
 public:
   Impl();
 
-  internal::RawSchema* load(schema::Node::Reader reader);
+  internal::RawSchema* load(const schema::Node::Reader& reader);
 
   internal::RawSchema* loadNative(const internal::RawSchema* nativeSchema);
 
-  internal::RawSchema* loadEmpty(uint64_t id, Text::Reader name, schema::Node::Body::Which kind);
+  internal::RawSchema* loadEmpty(uint64_t id, kj::StringPtr name, schema::Node::Body::Which kind);
   // Create a dummy empty schema of the given kind for the given id and load it.
 
   internal::RawSchema* tryGet(uint64_t typeId) const;
@@ -79,7 +79,7 @@ class SchemaLoader::Validator {
 public:
   Validator(SchemaLoader::Impl& loader): loader(loader) {}
 
-  bool validate(schema::Node::Reader node) {
+  bool validate(const schema::Node::Reader& node) {
     isValid = true;
     nodeName = node.getDisplayName();
     dependencies.clear();
@@ -149,11 +149,11 @@ private:
 #define FAIL_VALIDATE_SCHEMA(...) \
   KJ_FAIL_REQUIRE(__VA_ARGS__) { isValid = false; return; }
 
-  void validate(schema::FileNode::Reader fileNode) {
+  void validate(const schema::FileNode::Reader& fileNode) {
     // Nothing needs validation.
   }
 
-  void validate(schema::StructNode::Reader structNode) {
+  void validate(const schema::StructNode::Reader& structNode) {
     uint dataSizeInBits;
     uint pointerCount;
 
@@ -223,13 +223,13 @@ private:
     }
   }
 
-  void validateMemberName(Text::Reader name, uint unionIndex, uint index) {
+  void validateMemberName(kj::StringPtr name, uint unionIndex, uint index) {
     bool isNewName = members.insert(std::make_pair(
         std::pair<uint, Text::Reader>(unionIndex, name), index)).second;
     VALIDATE_SCHEMA(isNewName, "duplicate name", name);
   }
 
-  void validate(schema::StructNode::Member::Reader member,
+  void validate(const schema::StructNode::Member::Reader& member,
                 kj::ArrayPtr<bool> sawCodeOrder, kj::ArrayPtr<bool> sawOrdinal,
                 uint dataSizeInBits, uint pointerCount,
                 uint unionIndex, uint index) {
@@ -282,7 +282,7 @@ private:
     }
   }
 
-  void validate(schema::EnumNode::Reader enumNode) {
+  void validate(const schema::EnumNode::Reader& enumNode) {
     auto enumerants = enumNode.getEnumerants();
 
     KJ_STACK_ARRAY(bool, sawCodeOrder, enumerants.size(), 32, 256);
@@ -299,7 +299,7 @@ private:
     }
   }
 
-  void validate(schema::InterfaceNode::Reader interfaceNode) {
+  void validate(const schema::InterfaceNode::Reader& interfaceNode) {
     auto methods = interfaceNode.getMethods();
 
     KJ_STACK_ARRAY(bool, sawCodeOrder, methods.size(), 32, 256);
@@ -329,17 +329,17 @@ private:
     }
   }
 
-  void validate(schema::ConstNode::Reader constNode) {
+  void validate(const schema::ConstNode::Reader& constNode) {
     uint dummy1;
     bool dummy2;
     validate(constNode.getType(), constNode.getValue(), &dummy1, &dummy2);
   }
 
-  void validate(schema::AnnotationNode::Reader annotationNode) {
+  void validate(const schema::AnnotationNode::Reader& annotationNode) {
     validate(annotationNode.getType());
   }
 
-  void validate(schema::Type::Reader type, schema::Value::Reader value,
+  void validate(const schema::Type::Reader& type, const schema::Value::Reader& value,
                 uint* dataSizeInBits, bool* isPointer) {
     validate(type);
 
@@ -379,7 +379,7 @@ private:
     }
   }
 
-  void validate(schema::Type::Reader type) {
+  void validate(const schema::Type::Reader& type) {
     switch (type.getBody().which()) {
       case schema::Type::Body::VOID_TYPE:
       case schema::Type::Body::BOOL_TYPE:
@@ -442,7 +442,8 @@ class SchemaLoader::CompatibilityChecker {
 public:
   CompatibilityChecker(SchemaLoader::Impl& loader): loader(loader) {}
 
-  bool shouldReplace(schema::Node::Reader existingNode, schema::Node::Reader replacement,
+  bool shouldReplace(const schema::Node::Reader& existingNode,
+                     const schema::Node::Reader& replacement,
                      bool replacementIsNative) {
     KJ_CONTEXT("checking compatibility with previously-loaded node of the same id",
                existingNode.getDisplayName());
@@ -508,7 +509,8 @@ private:
     }
   }
 
-  void checkCompatibility(schema::Node::Reader node, schema::Node::Reader replacement) {
+  void checkCompatibility(const schema::Node::Reader& node,
+                          const schema::Node::Reader& replacement) {
     // Returns whether `replacement` is equivalent, older than, newer than, or incompatible with
     // `node`.  If exceptions are enabled, this will throw an exception on INCOMPATIBLE.
 
@@ -547,12 +549,13 @@ private:
     }
   }
 
-  void checkCompatibility(schema::FileNode::Reader file, schema::FileNode::Reader replacement) {
+  void checkCompatibility(const schema::FileNode::Reader& file,
+                          const schema::FileNode::Reader& replacement) {
     // Nothing to compare.
   }
 
-  void checkCompatibility(schema::StructNode::Reader structNode,
-                          schema::StructNode::Reader replacement) {
+  void checkCompatibility(const schema::StructNode::Reader& structNode,
+                          const schema::StructNode::Reader& replacement) {
     if (replacement.getDataSectionWordSize() > structNode.getDataSectionWordSize()) {
       replacementIsNewer();
     } else if (replacement.getDataSectionWordSize() < structNode.getDataSectionWordSize()) {
@@ -591,8 +594,8 @@ private:
     }
   }
 
-  void checkCompatibility(schema::StructNode::Member::Reader member,
-                          schema::StructNode::Member::Reader replacement) {
+  void checkCompatibility(const schema::StructNode::Member::Reader& member,
+                          const schema::StructNode::Member::Reader& replacement) {
     KJ_CONTEXT("comparing struct member", member.getName());
 
     switch (member.getBody().which()) {
@@ -634,8 +637,8 @@ private:
     }
   }
 
-  void checkCompatibility(schema::EnumNode::Reader enumNode,
-                          schema::EnumNode::Reader replacement) {
+  void checkCompatibility(const schema::EnumNode::Reader& enumNode,
+                          const schema::EnumNode::Reader& replacement) {
     uint size = enumNode.getEnumerants().size();
     uint replacementSize = replacement.getEnumerants().size();
     if (replacementSize > size) {
@@ -645,8 +648,8 @@ private:
     }
   }
 
-  void checkCompatibility(schema::InterfaceNode::Reader interfaceNode,
-                          schema::InterfaceNode::Reader replacement) {
+  void checkCompatibility(const schema::InterfaceNode::Reader& interfaceNode,
+                          const schema::InterfaceNode::Reader& replacement) {
     auto methods = interfaceNode.getMethods();
     auto replacementMethods = replacement.getMethods();
 
@@ -663,8 +666,8 @@ private:
     }
   }
 
-  void checkCompatibility(schema::InterfaceNode::Method::Reader method,
-                          schema::InterfaceNode::Method::Reader replacement) {
+  void checkCompatibility(const schema::InterfaceNode::Method::Reader& method,
+                          const schema::InterfaceNode::Method::Reader& replacement) {
     KJ_CONTEXT("comparing method", method.getName());
 
     auto params = method.getParams();
@@ -703,13 +706,13 @@ private:
                        ALLOW_UPGRADE_TO_STRUCT);
   }
 
-  void checkCompatibility(schema::ConstNode::Reader constNode,
-                          schema::ConstNode::Reader replacement) {
+  void checkCompatibility(const schema::ConstNode::Reader& constNode,
+                          const schema::ConstNode::Reader& replacement) {
     // Who cares?  These don't appear on the wire.
   }
 
-  void checkCompatibility(schema::AnnotationNode::Reader annotationNode,
-                          schema::AnnotationNode::Reader replacement) {
+  void checkCompatibility(const schema::AnnotationNode::Reader& annotationNode,
+                          const schema::AnnotationNode::Reader& replacement) {
     // Who cares?  These don't appear on the wire.
   }
 
@@ -718,8 +721,8 @@ private:
     NO_UPGRADE_TO_STRUCT
   };
 
-  void checkCompatibility(schema::Type::Reader type,
-                          schema::Type::Reader replacement,
+  void checkCompatibility(const schema::Type::Reader& type,
+                          const schema::Type::Reader& replacement,
                           UpgradeToStructMode upgradeToStructMode) {
     if (replacement.getBody().which() != type.getBody().which()) {
       // Check for allowed "upgrade" to Data or Object.
@@ -773,9 +776,10 @@ private:
         return;
 
       case schema::Type::Body::LIST_TYPE:
-        return checkCompatibility(type.getBody().getListType(),
-                                  replacement.getBody().getListType(),
-                                  ALLOW_UPGRADE_TO_STRUCT);
+        checkCompatibility(type.getBody().getListType(),
+                           replacement.getBody().getListType(),
+                           ALLOW_UPGRADE_TO_STRUCT);
+        return;
 
       case schema::Type::Body::ENUM_TYPE:
         VALIDATE_SCHEMA(replacement.getBody().getEnumType() == type.getBody().getEnumType(),
@@ -804,7 +808,7 @@ private:
     // We assume unknown types (from newer versions of Cap'n Proto?) are equivalent.
   }
 
-  void checkUpgradeToStruct(schema::Type::Reader type, uint64_t structTypeId) {
+  void checkUpgradeToStruct(const schema::Type::Reader& type, uint64_t structTypeId) {
     // We can't just look up the target struct and check it because it may not have been loaded
     // yet.  Instead, we contrive a struct that looks like what we want and load() that, which
     // guarantees that any incompatibility will be caught either now or when the real version of
@@ -884,7 +888,7 @@ private:
     loader.load(node);
   }
 
-  bool canUpgradeToData(schema::Type::Reader type) {
+  bool canUpgradeToData(const schema::Type::Reader& type) {
     if (type.getBody().which() == schema::Type::Body::TEXT_TYPE) {
       return true;
     } else if (type.getBody().which() == schema::Type::Body::LIST_TYPE) {
@@ -900,7 +904,7 @@ private:
     }
   }
 
-  bool canUpgradeToObject(schema::Type::Reader type) {
+  bool canUpgradeToObject(const schema::Type::Reader& type) {
     switch (type.getBody().which()) {
       case schema::Type::Body::VOID_TYPE:
       case schema::Type::Body::BOOL_TYPE:
@@ -930,8 +934,8 @@ private:
     return true;
   }
 
-  void checkDefaultCompatibility(schema::Value::Reader value,
-                                 schema::Value::Reader replacement) {
+  void checkDefaultCompatibility(const schema::Value::Reader& value,
+                                 const schema::Value::Reader& replacement) {
     // Note that we test default compatibility only after testing type compatibility, and default
     // values have already been validated as matching their types, so this should pass.
     KJ_ASSERT(value.getBody().which() == replacement.getBody().which()) {
@@ -980,7 +984,7 @@ SchemaLoader::Impl::Impl()
     : arena(allocator.arena()),
       segment(allocator.getRootSegment()) {}
 
-internal::RawSchema* SchemaLoader::Impl::load(schema::Node::Reader reader) {
+internal::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader) {
   // Make a copy of the node which can be used unchecked.
   size_t size = reader.totalSizeInWords() + 1;
   word* validated = allocate<word>(size);
@@ -1064,7 +1068,7 @@ internal::RawSchema* SchemaLoader::Impl::loadNative(const internal::RawSchema* n
 }
 
 internal::RawSchema* SchemaLoader::Impl::loadEmpty(
-    uint64_t id, Text::Reader name, schema::Node::Body::Which kind) {
+    uint64_t id, kj::StringPtr name, schema::Node::Body::Which kind) {
   word scratch[32];
   memset(scratch, 0, sizeof(scratch));
   MallocMessageBuilder builder(kj::arrayPtr(scratch, sizeof(scratch)));
@@ -1124,7 +1128,7 @@ kj::Maybe<Schema> SchemaLoader::tryGet(uint64_t id) const {
   }
 }
 
-Schema SchemaLoader::load(schema::Node::Reader reader) {
+Schema SchemaLoader::load(const schema::Node::Reader& reader) {
   return Schema(impl->load(reader));
 }
 

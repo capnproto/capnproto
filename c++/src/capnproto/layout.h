@@ -51,6 +51,16 @@ class SegmentBuilder;
 
 // =============================================================================
 
+struct DisallowConstCopy {
+  DisallowConstCopy() = default;
+  DisallowConstCopy(DisallowConstCopy&);
+  DisallowConstCopy(DisallowConstCopy&&) = default;
+  DisallowConstCopy& operator=(DisallowConstCopy&);
+  DisallowConstCopy& operator=(DisallowConstCopy&&) = default;
+};
+inline DisallowConstCopy::DisallowConstCopy(DisallowConstCopy&) = default;
+inline DisallowConstCopy& DisallowConstCopy::operator=(DisallowConstCopy&) = default;
+
 enum class FieldSize: uint8_t {
   // TODO(cleanup):  Rename to FieldLayout or maybe ValueLayout.
 
@@ -290,7 +300,7 @@ private:
   T value;
 };
 
-class StructBuilder {
+class StructBuilder: public DisallowConstCopy {
 public:
   inline StructBuilder(): segment(nullptr), data(nullptr), pointers(nullptr), bit0Offset(0) {}
 
@@ -303,85 +313,85 @@ public:
   inline Data::Builder getDataSectionAsBlob();
 
   template <typename T>
-  KJ_ALWAYS_INLINE(T getDataField(ElementCount offset) const);
+  KJ_ALWAYS_INLINE(T getDataField(ElementCount offset));
   // Gets the data field value of the given type at the given offset.  The offset is measured in
   // multiples of the field size, determined by the type.
 
   template <typename T>
-  KJ_ALWAYS_INLINE(T getDataField(ElementCount offset, Mask<T> mask) const);
+  KJ_ALWAYS_INLINE(T getDataField(ElementCount offset, Mask<T> mask));
   // Like getDataField() but applies the given XOR mask to the data on load.  Used for reading
   // fields with non-zero default values.
 
   template <typename T>
   KJ_ALWAYS_INLINE(void setDataField(
-      ElementCount offset, kj::NoInfer<T> value) const);
+      ElementCount offset, kj::NoInfer<T> value));
   // Sets the data field value at the given offset.
 
   template <typename T>
   KJ_ALWAYS_INLINE(void setDataField(
-      ElementCount offset, kj::NoInfer<T> value, Mask<T> mask) const);
+      ElementCount offset, kj::NoInfer<T> value, Mask<T> mask));
   // Like setDataField() but applies the given XOR mask before storing.  Used for writing fields
   // with non-zero default values.
 
-  StructBuilder initStructField(WirePointerCount ptrIndex, StructSize size) const;
+  StructBuilder initStructField(WirePointerCount ptrIndex, StructSize size);
   // Initializes the struct field at the given index in the pointer segment.  If it is already
   // initialized, the previous value is discarded or overwritten.  The struct is initialized to
   // the type's default state (all-zero).  Use getStructField() if you want the struct to be
   // initialized as a copy of the field's default value (which may have non-null pointers).
 
   StructBuilder getStructField(WirePointerCount ptrIndex, StructSize size,
-                               const word* defaultValue) const;
+                               const word* defaultValue);
   // Gets the struct field at the given index in the pointer segment.  If the field is not already
   // initialized, it is initialized as a deep copy of the given default value (a flat message),
   // or to the empty state if defaultValue is nullptr.
 
   ListBuilder initListField(WirePointerCount ptrIndex, FieldSize elementSize,
-                            ElementCount elementCount) const;
+                            ElementCount elementCount);
   // Allocates a new list of the given size for the field at the given index in the pointer
   // segment, and return a pointer to it.  All elements are initialized to zero.
 
   ListBuilder initStructListField(WirePointerCount ptrIndex, ElementCount elementCount,
-                                  StructSize size) const;
+                                  StructSize size);
   // Allocates a new list of the given size for the field at the given index in the pointer
   // segment, and return a pointer to it.  Each element is initialized to its empty state.
 
   ListBuilder getListField(WirePointerCount ptrIndex, FieldSize elementSize,
-                           const word* defaultValue) const;
+                           const word* defaultValue);
   // Gets the already-allocated list field for the given pointer index, ensuring that the list is
   // suitable for storing non-struct elements of the given size.  If the list is not already
   // allocated, it is allocated as a deep copy of the given default value (a flat message).  If
   // the default value is null, an empty list is used.
 
   ListBuilder getStructListField(WirePointerCount ptrIndex, StructSize elementSize,
-                                 const word* defaultValue) const;
+                                 const word* defaultValue);
   // Gets the already-allocated list field for the given pointer index, ensuring that the list
   // is suitable for storing struct elements of the given size.  If the list is not
   // already allocated, it is allocated as a deep copy of the given default value (a flat
   // message).  If the default value is null, an empty list is used.
 
   template <typename T>
-  typename T::Builder initBlobField(WirePointerCount ptrIndex, ByteCount size) const;
+  typename T::Builder initBlobField(WirePointerCount ptrIndex, ByteCount size);
   // Initialize a Text or Data field to the given size in bytes (not including NUL terminator for
   // Text) and return a Text::Builder which can be used to fill in the content.
 
   template <typename T>
-  void setBlobField(WirePointerCount ptrIndex, typename T::Reader value) const;
+  void setBlobField(WirePointerCount ptrIndex, typename T::Reader value);
   // Set the blob field to a copy of the given blob.
 
   template <typename T>
   typename T::Builder getBlobField(WirePointerCount ptrIndex,
-                                   const void* defaultValue, ByteCount defaultSize) const;
+                                   const void* defaultValue, ByteCount defaultSize);
   // Get the blob field.  If it is not initialized, initialize it to a copy of the given default.
 
-  ObjectBuilder getObjectField(WirePointerCount ptrIndex, const word* defaultValue) const;
+  ObjectBuilder getObjectField(WirePointerCount ptrIndex, const word* defaultValue);
   // Read a pointer of arbitrary type.
 
-  void setStructField(WirePointerCount ptrIndex, StructReader value) const;
-  void setListField(WirePointerCount ptrIndex, ListReader value) const;
-  void setObjectField(WirePointerCount ptrIndex, ObjectReader value) const;
+  void setStructField(WirePointerCount ptrIndex, StructReader value);
+  void setListField(WirePointerCount ptrIndex, ListReader value);
+  void setObjectField(WirePointerCount ptrIndex, ObjectReader value);
   // Sets a pointer field to a deep copy of the given value.
 
-  bool isPointerFieldNull(WirePointerCount ptrIndex) const;
+  bool isPointerFieldNull(WirePointerCount ptrIndex);
 
   StructReader asReader() const;
   // Gets a StructReader pointing at the same memory.
@@ -510,7 +520,7 @@ private:
 
 // -------------------------------------------------------------------
 
-class ListBuilder {
+class ListBuilder: public DisallowConstCopy {
 public:
   inline ListBuilder()
       : segment(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
@@ -524,55 +534,55 @@ public:
   // Reinterpret the list as a blob.  Throws an exception if the elements are not byte-sized.
 
   template <typename T>
-  KJ_ALWAYS_INLINE(T getDataElement(ElementCount index) const);
+  KJ_ALWAYS_INLINE(T getDataElement(ElementCount index));
   // Get the element of the given type at the given index.
 
   template <typename T>
   KJ_ALWAYS_INLINE(void setDataElement(
-      ElementCount index, kj::NoInfer<T> value) const);
+      ElementCount index, kj::NoInfer<T> value));
   // Set the element at the given index.
 
-  StructBuilder getStructElement(ElementCount index) const;
+  StructBuilder getStructElement(ElementCount index);
   // Get the struct element at the given index.
 
   ListBuilder initListElement(
-      ElementCount index, FieldSize elementSize, ElementCount elementCount) const;
+      ElementCount index, FieldSize elementSize, ElementCount elementCount);
   // Create a new list element of the given size at the given index.  All elements are initialized
   // to zero.
 
   ListBuilder initStructListElement(ElementCount index, ElementCount elementCount,
-                                    StructSize size) const;
+                                    StructSize size);
   // Allocates a new list of the given size for the field at the given index in the pointer
   // segment, and return a pointer to it.  Each element is initialized to its empty state.
 
-  ListBuilder getListElement(ElementCount index, FieldSize elementSize) const;
+  ListBuilder getListElement(ElementCount index, FieldSize elementSize);
   // Get the existing list element at the given index, making sure it is suitable for storing
   // non-struct elements of the given size.  Returns an empty list if the element is not
   // initialized.
 
-  ListBuilder getStructListElement(ElementCount index, StructSize elementSize) const;
+  ListBuilder getStructListElement(ElementCount index, StructSize elementSize);
   // Get the existing list element at the given index, making sure it is suitable for storing
   // struct elements of the given size.  Returns an empty list if the element is not
   // initialized.
 
   template <typename T>
-  typename T::Builder initBlobElement(ElementCount index, ByteCount size) const;
+  typename T::Builder initBlobElement(ElementCount index, ByteCount size);
   // Initialize a Text or Data element to the given size in bytes (not including NUL terminator for
   // Text) and return a Text::Builder which can be used to fill in the content.
 
   template <typename T>
-  void setBlobElement(ElementCount index, typename T::Reader value) const;
+  void setBlobElement(ElementCount index, typename T::Reader value);
   // Set the blob element to a copy of the given blob.
 
   template <typename T>
-  typename T::Builder getBlobElement(ElementCount index) const;
+  typename T::Builder getBlobElement(ElementCount index);
   // Get the blob element.  If it is not initialized, return an empty blob builder.
 
-  ObjectBuilder getObjectElement(ElementCount index) const;
+  ObjectBuilder getObjectElement(ElementCount index);
   // Gets a pointer element of arbitrary type.
 
-  void setListElement(ElementCount index, ListReader value) const;
-  void setObjectElement(ElementCount index, ObjectReader value) const;
+  void setListElement(ElementCount index, ListReader value);
+  void setObjectElement(ElementCount index, ObjectReader value);
   // Sets a pointer element to a deep copy of the given value.
 
   ListReader asReader() const;
@@ -716,12 +726,12 @@ inline Data::Builder StructBuilder::getDataSectionAsBlob() {
 }
 
 template <typename T>
-inline T StructBuilder::getDataField(ElementCount offset) const {
+inline T StructBuilder::getDataField(ElementCount offset) {
   return reinterpret_cast<WireValue<T>*>(data)[offset / ELEMENTS].get();
 }
 
 template <>
-inline bool StructBuilder::getDataField<bool>(ElementCount offset) const {
+inline bool StructBuilder::getDataField<bool>(ElementCount offset) {
   // This branch should be compiled out whenever this is inlined with a constant offset.
   BitCount boffset = (offset == 0 * ELEMENTS) ?
       BitCount(bit0Offset) : offset * (1 * BITS / ELEMENTS);
@@ -730,23 +740,22 @@ inline bool StructBuilder::getDataField<bool>(ElementCount offset) const {
 }
 
 template <>
-inline Void StructBuilder::getDataField<Void>(ElementCount offset) const {
+inline Void StructBuilder::getDataField<Void>(ElementCount offset) {
   return Void::VOID;
 }
 
 template <typename T>
-inline T StructBuilder::getDataField(ElementCount offset, Mask<T> mask) const {
+inline T StructBuilder::getDataField(ElementCount offset, Mask<T> mask) {
   return unmask<T>(getDataField<Mask<T> >(offset), mask);
 }
 
 template <typename T>
-inline void StructBuilder::setDataField(
-    ElementCount offset, kj::NoInfer<T> value) const {
+inline void StructBuilder::setDataField(ElementCount offset, kj::NoInfer<T> value) {
   reinterpret_cast<WireValue<T>*>(data)[offset / ELEMENTS].set(value);
 }
 
 template <>
-inline void StructBuilder::setDataField<bool>(ElementCount offset, bool value) const {
+inline void StructBuilder::setDataField<bool>(ElementCount offset, bool value) {
   // This branch should be compiled out whenever this is inlined with a constant offset.
   BitCount boffset = (offset == 0 * ELEMENTS) ?
       BitCount(bit0Offset) : offset * (1 * BITS / ELEMENTS);
@@ -757,11 +766,10 @@ inline void StructBuilder::setDataField<bool>(ElementCount offset, bool value) c
 }
 
 template <>
-inline void StructBuilder::setDataField<Void>(ElementCount offset, Void value) const {}
+inline void StructBuilder::setDataField<Void>(ElementCount offset, Void value) {}
 
 template <typename T>
-inline void StructBuilder::setDataField(
-    ElementCount offset, kj::NoInfer<T> value, Mask<T> m) const {
+inline void StructBuilder::setDataField(ElementCount offset, kj::NoInfer<T> value, Mask<T> m) {
   setDataField<Mask<T> >(offset, mask<T>(value, m));
 }
 
@@ -810,7 +818,7 @@ T StructReader::getDataField(ElementCount offset, Mask<T> mask) const {
 inline ElementCount ListBuilder::size() const { return elementCount; }
 
 template <typename T>
-inline T ListBuilder::getDataElement(ElementCount index) const {
+inline T ListBuilder::getDataElement(ElementCount index) {
   return reinterpret_cast<WireValue<T>*>(ptr + index * step / BITS_PER_BYTE)->get();
 
   // TODO(soon):  Benchmark this alternate implementation, which I suspect may make better use of
@@ -822,7 +830,7 @@ inline T ListBuilder::getDataElement(ElementCount index) const {
 }
 
 template <>
-inline bool ListBuilder::getDataElement<bool>(ElementCount index) const {
+inline bool ListBuilder::getDataElement<bool>(ElementCount index) {
   // Ignore stepBytes for bit lists because bit lists cannot be upgraded to struct lists.
   BitCount bindex = index * step;
   byte* b = ptr + bindex / BITS_PER_BYTE;
@@ -830,17 +838,17 @@ inline bool ListBuilder::getDataElement<bool>(ElementCount index) const {
 }
 
 template <>
-inline Void ListBuilder::getDataElement<Void>(ElementCount index) const {
+inline Void ListBuilder::getDataElement<Void>(ElementCount index) {
   return Void::VOID;
 }
 
 template <typename T>
-inline void ListBuilder::setDataElement(ElementCount index, kj::NoInfer<T> value) const {
+inline void ListBuilder::setDataElement(ElementCount index, kj::NoInfer<T> value) {
   reinterpret_cast<WireValue<T>*>(ptr + index * step / BITS_PER_BYTE)->set(value);
 }
 
 template <>
-inline void ListBuilder::setDataElement<bool>(ElementCount index, bool value) const {
+inline void ListBuilder::setDataElement<bool>(ElementCount index, bool value) {
   // Ignore stepBytes for bit lists because bit lists cannot be upgraded to struct lists.
   BitCount bindex = index * (1 * BITS / ELEMENTS);
   byte* b = ptr + bindex / BITS_PER_BYTE;
@@ -850,7 +858,7 @@ inline void ListBuilder::setDataElement<bool>(ElementCount index, bool value) co
 }
 
 template <>
-inline void ListBuilder::setDataElement<Void>(ElementCount index, Void value) const {}
+inline void ListBuilder::setDataElement<Void>(ElementCount index, Void value) {}
 
 // -------------------------------------------------------------------
 
@@ -875,22 +883,22 @@ inline Void ListReader::getDataElement<Void>(ElementCount index) const {
 }
 
 // These are defined in the source file.
-template <> typename Text::Builder StructBuilder::initBlobField<Text>(WirePointerCount ptrIndex, ByteCount size) const;
-template <> void StructBuilder::setBlobField<Text>(WirePointerCount ptrIndex, typename Text::Reader value) const;
-template <> typename Text::Builder StructBuilder::getBlobField<Text>(WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) const;
+template <> typename Text::Builder StructBuilder::initBlobField<Text>(WirePointerCount ptrIndex, ByteCount size);
+template <> void StructBuilder::setBlobField<Text>(WirePointerCount ptrIndex, typename Text::Reader value);
+template <> typename Text::Builder StructBuilder::getBlobField<Text>(WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize);
 template <> typename Text::Reader StructReader::getBlobField<Text>(WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) const;
-template <> typename Text::Builder ListBuilder::initBlobElement<Text>(ElementCount index, ByteCount size) const;
-template <> void ListBuilder::setBlobElement<Text>(ElementCount index, typename Text::Reader value) const;
-template <> typename Text::Builder ListBuilder::getBlobElement<Text>(ElementCount index) const;
+template <> typename Text::Builder ListBuilder::initBlobElement<Text>(ElementCount index, ByteCount size);
+template <> void ListBuilder::setBlobElement<Text>(ElementCount index, typename Text::Reader value);
+template <> typename Text::Builder ListBuilder::getBlobElement<Text>(ElementCount index);
 template <> typename Text::Reader ListReader::getBlobElement<Text>(ElementCount index) const;
 
-template <> typename Data::Builder StructBuilder::initBlobField<Data>(WirePointerCount ptrIndex, ByteCount size) const;
-template <> void StructBuilder::setBlobField<Data>(WirePointerCount ptrIndex, typename Data::Reader value) const;
-template <> typename Data::Builder StructBuilder::getBlobField<Data>(WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) const;
+template <> typename Data::Builder StructBuilder::initBlobField<Data>(WirePointerCount ptrIndex, ByteCount size);
+template <> void StructBuilder::setBlobField<Data>(WirePointerCount ptrIndex, typename Data::Reader value);
+template <> typename Data::Builder StructBuilder::getBlobField<Data>(WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize);
 template <> typename Data::Reader StructReader::getBlobField<Data>(WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) const;
-template <> typename Data::Builder ListBuilder::initBlobElement<Data>(ElementCount index, ByteCount size) const;
-template <> void ListBuilder::setBlobElement<Data>(ElementCount index, typename Data::Reader value) const;
-template <> typename Data::Builder ListBuilder::getBlobElement<Data>(ElementCount index) const;
+template <> typename Data::Builder ListBuilder::initBlobElement<Data>(ElementCount index, ByteCount size);
+template <> void ListBuilder::setBlobElement<Data>(ElementCount index, typename Data::Reader value);
+template <> typename Data::Builder ListBuilder::getBlobElement<Data>(ElementCount index);
 template <> typename Data::Reader ListReader::getBlobElement<Data>(ElementCount index) const;
 
 }  // namespace internal

@@ -102,7 +102,7 @@ inline internal::StructSize structSizeFromSchema(StructSchema schema) {
 
 // =======================================================================================
 
-kj::Maybe<EnumSchema::Enumerant> DynamicEnum::getEnumerant() {
+kj::Maybe<EnumSchema::Enumerant> DynamicEnum::getEnumerant() const {
   auto enumerants = schema.getEnumerants();
   if (value < enumerants.size()) {
     return enumerants[value];
@@ -111,7 +111,7 @@ kj::Maybe<EnumSchema::Enumerant> DynamicEnum::getEnumerant() {
   }
 }
 
-uint16_t DynamicEnum::asImpl(uint64_t requestedTypeId) {
+uint16_t DynamicEnum::asImpl(uint64_t requestedTypeId) const {
   KJ_REQUIRE(requestedTypeId == schema.getProto().getId(),
              "Type mismatch in DynamicEnum.as().") {
     // use it anyway
@@ -122,7 +122,7 @@ uint16_t DynamicEnum::asImpl(uint64_t requestedTypeId) {
 
 // =======================================================================================
 
-DynamicStruct::Reader DynamicObject::as(StructSchema schema) {
+DynamicStruct::Reader DynamicObject::as(StructSchema schema) const {
   if (reader.kind == internal::ObjectKind::NULL_POINTER) {
     return DynamicStruct::Reader(schema, internal::StructReader());
   }
@@ -133,7 +133,7 @@ DynamicStruct::Reader DynamicObject::as(StructSchema schema) {
   return DynamicStruct::Reader(schema, reader.structReader);
 }
 
-DynamicList::Reader DynamicObject::as(ListSchema schema) {
+DynamicList::Reader DynamicObject::as(ListSchema schema) const {
   if (reader.kind == internal::ObjectKind::NULL_POINTER) {
     return DynamicList::Reader(schema, internal::ListReader());
   }
@@ -146,7 +146,7 @@ DynamicList::Reader DynamicObject::as(ListSchema schema) {
 
 // =======================================================================================
 
-kj::Maybe<StructSchema::Member> DynamicUnion::Reader::which() {
+kj::Maybe<StructSchema::Member> DynamicUnion::Reader::which() const {
   auto members = schema.getMembers();
   uint16_t discrim = reader.getDataField<uint16_t>(
       schema.getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS);
@@ -169,7 +169,7 @@ kj::Maybe<StructSchema::Member> DynamicUnion::Builder::which() {
   }
 }
 
-DynamicValue::Reader DynamicUnion::Reader::get() {
+DynamicValue::Reader DynamicUnion::Reader::get() const {
   KJ_IF_MAYBE(w, which()) {
     return DynamicValue::Reader(DynamicStruct::Reader::getImpl(reader, *w));
   } else {
@@ -185,7 +185,7 @@ DynamicValue::Builder DynamicUnion::Builder::get() {
   }
 }
 
-void DynamicUnion::Builder::set(StructSchema::Member member, DynamicValue::Reader value) {
+void DynamicUnion::Builder::set(StructSchema::Member member, const DynamicValue::Reader& value) {
   setDiscriminant(member);
   DynamicStruct::Builder::setImpl(builder, member, value);
 }
@@ -231,26 +231,26 @@ Data::Builder DynamicUnion::Builder::initObjectAsData(StructSchema::Member membe
   return DynamicStruct::Builder::initFieldAsDataImpl(builder, member, size);
 }
 
-void DynamicUnion::Builder::set(Text::Reader name, DynamicValue::Reader value) {
+void DynamicUnion::Builder::set(kj::StringPtr name, const DynamicValue::Reader& value) {
   set(schema.getMemberByName(name), value);
 }
-DynamicValue::Builder DynamicUnion::Builder::init(Text::Reader name) {
+DynamicValue::Builder DynamicUnion::Builder::init(kj::StringPtr name) {
   return init(schema.getMemberByName(name));
 }
-DynamicValue::Builder DynamicUnion::Builder::init(Text::Reader name, uint size) {
+DynamicValue::Builder DynamicUnion::Builder::init(kj::StringPtr name, uint size) {
   return init(schema.getMemberByName(name), size);
 }
-DynamicStruct::Builder DynamicUnion::Builder::initObject(Text::Reader name, StructSchema type) {
+DynamicStruct::Builder DynamicUnion::Builder::initObject(kj::StringPtr name, StructSchema type) {
   return initObject(schema.getMemberByName(name), type);
 }
 DynamicList::Builder DynamicUnion::Builder::initObject(
-    Text::Reader name, ListSchema type, uint size) {
+    kj::StringPtr name, ListSchema type, uint size) {
   return initObject(schema.getMemberByName(name), type, size);
 }
-Text::Builder DynamicUnion::Builder::initObjectAsText(Text::Reader name, uint size) {
+Text::Builder DynamicUnion::Builder::initObjectAsText(kj::StringPtr name, uint size) {
   return initObjectAsText(schema.getMemberByName(name), size);
 }
-Data::Builder DynamicUnion::Builder::initObjectAsData(Text::Reader name, uint size) {
+Data::Builder DynamicUnion::Builder::initObjectAsData(kj::StringPtr name, uint size) {
   return initObjectAsData(schema.getMemberByName(name), size);
 }
 
@@ -285,7 +285,7 @@ void DynamicUnion::Builder::setObjectDiscriminant(StructSchema::Member member) {
 
 // =======================================================================================
 
-DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Member member) {
+DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Member member) const {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   return getImpl(reader, member);
 }
@@ -294,7 +294,7 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Member member) {
   return getImpl(builder, member);
 }
 
-bool DynamicStruct::Reader::has(StructSchema::Member member) {
+bool DynamicStruct::Reader::has(StructSchema::Member member) const {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
 
   auto body = member.getProto().getBody();
@@ -427,7 +427,7 @@ bool DynamicStruct::Builder::has(StructSchema::Member member) {
   return false;
 }
 
-void DynamicStruct::Builder::set(StructSchema::Member member, DynamicValue::Reader value) {
+void DynamicStruct::Builder::set(StructSchema::Member member, const DynamicValue::Reader& value) {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
   return setImpl(builder, member, value);
 }
@@ -591,56 +591,56 @@ Data::Builder DynamicStruct::Builder::initObjectAsData(StructSchema::Member memb
   return Data::Builder();
 }
 
-DynamicValue::Reader DynamicStruct::Reader::get(Text::Reader name) {
+DynamicValue::Reader DynamicStruct::Reader::get(kj::StringPtr name) const {
   return getImpl(reader, schema.getMemberByName(name));
 }
-DynamicValue::Builder DynamicStruct::Builder::get(Text::Reader name) {
+DynamicValue::Builder DynamicStruct::Builder::get(kj::StringPtr name) {
   return getImpl(builder, schema.getMemberByName(name));
 }
-bool DynamicStruct::Reader::has(Text::Reader name) {
+bool DynamicStruct::Reader::has(kj::StringPtr name) const {
   return has(schema.getMemberByName(name));
 }
-bool DynamicStruct::Builder::has(Text::Reader name) {
+bool DynamicStruct::Builder::has(kj::StringPtr name) {
   return has(schema.getMemberByName(name));
 }
-void DynamicStruct::Builder::set(Text::Reader name, DynamicValue::Reader value) {
+void DynamicStruct::Builder::set(kj::StringPtr name, const DynamicValue::Reader& value) {
   setImpl(builder, schema.getMemberByName(name), value);
 }
-void DynamicStruct::Builder::set(Text::Reader name,
+void DynamicStruct::Builder::set(kj::StringPtr name,
                                  std::initializer_list<DynamicValue::Reader> value) {
   init(name, value.size()).as<DynamicList>().copyFrom(value);
 }
-DynamicValue::Builder DynamicStruct::Builder::init(Text::Reader name) {
+DynamicValue::Builder DynamicStruct::Builder::init(kj::StringPtr name) {
   return initImpl(builder, schema.getMemberByName(name));
 }
-DynamicValue::Builder DynamicStruct::Builder::init(Text::Reader name, uint size) {
+DynamicValue::Builder DynamicStruct::Builder::init(kj::StringPtr name, uint size) {
   return initImpl(builder, schema.getMemberByName(name), size);
 }
 DynamicStruct::Builder DynamicStruct::Builder::getObject(
-    Text::Reader name, StructSchema type) {
+    kj::StringPtr name, StructSchema type) {
   return getObject(schema.getMemberByName(name), type);
 }
-DynamicList::Builder DynamicStruct::Builder::getObject(Text::Reader name, ListSchema type) {
+DynamicList::Builder DynamicStruct::Builder::getObject(kj::StringPtr name, ListSchema type) {
   return getObject(schema.getMemberByName(name), type);
 }
-Text::Builder DynamicStruct::Builder::getObjectAsText(Text::Reader name) {
+Text::Builder DynamicStruct::Builder::getObjectAsText(kj::StringPtr name) {
   return getObjectAsText(schema.getMemberByName(name));
 }
-Data::Builder DynamicStruct::Builder::getObjectAsData(Text::Reader name) {
+Data::Builder DynamicStruct::Builder::getObjectAsData(kj::StringPtr name) {
   return getObjectAsData(schema.getMemberByName(name));
 }
 DynamicStruct::Builder DynamicStruct::Builder::initObject(
-    Text::Reader name, StructSchema type) {
+    kj::StringPtr name, StructSchema type) {
   return initObject(schema.getMemberByName(name), type);
 }
 DynamicList::Builder DynamicStruct::Builder::initObject(
-    Text::Reader name, ListSchema type, uint size) {
+    kj::StringPtr name, ListSchema type, uint size) {
   return initObject(schema.getMemberByName(name), type, size);
 }
-Text::Builder DynamicStruct::Builder::initObjectAsText(Text::Reader name, uint size) {
+Text::Builder DynamicStruct::Builder::initObjectAsText(kj::StringPtr name, uint size) {
   return initObjectAsText(schema.getMemberByName(name), size);
 }
-Data::Builder DynamicStruct::Builder::initObjectAsData(Text::Reader name, uint size) {
+Data::Builder DynamicStruct::Builder::initObjectAsData(kj::StringPtr name, uint size) {
   return initObjectAsData(schema.getMemberByName(name), size);
 }
 
@@ -873,7 +873,8 @@ Data::Builder DynamicStruct::Builder::getObjectAsDataImpl(
 }
 
 void DynamicStruct::Builder::setImpl(
-    internal::StructBuilder builder, StructSchema::Member member, DynamicValue::Reader value) {
+    internal::StructBuilder builder, StructSchema::Member member,
+    const DynamicValue::Reader& value) {
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER: {
       auto src = value.as<DynamicUnion>();
@@ -1119,7 +1120,7 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) const {
   return nullptr;
 }
 
-DynamicValue::Builder DynamicList::Builder::operator[](uint index) const {
+DynamicValue::Builder DynamicList::Builder::operator[](uint index) {
   KJ_REQUIRE(index < size(), "List index out-of-bounds.");
 
   switch (schema.whichElementType()) {
@@ -1182,7 +1183,7 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) const {
   return nullptr;
 }
 
-void DynamicList::Builder::set(uint index, DynamicValue::Reader value) {
+void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
   KJ_REQUIRE(index < size(), "List index out-of-bounds.") {
     return;
   }
@@ -1321,13 +1322,13 @@ void DynamicList::Builder::copyFrom(std::initializer_list<DynamicValue::Reader> 
   }
 }
 
-DynamicList::Reader DynamicList::Builder::asReader() {
+DynamicList::Reader DynamicList::Builder::asReader() const {
   return DynamicList::Reader(schema, builder.asReader());
 }
 
 // =======================================================================================
 
-DynamicValue::Reader DynamicValue::Builder::asReader() {
+DynamicValue::Reader DynamicValue::Builder::asReader() const {
   switch (type) {
     case UNKNOWN: return Reader();
     case VOID: return Reader(voidValue);
@@ -1399,7 +1400,7 @@ T checkRoundTrip(U value) {
 }  // namespace
 
 #define HANDLE_NUMERIC_TYPE(typeName, ifInt, ifUint, ifFloat) \
-typeName DynamicValue::Reader::AsImpl<typeName>::apply(Reader reader) { \
+typeName DynamicValue::Reader::AsImpl<typeName>::apply(const Reader& reader) { \
   switch (reader.type) { \
     case INT: \
       return ifInt<typeName>(reader.intValue); \
@@ -1413,7 +1414,7 @@ typeName DynamicValue::Reader::AsImpl<typeName>::apply(Reader reader) { \
       } \
   } \
 } \
-typeName DynamicValue::Builder::AsImpl<typeName>::apply(Builder builder) { \
+typeName DynamicValue::Builder::AsImpl<typeName>::apply(Builder& builder) { \
   switch (builder.type) { \
     case INT: \
       return ifInt<typeName>(builder.intValue); \
@@ -1442,12 +1443,12 @@ HANDLE_NUMERIC_TYPE(double, kj::upcast, kj::upcast, kj::upcast)
 #undef HANDLE_NUMERIC_TYPE
 
 #define HANDLE_TYPE(name, discrim, typeName) \
-ReaderFor<typeName> DynamicValue::Reader::AsImpl<typeName>::apply(Reader reader) { \
+ReaderFor<typeName> DynamicValue::Reader::AsImpl<typeName>::apply(const Reader& reader) { \
   KJ_REQUIRE(reader.type == discrim, \
       "Type mismatch when using DynamicValue::Reader::as()."); \
   return reader.name##Value; \
 } \
-BuilderFor<typeName> DynamicValue::Builder::AsImpl<typeName>::apply(Builder builder) { \
+BuilderFor<typeName> DynamicValue::Builder::AsImpl<typeName>::apply(Builder& builder) { \
   KJ_REQUIRE(builder.type == discrim, \
       "Type mismatch when using DynamicValue::Builder::as()."); \
   return builder.name##Value; \
@@ -1467,13 +1468,13 @@ HANDLE_TYPE(union, UNION, DynamicUnion)
 #undef HANDLE_TYPE
 
 // As in the header, HANDLE_TYPE(void, VOID, Void) crashes GCC 4.7.
-Void DynamicValue::Reader::AsImpl<Void>::apply(Reader reader) {
+Void DynamicValue::Reader::AsImpl<Void>::apply(const Reader& reader) {
   KJ_REQUIRE(reader.type == VOID, "Type mismatch when using DynamicValue::Reader::as().") {
     return Void();
   }
   return reader.voidValue;
 }
-Void DynamicValue::Builder::AsImpl<Void>::apply(Builder builder) {
+Void DynamicValue::Builder::AsImpl<Void>::apply(Builder& builder) {
   KJ_REQUIRE(builder.type == VOID, "Type mismatch when using DynamicValue::Builder::as().") {
     return Void();
   }
@@ -1509,7 +1510,7 @@ DynamicStruct::Builder PointerHelpers<DynamicStruct, Kind::UNKNOWN>::getDynamic(
       index, structSizeFromSchema(schema), nullptr));
 }
 void PointerHelpers<DynamicStruct, Kind::UNKNOWN>::set(
-    StructBuilder builder, WirePointerCount index, DynamicStruct::Reader value) {
+    StructBuilder builder, WirePointerCount index, const DynamicStruct::Reader& value) {
   builder.setStructField(index, value.reader);
 }
 DynamicStruct::Builder PointerHelpers<DynamicStruct, Kind::UNKNOWN>::init(
@@ -1536,7 +1537,7 @@ DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::getDynamic(
   }
 }
 void PointerHelpers<DynamicList, Kind::UNKNOWN>::set(
-    StructBuilder builder, WirePointerCount index, DynamicList::Reader value) {
+    StructBuilder builder, WirePointerCount index, const DynamicList::Reader& value) {
   builder.setListField(index, value.reader);
 }
 DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::init(

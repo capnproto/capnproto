@@ -44,7 +44,7 @@ public:
   kj::Maybe<Schema> tryGet(uint64_t id) const;
   // Like get() but doesn't throw.
 
-  Schema load(schema::Node::Reader reader);
+  Schema load(const schema::Node::Reader& reader);
   // Loads the given schema node.  Validates the node and throws an exception if invalid.  This
   // makes a copy of the schema, so the object passed in can be destroyed after this returns.
   //

@@ -76,7 +76,7 @@ InterfaceSchema Schema::asInterface() const {
   return InterfaceSchema(raw);
 }
 
-void Schema::requireUsableAs(const internal::RawSchema* expected) {
+void Schema::requireUsableAs(const internal::RawSchema* expected) const {
   KJ_REQUIRE(raw == expected ||
           (raw != nullptr && expected != nullptr && raw->canCastTo == expected),
           "This schema is not compatible with the requested native type.");
@@ -87,7 +87,7 @@ void Schema::requireUsableAs(const internal::RawSchema* expected) {
 namespace {
 
 template <typename List>
-auto findSchemaMemberByName(const internal::RawSchema* raw, Text::Reader name,
+auto findSchemaMemberByName(const internal::RawSchema* raw, kj::StringPtr name,
                             uint unionIndex, List&& list)
     -> kj::Maybe<kj::RemoveReference<decltype(list[0])>> {
   uint lower = 0;
@@ -100,7 +100,7 @@ auto findSchemaMemberByName(const internal::RawSchema* raw, Text::Reader name,
 
     if (member.unionIndex == unionIndex) {
       auto candidate = list[member.index];
-      Text::Reader candidateName = candidate.getProto().getName();
+      kj::StringPtr candidateName = candidate.getProto().getName();
       if (candidateName == name) {
         return candidate;
       } else if (candidateName < name) {
@@ -124,11 +124,11 @@ StructSchema::MemberList StructSchema::getMembers() const {
   return MemberList(*this, 0, getProto().getBody().getStructNode().getMembers());
 }
 
-kj::Maybe<StructSchema::Member> StructSchema::findMemberByName(Text::Reader name) const {
+kj::Maybe<StructSchema::Member> StructSchema::findMemberByName(kj::StringPtr name) const {
   return findSchemaMemberByName(raw, name, 0, getMembers());
 }
 
-StructSchema::Member StructSchema::getMemberByName(Text::Reader name) const {
+StructSchema::Member StructSchema::getMemberByName(kj::StringPtr name) const {
   KJ_IF_MAYBE(member, findMemberByName(name)) {
     return *member;
   } else {
@@ -152,11 +152,11 @@ StructSchema::MemberList StructSchema::Union::getMembers() const {
   return MemberList(parent, index + 1, proto.getBody().getUnionMember().getMembers());
 }
 
-kj::Maybe<StructSchema::Member> StructSchema::Union::findMemberByName(Text::Reader name) const {
+kj::Maybe<StructSchema::Member> StructSchema::Union::findMemberByName(kj::StringPtr name) const {
   return findSchemaMemberByName(parent.raw, name, index + 1, getMembers());
 }
 
-StructSchema::Member StructSchema::Union::getMemberByName(Text::Reader name) const {
+StructSchema::Member StructSchema::Union::getMemberByName(kj::StringPtr name) const {
   KJ_IF_MAYBE(member, findMemberByName(name)) {
     return *member;
   } else {
@@ -170,11 +170,11 @@ EnumSchema::EnumerantList EnumSchema::getEnumerants() const {
   return EnumerantList(*this, getProto().getBody().getEnumNode().getEnumerants());
 }
 
-kj::Maybe<EnumSchema::Enumerant> EnumSchema::findEnumerantByName(Text::Reader name) const {
+kj::Maybe<EnumSchema::Enumerant> EnumSchema::findEnumerantByName(kj::StringPtr name) const {
   return findSchemaMemberByName(raw, name, 0, getEnumerants());
 }
 
-EnumSchema::Enumerant EnumSchema::getEnumerantByName(Text::Reader name) const {
+EnumSchema::Enumerant EnumSchema::getEnumerantByName(kj::StringPtr name) const {
   KJ_IF_MAYBE(enumerant, findEnumerantByName(name)) {
     return *enumerant;
   } else {
@@ -188,11 +188,11 @@ InterfaceSchema::MethodList InterfaceSchema::getMethods() const {
   return MethodList(*this, getProto().getBody().getInterfaceNode().getMethods());
 }
 
-kj::Maybe<InterfaceSchema::Method> InterfaceSchema::findMethodByName(Text::Reader name) const {
+kj::Maybe<InterfaceSchema::Method> InterfaceSchema::findMethodByName(kj::StringPtr name) const {
   return findSchemaMemberByName(raw, name, 0, getMethods());
 }
 
-InterfaceSchema::Method InterfaceSchema::getMethodByName(Text::Reader name) const {
+InterfaceSchema::Method InterfaceSchema::getMethodByName(kj::StringPtr name) const {
   KJ_IF_MAYBE(method, findMethodByName(name)) {
     return *method;
   } else {
@@ -299,7 +299,7 @@ ListSchema ListSchema::getListElementType() const {
   return ListSchema(elementType, nestingDepth - 1, elementSchema);
 }
 
-void ListSchema::requireUsableAs(ListSchema expected) {
+void ListSchema::requireUsableAs(ListSchema expected) const {
   KJ_REQUIRE(elementType == expected.elementType && nestingDepth == expected.nestingDepth,
           "This schema is not compatible with the requested native type.");
   elementSchema.requireUsableAs(expected.elementSchema.raw);

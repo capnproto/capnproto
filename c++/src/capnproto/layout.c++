@@ -1825,89 +1825,89 @@ StructBuilder StructBuilder::getRoot(
 }
 
 StructBuilder StructBuilder::initStructField(
-    WirePointerCount ptrIndex, StructSize size) const {
+    WirePointerCount ptrIndex, StructSize size) {
   return WireHelpers::initStructPointer(pointers + ptrIndex, segment, size);
 }
 
 StructBuilder StructBuilder::getStructField(
-    WirePointerCount ptrIndex, StructSize size, const word* defaultValue) const {
+    WirePointerCount ptrIndex, StructSize size, const word* defaultValue) {
   return WireHelpers::getWritableStructPointer(
       pointers + ptrIndex, segment, size, defaultValue);
 }
 
 ListBuilder StructBuilder::initListField(
-    WirePointerCount ptrIndex, FieldSize elementSize, ElementCount elementCount) const {
+    WirePointerCount ptrIndex, FieldSize elementSize, ElementCount elementCount) {
   return WireHelpers::initListPointer(
       pointers + ptrIndex, segment,
       elementCount, elementSize);
 }
 
 ListBuilder StructBuilder::initStructListField(
-    WirePointerCount ptrIndex, ElementCount elementCount, StructSize elementSize) const {
+    WirePointerCount ptrIndex, ElementCount elementCount, StructSize elementSize) {
   return WireHelpers::initStructListPointer(
       pointers + ptrIndex, segment, elementCount, elementSize);
 }
 
 ListBuilder StructBuilder::getListField(
-    WirePointerCount ptrIndex, FieldSize elementSize, const word* defaultValue) const {
+    WirePointerCount ptrIndex, FieldSize elementSize, const word* defaultValue) {
   return WireHelpers::getWritableListPointer(
       pointers + ptrIndex, segment, elementSize, defaultValue);
 }
 
 ListBuilder StructBuilder::getStructListField(
-    WirePointerCount ptrIndex, StructSize elementSize, const word* defaultValue) const {
+    WirePointerCount ptrIndex, StructSize elementSize, const word* defaultValue) {
   return WireHelpers::getWritableStructListPointer(
       pointers + ptrIndex, segment, elementSize, defaultValue);
 }
 
 template <>
-Text::Builder StructBuilder::initBlobField<Text>(WirePointerCount ptrIndex, ByteCount size) const {
+Text::Builder StructBuilder::initBlobField<Text>(WirePointerCount ptrIndex, ByteCount size) {
   return WireHelpers::initTextPointer(pointers + ptrIndex, segment, size);
 }
 template <>
-void StructBuilder::setBlobField<Text>(WirePointerCount ptrIndex, Text::Reader value) const {
+void StructBuilder::setBlobField<Text>(WirePointerCount ptrIndex, Text::Reader value) {
   WireHelpers::setTextPointer(pointers + ptrIndex, segment, value);
 }
 template <>
 Text::Builder StructBuilder::getBlobField<Text>(
-    WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) const {
+    WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) {
   return WireHelpers::getWritableTextPointer(
       pointers + ptrIndex, segment, defaultValue, defaultSize);
 }
 
 template <>
-Data::Builder StructBuilder::initBlobField<Data>(WirePointerCount ptrIndex, ByteCount size) const {
+Data::Builder StructBuilder::initBlobField<Data>(WirePointerCount ptrIndex, ByteCount size) {
   return WireHelpers::initDataPointer(pointers + ptrIndex, segment, size);
 }
 template <>
-void StructBuilder::setBlobField<Data>(WirePointerCount ptrIndex, Data::Reader value) const {
+void StructBuilder::setBlobField<Data>(WirePointerCount ptrIndex, Data::Reader value) {
   WireHelpers::setDataPointer(pointers + ptrIndex, segment, value);
 }
 template <>
 Data::Builder StructBuilder::getBlobField<Data>(
-    WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) const {
+    WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) {
   return WireHelpers::getWritableDataPointer(
       pointers + ptrIndex, segment, defaultValue, defaultSize);
 }
 
 ObjectBuilder StructBuilder::getObjectField(
-    WirePointerCount ptrIndex, const word* defaultValue) const {
+    WirePointerCount ptrIndex, const word* defaultValue) {
   return WireHelpers::getWritableObjectPointer(segment, pointers + ptrIndex, defaultValue);
 }
 
-void StructBuilder::setStructField(WirePointerCount ptrIndex, StructReader value) const {
+void StructBuilder::setStructField(WirePointerCount ptrIndex, StructReader value) {
   return WireHelpers::setStructPointer(segment, pointers + ptrIndex, value);
 }
 
-void StructBuilder::setListField(WirePointerCount ptrIndex, ListReader value) const {
+void StructBuilder::setListField(WirePointerCount ptrIndex, ListReader value) {
   return WireHelpers::setListPointer(segment, pointers + ptrIndex, value);
 }
 
-void StructBuilder::setObjectField(WirePointerCount ptrIndex, ObjectReader value) const {
+void StructBuilder::setObjectField(WirePointerCount ptrIndex, ObjectReader value) {
   return WireHelpers::setObjectPointer(segment, pointers + ptrIndex, value);
 }
 
-bool StructBuilder::isPointerFieldNull(WirePointerCount ptrIndex) const {
+bool StructBuilder::isPointerFieldNull(WirePointerCount ptrIndex) {
   return (pointers + ptrIndex)->isNull();
 }
 
@@ -2027,7 +2027,7 @@ Data::Builder ListBuilder::asData() {
   return Data::Builder(reinterpret_cast<byte*>(ptr), elementCount / ELEMENTS);
 }
 
-StructBuilder ListBuilder::getStructElement(ElementCount index) const {
+StructBuilder ListBuilder::getStructElement(ElementCount index) {
   BitCount64 indexBit = ElementCount64(index) * step;
   byte* structData = ptr + indexBit / BITS_PER_BYTE;
   return StructBuilder(segment, structData,
@@ -2036,75 +2036,75 @@ StructBuilder ListBuilder::getStructElement(ElementCount index) const {
 }
 
 ListBuilder ListBuilder::initListElement(
-    ElementCount index, FieldSize elementSize, ElementCount elementCount) const {
+    ElementCount index, FieldSize elementSize, ElementCount elementCount) {
   return WireHelpers::initListPointer(
       reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE),
       segment, elementCount, elementSize);
 }
 
 ListBuilder ListBuilder::initStructListElement(
-    ElementCount index, ElementCount elementCount, StructSize elementSize) const {
+    ElementCount index, ElementCount elementCount, StructSize elementSize) {
   return WireHelpers::initStructListPointer(
       reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE),
       segment, elementCount, elementSize);
 }
 
-ListBuilder ListBuilder::getListElement(ElementCount index, FieldSize elementSize) const {
+ListBuilder ListBuilder::getListElement(ElementCount index, FieldSize elementSize) {
   return WireHelpers::getWritableListPointer(
       reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment,
       elementSize, nullptr);
 }
 
-ListBuilder ListBuilder::getStructListElement(ElementCount index, StructSize elementSize) const {
+ListBuilder ListBuilder::getStructListElement(ElementCount index, StructSize elementSize) {
   return WireHelpers::getWritableStructListPointer(
       reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment,
       elementSize, nullptr);
 }
 
 template <>
-Text::Builder ListBuilder::initBlobElement<Text>(ElementCount index, ByteCount size) const {
+Text::Builder ListBuilder::initBlobElement<Text>(ElementCount index, ByteCount size) {
   return WireHelpers::initTextPointer(
       reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment, size);
 }
 template <>
-void ListBuilder::setBlobElement<Text>(ElementCount index, Text::Reader value) const {
+void ListBuilder::setBlobElement<Text>(ElementCount index, Text::Reader value) {
   WireHelpers::setTextPointer(
       reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment, value);
 }
 template <>
-Text::Builder ListBuilder::getBlobElement<Text>(ElementCount index) const {
+Text::Builder ListBuilder::getBlobElement<Text>(ElementCount index) {
   return WireHelpers::getWritableTextPointer(
       reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment, "", 0 * BYTES);
 }
 
 template <>
-Data::Builder ListBuilder::initBlobElement<Data>(ElementCount index, ByteCount size) const {
+Data::Builder ListBuilder::initBlobElement<Data>(ElementCount index, ByteCount size) {
   return WireHelpers::initDataPointer(
       reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment, size);
 }
 template <>
-void ListBuilder::setBlobElement<Data>(ElementCount index, Data::Reader value) const {
+void ListBuilder::setBlobElement<Data>(ElementCount index, Data::Reader value) {
   WireHelpers::setDataPointer(
       reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment, value);
 }
 template <>
-Data::Builder ListBuilder::getBlobElement<Data>(ElementCount index) const {
+Data::Builder ListBuilder::getBlobElement<Data>(ElementCount index) {
   return WireHelpers::getWritableDataPointer(
       reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment, nullptr,
       0 * BYTES);
 }
 
-ObjectBuilder ListBuilder::getObjectElement(ElementCount index) const {
+ObjectBuilder ListBuilder::getObjectElement(ElementCount index) {
   return WireHelpers::getWritableObjectPointer(
       segment, reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), nullptr);
 }
 
-void ListBuilder::setListElement(ElementCount index, ListReader value) const {
+void ListBuilder::setListElement(ElementCount index, ListReader value) {
   return WireHelpers::setListPointer(
       segment, reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), value);
 }
 
-void ListBuilder::setObjectElement(ElementCount index, ObjectReader value) const {
+void ListBuilder::setObjectElement(ElementCount index, ObjectReader value) {
   return WireHelpers::setObjectPointer(
       segment, reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), value);
 }

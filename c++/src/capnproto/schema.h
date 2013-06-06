@@ -76,7 +76,7 @@ public:
   // it), compare their IDs instead.
 
   template <typename T>
-  void requireUsableAs();
+  void requireUsableAs() const;
   // Throws an exception if a value with this Schema cannot safely be cast to a native value of
   // the given type.  This passes if either:
   // - *this == from<T>()
@@ -92,7 +92,7 @@ private:
     return Schema(&internal::rawSchema<T>());
   }
 
-  void requireUsableAs(const internal::RawSchema* expected);
+  void requireUsableAs(const internal::RawSchema* expected) const;
 
   friend class StructSchema;
   friend class EnumSchema;
@@ -113,9 +113,9 @@ public:
 
   MemberList getMembers() const;
 
-  kj::Maybe<Member> findMemberByName(Text::Reader name) const;
+  kj::Maybe<Member> findMemberByName(kj::StringPtr name) const;
 
-  Member getMemberByName(Text::Reader name) const;
+  Member getMemberByName(kj::StringPtr name) const;
   // Like findMemberByName() but throws an exception on failure.
 
 private:
@@ -169,9 +169,9 @@ public:
 
   MemberList getMembers() const;
 
-  kj::Maybe<Member> findMemberByName(Text::Reader name) const;
+  kj::Maybe<Member> findMemberByName(kj::StringPtr name) const;
 
-  Member getMemberByName(Text::Reader name) const;
+  Member getMemberByName(kj::StringPtr name) const;
   // Like findMemberByName() but throws an exception on failure.
 
 private:
@@ -185,7 +185,7 @@ public:
   inline uint size() const { return list.size(); }
   inline Member operator[](uint index) const { return Member(parent, unionIndex, index, list[index]); }
 
-  typedef internal::IndexingIterator<MemberList, Member> iterator;
+  typedef internal::IndexingIterator<const MemberList, Member> iterator;
   inline iterator begin() const { return iterator(this, 0); }
   inline iterator end() const { return iterator(this, size()); }
 
@@ -212,9 +212,9 @@ public:
 
   EnumerantList getEnumerants() const;
 
-  kj::Maybe<Enumerant> findEnumerantByName(Text::Reader name) const;
+  kj::Maybe<Enumerant> findEnumerantByName(kj::StringPtr name) const;
 
-  Enumerant getEnumerantByName(Text::Reader name) const;
+  Enumerant getEnumerantByName(kj::StringPtr name) const;
   // Like findEnumerantByName() but throws an exception on failure.
 
 private:
@@ -254,7 +254,7 @@ public:
   inline uint size() const { return list.size(); }
   inline Enumerant operator[](uint index) const { return Enumerant(parent, index, list[index]); }
 
-  typedef internal::IndexingIterator<EnumerantList, Enumerant> iterator;
+  typedef internal::IndexingIterator<const EnumerantList, Enumerant> iterator;
   inline iterator begin() const { return iterator(this, 0); }
   inline iterator end() const { return iterator(this, size()); }
 
@@ -279,9 +279,9 @@ public:
 
   MethodList getMethods() const;
 
-  kj::Maybe<Method> findMethodByName(Text::Reader name) const;
+  kj::Maybe<Method> findMethodByName(kj::StringPtr name) const;
 
-  Method getMethodByName(Text::Reader name) const;
+  Method getMethodByName(kj::StringPtr name) const;
   // Like findMethodByName() but throws an exception on failure.
 
 private:
@@ -322,7 +322,7 @@ public:
   inline uint size() const { return list.size(); }
   inline Method operator[](uint index) const { return Method(parent, index, list[index]); }
 
-  typedef internal::IndexingIterator<MethodList, Method> iterator;
+  typedef internal::IndexingIterator<const MethodList, Method> iterator;
   inline iterator begin() const { return iterator(this, 0); }
   inline iterator end() const { return iterator(this, size()); }
 
@@ -372,7 +372,7 @@ public:
   inline bool operator!=(const ListSchema& other) const { return !(*this == other); }
 
   template <typename T>
-  void requireUsableAs();
+  void requireUsableAs() const;
 
 private:
   schema::Type::Body::Which elementType;
@@ -393,7 +393,7 @@ private:
     return FromImpl<T>::get();
   }
 
-  void requireUsableAs(ListSchema expected);
+  void requireUsableAs(ListSchema expected) const;
 
   friend class Schema;
 };
@@ -417,7 +417,7 @@ template <> inline schema::Type::Body::Which Schema::from<Text>() { return schem
 template <> inline schema::Type::Body::Which Schema::from<Data>() { return schema::Type::Body::DATA_TYPE; }
 
 template <typename T>
-inline void Schema::requireUsableAs() {
+inline void Schema::requireUsableAs() const {
   requireUsableAs(&internal::rawSchema<T>());
 }
 
@@ -455,7 +455,7 @@ inline bool ListSchema::operator==(const ListSchema& other) const {
 }
 
 template <typename T>
-inline void ListSchema::requireUsableAs() {
+inline void ListSchema::requireUsableAs() const {
   static_assert(kind<T>() == Kind::LIST,
                 "ListSchema::requireUsableAs<T>() requires T is a list type.");
   requireUsableAs(Schema::from<T>());
