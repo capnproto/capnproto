@@ -11,7 +11,7 @@
 
 # Code you may want to map in from elsewhere.
 /c++/src/base
-/c++/src/capnproto/compilerbin
+/c++/src/capnp/compilerbin
 /c++/src/ekam
 /c++/src/os
 /c++/src/protobuf
