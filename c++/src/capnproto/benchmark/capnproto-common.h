@@ -24,7 +24,6 @@
 #ifndef CAPNPROTO_BENCHMARK_CAPNPROTO_COMMON_H_
 #define CAPNPROTO_BENCHMARK_CAPNPROTO_COMMON_H_
 
-#define CAPNPROTO_PRIVATE
 #include "common.h"
 #include <capnproto/serialize.h>
 #include <capnproto/serialize-packed.h>

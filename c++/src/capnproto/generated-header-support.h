@@ -108,8 +108,6 @@ struct PointerHelpers<T, Kind::BLOB> {
   }
 };
 
-#if defined(CAPNPROTO_PRIVATE) || defined(__CDT_PARSER__)
-
 struct UncheckedMessage {
   typedef const word* Reader;
 };
@@ -124,8 +122,6 @@ struct PointerHelpers<UncheckedMessage> {
     return reader.getUncheckedPointer(index);
   }
 };
-
-#endif
 
 struct RawSchema {
   // The generated code defines a constant RawSchema for every compiled declaration.
