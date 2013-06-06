@@ -21,8 +21,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNPROTO_BENCHMARK_COMMON_H_
-#define CAPNPROTO_BENCHMARK_COMMON_H_
+#ifndef CAPNP_BENCHMARK_COMMON_H_
+#define CAPNP_BENCHMARK_COMMON_H_
 
 #include <unistd.h>
 #include <limits>
@@ -282,4 +282,4 @@ int benchmarkMain(int argc, char* argv[]) {
 }  // namespace capnp
 }  // namespace benchmark
 
-#endif  // CAPNPROTO_BENCHMARK_COMMON_H_
+#endif  // CAPNP_BENCHMARK_COMMON_H_

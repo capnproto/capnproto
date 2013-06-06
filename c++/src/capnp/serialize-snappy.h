@@ -21,8 +21,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNPROTO_SERIALIZE_SNAPPY_H_
-#define CAPNPROTO_SERIALIZE_SNAPPY_H_
+#ifndef CAPNP_SERIALIZE_SNAPPY_H_
+#define CAPNP_SERIALIZE_SNAPPY_H_
 
 #include "serialize.h"
 #include "serialize-packed.h"
@@ -108,4 +108,4 @@ inline void writeSnappyPackedMessage(kj::OutputStream& output, MessageBuilder& b
 
 }  // namespace capnp
 
-#endif  // CAPNPROTO_SERIALIZE_SNAPPY_H_
+#endif  // CAPNP_SERIALIZE_SNAPPY_H_

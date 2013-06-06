@@ -32,8 +32,8 @@
 // As always, underlying data is validated lazily, so you have to actually traverse the whole
 // message if you want to validate all content.
 
-#ifndef CAPNPROTO_DYNAMIC_H_
-#define CAPNPROTO_DYNAMIC_H_
+#ifndef CAPNP_DYNAMIC_H_
+#define CAPNP_DYNAMIC_H_
 
 #include "schema.h"
 #include "layout.h"
@@ -730,48 +730,48 @@ DynamicTypeFor<TypeIfEnum<T>> toDynamic(T&& value) {
 inline DynamicValue::Reader::Reader(std::nullptr_t n): type(UNKNOWN) {}
 inline DynamicValue::Builder::Builder(std::nullptr_t n): type(UNKNOWN) {}
 
-    #define CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(cppType, typeTag, fieldName) \
+    #define CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(cppType, typeTag, fieldName) \
 inline DynamicValue::Reader::Reader(cppType value) \
     : type(typeTag), fieldName##Value(value) {} \
 inline DynamicValue::Builder::Builder(cppType value) \
     : type(typeTag), fieldName##Value(value) {}
 
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Void, VOID, void);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(bool, BOOL, bool);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(char, INT, int);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(signed char, INT, int);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(short, INT, int);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(int, INT, int);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(long, INT, int);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(long long, INT, int);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned char, UINT, uint);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned short, UINT, uint);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned int, UINT, uint);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned long, UINT, uint);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned long long, UINT, uint);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(float, FLOAT, float);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(double, FLOAT, float);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicEnum, ENUM, enum);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicObject, OBJECT, object);
-#undef CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Void, VOID, void);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(bool, BOOL, bool);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(char, INT, int);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(signed char, INT, int);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(short, INT, int);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(int, INT, int);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(long, INT, int);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(long long, INT, int);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned char, UINT, uint);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned short, UINT, uint);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned int, UINT, uint);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned long, UINT, uint);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned long long, UINT, uint);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(float, FLOAT, float);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(double, FLOAT, float);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicEnum, ENUM, enum);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicObject, OBJECT, object);
+#undef CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR
 
-#define CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(cppType, typeTag, fieldName) \
+#define CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(cppType, typeTag, fieldName) \
 inline DynamicValue::Reader::Reader(const cppType::Reader& value) \
     : type(typeTag), fieldName##Value(value) {} \
 inline DynamicValue::Builder::Builder(cppType::Builder value) \
     : type(typeTag), fieldName##Value(value) {}
 
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Text, TEXT, text);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Data, DATA, data);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicList, LIST, list);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicStruct, STRUCT, struct);
-CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicUnion, UNION, union);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Text, TEXT, text);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Data, DATA, data);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicList, LIST, list);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicStruct, STRUCT, struct);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicUnion, UNION, union);
 
-#undef CAPNPROTO_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR
+#undef CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR
 
 inline DynamicValue::Reader::Reader(const char* value): Reader(Text::Reader(value)) {}
 
-#define CAPNPROTO_DECLARE_TYPE(name, discrim, typeName) \
+#define CAPNP_DECLARE_TYPE(name, discrim, typeName) \
 template <> \
 struct DynamicValue::Reader::AsImpl<typeName> { \
   static ReaderFor<typeName> apply(const Reader& reader); \
@@ -781,29 +781,29 @@ struct DynamicValue::Builder::AsImpl<typeName> { \
   static BuilderFor<typeName> apply(Builder& builder); \
 };
 
-//CAPNPROTO_DECLARE_TYPE(void, VOID, Void)
-CAPNPROTO_DECLARE_TYPE(bool, BOOL, bool)
-CAPNPROTO_DECLARE_TYPE(int8, INT8, int8_t)
-CAPNPROTO_DECLARE_TYPE(int16, INT16, int16_t)
-CAPNPROTO_DECLARE_TYPE(int32, INT32, int32_t)
-CAPNPROTO_DECLARE_TYPE(int64, INT64, int64_t)
-CAPNPROTO_DECLARE_TYPE(uint8, UINT8, uint8_t)
-CAPNPROTO_DECLARE_TYPE(uint16, UINT16, uint16_t)
-CAPNPROTO_DECLARE_TYPE(uint32, UINT32, uint32_t)
-CAPNPROTO_DECLARE_TYPE(uint64, UINT64, uint64_t)
-CAPNPROTO_DECLARE_TYPE(float32, FLOAT32, float)
-CAPNPROTO_DECLARE_TYPE(float64, FLOAT64, double)
+//CAPNP_DECLARE_TYPE(void, VOID, Void)
+CAPNP_DECLARE_TYPE(bool, BOOL, bool)
+CAPNP_DECLARE_TYPE(int8, INT8, int8_t)
+CAPNP_DECLARE_TYPE(int16, INT16, int16_t)
+CAPNP_DECLARE_TYPE(int32, INT32, int32_t)
+CAPNP_DECLARE_TYPE(int64, INT64, int64_t)
+CAPNP_DECLARE_TYPE(uint8, UINT8, uint8_t)
+CAPNP_DECLARE_TYPE(uint16, UINT16, uint16_t)
+CAPNP_DECLARE_TYPE(uint32, UINT32, uint32_t)
+CAPNP_DECLARE_TYPE(uint64, UINT64, uint64_t)
+CAPNP_DECLARE_TYPE(float32, FLOAT32, float)
+CAPNP_DECLARE_TYPE(float64, FLOAT64, double)
 
-CAPNPROTO_DECLARE_TYPE(text, TEXT, Text)
-CAPNPROTO_DECLARE_TYPE(data, DATA, Data)
-CAPNPROTO_DECLARE_TYPE(list, LIST, DynamicList)
-CAPNPROTO_DECLARE_TYPE(struct, STRUCT, DynamicStruct)
-CAPNPROTO_DECLARE_TYPE(enum, ENUM, DynamicEnum)
-CAPNPROTO_DECLARE_TYPE(object, OBJECT, DynamicObject)
-CAPNPROTO_DECLARE_TYPE(union, UNION, DynamicUnion)
-#undef CAPNPROTO_DECLARE_TYPE
+CAPNP_DECLARE_TYPE(text, TEXT, Text)
+CAPNP_DECLARE_TYPE(data, DATA, Data)
+CAPNP_DECLARE_TYPE(list, LIST, DynamicList)
+CAPNP_DECLARE_TYPE(struct, STRUCT, DynamicStruct)
+CAPNP_DECLARE_TYPE(enum, ENUM, DynamicEnum)
+CAPNP_DECLARE_TYPE(object, OBJECT, DynamicObject)
+CAPNP_DECLARE_TYPE(union, UNION, DynamicUnion)
+#undef CAPNP_DECLARE_TYPE
 
-// CAPNPROTO_DECLARE_TYPE(Void) causes gcc 4.7 to segfault.  If I do it manually and remove the
+// CAPNP_DECLARE_TYPE(Void) causes gcc 4.7 to segfault.  If I do it manually and remove the
 // ReaderFor<> and BuilderFor<> wrappers, it works.
 template <>
 struct DynamicValue::Reader::AsImpl<Void> {
@@ -933,4 +933,4 @@ inline DynamicList::Builder DynamicList::Builder::as<DynamicList>() {
 
 }  // namespace capnp
 
-#endif  // CAPNPROTO_DYNAMIC_H_
+#endif  // CAPNP_DYNAMIC_H_

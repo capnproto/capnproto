@@ -28,8 +28,8 @@
 // as does other parts of the Cap'n proto library which provide a higher-level interface for
 // dynamic introspection.
 
-#ifndef CAPNPROTO_LAYOUT_H_
-#define CAPNPROTO_LAYOUT_H_
+#ifndef CAPNP_LAYOUT_H_
+#define CAPNP_LAYOUT_H_
 
 #include <kj/common.h>
 #include "common.h"
@@ -894,4 +894,4 @@ template <> typename Data::Reader ListReader::getBlobElement<Data>(ElementCount 
 }  // namespace internal
 }  // namespace capnp
 
-#endif  // CAPNPROTO_LAYOUT_H_
+#endif  // CAPNP_LAYOUT_H_

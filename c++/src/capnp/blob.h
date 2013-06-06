@@ -21,8 +21,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNPROTO_BLOB_H_
-#define CAPNPROTO_BLOB_H_
+#ifndef CAPNP_BLOB_H_
+#define CAPNP_BLOB_H_
 
 #include <kj/common.h>
 #include <kj/string.h>
@@ -200,4 +200,4 @@ inline kj::ArrayPtr<char> Text::Builder::slice(size_t start, size_t end) {
 
 }  // namespace capnp
 
-#endif  // CAPNPROTO_BLOB_H_
+#endif  // CAPNP_BLOB_H_

@@ -21,8 +21,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNPROTO_SERIALIZE_PACKED_H_
-#define CAPNPROTO_SERIALIZE_PACKED_H_
+#ifndef CAPNP_SERIALIZE_PACKED_H_
+#define CAPNP_SERIALIZE_PACKED_H_
 
 #include "serialize.h"
 
@@ -121,4 +121,4 @@ inline void writePackedMessageToFd(int fd, MessageBuilder& builder) {
 
 }  // namespace capnp
 
-#endif  // CAPNPROTO_SERIALIZE_PACKED_H_
+#endif  // CAPNP_SERIALIZE_PACKED_H_

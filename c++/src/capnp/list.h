@@ -21,8 +21,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNPROTO_LIST_H_
-#define CAPNPROTO_LIST_H_
+#ifndef CAPNP_LIST_H_
+#define CAPNP_LIST_H_
 
 #include "layout.h"
 #include <initializer_list>
@@ -549,4 +549,4 @@ private:
 
 }  // namespace capnp
 
-#endif  // CAPNPROTO_LIST_H_
+#endif  // CAPNP_LIST_H_

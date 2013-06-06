@@ -114,15 +114,15 @@ namespace internal {
 {{#fileTypes}}
 {{#typeStructOrUnion}}
 {{#typeStruct}}
-CAPNPROTO_DECLARE_STRUCT(
+CAPNP_DECLARE_STRUCT(
     ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{typeFullName}}, {{structId}},
     {{structDataSize}}, {{structPointerCount}}, {{structPreferredListEncoding}});
 {{#structNestedEnums}}
-CAPNPROTO_DECLARE_ENUM(
+CAPNP_DECLARE_ENUM(
     ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{typeFullName}}::{{enumName}}, {{enumId}});
 {{/structNestedEnums}}
 {{#structUnions}}
-CAPNPROTO_DECLARE_UNION(
+CAPNP_DECLARE_UNION(
     ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{structFullName}}::{{unionTitleCase}},
     ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{structFullName}}, {{unionIndex}});
 {{/structUnions}}
@@ -130,7 +130,7 @@ CAPNPROTO_DECLARE_UNION(
 {{/typeStructOrUnion}}
 {{/fileTypes}}
 {{#fileEnums}}
-CAPNPROTO_DECLARE_ENUM(
+CAPNP_DECLARE_ENUM(
     ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{enumName}}, {{enumId}});
 {{/fileEnums}}
 }  // namespace capnp

@@ -21,8 +21,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNPROTO_SCHEMA_H_
-#define CAPNPROTO_SCHEMA_H_
+#ifndef CAPNP_SCHEMA_H_
+#define CAPNP_SCHEMA_H_
 
 #include "schema.capnp.h"
 
@@ -468,4 +468,4 @@ struct ListSchema::FromImpl<List<T>> {
 
 }  // namespace capnp
 
-#endif  // CAPNPROTO_SCHEMA_H_
+#endif  // CAPNP_SCHEMA_H_

@@ -530,7 +530,7 @@ outerFileContext schemaNodes = fileContext where
         context "fileName" = MuVariable $ fileName desc
         context "fileBasename" = MuVariable $ takeBaseName $ fileName desc
         context "fileIncludeGuard" = MuVariable $
-            "CAPNPROTO_INCLUDED_" ++ hashString (fileName desc ++ ':':show (fileId desc))
+            "CAPNP_INCLUDED_" ++ hashString (fileName desc ++ ':':show (fileId desc))
         context "fileNamespaces" = MuList $ map (namespaceContext context) namespace
         context "fileEnums" = MuList $ map (enumContext context) [e | DescEnum e <- fileMembers desc]
         context "fileTypes" = MuList $ map (typeContext context) flattenedMembers

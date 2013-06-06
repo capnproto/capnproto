@@ -21,10 +21,10 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNPROTO_ARENA_H_
-#define CAPNPROTO_ARENA_H_
+#ifndef CAPNP_ARENA_H_
+#define CAPNP_ARENA_H_
 
-#ifndef CAPNPROTO_PRIVATE
+#ifndef CAPNP_PRIVATE
 #error "This header is only meant to be included by Cap'n Proto's own source code."
 #endif
 
@@ -298,4 +298,4 @@ inline void SegmentBuilder::reset() {
 }  // namespace internal
 }  // namespace capnp
 
-#endif  // CAPNPROTO_ARENA_H_
+#endif  // CAPNP_ARENA_H_

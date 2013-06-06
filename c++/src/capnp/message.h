@@ -28,8 +28,8 @@
 
 #include "list.h"  // TODO(cleanup):  For FromReader.  Move elsewhere?
 
-#ifndef CAPNPROTO_MESSAGE_H_
-#define CAPNPROTO_MESSAGE_H_
+#ifndef CAPNP_MESSAGE_H_
+#define CAPNP_MESSAGE_H_
 
 namespace capnp {
 
@@ -370,4 +370,4 @@ static typename Type::Reader defaultValue() {
 
 }  // namespace capnp
 
-#endif  // CAPNPROTO_MESSAGE_H_
+#endif  // CAPNP_MESSAGE_H_

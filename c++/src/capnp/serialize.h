@@ -40,8 +40,8 @@
 // - A multi-segment message can be read entirely in three system calls with no buffering.
 // - The format is appropriate for mmap()ing since all data is aligned.
 
-#ifndef CAPNPROTO_SERIALIZE_H_
-#define CAPNPROTO_SERIALIZE_H_
+#ifndef CAPNP_SERIALIZE_H_
+#define CAPNP_SERIALIZE_H_
 
 #include "message.h"
 #include <kj/io.h>

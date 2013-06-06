@@ -21,8 +21,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNPROTO_SCHEMA_LOADER_H_
-#define CAPNPROTO_SCHEMA_LOADER_H_
+#ifndef CAPNP_SCHEMA_LOADER_H_
+#define CAPNP_SCHEMA_LOADER_H_
 
 #include "schema.h"
 #include <kj/memory.h>
@@ -108,4 +108,4 @@ inline void SchemaLoader::loadCompiledTypeAndDependencies() {
 
 }  // namespace capnp
 
-#endif  // CAPNPROTO_SCHEMA_LOADER_H_
+#endif  // CAPNP_SCHEMA_LOADER_H_

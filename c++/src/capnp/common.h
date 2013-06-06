@@ -25,8 +25,8 @@
 // time, but should then be optimized down to basic primitives (usually, integers) by the
 // compiler.
 
-#ifndef CAPNPROTO_COMMON_H_
-#define CAPNPROTO_COMMON_H_
+#ifndef CAPNP_COMMON_H_
+#define CAPNP_COMMON_H_
 
 #include <kj/units.h>
 #include <inttypes.h>
@@ -217,4 +217,4 @@ inline constexpr WordCount intervalLength(const word* a, const word* b) {
 
 }  // namespace capnp
 
-#endif  // CAPNPROTO_COMMON_H_
+#endif  // CAPNP_COMMON_H_
