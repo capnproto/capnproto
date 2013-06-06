@@ -77,8 +77,7 @@ public:
     other.ptr = nullptr;
     other.size_ = 0;
   }
-  template <typename = EnableIfConst<T>>
-  inline Array(Array<RemoveConst<T>>&& other) noexcept
+  inline Array(Array<RemoveConstOrBogus<T>>&& other) noexcept
       : ptr(other.ptr), size_(other.size_), disposer(other.disposer) {
     other.ptr = nullptr;
     other.size_ = 0;

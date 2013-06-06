@@ -158,6 +158,13 @@ TEST(Common, MaybeConstness) {
   Maybe<int&> mi = i;
   const Maybe<int&> cmi = mi;
 //  const Maybe<int&> cmi2 = cmi;    // shouldn't compile!  Transitive const violation.
+
+  KJ_IF_MAYBE(i2, cmi) {
+    EXPECT_EQ(&i, i2);
+  } else {
+    ADD_FAILURE();
+  }
+
   Maybe<const int&> mci = mi;
   const Maybe<const int&> cmci = mci;
   const Maybe<const int&> cmci2 = cmci;

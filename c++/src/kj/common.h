@@ -243,6 +243,10 @@ template <typename T> struct EnableIfConst_;
 template <typename T> struct EnableIfConst_<const T> { typedef T Type; };
 template <typename T> using EnableIfConst = typename EnableIfConst_<T>::Type;
 
+template <typename T> struct RemoveConstOrBogus_ { struct Type; };
+template <typename T> struct RemoveConstOrBogus_<const T> { typedef T Type; };
+template <typename T> using RemoveConstOrBogus = typename RemoveConstOrBogus_<T>::Type;
+
 // =======================================================================================
 // Equivalents to std::move() and std::forward(), since these are very commonly needed and the
 // std header <utility> pulls in lots of other stuff.

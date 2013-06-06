@@ -88,8 +88,7 @@ public:
   Own(const Own& other) = delete;
   inline Own(Own&& other) noexcept
       : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
-  template <typename = EnableIfConst<T>>
-  inline Own(Own<RemoveConst<T>>&& other) noexcept
+  inline Own(Own<RemoveConstOrBogus<T>>&& other) noexcept
       : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
   template <typename U>
   inline Own(Own<U>&& other) noexcept

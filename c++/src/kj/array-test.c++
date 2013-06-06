@@ -101,13 +101,15 @@ TEST(Array, TrivialConstructor) {
   {
     Array<char> chars = heapArray<char>(32);
 
-    // Somewhat hacky:  We can't guarantee that the new array is allocated in the same place, but
-    // any reasonable allocator is highly likely to do so.  If it does, then we expect that the
-    // memory has not been initialized.
-    if (chars.begin() == ptr) {
-      EXPECT_NE(chars[0], 0);
-      EXPECT_NE(chars[1], 0);
-    }
+    // TODO(test):  The following doesn't work in opt mode -- I guess some allocators zero the
+    //   memory?  Is there some other way we can test this?  Maybe override malloc()?
+//    // Somewhat hacky:  We can't guarantee that the new array is allocated in the same place, but
+//    // any reasonable allocator is highly likely to do so.  If it does, then we expect that the
+//    // memory has not been initialized.
+//    if (chars.begin() == ptr) {
+//      EXPECT_NE(chars[0], 0);
+//      EXPECT_NE(chars[1], 0);
+//    }
   }
 }
 

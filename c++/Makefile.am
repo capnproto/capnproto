@@ -149,10 +149,11 @@ BUILT_SOURCES = $(test_capnpc_outputs) $(capnpc_outputs)
 check_PROGRAMS = capnproto-test
 capnproto_test_LDADD = -lgtest -lgtest_main libcapnproto.a
 capnproto_test_SOURCES =                                       \
-  src/kj/array-test.c++                                        \
   src/kj/common-test.c++                                       \
-  src/kj/debug-test.c++                                        \
+  src/kj/memory-test.c++                                       \
+  src/kj/array-test.c++                                        \
   src/kj/string-test.c++                                       \
+  src/kj/debug-test.c++                                        \
   src/kj/units-test.c++                                        \
   src/capnproto/blob-test.c++                                  \
   src/capnproto/layout-test.c++                                \
