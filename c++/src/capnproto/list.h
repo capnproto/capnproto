@@ -195,9 +195,9 @@ struct List<T, Kind::PRIMITIVE> {
       return reader.template getDataElement<T>(index * ELEMENTS);
     }
 
-    typedef internal::IndexingIterator<const Reader, T> iterator;
-    inline iterator begin() const { return iterator(this, 0); }
-    inline iterator end() const { return iterator(this, size()); }
+    typedef internal::IndexingIterator<const Reader, T> Iterator;
+    inline Iterator begin() const { return Iterator(this, 0); }
+    inline Iterator end() const { return Iterator(this, size()); }
 
   private:
     internal::ListReader reader;
@@ -231,9 +231,9 @@ struct List<T, Kind::PRIMITIVE> {
       builder.template setDataElement<T>(index * ELEMENTS, value);
     }
 
-    typedef internal::IndexingIterator<Builder, T> iterator;
-    inline iterator begin() { return iterator(this, 0); }
-    inline iterator end() { return iterator(this, size()); }
+    typedef internal::IndexingIterator<Builder, T> Iterator;
+    inline Iterator begin() { return Iterator(this, 0); }
+    inline Iterator end() { return Iterator(this, size()); }
 
   private:
     internal::ListBuilder builder;
@@ -294,9 +294,9 @@ struct List<T, Kind::STRUCT> {
       return typename T::Reader(reader.getStructElement(index * ELEMENTS));
     }
 
-    typedef internal::IndexingIterator<const Reader, typename T::Reader> iterator;
-    inline iterator begin() const { return iterator(this, 0); }
-    inline iterator end() const { return iterator(this, size()); }
+    typedef internal::IndexingIterator<const Reader, typename T::Reader> Iterator;
+    inline Iterator begin() const { return Iterator(this, 0); }
+    inline Iterator end() const { return Iterator(this, size()); }
 
   private:
     internal::ListReader reader;
@@ -326,9 +326,9 @@ struct List<T, Kind::STRUCT> {
     // be redundant, and set() would risk data loss if the input struct were from a newer version
     // of teh protocol.
 
-    typedef internal::IndexingIterator<Builder, typename T::Builder> iterator;
-    inline iterator begin() { return iterator(this, 0); }
-    inline iterator end() { return iterator(this, size()); }
+    typedef internal::IndexingIterator<Builder, typename T::Builder> Iterator;
+    inline Iterator begin() { return Iterator(this, 0); }
+    inline Iterator end() { return Iterator(this, size()); }
 
   private:
     internal::ListBuilder builder;
@@ -386,9 +386,9 @@ struct List<List<T>, Kind::LIST> {
       return typename List<T>::Reader(List<T>::getAsElementOf(reader, index));
     }
 
-    typedef internal::IndexingIterator<const Reader, typename List<T>::Reader> iterator;
-    inline iterator begin() const { return iterator(this, 0); }
-    inline iterator end() const { return iterator(this, size()); }
+    typedef internal::IndexingIterator<const Reader, typename List<T>::Reader> Iterator;
+    inline Iterator begin() const { return Iterator(this, 0); }
+    inline Iterator end() const { return Iterator(this, size()); }
 
   private:
     internal::ListReader reader;
@@ -426,9 +426,9 @@ struct List<List<T>, Kind::LIST> {
       }
     }
 
-    typedef internal::IndexingIterator<Builder, typename List<T>::Builder> iterator;
-    inline iterator begin() { return iterator(this, 0); }
-    inline iterator end() { return iterator(this, size()); }
+    typedef internal::IndexingIterator<Builder, typename List<T>::Builder> Iterator;
+    inline Iterator begin() { return Iterator(this, 0); }
+    inline Iterator end() { return Iterator(this, size()); }
 
   private:
     internal::ListBuilder builder;
@@ -484,9 +484,9 @@ struct List<T, Kind::BLOB> {
       return reader.getBlobElement<T>(index * ELEMENTS);
     }
 
-    typedef internal::IndexingIterator<const Reader, typename T::Reader> iterator;
-    inline iterator begin() const { return iterator(this, 0); }
-    inline iterator end() const { return iterator(this, size()); }
+    typedef internal::IndexingIterator<const Reader, typename T::Reader> Iterator;
+    inline Iterator begin() const { return Iterator(this, 0); }
+    inline Iterator end() const { return Iterator(this, size()); }
 
   private:
     internal::ListReader reader;
@@ -517,9 +517,9 @@ struct List<T, Kind::BLOB> {
       return builder.initBlobElement<T>(index * ELEMENTS, size * BYTES);
     }
 
-    typedef internal::IndexingIterator<Builder, typename T::Builder> iterator;
-    inline iterator begin() { return iterator(this, 0); }
-    inline iterator end() { return iterator(this, size()); }
+    typedef internal::IndexingIterator<Builder, typename T::Builder> Iterator;
+    inline Iterator begin() { return Iterator(this, 0); }
+    inline Iterator end() { return Iterator(this, size()); }
 
   private:
     internal::ListBuilder builder;

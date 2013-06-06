@@ -185,9 +185,9 @@ public:
   inline uint size() const { return list.size(); }
   inline Member operator[](uint index) const { return Member(parent, unionIndex, index, list[index]); }
 
-  typedef internal::IndexingIterator<const MemberList, Member> iterator;
-  inline iterator begin() const { return iterator(this, 0); }
-  inline iterator end() const { return iterator(this, size()); }
+  typedef internal::IndexingIterator<const MemberList, Member> Iterator;
+  inline Iterator begin() const { return Iterator(this, 0); }
+  inline Iterator end() const { return Iterator(this, size()); }
 
 private:
   StructSchema parent;
@@ -254,9 +254,9 @@ public:
   inline uint size() const { return list.size(); }
   inline Enumerant operator[](uint index) const { return Enumerant(parent, index, list[index]); }
 
-  typedef internal::IndexingIterator<const EnumerantList, Enumerant> iterator;
-  inline iterator begin() const { return iterator(this, 0); }
-  inline iterator end() const { return iterator(this, size()); }
+  typedef internal::IndexingIterator<const EnumerantList, Enumerant> Iterator;
+  inline Iterator begin() const { return Iterator(this, 0); }
+  inline Iterator end() const { return Iterator(this, size()); }
 
 private:
   EnumSchema parent;
@@ -322,9 +322,9 @@ public:
   inline uint size() const { return list.size(); }
   inline Method operator[](uint index) const { return Method(parent, index, list[index]); }
 
-  typedef internal::IndexingIterator<const MethodList, Method> iterator;
-  inline iterator begin() const { return iterator(this, 0); }
-  inline iterator end() const { return iterator(this, size()); }
+  typedef internal::IndexingIterator<const MethodList, Method> Iterator;
+  inline Iterator begin() const { return Iterator(this, 0); }
+  inline Iterator end() const { return Iterator(this, size()); }
 
 private:
   InterfaceSchema parent;

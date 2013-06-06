@@ -423,9 +423,9 @@ public:
   inline uint size() const { return reader.size() / ELEMENTS; }
   DynamicValue::Reader operator[](uint index) const;
 
-  typedef internal::IndexingIterator<const Reader, DynamicValue::Reader> iterator;
-  inline iterator begin() const { return iterator(this, 0); }
-  inline iterator end() const { return iterator(this, size()); }
+  typedef internal::IndexingIterator<const Reader, DynamicValue::Reader> Iterator;
+  inline Iterator begin() const { return Iterator(this, 0); }
+  inline Iterator end() const { return Iterator(this, size()); }
 
 private:
   ListSchema schema;
@@ -461,9 +461,9 @@ public:
   void set(uint index, const DynamicValue::Reader& value);
   DynamicValue::Builder init(uint index, uint size);
 
-  typedef internal::IndexingIterator<Builder, DynamicStruct::Builder> iterator;
-  inline iterator begin() { return iterator(this, 0); }
-  inline iterator end() { return iterator(this, size()); }
+  typedef internal::IndexingIterator<Builder, DynamicStruct::Builder> Iterator;
+  inline Iterator begin() { return Iterator(this, 0); }
+  inline Iterator end() { return Iterator(this, size()); }
 
   void copyFrom(std::initializer_list<DynamicValue::Reader> value);
 
