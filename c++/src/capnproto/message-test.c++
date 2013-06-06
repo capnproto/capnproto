@@ -24,7 +24,7 @@
 #include "message.h"
 #include <gtest/gtest.h>
 
-namespace capnproto {
+namespace capnp {
 namespace internal {
 namespace {
 
@@ -50,4 +50,4 @@ TEST(Message, MallocBuilderWithFirstSegment) {
 
 }  // namespace
 }  // namespace internal
-}  // namespace capnproto
+}  // namespace capnp

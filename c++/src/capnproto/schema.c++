@@ -25,7 +25,7 @@
 #include "message.h"
 #include <kj/debug.h>
 
-namespace capnproto {
+namespace capnp {
 
 schema::Node::Reader Schema::getProto() const {
   return readMessageUnchecked<schema::Node>(raw->encodedNode);
@@ -304,4 +304,4 @@ void ListSchema::requireUsableAs(ListSchema expected) const {
   elementSchema.requireUsableAs(expected.elementSchema.raw);
 }
 
-}  // namespace capnproto
+}  // namespace capnp

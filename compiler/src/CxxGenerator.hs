@@ -164,7 +164,7 @@ listInlineMultiplierString (ListType t) = case inlineMultiplier t of
     s -> " * " ++ show s
 listInlineMultiplierString _ = error "Not a list."
 
-cxxTypeString (BuiltinType BuiltinVoid) = " ::capnproto::Void"
+cxxTypeString (BuiltinType BuiltinVoid) = " ::capnp::Void"
 cxxTypeString (BuiltinType BuiltinBool) = "bool"
 cxxTypeString (BuiltinType BuiltinInt8) = " ::int8_t"
 cxxTypeString (BuiltinType BuiltinInt16) = " ::int16_t"
@@ -176,18 +176,18 @@ cxxTypeString (BuiltinType BuiltinUInt32) = " ::uint32_t"
 cxxTypeString (BuiltinType BuiltinUInt64) = " ::uint64_t"
 cxxTypeString (BuiltinType BuiltinFloat32) = "float"
 cxxTypeString (BuiltinType BuiltinFloat64) = "double"
-cxxTypeString (BuiltinType BuiltinText) = " ::capnproto::Text"
-cxxTypeString (BuiltinType BuiltinData) = " ::capnproto::Data"
-cxxTypeString (BuiltinType BuiltinObject) = " ::capnproto::Object"
+cxxTypeString (BuiltinType BuiltinText) = " ::capnp::Text"
+cxxTypeString (BuiltinType BuiltinData) = " ::capnp::Data"
+cxxTypeString (BuiltinType BuiltinObject) = " ::capnp::Object"
 cxxTypeString (EnumType desc) = globalName $ DescEnum desc
 cxxTypeString (StructType desc) = globalName $ DescStruct desc
 cxxTypeString (InlineStructType desc) = globalName $ DescStruct desc
 cxxTypeString (InterfaceType desc) = globalName $ DescInterface desc
-cxxTypeString (ListType t) = concat [" ::capnproto::List<", cxxTypeString t, ">"]
+cxxTypeString (ListType t) = concat [" ::capnp::List<", cxxTypeString t, ">"]
 cxxTypeString (InlineListType t s) =
-    concat [" ::capnproto::InlineList<", cxxTypeString t, ", ", show s, ">"]
+    concat [" ::capnp::InlineList<", cxxTypeString t, ", ", show s, ">"]
 cxxTypeString (InlineDataType s) =
-    concat [" ::capnproto::InlineData<", show s, ">"]
+    concat [" ::capnp::InlineData<", show s, ">"]
 
 cxxFieldSizeString SizeVoid = "VOID";
 cxxFieldSizeString (SizeData Size1) = "BIT";
@@ -206,8 +206,8 @@ fieldOffsetInteger (InlineCompositeOffset d p ds ps) = let
     byteOffset = case ds of
         DataSectionWords _ -> d * 8
         _ -> d * byteSize
-    in printf "%d * ::capnproto::BYTES, %d * ::capnproto::BYTES, \
-              \%d * ::capnproto::POINTERS, %d * ::capnproto::POINTERS" byteOffset byteSize p ps
+    in printf "%d * ::capnp::BYTES, %d * ::capnp::BYTES, \
+              \%d * ::capnp::POINTERS, %d * ::capnp::POINTERS" byteOffset byteSize p ps
 
 isDefaultZero VoidDesc = True
 isDefaultZero (BoolDesc    b) = not b
@@ -434,7 +434,7 @@ outerFileContext schemaNodes = fileContext where
             Just (_, n) -> MuVariable n
             Nothing -> muNull
         context "fieldSetterDefault" = case fieldType desc of
-            BuiltinType BuiltinVoid -> MuVariable " = ::capnproto::Void::VOID"
+            BuiltinType BuiltinVoid -> MuVariable " = ::capnp::Void::VOID"
             _ -> MuVariable ""
         context s = parent s
 

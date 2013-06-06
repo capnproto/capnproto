@@ -24,7 +24,7 @@
 #include "carsales.pb.h"
 #include "protobuf-common.h"
 
-namespace capnproto {
+namespace capnp {
 namespace benchmark {
 namespace protobuf {
 
@@ -134,10 +134,10 @@ public:
 
 }  // namespace protobuf
 }  // namespace benchmark
-}  // namespace capnproto
+}  // namespace capnp
 
 int main(int argc, char* argv[]) {
-  return capnproto::benchmark::benchmarkMain<
-      capnproto::benchmark::protobuf::BenchmarkTypes,
-      capnproto::benchmark::protobuf::CarSalesTestCase>(argc, argv);
+  return capnp::benchmark::benchmarkMain<
+      capnp::benchmark::protobuf::BenchmarkTypes,
+      capnp::benchmark::protobuf::CarSalesTestCase>(argc, argv);
 }

@@ -46,7 +46,7 @@
 #include "message.h"
 #include <kj/io.h>
 
-namespace capnproto {
+namespace capnp {
 
 class FlatArrayMessageReader: public MessageReader {
   // Parses a message from a flat array.  Note that it makes sense to use this together with mmap()
@@ -150,6 +150,6 @@ inline void writeMessageToFd(int fd, MessageBuilder& builder) {
   writeMessageToFd(fd, builder.getSegmentsForOutput());
 }
 
-}  // namespace capnproto
+}  // namespace capnp
 
 #endif  // SERIALIZE_H_

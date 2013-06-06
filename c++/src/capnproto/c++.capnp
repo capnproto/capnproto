@@ -22,6 +22,6 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 @0xbdf87d7bb8304e81;
-$namespace("capnproto::annotations");
+$namespace("capnp::annotations");
 
 annotation namespace(file): Text;

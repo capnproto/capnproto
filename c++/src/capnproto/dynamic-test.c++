@@ -50,7 +50,7 @@
 #include <gtest/gtest.h>
 #include "test-util.h"
 
-namespace capnproto {
+namespace capnp {
 namespace internal {
 namespace {
 
@@ -380,4 +380,4 @@ TEST(DynamicApi, SetEnumFromNative) {
 
 }  // namespace
 }  // namespace internal
-}  // namespace capnproto
+}  // namespace capnp

@@ -29,7 +29,7 @@
 #include <stdlib.h>
 #include "test-util.h"
 
-namespace capnproto {
+namespace capnp {
 namespace internal {
 namespace {
 
@@ -256,4 +256,4 @@ TEST(Snappy, RoundTripTwoMessages) {
 
 }  // namespace
 }  // namespace internal
-}  // namespace capnproto
+}  // namespace capnp

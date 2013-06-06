@@ -48,7 +48,7 @@
 #include <gtest/gtest.h>
 #include "test-util.h"
 
-namespace capnproto {
+namespace capnp {
 namespace internal {
 namespace {
 
@@ -267,4 +267,4 @@ TEST(Schema, Lists) {
 
 }  // namespace
 }  // namespace internal
-}  // namespace capnproto
+}  // namespace capnp

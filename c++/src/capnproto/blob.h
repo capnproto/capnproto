@@ -29,7 +29,7 @@
 #include "common.h"
 #include <string.h>
 
-namespace capnproto {
+namespace capnp {
 
 struct Data {
   Data() = delete;
@@ -198,6 +198,6 @@ inline kj::ArrayPtr<char> Text::Builder::slice(size_t start, size_t end) {
   return content.slice(start, end);
 }
 
-}  // namespace capnproto
+}  // namespace capnp
 
 #endif  // CAPNPROTO_BLOB_H_

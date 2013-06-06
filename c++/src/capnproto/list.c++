@@ -23,6 +23,6 @@
 
 #include "list.h"
 
-namespace capnproto {
+namespace capnp {
 
-}  // namespace capnproto
+}  // namespace capnp

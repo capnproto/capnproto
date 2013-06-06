@@ -26,7 +26,7 @@
 #include "layout.h"
 #include <vector>
 
-namespace capnproto {
+namespace capnp {
 
 namespace internal {
 
@@ -478,4 +478,4 @@ void writePackedMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>>
   writePackedMessage(output, segments);
 }
 
-}  // namespace capnproto
+}  // namespace capnp

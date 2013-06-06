@@ -27,7 +27,7 @@
 #include "schema.h"
 #include <kj/memory.h>
 
-namespace capnproto {
+namespace capnp {
 
 class SchemaLoader {
 public:
@@ -106,6 +106,6 @@ inline void SchemaLoader::loadCompiledTypeAndDependencies() {
   loadNative(&internal::rawSchema<T>());
 }
 
-}  // namespace capnproto
+}  // namespace capnp
 
 #endif  // CAPNPROTO_SCHEMA_LOADER_H_

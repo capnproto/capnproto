@@ -30,7 +30,7 @@
 #include <kj/debug.h>
 #include <kj/exception.h>
 
-namespace capnproto {
+namespace capnp {
 
 class SchemaLoader::Impl {
 public:
@@ -1140,4 +1140,4 @@ void SchemaLoader::loadNative(const internal::RawSchema* nativeSchema) {
   impl->loadNative(nativeSchema);
 }
 
-}  // namespace capnproto
+}  // namespace capnp

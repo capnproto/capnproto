@@ -26,7 +26,7 @@
 
 #include "schema.capnp.h"
 
-namespace capnproto {
+namespace capnp {
 
 class Schema;
 class StructSchema;
@@ -47,7 +47,7 @@ using SchemaType = typename SchemaType_<T>::Type;
 // SchemaType<T> is the type of T's schema, e.g. StructSchema if T is a struct.
 
 class Schema {
-  // Convenience wrapper around capnproto::schema::Node.
+  // Convenience wrapper around capnp::schema::Node.
 
 public:
   inline Schema(): raw(nullptr) {}
@@ -466,6 +466,6 @@ struct ListSchema::FromImpl<List<T>> {
   static inline ListSchema get() { return of(Schema::from<T>()); }
 };
 
-}  // namespace capnproto
+}  // namespace capnp
 
 #endif  // CAPNPROTO_SCHEMA_H_

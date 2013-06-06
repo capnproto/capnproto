@@ -27,7 +27,7 @@
 #include <gtest/gtest.h>
 #include "test-util.h"
 
-namespace capnproto {
+namespace capnp {
 namespace internal {
 namespace {
 
@@ -1336,4 +1336,4 @@ TEST(Encoding, Has) {
 
 }  // namespace
 }  // namespace internal
-}  // namespace capnproto
+}  // namespace capnp

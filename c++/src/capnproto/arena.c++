@@ -29,7 +29,7 @@
 #include <string.h>
 #include <stdio.h>
 
-namespace capnproto {
+namespace capnp {
 namespace internal {
 
 Arena::~Arena() {}
@@ -94,7 +94,7 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
 }
 
 void ReaderArena::reportReadLimitReached() {
-  KJ_FAIL_REQUIRE("Exceeded message traversal limit.  See capnproto::ReaderOptions.") {
+  KJ_FAIL_REQUIRE("Exceeded message traversal limit.  See capnp::ReaderOptions.") {
     return;
   }
 }
@@ -223,4 +223,4 @@ void BuilderArena::reportReadLimitReached() {
 }
 
 }  // namespace internal
-}  // namespace capnproto
+}  // namespace capnp

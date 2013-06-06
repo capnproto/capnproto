@@ -31,7 +31,7 @@
 #include <kj/units.h>
 #include <inttypes.h>
 
-namespace capnproto {
+namespace capnp {
 
 typedef unsigned int uint;
 
@@ -215,6 +215,6 @@ inline constexpr WordCount intervalLength(const word* a, const word* b) {
   return uint(b - a) * WORDS;
 }
 
-}  // namespace capnproto
+}  // namespace capnp
 
 #endif  // CAPNPROTO_COMMON_H_

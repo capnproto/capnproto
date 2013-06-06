@@ -28,7 +28,7 @@ Template for generated C++ header files.
 #ifndef {{fileIncludeGuard}}
 #define {{fileIncludeGuard}}
 
-#include <capnproto/generated-header-support.h>
+#include <capnp/generated-header-support.h>
 {{#fileImports}}
 {{#importIsSystem}}
 #include <{{importFilename}}.h>
@@ -81,7 +81,7 @@ struct {{typeFullName}} {
 private:
 {{#typeFields}}
 {{#fieldDefaultBytes}}
-  static const ::capnproto::internal::AlignedData<{{defaultWordCount}}> DEFAULT_{{fieldUpperCase}};
+  static const ::capnp::internal::AlignedData<{{defaultWordCount}}> DEFAULT_{{fieldUpperCase}};
 {{/fieldDefaultBytes}}
 {{/typeFields}}
 };
@@ -102,11 +102,11 @@ enum class {{enumName}}: uint16_t {
 }  // namespace
 {{/fileNamespaces}}
 
-namespace capnproto {
+namespace capnp {
 namespace schemas {
 {{#fileTypes}}
 {{#typeSchema}}
-extern const ::capnproto::internal::RawSchema s_{{schemaId}};
+extern const ::capnp::internal::RawSchema s_{{schemaId}};
 {{/typeSchema}}
 {{/fileTypes}}
 }  // namespace schemas
@@ -133,7 +133,7 @@ CAPNPROTO_DECLARE_UNION(
 CAPNPROTO_DECLARE_ENUM(
     ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{enumName}}, {{enumId}});
 {{/fileEnums}}
-}  // namespace capnproto
+}  // namespace capnp
 }  // namespace internal
 
 {{#fileNamespaces}}
@@ -149,11 +149,11 @@ public:
   typedef {{typeName}} Reads;
 
   Reader() = default;
-  inline explicit Reader(::capnproto::internal::StructReader base): _reader(base) {}
+  inline explicit Reader(::capnp::internal::StructReader base): _reader(base) {}
 {{#typeStruct}}
 
   inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnproto::WORDS;
+    return _reader.totalSize() / ::capnp::WORDS;
   }
 {{#structUnions}}
 
@@ -184,21 +184,21 @@ public:
 {{/fieldIsGenericObject}}
 {{/typeFields}}
 private:
-  ::capnproto::internal::StructReader _reader;
-  template <typename T, ::capnproto::Kind k>
-  friend struct ::capnproto::ToDynamic_;
-  template <typename T, ::capnproto::Kind k>
-  friend struct ::capnproto::internal::PointerHelpers;
-  friend class ::capnproto::MessageBuilder;
+  ::capnp::internal::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::internal::PointerHelpers;
+  friend class ::capnp::MessageBuilder;
   friend ::kj::String KJ_STRINGIFY({{typeFullName}}::Reader reader);
 };
 
 inline ::kj::String KJ_STRINGIFY({{typeFullName}}::Reader reader) {
 {{#typeStruct}}
-  return ::capnproto::internal::structString<{{typeFullName}}>(reader._reader);
+  return ::capnp::internal::structString<{{typeFullName}}>(reader._reader);
 {{/typeStruct}}
 {{#typeUnion}}
-  return ::capnproto::internal::unionString<{{typeFullName}}>(reader._reader);
+  return ::capnp::internal::unionString<{{typeFullName}}>(reader._reader);
 {{/typeUnion}}
 }
 
@@ -209,7 +209,7 @@ public:
   typedef {{typeName}} Builds;
 
   Builder() = default;
-  inline explicit Builder(::capnproto::internal::StructBuilder base): _builder(base) {}
+  inline explicit Builder(::capnp::internal::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
 {{#typeStruct}}
@@ -261,18 +261,18 @@ public:
 {{/fieldIsGenericObject}}
 {{/typeFields}}
 private:
-  ::capnproto::internal::StructBuilder _builder;
-  template <typename T, ::capnproto::Kind k>
-  friend struct ::capnproto::ToDynamic_;
+  ::capnp::internal::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
   friend ::kj::String KJ_STRINGIFY({{typeFullName}}::Builder builder);
 };
 
 inline ::kj::String KJ_STRINGIFY({{typeFullName}}::Builder builder) {
 {{#typeStruct}}
-  return ::capnproto::internal::structString<{{typeFullName}}>(builder._builder.asReader());
+  return ::capnp::internal::structString<{{typeFullName}}>(builder._builder.asReader());
 {{/typeStruct}}
 {{#typeUnion}}
-  return ::capnproto::internal::unionString<{{typeFullName}}>(builder._builder.asReader());
+  return ::capnp::internal::unionString<{{typeFullName}}>(builder._builder.asReader());
 {{/typeUnion}}
 }
 {{/typeStructOrUnion}}
@@ -296,11 +296,11 @@ inline {{unionFullName}}::Builder {{structFullName}}::Builder::get{{unionTitleCa
 
 // {{unionFullName}}
 inline {{unionFullName}}::Which {{unionFullName}}::Reader::which() const {
-  return _reader.getDataField<Which>({{unionTagOffset}} * ::capnproto::ELEMENTS);
+  return _reader.getDataField<Which>({{unionTagOffset}} * ::capnp::ELEMENTS);
 }
 
 inline {{unionFullName}}::Which {{unionFullName}}::Builder::which() {
-  return _builder.getDataField<Which>({{unionTagOffset}} * ::capnproto::ELEMENTS);
+  return _builder.getDataField<Which>({{unionTagOffset}} * ::capnp::ELEMENTS);
 }
 {{/typeUnion}}
 {{! ------------------------------------------------------------------------------------------- }}
@@ -315,7 +315,7 @@ inline {{fieldType}} {{typeFullName}}::Reader::get{{fieldTitleCase}}() const {
               "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return _reader.getDataField<{{fieldType}}>(
-      {{fieldOffset}} * ::capnproto::ELEMENTS{{fieldDefaultMask}});
+      {{fieldOffset}} * ::capnp::ELEMENTS{{fieldDefaultMask}});
 }
 
 inline {{fieldType}} {{typeFullName}}::Builder::get{{fieldTitleCase}}() {
@@ -324,25 +324,25 @@ inline {{fieldType}} {{typeFullName}}::Builder::get{{fieldTitleCase}}() {
               "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
   return _builder.getDataField<{{fieldType}}>(
-      {{fieldOffset}} * ::capnproto::ELEMENTS{{fieldDefaultMask}});
+      {{fieldOffset}} * ::capnp::ELEMENTS{{fieldDefaultMask}});
 }
 inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}({{fieldType}} value{{fieldSetterDefault}}) {
 {{#fieldUnion}}
   _builder.setDataField<{{unionTitleCase}}::Which>(
-      {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
+      {{unionTagOffset}} * ::capnp::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
   _builder.setDataField<{{fieldType}}>(
-      {{fieldOffset}} * ::capnproto::ELEMENTS, value{{fieldDefaultMask}});
+      {{fieldOffset}} * ::capnp::ELEMENTS, value{{fieldDefaultMask}});
 }
 {{/fieldIsPrimitive}}
 {{! ------------------------------------------------------------------------------------------- }}
 {{^fieldIsPrimitive}}
 inline bool {{typeFullName}}::Reader::has{{fieldTitleCase}}() const {
-  return !_reader.isPointerFieldNull({{fieldOffset}} * ::capnproto::POINTERS);
+  return !_reader.isPointerFieldNull({{fieldOffset}} * ::capnp::POINTERS);
 }
 
 inline bool {{typeFullName}}::Builder::has{{fieldTitleCase}}() {
-  return !_builder.isPointerFieldNull({{fieldOffset}} * ::capnproto::POINTERS);
+  return !_builder.isPointerFieldNull({{fieldOffset}} * ::capnp::POINTERS);
 }
 
 {{^fieldIsGenericObject}}
@@ -351,8 +351,8 @@ inline {{fieldType}}::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() c
   KJ_IREQUIRE(which() == {{unionTitleCase}}::{{fieldUpperCase}},
               "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
-  return ::capnproto::internal::PointerHelpers<{{fieldType}}>::get(
-      _reader, {{fieldOffset}} * ::capnproto::POINTERS{{#fieldDefaultBytes}},
+  return ::capnp::internal::PointerHelpers<{{fieldType}}>::get(
+      _reader, {{fieldOffset}} * ::capnp::POINTERS{{#fieldDefaultBytes}},
       DEFAULT_{{fieldUpperCase}}.words{{#fieldIsBlob}}, {{defaultBlobSize}}{{/fieldIsBlob}}{{/fieldDefaultBytes}});
 }
 
@@ -361,18 +361,18 @@ inline {{fieldType}}::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}()
   KJ_IREQUIRE(which() == {{unionTitleCase}}::{{fieldUpperCase}},
               "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
-  return ::capnproto::internal::PointerHelpers<{{fieldType}}>::get(
-      _builder, {{fieldOffset}} * ::capnproto::POINTERS{{#fieldDefaultBytes}},
+  return ::capnp::internal::PointerHelpers<{{fieldType}}>::get(
+      _builder, {{fieldOffset}} * ::capnp::POINTERS{{#fieldDefaultBytes}},
       DEFAULT_{{fieldUpperCase}}.words{{#fieldIsBlob}}, {{defaultBlobSize}}{{/fieldIsBlob}}{{/fieldDefaultBytes}});
 }
 
 inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}({{fieldType}}::Reader value) {
 {{#fieldUnion}}
   _builder.setDataField<{{unionTitleCase}}::Which>(
-      {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
+      {{unionTagOffset}} * ::capnp::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
-  ::capnproto::internal::PointerHelpers<{{fieldType}}>::set(
-      _builder, {{fieldOffset}} * ::capnproto::POINTERS, value);
+  ::capnp::internal::PointerHelpers<{{fieldType}}>::set(
+      _builder, {{fieldOffset}} * ::capnp::POINTERS, value);
 }
 
 {{#fieldIsNonStructList}}
@@ -380,10 +380,10 @@ inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}(
     std::initializer_list<{{fieldElementReaderType}}> value) {
 {{#fieldUnion}}
   _builder.setDataField<{{unionTitleCase}}::Which>(
-      {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
+      {{unionTagOffset}} * ::capnp::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
-  ::capnproto::internal::PointerHelpers<{{fieldType}}>::set(
-      _builder, {{fieldOffset}} * ::capnproto::POINTERS, value);
+  ::capnp::internal::PointerHelpers<{{fieldType}}>::set(
+      _builder, {{fieldOffset}} * ::capnp::POINTERS, value);
 }
 
 {{/fieldIsNonStructList}}
@@ -391,10 +391,10 @@ inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}(
 inline {{fieldType}}::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(unsigned int size) {
 {{#fieldUnion}}
   _builder.setDataField<{{unionTitleCase}}::Which>(
-      {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
+      {{unionTagOffset}} * ::capnp::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
-  return ::capnproto::internal::PointerHelpers<{{fieldType}}>::init(
-      _builder, {{fieldOffset}} * ::capnproto::POINTERS, size);
+  return ::capnp::internal::PointerHelpers<{{fieldType}}>::init(
+      _builder, {{fieldOffset}} * ::capnp::POINTERS, size);
 }
 
 {{/fieldIsListOrBlob}}
@@ -402,10 +402,10 @@ inline {{fieldType}}::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(
 inline {{fieldType}}::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}() {
 {{#fieldUnion}}
   _builder.setDataField<{{unionTitleCase}}::Which>(
-      {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
+      {{unionTagOffset}} * ::capnp::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
-  return ::capnproto::internal::PointerHelpers<{{fieldType}}>::init(
-      _builder, {{fieldOffset}} * ::capnproto::POINTERS);
+  return ::capnp::internal::PointerHelpers<{{fieldType}}>::init(
+      _builder, {{fieldOffset}} * ::capnp::POINTERS);
 }
 
 {{/fieldIsStruct}}
@@ -418,8 +418,8 @@ inline typename T::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}() cons
   KJ_IREQUIRE(which() == {{unionTitleCase}}::{{fieldUpperCase}},
               "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
-  return ::capnproto::internal::PointerHelpers<T>::get(
-      _reader, {{fieldOffset}} * ::capnproto::POINTERS);
+  return ::capnp::internal::PointerHelpers<T>::get(
+      _reader, {{fieldOffset}} * ::capnp::POINTERS);
 }
 
 template <typename T>
@@ -428,8 +428,8 @@ inline typename T::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}() {
   KJ_IREQUIRE(which() == {{unionTitleCase}}::{{fieldUpperCase}},
               "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
-  return ::capnproto::internal::PointerHelpers<T>::get(
-      _builder, {{fieldOffset}} * ::capnproto::POINTERS);
+  return ::capnp::internal::PointerHelpers<T>::get(
+      _builder, {{fieldOffset}} * ::capnp::POINTERS);
 }
 
 template <typename T, typename Param>
@@ -438,8 +438,8 @@ inline typename T::Reader {{typeFullName}}::Reader::get{{fieldTitleCase}}(Param&
   KJ_IREQUIRE(which() == {{unionTitleCase}}::{{fieldUpperCase}},
               "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
-  return ::capnproto::internal::PointerHelpers<T>::getDynamic(
-      _reader, {{fieldOffset}} * ::capnproto::POINTERS, ::kj::fwd<Param>(param));
+  return ::capnp::internal::PointerHelpers<T>::getDynamic(
+      _reader, {{fieldOffset}} * ::capnp::POINTERS, ::kj::fwd<Param>(param));
 }
 
 template <typename T, typename Param>
@@ -448,38 +448,38 @@ inline typename T::Builder {{typeFullName}}::Builder::get{{fieldTitleCase}}(Para
   KJ_IREQUIRE(which() == {{unionTitleCase}}::{{fieldUpperCase}},
               "Must check which() before get()ing a union member.");
 {{/fieldUnion}}
-  return ::capnproto::internal::PointerHelpers<T>::getDynamic(
-      _builder, {{fieldOffset}} * ::capnproto::POINTERS, ::kj::fwd<Param>(param));
+  return ::capnp::internal::PointerHelpers<T>::getDynamic(
+      _builder, {{fieldOffset}} * ::capnp::POINTERS, ::kj::fwd<Param>(param));
 }
 
 template <typename T>
 inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}(typename T::Reader value) {
 {{#fieldUnion}}
   _builder.setDataField<{{unionTitleCase}}::Which>(
-      {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
+      {{unionTagOffset}} * ::capnp::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
-  ::capnproto::internal::PointerHelpers<T>::set(
-      _builder, {{fieldOffset}} * ::capnproto::POINTERS, value);
+  ::capnp::internal::PointerHelpers<T>::set(
+      _builder, {{fieldOffset}} * ::capnp::POINTERS, value);
 }
 
 template <typename T, typename U>
 inline void {{typeFullName}}::Builder::set{{fieldTitleCase}}(std::initializer_list<U> value) {
 {{#fieldUnion}}
   _builder.setDataField<{{unionTitleCase}}::Which>(
-      {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
+      {{unionTagOffset}} * ::capnp::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
-  ::capnproto::internal::PointerHelpers<T>::set(
-      _builder, {{fieldOffset}} * ::capnproto::POINTERS, value);
+  ::capnp::internal::PointerHelpers<T>::set(
+      _builder, {{fieldOffset}} * ::capnp::POINTERS, value);
 }
 
 template <typename T, typename... Params>
 inline typename T::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(Params&&... params) {
 {{#fieldUnion}}
   _builder.setDataField<{{unionTitleCase}}::Which>(
-      {{unionTagOffset}} * ::capnproto::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
+      {{unionTagOffset}} * ::capnp::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
-  return ::capnproto::internal::PointerHelpers<T>::init(
-      _builder, {{fieldOffset}} * ::capnproto::POINTERS, ::kj::fwd<Params>(params)...);
+  return ::capnp::internal::PointerHelpers<T>::init(
+      _builder, {{fieldOffset}} * ::capnp::POINTERS, ::kj::fwd<Params>(params)...);
 }
 
 {{/fieldIsGenericObject}}

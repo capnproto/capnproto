@@ -31,7 +31,7 @@
 #include <vector>
 #include <unistd.h>
 
-namespace capnproto {
+namespace capnp {
 
 MessageReader::MessageReader(ReaderOptions options): options(options), allocatedArena(false) {}
 MessageReader::~MessageReader() {
@@ -233,4 +233,4 @@ kj::ArrayPtr<word> FlatMessageBuilder::allocateSegment(uint minimumSize) {
   return array;
 }
 
-}  // namespace capnproto
+}  // namespace capnp

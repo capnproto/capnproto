@@ -27,7 +27,7 @@ using Cxx = import "c++.capnp";
 
 # Use a namespace likely to cause trouble if the generated code doesn't use fully-qualified
 # names for stuff in the capnproto namespace.
-$Cxx.namespace("capnproto_test::capnproto::test");
+$Cxx.namespace("capnproto_test::capnp::test");
 
 enum TestEnum {
   foo @0;

@@ -34,7 +34,7 @@
 #include "common.h"
 #include "message.h"
 
-namespace capnproto {
+namespace capnp {
 namespace internal {
 
 class SegmentReader;
@@ -296,6 +296,6 @@ inline void SegmentBuilder::reset() {
 }
 
 }  // namespace internal
-}  // namespace capnproto
+}  // namespace capnp
 
 #endif  // CAPNPROTO_ARENA_H_

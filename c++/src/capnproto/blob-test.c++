@@ -30,7 +30,7 @@
 // TODO(test):  This test is outdated -- it predates the retrofit of Text and Data on top of
 //   kj::ArrayPtr/kj::StringPtr.  Clean it up.
 
-namespace capnproto {
+namespace capnp {
 namespace {
 
 TEST(Blob, Text) {
@@ -116,4 +116,4 @@ TEST(Blob, Compare) {
 }
 
 }  // namespace
-}  // namespace capnproto
+}  // namespace capnp

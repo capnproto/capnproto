@@ -21,10 +21,10 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-using Cxx = import "/capnproto/c++.capnp";
+using Cxx = import "/capnp/c++.capnp";
 
 @0xff75ddc6a36723c9;
-$Cxx.namespace("capnproto::benchmark::capnp");
+$Cxx.namespace("capnp::benchmark::capnp");
 
 struct ParkingLot {
   cars@0: List(Car);

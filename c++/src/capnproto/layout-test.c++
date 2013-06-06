@@ -27,14 +27,14 @@
 #include "arena.h"
 #include <gtest/gtest.h>
 
-namespace capnproto {
+namespace capnp {
   template <typename T, typename U>
   std::ostream& operator<<(std::ostream& os, kj::Quantity<T, U> value) {
     return os << (value / kj::unit<kj::Quantity<T, U>>());
   }
 }
 
-namespace capnproto {
+namespace capnp {
 namespace internal {
 namespace {
 
@@ -371,4 +371,4 @@ TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
 
 }  // namespace
 }  // namespace internal
-}  // namespace capnproto
+}  // namespace capnp

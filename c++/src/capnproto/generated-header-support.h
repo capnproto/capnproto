@@ -30,7 +30,7 @@
 #include "list.h"
 #include <kj/string.h>
 
-namespace capnproto {
+namespace capnp {
 
 class MessageBuilder;  // So that it can be declared a friend.
 
@@ -200,7 +200,7 @@ inline constexpr uint64_t typeId() { return internal::TypeId_<T>::typeId; }
 // typeId<MyType>() returns the type ID as defined in the schema.  Works with structs, enums, and
 // interfaces.
 
-}  // namespace capnproto
+}  // namespace capnp
 
 #define CAPNPROTO_DECLARE_ENUM(type, id) \
     template <> struct Kind_<type> { static constexpr Kind kind = Kind::ENUM; }; \

@@ -31,7 +31,7 @@
 #ifndef CAPNPROTO_MESSAGE_H_
 #define CAPNPROTO_MESSAGE_H_
 
-namespace capnproto {
+namespace capnp {
 
 namespace internal {
   class ReaderArena;
@@ -102,7 +102,7 @@ public:
   template <typename RootType>
   typename RootType::Reader getRoot(StructSchema schema);
   // Dynamically interpret the root struct of the message using the given schema.
-  // RootType in this case must be DynamicStruct, and you must #include <capnproto/dynamic.h> to
+  // RootType in this case must be DynamicStruct, and you must #include <capnp/dynamic.h> to
   // use this.
 
 private:
@@ -145,13 +145,13 @@ public:
   template <typename RootType>
   typename RootType::Builder getRoot(StructSchema schema);
   // Dynamically interpret the root struct of the message using the given schema.
-  // RootType in this case must be DynamicStruct, and you must #include <capnproto/dynamic.h> to
+  // RootType in this case must be DynamicStruct, and you must #include <capnp/dynamic.h> to
   // use this.
 
   template <typename RootType>
   typename RootType::Builder initRoot(StructSchema schema);
   // Dynamically init the root struct of the message using the given schema.
-  // RootType in this case must be DynamicStruct, and you must #include <capnproto/dynamic.h> to
+  // RootType in this case must be DynamicStruct, and you must #include <capnp/dynamic.h> to
   // use this.
 
   kj::ArrayPtr<const kj::ArrayPtr<const word>> getSegmentsForOutput();
@@ -368,6 +368,6 @@ static typename Type::Reader defaultValue() {
   return typename Type::Reader(internal::StructReader());
 }
 
-}  // namespace capnproto
+}  // namespace capnp
 
 #endif  // CAPNPROTO_MESSAGE_H_

@@ -25,15 +25,15 @@
 #define CAPNPROTO_BENCHMARK_CAPNPROTO_COMMON_H_
 
 #include "common.h"
-#include <capnproto/serialize.h>
-#include <capnproto/serialize-packed.h>
+#include <capnp/serialize.h>
+#include <capnp/serialize-packed.h>
 #include <kj/debug.h>
 #if HAVE_SNAPPY
-#include <capnproto/serialize-snappy.h>
+#include <capnp/serialize-snappy.h>
 #endif  // HAVE_SNAPPY
 #include <thread>
 
-namespace capnproto {
+namespace capnp {
 namespace benchmark {
 namespace capnp {
 
@@ -416,6 +416,6 @@ struct BenchmarkTypes {
 
 }  // namespace capnp
 }  // namespace benchmark
-}  // namespace capnproto
+}  // namespace capnp
 
 #endif  // CAPNPROTO_BENCHMARK_CAPNPROTO_COMMON_H_

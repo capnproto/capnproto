@@ -36,7 +36,7 @@ namespace {{namespaceName}} {
 {{#typeStruct}}
 {{#structFields}}
 {{#fieldDefaultBytes}}
-const ::capnproto::internal::AlignedData<{{defaultWordCount}}>
+const ::capnp::internal::AlignedData<{{defaultWordCount}}>
     {{structFullName}}::DEFAULT_{{fieldUpperCase}} = {
   { {{defaultByteList}} }
 };
@@ -50,25 +50,25 @@ const ::capnproto::internal::AlignedData<{{defaultWordCount}}>
 }  // namespace
 {{/fileNamespaces}}
 
-namespace capnproto {
+namespace capnp {
 namespace schemas {
 
 {{#fileTypes}}
 {{#typeSchema}}
-static const ::capnproto::internal::AlignedData<{{schemaWordCount}}> b_{{schemaId}} = {
+static const ::capnp::internal::AlignedData<{{schemaWordCount}}> b_{{schemaId}} = {
   { {{schemaBytes}} }
 };
-static const ::capnproto::internal::RawSchema* const d_{{schemaId}}[] = {
+static const ::capnp::internal::RawSchema* const d_{{schemaId}}[] = {
 {{#schemaDependencies}}
   &s_{{dependencyId}},
 {{/schemaDependencies}}
 };
-static const ::capnproto::internal::RawSchema::MemberInfo m_{{schemaId}}[] = {
+static const ::capnp::internal::RawSchema::MemberInfo m_{{schemaId}}[] = {
 {{#schemaMembersByName}}
   { {{memberUnionIndex}}, {{memberIndex}} },
 {{/schemaMembersByName}}
 };
-const ::capnproto::internal::RawSchema s_{{schemaId}} = {
+const ::capnp::internal::RawSchema s_{{schemaId}} = {
   b_{{schemaId}}.words, d_{{schemaId}}, m_{{schemaId}},
   {{schemaDependencyCount}}, {{schemaMemberCount}}, nullptr
 };
@@ -97,4 +97,4 @@ CAPNPROTO_DEFINE_ENUM(
     ::{{#fileNamespaces}}{{namespaceName}}::{{/fileNamespaces}}{{enumName}});
 {{/fileEnums}}
 }  // namespace internal
-}  // namespace capnproto
+}  // namespace capnp

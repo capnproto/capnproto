@@ -23,8 +23,8 @@
 
 #include "blob.h"
 
-namespace capnproto {
+namespace capnp {
 
 char Text::Builder::nulstr[1] = "";
 
-}  // namespace capnproto
+}  // namespace capnp

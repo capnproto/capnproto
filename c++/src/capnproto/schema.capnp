@@ -24,7 +24,7 @@
 using Cxx = import "c++.capnp";
 
 @0xb471df2f45ca32c7;
-$Cxx.namespace("capnproto::schema");
+$Cxx.namespace("capnp::schema");
 
 # WARNING:  This protocol is still subject to backwards-incompatible change.
 

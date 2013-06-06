@@ -23,7 +23,7 @@
 
 #include "common.h"
 
-namespace capnproto {
+namespace capnp {
 namespace benchmark {
 namespace null {
 
@@ -173,4 +173,4 @@ struct BenchmarkTypes {
 
 }  // namespace null
 }  // namespace benchmark
-}  // namespace capnproto
+}  // namespace capnp

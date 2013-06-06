@@ -27,7 +27,7 @@
 #include "layout.h"
 #include <initializer_list>
 
-namespace capnproto {
+namespace capnp {
 namespace internal {
 
 template <typename T, Kind k = kind<T>()>
@@ -547,6 +547,6 @@ private:
   friend struct internal::PointerHelpers;
 };
 
-}  // namespace capnproto
+}  // namespace capnp
 
 #endif  // CAPNPROTO_LIST_H_

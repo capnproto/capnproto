@@ -30,7 +30,7 @@
 #include <snappy/snappy-sinksource.h>
 #endif  // HAVE_SNAPPY
 
-namespace capnproto {
+namespace capnp {
 namespace benchmark {
 namespace protobuf {
 
@@ -358,4 +358,4 @@ struct BenchmarkTypes {
 
 }  // namespace protobuf
 }  // namespace benchmark
-}  // namespace capnproto
+}  // namespace capnp

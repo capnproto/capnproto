@@ -38,7 +38,7 @@
 #include <stdio.h>
 #include <string.h>
 
-namespace capnproto {
+namespace capnp {
 namespace benchmark {
 
 static inline uint32_t nextFastRand() {
@@ -279,7 +279,7 @@ int benchmarkMain(int argc, char* argv[]) {
   return 0;
 }
 
-}  // namespace capnproto
+}  // namespace capnp
 }  // namespace benchmark
 
 #endif  // CAPNPROTO_BENCHMARK_COMMON_H_

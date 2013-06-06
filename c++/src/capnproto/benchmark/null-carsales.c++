@@ -23,7 +23,7 @@
 
 #include "null-common.h"
 
-namespace capnproto {
+namespace capnp {
 namespace benchmark {
 namespace null {
 
@@ -194,10 +194,10 @@ public:
 
 }  // namespace null
 }  // namespace benchmark
-}  // namespace capnproto
+}  // namespace capnp
 
 int main(int argc, char* argv[]) {
-  return capnproto::benchmark::benchmarkMain<
-      capnproto::benchmark::null::BenchmarkTypes,
-      capnproto::benchmark::null::CarSalesTestCase>(argc, argv);
+  return capnp::benchmark::benchmarkMain<
+      capnp::benchmark::null::BenchmarkTypes,
+      capnp::benchmark::null::CarSalesTestCase>(argc, argv);
 }

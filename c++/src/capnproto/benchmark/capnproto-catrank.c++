@@ -24,7 +24,7 @@
 #include "catrank.capnp.h"
 #include "capnproto-common.h"
 
-namespace capnproto {
+namespace capnp {
 namespace benchmark {
 namespace capnp {
 
@@ -133,10 +133,10 @@ public:
 
 }  // namespace capnp
 }  // namespace benchmark
-}  // namespace capnproto
+}  // namespace capnp
 
 int main(int argc, char* argv[]) {
-  return capnproto::benchmark::benchmarkMain<
-      capnproto::benchmark::capnp::BenchmarkTypes,
-      capnproto::benchmark::capnp::CatRankTestCase>(argc, argv);
+  return capnp::benchmark::benchmarkMain<
+      capnp::benchmark::capnp::BenchmarkTypes,
+      capnp::benchmark::capnp::CatRankTestCase>(argc, argv);
 }

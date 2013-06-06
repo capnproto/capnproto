@@ -21,10 +21,10 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-using Cxx = import "/capnproto/c++.capnp";
+using Cxx = import "/capnp/c++.capnp";
 
 @0xe12dc4c3e70e9eda;
-$Cxx.namespace("capnproto::benchmark::capnp");
+$Cxx.namespace("capnp::benchmark::capnp");
 
 enum Operation {
   add @0;

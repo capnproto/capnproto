@@ -29,7 +29,7 @@
 #include "blob.h"
 #include "dynamic.h"
 
-namespace capnproto {
+namespace capnp {
 
 inline std::ostream& operator<<(std::ostream& os, const Data::Reader& value) {
   return os.write(reinterpret_cast<const char*>(value.begin()), value.size());
@@ -53,18 +53,18 @@ inline Data::Reader data(const char* str) {
   return Data::Reader(reinterpret_cast<const byte*>(str), strlen(str));
 }
 
-namespace test = capnproto_test::capnproto::test;
+namespace test = capnproto_test::capnp::test;
 
 // We don't use "using namespace" to pull these in because then things would still compile
 // correctly if they were generated in the global namespace.
-using ::capnproto_test::capnproto::test::TestAllTypes;
-using ::capnproto_test::capnproto::test::TestDefaults;
-using ::capnproto_test::capnproto::test::TestEnum;
-using ::capnproto_test::capnproto::test::TestUnion;
-using ::capnproto_test::capnproto::test::TestUnionDefaults;
-using ::capnproto_test::capnproto::test::TestNestedTypes;
-using ::capnproto_test::capnproto::test::TestUsing;
-using ::capnproto_test::capnproto::test::TestListDefaults;
+using ::capnproto_test::capnp::test::TestAllTypes;
+using ::capnproto_test::capnp::test::TestDefaults;
+using ::capnproto_test::capnp::test::TestEnum;
+using ::capnproto_test::capnp::test::TestUnion;
+using ::capnproto_test::capnp::test::TestUnionDefaults;
+using ::capnproto_test::capnp::test::TestNestedTypes;
+using ::capnproto_test::capnp::test::TestUsing;
+using ::capnproto_test::capnp::test::TestListDefaults;
 
 void initTestMessage(TestAllTypes::Builder builder);
 void initTestMessage(TestDefaults::Builder builder);
@@ -91,6 +91,6 @@ void checkDynamicTestMessageAllZero(DynamicStruct::Builder builder);
 void checkDynamicTestMessageAllZero(DynamicStruct::Reader reader);
 
 }  // namespace internal
-}  // namespace capnproto
+}  // namespace capnp
 
 #endif  // TEST_UTIL_H_

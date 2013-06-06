@@ -39,7 +39,7 @@
 #include "layout.h"
 #include "message.h"
 
-namespace capnproto {
+namespace capnp {
 
 class MessageReader;
 class MessageBuilder;
@@ -295,8 +295,8 @@ private:
   friend struct DynamicList;
   friend class MessageReader;
   friend class MessageBuilder;
-  template <typename T, ::capnproto::Kind k>
-  friend struct ::capnproto::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
   friend kj::String internal::structString(
       internal::StructReader reader, const internal::RawSchema& schema);
 };
@@ -400,8 +400,8 @@ private:
   friend struct DynamicList;
   friend class MessageReader;
   friend class MessageBuilder;
-  template <typename T, ::capnproto::Kind k>
-  friend struct ::capnproto::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
 };
 
 // -------------------------------------------------------------------
@@ -438,8 +438,8 @@ private:
   friend struct DynamicStruct;
   friend class DynamicObject;
   friend class DynamicList::Builder;
-  template <typename T, ::capnproto::Kind k>
-  friend struct ::capnproto::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
 };
 
 class DynamicList::Builder {
@@ -478,8 +478,8 @@ private:
   template <typename T, Kind k>
   friend struct internal::PointerHelpers;
   friend struct DynamicStruct;
-  template <typename T, ::capnproto::Kind k>
-  friend struct ::capnproto::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
 };
 
 // -------------------------------------------------------------------
@@ -931,6 +931,6 @@ inline DynamicList::Builder DynamicList::Builder::as<DynamicList>() {
   return *this;
 }
 
-}  // namespace capnproto
+}  // namespace capnp
 
 #endif  // CAPNPROTO_DYNAMIC_H_

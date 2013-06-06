@@ -28,7 +28,7 @@
 #include <snappy/snappy-sinksource.h>
 #include <vector>
 
-namespace capnproto {
+namespace capnp {
 
 class SnappyInputStream::InputStreamSnappySource: public snappy::Source {
 public:
@@ -208,4 +208,4 @@ void writeSnappyPackedMessage(kj::OutputStream& output,
   writePackedMessage(snappyOut, segments);
 }
 
-}  // namespace capnproto
+}  // namespace capnp

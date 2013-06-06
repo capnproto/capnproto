@@ -36,7 +36,7 @@
 
 using namespace std;
 
-namespace capnproto {
+namespace capnp {
 namespace benchmark {
 namespace runner {
 
@@ -643,8 +643,8 @@ int main(int argc, char* argv[]) {
 
 }  // namespace runner
 }  // namespace benchmark
-}  // namespace capnproto
+}  // namespace capnp
 
 int main(int argc, char* argv[]) {
-  return capnproto::benchmark::runner::main(argc, argv);
+  return capnp::benchmark::runner::main(argc, argv);
 }

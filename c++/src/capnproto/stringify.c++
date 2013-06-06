@@ -27,7 +27,7 @@
 
 // TODO(cleanup):  Rewrite this using something other than iostream?
 
-namespace capnproto {
+namespace capnp {
 
 namespace {
 
@@ -212,4 +212,4 @@ kj::String unionString(StructReader reader, const RawSchema& schema, uint member
 
 }  // namespace internal
 
-}  // namespace capnproto
+}  // namespace capnp

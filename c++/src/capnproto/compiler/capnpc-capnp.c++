@@ -34,7 +34,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace capnproto {
+namespace capnp {
 namespace {
 
 class TextBlob {
@@ -607,8 +607,8 @@ int main(int argc, char* argv[]) {
 }
 
 }  // namespace
-}  // namespace capnproto
+}  // namespace capnp
 
 int main(int argc, char* argv[]) {
-  return capnproto::main(argc, argv);
+  return capnp::main(argc, argv);
 }

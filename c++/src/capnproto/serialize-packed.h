@@ -26,7 +26,7 @@
 
 #include "serialize.h"
 
-namespace capnproto {
+namespace capnp {
 
 namespace internal {
 
@@ -119,6 +119,6 @@ inline void writePackedMessageToFd(int fd, MessageBuilder& builder) {
   writePackedMessageToFd(fd, builder.getSegmentsForOutput());
 }
 
-}  // namespace capnproto
+}  // namespace capnp
 
 #endif  // CAPNPROTO_SERIALIZE_PACKED_H_

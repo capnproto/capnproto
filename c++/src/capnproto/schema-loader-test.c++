@@ -26,7 +26,7 @@
 #include "test-util.h"
 #include <kj/debug.h>
 
-namespace capnproto {
+namespace capnp {
 namespace internal {
 namespace {
 
@@ -218,4 +218,4 @@ TEST(SchemaLoader, Enumerate) {
 
 }  // namespace
 }  // namespace internal
-}  // namespace capnproto
+}  // namespace capnp

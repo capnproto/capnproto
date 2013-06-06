@@ -27,7 +27,7 @@
 #include "serialize.h"
 #include "serialize-packed.h"
 
-namespace capnproto {
+namespace capnp {
 
 constexpr size_t SNAPPY_BUFFER_SIZE = 65536;
 constexpr size_t SNAPPY_COMPRESSED_BUFFER_SIZE = 76490;
@@ -106,6 +106,6 @@ inline void writeSnappyPackedMessage(kj::OutputStream& output, MessageBuilder& b
   writeSnappyPackedMessage(output, builder.getSegmentsForOutput(), buffer, compressedBuffer);
 }
 
-}  // namespace capnproto
+}  // namespace capnp
 
 #endif  // CAPNPROTO_SERIALIZE_SNAPPY_H_

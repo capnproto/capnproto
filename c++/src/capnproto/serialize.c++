@@ -26,7 +26,7 @@
 #include <kj/debug.h>
 #include <exception>
 
-namespace capnproto {
+namespace capnp {
 
 FlatArrayMessageReader::FlatArrayMessageReader(
     kj::ArrayPtr<const word> array, ReaderOptions options)
@@ -162,7 +162,7 @@ InputStreamMessageReader::InputStreamMessageReader(
   // size to make the receiver allocate excessive space and possibly crash.
   KJ_REQUIRE(totalWords <= options.traversalLimitInWords,
              "Message is too large.  To increase the limit on the receiving end, see "
-             "capnproto::ReaderOptions.") {
+             "capnp::ReaderOptions.") {
     segmentCount = 1;
     segment0Size = kj::min(segment0Size, options.traversalLimitInWords);
     totalWords = segment0Size;
@@ -274,4 +274,4 @@ void writeMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segme
   writeMessage(stream, segments);
 }
 
-}  // namespace capnproto
+}  // namespace capnp

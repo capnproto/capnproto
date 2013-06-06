@@ -24,7 +24,7 @@
 #include "test-util.h"
 #include <gtest/gtest.h>
 
-namespace capnproto {
+namespace capnp {
 namespace internal {
 namespace {
 
@@ -914,4 +914,4 @@ void checkDynamicTestMessageAllZero(DynamicStruct::Reader reader) {
 }
 
 }  // namespace internal
-}  // namespace capnproto
+}  // namespace capnp

@@ -35,7 +35,7 @@
 #include "common.h"
 #include "blob.h"
 
-namespace capnproto {
+namespace capnp {
 namespace internal {
 
 class StructBuilder;
@@ -771,7 +771,7 @@ inline Data::Reader StructReader::getDataSectionAsBlob() {
 
 template <typename T>
 T StructReader::getDataField(ElementCount offset) const {
-  if ((offset + 1 * ELEMENTS) * capnproto::bitsPerElement<T>() <= dataSize) {
+  if ((offset + 1 * ELEMENTS) * capnp::bitsPerElement<T>() <= dataSize) {
     return reinterpret_cast<const WireValue<T>*>(data)[offset / ELEMENTS].get();
   } else {
     return static_cast<T>(0);
@@ -816,7 +816,7 @@ inline T ListBuilder::getDataElement(ElementCount index) {
   //   the various non-inline methods that look up pointers.
   //   Also if using this, consider changing ptr back to void* instead of byte*.
 //  return reinterpret_cast<WireValue<T>*>(ptr)[
-//      index / ELEMENTS * (step / capnproto::bitsPerElement<T>())].get();
+//      index / ELEMENTS * (step / capnp::bitsPerElement<T>())].get();
 }
 
 template <>
@@ -892,6 +892,6 @@ template <> typename Data::Builder ListBuilder::getBlobElement<Data>(ElementCoun
 template <> typename Data::Reader ListReader::getBlobElement<Data>(ElementCount index) const;
 
 }  // namespace internal
-}  // namespace capnproto
+}  // namespace capnp
 
 #endif  // CAPNPROTO_LAYOUT_H_

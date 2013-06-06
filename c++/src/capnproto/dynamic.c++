@@ -24,7 +24,7 @@
 #include "dynamic.h"
 #include <kj/debug.h>
 
-namespace capnproto {
+namespace capnp {
 
 namespace {
 
@@ -1553,4 +1553,4 @@ DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::init(
 
 }  // namespace internal
 
-}  // namespace capnproto
+}  // namespace capnp
