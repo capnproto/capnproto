@@ -66,7 +66,7 @@ enum class FieldSize: uint8_t {
   FOUR_BYTES = 4,
   EIGHT_BYTES = 5,
 
-  POINTER = 6,  // Indicates that the field lives in the pointer segment, not the data segment.
+  POINTER = 6,  // Indicates that the field lives in the pointer section, not the data section.
 
   INLINE_COMPOSITE = 7
   // A composite type of fixed width.  This serves two purposes:
@@ -324,14 +324,14 @@ public:
   // with non-zero default values.
 
   StructBuilder initStructField(WirePointerCount ptrIndex, StructSize size);
-  // Initializes the struct field at the given index in the pointer segment.  If it is already
+  // Initializes the struct field at the given index in the pointer section.  If it is already
   // initialized, the previous value is discarded or overwritten.  The struct is initialized to
   // the type's default state (all-zero).  Use getStructField() if you want the struct to be
   // initialized as a copy of the field's default value (which may have non-null pointers).
 
   StructBuilder getStructField(WirePointerCount ptrIndex, StructSize size,
                                const word* defaultValue);
-  // Gets the struct field at the given index in the pointer segment.  If the field is not already
+  // Gets the struct field at the given index in the pointer section.  If the field is not already
   // initialized, it is initialized as a deep copy of the given default value (a flat message),
   // or to the empty state if defaultValue is nullptr.
 
@@ -392,10 +392,10 @@ private:
   WirePointer* pointers;   // Pointer to the encoded pointers.
 
   BitCount32 dataSize;
-  // Size of data segment.  We use a bit count rather than a word count to more easily handle the
+  // Size of data section.  We use a bit count rather than a word count to more easily handle the
   // case of struct lists encoded with less than a word per element.
 
-  WirePointerCount16 pointerCount;  // Size of the pointer segment.
+  WirePointerCount16 pointerCount;  // Size of the pointer section.
 
   BitCount8 bit0Offset;
   // A special hack:  If dataSize == 1 bit, then bit0Offset is the offset of that bit within the
@@ -428,7 +428,7 @@ public:
   KJ_ALWAYS_INLINE(T getDataField(ElementCount offset) const);
   // Get the data field value of the given type at the given offset.  The offset is measured in
   // multiples of the field size, determined by the type.  Returns zero if the offset is past the
-  // end of the struct's data segment.
+  // end of the struct's data section.
 
   template <typename T>
   KJ_ALWAYS_INLINE(
@@ -437,14 +437,14 @@ public:
   // fields with non-zero default values.
 
   StructReader getStructField(WirePointerCount ptrIndex, const word* defaultValue) const;
-  // Get the struct field at the given index in the pointer segment, or the default value if not
+  // Get the struct field at the given index in the pointer section, or the default value if not
   // initialized.  defaultValue will be interpreted as a flat message -- it must point at a
   // struct pointer, which in turn points at the struct value.  The default value is allowed to
   // be null, in which case an empty struct is used.
 
   ListReader getListField(WirePointerCount ptrIndex, FieldSize expectedElementSize,
                           const word* defaultValue) const;
-  // Get the list field at the given index in the pointer segment, or the default value if not
+  // Get the list field at the given index in the pointer section, or the default value if not
   // initialized.  The default value is allowed to be null, in which case an empty list is used.
 
   template <typename T>
@@ -476,10 +476,10 @@ private:
   const WirePointer* pointers;
 
   BitCount32 dataSize;
-  // Size of data segment.  We use a bit count rather than a word count to more easily handle the
+  // Size of data section.  We use a bit count rather than a word count to more easily handle the
   // case of struct lists encoded with less than a word per element.
 
-  WirePointerCount16 pointerCount;  // Size of the pointer segment.
+  WirePointerCount16 pointerCount;  // Size of the pointer section.
 
   BitCount8 bit0Offset;
   // A special hack:  If dataSize == 1 bit, then bit0Offset is the offset of that bit within the

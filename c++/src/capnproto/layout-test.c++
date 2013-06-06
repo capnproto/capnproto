@@ -42,7 +42,7 @@ TEST(WireFormat, SimpleRawDataStruct) {
   AlignedData<2> data = {{
     // Struct ref, offset = 1, dataSize = 1, pointerCount = 0
     0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
-    // Content for the data segment.
+    // Content for the data section.
     0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef
   }};
 
@@ -286,8 +286,8 @@ TEST(WireFormat, StructRoundTrip_OneSegment) {
   //   13  struct list
   //         1 tag
   //        12 4x struct
-  //           1 data segment
-  //           1 pointer segment
+  //           1 data section
+  //           1 pointer section
   //           1 sub-struct
   //   11  list list
   //         5 pointers to sub-lists

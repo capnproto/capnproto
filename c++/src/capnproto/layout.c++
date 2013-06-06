@@ -1562,7 +1562,7 @@ struct WireHelpers {
         case FieldSize::POINTER:
           // We expected a list of pointers but got a list of structs.  Assuming the first field
           // in the struct is the pointer we were looking for, we want to munge the pointer to
-          // point at the first element's pointer segment.
+          // point at the first element's pointer section.
           ptr += tag->structRef.dataSize.get();
           KJ_REQUIRE(tag->structRef.ptrCount.get() > 0 * POINTERS,
                      "Expected a pointer list, but got a list of data-only structs.") {
@@ -2162,7 +2162,7 @@ StructReader ListReader::getStructElement(ElementCount index) const {
   // This check should pass if there are no bugs in the list pointer validation code.
   KJ_DASSERT(structPointerCount == 0 * POINTERS ||
          (uintptr_t)structPointers % sizeof(WirePointer) == 0,
-         "Pointer segment of struct list element not aligned.");
+         "Pointer section of struct list element not aligned.");
 
   return StructReader(
       segment, structData, structPointers,
@@ -2172,7 +2172,7 @@ StructReader ListReader::getStructElement(ElementCount index) const {
 
 static const WirePointer* checkAlignment(const void* ptr) {
   KJ_DASSERT((uintptr_t)ptr % sizeof(WirePointer) == 0,
-         "Pointer segment of struct list element not aligned.");
+         "Pointer section of struct list element not aligned.");
   return reinterpret_cast<const WirePointer*>(ptr);
 }
 
