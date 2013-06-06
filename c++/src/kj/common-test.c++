@@ -208,8 +208,8 @@ TEST(Common, Downcast) {
 #endif
 
 #if KJ_NO_RTTI
-  EXPECT_TRUE(dynamicDowncastIfAvailable<Bar&>(foo) == nullptr);
-  EXPECT_TRUE(dynamicDowncastIfAvailable<Baz&>(foo) == nullptr);
+  EXPECT_TRUE(dynamicDowncastIfAvailable<Bar>(foo) == nullptr);
+  EXPECT_TRUE(dynamicDowncastIfAvailable<Baz>(foo) == nullptr);
 #else
   KJ_IF_MAYBE(m, dynamicDowncastIfAvailable<Bar>(foo)) {
     EXPECT_EQ(&bar, m);
