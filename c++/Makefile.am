@@ -41,14 +41,14 @@ maintainer-clean-local:
 	-rm -rf build-aux
 
 capnpc_inputs =                                                \
-  src/capnproto/c++.capnp                                      \
-  src/capnproto/schema.capnp
+  src/capnp/c++.capnp                                          \
+  src/capnp/schema.capnp
 
 capnpc_outputs =                                               \
-  src/capnproto/c++.capnp.c++                                  \
-  src/capnproto/c++.capnp.h                                    \
-  src/capnproto/schema.capnp.c++                               \
-  src/capnproto/schema.capnp.h
+  src/capnp/c++.capnp.c++                                      \
+  src/capnp/c++.capnp.h                                        \
+  src/capnp/schema.capnp.c++                                   \
+  src/capnp/schema.capnp.h
 
 # This should depend on $(capnpc_inputs), but then make mysteriously complains
 # about a cyclic dependency.  I don't know where it is coming from.  I rummaged
@@ -74,19 +74,20 @@ includekj_HEADERS =                                            \
   src/kj/io.h
 
 includecapnp_HEADERS =                                         \
-  src/capnproto/common.h                                       \
-  src/capnproto/blob.h                                         \
-  src/capnproto/layout.h                                       \
-  src/capnproto/list.h                                         \
-  src/capnproto/message.h                                      \
-  src/capnproto/schema.h                                       \
-  src/capnproto/schema-loader.h                                \
-  src/capnproto/dynamic.h                                      \
-  src/capnproto/serialize.h                                    \
-  src/capnproto/serialize-packed.h                             \
-  src/capnproto/generated-header-support.h
+  src/capnp/common.h                                           \
+  src/capnp/blob.h                                             \
+  src/capnp/endian.h                                           \
+  src/capnp/layout.h                                           \
+  src/capnp/list.h                                             \
+  src/capnp/message.h                                          \
+  src/capnp/schema.h                                           \
+  src/capnp/schema-loader.h                                    \
+  src/capnp/dynamic.h                                          \
+  src/capnp/serialize.h                                        \
+  src/capnp/serialize-packed.h                                 \
+  src/capnp/generated-header-support.h
 nodist_includecapnp_HEADERS =                                  \
-  src/capnproto/schema.capnp.h
+  src/capnp/schema.capnp.h
 
 # No dynamic library for now since C++ binary compatibility is hard.
 # It may make more sense to have every module statically link Cap'n Proto
@@ -102,37 +103,37 @@ libcapnproto_a_SOURCES=                                        \
   src/kj/exception.c++                                         \
   src/kj/debug.c++                                             \
   src/kj/io.c++                                                \
-  src/capnproto/blob.c++                                       \
-  src/capnproto/arena.h                                        \
-  src/capnproto/arena.c++                                      \
-  src/capnproto/layout.c++                                     \
-  src/capnproto/list.c++                                       \
-  src/capnproto/message.c++                                    \
-  src/capnproto/schema.c++                                     \
-  src/capnproto/schema-loader.c++                              \
-  src/capnproto/dynamic.c++                                    \
-  src/capnproto/stringify.c++                                  \
-  src/capnproto/serialize.c++                                  \
-  src/capnproto/serialize-packed.c++
+  src/capnp/blob.c++                                           \
+  src/capnp/arena.h                                            \
+  src/capnp/arena.c++                                          \
+  src/capnp/layout.c++                                         \
+  src/capnp/list.c++                                           \
+  src/capnp/message.c++                                        \
+  src/capnp/schema.c++                                         \
+  src/capnp/schema-loader.c++                                  \
+  src/capnp/dynamic.c++                                        \
+  src/capnp/stringify.c++                                      \
+  src/capnp/serialize.c++                                      \
+  src/capnp/serialize-packed.c++
 nodist_libcapnproto_a_SOURCES =                                \
-  src/capnproto/schema.capnp.c++
+  src/capnp/schema.capnp.c++
 
 # Source files intentionally not included in the dist at this time:
-#  src/capnproto/serialize-snappy*
-#  src/capnproto/benchmark/...
-#  src/capnproto/compiler/...
+#  src/capnp/serialize-snappy*
+#  src/capnp/benchmark/...
+#  src/capnp/compiler/...
 
 # Tests ==============================================================
 
 test_capnpc_inputs =                                           \
-  src/capnproto/test.capnp                                     \
-  src/capnproto/test-import.capnp
+  src/capnp/test.capnp                                         \
+  src/capnp/test-import.capnp
 
 test_capnpc_outputs =                                          \
-  src/capnproto/test.capnp.c++                                 \
-  src/capnproto/test.capnp.h                                   \
-  src/capnproto/test-import.capnp.c++                          \
-  src/capnproto/test-import.capnp.h
+  src/capnp/test.capnp.c++                                     \
+  src/capnp/test.capnp.h                                       \
+  src/capnp/test-import.capnp.c++                              \
+  src/capnp/test-import.capnp.h
 
 # This should depend on $(test_capnpc_inputs), but then make mysteriously complains
 # about a cyclic dependency.  I don't know where it is coming from.  I rummaged
@@ -155,18 +156,21 @@ capnproto_test_SOURCES =                                       \
   src/kj/string-test.c++                                       \
   src/kj/debug-test.c++                                        \
   src/kj/units-test.c++                                        \
-  src/capnproto/blob-test.c++                                  \
-  src/capnproto/layout-test.c++                                \
-  src/capnproto/message-test.c++                               \
-  src/capnproto/schema-test.c++                                \
-  src/capnproto/schema-loader-test.c++                         \
-  src/capnproto/dynamic-test.c++                               \
-  src/capnproto/stringify-test.c++                             \
-  src/capnproto/encoding-test.c++                              \
-  src/capnproto/serialize-test.c++                             \
-  src/capnproto/serialize-packed-test.c++                      \
-  src/capnproto/test-util.c++                                  \
-  src/capnproto/test-util.h
+  src/capnp/blob-test.c++                                      \
+  src/capnp/endian-test.c++                                    \
+  src/capnp/endian-fallback-test.c++                           \
+  src/capnp/endian-reverse-test.c++                            \
+  src/capnp/layout-test.c++                                    \
+  src/capnp/message-test.c++                                   \
+  src/capnp/schema-test.c++                                    \
+  src/capnp/schema-loader-test.c++                             \
+  src/capnp/dynamic-test.c++                                   \
+  src/capnp/stringify-test.c++                                 \
+  src/capnp/encoding-test.c++                                  \
+  src/capnp/serialize-test.c++                                 \
+  src/capnp/serialize-packed-test.c++                          \
+  src/capnp/test-util.c++                                      \
+  src/capnp/test-util.h
 nodist_capnproto_test_SOURCES = $(test_capnpc_outputs)
 
 TESTS = capnproto-test

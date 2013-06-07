@@ -3,7 +3,7 @@
 # autoconf can't handle apostrophes in names...
 AC_INIT([Capn Proto],[0.1.0],[capnproto@googlegroups.com],[capnproto])
 
-AC_CONFIG_SRCDIR([src/capnproto/layout.c++])
+AC_CONFIG_SRCDIR([src/capnp/layout.c++])
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])

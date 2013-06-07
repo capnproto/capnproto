@@ -34,6 +34,7 @@
 #include <kj/common.h>
 #include "common.h"
 #include "blob.h"
+#include "endian.h"
 
 namespace capnp {
 namespace _ {  // private
@@ -265,30 +266,7 @@ inline double unmask<double>(uint64_t value, uint64_t mask) {
 
 // -------------------------------------------------------------------
 
-template <typename T>
-class WireValue {
-  // Wraps a primitive value as it appears on the wire.  Namely, values are little-endian on the
-  // wire, because little-endian is the most common endianness in modern CPUs.
-  //
-  // TODO(soon):  On big-endian systems, inject byte-swapping here.  Most big-endian CPUs implement
-  //   dedicated instructions for this, so use those rather than writing a bunch of shifts and
-  //   masks.  Note that GCC has e.g. __builtin__bswap32() for this.
-  //
-  // Note:  In general, code that depends cares about byte ordering is bad.  See:
-  //     http://commandcenter.blogspot.com/2012/04/byte-order-fallacy.html
-  //   Cap'n Proto is special because it is essentially doing compiler-like things, fussing over
-  //   allocation and layout of memory, in order to squeeze out every last drop of performance.
-
-public:
-  WireValue() = default;
-  KJ_ALWAYS_INLINE(WireValue(T value)): value(value) {}
-
-  KJ_ALWAYS_INLINE(T get() const) { return value; }
-  KJ_ALWAYS_INLINE(void set(T newValue)) { value = newValue; }
-
-private:
-  T value;
-};
+// -------------------------------------------------------------------
 
 class StructBuilder: public kj::DisallowConstCopy {
 public:
