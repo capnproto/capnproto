@@ -27,6 +27,7 @@
 #include <stddef.h>
 #include "common.h"
 #include "array.h"
+#include "exception.h"
 
 namespace kj {
 
@@ -35,7 +36,7 @@ namespace kj {
 
 class InputStream {
 public:
-  virtual ~InputStream();
+  virtual ~InputStream() noexcept(false);
 
   virtual size_t read(void* buffer, size_t minBytes, size_t maxBytes) = 0;
   // Reads at least minBytes and at most maxBytes, copying them into the given buffer.  Returns
@@ -63,7 +64,7 @@ public:
 
 class OutputStream {
 public:
-  virtual ~OutputStream();
+  virtual ~OutputStream() noexcept(false);
 
   virtual void write(const void* buffer, size_t size) = 0;
   // Always writes the full size.  Throws exception on error.
@@ -81,7 +82,7 @@ class BufferedInputStream: public InputStream {
   // caller a direct pointer to that memory to potentially avoid a copy.
 
 public:
-  virtual ~BufferedInputStream();
+  virtual ~BufferedInputStream() noexcept(false);
 
   virtual ArrayPtr<const byte> getReadBuffer() = 0;
   // Get a direct pointer into the read buffer, which contains the next bytes in the input.  If the
@@ -96,7 +97,7 @@ class BufferedOutputStream: public OutputStream {
   // caller a direct pointer to that memory to potentially avoid a copy.
 
 public:
-  virtual ~BufferedOutputStream();
+  virtual ~BufferedOutputStream() noexcept(false);
 
   virtual ArrayPtr<byte> getWriteBuffer() = 0;
   // Get a direct pointer into the write buffer.  The caller may choose to fill in some prefix of
@@ -126,7 +127,7 @@ public:
   // its own.  This may improve performance if the buffer can be reused.
 
   KJ_DISALLOW_COPY(BufferedInputStreamWrapper);
-  ~BufferedInputStreamWrapper();
+  ~BufferedInputStreamWrapper() noexcept(false);
 
   // implements BufferedInputStream ----------------------------------
   ArrayPtr<const byte> getReadBuffer() override;
@@ -152,7 +153,7 @@ public:
   // its own.  This may improve performance if the buffer can be reused.
 
   KJ_DISALLOW_COPY(BufferedOutputStreamWrapper);
-  ~BufferedOutputStreamWrapper();
+  ~BufferedOutputStreamWrapper() noexcept(false);
 
   void flush();
   // Force the wrapper to write any remaining bytes in its buffer to the inner stream.  Note that
@@ -168,6 +169,7 @@ private:
   Array<byte> ownedBuffer;
   ArrayPtr<byte> buffer;
   byte* bufferPos;
+  UnwindDetector unwindDetector;
 };
 
 // =======================================================================================
@@ -226,7 +228,7 @@ public:
   inline explicit AutoCloseFd(int fd): fd(fd) {}
   inline AutoCloseFd(AutoCloseFd&& other): fd(other.fd) { other.fd = -1; }
   KJ_DISALLOW_COPY(AutoCloseFd);
-  ~AutoCloseFd();
+  ~AutoCloseFd() noexcept(false);
 
   inline operator int() { return fd; }
   inline int get() { return fd; }
@@ -236,6 +238,7 @@ public:
 
 private:
   int fd;
+  UnwindDetector unwindDetector;
 };
 
 class FdInputStream: public InputStream {
@@ -245,7 +248,7 @@ public:
   explicit FdInputStream(int fd): fd(fd) {};
   explicit FdInputStream(AutoCloseFd fd): fd(fd), autoclose(mv(fd)) {}
   KJ_DISALLOW_COPY(FdInputStream);
-  ~FdInputStream();
+  ~FdInputStream() noexcept(false);
 
   size_t read(void* buffer, size_t minBytes, size_t maxBytes) override;
 
@@ -261,7 +264,7 @@ public:
   explicit FdOutputStream(int fd): fd(fd) {};
   explicit FdOutputStream(AutoCloseFd fd): fd(fd), autoclose(mv(fd)) {}
   KJ_DISALLOW_COPY(FdOutputStream);
-  ~FdOutputStream();
+  ~FdOutputStream() noexcept(false);
 
   void write(const void* buffer, size_t size) override;
   void write(ArrayPtr<const ArrayPtr<const byte>> pieces) override;

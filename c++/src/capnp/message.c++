@@ -34,7 +34,7 @@
 namespace capnp {
 
 MessageReader::MessageReader(ReaderOptions options): options(options), allocatedArena(false) {}
-MessageReader::~MessageReader() {
+MessageReader::~MessageReader() noexcept(false) {
   if (allocatedArena) {
     arena()->~ReaderArena();
   }

@@ -84,7 +84,7 @@ public:
   // default value of "ReaderOptions()".  The base class constructor doesn't have a default value
   // in order to remind subclasses that they really need to give the user a way to provide this.
 
-  virtual ~MessageReader();
+  virtual ~MessageReader() noexcept(false);
 
   virtual kj::ArrayPtr<const word> getSegment(uint id) = 0;
   // Gets the segment with the given ID, or returns null if no such segment exists.

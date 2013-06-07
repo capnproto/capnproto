@@ -60,7 +60,7 @@ public:
                               kj::ArrayPtr<byte> buffer = nullptr,
                               kj::ArrayPtr<byte> compressedBuffer = nullptr);
   KJ_DISALLOW_COPY(SnappyOutputStream);
-  ~SnappyOutputStream();
+  ~SnappyOutputStream() noexcept(false);
 
   void flush();
   // Force the stream to write any remaining bytes in its buffer to the inner stream.  This will
@@ -79,6 +79,8 @@ private:
 
   kj::Array<byte> ownedCompressedBuffer;
   kj::ArrayPtr<byte> compressedBuffer;
+
+  kj::UnwindDetector unwindDetector;
 };
 
 class SnappyPackedMessageReader: private SnappyInputStream, public PackedMessageReader {

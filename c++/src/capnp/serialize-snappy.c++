@@ -138,17 +138,11 @@ SnappyOutputStream::SnappyOutputStream(
   this->compressedBuffer = compressedBuffer;
 }
 
-SnappyOutputStream::~SnappyOutputStream() {
+SnappyOutputStream::~SnappyOutputStream() noexcept(false) {
   if (bufferPos > buffer.begin()) {
-    if (std::uncaught_exception()) {
-      try {
-        flush();
-      } catch (...) {
-        // TODO(someday): report secondary faults
-      }
-    } else {
+    unwindDetector.catchExceptionsIfUnwinding([&]() {
       flush();
-    }
+    });
   }
 }
 

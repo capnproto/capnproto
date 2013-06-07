@@ -85,7 +85,7 @@ std::string fileLine(std::string file, int line) {
   return file;
 }
 
-TEST(Logging, Log) {
+TEST(Debug, Log) {
   MockExceptionCallback mockCallback;
   int line;
 
@@ -156,19 +156,23 @@ TEST(Logging, Log) {
   mockCallback.text.clear();
 }
 
-TEST(Logging, Catch) {
+TEST(Debug, Catch) {
   int line;
 
   // Catch as kj::Exception.
-  try {
+  Maybe<Exception> exception = kj::runCatchingExceptions([&](){
     line = __LINE__; KJ_FAIL_ASSERT("foo");
-    ADD_FAILURE() << "Expected exception.";
-  } catch (const Exception& e) {
-    String what = str(e);
+  });
+
+  KJ_IF_MAYBE(e, exception) {
+    String what = str(*e);
     std::string text(what.cStr(), strchr(what.cStr(), '\n') - what.cStr());
     EXPECT_EQ(fileLine(__FILE__, line) + ": bug in code: foo", text);
+  } else {
+    ADD_FAILURE() << "Expected exception.";
   }
 
+#if !KJ_NO_EXCEPTIONS
   // Catch as std::exception.
   try {
     line = __LINE__; KJ_FAIL_ASSERT("foo");
@@ -178,9 +182,10 @@ TEST(Logging, Catch) {
     std::string text(what, strchr(what, '\n') - what);
     EXPECT_EQ(fileLine(__FILE__, line) + ": bug in code: foo", text);
   }
+#endif
 }
 
-TEST(Logging, Syscall) {
+TEST(Debug, Syscall) {
   MockExceptionCallback mockCallback;
   int line;
 
@@ -204,7 +209,7 @@ TEST(Logging, Syscall) {
   EXPECT_TRUE(recovered);
 }
 
-TEST(Logging, Context) {
+TEST(Debug, Context) {
   MockExceptionCallback mockCallback;
 
   {
@@ -246,11 +251,6 @@ TEST(Logging, Context) {
       mockCallback.text.clear();
     }
   }
-}
-
-TEST(Logging, ExceptionCallbackMustBeOnStack) {
-  // TODO(cleanup):  Put in exception-test.c++, when it exists.
-  EXPECT_ANY_THROW(new ExceptionCallback);
 }
 
 }  // namespace

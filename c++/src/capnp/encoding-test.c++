@@ -509,11 +509,15 @@ TEST(Encoding, ListUpgrade) {
     EXPECT_EQ(56u, l[2].getF());
   }
 
-  try {
-    reader.getObjectField<List<uint32_t>>();
-    ADD_FAILURE() << "Expected exception.";
-  } catch (const kj::Exception& e) {
-    // expected
+  {
+    kj::Maybe<kj::Exception> e = kj::runCatchingExceptions([&]() {
+      reader.getObjectField<List<uint32_t>>();
+#if !KJ_NO_EXCEPTIONS
+      ADD_FAILURE() << "Should have thrown an exception.";
+#endif
+    });
+
+    EXPECT_TRUE(e != nullptr) << "Should have thrown an exception.";
   }
 
   {
@@ -581,11 +585,15 @@ TEST(Encoding, BitListUpgrade) {
 
   auto reader = root.asReader();
 
-  try {
-    reader.getObjectField<List<uint8_t>>();
-    ADD_FAILURE() << "Expected exception.";
-  } catch (const kj::Exception& e) {
-    // expected
+  {
+    kj::Maybe<kj::Exception> e = kj::runCatchingExceptions([&]() {
+      reader.getObjectField<List<uint8_t>>();
+#if !KJ_NO_EXCEPTIONS
+      ADD_FAILURE() << "Should have thrown an exception.";
+#endif
+    });
+
+    EXPECT_TRUE(e != nullptr) << "Should have thrown an exception.";
   }
 
   {

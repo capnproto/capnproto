@@ -30,10 +30,10 @@
 
 namespace kj {
 
-InputStream::~InputStream() {}
-OutputStream::~OutputStream() {}
-BufferedInputStream::~BufferedInputStream() {}
-BufferedOutputStream::~BufferedOutputStream() {}
+InputStream::~InputStream() noexcept(false) {}
+OutputStream::~OutputStream() noexcept(false) {}
+BufferedInputStream::~BufferedInputStream() noexcept(false) {}
+BufferedOutputStream::~BufferedOutputStream() noexcept(false) {}
 
 void InputStream::skip(size_t bytes) {
   char scratch[8192];
@@ -56,7 +56,7 @@ BufferedInputStreamWrapper::BufferedInputStreamWrapper(InputStream& inner, Array
     : inner(inner), ownedBuffer(buffer == nullptr ? heapArray<byte>(8192) : nullptr),
       buffer(buffer == nullptr ? ownedBuffer : buffer) {}
 
-BufferedInputStreamWrapper::~BufferedInputStreamWrapper() {}
+BufferedInputStreamWrapper::~BufferedInputStreamWrapper() noexcept(false) {}
 
 ArrayPtr<const byte> BufferedInputStreamWrapper::getReadBuffer() {
   if (bufferAvailable.size() == 0) {
@@ -123,18 +123,10 @@ BufferedOutputStreamWrapper::BufferedOutputStreamWrapper(OutputStream& inner, Ar
       buffer(buffer == nullptr ? ownedBuffer : buffer),
       bufferPos(this->buffer.begin()) {}
 
-BufferedOutputStreamWrapper::~BufferedOutputStreamWrapper() {
-  if (bufferPos > buffer.begin()) {
-    if (std::uncaught_exception()) {
-      try {
-        inner.write(buffer.begin(), bufferPos - buffer.begin());
-      } catch (...) {
-        // TODO(someday):  Report secondary faults.
-      }
-    } else {
-      flush();
-    }
-  }
+BufferedOutputStreamWrapper::~BufferedOutputStreamWrapper() noexcept(false) {
+  unwindDetector.catchExceptionsIfUnwinding([&]() {
+    flush();
+  });
 }
 
 void BufferedOutputStreamWrapper::flush() {
@@ -229,15 +221,18 @@ void ArrayOutputStream::write(const void* src, size_t size) {
 
 // =======================================================================================
 
-AutoCloseFd::~AutoCloseFd() {
-  if (fd >= 0 && close(fd) < 0) {
-    FAIL_SYSCALL("close", errno, fd) {
-      break;
+AutoCloseFd::~AutoCloseFd() noexcept(false) {
+  unwindDetector.catchExceptionsIfUnwinding([&]() {
+    // Don't use SYSCALL() here because close() should not be repeated on EINTR.
+    if (fd >= 0 && close(fd) < 0) {
+      FAIL_SYSCALL("close", errno, fd) {
+        break;
+      }
     }
-  }
+  });
 }
 
-FdInputStream::~FdInputStream() {}
+FdInputStream::~FdInputStream() noexcept(false) {}
 
 size_t FdInputStream::read(void* buffer, size_t minBytes, size_t maxBytes) {
   byte* pos = reinterpret_cast<byte*>(buffer);
@@ -256,7 +251,7 @@ size_t FdInputStream::read(void* buffer, size_t minBytes, size_t maxBytes) {
   return pos - reinterpret_cast<byte*>(buffer);
 }
 
-FdOutputStream::~FdOutputStream() {}
+FdOutputStream::~FdOutputStream() noexcept(false) {}
 
 void FdOutputStream::write(const void* buffer, size_t size) {
   const char* pos = reinterpret_cast<const char*>(buffer);

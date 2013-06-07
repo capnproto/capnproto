@@ -197,21 +197,14 @@ InputStreamMessageReader::InputStreamMessageReader(
   }
 }
 
-InputStreamMessageReader::~InputStreamMessageReader() {
+InputStreamMessageReader::~InputStreamMessageReader() noexcept(false) {
   if (readPos != nullptr) {
-    // Note that lazy reads only happen when we have multiple segments, so moreSegments.back() is
-    // valid.
-    const byte* allEnd = reinterpret_cast<const byte*>(moreSegments.back().end());
-
-    if (std::uncaught_exception()) {
-      try {
-        inputStream.skip(allEnd - readPos);
-      } catch (...) {
-        // TODO(someday):  Devise some way to report secondary errors during unwind.
-      }
-    } else {
+    unwindDetector.catchExceptionsIfUnwinding([&]() {
+      // Note that lazy reads only happen when we have multiple segments, so moreSegments.back() is
+      // valid.
+      const byte* allEnd = reinterpret_cast<const byte*>(moreSegments.back().end());
       inputStream.skip(allEnd - readPos);
-    }
+    });
   }
 }
 
@@ -267,7 +260,7 @@ void writeMessage(kj::OutputStream& output, kj::ArrayPtr<const kj::ArrayPtr<cons
 }
 
 // =======================================================================================
-StreamFdMessageReader::~StreamFdMessageReader() {}
+StreamFdMessageReader::~StreamFdMessageReader() noexcept(false) {}
 
 void writeMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
   kj::FdOutputStream stream(fd);

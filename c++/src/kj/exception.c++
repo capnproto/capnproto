@@ -29,6 +29,10 @@
 #include <stdlib.h>
 #include <exception>
 
+#if __GNUC__
+#include <cxxabi.h>
+#endif
+
 #if defined(__linux__) && !defined(NDEBUG)
 #include <stdio.h>
 #endif
@@ -293,9 +297,7 @@ public:
   }
 
   void logMessage(const char* file, int line, int contextDepth, String&& text) override {
-    if (contextDepth > 0) {
-      text = str(RepeatChar('_', contextDepth), mv(text));
-    }
+    text = str(RepeatChar('_', contextDepth), file, ":", line, ": ", mv(text));
 
     StringPtr textPtr = text;
 
@@ -328,5 +330,85 @@ ExceptionCallback& getExceptionCallback() {
   ExceptionCallback* scoped = threadLocalCallback;
   return scoped != nullptr ? *scoped : defaultCallback;
 }
+
+// =======================================================================================
+
+namespace {
+
+#if __GNUC__
+
+// __cxa_eh_globals does not appear to be defined in a visible header.  This is what it looks like.
+struct DummyEhGlobals {
+  abi::__cxa_exception* caughtExceptions;
+  uint uncaughtExceptions;
+};
+
+uint uncaughtExceptionCount() {
+  // TODO(perf):  Use __cxa_get_globals_fast()?  Requires that __cxa_get_globals() has been called
+  //   from somewhere.
+  return reinterpret_cast<DummyEhGlobals*>(abi::__cxa_get_globals())->uncaughtExceptions;
+}
+
+#else
+#error "This needs to be ported to your compiler / C++ ABI."
+#endif
+
+}  // namespace
+
+UnwindDetector::UnwindDetector(): uncaughtCount(uncaughtExceptionCount()) {}
+
+bool UnwindDetector::isUnwinding() const {
+  return uncaughtExceptionCount() > uncaughtCount;
+}
+
+void UnwindDetector::catchExceptionsAsSecondaryFaults(_::Runnable& runnable) const {
+  // TODO(someday):  Attach the secondary exception to whatever primary exception is causing
+  //   the unwind.  For now we just drop it on the floor as this is probably fine most of the
+  //   time.
+  runCatchingExceptions(runnable);
+}
+
+namespace _ {  // private
+
+class RecoverableExceptionCatcher: public ExceptionCallback {
+  // Catches a recoverable exception without using try/catch.  Used when compiled with
+  // -fno-exceptions.
+
+public:
+  virtual ~RecoverableExceptionCatcher() {}
+
+  void onRecoverableException(Exception&& exception) override {
+    if (caught == nullptr) {
+      caught = mv(exception);
+    } else {
+      // TODO(someday):  Consider it a secondary fault?
+    }
+  }
+
+  Maybe<Exception> caught;
+};
+
+Maybe<Exception> runCatchingExceptions(Runnable& runnable) {
+#if KJ_NO_EXCEPTIONS
+  RecoverableExceptionCatcher catcher;
+  runnable.run();
+  return mv(catcher.caught);
+#else
+  try {
+    runnable.run();
+    return nullptr;
+  } catch (Exception& e) {
+    return kj::mv(e);
+  } catch (std::exception& e) {
+    return Exception(Exception::Nature::OTHER, Exception::Durability::PERMANENT,
+                     "(unknown)", -1, str("std::exception: ", e.what()));
+  } catch (...) {
+    return Exception(Exception::Nature::OTHER, Exception::Durability::PERMANENT,
+                     "(unknown)", -1, str("Unknown non-KJ exception."));
+  }
+#endif
+}
+
+}  // namespace _ (private)
 
 }  // namespace kj

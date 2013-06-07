@@ -77,7 +77,7 @@ public:
   int getLine() const { return line; }
   Nature getNature() const { return nature; }
   Durability getDurability() const { return durability; }
-  ArrayPtr<const char> getDescription() const { return description; }
+  StringPtr getDescription() const { return description; }
   ArrayPtr<void* const> getStackTrace() const { return arrayPtr(trace, traceCount); }
 
   struct Context {
@@ -122,6 +122,8 @@ private:
 ArrayPtr<const char> KJ_STRINGIFY(Exception::Nature nature);
 ArrayPtr<const char> KJ_STRINGIFY(Exception::Durability durability);
 String KJ_STRINGIFY(const Exception& e);
+
+// =======================================================================================
 
 class ExceptionCallback {
   // If you don't like C++ exceptions, you may implement and register an ExceptionCallback in order
@@ -176,6 +178,86 @@ private:
 
 ExceptionCallback& getExceptionCallback();
 // Returns the current exception callback.
+
+// =======================================================================================
+
+namespace _ { class Runnable; }
+
+template <typename Func>
+Maybe<Exception> runCatchingExceptions(Func&& func);
+// Executes the given function (usually, a lambda returning nothing) catching any exceptions that
+// are thrown.  Returns the Exception if there was one, or null if the operation completed normally.
+// Non-KJ exceptions will be wrapped.
+//
+// If exception are disabled (e.g. with -fno-exceptions), this will still detect whether any
+// recoverable exceptions occurred while running the function and will return those.
+
+class UnwindDetector {
+  // Utility for detecting when a destructor is called due to unwind.  Useful for:
+  // - Avoiding throwing exceptions in this case, which would terminate the program.
+  // - Detecting whether to commit or roll back a transaction.
+  //
+  // To use this class, either inherit privately from it or declare it as a member.  The detector
+  // works by comparing the exception state against that when the constructor was called, so for
+  // an object that was actually constructed during exception unwind, it will behave as if no
+  // unwind is taking place.  This is usually the desired behavior.
+
+public:
+  UnwindDetector();
+
+  bool isUnwinding() const;
+  // Returns true if the current thread is in a stack unwind that it wasn't in at the time the
+  // object was constructed.
+
+  template <typename Func>
+  void catchExceptionsIfUnwinding(Func&& func) const;
+  // Runs the given function (e.g., a lambda).  If isUnwinding() is true, any exceptions are
+  // caught and treated as secondary faults, meaning they are considered to be side-effects of the
+  // exception that is unwinding the stack.  Otherwise, exceptions are passed through normally.
+
+private:
+  uint uncaughtCount;
+
+  void catchExceptionsAsSecondaryFaults(_::Runnable& runnable) const;
+};
+
+namespace _ {  // private
+
+class Runnable {
+public:
+  virtual void run() = 0;
+};
+
+template <typename Func>
+class RunnableImpl: public Runnable {
+public:
+  RunnableImpl(Func&& func): func(kj::mv(func)) {}
+  void run() override {
+    func();
+  }
+private:
+  Func func;
+};
+
+Maybe<Exception> runCatchingExceptions(Runnable& runnable);
+
+}  // namespace _ (private)
+
+template <typename Func>
+Maybe<Exception> runCatchingExceptions(Func&& func) {
+  _::RunnableImpl<Decay<Func>> runnable(kj::fwd<Func>(func));
+  return _::runCatchingExceptions(runnable);
+}
+
+template <typename Func>
+void UnwindDetector::catchExceptionsIfUnwinding(Func&& func) const {
+  if (isUnwinding()) {
+    _::RunnableImpl<Decay<Func>> runnable(kj::fwd<Func>(func));
+    catchExceptionsAsSecondaryFaults(runnable);
+  } else {
+    func();
+  }
+}
 
 }  // namespace kj
 
