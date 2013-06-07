@@ -122,7 +122,7 @@ private:
 class MessageBuilder {
 public:
   MessageBuilder();
-  virtual ~MessageBuilder();
+  virtual ~MessageBuilder() noexcept(false);
 
   virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) = 0;
   // Allocates an array of at least the given number of words, throwing an exception or crashing if
@@ -225,7 +225,7 @@ public:
   // segments.  All arrays passed in must remain valid until the MessageReader is destroyed.
 
   KJ_DISALLOW_COPY(SegmentArrayMessageReader);
-  ~SegmentArrayMessageReader();
+  ~SegmentArrayMessageReader() noexcept(false);
 
   virtual kj::ArrayPtr<const word> getSegment(uint id) override;
 
@@ -282,7 +282,7 @@ public:
   // over any space that was used so that it can be reused.
 
   KJ_DISALLOW_COPY(MallocMessageBuilder);
-  virtual ~MallocMessageBuilder();
+  virtual ~MallocMessageBuilder() noexcept(false);
 
   virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) override;
 
@@ -306,7 +306,7 @@ class FlatMessageBuilder: public MessageBuilder {
 public:
   explicit FlatMessageBuilder(kj::ArrayPtr<word> array);
   KJ_DISALLOW_COPY(FlatMessageBuilder);
-  virtual ~FlatMessageBuilder();
+  virtual ~FlatMessageBuilder() noexcept(false);
 
   void requireFilled();
   // Throws an exception if the flat array is not exactly full.

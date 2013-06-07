@@ -37,7 +37,7 @@ class PackedInputStream: public kj::InputStream {
 public:
   explicit PackedInputStream(kj::BufferedInputStream& inner);
   KJ_DISALLOW_COPY(PackedInputStream);
-  ~PackedInputStream();
+  ~PackedInputStream() noexcept(false);
 
   // implements InputStream ------------------------------------------
   size_t read(void* buffer, size_t minBytes, size_t maxBytes) override;
@@ -51,7 +51,7 @@ class PackedOutputStream: public kj::OutputStream {
 public:
   explicit PackedOutputStream(kj::BufferedOutputStream& inner);
   KJ_DISALLOW_COPY(PackedOutputStream);
-  ~PackedOutputStream();
+  ~PackedOutputStream() noexcept(false);
 
   // implements OutputStream -----------------------------------------
   void write(const void* buffer, size_t bytes) override;
@@ -67,7 +67,7 @@ public:
   PackedMessageReader(kj::BufferedInputStream& inputStream, ReaderOptions options = ReaderOptions(),
                       kj::ArrayPtr<word> scratchSpace = nullptr);
   KJ_DISALLOW_COPY(PackedMessageReader);
-  ~PackedMessageReader();
+  ~PackedMessageReader() noexcept(false);
 };
 
 class PackedFdMessageReader: private kj::FdInputStream, private kj::BufferedInputStreamWrapper,
@@ -85,7 +85,7 @@ public:
 
   KJ_DISALLOW_COPY(PackedFdMessageReader);
 
-  ~PackedFdMessageReader();
+  ~PackedFdMessageReader() noexcept(false);
 };
 
 void writePackedMessage(kj::BufferedOutputStream& output, MessageBuilder& builder);

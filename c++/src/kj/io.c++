@@ -172,7 +172,7 @@ void BufferedOutputStreamWrapper::write(const void* src, size_t size) {
 // =======================================================================================
 
 ArrayInputStream::ArrayInputStream(ArrayPtr<const byte> array): array(array) {}
-ArrayInputStream::~ArrayInputStream() {}
+ArrayInputStream::~ArrayInputStream() noexcept(false) {}
 
 ArrayPtr<const byte> ArrayInputStream::getReadBuffer() {
   return array;
@@ -201,7 +201,7 @@ void ArrayInputStream::skip(size_t bytes) {
 // -------------------------------------------------------------------
 
 ArrayOutputStream::ArrayOutputStream(ArrayPtr<byte> array): array(array), fillPos(array.begin()) {}
-ArrayOutputStream::~ArrayOutputStream() {}
+ArrayOutputStream::~ArrayOutputStream() noexcept(false) {}
 
 ArrayPtr<byte> ArrayOutputStream::getWriteBuffer() {
   return arrayPtr(fillPos, array.end());

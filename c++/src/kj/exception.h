@@ -141,7 +141,7 @@ class ExceptionCallback {
 public:
   ExceptionCallback();
   KJ_DISALLOW_COPY(ExceptionCallback);
-  virtual ~ExceptionCallback();
+  virtual ~ExceptionCallback() noexcept(false);
 
   virtual void onRecoverableException(Exception&& exception);
   // Called when an exception has been raised, but the calling code has the ability to continue by

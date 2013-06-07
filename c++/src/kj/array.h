@@ -37,7 +37,7 @@ class ArrayDisposer {
   // Much like Disposer from memory.h.
 
 protected:
-  virtual ~ArrayDisposer();
+  virtual ~ArrayDisposer() noexcept(false);
 
   virtual void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
                            size_t capacity, void (*destroyElement)(void*)) const = 0;
@@ -231,7 +231,7 @@ public:
     other.endPtr = nullptr;
   }
   KJ_DISALLOW_COPY(ArrayBuilder);
-  inline ~ArrayBuilder() { dispose(); }
+  inline ~ArrayBuilder() noexcept(false) { dispose(); }
 
   inline operator ArrayPtr<T>() {
     return arrayPtr(ptr, pos);
@@ -506,7 +506,7 @@ struct CopyConstructArray_<T, Iterator, false> {
     T* start;
     T* pos;
     inline explicit ExceptionGuard(T* pos): start(pos), pos(pos) {}
-    ~ExceptionGuard() {
+    ~ExceptionGuard() noexcept(false) {
       while (pos > start) {
         dtor(*--pos);
       }

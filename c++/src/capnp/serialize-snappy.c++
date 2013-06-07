@@ -34,7 +34,7 @@ class SnappyInputStream::InputStreamSnappySource: public snappy::Source {
 public:
   inline InputStreamSnappySource(BufferedInputStream& inputStream)
       : inputStream(inputStream) {}
-  inline ~InputStreamSnappySource() {};
+  inline ~InputStreamSnappySource() noexcept {};
 
   // implements snappy::Source ---------------------------------------
 
@@ -66,7 +66,7 @@ SnappyInputStream::SnappyInputStream(BufferedInputStream& inner, kj::ArrayPtr<by
   this->buffer = buffer;
 }
 
-SnappyInputStream::~SnappyInputStream() {}
+SnappyInputStream::~SnappyInputStream() noexcept(false) {}
 
 kj::ArrayPtr<const byte> SnappyInputStream::getReadBuffer() {
   if (bufferAvailable.size() == 0) {
@@ -193,7 +193,7 @@ SnappyPackedMessageReader::SnappyPackedMessageReader(
     : SnappyInputStream(inputStream, buffer),
       PackedMessageReader(static_cast<SnappyInputStream&>(*this), options, scratchSpace) {}
 
-SnappyPackedMessageReader::~SnappyPackedMessageReader() {}
+SnappyPackedMessageReader::~SnappyPackedMessageReader() noexcept(false) {}
 
 void writeSnappyPackedMessage(kj::OutputStream& output,
                               kj::ArrayPtr<const kj::ArrayPtr<const word>> segments,

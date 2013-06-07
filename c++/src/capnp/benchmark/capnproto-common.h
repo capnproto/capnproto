@@ -183,7 +183,7 @@ struct UseScratch {
       KJ_REQUIRE(scratchCounter < 6, "Too many scratch spaces needed at once.");
       words = scratchSpace + scratchCounter++ * SCRATCH_SIZE;
     }
-    ~ScratchSpace() {
+    ~ScratchSpace() noexcept {
       --scratchCounter;
     }
   };

@@ -32,7 +32,7 @@ namespace capnp {
 class SchemaLoader {
 public:
   SchemaLoader();
-  ~SchemaLoader();
+  ~SchemaLoader() noexcept(false);
   KJ_DISALLOW_COPY(SchemaLoader);
 
   Schema get(uint64_t id) const;

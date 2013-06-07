@@ -62,7 +62,7 @@ _::StructReader MessageReader::getRootInternal() {
 // -------------------------------------------------------------------
 
 MessageBuilder::MessageBuilder(): allocatedArena(false) {}
-MessageBuilder::~MessageBuilder() {
+MessageBuilder::~MessageBuilder() noexcept(false) {
   if (allocatedArena) {
     arena()->~BuilderArena();
   }
@@ -121,7 +121,7 @@ SegmentArrayMessageReader::SegmentArrayMessageReader(
     kj::ArrayPtr<const kj::ArrayPtr<const word>> segments, ReaderOptions options)
     : MessageReader(options), segments(segments) {}
 
-SegmentArrayMessageReader::~SegmentArrayMessageReader() {}
+SegmentArrayMessageReader::~SegmentArrayMessageReader() noexcept(false) {}
 
 kj::ArrayPtr<const word> SegmentArrayMessageReader::getSegment(uint id) {
   if (id < segments.size()) {
@@ -153,7 +153,7 @@ MallocMessageBuilder::MallocMessageBuilder(
           "First segment must be zeroed.");
 }
 
-MallocMessageBuilder::~MallocMessageBuilder() {
+MallocMessageBuilder::~MallocMessageBuilder() noexcept(false) {
   if (returnedFirstSegment) {
     if (ownFirstSegment) {
       free(firstSegment);
@@ -220,7 +220,7 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
 // -------------------------------------------------------------------
 
 FlatMessageBuilder::FlatMessageBuilder(kj::ArrayPtr<word> array): array(array), allocated(false) {}
-FlatMessageBuilder::~FlatMessageBuilder() {}
+FlatMessageBuilder::~FlatMessageBuilder() noexcept(false) {}
 
 void FlatMessageBuilder::requireFilled() {
   KJ_REQUIRE(getSegmentsForOutput()[0].end() == array.end(),

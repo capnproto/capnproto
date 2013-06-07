@@ -228,7 +228,7 @@ int Debug::getOsErrorNumber() {
 }
 
 Debug::Context::Context(): logged(false) {}
-Debug::Context::~Context() {}
+Debug::Context::~Context() noexcept(false) {}
 
 Debug::Context::Value Debug::Context::ensureInitialized() {
   KJ_IF_MAYBE(v, value) {

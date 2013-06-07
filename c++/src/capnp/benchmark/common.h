@@ -90,7 +90,7 @@ public:
     sem_init(&semaphore, 0, 0);
   }
 
-  ~ProducerConsumerQueue() {
+  ~ProducerConsumerQueue() noexcept(false) {
     while (front != nullptr) {
       Node* oldFront = front;
       front = front->next;

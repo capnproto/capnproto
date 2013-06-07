@@ -340,7 +340,7 @@ public:
       ctor(value, other.value);
     }
   }
-  inline ~NullableValue() {
+  inline ~NullableValue() noexcept(noexcept(instance<T&>().~T())) {
     if (isSet) {
       dtor(value);
     }

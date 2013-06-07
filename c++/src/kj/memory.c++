@@ -25,6 +25,6 @@
 
 namespace kj {
 
-Disposer::~Disposer() {}
+Disposer::~Disposer() noexcept(false) {}
 
 }  // namespace kj

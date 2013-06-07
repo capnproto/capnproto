@@ -36,7 +36,7 @@ class SnappyInputStream: public kj::BufferedInputStream {
 public:
   explicit SnappyInputStream(BufferedInputStream& inner, kj::ArrayPtr<byte> buffer = nullptr);
   KJ_DISALLOW_COPY(SnappyInputStream);
-  ~SnappyInputStream();
+  ~SnappyInputStream() noexcept(false);
 
   // implements BufferedInputStream ----------------------------------
   kj::ArrayPtr<const byte> getReadBuffer() override;
@@ -88,7 +88,7 @@ public:
   SnappyPackedMessageReader(
       BufferedInputStream& inputStream, ReaderOptions options = ReaderOptions(),
       kj::ArrayPtr<word> scratchSpace = nullptr, kj::ArrayPtr<byte> buffer = nullptr);
-  ~SnappyPackedMessageReader();
+  ~SnappyPackedMessageReader() noexcept(false);
 };
 
 void writeSnappyPackedMessage(kj::OutputStream& output, MessageBuilder& builder,

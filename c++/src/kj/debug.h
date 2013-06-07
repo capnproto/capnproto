@@ -220,7 +220,7 @@ public:
   public:
     Context();
     KJ_DISALLOW_COPY(Context);
-    virtual ~Context();
+    virtual ~Context() noexcept(false);
 
     struct Value {
       const char* file;

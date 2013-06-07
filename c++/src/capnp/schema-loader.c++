@@ -1111,7 +1111,7 @@ kj::Array<Schema> SchemaLoader::Impl::getAllLoaded() const {
 // =======================================================================================
 
 SchemaLoader::SchemaLoader(): impl(kj::heap<Impl>()) {}
-SchemaLoader::~SchemaLoader() {}
+SchemaLoader::~SchemaLoader() noexcept(false) {}
 
 Schema SchemaLoader::get(uint64_t id) const {
   _::RawSchema* raw = impl->tryGet(id);

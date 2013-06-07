@@ -40,7 +40,7 @@ class Disposer {
   // custom memory allocators.
 
 protected:
-  virtual ~Disposer();
+  virtual ~Disposer() noexcept(false);
 
   virtual void disposeImpl(void* pointer) const = 0;
   // Disposes of the object, given a pointer to the beginning of the object.  If the object is
@@ -99,7 +99,7 @@ public:
   }
   inline Own(T* ptr, const Disposer& disposer) noexcept: disposer(&disposer), ptr(ptr) {}
 
-  ~Own() noexcept { dispose(); }
+  ~Own() noexcept(false) { dispose(); }
 
   inline Own& operator=(Own&& other) {
     dispose();

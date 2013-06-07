@@ -253,7 +253,7 @@ ExceptionCallback::ExceptionCallback(): next(getExceptionCallback()) {
 
 ExceptionCallback::ExceptionCallback(ExceptionCallback& next): next(next) {}
 
-ExceptionCallback::~ExceptionCallback() {
+ExceptionCallback::~ExceptionCallback() noexcept(false) {
   if (&next != this) {
     threadLocalCallback = &next;
   }
@@ -375,7 +375,7 @@ class RecoverableExceptionCatcher: public ExceptionCallback {
   // -fno-exceptions.
 
 public:
-  virtual ~RecoverableExceptionCatcher() {}
+  virtual ~RecoverableExceptionCatcher() noexcept(false) {}
 
   void onRecoverableException(Exception&& exception) override {
     if (caught == nullptr) {

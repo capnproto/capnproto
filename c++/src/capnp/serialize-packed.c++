@@ -31,7 +31,7 @@ namespace capnp {
 namespace _ {  // private
 
 PackedInputStream::PackedInputStream(kj::BufferedInputStream& inner): inner(inner) {}
-PackedInputStream::~PackedInputStream() {}
+PackedInputStream::~PackedInputStream() noexcept(false) {}
 
 size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
   if (maxBytes == 0) {
@@ -302,7 +302,7 @@ void PackedInputStream::skip(size_t bytes) {
 
 PackedOutputStream::PackedOutputStream(kj::BufferedOutputStream& inner)
     : inner(inner) {}
-PackedOutputStream::~PackedOutputStream() {}
+PackedOutputStream::~PackedOutputStream() noexcept(false) {}
 
 void PackedOutputStream::write(const void* src, size_t size) {
   kj::ArrayPtr<byte> buffer = inner.getWriteBuffer();
@@ -438,7 +438,7 @@ PackedMessageReader::PackedMessageReader(
     : PackedInputStream(inputStream),
       InputStreamMessageReader(static_cast<PackedInputStream&>(*this), options, scratchSpace) {}
 
-PackedMessageReader::~PackedMessageReader() {}
+PackedMessageReader::~PackedMessageReader() noexcept(false) {}
 
 PackedFdMessageReader::PackedFdMessageReader(
     int fd, ReaderOptions options, kj::ArrayPtr<word> scratchSpace)
@@ -454,7 +454,7 @@ PackedFdMessageReader::PackedFdMessageReader(
       PackedMessageReader(static_cast<BufferedInputStreamWrapper&>(*this),
                           options, scratchSpace) {}
 
-PackedFdMessageReader::~PackedFdMessageReader() {}
+PackedFdMessageReader::~PackedFdMessageReader() noexcept(false) {}
 
 void writePackedMessage(kj::BufferedOutputStream& output,
                         kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {

@@ -134,7 +134,7 @@ private:
 
 class Arena {
 public:
-  virtual ~Arena();
+  virtual ~Arena() noexcept(false);
 
   virtual SegmentReader* tryGetSegment(SegmentId id) = 0;
   // Gets the segment with the given ID, or return nullptr if no such segment exists.
@@ -150,7 +150,7 @@ public:
 class ReaderArena final: public Arena {
 public:
   ReaderArena(MessageReader* message);
-  ~ReaderArena();
+  ~ReaderArena() noexcept(false);
   KJ_DISALLOW_COPY(ReaderArena);
 
   // implements Arena ------------------------------------------------
@@ -171,7 +171,7 @@ private:
 class BuilderArena final: public Arena {
 public:
   BuilderArena(MessageBuilder* message);
-  ~BuilderArena();
+  ~BuilderArena() noexcept(false);
   KJ_DISALLOW_COPY(BuilderArena);
 
   SegmentBuilder* getSegment(SegmentId id);

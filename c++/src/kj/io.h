@@ -179,7 +179,7 @@ class ArrayInputStream: public BufferedInputStream {
 public:
   explicit ArrayInputStream(ArrayPtr<const byte> array);
   KJ_DISALLOW_COPY(ArrayInputStream);
-  ~ArrayInputStream();
+  ~ArrayInputStream() noexcept(false);
 
   // implements BufferedInputStream ----------------------------------
   ArrayPtr<const byte> getReadBuffer() override;
@@ -194,7 +194,7 @@ class ArrayOutputStream: public BufferedOutputStream {
 public:
   explicit ArrayOutputStream(ArrayPtr<byte> array);
   KJ_DISALLOW_COPY(ArrayOutputStream);
-  ~ArrayOutputStream();
+  ~ArrayOutputStream() noexcept(false);
 
   ArrayPtr<byte> getArray() {
     // Get the portion of the array which has been filled in.
