@@ -86,8 +86,8 @@ typedef unsigned char byte;
   classname& operator=(const classname&) = delete
 // Deletes the implicit copy constructor and assignment operator.
 
-#define KJ_EXPECT_TRUE(condition) __builtin_expect(condition, true)
-#define KJ_EXPECT_FALSE(condition) __builtin_expect(condition, false)
+#define KJ_LIKELY(condition) __builtin_expect(condition, true)
+#define KJ_UNLIKELY(condition) __builtin_expect(condition, false)
 // Branch prediction macros.  Evaluates to the condition given, but also tells the compiler that we
 // expect the condition to be true/false enough of the time that it's worth hard-coding branch
 // prediction.
@@ -123,7 +123,7 @@ void inlineRequireFailure(
 #define KJ_IREQUIRE(condition, ...)
 #else
 #define KJ_IREQUIRE(condition, ...) \
-    if (KJ_EXPECT_TRUE(condition)); else ::kj::_::inlineRequireFailure( \
+    if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
         __FILE__, __LINE__, #condition, #__VA_ARGS__, ##__VA_ARGS__)
 // Version of KJ_REQUIRE() which is safe to use in headers that are #included by users.  Used to
 // check preconditions inside inline methods.  KJ_INLINE_DPRECOND is particularly useful in that

@@ -114,7 +114,7 @@ namespace kj {
 #define KJ_DBG(...) KJ_LOG(DEBUG, ##__VA_ARGS__)
 
 #define _kJ_FAULT(nature, cond, ...) \
-  if (KJ_EXPECT_TRUE(cond)) {} else \
+  if (KJ_LIKELY(cond)) {} else \
     for (::kj::_::Debug::Fault f(__FILE__, __LINE__, ::kj::Exception::Nature::nature, 0, \
                                  #cond, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
 

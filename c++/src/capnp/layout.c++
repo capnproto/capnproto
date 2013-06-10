@@ -1453,7 +1453,7 @@ struct WireHelpers {
     }
 
     const word* ptr = followFars(ref, segment);
-    if (KJ_EXPECT_FALSE(ptr == nullptr)) {
+    if (KJ_UNLIKELY(ptr == nullptr)) {
       // Already reported the error.
       goto useDefault;
     }
@@ -1495,7 +1495,7 @@ struct WireHelpers {
     }
 
     const word* ptr = followFars(ref, segment);
-    if (KJ_EXPECT_FALSE(ptr == nullptr)) {
+    if (KJ_UNLIKELY(ptr == nullptr)) {
       // Already reported error.
       goto useDefault;
     }
@@ -1627,7 +1627,7 @@ struct WireHelpers {
     } else {
       const word* ptr = followFars(ref, segment);
 
-      if (KJ_EXPECT_FALSE(ptr == nullptr)) {
+      if (KJ_UNLIKELY(ptr == nullptr)) {
         // Already reported error.
         goto useDefault;
       }
@@ -1674,7 +1674,7 @@ struct WireHelpers {
     } else {
       const word* ptr = followFars(ref, segment);
 
-      if (KJ_EXPECT_FALSE(ptr == nullptr)) {
+      if (KJ_UNLIKELY(ptr == nullptr)) {
         // Already reported error.
         goto useDefault;
       }
@@ -1723,7 +1723,7 @@ struct WireHelpers {
     }
 
     const word* ptr = WireHelpers::followFars(ref, segment);
-    if (KJ_EXPECT_FALSE(ptr == nullptr)) {
+    if (KJ_UNLIKELY(ptr == nullptr)) {
       // Already reported the error.
       goto useDefault;
     }
