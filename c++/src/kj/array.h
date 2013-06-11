@@ -242,6 +242,9 @@ public:
   inline ArrayPtr<T> asPtr() {
     return arrayPtr(ptr, pos);
   }
+  inline ArrayPtr<const T> asPtr() const {
+    return arrayPtr(ptr, pos);
+  }
 
   inline size_t size() const { return pos - ptr; }
   inline size_t capacity() const { return endPtr - ptr; }
@@ -303,6 +306,10 @@ public:
     pos = nullptr;
     endPtr = nullptr;
     return result;
+  }
+
+  inline bool isFull() const {
+    return pos == endPtr;
   }
 
 private:

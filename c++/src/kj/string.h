@@ -48,6 +48,7 @@ public:
   inline StringPtr(const char* value, size_t size): content(value, size + 1) {
     KJ_IREQUIRE(value[size] == '\0', "StringPtr must be NUL-terminated.");
   }
+  inline StringPtr(const char* begin, const char* end): StringPtr(begin, end - begin) {}
   inline StringPtr(const String& value);
 
   inline operator ArrayPtr<const char>() const;
