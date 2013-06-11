@@ -154,8 +154,10 @@ capnproto_test_SOURCES =                                       \
   src/kj/memory-test.c++                                       \
   src/kj/array-test.c++                                        \
   src/kj/string-test.c++                                       \
+  src/kj/exception-test.c++                                    \
   src/kj/debug-test.c++                                        \
   src/kj/units-test.c++                                        \
+  src/kj/parse-test.c++                                        \
   src/capnp/blob-test.c++                                      \
   src/capnp/endian-test.c++                                    \
   src/capnp/endian-fallback-test.c++                           \
