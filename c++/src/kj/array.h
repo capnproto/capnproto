@@ -37,7 +37,8 @@ class ArrayDisposer {
   // Much like Disposer from memory.h.
 
 protected:
-  virtual ~ArrayDisposer() noexcept(false);
+  // Do not declare a destructor, as doing so will force a global initializer for
+  // HeapArrayDisposer::instance.
 
   virtual void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
                            size_t capacity, void (*destroyElement)(void*)) const = 0;

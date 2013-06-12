@@ -34,7 +34,7 @@ class SnappyInputStream::InputStreamSnappySource: public snappy::Source {
 public:
   inline InputStreamSnappySource(BufferedInputStream& inputStream)
       : inputStream(inputStream) {}
-  inline ~InputStreamSnappySource() noexcept {};
+  inline ~InputStreamSnappySource() noexcept {}
 
   // implements snappy::Source ---------------------------------------
 

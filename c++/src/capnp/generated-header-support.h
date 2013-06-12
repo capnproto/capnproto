@@ -138,9 +138,6 @@ struct RawSchema {
   struct MemberInfo {
     uint16_t unionIndex;  // 0 = not in a union, >0 = parent union's index + 1
     uint16_t index;       // index of the member
-
-    MemberInfo() = default;
-    inline MemberInfo(uint16_t unionIndex, uint16_t index): unionIndex(unionIndex), index(index) {}
   };
 
   const MemberInfo* membersByName;

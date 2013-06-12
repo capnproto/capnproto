@@ -100,11 +100,11 @@ typedef unsigned char byte;
 // Don't force inline in debug mode.
 #endif
 
-#define KJ_NORETURN __attribute__((noreturn));
-#define KJ_UNUSED __attribute__((unused));
+#define KJ_NORETURN __attribute__((noreturn))
+#define KJ_UNUSED __attribute__((unused))
 
 #if __clang__
-#define KJ_UNUSED_MEMBER __attribute__((unused));
+#define KJ_UNUSED_MEMBER __attribute__((unused))
 // Inhibits "unused" warning for member variables.  Only Clang produces such a warning, while GCC
 // complains if the attribute is set on members.
 #else

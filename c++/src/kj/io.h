@@ -245,7 +245,7 @@ class FdInputStream: public InputStream {
   // An InputStream wrapping a file descriptor.
 
 public:
-  explicit FdInputStream(int fd): fd(fd) {};
+  explicit FdInputStream(int fd): fd(fd) {}
   explicit FdInputStream(AutoCloseFd fd): fd(fd), autoclose(mv(fd)) {}
   KJ_DISALLOW_COPY(FdInputStream);
   ~FdInputStream() noexcept(false);
@@ -261,7 +261,7 @@ class FdOutputStream: public OutputStream {
   // An OutputStream wrapping a file descriptor.
 
 public:
-  explicit FdOutputStream(int fd): fd(fd) {};
+  explicit FdOutputStream(int fd): fd(fd) {}
   explicit FdOutputStream(AutoCloseFd fd): fd(fd), autoclose(mv(fd)) {}
   KJ_DISALLOW_COPY(FdOutputStream);
   ~FdOutputStream() noexcept(false);

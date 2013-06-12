@@ -40,7 +40,8 @@ class Disposer {
   // custom memory allocators.
 
 protected:
-  virtual ~Disposer() noexcept(false);
+  // Do not declare a destructor, as doing so will force a global initializer for each HeapDisposer
+  // instance.  Eww!
 
   virtual void disposeImpl(void* pointer) const = 0;
   // Disposes of the object, given a pointer to the beginning of the object.  If the object is

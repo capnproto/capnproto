@@ -24,9 +24,6 @@
 #include "array.h"
 
 namespace kj {
-
-ArrayDisposer::~ArrayDisposer() noexcept(false) {}
-
 namespace _ {  // private
 
 struct HeapArrayDisposer::ExceptionGuard {
