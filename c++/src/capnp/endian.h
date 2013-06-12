@@ -49,11 +49,13 @@ namespace _ {  // private
 #define CAPNP_OPPOSITE_OF_WIRE_BYTE_ORDER __ORDER_BIG_ENDIAN__
 #endif
 
-#if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == CAPNP_WIRE_BYTE_ORDER) && !CAPNP_DISABLE_ENDIAN_DETECTION
+#if defined(__BYTE_ORDER__) && \
+    __BYTE_ORDER__ == CAPNP_WIRE_BYTE_ORDER && \
+    !CAPNP_DISABLE_ENDIAN_DETECTION
 // CPU is little-endian.  We can just read/write the memory directly.
 
 template <typename T>
-class WireValue {
+class DirectWireValue {
 public:
   KJ_ALWAYS_INLINE(T get() const) { return value; }
   KJ_ALWAYS_INLINE(void set(T newValue)) { value = newValue; }
@@ -62,7 +64,15 @@ private:
   T value;
 };
 
-#elif defined(__BYTE_ORDER__) && __BYTE_ORDER__ == CAPNP_OPPOSITE_OF_WIRE_BYTE_ORDER && defined(__GNUC__) && !CAPNP_DISABLE_ENDIAN_DETECTION
+template <typename T>
+using WireValue = DirectWireValue<T>;
+// To prevent ODR problems when endian-test, endian-reverse-test, and endian-fallback-test are
+// linked together, we define each implementation with a different name and define an alias to the
+// one we want to use.
+
+#elif defined(__BYTE_ORDER__) && \
+      __BYTE_ORDER__ == CAPNP_OPPOSITE_OF_WIRE_BYTE_ORDER && \
+      defined(__GNUC__) && !CAPNP_DISABLE_ENDIAN_DETECTION
 // Big-endian, but GCC's __builtin_bswap() is available.
 
 // TODO(perf):  Use dedicated instructions to read little-endian data on big-endian CPUs that have
@@ -72,10 +82,10 @@ private:
 //   compiler optimizes away the memcpy()s and keeps everything in registers.
 
 template <typename T, size_t size = sizeof(T)>
-class WireValue;
+class SwappingWireValue;
 
 template <typename T>
-class WireValue<T, 1> {
+class SwappingWireValue<T, 1> {
 public:
   KJ_ALWAYS_INLINE(T get() const) { return value; }
   KJ_ALWAYS_INLINE(void set(T newValue)) { value = newValue; }
@@ -85,7 +95,7 @@ private:
 };
 
 template <typename T>
-class WireValue<T, 2> {
+class SwappingWireValue<T, 2> {
 public:
   KJ_ALWAYS_INLINE(T get() const) {
     uint16_t swapped = __builtin_bswap16(value);
@@ -104,7 +114,7 @@ private:
 };
 
 template <typename T>
-class WireValue<T, 4> {
+class SwappingWireValue<T, 4> {
 public:
   KJ_ALWAYS_INLINE(T get() const) {
     uint32_t swapped = __builtin_bswap32(value);
@@ -123,7 +133,7 @@ private:
 };
 
 template <typename T>
-class WireValue<T, 8> {
+class SwappingWireValue<T, 8> {
 public:
   KJ_ALWAYS_INLINE(T get() const) {
     uint64_t swapped = __builtin_bswap64(value);
@@ -141,14 +151,25 @@ private:
   uint64_t value;
 };
 
+template <typename T>
+using WireValue = SwappingWireValue<T>;
+// To prevent ODR problems when endian-test, endian-reverse-test, and endian-fallback-test are
+// linked together, we define each implementation with a different name and define an alias to the
+// one we want to use.
+
 #else
 // Unknown endianness.  Fall back to bit shifts.
 
+#if !CAPNP_DISABLE_ENDIAN_DETECTION
+#warning "Couldn't detect endianness of your platform.  Using unoptimized fallback implementation."
+#warning "Consider changing this code to detect your platform and send us a patch!"
+#endif
+
 template <typename T, size_t size = sizeof(T)>
-class WireValue;
+class ShiftingWireValue;
 
 template <typename T>
-class WireValue<T, 1> {
+class ShiftingWireValue<T, 1> {
 public:
   KJ_ALWAYS_INLINE(T get() const) { return value; }
   KJ_ALWAYS_INLINE(void set(T newValue)) { value = newValue; }
@@ -158,7 +179,7 @@ private:
 };
 
 template <typename T>
-class WireValue<T, 2> {
+class ShiftingWireValue<T, 2> {
 public:
   KJ_ALWAYS_INLINE(T get() const) {
     uint16_t raw = (static_cast<uint16_t>(bytes[0])     ) |
@@ -182,7 +203,7 @@ private:
 };
 
 template <typename T>
-class WireValue<T, 4> {
+class ShiftingWireValue<T, 4> {
 public:
   KJ_ALWAYS_INLINE(T get() const) {
     uint32_t raw = (static_cast<uint32_t>(bytes[0])      ) |
@@ -210,7 +231,7 @@ private:
 };
 
 template <typename T>
-class WireValue<T, 8> {
+class ShiftingWireValue<T, 8> {
 public:
   KJ_ALWAYS_INLINE(T get() const) {
     uint64_t raw = (static_cast<uint64_t>(bytes[0])      ) |
@@ -244,6 +265,12 @@ private:
     uint64_t align;
   };
 };
+
+template <typename T>
+using WireValue = ShiftingWireValue<T>;
+// To prevent ODR problems when endian-test, endian-reverse-test, and endian-fallback-test are
+// linked together, we define each implementation with a different name and define an alias to the
+// one we want to use.
 
 #endif
 
