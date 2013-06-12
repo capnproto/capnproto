@@ -204,7 +204,13 @@ TEST(Common, Downcast) {
 
   EXPECT_EQ(&bar, &downcast<Bar>(foo));
 #if !defined(NDEBUG) && !KJ_NO_RTTI
+#if KJ_NO_EXCEPTIONS
+#ifndef NDEBUG
+  EXPECT_DEATH_IF_SUPPORTED(downcast<Baz>(foo), "Value cannot be downcast");
+#endif
+#else
   EXPECT_ANY_THROW(downcast<Baz>(foo));
+#endif
 #endif
 
 #if KJ_NO_RTTI

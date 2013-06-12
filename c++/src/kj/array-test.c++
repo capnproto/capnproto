@@ -124,6 +124,7 @@ TEST(Array, ComplexConstructor) {
   EXPECT_EQ(0, TestObject::count);
 }
 
+#if !KJ_NO_EXCEPTIONS
 TEST(Array, ThrowingConstructor) {
   TestObject::count = 0;
   TestObject::throwAt = 16;
@@ -145,6 +146,7 @@ TEST(Array, ThrowingDestructor) {
   EXPECT_ANY_THROW(array = nullptr);
   EXPECT_EQ(0, TestObject::count);
 }
+#endif  // !KJ_NO_EXCEPTIONS
 
 TEST(Array, AraryBuilder) {
   TestObject::count = 0;
@@ -260,6 +262,7 @@ TEST(Array, AraryBuilderAddAll) {
   EXPECT_EQ(0, TestObject::count);
   EXPECT_EQ(0, TestObject::copiedCount);
 
+#if !KJ_NO_EXCEPTIONS
   {
     // Complex case, exceptions occur.
     TestObject::count = 0;
@@ -283,6 +286,7 @@ TEST(Array, AraryBuilderAddAll) {
   }
   EXPECT_EQ(0, TestObject::count);
   EXPECT_EQ(0, TestObject::copiedCount);
+#endif  // !KJ_NO_EXCEPTIONS
 }
 
 TEST(Array, HeapCopy) {

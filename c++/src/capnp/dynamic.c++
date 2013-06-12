@@ -1444,12 +1444,16 @@ HANDLE_NUMERIC_TYPE(double, kj::implicitCast, kj::implicitCast, kj::implicitCast
 #define HANDLE_TYPE(name, discrim, typeName) \
 ReaderFor<typeName> DynamicValue::Reader::AsImpl<typeName>::apply(const Reader& reader) { \
   KJ_REQUIRE(reader.type == discrim, \
-      "Type mismatch when using DynamicValue::Reader::as()."); \
+      "Type mismatch when using DynamicValue::Reader::as().") { \
+    return ReaderFor<typeName>(); \
+  } \
   return reader.name##Value; \
 } \
 BuilderFor<typeName> DynamicValue::Builder::AsImpl<typeName>::apply(Builder& builder) { \
   KJ_REQUIRE(builder.type == discrim, \
-      "Type mismatch when using DynamicValue::Builder::as()."); \
+      "Type mismatch when using DynamicValue::Builder::as().") { \
+    return BuilderFor<typeName>(); \
+  } \
   return builder.name##Value; \
 }
 

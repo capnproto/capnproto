@@ -56,6 +56,14 @@ TEST(SchemaLoader, Load) {
   EXPECT_EQ(0u, struct16Schema.getProto().getBody().getStructNode().getMembers().size());
 }
 
+#if KJ_NO_EXCEPTIONS
+#undef EXPECT_ANY_THROW
+#define EXPECT_ANY_THROW(code) EXPECT_DEATH(code, ".")
+#define EXPECT_NONFATAL_FAILURE(code) code
+#else
+#define EXPECT_NONFATAL_FAILURE EXPECT_ANY_THROW
+#endif
+
 TEST(SchemaLoader, Use) {
   SchemaLoader loader;
 
@@ -196,7 +204,7 @@ TEST(SchemaLoader, Downgrade) {
 TEST(SchemaLoader, Incompatible) {
   SchemaLoader loader;
   loader.loadCompiledTypeAndDependencies<test::TestListDefaults>();
-  EXPECT_ANY_THROW(
+  EXPECT_NONFATAL_FAILURE(
       loadUnderAlternateTypeId<test::TestAllTypes>(loader, typeId<test::TestListDefaults>()));
 }
 

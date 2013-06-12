@@ -88,7 +88,11 @@ TEST(Exception, UnwindDetector) {
 }
 
 TEST(Exception, ExceptionCallbackMustBeOnStack) {
+#if KJ_NO_EXCEPTIONS
+  EXPECT_DEATH_IF_SUPPORTED(new ExceptionCallback, "must be allocated on the stack");
+#else
   EXPECT_ANY_THROW(new ExceptionCallback);
+#endif
 }
 
 }  // namespace

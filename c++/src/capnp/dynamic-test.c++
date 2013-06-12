@@ -316,6 +316,12 @@ TEST(DynamicApi, UnionsWrite) {
   EXPECT_EQ(1234567890123456789ll, reader.getUnion3().getU3f0s64());
 }
 
+#if KJ_NO_EXCEPTIONS
+#undef EXPECT_ANY_THROW
+// All exceptions should be non-fatal, so when exceptions are disabled the code should return.
+#define EXPECT_ANY_THROW(code) code
+#endif
+
 TEST(DynamicApi, ConversionFailures) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<DynamicStruct>(Schema::from<TestAllTypes>());

@@ -52,6 +52,11 @@ namespace capnp {
 namespace _ {  // private
 namespace {
 
+#if KJ_NO_EXCEPTIONS
+#undef EXPECT_ANY_THROW
+#define EXPECT_ANY_THROW(code) EXPECT_DEATH(code, ".")
+#endif
+
 TEST(Schema, Structs) {
   StructSchema schema = Schema::from<TestAllTypes>();
 

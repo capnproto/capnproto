@@ -27,6 +27,7 @@
 #include <string>
 #include <stdio.h>
 #include <unistd.h>
+#include <signal.h>
 #include <errno.h>
 #include <string.h>
 #include <exception>
@@ -43,6 +44,83 @@ public:
 
   std::string text;
 
+  int outputPipe = -1;
+
+  bool forkForDeathTest() {
+    // This is called when exceptions are disabled.  We fork the process instead and then expect
+    // the child to die.
+
+    int pipeFds[2];
+    pipe(pipeFds);
+    pid_t child = fork();
+    if (child == 0) {
+      // This is the child!
+      close(pipeFds[0]);
+      outputPipe = pipeFds[1];
+      return true;
+    } else {
+      close(pipeFds[1]);
+
+      // Read child error messages into our local buffer.
+      char buf[1024];
+      for (;;) {
+        ssize_t n = read(pipeFds[0], buf, sizeof(buf));
+        if (n < 0) {
+          if (errno == EINTR) {
+            continue;
+          } else {
+            break;
+          }
+        } else if (n == 0) {
+          break;
+        } else {
+          text.append(buf, n);
+        }
+      }
+
+      close(pipeFds[0]);
+
+      // Get exit status.
+      int status;
+      do {
+        if (waitpid(child, &status, 0) < 0) {
+          if (errno == EINTR) {
+            continue;
+          } else {
+            ADD_FAILURE() << "waidpid: " << strerror(errno);
+            return false;
+          }
+        }
+      } while (false);
+
+      EXPECT_TRUE(WIFEXITED(status));
+      EXPECT_EQ(74, WEXITSTATUS(status));
+
+      return false;
+    }
+  }
+
+  void flush() {
+    if (outputPipe != -1) {
+      const char* pos = &*text.begin();
+      const char* end = pos + text.size();
+
+      while (pos < end) {
+        ssize_t n = write(outputPipe, pos, end - pos);
+        if (n < 0) {
+          if (errno == EINTR) {
+            continue;
+          } else {
+            break;  // Give up on error.
+          }
+        }
+        pos += n;
+      }
+
+      text.clear();
+    }
+  }
+
   void onRecoverableException(Exception&& exception) override {
     text += "recoverable exception: ";
     auto what = str(exception);
@@ -54,6 +132,7 @@ public:
       text.append(what.cStr(), end);
     }
     text += '\n';
+    flush();
   }
 
   void onFatalException(Exception&& exception) override {
@@ -67,7 +146,17 @@ public:
       text.append(what.cStr(), end);
     }
     text += '\n';
+    flush();
+#if KJ_NO_EXCEPTIONS
+    if (outputPipe >= 0) {
+      // This is a child process.  We got what we want, now exit quickly without writing any
+      // additional messages, with a status code that the parent will interpret as "exited in the
+      // way we expected".
+      _exit(74);
+    }
+#else
     throw MockException();
+#endif
   }
 
   void logMessage(const char* file, int line, int contextDepth, String&& text) override {
@@ -76,6 +165,12 @@ public:
     this->text.append(text.begin(), text.end());
   }
 };
+
+#if KJ_NO_EXCEPTIONS
+#define EXPECT_FATAL(code) if (mockCallback.forkForDeathTest()) { code; abort(); }
+#else
+#define EXPECT_FATAL(code) EXPECT_THROW(code, MockException);
+#endif
 
 std::string fileLine(std::string file, int line) {
   file += ':';
@@ -123,7 +218,7 @@ TEST(Debug, Log) {
   Debug::setLogLevel(Debug::Severity::WARNING);
 
   KJ_ASSERT(1 == 1);
-  EXPECT_THROW(KJ_ASSERT(1 == 2), MockException); line = __LINE__;
+  EXPECT_FATAL(KJ_ASSERT(1 == 2)); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: expected "
             "1 == 2\n", mockCallback.text);
   mockCallback.text.clear();
@@ -140,17 +235,17 @@ TEST(Debug, Log) {
   EXPECT_TRUE(recovered);
   mockCallback.text.clear();
 
-  EXPECT_THROW(KJ_ASSERT(1 == 2, i, "hi", str), MockException); line = __LINE__;
+  EXPECT_FATAL(KJ_ASSERT(1 == 2, i, "hi", str)); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: expected "
             "1 == 2; i = 123; hi; str = foo\n", mockCallback.text);
   mockCallback.text.clear();
 
-  EXPECT_THROW(KJ_REQUIRE(1 == 2, i, "hi", str), MockException); line = __LINE__;
+  EXPECT_FATAL(KJ_REQUIRE(1 == 2, i, "hi", str)); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": requirement not met: expected "
             "1 == 2; i = 123; hi; str = foo\n", mockCallback.text);
   mockCallback.text.clear();
 
-  EXPECT_THROW(KJ_FAIL_ASSERT("foo"), MockException); line = __LINE__;
+  EXPECT_FATAL(KJ_FAIL_ASSERT("foo")); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": bug in code: foo\n",
             mockCallback.text);
   mockCallback.text.clear();
@@ -159,28 +254,47 @@ TEST(Debug, Log) {
 TEST(Debug, Catch) {
   int line;
 
-  // Catch as kj::Exception.
-  Maybe<Exception> exception = kj::runCatchingExceptions([&](){
-    line = __LINE__; KJ_FAIL_ASSERT("foo");
-  });
+  {
+    // Catch recoverable as kj::Exception.
+    Maybe<Exception> exception = kj::runCatchingExceptions([&](){
+      line = __LINE__; KJ_FAIL_ASSERT("foo") { break; }
+    });
 
-  KJ_IF_MAYBE(e, exception) {
-    String what = str(*e);
-    std::string text(what.cStr(), strchr(what.cStr(), '\n') - what.cStr());
-    EXPECT_EQ(fileLine(__FILE__, line) + ": bug in code: foo", text);
-  } else {
-    ADD_FAILURE() << "Expected exception.";
+    KJ_IF_MAYBE(e, exception) {
+      String what = str(*e);
+      std::string text(what.cStr(), strchr(what.cStr(), '\n') - what.cStr());
+      EXPECT_EQ(fileLine(__FILE__, line) + ": bug in code: foo", text);
+    } else {
+      ADD_FAILURE() << "Expected exception.";
+    }
   }
 
 #if !KJ_NO_EXCEPTIONS
-  // Catch as std::exception.
-  try {
-    line = __LINE__; KJ_FAIL_ASSERT("foo");
-    ADD_FAILURE() << "Expected exception.";
-  } catch (const std::exception& e) {
-    const char* what = e.what();
-    std::string text(what, strchr(what, '\n') - what);
-    EXPECT_EQ(fileLine(__FILE__, line) + ": bug in code: foo", text);
+  {
+    // Catch fatal as kj::Exception.
+    Maybe<Exception> exception = kj::runCatchingExceptions([&](){
+      line = __LINE__; KJ_FAIL_ASSERT("foo");
+    });
+
+    KJ_IF_MAYBE(e, exception) {
+      String what = str(*e);
+      std::string text(what.cStr(), strchr(what.cStr(), '\n') - what.cStr());
+      EXPECT_EQ(fileLine(__FILE__, line) + ": bug in code: foo", text);
+    } else {
+      ADD_FAILURE() << "Expected exception.";
+    }
+  }
+
+  {
+    // Catch as std::exception.
+    try {
+      line = __LINE__; KJ_FAIL_ASSERT("foo");
+      ADD_FAILURE() << "Expected exception.";
+    } catch (const std::exception& e) {
+      const char* what = e.what();
+      std::string text(what, strchr(what, '\n') - what);
+      EXPECT_EQ(fileLine(__FILE__, line) + ": bug in code: foo", text);
+    }
   }
 #endif
 }
@@ -195,7 +309,7 @@ TEST(Debug, Syscall) {
   int fd;
   KJ_SYSCALL(fd = dup(STDIN_FILENO));
   KJ_SYSCALL(close(fd));
-  EXPECT_THROW(KJ_SYSCALL(close(fd), i, "bar", str), MockException); line = __LINE__;
+  EXPECT_FATAL(KJ_SYSCALL(close(fd), i, "bar", str)); line = __LINE__;
   EXPECT_EQ("fatal exception: " + fileLine(__FILE__, line) + ": error from OS: close(fd): "
             + strerror(EBADF) + "; i = 123; bar; str = foo\n", mockCallback.text);
   mockCallback.text.clear();
@@ -221,7 +335,7 @@ TEST(Debug, Context) {
               mockCallback.text);
     mockCallback.text.clear();
 
-    EXPECT_THROW(KJ_FAIL_ASSERT("bar"), MockException); line = __LINE__;
+    EXPECT_FATAL(KJ_FAIL_ASSERT("bar")); line = __LINE__;
     EXPECT_EQ("fatal exception: " + fileLine(__FILE__, cline) + ": context: foo\n"
               + fileLine(__FILE__, line) + ": bug in code: bar\n",
               mockCallback.text);
@@ -231,7 +345,7 @@ TEST(Debug, Context) {
       int i = 123;
       const char* str = "qux";
       KJ_CONTEXT("baz", i, "corge", str); int cline2 = __LINE__;
-      EXPECT_THROW(KJ_FAIL_ASSERT("bar"), MockException); line = __LINE__;
+      EXPECT_FATAL(KJ_FAIL_ASSERT("bar")); line = __LINE__;
 
       EXPECT_EQ("fatal exception: " + fileLine(__FILE__, cline) + ": context: foo\n"
                 + fileLine(__FILE__, cline2) + ": context: baz; i = 123; corge; str = qux\n"
@@ -242,7 +356,7 @@ TEST(Debug, Context) {
 
     {
       KJ_CONTEXT("grault"); int cline2 = __LINE__;
-      EXPECT_THROW(KJ_FAIL_ASSERT("bar"), MockException); line = __LINE__;
+      EXPECT_FATAL(KJ_FAIL_ASSERT("bar")); line = __LINE__;
 
       EXPECT_EQ("fatal exception: " + fileLine(__FILE__, cline) + ": context: foo\n"
                 + fileLine(__FILE__, cline2) + ": context: grault\n"

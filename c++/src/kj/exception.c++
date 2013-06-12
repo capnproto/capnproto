@@ -348,7 +348,7 @@ private:
     getExceptionCallback().logMessage(e.getFile(), e.getLine(), 0, str(
         e.getNature(), e.getDurability() == Exception::Durability::TEMPORARY ? " (temporary)" : "",
         e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
-        "\nstack: ", strArray(e.getStackTrace(), " ")));
+        "\nstack: ", strArray(e.getStackTrace(), " "), "\n"));
   }
 };
 
