@@ -74,7 +74,7 @@ TEST(EndianReverse, FourBytes) {
 
   WireValue<uint32_t>* vals = reinterpret_cast<WireValue<uint32_t>*>(bytes);
 
-  EXPECT_EQ(0x12345678, vals[0].get());
+  EXPECT_EQ(0x12345678u, vals[0].get());
 
   vals[0].set(0x23456789);
 
@@ -89,9 +89,9 @@ TEST(EndianReverse, EightBytes) {
 
   WireValue<uint64_t>* vals = reinterpret_cast<WireValue<uint64_t>*>(bytes);
 
-  EXPECT_EQ(0x123456789abcdef0, vals[0].get());
+  EXPECT_EQ(0x123456789abcdef0ull, vals[0].get());
 
-  vals[0].set(0x23456789abcdef01);
+  vals[0].set(0x23456789abcdef01ull);
 
   EXPECT_EQ(0x23, bytes[0]);
   EXPECT_EQ(0x45, bytes[1]);

@@ -75,7 +75,7 @@ TEST(Endian, FourBytes) {
 
   WireValue<uint32_t>* vals = reinterpret_cast<WireValue<uint32_t>*>(bytes);
 
-  EXPECT_EQ(0x78563412, vals[0].get());
+  EXPECT_EQ(0x78563412u, vals[0].get());
 
   vals[0].set(0x23456789);
 
