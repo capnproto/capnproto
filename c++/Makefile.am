@@ -60,7 +60,7 @@ capnpc_middleman:
 
 $(capnpc_outputs): capnpc_middleman
 
-includecapnpdir = $(includedir)/capnproto
+includecapnpdir = $(includedir)/capnp
 includekjdir = $(includedir)/kj
 
 includekj_HEADERS =                                            \

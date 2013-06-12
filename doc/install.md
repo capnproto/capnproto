@@ -182,4 +182,4 @@ If setting up Ekam is too much work for you, you can also build with Automake.
        sudo make install
 
 This will install `libcapnproto.a` in `/usr/local/lib` and headers in
-`/usr/local/include/capnproto`.
+`/usr/local/include/capnp` and `/usr/local/include/kj`.
