@@ -36,6 +36,8 @@ class Vector {
   // move constructor throws, the Vector is left in an inconsistent state.  This is acceptable
   // under KJ exception theory which assumes that exceptions leave things in inconsistent states.
 
+  // TODO(someday): Allow specifying a custom allocator.
+
 public:
   inline Vector() = default;
   inline explicit Vector(size_t capacity): builder(heapArrayBuilder<T>(capacity)) {}
@@ -59,6 +61,14 @@ public:
   inline T& front() { return builder.front(); }
   inline T& back() { return builder.back(); }
 
+  inline Array<T> releaseAsArray() {
+    // TODO(perf):  Avoid a copy/move by allowing Array<T> to point to incomplete space?
+    if (!builder.isFull()) {
+      setCapacity(size());
+    }
+    return builder.finish();
+  }
+
   template <typename... Params>
   inline void add(Params&&... params) {
     if (builder.isFull()) grow();
@@ -69,10 +79,13 @@ private:
   ArrayBuilder<T> builder;
 
   void grow() {
-    size_t newSize = capacity() == 0 ? 4 : capacity() * 2;
+    setCapacity(capacity() == 0 ? 4 : capacity() * 2);
+  }
+  void setCapacity(size_t newSize) {
     ArrayBuilder<T> newBuilder = heapArrayBuilder<T>(newSize);
-    for (T& element: builder) {
-      newBuilder.add(kj::mv(element));
+    size_t moveCount = kj::min(newSize, builder.size());
+    for (size_t i = 0; i < moveCount; i++) {
+      newBuilder.add(kj::mv(builder[i]));
     }
     builder = kj::mv(newBuilder);
   }

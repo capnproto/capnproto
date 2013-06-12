@@ -21,6 +21,20 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Parser combinator framework!
+//
+// This file declares several functions which construct parsers, usually taking other parsers as
+// input, thus making them parser combinators.
+//
+// A valid parser is any functor which takes a reference to an input cursor (defined below) as its
+// input and returns a Maybe.  The parser returns null on parse failure, or returns the parsed
+// result on success.
+//
+// An "input cursor" is any type which implements the same interface as IteratorInput, below.  Such
+// a type acts as a pointer to the current input location.  When a parser returns successfully, it
+// will have updated the input cursor to point to the position just past the end of what was parsed.
+// On failure, the cursor position is unspecified.
+
 #ifndef KJ_PARSER_H_
 #define KJ_PARSER_H_
 
@@ -35,6 +49,8 @@ namespace parse {
 
 template <typename Element, typename Iterator>
 class IteratorInput {
+  // A parser input implementation based on an iterator range.
+
 public:
   typedef Element ElementType;
 
@@ -81,162 +97,71 @@ private:
   IteratorInput& operator=(IteratorInput&&) = delete;
 };
 
-template <typename T>
-struct ExtractParseFuncType;
-
-template <typename I, typename O, typename Object>
-struct ExtractParseFuncType<Maybe<O> (Object::*)(I&) const> {
-  typedef I InputType;
-  typedef typename I::ElementType ElementType;
-  typedef O OutputType;
-};
-
-template <typename I, typename O, typename Object>
-struct ExtractParseFuncType<Maybe<O> (Object::*)(I&)> {
-  typedef I InputType;
-  typedef typename I::ElementType ElementType;
-  typedef O OutputType;
-};
-
-template <typename T>
-struct ExtractParserType: public ExtractParseFuncType<decltype(&T::operator())> {};
-template <typename T>
-struct ExtractParserType<T&>: public ExtractParserType<T> {};
-template <typename T>
-struct ExtractParserType<T&&>: public ExtractParserType<T> {};
-template <typename T>
-struct ExtractParserType<const T>: public ExtractParserType<T> {};
-template <typename T>
-struct ExtractParserType<const T&>: public ExtractParserType<T> {};
-template <typename T>
-struct ExtractParserType<const T&&>: public ExtractParserType<T> {};
+template <typename T> struct OutputType_;
+template <typename T> struct OutputType_<Maybe<T>> { typedef T Type; };
+template <typename Parser, typename Input>
+using OutputType = typename OutputType_<decltype(instance<Parser&>()(instance<Input&>()))>::Type;
+// Synonym for the output type of a parser, given the parser type and the input type.
 
 // =======================================================================================
 
 template <typename Input, typename Output>
-class ParserWrapper {
-public:
-  virtual ~ParserWrapper() {}
-
-  typedef Input InputType;
-  typedef typename Input::ElementType ElementType;
-  typedef Output OutputType;
-
-  virtual Maybe<Output> operator()(Input& input) const = 0;
-  virtual Own<ParserWrapper> clone() = 0;
-};
-
-template <typename Input, typename Output>
-class Parser {
-public:
-  Parser(const Parser& other): wrapper(other.wrapper->clone()) {}
-  Parser(Parser& other): wrapper(other.wrapper->clone()) {}
-  Parser(const Parser&& other): wrapper(other.wrapper->clone()) {}
-  Parser(Parser&& other): wrapper(kj::mv(other.wrapper)) {}
-  Parser(Own<ParserWrapper<Input, Output>> wrapper): wrapper(kj::mv(wrapper)) {}
-
-  template <typename Other>
-  Parser(Other&& other): wrapper(heap<WrapperImpl<Other>>(kj::mv(other))) {}
-
-  Parser& operator=(const Parser& other) { wrapper = other.wrapper->clone(); }
-  Parser& operator=(Parser&& other) { wrapper = kj::mv(other.wrapper); }
-
-  // Always inline in the hopes that this allows branch prediction to kick in so the virtual call
-  // doesn't hurt so much.
-  inline Maybe<Output> operator()(Input& input) const __attribute__((always_inline)) {
-    return (*wrapper)(input);
-  }
-
-private:
-  Own<ParserWrapper<Input, Output>> wrapper;
-
-  template <typename Other>
-  struct WrapperImpl: public ParserWrapper<Input, Output> {
-    WrapperImpl(Other&& impl): impl(kj::mv(impl)) {};
-    ~WrapperImpl() {}
-
-    Maybe<Output> operator()(Input& input) const {
-      return impl(input);
-    }
-
-    Own<ParserWrapper<Input, Output>> clone() {
-      return heap<WrapperImpl>(*this);
-    }
-
-    Other impl;
-  };
-};
-
-template <typename ParserImpl>
-Parser<typename ExtractParserType<ParserImpl>::InputType,
-       typename ExtractParserType<ParserImpl>::OutputType>
-wrap(ParserImpl&& impl) {
-  typedef typename ExtractParserType<ParserImpl>::InputType Input;
-  typedef typename ExtractParserType<ParserImpl>::OutputType Output;
-
-  return Parser<Input, Output>(kj::mv(impl));
-}
-
-template <typename SubParser>
 class ParserRef {
-public:
-  explicit ParserRef(const SubParser& parser): parser(&parser) {}
+  // Acts as a reference to some other parser, with simplified type.  The referenced parser
+  // is polymorphic by virtual call rather than templates.  For grammars of non-trivial size,
+  // it is important to inject refs into the grammar here and there to prevent the parser types
+  // from becoming ridiculous.  Using too many of them can hurt performance, though.
 
-  Maybe<typename ExtractParserType<SubParser>::OutputType> operator()(
-      typename ExtractParserType<SubParser>::InputType& input) const {
-    return (*parser)(input);
+public:
+  template <typename Other>
+  ParserRef(Other& other): parser(&other), wrapper(WrapperImpl<Other>::instance()) {}
+
+  KJ_ALWAYS_INLINE(Maybe<Output> operator()(Input& input) const) {
+    // Always inline in the hopes that this allows branch prediction to kick in so the virtual call
+    // doesn't hurt so much.
+    return wrapper.parse(parser, input);
   }
 
 private:
-  const SubParser* parser;
+  struct Wrapper {
+    virtual Maybe<Output> parse(const void* parser, Input& input) const = 0;
+  };
+  template <typename ParserImpl>
+  struct WrapperImpl: public Wrapper {
+    Maybe<Output> parse(const void* parser, Input& input) const override {
+      return (*reinterpret_cast<const ParserImpl*>(parser))(input);
+    }
+
+    static WrapperImpl& instance() {
+      static WrapperImpl obj;
+      return obj;
+    }
+  };
+
+  const void* parser;
+  Wrapper& wrapper;
 };
 
-template <typename SubParser>
-ParserRef<Decay<SubParser>> ref(const SubParser& impl) {
-  return ParserRef<Decay<SubParser>>(impl);
+template <typename Input, typename ParserImpl>
+ParserRef<Input, OutputType<ParserImpl, Input>>
+ref(ParserImpl& impl) {
+  // Constructs a ParserRef.  You must specify the input type explicitly, e.g.
+  // `ref<MyInput>(myParser)`.
+
+  return ParserRef<Input, OutputType<ParserImpl, Input>>(impl);
 }
-
-template <typename T>
-struct MaybeRef {
-  typedef Decay<T> Type;
-
-  template <typename U>
-  static Type from(U&& parser) {
-    return static_cast<Type&&>(parser);
-  }
-};
-
-template <typename T>
-struct MaybeRef<T&> {
-  typedef ParserRef<Decay<T>> Type;
-
-  template <typename U>
-  static Type from(U& parser) {
-    return parse::ref(parser);
-  }
-};
-
-template <template <typename SubParser> class WrapperParser>
-struct WrapperParserConstructor {
-  template <typename SubParser, typename... Args>
-  WrapperParser<typename MaybeRef<SubParser>::Type> operator()(
-      SubParser&& subParser, Args&&... args) {
-    return WrapperParser<typename MaybeRef<SubParser>::Type>(
-        MaybeRef<SubParser>::from(subParser),
-        kj::fwd(args)...);
-  }
-};
 
 // -------------------------------------------------------------------
-// ExactElementParser
+// exactly()
 // Output = Tuple<>
 
-template <typename Input>
-class ExactElementParser {
+template <typename T>
+class Exactly_ {
 public:
-  explicit ExactElementParser(typename Input::ElementType&& expected): expected(expected) {}
+  explicit Exactly_(T&& expected): expected(expected) {}
 
-  virtual Maybe<Tuple<>> operator()(Input& input) const {
+  template <typename Input>
+  Maybe<Tuple<>> operator()(Input& input) const {
     if (input.atEnd() || input.current() != expected) {
       return nullptr;
     } else {
@@ -246,40 +171,44 @@ public:
   }
 
 private:
-  typename Input::ElementType expected;
+  T expected;
 };
 
-template <typename Input>
-ExactElementParser<Input> exactElement(typename Input::ElementType&& expected) {
-  return ExactElementParser<Decay<Input>>(kj::mv(expected));
+template <typename T>
+Exactly_<T> exactly(T&& expected) {
+  // Constructs a parser which succeeds when the input is exactly the token specified.  The
+  // result is always the empty tuple.
+
+  return Exactly_<T>(kj::fwd<T>(expected));
 }
 
 // -------------------------------------------------------------------
-// SequenceParser
+// sequence()
 // Output = Flattened Tuple of outputs of sub-parsers.
 
-template <typename Input, typename... SubParsers> class SequenceParser;
+template <typename... SubParsers> class Sequence_;
 
-template <typename Input, typename FirstSubParser, typename... SubParsers>
-class SequenceParser<Input, FirstSubParser, SubParsers...> {
+template <typename FirstSubParser, typename... SubParsers>
+class Sequence_<FirstSubParser, SubParsers...> {
 public:
   template <typename T, typename... U>
-  explicit SequenceParser(T&& firstSubParser, U&&... rest)
+  explicit Sequence_(T&& firstSubParser, U&&... rest)
       : first(kj::fwd<T>(firstSubParser)), rest(kj::fwd<U>(rest)...) {}
 
+  template <typename Input>
   auto operator()(Input& input) const ->
       Maybe<decltype(tuple(
-          instance<typename ExtractParserType<FirstSubParser>::OutputType>(),
-          instance<typename ExtractParserType<SubParsers>::OutputType>()...))> {
+          instance<OutputType<FirstSubParser, Input>>(),
+          instance<OutputType<SubParsers, Input>>()...))> {
     return parseNext(input);
   }
 
-  template <typename... InitialParams>
+  template <typename Input, typename... InitialParams>
   auto parseNext(Input& input, InitialParams&&... initialParams) const ->
       Maybe<decltype(tuple(
           kj::fwd<InitialParams>(initialParams)...,
-          instance<typename ExtractParserType<FirstSubParser>::OutputType>(),
-          instance<typename ExtractParserType<SubParsers>::OutputType>()...))> {
+          instance<OutputType<FirstSubParser, Input>>(),
+          instance<OutputType<SubParsers, Input>>()...))> {
     KJ_IF_MAYBE(firstResult, first(input)) {
       return rest.parseNext(input, kj::fwd<InitialParams>(initialParams)...,
                             kj::mv(*firstResult));
@@ -290,52 +219,49 @@ public:
 
 private:
   FirstSubParser first;
-  SequenceParser<Input, SubParsers...> rest;
+  Sequence_<SubParsers...> rest;
 };
 
-template <typename Input>
-class SequenceParser<Input> {
+template <>
+class Sequence_<> {
 public:
+  template <typename Input>
   Maybe<Tuple<>> operator()(Input& input) const {
     return parseNext(input);
   }
 
-  template <typename... Params>
+  template <typename Input, typename... Params>
   auto parseNext(Input& input, Params&&... params) const ->
       Maybe<decltype(tuple(kj::fwd<Params>(params)...))> {
     return tuple(kj::fwd<Params>(params)...);
   }
 };
 
-template <typename FirstSubParser, typename... MoreSubParsers>
-SequenceParser<typename ExtractParserType<FirstSubParser>::InputType,
-               typename MaybeRef<FirstSubParser>::Type,
-               typename MaybeRef<MoreSubParsers>::Type...>
-sequence(FirstSubParser&& first, MoreSubParsers&&... rest) {
-  return SequenceParser<typename ExtractParserType<FirstSubParser>::InputType,
-                        typename MaybeRef<FirstSubParser>::Type,
-                        typename MaybeRef<MoreSubParsers>::Type...>(
-      MaybeRef<FirstSubParser>::from(first), MaybeRef<MoreSubParsers>::from(rest)...);
+template <typename... SubParsers>
+Sequence_<SubParsers...> sequence(SubParsers&&... subParsers) {
+  // Constructs a parser that executes each of the parameter parsers in sequence and returns a
+  // tuple of their results.
+
+  return Sequence_<SubParsers...>(kj::fwd<SubParsers>(subParsers)...);
 }
 
-
 // -------------------------------------------------------------------
-// RepeatedParser
+// many()
 // Output = Array of output of sub-parser.
 
 template <typename SubParser, bool atLeastOne>
-class RepeatedParser {
+class Many_ {
 public:
-  explicit RepeatedParser(SubParser&& subParser)
+  explicit Many_(SubParser&& subParser)
       : subParser(kj::mv(subParser)) {}
 
-  Maybe<Vector<typename ExtractParserType<SubParser>::OutputType>> operator()(
-      typename ExtractParserType<SubParser>::InputType& input) const {
-    typedef Vector<typename ExtractParserType<SubParser>::OutputType> Results;
+  template <typename Input>
+  Maybe<Array<OutputType<SubParser, Input>>> operator()(Input& input) const {
+    typedef Vector<OutputType<SubParser, Input>> Results;
     Results results;
 
     while (!input.atEnd()) {
-      typename ExtractParserType<SubParser>::InputType subInput(input);
+      Input subInput(input);
 
       KJ_IF_MAYBE(subResult, subParser(subInput)) {
         subInput.advanceParent();
@@ -349,7 +275,7 @@ public:
       return nullptr;
     }
 
-    return kj::mv(results);
+    return results.releaseAsArray();
   }
 
 private:
@@ -357,41 +283,38 @@ private:
 };
 
 template <typename SubParser>
-RepeatedParser<typename MaybeRef<SubParser>::Type, false>
-repeated(SubParser&& subParser) {
-  return RepeatedParser<typename MaybeRef<SubParser>::Type, false>(
-      MaybeRef<SubParser>::from(subParser));
+Many_<SubParser, false> many(SubParser&& subParser) {
+  // Constructs a parser that repeatedly executes the given parser until it fails, returning an
+  // Array of the results.
+  return Many_<SubParser, false>(kj::fwd<SubParser>(subParser));
 }
 
 template <typename SubParser>
-RepeatedParser<typename MaybeRef<SubParser>::Type, true>
-oneOrMore(SubParser&& subParser) {
-  return RepeatedParser<typename MaybeRef<SubParser>::Type, true>(
-      MaybeRef<SubParser>::from(subParser));
+Many_<SubParser, true> oneOrMore(SubParser&& subParser) {
+  // Like `many()` but the parser must parse at least one item to be successful.
+  return Many_<SubParser, true>(kj::fwd<SubParser>(subParser));
 }
 
 // -------------------------------------------------------------------
-// OptionalParser
+// optional()
 // Output = Maybe<output of sub-parser>
 
 template <typename SubParser>
-class OptionalParser {
+class Optional_ {
 public:
-  explicit OptionalParser(SubParser&& subParser)
+  explicit Optional_(SubParser&& subParser)
       : subParser(kj::mv(subParser)) {}
 
-  Maybe<Maybe<typename ExtractParserType<SubParser>::OutputType>> operator()(
-      typename ExtractParserType<SubParser>::InputType& input) const {
-    typedef Maybe<typename ExtractParserType<SubParser>::OutputType> Result;
+  template <typename Input>
+  Maybe<Maybe<OutputType<SubParser, Input>>> operator()(Input& input) const {
+    typedef Maybe<OutputType<SubParser, Input>> Result;
 
-    typename ExtractParserType<SubParser>::InputType subInput(input);
-    auto subResult = subParser(subInput);
-
-    if (subResult == nullptr) {
-      return Result(nullptr);
-    } else {
+    Input subInput(input);
+    KJ_IF_MAYBE(subResult, subParser(subInput)) {
       subInput.advanceParent();
       return Result(kj::mv(*subResult));
+    } else {
+      return Result(nullptr);
     }
   }
 
@@ -400,34 +323,34 @@ private:
 };
 
 template <typename SubParser>
-OptionalParser<typename MaybeRef<SubParser>::Type>
-optional(SubParser&& subParser) {
-  return OptionalParser<typename MaybeRef<SubParser>::Type>(
-      MaybeRef<SubParser>::from(subParser));
+Optional_<SubParser> optional(SubParser&& subParser) {
+  // Constructs a parser that accepts zero or one of the given sub-parser, returning a Maybe
+  // of the sub-parser's result.
+  return Optional_<SubParser>(kj::fwd<SubParser>(subParser));
 }
 
 // -------------------------------------------------------------------
-// OneOfParser
+// oneOf()
 // All SubParsers must have same output type, which becomes the output type of the
 // OneOfParser.
 
-template <typename Input, typename Output, typename... SubParsers>
-class OneOfParser;
+template <typename... SubParsers>
+class OneOf_;
 
-template <typename Input, typename Output, typename FirstSubParser, typename... SubParsers>
-class OneOfParser<Input, Output, FirstSubParser, SubParsers...> {
+template <typename FirstSubParser, typename... SubParsers>
+class OneOf_<FirstSubParser, SubParsers...> {
 public:
   template <typename T, typename... U>
-  explicit OneOfParser(T&& firstSubParser, U&&... rest)
+  explicit OneOf_(T&& firstSubParser, U&&... rest)
       : first(kj::fwd<T>(firstSubParser)), rest(kj::fwd<U>(rest)...) {}
 
-  Maybe<Output> operator()(Input& input) const {
+  template <typename Input>
+  Maybe<OutputType<FirstSubParser, Input>> operator()(Input& input) const {
     {
       Input subInput(input);
-      Maybe<Output> firstResult = first(subInput);
+      Maybe<OutputType<FirstSubParser, Input>> firstResult = first(subInput);
 
       if (firstResult != nullptr) {
-        // MAYBE: Should we try parsing with "rest" in order to check for ambiguities?
         subInput.advanceParent();
         return kj::mv(firstResult);
       }
@@ -439,32 +362,28 @@ public:
 
 private:
   FirstSubParser first;
-  OneOfParser<Input, Output, SubParsers...> rest;
+  OneOf_<SubParsers...> rest;
 };
 
-template <typename Input, typename Output>
-class OneOfParser<Input, Output> {
+template <>
+class OneOf_<> {
 public:
-  Maybe<Output> operator()(Input& input) const {
+  template <typename Input>
+  decltype(nullptr) operator()(Input& input) const {
     return nullptr;
   }
 };
 
-template <typename FirstSubParser, typename... MoreSubParsers>
-OneOfParser<typename ExtractParserType<FirstSubParser>::InputType,
-            typename ExtractParserType<FirstSubParser>::OutputType,
-            typename MaybeRef<FirstSubParser>::Type,
-            typename MaybeRef<MoreSubParsers>::Type...>
-oneOf(FirstSubParser&& first, MoreSubParsers&&... rest) {
-  return OneOfParser<typename ExtractParserType<FirstSubParser>::InputType,
-                     typename ExtractParserType<FirstSubParser>::OutputType,
-                     typename MaybeRef<FirstSubParser>::Type,
-                     typename MaybeRef<MoreSubParsers>::Type...>(
-      MaybeRef<FirstSubParser>::from(first), MaybeRef<MoreSubParsers>::from(rest)...);
+template <typename... SubParsers>
+OneOf_<SubParsers...> oneOf(SubParsers&&... parsers) {
+  // Constructs a parser that accepts one of a set of options.  The parser behaves as the first
+  // sub-parser in the list which returns successfully.  All of the sub-parsers must return the
+  // same type.
+  return OneOf_<SubParsers...>(kj::fwd<SubParsers>(parsers)...);
 }
 
 // -------------------------------------------------------------------
-// TransformParser
+// transform()
 // Output = Result of applying transform functor to input value.  If input is a tuple, it is
 // unpacked to form the transformation parameters.
 
@@ -482,22 +401,25 @@ private:
   Position end_;
 };
 
-template <typename SubParser, typename Transform>
-class TransformParser {
+template <typename Position>
+Span<Decay<Position>> span(Position&& start, Position&& end) {
+  return Span<Decay<Position>>(kj::fwd<Position>(start), kj::fwd<Position>(end));
+}
+
+template <typename SubParser, typename TransformFunc>
+class Transform_ {
 public:
-  explicit TransformParser(SubParser&& subParser, Transform&& transform)
-      : subParser(kj::mv(subParser)), transform(kj::mv(transform)) {}
+  explicit Transform_(SubParser&& subParser, TransformFunc&& transform)
+      : subParser(kj::fwd<SubParser>(subParser)), transform(kj::fwd<TransformFunc>(transform)) {}
 
-  typedef typename ExtractParserType<SubParser>::InputType InputType;
-  typedef Decay<decltype(instance<InputType>().getPosition())> Position;
-  typedef typename ExtractParserType<SubParser>::OutputType SubOutput;
-  typedef decltype(kj::apply(instance<Transform&>(), instance<Span<Position>>(),
-                             instance<SubOutput&&>())) Output;
-
-  Maybe<Output> operator()(InputType& input) const {
+  template <typename Input>
+  Maybe<decltype(kj::apply(instance<TransformFunc&>(),
+                           instance<Span<Decay<decltype(instance<Input&>().getPosition())>>>(),
+                           instance<OutputType<SubParser, Input>&&>()))>
+      operator()(Input& input) const {
     auto start = input.getPosition();
     KJ_IF_MAYBE(subResult, subParser(input)) {
-      return kj::apply(transform, Span<Position>(kj::mv(start), input.getPosition()),
+      return kj::apply(transform, Span<decltype(start)>(kj::mv(start), input.getPosition()),
                        kj::mv(*subResult));
     } else {
       return nullptr;
@@ -506,33 +428,39 @@ public:
 
 private:
   SubParser subParser;
-  Transform transform;
+  TransformFunc transform;
 };
 
-template <typename SubParser, typename Transform>
-TransformParser<typename MaybeRef<SubParser>::Type, Decay<Transform>>
-transform(SubParser&& subParser, Transform&& transform) {
-  return TransformParser<typename MaybeRef<SubParser>::Type, Decay<Transform>>(
-      MaybeRef<SubParser>::from(subParser), kj::fwd<Transform>(transform));
+template <typename SubParser, typename TransformFunc>
+Transform_<SubParser, TransformFunc> transform(SubParser&& subParser, TransformFunc&& functor) {
+  // Constructs a parser which executes some other parser and then transforms the result by invoking
+  // `functor` on it.  Typically `functor` is a lambda.  It is invoked using `kj::apply`,
+  // meaning tuples will be unpacked as arguments.
+  return Transform_<SubParser, TransformFunc>(
+      kj::fwd<SubParser>(subParser), kj::fwd<TransformFunc>(functor));
 }
 
 // -------------------------------------------------------------------
-// AcceptIfParser
+// acceptIf()
 // Output = Same as SubParser
 
 template <typename SubParser, typename Condition>
-class AcceptIfParser {
+class AcceptIf_ {
 public:
-  explicit AcceptIfParser(SubParser&& subParser, Condition&& condition)
+  explicit AcceptIf_(SubParser&& subParser, Condition&& condition)
       : subParser(kj::mv(subParser)), condition(kj::mv(condition)) {}
 
-  Maybe<typename ExtractParserType<SubParser>::OutputType>
-  operator()(typename ExtractParserType<SubParser>::InputType& input) const {
-    Maybe<typename ExtractParserType<SubParser>::OutputType> subResult = subParser(input);
-    if (subResult && !condition(*subResult)) {
-      subResult = nullptr;
+  template <typename Input>
+  Maybe<OutputType<SubParser, Input>> operator()(Input& input) const {
+    KJ_IF_MAYBE(subResult, subParser(input)) {
+      if (condition(*subResult)) {
+        return kj::mv(*subResult);
+      } else {
+        return nullptr;
+      }
+    } else {
+      return nullptr;
     }
-    return subResult;
   }
 
 private:
@@ -541,19 +469,22 @@ private:
 };
 
 template <typename SubParser, typename Condition>
-AcceptIfParser<typename MaybeRef<SubParser>::Type, Decay<Condition>>
-acceptIf(SubParser&& subParser, Condition&& condition) {
-  return AcceptIfParser<typename MaybeRef<SubParser>::Type, Decay<Condition>>(
-      MaybeRef<SubParser>::from(subParser), kj::fwd<Condition>(condition));
+AcceptIf_<SubParser, Condition> acceptIf(SubParser&& subParser, Condition&& condition) {
+  // Constructs a parser which executes some other parser and then invokes the functor
+  // `condition` on the result to check if it is valid.  Typically, `condition` is a lambda
+  // returning true or false.  Like with `transform()`, `condition` is invoked using `kj::apply`
+  // to unpack tuples.
+  return AcceptIf_<SubParser, Condition>(
+      kj::fwd<SubParser>(subParser), kj::fwd<Condition>(condition));
 }
 
 // -------------------------------------------------------------------
-// EndOfInputParser
+// endOfInput()
 // Output = Tuple<>, only succeeds if at end-of-input
 
-template <typename Input>
-class EndOfInputParser {
+class EndOfInput_ {
 public:
+  template <typename Input>
   Maybe<Tuple<>> operator()(Input& input) const {
     if (input.atEnd()) {
       return Tuple<>();
@@ -563,9 +494,9 @@ public:
   }
 };
 
-template <typename T>
-EndOfInputParser<T> endOfInput() {
-  return EndOfInputParser<T>();
+EndOfInput_ endOfInput() {
+  // Constructs a parser that succeeds only if it is called with no input.
+  return EndOfInput_();
 }
 
 }  // namespace parse

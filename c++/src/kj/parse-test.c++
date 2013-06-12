@@ -30,29 +30,26 @@ namespace parse {
 namespace {
 
 typedef IteratorInput<char, const char*> Input;
-ExactElementParser<Input> exactChar(char c) {
-  return exactElement<Input>(mv(c));
-}
-
 typedef Span<const char*> TestLocation;
 
 TEST(Parsers, ExactElementParser) {
   StringPtr text = "foo";
   Input input(text.begin(), text.end());
 
-  Maybe<Tuple<>> result = exactChar('f')(input);
+  Maybe<Tuple<>> result = exactly('f')(input);
   EXPECT_TRUE(result != nullptr);
   EXPECT_FALSE(input.atEnd());
 
-  result = exactChar('o')(input);
+  result = exactly('o')(input);
   EXPECT_TRUE(result != nullptr);
   EXPECT_FALSE(input.atEnd());
 
-  result = exactChar('x')(input);
+  result = exactly('x')(input);
   EXPECT_TRUE(result == nullptr);
   EXPECT_FALSE(input.atEnd());
 
-  Parser<Input, Tuple<>> wrapped = exactChar('o');
+  auto parser = exactly('o');
+  ParserRef<Input, Tuple<>> wrapped = ref<Input>(parser);
   result = wrapped(input);
   EXPECT_TRUE(result != nullptr);
   EXPECT_TRUE(input.atEnd());
@@ -63,21 +60,21 @@ TEST(Parsers, SequenceParser) {
 
   {
     Input input(text.begin(), text.end());
-    Maybe<Tuple<>> result = sequence(exactChar('f'), exactChar('o'), exactChar('o'))(input);
+    Maybe<Tuple<>> result = sequence(exactly('f'), exactly('o'), exactly('o'))(input);
     EXPECT_TRUE(result != nullptr);
     EXPECT_TRUE(input.atEnd());
   }
 
   {
     Input input(text.begin(), text.end());
-    Maybe<Tuple<>> result = sequence(exactChar('f'), exactChar('o'))(input);
+    Maybe<Tuple<>> result = sequence(exactly('f'), exactly('o'))(input);
     EXPECT_TRUE(result != nullptr);
     EXPECT_FALSE(input.atEnd());
   }
 
   {
     Input input(text.begin(), text.end());
-    Maybe<Tuple<>> result = sequence(exactChar('x'), exactChar('o'), exactChar('o'))(input);
+    Maybe<Tuple<>> result = sequence(exactly('x'), exactly('o'), exactly('o'))(input);
     EXPECT_TRUE(result == nullptr);
     EXPECT_FALSE(input.atEnd());
   }
@@ -85,7 +82,7 @@ TEST(Parsers, SequenceParser) {
   {
     Input input(text.begin(), text.end());
     Maybe<Tuple<>> result =
-        sequence(sequence(exactChar('f'), exactChar('o')), exactChar('o'))(input);
+        sequence(sequence(exactly('f'), exactly('o')), exactly('o'))(input);
     EXPECT_TRUE(result != nullptr);
     EXPECT_TRUE(input.atEnd());
   }
@@ -93,15 +90,15 @@ TEST(Parsers, SequenceParser) {
   {
     Input input(text.begin(), text.end());
     Maybe<Tuple<>> result =
-        sequence(sequence(exactChar('f')), exactChar('o'), exactChar('o'))(input);
+        sequence(sequence(exactly('f')), exactly('o'), exactly('o'))(input);
     EXPECT_TRUE(result != nullptr);
     EXPECT_TRUE(input.atEnd());
   }
 
   {
     Input input(text.begin(), text.end());
-    Maybe<int> result = sequence(transform(exactChar('f'), [](TestLocation){return 123;}),
-                                 exactChar('o'), exactChar('o'))(input);
+    Maybe<int> result = sequence(transform(exactly('f'), [](TestLocation){return 123;}),
+                                 exactly('o'), exactly('o'))(input);
     KJ_IF_MAYBE(i, result) {
       EXPECT_EQ(123, *i);
     } else {
@@ -111,74 +108,11 @@ TEST(Parsers, SequenceParser) {
   }
 }
 
-TEST(Parsers, TransformParser) {
-  StringPtr text = "foo";
-
-  auto parser = transform(
-      sequence(exactChar('f'), exactChar('o'), exactChar('o')),
-      [](TestLocation location) -> int {
-        EXPECT_EQ("foo", StringPtr(location.begin(), location.end()));
-        return 123;
-      });
-
-  {
-    Input input(text.begin(), text.end());
-    Maybe<int> result = parser(input);
-    KJ_IF_MAYBE(i, result) {
-      EXPECT_EQ(123, *i);
-    } else {
-      ADD_FAILURE() << "Expected 123, got null.";
-    }
-    EXPECT_TRUE(input.atEnd());
-  }
-}
-
-TEST(Parsers, TransformParser_MaybeRef) {
-  struct Transform {
-    int value;
-
-    Transform(int value): value(value) {}
-
-    int operator()(TestLocation) const { return value; }
-  };
-
-  // Don't use auto for the TransformParsers here because we're trying to make sure that MaybeRef
-  // is working correctly.  When transform() is given an lvalue, it should wrap the type in
-  // ParserRef.
-
-  TransformParser<ExactElementParser<Input>, Transform> parser1 =
-      transform(exactChar('f'), Transform(12));
-
-  auto otherParser = exactChar('o');
-  TransformParser<ParserRef<ExactElementParser<Input>>, Transform> parser2 =
-      transform(otherParser, Transform(34));
-
-  auto otherParser2 = exactChar('b');
-  TransformParser<ExactElementParser<Input>, Transform> parser3 =
-      transform(mv(otherParser2), Transform(56));
-
-  StringPtr text = "foob";
-  auto parser = transform(
-      sequence(parser1, parser2, exactChar('o'), parser3),
-      [](TestLocation, int i, int j, int k) { return i + j + k; });
-
-  {
-    Input input(text.begin(), text.end());
-    Maybe<int> result = parser(input);
-    KJ_IF_MAYBE(i, result) {
-      EXPECT_EQ(12 + 34 + 56, *i);
-    } else {
-      ADD_FAILURE() << "Expected 12 + 34 + 56, got null.";
-    }
-    EXPECT_TRUE(input.atEnd());
-  }
-}
-
-TEST(Parsers, RepeatedParser) {
+TEST(Parsers, ManyParser) {
   StringPtr text = "foooob";
 
   auto parser = transform(
-      sequence(exactChar('f'), repeated(exactChar('o'))),
+      sequence(exactly('f'), many(exactly('o'))),
       [](TestLocation, ArrayPtr<Tuple<>> values) -> int { return values.size(); });
 
   {
@@ -215,11 +149,57 @@ TEST(Parsers, RepeatedParser) {
   }
 }
 
+TEST(Parsers, OptionalParser) {
+  auto parser = sequence(
+      transform(exactly('b'), [](TestLocation) -> uint { return 123; }),
+      optional(transform(exactly('a'), [](TestLocation) -> uint { return 456; })),
+      transform(exactly('r'), [](TestLocation) -> uint { return 789; }));
+
+  {
+    StringPtr text = "bar";
+    Input input(text.begin(), text.end());
+    Maybe<Tuple<uint, Maybe<uint>, uint>> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ(123, get<0>(*value));
+      KJ_IF_MAYBE(value2, get<1>(*value)) {
+        EXPECT_EQ(456, *value2);
+      } else {
+        ADD_FAILURE() << "Expected 456, got null.";
+      }
+      EXPECT_EQ(789, get<2>(*value));
+    } else {
+      ADD_FAILURE() << "Expected result tuple, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "br";
+    Input input(text.begin(), text.end());
+    Maybe<Tuple<uint, Maybe<uint>, uint>> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ(123, get<0>(*value));
+      EXPECT_TRUE(get<1>(*value) == nullptr);
+      EXPECT_EQ(789, get<2>(*value));
+    } else {
+      ADD_FAILURE() << "Expected result tuple, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "bzr";
+    Input input(text.begin(), text.end());
+    Maybe<Tuple<uint, Maybe<uint>, uint>> result = parser(input);
+    EXPECT_TRUE(result == nullptr);
+  }
+}
+
 TEST(Parsers, OneOfParser) {
   auto parser = oneOf(
-      transform(sequence(exactChar('f'), exactChar('o'), exactChar('o')),
+      transform(sequence(exactly('f'), exactly('o'), exactly('o')),
                 [](TestLocation) -> StringPtr { return "foo"; }),
-      transform(sequence(exactChar('b'), exactChar('a'), exactChar('r')),
+      transform(sequence(exactly('b'), exactly('a'), exactly('r')),
                 [](TestLocation) -> StringPtr { return "bar"; }));
 
   {
@@ -242,6 +222,107 @@ TEST(Parsers, OneOfParser) {
       EXPECT_EQ("bar", *s);
     } else {
       ADD_FAILURE() << "Expected 'bar', got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+}
+
+TEST(Parsers, TransformParser) {
+  StringPtr text = "foo";
+
+  auto parser = transform(
+      sequence(exactly('f'), exactly('o'), exactly('o')),
+      [](TestLocation location) -> int {
+        EXPECT_EQ("foo", StringPtr(location.begin(), location.end()));
+        return 123;
+      });
+
+  {
+    Input input(text.begin(), text.end());
+    Maybe<int> result = parser(input);
+    KJ_IF_MAYBE(i, result) {
+      EXPECT_EQ(123, *i);
+    } else {
+      ADD_FAILURE() << "Expected 123, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+}
+
+TEST(Parsers, References) {
+  struct TransformFunc {
+    int value;
+
+    TransformFunc(int value): value(value) {}
+
+    int operator()(TestLocation) const { return value; }
+  };
+
+  // Don't use auto for the parsers here in order to verify that the templates are properly choosing
+  // whether to use references or copies.
+
+  Transform_<Exactly_<char>, TransformFunc> parser1 =
+      transform(exactly('f'), TransformFunc(12));
+
+  auto otherParser = exactly('o');
+  Transform_<Exactly_<char>&, TransformFunc> parser2 =
+      transform(otherParser, TransformFunc(34));
+
+  auto otherParser2 = exactly('b');
+  Transform_<Exactly_<char>, TransformFunc> parser3 =
+      transform(mv(otherParser2), TransformFunc(56));
+
+  StringPtr text = "foob";
+  auto parser = transform(
+      sequence(parser1, parser2, exactly('o'), parser3),
+      [](TestLocation, int i, int j, int k) { return i + j + k; });
+
+  {
+    Input input(text.begin(), text.end());
+    Maybe<int> result = parser(input);
+    KJ_IF_MAYBE(i, result) {
+      EXPECT_EQ(12 + 34 + 56, *i);
+    } else {
+      ADD_FAILURE() << "Expected 12 + 34 + 56, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+}
+
+TEST(Parsers, AcceptIfParser) {
+  auto parser = acceptIf(
+      oneOf(transform(exactly('a'), [](TestLocation) -> uint { return 123; }),
+            transform(exactly('b'), [](TestLocation) -> uint { return 456; }),
+            transform(exactly('c'), [](TestLocation) -> uint { return 789; })),
+      [](uint i) {return i > 200;});
+
+  {
+    StringPtr text = "a";
+    Input input(text.begin(), text.end());
+    Maybe<uint> result = parser(input);
+    EXPECT_TRUE(result == nullptr);
+  }
+
+  {
+    StringPtr text = "b";
+    Input input(text.begin(), text.end());
+    Maybe<uint> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ(456, *value);
+    } else {
+      ADD_FAILURE() << "Expected parse result, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "c";
+    Input input(text.begin(), text.end());
+    Maybe<uint> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ(789, *value);
+    } else {
+      ADD_FAILURE() << "Expected parse result, got null.";
     }
     EXPECT_TRUE(input.atEnd());
   }
