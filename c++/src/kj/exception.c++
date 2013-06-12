@@ -35,6 +35,7 @@
 
 #if defined(__linux__) && !defined(NDEBUG)
 #include <stdio.h>
+#include <pthread.h>
 #endif
 
 namespace kj {
@@ -43,9 +44,29 @@ namespace {
 
 String getStackSymbols(ArrayPtr<void* const> trace) {
 #if defined(__linux__) && !defined(NDEBUG)
+  // We want to generate a human-readable stack trace.
+
+  // TODO(someday):  It would be really great if we could avoid farming out to addr2line and do
+  //   this all in-process, but that may involve onerous requirements like large library
+  //   dependencies or using -rdynamic.
+
+  // The environment manipulation is not thread-safe, so lock a mutex.  This could still be
+  // problematic if another thread is manipulating the environment in unrelated code, but there's
+  // not much we can do about that.  This is debug-only anyway and only an issue when LD_PRELOAD
+  // is in use.
+  static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+  pthread_mutex_lock(&mutex);
+
+  // Don't heapcheck / intercept syscalls for addr2line.
+  const char* preload = getenv("LD_PRELOAD");
+  String oldPreload;
+  if (preload != nullptr) {
+    oldPreload = heapString(preload);
+    unsetenv("LD_PRELOAD");
+  }
+
   // Get executable name from /proc/self/exe, then pass it and the stack trace to addr2line to
   // get file/line pairs.
-
   char exe[512];
   ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe));
   if (n < 0 || n >= static_cast<ssize_t>(sizeof(exe))) {
@@ -80,6 +101,12 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
   while (fgets(line, sizeof(line), p) != nullptr) {}
 
   pclose(p);
+
+  if (oldPreload != nullptr) {
+    setenv("LD_PRELOAD", oldPreload.cStr(), true);
+  }
+
+  pthread_mutex_unlock(&mutex);
 
   return strArray(arrayPtr(lines, i), "");
 #else
