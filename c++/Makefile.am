@@ -68,10 +68,13 @@ includekj_HEADERS =                                            \
   src/kj/units.h                                               \
   src/kj/memory.h                                              \
   src/kj/array.h                                               \
+  src/kj/vector.h                                              \
   src/kj/string.h                                              \
   src/kj/exception.h                                           \
   src/kj/debug.h                                               \
-  src/kj/io.h
+  src/kj/io.h                                                  \
+  src/kj/tuple.h                                               \
+  src/kj/parse.h
 
 includecapnp_HEADERS =                                         \
   src/capnp/common.h                                           \
@@ -157,6 +160,7 @@ capnproto_test_SOURCES =                                       \
   src/kj/exception-test.c++                                    \
   src/kj/debug-test.c++                                        \
   src/kj/units-test.c++                                        \
+  src/kj/tuple-test.c++                                        \
   src/kj/parse-test.c++                                        \
   src/capnp/blob-test.c++                                      \
   src/capnp/endian-test.c++                                    \

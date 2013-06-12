@@ -29,22 +29,6 @@ namespace kj {
 namespace parse {
 namespace {
 
-TEST(Tuple, Flatten) {
-  int output = 0;
-
-  Tuple<int, int, int> t =
-  tuple(tuple(tuple(), tuple(1)), tuple(), 20, tuple(tuple(tuple(), 300)));
-
-  applyTuple([&](int i, int j, int k) { output = i + j + k; }, t);
-  EXPECT_EQ(321, output);
-
-  EXPECT_EQ(321, applyTuple([](int i, int j, int k) { return i + j + k; }, t));
-
-  Tuple<Maybe<int>, String> t2 = tuple(Maybe<int>(123), heapString("foo"));
-  String t3 = tuple(heapString("foo"));
-  String t4 = tuple(heapString("foo"), Void());
-}
-
 typedef IteratorInput<char, const char*> Input;
 ExactElementParser<Input> exactChar(char c) {
   return exactElement<Input>(mv(c));
@@ -56,7 +40,7 @@ TEST(Parsers, ExactElementParser) {
   StringPtr text = "foo";
   Input input(text.begin(), text.end());
 
-  Maybe<Void> result = exactChar('f')(input);
+  Maybe<Tuple<>> result = exactChar('f')(input);
   EXPECT_TRUE(result != nullptr);
   EXPECT_FALSE(input.atEnd());
 
@@ -68,7 +52,7 @@ TEST(Parsers, ExactElementParser) {
   EXPECT_TRUE(result == nullptr);
   EXPECT_FALSE(input.atEnd());
 
-  Parser<Input, Void> wrapped = exactChar('o');
+  Parser<Input, Tuple<>> wrapped = exactChar('o');
   result = wrapped(input);
   EXPECT_TRUE(result != nullptr);
   EXPECT_TRUE(input.atEnd());
@@ -79,35 +63,37 @@ TEST(Parsers, SequenceParser) {
 
   {
     Input input(text.begin(), text.end());
-    Maybe<Void> result = sequence(exactChar('f'), exactChar('o'), exactChar('o'))(input);
+    Maybe<Tuple<>> result = sequence(exactChar('f'), exactChar('o'), exactChar('o'))(input);
     EXPECT_TRUE(result != nullptr);
     EXPECT_TRUE(input.atEnd());
   }
 
   {
     Input input(text.begin(), text.end());
-    Maybe<Void> result = sequence(exactChar('f'), exactChar('o'))(input);
+    Maybe<Tuple<>> result = sequence(exactChar('f'), exactChar('o'))(input);
     EXPECT_TRUE(result != nullptr);
     EXPECT_FALSE(input.atEnd());
   }
 
   {
     Input input(text.begin(), text.end());
-    Maybe<Void> result = sequence(exactChar('x'), exactChar('o'), exactChar('o'))(input);
+    Maybe<Tuple<>> result = sequence(exactChar('x'), exactChar('o'), exactChar('o'))(input);
     EXPECT_TRUE(result == nullptr);
     EXPECT_FALSE(input.atEnd());
   }
 
   {
     Input input(text.begin(), text.end());
-    Maybe<Void> result = sequence(sequence(exactChar('f'), exactChar('o')), exactChar('o'))(input);
+    Maybe<Tuple<>> result =
+        sequence(sequence(exactChar('f'), exactChar('o')), exactChar('o'))(input);
     EXPECT_TRUE(result != nullptr);
     EXPECT_TRUE(input.atEnd());
   }
 
   {
     Input input(text.begin(), text.end());
-    Maybe<Void> result = sequence(sequence(exactChar('f')), exactChar('o'), exactChar('o'))(input);
+    Maybe<Tuple<>> result =
+        sequence(sequence(exactChar('f')), exactChar('o'), exactChar('o'))(input);
     EXPECT_TRUE(result != nullptr);
     EXPECT_TRUE(input.atEnd());
   }
@@ -193,7 +179,7 @@ TEST(Parsers, RepeatedParser) {
 
   auto parser = transform(
       sequence(exactChar('f'), repeated(exactChar('o'))),
-      [](TestLocation, ArrayPtr<Void> values) -> int { return values.size(); });
+      [](TestLocation, ArrayPtr<Tuple<>> values) -> int { return values.size(); });
 
   {
     Input input(text.begin(), text.begin() + 3);

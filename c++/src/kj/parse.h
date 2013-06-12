@@ -27,174 +27,11 @@
 #include "common.h"
 #include "memory.h"
 #include "array.h"
+#include "tuple.h"
+#include "vector.h"
 
 namespace kj {
 namespace parse {
-
-// I don't understand std::tuple.
-template <typename... T>
-struct Tuple;
-
-template <>
-struct Tuple<> {
-  Tuple() {}
-};
-
-template <typename First, typename... Rest>
-struct Tuple<First, Rest...> {
-  Tuple() {}
-
-  Tuple(Tuple&& other): first(kj::mv(other.first)), rest(kj::mv(other.rest)) {}
-  Tuple(const Tuple& other): first(other.first), rest(other.rest) {}
-  Tuple(Tuple& other): first(other.first), rest(other.rest) {}
-
-  template <typename First2, typename Rest2>
-  explicit Tuple(First2&& first2, Rest2&& rest2)
-      : first(kj::fwd<First2>(first2)),
-        rest(kj::fwd<Rest2>(rest2)) {}
-
-  First first;
-  Tuple<Rest...> rest;
-};
-
-typedef Tuple<> Void;
-
-
-
-template <typename T, typename U>
-struct ConsTuple {
-  typedef Tuple<Decay<T>, Decay<U>> Type;
-};
-
-template <typename T, typename... U>
-struct ConsTuple<T, Tuple<U...>> {
-  typedef Tuple<Decay<T>, U...> Type;
-};
-
-template <typename T>
-struct ConsTuple<T, Tuple<>> {
-  typedef Decay<T> Type;
-};
-
-template <typename... T>
-struct MakeTuple;
-
-template <>
-struct MakeTuple<> {
-  typedef Tuple<> Type;
-};
-
-template <typename T>
-struct MakeTuple<T> {
-  typedef Decay<T> Type;
-};
-
-template <typename T, typename U, typename... V>
-struct MakeTuple<T, U, V...> {
-  typedef typename ConsTuple<T, typename MakeTuple<U, V...>::Type>::Type Type;
-};
-
-template <typename T, typename... U>
-struct MakeTuple<Tuple<>, T, U...> {
-  typedef typename MakeTuple<T, U...>::Type Type;
-};
-
-template <typename T, typename... U, typename V, typename... W>
-struct MakeTuple<Tuple<T, U...>, V, W...> {
-  typedef typename ConsTuple<T, typename MakeTuple<Tuple<U...>, V, W...>::Type>::Type Type;
-};
-
-template <typename T, typename U>
-typename ConsTuple<T, U>::Type
-inline consTuple(T&& t, U&& u) {
-  return typename ConsTuple<T, U>::Type(
-      kj::fwd<T>(t),
-      Tuple<Decay<U>>(kj::fwd<U>(u), Void()));
-}
-
-template <typename T, typename... U>
-typename ConsTuple<T, Tuple<U...>>::Type
-inline consTuple(T&& t, Tuple<U...>&& u) {
-  return typename ConsTuple<T, Tuple<U...>>::Type(kj::mv(t), kj::mv(u));
-}
-
-template <typename T>
-typename ConsTuple<T, Tuple<>>::Type
-inline consTuple(T&& t, Tuple<>&& u) {
-  return kj::fwd<T>(t);
-}
-
-typename MakeTuple<>::Type
-inline tuple() {
-  return Tuple<>();
-}
-
-template <typename T>
-typename MakeTuple<T>::Type
-inline tuple(T&& first) {
-  return kj::fwd<T>(first);
-}
-
-template <typename T, typename U, typename... V>
-typename MakeTuple<T, U, V...>::Type
-inline tuple(T&& first, U&& second, V&&... rest) {
-  return consTuple(kj::fwd<T>(first),
-      tuple(kj::fwd<U>(second), kj::fwd<V>(rest)...));
-}
-
-template <typename T, typename... U>
-typename MakeTuple<Tuple<>, T, U...>::Type
-inline tuple(Tuple<>&&, T&& first, U&&... rest) {
-  return tuple(kj::fwd<T>(first), kj::fwd<U>(rest)...);
-}
-
-template <typename T, typename... U>
-typename MakeTuple<Tuple<>, T, U...>::Type
-inline tuple(const Tuple<>&, T&& first, U&&... rest) {
-  return tuple(kj::fwd<T>(first), kj::fwd<U>(rest)...);
-}
-
-template <typename T, typename... U, typename V, typename... W>
-typename MakeTuple<Tuple<T, U...>, V, W...>::Type
-inline tuple(Tuple<T, U...>&& first, V&& second, W&&... rest) {
-  return consTuple(kj::mv(first.first),
-      tuple(kj::mv(first.rest), kj::fwd<V>(second), kj::fwd<W>(rest)...));
-}
-
-template <typename T, typename... U, typename V, typename... W>
-typename MakeTuple<Tuple<T, U...>, V, W...>::Type
-inline tuple(const Tuple<T, U...>& first, V&& second, W&&... rest) {
-  return consTuple(first.first,
-      tuple(first.rest, kj::fwd<V>(second), kj::fwd<W>(rest)...));
-}
-
-template <typename Func, typename T, typename... Params>
-inline auto applyTuple(Func&& func, T&& t, Params&&... params) ->
-decltype(func(kj::fwd<Params>(params)..., kj::fwd<T>(t))) {
-  return func(kj::fwd<Params>(params)..., kj::fwd<T>(t));
-}
-
-template <typename Func, typename... Params>
-inline auto applyTuple(Func&& func, Tuple<> t, Params&&... params) ->
-decltype(func(kj::fwd<Params>(params)...)) {
-  return func(kj::fwd<Params>(params)...);
-}
-
-template <typename Func, typename T, typename... U, typename... Params>
-inline auto applyTuple(Func&& func, Tuple<T, U...>&& t, Params&&... params) ->
-decltype(func(kj::fwd<Params>(params)..., instance<T&&>(), instance<U&&>()...)) {
-  return applyTuple(kj::fwd<Func>(func), kj::mv(t.rest),
-                    kj::fwd<Params>(params)..., kj::mv(t.first));
-}
-
-template <typename Func, typename T, typename... U, typename... Params>
-inline auto applyTuple(Func&& func, const Tuple<T, U...>& t, Params&&... params) ->
-decltype(func(kj::fwd<Params>(params)..., instance<const T&>(), instance<const U&>()...)) {
-  return applyTuple(kj::fwd<Func>(func), t.rest,
-                    kj::fwd<Params>(params)..., t.first);
-}
-
-// =======================================================================================
 
 template <typename Element, typename Iterator>
 class IteratorInput {
@@ -243,7 +80,6 @@ private:
   IteratorInput& operator=(const IteratorInput&) = delete;
   IteratorInput& operator=(IteratorInput&&) = delete;
 };
-
 
 template <typename T>
 struct ExtractParseFuncType;
@@ -393,19 +229,19 @@ struct WrapperParserConstructor {
 
 // -------------------------------------------------------------------
 // ExactElementParser
-// Output = Void
+// Output = Tuple<>
 
 template <typename Input>
 class ExactElementParser {
 public:
   explicit ExactElementParser(typename Input::ElementType&& expected): expected(expected) {}
 
-  virtual Maybe<Void> operator()(Input& input) const {
+  virtual Maybe<Tuple<>> operator()(Input& input) const {
     if (input.atEnd() || input.current() != expected) {
       return nullptr;
     } else {
       input.next();
-      return Void();
+      return Tuple<>();
     }
   }
 
@@ -460,7 +296,7 @@ private:
 template <typename Input>
 class SequenceParser<Input> {
 public:
-  Maybe<Void> operator()(Input& input) const {
+  Maybe<Tuple<>> operator()(Input& input) const {
     return parseNext(input);
   }
 
@@ -486,56 +322,6 @@ sequence(FirstSubParser&& first, MoreSubParsers&&... rest) {
 // -------------------------------------------------------------------
 // RepeatedParser
 // Output = Array of output of sub-parser.
-
-template <typename T>
-class Vector {
-  // Similar to std::vector, but based on KJ framework.
-  //
-  // This implementation always uses move constructors when growing the backing array.  If the
-  // move constructor throws, the Vector is left in an inconsistent state.  This is acceptable
-  // under KJ exception theory which assumes that exceptions leave things in inconsistent states.
-
-public:
-  inline Vector() = default;
-  inline explicit Vector(size_t capacity): builder(heapArrayBuilder<T>(capacity)) {}
-
-  inline operator ArrayPtr<T>() { return builder; }
-  inline operator ArrayPtr<const T>() const { return builder; }
-  inline ArrayPtr<T> asPtr() { return builder.asPtr(); }
-  inline ArrayPtr<const T> asPtr() const { return builder.asPtr(); }
-
-  inline size_t size() const { return builder.size(); }
-  inline bool empty() const { return size() == 0; }
-  inline size_t capacity() const { return builder.capacity(); }
-  inline T& operator[](size_t index) const { return builder[index]; }
-
-  inline const T* begin() const { return builder.begin(); }
-  inline const T* end() const { return builder.end(); }
-  inline const T& front() const { return builder.front(); }
-  inline const T& back() const { return builder.back(); }
-  inline T* begin() { return builder.begin(); }
-  inline T* end() { return builder.end(); }
-  inline T& front() { return builder.front(); }
-  inline T& back() { return builder.back(); }
-
-  template <typename... Params>
-  inline void add(Params&&... params) {
-    if (builder.isFull()) grow();
-    builder.add(kj::fwd<Params>(params)...);
-  }
-
-private:
-  ArrayBuilder<T> builder;
-
-  void grow() {
-    size_t newSize = capacity() == 0 ? 4 : capacity() * 2;
-    ArrayBuilder<T> newBuilder = heapArrayBuilder<T>(newSize);
-    for (T& element: builder) {
-      newBuilder.add(kj::mv(element));
-    }
-    builder = kj::mv(newBuilder);
-  }
-};
 
 template <typename SubParser, bool atLeastOne>
 class RepeatedParser {
@@ -705,14 +491,14 @@ public:
   typedef typename ExtractParserType<SubParser>::InputType InputType;
   typedef Decay<decltype(instance<InputType>().getPosition())> Position;
   typedef typename ExtractParserType<SubParser>::OutputType SubOutput;
-  typedef decltype(applyTuple(instance<Transform&>(), instance<SubOutput&&>(),
-                              instance<Span<Position>>())) Output;
+  typedef decltype(kj::apply(instance<Transform&>(), instance<Span<Position>>(),
+                             instance<SubOutput&&>())) Output;
 
   Maybe<Output> operator()(InputType& input) const {
     auto start = input.getPosition();
     KJ_IF_MAYBE(subResult, subParser(input)) {
-      return applyTuple(transform, kj::mv(*subResult),
-                        Span<Position>(kj::mv(start), input.getPosition()));
+      return kj::apply(transform, Span<Position>(kj::mv(start), input.getPosition()),
+                       kj::mv(*subResult));
     } else {
       return nullptr;
     }
@@ -763,14 +549,14 @@ acceptIf(SubParser&& subParser, Condition&& condition) {
 
 // -------------------------------------------------------------------
 // EndOfInputParser
-// Output = Void, only succeeds if at end-of-input
+// Output = Tuple<>, only succeeds if at end-of-input
 
 template <typename Input>
 class EndOfInputParser {
 public:
-  Maybe<Void> operator()(Input& input) const {
+  Maybe<Tuple<>> operator()(Input& input) const {
     if (input.atEnd()) {
-      return Void();
+      return Tuple<>();
     } else {
       return nullptr;
     }
