@@ -161,7 +161,7 @@
   <span class='n'>alice</span><span class='p'>.</span><span class='n'>setName</span><span class='p'>(</span><span class='s'>&quot;Alice&quot;</span><span class='p'>);</span>
   <span class='n'>alice</span><span class='p'>.</span><span class='n'>setEmail</span><span class='p'>(</span><span class='s'>&quot;alice@example.com&quot;</span><span class='p'>);</span>
   <span class='c1'>// Type shown for explanation purposes; normally you&#39;d use auto.</span>
-  <span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>alicePhones</span> <span class='o'>=</span>
+  <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>alicePhones</span> <span class='o'>=</span>
       <span class='n'>alice</span><span class='p'>.</span><span class='n'>initPhones</span><span class='p'>(</span><span class='mi'>1</span><span class='p'>);</span>
   <span class='n'>alicePhones</span><span class='p'>[</span><span class='mi'>0</span><span class='p'>].</span><span class='n'>setNumber</span><span class='p'>(</span><span class='s'>&quot;555-1212&quot;</span><span class='p'>);</span>
   <span class='n'>alicePhones</span><span class='p'>[</span><span class='mi'>0</span><span class='p'>].</span><span class='n'>setType</span><span class='p'>(</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>::</span><span class='n'>Type</span><span class='o'>::</span><span class='n'>MOBILE</span><span class='p'>);</span>
@@ -187,7 +187,8 @@
   <span class='n'>AddressBook</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>addressBook</span> <span class='o'>=</span> <span class='n'>message</span><span class='p'>.</span><span class='n'>getRoot</span><span class='o'>&lt;</span><span class='n'>AddressBook</span><span class='o'>&gt;</span><span class='p'>();</span>
 
   <span class='k'>for</span> <span class='p'>(</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>person</span> <span class='o'>:</span> <span class='n'>addressBook</span><span class='p'>.</span><span class='n'>getPeople</span><span class='p'>())</span> <span class='p'>{</span>
-    <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>person</span><span class='p'>.</span><span class='n'>getName</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;: &quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>person</span><span class='p'>.</span><span class='n'>getEmail</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+    <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>person</span><span class='p'>.</span><span class='n'>getName</span><span class='p'>().</span><span class='n'>cStr</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;: &quot;</span>
+              <span class='o'>&lt;&lt;</span> <span class='n'>person</span><span class='p'>.</span><span class='n'>getEmail</span><span class='p'>().</span><span class='n'>cStr</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
     <span class='k'>for</span> <span class='p'>(</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>phone</span><span class='o'>:</span> <span class='n'>person</span><span class='p'>.</span><span class='n'>getPhones</span><span class='p'>())</span> <span class='p'>{</span>
       <span class='k'>const</span> <span class='kt'>char</span><span class='o'>*</span> <span class='n'>typeName</span> <span class='o'>=</span> <span class='s'>&quot;UNKNOWN&quot;</span><span class='p'>;</span>
       <span class='k'>switch</span> <span class='p'>(</span><span class='n'>phone</span><span class='p'>.</span><span class='n'>getType</span><span class='p'>())</span> <span class='p'>{</span>
@@ -196,7 +197,7 @@
         <span class='k'>case</span> <span class='n'>Person</span>:<span class='o'>:</span><span class='n'>PhoneNumber</span><span class='o'>::</span><span class='n'>Type</span><span class='o'>::</span><span class='n'>WORK</span><span class='o'>:</span> <span class='n'>typeName</span> <span class='o'>=</span> <span class='s'>&quot;work&quot;</span><span class='p'>;</span> <span class='k'>break</span><span class='p'>;</span>
       <span class='p'>}</span>
       <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;  &quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>typeName</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot; phone: &quot;</span>
-                <span class='o'>&lt;&lt;</span> <span class='n'>phone</span><span class='p'>.</span><span class='n'>getNumber</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+                <span class='o'>&lt;&lt;</span> <span class='n'>phone</span><span class='p'>.</span><span class='n'>getNumber</span><span class='p'>().</span><span class='n'>cStr</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
     <span class='p'>}</span>
     <span class='n'>Person</span><span class='o'>::</span><span class='n'>Employment</span><span class='o'>::</span><span class='n'>Reader</span> <span class='n'>employment</span> <span class='o'>=</span> <span class='n'>person</span><span class='p'>.</span><span class='n'>getEmployment</span><span class='p'>();</span>
     <span class='k'>switch</span> <span class='p'>(</span><span class='n'>employment</span><span class='p'>.</span><span class='n'>which</span><span class='p'>())</span> <span class='p'>{</span>
@@ -205,11 +206,11 @@
         <span class='k'>break</span><span class='p'>;</span>
       <span class='k'>case</span> <span class='n'>Person</span>:<span class='o'>:</span><span class='n'>Employment</span><span class='o'>::</span><span class='n'>EMPLOYER</span><span class='o'>:</span>
         <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;  employer: &quot;</span>
-                  <span class='o'>&lt;&lt;</span> <span class='n'>employment</span><span class='p'>.</span><span class='n'>getEmployer</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+                  <span class='o'>&lt;&lt;</span> <span class='n'>employment</span><span class='p'>.</span><span class='n'>getEmployer</span><span class='p'>().</span><span class='n'>cStr</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
         <span class='k'>break</span><span class='p'>;</span>
       <span class='k'>case</span> <span class='n'>Person</span>:<span class='o'>:</span><span class='n'>Employment</span><span class='o'>::</span><span class='n'>SCHOOL</span><span class='o'>:</span>
         <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;  student at: &quot;</span>
-                  <span class='o'>&lt;&lt;</span> <span class='n'>employment</span><span class='p'>.</span><span class='n'>getSchool</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
+                  <span class='o'>&lt;&lt;</span> <span class='n'>employment</span><span class='p'>.</span><span class='n'>getSchool</span><span class='p'>().</span><span class='n'>cStr</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
         <span class='k'>break</span><span class='p'>;</span>
       <span class='k'>case</span> <span class='n'>Person</span>:<span class='o'>:</span><span class='n'>Employment</span><span class='o'>::</span><span class='n'>SELF_EMPLOYED</span><span class='o'>:</span>
         <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;  self-employed&quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>std</span><span class='o'>::</span><span class='n'>endl</span><span class='p'>;</span>
@@ -344,11 +345,7 @@
 
 <h2 id='blobs_text_and_data'>Blobs (Text and Data)</h2>
 
-<p>Blobs are manipulated using the classes <code>capnp::Text</code> and <code>capnp::Data</code>. These classes are, again, just containers for inner classes <code>Reader</code> and <code>Builder</code>. These classes are iterable and implement <code>data()</code>, <code>size()</code>, and <code>operator[]</code> methods, similar to <code>std::string</code>. <code>Builder::operator[]</code> even returns a reference (unlike with <code>List&lt;T&gt;</code>). <code>Text::Reader</code> additionally has a method <code>c_str()</code> which returns a NUL-terminated <code>const char*</code>.</p>
-
-<p>These classes strive to be easy to convert to other common representations of raw data. Blob readers and builders can be implicitly converted to any class which takes <code>(const char*, size_t)</code> as its constructor parameters, and from any class which has <code>const char* data()</code> and <code>size_t size()</code> methods (in particular, <code>std::string</code>). Text readers and builders can additionally be implicitly converted to and from NUL-terminated <code>const char*</code>s.</p>
-
-<p>Because of this, callers often don&#8217;t need to know anything about the blob classes. If you use <code>std::string</code> to represent blobs in your own code, or NUL-terminated character arrays for text, just pretend that&#8217;s what Cap&#8217;n Proto uses too.</p>
+<p>Blobs are manipulated using the classes <code>capnp::Text</code> and <code>capnp::Data</code>. These classes are, again, just containers for inner classes <code>Reader</code> and <code>Builder</code>. These classes are iterable and implement <code>size()</code> and <code>operator[]</code> methods. <code>Builder::operator[]</code> even returns a reference (unlike with <code>List&lt;T&gt;</code>). <code>Text::Reader</code> additionally has a method <code>cStr()</code> which returns a NUL-terminated <code>const char*</code>.</p>
 
 <h2 id='interfaces'>Interfaces</h2>
 
@@ -388,20 +385,20 @@
 <span class='cp'>#include &lt;capnp/schema.h&gt;</span>
 <span class='cp'>#include &lt;capnp/dynamic.h&gt;</span>
 
-<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicValue</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicStruct</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicEnum</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicList</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicUnion</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>Schema</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>StructSchema</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>EnumSchema</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicValue</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicStruct</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicEnum</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicList</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicUnion</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>Schema</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>StructSchema</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>EnumSchema</span><span class='p'>;</span>
 
-<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>Void</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>Text</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>MallocMessageBuilder</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='n'>capnp</span><span class='o'>::</span><span class='n'>PackedFdMessageReader</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>Void</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>Text</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>MallocMessageBuilder</span><span class='p'>;</span>
+<span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>PackedFdMessageReader</span><span class='p'>;</span>
 
 <span class='kt'>void</span> <span class='nf'>dynamicWriteAddressBook</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>fd</span><span class='p'>,</span> <span class='n'>StructSchema</span> <span class='n'>schema</span><span class='p'>)</span> <span class='p'>{</span>
   <span class='c1'>// Write a message using the dynamic API to set each</span>
@@ -471,7 +468,7 @@
       <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>value</span><span class='p'>.</span><span class='n'>as</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;</span><span class='p'>();</span>
       <span class='k'>break</span><span class='p'>;</span>
     <span class='k'>case</span> <span class='n'>DynamicValue</span>:<span class='o'>:</span><span class='n'>TEXT</span><span class='o'>:</span>
-      <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='sc'>&#39;\&quot;&#39;</span> <span class='o'>&lt;&lt;</span> <span class='n'>value</span><span class='p'>.</span><span class='n'>as</span><span class='o'>&lt;</span><span class='n'>Text</span><span class='o'>&gt;</span><span class='p'>().</span><span class='n'>c_str</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='sc'>&#39;\&quot;&#39;</span><span class='p'>;</span>
+      <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='sc'>&#39;\&quot;&#39;</span> <span class='o'>&lt;&lt;</span> <span class='n'>value</span><span class='p'>.</span><span class='n'>as</span><span class='o'>&lt;</span><span class='n'>Text</span><span class='o'>&gt;</span><span class='p'>().</span><span class='n'>cStr</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='sc'>&#39;\&quot;&#39;</span><span class='p'>;</span>
       <span class='k'>break</span><span class='p'>;</span>
     <span class='k'>case</span> <span class='n'>DynamicValue</span>:<span class='o'>:</span><span class='n'>LIST</span><span class='o'>:</span> <span class='p'>{</span>
       <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;[&quot;</span><span class='p'>;</span>
@@ -491,7 +488,7 @@
       <span class='k'>auto</span> <span class='n'>enumValue</span> <span class='o'>=</span> <span class='n'>value</span><span class='p'>.</span><span class='n'>as</span><span class='o'>&lt;</span><span class='n'>DynamicEnum</span><span class='o'>&gt;</span><span class='p'>();</span>
       <span class='n'>KJ_IF_MAYBE</span><span class='p'>(</span><span class='n'>enumerant</span><span class='p'>,</span> <span class='n'>enumValue</span><span class='p'>.</span><span class='n'>getEnumerant</span><span class='p'>())</span> <span class='p'>{</span>
         <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span>
-            <span class='n'>enumerant</span><span class='o'>-&gt;</span><span class='n'>getProto</span><span class='p'>().</span><span class='n'>getName</span><span class='p'>().</span><span class='n'>c_str</span><span class='p'>();</span>
+            <span class='n'>enumerant</span><span class='o'>-&gt;</span><span class='n'>getProto</span><span class='p'>().</span><span class='n'>getName</span><span class='p'>().</span><span class='n'>cStr</span><span class='p'>();</span>
       <span class='p'>}</span> <span class='k'>else</span> <span class='p'>{</span>
         <span class='c1'>// Unknown enum value; output raw number.</span>
         <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>enumValue</span><span class='p'>.</span><span class='n'>getRaw</span><span class='p'>();</span>
@@ -509,7 +506,7 @@
         <span class='p'>}</span> <span class='k'>else</span> <span class='p'>{</span>
           <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;, &quot;</span><span class='p'>;</span>
         <span class='p'>}</span>
-        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>member</span><span class='p'>.</span><span class='n'>getProto</span><span class='p'>().</span><span class='n'>getName</span><span class='p'>().</span><span class='n'>c_str</span><span class='p'>()</span>
+        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>member</span><span class='p'>.</span><span class='n'>getProto</span><span class='p'>().</span><span class='n'>getName</span><span class='p'>().</span><span class='n'>cStr</span><span class='p'>()</span>
                   <span class='o'>&lt;&lt;</span> <span class='s'>&quot; = &quot;</span><span class='p'>;</span>
         <span class='n'>dynamicPrintValue</span><span class='p'>(</span><span class='n'>structValue</span><span class='p'>.</span><span class='n'>get</span><span class='p'>(</span><span class='n'>member</span><span class='p'>));</span>
       <span class='p'>}</span>
@@ -519,7 +516,7 @@
     <span class='k'>case</span> <span class='n'>DynamicValue</span>:<span class='o'>:</span><span class='n'>UNION</span><span class='o'>:</span> <span class='p'>{</span>
       <span class='k'>auto</span> <span class='n'>unionValue</span> <span class='o'>=</span> <span class='n'>value</span><span class='p'>.</span><span class='n'>as</span><span class='o'>&lt;</span><span class='n'>DynamicUnion</span><span class='o'>&gt;</span><span class='p'>();</span>
       <span class='n'>KJ_IF_MAYBE</span><span class='p'>(</span><span class='n'>tag</span><span class='p'>,</span> <span class='n'>unionValue</span><span class='p'>.</span><span class='n'>which</span><span class='p'>())</span> <span class='p'>{</span>
-        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>tag</span><span class='o'>-&gt;</span><span class='n'>getProto</span><span class='p'>().</span><span class='n'>getName</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;(&quot;</span><span class='p'>;</span>
+        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>tag</span><span class='o'>-&gt;</span><span class='n'>getProto</span><span class='p'>().</span><span class='n'>getName</span><span class='p'>().</span><span class='n'>cStr</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;(&quot;</span><span class='p'>;</span>
         <span class='n'>dynamicPrintValue</span><span class='p'>(</span><span class='n'>unionValue</span><span class='p'>.</span><span class='n'>get</span><span class='p'>());</span>
         <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;)&quot;</span><span class='p'>;</span>
       <span class='p'>}</span> <span class='k'>else</span> <span class='p'>{</span>

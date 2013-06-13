@@ -108,7 +108,7 @@
       </script>
       <section id="main_content" class="inner">
         <h1 id='installation'>Installation</h1>
-<p style='font-size: 125%; font-weight: bold;'>Note: Cap'n Proto is not ready yet</p><div style='float: right'><a style='color: #fff' class='groups_link' href='https://groups.google.com/group/capnproto-announce'>Sign Up for Updates</a></div>
+<p style='font-size: 125%; font-weight: bold;'>Note: Cap'n Proto is not ready yet</p><div style='float: right'><a style='color: #fff' href='https://groups.google.com/group/capnproto-announce' class='groups_link'>Sign Up for Updates</a></div>
 <p>As of this writing, Cap&#8217;n Proto is in the very early stages of development. It is still missing many essential features:</p>
 
 <ul>
@@ -173,7 +173,7 @@ cd capnproto/c++
 
 <p>This will build everything it can and run tests.</p>
 
-<p>Note that Ekam will fail to build some things and output a bunch of error messages. You should be able to ignore any errors that originate outside of the <code>capnproto</code> directory &#8211; these are just parts of other packages like Google Test that Ekam doesn&#8217;t fully know how to build, but aren&#8217;t needed by Cap&#8217;n Proto anyway.</p>
+<p>Note that Ekam will fail to build some things and output a bunch of error messages. You should be able to ignore any errors that originate outside of the <code>capnp</code> and <code>kj</code> directories &#8211; these are just parts of other packages like Google Test that Ekam doesn&#8217;t fully know how to build, but aren&#8217;t needed by Cap&#8217;n Proto anyway.</p>
 
 <h3 id='running_the_benchmarks'>Running the Benchmarks</h3>
 
@@ -181,19 +181,19 @@ cd capnproto/c++
 
 <p>That said, Cap&#8217;n Proto does have a small suite of silly benchmarks used to validate changes.</p>
 
-<p>The Ekam build will put the benchmark binaries in <code>tmp/capnproto/benchmark</code>.</p>
+<p>The Ekam build will put the benchmark binaries in <code>tmp/capnp/benchmark</code>.</p>
 
-<pre><code>tmp/capnproto/benchmark</code></pre>
+<pre><code>tmp/capnp/benchmark</code></pre>
 
 <p>This runs the default test case, CatRank. CatRank simulates a search engine scoring algorithm which promotes pages that discuss cats (and demotes ones discussing dogs). A list of up to 1000 random search results with URLs, scores, and snippets is sent to the server, which searches the snippets for instances of &#8220;cat&#8221; and &#8220;dog&#8221;, adjusts their scores accordingly, then returns the new result list sorted by score.</p>
 
 <p>This test case is very string-heavy. Cap&#8217;n Proto performs well due to its zero-copy strings, but packing the message doesn&#8217;t help much.</p>
 
-<pre><code>tmp/capnproto/benchmark eval</code></pre>
+<pre><code>tmp/capnp/benchmark eval</code></pre>
 
 <p>In this test case, the client generates a random, deeply-nested arithmetic expression for the server to evaluate. This case is a pathologically bad case for Cap&#8217;n Proto as it involves lots of pointers with relatively little actual data. When packing is enabled it actually loses to Protobufs by a little bit on CPU time (as of this writing, at least; it&#8217;ll probably get better with optimization).</p>
 
-<pre><code>tmp/capnproto/benchmark carsales</code></pre>
+<pre><code>tmp/capnp/benchmark carsales</code></pre>
 
 <p>This test case involves sending to the server a description of a bunch of cars, and asks the server to decide how much the lot is worth. This case is very number-heavy, and because of this Cap&#8217;n Proto&#8217;s &#8220;packed&#8221; mode really shines.</p>
 
@@ -252,7 +252,7 @@ sudo make install</code></pre>
 </li>
 </ol>
 
-<p>This will install <code>libcapnproto.a</code> in <code>/usr/local/lib</code> and headers in <code>/usr/local/include/capnproto</code>.</p>
+<p>This will install <code>libcapnp.a</code> in <code>/usr/local/lib</code> and headers in <code>/usr/local/include/capnp</code> and <code>/usr/local/include/kj</code>.</p>
         <div style="clear: left;"></div>
       </section>
     </div>
