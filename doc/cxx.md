@@ -62,7 +62,7 @@ void writeAddressBook(int fd) {
   alice.setName("Alice");
   alice.setEmail("alice@example.com");
   // Type shown for explanation purposes; normally you'd use auto.
-  capnp::List<Person::PhoneNumber>::Builder alicePhones =
+  ::capnp::List<Person::PhoneNumber>::Builder alicePhones =
       alice.initPhones(1);
   alicePhones[0].setNumber("555-1212");
   alicePhones[0].setType(Person::PhoneNumber::Type::MOBILE);
@@ -88,7 +88,8 @@ void printAddressBook(int fd) {
   AddressBook::Reader addressBook = message.getRoot<AddressBook>();
 
   for (Person::Reader person : addressBook.getPeople()) {
-    std::cout << person.getName() << ": " << person.getEmail() << std::endl;
+    std::cout << person.getName().cStr() << ": "
+              << person.getEmail().cStr() << std::endl;
     for (Person::PhoneNumber::Reader phone: person.getPhones()) {
       const char* typeName = "UNKNOWN";
       switch (phone.getType()) {
@@ -97,7 +98,7 @@ void printAddressBook(int fd) {
         case Person::PhoneNumber::Type::WORK: typeName = "work"; break;
       }
       std::cout << "  " << typeName << " phone: "
-                << phone.getNumber() << std::endl;
+                << phone.getNumber().cStr() << std::endl;
     }
     Person::Employment::Reader employment = person.getEmployment();
     switch (employment.which()) {
@@ -106,11 +107,11 @@ void printAddressBook(int fd) {
         break;
       case Person::Employment::EMPLOYER:
         std::cout << "  employer: "
-                  << employment.getEmployer() << std::endl;
+                  << employment.getEmployer().cStr() << std::endl;
         break;
       case Person::Employment::SCHOOL:
         std::cout << "  student at: "
-                  << employment.getSchool() << std::endl;
+                  << employment.getSchool().cStr() << std::endl;
         break;
       case Person::Employment::SELF_EMPLOYED:
         std::cout << "  self-employed" << std::endl;
@@ -387,20 +388,20 @@ of the dynamic API:
 #include <capnp/schema.h>
 #include <capnp/dynamic.h>
 
-using capnp::DynamicValue;
-using capnp::DynamicStruct;
-using capnp::DynamicEnum;
-using capnp::DynamicList;
-using capnp::DynamicUnion;
-using capnp::List;
-using capnp::Schema;
-using capnp::StructSchema;
-using capnp::EnumSchema;
+using ::capnp::DynamicValue;
+using ::capnp::DynamicStruct;
+using ::capnp::DynamicEnum;
+using ::capnp::DynamicList;
+using ::capnp::DynamicUnion;
+using ::capnp::List;
+using ::capnp::Schema;
+using ::capnp::StructSchema;
+using ::capnp::EnumSchema;
 
-using capnp::Void;
-using capnp::Text;
-using capnp::MallocMessageBuilder;
-using capnp::PackedFdMessageReader;
+using ::capnp::Void;
+using ::capnp::Text;
+using ::capnp::MallocMessageBuilder;
+using ::capnp::PackedFdMessageReader;
 
 void dynamicWriteAddressBook(int fd, StructSchema schema) {
   // Write a message using the dynamic API to set each
@@ -470,7 +471,7 @@ void dynamicPrintValue(DynamicValue::Reader value) {
       std::cout << value.as<double>();
       break;
     case DynamicValue::TEXT:
-      std::cout << '\"' << value.as<Text>().c_str() << '\"';
+      std::cout << '\"' << value.as<Text>().cStr() << '\"';
       break;
     case DynamicValue::LIST: {
       std::cout << "[";
@@ -490,7 +491,7 @@ void dynamicPrintValue(DynamicValue::Reader value) {
       auto enumValue = value.as<DynamicEnum>();
       KJ_IF_MAYBE(enumerant, enumValue.getEnumerant()) {
         std::cout <<
-            enumerant->getProto().getName().c_str();
+            enumerant->getProto().getName().cStr();
       } else {
         // Unknown enum value; output raw number.
         std::cout << enumValue.getRaw();
@@ -508,7 +509,7 @@ void dynamicPrintValue(DynamicValue::Reader value) {
         } else {
           std::cout << ", ";
         }
-        std::cout << member.getProto().getName().c_str()
+        std::cout << member.getProto().getName().cStr()
                   << " = ";
         dynamicPrintValue(structValue.get(member));
       }
@@ -518,7 +519,7 @@ void dynamicPrintValue(DynamicValue::Reader value) {
     case DynamicValue::UNION: {
       auto unionValue = value.as<DynamicUnion>();
       KJ_IF_MAYBE(tag, unionValue.which()) {
-        std::cout << tag->getProto().getName() << "(";
+        std::cout << tag->getProto().getName().cStr() << "(";
         dynamicPrintValue(unionValue.get());
         std::cout << ")";
       } else {
