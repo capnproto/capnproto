@@ -306,12 +306,7 @@ public:
 #if KJ_NO_EXCEPTIONS
     logException(mv(exception));
 #else
-    if (std::uncaught_exception()) {
-      // Throwing is probably dangerous.  Log instead.
-      logException(mv(exception));
-    } else {
-      throw ExceptionImpl(mv(exception));
-    }
+    throw ExceptionImpl(mv(exception));
 #endif
   }
 
