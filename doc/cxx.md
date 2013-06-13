@@ -308,20 +308,9 @@ to have any value that is within the range of their base type, which for Cap'n P
 
 Blobs are manipulated using the classes `capnp::Text` and `capnp::Data`.  These classes are,
 again, just containers for inner classes `Reader` and `Builder`.  These classes are iterable and
-implement `data()`, `size()`, and `operator[]` methods, similar to `std::string`.
-`Builder::operator[]` even returns a reference (unlike with `List<T>`).  `Text::Reader`
-additionally has a method `c_str()` which returns a NUL-terminated `const char*`.
-
-These classes strive to be easy to convert to other common representations of raw data.
-Blob readers and builders can be implicitly converted to any class which takes
-`(const char*, size_t)` as its constructor parameters, and from any class which has
-`const char* data()` and `size_t size()` methods (in particular, `std::string`).  Text
-readers and builders can additionally be implicitly converted to and from NUL-terminated
-`const char*`s.
-
-Because of this, callers often don't need to know anything about the blob classes.  If you use
-`std::string` to represent blobs in your own code, or NUL-terminated character arrays for text,
-just pretend that's what Cap'n Proto uses too.
+implement `size()` and `operator[]` methods.  `Builder::operator[]` even returns a reference
+(unlike with `List<T>`).  `Text::Reader` additionally has a method `cStr()` which returns a
+NUL-terminated `const char*`.
 
 ## Interfaces
 
