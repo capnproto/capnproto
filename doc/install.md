@@ -211,7 +211,10 @@ quirks in that you will want to use libc++ (LLVM's implementation of the standar
 rather than libstdc++ (GCC's implementation).  These problems can be worked around as described
 below.
 
-First, download the Clang 3.2 binaries and put them somewhere easy to remember:
+First, you need the Xcode command-line tools.  Download Xcode from the app store.  Then, open Xcode,
+go to Xcode menu > Preferences > Downloads, and choose to install "Command Line Tools".
+
+Next, download the Clang 3.2 binaries and put them somewhere easy to remember:
 
     curl -O http://llvm.org/releases/3.2/clang+llvm-3.2-x86_64-apple-darwin11.tar.gz
     tar zxf clang+llvm-3.2-x86_64-apple-darwin11.tar.gz
@@ -256,4 +259,4 @@ compiler.
      make -j4 check
      sudo make install
 
-Phew.  Here's hoping that XCode 5.0 and a future Google Test release will simplify all this!
+Phew.  Here's hoping that Xcode 5.0 and a future Google Test release will simplify all this!
