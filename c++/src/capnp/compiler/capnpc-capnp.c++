@@ -41,7 +41,7 @@ class TextBlob {
 public:
   TextBlob() = default;
   template <typename... Params>
-  TextBlob(Params&&... params);
+  explicit TextBlob(Params&&... params);
   TextBlob(kj::Array<TextBlob>&& params);
 
   void writeTo(kj::OutputStream& out) const;
@@ -64,8 +64,8 @@ private:
   void fill(char* textPos, Branch* branchesPos, TextBlob&& first, Rest&&... rest);
 
   template <typename T>
-  auto toContainer(T&& t) -> decltype(kj::toCharSequence(kj::fwd(t))) {
-    return kj::toCharSequence(kj::fwd(t));
+  auto toContainer(T&& t) -> decltype(kj::toCharSequence(kj::fwd<T>(t))) {
+    return kj::toCharSequence(kj::fwd<T>(t));
   }
   TextBlob&& toContainer(TextBlob&& t) {
     return kj::mv(t);
@@ -202,6 +202,10 @@ struct Indent {
   inline Iterator begin() const { return Iterator(0); }
   inline Iterator end() const { return Iterator(amount); }
 };
+
+inline Indent KJ_STRINGIFY(const Indent& indent) {
+  return indent;
+}
 
 // =======================================================================================
 
@@ -390,7 +394,7 @@ TextBlob genValue(schema::Type::Reader type, schema::Value::Reader value, Schema
       return text("");
     }
   }
-  return 0;
+  return text("");
 }
 
 TextBlob genAnnotation(schema::Annotation::Reader annotation,
