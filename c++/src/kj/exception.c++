@@ -29,10 +29,6 @@
 #include <stdlib.h>
 #include <exception>
 
-#if __GNUC__
-#include <cxxabi.h>
-#endif
-
 #if defined(__linux__) && !defined(NDEBUG)
 #include <stdio.h>
 #include <pthread.h>
@@ -355,32 +351,55 @@ ExceptionCallback& getExceptionCallback() {
 
 // =======================================================================================
 
-namespace {
+namespace _ {  // private
 
 #if __GNUC__
 
-// __cxa_eh_globals does not appear to be defined in a visible header.  This is what it looks like.
-struct DummyEhGlobals {
-  abi::__cxa_exception* caughtExceptions;
+// Horrible -- but working -- hack:  We can dig into __cxa_get_globals() in order to extract the
+// count of uncaught exceptions.  This function is part of the C++ ABI implementation used on Linux,
+// OSX, and probably other platforms that use GCC.  Unfortunately, __cxa_get_globals() is only
+// actually defined in cxxabi.h on some platforms (e.g. Linux, but not OSX), and even where it is
+// defined, it returns an incomplete type.  Here we use the same hack used by Evgeny Panasyuk:
+//   https://github.com/panaseleus/stack_unwinding/blob/master/boost/exception/uncaught_exception_count.hpp
+//
+// Notice that a similar hack is possible on MSVC -- if its C++11 support ever gets to the point of
+// supporting KJ in the first place.
+//
+// It appears likely that a future version of the C++ standard may include an
+// uncaught_exception_count() function in the standard library, or an equivalent language feature.
+// Some discussion:
+//   https://groups.google.com/a/isocpp.org/d/msg/std-proposals/HglEslyZFYs/kKdu5jJw5AgJ
+
+struct FakeEhGlobals {
+  // Fake
+
+  void* caughtExceptions;
   uint uncaughtExceptions;
 };
+
+// Because of the 'extern "C"', the symbol name is not mangled and thus the namespace is effectively
+// ignored for linking.  Thus it doesn't matter that we are declaring __cxa_get_globals() in a
+// different namespace from the ABI's definition.
+extern "C" {
+FakeEhGlobals* __cxa_get_globals();
+}
 
 uint uncaughtExceptionCount() {
   // TODO(perf):  Use __cxa_get_globals_fast()?  Requires that __cxa_get_globals() has been called
   //   from somewhere.
-  return reinterpret_cast<DummyEhGlobals*>(abi::__cxa_get_globals())->uncaughtExceptions;
+  return __cxa_get_globals()->uncaughtExceptions;
 }
 
 #else
 #error "This needs to be ported to your compiler / C++ ABI."
 #endif
 
-}  // namespace
+}  // namespace _ (private)
 
-UnwindDetector::UnwindDetector(): uncaughtCount(uncaughtExceptionCount()) {}
+UnwindDetector::UnwindDetector(): uncaughtCount(_::uncaughtExceptionCount()) {}
 
 bool UnwindDetector::isUnwinding() const {
-  return uncaughtExceptionCount() > uncaughtCount;
+  return _::uncaughtExceptionCount() > uncaughtCount;
 }
 
 void UnwindDetector::catchExceptionsAsSecondaryFaults(_::Runnable& runnable) const {
