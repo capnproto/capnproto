@@ -60,6 +60,6 @@ exact path to the plugin executable, and does not search `$PATH`.  Examples:
 If the user specifies an output directory, the compiler will run the plugin with that directory
 as the working directory, so you do not need to worry about this.
 
-[This example plugin](https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnproto/compiler/capnpc-capnp.c%2B%2B)
+[This example plugin](https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnp/compiler/capnpc-capnp.c%2B%2B)
 writes the schema back to standard output in Cap'n Proto schema language, similar to what
 `capnpc -v` does.
