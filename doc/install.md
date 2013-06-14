@@ -155,6 +155,11 @@ with error markers.
 
 ### Building with Automake
 
+For these instructions you will need to have the GNU autotools --
+[autoconf](http://www.gnu.org/software/autoconf/),
+[automake](http://www.gnu.org/software/automake/), and
+[libtool](http://www.gnu.org/software/libtool/) -- installed.
+
 _If you are using Mac OSX, you'll need to follow the modified instructions in the next section._
 
 If setting up Ekam is too much work for you, you can also build with Automake.
