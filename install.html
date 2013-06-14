@@ -108,7 +108,7 @@
       </script>
       <section id="main_content" class="inner">
         <h1 id='installation'>Installation</h1>
-<p style='font-size: 125%; font-weight: bold;'>Note: Cap'n Proto is not ready yet</p><div style='float: right'><a class='groups_link' style='color: #fff' href='https://groups.google.com/group/capnproto-announce'>Sign Up for Updates</a></div>
+<p style='font-size: 125%; font-weight: bold;'>Note: Cap'n Proto is not ready yet</p><div style='float: right'><a class='groups_link' href='https://groups.google.com/group/capnproto-announce' style='color: #fff'>Sign Up for Updates</a></div>
 <p>As of this writing, Cap&#8217;n Proto is in the very early stages of development. It is still missing many essential features:</p>
 
 <ul>
@@ -272,7 +272,9 @@ sudo make install</code></pre>
 
 <p>Option 2 is the one preferred by Cap&#8217;n Proto&#8217;s developers. However, it presents some additional quirks in that you will want to use libc++ (LLVM&#8217;s implementation of the standard C++ library) rather than libstdc++ (GCC&#8217;s implementation). These problems can be worked around as described below.</p>
 
-<p>First, download the Clang 3.2 binaries and put them somewhere easy to remember:</p>
+<p>First, you need the Xcode command-line tools. Download Xcode from the app store. Then, open Xcode, go to Xcode menu &gt; Preferences &gt; Downloads, and choose to install &#8220;Command Line Tools&#8221;.</p>
+
+<p>Next, download the Clang 3.2 binaries and put them somewhere easy to remember:</p>
 
 <pre><code>curl -O http://llvm.org/releases/3.2/clang+llvm-3.2-x86_64-apple-darwin11.tar.gz
 tar zxf clang+llvm-3.2-x86_64-apple-darwin11.tar.gz
@@ -310,7 +312,7 @@ cp lib/.libs/*.a ~/gtest-install/lib</code></pre>
  make -j4 check
  sudo make install</code></pre>
 
-<p>Phew. Here&#8217;s hoping that XCode 5.0 and a future Google Test release will simplify all this!</p>
+<p>Phew. Here&#8217;s hoping that Xcode 5.0 and a future Google Test release will simplify all this!</p>
         <div style="clear: left;"></div>
       </section>
     </div>
