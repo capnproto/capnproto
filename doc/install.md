@@ -92,7 +92,7 @@ be able to ignore any errors that originate outside of the `capnp` and `kj` dire
 are just parts of other packages like Google Test that Ekam doesn't fully know how to build, but
 aren't needed by Cap'n Proto anyway.
 
-### Running the Benchmarks
+#### Running the Benchmarks
 
 Before getting into benchmarks, let me be frank:  performance varies wildly by use case, and no
 benchmark is going to properly reflect the big picture.  If performance is critical to your use
@@ -129,7 +129,7 @@ This test case involves sending to the server a description of a bunch of cars, 
 to decide how much the lot is worth.  This case is very number-heavy, and because of this
 Cap'n Proto's "packed" mode really shines.
 
-### Developing with Ekam
+#### Developing with Ekam
 
 If you intend to do some development, you should build `continuous` or `continuous-opt` instead
 of `once`.  These modes will build everything, then watch the source tree for changes and rebuild
@@ -154,6 +154,8 @@ with error markers.
 
 ### Building with Automake
 
+_If you are using Mac OSX, you'll need to follow the modified instructions in the next section._
+
 If setting up Ekam is too much work for you, you can also build with Automake.
 
 1. Make sure the [Google Test](https://googletest.googlecode.com/) headers are in your include
@@ -168,7 +170,7 @@ If setting up Ekam is too much work for you, you can also build with Automake.
        mkdir -p ~/gtest-install/include
        mkdir -p ~/gtest-install/lib
        cp -r include/gtest ~/gtest-install/include/gtest
-       cp ./lib/.libs/*.a ~/gtest-install/lib
+       cp lib/.libs/*.a ~/gtest-install/lib
 
 2. Clone and build the Cap'n Proto code.
 
@@ -183,3 +185,69 @@ If setting up Ekam is too much work for you, you can also build with Automake.
 
 This will install `libcapnp.a` in `/usr/local/lib` and headers in `/usr/local/include/capnp` and
 `/usr/local/include/kj`.
+
+#### Mac OSX Notes
+
+As of this writing, Mac OSX 10.8 with Xcode 4.6 command-line tools is not quite good enough to
+compile Cap'n Proto.  The included version of GCC is ancient.  The included version of Clang --
+which mysteriously advertises itself as version 4.2 -- was actually cut from LLVM SVN somewhere
+between versions 3.1 and 3.2; it is not sufficient to build Cap'n Proto.
+
+There are two options:
+
+1. Use [Macports](http://www.macports.org/) or [Fink](http://www.finkproject.org/) to get an
+   up-to-date GCC.
+2. Obtain Clang 3.2 (or better)
+   [directly from the LLVM project](http://llvm.org/releases/download.html).
+
+Option 2 is the one preferred by Cap'n Proto's developers.  However, it presents some additional
+quirks in that you will want to use libc++ (LLVM's implementation of the standard C++ library)
+rather than libstdc++ (GCC's implementation).  These problems can be worked around as described
+below.
+
+First, download the Clang 3.2 binaries and put them somewhere easy to remember:
+
+    curl -O http://llvm.org/releases/3.2/clang+llvm-3.2-x86_64-apple-darwin11.tar.gz
+    tar zxf clang+llvm-3.2-x86_64-apple-darwin11.tar.gz
+    mv clang+llvm-3.2-x86_64-apple-darwin11 ~/clang-3.2
+
+Next, you need to symlink the system's libc++ into the clang 3.2 tree so that it can see it:
+
+    ln -s /usr/lib/c++ ~/clang-3.2/lib/c++
+
+The other problem is that if you want to run Cap'n Proto's tests (with `make check`), you will need
+to make sure Google Test is compiled with libc++.  This is further complicated by the fact that
+the latest version of Google Test (1.6) relies on `tr1` headers and namespaces, which in C++11
+(and therefore libc++) have been folded into the standand namespace.  You will need to modify the
+gtest code to strip out references to `tr1`.  Also, one of gtest's own tests uses `thread_local` as
+a variable name, but it is a keyword in C++11, so that will need to be fixed too if you happen to
+want to run gtest's tests.
+
+Thus, the gtest instructions from above become:
+
+    curl -O https://googletest.googlecode.com/files/gtest-1.6.0.zip
+    unzip gtest-1.6.0.zip
+    cd gtest-1.6.0
+    find . -type f | xargs sed -i '' -e \
+        's,<tr1/,<,g;s/::tr1::/::/g;s/thread_local/thread_local_/g'
+    CXX=clang++ CXXFLAGS="-std=c++11 -stdlib=libc++" ./configure
+    make -j4
+    mkdir -p ~/gtest-install/include
+    mkdir -p ~/gtest-install/lib
+    cp -r include/gtest ~/gtest-install/include/gtest
+    cp lib/.libs/*.a ~/gtest-install/lib
+
+At this point building Cap'n Proto is just like above, except you need to set `CXX` to the right
+compiler.
+
+     git clone https://github.com/kentonv/capnproto.git
+     cd capnproto/c++
+     autoreconf -i
+     CXX=~/clang-3.2/bin/clang++ \
+         CXXFLAGS="-O2 -DNDEBUG -I$HOME/gtest-install/include" \
+         LDFLAGS="-L$HOME/gtest-install/lib" \
+         ./configure
+     make -j4 check
+     sudo make install
+
+Phew.  Here's hoping that XCode 5.0 and a future Google Test release will simplify all this!
