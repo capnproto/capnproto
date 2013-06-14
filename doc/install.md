@@ -46,8 +46,9 @@ Now you can check out, build, and install `capnpc` like so:
     cd capnproto/compiler
     cabal install capnproto-compiler.cabal
 
-Be sure that the Cabal bin directory (typically `$HOME/.cabal/bin`) is in your `PATH` before you
-attempt to build the C++ runtime.
+Be sure that the Cabal bin directory (e.g. `$HOME/.cabal/bin` on Ubuntu or
+`$HOME/Library/Haskell/bin` on Mac OSX) is in your `PATH` before you attempt to build the C++
+runtime.
 
 ## Installing the C++ Runtime
 
