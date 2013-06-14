@@ -42,6 +42,11 @@
   #if __clang__
     #if __clang_major__ < 3 || (__clang_major__ == 3 && __clang_minor__ < 2)
       #warning "This library requires at least Clang 3.2."
+    #elif defined(__apple_build_version__) && __apple_build_version__ <= 4250028
+      #warning "This library requires at least Clang 3.2.  XCode 4.6's Clang, which claims to be "\
+               "version 4.2 (wat?), is actually built from some random SVN revision between 3.1 "\
+               "and 3.2.  Unfortunately, it is insufficient for compiling this library.  You can "\
+               "download the real Clang 3.2 (or newer) from the Clang web site."
     #endif
   #else
     #if __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 7)
