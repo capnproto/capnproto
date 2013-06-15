@@ -141,7 +141,7 @@ void inlineRequireFailure(
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
         __FILE__, __LINE__, #condition, #__VA_ARGS__, ##__VA_ARGS__)
 // Version of KJ_REQUIRE() which is safe to use in headers that are #included by users.  Used to
-// check preconditions inside inline methods.  KJ_INLINE_DPRECOND is particularly useful in that
+// check preconditions inside inline methods.  KJ_IREQUIRE is particularly useful in that
 // it will be enabled depending on whether the application is compiled in debug mode rather than
 // whether libkj is.
 #endif
