@@ -55,6 +55,61 @@ TEST(Parsers, ExactElementParser) {
   EXPECT_TRUE(input.atEnd());
 }
 
+TEST(Parsers, ExactlyConstParser) {
+  StringPtr text = "foo";
+  Input input(text.begin(), text.end());
+
+  Maybe<Tuple<>> result = exactlyConst<char, 'f'>()(input);
+  EXPECT_TRUE(result != nullptr);
+  EXPECT_FALSE(input.atEnd());
+
+  result = exactlyConst<char, 'o'>()(input);
+  EXPECT_TRUE(result != nullptr);
+  EXPECT_FALSE(input.atEnd());
+
+  result = exactlyConst<char, 'x'>()(input);
+  EXPECT_TRUE(result == nullptr);
+  EXPECT_FALSE(input.atEnd());
+
+  auto parser = exactlyConst<char, 'o'>();
+  ParserRef<Input, Tuple<>> wrapped = ref<Input>(parser);
+  result = wrapped(input);
+  EXPECT_TRUE(result != nullptr);
+  EXPECT_TRUE(input.atEnd());
+}
+
+TEST(Parsers, ExactChar) {
+  constexpr auto parser = exactChar<'a'>();
+
+  {
+    StringPtr text = "a";
+    Input input(text.begin(), text.end());
+    EXPECT_TRUE(parser(input) != nullptr);
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "b";
+    Input input(text.begin(), text.end());
+    EXPECT_TRUE(parser(input) == nullptr);
+    EXPECT_FALSE(input.atEnd());
+  }
+}
+
+TEST(Parsers, ConstResultParser) {
+  auto parser = constResult(exactly('o'), 123);
+
+  StringPtr text = "o";
+  Input input(text.begin(), text.end());
+  Maybe<int> result = parser(input);
+  KJ_IF_MAYBE(i, result) {
+    EXPECT_EQ(123, *i);
+  } else {
+    ADD_FAILURE() << "Expected 123, got null.";
+  }
+  EXPECT_TRUE(input.atEnd());
+}
+
 TEST(Parsers, SequenceParser) {
   StringPtr text = "foo";
 
@@ -325,6 +380,151 @@ TEST(Parsers, AcceptIfParser) {
       ADD_FAILURE() << "Expected parse result, got null.";
     }
     EXPECT_TRUE(input.atEnd());
+  }
+}
+
+TEST(Parsers, CharRange) {
+  constexpr auto parser = charRange('a', 'z');
+
+  {
+    StringPtr text = "a";
+    Input input(text.begin(), text.end());
+    Maybe<char> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ('a', *value);
+    } else {
+      ADD_FAILURE() << "Expected parse result, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "n";
+    Input input(text.begin(), text.end());
+    Maybe<char> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ('n', *value);
+    } else {
+      ADD_FAILURE() << "Expected parse result, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "z";
+    Input input(text.begin(), text.end());
+    Maybe<char> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ('z', *value);
+    } else {
+      ADD_FAILURE() << "Expected parse result, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "`";
+    Input input(text.begin(), text.end());
+    Maybe<char> result = parser(input);
+    EXPECT_TRUE(result == nullptr);
+    EXPECT_FALSE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "{";
+    Input input(text.begin(), text.end());
+    Maybe<char> result = parser(input);
+    EXPECT_TRUE(result == nullptr);
+    EXPECT_FALSE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "A";
+    Input input(text.begin(), text.end());
+    Maybe<char> result = parser(input);
+    EXPECT_TRUE(result == nullptr);
+    EXPECT_FALSE(input.atEnd());
+  }
+}
+
+TEST(Parsers, AnyChar) {
+  constexpr auto parser = anyChar("axn2B");
+
+  {
+    StringPtr text = "a";
+    Input input(text.begin(), text.end());
+    Maybe<char> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ('a', *value);
+    } else {
+      ADD_FAILURE() << "Expected parse result, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "n";
+    Input input(text.begin(), text.end());
+    Maybe<char> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ('n', *value);
+    } else {
+      ADD_FAILURE() << "Expected parse result, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "B";
+    Input input(text.begin(), text.end());
+    Maybe<char> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ('B', *value);
+    } else {
+      ADD_FAILURE() << "Expected parse result, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "b";
+    Input input(text.begin(), text.end());
+    Maybe<char> result = parser(input);
+    EXPECT_TRUE(result == nullptr);
+    EXPECT_FALSE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "j";
+    Input input(text.begin(), text.end());
+    Maybe<char> result = parser(input);
+    EXPECT_TRUE(result == nullptr);
+    EXPECT_FALSE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "A";
+    Input input(text.begin(), text.end());
+    Maybe<char> result = parser(input);
+    EXPECT_TRUE(result == nullptr);
+    EXPECT_FALSE(input.atEnd());
+  }
+}
+
+TEST(Parsers, CharGroupCombo) {
+  constexpr auto parser =
+      many(charRange('0', '9').orRange('a', 'z').orRange('A', 'Z').orAny("-_"));
+
+  {
+    StringPtr text = "foo1-bar2_baz3@qux";
+    Input input(text.begin(), text.end());
+    Maybe<Array<char>> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ("foo1-bar2_baz3", str(*value));
+    } else {
+      ADD_FAILURE() << "Expected parse result, got null.";
+    }
+    EXPECT_FALSE(input.atEnd());
   }
 }
 
