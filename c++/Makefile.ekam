@@ -19,7 +19,7 @@ once:
 	CXXFLAGS="$(EXTRA_FLAG) -std=c++11 -O2 -DNDEBUG -Wall" LIBS='-lz -pthread' $(EKAM) -j6
 
 continuous:
-	CXXFLAGS="$(EXTRA_FLAG) -std=c++11 -g -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
+	CXXFLAGS="$(EXTRA_FLAG) -std=c++11 -g -DCAPNP_DEBUG_TYPES=1 -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
 
 continuous-opt:
 	CXXFLAGS="$(EXTRA_FLAG) -std=c++11 -O2 -DNDEBUG -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315

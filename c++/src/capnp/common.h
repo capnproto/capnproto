@@ -62,23 +62,17 @@ class word { uint64_t content KJ_UNUSED_MEMBER; KJ_DISALLOW_COPY(word); public: 
 static_assert(sizeof(byte) == 1, "uint8_t is not one byte?");
 static_assert(sizeof(word) == 8, "uint64_t is not 8 bytes?");
 
-namespace _ { class BitLabel; class ElementLabel; struct WirePointer; }
-
-#ifndef KJ_DEBUG_TYPES
-#define KJ_DEBUG_TYPES 1
-// Set this to zero to degrade all the "count" types below to being plain integers.  All the code
-// should still operate exactly the same, we just lose compile-time checking.  Note that this will
-// also change symbol names, so it's important that the library and any clients be compiled with
-// the same setting here.
+#if CAPNP_DEBUG_TYPES
+// Set CAPNP_DEBUG_TYPES to 1 to use kj::Quantity for "count" types.  Otherwise, plain integers are
+// used.  All the code should still operate exactly the same, we just lose compile-time checking.
+// Note that this will also change symbol names, so it's important that the library and any clients
+// be compiled with the same setting here.
 //
-// TODO(soon):  Decide policy on this.  It may make sense to only use KJ_DEBUG_TYPES when
-//   compiling the tests of libraries that explicitly want the safety (like Cap'n Proto), but
-//   disable it for all real builds, as some clients may find this safety tiring.  Also, need to
-//   benchmark to verify there really is no perf hit.
+// We disable this by default to reduce symbol name size and avoid any possibility of the compiler
+// failing to fully-optimize the types, but anyone modifying Cap'n Proto itself should enable this
+// during development and testing.
 
-#endif
-
-#if KJ_DEBUG_TYPES
+namespace _ { class BitLabel; class ElementLabel; struct WirePointer; }
 
 typedef kj::Quantity<uint, _::BitLabel> BitCount;
 typedef kj::Quantity<uint8_t, _::BitLabel> BitCount8;
@@ -109,6 +103,40 @@ typedef kj::Quantity<uint8_t, _::WirePointer> WirePointerCount8;
 typedef kj::Quantity<uint16_t, _::WirePointer> WirePointerCount16;
 typedef kj::Quantity<uint32_t, _::WirePointer> WirePointerCount32;
 typedef kj::Quantity<uint64_t, _::WirePointer> WirePointerCount64;
+
+template <typename T, typename U>
+inline constexpr U* operator+(U* ptr, kj::Quantity<T, U> offset) {
+  return ptr + offset / kj::unit<kj::Quantity<T, U>>();
+}
+template <typename T, typename U>
+inline constexpr const U* operator+(const U* ptr, kj::Quantity<T, U> offset) {
+  return ptr + offset / kj::unit<kj::Quantity<T, U>>();
+}
+template <typename T, typename U>
+inline constexpr U* operator+=(U*& ptr, kj::Quantity<T, U> offset) {
+  return ptr = ptr + offset / kj::unit<kj::Quantity<T, U>>();
+}
+template <typename T, typename U>
+inline constexpr const U* operator+=(const U*& ptr, kj::Quantity<T, U> offset) {
+  return ptr = ptr + offset / kj::unit<kj::Quantity<T, U>>();
+}
+
+template <typename T, typename U>
+inline constexpr U* operator-(U* ptr, kj::Quantity<T, U> offset) {
+  return ptr - offset / kj::unit<kj::Quantity<T, U>>();
+}
+template <typename T, typename U>
+inline constexpr const U* operator-(const U* ptr, kj::Quantity<T, U> offset) {
+  return ptr - offset / kj::unit<kj::Quantity<T, U>>();
+}
+template <typename T, typename U>
+inline constexpr U* operator-=(U*& ptr, kj::Quantity<T, U> offset) {
+  return ptr = ptr - offset / kj::unit<kj::Quantity<T, U>>();
+}
+template <typename T, typename U>
+inline constexpr const U* operator-=(const U*& ptr, kj::Quantity<T, U> offset) {
+  return ptr = ptr - offset / kj::unit<kj::Quantity<T, U>>();
+}
 
 #else
 
@@ -169,44 +197,6 @@ template <typename T>
 inline constexpr decltype(BITS / ELEMENTS) bitsPerElement() {
   return sizeof(T) * 8 * BITS / ELEMENTS;
 }
-
-#ifndef __CDT_PARSER__
-
-template <typename T, typename U>
-inline constexpr U* operator+(U* ptr, kj::Quantity<T, U> offset) {
-  return ptr + offset / kj::unit<kj::Quantity<T, U>>();
-}
-template <typename T, typename U>
-inline constexpr const U* operator+(const U* ptr, kj::Quantity<T, U> offset) {
-  return ptr + offset / kj::unit<kj::Quantity<T, U>>();
-}
-template <typename T, typename U>
-inline constexpr U* operator+=(U*& ptr, kj::Quantity<T, U> offset) {
-  return ptr = ptr + offset / kj::unit<kj::Quantity<T, U>>();
-}
-template <typename T, typename U>
-inline constexpr const U* operator+=(const U*& ptr, kj::Quantity<T, U> offset) {
-  return ptr = ptr + offset / kj::unit<kj::Quantity<T, U>>();
-}
-
-template <typename T, typename U>
-inline constexpr U* operator-(U* ptr, kj::Quantity<T, U> offset) {
-  return ptr - offset / kj::unit<kj::Quantity<T, U>>();
-}
-template <typename T, typename U>
-inline constexpr const U* operator-(const U* ptr, kj::Quantity<T, U> offset) {
-  return ptr - offset / kj::unit<kj::Quantity<T, U>>();
-}
-template <typename T, typename U>
-inline constexpr U* operator-=(U*& ptr, kj::Quantity<T, U> offset) {
-  return ptr = ptr - offset / kj::unit<kj::Quantity<T, U>>();
-}
-template <typename T, typename U>
-inline constexpr const U* operator-=(const U*& ptr, kj::Quantity<T, U> offset) {
-  return ptr = ptr - offset / kj::unit<kj::Quantity<T, U>>();
-}
-
-#endif
 
 inline constexpr ByteCount intervalLength(const byte* a, const byte* b) {
   return uint(b - a) * BYTES;

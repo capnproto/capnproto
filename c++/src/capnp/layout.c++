@@ -195,17 +195,17 @@ static_assert(POINTERS * BITS_PER_POINTER / BITS_PER_BYTE / BYTES == sizeof(Wire
 // =======================================================================================
 
 struct WireHelpers {
-  static KJ_ALWAYS_INLINE(WordCount roundUpToWords(BitCount64 bits)) {
+  static KJ_ALWAYS_INLINE(WordCount roundBitsUpToWords(BitCount64 bits)) {
     static_assert(sizeof(word) == 8, "This code assumes 64-bit words.");
     return (bits + 63 * BITS) / BITS_PER_WORD;
   }
 
-  static KJ_ALWAYS_INLINE(WordCount roundUpToWords(ByteCount bytes)) {
+  static KJ_ALWAYS_INLINE(WordCount roundBytesUpToWords(ByteCount bytes)) {
     static_assert(sizeof(word) == 8, "This code assumes 64-bit words.");
     return (bytes + 7 * BYTES) / BYTES_PER_WORD;
   }
 
-  static KJ_ALWAYS_INLINE(ByteCount roundUpToBytes(BitCount bits)) {
+  static KJ_ALWAYS_INLINE(ByteCount roundBitsUpToBytes(BitCount bits)) {
     return (bits + 7 * BITS) / BITS_PER_BYTE;
   }
 
@@ -367,8 +367,8 @@ struct WireHelpers {
           case FieldSize::FOUR_BYTES:
           case FieldSize::EIGHT_BYTES:
             memset(ptr, 0,
-                roundUpToWords(ElementCount64(tag->listRef.elementCount()) *
-                               dataBitsPerElement(tag->listRef.elementSize()))
+                roundBitsUpToWords(ElementCount64(tag->listRef.elementCount()) *
+                                   dataBitsPerElement(tag->listRef.elementSize()))
                     * BYTES_PER_WORD / BYTES);
             break;
           case FieldSize::POINTER: {
@@ -475,7 +475,7 @@ struct WireHelpers {
           case FieldSize::TWO_BYTES:
           case FieldSize::FOUR_BYTES:
           case FieldSize::EIGHT_BYTES: {
-            WordCount totalWords = roundUpToWords(
+            WordCount totalWords = roundBitsUpToWords(
                 ElementCount64(ref->listRef.elementCount()) *
                 dataBitsPerElement(ref->listRef.elementSize()));
             KJ_REQUIRE(boundsCheck(segment, ptr, ptr + totalWords),
@@ -602,7 +602,7 @@ struct WireHelpers {
           case FieldSize::TWO_BYTES:
           case FieldSize::FOUR_BYTES:
           case FieldSize::EIGHT_BYTES: {
-            WordCount wordCount = roundUpToWords(
+            WordCount wordCount = roundBitsUpToWords(
                 ElementCount64(src->listRef.elementCount()) *
                 dataBitsPerElement(src->listRef.elementSize()));
             const word* srcPtr = src->target();
@@ -809,7 +809,7 @@ struct WireHelpers {
     auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
 
     // Calculate size of the list.
-    WordCount wordCount = roundUpToWords(ElementCount64(elementCount) * step);
+    WordCount wordCount = roundBitsUpToWords(ElementCount64(elementCount) * step);
 
     // Allocate the list.
     word* ptr = allocate(ref, segment, wordCount, WirePointer::LIST);
@@ -1153,7 +1153,7 @@ struct WireHelpers {
         }
 
         // Zero out old location.  See explanation in getWritableStructPointer().
-        memset(oldPtr, 0, roundUpToBytes(oldStep * elementCount) / BYTES);
+        memset(oldPtr, 0, roundBitsUpToBytes(oldStep * elementCount) / BYTES);
 
         return ListBuilder(origSegment, newPtr, newStep * BITS_PER_WORD, elementCount,
                            newDataSize * BITS_PER_WORD, newPointerCount);
@@ -1175,7 +1175,7 @@ struct WireHelpers {
             dataBitsPerElement(elementSize.preferredListEncoding) * ELEMENTS;
 
         WordCount totalWords =
-            roundUpToWords(BitCount64(newDataSize) * (elementCount / ELEMENTS));
+            roundBitsUpToWords(BitCount64(newDataSize) * (elementCount / ELEMENTS));
 
         // Don't let allocate() zero out the object just yet.
         zeroPointerAndFars(origSegment, origRef);
@@ -1201,7 +1201,7 @@ struct WireHelpers {
         }
 
         // Zero out old location.  See explanation in getWritableStructPointer().
-        memset(oldPtr, 0, roundUpToBytes(oldStep * elementCount) / BYTES);
+        memset(oldPtr, 0, roundBitsUpToBytes(oldStep * elementCount) / BYTES);
 
         return ListBuilder(origSegment, newPtr, newDataSize / ELEMENTS, elementCount,
                            newDataSize, 0 * POINTERS);
@@ -1215,7 +1215,7 @@ struct WireHelpers {
     ByteCount byteSize = size + 1 * BYTES;
 
     // Allocate the space.
-    word* ptr = allocate(ref, segment, roundUpToWords(byteSize), WirePointer::LIST);
+    word* ptr = allocate(ref, segment, roundBytesUpToWords(byteSize), WirePointer::LIST);
 
     // Initialize the pointer.
     ref->listRef.set(FieldSize::BYTE, byteSize * (1 * ELEMENTS / BYTES));
@@ -1253,7 +1253,7 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(Data::Builder initDataPointer(
       WirePointer* ref, SegmentBuilder* segment, ByteCount size)) {
     // Allocate the space.
-    word* ptr = allocate(ref, segment, roundUpToWords(size), WirePointer::LIST);
+    word* ptr = allocate(ref, segment, roundBytesUpToWords(size), WirePointer::LIST);
 
     // Initialize the pointer.
     ref->listRef.set(FieldSize::BYTE, size * (1 * ELEMENTS / BYTES));
@@ -1334,7 +1334,7 @@ struct WireHelpers {
   }
 
   static void setStructPointer(SegmentBuilder* segment, WirePointer* ref, StructReader value) {
-    WordCount dataSize = roundUpToWords(value.dataSize);
+    WordCount dataSize = roundBitsUpToWords(value.dataSize);
     WordCount totalSize = dataSize + value.pointerCount * WORDS_PER_POINTER;
 
     word* ptr = allocate(ref, segment, totalSize, WirePointer::STRUCT);
@@ -1354,7 +1354,7 @@ struct WireHelpers {
   }
 
   static void setListPointer(SegmentBuilder* segment, WirePointer* ref, ListReader value) {
-    WordCount totalSize = roundUpToWords(value.elementCount * value.step);
+    WordCount totalSize = roundBitsUpToWords(value.elementCount * value.step);
 
     if (value.step * ELEMENTS <= BITS_PER_WORD * WORDS) {
       // List of non-structs.
@@ -1391,7 +1391,7 @@ struct WireHelpers {
       word* ptr = allocate(ref, segment, totalSize + POINTER_SIZE_IN_WORDS, WirePointer::LIST);
       ref->listRef.setInlineComposite(totalSize);
 
-      WordCount dataSize = roundUpToWords(value.structDataSize);
+      WordCount dataSize = roundBitsUpToWords(value.structDataSize);
       WirePointerCount pointerCount = value.structPointerCount;
 
       WirePointer* tag = reinterpret_cast<WirePointer*>(ptr);
@@ -1588,7 +1588,7 @@ struct WireHelpers {
       auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
 
       KJ_REQUIRE(boundsCheck(segment, ptr, ptr +
-                     roundUpToWords(ElementCount64(ref->listRef.elementCount()) * step)),
+                     roundBitsUpToWords(ElementCount64(ref->listRef.elementCount()) * step)),
                  "Message contains out-of-bounds list pointer.") {
         goto useDefault;
       }
@@ -1645,7 +1645,7 @@ struct WireHelpers {
       }
 
       KJ_REQUIRE(boundsCheck(segment, ptr, ptr +
-                     roundUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))),
+                     roundBytesUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))),
                  "Message contained out-of-bounds text pointer.") {
         goto useDefault;
       }
@@ -1692,7 +1692,7 @@ struct WireHelpers {
       }
 
       KJ_REQUIRE(boundsCheck(segment, ptr, ptr +
-                     roundUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))),
+                     roundBytesUpToWords(ref->listRef.elementCount() * (1 * BYTES / ELEMENTS))),
                  "Message contained out-of-bounds data pointer.") {
         goto useDefault;
       }
@@ -1785,7 +1785,7 @@ struct WireHelpers {
           WirePointerCount pointerCount = pointersPerElement(elementSize) * ELEMENTS;
           auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
           ElementCount elementCount = ref->listRef.elementCount();
-          WordCount wordCount = roundUpToWords(ElementCount64(elementCount) * step);
+          WordCount wordCount = roundBitsUpToWords(ElementCount64(elementCount) * step);
 
           KJ_REQUIRE(boundsCheck(segment, ptr, ptr + wordCount),
                      "Message contains out-of-bounds list pointer.") {
@@ -1978,7 +1978,7 @@ bool StructReader::isPointerFieldNull(WirePointerCount ptrIndex) const {
 }
 
 WordCount64 StructReader::totalSize() const {
-  WordCount64 result = WireHelpers::roundUpToWords(dataSize) + pointerCount * WORDS_PER_POINTER;
+  WordCount64 result = WireHelpers::roundBitsUpToWords(dataSize) + pointerCount * WORDS_PER_POINTER;
 
   for (uint i = 0; i < pointerCount / POINTERS; i++) {
     result += WireHelpers::totalSize(segment, pointers + i, nestingLimit);
