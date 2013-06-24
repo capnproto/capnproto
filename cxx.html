@@ -241,7 +241,21 @@
 
 <p>This will create <code>myproto.capnp.h</code> and <code>myproto.capnp.c++</code> in the same directory as <code>myproto.capnp</code>.</p>
 
-<h2 id='primitive_types'>Primitive Types</h2>
+<h3 id='setting_a_namespace'>Setting a Namespace</h3>
+
+<p>You probably want your generated types to live in a C++ namespace. You will need to import <code>/capnp/c++.capnp</code> and use the <code>namespace</code> annotation it defines:</p>
+<div class='highlight'><pre><code class='capnp'><span class='k'>using</span> <span class='n'>Cxx</span> <span class='l'>= import &quot;/capnp/c++.capnp&quot;</span>;
+<span class='na'>$Cxx.namespace(&quot;foo::bar::baz&quot;)</span>;
+</code></pre></div>
+<p>Note that for this to work, <code>capnp/c++.capnp</code> must be located in the search path specified with <code>-I</code> options. This file is found in the Cap&#8217;n Proto source repo, so you could invoke <code>capnpc</code> like so:</p>
+
+<pre><code>capnpc -I$CAPNPROTO_GIT_ROOT/c++/src -oc++ myproto.capnp</code></pre>
+
+<p>As of this writing, the file is not automatically installed anywhere, but in the future it will be.</p>
+
+<h2 id='types'>Types</h2>
+
+<h3 id='primitive_types'>Primitive Types</h3>
 
 <p>Primitive types map to the obvious C++ types:</p>
 
@@ -259,7 +273,7 @@
 <li><code>Void</code> -&gt; <code>::capnp::Void</code> (An enum with one value: <code>::capnp::Void::VOID</code>)</li>
 </ul>
 
-<h2 id='structs'>Structs</h2>
+<h3 id='structs'>Structs</h3>
 
 <p>For each struct <code>Foo</code> in your interface, a C++ type named <code>Foo</code> generated. This type itself is really just a namespace; it contains two important inner classes: <code>Reader</code> and <code>Builder</code>.</p>
 
@@ -317,13 +331,13 @@
 <span class='kt'>void</span> <span class='nf'>setMyListField</span><span class='p'>(</span><span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;::</span><span class='n'>Reader</span> <span class='n'>value</span><span class='p'>);</span>
 <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>initMyListField</span><span class='p'>(</span><span class='kt'>size_t</span> <span class='n'>size</span><span class='p'>);</span>
 </code></pre></div>
-<h2 id='unions'>Unions</h2>
+<h3 id='unions'>Unions</h3>
 
 <p>For each union <code>foo</code> declared in the struct, the struct&#8217;s reader and builder have a method <code>getFoo()</code> which returns a reader/builder for the union. The union reader/builder has accessors for each field exactly like a struct&#8217;s accessors. It also has an accessor <code>which()</code> which returns an enum indicating which member of the union is currently set. Setting any member of the union updates the value returned by <code>which()</code>. Getting a member other than the currently-set member crashes in debug mode or returns garbage when <code>NDEBUG</code> is defined.</p>
 
 <p>See the <a href='#example_usage'>example</a> at the top of the page for an example of unions.</p>
 
-<h2 id='lists'>Lists</h2>
+<h3 id='lists'>Lists</h3>
 
 <p>Lists are represented by the type <code>capnp::List&lt;T&gt;</code>, where <code>T</code> is any of the primitive types, any Cap&#8217;n Proto user-defined type, <code>capnp::Text</code>, <code>capnp::Data</code>, or <code>capnp::List&lt;U&gt;</code> (to form a list of lists).</p>
 
@@ -335,7 +349,7 @@
 
 <p>For lists of lists or lists of blobs, the builder also has a method <code>init(index, size)</code> which sets the element at the given index to a newly-allocated value with the given size and returns a builder for it. Struct lists do not have an <code>init</code> method because all elements are initialized to empty values when the list is created.</p>
 
-<h2 id='enums'>Enums</h2>
+<h3 id='enums'>Enums</h3>
 
 <p>Cap&#8217;n Proto enums become C++11 &#8220;enum classes&#8221;. That means they behave like any other enum, but the enum&#8217;s values are scoped within the type. E.g. for an enum <code>Foo</code> with value <code>bar</code>, you must refer to the value as <code>Foo::BAR</code>.</p>
 
@@ -343,11 +357,11 @@
 
 <p>Keep in mind when writing <code>switch</code> blocks that an enum read off the wire may have a numeric value that is not listed in its definition. This may be the case if the sender is using a newer version of the protocol, or if the message is corrupt or malicious. In C++11, enums are allowed to have any value that is within the range of their base type, which for Cap&#8217;n Proto enums is <code>uint16_t</code>.</p>
 
-<h2 id='blobs_text_and_data'>Blobs (Text and Data)</h2>
+<h3 id='blobs_text_and_data'>Blobs (Text and Data)</h3>
 
 <p>Blobs are manipulated using the classes <code>capnp::Text</code> and <code>capnp::Data</code>. These classes are, again, just containers for inner classes <code>Reader</code> and <code>Builder</code>. These classes are iterable and implement <code>size()</code> and <code>operator[]</code> methods. <code>Builder::operator[]</code> even returns a reference (unlike with <code>List&lt;T&gt;</code>). <code>Text::Reader</code> additionally has a method <code>cStr()</code> which returns a NUL-terminated <code>const char*</code>.</p>
 
-<h2 id='interfaces'>Interfaces</h2>
+<h3 id='interfaces'>Interfaces</h3>
 
 <p>Interfaces (RPC) are not yet implemented at this time.</p>
 
@@ -360,18 +374,6 @@
 <p>Note that if your stream contains additional data after the message, <code>PackedFdMessageReader</code> may accidentally read some of that data, since it does buffered I/O. To make this work correctly, you will need to set up a multi-use buffered stream. Buffered I/O may also be a good idea with <code>StreamFdMessageReader</code> and also when writing, for performance reasons. See <code>capnp/io.h</code> for details.</p>
 
 <p>There is an <a href='#example_usage'>example</a> of all this at the beginning of this page.</p>
-
-<h2 id='setting_a_namespace'>Setting a Namespace</h2>
-
-<p>You probably want your generated types to live in a C++ namespace. You will need to import <code>/capnp/c++.capnp</code> and use the <code>namespace</code> annotation it defines:</p>
-<div class='highlight'><pre><code class='capnp'><span class='n'>Cxx</span> <span class='l'>= import &quot;/capnp/c++.capnp&quot;</span>;
-<span class='na'>$Cxx.namespace(&quot;foo::bar::baz&quot;)</span>;
-</code></pre></div>
-<p>Note that for this to work, <code>capnp/c++.capnp</code> must be located in the search path specified with <code>-I</code> options. This file is found in the Cap&#8217;n Proto source repo, so you could invoke <code>capnpc</code> like so:</p>
-
-<pre><code>capnpc -I$CAPNPROTO_GIT_ROOT/c++/src -oc++ myproto.capnp</code></pre>
-
-<p>As of this writing, the file is not automatically installed anywhere, but in the future it will be.</p>
 
 <h2 id='dynamic_reflection'>Dynamic Reflection</h2>
 
@@ -574,7 +576,7 @@ capnp/dynamic.h</code></pre>
 
 <ul>
 <li>
-<p>Protobuf generated code is enormous due to the parsing and serializing code generated for every class. This actually poses a significant problem in practice &#8211; there exist server binaries containing literally hundreds of megabytes of compiled protobuf code. Cap&#8217;n Proto generated code, on the other hand, is almost entirely inlined accessors. The only things that go into <code>.capnp.o</code> files are default values for pointer fields, and only if they have non-empty defaults (which are unusual). (Eventually, the object files may also contain type descriptors, but those should also be small.)</p>
+<p>Protobuf generated code is enormous due to the parsing and serializing code generated for every class. This actually poses a significant problem in practice &#8211; there exist server binaries containing literally hundreds of megabytes of compiled protobuf code. Cap&#8217;n Proto generated code, on the other hand, is almost entirely inlined accessors. The only things that go into <code>.capnp.o</code> files are default values for pointer fields (if needed, which is rare) and the encoded schema (just the raw bytes of a Cap&#8217;n-Proto-encoded schema structure). The latter could even be removed if you don&#8217;t use dynamic reflection.</p>
 </li>
 
 <li>
