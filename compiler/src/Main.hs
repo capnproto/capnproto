@@ -54,6 +54,8 @@ import WireFormat(encodeSchema)
 
 import CxxGenerator(generateCxx)
 
+version = "Cap'n Proto Compiler 0.1.0-pre (from git)"
+
 type GeneratorFn = [FileDesc] -> [Word8] -> Map.Map Word64 [Word8] -> IO [(FilePath, LZ.ByteString)]
 
 generatorFns :: Map.Map String GeneratorFn
@@ -64,6 +66,7 @@ data Opt = SearchPathOpt FilePath
          | SrcPrefixOpt String
          | VerboseOpt
          | HelpOpt
+         | VersionOpt
          | GenIdOpt
 
 main :: IO ()
@@ -84,6 +87,7 @@ main = do
          , Option "v" ["verbose"] (NoArg VerboseOpt) "Write information about parsed files."
          , Option "i" ["generate-id"] (NoArg GenIdOpt) "Generate a new unique ID."
          , Option "h" ["help"] (NoArg HelpOpt) "Print usage info and exit."
+         , Option "" ["version"] (NoArg VersionOpt) "Print version number and exit."
          ]
     let usage = usageInfo
          "capnpc [OPTION]... [FILE]...\n\
@@ -104,6 +108,11 @@ main = do
     let isHelp = not $ null [opt | opt@HelpOpt <- options]
     when isHelp (do
         putStr usage
+        exitSuccess)
+
+    let isVersion = not $ null [opt | opt@VersionOpt <- options]
+    when isVersion (do
+        putStr (version ++ "\n")
         exitSuccess)
 
     let isGenId = not $ null [opt | opt@GenIdOpt <- options]
