@@ -23,7 +23,6 @@
 
 #include "serialize.h"
 #include <kj/debug.h>
-#include "test.capnp.h"
 #include <gtest/gtest.h>
 #include <string>
 #include <stdlib.h>

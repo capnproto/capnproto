@@ -22,7 +22,6 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "serialize-packed.h"
-#include "test.capnp.h"
 #include <kj/debug.h>
 #include <gtest/gtest.h>
 #include <string>

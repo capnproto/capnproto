@@ -47,7 +47,7 @@ import qualified Data.Map as Map
 import qualified Data.ByteString.Lazy.Char8 as LZ
 import Data.ByteString(unpack, pack, hPut)
 import Data.Word(Word64, Word8)
-import Data.Maybe(fromMaybe, catMaybes)
+import Data.Maybe(fromMaybe, catMaybes, mapMaybe)
 import Data.Function(on)
 import Semantics
 import WireFormat(encodeSchema)
@@ -61,6 +61,7 @@ generatorFns = Map.fromList [ ("c++", generateCxx) ]
 
 data Opt = SearchPathOpt FilePath
          | OutputOpt String GeneratorFn FilePath
+         | SrcPrefixOpt String
          | VerboseOpt
          | HelpOpt
          | GenIdOpt
@@ -70,11 +71,16 @@ main = do
     let optionDescs =
          [ Option "I" ["import-path"] (ReqArg SearchPathOpt "DIR")
              "Search DIR for absolute imports."
+         , Option "" ["src-prefix"] (ReqArg SrcPrefixOpt "PREFIX")
+             "Prefix directory to strip off of source\n\
+             \file names before generating output file\n\
+             \names."
          , Option "o" ["output"] (ReqArg parseOutputArg "LANG[:DIR]")
              ("Generate output for language LANG\n\
               \to directory DIR (default: current\n\
               \directory).  LANG may be any of:\n\
-              \  " ++ unwords (Map.keys generatorFns))
+              \  " ++ unwords (Map.keys generatorFns) ++ "\n\
+              \or a plugin name.")
          , Option "v" ["verbose"] (NoArg VerboseOpt) "Write information about parsed files."
          , Option "i" ["generate-id"] (NoArg GenIdOpt) "Generate a new unique ID."
          , Option "h" ["help"] (NoArg HelpOpt) "Print usage info and exit."
@@ -114,6 +120,11 @@ main = do
     --   these hard-coded default paths.
     let searchPath = ["/usr/local/include", "/usr/include"] ++
                      [dir | SearchPathOpt dir <- options]
+        srcPrefixes = [addTrailingSlash prefix | SrcPrefixOpt prefix <- options]
+        addTrailingSlash path =
+            if not (null path) && last path /= '/'
+                then path ++ "/"
+                else path
 
     let verifyDirectoryExists dir = do
         exists <- doesDirectoryExist dir
@@ -143,7 +154,7 @@ main = do
             \be easy enough to grep, right?"
         exitFailure)
 
-    mapM_ (doOutput requestedFiles schema schemaMap) outputs
+    mapM_ (doOutput requestedFiles srcPrefixes schema schemaMap) outputs
 
     when failed exitFailure
 
@@ -293,9 +304,12 @@ handleFile isVerbose searchPath filename = do
         Right _ -> return Nothing
         Left desc -> return $ Just desc
 
-doOutput requestedFiles schema schemaMap output = do
+doOutput requestedFiles srcPrefixes schema schemaMap output = do
     let write dir (name, content) = do
-            let outFilename = dir ++ "/" ++ name
+            let strippedOptions = mapMaybe (flip List.stripPrefix name) srcPrefixes
+                stripped = if null strippedOptions then name else
+                    List.minimumBy (compare `on` length) strippedOptions
+                outFilename = dir ++ "/" ++ stripped
             createDirectoryIfMissing True $ takeDirectory outFilename
             LZ.writeFile outFilename content
         generate (generatorFn, dir) = do

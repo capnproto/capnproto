@@ -4,15 +4,11 @@ ACLOCAL_AMFLAGS = -I m4
 
 AUTOMAKE_OPTIONS = foreign
 
-AM_CXXFLAGS = -I$(srcdir)/src
+AM_CXXFLAGS = -I$(srcdir)/src -I$(builddir)/src
 
 EXTRA_DIST =                                                                 \
   README.txt                                                                 \
-  INSTALL.txt                                                                \
-  COPYING.txt                                                                \
-  CONTRIBUTORS.txt                                                           \
-  CHANGES.txt                                                                \
-  $(capnpc_inputs)                                                           \
+  LICENSE.txt                                                                \
   $(test_capnpc_inputs)
 
 CLEANFILES = $(capnpc_outputs) $(test_capnpc_outputs) capnpc_middleman test_capnpc_middleman
@@ -46,12 +42,20 @@ maintainer-clean-local:
 # unexpectedly overwritten!  We need to cancel the implicit rule by declaring an explicit one.
 #
 # I want the hours of my life back that I spent figuring this out.
-$(capnpc_inputs) $(test_capnpc_inputs):
-	:
+%.capnp:
+	@:
 
-capnpc_inputs =                                                \
+# Implicit rules for invoking capnpc.
+%.capnp.h: %.capnp
+	$(CAPNPC) --src-prefix=$(srcdir) -oc++ $^
+%.capnp.c++: %.capnp.h
+	@:
+
+public_capnpc_inputs =                                         \
   src/capnp/c++.capnp                                          \
   src/capnp/schema.capnp
+
+capnpc_inputs = $(public_capnpc_inputs)
 
 capnpc_outputs =                                               \
   src/capnp/c++.capnp.c++                                      \
@@ -59,18 +63,10 @@ capnpc_outputs =                                               \
   src/capnp/schema.capnp.c++                                   \
   src/capnp/schema.capnp.h
 
-capnpc_middleman: $(capnpc_inputs)
-	$(CAPNPC) -oc++ $(capnpc_inputs)
-	touch capnpc_middleman
-
-$(capnpc_outputs): capnpc_middleman
-
 includecapnpdir = $(includedir)/capnp
 includekjdir = $(includedir)/kj
 
-dist_includecapnp_DATA =                                       \
-  src/capnp/c++.capnp                                          \
-  src/capnp/schema.capnp
+dist_includecapnp_DATA = $(public_capnpc_inputs)
 
 includekj_HEADERS =                                            \
   src/kj/common.h                                              \
@@ -147,12 +143,6 @@ test_capnpc_outputs =                                          \
   src/capnp/test.capnp.h                                       \
   src/capnp/test-import.capnp.c++                              \
   src/capnp/test-import.capnp.h
-
-test_capnpc_middleman: $(test_capnpc_inputs)
-	$(CAPNPC) -oc++ $(test_capnpc_inputs)
-	touch test_capnpc_middleman
-
-$(test_capnpc_outputs): test_capnpc_middleman
 
 BUILT_SOURCES = $(test_capnpc_outputs) $(capnpc_outputs)
 

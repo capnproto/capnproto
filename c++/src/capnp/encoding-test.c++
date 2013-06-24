@@ -21,7 +21,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "test-import.capnp.h"
+#include <capnp/test-import.capnp.h>
 #include "message.h"
 #include <kj/debug.h>
 #include <gtest/gtest.h>

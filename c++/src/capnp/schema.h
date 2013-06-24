@@ -24,7 +24,7 @@
 #ifndef CAPNP_SCHEMA_H_
 #define CAPNP_SCHEMA_H_
 
-#include "schema.capnp.h"
+#include <capnp/schema.capnp.h>
 
 namespace capnp {
 

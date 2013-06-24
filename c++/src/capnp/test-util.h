@@ -24,7 +24,7 @@
 #ifndef CAPNP_TEST_UTIL_H_
 #define CAPNP_TEST_UTIL_H_
 
-#include "test.capnp.h"
+#include <capnp/test.capnp.h>
 #include <iostream>
 #include "blob.h"
 #include "dynamic.h"
