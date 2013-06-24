@@ -108,7 +108,12 @@ main = do
 
     let isVerbose = not $ null [opt | opt@VerboseOpt <- options]
     let outputs = [(fn, dir) | OutputOpt _ fn dir <- options]
-    let searchPath = [dir | SearchPathOpt dir <- options]
+
+    -- TODO(someday):  We should perhaps determine the compiler binary's location and search its
+    --   ../include as well.  Also, there should perhaps be a way to tell the compiler not to search
+    --   these hard-coded default paths.
+    let searchPath = ["/usr/local/include", "/usr/include"] ++
+                     [dir | SearchPathOpt dir <- options]
 
     let verifyDirectoryExists dir = do
         exists <- doesDirectoryExist dir

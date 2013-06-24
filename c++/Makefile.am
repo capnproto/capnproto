@@ -40,6 +40,15 @@ MAINTAINERCLEANFILES =   \
 maintainer-clean-local:
 	-rm -rf build-aux
 
+# gmake defines an implicit rule building n from n.o.  Unfortunately, this triggers on our .capnp
+# files because they generate .capnp.c++ which is compiled to .capnp.o.  In addition to being
+# nonsense, this leads to cyclic dependency issues and could even cause the .capnp files to be
+# unexpectedly overwritten!  We need to cancel the implicit rule by declaring an explicit one.
+#
+# I want the hours of my life back that I spent figuring this out.
+$(capnpc_inputs) $(test_capnpc_inputs):
+	:
+
 capnpc_inputs =                                                \
   src/capnp/c++.capnp                                          \
   src/capnp/schema.capnp
@@ -50,11 +59,7 @@ capnpc_outputs =                                               \
   src/capnp/schema.capnp.c++                                   \
   src/capnp/schema.capnp.h
 
-# This should depend on $(capnpc_inputs), but then make mysteriously complains
-# about a cyclic dependency.  I don't know where it is coming from.  I rummaged
-# around in the generated Makefile a bit but couldn't figure it out.  I give
-# up.  Automake is terrible.
-capnpc_middleman:
+capnpc_middleman: $(capnpc_inputs)
 	$(CAPNPC) -oc++ $(capnpc_inputs)
 	touch capnpc_middleman
 
@@ -62,6 +67,10 @@ $(capnpc_outputs): capnpc_middleman
 
 includecapnpdir = $(includedir)/capnp
 includekjdir = $(includedir)/kj
+
+dist_includecapnp_DATA =                                       \
+  src/capnp/c++.capnp                                          \
+  src/capnp/schema.capnp
 
 includekj_HEADERS =                                            \
   src/kj/common.h                                              \
@@ -119,7 +128,8 @@ libcapnp_a_SOURCES=                                            \
   src/capnp/serialize.c++                                      \
   src/capnp/serialize-packed.c++
 nodist_libcapnp_a_SOURCES =                                    \
-  src/capnp/schema.capnp.c++
+  src/capnp/schema.capnp.c++                                   \
+  src/capnp/c++.capnp.c++
 
 # Source files intentionally not included in the dist at this time:
 #  src/capnp/serialize-snappy*
@@ -138,11 +148,7 @@ test_capnpc_outputs =                                          \
   src/capnp/test-import.capnp.c++                              \
   src/capnp/test-import.capnp.h
 
-# This should depend on $(test_capnpc_inputs), but then make mysteriously complains
-# about a cyclic dependency.  I don't know where it is coming from.  I rummaged
-# around in the generated Makefile a bit but couldn't figure it out.  I give
-# up.  Automake is terrible.
-test_capnpc_middleman:
+test_capnpc_middleman: $(test_capnpc_inputs)
 	$(CAPNPC) -oc++ $(test_capnpc_inputs)
 	touch test_capnpc_middleman
 

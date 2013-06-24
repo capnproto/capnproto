@@ -169,7 +169,28 @@ To generate C++ code from your `.capnp` [interface definition](language.html), r
 
 This will create `myproto.capnp.h` and `myproto.capnp.c++` in the same directory as `myproto.capnp`.
 
-## Primitive Types
+### Setting a Namespace
+
+You probably want your generated types to live in a C++ namespace.  You will need to import
+`/capnp/c++.capnp` and use the `namespace` annotation it defines:
+
+{% highlight capnp %}
+using Cxx = import "/capnp/c++.capnp";
+$Cxx.namespace("foo::bar::baz");
+{% endhighlight %}
+
+Note that for this to work, `capnp/c++.capnp` must be located in the search path specified with
+`-I` options.  This file is found in the Cap'n Proto source repo, so you could invoke `capnpc` like
+so:
+
+    capnpc -I$CAPNPROTO_GIT_ROOT/c++/src -oc++ myproto.capnp
+
+As of this writing, the file is not automatically installed anywhere, but in the future it will
+be.
+
+## Types
+
+### Primitive Types
 
 Primitive types map to the obvious C++ types:
 
@@ -180,7 +201,7 @@ Primitive types map to the obvious C++ types:
 * `Float64` -> `double`
 * `Void` -> `::capnp::Void` (An enum with one value: `::capnp::Void::VOID`)
 
-## Structs
+### Structs
 
 For each struct `Foo` in your interface, a C++ type named `Foo` generated.  This type itself is
 really just a namespace; it contains two important inner classes:  `Reader` and `Builder`.
@@ -253,7 +274,7 @@ void setMyListField(::capnp::List<double>::Reader value);
 ::capnp::List<double>::Builder initMyListField(size_t size);
 {% endhighlight %}
 
-## Unions
+### Unions
 
 For each union `foo` declared in the struct, the struct's reader and builder have a method
 `getFoo()` which returns a reader/builder for the union.  The union reader/builder has accessors
@@ -264,7 +285,7 @@ crashes in debug mode or returns garbage when `NDEBUG` is defined.
 
 See the [example](#example_usage) at the top of the page for an example of unions.
 
-## Lists
+### Lists
 
 Lists are represented by the type `capnp::List<T>`, where `T` is any of the primitive types,
 any Cap'n Proto user-defined type, `capnp::Text`, `capnp::Data`, or `capnp::List<U>`
@@ -289,7 +310,7 @@ the element at the given index to a newly-allocated value with the given size an
 for it.  Struct lists do not have an `init` method because all elements are initialized to empty
 values when the list is created.
 
-## Enums
+### Enums
 
 Cap'n Proto enums become C++11 "enum classes".  That means they behave like any other enum, but
 the enum's values are scoped within the type.  E.g. for an enum `Foo` with value `bar`, you must
@@ -304,7 +325,7 @@ version of the protocol, or if the message is corrupt or malicious.  In C++11, e
 to have any value that is within the range of their base type, which for Cap'n Proto enums is
 `uint16_t`.
 
-## Blobs (Text and Data)
+### Blobs (Text and Data)
 
 Blobs are manipulated using the classes `capnp::Text` and `capnp::Data`.  These classes are,
 again, just containers for inner classes `Reader` and `Builder`.  These classes are iterable and
@@ -312,7 +333,7 @@ implement `size()` and `operator[]` methods.  `Builder::operator[]` even returns
 (unlike with `List<T>`).  `Text::Reader` additionally has a method `cStr()` which returns a
 NUL-terminated `const char*`.
 
-## Interfaces
+### Interfaces
 
 Interfaces (RPC) are not yet implemented at this time.
 
@@ -336,25 +357,6 @@ will need to set up a multi-use buffered stream.  Buffered I/O may also be a goo
 details.
 
 There is an [example](#example_usage) of all this at the beginning of this page.
-
-## Setting a Namespace
-
-You probably want your generated types to live in a C++ namespace.  You will need to import
-`/capnp/c++.capnp` and use the `namespace` annotation it defines:
-
-{% highlight capnp %}
-Cxx = import "/capnp/c++.capnp";
-$Cxx.namespace("foo::bar::baz");
-{% endhighlight %}
-
-Note that for this to work, `capnp/c++.capnp` must be located in the search path specified with
-`-I` options.  This file is found in the Cap'n Proto source repo, so you could invoke `capnpc` like
-so:
-
-    capnpc -I$CAPNPROTO_GIT_ROOT/c++/src -oc++ myproto.capnp
-
-As of this writing, the file is not automatically installed anywhere, but in the future it will
-be.
 
 ## Dynamic Reflection
 
@@ -572,9 +574,9 @@ learned the hard way:
   class.  This actually poses a significant problem in practice -- there exist server binaries
   containing literally hundreds of megabytes of compiled protobuf code.  Cap'n Proto generated code,
   on the other hand, is almost entirely inlined accessors.  The only things that go into `.capnp.o`
-  files are default values for pointer fields, and only if they have non-empty defaults (which are
-  unusual).  (Eventually, the object files may also contain type descriptors, but those should also
-  be small.)
+  files are default values for pointer fields (if needed, which is rare) and the encoded schema
+  (just the raw bytes of a Cap'n-Proto-encoded schema structure).  The latter could even be removed
+  if you don't use dynamic reflection.
 
 * The C++ Protobuf implementation used lots of dynamic initialization code (that runs before
   `main()`) to do things like register types in global tables.  This proved problematic for
