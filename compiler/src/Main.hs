@@ -151,7 +151,7 @@ main = do
         hPutStr stderr
             "IDs (16-digit hex strings prefixed with @0x) must be unique.  Sorry I'm not\n\
             \able to be more specific about where the duplicates were seen, but it should\n\
-            \be easy enough to grep, right?"
+            \be easy enough to grep, right?\n"
         exitFailure)
 
     mapM_ (doOutput requestedFiles srcPrefixes schema schemaMap) outputs
@@ -301,7 +301,9 @@ handleFile isVerbose searchPath filename = do
     result <- importFile isVerbose searchPath filename
 
     case result of
-        Right _ -> return Nothing
+        Right e -> do
+            liftIO $ hPutStr stderr (e ++ "\n")
+            return Nothing
         Left desc -> return $ Just desc
 
 doOutput requestedFiles srcPrefixes schema schemaMap output = do
