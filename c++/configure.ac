@@ -26,14 +26,15 @@ AC_PROG_CXX
 AC_LANG([C++])
 AX_CXX_COMPILE_STDCXX_11([noext])
 ACX_PTHREAD
+
 AC_PROG_LIBTOOL
 
 LIBS="$PTHREAD_LIBS $LIBS"
 CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
 
-# We need gtest to use the same CXXFLAGS, especially -std and -stdlib, so export them before
-# configuring gtest.
-export CXXFLAGS
+# AX_CXX_COMPILE_STDCXX_11 may have modified CXX, and we need gtest to use these modifications as
+# well (especially -stdlib).
+export CXX
 AC_CONFIG_SUBDIRS([gtest])
 
 AC_CONFIG_FILES([Makefile])

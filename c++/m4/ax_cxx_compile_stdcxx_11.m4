@@ -1,5 +1,6 @@
 # ============================================================================
 #  http://www.gnu.org/software/autoconf-archive/ax_cxx_compile_stdcxx_11.html
+#  Additionally modified to detect -stdlib by Kenton Varda.
 # ============================================================================
 #
 # SYNOPSIS
@@ -20,6 +21,13 @@
 #   try adding -stdlib=libc++ to see if that fixes it.  This is needed e.g.
 #   on Mac OSX 10.8, which ships with a very old libstdc++ but a relatively
 #   new libc++.
+#
+#   Both flags are actually added to CXX rather than CXXFLAGS to work around
+#   a bug in libtool: -stdlib is stripped from CXXFLAGS when linking dynamic
+#   libraries because it is not recognized.  A patch was committed to mainline
+#   libtool in February 2012 but as of June 2013 there has not yet been a
+#   release containing this patch.
+#      http://git.savannah.gnu.org/gitweb/?p=libtool.git;a=commit;h=c0c49f289f22ae670066657c60905986da3b555f
 #
 # LICENSE
 #
@@ -80,14 +88,14 @@ AC_DEFUN([AX_CXX_COMPILE_STDCXX_11], [dnl
       cachevar=AS_TR_SH([ax_cv_cxx_compile_cxx11_$switch])
       AC_CACHE_CHECK(whether $CXX supports C++11 features with $switch,
                      $cachevar,
-        [ac_save_CXXFLAGS="$CXXFLAGS"
-         CXXFLAGS="$CXXFLAGS $switch"
+        [ac_save_CXX="$CXX"
+         CXX="$CXX $switch"
          AC_COMPILE_IFELSE([AC_LANG_SOURCE([_AX_CXX_COMPILE_STDCXX_11_testbody])],
           [eval $cachevar=yes],
           [eval $cachevar=no])
-         CXXFLAGS="$ac_save_CXXFLAGS"])
+         CXX="$ac_save_CXX"])
       if eval test x\$$cachevar = xyes; then
-        CXXFLAGS="$CXXFLAGS $switch"
+        CXX="$CXX $switch"
         ac_success=yes
         break
       fi
@@ -100,14 +108,14 @@ AC_DEFUN([AX_CXX_COMPILE_STDCXX_11], [dnl
       cachevar=AS_TR_SH([ax_cv_cxx_compile_cxx11_$switch])
       AC_CACHE_CHECK(whether $CXX supports C++11 features with $switch,
                      $cachevar,
-        [ac_save_CXXFLAGS="$CXXFLAGS"
-         CXXFLAGS="$CXXFLAGS $switch"
+        [ac_save_CXX="$CXX"
+         CXX="$CXX $switch"
          AC_COMPILE_IFELSE([AC_LANG_SOURCE([_AX_CXX_COMPILE_STDCXX_11_testbody])],
           [eval $cachevar=yes],
           [eval $cachevar=no])
-         CXXFLAGS="$ac_save_CXXFLAGS"])
+         CXX="$ac_save_CXX"])
       if eval test x\$$cachevar = xyes; then
-        CXXFLAGS="$CXXFLAGS $switch"
+        CXX="$CXX $switch"
         ac_success=yes
         break
       fi
@@ -130,14 +138,14 @@ AC_DEFUN([AX_CXX_COMPILE_STDCXX_11], [dnl
       # Try with -stdlib=libc++
       AC_CACHE_CHECK(whether $CXX supports C++11 library features with -stdlib=libc++,
                      ax_cv_cxx_compile_cxx11_lib_libcxx,
-        [ac_save_CXXFLAGS="$CXXFLAGS"
-         CXXFLAGS="$CXXFLAGS -stdlib=libc++"
+        [ac_save_CXX="$CXX"
+         CXX="$CXX -stdlib=libc++"
          AC_COMPILE_IFELSE([AC_LANG_SOURCE([_AX_CXX_COMPILE_STDCXX_11_testbody_lib])],
           [eval ax_cv_cxx_compile_cxx11_lib_libcxx=yes],
           [eval ax_cv_cxx_compile_cxx11_lib_libcxx=no])
-         CXXFLAGS="$ac_save_CXXFLAGS"])
+         CXX="$ac_save_CXX"])
       if eval test x$ax_cv_cxx_compile_cxx11_lib_libcxx = xyes; then
-        CXXFLAGS="$CXXFLAGS -stdlib=libc++"
+        CXX="$CXX -stdlib=libc++"
         ac_success=yes
         break
       fi
