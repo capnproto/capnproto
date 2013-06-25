@@ -23,13 +23,18 @@ AM_INIT_AUTOMAKE
 # Checks for programs.
 AC_PROG_CC
 AC_PROG_CXX
-AC_PROG_RANLIB
 AC_LANG([C++])
 AX_CXX_COMPILE_STDCXX_11([noext])
 ACX_PTHREAD
+AC_PROG_LIBTOOL
 
 LIBS="$PTHREAD_LIBS $LIBS"
 CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
+
+# We need gtest to use the same CXXFLAGS, especially -std and -stdlib, so export them before
+# configuring gtest.
+export CXXFLAGS
+AC_CONFIG_SUBDIRS([gtest])
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

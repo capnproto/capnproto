@@ -4,6 +4,35 @@ ACLOCAL_AMFLAGS = -I m4
 
 AUTOMAKE_OPTIONS = foreign
 
+# Always include gtest in distributions.
+DIST_SUBDIRS = $(subdirs)
+
+# Build gtest before we build Cap'n Proto tests.  We don't add gtest to SUBDIRS
+# because then "make check" would also build and run all of gtest's own tests,
+# which takes a lot of time and is generally not useful to us.  Also, we don't
+# want "make install" to recurse into gtest since we don't want to overwrite
+# the installed version of gtest if there is one (and, actually, gtest doesn't
+# even support "make install" anyway).  So we define a rule such that it will
+# only be built when needed.
+gtest/lib/libgtest.la:
+	@echo "Making lib/libgtest.a lib/libgtest_main.a in gtest"
+	@cd gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la
+
+gtest/lib/libgtest_main.la: gtest/lib/libgtest.la
+	@:
+
+# We would like to clean gtest when "make clean" is invoked.  But we have to
+# be careful because clean-local is also invoked during "make distclean", but
+# "make distclean" already recurses into gtest because it's listed among the
+# DIST_SUBDIRS.  distclean will delete gtest/Makefile, so if we then try to
+# cd to the directory again and "make clean" it will fail.  So, check that the
+# Makefile exists before recursing.
+clean-local:
+	@if test -e gtest/Makefile; then \
+	  echo "Making clean in gtest"; \
+	  cd gtest && $(MAKE) $(AM_MAKEFLAGS) clean; \
+	fi
+
 AM_CXXFLAGS = -I$(srcdir)/src -I$(builddir)/src
 
 EXTRA_DIST =                                                                 \
@@ -97,12 +126,10 @@ includecapnp_HEADERS =                                         \
 nodist_includecapnp_HEADERS =                                  \
   src/capnp/schema.capnp.h
 
-# No dynamic library for now since C++ binary compatibility is hard.
-# It may make more sense to have every module statically link Cap'n Proto
-# and pass around messages via memory pointers.
-lib_LIBRARIES = libcapnp.a
+lib_LTLIBRARIES = libcapnp.la
 
-libcapnp_a_SOURCES=                                            \
+libcapnp_la_LDFLAGS = -release $(VERSION) -export-dynamic -no-undefined
+libcapnp_la_SOURCES=                                           \
   src/kj/common.c++                                            \
   src/kj/units.c++                                             \
   src/kj/memory.c++                                            \
@@ -123,7 +150,7 @@ libcapnp_a_SOURCES=                                            \
   src/capnp/stringify.c++                                      \
   src/capnp/serialize.c++                                      \
   src/capnp/serialize-packed.c++
-nodist_libcapnp_a_SOURCES =                                    \
+nodist_libcapnp_la_SOURCES =                                   \
   src/capnp/schema.capnp.c++                                   \
   src/capnp/c++.capnp.c++
 
@@ -147,7 +174,8 @@ test_capnpc_outputs =                                          \
 BUILT_SOURCES = $(test_capnpc_outputs) $(capnpc_outputs)
 
 check_PROGRAMS = capnp-test
-capnp_test_LDADD = -lgtest -lgtest_main libcapnp.a
+capnp_test_LDADD = gtest/lib/libgtest.la gtest/lib/libgtest_main.la libcapnp.la
+capnp_test_CPPFLAGS = -Igtest/include -I$(srcdir)/gtest/include
 capnp_test_SOURCES =                                           \
   src/kj/common-test.c++                                       \
   src/kj/memory-test.c++                                       \

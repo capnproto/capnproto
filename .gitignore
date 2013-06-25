@@ -24,6 +24,9 @@
 # setup-ekam.sh
 /c++/.ekam
 
+# setup-autotools.sh
+/c++/gtest
+
 # Jekyll-generated site
 /doc/_site
 
