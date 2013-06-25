@@ -54,7 +54,7 @@ import WireFormat(encodeSchema)
 
 import CxxGenerator(generateCxx)
 
-version = "Cap'n Proto Compiler 0.1.0-pre (from git)"
+version = "Cap'n Proto Compiler 0.1-dev (from git)"
 
 type GeneratorFn = [FileDesc] -> [Word8] -> Map.Map Word64 [Word8] -> IO [(FilePath, LZ.ByteString)]
 
