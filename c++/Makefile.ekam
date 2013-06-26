@@ -27,5 +27,8 @@ continuous-opt:
 continuous-opt3:
 	CXXFLAGS="$(EXTRA_FLAG) -std=c++11 -O3 -DNDEBUG -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
 
+continuous-opts:
+	CXXFLAGS="$(EXTRA_FLAG) -std=c++11 -Os -DNDEBUG -Wall" LIBS='-lz -pthread' $(EKAM) -j6 -c -n :51315
+
 clean:
 	rm -rf bin lib tmp

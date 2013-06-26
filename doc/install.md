@@ -173,7 +173,7 @@ That said, Cap'n Proto does have a small suite of silly benchmarks used to valid
 
 The Ekam build will put the benchmark binaries in `tmp/capnp/benchmark`.
 
-    tmp/capnp/benchmark
+    tmp/capnp/benchmark/runner
 
 This runs the default test case, CatRank.  CatRank simulates a search engine scoring algorithm
 which promotes pages that discuss cats (and demotes ones discussing dogs).  A list of up to 1000
@@ -184,7 +184,7 @@ result list sorted by score.
 This test case is very string-heavy.  Cap'n Proto performs well due to its zero-copy strings, but
 packing the message doesn't help much.
 
-    tmp/capnp/benchmark eval
+    tmp/capnp/benchmark/runner eval
 
 In this test case, the client generates a random, deeply-nested arithmetic expression for the
 server to evaluate.  This case is a pathologically bad case for Cap'n Proto as it involves lots of
@@ -192,7 +192,7 @@ pointers with relatively little actual data.  When packing is enabled it actuall
 Protobufs by a little bit on CPU time (as of this writing, at least; it'll probably get better with
 optimization).
 
-    tmp/capnp/benchmark carsales
+    tmp/capnp/benchmark/runner carsales
 
 This test case involves sending to the server a description of a bunch of cars, and asks the server
 to decide how much the lot is worth.  This case is very number-heavy, and because of this
