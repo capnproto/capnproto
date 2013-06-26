@@ -17,6 +17,9 @@ if [ $# -gt 0 ]; then
     fi
     HOST=$2
     shift 2
+    echo "========================================================================="
+    echo "Pushing code to $HOST..."
+    echo "========================================================================="
     ssh $HOST 'rm -rf tmp-test-capnp && mkdir tmp-test-capnp && git init tmp-test-capnp'
     git push ssh://$HOST/~/tmp-test-capnp master:test
     ssh $HOST "cd tmp-test-capnp && git checkout test && ./super-test.sh $@ && cd .. && rm -rf tmp-test-capnp"
@@ -134,6 +137,9 @@ if [ "x`uname`" == xDarwin ]; then
     exit 1
   fi
   export CXX=~/clang-3.2/bin/clang++
+  SAMPLE_CXXFLAGS=-stdlib=libc++
+else
+  SAMPLE_CXXFLAGS=
 fi
 
 cd c++
@@ -150,7 +156,7 @@ doit make install
 
 cd samples
 doit capnpc -oc++ addressbook.capnp -I"$STAGING"/include
-doit ${CXX:-g++} -std=c++11 -I"$STAGING"/include -L"$STAGING"/lib \
+doit ${CXX:-g++} -std=c++11 $SAMPLE_CXXFLAGS -I"$STAGING"/include -L"$STAGING"/lib \
     addressbook.c++ addressbook.capnp.c++ -lcapnp -o addressbook
 echo "@@@@ ./addressbook (in various configurations)"
 ./addressbook write | ./addressbook read
