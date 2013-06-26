@@ -247,11 +247,7 @@
 <div class='highlight'><pre><code class='capnp'><span class='k'>using</span> <span class='n'>Cxx</span> <span class='l'>= import &quot;/capnp/c++.capnp&quot;</span>;
 <span class='na'>$Cxx.namespace(&quot;foo::bar::baz&quot;)</span>;
 </code></pre></div>
-<p>Note that for this to work, <code>capnp/c++.capnp</code> must be located in the search path specified with <code>-I</code> options. This file is found in the Cap&#8217;n Proto source repo, so you could invoke <code>capnpc</code> like so:</p>
-
-<pre><code>capnpc -I$CAPNPROTO_GIT_ROOT/c++/src -oc++ myproto.capnp</code></pre>
-
-<p>As of this writing, the file is not automatically installed anywhere, but in the future it will be.</p>
+<p>Note that <code>capnp/c++.capnp</code> is installed in <code>$PREFIX/include</code> when you install the C++ runtime. <code>capnpc</code> automatically searches <code>/usr/include</code> and <code>/usr/local/include</code> for imports that start with a <code>/</code>, so it should &#8220;just work&#8221;. If you installed somewhere else, you may need to add it to the search path with the <code>-I</code> flag to <code>capnpc</code>, which works much like the compiler flag of the same name.</p>
 
 <h2 id='types'>Types</h2>
 
