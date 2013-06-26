@@ -6,11 +6,17 @@ layout: page
 
 Cap'n Proto's reference implementation is in C++.  Implementations in other languages are
 maintained by respective authors and have not been reviewed by me
-([@kentonv](https://github.com/kentonv)).  Here are some implementations I'm aware of:
+([@kentonv](https://github.com/kentonv)).  Here are the implementations I'm aware of:
+
+##### Ready To Use
+
+* [C++](cxx.html) by [@kentonv](https://github.com/kentonv) -- Official reference implementation
+
+##### Works In Progress
 
 * [C and Go](https://github.com/jmckaskill/go-capnproto) by
   [@jmckaskill](https://github.com/jmckaskill)
-* [Python wrappers for Cap'n Proto C++](https://github.com/jparyani/capnpc-python-cpp) by
+* [Python (via C extensions)](https://github.com/jparyani/capnpc-python-cpp) by
   [@jparyani](https://github.com/jparyani)
 
 ## Contribute Your Own!
