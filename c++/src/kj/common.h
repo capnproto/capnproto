@@ -47,7 +47,9 @@
       #warning "This library requires at least Clang 3.2.  XCode 4.6's Clang, which claims to be "\
                "version 4.2 (wat?), is actually built from some random SVN revision between 3.1 "\
                "and 3.2.  Unfortunately, it is insufficient for compiling this library.  You can "\
-               "download the real Clang 3.2 (or newer) from the Clang web site."
+               "download the real Clang 3.2 (or newer) from the Clang web site.  Step-by-step "\
+               "instructions can be found in Cap'n Proto's documentation: "\
+               "http://kentonv.github.io/capnproto/install.html#clang_32_on_mac_osx"
     #elif __cplusplus >= 201103L && !__has_include(<initializer_list>)
       #warning "Your compiler supports C++11 but your C++ standard library does not.  If your "\
                "system has libc++ installed (as should be the case on e.g. Mac OSX), try adding "\

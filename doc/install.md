@@ -61,6 +61,74 @@ need to set the environment variable `CXX=g++-4.7` before following the instruct
 If you are using Clang, you must use at least version 3.2.  To use Clang, set the environment
 variable `CXX=clang++` before following any instructions below, otherwise `g++` is used by default.
 
+##### Clang 3.2 on Mac OSX
+
+As of this writing, Mac OSX 10.8 with Xcode 4.6 command-line tools is not quite good enough to
+compile Cap'n Proto.  The included version of GCC is ancient.  The included version of Clang --
+which mysteriously advertises itself as version 4.2 -- was actually cut from LLVM SVN somewhere
+between versions 3.1 and 3.2; it is not sufficient to build Cap'n Proto.
+
+There are two options:
+
+1. Use [Macports](http://www.macports.org/) or [Fink](http://www.finkproject.org/) to get an
+   up-to-date GCC.
+2. Obtain Clang 3.2 (or better)
+   [directly from the LLVM project](http://llvm.org/releases/download.html).
+
+Option 2 is the one preferred by Cap'n Proto's developers.  Here are step-by-step instructions
+for setting this up:
+
+1. Get the Xcode command-line tools.  Download Xcode from the app store.  Then, open Xcode,
+   go to Xcode menu > Preferences > Downloads, and choose to install "Command Line Tools".
+2. Download the Clang 3.2 binaries and put them somewhere easy to remember:
+
+       curl -O http://llvm.org/releases/3.2/clang+llvm-3.2-x86_64-apple-darwin11.tar.gz
+       tar zxf clang+llvm-3.2-x86_64-apple-darwin11.tar.gz
+       mv clang+llvm-3.2-x86_64-apple-darwin11 ~/clang-3.2
+
+3. We will need to use libc++ (from LLVM) rather than libstdc++ (from GNU) because Xcode's
+   libstdc++ (like its GCC) is too old.  In order for your freshly-downloaded Clang binaries to
+   be able to find it, you'll need to symlink it into the Clang tree:
+
+       ln -s /usr/lib/c++ ~/clang-3.2/lib/c++
+
+You may now follow the instructions below, but make sure to tell `configure` to use your
+newly-downloaded Clang binary:
+
+    ./configure CXX=~/clang-3.2/bin/clang++
+
+Hopefully, Xcode 5.0 will be released soon with a newer Clang, making this extra work unnecessary.
+
+### Building from a release package
+
+If you downloaded a release version of the Cap'n Proto C++ runtime, you may build and install it
+in the usual way:
+
+    ./configure
+    make -j6 check
+    sudo make install
+
+This will install `libcapnp` in `/usr/local/lib` and headers in `/usr/local/include/capnp` and
+`/usr/local/include/kj`.
+
+### Building from Git with Autotools
+
+If you download directly from Git, and you don't want to
+[build with Ekam](install.html#building_with_ekam), you will need to have the GNU autotools --
+[autoconf](http://www.gnu.org/software/autoconf/),
+[automake](http://www.gnu.org/software/automake/), and
+[libtool](http://www.gnu.org/software/libtool/) -- installed.  You will also need Subversion
+installed (in addition to Git) in order to fetch the Google Test sources (done by
+`setup-autotools.sh`).
+
+    git clone https://github.com/kentonv/capnproto.git
+    cd capnproto/c++
+    ./setup-autotools.sh
+    autoreconf -i
+    ./configure
+    make -j6 check
+    sudo make install
+
 ### Building with Ekam
 
 Ekam is a build system I wrote a while back that automatically figures out how to build your C++
@@ -70,7 +138,7 @@ productivity, so I really like using Ekam.
 
 Unfortunately it's very much unfinished.  It works (for me), but it is quirky and rough around the
 edges.  It only works on Linux, and is best used together with Eclipse.  If you find it
-unacceptable, scroll down to the [Automake instructions](#building_with_automake).
+unacceptable, scroll up to the [Automake instructions](#building_from_git_with_autotools).
 
 The Cap'n Proto repo includes a script which will attempt to set up Ekam for you.
 
@@ -152,111 +220,3 @@ editor while building in continuous mode.  Build the plugin like so:
 
 The dashboard view lets you browse the whole tree of build actions and also populates your editor
 with error markers.
-
-### Building with Automake
-
-For these instructions you will need to have the GNU autotools --
-[autoconf](http://www.gnu.org/software/autoconf/),
-[automake](http://www.gnu.org/software/automake/), and
-[libtool](http://www.gnu.org/software/libtool/) -- installed.
-
-_If you are using Mac OSX, you'll need to follow the modified instructions in the next section._
-
-If setting up Ekam is too much work for you, you can also build with Automake.
-
-1. Make sure the [Google Test](https://googletest.googlecode.com/) headers are in your include
-   path and `libgtest.a` and `libgtest_main.a` are in your library path.  Google Test has
-   apparently decided that `make install` is evil so you have to do this somewhat manually.  :(
-
-       wget https://googletest.googlecode.com/files/gtest-1.6.0.zip
-       unzip gtest-1.6.0.zip
-       cd gtest-1.6.0
-       ./configure
-       make -j4
-       mkdir -p ~/gtest-install/include
-       mkdir -p ~/gtest-install/lib
-       cp -r include/gtest ~/gtest-install/include/gtest
-       cp lib/.libs/*.a ~/gtest-install/lib
-
-2. Clone and build the Cap'n Proto code.
-
-       git clone https://github.com/kentonv/capnproto.git
-       cd capnproto/c++
-       autoreconf -i
-       CXXFLAGS="-O2 -DNDEBUG -I$HOME/gtest-install/include" \
-           LDFLAGS="-L$HOME/gtest-install/lib" \
-           ./configure
-       make -j4 check
-       sudo make install
-
-This will install `libcapnp.a` in `/usr/local/lib` and headers in `/usr/local/include/capnp` and
-`/usr/local/include/kj`.
-
-#### Mac OSX Notes
-
-As of this writing, Mac OSX 10.8 with Xcode 4.6 command-line tools is not quite good enough to
-compile Cap'n Proto.  The included version of GCC is ancient.  The included version of Clang --
-which mysteriously advertises itself as version 4.2 -- was actually cut from LLVM SVN somewhere
-between versions 3.1 and 3.2; it is not sufficient to build Cap'n Proto.
-
-There are two options:
-
-1. Use [Macports](http://www.macports.org/) or [Fink](http://www.finkproject.org/) to get an
-   up-to-date GCC.
-2. Obtain Clang 3.2 (or better)
-   [directly from the LLVM project](http://llvm.org/releases/download.html).
-
-Option 2 is the one preferred by Cap'n Proto's developers.  However, it presents some additional
-quirks in that you will want to use libc++ (LLVM's implementation of the standard C++ library)
-rather than libstdc++ (GCC's implementation).  These problems can be worked around as described
-below.
-
-First, you need the Xcode command-line tools.  Download Xcode from the app store.  Then, open Xcode,
-go to Xcode menu > Preferences > Downloads, and choose to install "Command Line Tools".
-
-Next, download the Clang 3.2 binaries and put them somewhere easy to remember:
-
-    curl -O http://llvm.org/releases/3.2/clang+llvm-3.2-x86_64-apple-darwin11.tar.gz
-    tar zxf clang+llvm-3.2-x86_64-apple-darwin11.tar.gz
-    mv clang+llvm-3.2-x86_64-apple-darwin11 ~/clang-3.2
-
-Next, you need to symlink the system's libc++ into the clang 3.2 tree so that it can see it:
-
-    ln -s /usr/lib/c++ ~/clang-3.2/lib/c++
-
-The other problem is that if you want to run Cap'n Proto's tests (with `make check`), you will need
-to make sure Google Test is compiled with libc++.  This is further complicated by the fact that
-the latest version of Google Test (1.6) relies on `tr1` headers and namespaces, which in C++11
-(and therefore libc++) have been folded into the standand namespace.  You will need to modify the
-gtest code to strip out references to `tr1`.  Also, one of gtest's own tests uses `thread_local` as
-a variable name, but it is a keyword in C++11, so that will need to be fixed too if you happen to
-want to run gtest's tests.
-
-Thus, the gtest instructions from above become:
-
-    curl -O https://googletest.googlecode.com/files/gtest-1.6.0.zip
-    unzip gtest-1.6.0.zip
-    cd gtest-1.6.0
-    find . -type f | xargs sed -i '' -e \
-        's,<tr1/,<,g;s/::tr1::/::/g;s/thread_local/thread_local_/g'
-    CXX=clang++ CXXFLAGS="-std=c++11 -stdlib=libc++" ./configure
-    make -j4
-    mkdir -p ~/gtest-install/include
-    mkdir -p ~/gtest-install/lib
-    cp -r include/gtest ~/gtest-install/include/gtest
-    cp lib/.libs/*.a ~/gtest-install/lib
-
-At this point building Cap'n Proto is just like above, except you need to set `CXX` to the right
-compiler.
-
-     git clone https://github.com/kentonv/capnproto.git
-     cd capnproto/c++
-     autoreconf -i
-     CXX=~/clang-3.2/bin/clang++ \
-         CXXFLAGS="-O2 -DNDEBUG -I$HOME/gtest-install/include" \
-         LDFLAGS="-L$HOME/gtest-install/lib" \
-         ./configure
-     make -j4 check
-     sudo make install
-
-Phew.  Here's hoping that Xcode 5.0 and a future Google Test release will simplify all this!
