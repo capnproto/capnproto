@@ -1,8 +1,25 @@
 name:           capnproto-compiler
-version:        0.1
+version:        0.1-dev
 cabal-version:  >=1.2
 build-type:     Simple
-author:         kenton
+author:         Kenton Varda <temporal@gmail.com>
+maintainer:     capnproto@googlegroups.com
+homepage:       http://kentonv.github.io/capnproto/
+-- actually BSD2, but that's not on the list for some reason
+license:        BSD3
+license-file:   LICENSE.txt
+synopsis:       Schema parser and code generator for Cap'n Proto serialization/RPC system.
+category:       Data
+description:
+  Cap’n Proto is an insanely fast data interchange format and capability-based RPC system. Think
+  JSON, except binary. Or think Protocol Buffers, except faster. In fact, in benchmarks, Cap’n
+  Proto is INFINITY TIMES faster than Protocol Buffers.
+
+  This package is the executable tool which parses Cap'n Proto schema definitions and generates
+  corresponding source code in various target languages.  To be useful, you will also need to
+  obtain a runtime library for your target language.  These are distributed separately.
+
+  See the web site for full documentation:  http://kentonv.github.io/capnproto/
 
 -- How to get stack traces:
 -- 1. Compile normally and do not clean.
@@ -10,6 +27,11 @@ author:         kenton
 --    (TODO:  Figure out how to add these through "cabal configure" instead of by editing
 --    this file.  --enable-executable-profiling alone doesn't appear to get the job done.)
 -- 3. Run with +RTS -xc -RTS on the command line.
+
+extra-source-files:
+                   README.txt,
+                   src/c++-source.mustache,
+                   src/c++-header.mustache
 
 executable capnpc
   hs-source-dirs:  src

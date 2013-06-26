@@ -51,10 +51,9 @@ import Data.Maybe(fromMaybe, catMaybes, mapMaybe)
 import Data.Function(on)
 import Semantics
 import WireFormat(encodeSchema)
-
 import CxxGenerator(generateCxx)
-
-version = "Cap'n Proto Compiler 0.1-dev (from git)"
+import Paths_capnproto_compiler
+import Data.Version(showVersion)
 
 type GeneratorFn = [FileDesc] -> [Word8] -> Map.Map Word64 [Word8] -> IO [(FilePath, LZ.ByteString)]
 
@@ -112,7 +111,7 @@ main = do
 
     let isVersion = not $ null [opt | opt@VersionOpt <- options]
     when isVersion (do
-        putStr (version ++ "\n")
+        putStr ("Cap'n Proto Compiler " ++ showVersion Paths_capnproto_compiler.version ++ "\n")
         exitSuccess)
 
     let isGenId = not $ null [opt | opt@GenIdOpt <- options]
