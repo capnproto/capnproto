@@ -179,11 +179,11 @@ using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("foo::bar::baz");
 {% endhighlight %}
 
-Note that `capnp/c++.capnp` is installed in `$PREFIX/include` when you install the C++ runtime.
-`capnpc` automatically searches `/usr/include` and `/usr/local/include` for imports that start with
-a `/`, so it should "just work".  If you installed somewhere else, you may need to add it to the
-search path with the `-I` flag to `capnpc`, which works much like the compiler flag of the same
-name.
+Note that `capnp/c++.capnp` is installed in `$PREFIX/include` (`/usr/local/include` by default)
+when you install the C++ runtime.  `capnpc` automatically searches `/usr/include` and
+`/usr/local/include` for imports that start with a `/`, so it should "just work".  If you installed
+somewhere else, you may need to add it to the search path with the `-I` flag to `capnpc`, which
+works much like the compiler flag of the same name.
 
 ## Types
 
