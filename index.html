@@ -108,7 +108,7 @@
       </script>
       <section id="main_content" class="inner">
         <h1 id='introduction'>Introduction</h1>
-<img src='images/infinity-times-faster.png' style='width:334px; height:306px; float: right;' />
+<img style='width:334px; height:306px; float: right;' src='images/infinity-times-faster.png' />
 <p>Cap&#8217;n Proto is an insanely fast data interchange format and capability-based RPC system. Think JSON, except binary. Or think <a href='http://protobuf.googlecode.com'>Protocol Buffers</a>, except faster. In fact, in benchmarks, Cap&#8217;n Proto is INFINITY TIMES faster than Protocol Buffers.</p>
 
 <p>This benchmark is, of course, unfair. It is only measuring the time to encode and decode a message in memory. Cap&#8217;n Proto gets a perfect score because <em>there is no encoding/decoding step</em>. The Cap&#8217;n Proto encoding is appropriate both as a data interchange format and an in-memory representation, so once your structure is built, you can simply write the bytes straight out to disk!</p>
@@ -123,7 +123,7 @@
 
 <p><strong><em>Won&#8217;t fixed-width integers, unset optional fields, and padding waste space on the wire?</em></strong></p>
 
-<p>Yes. However, since all these extra bytes are zeros, when bandwidth matters, we can apply an extremely fast compression scheme to remove them. Cap&#8217;n Proto calls this &#8220;packing&#8221; the message; it achieves similar (better, even) message sizes to protobuf encoding, and it&#8217;s still faster.</p>
+<p>Yes. However, since all these extra bytes are zeros, when bandwidth matters, we can apply an extremely fast Cap&#8217;n-Proto-specific compression scheme to remove them. Cap&#8217;n Proto calls this &#8220;packing&#8221; the message; it achieves similar (better, even) message sizes to protobuf encoding, and it&#8217;s still faster.</p>
 
 <p>When bandwidth really matters, you should apply general-purpose compression, like <a href='http://www.zlib.net/'>zlib</a> or <a href='https://code.google.com/p/snappy/'>Snappy</a>, regardless of your encoding format.</p>
 
@@ -159,9 +159,9 @@
 
 <p>At this time, Cap&#8217;n Proto is not ready for production use. Feel free to <a href='install.html'>play around with the code and run the benchmarks</a>, but note that it&#8217;s incomplete and buggy. If you&#8217;d like to help hack on Cap&#8217;n Proto, such as by writing bindings in other languages, let us know on the <a href='https://groups.google.com/group/capnproto'>discussion group</a>. If you&#8217;d just like to know when it&#8217;s ready, add yourself to the <a href='https://groups.google.com/group/capnproto-announce'>announcement list</a>.</p>
 <div style='float: right'>
-<a style='color: #fff' href='https://github.com/kentonv/capnproto' class='github_link'>Develop</a>
-<a style='color: #fff' href='https://groups.google.com/group/capnproto' class='groups_link'>Discuss</a>
-<a style='color: #fff' href='https://groups.google.com/group/capnproto-announce' class='groups_link'>Stay Updated</a>
+<a class='github_link' href='https://github.com/kentonv/capnproto' style='color: #fff'>Develop</a>
+<a class='groups_link' href='https://groups.google.com/group/capnproto' style='color: #fff'>Discuss</a>
+<a class='groups_link' href='https://groups.google.com/group/capnproto-announce' style='color: #fff'>Stay Updated</a>
 </div><div style='clear: right;'> </div>
         <div style="clear: left;"></div>
       </section>
