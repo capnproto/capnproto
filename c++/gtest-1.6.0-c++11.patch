@@ -147,6 +147,49 @@ Index: include/gtest/gtest-printers.h
        TersePrintPrefixToStrings(value, &result);
    return result;
  }
+Index: include/gtest/internal/gtest-port.h
+===================================================================
+--- include/gtest/internal/gtest-port.h	(revision 655)
++++ include/gtest/internal/gtest-port.h	(working copy)
+@@ -377,7 +377,7 @@
+ #  endif
+ 
+ // Starting with version 4.3.2, gcc defines __GXX_RTTI iff RTTI is enabled.
+-# elif defined(__GNUC__) && (GTEST_GCC_VER_ >= 40302)
++# elif defined(__GNUC__) && (GTEST_GCC_VER_ >= 40302 || __clang__)
+ 
+ #  ifdef __GXX_RTTI
+ #   define GTEST_HAS_RTTI 1
+@@ -482,21 +482,21 @@
+ #  include <tuple>
+ 
+ # elif defined(__GNUC__) && (GTEST_GCC_VER_ >= 40000)
+-// GCC 4.0+ implements tr1/tuple in the <tr1/tuple> header.  This does
++// GCC 4.0+ implements tr1/tuple in the <tuple> header.  This does
+ // not conform to the TR1 spec, which requires the header to be <tuple>.
+ 
+ #  if !GTEST_HAS_RTTI && GTEST_GCC_VER_ < 40302
+-// Until version 4.3.2, gcc has a bug that causes <tr1/functional>,
+-// which is #included by <tr1/tuple>, to not compile when RTTI is
++// Until version 4.3.2, gcc has a bug that causes <functional>,
++// which is #included by <tuple>, to not compile when RTTI is
+ // disabled.  _TR1_FUNCTIONAL is the header guard for
+-// <tr1/functional>.  Hence the following #define is a hack to prevent
+-// <tr1/functional> from being included.
++// <functional>.  Hence the following #define is a hack to prevent
++// <functional> from being included.
+ #   define _TR1_FUNCTIONAL 1
+-#   include <tr1/tuple>
++#   include <tuple>
+ #   undef _TR1_FUNCTIONAL  // Allows the user to #include
+-                        // <tr1/functional> if he chooses to.
++                        // <functional> if he chooses to.
+ #  else
+-#   include <tr1/tuple>  // NOLINT
++#   include <tuple>  // NOLINT
+ #  endif  // !GTEST_HAS_RTTI && GTEST_GCC_VER_ < 40302
+ 
+ # else
 Index: include/gtest/internal/gtest-param-util-generated.h.pump
 ===================================================================
 --- include/gtest/internal/gtest-param-util-generated.h.pump	(revision 655)
@@ -474,40 +517,6 @@ Index: include/gtest/internal/gtest-tuple.h.pump
    }
  };
  
-Index: include/gtest/internal/gtest-port.h
-===================================================================
---- include/gtest/internal/gtest-port.h	(revision 655)
-+++ include/gtest/internal/gtest-port.h	(working copy)
-@@ -482,21 +482,21 @@
- #  include <tuple>
- 
- # elif defined(__GNUC__) && (GTEST_GCC_VER_ >= 40000)
--// GCC 4.0+ implements tr1/tuple in the <tr1/tuple> header.  This does
-+// GCC 4.0+ implements tr1/tuple in the <tuple> header.  This does
- // not conform to the TR1 spec, which requires the header to be <tuple>.
- 
- #  if !GTEST_HAS_RTTI && GTEST_GCC_VER_ < 40302
--// Until version 4.3.2, gcc has a bug that causes <tr1/functional>,
--// which is #included by <tr1/tuple>, to not compile when RTTI is
-+// Until version 4.3.2, gcc has a bug that causes <functional>,
-+// which is #included by <tuple>, to not compile when RTTI is
- // disabled.  _TR1_FUNCTIONAL is the header guard for
--// <tr1/functional>.  Hence the following #define is a hack to prevent
--// <tr1/functional> from being included.
-+// <functional>.  Hence the following #define is a hack to prevent
-+// <functional> from being included.
- #   define _TR1_FUNCTIONAL 1
--#   include <tr1/tuple>
-+#   include <tuple>
- #   undef _TR1_FUNCTIONAL  // Allows the user to #include
--                        // <tr1/functional> if he chooses to.
-+                        // <functional> if he chooses to.
- #  else
--#   include <tr1/tuple>  // NOLINT
-+#   include <tuple>  // NOLINT
- #  endif  // !GTEST_HAS_RTTI && GTEST_GCC_VER_ < 40302
- 
- # else
 Index: samples/sample8_unittest.cc
 ===================================================================
 --- samples/sample8_unittest.cc	(revision 655)
@@ -535,23 +544,27 @@ Index: samples/sample8_unittest.cc
      table_ = new HybridPrimeTable(force_on_the_fly, max_precalculated);
    }
    virtual void TearDown() {
-Index: test/gtest-param-test_test.cc
+Index: test/gtest-tuple_test.cc
 ===================================================================
---- test/gtest-param-test_test.cc	(revision 655)
-+++ test/gtest-param-test_test.cc	(working copy)
-@@ -64,9 +64,9 @@
+--- test/gtest-tuple_test.cc	(revision 655)
++++ test/gtest-tuple_test.cc	(working copy)
+@@ -35,11 +35,11 @@
  
- # if GTEST_HAS_COMBINE
- using ::testing::Combine;
+ namespace {
+ 
 -using ::std::tr1::get;
 -using ::std::tr1::make_tuple;
 -using ::std::tr1::tuple;
+-using ::std::tr1::tuple_element;
+-using ::std::tr1::tuple_size;
 +using ::std::get;
 +using ::std::make_tuple;
 +using ::std::tuple;
- # endif  // GTEST_HAS_COMBINE
++using ::std::tuple_element;
++using ::std::tuple_size;
+ using ::testing::StaticAssertTypeEq;
  
- using ::testing::internal::ParamGenerator;
+ // Tests that tuple_element<K, tuple<T0, T1, ..., TN> >::type returns TK.
 Index: test/gtest-port_test.cc
 ===================================================================
 --- test/gtest-port_test.cc	(revision 655)
@@ -688,27 +701,23 @@ Index: test/gtest-port_test.cc
    EXPECT_TRUE(result.c_str() == NULL);
  }
  
-Index: test/gtest-tuple_test.cc
+Index: test/gtest-param-test_test.cc
 ===================================================================
---- test/gtest-tuple_test.cc	(revision 655)
-+++ test/gtest-tuple_test.cc	(working copy)
-@@ -35,11 +35,11 @@
+--- test/gtest-param-test_test.cc	(revision 655)
++++ test/gtest-param-test_test.cc	(working copy)
+@@ -64,9 +64,9 @@
  
- namespace {
- 
+ # if GTEST_HAS_COMBINE
+ using ::testing::Combine;
 -using ::std::tr1::get;
 -using ::std::tr1::make_tuple;
 -using ::std::tr1::tuple;
--using ::std::tr1::tuple_element;
--using ::std::tr1::tuple_size;
 +using ::std::get;
 +using ::std::make_tuple;
 +using ::std::tuple;
-+using ::std::tuple_element;
-+using ::std::tuple_size;
- using ::testing::StaticAssertTypeEq;
+ # endif  // GTEST_HAS_COMBINE
  
- // Tests that tuple_element<K, tuple<T0, T1, ..., TN> >::type returns TK.
+ using ::testing::internal::ParamGenerator;
 Index: test/gtest-printers_test.cc
 ===================================================================
 --- test/gtest-printers_test.cc	(revision 655)
