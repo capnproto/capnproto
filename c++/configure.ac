@@ -1,10 +1,5 @@
 ## Process this file with autoconf to produce configure.
 
-# At head, the version number is the next anticipated minor release with the suffix "-dev".  The
-# micro version number is omitted.  When a release branch is cut, "-dev" is replaced with "-beta"
-# in the release branch and the minor version number is bumped in head.  In the release branch,
-# "-beta" is eventually replaced with a micro version number (initially ".0"), which is then
-# incremented for each bugfix release.
 AC_INIT([Capn Proto],[0.1-dev],[capnproto@googlegroups.com],[capnproto])
 
 AC_CONFIG_SRCDIR([src/capnp/layout.c++])
