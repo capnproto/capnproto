@@ -179,14 +179,11 @@ using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("foo::bar::baz");
 {% endhighlight %}
 
-Note that for this to work, `capnp/c++.capnp` must be located in the search path specified with
-`-I` options.  This file is found in the Cap'n Proto source repo, so you could invoke `capnpc` like
-so:
-
-    capnpc -I$CAPNPROTO_GIT_ROOT/c++/src -oc++ myproto.capnp
-
-As of this writing, the file is not automatically installed anywhere, but in the future it will
-be.
+Note that `capnp/c++.capnp` is installed in `$PREFIX/include` when you install the C++ runtime.
+`capnpc` automatically searches `/usr/include` and `/usr/local/include` for imports that start with
+a `/`, so it should "just work".  If you installed somewhere else, you may need to add it to the
+search path with the `-I` flag to `capnpc`, which works much like the compiler flag of the same
+name.
 
 ## Types
 
