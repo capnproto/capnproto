@@ -15,6 +15,10 @@ Full installation and usage instructions and other documentation are maintained
 on the Cap'n Proto web site:
   http://kentonv.github.io/capnproto/install.html
 
+WARNING:  You must be using either GCC 4.7+ or Clang 3.2+.  On OSX, Xcode 4's
+command-line tools are NOT sufficient -- see the web site for step-by-step
+instructions to get Clang 3.2 working on OSX.
+
 To build and install (from a release package), simply do:
   ./configure
   make -j4 check
@@ -25,3 +29,4 @@ You can increase this number if you have more cores.  Specifying "check"
 says to run tests in addition to building.  This can be omitted to make the
 build slightly faster, but running tests and reporting failures back to the
 developers helps us out!
+
