@@ -10,7 +10,7 @@ maintained by respective authors and have not been reviewed by me
 
 * [C and Go](https://github.com/jmckaskill/go-capnproto) by
   [@jmckaskill](https://github.com/jmckaskill)
-* [Boost Python wrappers for Cap'n Proto C++](https://github.com/jparyani/capnproto) by
+* [Python wrappers for Cap'n Proto C++](https://github.com/jparyani/capnpc-python-cpp) by
   [@jparyani](https://github.com/jparyani)
 
 ## Contribute Your Own!

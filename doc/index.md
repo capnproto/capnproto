@@ -34,8 +34,9 @@ always knows how to arrange them for backwards-compatibility.
 **_Won't fixed-width integers, unset optional fields, and padding waste space on the wire?_**
 
 Yes. However, since all these extra bytes are zeros, when bandwidth matters, we can apply an
-extremely fast compression scheme to remove them. Cap'n Proto calls this "packing" the message;
-it achieves similar (better, even) message sizes to protobuf encoding, and it's still faster.
+extremely fast Cap'n-Proto-specific compression scheme to remove them. Cap'n Proto calls this
+"packing" the message; it achieves similar (better, even) message sizes to protobuf encoding, and
+it's still faster.
 
 When bandwidth really matters, you should apply general-purpose compression, like
 [zlib](http://www.zlib.net/) or [Snappy](https://code.google.com/p/snappy/), regardless of your
