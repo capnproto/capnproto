@@ -5,7 +5,8 @@ How to release
   on any machine available through ssh using `./super-test.sh remote [hostname]`.  Also run in
   clang mode.
 
-* Create a new release branch, named release-VERSION.
+* Create a new release branch, named release-VERSION, where VERSION is the current version number
+  except with `-dev` replaced by `.0`.  E.g. 1.1-dev becomes 1.1.0.
 
 * In the master branch, bump the minor version number.
 
@@ -37,10 +38,11 @@ How to release
 
 * Submit the blog post to Hacker News and other places.
 
-* If problems are discovered in the release, fix them in the release branch and bump the micro
-  version number.  Repeat the release candidate process if the changes are complicated, or skip it
-  and just publish if the release is simple and obvious.  Blog posts are usually not warranted for
-  minor bugfix releases, but the people reporting the bug should of course be told of the fix.  Be
-  sure to cherry-pick the fix back into the mainline.  If at all possible, include a test with your
-  fix so that it doesn't happen again.  The test may be a unit test, an extension of
-  `super-test.sh`, or a new step in the release process.
+* If problems are discovered in the release, make a new release branch forked from the current one
+  (not from master) with the micro version incremented by one and fix the problems there.  Repeat
+  the release candidate process if the changes are complicated, or skip it and just publish if the
+  release is simple and obvious.  Blog posts are usually not warranted for minor bugfix releases,
+  but the people reporting the bug should of course be told of the fix.  Be sure to cherry-pick the
+  fix back into the mainline.  If at all possible, include a test with your fix so that it doesn't
+  happen again.  The test may be a unit test, an extension of `super-test.sh`, or a new step in the
+  release process.
