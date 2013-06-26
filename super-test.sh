@@ -113,7 +113,7 @@ STAGING=$PWD/tmp-staging
 mkdir $STAGING/bin
 mkdir $STAGING/lib
 export PATH=$STAGING/bin:$PATH
-export LD_LIBRARY_PATH=$STAGING/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$STAGING/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 
 echo "========================================================================="
 echo "Building compiler"
