@@ -30,12 +30,13 @@ system is still in the design phase, but will be implemented over the coming wee
 
 Also missing is support for languages other than C++.  However, I'm happy to report that a number
 of awesome contributors have stepped up and are working on
-[implementations in C, Go, Python](/otherlang.html), and a few others not yet announced.  None of
-these are "ready" just yet, but watch this space.  (Would you like to work on an implementation in
-your favorite language?  [Let us know!](https://groups.google.com/group/capnproto))
+[implementations in C, Go, Python]({{ site.baseurl }}otherlang.html), and a few others not yet
+announced.  None of these are "ready" just yet, but watch this space.  (Would you like to work on
+an implementation in your favorite language?
+[Let us know!](https://groups.google.com/group/capnproto))
 
 Going forward, Cap'n Proto releases will occur more frequently, perhaps every 2-4 weeks.
 Consider [signing up for release announcements](https://groups.google.com/group/capnproto-announce).
 
-In any case, go [download the release](/install.html) and
+In any case, go [download the release]({{ site.baseurl }}install.html) and
 [tell us your thoughts](https://groups.google.com/group/capnproto).
