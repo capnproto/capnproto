@@ -4,7 +4,7 @@ set -euo pipefail
 
 doit() {
   echo "@@@@ $@"
-  #"$@"
+  "$@"
 }
 
 get_version() {
