@@ -1,5 +1,5 @@
 function initSidebar() {
-  var filename = document.location.pathname;
+  var filename = document.location.pathname.slice("/capnproto".length);
 
   if (filename == "/") {
     filename = "/index.html";
@@ -45,7 +45,7 @@ function initSidebar() {
           window.location.href = url;
           event.stopPropagation();
         }
-      })(href + "#main_content");
+      })(href + "#");
       parent.appendChild(p);
       items[i].className = "selected";
       toc = document.createElement("ul");

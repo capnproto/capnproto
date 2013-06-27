@@ -3,7 +3,7 @@
 <div class="hmargin" style="float: right"><a class="groups_link" style="color: #fff"
 href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
-<h1><a href="/news/">News</a></h1>
+<h1><a href="{{ site.baseurl }}news/">News</a></h1>
 
 <h2>{{ page.title }}</h2>
 <p class="author">
@@ -13,7 +13,7 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 {{ content }}
 <script type="text/javascript">setupNewsSidebar([
     {% for post in site.posts %}
-      { title: "{{ post.title }}", url: "{{ post.url }}" },
+      { title: "{{ post.title }}", url: "/capnproto{{ post.url }}" },
     {% endfor %}
     ]);</script>
 {% include footer.html %}

@@ -4,7 +4,7 @@ title: Announcing Cap'n Proto
 author: kentonv
 ---
 
-<img src='/images/infinity-times-faster.png' style='width:334px; height:306px; float: right;'>
+<img src='{{ site.baseurl }}images/infinity-times-faster.png' style='width:334px; height:306px; float: right;'>
 
 So, uh...  I have a confession to make.
 
