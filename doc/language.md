@@ -2,7 +2,7 @@
 layout: page
 ---
 
-# Defining Types
+# Schema Language
 
 Like Protocol Buffers and Thrift (but unlike JSON or MessagePack), Cap'n Proto messages are
 strongly-typed and not self-describing. You must define your message structure in a special

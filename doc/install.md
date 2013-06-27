@@ -13,9 +13,9 @@ As of this writing, Cap'n Proto is in beta.  The serialization layer is close to
 and we don't anticipate any further changes to the wire format.  That said, if you want to use it,
 you should keep in mind some caveats:
 
-* **Security:** Although Kenton has some background in security, there are almost certainly a few
-  exploitable security bugs in the Cap'n Proto code. You should not use Cap'n Proto on untrusted
-  data until a proper security review has been completed.
+* **Security:** Cap'n Proto has not yet had a security review.  Although Kenton has a background
+  in security and is not aware of any vulnerabilities in the current code, it's likely that there
+  are a few.  For now, do not accept Cap'n Proto messages from parties you do not trust.
 * **API Stability:** The Cap'n Proto programming interface may still change in ways that break
   existing code.  Such changes are likely to be minor and should not affect the wire format.
 * **Performance:** While Cap'n Proto is inherently fast by design, the implementation has not yet
@@ -42,8 +42,8 @@ First, install [Cabal](http://www.haskell.org/cabal/), e.g. on Ubuntu:
 
 Now you can download and install the release tarball:
 
-    curl -O [TODO: URL]
-    cabal install capnproto-compiler-0.1.0.tar.gz
+<pre><code>curl -O <a href="http://capnproto.org/capnproto-compiler-0.1.0.tar.gz">http://capnproto.org/capnproto-compiler-0.1.0.tar.gz</a>
+cabal install capnproto-compiler-0.1.0.tar.gz</code></pre>
 
 Be sure that the Cabal bin directory (e.g. `$HOME/.cabal/bin` on Ubuntu or
 `$HOME/Library/Haskell/bin` on Mac OSX) is in your `PATH` before you attempt to build the C++
@@ -114,12 +114,12 @@ from Git, you must install the runtime from Git.
 
 You may download and install the release version of the C++ runtime like so:
 
-    curl -O [TODO: URL]
-    tar zxvf capnproto-c++-0.1.0.tar.gz
-    cd capnproto-c++-0.1.0
-    ./configure
-    make -j6 check
-    sudo make install
+<pre><code>curl -O <a href="http://capnproto.org/capnproto-c++-0.1.0.tar.gz">http://capnproto.org/capnproto-c++-0.1.0.tar.gz</a>
+tar zxf capnproto-c++-0.1.0.tar.gz
+cd capnproto-c++-0.1.0
+./configure
+make -j6 check
+sudo make install</code></pre>
 
 This will install `libcapnp` in `/usr/local/lib` and headers in `/usr/local/include/capnp` and
 `/usr/local/include/kj`.

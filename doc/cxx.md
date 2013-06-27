@@ -542,6 +542,10 @@ Notes about the dynamic API:
   and even enum types and `DynamicEnum`.  Finally, all valid Cap'n Proto field types may be
   implicitly converted to `DynamicValue`.
 
+* You can load schemas dynamically at runtime using `SchemaLoader` (`capnp/schema-loader.h`) and
+  use the Dynamic API to manipulate objects of these types.  `MessageBuilder` and `MessageReader`
+  have methods for accessing the message root using a dynamic schema.
+
 * Unlike with Protobufs, there is no "global registry" of compiled-in types.  To get the schema
   for a compiled-in type, use `capnp::Schema::from<MyType>()`.
 

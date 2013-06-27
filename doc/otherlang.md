@@ -40,11 +40,11 @@ The Cap'n Proto compiler / code generator binary, `capnpc`, supports a "plugin" 
 custom code generators.  Plugins are independent executables (written in any language) which read
 a description of the schema from standard input and then generate the necessary code.  The
 description is itself a Cap'n Proto message, defined by
-[schema.capnp](https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnproto/schema.capnp)
-(the file will move to a better location eventually).  Specifically, the plugin receives a
-`CodeGeneratorRequest`, using
+[schema.capnp](https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnp/schema.capnp).
+Specifically, the plugin receives a `CodeGeneratorRequest`, using
 [standard serialization](http://kentonv.github.io/capnproto/encoding.html#serialization_over_a_stream)
-(not packed).
+(not packed).  (Note that installing the C++ runtime causes schema.capnp to be placed in
+`$PREFIX/include/capnp` -- `/usr/local/include/capnp` by default).
 
 Of course, because the input to a plugin is itself in Cap'n Proto format, if you write your
 plugin directly in the language you wish to support, you may have a bootstrapping problem:  you
@@ -69,3 +69,23 @@ as the working directory, so you do not need to worry about this.
 [This example plugin](https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnp/compiler/capnpc-capnp.c%2B%2B)
 writes the schema back to standard output in Cap'n Proto schema language, similar to what
 `capnpc -v` does.
+
+### Supporting Dynamic Languages
+
+Dynamic languages have no compile step.  This makes it difficult to work `capnpc` into the workflow
+for such languages.  Additionally, dynamic languages are often scripting languages that do not
+support pointer arithmetic or any reasonably-performant alternative.
+
+Fortunately, dynamic languages usually have facilities for calling native code.  The best way to
+support Cap'n Proto in a dynamic language, then, is to wrap the C++ library, in particular the
+[C++ dynamic API](cxx.html#dynamic_reflection).  This way you get reasonable performance while
+still avoiding the need to generate any code specific to each schema.
+
+Of course, you still need to parse the schema.  As of v0.1, the C++ runtime only has the ability
+to load schemas that have already been parsed and translated to a binary format (defined by
+`schema.capnp`, the same format used by compiler plugins).  It cannot parse `.capnp` files directly.
+In a future version of Cap'n Proto, the schema parser will be rewritten from Haskell to C++ to
+solve this problem.  For now, you can hack around it by invoking `capnpc` as a subprocess.  Running
+`capnpc -o/bin/cat myschema.capnp`, for example, will cause `capnpc` to invoke `cat` as if it were
+a compiler plugin causing the compiled schemas to be written back to stdout, from which your calling
+process can parse and load them.
