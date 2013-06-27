@@ -1,5 +1,5 @@
 name:           capnproto-compiler
-version:        0.1-dev
+version:        0.2-dev
 cabal-version:  >=1.2
 build-type:     Simple
 author:         Kenton Varda <temporal@gmail.com>
