@@ -7,9 +7,11 @@
     <meta name="description" content="Capnproto : Cap'n Proto serialization/RPC system" />
     <meta name="viewport" content="width=480">
 
-    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+    <link rel="stylesheet" type="text/css" media="screen" href="/capnproto/stylesheets/stylesheet.css">
 
     <title>Cap'n Proto</title>
+
+    <script type="text/javascript" src="/capnproto/javascripts/main.js"></script>
   </head>
 
   <body class="desktop">
@@ -17,9 +19,9 @@
     <!-- HEADER -->
     <div id="header_wrap" class="outer">
       <header class="inner">
-        <img src="images/captain_proto.png">
+        <img src="/capnproto/images/captain_proto.png">
         <div id="infinitely_faster">
-          <img src="images/infinitely_faster.png">
+          <img src="/capnproto/images/infinitely_faster.png">
         </div>
       </header>
       <a id="discuss_banner" href="https://groups.google.com/group/capnproto">Discuss on Groups</a>
@@ -31,83 +33,19 @@
 
       <section id="menu">
         <ul>
-          <li><a href="index.html">Introduction</a></li>
-          <li><a href="install.html">Installation</a></li>
-          <li><a href="language.html">Schema Language</a></li>
-          <li><a href="encoding.html">Encoding</a></li>
-          <li><a href="rpc.html">RPC Protocol</a></li>
-          <li><a href="cxx.html">C++ Runtime</a></li>
-          <li><a href="otherlang.html">Other Languages</a></li>
+          <li><a href="/capnproto/index.html">Introduction</a></li>
+          <li><a href="/capnproto/news/">News</a></li>
+          <li><a href="/capnproto/install.html">Installation</a></li>
+          <li><a href="/capnproto/language.html">Schema Language</a></li>
+          <li><a href="/capnproto/encoding.html">Encoding</a></li>
+          <li><a href="/capnproto/rpc.html">RPC Protocol</a></li>
+          <li><a href="/capnproto/cxx.html">C++ Runtime</a></li>
+          <li><a href="/capnproto/otherlang.html">Other Languages</a></li>
         </ul>
       </section>
-      <script type="text/javascript">
-        // Highlight the current page in the sidebar, make the sidebar items easy to click, and
-        // make the sidebar float when scrolled, unless there isn't enough space.
-        (function () {
-          var pathname = document.location.pathname;
-          var last = pathname.lastIndexOf('/');
-          var filename = pathname.substring(last);
-
-          if (filename == "/") {
-            filename = "/index.html";
-          }
-
-          var menu = document.getElementById("menu");
-          var setMenuLayout = function() {
-            if (window.innerWidth < 900) {
-              document.body.className = "narrow";
-              menu.className = "";
-            } else {
-              if (document.body.clientWidth < 1340) {
-                document.body.className = "normal";
-              } else {
-                document.body.className = "wide";
-              }
-
-              if (window.scrollY < 410 || window.innerHeight < menu.clientHeight + 100) {
-                menu.className = "";
-              } else {
-                menu.className = "floating";
-              }
-            }
-          };
-          setMenuLayout();
-          window.onresize = setMenuLayout;
-          window.onscroll = setMenuLayout;
-
-          var items = menu.getElementsByTagName("li");
-          for (var i = 0; i < items.length; i++) {
-            var link = items[i].getElementsByTagName("a")[0];
-            var href = link.href;
-            if (href.lastIndexOf(filename) >= 0) {
-              var parent = link.parentNode;
-              parent.removeChild(link);
-              var p = document.createElement("p");
-              p.appendChild(document.createTextNode(link.innerText || link.textContent));
-              p.onclick = (function(url) {
-                return function(event) {
-                  window.location.href = url;
-                  event.stopPropagation();
-                }
-              })(href + "#main_content");
-              parent.appendChild(p);
-              items[i].className = "selected";
-              var toc = document.createElement("ul");
-              toc.id = "toc";
-              items[i].appendChild(toc);
-            } else {
-              items[i].onclick = (function(url) {
-                return function(event) {
-                  window.location.href = url;
-                  event.stopPropagation();
-                }
-              })(href);
-            }
-          }
-        })();
-      </script>
       <section id="main_content" class="inner">
-        <h1 id='other_languages'>Other Languages</h1>
+
+<h1 id='other_languages'>Other Languages</h1>
 
 <p>Cap&#8217;n Proto&#8217;s reference implementation is in C++. Implementations in other languages are maintained by respective authors and have not been reviewed by me (<a href='https://github.com/kentonv'>@kentonv</a>). Here are the implementations I&#8217;m aware of:</p>
 
@@ -137,7 +75,7 @@
 
 <h3 id='how_to_write_compiler_plugins'>How to Write Compiler Plugins</h3>
 
-<p>The Cap&#8217;n Proto compiler / code generator binary, <code>capnpc</code>, supports a &#8220;plugin&#8221; interface for custom code generators. Plugins are independent executables (written in any language) which read a description of the schema from standard input and then generate the necessary code. The description is itself a Cap&#8217;n Proto message, defined by <a href='https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnproto/schema.capnp'>schema.capnp</a> (the file will move to a better location eventually). Specifically, the plugin receives a <code>CodeGeneratorRequest</code>, using <a href='http://kentonv.github.io/capnproto/encoding.html#serialization_over_a_stream'>standard serialization</a> (not packed).</p>
+<p>The Cap&#8217;n Proto compiler / code generator binary, <code>capnpc</code>, supports a &#8220;plugin&#8221; interface for custom code generators. Plugins are independent executables (written in any language) which read a description of the schema from standard input and then generate the necessary code. The description is itself a Cap&#8217;n Proto message, defined by <a href='https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnp/schema.capnp'>schema.capnp</a>. Specifically, the plugin receives a <code>CodeGeneratorRequest</code>, using <a href='http://kentonv.github.io/capnproto/encoding.html#serialization_over_a_stream'>standard serialization</a> (not packed). (Note that installing the C++ runtime causes schema.capnp to be placed in <code>$PREFIX/include/capnp</code> &#8211; <code>/usr/local/include/capnp</code> by default).</p>
 
 <p>Of course, because the input to a plugin is itself in Cap&#8217;n Proto format, if you write your plugin directly in the language you wish to support, you may have a bootstrapping problem: you somehow need to generate code for <code>schema.capnp</code> before you write your code generator. Luckily, because of the simplicity of the Cap&#8217;n Proto format, it is generally not too hard to do this by hand. Remember that you can use <code>capnpc -v schema.capnp</code> to get a dump of the sizes and offsets of all structs and fields defined in the file.</p>
 
@@ -152,7 +90,16 @@ capnpc -o ./myplugin addressbook.capnp</code></pre>
 <p>If the user specifies an output directory, the compiler will run the plugin with that directory as the working directory, so you do not need to worry about this.</p>
 
 <p><a href='https://github.com/kentonv/capnproto/blob/master/c%2B%2B/src/capnp/compiler/capnpc-capnp.c%2B%2B'>This example plugin</a> writes the schema back to standard output in Cap&#8217;n Proto schema language, similar to what <code>capnpc -v</code> does.</p>
-        <div style="clear: left;"></div>
+
+<h3 id='supporting_dynamic_languages'>Supporting Dynamic Languages</h3>
+
+<p>Dynamic languages have no compile step. This makes it difficult to work <code>capnpc</code> into the workflow for such languages. Additionally, dynamic languages are often scripting languages that do not support pointer arithmetic or any reasonably-performant alternative.</p>
+
+<p>Fortunately, dynamic languages usually have facilities for calling native code. The best way to support Cap&#8217;n Proto in a dynamic language, then, is to wrap the C++ library, in particular the <a href='cxx.html#dynamic_reflection'>C++ dynamic API</a>. This way you get reasonable performance while still avoiding the need to generate any code specific to each schema.</p>
+
+<p>Of course, you still need to parse the schema. As of v0.1, the C++ runtime only has the ability to load schemas that have already been parsed and translated to a binary format (defined by <code>schema.capnp</code>, the same format used by compiler plugins). It cannot parse <code>.capnp</code> files directly. In a future version of Cap&#8217;n Proto, the schema parser will be rewritten from Haskell to C++ to solve this problem. For now, you can hack around it by invoking <code>capnpc</code> as a subprocess. Running <code>capnpc -o/bin/cat myschema.capnp</code>, for example, will cause <code>capnpc</code> to invoke <code>cat</code> as if it were a compiler plugin causing the compiled schemas to be written back to stdout, from which your calling process can parse and load them.</p>
+<script type="text/javascript">setupSidebar()</script>
+        <div style="clear: both;"></div>
       </section>
     </div>
 
@@ -165,59 +112,6 @@ capnpc -o ./myplugin addressbook.capnp</code></pre>
     </div>
 
     <script type="text/javascript">
-      // Inject a table of contents into the sidebar.
-      (function() {
-        var toc = document.getElementById("toc");
-        if (toc) {
-          var content = document.getElementById("main_content").childNodes;
-          var headings = [];
-
-          for (var i = 0; i < content.length; i++) {
-            if (content[i].tagName == "H2" ||
-                content[i].tagName == "H3" ||
-                content[i].tagName == "H4") {
-              headings.push(content[i]);
-            }
-          }
-
-          var levels = [toc];
-          for (var i in headings) {
-            var hl = headings[i].tagName.slice(1) - 1;
-            while (hl > levels.length) {
-              var parent = levels[levels.length - 1];
-              var item = parent.childNodes[parent.childNodes.length - 1];
-              var sublist = document.createElement("ul");
-              item.appendChild(sublist);
-              levels.push(sublist);
-            }
-            while (hl < levels.length) {
-              levels.pop();
-            }
-
-            var parent = levels[levels.length - 1];
-            var item = document.createElement("li");
-            var p = document.createElement("p");
-            var link = document.createElement("a");
-            link.appendChild(document.createTextNode(headings[i].innerText || headings[i].textContent));
-            link.href = "#" + headings[i].id;
-            p.appendChild(link);
-            p.onclick = (function(url) {
-              return function(event) {
-                window.location.href = url;
-                event.stopPropagation();
-              }
-            })(link.href);
-            item.appendChild(p);
-            parent.appendChild(item);
-          }
-        }
-
-        var menu = document.getElementById("menu");
-        document.getElementById("main_content").style.minHeight = menu.clientHeight + 100 + "px";
-      })()
-    </script>
-
-    <script type="text/javascript">
       var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
       document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
     </script>
@@ -227,7 +121,6 @@ capnpc -o ./myplugin addressbook.capnp</code></pre>
         pageTracker._trackPageview();
       } catch(err) {}
     </script>
-
-
   </body>
 </html>
+

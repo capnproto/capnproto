@@ -7,9 +7,11 @@
     <meta name="description" content="Capnproto : Cap'n Proto serialization/RPC system" />
     <meta name="viewport" content="width=480">
 
-    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+    <link rel="stylesheet" type="text/css" media="screen" href="/capnproto/stylesheets/stylesheet.css">
 
     <title>Cap'n Proto</title>
+
+    <script type="text/javascript" src="/capnproto/javascripts/main.js"></script>
   </head>
 
   <body class="desktop">
@@ -17,9 +19,9 @@
     <!-- HEADER -->
     <div id="header_wrap" class="outer">
       <header class="inner">
-        <img src="images/captain_proto.png">
+        <img src="/capnproto/images/captain_proto.png">
         <div id="infinitely_faster">
-          <img src="images/infinitely_faster.png">
+          <img src="/capnproto/images/infinitely_faster.png">
         </div>
       </header>
       <a id="discuss_banner" href="https://groups.google.com/group/capnproto">Discuss on Groups</a>
@@ -31,83 +33,19 @@
 
       <section id="menu">
         <ul>
-          <li><a href="index.html">Introduction</a></li>
-          <li><a href="install.html">Installation</a></li>
-          <li><a href="language.html">Schema Language</a></li>
-          <li><a href="encoding.html">Encoding</a></li>
-          <li><a href="rpc.html">RPC Protocol</a></li>
-          <li><a href="cxx.html">C++ Runtime</a></li>
-          <li><a href="otherlang.html">Other Languages</a></li>
+          <li><a href="/capnproto/index.html">Introduction</a></li>
+          <li><a href="/capnproto/news/">News</a></li>
+          <li><a href="/capnproto/install.html">Installation</a></li>
+          <li><a href="/capnproto/language.html">Schema Language</a></li>
+          <li><a href="/capnproto/encoding.html">Encoding</a></li>
+          <li><a href="/capnproto/rpc.html">RPC Protocol</a></li>
+          <li><a href="/capnproto/cxx.html">C++ Runtime</a></li>
+          <li><a href="/capnproto/otherlang.html">Other Languages</a></li>
         </ul>
       </section>
-      <script type="text/javascript">
-        // Highlight the current page in the sidebar, make the sidebar items easy to click, and
-        // make the sidebar float when scrolled, unless there isn't enough space.
-        (function () {
-          var pathname = document.location.pathname;
-          var last = pathname.lastIndexOf('/');
-          var filename = pathname.substring(last);
-
-          if (filename == "/") {
-            filename = "/index.html";
-          }
-
-          var menu = document.getElementById("menu");
-          var setMenuLayout = function() {
-            if (window.innerWidth < 900) {
-              document.body.className = "narrow";
-              menu.className = "";
-            } else {
-              if (document.body.clientWidth < 1340) {
-                document.body.className = "normal";
-              } else {
-                document.body.className = "wide";
-              }
-
-              if (window.scrollY < 410 || window.innerHeight < menu.clientHeight + 100) {
-                menu.className = "";
-              } else {
-                menu.className = "floating";
-              }
-            }
-          };
-          setMenuLayout();
-          window.onresize = setMenuLayout;
-          window.onscroll = setMenuLayout;
-
-          var items = menu.getElementsByTagName("li");
-          for (var i = 0; i < items.length; i++) {
-            var link = items[i].getElementsByTagName("a")[0];
-            var href = link.href;
-            if (href.lastIndexOf(filename) >= 0) {
-              var parent = link.parentNode;
-              parent.removeChild(link);
-              var p = document.createElement("p");
-              p.appendChild(document.createTextNode(link.innerText || link.textContent));
-              p.onclick = (function(url) {
-                return function(event) {
-                  window.location.href = url;
-                  event.stopPropagation();
-                }
-              })(href + "#main_content");
-              parent.appendChild(p);
-              items[i].className = "selected";
-              var toc = document.createElement("ul");
-              toc.id = "toc";
-              items[i].appendChild(toc);
-            } else {
-              items[i].onclick = (function(url) {
-                return function(event) {
-                  window.location.href = url;
-                  event.stopPropagation();
-                }
-              })(href);
-            }
-          }
-        })();
-      </script>
       <section id="main_content" class="inner">
-        <h1 id='introduction'>Introduction</h1>
+
+<h1 id='introduction'>Introduction</h1>
 <img style='width:334px; height:306px; float: right;' src='images/infinity-times-faster.png' />
 <p>Cap&#8217;n Proto is an insanely fast data interchange format and capability-based RPC system. Think JSON, except binary. Or think <a href='http://protobuf.googlecode.com'>Protocol Buffers</a>, except faster. In fact, in benchmarks, Cap&#8217;n Proto is INFINITY TIMES faster than Protocol Buffers.</p>
 
@@ -157,13 +95,14 @@
 
 <p><strong><em>OK, how do I get started?</em></strong></p>
 
-<p>At this time, Cap&#8217;n Proto is not ready for production use. Feel free to <a href='install.html'>play around with the code and run the benchmarks</a>, but note that it&#8217;s incomplete and buggy. If you&#8217;d like to help hack on Cap&#8217;n Proto, such as by writing bindings in other languages, let us know on the <a href='https://groups.google.com/group/capnproto'>discussion group</a>. If you&#8217;d just like to know when it&#8217;s ready, add yourself to the <a href='https://groups.google.com/group/capnproto-announce'>announcement list</a>.</p>
+<p>To install Cap&#8217;n Proto, head over to the <a href='install.html'>installation page</a>. If you&#8217;d like to help hack on Cap&#8217;n Proto, such as by writing bindings in other languages, let us know on the <a href='https://groups.google.com/group/capnproto'>discussion group</a>. If you&#8217;d like to receive e-mail udpates about future releases, add yourself to the <a href='https://groups.google.com/group/capnproto-announce'>announcement list</a>.</p>
 <div style='float: right'>
 <a style='color: #fff' href='https://github.com/kentonv/capnproto' class='github_link'>Develop</a>
 <a style='color: #fff' href='https://groups.google.com/group/capnproto' class='groups_link'>Discuss</a>
 <a style='color: #fff' href='https://groups.google.com/group/capnproto-announce' class='groups_link'>Stay Updated</a>
 </div><div style='clear: right;'> </div>
-        <div style="clear: left;"></div>
+<script type="text/javascript">setupSidebar()</script>
+        <div style="clear: both;"></div>
       </section>
     </div>
 
@@ -176,59 +115,6 @@
     </div>
 
     <script type="text/javascript">
-      // Inject a table of contents into the sidebar.
-      (function() {
-        var toc = document.getElementById("toc");
-        if (toc) {
-          var content = document.getElementById("main_content").childNodes;
-          var headings = [];
-
-          for (var i = 0; i < content.length; i++) {
-            if (content[i].tagName == "H2" ||
-                content[i].tagName == "H3" ||
-                content[i].tagName == "H4") {
-              headings.push(content[i]);
-            }
-          }
-
-          var levels = [toc];
-          for (var i in headings) {
-            var hl = headings[i].tagName.slice(1) - 1;
-            while (hl > levels.length) {
-              var parent = levels[levels.length - 1];
-              var item = parent.childNodes[parent.childNodes.length - 1];
-              var sublist = document.createElement("ul");
-              item.appendChild(sublist);
-              levels.push(sublist);
-            }
-            while (hl < levels.length) {
-              levels.pop();
-            }
-
-            var parent = levels[levels.length - 1];
-            var item = document.createElement("li");
-            var p = document.createElement("p");
-            var link = document.createElement("a");
-            link.appendChild(document.createTextNode(headings[i].innerText || headings[i].textContent));
-            link.href = "#" + headings[i].id;
-            p.appendChild(link);
-            p.onclick = (function(url) {
-              return function(event) {
-                window.location.href = url;
-                event.stopPropagation();
-              }
-            })(link.href);
-            item.appendChild(p);
-            parent.appendChild(item);
-          }
-        }
-
-        var menu = document.getElementById("menu");
-        document.getElementById("main_content").style.minHeight = menu.clientHeight + 100 + "px";
-      })()
-    </script>
-
-    <script type="text/javascript">
       var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
       document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
     </script>
@@ -238,7 +124,6 @@
         pageTracker._trackPageview();
       } catch(err) {}
     </script>
-
-
   </body>
 </html>
+
