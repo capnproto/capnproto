@@ -73,10 +73,6 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: -1px;
 }
 
-.hmargin {
-  margin: 10px 0 0 0;
-}
-
 h1 {
   font-size: 36px;
   font-weight: 700;
@@ -255,17 +251,6 @@ form {
 img {
   width: 100%;
   max-width: 100%;
-}
-
-p.author {
-	margin: -1em 0 0 0;
-	padding: 0;
-	font-size: 80%;
-	color: #888;
-}
-
-h1>a, h2>a {
-	color: black;
 }
 
 /*******************************************************************************

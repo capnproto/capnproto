@@ -7,11 +7,9 @@
     <meta name="description" content="Capnproto : Cap'n Proto serialization/RPC system" />
     <meta name="viewport" content="width=480">
 
-    <link rel="stylesheet" type="text/css" media="screen" href="/stylesheets/stylesheet.css">
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
 
     <title>Cap'n Proto</title>
-
-    <script type="text/javascript" src="/javascripts/main.js"></script>
   </head>
 
   <body class="desktop">
@@ -19,9 +17,9 @@
     <!-- HEADER -->
     <div id="header_wrap" class="outer">
       <header class="inner">
-        <img src="/images/captain_proto.png">
+        <img src="images/captain_proto.png">
         <div id="infinitely_faster">
-          <img src="/images/infinitely_faster.png">
+          <img src="images/infinitely_faster.png">
         </div>
       </header>
       <a id="discuss_banner" href="https://groups.google.com/group/capnproto">Discuss on Groups</a>
@@ -33,19 +31,83 @@
 
       <section id="menu">
         <ul>
-          <li><a href="/index.html">Introduction</a></li>
-          <li><a href="/news/">News</a></li>
-          <li><a href="/install.html">Installation</a></li>
-          <li><a href="/language.html">Schema Language</a></li>
-          <li><a href="/encoding.html">Encoding</a></li>
-          <li><a href="/rpc.html">RPC Protocol</a></li>
-          <li><a href="/cxx.html">C++ Runtime</a></li>
-          <li><a href="/otherlang.html">Other Languages</a></li>
+          <li><a href="index.html">Introduction</a></li>
+          <li><a href="install.html">Installation</a></li>
+          <li><a href="language.html">Schema Language</a></li>
+          <li><a href="encoding.html">Encoding</a></li>
+          <li><a href="rpc.html">RPC Protocol</a></li>
+          <li><a href="cxx.html">C++ Runtime</a></li>
+          <li><a href="otherlang.html">Other Languages</a></li>
         </ul>
       </section>
-      <section id="main_content" class="inner">
+      <script type="text/javascript">
+        // Highlight the current page in the sidebar, make the sidebar items easy to click, and
+        // make the sidebar float when scrolled, unless there isn't enough space.
+        (function () {
+          var pathname = document.location.pathname;
+          var last = pathname.lastIndexOf('/');
+          var filename = pathname.substring(last);
 
-<h1 id='c_runtime'>C++ Runtime</h1>
+          if (filename == "/") {
+            filename = "/index.html";
+          }
+
+          var menu = document.getElementById("menu");
+          var setMenuLayout = function() {
+            if (window.innerWidth < 900) {
+              document.body.className = "narrow";
+              menu.className = "";
+            } else {
+              if (document.body.clientWidth < 1340) {
+                document.body.className = "normal";
+              } else {
+                document.body.className = "wide";
+              }
+
+              if (window.scrollY < 410 || window.innerHeight < menu.clientHeight + 100) {
+                menu.className = "";
+              } else {
+                menu.className = "floating";
+              }
+            }
+          };
+          setMenuLayout();
+          window.onresize = setMenuLayout;
+          window.onscroll = setMenuLayout;
+
+          var items = menu.getElementsByTagName("li");
+          for (var i = 0; i < items.length; i++) {
+            var link = items[i].getElementsByTagName("a")[0];
+            var href = link.href;
+            if (href.lastIndexOf(filename) >= 0) {
+              var parent = link.parentNode;
+              parent.removeChild(link);
+              var p = document.createElement("p");
+              p.appendChild(document.createTextNode(link.innerText || link.textContent));
+              p.onclick = (function(url) {
+                return function(event) {
+                  window.location.href = url;
+                  event.stopPropagation();
+                }
+              })(href + "#main_content");
+              parent.appendChild(p);
+              items[i].className = "selected";
+              var toc = document.createElement("ul");
+              toc.id = "toc";
+              items[i].appendChild(toc);
+            } else {
+              items[i].onclick = (function(url) {
+                return function(event) {
+                  window.location.href = url;
+                  event.stopPropagation();
+                }
+              })(href);
+            }
+          }
+        })();
+      </script>
+      <section id="main_content" class="inner">
+        <h1 id='c_runtime'>C++ Runtime</h1>
 
 <p>The Cap&#8217;n Proto C++ runtime implementation provides an easy-to-use interface for manipulating messages backed by fast pointer arithmetic.</p>
 
@@ -299,10 +361,6 @@
 
 <p>Interfaces (RPC) are not yet implemented at this time.</p>
 
-<h3 id='constants'>Constants</h3>
-
-<p>Constants are not yet implemented at this time. (They are not hard, but they are low-priority.)</p>
-
 <h2 id='messages_and_io'>Messages and I/O</h2>
 
 <p>To create a new message, you must start by creating a <code>capnp::MessageBuilder</code> (<code>capnp/message.h</code>). This is an abstract type which you can implement yourself, but most users will want to use <code>capnp::MallocMessageBuilder</code>. Once your message is constructed, write it to a file descriptor with <code>capnp::writeMessageToFd(fd, builder)</code> (<code>capnp/serialize.h</code>) or <code>capnp::writePackedMessageToFd(fd, builder)</code> (<code>capnp/serialize-packed.h</code>).</p>
@@ -487,10 +545,6 @@
 </li>
 
 <li>
-<p>You can load schemas dynamically at runtime using <code>SchemaLoader</code> (<code>capnp/schema-loader.h</code>) and use the Dynamic API to manipulate objects of these types. <code>MessageBuilder</code> and <code>MessageReader</code> have methods for accessing the message root using a dynamic schema.</p>
-</li>
-
-<li>
 <p>Unlike with Protobufs, there is no &#8220;global registry&#8221; of compiled-in types. To get the schema for a compiled-in type, use <code>capnp::Schema::from&lt;MyType&gt;()</code>.</p>
 </li>
 
@@ -530,15 +584,14 @@ capnp/dynamic.h</code></pre>
 </li>
 
 <li>
-<p>The in-memory representation of messages in Protobuf-C++ involves many heap objects. Each message (struct) is an object, each non-primitive repeated field allocates an array of pointers to more objects, and each string may actually add two heap objects. Cap&#8217;n Proto by its nature uses arena allocation, so the entire message is allocated in a few contiguous segments. This means Cap&#8217;n Proto spends very little time allocating memory, stores messages more compactly, and avoids memory fragmentation.</p>
+<p>The in-memory representation of messages in Protobuf-C++ involves many heap objects. Each message is an object, each non-primitive repeated field allocates an array of pointers to more objects, and each string may actually add two heap objects. Cap&#8217;n Proto by its nature uses arena allocation, so the entire message is allocated in a few contiguous segments. This means Cap&#8217;n Proto spends very little time allocating memory, stores messages more compactly, and avoids memory fragmentation.</p>
 </li>
 
 <li>
 <p>Related to the last point, Protobuf-C++ relies heavily on object reuse for performance. Building or parsing into a newly-allocated Protobuf object is significantly slower than using an existing one. However, the memory usage of a Protobuf object will tend to grow the more times it is reused, particularly if it is used to parse messages of many different &#8220;shapes&#8221;, so the objects need to be deleted and re-allocated from time to time. All this makes tuning Protobufs fairly tedious. In contrast, enabling memory reuse with Cap&#8217;n Proto is as simple as providing a byte buffer to use as scratch space when you build or read in a message. Provide enough scratch space to hold the entire message and Cap&#8217;n Proto won&#8217;t allocate any memory. Or don&#8217;t &#8211; since Cap&#8217;n Proto doesn&#8217;t do much allocation in the first place, the benefits of scratch space are small.</p>
 </li>
 </ul>
-<script type="text/javascript">setupSidebar()</script>
-        <div style="clear: both;"></div>
+        <div style="clear: left;"></div>
       </section>
     </div>
 
@@ -551,6 +604,59 @@ capnp/dynamic.h</code></pre>
     </div>
 
     <script type="text/javascript">
+      // Inject a table of contents into the sidebar.
+      (function() {
+        var toc = document.getElementById("toc");
+        if (toc) {
+          var content = document.getElementById("main_content").childNodes;
+          var headings = [];
+
+          for (var i = 0; i < content.length; i++) {
+            if (content[i].tagName == "H2" ||
+                content[i].tagName == "H3" ||
+                content[i].tagName == "H4") {
+              headings.push(content[i]);
+            }
+          }
+
+          var levels = [toc];
+          for (var i in headings) {
+            var hl = headings[i].tagName.slice(1) - 1;
+            while (hl > levels.length) {
+              var parent = levels[levels.length - 1];
+              var item = parent.childNodes[parent.childNodes.length - 1];
+              var sublist = document.createElement("ul");
+              item.appendChild(sublist);
+              levels.push(sublist);
+            }
+            while (hl < levels.length) {
+              levels.pop();
+            }
+
+            var parent = levels[levels.length - 1];
+            var item = document.createElement("li");
+            var p = document.createElement("p");
+            var link = document.createElement("a");
+            link.appendChild(document.createTextNode(headings[i].innerText || headings[i].textContent));
+            link.href = "#" + headings[i].id;
+            p.appendChild(link);
+            p.onclick = (function(url) {
+              return function(event) {
+                window.location.href = url;
+                event.stopPropagation();
+              }
+            })(link.href);
+            item.appendChild(p);
+            parent.appendChild(item);
+          }
+        }
+
+        var menu = document.getElementById("menu");
+        document.getElementById("main_content").style.minHeight = menu.clientHeight + 100 + "px";
+      })()
+    </script>
+
+    <script type="text/javascript">
       var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
       document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
     </script>
@@ -560,6 +666,7 @@ capnp/dynamic.h</code></pre>
         pageTracker._trackPageview();
       } catch(err) {}
     </script>
+
+
   </body>
 </html>
-
