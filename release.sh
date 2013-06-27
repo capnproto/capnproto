@@ -44,11 +44,11 @@ case "$BRANCH" in
     echo "Building C++ runtime package..."
     echo "========================================================================="
     cd c++
-    doit ./setup-autotools.sh
+    doit ./setup-autotools.sh | tr = -
     doit autoreconf -i
     doit ./configure
     doit make dist
-    doit cp capnproto-c++-$VERSION.0-rc1.tar.gz ..
+    doit mv capnproto-c++-$VERSION.0-rc1.tar.gz ..
     doit make maintainer-clean
     cd ..
 
