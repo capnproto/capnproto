@@ -326,8 +326,8 @@
 <div class='highlight'><pre><code class='capnp'><span class='k'>annotation</span> <span class='n'>qux</span>(<span class='k'>struct</span>, <span class='n'>field</span>) <span class='nc'>:Void</span>;
 
 <span class='k'>struct</span> <span class='n'>MyStruct</span> <span class='na'>$qux </span>{
-  <span class='n'>string</span> <span class='na'>$0 </span><span class='nc'>:Text </span><span class='na'>$qux</span>;
-  <span class='n'>number</span> <span class='na'>$1 </span><span class='nc'>:Int32 </span><span class='na'>$qux</span>;
+  <span class='n'>string</span> <span class='nd'>@0</span> <span class='nc'>:Text </span><span class='na'>$qux</span>;
+  <span class='n'>number</span> <span class='nd'>@1</span> <span class='nc'>:Int32 </span><span class='na'>$qux</span>;
 }
 
 <span class='k'>annotation</span> <span class='n'>corge</span>(<span class='n'>file</span>) <span class='nc'>:MyStruct</span>;
