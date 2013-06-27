@@ -1,5 +1,6 @@
 ---
 layout: page
+title: Schema Language
 ---
 
 # Schema Language

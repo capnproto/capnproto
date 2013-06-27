@@ -1,5 +1,6 @@
 ---
 layout: page
+title: Other Languages
 ---
 
 # Other Languages

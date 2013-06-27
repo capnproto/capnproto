@@ -1,5 +1,6 @@
 ---
 layout: page
+title: RPC Protocol
 ---
 
 # RPC Protocol
