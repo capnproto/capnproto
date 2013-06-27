@@ -85,12 +85,4 @@ languages, let us know on the [discussion group](https://groups.google.com/group
 you'd just like to know when it's ready, add yourself to the
 [announcement list](https://groups.google.com/group/capnproto-announce).
 
-<div style="float: right">
-<a class="github_link" style="color: #fff"
-href="https://github.com/kentonv/capnproto">Develop</a>
-<a class="groups_link" style="color: #fff"
-href="https://groups.google.com/group/capnproto">Discuss</a>
-<a class="groups_link" style="color: #fff"
-href="https://groups.google.com/group/capnproto-announce">Stay Updated</a>
-</div>
-<div style="clear: right;"> </div>
+{% include buttons.html %}

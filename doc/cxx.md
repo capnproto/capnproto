@@ -334,6 +334,10 @@ NUL-terminated `const char*`.
 
 Interfaces (RPC) are not yet implemented at this time.
 
+### Constants
+
+Constants are not yet implemented at this time.  (They are not hard, but they are low-priority.)
+
 ## Messages and I/O
 
 To create a new message, you must start by creating a `capnp::MessageBuilder`
@@ -588,11 +592,11 @@ learned the hard way:
   quickly.
 
 * The in-memory representation of messages in Protobuf-C++ involves many heap objects.  Each
-  message is an object, each non-primitive repeated field allocates an array of pointers to more
-  objects, and each string may actually add two heap objects.  Cap'n Proto by its nature uses
-  arena allocation, so the entire message is allocated in a few contiguous segments.  This means
-  Cap'n Proto spends very little time allocating memory, stores messages more compactly, and avoids
-  memory fragmentation.
+  message (struct) is an object, each non-primitive repeated field allocates an array of pointers
+  to more objects, and each string may actually add two heap objects.  Cap'n Proto by its nature
+  uses arena allocation, so the entire message is allocated in a few contiguous segments.  This
+  means Cap'n Proto spends very little time allocating memory, stores messages more compactly, and
+  avoids memory fragmentation.
 
 * Related to the last point, Protobuf-C++ relies heavily on object reuse for performance.
   Building or parsing into a newly-allocated Protobuf object is significantly slower than using

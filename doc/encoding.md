@@ -4,10 +4,6 @@ layout: page
 
 # Encoding Spec
 
-## NOT FINALIZED
-
-The Cap'n Proto encoding is still evolving.  Anything in this document could still change.
-
 ## Organization
 
 ### 64-bit Words
