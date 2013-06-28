@@ -1,5 +1,7 @@
 /*******************************************************************************
-Slate Theme for GitHub Pages
+Site Design by @kentonv and @sailorhg.
+
+Originally based on Slate Theme for GitHub Pages
 by Jason Costello, @jsncostello
 *******************************************************************************/
 
@@ -163,9 +165,6 @@ pre, code {
   border-radius: 2px;
   -moz-border-radius: 2px;
   -webkit-border-radius: 2px;
-
-
-
 }
 
 pre {
@@ -262,6 +261,17 @@ p.author {
 	padding: 0;
 	font-size: 80%;
 	color: #888;
+}
+
+p.author>span.gplus-followbutton {
+	position: relative;
+	top: 3px;
+}
+
+p.copyright>span.gplus-followbutton {
+	position: relative;
+	top: 1px;
+	/* Yes, it's off by one goddamn pixel, you got a problem with that? */
 }
 
 h1>a, h2>a {
