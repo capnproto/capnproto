@@ -19,7 +19,10 @@ function initSidebar() {
         document.body.className = "wide";
       }
 
-      if (window.scrollY < 410 || window.innerHeight < menu.clientHeight + 100) {
+      var y = (window.pageYOffset !== undefined) ? window.pageYOffset :
+        (document.documentElement || document.body.parentNode || document.body).scrollTop;
+
+      if (y < 410 || window.innerHeight < menu.clientHeight + 100) {
         menu.className = "";
       } else {
         menu.className = "floating";
