@@ -35,14 +35,14 @@
 // will have updated the input cursor to point to the position just past the end of what was parsed.
 // On failure, the cursor position is unspecified.
 
-#ifndef KJ_PARSER_H_
-#define KJ_PARSER_H_
+#ifndef KJ_PARSE_COMMON_H_
+#define KJ_PARSE_COMMON_H_
 
-#include "common.h"
-#include "memory.h"
-#include "array.h"
-#include "tuple.h"
-#include "vector.h"
+#include "../common.h"
+#include "../memory.h"
+#include "../array.h"
+#include "../tuple.h"
+#include "../vector.h"
 
 namespace kj {
 namespace parse {
@@ -632,4 +632,4 @@ constexpr CharGroup_ anyChar(const char* chars) {
 }  // namespace parse
 }  // namespace kj
 
-#endif  // KJ_PARSER_H_
+#endif  // KJ_PARSE_COMMON_H_

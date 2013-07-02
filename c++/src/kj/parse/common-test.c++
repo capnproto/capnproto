@@ -21,8 +21,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "parse.h"
-#include "string.h"
+#include "common.h"
+#include "../string.h"
 #include <gtest/gtest.h>
 
 namespace kj {
@@ -32,7 +32,7 @@ namespace {
 typedef IteratorInput<char, const char*> Input;
 typedef Span<const char*> TestLocation;
 
-TEST(Parsers, ExactElementParser) {
+TEST(CommonParsers, ExactElementParser) {
   StringPtr text = "foo";
   Input input(text.begin(), text.end());
 
@@ -55,7 +55,7 @@ TEST(Parsers, ExactElementParser) {
   EXPECT_TRUE(input.atEnd());
 }
 
-TEST(Parsers, ExactlyConstParser) {
+TEST(CommonParsers, ExactlyConstParser) {
   StringPtr text = "foo";
   Input input(text.begin(), text.end());
 
@@ -78,7 +78,7 @@ TEST(Parsers, ExactlyConstParser) {
   EXPECT_TRUE(input.atEnd());
 }
 
-TEST(Parsers, ExactChar) {
+TEST(CommonParsers, ExactChar) {
   constexpr auto parser = exactChar<'a'>();
 
   {
@@ -96,7 +96,7 @@ TEST(Parsers, ExactChar) {
   }
 }
 
-TEST(Parsers, ConstResultParser) {
+TEST(CommonParsers, ConstResultParser) {
   auto parser = constResult(exactly('o'), 123);
 
   StringPtr text = "o";
@@ -110,7 +110,7 @@ TEST(Parsers, ConstResultParser) {
   EXPECT_TRUE(input.atEnd());
 }
 
-TEST(Parsers, SequenceParser) {
+TEST(CommonParsers, SequenceParser) {
   StringPtr text = "foo";
 
   {
@@ -163,7 +163,7 @@ TEST(Parsers, SequenceParser) {
   }
 }
 
-TEST(Parsers, ManyParser) {
+TEST(CommonParsers, ManyParser) {
   StringPtr text = "foooob";
 
   auto parser = transform(
@@ -204,7 +204,7 @@ TEST(Parsers, ManyParser) {
   }
 }
 
-TEST(Parsers, OptionalParser) {
+TEST(CommonParsers, OptionalParser) {
   auto parser = sequence(
       transform(exactly('b'), [](TestLocation) -> uint { return 123; }),
       optional(transform(exactly('a'), [](TestLocation) -> uint { return 456; })),
@@ -250,7 +250,7 @@ TEST(Parsers, OptionalParser) {
   }
 }
 
-TEST(Parsers, OneOfParser) {
+TEST(CommonParsers, OneOfParser) {
   auto parser = oneOf(
       transform(sequence(exactly('f'), exactly('o'), exactly('o')),
                 [](TestLocation) -> StringPtr { return "foo"; }),
@@ -282,7 +282,7 @@ TEST(Parsers, OneOfParser) {
   }
 }
 
-TEST(Parsers, TransformParser) {
+TEST(CommonParsers, TransformParser) {
   StringPtr text = "foo";
 
   auto parser = transform(
@@ -304,7 +304,7 @@ TEST(Parsers, TransformParser) {
   }
 }
 
-TEST(Parsers, References) {
+TEST(CommonParsers, References) {
   struct TransformFunc {
     int value;
 
@@ -344,7 +344,7 @@ TEST(Parsers, References) {
   }
 }
 
-TEST(Parsers, AcceptIfParser) {
+TEST(CommonParsers, AcceptIfParser) {
   auto parser = acceptIf(
       oneOf(transform(exactly('a'), [](TestLocation) -> uint { return 123; }),
             transform(exactly('b'), [](TestLocation) -> uint { return 456; }),
@@ -383,7 +383,7 @@ TEST(Parsers, AcceptIfParser) {
   }
 }
 
-TEST(Parsers, CharRange) {
+TEST(CommonParsers, CharRange) {
   constexpr auto parser = charRange('a', 'z');
 
   {
@@ -447,7 +447,7 @@ TEST(Parsers, CharRange) {
   }
 }
 
-TEST(Parsers, AnyChar) {
+TEST(CommonParsers, AnyChar) {
   constexpr auto parser = anyChar("axn2B");
 
   {
@@ -511,7 +511,7 @@ TEST(Parsers, AnyChar) {
   }
 }
 
-TEST(Parsers, CharGroupCombo) {
+TEST(CommonParsers, CharGroupCombo) {
   constexpr auto parser =
       many(charRange('0', '9').orRange('a', 'z').orRange('A', 'Z').orAny("-_"));
 
