@@ -52,8 +52,6 @@ class IteratorInput {
   // A parser input implementation based on an iterator range.
 
 public:
-  typedef Element ElementType;
-
   IteratorInput(Iterator begin, Iterator end)
       : parent(nullptr), pos(begin), end(end), best(begin) {}
   IteratorInput(IteratorInput& parent)
@@ -63,6 +61,7 @@ public:
       parent->best = kj::max(kj::max(pos, best), parent->best);
     }
   }
+  KJ_DISALLOW_COPY(IteratorInput);
 
   void advanceParent() {
     parent->pos = pos;
@@ -74,7 +73,7 @@ public:
     return *pos;
   }
   const Element& consume() {
-    assert(!atEnd());
+    KJ_IREQUIRE(!atEnd());
     return *pos++;
   }
   void next() {
@@ -91,10 +90,6 @@ private:
   Iterator pos;
   Iterator end;
   Iterator best;  // furthest we got with any sub-input
-
-  IteratorInput(IteratorInput&&) = delete;
-  IteratorInput& operator=(const IteratorInput&) = delete;
-  IteratorInput& operator=(IteratorInput&&) = delete;
 };
 
 template <typename T> struct OutputType_;
@@ -213,11 +208,6 @@ constexpr ExactlyConst_<T, expected> exactlyConst() {
   // it to perform better -- or worse.  Be sure to measure.
 
   return ExactlyConst_<T, expected>();
-}
-
-template <char c>
-constexpr ExactlyConst_<char, c> exactChar() {
-  return ExactlyConst_<char, c>();
 }
 
 // -------------------------------------------------------------------
@@ -566,67 +556,6 @@ public:
 constexpr EndOfInput_ endOfInput() {
   // Constructs a parser that succeeds only if it is called with no input.
   return EndOfInput_();
-}
-
-// -------------------------------------------------------------------
-// CharGroup
-
-class CharGroup_ {
-public:
-  constexpr CharGroup_(): bits{0, 0, 0, 0} {}
-
-  constexpr CharGroup_ orRange(unsigned char first, unsigned char last) const {
-    return CharGroup_(bits[0] | (oneBits(last +   1) & ~oneBits(first      )),
-                      bits[1] | (oneBits(last -  63) & ~oneBits(first -  64)),
-                      bits[2] | (oneBits(last - 127) & ~oneBits(first - 128)),
-                      bits[3] | (oneBits(last - 191) & ~oneBits(first - 192)));
-  }
-
-  constexpr CharGroup_ orAny(const char* chars) const {
-    return *chars == 0 ? *this : orChar(*chars).orAny(chars + 1);
-  }
-
-  constexpr CharGroup_ orChar(unsigned char c) const {
-    return CharGroup_(bits[0] | bit(c),
-                      bits[1] | bit(c - 64),
-                      bits[2] | bit(c - 128),
-                      bits[3] | bit(c - 256));
-  }
-
-  constexpr CharGroup_ invert() const {
-    return CharGroup_(~bits[0], ~bits[1], ~bits[2], ~bits[3]);
-  }
-
-  template <typename Input>
-  Maybe<char> operator()(Input& input) const {
-    unsigned char c = input.current();
-    if ((bits[c / 64] & (1ll << (c % 64))) != 0) {
-      input.next();
-      return c;
-    } else {
-      return nullptr;
-    }
-  }
-
-private:
-  typedef unsigned long long Bits64;
-
-  constexpr CharGroup_(Bits64 a, Bits64 b, Bits64 c, Bits64 d): bits{a, b, c, d} {}
-  Bits64 bits[4];
-
-  static constexpr Bits64 oneBits(int count) {
-    return count <= 0 ? 0ll : count >= 64 ? -1ll : ((1ll << count) - 1);
-  }
-  static constexpr Bits64 bit(int index) {
-    return index < 0 ? 0 : index >= 64 ? 0 : (1ll << index);
-  }
-};
-
-constexpr CharGroup_ charRange(char first, char last) {
-  return CharGroup_().orRange(first, last);
-}
-constexpr CharGroup_ anyChar(const char* chars) {
-  return CharGroup_().orAny(chars);
 }
 
 }  // namespace parse
