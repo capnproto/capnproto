@@ -151,6 +151,29 @@ constexpr ParserRef<Input, OutputType<ParserImpl, Input>> ref(ParserImpl& impl) 
 }
 
 // -------------------------------------------------------------------
+// any()
+// Output = one token
+
+class Any_ {
+public:
+  template <typename Input>
+  Maybe<Decay<decltype(instance<Input>().current())>> operator()(Input& input) const {
+    if (input.atEnd()) {
+      return nullptr;
+    } else {
+      auto result = input.current();
+      input.next();
+      return result;
+    }
+  }
+};
+
+constexpr Any_ any() {
+  // Constructs a parser which matches any token and simply returns it.
+  return Any_();
+}
+
+// -------------------------------------------------------------------
 // exactly()
 // Output = Tuple<>
 
@@ -305,16 +328,28 @@ constexpr Sequence_<SubParsers...> sequence(SubParsers&&... subParsers) {
 
 // -------------------------------------------------------------------
 // many()
-// Output = Array of output of sub-parser.
+// Output = Array of output of sub-parser, or just a uint count if the sub-parser returns Tuple<>.
 
 template <typename SubParser, bool atLeastOne>
 class Many_ {
+  template <typename Input, typename Output = OutputType<SubParser, Input>>
+  struct Impl;
 public:
   explicit constexpr Many_(SubParser&& subParser)
       : subParser(kj::mv(subParser)) {}
 
   template <typename Input>
-  Maybe<Array<OutputType<SubParser, Input>>> operator()(Input& input) const {
+  auto operator()(Input& input) const
+      -> decltype(Impl<Input>::apply(instance<const SubParser&>(), input));
+
+private:
+  SubParser subParser;
+};
+
+template <typename SubParser, bool atLeastOne>
+template <typename Input, typename Output>
+struct Many_<SubParser, atLeastOne>::Impl {
+  static Maybe<Array<Output>> apply(const SubParser& subParser, Input& input) {
     typedef Vector<OutputType<SubParser, Input>> Results;
     Results results;
 
@@ -335,15 +370,44 @@ public:
 
     return results.releaseAsArray();
   }
-
-private:
-  SubParser subParser;
 };
+
+template <typename SubParser, bool atLeastOne>
+template <typename Input>
+struct Many_<SubParser, atLeastOne>::Impl<Input, Tuple<>> {
+  static Maybe<uint> apply(const SubParser& subParser, Input& input) {
+    uint count = 0;
+
+    while (!input.atEnd()) {
+      Input subInput(input);
+
+      KJ_IF_MAYBE(subResult, subParser(subInput)) {
+        subInput.advanceParent();
+        ++count;
+      } else {
+        break;
+      }
+    }
+
+    if (atLeastOne && count == 0) {
+      return nullptr;
+    }
+
+    return count;
+  }
+};
+
+template <typename SubParser, bool atLeastOne>
+template <typename Input>
+auto Many_<SubParser, atLeastOne>::operator()(Input& input) const
+    -> decltype(Impl<Input>::apply(instance<const SubParser&>(), input)) {
+  return Impl<Input, OutputType<SubParser, Input>>::apply(subParser, input);
+}
 
 template <typename SubParser>
 constexpr Many_<SubParser, false> many(SubParser&& subParser) {
   // Constructs a parser that repeatedly executes the given parser until it fails, returning an
-  // Array of the results.
+  // Array of the results (or a uint count if `subParser` returns an empty tuple).
   return Many_<SubParser, false>(kj::fwd<SubParser>(subParser));
 }
 

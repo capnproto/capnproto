@@ -31,6 +31,7 @@ namespace parse {
 
 // =======================================================================================
 
+template <typename ReturnType>
 class CharGroup_ {
 public:
   constexpr CharGroup_(): bits{0, 0, 0, 0} {}
@@ -58,15 +59,7 @@ public:
   }
 
   template <typename Input>
-  Maybe<char> operator()(Input& input) const {
-    unsigned char c = input.current();
-    if ((bits[c / 64] & (1ll << (c % 64))) != 0) {
-      input.next();
-      return c;
-    } else {
-      return nullptr;
-    }
-  }
+  Maybe<ReturnType> operator()(Input& input) const;
 
 private:
   typedef unsigned long long Bits64;
@@ -82,7 +75,31 @@ private:
   }
 };
 
-constexpr CharGroup_ charRange(char first, char last) {
+template <>
+template <typename Input>
+Maybe<char> CharGroup_<char>::operator()(Input& input) const {
+  unsigned char c = input.current();
+  if ((bits[c / 64] & (1ll << (c % 64))) != 0) {
+    input.next();
+    return c;
+  } else {
+    return nullptr;
+  }
+}
+
+template <>
+template <typename Input>
+Maybe<Tuple<>> CharGroup_<Tuple<>>::operator()(Input& input) const {
+  unsigned char c = input.current();
+  if ((bits[c / 64] & (1ll << (c % 64))) != 0) {
+    input.next();
+    return tuple();
+  } else {
+    return nullptr;
+  }
+}
+
+constexpr CharGroup_<char> charRange(char first, char last) {
   // Create a parser which accepts any character in the range from `first` to `last`, inclusive.
   // For example: `charRange('a', 'z')` matches all lower-case letters.  The parser's result is the
   // character matched.
@@ -94,15 +111,27 @@ constexpr CharGroup_ charRange(char first, char last) {
   //
   // You can also use `.invert()` to match the opposite set of characters.
 
-  return CharGroup_().orRange(first, last);
+  return CharGroup_<char>().orRange(first, last);
 }
 
-constexpr CharGroup_ anyChar(const char* chars) {
+constexpr CharGroup_<char> anyOfChars(const char* chars) {
   // Returns a parser that accepts any of the characters in the given string (which should usually
   // be a literal).  The returned parser is of the same type as returned by `charRange()` -- see
   // that function for more info.
 
-  return CharGroup_().orAny(chars);
+  return CharGroup_<char>().orAny(chars);
+}
+
+constexpr CharGroup_<Tuple<>> discardCharRange(char first, char last) {
+  // Like `charRange()` except that the parser returns an empty tuple.
+
+  return CharGroup_<Tuple<>>().orRange(first, last);
+}
+
+constexpr CharGroup_<Tuple<>> discardAnyOfChars(const char* chars) {
+  // Like `anyChar()` except that the parser returns an empty tuple.
+
+  return CharGroup_<Tuple<>>().orAny(chars);
 }
 
 template <char c>

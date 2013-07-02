@@ -32,6 +32,39 @@ namespace {
 typedef IteratorInput<char, const char*> Input;
 typedef Span<const char*> TestLocation;
 
+TEST(CommonParsers, AnyParser) {
+  StringPtr text = "foo";
+  Input input(text.begin(), text.end());
+
+  Maybe<char> result = any()(input);
+  KJ_IF_MAYBE(c, result) {
+    EXPECT_EQ('f', *c);
+  } else {
+    ADD_FAILURE() << "Expected 'c', got null.";
+  }
+  EXPECT_FALSE(input.atEnd());
+
+  result = any()(input);
+  KJ_IF_MAYBE(c, result) {
+    EXPECT_EQ('o', *c);
+  } else {
+    ADD_FAILURE() << "Expected 'o', got null.";
+  }
+  EXPECT_FALSE(input.atEnd());
+
+  result = any()(input);
+  KJ_IF_MAYBE(c, result) {
+    EXPECT_EQ('o', *c);
+  } else {
+    ADD_FAILURE() << "Expected 'o', got null.";
+  }
+  EXPECT_TRUE(input.atEnd());
+
+  result = any()(input);
+  EXPECT_TRUE(result == nullptr);
+  EXPECT_TRUE(input.atEnd());
+}
+
 TEST(CommonParsers, ExactElementParser) {
   StringPtr text = "foo";
   Input input(text.begin(), text.end());
@@ -145,12 +178,10 @@ TEST(CommonParsers, SequenceParser) {
   }
 }
 
-TEST(CommonParsers, ManyParser) {
+TEST(CommonParsers, ManyParserCountOnly) {
   StringPtr text = "foooob";
 
-  auto parser = transform(
-      sequence(exactly('f'), many(exactly('o'))),
-      [](TestLocation, ArrayPtr<Tuple<>> values) -> int { return values.size(); });
+  auto parser = sequence(exactly('f'), many(exactly('o')));
 
   {
     Input input(text.begin(), text.begin() + 3);
@@ -183,6 +214,23 @@ TEST(CommonParsers, ManyParser) {
       ADD_FAILURE() << "Expected 4, got null.";
     }
     EXPECT_FALSE(input.atEnd());
+  }
+}
+
+TEST(CommonParsers, ManyParserSubResult) {
+  StringPtr text = "foooob";
+
+  auto parser = many(any());
+
+  {
+    Input input(text.begin(), text.end());
+    Maybe<Array<char>> result = parser(input);
+    KJ_IF_MAYBE(chars, result) {
+      EXPECT_EQ(text, heapString(*chars));
+    } else {
+      ADD_FAILURE() << "Expected char array, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
   }
 }
 

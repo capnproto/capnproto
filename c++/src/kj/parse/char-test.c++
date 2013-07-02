@@ -96,8 +96,8 @@ TEST(CharParsers, CharRange) {
   }
 }
 
-TEST(CharParsers, AnyChar) {
-  constexpr auto parser = anyChar("axn2B");
+TEST(CharParsers, AnyOfChars) {
+  constexpr auto parser = anyOfChars("axn2B");
 
   {
     StringPtr text = "a";
@@ -172,6 +172,38 @@ TEST(CharParsers, CharGroupCombo) {
       EXPECT_EQ("foo1-bar2_baz3", str(*value));
     } else {
       ADD_FAILURE() << "Expected parse result, got null.";
+    }
+    EXPECT_FALSE(input.atEnd());
+  }
+}
+
+TEST(CharParsers, DiscardCharRange) {
+  constexpr auto parser = many(discardCharRange('a', 'z'));
+
+  {
+    StringPtr text = "foo-bar";
+    Input input(text.begin(), text.end());
+    Maybe<int> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ(3, *value);
+    } else {
+      ADD_FAILURE() << "Expected 3, got null.";
+    }
+    EXPECT_FALSE(input.atEnd());
+  }
+}
+
+TEST(CharParsers, DiscardAnyOfChars) {
+  constexpr auto parser = many(discardAnyOfChars("abcd"));
+
+  {
+    StringPtr text = "cadbfoo";
+    Input input(text.begin(), text.end());
+    Maybe<int> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ(4, *value);
+    } else {
+      ADD_FAILURE() << "Expected 4, got null.";
     }
     EXPECT_FALSE(input.atEnd());
   }
