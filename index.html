@@ -4,7 +4,6 @@
   <head>
     <meta charset='utf-8' />
     <meta http-equiv="X-UA-Compatible" content="chrome=1" />
-    <meta name="description" content="Capnproto : Cap'n Proto serialization/RPC system" />
     <meta name="viewport" content="width=480">
 
     <link rel="stylesheet" type="text/css" media="screen" href="/capnproto/stylesheets/stylesheet.css">
@@ -46,7 +45,7 @@
       <section id="main_content" class="inner">
 
 <h1 id='introduction'>Introduction</h1>
-<img style='width:334px; height:306px; float: right;' src='images/infinity-times-faster.png' />
+<img src='images/infinity-times-faster.png' style='width:334px; height:306px; float: right;' />
 <p>Cap&#8217;n Proto is an insanely fast data interchange format and capability-based RPC system. Think JSON, except binary. Or think <a href='http://protobuf.googlecode.com'>Protocol Buffers</a>, except faster. In fact, in benchmarks, Cap&#8217;n Proto is INFINITY TIMES faster than Protocol Buffers.</p>
 
 <p>This benchmark is, of course, unfair. It is only measuring the time to encode and decode a message in memory. Cap&#8217;n Proto gets a perfect score because <em>there is no encoding/decoding step</em>. The Cap&#8217;n Proto encoding is appropriate both as a data interchange format and an in-memory representation, so once your structure is built, you can simply write the bytes straight out to disk!</p>
@@ -97,9 +96,9 @@
 
 <p>To install Cap&#8217;n Proto, head over to the <a href='install.html'>installation page</a>. If you&#8217;d like to help hack on Cap&#8217;n Proto, such as by writing bindings in other languages, let us know on the <a href='https://groups.google.com/group/capnproto'>discussion group</a>. If you&#8217;d like to receive e-mail udpates about future releases, add yourself to the <a href='https://groups.google.com/group/capnproto-announce'>announcement list</a>.</p>
 <div style='float: right'>
-<a class='github_link' style='color: #fff' href='https://github.com/kentonv/capnproto'>Develop</a>
-<a class='groups_link' style='color: #fff' href='https://groups.google.com/group/capnproto'>Discuss</a>
-<a class='groups_link' style='color: #fff' href='https://groups.google.com/group/capnproto-announce'>Stay Updated</a>
+<a class='github_link' href='https://github.com/kentonv/capnproto' style='color: #fff'>Develop</a>
+<a class='groups_link' href='https://groups.google.com/group/capnproto' style='color: #fff'>Discuss</a>
+<a class='groups_link' href='https://groups.google.com/group/capnproto-announce' style='color: #fff'>Stay Updated</a>
 </div><div style='clear: right;'> </div>
 <script type="text/javascript">setupSidebar()</script>
         <div style="clear: both;"></div>
