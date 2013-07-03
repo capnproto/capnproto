@@ -90,10 +90,10 @@ int TestNoexceptObject::count = 0;
 int TestNoexceptObject::copiedCount = 0;
 
 TEST(Array, TrivialConstructor) {
-  char* ptr;
+//  char* ptr;
   {
     Array<char> chars = heapArray<char>(32);
-    ptr = chars.begin();
+//    ptr = chars.begin();
     chars[0] = 12;
     chars[1] = 34;
   }

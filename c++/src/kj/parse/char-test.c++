@@ -219,7 +219,7 @@ TEST(CharParsers, Integer) {
     Input input(text.begin(), text.end());
     Maybe<uint64_t> result = parser(input);
     KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(12349, *value);
+      EXPECT_EQ(12349u, *value);
     } else {
       ADD_FAILURE() << "Expected integer, got null.";
     }
@@ -231,7 +231,7 @@ TEST(CharParsers, Integer) {
     Input input(text.begin(), text.end());
     Maybe<uint64_t> result = parser(input);
     KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(0x1aF0, *value);
+      EXPECT_EQ(0x1aF0u, *value);
     } else {
       ADD_FAILURE() << "Expected integer, got null.";
     }
@@ -243,7 +243,7 @@ TEST(CharParsers, Integer) {
     Input input(text.begin(), text.end());
     Maybe<uint64_t> result = parser(input);
     KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(064270, *value);
+      EXPECT_EQ(064270u, *value);
     } else {
       ADD_FAILURE() << "Expected integer, got null.";
     }

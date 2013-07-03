@@ -250,7 +250,7 @@ public:
   inline size_t size() const { return pos - ptr; }
   inline size_t capacity() const { return endPtr - ptr; }
   inline T& operator[](size_t index) const {
-    KJ_IREQUIRE(index < pos - ptr, "Out-of-bounds Array access.");
+    KJ_IREQUIRE(index < implicitCast<size_t>(pos - ptr), "Out-of-bounds Array access.");
     return ptr[index];
   }
 

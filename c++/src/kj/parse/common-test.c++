@@ -255,13 +255,13 @@ TEST(CommonParsers, OptionalParser) {
     Input input(text.begin(), text.end());
     Maybe<Tuple<uint, Maybe<uint>, uint>> result = parser(input);
     KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(123, get<0>(*value));
+      EXPECT_EQ(123u, get<0>(*value));
       KJ_IF_MAYBE(value2, get<1>(*value)) {
-        EXPECT_EQ(456, *value2);
+        EXPECT_EQ(456u, *value2);
       } else {
         ADD_FAILURE() << "Expected 456, got null.";
       }
-      EXPECT_EQ(789, get<2>(*value));
+      EXPECT_EQ(789u, get<2>(*value));
     } else {
       ADD_FAILURE() << "Expected result tuple, got null.";
     }
@@ -273,9 +273,9 @@ TEST(CommonParsers, OptionalParser) {
     Input input(text.begin(), text.end());
     Maybe<Tuple<uint, Maybe<uint>, uint>> result = parser(input);
     KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(123, get<0>(*value));
+      EXPECT_EQ(123u, get<0>(*value));
       EXPECT_TRUE(get<1>(*value) == nullptr);
-      EXPECT_EQ(789, get<2>(*value));
+      EXPECT_EQ(789u, get<2>(*value));
     } else {
       ADD_FAILURE() << "Expected result tuple, got null.";
     }
@@ -403,7 +403,7 @@ TEST(CommonParsers, AcceptIfParser) {
     Input input(text.begin(), text.end());
     Maybe<uint> result = parser(input);
     KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(456, *value);
+      EXPECT_EQ(456u, *value);
     } else {
       ADD_FAILURE() << "Expected parse result, got null.";
     }
@@ -415,7 +415,7 @@ TEST(CommonParsers, AcceptIfParser) {
     Input input(text.begin(), text.end());
     Maybe<uint> result = parser(input);
     KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(789, *value);
+      EXPECT_EQ(789u, *value);
     } else {
       ADD_FAILURE() << "Expected parse result, got null.";
     }
