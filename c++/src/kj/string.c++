@@ -39,7 +39,8 @@ String heapString(size_t size) {
 
 String heapString(const char* value, size_t size) {
   char* buffer = _::HeapArrayDisposer::allocate<char>(size + 1);
-  memcpy(buffer, value, size + 1);
+  memcpy(buffer, value, size);
+  buffer[size] = '\0';
   return String(buffer, size, _::HeapArrayDisposer::instance);
 }
 

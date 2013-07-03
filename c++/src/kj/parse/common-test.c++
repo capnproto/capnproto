@@ -30,13 +30,13 @@ namespace parse {
 namespace {
 
 typedef IteratorInput<char, const char*> Input;
-typedef Span<const char*> TestLocation;
 
 TEST(CommonParsers, AnyParser) {
   StringPtr text = "foo";
   Input input(text.begin(), text.end());
+  constexpr auto parser = any;
 
-  Maybe<char> result = any()(input);
+  Maybe<char> result = parser(input);
   KJ_IF_MAYBE(c, result) {
     EXPECT_EQ('f', *c);
   } else {
@@ -44,7 +44,7 @@ TEST(CommonParsers, AnyParser) {
   }
   EXPECT_FALSE(input.atEnd());
 
-  result = any()(input);
+  result = parser(input);
   KJ_IF_MAYBE(c, result) {
     EXPECT_EQ('o', *c);
   } else {
@@ -52,7 +52,7 @@ TEST(CommonParsers, AnyParser) {
   }
   EXPECT_FALSE(input.atEnd());
 
-  result = any()(input);
+  result = parser(input);
   KJ_IF_MAYBE(c, result) {
     EXPECT_EQ('o', *c);
   } else {
@@ -60,7 +60,7 @@ TEST(CommonParsers, AnyParser) {
   }
   EXPECT_TRUE(input.atEnd());
 
-  result = any()(input);
+  result = parser(input);
   EXPECT_TRUE(result == nullptr);
   EXPECT_TRUE(input.atEnd());
 }
@@ -125,6 +125,16 @@ TEST(CommonParsers, ConstResultParser) {
   EXPECT_TRUE(input.atEnd());
 }
 
+TEST(CommonParsers, DiscardParser) {
+  auto parser = discard(any);
+
+  StringPtr text = "o";
+  Input input(text.begin(), text.end());
+  Maybe<Tuple<>> result = parser(input);
+  EXPECT_TRUE(result != nullptr);
+  EXPECT_TRUE(input.atEnd());
+}
+
 TEST(CommonParsers, SequenceParser) {
   StringPtr text = "foo";
 
@@ -167,7 +177,7 @@ TEST(CommonParsers, SequenceParser) {
 
   {
     Input input(text.begin(), text.end());
-    Maybe<int> result = sequence(transform(exactly('f'), [](TestLocation){return 123;}),
+    Maybe<int> result = sequence(transform(exactly('f'), [](){return 123;}),
                                  exactly('o'), exactly('o'))(input);
     KJ_IF_MAYBE(i, result) {
       EXPECT_EQ(123, *i);
@@ -220,7 +230,7 @@ TEST(CommonParsers, ManyParserCountOnly) {
 TEST(CommonParsers, ManyParserSubResult) {
   StringPtr text = "foooob";
 
-  auto parser = many(any());
+  auto parser = many(any);
 
   {
     Input input(text.begin(), text.end());
@@ -236,9 +246,9 @@ TEST(CommonParsers, ManyParserSubResult) {
 
 TEST(CommonParsers, OptionalParser) {
   auto parser = sequence(
-      transform(exactly('b'), [](TestLocation) -> uint { return 123; }),
-      optional(transform(exactly('a'), [](TestLocation) -> uint { return 456; })),
-      transform(exactly('r'), [](TestLocation) -> uint { return 789; }));
+      transform(exactly('b'), []() -> uint { return 123; }),
+      optional(transform(exactly('a'), []() -> uint { return 456; })),
+      transform(exactly('r'), []() -> uint { return 789; }));
 
   {
     StringPtr text = "bar";
@@ -283,9 +293,9 @@ TEST(CommonParsers, OptionalParser) {
 TEST(CommonParsers, OneOfParser) {
   auto parser = oneOf(
       transform(sequence(exactly('f'), exactly('o'), exactly('o')),
-                [](TestLocation) -> StringPtr { return "foo"; }),
+                []() -> StringPtr { return "foo"; }),
       transform(sequence(exactly('b'), exactly('a'), exactly('r')),
-                [](TestLocation) -> StringPtr { return "bar"; }));
+                []() -> StringPtr { return "bar"; }));
 
   {
     StringPtr text = "foo";
@@ -315,9 +325,9 @@ TEST(CommonParsers, OneOfParser) {
 TEST(CommonParsers, TransformParser) {
   StringPtr text = "foo";
 
-  auto parser = transform(
+  auto parser = transformWithLocation(
       sequence(exactly('f'), exactly('o'), exactly('o')),
-      [](TestLocation location) -> int {
+      [](Span<const char*> location) -> int {
         EXPECT_EQ("foo", StringPtr(location.begin(), location.end()));
         return 123;
       });
@@ -340,7 +350,7 @@ TEST(CommonParsers, References) {
 
     TransformFunc(int value): value(value) {}
 
-    int operator()(TestLocation) const { return value; }
+    int operator()() const { return value; }
   };
 
   // Don't use auto for the parsers here in order to verify that the templates are properly choosing
@@ -360,7 +370,7 @@ TEST(CommonParsers, References) {
   StringPtr text = "foob";
   auto parser = transform(
       sequence(parser1, parser2, exactly('o'), parser3),
-      [](TestLocation, int i, int j, int k) { return i + j + k; });
+      [](int i, int j, int k) { return i + j + k; });
 
   {
     Input input(text.begin(), text.end());
@@ -376,9 +386,9 @@ TEST(CommonParsers, References) {
 
 TEST(CommonParsers, AcceptIfParser) {
   auto parser = acceptIf(
-      oneOf(transform(exactly('a'), [](TestLocation) -> uint { return 123; }),
-            transform(exactly('b'), [](TestLocation) -> uint { return 456; }),
-            transform(exactly('c'), [](TestLocation) -> uint { return 789; })),
+      oneOf(transform(exactly('a'), []() -> uint { return 123; }),
+            transform(exactly('b'), []() -> uint { return 456; }),
+            transform(exactly('c'), []() -> uint { return 789; })),
       [](uint i) {return i > 200;});
 
   {
@@ -410,6 +420,37 @@ TEST(CommonParsers, AcceptIfParser) {
       ADD_FAILURE() << "Expected parse result, got null.";
     }
     EXPECT_TRUE(input.atEnd());
+  }
+}
+
+TEST(CommonParsers, NotLookingAt) {
+  auto parser = notLookingAt(exactly('a'));
+
+  {
+    StringPtr text = "a";
+    Input input(text.begin(), text.end());
+    EXPECT_TRUE(parser(input) == nullptr);
+    EXPECT_FALSE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "b";
+    Input input(text.begin(), text.end());
+    EXPECT_TRUE(parser(input) != nullptr);
+    EXPECT_FALSE(input.atEnd());
+  }
+}
+
+TEST(CommonParsers, EndOfInput) {
+  auto parser = endOfInput;
+
+  {
+    StringPtr text = "a";
+    Input input(text.begin(), text.end());
+    EXPECT_TRUE(parser(input) == nullptr);
+    EXPECT_TRUE(parser(input) == nullptr);
+    input.next();
+    EXPECT_FALSE(parser(input) == nullptr);
   }
 }
 

@@ -93,8 +93,8 @@ struct TupleElement {
 
   T value;
   TupleElement() = default;
-  inline TupleElement(const T& value): value(value) {}
-  inline TupleElement(T&& value): value(kj::mv(value)) {}
+  constexpr inline TupleElement(const T& value): value(value) {}
+  constexpr inline TupleElement(T&& value): value(kj::mv(value)) {}
 };
 
 template <uint index, typename T>
@@ -134,13 +134,13 @@ struct TupleImpl<Indexes<indexes...>, Types...>
   }
 
   template <typename... U>
-  inline TupleImpl(Tuple<U...>&& other)
+  constexpr inline TupleImpl(Tuple<U...>&& other)
       : TupleElement<indexes, Types>(kj::mv(getImpl<indexes>(other)))... {}
   template <typename... U>
-  inline TupleImpl(Tuple<U...>& other)
+  constexpr inline TupleImpl(Tuple<U...>& other)
       : TupleElement<indexes, Types>(getImpl<indexes>(other))... {}
   template <typename... U>
-  inline TupleImpl(const Tuple<U...>& other)
+  constexpr inline TupleImpl(const Tuple<U...>& other)
       : TupleElement<indexes, Types>(getImpl<indexes>(other))... {}
 };
 
@@ -153,15 +153,15 @@ class Tuple {
 public:
   Tuple() = default;
   template <typename... U>
-  Tuple(Tuple<U...>&& other): impl(kj::mv(other)) {}
+  constexpr inline Tuple(Tuple<U...>&& other): impl(kj::mv(other)) {}
   template <typename... U>
-  Tuple(Tuple<U...>& other): impl(other) {}
+  constexpr inline Tuple(Tuple<U...>& other): impl(other) {}
   template <typename... U>
-  Tuple(const Tuple<U...>& other): impl(other) {}
+  constexpr inline Tuple(const Tuple<U...>& other): impl(other) {}
 
 private:
   template <typename... Params>
-  Tuple(Params&&... params): impl(kj::fwd<Params>(params)...) {}
+  constexpr Tuple(Params&&... params): impl(kj::fwd<Params>(params)...) {}
 
   TupleImpl<MakeIndexes<sizeof...(T)>, T...> impl;
 
@@ -172,6 +172,12 @@ private:
   template <size_t index, typename... U>
   friend inline const TypeByIndex<index, U...>& getImpl(const Tuple<U...>& tuple);
   friend struct MakeTupleFunc;
+};
+
+template <>
+class Tuple<> {
+  // Simplified zero-member version of Tuple.  In particular this is important to make sure that
+  // Tuple<>() is constexpr.
 };
 
 template <size_t index, typename... T>

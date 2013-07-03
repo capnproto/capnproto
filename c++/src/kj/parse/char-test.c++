@@ -177,39 +177,7 @@ TEST(CharParsers, CharGroupCombo) {
   }
 }
 
-TEST(CharParsers, DiscardCharRange) {
-  constexpr auto parser = many(discardCharRange('a', 'z'));
-
-  {
-    StringPtr text = "foo-bar";
-    Input input(text.begin(), text.end());
-    Maybe<int> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(3, *value);
-    } else {
-      ADD_FAILURE() << "Expected 3, got null.";
-    }
-    EXPECT_FALSE(input.atEnd());
-  }
-}
-
-TEST(CharParsers, DiscardAnyOfChars) {
-  constexpr auto parser = many(discardAnyOfChars("abcd"));
-
-  {
-    StringPtr text = "cadbfoo";
-    Input input(text.begin(), text.end());
-    Maybe<int> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(4, *value);
-    } else {
-      ADD_FAILURE() << "Expected 4, got null.";
-    }
-    EXPECT_FALSE(input.atEnd());
-  }
-}
-
-TEST(CommonParsers, ExactChar) {
+TEST(CharParsers, ExactChar) {
   constexpr auto parser = exactChar<'a'>();
 
   {
@@ -224,6 +192,206 @@ TEST(CommonParsers, ExactChar) {
     Input input(text.begin(), text.end());
     EXPECT_TRUE(parser(input) == nullptr);
     EXPECT_FALSE(input.atEnd());
+  }
+}
+
+TEST(CharParsers, Identifier) {
+  constexpr auto parser = identifier;
+
+  {
+    StringPtr text = "helloWorld123 ";
+    Input input(text.begin(), text.end());
+    Maybe<String> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ("helloWorld123", *value);
+    } else {
+      ADD_FAILURE() << "Expected string, got null.";
+    }
+    EXPECT_FALSE(input.atEnd());
+  }
+}
+
+TEST(CharParsers, Integer) {
+  constexpr auto parser = integer;
+
+  {
+    StringPtr text = "12349";
+    Input input(text.begin(), text.end());
+    Maybe<uint64_t> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ(12349, *value);
+    } else {
+      ADD_FAILURE() << "Expected integer, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "0x1aF0";
+    Input input(text.begin(), text.end());
+    Maybe<uint64_t> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ(0x1aF0, *value);
+    } else {
+      ADD_FAILURE() << "Expected integer, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "064270";
+    Input input(text.begin(), text.end());
+    Maybe<uint64_t> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ(064270, *value);
+    } else {
+      ADD_FAILURE() << "Expected integer, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+}
+
+TEST(CharParsers, Number) {
+  constexpr auto parser = number;
+
+  {
+    StringPtr text = "12345";
+    Input input(text.begin(), text.end());
+    Maybe<double> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ(12345, *value);
+    } else {
+      ADD_FAILURE() << "Expected number, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "123.25";
+    Input input(text.begin(), text.end());
+    Maybe<double> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ(123.25, *value);
+    } else {
+      ADD_FAILURE() << "Expected number, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "123e10";
+    Input input(text.begin(), text.end());
+    Maybe<double> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ(123e10, *value);
+    } else {
+      ADD_FAILURE() << "Expected number, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "123.25E+10";
+    Input input(text.begin(), text.end());
+    Maybe<double> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ(123.25E+10, *value);
+    } else {
+      ADD_FAILURE() << "Expected number, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "25e-2";
+    Input input(text.begin(), text.end());
+    Maybe<double> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ(25e-2, *value);
+    } else {
+      ADD_FAILURE() << "Expected number, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+}
+
+TEST(CharParsers, DoubleQuotedString) {
+  constexpr auto parser = doubleQuotedString;
+
+  {
+    StringPtr text = "\"hello\"";
+    Input input(text.begin(), text.end());
+    Maybe<String> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ("hello", *value);
+    } else {
+      ADD_FAILURE() << "Expected \"hello\", got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "\"test\\a\\b\\f\\n\\r\\t\\v\\\'\\\"\\\?\x01\2\34\156\"";
+    Input input(text.begin(), text.end());
+    Maybe<String> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ("test\a\b\f\n\r\t\v\'\"\?\x01\2\34\156", *value);
+    } else {
+      ADD_FAILURE() << "Expected string, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "\"foo'bar\"";
+    Input input(text.begin(), text.end());
+    Maybe<String> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ("foo'bar", *value);
+    } else {
+      ADD_FAILURE() << "Expected string, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+}
+
+TEST(CharParsers, SingleQuotedString) {
+  constexpr auto parser = singleQuotedString;
+
+  {
+    StringPtr text = "\'hello\'";
+    Input input(text.begin(), text.end());
+    Maybe<String> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ("hello", *value);
+    } else {
+      ADD_FAILURE() << "Expected \"hello\", got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "\'test\\a\\b\\f\\n\\r\\t\\v\\\'\\\"\\\?\x01\2\34\156\'";
+    Input input(text.begin(), text.end());
+    Maybe<String> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ("test\a\b\f\n\r\t\v\'\"\?\x01\2\34\156", *value);
+    } else {
+      ADD_FAILURE() << "Expected string, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "\'foo\"bar\'";
+    Input input(text.begin(), text.end());
+    Maybe<String> result = parser(input);
+    KJ_IF_MAYBE(value, result) {
+      EXPECT_EQ("foo\"bar", *value);
+    } else {
+      ADD_FAILURE() << "Expected string, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
   }
 }
 

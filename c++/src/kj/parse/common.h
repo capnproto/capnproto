@@ -66,6 +66,9 @@ public:
   void advanceParent() {
     parent->pos = pos;
   }
+  void forgetParent() {
+    parent = nullptr;
+  }
 
   bool atEnd() { return pos == end; }
   const Element& current() {
@@ -151,27 +154,23 @@ constexpr ParserRef<Input, OutputType<ParserImpl, Input>> ref(ParserImpl& impl) 
 }
 
 // -------------------------------------------------------------------
-// any()
+// any
 // Output = one token
 
 class Any_ {
 public:
   template <typename Input>
-  Maybe<Decay<decltype(instance<Input>().current())>> operator()(Input& input) const {
+  Maybe<Decay<decltype(instance<Input>().consume())>> operator()(Input& input) const {
     if (input.atEnd()) {
       return nullptr;
     } else {
-      auto result = input.current();
-      input.next();
-      return result;
+      return input.consume();
     }
   }
 };
 
-constexpr Any_ any() {
-  // Constructs a parser which matches any token and simply returns it.
-  return Any_();
-}
+constexpr Any_ any = Any_();
+// A parser which matches any token and simply returns it.
 
 // -------------------------------------------------------------------
 // exactly()
@@ -261,6 +260,12 @@ constexpr ConstResult_<SubParser, Result> constResult(SubParser&& subParser, Res
   // Constructs a parser which returns exactly `result` if `subParser` is successful.
 
   return ConstResult_<SubParser, Result>(kj::fwd<SubParser>(subParser), kj::fwd<Result>(result));
+}
+
+template <typename SubParser>
+constexpr ConstResult_<SubParser, Tuple<>> discard(SubParser&& subParser) {
+  // Constructs a parser which wraps `subParser` but discards the result.
+  return constResult(kj::fwd<SubParser>(subParser), Tuple<>());
 }
 
 // -------------------------------------------------------------------
@@ -536,6 +541,28 @@ public:
 
   template <typename Input>
   Maybe<decltype(kj::apply(instance<TransformFunc&>(),
+                           instance<OutputType<SubParser, Input>&&>()))>
+      operator()(Input& input) const {
+    KJ_IF_MAYBE(subResult, subParser(input)) {
+      return kj::apply(transform, kj::mv(*subResult));
+    } else {
+      return nullptr;
+    }
+  }
+
+private:
+  SubParser subParser;
+  TransformFunc transform;
+};
+
+template <typename SubParser, typename TransformFunc>
+class TransformWithLocation_ {
+public:
+  explicit constexpr TransformWithLocation_(SubParser&& subParser, TransformFunc&& transform)
+      : subParser(kj::fwd<SubParser>(subParser)), transform(kj::fwd<TransformFunc>(transform)) {}
+
+  template <typename Input>
+  Maybe<decltype(kj::apply(instance<TransformFunc&>(),
                            instance<Span<Decay<decltype(instance<Input&>().getPosition())>>>(),
                            instance<OutputType<SubParser, Input>&&>()))>
       operator()(Input& input) const {
@@ -560,6 +587,16 @@ constexpr Transform_<SubParser, TransformFunc> transform(
   // `functor` on it.  Typically `functor` is a lambda.  It is invoked using `kj::apply`,
   // meaning tuples will be unpacked as arguments.
   return Transform_<SubParser, TransformFunc>(
+      kj::fwd<SubParser>(subParser), kj::fwd<TransformFunc>(functor));
+}
+
+template <typename SubParser, typename TransformFunc>
+constexpr TransformWithLocation_<SubParser, TransformFunc> transformWithLocation(
+    SubParser&& subParser, TransformFunc&& functor) {
+  // Constructs a parser which executes some other parser and then transforms the result by invoking
+  // `functor` on it.  Typically `functor` is a lambda.  It is invoked using `kj::apply`,
+  // meaning tuples will be unpacked as arguments.
+  return TransformWithLocation_<SubParser, TransformFunc>(
       kj::fwd<SubParser>(subParser), kj::fwd<TransformFunc>(functor));
 }
 
@@ -602,6 +639,37 @@ constexpr AcceptIf_<SubParser, Condition> acceptIf(SubParser&& subParser, Condit
 }
 
 // -------------------------------------------------------------------
+// notLookingAt()
+// Fails if the given parser succeeds at the current location.
+
+template <typename SubParser>
+class NotLookingAt_ {
+public:
+  explicit constexpr NotLookingAt_(SubParser&& subParser): subParser(kj::mv(subParser)) {}
+
+  template <typename Input>
+  Maybe<Tuple<>> operator()(Input& input) const {
+    Input subInput(input);
+    subInput.forgetParent();
+    if (subParser(subInput) == nullptr) {
+      return Tuple<>();
+    } else {
+      return nullptr;
+    }
+  }
+
+private:
+  SubParser subParser;
+};
+
+template <typename SubParser>
+constexpr NotLookingAt_<SubParser> notLookingAt(SubParser&& subParser) {
+  // Constructs a parser which fails at any position where the given parser succeeds.  Otherwise,
+  // it succeeds without consuming any input and returns an empty tuple.
+  return NotLookingAt_<SubParser>(kj::fwd<SubParser>(subParser));
+}
+
+// -------------------------------------------------------------------
 // endOfInput()
 // Output = Tuple<>, only succeeds if at end-of-input
 
@@ -617,10 +685,8 @@ public:
   }
 };
 
-constexpr EndOfInput_ endOfInput() {
-  // Constructs a parser that succeeds only if it is called with no input.
-  return EndOfInput_();
-}
+constexpr EndOfInput_ endOfInput = EndOfInput_();
+// A parser that succeeds only if it is called with no input.
 
 }  // namespace parse
 }  // namespace kj
