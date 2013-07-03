@@ -32,6 +32,44 @@ namespace {
 typedef IteratorInput<char, const char*> Input;
 typedef Span<const char*> TestLocation;
 
+TEST(CharParsers, ExactChar) {
+  constexpr auto parser = exactChar<'a'>();
+
+  {
+    StringPtr text = "a";
+    Input input(text.begin(), text.end());
+    EXPECT_TRUE(parser(input) != nullptr);
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "b";
+    Input input(text.begin(), text.end());
+    EXPECT_TRUE(parser(input) == nullptr);
+    EXPECT_FALSE(input.atEnd());
+  }
+}
+
+TEST(CharParsers, ExactString) {
+  constexpr auto parser = exactString("foo");
+
+  {
+    StringPtr text = "foobar";
+    Input input(text.begin(), text.end());
+    EXPECT_TRUE(parser(input) != nullptr);
+    ASSERT_FALSE(input.atEnd());
+    EXPECT_EQ('b', input.current());
+  }
+
+  {
+    StringPtr text = "bar";
+    Input input(text.begin(), text.end());
+    EXPECT_TRUE(parser(input) == nullptr);
+    EXPECT_FALSE(input.atEnd());
+    EXPECT_EQ('b', input.current());
+  }
+}
+
 TEST(CharParsers, CharRange) {
   constexpr auto parser = charRange('a', 'z');
 
@@ -173,24 +211,6 @@ TEST(CharParsers, CharGroupCombo) {
     } else {
       ADD_FAILURE() << "Expected parse result, got null.";
     }
-    EXPECT_FALSE(input.atEnd());
-  }
-}
-
-TEST(CharParsers, ExactChar) {
-  constexpr auto parser = exactChar<'a'>();
-
-  {
-    StringPtr text = "a";
-    Input input(text.begin(), text.end());
-    EXPECT_TRUE(parser(input) != nullptr);
-    EXPECT_TRUE(input.atEnd());
-  }
-
-  {
-    StringPtr text = "b";
-    Input input(text.begin(), text.end());
-    EXPECT_TRUE(parser(input) == nullptr);
     EXPECT_FALSE(input.atEnd());
   }
 }

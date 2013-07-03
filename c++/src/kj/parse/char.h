@@ -21,6 +21,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// This file contains parsers useful for character stream inputs, including parsers to parse
+// common kinds of tokens like identifiers, numbers, and quoted strings.
+
 #ifndef KJ_PARSE_CHAR_H_
 #define KJ_PARSE_CHAR_H_
 
@@ -32,37 +35,73 @@ namespace kj {
 namespace parse {
 
 // =======================================================================================
+// Exact char/string.
+
+class ExactString_ {
+public:
+  constexpr inline ExactString_(const char* str): str(str) {}
+
+  template <typename Input>
+  Maybe<Tuple<>> operator()(Input& input) const {
+    const char* ptr = str;
+
+    while (*ptr != '\0') {
+      if (input.atEnd() || input.current() != *ptr) return nullptr;
+      input.next();
+      ++ptr;
+    }
+
+    return Tuple<>();
+  }
+
+private:
+  const char* str;
+};
+
+constexpr inline ExactString_ exactString(const char* str) {
+  return ExactString_(str);
+}
+
+template <char c>
+constexpr ExactlyConst_<char, c> exactChar() {
+  // Returns a parser that matches exactly the character given by the template argument (returning
+  // no result).
+  return ExactlyConst_<char, c>();
+}
+
+// =======================================================================================
+// Char ranges / sets
 
 class CharGroup_ {
 public:
-  constexpr CharGroup_(): bits{0, 0, 0, 0} {}
+  constexpr inline CharGroup_(): bits{0, 0, 0, 0} {}
 
-  constexpr CharGroup_ orRange(unsigned char first, unsigned char last) const {
+  constexpr inline CharGroup_ orRange(unsigned char first, unsigned char last) const {
     return CharGroup_(bits[0] | (oneBits(last +   1) & ~oneBits(first      )),
                       bits[1] | (oneBits(last -  63) & ~oneBits(first -  64)),
                       bits[2] | (oneBits(last - 127) & ~oneBits(first - 128)),
                       bits[3] | (oneBits(last - 191) & ~oneBits(first - 192)));
   }
 
-  constexpr CharGroup_ orAny(const char* chars) const {
+  constexpr inline CharGroup_ orAny(const char* chars) const {
     return *chars == 0 ? *this : orChar(*chars).orAny(chars + 1);
   }
 
-  constexpr CharGroup_ orChar(unsigned char c) const {
+  constexpr inline CharGroup_ orChar(unsigned char c) const {
     return CharGroup_(bits[0] | bit(c),
                       bits[1] | bit(c - 64),
                       bits[2] | bit(c - 128),
                       bits[3] | bit(c - 256));
   }
 
-  constexpr CharGroup_ orGroup(CharGroup_ other) const {
+  constexpr inline CharGroup_ orGroup(CharGroup_ other) const {
     return CharGroup_(bits[0] | other.bits[0],
                       bits[1] | other.bits[1],
                       bits[2] | other.bits[2],
                       bits[3] | other.bits[3]);
   }
 
-  constexpr CharGroup_ invert() const {
+  constexpr inline CharGroup_ invert() const {
     return CharGroup_(~bits[0], ~bits[1], ~bits[2], ~bits[3]);
   }
 
@@ -81,18 +120,18 @@ public:
 private:
   typedef unsigned long long Bits64;
 
-  constexpr CharGroup_(Bits64 a, Bits64 b, Bits64 c, Bits64 d): bits{a, b, c, d} {}
+  constexpr inline CharGroup_(Bits64 a, Bits64 b, Bits64 c, Bits64 d): bits{a, b, c, d} {}
   Bits64 bits[4];
 
-  static constexpr Bits64 oneBits(int count) {
+  static constexpr inline Bits64 oneBits(int count) {
     return count <= 0 ? 0ll : count >= 64 ? -1ll : ((1ll << count) - 1);
   }
-  static constexpr Bits64 bit(int index) {
+  static constexpr inline Bits64 bit(int index) {
     return index < 0 ? 0 : index >= 64 ? 0 : (1ll << index);
   }
 };
 
-constexpr CharGroup_ charRange(char first, char last) {
+constexpr inline CharGroup_ charRange(char first, char last) {
   // Create a parser which accepts any character in the range from `first` to `last`, inclusive.
   // For example: `charRange('a', 'z')` matches all lower-case letters.  The parser's result is the
   // character matched.
@@ -107,19 +146,12 @@ constexpr CharGroup_ charRange(char first, char last) {
   return CharGroup_().orRange(first, last);
 }
 
-constexpr CharGroup_ anyOfChars(const char* chars) {
+constexpr inline CharGroup_ anyOfChars(const char* chars) {
   // Returns a parser that accepts any of the characters in the given string (which should usually
   // be a literal).  The returned parser is of the same type as returned by `charRange()` -- see
   // that function for more info.
 
   return CharGroup_().orAny(chars);
-}
-
-template <char c>
-constexpr ExactlyConst_<char, c> exactChar() {
-  // Returns a parser that matches exactly the character given by the template argument (returning
-  // no result).
-  return ExactlyConst_<char, c>();
 }
 
 // =======================================================================================
@@ -135,7 +167,7 @@ struct ArrayToString {
 }  // namespace _ (private)
 
 template <typename SubParser>
-constexpr auto charsToString(SubParser&& subParser)
+constexpr inline auto charsToString(SubParser&& subParser)
     -> decltype(transform(kj::fwd<SubParser>(subParser), _::ArrayToString())) {
   // Wraps a parser that returns Array<char> such that it returns String instead.
   return parse::transform(kj::fwd<SubParser>(subParser), _::ArrayToString());
