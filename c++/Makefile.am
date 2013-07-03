@@ -2,7 +2,7 @@
 
 ACLOCAL_AMFLAGS = -I m4
 
-AUTOMAKE_OPTIONS = foreign
+AUTOMAKE_OPTIONS = foreign subdir-objects
 
 # Always include gtest in distributions.
 DIST_SUBDIRS = $(subdirs)
@@ -94,6 +94,7 @@ capnpc_outputs =                                               \
 
 includecapnpdir = $(includedir)/capnp
 includekjdir = $(includedir)/kj
+includekjparsedir = $(includekjdir)/parse
 
 dist_includecapnp_DATA = $(public_capnpc_inputs)
 
@@ -107,8 +108,11 @@ includekj_HEADERS =                                            \
   src/kj/exception.h                                           \
   src/kj/debug.h                                               \
   src/kj/io.h                                                  \
-  src/kj/tuple.h                                               \
-  src/kj/parse.h
+  src/kj/tuple.h
+
+includekjparse_HEADERS =                                       \
+  src/kj/parse/common.h                                        \
+  src/kj/parse/char.h
 
 includecapnp_HEADERS =                                         \
   src/capnp/common.h                                           \
@@ -138,6 +142,7 @@ libcapnp_la_SOURCES=                                           \
   src/kj/exception.c++                                         \
   src/kj/debug.c++                                             \
   src/kj/io.c++                                                \
+  src/kj/parse/char.c++                                        \
   src/capnp/blob.c++                                           \
   src/capnp/arena.h                                            \
   src/capnp/arena.c++                                          \
@@ -185,7 +190,8 @@ capnp_test_SOURCES =                                           \
   src/kj/debug-test.c++                                        \
   src/kj/units-test.c++                                        \
   src/kj/tuple-test.c++                                        \
-  src/kj/parse-test.c++                                        \
+  src/kj/parse/common-test.c++                                 \
+  src/kj/parse/char-test.c++                                   \
   src/capnp/blob-test.c++                                      \
   src/capnp/endian-test.c++                                    \
   src/capnp/endian-fallback-test.c++                           \
