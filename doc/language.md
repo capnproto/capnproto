@@ -160,6 +160,45 @@ Notes:
   for the `unemployed` or `selfEmployed` cases, but we still want the union to distinguish these
   states from others.
 
+**Wait, why aren't unions first-class types?**
+
+Requiring unions to be declared inside a struct, rather than living as free-standing types, has
+some important advantages:
+
+* If unions were first-class types, then either (a) all unions would have to have a fixed size of
+  18 bytes (a data word, a pointer, and a 2-byte tag) regardless of their members; or (b) unions
+  would have to be separate objects embedded by pointer, adding 10-14 bytes of overhead to every
+  union (the pointer plus 2-6 bytes lost to padding).
+
+  If neither of these conditions were true, then adding a new field to a union would potentially
+  alter the layout of any struct containing an instance of that union in a backwards-incompatible
+  way.  On the other hand, if each union type is bound to its containing struct, then its fields
+  can be numbered in the same space as the struct's fields, which allows the layout algorithm to
+  extend the union for new fields without disrupting the positioning of existing fields.  All in
+  all, space is saved.
+
+* A free-standing union would be a liability for protocol evolution, because no additional data
+  can be attached to it later on.  Consider, for example, a type which represents a parser token.
+  This type is naturally a union: it may be a keyword, identifier, numeric literal, quoted string,
+  etc.  So the author defines it as a union, and the type is used widely.  Later on, the developer
+  wants to attach information to the token indicating its line and column number in the source
+  file.  Unfortunately, this is impossible without updating all users of the type, because the new
+  information ought to apply to _all_ token instances, not just specific members of the union.  On
+  the other hand, if unions must be embedded within structs, it is always possible to add new
+  fields to the struct later on.
+
+* When evolving a protocol it is common to discover that some existing field really should have
+  been enclosed in a union, because new fields being added are mutually exclusive with it.  With
+  Cap'n Proto's unions, it is actually possible to "retroactively unionize" such a field without
+  changing its layout.  This allows you to continue being able to read old data without wasting
+  space when writing new data.  This is only possible when unions are declared within their
+  containing struct.
+
+Cap'n Proto's unconventional approach to unions provides these advantages without any real down
+side:  where you would conventionally define a free-standing union type, in Cap'n Proto you
+may simply define a struct type that contains only that union, and you have achieved the same
+effect.  Thus, aside from being slightly unintuitive, it is strictly superior.
+
 ### Dynamically-typed Fields
 
 A struct may have a field with type `Object`.  This field's value can be of any pointer type -- i.e.
