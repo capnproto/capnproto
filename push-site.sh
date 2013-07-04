@@ -2,10 +2,10 @@
 
 set -eu
 
-if [ "x$(git status --porcelain)" != "x" ]; then
-  echo "error:  git repo has uncommited changes." >&2
-  exit 1
-fi
+#if [ "x$(git status --porcelain)" != "x" ]; then
+#  echo "error:  git repo has uncommited changes." >&2
+#  exit 1
+#fi
 
 echo "Checking out doc branch in ./.gh-pages..."
 
