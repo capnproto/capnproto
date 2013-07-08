@@ -119,6 +119,7 @@ includecapnp_HEADERS =                                         \
   src/capnp/blob.h                                             \
   src/capnp/endian.h                                           \
   src/capnp/layout.h                                           \
+  src/capnp/orphan.h                                           \
   src/capnp/list.h                                             \
   src/capnp/message.h                                          \
   src/capnp/schema.h                                           \
@@ -203,6 +204,7 @@ capnp_test_SOURCES =                                           \
   src/capnp/dynamic-test.c++                                   \
   src/capnp/stringify-test.c++                                 \
   src/capnp/encoding-test.c++                                  \
+  src/capnp/orphan-test.c++                                    \
   src/capnp/serialize-test.c++                                 \
   src/capnp/serialize-packed-test.c++                          \
   src/capnp/test-util.c++                                      \

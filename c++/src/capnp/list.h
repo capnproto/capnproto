@@ -25,80 +25,11 @@
 #define CAPNP_LIST_H_
 
 #include "layout.h"
+#include "orphan.h"
 #include <initializer_list>
 
 namespace capnp {
 namespace _ {  // private
-
-template <typename T, Kind k = kind<T>()>
-struct PointerHelpers;
-
-}  // namespace _ (private)
-
-template <typename T, Kind k = kind<T>()>
-struct List;
-
-template <typename T, Kind k = kind<T>()> struct ReaderFor_ { typedef typename T::Reader Type; };
-template <typename T> struct ReaderFor_<T, Kind::PRIMITIVE> { typedef T Type; };
-template <typename T> struct ReaderFor_<T, Kind::ENUM> { typedef T Type; };
-template <typename T> using ReaderFor = typename ReaderFor_<T>::Type;
-// The type returned by List<T>::Reader::operator[].
-
-template <typename T, Kind k = kind<T>()> struct BuilderFor_ { typedef typename T::Builder Type; };
-template <typename T> struct BuilderFor_<T, Kind::PRIMITIVE> { typedef T Type; };
-template <typename T> struct BuilderFor_<T, Kind::ENUM> { typedef T Type; };
-template <typename T> using BuilderFor = typename BuilderFor_<T>::Type;
-// The type returned by List<T>::Builder::operator[].
-
-template <typename T>
-using FromReader = typename kj::Decay<T>::Reads;
-// FromReader<MyType::Reader> = MyType (for any Cap'n Proto type).
-
-template <typename T>
-using FromBuilder = typename kj::Decay<T>::Builds;
-// FromBuilder<MyType::Builder> = MyType (for any Cap'n Proto type).
-
-template <typename T, Kind k = kind<T>()> struct TypeIfEnum_;
-template <typename T> struct TypeIfEnum_<T, Kind::ENUM> { typedef T Type; };
-
-template <typename T>
-using TypeIfEnum = typename TypeIfEnum_<kj::Decay<T>>::Type;
-
-namespace _ {  // private
-
-template <typename T, Kind k> struct Kind_<List<T, k>> { static constexpr Kind kind = Kind::LIST; };
-
-template <size_t size> struct FieldSizeForByteSize;
-template <> struct FieldSizeForByteSize<1> { static constexpr FieldSize value = FieldSize::BYTE; };
-template <> struct FieldSizeForByteSize<2> { static constexpr FieldSize value = FieldSize::TWO_BYTES; };
-template <> struct FieldSizeForByteSize<4> { static constexpr FieldSize value = FieldSize::FOUR_BYTES; };
-template <> struct FieldSizeForByteSize<8> { static constexpr FieldSize value = FieldSize::EIGHT_BYTES; };
-
-template <typename T> struct FieldSizeForType {
-  static constexpr FieldSize value =
-      // Primitive types that aren't special-cased below can be determined from sizeof().
-      kind<T>() == Kind::PRIMITIVE ? FieldSizeForByteSize<sizeof(T)>::value :
-      kind<T>() == Kind::ENUM ? FieldSize::TWO_BYTES :
-      kind<T>() == Kind::STRUCT ? FieldSize::INLINE_COMPOSITE :
-
-      // Everything else is a pointer.
-      FieldSize::POINTER;
-};
-
-// Void and bool are special.
-template <> struct FieldSizeForType<Void> { static constexpr FieldSize value = FieldSize::VOID; };
-template <> struct FieldSizeForType<bool> { static constexpr FieldSize value = FieldSize::BIT; };
-
-// Lists and blobs are pointers, not structs.
-template <typename T, bool b> struct FieldSizeForType<List<T, b>> {
-  static constexpr FieldSize value = FieldSize::POINTER;
-};
-template <> struct FieldSizeForType<Text> {
-  static constexpr FieldSize value = FieldSize::POINTER;
-};
-template <> struct FieldSizeForType<Data> {
-  static constexpr FieldSize value = FieldSize::POINTER;
-};
 
 template <typename T>
 class TemporaryPointer {
@@ -193,6 +124,9 @@ struct List<T, Kind::PRIMITIVE> {
     friend struct _::PointerHelpers;
     template <typename U, Kind K>
     friend struct List;
+    friend class Orphanage;
+    template <typename U, Kind K>
+    friend struct ToDynamic_;
   };
 
   class Builder {
@@ -225,34 +159,37 @@ struct List<T, Kind::PRIMITIVE> {
 
   private:
     _::ListBuilder builder;
+    friend class Orphanage;
+    template <typename U, Kind K>
+    friend struct ToDynamic_;
   };
 
 private:
   inline static _::ListBuilder initAsElementOf(
       _::ListBuilder& builder, uint index, uint size) {
     return builder.initListElement(
-        index * ELEMENTS, _::FieldSizeForType<T>::value, size * ELEMENTS);
+        index * ELEMENTS, _::ElementSizeForType<T>::value, size * ELEMENTS);
   }
   inline static _::ListBuilder getAsElementOf(
       _::ListBuilder& builder, uint index) {
-    return builder.getListElement(index * ELEMENTS, _::FieldSizeForType<T>::value);
+    return builder.getListElement(index * ELEMENTS, _::ElementSizeForType<T>::value);
   }
   inline static _::ListReader getAsElementOf(
       const _::ListReader& reader, uint index) {
-    return reader.getListElement(index * ELEMENTS, _::FieldSizeForType<T>::value);
+    return reader.getListElement(index * ELEMENTS, _::ElementSizeForType<T>::value);
   }
 
   inline static _::ListBuilder initAsFieldOf(
       _::StructBuilder& builder, WirePointerCount index, uint size) {
-    return builder.initListField(index, _::FieldSizeForType<T>::value, size * ELEMENTS);
+    return builder.initListField(index, _::ElementSizeForType<T>::value, size * ELEMENTS);
   }
   inline static _::ListBuilder getAsFieldOf(
       _::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
-    return builder.getListField(index, _::FieldSizeForType<T>::value, defaultValue);
+    return builder.getListField(index, _::ElementSizeForType<T>::value, defaultValue);
   }
   inline static _::ListReader getAsFieldOf(
       const _::StructReader& reader, WirePointerCount index, const word* defaultValue) {
-    return reader.getListField(index, _::FieldSizeForType<T>::value, defaultValue);
+    return reader.getListField(index, _::ElementSizeForType<T>::value, defaultValue);
   }
 
   template <typename U, Kind k>
@@ -292,6 +229,9 @@ struct List<T, Kind::STRUCT> {
     friend struct _::PointerHelpers;
     template <typename U, Kind K>
     friend struct List;
+    friend class Orphanage;
+    template <typename U, Kind K>
+    friend struct ToDynamic_;
   };
 
   class Builder {
@@ -309,10 +249,10 @@ struct List<T, Kind::STRUCT> {
       return typename T::Builder(builder.getStructElement(index * ELEMENTS));
     }
 
-    // There are no init() or set() methods for lists of structs because the elements of the list
-    // are inlined and are initialized when the list is initialized.  This means that init() would
-    // be redundant, and set() would risk data loss if the input struct were from a newer version
-    // of teh protocol.
+    // There are no init(), set(), adopt(), or disown() methods for lists of structs because the
+    // elements of the list are inlined and are initialized when the list is initialized.  This
+    // means that init() would be redundant, and set() would risk data loss if the input struct
+    // were from a newer version of the protocol.
 
     typedef _::IndexingIterator<Builder, typename T::Builder> Iterator;
     inline Iterator begin() { return Iterator(this, 0); }
@@ -320,6 +260,9 @@ struct List<T, Kind::STRUCT> {
 
   private:
     _::ListBuilder builder;
+    friend class Orphanage;
+    template <typename U, Kind K>
+    friend struct ToDynamic_;
   };
 
 private:
@@ -384,6 +327,9 @@ struct List<List<T>, Kind::LIST> {
     friend struct _::PointerHelpers;
     template <typename U, Kind K>
     friend struct List;
+    friend class Orphanage;
+    template <typename U, Kind K>
+    friend struct ToDynamic_;
   };
 
   class Builder {
@@ -413,6 +359,12 @@ struct List<List<T>, Kind::LIST> {
         l.set(i++, element);
       }
     }
+    inline void adopt(uint index, Orphan<T>&& value) {
+      builder.adopt(index * ELEMENTS, kj::mv(value));
+    }
+    inline Orphan<T> disown(uint index) {
+      return Orphan<T>(builder.disown(index * ELEMENTS));
+    }
 
     typedef _::IndexingIterator<Builder, typename List<T>::Builder> Iterator;
     inline Iterator begin() { return Iterator(this, 0); }
@@ -420,6 +372,9 @@ struct List<List<T>, Kind::LIST> {
 
   private:
     _::ListBuilder builder;
+    friend class Orphanage;
+    template <typename U, Kind K>
+    friend struct ToDynamic_;
   };
 
 private:
@@ -482,6 +437,9 @@ struct List<T, Kind::BLOB> {
     friend struct _::PointerHelpers;
     template <typename U, Kind K>
     friend struct List;
+    friend class Orphanage;
+    template <typename U, Kind K>
+    friend struct ToDynamic_;
   };
 
   class Builder {
@@ -504,6 +462,12 @@ struct List<T, Kind::BLOB> {
     inline typename T::Builder init(uint index, uint size) {
       return builder.initBlobElement<T>(index * ELEMENTS, size * BYTES);
     }
+    inline void adopt(uint index, Orphan<T>&& value) {
+      builder.adopt(index * ELEMENTS, kj::mv(value));
+    }
+    inline Orphan<T> disown(uint index) {
+      return Orphan<T>(builder.disown(index * ELEMENTS));
+    }
 
     typedef _::IndexingIterator<Builder, typename T::Builder> Iterator;
     inline Iterator begin() { return Iterator(this, 0); }
@@ -511,6 +475,9 @@ struct List<T, Kind::BLOB> {
 
   private:
     _::ListBuilder builder;
+    friend class Orphanage;
+    template <typename U, Kind K>
+    friend struct ToDynamic_;
   };
 
 private:

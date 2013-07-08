@@ -1557,4 +1557,35 @@ DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::init(
 
 }  // namespace _ (private)
 
+// -------------------------------------------------------------------
+
+Orphan<DynamicStruct> Orphanage::newOrphan(StructSchema schema) {
+  return Orphan<DynamicStruct>(
+      schema, _::OrphanBuilder::initStruct(arena, structSizeFromSchema(schema)));
+}
+
+Orphan<DynamicList> Orphanage::newOrphan(ListSchema schema, uint size) {
+  if (schema.whichElementType() == schema::Type::Body::STRUCT_TYPE) {
+    return Orphan<DynamicList>(schema, _::OrphanBuilder::initStructList(
+        arena, size * ELEMENTS, structSizeFromSchema(schema.getStructElementType())));
+  } else {
+    return Orphan<DynamicList>(schema, _::OrphanBuilder::initList(
+        arena, size * ELEMENTS, elementSizeFor(schema.whichElementType())));
+  }
+}
+
+DynamicStruct::Builder Orphan<DynamicStruct>::get() {
+  return DynamicStruct::Builder(schema, builder.asStruct(structSizeFromSchema(schema)));
+}
+
+DynamicList::Builder Orphan<DynamicList>::get() {
+  if (schema.whichElementType() == schema::Type::Body::STRUCT_TYPE) {
+    return DynamicList::Builder(
+        schema, builder.asStructList(structSizeFromSchema(schema.getStructElementType())));
+  } else {
+    return DynamicList::Builder(
+        schema, builder.asList(elementSizeFor(schema.whichElementType())));
+  }
+}
+
 }  // namespace capnp

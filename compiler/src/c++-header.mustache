@@ -190,6 +190,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::_::PointerHelpers;
   friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
   friend ::kj::String KJ_STRINGIFY({{typeFullName}}::Reader reader);
 };
 
@@ -247,6 +248,8 @@ public:
 {{#fieldIsStruct}}
   inline {{fieldType}}::Builder init{{fieldTitleCase}}();
 {{/fieldIsStruct}}
+  inline void adopt{{fieldTitleCase}}(::capnp::Orphan<{{fieldType}}>&& value);
+  inline ::capnp::Orphan<{{fieldType}}> disown{{fieldTitleCase}}();
 {{/fieldIsGenericObject}}
 {{/fieldIsPrimitive}}
 {{#fieldIsGenericObject}}
@@ -258,12 +261,16 @@ public:
       set{{fieldTitleCase}}(std::initializer_list<U> value);
   template <typename T, typename... Params> inline typename T::Builder
       init{{fieldTitleCase}}(Params&&... params);
+  template <typename T> void adopt{{fieldTitleCase}}(::capnp::Orphan<T>&& value);
+  template <typename T, typename... Params> ::capnp::Orphan<T>
+      disown{{fieldTitleCase}}(Params&&... params);
 {{/fieldIsGenericObject}}
 {{/typeFields}}
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
   friend ::kj::String KJ_STRINGIFY({{typeFullName}}::Builder builder);
 };
 
@@ -409,6 +416,26 @@ inline {{fieldType}}::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(
 }
 
 {{/fieldIsStruct}}
+
+inline void {{typeFullName}}::Builder::adopt{{fieldTitleCase}}(
+    ::capnp::Orphan<{{fieldType}}>&& value) {
+{{#fieldUnion}}
+  _builder.setDataField<{{unionTitleCase}}::Which>(
+      {{unionTagOffset}} * ::capnp::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
+{{/fieldUnion}}
+  ::capnp::_::PointerHelpers<{{fieldType}}>::adopt(
+      _builder, {{fieldOffset}} * ::capnp::POINTERS, kj::mv(value));
+}
+
+inline ::capnp::Orphan<{{fieldType}}> {{typeFullName}}::Builder::disown{{fieldTitleCase}}() {
+{{#fieldUnion}}
+  KJ_IREQUIRE(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+              "Must check which() before get()ing a union member.");
+{{/fieldUnion}}
+  return ::capnp::_::PointerHelpers<{{fieldType}}>::disown(
+      _builder, {{fieldOffset}} * ::capnp::POINTERS);
+}
+
 {{/fieldIsGenericObject}}
 {{! ------------------------------------------------------------------------------------------- }}
 {{#fieldIsGenericObject}}
@@ -479,6 +506,26 @@ inline typename T::Builder {{typeFullName}}::Builder::init{{fieldTitleCase}}(Par
       {{unionTagOffset}} * ::capnp::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
 {{/fieldUnion}}
   return ::capnp::_::PointerHelpers<T>::init(
+      _builder, {{fieldOffset}} * ::capnp::POINTERS, ::kj::fwd<Params>(params)...);
+}
+
+template <typename T>
+void {{typeFullName}}::Builder::adopt{{fieldTitleCase}}(::capnp::Orphan<T>&& value) {
+{{#fieldUnion}}
+  _builder.setDataField<{{unionTitleCase}}::Which>(
+      {{unionTagOffset}} * ::capnp::ELEMENTS, {{unionTitleCase}}::{{fieldUpperCase}});
+{{/fieldUnion}}
+  ::capnp::_::PointerHelpers<T>::adopt(
+      _builder, {{fieldOffset}} * ::capnp::POINTERS, kj::mv(value));
+}
+
+template <typename T, typename... Params>
+::capnp::Orphan<T> {{typeFullName}}::Builder::disown{{fieldTitleCase}}(Params&&... params) {
+{{#fieldUnion}}
+  KJ_IREQUIRE(which() == {{unionTitleCase}}::{{fieldUpperCase}},
+              "Must check which() before get()ing a union member.");
+{{/fieldUnion}}
+  return ::capnp::_::PointerHelpers<T>::disown(
       _builder, {{fieldOffset}} * ::capnp::POINTERS, ::kj::fwd<Params>(params)...);
 }
 

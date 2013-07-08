@@ -104,6 +104,14 @@ BuilderFor<DynamicTypeFor<FromBuilder<T>>> toDynamic(T&& value);
 template <typename T>
 DynamicTypeFor<TypeIfEnum<T>> toDynamic(T&& value);
 
+template <typename T> struct EnableIfNotDynamic_ { typedef T Type; };
+template <> struct EnableIfNotDynamic_<DynamicUnion> {};
+template <> struct EnableIfNotDynamic_<DynamicStruct> {};
+template <> struct EnableIfNotDynamic_<DynamicList> {};
+template <> struct EnableIfNotDynamic_<DynamicValue> {};
+template <typename T>
+using EnableIfNotDynamic = typename EnableIfNotDynamic_<T>::Type;
+
 // -------------------------------------------------------------------
 
 class DynamicEnum {
@@ -176,6 +184,8 @@ private:
 
 class DynamicUnion::Reader {
 public:
+  typedef DynamicUnion Reads;
+
   Reader() = default;
 
   inline StructSchema::Union getSchema() const { return schema; }
@@ -203,6 +213,8 @@ private:
 
 class DynamicUnion::Builder {
 public:
+  typedef DynamicUnion Builds;
+
   Builder() = default;
 
   inline StructSchema::Union getSchema() const { return schema; }
@@ -255,9 +267,11 @@ private:
 
 class DynamicStruct::Reader {
 public:
+  typedef DynamicStruct Reads;
+
   Reader() = default;
 
-  template <typename T, typename = FromReader<T>>
+  template <typename T, typename = EnableIfNotDynamic<FromReader<T>>>
   inline Reader(T&& value): Reader(toDynamic(value)) {}
 
   template <typename T>
@@ -299,13 +313,16 @@ private:
   friend struct ::capnp::ToDynamic_;
   friend kj::String _::structString(
       _::StructReader reader, const _::RawSchema& schema);
+  friend class Orphanage;
 };
 
 class DynamicStruct::Builder {
 public:
+  typedef DynamicStruct Builds;
+
   Builder() = default;
 
-  template <typename T, typename = FromBuilder<T>>
+  template <typename T, typename = EnableIfNotDynamic<FromBuilder<T>>>
   inline Builder(T&& value): Builder(toDynamic(value)) {}
 
   template <typename T>
@@ -328,6 +345,8 @@ public:
   DynamicValue::Builder init(StructSchema::Member member);
   DynamicValue::Builder init(StructSchema::Member member, uint size);
   // Init a struct, list, or blob field.
+
+  // TODO(someday):  Implement adopt() and disown().
 
   DynamicStruct::Builder getObject(StructSchema::Member member, StructSchema type);
   DynamicList::Builder getObject(StructSchema::Member member, ListSchema type);
@@ -402,15 +421,19 @@ private:
   friend class MessageBuilder;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
+  friend class Orphanage;
+  friend class Orphan<DynamicStruct>;
 };
 
 // -------------------------------------------------------------------
 
 class DynamicList::Reader {
 public:
+  typedef DynamicList Reads;
+
   Reader() = default;
 
-  template <typename T, typename = FromReader<T>>
+  template <typename T, typename = EnableIfNotDynamic<FromReader<T>>>
   inline Reader(T&& value): Reader(toDynamic(value)) {}
 
   template <typename T>
@@ -440,13 +463,16 @@ private:
   friend class DynamicList::Builder;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
+  friend class Orphanage;
 };
 
 class DynamicList::Builder {
 public:
+  typedef DynamicList Builds;
+
   Builder() = default;
 
-  template <typename T, typename = FromBuilder<T>>
+  template <typename T, typename = EnableIfNotDynamic<FromBuilder<T>>>
   inline Builder(T&& value): Builder(toDynamic(value)) {}
 
   template <typename T>
@@ -460,6 +486,7 @@ public:
   DynamicValue::Builder operator[](uint index);
   void set(uint index, const DynamicValue::Reader& value);
   DynamicValue::Builder init(uint index, uint size);
+  // TODO(someday):  Implement adopt() and disown().
 
   typedef _::IndexingIterator<Builder, DynamicStruct::Builder> Iterator;
   inline Iterator begin() { return Iterator(this, 0); }
@@ -480,6 +507,10 @@ private:
   friend struct DynamicStruct;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
+  friend class Orphanage;
+  template <typename T, Kind k>
+  friend struct _::OrphanGetImpl;
+  friend class Orphan<DynamicList>;
 };
 
 // -------------------------------------------------------------------
@@ -498,6 +529,8 @@ template <> struct BuilderFor_<DynamicList, Kind::UNKNOWN> { typedef DynamicList
 
 class DynamicValue::Reader {
 public:
+  typedef DynamicValue Reads;
+
   inline Reader(std::nullptr_t n = nullptr);  // UNKNOWN
   inline Reader(Void value);
   inline Reader(bool value);
@@ -576,6 +609,8 @@ private:
 
 class DynamicValue::Builder {
 public:
+  typedef DynamicValue Builds;
+
   inline Builder(std::nullptr_t n = nullptr);  // UNKNOWN
   inline Builder(Void value);
   inline Builder(bool value);
@@ -647,6 +682,88 @@ kj::String KJ_STRINGIFY(const DynamicList::Reader& value);
 kj::String KJ_STRINGIFY(const DynamicList::Builder& value);
 
 // -------------------------------------------------------------------
+// Orphan <-> Dynamic glue
+
+template <>
+class Orphan<DynamicStruct> {
+public:
+  Orphan() = default;
+  KJ_DISALLOW_COPY(Orphan);
+  Orphan(Orphan&&) = default;
+  Orphan& operator=(Orphan&&) = default;
+
+  DynamicStruct::Builder get();
+
+  inline bool operator==(decltype(nullptr)) { return builder == nullptr; }
+  inline bool operator!=(decltype(nullptr)) { return builder == nullptr; }
+
+private:
+  StructSchema schema;
+  _::OrphanBuilder builder;
+
+  inline Orphan(StructSchema schema, _::OrphanBuilder&& builder)
+      : schema(schema), builder(kj::mv(builder)) {}
+
+  template <typename, Kind>
+  friend struct _::PointerHelpers;
+  friend struct DynamicList;
+  friend class Orphanage;
+};
+
+template <>
+class Orphan<DynamicList> {
+public:
+  Orphan() = default;
+  KJ_DISALLOW_COPY(Orphan);
+  Orphan(Orphan&&) = default;
+  Orphan& operator=(Orphan&&) = default;
+
+  DynamicList::Builder get();
+
+  inline bool operator==(decltype(nullptr)) { return builder == nullptr; }
+  inline bool operator!=(decltype(nullptr)) { return builder == nullptr; }
+
+private:
+  ListSchema schema;
+  _::OrphanBuilder builder;
+
+  inline Orphan(ListSchema schema, _::OrphanBuilder&& builder)
+      : schema(schema), builder(kj::mv(builder)) {}
+
+  template <typename, Kind>
+  friend struct _::PointerHelpers;
+  friend struct DynamicList;
+  friend class Orphanage;
+};
+
+template <>
+struct Orphanage::GetInnerBuilder<DynamicStruct, Kind::UNKNOWN> {
+  static inline _::StructBuilder apply(DynamicStruct::Builder& t) {
+    return t.builder;
+  }
+};
+
+template <>
+struct Orphanage::GetInnerBuilder<DynamicList, Kind::UNKNOWN> {
+  static inline _::ListBuilder apply(DynamicList::Builder& t) {
+    return t.builder;
+  }
+};
+
+template <>
+inline Orphan<DynamicStruct> Orphanage::newOrphanCopy<DynamicStruct::Reader>(
+    const DynamicStruct::Reader& copyFrom) {
+  return Orphan<DynamicStruct>(
+      copyFrom.getSchema(), _::OrphanBuilder::copy(arena, copyFrom.reader));
+}
+
+template <>
+inline Orphan<DynamicList> Orphanage::newOrphanCopy<DynamicList::Reader>(
+    const DynamicList::Reader& copyFrom) {
+  return Orphan<DynamicList>(copyFrom.getSchema(), _::OrphanBuilder::copy(arena, copyFrom.reader));
+}
+
+// -------------------------------------------------------------------
 // Inject the ability to use DynamicStruct for message roots and Dynamic{Struct,List} for
 // generated Object accessors.
 
@@ -672,6 +789,14 @@ struct PointerHelpers<DynamicStruct, Kind::UNKNOWN> {
       StructBuilder builder, WirePointerCount index, const DynamicStruct::Reader& value);
   static DynamicStruct::Builder init(
       StructBuilder builder, WirePointerCount index, StructSchema schema);
+  static inline void adopt(StructBuilder builder, WirePointerCount index,
+                           Orphan<DynamicStruct>&& value) {
+    builder.adopt(index, kj::mv(value.builder));
+  }
+  static inline Orphan<DynamicStruct> disown(StructBuilder builder, WirePointerCount index,
+                                             StructSchema schema) {
+    return Orphan<DynamicStruct>(schema, builder.disown(index));
+  }
 };
 
 template <>
@@ -687,6 +812,14 @@ struct PointerHelpers<DynamicList, Kind::UNKNOWN> {
       StructBuilder builder, WirePointerCount index, const DynamicList::Reader& value);
   static DynamicList::Builder init(
       StructBuilder builder, WirePointerCount index, ListSchema schema, uint size);
+  static inline void adopt(StructBuilder builder, WirePointerCount index,
+                           Orphan<DynamicList>&& value) {
+    builder.adopt(index, kj::mv(value.builder));
+  }
+  static inline Orphan<DynamicList> disown(StructBuilder builder, WirePointerCount index,
+                                           ListSchema schema) {
+    return Orphan<DynamicList>(schema, builder.disown(index));
+  }
 };
 
 }  // namespace _ (private)

@@ -116,6 +116,14 @@ kj::ArrayPtr<const kj::ArrayPtr<const word>> MessageBuilder::getSegmentsForOutpu
   }
 }
 
+Orphanage MessageBuilder::getOrphanage() {
+  // We must ensure that the arena and root pointer have been allocated before the Orphanage
+  // can be used.
+  if (!allocatedArena) getRootSegment();
+
+  return Orphanage(arena());
+}
+
 // =======================================================================================
 
 SegmentArrayMessageReader::SegmentArrayMessageReader(

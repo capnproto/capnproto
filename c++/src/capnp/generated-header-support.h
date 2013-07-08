@@ -28,6 +28,7 @@
 
 #include "layout.h"
 #include "list.h"
+#include "orphan.h"
 #include <kj/string.h>
 
 namespace capnp {
@@ -58,6 +59,12 @@ struct PointerHelpers<T, Kind::STRUCT> {
   static inline typename T::Builder init(StructBuilder builder, WirePointerCount index) {
     return typename T::Builder(builder.initStructField(index, structSize<T>()));
   }
+  static inline void adopt(StructBuilder builder, WirePointerCount index, Orphan<T>&& value) {
+    builder.adopt(index, kj::mv(value.builder));
+  }
+  static inline Orphan<T> disown(StructBuilder builder, WirePointerCount index) {
+    return Orphan<T>(builder.disown(index));
+  }
 };
 
 template <typename T>
@@ -86,6 +93,12 @@ struct PointerHelpers<List<T>, Kind::LIST> {
       StructBuilder builder, WirePointerCount index, uint size) {
     return typename List<T>::Builder(List<T>::initAsFieldOf(builder, index, size));
   }
+  static inline void adopt(StructBuilder builder, WirePointerCount index, Orphan<List<T>>&& value) {
+    builder.adopt(index, kj::mv(value.builder));
+  }
+  static inline Orphan<List<T>> disown(StructBuilder builder, WirePointerCount index) {
+    return Orphan<List<T>>(builder.disown(index));
+  }
 };
 
 template <typename T>
@@ -105,6 +118,12 @@ struct PointerHelpers<T, Kind::BLOB> {
   }
   static inline typename T::Builder init(StructBuilder builder, WirePointerCount index, uint size) {
     return builder.initBlobField<T>(index, size * BYTES);
+  }
+  static inline void adopt(StructBuilder builder, WirePointerCount index, Orphan<T>&& value) {
+    builder.adopt(index, kj::mv(value.builder));
+  }
+  static inline Orphan<T> disown(StructBuilder builder, WirePointerCount index) {
+    return Orphan<T>(builder.disown(index));
   }
 };
 

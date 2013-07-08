@@ -43,12 +43,14 @@ class StructBuilder;
 class StructReader;
 class ListBuilder;
 class ListReader;
+class OrphanBuilder;
 struct ObjectBuilder;
 struct ObjectReader;
 struct WirePointer;
 struct WireHelpers;
 class SegmentReader;
 class SegmentBuilder;
+class BuilderArena;
 
 // =============================================================================
 
@@ -120,44 +122,39 @@ inline constexpr PointersPerElement pointersPerElement(FieldSize size) {
   return size == FieldSize::POINTER ? 1 * POINTERS / ELEMENTS : 0 * POINTERS / ELEMENTS;
 }
 
-}  // namespace _ (private)
+template <size_t size> struct ElementSizeForByteSize;
+template <> struct ElementSizeForByteSize<1> { static constexpr FieldSize value = FieldSize::BYTE; };
+template <> struct ElementSizeForByteSize<2> { static constexpr FieldSize value = FieldSize::TWO_BYTES; };
+template <> struct ElementSizeForByteSize<4> { static constexpr FieldSize value = FieldSize::FOUR_BYTES; };
+template <> struct ElementSizeForByteSize<8> { static constexpr FieldSize value = FieldSize::EIGHT_BYTES; };
 
-enum class Kind: uint8_t {
-  PRIMITIVE,
-  BLOB,
-  ENUM,
-  STRUCT,
-  UNION,
-  INTERFACE,
-  LIST,
-  UNKNOWN
+template <typename T> struct ElementSizeForType {
+  static constexpr FieldSize value =
+      // Primitive types that aren't special-cased below can be determined from sizeof().
+      kind<T>() == Kind::PRIMITIVE ? ElementSizeForByteSize<sizeof(T)>::value :
+      kind<T>() == Kind::ENUM ? FieldSize::TWO_BYTES :
+      kind<T>() == Kind::STRUCT ? FieldSize::INLINE_COMPOSITE :
+
+      // Everything else is a pointer.
+      FieldSize::POINTER;
 };
 
-namespace _ {  // private
+// Void and bool are special.
+template <> struct ElementSizeForType<Void> { static constexpr FieldSize value = FieldSize::VOID; };
+template <> struct ElementSizeForType<bool> { static constexpr FieldSize value = FieldSize::BIT; };
 
-template <typename T> struct Kind_ { static constexpr Kind kind = Kind::UNKNOWN; };
-
-template <> struct Kind_<Void> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct Kind_<bool> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct Kind_<int8_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct Kind_<int16_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct Kind_<int32_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct Kind_<int64_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct Kind_<uint8_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct Kind_<uint16_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct Kind_<uint32_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct Kind_<uint64_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct Kind_<float> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct Kind_<double> { static constexpr Kind kind = Kind::PRIMITIVE; };
-template <> struct Kind_<Text> { static constexpr Kind kind = Kind::BLOB; };
-template <> struct Kind_<Data> { static constexpr Kind kind = Kind::BLOB; };
+// Lists and blobs are pointers, not structs.
+template <typename T, bool b> struct ElementSizeForType<List<T, b>> {
+  static constexpr FieldSize value = FieldSize::POINTER;
+};
+template <> struct ElementSizeForType<Text> {
+  static constexpr FieldSize value = FieldSize::POINTER;
+};
+template <> struct ElementSizeForType<Data> {
+  static constexpr FieldSize value = FieldSize::POINTER;
+};
 
 }  // namespace _ (private)
-
-template <typename T>
-inline constexpr Kind kind() {
-  return _::Kind_<T>::kind;
-}
 
 // =============================================================================
 
@@ -359,10 +356,21 @@ public:
   void setObjectField(WirePointerCount ptrIndex, ObjectReader value);
   // Sets a pointer field to a deep copy of the given value.
 
+  void adopt(WirePointerCount ptrIndex, OrphanBuilder&& orphan);
+  // Adopt the orphaned object as the value of the given pointer field.  The orphan must reside in
+  // the same message as the new parent.  No copying occurs.
+
+  OrphanBuilder disown(WirePointerCount ptrIndex);
+  // Detach the given pointer field from this object.  The pointer becomes null, and the child
+  // object is returned as an orphan.
+
   bool isPointerFieldNull(WirePointerCount ptrIndex);
 
   StructReader asReader() const;
   // Gets a StructReader pointing at the same memory.
+
+  BuilderArena* getArena();
+  // Gets the arena in which this object is allocated.
 
 private:
   SegmentBuilder* segment;     // Memory segment in which the struct resides.
@@ -387,6 +395,7 @@ private:
 
   friend class ListBuilder;
   friend struct WireHelpers;
+  friend class OrphanBuilder;
 };
 
 class StructReader {
@@ -553,8 +562,19 @@ public:
   void setObjectElement(ElementCount index, ObjectReader value);
   // Sets a pointer element to a deep copy of the given value.
 
+  void adopt(ElementCount index, OrphanBuilder&& orphan);
+  // Adopt the orphaned object as the value of the given pointer field.  The orphan must reside in
+  // the same message as the new parent.  No copying occurs.
+
+  OrphanBuilder disown(ElementCount index);
+  // Detach the given pointer field from this object.  The pointer becomes null, and the child
+  // object is returned as an orphan.
+
   ListReader asReader() const;
   // Get a ListReader pointing at the same memory.
+
+  BuilderArena* getArena();
+  // Gets the arena in which this object is allocated.
 
 private:
   SegmentBuilder* segment;  // Memory segment in which the list resides.
@@ -580,6 +600,7 @@ private:
 
   friend class StructBuilder;
   friend struct WireHelpers;
+  friend class OrphanBuilder;
 };
 
 class ListReader {
@@ -642,6 +663,7 @@ private:
   friend class StructReader;
   friend class ListBuilder;
   friend struct WireHelpers;
+  friend class OrphanBuilder;
 };
 
 // -------------------------------------------------------------------
@@ -684,6 +706,84 @@ struct ObjectReader {
       : kind(ObjectKind::STRUCT), structReader(structReader) {}
   ObjectReader(ListReader listReader)
       : kind(ObjectKind::LIST), listReader(listReader) {}
+};
+
+// -------------------------------------------------------------------
+
+class OrphanBuilder {
+public:
+  inline OrphanBuilder(): segment(nullptr), location(nullptr) { memset(&tag, 0, sizeof(tag)); }
+  OrphanBuilder(const OrphanBuilder& other) = delete;
+  inline OrphanBuilder(OrphanBuilder&& other);
+  inline ~OrphanBuilder();
+
+  static OrphanBuilder initStruct(BuilderArena* arena, StructSize size);
+  static OrphanBuilder initList(BuilderArena* arena, ElementCount elementCount,
+                                FieldSize elementSize);
+  static OrphanBuilder initStructList(BuilderArena* arena, ElementCount elementCount,
+                                      StructSize elementSize);
+  static OrphanBuilder initText(BuilderArena* arena, ByteCount size);
+  static OrphanBuilder initData(BuilderArena* arena, ByteCount size);
+
+  static OrphanBuilder copy(BuilderArena* arena, StructReader copyFrom);
+  static OrphanBuilder copy(BuilderArena* arena, ListReader copyFrom);
+  static OrphanBuilder copy(BuilderArena* arena, Text::Reader copyFrom);
+  static OrphanBuilder copy(BuilderArena* arena, Data::Reader copyFrom);
+
+  OrphanBuilder& operator=(const OrphanBuilder& other) = delete;
+  inline OrphanBuilder& operator=(OrphanBuilder&& other);
+
+  inline bool operator==(decltype(nullptr)) { return location == nullptr; }
+  inline bool operator!=(decltype(nullptr)) { return location != nullptr; }
+
+  StructBuilder asStruct(StructSize size);
+  // Interpret as a struct, or throw an exception if not a struct.
+
+  ListBuilder asList(FieldSize elementSize);
+  // Interpret as a list, or throw an exception if not a list.  elementSize cannot be
+  // INLINE_COMPOSITE -- use asStructList() instead.
+
+  ListBuilder asStructList(StructSize elementSize);
+  // Interpret as a struct list, or throw an exception if not a list.
+
+  Text::Builder asText();
+  Data::Builder asData();
+  // Interpret as a blob, or throw an exception if not a blob.
+
+  ObjectBuilder asObject();
+  // Interpret as an arbitrary object.
+
+private:
+  static_assert(1 * POINTERS * WORDS_PER_POINTER == 1 * WORDS,
+                "This struct assumes a pointer is one word.");
+  word tag;
+  // Contains an encoded WirePointer representing this object.  WirePointer is defined in
+  // layout.c++, but fits in a word.
+  //
+  // If the pointer is a FAR pointer, then the tag is a complete pointer, `location` is null, and
+  // `segment` is any arbitrary segment in the message.  Otherwise, the tag's offset is garbage,
+  // `location` points at the actual object, and `segment` points at the segment where `location`
+  // resides.
+
+  SegmentBuilder* segment;
+  // Segment in which the object resides, or an arbitrary segment in the message if the tag is a
+  // FAR pointer.
+
+  word* location;
+  // Pointer to the object, or null if the tag is a FAR pointer.
+
+  inline OrphanBuilder(const void* tagPtr, SegmentBuilder* segment, word* location)
+      : segment(segment), location(location) {
+    memcpy(&tag, tagPtr, sizeof(tag));
+  }
+
+  inline WirePointer* tagAsPtr() { return reinterpret_cast<WirePointer*>(&tag); }
+
+  void euthanize();
+  // Erase the target object, zeroing it out and possibly reclaiming the memory.  Called when
+  // the OrphanBuilder is being destroyed or overwritten and it is non-null.
+
+  friend struct WireHelpers;
 };
 
 // =======================================================================================
@@ -868,6 +968,35 @@ template <> typename Data::Builder ListBuilder::initBlobElement<Data>(ElementCou
 template <> void ListBuilder::setBlobElement<Data>(ElementCount index, typename Data::Reader value);
 template <> typename Data::Builder ListBuilder::getBlobElement<Data>(ElementCount index);
 template <> typename Data::Reader ListReader::getBlobElement<Data>(ElementCount index) const;
+
+// -------------------------------------------------------------------
+
+inline OrphanBuilder::OrphanBuilder(OrphanBuilder&& other)
+    : segment(other.segment), location(other.location) {
+  memcpy(&tag, &other.tag, sizeof(tag));  // Needs memcpy to comply with aliasing rules.
+  other.segment = nullptr;
+  other.location = nullptr;
+}
+
+inline OrphanBuilder::~OrphanBuilder() {
+  if (segment != nullptr) euthanize();
+}
+
+inline OrphanBuilder& OrphanBuilder::operator=(OrphanBuilder&& other) {
+  // With normal smart pointers, it's important to handle the case where the incoming pointer
+  // is actually transitively owned by this one.  In this case, euthanize() would destroy `other`
+  // before we copied it.  This isn't possible in the case of `OrphanBuilder` because it only
+  // owns message objects, and `other` is not itself a message object, therefore cannot possibly
+  // be transitively owned by `this`.
+
+  if (segment != nullptr) euthanize();
+  segment = other.segment;
+  location = other.location;
+  memcpy(&tag, &other.tag, sizeof(tag));  // Needs memcpy to comply with aliasing rules.
+  other.segment = nullptr;
+  other.location = nullptr;
+  return *this;
+}
 
 }  // namespace _ (private)
 }  // namespace capnp

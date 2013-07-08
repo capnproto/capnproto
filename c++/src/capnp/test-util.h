@@ -28,6 +28,7 @@
 #include <iostream>
 #include "blob.h"
 #include "dynamic.h"
+#include <gtest/gtest.h>
 
 namespace capnp {
 
@@ -89,6 +90,56 @@ void checkDynamicTestMessage(DynamicStruct::Reader reader);
 void checkDynamicTestLists(DynamicStruct::Reader reader);
 void checkDynamicTestMessageAllZero(DynamicStruct::Builder builder);
 void checkDynamicTestMessageAllZero(DynamicStruct::Reader reader);
+
+template <typename T, typename U>
+void checkList(T reader, std::initializer_list<U> expected) {
+  ASSERT_EQ(expected.size(), reader.size());
+  for (uint i = 0; i < expected.size(); i++) {
+    EXPECT_EQ(expected.begin()[i], reader[i]);
+  }
+}
+
+template <typename T>
+void checkList(T reader, std::initializer_list<float> expected) {
+  ASSERT_EQ(expected.size(), reader.size());
+  for (uint i = 0; i < expected.size(); i++) {
+    EXPECT_FLOAT_EQ(expected.begin()[i], reader[i]);
+  }
+}
+
+template <typename T>
+void checkList(T reader, std::initializer_list<double> expected) {
+  ASSERT_EQ(expected.size(), reader.size());
+  for (uint i = 0; i < expected.size(); i++) {
+    EXPECT_DOUBLE_EQ(expected.begin()[i], reader[i]);
+  }
+}
+
+// Hack because as<>() is a template-parameter-dependent lookup everywhere below...
+#define as template as
+
+template <typename T> void expectPrimitiveEq(T a, T b) { EXPECT_EQ(a, b); }
+inline void expectPrimitiveEq(float a, float b) { EXPECT_FLOAT_EQ(a, b); }
+inline void expectPrimitiveEq(double a, double b) { EXPECT_DOUBLE_EQ(a, b); }
+inline void expectPrimitiveEq(Text::Reader a, Text::Builder b) { EXPECT_EQ(a, b); }
+inline void expectPrimitiveEq(Data::Reader a, Data::Builder b) { EXPECT_EQ(a, b); }
+
+template <typename Element, typename T>
+void checkList(T reader, std::initializer_list<ReaderFor<Element>> expected) {
+  auto list = reader.as<DynamicList>();
+  ASSERT_EQ(expected.size(), list.size());
+  for (uint i = 0; i < expected.size(); i++) {
+    expectPrimitiveEq(expected.begin()[i], list[i].as<Element>());
+  }
+
+  auto typed = reader.as<List<Element>>();
+  ASSERT_EQ(expected.size(), typed.size());
+  for (uint i = 0; i < expected.size(); i++) {
+    expectPrimitiveEq(expected.begin()[i], typed[i]);
+  }
+}
+
+#undef as
 
 }  // namespace _ (private)
 }  // namespace capnp

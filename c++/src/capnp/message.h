@@ -156,6 +156,8 @@ public:
 
   kj::ArrayPtr<const kj::ArrayPtr<const word>> getSegmentsForOutput();
 
+  Orphanage getOrphanage();
+
 private:
   // Space in which we can construct a BuilderArena.  We don't use BuilderArena directly here
   // because we don't want clients to have to #include arena.h, which itself includes a bunch of

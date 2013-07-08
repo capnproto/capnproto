@@ -104,7 +104,7 @@ public:
     KJ_IREQUIRE(value[size] == '\0', "StringPtr must be NUL-terminated.");
   }
 
-  inline Reader asReader() const { return Reader(content.begin(), content.size()); }
+  inline Reader asReader() const { return Reader(content.begin(), content.size() - 1); }
 
   inline operator kj::ArrayPtr<char>();
   inline kj::ArrayPtr<char> asArray();

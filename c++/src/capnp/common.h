@@ -43,6 +43,84 @@ enum class Void {
 template <typename T>
 inline T& operator<<(T& os, Void) { return os << "void"; }
 
+struct Text;
+struct Data;
+
+enum class Kind: uint8_t {
+  PRIMITIVE,
+  BLOB,
+  ENUM,
+  STRUCT,
+  UNION,
+  INTERFACE,
+  LIST,
+  UNKNOWN
+};
+
+namespace _ {  // private
+
+template <typename T> struct Kind_ { static constexpr Kind kind = Kind::UNKNOWN; };
+
+template <> struct Kind_<Void> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<bool> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<int8_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<int16_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<int32_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<int64_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<uint8_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<uint16_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<uint32_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<uint64_t> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<float> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<double> { static constexpr Kind kind = Kind::PRIMITIVE; };
+template <> struct Kind_<Text> { static constexpr Kind kind = Kind::BLOB; };
+template <> struct Kind_<Data> { static constexpr Kind kind = Kind::BLOB; };
+
+}  // namespace _ (private)
+
+template <typename T>
+inline constexpr Kind kind() {
+  return _::Kind_<T>::kind;
+}
+
+template <typename T, Kind k = kind<T>()>
+struct List;
+
+namespace _ {  // private
+template <typename T, Kind k> struct Kind_<List<T, k>> { static constexpr Kind kind = Kind::LIST; };
+}  // namespace _ (private)
+
+template <typename T, Kind k = kind<T>()> struct ReaderFor_ { typedef typename T::Reader Type; };
+template <typename T> struct ReaderFor_<T, Kind::PRIMITIVE> { typedef T Type; };
+template <typename T> struct ReaderFor_<T, Kind::ENUM> { typedef T Type; };
+template <typename T> using ReaderFor = typename ReaderFor_<T>::Type;
+// The type returned by List<T>::Reader::operator[].
+
+template <typename T, Kind k = kind<T>()> struct BuilderFor_ { typedef typename T::Builder Type; };
+template <typename T> struct BuilderFor_<T, Kind::PRIMITIVE> { typedef T Type; };
+template <typename T> struct BuilderFor_<T, Kind::ENUM> { typedef T Type; };
+template <typename T> using BuilderFor = typename BuilderFor_<T>::Type;
+// The type returned by List<T>::Builder::operator[].
+
+template <typename T, Kind k = kind<T>()> struct TypeIfEnum_;
+template <typename T> struct TypeIfEnum_<T, Kind::ENUM> { typedef T Type; };
+
+template <typename T>
+using TypeIfEnum = typename TypeIfEnum_<kj::Decay<T>>::Type;
+
+template <typename T>
+using FromReader = typename kj::Decay<T>::Reads;
+// FromReader<MyType::Reader> = MyType (for any Cap'n Proto type).
+
+template <typename T>
+using FromBuilder = typename kj::Decay<T>::Builds;
+// FromBuilder<MyType::Builder> = MyType (for any Cap'n Proto type).
+
+namespace _ {  // private
+template <typename T, Kind k = kind<T>()>
+struct PointerHelpers;
+}  // namespace _ (private)
+
 // =======================================================================================
 // Raw memory types and measures
 
