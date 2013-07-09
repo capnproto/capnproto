@@ -183,6 +183,9 @@ constexpr auto nameStart = alpha.orChar('_');
 constexpr auto nameChar = alphaNumeric.orChar('_');
 constexpr auto hexDigit = charRange('0', '9').orRange('a', 'f').orRange('A', 'F');
 constexpr auto octDigit = charRange('0', '7');
+constexpr auto whitespaceChar = anyOfChars(" \f\n\r\t\v");
+constexpr auto controlChar = charRange(0, 0x1f).invert().orGroup(whitespaceChar).invert();
+
 constexpr auto whitespace = many(anyOfChars(" \f\n\r\t\v"));
 
 constexpr auto discardWhitespace = discard(many(discard(anyOfChars(" \f\n\r\t\v"))));
@@ -257,7 +260,7 @@ struct ParseFloat {
 
 constexpr auto number = transform(
     sequence(
-        many(digit),
+        oneOrMore(digit),
         optional(sequence(exactChar<'.'>(), many(digit))),
         optional(sequence(discard(anyOfChars("eE")), optional(anyOfChars("+-")), many(digit))),
         notLookingAt(alpha.orAny("_."))),
@@ -285,7 +288,7 @@ struct InterpretEscape {
 
 struct ParseHexEscape {
   inline char operator()(char first, char second) const {
-    return (parseDigit(first) << 4) | second;
+    return (parseDigit(first) << 4) | parseDigit(second);
   }
 };
 

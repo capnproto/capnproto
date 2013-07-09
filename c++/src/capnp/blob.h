@@ -122,6 +122,7 @@ public:
   // Result does not include NUL terminator.
 
   inline char operator[](size_t index) const { return content[index]; }
+  inline char& operator[](size_t index) { return content[index]; }
 
   inline char* begin() { return content.begin(); }
   inline char* end() { return content.end() - 1; }

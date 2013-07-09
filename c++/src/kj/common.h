@@ -267,6 +267,10 @@ template <typename T> struct RemoveConstOrBogus_ { struct Type; };
 template <typename T> struct RemoveConstOrBogus_<const T> { typedef T Type; };
 template <typename T> using RemoveConstOrBogus = typename RemoveConstOrBogus_<T>::Type;
 
+template <typename T> struct IsReference_ { static constexpr bool value = false; };
+template <typename T> struct IsReference_<T&> { static constexpr bool value = true; };
+template <typename T> constexpr bool isReference() { return IsReference_<T>::value; }
+
 // =======================================================================================
 // Equivalents to std::move() and std::forward(), since these are very commonly needed and the
 // std header <utility> pulls in lots of other stuff.

@@ -111,14 +111,30 @@ class ParserRef {
   // from becoming ridiculous.  Using too many of them can hurt performance, though.
 
 public:
+  ParserRef(): parser(nullptr), wrapper(nullptr) {}
+  ParserRef(const ParserRef&) = default;
+  ParserRef(ParserRef&&) = default;
+  ParserRef& operator=(const ParserRef& other) = default;
+  ParserRef& operator=(ParserRef&& other) = default;
+
   template <typename Other>
-  constexpr ParserRef(Other& other)
-      : parser(&other), wrapper(WrapperImplInstance<Other>::instance) {}
+  constexpr ParserRef(Other&& other)
+      : parser(&other), wrapper(&WrapperImplInstance<Decay<Other>>::instance) {
+    static_assert(kj::isReference<Other>(), "ParseRef should not be assigned to a temporary.");
+  }
+
+  template <typename Other>
+  inline ParserRef& operator=(Other&& other) {
+    static_assert(kj::isReference<Other>(), "ParseRef should not be assigned to a temporary.");
+    parser = &other;
+    wrapper = &WrapperImplInstance<Decay<Other>>::instance;
+    return *this;
+  }
 
   KJ_ALWAYS_INLINE(Maybe<Output> operator()(Input& input) const) {
     // Always inline in the hopes that this allows branch prediction to kick in so the virtual call
     // doesn't hurt so much.
-    return wrapper.parse(parser, input);
+    return wrapper->parse(parser, input);
   }
 
 private:
@@ -137,7 +153,7 @@ private:
   };
 
   const void* parser;
-  const Wrapper& wrapper;
+  const Wrapper* wrapper;
 };
 
 template <typename Input, typename Output>
@@ -517,8 +533,8 @@ constexpr OneOf_<SubParsers...> oneOf(SubParsers&&... parsers) {
 template <typename Position>
 struct Span {
 public:
-  inline const Position& begin() { return begin_; }
-  inline const Position& end() { return end_; }
+  inline const Position& begin() const { return begin_; }
+  inline const Position& end() const { return end_; }
 
   Span() = default;
   inline constexpr Span(Position&& begin, Position&& end): begin_(mv(begin)), end_(mv(end)) {}

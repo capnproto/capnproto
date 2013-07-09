@@ -59,13 +59,13 @@ TEST(Orphans, Lists) {
   Orphan<List<uint32_t>> orphan = root.disownUInt32List();
   EXPECT_FALSE(orphan == nullptr);
 
-  checkList(orphan.get().asReader(), {12, 34, 56});
+  checkList(orphan.get().asReader(), {12u, 34u, 56u});
   EXPECT_FALSE(root.hasUInt32List());
 
   root.adoptUInt32List(kj::mv(orphan));
   EXPECT_TRUE(orphan == nullptr);
   EXPECT_TRUE(root.hasUInt32List());
-  checkList(root.asReader().getUInt32List(), {12, 34, 56});
+  checkList(root.asReader().getUInt32List(), {12u, 34u, 56u});
 }
 
 TEST(Orphans, Text) {
@@ -202,7 +202,7 @@ TEST(Orphans, OrphanageListCopy) {
 
   Orphan<List<uint32_t>> orphan = builder2.getOrphanage().newOrphanCopy(
       root1.asReader().getUInt32List());
-  checkList(orphan.get().asReader(), {12, 34, 56});
+  checkList(orphan.get().asReader(), {12u, 34u, 56u});
 
   auto root2 = builder2.initRoot<TestAllTypes>();
   root2.adoptUInt32List(kj::mv(orphan));
@@ -272,13 +272,13 @@ TEST(Orphans, ListObject) {
   Orphan<List<uint32_t>> orphan = root.disownObjectField<List<uint32_t>>();
   EXPECT_FALSE(orphan == nullptr);
 
-  checkList(orphan.get().asReader(), {12, 34, 56});
+  checkList(orphan.get().asReader(), {12u, 34u, 56u});
   EXPECT_FALSE(root.hasObjectField());
 
   root.adoptObjectField(kj::mv(orphan));
   EXPECT_TRUE(orphan == nullptr);
   EXPECT_TRUE(root.hasObjectField());
-  checkList(root.asReader().getObjectField<List<uint32_t>>(), {12, 34, 56});
+  checkList(root.asReader().getObjectField<List<uint32_t>>(), {12u, 34u, 56u});
 }
 
 TEST(Orphans, DynamicStruct) {
@@ -318,7 +318,7 @@ TEST(Orphans, DynamicList) {
   root.adoptObjectField(kj::mv(orphan));
   EXPECT_TRUE(orphan == nullptr);
   EXPECT_TRUE(root.hasObjectField());
-  checkList(root.asReader().getObjectField<List<uint32_t>>(), {12, 34, 56});
+  checkList(root.asReader().getObjectField<List<uint32_t>>(), {12u, 34u, 56u});
 }
 
 TEST(Orphans, OrphanageDynamicStruct) {
@@ -344,7 +344,7 @@ TEST(Orphans, OrphanageDynamicList) {
 
   auto root = builder.initRoot<test::TestObject>();
   root.adoptObjectField(kj::mv(orphan));
-  checkList(root.getObjectField<List<uint32_t>>(), {123, 456});
+  checkList(root.getObjectField<List<uint32_t>>(), {123u, 456u});
 }
 
 TEST(Orphans, OrphanageDynamicStructCopy) {
@@ -376,7 +376,7 @@ TEST(Orphans, OrphanageDynamicListCopy) {
 
   auto root2 = builder2.initRoot<test::TestObject>();
   root2.adoptObjectField(kj::mv(orphan));
-  checkList(root2.getObjectField<List<uint32_t>>(), {12, 34, 56});
+  checkList(root2.getObjectField<List<uint32_t>>(), {12u, 34u, 56u});
 }
 
 TEST(Orphans, OrphanageFromBuilder) {

@@ -180,6 +180,10 @@ class Tuple<> {
   // Tuple<>() is constexpr.
 };
 
+template <typename T>
+class Tuple<T>;
+// Single-element tuple should never be used.  The public API should ensure this.
+
 template <size_t index, typename... T>
 inline TypeByIndex<index, T...>& getImpl(Tuple<T...>& tuple) {
   // Get member of a Tuple by index, e.g. `get<2>(myTuple)`.
@@ -210,6 +214,10 @@ inline T&& getImpl(T&& value) {
 
 template <typename Func, typename SoFar, typename... T>
 struct ExpandAndApplyResult_;
+// Template which computes the return type of applying Func to T... after flattening tuples.
+// SoFar starts as Tuple<> and accumulates the flattened parameter types -- so after this template
+// is recursively expanded, T... is empty and SoFar is a Tuple containing all the parameters.
+
 template <typename Func, typename First, typename... Rest, typename... T>
 struct ExpandAndApplyResult_<Func, Tuple<T...>, First, Rest...>
     : public ExpandAndApplyResult_<Func, Tuple<T..., First>, Rest...> {};

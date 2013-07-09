@@ -351,11 +351,11 @@ TEST(CharParsers, DoubleQuotedString) {
   }
 
   {
-    StringPtr text = "\"test\\a\\b\\f\\n\\r\\t\\v\\\'\\\"\\\?\x01\2\34\156\"";
+    StringPtr text = "\"test\\a\\b\\f\\n\\r\\t\\v\\\'\\\"\\\?\\x01\\x20\\2\\34\\156\"";
     Input input(text.begin(), text.end());
     Maybe<String> result = parser(input);
     KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ("test\a\b\f\n\r\t\v\'\"\?\x01\2\34\156", *value);
+      EXPECT_EQ("test\a\b\f\n\r\t\v\'\"\?\x01\x20\2\34\156", *value);
     } else {
       ADD_FAILURE() << "Expected string, got null.";
     }

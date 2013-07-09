@@ -75,11 +75,18 @@ public:
     builder.add(kj::fwd<Params>(params)...);
   }
 
+  template <typename Iterator>
+  inline void addAll(Iterator begin, Iterator end) {
+    size_t needed = builder.size() + (end - begin);
+    if (needed > builder.capacity()) grow(needed);
+    builder.addAll(begin, end);
+  }
+
 private:
   ArrayBuilder<T> builder;
 
-  void grow() {
-    setCapacity(capacity() == 0 ? 4 : capacity() * 2);
+  void grow(size_t minCapacity = 0) {
+    setCapacity(kj::max(minCapacity, capacity() == 0 ? 4 : capacity() * 2));
   }
   void setCapacity(size_t newSize) {
     ArrayBuilder<T> newBuilder = heapArrayBuilder<T>(newSize);
