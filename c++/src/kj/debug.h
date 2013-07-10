@@ -140,11 +140,12 @@ namespace kj {
            errorNumber, code, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
 
 #define KJ_CONTEXT(...) \
-  auto _kjContextFunc = [&]() -> ::kj::_::Debug::Context::Value { \
+  auto KJ_UNIQUE_NAME(_kjContextFunc) = [&]() -> ::kj::_::Debug::Context::Value { \
         return ::kj::_::Debug::Context::Value(__FILE__, __LINE__, \
             ::kj::_::Debug::makeContextDescription(#__VA_ARGS__, ##__VA_ARGS__)); \
       }; \
-  ::kj::_::Debug::ContextImpl<decltype(_kjContextFunc)> _kjContext(_kjContextFunc)
+  ::kj::_::Debug::ContextImpl<decltype(KJ_UNIQUE_NAME(_kjContextFunc))> \
+      KJ_UNIQUE_NAME(_kjContext)(KJ_UNIQUE_NAME(_kjContextFunc))
 
 #ifdef NDEBUG
 #define KJ_DLOG(...) do {} while (false)

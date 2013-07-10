@@ -61,6 +61,45 @@ private:
   struct Dispose_;
 };
 
+class ExceptionSafeArrayUtil {
+  // Utility class that assists in constructing or destroying elements of an array, where the
+  // constructor or destructor could throw exceptions.  In case of an exception,
+  // ExceptionSafeArrayUtil's destructor will call destructors on all elements that have been
+  // constructed but not destroyed.  Remember that destructors that throw exceptions are required
+  // to use UnwindDetector to detect unwind and avoid exceptions in this case.  Therefore, no more
+  // than one exception will be thrown (and the program will not terminate).
+
+public:
+  inline ExceptionSafeArrayUtil(void* ptr, size_t elementSize, size_t constructedElementCount,
+                                void (*destroyElement)(void*))
+      : pos(reinterpret_cast<byte*>(ptr) + elementSize * constructedElementCount),
+        elementSize(elementSize), constructedElementCount(constructedElementCount),
+        destroyElement(destroyElement) {}
+  KJ_DISALLOW_COPY(ExceptionSafeArrayUtil);
+
+  inline ~ExceptionSafeArrayUtil() noexcept(false) {
+    if (constructedElementCount > 0) destroyAll();
+  }
+
+  void construct(size_t count, void (*constructElement)(void*));
+  // Construct the given number of elements.
+
+  void destroyAll();
+  // Destroy all elements.  Call this immediately before ExceptionSafeArrayUtil goes out-of-scope
+  // to ensure that one element throwing an exception does not prevent the others from being
+  // destroyed.
+
+  void release() { constructedElementCount = 0; }
+  // Prevent ExceptionSafeArrayUtil's destructor from destroying the constructed elements.
+  // Call this after you've successfully finished constructing.
+
+private:
+  byte* pos;
+  size_t elementSize;
+  size_t constructedElementCount;
+  void (*destroyElement)(void*);
+};
+
 // =======================================================================================
 // Array
 
@@ -185,8 +224,6 @@ private:
   template <typename T, bool hasTrivialConstructor = __has_trivial_constructor(T),
                         bool hasNothrowConstructor = __has_nothrow_constructor(T)>
   struct Allocate_;
-
-  struct ExceptionGuard;
 };
 
 }  // namespace _ (private)
@@ -295,14 +332,14 @@ public:
   void addAll(Iterator start, Iterator end);
 
   Array<T> finish() {
-    // We could safely remove this check as long as HeapArrayDisposer relies on operator delete
-    // (which doesn't need to know the original capacity) or if we created a custom disposer for
-    // ArrayBuilder which stores the capacity in a prefix.  But that would mean we can't allow
-    // arbitrary disposers with ArrayBuilder in the future, and anyway this check might catch bugs.
-    // Probably we should just create a new Vector-like data structure if we want to allow building
-    // of arrays without knowing the final size in advance.
+    // We could safely remove this check if we assume that the disposer implementation doesn't
+    // need to know the original capacity, as is thes case with HeapArrayDisposer since it uses
+    // operator new() or if we created a custom disposer for ArrayBuilder which stores the capacity
+    // in a prefix.  But that would make it hard to write cleverer heap allocators, and anyway this
+    // check might catch bugs.  Probably people should use Vector if they want to build arrays
+    // without knowing the final size in advance.
     KJ_IREQUIRE(pos == endPtr, "ArrayBuilder::finish() called prematurely.");
-    Array<T> result(reinterpret_cast<T*>(ptr), pos - ptr, _::HeapArrayDisposer::instance);
+    Array<T> result(reinterpret_cast<T*>(ptr), pos - ptr, *disposer);
     ptr = nullptr;
     pos = nullptr;
     endPtr = nullptr;

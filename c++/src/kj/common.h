@@ -176,6 +176,12 @@ void inlineRequireFailure(
 
 #define KJ_ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
 
+#define KJ_CONCAT_(x, y) x##y
+#define KJ_CONCAT(x, y) KJ_CONCAT_(x, y)
+#define KJ_UNIQUE_NAME(prefix) KJ_CONCAT(prefix, __LINE__)
+// Create a unique identifier name.  We use concatenate __LINE__ rather than __COUNTER__ so that
+// the name can be used multiple times in the same macro.
+
 // =======================================================================================
 // Template metaprogramming helpers.
 
@@ -283,9 +289,9 @@ template<typename T> constexpr T&& mv(T& t) noexcept { return static_cast<T&&>(t
 template<typename T> constexpr T&& fwd(NoInfer<T>& t) noexcept { return static_cast<T&&>(t); }
 
 template <typename T, typename U>
-auto min(T&& a, U&& b) -> decltype(a < b ? a : b) { return a < b ? a : b; }
+inline constexpr auto min(T&& a, U&& b) -> decltype(a < b ? a : b) { return a < b ? a : b; }
 template <typename T, typename U>
-auto max(T&& a, U&& b) -> decltype(a > b ? a : b) { return a > b ? a : b; }
+inline constexpr auto max(T&& a, U&& b) -> decltype(a > b ? a : b) { return a > b ? a : b; }
 
 // =======================================================================================
 // Manually invoking constructors and destructors
@@ -709,6 +715,29 @@ To& downcast(From& from) {
 
   return static_cast<To&>(from);
 }
+
+// =======================================================================================
+// Defer
+
+namespace _ {  // private
+
+template <typename Func>
+class Deferred {
+public:
+  inline Deferred(Func func): func(func) {}
+  inline ~Deferred() { func(); }
+private:
+  Func func;
+};
+
+template <typename Func>
+Deferred<Decay<Func>> defer(Func&& func) {
+  return Deferred<Decay<Func>>(kj::fwd<Func>(func));
+}
+
+}  // namespace _ (private)
+
+#define KJ_DEFER(code) auto KJ_UNIQUE_NAME(_kjDefer) = ::kj::_::defer([&](){code;})
 
 }  // namespace kj
 

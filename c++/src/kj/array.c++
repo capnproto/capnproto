@@ -24,36 +24,25 @@
 #include "array.h"
 
 namespace kj {
+
+void ExceptionSafeArrayUtil::construct(size_t count, void (*constructElement)(void*)) {
+  while (count > 0) {
+    constructElement(pos);
+    pos += elementSize;
+    ++constructedElementCount;
+    --count;
+  }
+}
+
+void ExceptionSafeArrayUtil::destroyAll() {
+  while (constructedElementCount > 0) {
+    pos -= elementSize;
+    --constructedElementCount;
+    destroyElement(pos);
+  }
+}
+
 namespace _ {  // private
-
-struct HeapArrayDisposer::ExceptionGuard {
-  byte* pos;
-  size_t elementSize;
-  size_t elementCount;
-  size_t constructedCount;
-  void (*destroyElement)(void*);
-
-  ExceptionGuard(void* ptr, size_t elementSize, size_t elementCount,
-                 void (*destroyElement)(void*))
-      : pos(reinterpret_cast<byte*>(ptr) + elementSize * elementCount),
-        elementSize(elementSize), elementCount(elementCount),
-        destroyElement(destroyElement) {}
-
-  ~ExceptionGuard() noexcept(false) {
-    if (pos != nullptr) {
-      destroyAll();
-      operator delete(pos);
-    }
-  }
-
-  void destroyAll() {
-    while (elementCount > 0) {
-      pos -= elementSize;
-      --elementCount;
-      destroyElement(pos);
-    }
-  }
-};
 
 void* HeapArrayDisposer::allocateImpl(size_t elementSize, size_t elementCount, size_t capacity,
                                       void (*constructElement)(void*),
@@ -70,13 +59,9 @@ void* HeapArrayDisposer::allocateImpl(size_t elementSize, size_t elementCount, s
       --elementCount;
     }
   } else {
-    ExceptionGuard guard(result, elementSize, 0, destroyElement);
-    while (guard.elementCount < elementCount) {
-      constructElement(guard.pos);
-      guard.pos += elementSize;
-      ++guard.elementCount;
-    }
-    guard.pos = nullptr;
+    ExceptionSafeArrayUtil guard(result, elementSize, 0, destroyElement);
+    guard.construct(elementCount, constructElement);
+    guard.release();
   }
 
   return result;
@@ -90,11 +75,9 @@ void HeapArrayDisposer::disposeImpl(
   if (destroyElement == nullptr) {
     operator delete(firstElement);
   } else {
-    ExceptionGuard guard(firstElement, elementSize, elementCount, destroyElement);
+    KJ_DEFER(operator delete(firstElement));
+    ExceptionSafeArrayUtil guard(firstElement, elementSize, elementCount, destroyElement);
     guard.destroyAll();
-
-    // If an exception is thrown, we'll continue the destruction process in ExceptionGuard's
-    // destructor.  If _that_ throws an exception, the program terminates according to C++ rules.
   }
 }
 

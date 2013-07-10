@@ -107,6 +107,7 @@ includekj_HEADERS =                                            \
   src/kj/string.h                                              \
   src/kj/exception.h                                           \
   src/kj/debug.h                                               \
+  src/kj/arena.h                                               \
   src/kj/io.h                                                  \
   src/kj/tuple.h
 
@@ -142,6 +143,7 @@ libcapnp_la_SOURCES=                                           \
   src/kj/string.c++                                            \
   src/kj/exception.c++                                         \
   src/kj/debug.c++                                             \
+  src/kj/arena.c++                                             \
   src/kj/io.c++                                                \
   src/kj/parse/char.c++                                        \
   src/capnp/blob.c++                                           \
@@ -189,6 +191,7 @@ capnp_test_SOURCES =                                           \
   src/kj/string-test.c++                                       \
   src/kj/exception-test.c++                                    \
   src/kj/debug-test.c++                                        \
+  src/kj/arena-test.c++                                        \
   src/kj/units-test.c++                                        \
   src/kj/tuple-test.c++                                        \
   src/kj/parse/common-test.c++                                 \

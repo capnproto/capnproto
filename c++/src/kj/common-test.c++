@@ -246,5 +246,23 @@ TEST(Common, MinMax) {
   EXPECT_EQ(1234567890123456789ll, kj::max('a', 1234567890123456789ll));
 }
 
+TEST(Common, Defer) {
+  uint i = 0;
+  uint j = 1;
+  bool k = false;
+
+  {
+    KJ_DEFER(++i);
+    KJ_DEFER(j += 3; k = true);
+    EXPECT_EQ(0, i);
+    EXPECT_EQ(1, j);
+    EXPECT_FALSE(k);
+  }
+
+  EXPECT_EQ(1, i);
+  EXPECT_EQ(4, j);
+  EXPECT_TRUE(k);
+}
+
 }  // namespace
 }  // namespace kj
