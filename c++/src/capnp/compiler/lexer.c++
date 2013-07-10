@@ -28,12 +28,62 @@
 namespace capnp {
 namespace compiler {
 
+bool lex(kj::ArrayPtr<const char> input, LexedStatements::Builder result) {
+  Lexer lexer(Orphanage::getForMessageContaining(result));
+
+  Lexer::ParserInput parserInput(input.begin(), input.end());
+  kj::Maybe<kj::Array<Orphan<Statement>>> parseOutput =
+      lexer.getParsers().statementSequence(parserInput);
+
+  if (!parserInput.atEnd()) {
+    return false;
+  }
+
+  KJ_IF_MAYBE(output, parseOutput) {
+    auto l = result.initStatements(output->size());
+    for (uint i = 0; i < output->size(); i++) {
+      l[i].adoptStatement(kj::mv((*output)[i]));
+    }
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool lex(kj::ArrayPtr<const char> input, LexedTokens::Builder result) {
+  Lexer lexer(Orphanage::getForMessageContaining(result));
+
+  Lexer::ParserInput parserInput(input.begin(), input.end());
+  kj::Maybe<kj::Array<Orphan<Token>>> parseOutput =
+      lexer.getParsers().tokenSequence(parserInput);
+
+  if (!parserInput.atEnd()) {
+    return false;
+  }
+
+  KJ_IF_MAYBE(output, parseOutput) {
+    auto l = result.initTokens(output->size());
+    for (uint i = 0; i < output->size(); i++) {
+      l[i].adoptToken(kj::mv((*output)[i]));
+    }
+    return true;
+  } else {
+    return false;
+  }
+}
+
 namespace p = kj::parse;
 
 namespace {
 
-typedef p::IteratorInput<char, const char*> Input;
-typedef p::Span<const char*> Location;
+typedef p::Span<uint32_t> Location;
+
+Token::Body::Builder initTok(Orphan<Token>& t, const Location& loc) {
+  auto tb = t.get();
+  tb.setStartByte(loc.begin());
+  tb.setEndByte(loc.end());
+  return tb.getBody();
+}
 
 void buildTokenSequenceList(List<List<TokenPointer>>::Builder builder,
                             kj::Array<kj::Array<Orphan<Token>>>&& items) {
@@ -90,35 +140,13 @@ constexpr auto docComment = sequence(
 
 }  // namespace
 
-bool lex(kj::ArrayPtr<const char> input,
-         LexedStatements::Builder* resultStatements,
-         LexedTokens::Builder* resultTokens) {
-  // This is a bit hacky.  Since the transformations applied by our parser require access to an
-  // Orphanage in order to build objects, we construct the parsers as local variables.  This means
-  // that all the parsers need to live in a single function scope.  In order to handle both tokens
-  // and statements, we have the function take `resultStatements` and `resultTokens` and parse
-  // into whichever one is non-null.
-  //
-  // TODO(someday):  Perhaps there should be a utility class called ParserPool which has a method
-  //   that takes a parser, allocates a copy of it within some arena, then returns a ParserRef
-  //   referencing that copy.  Then there could be a Lexer class which contains a ParserPool and
-  //   builds all its parsers in its constructor.  This would allow the class to directly expose
-  //   the parsers so that they can be used within other parser combinators.
+Lexer::Lexer(Orphanage orphanage): orphanage(orphanage) {
 
-  Orphanage orphanage = resultStatements == nullptr ?
-      Orphanage::getForMessageContaining(*resultTokens) :
-      Orphanage::getForMessageContaining(*resultStatements);
+  // Note that because passing an lvalue to a parser constructor uses it by-referencee, it's safe
+  // for us to use parsers.tokenSequence even though we haven't yet constructed it.
+  auto& tokenSequence = parsers.tokenSequence;
 
-  auto initTok = [&](Orphan<Token>& t, const Location& loc) -> Token::Body::Builder {
-    auto tb = t.get();
-    tb.setStartByte(loc.begin() - input.begin());
-    tb.setEndByte(loc.end() - input.begin());
-    return tb.getBody();
-  };
-
-  p::ParserRef<Input, kj::Array<Orphan<Token>>> tokenSequence;
-
-  auto commaDelimitedList = transform(
+  auto& commaDelimitedList = arena.copy(p::transform(
       p::sequence(tokenSequence, p::many(p::sequence(p::exactChar<','>(), tokenSequence))),
       [&](kj::Array<Orphan<Token>>&& first, kj::Array<kj::Array<Orphan<Token>>>&& rest)
           -> kj::Array<kj::Array<Orphan<Token>>> {
@@ -133,9 +161,9 @@ bool lex(kj::ArrayPtr<const char> input,
           }
           return result.finish();
         }
-      });
+      }));
 
-  auto token = p::oneOf(
+  auto& token = arena.copy(p::oneOf(
       p::transformWithLocation(p::identifier,
           [&](Location loc, kj::String name) -> Orphan<Token> {
             auto t = orphanage.newOrphan<Token>();
@@ -183,94 +211,54 @@ bool lex(kj::ArrayPtr<const char> input,
                 initTok(t, loc).initBracketedList(items.size()), kj::mv(items));
             return t;
           })
-      );
-  auto tokenSequence_ =
-      sequence(commentsAndWhitespace, many(sequence(token, commentsAndWhitespace)));
-  tokenSequence = tokenSequence_;
+      ));
+  parsers.tokenSequence = arena.copy(p::sequence(
+      commentsAndWhitespace, p::many(p::sequence(token, commentsAndWhitespace))));
 
-  if (resultStatements == nullptr) {
-    // Only a token sequence is requested.
-    Input parserInput(input.begin(), input.end());
-    kj::Maybe<kj::Array<Orphan<Token>>> parseOutput = tokenSequence(parserInput);
+  auto& statementSequence = parsers.statementSequence;
 
-    if (!parserInput.atEnd()) {
-      return false;
-    }
+  auto& statementEnd = arena.copy(p::oneOf(
+      transform(p::sequence(p::exactChar<';'>(), docComment),
+          [&](kj::Array<kj::String>&& comment) -> Orphan<Statement> {
+            auto result = orphanage.newOrphan<Statement>();
+            auto builder = result.get();
+            attachDocComment(builder, kj::mv(comment));
+            builder.getBlock().setNone();
+            return result;
+          }),
+      transform(
+          p::sequence(p::exactChar<'{'>(), docComment, statementSequence, p::exactChar<'}'>()),
+          [&](kj::Array<kj::String>&& comment, kj::Array<Orphan<Statement>>&& statements)
+              -> Orphan<Statement> {
+            auto result = orphanage.newOrphan<Statement>();
+            auto builder = result.get();
+            attachDocComment(builder, kj::mv(comment));
+            auto list = builder.getBlock().initStatements(statements.size());
+            for (uint i = 0; i < statements.size(); i++) {
+              list[i].adoptStatement(kj::mv(statements[i]));
+            }
+            return result;
+          })
+      ));
 
-    KJ_IF_MAYBE(output, parseOutput) {
-      auto l = resultTokens->initTokens(output->size());
-      for (uint i = 0; i < output->size(); i++) {
-        l[i].adoptToken(kj::mv((*output)[i]));
-      }
-      return true;
-    } else {
-      return false;
-    }
-  } else {
-    p::ParserRef<Input, kj::Array<Orphan<Statement>>> statementSequence;
+  auto& statement = arena.copy(p::transform(p::sequence(tokenSequence, statementEnd),
+      [&](kj::Array<Orphan<Token>>&& tokens, Orphan<Statement>&& statement) {
+        auto tokensBuilder = statement.get().initTokens(tokens.size());
+        for (uint i = 0; i < tokens.size(); i++) {
+          tokensBuilder[i].adoptToken(kj::mv(tokens[i]));
+        }
+        return kj::mv(statement);
+      }));
 
-    auto statementEnd = p::oneOf(
-        transform(p::sequence(p::exactChar<';'>(), docComment),
-            [&](kj::Array<kj::String>&& comment) -> Orphan<Statement> {
-              auto result = orphanage.newOrphan<Statement>();
-              auto builder = result.get();
-              attachDocComment(builder, kj::mv(comment));
-              builder.getBlock().setNone();
-              return result;
-            }),
-        transform(
-            p::sequence(p::exactChar<'{'>(), docComment, statementSequence, p::exactChar<'}'>()),
-            [&](kj::Array<kj::String>&& comment, kj::Array<Orphan<Statement>>&& statements)
-                -> Orphan<Statement> {
-              auto result = orphanage.newOrphan<Statement>();
-              auto builder = result.get();
-              attachDocComment(builder, kj::mv(comment));
-              auto list = builder.getBlock().initStatements(statements.size());
-              for (uint i = 0; i < statements.size(); i++) {
-                list[i].adoptStatement(kj::mv(statements[i]));
-              }
-              return result;
-            })
-        );
+  parsers.statementSequence = arena.copy(sequence(
+      commentsAndWhitespace, many(sequence(statement, commentsAndWhitespace))));
 
-    auto statement = p::transform(p::sequence(tokenSequence, statementEnd),
-        [&](kj::Array<Orphan<Token>>&& tokens, Orphan<Statement>&& statement) {
-          auto tokensBuilder = statement.get().initTokens(tokens.size());
-          for (uint i = 0; i < tokens.size(); i++) {
-            tokensBuilder[i].adoptToken(kj::mv(tokens[i]));
-          }
-          return kj::mv(statement);
-        });
-
-    auto statementSequence_ =
-        sequence(commentsAndWhitespace, many(sequence(statement, commentsAndWhitespace)));
-    statementSequence = statementSequence_;
-
-    Input parserInput(input.begin(), input.end());
-    kj::Maybe<kj::Array<Orphan<Statement>>> parseOutput = statementSequence(parserInput);
-
-    if (!parserInput.atEnd()) {
-      return false;
-    }
-
-    KJ_IF_MAYBE(output, parseOutput) {
-      auto l = resultStatements->initStatements(output->size());
-      for (uint i = 0; i < output->size(); i++) {
-        l[i].adoptStatement(kj::mv((*output)[i]));
-      }
-      return true;
-    } else {
-      return false;
-    }
-  }
+  parsers.token = token;
+  parsers.statement = statement;
+  parsers.emptySpace = commentsAndWhitespace;
 }
 
-bool lex(kj::ArrayPtr<const char> input, LexedStatements::Builder result) {
-  return lex(kj::mv(input), &result, nullptr);
-}
-bool lex(kj::ArrayPtr<const char> input, LexedTokens::Builder result) {
-  return lex(kj::mv(input), nullptr, &result);
-}
+Lexer::~Lexer() {}
 
 }  // namespace compiler
 }  // namespace capnp

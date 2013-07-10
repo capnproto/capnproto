@@ -25,6 +25,8 @@
 #define CAPNP_COMPILER_LEXER_H_
 
 #include "lexer.capnp.h"
+#include <kj/parse/common.h>
+#include <kj/arena.h>
 
 namespace capnp {
 namespace compiler {
@@ -38,6 +40,54 @@ bool lex(kj::ArrayPtr<const char> input, LexedTokens::Builder result);
 // There are two versions, one that parses a list of statements, and one which just parses tokens
 // that might form a part of one statement.  In other words, in the later case, the input should
 // not contain semicolons or curly braces, unless they are in string literals of course.
+
+class Lexer {
+  // Advanced lexer interface.  This interface exposes the inner parsers so that you can embed them
+  // into your own parsers.
+
+public:
+  Lexer(Orphanage orphanage);
+  // `orphanage` is used to allocate Cap'n Proto message objects in the result.  `inputStart` is
+  // a pointer to the beginning of the input, used to compute byte offsets.
+
+  ~Lexer();
+
+  class ParserInput: public kj::parse::IteratorInput<char, const char*> {
+    // Like IteratorInput<char, const char*> except that positions are measured as byte offsets
+    // rather than pointers.
+
+  public:
+    ParserInput(const char* begin, const char* end)
+      : IteratorInput<char, const char*>(begin, end), begin(begin) {}
+    explicit ParserInput(ParserInput& parent)
+      : IteratorInput<char, const char*>(parent), begin(parent.begin) {}
+
+    inline uint32_t getPosition() {
+      return IteratorInput<char, const char*>::getPosition() - begin;
+    }
+
+  private:
+    const char* begin;
+  };
+
+  template <typename Output>
+  using Parser = kj::parse::ParserRef<ParserInput, Output>;
+
+  struct Parsers {
+    Parser<kj::Tuple<>> emptySpace;
+    Parser<Orphan<Token>> token;
+    Parser<kj::Array<Orphan<Token>>> tokenSequence;
+    Parser<Orphan<Statement>> statement;
+    Parser<kj::Array<Orphan<Statement>>> statementSequence;
+  };
+
+  const Parsers& getParsers() { return parsers; }
+
+private:
+  Orphanage orphanage;
+  kj::Arena arena;
+  Parsers parsers;
+};
 
 }  // namespace compiler
 }  // namespace capnp

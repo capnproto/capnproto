@@ -54,7 +54,7 @@ class IteratorInput {
 public:
   IteratorInput(Iterator begin, Iterator end)
       : parent(nullptr), pos(begin), end(end), best(begin) {}
-  IteratorInput(IteratorInput& parent)
+  explicit IteratorInput(IteratorInput& parent)
       : parent(&parent), pos(parent.pos), end(parent.end), best(parent.pos) {}
   ~IteratorInput() {
     if (parent != nullptr) {

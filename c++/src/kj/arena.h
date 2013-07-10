@@ -67,6 +67,11 @@ public:
   // the need for the Arena itself to keep track of destructors to call later, which may make it
   // slightly more efficient.
 
+  template <typename T>
+  inline T& copy(T&& value) { return allocate<Decay<T>>(kj::fwd<T>(value)); }
+  // Allocate a copy of the given value in the arena.  This is just a shortcut for calling the
+  // type's copy (or move) constructor.
+
   StringPtr copyString(StringPtr content);
   // Make a copy of the given string inside the arena, and return a pointer to the copy.
 
