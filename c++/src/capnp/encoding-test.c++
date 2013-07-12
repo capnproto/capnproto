@@ -251,7 +251,7 @@ struct UnionState {
 
   UnionState(std::initializer_list<uint> discriminants, int dataOffset)
       : dataOffset(dataOffset) {
-    memcpy(this->discriminants, discriminants.begin(), sizeof(discriminants));
+    memcpy(this->discriminants, discriminants.begin(), sizeof(this->discriminants));
   }
 
   bool operator==(const UnionState& other) const {
