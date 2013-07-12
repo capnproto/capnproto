@@ -249,6 +249,24 @@ struct List<T, Kind::STRUCT> {
       return typename T::Builder(builder.getStructElement(index * ELEMENTS));
     }
 
+    inline void adoptWithCaveats(uint index, Orphan<T>&& orphan) {
+      // Mostly behaves like you'd expect `adopt` to behave, but with two caveats originating from
+      // the fact that structs in a struct list are allocated inline rather than by pointer:
+      // * This actually performs a shallow copy, effectively adopting each of the orphan's
+      //   children rather than adopting the orphan itself.  The orphan ends up being discarded,
+      //   possibly wasting space in the message object.
+      // * If the orphan is larger than the target struct -- say, because the orphan was built
+      //   using a newer version of the schema that has additional fields -- it will be truncated,
+      //   losing data.
+
+      // We pass a zero-valued StructSize to asStruct() because we do not want the struct to be
+      // expanded under any circumstances.  We're just going to throw it away anyway, and
+      // transferContentFrom() already carefully compares the struct sizes before transferring.
+      builder.getStructElement(index * ELEMENTS).transferContentFrom(
+          orphan.builder.asStruct(_::StructSize(
+              0 * WORDS, 0 * POINTERS, _::FieldSize::VOID)));
+    }
+
     // There are no init(), set(), adopt(), or disown() methods for lists of structs because the
     // elements of the list are inlined and are initialized when the list is initialized.  This
     // means that init() would be redundant, and set() would risk data loss if the input struct

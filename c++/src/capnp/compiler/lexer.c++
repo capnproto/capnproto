@@ -42,7 +42,7 @@ bool lex(kj::ArrayPtr<const char> input, LexedStatements::Builder result) {
   KJ_IF_MAYBE(output, parseOutput) {
     auto l = result.initStatements(output->size());
     for (uint i = 0; i < output->size(); i++) {
-      l[i].adoptStatement(kj::mv((*output)[i]));
+      l.adoptWithCaveats(i, kj::mv((*output)[i]));
     }
     return true;
   } else {
@@ -64,7 +64,7 @@ bool lex(kj::ArrayPtr<const char> input, LexedTokens::Builder result) {
   KJ_IF_MAYBE(output, parseOutput) {
     auto l = result.initTokens(output->size());
     for (uint i = 0; i < output->size(); i++) {
-      l[i].adoptToken(kj::mv((*output)[i]));
+      l.adoptWithCaveats(i, kj::mv((*output)[i]));
     }
     return true;
   } else {
@@ -85,13 +85,13 @@ Token::Body::Builder initTok(Orphan<Token>& t, const Location& loc) {
   return tb.getBody();
 }
 
-void buildTokenSequenceList(List<List<TokenPointer>>::Builder builder,
+void buildTokenSequenceList(List<List<Token>>::Builder builder,
                             kj::Array<kj::Array<Orphan<Token>>>&& items) {
   for (uint i = 0; i < items.size(); i++) {
     auto& item = items[i];
     auto itemBuilder = builder.init(i, item.size());
     for (uint j = 0; j < item.size(); j++) {
-      itemBuilder[j].adoptToken(kj::mv(item[j]));
+      itemBuilder.adoptWithCaveats(j, kj::mv(item[j]));
     }
   }
 }
@@ -101,16 +101,14 @@ void attachDocComment(Statement::Builder statement, kj::Array<kj::String>&& comm
   for (auto& line: comment) {
     size += line.size() + 1;  // include newline
   }
-  if (size > 0) {
-    Text::Builder builder = statement.initDocComment(size);
-    char* pos = builder.begin();
-    for (auto& line: comment) {
-      memcpy(pos, line.begin(), line.size());
-      pos += line.size();
-      *pos++ = '\n';
-    }
-    KJ_ASSERT(pos == builder.end());
+  Text::Builder builder = statement.initDocComment(size);
+  char* pos = builder.begin();
+  for (auto& line: comment) {
+    memcpy(pos, line.begin(), line.size());
+    pos += line.size();
+    *pos++ = '\n';
   }
+  KJ_ASSERT(pos == builder.end());
 }
 
 constexpr auto discardComment =
@@ -131,16 +129,16 @@ constexpr auto newline = p::oneOf(
     p::exactChar<'\n'>(),
     sequence(p::exactChar<'\r'>(), p::discard(p::optional(p::exactChar<'\n'>()))));
 
-constexpr auto docComment = sequence(
+constexpr auto docComment = p::optional(p::sequence(
     discardLineWhitespace,
     p::discard(p::optional(newline)),
-    p::many(p::sequence(discardLineWhitespace, saveComment)));
+    p::oneOrMore(p::sequence(discardLineWhitespace, saveComment))));
 // Parses a set of comment lines preceded by at most one newline and with no intervening blank
 // lines.
 
 }  // namespace
 
-Lexer::Lexer(Orphanage orphanage): orphanage(orphanage) {
+Lexer::Lexer(Orphanage orphanageParam): orphanage(orphanageParam) {
 
   // Note that because passing an lvalue to a parser constructor uses it by-referencee, it's safe
   // for us to use parsers.tokenSequence even though we haven't yet constructed it.
@@ -148,7 +146,7 @@ Lexer::Lexer(Orphanage orphanage): orphanage(orphanage) {
 
   auto& commaDelimitedList = arena.copy(p::transform(
       p::sequence(tokenSequence, p::many(p::sequence(p::exactChar<','>(), tokenSequence))),
-      [&](kj::Array<Orphan<Token>>&& first, kj::Array<kj::Array<Orphan<Token>>>&& rest)
+      [this](kj::Array<Orphan<Token>>&& first, kj::Array<kj::Array<Orphan<Token>>>&& rest)
           -> kj::Array<kj::Array<Orphan<Token>>> {
         if (first == nullptr && rest == nullptr) {
           // Completely empty list.
@@ -165,39 +163,39 @@ Lexer::Lexer(Orphanage orphanage): orphanage(orphanage) {
 
   auto& token = arena.copy(p::oneOf(
       p::transformWithLocation(p::identifier,
-          [&](Location loc, kj::String name) -> Orphan<Token> {
+          [this](Location loc, kj::String name) -> Orphan<Token> {
             auto t = orphanage.newOrphan<Token>();
             initTok(t, loc).setIdentifier(name);
             return t;
           }),
       p::transformWithLocation(p::doubleQuotedString,
-          [&](Location loc, kj::String text) -> Orphan<Token> {
+          [this](Location loc, kj::String text) -> Orphan<Token> {
             auto t = orphanage.newOrphan<Token>();
             initTok(t, loc).setStringLiteral(text);
             return t;
           }),
       p::transformWithLocation(p::integer,
-          [&](Location loc, uint64_t i) -> Orphan<Token> {
+          [this](Location loc, uint64_t i) -> Orphan<Token> {
             auto t = orphanage.newOrphan<Token>();
             initTok(t, loc).setIntegerLiteral(i);
             return t;
           }),
       p::transformWithLocation(p::number,
-          [&](Location loc, double x) -> Orphan<Token> {
+          [this](Location loc, double x) -> Orphan<Token> {
             auto t = orphanage.newOrphan<Token>();
             initTok(t, loc).setFloatLiteral(x);
             return t;
           }),
       p::transformWithLocation(
           p::charsToString(p::oneOrMore(p::anyOfChars("!$%&*+-./:<=>?@^|~"))),
-          [&](Location loc, kj::String text) -> Orphan<Token> {
+          [this](Location loc, kj::String text) -> Orphan<Token> {
             auto t = orphanage.newOrphan<Token>();
             initTok(t, loc).setOperator(text);
             return t;
           }),
       p::transformWithLocation(
           sequence(p::exactChar<'('>(), commaDelimitedList, p::exactChar<')'>()),
-          [&](Location loc, kj::Array<kj::Array<Orphan<Token>>>&& items) -> Orphan<Token> {
+          [this](Location loc, kj::Array<kj::Array<Orphan<Token>>>&& items) -> Orphan<Token> {
             auto t = orphanage.newOrphan<Token>();
             buildTokenSequenceList(
                 initTok(t, loc).initParenthesizedList(items.size()), kj::mv(items));
@@ -205,7 +203,7 @@ Lexer::Lexer(Orphanage orphanage): orphanage(orphanage) {
           }),
       p::transformWithLocation(
           sequence(p::exactChar<'['>(), commaDelimitedList, p::exactChar<']'>()),
-          [&](Location loc, kj::Array<kj::Array<Orphan<Token>>>&& items) -> Orphan<Token> {
+          [this](Location loc, kj::Array<kj::Array<Orphan<Token>>>&& items) -> Orphan<Token> {
             auto t = orphanage.newOrphan<Token>();
             buildTokenSequenceList(
                 initTok(t, loc).initBracketedList(items.size()), kj::mv(items));
@@ -219,34 +217,46 @@ Lexer::Lexer(Orphanage orphanage): orphanage(orphanage) {
 
   auto& statementEnd = arena.copy(p::oneOf(
       transform(p::sequence(p::exactChar<';'>(), docComment),
-          [&](kj::Array<kj::String>&& comment) -> Orphan<Statement> {
+          [this](kj::Maybe<kj::Array<kj::String>>&& comment) -> Orphan<Statement> {
             auto result = orphanage.newOrphan<Statement>();
             auto builder = result.get();
-            attachDocComment(builder, kj::mv(comment));
+            KJ_IF_MAYBE(c, comment) {
+              attachDocComment(builder, kj::mv(*c));
+            }
             builder.getBlock().setNone();
             return result;
           }),
       transform(
-          p::sequence(p::exactChar<'{'>(), docComment, statementSequence, p::exactChar<'}'>()),
-          [&](kj::Array<kj::String>&& comment, kj::Array<Orphan<Statement>>&& statements)
+          p::sequence(p::exactChar<'{'>(), docComment, statementSequence, p::exactChar<'}'>(),
+                      docComment),
+          [this](kj::Maybe<kj::Array<kj::String>>&& comment,
+                 kj::Array<Orphan<Statement>>&& statements,
+                 kj::Maybe<kj::Array<kj::String>>&& lateComment)
               -> Orphan<Statement> {
             auto result = orphanage.newOrphan<Statement>();
             auto builder = result.get();
-            attachDocComment(builder, kj::mv(comment));
+            KJ_IF_MAYBE(c, comment) {
+              attachDocComment(builder, kj::mv(*c));
+            } else KJ_IF_MAYBE(c, lateComment) {
+              attachDocComment(builder, kj::mv(*c));
+            }
             auto list = builder.getBlock().initStatements(statements.size());
             for (uint i = 0; i < statements.size(); i++) {
-              list[i].adoptStatement(kj::mv(statements[i]));
+              list.adoptWithCaveats(i, kj::mv(statements[i]));
             }
             return result;
           })
       ));
 
-  auto& statement = arena.copy(p::transform(p::sequence(tokenSequence, statementEnd),
-      [&](kj::Array<Orphan<Token>>&& tokens, Orphan<Statement>&& statement) {
-        auto tokensBuilder = statement.get().initTokens(tokens.size());
+  auto& statement = arena.copy(p::transformWithLocation(p::sequence(tokenSequence, statementEnd),
+      [this](Location loc, kj::Array<Orphan<Token>>&& tokens, Orphan<Statement>&& statement) {
+        auto builder = statement.get();
+        auto tokensBuilder = builder.initTokens(tokens.size());
         for (uint i = 0; i < tokens.size(); i++) {
-          tokensBuilder[i].adoptToken(kj::mv(tokens[i]));
+          tokensBuilder.adoptWithCaveats(i, kj::mv(tokens[i]));
         }
+        builder.setStartByte(loc.begin());
+        builder.setEndByte(loc.end());
         return kj::mv(statement);
       }));
 

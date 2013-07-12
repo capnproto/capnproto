@@ -71,11 +71,11 @@ public:
   }
 
   bool atEnd() { return pos == end; }
-  const Element& current() {
+  auto current() -> decltype(*instance<Iterator>()) {
     KJ_IREQUIRE(!atEnd());
     return *pos;
   }
-  const Element& consume() {
+  auto consume() -> decltype(*instance<Iterator>()) {
     KJ_IREQUIRE(!atEnd());
     return *pos++;
   }
@@ -274,7 +274,6 @@ private:
 template <typename SubParser, typename Result>
 constexpr ConstResult_<SubParser, Result> constResult(SubParser&& subParser, Result&& result) {
   // Constructs a parser which returns exactly `result` if `subParser` is successful.
-
   return ConstResult_<SubParser, Result>(kj::fwd<SubParser>(subParser), kj::fwd<Result>(result));
 }
 
@@ -572,6 +571,27 @@ private:
 };
 
 template <typename SubParser, typename TransformFunc>
+class TransformOrReject_ {
+public:
+  explicit constexpr TransformOrReject_(SubParser&& subParser, TransformFunc&& transform)
+      : subParser(kj::fwd<SubParser>(subParser)), transform(kj::fwd<TransformFunc>(transform)) {}
+
+  template <typename Input>
+  decltype(kj::apply(instance<TransformFunc&>(), instance<OutputType<SubParser, Input>&&>()))
+      operator()(Input& input) const {
+    KJ_IF_MAYBE(subResult, subParser(input)) {
+      return kj::apply(transform, kj::mv(*subResult));
+    } else {
+      return nullptr;
+    }
+  }
+
+private:
+  SubParser subParser;
+  TransformFunc transform;
+};
+
+template <typename SubParser, typename TransformFunc>
 class TransformWithLocation_ {
 public:
   explicit constexpr TransformWithLocation_(SubParser&& subParser, TransformFunc&& transform)
@@ -607,11 +627,20 @@ constexpr Transform_<SubParser, TransformFunc> transform(
 }
 
 template <typename SubParser, typename TransformFunc>
+constexpr TransformOrReject_<SubParser, TransformFunc> transformOrReject(
+    SubParser&& subParser, TransformFunc&& functor) {
+  // Like `transform()` except that `functor` returns a `Maybe`.  If it returns null, parsing fails,
+  // otherwise the parser's result is the content of the `Maybe`.
+  return TransformOrReject_<SubParser, TransformFunc>(
+      kj::fwd<SubParser>(subParser), kj::fwd<TransformFunc>(functor));
+}
+
+template <typename SubParser, typename TransformFunc>
 constexpr TransformWithLocation_<SubParser, TransformFunc> transformWithLocation(
     SubParser&& subParser, TransformFunc&& functor) {
-  // Constructs a parser which executes some other parser and then transforms the result by invoking
-  // `functor` on it.  Typically `functor` is a lambda.  It is invoked using `kj::apply`,
-  // meaning tuples will be unpacked as arguments.
+  // Like `transform` except that `functor` also takes a `Span` as its first parameter specifying
+  // the location of the parsed content.  The span's position type is whatever the parser input's
+  // getPosition() returns.
   return TransformWithLocation_<SubParser, TransformFunc>(
       kj::fwd<SubParser>(subParser), kj::fwd<TransformFunc>(functor));
 }
@@ -650,6 +679,8 @@ constexpr AcceptIf_<SubParser, Condition> acceptIf(SubParser&& subParser, Condit
   // `condition` on the result to check if it is valid.  Typically, `condition` is a lambda
   // returning true or false.  Like with `transform()`, `condition` is invoked using `kj::apply`
   // to unpack tuples.
+  //
+  // TODO(soon):  Remove in favor of transformOrReject()?
   return AcceptIf_<SubParser, Condition>(
       kj::fwd<SubParser>(subParser), kj::fwd<Condition>(condition));
 }

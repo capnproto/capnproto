@@ -344,6 +344,37 @@ TEST(CommonParsers, TransformParser) {
   }
 }
 
+TEST(CommonParsers, TransformOrRejectParser) {
+  auto parser = transformOrReject(many(any),
+      [](Array<char> chars) -> Maybe<int> {
+        if (heapString(chars) == "foo") {
+          return 123;
+        } else {
+          return nullptr;
+        }
+      });
+
+  {
+    StringPtr text = "foo";
+    Input input(text.begin(), text.end());
+    Maybe<int> result = parser(input);
+    KJ_IF_MAYBE(i, result) {
+      EXPECT_EQ(123, *i);
+    } else {
+      ADD_FAILURE() << "Expected 123, got null.";
+    }
+    EXPECT_TRUE(input.atEnd());
+  }
+
+  {
+    StringPtr text = "bar";
+    Input input(text.begin(), text.end());
+    Maybe<int> result = parser(input);
+    EXPECT_TRUE(result == nullptr);
+    EXPECT_TRUE(input.atEnd());
+  }
+}
+
 TEST(CommonParsers, References) {
   struct TransformFunc {
     int value;

@@ -59,54 +59,54 @@ kj::String doLex(kj::StringPtr constText) {
 TEST(Lexer, Tokens) {
   EXPECT_STREQ(
       "(tokens = ["
-        "(token = (body = identifier('foo'), endByte = 3)), "
-        "(token = (body = identifier('bar'), startByte = 4, endByte = 7))"
+        "(body = identifier('foo'), endByte = 3), "
+        "(body = identifier('bar'), startByte = 4, endByte = 7)"
       "])",
       doLex<LexedTokens>("foo bar").cStr());
 
   EXPECT_STREQ(
       "(tokens = ["
-        "(token = (body = identifier('foo'), endByte = 3)), "
-        "(token = (body = identifier('bar'), startByte = 15, endByte = 18))"
+        "(body = identifier('foo'), endByte = 3), "
+        "(body = identifier('bar'), startByte = 15, endByte = 18)"
       "])",
       doLex<LexedTokens>("foo # comment\n bar").cStr());
 
   EXPECT_STREQ(
       "(tokens = ["
-        "(token = (body = stringLiteral('foo '), startByte = 2, endByte = 11)), "
-        "(token = (body = integerLiteral(123), startByte = 12, endByte = 15)), "
-        "(token = (body = floatLiteral(2.75), startByte = 16, endByte = 20)), "
-        "(token = (body = floatLiteral(60000), startByte = 21, endByte = 24)), "
-        "(token = (body = operator('+'), startByte = 25, endByte = 26)), "
-        "(token = (body = operator('-='), startByte = 27, endByte = 29))"
+        "(body = stringLiteral('foo '), startByte = 2, endByte = 11), "
+        "(body = integerLiteral(123), startByte = 12, endByte = 15), "
+        "(body = floatLiteral(2.75), startByte = 16, endByte = 20), "
+        "(body = floatLiteral(60000), startByte = 21, endByte = 24), "
+        "(body = operator('+'), startByte = 25, endByte = 26), "
+        "(body = operator('-='), startByte = 27, endByte = 29)"
       "])",
       doLex<LexedTokens>("  'foo\\x20' 123 2.75 6e4 + -=  ").cStr());
 
   EXPECT_STREQ(
       "(tokens = ["
-        "(token = (body = parenthesizedList(["
+        "(body = parenthesizedList(["
           "["
-            "(token = (body = identifier('foo'), startByte = 1, endByte = 4)), "
-            "(token = (body = identifier('bar'), startByte = 5, endByte = 8))"
+            "(body = identifier('foo'), startByte = 1, endByte = 4), "
+            "(body = identifier('bar'), startByte = 5, endByte = 8)"
           "], ["
-            "(token = (body = identifier('baz'), startByte = 10, endByte = 13)), "
-            "(token = (body = identifier('qux'), startByte = 14, endByte = 17))"
+            "(body = identifier('baz'), startByte = 10, endByte = 13), "
+            "(body = identifier('qux'), startByte = 14, endByte = 17)"
           "], ["
-            "(token = (body = identifier('corge'), startByte = 19, endByte = 24)), "
-            "(token = (body = identifier('grault'), startByte = 25, endByte = 31))"
+            "(body = identifier('corge'), startByte = 19, endByte = 24), "
+            "(body = identifier('grault'), startByte = 25, endByte = 31)"
           "]"
-        "]), endByte = 32))"
+        "]), endByte = 32)"
       "])",
       doLex<LexedTokens>("(foo bar, baz qux, corge grault)").cStr());
 
   EXPECT_STREQ(
       "(tokens = ["
-        "(token = (body = parenthesizedList(["
+        "(body = parenthesizedList(["
           "["
-            "(token = (body = identifier('foo'), startByte = 1, endByte = 4)), "
-            "(token = (body = identifier('bar'), startByte = 5, endByte = 8))"
+            "(body = identifier('foo'), startByte = 1, endByte = 4), "
+            "(body = identifier('bar'), startByte = 5, endByte = 8)"
           "]"
-        "]), endByte = 9))"
+        "]), endByte = 9)"
       "])",
       doLex<LexedTokens>("(foo bar)").cStr());
 
@@ -114,50 +114,50 @@ TEST(Lexer, Tokens) {
   // list.
   EXPECT_STREQ(
       "(tokens = ["
-        "(token = (body = parenthesizedList([]), endByte = 4))"
+        "(body = parenthesizedList([]), endByte = 4)"
       "])",
       doLex<LexedTokens>("(  )").cStr());
 
   EXPECT_STREQ(
       "(tokens = ["
-        "(token = (body = bracketedList(["
+        "(body = bracketedList(["
           "["
-            "(token = (body = identifier('foo'), startByte = 1, endByte = 4)), "
-            "(token = (body = identifier('bar'), startByte = 5, endByte = 8))"
+            "(body = identifier('foo'), startByte = 1, endByte = 4), "
+            "(body = identifier('bar'), startByte = 5, endByte = 8)"
           "], ["
-            "(token = (body = identifier('baz'), startByte = 10, endByte = 13)), "
-            "(token = (body = identifier('qux'), startByte = 14, endByte = 17))"
+            "(body = identifier('baz'), startByte = 10, endByte = 13), "
+            "(body = identifier('qux'), startByte = 14, endByte = 17)"
           "], ["
-            "(token = (body = identifier('corge'), startByte = 19, endByte = 24)), "
-            "(token = (body = identifier('grault'), startByte = 25, endByte = 31))"
+            "(body = identifier('corge'), startByte = 19, endByte = 24), "
+            "(body = identifier('grault'), startByte = 25, endByte = 31)"
           "]"
-        "]), endByte = 32))"
+        "]), endByte = 32)"
       "])",
       doLex<LexedTokens>("[foo bar, baz qux, corge grault]").cStr());
 
   EXPECT_STREQ(
       "(tokens = ["
-        "(token = (body = bracketedList(["
+        "(body = bracketedList(["
           "["
-            "(token = (body = identifier('foo'), startByte = 1, endByte = 4))"
+            "(body = identifier('foo'), startByte = 1, endByte = 4)"
           "], ["
-            "(token = (body = parenthesizedList(["
+            "(body = parenthesizedList(["
               "["
-                "(token = (body = identifier('bar'), startByte = 7, endByte = 10))"
+                "(body = identifier('bar'), startByte = 7, endByte = 10)"
               "], ["
-                "(token = (body = identifier('baz'), startByte = 12, endByte = 15))"
+                "(body = identifier('baz'), startByte = 12, endByte = 15)"
               "]"
-            "]), startByte = 6, endByte = 16))"
+            "]), startByte = 6, endByte = 16)"
           "]"
-        "]), endByte = 17)), "
-        "(token = (body = identifier('qux'), startByte = 18, endByte = 21))"
+        "]), endByte = 17), "
+        "(body = identifier('qux'), startByte = 18, endByte = 21)"
       "])",
       doLex<LexedTokens>("[foo, (bar, baz)] qux").cStr());
 
   EXPECT_STREQ(
       "(tokens = ["
-        "(token = (body = identifier('foo'), endByte = 3)), "
-        "(token = (body = identifier('bar'), startByte = 7, endByte = 10))"
+        "(body = identifier('foo'), endByte = 3), "
+        "(body = identifier('bar'), startByte = 7, endByte = 10)"
       "])",
       doLex<LexedTokens>("foo\n\r\t\vbar").cStr());
 }
@@ -165,45 +165,46 @@ TEST(Lexer, Tokens) {
 TEST(Lexer, Statements) {
   EXPECT_STREQ(
       "(statements = ["
-        "(statement = (tokens = ["
-          "(token = (body = identifier('foo'), endByte = 3)), "
-          "(token = (body = identifier('bar'), startByte = 4, endByte = 7))"
-        "]))"
+        "(tokens = ["
+          "(body = identifier('foo'), endByte = 3), "
+          "(body = identifier('bar'), startByte = 4, endByte = 7)"
+        "], endByte = 8)"
       "])",
       doLex<LexedStatements>("foo bar;").cStr());
 
   EXPECT_STREQ(
       "(statements = ["
-        "(statement = (tokens = ["
-          "(token = (body = identifier('foo'), endByte = 3))"
-        "])), "
-        "(statement = (tokens = ["
-          "(token = (body = identifier('bar'), startByte = 5, endByte = 8))"
-        "])), "
-        "(statement = (tokens = ["
-          "(token = (body = identifier('baz'), startByte = 10, endByte = 13))"
-        "]))"
+        "(tokens = ["
+          "(body = identifier('foo'), endByte = 3)"
+        "], endByte = 4), "
+        "(tokens = ["
+          "(body = identifier('bar'), startByte = 5, endByte = 8)"
+        "], startByte = 5, endByte = 9), "
+        "(tokens = ["
+          "(body = identifier('baz'), startByte = 10, endByte = 13)"
+        "], startByte = 10, endByte = 14)"
       "])",
       doLex<LexedStatements>("foo; bar; baz; ").cStr());
 
   EXPECT_STREQ(
       "(statements = ["
-        "(statement = ("
+        "("
           "tokens = ["
-            "(token = (body = identifier('foo'), endByte = 3))"
+            "(body = identifier('foo'), endByte = 3)"
           "], "
           "block = statements(["
-            "(statement = (tokens = ["
-              "(token = (body = identifier('bar'), startByte = 5, endByte = 8))"
-            "])), "
-            "(statement = (tokens = ["
-              "(token = (body = identifier('baz'), startByte = 10, endByte = 13))"
-            "]))"
-          "]))"
+            "(tokens = ["
+              "(body = identifier('bar'), startByte = 5, endByte = 8)"
+            "], startByte = 5, endByte = 9), "
+            "(tokens = ["
+              "(body = identifier('baz'), startByte = 10, endByte = 13)"
+            "], startByte = 10, endByte = 14)"
+          "]), "
+          "endByte = 15"
         "), "
-        "(statement = (tokens = ["
-          "(token = (body = identifier('qux'), startByte = 16, endByte = 19))"
-        "]))"
+        "(tokens = ["
+          "(body = identifier('qux'), startByte = 16, endByte = 19)"
+        "], startByte = 16, endByte = 20)"
       "])",
       doLex<LexedStatements>("foo {bar; baz;} qux;").cStr());
 }
@@ -211,90 +212,120 @@ TEST(Lexer, Statements) {
 TEST(Lexer, DocComments) {
   EXPECT_STREQ(
       "(statements = ["
-        "(statement = ("
+        "("
           "tokens = ["
-            "(token = (body = identifier('foo'), endByte = 3))"
+            "(body = identifier('foo'), endByte = 3)"
           "], "
-          "docComment = 'blah blah\\n'"
-        "))"
+          "docComment = 'blah blah\\n', "
+          "endByte = 16"
+        ")"
       "])",
       doLex<LexedStatements>("foo; # blah blah").cStr());
 
   EXPECT_STREQ(
       "(statements = ["
-        "(statement = ("
+        "("
           "tokens = ["
-            "(token = (body = identifier('foo'), endByte = 3))"
+            "(body = identifier('foo'), endByte = 3)"
           "], "
-          "docComment = 'blah blah\\n'"
-        "))"
+          "docComment = 'blah blah\\n', "
+          "endByte = 15"
+        ")"
       "])",
       doLex<LexedStatements>("foo; #blah blah").cStr());
 
   EXPECT_STREQ(
       "(statements = ["
-        "(statement = ("
+        "("
           "tokens = ["
-            "(token = (body = identifier('foo'), endByte = 3))"
+            "(body = identifier('foo'), endByte = 3)"
           "], "
-          "docComment = ' blah blah\\n'"
-        "))"
+          "docComment = ' blah blah\\n', "
+          "endByte = 17"
+        ")"
       "])",
       doLex<LexedStatements>("foo; #  blah blah").cStr());
 
   EXPECT_STREQ(
       "(statements = ["
-        "(statement = ("
+        "("
           "tokens = ["
-            "(token = (body = identifier('foo'), endByte = 3))"
+            "(body = identifier('foo'), endByte = 3)"
           "], "
-          "docComment = 'blah blah\\n'"
-        "))"
+          "docComment = 'blah blah\\n', "
+          "endByte = 16"
+        ")"
       "])",
       doLex<LexedStatements>("foo;\n# blah blah").cStr());
 
   EXPECT_STREQ(
       "(statements = ["
-        "(statement = ("
+        "("
           "tokens = ["
-            "(token = (body = identifier('foo'), endByte = 3))"
-          "]"
-        "))"
+            "(body = identifier('foo'), endByte = 3)"
+          "], "
+          "endByte = 4"
+        ")"
       "])",
       doLex<LexedStatements>("foo;\n\n# blah blah").cStr());
 
   EXPECT_STREQ(
       "(statements = ["
-        "(statement = ("
+        "("
           "tokens = ["
-            "(token = (body = identifier('foo'), endByte = 3))"
+            "(body = identifier('foo'), endByte = 3)"
           "], "
-          "docComment = 'bar baz\\nqux corge\\n'"
-        "))"
+          "docComment = 'bar baz\\nqux corge\\n', "
+          "endByte = 30"
+        ")"
       "])",
       doLex<LexedStatements>("foo;\n # bar baz\n  # qux corge\n\n# grault\n# garply").cStr());
 
   EXPECT_STREQ(
       "(statements = ["
-        "(statement = ("
+        "("
           "tokens = ["
-            "(token = (body = identifier('foo'), endByte = 3))"
+            "(body = identifier('foo'), endByte = 3)"
           "], "
           "block = statements(["
-            "(statement = (tokens = ["
-              "(token = (body = identifier('bar'), startByte = 17, endByte = 20))"
-            "], docComment = 'hi\\n')), "
-            "(statement = (tokens = ["
-              "(token = (body = identifier('baz'), startByte = 28, endByte = 31))"
-            "]))"
+            "(tokens = ["
+              "(body = identifier('bar'), startByte = 17, endByte = 20)"
+            "], docComment = 'hi\\n', startByte = 17, endByte = 27), "
+            "(tokens = ["
+              "(body = identifier('baz'), startByte = 28, endByte = 31)"
+            "], startByte = 28, endByte = 32)"
           "]), "
-          "docComment = 'blah blah\\n'"
-        ")), "
-        "(statement = (tokens = ["
-          "(token = (body = identifier('qux'), startByte = 44, endByte = 47))"
-        "]))"
+          "docComment = 'blah blah\\n', "
+          "endByte = 44"
+        "), "
+        "(tokens = ["
+          "(body = identifier('qux'), startByte = 44, endByte = 47)"
+        "], startByte = 44, endByte = 48)"
       "])",
       doLex<LexedStatements>("foo {# blah blah\nbar; # hi\n baz;} # ignored\nqux;").cStr());
+
+  EXPECT_STREQ(
+      "(statements = ["
+        "("
+          "tokens = ["
+            "(body = identifier('foo'), endByte = 3)"
+          "], "
+          "block = statements(["
+            "(tokens = ["
+              "(body = identifier('bar'), startByte = 5, endByte = 8)"
+            "], startByte = 5, endByte = 9), "
+            "(tokens = ["
+              "(body = identifier('baz'), startByte = 10, endByte = 13)"
+            "], startByte = 10, endByte = 14)"
+          "]), "
+          "docComment = 'late comment\\n', "
+          "endByte = 31"
+        "), "
+        "(tokens = ["
+          "(body = identifier('qux'), startByte = 31, endByte = 34)"
+        "], startByte = 31, endByte = 35)"
+      "])",
+      doLex<LexedStatements>("foo {bar; baz;}\n# late comment\nqux;").cStr());
 }
 
 }  // namespace
