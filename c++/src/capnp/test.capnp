@@ -376,3 +376,10 @@ struct TestNewVersion {
   new1 @3 :Int64 = 987;
   new2 @4 :Text = "baz";
 }
+
+struct TestStructUnion {
+  un @0 union {
+    allTypes @1 :TestAllTypes;
+    object @2 :TestObject;
+  }
+}

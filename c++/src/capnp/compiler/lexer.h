@@ -24,15 +24,18 @@
 #ifndef CAPNP_COMPILER_LEXER_H_
 #define CAPNP_COMPILER_LEXER_H_
 
-#include "lexer.capnp.h"
+#include <capnp/compiler/lexer.capnp.h>
 #include <kj/parse/common.h>
 #include <kj/arena.h>
+#include "error-reporter.h"
 
 namespace capnp {
 namespace compiler {
 
-bool lex(kj::ArrayPtr<const char> input, LexedStatements::Builder result);
-bool lex(kj::ArrayPtr<const char> input, LexedTokens::Builder result);
+bool lex(kj::ArrayPtr<const char> input, LexedStatements::Builder result,
+         ErrorReporter& errorReporter);
+bool lex(kj::ArrayPtr<const char> input, LexedTokens::Builder result,
+         ErrorReporter& errorReporter);
 // Lex the given source code, placing the results in `result`.  Returns true if there
 // were no errors, false if there were.  Even when errors are present, the file may have partial
 // content which can be fed into later stages of parsing in order to find more errors.
@@ -46,7 +49,7 @@ class Lexer {
   // into your own parsers.
 
 public:
-  Lexer(Orphanage orphanage);
+  Lexer(Orphanage orphanage, ErrorReporter& errorReporter);
   // `orphanage` is used to allocate Cap'n Proto message objects in the result.  `inputStart` is
   // a pointer to the beginning of the input, used to compute byte offsets.
 
@@ -62,6 +65,9 @@ public:
     explicit ParserInput(ParserInput& parent)
       : IteratorInput<char, const char*>(parent), begin(parent.begin) {}
 
+    inline uint32_t getBest() {
+      return IteratorInput<char, const char*>::getBest() - begin;
+    }
     inline uint32_t getPosition() {
       return IteratorInput<char, const char*>::getPosition() - begin;
     }
@@ -85,6 +91,7 @@ public:
 
 private:
   Orphanage orphanage;
+  ErrorReporter& errorReporter;
   kj::Arena arena;
   Parsers parsers;
 };

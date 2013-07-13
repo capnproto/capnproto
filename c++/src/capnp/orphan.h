@@ -138,8 +138,8 @@ struct OrphanGetImpl<T, Kind::STRUCT> {
   }
 };
 
-template <typename T>
-struct OrphanGetImpl<List<T>, Kind::LIST> {
+template <typename T, Kind k>
+struct OrphanGetImpl<List<T, k>, Kind::LIST> {
   static inline typename List<T>::Builder apply(_::OrphanBuilder& builder) {
     return typename List<T>::Builder(builder.asList(_::ElementSizeForType<T>::value));
   }
@@ -147,7 +147,7 @@ struct OrphanGetImpl<List<T>, Kind::LIST> {
 
 template <typename T>
 struct OrphanGetImpl<List<T, Kind::STRUCT>, Kind::LIST> {
-  static inline typename T::Builder apply(_::OrphanBuilder& builder) {
+  static inline typename List<T>::Builder apply(_::OrphanBuilder& builder) {
     return typename List<T>::Builder(builder.asStructList(_::structSize<T>()));
   }
 };
@@ -207,7 +207,7 @@ struct Orphanage::NewOrphanListImpl<List<T, k>> {
 template <typename T>
 struct Orphanage::NewOrphanListImpl<List<T, Kind::STRUCT>> {
   static inline _::OrphanBuilder apply(_::BuilderArena* arena, uint size) {
-    return _::OrphanBuilder::initList(arena, size * ELEMENTS, _::structSize<T>());
+    return _::OrphanBuilder::initStructList(arena, size * ELEMENTS, _::structSize<T>());
   }
 };
 

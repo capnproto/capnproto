@@ -24,21 +24,21 @@
 #ifndef CAPNP_COMPILER_PARSER_H_
 #define CAPNP_COMPILER_PARSER_H_
 
-#include "grammar.capnp.h"
-#include "lexer.capnp.h"
+#include <capnp/compiler/grammar.capnp.h>
+#include <capnp/compiler/lexer.capnp.h>
 #include <kj/parse/common.h>
 #include <kj/arena.h>
+#include "error-reporter.h"
 
 namespace capnp {
 namespace compiler {
 
-bool parseFile(List<Statement>::Reader statements, ParsedFile::Builder result);
+void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
+               ErrorReporter& errorReporter);
 // Parse a list of statements to build a ParsedFile.
-
-class ErrorReporter {
-public:
-  virtual void addError(uint32_t startByte, uint32_t endByte, kj::String message) = 0;
-};
+//
+// If any errors are reported, then the output is not usable.  However, it may be passed on through
+// later stages of compilation in order to detect additional errors.
 
 class CapnpParser {
   // Advanced parser interface.  This interface exposes the inner parsers so that you can embed
@@ -51,13 +51,16 @@ public:
 
   ~CapnpParser();
 
+  KJ_DISALLOW_COPY(CapnpParser);
+
   using ParserInput = kj::parse::IteratorInput<Token::Reader, List<Token>::Reader::Iterator>;
   struct DeclParserResult;
   template <typename Output>
   using Parser = kj::parse::ParserRef<ParserInput, Output>;
   using DeclParser = Parser<DeclParserResult>;
 
-  Orphan<Declaration> parseStatement(Statement::Reader statement, const DeclParser& parser);
+  kj::Maybe<Orphan<Declaration>> parseStatement(
+      Statement::Reader statement, const DeclParser& parser);
   // Parse a statement using the given parser.  In addition to parsing the token sequence itself,
   // this takes care of parsing the block (if any) and copying over the doc comment (if any).
 
@@ -99,6 +102,10 @@ public:
     Parser<Orphan<DeclName>> declName;
     Parser<Orphan<TypeExpression>> typeExpression;
     Parser<Orphan<ValueExpression>> valueExpression;
+    Parser<Orphan<ValueExpression>> parenthesizedValueExpression;
+    Parser<Orphan<Declaration::AnnotationApplication>> annotation;
+    Parser<Orphan<LocatedInteger>> uid;
+    Parser<Orphan<LocatedInteger>> ordinal;
 
     DeclParser usingDecl;
     DeclParser constDecl;

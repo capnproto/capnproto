@@ -29,6 +29,13 @@ namespace capnp {
 namespace compiler {
 namespace {
 
+class TestFailingErrorReporter: public ErrorReporter {
+public:
+  void addError(uint32_t startByte, uint32_t endByte, kj::String message) override {
+    ADD_FAILURE() << "Parse failed: (" << startByte << "-" << endByte << ") " << message.cStr();
+  }
+};
+
 template <typename LexResult>
 kj::String doLex(kj::StringPtr constText) {
   // Parse the given string into the given Cap'n Proto struct type using lex(), then stringify the
@@ -47,7 +54,8 @@ kj::String doLex(kj::StringPtr constText) {
   }
   MallocMessageBuilder message;
   auto file = message.initRoot<LexResult>();
-  EXPECT_TRUE(lex(text, file));
+  TestFailingErrorReporter errorReporter;
+  EXPECT_TRUE(lex(text, file, errorReporter));
   kj::String result = kj::str(file);
   for (char& c: result) {
     // Make it easier to write golden strings below.

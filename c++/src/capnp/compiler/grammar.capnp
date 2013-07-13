@@ -27,6 +27,8 @@ using Cxx = import "/capnp/c++.capnp";
 
 $Cxx.namespace("capnp::compiler");
 
+# TODO(someday):  Here's a case where parameterized types might be nice, but note that it would
+#   need to support primitive parameters...
 struct LocatedText {
   value @0 :Text;
   startByte @1 :UInt32;
@@ -168,6 +170,8 @@ struct Declaration {
   }
 
   struct Union {}
+
+  struct Group {}
 
   struct Interface {}
 

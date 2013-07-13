@@ -22,33 +22,54 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "lexer.h"
+#include "parser.h"
 #include <kj/vector.h>
 #include <kj/io.h>
 #include <unistd.h>
 #include <kj/debug.h>
 #include "../message.h"
+#include <iostream>
+
+class CoutErrorReporter: public capnp::compiler::ErrorReporter {
+public:
+  void addError(uint32_t startByte, uint32_t endByte, kj::String message) override {
+    std::cout << "input:" << startByte << "-" << endByte << ": " << message.cStr() << std::endl;
+  }
+};
 
 int main(int argc, char* argv[]) {
   // Eventually this will be capnpc.  For now it's just a dummy program that tests parsing.
 
-  kj::Vector<char> input;
-  char buffer[4096];
-  for (;;) {
-    ssize_t n;
-    KJ_SYSCALL(n = read(STDIN_FILENO, buffer, sizeof(buffer)));
-    if (n == 0) {
-      break;
-    }
-    input.addAll(buffer, buffer + n);
-  }
+//  kj::Vector<char> input;
+//  char buffer[4096];
+//  for (;;) {
+//    ssize_t n;
+//    KJ_SYSCALL(n = read(STDIN_FILENO, buffer, sizeof(buffer)));
+//    if (n == 0) {
+//      break;
+//    }
+//    input.addAll(buffer, buffer + n);
+//  }
+//
+//  KJ_DBG(input);
 
-  KJ_DBG(input);
+  // This input triggers a data corruption bug.  Fix it before doing anything else!
+  kj::StringPtr input = "@0xfa974d18d718428e; const x :Int32 = 1;";
 
-  capnp::MallocMessageBuilder message;
-  auto file = message.initRoot<capnp::compiler::LexedStatements>();
-  capnp::compiler::lex(input, file);
+  CoutErrorReporter errorReporter;
 
-  KJ_DBG(file);
+  capnp::MallocMessageBuilder lexerArena;
+  auto lexedFile = lexerArena.initRoot<capnp::compiler::LexedStatements>();
+  capnp::compiler::lex(input, lexedFile, errorReporter);
+  KJ_DBG(lexedFile);
+
+  capnp::MallocMessageBuilder parserArena;
+  auto parsedFile = parserArena.initRoot<capnp::compiler::ParsedFile>();
+  capnp::compiler::parseFile(lexedFile.getStatements(), parsedFile, errorReporter);
+
+  capnp::MallocMessageBuilder parserArena2;
+  parserArena2.setRoot(parsedFile.asReader());
+  //KJ_DBG(parsedFile);
 
   return 0;
 }

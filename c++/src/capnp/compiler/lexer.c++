@@ -28,16 +28,16 @@
 namespace capnp {
 namespace compiler {
 
-bool lex(kj::ArrayPtr<const char> input, LexedStatements::Builder result) {
-  Lexer lexer(Orphanage::getForMessageContaining(result));
+namespace p = kj::parse;
+
+bool lex(kj::ArrayPtr<const char> input, LexedStatements::Builder result,
+         ErrorReporter& errorReporter) {
+  Lexer lexer(Orphanage::getForMessageContaining(result), errorReporter);
+
+  auto parser = p::sequence(lexer.getParsers().statementSequence, p::endOfInput);
 
   Lexer::ParserInput parserInput(input.begin(), input.end());
-  kj::Maybe<kj::Array<Orphan<Statement>>> parseOutput =
-      lexer.getParsers().statementSequence(parserInput);
-
-  if (!parserInput.atEnd()) {
-    return false;
-  }
+  kj::Maybe<kj::Array<Orphan<Statement>>> parseOutput = parser(parserInput);
 
   KJ_IF_MAYBE(output, parseOutput) {
     auto l = result.initStatements(output->size());
@@ -46,20 +46,20 @@ bool lex(kj::ArrayPtr<const char> input, LexedStatements::Builder result) {
     }
     return true;
   } else {
+    uint32_t best = parserInput.getBest();
+    errorReporter.addError(best, best, kj::str("Parse error."));
     return false;
   }
 }
 
-bool lex(kj::ArrayPtr<const char> input, LexedTokens::Builder result) {
-  Lexer lexer(Orphanage::getForMessageContaining(result));
+bool lex(kj::ArrayPtr<const char> input, LexedTokens::Builder result,
+         ErrorReporter& errorReporter) {
+  Lexer lexer(Orphanage::getForMessageContaining(result), errorReporter);
+
+  auto parser = p::sequence(lexer.getParsers().tokenSequence, p::endOfInput);
 
   Lexer::ParserInput parserInput(input.begin(), input.end());
-  kj::Maybe<kj::Array<Orphan<Token>>> parseOutput =
-      lexer.getParsers().tokenSequence(parserInput);
-
-  if (!parserInput.atEnd()) {
-    return false;
-  }
+  kj::Maybe<kj::Array<Orphan<Token>>> parseOutput = parser(parserInput);
 
   KJ_IF_MAYBE(output, parseOutput) {
     auto l = result.initTokens(output->size());
@@ -68,11 +68,11 @@ bool lex(kj::ArrayPtr<const char> input, LexedTokens::Builder result) {
     }
     return true;
   } else {
+    uint32_t best = parserInput.getBest();
+    errorReporter.addError(best, best, kj::str("Parse error."));
     return false;
   }
 }
-
-namespace p = kj::parse;
 
 namespace {
 
@@ -138,7 +138,8 @@ constexpr auto docComment = p::optional(p::sequence(
 
 }  // namespace
 
-Lexer::Lexer(Orphanage orphanageParam): orphanage(orphanageParam) {
+Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporterParam)
+    : orphanage(orphanageParam), errorReporter(errorReporterParam) {
 
   // Note that because passing an lvalue to a parser constructor uses it by-referencee, it's safe
   // for us to use parsers.tokenSequence even though we haven't yet constructed it.

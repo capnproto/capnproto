@@ -164,6 +164,17 @@ TEST(Stringify, Unions) {
   EXPECT_EQ("u3f0s64(123456789012345678)", kj::str(root.getUnion3()));
 }
 
+TEST(Stringify, StructUnions) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestStructUnion>();
+
+  auto allTypes = root.getUn().initAllTypes();
+  allTypes.setUInt32Field(12345);
+  allTypes.setTextField("foo");
+
+  EXPECT_EQ("(un = allTypes(uInt32Field = 12345, textField = \"foo\"))", kj::str(root));
+}
+
 TEST(Stringify, MoreValues) {
   EXPECT_EQ("123", kj::str(DynamicValue::Reader(123)));
   EXPECT_EQ("1.23e47", kj::str(DynamicValue::Reader(123e45)));

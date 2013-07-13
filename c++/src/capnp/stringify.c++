@@ -34,7 +34,7 @@ namespace {
 static const char HEXDIGITS[] = "0123456789abcdef";
 
 static void print(std::ostream& os, const DynamicValue::Reader& value,
-                  schema::Type::Body::Which which) {
+                  schema::Type::Body::Which which, bool alreadyParenthesized = false) {
   // Print an arbitrary message via the dynamic API by
   // iterating over the schema.  Look at the handling
   // of STRUCT in particular.
@@ -127,7 +127,7 @@ static void print(std::ostream& os, const DynamicValue::Reader& value,
       break;
     }
     case DynamicValue::STRUCT: {
-      os << "(";
+      if (!alreadyParenthesized) os << "(";
       auto structValue = value.as<DynamicStruct>();
       bool first = true;
       for (auto member: structValue.getSchema().getMembers()) {
@@ -151,7 +151,7 @@ static void print(std::ostream& os, const DynamicValue::Reader& value,
           }
         }
       }
-      os << ")";
+      if (!alreadyParenthesized) os << ")";
       break;
     }
     case DynamicValue::UNION: {
@@ -159,7 +159,8 @@ static void print(std::ostream& os, const DynamicValue::Reader& value,
       KJ_IF_MAYBE(tag, unionValue.which()) {
         os << tag->getProto().getName().cStr() << "(";
         print(os, unionValue.get(),
-              tag->getProto().getBody().getFieldMember().getType().getBody().which());
+              tag->getProto().getBody().getFieldMember().getType().getBody().which(),
+              true /* alreadyParenthesized */);
         os << ")";
       } else {
         // Unknown union member; must have come from newer
