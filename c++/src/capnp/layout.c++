@@ -2445,7 +2445,7 @@ OrphanBuilder OrphanBuilder::initStructList(
         result.tagAsPtr(), result.segment, elementCount, elementSize);
     KJ_ASSERT(builder.segment == result.segment,
               "Orphan was unexpectedly allocated in a different segment.");
-    result.location = reinterpret_cast<word*>(builder.ptr);
+    result.location = reinterpret_cast<word*>(builder.ptr) - POINTER_SIZE_IN_WORDS;
     return result;
   }
 }
@@ -2563,7 +2563,7 @@ ListBuilder OrphanBuilder::asStructList(StructSize elementSize) {
   if (tagAsPtr()->kind() == WirePointer::FAR) {
     location = nullptr;
   } else {
-    location = reinterpret_cast<word*>(result.ptr);
+    location = reinterpret_cast<word*>(result.ptr) - POINTER_SIZE_IN_WORDS;
   }
 
   return result;
@@ -2592,7 +2592,11 @@ ObjectBuilder OrphanBuilder::asObject() {
         location = reinterpret_cast<word*>(result.structBuilder.data);
         break;
       case ObjectKind::LIST:
-        location = reinterpret_cast<word*>(result.listBuilder.ptr);
+        if (tagAsPtr()->listRef.elementSize() == FieldSize::INLINE_COMPOSITE) {
+          location = reinterpret_cast<word*>(result.listBuilder.ptr) - POINTER_SIZE_IN_WORDS;
+        } else {
+          location = reinterpret_cast<word*>(result.listBuilder.ptr);
+        }
         break;
       case ObjectKind::NULL_POINTER:
         location = nullptr;

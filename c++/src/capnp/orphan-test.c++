@@ -68,6 +68,31 @@ TEST(Orphans, Lists) {
   checkList(root.asReader().getUInt32List(), {12u, 34u, 56u});
 }
 
+TEST(Orphans, StructLists) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  auto list = root.initStructList(2);
+  list[0].setTextField("foo");
+  list[1].setTextField("bar");
+  EXPECT_TRUE(root.hasStructList());
+
+  Orphan<List<TestAllTypes>> orphan = root.disownStructList();
+  EXPECT_FALSE(orphan == nullptr);
+
+  ASSERT_EQ(2u, orphan.get().size());
+  EXPECT_EQ("foo", orphan.get()[0].getTextField());
+  EXPECT_EQ("bar", orphan.get()[1].getTextField());
+  EXPECT_FALSE(root.hasStructList());
+
+  root.adoptStructList(kj::mv(orphan));
+  EXPECT_TRUE(orphan == nullptr);
+  EXPECT_TRUE(root.hasStructList());
+  ASSERT_EQ(2u, root.asReader().getStructList().size());
+  EXPECT_EQ("foo", root.asReader().getStructList()[0].getTextField());
+  EXPECT_EQ("bar", root.asReader().getStructList()[1].getTextField());
+}
+
 TEST(Orphans, Text) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<TestAllTypes>();
@@ -319,6 +344,32 @@ TEST(Orphans, DynamicList) {
   EXPECT_TRUE(orphan == nullptr);
   EXPECT_TRUE(root.hasObjectField());
   checkList(root.asReader().getObjectField<List<uint32_t>>(), {12u, 34u, 56u});
+}
+
+TEST(Orphans, DynamicStructList) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestObject>();
+
+  auto list = root.initObjectField<List<TestAllTypes>>(2);
+  list[0].setTextField("foo");
+  list[1].setTextField("bar");
+  EXPECT_TRUE(root.hasObjectField());
+
+  Orphan<DynamicList> orphan =
+      root.disownObjectField<DynamicList>(Schema::from<List<TestAllTypes>>());
+  EXPECT_FALSE(orphan == nullptr);
+
+  ASSERT_EQ(2u, orphan.get().size());
+  EXPECT_EQ("foo", orphan.get()[0].as<TestAllTypes>().getTextField());
+  EXPECT_EQ("bar", orphan.get()[1].as<TestAllTypes>().getTextField());
+  EXPECT_FALSE(root.hasObjectField());
+
+  root.adoptObjectField(kj::mv(orphan));
+  EXPECT_TRUE(orphan == nullptr);
+  EXPECT_TRUE(root.hasObjectField());
+  ASSERT_EQ(2u, root.asReader().getObjectField<List<TestAllTypes>>().size());
+  EXPECT_EQ("foo", root.asReader().getObjectField<List<TestAllTypes>>()[0].getTextField());
+  EXPECT_EQ("bar", root.asReader().getObjectField<List<TestAllTypes>>()[1].getTextField());
 }
 
 TEST(Orphans, OrphanageDynamicStruct) {

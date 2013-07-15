@@ -66,10 +66,7 @@ int main(int argc, char* argv[]) {
   capnp::MallocMessageBuilder parserArena;
   auto parsedFile = parserArena.initRoot<capnp::compiler::ParsedFile>();
   capnp::compiler::parseFile(lexedFile.getStatements(), parsedFile, errorReporter);
-
-  capnp::MallocMessageBuilder parserArena2;
-  parserArena2.setRoot(parsedFile.asReader());
-  //KJ_DBG(parsedFile);
+  KJ_DBG(parsedFile);
 
   return 0;
 }
