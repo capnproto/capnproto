@@ -106,6 +106,7 @@ public:
     Parser<Orphan<Declaration::AnnotationApplication>> annotation;
     Parser<Orphan<LocatedInteger>> uid;
     Parser<Orphan<LocatedInteger>> ordinal;
+    Parser<Orphan<Declaration::Method::Param>> param;
 
     DeclParser usingDecl;
     DeclParser constDecl;
@@ -114,6 +115,7 @@ public:
     DeclParser structDecl;
     DeclParser fieldDecl;
     DeclParser unionDecl;
+    DeclParser groupDecl;
     DeclParser interfaceDecl;
     DeclParser methodDecl;
     DeclParser paramDecl;

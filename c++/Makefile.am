@@ -126,6 +126,7 @@ includecapnp_HEADERS =                                         \
   src/capnp/schema.h                                           \
   src/capnp/schema-loader.h                                    \
   src/capnp/dynamic.h                                          \
+  src/capnp/pretty-print.h                                     \
   src/capnp/serialize.h                                        \
   src/capnp/serialize-packed.h                                 \
   src/capnp/generated-header-support.h

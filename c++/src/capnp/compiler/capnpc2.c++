@@ -23,6 +23,7 @@
 
 #include "lexer.h"
 #include "parser.h"
+#include <capnp/pretty-print.h>
 #include <kj/vector.h>
 #include <kj/io.h>
 #include <unistd.h>
@@ -40,33 +41,38 @@ public:
 int main(int argc, char* argv[]) {
   // Eventually this will be capnpc.  For now it's just a dummy program that tests parsing.
 
-//  kj::Vector<char> input;
-//  char buffer[4096];
-//  for (;;) {
-//    ssize_t n;
-//    KJ_SYSCALL(n = read(STDIN_FILENO, buffer, sizeof(buffer)));
-//    if (n == 0) {
-//      break;
-//    }
-//    input.addAll(buffer, buffer + n);
-//  }
-//
-//  KJ_DBG(input);
-
-  // This input triggers a data corruption bug.  Fix it before doing anything else!
-  kj::StringPtr input = "@0xfa974d18d718428e; const x :Int32 = 1;";
+  kj::Vector<char> input;
+  char buffer[4096];
+  for (;;) {
+    ssize_t n;
+    KJ_SYSCALL(n = read(STDIN_FILENO, buffer, sizeof(buffer)));
+    if (n == 0) {
+      break;
+    }
+    input.addAll(buffer, buffer + n);
+  }
 
   CoutErrorReporter errorReporter;
+
+  std::cout << "=========================================================================\n"
+            << "lex\n"
+            << "========================================================================="
+            << std::endl;
 
   capnp::MallocMessageBuilder lexerArena;
   auto lexedFile = lexerArena.initRoot<capnp::compiler::LexedStatements>();
   capnp::compiler::lex(input, lexedFile, errorReporter);
-  KJ_DBG(lexedFile);
+  std::cout << capnp::prettyPrint(lexedFile).cStr() << std::endl;
+
+  std::cout << "=========================================================================\n"
+            << "parse\n"
+            << "========================================================================="
+            << std::endl;
 
   capnp::MallocMessageBuilder parserArena;
   auto parsedFile = parserArena.initRoot<capnp::compiler::ParsedFile>();
   capnp::compiler::parseFile(lexedFile.getStatements(), parsedFile, errorReporter);
-  KJ_DBG(parsedFile);
+  std::cout << capnp::prettyPrint(parsedFile).cStr() << std::endl;
 
   return 0;
 }

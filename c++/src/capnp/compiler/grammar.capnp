@@ -22,6 +22,11 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 @0xc56be168dcbbc3c6;
+# The structures in this file correspond to the AST of the Cap'n Proto schema language.
+#
+# This file is intended to be used internally by capnpc.  Mostly, it is useful because it is more
+# convenient that defining data classes in C++, particularly where variant types (unions) are
+# needed.  Over time, this file may change in backwards-incompatible ways.
 
 using Cxx = import "/capnp/c++.capnp";
 
@@ -121,7 +126,11 @@ struct Declaration {
   annotations @5 :List(AnnotationApplication);
   struct AnnotationApplication {
     name @0 :DeclName;
-    value @1 :ValueExpression;
+
+    value @1 union {
+      none @2 :Void;   # None specified; implies void value.
+      expression @3 :ValueExpression;
+    }
   }
 
   startByte @18 :UInt32;
@@ -137,6 +146,7 @@ struct Declaration {
     structDecl @11 :Struct;
     fieldDecl @12 :Field;
     unionDecl @13 :Union;
+    groupDecl @23 :Group;
     interfaceDecl @14 :Interface;
     methodDecl @15 :Method;
     annotationDecl @16 :Annotation;
@@ -178,12 +188,18 @@ struct Declaration {
   struct Method {
     params @0 :List(Param);
     struct Param {
-      type @0 :TypeExpression;
-      annotations @4 :List(AnnotationApplication);
-      defaultValue @1 union {
-        none @2 :Void;
-        value @3 :ValueExpression;
+      name @0 :LocatedText;  # If null, param failed to parse.
+      type @1 :TypeExpression;
+      annotations @2 :List(AnnotationApplication);
+      defaultValue @3 union {
+        none @4 :Void;
+        value @5 :ValueExpression;
       }
+    }
+
+    returnType @1 union {
+      none @2 :Void;   # No return type specified; implied Void.
+      expression @3 :TypeExpression;
     }
   }
 

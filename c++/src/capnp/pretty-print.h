@@ -21,34 +21,25 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "string.h"
-#include <gtest/gtest.h>
-#include <string>
+#ifndef CAPNP_PRETTY_PRINT_H_
+#define CAPNP_PRETTY_PRINT_H_
 
-namespace kj {
-namespace _ {  // private
-namespace {
+#include "dynamic.h"
+#include <kj/string.h>
 
-TEST(String, Str) {
-  EXPECT_EQ("foobar", str("foo", "bar"));
-  EXPECT_EQ("1 2 3 4", str(1, " ", 2u, " ", 3l, " ", 4ll));
-  EXPECT_EQ("1.5 foo 1e15 bar -3", str(1.5f, " foo ", 1e15, " bar ", -3));
-  EXPECT_EQ("foo", str('f', 'o', 'o'));
-}
+namespace capnp {
 
-TEST(String, StartsEndsWith) {
-  EXPECT_TRUE(StringPtr("foobar").startsWith("foo"));
-  EXPECT_FALSE(StringPtr("foobar").startsWith("bar"));
-  EXPECT_FALSE(StringPtr("foobar").endsWith("foo"));
-  EXPECT_TRUE(StringPtr("foobar").endsWith("bar"));
+kj::String prettyPrint(DynamicStruct::Reader value);
+kj::String prettyPrint(DynamicStruct::Builder value);
+kj::String prettyPrint(DynamicList::Reader value);
+kj::String prettyPrint(DynamicList::Builder value);
+// Print the given Cap'n Proto struct or list with nice indentation.  Note that you can pass any
+// struct or list reader or builder type to this method, since they can be implicitly converted
+// to one of the dynamic types.
+//
+// If you don't want indentation, just use the value's KJ stringifier (e.g. pass it to kj::str(),
+// any of the KJ debug macros, etc.).
 
-  EXPECT_FALSE(StringPtr("fo").startsWith("foo"));
-  EXPECT_FALSE(StringPtr("fo").endsWith("foo"));
+}  // namespace capnp
 
-  EXPECT_TRUE(StringPtr("foobar").startsWith(""));
-  EXPECT_TRUE(StringPtr("foobar").endsWith(""));
-}
-
-}  // namespace
-}  // namespace _ (private)
-}  // namespace kj
+#endif  // PRETTY_PRINT_H_

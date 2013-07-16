@@ -22,6 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "parser.h"
+#include <capnp/dynamic.h>
 #include <kj/debug.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -69,6 +70,9 @@ void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
           } else {
             sawId = true;
             result.setId(body.getNakedId());
+            if (builder.hasDocComment()) {
+              result.adoptDocComment(builder.disownDocComment());
+            }
           }
           break;
         case Declaration::Body::NAKED_ANNOTATION:
@@ -266,6 +270,34 @@ Orphan<List<T>> arrayToList(Orphanage& orphanage, kj::Array<Orphan<T>>&& element
     builder.adoptWithCaveats(i, kj::mv(elements[i]));
   }
   return kj::mv(result);
+}
+
+inline Declaration::Builder initDecl(
+    Declaration::Builder builder, Located<Text::Reader>&& name,
+    kj::Maybe<Orphan<LocatedInteger>>&& id,
+    kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations) {
+  name.copyTo(builder.initName());
+  KJ_IF_MAYBE(i, id) {
+    builder.getId().adoptUid(kj::mv(*i));
+  }
+  auto list = builder.initAnnotations(annotations.size());
+  for (uint i = 0; i < annotations.size(); i++) {
+    list.adoptWithCaveats(i, kj::mv(annotations[i]));
+  }
+  return builder;
+}
+
+inline Declaration::Builder initMemberDecl(
+    Declaration::Builder builder, Located<Text::Reader>&& name,
+    Orphan<LocatedInteger>&& ordinal,
+    kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations) {
+  name.copyTo(builder.initName());
+  builder.getId().adoptOrdinal(kj::mv(ordinal));
+  auto list = builder.initAnnotations(annotations.size());
+  for (uint i = 0; i < annotations.size(); i++) {
+    list.adoptWithCaveats(i, kj::mv(annotations[i]));
+  }
+  return builder;
 }
 
 }  // namespace
@@ -487,14 +519,19 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
           })
       ));
 
-  parsers.annotation = arena.copy(p::transform(
-      p::sequence(op("$"), parsers.declName, parsers.parenthesizedValueExpression),
-      [this](Orphan<DeclName>&& name, Orphan<ValueExpression>&& value)
+  parsers.annotation = arena.copy(p::transformWithLocation(
+      p::sequence(op("$"), parsers.declName, p::optional(parsers.parenthesizedValueExpression)),
+      [this](kj::parse::Span<List<Token>::Reader::Iterator> location,
+             Orphan<DeclName>&& name, kj::Maybe<Orphan<ValueExpression>>&& value)
           -> Orphan<Declaration::AnnotationApplication> {
         auto result = orphanage.newOrphan<Declaration::AnnotationApplication>();
         auto builder = result.get();
         builder.adoptName(kj::mv(name));
-        builder.adoptValue(kj::mv(value));
+        KJ_IF_MAYBE(v, value) {
+          builder.getValue().adoptExpression(kj::mv(*v));
+        } else {
+          builder.getValue().setNone();
+        }
         return result;
       }));
 
@@ -541,17 +578,237 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
-        auto builder = decl.get();
-        name.copyTo(builder.initName());
+        auto builder = initDecl(decl.get(), kj::mv(name), kj::mv(id), kj::mv(annotations))
+            .getBody().initConstDecl();
+        builder.adoptType(kj::mv(type));
+        builder.adoptValue(kj::mv(value));
+        return DeclParserResult(kj::mv(decl));
+      }));
 
-        KJ_IF_MAYBE(i, id) {
-          builder.getId().adoptUid(kj::mv(*i));
+  parsers.enumDecl = arena.copy(p::transform(
+      p::sequence(keyword("enum"), identifier, p::optional(parsers.uid),
+                  p::many(parsers.annotation)),
+      [this](Located<Text::Reader>&& name, kj::Maybe<Orphan<LocatedInteger>>&& id,
+             kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
+                 -> DeclParserResult {
+        auto decl = orphanage.newOrphan<Declaration>();
+        initDecl(decl.get(), kj::mv(name), kj::mv(id), kj::mv(annotations))
+            .getBody().initEnumDecl();
+        return DeclParserResult(kj::mv(decl), parsers.enumLevelDecl);
+      }));
+
+  parsers.enumerantDecl = arena.copy(p::transform(
+      p::sequence(identifier, parsers.ordinal, p::many(parsers.annotation)),
+      [this](Located<Text::Reader>&& name, Orphan<LocatedInteger>&& ordinal,
+             kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
+                 -> DeclParserResult {
+        auto decl = orphanage.newOrphan<Declaration>();
+        initMemberDecl(decl.get(), kj::mv(name), kj::mv(ordinal), kj::mv(annotations))
+            .getBody().initEnumerantDecl();
+        return DeclParserResult(kj::mv(decl));
+      }));
+
+  parsers.structDecl = arena.copy(p::transform(
+      p::sequence(keyword("struct"), identifier, p::optional(parsers.uid),
+                  p::many(parsers.annotation)),
+      [this](Located<Text::Reader>&& name, kj::Maybe<Orphan<LocatedInteger>>&& id,
+             kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
+                 -> DeclParserResult {
+        auto decl = orphanage.newOrphan<Declaration>();
+        initDecl(decl.get(), kj::mv(name), kj::mv(id), kj::mv(annotations))
+            .getBody().initStructDecl();
+        return DeclParserResult(kj::mv(decl), parsers.structLevelDecl);
+      }));
+
+  parsers.fieldDecl = arena.copy(p::transform(
+      p::sequence(identifier, parsers.ordinal, op(":"), parsers.typeExpression,
+                  p::optional(p::sequence(op("="), parsers.valueExpression)),
+                  p::many(parsers.annotation)),
+      [this](Located<Text::Reader>&& name, Orphan<LocatedInteger>&& ordinal,
+             Orphan<TypeExpression>&& type, kj::Maybe<Orphan<ValueExpression>>&& defaultValue,
+             kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
+                 -> DeclParserResult {
+        auto decl = orphanage.newOrphan<Declaration>();
+        auto builder =
+            initMemberDecl(decl.get(), kj::mv(name), kj::mv(ordinal), kj::mv(annotations))
+                .getBody().initFieldDecl();
+        builder.adoptType(kj::mv(type));
+        KJ_IF_MAYBE(val, defaultValue) {
+          builder.getDefaultValue().adoptValue(kj::mv(*val));
+        } else {
+          builder.getDefaultValue().setNone();
         }
-        builder.adoptAnnotations(arrayToList(orphanage, kj::mv(annotations)));
+        return DeclParserResult(kj::mv(decl));
+      }));
 
-        auto constBuilder = builder.getBody().initConstDecl();
-        constBuilder.adoptType(kj::mv(type));
-        constBuilder.adoptValue(kj::mv(value));
+  parsers.unionDecl = arena.copy(p::transform(
+      p::sequence(p::optional(identifier), p::optional(parsers.ordinal), keyword("union"),
+                  p::many(parsers.annotation)),
+      [this](kj::Maybe<Located<Text::Reader>>&& name,
+             kj::Maybe<Orphan<LocatedInteger>>&& ordinal,
+             kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
+                 -> DeclParserResult {
+        auto decl = orphanage.newOrphan<Declaration>();
+        auto builder = decl.get();
+        KJ_IF_MAYBE(n, name) {
+          n->copyTo(builder.initName());
+        }
+        KJ_IF_MAYBE(ord, ordinal) {
+          builder.getId().adoptOrdinal(kj::mv(*ord));
+        } else {
+          builder.getId().setUnspecified();
+        }
+        auto list = builder.initAnnotations(annotations.size());
+        for (uint i = 0; i < annotations.size(); i++) {
+          list.adoptWithCaveats(i, kj::mv(annotations[i]));
+        }
+        builder.getBody().initGroupDecl();
+        return DeclParserResult(kj::mv(decl), parsers.structLevelDecl);
+      }));
+
+  parsers.unionDecl = arena.copy(p::transform(
+      p::sequence(keyword("group"), p::many(parsers.annotation)),
+      [this](kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
+                 -> DeclParserResult {
+        auto decl = orphanage.newOrphan<Declaration>();
+        auto builder = decl.get();
+        builder.getId().setUnspecified();
+        auto list = builder.initAnnotations(annotations.size());
+        for (uint i = 0; i < annotations.size(); i++) {
+          list.adoptWithCaveats(i, kj::mv(annotations[i]));
+        }
+        builder.getBody().initGroupDecl();
+        return DeclParserResult(kj::mv(decl), parsers.structLevelDecl);
+      }));
+
+  parsers.interfaceDecl = arena.copy(p::transform(
+      p::sequence(keyword("interface"), identifier, p::optional(parsers.uid),
+                  p::many(parsers.annotation)),
+      [this](Located<Text::Reader>&& name, kj::Maybe<Orphan<LocatedInteger>>&& id,
+             kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
+                 -> DeclParserResult {
+        auto decl = orphanage.newOrphan<Declaration>();
+        initDecl(decl.get(), kj::mv(name), kj::mv(id), kj::mv(annotations))
+            .getBody().initInterfaceDecl();
+        return DeclParserResult(kj::mv(decl), parsers.interfaceLevelDecl);
+      }));
+
+  parsers.param = arena.copy(p::transform(
+      p::sequence(identifier, op(":"), parsers.typeExpression,
+                  p::optional(p::sequence(op("="), parsers.valueExpression)),
+                  p::many(parsers.annotation)),
+      [this](Located<Text::Reader>&& name, Orphan<TypeExpression>&& type,
+             kj::Maybe<Orphan<ValueExpression>>&& defaultValue,
+             kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
+                 -> Orphan<Declaration::Method::Param> {
+        auto result = orphanage.newOrphan<Declaration::Method::Param>();
+        auto builder = result.get();
+
+        name.copyTo(builder.initName());
+        builder.adoptType(kj::mv(type));
+        builder.adoptAnnotations(arrayToList(orphanage, kj::mv(annotations)));
+        KJ_IF_MAYBE(val, defaultValue) {
+          builder.getDefaultValue().adoptValue(kj::mv(*val));
+        } else {
+          builder.getDefaultValue().setNone();
+        }
+
+        return kj::mv(result);
+      }));
+
+  parsers.methodDecl = arena.copy(p::transform(
+      p::sequence(identifier, parsers.ordinal,
+                  parenthesizedList(parsers.param, errorReporter),
+                  p::optional(p::sequence(op(":"), parsers.typeExpression)),
+                  p::many(parsers.annotation)),
+      [this](Located<Text::Reader>&& name, Orphan<LocatedInteger>&& ordinal,
+             Located<kj::Array<kj::Maybe<Orphan<Declaration::Method::Param>>>>&& params,
+             kj::Maybe<Orphan<TypeExpression>>&& returnType,
+             kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
+                 -> DeclParserResult {
+        auto decl = orphanage.newOrphan<Declaration>();
+        auto builder =
+            initMemberDecl(decl.get(), kj::mv(name), kj::mv(ordinal), kj::mv(annotations))
+                .getBody().initMethodDecl();
+
+        auto paramsBuilder = builder.initParams(params.value.size());
+        for (uint i = 0; i < params.value.size(); i++) {
+          KJ_IF_MAYBE(param, params.value[i]) {
+            paramsBuilder.adoptWithCaveats(i, kj::mv(*param));
+          }
+        }
+
+        KJ_IF_MAYBE(t, returnType) {
+          builder.getReturnType().adoptExpression(kj::mv(*t));
+        } else {
+          builder.getReturnType().setNone();
+        }
+        return DeclParserResult(kj::mv(decl));
+      }));
+
+  auto& annotationTarget = arena.copy(p::oneOf(
+      identifier,
+      p::transformWithLocation(op("*"),
+          [this](kj::parse::Span<List<Token>::Reader::Iterator> location) {
+            // Hacky...
+            return Located<Text::Reader>("*",
+                location.begin()->getStartByte(),
+                location.begin()->getEndByte());
+          })));
+
+  parsers.annotationDecl = arena.copy(p::transform(
+      p::sequence(keyword("annotation"), identifier, p::optional(parsers.uid),
+                  parenthesizedList(annotationTarget, errorReporter),
+                  op(":"), parsers.typeExpression,
+                  p::many(parsers.annotation)),
+      [this](Located<Text::Reader>&& name, kj::Maybe<Orphan<LocatedInteger>>&& id,
+             Located<kj::Array<kj::Maybe<Located<Text::Reader>>>>&& targets,
+             Orphan<TypeExpression>&& type,
+             kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
+                 -> DeclParserResult {
+        auto decl = orphanage.newOrphan<Declaration>();
+        auto builder = initDecl(decl.get(), kj::mv(name), kj::mv(id), kj::mv(annotations))
+            .getBody().initAnnotationDecl();
+        builder.adoptType(kj::mv(type));
+        DynamicStruct::Builder dynamicBuilder = builder;
+        for (auto& maybeTarget: targets.value) {
+          KJ_IF_MAYBE(target, maybeTarget) {
+            if (target->value == "*") {
+              // Set all.
+              if (targets.value.size() > 1) {
+                errorReporter.addError(target->startByte, target->endByte,
+                    kj::str("Wildcard should not be specified together with other targets."));
+              }
+
+              for (auto member: dynamicBuilder.getSchema().getMembers()) {
+                if (member.getProto().getName().startsWith("targets")) {
+                  dynamicBuilder.set(member, true);
+                }
+              }
+            } else {
+              if (target->value.size() == 0 || target->value.size() >= 32 ||
+                  target->value[0] < 'a' || target->value[0] > 'z') {
+                errorReporter.addError(target->startByte, target->endByte,
+                    kj::str("Not a valid annotation target."));
+              } else {
+                char buffer[64];
+                strcpy(buffer, "targets");
+                strcat(buffer, target->value.cStr());
+                buffer[strlen("targets")] += 'A' - 'a';
+                KJ_IF_MAYBE(member, dynamicBuilder.getSchema().findMemberByName(buffer)) {
+                  if (dynamicBuilder.get(*member).as<bool>()) {
+                    errorReporter.addError(target->startByte, target->endByte,
+                        kj::str("Duplicate target specification."));
+                  }
+                  dynamicBuilder.set(*member, true);
+                } else {
+                  errorReporter.addError(target->startByte, target->endByte,
+                      kj::str("Not a valid annotation target."));
+                }
+              }
+            }
+          }
+        }
         return DeclParserResult(kj::mv(decl));
       }));
 
@@ -573,8 +830,16 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
 
   // -----------------------------------------------------------------
 
+  parsers.genericDecl = arena.copy(p::oneOf(
+      parsers.usingDecl, parsers.constDecl, parsers.annotationDecl,
+      parsers.enumDecl, parsers.structDecl, parsers.interfaceDecl));
   parsers.fileLevelDecl = arena.copy(p::oneOf(
-      parsers.usingDecl, parsers.constDecl, nakedId, nakedAnnotation));
+      parsers.genericDecl, nakedId, nakedAnnotation));
+  parsers.enumLevelDecl = arena.copy(p::oneOf(parsers.enumerantDecl));
+  parsers.structLevelDecl = arena.copy(p::oneOf(
+      parsers.fieldDecl, parsers.unionDecl, parsers.groupDecl, parsers.genericDecl));
+  parsers.interfaceLevelDecl = arena.copy(p::oneOf(
+      parsers.methodDecl, parsers.genericDecl));
 }
 
 CapnpParser::~CapnpParser() {}

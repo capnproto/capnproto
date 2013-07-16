@@ -46,6 +46,7 @@
 
 #include "message.h"
 #include "dynamic.h"
+#include "pretty-print.h"
 #include <kj/debug.h>
 #include <gtest/gtest.h>
 #include "test-util.h"
@@ -60,7 +61,7 @@ namespace capnp {
 namespace _ {  // private
 namespace {
 
-TEST(Stringify, DebugString) {
+TEST(Stringify, KjStringification) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<TestAllTypes>();
 
@@ -140,6 +141,205 @@ TEST(Stringify, DebugString) {
                     "(textField = \"structlist 3\")], "
       "enumList = [foo, garply])",
       kj::str(root));
+}
+
+TEST(Stringify, PrettyPrint) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  EXPECT_EQ("()", prettyPrint(root));
+
+  initTestMessage(root);
+
+  EXPECT_EQ(
+      "( boolField = true,\n"
+      "  int8Field = -123,\n"
+      "  int16Field = -12345,\n"
+      "  int32Field = -12345678,\n"
+      "  int64Field = -123456789012345,\n"
+      "  uInt8Field = 234,\n"
+      "  uInt16Field = 45678,\n"
+      "  uInt32Field = 3456789012,\n"
+      "  uInt64Field = 12345678901234567890,\n"
+      "  float32Field = 1234.5,\n"
+      "  float64Field = -1.23e47,\n"
+      "  textField = \"foo\",\n"
+      "  dataField = \"bar\",\n"
+      "  structField = (\n"
+      "    boolField = true,\n"
+      "    int8Field = -12,\n"
+      "    int16Field = 3456,\n"
+      "    int32Field = -78901234,\n"
+      "    int64Field = 56789012345678,\n"
+      "    uInt8Field = 90,\n"
+      "    uInt16Field = 1234,\n"
+      "    uInt32Field = 56789012,\n"
+      "    uInt64Field = 345678901234567890,\n"
+      "    float32Field = -1.25e-10,\n"
+      "    float64Field = 345,\n"
+      "    textField = \"baz\",\n"
+      "    dataField = \"qux\",\n"
+      "    structField = (\n"
+      "      textField = \"nested\",\n"
+      "      structField = (textField = \"really nested\")),\n"
+      "    enumField = baz,\n"
+      "    voidList = [void, void, void],\n"
+      "    boolList = [false, true, false, true, true],\n"
+      "    int8List = [12, -34, -128, 127],\n"
+      "    int16List = [1234, -5678, -32768, 32767],\n"
+      "    int32List = [12345678, -90123456, -2147483648, 2147483647],\n"
+      "    int64List = [123456789012345, -678901234567890, "
+                       "-9223372036854775808, 9223372036854775807],\n"
+      "    uInt8List = [12, 34, 0, 255],\n"
+      "    uInt16List = [1234, 5678, 0, 65535],\n"
+      "    uInt32List = [12345678, 90123456, 0, 4294967295],\n"
+      "    uInt64List = [123456789012345, 678901234567890, 0, 18446744073709551615],\n"
+      "    float32List = [0, 1234567, 1e37, -1e37, 1e-37, -1e-37],\n"
+      "    float64List = [0, 123456789012345, 1e306, -1e306, 1e-306, -1e-306],\n"
+      "    textList = [\"quux\", \"corge\", \"grault\"],\n"
+      "    dataList = [\"garply\", \"waldo\", \"fred\"],\n"
+      "    structList = [\n"
+      "      (textField = \"x structlist 1\"),\n"
+      "      (textField = \"x structlist 2\"),\n"
+      "      (textField = \"x structlist 3\")],\n"
+      "    enumList = [qux, bar, grault]),\n"
+      "  enumField = corge,\n"
+      "  voidList = [void, void, void, void, void, void],\n"
+      "  boolList = [true, false, false, true],\n"
+      "  int8List = [111, -111],\n"
+      "  int16List = [11111, -11111],\n"
+      "  int32List = [111111111, -111111111],\n"
+      "  int64List = [1111111111111111111, -1111111111111111111],\n"
+      "  uInt8List = [111, 222],\n"
+      "  uInt16List = [33333, 44444],\n"
+      "  uInt32List = [3333333333],\n"
+      "  uInt64List = [11111111111111111111],\n"
+      "  float32List = [5555.5, inf, -inf, nan],\n"
+      "  float64List = [7777.75, inf, -inf, nan],\n"
+      "  textList = [\"plugh\", \"xyzzy\", \"thud\"],\n"
+      "  dataList = [\"oops\", \"exhausted\", \"rfc3092\"],\n"
+      "  structList = [\n"
+      "    (textField = \"structlist 1\"),\n"
+      "    (textField = \"structlist 2\"),\n"
+      "    (textField = \"structlist 3\")],\n"
+      "  enumList = [foo, garply])",
+      prettyPrint(root));
+}
+
+TEST(Stringify, PrettyPrintAdvanced) {
+  MallocMessageBuilder builder;
+
+  {
+    auto root = builder.initRoot<TestAllTypes>();
+
+    auto list = root.initStructList(3);
+    list[0].setInt32Field(123);
+    list[0].setTextField("foo");
+    list[1].setInt32Field(456);
+    list[1].setTextField("bar");
+    list[2].setInt32Field(789);
+    list[2].setTextField("baz");
+
+    EXPECT_EQ(
+        "(structList = [\n"
+        "  ( int32Field = 123,\n"
+        "    textField = \"foo\"),\n"
+        "  ( int32Field = 456,\n"
+        "    textField = \"bar\"),\n"
+        "  ( int32Field = 789,\n"
+        "    textField = \"baz\")])",
+        prettyPrint(root));
+
+    root.setInt32Field(55);
+
+    EXPECT_EQ(
+        "( int32Field = 55,\n"
+        "  structList = [\n"
+        "    ( int32Field = 123,\n"
+        "      textField = \"foo\"),\n"
+        "    ( int32Field = 456,\n"
+        "      textField = \"bar\"),\n"
+        "    ( int32Field = 789,\n"
+        "      textField = \"baz\")])",
+        prettyPrint(root));
+  }
+
+  {
+    auto root = builder.initRoot<test::TestLists>();
+    auto ll = root.initInt32ListList(3);
+    ll.set(0, {123, 456, 789});
+    ll.set(1, {234, 567, 891});
+    ll.set(2, {345, 678, 912});
+
+    EXPECT_EQ(
+        "[ [123, 456, 789],\n"
+        "  [234, 567, 891],\n"
+        "  [345, 678, 912]]",
+        prettyPrint(ll));
+
+    EXPECT_EQ(
+        "(int32ListList = [\n"
+        "  [123, 456, 789],\n"
+        "  [234, 567, 891],\n"
+        "  [345, 678, 912]])",
+        prettyPrint(root));
+
+    root.initList8(0);
+
+    EXPECT_EQ(
+        "( list8 = [],\n"
+        "  int32ListList = [\n"
+        "    [123, 456, 789],\n"
+        "    [234, 567, 891],\n"
+        "    [345, 678, 912]])",
+        prettyPrint(root));
+
+    auto l8 = root.initList8(1);
+    l8[0].setF(12);
+
+    EXPECT_EQ(
+        "( list8 = [(f = 12)],\n"
+        "  int32ListList = [\n"
+        "    [123, 456, 789],\n"
+        "    [234, 567, 891],\n"
+        "    [345, 678, 912]])",
+        prettyPrint(root));
+
+    l8 = root.initList8(2);
+    l8[0].setF(12);
+    l8[1].setF(34);
+
+    EXPECT_EQ(
+        "( list8 = [\n"
+        "    (f = 12),\n"
+        "    (f = 34)],\n"
+        "  int32ListList = [\n"
+        "    [123, 456, 789],\n"
+        "    [234, 567, 891],\n"
+        "    [345, 678, 912]])",
+        prettyPrint(root));
+  }
+
+  {
+    auto root = builder.initRoot<test::TestStructUnion>();
+
+    auto s = root.getUn().initAllTypes();
+    EXPECT_EQ(
+        "(un = allTypes())",
+        prettyPrint(root));
+
+    s.setInt32Field(123);
+    EXPECT_EQ(
+        "(un = allTypes(int32Field = 123))",
+        prettyPrint(root));
+
+    s.setTextField("foo");
+    EXPECT_EQ(
+        "(un = allTypes(\n"
+        "  int32Field = 123,\n"
+        "  textField = \"foo\"))",
+        prettyPrint(root));
+  }
 }
 
 TEST(Stringify, Unions) {

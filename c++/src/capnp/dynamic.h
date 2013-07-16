@@ -104,21 +104,13 @@ BuilderFor<DynamicTypeFor<FromBuilder<T>>> toDynamic(T&& value);
 template <typename T>
 DynamicTypeFor<TypeIfEnum<T>> toDynamic(T&& value);
 
-template <typename T> struct EnableIfNotDynamic_ { typedef T Type; };
-template <> struct EnableIfNotDynamic_<DynamicUnion> {};
-template <> struct EnableIfNotDynamic_<DynamicStruct> {};
-template <> struct EnableIfNotDynamic_<DynamicList> {};
-template <> struct EnableIfNotDynamic_<DynamicValue> {};
-template <typename T>
-using EnableIfNotDynamic = typename EnableIfNotDynamic_<T>::Type;
-
 // -------------------------------------------------------------------
 
 class DynamicEnum {
 public:
   DynamicEnum() = default;
 
-  template <typename T, typename = TypeIfEnum<T>>
+  template <typename T, typename = kj::EnableIf<kind<T>() == Kind::ENUM>>
   inline DynamicEnum(T&& value): DynamicEnum(toDynamic(value)) {}
 
   template <typename T>
@@ -271,7 +263,7 @@ public:
 
   Reader() = default;
 
-  template <typename T, typename = EnableIfNotDynamic<FromReader<T>>>
+  template <typename T, typename = kj::EnableIf<kind<FromReader<T>>() == Kind::STRUCT>>
   inline Reader(T&& value): Reader(toDynamic(value)) {}
 
   template <typename T>
@@ -322,7 +314,7 @@ public:
 
   Builder() = default;
 
-  template <typename T, typename = EnableIfNotDynamic<FromBuilder<T>>>
+  template <typename T, typename = kj::EnableIf<kind<FromBuilder<T>>() == Kind::STRUCT>>
   inline Builder(T&& value): Builder(toDynamic(value)) {}
 
   template <typename T>
@@ -433,7 +425,7 @@ public:
 
   Reader() = default;
 
-  template <typename T, typename = EnableIfNotDynamic<FromReader<T>>>
+  template <typename T, typename = kj::EnableIf<kind<FromReader<T>>() == Kind::LIST>>
   inline Reader(T&& value): Reader(toDynamic(value)) {}
 
   template <typename T>
@@ -472,7 +464,7 @@ public:
 
   Builder() = default;
 
-  template <typename T, typename = EnableIfNotDynamic<FromBuilder<T>>>
+  template <typename T, typename = kj::EnableIf<kind<FromBuilder<T>>() == Kind::LIST>>
   inline Builder(T&& value): Builder(toDynamic(value)) {}
 
   template <typename T>

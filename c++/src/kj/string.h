@@ -81,6 +81,9 @@ public:
   // A string slice is only NUL-terminated if it is a suffix, so slice() has a one-parameter
   // version that assumes end = size().
 
+  inline bool startsWith(const StringPtr& other) const;
+  inline bool endsWith(const StringPtr& other) const;
+
 private:
   inline StringPtr(ArrayPtr<const char> content): content(content) {}
 
@@ -131,6 +134,9 @@ public:
 
   inline bool operator==(const StringPtr& other) const { return StringPtr(*this) == other; }
   inline bool operator!=(const StringPtr& other) const { return !(*this == other); }
+
+  inline bool startsWith(const StringPtr& other) const { return StringPtr(*this).startsWith(other);}
+  inline bool endsWith(const StringPtr& other) const { return StringPtr(*this).endsWith(other); }
 
 private:
   Array<char> content;
@@ -351,6 +357,15 @@ inline StringPtr StringPtr::slice(size_t start) const {
 }
 inline ArrayPtr<const char> StringPtr::slice(size_t start, size_t end) const {
   return content.slice(start, end);
+}
+
+inline bool StringPtr::startsWith(const StringPtr& other) const {
+  return other.content.size() <= content.size() &&
+      memcmp(content.begin(), other.content.begin(), other.size()) == 0;
+}
+inline bool StringPtr::endsWith(const StringPtr& other) const {
+  return other.content.size() <= content.size() &&
+      memcmp(end() - other.size(), other.content.begin(), other.size()) == 0;
 }
 
 inline String::operator ArrayPtr<char>() {
