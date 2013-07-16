@@ -35,3 +35,7 @@
 
 # cabal-install artifacts
 /compiler/dist/
+
+# capnp generated files
+*.capnp.c++
+*.capnp.h
