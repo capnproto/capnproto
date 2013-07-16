@@ -666,7 +666,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
         return DeclParserResult(kj::mv(decl), parsers.structLevelDecl);
       }));
 
-  parsers.unionDecl = arena.copy(p::transform(
+  parsers.groupDecl = arena.copy(p::transform(
       p::sequence(keyword("group"), p::many(parsers.annotation)),
       [this](kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
