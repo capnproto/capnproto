@@ -261,6 +261,10 @@ struct DisallowConstCopyIfNotConst: public DisallowConstCopy {
 template <typename T>
 struct DisallowConstCopyIfNotConst<const T> {};
 
+template <typename T> struct IsConst_ { static constexpr bool value = false; };
+template <typename T> struct IsConst_<const T> { static constexpr bool value = true; };
+template <typename T> constexpr bool isConst() { return IsConst_<T>::value; }
+
 template <typename T> struct EnableIfNotConst_ { typedef T Type; };
 template <typename T> struct EnableIfNotConst_<const T>;
 template <typename T> using EnableIfNotConst = typename EnableIfNotConst_<T>::Type;
@@ -269,9 +273,9 @@ template <typename T> struct EnableIfConst_;
 template <typename T> struct EnableIfConst_<const T> { typedef T Type; };
 template <typename T> using EnableIfConst = typename EnableIfConst_<T>::Type;
 
-template <typename T> struct RemoveConstOrBogus_ { struct Type; };
-template <typename T> struct RemoveConstOrBogus_<const T> { typedef T Type; };
-template <typename T> using RemoveConstOrBogus = typename RemoveConstOrBogus_<T>::Type;
+template <typename T> struct RemoveConstOrDisable_ { struct Type; };
+template <typename T> struct RemoveConstOrDisable_<const T> { typedef T Type; };
+template <typename T> using RemoveConstOrDisable = typename RemoveConstOrDisable_<T>::Type;
 
 template <typename T> struct IsReference_ { static constexpr bool value = false; };
 template <typename T> struct IsReference_<T&> { static constexpr bool value = true; };

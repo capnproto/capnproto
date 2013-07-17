@@ -201,7 +201,7 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
 
   void* result = calloc(size, sizeof(word));
   if (result == nullptr) {
-    FAIL_SYSCALL("calloc(size, sizeof(word))", ENOMEM, size);
+    KJ_FAIL_SYSCALL("calloc(size, sizeof(word))", ENOMEM, size);
   }
 
   if (!returnedFirstSegment) {

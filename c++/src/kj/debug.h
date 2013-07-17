@@ -134,7 +134,7 @@ namespace kj {
              __FILE__, __LINE__, ::kj::Exception::Nature::OS_ERROR, \
              _kjSyscallResult.getErrorNumber(), #call, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
 
-#define FAIL_SYSCALL(code, errorNumber, ...) \
+#define KJ_FAIL_SYSCALL(code, errorNumber, ...) \
   for (::kj::_::Debug::Fault f( \
            __FILE__, __LINE__, ::kj::Exception::Nature::OS_ERROR, \
            errorNumber, code, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())

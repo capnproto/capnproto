@@ -27,8 +27,6 @@
 
 namespace kj {
 
-const Arena::ArrayDisposerImpl Arena::ArrayDisposerImpl::instance = Arena::ArrayDisposerImpl();
-
 Arena::Arena(size_t chunkSize): state(chunkSize) {}
 
 Arena::Arena(ArrayPtr<byte> scratch, size_t chunkSize): state(chunkSize) {
@@ -135,15 +133,6 @@ void Arena::setDestructor(void* ptr, void (*destructor)(void*)) {
   header->destructor = destructor;
   header->next = state.objectList;
   state.objectList = header;
-}
-
-void Arena::ArrayDisposerImpl::disposeImpl(
-    void* firstElement, size_t elementSize, size_t elementCount,
-    size_t capacity, void (*destroyElement)(void*)) const {
-  if (destroyElement != nullptr) {
-    ExceptionSafeArrayUtil guard(firstElement, elementSize, elementCount, destroyElement);
-    guard.destroyAll();
-  }
 }
 
 }  // namespace kj

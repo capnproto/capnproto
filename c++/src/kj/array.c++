@@ -42,6 +42,18 @@ void ExceptionSafeArrayUtil::destroyAll() {
   }
 }
 
+const DestructorOnlyArrayDisposer DestructorOnlyArrayDisposer::instance =
+    DestructorOnlyArrayDisposer();
+
+void DestructorOnlyArrayDisposer::disposeImpl(
+    void* firstElement, size_t elementSize, size_t elementCount,
+    size_t capacity, void (*destroyElement)(void*)) const {
+  if (destroyElement != nullptr) {
+    ExceptionSafeArrayUtil guard(firstElement, elementSize, elementCount, destroyElement);
+    guard.destroyAll();
+  }
+}
+
 namespace _ {  // private
 
 void* HeapArrayDisposer::allocateImpl(size_t elementSize, size_t elementCount, size_t capacity,

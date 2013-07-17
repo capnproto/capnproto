@@ -112,28 +112,10 @@ private:
   // pointer previously returned by an `allocateBytes()` call for which `hasDisposer` was true.
 
   template <typename T>
-  class DisposerImpl: public Disposer {
-  public:
-    static const DisposerImpl instance;
-
-    void disposeImpl(void* pointer) const override {
-      reinterpret_cast<T*>(pointer)->~T();
-    }
-  };
-
-  class ArrayDisposerImpl: public ArrayDisposer {
-  public:
-    static const ArrayDisposerImpl instance;
-
-    void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
-                     size_t capacity, void (*destroyElement)(void*)) const override;
-  };
-
-  template <typename T>
   static void destroyArray(void* pointer) {
     size_t elementCount = *reinterpret_cast<size_t*>(pointer);
     constexpr size_t prefixSize = kj::max(alignof(T), sizeof(size_t));
-    ArrayDisposerImpl::instance.disposeImpl(
+    DestructorOnlyArrayDisposer::instance.disposeImpl(
         reinterpret_cast<byte*>(pointer) + prefixSize,
         sizeof(T), elementCount, elementCount, &destroyObject<T>);
   }
@@ -202,7 +184,7 @@ Own<T> Arena::allocateOwn(Params&&... params) {
   if (!__has_trivial_constructor(T) || sizeof...(Params) > 0) {
     ctor(result, kj::fwd<Params>(params)...);
   }
-  return Own<T>(&result, DisposerImpl<T>::instance);
+  return Own<T>(&result, DestructorOnlyDisposer<T>::instance);
 }
 
 template <typename T>
@@ -218,11 +200,8 @@ template <typename T>
 ArrayBuilder<T> Arena::allocateOwnArrayBuilder(size_t capacity) {
   return ArrayBuilder<T>(
       reinterpret_cast<T*>(allocateBytes(sizeof(T) * capacity, alignof(T), false)),
-      capacity, ArrayDisposerImpl::instance);
+      capacity, DestructorOnlyArrayDisposer::instance);
 }
-
-template <typename T>
-const Arena::DisposerImpl<T> Arena::DisposerImpl<T>::instance = Arena::DisposerImpl<T>();
 
 }  // namespace kj
 

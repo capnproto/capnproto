@@ -225,7 +225,7 @@ AutoCloseFd::~AutoCloseFd() noexcept(false) {
   unwindDetector.catchExceptionsIfUnwinding([&]() {
     // Don't use SYSCALL() here because close() should not be repeated on EINTR.
     if (fd >= 0 && close(fd) < 0) {
-      FAIL_SYSCALL("close", errno, fd) {
+      KJ_FAIL_SYSCALL("close", errno, fd) {
         break;
       }
     }

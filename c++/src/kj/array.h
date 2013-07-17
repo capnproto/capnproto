@@ -100,6 +100,14 @@ private:
   void (*destroyElement)(void*);
 };
 
+class DestructorOnlyArrayDisposer: public ArrayDisposer {
+public:
+  static const DestructorOnlyArrayDisposer instance;
+
+  void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
+                   size_t capacity, void (*destroyElement)(void*)) const override;
+};
+
 // =======================================================================================
 // Array
 
@@ -117,7 +125,7 @@ public:
     other.ptr = nullptr;
     other.size_ = 0;
   }
-  inline Array(Array<RemoveConstOrBogus<T>>&& other) noexcept
+  inline Array(Array<RemoveConstOrDisable<T>>&& other) noexcept
       : ptr(other.ptr), size_(other.size_), disposer(other.disposer) {
     other.ptr = nullptr;
     other.size_ = 0;

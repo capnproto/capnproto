@@ -66,6 +66,21 @@ private:
   struct Dispose_;
 };
 
+template <typename T>
+class DestructorOnlyDisposer: public Disposer {
+  // A disposer that merely calls the type's destructor and nothing else.
+
+public:
+  static const DestructorOnlyDisposer instance;
+
+  void disposeImpl(void* pointer) const override {
+    reinterpret_cast<T*>(pointer)->~T();
+  }
+};
+
+template <typename T>
+const DestructorOnlyDisposer<T> DestructorOnlyDisposer<T>::instance = DestructorOnlyDisposer<T>();
+
 // =======================================================================================
 // Own<T> -- An owned pointer.
 
@@ -86,10 +101,11 @@ class Own {
   //   then you've lost any benefit to interoperating with the "standard" unique_ptr.
 
 public:
-  Own(const Own& other) = delete;
+  KJ_DISALLOW_COPY(Own);
+  inline Own(): disposer(nullptr), ptr(nullptr) {}
   inline Own(Own&& other) noexcept
       : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
-  inline Own(Own<RemoveConstOrBogus<T>>&& other) noexcept
+  inline Own(Own<RemoveConstOrDisable<T>>&& other) noexcept
       : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
   template <typename U>
   inline Own(Own<U>&& other) noexcept
@@ -124,6 +140,7 @@ private:
   T* ptr;
 
   inline explicit Own(decltype(nullptr)): disposer(nullptr), ptr(nullptr) {}
+
   inline bool operator==(decltype(nullptr)) { return ptr == nullptr; }
   inline bool operator!=(decltype(nullptr)) { return ptr != nullptr; }
   // Only called by Maybe<Own<T>>.
@@ -243,6 +260,28 @@ Own<Decay<T>> heap(T&& orig) {
   typedef Decay<T> T2;
   return Own<T2>(new T2(kj::fwd<T>(orig)), _::HeapDisposer<T2>::instance);
 }
+
+// =======================================================================================
+// SpaceFor<T> -- assists in manual allocation
+
+template <typename T>
+class SpaceFor {
+  // A class which has the same size and alignment as T but does not call its constructor or
+  // destructor automatically.  Instead, call construct() to construct a T in the space, which
+  // returns an Own<T> which will take care of calling T's destructor later.
+
+public:
+  template <typename... Params>
+  Own<T> construct(Params&&... params) {
+    ctor(value, kj::fwd<Params>(params)...);
+    return Own<T>(&value, DestructorOnlyDisposer<T>::instance);
+  }
+
+private:
+  union {
+    T value;
+  };
+};
 
 // =======================================================================================
 // Inline implementation details
