@@ -53,6 +53,7 @@ public:
   Orphan& operator=(Orphan&&) = default;
 
   inline typename T::Builder get();
+  inline typename T::Reader getReader() const;
 
   inline bool operator==(decltype(nullptr)) { return builder == nullptr; }
   inline bool operator!=(decltype(nullptr)) { return builder == nullptr; }
@@ -136,12 +137,18 @@ struct OrphanGetImpl<T, Kind::STRUCT> {
   static inline typename T::Builder apply(_::OrphanBuilder& builder) {
     return typename T::Builder(builder.asStruct(_::structSize<T>()));
   }
+  static inline typename T::Reader applyReader(const _::OrphanBuilder& builder) {
+    return typename T::Reader(builder.asStructReader(_::structSize<T>()));
+  }
 };
 
 template <typename T, Kind k>
 struct OrphanGetImpl<List<T, k>, Kind::LIST> {
   static inline typename List<T>::Builder apply(_::OrphanBuilder& builder) {
     return typename List<T>::Builder(builder.asList(_::ElementSizeForType<T>::value));
+  }
+  static inline typename List<T>::Reader applyReader(const _::OrphanBuilder& builder) {
+    return typename List<T>::Reader(builder.asListReader(_::ElementSizeForType<T>::value));
   }
 };
 
@@ -150,12 +157,18 @@ struct OrphanGetImpl<List<T, Kind::STRUCT>, Kind::LIST> {
   static inline typename List<T>::Builder apply(_::OrphanBuilder& builder) {
     return typename List<T>::Builder(builder.asStructList(_::structSize<T>()));
   }
+  static inline typename List<T>::Reader applyReader(const _::OrphanBuilder& builder) {
+    return typename List<T>::Reader(builder.asListReader(_::ElementSizeForType<T>::value));
+  }
 };
 
 template <>
 struct OrphanGetImpl<Text, Kind::BLOB> {
   static inline Text::Builder apply(_::OrphanBuilder& builder) {
     return Text::Builder(builder.asText());
+  }
+  static inline Text::Reader applyReader(const _::OrphanBuilder& builder) {
+    return Text::Reader(builder.asTextReader());
   }
 };
 
@@ -164,6 +177,9 @@ struct OrphanGetImpl<Data, Kind::BLOB> {
   static inline Data::Builder apply(_::OrphanBuilder& builder) {
     return Data::Builder(builder.asData());
   }
+  static inline Data::Reader applyReader(const _::OrphanBuilder& builder) {
+    return Data::Reader(builder.asDataReader());
+  }
 };
 
 }  // namespace _ (private)
@@ -171,6 +187,11 @@ struct OrphanGetImpl<Data, Kind::BLOB> {
 template <typename T>
 inline typename T::Builder Orphan<T>::get() {
   return _::OrphanGetImpl<T>::apply(builder);
+}
+
+template <typename T>
+inline typename T::Reader Orphan<T>::getReader() const {
+  return _::OrphanGetImpl<T>::applyReader(builder);
 }
 
 template <typename T>

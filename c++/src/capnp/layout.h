@@ -758,6 +758,12 @@ public:
   ObjectBuilder asObject();
   // Interpret as an arbitrary object.
 
+  StructReader asStructReader(StructSize size) const;
+  ListReader asListReader(FieldSize elementSize) const;
+  Text::Reader asTextReader() const;
+  Data::Reader asDataReader() const;
+  ObjectReader asObjectReader() const;
+
 private:
   static_assert(1 * POINTERS * WORDS_PER_POINTER == 1 * WORDS,
                 "This struct assumes a pointer is one word.");
@@ -783,6 +789,7 @@ private:
   }
 
   inline WirePointer* tagAsPtr() { return reinterpret_cast<WirePointer*>(&tag); }
+  inline const WirePointer* tagAsPtr() const { return reinterpret_cast<const WirePointer*>(&tag); }
 
   void euthanize();
   // Erase the target object, zeroing it out and possibly reclaiming the memory.  Called when

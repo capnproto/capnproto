@@ -1578,6 +1578,10 @@ DynamicStruct::Builder Orphan<DynamicStruct>::get() {
   return DynamicStruct::Builder(schema, builder.asStruct(structSizeFromSchema(schema)));
 }
 
+DynamicStruct::Reader Orphan<DynamicStruct>::getReader() const {
+  return DynamicStruct::Reader(schema, builder.asStructReader(structSizeFromSchema(schema)));
+}
+
 DynamicList::Builder Orphan<DynamicList>::get() {
   if (schema.whichElementType() == schema::Type::Body::STRUCT_TYPE) {
     return DynamicList::Builder(
@@ -1586,6 +1590,11 @@ DynamicList::Builder Orphan<DynamicList>::get() {
     return DynamicList::Builder(
         schema, builder.asList(elementSizeFor(schema.whichElementType())));
   }
+}
+
+DynamicList::Reader Orphan<DynamicList>::getReader() const {
+  return DynamicList::Reader(
+      schema, builder.asListReader(elementSizeFor(schema.whichElementType())));
 }
 
 }  // namespace capnp

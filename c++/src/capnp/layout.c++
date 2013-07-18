@@ -192,6 +192,15 @@ static_assert(POINTERS * BYTES_PER_POINTER / BYTES == sizeof(WirePointer),
 static_assert(POINTERS * BITS_PER_POINTER / BITS_PER_BYTE / BYTES == sizeof(WirePointer),
     "BITS_PER_POINTER is wrong.");
 
+namespace {
+
+static const union {
+  AlignedData<POINTER_SIZE_IN_WORDS / WORDS> word;
+  WirePointer pointer;
+} zero = {{{0}}};
+
+}  // namespace
+
 // =======================================================================================
 
 struct WireHelpers {
@@ -285,10 +294,9 @@ struct WireHelpers {
     }
   }
 
-  static KJ_ALWAYS_INLINE(
-      const word* followFars(const WirePointer*& ref, SegmentReader*& segment)) {
-    // Like the other followFars() but operates on readers.  There is no `refTarget` parameter
-    // because `ref->target()` is valid for all use cases of this method.
+  static KJ_ALWAYS_INLINE(const word* followFars(
+      const WirePointer*& ref, const word* refTarget, SegmentReader*& segment)) {
+    // Like the other followFars() but operates on readers.
 
     // If the segment is null, this is an unchecked message, so there are no FAR pointers.
     if (segment != nullptr && ref->kind() == WirePointer::FAR) {
@@ -325,7 +333,7 @@ struct WireHelpers {
 
       return segment->getStartPtr() + pad->farPositionInSegment();
     } else {
-      return ref->target();
+      return refTarget;
     }
   }
 
@@ -466,7 +474,7 @@ struct WireHelpers {
     }
     --nestingLimit;
 
-    const word* ptr = followFars(ref, segment);
+    const word* ptr = followFars(ref, ref->target(), segment);
 
     WordCount64 result = 0 * WORDS;
 
@@ -1559,6 +1567,12 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(StructReader readStructPointer(
       SegmentReader* segment, const WirePointer* ref, const word* defaultValue,
       int nestingLimit)) {
+    return readStructPointer(segment, ref, ref->target(), defaultValue, nestingLimit);
+  }
+
+  static KJ_ALWAYS_INLINE(StructReader readStructPointer(
+      SegmentReader* segment, const WirePointer* ref, const word* refTarget,
+      const word* defaultValue, int nestingLimit)) {
     if (ref == nullptr || ref->isNull()) {
     useDefault:
       if (defaultValue == nullptr ||
@@ -1567,6 +1581,7 @@ struct WireHelpers {
       }
       segment = nullptr;
       ref = reinterpret_cast<const WirePointer*>(defaultValue);
+      refTarget = ref->target();
       defaultValue = nullptr;  // If the default value is itself invalid, don't use it again.
     }
 
@@ -1575,7 +1590,7 @@ struct WireHelpers {
       goto useDefault;
     }
 
-    const word* ptr = followFars(ref, segment);
+    const word* ptr = followFars(ref, refTarget, segment);
     if (KJ_UNLIKELY(ptr == nullptr)) {
       // Already reported the error.
       goto useDefault;
@@ -1601,6 +1616,13 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(ListReader readListPointer(
       SegmentReader* segment, const WirePointer* ref, const word* defaultValue,
       FieldSize expectedElementSize, int nestingLimit)) {
+    return readListPointer(segment, ref, ref->target(), defaultValue,
+                           expectedElementSize, nestingLimit);
+  }
+
+  static KJ_ALWAYS_INLINE(ListReader readListPointer(
+      SegmentReader* segment, const WirePointer* ref, const word* refTarget,
+      const word* defaultValue, FieldSize expectedElementSize, int nestingLimit)) {
     if (ref == nullptr || ref->isNull()) {
     useDefault:
       if (defaultValue == nullptr ||
@@ -1609,6 +1631,7 @@ struct WireHelpers {
       }
       segment = nullptr;
       ref = reinterpret_cast<const WirePointer*>(defaultValue);
+      refTarget = ref->target();
       defaultValue = nullptr;  // If the default value is itself invalid, don't use it again.
     }
 
@@ -1617,7 +1640,7 @@ struct WireHelpers {
       goto useDefault;
     }
 
-    const word* ptr = followFars(ref, segment);
+    const word* ptr = followFars(ref, refTarget, segment);
     if (KJ_UNLIKELY(ptr == nullptr)) {
       // Already reported error.
       goto useDefault;
@@ -1743,12 +1766,18 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(Text::Reader readTextPointer(
       SegmentReader* segment, const WirePointer* ref,
       const void* defaultValue, ByteCount defaultSize)) {
+    return readTextPointer(segment, ref, ref->target(), defaultValue, defaultSize);
+  }
+
+  static KJ_ALWAYS_INLINE(Text::Reader readTextPointer(
+      SegmentReader* segment, const WirePointer* ref, const word* refTarget,
+      const void* defaultValue, ByteCount defaultSize)) {
     if (ref == nullptr || ref->isNull()) {
     useDefault:
       if (defaultValue == nullptr) defaultValue = "";
       return Text::Reader(reinterpret_cast<const char*>(defaultValue), defaultSize / BYTES);
     } else {
-      const word* ptr = followFars(ref, segment);
+      const word* ptr = followFars(ref, refTarget, segment);
 
       if (KJ_UNLIKELY(ptr == nullptr)) {
         // Already reported error.
@@ -1791,11 +1820,17 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(Data::Reader readDataPointer(
       SegmentReader* segment, const WirePointer* ref,
       const void* defaultValue, ByteCount defaultSize)) {
+    return readDataPointer(segment, ref, ref->target(), defaultValue, defaultSize);
+  }
+
+  static KJ_ALWAYS_INLINE(Data::Reader readDataPointer(
+      SegmentReader* segment, const WirePointer* ref, const word* refTarget,
+      const void* defaultValue, ByteCount defaultSize)) {
     if (ref == nullptr || ref->isNull()) {
     useDefault:
       return Data::Reader(reinterpret_cast<const byte*>(defaultValue), defaultSize / BYTES);
     } else {
-      const word* ptr = followFars(ref, segment);
+      const word* ptr = followFars(ref, refTarget, segment);
 
       if (KJ_UNLIKELY(ptr == nullptr)) {
         // Already reported error.
@@ -1827,6 +1862,12 @@ struct WireHelpers {
   static ObjectReader readObjectPointer(
       SegmentReader* segment, const WirePointer* ref,
       const word* defaultValue, int nestingLimit) {
+    return readObjectPointer(segment, ref, ref->target(), defaultValue, nestingLimit);
+  }
+
+  static ObjectReader readObjectPointer(
+      SegmentReader* segment, const WirePointer* ref, const word* refTarget,
+      const word* defaultValue, int nestingLimit) {
     // We can't really reuse readStructPointer() and readListPointer() because they are designed
     // for the case where we are expecting a specific type, and they do validation around that,
     // whereas this method is for the case where we accept any pointer.
@@ -1842,10 +1883,11 @@ struct WireHelpers {
       }
       segment = nullptr;
       ref = reinterpret_cast<const WirePointer*>(defaultValue);
+      refTarget = ref->target();
       defaultValue = nullptr;  // If the default value is itself invalid, don't use it again.
     }
 
-    const word* ptr = WireHelpers::followFars(ref, segment);
+    const word* ptr = WireHelpers::followFars(ref, refTarget, segment);
     if (KJ_UNLIKELY(ptr == nullptr)) {
       // Already reported the error.
       goto useDefault;
@@ -2111,13 +2153,13 @@ StructReader StructReader::readRoot(
 
 StructReader StructReader::getStructField(
     WirePointerCount ptrIndex, const word* defaultValue) const {
-  const WirePointer* ref = ptrIndex >= pointerCount ? nullptr : pointers + ptrIndex;
+  const WirePointer* ref = ptrIndex >= pointerCount ? &zero.pointer : pointers + ptrIndex;
   return WireHelpers::readStructPointer(segment, ref, defaultValue, nestingLimit);
 }
 
 ListReader StructReader::getListField(
     WirePointerCount ptrIndex, FieldSize expectedElementSize, const word* defaultValue) const {
-  const WirePointer* ref = ptrIndex >= pointerCount ? nullptr : pointers + ptrIndex;
+  const WirePointer* ref = ptrIndex >= pointerCount ? &zero.pointer : pointers + ptrIndex;
   return WireHelpers::readListPointer(
       segment, ref, defaultValue, expectedElementSize, nestingLimit);
 }
@@ -2125,14 +2167,14 @@ ListReader StructReader::getListField(
 template <>
 Text::Reader StructReader::getBlobField<Text>(
     WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) const {
-  const WirePointer* ref = ptrIndex >= pointerCount ? nullptr : pointers + ptrIndex;
+  const WirePointer* ref = ptrIndex >= pointerCount ? &zero.pointer : pointers + ptrIndex;
   return WireHelpers::readTextPointer(segment, ref, defaultValue, defaultSize);
 }
 
 template <>
 Data::Reader StructReader::getBlobField<Data>(
     WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) const {
-  const WirePointer* ref = ptrIndex >= pointerCount ? nullptr : pointers + ptrIndex;
+  const WirePointer* ref = ptrIndex >= pointerCount ? &zero.pointer : pointers + ptrIndex;
   return WireHelpers::readDataPointer(segment, ref, defaultValue, defaultSize);
 }
 
@@ -2605,6 +2647,29 @@ ObjectBuilder OrphanBuilder::asObject() {
   }
 
   return result;
+}
+
+StructReader OrphanBuilder::asStructReader(StructSize size) const {
+  return WireHelpers::readStructPointer(
+      segment, tagAsPtr(), location, nullptr, std::numeric_limits<int>::max());
+}
+
+ListReader OrphanBuilder::asListReader(FieldSize elementSize) const {
+  return WireHelpers::readListPointer(
+      segment, tagAsPtr(), location, nullptr, elementSize, std::numeric_limits<int>::max());
+}
+
+Text::Reader OrphanBuilder::asTextReader() const {
+  return WireHelpers::readTextPointer(segment, tagAsPtr(), location, nullptr, 0 * BYTES);
+}
+
+Data::Reader OrphanBuilder::asDataReader() const {
+  return WireHelpers::readDataPointer(segment, tagAsPtr(), location, nullptr, 0 * BYTES);
+}
+
+ObjectReader OrphanBuilder::asObjectReader() const {
+  return WireHelpers::readObjectPointer(
+      segment, tagAsPtr(), location, nullptr, std::numeric_limits<int>::max());
 }
 
 void OrphanBuilder::euthanize() {

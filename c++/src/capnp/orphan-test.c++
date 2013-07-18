@@ -40,7 +40,8 @@ TEST(Orphans, Structs) {
   Orphan<TestAllTypes> orphan = root.disownStructField();
   EXPECT_FALSE(orphan == nullptr);
 
-  checkTestMessage(orphan.get().asReader());
+  checkTestMessage(orphan.getReader());
+  checkTestMessage(orphan.get());
   EXPECT_FALSE(root.hasStructField());
 
   root.adoptStructField(kj::mv(orphan));
@@ -59,7 +60,8 @@ TEST(Orphans, Lists) {
   Orphan<List<uint32_t>> orphan = root.disownUInt32List();
   EXPECT_FALSE(orphan == nullptr);
 
-  checkList(orphan.get().asReader(), {12u, 34u, 56u});
+  checkList(orphan.getReader(), {12u, 34u, 56u});
+  checkList(orphan.get(), {12u, 34u, 56u});
   EXPECT_FALSE(root.hasUInt32List());
 
   root.adoptUInt32List(kj::mv(orphan));
@@ -80,6 +82,9 @@ TEST(Orphans, StructLists) {
   Orphan<List<TestAllTypes>> orphan = root.disownStructList();
   EXPECT_FALSE(orphan == nullptr);
 
+  ASSERT_EQ(2u, orphan.getReader().size());
+  EXPECT_EQ("foo", orphan.getReader()[0].getTextField());
+  EXPECT_EQ("bar", orphan.getReader()[1].getTextField());
   ASSERT_EQ(2u, orphan.get().size());
   EXPECT_EQ("foo", orphan.get()[0].getTextField());
   EXPECT_EQ("bar", orphan.get()[1].getTextField());
@@ -103,6 +108,7 @@ TEST(Orphans, Text) {
   Orphan<Text> orphan = root.disownTextField();
   EXPECT_FALSE(orphan == nullptr);
 
+  EXPECT_EQ("foo", orphan.getReader());
   EXPECT_EQ("foo", orphan.get());
   EXPECT_FALSE(root.hasTextField());
 
@@ -122,6 +128,7 @@ TEST(Orphans, Data) {
   Orphan<Data> orphan = root.disownDataField();
   EXPECT_FALSE(orphan == nullptr);
 
+  EXPECT_EQ(data("foo"), orphan.getReader());
   EXPECT_EQ(data("foo"), orphan.get());
   EXPECT_FALSE(root.hasDataField());
 
@@ -155,7 +162,7 @@ TEST(Orphans, OrphanageStruct) {
 
   Orphan<TestAllTypes> orphan = builder.getOrphanage().newOrphan<TestAllTypes>();
   initTestMessage(orphan.get());
-  checkTestMessage(orphan.get().asReader());
+  checkTestMessage(orphan.getReader());
 
   auto root = builder.initRoot<TestAllTypes>();
   root.adoptStructField(kj::mv(orphan));
@@ -168,7 +175,7 @@ TEST(Orphans, OrphanageList) {
   orphan.get().set(0, 123);
   orphan.get().set(1, 456);
 
-  List<uint32_t>::Reader reader = orphan.get().asReader();
+  List<uint32_t>::Reader reader = orphan.getReader();
   ASSERT_EQ(2u, reader.size());
   EXPECT_EQ(123u, reader[0]);
   EXPECT_EQ(456u, reader[1]);
@@ -212,7 +219,7 @@ TEST(Orphans, OrphanageStructCopy) {
   initTestMessage(root1);
 
   Orphan<TestAllTypes> orphan = builder2.getOrphanage().newOrphanCopy(root1.asReader());
-  checkTestMessage(orphan.get().asReader());
+  checkTestMessage(orphan.getReader());
 
   auto root2 = builder2.initRoot<TestAllTypes>();
   root2.adoptStructField(kj::mv(orphan));
@@ -227,7 +234,7 @@ TEST(Orphans, OrphanageListCopy) {
 
   Orphan<List<uint32_t>> orphan = builder2.getOrphanage().newOrphanCopy(
       root1.asReader().getUInt32List());
-  checkList(orphan.get().asReader(), {12u, 34u, 56u});
+  checkList(orphan.getReader(), {12u, 34u, 56u});
 
   auto root2 = builder2.initRoot<TestAllTypes>();
   root2.adoptUInt32List(kj::mv(orphan));
@@ -237,7 +244,7 @@ TEST(Orphans, OrphanageTextCopy) {
   MallocMessageBuilder builder;
 
   Orphan<Text> orphan = builder.getOrphanage().newOrphanCopy(Text::Reader("foobarba"));
-  EXPECT_EQ("foobarba", orphan.get().asReader());
+  EXPECT_EQ("foobarba", orphan.getReader());
 
   auto root = builder.initRoot<TestAllTypes>();
   root.adoptTextField(kj::mv(orphan));
@@ -247,7 +254,7 @@ TEST(Orphans, OrphanageDataCopy) {
   MallocMessageBuilder builder;
 
   Orphan<Data> orphan = builder.getOrphanage().newOrphanCopy(data("foo"));
-  EXPECT_EQ(data("foo"), orphan.get().asReader());
+  EXPECT_EQ(data("foo"), orphan.getReader());
 
   auto root = builder.initRoot<TestAllTypes>();
   root.adoptDataField(kj::mv(orphan));
@@ -259,9 +266,9 @@ TEST(Orphans, ZeroOut) {
 
   {
     Orphan<TestAllTypes> orphan = builder.getOrphanage().newOrphan<TestAllTypes>();
-    orphanReader = orphan.get().asReader();
+    orphanReader = orphan.getReader();
     initTestMessage(orphan.get());
-    checkTestMessage(orphan.get().asReader());
+    checkTestMessage(orphan.getReader());
   }
 
   // Once the Orphan destructor is called, the message should be zero'd out.
@@ -278,7 +285,7 @@ TEST(Orphans, StructObject) {
   Orphan<TestAllTypes> orphan = root.disownObjectField<TestAllTypes>();
   EXPECT_FALSE(orphan == nullptr);
 
-  checkTestMessage(orphan.get().asReader());
+  checkTestMessage(orphan.getReader());
   EXPECT_FALSE(root.hasObjectField());
 
   root.adoptObjectField(kj::mv(orphan));
@@ -297,7 +304,7 @@ TEST(Orphans, ListObject) {
   Orphan<List<uint32_t>> orphan = root.disownObjectField<List<uint32_t>>();
   EXPECT_FALSE(orphan == nullptr);
 
-  checkList(orphan.get().asReader(), {12u, 34u, 56u});
+  checkList(orphan.getReader(), {12u, 34u, 56u});
   EXPECT_FALSE(root.hasObjectField());
 
   root.adoptObjectField(kj::mv(orphan));
@@ -318,7 +325,7 @@ TEST(Orphans, DynamicStruct) {
   EXPECT_FALSE(orphan == nullptr);
 
   EXPECT_TRUE(orphan.get().getSchema() == Schema::from<TestAllTypes>());
-  checkDynamicTestMessage(orphan.get().asReader());
+  checkDynamicTestMessage(orphan.getReader());
   EXPECT_FALSE(root.hasObjectField());
 
   root.adoptObjectField(kj::mv(orphan));
@@ -337,7 +344,7 @@ TEST(Orphans, DynamicList) {
   Orphan<DynamicList> orphan = root.disownObjectField<DynamicList>(Schema::from<List<uint32_t>>());
   EXPECT_FALSE(orphan == nullptr);
 
-  checkList<uint32_t>(orphan.get().asReader(), {12, 34, 56});
+  checkList<uint32_t>(orphan.getReader(), {12, 34, 56});
   EXPECT_FALSE(root.hasObjectField());
 
   root.adoptObjectField(kj::mv(orphan));
@@ -377,7 +384,7 @@ TEST(Orphans, OrphanageDynamicStruct) {
 
   Orphan<DynamicStruct> orphan = builder.getOrphanage().newOrphan(Schema::from<TestAllTypes>());
   initDynamicTestMessage(orphan.get());
-  checkDynamicTestMessage(orphan.get().asReader());
+  checkDynamicTestMessage(orphan.getReader());
 
   auto root = builder.initRoot<test::TestObject>();
   root.adoptObjectField(kj::mv(orphan));
@@ -391,7 +398,7 @@ TEST(Orphans, OrphanageDynamicList) {
   orphan.get().set(0, 123);
   orphan.get().set(1, 456);
 
-  checkList<uint32_t>(orphan.get().asReader(), {123, 456});
+  checkList<uint32_t>(orphan.getReader(), {123, 456});
 
   auto root = builder.initRoot<test::TestObject>();
   root.adoptObjectField(kj::mv(orphan));
@@ -407,7 +414,7 @@ TEST(Orphans, OrphanageDynamicStructCopy) {
 
   Orphan<DynamicStruct> orphan = builder2.getOrphanage().newOrphanCopy(
       root1.asReader().getObjectField<DynamicStruct>(Schema::from<TestAllTypes>()));
-  checkDynamicTestMessage(orphan.get().asReader());
+  checkDynamicTestMessage(orphan.getReader());
 
   auto root2 = builder2.initRoot<test::TestObject>();
   root2.adoptObjectField(kj::mv(orphan));
@@ -423,7 +430,7 @@ TEST(Orphans, OrphanageDynamicListCopy) {
 
   Orphan<DynamicList> orphan = builder2.getOrphanage().newOrphanCopy(
       root1.asReader().getObjectField<DynamicList>(Schema::from<List<uint32_t>>()));
-  checkList<uint32_t>(orphan.get().asReader(), {12, 34, 56});
+  checkList<uint32_t>(orphan.getReader(), {12, 34, 56});
 
   auto root2 = builder2.initRoot<test::TestObject>();
   root2.adoptObjectField(kj::mv(orphan));

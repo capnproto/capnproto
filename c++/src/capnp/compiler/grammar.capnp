@@ -151,7 +151,7 @@ struct Declaration {
     methodDecl @15 :Method;
     annotationDecl @16 :Annotation;
 
-    nakedId @21 :UInt64;
+    nakedId @21 :LocatedInteger;
     nakedAnnotation @22 :AnnotationApplication;
     # A floating UID or annotation (allowed at the file top level).
   }
@@ -221,9 +221,5 @@ struct Declaration {
 }
 
 struct ParsedFile {
-  id @0 :UInt64;
-  annotations @1 :List(Declaration.AnnotationApplication);
-  docComment @2 :Text;
-
-  topDecls @3 :List(Declaration);
+  root @0 :Declaration;
 }

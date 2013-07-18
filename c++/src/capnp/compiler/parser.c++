@@ -44,7 +44,7 @@ uint64_t randomId() {
   KJ_SYSCALL(n = read(fd, &result, sizeof(result)), "/dev/urandom");
   KJ_ASSERT(n == sizeof(result), "Incomplete read from /dev/urandom.", n);
 
-  return result;
+  return result | (1ull << 63);
 }
 
 }  // namespace
@@ -56,7 +56,7 @@ void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
   kj::Vector<Orphan<Declaration>> decls(statements.size());
   kj::Vector<Orphan<Declaration::AnnotationApplication>> annotations;
 
-  bool sawId = false;
+  auto fileDecl = result.getRoot();
 
   for (auto statement: statements) {
     KJ_IF_MAYBE(decl, parser.parseStatement(statement, parser.getParsers().fileLevelDecl)) {
@@ -64,14 +64,13 @@ void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
       auto body = builder.getBody();
       switch (body.which()) {
         case Declaration::Body::NAKED_ID:
-          if (sawId) {
+          if (fileDecl.getId().which() == Declaration::Id::UID) {
             errorReporter.addError(builder.getStartByte(), builder.getEndByte(),
                                    kj::str("File can only have one ID."));
           } else {
-            sawId = true;
-            result.setId(body.getNakedId());
+            fileDecl.getId().adoptUid(body.disownNakedId());
             if (builder.hasDocComment()) {
-              result.adoptDocComment(builder.disownDocComment());
+              fileDecl.adoptDocComment(builder.disownDocComment());
             }
           }
           break;
@@ -85,18 +84,20 @@ void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
     }
   }
 
-  if (!sawId) {
+  if (fileDecl.getId().which() != Declaration::Id::UID) {
+    uint64_t id = randomId();
+    fileDecl.getId().initUid().setValue(id);
     errorReporter.addError(0, 0,
         kj::str("File does not declare an ID.  I've generated one for you.  Add this line to your "
-                "file: @0x", kj::hex(randomId() | (1ull << 63)), ";"));
+                "file: @0x", kj::hex(id), ";"));
   }
 
-  auto declsBuilder = result.initTopDecls(decls.size());
+  auto declsBuilder = fileDecl.initNestedDecls(decls.size());
   for (size_t i = 0; i < decls.size(); i++) {
     declsBuilder.adoptWithCaveats(i, kj::mv(decls[i]));
   }
 
-  auto annotationsBuilder = result.initAnnotations(annotations.size());
+  auto annotationsBuilder = fileDecl.initAnnotations(annotations.size());
   for (size_t i = 0; i < annotations.size(); i++) {
     annotationsBuilder.adoptWithCaveats(i, kj::mv(annotations[i]));
   }
@@ -817,7 +818,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
   auto& nakedId = arena.copy(p::transform(parsers.uid,
       [this](Orphan<LocatedInteger>&& value) -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
-        decl.get().getBody().setNakedId(value.get().getValue());
+        decl.get().getBody().adoptNakedId(kj::mv(value));
         return DeclParserResult(kj::mv(decl));
       }));
 

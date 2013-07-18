@@ -166,7 +166,7 @@ template <typename T>
 class Lazy {
 public:
   template <typename Func>
-  const T& get(Func&& init);
+  const T& get(Func&& init) const;
   // The first thread to call get() will invoke the given init function to construct the value.
   // Other threads will block until construction completes, then return the same value.
   //
@@ -221,7 +221,7 @@ private:
 
 template <typename T>
 template <typename Func>
-const T& Lazy<T>::get(Func&& init) {
+const T& Lazy<T>::get(Func&& init) const {
   if (!once.isInitialized()) {
     InitImpl<Func> initImpl(*this, kj::fwd<Func>(init));
     once.runOnce(initImpl);

@@ -271,6 +271,9 @@ class SpaceFor {
   // returns an Own<T> which will take care of calling T's destructor later.
 
 public:
+  inline SpaceFor() {}
+  inline ~SpaceFor() {}
+
   template <typename... Params>
   Own<T> construct(Params&&... params) {
     ctor(value, kj::fwd<Params>(params)...);

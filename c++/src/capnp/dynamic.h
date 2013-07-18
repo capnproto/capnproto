@@ -306,6 +306,7 @@ private:
   friend kj::String _::structString(
       _::StructReader reader, const _::RawSchema& schema);
   friend class Orphanage;
+  friend class Orphan<DynamicStruct>;
 };
 
 class DynamicStruct::Builder {
@@ -456,6 +457,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class Orphanage;
+  friend class Orphan<DynamicList>;
 };
 
 class DynamicList::Builder {
@@ -685,6 +687,7 @@ public:
   Orphan& operator=(Orphan&&) = default;
 
   DynamicStruct::Builder get();
+  DynamicStruct::Reader getReader() const;
 
   inline bool operator==(decltype(nullptr)) { return builder == nullptr; }
   inline bool operator!=(decltype(nullptr)) { return builder == nullptr; }
@@ -711,6 +714,7 @@ public:
   Orphan& operator=(Orphan&&) = default;
 
   DynamicList::Builder get();
+  DynamicList::Reader getReader() const;
 
   inline bool operator==(decltype(nullptr)) { return builder == nullptr; }
   inline bool operator!=(decltype(nullptr)) { return builder == nullptr; }
