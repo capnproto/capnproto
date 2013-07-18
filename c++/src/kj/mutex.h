@@ -87,6 +87,9 @@ private:
 
 template <typename T>
 class Locked {
+  // Return type for `MutexGuarded<T>::lock()`.  `Locked<T>` provides access to the guarded object
+  // and unlocks the mutex when it goes out of scope.
+
 public:
   KJ_DISALLOW_COPY(Locked);
   inline Locked(): mutex(nullptr), ptr(nullptr) {}
@@ -164,7 +167,11 @@ class MutexGuarded<const T> {
 
 template <typename T>
 class Lazy {
+  // A lazily-initialized value.
+
 public:
+  template <typename Func>
+  T& get(Func&& init);
   template <typename Func>
   const T& get(Func&& init) const;
   // The first thread to call get() will invoke the given init function to construct the value.
@@ -221,7 +228,17 @@ private:
 
 template <typename T>
 template <typename Func>
-const T& Lazy<T>::get(Func&& init) const {
+inline T& Lazy<T>::get(Func&& init) {
+  if (!once.isInitialized()) {
+    InitImpl<Func> initImpl(*this, kj::fwd<Func>(init));
+    once.runOnce(initImpl);
+  }
+  return *value;
+}
+
+template <typename T>
+template <typename Func>
+inline const T& Lazy<T>::get(Func&& init) const {
   if (!once.isInitialized()) {
     InitImpl<Func> initImpl(*this, kj::fwd<Func>(init));
     once.runOnce(initImpl);
