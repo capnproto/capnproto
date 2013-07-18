@@ -29,13 +29,12 @@
 #include "arena.h"
 #include <kj/debug.h>
 #include <kj/exception.h>
+#include <kj/arena.h>
 
 namespace capnp {
 
 class SchemaLoader::Impl {
 public:
-  Impl();
-
   _::RawSchema* load(const schema::Node::Reader& reader);
 
   _::RawSchema* loadNative(const _::RawSchema* nativeSchema);
@@ -46,30 +45,9 @@ public:
   _::RawSchema* tryGet(uint64_t typeId) const;
   kj::Array<Schema> getAllLoaded() const;
 
-  template <typename T>
-  T* allocate(size_t count = 1) {
-    ByteCount bytes = count * sizeof(T) * BYTES;
-    static_assert(sizeof(word) == 8, "This code assumes 64-bit words.");
-    WordCount words = (bytes + 7 * BYTES) / BYTES_PER_WORD;
-
-    while (true) {
-      word* result = segment->allocate(words);
-      if (result != nullptr) {
-        return reinterpret_cast<T*>(result);
-      }
-      segment = arena->getSegmentWithAvailable(words);
-    }
-  }
+  kj::Arena arena;
 
 private:
-  MallocMessageBuilder allocator;
-  _::BuilderArena* arena;
-  _::SegmentBuilder* segment;
-  // HACK:  We don't actually use these to build messages, we use them to allocate memory that
-  //   should be freed when the loader is freed.  We're reusing BuilderArena as a convenient
-  //   implementation of the general concept of arenas.
-  // TODO(cleanup):  Develop a stand-alone Arena class that can be used for things like this.
-
   std::unordered_map<uint64_t, _::RawSchema*> schemas;
 };
 
@@ -113,27 +91,27 @@ public:
 
   const _::RawSchema** makeDependencyArray(uint32_t* count) {
     *count = dependencies.size();
-    const _::RawSchema** result =
-        loader.allocate<const _::RawSchema*>(*count);
+    kj::ArrayPtr<const _::RawSchema*> result =
+        loader.arena.allocateArray<const _::RawSchema*>(*count);
     uint pos = 0;
     for (auto& dep: dependencies) {
       result[pos++] = dep.second;
     }
     KJ_DASSERT(pos == *count);
-    return result;
+    return result.begin();
   }
 
   const _::RawSchema::MemberInfo* makeMemberInfoArray(uint32_t* count) {
     *count = members.size();
-    _::RawSchema::MemberInfo* result =
-        loader.allocate<_::RawSchema::MemberInfo>(*count);
+    kj::ArrayPtr<_::RawSchema::MemberInfo> result =
+        loader.arena.allocateArray<_::RawSchema::MemberInfo>(*count);
     uint pos = 0;
     for (auto& member: members) {
       result[pos++] = {kj::implicitCast<uint16_t>(member.first.first),
                        kj::implicitCast<uint16_t>(member.second)};
     }
     KJ_DASSERT(pos == *count);
-    return result;
+    return result.begin();
   }
 
 private:
@@ -981,19 +959,16 @@ private:
 
 // =======================================================================================
 
-SchemaLoader::Impl::Impl()
-    : arena(allocator.arena()),
-      segment(allocator.getRootSegment()) {}
-
 _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader) {
   // Make a copy of the node which can be used unchecked.
   size_t size = reader.totalSizeInWords() + 1;
-  word* validated = allocate<word>(size);
-  copyToUnchecked(reader, kj::arrayPtr(validated, size));
+  kj::ArrayPtr<word> validated = arena.allocateArray<word>(size);
+  memset(validated.begin(), 0, size * sizeof(word));
+  copyToUnchecked(reader, validated);
 
   // Validate the copy.
   Validator validator(*this);
-  auto validatedReader = readMessageUnchecked<schema::Node>(validated);
+  auto validatedReader = readMessageUnchecked<schema::Node>(validated.begin());
 
   if (!validator.validate(validatedReader)) {
     // Not valid.  Construct an empty schema of the same type and return that.
@@ -1006,7 +981,7 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader) {
   _::RawSchema*& slot = schemas[validatedReader.getId()];
   if (slot == nullptr) {
     // Nope, allocate a new RawSchema.
-    slot = allocate<_::RawSchema>();
+    slot = &arena.allocate<_::RawSchema>();
   } else {
     // Yes, check if it is compatible and figure out which schema is newer.
     auto existing = readMessageUnchecked<schema::Node>(slot->encodedNode);
@@ -1018,7 +993,7 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader) {
   }
 
   // Initialize the RawSchema.
-  slot->encodedNode = validated;
+  slot->encodedNode = validated.begin();
   slot->dependencies = validator.makeDependencyArray(&slot->dependencyCount);
   slot->membersByName = validator.makeMemberInfoArray(&slot->memberCount);
 
@@ -1029,7 +1004,7 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
   auto reader = readMessageUnchecked<schema::Node>(nativeSchema->encodedNode);
   _::RawSchema*& slot = schemas[reader.getId()];
   if (slot == nullptr) {
-    slot = allocate<_::RawSchema>();
+    slot = &arena.allocate<_::RawSchema>();
   } else if (slot->canCastTo != nullptr) {
     KJ_REQUIRE(slot->canCastTo == nativeSchema,
         "two different compiled-in type have the same type ID",
@@ -1058,12 +1033,12 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
   slot->canCastTo = nativeSchema;
 
   // Except that we need to set the dependency list to point at other loader-owned RawSchemas.
-  const _::RawSchema** dependencies =
-      allocate<const _::RawSchema*>(slot->dependencyCount);
+  kj::ArrayPtr<const _::RawSchema*> dependencies =
+      arena.allocateArray<const _::RawSchema*>(slot->dependencyCount);
   for (uint i = 0; i < nativeSchema->dependencyCount; i++) {
     dependencies[i] = loadNative(nativeSchema->dependencies[i]);
   }
-  slot->dependencies = dependencies;
+  slot->dependencies = dependencies.begin();
 
   return slot;
 }
