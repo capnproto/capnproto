@@ -38,11 +38,12 @@ Schema Schema::getDependency(uint64_t id) const {
   while (lower < upper) {
     uint mid = (lower + upper) / 2;
 
-    Schema candidate(raw->dependencies[mid]);
+    const _::RawSchema* candidate = raw->dependencies[mid];
 
-    uint64_t candidateId = candidate.getProto().getId();
+    uint64_t candidateId = candidate->id;
     if (candidateId == id) {
-      return candidate;
+      candidate->ensureInitialized();
+      return Schema(candidate);
     } else if (candidateId < id) {
       lower = mid + 1;
     } else {

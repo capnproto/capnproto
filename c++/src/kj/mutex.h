@@ -47,9 +47,9 @@ public:
   ~Mutex();
   KJ_DISALLOW_COPY(Mutex);
 
-  void lock() noexcept;
-  void readLock() noexcept;
-  void unlock(bool lockedForRead) noexcept;
+  void lock();
+  void readLock();
+  void unlock(bool lockedForRead);
 
 private:
   mutable pthread_rwlock_t mutex;

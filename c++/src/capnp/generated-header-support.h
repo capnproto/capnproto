@@ -147,11 +147,16 @@ struct RawSchema {
   //
   // This is an internal structure which could change in the future.
 
+  uint64_t id;
+
   const word* encodedNode;
   // Encoded SchemaNode, readable via readMessageUnchecked<schema::Node>(encodedNode).
 
   const RawSchema* const* dependencies;
-  // Pointers to other types on which this one depends, sorted by ID.
+  // Pointers to other types on which this one depends, sorted by ID.  The schemas in this table
+  // may be uninitialized -- you must call ensureInitialized() on the one you wish to use before
+  // using it.
+  //
   // TODO(someday):  Make this a hashtable.
 
   struct MemberInfo {
@@ -171,6 +176,23 @@ struct RawSchema {
   // Points to the RawSchema of a compiled-in type to which it is safe to cast any DynamicValue
   // with this schema.  This is null for all compiled-in types; it is only set by SchemaLoader on
   // dynamically-loaded types.
+
+  class Initializer {
+  public:
+    virtual void init(const RawSchema* schema) const = 0;
+  };
+
+  const Initializer* lazyInitializer;
+  // Lazy initializer, invoked by ensureInitialized().
+
+  inline void ensureInitialized() const {
+    // Lazy initialization support.  Invoke to ensure that initialization has taken place.  This
+    // is required in particular when traversing the dependency list.  RawSchemas for compiled-in
+    // types are always initialized; only dynamically-loaded schemas may be lazy.
+
+    const Initializer* i = __atomic_load_n(&lazyInitializer, __ATOMIC_ACQUIRE);
+    if (i != nullptr) i->init(this);
+  }
 };
 
 template <typename T>

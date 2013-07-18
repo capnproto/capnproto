@@ -26,12 +26,34 @@
 
 #include "schema.h"
 #include <kj/memory.h>
+#include <kj/mutex.h>
 
 namespace capnp {
 
 class SchemaLoader {
 public:
+  class LazyLoadCallback {
+  public:
+    virtual void load(const SchemaLoader& loader, uint64_t id) const = 0;
+    // Request that the schema node with the given ID be loaded into the given SchemaLoader.  If
+    // the callback is able to find a schema for this ID, it should invoke `loadIfNew()` on
+    // `loader` to load it.  If no such node exists, it should simply do nothing and return.
+    //
+    // The callback is allowed to load schema nodes other than the one requested, e.g. because it
+    // expects they will be needed soon.
+    //
+    // If the `SchemaLoader` is used from multiple threads, the callback must be thread-safe.
+    // In particular, it's possible for multiple threads to invoke `load()` with the same ID.
+    // If the callback performs a large amount of work to look up IDs, it should be sure to
+    // de-dup these requests.
+  };
+
   SchemaLoader();
+
+  SchemaLoader(const LazyLoadCallback& callback);
+  // Construct a SchemaLoader which will invoke the given callback when a schema node is requested
+  // that isn't already loaded.
+
   ~SchemaLoader() noexcept(false);
   KJ_DISALLOW_COPY(SchemaLoader);
 
@@ -79,6 +101,11 @@ public:
   // Also note that unknown types are not considered invalid.  Instead, the dynamic API returns
   // a DynamicValue with type UNKNOWN for these.
 
+  Schema loadIfNew(const schema::Node::Reader& reader) const;
+  // Like `load()` but does nothing if a schema with the same ID is already loaded.  In contrast,
+  // `load()` would attempt to compare the schemas and take the newer one.  `loadIfNew()` is safe
+  // to call even while concurrently using schemas from this loader.
+
   template <typename T>
   void loadCompiledTypeAndDependencies();
   // Load the schema for the given compiled-in type and all of its dependencies.
@@ -96,7 +123,8 @@ private:
   class Validator;
   class CompatibilityChecker;
   class Impl;
-  kj::Own<Impl> impl;
+  class InitializerImpl;
+  kj::MutexGuarded<kj::Own<Impl>> impl;
 
   void loadNative(const _::RawSchema* nativeSchema);
 };

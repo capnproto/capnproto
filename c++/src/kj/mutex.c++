@@ -50,15 +50,15 @@ Mutex::~Mutex() {
   KJ_PTHREAD_CLEANUP(pthread_rwlock_destroy(&mutex));
 }
 
-void Mutex::lock() noexcept {
+void Mutex::lock() {
   KJ_PTHREAD_CALL(pthread_rwlock_wrlock(&mutex));
 }
 
-void Mutex::readLock() noexcept {
+void Mutex::readLock() {
   KJ_PTHREAD_CALL(pthread_rwlock_rdlock(&mutex));
 }
 
-void Mutex::unlock(bool lockedForRead) noexcept {
+void Mutex::unlock(bool lockedForRead) {
   KJ_PTHREAD_CALL(pthread_rwlock_unlock(&mutex));
 }
 

@@ -86,7 +86,10 @@ public:
 private:
   const _::RawSchema* raw;
 
-  inline explicit Schema(const _::RawSchema* raw): raw(raw) {}
+  inline explicit Schema(const _::RawSchema* raw): raw(raw) {
+    KJ_IREQUIRE(raw->lazyInitializer == nullptr,
+        "Must call ensureInitialized() on RawSchema before constructing Schema.");
+  }
 
   template <typename T> static inline Schema fromImpl() {
     return Schema(&_::rawSchema<T>());

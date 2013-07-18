@@ -208,6 +208,8 @@ TEST(SchemaLoader, Incompatible) {
       loadUnderAlternateTypeId<test::TestAllTypes>(loader, typeId<test::TestListDefaults>()));
 }
 
+// TODO(test):  More extensively test upgrade/downgrade checks.
+
 TEST(SchemaLoader, Enumerate) {
   SchemaLoader loader;
   loader.loadCompiledTypeAndDependencies<TestAllTypes>();
@@ -222,7 +224,88 @@ TEST(SchemaLoader, Enumerate) {
   }
 }
 
-// TODO(test):  More extensively test upgrade/downgrade checks.
+TEST(SchemaLoader, EnumerateNoPlaceholders) {
+  SchemaLoader loader;
+  Schema schema = loader.load(Schema::from<TestDefaults>().getProto());
+
+  {
+    auto list = loader.getAllLoaded();
+    ASSERT_EQ(1u, list.size());
+    EXPECT_TRUE(list[0] == schema);
+  }
+
+  Schema dep = schema.getDependency(typeId<TestAllTypes>());
+
+  {
+    auto list = loader.getAllLoaded();
+    ASSERT_EQ(2u, list.size());
+    if (list[0] == schema) {
+      EXPECT_TRUE(list[1] == dep);
+    } else {
+      EXPECT_TRUE(list[0] == dep);
+      EXPECT_TRUE(list[1] == schema);
+    }
+  }
+}
+
+class FakeLoaderCallback: public SchemaLoader::LazyLoadCallback {
+public:
+  FakeLoaderCallback(const schema::Node::Reader node): node(node), loaded(false) {}
+
+  bool isLoaded() { return loaded; }
+
+  void load(const SchemaLoader& loader, uint64_t id) const override {
+    if (id == 1234) {
+      // Magic "not found" ID.
+      return;
+    }
+
+    EXPECT_EQ(node.getId(), id);
+    EXPECT_FALSE(loaded);
+    loaded = true;
+    loader.loadIfNew(node);
+  }
+
+private:
+  const schema::Node::Reader node;
+  mutable bool loaded = false;
+};
+
+TEST(SchemaLoader, LazyLoad) {
+  FakeLoaderCallback callback(Schema::from<TestAllTypes>().getProto());
+  SchemaLoader loader(callback);
+
+  EXPECT_TRUE(loader.tryGet(1234) == nullptr);
+
+  EXPECT_FALSE(callback.isLoaded());
+  Schema schema = loader.get(typeId<TestAllTypes>());
+  EXPECT_TRUE(callback.isLoaded());
+
+  EXPECT_EQ(schema.getProto().getDisplayName(),
+            Schema::from<TestAllTypes>().getProto().getDisplayName());
+
+  EXPECT_EQ(schema, schema.getDependency(typeId<TestAllTypes>()));
+  EXPECT_EQ(schema, loader.get(typeId<TestAllTypes>()));
+}
+
+TEST(SchemaLoader, LazyLoadGetDependency) {
+  FakeLoaderCallback callback(Schema::from<TestAllTypes>().getProto());
+  SchemaLoader loader(callback);
+
+  Schema schema = loader.load(Schema::from<TestDefaults>().getProto());
+
+  EXPECT_FALSE(callback.isLoaded());
+
+  Schema dep = schema.getDependency(typeId<TestAllTypes>());
+
+  EXPECT_TRUE(callback.isLoaded());
+
+  EXPECT_EQ(dep.getProto().getDisplayName(),
+            Schema::from<TestAllTypes>().getProto().getDisplayName());
+
+  EXPECT_EQ(dep, schema.getDependency(typeId<TestAllTypes>()));
+  EXPECT_EQ(dep, loader.get(typeId<TestAllTypes>()));
+}
 
 }  // namespace
 }  // namespace _ (private)
