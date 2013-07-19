@@ -732,8 +732,7 @@ public:
   inline ~Deferred() { if (!canceled) func(); }
   KJ_DISALLOW_COPY(Deferred);
 
-  // This move constructor is optimized away by the compiler in practice.  It is only here for
-  // technical correctness.
+  // This move constructor is usually optimized away by the compiler.
   inline Deferred(Deferred&& other): func(kj::mv(other.func)) {
     other.canceled = true;
   }
@@ -742,14 +741,22 @@ private:
   bool canceled;
 };
 
-template <typename Func>
-Deferred<Decay<Func>> defer(Func&& func) {
-  return Deferred<Decay<Func>>(kj::fwd<Func>(func));
-}
-
 }  // namespace _ (private)
 
-#define KJ_DEFER(code) auto KJ_UNIQUE_NAME(_kjDefer) = ::kj::_::defer([&](){code;})
+template <typename Func>
+_::Deferred<Decay<Func>> defer(Func&& func) {
+  // Returns an object which will invoke the given functor in its destructor.  The object is not
+  // copyable but is movable with the semantics you'd expect.  Since the return type is private,
+  // you need to assign to an `auto` variable.
+  //
+  // The KJ_DEFER macro provides slightly more convenient syntax for the common case where you
+  // want some code to run at function exit.
+
+  return _::Deferred<Decay<Func>>(kj::fwd<Func>(func));
+}
+
+#define KJ_DEFER(code) auto KJ_UNIQUE_NAME(_kjDefer) = ::kj::defer([&](){code;})
+// Run the given code when the function exits, whether by return or exception.
 
 }  // namespace kj
 

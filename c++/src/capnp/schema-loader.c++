@@ -1213,7 +1213,7 @@ Schema SchemaLoader::load(const schema::Node::Reader& reader) {
   return Schema(impl.lock()->get()->load(reader, false));
 }
 
-Schema SchemaLoader::loadIfNew(const schema::Node::Reader& reader) const {
+Schema SchemaLoader::loadOnce(const schema::Node::Reader& reader) const {
   auto locked = impl.lock();
   auto getResult = locked->get()->tryGet(reader.getId());
   if (getResult.schema == nullptr || getResult.schema->lazyInitializer != nullptr) {

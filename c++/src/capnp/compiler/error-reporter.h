@@ -34,7 +34,7 @@ class ErrorReporter {
 public:
   virtual ~ErrorReporter() noexcept(false);
 
-  virtual void addError(uint32_t startByte, uint32_t endByte, kj::String message) = 0;
+  virtual void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) = 0;
   // Report an error at the given location in the input text.  `startByte` and `endByte` indicate
   // the span of text that is erroneous.  They may be equal, in which case the parser was only
   // able to identify where the error begins, not where it ends.

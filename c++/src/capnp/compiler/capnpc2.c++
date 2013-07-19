@@ -33,7 +33,7 @@
 
 class CoutErrorReporter: public capnp::compiler::ErrorReporter {
 public:
-  void addError(uint32_t startByte, uint32_t endByte, kj::String message) override {
+  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
     std::cout << "input:" << startByte << "-" << endByte << ": " << message.cStr() << std::endl;
   }
 };

@@ -66,7 +66,7 @@ void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
         case Declaration::Body::NAKED_ID:
           if (fileDecl.getId().which() == Declaration::Id::UID) {
             errorReporter.addError(builder.getStartByte(), builder.getEndByte(),
-                                   kj::str("File can only have one ID."));
+                                   "File can only have one ID.");
           } else {
             fileDecl.getId().adoptUid(body.disownNakedId());
             if (builder.hasDocComment()) {
@@ -219,20 +219,17 @@ public:
         if (best < item.end()) {
           // Report error from the point where parsing failed to the end of the item.
           errorReporter.addError(
-              best->getStartByte(), (item.end() - 1)->getEndByte(),
-              kj::str("Parse error."));
+              best->getStartByte(), (item.end() - 1)->getEndByte(), "Parse error.");
         } else if (item.size() > 0) {
           // The item is non-empty and the parser consumed all of it before failing.  Report an
           // error for the whole thing.
           errorReporter.addError(
-              item.begin()->getStartByte(), (item.end() - 1)->getEndByte(),
-              kj::str("Parse error."));
+              item.begin()->getStartByte(), (item.end() - 1)->getEndByte(), "Parse error.");
         } else {
           // The item has no content.
           // TODO(cleanup):  We don't actually know the item's location, so we can only report
           //   an error across the whole list.  Fix this.
-          errorReporter.addError(items.startByte, items.endByte,
-              kj::str("Parse error: Empty list item."));
+          errorReporter.addError(items.startByte, items.endByte, "Parse error: Empty list item.");
         }
       }
     }
@@ -412,7 +409,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
             } else {
               auto fieldValue = field->get().getValue();
               errorReporter.addError(fieldValue.getStartByte(), fieldValue.getEndByte(),
-                                     kj::str("Missing field name."));
+                                     "Missing field name.");
             }
           }
         }
@@ -511,7 +508,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
                 } else {
                   auto fieldValue = field->get().getValue();
                   errorReporter.addError(fieldValue.getStartByte(), fieldValue.getEndByte(),
-                                         kj::str("Missing field name."));
+                                         "Missing field name.");
                 }
               }
             }
@@ -541,7 +538,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
       [this](Located<uint64_t>&& value) {
         if (value.value < (1ull << 63)) {
           errorReporter.addError(value.startByte, value.endByte,
-              kj::str("Invalid ID.  Please generate a new one with 'capnpc -i'."));
+              "Invalid ID.  Please generate a new one with 'capnpc -i'.");
         }
         return value.asProto<LocatedInteger>(orphanage);
       }));
@@ -551,7 +548,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
       [this](Located<uint64_t>&& value) {
         if (value.value >= 65536) {
           errorReporter.addError(value.startByte, value.endByte,
-              kj::str("Ordinals cannot be greater than 65535."));
+              "Ordinals cannot be greater than 65535.");
         }
         return value.asProto<LocatedInteger>(orphanage);
       }));
@@ -778,7 +775,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
               // Set all.
               if (targets.value.size() > 1) {
                 errorReporter.addError(target->startByte, target->endByte,
-                    kj::str("Wildcard should not be specified together with other targets."));
+                    "Wildcard should not be specified together with other targets.");
               }
 
               for (auto member: dynamicBuilder.getSchema().getMembers()) {
@@ -790,7 +787,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
               if (target->value.size() == 0 || target->value.size() >= 32 ||
                   target->value[0] < 'a' || target->value[0] > 'z') {
                 errorReporter.addError(target->startByte, target->endByte,
-                    kj::str("Not a valid annotation target."));
+                                       "Not a valid annotation target.");
               } else {
                 char buffer[64];
                 strcpy(buffer, "targets");
@@ -799,12 +796,12 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
                 KJ_IF_MAYBE(member, dynamicBuilder.getSchema().findMemberByName(buffer)) {
                   if (dynamicBuilder.get(*member).as<bool>()) {
                     errorReporter.addError(target->startByte, target->endByte,
-                        kj::str("Duplicate target specification."));
+                                           "Duplicate target specification.");
                   }
                   dynamicBuilder.set(*member, true);
                 } else {
                   errorReporter.addError(target->startByte, target->endByte,
-                      kj::str("Not a valid annotation target."));
+                                         "Not a valid annotation target.");
                 }
               }
             }
@@ -866,7 +863,7 @@ kj::Maybe<Orphan<Declaration>> CapnpParser::parseStatement(
       case Statement::Block::NONE:
         if (output->memberParser != nullptr) {
           errorReporter.addError(statement.getStartByte(), statement.getEndByte(),
-              kj::str("This statement should end with a semicolon, not a block."));
+              "This statement should end with a semicolon, not a block.");
         }
         break;
 
@@ -882,7 +879,7 @@ kj::Maybe<Orphan<Declaration>> CapnpParser::parseStatement(
           builder.adoptNestedDecls(arrayToList(orphanage, members.releaseAsArray()));
         } else {
           errorReporter.addError(statement.getStartByte(), statement.getEndByte(),
-              kj::str("This statement should end with a block, not a semicolon."));
+              "This statement should end with a block, not a semicolon.");
         }
         break;
     }
@@ -902,7 +899,7 @@ kj::Maybe<Orphan<Declaration>> CapnpParser::parseStatement(
       bestByte = 0;
     }
 
-    errorReporter.addError(bestByte, bestByte, kj::str("Parse error."));
+    errorReporter.addError(bestByte, bestByte, "Parse error.");
     return nullptr;
   }
 }

@@ -263,7 +263,7 @@ public:
     EXPECT_EQ(node.getId(), id);
     EXPECT_FALSE(loaded);
     loaded = true;
-    loader.loadIfNew(node);
+    loader.loadOnce(node);
   }
 
 private:

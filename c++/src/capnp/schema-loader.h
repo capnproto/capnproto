@@ -36,7 +36,7 @@ public:
   public:
     virtual void load(const SchemaLoader& loader, uint64_t id) const = 0;
     // Request that the schema node with the given ID be loaded into the given SchemaLoader.  If
-    // the callback is able to find a schema for this ID, it should invoke `loadIfNew()` on
+    // the callback is able to find a schema for this ID, it should invoke `loadOnce()` on
     // `loader` to load it.  If no such node exists, it should simply do nothing and return.
     //
     // The callback is allowed to load schema nodes other than the one requested, e.g. because it
@@ -101,10 +101,12 @@ public:
   // Also note that unknown types are not considered invalid.  Instead, the dynamic API returns
   // a DynamicValue with type UNKNOWN for these.
 
-  Schema loadIfNew(const schema::Node::Reader& reader) const;
+  Schema loadOnce(const schema::Node::Reader& reader) const;
   // Like `load()` but does nothing if a schema with the same ID is already loaded.  In contrast,
-  // `load()` would attempt to compare the schemas and take the newer one.  `loadIfNew()` is safe
-  // to call even while concurrently using schemas from this loader.
+  // `load()` would attempt to compare the schemas and take the newer one.  `loadOnce()` is safe
+  // to call even while concurrently using schemas from this loader.  It should be considered an
+  // error to call `loadOnce()` with two non-identical schemas that share the same ID, although
+  // this error may or may not actually be detected by the implementation.
 
   template <typename T>
   void loadCompiledTypeAndDependencies();

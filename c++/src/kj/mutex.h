@@ -153,6 +153,11 @@ public:
   // Lock the value for read-only access.  Multiple read-only locks can be taken concurrently, as
   // long as there are no writers.
 
+  inline const T& getWithoutLock() const { return value; }
+  inline T& getWithoutLock() { return value; }
+  // Escape hatch for cases where some external factor guarantees that it's safe to get the
+  // value.  You should treat these like const_cast -- be highly suspicious of any use.
+
 private:
   mutable _::Mutex mutex;
   mutable T value;
