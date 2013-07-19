@@ -728,10 +728,18 @@ namespace _ {  // private
 template <typename Func>
 class Deferred {
 public:
-  inline Deferred(Func func): func(func) {}
-  inline ~Deferred() { func(); }
+  inline Deferred(Func func): func(func), canceled(false) {}
+  inline ~Deferred() { if (!canceled) func(); }
+  KJ_DISALLOW_COPY(Deferred);
+
+  // This move constructor is optimized away by the compiler in practice.  It is only here for
+  // technical correctness.
+  inline Deferred(Deferred&& other): func(kj::mv(other.func)) {
+    other.canceled = true;
+  }
 private:
   Func func;
+  bool canceled;
 };
 
 template <typename Func>
