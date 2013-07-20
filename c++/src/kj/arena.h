@@ -114,6 +114,10 @@ private:
   // Allocate the given number of bytes.  `hasDisposer` must be true if `setDisposer()` may be
   // called on this pointer later.
 
+  void* allocateBytesLockless(size_t amount, uint alignment) const;
+  // Try to allocate the given number of bytes without taking a lock.  Fails if and only if there
+  // is no space left in the current chunk.
+
   void* allocateBytesFallback(size_t amount, uint alignment) const;
   // Fallback used when the current chunk is out of space.
 

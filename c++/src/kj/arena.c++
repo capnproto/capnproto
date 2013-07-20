@@ -97,34 +97,10 @@ void* Arena::allocateBytes(size_t amount, uint alignment, bool hasDisposer) cons
     amount += alignTo(sizeof(ObjectHeader), alignment);
   }
 
-  void* result;
+  void* result = allocateBytesLockless(amount, alignment);
 
-  for (;;) {
-    ChunkHeader* chunk = __atomic_load_n(&state.getWithoutLock().currentChunk, __ATOMIC_ACQUIRE);
-
-    if (chunk == nullptr) {
-      // No chunks allocated yet.
-      result = allocateBytesFallback(amount, alignment);
-      break;
-    }
-
-    byte* pos = __atomic_load_n(&chunk->pos, __ATOMIC_RELAXED);
-    byte* alignedPos = alignTo(pos, alignment);
-    byte* endPos = alignedPos + amount;
-
-    // Careful about pointer wrapping (e.g. if the chunk is near the end of the address space).
-    if (chunk->end - endPos < 0) {
-      // Not enough space.
-      result = allocateBytesFallback(amount, alignment);
-      break;
-    }
-
-    // There appears to be enough space in this chunk, unless another thread stole it.
-    if (KJ_LIKELY(__atomic_compare_exchange_n(
-          &chunk->pos, &pos, endPos, true, __ATOMIC_RELAXED, __ATOMIC_RELAXED))) {
-      result = alignedPos;
-      break;
-    }
+  if (result == nullptr) {
+    result = allocateBytesFallback(amount, alignment);
   }
 
   if (hasDisposer) {
@@ -136,10 +112,47 @@ void* Arena::allocateBytes(size_t amount, uint alignment, bool hasDisposer) cons
   return result;
 }
 
+void* Arena::allocateBytesLockless(size_t amount, uint alignment) const {
+  for (;;) {
+    ChunkHeader* chunk = __atomic_load_n(&state.getWithoutLock().currentChunk, __ATOMIC_ACQUIRE);
+
+    if (chunk == nullptr) {
+      // No chunks allocated yet.
+      return nullptr;
+    }
+
+    byte* pos = __atomic_load_n(&chunk->pos, __ATOMIC_RELAXED);
+    byte* alignedPos = alignTo(pos, alignment);
+    byte* endPos = alignedPos + amount;
+
+    // Careful about pointer wrapping (e.g. if the chunk is near the end of the address space).
+    if (chunk->end - endPos < 0) {
+      // Not enough space.
+      return nullptr;
+    }
+
+    // There appears to be enough space in this chunk, unless another thread stole it.
+    if (KJ_LIKELY(__atomic_compare_exchange_n(
+          &chunk->pos, &pos, endPos, true, __ATOMIC_RELAXED, __ATOMIC_RELAXED))) {
+      return alignedPos;
+    }
+
+    // Contention.  Retry.
+  }
+}
+
 void* Arena::allocateBytesFallback(size_t amount, uint alignment) const {
   auto lock = state.lockExclusive();
 
-  // We already know that the current chunk is out of space.
+  // Now that we have the lock, try one more time to allocate from the current chunk.  This could
+  // work if another thread allocated a new chunk while we were waiting for the lock.
+  void* locklessResult = allocateBytesLockless(amount, alignment);
+  if (locklessResult != nullptr) {
+    return locklessResult;
+  }
+
+  // OK, we know the current chunk is out of space and we hold the lock so no one else is
+  // allocating a new one.  Let's do it!
 
   alignment = kj::max(alignment, alignof(ChunkHeader));
   amount += alignTo(sizeof(ChunkHeader), alignment);
