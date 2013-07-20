@@ -47,9 +47,13 @@ public:
   ~Mutex();
   KJ_DISALLOW_COPY(Mutex);
 
-  void lock();
-  void readLock();
-  void unlock(bool lockedForRead);
+  enum Exclusivity {
+    EXCLUSIVE,
+    SHARED
+  };
+
+  void lock(Exclusivity exclusivity);
+  void unlock(Exclusivity exclusivity);
 
 private:
   mutable pthread_rwlock_t mutex;
@@ -97,7 +101,9 @@ public:
     other.mutex = nullptr;
     other.ptr = nullptr;
   }
-  inline ~Locked() { if (mutex != nullptr) mutex->unlock(isConst<T>()); }
+  inline ~Locked() {
+    if (mutex != nullptr) mutex->unlock(isConst<T>() ? _::Mutex::SHARED : _::Mutex::EXCLUSIVE);
+  }
 
   inline Locked& operator=(Locked&& other) {
     if (mutex != nullptr) mutex->unlock(isConst<T>());
@@ -139,8 +145,8 @@ public:
   explicit MutexGuarded(Params&&... params);
   // Initialize the mutex-guarded object by passing the given parameters to its constructor.
 
-  Locked<T> lock() const;
-  // Locks the mutex and returns the guarded object.  The returned `Locked<T>` can be passed by
+  Locked<T> lockExclusive() const;
+  // Exclusively locks the object and returns it.  The returned `Locked<T>` can be passed by
   // move, similar to `Own<T>`.
   //
   // This method is declared `const` in accordance with KJ style rules which say that constness
@@ -149,9 +155,9 @@ public:
   // be shared between threads, its methods should be const, even though locking it produces a
   // non-const pointer to the contained object.
 
-  Locked<const T> lockForRead() const;
-  // Lock the value for read-only access.  Multiple read-only locks can be taken concurrently, as
-  // long as there are no writers.
+  Locked<const T> lockShared() const;
+  // Lock the value for shared access.  Multiple shared locks can be taken concurrently, but cannot
+  // be held at the same time as a non-shared lock.
 
   inline const T& getWithoutLock() const { return value; }
   inline T& getWithoutLock() { return value; }
@@ -205,14 +211,14 @@ inline MutexGuarded<T>::MutexGuarded(Params&&... params)
     : value(kj::fwd<Params>(params)...) {}
 
 template <typename T>
-inline Locked<T> MutexGuarded<T>::lock() const {
-  mutex.lock();
+inline Locked<T> MutexGuarded<T>::lockExclusive() const {
+  mutex.lock(_::Mutex::EXCLUSIVE);
   return Locked<T>(mutex, value);
 }
 
 template <typename T>
-inline Locked<const T> MutexGuarded<T>::lockForRead() const {
-  mutex.readLock();
+inline Locked<const T> MutexGuarded<T>::lockShared() const {
+  mutex.lock(_::Mutex::SHARED);
   return Locked<const T>(mutex, value);
 }
 

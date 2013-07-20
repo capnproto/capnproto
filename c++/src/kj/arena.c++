@@ -27,11 +27,20 @@
 
 namespace kj {
 
-Arena::Arena(size_t chunkSize): state(chunkSize) {}
+Arena::Arena(size_t chunkSizeHint): state(kj::max(sizeof(ChunkHeader), chunkSizeHint)) {}
 
-Arena::Arena(ArrayPtr<byte> scratch, size_t chunkSize): state(chunkSize) {
-  state.pos = scratch.begin();
-  state.chunkEnd = scratch.end();
+Arena::Arena(ArrayPtr<byte> scratch)
+    : state(kj::max(sizeof(ChunkHeader), scratch.size())) {
+  if (scratch.size() > sizeof(ChunkHeader)) {
+    ChunkHeader* chunk = reinterpret_cast<ChunkHeader*>(scratch.begin());
+    chunk->end = scratch.end();
+    chunk->pos = reinterpret_cast<byte*>(chunk + 1);
+    chunk->next = nullptr;  // Never actually observed.
+
+    // Don't place the chunk in the chunk list because it's not ours to delete.  Just make it the
+    // current chunk so that we'll allocate from it until it is empty.
+    state.getWithoutLock().currentChunk = chunk;
+  }
 }
 
 Arena::~Arena() noexcept(false) {
@@ -39,7 +48,7 @@ Arena::~Arena() noexcept(false) {
   // called.  This ensures that if the first pass throws an exception, remaining objects are still
   // destroyed.  If the second pass throws, the program terminates, but any destructors that could
   // throw should be using UnwindDetector to avoid this.
-  state.cleanup();
+  state.getWithoutLock().cleanup();
 }
 
 void Arena::State::cleanup() {
@@ -72,67 +81,108 @@ inline byte* alignTo(byte* p, uint alignment) {
   return reinterpret_cast<byte*>((i + mask) & ~mask);
 }
 
+inline size_t alignTo(size_t s, uint alignment) {
+  // Round the pointer up to the next aligned value.
+
+  KJ_DASSERT(isPowerOfTwo(alignment), alignment);
+  size_t mask = alignment - 1;
+  return (s + mask) & ~mask;
+}
+
 }  // namespace
 
-void* Arena::allocateBytes(size_t amount, uint alignment, bool hasDisposer) {
-  // Code below depends on power-of-two alignment and header sizes.
-  static_assert(isPowerOfTwo(sizeof(ChunkHeader)), "sizeof(ChunkHeader) is not a power of 2.");
-  static_assert(isPowerOfTwo(sizeof(ObjectHeader)), "sizeof(ObjectHeader) is not a power of 2.");
-  KJ_DASSERT(isPowerOfTwo(alignment), alignment);
-
-  // Offset we must apply if the allocated space is being prefixed with these headers.
-  uint chunkHeaderSize = kj::max(alignment, sizeof(ChunkHeader));
-  uint objectHeaderSize = kj::max(alignment, sizeof(ObjectHeader));
-
+void* Arena::allocateBytes(size_t amount, uint alignment, bool hasDisposer) const {
   if (hasDisposer) {
-    amount += objectHeaderSize;
+    alignment = kj::max(alignment, alignof(ObjectHeader));
+    amount += alignTo(sizeof(ObjectHeader), alignment);
   }
 
   void* result;
-  byte* alignedPos = alignTo(state.pos, alignment);
-  byte* endPos = alignedPos + amount;
-  if (endPos <= state.chunkEnd) {
-    // There's enough space in the current chunk.
-    result = alignedPos;
-    state.pos = alignedPos + amount;
-  } else if (amount + chunkHeaderSize > state.chunkSize ||
-             state.chunkEnd - state.pos > state.chunkSize / 4) {
-    // This object is too big to fit in one chunk, or we'd waste more than a quarter of the chunk
-    // by starting a new one now.  Instead, allocate the object in its own independent chunk.
-    ChunkHeader* newChunk = reinterpret_cast<ChunkHeader*>(operator new(chunkHeaderSize + amount));
-    result = reinterpret_cast<byte*>(newChunk) + chunkHeaderSize;
-    newChunk->next = state.chunkList;
-    state.chunkList = newChunk;
-    // We don't update state.pos and state.chunkEnd because the new chunk has no extra space but
-    // the old chunk might.
-  } else {
-    // Allocate a new chunk.
-    ChunkHeader* newChunk = reinterpret_cast<ChunkHeader*>(operator new(state.chunkSize));
-    result = reinterpret_cast<byte*>(newChunk) + chunkHeaderSize;
-    newChunk->next = state.chunkList;
-    state.chunkList = newChunk;
-    state.pos = reinterpret_cast<byte*>(result) + amount;
-    state.chunkEnd = reinterpret_cast<byte*>(newChunk) + state.chunkSize;
+
+  for (;;) {
+    ChunkHeader* chunk = __atomic_load_n(&state.getWithoutLock().currentChunk, __ATOMIC_ACQUIRE);
+
+    if (chunk == nullptr) {
+      // No chunks allocated yet.
+      result = allocateBytesFallback(amount, alignment);
+      break;
+    }
+
+    byte* pos = __atomic_load_n(&chunk->pos, __ATOMIC_RELAXED);
+    byte* alignedPos = alignTo(pos, alignment);
+    byte* endPos = alignedPos + amount;
+
+    // Careful about pointer wrapping (e.g. if the chunk is near the end of the address space).
+    if (chunk->end - endPos < 0) {
+      // Not enough space.
+      result = allocateBytesFallback(amount, alignment);
+      break;
+    }
+
+    // There appears to be enough space in this chunk, unless another thread stole it.
+    if (KJ_LIKELY(__atomic_compare_exchange_n(
+          &chunk->pos, &pos, endPos, true, __ATOMIC_RELAXED, __ATOMIC_RELAXED))) {
+      result = alignedPos;
+      break;
+    }
   }
 
   if (hasDisposer) {
     // Reserve space for the ObjectHeader, but don't add it to the object list yet.
-    result = reinterpret_cast<byte*>(result) + objectHeaderSize;
+    result = alignTo(reinterpret_cast<byte*>(result) + sizeof(ObjectHeader), alignment);
   }
+
+  KJ_DASSERT(reinterpret_cast<uintptr_t>(result) % alignment == 0);
   return result;
 }
 
-StringPtr Arena::copyString(StringPtr content) {
+void* Arena::allocateBytesFallback(size_t amount, uint alignment) const {
+  auto lock = state.lockExclusive();
+
+  // We already know that the current chunk is out of space.
+
+  alignment = kj::max(alignment, alignof(ChunkHeader));
+  amount += alignTo(sizeof(ChunkHeader), alignment);
+
+  while (lock->nextChunkSize < amount) {
+    lock->nextChunkSize *= 2;
+  }
+
+  byte* bytes = reinterpret_cast<byte*>(operator new(lock->nextChunkSize));
+
+  ChunkHeader* newChunk = reinterpret_cast<ChunkHeader*>(bytes);
+  newChunk->next = lock->chunkList;
+  newChunk->pos = bytes + amount;
+  newChunk->end = bytes + lock->nextChunkSize;
+  __atomic_store_n(&lock->currentChunk, newChunk, __ATOMIC_RELEASE);
+
+  lock->nextChunkSize *= 2;
+
+  byte* result = alignTo(bytes + sizeof(ChunkHeader), alignment);
+  lock->chunkList = newChunk;
+
+  return result;
+}
+
+StringPtr Arena::copyString(StringPtr content) const {
   char* data = reinterpret_cast<char*>(allocateBytes(content.size() + 1, 1, false));
   memcpy(data, content.cStr(), content.size() + 1);
   return StringPtr(data, content.size());
 }
 
-void Arena::setDestructor(void* ptr, void (*destructor)(void*)) {
+void Arena::setDestructor(void* ptr, void (*destructor)(void*)) const {
   ObjectHeader* header = reinterpret_cast<ObjectHeader*>(ptr) - 1;
+  KJ_DASSERT(reinterpret_cast<uintptr_t>(header) % alignof(ObjectHeader) == 0);
   header->destructor = destructor;
-  header->next = state.objectList;
-  state.objectList = header;
+  header->next = state.getWithoutLock().objectList;
+
+  // We can use relaxed atomics here because the object list is not actually traversed until the
+  // destructor, which needs to be synchronized in its own way.
+  while (!__atomic_compare_exchange_n(
+      &state.getWithoutLock().objectList, &header->next, header, true,
+      __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+    // Retry.
+  }
 }
 
 }  // namespace kj

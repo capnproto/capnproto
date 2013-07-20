@@ -63,11 +63,11 @@ TEST(Mutex, MutexGuarded) {
   MutexGuarded<uint> value(123);
 
   {
-    Locked<uint> lock = value.lock();
+    Locked<uint> lock = value.lockExclusive();
     EXPECT_EQ(123, *lock);
 
     Thread thread([&]() {
-      Locked<uint> threadLock = value.lock();
+      Locked<uint> threadLock = value.lockExclusive();
       EXPECT_EQ(456, *threadLock);
       *threadLock = 789;
     });
@@ -78,13 +78,13 @@ TEST(Mutex, MutexGuarded) {
     auto earlyRelease = kj::mv(lock);
   }
 
-  EXPECT_EQ(789, *value.lock());
+  EXPECT_EQ(789, *value.lockExclusive());
 
   {
-    auto rlock1 = value.lockForRead();
+    auto rlock1 = value.lockShared();
 
     Thread thread2([&]() {
-      Locked<uint> threadLock = value.lock();
+      Locked<uint> threadLock = value.lockExclusive();
       *threadLock = 321;
     });
 
@@ -92,11 +92,11 @@ TEST(Mutex, MutexGuarded) {
     EXPECT_EQ(789, *rlock1);
 
     {
-      auto rlock2 = value.lockForRead();
+      auto rlock2 = value.lockShared();
       EXPECT_EQ(789, *rlock2);
-      auto rlock3 = value.lockForRead();
+      auto rlock3 = value.lockShared();
       EXPECT_EQ(789, *rlock3);
-      auto rlock4 = value.lockForRead();
+      auto rlock4 = value.lockShared();
       EXPECT_EQ(789, *rlock4);
     }
 
@@ -105,7 +105,7 @@ TEST(Mutex, MutexGuarded) {
     auto earlyRelease = kj::mv(rlock1);
   }
 
-  EXPECT_EQ(321, *value.lock());
+  EXPECT_EQ(321, *value.lockExclusive());
 }
 
 TEST(Mutex, Lazy) {

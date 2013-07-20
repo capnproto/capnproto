@@ -27,40 +27,45 @@
 #include "memory.h"
 #include "array.h"
 #include "string.h"
+#include "mutex.h"
 
 namespace kj {
 
 class Arena {
   // A class which allows several objects to be allocated in contiguous chunks of memory, then
   // frees them all at once.
+  //
+  // Allocating from the same Arena in multiple threads concurrently is safe but not particularly
+  // performant due to contention.  The class could be optimized in the future to use per-thread
+  // chunks to solve this.
 
 public:
-  Arena(size_t chunkSize = 1024);
-  // Create an Arena that tries to allocate in chunks of the given size.  It may deviate from the
-  // size if an object is too large to fit or to avoid excessive fragmentation.  Each chunk has
-  // a one-word header which is included in the chunk size.
+  explicit Arena(size_t chunkSizeHint = 1024);
+  // Create an Arena.  `chunkSizeHint` hints at where to start when allocating chunks, but is only
+  // a hint -- the Arena will, for example, allocate progressively larger chunks as time goes on,
+  // in order to reduce overall allocation overhead.
 
-  Arena(ArrayPtr<byte> scratch, size_t chunkSize = 1024);
+  explicit Arena(ArrayPtr<byte> scratch);
   // Allocates from the given scratch space first, only resorting to the heap when it runs out.
 
   KJ_DISALLOW_COPY(Arena);
   ~Arena() noexcept(false);
 
   template <typename T, typename... Params>
-  T& allocate(Params&&... params);
+  T& allocate(Params&&... params) const;
   template <typename T>
-  ArrayPtr<T> allocateArray(size_t size);
+  ArrayPtr<T> allocateArray(size_t size) const;
   // Allocate an object or array of type T.  If T has a non-trivial destructor, that destructor
   // will be run during the Arena's destructor.  Such destructors are run in opposite order of
   // allocation.  Note that these methods must maintain a list of destructors to call, which has
   // overhead, but this overhead only applies if T has a non-trivial destructor.
 
   template <typename T, typename... Params>
-  Own<T> allocateOwn(Params&&... params);
+  Own<T> allocateOwn(Params&&... params) const;
   template <typename T>
-  Array<T> allocateOwnArray(size_t size);
+  Array<T> allocateOwnArray(size_t size) const;
   template <typename T>
-  ArrayBuilder<T> allocateOwnArrayBuilder(size_t capacity);
+  ArrayBuilder<T> allocateOwnArrayBuilder(size_t capacity) const;
   // Allocate an object or array of type T.  Destructors are executed when the returned Own<T>
   // or Array<T> goes out-of-scope, which must happen before the Arena is destroyed.  This variant
   // is useful when you need to control when the destructor is called.  This variant also avoids
@@ -68,16 +73,18 @@ public:
   // slightly more efficient.
 
   template <typename T>
-  inline T& copy(T&& value) { return allocate<Decay<T>>(kj::fwd<T>(value)); }
+  inline T& copy(T&& value) const { return allocate<Decay<T>>(kj::fwd<T>(value)); }
   // Allocate a copy of the given value in the arena.  This is just a shortcut for calling the
   // type's copy (or move) constructor.
 
-  StringPtr copyString(StringPtr content);
+  StringPtr copyString(StringPtr content) const;
   // Make a copy of the given string inside the arena, and return a pointer to the copy.
 
 private:
   struct ChunkHeader {
     ChunkHeader* next;
+    byte* pos;  // first unallocated byte in this chunk
+    byte* end;  // end of this chunk
   };
   struct ObjectHeader {
     void (*destructor)(void*);
@@ -85,15 +92,15 @@ private:
   };
 
   struct State {
-    size_t chunkSize;
+    size_t nextChunkSize;
     ChunkHeader* chunkList;
-    ObjectHeader* objectList;
-    byte* pos;
-    byte* chunkEnd;
+    mutable ObjectHeader* objectList;
 
-    inline State(size_t chunkSize)
-        : chunkSize(chunkSize), chunkList(nullptr), objectList(nullptr),
-          pos(nullptr), chunkEnd(nullptr) {}
+    ChunkHeader* currentChunk;
+
+    inline State(size_t nextChunkSize)
+        : nextChunkSize(nextChunkSize), chunkList(nullptr),
+          objectList(nullptr), currentChunk(nullptr) {}
     inline ~State() noexcept(false) { cleanup(); }
 
     void cleanup();
@@ -101,13 +108,16 @@ private:
     // left in a consistent state, such that if cleanup() is called again, it will pick up where
     // it left off.
   };
-  State state;
+  MutexGuarded<State> state;
 
-  void* allocateBytes(size_t amount, uint alignment, bool hasDisposer);
+  void* allocateBytes(size_t amount, uint alignment, bool hasDisposer) const;
   // Allocate the given number of bytes.  `hasDisposer` must be true if `setDisposer()` may be
   // called on this pointer later.
 
-  void setDestructor(void* ptr, void (*destructor)(void*));
+  void* allocateBytesFallback(size_t amount, uint alignment) const;
+  // Fallback used when the current chunk is out of space.
+
+  void setDestructor(void* ptr, void (*destructor)(void*)) const;
   // Schedule the given destructor to be executed when the Arena is destroyed.  `ptr` must be a
   // pointer previously returned by an `allocateBytes()` call for which `hasDisposer` was true.
 
@@ -130,7 +140,7 @@ private:
 // Inline implementation details
 
 template <typename T, typename... Params>
-T& Arena::allocate(Params&&... params) {
+T& Arena::allocate(Params&&... params) const {
   T& result = *reinterpret_cast<T*>(allocateBytes(
       sizeof(T), alignof(T), !__has_trivial_destructor(T)));
   if (!__has_trivial_constructor(T) || sizeof...(Params) > 0) {
@@ -143,7 +153,7 @@ T& Arena::allocate(Params&&... params) {
 }
 
 template <typename T>
-ArrayPtr<T> Arena::allocateArray(size_t size) {
+ArrayPtr<T> Arena::allocateArray(size_t size) const {
   if (__has_trivial_destructor(T)) {
     ArrayPtr<T> result =
         arrayPtr(reinterpret_cast<T*>(allocateBytes(
@@ -179,7 +189,7 @@ ArrayPtr<T> Arena::allocateArray(size_t size) {
 }
 
 template <typename T, typename... Params>
-Own<T> Arena::allocateOwn(Params&&... params) {
+Own<T> Arena::allocateOwn(Params&&... params) const {
   T& result = *reinterpret_cast<T*>(allocateBytes(sizeof(T), alignof(T), false));
   if (!__has_trivial_constructor(T) || sizeof...(Params) > 0) {
     ctor(result, kj::fwd<Params>(params)...);
@@ -188,7 +198,7 @@ Own<T> Arena::allocateOwn(Params&&... params) {
 }
 
 template <typename T>
-Array<T> Arena::allocateOwnArray(size_t size) {
+Array<T> Arena::allocateOwnArray(size_t size) const {
   ArrayBuilder<T> result = allocateOwnArrayBuilder<T>(size);
   for (size_t i = 0; i < size; i++) {
     result.add();
@@ -197,7 +207,7 @@ Array<T> Arena::allocateOwnArray(size_t size) {
 }
 
 template <typename T>
-ArrayBuilder<T> Arena::allocateOwnArrayBuilder(size_t capacity) {
+ArrayBuilder<T> Arena::allocateOwnArrayBuilder(size_t capacity) const {
   return ArrayBuilder<T>(
       reinterpret_cast<T*>(allocateBytes(sizeof(T) * capacity, alignof(T), false)),
       capacity, DestructorOnlyArrayDisposer::instance);

@@ -50,15 +50,18 @@ Mutex::~Mutex() {
   KJ_PTHREAD_CLEANUP(pthread_rwlock_destroy(&mutex));
 }
 
-void Mutex::lock() {
-  KJ_PTHREAD_CALL(pthread_rwlock_wrlock(&mutex));
+void Mutex::lock(Exclusivity exclusivity) {
+  switch (exclusivity) {
+    case EXCLUSIVE:
+      KJ_PTHREAD_CALL(pthread_rwlock_wrlock(&mutex));
+      break;
+    case SHARED:
+      KJ_PTHREAD_CALL(pthread_rwlock_rdlock(&mutex));
+      break;
+  }
 }
 
-void Mutex::readLock() {
-  KJ_PTHREAD_CALL(pthread_rwlock_rdlock(&mutex));
-}
-
-void Mutex::unlock(bool lockedForRead) {
+void Mutex::unlock(Exclusivity exclusivity) {
   KJ_PTHREAD_CALL(pthread_rwlock_unlock(&mutex));
 }
 

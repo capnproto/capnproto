@@ -1167,7 +1167,7 @@ void SchemaLoader::InitializerImpl::init(const _::RawSchema* schema) const {
 
     // Lock the loader for read to make sure no one is concurrently loading a replacement for this
     // schema node.
-    auto lock = loader.impl.lockForRead();
+    auto lock = loader.impl.lockShared();
 
     // Get the mutable version of the schema.
     _::RawSchema* mutableSchema = lock->get()->tryGet(schema->id).schema;
@@ -1195,12 +1195,12 @@ Schema SchemaLoader::get(uint64_t id) const {
 }
 
 kj::Maybe<Schema> SchemaLoader::tryGet(uint64_t id) const {
-  auto getResult = impl.lockForRead()->get()->tryGet(id);
+  auto getResult = impl.lockShared()->get()->tryGet(id);
   if (getResult.schema == nullptr || getResult.schema->lazyInitializer != nullptr) {
     KJ_IF_MAYBE(c, getResult.callback) {
       c->load(*this, id);
     }
-    getResult = impl.lockForRead()->get()->tryGet(id);
+    getResult = impl.lockShared()->get()->tryGet(id);
   }
   if (getResult.schema != nullptr && getResult.schema->lazyInitializer == nullptr) {
     return Schema(getResult.schema);
@@ -1210,11 +1210,11 @@ kj::Maybe<Schema> SchemaLoader::tryGet(uint64_t id) const {
 }
 
 Schema SchemaLoader::load(const schema::Node::Reader& reader) {
-  return Schema(impl.lock()->get()->load(reader, false));
+  return Schema(impl.lockExclusive()->get()->load(reader, false));
 }
 
 Schema SchemaLoader::loadOnce(const schema::Node::Reader& reader) const {
-  auto locked = impl.lock();
+  auto locked = impl.lockExclusive();
   auto getResult = locked->get()->tryGet(reader.getId());
   if (getResult.schema == nullptr || getResult.schema->lazyInitializer != nullptr) {
     // Doesn't exist yet, or the existing schema is a placeholder and therefore has not yet been
@@ -1226,11 +1226,11 @@ Schema SchemaLoader::loadOnce(const schema::Node::Reader& reader) const {
 }
 
 kj::Array<Schema> SchemaLoader::getAllLoaded() const {
-  return impl.lockForRead()->get()->getAllLoaded();
+  return impl.lockShared()->get()->getAllLoaded();
 }
 
 void SchemaLoader::loadNative(const _::RawSchema* nativeSchema) {
-  impl.lock()->get()->loadNative(nativeSchema);
+  impl.lockExclusive()->get()->loadNative(nativeSchema);
 }
 
 }  // namespace capnp

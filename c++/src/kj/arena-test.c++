@@ -197,32 +197,50 @@ TEST(Arena, Alignment) {
 
 TEST(Arena, EndOfChunk) {
   union {
-    byte scratch[16];
+    byte scratch[64];
     uint64_t align;
   };
   Arena arena(arrayPtr(scratch, sizeof(scratch)));
 
+  // First allocation will come from somewhere in the scratch space (after the chunk header).
   uint64_t& i = arena.allocate<uint64_t>();
-  EXPECT_EQ(scratch, reinterpret_cast<byte*>(&i));
+  EXPECT_GE(reinterpret_cast<byte*>(&i), scratch);
+  EXPECT_LT(reinterpret_cast<byte*>(&i), scratch + sizeof(scratch));
 
+  // Next allocation will come at the next position.
   uint64_t& i2 = arena.allocate<uint64_t>();
-  EXPECT_EQ(scratch + 8, reinterpret_cast<byte*>(&i2));
+  EXPECT_EQ(&i + 1, &i2);
 
+  // Allocate the rest of the scratch space.
+  size_t spaceLeft = scratch + sizeof(scratch) - reinterpret_cast<byte*>(&i2 + 1);
+  ArrayPtr<byte> remaining = arena.allocateArray<byte>(spaceLeft);
+  EXPECT_EQ(reinterpret_cast<byte*>(&i2 + 1), remaining.begin());
+
+  // Next allocation comes from somewhere new.
   uint64_t& i3 = arena.allocate<uint64_t>();
-  EXPECT_NE(scratch + 16, reinterpret_cast<byte*>(&i3));
+  EXPECT_NE(remaining.end(), reinterpret_cast<byte*>(&i3));
 }
 
 TEST(Arena, EndOfChunkAlignment) {
   union {
-    byte scratch[10];
+    byte scratch[34];
     uint64_t align;
   };
   Arena arena(arrayPtr(scratch, sizeof(scratch)));
 
-  uint16_t& i = arena.allocate<uint16_t>();
-  EXPECT_EQ(scratch, reinterpret_cast<byte*>(&i));
+  // Figure out where we are...
+  byte* start = arena.allocateArray<byte>(0).begin();
 
-  // Although there is technically enough space in the scratch array, it is not aligned correctly.
+  // Allocate enough space so that we're 24 bytes into the scratch space.  (On 64-bit systems, this
+  // should be zero.)
+  arena.allocateArray<byte>(24 - (start - scratch));
+
+  // Allocating a 16-bit integer works.  Now we're at 26 bytes; 8 bytes are left.
+  uint16_t& i = arena.allocate<uint16_t>();
+  EXPECT_EQ(scratch + 24, reinterpret_cast<byte*>(&i));
+
+  // Although there is technically enough space to allocate a uint64, it is not aligned correctly,
+  // so it will be allocated elsewhere instead.
   uint64_t& i2 = arena.allocate<uint64_t>();
   EXPECT_TRUE(reinterpret_cast<byte*>(&i2) < scratch ||
               reinterpret_cast<byte*>(&i2) > scratch + sizeof(scratch));
@@ -237,14 +255,19 @@ TEST(Arena, TooBig) {
 
   byte& b2 = arena.allocate<byte>();
 
-  EXPECT_EQ(&b1 + 1, &b2);
+  // The array should not have been allocated anywhere near that first byte.
+  EXPECT_TRUE(arr.begin() < &b1 || arr.begin() > &b1 + 512);
+
+  // The next byte should have been allocated after the array.
+  EXPECT_EQ(arr.end(), &b2);
 
   // Write to the array to make sure it's valid.
   memset(arr.begin(), 0xbe, arr.size());
 }
 
 TEST(Arena, MultiSegment) {
-  Arena arena(24);
+  // Sorry, this test makes assumptions about the size of ChunkHeader.
+  Arena arena(sizeof(void*) == 4 ? 32 : 40);
 
   uint64_t& i1 = arena.allocate<uint64_t>();
   uint64_t& i2 = arena.allocate<uint64_t>();
@@ -281,6 +304,97 @@ TEST(Arena, Strings) {
   EXPECT_EQ(foo.end() + 1, bar.begin());
   EXPECT_EQ(bar.end() + 1, quux.begin());
   EXPECT_EQ(quux.end() + 1, corge.begin());
+}
+
+// I tried to use std::thread but it threw a pure-virtual exception.  It's unclear if it's meant
+// to be ready in GCC 4.7.
+class Thread {
+public:
+  template <typename Func>
+  explicit Thread(Func&& func) {
+    KJ_ASSERT(pthread_create(
+        &thread, nullptr, &runThread<Decay<Func>>,
+        new Decay<Func>(kj::fwd<Func>(func))) == 0);
+  }
+  ~Thread() {
+    KJ_ASSERT(pthread_join(thread, nullptr) == 0);
+  }
+
+private:
+  pthread_t thread;
+
+  template <typename Func>
+  static void* runThread(void* ptr) {
+    Func* func = reinterpret_cast<Func*>(ptr);
+    KJ_DEFER(delete func);
+    (*func)();
+    return nullptr;
+  }
+};
+
+struct ThreadTestObject {
+  ThreadTestObject* next;
+  void* owner;  // points into the owning thread's stack
+
+  ThreadTestObject(ThreadTestObject* next, void* owner)
+      : next(next), owner(owner) {}
+  ~ThreadTestObject() { ++destructorCount; }
+
+  static uint destructorCount;
+};
+uint ThreadTestObject::destructorCount = 0;
+
+TEST(Arena, Threads) {
+  // Test thread-safety.  We allocate objects in four threads simultaneously, verify that they
+  // are not corrupted, then verify that their destructors are all called when the Arena is
+  // destroyed.
+
+  {
+    MutexGuarded<Arena> arena;
+
+    // Func to run in each thread.
+    auto threadFunc = [&]() {
+      int me;
+      ThreadTestObject* head = nullptr;
+
+      {
+        auto lock = arena.lockShared();
+
+        // Allocate a huge linked list.
+        for (uint i = 0; i < 100000; i++) {
+          head = &lock->allocate<ThreadTestObject>(head, &me);
+        }
+      }
+
+      // Wait until all other threads are done before verifying.
+      arena.lockExclusive();
+
+      // Verify that the list hasn't been corrupted.
+      while (head != nullptr) {
+        ASSERT_EQ(&me, head->owner);
+        head = head->next;
+      }
+    };
+
+    {
+      auto lock = arena.lockExclusive();
+      Thread thread1(threadFunc);
+      Thread thread2(threadFunc);
+      Thread thread3(threadFunc);
+      Thread thread4(threadFunc);
+
+      // Wait for threads to be ready.
+      usleep(10000);
+
+      auto release = kj::mv(lock);
+      // As we go out of scope, the lock will be released (since `release` is destroyed first),
+      // allowing all the threads to start running.  We'll then join each thread.
+    }
+
+    EXPECT_EQ(0, ThreadTestObject::destructorCount);
+  }
+
+  EXPECT_EQ(400000, ThreadTestObject::destructorCount);
 }
 
 }  // namespace
