@@ -110,7 +110,8 @@ includekj_HEADERS =                                            \
   src/kj/arena.h                                               \
   src/kj/io.h                                                  \
   src/kj/tuple.h                                               \
-  src/kj/mutex.h
+  src/kj/mutex.h                                               \
+  src/kj/thread.h
 
 includekjparse_HEADERS =                                       \
   src/kj/parse/common.h                                        \
@@ -148,6 +149,7 @@ libcapnp_la_SOURCES=                                           \
   src/kj/arena.c++                                             \
   src/kj/io.c++                                                \
   src/kj/mutex.c++                                             \
+  src/kj/thread.c++                                            \
   src/kj/parse/char.c++                                        \
   src/capnp/blob.c++                                           \
   src/capnp/arena.h                                            \
@@ -198,6 +200,7 @@ capnp_test_SOURCES =                                           \
   src/kj/units-test.c++                                        \
   src/kj/tuple-test.c++                                        \
   src/kj/mutex-test.c++                                        \
+  src/kj/thread-test.c++                                       \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \
   src/capnp/blob-test.c++                                      \

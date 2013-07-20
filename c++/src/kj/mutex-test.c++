@@ -23,39 +23,13 @@
 
 #include "mutex.h"
 #include "debug.h"
+#include "thread.h"
 #include <pthread.h>
 #include <unistd.h>
 #include <gtest/gtest.h>
 
 namespace kj {
 namespace {
-
-// I tried to use std::thread but it threw a pure-virtual exception.  It's unclear if it's meant
-// to be ready in GCC 4.7.
-
-class Thread {
-public:
-  template <typename Func>
-  explicit Thread(Func&& func) {
-    KJ_ASSERT(pthread_create(
-        &thread, nullptr, &runThread<Decay<Func>>,
-        new Decay<Func>(kj::fwd<Func>(func))) == 0);
-  }
-  ~Thread() {
-    KJ_ASSERT(pthread_join(thread, nullptr) == 0);
-  }
-
-private:
-  pthread_t thread;
-
-  template <typename Func>
-  static void* runThread(void* ptr) {
-    Func* func = reinterpret_cast<Func*>(ptr);
-    KJ_DEFER(delete func);
-    (*func)();
-    return nullptr;
-  }
-};
 
 inline void delay() { usleep(10000); }
 
