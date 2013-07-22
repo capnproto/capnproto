@@ -38,8 +38,9 @@ void ReadLimiter::unread(WordCount64 amount) {
   // Be careful not to overflow here.  Since ReadLimiter has no thread-safety, it's possible that
   // the limit value was not updated correctly for one or more reads, and therefore unread() could
   // overflow it even if it is only unreading bytes that were acutally read.
-  WordCount64 newValue = limit + amount;
-  if (newValue > limit) {
+  uint64_t oldValue = limit;
+  uint64_t newValue = oldValue + amount / WORDS;
+  if (newValue > oldValue) {
     limit = newValue;
   }
 }
@@ -109,52 +110,63 @@ SegmentBuilder* BuilderArena::getSegment(SegmentId id) {
   // This method is allowed to fail if the segment ID is not valid.
   if (id == SegmentId(0)) {
     return &segment0;
-  } else KJ_IF_MAYBE(s, moreSegments) {
-    KJ_REQUIRE(id.value - 1 < s->builders.size(), "invalid segment id", id.value);
-    return s->builders[id.value - 1].get();
   } else {
-    KJ_FAIL_REQUIRE("invalid segment id", id.value);
+    auto lock = moreSegments.lockShared();
+    KJ_IF_MAYBE(s, *lock) {
+      KJ_REQUIRE(id.value - 1 < s->builders.size(), "invalid segment id", id.value);
+      // TODO(cleanup):  Return a const SegmentBuilder and tediously constify all SegmentBuilder
+      //   pointers throughout the codebase.
+      return const_cast<SegmentBuilder*>(s->builders[id.value - 1].get());
+    } else {
+      KJ_FAIL_REQUIRE("invalid segment id", id.value);
+    }
   }
 }
 
-SegmentBuilder* BuilderArena::getSegmentWithAvailable(WordCount minimumAvailable) {
-  // TODO(someday):  Mutex-locking?  Do we want to allow people to build different parts of the
-  //   same message in different threads?
-
+BuilderArena::AllocateResult BuilderArena::allocate(WordCount amount) {
   if (segment0.getArena() == nullptr) {
-    // We're allocating the first segment.
-    kj::ArrayPtr<word> ptr = message->allocateSegment(minimumAvailable / WORDS);
+    // We're allocating the first segment.  We don't need to worry about threads at this point
+    // because calling MessageBuilder::initRoot() from multiple threads is not intended to be safe.
+    kj::ArrayPtr<word> ptr = message->allocateSegment(amount / WORDS);
 
     // Re-allocate segment0 in-place.  This is a bit of a hack, but we have not returned any
     // pointers to this segment yet, so it should be fine.
-    segment0.~SegmentBuilder();
-    return new (&segment0) SegmentBuilder(this, SegmentId(0), ptr, &this->dummyLimiter);
+    kj::dtor(segment0);
+    kj::ctor(segment0, this, SegmentId(0), ptr, &this->dummyLimiter);
+    return AllocateResult { &segment0, segment0.allocate(amount) };
   } else {
-    if (segment0.available() >= minimumAvailable) {
-      return &segment0;
+    // Check if there is space in the first segment.  We can do this without locking.
+    word* attempt = segment0.allocate(amount);
+    if (attempt != nullptr) {
+      return AllocateResult { &segment0, attempt };
     }
 
+    // Need to fall back to additional segments.
+
+    auto lock = moreSegments.lockExclusive();
     MultiSegmentState* segmentState;
-    KJ_IF_MAYBE(s, moreSegments) {
+    KJ_IF_MAYBE(s, *lock) {
       // TODO(perf):  Check for available space in more than just the last segment.  We don't
       //   want this to be O(n), though, so we'll need to maintain some sort of table.  Complicating
       //   matters, we want SegmentBuilders::allocate() to be fast, so we can't update any such
       //   table when allocation actually happens.  Instead, we could have a priority queue based
       //   on the last-known available size, and then re-check the size when we pop segments off it
       //   and shove them to the back of the queue if they have become too small.
-      if (s->builders.back()->available() >= minimumAvailable) {
-        return s->builders.back().get();
+
+      attempt = s->builders.back()->allocate(amount);
+      if (attempt != nullptr) {
+        return AllocateResult { s->builders.back().get(), attempt };
       }
       segmentState = s;
     } else {
       auto newSegmentState = kj::heap<MultiSegmentState>();
       segmentState = newSegmentState;
-      moreSegments = kj::mv(newSegmentState);
+      *lock = kj::mv(newSegmentState);
     }
 
     kj::Own<SegmentBuilder> newBuilder = kj::heap<SegmentBuilder>(
         this, SegmentId(segmentState->builders.size() + 1),
-        message->allocateSegment(minimumAvailable / WORDS), &this->dummyLimiter);
+        message->allocateSegment(amount / WORDS), &this->dummyLimiter);
     SegmentBuilder* result = newBuilder.get();
     segmentState->builders.push_back(kj::mv(newBuilder));
 
@@ -162,7 +174,9 @@ SegmentBuilder* BuilderArena::getSegmentWithAvailable(WordCount minimumAvailable
     // getSegmentsForOutput(), which callers might reasonably expect is a thread-safe method.
     segmentState->forOutput.resize(segmentState->builders.size() + 1);
 
-    return result;
+    // Allocating from the new segment is guaranteed to succeed since no other thread could have
+    // received a pointer to it yet (since we still hold the lock).
+    return AllocateResult { result, result->allocate(amount) };
   }
 }
 
@@ -172,7 +186,7 @@ kj::ArrayPtr<const kj::ArrayPtr<const word>> BuilderArena::getSegmentsForOutput(
   // segments is actually changing due to an activity in another thread, then the caller has a
   // problem regardless of locking here.
 
-  KJ_IF_MAYBE(segmentState, moreSegments) {
+  KJ_IF_MAYBE(segmentState, moreSegments.getWithoutLock()) {
     KJ_DASSERT(segmentState->forOutput.size() == segmentState->builders.size() + 1,
         "segmentState->forOutput wasn't resized correctly when the last builder was added.",
         segmentState->forOutput.size(), segmentState->builders.size());
@@ -206,9 +220,13 @@ SegmentReader* BuilderArena::tryGetSegment(SegmentId id) {
       return &segment0;
     }
   } else {
-    KJ_IF_MAYBE(segmentState, moreSegments) {
+    auto lock = moreSegments.lockShared();
+    KJ_IF_MAYBE(segmentState, *lock) {
       if (id.value <= segmentState->builders.size()) {
-        return segmentState->builders[id.value - 1].get();
+        // TODO(cleanup):  Return a const SegmentReader and tediously constify all SegmentBuilder
+        //   pointers throughout the codebase.
+        return const_cast<SegmentReader*>(kj::implicitCast<const SegmentReader*>(
+            segmentState->builders[id.value - 1].get()));
       }
     }
     return nullptr;

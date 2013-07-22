@@ -65,7 +65,7 @@ _::StructReader MessageReader::getRootInternal() {
 MessageBuilder::MessageBuilder(): allocatedArena(false) {}
 MessageBuilder::~MessageBuilder() noexcept(false) {
   if (allocatedArena) {
-    arena()->~BuilderArena();
+    kj::dtor(*arena());
   }
 }
 
@@ -74,19 +74,17 @@ _::SegmentBuilder* MessageBuilder::getRootSegment() {
     return arena()->getSegment(_::SegmentId(0));
   } else {
     static_assert(sizeof(_::BuilderArena) <= sizeof(arenaSpace),
-        "arenaSpace is too small to hold a BuilderArena.  Please increase it.  This will break "
-        "ABI compatibility.");
-    new(arena()) _::BuilderArena(this);
+        "arenaSpace is too small to hold a BuilderArena.  Please increase it.");
+    kj::ctor(*arena(), this);
     allocatedArena = true;
 
-    WordCount ptrSize = 1 * POINTERS * WORDS_PER_POINTER;
-    _::SegmentBuilder* segment = arena()->getSegmentWithAvailable(ptrSize);
-    KJ_ASSERT(segment->getSegmentId() == _::SegmentId(0),
+    auto allocation = arena()->allocate(POINTER_SIZE_IN_WORDS);
+
+    KJ_ASSERT(allocation.segment->getSegmentId() == _::SegmentId(0),
         "First allocated word of new arena was not in segment ID 0.");
-    word* location = segment->allocate(ptrSize);
-    KJ_ASSERT(location == segment->getPtrUnchecked(0 * WORDS),
+    KJ_ASSERT(allocation.words == allocation.segment->getPtrUnchecked(0 * WORDS),
         "First allocated word of new arena was not the first word in its segment.");
-    return segment;
+    return allocation.segment;
   }
 }
 

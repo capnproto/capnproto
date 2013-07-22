@@ -748,14 +748,14 @@ struct Orphanage::GetInnerBuilder<DynamicList, Kind::UNKNOWN> {
 
 template <>
 inline Orphan<DynamicStruct> Orphanage::newOrphanCopy<DynamicStruct::Reader>(
-    const DynamicStruct::Reader& copyFrom) {
+    const DynamicStruct::Reader& copyFrom) const {
   return Orphan<DynamicStruct>(
       copyFrom.getSchema(), _::OrphanBuilder::copy(arena, copyFrom.reader));
 }
 
 template <>
 inline Orphan<DynamicList> Orphanage::newOrphanCopy<DynamicList::Reader>(
-    const DynamicList::Reader& copyFrom) {
+    const DynamicList::Reader& copyFrom) const {
   return Orphan<DynamicList>(copyFrom.getSchema(), _::OrphanBuilder::copy(arena, copyFrom.reader));
 }
 

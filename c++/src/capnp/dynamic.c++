@@ -1559,12 +1559,12 @@ DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::init(
 
 // -------------------------------------------------------------------
 
-Orphan<DynamicStruct> Orphanage::newOrphan(StructSchema schema) {
+Orphan<DynamicStruct> Orphanage::newOrphan(StructSchema schema) const {
   return Orphan<DynamicStruct>(
       schema, _::OrphanBuilder::initStruct(arena, structSizeFromSchema(schema)));
 }
 
-Orphan<DynamicList> Orphanage::newOrphan(ListSchema schema, uint size) {
+Orphan<DynamicList> Orphanage::newOrphan(ListSchema schema, uint size) const {
   if (schema.whichElementType() == schema::Type::Body::STRUCT_TYPE) {
     return Orphan<DynamicList>(schema, _::OrphanBuilder::initStructList(
         arena, size * ELEMENTS, structSizeFromSchema(schema.getStructElementType())));

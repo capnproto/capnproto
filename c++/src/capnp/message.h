@@ -23,6 +23,7 @@
 
 #include <kj/common.h>
 #include <kj/memory.h>
+#include <kj/mutex.h>
 #include "common.h"
 #include "layout.h"
 
@@ -78,6 +79,16 @@ struct ReaderOptions {
 };
 
 class MessageReader {
+  // Abstract interface for an object used to read a Cap'n Proto message.  Subclasses of
+  // MessageReader are responsible for reading the raw, flat message content.  Callers should
+  // usually call `messageReader.getRoot<MyStructType>()` to get a `MyStructType::Reader`
+  // representing the root of the message, then use that to traverse the message content.
+  //
+  // Some common subclasses of `MessageReader` include `SegmentArrayMessageReader`, whose
+  // constructor accepts pointers to the raw data, and `StreamFdMessageReader` (from
+  // `serialize.h`), which reads the message from a file descriptor.  One might implement other
+  // subclasses to handle things like reading from shared memory segments, mmap()ed files, etc.
+
 public:
   MessageReader(ReaderOptions options);
   // It is suggested that subclasses take ReaderOptions as a constructor parameter, but give it a
@@ -120,6 +131,17 @@ private:
 };
 
 class MessageBuilder {
+  // Abstract interface for an object used to allocate and build a message.  Subclasses of
+  // MessageBuilder are responsible for allocating the space in which the message will be written.
+  // The most common subclass is `MallocMessageBuilder`, but other subclasses may be used to do
+  // tricky things like allocate messages in shared memory or mmap()ed files.
+  //
+  // Creating a new message ususually means allocating a new MessageBuilder (ideally on the stack)
+  // and then calling `messageBuilder.initRoot<MyStructType>()` to get a `MyStructType::Builder`.
+  // That, in turn, can be used to fill in the message content.  When done, you can call
+  // `messageBuilder.getSegmentsForOutput()` to get a list of flat data arrays containing the
+  // message.
+
 public:
   MessageBuilder();
   virtual ~MessageBuilder() noexcept(false);
@@ -129,6 +151,9 @@ public:
   // this is not possible.  It is expected that this method will usually return more space than
   // requested, and the caller should use that extra space as much as possible before allocating
   // more.  The returned space remains valid at least until the MessageBuilder is destroyed.
+  //
+  // Cap'n Proto will only call this once at a time, so the subclass need not worry about
+  // thread-safety.
 
   template <typename RootType>
   typename RootType::Builder initRoot();
@@ -159,12 +184,18 @@ public:
   Orphanage getOrphanage();
 
 private:
+  void* arenaSpace[15 + sizeof(kj::MutexGuarded<void*>) / sizeof(void*)];
   // Space in which we can construct a BuilderArena.  We don't use BuilderArena directly here
   // because we don't want clients to have to #include arena.h, which itself includes a bunch of
   // big STL headers.  We don't use a pointer to a BuilderArena because that would require an
   // extra malloc on every message which could be expensive when processing small messages.
-  void* arenaSpace[15];
+
   bool allocatedArena = false;
+  // We have to initialize the arena lazily because when we do so we want to allocate the root
+  // pointer immediately, and this will allocate a segment, which requires a virtual function
+  // call on the MessageBuilder.  We can't do such a call in the constructor since the subclass
+  // isn't constructed yet.  This is kind of annoying because it means that getOrphanage() is
+  // not thread-safe, but that shouldn't be a huge deal...
 
   _::BuilderArena* arena() { return reinterpret_cast<_::BuilderArena*>(arenaSpace); }
   _::SegmentBuilder* getRootSegment();

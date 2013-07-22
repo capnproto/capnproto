@@ -89,23 +89,23 @@ public:
   // `getOrphanage()` method.
 
   template <typename RootType>
-  Orphan<RootType> newOrphan();
+  Orphan<RootType> newOrphan() const;
   // Allocate a new orphaned struct.
 
   template <typename RootType>
-  Orphan<RootType> newOrphan(uint size);
+  Orphan<RootType> newOrphan(uint size) const;
   // Allocate a new orphaned list or blob.
 
-  Orphan<DynamicStruct> newOrphan(StructSchema schema);
+  Orphan<DynamicStruct> newOrphan(StructSchema schema) const;
   // Dynamically create an orphan struct with the given schema.  You must
   // #include <capnp/dynamic.h> to use this.
 
-  Orphan<DynamicList> newOrphan(ListSchema schema, uint size);
+  Orphan<DynamicList> newOrphan(ListSchema schema, uint size) const;
   // Dynamically create an orphan list with the given schema.  You must #include <capnp/dynamic.h>
   // to use this.
 
   template <typename Reader>
-  Orphan<FromReader<Reader>> newOrphanCopy(const Reader& copyFrom);
+  Orphan<FromReader<Reader>> newOrphanCopy(const Reader& copyFrom) const;
   // Allocate a new orphaned object (struct, list, or blob) and initialize it as a copy of the
   // given object.
 
@@ -214,7 +214,7 @@ Orphanage Orphanage::getForMessageContaining(BuilderType builder) {
 }
 
 template <typename RootType>
-Orphan<RootType> Orphanage::newOrphan() {
+Orphan<RootType> Orphanage::newOrphan() const {
   return Orphan<RootType>(_::OrphanBuilder::initStruct(arena, _::structSize<RootType>()));
 }
 
@@ -247,7 +247,7 @@ struct Orphanage::NewOrphanListImpl<Data> {
 };
 
 template <typename RootType>
-Orphan<RootType> Orphanage::newOrphan(uint size) {
+Orphan<RootType> Orphanage::newOrphan(uint size) const {
   return Orphan<RootType>(NewOrphanListImpl<RootType>::apply(arena, size));
 }
 
@@ -273,7 +273,7 @@ struct Orphanage::GetInnerReader<T, Kind::BLOB> {
 };
 
 template <typename Reader>
-Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(const Reader& copyFrom) {
+Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(const Reader& copyFrom) const {
   return Orphan<FromReader<Reader>>(_::OrphanBuilder::copy(
       arena, GetInnerReader<FromReader<Reader>>::apply(copyFrom)));
 }

@@ -23,6 +23,7 @@
 
 #include <capnp/test-import.capnp.h>
 #include "message.h"
+#include <kj/thread.h>
 #include <kj/debug.h>
 #include <gtest/gtest.h>
 #include "test-util.h"
@@ -1348,6 +1349,54 @@ TEST(Encoding, Has) {
   EXPECT_TRUE(root.asReader().hasDataField());
   EXPECT_TRUE(root.asReader().hasStructField());
   EXPECT_TRUE(root.asReader().hasInt32List());
+}
+
+TEST(Encoding, Threads) {
+  // Use fixed-size segments so that many segments are allocated during the test.
+  MallocMessageBuilder message(1024, AllocationStrategy::FIXED_SIZE);
+
+  kj::MutexGuarded<Orphanage> orphanage(message.getOrphanage());
+
+  auto outerLock = orphanage.lockExclusive();
+
+  auto threadFunc = [&]() {
+    int dummy;
+    uint64_t me = reinterpret_cast<uintptr_t>(&dummy);
+
+    {
+      // Make sure all threads start at the same time.
+      auto lock = orphanage.lockShared();
+
+      // Allocate space for a list.  This will always end up allocating a new segment.
+      auto list = lock->newOrphan<List<List<uint64_t>>>(10000);
+      auto builder = list.get();
+
+      // Allocate a bunch of smaller lists and initialize them to values specific to this thread.
+      for (uint i = 0; i < builder.size(); i++) {
+        builder.set(i, {me, me + 1, me + 2, me + 3});
+      }
+
+      // Check that none of the values were corrupted.
+      for (auto item: list.getReader()) {
+        ASSERT_EQ(4, item.size());
+        EXPECT_EQ(me, item[0]);
+        EXPECT_EQ(me + 1, item[1]);
+        EXPECT_EQ(me + 2, item[2]);
+        EXPECT_EQ(me + 3, item[3]);
+      }
+    }
+  };
+
+  kj::Thread thread1(threadFunc);
+  kj::Thread thread2(threadFunc);
+  kj::Thread thread3(threadFunc);
+  kj::Thread thread4(threadFunc);
+
+  usleep(10000);
+  auto releaseLock = kj::mv(outerLock);
+
+  // On the way out, we'll release the lock, thus allowing the threads to start, then we'll join
+  // each thread, thus waiting for them all to complete.
 }
 
 }  // namespace
