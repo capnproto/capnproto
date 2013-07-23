@@ -200,7 +200,6 @@ capnp_test_SOURCES =                                           \
   src/kj/units-test.c++                                        \
   src/kj/tuple-test.c++                                        \
   src/kj/mutex-test.c++                                        \
-  src/kj/thread-test.c++                                       \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \
   src/capnp/blob-test.c++                                      \

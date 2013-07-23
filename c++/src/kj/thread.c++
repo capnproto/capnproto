@@ -39,7 +39,7 @@ Thread::Thread(void* (*run)(void*), void (*deleteArg)(void*), void* arg) {
 }
 
 Thread::~Thread() {
-  KJ_ASSERT(pthread_join(threadId, nullptr) == 0);
+  KJ_ASSERT(pthread_join(*reinterpret_cast<pthread_t*>(&threadId), nullptr) == 0);
 }
 
 }  // namespace kj
