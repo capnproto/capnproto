@@ -57,10 +57,27 @@ TEST(Mutex, MutexGuarded) {
   {
     auto rlock1 = value.lockShared();
 
+    {
+      auto rlock2 = value.lockShared();
+      EXPECT_EQ(789, *rlock2);
+      auto rlock3 = value.lockShared();
+      EXPECT_EQ(789, *rlock3);
+      auto rlock4 = value.lockShared();
+      EXPECT_EQ(789, *rlock4);
+    }
+
     Thread thread2([&]() {
       Locked<uint> threadLock = value.lockExclusive();
       *threadLock = 321;
     });
+
+#if KJ_USE_FUTEX
+    // So, it turns out that pthread_rwlock on BSD "prioritizes" readers over writers.  The result
+    // is that if one thread tries to take multiple read locks, but another thread happens to
+    // request a write lock it between, you get a deadlock.  This seems to contradict the man pages
+    // and common sense, but this is how it is.  The futex-based implementation doesn't currently
+    // have this problem because it does not prioritize writers.  Perhaps it will in the future,
+    // but we'll leave this test here until then to make sure we notice the change.
 
     delay();
     EXPECT_EQ(789, *rlock1);
@@ -73,6 +90,7 @@ TEST(Mutex, MutexGuarded) {
       auto rlock4 = value.lockShared();
       EXPECT_EQ(789, *rlock4);
     }
+#endif
 
     delay();
     EXPECT_EQ(789, *rlock1);

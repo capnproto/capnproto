@@ -174,7 +174,14 @@ class MutexGuarded {
   // An object of type T, guarded by a mutex.  In order to access the object, you must lock it.
   //
   // Write locks are not "recursive" -- trying to lock again in a thread that already holds a lock
-  // will deadlock.  If you think you need recursive locks, you are wrong.  Get over it.
+  // will deadlock.  Recursive write locks are usually a sign of bad design.
+  //
+  // Unfortunately, **READ LOCKS ARE NOT RECURSIVE** either.  Common sense says they should be.
+  // But on many operating systems (BSD, OSX), recursively read-locking a pthread_rwlock is
+  // actually unsafe.  The problem is that writers are "prioritized" over readers, so a read lock
+  // request will block if any write lock requests are outstanding.  So, if thread A takes a read
+  // lock, thread B requests a write lock (and starts waiting), and then thread A tries to take
+  // another read lock recursively, the result is deadlock.
 
 public:
   template <typename... Params>
