@@ -26,11 +26,15 @@
 
 #include "memory.h"
 
-// For now, we use pthreads.
-// TODO(someday):  On Linux, use raw futexes.  pthreads are bloated with optional features and
-//   debugging bookkeeping that aren't worth the cost.  A mutex should be four bytes, not forty,
-//   and uncontended operations should be entirely inline!
+#if __linux__ && !defined(KJ_FUTEX)
+#define KJ_USE_FUTEX 1
+#endif
+
+#if !KJ_USE_FUTEX
+// On Linux we use futex.  On other platforms we wrap pthreads.
+// TODO(someday):  Write efficient low-level locking primitives for other platforms.
 #include <pthread.h>
+#endif
 
 namespace kj {
 
@@ -56,15 +60,33 @@ public:
   void unlock(Exclusivity exclusivity);
 
 private:
+#if KJ_USE_FUTEX
+  uint futex;
+  // bit 31 (msb) = set if exclusive lock held
+  // bit 30 (msb) = set if threads are waiting for exclusive lock
+  // bits 0-29 = count of readers; If an exclusive lock is held, this is the count of threads
+  //   waiting for a read lock, otherwise it is the count of threads that currently hold a read
+  //   lock.
+
+  static constexpr uint EXCLUSIVE_HELD = 1u << 31;
+  static constexpr uint EXCLUSIVE_REQUESTED = 1u << 30;
+  static constexpr uint SHARED_COUNT_MASK = EXCLUSIVE_REQUESTED - 1;
+
+#else
   mutable pthread_rwlock_t mutex;
+#endif
 };
 
 class Once {
   // Internal implementation details.  See `Lazy<T>`.
 
 public:
+#if KJ_USE_FUTEX
+  inline Once(): futex(UNINITIALIZED) {}
+#else
   Once();
   ~Once();
+#endif
   KJ_DISALLOW_COPY(Once);
 
   class Initializer {
@@ -76,12 +98,26 @@ public:
 
   inline bool isInitialized() noexcept {
     // Fast path check to see if runOnce() would simply return immediately.
+#if KJ_USE_FUTEX
+    return __atomic_load_n(&futex, __ATOMIC_ACQUIRE) == INITIALIZED;
+#else
     return __atomic_load_n(&initialized, __ATOMIC_ACQUIRE);
+#endif
   }
 
 private:
+#if KJ_USE_FUTEX
+  uint futex;
+
+  static constexpr uint UNINITIALIZED = 0;
+  static constexpr uint INITIALIZING = 1;
+  static constexpr uint INITIALIZING_WITH_WAITERS = 2;
+  static constexpr uint INITIALIZED = 3;
+
+#else
   bool initialized;
   pthread_mutex_t mutex;
+#endif
 };
 
 }  // namespace _ (private)
