@@ -151,7 +151,17 @@ struct FileNode {
   imports @0 :List(Import);
   struct Import {
     id @0 :Id;
-    # ID of the imported file.
+    # DEPRECATED:  ID of the imported file.  This is no longer filled in because it is hostile to
+    # lazy importing:  since this import list appears in the FileNode, and since the FileNode must
+    # necessarily be cosntructed if any schemas in the file are used, the implication of listing
+    # import IDs here is that if a schema file is used at all, all of its imports must be parsed,
+    # just to get their IDs.  We'd much rather delay parsing a file until something inside it is
+    # actually used.
+    #
+    # In any case, this import list's main reason for existing is to make it easy to generate
+    # the appropriate #include statements in C++.  The IDs of files aren't needed for that.
+    #
+    # TODO(someday):  Perhaps provide an alternative way to identify the remote file.
 
     name @1 :Text;
     # Name which *this* file used to refer to the foreign file.  This may be a relative name.
@@ -197,6 +207,11 @@ struct StructNode {
     name @0 :Text;
 
     ordinal @1 :UInt16;
+    # For fields, the ordinal number.  For unions, if an explicit ordinal was given, that number.
+    # Otherwise, for unions and groups, this is the ordinal of the lowest-numbered field in the
+    # union/group.
+    #
+    # TODO(someday):  When revamping the meta-schema, move this into Field.
 
     codeOrder @2 :UInt16;
     # Indicates where this member appeared in the code, relative to other members.
@@ -214,6 +229,7 @@ struct StructNode {
 
       fieldMember @5 :Field;
       unionMember @6 :Union;
+      groupMember @7 :Group;
     }
   }
 
@@ -235,6 +251,10 @@ struct StructNode {
     # Fields of this union, ordered by ordinal.  Currently all members are fields, but
     # consumers should skip member types that they don't understand.  The first member in this list
     # gets discriminant value zero, the next gets one, and so on.
+  }
+
+  struct Group {
+    members @0 :List(Member);
   }
 }
 

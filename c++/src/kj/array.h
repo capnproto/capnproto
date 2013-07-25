@@ -325,10 +325,10 @@ public:
   }
 
   template <typename... Params>
-  void add(Params&&... params) {
+  T& add(Params&&... params) {
     KJ_IREQUIRE(pos < endPtr, "Added too many elements to ArrayBuilder.");
     ctor(*pos, kj::fwd<Params>(params)...);
-    ++pos;
+    return *pos++;
   }
 
   template <typename Container>

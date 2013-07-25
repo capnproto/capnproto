@@ -31,7 +31,7 @@ namespace {
 
 class TestFailingErrorReporter: public ErrorReporter {
 public:
-  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
+  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) const override {
     ADD_FAILURE() << "Parse failed: (" << startByte << "-" << endByte << ") " << message.cStr();
   }
 };

@@ -70,9 +70,9 @@ public:
   }
 
   template <typename... Params>
-  inline void add(Params&&... params) {
+  inline T& add(Params&&... params) {
     if (builder.isFull()) grow();
-    builder.add(kj::fwd<Params>(params)...);
+    return builder.add(kj::fwd<Params>(params)...);
   }
 
   template <typename Iterator>

@@ -34,10 +34,18 @@ class ErrorReporter {
 public:
   virtual ~ErrorReporter() noexcept(false);
 
-  virtual void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) = 0;
+  virtual void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) const = 0;
   // Report an error at the given location in the input text.  `startByte` and `endByte` indicate
   // the span of text that is erroneous.  They may be equal, in which case the parser was only
   // able to identify where the error begins, not where it ends.
+
+  template <typename T>
+  inline void addErrorOn(T&& decl, kj::StringPtr message) const {
+    // Works for any `T` that defines `getStartByte()` and `getEndByte()` methods, which many
+    // of the Cap'n Proto types defined in `grammar.capnp` do.
+
+    addError(decl.getStartByte(), decl.getEndByte(), message);
+  }
 };
 
 }  // namespace compiler

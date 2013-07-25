@@ -57,6 +57,7 @@ void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
   kj::Vector<Orphan<Declaration::AnnotationApplication>> annotations;
 
   auto fileDecl = result.getRoot();
+  fileDecl.getBody().initFileDecl();
 
   for (auto statement: statements) {
     KJ_IF_MAYBE(decl, parser.parseStatement(statement, parser.getParsers().fileLevelDecl)) {
@@ -556,13 +557,13 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
   // -----------------------------------------------------------------
 
   parsers.usingDecl = arena.copy(p::transform(
-      p::sequence(keyword("using"), identifier, op("="), parsers.typeExpression),
-      [this](Located<Text::Reader>&& name, Orphan<TypeExpression>&& type) -> DeclParserResult {
+      p::sequence(keyword("using"), identifier, op("="), parsers.declName),
+      [this](Located<Text::Reader>&& name, Orphan<DeclName>&& target) -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
         auto builder = decl.get();
         name.copyTo(builder.initName());
         // no id, no annotations for using decl
-        builder.getBody().initUsingDecl().adoptTarget(kj::mv(type));
+        builder.getBody().initUsingDecl().adoptTarget(kj::mv(target));
         return DeclParserResult(kj::mv(decl));
       }));
 

@@ -139,6 +139,7 @@ struct Declaration {
   docComment @20 :Text;
 
   body @6 union {
+    fileDecl @24 :File;
     usingDecl @7 :Using;
     constDecl @8 :Const;
     enumDecl @9 :Enum;
@@ -154,10 +155,38 @@ struct Declaration {
     nakedId @21 :LocatedInteger;
     nakedAnnotation @22 :AnnotationApplication;
     # A floating UID or annotation (allowed at the file top level).
+
+    # The following declaration types are not produced by the parser, but are declared here
+    # so that the compiler can handle symbol name lookups more uniformly.
+    #
+    # New union members added here will magically become visible in the global scope.
+    # "builtinFoo" becomes visible as "Foo", while "builtinFooValue" becomes visible as "foo".
+    builtinVoid @25 :Void;
+    builtinBool @26 :Void;
+    builtinInt8 @27 :Void;
+    builtinInt16 @28 :Void;
+    builtinInt32 @29 :Void;
+    builtinInt64 @30 :Void;
+    builtinUInt8 @31 :Void;
+    builtinUInt16 @32 :Void;
+    builtinUInt32 @33 :Void;
+    builtinUInt64 @34 :Void;
+    builtinFloat32 @35 :Void;
+    builtinFloat64 @36 :Void;
+    builtinText @37 :Void;
+    builtinData @38 :Void;
+    builtinList @39 :Void;
+    builtinObject @40 :Void;
+
+    builtinTrueValue @41 :Void;
+    builtinFalseValue @42 :Void;
+    builtinVoidValue @43 :Void;
   }
 
+  struct File {}
+
   struct Using {
-    target @0 :TypeExpression;
+    target @0 :DeclName;
   }
 
   struct Const {

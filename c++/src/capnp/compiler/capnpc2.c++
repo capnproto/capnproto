@@ -31,10 +31,10 @@
 #include "../message.h"
 #include <iostream>
 
-class CoutErrorReporter: public capnp::compiler::ErrorReporter {
+class CerrErrorReporter: public capnp::compiler::ErrorReporter {
 public:
-  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
-    std::cout << "input:" << startByte << "-" << endByte << ": " << message.cStr() << std::endl;
+  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) const override {
+    std::cerr << "input:" << startByte << "-" << endByte << ": " << message.cStr() << std::endl;
   }
 };
 
@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
     input.addAll(buffer, buffer + n);
   }
 
-  CoutErrorReporter errorReporter;
+  CerrErrorReporter errorReporter;
 
   std::cout << "=========================================================================\n"
             << "lex\n"
