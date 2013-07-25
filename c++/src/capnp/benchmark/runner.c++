@@ -434,7 +434,7 @@ int main(int argc, char* argv[]) {
       break;
     case Mode::BYTES:
       cout << "* in-memory I/O" << endl;
-      cout << "  * with client an server in the same thread" << endl;
+      cout << "  * with client and server in the same thread" << endl;
       break;
     case Mode::PIPE_SYNC:
       cout << "* pipe I/O" << endl;

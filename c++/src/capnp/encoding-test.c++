@@ -737,7 +737,7 @@ TEST(Encoding, UpgradeStructInBuilder) {
 TEST(Encoding, UpgradeStructInBuilderMultiSegment) {
   // Exactly like the previous test, except that we force multiple segments.  Since we force a
   // separate segment for every object, every pointer is a far pointer, and far pointers are easily
-  // transferred, so this is acutally not such a complicated case.
+  // transferred, so this is actually not such a complicated case.
 
   MallocMessageBuilder builder(0, AllocationStrategy::FIXED_SIZE);
   auto root = builder.initRoot<test::TestObject>();
