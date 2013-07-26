@@ -40,6 +40,10 @@ struct Node {
   #
   # (On Zooko's triangle, this is the node's nickname.)
 
+  displayNamePrefixLength @12 :UInt32;
+  # If you want a shorter version of `displayName` (just naming this node, without its surrounding
+  # scope), chop off this many characters from the beginning of `displayName`.
+
   scopeId @2 :Id = 0;
   # ID of the lexical parent node.  Typically, the scope node will have a NestedNode pointing back
   # at this node, but robust code should avoid relying on this.  `scopeId` is zero if the node has
@@ -109,6 +113,7 @@ struct Value {
 
   body @0 union {
     # Note ordinals 1 and 10 are intentionally swapped to improve union layout.
+    # TODO:  Make it 2 and 10 that are swapped instead so that voidValue is still default?
     voidValue @10 :Void;
     boolValue @2 :Bool;
     int8Value @3 :Int8;

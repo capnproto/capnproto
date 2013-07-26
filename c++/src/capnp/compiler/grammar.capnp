@@ -95,7 +95,7 @@ struct ValueExpression {
     negativeInt @3 :UInt64;
     float @4 :Float64;
     string @5 :Text;
-    identifier @6 :Text;
+    name @6 :DeclName;
     list @7 :List(ValueExpression);
     structValue @8 :List(FieldAssignment);
     unionValue @9 :FieldAssignment;
@@ -160,7 +160,7 @@ struct Declaration {
     # so that the compiler can handle symbol name lookups more uniformly.
     #
     # New union members added here will magically become visible in the global scope.
-    # "builtinFoo" becomes visible as "Foo", while "builtinFooValue" becomes visible as "foo".
+    # E.g. "builtinFoo" becomes visible as "Foo".
     builtinVoid @25 :Void;
     builtinBool @26 :Void;
     builtinInt8 @27 :Void;
@@ -177,10 +177,6 @@ struct Declaration {
     builtinData @38 :Void;
     builtinList @39 :Void;
     builtinObject @40 :Void;
-
-    builtinTrueValue @41 :Void;
-    builtinFalseValue @42 :Void;
-    builtinVoidValue @43 :Void;
   }
 
   struct File {}

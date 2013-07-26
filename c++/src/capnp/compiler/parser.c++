@@ -28,6 +28,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <limits>
 
 namespace capnp {
 namespace compiler {
@@ -299,6 +300,15 @@ inline Declaration::Builder initMemberDecl(
   return builder;
 }
 
+template <typename BuilderType>
+void initLocation(kj::parse::Span<List<Token>::Reader::Iterator> location,
+                  BuilderType builder) {
+  if (location.begin() < location.end()) {
+    builder.setStartByte(location.begin()->getStartByte());
+    builder.setEndByte((location.end() - 1)->getEndByte());
+  }
+}
+
 }  // namespace
 
 // =======================================================================================
@@ -336,10 +346,11 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
         return kj::mv(result);
       }));
 
-  parsers.typeExpression = arena.copy(p::transform(
+  parsers.typeExpression = arena.copy(p::transformWithLocation(
       p::sequence(parsers.declName, p::optional(
           parenthesizedList(parsers.typeExpression, errorReporter))),
-      [this](Orphan<DeclName>&& name,
+      [this](kj::parse::Span<List<Token>::Reader::Iterator> location,
+             Orphan<DeclName>&& name,
              kj::Maybe<Located<kj::Array<kj::Maybe<Orphan<TypeExpression>>>>>&& params)
              -> Orphan<TypeExpression> {
         auto result = orphanage.newOrphan<TypeExpression>();
@@ -356,6 +367,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
             }
           }
         }
+        initLocation(location, builder);
         return result;
       }));
 
@@ -451,6 +463,15 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
             value.copyLocationTo(builder);
             return result;
           }),
+      p::transformWithLocation(p::sequence(op("-"), keyword("inf")),
+          [this](kj::parse::Span<List<Token>::Reader::Iterator> location)
+              -> Orphan<ValueExpression> {
+            auto result = orphanage.newOrphan<ValueExpression>();
+            auto builder = result.get();
+            builder.getBody().setFloat(-std::numeric_limits<double>::infinity());
+            initLocation(location, builder);
+            return result;
+          }),
       p::transform(stringLiteral,
           [this](Located<Text::Reader>&& value) -> Orphan<ValueExpression> {
             auto result = orphanage.newOrphan<ValueExpression>();
@@ -474,12 +495,13 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
 
             return result;
           }),
-      p::transform(identifier,
-          [this](Located<Text::Reader>&& value) -> Orphan<ValueExpression> {
+      p::transformWithLocation(parsers.declName,
+          [this](kj::parse::Span<List<Token>::Reader::Iterator> location,
+                 Orphan<DeclName>&& value) -> Orphan<ValueExpression> {
             auto result = orphanage.newOrphan<ValueExpression>();
             auto builder = result.get();
-            builder.getBody().setIdentifier(value.value);
-            value.copyLocationTo(builder);
+            builder.getBody().adoptName(kj::mv(value));
+            initLocation(location, builder);
             return result;
           }),
       p::transform(bracketedList(parsers.valueExpression, errorReporter),
@@ -518,10 +540,9 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
           })
       ));
 
-  parsers.annotation = arena.copy(p::transformWithLocation(
+  parsers.annotation = arena.copy(p::transform(
       p::sequence(op("$"), parsers.declName, p::optional(parsers.parenthesizedValueExpression)),
-      [this](kj::parse::Span<List<Token>::Reader::Iterator> location,
-             Orphan<DeclName>&& name, kj::Maybe<Orphan<ValueExpression>>&& value)
+      [this](Orphan<DeclName>&& name, kj::Maybe<Orphan<ValueExpression>>&& value)
           -> Orphan<Declaration::AnnotationApplication> {
         auto result = orphanage.newOrphan<Declaration::AnnotationApplication>();
         auto builder = result.get();
