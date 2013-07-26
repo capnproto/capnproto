@@ -138,19 +138,34 @@ private:
 
   void compileBootstrapValue(ValueExpression::Reader source, schema::Type::Reader type,
                              schema::Value::Builder target);
-  // Interprets the value expression and initializes `target` with the result.  If some parts of
-  // the value cannot be built at bootstrap time, they'll be added to `unfinishedValues`
-  // automatically for later processing.
+  // Calls compileValue() if this value should be interpreted at bootstrap time.  Otheriwse,
+  // adds the value to `unfinishedValues` for later evaluation.
 
-  void compileFinalValue(ValueExpression::Reader source,
-                         schema::Type::Reader type, schema::Value::Builder target);
-  // Compile a previously-unfinished value.  See `unfinishedValues`.
+  void compileValue(ValueExpression::Reader source, schema::Type::Reader type,
+                    schema::Value::Builder target, bool isBootstrap);
+  // Interprets the value expression and initializes `target` with the result.
+
+  class DynamicSlot;
+
+  void compileValue(ValueExpression::Reader src, DynamicSlot& dst, bool isBootstrap);
+  // Fill in `dst` (which effectively points to a struct field or list element) with the given
+  // value.
+
+  void compileValueInner(ValueExpression::Reader src, DynamicSlot& dst, bool isBootstrap);
+  // Helper for compileValue().
 
   void copyValue(schema::Value::Reader src, schema::Type::Reader srcType,
                  schema::Value::Builder dst, schema::Type::Reader dstType,
                  ValueExpression::Reader errorLocation);
   // Copy a value from one schema to another, possibly coercing the type if compatible, or
   // reporting an error otherwise.
+
+  kj::Maybe<DynamicValue::Reader> readConstant(DeclName::Reader name, bool isBootstrap,
+                                               ValueExpression::Reader errorLocation);
+  // Get the value of the given constant.
+
+  ListSchema makeListSchemaOf(schema::Type::Reader elementType);
+  // Construct a list schema representing a list of elements of the given type.
 
   Orphan<List<schema::Annotation>> compileAnnotationApplications(
       List<Declaration::AnnotationApplication>::Reader annotations,

@@ -31,7 +31,7 @@ namespace compiler {
 namespace p = kj::parse;
 
 bool lex(kj::ArrayPtr<const char> input, LexedStatements::Builder result,
-         ErrorReporter& errorReporter) {
+         const ErrorReporter& errorReporter) {
   Lexer lexer(Orphanage::getForMessageContaining(result), errorReporter);
 
   auto parser = p::sequence(lexer.getParsers().statementSequence, p::endOfInput);
@@ -53,7 +53,7 @@ bool lex(kj::ArrayPtr<const char> input, LexedStatements::Builder result,
 }
 
 bool lex(kj::ArrayPtr<const char> input, LexedTokens::Builder result,
-         ErrorReporter& errorReporter) {
+         const ErrorReporter& errorReporter) {
   Lexer lexer(Orphanage::getForMessageContaining(result), errorReporter);
 
   auto parser = p::sequence(lexer.getParsers().tokenSequence, p::endOfInput);
@@ -138,7 +138,7 @@ constexpr auto docComment = p::optional(p::sequence(
 
 }  // namespace
 
-Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporterParam)
+Lexer::Lexer(Orphanage orphanageParam, const ErrorReporter& errorReporterParam)
     : orphanage(orphanageParam), errorReporter(errorReporterParam) {
 
   // Note that because passing an lvalue to a parser constructor uses it by-referencee, it's safe

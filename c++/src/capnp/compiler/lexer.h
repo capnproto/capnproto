@@ -33,9 +33,9 @@ namespace capnp {
 namespace compiler {
 
 bool lex(kj::ArrayPtr<const char> input, LexedStatements::Builder result,
-         ErrorReporter& errorReporter);
+         const ErrorReporter& errorReporter);
 bool lex(kj::ArrayPtr<const char> input, LexedTokens::Builder result,
-         ErrorReporter& errorReporter);
+         const ErrorReporter& errorReporter);
 // Lex the given source code, placing the results in `result`.  Returns true if there
 // were no errors, false if there were.  Even when errors are present, the file may have partial
 // content which can be fed into later stages of parsing in order to find more errors.
@@ -49,7 +49,7 @@ class Lexer {
   // into your own parsers.
 
 public:
-  Lexer(Orphanage orphanage, ErrorReporter& errorReporter);
+  Lexer(Orphanage orphanage, const ErrorReporter& errorReporter);
   // `orphanage` is used to allocate Cap'n Proto message objects in the result.  `inputStart` is
   // a pointer to the beginning of the input, used to compute byte offsets.
 
@@ -91,7 +91,7 @@ public:
 
 private:
   Orphanage orphanage;
-  ErrorReporter& errorReporter;
+  const ErrorReporter& errorReporter;
   kj::Arena arena;
   Parsers parsers;
 };

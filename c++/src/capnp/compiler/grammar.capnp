@@ -69,6 +69,9 @@ struct DeclName {
 
   memberPath @4 :List(LocatedText);
   # List of `.member` suffixes.
+
+  startByte @5 :UInt32;
+  endByte @6 :UInt32;
 }
 
 struct TypeExpression {

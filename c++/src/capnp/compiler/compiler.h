@@ -32,7 +32,6 @@
 namespace capnp {
 namespace compiler {
 
-template <typename ContentType>
 class Module: public ErrorReporter {
 public:
   virtual kj::StringPtr getLocalName() const = 0;
@@ -43,7 +42,7 @@ public:
   // The name of the module file relative to the source tree.  Used to decide where to output
   // generated code and to form the `displayName` in the schema.
 
-  virtual ContentType loadContent(Orphanage orphanage) const = 0;
+  virtual Orphan<ParsedFile> loadContent(Orphanage orphanage) const = 0;
   // Loads the module content, using the given orphanage to allocate objects if necessary.
 
   virtual kj::Maybe<const Module&> importRelative(kj::StringPtr importPath) const = 0;
@@ -77,7 +76,7 @@ public:
     // use EAGER mode.
   };
 
-  Schema add(Module<ParsedFile::Reader>& module, Mode mode) const;
+  Schema add(Module& module, Mode mode) const;
   // Add a module to the Compiler, returning its root Schema object.
 
   const SchemaLoader& getLoader() const;

@@ -109,6 +109,8 @@ DynamicTypeFor<TypeIfEnum<T>> toDynamic(T&& value);
 class DynamicEnum {
 public:
   DynamicEnum() = default;
+  inline DynamicEnum(EnumSchema::Enumerant enumerant)
+      : schema(enumerant.getContainingEnum()), value(enumerant.getOrdinal()) {}
 
   template <typename T, typename = kj::EnableIf<kind<T>() == Kind::ENUM>>
   inline DynamicEnum(T&& value): DynamicEnum(toDynamic(value)) {}

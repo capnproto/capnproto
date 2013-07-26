@@ -183,7 +183,7 @@ private:
 
 class Compiler::CompiledModule {
 public:
-  CompiledModule(const Compiler::Impl& compiler, const Module<ParsedFile::Reader>& parserModule);
+  CompiledModule(const Compiler::Impl& compiler, const Module& parserModule);
 
   const Compiler::Impl& getCompiler() const { return compiler; }
 
@@ -196,7 +196,7 @@ public:
 
 private:
   const Compiler::Impl& compiler;
-  const Module<ParsedFile::Reader>& parserModule;
+  const Module& parserModule;
   MallocMessageBuilder contentArena;
   ParsedFile::Reader content;
   Node rootNode;
@@ -206,7 +206,7 @@ class Compiler::Impl: public SchemaLoader::LazyLoadCallback {
 public:
   Impl();
 
-  const CompiledModule& add(const Module<ParsedFile::Reader>& parsedModule) const;
+  const CompiledModule& add(const Module& parsedModule) const;
 
   struct Workspace {
     // Scratch space where stuff can be allocated while working.  The Workspace is available
@@ -264,7 +264,7 @@ private:
   uint workspaceRefcount = 0;
   // Count of threads that have entered the compiler.
 
-  typedef std::unordered_map<Module<ParsedFile::Reader>*, kj::Own<CompiledModule>> ModuleMap;
+  typedef std::unordered_map<Module*, kj::Own<CompiledModule>> ModuleMap;
   kj::MutexGuarded<ModuleMap> modules;
   // Map of parser modules to compiler modules.
 
@@ -627,7 +627,7 @@ Schema Compiler::Node::resolveFinalSchema(uint64_t id) const {
 // =======================================================================================
 
 Compiler::CompiledModule::CompiledModule(
-    const Compiler::Impl& compiler, const Module<ParsedFile::Reader>& parserModule)
+    const Compiler::Impl& compiler, const Module& parserModule)
     : compiler(compiler), parserModule(parserModule),
       content(parserModule.loadContent(contentArena.getOrphanage())),
       rootNode(*this) {}
@@ -635,7 +635,7 @@ Compiler::CompiledModule::CompiledModule(
 kj::Maybe<const Compiler::CompiledModule&> Compiler::CompiledModule::importRelative(
     kj::StringPtr importPath) const {
   return parserModule.importRelative(importPath).map(
-      [this](const Module<ParsedFile::Reader>& module) -> const Compiler::CompiledModule& {
+      [this](const Module& module) -> const Compiler::CompiledModule& {
         return compiler.add(module);
       });
 }

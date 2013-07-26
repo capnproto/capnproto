@@ -138,6 +138,11 @@ public:
   inline bool startsWith(const StringPtr& other) const { return StringPtr(*this).startsWith(other);}
   inline bool endsWith(const StringPtr& other) const { return StringPtr(*this).endsWith(other); }
 
+  inline StringPtr slice(size_t start) const { return StringPtr(*this).slice(start); }
+  inline ArrayPtr<const char> slice(size_t start, size_t end) const {
+    return StringPtr(*this).slice(start, end);
+  }
+
 private:
   Array<char> content;
 };
