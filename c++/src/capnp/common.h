@@ -131,7 +131,7 @@ class word { uint64_t content KJ_UNUSED_MEMBER; KJ_DISALLOW_COPY(word); public: 
 // arithmetic clearer.  Since the contents are private, the only way to access them is to first
 // reinterpret_cast to some other pointer type.
 //
-// Coping is disallowed because you should always use memcpy().  Otherwise, you may run afoul of
+// Copying is disallowed because you should always use memcpy().  Otherwise, you may run afoul of
 // aliasing rules.
 //
 // A pointer of type word* should always be word-aligned even if won't actually be dereferenced as
