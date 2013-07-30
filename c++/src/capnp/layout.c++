@@ -1585,7 +1585,7 @@ struct WireHelpers {
   }
 
   static void adopt(SegmentBuilder* segment, WirePointer* ref, OrphanBuilder&& value) {
-    KJ_REQUIRE(value.segment->getArena() == segment->getArena(),
+    KJ_REQUIRE(value.segment == nullptr || value.segment->getArena() == segment->getArena(),
                "Adopted object must live in the same message.");
 
     if (!ref->isNull()) {

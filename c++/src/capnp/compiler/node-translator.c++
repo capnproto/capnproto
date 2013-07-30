@@ -74,7 +74,9 @@ public:
       // remove it from the holes, and return its offset (as a multiple of its size).  If there
       // is no such space, returns zero (no hole can be at offset zero, as explained above).
 
-      if (holes[lgSize] != 0) {
+      if (lgSize >= KJ_ARRAY_SIZE(holes)) {
+        return nullptr;
+      } else if (holes[lgSize] != 0) {
         UIntType result = holes[lgSize];
         holes[lgSize] = 0;
         return result;
@@ -549,7 +551,7 @@ public:
     }
   };
 
-  Top& getTop();
+  Top& getTop() { return top; }
 
 private:
   Top top;
@@ -835,7 +837,7 @@ public:
                  schema::StructNode::Builder builder) {
     // Build the member-info-by-ordinal map.
     MemberInfo root(layout.getTop());
-    traverseGroup(members, root);
+    traverseTopOrGroup(members, root);
 
     // Init the root.
     root.memberSchemas = builder.initMembers(root.childCount);
@@ -872,40 +874,42 @@ public:
                 translator.compileDefaultDefaultValue(typeBuilder, fieldBuilder.initDefaultValue());
                 break;
             }
+          } else {
+            translator.compileDefaultDefaultValue(typeBuilder, fieldBuilder.initDefaultValue());
+          }
 
-            int lgSize = -1;
-            switch (typeBuilder.getBody().which()) {
-              case schema::Type::Body::VOID_TYPE: lgSize = -1; break;
-              case schema::Type::Body::BOOL_TYPE: lgSize = 0; break;
-              case schema::Type::Body::INT8_TYPE: lgSize = 3; break;
-              case schema::Type::Body::INT16_TYPE: lgSize = 4; break;
-              case schema::Type::Body::INT32_TYPE: lgSize = 5; break;
-              case schema::Type::Body::INT64_TYPE: lgSize = 6; break;
-              case schema::Type::Body::UINT8_TYPE: lgSize = 3; break;
-              case schema::Type::Body::UINT16_TYPE: lgSize = 4; break;
-              case schema::Type::Body::UINT32_TYPE: lgSize = 5; break;
-              case schema::Type::Body::UINT64_TYPE: lgSize = 6; break;
-              case schema::Type::Body::FLOAT32_TYPE: lgSize = 5; break;
-              case schema::Type::Body::FLOAT64_TYPE: lgSize = 6; break;
+          int lgSize = -1;
+          switch (typeBuilder.getBody().which()) {
+            case schema::Type::Body::VOID_TYPE: lgSize = -1; break;
+            case schema::Type::Body::BOOL_TYPE: lgSize = 0; break;
+            case schema::Type::Body::INT8_TYPE: lgSize = 3; break;
+            case schema::Type::Body::INT16_TYPE: lgSize = 4; break;
+            case schema::Type::Body::INT32_TYPE: lgSize = 5; break;
+            case schema::Type::Body::INT64_TYPE: lgSize = 6; break;
+            case schema::Type::Body::UINT8_TYPE: lgSize = 3; break;
+            case schema::Type::Body::UINT16_TYPE: lgSize = 4; break;
+            case schema::Type::Body::UINT32_TYPE: lgSize = 5; break;
+            case schema::Type::Body::UINT64_TYPE: lgSize = 6; break;
+            case schema::Type::Body::FLOAT32_TYPE: lgSize = 5; break;
+            case schema::Type::Body::FLOAT64_TYPE: lgSize = 6; break;
 
-              case schema::Type::Body::TEXT_TYPE: lgSize = -2; break;
-              case schema::Type::Body::DATA_TYPE: lgSize = -2; break;
-              case schema::Type::Body::LIST_TYPE: lgSize = -2; break;
-              case schema::Type::Body::ENUM_TYPE: lgSize = 4; break;
-              case schema::Type::Body::STRUCT_TYPE: lgSize = -2; break;
-              case schema::Type::Body::INTERFACE_TYPE: lgSize = -2; break;
-              case schema::Type::Body::OBJECT_TYPE: lgSize = -2; break;
-            }
+            case schema::Type::Body::TEXT_TYPE: lgSize = -2; break;
+            case schema::Type::Body::DATA_TYPE: lgSize = -2; break;
+            case schema::Type::Body::LIST_TYPE: lgSize = -2; break;
+            case schema::Type::Body::ENUM_TYPE: lgSize = 4; break;
+            case schema::Type::Body::STRUCT_TYPE: lgSize = -2; break;
+            case schema::Type::Body::INTERFACE_TYPE: lgSize = -2; break;
+            case schema::Type::Body::OBJECT_TYPE: lgSize = -2; break;
+          }
 
-            if (lgSize == -2) {
-              // pointer
-              fieldBuilder.setOffset(member.fieldScope->addPointer());
-            } else if (lgSize == -1) {
-              // void
-              fieldBuilder.setOffset(0);
-            } else {
-              fieldBuilder.setOffset(member.fieldScope->addData(lgSize));
-            }
+          if (lgSize == -2) {
+            // pointer
+            fieldBuilder.setOffset(member.fieldScope->addPointer());
+          } else if (lgSize == -1) {
+            // void
+            fieldBuilder.setOffset(0);
+          } else {
+            fieldBuilder.setOffset(member.fieldScope->addData(lgSize));
           }
 
           targetsFlagName = "targetsField";
@@ -1107,12 +1111,16 @@ private:
   }
 
   uint traverseGroup(List<Declaration>::Reader members, MemberInfo& parent) {
-    uint minOrdinal = std::numeric_limits<uint>::max();
-    uint codeOrder = 0;
-
     if (members.size() < 2) {
       errorReporter.addErrorOn(parent.decl, "Group must have at least two members.");
     }
+
+    return traverseTopOrGroup(members, parent);
+  }
+
+  uint traverseTopOrGroup(List<Declaration>::Reader members, MemberInfo& parent) {
+    uint minOrdinal = std::numeric_limits<uint>::max();
+    uint codeOrder = 0;
 
     for (auto member: members) {
       uint ordinal = 0;
@@ -1122,6 +1130,7 @@ private:
         case Declaration::Body::FIELD_DECL: {
           memberInfo = &arena.allocate<MemberInfo>(
               parent, codeOrder++, member, *parent.fieldScope);
+          ordinal = member.getId().getOrdinal().getValue();
           break;
         }
 
@@ -1258,13 +1267,14 @@ bool NodeTranslator::compileType(TypeExpression::Reader source, schema::Type::Bu
       if (source.getParams().size() != 0) {
         errorReporter.addErrorOn(source, kj::str(
             "'", declNameString(name), "' does not accept parameters."));
+        return false;
       }
-      return false;
     }
 
     return true;
 
   } else {
+    target.getBody().setVoidType();
     return false;
   }
 }
@@ -1305,63 +1315,59 @@ public:
       : type(FIELD), structBuilder(structBuilder), member(member) {}
   DynamicSlot(DynamicList::Builder listBuilder, uint index)
       : type(ELEMENT), listBuilder(listBuilder), index(index) {}
-  DynamicSlot(DynamicStruct::Builder structBuilder, StructSchema::Member member,
-              StructSchema structMemberSchema)
-      : type(STRUCT_OBJECT_FIELD), structBuilder(structBuilder), member(member),
-        structMemberSchema(structMemberSchema) {}
-  DynamicSlot(DynamicStruct::Builder structBuilder, StructSchema::Member member,
-              ListSchema listMemberSchema)
-      : type(LIST_OBJECT_FIELD), structBuilder(structBuilder), member(member),
-        listMemberSchema(listMemberSchema) {}
   DynamicSlot(DynamicUnion::Builder unionBuilder, StructSchema::Member unionMember)
       : type(UNION_MEMBER), unionBuilder(unionBuilder), unionMember(unionMember) {}
-
-  bool wasSet = false;
+  DynamicSlot(DynamicUnion::Builder unionBuilder, StructSchema::Member unionMember,
+              StructSchema structMemberSchema)
+      : type(STRUCT_OBJECT_UNION_MEMBER), unionBuilder(unionBuilder), unionMember(unionMember),
+        structMemberSchema(structMemberSchema) {}
+  DynamicSlot(DynamicUnion::Builder unionBuilder, StructSchema::Member unionMember,
+              ListSchema listMemberSchema)
+      : type(LIST_OBJECT_UNION_MEMBER), unionBuilder(unionBuilder), unionMember(unionMember),
+        listMemberSchema(listMemberSchema) {}
 
   DynamicStruct::Builder initStruct() {
-    wasSet = true;
     switch (type) {
       case FIELD: return structBuilder.init(member).as<DynamicStruct>();
       case ELEMENT: return listBuilder[index].as<DynamicStruct>();
-      case STRUCT_OBJECT_FIELD: return structBuilder.initObject(member, structMemberSchema);
-      case LIST_OBJECT_FIELD: KJ_FAIL_REQUIRE("Value type mismatch.");
       case UNION_MEMBER: return unionBuilder.init(unionMember).as<DynamicStruct>();
+      case STRUCT_OBJECT_UNION_MEMBER:
+        return unionBuilder.initObject(unionMember, structMemberSchema);
+      case LIST_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
     }
     KJ_FAIL_ASSERT("can't get here");
   }
 
   DynamicList::Builder initList(uint size) {
-    wasSet = true;
     switch (type) {
       case FIELD: return structBuilder.init(member, size).as<DynamicList>();
       case ELEMENT: return listBuilder.init(index, size).as<DynamicList>();
-      case STRUCT_OBJECT_FIELD: KJ_FAIL_REQUIRE("Value type mismatch.");
-      case LIST_OBJECT_FIELD: return structBuilder.initObject(member, listMemberSchema, size);
       case UNION_MEMBER: return unionBuilder.init(unionMember, size).as<DynamicList>();
+      case STRUCT_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
+      case LIST_OBJECT_UNION_MEMBER:
+        return unionBuilder.initObject(unionMember, listMemberSchema, size);
     }
     KJ_FAIL_ASSERT("can't get here");
   }
 
   DynamicUnion::Builder getUnion() {
-    wasSet = true;
     switch (type) {
       case FIELD: return structBuilder.get(member).as<DynamicUnion>();
-      case ELEMENT: KJ_FAIL_REQUIRE("Value type mismatch.");
-      case STRUCT_OBJECT_FIELD: KJ_FAIL_REQUIRE("Value type mismatch.");
-      case LIST_OBJECT_FIELD: KJ_FAIL_REQUIRE("Value type mismatch.");
+      case ELEMENT: KJ_FAIL_REQUIRE("Type mismatch.");
       case UNION_MEMBER: return unionBuilder.init(unionMember).as<DynamicUnion>();
+      case STRUCT_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
+      case LIST_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
     }
     KJ_FAIL_ASSERT("can't get here");
   }
 
   void set(DynamicValue::Reader value) {
-    wasSet = true;
     switch (type) {
       case FIELD: return structBuilder.set(member, value);
       case ELEMENT: return listBuilder.set(index, value);
-      case STRUCT_OBJECT_FIELD: return structBuilder.set(member, value);
-      case LIST_OBJECT_FIELD: return structBuilder.set(member, value);
       case UNION_MEMBER: return unionBuilder.set(unionMember, value);
+      case STRUCT_OBJECT_UNION_MEMBER: return unionBuilder.set(unionMember, value);
+      case LIST_OBJECT_UNION_MEMBER: return unionBuilder.set(unionMember, value);
     }
     KJ_FAIL_ASSERT("can't get here");
   }
@@ -1379,16 +1385,16 @@ public:
         }
         return nullptr;
       }
-      case STRUCT_OBJECT_FIELD: return nullptr;
-      case LIST_OBJECT_FIELD: return nullptr;
       case UNION_MEMBER: return enumIdForMember(unionMember);
+      case STRUCT_OBJECT_UNION_MEMBER: return nullptr;
+      case LIST_OBJECT_UNION_MEMBER: return nullptr;
     }
     KJ_FAIL_ASSERT("can't get here");
   }
 
 private:
   enum Type {
-    FIELD, ELEMENT, STRUCT_OBJECT_FIELD, LIST_OBJECT_FIELD, UNION_MEMBER
+    FIELD, ELEMENT, UNION_MEMBER, STRUCT_OBJECT_UNION_MEMBER, LIST_OBJECT_UNION_MEMBER
   };
   Type type;
 
@@ -1396,10 +1402,6 @@ private:
     struct {
       DynamicStruct::Builder structBuilder;
       StructSchema::Member member;
-      union {
-        StructSchema structMemberSchema;
-        ListSchema listMemberSchema;
-      };
     };
     struct {
       DynamicList::Builder listBuilder;
@@ -1408,6 +1410,10 @@ private:
     struct {
       DynamicUnion::Builder unionBuilder;
       StructSchema::Member unionMember;
+      union {
+        StructSchema structMemberSchema;
+        ListSchema listMemberSchema;
+      };
     };
   };
 
@@ -1451,6 +1457,10 @@ static kj::StringPtr getValueUnionMemberNameFor(schema::Type::Body::Which type) 
 void NodeTranslator::compileBootstrapValue(ValueExpression::Reader source,
                                            schema::Type::Reader type,
                                            schema::Value::Builder target) {
+  // Start by filling in a default default value so that if for whatever reason we don't end up
+  // initializing the value, this won't cause schema validation to fail.
+  compileDefaultDefaultValue(type, target);
+
   switch (type.getBody().which()) {
     case schema::Type::Body::LIST_TYPE:
     case schema::Type::Body::STRUCT_TYPE:
@@ -1471,11 +1481,24 @@ void NodeTranslator::compileValue(ValueExpression::Reader source, schema::Type::
   auto valueUnion = toDynamic(target).get("body").as<DynamicUnion>();
   auto member = valueUnion.getSchema().getMemberByName(
       getValueUnionMemberNameFor(type.getBody().which()));
-  DynamicSlot slot(valueUnion, member);
-  compileValue(source, slot, isBootstrap);
-  if (!slot.wasSet) {
-    // An error should have been reported already.  Initialize to a reasonable default.
-    compileDefaultDefaultValue(type, target);
+  switch (type.getBody().which()) {
+    case schema::Type::Body::LIST_TYPE:
+      KJ_IF_MAYBE(listSchema, makeListSchemaOf(type.getBody().getListType())) {
+        DynamicSlot slot(valueUnion, member, *listSchema);
+        compileValue(source, slot, isBootstrap);
+      }
+      break;
+    case schema::Type::Body::STRUCT_TYPE:
+      KJ_IF_MAYBE(structSchema, resolver.resolveMaybeBootstrapSchema(
+          type.getBody().getStructType())) {
+        DynamicSlot slot(valueUnion, member, structSchema->asStruct());
+        compileValue(source, slot, isBootstrap);
+      }
+      break;
+    default:
+      DynamicSlot slot(valueUnion, member);
+      compileValue(source, slot, isBootstrap);
+      break;
   }
 }
 
@@ -1487,8 +1510,7 @@ void NodeTranslator::compileValue(ValueExpression::Reader src, DynamicSlot& dst,
   //   way to test for type compatibility without throwing.
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions(
       [&]() { compileValueInner(src, dst, isBootstrap); })) {
-    errorReporter.addErrorOn(src, exception->getDescription());
-    dst.wasSet = false;
+    errorReporter.addErrorOn(src, "Type mismatch.");
   }
 }
 
@@ -1499,32 +1521,45 @@ void NodeTranslator::compileValueInner(
       auto name = src.getBody().getName();
       bool isBare = name.getBase().which() == DeclName::Base::RELATIVE_NAME &&
                     name.getMemberPath().size() == 0;
+      bool wasSet = false;
       if (isBare) {
         // The name is just a bare identifier.  It may be a literal value or an enumerant.
         kj::StringPtr id = name.getBase().getRelativeName().getValue();
 
         KJ_IF_MAYBE(enumId, dst.getEnumType()) {
-          auto enumSchema = resolver.resolveMaybeBootstrapSchema(*enumId).asEnum();
-          KJ_IF_MAYBE(enumerant, enumSchema.findEnumerantByName(id)) {
-            dst.set(DynamicEnum(*enumerant));
+          KJ_IF_MAYBE(enumSchema, resolver.resolveMaybeBootstrapSchema(*enumId)) {
+            KJ_IF_MAYBE(enumerant, enumSchema->asEnum().findEnumerantByName(id)) {
+              dst.set(DynamicEnum(*enumerant));
+              wasSet = true;
+            }
+          } else {
+            // Enum type is broken.  We don't want to report a redundant error here, so just assume
+            // we would have found a matching enumerant.
+            dst.set(kj::implicitCast<uint16_t>(0));
+            wasSet = true;
           }
         } else {
           // Interpret known constant values.
           if (id == "void") {
             dst.set(Void::VOID);
+            wasSet = true;
           } else if (id == "true") {
             dst.set(true);
+            wasSet = true;
           } else if (id == "false") {
             dst.set(false);
+            wasSet = true;
           } else if (id == "nan") {
             dst.set(std::numeric_limits<double>::quiet_NaN());
+            wasSet = true;
           } else if (id == "inf") {
             dst.set(std::numeric_limits<double>::infinity());
+            wasSet = true;
           }
         }
       }
 
-      if (!dst.wasSet) {
+      if (!wasSet) {
         // Haven't resolved the name yet.  Try looking up a constant.
         KJ_IF_MAYBE(constValue, readConstant(src.getBody().getName(), isBootstrap, src)) {
           dst.set(*constValue);
@@ -1618,7 +1653,7 @@ void NodeTranslator::copyValue(schema::Value::Reader src, schema::Type::Reader s
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions(
         [&]() { dstBody.set(dstFieldName, srcBody.get()); })) {
       // Exception caught, therefore the types are not compatible.
-      errorReporter.addErrorOn(errorLocation, exception->getDescription());
+      errorReporter.addErrorOn(errorLocation, "Type mismatch.");
     }
   } else {
     KJ_FAIL_ASSERT("Didn't recognize schema::Value::Body type?");
@@ -1641,72 +1676,105 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
     //
     // We need to be very careful not to query this Schema's dependencies because if it is
     // a final schema then this query could trigger a lazy load which would deadlock.
-    Schema constSchema = isBootstrap ?
+    kj::Maybe<Schema> maybeConstSchema = isBootstrap ?
         resolver.resolveMaybeBootstrapSchema(resolved->id) :
         resolver.resolveFinalSchema(resolved->id);
-    auto constReader = constSchema.getProto().getBody().getConstNode();
-    auto constValue = toDynamic(constReader.getValue()).get("body").as<DynamicUnion>().get();
+    KJ_IF_MAYBE(constSchema, maybeConstSchema) {
+      auto constReader = constSchema->getProto().getBody().getConstNode();
+      auto constValue = toDynamic(constReader.getValue()).get("body").as<DynamicUnion>().get();
 
-    if (constValue.getType() == DynamicValue::OBJECT) {
-      // We need to assign an appropriate schema to this object.
-      DynamicObject objValue = constValue.as<DynamicObject>();
-      auto constType = constReader.getType();
-      switch (constType.getBody().which()) {
-        case schema::Type::Body::STRUCT_TYPE:
-          constValue = objValue.as(resolver.resolveMaybeBootstrapSchema(
-              constType.getBody().getStructType()).asStruct());
-          break;
-        case schema::Type::Body::LIST_TYPE:
-          constValue = objValue.as(makeListSchemaOf(constType.getBody().getListType()));
-          break;
-        case schema::Type::Body::OBJECT_TYPE:
-          // Fine as-is.
-          break;
-        default:
-          KJ_FAIL_ASSERT("Unrecognized Object-typed member of schema::Value::body.");
-          break;
+      if (constValue.getType() == DynamicValue::OBJECT) {
+        // We need to assign an appropriate schema to this object.
+        DynamicObject objValue = constValue.as<DynamicObject>();
+        auto constType = constReader.getType();
+        switch (constType.getBody().which()) {
+          case schema::Type::Body::STRUCT_TYPE:
+            KJ_IF_MAYBE(structSchema, resolver.resolveMaybeBootstrapSchema(
+                constType.getBody().getStructType())) {
+              constValue = objValue.as(structSchema->asStruct());
+            } else {
+              // The struct's schema is broken for reasons already reported.
+              return nullptr;
+            }
+            break;
+          case schema::Type::Body::LIST_TYPE:
+            KJ_IF_MAYBE(listSchema, makeListSchemaOf(constType.getBody().getListType())) {
+              constValue = objValue.as(*listSchema);
+            } else {
+              // The list's schema is broken for reasons already reported.
+              return nullptr;
+            }
+            break;
+          case schema::Type::Body::OBJECT_TYPE:
+            // Fine as-is.
+            break;
+          default:
+            KJ_FAIL_ASSERT("Unrecognized Object-typed member of schema::Value::body.");
+            break;
+        }
       }
-    }
 
-    if (name.getBase().which() == DeclName::Base::RELATIVE_NAME &&
-        name.getMemberPath().size() == 0) {
-      // A fully unqualified identifier looks like it might refer to a constant visible in the
-      // current scope, but if that's really what the user wanted, we want them to use a
-      // qualified name to make it more obvious.  Report an error.
-      Schema scope = resolver.resolveMaybeBootstrapSchema(constSchema.getProto().getScopeId());
-      auto scopeReader = scope.getProto();
-      kj::StringPtr parent;
-      if (scopeReader.getBody().which() == schema::Node::Body::FILE_NODE) {
-        parent = "";
-      } else {
-        parent = scopeReader.getDisplayName().slice(scopeReader.getDisplayNamePrefixLength());
+      if (name.getBase().which() == DeclName::Base::RELATIVE_NAME &&
+          name.getMemberPath().size() == 0) {
+        // A fully unqualified identifier looks like it might refer to a constant visible in the
+        // current scope, but if that's really what the user wanted, we want them to use a
+        // qualified name to make it more obvious.  Report an error.
+        KJ_IF_MAYBE(scope, resolver.resolveMaybeBootstrapSchema(
+            constSchema->getProto().getScopeId())) {
+          auto scopeReader = scope->getProto();
+          kj::StringPtr parent;
+          if (scopeReader.getBody().which() == schema::Node::Body::FILE_NODE) {
+            parent = "";
+          } else {
+            parent = scopeReader.getDisplayName().slice(scopeReader.getDisplayNamePrefixLength());
+          }
+          kj::StringPtr id = name.getBase().getRelativeName().getValue();
+
+          errorReporter.addErrorOn(errorLocation, kj::str(
+              "Constant names must be qualified to avoid confusion.  Please replace '",
+              declNameString(name), "' with '", parent, ".", id,
+              "', if that's what you intended."));
+        }
       }
-      kj::StringPtr id = name.getBase().getRelativeName().getValue();
 
-      errorReporter.addErrorOn(errorLocation, kj::str(
-          "Constant names must be qualified to avoid confusion.  Please replace '",
-          declNameString(name), "' with '", parent, ".", id,
-          "', if that's what you intended."));
+      return constValue;
+    } else {
+      // The target is a constant, but the constant's schema is broken for reasons already reported.
+      return nullptr;
     }
-
-    return constValue;
   } else {
+    // Lookup will have reported an error.
     return nullptr;
   }
 }
 
-ListSchema NodeTranslator::makeListSchemaOf(schema::Type::Reader elementType) {
+kj::Maybe<ListSchema> NodeTranslator::makeListSchemaOf(schema::Type::Reader elementType) {
   auto body = elementType.getBody();
   switch (body.which()) {
     case schema::Type::Body::ENUM_TYPE:
-      return ListSchema::of(resolver.resolveMaybeBootstrapSchema(body.getEnumType()).asEnum());
+      KJ_IF_MAYBE(enumSchema, resolver.resolveMaybeBootstrapSchema(body.getEnumType())) {
+        return ListSchema::of(enumSchema->asEnum());
+      } else {
+        return nullptr;
+      }
     case schema::Type::Body::STRUCT_TYPE:
-      return ListSchema::of(resolver.resolveMaybeBootstrapSchema(body.getStructType()).asStruct());
+      KJ_IF_MAYBE(structSchema, resolver.resolveMaybeBootstrapSchema(body.getStructType())) {
+        return ListSchema::of(structSchema->asStruct());
+      } else {
+        return nullptr;
+      }
     case schema::Type::Body::INTERFACE_TYPE:
-      return ListSchema::of(resolver.resolveMaybeBootstrapSchema(body.getInterfaceType())
-                            .asInterface());
+      KJ_IF_MAYBE(interfaceSchema, resolver.resolveMaybeBootstrapSchema(body.getInterfaceType())) {
+        return ListSchema::of(interfaceSchema->asInterface());
+      } else {
+        return nullptr;
+      }
     case schema::Type::Body::LIST_TYPE:
-      return ListSchema::of(makeListSchemaOf(body.getListType()));
+      KJ_IF_MAYBE(listSchema, makeListSchemaOf(body.getListType())) {
+        return ListSchema::of(*listSchema);
+      } else {
+        return nullptr;
+      }
     default:
       return ListSchema::of(body.which());
   }
@@ -1727,6 +1795,10 @@ Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
   for (uint i = 0; i < annotations.size(); i++) {
     Declaration::AnnotationApplication::Reader annotation = annotations[i];
     schema::Annotation::Builder annotationBuilder = builder[i];
+
+    // Set the annotation's value to void in case we fail to produce something better below.
+    annotationBuilder.initValue().getBody().setVoidValue();
+
     auto name = annotation.getName();
     KJ_IF_MAYBE(decl, resolver.resolve(name)) {
       if (decl->kind != Declaration::Body::ANNOTATION_DECL) {
@@ -1734,33 +1806,33 @@ Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
             "'", declNameString(name), "' is not an annotation."));
       } else {
         annotationBuilder.setId(decl->id);
-        auto node = resolver.resolveMaybeBootstrapSchema(decl->id).getProto()
-            .getBody().getAnnotationNode();
-        if (!toDynamic(node).get(targetsFlagName).as<bool>()) {
-          errorReporter.addErrorOn(name, kj::str(
-              "'", declNameString(name), "' cannot be applied to this kind of declaration."));
+        KJ_IF_MAYBE(annotationSchema, resolver.resolveMaybeBootstrapSchema(decl->id)) {
+          auto node = annotationSchema->getProto().getBody().getAnnotationNode();
+          if (!toDynamic(node).get(targetsFlagName).as<bool>()) {
+            errorReporter.addErrorOn(name, kj::str(
+                "'", declNameString(name), "' cannot be applied to this kind of declaration."));
+          }
+
+          // Interpret the value.
+          auto value = annotation.getValue();
+          switch (value.which()) {
+            case Declaration::AnnotationApplication::Value::NONE:
+              // No value, i.e. void.
+              if (node.getType().getBody().which() == schema::Type::Body::VOID_TYPE) {
+                annotationBuilder.getValue().getBody().setVoidValue();
+              } else {
+                errorReporter.addErrorOn(name, kj::str(
+                    "'", declNameString(name), "' requires a value."));
+                compileDefaultDefaultValue(node.getType(), annotationBuilder.getValue());
+              }
+              break;
+
+            case Declaration::AnnotationApplication::Value::EXPRESSION:
+              compileBootstrapValue(value.getExpression(), node.getType(),
+                                    annotationBuilder.getValue());
+              break;
+          }
         }
-
-        // Interpret the value.
-        auto value = annotation.getValue();
-        switch (value.which()) {
-          case Declaration::AnnotationApplication::Value::NONE:
-            // No value, i.e. void.
-            if (node.getType().getBody().which() == schema::Type::Body::VOID_TYPE) {
-              annotationBuilder.initValue().getBody().setVoidValue();
-            } else {
-              errorReporter.addErrorOn(name, kj::str(
-                  "'", declNameString(name), "' requires a value."));
-              compileDefaultDefaultValue(node.getType(), annotationBuilder.initValue());
-            }
-            break;
-
-          case Declaration::AnnotationApplication::Value::EXPRESSION:
-            compileBootstrapValue(value.getExpression(), node.getType(),
-                                  annotationBuilder.initValue());
-            break;
-        }
-
       }
     }
   }

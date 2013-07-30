@@ -55,7 +55,7 @@ class Compiler {
   // Cross-links separate modules (schema files) and translates them into schema nodes.
 
 public:
-  explicit Compiler();
+  Compiler();
   ~Compiler();
   KJ_DISALLOW_COPY(Compiler);
 
@@ -76,8 +76,11 @@ public:
     // use EAGER mode.
   };
 
-  Schema add(Module& module, Mode mode) const;
-  // Add a module to the Compiler, returning its root Schema object.
+  uint64_t add(Module& module, Mode mode) const;
+  // Add a module to the Compiler, returning the module's file ID.  The ID can then be used to
+  // look up the schema in the SchemaLoader returned by `getLoader()`.  However, if there were any
+  // errors while compiling (reported via `module.addError()`), then the SchemaLoader may behave as
+  // if the node doesn't exist, or may return an invalid partial Schema.
 
   const SchemaLoader& getLoader() const;
   // Get a SchemaLoader backed by this compiler.  Schema nodes will be lazily constructed as you

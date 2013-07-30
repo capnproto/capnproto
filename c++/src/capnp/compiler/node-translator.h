@@ -54,15 +54,17 @@ public:
     // Look up the given name, relative to this node, and return basic information about the
     // target.
 
-    virtual Schema resolveMaybeBootstrapSchema(uint64_t id) const = 0;
+    virtual kj::Maybe<Schema> resolveMaybeBootstrapSchema(uint64_t id) const = 0;
     // Get the schema for the given ID.  Returning either a bootstrap schema or a final schema
     // is acceptable.  Throws an exception if the id is not one that was found by calling resolve()
-    // or by traversing other schemas.
+    // or by traversing other schemas.  Returns null if the ID is recognized, but the corresponding
+    // schema node failed to be built for reasons that were already reported.
 
-    virtual Schema resolveFinalSchema(uint64_t id) const = 0;
+    virtual kj::Maybe<Schema> resolveFinalSchema(uint64_t id) const = 0;
     // Get the final schema for the given ID.  A bootstrap schema is not acceptable.  Throws an
     // exception if the id is not one that was found by calling resolve() or by traversing other
-    // schemas.
+    // schemas.  Returns null if the ID is recognized, but the corresponding schema node failed to
+    // be built for reasons that were already reported.
   };
 
   NodeTranslator(const Resolver& resolver, const ErrorReporter& errorReporter,
@@ -162,10 +164,12 @@ private:
 
   kj::Maybe<DynamicValue::Reader> readConstant(DeclName::Reader name, bool isBootstrap,
                                                ValueExpression::Reader errorLocation);
-  // Get the value of the given constant.
+  // Get the value of the given constant.  May return null if some error occurs, which will already
+  // have been reported.
 
-  ListSchema makeListSchemaOf(schema::Type::Reader elementType);
-  // Construct a list schema representing a list of elements of the given type.
+  kj::Maybe<ListSchema> makeListSchemaOf(schema::Type::Reader elementType);
+  // Construct a list schema representing a list of elements of the given type.  May return null if
+  // some error occurs, which will already have been reported.
 
   Orphan<List<schema::Annotation>> compileAnnotationApplications(
       List<Declaration::AnnotationApplication>::Reader annotations,
