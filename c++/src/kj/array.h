@@ -108,6 +108,17 @@ public:
                    size_t capacity, void (*destroyElement)(void*)) const override;
 };
 
+class NullArrayDisposer: public ArrayDisposer {
+  // An ArrayDisposer that does nothing.  Can be used to construct a fake Arrays that doesn't
+  // actually own its content.
+
+public:
+  static const NullArrayDisposer instance;
+
+  void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
+                   size_t capacity, void (*destroyElement)(void*)) const override;
+};
+
 // =======================================================================================
 // Array
 

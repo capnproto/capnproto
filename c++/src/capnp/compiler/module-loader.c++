@@ -263,7 +263,7 @@ public:
     uint startLine = findLargestElementBefore(lines, startByte);
     uint startCol = startByte - lines[startLine];
     loader.writeError(
-        kj::str(localName, ":", startLine, ":", startCol, ": error: ", message, "\n"));
+        kj::str(localName, ":", startLine + 1, ":", startCol + 1, ": error: ", message, "\n"));
   }
 
 private:
@@ -291,7 +291,7 @@ kj::Maybe<const Module&> ModuleLoader::Impl::loadModule(
     return *iter->second;
   }
 
-  if (access(canonicalLocalName.cStr(), R_OK) < 0) {
+  if (access(canonicalLocalName.cStr(), F_OK) < 0) {
     // No such file.
     return nullptr;
   }

@@ -24,6 +24,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "compiler.h"
+#include "module-loader.h"
 #include <capnp/pretty-print.h>
 #include <kj/vector.h>
 #include <kj/io.h>
@@ -31,6 +32,10 @@
 #include <kj/debug.h>
 #include "../message.h"
 #include <iostream>
+#include <kj/main.h>
+
+namespace capnp {
+namespace compiler {
 
 class DummyModule: public capnp::compiler::Module {
 public:
@@ -51,6 +56,36 @@ public:
   void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) const override {
     std::cerr << "input:" << startByte << "-" << endByte << ": " << message.cStr() << std::endl;
   }
+};
+
+class CompilerMain {
+public:
+  explicit CompilerMain(kj::ProcessContext& context)
+      : context(context), loader(STDERR_FILENO) {}
+
+  kj::MainFunc getMain() {
+    return kj::MainBuilder(
+          context, "Cap'n Proto compiler version 0.2",
+          "Compiles Cap'n Proto schema files and generates corresponding source code in one or "
+          "more languages.")
+        .expectOneOrMoreArgs("source", KJ_BIND_METHOD(*this, addSource))
+        .build();
+  }
+
+  kj::MainBuilder::Validity addSource(kj::StringPtr file) {
+    KJ_IF_MAYBE(module, loader.loadModule(file, file)) {
+      compiler.add(*module, Compiler::EAGER);
+    } else {
+      return "no such file";
+    }
+
+    return true;
+  }
+
+private:
+  kj::ProcessContext& context;
+  ModuleLoader loader;
+  Compiler compiler;
 };
 
 int main(int argc, char* argv[]) {
@@ -109,3 +144,8 @@ int main(int argc, char* argv[]) {
 
   return 0;
 }
+
+}  // namespace compiler
+}  // namespace capnp
+
+KJ_MAIN(capnp::compiler::CompilerMain);

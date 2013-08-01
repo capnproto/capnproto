@@ -84,6 +84,8 @@ public:
   inline bool startsWith(const StringPtr& other) const;
   inline bool endsWith(const StringPtr& other) const;
 
+  inline Maybe<size_t> findFirst(char c) const;
+
 private:
   inline StringPtr(ArrayPtr<const char> content): content(content) {}
 
@@ -109,6 +111,8 @@ public:
   inline String(decltype(nullptr)): content(nullptr) {}
   inline String(char* value, size_t size, const ArrayDisposer& disposer);
   // Does not copy.  `size` does not include NUL terminator, but `value` must be NUL-terminated.
+  inline explicit String(Array<char> buffer);
+  // Does not copy.  Requires `buffer` ends with `\0`.
 
   inline operator ArrayPtr<char>();
   inline operator ArrayPtr<const char>() const;
@@ -373,6 +377,15 @@ inline bool StringPtr::endsWith(const StringPtr& other) const {
       memcmp(end() - other.size(), other.content.begin(), other.size()) == 0;
 }
 
+inline Maybe<size_t> StringPtr::findFirst(char c) const {
+  const char* pos = reinterpret_cast<const char*>(memchr(content.begin(), c, size()));
+  if (pos == nullptr) {
+    return nullptr;
+  } else {
+    return pos - content.begin();
+  }
+}
+
 inline String::operator ArrayPtr<char>() {
   return content == nullptr ? ArrayPtr<char>(nullptr) : content.slice(0, content.size() - 1);
 }
@@ -402,6 +415,10 @@ inline const char* String::end() const { return content == nullptr ? nullptr : c
 inline String::String(char* value, size_t size, const ArrayDisposer& disposer)
     : content(value, size + 1, disposer) {
   KJ_IREQUIRE(value[size] == '\0', "String must be NUL-terminated.");
+}
+
+inline String::String(Array<char> buffer): content(kj::mv(buffer)) {
+  KJ_IREQUIRE(content.size() > 0 && content.back() == '\0', "String must be NUL-terminated.");
 }
 
 inline String heapString(const char* value) {

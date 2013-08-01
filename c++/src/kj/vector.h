@@ -82,6 +82,11 @@ public:
     builder.addAll(begin, end);
   }
 
+  template <typename Container>
+  inline void addAll(Container&& container) {
+    addAll(container.begin(), container.end());
+  }
+
 private:
   ArrayBuilder<T> builder;
 

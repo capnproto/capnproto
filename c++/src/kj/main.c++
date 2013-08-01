@@ -1,0 +1,685 @@
+// Copyright (c) 2013, Kenton Varda <temporal@gmail.com>
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright notice, this
+//    list of conditions and the following disclaimer.
+// 2. Redistributions in binary form must reproduce the above copyright notice,
+//    this list of conditions and the following disclaimer in the documentation
+//    and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+#include "main.h"
+#include "debug.h"
+#include "arena.h"
+#include <map>
+#include <set>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+#include <limits.h>
+
+namespace kj {
+
+// =======================================================================================
+
+TopLevelProcessContext::TopLevelProcessContext(StringPtr programName)
+    : programName(programName),
+      cleanShutdown(getenv("KJ_CLEAN_SHUTDOWN") != nullptr) {}
+
+StringPtr TopLevelProcessContext::getProgramName() {
+  return programName;
+}
+
+void TopLevelProcessContext::exit() {
+  int exitCode = hadErrors ? 1 : 0;
+  if (cleanShutdown) {
+#if KJ_NO_EXCEPTIONS
+    // This is the best we can do.
+    warning("warning: KJ_CLEAN_SHUTDOWN may not work correctly when compiled "
+            "with -fno-exceptions.");
+    ::exit(exitCode);
+#else
+    throw CleanShutdownException { exitCode };
+#endif
+  }
+  quick_exit(exitCode);
+}
+
+void TopLevelProcessContext::warning(StringPtr message) {
+  const char* pos = message.begin();
+
+  while (pos < message.end()) {
+    ssize_t n = write(STDERR_FILENO, pos, message.end() - pos);
+    if (n < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      // Apparently we can't write to stderr.  Dunno what to do.
+      return;
+    }
+    pos += n;
+  }
+  if (message.size() > 0 && message[message.size() - 1] != '\n') {
+    write(STDERR_FILENO, "\n", 1);
+  }
+}
+
+void TopLevelProcessContext::error(StringPtr message) {
+  hadErrors = true;
+  warning(message);
+}
+
+void TopLevelProcessContext::exitError(StringPtr message) {
+  error(message);
+  exit();
+}
+
+void TopLevelProcessContext::exitInfo(StringPtr message) {
+  const char* pos = message.begin();
+
+  while (pos < message.end()) {
+    ssize_t n;
+    KJ_SYSCALL(n = write(STDOUT_FILENO, pos, message.end() - pos));
+    pos += n;
+  }
+  if (message.size() > 0 && message[message.size() - 1] != '\n') {
+    write(STDOUT_FILENO, "\n", 1);
+  }
+
+  exit();
+}
+
+void TopLevelProcessContext::increaseLoggingVerbosity() {
+  // At the moment, there is only one log level that isn't enabled by default.
+  _::Debug::setLogLevel(_::Debug::Severity::INFO);
+}
+
+// =======================================================================================
+
+int runMainAndExit(ProcessContext& context, MainFunc&& func, int argc, char* argv[]) {
+#if !KJ_NO_EXCEPTIONS
+  try {
+#endif
+    KJ_ASSERT(argc > 0);
+
+    KJ_STACK_ARRAY(StringPtr, params, argc - 1, 8, 32);
+    for (int i = 1; i < argc; i++) {
+      params[i - 1] = argv[i];
+    }
+
+    KJ_IF_MAYBE(exception, runCatchingExceptions([&]() {
+      func(argv[0], params);
+    })) {
+      context.error(str(exception));
+    }
+    context.exit();
+#if !KJ_NO_EXCEPTIONS
+  } catch (const TopLevelProcessContext::CleanShutdownException& e) {
+    return e.exitCode;
+  }
+#endif
+}
+
+// =======================================================================================
+
+struct MainBuilder::Impl {
+  inline Impl(ProcessContext& context, StringPtr version,
+              StringPtr briefDescription, StringPtr extendedDescription)
+      : context(context), version(version),
+        briefDescription(briefDescription), extendedDescription(extendedDescription) {}
+
+  ProcessContext& context;
+  StringPtr version;
+  StringPtr briefDescription;
+  StringPtr extendedDescription;
+
+  Arena arena;
+
+  struct CharArrayCompare {
+    inline bool operator()(const ArrayPtr<const char>& a, const ArrayPtr<const char>& b) const {
+      int cmp = memcmp(a.begin(), b.begin(), min(a.size(), b.size()));
+      if (cmp == 0) {
+        return a.size() < b.size();
+      } else {
+        return cmp < 0;
+      }
+    }
+  };
+
+  struct Option {
+    ArrayPtr<OptionName> names;
+    bool hasArg;
+    union {
+      Function<Validity()>* func;
+      Function<Validity(StringPtr)>* funcWithArg;
+    };
+    StringPtr argTitle;
+    StringPtr helpText;
+  };
+
+  class OptionDisplayOrder;
+
+  std::map<char, Option*> shortOptions;
+  std::map<ArrayPtr<const char>, Option*, CharArrayCompare> longOptions;
+
+  struct SubCommand {
+    Function<MainFunc()> func;
+    StringPtr helpText;
+  };
+  std::map<StringPtr, SubCommand> subCommands;
+
+  struct Arg {
+    StringPtr title;
+    Function<Validity(StringPtr)> callback;
+    uint minCount;
+    uint maxCount;
+  };
+
+  Vector<Arg> args;
+
+  Maybe<Function<Validity()>> finalCallback;
+
+  Option& addOption(std::initializer_list<OptionName> names, bool hasArg, StringPtr helpText) {
+    KJ_REQUIRE(names.size() > 0, "option must have at least one name");
+
+    Option& option = arena.allocate<Option>();
+    option.names = arena.allocateArray<OptionName>(names.size());
+    uint i = 0;
+    for (auto& name: names) {
+      option.names[i++] = name;
+      if (name.isLong) {
+        KJ_REQUIRE(
+            longOptions.insert(std::make_pair(StringPtr(name.longName).asArray(), &option)).second,
+            "duplicate option", name.longName);
+      } else {
+        KJ_REQUIRE(
+            shortOptions.insert(std::make_pair(name.shortName, &option)).second,
+            "duplicate option", name.shortName);
+      }
+    }
+    option.hasArg = hasArg;
+    option.helpText = helpText;
+    return option;
+  }
+
+  Validity printVersion() {
+    context.exitInfo(version);
+    return true;
+  }
+
+  Validity increaseVerbosity() {
+    context.increaseLoggingVerbosity();
+    return true;
+  }
+};
+
+MainBuilder::MainBuilder(ProcessContext& context, StringPtr version,
+                         StringPtr briefDescription, StringPtr extendedDescription)
+    : impl(heap<Impl>(context, version, briefDescription, extendedDescription)) {
+  addOption({"verbose"}, KJ_BIND_METHOD(*impl, increaseVerbosity),
+            "Log informational messages to stderr; useful for debugging.");
+  addOption({"version"}, KJ_BIND_METHOD(*impl, printVersion),
+            "Print version information and exit.");
+}
+
+MainBuilder::~MainBuilder() noexcept(false) {}
+
+MainBuilder& MainBuilder::addOption(std::initializer_list<OptionName> names,
+                                    Function<Validity()> callback,
+                                    StringPtr helpText) {
+  impl->addOption(names, false, helpText).func = &impl->arena.copy(kj::mv(callback));
+  return *this;
+}
+
+MainBuilder& MainBuilder::addOptionWithArg(std::initializer_list<OptionName> names,
+                                           Function<Validity(StringPtr)> callback,
+                                           StringPtr argumentTitle, StringPtr helpText) {
+  auto& opt = impl->addOption(names, true, helpText);
+  opt.funcWithArg = &impl->arena.copy(kj::mv(callback));
+  opt.argTitle = argumentTitle;
+  return *this;
+}
+
+MainBuilder& MainBuilder::addSubCommand(StringPtr name, Function<MainFunc()> getSubParser,
+                                        StringPtr helpText) {
+  KJ_REQUIRE(impl->args.size() == 0, "cannot have sub-commands when expecting arguments");
+  KJ_REQUIRE(impl->finalCallback == nullptr,
+             "cannot have a final callback when accepting sub-commands");
+  KJ_REQUIRE(
+      impl->subCommands.insert(std::make_pair(
+          name, Impl::SubCommand { kj::mv(getSubParser), helpText })).second,
+      "duplicate sub-command", name);
+  return *this;
+}
+
+MainBuilder& MainBuilder::expectArg(StringPtr title, Function<Validity(StringPtr)> callback) {
+  KJ_REQUIRE(impl->subCommands.empty(), "cannot have sub-commands when expecting arguments");
+  impl->args.add(Impl::Arg { title, kj::mv(callback), 1, 1 });
+  return *this;
+}
+MainBuilder& MainBuilder::expectOptionalArg(
+    StringPtr title, Function<Validity(StringPtr)> callback) {
+  KJ_REQUIRE(impl->subCommands.empty(), "cannot have sub-commands when expecting arguments");
+  impl->args.add(Impl::Arg { title, kj::mv(callback), 0, 1 });
+  return *this;
+}
+MainBuilder& MainBuilder::expectZeroOrMoreArgs(
+    StringPtr title, Function<Validity(StringPtr)> callback) {
+  KJ_REQUIRE(impl->subCommands.empty(), "cannot have sub-commands when expecting arguments");
+  impl->args.add(Impl::Arg { title, kj::mv(callback), 0, UINT_MAX });
+  return *this;
+}
+MainBuilder& MainBuilder::expectOneOrMoreArgs(
+    StringPtr title, Function<Validity(StringPtr)> callback) {
+  KJ_REQUIRE(impl->subCommands.empty(), "cannot have sub-commands when expecting arguments");
+  impl->args.add(Impl::Arg { title, kj::mv(callback), 1, UINT_MAX });
+  return *this;
+}
+
+MainBuilder& MainBuilder::callAfterParsing(Function<Validity()> callback) {
+  KJ_REQUIRE(impl->finalCallback == nullptr, "callAfterParsing() can only be called once");
+  KJ_REQUIRE(impl->subCommands.empty(), "cannot have a final callback when accepting sub-commands");
+  impl->finalCallback = kj::mv(callback);
+  return *this;
+}
+
+class MainBuilder::MainImpl {
+public:
+  MainImpl(Own<Impl>&& impl): impl(kj::mv(impl)) {}
+
+  void operator()(StringPtr programName, ArrayPtr<const StringPtr> params);
+
+private:
+  Own<Impl> impl;
+
+  void usageError(StringPtr programName, StringPtr message) KJ_NORETURN;
+  void printHelp(StringPtr programName) KJ_NORETURN;
+  void wrapText(Vector<char>& output, StringPtr indent, StringPtr text);
+};
+
+MainFunc MainBuilder::build() {
+  return MainImpl(kj::mv(impl));
+}
+
+void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const StringPtr> params) {
+  Vector<StringPtr> arguments;
+
+  for (size_t i = 0; i < params.size(); i++) {
+    StringPtr param = params[i];
+    if (param == "--") {
+      // "--" ends option parsing.
+      arguments.addAll(params.begin() + i + 1, params.end());
+      break;
+    } else if (param.startsWith("--")) {
+      // Long option.
+      ArrayPtr<const char> name;
+      Maybe<StringPtr> maybeArg;
+      KJ_IF_MAYBE(pos, param.findFirst('=')) {
+        name = param.slice(2, *pos);
+        maybeArg = param.slice(*pos + 1);
+      } else {
+        name = param.slice(2);
+      }
+      auto iter = impl->longOptions.find(name);
+      if (iter == impl->longOptions.end()) {
+        if (param == "--help") {
+          printHelp(programName);
+        } else {
+          usageError(programName, str("--", name, ": unrecognized option"));
+        }
+      } else {
+        const Impl::Option& option = *iter->second;
+        if (option.hasArg) {
+          // Argument expected.
+          KJ_IF_MAYBE(arg, maybeArg) {
+            // "--foo=blah": "blah" is the argument.
+            KJ_IF_MAYBE(error, (*option.funcWithArg)(*arg).releaseError()) {
+              usageError(programName, str(param, ": ", *error));
+            }
+          } else if (i + 1 < params.size() && !params[i + 1].startsWith("-")) {
+            // "--foo blah": "blah" is the argument.
+            ++i;
+            KJ_IF_MAYBE(error, (*option.funcWithArg)(params[i]).releaseError()) {
+              usageError(programName, str(param, "=", params[i], ": ", *error));
+            }
+          } else {
+            usageError(programName, str("--", name, ": missing argument"));
+          }
+        } else {
+          // No argument expected.
+          if (maybeArg == nullptr) {
+            KJ_IF_MAYBE(error, (*option.func)().releaseError()) {
+              usageError(programName, str(param, ": ", *error));
+            }
+          } else {
+            usageError(programName, str("--", name, ": option does not accept an argument"));
+          }
+        }
+      }
+    } else if (param.startsWith("-")) {
+      // Short option(s).
+      for (uint j = 1; j < param.size(); j++) {
+        char c = param[j];
+        auto iter = impl->shortOptions.find(c);
+        if (iter == impl->shortOptions.end()) {
+          usageError(programName, str("-", c, ": unrecognized option"));
+        } else {
+          const Impl::Option& option = *iter->second;
+          if (option.hasArg) {
+            // Argument expected.
+            if (j + 1 < params.size()) {
+              // Rest of flag is argument.
+              StringPtr arg = param.slice(j + 1);
+              KJ_IF_MAYBE(error, (*option.funcWithArg)(arg).releaseError()) {
+                usageError(programName, str("-", c, " ", arg, ": ", *error));
+              }
+              break;
+            } else if (i + 1 < params.size() && !params[i + 1].startsWith("-")) {
+              // Next parameter is argument.
+              ++i;
+              KJ_IF_MAYBE(error, (*option.funcWithArg)(params[i]).releaseError()) {
+                usageError(programName, str("-", c, " ", params[i], ": ", *error));
+              }
+              break;
+            } else {
+              usageError(programName, str("-", c, ": missing argument"));
+            }
+          } else {
+            // No argument expected.
+            KJ_IF_MAYBE(error, (*option.func)().releaseError()) {
+              usageError(programName, str("-", c, ": ", *error));
+            }
+          }
+        }
+      }
+    } else if (!impl->subCommands.empty()) {
+      // A sub-command name.
+      auto iter = impl->subCommands.find(param);
+      if (iter == impl->subCommands.end()) {
+        MainFunc subMain = iter->second.func();
+        subMain(str(programName, ' ', param), params.slice(i + 1, params.size()));
+        return;
+      } else if (param == "help") {
+        if (i + 1 < params.size()) {
+          iter = impl->subCommands.find(params[i + 1]);
+          if (iter == impl->subCommands.end()) {
+            usageError(programName, str(params[i + 1], ": unknown command"));
+          } else {
+            // Run the sub-command with "--help" as the argument.
+            MainFunc subMain = iter->second.func();
+            StringPtr dummyArg = "--help";
+            subMain(str(programName, ' ', params[i + 1]), arrayPtr(&dummyArg, 1));
+            return;
+          }
+        } else {
+          printHelp(programName);
+        }
+      } else {
+        // Arguments are not accepted, so this is an error.
+        usageError(programName, str(param, ": unknown command"));
+      }
+    } else {
+      // Just a regular argument.
+      arguments.add(param);
+    }
+  }
+
+  // ------------------------------------
+  // Handle arguments.
+  // ------------------------------------
+
+  // Count the number of required arguments, so that we know how to distribute the optional args.
+  uint requiredArgCount = 0;
+  for (auto& argSpec: impl->args) {
+    requiredArgCount += argSpec.minCount;
+  }
+
+  // Now go through each argument spec and consume arguments with it.
+  StringPtr* argPos = arguments.begin();
+  for (auto& argSpec: impl->args) {
+    uint i = 0;
+    for (; i < argSpec.minCount; i++) {
+      if (argPos == arguments.end()) {
+        usageError(programName, str("missing argument <", argSpec.title, '>'));
+      } else {
+        KJ_IF_MAYBE(error, argSpec.callback(*argPos).releaseError()) {
+          usageError(programName, str(*argPos, ": ", *error));
+        }
+        ++argPos;
+        --requiredArgCount;
+      }
+    }
+
+    // If we have more arguments than we need, and this argument spec will accept extras, give
+    // them to it.
+    for (; i < argSpec.maxCount && arguments.end() - argPos > requiredArgCount; ++i) {
+      KJ_IF_MAYBE(error, argSpec.callback(*argPos).releaseError()) {
+        usageError(programName, str(*argPos, ": ", *error));
+      }
+      ++argPos;
+    }
+  }
+
+  // Did we consume all the arguments?
+  while (argPos < arguments.end()) {
+    usageError(programName, str(*argPos++, ": too many arguments"));
+  }
+
+  // Run the final callback, if any.
+  KJ_IF_MAYBE(f, impl->finalCallback) {
+    KJ_IF_MAYBE(error, (*f)().releaseError()) {
+      usageError(programName, *error);
+    }
+  }
+}
+
+void MainBuilder::MainImpl::usageError(StringPtr programName, StringPtr message) {
+  impl->context.exitError(kj::str(
+      programName, ": ", message,
+      "\nTry '", programName, " --help' for more information."));
+}
+
+class MainBuilder::Impl::OptionDisplayOrder {
+public:
+  bool operator()(const Option* a, const Option* b) {
+    if (a == b) return false;
+
+    char aShort = '\0';
+    char bShort = '\0';
+
+    for (auto& name: a->names) {
+      if (name.isLong) {
+        if (aShort == '\0') {
+          aShort = name.longName[0];
+        }
+      } else {
+        aShort = name.shortName;
+        break;
+      }
+    }
+    for (auto& name: b->names) {
+      if (name.isLong) {
+        if (bShort == '\0') {
+          bShort = name.longName[0];
+        }
+      } else {
+        bShort = name.shortName;
+        break;
+      }
+    }
+
+    if (aShort < bShort) return true;
+    if (aShort > bShort) return false;
+
+    StringPtr aLong;
+    StringPtr bLong;
+
+    for (auto& name: a->names) {
+      if (name.isLong) {
+        aLong = name.longName;
+        break;
+      }
+    }
+    for (auto& name: b->names) {
+      if (name.isLong) {
+        bLong = name.longName;
+        break;
+      }
+    }
+
+    return aLong < bLong;
+  }
+};
+
+void MainBuilder::MainImpl::printHelp(StringPtr programName) {
+  Vector<char> text(1024);
+
+  std::set<const Impl::Option*, Impl::OptionDisplayOrder> sortedOptions;
+
+  for (auto& entry: impl->shortOptions) {
+    sortedOptions.insert(entry.second);
+  }
+  for (auto& entry: impl->longOptions) {
+    sortedOptions.insert(entry.second);
+  }
+
+  text.addAll(str("Usage: ", programName, sortedOptions.empty() ? "" : " [<option>...]"));
+
+  if (impl->subCommands.empty()) {
+    for (auto& arg: impl->args) {
+      text.add(' ');
+      if (arg.minCount == 0) {
+        text.addAll(str("[<", arg.title, arg.maxCount > 1 ? ">...]" : ">]"));
+      } else {
+        text.addAll(str('<', arg.title, arg.maxCount > 1 ? ">..." : ">"));
+      }
+    }
+  } else {
+    text.addAll(StringPtr(" <command> [<arg>...]"));
+  }
+  text.addAll(StringPtr("\n\n"));
+
+  wrapText(text, "", impl->briefDescription);
+
+  if (!impl->subCommands.empty()) {
+    text.addAll(StringPtr("\nCommands:\n"));
+    size_t maxLen = 0;
+    for (auto& command: impl->subCommands) {
+      maxLen = kj::max(maxLen, command.first.size());
+    }
+    for (auto& command: impl->subCommands) {
+      text.addAll(StringPtr("  "));
+      text.addAll(command.first);
+      for (size_t i = command.first.size(); i < maxLen; i++) {
+        text.add(' ');
+      }
+      text.addAll(StringPtr("  "));
+      text.addAll(command.second.helpText);
+      text.add('\n');
+    }
+    text.addAll(str(
+        "\nSee '", programName, " help <command>' for more information on a specific command.\n"));
+  }
+
+  if (!sortedOptions.empty()) {
+    text.addAll(StringPtr("\nOptions:\n"));
+
+    for (auto opt: sortedOptions) {
+      text.addAll(StringPtr("    "));
+      bool isFirst = true;
+      for (auto& name: opt->names) {
+        if (isFirst) {
+          isFirst = false;
+        } else {
+          text.addAll(StringPtr(", "));
+        }
+        if (name.isLong) {
+          text.addAll(str("--", name.longName));
+          if (opt->hasArg) {
+            text.addAll(str("=<", opt->argTitle, '>'));
+          }
+        } else {
+          text.addAll(str("-", name.shortName));
+          if (opt->hasArg) {
+            text.addAll(str('<', opt->argTitle, '>'));
+          }
+        }
+      }
+      text.add('\n');
+      wrapText(text, "        ", opt->helpText);
+    }
+
+    text.addAll(StringPtr("    --help\n        Display this help text and exit.\n"));
+  }
+
+  if (impl->extendedDescription.size() > 0) {
+    text.add('\n');
+    wrapText(text, "", impl->extendedDescription);
+  }
+
+  text.add('\0');
+  impl->context.exitInfo(String(text.releaseAsArray()));
+}
+
+void MainBuilder::MainImpl::wrapText(Vector<char>& output, StringPtr indent, StringPtr text) {
+  uint width = 80 - indent.size();
+
+  while (text.size() > 0) {
+    output.addAll(indent);
+
+    KJ_IF_MAYBE(lineEnd, text.findFirst('\n')) {
+      if (*lineEnd <= width) {
+        output.addAll(text.slice(0, *lineEnd + 1));
+        text = text.slice(*lineEnd + 1);
+        continue;
+      }
+    }
+
+    if (text.size() <= width) {
+      output.addAll(text);
+      output.add('\n');
+      break;
+    }
+
+    uint wrapPos = width;
+    for (;; wrapPos--) {
+      if (wrapPos == 0) {
+        // Hmm, no good place to break words.  Just break in the middle.
+        wrapPos = width;
+        break;
+      } else if (text[wrapPos] == ' ' && text[wrapPos - 1] != ' ') {
+        // This position is a space and is preceded by a non-space.  Wrap here.
+        break;
+      }
+    }
+
+    output.addAll(text.slice(0, wrapPos));
+    output.add('\n');
+
+    // Skip spaces after the text that was printed.
+    while (text[wrapPos] == ' ') {
+      ++wrapPos;
+    }
+    if (text[wrapPos] == '\n') {
+      // Huh, apparently there were a whole bunch of spaces at the end of the line followed by a
+      // newline.  Skip the newline as well so we don't print a blank line.
+      ++wrapPos;
+    }
+    text = text.slice(wrapPos);
+  }
+}
+
+}  // namespace kj

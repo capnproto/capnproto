@@ -76,7 +76,7 @@ public:
     // use EAGER mode.
   };
 
-  uint64_t add(Module& module, Mode mode) const;
+  uint64_t add(const Module& module, Mode mode) const;
   // Add a module to the Compiler, returning the module's file ID.  The ID can then be used to
   // look up the schema in the SchemaLoader returned by `getLoader()`.  However, if there were any
   // errors while compiling (reported via `module.addError()`), then the SchemaLoader may behave as

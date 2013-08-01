@@ -1489,8 +1489,7 @@ void NodeTranslator::compileValue(ValueExpression::Reader source, schema::Type::
       }
       break;
     case schema::Type::Body::STRUCT_TYPE:
-      KJ_IF_MAYBE(structSchema, resolver.resolveMaybeBootstrapSchema(
-          type.getBody().getStructType())) {
+      KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(type.getBody().getStructType())) {
         DynamicSlot slot(valueUnion, member, structSchema->asStruct());
         compileValue(source, slot, isBootstrap);
       }
@@ -1527,7 +1526,7 @@ void NodeTranslator::compileValueInner(
         kj::StringPtr id = name.getBase().getRelativeName().getValue();
 
         KJ_IF_MAYBE(enumId, dst.getEnumType()) {
-          KJ_IF_MAYBE(enumSchema, resolver.resolveMaybeBootstrapSchema(*enumId)) {
+          KJ_IF_MAYBE(enumSchema, resolver.resolveBootstrapSchema(*enumId)) {
             KJ_IF_MAYBE(enumerant, enumSchema->asEnum().findEnumerantByName(id)) {
               dst.set(DynamicEnum(*enumerant));
               wasSet = true;
@@ -1677,7 +1676,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
     // We need to be very careful not to query this Schema's dependencies because if it is
     // a final schema then this query could trigger a lazy load which would deadlock.
     kj::Maybe<Schema> maybeConstSchema = isBootstrap ?
-        resolver.resolveMaybeBootstrapSchema(resolved->id) :
+        resolver.resolveBootstrapSchema(resolved->id) :
         resolver.resolveFinalSchema(resolved->id);
     KJ_IF_MAYBE(constSchema, maybeConstSchema) {
       auto constReader = constSchema->getProto().getBody().getConstNode();
@@ -1689,7 +1688,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
         auto constType = constReader.getType();
         switch (constType.getBody().which()) {
           case schema::Type::Body::STRUCT_TYPE:
-            KJ_IF_MAYBE(structSchema, resolver.resolveMaybeBootstrapSchema(
+            KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(
                 constType.getBody().getStructType())) {
               constValue = objValue.as(structSchema->asStruct());
             } else {
@@ -1719,7 +1718,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
         // A fully unqualified identifier looks like it might refer to a constant visible in the
         // current scope, but if that's really what the user wanted, we want them to use a
         // qualified name to make it more obvious.  Report an error.
-        KJ_IF_MAYBE(scope, resolver.resolveMaybeBootstrapSchema(
+        KJ_IF_MAYBE(scope, resolver.resolveBootstrapSchema(
             constSchema->getProto().getScopeId())) {
           auto scopeReader = scope->getProto();
           kj::StringPtr parent;
@@ -1752,19 +1751,19 @@ kj::Maybe<ListSchema> NodeTranslator::makeListSchemaOf(schema::Type::Reader elem
   auto body = elementType.getBody();
   switch (body.which()) {
     case schema::Type::Body::ENUM_TYPE:
-      KJ_IF_MAYBE(enumSchema, resolver.resolveMaybeBootstrapSchema(body.getEnumType())) {
+      KJ_IF_MAYBE(enumSchema, resolver.resolveBootstrapSchema(body.getEnumType())) {
         return ListSchema::of(enumSchema->asEnum());
       } else {
         return nullptr;
       }
     case schema::Type::Body::STRUCT_TYPE:
-      KJ_IF_MAYBE(structSchema, resolver.resolveMaybeBootstrapSchema(body.getStructType())) {
+      KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(body.getStructType())) {
         return ListSchema::of(structSchema->asStruct());
       } else {
         return nullptr;
       }
     case schema::Type::Body::INTERFACE_TYPE:
-      KJ_IF_MAYBE(interfaceSchema, resolver.resolveMaybeBootstrapSchema(body.getInterfaceType())) {
+      KJ_IF_MAYBE(interfaceSchema, resolver.resolveBootstrapSchema(body.getInterfaceType())) {
         return ListSchema::of(interfaceSchema->asInterface());
       } else {
         return nullptr;
@@ -1806,7 +1805,7 @@ Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
             "'", declNameString(name), "' is not an annotation."));
       } else {
         annotationBuilder.setId(decl->id);
-        KJ_IF_MAYBE(annotationSchema, resolver.resolveMaybeBootstrapSchema(decl->id)) {
+        KJ_IF_MAYBE(annotationSchema, resolver.resolveBootstrapSchema(decl->id)) {
           auto node = annotationSchema->getProto().getBody().getAnnotationNode();
           if (!toDynamic(node).get(targetsFlagName).as<bool>()) {
             errorReporter.addErrorOn(name, kj::str(

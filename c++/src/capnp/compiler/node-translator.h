@@ -54,17 +54,24 @@ public:
     // Look up the given name, relative to this node, and return basic information about the
     // target.
 
-    virtual kj::Maybe<Schema> resolveMaybeBootstrapSchema(uint64_t id) const = 0;
-    // Get the schema for the given ID.  Returning either a bootstrap schema or a final schema
-    // is acceptable.  Throws an exception if the id is not one that was found by calling resolve()
-    // or by traversing other schemas.  Returns null if the ID is recognized, but the corresponding
+    virtual kj::Maybe<Schema> resolveBootstrapSchema(uint64_t id) const = 0;
+    // Get the schema for the given ID.  If a schema is returned, it must be safe to traverse its
+    // dependencies using Schema::getDependency().  A schema that is only at the bootstrap stage
+    // is acceptable.
+    //
+    // Throws an exception if the id is not one that was found by calling resolve() or by
+    // traversing other schemas.  Returns null if the ID is recognized, but the corresponding
     // schema node failed to be built for reasons that were already reported.
 
     virtual kj::Maybe<Schema> resolveFinalSchema(uint64_t id) const = 0;
-    // Get the final schema for the given ID.  A bootstrap schema is not acceptable.  Throws an
-    // exception if the id is not one that was found by calling resolve() or by traversing other
-    // schemas.  Returns null if the ID is recognized, but the corresponding schema node failed to
-    // be built for reasons that were already reported.
+    // Get the final schema for the given ID.  A bootstrap schema is not acceptable.  It is NOT
+    // safe to traverse the schema's dependencies with Schema::getDependency() as doing so may
+    // trigger lazy loading callbacks that deadlock on the compiler mutex.  Instead, the caller
+    // should carefully look up dependencies through this Resolver.
+    //
+    // Throws an exception if the id is not one that was found by calling resolve() or by
+    // traversing other schemas.  Returns null if the ID is recognized, but the corresponding
+    // schema node failed to be built for reasons that were already reported.
   };
 
   NodeTranslator(const Resolver& resolver, const ErrorReporter& errorReporter,
