@@ -145,6 +145,7 @@ private:
 
     typedef std::multimap<kj::StringPtr, kj::Own<Node>> NestedNodesMap;
     NestedNodesMap nestedNodes;
+    kj::Vector<Node*> orderedNestedNodes;
     // Filled in when lookupMember() is first called.  multimap in case of duplicate member names --
     // we still want to compile them, even if it's an error.
 
@@ -237,7 +238,9 @@ public:
     // These bootstrap schemas can then be plugged into the dynamic API and used to evaluate these
     // remaining values.
 
-    inline Workspace(): orphanage(message.getOrphanage()) {}
+    inline explicit Workspace(const SchemaLoader::LazyLoadCallback& loaderCallback)
+        : orphanage(message.getOrphanage()),
+          bootstrapLoader(loaderCallback) {}
   };
 
   const kj::Arena& getNodeArena() const { return nodeArena; }
@@ -373,7 +376,7 @@ uint64_t Compiler::Node::generateId(uint64_t parentId, kj::StringPtr declName,
     result = (result << 8) | resultBytes[i];
   }
 
-  return result;
+  return result | (1ull << 63);
 }
 
 kj::StringPtr Compiler::Node::joinDisplayName(
@@ -415,6 +418,7 @@ const Compiler::Node::Content& Compiler::Node::getContent(Content::State minimum
           case Declaration::Body::INTERFACE_DECL: {
             kj::Own<Node> subNode = arena.allocateOwn<Node>(*this, nestedDecl);
             kj::StringPtr name = nestedDecl.getName().getValue();
+            locked->orderedNestedNodes.add(subNode);
             locked->nestedNodes.insert(std::make_pair(name, kj::mv(subNode)));
             break;
           }
@@ -459,10 +463,10 @@ const Compiler::Node::Content& Compiler::Node::getContent(Content::State minimum
         builder.setScopeId(p->id);
       }
 
-      auto nestedIter = builder.initNestedNodes(locked->nestedNodes.size()).begin();
-      for (auto& entry: locked->nestedNodes) {
-        nestedIter->setName(entry.first);
-        nestedIter->setId(entry.second->id);
+      auto nestedIter = builder.initNestedNodes(locked->orderedNestedNodes.size()).begin();
+      for (auto node: locked->orderedNestedNodes) {
+        nestedIter->setName(node->declaration.getName().getValue());
+        nestedIter->setId(node->id);
         ++nestedIter;
       }
 
@@ -482,6 +486,7 @@ const Compiler::Node::Content& Compiler::Node::getContent(Content::State minimum
       // case.
       Content* contentPtr = locked.get();
       workspace.arena.copy(kj::defer([contentPtr]() {
+        contentPtr->bootstrapSchema = nullptr;
         if (contentPtr->state == Content::BOOTSTRAP) {
           contentPtr->state = Content::EXPANDED;
         }
@@ -751,7 +756,7 @@ kj::Maybe<const Compiler::Node&> Compiler::Impl::lookupBuiltin(kj::StringPtr nam
 }
 
 uint64_t Compiler::Impl::add(const Module& module, Mode mode) const {
-  Impl::Workspace workspace;
+  Impl::Workspace workspace(*this);
   auto lock = this->workspace.lockExclusive();
   *lock = &workspace;
   KJ_DEFER(*lock = nullptr);
@@ -766,7 +771,7 @@ uint64_t Compiler::Impl::add(const Module& module, Mode mode) const {
 void Compiler::Impl::load(const SchemaLoader& loader, uint64_t id) const {
   KJ_IF_MAYBE(node, findNode(id)) {
     if (&loader == &finalLoader) {
-      Workspace workspace;
+      Workspace workspace(*this);
       auto lock = this->workspace.lockExclusive();
       *lock = &workspace;
       KJ_DEFER(*lock = nullptr);

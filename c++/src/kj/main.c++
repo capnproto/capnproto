@@ -123,7 +123,7 @@ int runMainAndExit(ProcessContext& context, MainFunc&& func, int argc, char* arg
     KJ_IF_MAYBE(exception, runCatchingExceptions([&]() {
       func(argv[0], params);
     })) {
-      context.error(str(exception));
+      context.error(str("*** Uncaught exception ***\n", *exception));
     }
     context.exit();
 #if !KJ_NO_EXCEPTIONS
@@ -453,7 +453,7 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
     uint i = 0;
     for (; i < argSpec.minCount; i++) {
       if (argPos == arguments.end()) {
-        usageError(programName, str("missing argument <", argSpec.title, '>'));
+        usageError(programName, str("missing argument ", argSpec.title));
       } else {
         KJ_IF_MAYBE(error, argSpec.callback(*argPos).releaseError()) {
           usageError(programName, str(*argPos, ": ", *error));
@@ -562,9 +562,9 @@ void MainBuilder::MainImpl::printHelp(StringPtr programName) {
     for (auto& arg: impl->args) {
       text.add(' ');
       if (arg.minCount == 0) {
-        text.addAll(str("[<", arg.title, arg.maxCount > 1 ? ">...]" : ">]"));
+        text.addAll(str("[", arg.title, arg.maxCount > 1 ? "...]" : "]"));
       } else {
-        text.addAll(str('<', arg.title, arg.maxCount > 1 ? ">..." : ">"));
+        text.addAll(str(arg.title, arg.maxCount > 1 ? "..." : ""));
       }
     }
   } else {
@@ -609,12 +609,12 @@ void MainBuilder::MainImpl::printHelp(StringPtr programName) {
         if (name.isLong) {
           text.addAll(str("--", name.longName));
           if (opt->hasArg) {
-            text.addAll(str("=<", opt->argTitle, '>'));
+            text.addAll(str("=", opt->argTitle));
           }
         } else {
           text.addAll(str("-", name.shortName));
           if (opt->hasArg) {
-            text.addAll(str('<', opt->argTitle, '>'));
+            text.addAll(opt->argTitle);
           }
         }
       }

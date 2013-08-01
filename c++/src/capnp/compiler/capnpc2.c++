@@ -26,6 +26,7 @@
 #include "compiler.h"
 #include "module-loader.h"
 #include <capnp/pretty-print.h>
+#include <capnp/schema.capnp.h>
 #include <kj/vector.h>
 #include <kj/io.h>
 #include <unistd.h>
@@ -33,6 +34,10 @@
 #include "../message.h"
 #include <iostream>
 #include <kj/main.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <capnp/serialize.h>
 
 namespace capnp {
 namespace compiler {
@@ -68,15 +73,113 @@ public:
           context, "Cap'n Proto compiler version 0.2",
           "Compiles Cap'n Proto schema files and generates corresponding source code in one or "
           "more languages.")
+        .addOptionWithArg({'o', "output"}, KJ_BIND_METHOD(*this, addOutput), "<lang>[:<dir>]",
+                          "Generate source code for language <lang> in directory <dir> (default: "
+                          "current directory).  <lang> actually specifies a plugin to use.  If "
+                          "<lang> is a simple word, the compiler for a plugin called "
+                          "'capnpc-<lang>' in $PATH.  If <lang> is a file path containing slashes, "
+                          "it is interpreted as the exact plugin executable file name, and $PATH "
+                          "is not searched.")
         .expectOneOrMoreArgs("source", KJ_BIND_METHOD(*this, addSource))
+        .callAfterParsing(KJ_BIND_METHOD(*this, generateOutput))
         .build();
+  }
+
+  kj::MainBuilder::Validity addOutput(kj::StringPtr spec) {
+    KJ_IF_MAYBE(split, spec.findFirst(':')) {
+      kj::StringPtr dir = spec.slice(*split + 1);
+      struct stat stats;
+      if (stat(dir.cStr(), &stats) < 0 || !S_ISDIR(stats.st_mode)) {
+        return "output location is inaccessible or is not a directory";
+      }
+      outputs.add(OutputDirective { spec.slice(0, *split), dir });
+    } else {
+      outputs.add(OutputDirective { spec.asArray(), nullptr });
+    }
+
+    return true;
   }
 
   kj::MainBuilder::Validity addSource(kj::StringPtr file) {
     KJ_IF_MAYBE(module, loader.loadModule(file, file)) {
-      compiler.add(*module, Compiler::EAGER);
+      sourceIds.add(compiler.add(*module, Compiler::EAGER));
     } else {
       return "no such file";
+    }
+
+    return true;
+  }
+
+  kj::MainBuilder::Validity generateOutput() {
+    if (outputs.size() == 0) {
+      return "no outputs specified";
+    }
+
+    MallocMessageBuilder message;
+    auto request = message.initRoot<schema::CodeGeneratorRequest>();
+
+    auto schemas = compiler.getLoader().getAllLoaded();
+    auto nodes = request.initNodes(schemas.size());
+    for (size_t i = 0; i < schemas.size(); i++) {
+      nodes.setWithCaveats(i, schemas[i].getProto());
+    }
+
+    auto requestedFiles = request.initRequestedFiles(sourceIds.size());
+    for (size_t i = 0; i < sourceIds.size(); i++) {
+      requestedFiles.set(i, sourceIds[i]);
+    }
+
+    for (auto& output: outputs) {
+      int pipeFds[2];
+      KJ_SYSCALL(pipe(pipeFds));
+
+      kj::String exeName;
+      bool shouldSearchPath = true;
+      for (char c: output.name) {
+        if (c == '/') {
+          shouldSearchPath = false;
+          break;
+        }
+      }
+      if (shouldSearchPath) {
+        exeName = kj::str("capnpc-", output.name);
+      } else {
+        exeName = kj::heapString(output.name);
+      }
+
+      pid_t child;
+      KJ_SYSCALL(child = fork());
+      if (child == 0) {
+        // I am the child!
+        KJ_SYSCALL(close(pipeFds[1]));
+        KJ_SYSCALL(dup2(pipeFds[0], STDIN_FILENO));
+        KJ_SYSCALL(close(pipeFds[0]));
+
+        if (output.dir != nullptr) {
+          KJ_SYSCALL(chdir(output.dir.cStr()), output.dir);
+        }
+
+        if (shouldSearchPath) {
+          KJ_SYSCALL(execlp(exeName.cStr(), exeName.cStr(), nullptr));
+        } else {
+          KJ_SYSCALL(execl(exeName.cStr(), exeName.cStr(), nullptr));
+        }
+
+        KJ_FAIL_ASSERT("execlp() returned?");
+      }
+
+      KJ_SYSCALL(close(pipeFds[0]));
+
+      writeMessageToFd(pipeFds[1], message);
+      KJ_SYSCALL(close(pipeFds[1]));
+
+      int status;
+      KJ_SYSCALL(waitpid(child, &status, 0));
+      if (WIFSIGNALED(status)) {
+        context.error(kj::str(exeName, ": plugin failed: ", strsignal(WTERMSIG(status))));
+      } else if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+        context.error(kj::str(exeName, ": plugin failed: exit code ", WEXITSTATUS(status)));
+      }
     }
 
     return true;
@@ -86,64 +189,15 @@ private:
   kj::ProcessContext& context;
   ModuleLoader loader;
   Compiler compiler;
+
+  kj::Vector<uint64_t> sourceIds;
+
+  struct OutputDirective {
+    kj::ArrayPtr<const char> name;
+    kj::StringPtr dir;
+  };
+  kj::Vector<OutputDirective> outputs;
 };
-
-int main(int argc, char* argv[]) {
-  // Eventually this will be capnpc.  For now it's just a dummy program that tests parsing.
-
-//  kj::Vector<char> input;
-//  char buffer[4096];
-//  for (;;) {
-//    ssize_t n;
-//    KJ_SYSCALL(n = read(STDIN_FILENO, buffer, sizeof(buffer)));
-//    if (n == 0) {
-//      break;
-//    }
-//    input.addAll(buffer, buffer + n);
-//  }
-
-  kj::StringPtr input =
-      "@0x8e001c75f6ff54c8;\n"
-      "struct Foo { bar @0 :Int32 = 123; baz @1 :Text; }\n"
-      "struct Qux { foo @0 :List(Int32) = [12, 34]; }";
-
-  DummyModule module;
-
-  std::cout << "=========================================================================\n"
-            << "lex\n"
-            << "========================================================================="
-            << std::endl;
-
-  capnp::MallocMessageBuilder lexerArena;
-  auto lexedFile = lexerArena.initRoot<capnp::compiler::LexedStatements>();
-  capnp::compiler::lex(input, lexedFile, module);
-  std::cout << capnp::prettyPrint(lexedFile).cStr() << std::endl;
-
-  std::cout << "=========================================================================\n"
-            << "parse\n"
-            << "========================================================================="
-            << std::endl;
-
-  capnp::MallocMessageBuilder parserArena;
-  auto parsedFile = parserArena.initRoot<capnp::compiler::ParsedFile>();
-  capnp::compiler::parseFile(lexedFile.getStatements(), parsedFile, module);
-  std::cout << capnp::prettyPrint(parsedFile).cStr() << std::endl;
-
-  std::cout << "=========================================================================\n"
-            << "compile\n"
-            << "========================================================================="
-            << std::endl;
-
-  module.content = parsedFile.asReader();
-  capnp::compiler::Compiler compiler;
-  compiler.add(module, capnp::compiler::Compiler::EAGER);
-
-  for (auto schema: compiler.getLoader().getAllLoaded()) {
-    std::cout << capnp::prettyPrint(schema.getProto()).cStr() << std::endl;
-  }
-
-  return 0;
-}
 
 }  // namespace compiler
 }  // namespace capnp

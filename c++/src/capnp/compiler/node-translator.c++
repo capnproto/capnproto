@@ -169,6 +169,7 @@ public:
   struct StructOrGroup {
     // Abstract interface for scopes in which fields can be added.
 
+    virtual void addVoid() = 0;
     virtual uint addData(uint lgSize) = 0;
     virtual uint addPointer() = 0;
     virtual bool tryExpandData(uint oldLgSize, uint oldOffset, uint expansionFactor) = 0;
@@ -183,6 +184,8 @@ public:
     // Size of the struct so far.
 
     HoleSet<uint> holes;
+
+    void addVoid() override {}
 
     uint addData(uint lgSize) override {
       KJ_IF_MAYBE(hole, holes.tryAllocate(lgSize)) {
@@ -226,7 +229,7 @@ public:
 
     StructOrGroup& parent;
     uint groupCount = 0;
-    kj::Maybe<int> discriminantOffset;
+    kj::Maybe<uint> discriminantOffset;
     kj::Vector<DataLocation> dataLocations;
     kj::Vector<uint> pointerLocations;
 
@@ -247,7 +250,7 @@ public:
       return pointerLocations.add(parent.addPointer());
     }
 
-    void newGroup() {
+    void newGroupAddingFirstMember() {
       if (++groupCount == 2) {
         addDiscriminant();
       }
@@ -273,11 +276,15 @@ public:
       kj::Maybe<uint> smallestHoleAtLeast(Union::DataLocation& location, uint lgSize) {
         // Find the smallest single hole that is at least the given size.  This is used to find the
         // optimal place to allocate each field -- it is placed in the smallest slot where it fits,
-        // to reduce fragmentation.
+        // to reduce fragmentation.  Returns the size of the hole, if found.
 
         if (!isUsed) {
           // The location is effectively one big hole.
-          return location.lgSize;
+          if (lgSize <= location.lgSize) {
+            return location.lgSize;
+          } else {
+            return nullptr;
+          }
         } else if (lgSize >= lgSizeUsed) {
           // Requested size is at least our current usage, so clearly won't fit in any current
           // holes, but if the location's size is larger than what we're using, we'd be able to
@@ -471,12 +478,21 @@ public:
     uint parentPointerLocationUsage = 0;
     // Number of parent's pointer locations that have been used by this group.
 
-    inline Group(Union& parent): parent(parent) {
-      parent.newGroup();
-    }
+    bool hasMembers = false;
+
+    inline Group(Union& parent): parent(parent) {}
     KJ_DISALLOW_COPY(Group);
 
+    void addVoid() override {
+      if (!hasMembers) {
+        hasMembers = true;
+        parent.newGroupAddingFirstMember();
+      }
+    }
+
     uint addData(uint lgSize) override {
+      addVoid();
+
       uint bestSize = std::numeric_limits<uint>::max();
       kj::Maybe<uint> bestLocation = nullptr;
 
@@ -516,6 +532,8 @@ public:
     }
 
     uint addPointer() override {
+      addVoid();
+
       if (parentPointerLocationUsage < parent.pointerLocations.size()) {
         return parent.pointerLocations[parentPointerLocationUsage++];
       } else {
@@ -817,7 +835,7 @@ void NodeTranslator::compileEnum(Declaration::Enum::Reader decl,
 
     dupDetector.check(enumerantDecl.getId().getOrdinal());
 
-    auto enumerantBuilder = list[i];
+    auto enumerantBuilder = list[i++];
     enumerantBuilder.setName(enumerantDecl.getName().getValue());
     enumerantBuilder.setCodeOrder(codeOrder);
     enumerantBuilder.adoptAnnotations(compileAnnotationApplications(
@@ -907,6 +925,7 @@ public:
             fieldBuilder.setOffset(member.fieldScope->addPointer());
           } else if (lgSize == -1) {
             // void
+            member.fieldScope->addVoid();
             fieldBuilder.setOffset(0);
           } else {
             fieldBuilder.setOffset(member.fieldScope->addData(lgSize));
@@ -1296,13 +1315,13 @@ void NodeTranslator::compileDefaultDefaultValue(
     case schema::Type::Body::UINT64_TYPE: target.getBody().setUint64Value(0); break;
     case schema::Type::Body::FLOAT32_TYPE: target.getBody().setFloat32Value(0); break;
     case schema::Type::Body::FLOAT64_TYPE: target.getBody().setFloat64Value(0); break;
-    case schema::Type::Body::TEXT_TYPE: target.getBody().initTextValue(0); break;
-    case schema::Type::Body::DATA_TYPE: target.getBody().initDataValue(0); break;
     case schema::Type::Body::ENUM_TYPE: target.getBody().setEnumValue(0); break;
     case schema::Type::Body::INTERFACE_TYPE: target.getBody().setInterfaceValue(); break;
 
     // Bit of a hack:  For "Object" types, we adopt a null orphan, which sets the field to null.
     // TODO(cleanup):  Create a cleaner way to do this.
+    case schema::Type::Body::TEXT_TYPE: target.getBody().adoptTextValue(Orphan<Text>()); break;
+    case schema::Type::Body::DATA_TYPE: target.getBody().adoptDataValue(Orphan<Data>()); break;
     case schema::Type::Body::STRUCT_TYPE: target.getBody().adoptStructValue(Orphan<Data>()); break;
     case schema::Type::Body::LIST_TYPE: target.getBody().adoptListValue(Orphan<Data>()); break;
     case schema::Type::Body::OBJECT_TYPE: target.getBody().adoptObjectValue(Orphan<Data>()); break;
@@ -1325,6 +1344,10 @@ public:
               ListSchema listMemberSchema)
       : type(LIST_OBJECT_UNION_MEMBER), unionBuilder(unionBuilder), unionMember(unionMember),
         listMemberSchema(listMemberSchema) {}
+  DynamicSlot(DynamicUnion::Builder unionBuilder, StructSchema::Member unionMember,
+              EnumSchema enumMemberSchema)
+      : type(ENUM_UNION_MEMBER), unionBuilder(unionBuilder), unionMember(unionMember),
+        enumMemberSchema(enumMemberSchema) {}
 
   DynamicStruct::Builder initStruct() {
     switch (type) {
@@ -1334,6 +1357,7 @@ public:
       case STRUCT_OBJECT_UNION_MEMBER:
         return unionBuilder.initObject(unionMember, structMemberSchema);
       case LIST_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
+      case ENUM_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
     }
     KJ_FAIL_ASSERT("can't get here");
   }
@@ -1346,6 +1370,7 @@ public:
       case STRUCT_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
       case LIST_OBJECT_UNION_MEMBER:
         return unionBuilder.initObject(unionMember, listMemberSchema, size);
+      case ENUM_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
     }
     KJ_FAIL_ASSERT("can't get here");
   }
@@ -1357,17 +1382,21 @@ public:
       case UNION_MEMBER: return unionBuilder.init(unionMember).as<DynamicUnion>();
       case STRUCT_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
       case LIST_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
+      case ENUM_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
     }
     KJ_FAIL_ASSERT("can't get here");
   }
 
   void set(DynamicValue::Reader value) {
     switch (type) {
-      case FIELD: return structBuilder.set(member, value);
-      case ELEMENT: return listBuilder.set(index, value);
-      case UNION_MEMBER: return unionBuilder.set(unionMember, value);
-      case STRUCT_OBJECT_UNION_MEMBER: return unionBuilder.set(unionMember, value);
-      case LIST_OBJECT_UNION_MEMBER: return unionBuilder.set(unionMember, value);
+      case FIELD: structBuilder.set(member, value); return;
+      case ELEMENT: listBuilder.set(index, value); return;
+      case UNION_MEMBER: unionBuilder.set(unionMember, value); return;
+      case STRUCT_OBJECT_UNION_MEMBER: unionBuilder.set(unionMember, value); return;
+      case LIST_OBJECT_UNION_MEMBER: unionBuilder.set(unionMember, value); return;
+      case ENUM_UNION_MEMBER:
+        unionBuilder.set(unionMember, value.as<DynamicEnum>().getRaw());
+        return;
     }
     KJ_FAIL_ASSERT("can't get here");
   }
@@ -1388,13 +1417,15 @@ public:
       case UNION_MEMBER: return enumIdForMember(unionMember);
       case STRUCT_OBJECT_UNION_MEMBER: return nullptr;
       case LIST_OBJECT_UNION_MEMBER: return nullptr;
+      case ENUM_UNION_MEMBER: return enumMemberSchema.getProto().getId();
     }
     KJ_FAIL_ASSERT("can't get here");
   }
 
 private:
   enum Type {
-    FIELD, ELEMENT, UNION_MEMBER, STRUCT_OBJECT_UNION_MEMBER, LIST_OBJECT_UNION_MEMBER
+    FIELD, ELEMENT, UNION_MEMBER, STRUCT_OBJECT_UNION_MEMBER, LIST_OBJECT_UNION_MEMBER,
+    ENUM_UNION_MEMBER
   };
   Type type;
 
@@ -1413,6 +1444,7 @@ private:
       union {
         StructSchema structMemberSchema;
         ListSchema listMemberSchema;
+        EnumSchema enumMemberSchema;
       };
     };
   };
@@ -1491,6 +1523,12 @@ void NodeTranslator::compileValue(ValueExpression::Reader source, schema::Type::
     case schema::Type::Body::STRUCT_TYPE:
       KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(type.getBody().getStructType())) {
         DynamicSlot slot(valueUnion, member, structSchema->asStruct());
+        compileValue(source, slot, isBootstrap);
+      }
+      break;
+    case schema::Type::Body::ENUM_TYPE:
+      KJ_IF_MAYBE(enumSchema, resolver.resolveBootstrapSchema(type.getBody().getEnumType())) {
+        DynamicSlot slot(valueUnion, member, enumSchema->asEnum());
         compileValue(source, slot, isBootstrap);
       }
       break;

@@ -2159,6 +2159,7 @@ void StructBuilder::transferContentFrom(StructBuilder other) {
   for (uint i = 0; i < pointerCount / POINTERS; i++) {
     WireHelpers::zeroObject(segment, pointers + i);
   }
+  memset(pointers, 0, pointerCount * BYTES_PER_POINTER / BYTES);
 
   // Transfer the pointers.
   WirePointerCount sharedPointerCount = kj::min(pointerCount, other.pointerCount);
@@ -2170,6 +2171,42 @@ void StructBuilder::transferContentFrom(StructBuilder other) {
   // If the source had any extra pointers that the destination didn't have space for, we
   // intentionally leave them be, so that they'll be cleaned up later.
   memset(other.pointers, 0, sharedPointerCount * BYTES_PER_POINTER / BYTES);
+}
+
+void StructBuilder::copyContentFrom(StructReader other) {
+  // Determine the amount of data the builders have in common.
+  BitCount sharedDataSize = kj::min(dataSize, other.dataSize);
+
+  if (dataSize > sharedDataSize) {
+    // Since the target is larger than the source, make sure to zero out the extra bits that the
+    // source doesn't have.
+    if (dataSize == 1 * BITS) {
+      setDataField<bool>(0 * ELEMENTS, false);
+    } else {
+      byte* unshared = reinterpret_cast<byte*>(data) + sharedDataSize / BITS_PER_BYTE / BYTES;
+      memset(unshared, 0, (dataSize - sharedDataSize) / BITS_PER_BYTE / BYTES);
+    }
+  }
+
+  // Copy over the shared part.
+  if (sharedDataSize == 1 * BITS) {
+    setDataField<bool>(0 * ELEMENTS, other.getDataField<bool>(0 * ELEMENTS));
+  } else {
+    memcpy(data, other.data, sharedDataSize / BITS_PER_BYTE / BYTES);
+  }
+
+  // Zero out all pointers in the target.
+  for (uint i = 0; i < pointerCount / POINTERS; i++) {
+    WireHelpers::zeroObject(segment, pointers + i);
+  }
+  memset(pointers, 0, pointerCount * BYTES_PER_POINTER / BYTES);
+
+  // Copy the pointers.
+  WirePointerCount sharedPointerCount = kj::min(pointerCount, other.pointerCount);
+  for (uint i = 0; i < sharedPointerCount / POINTERS; i++) {
+    WireHelpers::setObjectPointer(segment, pointers + i, WireHelpers::readObjectPointer(
+        other.segment, other.pointers + i, nullptr, other.nestingLimit));
+  }
 }
 
 bool StructBuilder::isPointerFieldNull(WirePointerCount ptrIndex) {

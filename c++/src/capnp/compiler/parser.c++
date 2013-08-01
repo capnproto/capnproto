@@ -699,7 +699,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
         for (uint i = 0; i < annotations.size(); i++) {
           list.adoptWithCaveats(i, kj::mv(annotations[i]));
         }
-        builder.getBody().initGroupDecl();
+        builder.getBody().initUnionDecl();
         return DeclParserResult(kj::mv(decl), parsers.structLevelDecl);
       }));
 

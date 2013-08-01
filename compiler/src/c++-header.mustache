@@ -189,6 +189,8 @@ private:
   friend struct ::capnp::ToDynamic_;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
   friend ::kj::String KJ_STRINGIFY({{typeFullName}}::Reader reader);

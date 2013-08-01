@@ -266,6 +266,15 @@ struct List<T, Kind::STRUCT> {
           orphan.builder.asStruct(_::StructSize(
               0 * WORDS, 0 * POINTERS, _::FieldSize::VOID)));
     }
+    inline void setWithCaveats(uint index, const typename T::Reader& reader) {
+      // Mostly behaves like you'd expect `set` to behave, but with a caveat originating from
+      // the fact that structs in a struct list are allocated inline rather than by pointer:
+      // If the source struct is larger than the target struct -- say, because the source was built
+      // using a newer version of the schema that has additional fields -- it will be truncated,
+      // losing data.
+
+      builder.getStructElement(index * ELEMENTS).copyContentFrom(reader._reader);
+    }
 
     // There are no init(), set(), adopt(), or disown() methods for lists of structs because the
     // elements of the list are inlined and are initialized when the list is initialized.  This

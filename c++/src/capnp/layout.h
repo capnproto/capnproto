@@ -369,6 +369,11 @@ public:
   // than this, the extra data is not transferred, meaning there is a risk of data loss when
   // transferring from messages built with future versions of the protocol.
 
+  void copyContentFrom(StructReader other);
+  // Copy content from `other`.  If `other`'s sections are larger than this, the extra data is not
+  // copied, meaning there is a risk of data loss when copying from messages built with future
+  // versions of the protocol.
+
   bool isPointerFieldNull(WirePointerCount ptrIndex);
 
   StructReader asReader() const;

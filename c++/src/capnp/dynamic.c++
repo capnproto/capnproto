@@ -1459,7 +1459,6 @@ BuilderFor<typeName> DynamicValue::Builder::AsImpl<typeName>::apply(Builder& bui
 HANDLE_TYPE(bool, BOOL, bool)
 
 HANDLE_TYPE(text, TEXT, Text)
-HANDLE_TYPE(data, DATA, Data)
 HANDLE_TYPE(list, LIST, DynamicList)
 HANDLE_TYPE(struct, STRUCT, DynamicStruct)
 HANDLE_TYPE(enum, ENUM, DynamicEnum)
@@ -1467,6 +1466,29 @@ HANDLE_TYPE(object, OBJECT, DynamicObject)
 HANDLE_TYPE(union, UNION, DynamicUnion)
 
 #undef HANDLE_TYPE
+
+Data::Reader DynamicValue::Reader::AsImpl<Data>::apply(const Reader& reader) {
+  if (reader.type == TEXT) {
+    // Coerce text to data.
+    return Data::Reader(reinterpret_cast<const byte*>(reader.textValue.begin()),
+                        reader.textValue.size());
+  }
+  KJ_REQUIRE(reader.type == DATA, "Value type mismatch.") {
+    return Data::Reader();
+  }
+  return reader.dataValue;
+}
+Data::Builder DynamicValue::Builder::AsImpl<Data>::apply(Builder& builder) {
+  if (builder.type == TEXT) {
+    // Coerce text to data.
+    return Data::Builder(reinterpret_cast<byte*>(builder.textValue.begin()),
+                         builder.textValue.size());
+  }
+  KJ_REQUIRE(builder.type == DATA, "Value type mismatch.") {
+    return BuilderFor<Data>();
+  }
+  return builder.dataValue;
+}
 
 // As in the header, HANDLE_TYPE(void, VOID, Void) crashes GCC 4.7.
 Void DynamicValue::Reader::AsImpl<Void>::apply(const Reader& reader) {

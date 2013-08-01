@@ -147,6 +147,8 @@ public:
     return StringPtr(*this).slice(start, end);
   }
 
+  inline Maybe<size_t> findFirst(char c) const { return StringPtr(*this).findFirst(c); }
+
 private:
   Array<char> content;
 };

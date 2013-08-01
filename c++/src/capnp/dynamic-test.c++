@@ -384,6 +384,14 @@ TEST(DynamicApi, SetEnumFromNative) {
   checkList<TestEnum>(root.get("enumList"), {TestEnum::BAR, TestEnum::FOO});
 }
 
+TEST(DynamicApi, SetDataFromText) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<DynamicStruct>(Schema::from<TestAllTypes>());
+
+  root.set("dataField", "foo");
+  EXPECT_EQ(data("foo"), root.get("dataField").as<Data>());
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

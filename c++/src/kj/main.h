@@ -173,8 +173,8 @@ class MainBuilder {
   //             .addOption({'a', "all"}, KJ_BIND_METHOD(*this, setAll),
   //                 "Frob all the widgets.  Otherwise, only some widgets are frobbed.")
   //             .addOptionWithArg({'o', "output"}, KJ_BIND_METHOD(*this, setOutput),
-  //                 "filename", "Output to <filename>.  Must be a .foo file.")
-  //             .expectOneOrMoreArgs("source", KJ_BIND_METHOD(*this, processInput))
+  //                 "<filename>", "Output to <filename>.  Must be a .foo file.")
+  //             .expectOneOrMoreArgs("<source>", KJ_BIND_METHOD(*this, processInput))
   //             .build();
   //       }
   //
@@ -260,7 +260,7 @@ public:
   // Example:
   //
   //     builder.addOptionWithArg({'o', "output"}, KJ_BIND_METHOD(*this, setOutput),
-  //                              "filename", "Output to <filename>.");
+  //                              "<filename>", "Output to <filename>.");
   //
   // This option could be specified with an argument of "foo" in the following ways:
   //
@@ -312,11 +312,11 @@ public:
   // order of registration.
   //
   // For example, say you called:
-  //     builder.expectArg("foo", ...);
-  //     builder.expectOptionalArg("bar", ...);
-  //     builder.expectArg("baz", ...);
-  //     builder.expectZeroOrMoreArgs("qux", ...);
-  //     builder.expectArg("corge", ...);
+  //     builder.expectArg("<foo>", ...);
+  //     builder.expectOptionalArg("<bar>", ...);
+  //     builder.expectArg("<baz>", ...);
+  //     builder.expectZeroOrMoreArgs("<qux>", ...);
+  //     builder.expectArg("<corge>", ...);
   //
   // This command requires at least three arguments: foo, baz, and corge.  If four arguments are
   // given, the second is assigned to bar.  If five or more arguments are specified, then the
