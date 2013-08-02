@@ -158,7 +158,7 @@ doit make install
 cd samples
 doit capnpc -oc++ addressbook.capnp -I"$STAGING"/include
 doit ${CXX:-g++} -std=c++11 $SAMPLE_CXXFLAGS -I"$STAGING"/include -L"$STAGING"/lib \
-    addressbook.c++ addressbook.capnp.c++ -lcapnp -o addressbook
+    addressbook.c++ addressbook.capnp.c++ -lcapnp -pthread -o addressbook
 echo "@@@@ ./addressbook (in various configurations)"
 ./addressbook write | ./addressbook read
 ./addressbook dwrite | ./addressbook dread
