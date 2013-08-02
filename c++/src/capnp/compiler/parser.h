@@ -40,6 +40,9 @@ void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
 // If any errors are reported, then the output is not usable.  However, it may be passed on through
 // later stages of compilation in order to detect additional errors.
 
+uint64_t generateRandomId();
+// Generate a new random unique ID.  This lives here mostly for lack of a better location.
+
 class CapnpParser {
   // Advanced parser interface.  This interface exposes the inner parsers so that you can embed
   // them into your own parsers.

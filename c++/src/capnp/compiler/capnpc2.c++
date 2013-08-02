@@ -73,6 +73,13 @@ public:
           context, "Cap'n Proto compiler version 0.2",
           "Compiles Cap'n Proto schema files and generates corresponding source code in one or "
           "more languages.")
+        .addOptionWithArg({'I', "import-path"}, KJ_BIND_METHOD(*this, addImportPath), "<dir>",
+                          "Add <dir> to the list of directories searched for non-relative "
+                          "imports (ones that start with a '/').")
+        .addOption({"no-standard-import"}, KJ_BIND_METHOD(*this, noStandardImport),
+                   "Do not add any default import paths; use only those specified by -I.  "
+                   "Otherwise, typically /usr/include and /usr/local/include are added by "
+                   "default.")
         .addOptionWithArg({'o', "output"}, KJ_BIND_METHOD(*this, addOutput), "<lang>[:<dir>]",
                           "Generate source code for language <lang> in directory <dir> (default: "
                           "current directory).  <lang> actually specifies a plugin to use.  If "
@@ -80,9 +87,27 @@ public:
                           "'capnpc-<lang>' in $PATH.  If <lang> is a file path containing slashes, "
                           "it is interpreted as the exact plugin executable file name, and $PATH "
                           "is not searched.")
+        .addOptionWithArg({"src-prefix"}, KJ_BIND_METHOD(*this, addSourcePrefix), "<prefix>",
+                          "If a file specified for compilation starts with <prefix>, remove "
+                          "the prefix for the purpose of deciding the names of output files.  "
+                          "For example, the following command:\n"
+                          "    capnp --src-prefix=foo/bar -oc++:corge foo/bar/baz/qux.capnp\n"
+                          "would generate the files corge/baz/qux.capnp.{h,c++}.")
+        .addOption({'i', "generate-id"}, KJ_BIND_METHOD(*this, generateId),
+                   "Generate a new 64-bit unique ID for use in a Cap'n Proto schema.")
         .expectOneOrMoreArgs("source", KJ_BIND_METHOD(*this, addSource))
         .callAfterParsing(KJ_BIND_METHOD(*this, generateOutput))
         .build();
+  }
+
+  kj::MainBuilder::Validity addImportPath(kj::StringPtr path) {
+    loader.addImportPath(kj::heapString(path));
+    return true;
+  }
+
+  kj::MainBuilder::Validity noStandardImport() {
+    addStandardImportPaths = false;
+    return true;
   }
 
   kj::MainBuilder::Validity addOutput(kj::StringPtr spec) {
@@ -100,8 +125,35 @@ public:
     return true;
   }
 
+  kj::MainBuilder::Validity addSourcePrefix(kj::StringPtr prefix) {
+    if (prefix.endsWith("/")) {
+      sourcePrefixes.add(kj::heapString(prefix));
+    } else {
+      sourcePrefixes.add(kj::str(prefix, '/'));
+    }
+    return true;
+  }
+
+  kj::MainBuilder::Validity generateId() {
+    context.exitInfo(kj::str("@0x", kj::hex(generateRandomId())));
+  }
+
   kj::MainBuilder::Validity addSource(kj::StringPtr file) {
-    KJ_IF_MAYBE(module, loader.loadModule(file, file)) {
+    if (addStandardImportPaths) {
+      loader.addImportPath(kj::heapString("/usr/local/include"));
+      loader.addImportPath(kj::heapString("/usr/include"));
+      addStandardImportPaths = false;
+    }
+
+    size_t longestPrefix = 0;
+
+    for (auto& prefix: sourcePrefixes) {
+      if (file.startsWith(prefix)) {
+        longestPrefix = kj::max(longestPrefix, prefix.size());
+      }
+    }
+
+    KJ_IF_MAYBE(module, loader.loadModule(file, file.slice(longestPrefix))) {
       sourceIds.add(compiler.add(*module, Compiler::EAGER));
     } else {
       return "no such file";
@@ -218,6 +270,9 @@ private:
   kj::ProcessContext& context;
   ModuleLoader loader;
   Compiler compiler;
+
+  kj::Vector<kj::String> sourcePrefixes;
+  bool addStandardImportPaths = true;
 
   kj::Vector<uint64_t> sourceIds;
 
