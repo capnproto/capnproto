@@ -193,7 +193,7 @@ kj::String catPath(kj::StringPtr base, kj::StringPtr add) {
 
 class ModuleLoader::Impl {
 public:
-  Impl(int errorFd): errorFd(errorFd) {}
+  Impl(const GlobalErrorReporter& errorReporter): errorReporter(errorReporter) {}
 
   void addImportPath(kj::String path) {
     searchPath.add(kj::heapString(kj::mv(path)));
@@ -201,10 +201,10 @@ public:
 
   kj::Maybe<const Module&> loadModule(kj::StringPtr localName, kj::StringPtr sourceName) const;
   kj::Maybe<const Module&> loadModuleFromSearchPath(kj::StringPtr sourceName) const;
-  void writeError(kj::StringPtr content) const;
+  const GlobalErrorReporter& getErrorReporter() const { return errorReporter; }
 
 private:
-  int errorFd;
+  const GlobalErrorReporter& errorReporter;
   kj::Vector<kj::String> searchPath;
   kj::MutexGuarded<std::map<kj::StringPtr, kj::Own<Module>>> modules;
 };
@@ -260,10 +260,21 @@ public:
           return space.construct();
         });
 
+    // TODO(someday):  This counts tabs as single characters.  Do we care?
     uint startLine = findLargestElementBefore(lines, startByte);
     uint startCol = startByte - lines[startLine];
-    loader.writeError(
-        kj::str(localName, ":", startLine + 1, ":", startCol + 1, ": error: ", message, "\n"));
+    uint endLine = findLargestElementBefore(lines, endByte);
+    uint endCol = endByte - lines[endLine];
+
+    loader.getErrorReporter().addError(
+        localName,
+        GlobalErrorReporter::SourcePos { startByte, startLine, startCol },
+        GlobalErrorReporter::SourcePos { endByte, endLine, endCol },
+        message);
+  }
+
+  bool hadErrors() const {
+    return loader.getErrorReporter().hadErrors();
   }
 
 private:
@@ -317,18 +328,10 @@ kj::Maybe<const Module&> ModuleLoader::Impl::loadModuleFromSearchPath(
   return nullptr;
 }
 
-void ModuleLoader::Impl::writeError(kj::StringPtr content) const {
-  const char* pos = content.begin();
-  while (pos < content.end()) {
-    ssize_t n;
-    KJ_SYSCALL(n = write(errorFd, pos, content.end() - pos));
-    pos += n;
-  }
-}
-
 // =======================================================================================
 
-ModuleLoader::ModuleLoader(int errorFd): impl(kj::heap<Impl>(errorFd)) {}
+ModuleLoader::ModuleLoader(const GlobalErrorReporter& errorReporter)
+    : impl(kj::heap<Impl>(errorReporter)) {}
 ModuleLoader::~ModuleLoader() {}
 
 void ModuleLoader::addImportPath(kj::String path) { impl->addImportPath(kj::mv(path)); }

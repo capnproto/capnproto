@@ -357,73 +357,19 @@ public:
           if (location.tryExpandTo(group.parent, lgSize)) {
             isUsed = true;
             lgSizeUsed = lgSize;
-            return kj::implicitCast<uint>(0);
+            return location.offset << (location.lgSize - lgSize);
           } else {
             return nullptr;
           }
         } else {
           uint newSize = kj::max(lgSizeUsed, lgSize) + 1;
           if (tryExpandUsage(group, location, newSize)) {
-            return holes.assertHoleAndAllocate(lgSize);
+            uint result = holes.assertHoleAndAllocate(lgSize);
+            uint locationOffset = location.offset << (location.lgSize - lgSize);
+            return locationOffset + result;
           } else {
             return nullptr;
           }
-        }
-      }
-
-      kj::Maybe<uint> tryAllocate(Group& group, Union::DataLocation& location, uint lgSize) {
-        if (isUsed) {
-          // We've already used some space in this location.  Try to allocate from a hole.
-          uint result;
-          KJ_IF_MAYBE(hole, holes.tryAllocate(lgSize)) {
-            result = *hole;
-          } else {
-            // Failure.  But perhaps we could expand the location to include a new hole which would
-            // be big enough for the value.
-            uint neededSizeUsed;
-            if (lgSize <= lgSizeUsed) {
-              // We are already at least as big as the desired size, so doubling should be good
-              // enough.  The new value will be located just past the end of our current used
-              // space.
-              neededSizeUsed = lgSizeUsed + 1;
-              result = 1 << (lgSizeUsed - lgSize);
-            } else {
-              // We are smaller than the desired size, so we'll have to grow to 2x the desired size.
-              // The new value will be at an offset of 1x its own size.
-              neededSizeUsed = lgSize + 1;
-              result = 1;
-            }
-
-            if (!tryExpandUsage(group, location, neededSizeUsed)) {
-              return nullptr;
-            }
-            holes.addHolesAtEnd(lgSize, result + 1, neededSizeUsed - 1);
-          }
-
-          // OK, we found space.  Adjust the offset according to the location's offset before
-          // returning.
-          uint locationOffset = location.offset << (location.lgSize - lgSize);
-          return locationOffset + result;
-
-        } else {
-          // We haven't used this location at all yet.
-
-          if (location.lgSize < lgSize) {
-            // Not enough space.  Try to expand the location.
-            if (!location.tryExpandTo(group.parent, lgSize)) {
-              // Couldn't expand.  This location is not viable.
-              return nullptr;
-            }
-          }
-
-          // Either the location was already big enough, or we expanded it.
-          KJ_DASSERT(location.lgSize >= lgSize);
-
-          // Just mark the first part used for now.
-          lgSizeUsed = lgSize;
-
-          // Return the offset, adjusted to be appropriate for the size.
-          return location.offset << (location.lgSize - lgSize);
         }
       }
 
@@ -869,7 +815,7 @@ public:
         dupDetector.check(member.decl.getId().getOrdinal());
       }
 
-      schema::StructNode::Member::Builder builder = member.parent->getMemberSchema(member.index);
+      schema::StructNode::Member::Builder builder = member.getSchema();
 
       builder.setName(member.decl.getName().getValue());
       builder.setOrdinal(entry.first);
@@ -966,7 +912,7 @@ public:
     for (auto member: lateUnions) {
       member->unionScope->addDiscriminant();  // if it hasn't happened already
       KJ_IF_MAYBE(offset, member->unionScope->discriminantOffset) {
-        member->parent->getMemberSchema(member->index).getBody().getUnionMember()
+        member->getSchema().getBody().getUnionMember()
             .setDiscriminantOffset(*offset);
       } else {
         KJ_FAIL_ASSERT("addDiscriminant() didn't set the offset?");
@@ -1018,11 +964,16 @@ private:
     uint childCount = 0;
     // Number of children this member has.
 
-    uint index = 0;
+    uint childInitializedCount = 0;
+    // Number of children whose `schema` member has been initialized.  This initialization happens
+    // while walking the fields in ordinal order.
 
     Declaration::Reader decl;
 
     List<schema::StructNode::Member>::Builder memberSchemas;
+
+    kj::Maybe<schema::StructNode::Member::Builder> schema;
+    // Schema for this member, if applicable.  Initialized when getSchema() is first called.
 
     union {
       StructLayout::StructOrGroup* fieldScope;
@@ -1046,6 +997,16 @@ private:
                       const Declaration::Reader& decl, StructLayout::Union& unionScope)
         : parent(&parent), codeOrder(codeOrder), decl(decl), unionScope(&unionScope) {}
 
+    schema::StructNode::Member::Builder getSchema() {
+      KJ_IF_MAYBE(result, schema) {
+        return *result;
+      } else {
+        auto builder = parent->getMemberSchema(parent->childInitializedCount++);
+        schema = builder;
+        return builder;
+      }
+    }
+
     schema::StructNode::Member::Builder getMemberSchema(uint childIndex) {
       // Get the schema builder for the child member at the given index.  This lazily/dynamically
       // builds the builder tree.
@@ -1058,11 +1019,11 @@ private:
             KJ_FAIL_ASSERT("Fields don't have members.");
             break;
           case Declaration::Body::UNION_DECL:
-            memberSchemas = parent->getMemberSchema(index).getBody()
+            memberSchemas = getSchema().getBody()
                 .initUnionMember().initMembers(childCount);
             break;
           case Declaration::Body::GROUP_DECL:
-            memberSchemas = parent->getMemberSchema(index).getBody()
+            memberSchemas = getSchema().getBody()
                 .initGroupMember().initMembers(childCount);
             break;
           default:
@@ -1120,7 +1081,7 @@ private:
       }
 
       if (memberInfo != nullptr) {
-        memberInfo->index = parent.childCount++;
+        parent.childCount++;
         membersByOrdinal.insert(std::make_pair(ordinal, memberInfo));
         minOrdinal = kj::min(minOrdinal, ordinal);
       }
@@ -1175,7 +1136,7 @@ private:
       }
 
       if (memberInfo != nullptr) {
-        memberInfo->index = parent.childCount++;
+        parent.childCount++;
         membersByOrdinal.insert(std::make_pair(ordinal, memberInfo));
         minOrdinal = kj::min(minOrdinal, ordinal);
       }
@@ -1329,6 +1290,11 @@ void NodeTranslator::compileDefaultDefaultValue(
 }
 
 class NodeTranslator::DynamicSlot {
+  // Acts like a pointer to a field or list element.  The target's value can be set or initialized.
+  // This is useful when recursively compiling values.
+  //
+  // TODO(someday):  The Dynamic API should support something like this directly.
+
 public:
   DynamicSlot(DynamicStruct::Builder structBuilder, StructSchema::Member member)
       : type(FIELD), structBuilder(structBuilder), member(member) {}
@@ -1713,11 +1679,11 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
     //
     // We need to be very careful not to query this Schema's dependencies because if it is
     // a final schema then this query could trigger a lazy load which would deadlock.
-    kj::Maybe<Schema> maybeConstSchema = isBootstrap ?
-        resolver.resolveBootstrapSchema(resolved->id) :
+    kj::Maybe<schema::Node::Reader> maybeConstSchema = isBootstrap ?
+        resolver.resolveBootstrapSchema(resolved->id).map([](Schema s) { return s.getProto(); }) :
         resolver.resolveFinalSchema(resolved->id);
     KJ_IF_MAYBE(constSchema, maybeConstSchema) {
-      auto constReader = constSchema->getProto().getBody().getConstNode();
+      auto constReader = constSchema->getBody().getConstNode();
       auto constValue = toDynamic(constReader.getValue()).get("body").as<DynamicUnion>().get();
 
       if (constValue.getType() == DynamicValue::OBJECT) {
@@ -1756,8 +1722,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
         // A fully unqualified identifier looks like it might refer to a constant visible in the
         // current scope, but if that's really what the user wanted, we want them to use a
         // qualified name to make it more obvious.  Report an error.
-        KJ_IF_MAYBE(scope, resolver.resolveBootstrapSchema(
-            constSchema->getProto().getScopeId())) {
+        KJ_IF_MAYBE(scope, resolver.resolveBootstrapSchema(constSchema->getScopeId())) {
           auto scopeReader = scope->getProto();
           kj::StringPtr parent;
           if (scopeReader.getBody().which() == schema::Node::Body::FILE_NODE) {

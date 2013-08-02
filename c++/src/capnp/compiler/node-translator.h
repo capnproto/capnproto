@@ -63,11 +63,11 @@ public:
     // traversing other schemas.  Returns null if the ID is recognized, but the corresponding
     // schema node failed to be built for reasons that were already reported.
 
-    virtual kj::Maybe<Schema> resolveFinalSchema(uint64_t id) const = 0;
-    // Get the final schema for the given ID.  A bootstrap schema is not acceptable.  It is NOT
-    // safe to traverse the schema's dependencies with Schema::getDependency() as doing so may
-    // trigger lazy loading callbacks that deadlock on the compiler mutex.  Instead, the caller
-    // should carefully look up dependencies through this Resolver.
+    virtual kj::Maybe<schema::Node::Reader> resolveFinalSchema(uint64_t id) const = 0;
+    // Get the final schema for the given ID.  A bootstrap schema is not acceptable.  A raw
+    // node reader is returned rather than a Schema object because using a Schema object built
+    // by the final schema loader could trigger lazy initialization of dependencies which could
+    // lead to a cycle and deadlock.
     //
     // Throws an exception if the id is not one that was found by calling resolve() or by
     // traversing other schemas.  Returns null if the ID is recognized, but the corresponding

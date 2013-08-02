@@ -63,10 +63,10 @@ public:
   }
 };
 
-class CompilerMain {
+class CompilerMain final: public GlobalErrorReporter {
 public:
   explicit CompilerMain(kj::ProcessContext& context)
-      : context(context), loader(STDERR_FILENO) {}
+      : context(context), loader(*this) {}
 
   kj::MainFunc getMain() {
     return kj::MainBuilder(
@@ -111,6 +111,11 @@ public:
   }
 
   kj::MainBuilder::Validity generateOutput() {
+    if (hadErrors()) {
+      // Skip output if we had any errors.
+      return true;
+    }
+
     if (outputs.size() == 0) {
       return "no outputs specified";
     }
@@ -185,6 +190,30 @@ public:
     return true;
   }
 
+  void addError(kj::StringPtr file, SourcePos start, SourcePos end,
+                kj::StringPtr message) const override {
+    kj::String wholeMessage;
+    if (end.line == start.line) {
+      if (end.column == start.column) {
+        wholeMessage = kj::str(file, ":", start.line + 1, ":", start.column + 1,
+                               ": error: ", message, "\n");
+      } else {
+        wholeMessage = kj::str(file, ":", start.line + 1, ":", start.column + 1,
+                               "-", end.column + 1, ": error: ", message, "\n");
+      }
+    } else {
+      // The error spans multiple lines, so just report it on the first such line.
+      wholeMessage = kj::str(file, ":", start.line + 1, ": error: ", message, "\n");
+    }
+
+    context.error(wholeMessage);
+    __atomic_store_n(&hadErrors_, true, __ATOMIC_RELAXED);
+  }
+
+  bool hadErrors() const override {
+    return __atomic_load_n(&hadErrors_, __ATOMIC_RELAXED);
+  }
+
 private:
   kj::ProcessContext& context;
   ModuleLoader loader;
@@ -197,6 +226,8 @@ private:
     kj::StringPtr dir;
   };
   kj::Vector<OutputDirective> outputs;
+
+  mutable bool hadErrors_ = false;
 };
 
 }  // namespace compiler

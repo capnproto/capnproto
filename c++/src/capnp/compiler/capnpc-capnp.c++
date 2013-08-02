@@ -453,8 +453,8 @@ TextBlob genStructMember(schema::StructNode::Member::Reader member,
       int i = 0;
       return text(indent, member.getName(), " @", member.getOrdinal(),
                   " union", genAnnotations(member.getAnnotations(), scope),
-                  " {  # tag bits[", un.getDiscriminantOffset(), ", ",
-                  un.getDiscriminantOffset() + 16, ")\n",
+                  " {  # tag bits[", un.getDiscriminantOffset() * 16, ", ",
+                  un.getDiscriminantOffset() * 16 + 16, ")\n",
                   FOR_EACH(un.getMembers(), member) {
                     return genStructMember(member, scope, indent.next(), i++);
                   },

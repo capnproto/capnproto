@@ -25,6 +25,7 @@
 #define CAPNP_COMPILER_MODULE_LOADER_H_
 
 #include "compiler.h"
+#include "error-reporter.h"
 #include <kj/memory.h>
 #include <kj/array.h>
 #include <kj/string.h>
@@ -34,8 +35,8 @@ namespace compiler {
 
 class ModuleLoader {
 public:
-  explicit ModuleLoader(int errorFd);
-  // Create a ModuleLoader that writes error messages to the given file descriptor.
+  explicit ModuleLoader(const GlobalErrorReporter& errorReporter);
+  // Create a ModuleLoader that reports error messages to the given reporter.
 
   KJ_DISALLOW_COPY(ModuleLoader);
 

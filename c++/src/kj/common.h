@@ -393,6 +393,10 @@ private:  // internal interface used by friends only
       : isSet(true) {
     ctor(value, kj::mv(t));
   }
+  inline NullableValue(T& t)
+      : isSet(true) {
+    ctor(value, t);
+  }
   inline NullableValue(const T& t)
       : isSet(true) {
     ctor(value, t);
@@ -432,6 +436,19 @@ private:  // internal interface used by friends only
       isSet = other.isSet;
       if (isSet) {
         ctor(value, kj::mv(other.value));
+      }
+    }
+    return *this;
+  }
+
+  inline NullableValue& operator=(NullableValue& other) {
+    if (&other != this) {
+      if (isSet) {
+        dtor(value);
+      }
+      isSet = other.isSet;
+      if (isSet) {
+        ctor(value, other.value);
       }
     }
     return *this;
@@ -488,6 +505,7 @@ class Maybe {
 public:
   Maybe(): ptr(nullptr) {}
   Maybe(T&& t) noexcept(noexcept(T(instance<T&&>()))): ptr(kj::mv(t)) {}
+  Maybe(T& t): ptr(t) {}
   Maybe(const T& t): ptr(t) {}
   Maybe(const T* t) noexcept: ptr(t) {}
   Maybe(Maybe&& other) noexcept(noexcept(T(instance<T&&>()))): ptr(kj::mv(other.ptr)) {}
@@ -509,6 +527,7 @@ public:
   Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
 
   inline Maybe& operator=(Maybe&& other) { ptr = kj::mv(other.ptr); return *this; }
+  inline Maybe& operator=(Maybe& other) { ptr = other.ptr; return *this; }
   inline Maybe& operator=(const Maybe& other) { ptr = other.ptr; return *this; }
 
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }

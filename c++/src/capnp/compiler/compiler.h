@@ -86,6 +86,15 @@ public:
   // Get a SchemaLoader backed by this compiler.  Schema nodes will be lazily constructed as you
   // traverse them using this loader.
 
+  void clearWorkspace();
+  // The compiler builds a lot of temporary tables and data structures while it works.  It's
+  // useful to keep these around if more work is expected (especially if you are using lazy
+  // compilation and plan to look up Schema nodes that haven't already been seen), but once
+  // the SchemaLoader has everything you need, you can call clearWorkspace() to free up the
+  // temporary space.  Note that it's safe to call clearWorkspace() even if you do expect to
+  // compile more nodes in the future; it may simply lead to redundant work if the discarded
+  // structures are needed again.
+
 private:
   class Impl;
   kj::Own<Impl> impl;

@@ -34,6 +34,11 @@ public:
   void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) const override {
     ADD_FAILURE() << "Parse failed: (" << startByte << "-" << endByte << ") " << message.cStr();
   }
+
+  bool hadErrors() const override {
+    // Not used by lexer.
+    return false;
+  }
 };
 
 template <typename LexResult>

@@ -26,11 +26,14 @@
 
 #include "../common.h"
 #include <kj/string.h>
+#include <kj/exception.h>
 
 namespace capnp {
 namespace compiler {
 
 class ErrorReporter {
+  // Callback for reporting errors within a particular file.
+
 public:
   virtual ~ErrorReporter() noexcept(false);
 
@@ -46,6 +49,33 @@ public:
 
     addError(decl.getStartByte(), decl.getEndByte(), message);
   }
+
+  virtual bool hadErrors() const = 0;
+  // Return true if any errors have been reported, globally.  The main use case for this callback
+  // is to inhibit the reporting of errors which may have been caused by previous errors, or to
+  // allow the compiler to bail out entirely if it gets confused and thinks this could be because
+  // of previous errors.
+};
+
+class GlobalErrorReporter {
+  // Callback for reporting errors in any file.
+
+public:
+  struct SourcePos {
+    uint byte;
+    uint line;
+    uint column;
+  };
+
+  virtual void addError(kj::StringPtr file, SourcePos start, SourcePos end,
+                        kj::StringPtr message) const = 0;
+  // Report an error at the given location in the given file.
+
+  virtual bool hadErrors() const = 0;
+  // Return true if any errors have been reported, globally.  The main use case for this callback
+  // is to inhibit the reporting of errors which may have been caused by previous errors, or to
+  // allow the compiler to bail out entirely if it gets confused and thinks this could be because
+  // of previous errors.
 };
 
 }  // namespace compiler
