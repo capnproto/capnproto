@@ -152,7 +152,7 @@ AC_DEFUN([AX_CXX_COMPILE_STDCXX_11], [dnl
     fi
 
     if test x$ac_success = xno; then
-      AC_MSG_ERROR([*** A C++ library support for C++11 features is required.])
+      AC_MSG_ERROR([*** A C++ library with support for C++11 features is required.])
     fi
   fi
 ])
