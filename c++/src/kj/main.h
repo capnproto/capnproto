@@ -40,10 +40,69 @@ public:
 
   virtual void exit() KJ_NORETURN = 0;
   // Indicates program completion.  The program is considered successful unless `error()` was
-  // called.  Typically this exits with quick_exit(), meaning that the stack is not unwound, buffers
+  // called.  Typically this exits with _Exit(), meaning that the stack is not unwound, buffers
   // are not flushed, etc. -- it is the responsibility of the caller to flush any buffers that
   // matter.  However, an alternate context implementation e.g. for unit testing purposes could
   // choose to throw an exception instead.
+  //
+  // At first this approach may sound crazy.  Isn't it much better to shut down cleanly?  What if
+  // you lose data?  However, it turns out that if you look at each common class of program, _Exit()
+  // is almost always preferable.  Let's break it down:
+  //
+  // * Commands:  A typical program you might run from the command line is single-threaded and
+  //   exits quickly and deterministically.  Commands often use buffered I/O and need to flush
+  //   those buffers before exit.  However, most of the work performed by destructors is not
+  //   flushing buffers, but rather freeing up memory, placing objects into freelists, and closing
+  //   file descriptors.  All of this is irrelevant if the process is about to exit anyway, and
+  //   for a command that runs quickly, time wasted freeing heap space may make a real difference
+  //   in the overall runtime of a script.  Meanwhile, it is usually easy to determine exactly what
+  //   resources need to be flushed before exit, and easy to tell if they are not being flushed
+  //   (because the command fails to produce the expected output).  Therefore, it is reasonably
+  //   easy for commands to explicitly ensure all output is flushed before exiting, and it is
+  //   probably a good idea for them to do so anyway, because write failures should be detected
+  //   and handled.  For commands, a good strategy is to allocate any objects that require clean
+  //   destruction on the stack, and allow them to go out of scope before the command exits.
+  //   Meanwhile, any resources which do not need to be cleaned up should be allocated as members
+  //   of the command's main class, whose destructor normally will not be called.
+  //
+  // * Interactive apps:  Programs that interact with the user (whether they be graphical apps
+  //   with windows or console-based apps like emacs) generally exit only when the user asks them
+  //   to.  Such applications may store large data structures in memory which need to be synced
+  //   to disk, such as documents or user preferences.  However, relying on stack unwind or global
+  //   destructors as the mechanism for ensuring such syncing occurs is probably wrong.  First of
+  //   all, it's 2013, and applications ought to be actively syncing changes to non-volatile
+  //   storage the moment those changes are made.  Applications can crash at any time and a crash
+  //   should never lose data that is more than half a second old.  Meanwhile, if a user actually
+  //   does try to close an application while unsaved changes exist, the application UI should
+  //   prompt the user to decide what to do.  Such a UI mechanism is obviously too high level to
+  //   be implemented via destructors, so KJ's use of _Exit() shouldn't make a difference here.
+  //
+  // * Servers:  A good server is fault-tolerant, prepared for the possibility that at any time
+  //   it could crash, the OS could decide to kill it off, or the machine it is running on could
+  //   just die.  So, using _Exit() should be no problem.  In fact, servers generally never even
+  //   call exit anyway; they are killed externally.
+  //
+  // * Batch jobs:  A long-running batch job is something between a command and a server.  It
+  //   probably knows exactly what needs to be flushed before exiting, and it probably should be
+  //   fault-tolerant.
+  //
+  // Meanwhile, regardless of program type, if you are adhering to KJ style, then the use of
+  // _Exit() shouldn't be a problem anyway:
+  //
+  // * KJ style forbids global mutable state (singletons) in general and global constructors and
+  //   destructors in particular.  Therefore, everything that could possibly need cleanup either
+  //   lives on the stack or is transitively owned by something living on the stack.
+  //
+  // * Calling exit() simply means "Don't clean up anything older than this stack frame.".  If you
+  //   have resources that require cleanup before exit, make sure they are owned by stack frames
+  //   beyond the one that eventually calls exit().  To be as safe as possible, don't place any
+  //   state in your program's main class, and don't call exit() yourself.  Then, runMainAndExit()
+  //   will do it, and the only thing on the stack at that time will be your main class, which
+  //   has no state anyway.
+  //
+  // TODO(someday):  Perhaps we should use the new std::quick_exit(), so that at_quick_exit() is
+  //   available for those who really think they need it.  Unfortunately, it is not yet available
+  //   on many platforms.
 
   virtual void warning(StringPtr message) = 0;
   // Print the given message to standard error.  A newline is printed after the message if it
