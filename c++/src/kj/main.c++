@@ -161,6 +161,7 @@ int runMainAndExit(ProcessContext& context, MainFunc&& func, int argc, char* arg
     return e.exitCode;
   }
 #endif
+  KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT
 }
 
 // =======================================================================================
@@ -520,6 +521,7 @@ void MainBuilder::MainImpl::usageError(StringPtr programName, StringPtr message)
   impl->context.exitError(kj::str(
       programName, ": ", message,
       "\nTry '", programName, " --help' for more information."));
+  KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT
 }
 
 class MainBuilder::Impl::OptionDisplayOrder {
@@ -662,6 +664,7 @@ void MainBuilder::MainImpl::printHelp(StringPtr programName) {
 
   text.add('\0');
   impl->context.exitInfo(String(text.releaseAsArray()));
+  KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT
 }
 
 void MainBuilder::MainImpl::wrapText(Vector<char>& output, StringPtr indent, StringPtr text) {

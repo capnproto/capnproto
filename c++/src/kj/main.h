@@ -84,11 +84,11 @@ public:
   // are easily confused by quick_exit().
 
   StringPtr getProgramName() override;
-  void exit() KJ_NORETURN override;
+  void exit() override KJ_NORETURN;
   void warning(StringPtr message) override;
   void error(StringPtr message) override;
-  void exitError(StringPtr message) KJ_NORETURN override;
-  void exitInfo(StringPtr message) KJ_NORETURN override;
+  void exitError(StringPtr message) override KJ_NORETURN;
+  void exitInfo(StringPtr message) override KJ_NORETURN;
   void increaseLoggingVerbosity() override;
 
 private:
@@ -192,8 +192,8 @@ public:
   class OptionName {
   public:
     OptionName() = default;
-    inline constexpr OptionName(char shortName): isLong(false), shortName(shortName) {}
-    inline constexpr OptionName(const char* longName): isLong(true), longName(longName) {}
+    inline OptionName(char shortName): isLong(false), shortName(shortName) {}
+    inline OptionName(const char* longName): isLong(true), longName(longName) {}
 
   private:
     bool isLong;

@@ -117,7 +117,7 @@ private:
   Own<Iface> impl;
 };
 
-namespace _ {
+namespace _ {  // private
 
 template <typename T>
 T rvalueOrRef(T&&);
@@ -128,7 +128,47 @@ T rvalueOrRef(T&&);
 //     decltype(rvalueOrRef(i)) i2(i);                 // i2 has type int&.
 //     decltype(rvalueOrRef(kj::mv(i)) i3(kj::mv(i));  // i3 has type int.
 
-}  // namespace _
+}  // namespace _ (private)
+
+#if 1
+
+namespace _ {  // private
+
+template <typename T, typename Signature, Signature method>
+class BoundMethod;
+
+template <typename T, typename Return, typename... Params, Return (Decay<T>::*method)(Params...)>
+class BoundMethod<T, Return (Decay<T>::*)(Params...), method> {
+public:
+  BoundMethod(T&& t): t(kj::fwd<T>(t)) {}
+
+  Return operator()(Params&&... params) {
+    return (t.*method)(kj::fwd<Params>(params)...);
+  }
+
+private:
+  T t;
+};
+
+}  // namespace _ (private)
+
+#define KJ_BIND_METHOD(obj, method) \
+  ::kj::_::BoundMethod<decltype(::kj::_::rvalueOrRef(obj)), \
+                       decltype(&::kj::Decay<decltype(obj)>::method), \
+                       &::kj::Decay<decltype(obj)>::method>(obj)
+// Macro that produces a functor object which forwards to the method `obj.name`.  If `obj` is an
+// lvalue, the functor will hold a reference to it.  If `obj` is an rvalue, the functor will
+// contain a copy (by move) of it.
+//
+// The current implementation requires that the method is not overloaded.
+//
+// TODO(someday):  C++14's generic lambdas may be able to simplify this code considerably, and
+//   probably make it work with overloaded methods.
+
+#else
+// Here's a better implementation of the above that doesn't work with GCC (but does with Clang)
+// because it uses a local class with a template method.  Sigh.  This implementation supports
+// overloaded methods.
 
 #define KJ_BIND_METHOD(obj, method) \
   ({ \
@@ -149,6 +189,8 @@ T rvalueOrRef(T&&);
 // Macro that produces a functor object which forwards to the method `obj.name`.  If `obj` is an
 // lvalue, the functor will hold a reference to it.  If `obj` is an rvalue, the functor will
 // contain a copy (by move) of it.
+
+#endif
 
 }  // namespace kj
 

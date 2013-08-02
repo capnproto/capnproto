@@ -1378,7 +1378,7 @@ TEST(Encoding, Threads) {
 
       // Check that none of the values were corrupted.
       for (auto item: list.getReader()) {
-        ASSERT_EQ(4, item.size());
+        ASSERT_EQ(4u, item.size());
         EXPECT_EQ(me, item[0]);
         EXPECT_EQ(me + 1, item[1]);
         EXPECT_EQ(me + 2, item[2]);

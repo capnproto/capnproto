@@ -115,8 +115,8 @@ TEST(Arena, Array) {
     Arena arena;
     ArrayPtr<TestObject> arr1 = arena.allocateArray<TestObject>(4);
     ArrayPtr<TestObject> arr2 = arena.allocateArray<TestObject>(2);
-    EXPECT_EQ(4, arr1.size());
-    EXPECT_EQ(2, arr2.size());
+    EXPECT_EQ(4u, arr1.size());
+    EXPECT_EQ(2u, arr2.size());
     EXPECT_LE(arr1.end(), arr2.begin());
     EXPECT_EQ(6, TestObject::count);
   }
@@ -142,8 +142,8 @@ TEST(Arena, OwnArray) {
   {
     Array<TestObject> arr1 = arena.allocateOwnArray<TestObject>(4);
     Array<TestObject> arr2 = arena.allocateOwnArray<TestObject>(2);
-    EXPECT_EQ(4, arr1.size());
-    EXPECT_EQ(2, arr2.size());
+    EXPECT_EQ(4u, arr1.size());
+    EXPECT_EQ(2u, arr2.size());
     EXPECT_LE(arr1.end(), arr2.begin());
     EXPECT_EQ(6, TestObject::count);
   }
@@ -191,9 +191,9 @@ TEST(Arena, Alignment) {
   char& c2 = arena.allocate<char>();
   ArrayPtr<char> arr = arena.allocateArray<char>(8);
 
-  EXPECT_EQ(alignof(long) + sizeof(long), &c2 - &c);
-  EXPECT_EQ(alignof(long), reinterpret_cast<char*>(&l) - &c);
-  EXPECT_EQ(sizeof(char), arr.begin() - &c2);
+  EXPECT_EQ(alignof(long) + sizeof(long), implicitCast<size_t>(&c2 - &c));
+  EXPECT_EQ(alignof(long), implicitCast<size_t>(reinterpret_cast<char*>(&l) - &c));
+  EXPECT_EQ(sizeof(char), implicitCast<size_t>(arr.begin() - &c2));
 }
 
 TEST(Arena, EndOfChunk) {
@@ -285,7 +285,7 @@ TEST(Arena, MultiSegment) {
 TEST(Arena, Constructor) {
   Arena arena;
 
-  EXPECT_EQ(123, arena.allocate<uint64_t>(123));
+  EXPECT_EQ(123u, arena.allocate<uint64_t>(123));
   EXPECT_EQ("foo", arena.allocate<StringPtr>("foo", 3));
 }
 
@@ -366,10 +366,10 @@ TEST(Arena, Threads) {
       // allowing all the threads to start running.  We'll then join each thread.
     }
 
-    EXPECT_EQ(0, ThreadTestObject::destructorCount);
+    EXPECT_EQ(0u, ThreadTestObject::destructorCount);
   }
 
-  EXPECT_EQ(400000, ThreadTestObject::destructorCount);
+  EXPECT_EQ(400000u, ThreadTestObject::destructorCount);
 }
 
 }  // namespace

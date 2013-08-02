@@ -1297,31 +1297,31 @@ class NodeTranslator::DynamicSlot {
 
 public:
   DynamicSlot(DynamicStruct::Builder structBuilder, StructSchema::Member member)
-      : type(FIELD), structBuilder(structBuilder), member(member) {}
+      : type(FIELD), struct_{structBuilder, member} {}
   DynamicSlot(DynamicList::Builder listBuilder, uint index)
-      : type(ELEMENT), listBuilder(listBuilder), index(index) {}
+      : type(ELEMENT), list{listBuilder, index} {}
   DynamicSlot(DynamicUnion::Builder unionBuilder, StructSchema::Member unionMember)
-      : type(UNION_MEMBER), unionBuilder(unionBuilder), unionMember(unionMember) {}
+      : type(UNION_MEMBER), union_{unionBuilder, unionMember} {}
   DynamicSlot(DynamicUnion::Builder unionBuilder, StructSchema::Member unionMember,
               StructSchema structMemberSchema)
-      : type(STRUCT_OBJECT_UNION_MEMBER), unionBuilder(unionBuilder), unionMember(unionMember),
+      : type(STRUCT_OBJECT_UNION_MEMBER), union_{unionBuilder, unionMember},
         structMemberSchema(structMemberSchema) {}
   DynamicSlot(DynamicUnion::Builder unionBuilder, StructSchema::Member unionMember,
               ListSchema listMemberSchema)
-      : type(LIST_OBJECT_UNION_MEMBER), unionBuilder(unionBuilder), unionMember(unionMember),
+      : type(LIST_OBJECT_UNION_MEMBER), union_{unionBuilder, unionMember},
         listMemberSchema(listMemberSchema) {}
   DynamicSlot(DynamicUnion::Builder unionBuilder, StructSchema::Member unionMember,
               EnumSchema enumMemberSchema)
-      : type(ENUM_UNION_MEMBER), unionBuilder(unionBuilder), unionMember(unionMember),
+      : type(ENUM_UNION_MEMBER), union_{unionBuilder, unionMember},
         enumMemberSchema(enumMemberSchema) {}
 
   DynamicStruct::Builder initStruct() {
     switch (type) {
-      case FIELD: return structBuilder.init(member).as<DynamicStruct>();
-      case ELEMENT: return listBuilder[index].as<DynamicStruct>();
-      case UNION_MEMBER: return unionBuilder.init(unionMember).as<DynamicStruct>();
+      case FIELD: return struct_.builder.init(struct_.member).as<DynamicStruct>();
+      case ELEMENT: return list.builder[list.index].as<DynamicStruct>();
+      case UNION_MEMBER: return union_.builder.init(union_.member).as<DynamicStruct>();
       case STRUCT_OBJECT_UNION_MEMBER:
-        return unionBuilder.initObject(unionMember, structMemberSchema);
+        return union_.builder.initObject(union_.member, structMemberSchema);
       case LIST_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
       case ENUM_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
     }
@@ -1330,12 +1330,12 @@ public:
 
   DynamicList::Builder initList(uint size) {
     switch (type) {
-      case FIELD: return structBuilder.init(member, size).as<DynamicList>();
-      case ELEMENT: return listBuilder.init(index, size).as<DynamicList>();
-      case UNION_MEMBER: return unionBuilder.init(unionMember, size).as<DynamicList>();
+      case FIELD: return struct_.builder.init(struct_.member, size).as<DynamicList>();
+      case ELEMENT: return list.builder.init(list.index, size).as<DynamicList>();
+      case UNION_MEMBER: return union_.builder.init(union_.member, size).as<DynamicList>();
       case STRUCT_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
       case LIST_OBJECT_UNION_MEMBER:
-        return unionBuilder.initObject(unionMember, listMemberSchema, size);
+        return union_.builder.initObject(union_.member, listMemberSchema, size);
       case ENUM_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
     }
     KJ_FAIL_ASSERT("can't get here");
@@ -1343,9 +1343,9 @@ public:
 
   DynamicUnion::Builder getUnion() {
     switch (type) {
-      case FIELD: return structBuilder.get(member).as<DynamicUnion>();
+      case FIELD: return struct_.builder.get(struct_.member).as<DynamicUnion>();
       case ELEMENT: KJ_FAIL_REQUIRE("Type mismatch.");
-      case UNION_MEMBER: return unionBuilder.init(unionMember).as<DynamicUnion>();
+      case UNION_MEMBER: return union_.builder.init(union_.member).as<DynamicUnion>();
       case STRUCT_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
       case LIST_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
       case ENUM_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
@@ -1355,13 +1355,13 @@ public:
 
   void set(DynamicValue::Reader value) {
     switch (type) {
-      case FIELD: structBuilder.set(member, value); return;
-      case ELEMENT: listBuilder.set(index, value); return;
-      case UNION_MEMBER: unionBuilder.set(unionMember, value); return;
-      case STRUCT_OBJECT_UNION_MEMBER: unionBuilder.set(unionMember, value); return;
-      case LIST_OBJECT_UNION_MEMBER: unionBuilder.set(unionMember, value); return;
+      case FIELD: struct_.builder.set(struct_.member, value); return;
+      case ELEMENT: list.builder.set(list.index, value); return;
+      case UNION_MEMBER: union_.builder.set(union_.member, value); return;
+      case STRUCT_OBJECT_UNION_MEMBER: union_.builder.set(union_.member, value); return;
+      case LIST_OBJECT_UNION_MEMBER: union_.builder.set(union_.member, value); return;
       case ENUM_UNION_MEMBER:
-        unionBuilder.set(unionMember, value.as<DynamicEnum>().getRaw());
+        union_.builder.set(union_.member, value.as<DynamicEnum>().getRaw());
         return;
     }
     KJ_FAIL_ASSERT("can't get here");
@@ -1373,14 +1373,14 @@ public:
     // This is really ugly.
 
     switch (type) {
-      case FIELD: return enumIdForMember(member);
+      case FIELD: return enumIdForMember(struct_.member);
       case ELEMENT: {
-        if (listBuilder.getSchema().whichElementType() == schema::Type::Body::ENUM_TYPE) {
-          return listBuilder.getSchema().getEnumElementType().getProto().getId();
+        if (list.builder.getSchema().whichElementType() == schema::Type::Body::ENUM_TYPE) {
+          return list.builder.getSchema().getEnumElementType().getProto().getId();
         }
         return nullptr;
       }
-      case UNION_MEMBER: return enumIdForMember(unionMember);
+      case UNION_MEMBER: return enumIdForMember(union_.member);
       case STRUCT_OBJECT_UNION_MEMBER: return nullptr;
       case LIST_OBJECT_UNION_MEMBER: return nullptr;
       case ENUM_UNION_MEMBER: return enumMemberSchema.getProto().getId();
@@ -1397,22 +1397,23 @@ private:
 
   union {
     struct {
-      DynamicStruct::Builder structBuilder;
+      DynamicStruct::Builder builder;
       StructSchema::Member member;
-    };
+    } struct_;
     struct {
-      DynamicList::Builder listBuilder;
+      DynamicList::Builder builder;
       uint index;
-    };
+    } list;
     struct {
-      DynamicUnion::Builder unionBuilder;
-      StructSchema::Member unionMember;
-      union {
-        StructSchema structMemberSchema;
-        ListSchema listMemberSchema;
-        EnumSchema enumMemberSchema;
-      };
-    };
+      DynamicUnion::Builder builder;
+      StructSchema::Member member;
+    } union_;
+  };
+
+  union {
+    StructSchema structMemberSchema;
+    ListSchema listMemberSchema;
+    EnumSchema enumMemberSchema;
   };
 
   static kj::Maybe<uint64_t> enumIdForMember(StructSchema::Member member) {

@@ -254,13 +254,13 @@ TEST(Common, Defer) {
   {
     KJ_DEFER(++i);
     KJ_DEFER(j += 3; k = true);
-    EXPECT_EQ(0, i);
-    EXPECT_EQ(1, j);
+    EXPECT_EQ(0u, i);
+    EXPECT_EQ(1u, j);
     EXPECT_FALSE(k);
   }
 
-  EXPECT_EQ(1, i);
-  EXPECT_EQ(4, j);
+  EXPECT_EQ(1u, i);
+  EXPECT_EQ(4u, j);
   EXPECT_TRUE(k);
 }
 

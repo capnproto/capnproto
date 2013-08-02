@@ -38,32 +38,32 @@ TEST(Mutex, MutexGuarded) {
 
   {
     Locked<uint> lock = value.lockExclusive();
-    EXPECT_EQ(123, *lock);
+    EXPECT_EQ(123u, *lock);
 
     Thread thread([&]() {
       Locked<uint> threadLock = value.lockExclusive();
-      EXPECT_EQ(456, *threadLock);
+      EXPECT_EQ(456u, *threadLock);
       *threadLock = 789;
     });
 
     delay();
-    EXPECT_EQ(123, *lock);
+    EXPECT_EQ(123u, *lock);
     *lock = 456;
     auto earlyRelease = kj::mv(lock);
   }
 
-  EXPECT_EQ(789, *value.lockExclusive());
+  EXPECT_EQ(789u, *value.lockExclusive());
 
   {
     auto rlock1 = value.lockShared();
 
     {
       auto rlock2 = value.lockShared();
-      EXPECT_EQ(789, *rlock2);
+      EXPECT_EQ(789u, *rlock2);
       auto rlock3 = value.lockShared();
-      EXPECT_EQ(789, *rlock3);
+      EXPECT_EQ(789u, *rlock3);
       auto rlock4 = value.lockShared();
-      EXPECT_EQ(789, *rlock4);
+      EXPECT_EQ(789u, *rlock4);
     }
 
     Thread thread2([&]() {
@@ -80,24 +80,24 @@ TEST(Mutex, MutexGuarded) {
     // but we'll leave this test here until then to make sure we notice the change.
 
     delay();
-    EXPECT_EQ(789, *rlock1);
+    EXPECT_EQ(789u, *rlock1);
 
     {
       auto rlock2 = value.lockShared();
-      EXPECT_EQ(789, *rlock2);
+      EXPECT_EQ(789u, *rlock2);
       auto rlock3 = value.lockShared();
-      EXPECT_EQ(789, *rlock3);
+      EXPECT_EQ(789u, *rlock3);
       auto rlock4 = value.lockShared();
-      EXPECT_EQ(789, *rlock4);
+      EXPECT_EQ(789u, *rlock4);
     }
 #endif
 
     delay();
-    EXPECT_EQ(789, *rlock1);
+    EXPECT_EQ(789u, *rlock1);
     auto earlyRelease = kj::mv(rlock1);
   }
 
-  EXPECT_EQ(321, *value.lockExclusive());
+  EXPECT_EQ(321u, *value.lockExclusive());
 }
 
 TEST(Mutex, Lazy) {
@@ -105,7 +105,7 @@ TEST(Mutex, Lazy) {
   bool initStarted = false;
 
   Thread thread([&]() {
-    EXPECT_EQ(123, lazy.get([&](SpaceFor<uint>& space) -> Own<uint> {
+    EXPECT_EQ(123u, lazy.get([&](SpaceFor<uint>& space) -> Own<uint> {
       __atomic_store_n(&initStarted, true, __ATOMIC_RELAXED);
       delay();
       return space.construct(123);
@@ -117,8 +117,8 @@ TEST(Mutex, Lazy) {
     sched_yield();
   }
 
-  EXPECT_EQ(123, lazy.get([](SpaceFor<uint>& space) { return space.construct(456); }));
-  EXPECT_EQ(123, lazy.get([](SpaceFor<uint>& space) { return space.construct(789); }));
+  EXPECT_EQ(123u, lazy.get([](SpaceFor<uint>& space) { return space.construct(456); }));
+  EXPECT_EQ(123u, lazy.get([](SpaceFor<uint>& space) { return space.construct(789); }));
 }
 
 }  // namespace

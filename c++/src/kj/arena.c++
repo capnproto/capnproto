@@ -69,7 +69,7 @@ void Arena::State::cleanup() {
 namespace {
 
 constexpr bool isPowerOfTwo(size_t value) {
-  return (value & value - 1) == 0;
+  return (value & (value - 1)) == 0;
 }
 
 inline byte* alignTo(byte* p, uint alignment) {

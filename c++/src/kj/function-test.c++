@@ -59,7 +59,7 @@ TEST(Function, Method) {
 
   EXPECT_EQ(123 + 456, f(123, 456));
   EXPECT_EQ(7 + 8 + 1, f(7, 8));
-  EXPECT_EQ(9 + 2 + 2, f2(2, 9));
+  EXPECT_EQ(9u + 2u + 2u, f2(2, 9));
 
   EXPECT_EQ(3, obj.callCount);
 

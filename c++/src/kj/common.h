@@ -134,6 +134,8 @@ void inlineRequireFailure(
     const char* file, int line, const char* expectation, const char* macroArgs,
     const char* message = nullptr) KJ_NORETURN;
 
+void unreachable() KJ_NORETURN;
+
 }  // namespace _ (private)
 
 #ifdef NDEBUG
@@ -146,6 +148,16 @@ void inlineRequireFailure(
 // check preconditions inside inline methods.  KJ_IREQUIRE is particularly useful in that
 // it will be enabled depending on whether the application is compiled in debug mode rather than
 // whether libkj is.
+#endif
+
+#define KJ_UNREACHABLE ::kj::_::unreachable();
+// Put this on code paths that cannot be reached to suppress compiler warnings about missing
+// returns.
+
+#if __clang__
+#define KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT
+#else
+#define KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT KJ_UNREACHABLE
 #endif
 
 // #define KJ_STACK_ARRAY(type, name, size, minStack, maxStack)

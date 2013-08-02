@@ -465,7 +465,8 @@ const Compiler::Node::Content& Compiler::Node::getContent(Content::State minimum
         builder.setScopeId(p->id);
       }
 
-      auto nestedIter = builder.initNestedNodes(locked->orderedNestedNodes.size()).begin();
+      auto nestedNodes = builder.initNestedNodes(locked->orderedNestedNodes.size());
+      auto nestedIter = nestedNodes.begin();
       for (auto node: locked->orderedNestedNodes) {
         nestedIter->setName(node->declaration.getName().getValue());
         nestedIter->setId(node->id);

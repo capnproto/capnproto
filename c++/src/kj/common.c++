@@ -23,6 +23,7 @@
 
 #include "common.h"
 #include "debug.h"
+#include <stdlib.h>
 
 namespace kj {
 namespace _ {  // private
@@ -36,6 +37,13 @@ void inlineRequireFailure(const char* file, int line, const char* expectation,
     Debug::Fault f(file, line, Exception::Nature::PRECONDITION, 0, expectation, macroArgs, message);
     f.fatal();
   }
+}
+
+void unreachable() {
+  KJ_FAIL_ASSERT("Supposendly-unreachable branch executed.");
+
+  // Really make sure we abort.
+  abort();
 }
 
 }  // namespace _ (private)
