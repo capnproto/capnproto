@@ -40,7 +40,7 @@ public:
   ~PackedInputStream() noexcept(false);
 
   // implements InputStream ------------------------------------------
-  size_t read(void* buffer, size_t minBytes, size_t maxBytes) override;
+  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
   void skip(size_t bytes) override;
 
 private:

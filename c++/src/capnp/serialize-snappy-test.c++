@@ -94,7 +94,7 @@ public:
     data.append(reinterpret_cast<const char*>(buffer), size);
   }
 
-  size_t read(void* buffer, size_t minBytes, size_t maxBytes) override {
+  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     KJ_ASSERT(maxBytes <= data.size() - readPos, "Overran end of stream.");
     size_t amount = std::min(maxBytes, std::max(minBytes, preferredReadSize));
     memcpy(buffer, data.data() + readPos, amount);
@@ -107,7 +107,7 @@ public:
     readPos += bytes;
   }
 
-  kj::ArrayPtr<const byte> getReadBuffer() override {
+  kj::ArrayPtr<const byte> tryGetReadBuffer() override {
     size_t amount = std::min(data.size() - readPos, preferredReadSize);
     return kj::arrayPtr(reinterpret_cast<const byte*>(data.data() + readPos), amount);
   }

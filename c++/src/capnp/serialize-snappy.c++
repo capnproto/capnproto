@@ -36,6 +36,10 @@ public:
       : inputStream(inputStream) {}
   inline ~InputStreamSnappySource() noexcept {}
 
+  bool atEnd() {
+    return inputStream.getReadBuffer().size() == 0;
+  }
+
   // implements snappy::Source ---------------------------------------
 
   size_t Available() const override {
@@ -68,7 +72,7 @@ SnappyInputStream::SnappyInputStream(BufferedInputStream& inner, kj::ArrayPtr<by
 
 SnappyInputStream::~SnappyInputStream() noexcept(false) {}
 
-kj::ArrayPtr<const byte> SnappyInputStream::getReadBuffer() {
+kj::ArrayPtr<const byte> SnappyInputStream::tryGetReadBuffer() {
   if (bufferAvailable.size() == 0) {
     refill();
   }
@@ -76,44 +80,53 @@ kj::ArrayPtr<const byte> SnappyInputStream::getReadBuffer() {
   return bufferAvailable;
 }
 
-size_t SnappyInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
+size_t SnappyInputStream::tryRead(void* dst, size_t minBytes, size_t maxBytes) {
+  size_t total = 0;
   while (minBytes > bufferAvailable.size()) {
     memcpy(dst, bufferAvailable.begin(), bufferAvailable.size());
 
     dst = reinterpret_cast<byte*>(dst) + bufferAvailable.size();
+    total += bufferAvailable.size();
     minBytes -= bufferAvailable.size();
     maxBytes -= bufferAvailable.size();
 
-    refill();
+    if (!refill()) {
+      return total;
+    }
   }
 
   // Serve from current buffer.
   size_t n = std::min(bufferAvailable.size(), maxBytes);
   memcpy(dst, bufferAvailable.begin(), n);
   bufferAvailable = bufferAvailable.slice(n, bufferAvailable.size());
-  return n;
+  return total + n;
 }
 
 void SnappyInputStream::skip(size_t bytes) {
   while (bytes > bufferAvailable.size()) {
     bytes -= bufferAvailable.size();
-    refill();
+    KJ_REQUIRE(refill(), "Premature EOF");
   }
   bufferAvailable = bufferAvailable.slice(bytes, bufferAvailable.size());
 }
 
-void SnappyInputStream::refill() {
+bool SnappyInputStream::refill() {
   uint32_t length = 0;
   InputStreamSnappySource snappySource(inner);
+
+  if (snappySource.atEnd()) {
+    return false;
+  }
+
   KJ_REQUIRE(
       snappy::RawUncompress(
           &snappySource, reinterpret_cast<char*>(buffer.begin()), buffer.size(), &length),
       "Snappy decompression failed.") {
-    length = 1;  // garbage
-    break;
+    return false;
   }
 
   bufferAvailable = buffer.slice(0, length);
+  return true;
 }
 
 // =======================================================================================

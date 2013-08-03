@@ -82,6 +82,11 @@ public:
   // errors while compiling (reported via `module.addError()`), then the SchemaLoader may behave as
   // if the node doesn't exist, or may return an invalid partial Schema.
 
+  kj::Maybe<uint64_t> lookup(uint64_t parent, kj::StringPtr childName) const;
+  // Given the type ID of a schema node, find the ID of a node nested within it, without actually
+  // building either node.  Throws an exception if the parent ID is not recognized; returns null
+  // if the parent has no child of the given name.
+
   const SchemaLoader& getLoader() const;
   // Get a SchemaLoader backed by this compiler.  Schema nodes will be lazily constructed as you
   // traverse them using this loader.

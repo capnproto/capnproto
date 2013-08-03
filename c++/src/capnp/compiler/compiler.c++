@@ -214,6 +214,7 @@ public:
   virtual ~Impl();
 
   uint64_t add(const Module& module, Mode mode) const;
+  kj::Maybe<uint64_t> lookup(uint64_t parent, kj::StringPtr childName) const;
   const CompiledModule& add(const Module& parsedModule) const;
 
   struct Workspace {
@@ -785,6 +786,15 @@ uint64_t Compiler::Impl::add(const Module& module, Mode mode) const {
   return node.getId();
 }
 
+kj::Maybe<uint64_t> Compiler::Impl::lookup(uint64_t parent, kj::StringPtr childName) const {
+  // We know this won't use the workspace, so we need not lock it.
+  KJ_IF_MAYBE(parentNode, findNode(parent)) {
+    return parentNode->lookupMember(childName).map([](const Node& n) { return n.getId(); });
+  } else {
+    KJ_FAIL_REQUIRE("lookup()s parameter 'parent' must be a known ID.", parent);
+  }
+}
+
 void Compiler::Impl::load(const SchemaLoader& loader, uint64_t id) const {
   KJ_IF_MAYBE(node, findNode(id)) {
     if (&loader == &finalLoader) {
@@ -804,6 +814,10 @@ Compiler::~Compiler() {}
 
 uint64_t Compiler::add(const Module& module, Mode mode) const {
   return impl->add(module, mode);
+}
+
+kj::Maybe<uint64_t> Compiler::lookup(uint64_t parent, kj::StringPtr childName) const {
+  return impl->lookup(parent, childName);
 }
 
 const SchemaLoader& Compiler::getLoader() const {

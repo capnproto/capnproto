@@ -39,8 +39,8 @@ public:
   ~SnappyInputStream() noexcept(false);
 
   // implements BufferedInputStream ----------------------------------
-  kj::ArrayPtr<const byte> getReadBuffer() override;
-  size_t read(void* buffer, size_t minBytes, size_t maxBytes) override;
+  kj::ArrayPtr<const byte> tryGetReadBuffer() override;
+  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
   void skip(size_t bytes) override;
 
 private:
@@ -51,7 +51,7 @@ private:
   kj::ArrayPtr<byte> buffer;
   kj::ArrayPtr<byte> bufferAvailable;
 
-  void refill();
+  bool refill();
 };
 
 class SnappyOutputStream: public kj::BufferedOutputStream {

@@ -411,7 +411,7 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
           const Impl::Option& option = *iter->second;
           if (option.hasArg) {
             // Argument expected.
-            if (j + 1 < params.size()) {
+            if (j + 1 < param.size()) {
               // Rest of flag is argument.
               StringPtr arg = param.slice(j + 1);
               KJ_IF_MAYBE(error, (*option.funcWithArg)(arg).releaseError()) {
@@ -439,21 +439,23 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
     } else if (!impl->subCommands.empty()) {
       // A sub-command name.
       auto iter = impl->subCommands.find(param);
-      if (iter == impl->subCommands.end()) {
+      if (iter != impl->subCommands.end()) {
         MainFunc subMain = iter->second.func();
         subMain(str(programName, ' ', param), params.slice(i + 1, params.size()));
         return;
       } else if (param == "help") {
         if (i + 1 < params.size()) {
           iter = impl->subCommands.find(params[i + 1]);
-          if (iter == impl->subCommands.end()) {
-            usageError(programName, str(params[i + 1], ": unknown command"));
-          } else {
+          if (iter != impl->subCommands.end()) {
             // Run the sub-command with "--help" as the argument.
             MainFunc subMain = iter->second.func();
             StringPtr dummyArg = "--help";
             subMain(str(programName, ' ', params[i + 1]), arrayPtr(&dummyArg, 1));
             return;
+          } else if (params[i + 1] == "help") {
+            impl->context.exitInfo("Help, I'm trapped in a help text factory!");
+          } else {
+            usageError(programName, str(params[i + 1], ": unknown command"));
           }
         } else {
           printHelp(programName);

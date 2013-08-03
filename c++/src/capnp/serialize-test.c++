@@ -101,7 +101,7 @@ public:
         lazy(lazy) {}
   ~TestInputStream() {}
 
-  size_t read(void* buffer, size_t minBytes, size_t maxBytes) override {
+  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override {
     KJ_ASSERT(maxBytes <= size_t(end - pos), "Overran end of stream.");
     size_t amount = lazy ? minBytes : maxBytes;
     memcpy(buffer, pos, amount);

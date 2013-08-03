@@ -38,9 +38,9 @@ class InputStream {
 public:
   virtual ~InputStream() noexcept(false);
 
-  virtual size_t read(void* buffer, size_t minBytes, size_t maxBytes) = 0;
+  size_t read(void* buffer, size_t minBytes, size_t maxBytes);
   // Reads at least minBytes and at most maxBytes, copying them into the given buffer.  Returns
-  // the size read.  Throws an exception on errors.
+  // the size read.  Throws an exception on errors.  Implemented in terms of tryRead().
   //
   // maxBytes is the number of bytes the caller really wants, but minBytes is the minimum amount
   // needed by the caller before it can start doing useful processing.  If the stream returns less
@@ -48,11 +48,18 @@ public:
   // less than maxBytes is useful when it makes sense for the caller to parallelize processing
   // with I/O.
   //
+  // Never blocks if minBytes is zero.  If minBytes is zero and maxBytes is non-zero, this may
+  // attempt a non-blocking read or may just return zero.  To force a read, use a non-zero minBytes.
+  // To detect EOF without throwing an exception, use tryRead().
+  //
   // Cap'n Proto never asks for more bytes than it knows are part of the message.  Therefore, if
   // the InputStream happens to know that the stream will never reach maxBytes -- even if it has
   // reached minBytes -- it should throw an exception to avoid wasting time processing an incomplete
   // message.  If it can't even reach minBytes, it MUST throw an exception, as the caller is not
   // expected to understand how to deal with partial reads.
+
+  virtual size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) = 0;
+  // Like read(), but may return fewer than minBytes on EOF.
 
   inline void read(void* buffer, size_t bytes) { read(buffer, bytes, bytes); }
   // Convenience method for reading an exact number of bytes.
@@ -84,10 +91,13 @@ class BufferedInputStream: public InputStream {
 public:
   virtual ~BufferedInputStream() noexcept(false);
 
-  virtual ArrayPtr<const byte> getReadBuffer() = 0;
+  ArrayPtr<const byte> getReadBuffer();
   // Get a direct pointer into the read buffer, which contains the next bytes in the input.  If the
   // caller consumes any bytes, it should then call skip() to indicate this.  This always returns a
-  // non-empty buffer unless at EOF.
+  // non-empty buffer or throws an exception.  Implemented in terms of tryGetReadBuffer().
+
+  virtual ArrayPtr<const byte> tryGetReadBuffer() = 0;
+  // Like getReadBuffer() but may return an empty buffer on EOF.
 };
 
 class BufferedOutputStream: public OutputStream {
@@ -130,8 +140,8 @@ public:
   ~BufferedInputStreamWrapper() noexcept(false);
 
   // implements BufferedInputStream ----------------------------------
-  ArrayPtr<const byte> getReadBuffer() override;
-  size_t read(void* buffer, size_t minBytes, size_t maxBytes) override;
+  ArrayPtr<const byte> tryGetReadBuffer() override;
+  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
   void skip(size_t bytes) override;
 
 private:
@@ -182,8 +192,8 @@ public:
   ~ArrayInputStream() noexcept(false);
 
   // implements BufferedInputStream ----------------------------------
-  ArrayPtr<const byte> getReadBuffer() override;
-  size_t read(void* buffer, size_t minBytes, size_t maxBytes) override;
+  ArrayPtr<const byte> tryGetReadBuffer() override;
+  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
   void skip(size_t bytes) override;
 
 private:
@@ -250,7 +260,7 @@ public:
   KJ_DISALLOW_COPY(FdInputStream);
   ~FdInputStream() noexcept(false);
 
-  size_t read(void* buffer, size_t minBytes, size_t maxBytes) override;
+  size_t tryRead(void* buffer, size_t minBytes, size_t maxBytes) override;
 
 private:
   int fd;

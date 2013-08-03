@@ -252,7 +252,7 @@ static void print(std::ostream& os, const DynamicValue::Reader& value,
       }
       break;
     case DynamicValue::OBJECT:
-      os << "(opaque object)";
+      os << "<opaque object>";
       break;
   }
 }

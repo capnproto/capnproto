@@ -33,7 +33,7 @@ namespace _ {  // private
 PackedInputStream::PackedInputStream(kj::BufferedInputStream& inner): inner(inner) {}
 PackedInputStream::~PackedInputStream() noexcept(false) {}
 
-size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
+size_t PackedInputStream::tryRead(void* dst, size_t minBytes, size_t maxBytes) {
   if (maxBytes == 0) {
     return 0;
   }
@@ -46,8 +46,8 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
   uint8_t* const outMin = reinterpret_cast<uint8_t*>(dst) + minBytes;
 
   kj::ArrayPtr<const byte> buffer = inner.getReadBuffer();
-  KJ_REQUIRE(buffer.size() > 0, "Premature end of packed input.") {
-    return minBytes;  // garbage
+  if (buffer.size() == 0) {
+    return 0;
   }
   const uint8_t* __restrict__ in = reinterpret_cast<const uint8_t*>(buffer.begin());
 
@@ -55,7 +55,7 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
   inner.skip(buffer.size()); \
   buffer = inner.getReadBuffer(); \
   KJ_REQUIRE(buffer.size() > 0, "Premature end of packed input.") { \
-    return minBytes;  /* garbage */ \
+    return out - reinterpret_cast<uint8_t*>(dst); \
   } \
   in = reinterpret_cast<const uint8_t*>(buffer.begin())
 
@@ -127,7 +127,7 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
 
       KJ_REQUIRE(runLength <= outEnd - out,
                  "Packed input did not end cleanly on a segment boundary.") {
-        return std::max<size_t>(minBytes, out - reinterpret_cast<uint8_t*>(dst));  // garbage
+        return out - reinterpret_cast<uint8_t*>(dst);
       }
       memset(out, 0, runLength);
       out += runLength;
@@ -139,7 +139,7 @@ size_t PackedInputStream::read(void* dst, size_t minBytes, size_t maxBytes) {
 
       KJ_REQUIRE(runLength <= outEnd - out,
                  "Packed input did not end cleanly on a segment boundary.") {
-        return std::max<size_t>(minBytes, out - reinterpret_cast<uint8_t*>(dst));  // garbage
+        return out - reinterpret_cast<uint8_t*>(dst);
       }
 
       uint inRemaining = BUFFER_REMAINING;
