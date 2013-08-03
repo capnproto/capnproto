@@ -24,7 +24,7 @@
 // This program is a code generator plugin for capnpc which writes the schema back to stdout in
 // roughly capnpc format.
 
-#include "../schema.capnp.h"
+#include <capnp/schema.capnp.h>
 #include "../serialize.h"
 #include <kj/debug.h>
 #include <kj/io.h>
