@@ -33,7 +33,9 @@ clean-local:
 	  cd gtest && $(MAKE) $(AM_MAKEFLAGS) clean; \
 	fi
 
-AM_CXXFLAGS = -I$(srcdir)/src -I$(builddir)/src
+AM_CXXFLAGS = -I$(srcdir)/src -I$(builddir)/src $(PTHREAD_CFLAGS)
+
+AM_LDFLAGS = $(PTHREAD_CFLAGS)
 
 EXTRA_DIST =                                                                 \
   README.txt                                                                 \
@@ -76,7 +78,7 @@ maintainer-clean-local:
 
 # Implicit rules for invoking capnpc.
 %.capnp.h: %.capnp
-	$(CAPNPC) --src-prefix=$(srcdir) -oc++ $^
+	$(CAPNPC) --src-prefix=$(srcdir) -oc++ -I$(srcdir)/src $^
 %.capnp.c++: %.capnp.h
 	@:
 
@@ -84,13 +86,20 @@ public_capnpc_inputs =                                         \
   src/capnp/c++.capnp                                          \
   src/capnp/schema.capnp
 
-capnpc_inputs = $(public_capnpc_inputs)
+capnpc_inputs =                                                \
+  $(public_capnpc_inputs)                                      \
+  src/capnp/compiler/lexer.capnp                               \
+  src/capnp/compiler/grammar.capnp
 
 capnpc_outputs =                                               \
   src/capnp/c++.capnp.c++                                      \
   src/capnp/c++.capnp.h                                        \
   src/capnp/schema.capnp.c++                                   \
-  src/capnp/schema.capnp.h
+  src/capnp/schema.capnp.h                                     \
+  src/capnp/compiler/lexer.capnp.c++                           \
+  src/capnp/compiler/lexer.capnp.h                             \
+  src/capnp/compiler/grammar.capnp.c++                         \
+  src/capnp/compiler/grammar.capnp.h
 
 includecapnpdir = $(includedir)/capnp
 includekjdir = $(includedir)/kj
@@ -139,6 +148,7 @@ nodist_includecapnp_HEADERS =                                  \
 
 lib_LTLIBRARIES = libcapnp.la
 
+libcapnp_la_LIBADD = $(PTHREAD_LIBS)
 libcapnp_la_LDFLAGS = -release $(VERSION) -export-dynamic -no-undefined
 libcapnp_la_SOURCES=                                           \
   src/kj/common.c++                                            \
@@ -165,10 +175,36 @@ libcapnp_la_SOURCES=                                           \
   src/capnp/dynamic.c++                                        \
   src/capnp/stringify.c++                                      \
   src/capnp/serialize.c++                                      \
-  src/capnp/serialize-packed.c++
+  src/capnp/serialize-packed.c++                               \
+  src/capnp/compiler/md5.h                                     \
+  src/capnp/compiler/md5.c++                                   \
+  src/capnp/compiler/error-reporter.h                          \
+  src/capnp/compiler/error-reporter.c++                        \
+  src/capnp/compiler/lexer.capnp.h                             \
+  src/capnp/compiler/lexer.capnp.c++                           \
+  src/capnp/compiler/lexer.h                                   \
+  src/capnp/compiler/lexer.c++                                 \
+  src/capnp/compiler/grammar.capnp.h                           \
+  src/capnp/compiler/grammar.capnp.c++                         \
+  src/capnp/compiler/parser.h                                  \
+  src/capnp/compiler/parser.c++                                \
+  src/capnp/compiler/node-translator.h                         \
+  src/capnp/compiler/node-translator.c++                       \
+  src/capnp/compiler/compiler.h                                \
+  src/capnp/compiler/compiler.c++                              \
+  src/capnp/compiler/module-loader.h                           \
+  src/capnp/compiler/module-loader.c++
 nodist_libcapnp_la_SOURCES =                                   \
   src/capnp/schema.capnp.c++                                   \
   src/capnp/c++.capnp.c++
+
+bin_PROGRAMS = capnp capnpc-capnp
+
+capnp_LDADD = $(PTHREAD_LIBS) libcapnp.la
+capnp_SOURCES = src/capnp/compiler/capnp.c++
+
+capnpc_capnp_LDADD = $(PTHREAD_LIBS) libcapnp.la
+capnpc_capnp_SOURCES = src/capnp/compiler/capnpc-capnp.c++
 
 # Source files intentionally not included in the dist at this time:
 #  src/capnp/serialize-snappy*
@@ -221,7 +257,9 @@ capnp_test_SOURCES =                                           \
   src/capnp/serialize-test.c++                                 \
   src/capnp/serialize-packed-test.c++                          \
   src/capnp/test-util.c++                                      \
-  src/capnp/test-util.h
+  src/capnp/test-util.h                                        \
+  src/capnp/compiler/lexer-test.c++                            \
+  src/capnp/compiler/md5-test.c++
 nodist_capnp_test_SOURCES = $(test_capnpc_outputs)
 
 TESTS = capnp-test

@@ -474,6 +474,10 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
   // Handle arguments.
   // ------------------------------------
 
+  if (!impl->subCommands.empty()) {
+    usageError(programName, "missing command");
+  }
+
   // Count the number of required arguments, so that we know how to distribute the optional args.
   uint requiredArgCount = 0;
   for (auto& argSpec: impl->args) {
