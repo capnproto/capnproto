@@ -211,7 +211,7 @@ private:
 class Compiler::Impl: public SchemaLoader::LazyLoadCallback {
 public:
   Impl();
-  virtual ~Impl();
+  virtual ~Impl() noexcept(false);
 
   uint64_t add(const Module& module, Mode mode) const;
   kj::Maybe<uint64_t> lookup(uint64_t parent, kj::StringPtr childName) const;

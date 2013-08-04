@@ -56,7 +56,7 @@ class Compiler {
 
 public:
   Compiler();
-  ~Compiler();
+  ~Compiler() noexcept(false);
   KJ_DISALLOW_COPY(Compiler);
 
   enum Mode {
