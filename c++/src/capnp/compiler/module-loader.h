@@ -40,7 +40,7 @@ public:
 
   KJ_DISALLOW_COPY(ModuleLoader);
 
-  ~ModuleLoader();
+  ~ModuleLoader() noexcept(false);
 
   void addImportPath(kj::String path);
   // Add a directory to the list of paths that is searched for imports that start with a '/'.
