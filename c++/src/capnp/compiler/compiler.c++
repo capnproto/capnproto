@@ -84,7 +84,7 @@ public:
   kj::Maybe<Schema> getBootstrapSchema() const;
   kj::Maybe<schema::Node::Reader> getFinalSchema() const;
 
-  void traverse(Compiler::Mode mode) const;
+  void traverse(uint eagerness, std::unordered_map<const Node*, uint>& seen) const;
   // Get the final schema for this node, and also possibly traverse the node's children and
   // dependencies to ensure that they are loaded, depending on the mode.
 
@@ -185,6 +185,14 @@ private:
   const Content& getContent(Content::State minimumState) const;
   // Advances the content to at least the given state and returns it.  Does not lock if the content
   // is already at or past the given state.
+
+  void traverseType(const schema::Type::Reader& type, uint eagerness,
+                    std::unordered_map<const Node*, uint>& seen) const;
+  void traverseStructMember(const schema::StructNode::Member::Reader& member, uint eagerness,
+                            std::unordered_map<const Node*, uint>& seen) const;
+  void traverseAnnotations(const List<schema::Annotation>::Reader& annotations, uint eagerness,
+                           std::unordered_map<const Node*, uint>& seen) const;
+  // Helpers for traverse().
 };
 
 class Compiler::CompiledModule {
@@ -210,12 +218,13 @@ private:
 
 class Compiler::Impl: public SchemaLoader::LazyLoadCallback {
 public:
-  Impl();
+  explicit Impl(AnnotationFlag annotationFlag);
   virtual ~Impl() noexcept(false);
 
-  uint64_t add(const Module& module, Mode mode) const;
+  uint64_t add(const Module& module) const;
   kj::Maybe<uint64_t> lookup(uint64_t parent, kj::StringPtr childName) const;
-  const CompiledModule& add(const Module& parsedModule) const;
+  void eagerlyCompile(uint64_t id, uint eagerness) const;
+  const CompiledModule& addInternal(const Module& parsedModule) const;
 
   struct Workspace {
     // Scratch space where stuff can be allocated while working.  The Workspace is available
@@ -250,13 +259,16 @@ public:
   const SchemaLoader& getFinalLoader() const { return finalLoader; }
   // Schema loader containing final versions of schemas.
 
-  const Workspace& getWorkspace() const { return workspace.getWithoutLock(); }
+  const Workspace& getWorkspace() const { return workspace.getAlreadyLockedShared(); }
   // Temporary workspace that can be used to construct bootstrap objects.  We assume that the
   // caller already holds the workspace lock somewhere up the stack.
 
+  inline bool shouldCompileAnnotations() const {
+    return annotationFlag == AnnotationFlag::COMPILE_ANNOTATIONS;
+  }
+
   void clearWorkspace();
   // Reset the temporary workspace.
-
 
   uint64_t addNode(uint64_t desiredId, Node& node) const;
   // Add the given node to the by-ID map under the given ID.  If another node with the same ID
@@ -270,6 +282,8 @@ public:
   void load(const SchemaLoader& loader, uint64_t id) const override;
 
 private:
+  AnnotationFlag annotationFlag;
+
   kj::Arena nodeArena;
   // Arena used to allocate nodes and other permanent objects.
 
@@ -475,7 +489,8 @@ const Compiler::Node::Content& Compiler::Node::getContent(Content::State minimum
       }
 
       locked->translator = &workspace.arena.allocate<NodeTranslator>(
-          *this, module->getErrorReporter(), declaration, kj::mv(schemaNode));
+          *this, module->getErrorReporter(), declaration, kj::mv(schemaNode),
+          module->getCompiler().shouldCompileAnnotations());
       KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&](){
         locked->bootstrapSchema = workspace.bootstrapLoader.loadOnce(
             locked->translator->getBootstrapNode());
@@ -645,15 +660,122 @@ kj::Maybe<schema::Node::Reader> Compiler::Node::getFinalSchema() const {
       [](const Schema& schema) { return schema.getProto(); });
 }
 
-void Compiler::Node::traverse(Compiler::Mode mode) const {
-  getFinalSchema();
+void Compiler::Node::traverse(uint eagerness, std::unordered_map<const Node*, uint>& seen) const {
+  uint& slot = seen[this];
+  if ((slot & eagerness) == eagerness) {
+    // We've already covered this node.
+    return;
+  }
+  slot |= eagerness;
 
-  if (mode == EAGER) {
+  KJ_IF_MAYBE(schema, getFinalSchema()) {
+    if (eagerness / DEPENDENCIES != 0) {
+      // For traversing dependencies, discard the bits lower than DEPENDENCIES and replace
+      // them with the bits above DEPENDENCIES shifted over.
+      uint newEagerness = (eagerness & ~(DEPENDENCIES - 1)) | (eagerness / DEPENDENCIES);
+
+      switch (schema->getBody().which()) {
+        case schema::Node::Body::STRUCT_NODE:
+          for (auto member: schema->getBody().getStructNode().getMembers()) {
+            traverseStructMember(member, newEagerness, seen);
+          }
+          break;
+
+        case schema::Node::Body::ENUM_NODE:
+          for (auto enumerant: schema->getBody().getEnumNode().getEnumerants()) {
+            traverseAnnotations(enumerant.getAnnotations(), newEagerness, seen);
+          }
+          break;
+
+        case schema::Node::Body::INTERFACE_NODE:
+          for (auto method: schema->getBody().getInterfaceNode().getMethods()) {
+            for (auto param: method.getParams()) {
+              traverseType(param.getType(), newEagerness, seen);
+              traverseAnnotations(param.getAnnotations(), newEagerness, seen);
+            }
+            traverseType(method.getReturnType(), newEagerness, seen);
+            traverseAnnotations(method.getAnnotations(), newEagerness, seen);
+          }
+          break;
+
+        default:
+          break;
+      }
+
+      traverseAnnotations(schema->getAnnotations(), newEagerness, seen);
+    }
+  }
+
+  if (eagerness & PARENTS) {
+    KJ_IF_MAYBE(p, parent) {
+      p->traverse(eagerness, seen);
+    }
+  }
+
+  if (eagerness & CHILDREN) {
     for (auto& child: getContent(Content::EXPANDED).nestedNodes) {
-      child.second->traverse(mode);
+      child.second->traverse(eagerness, seen);
     }
   }
 }
+
+void Compiler::Node::traverseType(const schema::Type::Reader& type, uint eagerness,
+                                  std::unordered_map<const Node*, uint>& seen) const {
+  uint64_t id = 0;
+  switch (type.getBody().which()) {
+    case schema::Type::Body::STRUCT_TYPE:
+      id = type.getBody().getStructType();
+      break;
+    case schema::Type::Body::ENUM_TYPE:
+      id = type.getBody().getEnumType();
+      break;
+    case schema::Type::Body::INTERFACE_TYPE:
+      id = type.getBody().getInterfaceType();
+      break;
+    case schema::Type::Body::LIST_TYPE:
+      traverseType(type.getBody().getListType(), eagerness, seen);
+      return;
+    default:
+      return;
+  }
+
+  KJ_IF_MAYBE(node, module->getCompiler().findNode(id)) {
+    node->traverse(eagerness, seen);
+  } else {
+    KJ_FAIL_ASSERT("Dependency ID not present in compiler?", id);
+  }
+}
+
+void Compiler::Node::traverseStructMember(const schema::StructNode::Member::Reader& member,
+                                          uint eagerness,
+                                          std::unordered_map<const Node*, uint>& seen) const {
+  switch (member.getBody().which()) {
+    case schema::StructNode::Member::Body::FIELD_MEMBER:
+      traverseType(member.getBody().getFieldMember().getType(), eagerness, seen);
+      break;
+    case schema::StructNode::Member::Body::UNION_MEMBER:
+      for (auto child: member.getBody().getUnionMember().getMembers()) {
+        traverseStructMember(child, eagerness, seen);
+      }
+      break;
+    case schema::StructNode::Member::Body::GROUP_MEMBER:
+      for (auto child: member.getBody().getGroupMember().getMembers()) {
+        traverseStructMember(child, eagerness, seen);
+      }
+      break;
+  }
+}
+
+void Compiler::Node::traverseAnnotations(const List<schema::Annotation>::Reader& annotations,
+                                         uint eagerness,
+                                         std::unordered_map<const Node*, uint>& seen) const {
+  for (auto annotation: annotations) {
+    KJ_IF_MAYBE(node, module->getCompiler().findNode(annotation.getId())) {
+      node->traverse(eagerness, seen);
+    }
+  }
+}
+
 
 void Compiler::Node::addError(kj::StringPtr error) const {
   module->getErrorReporter().addError(startByte, endByte, error);
@@ -694,13 +816,14 @@ kj::Maybe<const Compiler::CompiledModule&> Compiler::CompiledModule::importRelat
     kj::StringPtr importPath) const {
   return parserModule.importRelative(importPath).map(
       [this](const Module& module) -> const Compiler::CompiledModule& {
-        return compiler.add(module);
+        return compiler.addInternal(module);
       });
 }
 
 // =======================================================================================
 
-Compiler::Impl::Impl(): finalLoader(*this), workspace(*this) {
+Compiler::Impl::Impl(AnnotationFlag annotationFlag)
+    : annotationFlag(annotationFlag), finalLoader(*this), workspace(*this) {
   // Reflectively interpret the members of Declaration.body.  Any member prefixed by "builtin"
   // defines a builtin declaration visible in the global scope.
   StructSchema::Union declBodySchema =
@@ -715,7 +838,7 @@ Compiler::Impl::Impl(): finalLoader(*this), workspace(*this) {
   }
 }
 
-Compiler::Impl::~Impl() {}
+Compiler::Impl::~Impl() noexcept(false) {}
 
 void Compiler::Impl::clearWorkspace() {
   auto lock = workspace.lockExclusive();
@@ -725,7 +848,7 @@ void Compiler::Impl::clearWorkspace() {
   kj::dtor(*lock);
 }
 
-const Compiler::CompiledModule& Compiler::Impl::add(const Module& parsedModule) const {
+const Compiler::CompiledModule& Compiler::Impl::addInternal(const Module& parsedModule) const {
   auto locked = modules.lockExclusive();
 
   kj::Own<CompiledModule>& slot = (*locked)[&parsedModule];
@@ -777,21 +900,30 @@ kj::Maybe<const Compiler::Node&> Compiler::Impl::lookupBuiltin(kj::StringPtr nam
   }
 }
 
-uint64_t Compiler::Impl::add(const Module& module, Mode mode) const {
-  auto lock = this->workspace.lockShared();
-  auto& node = add(module).getRootNode();
-  if (mode != LAZY) {
-    node.traverse(mode);
-  }
-  return node.getId();
+uint64_t Compiler::Impl::add(const Module& module) const {
+  return addInternal(module).getRootNode().getId();
 }
 
 kj::Maybe<uint64_t> Compiler::Impl::lookup(uint64_t parent, kj::StringPtr childName) const {
-  // We know this won't use the workspace, so we need not lock it.
+  // Looking up members does not use the workspace, so we don't need to lock it.
   KJ_IF_MAYBE(parentNode, findNode(parent)) {
-    return parentNode->lookupMember(childName).map([](const Node& n) { return n.getId(); });
+    KJ_IF_MAYBE(child, parentNode->lookupMember(childName)) {
+      return child->getId();
+    } else {
+      return nullptr;
+    }
   } else {
     KJ_FAIL_REQUIRE("lookup()s parameter 'parent' must be a known ID.", parent);
+  }
+}
+
+void Compiler::Impl::eagerlyCompile(uint64_t id, uint eagerness) const {
+  KJ_IF_MAYBE(node, findNode(id)) {
+    auto lock = this->workspace.lockShared();
+    std::unordered_map<const Node*, uint> seen;
+    node->traverse(eagerness, seen);
+  } else {
+    KJ_FAIL_REQUIRE("id did not come from this Compiler.", id);
   }
 }
 
@@ -801,7 +933,8 @@ void Compiler::Impl::load(const SchemaLoader& loader, uint64_t id) const {
       auto lock = this->workspace.lockShared();
       node->getFinalSchema();
     } else {
-      // Must be the bootstrap loader.
+      // Must be the bootstrap loader.  Workspace should already be locked.
+      this->workspace.getAlreadyLockedShared();
       node->getBootstrapSchema();
     }
   }
@@ -809,15 +942,19 @@ void Compiler::Impl::load(const SchemaLoader& loader, uint64_t id) const {
 
 // =======================================================================================
 
-Compiler::Compiler(): impl(kj::heap<Impl>()) {}
-Compiler::~Compiler() {}
+Compiler::Compiler(AnnotationFlag annotationFlag): impl(kj::heap<Impl>(annotationFlag)) {}
+Compiler::~Compiler() noexcept(false) {}
 
-uint64_t Compiler::add(const Module& module, Mode mode) const {
-  return impl->add(module, mode);
+uint64_t Compiler::add(const Module& module) const {
+  return impl->add(module);
 }
 
 kj::Maybe<uint64_t> Compiler::lookup(uint64_t parent, kj::StringPtr childName) const {
   return impl->lookup(parent, childName);
+}
+
+void Compiler::eagerlyCompile(uint64_t id, uint eagerness) const {
+  return impl->eagerlyCompile(id, eagerness);
 }
 
 const SchemaLoader& Compiler::getLoader() const {

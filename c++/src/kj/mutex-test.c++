@@ -33,12 +33,27 @@ namespace {
 
 inline void delay() { usleep(10000); }
 
+#if KJ_NO_EXCEPTIONS
+#undef EXPECT_ANY_THROW
+#define EXPECT_ANY_THROW(code) EXPECT_DEATH(code, ".")
+#define EXPECT_NONFATAL_FAILURE(code) code
+#else
+#define EXPECT_NONFATAL_FAILURE EXPECT_ANY_THROW
+#endif
+
+#ifdef NDEBUG
+#define EXPECT_DEBUG_ANY_THROW(EXP)
+#else
+#define EXPECT_DEBUG_ANY_THROW EXPECT_ANY_THROW
+#endif
+
 TEST(Mutex, MutexGuarded) {
   MutexGuarded<uint> value(123);
 
   {
     Locked<uint> lock = value.lockExclusive();
     EXPECT_EQ(123u, *lock);
+    EXPECT_EQ(123u, value.getAlreadyLockedExclusive());
 
     Thread thread([&]() {
       Locked<uint> threadLock = value.lockExclusive();
@@ -56,6 +71,8 @@ TEST(Mutex, MutexGuarded) {
 
   {
     auto rlock1 = value.lockShared();
+    EXPECT_EQ(789u, *rlock1);
+    EXPECT_EQ(789u, value.getAlreadyLockedShared());
 
     {
       auto rlock2 = value.lockShared();
@@ -98,6 +115,10 @@ TEST(Mutex, MutexGuarded) {
   }
 
   EXPECT_EQ(321u, *value.lockExclusive());
+
+  EXPECT_DEBUG_ANY_THROW(value.getAlreadyLockedExclusive());
+  EXPECT_DEBUG_ANY_THROW(value.getAlreadyLockedShared());
+  EXPECT_EQ(321u, value.getWithoutLock());
 }
 
 TEST(Mutex, Lazy) {

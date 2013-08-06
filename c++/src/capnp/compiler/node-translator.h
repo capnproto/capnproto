@@ -75,7 +75,8 @@ public:
   };
 
   NodeTranslator(const Resolver& resolver, const ErrorReporter& errorReporter,
-                 const Declaration::Reader& decl, Orphan<schema::Node> wipNode);
+                 const Declaration::Reader& decl, Orphan<schema::Node> wipNode,
+                 bool compileAnnotations);
   // Construct a NodeTranslator to translate the given declaration.  The wipNode starts out with
   // `displayName`, `id`, `scopeId`, and `nestedNodes` already initialized.  The `NodeTranslator`
   // fills in the rest.
@@ -96,6 +97,7 @@ public:
 private:
   const Resolver& resolver;
   const ErrorReporter& errorReporter;
+  bool compileAnnotations;
 
   Orphan<schema::Node> wipNode;
   // The work-in-progress schema node.

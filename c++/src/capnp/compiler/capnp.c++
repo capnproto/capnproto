@@ -116,7 +116,10 @@ public:
 
   kj::MainFunc getDecodeMain() {
     // Only parse the schemas we actually need for decoding.
-    compileMode = Compiler::LAZY;
+    compileEagerness = Compiler::NODE;
+
+    // Drop annotations since we don't need them.  This avoids importing files like c++.capnp.
+    annotationFlag = Compiler::DROP_ANNOTATIONS;
 
     kj::MainBuilder builder(context, VERSION_STRING,
           "Decodes one or more encoded Cap'n Proto messages as text.  The messages have root "
@@ -180,6 +183,11 @@ public:
   }
 
   kj::MainBuilder::Validity addSource(kj::StringPtr file) {
+    if (!compilerConstructed) {
+      compiler = compilerSpace.construct(annotationFlag);
+      compilerConstructed = true;
+    }
+
     if (addStandardImportPaths) {
       loader.addImportPath(kj::heapString("/usr/local/include"));
       loader.addImportPath(kj::heapString("/usr/include"));
@@ -195,7 +203,9 @@ public:
     }
 
     KJ_IF_MAYBE(module, loader.loadModule(file, file.slice(longestPrefix))) {
-      sourceIds.add(compiler.add(*module, Compiler::EAGER));
+      uint64_t id = compiler->add(*module);
+      compiler->eagerlyCompile(id, compileEagerness);
+      sourceIds.add(id);
     } else {
       return "no such file";
     }
@@ -243,6 +253,10 @@ public:
       return true;
     }
 
+    // We require one or more sources and if they failed to compile we quit above, so this should
+    // pass.  (This assertion also guarantees that `compiler` has been initialized.)
+    KJ_ASSERT(sourceIds.size() > 0, "Shouldn't have gotten here without sources.");
+
     if (outputs.size() == 0) {
       return "no outputs specified";
     }
@@ -250,7 +264,7 @@ public:
     MallocMessageBuilder message;
     auto request = message.initRoot<schema::CodeGeneratorRequest>();
 
-    auto schemas = compiler.getLoader().getAllLoaded();
+    auto schemas = compiler->getLoader().getAllLoaded();
     auto nodes = request.initNodes(schemas.size());
     for (size_t i = 0; i < schemas.size(); i++) {
       nodes.setWithCaveats(i, schemas[i].getProto());
@@ -351,14 +365,14 @@ public:
         type = nullptr;
       }
 
-      KJ_IF_MAYBE(childId, compiler.lookup(id, part)) {
+      KJ_IF_MAYBE(childId, compiler->lookup(id, part)) {
         id = *childId;
       } else {
         return "no such type";
       }
     }
 
-    Schema schema = compiler.getLoader().get(id);
+    Schema schema = compiler->getLoader().get(id);
     if (schema.getProto().getBody().which() != schema::Node::Body::STRUCT_NODE) {
       return "not a struct type";
     }
@@ -485,8 +499,17 @@ public:
 private:
   kj::ProcessContext& context;
   ModuleLoader loader;
-  Compiler compiler;
-  Compiler::Mode compileMode = Compiler::EAGER;
+  kj::SpaceFor<Compiler> compilerSpace;
+  bool compilerConstructed = false;
+  kj::Own<Compiler> compiler;
+
+  Compiler::AnnotationFlag annotationFlag = Compiler::COMPILE_ANNOTATIONS;
+
+  uint compileEagerness = Compiler::NODE | Compiler::CHILDREN |
+                          Compiler::DEPENDENCIES | Compiler::DEPENDENCY_PARENTS;
+  // By default we compile each explicitly listed schema in full, plus first-level dependencies
+  // of those schemas, plus the parent nodes of any dependencies.  This is what most code generators
+  // require to function.
 
   kj::Vector<kj::String> sourcePrefixes;
   bool addStandardImportPaths = true;

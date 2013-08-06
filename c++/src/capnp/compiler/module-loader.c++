@@ -332,7 +332,7 @@ kj::Maybe<const Module&> ModuleLoader::Impl::loadModuleFromSearchPath(
 
 ModuleLoader::ModuleLoader(const GlobalErrorReporter& errorReporter)
     : impl(kj::heap<Impl>(errorReporter)) {}
-ModuleLoader::~ModuleLoader() {}
+ModuleLoader::~ModuleLoader() noexcept(false) {}
 
 void ModuleLoader::addImportPath(kj::String path) { impl->addImportPath(kj::mv(path)); }
 

@@ -525,9 +525,10 @@ private:
 
 NodeTranslator::NodeTranslator(
     const Resolver& resolver, const ErrorReporter& errorReporter,
-    const Declaration::Reader& decl, Orphan<schema::Node> wipNodeParam)
+    const Declaration::Reader& decl, Orphan<schema::Node> wipNodeParam,
+    bool compileAnnotations)
     : resolver(resolver), errorReporter(errorReporter),
-      wipNode(kj::mv(wipNodeParam)) {
+      compileAnnotations(compileAnnotations), wipNode(kj::mv(wipNodeParam)) {
   compileNode(decl, wipNode.get());
 }
 
@@ -1786,7 +1787,7 @@ kj::Maybe<ListSchema> NodeTranslator::makeListSchemaOf(schema::Type::Reader elem
 Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
     List<Declaration::AnnotationApplication>::Reader annotations,
     kj::StringPtr targetsFlagName) {
-  if (annotations.size() == 0) {
+  if (annotations.size() == 0 || !compileAnnotations) {
     // Return null.
     return Orphan<List<schema::Annotation>>();
   }

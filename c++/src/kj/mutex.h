@@ -59,6 +59,11 @@ public:
   void lock(Exclusivity exclusivity);
   void unlock(Exclusivity exclusivity);
 
+  void assertLockedByCaller(Exclusivity exclusivity);
+  // In debug mode, assert that the mutex is locked by the calling thread, or if that is
+  // non-trivial, assert that the mutex is locked (which should be good enough to catch problems
+  // in unit tests).  In non-debug builds, do nothing.
+
 private:
 #if KJ_USE_FUTEX
   uint futex;
@@ -207,6 +212,11 @@ public:
   // Escape hatch for cases where some external factor guarantees that it's safe to get the
   // value.  You should treat these like const_cast -- be highly suspicious of any use.
 
+  inline const T& getAlreadyLockedShared() const;
+  inline T& getAlreadyLockedShared();
+  inline T& getAlreadyLockedExclusive() const;
+  // Like `getWithoutLock()`, but asserts that the lock is already held by the calling thread.
+
 private:
   mutable _::Mutex mutex;
   mutable T value;
@@ -263,6 +273,28 @@ template <typename T>
 inline Locked<const T> MutexGuarded<T>::lockShared() const {
   mutex.lock(_::Mutex::SHARED);
   return Locked<const T>(mutex, value);
+}
+
+template <typename T>
+inline const T& MutexGuarded<T>::getAlreadyLockedShared() const {
+#ifndef NDEBUG
+  mutex.assertLockedByCaller(_::Mutex::SHARED);
+#endif
+  return value;
+}
+template <typename T>
+inline T& MutexGuarded<T>::getAlreadyLockedShared() {
+#ifndef NDEBUG
+  mutex.assertLockedByCaller(_::Mutex::SHARED);
+#endif
+  return value;
+}
+template <typename T>
+inline T& MutexGuarded<T>::getAlreadyLockedExclusive() const {
+#ifndef NDEBUG
+  mutex.assertLockedByCaller(_::Mutex::EXCLUSIVE);
+#endif
+  return const_cast<T&>(value);
 }
 
 template <typename T>

@@ -875,7 +875,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
       parsers.methodDecl, parsers.genericDecl));
 }
 
-CapnpParser::~CapnpParser() {}
+CapnpParser::~CapnpParser() noexcept(false) {}
 
 kj::Maybe<Orphan<Declaration>> CapnpParser::parseStatement(
     Statement::Reader statement, const DeclParser& parser) {

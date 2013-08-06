@@ -123,6 +123,19 @@ void Mutex::unlock(Exclusivity exclusivity) {
   }
 }
 
+void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
+  switch (exclusivity) {
+    case EXCLUSIVE:
+      KJ_ASSERT(futex & EXCLUSIVE_HELD,
+                "Tried to call getAlreadyLocked*() but lock is not held.");
+      break;
+    case SHARED:
+      KJ_ASSERT(futex & SHARED_COUNT_MASK,
+                "Tried to call getAlreadyLocked*() but lock is not held.");
+      break;
+  }
+}
+
 void Once::runOnce(Initializer& init) {
   uint state = UNINITIALIZED;
   if (__atomic_compare_exchange_n(&futex, &state, INITIALIZING, false,
@@ -201,6 +214,26 @@ void Mutex::lock(Exclusivity exclusivity) {
 
 void Mutex::unlock(Exclusivity exclusivity) {
   KJ_PTHREAD_CALL(pthread_rwlock_unlock(&mutex));
+}
+
+void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
+  switch (exclusivity) {
+    case EXCLUSIVE:
+      // A read lock should fail if the mutex is already held for writing.
+      if (pthread_rwlock_tryrdlock(&mutex) == 0) {
+        pthread_rwlock_unlock(&mutex);
+        KJ_FAIL_ASSERT("Tried to call getAlreadyLocked*() but lock is not held.");
+      }
+      break;
+    case SHARED:
+      // A write lock should fail if the mutex is already held for reading or writing.  We don't
+      // have any way to prove that the lock is held only for reading.
+      if (pthread_rwlock_trywrlock(&mutex) == 0) {
+        pthread_rwlock_unlock(&mutex);
+        KJ_FAIL_ASSERT("Tried to call getAlreadyLocked*() but lock is not held.");
+      }
+      break;
+  }
 }
 
 Once::Once(): initialized(false) {

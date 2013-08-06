@@ -213,6 +213,7 @@ SchemaLoader schemaLoader;
 
 Text::Reader getUnqualifiedName(Schema schema) {
   auto proto = schema.getProto();
+  KJ_CONTEXT(proto.getDisplayName());
   auto parent = schemaLoader.get(proto.getScopeId());
   for (auto nested: parent.getProto().getNestedNodes()) {
     if (nested.getId() == proto.getId()) {
@@ -258,7 +259,7 @@ TextBlob nodeName(Schema target, Schema scope) {
     auto part = targetParents.back();
     auto proto = part.getProto();
     if (proto.getScopeId() == 0) {
-      path = text(kj::mv(path), "import \"", proto.getDisplayName(), "\".");
+      path = text(kj::mv(path), "import \"/", proto.getDisplayName(), "\".");
     } else {
       path = text(kj::mv(path), getUnqualifiedName(part), ".");
     }

@@ -269,7 +269,7 @@ Lexer::Lexer(Orphanage orphanageParam, const ErrorReporter& errorReporterParam)
   parsers.emptySpace = commentsAndWhitespace;
 }
 
-Lexer::~Lexer() {}
+Lexer::~Lexer() noexcept(false) {}
 
 }  // namespace compiler
 }  // namespace capnp
