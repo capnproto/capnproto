@@ -23,9 +23,7 @@
 
 #include "dynamic.h"
 #include <kj/debug.h>
-#include <sstream>
-
-// TODO(cleanup):  Rewrite this using something other than iostream?
+#include <kj/vector.h>
 
 namespace capnp {
 
@@ -33,96 +31,109 @@ namespace {
 
 static const char HEXDIGITS[] = "0123456789abcdef";
 
+enum PrintMode {
+  BARE,
+  // The value is planned to be printed on its own line, unless it is very short and contains
+  // no inner newlines.
+
+  PREFIXED,
+  // The value is planned to be printed with a prefix, like "memberName = " (a struct field).
+
+  PARENTHESIZED
+  // The value is printed in parenthesized (a union value).
+};
+
 class Indent {
 public:
-  explicit Indent(bool enable): amount(enable ? 1 : 0), hasPrefix(false), isFirst(true) {}
+  explicit Indent(bool enable): amount(enable ? 1 : 0) {}
 
-  enum ItemType {
-    INLINE,       // Items are simple values that don't need to be on their own lines.
-    PREFIXED,     // Each item is on a new line with some prefix attached (e.g. a field name).
-    STANDALONE    // Each item is on a new line with no prefix.
-  };
-
-  Indent startItem(std::ostream& os, ItemType type) {
-    // Start a new item (list element or struct field) within the parent value, writing a newline
-    // and indentation if necessary.
-
-    if (isFirst) {
-      isFirst = false;
-      if (type == INLINE || amount == 0) {
-        return Indent(amount, true);
-      }
-
-      if (hasPrefix) {
-        os << '\n';
-        for (uint i = 0; i < amount; i++) {
-          os << "  ";
-        }
-      } else {
-        os << ' ';
-      }
-      return Indent(amount + 1, type == PREFIXED);
-    } else {
-      if (type == INLINE || amount == 0) {
-        os << ", ";
-        return Indent(amount, true);
-      }
-
-      os << ",\n";
-      for (uint i = 0; i < amount; i++) {
-        os << "  ";
-      }
-      return Indent(amount + 1, type == PREFIXED);
-    }
+  Indent next() {
+    return Indent(amount == 0 ? 0 : amount + 1);
   }
 
-  Indent withPrefix() {
-    return Indent(amount, true);
+  kj::StringTree delimit(kj::Array<kj::StringTree> items, PrintMode mode) {
+    if (amount == 0 || canPrintAllInline(items)) {
+      return kj::StringTree(kj::mv(items), ", ");
+    } else {
+      char delim[amount * 2 + 3];
+      delim[0] = ',';
+      delim[1] = '\n';
+      memset(delim + 2, ' ', amount * 2);
+      delim[amount * 2 + 2] = '\0';
+
+      // If the outer value isn't being printed on its own line, we need to add a newline/indent
+      // before the first item, otherwise we only add a space on the assumption that it is preceded
+      // by an open bracket or parenthesis.
+      return kj::strTree(mode == BARE ? " " : delim + 1,
+          kj::StringTree(kj::mv(items), kj::StringPtr(delim, amount * 2 + 2)), ' ');
+    }
   }
 
 private:
-  Indent(uint amount, bool hasPrefix): amount(amount), hasPrefix(hasPrefix), isFirst(true) {}
   uint amount;
-  bool hasPrefix;
-  bool isFirst;
+
+  explicit Indent(uint amount): amount(amount) {}
+
+  static constexpr size_t maxInlineValueSize = 24;
+
+  static bool canPrintInline(const kj::StringTree& text) {
+    if (text.size() > maxInlineValueSize) {
+      return false;
+    }
+
+    char flat[maxInlineValueSize + 1];
+    text.flattenTo(flat);
+    flat[text.size()] = '\0';
+    if (strchr(flat, '\n') != nullptr) {
+      return false;
+    }
+
+    return true;
+  }
+
+  static bool canPrintAllInline(const kj::Array<kj::StringTree>& items) {
+    for (auto& item: items) {
+      if (!canPrintInline(item)) return false;
+    }
+    return true;
+  }
 };
 
-static void print(std::ostream& os, const DynamicValue::Reader& value,
-                  schema::Type::Body::Which which, Indent indent,
-                  bool alreadyParenthesized = false) {
-  // Print an arbitrary message via the dynamic API by
-  // iterating over the schema.  Look at the handling
-  // of STRUCT in particular.
+schema::Type::Body::Which whichMemberType(const StructSchema::Member& member) {
+  auto body = member.getProto().getBody();
+  switch (body.which()) {
+    case schema::StructNode::Member::Body::UNION_MEMBER:
+      return schema::Type::Body::VOID_TYPE;
+    case schema::StructNode::Member::Body::GROUP_MEMBER:
+      return schema::Type::Body::STRUCT_TYPE;
+    case schema::StructNode::Member::Body::FIELD_MEMBER:
+      return body.getFieldMember().getType().getBody().which();
+  }
+  KJ_UNREACHABLE;
+}
 
+static kj::StringTree print(const DynamicValue::Reader& value,
+                            schema::Type::Body::Which which, Indent indent,
+                            PrintMode mode) {
   switch (value.getType()) {
     case DynamicValue::UNKNOWN:
-      os << "?";
-      break;
+      return kj::strTree("?");
     case DynamicValue::VOID:
-      os << "void";
-      break;
+      return kj::strTree("void");
     case DynamicValue::BOOL:
-      os << (value.as<bool>() ? "true" : "false");
-      break;
+      return kj::strTree(value.as<bool>() ? "true" : "false");
     case DynamicValue::INT:
-      os << value.as<int64_t>();
-      break;
+      return kj::strTree(value.as<int64_t>());
     case DynamicValue::UINT:
-      os << value.as<uint64_t>();
-      break;
-    case DynamicValue::FLOAT: {
+      return kj::strTree(value.as<uint64_t>());
+    case DynamicValue::FLOAT:
       if (which == schema::Type::Body::FLOAT32_TYPE) {
-        auto buf = kj::toCharSequence(value.as<float>());
-        os.write(buf.begin(), buf.size());
+        return kj::strTree(value.as<float>());
       } else {
-        auto buf = kj::toCharSequence(value.as<double>());
-        os.write(buf.begin(), buf.size());
+        return kj::strTree(value.as<double>());
       }
-      break;
-    }
     case DynamicValue::TEXT:
     case DynamicValue::DATA: {
-      os << '\"';
       // TODO(someday):  Data probably shouldn't be printed as a string.
       kj::ArrayPtr<const char> chars;
       if (value.getType() == DynamicValue::DATA) {
@@ -131,176 +142,131 @@ static void print(std::ostream& os, const DynamicValue::Reader& value,
       } else {
         chars = value.as<Text>();
       }
+
+      kj::Vector<char> escaped(chars.size());
+
       for (char c: chars) {
         switch (c) {
-          case '\a': os << "\\a"; break;
-          case '\b': os << "\\b"; break;
-          case '\f': os << "\\f"; break;
-          case '\n': os << "\\n"; break;
-          case '\r': os << "\\r"; break;
-          case '\t': os << "\\t"; break;
-          case '\v': os << "\\v"; break;
-          case '\'': os << "\\\'"; break;
-          case '\"': os << "\\\""; break;
-          case '\\': os << "\\\\"; break;
+          case '\a': escaped.addAll(kj::StringPtr("\\a")); break;
+          case '\b': escaped.addAll(kj::StringPtr("\\b")); break;
+          case '\f': escaped.addAll(kj::StringPtr("\\f")); break;
+          case '\n': escaped.addAll(kj::StringPtr("\\n")); break;
+          case '\r': escaped.addAll(kj::StringPtr("\\r")); break;
+          case '\t': escaped.addAll(kj::StringPtr("\\t")); break;
+          case '\v': escaped.addAll(kj::StringPtr("\\v")); break;
+          case '\'': escaped.addAll(kj::StringPtr("\\\'")); break;
+          case '\"': escaped.addAll(kj::StringPtr("\\\"")); break;
+          case '\\': escaped.addAll(kj::StringPtr("\\\\")); break;
           default:
             if (c < 0x20) {
+              escaped.add('\\');
+              escaped.add('x');
               uint8_t c2 = c;
-              os << "\\x" << HEXDIGITS[c2 / 16] << HEXDIGITS[c2 % 16];
+              escaped.add(HEXDIGITS[c2 / 16]);
+              escaped.add(HEXDIGITS[c2 % 16]);
             } else {
-              os << c;
+              escaped.add(c);
             }
             break;
         }
       }
-      os << '\"';
-      break;
+      return kj::strTree('"', escaped, '"');
     }
     case DynamicValue::LIST: {
-      os << "[";
       auto listValue = value.as<DynamicList>();
-
-      // If the members are not primitives and there is more than one member, arrange for
-      // identation.
-      Indent::ItemType itemType;
-      switch (listValue.getSchema().whichElementType()) {
-        case schema::Type::Body::STRUCT_TYPE:
-        case schema::Type::Body::LIST_TYPE:
-          itemType = listValue.size() <= 1 ? Indent::INLINE : Indent::STANDALONE;
-          break;
-        default:
-          itemType = Indent::INLINE;
-          break;
-      }
-
-      for (auto element: listValue) {
-        print(os, element, listValue.getSchema().whichElementType(),
-              indent.startItem(os, itemType));
-      }
-      os << "]";
-      break;
+      auto which = listValue.getSchema().whichElementType();
+      kj::Array<kj::StringTree> elements = KJ_MAP(listValue, element) {
+        return print(element, which, indent.next(), BARE);
+      };
+      return kj::strTree('[', indent.delimit(kj::mv(elements), mode), ']');
     }
     case DynamicValue::ENUM: {
       auto enumValue = value.as<DynamicEnum>();
       KJ_IF_MAYBE(enumerant, enumValue.getEnumerant()) {
-        os << enumerant->getProto().getName().cStr();
+        return kj::strTree(enumerant->getProto().getName());
       } else {
         // Unknown enum value; output raw number.
-        os << enumValue.getRaw();
+        return kj::strTree(enumValue.getRaw());
       }
       break;
     }
     case DynamicValue::STRUCT: {
-      if (!alreadyParenthesized) os << "(";
       auto structValue = value.as<DynamicStruct>();
-      Indent::ItemType itemType = Indent::INLINE;
+      auto memberSchemas = structValue.getSchema().getMembers();
 
-      // If there is more than one member, arrange for indentation.
-      bool sawOne = false;
-      for (auto member: structValue.getSchema().getMembers()) {
+      kj::Vector<kj::StringTree> printedMembers(memberSchemas.size());
+      for (auto member: memberSchemas) {
         if (structValue.has(member)) {
-          if (sawOne) {
-            itemType = Indent::PREFIXED;
-            break;
-          } else {
-            sawOne = true;
-          }
+          printedMembers.add(kj::strTree(
+              member.getProto().getName(), " = ",
+              print(structValue.get(member), whichMemberType(member), indent.next(), PREFIXED)));
         }
       }
 
-      // Print the members.
-      for (auto member: structValue.getSchema().getMembers()) {
-        if (structValue.has(member)) {
-          Indent subIndent = indent.startItem(os, itemType);
-
-          os << member.getProto().getName().cStr() << " = ";
-
-          auto memberBody = member.getProto().getBody();
-          switch (memberBody.which()) {
-            case schema::StructNode::Member::Body::UNION_MEMBER:
-              print(os, structValue.get(member), schema::Type::Body::VOID_TYPE, subIndent);
-              break;
-            case schema::StructNode::Member::Body::FIELD_MEMBER:
-              print(os, structValue.get(member),
-                    memberBody.getFieldMember().getType().getBody().which(), subIndent);
-              break;
-          }
-        }
+      if (mode == PARENTHESIZED) {
+        return indent.delimit(printedMembers.releaseAsArray(), mode);
+      } else {
+        return kj::strTree('(', indent.delimit(printedMembers.releaseAsArray(), mode), ')');
       }
-
-      if (!alreadyParenthesized) os << ")";
-      break;
     }
     case DynamicValue::UNION: {
       auto unionValue = value.as<DynamicUnion>();
       KJ_IF_MAYBE(tag, unionValue.which()) {
-        os << tag->getProto().getName().cStr() << "(";
-        print(os, unionValue.get(),
-              tag->getProto().getBody().getFieldMember().getType().getBody().which(),
-              indent.withPrefix(), true /* alreadyParenthesized */);
-        os << ")";
+        return kj::strTree(
+            tag->getProto().getName(), '(',
+            print(unionValue.get(), whichMemberType(*tag), indent, PARENTHESIZED), ')');
       } else {
         // Unknown union member; must have come from newer
         // version of the protocol.
-        os << "?";
+        return kj::strTree("<unknown union member>");
       }
-      break;
     }
     case DynamicValue::INTERFACE:
       KJ_FAIL_ASSERT("Don't know how to print interfaces.") {
-        break;
+        return kj::String();
       }
-      break;
     case DynamicValue::OBJECT:
-      os << "<opaque object>";
-      break;
+      return kj::strTree("<opaque object>");
   }
+
+  KJ_UNREACHABLE;
 }
 
-kj::String stringify(DynamicValue::Reader value) {
-  std::stringstream out;
-  print(out, value, schema::Type::Body::STRUCT_TYPE, Indent(false));
-  auto content = out.str();
-  return kj::heapString(content.data(), content.size());
+kj::StringTree stringify(DynamicValue::Reader value) {
+  return print(value, schema::Type::Body::STRUCT_TYPE, Indent(false), BARE);
 }
 
 }  // namespace
 
-kj::String prettyPrint(DynamicStruct::Reader value) {
-  std::stringstream out;
-  print(out, value, schema::Type::Body::STRUCT_TYPE, Indent(true));
-  auto content = out.str();
-  return kj::heapString(content.data(), content.size());
+kj::StringTree prettyPrint(DynamicStruct::Reader value) {
+  return print(value, schema::Type::Body::STRUCT_TYPE, Indent(true), BARE);
 }
 
-kj::String prettyPrint(DynamicList::Reader value) {
-  std::stringstream out;
-  print(out, value, schema::Type::Body::LIST_TYPE, Indent(true));
-  auto content = out.str();
-  return kj::heapString(content.data(), content.size());
+kj::StringTree prettyPrint(DynamicList::Reader value) {
+  return print(value, schema::Type::Body::LIST_TYPE, Indent(true), BARE);
 }
 
-kj::String prettyPrint(DynamicStruct::Builder value) { return prettyPrint(value.asReader()); }
-kj::String prettyPrint(DynamicList::Builder value) { return prettyPrint(value.asReader()); }
+kj::StringTree prettyPrint(DynamicStruct::Builder value) { return prettyPrint(value.asReader()); }
+kj::StringTree prettyPrint(DynamicList::Builder value) { return prettyPrint(value.asReader()); }
 
-kj::String KJ_STRINGIFY(const DynamicValue::Reader& value) { return stringify(value); }
-kj::String KJ_STRINGIFY(const DynamicValue::Builder& value) { return stringify(value.asReader()); }
-kj::String KJ_STRINGIFY(DynamicEnum value) { return stringify(value); }
-kj::String KJ_STRINGIFY(const DynamicObject& value) { return stringify(value); }
-kj::String KJ_STRINGIFY(const DynamicUnion::Reader& value) { return stringify(value); }
-kj::String KJ_STRINGIFY(const DynamicUnion::Builder& value) { return stringify(value.asReader()); }
-kj::String KJ_STRINGIFY(const DynamicStruct::Reader& value) { return stringify(value); }
-kj::String KJ_STRINGIFY(const DynamicStruct::Builder& value) { return stringify(value.asReader()); }
-kj::String KJ_STRINGIFY(const DynamicList::Reader& value) { return stringify(value); }
-kj::String KJ_STRINGIFY(const DynamicList::Builder& value) { return stringify(value.asReader()); }
+kj::StringTree KJ_STRINGIFY(const DynamicValue::Reader& value) { return stringify(value); }
+kj::StringTree KJ_STRINGIFY(const DynamicValue::Builder& value) { return stringify(value.asReader()); }
+kj::StringTree KJ_STRINGIFY(DynamicEnum value) { return stringify(value); }
+kj::StringTree KJ_STRINGIFY(const DynamicObject& value) { return stringify(value); }
+kj::StringTree KJ_STRINGIFY(const DynamicUnion::Reader& value) { return stringify(value); }
+kj::StringTree KJ_STRINGIFY(const DynamicUnion::Builder& value) { return stringify(value.asReader()); }
+kj::StringTree KJ_STRINGIFY(const DynamicStruct::Reader& value) { return stringify(value); }
+kj::StringTree KJ_STRINGIFY(const DynamicStruct::Builder& value) { return stringify(value.asReader()); }
+kj::StringTree KJ_STRINGIFY(const DynamicList::Reader& value) { return stringify(value); }
+kj::StringTree KJ_STRINGIFY(const DynamicList::Builder& value) { return stringify(value.asReader()); }
 
 namespace _ {  // private
 
-kj::String structString(StructReader reader, const RawSchema& schema) {
+kj::StringTree structString(StructReader reader, const RawSchema& schema) {
   return stringify(DynamicStruct::Reader(StructSchema(&schema), reader));
 }
 
-kj::String unionString(StructReader reader, const RawSchema& schema, uint memberIndex) {
+kj::StringTree unionString(StructReader reader, const RawSchema& schema, uint memberIndex) {
   return stringify(DynamicUnion::Reader(
       StructSchema(&schema).getMembers()[memberIndex].asUnion(), reader));
 }

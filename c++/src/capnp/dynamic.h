@@ -201,7 +201,7 @@ private:
 
   friend struct DynamicStruct;
   friend class DynamicUnion::Builder;
-  friend kj::String _::unionString(
+  friend kj::StringTree _::unionString(
       _::StructReader reader, const _::RawSchema& schema, uint memberIndex);
 };
 
@@ -305,7 +305,7 @@ private:
   friend class MessageBuilder;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
-  friend kj::String _::structString(
+  friend kj::StringTree _::structString(
       _::StructReader reader, const _::RawSchema& schema);
   friend class Orphanage;
   friend class Orphan<DynamicStruct>;
@@ -666,16 +666,16 @@ private:
   // specialization.  Has a method apply() which does the work.
 };
 
-kj::String KJ_STRINGIFY(const DynamicValue::Reader& value);
-kj::String KJ_STRINGIFY(const DynamicValue::Builder& value);
-kj::String KJ_STRINGIFY(DynamicEnum value);
-kj::String KJ_STRINGIFY(const DynamicObject& value);
-kj::String KJ_STRINGIFY(const DynamicUnion::Reader& value);
-kj::String KJ_STRINGIFY(const DynamicUnion::Builder& value);
-kj::String KJ_STRINGIFY(const DynamicStruct::Reader& value);
-kj::String KJ_STRINGIFY(const DynamicStruct::Builder& value);
-kj::String KJ_STRINGIFY(const DynamicList::Reader& value);
-kj::String KJ_STRINGIFY(const DynamicList::Builder& value);
+kj::StringTree KJ_STRINGIFY(const DynamicValue::Reader& value);
+kj::StringTree KJ_STRINGIFY(const DynamicValue::Builder& value);
+kj::StringTree KJ_STRINGIFY(DynamicEnum value);
+kj::StringTree KJ_STRINGIFY(const DynamicObject& value);
+kj::StringTree KJ_STRINGIFY(const DynamicUnion::Reader& value);
+kj::StringTree KJ_STRINGIFY(const DynamicUnion::Builder& value);
+kj::StringTree KJ_STRINGIFY(const DynamicStruct::Reader& value);
+kj::StringTree KJ_STRINGIFY(const DynamicStruct::Builder& value);
+kj::StringTree KJ_STRINGIFY(const DynamicList::Reader& value);
+kj::StringTree KJ_STRINGIFY(const DynamicList::Builder& value);
 
 // -------------------------------------------------------------------
 // Orphan <-> Dynamic glue

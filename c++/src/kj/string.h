@@ -33,6 +33,8 @@ namespace kj {
 class StringPtr;
 class String;
 
+class StringTree;   // string-tree.h
+
 // =======================================================================================
 // StringPtr -- A NUL-terminated ArrayPtr<const char> containing UTF-8 text.
 //
@@ -183,6 +185,12 @@ inline size_t sum(std::initializer_list<size_t> nums) {
 
 inline char* fill(char* ptr) { return ptr; }
 
+template <typename... Rest>
+char* fill(char* __restrict__ target, const StringTree& first, Rest&&... rest);
+// Make str() work with stringifiers that return StringTree by patching fill().
+//
+// Defined in string-tree.h.
+
 template <typename First, typename... Rest>
 char* fill(char* __restrict__ target, const First& first, Rest&&... rest) {
   auto i = first.begin();
@@ -250,9 +258,9 @@ struct Stringifier {
   CappedArray<char, sizeof(const void*) * 4> operator*(const void* s) const;
 
   template <typename T>
-  Array<char> operator*(ArrayPtr<T> arr) const;
+  String operator*(ArrayPtr<T> arr) const;
   template <typename T>
-  Array<char> operator*(const Array<T>& arr) const;
+  String operator*(const Array<T>& arr) const;
 };
 static constexpr Stringifier STR = Stringifier();
 
@@ -316,12 +324,12 @@ String strArray(T&& arr, const char* delim) {
 namespace _ {  // private
 
 template <typename T>
-inline Array<char> Stringifier::operator*(ArrayPtr<T> arr) const {
+inline String Stringifier::operator*(ArrayPtr<T> arr) const {
   return strArray(arr, ", ");
 }
 
 template <typename T>
-inline Array<char> Stringifier::operator*(const Array<T>& arr) const {
+inline String Stringifier::operator*(const Array<T>& arr) const {
   return strArray(arr, ", ");
 }
 

@@ -451,18 +451,14 @@ private:
     {
       ParseErrorCatcher catcher;
       if (pretty) {
-        text = prettyPrint(root);
+        text = kj::str(prettyPrint(root), '\n');
       } else {
-        text = kj::str(root);
+        text = kj::str(root, '\n');
       }
       exception = kj::mv(catcher.exception);
     }
 
-    kj::ArrayPtr<const byte> pieces[2];
-    pieces[0] = kj::arrayPtr(reinterpret_cast<const byte*>(text.begin()), text.size());
-    pieces[1] = kj::arrayPtr(reinterpret_cast<const byte*>("\n"), 1);
-
-    kj::FdOutputStream(STDOUT_FILENO).write(kj::arrayPtr(pieces, KJ_ARRAY_SIZE(pieces)));
+    kj::FdOutputStream(STDOUT_FILENO).write(text.begin(), text.size());
 
     KJ_IF_MAYBE(e, exception) {
       context.error(kj::str("*** error in previous message ***\n", *e, "\n*** end error ***"));

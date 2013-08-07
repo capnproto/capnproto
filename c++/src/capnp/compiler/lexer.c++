@@ -139,7 +139,7 @@ constexpr auto docComment = p::optional(p::sequence(
 }  // namespace
 
 Lexer::Lexer(Orphanage orphanageParam, const ErrorReporter& errorReporterParam)
-    : orphanage(orphanageParam), errorReporter(errorReporterParam) {
+    : orphanage(orphanageParam) {
 
   // Note that because passing an lvalue to a parser constructor uses it by-referencee, it's safe
   // for us to use parsers.tokenSequence even though we haven't yet constructed it.

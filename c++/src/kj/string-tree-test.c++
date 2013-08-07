@@ -21,25 +21,41 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNP_PRETTY_PRINT_H_
-#define CAPNP_PRETTY_PRINT_H_
+#include "string-tree.h"
+#include <gtest/gtest.h>
 
-#include "dynamic.h"
-#include <kj/string-tree.h>
+namespace kj {
+namespace _ {  // private
+namespace {
 
-namespace capnp {
+TEST(StringTree, StrTree) {
+  EXPECT_EQ("foobar", strTree("foo", "bar").flatten());
+  EXPECT_EQ("1 2 3 4", strTree(1, " ", 2u, " ", 3l, " ", 4ll).flatten());
+  EXPECT_EQ("1.5 foo 1e15 bar -3", strTree(1.5f, " foo ", 1e15, " bar ", -3).flatten());
+  EXPECT_EQ("foo", strTree('f', 'o', 'o').flatten());
 
-kj::StringTree prettyPrint(DynamicStruct::Reader value);
-kj::StringTree prettyPrint(DynamicStruct::Builder value);
-kj::StringTree prettyPrint(DynamicList::Reader value);
-kj::StringTree prettyPrint(DynamicList::Builder value);
-// Print the given Cap'n Proto struct or list with nice indentation.  Note that you can pass any
-// struct or list reader or builder type to this method, since they can be implicitly converted
-// to one of the dynamic types.
-//
-// If you don't want indentation, just use the value's KJ stringifier (e.g. pass it to kj::str(),
-// any of the KJ debug macros, etc.).
+  {
+    StringTree tree = strTree(strTree(str("foo"), str("bar")), "baz");
+    EXPECT_EQ("foobarbaz", tree.flatten());
 
-}  // namespace capnp
+    uint pieceCount = 0;
+    tree.visit([&](ArrayPtr<const char> part) { ++pieceCount; EXPECT_EQ(3, part.size()); });
+    EXPECT_EQ(3, pieceCount);
+  }
 
-#endif  // PRETTY_PRINT_H_
+  EXPECT_EQ("<foobarbaz>", str('<', strTree(str("foo"), "bar", str("baz")), '>'));
+}
+
+TEST(StringTree, DelimitedArray) {
+  Array<StringTree> arr = heapArray<StringTree>(4);
+  arr[0] = strTree("foo");
+  arr[1] = strTree("bar");
+  arr[2] = strTree("baz");
+  arr[3] = strTree("qux");
+
+  EXPECT_EQ("foo, bar, baz, qux", StringTree(kj::mv(arr), ", ").flatten());
+}
+
+}  // namespace
+}  // namespace _ (private)
+}  // namespace kj

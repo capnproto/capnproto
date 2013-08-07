@@ -21,25 +21,45 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNP_PRETTY_PRINT_H_
-#define CAPNP_PRETTY_PRINT_H_
+#include "string-tree.h"
 
-#include "dynamic.h"
-#include <kj/string-tree.h>
+namespace kj {
 
-namespace capnp {
+StringTree::StringTree(Array<StringTree>&& pieces, StringPtr delim)
+    : size_(0),
+      branches(heapArray<Branch>(pieces.size())) {
+  if (pieces.size() > 0) {
+    if (pieces.size() > 1 && delim.size() > 0) {
+      text = heapString((pieces.size() - 1) * delim.size());
+      size_ = text.size();
+    }
 
-kj::StringTree prettyPrint(DynamicStruct::Reader value);
-kj::StringTree prettyPrint(DynamicStruct::Builder value);
-kj::StringTree prettyPrint(DynamicList::Reader value);
-kj::StringTree prettyPrint(DynamicList::Builder value);
-// Print the given Cap'n Proto struct or list with nice indentation.  Note that you can pass any
-// struct or list reader or builder type to this method, since they can be implicitly converted
-// to one of the dynamic types.
-//
-// If you don't want indentation, just use the value's KJ stringifier (e.g. pass it to kj::str(),
-// any of the KJ debug macros, etc.).
+    branches[0].index = 0;
+    branches[0].content = kj::mv(pieces[0]);
+    size_ += pieces[0].size();
 
-}  // namespace capnp
+    for (uint i = 1; i < pieces.size(); i++) {
+      if (delim.size() > 0) {
+        memcpy(text.begin() + (i - 1) * delim.size(), delim.begin(), delim.size());
+      }
+      branches[i].index = i * delim.size();
+      branches[i].content = kj::mv(pieces[i]);
+      size_ += pieces[i].size();
+    }
+  }
+}
 
-#endif  // PRETTY_PRINT_H_
+String StringTree::flatten() const {
+  String result = heapString(size());
+  flattenTo(result.begin());
+  return result;
+}
+
+void StringTree::flattenTo(char* __restrict__ target) const {
+  visit([&target](ArrayPtr<const char> text) {
+    memcpy(target, text.begin(), text.size());
+    target += text.size();
+  });
+}
+
+}  // namespace kj

@@ -28,6 +28,7 @@
 #include "../serialize.h"
 #include <kj/debug.h>
 #include <kj/io.h>
+#include <kj/string-tree.h>
 #include "../schema-loader.h"
 #include "../dynamic.h"
 #include <unistd.h>
@@ -36,146 +37,6 @@
 
 namespace capnp {
 namespace {
-
-class TextBlob {
-public:
-  TextBlob() = default;
-  template <typename... Params>
-  explicit TextBlob(Params&&... params);
-  TextBlob(kj::Array<TextBlob>&& params);
-
-  void writeTo(kj::OutputStream& out) const;
-
-private:
-  kj::Array<char> text;
-  struct Branch;
-  kj::Array<Branch> branches;
-
-  void allocate(size_t textSize, size_t branchCount);
-  template <typename First, typename... Rest>
-  void allocate(size_t textSize, size_t branchCount, const First& first, Rest&&... rest);
-  template <typename... Rest>
-  void allocate(size_t textSize, size_t branchCount, const TextBlob& first, Rest&&... rest);
-
-  void fill(char* textPos, Branch* branchesPos);
-  template <typename First, typename... Rest>
-  void fill(char* textPos, Branch* branchesPos, First&& first, Rest&&... rest);
-  template <typename... Rest>
-  void fill(char* textPos, Branch* branchesPos, TextBlob&& first, Rest&&... rest);
-
-  template <typename T>
-  auto toContainer(T&& t) -> decltype(kj::toCharSequence(kj::fwd<T>(t))) {
-    return kj::toCharSequence(kj::fwd<T>(t));
-  }
-  TextBlob&& toContainer(TextBlob&& t) {
-    return kj::mv(t);
-  }
-  TextBlob& toContainer(TextBlob& t) {
-    return t;
-  }
-  const TextBlob& toContainer(const TextBlob& t) {
-    return t;
-  }
-
-  template <typename... Params>
-  void init(Params&&... params);
-};
-
-struct TextBlob::Branch {
-  char* pos;
-  TextBlob content;
-};
-
-template <typename... Params>
-TextBlob::TextBlob(Params&&... params) {
-  init(toContainer(kj::fwd<Params>(params))...);
-}
-
-TextBlob::TextBlob(kj::Array<TextBlob>&& params) {
-  branches = kj::heapArray<Branch>(params.size());
-  for (size_t i = 0; i < params.size(); i++) {
-    branches[i].pos = nullptr;
-    branches[i].content = kj::mv(params[i]);
-  }
-}
-
-void TextBlob::writeTo(kj::OutputStream& out) const {
-  const char* pos = text.begin();
-  for (auto& branch: branches) {
-    out.write(pos, branch.pos - pos);
-    pos = branch.pos;
-    branch.content.writeTo(out);
-  }
-  out.write(pos, text.end() - pos);
-}
-
-void TextBlob::allocate(size_t textSize, size_t branchCount) {
-  text = kj::heapArray<char>(textSize);
-  branches = kj::heapArray<Branch>(branchCount);
-}
-
-template <typename First, typename... Rest>
-void TextBlob::allocate(size_t textSize, size_t branchCount, const First& first, Rest&&... rest) {
-  allocate(textSize + first.size(), branchCount, kj::fwd<Rest>(rest)...);
-}
-
-template <typename... Rest>
-void TextBlob::allocate(size_t textSize, size_t branchCount,
-                        const TextBlob& first, Rest&&... rest) {
-  allocate(textSize, branchCount + 1, kj::fwd<Rest>(rest)...);
-}
-
-void TextBlob::fill(char* textPos, Branch* branchesPos) {
-  KJ_ASSERT(textPos == text.end(), textPos - text.end());
-  KJ_ASSERT(branchesPos == branches.end(), branchesPos - branches.end());
-}
-
-template <typename First, typename... Rest>
-void TextBlob::fill(char* textPos, Branch* branchesPos, First&& first, Rest&&... rest) {
-  textPos = kj::_::fill(textPos, kj::fwd<First>(first));
-  fill(textPos, branchesPos, kj::fwd<Rest>(rest)...);
-}
-
-template <typename... Rest>
-void TextBlob::fill(char* textPos, Branch* branchesPos, TextBlob&& first, Rest&&... rest) {
-  branchesPos->pos = textPos;
-  branchesPos->content = kj::mv(first);
-  ++branchesPos;
-  fill(textPos, branchesPos, kj::fwd<Rest>(rest)...);
-}
-
-template <typename... Params>
-void TextBlob::init(Params&&... params) {
-  allocate(0, 0, params...);
-  fill(text.begin(), branches.begin(), kj::fwd<Params>(params)...);
-}
-
-template <typename... Params>
-TextBlob text(Params&&... params) {
-  return TextBlob(kj::fwd<Params>(params)...);
-}
-
-template <typename List, typename Func>
-TextBlob forText(List&& list, Func&& func) {
-  kj::Array<TextBlob> items = kj::heapArray<TextBlob>(list.size());
-  for (size_t i = 0; i < list.size(); i++) {
-    items[i] = func(list[i]);
-  }
-  return TextBlob(kj::mv(items));
-}
-
-template <typename T>
-struct ForTextHack {
-  T list;
-  ForTextHack(T list): list(kj::fwd<T>(list)) {}
-  template <typename Func>
-  TextBlob operator*(Func&& func) {
-    return forText(list, func);
-  }
-};
-
-#define FOR_EACH(list, name) ForTextHack<decltype(list)>(list) * \
-    [&](decltype((list)[0]) name) -> TextBlob
 
 struct Indent {
   uint amount;
@@ -224,7 +85,7 @@ Text::Reader getUnqualifiedName(Schema schema) {
   return "(?)";
 }
 
-TextBlob nodeName(Schema target, Schema scope) {
+kj::StringTree nodeName(Schema target, Schema scope) {
   std::vector<Schema> targetParents;
   std::vector<Schema> scopeParts;
 
@@ -254,49 +115,49 @@ TextBlob nodeName(Schema target, Schema scope) {
 
   // TODO(someday):  This is broken in that we aren't checking for shadowing.
 
-  TextBlob path = text();
+  kj::StringTree path = kj::strTree();
   while (!targetParents.empty()) {
     auto part = targetParents.back();
     auto proto = part.getProto();
     if (proto.getScopeId() == 0) {
-      path = text(kj::mv(path), "import \"/", proto.getDisplayName(), "\".");
+      path = kj::strTree(kj::mv(path), "import \"/", proto.getDisplayName(), "\".");
     } else {
-      path = text(kj::mv(path), getUnqualifiedName(part), ".");
+      path = kj::strTree(kj::mv(path), getUnqualifiedName(part), ".");
     }
     targetParents.pop_back();
   }
 
-  return text(kj::mv(path), getUnqualifiedName(target));
+  return kj::strTree(kj::mv(path), getUnqualifiedName(target));
 }
 
-TextBlob genType(schema::Type::Reader type, Schema scope) {
+kj::StringTree genType(schema::Type::Reader type, Schema scope) {
   auto body = type.getBody();
   switch (body.which()) {
-    case schema::Type::Body::VOID_TYPE: return text("Void");
-    case schema::Type::Body::BOOL_TYPE: return text("Bool");
-    case schema::Type::Body::INT8_TYPE: return text("Int8");
-    case schema::Type::Body::INT16_TYPE: return text("Int16");
-    case schema::Type::Body::INT32_TYPE: return text("Int32");
-    case schema::Type::Body::INT64_TYPE: return text("Int64");
-    case schema::Type::Body::UINT8_TYPE: return text("UInt8");
-    case schema::Type::Body::UINT16_TYPE: return text("UInt16");
-    case schema::Type::Body::UINT32_TYPE: return text("UInt32");
-    case schema::Type::Body::UINT64_TYPE: return text("UInt64");
-    case schema::Type::Body::FLOAT32_TYPE: return text("Float32");
-    case schema::Type::Body::FLOAT64_TYPE: return text("Float64");
-    case schema::Type::Body::TEXT_TYPE: return text("Text");
-    case schema::Type::Body::DATA_TYPE: return text("Data");
+    case schema::Type::Body::VOID_TYPE: return kj::strTree("Void");
+    case schema::Type::Body::BOOL_TYPE: return kj::strTree("Bool");
+    case schema::Type::Body::INT8_TYPE: return kj::strTree("Int8");
+    case schema::Type::Body::INT16_TYPE: return kj::strTree("Int16");
+    case schema::Type::Body::INT32_TYPE: return kj::strTree("Int32");
+    case schema::Type::Body::INT64_TYPE: return kj::strTree("Int64");
+    case schema::Type::Body::UINT8_TYPE: return kj::strTree("UInt8");
+    case schema::Type::Body::UINT16_TYPE: return kj::strTree("UInt16");
+    case schema::Type::Body::UINT32_TYPE: return kj::strTree("UInt32");
+    case schema::Type::Body::UINT64_TYPE: return kj::strTree("UInt64");
+    case schema::Type::Body::FLOAT32_TYPE: return kj::strTree("Float32");
+    case schema::Type::Body::FLOAT64_TYPE: return kj::strTree("Float64");
+    case schema::Type::Body::TEXT_TYPE: return kj::strTree("Text");
+    case schema::Type::Body::DATA_TYPE: return kj::strTree("Data");
     case schema::Type::Body::LIST_TYPE:
-      return text("List(", genType(body.getListType(), scope), ")");
+      return kj::strTree("List(", genType(body.getListType(), scope), ")");
     case schema::Type::Body::ENUM_TYPE:
       return nodeName(scope.getDependency(body.getEnumType()), scope);
     case schema::Type::Body::STRUCT_TYPE:
       return nodeName(scope.getDependency(body.getStructType()), scope);
     case schema::Type::Body::INTERFACE_TYPE:
       return nodeName(scope.getDependency(body.getInterfaceType()), scope);
-    case schema::Type::Body::OBJECT_TYPE: return text("Object");
+    case schema::Type::Body::OBJECT_TYPE: return kj::strTree("Object");
   }
-  return text();
+  return kj::strTree();
 }
 
 int typeSizeBits(schema::Type::Reader type) {
@@ -350,28 +211,31 @@ bool isEmptyValue(schema::Value::Reader value) {
   return true;
 }
 
-TextBlob genValue(schema::Type::Reader type, schema::Value::Reader value, Schema scope) {
+kj::StringTree genValue(schema::Type::Reader type, schema::Value::Reader value, Schema scope) {
   auto body = value.getBody();
   switch (body.which()) {
-    case schema::Value::Body::VOID_VALUE: return text("void");
-    case schema::Value::Body::BOOL_VALUE: return text(body.getBoolValue() ? "true" : "false");
-    case schema::Value::Body::INT8_VALUE: return text((int)body.getInt8Value());
-    case schema::Value::Body::INT16_VALUE: return text(body.getInt16Value());
-    case schema::Value::Body::INT32_VALUE: return text(body.getInt32Value());
-    case schema::Value::Body::INT64_VALUE: return text(body.getInt64Value());
-    case schema::Value::Body::UINT8_VALUE: return text((uint)body.getUint8Value());
-    case schema::Value::Body::UINT16_VALUE: return text(body.getUint16Value());
-    case schema::Value::Body::UINT32_VALUE: return text(body.getUint32Value());
-    case schema::Value::Body::UINT64_VALUE: return text(body.getUint64Value());
-    case schema::Value::Body::FLOAT32_VALUE: return text(body.getFloat32Value());
-    case schema::Value::Body::FLOAT64_VALUE: return text(body.getFloat64Value());
-    case schema::Value::Body::TEXT_VALUE: return text(DynamicValue::Reader(body.getTextValue()));
-    case schema::Value::Body::DATA_VALUE: return text(DynamicValue::Reader(body.getDataValue()));
+    case schema::Value::Body::VOID_VALUE: return kj::strTree("void");
+    case schema::Value::Body::BOOL_VALUE:
+      return kj::strTree(body.getBoolValue() ? "true" : "false");
+    case schema::Value::Body::INT8_VALUE: return kj::strTree((int)body.getInt8Value());
+    case schema::Value::Body::INT16_VALUE: return kj::strTree(body.getInt16Value());
+    case schema::Value::Body::INT32_VALUE: return kj::strTree(body.getInt32Value());
+    case schema::Value::Body::INT64_VALUE: return kj::strTree(body.getInt64Value());
+    case schema::Value::Body::UINT8_VALUE: return kj::strTree((uint)body.getUint8Value());
+    case schema::Value::Body::UINT16_VALUE: return kj::strTree(body.getUint16Value());
+    case schema::Value::Body::UINT32_VALUE: return kj::strTree(body.getUint32Value());
+    case schema::Value::Body::UINT64_VALUE: return kj::strTree(body.getUint64Value());
+    case schema::Value::Body::FLOAT32_VALUE: return kj::strTree(body.getFloat32Value());
+    case schema::Value::Body::FLOAT64_VALUE: return kj::strTree(body.getFloat64Value());
+    case schema::Value::Body::TEXT_VALUE:
+      return kj::strTree(DynamicValue::Reader(body.getTextValue()));
+    case schema::Value::Body::DATA_VALUE:
+      return kj::strTree(DynamicValue::Reader(body.getDataValue()));
     case schema::Value::Body::LIST_VALUE: {
       KJ_REQUIRE(type.getBody().which() == schema::Type::Body::LIST_TYPE, "type/value mismatch");
       auto value = body.getListValue<DynamicList>(
           ListSchema::of(type.getBody().getListType(), scope));
-      return text(value);
+      return kj::strTree(value);
     }
     case schema::Value::Body::ENUM_VALUE: {
       KJ_REQUIRE(type.getBody().which() == schema::Type::Body::ENUM_TYPE, "type/value mismatch");
@@ -380,40 +244,40 @@ TextBlob genValue(schema::Type::Reader type, schema::Value::Reader value, Schema
       auto enumerants = enumType.getEnumerants();
       KJ_REQUIRE(body.getEnumValue() < enumerants.size(),
               "Enum value out-of-range.", body.getEnumValue(), enumNode.getDisplayName());
-      return text(enumerants[body.getEnumValue()].getName());
+      return kj::strTree(enumerants[body.getEnumValue()].getName());
     }
     case schema::Value::Body::STRUCT_VALUE: {
       KJ_REQUIRE(type.getBody().which() == schema::Type::Body::STRUCT_TYPE, "type/value mismatch");
       auto value = body.getStructValue<DynamicStruct>(
           scope.getDependency(type.getBody().getStructType()).asStruct());
-      return text(value);
+      return kj::strTree(value);
     }
     case schema::Value::Body::INTERFACE_VALUE: {
-      return text("");
+      return kj::strTree("");
     }
     case schema::Value::Body::OBJECT_VALUE: {
-      return text("");
+      return kj::strTree("");
     }
   }
-  return text("");
+  return kj::strTree("");
 }
 
-TextBlob genAnnotation(schema::Annotation::Reader annotation,
-                       Schema scope,
-                       const char* prefix = " ", const char* suffix = "") {
+kj::StringTree genAnnotation(schema::Annotation::Reader annotation,
+                             Schema scope,
+                             const char* prefix = " ", const char* suffix = "") {
   auto decl = schemaLoader.get(annotation.getId());
   auto body = decl.getProto().getBody();
   KJ_REQUIRE(body.which() == schema::Node::Body::ANNOTATION_NODE);
   auto annDecl = body.getAnnotationNode();
 
-  return text(prefix, "$", nodeName(decl, scope), "(",
-              genValue(annDecl.getType(), annotation.getValue(), scope), ")", suffix);
+  return kj::strTree(prefix, "$", nodeName(decl, scope), "(",
+                     genValue(annDecl.getType(), annotation.getValue(), scope), ")", suffix);
 }
 
-TextBlob genAnnotations(List<schema::Annotation>::Reader list, Schema scope) {
-  return FOR_EACH(list, ann) { return genAnnotation(ann, scope); };
+kj::StringTree genAnnotations(List<schema::Annotation>::Reader list, Schema scope) {
+  return kj::strTree(KJ_MAP(list, ann) { return genAnnotation(ann, scope); });
 }
-TextBlob genAnnotations(Schema schema) {
+kj::StringTree genAnnotations(Schema schema) {
   auto proto = schema.getProto();
   return genAnnotations(proto.getAnnotations(), schemaLoader.get(proto.getScopeId()));
 }
@@ -432,42 +296,55 @@ const char* elementSizeName(schema::ElementSize size) {
   return "";
 }
 
-TextBlob genStructMember(schema::StructNode::Member::Reader member,
-                         Schema scope, Indent indent, int unionTag = -1) {
+kj::StringTree genStructMember(schema::StructNode::Member::Reader member,
+                               Schema scope, Indent indent, int unionTag = -1) {
   switch (member.getBody().which()) {
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
       auto field = member.getBody().getFieldMember();
       int size = typeSizeBits(field.getType());
-      return text(indent, member.getName(), " @", member.getOrdinal(),
-                  " :", genType(field.getType(), scope),
-                  isEmptyValue(field.getDefaultValue()) ? text("") :
-                      text(" = ", genValue(field.getType(), field.getDefaultValue(), scope)),
-                  genAnnotations(member.getAnnotations(), scope),
-                  ";  # ", size == -1 ? text("ptr[", field.getOffset(), "]")
-                                      : text("bits[", field.getOffset() * size, ", ",
-                                                     (field.getOffset() + 1) * size, ")"),
-                  unionTag != -1 ? text(", union tag = ", unionTag) : text(),
-                  "\n");
+      return kj::strTree(
+          indent, member.getName(), " @", member.getOrdinal(),
+          " :", genType(field.getType(), scope),
+          isEmptyValue(field.getDefaultValue()) ? kj::strTree("") :
+              kj::strTree(" = ", genValue(field.getType(), field.getDefaultValue(), scope)),
+          genAnnotations(member.getAnnotations(), scope),
+          ";  # ", size == -1 ? kj::strTree("ptr[", field.getOffset(), "]")
+                              : kj::strTree("bits[", field.getOffset() * size, ", ",
+                                            (field.getOffset() + 1) * size, ")"),
+          unionTag != -1 ? kj::strTree(", union tag = ", unionTag) : kj::strTree(),
+          "\n");
     }
     case schema::StructNode::Member::Body::UNION_MEMBER: {
       auto un = member.getBody().getUnionMember();
       int i = 0;
-      return text(indent, member.getName(), " @", member.getOrdinal(),
-                  " union", genAnnotations(member.getAnnotations(), scope),
-                  " {  # tag bits[", un.getDiscriminantOffset() * 16, ", ",
-                  un.getDiscriminantOffset() * 16 + 16, ")\n",
-                  FOR_EACH(un.getMembers(), member) {
-                    return genStructMember(member, scope, indent.next(), i++);
-                  },
-                  indent, "}\n");
+      return kj::strTree(
+          indent, member.getName(), " @", member.getOrdinal(),
+          " union", genAnnotations(member.getAnnotations(), scope),
+          " {  # tag bits[", un.getDiscriminantOffset() * 16, ", ",
+          un.getDiscriminantOffset() * 16 + 16, ")\n",
+          KJ_MAP(un.getMembers(), member) {
+            return genStructMember(member, scope, indent.next(), i++);
+          },
+          indent, "}\n");
+    }
+    case schema::StructNode::Member::Body::GROUP_MEMBER: {
+      auto group = member.getBody().getGroupMember();
+      return kj::strTree(
+          indent, member.getName(),
+          " group", genAnnotations(member.getAnnotations(), scope), " {",
+          unionTag != -1 ? kj::strTree("  # union tag = ", unionTag) : kj::strTree(), "\n",
+          KJ_MAP(group.getMembers(), member) {
+            return genStructMember(member, scope, indent.next());
+          },
+          indent, "}\n");
     }
   }
-  return text();
+  return kj::strTree();
 }
 
-TextBlob genNestedDecls(Schema schema, Indent indent);
+kj::StringTree genNestedDecls(Schema schema, Indent indent);
 
-TextBlob genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent indent) {
+kj::StringTree genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent indent) {
   auto proto = schema.getProto();
   if (proto.getScopeId() != scopeId) {
     // This appears to be an alias for something declared elsewhere.
@@ -480,15 +357,15 @@ TextBlob genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent inde
       break;
     case schema::Node::Body::STRUCT_NODE: {
       auto body = proto.getBody().getStructNode();
-      return text(
+      return kj::strTree(
           indent, "struct ", name, " @0x", kj::hex(proto.getId()), genAnnotations(schema), " {  # ",
           body.getDataSectionWordSize() * 8, " bytes, ",
           body.getPointerSectionSize(), " ptrs",
           body.getPreferredListEncoding() == schema::ElementSize::INLINE_COMPOSITE
-              ? text()
-              : text(", packed as ", elementSizeName(body.getPreferredListEncoding())),
+              ? kj::strTree()
+              : kj::strTree(", packed as ", elementSizeName(body.getPreferredListEncoding())),
           "\n",
-          FOR_EACH(body.getMembers(), member) {
+          KJ_MAP(body.getMembers(), member) {
             return genStructMember(member, schema, indent.next());
           },
           genNestedDecls(schema, indent.next()),
@@ -497,11 +374,11 @@ TextBlob genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent inde
     case schema::Node::Body::ENUM_NODE: {
       auto body = proto.getBody().getEnumNode();
       uint i = 0;
-      return text(
+      return kj::strTree(
           indent, "enum ", name, " @0x", kj::hex(proto.getId()), genAnnotations(schema), " {\n",
-          FOR_EACH(body.getEnumerants(), enumerant) {
-            return text(indent.next(), enumerant.getName(), " @", i++,
-                        genAnnotations(enumerant.getAnnotations(), schema), ";\n");
+          KJ_MAP(body.getEnumerants(), enumerant) {
+            return kj::strTree(indent.next(), enumerant.getName(), " @", i++,
+                               genAnnotations(enumerant.getAnnotations(), schema), ";\n");
           },
           genNestedDecls(schema, indent.next()),
           indent, "}\n");
@@ -509,22 +386,23 @@ TextBlob genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent inde
     case schema::Node::Body::INTERFACE_NODE: {
       auto body = proto.getBody().getInterfaceNode();
       uint i = 0;
-      return text(
+      return kj::strTree(
           indent, "interface ", name, " @0x", kj::hex(proto.getId()),
           genAnnotations(schema), " {\n",
-          FOR_EACH(body.getMethods(), method) {
+          KJ_MAP(body.getMethods(), method) {
             int j = 0;
-            return text(
+            return kj::strTree(
                 indent.next(), method.getName(), " @", i++, "(",
-                FOR_EACH(method.getParams(), param) {
+                KJ_MAP(method.getParams(), param) {
                   bool hasDefault = j >= method.getRequiredParamCount() ||
                       !isEmptyValue(param.getDefaultValue());
-                  return text(
+                  return kj::strTree(
                       j++ > 0 ? ", " : "",
                       param.getName(), ": ", genType(param.getType(), schema),
                       hasDefault
-                          ? text(" = ", genValue(param.getType(), param.getDefaultValue(), schema))
-                          : text(),
+                          ? kj::strTree(" = ", genValue(
+                              param.getType(), param.getDefaultValue(), schema))
+                          : kj::strTree(),
                       genAnnotations(param.getAnnotations(), schema));
                 },
                 ") :", genType(method.getReturnType(), schema),
@@ -535,7 +413,7 @@ TextBlob genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent inde
     }
     case schema::Node::Body::CONST_NODE: {
       auto body = proto.getBody().getConstNode();
-      return text(
+      return kj::strTree(
           indent, "const ", name, " @0x", kj::hex(proto.getId()), " :",
           genType(body.getType(), schema), " = ",
           genValue(body.getType(), body.getValue(), schema), ";\n");
@@ -561,33 +439,33 @@ TextBlob genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent inde
       } else {
         targets.setSize(i);
       }
-      return text(
+      return kj::strTree(
           indent, "annotation ", name, " @0x", kj::hex(proto.getId()),
           " (", strArray(targets, ", "), ") :",
           genType(body.getType(), schema), genAnnotations(schema), ";\n");
     }
   }
 
-  return text();
+  return kj::strTree();
 }
 
-TextBlob genNestedDecls(Schema schema, Indent indent) {
+kj::StringTree genNestedDecls(Schema schema, Indent indent) {
   uint64_t id = schema.getProto().getId();
-  return FOR_EACH(schema.getProto().getNestedNodes(), nested) {
+  return kj::strTree(KJ_MAP(schema.getProto().getNestedNodes(), nested) {
     return genDecl(schemaLoader.get(nested.getId()), nested.getName(), id, indent);
-  };
+  });
 }
 
-TextBlob genFile(Schema file) {
+kj::StringTree genFile(Schema file) {
   auto proto = file.getProto();
   auto body = proto.getBody();
   KJ_REQUIRE(body.which() == schema::Node::Body::FILE_NODE, "Expected a file node.",
           (uint)body.which());
 
-  return text(
+  return kj::strTree(
     "# ", proto.getDisplayName(), "\n",
     "@0x", kj::hex(proto.getId()), ";\n",
-    FOR_EACH(proto.getAnnotations(), ann) { return genAnnotation(ann, file, "", ";\n"); },
+    KJ_MAP(proto.getAnnotations(), ann) { return genAnnotation(ann, file, "", ";\n"); },
     genNestedDecls(file, Indent(0)));
 }
 
@@ -605,7 +483,10 @@ int main(int argc, char* argv[]) {
   kj::BufferedOutputStreamWrapper out(rawOut);
 
   for (auto fileId: request.getRequestedFiles()) {
-    genFile(schemaLoader.get(fileId)).writeTo(out);
+    genFile(schemaLoader.get(fileId)).visit(
+        [&](kj::ArrayPtr<const char> text) {
+          out.write(text.begin(), text.size());
+        });
   }
 
   return 0;

@@ -91,7 +91,6 @@ public:
 
 private:
   Orphanage orphanage;
-  const ErrorReporter& errorReporter;
   kj::Arena arena;
   Parsers parsers;
 };

@@ -30,6 +30,7 @@
 #include "list.h"
 #include "orphan.h"
 #include <kj/string.h>
+#include <kj/string-tree.h>
 
 namespace capnp {
 
@@ -216,18 +217,18 @@ struct UnionParentType_;
 template <typename T>
 using UnionParentType = typename UnionParentType_<T>::Type;
 
-kj::String structString(StructReader reader, const RawSchema& schema);
-kj::String unionString(StructReader reader, const RawSchema& schema, uint memberIndex);
+kj::StringTree structString(StructReader reader, const RawSchema& schema);
+kj::StringTree unionString(StructReader reader, const RawSchema& schema, uint memberIndex);
 // Declared here so that we can declare inline stringify methods on generated types.
 // Defined in stringify.c++, which depends on dynamic.c++, which is allowed not to be linked in.
 
 template <typename T>
-inline kj::String structString(StructReader reader) {
+inline kj::StringTree structString(StructReader reader) {
   return structString(reader, rawSchema<T>());
 }
 
 template <typename T>
-inline kj::String unionString(StructReader reader) {
+inline kj::StringTree unionString(StructReader reader) {
   return unionString(reader, rawSchema<UnionParentType<T>>(), unionMemberIndex<T>());
 }
 

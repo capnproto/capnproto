@@ -147,7 +147,7 @@ TEST(Stringify, PrettyPrint) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<TestAllTypes>();
 
-  EXPECT_EQ("()", prettyPrint(root));
+  EXPECT_EQ("()", prettyPrint(root).flatten());
 
   initTestMessage(root);
 
@@ -181,7 +181,8 @@ TEST(Stringify, PrettyPrint) {
       "    dataField = \"qux\",\n"
       "    structField = (\n"
       "      textField = \"nested\",\n"
-      "      structField = (textField = \"really nested\")),\n"
+      "      structField = (\n"
+      "        textField = \"really nested\" ) ),\n"
       "    enumField = baz,\n"
       "    voidList = [void, void, void],\n"
       "    boolList = [false, true, false, true, true],\n"
@@ -199,10 +200,10 @@ TEST(Stringify, PrettyPrint) {
       "    textList = [\"quux\", \"corge\", \"grault\"],\n"
       "    dataList = [\"garply\", \"waldo\", \"fred\"],\n"
       "    structList = [\n"
-      "      (textField = \"x structlist 1\"),\n"
-      "      (textField = \"x structlist 2\"),\n"
-      "      (textField = \"x structlist 3\")],\n"
-      "    enumList = [qux, bar, grault]),\n"
+      "      ( textField = \"x structlist 1\" ),\n"
+      "      ( textField = \"x structlist 2\" ),\n"
+      "      ( textField = \"x structlist 3\" ) ],\n"
+      "    enumList = [qux, bar, grault] ),\n"
       "  enumField = corge,\n"
       "  voidList = [void, void, void, void, void, void],\n"
       "  boolList = [true, false, false, true],\n"
@@ -219,11 +220,11 @@ TEST(Stringify, PrettyPrint) {
       "  textList = [\"plugh\", \"xyzzy\", \"thud\"],\n"
       "  dataList = [\"oops\", \"exhausted\", \"rfc3092\"],\n"
       "  structList = [\n"
-      "    (textField = \"structlist 1\"),\n"
-      "    (textField = \"structlist 2\"),\n"
-      "    (textField = \"structlist 3\")],\n"
-      "  enumList = [foo, garply])",
-      prettyPrint(root));
+      "    ( textField = \"structlist 1\" ),\n"
+      "    ( textField = \"structlist 2\" ),\n"
+      "    ( textField = \"structlist 3\" ) ],\n"
+      "  enumList = [foo, garply] )",
+      prettyPrint(root).flatten());
 }
 
 TEST(Stringify, PrettyPrintAdvanced) {
@@ -241,58 +242,52 @@ TEST(Stringify, PrettyPrintAdvanced) {
     list[2].setTextField("baz");
 
     EXPECT_EQ(
-        "(structList = [\n"
-        "  ( int32Field = 123,\n"
-        "    textField = \"foo\"),\n"
-        "  ( int32Field = 456,\n"
-        "    textField = \"bar\"),\n"
-        "  ( int32Field = 789,\n"
-        "    textField = \"baz\")])",
-        prettyPrint(root));
+        "( structList = [\n"
+        "    (int32Field = 123, textField = \"foo\"),\n"
+        "    (int32Field = 456, textField = \"bar\"),\n"
+        "    (int32Field = 789, textField = \"baz\") ] )",
+        prettyPrint(root).flatten());
 
     root.setInt32Field(55);
 
     EXPECT_EQ(
         "( int32Field = 55,\n"
         "  structList = [\n"
-        "    ( int32Field = 123,\n"
-        "      textField = \"foo\"),\n"
-        "    ( int32Field = 456,\n"
-        "      textField = \"bar\"),\n"
-        "    ( int32Field = 789,\n"
-        "      textField = \"baz\")])",
-        prettyPrint(root));
+        "    (int32Field = 123, textField = \"foo\"),\n"
+        "    (int32Field = 456, textField = \"bar\"),\n"
+        "    (int32Field = 789, textField = \"baz\") ] )",
+        prettyPrint(root).flatten());
   }
 
   {
     auto root = builder.initRoot<test::TestLists>();
     auto ll = root.initInt32ListList(3);
-    ll.set(0, {123, 456, 789});
-    ll.set(1, {234, 567, 891});
-    ll.set(2, {345, 678, 912});
+    ll.set(0, {123, 456, 789, 1234567890});
+    ll.set(1, {234, 567, 891, 1234567890});
+    ll.set(2, {345, 678, 912, 1234567890});
 
     EXPECT_EQ(
-        "[ [123, 456, 789],\n"
-        "  [234, 567, 891],\n"
-        "  [345, 678, 912]]",
-        prettyPrint(ll));
+        "[ [123, 456, 789, 1234567890],\n"
+        "  [234, 567, 891, 1234567890],\n"
+        "  [345, 678, 912, 1234567890] ]",
+        prettyPrint(ll).flatten());
 
     EXPECT_EQ(
-        "(int32ListList = [\n"
-        "  [123, 456, 789],\n"
-        "  [234, 567, 891],\n"
-        "  [345, 678, 912]])",
-        prettyPrint(root));
+        "( int32ListList = [\n"
+        "    [123, 456, 789, 1234567890],\n"
+        "    [234, 567, 891, 1234567890],\n"
+        "    [345, 678, 912, 1234567890] ] )",
+        prettyPrint(root).flatten());
 
     root.initList8(0);
 
     EXPECT_EQ(
         "( list8 = [],\n"
         "  int32ListList = [\n"
-        "    [123, 456, 789],\n"
-        "    [234, 567, 891],\n"
-        "    [345, 678, 912]])",
-        prettyPrint(root));
+        "    [123, 456, 789, 1234567890],\n"
+        "    [234, 567, 891, 1234567890],\n"
+        "    [345, 678, 912, 1234567890] ] )",
+        prettyPrint(root).flatten());
 
     auto l8 = root.initList8(1);
     l8[0].setF(12);
@@ -300,24 +295,22 @@ TEST(Stringify, PrettyPrintAdvanced) {
     EXPECT_EQ(
         "( list8 = [(f = 12)],\n"
         "  int32ListList = [\n"
-        "    [123, 456, 789],\n"
-        "    [234, 567, 891],\n"
-        "    [345, 678, 912]])",
-        prettyPrint(root));
+        "    [123, 456, 789, 1234567890],\n"
+        "    [234, 567, 891, 1234567890],\n"
+        "    [345, 678, 912, 1234567890] ] )",
+        prettyPrint(root).flatten());
 
     l8 = root.initList8(2);
     l8[0].setF(12);
     l8[1].setF(34);
 
     EXPECT_EQ(
-        "( list8 = [\n"
-        "    (f = 12),\n"
-        "    (f = 34)],\n"
+        "( list8 = [(f = 12), (f = 34)],\n"
         "  int32ListList = [\n"
-        "    [123, 456, 789],\n"
-        "    [234, 567, 891],\n"
-        "    [345, 678, 912]])",
-        prettyPrint(root));
+        "    [123, 456, 789, 1234567890],\n"
+        "    [234, 567, 891, 1234567890],\n"
+        "    [345, 678, 912, 1234567890] ] )",
+        prettyPrint(root).flatten());
   }
 
   {
@@ -326,19 +319,21 @@ TEST(Stringify, PrettyPrintAdvanced) {
     auto s = root.getUn().initAllTypes();
     EXPECT_EQ(
         "(un = allTypes())",
-        prettyPrint(root));
+        prettyPrint(root).flatten());
 
     s.setInt32Field(123);
     EXPECT_EQ(
-        "(un = allTypes(int32Field = 123))",
-        prettyPrint(root));
+        "( un = allTypes(int32Field = 123) )",
+        prettyPrint(root).flatten());
 
     s.setTextField("foo");
+    s.setUInt64Field(0xffffffffffffffffull);
     EXPECT_EQ(
-        "(un = allTypes(\n"
-        "  int32Field = 123,\n"
-        "  textField = \"foo\"))",
-        prettyPrint(root));
+        "( un = allTypes(\n"
+        "    int32Field = 123,\n"
+        "    uInt64Field = 18446744073709551615,\n"
+        "    textField = \"foo\" ) )",
+        prettyPrint(root).flatten());
   }
 }
 

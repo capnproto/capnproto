@@ -127,9 +127,9 @@ private:
     return StructSchema(&_::rawSchema<T>());
   }
   friend class Schema;
-  friend kj::String _::structString(
+  friend kj::StringTree _::structString(
       _::StructReader reader, const _::RawSchema& schema);
-  friend kj::String _::unionString(
+  friend kj::StringTree _::unionString(
       _::StructReader reader, const _::RawSchema& schema, uint memberIndex);
 };
 

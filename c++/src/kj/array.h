@@ -461,6 +461,36 @@ private:
 };
 
 // =======================================================================================
+// KJ_MAP_ARRAY
+
+#define KJ_MAP(array, elementName) \
+  ::kj::_::Mapper<decltype(array)>(array) * [&](decltype(*(array).begin()) elementName)
+// Applies some function to every element of an array, returning an Array of the results,  with
+// nice syntax.  Example:
+//
+//     StringPtr foo = "abcd";
+//     Array<char> bar = KJ_MAP(foo, c) -> char { return c + 1; };
+//     KJ_ASSERT(str(bar) == "bcde");
+
+namespace _ {  // private
+
+template <typename T>
+struct Mapper {
+  T array;
+  Mapper(T array): array(kj::fwd<T>(array)) {}
+  template <typename Func>
+  auto operator*(Func&& func) -> Array<decltype(func(*array.begin()))> {
+    auto builder = heapArrayBuilder<decltype(func(*array.begin()))>(array.size());
+    for (auto iter = array.begin(); iter != array.end(); ++iter) {
+      builder.add(func(*iter));
+    }
+    return builder.finish();
+  }
+};
+
+}  // namespace _ (private)
+
+// =======================================================================================
 // Inline implementation details
 
 template <typename T>

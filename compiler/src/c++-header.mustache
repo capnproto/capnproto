@@ -193,10 +193,10 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::String KJ_STRINGIFY({{typeFullName}}::Reader reader);
+  friend ::kj::StringTree KJ_STRINGIFY({{typeFullName}}::Reader reader);
 };
 
-inline ::kj::String KJ_STRINGIFY({{typeFullName}}::Reader reader) {
+inline ::kj::StringTree KJ_STRINGIFY({{typeFullName}}::Reader reader) {
 {{#typeStruct}}
   return ::capnp::_::structString<{{typeFullName}}>(reader._reader);
 {{/typeStruct}}
@@ -273,10 +273,10 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::String KJ_STRINGIFY({{typeFullName}}::Builder builder);
+  friend ::kj::StringTree KJ_STRINGIFY({{typeFullName}}::Builder builder);
 };
 
-inline ::kj::String KJ_STRINGIFY({{typeFullName}}::Builder builder) {
+inline ::kj::StringTree KJ_STRINGIFY({{typeFullName}}::Builder builder) {
 {{#typeStruct}}
   return ::capnp::_::structString<{{typeFullName}}>(builder._builder.asReader());
 {{/typeStruct}}
