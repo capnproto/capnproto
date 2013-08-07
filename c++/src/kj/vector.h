@@ -87,6 +87,10 @@ public:
     addAll(container.begin(), container.end());
   }
 
+  inline void removeLast() {
+    builder.removeLast();
+  }
+
 private:
   ArrayBuilder<T> builder;
 

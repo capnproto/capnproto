@@ -41,6 +41,12 @@
 #include <capnp/serialize-packed.h>
 #include <limits>
 
+#if HAVE_CONFIG_H
+#include "config.h"
+#else
+#define VERSION "(unknown ekam build)"
+#endif
+
 namespace capnp {
 namespace compiler {
 
@@ -65,7 +71,7 @@ public:
   }
 };
 
-static const char VERSION_STRING[] = "Cap'n Proto version 0.2";
+static const char VERSION_STRING[] = "Cap'n Proto version " VERSION;
 
 class CompilerMain final: public GlobalErrorReporter {
 public:

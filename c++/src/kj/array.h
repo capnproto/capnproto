@@ -350,6 +350,11 @@ public:
   template <typename Iterator>
   void addAll(Iterator start, Iterator end);
 
+  void removeLast() {
+    KJ_IREQUIRE(pos > ptr, "No elements present to remove.");
+    kj::dtor(*--pos);
+  }
+
   Array<T> finish() {
     // We could safely remove this check if we assume that the disposer implementation doesn't
     // need to know the original capacity, as is thes case with HeapArrayDisposer since it uses
