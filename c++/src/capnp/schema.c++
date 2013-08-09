@@ -55,7 +55,7 @@ Schema Schema::getDependency(uint64_t id) const {
     }
   }
 
-  KJ_FAIL_REQUIRE("Requested ID not found in dependency table.", id);
+  KJ_FAIL_REQUIRE("Requested ID not found in dependency table.", kj::hex(id));
   return Schema();
 }
 

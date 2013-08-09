@@ -346,10 +346,10 @@ TEST(Encoding, UnionLayout) {
   EXPECT_EQ(UnionState({0,12,0,0}, 512), INIT_UNION(getUnion1().setU1f1sp("1")));
 
   EXPECT_EQ(UnionState({0,13,0,0},  -1), INIT_UNION(getUnion1().setU1f2s0(Void::VOID)));
-  EXPECT_EQ(UnionState({0,14,0,0}, 128), INIT_UNION(getUnion1().setU1f2s1(1)));
-  EXPECT_EQ(UnionState({0,15,0,0}, 128), INIT_UNION(getUnion1().setU1f2s8(1)));
-  EXPECT_EQ(UnionState({0,16,0,0}, 128), INIT_UNION(getUnion1().setU1f2s16(1)));
-  EXPECT_EQ(UnionState({0,17,0,0}, 128), INIT_UNION(getUnion1().setU1f2s32(1)));
+  EXPECT_EQ(UnionState({0,14,0,0}, 65), INIT_UNION(getUnion1().setU1f2s1(1)));
+  EXPECT_EQ(UnionState({0,15,0,0}, 72), INIT_UNION(getUnion1().setU1f2s8(1)));
+  EXPECT_EQ(UnionState({0,16,0,0}, 80), INIT_UNION(getUnion1().setU1f2s16(1)));
+  EXPECT_EQ(UnionState({0,17,0,0}, 96), INIT_UNION(getUnion1().setU1f2s32(1)));
   EXPECT_EQ(UnionState({0,18,0,0}, 128), INIT_UNION(getUnion1().setU1f2s64(1)));
   EXPECT_EQ(UnionState({0,19,0,0}, 512), INIT_UNION(getUnion1().setU1f2sp("1")));
 

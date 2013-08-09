@@ -216,7 +216,7 @@ struct TestUnion {
     u1f0sp  @30: Text;
     u1f1sp  @31: Text;
 
-    # Pack more stuff into union1 -- should go into same space as u1f0s64.
+    # Pack more stuff into union1 -- each should go into the same space as corresponding u1f0s*.
     u1f2s0  @32: Void;
     u1f2s1  @33: Bool;
     u1f2s8  @34: Int8;

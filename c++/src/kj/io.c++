@@ -233,14 +233,16 @@ void ArrayOutputStream::write(const void* src, size_t size) {
 // =======================================================================================
 
 AutoCloseFd::~AutoCloseFd() noexcept(false) {
-  unwindDetector.catchExceptionsIfUnwinding([&]() {
-    // Don't use SYSCALL() here because close() should not be repeated on EINTR.
-    if (fd >= 0 && close(fd) < 0) {
-      KJ_FAIL_SYSCALL("close", errno, fd) {
-        break;
+  if (fd >= 0) {
+    unwindDetector.catchExceptionsIfUnwinding([&]() {
+      // Don't use SYSCALL() here because close() should not be repeated on EINTR.
+      if (close(fd) < 0) {
+        KJ_FAIL_SYSCALL("close", errno, fd) {
+          break;
+        }
       }
-    }
-  });
+    });
+  }
 }
 
 FdInputStream::~FdInputStream() noexcept(false) {}

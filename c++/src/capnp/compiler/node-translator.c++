@@ -687,6 +687,10 @@ static void findImports(DynamicValue::Reader value, std::set<kj::StringPtr>& out
       }
       break;
 
+    case DynamicValue::UNION:
+      findImports(value.as<DynamicUnion>().get(), output);
+      break;
+
     default:
       break;
   }
@@ -699,6 +703,9 @@ void NodeTranslator::compileFile(Declaration::Reader decl, schema::FileNode::Bui
   auto list = builder.initImports(imports.size());
   auto iter = imports.begin();
   for (auto element: list) {
+    KJ_IF_MAYBE(i, resolver.resolveImport(*iter)) {
+      element.setId(*i);
+    }
     element.setName(*iter++);
   }
   KJ_ASSERT(iter == imports.end());

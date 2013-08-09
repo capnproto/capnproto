@@ -156,17 +156,7 @@ struct FileNode {
   imports @0 :List(Import);
   struct Import {
     id @0 :Id;
-    # DEPRECATED:  ID of the imported file.  This is no longer filled in because it is hostile to
-    # lazy importing:  since this import list appears in the FileNode, and since the FileNode must
-    # necessarily be cosntructed if any schemas in the file are used, the implication of listing
-    # import IDs here is that if a schema file is used at all, all of its imports must be parsed,
-    # just to get their IDs.  We'd much rather delay parsing a file until something inside it is
-    # actually used.
-    #
-    # In any case, this import list's main reason for existing is to make it easy to generate
-    # the appropriate #include statements in C++.  The IDs of files aren't needed for that.
-    #
-    # TODO(someday):  Perhaps provide an alternative way to identify the remote file.
+    # ID of the imported file.
 
     name @1 :Text;
     # Name which *this* file used to refer to the foreign file.  This may be a relative name.

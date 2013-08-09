@@ -32,6 +32,15 @@ fi
 
 INPUT=$1
 
+case "$INPUT" in
+    *capnp/c++.capnp | \
+    *capnp/schema.capnp | \
+    *capnp/compiler/lexer.capnp | \
+    *capnp/compiler/grammar.capnp )
+        exit 0
+        ;;
+esac
+
 echo findProvider special:ekam-interceptor
 read INTERCEPTOR
 
@@ -40,13 +49,22 @@ if test "$INTERCEPTOR" = ""; then
   exit 1
 fi
 
-echo findProvider file:capnpc
-read CAPNPC
+echo findProvider file:capnp
+read CAPNP
 
-if test "$CAPNPC" = ""; then
-  CAPNPC=capnpc
+if test "$CAPNP" = ""; then
+  echo "error:  couldn't find capnp." >&2
+  exit 1
+fi
+
+echo findProvider file:capnpc-c++
+read CAPNPC_CXX
+
+if test "$CAPNPC_CXX" = ""; then
+  echo "error:  couldn't find capnpc-c++." >&2
+  exit 1
 fi
 
 # When exception stack traces are needed, add: +RTS -xc -RTS
 LD_PRELOAD=$INTERCEPTOR DYLD_FORCE_FLAT_NAMESPACE= DYLD_INSERT_LIBRARIES=$INTERCEPTOR \
-$CAPNPC -I. -oc++ "$INPUT" 3>&1 4<&0 >&2
+$CAPNP compile -I. -o$CAPNPC_CXX "$INPUT" 3>&1 4<&0 >&2

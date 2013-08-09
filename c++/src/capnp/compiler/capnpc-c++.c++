@@ -34,8 +34,13 @@
 #include "../dynamic.h"
 #include <unistd.h>
 #include <unordered_map>
+#include <unordered_set>
+#include <set>
 #include <kj/main.h>
 #include <algorithm>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #if HAVE_CONFIG_H
 #include "config.h"
@@ -54,16 +59,16 @@ static constexpr const char* FIELD_SIZE_NAMES[] = {
   "VOID", "BIT", "BYTE", "TWO_BYTES", "FOUR_BYTES", "EIGHT_BYTES", "POINTER", "INLINE_COMPOSITE"
 };
 
-void enumerateDeps(schema::Type::Reader type, kj::Vector<uint64_t>& deps) {
+void enumerateDeps(schema::Type::Reader type, std::set<uint64_t>& deps) {
   switch (type.getBody().which()) {
     case schema::Type::Body::STRUCT_TYPE:
-      deps.add(type.getBody().getStructType());
+      deps.insert(type.getBody().getStructType());
       break;
     case schema::Type::Body::ENUM_TYPE:
-      deps.add(type.getBody().getEnumType());
+      deps.insert(type.getBody().getEnumType());
       break;
     case schema::Type::Body::INTERFACE_TYPE:
-      deps.add(type.getBody().getInterfaceType());
+      deps.insert(type.getBody().getInterfaceType());
       break;
     case schema::Type::Body::LIST_TYPE:
       enumerateDeps(type.getBody().getListType(), deps);
@@ -73,7 +78,7 @@ void enumerateDeps(schema::Type::Reader type, kj::Vector<uint64_t>& deps) {
   }
 }
 
-void enumerateDeps(schema::StructNode::Member::Reader member, kj::Vector<uint64_t>& deps) {
+void enumerateDeps(schema::StructNode::Member::Reader member, std::set<uint64_t>& deps) {
   switch (member.getBody().which()) {
     case schema::StructNode::Member::Body::FIELD_MEMBER:
       enumerateDeps(member.getBody().getFieldMember().getType(), deps);
@@ -91,7 +96,7 @@ void enumerateDeps(schema::StructNode::Member::Reader member, kj::Vector<uint64_
   }
 }
 
-void enumerateDeps(schema::Node::Reader node, kj::Vector<uint64_t>& deps) {
+void enumerateDeps(schema::Node::Reader node, std::set<uint64_t>& deps) {
   switch (node.getBody().which()) {
     case schema::Node::Body::STRUCT_NODE:
       for (auto member: node.getBody().getStructNode().getMembers()) {
@@ -157,6 +162,15 @@ void makeMemberInfoTable(uint parent, MemberList&& members,
   }
 }
 
+kj::StringPtr baseName(kj::StringPtr path) {
+  const char* slashPos = strrchr(path.cStr(), '/');
+  if (slashPos == nullptr) {
+    return path;
+  } else {
+    return slashPos + 1;
+  }
+}
+
 // =======================================================================================
 
 class CapnpcCppMain {
@@ -176,10 +190,12 @@ public:
 private:
   kj::ProcessContext& context;
   SchemaLoader schemaLoader;
+  std::unordered_set<uint64_t> usedImports;
 
   kj::StringTree cppFullName(Schema schema) {
     auto node = schema.getProto();
     if (node.getScopeId() == 0) {
+      usedImports.insert(node.getId());
       for (auto annotation: node.getAnnotations()) {
         if (annotation.getId() == NAMESPACE_ANNOTATION_ID) {
           return kj::strTree(" ::", annotation.getValue().getBody().getTextValue());
@@ -285,7 +301,7 @@ private:
     kj::String ownedType;
     kj::String type = typeName(field.getType()).flatten();
     kj::StringPtr setterDefault;  // only for void
-    uint64_t defaultMask = 0;    // primitives only
+    kj::String defaultMask;    // primitives only
     size_t defaultOffset = 0;    // pointers only: offset of the default value within the schema.
     size_t defaultSize = 0;      // blobs only: byte size of the default value.
 
@@ -297,24 +313,46 @@ private:
         setterDefault = " = ::capnp::Void::VOID";
         break;
 
-#define HANDLE_PRIMITIVE(discrim, typeName, defaultName) \
+#define HANDLE_PRIMITIVE(discrim, typeName, defaultName, suffix) \
       case schema::Type::Body::discrim##_TYPE: \
         kind = FieldKind::PRIMITIVE; \
-        defaultMask = defaultBody.get##defaultName##Value(); \
+        if (defaultBody.get##defaultName##Value() != 0) { \
+          defaultMask = kj::str(defaultBody.get##defaultName##Value(), #suffix); \
+        } \
         break;
 
-      HANDLE_PRIMITIVE(BOOL, bool, Bool);
-      HANDLE_PRIMITIVE(INT8 , ::int8_t , Int8 );
-      HANDLE_PRIMITIVE(INT16, ::int16_t, Int16);
-      HANDLE_PRIMITIVE(INT32, ::int32_t, Int32);
-      HANDLE_PRIMITIVE(INT64, ::int64_t, Int64);
-      HANDLE_PRIMITIVE(UINT8 , ::uint8_t , Uint8 );
-      HANDLE_PRIMITIVE(UINT16, ::uint16_t, Uint16);
-      HANDLE_PRIMITIVE(UINT32, ::uint32_t, Uint32);
-      HANDLE_PRIMITIVE(UINT64, ::uint64_t, Uint64);
-      HANDLE_PRIMITIVE(FLOAT32, float, Float32);
-      HANDLE_PRIMITIVE(FLOAT64, double, Float64);
+      HANDLE_PRIMITIVE(BOOL, bool, Bool, );
+      HANDLE_PRIMITIVE(INT8 , ::int8_t , Int8 , );
+      HANDLE_PRIMITIVE(INT16, ::int16_t, Int16, );
+      HANDLE_PRIMITIVE(INT32, ::int32_t, Int32, );
+      HANDLE_PRIMITIVE(INT64, ::int64_t, Int64, ll);
+      HANDLE_PRIMITIVE(UINT8 , ::uint8_t , Uint8 , u);
+      HANDLE_PRIMITIVE(UINT16, ::uint16_t, Uint16, u);
+      HANDLE_PRIMITIVE(UINT32, ::uint32_t, Uint32, u);
+      HANDLE_PRIMITIVE(UINT64, ::uint64_t, Uint64, ull);
 #undef HANDLE_PRIMITIVE
+
+      case schema::Type::Body::FLOAT32_TYPE:
+        kind = FieldKind::PRIMITIVE;
+        if (defaultBody.getFloat32Value() != 0) {
+          uint32_t mask;
+          float value = defaultBody.getFloat32Value();
+          static_assert(sizeof(mask) == sizeof(value), "bug");
+          memcpy(&mask, &value, sizeof(mask));
+          defaultMask = kj::str(mask, "u");
+        }
+        break;
+
+      case schema::Type::Body::FLOAT64_TYPE:
+        kind = FieldKind::PRIMITIVE;
+        if (defaultBody.getFloat64Value() != 0) {
+          uint64_t mask;
+          double value = defaultBody.getFloat64Value();
+          static_assert(sizeof(mask) == sizeof(value), "bug");
+          memcpy(&mask, &value, sizeof(mask));
+          defaultMask = kj::str(mask, "ull");
+        }
+        break;
 
       case schema::Type::Body::TEXT_TYPE:
         kind = FieldKind::BLOB;
@@ -333,7 +371,9 @@ private:
 
       case schema::Type::Body::ENUM_TYPE:
         kind = FieldKind::PRIMITIVE;
-        defaultMask = defaultBody.getEnumValue();
+        if (defaultBody.getEnumValue() != 0) {
+          defaultMask = kj::str(defaultBody.getEnumValue(), "u");
+        }
         break;
 
       case schema::Type::Body::STRUCT_TYPE:
@@ -360,12 +400,8 @@ private:
     }
 
     kj::String defaultMaskParam;
-    if (defaultMask != 0) {
-      if (defaultMask > 0xffffffffu) {
-        defaultMaskParam = kj::str(", ", defaultMask, "ull");
-      } else {
-        defaultMaskParam = kj::str(", ", defaultMask, "u");
-      }
+    if (defaultMask.size() > 0) {
+      defaultMaskParam = kj::str(", ", defaultMask);
     }
 
     kj::String titleCase = toTitleCase(proto.getName());
@@ -447,7 +483,7 @@ private:
             "  inline typename T::Builder init", titleCase, "(Params&&... params);\n"
             "  template <typename T>\n"
             "  inline void adopt", titleCase, "(::capnp::Orphan<T>&& value);\n"
-            "  template <typename T>\n"
+            "  template <typename T, typename... Params>\n"
             "  inline ::capnp::Orphan<T> disown", titleCase, "(Params&&... params);\n"
             "\n"),
 
@@ -508,7 +544,7 @@ private:
             "  ::capnp::_::PointerHelpers<T>::adopt(\n"
             "      _builder, ", offset, " * ::capnp::POINTERS, kj::mv(value));\n"
             "}\n"
-            "template <typename T>\n"
+            "template <typename T, typename... Params>\n"
             "inline ::capnp::Orphan<T> ", scope, "Builder::disown", titleCase, "(Params&&... params) {\n",
             unionCheck,
             "  return ::capnp::_::PointerHelpers<T>::disown(\n"
@@ -526,6 +562,7 @@ private:
           defaultSize == 0 ? kj::strTree() : kj::strTree(", ", defaultSize));
 
       kj::String elementReaderType;
+      bool isStructList = false;
       if (kind == FieldKind::LIST) {
         bool primitiveElement = false;
         switch (typeBody.getListType().getBody().which()) {
@@ -547,10 +584,14 @@ private:
 
           case schema::Type::Body::TEXT_TYPE:
           case schema::Type::Body::DATA_TYPE:
-          case schema::Type::Body::STRUCT_TYPE:
           case schema::Type::Body::LIST_TYPE:
           case schema::Type::Body::INTERFACE_TYPE:
           case schema::Type::Body::OBJECT_TYPE:
+            primitiveElement = false;
+            break;
+
+          case schema::Type::Body::STRUCT_TYPE:
+            isStructList = true;
             primitiveElement = false;
             break;
         }
@@ -569,9 +610,9 @@ private:
             "  inline bool has", titleCase, "();\n"
             "  inline ", type, "::Builder get", titleCase, "();\n"
             "  inline void set", titleCase, "(", type, "::Reader value);\n",
-            kind == FieldKind::LIST
+            kind == FieldKind::LIST && !isStructList
             ? kj::strTree(
-              "  inline void set", titleCase, "(std::initializer_list<", type, "> value);\n")
+              "  inline void set", titleCase, "(std::initializer_list<", elementReaderType, "> value);\n")
             : kj::strTree(),
             kind == FieldKind::STRUCT
             ? kj::strTree(
@@ -606,9 +647,9 @@ private:
             "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
             "      _builder, ", offset, " * ::capnp::POINTERS, value);\n"
             "}\n",
-            kind == FieldKind::LIST
+            kind == FieldKind::LIST && !isStructList
             ? kj::strTree(
-              "inline void ", scope, "Builder::set", titleCase, "(std::initializer_list<", type, "> value) {\n",
+              "inline void ", scope, "Builder::set", titleCase, "(std::initializer_list<", elementReaderType, "> value) {\n",
               unionSet,
               "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
               "      _builder, ", offset, " * ::capnp::POINTERS, value);\n"
@@ -688,6 +729,8 @@ private:
         "\n"
         "  Builder() = default;\n"
         "  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}\n"
+        "  inline operator Reader() const { return Reader(_builder.asReader()); }\n"
+        "  inline Reader asReader() const { return *this; }\n"
         "\n"
         "  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }\n"
         "\n",
@@ -750,7 +793,7 @@ private:
               return kj::strTree(
                   "    ", toUpperCase(subMember.getProto().getName()), ",\n");
             },
-            "  }\n");
+            "  };\n");
 
         if (unionName.size() == 0) {
           // Anonymous union.
@@ -797,7 +840,7 @@ private:
                 "\n",
                 kj::mv(whichEnumDef),
                 kj::mv(subText.innerTypeDecls),
-                "}\n"
+                "};\n"
                 "\n",
                 kj::mv(subText.innerTypeDefs)),
 
@@ -950,7 +993,7 @@ private:
     auto schemaDecl = kj::strTree(
         "extern const ::capnp::_::RawSchema s_", hexId, ";\n");
 
-    kj::Vector<uint64_t> deps;
+    std::set<uint64_t> deps;
     enumerateDeps(proto, deps);
 
     kj::Vector<capnp::_::RawSchema::MemberInfo> memberInfos;
@@ -1018,6 +1061,7 @@ private:
                             kj::mv(membersText.readerMethodDecls)),
               makeBuilderDef(fullName, name, "structString",
                              kj::mv(membersText.builderMethodDecls)),
+              kj::mv(membersText.innerTypeReaderBuilderDefs),
               KJ_MAP(nestedTexts, n) { return kj::mv(n.readerBuilderDefs); }),
 
           kj::strTree(
@@ -1145,8 +1189,10 @@ private:
     kj::StringTree source;
   };
 
-  FileText makeFileText(uint64_t id) {
-    auto node = schemaLoader.get(id).getProto();
+  FileText makeFileText(Schema schema) {
+    usedImports.clear();
+
+    auto node = schema.getProto();
     auto displayName = node.getDisplayName();
 
     kj::Vector<kj::ArrayPtr<const char>> namespaceParts;
@@ -1182,22 +1228,29 @@ private:
 
     kj::String separator = kj::str("// ", kj::repeat('=', 87), "\n");
 
-    const char* baseName = strrchr(displayName.cStr(), '/');
-    if (baseName == nullptr) {
-      baseName = displayName.cStr();
-    } else {
-      baseName++;
+    kj::Vector<kj::StringPtr> includes;
+    for (auto import: node.getBody().getFileNode().getImports()) {
+      if (usedImports.count(import.getId()) > 0) {
+        includes.add(import.getName());
+      }
     }
 
     return FileText {
       kj::strTree(
           "// Generated by Cap'n Proto compiler, DO NOT EDIT\n"
-          "// source: ", baseName, "\n"
+          "// source: ", baseName(displayName), "\n"
           "\n"
           "#ifndef CAPNP_INCLUDED_", kj::hex(node.getId()), "_\n",
           "#define CAPNP_INCLUDED_", kj::hex(node.getId()), "_\n"
           "\n"
-          "#include <capnp/generated-header-support.h>\n"
+          "#include <capnp/generated-header-support.h>\n",
+          KJ_MAP(includes, path) {
+            if (path.startsWith("/")) {
+              return kj::strTree("#include <", path.slice(1), ".h>\n");
+            } else {
+              return kj::strTree("#include \"", path, ".h\"\n");
+            }
+          },
           "\n",
 
           KJ_MAP(namespaceParts, n) { return kj::strTree("namespace ", n, " {\n"); }, "\n",
@@ -1228,9 +1281,9 @@ private:
 
       kj::strTree(
           "// Generated by Cap'n Proto compiler, DO NOT EDIT\n"
-          "// source: ", baseName, "\n"
+          "// source: ", baseName(displayName), "\n"
           "\n"
-          "#include \"", baseName, ".h\"\n"
+          "#include \"", baseName(displayName), ".h\"\n"
           "\n"
           "namespace capnp {\n"
           "namespace schemas {\n",
@@ -1244,6 +1297,17 @@ private:
   }
 
   // -----------------------------------------------------------------
+
+  void writeFile(kj::StringPtr filename, const kj::StringTree& text) {
+    int fd;
+    KJ_SYSCALL(fd = open(filename.cStr(), O_CREAT | O_WRONLY | O_TRUNC, 0666), filename);
+    kj::FdOutputStream out((kj::AutoCloseFd(fd)));
+
+    text.visit(
+        [&](kj::ArrayPtr<const char> text) {
+          out.write(text.begin(), text.size());
+        });
+  }
 
   kj::MainBuilder::Validity run() {
     ReaderOptions options;
@@ -1259,12 +1323,11 @@ private:
     kj::BufferedOutputStreamWrapper out(rawOut);
 
     for (auto fileId: request.getRequestedFiles()) {
-      auto fileText = makeFileText(fileId);
+      auto schema = schemaLoader.get(fileId);
+      auto fileText = makeFileText(schema);
 
-      fileText.source.visit(
-          [&](kj::ArrayPtr<const char> text) {
-            out.write(text.begin(), text.size());
-          });
+      writeFile(kj::str(schema.getProto().getDisplayName(), ".h"), fileText.header);
+      writeFile(kj::str(schema.getProto().getDisplayName(), ".c++"), fileText.source);
     }
 
     return true;

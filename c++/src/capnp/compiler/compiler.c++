@@ -95,6 +95,7 @@ public:
   kj::Maybe<ResolvedName> resolve(const DeclName::Reader& name) const override;
   kj::Maybe<Schema> resolveBootstrapSchema(uint64_t id) const override;
   kj::Maybe<schema::Node::Reader> resolveFinalSchema(uint64_t id) const override;
+  kj::Maybe<uint64_t> resolveImport(kj::StringPtr name) const override;
 
 private:
   const CompiledModule* module;  // null iff isBuiltin is true
@@ -801,6 +802,14 @@ kj::Maybe<schema::Node::Reader> Compiler::Node::resolveFinalSchema(uint64_t id) 
     return node->getFinalSchema();
   } else {
     KJ_FAIL_REQUIRE("Tried to get schema for ID we haven't seen before.");
+  }
+}
+
+kj::Maybe<uint64_t> Compiler::Node::resolveImport(kj::StringPtr name) const {
+  KJ_IF_MAYBE(m, module->importRelative(name)) {
+    return m->getRootNode().getId();
+  } else {
+    return nullptr;
   }
 }
 

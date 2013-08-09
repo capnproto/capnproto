@@ -72,6 +72,9 @@ public:
     // Throws an exception if the id is not one that was found by calling resolve() or by
     // traversing other schemas.  Returns null if the ID is recognized, but the corresponding
     // schema node failed to be built for reasons that were already reported.
+
+    virtual kj::Maybe<uint64_t> resolveImport(kj::StringPtr name) const = 0;
+    // Get the ID of an imported file given the import path.
   };
 
   NodeTranslator(const Resolver& resolver, const ErrorReporter& errorReporter,
