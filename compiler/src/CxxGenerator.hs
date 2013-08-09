@@ -75,11 +75,11 @@ globalName desc = globalName (descParent desc) ++ "::" ++ descName desc
 flattenTypes :: [Desc] -> [Desc]
 flattenTypes [] = []
 flattenTypes (d@(DescStruct s):rest) = d:(flattenTypes children ++ flattenTypes rest) where
-    children = catMaybes $ Map.elems $ structMemberMap s
+    children = structMembers s
 flattenTypes (d@(DescUnion u):rest) = d:(flattenTypes children ++ flattenTypes rest) where
-    children = catMaybes $ Map.elems $ unionMemberMap u
+    children = unionMembers u
 flattenTypes (d@(DescInterface i):rest) = d:(flattenTypes children ++ flattenTypes rest) where
-    children = catMaybes $ Map.elems $ interfaceMemberMap i
+    children = interfaceMembers i
 flattenTypes (d@(DescEnum _):rest) = d:flattenTypes rest
 flattenTypes (_:rest) = flattenTypes rest
 
@@ -440,7 +440,7 @@ outerFileContext schemaNodes = fileContext where
 
     unionContext parent desc = mkStrContext context where
         titleCase = toTitleCase $ unionName desc
-        
+
         unionIndex = Map.findIndex (unionNumber desc) $ structMembersByNumber $ unionParent desc
 
         context "typeStruct" = MuBool False
@@ -521,7 +521,7 @@ outerFileContext schemaNodes = fileContext where
         context s = parent s
 
     fileContext desc = mkStrContext context where
-        flattenedMembers = flattenTypes $ catMaybes $ Map.elems $ fileMemberMap desc
+        flattenedMembers = flattenTypes $ fileMembers desc
 
         namespace = maybe [] (splitOn "::") $ fileNamespace desc
 

@@ -153,6 +153,9 @@ struct RawSchema {
   const word* encodedNode;
   // Encoded SchemaNode, readable via readMessageUnchecked<schema::Node>(encodedNode).
 
+  uint32_t encodedSize;
+  // Size of encodedNode, in words.
+
   const RawSchema* const* dependencies;
   // Pointers to other types on which this one depends, sorted by ID.  The schemas in this table
   // may be uninitialized -- you must call ensureInitialized() on the one you wish to use before

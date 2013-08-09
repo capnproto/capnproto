@@ -469,7 +469,7 @@ private:
 // KJ_MAP_ARRAY
 
 #define KJ_MAP(array, elementName) \
-  ::kj::_::Mapper<decltype(array)>(array) * [&](decltype(*(array).begin()) elementName)
+  ::kj::_::Mapper<KJ_DECLTYPE_REF(array)>(array) * [&](decltype(*(array).begin()) elementName)
 // Applies some function to every element of an array, returning an Array of the results,  with
 // nice syntax.  Example:
 //
@@ -482,7 +482,7 @@ namespace _ {  // private
 template <typename T>
 struct Mapper {
   T array;
-  Mapper(T array): array(kj::fwd<T>(array)) {}
+  Mapper(T&& array): array(kj::fwd<T>(array)) {}
   template <typename Func>
   auto operator*(Func&& func) -> Array<decltype(func(*array.begin()))> {
     auto builder = heapArrayBuilder<decltype(func(*array.begin()))>(array.size());

@@ -237,6 +237,9 @@ struct Stringifier {
   inline ArrayPtr<const char> operator*(const String& s) const { return s.asArray(); }
   inline ArrayPtr<const char> operator*(const StringPtr& s) const { return s.asArray(); }
 
+  inline Range<char> operator*(const Range<char>& r) const { return r; }
+  inline Repeat<char> operator*(const Repeat<char>& r) const { return r; }
+
   inline FixedArray<char, 1> operator*(char c) const {
     FixedArray<char, 1> result;
     result[0] = c;

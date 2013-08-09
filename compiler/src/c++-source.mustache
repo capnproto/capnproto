@@ -69,7 +69,7 @@ static const ::capnp::_::RawSchema::MemberInfo m_{{schemaId}}[] = {
 {{/schemaMembersByName}}
 };
 const ::capnp::_::RawSchema s_{{schemaId}} = {
-  0x{{schemaId}}, b_{{schemaId}}.words, d_{{schemaId}}, m_{{schemaId}},
+  0x{{schemaId}}, b_{{schemaId}}.words, {{schemaWordCount}}, d_{{schemaId}}, m_{{schemaId}},
   {{schemaDependencyCount}}, {{schemaMemberCount}}, nullptr, nullptr
 };
 {{/typeSchema}}

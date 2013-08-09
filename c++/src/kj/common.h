@@ -293,6 +293,22 @@ template <typename T> struct IsReference_ { static constexpr bool value = false;
 template <typename T> struct IsReference_<T&> { static constexpr bool value = true; };
 template <typename T> constexpr bool isReference() { return IsReference_<T>::value; }
 
+namespace _ {  // private
+
+template <typename T>
+T refIfLvalue(T&&);
+
+}  // namespace _ (private)
+
+#define KJ_DECLTYPE_REF(exp) decltype(::kj::_::refIfLvalue(exp))
+// Like decltype(exp), but if exp is an lvalue, produces a reference type.
+//
+//     int i;
+//     decltype(i) i1(i);                         // i1 has type int.
+//     KJ_DECLTYPE_REF(i + 1) i2(i + 1);          // i2 has type int.
+//     KJ_DECLTYPE_REF(i) i3(i);                  // i3 has type int&.
+//     KJ_DECLTYPE_REF(kj::mv(i)) i4(kj::mv(i));  // i4 has type int.
+
 // =======================================================================================
 // Equivalents to std::move() and std::forward(), since these are very commonly needed and the
 // std header <utility> pulls in lots of other stuff.
@@ -308,6 +324,86 @@ template <typename T, typename U>
 inline constexpr auto min(T&& a, U&& b) -> decltype(a < b ? a : b) { return a < b ? a : b; }
 template <typename T, typename U>
 inline constexpr auto max(T&& a, U&& b) -> decltype(a > b ? a : b) { return a > b ? a : b; }
+
+// =======================================================================================
+// Useful fake containers
+
+template <typename T>
+class Range {
+public:
+  inline constexpr Range(const T& begin, const T& end): begin_(begin), end_(end) {}
+
+  class Iterator {
+  public:
+    Iterator() = default;
+    inline Iterator(const T& value): value(value) {}
+
+    inline const T& operator*() const { return value; }
+    inline Iterator& operator++() { ++value; return *this; }
+    inline Iterator operator++(int) { return Iterator(value++); }
+    inline bool operator==(const Iterator& other) const { return value == other.value; }
+    inline bool operator!=(const Iterator& other) const { return value != other.value; }
+
+  private:
+    T value;
+  };
+
+  inline Iterator begin() const { return Iterator(begin_); }
+  inline Iterator end() const { return Iterator(end_); }
+
+  inline auto size() const -> decltype(instance<T>() - instance<T>()) { return end_ - begin_; }
+
+private:
+  T begin_;
+  T end_;
+};
+
+template <typename T>
+inline constexpr Range<Decay<T>> range(T&& begin, T&& end) { return Range<Decay<T>>(begin, end); }
+// Returns a fake iterable container containing all values of T from `begin` (inclusive) to `end`
+// (exclusive).  Example:
+//
+//     // Prints 1, 2, 3, 4, 5, 6, 7, 8, 9.
+//     for (int i: kj::range(1, 10)) { print(i); }
+
+template <typename T>
+class Repeat {
+public:
+  inline constexpr Repeat(const T& value, size_t count): value(value), count(count) {}
+
+  class Iterator {
+  public:
+    Iterator() = default;
+    inline Iterator(const T& value, size_t index): value(value), index(index) {}
+
+    inline const T& operator*() const { return value; }
+    inline Iterator& operator++() { ++index; return *this; }
+    inline Iterator operator++(int) { return Iterator(value, index++); }
+    inline bool operator==(const Iterator& other) const { return index == other.index; }
+    inline bool operator!=(const Iterator& other) const { return index != other.index; }
+
+  private:
+    T value;
+    size_t index;
+  };
+
+  inline Iterator begin() const { return Iterator(value, 0); }
+  inline Iterator end() const { return Iterator(value, count); }
+
+  inline size_t size() const { return count; }
+
+private:
+  T value;
+  size_t count;
+};
+
+template <typename T>
+inline constexpr Repeat<Decay<T>> repeat(T&& value, size_t count) {
+  // Returns a fake iterable which contains `count` repeats of `value`.  Useful for e.g. creating
+  // a bunch of spaces:  `kj::repeat(' ', indent * 2)`
+
+  return Repeat<Decay<T>>(value, count);
+}
 
 // =======================================================================================
 // Manually invoking constructors and destructors

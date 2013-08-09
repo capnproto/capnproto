@@ -58,6 +58,10 @@ public:
 
   schema::Node::Reader getProto() const;
 
+  kj::ArrayPtr<const word> asUncheckedMessage() const;
+  // Get the encoded schema node content as a single message segment.  It is safe to read as an
+  // unchecked message.
+
   Schema getDependency(uint64_t id) const;
   // Gets the Schema for one of this Schema's dependencies.  For example, if this Schema is for a
   // struct, you could look up the schema for one of its fields' types.  Throws an exception if this
@@ -111,7 +115,9 @@ public:
   StructSchema() = default;
 
   class Member;
+  class Field;
   class Union;
+  class Group;
   class MemberList;
 
   MemberList getMembers() const;
@@ -146,8 +152,14 @@ public:
   kj::Maybe<Union> getContainingUnion() const;
   // If this a member of a union, gets the containing union schema.
 
+  Field asField() const;
+  // Cast the member to a Field.  Throws an exception if not a field.
+
   Union asUnion() const;
   // Cast the member to a Union.  Throws an exception if not a union.
+
+  Group asGroup() const;
+  // Cast the member to a Group.  Throws an exception if not a group.
 
   inline bool operator==(const Member& other) const;
   inline bool operator!=(const Member& other) const { return !(*this == other); }
@@ -156,12 +168,41 @@ private:
   StructSchema parent;
   uint unionIndex;  // 0 = none, >0 = actual union index - 1
   uint index;
-  mutable schema::StructNode::Member::Reader proto;
-  // TODO(soon): Make all reader methods const and then remove this ugly use of "mutable".
+  schema::StructNode::Member::Reader proto;
 
   inline Member(StructSchema parent, uint unionIndex, uint index,
                 schema::StructNode::Member::Reader proto)
       : parent(parent), unionIndex(unionIndex), index(index), proto(proto) {}
+
+  friend class StructSchema;
+};
+
+class StructSchema::Field: public Member {
+public:
+  Field() = default;
+
+  uint32_t getDefaultValueSchemaOffset() const;
+  // For struct, list, and object fields, returns the offset, in words, within the first segment of
+  // the struct's schema, where this field's default value pointer is located.  The schema is
+  // always stored as a single-segment unchecked message, which in turn means that the default
+  // value pointer itself can be treated as the root of an unchecked message -- if you know where
+  // to find it, which is what this method helps you with.
+  //
+  // For blobs, returns the offset of the begging of the blob's content within the first segment of
+  // the struct's schema.
+  //
+  // This is primarily useful for code generators.  The C++ code generator, for example, embeds
+  // the entire schema as a raw word array within the generated code.  Of course, to implement
+  // field accessors, it needs access to those fields' default values.  Embedding separate copies
+  // of those default values would be redundant since they are already included in the schema, but
+  // seeking through the schema at runtime to find the default values would be ugly.  Instead,
+  // the code generator can use getDefaultValueSchemaOffset() to find the offset of the default
+  // value within the schema, and can simply apply that offset at runtime.
+  //
+  // If the above does not make sense, you probably don't need this method.
+
+private:
+  inline Field(const Member& base): Member(base) {}
 
   friend class StructSchema;
 };
@@ -179,6 +220,23 @@ public:
 
 private:
   inline Union(const Member& base): Member(base) {}
+
+  friend class StructSchema;
+};
+
+class StructSchema::Group: public Member {
+public:
+  Group() = default;
+
+  MemberList getMembers() const;
+
+  kj::Maybe<Member> findMemberByName(kj::StringPtr name) const;
+
+  Member getMemberByName(kj::StringPtr name) const;
+  // Like findMemberByName() but throws an exception on failure.
+
+private:
+  inline Group(const Member& base): Member(base) {}
 
   friend class StructSchema;
 };
@@ -233,9 +291,10 @@ public:
   Enumerant() = default;
 
   inline schema::EnumNode::Enumerant::Reader getProto() const { return proto; }
-  inline EnumSchema getContainingEnum() { return parent; }
+  inline EnumSchema getContainingEnum() const { return parent; }
 
-  inline uint16_t getOrdinal() { return ordinal; }
+  inline uint16_t getOrdinal() const { return ordinal; }
+  inline uint getIndex() const { return ordinal; }
 
   inline bool operator==(const Enumerant& other) const;
   inline bool operator!=(const Enumerant& other) const { return !(*this == other); }
@@ -243,8 +302,7 @@ public:
 private:
   EnumSchema parent;
   uint16_t ordinal;
-  mutable schema::EnumNode::Enumerant::Reader proto;
-  // TODO(soon): Make all reader methods const and then remove this ugly use of "mutable".
+  schema::EnumNode::Enumerant::Reader proto;
 
   inline Enumerant(EnumSchema parent, uint16_t ordinal, schema::EnumNode::Enumerant::Reader proto)
       : parent(parent), ordinal(ordinal), proto(proto) {}
@@ -300,9 +358,10 @@ public:
   Method() = default;
 
   inline schema::InterfaceNode::Method::Reader getProto() const { return proto; }
-  inline InterfaceSchema getContainingInterface() { return parent; }
+  inline InterfaceSchema getContainingInterface() const { return parent; }
 
-  inline uint16_t getOrdinal() { return ordinal; }
+  inline uint16_t getOrdinal() const { return ordinal; }
+  inline uint getIndex() const { return ordinal; }
 
   inline bool operator==(const Method& other) const;
   inline bool operator!=(const Method& other) const { return !(*this == other); }
@@ -310,8 +369,7 @@ public:
 private:
   InterfaceSchema parent;
   uint16_t ordinal;
-  mutable schema::InterfaceNode::Method::Reader proto;
-  // TODO(soon): Make all reader methods const and then remove this ugly use of "mutable".
+  schema::InterfaceNode::Method::Reader proto;
 
   inline Method(InterfaceSchema parent, uint16_t ordinal,
                 schema::InterfaceNode::Method::Reader proto)

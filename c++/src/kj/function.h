@@ -117,19 +117,6 @@ private:
   Own<Iface> impl;
 };
 
-namespace _ {  // private
-
-template <typename T>
-T rvalueOrRef(T&&);
-// Hack to help detect if an expression is an lvalue or an rvalue.
-//
-//     int i;
-//     decltype(i) i1(i);                              // i1 has type int.
-//     decltype(rvalueOrRef(i)) i2(i);                 // i2 has type int&.
-//     decltype(rvalueOrRef(kj::mv(i)) i3(kj::mv(i));  // i3 has type int.
-
-}  // namespace _ (private)
-
 #if 1
 
 namespace _ {  // private
@@ -153,7 +140,7 @@ private:
 }  // namespace _ (private)
 
 #define KJ_BIND_METHOD(obj, method) \
-  ::kj::_::BoundMethod<decltype(::kj::_::rvalueOrRef(obj)), \
+  ::kj::_::BoundMethod<KJ_DECLTYPE_REF(obj), \
                        decltype(&::kj::Decay<decltype(obj)>::method), \
                        &::kj::Decay<decltype(obj)>::method>(obj)
 // Macro that produces a functor object which forwards to the method `obj.name`.  If `obj` is an
@@ -172,7 +159,7 @@ private:
 
 #define KJ_BIND_METHOD(obj, method) \
   ({ \
-    typedef decltype(::kj::_::rvalueOrRef(obj)) T; \
+    typedef KJ_DECLTYPE_REF(obj) T; \
     class F { \
     public: \
       inline F(T&& t): t(::kj::fwd<T>(t)) {} \

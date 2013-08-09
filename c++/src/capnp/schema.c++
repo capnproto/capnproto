@@ -31,6 +31,10 @@ schema::Node::Reader Schema::getProto() const {
   return readMessageUnchecked<schema::Node>(raw->encodedNode);
 }
 
+kj::ArrayPtr<const word> Schema::asUncheckedMessage() const {
+  return kj::arrayPtr(raw->encodedNode, raw->encodedSize);
+}
+
 Schema Schema::getDependency(uint64_t id) const {
   uint lower = 0;
   uint upper = raw->dependencyCount;
@@ -141,11 +145,53 @@ kj::Maybe<StructSchema::Union> StructSchema::Member::getContainingUnion() const 
   return parent.getMembers()[unionIndex - 1].asUnion();
 }
 
+StructSchema::Field StructSchema::Member::asField() const {
+  KJ_REQUIRE(proto.getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
+          "Tried to use non-field struct member as a field.",
+          parent.getProto().getDisplayName(), proto.getName());
+  return Field(*this);
+}
+
 StructSchema::Union StructSchema::Member::asUnion() const {
   KJ_REQUIRE(proto.getBody().which() == schema::StructNode::Member::Body::UNION_MEMBER,
           "Tried to use non-union struct member as a union.",
           parent.getProto().getDisplayName(), proto.getName());
   return Union(*this);
+}
+
+StructSchema::Group StructSchema::Member::asGroup() const {
+  KJ_REQUIRE(proto.getBody().which() == schema::StructNode::Member::Body::GROUP_MEMBER,
+          "Tried to use non-group struct member as a group.",
+          parent.getProto().getDisplayName(), proto.getName());
+  return Group(*this);
+}
+
+uint32_t StructSchema::Field::getDefaultValueSchemaOffset() const {
+  auto defaultValue = proto.getBody().getFieldMember().getDefaultValue().getBody();
+  const word* ptr;
+
+  switch (defaultValue.which()) {
+    case schema::Value::Body::TEXT_VALUE:
+      ptr = reinterpret_cast<const word*>(defaultValue.getTextValue().begin());
+      break;
+    case schema::Value::Body::DATA_VALUE:
+      ptr = reinterpret_cast<const word*>(defaultValue.getDataValue().begin());
+      break;
+    case schema::Value::Body::STRUCT_VALUE:
+      ptr = defaultValue.getStructValue<_::UncheckedMessage>();
+      break;
+    case schema::Value::Body::LIST_VALUE:
+      ptr = defaultValue.getListValue<_::UncheckedMessage>();
+      break;
+    case schema::Value::Body::OBJECT_VALUE:
+      ptr = defaultValue.getObjectValue<_::UncheckedMessage>();
+      break;
+    default:
+      KJ_FAIL_ASSERT("getDefaultValueSchemaOffset() can only be called on struct, list, "
+                     "and object fields.");
+  }
+
+  return ptr - parent.raw->encodedNode;
 }
 
 StructSchema::MemberList StructSchema::Union::getMembers() const {
@@ -163,6 +209,25 @@ StructSchema::Member StructSchema::Union::getMemberByName(kj::StringPtr name) co
     KJ_FAIL_REQUIRE("union has no such member", name);
   }
 }
+
+StructSchema::MemberList StructSchema::Group::getMembers() const {
+  return MemberList(parent, 0, proto.getBody().getGroupMember().getMembers());
+}
+
+#if 0
+// TODO(soon):  Implement correctly.  Requires some changes to lookup table format.
+kj::Maybe<StructSchema::Member> StructSchema::Group::findMemberByName(kj::StringPtr name) const {
+  return findSchemaMemberByName(parent.raw, name, index + 1, getMembers());
+}
+
+StructSchema::Member StructSchema::Group::getMemberByName(kj::StringPtr name) const {
+  KJ_IF_MAYBE(member, findMemberByName(name)) {
+    return *member;
+  } else {
+    KJ_FAIL_REQUIRE("group has no such member", name);
+  }
+}
+#endif
 
 // -------------------------------------------------------------------
 

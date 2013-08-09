@@ -1032,6 +1032,7 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
   if (shouldReplace) {
     // Initialize the RawSchema.
     slot->encodedNode = validated.begin();
+    slot->encodedSize = validated.size();
     slot->dependencies = validator.makeDependencyArray(&slot->dependencyCount);
     slot->membersByName = validator.makeMemberInfoArray(&slot->memberCount);
   }

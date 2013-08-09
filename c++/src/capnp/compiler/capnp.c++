@@ -43,8 +43,10 @@
 
 #if HAVE_CONFIG_H
 #include "config.h"
-#else
-#define VERSION "(unknown ekam build)"
+#endif
+
+#ifndef VERSION
+#define VERSION "(unknown)"
 #endif
 
 namespace capnp {
