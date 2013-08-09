@@ -124,6 +124,7 @@ includekjparse_HEADERS =                                       \
   src/kj/parse/char.h
 
 includecapnp_HEADERS =                                         \
+  src/capnp/c++.capnp.h                                        \
   src/capnp/common.h                                           \
   src/capnp/blob.h                                             \
   src/capnp/endian.h                                           \
@@ -131,6 +132,7 @@ includecapnp_HEADERS =                                         \
   src/capnp/orphan.h                                           \
   src/capnp/list.h                                             \
   src/capnp/message.h                                          \
+  src/capnp/schema.capnp.h                                     \
   src/capnp/schema.h                                           \
   src/capnp/schema-loader.h                                    \
   src/capnp/dynamic.h                                          \
@@ -138,8 +140,6 @@ includecapnp_HEADERS =                                         \
   src/capnp/serialize.h                                        \
   src/capnp/serialize-packed.h                                 \
   src/capnp/generated-header-support.h
-nodist_includecapnp_HEADERS =                                  \
-  src/capnp/schema.capnp.h
 
 lib_LTLIBRARIES = libcapnp.la
 
@@ -160,12 +160,14 @@ libcapnp_la_SOURCES=                                           \
   src/kj/thread.c++                                            \
   src/kj/main.c++                                              \
   src/kj/parse/char.c++                                        \
+  src/capnp/c++.capnp.c++                                      \
   src/capnp/blob.c++                                           \
   src/capnp/arena.h                                            \
   src/capnp/arena.c++                                          \
   src/capnp/layout.c++                                         \
   src/capnp/list.c++                                           \
   src/capnp/message.c++                                        \
+  src/capnp/schema.capnp.c++                                   \
   src/capnp/schema.c++                                         \
   src/capnp/schema-loader.c++                                  \
   src/capnp/dynamic.c++                                        \
@@ -190,9 +192,6 @@ libcapnp_la_SOURCES=                                           \
   src/capnp/compiler/compiler.c++                              \
   src/capnp/compiler/module-loader.h                           \
   src/capnp/compiler/module-loader.c++
-nodist_libcapnp_la_SOURCES =                                   \
-  src/capnp/schema.capnp.c++                                   \
-  src/capnp/c++.capnp.c++
 
 bin_PROGRAMS = capnp capnpc-capnp capnpc-c++
 

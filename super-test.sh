@@ -170,8 +170,8 @@ echo "========================================================================="
 
 doit make install
 
-"x$(which capnp)" == "x$STAGING/bin/capnp"
-"x$(which capnpc-c++)" == "x$STAGING/bin/capnpc-c++"
+test "x$(which capnp)" == "x$STAGING/bin/capnp"
+test "x$(which capnpc-c++)" == "x$STAGING/bin/capnpc-c++"
 
 cd samples
 doit capnp compile -oc++ addressbook.capnp -I"$STAGING"/include --no-standard-import
