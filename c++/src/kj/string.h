@@ -402,12 +402,12 @@ inline Maybe<size_t> StringPtr::findFirst(char c) const {
 }
 
 inline Maybe<size_t> StringPtr::findLast(char c) const {
-  const char* pos = reinterpret_cast<const char*>(memrchr(content.begin(), c, size()));
-  if (pos == nullptr) {
-    return nullptr;
-  } else {
-    return pos - content.begin();
+  for (size_t i = size(); i > 0; --i) {
+    if (content[i-1] == c) {
+      return i-1;
+    }
   }
+  return nullptr;
 }
 
 inline String::operator ArrayPtr<char>() {
