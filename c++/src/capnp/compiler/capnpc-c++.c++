@@ -392,7 +392,7 @@ private:
         break;
       case schema::Type::Body::OBJECT_TYPE:
         kind = FieldKind::OBJECT;
-        if (defaultBody.hasListValue()) {
+        if (defaultBody.hasObjectValue()) {
           defaultOffset = member.getDefaultValueSchemaOffset();
         }
         break;
