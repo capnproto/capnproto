@@ -53,13 +53,23 @@ fi
 
 mkdir -p tmp/capnp/bootstrap-test-tmp
 
-INPUTS="src/capnp/c++.capnp src/capnp/schema.capnp src/capnp/compiler/lexer.capnp src/capnp/compiler/grammar.capnp"
+INPUTS="capnp/c++.capnp capnp/schema.capnp capnp/compiler/lexer.capnp capnp/compiler/grammar.capnp"
+
+SRC_INPUTS=""
+for file in $INPUTS; do
+  echo findProvider file:$file
+  read srcfile
+  SRC_INPUTS="$SRC_INPUTS $srcfile"
+done
 
 $CAPNP compile --src-prefix=src -Isrc --no-standard-import \
-    -o$CAPNPC_CXX:tmp/capnp/bootstrap-test-tmp $INPUTS
+    -o$CAPNPC_CXX:tmp/capnp/bootstrap-test-tmp $SRC_INPUTS
 
 for file in $INPUTS; do
   for ext in h c++; do
-    diff -u $file.$ext tmp/capnp/bootstrap-test-tmp/${file#src/}.$ext >&2
+    echo findProvider file:$file.$ext
+    read srcfile
+    test "x$srcfile" != x || (echo "missing: $file.$ext" >&2 && exit 1)
+    diff -u $srcfile tmp/capnp/bootstrap-test-tmp/$file.$ext >&2
   done
 done
