@@ -107,7 +107,6 @@ __EOF__
     fi
     rm -f capnproto-*.tar.gz samples/addressbook samples/addressbook.capnp.c++ \
           samples/addressbook.capnp.h
-    rm -rf gtest
     exit 0
   elif [ "x$1" == "xhelp" ]; then
     echo "usage: $0 [COMMAND]"
@@ -171,8 +170,11 @@ echo "========================================================================="
 
 doit make install
 
+"x$(which capnp)" == "x$STAGING/bin/capnp"
+"x$(which capnpc-c++)" == "x$STAGING/bin/capnpc-c++"
+
 cd samples
-doit capnpc -oc++ addressbook.capnp -I"$STAGING"/include
+doit capnp compile -oc++ addressbook.capnp -I"$STAGING"/include --no-standard-import
 doit ${CXX:-g++} -std=c++11 $SAMPLE_CXXFLAGS -I"$STAGING"/include -L"$STAGING"/lib \
     addressbook.c++ addressbook.capnp.c++ -lcapnp -pthread -o addressbook
 echo "@@@@ ./addressbook (in various configurations)"
@@ -180,6 +182,14 @@ echo "@@@@ ./addressbook (in various configurations)"
 ./addressbook dwrite | ./addressbook dread
 rm addressbook addressbook.capnp.c++ addressbook.capnp.h
 cd ..
+
+echo "========================================================================="
+echo "Testing --with-external-capnp"
+echo "========================================================================="
+
+doit make distclean
+doit ./configure --prefix="$STAGING" --with-external-capnp CAPNP=$STAGING/bin/capnp
+doit make -j6 check
 
 doit make uninstall
 

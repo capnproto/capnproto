@@ -40,6 +40,7 @@
 #include <capnp/serialize.h>
 #include <capnp/serialize-packed.h>
 #include <limits>
+#include <errno.h>
 
 #if HAVE_CONFIG_H
 #include "config.h"
@@ -191,6 +192,11 @@ public:
   }
 
   kj::MainBuilder::Validity addSource(kj::StringPtr file) {
+    // Strip redundant "./" prefixes to make src-prefix matching more lenient.
+    while (file.startsWith("./")) {
+      file = file.slice(2);
+    }
+
     if (!compilerConstructed) {
       compiler = compilerSpace.construct(annotationFlag);
       compilerConstructed = true;
@@ -247,6 +253,16 @@ public:
   }
 
   kj::MainBuilder::Validity addSourcePrefix(kj::StringPtr prefix) {
+    // Strip redundant "./" prefixes to make src-prefix matching more lenient.
+    while (prefix.startsWith("./")) {
+      prefix = prefix.slice(2);
+    }
+
+    if (prefix == "" || prefix == ".") {
+      // Irrelevant prefix.
+      return true;
+    }
+
     if (prefix.endsWith("/")) {
       sourcePrefixes.add(kj::heapString(prefix));
     } else {
@@ -309,17 +325,34 @@ public:
         KJ_SYSCALL(dup2(pipeFds[0], STDIN_FILENO));
         KJ_SYSCALL(close(pipeFds[0]));
 
+        kj::Array<char> pwd = kj::heapArray<char>(256);
+        while (getcwd(pwd.begin(), pwd.size()) == nullptr) {
+          KJ_REQUIRE(pwd.size() < 8192, "WTF your working directory path is more than 8k?");
+          pwd = kj::heapArray<char>(pwd.size() * 2);
+        }
+
         if (output.dir != nullptr) {
           KJ_SYSCALL(chdir(output.dir.cStr()), output.dir);
         }
 
         if (shouldSearchPath) {
-          KJ_SYSCALL(execlp(exeName.cStr(), exeName.cStr(), nullptr));
+          execlp(exeName.cStr(), exeName.cStr(), nullptr);
         } else {
-          KJ_SYSCALL(execl(exeName.cStr(), exeName.cStr(), nullptr));
+          if (!exeName.startsWith("/")) {
+            // The name is relative.  Prefix it with our original working directory path.
+            exeName = kj::str(pwd.begin(), "/", exeName);
+          }
+
+          execl(exeName.cStr(), exeName.cStr(), nullptr);
         }
 
-        KJ_FAIL_ASSERT("execlp() returned?");
+        int error = errno;
+        if (error == ENOENT) {
+          context.exitError(kj::str(output.name, ": no such plugin (executable should be '",
+                                    exeName, "')"));
+        } else {
+          KJ_FAIL_SYSCALL("exec()", error);
+        }
       }
 
       KJ_SYSCALL(close(pipeFds[0]));
@@ -330,9 +363,9 @@ public:
       int status;
       KJ_SYSCALL(waitpid(child, &status, 0));
       if (WIFSIGNALED(status)) {
-        context.error(kj::str(exeName, ": plugin failed: ", strsignal(WTERMSIG(status))));
+        context.error(kj::str(output.name, ": plugin failed: ", strsignal(WTERMSIG(status))));
       } else if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
-        context.error(kj::str(exeName, ": plugin failed: exit code ", WEXITSTATUS(status)));
+        context.error(kj::str(output.name, ": plugin failed: exit code ", WEXITSTATUS(status)));
       }
     }
 

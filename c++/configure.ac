@@ -14,10 +14,13 @@ AS_IF([test "x${ac_cv_env_CFLAGS_set}" = "x"],
 AS_IF([test "x${ac_cv_env_CXXFLAGS_set}" = "x"],
       [CXXFLAGS="-O2 -DNDEBUG"])
 
-AS_IF([test "x$CAPNPC" = "x"], [CAPNPC="capnpc"])
-AC_SUBST([CAPNPC])
-
 AM_INIT_AUTOMAKE
+
+AC_ARG_WITH([external-capnp],
+  [AS_HELP_STRING([--with-external-capnp],
+    [use the system capnp binary (or the one specified with $CAPNP) instead of compiling a new
+     one (useful for cross-compiling)])],
+  [external_capnp=yes],[external_capnp=no])
 
 # Checks for programs.
 AC_PROG_CC
@@ -26,6 +29,24 @@ AC_LANG([C++])
 AX_CXX_COMPILE_STDCXX_11([noext])
 ACX_PTHREAD
 AC_PROG_LIBTOOL
+
+AS_IF([test "$external_capnp" != "no"], [
+	AS_IF([test "x$CAPNP" = "x"], [CAPNP="capnp"], [with_capnp=yes])
+	AS_IF([test "x$CAPNPC_CXX" = "x"], [
+	  # CAPNPC_CXX was not specified.  Choose a reasonable default.
+	  AS_CASE([$CAPNP], [*/*], [
+	    # $CAPNP contains a slash, so it's not on $PATH.  Assume capnpc-c++ is not either, but is
+	    # in the same directory.
+	    CAPNPC_CXX=`dirname $CAPNP`/capnpc-c++
+	  ], [
+	    # $CAPNP is on $PATH, so tell it to find the plugin on $PATH as well.
+	    CAPNPC_CXX="c++"
+	  ])
+	])
+	AC_SUBST([CAPNP])
+	AC_SUBST([CAPNPC_CXX])
+])
+AM_CONDITIONAL([USE_EXTERNAL_CAPNP], [test "$external_capnp" != "no"])
 
 LIBS="$PTHREAD_LIBS $LIBS"
 CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
