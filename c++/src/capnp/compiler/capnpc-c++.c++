@@ -163,11 +163,10 @@ void makeMemberInfoTable(uint parent, MemberList&& members,
 }
 
 kj::StringPtr baseName(kj::StringPtr path) {
-  const char* slashPos = strrchr(path.cStr(), '/');
-  if (slashPos == nullptr) {
-    return path;
+  KJ_IF_MAYBE(slashPos, path.findLast('/')) {
+    return path.slice(*slashPos + 1);
   } else {
-    return slashPos + 1;
+    return path;
   }
 }
 
@@ -1298,7 +1297,26 @@ private:
 
   // -----------------------------------------------------------------
 
+  void makeDirectory(kj::StringPtr path) {
+    KJ_IF_MAYBE(slashpos, path.findLast('/')) {
+      // Make the parent dir.
+      makeDirectory(kj::str(path.slice(0, *slashpos)));
+    }
+
+    if (mkdir(path.cStr(), 0777) < 0) {
+      int error = errno;
+      if (error != EEXIST) {
+        KJ_FAIL_SYSCALL("mkdir(path)", error, path);
+      }
+    }
+  }
+
   void writeFile(kj::StringPtr filename, const kj::StringTree& text) {
+    KJ_IF_MAYBE(slashpos, filename.findLast('/')) {
+      // Make the parent dir.
+      makeDirectory(kj::str(filename.slice(0, *slashpos)));
+    }
+
     int fd;
     KJ_SYSCALL(fd = open(filename.cStr(), O_CREAT | O_WRONLY | O_TRUNC, 0666), filename);
     kj::FdOutputStream out((kj::AutoCloseFd(fd)));

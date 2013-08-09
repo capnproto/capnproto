@@ -23,23 +23,9 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+# This is a one-off test rule.
+
 set -eu
-
-if test $# = 0; then
-  echo trigger filetype:.capnp
-  exit 0
-fi
-
-INPUT=$1
-
-case "$INPUT" in
-    *capnp/c++.capnp | \
-    *capnp/schema.capnp | \
-    *capnp/compiler/lexer.capnp | \
-    *capnp/compiler/grammar.capnp )
-        exit 0
-        ;;
-esac
 
 echo findProvider special:ekam-interceptor
 read INTERCEPTOR
@@ -65,5 +51,15 @@ if test "$CAPNPC_CXX" = ""; then
   exit 1
 fi
 
-LD_PRELOAD=$INTERCEPTOR DYLD_FORCE_FLAT_NAMESPACE= DYLD_INSERT_LIBRARIES=$INTERCEPTOR \
-$CAPNP compile -I. -o$CAPNPC_CXX "$INPUT" 3>&1 4<&0 >&2
+mkdir -p tmp/capnp/bootstrap-test-tmp
+
+INPUTS="src/capnp/c++.capnp src/capnp/schema.capnp src/capnp/compiler/lexer.capnp src/capnp/compiler/grammar.capnp"
+
+$CAPNP compile --src-prefix=src -Isrc --no-standard-import \
+    -o$CAPNPC_CXX:tmp/capnp/bootstrap-test-tmp $INPUTS
+
+for file in $INPUTS; do
+  for ext in h c++; do
+    diff -u $file.$ext tmp/capnp/bootstrap-test-tmp/${file#src/}.$ext >&2
+  done
+done

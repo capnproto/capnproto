@@ -87,6 +87,7 @@ public:
   inline bool endsWith(const StringPtr& other) const;
 
   inline Maybe<size_t> findFirst(char c) const;
+  inline Maybe<size_t> findLast(char c) const;
 
 private:
   inline StringPtr(ArrayPtr<const char> content): content(content) {}
@@ -150,6 +151,7 @@ public:
   }
 
   inline Maybe<size_t> findFirst(char c) const { return StringPtr(*this).findFirst(c); }
+  inline Maybe<size_t> findLast(char c) const { return StringPtr(*this).findLast(c); }
 
 private:
   Array<char> content;
@@ -392,6 +394,15 @@ inline bool StringPtr::endsWith(const StringPtr& other) const {
 
 inline Maybe<size_t> StringPtr::findFirst(char c) const {
   const char* pos = reinterpret_cast<const char*>(memchr(content.begin(), c, size()));
+  if (pos == nullptr) {
+    return nullptr;
+  } else {
+    return pos - content.begin();
+  }
+}
+
+inline Maybe<size_t> StringPtr::findLast(char c) const {
+  const char* pos = reinterpret_cast<const char*>(memrchr(content.begin(), c, size()));
   if (pos == nullptr) {
     return nullptr;
   } else {
