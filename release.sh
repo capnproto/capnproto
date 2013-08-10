@@ -26,7 +26,7 @@ update_version() {
   local BRANCH_DESC=$3
 
   local OLD_REGEX=${OLD//./[.]}
-  doit sed -i -e "s/$OLD_REGEX/$NEW/g" c++/configure.ac compiler/capnproto-compiler.cabal
+  doit sed -i -e "s/$OLD_REGEX/$NEW/g" c++/configure.ac
   doit git commit -a -m "Set $BRANCH_DESC version to $NEW."
 }
 
@@ -35,17 +35,7 @@ build_packages() {
   local VERSION_BASE=${VERSION%%-*}
 
   echo "========================================================================="
-  echo "Building compiler package..."
-  echo "========================================================================="
-  cd compiler
-  doit cabal configure
-  doit cabal sdist
-  doit cp dist/capnproto-compiler-$VERSION_BASE.tar.gz ../capnproto-compiler-$VERSION.tar.gz
-  doit cabal clean
-  cd ..
-
-  echo "========================================================================="
-  echo "Building C++ runtime package..."
+  echo "Building C++ package..."
   echo "========================================================================="
   cd c++
   doit ./setup-autotools.sh | tr = -
@@ -74,7 +64,6 @@ done_banner() {
   echo "Done"
   echo "========================================================================="
   echo "Ready to release:"
-  echo "  capnproto-compiler-$VERSION.tar.gz"
   echo "  capnproto-c++-$VERSION.tar.gz"
   echo "Don't forget to push changes:"
   echo "  git push origin $PUSH"
