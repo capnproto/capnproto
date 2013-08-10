@@ -25,9 +25,12 @@
 #include "string.h"
 #include "debug.h"
 #include <unistd.h>
-#include <execinfo.h>
 #include <stdlib.h>
 #include <exception>
+
+#ifndef __CYGWIN__
+#include <execinfo.h>
+#endif
 
 #if defined(__linux__) && !defined(NDEBUG)
 #include <stdio.h>
@@ -166,14 +169,19 @@ String KJ_STRINGIFY(const Exception& e) {
              e.getFile(), ":", e.getLine(), ": ", e.getNature(),
              e.getDurability() == Exception::Durability::TEMPORARY ? " (temporary)" : "",
              e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
-             "\nstack: ", strArray(e.getStackTrace(), " "), getStackSymbols(e.getStackTrace()));
+             e.getStackTrace().size() > 0 ? "\nstack: " : "", strArray(e.getStackTrace(), " "),
+             getStackSymbols(e.getStackTrace()));
 }
 
 Exception::Exception(Nature nature, Durability durability, const char* file, int line,
                      String description) noexcept
     : file(file), line(line), nature(nature), durability(durability),
       description(mv(description)) {
+#ifdef __CYGWIN__
+  traceCount = 0;
+#else
   traceCount = backtrace(trace, 16);
+#endif
 }
 
 Exception::Exception(const Exception& other) noexcept
