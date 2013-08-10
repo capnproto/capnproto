@@ -300,7 +300,7 @@ TEST(Debug, Catch) {
       ADD_FAILURE() << "Expected exception.";
     } catch (const std::exception& e) {
       kj::StringPtr what = e.what();
-      std::string text = e.what();
+      std::string text;
       KJ_IF_MAYBE(eol, what.findFirst('\n')) {
         text.assign(what.cStr(), *eol);
       } else {
