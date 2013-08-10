@@ -204,6 +204,14 @@ capnpc_capnp_SOURCES = src/capnp/compiler/capnpc-capnp.c++
 capnpc_c___LDADD = $(PTHREAD_LIBS) libcapnp.la
 capnpc_c___SOURCES = src/capnp/compiler/capnpc-c++.c++
 
+# Symlink capnpc -> capnp.  The capnp binary will behave like the old capnpc
+# binary (i.e. like "capnp compile") when invoked via this symlink.
+install-exec-hook:
+	ln -s capnp $(DESTDIR)$(bindir)/capnpc
+
+uninstall-hook:
+	rm $(DESTDIR)$(bindir)/capnpc
+
 # Source files intentionally not included in the dist at this time:
 #  src/capnp/serialize-snappy*
 #  src/capnp/benchmark/...
