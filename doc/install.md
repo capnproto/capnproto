@@ -32,33 +32,11 @@ If you'd like to hack on Cap'n Proto, you should join the
 If you'd just like to receive updates as things progress, add yourself to the
 [announce list](https://groups.google.com/group/capnproto-announce).
 
-## Installing the Cap'n Proto Compiler
+## Installing the Cap'n Proto tools and C++ Runtime
 
-`capnpc`, which takes `.capnp` files and generates source code for them (e.g. in C++), is itself
-written in Haskell.
-
-First, install [Cabal](http://www.haskell.org/cabal/), e.g. on Ubuntu:
-
-    sudo apt-get install cabal-install
-
-Now you can download and install the release tarball:
-
-<pre><code>curl -O <a href="http://capnproto.org/capnproto-compiler-0.1.0.tar.gz">http://capnproto.org/capnproto-compiler-0.1.0.tar.gz</a>
-cabal install capnproto-compiler-0.1.0.tar.gz</code></pre>
-
-Be sure that the Cabal bin directory (e.g. `$HOME/.cabal/bin` on Ubuntu or
-`$HOME/Library/Haskell/bin` on Mac OSX) is in your `PATH` before you attempt to build the C++
-runtime.
-
-### Building the compiler from Git mainline
-
-If you want to try out the latest -- possibly broken! -- compiler, do:
-
-    git clone https://github.com/kentonv/capnproto.git
-    cd capnproto/compiler
-    cabal install capnproto-compiler.cabal
-
-## Installing the C++ Runtime
+The Cap'n Proto tools, including the compiler which takes `.capnp` files and generates source code
+for them, are written in C++.  Therefore, you must install the C++ package even if your actual
+development language is something else.
 
 ### GCC 4.7 or Clang 3.2 Needed
 
@@ -80,8 +58,10 @@ There are two options:
 
 1. Use [Macports](http://www.macports.org/) or [Fink](http://www.finkproject.org/) to get an
    up-to-date GCC.
-2. Obtain Clang 3.2 (or better)
-   [directly from the LLVM project](http://llvm.org/releases/download.html).
+2. Obtain Clang 3.2
+   [directly from the LLVM project](http://llvm.org/releases/download.html).  (Unfortunately,
+   Clang 3.3 apparently does NOT work, because the libc++ headers shipped with XCode contain
+   bugs that Clang 3.3 refuses to compile.)
 
 Option 2 is the one preferred by Cap'n Proto's developers.  Here are step-by-step instructions
 for setting this up:
@@ -103,27 +83,26 @@ for setting this up:
 You may now follow the instructions below, but make sure to tell `configure` to use your
 newly-downloaded Clang binary:
 
-    ./configure CXX=~/clang-3.2/bin/clang++
+    ./configure CXX=$HOME/clang-3.2/bin/clang++
 
 Hopefully, Xcode 5.0 will be released soon with a newer Clang, making this extra work unnecessary.
 
 ### Building from a release package
 
-First, make sure you've installed the Cap'n Proto compiler, described above.  You MUST use the
-exact same version of the compiler and the runtime library!  That means if you installed `capnpc`
-from Git, you must install the runtime from Git.
+You may download and install the release version of Cap'n Proto like so:
 
-You may download and install the release version of the C++ runtime like so:
-
-<pre><code>curl -O <a href="http://capnproto.org/capnproto-c++-0.1.0.tar.gz">http://capnproto.org/capnproto-c++-0.1.0.tar.gz</a>
-tar zxf capnproto-c++-0.1.0.tar.gz
-cd capnproto-c++-0.1.0
+<pre><code>curl -O <a href="http://capnproto.org/capnproto-c++-0.2.0.tar.gz">http://capnproto.org/capnproto-c++-0.2.0.tar.gz</a>
+tar zxf capnproto-c++-0.2.0.tar.gz
+cd capnproto-c++-0.2.0
 ./configure
 make -j6 check
 sudo make install</code></pre>
 
-This will install `libcapnp` in `/usr/local/lib` and headers in `/usr/local/include/capnp` and
-`/usr/local/include/kj`.
+This will install `capnp`, the Cap'n Proto command-line tool.  It will also install `libcapnp` in
+`/usr/local/lib` and headers in `/usr/local/include/capnp` and `/usr/local/include/kj`.
+
+On Linux, if running `capnp` immediately after installation produces an error saying that the
+`libcapnp` library does not exist, run `sudo ldconfig` and try again.
 
 ### Building from Git with Autotools
 

@@ -166,7 +166,7 @@ name "KJ" has no particular meaning; it was chosen to be short and easy-to-type.
 
 To generate C++ code from your `.capnp` [interface definition](language.html), run:
 
-    capnpc -oc++ myproto.capnp
+    capnp compile -oc++ myproto.capnp
 
 This will create `myproto.capnp.h` and `myproto.capnp.c++` in the same directory as `myproto.capnp`.
 
@@ -181,10 +181,10 @@ $Cxx.namespace("foo::bar::baz");
 {% endhighlight %}
 
 Note that `capnp/c++.capnp` is installed in `$PREFIX/include` (`/usr/local/include` by default)
-when you install the C++ runtime.  `capnpc` automatically searches `/usr/include` and
+when you install the C++ runtime.  The `capnp` tool automatically searches `/usr/include` and
 `/usr/local/include` for imports that start with a `/`, so it should "just work".  If you installed
-somewhere else, you may need to add it to the search path with the `-I` flag to `capnpc`, which
-works much like the compiler flag of the same name.
+somewhere else, you may need to add it to the search path with the `-I` flag to `capnp compile`,
+which works much like the compiler flag of the same name.
 
 ## Types
 
