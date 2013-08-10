@@ -31,6 +31,8 @@
 #include <errno.h>
 #include <string.h>
 #include <exception>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 namespace kj {
 namespace _ {  // private
