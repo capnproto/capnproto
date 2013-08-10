@@ -21,8 +21,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// This program is a code generator plugin for capnpc which writes the schema back to stdout in
-// roughly capnpc format.
+// This program is a code generator plugin for `capnp compile` which writes the schema back to
+// stdout in roughly capnpc format.
 
 #include <capnp/schema.capnp.h>
 #include "../serialize.h"
