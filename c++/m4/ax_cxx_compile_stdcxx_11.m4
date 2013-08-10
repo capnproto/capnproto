@@ -44,19 +44,40 @@
 
 m4_define([_AX_CXX_COMPILE_STDCXX_11_testbody], [
   template <typename T>
-    struct check
-    {
-      static_assert(sizeof(int) <= sizeof(T), "not big enough");
-    };
+  struct check
+  {
+    static_assert(sizeof(int) <= sizeof(T), "not big enough");
+  };
 
-    typedef check<check<bool>> right_angle_brackets;
+  typedef check<check<bool>> right_angle_brackets;
 
-    int a;
-    decltype(a) b;
+  int a;
+  decltype(a) b;
 
-    typedef check<int> check_type;
-    check_type c;
-    check_type&& cr = static_cast<check_type&&>(c);
+  typedef check<int> check_type;
+  check_type c;
+  check_type&& cr = static_cast<check_type&&>(c);
+
+  // GCC 4.7 introduced __float128 and makes reference to it in type_traits.
+  // Clang doesn't implement it, so produces an error.  Using -std=c++11
+  // instead of -std=gnu++11 works around the problem.  But on some
+  // platforms we need -std=gnu++11.  So we want to make sure the test of
+  // -std=gnu++11 fails only where this problem is present, and we hope that
+  // -std=c++11 is always an acceptable fallback in these cases.  Complicating
+  // matters, though, is that we don't want to fail here if the platform is
+  // completely missing a C++11 standard library, because we want to probe that
+  // in a later test.  It happens, though, that Clang allows us to check
+  // whether a header exists at all before we include it.
+  //
+  // So, if we detect that __has_include is available (which it is on Clang),
+  // and we use it to detect that <type_traits> (a C++11 header) exists, then
+  // we go ahead and #include it to see if it breaks.  In all other cases, we
+  // don't #include it at all.
+  #ifdef __has_include
+  #if __has_include(<type_traits>)
+  #include <type_traits>
+  #endif
+  #endif
 ])
 
 m4_define([_AX_CXX_COMPILE_STDCXX_11_testbody_lib], [
