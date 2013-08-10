@@ -171,7 +171,9 @@ static char* canonicalizePath(char* path) {
 kj::String canonicalizePath(kj::StringPtr path) {
   KJ_STACK_ARRAY(char, result, path.size() + 1, 128, 512);
   strcpy(result.begin(), path.begin());
-  char* end = canonicalizePath(result.begin());
+
+  char* start = path.startsWith("/") ? result.begin() + 1 : result.begin();
+  char* end = canonicalizePath(start);
   return kj::heapString(result.slice(0, end - result.begin()));
 }
 
