@@ -99,9 +99,7 @@ __EOF__
     exit 0
   elif [ "x$1" == "xclean" ]; then
     rm -rf tmp-staging
-    cd compiler
-    doit cabal clean
-    cd ../c++
+    cd c++
     if [ -e Makefile ]; then
       doit make maintainer-clean
     fi
@@ -113,6 +111,7 @@ __EOF__
     echo "commands:"
     echo "  test          Runs tests (the default)."
     echo "  clang         Runs tests using Clang compiler."
+    echo "  gcc-4.8       Runs tests using gcc-4.8."
     echo "  remote HOST   Runs tests on HOST via SSH."
     echo "  kenton        Kenton's meta-test (uses hosts on Kenton's network)."
     echo "  clean         Delete temporary files that may be left after failure."
@@ -133,15 +132,6 @@ mkdir $STAGING/bin
 mkdir $STAGING/lib
 export PATH=$STAGING/bin:$PATH
 export LD_LIBRARY_PATH=$STAGING/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
-
-echo "========================================================================="
-echo "Building compiler"
-echo "========================================================================="
-
-cd compiler
-doit cabal install --bindir="$STAGING/bin" --libdir="$STAGING/lib" capnproto-compiler.cabal
-doit cabal clean
-cd ..
 
 echo "========================================================================="
 echo "Building c++"
