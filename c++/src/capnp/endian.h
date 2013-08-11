@@ -98,7 +98,9 @@ template <typename T>
 class SwappingWireValue<T, 2> {
 public:
   KJ_ALWAYS_INLINE(T get() const) {
-    uint16_t swapped = __builtin_bswap16(value);
+    // Not all platforms have __builtin_bswap16() for some reason.  In particular, it is missing
+    // on gcc-4.7.3-cygwin32 (but present on gcc-4.8.1-cygwin64).
+    uint16_t swapped = (value << 8) | (value >> 8);
     T result;
     memcpy(&result, &swapped, sizeof(T));
     return result;
@@ -106,7 +108,9 @@ public:
   KJ_ALWAYS_INLINE(void set(T newValue)) {
     uint16_t raw;
     memcpy(&raw, &newValue, sizeof(T));
-    value = __builtin_bswap16(raw);
+    // Not all platforms have __builtin_bswap16() for some reason.  In particular, it is missing
+    // on gcc-4.7.3-cygwin32 (but present on gcc-4.8.1-cygwin64).
+    value = (raw << 8) | (raw >> 8);
   }
 
 private:
