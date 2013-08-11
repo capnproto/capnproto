@@ -191,9 +191,44 @@ echo "Testing --with-external-capnp"
 echo "========================================================================="
 
 doit make distclean
-doit ./configure --prefix="$STAGING" --with-external-capnp CAPNP=$STAGING/bin/capnp
+doit ./configure --prefix="$STAGING" --disable-shared \
+    --with-external-capnp CAPNP=$STAGING/bin/capnp
 doit make -j6 check
+doit make distclean
 
+# Test 32-bit build now while we have $STAGING available for cross-compiling.
+if [ "x`uname -m`" = "xx86_64" ]; then
+  echo "========================================================================="
+  echo "Testing 32-bit build"
+  echo "========================================================================="
+
+  if [[ "`uname`" =~ CYGWIN ]]; then
+    # It's just not possible to run cygwin32 binaries from within cygwin64.
+
+    # Build as if we are cross-compiling, using the capnp we installed to $STAGING.
+    doit ./configure --prefix="$STAGING" --disable-shared --host=i686-pc-cygwin \
+        --with-external-capnp CAPNP=$STAGING/bin/capnp
+    doit make -j6 capnp-test.exe
+
+    # Expect a cygwin32 sshd to be listening at localhost port 2222, and use it
+    # to run the tests.
+    doit scp -P 2222 capnp-test.exe localhost:~/tmp-capnp-test.exe
+    doit ssh -p 2222 localhost './tmp-capnp-test.exe && rm tmp-capnp-test.exe'
+
+    doit make distclean
+
+  elif [ "x${CXX:-g++}" != "xg++-4.8" ]; then
+    doit ./configure CXX="${CXX:-g++} -m32" --disable-shared
+    doit make -j6 check
+    doit make distclean
+  fi
+fi
+
+echo "========================================================================="
+echo "Testing c++ uninstall"
+echo "========================================================================="
+
+doit ./configure --prefix="$STAGING"
 doit make uninstall
 
 echo "========================================================================="
@@ -208,13 +243,13 @@ echo "========================================================================="
 echo "Testing with -fno-rtti and -fno-exceptions"
 echo "========================================================================="
 
-doit ./configure CXXFLAGS=-fno-rtti
+doit ./configure --disable-shared CXXFLAGS=-fno-rtti
 doit make -j6 check
 doit make distclean
-doit ./configure CXXFLAGS=-fno-exceptions
+doit ./configure --disable-shared CXXFLAGS=-fno-exceptions
 doit make -j6 check
 doit make distclean
-doit ./configure CXXFLAGS="-fno-rtti -fno-exceptions"
+doit ./configure --disable-shared CXXFLAGS="-fno-rtti -fno-exceptions"
 doit make -j6 check
 
 doit make maintainer-clean

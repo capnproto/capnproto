@@ -305,7 +305,10 @@ private:
   std::map<kj::StringPtr, kj::Own<Node>> builtinDecls;
   // Map of built-in declarations, like "Int32" and "List", which make up the global scope.
 
-  mutable uint64_t nextBogusId = 1000;
+  mutable uint32_t nextBogusId = 1000;
+  // Counter for assigning bogus IDs to nodes whose real ID is a duplicate.  32-bit so that we
+  // can atomically increment it on 32-bit machines.  It will never overflow since that would
+  // require compiling at least 2^32 nodes in one process.
 };
 
 // =======================================================================================
