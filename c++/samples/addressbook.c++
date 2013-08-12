@@ -15,6 +15,9 @@
 #include <capnp/serialize-packed.h>
 #include <iostream>
 
+using addressbook::Person;
+using addressbook::AddressBook;
+
 void writeAddressBook(int fd) {
   ::capnp::MallocMessageBuilder message;
 

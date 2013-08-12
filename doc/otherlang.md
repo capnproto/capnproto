@@ -20,6 +20,7 @@ maintained by respective authors and have not been reviewed by me
 * [Python (via C extensions)](https://github.com/jparyani/capnpc-python-cpp) by
   [@jparyani](https://github.com/jparyani)
 * [Rust](https://github.com/dwrensha/capnproto-rust) by [@dwrensha](https://github.com/dwrensha)
+* [Ruby](https://github.com/cstrahan/capnp-ruby) by [@cstrahan](https://github.com/cstrahan)
 
 ## Contribute Your Own!
 

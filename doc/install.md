@@ -47,6 +47,9 @@ need to set the environment variable `CXX=g++-4.7` before following the instruct
 If you are using Clang, you must use at least version 3.2.  To use Clang, set the environment
 variable `CXX=clang++` before following any instructions below, otherwise `g++` is used by default.
 
+This package is officially tested on Linux (GCC 4.7, Clang 3.2), Mac OSX (Clang 3.2), and Cygwin
+(Windows; GCC 4.7), in 32-bit and 64-bit modes.
+
 ##### Clang 3.2 on Mac OSX
 
 As of this writing, Mac OSX 10.8 with Xcode 4.6 command-line tools is not quite good enough to
@@ -56,8 +59,8 @@ between versions 3.1 and 3.2; it is not sufficient to build Cap'n Proto.
 
 There are two options:
 
-1. Use [Macports](http://www.macports.org/) or [Fink](http://www.finkproject.org/) to get an
-   up-to-date GCC.
+1. Use [Macports](http://www.macports.org/), [Fink](http://www.finkproject.org/), or
+   [Homebrew](http://brew.sh/) to get an up-to-date GCC.
 2. Obtain Clang 3.2
    [directly from the LLVM project](http://llvm.org/releases/download.html).  (Unfortunately,
    Clang 3.3 apparently does NOT work, because the libc++ headers shipped with XCode contain
@@ -66,7 +69,7 @@ There are two options:
 Option 2 is the one preferred by Cap'n Proto's developers.  Here are step-by-step instructions
 for setting this up:
 
-1. Get the Xcode command-line tools.  Download Xcode from the app store.  Then, open Xcode,
+1. Get the Xcode command-line tools:  Download Xcode from the app store.  Then, open Xcode,
    go to Xcode menu > Preferences > Downloads, and choose to install "Command Line Tools".
 2. Download the Clang 3.2 binaries and put them somewhere easy to remember:
 

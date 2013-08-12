@@ -231,13 +231,13 @@ MyStruct::Reader getMyStructField();
 ::capnp::List<double> getMyListField();
 {% endhighlight %}
 
-`Foo::Builder`, meanwhile, has two or three methods for each field `bar`:
+`Foo::Builder`, meanwhile, has several methods for each field `bar`:
 
 * `getBar()`:  For primitives, returns the value.  For composites, returns a Builder for the
   composite.  If a composite field has not been initialized (i.e. this is the first time it has
   been accessed), it will be initialized to a copy of the field's default value before returning.
-* `setBar(x)`:  For primitives, sets the value to X.  For composites, sets the value to a copy of
-  x, which must be a Reader for the type.
+* `setBar(x)`:  For primitives, sets the value to x.  For composites, sets the value to a deep copy
+  of x, which must be a Reader for the type.
 * `initBar(n)`:  Only for lists and blobs.  Sets the field to a newly-allocated list or blob
   of size n and returns a Builder for it.  The elements of the list are initialized to their empty
   state (zero for numbers, default values for structs).
@@ -245,6 +245,12 @@ MyStruct::Reader getMyStructField();
   Builder for it.  Note that the newly-allocated struct is initialized to the default value for
   the struct's _type_ (i.e., all-zero) rather than the default value for the field `bar` (if it
   has one).
+* `hasBar()`:  Only for pointer fields (e.g. structs, lists, blobs).  Returns true if the pointer
+  has been initialized (non-null).  (This method is also available on readers.)
+* `adoptBar(x)`:  Only for pointer fields.  Adopts the orphaned object x, linking it into the field
+  `bar` without copying.  See the section on orphans.
+* `disownBar()`:  Disowns the value pointed to by `bar`, setting the pointer to null and returning
+  its previous value as an orphan.  See the section on orphans.
 
 {% highlight c++ %}
 // Example Builder methods:
@@ -555,6 +561,45 @@ Notes about the dynamic API:
   and the runtime library support code is relatively small.  Moreover, if you do not use the
   dynamic API or the schema API, you do not even need to link their implementations into your
   executable.
+
+## Orphans
+
+An "orphan" is a Cap'n Proto object that is disconnected from the mesasge structure.  That is,
+it is not the root of a message, and there is no other Cap'n Proto object holding a pointer to it.
+Thus, it has no parents.  Orphans are an advanced feature that can help avoid copies and make it
+easier to use Cap'n Proto objects as part of your application's internal state.  Typical
+applications probably won't use orphans.
+
+The class `capnp::Orphan<T>` (defined in `<capnp/orphan.h>`) represents a pointer to an orphaned
+object of type `T`.  `T` can be any struct type, `List<T>`, `Text`, or `Data`.  E.g.
+`capnp::Orphan<Person>` would be an orphaned `Person` structure.  `Orphan<T>` is a move-only class,
+similar to `std::unique_ptr<T>`.  This prevents two different objects from adopting the same
+orphan, which would result in an invalid message.
+
+An orphan can be "adopted" by another object to link it into the message structure.  Conversely,
+an object can "disown" one of its pointers, causing the pointed-to object to become an orphan.
+Every pointer-typed field `foo` provides builder methods `adoptFoo()` and `disownFoo()` for these
+purposes.  Again, these methods use C++11 move semantics.  To use them, you will need to be
+familiar with `std::move()` (or the equivalent but shorter-named `kj::mv()`).
+
+Even though an orphan is unlinked from the message tree, it still resides inside memory allocated
+for a particular message (i.e. a particular `MessageBuilder`).  An orphan can only be adopted by
+objects that live in the same message.  To move objects between messages, you must perform a copy.
+If the message is serialized while an `Orphan<T>` living within it still exists, the orphan's
+content will be part of the serialized message, but the only way the receiver could find it is by
+investigating the raw message; the Cap'n Proto API provides no way to detect or read it.
+
+To construct an orphan from scratch (without having some other object disown it), you need an
+`Orphanage`, which is essentially an orphan factory associated with some message.  You can get one
+by calling the `MessageBuilder`'s `getOrphanage()` method, or by calling the static method
+`Orphanage::getForMessageContaining(builder)` and passing it any struct or list builder.
+
+Note that when an `Orphan<T>` goes out-of-scope without being adopted, the underlying memory that
+it occupied is overwritten with zeros.  If you use packed serialization, these zeros will take very
+little bandwidth on the wire, but will still waste memory on the sending and receiving ends.
+Generally, you should avoid allocating message objects that won't be used, or if you cannot avoid
+it, arrange to copy the entire message over to a new `MessageBuilder` before serializing, since
+only the reachable objects will be copied.
 
 ## Reference
 
