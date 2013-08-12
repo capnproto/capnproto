@@ -64,34 +64,17 @@
 
 <p>If you&#8217;d just like to receive updates as things progress, add yourself to the <a href='https://groups.google.com/group/capnproto-announce'>announce list</a>.</p>
 
-<h2 id='installing_the_capn_proto_compiler'>Installing the Cap&#8217;n Proto Compiler</h2>
+<h2 id='installing_the_capn_proto_tools_and_c_runtime'>Installing the Cap&#8217;n Proto tools and C++ Runtime</h2>
 
-<p><code>capnpc</code>, which takes <code>.capnp</code> files and generates source code for them (e.g. in C++), is itself written in Haskell.</p>
-
-<p>First, install <a href='http://www.haskell.org/cabal/'>Cabal</a>, e.g. on Ubuntu:</p>
-
-<pre><code>sudo apt-get install cabal-install</code></pre>
-
-<p>Now you can download and install the release tarball:</p>
-<pre><code>curl -O <a href='http://capnproto.org/capnproto-compiler-0.1.0.tar.gz'>http://capnproto.org/capnproto-compiler-0.1.0.tar.gz</a>
-cabal install capnproto-compiler-0.1.0.tar.gz</code></pre>
-<p>Be sure that the Cabal bin directory (e.g. <code>$HOME/.cabal/bin</code> on Ubuntu or <code>$HOME/Library/Haskell/bin</code> on Mac OSX) is in your <code>PATH</code> before you attempt to build the C++ runtime.</p>
-
-<h3 id='building_the_compiler_from_git_mainline'>Building the compiler from Git mainline</h3>
-
-<p>If you want to try out the latest &#8211; possibly broken! &#8211; compiler, do:</p>
-
-<pre><code>git clone https://github.com/kentonv/capnproto.git
-cd capnproto/compiler
-cabal install capnproto-compiler.cabal</code></pre>
-
-<h2 id='installing_the_c_runtime'>Installing the C++ Runtime</h2>
+<p>The Cap&#8217;n Proto tools, including the compiler which takes <code>.capnp</code> files and generates source code for them, are written in C++. Therefore, you must install the C++ package even if your actual development language is something else.</p>
 
 <h3 id='gcc_47_or_clang_32_needed'>GCC 4.7 or Clang 3.2 Needed</h3>
 
 <p>If you are using GCC, you MUST use at least version 4.7 as Cap&#8217;n Proto uses recently-implemented C++11 features. If GCC 4.7 is installed but your system&#8217;s default GCC is older, you will probably need to set the environment variable <code>CXX=g++-4.7</code> before following the instructions below.</p>
 
 <p>If you are using Clang, you must use at least version 3.2. To use Clang, set the environment variable <code>CXX=clang++</code> before following any instructions below, otherwise <code>g++</code> is used by default.</p>
+
+<p>This package is officially tested on Linux (GCC 4.7, Clang 3.2), Mac OSX (Clang 3.2), and Cygwin (Windows; GCC 4.7), in 32-bit and 64-bit modes.</p>
 
 <h5 id='clang_32_on_mac_osx'>Clang 3.2 on Mac OSX</h5>
 
@@ -100,16 +83,16 @@ cabal install capnproto-compiler.cabal</code></pre>
 <p>There are two options:</p>
 
 <ol>
-<li>Use <a href='http://www.macports.org/'>Macports</a> or <a href='http://www.finkproject.org/'>Fink</a> to get an up-to-date GCC.</li>
+<li>Use <a href='http://www.macports.org/'>Macports</a>, <a href='http://www.finkproject.org/'>Fink</a>, or <a href='http://brew.sh/'>Homebrew</a> to get an up-to-date GCC.</li>
 
-<li>Obtain Clang 3.2 (or better) <a href='http://llvm.org/releases/download.html'>directly from the LLVM project</a>.</li>
+<li>Obtain Clang 3.2 <a href='http://llvm.org/releases/download.html'>directly from the LLVM project</a>. (Unfortunately, Clang 3.3 apparently does NOT work, because the libc++ headers shipped with XCode contain bugs that Clang 3.3 refuses to compile.)</li>
 </ol>
 
 <p>Option 2 is the one preferred by Cap&#8217;n Proto&#8217;s developers. Here are step-by-step instructions for setting this up:</p>
 
 <ol>
 <li>
-<p>Get the Xcode command-line tools. Download Xcode from the app store. Then, open Xcode, go to Xcode menu &gt; Preferences &gt; Downloads, and choose to install &#8220;Command Line Tools&#8221;.</p>
+<p>Get the Xcode command-line tools: Download Xcode from the app store. Then, open Xcode, go to Xcode menu &gt; Preferences &gt; Downloads, and choose to install &#8220;Command Line Tools&#8221;.</p>
 </li>
 
 <li>
@@ -129,22 +112,22 @@ mv clang+llvm-3.2-x86_64-apple-darwin11 ~/clang-3.2</code></pre>
 
 <p>You may now follow the instructions below, but make sure to tell <code>configure</code> to use your newly-downloaded Clang binary:</p>
 
-<pre><code>./configure CXX=~/clang-3.2/bin/clang++</code></pre>
+<pre><code>./configure CXX=$HOME/clang-3.2/bin/clang++</code></pre>
 
 <p>Hopefully, Xcode 5.0 will be released soon with a newer Clang, making this extra work unnecessary.</p>
 
 <h3 id='building_from_a_release_package'>Building from a release package</h3>
 
-<p>First, make sure you&#8217;ve installed the Cap&#8217;n Proto compiler, described above. You MUST use the exact same version of the compiler and the runtime library! That means if you installed <code>capnpc</code> from Git, you must install the runtime from Git.</p>
-
-<p>You may download and install the release version of the C++ runtime like so:</p>
-<pre><code>curl -O <a href='http://capnproto.org/capnproto-c++-0.1.0.tar.gz'>http://capnproto.org/capnproto-c++-0.1.0.tar.gz</a>
-tar zxf capnproto-c++-0.1.0.tar.gz
-cd capnproto-c++-0.1.0
+<p>You may download and install the release version of Cap&#8217;n Proto like so:</p>
+<pre><code>curl -O <a href='http://capnproto.org/capnproto-c++-0.2.0.tar.gz'>http://capnproto.org/capnproto-c++-0.2.0.tar.gz</a>
+tar zxf capnproto-c++-0.2.0.tar.gz
+cd capnproto-c++-0.2.0
 ./configure
 make -j6 check
 sudo make install</code></pre>
-<p>This will install <code>libcapnp</code> in <code>/usr/local/lib</code> and headers in <code>/usr/local/include/capnp</code> and <code>/usr/local/include/kj</code>.</p>
+<p>This will install <code>capnp</code>, the Cap&#8217;n Proto command-line tool. It will also install <code>libcapnp</code> in <code>/usr/local/lib</code> and headers in <code>/usr/local/include/capnp</code> and <code>/usr/local/include/kj</code>.</p>
+
+<p>On Linux, if running <code>capnp</code> immediately after installation produces an error saying that the <code>libcapnp</code> library does not exist, run <code>sudo ldconfig</code> and try again.</p>
 
 <h3 id='building_from_git_with_autotools'>Building from Git with Autotools</h3>
 
@@ -232,7 +215,8 @@ cd capnproto/c++
     <div id="footer_wrap" class="outer">
       <footer class="inner">
         <p class="copyright">Cap'n Proto maintained by <a href="https://github.com/kentonv">kentonv</a>
-          <span class="gplus-followbutton"><span class="g-follow" data-annotation="bubble" data-height="15" data-href="//plus.google.com/118187272963262049674" data-rel="author"></span></span></p>
+          <span class="gplus-followbutton"><span class="g-follow" data-annotation="bubble" data-height="15" data-href="//plus.google.com/118187272963262049674" data-rel="author"></span></span>
+          <a href="https://www.gittip.com/kentonv/"><img class="gittip15" src="/capnproto/images/gittip15.png" alt="Gittip"></a></p>
         <p>Design by <a href="http://www.starfruit-cafe.net/blog">sailorhg</a> ∙ Published with <a href="http://pages.github.com">GitHub Pages</a></p>
       </footer>
     </div>

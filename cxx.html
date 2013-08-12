@@ -174,7 +174,7 @@
 
 <p>To generate C++ code from your <code>.capnp</code> <a href='language.html'>interface definition</a>, run:</p>
 
-<pre><code>capnpc -oc++ myproto.capnp</code></pre>
+<pre><code>capnp compile -oc++ myproto.capnp</code></pre>
 
 <p>This will create <code>myproto.capnp.h</code> and <code>myproto.capnp.c++</code> in the same directory as <code>myproto.capnp</code>.</p>
 
@@ -184,7 +184,7 @@
 <div class='highlight'><pre><code class='capnp'><span class='k'>using</span> <span class='n'>Cxx</span> <span class='l'>= import &quot;/capnp/c++.capnp&quot;</span>;
 <span class='na'>$Cxx.namespace(&quot;foo::bar::baz&quot;)</span>;
 </code></pre></div>
-<p>Note that <code>capnp/c++.capnp</code> is installed in <code>$PREFIX/include</code> (<code>/usr/local/include</code> by default) when you install the C++ runtime. <code>capnpc</code> automatically searches <code>/usr/include</code> and <code>/usr/local/include</code> for imports that start with a <code>/</code>, so it should &#8220;just work&#8221;. If you installed somewhere else, you may need to add it to the search path with the <code>-I</code> flag to <code>capnpc</code>, which works much like the compiler flag of the same name.</p>
+<p>Note that <code>capnp/c++.capnp</code> is installed in <code>$PREFIX/include</code> (<code>/usr/local/include</code> by default) when you install the C++ runtime. The <code>capnp</code> tool automatically searches <code>/usr/include</code> and <code>/usr/local/include</code> for imports that start with a <code>/</code>, so it should &#8220;just work&#8221;. If you installed somewhere else, you may need to add it to the search path with the <code>-I</code> flag to <code>capnp compile</code>, which works much like the compiler flag of the same name.</p>
 
 <h2 id='types'>Types</h2>
 
@@ -229,16 +229,22 @@
 <span class='c1'>// myListField @3 :List(Float64);</span>
 <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;</span> <span class='n'>getMyListField</span><span class='p'>();</span>
 </code></pre></div>
-<p><code>Foo::Builder</code>, meanwhile, has two or three methods for each field <code>bar</code>:</p>
+<p><code>Foo::Builder</code>, meanwhile, has several methods for each field <code>bar</code>:</p>
 
 <ul>
 <li><code>getBar()</code>: For primitives, returns the value. For composites, returns a Builder for the composite. If a composite field has not been initialized (i.e. this is the first time it has been accessed), it will be initialized to a copy of the field&#8217;s default value before returning.</li>
 
-<li><code>setBar(x)</code>: For primitives, sets the value to X. For composites, sets the value to a copy of x, which must be a Reader for the type.</li>
+<li><code>setBar(x)</code>: For primitives, sets the value to x. For composites, sets the value to a deep copy of x, which must be a Reader for the type.</li>
 
 <li><code>initBar(n)</code>: Only for lists and blobs. Sets the field to a newly-allocated list or blob of size n and returns a Builder for it. The elements of the list are initialized to their empty state (zero for numbers, default values for structs).</li>
 
 <li><code>initBar()</code>: Only for structs. Sets the field to a newly-allocated struct and returns a Builder for it. Note that the newly-allocated struct is initialized to the default value for the struct&#8217;s <em>type</em> (i.e., all-zero) rather than the default value for the field <code>bar</code> (if it has one).</li>
+
+<li><code>hasBar()</code>: Only for pointer fields (e.g. structs, lists, blobs). Returns true if the pointer has been initialized (non-null). (This method is also available on readers.)</li>
+
+<li><code>adoptBar(x)</code>: Only for pointer fields. Adopts the orphaned object x, linking it into the field <code>bar</code> without copying. See the section on orphans.</li>
+
+<li><code>disownBar()</code>: Disowns the value pointed to by <code>bar</code>, setting the pointer to null and returning its previous value as an orphan. See the section on orphans.</li>
 </ul>
 <div class='highlight'><pre><code class='c++'><span class='c1'>// Example Builder methods:</span>
 
@@ -498,6 +504,20 @@
 </li>
 </ul>
 
+<h2 id='orphans'>Orphans</h2>
+
+<p>An &#8220;orphan&#8221; is a Cap&#8217;n Proto object that is disconnected from the mesasge structure. That is, it is not the root of a message, and there is no other Cap&#8217;n Proto object holding a pointer to it. Thus, it has no parents. Orphans are an advanced feature that can help avoid copies and make it easier to use Cap&#8217;n Proto objects as part of your application&#8217;s internal state. Typical applications probably won&#8217;t use orphans.</p>
+
+<p>The class <code>capnp::Orphan&lt;T&gt;</code> (defined in <code>&lt;capnp/orphan.h&gt;</code>) represents a pointer to an orphaned object of type <code>T</code>. <code>T</code> can be any struct type, <code>List&lt;T&gt;</code>, <code>Text</code>, or <code>Data</code>. E.g. <code>capnp::Orphan&lt;Person&gt;</code> would be an orphaned <code>Person</code> structure. <code>Orphan&lt;T&gt;</code> is a move-only class, similar to <code>std::unique_ptr&lt;T&gt;</code>. This prevents two different objects from adopting the same orphan, which would result in an invalid message.</p>
+
+<p>An orphan can be &#8220;adopted&#8221; by another object to link it into the message structure. Conversely, an object can &#8220;disown&#8221; one of its pointers, causing the pointed-to object to become an orphan. Every pointer-typed field <code>foo</code> provides builder methods <code>adoptFoo()</code> and <code>disownFoo()</code> for these purposes. Again, these methods use C++11 move semantics. To use them, you will need to be familiar with <code>std::move()</code> (or the equivalent but shorter-named <code>kj::mv()</code>).</p>
+
+<p>Even though an orphan is unlinked from the message tree, it still resides inside memory allocated for a particular message (i.e. a particular <code>MessageBuilder</code>). An orphan can only be adopted by objects that live in the same message. To move objects between messages, you must perform a copy. If the message is serialized while an <code>Orphan&lt;T&gt;</code> living within it still exists, the orphan&#8217;s content will be part of the serialized message, but the only way the receiver could find it is by investigating the raw message; the Cap&#8217;n Proto API provides no way to detect or read it.</p>
+
+<p>To construct an orphan from scratch (without having some other object disown it), you need an <code>Orphanage</code>, which is essentially an orphan factory associated with some message. You can get one by calling the <code>MessageBuilder</code>&#8217;s <code>getOrphanage()</code> method, or by calling the static method <code>Orphanage::getForMessageContaining(builder)</code> and passing it any struct or list builder.</p>
+
+<p>Note that when an <code>Orphan&lt;T&gt;</code> goes out-of-scope without being adopted, the underlying memory that it occupied is overwritten with zeros. If you use packed serialization, these zeros will take very little bandwidth on the wire, but will still waste memory on the sending and receiving ends. Generally, you should avoid allocating message objects that won&#8217;t be used, or if you cannot avoid it, arrange to copy the entire message over to a new <code>MessageBuilder</code> before serializing, since only the reachable objects will be copied.</p>
+
 <h2 id='reference'>Reference</h2>
 
 <p>The runtime library contains lots of useful features not described on this page. For now, the best reference is the header files. See:</p>
@@ -545,7 +565,8 @@ capnp/dynamic.h</code></pre>
     <div id="footer_wrap" class="outer">
       <footer class="inner">
         <p class="copyright">Cap'n Proto maintained by <a href="https://github.com/kentonv">kentonv</a>
-          <span class="gplus-followbutton"><span class="g-follow" data-annotation="bubble" data-height="15" data-href="//plus.google.com/118187272963262049674" data-rel="author"></span></span></p>
+          <span class="gplus-followbutton"><span class="g-follow" data-annotation="bubble" data-height="15" data-href="//plus.google.com/118187272963262049674" data-rel="author"></span></span>
+          <a href="https://www.gittip.com/kentonv/"><img class="gittip15" src="/capnproto/images/gittip15.png" alt="Gittip"></a></p>
         <p>Design by <a href="http://www.starfruit-cafe.net/blog">sailorhg</a> ∙ Published with <a href="http://pages.github.com">GitHub Pages</a></p>
       </footer>
     </div>

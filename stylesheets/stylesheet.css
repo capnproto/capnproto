@@ -154,6 +154,16 @@ img {
   max-width: 739px;
 }
 
+img.gittip {
+	width: 51px;
+	height: 10px;
+}
+
+img.gittip15 {
+  width: 77px;
+  height: 15px;
+}
+
 pre, code {
   width: 100%;
   color: #222;
