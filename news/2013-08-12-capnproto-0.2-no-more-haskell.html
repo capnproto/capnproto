@@ -102,7 +102,7 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 </code></pre></div>
 <p>An interesting fact about the above code is that constructing the parser itself does not allocate anything on the heap. The variable <code>number</code> in this case ends up being one 96-byte flat object, most of which is composed of tables for character matching. The whole thing could even be declared <code>constexpr</code>&#8230; if the C++ standard allowed empty-capture lambdas to be <code>constexpr</code>, which unfortunately it doesn&#8217;t (yet).</p>
 
-<p>Unforutnately, KJ is largely undocumented at the moment, since people who just want to use Cap&#8217;n Proto generally don&#8217;t need to know about it.</p>
+<p>Unfortunately, KJ is largely undocumented at the moment, since people who just want to use Cap&#8217;n Proto generally don&#8217;t need to know about it.</p>
 
 <p><strong>Other New Features</strong></p>
 
