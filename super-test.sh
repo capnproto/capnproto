@@ -179,7 +179,7 @@ test "x$(which capnpc-c++)" == "x$STAGING/bin/capnpc-c++"
 cd samples
 doit capnp compile -oc++ addressbook.capnp -I"$STAGING"/include --no-standard-import
 doit ${CXX:-g++} -std=c++11 $SAMPLE_CXXFLAGS -I"$STAGING"/include -L"$STAGING"/lib \
-    addressbook.c++ addressbook.capnp.c++ -lcapnp -pthread -o addressbook
+    addressbook.c++ addressbook.capnp.c++ -lcapnp -lkj -pthread -o addressbook
 echo "@@@@ ./addressbook (in various configurations)"
 ./addressbook write | ./addressbook read
 ./addressbook dwrite | ./addressbook dread

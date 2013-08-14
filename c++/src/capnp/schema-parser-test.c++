@@ -133,6 +133,8 @@ TEST(SchemaParser, Basic) {
   auto graultStruct = graultSchema.getNested("Grault").asStruct();
   EXPECT_EQ(graultStruct, barStruct.getDependency(graultStruct.getProto().getId()));
 
+  // Try importing the other grault.capnp directly.  It'll get the display name we specify since
+  // it wasn't imported before.
   auto wrongGraultSchema = parser.parseFile(SchemaFile::newDiskFile(
       kj::str("weird/display/name.capnp"),
       kj::str("/opt/include/grault.capnp"), importPath, reader));

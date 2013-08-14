@@ -135,17 +135,18 @@ includecapnp_HEADERS =                                         \
   src/capnp/schema.capnp.h                                     \
   src/capnp/schema.h                                           \
   src/capnp/schema-loader.h                                    \
+  src/capnp/schema-parser.h                                    \
   src/capnp/dynamic.h                                          \
   src/capnp/pretty-print.h                                     \
   src/capnp/serialize.h                                        \
   src/capnp/serialize-packed.h                                 \
   src/capnp/generated-header-support.h
 
-lib_LTLIBRARIES = libcapnp.la
+lib_LTLIBRARIES = libkj.la libcapnp.la libcapnpc.la
 
-libcapnp_la_LIBADD = $(PTHREAD_LIBS)
-libcapnp_la_LDFLAGS = -release $(VERSION) -export-dynamic -no-undefined
-libcapnp_la_SOURCES=                                           \
+libkj_la_LIBADD = $(PTHREAD_LIBS)
+libkj_la_LDFLAGS = -release $(VERSION) -export-dynamic -no-undefined
+libkj_la_SOURCES=                                              \
   src/kj/common.c++                                            \
   src/kj/units.c++                                             \
   src/kj/memory.c++                                            \
@@ -159,7 +160,11 @@ libcapnp_la_SOURCES=                                           \
   src/kj/mutex.c++                                             \
   src/kj/thread.c++                                            \
   src/kj/main.c++                                              \
-  src/kj/parse/char.c++                                        \
+  src/kj/parse/char.c++
+
+libcapnp_la_LIBADD = $(PTHREAD_LIBS) libkj.la
+libcapnp_la_LDFLAGS = -release $(VERSION) -export-dynamic -no-undefined
+libcapnp_la_SOURCES=                                           \
   src/capnp/c++.capnp.c++                                      \
   src/capnp/blob.c++                                           \
   src/capnp/arena.h                                            \
@@ -173,7 +178,11 @@ libcapnp_la_SOURCES=                                           \
   src/capnp/dynamic.c++                                        \
   src/capnp/stringify.c++                                      \
   src/capnp/serialize.c++                                      \
-  src/capnp/serialize-packed.c++                               \
+  src/capnp/serialize-packed.c++
+
+libcapnpc_la_LIBADD = $(PTHREAD_LIBS) libcapnp.la
+libcapnpc_la_LDFLAGS = -release $(VERSION) -export-dynamic -no-undefined
+libcapnpc_la_SOURCES=                                          \
   src/capnp/compiler/md5.h                                     \
   src/capnp/compiler/md5.c++                                   \
   src/capnp/compiler/error-reporter.h                          \
@@ -190,18 +199,20 @@ libcapnp_la_SOURCES=                                           \
   src/capnp/compiler/node-translator.c++                       \
   src/capnp/compiler/compiler.h                                \
   src/capnp/compiler/compiler.c++                              \
-  src/capnp/compiler/module-loader.h                           \
-  src/capnp/compiler/module-loader.c++
+  src/capnp/schema-parser.c++
 
 bin_PROGRAMS = capnp capnpc-capnp capnpc-c++
 
-capnp_LDADD = $(PTHREAD_LIBS) libcapnp.la
-capnp_SOURCES = src/capnp/compiler/capnp.c++
+capnp_LDADD = $(PTHREAD_LIBS) libcapnpc.la libcapnp.la libkj.la
+capnp_SOURCES =                                                \
+  src/capnp/compiler/module-loader.h                           \
+  src/capnp/compiler/module-loader.c++                         \
+  src/capnp/compiler/capnp.c++
 
-capnpc_capnp_LDADD = $(PTHREAD_LIBS) libcapnp.la
+capnpc_capnp_LDADD = $(PTHREAD_LIBS) libcapnp.la libkj.la
 capnpc_capnp_SOURCES = src/capnp/compiler/capnpc-capnp.c++
 
-capnpc_c___LDADD = $(PTHREAD_LIBS) libcapnp.la
+capnpc_c___LDADD = $(PTHREAD_LIBS) libcapnp.la libkj.la
 capnpc_c___SOURCES = src/capnp/compiler/capnpc-c++.c++
 
 # Symlink capnpc -> capnp.  The capnp binary will behave like the old capnpc
@@ -248,7 +259,7 @@ $(test_capnpc_outputs): test_capnpc_middleman
 BUILT_SOURCES = $(test_capnpc_outputs)
 
 check_PROGRAMS = capnp-test
-capnp_test_LDADD = gtest/lib/libgtest.la gtest/lib/libgtest_main.la libcapnp.la
+capnp_test_LDADD = gtest/lib/libgtest.la gtest/lib/libgtest_main.la libcapnpc.la libcapnp.la libkj.la
 capnp_test_CPPFLAGS = -Igtest/include -I$(srcdir)/gtest/include
 capnp_test_SOURCES =                                           \
   src/kj/common-test.c++                                       \
