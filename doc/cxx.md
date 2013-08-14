@@ -615,6 +615,40 @@ best reference is the header files.  See:
     capnp/schema-loader.h
     capnp/dynamic.h
 
+## Best Practices
+
+Here are some tips for using the C++ Cap'n Proto runtime most effectively:
+
+* Accessor methods for primitive (non-pointer) fields are fast and inline.  They should be just
+  as fast as accessing a struct field through a pointer.
+
+* Accessor methods for pointer fields, on the other hand, are not inline, as they need to validate
+  the pointer.  If you intend to access the same pointer multiple times, it is a good idea to
+  save the value to a local variable to avoid repeating this work.  This is generally not a
+  problem given C++11's `auto`.
+
+  Example:
+
+      // BAD
+      frob(foo.getBar().getBaz(),
+           foo.getBar().getQux(),
+           foo.getBar().getCorge());
+
+      // GOOD
+      auto bar = foo.getBar();
+      frob(bar.getBaz(), bar.getQux(), bar.getCorge());
+
+* If you are worried about the binary footprint of the Cap'n Proto library, consider statically
+  linking with the `--gc-sections` linker flag.  This will allow the linker to drop pieces of the
+  library that you do not actually use.  For example, many users do not use the dynamic schema and
+  reflection APIs, which contribute a large fraction of the Cap'n Proto library's overall
+  footprint.  Keep in mind that if you ever stringify a Cap'n Proto type, the stringification code
+  depends on the dynamic API; consider only using stringification in debug builds.
+
+  If you are dynamically linking against the system's shared copy of `libcapnp`, don't worry about
+  its binary size.  Remember that only the code which you actually use will be paged into RAM, and
+  those pages are shared with other applications on the system.
+
 ## Lessons Learned from Protocol Buffers
 
 The author of Cap'n Proto's C++ implementation also wrote (in the past) verison 2 of Google's
@@ -638,8 +672,7 @@ learned the hard way:
   The proliferation of template instantiations gives the Protobuf runtime library a large footprint,
   and using STL in the interface can lead to weird ABI problems and slow compiles.  Cap'n Proto
   does not use any STL containers in its interface and makes sparing use in its implementation.
-  As a result, the Cap'n Proto runtime library is very small, and code that uses it compiles
-  quickly.
+  As a result, the Cap'n Proto runtime library is smaller, and code that uses it compiles quickly.
 
 * The in-memory representation of messages in Protobuf-C++ involves many heap objects.  Each
   message (struct) is an object, each non-primitive repeated field allocates an array of pointers
