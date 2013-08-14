@@ -506,7 +506,7 @@
 
 <h2 id='orphans'>Orphans</h2>
 
-<p>An &#8220;orphan&#8221; is a Cap&#8217;n Proto object that is disconnected from the mesasge structure. That is, it is not the root of a message, and there is no other Cap&#8217;n Proto object holding a pointer to it. Thus, it has no parents. Orphans are an advanced feature that can help avoid copies and make it easier to use Cap&#8217;n Proto objects as part of your application&#8217;s internal state. Typical applications probably won&#8217;t use orphans.</p>
+<p>An &#8220;orphan&#8221; is a Cap&#8217;n Proto object that is disconnected from the message structure. That is, it is not the root of a message, and there is no other Cap&#8217;n Proto object holding a pointer to it. Thus, it has no parents. Orphans are an advanced feature that can help avoid copies and make it easier to use Cap&#8217;n Proto objects as part of your application&#8217;s internal state. Typical applications probably won&#8217;t use orphans.</p>
 
 <p>The class <code>capnp::Orphan&lt;T&gt;</code> (defined in <code>&lt;capnp/orphan.h&gt;</code>) represents a pointer to an orphaned object of type <code>T</code>. <code>T</code> can be any struct type, <code>List&lt;T&gt;</code>, <code>Text</code>, or <code>Data</code>. E.g. <code>capnp::Orphan&lt;Person&gt;</code> would be an orphaned <code>Person</code> structure. <code>Orphan&lt;T&gt;</code> is a move-only class, similar to <code>std::unique_ptr&lt;T&gt;</code>. This prevents two different objects from adopting the same orphan, which would result in an invalid message.</p>
 
@@ -531,6 +531,37 @@ capnp/schema.h
 capnp/schema-loader.h
 capnp/dynamic.h</code></pre>
 
+<h2 id='best_practices'>Best Practices</h2>
+
+<p>Here are some tips for using the C++ Cap&#8217;n Proto runtime most effectively:</p>
+
+<ul>
+<li>
+<p>Accessor methods for primitive (non-pointer) fields are fast and inline. They should be just as fast as accessing a struct field through a pointer.</p>
+</li>
+
+<li>
+<p>Accessor methods for pointer fields, on the other hand, are not inline, as they need to validate the pointer. If you intend to access the same pointer multiple times, it is a good idea to save the value to a local variable to avoid repeating this work. This is generally not a problem given C++11&#8217;s <code>auto</code>.</p>
+
+<p>Example:</p>
+
+<pre><code>// BAD
+frob(foo.getBar().getBaz(),
+     foo.getBar().getQux(),
+     foo.getBar().getCorge());
+
+// GOOD
+auto bar = foo.getBar();
+frob(bar.getBaz(), bar.getQux(), bar.getCorge());</code></pre>
+</li>
+
+<li>
+<p>If you are worried about the binary footprint of the Cap&#8217;n Proto library, consider statically linking with the <code>--gc-sections</code> linker flag. This will allow the linker to drop pieces of the library that you do not actually use. For example, many users do not use the dynamic schema and reflection APIs, which contribute a large fraction of the Cap&#8217;n Proto library&#8217;s overall footprint. Keep in mind that if you ever stringify a Cap&#8217;n Proto type, the stringification code depends on the dynamic API; consider only using stringification in debug builds.</p>
+
+<p>If you are dynamically linking against the system&#8217;s shared copy of <code>libcapnp</code>, don&#8217;t worry about its binary size. Remember that only the code which you actually use will be paged into RAM, and those pages are shared with other applications on the system.</p>
+</li>
+</ul>
+
 <h2 id='lessons_learned_from_protocol_buffers'>Lessons Learned from Protocol Buffers</h2>
 
 <p>The author of Cap&#8217;n Proto&#8217;s C++ implementation also wrote (in the past) verison 2 of Google&#8217;s Protocol Buffers. As a result, Cap&#8217;n Proto&#8217;s implementation benefits from a number of lessons learned the hard way:</p>
@@ -545,7 +576,7 @@ capnp/dynamic.h</code></pre>
 </li>
 
 <li>
-<p>The C++ Protobuf implementation makes heavy use of STL in its interface and implementation. The proliferation of template instantiations gives the Protobuf runtime library a large footprint, and using STL in the interface can lead to weird ABI problems and slow compiles. Cap&#8217;n Proto does not use any STL containers in its interface and makes sparing use in its implementation. As a result, the Cap&#8217;n Proto runtime library is very small, and code that uses it compiles quickly.</p>
+<p>The C++ Protobuf implementation makes heavy use of STL in its interface and implementation. The proliferation of template instantiations gives the Protobuf runtime library a large footprint, and using STL in the interface can lead to weird ABI problems and slow compiles. Cap&#8217;n Proto does not use any STL containers in its interface and makes sparing use in its implementation. As a result, the Cap&#8217;n Proto runtime library is smaller, and code that uses it compiles quickly.</p>
 </li>
 
 <li>
