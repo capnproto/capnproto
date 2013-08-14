@@ -184,9 +184,25 @@ Exception::Exception(Nature nature, Durability durability, const char* file, int
 #endif
 }
 
+Exception::Exception(Nature nature, Durability durability, String file, int line,
+                     String description) noexcept
+    : ownFile(kj::mv(file)), file(ownFile.cStr()), line(line), nature(nature),
+      durability(durability), description(mv(description)) {
+#ifdef __CYGWIN__
+  traceCount = 0;
+#else
+  traceCount = backtrace(trace, 16);
+#endif
+}
+
 Exception::Exception(const Exception& other) noexcept
     : file(other.file), line(other.line), nature(other.nature), durability(other.durability),
-      description(str(other.description)), traceCount(other.traceCount) {
+      description(heapString(other.description)), traceCount(other.traceCount) {
+  if (file == other.ownFile.cStr()) {
+    ownFile = heapString(other.ownFile);
+    file = ownFile.cStr();
+  }
+
   memcpy(trace, other.trace, sizeof(trace[0]) * traceCount);
 
   KJ_IF_MAYBE(c, other.context) {

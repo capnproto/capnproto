@@ -752,6 +752,7 @@ public:
       errorReporter.addErrorOn(ordinal,
           kj::str("Skipped ordinal @", expectedOrdinal, ".  Ordinals must be sequential with no "
                   "holes."));
+      expectedOrdinal = ordinal.getValue() + 1;
     } else {
       ++expectedOrdinal;
       lastOrdinalLocation = ordinal;

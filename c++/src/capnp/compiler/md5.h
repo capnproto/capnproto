@@ -49,6 +49,9 @@ public:
   inline void update(kj::StringPtr data) {
     return update(data.asArray());
   }
+  inline void update(const char* data) {
+    return update(kj::StringPtr(data));
+  }
 
   kj::ArrayPtr<const kj::byte> finish();
   kj::StringPtr finishAsHex();

@@ -69,6 +69,8 @@ public:
 
   Exception(Nature nature, Durability durability, const char* file, int line,
             String description = nullptr) noexcept;
+  Exception(Nature nature, Durability durability, String file, int line,
+            String description = nullptr) noexcept;
   Exception(const Exception& other) noexcept;
   Exception(Exception&& other) = default;
   ~Exception() noexcept;
@@ -107,6 +109,7 @@ public:
   // callback stack.
 
 private:
+  String ownFile;
   const char* file;
   int line;
   Nature nature;

@@ -216,7 +216,7 @@ public:
   ModuleImpl(const ModuleLoader::Impl& loader, kj::String localName, kj::String sourceName)
       : loader(loader), localName(kj::mv(localName)), sourceName(kj::mv(sourceName)) {}
 
-  kj::StringPtr getLocalName() const override {
+  kj::StringPtr getLocalName() const {
     return localName;
   }
 
@@ -275,7 +275,7 @@ public:
         message);
   }
 
-  bool hadErrors() const {
+  bool hadErrors() const override {
     return loader.getErrorReporter().hadErrors();
   }
 

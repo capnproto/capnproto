@@ -734,6 +734,10 @@ public:
   inline constexpr ArrayPtr(T* ptr, size_t size): ptr(ptr), size_(size) {}
   inline constexpr ArrayPtr(T* begin, T* end): ptr(begin), size_(end - begin) {}
 
+  template <size_t size>
+  inline constexpr ArrayPtr(T (&native)[size]): ptr(native), size_(size) {}
+  // Construct an ArrayPtr from a native C-style array.
+
   inline operator ArrayPtr<const T>() const {
     return ArrayPtr<const T>(ptr, size_);
   }

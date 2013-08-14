@@ -34,10 +34,6 @@ namespace compiler {
 
 class Module: public ErrorReporter {
 public:
-  virtual kj::StringPtr getLocalName() const = 0;
-  // Typically, the absolute or cwd-relative path name of the module file, used in error messages.
-  // This is only for display purposes.
-
   virtual kj::StringPtr getSourceName() const = 0;
   // The name of the module file relative to the source tree.  Used to decide where to output
   // generated code and to form the `displayName` in the schema.
