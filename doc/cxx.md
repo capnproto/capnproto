@@ -564,7 +564,7 @@ Notes about the dynamic API:
 
 ## Orphans
 
-An "orphan" is a Cap'n Proto object that is disconnected from the mesasge structure.  That is,
+An "orphan" is a Cap'n Proto object that is disconnected from the message structure.  That is,
 it is not the root of a message, and there is no other Cap'n Proto object holding a pointer to it.
 Thus, it has no parents.  Orphans are an advanced feature that can help avoid copies and make it
 easier to use Cap'n Proto objects as part of your application's internal state.  Typical
