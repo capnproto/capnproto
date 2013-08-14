@@ -474,6 +474,151 @@ TEST(Orphans, OrphanageFromBuilder) {
   }
 }
 
+static bool allZero(const word* begin, const word* end) {
+  for (const byte* pos = reinterpret_cast<const byte*>(begin);
+       pos < reinterpret_cast<const byte*>(end); ++pos) {
+    if (*pos != 0) return false;
+  }
+  return true;
+}
+
+TEST(Orphans, StructsZerodAfterUse) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  const word* zerosStart = builder.getSegmentsForOutput()[0].end();
+  initTestMessage(root.initStructField());
+  const word* zerosEnd = builder.getSegmentsForOutput()[0].end();
+
+  root.setTextField("foo");  // guard against overruns
+
+  EXPECT_EQ(1u, builder.getSegmentsForOutput().size());  // otherwise test is invalid
+
+  root.disownStructField();
+
+  EXPECT_TRUE(allZero(zerosStart, zerosEnd));
+
+  EXPECT_EQ("foo", root.getTextField());
+}
+
+TEST(Orphans, ListsZerodAfterUse) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  const word* zerosStart = builder.getSegmentsForOutput()[0].end();
+  root.setUInt32List({12, 34, 56});
+  const word* zerosEnd = builder.getSegmentsForOutput()[0].end();
+
+  root.setTextField("foo");  // guard against overruns
+
+  EXPECT_EQ(1u, builder.getSegmentsForOutput().size());  // otherwise test is invalid
+
+  root.disownUInt32List();
+
+  EXPECT_TRUE(allZero(zerosStart, zerosEnd));
+
+  EXPECT_EQ("foo", root.getTextField());
+}
+
+TEST(Orphans, EmptyListsZerodAfterUse) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  const word* zerosStart = builder.getSegmentsForOutput()[0].end();
+  root.initUInt32List(0);
+  const word* zerosEnd = builder.getSegmentsForOutput()[0].end();
+
+  root.setTextField("foo");  // guard against overruns
+
+  EXPECT_EQ(1u, builder.getSegmentsForOutput().size());  // otherwise test is invalid
+
+  root.disownUInt32List();
+
+  EXPECT_TRUE(allZero(zerosStart, zerosEnd));
+
+  EXPECT_EQ("foo", root.getTextField());
+}
+
+TEST(Orphans, StructListsZerodAfterUse) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  const word* zerosStart = builder.getSegmentsForOutput()[0].end();
+  {
+    auto list = root.initStructList(2);
+    initTestMessage(list[0]);
+    initTestMessage(list[1]);
+  }
+  const word* zerosEnd = builder.getSegmentsForOutput()[0].end();
+
+  root.setTextField("foo");  // guard against overruns
+
+  EXPECT_EQ(1u, builder.getSegmentsForOutput().size());  // otherwise test is invalid
+
+  root.disownStructList();
+
+  EXPECT_TRUE(allZero(zerosStart, zerosEnd));
+
+  EXPECT_EQ("foo", root.getTextField());
+}
+
+TEST(Orphans, EmptyStructListsZerodAfterUse) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  const word* zerosStart = builder.getSegmentsForOutput()[0].end();
+  root.initStructList(0);
+  const word* zerosEnd = builder.getSegmentsForOutput()[0].end();
+
+  root.setTextField("foo");  // guard against overruns
+
+  EXPECT_EQ(1u, builder.getSegmentsForOutput().size());  // otherwise test is invalid
+
+  root.disownStructList();
+
+  EXPECT_TRUE(allZero(zerosStart, zerosEnd));
+
+  EXPECT_EQ("foo", root.getTextField());
+}
+
+TEST(Orphans, TextZerodAfterUse) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  const word* zerosStart = builder.getSegmentsForOutput()[0].end();
+  root.setTextField("abcd123");
+  const word* zerosEnd = builder.getSegmentsForOutput()[0].end();
+
+  root.setDataField(data("foo"));  // guard against overruns
+
+  EXPECT_EQ(1u, builder.getSegmentsForOutput().size());  // otherwise test is invalid
+
+  root.disownTextField();
+
+  EXPECT_TRUE(allZero(zerosStart, zerosEnd));
+
+  EXPECT_EQ(data("foo"), root.getDataField());
+}
+
+TEST(Orphans, DataZerodAfterUse) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  const word* zerosStart = builder.getSegmentsForOutput()[0].end();
+  root.setDataField(data("abcd123"));
+  const word* zerosEnd = builder.getSegmentsForOutput()[0].end();
+
+  root.setTextField("foo");  // guard against overruns
+
+  EXPECT_EQ(1u, builder.getSegmentsForOutput().size());  // otherwise test is invalid
+
+  root.disownDataField();
+
+  EXPECT_TRUE(allZero(zerosStart, zerosEnd));
+
+  EXPECT_EQ("foo", root.getTextField());
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

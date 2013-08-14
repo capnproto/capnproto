@@ -444,6 +444,7 @@ struct WireHelpers {
             for (uint i = 0; i < count; i++) {
               zeroObject(segment, reinterpret_cast<WirePointer*>(ptr) + i);
             }
+            memset(ptr, 0, POINTER_SIZE_IN_WORDS * count * BYTES_PER_WORD / BYTES);
             break;
           }
           case FieldSize::INLINE_COMPOSITE: {
@@ -465,7 +466,7 @@ struct WireHelpers {
               }
             }
 
-            memset(ptr, 0, (elementTag->structRef.wordSize() + POINTER_SIZE_IN_WORDS)
+            memset(ptr, 0, (elementTag->structRef.wordSize() * count + POINTER_SIZE_IN_WORDS)
                            * BYTES_PER_WORD / BYTES);
             break;
           }
