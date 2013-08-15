@@ -172,7 +172,7 @@ DynamicValue::Reader DynamicUnion::Reader::get() const {
   KJ_IF_MAYBE(w, which()) {
     return DynamicValue::Reader(DynamicStruct::Reader::getImpl(reader, *w));
   } else {
-    return nullptr;
+    KJ_FAIL_REQUIRE("DynamicUnion get() cannot be called if which() returns nullptr.");
   }
 }
 
@@ -180,7 +180,7 @@ DynamicValue::Builder DynamicUnion::Builder::get() {
   KJ_IF_MAYBE(w, which()) {
     return DynamicValue::Builder(DynamicStruct::Builder::getImpl(builder, *w));
   } else {
-    return nullptr;
+    KJ_FAIL_REQUIRE("DynamicUnion get() cannot be called if which() returns nullptr.");
   }
 }
 
@@ -284,17 +284,60 @@ void DynamicUnion::Builder::setObjectDiscriminant(StructSchema::Member member) {
 
 // =======================================================================================
 
+void DynamicStruct::Builder::verifySetInUnion(StructSchema::Member member) {
+  // If a union member, verify that it is set.
+  KJ_IF_MAYBE(containingUnion, member.getContainingUnion()) {
+    uint16_t discrim = builder.getDataField<uint16_t>(
+        containingUnion->getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS);
+    KJ_REQUIRE(member.getIndex() == discrim,
+        "Tried to get() a union member which is not currently initialized.",
+        member.getProto().getName(), containingUnion->getProto().getName(),
+        member.getContainingStruct().getProto().getDisplayName());
+  }
+}
+
+void DynamicStruct::Builder::setInUnion(StructSchema::Member member) {
+  // If a union member, set the discriminant to match.
+  KJ_IF_MAYBE(containingUnion, member.getContainingUnion()) {
+    builder.setDataField<uint16_t>(
+        containingUnion->getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS,
+        member.getIndex());
+  }
+}
+
 DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Member member) const {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+
+  // If a union member, verify that it is set.
+  KJ_IF_MAYBE(containingUnion, member.getContainingUnion()) {
+    uint16_t discrim = reader.getDataField<uint16_t>(
+        containingUnion->getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS);
+    KJ_REQUIRE(member.getIndex() == discrim,
+        "Tried to get() a union member which is not currently initialized.",
+        member.getProto().getName(), containingUnion->getProto().getName(),
+        member.getContainingStruct().getProto().getDisplayName());
+  }
+
   return getImpl(reader, member);
 }
 DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Member member) {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  verifySetInUnion(member);
+
   return getImpl(builder, member);
 }
 
 bool DynamicStruct::Reader::has(StructSchema::Member member) const {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+
+  // Check union member.
+  KJ_IF_MAYBE(containingUnion, member.getContainingUnion()) {
+    uint16_t discrim = reader.getDataField<uint16_t>(
+        containingUnion->getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS);
+    if (discrim != member.getIndex()) {
+      return false;
+    }
+  }
 
   auto body = member.getProto().getBody();
   switch (body.which()) {
@@ -362,6 +405,15 @@ bool DynamicStruct::Reader::has(StructSchema::Member member) const {
 bool DynamicStruct::Builder::has(StructSchema::Member member) {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
 
+  // Check union member.
+  KJ_IF_MAYBE(containingUnion, member.getContainingUnion()) {
+    uint16_t discrim = builder.getDataField<uint16_t>(
+        containingUnion->getProto().getBody().getUnionMember().getDiscriminantOffset() * ELEMENTS);
+    if (discrim != member.getIndex()) {
+      return false;
+    }
+  }
+
   auto body = member.getProto().getBody();
   switch (body.which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER: {
@@ -428,21 +480,25 @@ bool DynamicStruct::Builder::has(StructSchema::Member member) {
 
 void DynamicStruct::Builder::set(StructSchema::Member member, const DynamicValue::Reader& value) {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  setInUnion(member);
   return setImpl(builder, member, value);
 }
 DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Member member) {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  setInUnion(member);
   return initImpl(builder, member);
 }
 DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Member member, uint size) {
   KJ_REQUIRE(member.getContainingStruct() == schema,
           "`member` is not a member of this struct.");
+  setInUnion(member);
   return initImpl(builder, member, size);
 }
 
 DynamicStruct::Builder DynamicStruct::Builder::getObject(
     StructSchema::Member member, StructSchema type) {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  verifySetInUnion(member);
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
       KJ_FAIL_REQUIRE("Expected an Object.");
@@ -462,6 +518,7 @@ DynamicStruct::Builder DynamicStruct::Builder::getObject(
 DynamicList::Builder DynamicStruct::Builder::getObject(
     StructSchema::Member member, ListSchema type) {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  verifySetInUnion(member);
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
       KJ_FAIL_REQUIRE("Expected an Object.");
@@ -480,6 +537,7 @@ DynamicList::Builder DynamicStruct::Builder::getObject(
 }
 Text::Builder DynamicStruct::Builder::getObjectAsText(StructSchema::Member member) {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  verifySetInUnion(member);
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
       KJ_FAIL_REQUIRE("Expected an Object.");
@@ -498,6 +556,7 @@ Text::Builder DynamicStruct::Builder::getObjectAsText(StructSchema::Member membe
 }
 Data::Builder DynamicStruct::Builder::getObjectAsData(StructSchema::Member member) {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  verifySetInUnion(member);
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
       KJ_FAIL_REQUIRE("Expected an Object.");
@@ -518,6 +577,7 @@ Data::Builder DynamicStruct::Builder::getObjectAsData(StructSchema::Member membe
 DynamicStruct::Builder DynamicStruct::Builder::initObject(
     StructSchema::Member member, StructSchema type) {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  setInUnion(member);
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
       KJ_FAIL_REQUIRE("Expected an Object.");
@@ -537,6 +597,7 @@ DynamicStruct::Builder DynamicStruct::Builder::initObject(
 DynamicList::Builder DynamicStruct::Builder::initObject(
     StructSchema::Member member, ListSchema type, uint size) {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  setInUnion(member);
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
       KJ_FAIL_REQUIRE("Expected an Object.");
@@ -555,6 +616,7 @@ DynamicList::Builder DynamicStruct::Builder::initObject(
 }
 Text::Builder DynamicStruct::Builder::initObjectAsText(StructSchema::Member member, uint size) {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  setInUnion(member);
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
       KJ_FAIL_REQUIRE("Expected an Object.");
@@ -573,6 +635,7 @@ Text::Builder DynamicStruct::Builder::initObjectAsText(StructSchema::Member memb
 }
 Data::Builder DynamicStruct::Builder::initObjectAsData(StructSchema::Member member, uint size) {
   KJ_REQUIRE(member.getContainingStruct() == schema, "`member` is not a member of this struct.");
+  setInUnion(member);
   switch (member.getProto().getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
       KJ_FAIL_REQUIRE("Expected an Object.");
@@ -591,10 +654,10 @@ Data::Builder DynamicStruct::Builder::initObjectAsData(StructSchema::Member memb
 }
 
 DynamicValue::Reader DynamicStruct::Reader::get(kj::StringPtr name) const {
-  return getImpl(reader, schema.getMemberByName(name));
+  return get(schema.getMemberByName(name));
 }
 DynamicValue::Builder DynamicStruct::Builder::get(kj::StringPtr name) {
-  return getImpl(builder, schema.getMemberByName(name));
+  return get(schema.getMemberByName(name));
 }
 bool DynamicStruct::Reader::has(kj::StringPtr name) const {
   return has(schema.getMemberByName(name));
@@ -603,17 +666,17 @@ bool DynamicStruct::Builder::has(kj::StringPtr name) {
   return has(schema.getMemberByName(name));
 }
 void DynamicStruct::Builder::set(kj::StringPtr name, const DynamicValue::Reader& value) {
-  setImpl(builder, schema.getMemberByName(name), value);
+  set(schema.getMemberByName(name), value);
 }
 void DynamicStruct::Builder::set(kj::StringPtr name,
                                  std::initializer_list<DynamicValue::Reader> value) {
   init(name, value.size()).as<DynamicList>().copyFrom(value);
 }
 DynamicValue::Builder DynamicStruct::Builder::init(kj::StringPtr name) {
-  return initImpl(builder, schema.getMemberByName(name));
+  return init(schema.getMemberByName(name));
 }
 DynamicValue::Builder DynamicStruct::Builder::init(kj::StringPtr name, uint size) {
-  return initImpl(builder, schema.getMemberByName(name), size);
+  return init(schema.getMemberByName(name), size);
 }
 DynamicStruct::Builder DynamicStruct::Builder::getObject(
     kj::StringPtr name, StructSchema type) {
@@ -645,12 +708,13 @@ Data::Builder DynamicStruct::Builder::initObjectAsData(kj::StringPtr name, uint 
 
 DynamicValue::Reader DynamicStruct::Reader::getImpl(
     _::StructReader reader, StructSchema::Member member) {
-  switch (member.getProto().getBody().which()) {
+  auto proto = member.getProto();
+  switch (proto.getBody().which()) {
     case schema::StructNode::Member::Body::UNION_MEMBER:
       return DynamicUnion::Reader(member.asUnion(), reader);
 
     case schema::StructNode::Member::Body::FIELD_MEMBER: {
-      auto field = member.getProto().getBody().getFieldMember();
+      auto field = proto.getBody().getFieldMember();
       auto type = field.getType().getBody();
       auto dval = field.getDefaultValue().getBody();
 
@@ -731,7 +795,7 @@ DynamicValue::Reader DynamicStruct::Reader::getImpl(
     }
   }
 
-  KJ_FAIL_ASSERT("switch() missing case.", (uint)member.getProto().getBody().which());
+  KJ_FAIL_ASSERT("switch() missing case.", (uint)proto.getBody().which());
   return nullptr;
 }
 

@@ -398,7 +398,7 @@ TEST(Encoding, UnionDefault) {
 
 TEST(Encoding, UnnamedUnion) {
   MallocMessageBuilder builder;
-  auto root = builder.getRoot<test::TestUnnamedUnion>();
+  auto root = builder.initRoot<test::TestUnnamedUnion>();
   EXPECT_EQ(test::TestUnnamedUnion::FOO, root.which());
 
   root.setBar(321);
@@ -417,7 +417,8 @@ TEST(Encoding, UnnamedUnion) {
   EXPECT_DEBUG_ANY_THROW(root.getBar());
   EXPECT_DEBUG_ANY_THROW(root.asReader().getBar());
 
-  KJ_IF_MAYBE(u, Schema::from<test::TestUnnamedUnion>().getUnnamedUnion()) {
+  StructSchema schema = Schema::from<test::TestUnnamedUnion>();
+  KJ_IF_MAYBE(u, schema.getUnnamedUnion()) {
     // The discriminant is allocated between allocating the first and second members.
     EXPECT_EQ(1, u->getProto().getBody().getUnionMember().getDiscriminantOffset());
     EXPECT_EQ(0, u->getMemberByName("foo").getProto().getBody().getFieldMember().getOffset());

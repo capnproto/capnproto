@@ -380,6 +380,9 @@ private:
   inline Builder(StructSchema schema, _::StructBuilder builder)
       : schema(schema), builder(builder) {}
 
+  void verifySetInUnion(StructSchema::Member member);
+  void setInUnion(StructSchema::Member member);
+
   static DynamicValue::Builder getImpl(
       _::StructBuilder builder, StructSchema::Member member);
   static DynamicStruct::Builder getObjectImpl(

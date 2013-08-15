@@ -359,6 +359,34 @@ TEST(Stringify, Unions) {
   EXPECT_EQ("u3f0s64(123456789012345678)", kj::str(root.getUnion3()));
 }
 
+TEST(Stringify, UnnamedUnions) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestUnnamedUnion>();
+
+  root.setBar(123);
+
+  EXPECT_EQ("(bar(123))", kj::str(root));
+  EXPECT_EQ("(bar(123))", prettyPrint(root).flatten());
+
+  root.setAfter("foooooooooooooooooooooooooooooooo");
+
+  EXPECT_EQ("(bar(123), after = \"foooooooooooooooooooooooooooooooo\")", kj::str(root));
+  EXPECT_EQ(
+      "( bar(123),\n"
+      "  after = \"foooooooooooooooooooooooooooooooo\" )",
+      prettyPrint(root).flatten());
+
+  root.setBefore("before");
+
+  EXPECT_EQ("(before = \"before\", bar(123), "
+      "after = \"foooooooooooooooooooooooooooooooo\")", kj::str(root));
+  EXPECT_EQ(
+      "( before = \"before\",\n"
+      "  bar(123),\n"
+      "  after = \"foooooooooooooooooooooooooooooooo\" )",
+      prettyPrint(root).flatten());
+}
+
 TEST(Stringify, StructUnions) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<test::TestStructUnion>();

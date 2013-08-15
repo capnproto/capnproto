@@ -341,8 +341,8 @@ struct TestListDefaults {
 }
 
 struct TestLateUnion {
-  # Test what happens if the unions are the first ordinals in the struct.  At one point this was
-  # broken for the dynamic API.
+  # Test what happens if the unions are not the first ordinals in the struct.  At one point this
+  # was broken for the dynamic API.
 
   foo @0 :Int32;
   bar @1 :Text;
@@ -385,12 +385,12 @@ struct TestStructUnion {
 }
 
 struct TestUnnamedUnion {
-  before @0 :Void;
+  before @0 :Text;
 
   union {
     foo @1 :UInt16;
     bar @2 :UInt32;
   }
 
-  after @3 :Void;
+  after @3 :Text;
 }

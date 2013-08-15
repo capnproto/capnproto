@@ -56,6 +56,40 @@ TEST(SchemaLoader, Load) {
   EXPECT_EQ(0u, struct16Schema.getProto().getBody().getStructNode().getMembers().size());
 }
 
+TEST(SchemaLoader, LoadLateUnion) {
+  SchemaLoader loader;
+
+  StructSchema schema =
+      loader.load(Schema::from<test::TestLateUnion>().getProto()).asStruct();
+
+  EXPECT_EQ(6, schema.getMemberByName("theUnion").asUnion()
+                     .getMemberByName("grault").getProto().getOrdinal());
+  EXPECT_EQ(9, schema.getMemberByName("anotherUnion").asUnion()
+                     .getMemberByName("corge").getProto().getOrdinal());
+  EXPECT_TRUE(schema.findMemberByName("corge") == nullptr);
+  EXPECT_TRUE(schema.findMemberByName("grault") == nullptr);
+}
+
+TEST(SchemaLoader, LoadUnnamedUnion) {
+  SchemaLoader loader;
+
+  StructSchema schema =
+      loader.load(Schema::from<test::TestUnnamedUnion>().getProto()).asStruct();
+
+  EXPECT_TRUE(schema.findMemberByName("") == nullptr);
+
+  KJ_IF_MAYBE(u, schema.getUnnamedUnion()) {
+    EXPECT_TRUE(schema.getMemberByName("foo") == u->getMemberByName("foo"));
+    EXPECT_TRUE(schema.getMemberByName("bar") == u->getMemberByName("bar"));
+    EXPECT_TRUE(u->findMemberByName("before") == nullptr);
+    EXPECT_TRUE(u->findMemberByName("after") == nullptr);
+    EXPECT_TRUE(schema.findMemberByName("before") != nullptr);
+    EXPECT_TRUE(schema.findMemberByName("after") != nullptr);
+  } else {
+    ADD_FAILURE() << "getUnnamedUnion() should have returned non-null.";
+  }
+}
+
 #if KJ_NO_EXCEPTIONS
 #undef EXPECT_ANY_THROW
 #define EXPECT_ANY_THROW(code) EXPECT_DEATH(code, ".")

@@ -274,6 +274,17 @@ TEST(Schema, UnnamedUnion) {
   StructSchema schema = Schema::from<test::TestUnnamedUnion>();
 
   EXPECT_TRUE(schema.findMemberByName("") == nullptr);
+
+  KJ_IF_MAYBE(u, schema.getUnnamedUnion()) {
+    EXPECT_TRUE(schema.getMemberByName("foo") == u->getMemberByName("foo"));
+    EXPECT_TRUE(schema.getMemberByName("bar") == u->getMemberByName("bar"));
+    EXPECT_TRUE(u->findMemberByName("before") == nullptr);
+    EXPECT_TRUE(u->findMemberByName("after") == nullptr);
+    EXPECT_TRUE(schema.findMemberByName("before") != nullptr);
+    EXPECT_TRUE(schema.findMemberByName("after") != nullptr);
+  } else {
+    ADD_FAILURE() << "getUnnamedUnion() should have returned non-null.";
+  }
 }
 
 }  // namespace

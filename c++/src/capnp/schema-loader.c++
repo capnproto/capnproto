@@ -148,7 +148,7 @@ private:
   bool isValid;
   std::map<uint64_t, _::RawSchema*> dependencies;
 
-  // Maps (unionIndex, name) -> index for each member.
+  // Maps (scopeOrdinal, name) -> index for each member.
   std::map<std::pair<uint, Text::Reader>, uint> members;
 
 #define VALIDATE_SCHEMA(condition, ...) \
@@ -226,21 +226,22 @@ private:
     uint index = 0;
     for (auto member: members) {
       KJ_CONTEXT("validating struct member", member.getName());
-      validate(member, sawCodeOrder, sawOrdinal, dataSizeInBits, pointerCount, 0, index++);
+      validate(member, sawCodeOrder, sawOrdinal, dataSizeInBits, pointerCount, 0, members.size(),
+               index++);
     }
   }
 
-  void validateMemberName(kj::StringPtr name, uint unionIndex, uint index) {
+  void validateMemberName(kj::StringPtr name, uint scopeOrdinal, uint adjustedIndex) {
     bool isNewName = members.insert(std::make_pair(
-        std::pair<uint, Text::Reader>(unionIndex, name), index)).second;
+        std::pair<uint, Text::Reader>(scopeOrdinal, name), adjustedIndex)).second;
     VALIDATE_SCHEMA(isNewName, "duplicate name", name);
   }
 
   void validate(const schema::StructNode::Member::Reader& member,
                 kj::ArrayPtr<bool> sawCodeOrder, kj::ArrayPtr<bool> sawOrdinal,
                 uint dataSizeInBits, uint pointerCount,
-                uint unionIndex, uint index) {
-    validateMemberName(member.getName(), unionIndex, index);
+                uint scopeOrdinal, uint scopeMemberCount, uint adjustedIndex) {
+    validateMemberName(member.getName(), scopeOrdinal, adjustedIndex);
     VALIDATE_SCHEMA(member.getCodeOrder() < sawCodeOrder.size() &&
                     !sawCodeOrder[member.getCodeOrder()],
                     "Invalid codeOrder.");
@@ -284,14 +285,17 @@ private:
               uMember.getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
               "Union members must be fields.");
 
-          uint subUnionIndex;
+          uint subScopeOrdinal;
+          uint indexAdjustment;
           if (member.getName().size() == 0) {
-            subUnionIndex = unionIndex;
+            subScopeOrdinal = scopeOrdinal;
+            indexAdjustment = scopeMemberCount;
           } else {
-            subUnionIndex = index + 1;
+            subScopeOrdinal = member.getOrdinal() + 1;
+            indexAdjustment = 0;
           }
           validate(uMember, uSawCodeOrder, sawOrdinal, dataSizeInBits, pointerCount,
-                   subUnionIndex, subIndex++);
+                   subScopeOrdinal, uMembers.size(), subIndex++ + indexAdjustment);
         }
 
         // Union ordinal may match the ordinal of its first member, meaning it was unspecified in

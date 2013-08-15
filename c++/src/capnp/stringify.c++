@@ -197,9 +197,16 @@ static kj::StringTree print(const DynamicValue::Reader& value,
       kj::Vector<kj::StringTree> printedMembers(memberSchemas.size());
       for (auto member: memberSchemas) {
         if (structValue.has(member)) {
-          printedMembers.add(kj::strTree(
-              member.getProto().getName(), " = ",
-              print(structValue.get(member), whichMemberType(member), indent.next(), PREFIXED)));
+          auto name = member.getProto().getName();
+          if (name.size() == 0) {
+            // Unnamed union.  Just print the content.
+            printedMembers.add(kj::strTree(
+                print(structValue.get(member), whichMemberType(member), indent.next(), BARE)));
+          } else {
+            printedMembers.add(kj::strTree(
+                name, " = ",
+                print(structValue.get(member), whichMemberType(member), indent.next(), PREFIXED)));
+          }
         }
       }
 

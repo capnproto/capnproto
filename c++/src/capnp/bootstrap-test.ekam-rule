@@ -73,3 +73,5 @@ for file in $INPUTS; do
     diff -u $srcfile tmp/capnp/bootstrap-test-tmp/$file.$ext >&2
   done
 done
+
+echo passed

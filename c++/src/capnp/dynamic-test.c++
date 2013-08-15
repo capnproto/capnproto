@@ -293,6 +293,14 @@ TEST(DynamicApi, UnionsRead) {
   }
 }
 
+#if KJ_NO_EXCEPTIONS
+#undef EXPECT_ANY_THROW
+#define EXPECT_ANY_THROW(code) EXPECT_DEATH(code, ".")
+#define EXPECT_NONFATAL_FAILURE(code) code
+#else
+#define EXPECT_NONFATAL_FAILURE EXPECT_ANY_THROW
+#endif
+
 TEST(DynamicApi, UnionsWrite) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<DynamicStruct>(Schema::from<TestUnion>());
@@ -314,29 +322,81 @@ TEST(DynamicApi, UnionsWrite) {
 
   ASSERT_EQ(TestUnion::Union3::U3F0S64, reader.getUnion3().which());
   EXPECT_EQ(1234567890123456789ll, reader.getUnion3().getU3f0s64());
+
+  // Can't access union members by name from the root.
+  EXPECT_ANY_THROW(root.get("u0f1s32"));
+  EXPECT_ANY_THROW(root.set("u0f1s32", 1234567));
+
+  // But can access them by member pointer.
+  auto member = root.get("union0").as<DynamicUnion>().getSchema().getMemberByName("u0f1s32");
+  EXPECT_EQ(1234567, root.get(member).as<int>());
+  auto member2 = root.get("union0").as<DynamicUnion>().getSchema().getMemberByName("u0f1sp");
+  root.set(member2, "foo");
+  EXPECT_EQ("foo", reader.getUnion0().getU0f1sp());
 }
 
-#if KJ_NO_EXCEPTIONS
-#undef EXPECT_ANY_THROW
-// All exceptions should be non-fatal, so when exceptions are disabled the code should return.
-#define EXPECT_ANY_THROW(code) code
-#endif
+TEST(DynamicApi, UnnamedUnion) {
+  MallocMessageBuilder builder;
+  StructSchema schema = Schema::from<test::TestUnnamedUnion>();
+  auto root = builder.initRoot<DynamicStruct>(schema);
+
+  DynamicUnion::Builder unionBuilder =
+      root.get(KJ_ASSERT_NONNULL(schema.getUnnamedUnion())).as<DynamicUnion>();
+
+  EXPECT_EQ(schema.getMemberByName("foo"), KJ_ASSERT_NONNULL(unionBuilder.which()));
+
+  root.set("bar", 321);
+  EXPECT_EQ(schema.getMemberByName("bar"), KJ_ASSERT_NONNULL(unionBuilder.which()));
+  EXPECT_EQ(321u, root.get("bar").as<uint>());
+  EXPECT_EQ(321u, root.asReader().get("bar").as<uint>());
+  EXPECT_EQ(321u, unionBuilder.get().as<uint>());
+  EXPECT_EQ(321u, unionBuilder.asReader().get().as<uint>());
+  EXPECT_ANY_THROW(root.get("foo"));
+  EXPECT_ANY_THROW(root.asReader().get("foo"));
+
+  root.set("foo", 123);
+  EXPECT_EQ(schema.getMemberByName("foo"), KJ_ASSERT_NONNULL(unionBuilder.which()));
+  EXPECT_EQ(123u, root.get("foo").as<uint>());
+  EXPECT_EQ(123u, root.asReader().get("foo").as<uint>());
+  EXPECT_EQ(123u, unionBuilder.get().as<uint>());
+  EXPECT_EQ(123u, unionBuilder.asReader().get().as<uint>());
+  EXPECT_ANY_THROW(root.get("bar"));
+  EXPECT_ANY_THROW(root.asReader().get("bar"));
+
+  unionBuilder.set("bar", 321);
+  EXPECT_EQ(schema.getMemberByName("bar"), KJ_ASSERT_NONNULL(unionBuilder.which()));
+  EXPECT_EQ(321u, root.get("bar").as<uint>());
+  EXPECT_EQ(321u, root.asReader().get("bar").as<uint>());
+  EXPECT_EQ(321u, unionBuilder.get().as<uint>());
+  EXPECT_EQ(321u, unionBuilder.asReader().get().as<uint>());
+  EXPECT_ANY_THROW(root.get("foo"));
+  EXPECT_ANY_THROW(root.asReader().get("foo"));
+
+  unionBuilder.set("foo", 123);
+  EXPECT_EQ(schema.getMemberByName("foo"), KJ_ASSERT_NONNULL(unionBuilder.which()));
+  EXPECT_EQ(123u, root.get("foo").as<uint>());
+  EXPECT_EQ(123u, root.asReader().get("foo").as<uint>());
+  EXPECT_EQ(123u, unionBuilder.get().as<uint>());
+  EXPECT_EQ(123u, unionBuilder.asReader().get().as<uint>());
+  EXPECT_ANY_THROW(root.get("bar"));
+  EXPECT_ANY_THROW(root.asReader().get("bar"));
+}
 
 TEST(DynamicApi, ConversionFailures) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<DynamicStruct>(Schema::from<TestAllTypes>());
 
   root.set("int8Field", 123);
-  EXPECT_ANY_THROW(root.set("int8Field", 1234));
+  EXPECT_NONFATAL_FAILURE(root.set("int8Field", 1234));
 
   root.set("uInt32Field", 1);
-  EXPECT_ANY_THROW(root.set("uInt32Field", -1));
+  EXPECT_NONFATAL_FAILURE(root.set("uInt32Field", -1));
 
   root.set("int16Field", 5);
-  EXPECT_ANY_THROW(root.set("int16Field", 0.5));
+  EXPECT_NONFATAL_FAILURE(root.set("int16Field", 0.5));
 
   root.set("boolField", true);
-  EXPECT_ANY_THROW(root.set("boolField", 1));
+  EXPECT_NONFATAL_FAILURE(root.set("boolField", 1));
 }
 
 TEST(DynamicApi, LateUnion) {

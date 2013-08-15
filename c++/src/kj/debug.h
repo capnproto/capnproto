@@ -147,6 +147,18 @@ namespace kj {
   ::kj::_::Debug::ContextImpl<decltype(KJ_UNIQUE_NAME(_kjContextFunc))> \
       KJ_UNIQUE_NAME(_kjContext)(KJ_UNIQUE_NAME(_kjContextFunc))
 
+#define _kJ_NONNULL(nature, value, ...) \
+  ({ \
+    auto result = ::kj::_::readMaybe(value); \
+    if (KJ_UNLIKELY(!result)) { \
+      ::kj::_::Debug::Fault(__FILE__, __LINE__, ::kj::Exception::Nature::nature, 0, \
+                            #value " != nullptr", #__VA_ARGS__, ##__VA_ARGS__).fatal(); \
+    } \
+    *result; \
+  })
+#define KJ_ASSERT_NONNULL(value, ...) _kJ_NONNULL(LOCAL_BUG, value, ##__VA_ARGS__)
+#define KJ_REQUIRE_NONNULL(value, ...) _kJ_NONNULL(PRECONDITION, value, ##__VA_ARGS__)
+
 #ifdef NDEBUG
 #define KJ_DLOG(...) do {} while (false)
 #define KJ_DASSERT(...) do {} while (false)

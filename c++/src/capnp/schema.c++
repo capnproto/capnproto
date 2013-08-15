@@ -90,20 +90,74 @@ void Schema::requireUsableAs(const _::RawSchema* expected) const {
 
 namespace {
 
+inline StructSchema::MemberList getUnionMembers(StructSchema::Member m) {
+  return m.asUnion().getMembers();
+}
+inline EnumSchema::EnumerantList getUnionMembers(EnumSchema::Enumerant) {
+  KJ_FAIL_ASSERT("MemberInfo for enum nonsensically expects unnamed unions.");
+}
+inline InterfaceSchema::MethodList getUnionMembers(InterfaceSchema::Method) {
+  KJ_FAIL_ASSERT("MemberInfo for interface nonsensically expects unnamed unions.");
+}
+
 template <typename List>
-auto findSchemaMemberByName(const _::RawSchema* raw, kj::StringPtr name,
-                            uint unionIndex, List&& list)
-    -> kj::Maybe<kj::Decay<decltype(list[0])>> {
+auto findUnnamedMemberOfScope(const _::RawSchema* raw, uint scopeOrdinal, List&& list)
+    -> decltype(list[0]) {
   uint lower = 0;
   uint upper = raw->memberCount;
+
+  // Since the empty string sorts before all other strings, we're looking for the first member
+  // that has the expected scopeOrdinal.
+  while (lower < upper) {
+    uint mid = (lower + upper) / 2;
+
+    const _::RawSchema::MemberInfo& member = raw->membersByName[mid];
+
+    if (member.scopeOrdinal < scopeOrdinal) {
+      lower = mid + 1;
+    } else {
+      upper = mid;
+    }
+  }
+
+  const _::RawSchema::MemberInfo& result = raw->membersByName[lower];
+
+  KJ_DASSERT(lower < raw->memberCount && list[result.index].getProto().getName().size() == 0,
+             "Expected to find an unnamed union, but didn't.  MemberInfo table must be broken.");
+
+  return list[result.index];
+}
+
+template <typename List>
+auto findSchemaMemberByName(const _::RawSchema* raw, kj::StringPtr name,
+                            uint scopeOrdinal, List&& list)
+    -> kj::Maybe<decltype(list[0])> {
+  uint lower = 0;
+  uint upper = raw->memberCount;
+  List unnamedUnionMembers;
 
   while (lower < upper) {
     uint mid = (lower + upper) / 2;
 
     const _::RawSchema::MemberInfo& member = raw->membersByName[mid];
 
-    if (member.unionIndex == unionIndex) {
-      auto candidate = list[member.index];
+    if (member.scopeOrdinal == scopeOrdinal) {
+      decltype(list[member.index]) candidate;
+
+      if (member.index < list.size()) {
+        candidate = list[member.index];
+      } else {
+        // This looks like it's a member of an unnamed union.
+        if (unnamedUnionMembers.size() == 0) {
+          // We haven't expanded the unnamed union yet.  We have to find it.  It should be the very
+          // first item with the expected ordinal.
+          unnamedUnionMembers = getUnionMembers(findUnnamedMemberOfScope(raw, scopeOrdinal, list));
+        }
+        uint uIndex = member.index - list.size();
+        KJ_DASSERT(uIndex < unnamedUnionMembers.size());
+        candidate = unnamedUnionMembers[uIndex];
+      }
+
       kj::StringPtr candidateName = candidate.getProto().getName();
       if (candidateName == name) {
         return candidate;
@@ -112,7 +166,7 @@ auto findSchemaMemberByName(const _::RawSchema* raw, kj::StringPtr name,
       } else {
         upper = mid;
       }
-    } else if (member.unionIndex < unionIndex) {
+    } else if (member.scopeOrdinal < scopeOrdinal) {
       lower = mid + 1;
     } else {
       upper = mid;
@@ -208,7 +262,24 @@ StructSchema::MemberList StructSchema::Union::getMembers() const {
 }
 
 kj::Maybe<StructSchema::Member> StructSchema::Union::findMemberByName(kj::StringPtr name) const {
-  return findSchemaMemberByName(parent.raw, name, index + 1, getMembers());
+  auto proto = getProto();
+  if (proto.getName().size() == 0) {
+    // Unnamed union, so we have to search the parent scope.
+    KJ_IF_MAYBE(result, getContainingStruct().findMemberByName(name)) {
+      KJ_IF_MAYBE(containingUnion, result->getContainingUnion()) {
+        KJ_ASSERT(*containingUnion == *this,
+                  "Found a member of some other union?  But there can only be one unnamed union!");
+        return *result;
+      } else {
+        // Oops, we found a member of the parent scope that is *not* also a member of the union.
+        return nullptr;
+      }
+    } else {
+      return nullptr;
+    }
+  } else {
+    return findSchemaMemberByName(parent.raw, name, getProto().getOrdinal() + 1, getMembers());
+  }
 }
 
 StructSchema::Member StructSchema::Union::getMemberByName(kj::StringPtr name) const {
@@ -226,7 +297,7 @@ StructSchema::MemberList StructSchema::Group::getMembers() const {
 #if 0
 // TODO(soon):  Implement correctly.  Requires some changes to lookup table format.
 kj::Maybe<StructSchema::Member> StructSchema::Group::findMemberByName(kj::StringPtr name) const {
-  return findSchemaMemberByName(parent.raw, name, index + 1, getMembers());
+  return findSchemaMemberByName(parent.raw, name, getProto().getOrdinal() + 1, getMembers());
 }
 
 StructSchema::Member StructSchema::Group::getMemberByName(kj::StringPtr name) const {

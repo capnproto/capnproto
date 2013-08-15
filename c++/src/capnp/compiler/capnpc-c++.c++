@@ -119,7 +119,7 @@ void enumerateDeps(schema::Node::Reader node, std::set<uint64_t>& deps) {
 struct OrderByName {
   template <typename T>
   inline bool operator()(const T& a, const T& b) const {
-    return a.getProto().getName() < b.getProto().getName();
+    return a.member.getProto().getName() < b.member.getProto().getName();
   }
 };
 
@@ -135,11 +135,12 @@ void makeSubMemberInfoTable(const StructSchema::Member& member,
     case schema::StructNode::Member::Body::UNION_MEMBER:
       // Only create a sub-table if the union is named.
       if (member.getProto().getName().size() > 0) {
-        makeMemberInfoTable(1 + member.getIndex(), member.asUnion().getMembers(), info);
+        makeMemberInfoTable(1 + member.getProto().getOrdinal(),
+                            member.asUnion().getMembers(), info);
       }
       break;
     case schema::StructNode::Member::Body::GROUP_MEMBER:
-      makeMemberInfoTable(1 + member.getIndex(), member.asGroup().getMembers(), info);
+      makeMemberInfoTable(1 + member.getProto().getOrdinal(), member.asGroup().getMembers(), info);
       break;
   }
 }
@@ -148,29 +149,40 @@ void makeSubMemberInfoTable(const EnumSchema::Enumerant& member,
 void makeSubMemberInfoTable(const InterfaceSchema::Method& member,
                             kj::Vector<capnp::_::RawSchema::MemberInfo>& info) {}
 
+template <typename Member>
+struct MemberAndIndex {
+  Member member;
+  uint index;
+
+  MemberAndIndex(Member member): member(member), index(member.getIndex()) {}
+  MemberAndIndex(Member member, uint index): member(member), index(index) {}
+};
+
 void enumerateScope(const StructSchema::MemberList& members,
-                    kj::Vector<StructSchema::Member>& vec) {
+                    kj::Vector<MemberAndIndex<StructSchema::Member>>& vec,
+                    uint offset = 0) {
   // Given a member list, flatten all members of the scope into one vector.  This basically means
-  // copying all the members to the vector, except that unnamed unions are flattened.
+  // copying all the members to the vector, except that unnamed unions are flattened, with their
+  // members' indexes being offset by the size of the parent scope.
 
   for (auto member: members) {
-    vec.add(member);
+    vec.add(member, member.getIndex() + offset);
     if (member.getProto().getName().size() == 0) {
       // Flatten unnamed union.
-      enumerateScope(member.asUnion().getMembers(), vec);
+      enumerateScope(member.asUnion().getMembers(), vec, offset + members.size());
     }
   }
 }
 
 void enumerateScope(const EnumSchema::EnumerantList& members,
-                    kj::Vector<EnumSchema::Enumerant>& vec) {
+                    kj::Vector<MemberAndIndex<EnumSchema::Enumerant>>& vec) {
   for (auto member: members) {
     vec.add(member);
   }
 }
 
 void enumerateScope(const InterfaceSchema::MethodList& members,
-                    kj::Vector<InterfaceSchema::Method>& vec) {
+                    kj::Vector<MemberAndIndex<InterfaceSchema::Method>>& vec) {
   for (auto member: members) {
     vec.add(member);
   }
@@ -179,16 +191,15 @@ void enumerateScope(const InterfaceSchema::MethodList& members,
 template <typename MemberList>
 void makeMemberInfoTable(uint parent, MemberList&& members,
                          kj::Vector<capnp::_::RawSchema::MemberInfo>& info) {
-  kj::Vector<kj::Decay<decltype(members[0])>> sortedMembers(members.size());
-  enumerateScope(members, sortedMembers);
+  kj::Vector<MemberAndIndex<decltype(members[0])>> sorted(members.size());
+  enumerateScope(members, sorted);
 
-  auto sorted = KJ_MAP(members, m) { return m; };
   std::sort(sorted.begin(), sorted.end(), OrderByName());
 
   for (auto& member: sorted) {
     info.add(capnp::_::RawSchema::MemberInfo {
       kj::implicitCast<uint16_t>(parent),
-      kj::implicitCast<uint16_t>(member.getIndex())
+      kj::implicitCast<uint16_t>(member.index)
     });
   }
   for (auto member: members) {
@@ -1063,7 +1074,7 @@ private:
         "};\n"
         "static const ::capnp::_::RawSchema::MemberInfo m_", hexId, "[] = {\n",
         KJ_MAP(memberInfos, info) {
-          return kj::strTree("  { ", info.unionIndex, ", ", info.index, " },\n");
+          return kj::strTree("  { ", info.scopeOrdinal, ", ", info.index, " },\n");
         },
         "};\n"
         "const ::capnp::_::RawSchema s_", hexId, " = {\n"

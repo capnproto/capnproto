@@ -254,6 +254,8 @@ private:
 
 class StructSchema::MemberList {
 public:
+  MemberList() = default;  // empty list
+
   inline uint size() const { return list.size(); }
   inline Member operator[](uint index) const { return Member(parent, unionIndex, index, list[index]); }
 
@@ -323,6 +325,8 @@ private:
 
 class EnumSchema::EnumerantList {
 public:
+  EnumerantList() = default;  // empty list
+
   inline uint size() const { return list.size(); }
   inline Enumerant operator[](uint index) const { return Enumerant(parent, index, list[index]); }
 
@@ -391,6 +395,8 @@ private:
 
 class InterfaceSchema::MethodList {
 public:
+  MethodList() = default;  // empty list
+
   inline uint size() const { return list.size(); }
   inline Method operator[](uint index) const { return Method(parent, index, list[index]); }
 

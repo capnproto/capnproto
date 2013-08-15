@@ -600,6 +600,10 @@ inline T* readMaybe(Maybe<T&>&& maybe) { return maybe.ptr; }
 template <typename T>
 inline T* readMaybe(const Maybe<T&>& maybe) { return maybe.ptr; }
 
+template <typename T>
+inline T* readMaybe(T* ptr) { return ptr; }
+// Allow KJ_IF_MAYBE to work on regular pointers.
+
 }  // namespace _ (private)
 
 #define KJ_IF_MAYBE(name, exp) if (auto name = ::kj::_::readMaybe(exp))
