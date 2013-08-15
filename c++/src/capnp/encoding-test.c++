@@ -367,6 +367,41 @@ TEST(Encoding, UnionLayout) {
 #undef INIT_UNION
 }
 
+TEST(Encoding, UnnamedUnion) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestUnnamedUnion>();
+  EXPECT_EQ(test::TestUnnamedUnion::FOO, root.which());
+
+  root.setBar(321);
+  EXPECT_EQ(test::TestUnnamedUnion::BAR, root.which());
+  EXPECT_EQ(test::TestUnnamedUnion::BAR, root.asReader().which());
+  EXPECT_EQ(321, root.getBar());
+  EXPECT_EQ(321, root.asReader().getBar());
+  EXPECT_DEBUG_ANY_THROW(root.getFoo());
+  EXPECT_DEBUG_ANY_THROW(root.asReader().getFoo());
+
+  root.setFoo(123);
+  EXPECT_EQ(test::TestUnnamedUnion::FOO, root.which());
+  EXPECT_EQ(test::TestUnnamedUnion::FOO, root.asReader().which());
+  EXPECT_EQ(123, root.getFoo());
+  EXPECT_EQ(123, root.asReader().getFoo());
+  EXPECT_DEBUG_ANY_THROW(root.getBar());
+  EXPECT_DEBUG_ANY_THROW(root.asReader().getBar());
+
+  StructSchema schema = Schema::from<test::TestUnnamedUnion>();
+  KJ_IF_MAYBE(u, schema.getUnnamedUnion()) {
+    // The discriminant is allocated just before allocating "bar".
+    EXPECT_EQ(2, u->getProto().getBody().getUnionMember().getDiscriminantOffset());
+    EXPECT_EQ(0, u->getMemberByName("foo").getProto().getBody().getFieldMember().getOffset());
+    EXPECT_EQ(2, u->getMemberByName("bar").getProto().getBody().getFieldMember().getOffset());
+
+    // The union receives the ordinal of its first member, since it does not explicitly declare one.
+    EXPECT_EQ(1, u->getProto().getOrdinal());
+  } else {
+    ADD_FAILURE() << "getUnnamedUnion() should have returned non-null.";
+  }
+}
+
 TEST(Encoding, UnionDefault) {
   MallocMessageBuilder builder;
   TestUnionDefaults::Reader reader = builder.getRoot<TestUnionDefaults>().asReader();
@@ -394,40 +429,21 @@ TEST(Encoding, UnionDefault) {
     EXPECT_EQ(true, field.getUnion2().getU2f0s1());
     EXPECT_EQ(12345678, field.getUnion3().getU3f0s32());
   }
-}
 
-TEST(Encoding, UnnamedUnion) {
-  MallocMessageBuilder builder;
-  auto root = builder.initRoot<test::TestUnnamedUnion>();
-  EXPECT_EQ(test::TestUnnamedUnion::FOO, root.which());
+  {
+    auto field = reader.getUnnamed1();
+    EXPECT_EQ(test::TestUnnamedUnion::FOO, field.which());
+    EXPECT_EQ(123, field.getFoo());
+    EXPECT_FALSE(field.hasBefore());
+    EXPECT_FALSE(field.hasAfter());
+  }
 
-  root.setBar(321);
-  EXPECT_EQ(test::TestUnnamedUnion::BAR, root.which());
-  EXPECT_EQ(test::TestUnnamedUnion::BAR, root.asReader().which());
-  EXPECT_EQ(321, root.getBar());
-  EXPECT_EQ(321, root.asReader().getBar());
-  EXPECT_DEBUG_ANY_THROW(root.getFoo());
-  EXPECT_DEBUG_ANY_THROW(root.asReader().getFoo());
-
-  root.setFoo(123);
-  EXPECT_EQ(test::TestUnnamedUnion::FOO, root.which());
-  EXPECT_EQ(test::TestUnnamedUnion::FOO, root.asReader().which());
-  EXPECT_EQ(123, root.getFoo());
-  EXPECT_EQ(123, root.asReader().getFoo());
-  EXPECT_DEBUG_ANY_THROW(root.getBar());
-  EXPECT_DEBUG_ANY_THROW(root.asReader().getBar());
-
-  StructSchema schema = Schema::from<test::TestUnnamedUnion>();
-  KJ_IF_MAYBE(u, schema.getUnnamedUnion()) {
-    // The discriminant is allocated between allocating the first and second members.
-    EXPECT_EQ(1, u->getProto().getBody().getUnionMember().getDiscriminantOffset());
-    EXPECT_EQ(0, u->getMemberByName("foo").getProto().getBody().getFieldMember().getOffset());
-    EXPECT_EQ(1, u->getMemberByName("bar").getProto().getBody().getFieldMember().getOffset());
-
-    // The union receives the ordinal of its first member, since it does not explicitly declare one.
-    EXPECT_EQ(1, u->getProto().getOrdinal());
-  } else {
-    ADD_FAILURE() << "getUnnamedUnion() should have returned non-null.";
+  {
+    auto field = reader.getUnnamed2();
+    EXPECT_EQ(test::TestUnnamedUnion::BAR, field.which());
+    EXPECT_EQ(321, field.getBar());
+    EXPECT_EQ("foo", field.getBefore());
+    EXPECT_EQ("bar", field.getAfter());
   }
 }
 

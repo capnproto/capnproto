@@ -372,19 +372,40 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
         return result;
       }));
 
+  // Matches "value" or "unionName(value)".
+  auto& fieldValue = arena.copy(p::oneOf(
+      p::transform(p::sequence(identifier, parsers.parenthesizedValueExpression),
+          [this](Located<Text::Reader>&& name, Orphan<ValueExpression>&& value)
+              -> Orphan<ValueExpression::FieldAssignment> {
+            auto result = orphanage.newOrphan<ValueExpression::FieldAssignment>();
+            auto builder = result.get();
+            name.copyTo(builder.initUnion());
+            builder.adoptValue(kj::mv(value));
+            return result;
+          }),
+      p::transform(parsers.valueExpression,
+          [this](Orphan<ValueExpression>&& value)
+              -> Orphan<ValueExpression::FieldAssignment> {
+            auto result = orphanage.newOrphan<ValueExpression::FieldAssignment>();
+            auto builder = result.get();
+            builder.setNotUnion();
+            builder.adoptValue(kj::mv(value));
+            return result;
+          })));
+
+  // Parser for a "name = value" pair.  Also matches "name = unionMember(value)",
+  // "unionMember(value)" (unnamed union), and just "value" (which is not actually a valid field
+  // assigment, but simplifies the parser for parenthesizedValueExpression).
   auto& fieldAssignment = arena.copy(p::transform(
-      p::sequence(p::optional(p::sequence(identifier, op("="))), parsers.valueExpression),
-      [this](kj::Maybe<Located<Text::Reader>>&& fieldName, Orphan<ValueExpression>&& value)
-          -> Orphan<ValueExpression::FieldAssignment> {
-        auto result = orphanage.newOrphan<ValueExpression::FieldAssignment>();
-        auto builder = result.get();
-        // The field name is optional for now because this makes it easier for us to parse unions
-        // later.  We'll produce an error later if the name is missing when required.
+      p::sequence(p::optional(p::sequence(identifier, op("="))), fieldValue),
+      [this](kj::Maybe<Located<Text::Reader>>&& fieldName,
+             Orphan<ValueExpression::FieldAssignment>&& assignment)
+             -> Orphan<ValueExpression::FieldAssignment> {
+        auto builder = assignment.get();
         KJ_IF_MAYBE(fn, fieldName) {
           fn->copyTo(builder.initFieldName());
         }
-        builder.adoptValue(kj::mv(value));
-        return result;
+        return kj::mv(assignment);
       }));
 
   parsers.parenthesizedValueExpression = arena.copy(p::transform(
@@ -393,8 +414,10 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
           -> Orphan<ValueExpression> {
         if (value.value.size() == 1) {
           KJ_IF_MAYBE(firstVal, value.value[0]) {
-            if (!firstVal->get().hasFieldName()) {
-              // There is only one value and it isn't an assignment, therefore the value is
+            auto reader = firstVal->getReader();
+            if (reader.getFieldName().getValue().size() == 0 &&
+                reader.which() == ValueExpression::FieldAssignment::NOT_UNION) {
+              // There is only one value and it isn't an assignment or union, therefore the value is
               // not a struct.
               return firstVal->get().disownValue();
             }
@@ -418,12 +441,12 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
         auto structBuilder = builder.getBody().initStructValue(value.value.size());
         for (uint i = 0; i < value.value.size(); i++) {
           KJ_IF_MAYBE(field, value.value[i]) {
-            if (field->get().hasFieldName()) {
+            auto reader = field->getReader();
+            if (reader.getFieldName().getValue().size() > 0 ||
+                reader.which() == ValueExpression::FieldAssignment::UNION) {
               structBuilder.adoptWithCaveats(i, kj::mv(*field));
             } else {
-              auto fieldValue = field->get().getValue();
-              errorReporter.addError(fieldValue.getStartByte(), fieldValue.getEndByte(),
-                                     "Missing field name.");
+              errorReporter.addErrorOn(reader.getValue(), "Missing field name.");
             }
           }
         }
@@ -481,21 +504,6 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
             value.copyLocationTo(builder);
             return result;
           }),
-      p::transform(p::sequence(identifier, parsers.parenthesizedValueExpression),
-          [this](Located<Text::Reader>&& fieldName, Orphan<ValueExpression>&& value)
-              -> Orphan<ValueExpression> {
-            auto result = orphanage.newOrphan<ValueExpression>();
-
-            auto builder = result.get();
-            builder.setStartByte(fieldName.startByte);
-            builder.setEndByte(value.get().getEndByte());
-
-            auto unionBuilder = builder.getBody().initUnionValue();
-            fieldName.copyTo(unionBuilder.initFieldName());
-            unionBuilder.adoptValue(kj::mv(value));
-
-            return result;
-          }),
       p::transformWithLocation(parsers.declName,
           [this](kj::parse::Span<List<Token>::Reader::Iterator> location,
                  Orphan<DeclName>&& value) -> Orphan<ValueExpression> {
@@ -527,7 +535,9 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
             auto structBuilder = builder.getBody().initStructValue(value.value.size());
             for (uint i = 0; i < value.value.size(); i++) {
               KJ_IF_MAYBE(field, value.value[i]) {
-                if (field->get().hasFieldName()) {
+                auto reader = field->get();
+                if (reader.getFieldName().getValue().size() > 0 ||
+                    reader.which() == ValueExpression::FieldAssignment::UNION) {
                   structBuilder.adoptWithCaveats(i, kj::mv(*field));
                 } else {
                   auto fieldValue = field->get().getValue();

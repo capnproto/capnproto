@@ -101,16 +101,19 @@ struct ValueExpression {
     name @6 :DeclName;
     list @7 :List(ValueExpression);
     structValue @8 :List(FieldAssignment);
-    unionValue @9 :FieldAssignment;
   }
 
   struct FieldAssignment {
     fieldName @0 :LocatedText;
-    value @1 :ValueExpression;
+    union {
+      notUnion @1 :Void;
+      union @2 :LocatedText;  # Name of union member being assigned.
+    }
+    value @3 :ValueExpression;
   }
 
-  startByte @10 :UInt32;
-  endByte @11 :UInt32;
+  startByte @9 :UInt32;
+  endByte @10 :UInt32;
 }
 
 struct Declaration {

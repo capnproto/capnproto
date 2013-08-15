@@ -1647,27 +1647,56 @@ void NodeTranslator::compileValueInner(
       auto dstSchema = dstStruct.getSchema();
       for (auto assignment: srcStruct) {
         auto fieldName = assignment.getFieldName();
-        KJ_IF_MAYBE(member, dstSchema.findMemberByName(fieldName.getValue())) {
-          DynamicSlot slot(dstStruct, *member);
-          compileValue(assignment.getValue(), slot, isBootstrap);
-        } else {
-          errorReporter.addErrorOn(fieldName, kj::str(
-              "Value has no field named '", fieldName.getValue(), "'."));
-        }
-      }
-      break;
-    }
-    case ValueExpression::Body::UNION_VALUE: {
-      auto srcUnion = src.getBody().getUnionValue();
-      auto dstUnion = dst.getUnion();
 
-      auto fieldName = srcUnion.getFieldName();
-      KJ_IF_MAYBE(member, dstUnion.getSchema().findMemberByName(fieldName.getValue())) {
-        DynamicSlot slot(dstUnion, *member);
-        compileValue(srcUnion.getValue(), slot, isBootstrap);
-      } else {
-        errorReporter.addErrorOn(fieldName, kj::str(
-            "Union has no field named '", fieldName.getValue(), "'."));
+        switch (assignment.which()) {
+          case ValueExpression::FieldAssignment::NOT_UNION:
+            KJ_IF_MAYBE(member, dstSchema.findMemberByName(fieldName.getValue())) {
+              DynamicSlot slot(dstStruct, *member);
+              compileValue(assignment.getValue(), slot, isBootstrap);
+            } else {
+              errorReporter.addErrorOn(fieldName, kj::str(
+                  "Struct has no field named '", fieldName.getValue(), "'."));
+            }
+            break;
+
+          case ValueExpression::FieldAssignment::UNION: {
+            StructSchema::Union unionMember;
+            if (fieldName.getValue().size() == 0) {
+              // Unnamed.
+              KJ_IF_MAYBE(unnamedUnion, dstSchema.getUnnamedUnion()) {
+                unionMember = *unnamedUnion;
+              } else {
+                errorReporter.addErrorOn(assignment.getUnion(), kj::str(
+                    "Struct type '", dstSchema.getProto().getDisplayName(),
+                    "' does not contain an unnamed union."));
+                break;
+              }
+            } else {
+              KJ_IF_MAYBE(member, dstSchema.findMemberByName(fieldName.getValue())) {
+                if (member->getProto().getBody().which() ==
+                    schema::StructNode::Member::Body::UNION_MEMBER) {
+                  unionMember = member->asUnion();
+                } else {
+                  errorReporter.addErrorOn(fieldName, kj::str(
+                      "'", fieldName.getValue(), "' is not a union."));
+                  break;
+                }
+              } else {
+                errorReporter.addErrorOn(fieldName, kj::str(
+                    "Struct has no field named '", fieldName.getValue(), "'."));
+                break;
+              }
+            }
+
+            KJ_IF_MAYBE(member, unionMember.findMemberByName(assignment.getUnion().getValue())) {
+              DynamicSlot slot(dstStruct, *member);
+              compileValue(assignment.getValue(), slot, isBootstrap);
+            } else {
+              errorReporter.addErrorOn(assignment.getUnion(), kj::str(
+                  "Union has no member named '", assignment.getUnion().getValue(), "'."));
+            }
+          }
+        }
       }
       break;
     }

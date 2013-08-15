@@ -80,7 +80,6 @@ struct ValueExpression::Body {
     NAME,
     LIST,
     STRUCT_VALUE,
-    UNION_VALUE,
   };
 };
 
@@ -89,6 +88,10 @@ struct ValueExpression::FieldAssignment {
 
   class Reader;
   class Builder;
+  enum Which: uint16_t {
+    NOT_UNION,
+    UNION,
+  };
 };
 
 struct Declaration {
@@ -379,7 +382,7 @@ CAPNP_DECLARE_UNION(
     ::capnp::compiler::ValueExpression, 0);
 CAPNP_DECLARE_STRUCT(
     ::capnp::compiler::ValueExpression::FieldAssignment, b6b57cf8b27fba0e,
-    0, 2, INLINE_COMPOSITE);
+    1, 3, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::compiler::Declaration, 96efe787c17e83bb,
     2, 6, INLINE_COMPOSITE);
@@ -990,9 +993,6 @@ inline Which which() const;
   inline bool hasStructValue() const;
   inline  ::capnp::List< ::capnp::compiler::ValueExpression::FieldAssignment>::Reader getStructValue() const;
 
-  inline bool hasUnionValue() const;
-  inline  ::capnp::compiler::ValueExpression::FieldAssignment::Reader getUnionValue() const;
-
 private:
   ::capnp::_::StructReader _reader;
   template <typename T, ::capnp::Kind k>
@@ -1062,13 +1062,6 @@ inline Which which();
   inline void adoptStructValue(::capnp::Orphan< ::capnp::List< ::capnp::compiler::ValueExpression::FieldAssignment>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::ValueExpression::FieldAssignment>> disownStructValue();
 
-  inline bool hasUnionValue();
-  inline  ::capnp::compiler::ValueExpression::FieldAssignment::Builder getUnionValue();
-  inline void setUnionValue( ::capnp::compiler::ValueExpression::FieldAssignment::Reader value);
-  inline  ::capnp::compiler::ValueExpression::FieldAssignment::Builder initUnionValue();
-  inline void adoptUnionValue(::capnp::Orphan< ::capnp::compiler::ValueExpression::FieldAssignment>&& value);
-  inline ::capnp::Orphan< ::capnp::compiler::ValueExpression::FieldAssignment> disownUnionValue();
-
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename T, ::capnp::Kind k>
@@ -1094,6 +1087,12 @@ public:
 
   inline bool hasFieldName() const;
   inline  ::capnp::compiler::LocatedText::Reader getFieldName() const;
+
+  inline Which which() const;
+  inline  ::capnp::Void getNotUnion() const;
+
+  inline bool hasUnion() const;
+  inline  ::capnp::compiler::LocatedText::Reader getUnion() const;
 
   inline bool hasValue() const;
   inline  ::capnp::compiler::ValueExpression::Reader getValue() const;
@@ -1132,6 +1131,17 @@ public:
   inline  ::capnp::compiler::LocatedText::Builder initFieldName();
   inline void adoptFieldName(::capnp::Orphan< ::capnp::compiler::LocatedText>&& value);
   inline ::capnp::Orphan< ::capnp::compiler::LocatedText> disownFieldName();
+
+  inline Which which();
+  inline  ::capnp::Void getNotUnion();
+  inline void setNotUnion( ::capnp::Void value = ::capnp::Void::VOID);
+
+  inline bool hasUnion();
+  inline  ::capnp::compiler::LocatedText::Builder getUnion();
+  inline void setUnion( ::capnp::compiler::LocatedText::Reader value);
+  inline  ::capnp::compiler::LocatedText::Builder initUnion();
+  inline void adoptUnion(::capnp::Orphan< ::capnp::compiler::LocatedText>&& value);
+  inline ::capnp::Orphan< ::capnp::compiler::LocatedText> disownUnion();
 
   inline bool hasValue();
   inline  ::capnp::compiler::ValueExpression::Builder getValue();
@@ -3558,54 +3568,6 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::ValueExpression::Field
       _builder, 0 * ::capnp::POINTERS);
 }
 
-inline bool ValueExpression::Body::Reader::hasUnionValue() const {
-  KJ_IREQUIRE(which() == Body::UNION_VALUE,
-              "Must check which() before get()ing a union member.");
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
-}
-inline bool ValueExpression::Body::Builder::hasUnionValue() {
-  KJ_IREQUIRE(which() == Body::UNION_VALUE,
-              "Must check which() before get()ing a union member.");
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
-}
-inline  ::capnp::compiler::ValueExpression::FieldAssignment::Reader ValueExpression::Body::Reader::getUnionValue() const {
-  KJ_IREQUIRE(which() == Body::UNION_VALUE,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression::FieldAssignment>::get(
-      _reader, 0 * ::capnp::POINTERS);
-}
-inline  ::capnp::compiler::ValueExpression::FieldAssignment::Builder ValueExpression::Body::Builder::getUnionValue() {
-  KJ_IREQUIRE(which() == Body::UNION_VALUE,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression::FieldAssignment>::get(
-      _builder, 0 * ::capnp::POINTERS);
-}
-inline void ValueExpression::Body::Builder::setUnionValue( ::capnp::compiler::ValueExpression::FieldAssignment::Reader value) {
-  _builder.setDataField<Body::Which>(
-      0 * ::capnp::ELEMENTS, Body::UNION_VALUE);
-  ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression::FieldAssignment>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
-}
-inline  ::capnp::compiler::ValueExpression::FieldAssignment::Builder ValueExpression::Body::Builder::initUnionValue() {
-  _builder.setDataField<Body::Which>(
-      0 * ::capnp::ELEMENTS, Body::UNION_VALUE);
-  return ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression::FieldAssignment>::init(
-      _builder, 0 * ::capnp::POINTERS);
-}
-inline void ValueExpression::Body::Builder::adoptUnionValue(
-    ::capnp::Orphan< ::capnp::compiler::ValueExpression::FieldAssignment>&& value) {
-  _builder.setDataField<Body::Which>(
-      0 * ::capnp::ELEMENTS, Body::UNION_VALUE);
-  ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression::FieldAssignment>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::compiler::ValueExpression::FieldAssignment> ValueExpression::Body::Builder::disownUnionValue() {
-  KJ_IREQUIRE(which() == Body::UNION_VALUE,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression::FieldAssignment>::disown(
-      _builder, 0 * ::capnp::POINTERS);
-}
-
 inline  ::uint32_t ValueExpression::Reader::getStartByte() const {
   return _reader.getDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS);
@@ -3666,36 +3628,111 @@ inline ::capnp::Orphan< ::capnp::compiler::LocatedText> ValueExpression::FieldAs
       _builder, 0 * ::capnp::POINTERS);
 }
 
-inline bool ValueExpression::FieldAssignment::Reader::hasValue() const {
+inline ValueExpression::FieldAssignment::Which ValueExpression::FieldAssignment::Reader::which() const {
+  return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
+}
+inline ValueExpression::FieldAssignment::Which ValueExpression::FieldAssignment::Builder::which() {
+  return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::Void ValueExpression::FieldAssignment::Reader::getNotUnion() const {
+  KJ_IREQUIRE(which() == ValueExpression::FieldAssignment::NOT_UNION,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::Void ValueExpression::FieldAssignment::Builder::getNotUnion() {
+  KJ_IREQUIRE(which() == ValueExpression::FieldAssignment::NOT_UNION,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void ValueExpression::FieldAssignment::Builder::setNotUnion( ::capnp::Void value) {
+  _builder.setDataField<ValueExpression::FieldAssignment::Which>(
+      0 * ::capnp::ELEMENTS, ValueExpression::FieldAssignment::NOT_UNION);
+  _builder.setDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool ValueExpression::FieldAssignment::Reader::hasUnion() const {
+  KJ_IREQUIRE(which() == ValueExpression::FieldAssignment::UNION,
+              "Must check which() before get()ing a union member.");
   return !_reader.isPointerFieldNull(1 * ::capnp::POINTERS);
 }
-inline bool ValueExpression::FieldAssignment::Builder::hasValue() {
+inline bool ValueExpression::FieldAssignment::Builder::hasUnion() {
+  KJ_IREQUIRE(which() == ValueExpression::FieldAssignment::UNION,
+              "Must check which() before get()ing a union member.");
   return !_builder.isPointerFieldNull(1 * ::capnp::POINTERS);
+}
+inline  ::capnp::compiler::LocatedText::Reader ValueExpression::FieldAssignment::Reader::getUnion() const {
+  KJ_IREQUIRE(which() == ValueExpression::FieldAssignment::UNION,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::get(
+      _reader, 1 * ::capnp::POINTERS);
+}
+inline  ::capnp::compiler::LocatedText::Builder ValueExpression::FieldAssignment::Builder::getUnion() {
+  KJ_IREQUIRE(which() == ValueExpression::FieldAssignment::UNION,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::get(
+      _builder, 1 * ::capnp::POINTERS);
+}
+inline void ValueExpression::FieldAssignment::Builder::setUnion( ::capnp::compiler::LocatedText::Reader value) {
+  _builder.setDataField<ValueExpression::FieldAssignment::Which>(
+      0 * ::capnp::ELEMENTS, ValueExpression::FieldAssignment::UNION);
+  ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::set(
+      _builder, 1 * ::capnp::POINTERS, value);
+}
+inline  ::capnp::compiler::LocatedText::Builder ValueExpression::FieldAssignment::Builder::initUnion() {
+  _builder.setDataField<ValueExpression::FieldAssignment::Which>(
+      0 * ::capnp::ELEMENTS, ValueExpression::FieldAssignment::UNION);
+  return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::init(
+      _builder, 1 * ::capnp::POINTERS);
+}
+inline void ValueExpression::FieldAssignment::Builder::adoptUnion(
+    ::capnp::Orphan< ::capnp::compiler::LocatedText>&& value) {
+  _builder.setDataField<ValueExpression::FieldAssignment::Which>(
+      0 * ::capnp::ELEMENTS, ValueExpression::FieldAssignment::UNION);
+  ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::adopt(
+      _builder, 1 * ::capnp::POINTERS, kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::compiler::LocatedText> ValueExpression::FieldAssignment::Builder::disownUnion() {
+  KJ_IREQUIRE(which() == ValueExpression::FieldAssignment::UNION,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::disown(
+      _builder, 1 * ::capnp::POINTERS);
+}
+
+inline bool ValueExpression::FieldAssignment::Reader::hasValue() const {
+  return !_reader.isPointerFieldNull(2 * ::capnp::POINTERS);
+}
+inline bool ValueExpression::FieldAssignment::Builder::hasValue() {
+  return !_builder.isPointerFieldNull(2 * ::capnp::POINTERS);
 }
 inline  ::capnp::compiler::ValueExpression::Reader ValueExpression::FieldAssignment::Reader::getValue() const {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression>::get(
-      _reader, 1 * ::capnp::POINTERS);
+      _reader, 2 * ::capnp::POINTERS);
 }
 inline  ::capnp::compiler::ValueExpression::Builder ValueExpression::FieldAssignment::Builder::getValue() {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression>::get(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder, 2 * ::capnp::POINTERS);
 }
 inline void ValueExpression::FieldAssignment::Builder::setValue( ::capnp::compiler::ValueExpression::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression>::set(
-      _builder, 1 * ::capnp::POINTERS, value);
+      _builder, 2 * ::capnp::POINTERS, value);
 }
 inline  ::capnp::compiler::ValueExpression::Builder ValueExpression::FieldAssignment::Builder::initValue() {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression>::init(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder, 2 * ::capnp::POINTERS);
 }
 inline void ValueExpression::FieldAssignment::Builder::adoptValue(
     ::capnp::Orphan< ::capnp::compiler::ValueExpression>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression>::adopt(
-      _builder, 1 * ::capnp::POINTERS, kj::mv(value));
+      _builder, 2 * ::capnp::POINTERS, kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::compiler::ValueExpression> ValueExpression::FieldAssignment::Builder::disownValue() {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression>::disown(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder, 2 * ::capnp::POINTERS);
 }
 
 inline bool Declaration::Reader::hasName() const {
