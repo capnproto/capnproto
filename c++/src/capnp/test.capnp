@@ -269,6 +269,26 @@ struct TestUnnamedUnion {
   after @4 :Text;
 }
 
+struct TestGroups {
+  groups union {
+    foo group {
+      fooCorge @0 :Int32;
+      fooGrault @2 :Int64;
+      bazGarply @8 :Text;
+    }
+    bar group {
+      barCorge @3 :Int32;
+      barGrault @4 :Text;
+      barGarply @5 :Int64;
+    }
+    baz group {
+      bazCorge @1 :Int32;
+      bazGrault @6 :Text;
+      bazGarply @7 :Text;
+    }
+  }
+}
+
 struct TestUnionDefaults {
   s16s8s64s8Set @0 :TestUnion =
       (union0 = u0f0s16(321), union1 = u1f0s8(123), union2 = u2f0s64(12345678901234567),

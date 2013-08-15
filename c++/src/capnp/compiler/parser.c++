@@ -723,11 +723,13 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
       }));
 
   parsers.groupDecl = arena.copy(p::transform(
-      p::sequence(keyword("group"), p::many(parsers.annotation)),
-      [this](kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
+      p::sequence(identifier, keyword("group"), p::many(parsers.annotation)),
+      [this](Located<Text::Reader>&& name,
+             kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
         auto builder = decl.get();
+        name.copyTo(builder.getName());
         builder.getId().setUnspecified();
         auto list = builder.initAnnotations(annotations.size());
         for (uint i = 0; i < annotations.size(); i++) {

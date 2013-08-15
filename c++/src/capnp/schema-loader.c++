@@ -160,6 +160,32 @@ private:
     // Nothing needs validation.
   }
 
+  uint countOrdinals(const List<schema::StructNode::Member>::Reader& members) {
+    uint result = 0;
+
+    for (auto member: members) {
+      switch (member.getBody().which()) {
+      case schema::StructNode::Member::Body::FIELD_MEMBER:
+        ++result;
+        break;
+      case schema::StructNode::Member::Body::UNION_MEMBER: {
+        auto uMembers = member.getBody().getUnionMember().getMembers();
+        if (uMembers.size() == 0 || member.getOrdinal() != uMembers[0].getOrdinal()) {
+          // Union has explicit ordinal.
+          ++result;
+        }
+        result += countOrdinals(uMembers);
+        break;
+      }
+      case schema::StructNode::Member::Body::GROUP_MEMBER:
+        result += countOrdinals(member.getBody().getGroupMember().getMembers());
+        break;
+      }
+    }
+
+    return result;
+  }
+
   void validate(const schema::StructNode::Reader& structNode) {
     uint dataSizeInBits;
     uint pointerCount;
@@ -208,15 +234,8 @@ private:
                     structNode.getPointerSectionSize() == pointerCount,
                     "Struct size does not match preferredListEncoding.");
 
-    uint ordinalCount = 0;
-
     auto members = structNode.getMembers();
-    for (auto member: members) {
-      ++ordinalCount;
-      if (member.getBody().which() == schema::StructNode::Member::Body::UNION_MEMBER) {
-        ordinalCount += member.getBody().getUnionMember().getMembers().size();
-      }
-    }
+    uint ordinalCount = countOrdinals(members);
 
     KJ_STACK_ARRAY(bool, sawCodeOrder, members.size(), 32, 256);
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
@@ -282,8 +301,8 @@ private:
         for (auto uMember: uMembers) {
           KJ_CONTEXT("validating union member", uMember.getName());
           VALIDATE_SCHEMA(
-              uMember.getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
-              "Union members must be fields.");
+              uMember.getBody().which() != schema::StructNode::Member::Body::UNION_MEMBER,
+              "Union members must be fields or groups.");
 
           uint subScopeOrdinal;
           uint indexAdjustment;
@@ -306,6 +325,32 @@ private:
                           "Invalid ordinal.", member.getOrdinal());
           sawOrdinal[member.getOrdinal()] = true;
         }
+        break;
+      }
+
+      case schema::StructNode::Member::Body::GROUP_MEMBER: {
+        auto g = member.getBody().getGroupMember();
+
+        auto gMembers = g.getMembers();
+        VALIDATE_SCHEMA(gMembers.size() >= 2, "Group must have at least two members.");
+
+        KJ_STACK_ARRAY(bool, uSawCodeOrder, gMembers.size(), 32, 256);
+        memset(uSawCodeOrder.begin(), 0, uSawCodeOrder.size() * sizeof(uSawCodeOrder[0]));
+
+        uint subIndex = 0;
+        for (auto gMember: gMembers) {
+          KJ_CONTEXT("validating group member", gMember.getName());
+          VALIDATE_SCHEMA(
+              gMember.getBody().which() != schema::StructNode::Member::Body::GROUP_MEMBER,
+              "Group members must be fields or unions.");
+
+          validate(gMember, uSawCodeOrder, sawOrdinal, dataSizeInBits, pointerCount,
+                   member.getOrdinal() + 1, gMembers.size(), subIndex++);
+        }
+
+        // Group ordinal must match the ordinal of its first member.
+        VALIDATE_SCHEMA(member.getOrdinal() == gMembers[0].getOrdinal(),
+                        "Invalid ordinal.", member.getOrdinal());
         break;
       }
     }
@@ -648,6 +693,25 @@ private:
 
         auto members = existingUnion.getMembers();
         auto replacementMembers = replacementUnion.getMembers();
+        uint count = std::min(members.size(), replacementMembers.size());
+
+        if (replacementMembers.size() > members.size()) {
+          replacementIsNewer();
+        } else if (replacementMembers.size() < members.size()) {
+          replacementIsOlder();
+        }
+
+        for (uint i = 0; i < count; i++) {
+          checkCompatibility(members[i], replacementMembers[i]);
+        }
+        break;
+      }
+      case schema::StructNode::Member::Body::GROUP_MEMBER: {
+        auto existingGroup = member.getBody().getGroupMember();
+        auto replacementGroup = replacement.getBody().getGroupMember();
+
+        auto members = existingGroup.getMembers();
+        auto replacementMembers = replacementGroup.getMembers();
         uint count = std::min(members.size(), replacementMembers.size());
 
         if (replacementMembers.size() > members.size()) {

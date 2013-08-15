@@ -898,17 +898,18 @@ private:
 
             kj::strTree(
                 makeReaderDef(fullName, titleCase, "unionString", kj::strTree(
-                    "inline Which which() const;\n",
+                    "  inline Which which() const;\n",
                     kj::mv(subText.readerMethodDecls))),
                 makeBuilderDef(fullName, titleCase, "unionString", kj::strTree(
-                    "inline Which which();\n",
-                    kj::mv(subText.builderMethodDecls)))),
+                    "  inline Which which();\n",
+                    kj::mv(subText.builderMethodDecls))),
+                kj::mv(subText.innerTypeReaderBuilderDefs)),
 
             kj::strTree(
-                "inline ", titleCase, "::Reader get", titleCase, "() const;\n"),
+                "  inline ", titleCase, "::Reader get", titleCase, "() const;\n"),
 
             kj::strTree(
-                "inline ", titleCase, "::Builder get", titleCase, "();\n"),
+                "  inline ", titleCase, "::Builder get", titleCase, "();\n"),
 
             kj::strTree(
                 "inline ", fullName, "::Reader ", containingType, "::Reader::get", titleCase, "() const {\n"
@@ -955,7 +956,7 @@ private:
               "  class Reader;\n"
               "  class Builder;\n",
               kj::mv(subText.innerTypeDecls),
-              "}\n"
+              "};\n"
               "\n",
               kj::mv(subText.innerTypeDefs)),
 
@@ -963,13 +964,14 @@ private:
               makeReaderDef(fullName, titleCase, "groupString",
                             kj::mv(subText.readerMethodDecls)),
               makeBuilderDef(fullName, titleCase, "groupString",
-                             kj::mv(subText.builderMethodDecls))),
+                             kj::mv(subText.builderMethodDecls)),
+              kj::mv(subText.innerTypeReaderBuilderDefs)),
 
           kj::strTree(
-              "inline ", titleCase, "::Reader get", titleCase, "() const;\n"),
+              "  inline ", titleCase, "::Reader get", titleCase, "() const;\n"),
 
           kj::strTree(
-              "inline ", titleCase, "::Builder get", titleCase, "();\n"),
+              "  inline ", titleCase, "::Builder get", titleCase, "();\n"),
 
           kj::strTree(
               "inline ", fullName, "::Reader ", containingType, "::Reader::get", titleCase, "() const {\n"
@@ -980,8 +982,15 @@ private:
               "}\n",
               kj::mv(subText.inlineMethodDefs)),
 
-          kj::mv(subText.capnpPrivateDecls),
-          kj::mv(subText.capnpPrivateDefs),
+            kj::strTree(
+                "CAPNP_DECLARE_GROUP(\n"
+                "    ", namespace_, "::", fullName, ",\n"
+                "    ", namespace_, "::", containingType, ", ", member.getIndex(), ");\n",
+                kj::mv(subText.capnpPrivateDecls)),
+            kj::strTree(
+                "CAPNP_DEFINE_GROUP(\n"
+                "    ", namespace_, "::", fullName, ");\n",
+                kj::mv(subText.capnpPrivateDefs)),
         };
       }
     }
