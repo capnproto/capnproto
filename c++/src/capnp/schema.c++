@@ -129,6 +129,10 @@ StructSchema::MemberList StructSchema::getMembers() const {
 }
 
 kj::Maybe<StructSchema::Member> StructSchema::findMemberByName(kj::StringPtr name) const {
+  if (name.size() == 0) {
+    return nullptr;
+  }
+
   return findSchemaMemberByName(raw, name, 0, getMembers());
 }
 
@@ -138,6 +142,11 @@ StructSchema::Member StructSchema::getMemberByName(kj::StringPtr name) const {
   } else {
     KJ_FAIL_REQUIRE("struct has no such member", name);
   }
+}
+
+kj::Maybe<StructSchema::Union> StructSchema::getUnnamedUnion() const {
+  return findSchemaMemberByName(raw, "", 0, getMembers()).map(
+      [](Member member) { return member.asUnion(); });
 }
 
 kj::Maybe<StructSchema::Union> StructSchema::Member::getContainingUnion() const {

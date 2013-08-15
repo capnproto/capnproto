@@ -133,7 +133,10 @@ void makeSubMemberInfoTable(const StructSchema::Member& member,
     case schema::StructNode::Member::Body::FIELD_MEMBER:
       break;
     case schema::StructNode::Member::Body::UNION_MEMBER:
-      makeMemberInfoTable(1 + member.getIndex(), member.asUnion().getMembers(), info);
+      // Only create a sub-table if the union is named.
+      if (member.getProto().getName().size() > 0) {
+        makeMemberInfoTable(1 + member.getIndex(), member.asUnion().getMembers(), info);
+      }
       break;
     case schema::StructNode::Member::Body::GROUP_MEMBER:
       makeMemberInfoTable(1 + member.getIndex(), member.asGroup().getMembers(), info);
@@ -145,9 +148,40 @@ void makeSubMemberInfoTable(const EnumSchema::Enumerant& member,
 void makeSubMemberInfoTable(const InterfaceSchema::Method& member,
                             kj::Vector<capnp::_::RawSchema::MemberInfo>& info) {}
 
+void enumerateScope(const StructSchema::MemberList& members,
+                    kj::Vector<StructSchema::Member>& vec) {
+  // Given a member list, flatten all members of the scope into one vector.  This basically means
+  // copying all the members to the vector, except that unnamed unions are flattened.
+
+  for (auto member: members) {
+    vec.add(member);
+    if (member.getProto().getName().size() == 0) {
+      // Flatten unnamed union.
+      enumerateScope(member.asUnion().getMembers(), vec);
+    }
+  }
+}
+
+void enumerateScope(const EnumSchema::EnumerantList& members,
+                    kj::Vector<EnumSchema::Enumerant>& vec) {
+  for (auto member: members) {
+    vec.add(member);
+  }
+}
+
+void enumerateScope(const InterfaceSchema::MethodList& members,
+                    kj::Vector<InterfaceSchema::Method>& vec) {
+  for (auto member: members) {
+    vec.add(member);
+  }
+}
+
 template <typename MemberList>
 void makeMemberInfoTable(uint parent, MemberList&& members,
                          kj::Vector<capnp::_::RawSchema::MemberInfo>& info) {
+  kj::Vector<kj::Decay<decltype(members[0])>> sortedMembers(members.size());
+  enumerateScope(members, sortedMembers);
+
   auto sorted = KJ_MAP(members, m) { return m; };
   std::sort(sorted.begin(), sorted.end(), OrderByName());
 
@@ -408,17 +442,25 @@ private:
     kj::String unionSet, unionCheck;
     KJ_IF_MAYBE(u, member.getContainingUnion()) {
       auto unionProto = u->getProto();
-      kj::String unionTitleCase = toTitleCase(unionProto.getName());
+      kj::StringPtr unionScope;
+      kj::String ownUnionScope;
+      if (unionProto.getName().size() > 0) {
+        ownUnionScope = kj::str(toTitleCase(unionProto.getName()), "::");
+        unionScope = ownUnionScope;
+      } else {
+        // Anonymous union.
+        unionScope = scope;
+      }
       auto discrimOffset = unionProto.getBody().getUnionMember().getDiscriminantOffset();
 
       kj::String upperCase = toUpperCase(proto.getName());
       unionCheck = kj::str(
-          "  KJ_IREQUIRE(which() == ", unionTitleCase, "::", upperCase, ",\n"
+          "  KJ_IREQUIRE(which() == ", unionScope, upperCase, ",\n"
           "              \"Must check which() before get()ing a union member.\");\n");
       unionSet = kj::str(
-          "  _builder.setDataField<", unionTitleCase, "::Which>(\n"
+          "  _builder.setDataField<", unionScope, "Which>(\n"
           "      ", discrimOffset, " * ::capnp::ELEMENTS, ",
-                    unionTitleCase, "::", upperCase, ");\n");
+                    unionScope, upperCase, ");\n");
     }
 
     uint offset = field.getOffset();
@@ -804,10 +846,10 @@ private:
             kj::mv(subText.innerTypeReaderBuilderDefs),
 
             kj::strTree(
-                "inline Which which() const;\n",
+                "  inline Which which() const;\n",
                 kj::mv(subText.readerMethodDecls)),
             kj::strTree(
-                "inline Which which();\n",
+                "  inline Which which();\n",
                 kj::mv(subText.builderMethodDecls)),
             kj::strTree(
                 "inline ", containingType, "::Which ", containingType, "::Reader::which() const {\n"

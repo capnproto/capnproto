@@ -121,11 +121,22 @@ public:
   class MemberList;
 
   MemberList getMembers() const;
+  // List top-level members of this struct.  This list will contain top-level unions (including
+  // the anonymous one, if any), but will not contain the members of those unions (even if the
+  // union is anonymous).
 
   kj::Maybe<Member> findMemberByName(kj::StringPtr name) const;
+  // Find the member with the given name, or return null if there is no such member.  If the struct
+  // contains an unnamed union, then this will find members of that union in addition to members
+  // of the outer struct, since they exist in the same namespace, even though the union's members
+  // are not listed by `getMembers()`.  Therefore, you may want to check `getContainingUnion()` on
+  // the result.
 
   Member getMemberByName(kj::StringPtr name) const;
   // Like findMemberByName() but throws an exception on failure.
+
+  kj::Maybe<Union> getUnnamedUnion() const;
+  // If the struct contains an unnamed union, return it.
 
 private:
   StructSchema(const _::RawSchema* raw): Schema(raw) {}

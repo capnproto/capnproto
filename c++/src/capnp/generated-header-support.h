@@ -164,8 +164,18 @@ struct RawSchema {
   // TODO(someday):  Make this a hashtable.
 
   struct MemberInfo {
-    uint16_t unionIndex;  // 0 = not in a union, >0 = parent union's index + 1
-    uint16_t index;       // index of the member
+    uint16_t unionIndex;
+    // 0 = not in a union, >0 = one plus the index of the union within the scope indicated by
+    // scopeOrdinal.
+
+//    uint16_t scopeOrdinal;
+//    // One plus the ordinal number of the parent scope of this member when looking up by name.
+//    // Zero represents the top-level scope.
+
+    uint16_t index;
+    // Index of the member within its scope.  If the index is greater than the number of elements
+    // in the scope, then the member is in an unnamed union, and its index within that union is
+    // `index` - (number of members in the outer scope).
   };
 
   const MemberInfo* membersByName;

@@ -270,6 +270,12 @@ TEST(Schema, Lists) {
   }
 }
 
+TEST(Schema, UnnamedUnion) {
+  StructSchema schema = Schema::from<test::TestUnnamedUnion>();
+
+  EXPECT_TRUE(schema.findMemberByName("") == nullptr);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

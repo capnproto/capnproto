@@ -675,8 +675,21 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
       }));
 
   parsers.unionDecl = arena.copy(p::transform(
-      p::sequence(p::optional(identifier), p::optional(parsers.ordinal), keyword("union"),
-                  p::many(parsers.annotation)),
+      // Hacky:  The first branch of this oneOf() can correctly match named unions as well as
+      //   anonymous unions that have an ordinal, but fails to match anonymous unions wil no
+      //   ordinal because the "union" keyword is matched as an identifier and interpreted as
+      //   the name, and then parsing fails after that.  So, we have the second branch which
+      //   just matches the "union" keyword alone, and injects dummy null values for the
+      //   name and ordinal.
+      p::oneOf(
+          p::sequence(
+              p::optional(identifier), p::optional(parsers.ordinal), keyword("union"),
+              p::many(parsers.annotation)),
+          p::sequence(
+              keyword("union"),
+              p::optional([](ParserInput&) -> kj::Maybe<Located<Text::Reader>> { return nullptr; }),
+              p::optional([](ParserInput&) -> kj::Maybe<Orphan<LocatedInteger>> {return nullptr; }),
+              p::many(parsers.annotation))),
       [this](kj::Maybe<Located<Text::Reader>>&& name,
              kj::Maybe<Orphan<LocatedInteger>>&& ordinal,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)

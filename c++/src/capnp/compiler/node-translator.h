@@ -118,10 +118,6 @@ private:
 
   void compileNode(Declaration::Reader decl, schema::Node::Builder builder);
 
-  void checkMembers(List<Declaration>::Reader nestedDecls, Declaration::Body::Which parentKind);
-  // Check the given member list for errors, including detecting duplicate names and detecting
-  // out-of-place declarations.
-
   void disallowNested(List<Declaration>::Reader nestedDecls);
   // Complain if the nested decl list is non-empty.
 
@@ -130,6 +126,7 @@ private:
   void compileAnnotation(Declaration::Annotation::Reader decl,
                          schema::AnnotationNode::Builder builder);
 
+  class DuplicateNameDetector;
   class DuplicateOrdinalDetector;
   class StructLayout;
   class StructTranslator;

@@ -383,3 +383,14 @@ struct TestStructUnion {
     object @2 :TestObject;
   }
 }
+
+struct TestUnnamedUnion {
+  before @0 :Void;
+
+  union {
+    foo @1 :UInt16;
+    bar @2 :UInt32;
+  }
+
+  after @3 :Void;
+}

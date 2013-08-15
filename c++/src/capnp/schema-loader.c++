@@ -241,11 +241,6 @@ private:
                 uint dataSizeInBits, uint pointerCount,
                 uint unionIndex, uint index) {
     validateMemberName(member.getName(), unionIndex, index);
-
-    VALIDATE_SCHEMA(member.getOrdinal() < sawOrdinal.size() &&
-                    !sawOrdinal[member.getOrdinal()],
-                    "Invalid ordinal.");
-    sawOrdinal[member.getOrdinal()] = true;
     VALIDATE_SCHEMA(member.getCodeOrder() < sawCodeOrder.size() &&
                     !sawCodeOrder[member.getCodeOrder()],
                     "Invalid codeOrder.");
@@ -253,6 +248,11 @@ private:
 
     switch (member.getBody().which()) {
       case schema::StructNode::Member::Body::FIELD_MEMBER: {
+        VALIDATE_SCHEMA(member.getOrdinal() < sawOrdinal.size() &&
+                        !sawOrdinal[member.getOrdinal()],
+                        "Invalid ordinal.", member.getOrdinal());
+        sawOrdinal[member.getOrdinal()] = true;
+
         auto field = member.getBody().getFieldMember();
 
         uint fieldBits;
@@ -272,6 +272,8 @@ private:
                         "Schema invalid: Union discriminant out-of-bounds.");
 
         auto uMembers = u.getMembers();
+        VALIDATE_SCHEMA(uMembers.size() >= 2, "Union must have at least two members.");
+
         KJ_STACK_ARRAY(bool, uSawCodeOrder, uMembers.size(), 32, 256);
         memset(uSawCodeOrder.begin(), 0, uSawCodeOrder.size() * sizeof(uSawCodeOrder[0]));
 
@@ -281,8 +283,24 @@ private:
           VALIDATE_SCHEMA(
               uMember.getBody().which() == schema::StructNode::Member::Body::FIELD_MEMBER,
               "Union members must be fields.");
+
+          uint subUnionIndex;
+          if (member.getName().size() == 0) {
+            subUnionIndex = unionIndex;
+          } else {
+            subUnionIndex = index + 1;
+          }
           validate(uMember, uSawCodeOrder, sawOrdinal, dataSizeInBits, pointerCount,
-                   index + 1, subIndex++);
+                   subUnionIndex, subIndex++);
+        }
+
+        // Union ordinal may match the ordinal of its first member, meaning it was unspecified in
+        // the schema file.  Otherwise, it must be unique.
+        if (member.getOrdinal() != uMembers[0].getOrdinal()) {
+          VALIDATE_SCHEMA(member.getOrdinal() < sawOrdinal.size() &&
+                          !sawOrdinal[member.getOrdinal()],
+                          "Invalid ordinal.", member.getOrdinal());
+          sawOrdinal[member.getOrdinal()] = true;
         }
         break;
       }

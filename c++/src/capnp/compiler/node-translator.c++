@@ -543,8 +543,20 @@ schema::Node::Reader NodeTranslator::finish() {
   return wipNode.getReader();
 }
 
+class NodeTranslator::DuplicateNameDetector {
+public:
+  inline explicit DuplicateNameDetector(const ErrorReporter& errorReporter)
+      : errorReporter(errorReporter) {}
+  void check(List<Declaration>::Reader nestedDecls, Declaration::Body::Which parentKind);
+
+private:
+  const ErrorReporter& errorReporter;
+  std::map<kj::StringPtr, LocatedText::Reader> names;
+};
+
 void NodeTranslator::compileNode(Declaration::Reader decl, schema::Node::Builder builder) {
-  checkMembers(decl.getNestedDecls(), decl.getBody().which());
+  DuplicateNameDetector(errorReporter)
+      .check(decl.getNestedDecls(), decl.getBody().which());
 
   kj::StringPtr targetsFlagName;
 
@@ -585,21 +597,25 @@ void NodeTranslator::compileNode(Declaration::Reader decl, schema::Node::Builder
   builder.adoptAnnotations(compileAnnotationApplications(decl.getAnnotations(), targetsFlagName));
 }
 
-void NodeTranslator::checkMembers(
+void NodeTranslator::DuplicateNameDetector::check(
     List<Declaration>::Reader nestedDecls, Declaration::Body::Which parentKind) {
-  std::map<uint, Declaration::Reader> ordinals;
-  std::map<kj::StringPtr, LocatedText::Reader> names;
-
   for (auto decl: nestedDecls) {
     {
       auto name = decl.getName();
       auto nameText = name.getValue();
       auto insertResult = names.insert(std::make_pair(nameText, name));
       if (!insertResult.second) {
-        errorReporter.addErrorOn(
-            name, kj::str("'", nameText, "' is already defined in this scope."));
-        errorReporter.addErrorOn(
-            insertResult.first->second, kj::str("'", nameText, "' previously defined here."));
+        if (nameText.size() == 0 && decl.getBody().which() == Declaration::Body::UNION_DECL) {
+          errorReporter.addErrorOn(
+              name, kj::str("An unnamed union is already defined in this scope."));
+          errorReporter.addErrorOn(
+              insertResult.first->second, kj::str("Previously defined here."));
+        } else {
+          errorReporter.addErrorOn(
+              name, kj::str("'", nameText, "' is already defined in this scope."));
+          errorReporter.addErrorOn(
+              insertResult.first->second, kj::str("'", nameText, "' previously defined here."));
+        }
       }
     }
 
@@ -645,6 +661,18 @@ void NodeTranslator::checkMembers(
             errorReporter.addErrorOn(decl, "This declaration can only appear in structs.");
             break;
         }
+
+        // Struct members may have nested decls.  We need to check those here, because no one else
+        // is going to do it.
+        if (decl.getName().getValue().size() == 0) {
+          // Unnamed union.  Check members as if they are in the same scope.
+          check(decl.getNestedDecls(), decl.getBody().which());
+        } else {
+          // Children are in their own scope.
+          DuplicateNameDetector(errorReporter)
+              .check(decl.getNestedDecls(), decl.getBody().which());
+        }
+
         break;
 
       default:
