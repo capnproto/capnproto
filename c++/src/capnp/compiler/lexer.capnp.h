@@ -120,9 +120,11 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-inline Body::Reader getBody() const;
+  inline Body::Reader getBody() const;
+  inline bool hasStartByte() const;
   inline  ::uint32_t getStartByte() const;
 
+  inline bool hasEndByte() const;
   inline  ::uint32_t getEndByte() const;
 
 private:
@@ -153,10 +155,12 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-inline Body::Builder getBody();
+  inline Body::Builder getBody();
+  inline bool hasStartByte();
   inline  ::uint32_t getStartByte();
   inline void setStartByte( ::uint32_t value);
 
+  inline bool hasEndByte();
   inline  ::uint32_t getEndByte();
   inline void setEndByte( ::uint32_t value);
 
@@ -183,15 +187,17 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-inline Which which() const;
+  inline Which which() const;
   inline bool hasIdentifier() const;
   inline  ::capnp::Text::Reader getIdentifier() const;
 
   inline bool hasStringLiteral() const;
   inline  ::capnp::Text::Reader getStringLiteral() const;
 
+  inline bool hasIntegerLiteral() const;
   inline  ::uint64_t getIntegerLiteral() const;
 
+  inline bool hasFloatLiteral() const;
   inline double getFloatLiteral() const;
 
   inline bool hasOperator() const;
@@ -231,7 +237,7 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-inline Which which();
+  inline Which which();
   inline bool hasIdentifier();
   inline  ::capnp::Text::Builder getIdentifier();
   inline void setIdentifier( ::capnp::Text::Reader value);
@@ -246,9 +252,11 @@ inline Which which();
   inline void adoptStringLiteral(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownStringLiteral();
 
+  inline bool hasIntegerLiteral();
   inline  ::uint64_t getIntegerLiteral();
   inline void setIntegerLiteral( ::uint64_t value);
 
+  inline bool hasFloatLiteral();
   inline double getFloatLiteral();
   inline void setFloatLiteral(double value);
 
@@ -301,12 +309,14 @@ public:
   inline bool hasTokens() const;
   inline  ::capnp::List< ::capnp::compiler::Token>::Reader getTokens() const;
 
-inline Block::Reader getBlock() const;
+  inline Block::Reader getBlock() const;
   inline bool hasDocComment() const;
   inline  ::capnp::Text::Reader getDocComment() const;
 
+  inline bool hasStartByte() const;
   inline  ::uint32_t getStartByte() const;
 
+  inline bool hasEndByte() const;
   inline  ::uint32_t getEndByte() const;
 
 private:
@@ -344,7 +354,7 @@ public:
   inline void adoptTokens(::capnp::Orphan< ::capnp::List< ::capnp::compiler::Token>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Token>> disownTokens();
 
-inline Block::Builder getBlock();
+  inline Block::Builder getBlock();
   inline bool hasDocComment();
   inline  ::capnp::Text::Builder getDocComment();
   inline void setDocComment( ::capnp::Text::Reader value);
@@ -352,9 +362,11 @@ inline Block::Builder getBlock();
   inline void adoptDocComment(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownDocComment();
 
+  inline bool hasStartByte();
   inline  ::uint32_t getStartByte();
   inline void setStartByte( ::uint32_t value);
 
+  inline bool hasEndByte();
   inline  ::uint32_t getEndByte();
   inline void setEndByte( ::uint32_t value);
 
@@ -381,7 +393,8 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-inline Which which() const;
+  inline Which which() const;
+  inline bool hasNone() const;
   inline  ::capnp::Void getNone() const;
 
   inline bool hasStatements() const;
@@ -415,7 +428,8 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-inline Which which();
+  inline Which which();
+  inline bool hasNone();
   inline  ::capnp::Void getNone();
   inline void setNone( ::capnp::Void value = ::capnp::Void::VOID);
 
@@ -671,6 +685,17 @@ inline ::capnp::Orphan< ::capnp::Text> Token::Body::Builder::disownStringLiteral
       _builder, 0 * ::capnp::POINTERS);
 }
 
+inline bool Token::Body::Reader::hasIntegerLiteral() const {
+  KJ_IREQUIRE(which() == Body::INTEGER_LITERAL,
+              "Must check which() before get()ing a union member.");
+  return _reader.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
+}
+
+inline bool Token::Body::Builder::hasIntegerLiteral() {
+  KJ_IREQUIRE(which() == Body::INTEGER_LITERAL,
+              "Must check which() before get()ing a union member.");
+  return _builder.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
+}
 inline  ::uint64_t Token::Body::Reader::getIntegerLiteral() const {
   KJ_IREQUIRE(which() == Body::INTEGER_LITERAL,
               "Must check which() before get()ing a union member.");
@@ -691,6 +716,17 @@ inline void Token::Body::Builder::setIntegerLiteral( ::uint64_t value) {
       1 * ::capnp::ELEMENTS, value);
 }
 
+inline bool Token::Body::Reader::hasFloatLiteral() const {
+  KJ_IREQUIRE(which() == Body::FLOAT_LITERAL,
+              "Must check which() before get()ing a union member.");
+  return _reader.hasDataField<double>(1 * ::capnp::ELEMENTS);
+}
+
+inline bool Token::Body::Builder::hasFloatLiteral() {
+  KJ_IREQUIRE(which() == Body::FLOAT_LITERAL,
+              "Must check which() before get()ing a union member.");
+  return _builder.hasDataField<double>(1 * ::capnp::ELEMENTS);
+}
 inline double Token::Body::Reader::getFloatLiteral() const {
   KJ_IREQUIRE(which() == Body::FLOAT_LITERAL,
               "Must check which() before get()ing a union member.");
@@ -867,6 +903,13 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>
       _builder, 0 * ::capnp::POINTERS);
 }
 
+inline bool Token::Reader::hasStartByte() const {
+  return _reader.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
+}
+
+inline bool Token::Builder::hasStartByte() {
+  return _builder.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
+}
 inline  ::uint32_t Token::Reader::getStartByte() const {
   return _reader.getDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS);
@@ -881,6 +924,13 @@ inline void Token::Builder::setStartByte( ::uint32_t value) {
       1 * ::capnp::ELEMENTS, value);
 }
 
+inline bool Token::Reader::hasEndByte() const {
+  return _reader.hasDataField< ::uint32_t>(4 * ::capnp::ELEMENTS);
+}
+
+inline bool Token::Builder::hasEndByte() {
+  return _builder.hasDataField< ::uint32_t>(4 * ::capnp::ELEMENTS);
+}
 inline  ::uint32_t Token::Reader::getEndByte() const {
   return _reader.getDataField< ::uint32_t>(
       4 * ::capnp::ELEMENTS);
@@ -940,6 +990,17 @@ inline Statement::Block::Which Statement::Block::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 
+inline bool Statement::Block::Reader::hasNone() const {
+  KJ_IREQUIRE(which() == Block::NONE,
+              "Must check which() before get()ing a union member.");
+  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
+}
+
+inline bool Statement::Block::Builder::hasNone() {
+  KJ_IREQUIRE(which() == Block::NONE,
+              "Must check which() before get()ing a union member.");
+  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
+}
 inline  ::capnp::Void Statement::Block::Reader::getNone() const {
   KJ_IREQUIRE(which() == Block::NONE,
               "Must check which() before get()ing a union member.");
@@ -1040,6 +1101,13 @@ inline ::capnp::Orphan< ::capnp::Text> Statement::Builder::disownDocComment() {
       _builder, 2 * ::capnp::POINTERS);
 }
 
+inline bool Statement::Reader::hasStartByte() const {
+  return _reader.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
+}
+
+inline bool Statement::Builder::hasStartByte() {
+  return _builder.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
+}
 inline  ::uint32_t Statement::Reader::getStartByte() const {
   return _reader.getDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS);
@@ -1054,6 +1122,13 @@ inline void Statement::Builder::setStartByte( ::uint32_t value) {
       1 * ::capnp::ELEMENTS, value);
 }
 
+inline bool Statement::Reader::hasEndByte() const {
+  return _reader.hasDataField< ::uint32_t>(2 * ::capnp::ELEMENTS);
+}
+
+inline bool Statement::Builder::hasEndByte() {
+  return _builder.hasDataField< ::uint32_t>(2 * ::capnp::ELEMENTS);
+}
 inline  ::uint32_t Statement::Reader::getEndByte() const {
   return _reader.getDataField< ::uint32_t>(
       2 * ::capnp::ELEMENTS);

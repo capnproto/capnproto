@@ -495,15 +495,26 @@ private:
     if (kind == FieldKind::PRIMITIVE) {
       return FieldText {
         kj::strTree(
+            "  inline bool has", titleCase, "() const;\n"
             "  inline ", type, " get", titleCase, "() const;\n"
             "\n"),
 
         kj::strTree(
+            "  inline bool has", titleCase, "();\n"
             "  inline ", type, " get", titleCase, "();\n"
             "  inline void set", titleCase, "(", type, " value", setterDefault, ");\n"
             "\n"),
 
         kj::strTree(
+            "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
+            unionDiscrim.check,
+            "  return _reader.hasDataField<", type, ">(", offset, " * ::capnp::ELEMENTS);\n",
+            "}\n"
+            "\n"
+            "inline bool ", scope, "Builder::has", titleCase, "() {\n",
+            unionDiscrim.check,
+            "  return _builder.hasDataField<", type, ">(", offset, " * ::capnp::ELEMENTS);\n",
+            "}\n"
             "inline ", type, " ", scope, "Reader::get", titleCase, "() const {\n",
             unionDiscrim.check,
             "  return _reader.getDataField<", type, ">(\n"

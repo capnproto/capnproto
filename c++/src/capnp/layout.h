@@ -278,6 +278,10 @@ public:
   inline Data::Builder getDataSectionAsBlob();
 
   template <typename T>
+  KJ_ALWAYS_INLINE(bool hasDataField(ElementCount offset));
+  // Return true if the field is set to something other than its default value.
+
+  template <typename T>
   KJ_ALWAYS_INLINE(T getDataField(ElementCount offset));
   // Gets the data field value of the given type at the given offset.  The offset is measured in
   // multiples of the field size, determined by the type.
@@ -420,6 +424,10 @@ public:
   inline BitCount getDataSectionSize() const { return dataSize; }
   inline WirePointerCount getPointerSectionSize() const { return pointerCount; }
   inline Data::Reader getDataSectionAsBlob();
+
+  template <typename T>
+  KJ_ALWAYS_INLINE(bool hasDataField(ElementCount offset) const);
+  // Return true if the field is set to something other than its default value.
 
   template <typename T>
   KJ_ALWAYS_INLINE(T getDataField(ElementCount offset) const);
@@ -811,6 +819,16 @@ inline Data::Builder StructBuilder::getDataSectionAsBlob() {
 }
 
 template <typename T>
+inline bool StructBuilder::hasDataField(ElementCount offset) {
+  return getDataField<Mask<T>>(offset) != 0;
+}
+
+template <>
+inline bool StructBuilder::hasDataField<Void>(ElementCount offset) {
+  return false;
+}
+
+template <typename T>
 inline T StructBuilder::getDataField(ElementCount offset) {
   return reinterpret_cast<WireValue<T>*>(data)[offset / ELEMENTS].get();
 }
@@ -865,7 +883,17 @@ inline Data::Reader StructReader::getDataSectionAsBlob() {
 }
 
 template <typename T>
-T StructReader::getDataField(ElementCount offset) const {
+inline bool StructReader::hasDataField(ElementCount offset) const {
+  return getDataField<Mask<T>>(offset) != 0;
+}
+
+template <>
+inline bool StructReader::hasDataField<Void>(ElementCount offset) const {
+  return false;
+}
+
+template <typename T>
+inline T StructReader::getDataField(ElementCount offset) const {
   if ((offset + 1 * ELEMENTS) * capnp::bitsPerElement<T>() <= dataSize) {
     return reinterpret_cast<const WireValue<T>*>(data)[offset / ELEMENTS].get();
   } else {
