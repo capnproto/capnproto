@@ -402,6 +402,44 @@ TEST(Encoding, UnnamedUnion) {
   }
 }
 
+TEST(Encoding, Groups) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestGroups>();
+
+  {
+    auto foo = root.getGroups().initFoo();
+    foo.setCorge(12345678);
+    foo.setGrault(123456789012345ll);
+    foo.setGarply("foobar");
+
+    EXPECT_EQ(12345678, foo.getCorge());
+    EXPECT_EQ(123456789012345ll, foo.getGrault());
+    EXPECT_EQ("foobar", foo.getGarply());
+  }
+
+  {
+    auto bar = root.getGroups().initBar();
+    bar.setCorge(23456789);
+    bar.setGrault("barbaz");
+    bar.setGarply(234567890123456ll);
+
+    EXPECT_EQ(23456789, bar.getCorge());
+    EXPECT_EQ("barbaz", bar.getGrault());
+    EXPECT_EQ(234567890123456ll, bar.getGarply());
+  }
+
+  {
+    auto baz = root.getGroups().initBaz();
+    baz.setCorge(34567890);
+    baz.setGrault("bazqux");
+    baz.setGarply("quxquux");
+
+    EXPECT_EQ(34567890, baz.getCorge());
+    EXPECT_EQ("bazqux", baz.getGrault());
+    EXPECT_EQ("quxquux", baz.getGarply());
+  }
+}
+
 TEST(Encoding, UnionDefault) {
   MallocMessageBuilder builder;
   TestUnionDefaults::Reader reader = builder.getRoot<TestUnionDefaults>().asReader();

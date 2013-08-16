@@ -272,19 +272,19 @@ struct TestUnnamedUnion {
 struct TestGroups {
   groups union {
     foo group {
-      fooCorge @0 :Int32;
-      fooGrault @2 :Int64;
-      bazGarply @8 :Text;
+      corge @0 :Int32;
+      grault @2 :Int64;
+      garply @8 :Text;
     }
     bar group {
-      barCorge @3 :Int32;
-      barGrault @4 :Text;
-      barGarply @5 :Int64;
+      corge @3 :Int32;
+      grault @4 :Text;
+      garply @5 :Int64;
     }
     baz group {
-      bazCorge @1 :Int32;
-      bazGrault @6 :Text;
-      bazGarply @7 :Text;
+      corge @1 :Int32;
+      grault @6 :Text;
+      garply @7 :Text;
     }
   }
 }

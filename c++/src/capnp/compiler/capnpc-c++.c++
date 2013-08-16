@@ -322,6 +322,41 @@ private:
 
   // -----------------------------------------------------------------
 
+  struct DiscriminantChecks {
+    kj::String check;
+    kj::String set;
+  };
+
+  DiscriminantChecks makeDiscriminantChecks(kj::StringPtr scope,
+                                            kj::StringPtr memberName,
+                                            StructSchema::Union containingUnion) {
+    auto unionProto = containingUnion.getProto();
+    kj::StringPtr unionScope;
+    kj::String ownUnionScope;
+    if (unionProto.getName().size() > 0) {
+      ownUnionScope = kj::str(toTitleCase(unionProto.getName()), "::");
+      unionScope = ownUnionScope;
+    } else {
+      // Anonymous union.
+      unionScope = scope;
+    }
+    auto discrimOffset = unionProto.getBody().getUnionMember().getDiscriminantOffset();
+
+    kj::String upperCase = toUpperCase(memberName);
+
+    return DiscriminantChecks {
+        kj::str(
+            "  KJ_IREQUIRE(which() == ", unionScope, upperCase, ",\n"
+            "              \"Must check which() before get()ing a union member.\");\n"),
+        kj::str(
+            "  _builder.setDataField<", unionScope, "Which>(\n"
+            "      ", discrimOffset, " * ::capnp::ELEMENTS, ",
+                      unionScope, upperCase, ");\n")
+    };
+  }
+
+  // -----------------------------------------------------------------
+
   struct FieldText {
     kj::StringTree readerMethodDecls;
     kj::StringTree builderMethodDecls;
@@ -450,28 +485,9 @@ private:
 
     kj::String titleCase = toTitleCase(proto.getName());
 
-    kj::String unionSet, unionCheck;
+    DiscriminantChecks unionDiscrim;
     KJ_IF_MAYBE(u, member.getContainingUnion()) {
-      auto unionProto = u->getProto();
-      kj::StringPtr unionScope;
-      kj::String ownUnionScope;
-      if (unionProto.getName().size() > 0) {
-        ownUnionScope = kj::str(toTitleCase(unionProto.getName()), "::");
-        unionScope = ownUnionScope;
-      } else {
-        // Anonymous union.
-        unionScope = scope;
-      }
-      auto discrimOffset = unionProto.getBody().getUnionMember().getDiscriminantOffset();
-
-      kj::String upperCase = toUpperCase(proto.getName());
-      unionCheck = kj::str(
-          "  KJ_IREQUIRE(which() == ", unionScope, upperCase, ",\n"
-          "              \"Must check which() before get()ing a union member.\");\n");
-      unionSet = kj::str(
-          "  _builder.setDataField<", unionScope, "Which>(\n"
-          "      ", discrimOffset, " * ::capnp::ELEMENTS, ",
-                    unionScope, upperCase, ");\n");
+      unionDiscrim = makeDiscriminantChecks(scope, proto.getName(), *u);
     }
 
     uint offset = field.getOffset();
@@ -489,18 +505,18 @@ private:
 
         kj::strTree(
             "inline ", type, " ", scope, "Reader::get", titleCase, "() const {\n",
-            unionCheck,
+            unionDiscrim.check,
             "  return _reader.getDataField<", type, ">(\n"
             "      ", offset, " * ::capnp::ELEMENTS", defaultMaskParam, ");\n",
             "}\n"
             "\n"
             "inline ", type, " ", scope, "Builder::get", titleCase, "() {\n",
-            unionCheck,
+            unionDiscrim.check,
             "  return _builder.getDataField<", type, ">(\n"
             "      ", offset, " * ::capnp::ELEMENTS", defaultMaskParam, ");\n",
             "}\n"
             "inline void ", scope, "Builder::set", titleCase, "(", type, " value) {\n",
-            unionSet,
+            unionDiscrim.set,
             "  _builder.setDataField<", type, ">(\n"
             "      ", offset, " * ::capnp::ELEMENTS, value", defaultMaskParam, ");\n",
             "}\n"
@@ -541,64 +557,64 @@ private:
 
         kj::strTree(
             "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
-            unionCheck,
+            unionDiscrim.check,
             "  return !_reader.isPointerFieldNull(", offset, " * ::capnp::POINTERS);\n"
             "}\n"
             "inline bool ", scope, "Builder::has", titleCase, "() {\n",
-            unionCheck,
+            unionDiscrim.check,
             "  return !_builder.isPointerFieldNull(", offset, " * ::capnp::POINTERS);\n"
             "}\n"
             "template <typename T>\n"
             "inline typename T::Reader ", scope, "Reader::get", titleCase, "() const {\n",
-            unionCheck,
+            unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<T>::get(\n"
             "      _reader, ", offset, " * ::capnp::POINTERS);\n"
             "}\n"
             "template <typename T>\n"
             "inline typename T::Builder ", scope, "Builder::get", titleCase, "() {\n",
-            unionCheck,
+            unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<T>::get(\n"
             "      _builder, ", offset, " * ::capnp::POINTERS);\n"
             "}\n"
             "template <typename T, typename Param>\n"
             "inline typename T::Reader ", scope, "Reader::get", titleCase, "(Param&& param) const {\n",
-            unionCheck,
+            unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<T>::getDynamic(\n"
             "      _reader, ", offset, " * ::capnp::POINTERS, ::kj::fwd<Param>(param));\n"
             "}\n"
             "template <typename T, typename Param>\n"
             "inline typename T::Builder ", scope, "Builder::get", titleCase, "(Param&& param) {\n",
-            unionCheck,
+            unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<T>::getDynamic(\n"
             "      _builder, ", offset, " * ::capnp::POINTERS, ::kj::fwd<Param>(param));\n"
             "}\n"
             "template <typename T>\n"
             "inline void ", scope, "Builder::set", titleCase, "(typename T::Reader value) {\n",
-            unionSet,
+            unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<T>::set(\n"
             "      _builder, ", offset, " * ::capnp::POINTERS, value);\n"
             "}\n"
             "template <typename T, typename U>"
             "inline void ", scope, "Builder::set", titleCase, "(std::initializer_list<U> value) {\n",
-            unionSet,
+            unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<T>::set(\n"
             "      _builder, ", offset, " * ::capnp::POINTERS, value);\n"
             "}\n"
             "template <typename T, typename... Params>\n"
             "inline typename T::Builder ", scope, "Builder::init", titleCase, "(Params&&... params) {\n",
-            unionSet,
+            unionDiscrim.set,
             "  return ::capnp::_::PointerHelpers<T>::init(\n"
             "      _builder, ", offset, " * ::capnp::POINTERS, ::kj::fwd<Params>(params)...);\n"
             "}\n"
             "template <typename T>\n"
             "inline void ", scope, "Builder::adopt", titleCase, "(::capnp::Orphan<T>&& value) {\n",
-            unionSet,
+            unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<T>::adopt(\n"
             "      _builder, ", offset, " * ::capnp::POINTERS, kj::mv(value));\n"
             "}\n"
             "template <typename T, typename... Params>\n"
             "inline ::capnp::Orphan<T> ", scope, "Builder::disown", titleCase, "(Params&&... params) {\n",
-            unionCheck,
+            unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<T>::disown(\n"
             "      _builder, ", offset, " * ::capnp::POINTERS, ::kj::fwd<Params>(params)...);\n"
             "}\n"
@@ -677,32 +693,32 @@ private:
 
         kj::strTree(
             "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
-            unionCheck,
+            unionDiscrim.check,
             "  return !_reader.isPointerFieldNull(", offset, " * ::capnp::POINTERS);\n"
             "}\n"
             "inline bool ", scope, "Builder::has", titleCase, "() {\n",
-            unionCheck,
+            unionDiscrim.check,
             "  return !_builder.isPointerFieldNull(", offset, " * ::capnp::POINTERS);\n"
             "}\n"
             "inline ", type, "::Reader ", scope, "Reader::get", titleCase, "() const {\n",
-            unionCheck,
+            unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::get(\n"
             "      _reader, ", offset, " * ::capnp::POINTERS", defaultParam, ");\n"
             "}\n"
             "inline ", type, "::Builder ", scope, "Builder::get", titleCase, "() {\n",
-            unionCheck,
+            unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::get(\n"
             "      _builder, ", offset, " * ::capnp::POINTERS", defaultParam, ");\n"
             "}\n"
             "inline void ", scope, "Builder::set", titleCase, "(", type, "::Reader value) {\n",
-            unionSet,
+            unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
             "      _builder, ", offset, " * ::capnp::POINTERS, value);\n"
             "}\n",
             kind == FieldKind::LIST && !isStructList
             ? kj::strTree(
               "inline void ", scope, "Builder::set", titleCase, "(std::initializer_list<", elementReaderType, "> value) {\n",
-              unionSet,
+              unionDiscrim.set,
               "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
               "      _builder, ", offset, " * ::capnp::POINTERS, value);\n"
               "}\n")
@@ -710,24 +726,24 @@ private:
             kind == FieldKind::STRUCT
             ? kj::strTree(
                 "inline ", type, "::Builder ", scope, "Builder::init", titleCase, "() {\n",
-                unionSet,
+                unionDiscrim.set,
                 "  return ::capnp::_::PointerHelpers<", type, ">::init(\n"
                 "      _builder, ", offset, " * ::capnp::POINTERS);\n"
                 "}\n")
             : kj::strTree(
               "inline ", type, "::Builder ", scope, "Builder::init", titleCase, "(unsigned int size) {\n",
-              unionSet,
+              unionDiscrim.set,
               "  return ::capnp::_::PointerHelpers<", type, ">::init(\n"
               "      _builder, ", offset, " * ::capnp::POINTERS, size);\n"
               "}\n"),
             "inline void ", scope, "Builder::adopt", titleCase, "(\n"
             "    ::capnp::Orphan<", type, ">&& value) {\n",
-            unionSet,
+            unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<", type, ">::adopt(\n"
             "      _builder, ", offset, " * ::capnp::POINTERS, kj::mv(value));\n"
             "}\n"
             "inline ::capnp::Orphan<", type, "> ", scope, "Builder::disown", titleCase, "() {\n",
-            unionCheck,
+            unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::disown(\n"
             "      _builder, ", offset, " * ::capnp::POINTERS);\n"
             "}\n"
@@ -765,11 +781,12 @@ private:
         "  friend class ::capnp::Orphanage;\n"
         "  friend ::kj::StringTree KJ_STRINGIFY(", fullName, "::Reader reader);\n"
         "};\n"
-        "\n"
-        "inline ::kj::StringTree KJ_STRINGIFY(", fullName, "::Reader reader) {\n"
-        "  return ::capnp::_::", stringifier, "<", fullName, ">(reader._reader);\n"
-        "}\n"
-        "\n");
+        "\n",
+        stringifier.size() > 0 ? kj::strTree(
+          "inline ::kj::StringTree KJ_STRINGIFY(", fullName, "::Reader reader) {\n"
+          "  return ::capnp::_::", stringifier, "<", fullName, ">(reader._reader);\n"
+          "}\n"
+          "\n") : kj::strTree());
   }
 
   kj::StringTree makeBuilderDef(kj::StringPtr fullName, kj::StringPtr unqualifiedParentType,
@@ -794,11 +811,12 @@ private:
         "  friend class ::capnp::Orphanage;\n"
         "  friend ::kj::StringTree KJ_STRINGIFY(", fullName, "::Builder builder);\n"
         "};\n"
-        "\n"
-        "inline ::kj::StringTree KJ_STRINGIFY(", fullName, "::Builder builder) {\n"
-        "  return ::capnp::_::", stringifier, "<", fullName, ">(builder._builder.asReader());\n"
-        "}\n"
-        "\n");
+        "\n",
+        stringifier.size() > 0 ? kj::strTree(
+            "inline ::kj::StringTree KJ_STRINGIFY(", fullName, "::Builder builder) {\n"
+            "  return ::capnp::_::", stringifier, "<", fullName, ">(builder._builder.asReader());\n"
+            "}\n"
+            "\n") : kj::strTree());
   }
 
   // -----------------------------------------------------------------
@@ -945,6 +963,12 @@ private:
         auto fullName = kj::str(containingType, "::", titleCase);
         auto subText = makeMembersText(namespace_, fullName, member.asGroup().getMembers());
 
+        DiscriminantChecks unionDiscrim;
+        KJ_IF_MAYBE(u, member.getContainingUnion()) {
+          unionDiscrim = makeDiscriminantChecks(
+              kj::str(containingType, "::"), proto.getName(), *u);
+        }
+
         return MembersText {
           kj::strTree(
               "  struct ", titleCase, ";\n"),
@@ -961,9 +985,9 @@ private:
               kj::mv(subText.innerTypeDefs)),
 
           kj::strTree(
-              makeReaderDef(fullName, titleCase, "groupString",
+              makeReaderDef(fullName, titleCase, "",
                             kj::mv(subText.readerMethodDecls)),
-              makeBuilderDef(fullName, titleCase, "groupString",
+              makeBuilderDef(fullName, titleCase, "",
                              kj::mv(subText.builderMethodDecls)),
               kj::mv(subText.innerTypeReaderBuilderDefs)),
 
@@ -971,26 +995,28 @@ private:
               "  inline ", titleCase, "::Reader get", titleCase, "() const;\n"),
 
           kj::strTree(
-              "  inline ", titleCase, "::Builder get", titleCase, "();\n"),
+              "  inline ", titleCase, "::Builder get", titleCase, "();\n"
+              "  inline ", titleCase, "::Builder init", titleCase, "();\n"),
 
           kj::strTree(
-              "inline ", fullName, "::Reader ", containingType, "::Reader::get", titleCase, "() const {\n"
+              "inline ", fullName, "::Reader ", containingType, "::Reader::get", titleCase, "() const {\n",
+              unionDiscrim.check,
               "  return ", fullName, "::Reader(_reader);\n"
               "}\n"
-              "inline ", fullName, "::Builder ", containingType, "::Builder::get", titleCase, "() {\n"
+              "inline ", fullName, "::Builder ", containingType, "::Builder::get", titleCase, "() {\n",
+              unionDiscrim.check,
+              "  return ", fullName, "::Builder(_builder);\n"
+              "}\n"
+              // TODO(soon):  This should really zero out the existing group.  Maybe unions should
+              //   support zeroing out the whole union?
+              "inline ", fullName, "::Builder ", containingType, "::Builder::init", titleCase, "() {\n",
+              unionDiscrim.set,
               "  return ", fullName, "::Builder(_builder);\n"
               "}\n",
               kj::mv(subText.inlineMethodDefs)),
 
-            kj::strTree(
-                "CAPNP_DECLARE_GROUP(\n"
-                "    ", namespace_, "::", fullName, ",\n"
-                "    ", namespace_, "::", containingType, ", ", member.getIndex(), ");\n",
-                kj::mv(subText.capnpPrivateDecls)),
-            kj::strTree(
-                "CAPNP_DEFINE_GROUP(\n"
-                "    ", namespace_, "::", fullName, ");\n",
-                kj::mv(subText.capnpPrivateDefs)),
+          kj::mv(subText.capnpPrivateDecls),
+          kj::mv(subText.capnpPrivateDefs),
         };
       }
     }
