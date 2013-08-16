@@ -693,15 +693,17 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
       //   name and ordinal.
       p::oneOf(
           p::sequence(
-              p::optional(identifier), p::optional(parsers.ordinal), keyword("union"),
-              p::many(parsers.annotation)),
+              p::optional(identifier), p::optional(parsers.ordinal),
+              p::optional(op(":")), keyword("union"), p::many(parsers.annotation)),
           p::sequence(
               keyword("union"),
               p::optional([](ParserInput&) -> kj::Maybe<Located<Text::Reader>> { return nullptr; }),
-              p::optional([](ParserInput&) -> kj::Maybe<Orphan<LocatedInteger>> {return nullptr; }),
+              p::optional([](ParserInput&) -> kj::Maybe<Orphan<LocatedInteger>>{ return nullptr; }),
+              p::optional([](ParserInput&) -> kj::Maybe<kj::Tuple<>>           { return nullptr; }),
               p::many(parsers.annotation))),
       [this](kj::Maybe<Located<Text::Reader>>&& name,
              kj::Maybe<Orphan<LocatedInteger>>&& ordinal,
+             kj::Maybe<kj::Tuple<>>&&,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
@@ -723,8 +725,9 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
       }));
 
   parsers.groupDecl = arena.copy(p::transform(
-      p::sequence(identifier, keyword("group"), p::many(parsers.annotation)),
+      p::sequence(identifier, p::optional(op(":")), keyword("group"), p::many(parsers.annotation)),
       [this](Located<Text::Reader>&& name,
+             kj::Maybe<kj::Tuple<>>&&,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();

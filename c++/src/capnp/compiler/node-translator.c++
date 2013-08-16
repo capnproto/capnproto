@@ -364,7 +364,7 @@ public:
         } else {
           uint newSize = kj::max(lgSizeUsed, lgSize) + 1;
           if (tryExpandUsage(group, location, newSize)) {
-            uint result = holes.assertHoleAndAllocate(lgSize);
+            uint result = KJ_ASSERT_NONNULL(holes.tryAllocate(lgSize));
             uint locationOffset = location.offset << (location.lgSize - lgSize);
             return locationOffset + result;
           } else {
