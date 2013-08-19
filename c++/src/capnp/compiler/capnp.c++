@@ -216,10 +216,11 @@ public:
       }
     }
 
-    KJ_IF_MAYBE(module, loader.loadModule(file, file.slice(longestPrefix))) {
+    kj::StringPtr canonicalName = file.slice(longestPrefix);
+    KJ_IF_MAYBE(module, loader.loadModule(file, canonicalName)) {
       uint64_t id = compiler->add(*module);
       compiler->eagerlyCompile(id, compileEagerness);
-      sourceIds.add(id);
+      sourceFiles.add(SourceFile { id, canonicalName, &*module });
     } else {
       return "no such file";
     }
@@ -279,14 +280,14 @@ public:
 
     // We require one or more sources and if they failed to compile we quit above, so this should
     // pass.  (This assertion also guarantees that `compiler` has been initialized.)
-    KJ_ASSERT(sourceIds.size() > 0, "Shouldn't have gotten here without sources.");
+    KJ_ASSERT(sourceFiles.size() > 0, "Shouldn't have gotten here without sources.");
 
     if (outputs.size() == 0) {
       return "no outputs specified";
     }
 
     MallocMessageBuilder message;
-    auto request = message.initRoot<schema::CodeGeneratorRequest>();
+    auto request = message.initRoot<schema2::CodeGeneratorRequest>();
 
     auto schemas = compiler->getLoader().getAllLoaded();
     auto nodes = request.initNodes(schemas.size());
@@ -294,9 +295,13 @@ public:
       nodes.setWithCaveats(i, schemas[i].getProto());
     }
 
-    auto requestedFiles = request.initRequestedFiles(sourceIds.size());
-    for (size_t i = 0; i < sourceIds.size(); i++) {
-      requestedFiles.set(i, sourceIds[i]);
+    auto requestedFiles = request.initRequestedFiles(sourceFiles.size());
+    for (size_t i = 0; i < sourceFiles.size(); i++) {
+      auto requestedFile = requestedFiles[i];
+      requestedFile.setId(sourceFiles[i].id);
+      requestedFile.setFilename(sourceFiles[i].name);
+      requestedFile.adoptImports(compiler->getFileImportTable(
+          *sourceFiles[i].module, Orphanage::getForMessageContaining(requestedFile)));
     }
 
     for (auto& output: outputs) {
@@ -391,8 +396,8 @@ public:
   }
 
   kj::MainBuilder::Validity setRootType(kj::StringPtr type) {
-    KJ_ASSERT(sourceIds.size() == 1);
-    uint64_t id = sourceIds[0];
+    KJ_ASSERT(sourceFiles.size() == 1);
+    uint64_t id = sourceFiles[0].id;
 
     while (type.size() > 0) {
       kj::String temp;
@@ -414,7 +419,7 @@ public:
     }
 
     Schema schema = compiler->getLoader().get(id);
-    if (schema.getProto().getBody().which() != schema::Node::Body::STRUCT_NODE) {
+    if (schema.getProto().which() != schema2::Node::STRUCT) {
       return "not a struct type";
     }
     rootType = schema.asStruct();
@@ -557,7 +562,13 @@ private:
   StructSchema rootType;
   // For the "decode" command.
 
-  kj::Vector<uint64_t> sourceIds;
+  struct SourceFile {
+    uint64_t id;
+    kj::StringPtr name;
+    const Module* module;
+  };
+
+  kj::Vector<SourceFile> sourceFiles;
 
   struct OutputDirective {
     kj::ArrayPtr<const char> name;

@@ -63,7 +63,6 @@ struct DynamicValue {
     LIST,
     ENUM,
     STRUCT,
-    UNION,
     INTERFACE,
     OBJECT
   };
@@ -73,11 +72,6 @@ struct DynamicValue {
 };
 class DynamicEnum;
 class DynamicObject;
-struct DynamicUnion {
-  DynamicUnion() = delete;
-  class Reader;
-  class Builder;
-};
 struct DynamicStruct {
   DynamicStruct() = delete;
   class Reader;
@@ -176,89 +170,6 @@ private:
 
 // -------------------------------------------------------------------
 
-class DynamicUnion::Reader {
-public:
-  typedef DynamicUnion Reads;
-
-  Reader() = default;
-
-  inline StructSchema::Union getSchema() const { return schema; }
-
-  kj::Maybe<StructSchema::Member> which() const;
-  // Returns which field is set, or nullptr if an unknown field is set (i.e. the schema is old, and
-  // the underlying data has the union set to a member we don't know about).
-
-  DynamicValue::Reader get() const;
-  // Get the value of whichever field of the union is set.  Throws an exception if which() returns
-  // nullptr.
-
-private:
-  StructSchema::Union schema;
-  _::StructReader reader;
-
-  inline Reader(StructSchema::Union schema, _::StructReader reader)
-      : schema(schema), reader(reader) {}
-
-  friend struct DynamicStruct;
-  friend class DynamicUnion::Builder;
-  friend kj::StringTree _::unionString(
-      _::StructReader reader, const _::RawSchema& schema, uint memberIndex);
-};
-
-class DynamicUnion::Builder {
-public:
-  typedef DynamicUnion Builds;
-
-  Builder() = default;
-
-  inline StructSchema::Union getSchema() const { return schema; }
-
-  kj::Maybe<StructSchema::Member> which();
-  // Returns which field is set, or nullptr if an unknown field is set (i.e. the schema is old, and
-  // the underlying data has the union set to a member we don't know about).
-
-  DynamicValue::Builder get();
-  void set(StructSchema::Member member, const DynamicValue::Reader& value);
-  DynamicValue::Builder init(StructSchema::Member member);
-  DynamicValue::Builder init(StructSchema::Member member, uint size);
-
-  DynamicStruct::Builder getObject(StructSchema schema);
-  DynamicList::Builder getObject(ListSchema schema);
-  Text::Builder getObjectAsText();
-  Data::Builder getObjectAsData();
-  DynamicStruct::Builder initObject(StructSchema::Member member, StructSchema type);
-  DynamicList::Builder initObject(StructSchema::Member member, ListSchema type, uint size);
-  Text::Builder initObjectAsText(StructSchema::Member member, uint size);
-  Data::Builder initObjectAsData(StructSchema::Member member, uint size);
-  // Get/init an "Object" member.  Must specify the type.
-
-  void set(kj::StringPtr name, const DynamicValue::Reader& value);
-  DynamicValue::Builder init(kj::StringPtr name);
-  DynamicValue::Builder init(kj::StringPtr name, uint size);
-  DynamicStruct::Builder initObject(kj::StringPtr name, StructSchema type);
-  DynamicList::Builder initObject(kj::StringPtr name, ListSchema type, uint size);
-  Text::Builder initObjectAsText(kj::StringPtr name, uint size);
-  Data::Builder initObjectAsData(kj::StringPtr name, uint size);
-  // Convenience methods that identify the member by text name.
-
-  Reader asReader() const;
-
-private:
-  StructSchema::Union schema;
-  _::StructBuilder builder;
-
-  inline Builder(StructSchema::Union schema, _::StructBuilder builder)
-      : schema(schema), builder(builder) {}
-
-  StructSchema::Member checkIsObject();
-  void setDiscriminant(StructSchema::Member member);
-  void setObjectDiscriminant(StructSchema::Member member);
-
-  friend struct DynamicStruct;
-};
-
-// -------------------------------------------------------------------
-
 class DynamicStruct::Reader {
 public:
   typedef DynamicStruct Reads;
@@ -274,17 +185,26 @@ public:
 
   inline StructSchema getSchema() const { return schema; }
 
-  DynamicValue::Reader get(StructSchema::Member member) const;
-  // Read the given member value.
+  DynamicValue::Reader get(StructSchema::Field field) const;
+  // Read the given field value.
 
-  bool has(StructSchema::Member member) const;
-  // Tests whether the given member is set to its default value.  For pointer values, this does
+  bool has(StructSchema::Field field) const;
+  // Tests whether the given field is set to its default value.  For pointer values, this does
   // not actually traverse the value comparing it with the default, but simply returns true if the
-  // pointer is non-null.
+  // pointer is non-null.  For members of unions, has() returns whether the field is currently
+  // active and the union as a whole is non-default -- so, the only time has() will return false
+  // for an active union field is if it is the default active field and it has its default value.
+
+  kj::Maybe<StructSchema::Field> which() const;
+  // If the struct contains an (unnamed) union, and the currently-active field within that union
+  // is known, this returns that field.  Otherwise, it returns null.  In other words, this returns
+  // null if there is no union present _or_ if the union's discriminant is set to an unrecognized
+  // value.  This could happen in particular when receiving a message from a sender who has a
+  // newer version of the protocol and is using a field of the union that you don't know about yet.
 
   DynamicValue::Reader get(kj::StringPtr name) const;
   bool has(kj::StringPtr name) const;
-  // Shortcuts to access members by name.  These throw exceptions if no such member exists.
+  // Shortcuts to access fields by name.  These throw exceptions if no such field exists.
 
 private:
   StructSchema schema;
@@ -293,11 +213,12 @@ private:
   inline Reader(StructSchema schema, _::StructReader reader)
       : schema(schema), reader(reader) {}
 
-  static DynamicValue::Reader getImpl(_::StructReader reader, StructSchema::Member member);
+  bool isSetInUnion(StructSchema::Field field) const;
+  void verifySetInUnion(StructSchema::Field field) const;
+  static DynamicValue::Reader getImpl(_::StructReader reader, StructSchema::Field field);
 
   template <typename T, Kind K>
   friend struct _::PointerHelpers;
-  friend class DynamicUnion::Reader;
   friend class DynamicObject;
   friend class DynamicStruct::Builder;
   friend struct DynamicList;
@@ -326,33 +247,46 @@ public:
 
   inline StructSchema getSchema() const { return schema; }
 
-  DynamicValue::Builder get(StructSchema::Member member);
-  // Read the given member value.
+  DynamicValue::Builder get(StructSchema::Field field);
+  // Read the given field value.
 
-  bool has(StructSchema::Member member);
-  // Tests whether the given member is set to its default value.  For pointer values, this does
+  inline bool has(StructSchema::Field field) { return asReader().has(field); }
+  // Tests whether the given field is set to its default value.  For pointer values, this does
   // not actually traverse the value comparing it with the default, but simply returns true if the
-  // pointer is non-null.
+  // pointer is non-null.  For members of unions, has() returns whether the field is currently
+  // active and the union as a whole is non-default -- so, the only time has() will return false
+  // for an active union field is if it is the default active field and it has its default value.
 
-  void set(StructSchema::Member member, const DynamicValue::Reader& value);
-  // Set the given member value.
+  kj::Maybe<StructSchema::Field> which();
+  // If the struct contains an (unnamed) union, and the currently-active field within that union
+  // is known, this returns that field.  Otherwise, it returns null.  In other words, this returns
+  // null if there is no union present _or_ if the union's discriminant is set to an unrecognized
+  // value.  This could happen in particular when receiving a message from a sender who has a
+  // newer version of the protocol and is using a field of the union that you don't know about yet.
 
-  DynamicValue::Builder init(StructSchema::Member member);
-  DynamicValue::Builder init(StructSchema::Member member, uint size);
+  void set(StructSchema::Field field, const DynamicValue::Reader& value);
+  // Set the given field value.
+
+  DynamicValue::Builder init(StructSchema::Field field);
+  DynamicValue::Builder init(StructSchema::Field field, uint size);
   // Init a struct, list, or blob field.
+
+  void clear(StructSchema::Field field);
+  // Clear a field, setting it to its default value.  For pointer fields, this actually makes the
+  // field null.
 
   // TODO(someday):  Implement adopt() and disown().
 
-  DynamicStruct::Builder getObject(StructSchema::Member member, StructSchema type);
-  DynamicList::Builder getObject(StructSchema::Member member, ListSchema type);
-  Text::Builder getObjectAsText(StructSchema::Member member);
-  Data::Builder getObjectAsData(StructSchema::Member member);
+  DynamicStruct::Builder getObject(StructSchema::Field field, StructSchema type);
+  DynamicList::Builder getObject(StructSchema::Field field, ListSchema type);
+  Text::Builder getObjectAsText(StructSchema::Field field);
+  Data::Builder getObjectAsData(StructSchema::Field field);
   // Get an object field.  You must specify the type.
 
-  DynamicStruct::Builder initObject(StructSchema::Member member, StructSchema type);
-  DynamicList::Builder initObject(StructSchema::Member member, ListSchema type, uint size);
-  Text::Builder initObjectAsText(StructSchema::Member member, uint size);
-  Data::Builder initObjectAsData(StructSchema::Member member, uint size);
+  DynamicStruct::Builder initObject(StructSchema::Field field, StructSchema type);
+  DynamicList::Builder initObject(StructSchema::Field field, ListSchema type, uint size);
+  Text::Builder initObjectAsText(StructSchema::Field field, uint size);
+  Data::Builder initObjectAsData(StructSchema::Field field, uint size);
   // Init an object field.  You must specify the type.
 
   DynamicValue::Builder get(kj::StringPtr name);
@@ -361,6 +295,7 @@ public:
   void set(kj::StringPtr name, std::initializer_list<DynamicValue::Reader> value);
   DynamicValue::Builder init(kj::StringPtr name);
   DynamicValue::Builder init(kj::StringPtr name, uint size);
+  void clear(kj::StringPtr name);
   DynamicStruct::Builder getObject(kj::StringPtr name, StructSchema type);
   DynamicList::Builder getObject(kj::StringPtr name, ListSchema type);
   Text::Builder getObjectAsText(kj::StringPtr name);
@@ -369,7 +304,7 @@ public:
   DynamicList::Builder initObject(kj::StringPtr name, ListSchema type, uint size);
   Text::Builder initObjectAsText(kj::StringPtr name, uint size);
   Data::Builder initObjectAsData(kj::StringPtr name, uint size);
-  // Shortcuts to access members by name.  These throw exceptions if no such member exists.
+  // Shortcuts to access fields by name.  These throw exceptions if no such field exists.
 
   Reader asReader() const;
 
@@ -380,40 +315,14 @@ private:
   inline Builder(StructSchema schema, _::StructBuilder builder)
       : schema(schema), builder(builder) {}
 
-  void verifySetInUnion(StructSchema::Member member);
-  void setInUnion(StructSchema::Member member);
+  bool isSetInUnion(StructSchema::Field field);
+  void verifySetInUnion(StructSchema::Field field);
+  void setInUnion(StructSchema::Field field);
 
-  static DynamicValue::Builder getImpl(
-      _::StructBuilder builder, StructSchema::Member member);
-  static DynamicStruct::Builder getObjectImpl(
-      _::StructBuilder builder, StructSchema::Member field, StructSchema type);
-  static DynamicList::Builder getObjectImpl(
-      _::StructBuilder builder, StructSchema::Member field, ListSchema type);
-  static Text::Builder getObjectAsTextImpl(
-      _::StructBuilder builder, StructSchema::Member field);
-  static Data::Builder getObjectAsDataImpl(
-      _::StructBuilder builder, StructSchema::Member field);
-
-  static void setImpl(
-      _::StructBuilder builder, StructSchema::Member member,
-      const DynamicValue::Reader& value);
-
-  static DynamicValue::Builder initImpl(
-      _::StructBuilder builder, StructSchema::Member member, uint size);
-  static DynamicValue::Builder initImpl(
-      _::StructBuilder builder, StructSchema::Member member);
-  static DynamicStruct::Builder initFieldImpl(
-      _::StructBuilder builder, StructSchema::Member field, StructSchema type);
-  static DynamicList::Builder initFieldImpl(
-      _::StructBuilder builder, StructSchema::Member field, ListSchema type, uint size);
-  static Text::Builder initFieldAsTextImpl(
-      _::StructBuilder builder, StructSchema::Member field, uint size);
-  static Data::Builder initFieldAsDataImpl(
-      _::StructBuilder builder, StructSchema::Member field, uint size);
+  WirePointerCount verifyIsObject(StructSchema::Field field);
 
   template <typename T, Kind k>
   friend struct _::PointerHelpers;
-  friend class DynamicUnion::Builder;
   friend struct DynamicList;
   friend class MessageReader;
   friend class MessageBuilder;
@@ -552,7 +461,6 @@ public:
   inline Reader(const DynamicList::Reader& value);
   inline Reader(DynamicEnum value);
   inline Reader(const DynamicStruct::Reader& value);
-  inline Reader(const DynamicUnion::Reader& value);
   inline Reader(DynamicObject value);
 
   template <typename T, typename = decltype(toDynamic(kj::instance<T>()))>
@@ -565,7 +473,7 @@ public:
   // - Text, Data, any struct type:  Returns the corresponding Reader.
   // - List<T> for any T listed above:  Returns List<T>::Reader.
   // - DynamicEnum, DynamicObject:  Returns the corresponding type.
-  // - DynamicStruct, DynamicList, DynamicUnion:  Returns the corresponding Reader.
+  // - DynamicStruct, DynamicList:  Returns the corresponding Reader.
   //
   // DynamicValue allows various implicit conversions, mostly just to make the interface friendlier.
   // - Any integer can be converted to any other integer type so long as the actual value is within
@@ -597,7 +505,6 @@ private:
     DynamicList::Reader listValue;
     DynamicEnum enumValue;
     DynamicStruct::Reader structValue;
-    DynamicUnion::Reader unionValue;
     DynamicObject objectValue;
   };
 
@@ -631,7 +538,6 @@ public:
   inline Builder(DynamicList::Builder value);
   inline Builder(DynamicEnum value);
   inline Builder(DynamicStruct::Builder value);
-  inline Builder(DynamicUnion::Builder value);
   inline Builder(DynamicObject value);
 
   template <typename T, typename = decltype(toDynamic(kj::instance<T>()))>
@@ -660,7 +566,6 @@ private:
     DynamicList::Builder listValue;
     DynamicEnum enumValue;
     DynamicStruct::Builder structValue;
-    DynamicUnion::Builder unionValue;
     DynamicObject objectValue;
   };
 
@@ -673,8 +578,6 @@ kj::StringTree KJ_STRINGIFY(const DynamicValue::Reader& value);
 kj::StringTree KJ_STRINGIFY(const DynamicValue::Builder& value);
 kj::StringTree KJ_STRINGIFY(DynamicEnum value);
 kj::StringTree KJ_STRINGIFY(const DynamicObject& value);
-kj::StringTree KJ_STRINGIFY(const DynamicUnion::Reader& value);
-kj::StringTree KJ_STRINGIFY(const DynamicUnion::Builder& value);
 kj::StringTree KJ_STRINGIFY(const DynamicStruct::Reader& value);
 kj::StringTree KJ_STRINGIFY(const DynamicStruct::Builder& value);
 kj::StringTree KJ_STRINGIFY(const DynamicList::Reader& value);
@@ -899,7 +802,6 @@ CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Text, TEXT, text);
 CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Data, DATA, data);
 CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicList, LIST, list);
 CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicStruct, STRUCT, struct);
-CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicUnion, UNION, union);
 
 #undef CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR
 
@@ -934,7 +836,6 @@ CAPNP_DECLARE_TYPE(list, LIST, DynamicList)
 CAPNP_DECLARE_TYPE(struct, STRUCT, DynamicStruct)
 CAPNP_DECLARE_TYPE(enum, ENUM, DynamicEnum)
 CAPNP_DECLARE_TYPE(object, OBJECT, DynamicObject)
-CAPNP_DECLARE_TYPE(union, UNION, DynamicUnion)
 #undef CAPNP_DECLARE_TYPE
 
 // CAPNP_DECLARE_TYPE(Void) causes gcc 4.7 to segfault.  If I do it manually and remove the
@@ -1002,12 +903,6 @@ struct DynamicObject::AsImpl<T, Kind::LIST> {
     return value.as(Schema::from<T>()).template as<T>();
   }
 };
-
-// -------------------------------------------------------------------
-
-inline DynamicUnion::Reader DynamicUnion::Builder::asReader() const {
-  return DynamicUnion::Reader(schema, builder.asReader());
-}
 
 // -------------------------------------------------------------------
 

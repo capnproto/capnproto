@@ -22,12 +22,14 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "compiler.h"
+#include "parser.h"      // only for generateChildId()
 #include <kj/mutex.h>
 #include <kj/arena.h>
 #include <kj/vector.h>
 #include <kj/debug.h>
 #include <capnp/message.h>
 #include <map>
+#include <set>
 #include <unordered_map>
 #include "node-translator.h"
 #include "md5.h"
@@ -82,7 +84,7 @@ public:
   // Resolve an arbitrary DeclName to a Node.
 
   kj::Maybe<Schema> getBootstrapSchema() const;
-  kj::Maybe<schema::Node::Reader> getFinalSchema() const;
+  kj::Maybe<schema2::Node::Reader> getFinalSchema() const;
 
   void traverse(uint eagerness, std::unordered_map<const Node*, uint>& seen) const;
   // Get the final schema for this node, and also possibly traverse the node's children and
@@ -94,7 +96,7 @@ public:
   // implements NodeTranslator::Resolver -----------------------------
   kj::Maybe<ResolvedName> resolve(const DeclName::Reader& name) const override;
   kj::Maybe<Schema> resolveBootstrapSchema(uint64_t id) const override;
-  kj::Maybe<schema::Node::Reader> resolveFinalSchema(uint64_t id) const override;
+  kj::Maybe<schema2::Node::Reader> resolveFinalSchema(uint64_t id) const override;
   kj::Maybe<uint64_t> resolveImport(kj::StringPtr name) const override;
 
 private:
@@ -152,7 +154,7 @@ private:
 
     typedef std::multimap<kj::StringPtr, kj::Own<Alias>> AliasMap;
     AliasMap aliases;
-    //
+    // The "using" declarations.  These are just links to nodes elsewhere.
 
     // BOOTSTRAP -----------------------------------
 
@@ -167,6 +169,9 @@ private:
     kj::Maybe<Schema> finalSchema;
     // The complete schema as loaded by the compiler's main SchemaLoader.  Null if the final
     // loader threw an exception.
+
+    kj::Array<Schema> auxSchemas;
+    // Schemas for all auxiliary nodes built by the NodeTranslator.
   };
 
   kj::MutexGuarded<Content> content;
@@ -187,11 +192,11 @@ private:
   // Advances the content to at least the given state and returns it.  Does not lock if the content
   // is already at or past the given state.
 
-  void traverseType(const schema::Type::Reader& type, uint eagerness,
+  void traverseNodeDependencies(const schema2::Node::Reader& schemaNode, uint eagerness,
+                                std::unordered_map<const Node*, uint>& seen) const;
+  void traverseType(const schema2::Type::Reader& type, uint eagerness,
                     std::unordered_map<const Node*, uint>& seen) const;
-  void traverseStructMember(const schema::StructNode::Member::Reader& member, uint eagerness,
-                            std::unordered_map<const Node*, uint>& seen) const;
-  void traverseAnnotations(const List<schema::Annotation>::Reader& annotations, uint eagerness,
+  void traverseAnnotations(const List<schema2::Annotation>::Reader& annotations, uint eagerness,
                            std::unordered_map<const Node*, uint>& seen) const;
   // Helpers for traverse().
 };
@@ -209,6 +214,9 @@ public:
 
   kj::Maybe<const CompiledModule&> importRelative(kj::StringPtr importPath) const;
 
+  Orphan<List<schema2::CodeGeneratorRequest::RequestedFile::Import>>
+      getFileImportTable(Orphanage orphanage) const;
+
 private:
   const Compiler::Impl& compiler;
   const Module& parserModule;
@@ -224,6 +232,8 @@ public:
 
   uint64_t add(const Module& module) const;
   kj::Maybe<uint64_t> lookup(uint64_t parent, kj::StringPtr childName) const;
+  Orphan<List<schema2::CodeGeneratorRequest::RequestedFile::Import>>
+      getFileImportTable(const Module& module, Orphanage orphanage) const;
   void eagerlyCompile(uint64_t id, uint eagerness) const;
   const CompiledModule& addInternal(const Module& parsedModule) const;
 
@@ -378,26 +388,7 @@ uint64_t Compiler::Node::generateId(uint64_t parentId, kj::StringPtr declName,
     return declId.getUid().getValue();
   }
 
-  // No explicit ID.  Compute it by MD5 hashing the concatenation of the parent ID and the
-  // declaration name, and then taking the first 8 bytes.
-
-  kj::byte parentIdBytes[sizeof(uint64_t)];
-  for (uint i = 0; i < sizeof(uint64_t); i++) {
-    parentIdBytes[i] = (parentId >> (i * 8)) & 0xff;
-  }
-
-  Md5 md5;
-  md5.update(kj::arrayPtr(parentIdBytes, KJ_ARRAY_SIZE(parentIdBytes)));
-  md5.update(declName);
-
-  kj::ArrayPtr<const kj::byte> resultBytes = md5.finish();
-
-  uint64_t result = 0;
-  for (uint i = 0; i < sizeof(uint64_t); i++) {
-    result = (result << 8) | resultBytes[i];
-  }
-
-  return result | (1ull << 63);
+  return generateChildId(parentId, declName);
 }
 
 kj::StringPtr Compiler::Node::joinDisplayName(
@@ -476,7 +467,7 @@ const Compiler::Node::Content& Compiler::Node::getContent(Content::State minimum
       // Construct the NodeTranslator.
       auto& workspace = module->getCompiler().getWorkspace();
 
-      auto schemaNode = workspace.orphanage.newOrphan<schema::Node>();
+      auto schemaNode = workspace.orphanage.newOrphan<schema2::Node>();
       auto builder = schemaNode.get();
       builder.setId(id);
       builder.setDisplayName(displayName);
@@ -496,8 +487,11 @@ const Compiler::Node::Content& Compiler::Node::getContent(Content::State minimum
           *this, module->getErrorReporter(), declaration, kj::mv(schemaNode),
           module->getCompiler().shouldCompileAnnotations());
       KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&](){
-        locked->bootstrapSchema = workspace.bootstrapLoader.loadOnce(
-            locked->translator->getBootstrapNode());
+        auto nodeSet = locked->translator->getBootstrapNode();
+        for (auto& auxNode: nodeSet.auxNodes) {
+          workspace.bootstrapLoader.loadOnce(auxNode);
+        }
+        locked->bootstrapSchema = workspace.bootstrapLoader.loadOnce(nodeSet.node);
       })) {
         locked->bootstrapSchema = nullptr;
         // Only bother to report validation failures if we think we haven't seen any errors.
@@ -528,8 +522,11 @@ const Compiler::Node::Content& Compiler::Node::getContent(Content::State minimum
 
       // Create the final schema.
       KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&](){
-        locked->finalSchema = module->getCompiler().getFinalLoader().loadOnce(
-            locked->translator->finish());
+        auto nodeSet = locked->translator->finish();
+        locked->auxSchemas = KJ_MAP(nodeSet.auxNodes, auxNode) {
+          return module->getCompiler().getFinalLoader().loadOnce(auxNode);
+        };
+        locked->finalSchema = module->getCompiler().getFinalLoader().loadOnce(nodeSet.node);
       })) {
         locked->finalSchema = nullptr;
 
@@ -659,7 +656,7 @@ kj::Maybe<Schema> Compiler::Node::getBootstrapSchema() const {
     return content.bootstrapSchema;
   }
 }
-kj::Maybe<schema::Node::Reader> Compiler::Node::getFinalSchema() const {
+kj::Maybe<schema2::Node::Reader> Compiler::Node::getFinalSchema() const {
   return getContent(Content::FINISHED).finalSchema.map(
       [](const Schema& schema) { return schema.getProto(); });
 }
@@ -678,35 +675,10 @@ void Compiler::Node::traverse(uint eagerness, std::unordered_map<const Node*, ui
       // them with the bits above DEPENDENCIES shifted over.
       uint newEagerness = (eagerness & ~(DEPENDENCIES - 1)) | (eagerness / DEPENDENCIES);
 
-      switch (schema->getBody().which()) {
-        case schema::Node::Body::STRUCT_NODE:
-          for (auto member: schema->getBody().getStructNode().getMembers()) {
-            traverseStructMember(member, newEagerness, seen);
-          }
-          break;
-
-        case schema::Node::Body::ENUM_NODE:
-          for (auto enumerant: schema->getBody().getEnumNode().getEnumerants()) {
-            traverseAnnotations(enumerant.getAnnotations(), newEagerness, seen);
-          }
-          break;
-
-        case schema::Node::Body::INTERFACE_NODE:
-          for (auto method: schema->getBody().getInterfaceNode().getMethods()) {
-            for (auto param: method.getParams()) {
-              traverseType(param.getType(), newEagerness, seen);
-              traverseAnnotations(param.getAnnotations(), newEagerness, seen);
-            }
-            traverseType(method.getReturnType(), newEagerness, seen);
-            traverseAnnotations(method.getAnnotations(), newEagerness, seen);
-          }
-          break;
-
-        default:
-          break;
+      traverseNodeDependencies(*schema, newEagerness, seen);
+      for (auto& aux: getContent(Content::FINISHED).auxSchemas) {
+        traverseNodeDependencies(aux.getProto(), newEagerness, seen);
       }
-
-      traverseAnnotations(schema->getAnnotations(), newEagerness, seen);
     }
   }
 
@@ -723,21 +695,64 @@ void Compiler::Node::traverse(uint eagerness, std::unordered_map<const Node*, ui
   }
 }
 
-void Compiler::Node::traverseType(const schema::Type::Reader& type, uint eagerness,
+void Compiler::Node::traverseNodeDependencies(
+    const schema2::Node::Reader& schemaNode, uint eagerness,
+    std::unordered_map<const Node*, uint>& seen) const {
+  switch (schemaNode.which()) {
+    case schema2::Node::STRUCT:
+      for (auto field: schemaNode.getStruct().getFields()) {
+        switch (field.which()) {
+          case schema2::Field::REGULAR:
+            traverseType(field.getRegular().getType(), eagerness, seen);
+            break;
+          case schema2::Field::GROUP:
+            // Aux node will be scanned later.
+            break;
+        }
+
+        traverseAnnotations(field.getAnnotations(), eagerness, seen);
+      }
+      break;
+
+    case schema2::Node::ENUM:
+      for (auto enumerant: schemaNode.getEnum()) {
+        traverseAnnotations(enumerant.getAnnotations(), eagerness, seen);
+      }
+      break;
+
+    case schema2::Node::INTERFACE:
+      for (auto method: schemaNode.getInterface()) {
+        for (auto param: method.getParams()) {
+          traverseType(param.getType(), eagerness, seen);
+          traverseAnnotations(param.getAnnotations(), eagerness, seen);
+        }
+        traverseType(method.getReturnType(), eagerness, seen);
+        traverseAnnotations(method.getAnnotations(), eagerness, seen);
+      }
+      break;
+
+    default:
+      break;
+  }
+
+  traverseAnnotations(schemaNode.getAnnotations(), eagerness, seen);
+}
+
+void Compiler::Node::traverseType(const schema2::Type::Reader& type, uint eagerness,
                                   std::unordered_map<const Node*, uint>& seen) const {
   uint64_t id = 0;
-  switch (type.getBody().which()) {
-    case schema::Type::Body::STRUCT_TYPE:
-      id = type.getBody().getStructType();
+  switch (type.which()) {
+    case schema2::Type::STRUCT:
+      id = type.getStruct();
       break;
-    case schema::Type::Body::ENUM_TYPE:
-      id = type.getBody().getEnumType();
+    case schema2::Type::ENUM:
+      id = type.getEnum();
       break;
-    case schema::Type::Body::INTERFACE_TYPE:
-      id = type.getBody().getInterfaceType();
+    case schema2::Type::INTERFACE:
+      id = type.getInterface();
       break;
-    case schema::Type::Body::LIST_TYPE:
-      traverseType(type.getBody().getListType(), eagerness, seen);
+    case schema2::Type::LIST:
+      traverseType(type.getList(), eagerness, seen);
       return;
     default:
       return;
@@ -750,27 +765,7 @@ void Compiler::Node::traverseType(const schema::Type::Reader& type, uint eagerne
   }
 }
 
-void Compiler::Node::traverseStructMember(const schema::StructNode::Member::Reader& member,
-                                          uint eagerness,
-                                          std::unordered_map<const Node*, uint>& seen) const {
-  switch (member.getBody().which()) {
-    case schema::StructNode::Member::Body::FIELD_MEMBER:
-      traverseType(member.getBody().getFieldMember().getType(), eagerness, seen);
-      break;
-    case schema::StructNode::Member::Body::UNION_MEMBER:
-      for (auto child: member.getBody().getUnionMember().getMembers()) {
-        traverseStructMember(child, eagerness, seen);
-      }
-      break;
-    case schema::StructNode::Member::Body::GROUP_MEMBER:
-      for (auto child: member.getBody().getGroupMember().getMembers()) {
-        traverseStructMember(child, eagerness, seen);
-      }
-      break;
-  }
-}
-
-void Compiler::Node::traverseAnnotations(const List<schema::Annotation>::Reader& annotations,
+void Compiler::Node::traverseAnnotations(const List<schema2::Annotation>::Reader& annotations,
                                          uint eagerness,
                                          std::unordered_map<const Node*, uint>& seen) const {
   for (auto annotation: annotations) {
@@ -800,7 +795,7 @@ kj::Maybe<Schema> Compiler::Node::resolveBootstrapSchema(uint64_t id) const {
   }
 }
 
-kj::Maybe<schema::Node::Reader> Compiler::Node::resolveFinalSchema(uint64_t id) const {
+kj::Maybe<schema2::Node::Reader> Compiler::Node::resolveFinalSchema(uint64_t id) const {
   KJ_IF_MAYBE(node, module->getCompiler().findNode(id)) {
     return node->getFinalSchema();
   } else {
@@ -830,6 +825,76 @@ kj::Maybe<const Compiler::CompiledModule&> Compiler::CompiledModule::importRelat
       [this](const Module& module) -> const Compiler::CompiledModule& {
         return compiler.addInternal(module);
       });
+}
+
+static void findImports(DeclName::Reader name, std::set<kj::StringPtr>& output) {
+  if (name.getBase().which() == DeclName::Base::IMPORT_NAME) {
+    output.insert(name.getBase().getImportName().getValue());
+  }
+}
+
+static void findImports(TypeExpression::Reader type, std::set<kj::StringPtr>& output) {
+  findImports(type.getName(), output);
+  for (auto param: type.getParams()) {
+    findImports(param, output);
+  }
+}
+
+static void findImports(Declaration::Reader decl, std::set<kj::StringPtr>& output) {
+  switch (decl.getBody().which()) {
+    case Declaration::Body::USING_DECL:
+      findImports(decl.getBody().getUsingDecl().getTarget(), output);
+      break;
+    case Declaration::Body::CONST_DECL:
+      findImports(decl.getBody().getConstDecl().getType(), output);
+      break;
+    case Declaration::Body::FIELD_DECL:
+      findImports(decl.getBody().getFieldDecl().getType(), output);
+      break;
+    case Declaration::Body::METHOD_DECL: {
+      auto method = decl.getBody().getMethodDecl();
+      for (auto param: method.getParams()) {
+        findImports(param.getType(), output);
+        for (auto ann: param.getAnnotations()) {
+          findImports(ann.getName(), output);
+        }
+      }
+      if (method.getReturnType().which() == Declaration::Method::ReturnType::EXPRESSION) {
+        findImports(method.getReturnType().getExpression(), output);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+
+  for (auto ann: decl.getAnnotations()) {
+    findImports(ann.getName(), output);
+  }
+
+  for (auto nested: decl.getNestedDecls()) {
+    findImports(nested, output);
+  }
+}
+
+Orphan<List<schema2::CodeGeneratorRequest::RequestedFile::Import>>
+    Compiler::CompiledModule::getFileImportTable(Orphanage orphanage) const {
+  std::set<kj::StringPtr> importNames;
+  findImports(content.getReader().getRoot(), importNames);
+
+  auto result = orphanage.newOrphan<List<schema2::CodeGeneratorRequest::RequestedFile::Import>>(
+      importNames.size());
+  auto builder = result.get();
+
+  uint i = 0;
+  for (auto name: importNames) {
+    // We presumably ran this import before, so it shouldn't throw now.
+    auto entry = builder[i];
+    entry.setId(KJ_ASSERT_NONNULL(importRelative(name)).rootNode.getId());
+    entry.setName(name);
+  }
+
+  return result;
 }
 
 // =======================================================================================
@@ -929,6 +994,11 @@ kj::Maybe<uint64_t> Compiler::Impl::lookup(uint64_t parent, kj::StringPtr childN
   }
 }
 
+Orphan<List<schema2::CodeGeneratorRequest::RequestedFile::Import>>
+    Compiler::Impl::getFileImportTable(const Module& module, Orphanage orphanage) const {
+  return addInternal(module).getFileImportTable(orphanage);
+}
+
 void Compiler::Impl::eagerlyCompile(uint64_t id, uint eagerness) const {
   KJ_IF_MAYBE(node, findNode(id)) {
     auto lock = this->workspace.lockShared();
@@ -963,6 +1033,11 @@ uint64_t Compiler::add(const Module& module) const {
 
 kj::Maybe<uint64_t> Compiler::lookup(uint64_t parent, kj::StringPtr childName) const {
   return impl->lookup(parent, childName);
+}
+
+Orphan<List<schema2::CodeGeneratorRequest::RequestedFile::Import>>
+    Compiler::getFileImportTable(const Module& module, Orphanage orphanage) const {
+  return impl->getFileImportTable(module, orphanage);
 }
 
 void Compiler::eagerlyCompile(uint64_t id, uint eagerness) const {

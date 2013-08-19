@@ -22,6 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "node-translator.h"
+#include "parser.h"      // only for generateChildId()
 #include <kj/debug.h>
 #include <kj/arena.h>
 #include <set>
@@ -525,14 +526,21 @@ private:
 
 NodeTranslator::NodeTranslator(
     const Resolver& resolver, const ErrorReporter& errorReporter,
-    const Declaration::Reader& decl, Orphan<schema::Node> wipNodeParam,
+    const Declaration::Reader& decl, Orphan<schema2::Node> wipNodeParam,
     bool compileAnnotations)
     : resolver(resolver), errorReporter(errorReporter),
       compileAnnotations(compileAnnotations), wipNode(kj::mv(wipNodeParam)) {
   compileNode(decl, wipNode.get());
 }
 
-schema::Node::Reader NodeTranslator::finish() {
+NodeTranslator::NodeSet NodeTranslator::getBootstrapNode() {
+  return NodeSet {
+    wipNode.getReader(),
+    KJ_MAP(groups, g) { return g.getReader(); }
+  };
+}
+
+NodeTranslator::NodeSet NodeTranslator::finish() {
   // Careful about iteration here:  compileFinalValue() may actually add more elements to
   // `unfinishedValues`, invalidating iterators in the process.
   for (size_t i = 0; i < unfinishedValues.size(); i++) {
@@ -540,7 +548,7 @@ schema::Node::Reader NodeTranslator::finish() {
     compileValue(value.source, value.type, value.target, false);
   }
 
-  return wipNode.getReader();
+  return getBootstrapNode();
 }
 
 class NodeTranslator::DuplicateNameDetector {
@@ -554,7 +562,7 @@ private:
   std::map<kj::StringPtr, LocatedText::Reader> names;
 };
 
-void NodeTranslator::compileNode(Declaration::Reader decl, schema::Node::Builder builder) {
+void NodeTranslator::compileNode(Declaration::Reader decl, schema2::Node::Builder builder) {
   DuplicateNameDetector(errorReporter)
       .check(decl.getNestedDecls(), decl.getBody().which());
 
@@ -562,30 +570,26 @@ void NodeTranslator::compileNode(Declaration::Reader decl, schema::Node::Builder
 
   switch (decl.getBody().which()) {
     case Declaration::Body::FILE_DECL:
-      compileFile(decl, builder.getBody().initFileNode());
       targetsFlagName = "targetsFile";
       break;
     case Declaration::Body::CONST_DECL:
-      compileConst(decl.getBody().getConstDecl(), builder.getBody().initConstNode());
+      compileConst(decl.getBody().getConstDecl(), builder.initConst());
       targetsFlagName = "targetsConst";
       break;
     case Declaration::Body::ANNOTATION_DECL:
-      compileAnnotation(decl.getBody().getAnnotationDecl(), builder.getBody().initAnnotationNode());
+      compileAnnotation(decl.getBody().getAnnotationDecl(), builder.initAnnotation());
       targetsFlagName = "targetsAnnotation";
       break;
     case Declaration::Body::ENUM_DECL:
-      compileEnum(decl.getBody().getEnumDecl(), decl.getNestedDecls(),
-                  builder.getBody().initEnumNode());
+      compileEnum(decl.getBody().getEnumDecl(), decl.getNestedDecls(), builder);
       targetsFlagName = "targetsEnum";
       break;
     case Declaration::Body::STRUCT_DECL:
-      compileStruct(decl.getBody().getStructDecl(), decl.getNestedDecls(),
-                    builder.getBody().initStructNode());
+      compileStruct(decl.getBody().getStructDecl(), decl.getNestedDecls(), builder);
       targetsFlagName = "targetsStruct";
       break;
     case Declaration::Body::INTERFACE_DECL:
-      compileInterface(decl.getBody().getInterfaceDecl(), decl.getNestedDecls(),
-                       builder.getBody().initInterfaceNode());
+      compileInterface(decl.getBody().getInterfaceDecl(), decl.getNestedDecls(), builder);
       targetsFlagName = "targetsInterface";
       break;
 
@@ -688,59 +692,8 @@ void NodeTranslator::disallowNested(List<Declaration>::Reader nestedDecls) {
   }
 }
 
-static void findImports(DynamicValue::Reader value, std::set<kj::StringPtr>& output) {
-  switch (value.getType()) {
-    case DynamicValue::STRUCT: {
-      auto structValue = value.as<DynamicStruct>();
-      StructSchema schema = structValue.getSchema();
-
-      if (schema == Schema::from<DeclName>()) {
-        auto declName = structValue.as<DeclName>();
-        if (declName.getBase().which() == DeclName::Base::IMPORT_NAME) {
-          output.insert(declName.getBase().getImportName().getValue());
-        }
-      } else {
-        for (auto member: schema.getMembers()) {
-          if (structValue.has(member)) {
-            findImports(structValue.get(member), output);
-          }
-        }
-      }
-      break;
-    }
-
-    case DynamicValue::LIST:
-      for (auto element: value.as<DynamicList>()) {
-        findImports(element, output);
-      }
-      break;
-
-    case DynamicValue::UNION:
-      findImports(value.as<DynamicUnion>().get(), output);
-      break;
-
-    default:
-      break;
-  }
-}
-
-void NodeTranslator::compileFile(Declaration::Reader decl, schema::FileNode::Builder builder) {
-  std::set<kj::StringPtr> imports;
-  findImports(decl, imports);
-
-  auto list = builder.initImports(imports.size());
-  auto iter = imports.begin();
-  for (auto element: list) {
-    KJ_IF_MAYBE(i, resolver.resolveImport(*iter)) {
-      element.setId(*i);
-    }
-    element.setName(*iter++);
-  }
-  KJ_ASSERT(iter == imports.end());
-}
-
 void NodeTranslator::compileConst(Declaration::Const::Reader decl,
-                                  schema::ConstNode::Builder builder) {
+                                  schema2::Node::Const::Builder builder) {
   auto typeBuilder = builder.initType();
   if (compileType(decl.getType(), typeBuilder)) {
     compileBootstrapValue(decl.getValue(), typeBuilder.asReader(), builder.initValue());
@@ -748,9 +701,13 @@ void NodeTranslator::compileConst(Declaration::Const::Reader decl,
 }
 
 void NodeTranslator::compileAnnotation(Declaration::Annotation::Reader decl,
-                                       schema::AnnotationNode::Builder builder) {
+                                       schema2::Node::Annotation::Builder builder) {
   compileType(decl.getType(), builder.initType());
 
+#warning "temporary hack for schema transition"
+  builder.setTargetsFile(true);
+
+#if 0
   // Dynamically copy over the values of all of the "targets" members.
   DynamicStruct::Reader src = decl;
   DynamicStruct::Builder dst = builder;
@@ -761,6 +718,7 @@ void NodeTranslator::compileAnnotation(Declaration::Annotation::Reader decl,
       dst.set(dstMember, src.get(srcMember));
     }
   }
+#endif
 }
 
 class NodeTranslator::DuplicateOrdinalDetector {
@@ -795,7 +753,7 @@ private:
 
 void NodeTranslator::compileEnum(Declaration::Enum::Reader decl,
                                  List<Declaration>::Reader members,
-                                 schema::EnumNode::Builder builder) {
+                                 schema2::Node::Builder builder) {
   // maps ordinal -> (code order, declaration)
   std::multimap<uint, std::pair<uint, Declaration::Reader>> enumerants;
 
@@ -808,7 +766,7 @@ void NodeTranslator::compileEnum(Declaration::Enum::Reader decl,
     }
   }
 
-  auto list = builder.initEnumerants(enumerants.size());
+  auto list = builder.initEnum(enumerants.size());
   uint i = 0;
   DuplicateOrdinalDetector dupDetector(errorReporter);
 
@@ -835,13 +793,12 @@ public:
   KJ_DISALLOW_COPY(StructTranslator);
 
   void translate(Declaration::Struct::Reader decl, List<Declaration>::Reader members,
-                 schema::StructNode::Builder builder) {
-    // Build the member-info-by-ordinal map.
-    MemberInfo root(layout.getTop());
-    traverseTopOrGroup(members, root);
+                 schema2::Node::Builder builder) {
+    auto structBuilder = builder.initStruct();
 
-    // Init the root.
-    root.memberSchemas = builder.initMembers(root.childCount);
+    // Build the member-info-by-ordinal map.
+    MemberInfo root(builder);
+    traverseTopOrGroup(members, root, layout.getTop());
 
     // Go through each member in ordinal order, building each member schema.
     DuplicateOrdinalDetector dupDetector(errorReporter);
@@ -852,87 +809,103 @@ public:
         dupDetector.check(member.decl.getId().getOrdinal());
       }
 
-      schema::StructNode::Member::Builder builder = member.getSchema();
+      schema2::Field::Builder fieldBuilder = member.getSchema();
 
-      builder.setName(member.decl.getName().getValue());
-      builder.setOrdinal(entry.first);
-      builder.setCodeOrder(member.codeOrder);
-
-      kj::StringPtr targetsFlagName;
+      fieldBuilder.setName(member.decl.getName().getValue());
+      fieldBuilder.getOrdinal().setExplicit(entry.first);
+      fieldBuilder.setCodeOrder(member.codeOrder);
 
       switch (member.decl.getBody().which()) {
         case Declaration::Body::FIELD_DECL: {
           auto fieldReader = member.decl.getBody().getFieldDecl();
-          auto fieldBuilder = builder.getBody().initFieldMember();
-          auto typeBuilder = fieldBuilder.initType();
+          auto regularField = fieldBuilder.initRegular();
+          auto typeBuilder = regularField.initType();
           if (translator.compileType(fieldReader.getType(), typeBuilder)) {
             switch (fieldReader.getDefaultValue().which()) {
               case Declaration::Field::DefaultValue::VALUE:
                 translator.compileBootstrapValue(fieldReader.getDefaultValue().getValue(),
-                                                 typeBuilder, fieldBuilder.initDefaultValue());
+                                                 typeBuilder, regularField.initDefaultValue());
                 break;
               case Declaration::Field::DefaultValue::NONE:
-                translator.compileDefaultDefaultValue(typeBuilder, fieldBuilder.initDefaultValue());
+                translator.compileDefaultDefaultValue(typeBuilder, regularField.initDefaultValue());
                 break;
             }
           } else {
-            translator.compileDefaultDefaultValue(typeBuilder, fieldBuilder.initDefaultValue());
+            translator.compileDefaultDefaultValue(typeBuilder, regularField.initDefaultValue());
           }
 
           int lgSize = -1;
-          switch (typeBuilder.getBody().which()) {
-            case schema::Type::Body::VOID_TYPE: lgSize = -1; break;
-            case schema::Type::Body::BOOL_TYPE: lgSize = 0; break;
-            case schema::Type::Body::INT8_TYPE: lgSize = 3; break;
-            case schema::Type::Body::INT16_TYPE: lgSize = 4; break;
-            case schema::Type::Body::INT32_TYPE: lgSize = 5; break;
-            case schema::Type::Body::INT64_TYPE: lgSize = 6; break;
-            case schema::Type::Body::UINT8_TYPE: lgSize = 3; break;
-            case schema::Type::Body::UINT16_TYPE: lgSize = 4; break;
-            case schema::Type::Body::UINT32_TYPE: lgSize = 5; break;
-            case schema::Type::Body::UINT64_TYPE: lgSize = 6; break;
-            case schema::Type::Body::FLOAT32_TYPE: lgSize = 5; break;
-            case schema::Type::Body::FLOAT64_TYPE: lgSize = 6; break;
+          switch (typeBuilder.which()) {
+            case schema2::Type::VOID: lgSize = -1; break;
+            case schema2::Type::BOOL: lgSize = 0; break;
+            case schema2::Type::INT8: lgSize = 3; break;
+            case schema2::Type::INT16: lgSize = 4; break;
+            case schema2::Type::INT32: lgSize = 5; break;
+            case schema2::Type::INT64: lgSize = 6; break;
+            case schema2::Type::UINT8: lgSize = 3; break;
+            case schema2::Type::UINT16: lgSize = 4; break;
+            case schema2::Type::UINT32: lgSize = 5; break;
+            case schema2::Type::UINT64: lgSize = 6; break;
+            case schema2::Type::FLOAT32: lgSize = 5; break;
+            case schema2::Type::FLOAT64: lgSize = 6; break;
 
-            case schema::Type::Body::TEXT_TYPE: lgSize = -2; break;
-            case schema::Type::Body::DATA_TYPE: lgSize = -2; break;
-            case schema::Type::Body::LIST_TYPE: lgSize = -2; break;
-            case schema::Type::Body::ENUM_TYPE: lgSize = 4; break;
-            case schema::Type::Body::STRUCT_TYPE: lgSize = -2; break;
-            case schema::Type::Body::INTERFACE_TYPE: lgSize = -2; break;
-            case schema::Type::Body::OBJECT_TYPE: lgSize = -2; break;
+            case schema2::Type::TEXT: lgSize = -2; break;
+            case schema2::Type::DATA: lgSize = -2; break;
+            case schema2::Type::LIST: lgSize = -2; break;
+            case schema2::Type::ENUM: lgSize = 4; break;
+            case schema2::Type::STRUCT: lgSize = -2; break;
+            case schema2::Type::INTERFACE: lgSize = -2; break;
+            case schema2::Type::OBJECT: lgSize = -2; break;
           }
 
           if (lgSize == -2) {
             // pointer
-            fieldBuilder.setOffset(member.fieldScope->addPointer());
+            regularField.setOffset(member.fieldScope->addPointer());
           } else if (lgSize == -1) {
             // void
             member.fieldScope->addVoid();
-            fieldBuilder.setOffset(0);
+            regularField.setOffset(0);
           } else {
-            fieldBuilder.setOffset(member.fieldScope->addData(lgSize));
+            regularField.setOffset(member.fieldScope->addData(lgSize));
           }
-
-          targetsFlagName = "targetsField";
           break;
         }
 
         case Declaration::Body::UNION_DECL:
-          if (member.decl.getId().which() == Declaration::Id::ORDINAL) {
-            if (!member.unionScope->addDiscriminant()) {
-              errorReporter.addErrorOn(member.decl.getId().getOrdinal(),
-                  "Union ordinal, if specified, must be greater than no more than one of its "
-                  "member ordinals (i.e. there can only be one field retroactively unionized).");
-            }
+          if (!member.unionScope->addDiscriminant()) {
+            errorReporter.addErrorOn(member.decl.getId().getOrdinal(),
+                "Union ordinal, if specified, must be greater than no more than one of its "
+                "member ordinals (i.e. there can only be one field retroactively unionized).");
           }
-          lateUnions.add(&member);
-          // No need to fill in members as this is done automatically elsewhere.
+          break;
+
+        case Declaration::Body::GROUP_DECL:
+          KJ_FAIL_ASSERT("Groups don't have ordinals.");
+          break;
+
+        default:
+          KJ_FAIL_ASSERT("Unexpected member type.");
+          break;
+      }
+    }
+
+    // OK, we should have built all the members.  Now go through and make sure the discriminant
+    // offsets have been copied over to the schemas and annotations have been applied.
+    root.setDiscriminantOffsetInSchema();
+    for (auto member: allMembers) {
+      kj::StringPtr targetsFlagName;
+      switch (member->decl.getBody().which()) {
+        case Declaration::Body::FIELD_DECL:
+          targetsFlagName = "targetsField";
+          break;
+
+        case Declaration::Body::UNION_DECL:
+          member->setDiscriminantOffsetInSchema();
           targetsFlagName = "targetsUnion";
           break;
 
         case Declaration::Body::GROUP_DECL:
-          // Nothing to do here; members are filled in automatically elsewhere.
+          member->setDiscriminantOffsetInSchema();  // in case it contains an unnamed union
           targetsFlagName = "targetsGroup";
           break;
 
@@ -942,46 +915,39 @@ public:
       }
 
       builder.adoptAnnotations(translator.compileAnnotationApplications(
-          member.decl.getAnnotations(), targetsFlagName));
-    }
-
-    // OK, all members are built.  The only thing left is the late unions.
-    for (auto member: lateUnions) {
-      member->unionScope->addDiscriminant();  // if it hasn't happened already
-      KJ_IF_MAYBE(offset, member->unionScope->discriminantOffset) {
-        member->getSchema().getBody().getUnionMember()
-            .setDiscriminantOffset(*offset);
-      } else {
-        KJ_FAIL_ASSERT("addDiscriminant() didn't set the offset?");
-      }
+          member->decl.getAnnotations(), targetsFlagName));
     }
 
     // And fill in the sizes.
-    builder.setDataSectionWordSize(layout.getTop().dataWordCount);
-    builder.setPointerSectionSize(layout.getTop().pointerCount);
-    builder.setPreferredListEncoding(schema::ElementSize::INLINE_COMPOSITE);
+    structBuilder.setDataSectionWordSize(layout.getTop().dataWordCount);
+    structBuilder.setPointerSectionSize(layout.getTop().pointerCount);
+    structBuilder.setPreferredListEncoding(schema2::ElementSize::INLINE_COMPOSITE);
 
     if (layout.getTop().pointerCount == 0) {
       if (layout.getTop().dataWordCount == 0) {
-        builder.setPreferredListEncoding(schema::ElementSize::EMPTY);
+        structBuilder.setPreferredListEncoding(schema2::ElementSize::EMPTY);
       } else if (layout.getTop().dataWordCount == 1) {
-        KJ_IF_MAYBE(smallestHole, layout.getTop().holes.smallestAtLeast(0)) {
-
-        }
         switch (layout.getTop().holes.getFirstWordUsed()) {
-          case 0: builder.setPreferredListEncoding(schema::ElementSize::BIT); break;
+          case 0: structBuilder.setPreferredListEncoding(schema2::ElementSize::BIT); break;
           case 1:
           case 2:
-          case 3: builder.setPreferredListEncoding(schema::ElementSize::BYTE); break;
-          case 4: builder.setPreferredListEncoding(schema::ElementSize::TWO_BYTES); break;
-          case 5: builder.setPreferredListEncoding(schema::ElementSize::FOUR_BYTES); break;
-          case 6: builder.setPreferredListEncoding(schema::ElementSize::EIGHT_BYTES); break;
+          case 3: structBuilder.setPreferredListEncoding(schema2::ElementSize::BYTE); break;
+          case 4: structBuilder.setPreferredListEncoding(schema2::ElementSize::TWO_BYTES); break;
+          case 5: structBuilder.setPreferredListEncoding(schema2::ElementSize::FOUR_BYTES); break;
+          case 6: structBuilder.setPreferredListEncoding(schema2::ElementSize::EIGHT_BYTES); break;
           default: KJ_FAIL_ASSERT("Expected 0, 1, 2, 3, 4, 5, or 6."); break;
         }
       }
     } else if (layout.getTop().pointerCount == 1 &&
                layout.getTop().dataWordCount == 0) {
-      builder.setPreferredListEncoding(schema::ElementSize::POINTER);
+      structBuilder.setPreferredListEncoding(schema2::ElementSize::POINTER);
+    }
+
+    for (auto& group: translator.groups) {
+      auto groupBuilder = group.get().getStruct();
+      groupBuilder.setDataSectionWordSize(structBuilder.getDataSectionWordSize());
+      groupBuilder.setPointerSectionSize(structBuilder.getPointerSectionSize());
+      groupBuilder.setPreferredListEncoding(structBuilder.getPreferredListEncoding());
     }
   }
 
@@ -1005,82 +971,95 @@ private:
     // Number of children whose `schema` member has been initialized.  This initialization happens
     // while walking the fields in ordinal order.
 
+    uint unionDiscriminantCount = 0;
+    // Number of children who are members of the scope's union and have had their discriminant
+    // value decided.
+
+    bool isInUnion;
+    // Whether or not this field is in the parent's union.
+
     Declaration::Reader decl;
 
-    List<schema::StructNode::Member>::Builder memberSchemas;
+    kj::Maybe<schema2::Field::Builder> schema;
+    // Schema for the field.  Initialized when getSchema() is first called.
 
-    kj::Maybe<schema::StructNode::Member::Builder> schema;
-    // Schema for this member, if applicable.  Initialized when getSchema() is first called.
+    schema2::Node::Builder node;
+    // If it's a group, or the top-level struct.
 
     union {
       StructLayout::StructOrGroup* fieldScope;
       // If this member is a field, the scope of that field.  This will be used to assign an
       // offset for the field when going through in ordinal order.
-      //
-      // If the member is a group, this is is the group itself.
 
       StructLayout::Union* unionScope;
-      // If this member is a union, this is the union.  This will be used to assign a discriminant
-      // offset.
+      // If this member is a union, or it is a group or top-level struct containing an unnamed
+      // union, this is the union.  This will be used to assign a discriminant offset when the
+      // union's ordinal comes up (if the union has an explicit ordinal), as well as to finally
+      // copy over the discriminant offset to the schema.
     };
 
-    inline MemberInfo(StructLayout::Top& topScope)
-        : parent(nullptr), codeOrder(0), fieldScope(&topScope) {}
+    inline explicit MemberInfo(schema2::Node::Builder node)
+        : parent(nullptr), codeOrder(0), isInUnion(false), node(node), unionScope(nullptr) {}
     inline MemberInfo(MemberInfo& parent, uint codeOrder,
                       const Declaration::Reader& decl,
-                      StructLayout::StructOrGroup& fieldScope)
-        : parent(&parent), codeOrder(codeOrder), decl(decl), fieldScope(&fieldScope) {}
+                      StructLayout::StructOrGroup& fieldScope,
+                      bool isInUnion)
+        : parent(&parent), codeOrder(codeOrder), isInUnion(isInUnion),
+          decl(decl), fieldScope(&fieldScope) {}
     inline MemberInfo(MemberInfo& parent, uint codeOrder,
-                      const Declaration::Reader& decl, StructLayout::Union& unionScope)
-        : parent(&parent), codeOrder(codeOrder), decl(decl), unionScope(&unionScope) {}
+                      const Declaration::Reader& decl,
+                      schema2::Node::Builder node,
+                      bool isInUnion)
+        : parent(&parent), codeOrder(codeOrder), isInUnion(isInUnion),
+          decl(decl), node(node), unionScope(nullptr) {}
 
-    schema::StructNode::Member::Builder getSchema() {
+    schema2::Field::Builder getSchema() {
       KJ_IF_MAYBE(result, schema) {
         return *result;
       } else {
-        auto builder = parent->getMemberSchema(parent->childInitializedCount++);
+        auto builder = parent->addMemberSchema();
+        if (isInUnion) {
+          builder.setDiscriminantValue(parent->unionDiscriminantCount++);
+        }
         schema = builder;
         return builder;
       }
     }
 
-    schema::StructNode::Member::Builder getMemberSchema(uint childIndex) {
+    schema2::Field::Builder addMemberSchema() {
       // Get the schema builder for the child member at the given index.  This lazily/dynamically
       // builds the builder tree.
 
-      KJ_REQUIRE(childIndex < childCount);
+      KJ_REQUIRE(childInitializedCount < childCount);
 
-      if (memberSchemas.size() == 0) {
-        switch (decl.getBody().which()) {
-          case Declaration::Body::FIELD_DECL:
-            KJ_FAIL_ASSERT("Fields don't have members.");
-            break;
-          case Declaration::Body::UNION_DECL:
-            memberSchemas = getSchema().getBody()
-                .initUnionMember().initMembers(childCount);
-            break;
-          case Declaration::Body::GROUP_DECL:
-            memberSchemas = getSchema().getBody()
-                .initGroupMember().initMembers(childCount);
-            break;
-          default:
-            KJ_FAIL_ASSERT("Unexpected member type.");
-            break;
-        }
+      auto structNode = node.getStruct();
+      if (!structNode.hasFields()) {
+        getSchema();  // Make sure field exists in parent once the first child is added.
+        return structNode.initFields(childCount)[childInitializedCount++];
+      } else {
+        return structNode.getFields()[childInitializedCount++];
       }
-      return memberSchemas[childIndex];
+    }
+
+    void setDiscriminantOffsetInSchema() {
+      if (unionScope != nullptr) {
+        unionScope->addDiscriminant();  // if it hasn't happened already
+        auto structNode = node.getStruct();
+        structNode.setDiscriminantCount(unionDiscriminantCount);
+        structNode.setDiscriminantOffset(KJ_ASSERT_NONNULL(unionScope->discriminantOffset));
+      }
     }
   };
 
   std::multimap<uint, MemberInfo*> membersByOrdinal;
-  // For fields, the key is the ordinal.  For unions and groups, the key is the lowest ordinal
-  // number among their members, or the union's explicit ordinal number if it has one.
+  // Every member that has an explicit ordinal goes into this map.  We then iterate over the map
+  // to assign field offsets (or discriminant offsets for unions).
 
-  kj::Vector<MemberInfo*> lateUnions;
-  // Unions that need to have their discriminant offsets filled in after layout is complete.
+  kj::Vector<MemberInfo*> allMembers;
+  // All members, including ones that don't have ordinals.
 
-  uint traverseUnion(List<Declaration>::Reader members, MemberInfo& parent) {
-    uint minOrdinal = std::numeric_limits<uint>::max();
+  void traverseUnion(List<Declaration>::Reader members, MemberInfo& parent,
+                     StructLayout::Union& layout) {
     uint codeOrder = 0;
 
     if (members.size() < 2) {
@@ -1088,14 +1067,18 @@ private:
     }
 
     for (auto member: members) {
-      uint ordinal = 0;
+      kj::Maybe<uint> ordinal;
       MemberInfo* memberInfo = nullptr;
 
       switch (member.getBody().which()) {
         case Declaration::Body::FIELD_DECL: {
+          parent.childCount++;
+          // For layout purposes, pretend this field is enclosed in a one-member group.
           StructLayout::Group& singletonGroup =
-              arena.allocate<StructLayout::Group>(*parent.unionScope);
-          memberInfo = &arena.allocate<MemberInfo>(parent, codeOrder++, member, singletonGroup);
+              arena.allocate<StructLayout::Group>(layout);
+          memberInfo = &arena.allocate<MemberInfo>(parent, codeOrder++, member, singletonGroup,
+                                                   true);
+          allMembers.add(memberInfo);
           ordinal = member.getId().getOrdinal().getValue();
           break;
         }
@@ -1105,10 +1088,14 @@ private:
           break;
 
         case Declaration::Body::GROUP_DECL: {
-          StructLayout::Group& group =
-              arena.allocate<StructLayout::Group>(*parent.unionScope);
-          memberInfo = &arena.allocate<MemberInfo>(parent, codeOrder++, member, group);
-          ordinal = traverseGroup(member.getNestedDecls(), *memberInfo);
+          parent.childCount++;
+          StructLayout::Group& group = arena.allocate<StructLayout::Group>(layout);
+          memberInfo = &arena.allocate<MemberInfo>(
+              parent, codeOrder++, member,
+              newGroupNode(parent.node, member.getName().getValue()),
+              true);
+          allMembers.add(memberInfo);
+          traverseGroup(member.getNestedDecls(), *memberInfo, group);
           break;
         }
 
@@ -1117,46 +1104,54 @@ private:
           break;
       }
 
-      if (memberInfo != nullptr) {
-        parent.childCount++;
-        membersByOrdinal.insert(std::make_pair(ordinal, memberInfo));
-        minOrdinal = kj::min(minOrdinal, ordinal);
+      KJ_IF_MAYBE(o, ordinal) {
+        membersByOrdinal.insert(std::make_pair(*o, memberInfo));
       }
     }
-
-    return minOrdinal;
   }
 
-  uint traverseGroup(List<Declaration>::Reader members, MemberInfo& parent) {
-    if (members.size() < 2) {
-      errorReporter.addErrorOn(parent.decl, "Group must have at least two members.");
+  void traverseGroup(List<Declaration>::Reader members, MemberInfo& parent,
+                     StructLayout::StructOrGroup& layout) {
+    if (members.size() < 1) {
+      errorReporter.addErrorOn(parent.decl, "Group must have at least one member.");
     }
 
-    return traverseTopOrGroup(members, parent);
+    traverseTopOrGroup(members, parent, layout);
   }
 
-  uint traverseTopOrGroup(List<Declaration>::Reader members, MemberInfo& parent) {
-    uint minOrdinal = std::numeric_limits<uint>::max();
+  void traverseTopOrGroup(List<Declaration>::Reader members, MemberInfo& parent,
+                          StructLayout::StructOrGroup& layout) {
     uint codeOrder = 0;
 
     for (auto member: members) {
-      uint ordinal = 0;
+      kj::Maybe<uint> ordinal;
       MemberInfo* memberInfo = nullptr;
 
       switch (member.getBody().which()) {
         case Declaration::Body::FIELD_DECL: {
+          parent.childCount++;
           memberInfo = &arena.allocate<MemberInfo>(
-              parent, codeOrder++, member, *parent.fieldScope);
+              parent, codeOrder++, member, layout, false);
+          allMembers.add(memberInfo);
           ordinal = member.getId().getOrdinal().getValue();
           break;
         }
 
         case Declaration::Body::UNION_DECL: {
-          StructLayout::Union& unionLayout = arena.allocate<StructLayout::Union>(
-              *parent.fieldScope);
-          memberInfo = &arena.allocate<MemberInfo>(
-              parent, codeOrder++, member, unionLayout);
-          ordinal = traverseUnion(member.getNestedDecls(), *memberInfo);
+          StructLayout::Union& unionLayout = arena.allocate<StructLayout::Union>(layout);
+
+          if (member.getName().getValue() == "") {
+            memberInfo = &parent;
+          } else {
+            parent.childCount++;
+            memberInfo = &arena.allocate<MemberInfo>(
+                parent, codeOrder++, member,
+                newGroupNode(parent.node, member.getName().getValue()),
+                false);
+            allMembers.add(memberInfo);
+          }
+          memberInfo->unionScope = &unionLayout;
+          traverseUnion(member.getNestedDecls(), *memberInfo, unionLayout);
           if (member.getId().which() == Declaration::Id::ORDINAL) {
             ordinal = member.getId().getOrdinal().getValue();
           }
@@ -1164,7 +1159,18 @@ private:
         }
 
         case Declaration::Body::GROUP_DECL:
-          errorReporter.addErrorOn(member, "Groups should only appear inside unions.");
+          parent.childCount++;
+          memberInfo = &arena.allocate<MemberInfo>(
+              parent, codeOrder++, member,
+              newGroupNode(parent.node, member.getName().getValue()),
+              false);
+          allMembers.add(memberInfo);
+
+          // Members of the group are laid out just like they were members of the parent, so we
+          // just pass along the parent layout.
+          traverseGroup(member.getNestedDecls(), *memberInfo, layout);
+
+          // No ordinal for groups.
           break;
 
         default:
@@ -1172,20 +1178,33 @@ private:
           break;
       }
 
-      if (memberInfo != nullptr) {
-        parent.childCount++;
-        membersByOrdinal.insert(std::make_pair(ordinal, memberInfo));
-        minOrdinal = kj::min(minOrdinal, ordinal);
+      KJ_IF_MAYBE(o, ordinal) {
+        membersByOrdinal.insert(std::make_pair(*o, memberInfo));
       }
     }
+  }
 
-    return minOrdinal;
+  schema2::Node::Builder newGroupNode(schema2::Node::Reader parent, kj::StringPtr name) {
+    auto orphan = Orphanage::getForMessageContaining(translator.wipNode.get())
+        .newOrphan<schema2::Node>();
+    auto node = orphan.get();
+
+    node.setId(generateChildId(parent.getId(), name));
+    node.setDisplayName(kj::str(parent.getDisplayName(), '.', name));
+    node.setDisplayNamePrefixLength(node.getDisplayName().size() - name.size());
+    node.setScopeId(parent.getId());
+    node.initStruct().setIsGroup(true);
+
+    // The remaining contents of node.struct will be filled in later.
+
+    translator.groups.add(kj::mv(orphan));
+    return node;
   }
 };
 
 void NodeTranslator::compileStruct(Declaration::Struct::Reader decl,
                                    List<Declaration>::Reader members,
-                                   schema::StructNode::Builder builder) {
+                                   schema2::Node::Builder builder) {
   StructTranslator(*this).translate(decl, members, builder);
 }
 
@@ -1193,7 +1212,7 @@ void NodeTranslator::compileStruct(Declaration::Struct::Reader decl,
 
 void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
                                       List<Declaration>::Reader members,
-                                      schema::InterfaceNode::Builder builder) {
+                                      schema2::Node::Builder builder) {
   KJ_FAIL_ASSERT("TODO: compile interfaces");
 }
 
@@ -1226,15 +1245,15 @@ static kj::String declNameString(DeclName::Reader name) {
   }
 }
 
-bool NodeTranslator::compileType(TypeExpression::Reader source, schema::Type::Builder target) {
+bool NodeTranslator::compileType(TypeExpression::Reader source, schema2::Type::Builder target) {
   auto name = source.getName();
   KJ_IF_MAYBE(base, resolver.resolve(name)) {
     bool handledParams = false;
 
     switch (base->kind) {
-      case Declaration::Body::ENUM_DECL: target.getBody().setEnumType(base->id); break;
-      case Declaration::Body::STRUCT_DECL: target.getBody().setStructType(base->id); break;
-      case Declaration::Body::INTERFACE_DECL: target.getBody().setInterfaceType(base->id); break;
+      case Declaration::Body::ENUM_DECL: target.setEnum(base->id); break;
+      case Declaration::Body::STRUCT_DECL: target.setStruct(base->id); break;
+      case Declaration::Body::INTERFACE_DECL: target.setInterface(base->id); break;
 
       case Declaration::Body::BUILTIN_LIST: {
         auto params = source.getParams();
@@ -1243,15 +1262,15 @@ bool NodeTranslator::compileType(TypeExpression::Reader source, schema::Type::Bu
           return false;
         }
 
-        auto elementType = target.getBody().initListType();
+        auto elementType = target.initList();
         if (!compileType(params[0], elementType)) {
           return false;
         }
 
-        if (elementType.getBody().which() == schema::Type::Body::OBJECT_TYPE) {
+        if (elementType.which() == schema2::Type::OBJECT) {
           errorReporter.addErrorOn(source, "'List(Object)' is not supported.");
           // Seeing List(Object) later can mess things up, so change the type to Void.
-          elementType.getBody().setVoidType();
+          elementType.setVoid();
           return false;
         }
 
@@ -1259,21 +1278,21 @@ bool NodeTranslator::compileType(TypeExpression::Reader source, schema::Type::Bu
         break;
       }
 
-      case Declaration::Body::BUILTIN_VOID: target.getBody().setVoidType(); break;
-      case Declaration::Body::BUILTIN_BOOL: target.getBody().setBoolType(); break;
-      case Declaration::Body::BUILTIN_INT8: target.getBody().setInt8Type(); break;
-      case Declaration::Body::BUILTIN_INT16: target.getBody().setInt16Type(); break;
-      case Declaration::Body::BUILTIN_INT32: target.getBody().setInt32Type(); break;
-      case Declaration::Body::BUILTIN_INT64: target.getBody().setInt64Type(); break;
-      case Declaration::Body::BUILTIN_U_INT8: target.getBody().setUint8Type(); break;
-      case Declaration::Body::BUILTIN_U_INT16: target.getBody().setUint16Type(); break;
-      case Declaration::Body::BUILTIN_U_INT32: target.getBody().setUint32Type(); break;
-      case Declaration::Body::BUILTIN_U_INT64: target.getBody().setUint64Type(); break;
-      case Declaration::Body::BUILTIN_FLOAT32: target.getBody().setFloat32Type(); break;
-      case Declaration::Body::BUILTIN_FLOAT64: target.getBody().setFloat64Type(); break;
-      case Declaration::Body::BUILTIN_TEXT: target.getBody().setTextType(); break;
-      case Declaration::Body::BUILTIN_DATA: target.getBody().setDataType(); break;
-      case Declaration::Body::BUILTIN_OBJECT: target.getBody().setObjectType(); break;
+      case Declaration::Body::BUILTIN_VOID: target.setVoid(); break;
+      case Declaration::Body::BUILTIN_BOOL: target.setBool(); break;
+      case Declaration::Body::BUILTIN_INT8: target.setInt8(); break;
+      case Declaration::Body::BUILTIN_INT16: target.setInt16(); break;
+      case Declaration::Body::BUILTIN_INT32: target.setInt32(); break;
+      case Declaration::Body::BUILTIN_INT64: target.setInt64(); break;
+      case Declaration::Body::BUILTIN_U_INT8: target.setUint8(); break;
+      case Declaration::Body::BUILTIN_U_INT16: target.setUint16(); break;
+      case Declaration::Body::BUILTIN_U_INT32: target.setUint32(); break;
+      case Declaration::Body::BUILTIN_U_INT64: target.setUint64(); break;
+      case Declaration::Body::BUILTIN_FLOAT32: target.setFloat32(); break;
+      case Declaration::Body::BUILTIN_FLOAT64: target.setFloat64(); break;
+      case Declaration::Body::BUILTIN_TEXT: target.setText(); break;
+      case Declaration::Body::BUILTIN_DATA: target.setData(); break;
+      case Declaration::Body::BUILTIN_OBJECT: target.setObject(); break;
 
       default:
         errorReporter.addErrorOn(source, kj::str("'", declNameString(name), "' is not a type."));
@@ -1291,7 +1310,7 @@ bool NodeTranslator::compileType(TypeExpression::Reader source, schema::Type::Bu
     return true;
 
   } else {
-    target.getBody().setVoidType();
+    target.setVoid();
     return false;
   }
 }
@@ -1299,30 +1318,30 @@ bool NodeTranslator::compileType(TypeExpression::Reader source, schema::Type::Bu
 // -------------------------------------------------------------------
 
 void NodeTranslator::compileDefaultDefaultValue(
-    schema::Type::Reader type, schema::Value::Builder target) {
-  switch (type.getBody().which()) {
-    case schema::Type::Body::VOID_TYPE: target.getBody().setVoidValue(); break;
-    case schema::Type::Body::BOOL_TYPE: target.getBody().setBoolValue(false); break;
-    case schema::Type::Body::INT8_TYPE: target.getBody().setInt8Value(0); break;
-    case schema::Type::Body::INT16_TYPE: target.getBody().setInt16Value(0); break;
-    case schema::Type::Body::INT32_TYPE: target.getBody().setInt32Value(0); break;
-    case schema::Type::Body::INT64_TYPE: target.getBody().setInt64Value(0); break;
-    case schema::Type::Body::UINT8_TYPE: target.getBody().setUint8Value(0); break;
-    case schema::Type::Body::UINT16_TYPE: target.getBody().setUint16Value(0); break;
-    case schema::Type::Body::UINT32_TYPE: target.getBody().setUint32Value(0); break;
-    case schema::Type::Body::UINT64_TYPE: target.getBody().setUint64Value(0); break;
-    case schema::Type::Body::FLOAT32_TYPE: target.getBody().setFloat32Value(0); break;
-    case schema::Type::Body::FLOAT64_TYPE: target.getBody().setFloat64Value(0); break;
-    case schema::Type::Body::ENUM_TYPE: target.getBody().setEnumValue(0); break;
-    case schema::Type::Body::INTERFACE_TYPE: target.getBody().setInterfaceValue(); break;
+    schema2::Type::Reader type, schema2::Value::Builder target) {
+  switch (type.which()) {
+    case schema2::Type::VOID: target.setVoid(); break;
+    case schema2::Type::BOOL: target.setBool(false); break;
+    case schema2::Type::INT8: target.setInt8(0); break;
+    case schema2::Type::INT16: target.setInt16(0); break;
+    case schema2::Type::INT32: target.setInt32(0); break;
+    case schema2::Type::INT64: target.setInt64(0); break;
+    case schema2::Type::UINT8: target.setUint8(0); break;
+    case schema2::Type::UINT16: target.setUint16(0); break;
+    case schema2::Type::UINT32: target.setUint32(0); break;
+    case schema2::Type::UINT64: target.setUint64(0); break;
+    case schema2::Type::FLOAT32: target.setFloat32(0); break;
+    case schema2::Type::FLOAT64: target.setFloat64(0); break;
+    case schema2::Type::ENUM: target.setEnum(0); break;
+    case schema2::Type::INTERFACE: target.setInterface(); break;
 
     // Bit of a hack:  For "Object" types, we adopt a null orphan, which sets the field to null.
     // TODO(cleanup):  Create a cleaner way to do this.
-    case schema::Type::Body::TEXT_TYPE: target.getBody().adoptTextValue(Orphan<Text>()); break;
-    case schema::Type::Body::DATA_TYPE: target.getBody().adoptDataValue(Orphan<Data>()); break;
-    case schema::Type::Body::STRUCT_TYPE: target.getBody().adoptStructValue(Orphan<Data>()); break;
-    case schema::Type::Body::LIST_TYPE: target.getBody().adoptListValue(Orphan<Data>()); break;
-    case schema::Type::Body::OBJECT_TYPE: target.getBody().adoptObjectValue(Orphan<Data>()); break;
+    case schema2::Type::TEXT: target.adoptText(Orphan<Text>()); break;
+    case schema2::Type::DATA: target.adoptData(Orphan<Data>()); break;
+    case schema2::Type::STRUCT: target.adoptStruct(Orphan<Data>()); break;
+    case schema2::Type::LIST: target.adoptList(Orphan<Data>()); break;
+    case schema2::Type::OBJECT: target.adoptObject(Orphan<Data>()); break;
   }
 }
 
@@ -1333,175 +1352,152 @@ class NodeTranslator::DynamicSlot {
   // TODO(someday):  The Dynamic API should support something like this directly.
 
 public:
-  DynamicSlot(DynamicStruct::Builder structBuilder, StructSchema::Member member)
-      : type(FIELD), struct_{structBuilder, member} {}
+  DynamicSlot(DynamicStruct::Builder structBuilder, StructSchema::Field field)
+      : type(FIELD), struct_{structBuilder, field} {}
   DynamicSlot(DynamicList::Builder listBuilder, uint index)
       : type(ELEMENT), list{listBuilder, index} {}
-  DynamicSlot(DynamicUnion::Builder unionBuilder, StructSchema::Member unionMember)
-      : type(UNION_MEMBER), union_{unionBuilder, unionMember} {}
-  DynamicSlot(DynamicUnion::Builder unionBuilder, StructSchema::Member unionMember,
-              StructSchema structMemberSchema)
-      : type(STRUCT_OBJECT_UNION_MEMBER), union_{unionBuilder, unionMember},
-        structMemberSchema(structMemberSchema) {}
-  DynamicSlot(DynamicUnion::Builder unionBuilder, StructSchema::Member unionMember,
-              ListSchema listMemberSchema)
-      : type(LIST_OBJECT_UNION_MEMBER), union_{unionBuilder, unionMember},
-        listMemberSchema(listMemberSchema) {}
-  DynamicSlot(DynamicUnion::Builder unionBuilder, StructSchema::Member unionMember,
-              EnumSchema enumMemberSchema)
-      : type(ENUM_UNION_MEMBER), union_{unionBuilder, unionMember},
-        enumMemberSchema(enumMemberSchema) {}
+  DynamicSlot(DynamicStruct::Builder structBuilder, StructSchema::Field field,
+              StructSchema structFieldSchema)
+      : type(STRUCT_OBJECT_FIELD), struct_{structBuilder, field},
+        structFieldSchema(structFieldSchema) {}
+  DynamicSlot(DynamicStruct::Builder structBuilder, StructSchema::Field field,
+              ListSchema listFieldSchema)
+      : type(LIST_OBJECT_FIELD), struct_{structBuilder, field},
+        listFieldSchema(listFieldSchema) {}
+  DynamicSlot(DynamicStruct::Builder structBuilder, StructSchema::Field field,
+              EnumSchema enumFieldSchema)
+      : type(RAW_ENUM_FIELD), struct_{structBuilder, field},
+        enumFieldSchema(enumFieldSchema) {}
 
   DynamicStruct::Builder initStruct() {
     switch (type) {
-      case FIELD: return struct_.builder.init(struct_.member).as<DynamicStruct>();
+      case FIELD: return struct_.builder.init(struct_.field).as<DynamicStruct>();
       case ELEMENT: return list.builder[list.index].as<DynamicStruct>();
-      case UNION_MEMBER: return union_.builder.init(union_.member).as<DynamicStruct>();
-      case STRUCT_OBJECT_UNION_MEMBER:
-        return union_.builder.initObject(union_.member, structMemberSchema);
-      case LIST_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
-      case ENUM_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
+      case STRUCT_OBJECT_FIELD:
+        return struct_.builder.initObject(struct_.field, structFieldSchema);
+      case LIST_OBJECT_FIELD: KJ_FAIL_REQUIRE("Type mismatch.");
+      case RAW_ENUM_FIELD: KJ_FAIL_REQUIRE("Type mismatch.");
     }
     KJ_FAIL_ASSERT("can't get here");
   }
 
   DynamicList::Builder initList(uint size) {
     switch (type) {
-      case FIELD: return struct_.builder.init(struct_.member, size).as<DynamicList>();
+      case FIELD: return struct_.builder.init(struct_.field, size).as<DynamicList>();
       case ELEMENT: return list.builder.init(list.index, size).as<DynamicList>();
-      case UNION_MEMBER: return union_.builder.init(union_.member, size).as<DynamicList>();
-      case STRUCT_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
-      case LIST_OBJECT_UNION_MEMBER:
-        return union_.builder.initObject(union_.member, listMemberSchema, size);
-      case ENUM_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
-    }
-    KJ_FAIL_ASSERT("can't get here");
-  }
-
-  DynamicUnion::Builder getUnion() {
-    switch (type) {
-      case FIELD: return struct_.builder.get(struct_.member).as<DynamicUnion>();
-      case ELEMENT: KJ_FAIL_REQUIRE("Type mismatch.");
-      case UNION_MEMBER: return union_.builder.init(union_.member).as<DynamicUnion>();
-      case STRUCT_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
-      case LIST_OBJECT_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
-      case ENUM_UNION_MEMBER: KJ_FAIL_REQUIRE("Type mismatch.");
+      case STRUCT_OBJECT_FIELD: KJ_FAIL_REQUIRE("Type mismatch.");
+      case LIST_OBJECT_FIELD:
+        return struct_.builder.initObject(struct_.field, listFieldSchema, size);
+      case RAW_ENUM_FIELD: KJ_FAIL_REQUIRE("Type mismatch.");
     }
     KJ_FAIL_ASSERT("can't get here");
   }
 
   void set(DynamicValue::Reader value) {
     switch (type) {
-      case FIELD: struct_.builder.set(struct_.member, value); return;
+      case FIELD: struct_.builder.set(struct_.field, value); return;
       case ELEMENT: list.builder.set(list.index, value); return;
-      case UNION_MEMBER: union_.builder.set(union_.member, value); return;
-      case STRUCT_OBJECT_UNION_MEMBER: union_.builder.set(union_.member, value); return;
-      case LIST_OBJECT_UNION_MEMBER: union_.builder.set(union_.member, value); return;
-      case ENUM_UNION_MEMBER:
-        union_.builder.set(union_.member, value.as<DynamicEnum>().getRaw());
+      case STRUCT_OBJECT_FIELD: struct_.builder.set(struct_.field, value); return;
+      case LIST_OBJECT_FIELD: struct_.builder.set(struct_.field, value); return;
+      case RAW_ENUM_FIELD:
+        struct_.builder.set(struct_.field, value.as<DynamicEnum>().getRaw());
         return;
     }
     KJ_FAIL_ASSERT("can't get here");
   }
 
   kj::Maybe<uint64_t> getEnumType() {
-    // If the member is an enum, get its type ID.  Otherwise return nullptr.
+    // If the slot type is an enum, get its type ID.  Otherwise return nullptr.
     //
     // This is really ugly.
 
     switch (type) {
-      case FIELD: return enumIdForMember(struct_.member);
+      case FIELD: return enumIdForField(struct_.field);
       case ELEMENT: {
-        if (list.builder.getSchema().whichElementType() == schema::Type::Body::ENUM_TYPE) {
+        if (list.builder.getSchema().whichElementType() == schema2::Type::ENUM) {
           return list.builder.getSchema().getEnumElementType().getProto().getId();
         }
         return nullptr;
       }
-      case UNION_MEMBER: return enumIdForMember(union_.member);
-      case STRUCT_OBJECT_UNION_MEMBER: return nullptr;
-      case LIST_OBJECT_UNION_MEMBER: return nullptr;
-      case ENUM_UNION_MEMBER: return enumMemberSchema.getProto().getId();
+      case STRUCT_OBJECT_FIELD: return nullptr;
+      case LIST_OBJECT_FIELD: return nullptr;
+      case RAW_ENUM_FIELD: return enumFieldSchema.getProto().getId();
     }
     KJ_FAIL_ASSERT("can't get here");
   }
 
 private:
   enum Type {
-    FIELD, ELEMENT, UNION_MEMBER, STRUCT_OBJECT_UNION_MEMBER, LIST_OBJECT_UNION_MEMBER,
-    ENUM_UNION_MEMBER
+    FIELD, ELEMENT, STRUCT_OBJECT_FIELD, LIST_OBJECT_FIELD, RAW_ENUM_FIELD
   };
   Type type;
 
   union {
     struct {
       DynamicStruct::Builder builder;
-      StructSchema::Member member;
+      StructSchema::Field field;
     } struct_;
     struct {
       DynamicList::Builder builder;
       uint index;
     } list;
-    struct {
-      DynamicUnion::Builder builder;
-      StructSchema::Member member;
-    } union_;
   };
 
   union {
-    StructSchema structMemberSchema;
-    ListSchema listMemberSchema;
-    EnumSchema enumMemberSchema;
+    StructSchema structFieldSchema;
+    ListSchema listFieldSchema;
+    EnumSchema enumFieldSchema;
   };
 
-  static kj::Maybe<uint64_t> enumIdForMember(StructSchema::Member member) {
-    auto body = member.getProto().getBody();
-    if (body.which() == schema::StructNode::Member::Body::FIELD_MEMBER) {
-      auto typeBody = body.getFieldMember().getType().getBody();
-      if (typeBody.which() == schema::Type::Body::ENUM_TYPE) {
-        return typeBody.getEnumType();
+  static kj::Maybe<uint64_t> enumIdForField(StructSchema::Field field) {
+    schema2::Field::Reader proto = field.getProto();
+    if (proto.which() == schema2::Field::REGULAR) {
+      auto type = proto.getRegular().getType();
+      if (type.which() == schema2::Type::ENUM) {
+        return type.getEnum();
       }
     }
     return nullptr;
   }
 };
 
-static kj::StringPtr getValueUnionMemberNameFor(schema::Type::Body::Which type) {
+static kj::StringPtr getValueUnionFieldNameFor(schema2::Type::Which type) {
   switch (type) {
-    case schema::Type::Body::VOID_TYPE: return "voidValue";
-    case schema::Type::Body::BOOL_TYPE: return "boolValue";
-    case schema::Type::Body::INT8_TYPE: return "int8Value";
-    case schema::Type::Body::INT16_TYPE: return "int16Value";
-    case schema::Type::Body::INT32_TYPE: return "int32Value";
-    case schema::Type::Body::INT64_TYPE: return "int64Value";
-    case schema::Type::Body::UINT8_TYPE: return "uint8Value";
-    case schema::Type::Body::UINT16_TYPE: return "uint16Value";
-    case schema::Type::Body::UINT32_TYPE: return "uint32Value";
-    case schema::Type::Body::UINT64_TYPE: return "uint64Value";
-    case schema::Type::Body::FLOAT32_TYPE: return "float32Value";
-    case schema::Type::Body::FLOAT64_TYPE: return "float64Value";
-    case schema::Type::Body::TEXT_TYPE: return "textValue";
-    case schema::Type::Body::DATA_TYPE: return "dataValue";
-    case schema::Type::Body::LIST_TYPE: return "listValue";
-    case schema::Type::Body::ENUM_TYPE: return "enumValue";
-    case schema::Type::Body::STRUCT_TYPE: return "structValue";
-    case schema::Type::Body::INTERFACE_TYPE: return "interfaceValue";
-    case schema::Type::Body::OBJECT_TYPE: return "objectValue";
+    case schema2::Type::VOID: return "voidValue";
+    case schema2::Type::BOOL: return "boolValue";
+    case schema2::Type::INT8: return "int8Value";
+    case schema2::Type::INT16: return "int16Value";
+    case schema2::Type::INT32: return "int32Value";
+    case schema2::Type::INT64: return "int64Value";
+    case schema2::Type::UINT8: return "uint8Value";
+    case schema2::Type::UINT16: return "uint16Value";
+    case schema2::Type::UINT32: return "uint32Value";
+    case schema2::Type::UINT64: return "uint64Value";
+    case schema2::Type::FLOAT32: return "float32Value";
+    case schema2::Type::FLOAT64: return "float64Value";
+    case schema2::Type::TEXT: return "textValue";
+    case schema2::Type::DATA: return "dataValue";
+    case schema2::Type::LIST: return "listValue";
+    case schema2::Type::ENUM: return "enumValue";
+    case schema2::Type::STRUCT: return "structValue";
+    case schema2::Type::INTERFACE: return "interfaceValue";
+    case schema2::Type::OBJECT: return "objectValue";
   }
   KJ_FAIL_ASSERT("Unknown type.");
 }
 
 void NodeTranslator::compileBootstrapValue(ValueExpression::Reader source,
-                                           schema::Type::Reader type,
-                                           schema::Value::Builder target) {
+                                           schema2::Type::Reader type,
+                                           schema2::Value::Builder target) {
   // Start by filling in a default default value so that if for whatever reason we don't end up
   // initializing the value, this won't cause schema validation to fail.
   compileDefaultDefaultValue(type, target);
 
-  switch (type.getBody().which()) {
-    case schema::Type::Body::LIST_TYPE:
-    case schema::Type::Body::STRUCT_TYPE:
-    case schema::Type::Body::INTERFACE_TYPE:
-    case schema::Type::Body::OBJECT_TYPE:
+  switch (type.which()) {
+    case schema2::Type::LIST:
+    case schema2::Type::STRUCT:
+    case schema2::Type::INTERFACE:
+    case schema2::Type::OBJECT:
       unfinishedValues.add(UnfinishedValue { source, type, target });
       break;
 
@@ -1512,25 +1508,32 @@ void NodeTranslator::compileBootstrapValue(ValueExpression::Reader source,
   }
 }
 
-void NodeTranslator::compileValue(ValueExpression::Reader source, schema::Type::Reader type,
-                                  schema::Value::Builder target, bool isBootstrap) {
+void NodeTranslator::compileValue(ValueExpression::Reader source, schema2::Type::Reader type,
+                                  schema2::Value::Builder target, bool isBootstrap) {
+#warning "temporary hack for schema transition"
+  switch (type.which()) {
+    default:
+      KJ_FAIL_ASSERT("Need to compile value type:", (uint)type.which());
+  }
+
+#if 0
   auto valueUnion = toDynamic(target).get("body").as<DynamicUnion>();
   auto member = valueUnion.getSchema().getMemberByName(
-      getValueUnionMemberNameFor(type.getBody().which()));
+      getValueUnionFieldNameFor(type.getBody().which()));
   switch (type.getBody().which()) {
-    case schema::Type::Body::LIST_TYPE:
+    case schema2::Type::LIST:
       KJ_IF_MAYBE(listSchema, makeListSchemaOf(type.getBody().getListType())) {
         DynamicSlot slot(valueUnion, member, *listSchema);
         compileValue(source, slot, isBootstrap);
       }
       break;
-    case schema::Type::Body::STRUCT_TYPE:
+    case schema2::Type::STRUCT:
       KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(type.getBody().getStructType())) {
         DynamicSlot slot(valueUnion, member, structSchema->asStruct());
         compileValue(source, slot, isBootstrap);
       }
       break;
-    case schema::Type::Body::ENUM_TYPE:
+    case schema2::Type::ENUM:
       KJ_IF_MAYBE(enumSchema, resolver.resolveBootstrapSchema(type.getBody().getEnumType())) {
         DynamicSlot slot(valueUnion, member, enumSchema->asEnum());
         compileValue(source, slot, isBootstrap);
@@ -1541,6 +1544,7 @@ void NodeTranslator::compileValue(ValueExpression::Reader source, schema::Type::
       compileValue(source, slot, isBootstrap);
       break;
   }
+#endif
 }
 
 void NodeTranslator::compileValue(ValueExpression::Reader src, DynamicSlot& dst, bool isBootstrap) {
@@ -1650,8 +1654,8 @@ void NodeTranslator::compileValueInner(
 
         switch (assignment.which()) {
           case ValueExpression::FieldAssignment::NOT_UNION:
-            KJ_IF_MAYBE(member, dstSchema.findMemberByName(fieldName.getValue())) {
-              DynamicSlot slot(dstStruct, *member);
+            KJ_IF_MAYBE(field, dstSchema.findFieldByName(fieldName.getValue())) {
+              DynamicSlot slot(dstStruct, *field);
               compileValue(assignment.getValue(), slot, isBootstrap);
             } else {
               errorReporter.addErrorOn(fieldName, kj::str(
@@ -1660,41 +1664,8 @@ void NodeTranslator::compileValueInner(
             break;
 
           case ValueExpression::FieldAssignment::UNION: {
-            StructSchema::Union unionMember;
-            if (fieldName.getValue().size() == 0) {
-              // Unnamed.
-              KJ_IF_MAYBE(unnamedUnion, dstSchema.getUnnamedUnion()) {
-                unionMember = *unnamedUnion;
-              } else {
-                errorReporter.addErrorOn(assignment.getUnion(), kj::str(
-                    "Struct type '", dstSchema.getProto().getDisplayName(),
-                    "' does not contain an unnamed union."));
-                break;
-              }
-            } else {
-              KJ_IF_MAYBE(member, dstSchema.findMemberByName(fieldName.getValue())) {
-                if (member->getProto().getBody().which() ==
-                    schema::StructNode::Member::Body::UNION_MEMBER) {
-                  unionMember = member->asUnion();
-                } else {
-                  errorReporter.addErrorOn(fieldName, kj::str(
-                      "'", fieldName.getValue(), "' is not a union."));
-                  break;
-                }
-              } else {
-                errorReporter.addErrorOn(fieldName, kj::str(
-                    "Struct has no field named '", fieldName.getValue(), "'."));
-                break;
-              }
-            }
-
-            KJ_IF_MAYBE(member, unionMember.findMemberByName(assignment.getUnion().getValue())) {
-              DynamicSlot slot(dstStruct, *member);
-              compileValue(assignment.getValue(), slot, isBootstrap);
-            } else {
-              errorReporter.addErrorOn(assignment.getUnion(), kj::str(
-                  "Union has no member named '", assignment.getUnion().getValue(), "'."));
-            }
+            KJ_FAIL_ASSERT("Union literal syntax is obsolete.");
+            break;
           }
         }
       }
@@ -1704,29 +1675,6 @@ void NodeTranslator::compileValueInner(
     case ValueExpression::Body::UNKNOWN:
       // Ignore earlier error.
       break;
-  }
-}
-
-void NodeTranslator::copyValue(schema::Value::Reader src, schema::Type::Reader srcType,
-                               schema::Value::Builder dst, schema::Type::Reader dstType,
-                               ValueExpression::Reader errorLocation) {
-  DynamicUnion::Reader srcBody = DynamicStruct::Reader(src).get("body").as<DynamicUnion>();
-  DynamicUnion::Builder dstBody = DynamicStruct::Builder(dst).get("body").as<DynamicUnion>();
-
-  kj::StringPtr dstFieldName = getValueUnionMemberNameFor(dstType.getBody().which());
-
-  KJ_IF_MAYBE(which, srcBody.which()) {
-    // Setting a value via the dynamic API implements the implicit conversions that we want, with
-    // bounds checking that we want.  It throws an exception on failure, but that exception is a
-    // recoverable one, so even if exceptions are disabled, we should be able to catch it.  So,
-    // let's do that rather than try to re-implement all that logic here.
-    KJ_IF_MAYBE(exception, kj::runCatchingExceptions(
-        [&]() { dstBody.set(dstFieldName, srcBody.get()); })) {
-      // Exception caught, therefore the types are not compatible.
-      errorReporter.addErrorOn(errorLocation, "Type mismatch.");
-    }
-  } else {
-    KJ_FAIL_ASSERT("Didn't recognize schema::Value::Body type?");
   }
 }
 
@@ -1743,43 +1691,40 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
     // constant turns out to be non-primitive, we'll error out anyway.  If we're not
     // bootstrapping, we may be compiling a non-primitive value and so we need the final
     // version of the constant to make sure its value is filled in.
-    //
-    // We need to be very careful not to query this Schema's dependencies because if it is
-    // a final schema then this query could trigger a lazy load which would deadlock.
-    kj::Maybe<schema::Node::Reader> maybeConstSchema = isBootstrap ?
+    kj::Maybe<schema2::Node::Reader> maybeConstSchema = isBootstrap ?
         resolver.resolveBootstrapSchema(resolved->id).map([](Schema s) { return s.getProto(); }) :
         resolver.resolveFinalSchema(resolved->id);
     KJ_IF_MAYBE(constSchema, maybeConstSchema) {
-      auto constReader = constSchema->getBody().getConstNode();
-      auto constValue = toDynamic(constReader.getValue()).get("body").as<DynamicUnion>().get();
+      auto constReader = constSchema->getConst();
+      auto dynamicConst = toDynamic(constReader.getValue());
+      auto constValue = dynamicConst.get(KJ_ASSERT_NONNULL(dynamicConst.which()));
 
       if (constValue.getType() == DynamicValue::OBJECT) {
         // We need to assign an appropriate schema to this object.
         DynamicObject objValue = constValue.as<DynamicObject>();
         auto constType = constReader.getType();
-        switch (constType.getBody().which()) {
-          case schema::Type::Body::STRUCT_TYPE:
-            KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(
-                constType.getBody().getStructType())) {
+        switch (constType.which()) {
+          case schema2::Type::STRUCT:
+            KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(constType.getStruct())) {
               constValue = objValue.as(structSchema->asStruct());
             } else {
               // The struct's schema is broken for reasons already reported.
               return nullptr;
             }
             break;
-          case schema::Type::Body::LIST_TYPE:
-            KJ_IF_MAYBE(listSchema, makeListSchemaOf(constType.getBody().getListType())) {
+          case schema2::Type::LIST:
+            KJ_IF_MAYBE(listSchema, makeListSchemaOf(constType.getList())) {
               constValue = objValue.as(*listSchema);
             } else {
               // The list's schema is broken for reasons already reported.
               return nullptr;
             }
             break;
-          case schema::Type::Body::OBJECT_TYPE:
+          case schema2::Type::OBJECT:
             // Fine as-is.
             break;
           default:
-            KJ_FAIL_ASSERT("Unrecognized Object-typed member of schema::Value::body.");
+            KJ_FAIL_ASSERT("Unrecognized Object-typed member of schema::Value.");
             break;
         }
       }
@@ -1792,7 +1737,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
         KJ_IF_MAYBE(scope, resolver.resolveBootstrapSchema(constSchema->getScopeId())) {
           auto scopeReader = scope->getProto();
           kj::StringPtr parent;
-          if (scopeReader.getBody().which() == schema::Node::Body::FILE_NODE) {
+          if (scopeReader.which() == schema2::Node::FILE) {
             parent = "";
           } else {
             parent = scopeReader.getDisplayName().slice(scopeReader.getDisplayNamePrefixLength());
@@ -1817,56 +1762,55 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
   }
 }
 
-kj::Maybe<ListSchema> NodeTranslator::makeListSchemaOf(schema::Type::Reader elementType) {
-  auto body = elementType.getBody();
-  switch (body.which()) {
-    case schema::Type::Body::ENUM_TYPE:
-      KJ_IF_MAYBE(enumSchema, resolver.resolveBootstrapSchema(body.getEnumType())) {
+kj::Maybe<ListSchema> NodeTranslator::makeListSchemaOf(schema2::Type::Reader elementType) {
+  switch (elementType.which()) {
+    case schema2::Type::ENUM:
+      KJ_IF_MAYBE(enumSchema, resolver.resolveBootstrapSchema(elementType.getEnum())) {
         return ListSchema::of(enumSchema->asEnum());
       } else {
         return nullptr;
       }
-    case schema::Type::Body::STRUCT_TYPE:
-      KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(body.getStructType())) {
+    case schema2::Type::STRUCT:
+      KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(elementType.getStruct())) {
         return ListSchema::of(structSchema->asStruct());
       } else {
         return nullptr;
       }
-    case schema::Type::Body::INTERFACE_TYPE:
-      KJ_IF_MAYBE(interfaceSchema, resolver.resolveBootstrapSchema(body.getInterfaceType())) {
+    case schema2::Type::INTERFACE:
+      KJ_IF_MAYBE(interfaceSchema, resolver.resolveBootstrapSchema(elementType.getInterface())) {
         return ListSchema::of(interfaceSchema->asInterface());
       } else {
         return nullptr;
       }
-    case schema::Type::Body::LIST_TYPE:
-      KJ_IF_MAYBE(listSchema, makeListSchemaOf(body.getListType())) {
+    case schema2::Type::LIST:
+      KJ_IF_MAYBE(listSchema, makeListSchemaOf(elementType.getList())) {
         return ListSchema::of(*listSchema);
       } else {
         return nullptr;
       }
     default:
-      return ListSchema::of(body.which());
+      return ListSchema::of(elementType.which());
   }
 }
 
-Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
+Orphan<List<schema2::Annotation>> NodeTranslator::compileAnnotationApplications(
     List<Declaration::AnnotationApplication>::Reader annotations,
     kj::StringPtr targetsFlagName) {
   if (annotations.size() == 0 || !compileAnnotations) {
     // Return null.
-    return Orphan<List<schema::Annotation>>();
+    return Orphan<List<schema2::Annotation>>();
   }
 
   Orphanage orphanage = Orphanage::getForMessageContaining(wipNode.get());
-  auto result = orphanage.newOrphan<List<schema::Annotation>>(annotations.size());
+  auto result = orphanage.newOrphan<List<schema2::Annotation>>(annotations.size());
   auto builder = result.get();
 
   for (uint i = 0; i < annotations.size(); i++) {
     Declaration::AnnotationApplication::Reader annotation = annotations[i];
-    schema::Annotation::Builder annotationBuilder = builder[i];
+    schema2::Annotation::Builder annotationBuilder = builder[i];
 
     // Set the annotation's value to void in case we fail to produce something better below.
-    annotationBuilder.initValue().getBody().setVoidValue();
+    annotationBuilder.initValue().setVoid();
 
     auto name = annotation.getName();
     KJ_IF_MAYBE(decl, resolver.resolve(name)) {
@@ -1876,19 +1820,22 @@ Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
       } else {
         annotationBuilder.setId(decl->id);
         KJ_IF_MAYBE(annotationSchema, resolver.resolveBootstrapSchema(decl->id)) {
-          auto node = annotationSchema->getProto().getBody().getAnnotationNode();
+          auto node = annotationSchema->getProto().getAnnotation();
+#warning "temporary hack for schema transition"
+#if 0
           if (!toDynamic(node).get(targetsFlagName).as<bool>()) {
             errorReporter.addErrorOn(name, kj::str(
                 "'", declNameString(name), "' cannot be applied to this kind of declaration."));
           }
+#endif
 
           // Interpret the value.
           auto value = annotation.getValue();
           switch (value.which()) {
             case Declaration::AnnotationApplication::Value::NONE:
               // No value, i.e. void.
-              if (node.getType().getBody().which() == schema::Type::Body::VOID_TYPE) {
-                annotationBuilder.getValue().getBody().setVoidValue();
+              if (node.getType().which() == schema2::Type::VOID) {
+                annotationBuilder.getValue().setVoid();
               } else {
                 errorReporter.addErrorOn(name, kj::str(
                     "'", declNameString(name), "' requires a value."));

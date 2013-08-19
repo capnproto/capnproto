@@ -25,7 +25,7 @@
 #define CAPNP_COMPILER_COMPILER_H_
 
 #include <capnp/compiler/grammar.capnp.h>
-#include <capnp/schema.capnp.h>
+#include <capnp/schema2.capnp.h>
 #include <capnp/schema-loader.h>
 #include "error-reporter.h"
 
@@ -83,6 +83,10 @@ public:
   // Given the type ID of a schema node, find the ID of a node nested within it.  Throws an
   // exception if the parent ID is not recognized; returns null if the parent has no child of the
   // given name.  Neither the parent nor the child schema node is actually compiled.
+
+  Orphan<List<schema2::CodeGeneratorRequest::RequestedFile::Import>>
+      getFileImportTable(const Module& module, Orphanage orphanage) const;
+  // Build the import table for the CodeGeneratorRequest for the given module.
 
   enum Eagerness: uint32_t {
     // Flags specifying how eager to be about compilation.  These are intended to be bitwise OR'd.

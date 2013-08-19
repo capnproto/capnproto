@@ -75,7 +75,12 @@ struct Node {
       dataSectionWordSize @7 :UInt16;
       pointerSectionSize @8 :UInt16;
 
-      isGroup @9 :Bool;
+      preferredListEncoding @9 :ElementSize;
+      # The preferred element size to use when encoding a list of this struct.  If this is anything
+      # other than `inlineComposite` then the struct is one word or less in size and is a candidate
+      # for list packing optimization.
+
+      isGroup @10 :Bool;
       # If true, then this "struct" node is actually not an independent node, but merely represents
       # some named union or group within a particular parent struct.  This node's scopeId refers
       # to the parent struct, which may itself be a union/group in yet another struct.
@@ -87,23 +92,20 @@ struct Node {
       # Note that a named union is considered a special kind of group -- in fact, a named union
       # is exactly equivalent to a group that contains nothing but an unnamed union.
 
-      isUnion @10 :Bool;
-      # Whether or not this struct (or group) contains some fields that overlap.  If so, then a
-      # discriminant must be present to indicate which field among the overlapping ones is
-      # currently active.
+      discriminantCount @11 :UInt16;
+      # Number of fields in this struct which are members of an anonymous union, and thus may
+      # overlap.  If this is non-zero, then a 16-bit discriminant is present indicating which
+      # of the overlapping fields is active.  This can never be 1 -- if it is non-zero, it must be
+      # two or more.
       #
-      # Note that an unnamed union causes `isUnion` to be true on its _parent_.  E.g. for a struct
-      # containing an unnamed union, the struct node itself will have `isUnion` = true, and there
-      # will be no "group" nodes.  On the other hand, a named union is equivalent to a group
-      # containing an unnamed union, and thus becomes a whole separate schema node.
+      # Note that the fields of an unnamed union are considered fields of the scope containing the
+      # union -- an unnamed union is not its own group.  So, a top-level struct may contain a
+      # non-zero discriminant count.  Named unions, on the other hand, are equivalent to groups
+      # containing unnamed unions.  So, a named union has its own independent schema node, with
+      # `isGroup` = true.
 
-      discriminantOffset @11 :UInt32;
+      discriminantOffset @12 :UInt32;
       # If `isUnion` is true, this is the offset of the union discriminant, in multiples of 16 bits.
-
-      preferredListEncoding @12 :ElementSize;
-      # The preferred element size to use when encoding a list of this struct.  If this is anything
-      # other than `inlineComposite` then the struct is one word or less in size and is a candidate
-      # for list packing optimization.
 
       fields @13 :List(Field);
       # Fields defined within this scope (either the struct's top-level fields, or the fields of
@@ -183,11 +185,14 @@ struct Field {
     # A group.  This is the ID of the group's node.
   }
 
-  ordinal @8 :UInt16;
-  # The original ordinal number given to the field.  You probably should NOT use this; if you need
-  # a numeric identifier for a field, use its position within the field array for its scope.
-  # The ordinal is given here mainly just so that the original schema text can be reproduced given
-  # the compiled version -- i.e. so that `capnp compile -ocapnp` can do its job.
+  ordinal :union {
+    implicit @8 :Void;
+    explicit @9 :UInt16;
+    # The original ordinal number given to the field.  You probably should NOT use this; if you need
+    # a numeric identifier for a field, use its position within the field array for its scope.
+    # The ordinal is given here mainly just so that the original schema text can be reproduced given
+    # the compiled version -- i.e. so that `capnp compile -ocapnp` can do its job.
+  }
 }
 
 struct Enumerant {
@@ -232,63 +237,65 @@ struct Method {
 struct Type {
   # Represents a type expression.
 
-  body @0 union {
-    voidType @1 :Void;
-    boolType @2 :Void;
-    int8Type @3 :Void;
-    int16Type @4 :Void;
-    int32Type @5 :Void;
-    int64Type @6 :Void;
-    uint8Type @7 :Void;
-    uint16Type @8 :Void;
-    uint32Type @9 :Void;
-    uint64Type @10 :Void;
-    float32Type @11 :Void;
-    float64Type @12 :Void;
-    textType @13 :Void;
-    dataType @14 :Void;
+  union {
+    # The ordinals intentionally match those of Value.
 
-    listType @15 :Type;  # Value = the element type.
+    void @0 :Void;
+    bool @1 :Void;
+    int8 @2 :Void;
+    int16 @3 :Void;
+    int32 @4 :Void;
+    int64 @5 :Void;
+    uint8 @6 :Void;
+    uint16 @7 :Void;
+    uint32 @8 :Void;
+    uint64 @9 :Void;
+    float32 @10 :Void;
+    float64 @11 :Void;
+    text @12 :Void;
+    data @13 :Void;
 
-    enumType @16 :Id;
-    structType @17 :Id;
-    interfaceType @18 :Id;
+    list @14 :Type;  # Value = the element type.
 
-    objectType @19 :Void;
+    enum @15 :Id;
+    struct @16 :Id;
+    interface @17 :Id;
+
+    object @18 :Void;
   }
 }
 
 struct Value {
   # Represents a value, e.g. a field default value, constant value, or annotation value.
 
-  body @0 union {
-    # Note ordinals 1 and 10 are intentionally swapped to improve union layout.
-    # TODO:  Make it 2 and 10 that are swapped instead so that voidValue is still default?
-    voidValue @10 :Void;
-    boolValue @2 :Bool;
-    int8Value @3 :Int8;
-    int16Value @4 :Int16;
-    int32Value @5 :Int32;
-    int64Value @6 :Int64;
-    uint8Value @7 :UInt8;
-    uint16Value @8 :UInt16;
-    uint32Value @9 :UInt32;
-    uint64Value @1 :UInt64;
-    float32Value @11 :Float32;
-    float64Value @12 :Float64;
-    textValue @13 :Text;
-    dataValue @14 :Data;
+  union {
+    # The ordinals intentionally match those of Type.
 
-    listValue @15 :Object;
+    void @0 :Void;
+    bool @1 :Bool;
+    int8 @2 :Int8;
+    int16 @3 :Int16;
+    int32 @4 :Int32;
+    int64 @5 :Int64;
+    uint8 @6 :UInt8;
+    uint16 @7 :UInt16;
+    uint32 @8 :UInt32;
+    uint64 @9 :UInt64;
+    float32 @10 :Float32;
+    float64 @11 :Float64;
+    text @12 :Text;
+    data @13 :Data;
 
-    enumValue @16 :UInt16;
-    structValue @17 :Object;
+    list @14 :Object;
 
-    interfaceValue @18 :Void;
+    enum @15 :UInt16;
+    struct @16 :Object;
+
+    interface @17 :Void;
     # The only interface value that can be represented statically is "null", whose methods always
     # throw exceptions.
 
-    objectValue @19 :Object;
+    object @18 :Object;
   }
 }
 

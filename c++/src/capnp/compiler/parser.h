@@ -43,6 +43,11 @@ void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
 uint64_t generateRandomId();
 // Generate a new random unique ID.  This lives here mostly for lack of a better location.
 
+uint64_t generateChildId(uint64_t parentId, kj::StringPtr childName);
+// Generate the ID for a child node given its parent ID and name.
+//
+// TODO(cleanup):  Move generateRandomId() and generateChildId() somewhere more sensible.
+
 class CapnpParser {
   // Advanced parser interface.  This interface exposes the inner parsers so that you can embed
   // them into your own parsers.

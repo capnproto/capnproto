@@ -22,6 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "parser.h"
+#include "md5.h"
 #include <capnp/dynamic.h>
 #include <kj/debug.h>
 #include <unistd.h>
@@ -42,6 +43,29 @@ uint64_t generateRandomId() {
   ssize_t n;
   KJ_SYSCALL(n = read(fd, &result, sizeof(result)), "/dev/urandom");
   KJ_ASSERT(n == sizeof(result), "Incomplete read from /dev/urandom.", n);
+
+  return result | (1ull << 63);
+}
+
+uint64_t generateChildId(uint64_t parentId, kj::StringPtr childName) {
+  // Compute ID by MD5 hashing the concatenation of the parent ID and the declaration name, and
+  // then taking the first 8 bytes.
+
+  kj::byte parentIdBytes[sizeof(uint64_t)];
+  for (uint i = 0; i < sizeof(uint64_t); i++) {
+    parentIdBytes[i] = (parentId >> (i * 8)) & 0xff;
+  }
+
+  Md5 md5;
+  md5.update(kj::arrayPtr(parentIdBytes, KJ_ARRAY_SIZE(parentIdBytes)));
+  md5.update(childName);
+
+  kj::ArrayPtr<const kj::byte> resultBytes = md5.finish();
+
+  uint64_t result = 0;
+  for (uint i = 0; i < sizeof(uint64_t); i++) {
+    result = (result << 8) | resultBytes[i];
+  }
 
   return result | (1ull << 63);
 }

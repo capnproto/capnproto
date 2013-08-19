@@ -186,7 +186,7 @@ static kj::StringTree print(const DynamicValue::Reader& value,
         return kj::strTree(enumerant->getProto().getName());
       } else {
         // Unknown enum value; output raw number.
-        return kj::strTree(enumValue.getRaw());
+        return kj::strTree('(', enumValue.getRaw(), ')');
       }
       break;
     }

@@ -35,6 +35,7 @@ INPUT=$1
 case "$INPUT" in
     *capnp/c++.capnp | \
     *capnp/schema.capnp | \
+    *capnp/schema2.capnp | \
     *capnp/compiler/lexer.capnp | \
     *capnp/compiler/grammar.capnp )
         exit 0

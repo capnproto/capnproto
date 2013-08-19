@@ -164,14 +164,11 @@ struct RawSchema {
   // TODO(someday):  Make this a hashtable.
 
   struct MemberInfo {
-    uint16_t scopeOrdinal;
-    // One plus the ordinal number of the parent scope of this member when looking up by name.
-    // Zero represents the top-level scope.
+    uint16_t value;
 
-    uint16_t index;
-    // Index of the member within its scope.  If the index is greater than the number of elements
-    // in the scope, then the member is in an unnamed union, and its index within that union is
-    // `index` - (number of members in the outer scope).
+    inline operator uint16_t() const { return value; }
+    constexpr MemberInfo(uint16_t value): value(value) {}
+    constexpr MemberInfo(uint16_t value, uint16_t dummy): value(value) {}
   };
 
   const MemberInfo* membersByName;
@@ -181,6 +178,10 @@ struct RawSchema {
   uint32_t dependencyCount;
   uint32_t memberCount;
   // Sizes of above tables.
+
+  const uint16_t* membersByDiscriminant;
+  // List of all member indexes ordered by discriminant value.  Those which don't have a
+  // discriminant value are listed at the end, in order by ordinal.
 
   const RawSchema* canCastTo;
   // Points to the RawSchema of a compiled-in type to which it is safe to cast any DynamicValue
