@@ -119,60 +119,69 @@ struct WirePointer {
   // -----------------------------------------------------------------
   // Part of pointer that depends on the kind.
 
+  // Note:  Originally StructRef, ListRef, and FarRef were unnamed types, but this somehow
+  //   tickled a bug in GCC:
+  //     http://gcc.gnu.org/bugzilla/show_bug.cgi?id=58192
+  struct StructRef {
+    WireValue<WordCount16> dataSize;
+    WireValue<WirePointerCount16> ptrCount;
+
+    inline WordCount wordSize() const {
+      return dataSize.get() + ptrCount.get() * WORDS_PER_POINTER;
+    }
+
+    KJ_ALWAYS_INLINE(void set(WordCount ds, WirePointerCount rc)) {
+      dataSize.set(ds);
+      ptrCount.set(rc);
+    }
+    KJ_ALWAYS_INLINE(void set(StructSize size)) {
+      dataSize.set(size.data);
+      ptrCount.set(size.pointers);
+    }
+  };
+
+  struct ListRef {
+    WireValue<uint32_t> elementSizeAndCount;
+
+    KJ_ALWAYS_INLINE(FieldSize elementSize() const) {
+      return static_cast<FieldSize>(elementSizeAndCount.get() & 7);
+    }
+    KJ_ALWAYS_INLINE(ElementCount elementCount() const) {
+      return (elementSizeAndCount.get() >> 3) * ELEMENTS;
+    }
+    KJ_ALWAYS_INLINE(WordCount inlineCompositeWordCount() const) {
+      return elementCount() * (1 * WORDS / ELEMENTS);
+    }
+
+    KJ_ALWAYS_INLINE(void set(FieldSize es, ElementCount ec)) {
+      KJ_DREQUIRE(ec < (1 << 29) * ELEMENTS, "Lists are limited to 2**29 elements.");
+      elementSizeAndCount.set(((ec / ELEMENTS) << 3) | static_cast<int>(es));
+    }
+
+    KJ_ALWAYS_INLINE(void setInlineComposite(WordCount wc)) {
+      KJ_DREQUIRE(wc < (1 << 29) * WORDS, "Inline composite lists are limited to 2**29 words.");
+      elementSizeAndCount.set(((wc / WORDS) << 3) |
+                              static_cast<int>(FieldSize::INLINE_COMPOSITE));
+    }
+  };
+
+  struct FarRef {
+    WireValue<SegmentId> segmentId;
+
+    KJ_ALWAYS_INLINE(void set(SegmentId si)) {
+      segmentId.set(si);
+    }
+  };
+
   union {
     uint32_t upper32Bits;
 
-    struct {
-      WireValue<WordCount16> dataSize;
-      WireValue<WirePointerCount16> ptrCount;
-
-      inline WordCount wordSize() const {
-        return dataSize.get() + ptrCount.get() * WORDS_PER_POINTER;
-      }
-
-      KJ_ALWAYS_INLINE(void set(WordCount ds, WirePointerCount rc)) {
-        dataSize.set(ds);
-        ptrCount.set(rc);
-      }
-      KJ_ALWAYS_INLINE(void set(StructSize size)) {
-        dataSize.set(size.data);
-        ptrCount.set(size.pointers);
-      }
-    } structRef;
+    StructRef structRef;
     // Also covers capabilities.
 
-    struct {
-      WireValue<uint32_t> elementSizeAndCount;
+    ListRef listRef;
 
-      KJ_ALWAYS_INLINE(FieldSize elementSize() const) {
-        return static_cast<FieldSize>(elementSizeAndCount.get() & 7);
-      }
-      KJ_ALWAYS_INLINE(ElementCount elementCount() const) {
-        return (elementSizeAndCount.get() >> 3) * ELEMENTS;
-      }
-      KJ_ALWAYS_INLINE(WordCount inlineCompositeWordCount() const) {
-        return elementCount() * (1 * WORDS / ELEMENTS);
-      }
-
-      KJ_ALWAYS_INLINE(void set(FieldSize es, ElementCount ec)) {
-        KJ_DREQUIRE(ec < (1 << 29) * ELEMENTS, "Lists are limited to 2**29 elements.");
-        elementSizeAndCount.set(((ec / ELEMENTS) << 3) | static_cast<int>(es));
-      }
-
-      KJ_ALWAYS_INLINE(void setInlineComposite(WordCount wc)) {
-        KJ_DREQUIRE(wc < (1 << 29) * WORDS, "Inline composite lists are limited to 2**29 words.");
-        elementSizeAndCount.set(((wc / WORDS) << 3) |
-                                static_cast<int>(FieldSize::INLINE_COMPOSITE));
-      }
-    } listRef;
-
-    struct {
-      WireValue<SegmentId> segmentId;
-
-      KJ_ALWAYS_INLINE(void set(SegmentId si)) {
-        segmentId.set(si);
-      }
-    } farRef;
+    FarRef farRef;
   };
 
   KJ_ALWAYS_INLINE(bool isNull() const) {
