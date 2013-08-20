@@ -94,9 +94,9 @@ Hopefully, Xcode 5.0 will be released soon with a newer Clang, making this extra
 
 You may download and install the release version of Cap'n Proto like so:
 
-<pre><code>curl -O <a href="http://capnproto.org/capnproto-c++-0.2.0.tar.gz">http://capnproto.org/capnproto-c++-0.2.0.tar.gz</a>
-tar zxf capnproto-c++-0.2.0.tar.gz
-cd capnproto-c++-0.2.0
+<pre><code>curl -O <a href="http://capnproto.org/capnproto-c++-0.2.1.tar.gz">http://capnproto.org/capnproto-c++-0.2.1.tar.gz</a>
+tar zxf capnproto-c++-0.2.1.tar.gz
+cd capnproto-c++-0.2.1
 ./configure
 make -j6 check
 sudo make install</code></pre>
