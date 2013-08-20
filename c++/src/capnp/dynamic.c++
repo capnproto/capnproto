@@ -858,7 +858,7 @@ DynamicValue::Builder DynamicStruct::Builder::init(kj::StringPtr name, uint size
   return init(schema.getFieldByName(name), size);
 }
 void DynamicStruct::Builder::clear(kj::StringPtr name) {
-  return clear(schema.getFieldByName(name));
+  clear(schema.getFieldByName(name));
 }
 DynamicStruct::Builder DynamicStruct::Builder::getObject(
     kj::StringPtr name, StructSchema type) {
@@ -1332,16 +1332,22 @@ Void DynamicValue::Builder::AsImpl<Void>::apply(Builder& builder) {
 
 template <>
 DynamicStruct::Reader MessageReader::getRoot<DynamicStruct>(StructSchema schema) {
+  KJ_REQUIRE(!schema.getProto().getStruct().getIsGroup(),
+             "Can't use group type as the root of a message.");
   return DynamicStruct::Reader(schema, getRootInternal());
 }
 
 template <>
 DynamicStruct::Builder MessageBuilder::initRoot<DynamicStruct>(StructSchema schema) {
+  KJ_REQUIRE(!schema.getProto().getStruct().getIsGroup(),
+             "Can't use group type as the root of a message.");
   return DynamicStruct::Builder(schema, initRoot(structSizeFromSchema(schema)));
 }
 
 template <>
 DynamicStruct::Builder MessageBuilder::getRoot<DynamicStruct>(StructSchema schema) {
+  KJ_REQUIRE(!schema.getProto().getStruct().getIsGroup(),
+             "Can't use group type as the root of a message.");
   return DynamicStruct::Builder(schema, getRoot(structSizeFromSchema(schema)));
 }
 
@@ -1349,19 +1355,27 @@ namespace _ {  // private
 
 DynamicStruct::Reader PointerHelpers<DynamicStruct, Kind::UNKNOWN>::getDynamic(
     StructReader reader, WirePointerCount index, StructSchema schema) {
+  KJ_REQUIRE(!schema.getProto().getStruct().getIsGroup(),
+             "Cannot form pointer to group type.");
   return DynamicStruct::Reader(schema, reader.getStructField(index, nullptr));
 }
 DynamicStruct::Builder PointerHelpers<DynamicStruct, Kind::UNKNOWN>::getDynamic(
     StructBuilder builder, WirePointerCount index, StructSchema schema) {
+  KJ_REQUIRE(!schema.getProto().getStruct().getIsGroup(),
+             "Cannot form pointer to group type.");
   return DynamicStruct::Builder(schema, builder.getStructField(
       index, structSizeFromSchema(schema), nullptr));
 }
 void PointerHelpers<DynamicStruct, Kind::UNKNOWN>::set(
     StructBuilder builder, WirePointerCount index, const DynamicStruct::Reader& value) {
+  KJ_REQUIRE(!value.schema.getProto().getStruct().getIsGroup(),
+             "Cannot form pointer to group type.");
   builder.setStructField(index, value.reader);
 }
 DynamicStruct::Builder PointerHelpers<DynamicStruct, Kind::UNKNOWN>::init(
     StructBuilder builder, WirePointerCount index, StructSchema schema) {
+  KJ_REQUIRE(!schema.getProto().getStruct().getIsGroup(),
+             "Cannot form pointer to group type.");
   return DynamicStruct::Builder(schema,
       builder.initStructField(index, structSizeFromSchema(schema)));
 }

@@ -31,6 +31,16 @@
 namespace capnp {
 
 class SchemaLoader {
+  // Class which can be used to construct Schema objects from schema::Nodes as defined in
+  // schema.capnp.
+  //
+  // It is a bad idea to use this class on untrusted input with exceptions disabled -- you may
+  // be exposing yourself to denial-of-service attacks, as attackers can easily construct schemas
+  // that are subtly inconsistent in a way that causes exceptions to be thrown either by
+  // SchemaLoader or by the dynamic API when the schemas are subsequently used.  If you enable and
+  // properly catch exceptions, you should be OK -- assuming no bugs in the Cap'n Proto
+  // implementation, of course.
+
 public:
   class LazyLoadCallback {
   public:

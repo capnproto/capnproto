@@ -70,6 +70,31 @@ uint64_t generateChildId(uint64_t parentId, kj::StringPtr childName) {
   return result | (1ull << 63);
 }
 
+uint64_t generateGroupId(uint64_t parentId, uint16_t groupIndex) {
+  // Compute ID by MD5 hashing the concatenation of the parent ID and the group index, and
+  // then taking the first 8 bytes.
+
+  kj::byte bytes[sizeof(uint64_t) + sizeof(uint16_t)];
+  for (uint i = 0; i < sizeof(uint64_t); i++) {
+    bytes[i] = (parentId >> (i * 8)) & 0xff;
+  }
+  for (uint i = 0; i < sizeof(uint16_t); i++) {
+    bytes[sizeof(uint64_t) + i] = (groupIndex >> (i * 8)) & 0xff;
+  }
+
+  Md5 md5;
+  md5.update(bytes);
+
+  kj::ArrayPtr<const kj::byte> resultBytes = md5.finish();
+
+  uint64_t result = 0;
+  for (uint i = 0; i < sizeof(uint64_t); i++) {
+    result = (result << 8) | resultBytes[i];
+  }
+
+  return result | (1ull << 63);
+}
+
 void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
                const ErrorReporter& errorReporter) {
   CapnpParser parser(Orphanage::getForMessageContaining(result), errorReporter);
@@ -858,6 +883,8 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
         DynamicStruct::Builder dynamicBuilder = builder;
         for (auto& maybeTarget: targets.value) {
           KJ_IF_MAYBE(target, maybeTarget) {
+#warning "temporary hack for schema transition"
+#if 0
             if (target->value == "*") {
               // Set all.
               if (targets.value.size() > 1) {
@@ -892,6 +919,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
                 }
               }
             }
+#endif
           }
         }
         return DeclParserResult(kj::mv(decl));

@@ -903,6 +903,26 @@ Compiler::Impl::Impl(AnnotationFlag annotationFlag)
     : annotationFlag(annotationFlag), finalLoader(*this), workspace(*this) {
   // Reflectively interpret the members of Declaration.body.  Any member prefixed by "builtin"
   // defines a builtin declaration visible in the global scope.
+
+#warning "temporary hack for schema transition"
+  builtinDecls["Void"] = nodeArena.allocateOwn<Node>("Void", Declaration::Body::BUILTIN_VOID);
+  builtinDecls["Bool"] = nodeArena.allocateOwn<Node>("Bool", Declaration::Body::BUILTIN_BOOL);
+  builtinDecls["Int8"] = nodeArena.allocateOwn<Node>("Int8", Declaration::Body::BUILTIN_INT8);
+  builtinDecls["Int16"] = nodeArena.allocateOwn<Node>("Int16", Declaration::Body::BUILTIN_INT16);
+  builtinDecls["Int32"] = nodeArena.allocateOwn<Node>("Int32", Declaration::Body::BUILTIN_INT32);
+  builtinDecls["Int64"] = nodeArena.allocateOwn<Node>("Int64", Declaration::Body::BUILTIN_INT64);
+  builtinDecls["UInt8"] = nodeArena.allocateOwn<Node>("UInt8", Declaration::Body::BUILTIN_U_INT8);
+  builtinDecls["UInt16"] = nodeArena.allocateOwn<Node>("UInt16", Declaration::Body::BUILTIN_U_INT16);
+  builtinDecls["UInt32"] = nodeArena.allocateOwn<Node>("UInt32", Declaration::Body::BUILTIN_U_INT32);
+  builtinDecls["UInt64"] = nodeArena.allocateOwn<Node>("UInt64", Declaration::Body::BUILTIN_U_INT64);
+  builtinDecls["Float32"] = nodeArena.allocateOwn<Node>("Float32", Declaration::Body::BUILTIN_FLOAT32);
+  builtinDecls["Float64"] = nodeArena.allocateOwn<Node>("Float64", Declaration::Body::BUILTIN_FLOAT64);
+  builtinDecls["Text"] = nodeArena.allocateOwn<Node>("Text", Declaration::Body::BUILTIN_TEXT);
+  builtinDecls["Data"] = nodeArena.allocateOwn<Node>("Data", Declaration::Body::BUILTIN_DATA);
+  builtinDecls["List"] = nodeArena.allocateOwn<Node>("List", Declaration::Body::BUILTIN_LIST);
+  builtinDecls["Object"] = nodeArena.allocateOwn<Node>("Object", Declaration::Body::BUILTIN_OBJECT);
+
+#if 0
   StructSchema::Union declBodySchema =
       Schema::from<Declaration>().getMemberByName("body").asUnion();
   for (auto member: declBodySchema.getMembers()) {
@@ -913,6 +933,7 @@ Compiler::Impl::Impl(AnnotationFlag annotationFlag)
           symbolName, static_cast<Declaration::Body::Which>(member.getIndex()));
     }
   }
+#endif
 }
 
 Compiler::Impl::~Impl() noexcept(false) {}

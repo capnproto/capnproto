@@ -22,7 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "node-translator.h"
-#include "parser.h"      // only for generateChildId()
+#include "parser.h"      // only for generateGroupId()
 #include <kj/debug.h>
 #include <kj/arena.h>
 #include <set>
@@ -906,6 +906,7 @@ public:
 
         case Declaration::Body::GROUP_DECL:
           member->setDiscriminantOffsetInSchema();  // in case it contains an unnamed union
+          member->node.setId(generateGroupId(member->parent->node.getId(), member->index));
           targetsFlagName = "targetsGroup";
           break;
 
@@ -964,6 +965,9 @@ private:
     uint codeOrder;
     // Code order within the parent.
 
+    uint index = 0;
+    // Index within the parent.
+
     uint childCount = 0;
     // Number of children this member has.
 
@@ -1017,6 +1021,7 @@ private:
       KJ_IF_MAYBE(result, schema) {
         return *result;
       } else {
+        index = parent->childInitializedCount;
         auto builder = parent->addMemberSchema();
         if (isInUnion) {
           builder.setDiscriminantValue(parent->unionDiscriminantCount++);
@@ -1189,7 +1194,7 @@ private:
         .newOrphan<schema2::Node>();
     auto node = orphan.get();
 
-    node.setId(generateChildId(parent.getId(), name));
+    // We'll set the ID later.
     node.setDisplayName(kj::str(parent.getDisplayName(), '.', name));
     node.setDisplayNamePrefixLength(node.getDisplayName().size() - name.size());
     node.setScopeId(parent.getId());

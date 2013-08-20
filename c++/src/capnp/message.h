@@ -234,7 +234,7 @@ template <typename Reader>
 void copyToUnchecked(Reader&& reader, kj::ArrayPtr<word> uncheckedBuffer);
 // Copy the content of the given reader into the given buffer, such that it can safely be passed to
 // readMessageUnchecked().  The buffer's size must be exactly reader.totalSizeInWords() + 1,
-// otherwise an exception will be thrown.
+// otherwise an exception will be thrown.  The buffer must be zero'd before calling.
 
 template <typename Type>
 static typename Type::Reader defaultValue();
@@ -332,7 +332,7 @@ private:
 
 class FlatMessageBuilder: public MessageBuilder {
   // A message builder implementation which allocates from a single flat array, throwing an
-  // exception if it runs out of space.
+  // exception if it runs out of space.  The array must be zero'd before use.
 
 public:
   explicit FlatMessageBuilder(kj::ArrayPtr<word> array);

@@ -167,6 +167,7 @@ struct RawSchema {
     uint16_t value;
 
     inline operator uint16_t() const { return value; }
+    MemberInfo() = default;
     constexpr MemberInfo(uint16_t value): value(value) {}
     constexpr MemberInfo(uint16_t value, uint16_t dummy): value(value) {}
   };
