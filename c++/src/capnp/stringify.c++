@@ -99,19 +99,19 @@ private:
   }
 };
 
-static schema2::Type::Which whichFieldType(const StructSchema::Field& field) {
+static schema::Type::Which whichFieldType(const StructSchema::Field& field) {
   auto proto = field.getProto();
   switch (proto.which()) {
-    case schema2::Field::REGULAR:
+    case schema::Field::REGULAR:
       return proto.getRegular().getType().which();
-    case schema2::Field::GROUP:
-      return schema2::Type::STRUCT;
+    case schema::Field::GROUP:
+      return schema::Type::STRUCT;
   }
   KJ_UNREACHABLE;
 }
 
 static kj::StringTree print(const DynamicValue::Reader& value,
-                            schema2::Type::Which which, Indent indent,
+                            schema::Type::Which which, Indent indent,
                             PrintMode mode) {
   switch (value.getType()) {
     case DynamicValue::UNKNOWN:
@@ -125,7 +125,7 @@ static kj::StringTree print(const DynamicValue::Reader& value,
     case DynamicValue::UINT:
       return kj::strTree(value.as<uint64_t>());
     case DynamicValue::FLOAT:
-      if (which == schema2::Type::FLOAT32) {
+      if (which == schema::Type::FLOAT32) {
         return kj::strTree(value.as<float>());
       } else {
         return kj::strTree(value.as<double>());
@@ -242,17 +242,17 @@ static kj::StringTree print(const DynamicValue::Reader& value,
 }
 
 kj::StringTree stringify(DynamicValue::Reader value) {
-  return print(value, schema2::Type::STRUCT, Indent(false), BARE);
+  return print(value, schema::Type::STRUCT, Indent(false), BARE);
 }
 
 }  // namespace
 
 kj::StringTree prettyPrint(DynamicStruct::Reader value) {
-  return print(value, schema2::Type::STRUCT, Indent(true), BARE);
+  return print(value, schema::Type::STRUCT, Indent(true), BARE);
 }
 
 kj::StringTree prettyPrint(DynamicList::Reader value) {
-  return print(value, schema2::Type::LIST, Indent(true), BARE);
+  return print(value, schema::Type::LIST, Indent(true), BARE);
 }
 
 kj::StringTree prettyPrint(DynamicStruct::Builder value) { return prettyPrint(value.asReader()); }

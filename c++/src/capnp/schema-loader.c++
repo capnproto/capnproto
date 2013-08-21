@@ -56,11 +56,11 @@ public:
   inline Impl(const SchemaLoader& loader, const LazyLoadCallback& callback)
       : initializer(loader, callback) {}
 
-  _::RawSchema* load(const schema2::Node::Reader& reader, bool isPlaceholder);
+  _::RawSchema* load(const schema::Node::Reader& reader, bool isPlaceholder);
 
   _::RawSchema* loadNative(const _::RawSchema* nativeSchema);
 
-  _::RawSchema* loadEmpty(uint64_t id, kj::StringPtr name, schema2::Node::Which kind);
+  _::RawSchema* loadEmpty(uint64_t id, kj::StringPtr name, schema::Node::Which kind);
   // Create a dummy empty schema of the given kind for the given id and load it.
 
   struct TryGetResult {
@@ -72,7 +72,7 @@ public:
   kj::Array<Schema> getAllLoaded() const;
 
   void requireStructSize(uint64_t id, uint dataWordCount, uint pointerCount,
-                         schema2::ElementSize preferredListEncoding);
+                         schema::ElementSize preferredListEncoding);
   // Require any struct nodes loaded with this ID -- in the past and in the future -- to have at
   // least the given sizes.  Struct nodes that don't comply will simply be rewritten to comply.
   // This is used to ensure that parents of group nodes have at least the size of the group node,
@@ -87,17 +87,17 @@ private:
   struct RequiredSize {
     uint16_t dataWordCount;
     uint16_t pointerCount;
-    schema2::ElementSize preferredListEncoding;
+    schema::ElementSize preferredListEncoding;
   };
   std::unordered_map<uint64_t, RequiredSize> structSizeRequirements;
 
   InitializerImpl initializer;
 
-  kj::ArrayPtr<word> makeUncheckedNode(schema2::Node::Reader node);
+  kj::ArrayPtr<word> makeUncheckedNode(schema::Node::Reader node);
   // Construct a copy of the given schema node, allocated as a single-segment ("unchecked") node
   // within the loader's arena.
 
-  kj::ArrayPtr<word> makeUncheckedNodeEnforcingSizeRequirements(schema2::Node::Reader node);
+  kj::ArrayPtr<word> makeUncheckedNodeEnforcingSizeRequirements(schema::Node::Reader node);
   // Like makeUncheckedNode() but if structSizeRequirements has a requirement for this node which
   // is larger than the node claims to be, the size will be edited to comply.  This should be rare.
   // If the incoming node is not a struct, any struct size requirements will be ignored, but if
@@ -105,15 +105,15 @@ private:
   // (but at least can't cause memory corruption).
 
   kj::ArrayPtr<word> rewriteStructNodeWithSizes(
-      schema2::Node::Reader node, uint dataWordCount, uint pointerCount,
-      schema2::ElementSize preferredListEncoding);
+      schema::Node::Reader node, uint dataWordCount, uint pointerCount,
+      schema::ElementSize preferredListEncoding);
   // Make a copy of the given node (which must be a struct node) and set its sizes to be the max
   // of what it said already and the given sizes.
 
   // If the encoded node does not meet the given struct size requirements, make a new copy that
   // does.
   void applyStructSizeRequirement(_::RawSchema* raw, uint dataWordCount, uint pointerCount,
-                                  schema2::ElementSize preferredListEncoding);
+                                  schema::ElementSize preferredListEncoding);
 };
 
 // =======================================================================================
@@ -126,7 +126,7 @@ class SchemaLoader::Validator {
 public:
   Validator(SchemaLoader::Impl& loader): loader(loader) {}
 
-  bool validate(const schema2::Node::Reader& node) {
+  bool validate(const schema::Node::Reader& node) {
     isValid = true;
     nodeName = node.getDisplayName();
     dependencies.clear();
@@ -134,22 +134,22 @@ public:
     KJ_CONTEXT("validating schema node", nodeName, (uint)node.which());
 
     switch (node.which()) {
-      case schema2::Node::FILE:
+      case schema::Node::FILE:
         verifyVoid(node.getFile());
         break;
-      case schema2::Node::STRUCT:
+      case schema::Node::STRUCT:
         validate(node.getStruct(), node.getScopeId());
         break;
-      case schema2::Node::ENUM:
+      case schema::Node::ENUM:
         validate(node.getEnum());
         break;
-      case schema2::Node::INTERFACE:
+      case schema::Node::INTERFACE:
         validate(node.getInterface());
         break;
-      case schema2::Node::CONST:
+      case schema::Node::CONST:
         validate(node.getConst());
         break;
-      case schema2::Node::ANNOTATION:
+      case schema::Node::ANNOTATION:
         validate(node.getAnnotation());
         break;
     }
@@ -206,40 +206,40 @@ private:
     VALIDATE_SCHEMA(isNewName, "duplicate name", name);
   }
 
-  void validate(const schema2::Node::Struct::Reader& structNode, uint64_t scopeId) {
+  void validate(const schema::Node::Struct::Reader& structNode, uint64_t scopeId) {
     uint dataSizeInBits;
     uint pointerCount;
 
     switch (structNode.getPreferredListEncoding()) {
-      case schema2::ElementSize::EMPTY:
+      case schema::ElementSize::EMPTY:
         dataSizeInBits = 0;
         pointerCount = 0;
         break;
-      case schema2::ElementSize::BIT:
+      case schema::ElementSize::BIT:
         dataSizeInBits = 1;
         pointerCount = 0;
         break;
-      case schema2::ElementSize::BYTE:
+      case schema::ElementSize::BYTE:
         dataSizeInBits = 8;
         pointerCount = 0;
         break;
-      case schema2::ElementSize::TWO_BYTES:
+      case schema::ElementSize::TWO_BYTES:
         dataSizeInBits = 16;
         pointerCount = 0;
         break;
-      case schema2::ElementSize::FOUR_BYTES:
+      case schema::ElementSize::FOUR_BYTES:
         dataSizeInBits = 32;
         pointerCount = 0;
         break;
-      case schema2::ElementSize::EIGHT_BYTES:
+      case schema::ElementSize::EIGHT_BYTES:
         dataSizeInBits = 64;
         pointerCount = 0;
         break;
-      case schema2::ElementSize::POINTER:
+      case schema::ElementSize::POINTER:
         dataSizeInBits = 0;
         pointerCount = 1;
         break;
-      case schema2::ElementSize::INLINE_COMPOSITE:
+      case schema::ElementSize::INLINE_COMPOSITE:
         dataSizeInBits = structNode.getDataSectionWordSize() * 64;
         pointerCount = structNode.getPointerSectionSize();
         break;
@@ -289,7 +289,7 @@ private:
       sawCodeOrder[field.getCodeOrder()] = true;
 
       auto ordinal = field.getOrdinal();
-      if (ordinal.which() == schema2::Field::Ordinal::EXPLICIT) {
+      if (ordinal.which() == schema::Field::Ordinal::EXPLICIT) {
         VALIDATE_SCHEMA(ordinal.getExplicit() >= nextOrdinal,
                         "fields were not ordered by ordinal");
         nextOrdinal = ordinal.getExplicit() + 1;
@@ -309,7 +309,7 @@ private:
       }
 
       switch (field.which()) {
-        case schema2::Field::REGULAR: {
+        case schema::Field::REGULAR: {
           auto regularField = field.getRegular();
 
           uint fieldBits;
@@ -324,9 +324,9 @@ private:
           break;
         }
 
-        case schema2::Field::GROUP:
+        case schema::Field::GROUP:
           // Require that the group is a struct node.
-          validateTypeId(field.getGroup(), schema2::Node::STRUCT);
+          validateTypeId(field.getGroup(), schema::Node::STRUCT);
           break;
       }
 
@@ -347,11 +347,11 @@ private:
                                structNode.getPreferredListEncoding());
 
       // Require that the parent type is a struct.
-      validateTypeId(scopeId, schema2::Node::STRUCT);
+      validateTypeId(scopeId, schema::Node::STRUCT);
     }
   }
 
-  void validate(const List<schema2::Enumerant>::Reader& enumerants) {
+  void validate(const List<schema::Enumerant>::Reader& enumerants) {
     KJ_STACK_ARRAY(bool, sawCodeOrder, enumerants.size(), 32, 256);
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
 
@@ -366,7 +366,7 @@ private:
     }
   }
 
-  void validate(const List<schema2::Method>::Reader& methods) {
+  void validate(const List<schema::Method>::Reader& methods) {
     KJ_STACK_ARRAY(bool, sawCodeOrder, methods.size(), 32, 256);
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
 
@@ -394,26 +394,26 @@ private:
     }
   }
 
-  void validate(const schema2::Node::Const::Reader& constNode) {
+  void validate(const schema::Node::Const::Reader& constNode) {
     uint dummy1;
     bool dummy2;
     validate(constNode.getType(), constNode.getValue(), &dummy1, &dummy2);
   }
 
-  void validate(const schema2::Node::Annotation::Reader& annotationNode) {
+  void validate(const schema::Node::Annotation::Reader& annotationNode) {
     validate(annotationNode.getType());
   }
 
-  void validate(const schema2::Type::Reader& type, const schema2::Value::Reader& value,
+  void validate(const schema::Type::Reader& type, const schema::Value::Reader& value,
                 uint* dataSizeInBits, bool* isPointer) {
     validate(type);
 
-    schema2::Value::Which expectedValueType = schema2::Value::VOID;
+    schema::Value::Which expectedValueType = schema::Value::VOID;
     bool hadCase = false;
     switch (type.which()) {
 #define HANDLE_TYPE(name, bits, ptr) \
-      case schema2::Type::name: \
-        expectedValueType = schema2::Value::name; \
+      case schema::Type::name: \
+        expectedValueType = schema::Value::name; \
         *dataSizeInBits = bits; *isPointer = ptr; \
         hadCase = true; \
         break;
@@ -444,36 +444,36 @@ private:
     }
   }
 
-  void validate(const schema2::Type::Reader& type) {
+  void validate(const schema::Type::Reader& type) {
     switch (type.which()) {
-      case schema2::Type::VOID:
-      case schema2::Type::BOOL:
-      case schema2::Type::INT8:
-      case schema2::Type::INT16:
-      case schema2::Type::INT32:
-      case schema2::Type::INT64:
-      case schema2::Type::UINT8:
-      case schema2::Type::UINT16:
-      case schema2::Type::UINT32:
-      case schema2::Type::UINT64:
-      case schema2::Type::FLOAT32:
-      case schema2::Type::FLOAT64:
-      case schema2::Type::TEXT:
-      case schema2::Type::DATA:
-      case schema2::Type::OBJECT:
+      case schema::Type::VOID:
+      case schema::Type::BOOL:
+      case schema::Type::INT8:
+      case schema::Type::INT16:
+      case schema::Type::INT32:
+      case schema::Type::INT64:
+      case schema::Type::UINT8:
+      case schema::Type::UINT16:
+      case schema::Type::UINT32:
+      case schema::Type::UINT64:
+      case schema::Type::FLOAT32:
+      case schema::Type::FLOAT64:
+      case schema::Type::TEXT:
+      case schema::Type::DATA:
+      case schema::Type::OBJECT:
         break;
 
-      case schema2::Type::STRUCT:
-        validateTypeId(type.getStruct(), schema2::Node::STRUCT);
+      case schema::Type::STRUCT:
+        validateTypeId(type.getStruct(), schema::Node::STRUCT);
         break;
-      case schema2::Type::ENUM:
-        validateTypeId(type.getEnum(), schema2::Node::ENUM);
+      case schema::Type::ENUM:
+        validateTypeId(type.getEnum(), schema::Node::ENUM);
         break;
-      case schema2::Type::INTERFACE:
-        validateTypeId(type.getInterface(), schema2::Node::INTERFACE);
+      case schema::Type::INTERFACE:
+        validateTypeId(type.getInterface(), schema::Node::INTERFACE);
         break;
 
-      case schema2::Type::LIST:
+      case schema::Type::LIST:
         validate(type.getList());
         break;
     }
@@ -481,10 +481,10 @@ private:
     // We intentionally allow unknown types.
   }
 
-  void validateTypeId(uint64_t id, schema2::Node::Which expectedKind) {
+  void validateTypeId(uint64_t id, schema::Node::Which expectedKind) {
     _::RawSchema* existing = loader.tryGet(id).schema;
     if (existing != nullptr) {
-      auto node = readMessageUnchecked<schema2::Node>(existing->encodedNode);
+      auto node = readMessageUnchecked<schema::Node>(existing->encodedNode);
       VALIDATE_SCHEMA(node.which() == expectedKind,
           "expected a different kind of node for this ID",
           id, (uint)expectedKind, (uint)node.which(), node.getDisplayName());
@@ -506,8 +506,8 @@ class SchemaLoader::CompatibilityChecker {
 public:
   CompatibilityChecker(SchemaLoader::Impl& loader): loader(loader) {}
 
-  bool shouldReplace(const schema2::Node::Reader& existingNode,
-                     const schema2::Node::Reader& replacement,
+  bool shouldReplace(const schema::Node::Reader& existingNode,
+                     const schema::Node::Reader& replacement,
                      bool preferReplacementIfEquivalent) {
     KJ_CONTEXT("checking compatibility with previously-loaded node of the same id",
                existingNode.getDisplayName());
@@ -572,8 +572,8 @@ private:
     }
   }
 
-  void checkCompatibility(const schema2::Node::Reader& node,
-                          const schema2::Node::Reader& replacement) {
+  void checkCompatibility(const schema::Node::Reader& node,
+                          const schema::Node::Reader& replacement) {
     // Returns whether `replacement` is equivalent, older than, newer than, or incompatible with
     // `node`.  If exceptions are enabled, this will throw an exception on INCOMPATIBLE.
 
@@ -585,30 +585,30 @@ private:
     // - Annotations are ignored for compatibility purposes.
 
     switch (node.which()) {
-      case schema2::Node::FILE:
+      case schema::Node::FILE:
         verifyVoid(node.getFile());
         break;
-      case schema2::Node::STRUCT:
+      case schema::Node::STRUCT:
         checkCompatibility(node.getStruct(), replacement.getStruct(),
                            node.getScopeId(), replacement.getScopeId());
         break;
-      case schema2::Node::ENUM:
+      case schema::Node::ENUM:
         checkCompatibility(node.getEnum(), replacement.getEnum());
         break;
-      case schema2::Node::INTERFACE:
+      case schema::Node::INTERFACE:
         checkCompatibility(node.getInterface(), replacement.getInterface());
         break;
-      case schema2::Node::CONST:
+      case schema::Node::CONST:
         checkCompatibility(node.getConst(), replacement.getConst());
         break;
-      case schema2::Node::ANNOTATION:
+      case schema::Node::ANNOTATION:
         checkCompatibility(node.getAnnotation(), replacement.getAnnotation());
         break;
     }
   }
 
-  void checkCompatibility(const schema2::Node::Struct::Reader& structNode,
-                          const schema2::Node::Struct::Reader& replacement,
+  void checkCompatibility(const schema::Node::Struct::Reader& structNode,
+                          const schema::Node::Struct::Reader& replacement,
                           uint64_t scopeId, uint64_t replacementScopeId) {
     if (replacement.getDataSectionWordSize() > structNode.getDataSectionWordSize()) {
       replacementIsNewer();
@@ -666,15 +666,15 @@ private:
     }
   }
 
-  void checkCompatibility(const schema2::Field::Reader& field,
-                          const schema2::Field::Reader& replacement) {
+  void checkCompatibility(const schema::Field::Reader& field,
+                          const schema::Field::Reader& replacement) {
     KJ_CONTEXT("comparing struct field", field.getName());
 
     VALIDATE_SCHEMA(field.which() == replacement.which(),
                     "group field replaced with non-group or vice versa");
 
     switch (field.which()) {
-      case schema2::Field::REGULAR: {
+      case schema::Field::REGULAR: {
         auto regularField = field.getRegular();
         auto replacementRegularField = replacement.getRegular();
 
@@ -688,14 +688,14 @@ private:
         break;
       }
 
-      case schema2::Field::GROUP:
+      case schema::Field::GROUP:
         VALIDATE_SCHEMA(field.getGroup() == replacement.getGroup(), "group id changed");
         break;
     }
   }
 
-  void checkCompatibility(const List<schema2::Enumerant>::Reader& enumerants,
-                          const List<schema2::Enumerant>::Reader& replacementEnumerants) {
+  void checkCompatibility(const List<schema::Enumerant>::Reader& enumerants,
+                          const List<schema::Enumerant>::Reader& replacementEnumerants) {
     uint size = enumerants.size();
     uint replacementSize = replacementEnumerants.size();
     if (replacementSize > size) {
@@ -705,8 +705,8 @@ private:
     }
   }
 
-  void checkCompatibility(const List<schema2::Method>::Reader& methods,
-                          const List<schema2::Method>::Reader& replacementMethods) {
+  void checkCompatibility(const List<schema::Method>::Reader& methods,
+                          const List<schema::Method>::Reader& replacementMethods) {
     if (replacementMethods.size() > methods.size()) {
       replacementIsNewer();
     } else if (replacementMethods.size() < methods.size()) {
@@ -720,8 +720,8 @@ private:
     }
   }
 
-  void checkCompatibility(const schema2::Method::Reader& method,
-                          const schema2::Method::Reader& replacement) {
+  void checkCompatibility(const schema::Method::Reader& method,
+                          const schema::Method::Reader& replacement) {
     KJ_CONTEXT("comparing method", method.getName());
 
     auto params = method.getParams();
@@ -760,13 +760,13 @@ private:
                        ALLOW_UPGRADE_TO_STRUCT);
   }
 
-  void checkCompatibility(const schema2::Node::Const::Reader& constNode,
-                          const schema2::Node::Const::Reader& replacement) {
+  void checkCompatibility(const schema::Node::Const::Reader& constNode,
+                          const schema::Node::Const::Reader& replacement) {
     // Who cares?  These don't appear on the wire.
   }
 
-  void checkCompatibility(const schema2::Node::Annotation::Reader& annotationNode,
-                          const schema2::Node::Annotation::Reader& replacement) {
+  void checkCompatibility(const schema::Node::Annotation::Reader& annotationNode,
+                          const schema::Node::Annotation::Reader& replacement) {
     // Who cares?  These don't appear on the wire.
   }
 
@@ -775,30 +775,30 @@ private:
     NO_UPGRADE_TO_STRUCT
   };
 
-  void checkCompatibility(const schema2::Type::Reader& type,
-                          const schema2::Type::Reader& replacement,
+  void checkCompatibility(const schema::Type::Reader& type,
+                          const schema::Type::Reader& replacement,
                           UpgradeToStructMode upgradeToStructMode) {
     if (replacement.which() != type.which()) {
       // Check for allowed "upgrade" to Data or Object.
-      if (replacement.which() == schema2::Type::DATA && canUpgradeToData(type)) {
+      if (replacement.which() == schema::Type::DATA && canUpgradeToData(type)) {
         replacementIsNewer();
         return;
-      } else if (type.which() == schema2::Type::DATA && canUpgradeToData(replacement)) {
+      } else if (type.which() == schema::Type::DATA && canUpgradeToData(replacement)) {
         replacementIsOlder();
         return;
-      } else if (replacement.which() == schema2::Type::OBJECT && canUpgradeToObject(type)) {
+      } else if (replacement.which() == schema::Type::OBJECT && canUpgradeToObject(type)) {
         replacementIsNewer();
         return;
-      } else if (type.which() == schema2::Type::OBJECT && canUpgradeToObject(replacement)) {
+      } else if (type.which() == schema::Type::OBJECT && canUpgradeToObject(replacement)) {
         replacementIsOlder();
         return;
       }
 
       if (upgradeToStructMode == ALLOW_UPGRADE_TO_STRUCT) {
-        if (type.which() == schema2::Type::STRUCT) {
+        if (type.which() == schema::Type::STRUCT) {
           checkUpgradeToStruct(replacement, type.getStruct());
           return;
-        } else if (replacement.which() == schema2::Type::STRUCT) {
+        } else if (replacement.which() == schema::Type::STRUCT) {
           checkUpgradeToStruct(type, replacement.getStruct());
           return;
         }
@@ -808,32 +808,32 @@ private:
     }
 
     switch (type.which()) {
-      case schema2::Type::VOID:
-      case schema2::Type::BOOL:
-      case schema2::Type::INT8:
-      case schema2::Type::INT16:
-      case schema2::Type::INT32:
-      case schema2::Type::INT64:
-      case schema2::Type::UINT8:
-      case schema2::Type::UINT16:
-      case schema2::Type::UINT32:
-      case schema2::Type::UINT64:
-      case schema2::Type::FLOAT32:
-      case schema2::Type::FLOAT64:
-      case schema2::Type::TEXT:
-      case schema2::Type::DATA:
-      case schema2::Type::OBJECT:
+      case schema::Type::VOID:
+      case schema::Type::BOOL:
+      case schema::Type::INT8:
+      case schema::Type::INT16:
+      case schema::Type::INT32:
+      case schema::Type::INT64:
+      case schema::Type::UINT8:
+      case schema::Type::UINT16:
+      case schema::Type::UINT32:
+      case schema::Type::UINT64:
+      case schema::Type::FLOAT32:
+      case schema::Type::FLOAT64:
+      case schema::Type::TEXT:
+      case schema::Type::DATA:
+      case schema::Type::OBJECT:
         return;
 
-      case schema2::Type::LIST:
+      case schema::Type::LIST:
         checkCompatibility(type.getList(), replacement.getList(), ALLOW_UPGRADE_TO_STRUCT);
         return;
 
-      case schema2::Type::ENUM:
+      case schema::Type::ENUM:
         VALIDATE_SCHEMA(replacement.getEnum() == type.getEnum(), "type changed enum type");
         return;
 
-      case schema2::Type::STRUCT:
+      case schema::Type::STRUCT:
         // TODO(someday):  If the IDs don't match, we should compare the two structs for
         //   compatibility.  This is tricky, though, because the new type's target may not yet be
         //   loaded.  In that case we could take the old type, make a copy of it, assign the new
@@ -845,7 +845,7 @@ private:
                         "type changed to incompatible struct type");
         return;
 
-      case schema2::Type::INTERFACE:
+      case schema::Type::INTERFACE:
         VALIDATE_SCHEMA(replacement.getInterface() == type.getInterface(),
                         "type changed to incompatible interface type");
         return;
@@ -854,7 +854,7 @@ private:
     // We assume unknown types (from newer versions of Cap'n Proto?) are equivalent.
   }
 
-  void checkUpgradeToStruct(const schema2::Type::Reader& type, uint64_t structTypeId) {
+  void checkUpgradeToStruct(const schema::Type::Reader& type, uint64_t structTypeId) {
     // We can't just look up the target struct and check it because it may not have been loaded
     // yet.  Instead, we contrive a struct that looks like what we want and load() that, which
     // guarantees that any incompatibility will be caught either now or when the real version of
@@ -863,64 +863,64 @@ private:
     word scratch[32];
     memset(scratch, 0, sizeof(scratch));
     MallocMessageBuilder builder(scratch);
-    auto node = builder.initRoot<schema2::Node>();
+    auto node = builder.initRoot<schema::Node>();
     node.setId(structTypeId);
     node.setDisplayName(kj::str("(unknown type used in ", nodeName, ")"));
     auto structNode = node.initStruct();
 
     switch (type.which()) {
-      case schema2::Type::VOID:
+      case schema::Type::VOID:
         structNode.setDataSectionWordSize(0);
         structNode.setPointerSectionSize(0);
-        structNode.setPreferredListEncoding(schema2::ElementSize::EMPTY);
+        structNode.setPreferredListEncoding(schema::ElementSize::EMPTY);
         break;
 
-      case schema2::Type::BOOL:
+      case schema::Type::BOOL:
         structNode.setDataSectionWordSize(1);
         structNode.setPointerSectionSize(0);
-        structNode.setPreferredListEncoding(schema2::ElementSize::BIT);
+        structNode.setPreferredListEncoding(schema::ElementSize::BIT);
         break;
 
-      case schema2::Type::INT8:
-      case schema2::Type::UINT8:
+      case schema::Type::INT8:
+      case schema::Type::UINT8:
         structNode.setDataSectionWordSize(1);
         structNode.setPointerSectionSize(0);
-        structNode.setPreferredListEncoding(schema2::ElementSize::BYTE);
+        structNode.setPreferredListEncoding(schema::ElementSize::BYTE);
         break;
 
-      case schema2::Type::INT16:
-      case schema2::Type::UINT16:
-      case schema2::Type::ENUM:
+      case schema::Type::INT16:
+      case schema::Type::UINT16:
+      case schema::Type::ENUM:
         structNode.setDataSectionWordSize(1);
         structNode.setPointerSectionSize(0);
-        structNode.setPreferredListEncoding(schema2::ElementSize::TWO_BYTES);
+        structNode.setPreferredListEncoding(schema::ElementSize::TWO_BYTES);
         break;
 
-      case schema2::Type::INT32:
-      case schema2::Type::UINT32:
-      case schema2::Type::FLOAT32:
+      case schema::Type::INT32:
+      case schema::Type::UINT32:
+      case schema::Type::FLOAT32:
         structNode.setDataSectionWordSize(1);
         structNode.setPointerSectionSize(0);
-        structNode.setPreferredListEncoding(schema2::ElementSize::FOUR_BYTES);
+        structNode.setPreferredListEncoding(schema::ElementSize::FOUR_BYTES);
         break;
 
-      case schema2::Type::INT64:
-      case schema2::Type::UINT64:
-      case schema2::Type::FLOAT64:
+      case schema::Type::INT64:
+      case schema::Type::UINT64:
+      case schema::Type::FLOAT64:
         structNode.setDataSectionWordSize(1);
         structNode.setPointerSectionSize(0);
-        structNode.setPreferredListEncoding(schema2::ElementSize::EIGHT_BYTES);
+        structNode.setPreferredListEncoding(schema::ElementSize::EIGHT_BYTES);
         break;
 
-      case schema2::Type::TEXT:
-      case schema2::Type::DATA:
-      case schema2::Type::LIST:
-      case schema2::Type::STRUCT:
-      case schema2::Type::INTERFACE:
-      case schema2::Type::OBJECT:
+      case schema::Type::TEXT:
+      case schema::Type::DATA:
+      case schema::Type::LIST:
+      case schema::Type::STRUCT:
+      case schema::Type::INTERFACE:
+      case schema::Type::OBJECT:
         structNode.setDataSectionWordSize(0);
         structNode.setPointerSectionSize(1);
-        structNode.setPreferredListEncoding(schema2::ElementSize::POINTER);
+        structNode.setPreferredListEncoding(schema::ElementSize::POINTER);
         break;
     }
 
@@ -933,13 +933,13 @@ private:
     loader.load(node, true);
   }
 
-  bool canUpgradeToData(const schema2::Type::Reader& type) {
-    if (type.which() == schema2::Type::TEXT) {
+  bool canUpgradeToData(const schema::Type::Reader& type) {
+    if (type.which() == schema::Type::TEXT) {
       return true;
-    } else if (type.which() == schema2::Type::LIST) {
+    } else if (type.which() == schema::Type::LIST) {
       switch (type.getList().which()) {
-        case schema2::Type::INT8:
-        case schema2::Type::UINT8:
+        case schema::Type::INT8:
+        case schema::Type::UINT8:
           return true;
         default:
           return false;
@@ -949,29 +949,29 @@ private:
     }
   }
 
-  bool canUpgradeToObject(const schema2::Type::Reader& type) {
+  bool canUpgradeToObject(const schema::Type::Reader& type) {
     switch (type.which()) {
-      case schema2::Type::VOID:
-      case schema2::Type::BOOL:
-      case schema2::Type::INT8:
-      case schema2::Type::INT16:
-      case schema2::Type::INT32:
-      case schema2::Type::INT64:
-      case schema2::Type::UINT8:
-      case schema2::Type::UINT16:
-      case schema2::Type::UINT32:
-      case schema2::Type::UINT64:
-      case schema2::Type::FLOAT32:
-      case schema2::Type::FLOAT64:
-      case schema2::Type::ENUM:
+      case schema::Type::VOID:
+      case schema::Type::BOOL:
+      case schema::Type::INT8:
+      case schema::Type::INT16:
+      case schema::Type::INT32:
+      case schema::Type::INT64:
+      case schema::Type::UINT8:
+      case schema::Type::UINT16:
+      case schema::Type::UINT32:
+      case schema::Type::UINT64:
+      case schema::Type::FLOAT32:
+      case schema::Type::FLOAT64:
+      case schema::Type::ENUM:
         return false;
 
-      case schema2::Type::TEXT:
-      case schema2::Type::DATA:
-      case schema2::Type::LIST:
-      case schema2::Type::STRUCT:
-      case schema2::Type::INTERFACE:
-      case schema2::Type::OBJECT:
+      case schema::Type::TEXT:
+      case schema::Type::DATA:
+      case schema::Type::LIST:
+      case schema::Type::STRUCT:
+      case schema::Type::INTERFACE:
+      case schema::Type::OBJECT:
         return true;
     }
 
@@ -979,8 +979,8 @@ private:
     return true;
   }
 
-  void checkDefaultCompatibility(const schema2::Value::Reader& value,
-                                 const schema2::Value::Reader& replacement) {
+  void checkDefaultCompatibility(const schema::Value::Reader& value,
+                                 const schema::Value::Reader& replacement) {
     // Note that we test default compatibility only after testing type compatibility, and default
     // values have already been validated as matching their types, so this should pass.
     KJ_ASSERT(value.which() == replacement.which()) {
@@ -990,7 +990,7 @@ private:
 
     switch (value.which()) {
 #define HANDLE_TYPE(discrim, name) \
-      case schema2::Value::discrim: \
+      case schema::Value::discrim: \
         VALIDATE_SCHEMA(value.get##name() == replacement.get##name(), "default value changed"); \
         break;
       HANDLE_TYPE(VOID, Void);
@@ -1008,12 +1008,12 @@ private:
       HANDLE_TYPE(ENUM, Enum);
 #undef HANDLE_TYPE
 
-      case schema2::Value::TEXT:
-      case schema2::Value::DATA:
-      case schema2::Value::LIST:
-      case schema2::Value::STRUCT:
-      case schema2::Value::INTERFACE:
-      case schema2::Value::OBJECT:
+      case schema::Value::TEXT:
+      case schema::Value::DATA:
+      case schema::Value::LIST:
+      case schema::Value::STRUCT:
+      case schema::Value::INTERFACE:
+      case schema::Value::OBJECT:
         // It's not a big deal if default values for pointers change, and it would be difficult for
         // us to compare these defaults here, so just let it slide.
         break;
@@ -1023,13 +1023,13 @@ private:
 
 // =======================================================================================
 
-_::RawSchema* SchemaLoader::Impl::load(const schema2::Node::Reader& reader, bool isPlaceholder) {
+_::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool isPlaceholder) {
   // Make a copy of the node which can be used unchecked.
   kj::ArrayPtr<word> validated = makeUncheckedNodeEnforcingSizeRequirements(reader);
 
   // Validate the copy.
   Validator validator(*this);
-  auto validatedReader = readMessageUnchecked<schema2::Node>(validated.begin());
+  auto validatedReader = readMessageUnchecked<schema::Node>(validated.begin());
 
   if (!validator.validate(validatedReader)) {
     // Not valid.  Construct an empty schema of the same type and return that.
@@ -1056,7 +1056,7 @@ _::RawSchema* SchemaLoader::Impl::load(const schema2::Node::Reader& reader, bool
       isPlaceholder = false;
     }
 
-    auto existing = readMessageUnchecked<schema2::Node>(slot->encodedNode);
+    auto existing = readMessageUnchecked<schema::Node>(slot->encodedNode);
     CompatibilityChecker checker(*this);
 
     // Prefer to replace the existing schema if the existing schema is a placeholder.  Otherwise,
@@ -1098,12 +1098,12 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
     KJ_REQUIRE(slot->canCastTo == nativeSchema,
         "two different compiled-in type have the same type ID",
         nativeSchema->id,
-        readMessageUnchecked<schema2::Node>(nativeSchema->encodedNode).getDisplayName(),
-        readMessageUnchecked<schema2::Node>(slot->canCastTo->encodedNode).getDisplayName());
+        readMessageUnchecked<schema::Node>(nativeSchema->encodedNode).getDisplayName(),
+        readMessageUnchecked<schema::Node>(slot->canCastTo->encodedNode).getDisplayName());
     return slot;
   } else {
-    auto existing = readMessageUnchecked<schema2::Node>(slot->encodedNode);
-    auto native = readMessageUnchecked<schema2::Node>(nativeSchema->encodedNode);
+    auto existing = readMessageUnchecked<schema::Node>(slot->encodedNode);
+    auto native = readMessageUnchecked<schema::Node>(nativeSchema->encodedNode);
     CompatibilityChecker checker(*this);
     shouldReplace = checker.shouldReplace(existing, native, true);
   }
@@ -1160,21 +1160,21 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
 }
 
 _::RawSchema* SchemaLoader::Impl::loadEmpty(
-    uint64_t id, kj::StringPtr name, schema2::Node::Which kind) {
+    uint64_t id, kj::StringPtr name, schema::Node::Which kind) {
   word scratch[32];
   memset(scratch, 0, sizeof(scratch));
   MallocMessageBuilder builder(scratch);
-  auto node = builder.initRoot<schema2::Node>();
+  auto node = builder.initRoot<schema::Node>();
   node.setId(id);
   node.setDisplayName(name);
   switch (kind) {
-    case schema2::Node::STRUCT: node.initStruct(); break;
-    case schema2::Node::ENUM: node.initEnum(0); break;
-    case schema2::Node::INTERFACE: node.initInterface(0); break;
+    case schema::Node::STRUCT: node.initStruct(); break;
+    case schema::Node::ENUM: node.initEnum(0); break;
+    case schema::Node::INTERFACE: node.initInterface(0); break;
 
-    case schema2::Node::FILE:
-    case schema2::Node::CONST:
-    case schema2::Node::ANNOTATION:
+    case schema::Node::FILE:
+    case schema::Node::CONST:
+    case schema::Node::ANNOTATION:
       KJ_FAIL_REQUIRE("Not a type.");
       break;
   }
@@ -1206,13 +1206,13 @@ kj::Array<Schema> SchemaLoader::Impl::getAllLoaded() const {
 }
 
 void SchemaLoader::Impl::requireStructSize(uint64_t id, uint dataWordCount, uint pointerCount,
-                                           schema2::ElementSize preferredListEncoding) {
+                                           schema::ElementSize preferredListEncoding) {
   auto& slot = structSizeRequirements[id];
   slot.dataWordCount = kj::max(slot.dataWordCount, dataWordCount);
   slot.pointerCount = kj::max(slot.pointerCount, pointerCount);
 
   if (slot.dataWordCount + slot.pointerCount >= 2) {
-    slot.preferredListEncoding = schema2::ElementSize::INLINE_COMPOSITE;
+    slot.preferredListEncoding = schema::ElementSize::INLINE_COMPOSITE;
   } else {
     slot.preferredListEncoding = kj::max(slot.preferredListEncoding, preferredListEncoding);
   }
@@ -1223,7 +1223,7 @@ void SchemaLoader::Impl::requireStructSize(uint64_t id, uint dataWordCount, uint
   }
 }
 
-kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNode(schema2::Node::Reader node) {
+kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNode(schema::Node::Reader node) {
   size_t size = node.totalSizeInWords() + 1;
   kj::ArrayPtr<word> result = arena.allocateArray<word>(size);
   memset(result.begin(), 0, size * sizeof(word));
@@ -1232,8 +1232,8 @@ kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNode(schema2::Node::Reader n
 }
 
 kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNodeEnforcingSizeRequirements(
-    schema2::Node::Reader node) {
-  if (node.which() == schema2::Node::STRUCT) {
+    schema::Node::Reader node) {
+  if (node.which() == schema::Node::STRUCT) {
     auto iter = structSizeRequirements.find(node.getId());
     if (iter != structSizeRequirements.end()) {
       auto requirement = iter->second;
@@ -1252,18 +1252,18 @@ kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNodeEnforcingSizeRequirement
 }
 
 kj::ArrayPtr<word> SchemaLoader::Impl::rewriteStructNodeWithSizes(
-    schema2::Node::Reader node, uint dataWordCount, uint pointerCount,
-    schema2::ElementSize preferredListEncoding) {
+    schema::Node::Reader node, uint dataWordCount, uint pointerCount,
+    schema::ElementSize preferredListEncoding) {
   MallocMessageBuilder builder;
   builder.setRoot(node);
 
-  auto root = builder.getRoot<schema2::Node>();
+  auto root = builder.getRoot<schema::Node>();
   auto newStruct = root.getStruct();
   newStruct.setDataSectionWordSize(kj::max(newStruct.getDataSectionWordSize(), dataWordCount));
   newStruct.setPointerSectionSize(kj::max(newStruct.getPointerSectionSize(), pointerCount));
 
   if (newStruct.getDataSectionWordSize() + newStruct.getPointerSectionSize() >= 2) {
-    newStruct.setPreferredListEncoding(schema2::ElementSize::INLINE_COMPOSITE);
+    newStruct.setPreferredListEncoding(schema::ElementSize::INLINE_COMPOSITE);
   } else {
     newStruct.setPreferredListEncoding(
         kj::max(newStruct.getPreferredListEncoding(), preferredListEncoding));
@@ -1274,8 +1274,8 @@ kj::ArrayPtr<word> SchemaLoader::Impl::rewriteStructNodeWithSizes(
 
 void SchemaLoader::Impl::applyStructSizeRequirement(
     _::RawSchema* raw, uint dataWordCount, uint pointerCount,
-    schema2::ElementSize preferredListEncoding) {
-  auto node = readMessageUnchecked<schema2::Node>(raw->encodedNode);
+    schema::ElementSize preferredListEncoding) {
+  auto node = readMessageUnchecked<schema::Node>(raw->encodedNode);
 
   auto structNode = node.getStruct();
   if (structNode.getDataSectionWordSize() < dataWordCount ||
@@ -1345,11 +1345,11 @@ kj::Maybe<Schema> SchemaLoader::tryGet(uint64_t id) const {
   }
 }
 
-Schema SchemaLoader::load(const schema2::Node::Reader& reader) {
+Schema SchemaLoader::load(const schema::Node::Reader& reader) {
   return Schema(impl.lockExclusive()->get()->load(reader, false));
 }
 
-Schema SchemaLoader::loadOnce(const schema2::Node::Reader& reader) const {
+Schema SchemaLoader::loadOnce(const schema::Node::Reader& reader) const {
   auto locked = impl.lockExclusive();
   auto getResult = locked->get()->tryGet(reader.getId());
   if (getResult.schema == nullptr || getResult.schema->lazyInitializer != nullptr) {

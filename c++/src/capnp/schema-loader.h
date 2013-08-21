@@ -76,7 +76,7 @@ public:
   kj::Maybe<Schema> tryGet(uint64_t id) const;
   // Like get() but doesn't throw.
 
-  Schema load(const schema2::Node::Reader& reader);
+  Schema load(const schema::Node::Reader& reader);
   // Loads the given schema node.  Validates the node and throws an exception if invalid.  This
   // makes a copy of the schema, so the object passed in can be destroyed after this returns.
   //
@@ -111,7 +111,7 @@ public:
   // Also note that unknown types are not considered invalid.  Instead, the dynamic API returns
   // a DynamicValue with type UNKNOWN for these.
 
-  Schema loadOnce(const schema2::Node::Reader& reader) const;
+  Schema loadOnce(const schema::Node::Reader& reader) const;
   // Like `load()` but does nothing if a schema with the same ID is already loaded.  In contrast,
   // `load()` would attempt to compare the schemas and take the newer one.  `loadOnce()` is safe
   // to call even while concurrently using schemas from this loader.  It should be considered an

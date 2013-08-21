@@ -151,20 +151,20 @@ TEST(Schema, Enums) {
 // TODO(someday):  Test interface schemas when interfaces are implemented.
 
 TEST(Schema, Lists) {
-  EXPECT_EQ(schema2::Type::VOID, Schema::from<List<Void>>().whichElementType());
-  EXPECT_EQ(schema2::Type::BOOL, Schema::from<List<bool>>().whichElementType());
-  EXPECT_EQ(schema2::Type::INT8, Schema::from<List<int8_t>>().whichElementType());
-  EXPECT_EQ(schema2::Type::INT16, Schema::from<List<int16_t>>().whichElementType());
-  EXPECT_EQ(schema2::Type::INT32, Schema::from<List<int32_t>>().whichElementType());
-  EXPECT_EQ(schema2::Type::INT64, Schema::from<List<int64_t>>().whichElementType());
-  EXPECT_EQ(schema2::Type::UINT8, Schema::from<List<uint8_t>>().whichElementType());
-  EXPECT_EQ(schema2::Type::UINT16, Schema::from<List<uint16_t>>().whichElementType());
-  EXPECT_EQ(schema2::Type::UINT32, Schema::from<List<uint32_t>>().whichElementType());
-  EXPECT_EQ(schema2::Type::UINT64, Schema::from<List<uint64_t>>().whichElementType());
-  EXPECT_EQ(schema2::Type::FLOAT32, Schema::from<List<float>>().whichElementType());
-  EXPECT_EQ(schema2::Type::FLOAT64, Schema::from<List<double>>().whichElementType());
-  EXPECT_EQ(schema2::Type::TEXT, Schema::from<List<Text>>().whichElementType());
-  EXPECT_EQ(schema2::Type::DATA, Schema::from<List<Data>>().whichElementType());
+  EXPECT_EQ(schema::Type::VOID, Schema::from<List<Void>>().whichElementType());
+  EXPECT_EQ(schema::Type::BOOL, Schema::from<List<bool>>().whichElementType());
+  EXPECT_EQ(schema::Type::INT8, Schema::from<List<int8_t>>().whichElementType());
+  EXPECT_EQ(schema::Type::INT16, Schema::from<List<int16_t>>().whichElementType());
+  EXPECT_EQ(schema::Type::INT32, Schema::from<List<int32_t>>().whichElementType());
+  EXPECT_EQ(schema::Type::INT64, Schema::from<List<int64_t>>().whichElementType());
+  EXPECT_EQ(schema::Type::UINT8, Schema::from<List<uint8_t>>().whichElementType());
+  EXPECT_EQ(schema::Type::UINT16, Schema::from<List<uint16_t>>().whichElementType());
+  EXPECT_EQ(schema::Type::UINT32, Schema::from<List<uint32_t>>().whichElementType());
+  EXPECT_EQ(schema::Type::UINT64, Schema::from<List<uint64_t>>().whichElementType());
+  EXPECT_EQ(schema::Type::FLOAT32, Schema::from<List<float>>().whichElementType());
+  EXPECT_EQ(schema::Type::FLOAT64, Schema::from<List<double>>().whichElementType());
+  EXPECT_EQ(schema::Type::TEXT, Schema::from<List<Text>>().whichElementType());
+  EXPECT_EQ(schema::Type::DATA, Schema::from<List<Data>>().whichElementType());
 
   EXPECT_ANY_THROW(Schema::from<List<uint16_t>>().getStructElementType());
   EXPECT_ANY_THROW(Schema::from<List<uint16_t>>().getEnumElementType());
@@ -173,7 +173,7 @@ TEST(Schema, Lists) {
 
   {
     ListSchema schema = Schema::from<List<TestAllTypes>>();
-    EXPECT_EQ(schema2::Type::STRUCT, schema.whichElementType());
+    EXPECT_EQ(schema::Type::STRUCT, schema.whichElementType());
     EXPECT_TRUE(schema.getStructElementType() == Schema::from<TestAllTypes>());
     EXPECT_ANY_THROW(schema.getEnumElementType());
     EXPECT_ANY_THROW(schema.getInterfaceElementType());
@@ -182,7 +182,7 @@ TEST(Schema, Lists) {
 
   {
     ListSchema schema = Schema::from<List<TestEnum>>();
-    EXPECT_EQ(schema2::Type::ENUM, schema.whichElementType());
+    EXPECT_EQ(schema::Type::ENUM, schema.whichElementType());
     EXPECT_TRUE(schema.getEnumElementType() == Schema::from<TestEnum>());
     EXPECT_ANY_THROW(schema.getStructElementType());
     EXPECT_ANY_THROW(schema.getInterfaceElementType());
@@ -193,36 +193,36 @@ TEST(Schema, Lists) {
 
   {
     ListSchema schema = Schema::from<List<List<int32_t>>>();
-    EXPECT_EQ(schema2::Type::LIST, schema.whichElementType());
+    EXPECT_EQ(schema::Type::LIST, schema.whichElementType());
     EXPECT_ANY_THROW(schema.getStructElementType());
     EXPECT_ANY_THROW(schema.getEnumElementType());
     EXPECT_ANY_THROW(schema.getInterfaceElementType());
 
     ListSchema inner = schema.getListElementType();
-    EXPECT_EQ(schema2::Type::INT32, inner.whichElementType());
+    EXPECT_EQ(schema::Type::INT32, inner.whichElementType());
   }
 
   {
     ListSchema schema = Schema::from<List<List<TestAllTypes>>>();
-    EXPECT_EQ(schema2::Type::LIST, schema.whichElementType());
+    EXPECT_EQ(schema::Type::LIST, schema.whichElementType());
     EXPECT_ANY_THROW(schema.getStructElementType());
     EXPECT_ANY_THROW(schema.getEnumElementType());
     EXPECT_ANY_THROW(schema.getInterfaceElementType());
 
     ListSchema inner = schema.getListElementType();
-    EXPECT_EQ(schema2::Type::STRUCT, inner.whichElementType());
+    EXPECT_EQ(schema::Type::STRUCT, inner.whichElementType());
     EXPECT_TRUE(inner.getStructElementType() == Schema::from<TestAllTypes>());
   }
 
   {
     ListSchema schema = Schema::from<List<List<TestEnum>>>();
-    EXPECT_EQ(schema2::Type::LIST, schema.whichElementType());
+    EXPECT_EQ(schema::Type::LIST, schema.whichElementType());
     EXPECT_ANY_THROW(schema.getStructElementType());
     EXPECT_ANY_THROW(schema.getEnumElementType());
     EXPECT_ANY_THROW(schema.getInterfaceElementType());
 
     ListSchema inner = schema.getListElementType();
-    EXPECT_EQ(schema2::Type::ENUM, inner.whichElementType());
+    EXPECT_EQ(schema::Type::ENUM, inner.whichElementType());
     EXPECT_TRUE(inner.getEnumElementType() == Schema::from<TestEnum>());
   }
 
@@ -231,7 +231,7 @@ TEST(Schema, Lists) {
     auto type = context.getFieldByName("enumList").getProto().getRegular().getType();
 
     ListSchema schema = ListSchema::of(type.getList(), context);
-    EXPECT_EQ(schema2::Type::ENUM, schema.whichElementType());
+    EXPECT_EQ(schema::Type::ENUM, schema.whichElementType());
     EXPECT_TRUE(schema.getEnumElementType() == Schema::from<TestEnum>());
     EXPECT_ANY_THROW(schema.getStructElementType());
     EXPECT_ANY_THROW(schema.getInterfaceElementType());

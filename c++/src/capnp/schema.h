@@ -24,7 +24,7 @@
 #ifndef CAPNP_SCHEMA_H_
 #define CAPNP_SCHEMA_H_
 
-#include <capnp/schema2.capnp.h>
+#include <capnp/schema.capnp.h>
 
 namespace capnp {
 
@@ -35,8 +35,8 @@ class InterfaceSchema;
 class ListSchema;
 
 template <typename T, Kind k = kind<T>()> struct SchemaType_ { typedef Schema Type; };
-template <typename T> struct SchemaType_<T, Kind::PRIMITIVE> { typedef schema2::Type::Which Type; };
-template <typename T> struct SchemaType_<T, Kind::BLOB> { typedef schema2::Type::Which Type; };
+template <typename T> struct SchemaType_<T, Kind::PRIMITIVE> { typedef schema::Type::Which Type; };
+template <typename T> struct SchemaType_<T, Kind::BLOB> { typedef schema::Type::Which Type; };
 template <typename T> struct SchemaType_<T, Kind::ENUM> { typedef EnumSchema Type; };
 template <typename T> struct SchemaType_<T, Kind::STRUCT> { typedef StructSchema Type; };
 template <typename T> struct SchemaType_<T, Kind::INTERFACE> { typedef InterfaceSchema Type; };
@@ -56,7 +56,7 @@ public:
   static inline SchemaType<T> from() { return SchemaType<T>::template fromImpl<T>(); }
   // Get the Schema for a particular compiled-in type.
 
-  schema2::Node::Reader getProto() const;
+  schema::Node::Reader getProto() const;
 
   kj::ArrayPtr<const word> asUncheckedMessage() const;
   // Get the encoded schema node content as a single message segment.  It is safe to read as an
@@ -173,7 +173,7 @@ class StructSchema::Field {
 public:
   Field() = default;
 
-  inline schema2::Field::Reader getProto() const { return proto; }
+  inline schema::Field::Reader getProto() const { return proto; }
   inline StructSchema getContainingStruct() const { return parent; }
 
   inline uint getIndex() const { return index; }
@@ -205,9 +205,9 @@ public:
 private:
   StructSchema parent;
   uint index;
-  schema2::Field::Reader proto;
+  schema::Field::Reader proto;
 
-  inline Field(StructSchema parent, uint index, schema2::Field::Reader proto)
+  inline Field(StructSchema parent, uint index, schema::Field::Reader proto)
       : parent(parent), index(index), proto(proto) {}
 
   friend class StructSchema;
@@ -226,9 +226,9 @@ public:
 
 private:
   StructSchema parent;
-  List<schema2::Field>::Reader list;
+  List<schema::Field>::Reader list;
 
-  inline FieldList(StructSchema parent, List<schema2::Field>::Reader list)
+  inline FieldList(StructSchema parent, List<schema::Field>::Reader list)
       : parent(parent), list(list) {}
 
   friend class StructSchema;
@@ -249,11 +249,11 @@ public:
 
 private:
   StructSchema parent;
-  List<schema2::Field>::Reader list;
+  List<schema::Field>::Reader list;
   const uint16_t* indices;
   uint size_;
 
-  inline FieldSubset(StructSchema parent, List<schema2::Field>::Reader list,
+  inline FieldSubset(StructSchema parent, List<schema::Field>::Reader list,
                      const uint16_t* indices, uint size)
       : parent(parent), list(list), indices(indices), size_(size) {}
 
@@ -288,7 +288,7 @@ class EnumSchema::Enumerant {
 public:
   Enumerant() = default;
 
-  inline schema2::Enumerant::Reader getProto() const { return proto; }
+  inline schema::Enumerant::Reader getProto() const { return proto; }
   inline EnumSchema getContainingEnum() const { return parent; }
 
   inline uint16_t getOrdinal() const { return ordinal; }
@@ -300,9 +300,9 @@ public:
 private:
   EnumSchema parent;
   uint16_t ordinal;
-  schema2::Enumerant::Reader proto;
+  schema::Enumerant::Reader proto;
 
-  inline Enumerant(EnumSchema parent, uint16_t ordinal, schema2::Enumerant::Reader proto)
+  inline Enumerant(EnumSchema parent, uint16_t ordinal, schema::Enumerant::Reader proto)
       : parent(parent), ordinal(ordinal), proto(proto) {}
 
   friend class EnumSchema;
@@ -321,9 +321,9 @@ public:
 
 private:
   EnumSchema parent;
-  List<schema2::Enumerant>::Reader list;
+  List<schema::Enumerant>::Reader list;
 
-  inline EnumerantList(EnumSchema parent, List<schema2::Enumerant>::Reader list)
+  inline EnumerantList(EnumSchema parent, List<schema::Enumerant>::Reader list)
       : parent(parent), list(list) {}
 
   friend class EnumSchema;
@@ -357,7 +357,7 @@ class InterfaceSchema::Method {
 public:
   Method() = default;
 
-  inline schema2::Method::Reader getProto() const { return proto; }
+  inline schema::Method::Reader getProto() const { return proto; }
   inline InterfaceSchema getContainingInterface() const { return parent; }
 
   inline uint16_t getOrdinal() const { return ordinal; }
@@ -369,10 +369,10 @@ public:
 private:
   InterfaceSchema parent;
   uint16_t ordinal;
-  schema2::Method::Reader proto;
+  schema::Method::Reader proto;
 
   inline Method(InterfaceSchema parent, uint16_t ordinal,
-                schema2::Method::Reader proto)
+                schema::Method::Reader proto)
       : parent(parent), ordinal(ordinal), proto(proto) {}
 
   friend class InterfaceSchema;
@@ -391,9 +391,9 @@ public:
 
 private:
   InterfaceSchema parent;
-  List<schema2::Method>::Reader list;
+  List<schema::Method>::Reader list;
 
-  inline MethodList(InterfaceSchema parent, List<schema2::Method>::Reader list)
+  inline MethodList(InterfaceSchema parent, List<schema::Method>::Reader list)
       : parent(parent), list(list) {}
 
   friend class InterfaceSchema;
@@ -408,18 +408,18 @@ class ListSchema {
 public:
   ListSchema() = default;
 
-  static ListSchema of(schema2::Type::Which primitiveType);
+  static ListSchema of(schema::Type::Which primitiveType);
   static ListSchema of(StructSchema elementType);
   static ListSchema of(EnumSchema elementType);
   static ListSchema of(InterfaceSchema elementType);
   static ListSchema of(ListSchema elementType);
   // Construct the schema for a list of the given type.
 
-  static ListSchema of(schema2::Type::Reader elementType, Schema context);
+  static ListSchema of(schema::Type::Reader elementType, Schema context);
   // Construct from an element type schema.  Requires a context which can handle getDependency()
   // requests for any type ID found in the schema.
 
-  inline schema2::Type::Which whichElementType() const;
+  inline schema::Type::Which whichElementType() const;
   // Get the element type's "which()".  ListSchema does not actually store a schema::Type::Reader
   // describing the element type, but if it did, this would be equivalent to calling
   // .getBody().which() on that type.
@@ -438,15 +438,15 @@ public:
   void requireUsableAs() const;
 
 private:
-  schema2::Type::Which elementType;
+  schema::Type::Which elementType;
   uint8_t nestingDepth;  // 0 for T, 1 for List(T), 2 for List(List(T)), ...
   Schema elementSchema;  // if elementType is struct, enum, interface...
 
-  inline ListSchema(schema2::Type::Which elementType)
+  inline ListSchema(schema::Type::Which elementType)
       : elementType(elementType), nestingDepth(0) {}
-  inline ListSchema(schema2::Type::Which elementType, Schema elementSchema)
+  inline ListSchema(schema::Type::Which elementType, Schema elementSchema)
       : elementType(elementType), nestingDepth(0), elementSchema(elementSchema) {}
-  inline ListSchema(schema2::Type::Which elementType, uint8_t nestingDepth,
+  inline ListSchema(schema::Type::Which elementType, uint8_t nestingDepth,
                     Schema elementSchema)
       : elementType(elementType), nestingDepth(nestingDepth), elementSchema(elementSchema) {}
 
@@ -464,20 +464,20 @@ private:
 // =======================================================================================
 // inline implementation
 
-template <> inline schema2::Type::Which Schema::from<Void>() { return schema2::Type::VOID; }
-template <> inline schema2::Type::Which Schema::from<bool>() { return schema2::Type::BOOL; }
-template <> inline schema2::Type::Which Schema::from<int8_t>() { return schema2::Type::INT8; }
-template <> inline schema2::Type::Which Schema::from<int16_t>() { return schema2::Type::INT16; }
-template <> inline schema2::Type::Which Schema::from<int32_t>() { return schema2::Type::INT32; }
-template <> inline schema2::Type::Which Schema::from<int64_t>() { return schema2::Type::INT64; }
-template <> inline schema2::Type::Which Schema::from<uint8_t>() { return schema2::Type::UINT8; }
-template <> inline schema2::Type::Which Schema::from<uint16_t>() { return schema2::Type::UINT16; }
-template <> inline schema2::Type::Which Schema::from<uint32_t>() { return schema2::Type::UINT32; }
-template <> inline schema2::Type::Which Schema::from<uint64_t>() { return schema2::Type::UINT64; }
-template <> inline schema2::Type::Which Schema::from<float>() { return schema2::Type::FLOAT32; }
-template <> inline schema2::Type::Which Schema::from<double>() { return schema2::Type::FLOAT64; }
-template <> inline schema2::Type::Which Schema::from<Text>() { return schema2::Type::TEXT; }
-template <> inline schema2::Type::Which Schema::from<Data>() { return schema2::Type::DATA; }
+template <> inline schema::Type::Which Schema::from<Void>() { return schema::Type::VOID; }
+template <> inline schema::Type::Which Schema::from<bool>() { return schema::Type::BOOL; }
+template <> inline schema::Type::Which Schema::from<int8_t>() { return schema::Type::INT8; }
+template <> inline schema::Type::Which Schema::from<int16_t>() { return schema::Type::INT16; }
+template <> inline schema::Type::Which Schema::from<int32_t>() { return schema::Type::INT32; }
+template <> inline schema::Type::Which Schema::from<int64_t>() { return schema::Type::INT64; }
+template <> inline schema::Type::Which Schema::from<uint8_t>() { return schema::Type::UINT8; }
+template <> inline schema::Type::Which Schema::from<uint16_t>() { return schema::Type::UINT16; }
+template <> inline schema::Type::Which Schema::from<uint32_t>() { return schema::Type::UINT32; }
+template <> inline schema::Type::Which Schema::from<uint64_t>() { return schema::Type::UINT64; }
+template <> inline schema::Type::Which Schema::from<float>() { return schema::Type::FLOAT32; }
+template <> inline schema::Type::Which Schema::from<double>() { return schema::Type::FLOAT64; }
+template <> inline schema::Type::Which Schema::from<Text>() { return schema::Type::TEXT; }
+template <> inline schema::Type::Which Schema::from<Data>() { return schema::Type::DATA; }
 
 template <typename T>
 inline void Schema::requireUsableAs() const {
@@ -495,21 +495,21 @@ inline bool InterfaceSchema::Method::operator==(const Method& other) const {
 }
 
 inline ListSchema ListSchema::of(StructSchema elementType) {
-  return ListSchema(schema2::Type::STRUCT, 0, elementType);
+  return ListSchema(schema::Type::STRUCT, 0, elementType);
 }
 inline ListSchema ListSchema::of(EnumSchema elementType) {
-  return ListSchema(schema2::Type::ENUM, 0, elementType);
+  return ListSchema(schema::Type::ENUM, 0, elementType);
 }
 inline ListSchema ListSchema::of(InterfaceSchema elementType) {
-  return ListSchema(schema2::Type::INTERFACE, 0, elementType);
+  return ListSchema(schema::Type::INTERFACE, 0, elementType);
 }
 inline ListSchema ListSchema::of(ListSchema elementType) {
   return ListSchema(elementType.elementType, elementType.nestingDepth + 1,
                     elementType.elementSchema);
 }
 
-inline schema2::Type::Which ListSchema::whichElementType() const {
-  return nestingDepth == 0 ? elementType : schema2::Type::LIST;
+inline schema::Type::Which ListSchema::whichElementType() const {
+  return nestingDepth == 0 ? elementType : schema::Type::LIST;
 }
 
 inline bool ListSchema::operator==(const ListSchema& other) const {

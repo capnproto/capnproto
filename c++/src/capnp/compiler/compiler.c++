@@ -84,7 +84,7 @@ public:
   // Resolve an arbitrary DeclName to a Node.
 
   kj::Maybe<Schema> getBootstrapSchema() const;
-  kj::Maybe<schema2::Node::Reader> getFinalSchema() const;
+  kj::Maybe<schema::Node::Reader> getFinalSchema() const;
 
   void traverse(uint eagerness, std::unordered_map<const Node*, uint>& seen) const;
   // Get the final schema for this node, and also possibly traverse the node's children and
@@ -96,7 +96,7 @@ public:
   // implements NodeTranslator::Resolver -----------------------------
   kj::Maybe<ResolvedName> resolve(const DeclName::Reader& name) const override;
   kj::Maybe<Schema> resolveBootstrapSchema(uint64_t id) const override;
-  kj::Maybe<schema2::Node::Reader> resolveFinalSchema(uint64_t id) const override;
+  kj::Maybe<schema::Node::Reader> resolveFinalSchema(uint64_t id) const override;
   kj::Maybe<uint64_t> resolveImport(kj::StringPtr name) const override;
 
 private:
@@ -192,11 +192,11 @@ private:
   // Advances the content to at least the given state and returns it.  Does not lock if the content
   // is already at or past the given state.
 
-  void traverseNodeDependencies(const schema2::Node::Reader& schemaNode, uint eagerness,
+  void traverseNodeDependencies(const schema::Node::Reader& schemaNode, uint eagerness,
                                 std::unordered_map<const Node*, uint>& seen) const;
-  void traverseType(const schema2::Type::Reader& type, uint eagerness,
+  void traverseType(const schema::Type::Reader& type, uint eagerness,
                     std::unordered_map<const Node*, uint>& seen) const;
-  void traverseAnnotations(const List<schema2::Annotation>::Reader& annotations, uint eagerness,
+  void traverseAnnotations(const List<schema::Annotation>::Reader& annotations, uint eagerness,
                            std::unordered_map<const Node*, uint>& seen) const;
   // Helpers for traverse().
 };
@@ -214,7 +214,7 @@ public:
 
   kj::Maybe<const CompiledModule&> importRelative(kj::StringPtr importPath) const;
 
-  Orphan<List<schema2::CodeGeneratorRequest::RequestedFile::Import>>
+  Orphan<List<schema::CodeGeneratorRequest::RequestedFile::Import>>
       getFileImportTable(Orphanage orphanage) const;
 
 private:
@@ -232,7 +232,7 @@ public:
 
   uint64_t add(const Module& module) const;
   kj::Maybe<uint64_t> lookup(uint64_t parent, kj::StringPtr childName) const;
-  Orphan<List<schema2::CodeGeneratorRequest::RequestedFile::Import>>
+  Orphan<List<schema::CodeGeneratorRequest::RequestedFile::Import>>
       getFileImportTable(const Module& module, Orphanage orphanage) const;
   void eagerlyCompile(uint64_t id, uint eagerness) const;
   const CompiledModule& addInternal(const Module& parsedModule) const;
@@ -467,7 +467,7 @@ const Compiler::Node::Content& Compiler::Node::getContent(Content::State minimum
       // Construct the NodeTranslator.
       auto& workspace = module->getCompiler().getWorkspace();
 
-      auto schemaNode = workspace.orphanage.newOrphan<schema2::Node>();
+      auto schemaNode = workspace.orphanage.newOrphan<schema::Node>();
       auto builder = schemaNode.get();
       builder.setId(id);
       builder.setDisplayName(displayName);
@@ -656,7 +656,7 @@ kj::Maybe<Schema> Compiler::Node::getBootstrapSchema() const {
     return content.bootstrapSchema;
   }
 }
-kj::Maybe<schema2::Node::Reader> Compiler::Node::getFinalSchema() const {
+kj::Maybe<schema::Node::Reader> Compiler::Node::getFinalSchema() const {
   return getContent(Content::FINISHED).finalSchema.map(
       [](const Schema& schema) { return schema.getProto(); });
 }
@@ -696,16 +696,16 @@ void Compiler::Node::traverse(uint eagerness, std::unordered_map<const Node*, ui
 }
 
 void Compiler::Node::traverseNodeDependencies(
-    const schema2::Node::Reader& schemaNode, uint eagerness,
+    const schema::Node::Reader& schemaNode, uint eagerness,
     std::unordered_map<const Node*, uint>& seen) const {
   switch (schemaNode.which()) {
-    case schema2::Node::STRUCT:
+    case schema::Node::STRUCT:
       for (auto field: schemaNode.getStruct().getFields()) {
         switch (field.which()) {
-          case schema2::Field::REGULAR:
+          case schema::Field::REGULAR:
             traverseType(field.getRegular().getType(), eagerness, seen);
             break;
-          case schema2::Field::GROUP:
+          case schema::Field::GROUP:
             // Aux node will be scanned later.
             break;
         }
@@ -714,13 +714,13 @@ void Compiler::Node::traverseNodeDependencies(
       }
       break;
 
-    case schema2::Node::ENUM:
+    case schema::Node::ENUM:
       for (auto enumerant: schemaNode.getEnum()) {
         traverseAnnotations(enumerant.getAnnotations(), eagerness, seen);
       }
       break;
 
-    case schema2::Node::INTERFACE:
+    case schema::Node::INTERFACE:
       for (auto method: schemaNode.getInterface()) {
         for (auto param: method.getParams()) {
           traverseType(param.getType(), eagerness, seen);
@@ -738,20 +738,20 @@ void Compiler::Node::traverseNodeDependencies(
   traverseAnnotations(schemaNode.getAnnotations(), eagerness, seen);
 }
 
-void Compiler::Node::traverseType(const schema2::Type::Reader& type, uint eagerness,
+void Compiler::Node::traverseType(const schema::Type::Reader& type, uint eagerness,
                                   std::unordered_map<const Node*, uint>& seen) const {
   uint64_t id = 0;
   switch (type.which()) {
-    case schema2::Type::STRUCT:
+    case schema::Type::STRUCT:
       id = type.getStruct();
       break;
-    case schema2::Type::ENUM:
+    case schema::Type::ENUM:
       id = type.getEnum();
       break;
-    case schema2::Type::INTERFACE:
+    case schema::Type::INTERFACE:
       id = type.getInterface();
       break;
-    case schema2::Type::LIST:
+    case schema::Type::LIST:
       traverseType(type.getList(), eagerness, seen);
       return;
     default:
@@ -765,7 +765,7 @@ void Compiler::Node::traverseType(const schema2::Type::Reader& type, uint eagern
   }
 }
 
-void Compiler::Node::traverseAnnotations(const List<schema2::Annotation>::Reader& annotations,
+void Compiler::Node::traverseAnnotations(const List<schema::Annotation>::Reader& annotations,
                                          uint eagerness,
                                          std::unordered_map<const Node*, uint>& seen) const {
   for (auto annotation: annotations) {
@@ -795,7 +795,7 @@ kj::Maybe<Schema> Compiler::Node::resolveBootstrapSchema(uint64_t id) const {
   }
 }
 
-kj::Maybe<schema2::Node::Reader> Compiler::Node::resolveFinalSchema(uint64_t id) const {
+kj::Maybe<schema::Node::Reader> Compiler::Node::resolveFinalSchema(uint64_t id) const {
   KJ_IF_MAYBE(node, module->getCompiler().findNode(id)) {
     return node->getFinalSchema();
   } else {
@@ -877,12 +877,12 @@ static void findImports(Declaration::Reader decl, std::set<kj::StringPtr>& outpu
   }
 }
 
-Orphan<List<schema2::CodeGeneratorRequest::RequestedFile::Import>>
+Orphan<List<schema::CodeGeneratorRequest::RequestedFile::Import>>
     Compiler::CompiledModule::getFileImportTable(Orphanage orphanage) const {
   std::set<kj::StringPtr> importNames;
   findImports(content.getReader().getRoot(), importNames);
 
-  auto result = orphanage.newOrphan<List<schema2::CodeGeneratorRequest::RequestedFile::Import>>(
+  auto result = orphanage.newOrphan<List<schema::CodeGeneratorRequest::RequestedFile::Import>>(
       importNames.size());
   auto builder = result.get();
 
@@ -997,7 +997,7 @@ kj::Maybe<uint64_t> Compiler::Impl::lookup(uint64_t parent, kj::StringPtr childN
   }
 }
 
-Orphan<List<schema2::CodeGeneratorRequest::RequestedFile::Import>>
+Orphan<List<schema::CodeGeneratorRequest::RequestedFile::Import>>
     Compiler::Impl::getFileImportTable(const Module& module, Orphanage orphanage) const {
   return addInternal(module).getFileImportTable(orphanage);
 }
@@ -1038,7 +1038,7 @@ kj::Maybe<uint64_t> Compiler::lookup(uint64_t parent, kj::StringPtr childName) c
   return impl->lookup(parent, childName);
 }
 
-Orphan<List<schema2::CodeGeneratorRequest::RequestedFile::Import>>
+Orphan<List<schema::CodeGeneratorRequest::RequestedFile::Import>>
     Compiler::getFileImportTable(const Module& module, Orphanage orphanage) const {
   return impl->getFileImportTable(module, orphanage);
 }

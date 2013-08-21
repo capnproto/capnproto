@@ -25,7 +25,7 @@
 #define CAPNP_COMPILER_COMPILER_H_
 
 #include <capnp/compiler/grammar.capnp.h>
-#include <capnp/schema2.capnp.h>
+#include <capnp/schema.capnp.h>
 #include <capnp/schema-loader.h>
 #include "error-reporter.h"
 
@@ -84,7 +84,7 @@ public:
   // exception if the parent ID is not recognized; returns null if the parent has no child of the
   // given name.  Neither the parent nor the child schema node is actually compiled.
 
-  Orphan<List<schema2::CodeGeneratorRequest::RequestedFile::Import>>
+  Orphan<List<schema::CodeGeneratorRequest::RequestedFile::Import>>
       getFileImportTable(const Module& module, Orphanage orphanage) const;
   // Build the import table for the CodeGeneratorRequest for the given module.
 

@@ -23,10 +23,8 @@
 
 using Cxx = import "c++.capnp";
 
-@0xb471df2f45ca32c7;
+@0xa93fc509624c72d9;
 $Cxx.namespace("capnp::schema");
-
-# WARNING:  This protocol is still subject to backwards-incompatible change.
 
 using Id = UInt64;
 # The globally-unique ID of a file, type, or annotation.
@@ -40,17 +38,18 @@ struct Node {
   #
   # (On Zooko's triangle, this is the node's nickname.)
 
-  displayNamePrefixLength @12 :UInt32;
+  displayNamePrefixLength @2 :UInt32;
   # If you want a shorter version of `displayName` (just naming this node, without its surrounding
   # scope), chop off this many characters from the beginning of `displayName`.
 
-  scopeId @2 :Id = 0;
+  scopeId @3 :Id;
   # ID of the lexical parent node.  Typically, the scope node will have a NestedNode pointing back
-  # at this node, but robust code should avoid relying on this.  `scopeId` is zero if the node has
-  # no parent, which is normally only the case with files, but should be allowed for any kind of
-  # node (in order to make runtime type generation easier).
+  # at this node, but robust code should avoid relying on this (and, in fact, group nodes are not
+  # listed in the outer struct's nestedNodes, since they are listed in the fields).  `scopeId` is
+  # zero if the node has no parent, which is normally only the case with files, but should be
+  # allowed for any kind of node (in order to make runtime type generation easier).
 
-  nestedNodes @3 :List(NestedNode);
+  nestedNodes @4 :List(NestedNode);
   # List of nodes nested within this node, along with the names under which they were declared.
 
   struct NestedNode {
@@ -64,81 +63,241 @@ struct Node {
     # robust code should avoid relying on this.
   }
 
-  annotations @4 :List(Annotation);
+  annotations @5 :List(Annotation);
   # Annotations applied to this node.
 
-  body @5 union {
+  union {
     # Info specific to each kind of node.
 
-    fileNode @6 :FileNode;
-    structNode @7 :StructNode;
-    enumNode @8 :EnumNode;
-    interfaceNode @9 :InterfaceNode;
-    constNode @10 :ConstNode;
-    annotationNode @11 :AnnotationNode;
+    file @6 :Void;
+
+    struct :group {
+      dataSectionWordSize @7 :UInt16;
+      pointerSectionSize @8 :UInt16;
+
+      preferredListEncoding @9 :ElementSize;
+      # The preferred element size to use when encoding a list of this struct.  If this is anything
+      # other than `inlineComposite` then the struct is one word or less in size and is a candidate
+      # for list packing optimization.
+
+      isGroup @10 :Bool;
+      # If true, then this "struct" node is actually not an independent node, but merely represents
+      # some named union or group within a particular parent struct.  This node's scopeId refers
+      # to the parent struct, which may itself be a union/group in yet another struct.
+      #
+      # All group nodes share the same dataSectionWordSize and pointerSectionSize as the top-level
+      # struct, and their fields live in the same ordinal and offset spaces as all other fields in
+      # the struct.
+      #
+      # Note that a named union is considered a special kind of group -- in fact, a named union
+      # is exactly equivalent to a group that contains nothing but an unnamed union.
+
+      discriminantCount @11 :UInt16;
+      # Number of fields in this struct which are members of an anonymous union, and thus may
+      # overlap.  If this is non-zero, then a 16-bit discriminant is present indicating which
+      # of the overlapping fields is active.  This can never be 1 -- if it is non-zero, it must be
+      # two or more.
+      #
+      # Note that the fields of an unnamed union are considered fields of the scope containing the
+      # union -- an unnamed union is not its own group.  So, a top-level struct may contain a
+      # non-zero discriminant count.  Named unions, on the other hand, are equivalent to groups
+      # containing unnamed unions.  So, a named union has its own independent schema node, with
+      # `isGroup` = true.
+
+      discriminantOffset @12 :UInt32;
+      # If `discriminantCount` is non-zero, this is the offset of the union discriminant, in
+      # multiples of 16 bits.
+
+      fields @13 :List(Field);
+      # Fields defined within this scope (either the struct's top-level fields, or the fields of
+      # a particular group; see `isGroup`).
+      #
+      # The fields are sorted by ordinal number, but note that because groups share the same
+      # ordinal space, the field's index in this list is not necessarily exactly its ordinal.
+      # On the other hand, the field's position in this list does remain the same even as the
+      # protocol evolves, since it is not possible to insert or remove an earlier ordinal.
+      # Therefore, for most use cases, if you want to identify a field by number, it may make the
+      # most sense to use the field's index in this list rather than its ordinal.
+    }
+
+    enum @14 :List(Enumerant);
+    # Enumerants ordered by numeric value (ordinal).
+
+    interface @15 :List(Method);
+    # Methods ordered by ordinal.
+
+    const :group {
+      type @16 :Type;
+      value @17 :Value;
+    }
+
+    annotation :group {
+      type @18 :Type;
+
+      targetsFile @19 :Bool;
+      targetsConst @20 :Bool;
+      targetsEnum @21 :Bool;
+      targetsEnumerant @22 :Bool;
+      targetsStruct @23 :Bool;
+      targetsField @24 :Bool;
+      targetsUnion @25 :Bool;
+      targetsGroup @26 :Bool;
+      targetsInterface @27 :Bool;
+      targetsMethod @28 :Bool;
+      targetsParam @29 :Bool;
+      targetsAnnotation @30 :Bool;
+    }
   }
+}
+
+struct Field {
+  # Schema for a field of a struct.
+
+  name @0 :Text;
+
+  codeOrder @1 :UInt16;
+  # Indicates where this member appeared in the code, relative to other members.
+  # Code ordering may have semantic relevance -- programmers tend to place related fields
+  # together.  So, using code ordering makes sense in human-readable formats where ordering is
+  # otherwise irrelevant, like JSON.  The values of codeOrder are tightly-packed, so the maximum
+  # value is count(members) - 1.  Fields that are members of a union are only ordered relative to
+  # the other members of that union, so the maximum value there is count(union.members).
+
+  annotations @2 :List(Annotation);
+
+  discriminantValue @3 :UInt16 = 0xffff;
+  # If the field is in a union, this is the value which the union's discriminant should take when
+  # the field is active.  If the field is not in a union, this is 0xffff (so hasDiscriminantValue()
+  # returns false).
+
+  union {
+    regular :group {
+      # A regular (non-group) field.
+
+      offset @4 :UInt32;
+      # Offset, in units of the field's size, from the beginning of the section in which the field
+      # resides.  E.g. for a UInt32 field, multiply this by 4 to get the byte offset from the
+      # beginning of the data section.
+
+      type @5 :Type;
+      defaultValue @6 :Value;
+    }
+
+    group @7 :Id;
+    # A group.  This is the ID of the group's node.
+  }
+
+  ordinal :union {
+    implicit @8 :Void;
+    explicit @9 :UInt16;
+    # The original ordinal number given to the field.  You probably should NOT use this; if you need
+    # a numeric identifier for a field, use its position within the field array for its scope.
+    # The ordinal is given here mainly just so that the original schema text can be reproduced given
+    # the compiled version -- i.e. so that `capnp compile -ocapnp` can do its job.
+  }
+}
+
+struct Enumerant {
+  # Schema for member of an enum.
+
+  name @0 :Text;
+
+  codeOrder @1 :UInt16;
+  # Specifies order in which the enumerants were declared in the code.
+  # Like Struct.Field.codeOrder.
+
+  annotations @2 :List(Annotation);
+}
+
+struct Method {
+  # Schema for method of an interface.
+
+  name @0 :Text;
+
+  codeOrder @1 :UInt16;
+  # Specifies order in which the methods were declared in the code.
+  # Like Struct.Field.codeOrder.
+
+  params @2 :List(Param);
+  struct Param {
+    name @0 :Text;
+    type @1 :Type;
+    defaultValue @2 :Value;
+    annotations @3 :List(Annotation);
+  }
+
+  requiredParamCount @3 :UInt16;
+  # One plus the index of the last parameter that has no default value.  In languages where
+  # method calls look like function calls, this is the minimum number of parameters that must
+  # always be specified, while subsequent parameters are optional.
+
+  returnType @4 :Type;
+
+  annotations @5 :List(Annotation);
 }
 
 struct Type {
   # Represents a type expression.
 
-  body @0 union {
-    voidType @1 :Void;
-    boolType @2 :Void;
-    int8Type @3 :Void;
-    int16Type @4 :Void;
-    int32Type @5 :Void;
-    int64Type @6 :Void;
-    uint8Type @7 :Void;
-    uint16Type @8 :Void;
-    uint32Type @9 :Void;
-    uint64Type @10 :Void;
-    float32Type @11 :Void;
-    float64Type @12 :Void;
-    textType @13 :Void;
-    dataType @14 :Void;
+  union {
+    # The ordinals intentionally match those of Value.
 
-    listType @15 :Type;  # Value = the element type.
+    void @0 :Void;
+    bool @1 :Void;
+    int8 @2 :Void;
+    int16 @3 :Void;
+    int32 @4 :Void;
+    int64 @5 :Void;
+    uint8 @6 :Void;
+    uint16 @7 :Void;
+    uint32 @8 :Void;
+    uint64 @9 :Void;
+    float32 @10 :Void;
+    float64 @11 :Void;
+    text @12 :Void;
+    data @13 :Void;
 
-    enumType @16 :Id;
-    structType @17 :Id;
-    interfaceType @18 :Id;
+    list @14 :Type;  # Value = the element type.
 
-    objectType @19 :Void;
+    enum @15 :Id;
+    struct @16 :Id;
+    interface @17 :Id;
+
+    object @18 :Void;
   }
 }
 
 struct Value {
   # Represents a value, e.g. a field default value, constant value, or annotation value.
 
-  body @0 union {
-    # Note ordinals 1 and 10 are intentionally swapped to improve union layout.
-    # TODO:  Make it 2 and 10 that are swapped instead so that voidValue is still default?
-    voidValue @10 :Void;
-    boolValue @2 :Bool;
-    int8Value @3 :Int8;
-    int16Value @4 :Int16;
-    int32Value @5 :Int32;
-    int64Value @6 :Int64;
-    uint8Value @7 :UInt8;
-    uint16Value @8 :UInt16;
-    uint32Value @9 :UInt32;
-    uint64Value @1 :UInt64;
-    float32Value @11 :Float32;
-    float64Value @12 :Float64;
-    textValue @13 :Text;
-    dataValue @14 :Data;
+  union {
+    # The ordinals intentionally match those of Type.
 
-    listValue @15 :Object;
+    void @0 :Void;
+    bool @1 :Bool;
+    int8 @2 :Int8;
+    int16 @3 :Int16;
+    int32 @4 :Int32;
+    int64 @5 :Int64;
+    uint8 @6 :UInt8;
+    uint16 @7 :UInt16;
+    uint32 @8 :UInt32;
+    uint64 @9 :UInt64;
+    float32 @10 :Float32;
+    float64 @11 :Float64;
+    text @12 :Text;
+    data @13 :Data;
 
-    enumValue @16 :UInt16;
-    structValue @17 :Object;
+    list @14 :Object;
 
-    interfaceValue @18 :Void;
+    enum @15 :UInt16;
+    struct @16 :Object;
+
+    interface @17 :Void;
     # The only interface value that can be represented statically is "null", whose methods always
     # throw exceptions.
 
-    objectValue @19 :Object;
+    object @18 :Object;
   }
 }
 
@@ -150,21 +309,6 @@ struct Annotation {
   # ID of the annotation node.
 
   value @1 :Value;
-}
-
-struct FileNode {
-  imports @0 :List(Import);
-  struct Import {
-    id @0 :Id;
-    # ID of the imported file.
-
-    name @1 :Text;
-    # Name which *this* file used to refer to the foreign file.  This may be a relative name.
-    # This information is provided because it might be useful for code generation, e.g. to generate
-    # #include directives in C++.
-    #
-    # (On Zooko's triangle, this is the import's petname according to the importing file.)
-  }
 }
 
 enum ElementSize {
@@ -181,149 +325,36 @@ enum ElementSize {
   inlineComposite @7;
 }
 
-struct StructNode {
-  dataSectionWordSize @0 :UInt16;
-  pointerSectionSize @1 :UInt16;
-
-  preferredListEncoding @2 :ElementSize;
-  # The preferred element size to use when encoding a list of this struct.  If this is anything
-  # other than `inlineComposite` then the struct is one word or less in size and is a candidate for
-  # list packing optimization.
-
-  members @3 :List(Member);
-  # Top-level fields and unions of the struct, ordered by ordinal number, except that members of
-  # unions are not included in this list (because they are nested inside the union declaration).
-  # Note that this ordering is stable as the protocol evolves -- new members can only be added to
-  # the end.  So, when encoding a struct as tag/value pairs with numeric tags, it actually may make
-  # sense to use the field's position in this list rather than the original ordinal number to
-  # identify fields.
-
-  struct Member {
-    name @0 :Text;
-
-    ordinal @1 :UInt16;
-    # For fields, the ordinal number.  For unions, if an explicit ordinal was given, that number.
-    # Otherwise, for unions and groups, this is the ordinal of the lowest-numbered field in the
-    # union/group.
-    #
-    # TODO(someday):  When revamping the meta-schema, move this into Field.
-
-    codeOrder @2 :UInt16;
-    # Indicates where this member appeared in the code, relative to other members.
-    # Code ordering may have semantic relevance -- programmers tend to place related fields
-    # together.  So, using code ordering makes sense in human-readable formats where ordering is
-    # otherwise irrelevant, like JSON.  The values of codeOrder are tightly-packed, so the maximum
-    # value is count(members) - 1.  Fields that are members of a union are only ordered relative to
-    # the other members of that union, so the maximum value there is count(union.members).
-
-    annotations @3 :List(Annotation);
-
-    body @4 union {
-      # More member types could be added over time.  Consumers should skip those that they
-      # don't understand.
-
-      fieldMember @5 :Field;
-      unionMember @6 :Union;
-      groupMember @7 :Group;
-    }
-  }
-
-  struct Field {
-    offset @0 :UInt32;
-    # Offset, in units of the field's size, from the beginning of the section in which the field
-    # resides.  E.g. for a UInt32 field, multiply this by 4 to get the byte offset from the
-    # beginning of the data section.
-
-    type @1 :Type;
-    defaultValue @2 :Value;
-  }
-
-  struct Union {
-    discriminantOffset @0 :UInt32;
-    # Offset of the union's 16-bit discriminant within the struct's data section, in 16-bit units.
-
-    members @1 :List(Member);
-    # Fields of this union, ordered by ordinal.  Currently all members are fields, but
-    # consumers should skip member types that they don't understand.  The first member in this list
-    # gets discriminant value zero, the next gets one, and so on.
-  }
-
-  struct Group {
-    members @0 :List(Member);
-  }
-}
-
-struct EnumNode {
-  enumerants @0 :List(Enumerant);
-  # Enumerants, in order by ordinal.
-
-  struct Enumerant {
-    name @0 :Text;
-
-    codeOrder @1 :UInt16;
-    # Specifies order in which the enumerants were declared in the code.
-    # Like Struct.Field.codeOrder.
-
-    annotations @2 :List(Annotation);
-  }
-}
-
-struct InterfaceNode {
-  methods @0 :List(Method);
-  # Methods, in order by ordinal.
-
-  struct Method {
-    name @0 :Text;
-
-    codeOrder @1 :UInt16;
-    # Specifies order in which the methods were declared in the code.
-    # Like Struct.Field.codeOrder.
-
-    params @2 :List(Param);
-    struct Param {
-      name @0 :Text;
-      type @1 :Type;
-      defaultValue @2 :Value;
-      annotations @3 :List(Annotation);
-    }
-
-    requiredParamCount @3 :UInt16;
-    # One plus the index of the last parameter that has no default value.  In languages where
-    # method calls look like function calls, this is the minimum number of parameters that must
-    # always be specified, while subsequent parameters are optional.
-
-    returnType @4 :Type;
-
-    annotations @5 :List(Annotation);
-  }
-}
-
-struct ConstNode {
-  type @0 :Type;
-  value @1 :Value;
-}
-
-struct AnnotationNode {
-  type @0 :Type;
-
-  targetsFile @1 :Bool;
-  targetsConst @2 :Bool;
-  targetsEnum @3 :Bool;
-  targetsEnumerant @4 :Bool;
-  targetsStruct @5 :Bool;
-  targetsField @6 :Bool;
-  targetsUnion @7 :Bool;
-  targetsInterface @8 :Bool;
-  targetsMethod @9 :Bool;
-  targetsParam @10 :Bool;
-  targetsAnnotation @11 :Bool;
-}
-
 struct CodeGeneratorRequest {
   nodes @0 :List(Node);
   # All nodes parsed by the compiler, including for the files on the command line and their
   # imports.
 
-  requestedFiles @1 :List(Id);
-  # IDs of files which were listed on the command line.
+  requestedFiles @1 :List(RequestedFile);
+  # Files which were listed on the command line.
+
+  struct RequestedFile {
+    id @0 :Id;
+    # ID of the file.
+
+    filename @1 :Text;
+    # Name of the file as it appeared on the command-line (minus the src-prefix).  You may use
+    # this to decide where to write the output.
+
+    imports @2 :List(Import);
+    # List of all imported paths seen in this file.
+
+    struct Import {
+      id @0 :Id;
+      # ID of the imported file.
+
+      name @1 :Text;
+      # Name which *this* file used to refer to the foreign file.  This may be a relative name.
+      # This information is provided because it might be useful for code generation, e.g. to
+      # generate #include directives in C++.  We don't put this in Node.file because this
+      # information is only meaningful at compile time anyway.
+      #
+      # (On Zooko's triangle, this is the import's petname according to the importing file.)
+    }
+  }
 }

@@ -287,7 +287,7 @@ public:
     }
 
     MallocMessageBuilder message;
-    auto request = message.initRoot<schema2::CodeGeneratorRequest>();
+    auto request = message.initRoot<schema::CodeGeneratorRequest>();
 
     auto schemas = compiler->getLoader().getAllLoaded();
     auto nodes = request.initNodes(schemas.size());
@@ -419,7 +419,7 @@ public:
     }
 
     Schema schema = compiler->getLoader().get(id);
-    if (schema.getProto().which() != schema2::Node::STRUCT) {
+    if (schema.getProto().which() != schema::Node::STRUCT) {
       return "not a struct type";
     }
     rootType = schema.asStruct();

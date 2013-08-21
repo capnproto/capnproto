@@ -65,28 +65,28 @@ inline uint64_t bitCast<uint64_t, double>(double value) {
   return result;
 }
 
-_::FieldSize elementSizeFor(schema2::Type::Which elementType) {
+_::FieldSize elementSizeFor(schema::Type::Which elementType) {
   switch (elementType) {
-    case schema2::Type::VOID: return _::FieldSize::VOID;
-    case schema2::Type::BOOL: return _::FieldSize::BIT;
-    case schema2::Type::INT8: return _::FieldSize::BYTE;
-    case schema2::Type::INT16: return _::FieldSize::TWO_BYTES;
-    case schema2::Type::INT32: return _::FieldSize::FOUR_BYTES;
-    case schema2::Type::INT64: return _::FieldSize::EIGHT_BYTES;
-    case schema2::Type::UINT8: return _::FieldSize::BYTE;
-    case schema2::Type::UINT16: return _::FieldSize::TWO_BYTES;
-    case schema2::Type::UINT32: return _::FieldSize::FOUR_BYTES;
-    case schema2::Type::UINT64: return _::FieldSize::EIGHT_BYTES;
-    case schema2::Type::FLOAT32: return _::FieldSize::FOUR_BYTES;
-    case schema2::Type::FLOAT64: return _::FieldSize::EIGHT_BYTES;
+    case schema::Type::VOID: return _::FieldSize::VOID;
+    case schema::Type::BOOL: return _::FieldSize::BIT;
+    case schema::Type::INT8: return _::FieldSize::BYTE;
+    case schema::Type::INT16: return _::FieldSize::TWO_BYTES;
+    case schema::Type::INT32: return _::FieldSize::FOUR_BYTES;
+    case schema::Type::INT64: return _::FieldSize::EIGHT_BYTES;
+    case schema::Type::UINT8: return _::FieldSize::BYTE;
+    case schema::Type::UINT16: return _::FieldSize::TWO_BYTES;
+    case schema::Type::UINT32: return _::FieldSize::FOUR_BYTES;
+    case schema::Type::UINT64: return _::FieldSize::EIGHT_BYTES;
+    case schema::Type::FLOAT32: return _::FieldSize::FOUR_BYTES;
+    case schema::Type::FLOAT64: return _::FieldSize::EIGHT_BYTES;
 
-    case schema2::Type::TEXT: return _::FieldSize::POINTER;
-    case schema2::Type::DATA: return _::FieldSize::POINTER;
-    case schema2::Type::LIST: return _::FieldSize::POINTER;
-    case schema2::Type::ENUM: return _::FieldSize::TWO_BYTES;
-    case schema2::Type::STRUCT: return _::FieldSize::INLINE_COMPOSITE;
-    case schema2::Type::INTERFACE: return _::FieldSize::POINTER;
-    case schema2::Type::OBJECT: KJ_FAIL_ASSERT("List(Object) not supported."); break;
+    case schema::Type::TEXT: return _::FieldSize::POINTER;
+    case schema::Type::DATA: return _::FieldSize::POINTER;
+    case schema::Type::LIST: return _::FieldSize::POINTER;
+    case schema::Type::ENUM: return _::FieldSize::TWO_BYTES;
+    case schema::Type::STRUCT: return _::FieldSize::INLINE_COMPOSITE;
+    case schema::Type::INTERFACE: return _::FieldSize::POINTER;
+    case schema::Type::OBJECT: KJ_FAIL_ASSERT("List(Object) not supported."); break;
   }
 
   // Unknown type.  Treat it as zero-size.
@@ -199,18 +199,18 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
 
   auto proto = field.getProto();
   switch (proto.which()) {
-    case schema2::Field::REGULAR: {
+    case schema::Field::REGULAR: {
       auto regularField = proto.getRegular();
       auto type = regularField.getType();
       auto dval = regularField.getDefaultValue();
 
       switch (type.which()) {
-        case schema2::Type::VOID:
+        case schema::Type::VOID:
           return DynamicValue::Reader(
               reader.getDataField<Void>(regularField.getOffset() * ELEMENTS));
 
 #define HANDLE_TYPE(discrim, titleCase, type) \
-        case schema2::Type::discrim: \
+        case schema::Type::discrim: \
           return DynamicValue::Reader(reader.getDataField<type>( \
               regularField.getOffset() * ELEMENTS, \
               bitCast<_::Mask<type>>(dval.get##titleCase())));
@@ -229,7 +229,7 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
 
 #undef HANDLE_TYPE
 
-        case schema2::Type::ENUM: {
+        case schema::Type::ENUM: {
           uint16_t typedDval;
           typedDval = dval.getEnum();
           return DynamicValue::Reader(DynamicEnum(
@@ -237,21 +237,21 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
               reader.getDataField<uint16_t>(regularField.getOffset() * ELEMENTS, typedDval)));
         }
 
-        case schema2::Type::TEXT: {
+        case schema::Type::TEXT: {
           Text::Reader typedDval = dval.getText();
           return DynamicValue::Reader(
               reader.getBlobField<Text>(regularField.getOffset() * POINTERS,
                                         typedDval.begin(), typedDval.size() * BYTES));
         }
 
-        case schema2::Type::DATA: {
+        case schema::Type::DATA: {
           Data::Reader typedDval = dval.getData();
           return DynamicValue::Reader(
               reader.getBlobField<Data>(regularField.getOffset() * POINTERS,
                                         typedDval.begin(), typedDval.size() * BYTES));
         }
 
-        case schema2::Type::LIST: {
+        case schema::Type::LIST: {
           auto elementType = type.getList();
           return DynamicValue::Reader(DynamicList::Reader(
               ListSchema::of(elementType, field.getContainingStruct()),
@@ -260,20 +260,20 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
                                   dval.getList<_::UncheckedMessage>())));
         }
 
-        case schema2::Type::STRUCT: {
+        case schema::Type::STRUCT: {
           return DynamicValue::Reader(DynamicStruct::Reader(
               field.getContainingStruct().getDependency(type.getStruct()).asStruct(),
               reader.getStructField(regularField.getOffset() * POINTERS,
                                     dval.getStruct<_::UncheckedMessage>())));
         }
 
-        case schema2::Type::OBJECT: {
+        case schema::Type::OBJECT: {
           return DynamicValue::Reader(DynamicObject(
               reader.getObjectField(regularField.getOffset() * POINTERS,
                                     dval.getObject<_::UncheckedMessage>())));
         }
 
-        case schema2::Type::INTERFACE:
+        case schema::Type::INTERFACE:
           KJ_FAIL_ASSERT("Interfaces not yet implemented.");
           break;
       }
@@ -281,7 +281,7 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
       KJ_UNREACHABLE;
     }
 
-    case schema2::Field::GROUP:
+    case schema::Field::GROUP:
       return DynamicStruct::Reader(schema.getDependency(proto.getGroup()).asStruct(), reader);
   }
 
@@ -294,17 +294,17 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
 
   auto proto = field.getProto();
   switch (proto.which()) {
-    case schema2::Field::REGULAR: {
+    case schema::Field::REGULAR: {
       auto regularField = proto.getRegular();
       auto type = regularField.getType();
       auto dval = regularField.getDefaultValue();
 
       switch (type.which()) {
-        case schema2::Type::VOID:
+        case schema::Type::VOID:
           return builder.getDataField<Void>(regularField.getOffset() * ELEMENTS);
 
 #define HANDLE_TYPE(discrim, titleCase, type) \
-        case schema2::Type::discrim: \
+        case schema::Type::discrim: \
           return builder.getDataField<type>( \
               regularField.getOffset() * ELEMENTS, \
               bitCast<_::Mask<type>>(dval.get##titleCase()));
@@ -323,7 +323,7 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
 
 #undef HANDLE_TYPE
 
-        case schema2::Type::ENUM: {
+        case schema::Type::ENUM: {
           uint16_t typedDval;
           typedDval = dval.getEnum();
           return DynamicEnum(
@@ -331,21 +331,21 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
               builder.getDataField<uint16_t>(regularField.getOffset() * ELEMENTS, typedDval));
         }
 
-        case schema2::Type::TEXT: {
+        case schema::Type::TEXT: {
           Text::Reader typedDval = dval.getText();
           return builder.getBlobField<Text>(regularField.getOffset() * POINTERS,
                                             typedDval.begin(), typedDval.size() * BYTES);
         }
 
-        case schema2::Type::DATA: {
+        case schema::Type::DATA: {
           Data::Reader typedDval = dval.getData();
           return builder.getBlobField<Data>(regularField.getOffset() * POINTERS,
                                             typedDval.begin(), typedDval.size() * BYTES);
         }
 
-        case schema2::Type::LIST: {
+        case schema::Type::LIST: {
           ListSchema listType = ListSchema::of(type.getList(), field.getContainingStruct());
-          if (listType.whichElementType() == schema2::Type::STRUCT) {
+          if (listType.whichElementType() == schema::Type::STRUCT) {
             return DynamicList::Builder(listType,
                 builder.getStructListField(regularField.getOffset() * POINTERS,
                                            structSizeFromSchema(listType.getStructElementType()),
@@ -358,7 +358,7 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
           }
         }
 
-        case schema2::Type::STRUCT: {
+        case schema::Type::STRUCT: {
           auto structSchema =
               field.getContainingStruct().getDependency(type.getStruct()).asStruct();
           return DynamicStruct::Builder(structSchema,
@@ -368,14 +368,14 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
                   dval.getStruct<_::UncheckedMessage>()));
         }
 
-        case schema2::Type::OBJECT: {
+        case schema::Type::OBJECT: {
           return DynamicObject(
               builder.asReader().getObjectField(
                   regularField.getOffset() * POINTERS,
                   dval.getObject<_::UncheckedMessage>()));
         }
 
-        case schema2::Type::INTERFACE:
+        case schema::Type::INTERFACE:
           KJ_FAIL_ASSERT("Interfaces not yet implemented.");
           break;
       }
@@ -383,7 +383,7 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
       KJ_UNREACHABLE;
     }
 
-    case schema2::Field::GROUP:
+    case schema::Field::GROUP:
       return DynamicStruct::Builder(schema.getDependency(proto.getGroup()).asStruct(), builder);
   }
 
@@ -408,11 +408,11 @@ bool DynamicStruct::Reader::has(StructSchema::Field field) const {
   }
 
   switch (proto.which()) {
-    case schema2::Field::REGULAR:
+    case schema::Field::REGULAR:
       // Continue to below.
       break;
 
-    case schema2::Field::GROUP: {
+    case schema::Field::GROUP: {
       // Bleh, we have to check all of the members to see if any are set.
       auto group = get(field).as<DynamicStruct>();
 
@@ -445,11 +445,11 @@ bool DynamicStruct::Reader::has(StructSchema::Field field) const {
   auto type = regularField.getType();
 
   switch (type.which()) {
-    case schema2::Type::VOID:
+    case schema::Type::VOID:
       return false;
 
 #define HANDLE_TYPE(discrim, type) \
-    case schema2::Type::discrim: \
+    case schema::Type::discrim: \
       return reader.getDataField<type>(regularField.getOffset() * ELEMENTS) != 0;
 
     HANDLE_TYPE(BOOL, bool)
@@ -467,12 +467,12 @@ bool DynamicStruct::Reader::has(StructSchema::Field field) const {
 
 #undef HANDLE_TYPE
 
-    case schema2::Type::TEXT:
-    case schema2::Type::DATA:
-    case schema2::Type::LIST:
-    case schema2::Type::STRUCT:
-    case schema2::Type::OBJECT:
-    case schema2::Type::INTERFACE:
+    case schema::Type::TEXT:
+    case schema::Type::DATA:
+    case schema::Type::LIST:
+    case schema::Type::STRUCT:
+    case schema::Type::OBJECT:
+    case schema::Type::INTERFACE:
       return !reader.isPointerFieldNull(regularField.getOffset() * POINTERS);
   }
 
@@ -506,18 +506,18 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
 
   auto proto = field.getProto();
   switch (proto.which()) {
-    case schema2::Field::REGULAR: {
+    case schema::Field::REGULAR: {
       auto regularField = proto.getRegular();
       auto type = regularField.getType();
       auto dval = regularField.getDefaultValue();
 
       switch (type.which()) {
-        case schema2::Type::VOID:
+        case schema::Type::VOID:
           builder.setDataField<Void>(regularField.getOffset() * ELEMENTS, value.as<Void>());
           return;
 
 #define HANDLE_TYPE(discrim, titleCase, type) \
-        case schema2::Type::discrim: \
+        case schema::Type::discrim: \
           builder.setDataField<type>( \
               regularField.getOffset() * ELEMENTS, value.as<type>(), \
               bitCast<_::Mask<type> >(dval.get##titleCase())); \
@@ -537,7 +537,7 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
 
 #undef HANDLE_TYPE
 
-        case schema2::Type::ENUM: {
+        case schema::Type::ENUM: {
           uint16_t rawValue;
           auto enumSchema = field.getContainingStruct().getDependency(type.getEnum()).asEnum();
           if (value.getType() == DynamicValue::TEXT) {
@@ -556,29 +556,29 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
           return;
         }
 
-        case schema2::Type::TEXT:
+        case schema::Type::TEXT:
           builder.setBlobField<Text>(regularField.getOffset() * POINTERS, value.as<Text>());
           return;
 
-        case schema2::Type::DATA:
+        case schema::Type::DATA:
           builder.setBlobField<Data>(regularField.getOffset() * POINTERS, value.as<Data>());
           return;
 
-        case schema2::Type::LIST:
+        case schema::Type::LIST:
           builder.setListField(regularField.getOffset() * POINTERS, value.as<DynamicList>().reader);
           return;
 
-        case schema2::Type::STRUCT:
+        case schema::Type::STRUCT:
           builder.setStructField(
               regularField.getOffset() * POINTERS, value.as<DynamicStruct>().reader);
           return;
 
-        case schema2::Type::OBJECT:
+        case schema::Type::OBJECT:
           builder.setObjectField(
               regularField.getOffset() * POINTERS, value.as<DynamicObject>().reader);
           return;
 
-        case schema2::Type::INTERFACE:
+        case schema::Type::INTERFACE:
           KJ_FAIL_ASSERT("Interfaces not yet implemented.");
           return;
       }
@@ -586,7 +586,7 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
       KJ_UNREACHABLE;
     }
 
-    case schema2::Field::GROUP: {
+    case schema::Field::GROUP: {
       auto src = value.as<DynamicStruct>();
       auto dst = init(field).as<DynamicStruct>();
 
@@ -612,10 +612,10 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field) {
   auto proto = field.getProto();
 
   switch (proto.which()) {
-    case schema2::Field::REGULAR: {
+    case schema::Field::REGULAR: {
       auto regularField = proto.getRegular();
       auto type = regularField.getType();
-      KJ_REQUIRE(type.which() == schema2::Type::STRUCT,
+      KJ_REQUIRE(type.which() == schema::Type::STRUCT,
               "init() without a size is only valid for struct fields.");
       auto subSchema = schema.getDependency(type.getStruct()).asStruct();
       return DynamicStruct::Builder(subSchema,
@@ -623,7 +623,7 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field) {
               structSizeFromSchema(subSchema)));
     }
 
-    case schema2::Field::GROUP: {
+    case schema::Field::GROUP: {
       clear(field);
       return DynamicStruct::Builder(schema.getDependency(proto.getGroup()).asStruct(), builder);
     }
@@ -639,13 +639,13 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field, ui
   auto proto = field.getProto();
 
   switch (proto.which()) {
-    case schema2::Field::REGULAR: {
+    case schema::Field::REGULAR: {
       auto regularField = proto.getRegular();
       auto type = regularField.getType();
       switch (type.which()) {
-        case schema2::Type::LIST: {
+        case schema::Type::LIST: {
           auto listType = ListSchema::of(type.getList(), schema);
-          if (listType.whichElementType() == schema2::Type::STRUCT) {
+          if (listType.whichElementType() == schema::Type::STRUCT) {
             return DynamicList::Builder(listType,
                 builder.initStructListField(
                     regularField.getOffset() * POINTERS, size * ELEMENTS,
@@ -657,10 +657,10 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field, ui
                     elementSizeFor(listType.whichElementType()), size * ELEMENTS));
           }
         }
-        case schema2::Type::TEXT:
+        case schema::Type::TEXT:
           return builder.initBlobField<Text>(
               proto.getRegular().getOffset() * POINTERS, size * BYTES);
-        case schema2::Type::DATA:
+        case schema::Type::DATA:
           return builder.initBlobField<Data>(
               proto.getRegular().getOffset() * POINTERS, size * BYTES);
         default:
@@ -670,7 +670,7 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field, ui
       }
     }
 
-    case schema2::Field::GROUP:
+    case schema::Field::GROUP:
       KJ_FAIL_REQUIRE("init() with size is only valid for list, text, or data fields.");
   }
 
@@ -684,17 +684,17 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
 
   auto proto = field.getProto();
   switch (proto.which()) {
-    case schema2::Field::REGULAR: {
+    case schema::Field::REGULAR: {
       auto regularField = proto.getRegular();
       auto type = regularField.getType();
 
       switch (type.which()) {
-        case schema2::Type::VOID:
+        case schema::Type::VOID:
           builder.setDataField<Void>(regularField.getOffset() * ELEMENTS, Void::VOID);
           return;
 
 #define HANDLE_TYPE(discrim, type) \
-        case schema2::Type::discrim: \
+        case schema::Type::discrim: \
           builder.setDataField<type>(regularField.getOffset() * ELEMENTS, 0); \
           return;
 
@@ -713,15 +713,15 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
 
 #undef HANDLE_TYPE
 
-        case schema2::Type::TEXT:
-        case schema2::Type::DATA:
-        case schema2::Type::LIST:
-        case schema2::Type::STRUCT:
-        case schema2::Type::OBJECT:
+        case schema::Type::TEXT:
+        case schema::Type::DATA:
+        case schema::Type::LIST:
+        case schema::Type::STRUCT:
+        case schema::Type::OBJECT:
           builder.disown(regularField.getOffset() * POINTERS);
           return;
 
-        case schema2::Type::INTERFACE:
+        case schema::Type::INTERFACE:
           KJ_FAIL_ASSERT("Interfaces not yet implemented.");
           return;
       }
@@ -729,7 +729,7 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
       KJ_UNREACHABLE;
     }
 
-    case schema2::Field::GROUP: {
+    case schema::Field::GROUP: {
       DynamicStruct::Builder group(schema.getDependency(proto.getGroup()).asStruct(), builder);
       KJ_IF_MAYBE(unionField, group.schema.getFieldByDiscriminant(0)) {
         group.clear(*unionField);
@@ -749,14 +749,14 @@ WirePointerCount DynamicStruct::Builder::verifyIsObject(StructSchema::Field fiel
 
   auto proto = field.getProto();
   switch (proto.which()) {
-    case schema2::Field::REGULAR: {
+    case schema::Field::REGULAR: {
       auto regularField = proto.getRegular();
-      KJ_REQUIRE(regularField.getType().which() == schema2::Type::OBJECT,
+      KJ_REQUIRE(regularField.getType().which() == schema::Type::OBJECT,
                  "Expected an Object.");
       return regularField.getOffset() * POINTERS;
     }
 
-    case schema2::Field::GROUP:
+    case schema::Field::GROUP:
       KJ_FAIL_REQUIRE("Expected an Object.");
   }
 
@@ -775,7 +775,7 @@ DynamicList::Builder DynamicStruct::Builder::getObject(
     StructSchema::Field field, ListSchema type) {
   auto offset = verifyIsObject(field);
   verifySetInUnion(field);
-  if (type.whichElementType() == schema2::Type::STRUCT) {
+  if (type.whichElementType() == schema::Type::STRUCT) {
     return DynamicList::Builder(type, builder.getStructListField(
         offset, structSizeFromSchema(type.getStructElementType()), nullptr));
   } else {
@@ -807,7 +807,7 @@ DynamicList::Builder DynamicStruct::Builder::initObject(
     StructSchema::Field field, ListSchema type, uint size) {
   auto offset = verifyIsObject(field);
   setInUnion(field);
-  if (type.whichElementType() == schema2::Type::STRUCT) {
+  if (type.whichElementType() == schema::Type::STRUCT) {
     return DynamicList::Builder(type,
         builder.initStructListField(
             offset, size * ELEMENTS, structSizeFromSchema(type.getStructElementType())));
@@ -895,7 +895,7 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) const {
 
   switch (schema.whichElementType()) {
 #define HANDLE_TYPE(name, discrim, typeName) \
-    case schema2::Type::discrim: \
+    case schema::Type::discrim: \
       return DynamicValue::Reader(reader.getDataElement<typeName>(index * ELEMENTS));
 
     HANDLE_TYPE(void, VOID, Void)
@@ -912,31 +912,31 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) const {
     HANDLE_TYPE(float64, FLOAT64, double)
 #undef HANDLE_TYPE
 
-    case schema2::Type::TEXT:
+    case schema::Type::TEXT:
       return DynamicValue::Reader(reader.getBlobElement<Text>(index * ELEMENTS));
-    case schema2::Type::DATA:
+    case schema::Type::DATA:
       return DynamicValue::Reader(reader.getBlobElement<Data>(index * ELEMENTS));
 
-    case schema2::Type::LIST: {
+    case schema::Type::LIST: {
       auto elementType = schema.getListElementType();
       return DynamicValue::Reader(DynamicList::Reader(
           elementType, reader.getListElement(
               index * ELEMENTS, elementSizeFor(elementType.whichElementType()))));
     }
 
-    case schema2::Type::STRUCT:
+    case schema::Type::STRUCT:
       return DynamicValue::Reader(DynamicStruct::Reader(
           schema.getStructElementType(), reader.getStructElement(index * ELEMENTS)));
 
-    case schema2::Type::ENUM:
+    case schema::Type::ENUM:
       return DynamicValue::Reader(DynamicEnum(
           schema.getEnumElementType(), reader.getDataElement<uint16_t>(index * ELEMENTS)));
 
-    case schema2::Type::OBJECT:
+    case schema::Type::OBJECT:
       return DynamicValue::Reader(DynamicObject(
           reader.getObjectElement(index * ELEMENTS)));
 
-    case schema2::Type::INTERFACE:
+    case schema::Type::INTERFACE:
       KJ_FAIL_ASSERT("Interfaces not implemented.") {
         return nullptr;
       }
@@ -950,7 +950,7 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) {
 
   switch (schema.whichElementType()) {
 #define HANDLE_TYPE(name, discrim, typeName) \
-    case schema2::Type::discrim: \
+    case schema::Type::discrim: \
       return DynamicValue::Builder(builder.getDataElement<typeName>(index * ELEMENTS));
 
     HANDLE_TYPE(void, VOID, Void)
@@ -967,14 +967,14 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) {
     HANDLE_TYPE(float64, FLOAT64, double)
 #undef HANDLE_TYPE
 
-    case schema2::Type::TEXT:
+    case schema::Type::TEXT:
       return DynamicValue::Builder(builder.getBlobElement<Text>(index * ELEMENTS));
-    case schema2::Type::DATA:
+    case schema::Type::DATA:
       return DynamicValue::Builder(builder.getBlobElement<Data>(index * ELEMENTS));
 
-    case schema2::Type::LIST: {
+    case schema::Type::LIST: {
       ListSchema elementType = schema.getListElementType();
-      if (elementType.whichElementType() == schema2::Type::STRUCT) {
+      if (elementType.whichElementType() == schema::Type::STRUCT) {
         return DynamicValue::Builder(DynamicList::Builder(elementType,
             builder.getStructListElement(
                 index * ELEMENTS,
@@ -987,19 +987,19 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) {
       }
     }
 
-    case schema2::Type::STRUCT:
+    case schema::Type::STRUCT:
       return DynamicValue::Builder(DynamicStruct::Builder(
           schema.getStructElementType(), builder.getStructElement(index * ELEMENTS)));
 
-    case schema2::Type::ENUM:
+    case schema::Type::ENUM:
       return DynamicValue::Builder(DynamicEnum(
           schema.getEnumElementType(), builder.getDataElement<uint16_t>(index * ELEMENTS)));
 
-    case schema2::Type::OBJECT:
+    case schema::Type::OBJECT:
       KJ_FAIL_ASSERT("List(Object) not supported.");
       return nullptr;
 
-    case schema2::Type::INTERFACE:
+    case schema::Type::INTERFACE:
       KJ_FAIL_ASSERT("Interfaces not implemented.") {
         return nullptr;
       }
@@ -1015,7 +1015,7 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
 
   switch (schema.whichElementType()) {
 #define HANDLE_TYPE(name, discrim, typeName) \
-    case schema2::Type::discrim: \
+    case schema::Type::discrim: \
       builder.setDataElement<typeName>(index * ELEMENTS, value.as<typeName>()); \
       return;
 
@@ -1033,19 +1033,19 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
     HANDLE_TYPE(float64, FLOAT64, double)
 #undef HANDLE_TYPE
 
-    case schema2::Type::TEXT:
+    case schema::Type::TEXT:
       builder.setBlobElement<Text>(index * ELEMENTS, value.as<Text>());
       return;
-    case schema2::Type::DATA:
+    case schema::Type::DATA:
       builder.setBlobElement<Data>(index * ELEMENTS, value.as<Data>());
       return;
 
-    case schema2::Type::LIST: {
+    case schema::Type::LIST: {
       builder.setListElement(index * ELEMENTS, value.as<DynamicList>().reader);
       return;
     }
 
-    case schema2::Type::STRUCT:
+    case schema::Type::STRUCT:
       // Not supported for the same reason List<struct> doesn't support it -- the space for the
       // element is already allocated, and if it's smaller than the input value the copy would
       // have to be lossy.
@@ -1053,7 +1053,7 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
         return;
       }
 
-    case schema2::Type::ENUM: {
+    case schema::Type::ENUM: {
       uint16_t rawValue;
       if (value.getType() == DynamicValue::TEXT) {
         // Convert from text.
@@ -1070,12 +1070,12 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
       return;
     }
 
-    case schema2::Type::OBJECT:
+    case schema::Type::OBJECT:
       KJ_FAIL_ASSERT("List(Object) not supported.") {
         return;
       }
 
-    case schema2::Type::INTERFACE:
+    case schema::Type::INTERFACE:
       KJ_FAIL_ASSERT("Interfaces not implemented.") {
         return;
       }
@@ -1090,34 +1090,34 @@ DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
   KJ_REQUIRE(index < this->size(), "List index out-of-bounds.");
 
   switch (schema.whichElementType()) {
-    case schema2::Type::VOID:
-    case schema2::Type::BOOL:
-    case schema2::Type::INT8:
-    case schema2::Type::INT16:
-    case schema2::Type::INT32:
-    case schema2::Type::INT64:
-    case schema2::Type::UINT8:
-    case schema2::Type::UINT16:
-    case schema2::Type::UINT32:
-    case schema2::Type::UINT64:
-    case schema2::Type::FLOAT32:
-    case schema2::Type::FLOAT64:
-    case schema2::Type::ENUM:
-    case schema2::Type::STRUCT:
-    case schema2::Type::INTERFACE:
+    case schema::Type::VOID:
+    case schema::Type::BOOL:
+    case schema::Type::INT8:
+    case schema::Type::INT16:
+    case schema::Type::INT32:
+    case schema::Type::INT64:
+    case schema::Type::UINT8:
+    case schema::Type::UINT16:
+    case schema::Type::UINT32:
+    case schema::Type::UINT64:
+    case schema::Type::FLOAT32:
+    case schema::Type::FLOAT64:
+    case schema::Type::ENUM:
+    case schema::Type::STRUCT:
+    case schema::Type::INTERFACE:
       KJ_FAIL_REQUIRE("Expected a list or blob.");
       return nullptr;
 
-    case schema2::Type::TEXT:
+    case schema::Type::TEXT:
       return DynamicValue::Builder(builder.initBlobElement<Text>(index * ELEMENTS, size * BYTES));
 
-    case schema2::Type::DATA:
+    case schema::Type::DATA:
       return DynamicValue::Builder(builder.initBlobElement<Data>(index * ELEMENTS, size * BYTES));
 
-    case schema2::Type::LIST: {
+    case schema::Type::LIST: {
       auto elementType = schema.getListElementType();
 
-      if (elementType.whichElementType() == schema2::Type::STRUCT) {
+      if (elementType.whichElementType() == schema::Type::STRUCT) {
         return DynamicValue::Builder(DynamicList::Builder(
             elementType, builder.initStructListElement(
                 index * ELEMENTS, size * ELEMENTS,
@@ -1130,7 +1130,7 @@ DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
       }
     }
 
-    case schema2::Type::OBJECT: {
+    case schema::Type::OBJECT: {
       KJ_FAIL_ASSERT("List(Object) not supported.");
       return nullptr;
     }
@@ -1387,7 +1387,7 @@ DynamicList::Reader PointerHelpers<DynamicList, Kind::UNKNOWN>::getDynamic(
 }
 DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::getDynamic(
     StructBuilder builder, WirePointerCount index, ListSchema schema) {
-  if (schema.whichElementType() == schema2::Type::STRUCT) {
+  if (schema.whichElementType() == schema::Type::STRUCT) {
     return DynamicList::Builder(schema,
         builder.getStructListField(index,
             structSizeFromSchema(schema.getStructElementType()),
@@ -1403,7 +1403,7 @@ void PointerHelpers<DynamicList, Kind::UNKNOWN>::set(
 }
 DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::init(
     StructBuilder builder, WirePointerCount index, ListSchema schema, uint size) {
-  if (schema.whichElementType() == schema2::Type::STRUCT) {
+  if (schema.whichElementType() == schema::Type::STRUCT) {
     return DynamicList::Builder(schema,
         builder.initStructListField(index, size * ELEMENTS,
             structSizeFromSchema(schema.getStructElementType())));
@@ -1423,7 +1423,7 @@ Orphan<DynamicStruct> Orphanage::newOrphan(StructSchema schema) const {
 }
 
 Orphan<DynamicList> Orphanage::newOrphan(ListSchema schema, uint size) const {
-  if (schema.whichElementType() == schema2::Type::STRUCT) {
+  if (schema.whichElementType() == schema::Type::STRUCT) {
     return Orphan<DynamicList>(schema, _::OrphanBuilder::initStructList(
         arena, size * ELEMENTS, structSizeFromSchema(schema.getStructElementType())));
   } else {
@@ -1441,7 +1441,7 @@ DynamicStruct::Reader Orphan<DynamicStruct>::getReader() const {
 }
 
 DynamicList::Builder Orphan<DynamicList>::get() {
-  if (schema.whichElementType() == schema2::Type::STRUCT) {
+  if (schema.whichElementType() == schema::Type::STRUCT) {
     return DynamicList::Builder(
         schema, builder.asStructList(structSizeFromSchema(schema.getStructElementType())));
   } else {

@@ -176,16 +176,16 @@ template <typename T>
 Schema loadUnderAlternateTypeId(SchemaLoader& loader, uint64_t id) {
   MallocMessageBuilder schemaBuilder;
   schemaBuilder.setRoot(Schema::from<T>().getProto());
-  auto root = schemaBuilder.getRoot<schema2::Node>();
+  auto root = schemaBuilder.getRoot<schema::Node>();
   root.setId(id);
 
-  if (root.which() == schema2::Node::STRUCT) {
+  if (root.which() == schema::Node::STRUCT) {
     // If the struct contains any self-referential members, change their type IDs as well.
     auto fields = root.getStruct().getFields();
     for (auto field: fields) {
-      if (field.which() == schema2::Field::REGULAR) {
+      if (field.which() == schema::Field::REGULAR) {
         auto type = field.getRegular().getType();
-        if (type.which() == schema2::Type::STRUCT &&
+        if (type.which() == schema::Type::STRUCT &&
             type.getStruct() == typeId<T>()) {
           type.setStruct(id);
         }
@@ -282,7 +282,7 @@ TEST(SchemaLoader, EnumerateNoPlaceholders) {
 
 class FakeLoaderCallback: public SchemaLoader::LazyLoadCallback {
 public:
-  FakeLoaderCallback(const schema2::Node::Reader node): node(node), loaded(false) {}
+  FakeLoaderCallback(const schema::Node::Reader node): node(node), loaded(false) {}
 
   bool isLoaded() { return loaded; }
 
@@ -299,7 +299,7 @@ public:
   }
 
 private:
-  const schema2::Node::Reader node;
+  const schema::Node::Reader node;
   mutable bool loaded = false;
 };
 

@@ -526,7 +526,7 @@ private:
 
 NodeTranslator::NodeTranslator(
     const Resolver& resolver, const ErrorReporter& errorReporter,
-    const Declaration::Reader& decl, Orphan<schema2::Node> wipNodeParam,
+    const Declaration::Reader& decl, Orphan<schema::Node> wipNodeParam,
     bool compileAnnotations)
     : resolver(resolver), errorReporter(errorReporter),
       compileAnnotations(compileAnnotations), wipNode(kj::mv(wipNodeParam)) {
@@ -562,7 +562,7 @@ private:
   std::map<kj::StringPtr, LocatedText::Reader> names;
 };
 
-void NodeTranslator::compileNode(Declaration::Reader decl, schema2::Node::Builder builder) {
+void NodeTranslator::compileNode(Declaration::Reader decl, schema::Node::Builder builder) {
   DuplicateNameDetector(errorReporter)
       .check(decl.getNestedDecls(), decl.which());
 
@@ -693,7 +693,7 @@ void NodeTranslator::disallowNested(List<Declaration>::Reader nestedDecls) {
 }
 
 void NodeTranslator::compileConst(Declaration::Const::Reader decl,
-                                  schema2::Node::Const::Builder builder) {
+                                  schema::Node::Const::Builder builder) {
   auto typeBuilder = builder.initType();
   if (compileType(decl.getType(), typeBuilder)) {
     compileBootstrapValue(decl.getValue(), typeBuilder.asReader(), builder.initValue());
@@ -701,7 +701,7 @@ void NodeTranslator::compileConst(Declaration::Const::Reader decl,
 }
 
 void NodeTranslator::compileAnnotation(Declaration::Annotation::Reader decl,
-                                       schema2::Node::Annotation::Builder builder) {
+                                       schema::Node::Annotation::Builder builder) {
   compileType(decl.getType(), builder.initType());
 
   // Dynamically copy over the values of all of the "targets" members.
@@ -748,7 +748,7 @@ private:
 
 void NodeTranslator::compileEnum(Void decl,
                                  List<Declaration>::Reader members,
-                                 schema2::Node::Builder builder) {
+                                 schema::Node::Builder builder) {
   // maps ordinal -> (code order, declaration)
   std::multimap<uint, std::pair<uint, Declaration::Reader>> enumerants;
 
@@ -787,7 +787,7 @@ public:
       : translator(translator), errorReporter(translator.errorReporter) {}
   KJ_DISALLOW_COPY(StructTranslator);
 
-  void translate(Void decl, List<Declaration>::Reader members, schema2::Node::Builder builder) {
+  void translate(Void decl, List<Declaration>::Reader members, schema::Node::Builder builder) {
     auto structBuilder = builder.initStruct();
 
     // Build the member-info-by-ordinal map.
@@ -803,7 +803,7 @@ public:
         dupDetector.check(member.decl.getId().getOrdinal());
       }
 
-      schema2::Field::Builder fieldBuilder = member.getSchema();
+      schema::Field::Builder fieldBuilder = member.getSchema();
       fieldBuilder.getOrdinal().setExplicit(entry.first);
 
       switch (member.decl.which()) {
@@ -827,26 +827,26 @@ public:
 
           int lgSize = -1;
           switch (typeBuilder.which()) {
-            case schema2::Type::VOID: lgSize = -1; break;
-            case schema2::Type::BOOL: lgSize = 0; break;
-            case schema2::Type::INT8: lgSize = 3; break;
-            case schema2::Type::INT16: lgSize = 4; break;
-            case schema2::Type::INT32: lgSize = 5; break;
-            case schema2::Type::INT64: lgSize = 6; break;
-            case schema2::Type::UINT8: lgSize = 3; break;
-            case schema2::Type::UINT16: lgSize = 4; break;
-            case schema2::Type::UINT32: lgSize = 5; break;
-            case schema2::Type::UINT64: lgSize = 6; break;
-            case schema2::Type::FLOAT32: lgSize = 5; break;
-            case schema2::Type::FLOAT64: lgSize = 6; break;
+            case schema::Type::VOID: lgSize = -1; break;
+            case schema::Type::BOOL: lgSize = 0; break;
+            case schema::Type::INT8: lgSize = 3; break;
+            case schema::Type::INT16: lgSize = 4; break;
+            case schema::Type::INT32: lgSize = 5; break;
+            case schema::Type::INT64: lgSize = 6; break;
+            case schema::Type::UINT8: lgSize = 3; break;
+            case schema::Type::UINT16: lgSize = 4; break;
+            case schema::Type::UINT32: lgSize = 5; break;
+            case schema::Type::UINT64: lgSize = 6; break;
+            case schema::Type::FLOAT32: lgSize = 5; break;
+            case schema::Type::FLOAT64: lgSize = 6; break;
 
-            case schema2::Type::TEXT: lgSize = -2; break;
-            case schema2::Type::DATA: lgSize = -2; break;
-            case schema2::Type::LIST: lgSize = -2; break;
-            case schema2::Type::ENUM: lgSize = 4; break;
-            case schema2::Type::STRUCT: lgSize = -2; break;
-            case schema2::Type::INTERFACE: lgSize = -2; break;
-            case schema2::Type::OBJECT: lgSize = -2; break;
+            case schema::Type::TEXT: lgSize = -2; break;
+            case schema::Type::DATA: lgSize = -2; break;
+            case schema::Type::LIST: lgSize = -2; break;
+            case schema::Type::ENUM: lgSize = 4; break;
+            case schema::Type::STRUCT: lgSize = -2; break;
+            case schema::Type::INTERFACE: lgSize = -2; break;
+            case schema::Type::OBJECT: lgSize = -2; break;
           }
 
           if (lgSize == -2) {
@@ -912,26 +912,26 @@ public:
     // And fill in the sizes.
     structBuilder.setDataSectionWordSize(layout.getTop().dataWordCount);
     structBuilder.setPointerSectionSize(layout.getTop().pointerCount);
-    structBuilder.setPreferredListEncoding(schema2::ElementSize::INLINE_COMPOSITE);
+    structBuilder.setPreferredListEncoding(schema::ElementSize::INLINE_COMPOSITE);
 
     if (layout.getTop().pointerCount == 0) {
       if (layout.getTop().dataWordCount == 0) {
-        structBuilder.setPreferredListEncoding(schema2::ElementSize::EMPTY);
+        structBuilder.setPreferredListEncoding(schema::ElementSize::EMPTY);
       } else if (layout.getTop().dataWordCount == 1) {
         switch (layout.getTop().holes.getFirstWordUsed()) {
-          case 0: structBuilder.setPreferredListEncoding(schema2::ElementSize::BIT); break;
+          case 0: structBuilder.setPreferredListEncoding(schema::ElementSize::BIT); break;
           case 1:
           case 2:
-          case 3: structBuilder.setPreferredListEncoding(schema2::ElementSize::BYTE); break;
-          case 4: structBuilder.setPreferredListEncoding(schema2::ElementSize::TWO_BYTES); break;
-          case 5: structBuilder.setPreferredListEncoding(schema2::ElementSize::FOUR_BYTES); break;
-          case 6: structBuilder.setPreferredListEncoding(schema2::ElementSize::EIGHT_BYTES); break;
+          case 3: structBuilder.setPreferredListEncoding(schema::ElementSize::BYTE); break;
+          case 4: structBuilder.setPreferredListEncoding(schema::ElementSize::TWO_BYTES); break;
+          case 5: structBuilder.setPreferredListEncoding(schema::ElementSize::FOUR_BYTES); break;
+          case 6: structBuilder.setPreferredListEncoding(schema::ElementSize::EIGHT_BYTES); break;
           default: KJ_FAIL_ASSERT("Expected 0, 1, 2, 3, 4, 5, or 6."); break;
         }
       }
     } else if (layout.getTop().pointerCount == 1 &&
                layout.getTop().dataWordCount == 0) {
-      structBuilder.setPreferredListEncoding(schema2::ElementSize::POINTER);
+      structBuilder.setPreferredListEncoding(schema::ElementSize::POINTER);
     }
 
     for (auto& group: translator.groups) {
@@ -974,10 +974,10 @@ private:
 
     Declaration::Reader decl;
 
-    kj::Maybe<schema2::Field::Builder> schema;
+    kj::Maybe<schema::Field::Builder> schema;
     // Schema for the field.  Initialized when getSchema() is first called.
 
-    schema2::Node::Builder node;
+    schema::Node::Builder node;
     // If it's a group, or the top-level struct.
 
     union {
@@ -992,7 +992,7 @@ private:
       // copy over the discriminant offset to the schema.
     };
 
-    inline explicit MemberInfo(schema2::Node::Builder node)
+    inline explicit MemberInfo(schema::Node::Builder node)
         : parent(nullptr), codeOrder(0), isInUnion(false), node(node), unionScope(nullptr) {}
     inline MemberInfo(MemberInfo& parent, uint codeOrder,
                       const Declaration::Reader& decl,
@@ -1002,12 +1002,12 @@ private:
           decl(decl), fieldScope(&fieldScope) {}
     inline MemberInfo(MemberInfo& parent, uint codeOrder,
                       const Declaration::Reader& decl,
-                      schema2::Node::Builder node,
+                      schema::Node::Builder node,
                       bool isInUnion)
         : parent(&parent), codeOrder(codeOrder), isInUnion(isInUnion),
           decl(decl), node(node), unionScope(nullptr) {}
 
-    schema2::Field::Builder getSchema() {
+    schema::Field::Builder getSchema() {
       KJ_IF_MAYBE(result, schema) {
         return *result;
       } else {
@@ -1023,7 +1023,7 @@ private:
       }
     }
 
-    schema2::Field::Builder addMemberSchema() {
+    schema::Field::Builder addMemberSchema() {
       // Get the schema builder for the child member at the given index.  This lazily/dynamically
       // builds the builder tree.
 
@@ -1191,9 +1191,9 @@ private:
     }
   }
 
-  schema2::Node::Builder newGroupNode(schema2::Node::Reader parent, kj::StringPtr name) {
+  schema::Node::Builder newGroupNode(schema::Node::Reader parent, kj::StringPtr name) {
     auto orphan = Orphanage::getForMessageContaining(translator.wipNode.get())
-        .newOrphan<schema2::Node>();
+        .newOrphan<schema::Node>();
     auto node = orphan.get();
 
     // We'll set the ID and scope ID later.
@@ -1209,14 +1209,14 @@ private:
 };
 
 void NodeTranslator::compileStruct(Void decl, List<Declaration>::Reader members,
-                                   schema2::Node::Builder builder) {
+                                   schema::Node::Builder builder) {
   StructTranslator(*this).translate(decl, members, builder);
 }
 
 // -------------------------------------------------------------------
 
 void NodeTranslator::compileInterface(Void decl, List<Declaration>::Reader members,
-                                      schema2::Node::Builder builder) {
+                                      schema::Node::Builder builder) {
   KJ_FAIL_ASSERT("TODO: compile interfaces");
 }
 
@@ -1249,7 +1249,7 @@ static kj::String declNameString(DeclName::Reader name) {
   }
 }
 
-bool NodeTranslator::compileType(TypeExpression::Reader source, schema2::Type::Builder target) {
+bool NodeTranslator::compileType(TypeExpression::Reader source, schema::Type::Builder target) {
   auto name = source.getName();
   KJ_IF_MAYBE(base, resolver.resolve(name)) {
     bool handledParams = false;
@@ -1271,7 +1271,7 @@ bool NodeTranslator::compileType(TypeExpression::Reader source, schema2::Type::B
           return false;
         }
 
-        if (elementType.which() == schema2::Type::OBJECT) {
+        if (elementType.which() == schema::Type::OBJECT) {
           errorReporter.addErrorOn(source, "'List(Object)' is not supported.");
           // Seeing List(Object) later can mess things up, so change the type to Void.
           elementType.setVoid();
@@ -1322,30 +1322,30 @@ bool NodeTranslator::compileType(TypeExpression::Reader source, schema2::Type::B
 // -------------------------------------------------------------------
 
 void NodeTranslator::compileDefaultDefaultValue(
-    schema2::Type::Reader type, schema2::Value::Builder target) {
+    schema::Type::Reader type, schema::Value::Builder target) {
   switch (type.which()) {
-    case schema2::Type::VOID: target.setVoid(); break;
-    case schema2::Type::BOOL: target.setBool(false); break;
-    case schema2::Type::INT8: target.setInt8(0); break;
-    case schema2::Type::INT16: target.setInt16(0); break;
-    case schema2::Type::INT32: target.setInt32(0); break;
-    case schema2::Type::INT64: target.setInt64(0); break;
-    case schema2::Type::UINT8: target.setUint8(0); break;
-    case schema2::Type::UINT16: target.setUint16(0); break;
-    case schema2::Type::UINT32: target.setUint32(0); break;
-    case schema2::Type::UINT64: target.setUint64(0); break;
-    case schema2::Type::FLOAT32: target.setFloat32(0); break;
-    case schema2::Type::FLOAT64: target.setFloat64(0); break;
-    case schema2::Type::ENUM: target.setEnum(0); break;
-    case schema2::Type::INTERFACE: target.setInterface(); break;
+    case schema::Type::VOID: target.setVoid(); break;
+    case schema::Type::BOOL: target.setBool(false); break;
+    case schema::Type::INT8: target.setInt8(0); break;
+    case schema::Type::INT16: target.setInt16(0); break;
+    case schema::Type::INT32: target.setInt32(0); break;
+    case schema::Type::INT64: target.setInt64(0); break;
+    case schema::Type::UINT8: target.setUint8(0); break;
+    case schema::Type::UINT16: target.setUint16(0); break;
+    case schema::Type::UINT32: target.setUint32(0); break;
+    case schema::Type::UINT64: target.setUint64(0); break;
+    case schema::Type::FLOAT32: target.setFloat32(0); break;
+    case schema::Type::FLOAT64: target.setFloat64(0); break;
+    case schema::Type::ENUM: target.setEnum(0); break;
+    case schema::Type::INTERFACE: target.setInterface(); break;
 
     // Bit of a hack:  For "Object" types, we adopt a null orphan, which sets the field to null.
     // TODO(cleanup):  Create a cleaner way to do this.
-    case schema2::Type::TEXT: target.adoptText(Orphan<Text>()); break;
-    case schema2::Type::DATA: target.adoptData(Orphan<Data>()); break;
-    case schema2::Type::STRUCT: target.adoptStruct(Orphan<Data>()); break;
-    case schema2::Type::LIST: target.adoptList(Orphan<Data>()); break;
-    case schema2::Type::OBJECT: target.adoptObject(Orphan<Data>()); break;
+    case schema::Type::TEXT: target.adoptText(Orphan<Text>()); break;
+    case schema::Type::DATA: target.adoptData(Orphan<Data>()); break;
+    case schema::Type::STRUCT: target.adoptStruct(Orphan<Data>()); break;
+    case schema::Type::LIST: target.adoptList(Orphan<Data>()); break;
+    case schema::Type::OBJECT: target.adoptObject(Orphan<Data>()); break;
   }
 }
 
@@ -1418,7 +1418,7 @@ public:
     switch (type) {
       case FIELD: return enumIdForField(struct_.field);
       case ELEMENT: {
-        if (list.builder.getSchema().whichElementType() == schema2::Type::ENUM) {
+        if (list.builder.getSchema().whichElementType() == schema::Type::ENUM) {
           return list.builder.getSchema().getEnumElementType().getProto().getId();
         }
         return nullptr;
@@ -1454,10 +1454,10 @@ private:
   };
 
   static kj::Maybe<uint64_t> enumIdForField(StructSchema::Field field) {
-    schema2::Field::Reader proto = field.getProto();
-    if (proto.which() == schema2::Field::REGULAR) {
+    schema::Field::Reader proto = field.getProto();
+    if (proto.which() == schema::Field::REGULAR) {
       auto type = proto.getRegular().getType();
-      if (type.which() == schema2::Type::ENUM) {
+      if (type.which() == schema::Type::ENUM) {
         return type.getEnum();
       }
     }
@@ -1465,43 +1465,43 @@ private:
   }
 };
 
-static kj::StringPtr getValueUnionFieldNameFor(schema2::Type::Which type) {
+static kj::StringPtr getValueUnionFieldNameFor(schema::Type::Which type) {
   switch (type) {
-    case schema2::Type::VOID: return "void";
-    case schema2::Type::BOOL: return "bool";
-    case schema2::Type::INT8: return "int8";
-    case schema2::Type::INT16: return "int16";
-    case schema2::Type::INT32: return "int32";
-    case schema2::Type::INT64: return "int64";
-    case schema2::Type::UINT8: return "uint8";
-    case schema2::Type::UINT16: return "uint16";
-    case schema2::Type::UINT32: return "uint32";
-    case schema2::Type::UINT64: return "uint64";
-    case schema2::Type::FLOAT32: return "float32";
-    case schema2::Type::FLOAT64: return "float64";
-    case schema2::Type::TEXT: return "text";
-    case schema2::Type::DATA: return "data";
-    case schema2::Type::LIST: return "list";
-    case schema2::Type::ENUM: return "enum";
-    case schema2::Type::STRUCT: return "struct";
-    case schema2::Type::INTERFACE: return "interface";
-    case schema2::Type::OBJECT: return "object";
+    case schema::Type::VOID: return "void";
+    case schema::Type::BOOL: return "bool";
+    case schema::Type::INT8: return "int8";
+    case schema::Type::INT16: return "int16";
+    case schema::Type::INT32: return "int32";
+    case schema::Type::INT64: return "int64";
+    case schema::Type::UINT8: return "uint8";
+    case schema::Type::UINT16: return "uint16";
+    case schema::Type::UINT32: return "uint32";
+    case schema::Type::UINT64: return "uint64";
+    case schema::Type::FLOAT32: return "float32";
+    case schema::Type::FLOAT64: return "float64";
+    case schema::Type::TEXT: return "text";
+    case schema::Type::DATA: return "data";
+    case schema::Type::LIST: return "list";
+    case schema::Type::ENUM: return "enum";
+    case schema::Type::STRUCT: return "struct";
+    case schema::Type::INTERFACE: return "interface";
+    case schema::Type::OBJECT: return "object";
   }
   KJ_FAIL_ASSERT("Unknown type.");
 }
 
 void NodeTranslator::compileBootstrapValue(ValueExpression::Reader source,
-                                           schema2::Type::Reader type,
-                                           schema2::Value::Builder target) {
+                                           schema::Type::Reader type,
+                                           schema::Value::Builder target) {
   // Start by filling in a default default value so that if for whatever reason we don't end up
   // initializing the value, this won't cause schema validation to fail.
   compileDefaultDefaultValue(type, target);
 
   switch (type.which()) {
-    case schema2::Type::LIST:
-    case schema2::Type::STRUCT:
-    case schema2::Type::INTERFACE:
-    case schema2::Type::OBJECT:
+    case schema::Type::LIST:
+    case schema::Type::STRUCT:
+    case schema::Type::INTERFACE:
+    case schema::Type::OBJECT:
       unfinishedValues.add(UnfinishedValue { source, type, target });
       break;
 
@@ -1512,25 +1512,25 @@ void NodeTranslator::compileBootstrapValue(ValueExpression::Reader source,
   }
 }
 
-void NodeTranslator::compileValue(ValueExpression::Reader source, schema2::Type::Reader type,
-                                  schema2::Value::Builder target, bool isBootstrap) {
+void NodeTranslator::compileValue(ValueExpression::Reader source, schema::Type::Reader type,
+                                  schema::Value::Builder target, bool isBootstrap) {
   auto valueUnion = toDynamic(target);
   auto field = valueUnion.getSchema().getFieldByName(
       getValueUnionFieldNameFor(type.which()));
   switch (type.which()) {
-    case schema2::Type::LIST:
+    case schema::Type::LIST:
       KJ_IF_MAYBE(listSchema, makeListSchemaOf(type.getList())) {
         DynamicSlot slot(valueUnion, field, *listSchema);
         compileValue(source, slot, isBootstrap);
       }
       break;
-    case schema2::Type::STRUCT:
+    case schema::Type::STRUCT:
       KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(type.getStruct())) {
         DynamicSlot slot(valueUnion, field, structSchema->asStruct());
         compileValue(source, slot, isBootstrap);
       }
       break;
-    case schema2::Type::ENUM:
+    case schema::Type::ENUM:
       KJ_IF_MAYBE(enumSchema, resolver.resolveBootstrapSchema(type.getEnum())) {
         DynamicSlot slot(valueUnion, field, enumSchema->asEnum());
         compileValue(source, slot, isBootstrap);
@@ -1677,7 +1677,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
     // constant turns out to be non-primitive, we'll error out anyway.  If we're not
     // bootstrapping, we may be compiling a non-primitive value and so we need the final
     // version of the constant to make sure its value is filled in.
-    kj::Maybe<schema2::Node::Reader> maybeConstSchema = isBootstrap ?
+    kj::Maybe<schema::Node::Reader> maybeConstSchema = isBootstrap ?
         resolver.resolveBootstrapSchema(resolved->id).map([](Schema s) { return s.getProto(); }) :
         resolver.resolveFinalSchema(resolved->id);
     KJ_IF_MAYBE(constSchema, maybeConstSchema) {
@@ -1690,7 +1690,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
         DynamicObject objValue = constValue.as<DynamicObject>();
         auto constType = constReader.getType();
         switch (constType.which()) {
-          case schema2::Type::STRUCT:
+          case schema::Type::STRUCT:
             KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(constType.getStruct())) {
               constValue = objValue.as(structSchema->asStruct());
             } else {
@@ -1698,7 +1698,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
               return nullptr;
             }
             break;
-          case schema2::Type::LIST:
+          case schema::Type::LIST:
             KJ_IF_MAYBE(listSchema, makeListSchemaOf(constType.getList())) {
               constValue = objValue.as(*listSchema);
             } else {
@@ -1706,7 +1706,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
               return nullptr;
             }
             break;
-          case schema2::Type::OBJECT:
+          case schema::Type::OBJECT:
             // Fine as-is.
             break;
           default:
@@ -1723,7 +1723,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
         KJ_IF_MAYBE(scope, resolver.resolveBootstrapSchema(constSchema->getScopeId())) {
           auto scopeReader = scope->getProto();
           kj::StringPtr parent;
-          if (scopeReader.which() == schema2::Node::FILE) {
+          if (scopeReader.which() == schema::Node::FILE) {
             parent = "";
           } else {
             parent = scopeReader.getDisplayName().slice(scopeReader.getDisplayNamePrefixLength());
@@ -1748,27 +1748,27 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
   }
 }
 
-kj::Maybe<ListSchema> NodeTranslator::makeListSchemaOf(schema2::Type::Reader elementType) {
+kj::Maybe<ListSchema> NodeTranslator::makeListSchemaOf(schema::Type::Reader elementType) {
   switch (elementType.which()) {
-    case schema2::Type::ENUM:
+    case schema::Type::ENUM:
       KJ_IF_MAYBE(enumSchema, resolver.resolveBootstrapSchema(elementType.getEnum())) {
         return ListSchema::of(enumSchema->asEnum());
       } else {
         return nullptr;
       }
-    case schema2::Type::STRUCT:
+    case schema::Type::STRUCT:
       KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(elementType.getStruct())) {
         return ListSchema::of(structSchema->asStruct());
       } else {
         return nullptr;
       }
-    case schema2::Type::INTERFACE:
+    case schema::Type::INTERFACE:
       KJ_IF_MAYBE(interfaceSchema, resolver.resolveBootstrapSchema(elementType.getInterface())) {
         return ListSchema::of(interfaceSchema->asInterface());
       } else {
         return nullptr;
       }
-    case schema2::Type::LIST:
+    case schema::Type::LIST:
       KJ_IF_MAYBE(listSchema, makeListSchemaOf(elementType.getList())) {
         return ListSchema::of(*listSchema);
       } else {
@@ -1779,21 +1779,21 @@ kj::Maybe<ListSchema> NodeTranslator::makeListSchemaOf(schema2::Type::Reader ele
   }
 }
 
-Orphan<List<schema2::Annotation>> NodeTranslator::compileAnnotationApplications(
+Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
     List<Declaration::AnnotationApplication>::Reader annotations,
     kj::StringPtr targetsFlagName) {
   if (annotations.size() == 0 || !compileAnnotations) {
     // Return null.
-    return Orphan<List<schema2::Annotation>>();
+    return Orphan<List<schema::Annotation>>();
   }
 
   Orphanage orphanage = Orphanage::getForMessageContaining(wipNode.get());
-  auto result = orphanage.newOrphan<List<schema2::Annotation>>(annotations.size());
+  auto result = orphanage.newOrphan<List<schema::Annotation>>(annotations.size());
   auto builder = result.get();
 
   for (uint i = 0; i < annotations.size(); i++) {
     Declaration::AnnotationApplication::Reader annotation = annotations[i];
-    schema2::Annotation::Builder annotationBuilder = builder[i];
+    schema::Annotation::Builder annotationBuilder = builder[i];
 
     // Set the annotation's value to void in case we fail to produce something better below.
     annotationBuilder.initValue().setVoid();
@@ -1817,7 +1817,7 @@ Orphan<List<schema2::Annotation>> NodeTranslator::compileAnnotationApplications(
           switch (value.which()) {
             case Declaration::AnnotationApplication::Value::NONE:
               // No value, i.e. void.
-              if (node.getType().which() == schema2::Type::VOID) {
+              if (node.getType().which() == schema::Type::VOID) {
                 annotationBuilder.getValue().setVoid();
               } else {
                 errorReporter.addErrorOn(name, kj::str(

@@ -156,146 +156,146 @@ private:
     return kj::strTree(kj::mv(path), getUnqualifiedName(target));
   }
 
-  kj::StringTree genType(schema2::Type::Reader type, Schema scope) {
+  kj::StringTree genType(schema::Type::Reader type, Schema scope) {
     switch (type.which()) {
-      case schema2::Type::VOID: return kj::strTree("Void");
-      case schema2::Type::BOOL: return kj::strTree("Bool");
-      case schema2::Type::INT8: return kj::strTree("Int8");
-      case schema2::Type::INT16: return kj::strTree("Int16");
-      case schema2::Type::INT32: return kj::strTree("Int32");
-      case schema2::Type::INT64: return kj::strTree("Int64");
-      case schema2::Type::UINT8: return kj::strTree("UInt8");
-      case schema2::Type::UINT16: return kj::strTree("UInt16");
-      case schema2::Type::UINT32: return kj::strTree("UInt32");
-      case schema2::Type::UINT64: return kj::strTree("UInt64");
-      case schema2::Type::FLOAT32: return kj::strTree("Float32");
-      case schema2::Type::FLOAT64: return kj::strTree("Float64");
-      case schema2::Type::TEXT: return kj::strTree("Text");
-      case schema2::Type::DATA: return kj::strTree("Data");
-      case schema2::Type::LIST:
+      case schema::Type::VOID: return kj::strTree("Void");
+      case schema::Type::BOOL: return kj::strTree("Bool");
+      case schema::Type::INT8: return kj::strTree("Int8");
+      case schema::Type::INT16: return kj::strTree("Int16");
+      case schema::Type::INT32: return kj::strTree("Int32");
+      case schema::Type::INT64: return kj::strTree("Int64");
+      case schema::Type::UINT8: return kj::strTree("UInt8");
+      case schema::Type::UINT16: return kj::strTree("UInt16");
+      case schema::Type::UINT32: return kj::strTree("UInt32");
+      case schema::Type::UINT64: return kj::strTree("UInt64");
+      case schema::Type::FLOAT32: return kj::strTree("Float32");
+      case schema::Type::FLOAT64: return kj::strTree("Float64");
+      case schema::Type::TEXT: return kj::strTree("Text");
+      case schema::Type::DATA: return kj::strTree("Data");
+      case schema::Type::LIST:
         return kj::strTree("List(", genType(type.getList(), scope), ")");
-      case schema2::Type::ENUM:
+      case schema::Type::ENUM:
         return nodeName(scope.getDependency(type.getEnum()), scope);
-      case schema2::Type::STRUCT:
+      case schema::Type::STRUCT:
         return nodeName(scope.getDependency(type.getStruct()), scope);
-      case schema2::Type::INTERFACE:
+      case schema::Type::INTERFACE:
         return nodeName(scope.getDependency(type.getInterface()), scope);
-      case schema2::Type::OBJECT: return kj::strTree("Object");
+      case schema::Type::OBJECT: return kj::strTree("Object");
     }
     return kj::strTree();
   }
 
-  int typeSizeBits(schema2::Type::Reader type) {
+  int typeSizeBits(schema::Type::Reader type) {
     switch (type.which()) {
-      case schema2::Type::VOID: return 0;
-      case schema2::Type::BOOL: return 1;
-      case schema2::Type::INT8: return 8;
-      case schema2::Type::INT16: return 16;
-      case schema2::Type::INT32: return 32;
-      case schema2::Type::INT64: return 64;
-      case schema2::Type::UINT8: return 8;
-      case schema2::Type::UINT16: return 16;
-      case schema2::Type::UINT32: return 32;
-      case schema2::Type::UINT64: return 64;
-      case schema2::Type::FLOAT32: return 32;
-      case schema2::Type::FLOAT64: return 64;
-      case schema2::Type::TEXT: return -1;
-      case schema2::Type::DATA: return -1;
-      case schema2::Type::LIST: return -1;
-      case schema2::Type::ENUM: return 16;
-      case schema2::Type::STRUCT: return -1;
-      case schema2::Type::INTERFACE: return -1;
-      case schema2::Type::OBJECT: return -1;
+      case schema::Type::VOID: return 0;
+      case schema::Type::BOOL: return 1;
+      case schema::Type::INT8: return 8;
+      case schema::Type::INT16: return 16;
+      case schema::Type::INT32: return 32;
+      case schema::Type::INT64: return 64;
+      case schema::Type::UINT8: return 8;
+      case schema::Type::UINT16: return 16;
+      case schema::Type::UINT32: return 32;
+      case schema::Type::UINT64: return 64;
+      case schema::Type::FLOAT32: return 32;
+      case schema::Type::FLOAT64: return 64;
+      case schema::Type::TEXT: return -1;
+      case schema::Type::DATA: return -1;
+      case schema::Type::LIST: return -1;
+      case schema::Type::ENUM: return 16;
+      case schema::Type::STRUCT: return -1;
+      case schema::Type::INTERFACE: return -1;
+      case schema::Type::OBJECT: return -1;
     }
     return 0;
   }
 
-  bool isEmptyValue(schema2::Value::Reader value) {
+  bool isEmptyValue(schema::Value::Reader value) {
     switch (value.which()) {
-      case schema2::Value::VOID: return true;
-      case schema2::Value::BOOL: return value.getBool() == false;
-      case schema2::Value::INT8: return value.getInt8() == 0;
-      case schema2::Value::INT16: return value.getInt16() == 0;
-      case schema2::Value::INT32: return value.getInt32() == 0;
-      case schema2::Value::INT64: return value.getInt64() == 0;
-      case schema2::Value::UINT8: return value.getUint8() == 0;
-      case schema2::Value::UINT16: return value.getUint16() == 0;
-      case schema2::Value::UINT32: return value.getUint32() == 0;
-      case schema2::Value::UINT64: return value.getUint64() == 0;
-      case schema2::Value::FLOAT32: return value.getFloat32() == 0;
-      case schema2::Value::FLOAT64: return value.getFloat64() == 0;
-      case schema2::Value::TEXT: return !value.hasText();
-      case schema2::Value::DATA: return !value.hasData();
-      case schema2::Value::LIST: return !value.hasList();
-      case schema2::Value::ENUM: return value.getEnum() == 0;
-      case schema2::Value::STRUCT: return !value.hasStruct();
-      case schema2::Value::INTERFACE: return true;
-      case schema2::Value::OBJECT: return true;
+      case schema::Value::VOID: return true;
+      case schema::Value::BOOL: return value.getBool() == false;
+      case schema::Value::INT8: return value.getInt8() == 0;
+      case schema::Value::INT16: return value.getInt16() == 0;
+      case schema::Value::INT32: return value.getInt32() == 0;
+      case schema::Value::INT64: return value.getInt64() == 0;
+      case schema::Value::UINT8: return value.getUint8() == 0;
+      case schema::Value::UINT16: return value.getUint16() == 0;
+      case schema::Value::UINT32: return value.getUint32() == 0;
+      case schema::Value::UINT64: return value.getUint64() == 0;
+      case schema::Value::FLOAT32: return value.getFloat32() == 0;
+      case schema::Value::FLOAT64: return value.getFloat64() == 0;
+      case schema::Value::TEXT: return !value.hasText();
+      case schema::Value::DATA: return !value.hasData();
+      case schema::Value::LIST: return !value.hasList();
+      case schema::Value::ENUM: return value.getEnum() == 0;
+      case schema::Value::STRUCT: return !value.hasStruct();
+      case schema::Value::INTERFACE: return true;
+      case schema::Value::OBJECT: return true;
     }
     return true;
   }
 
-  kj::StringTree genValue(schema2::Type::Reader type, schema2::Value::Reader value, Schema scope) {
+  kj::StringTree genValue(schema::Type::Reader type, schema::Value::Reader value, Schema scope) {
     switch (value.which()) {
-      case schema2::Value::VOID: return kj::strTree("void");
-      case schema2::Value::BOOL:
+      case schema::Value::VOID: return kj::strTree("void");
+      case schema::Value::BOOL:
         return kj::strTree(value.getBool() ? "true" : "false");
-      case schema2::Value::INT8: return kj::strTree((int)value.getInt8());
-      case schema2::Value::INT16: return kj::strTree(value.getInt16());
-      case schema2::Value::INT32: return kj::strTree(value.getInt32());
-      case schema2::Value::INT64: return kj::strTree(value.getInt64());
-      case schema2::Value::UINT8: return kj::strTree((uint)value.getUint8());
-      case schema2::Value::UINT16: return kj::strTree(value.getUint16());
-      case schema2::Value::UINT32: return kj::strTree(value.getUint32());
-      case schema2::Value::UINT64: return kj::strTree(value.getUint64());
-      case schema2::Value::FLOAT32: return kj::strTree(value.getFloat32());
-      case schema2::Value::FLOAT64: return kj::strTree(value.getFloat64());
-      case schema2::Value::TEXT:
+      case schema::Value::INT8: return kj::strTree((int)value.getInt8());
+      case schema::Value::INT16: return kj::strTree(value.getInt16());
+      case schema::Value::INT32: return kj::strTree(value.getInt32());
+      case schema::Value::INT64: return kj::strTree(value.getInt64());
+      case schema::Value::UINT8: return kj::strTree((uint)value.getUint8());
+      case schema::Value::UINT16: return kj::strTree(value.getUint16());
+      case schema::Value::UINT32: return kj::strTree(value.getUint32());
+      case schema::Value::UINT64: return kj::strTree(value.getUint64());
+      case schema::Value::FLOAT32: return kj::strTree(value.getFloat32());
+      case schema::Value::FLOAT64: return kj::strTree(value.getFloat64());
+      case schema::Value::TEXT:
         return kj::strTree(DynamicValue::Reader(value.getText()));
-      case schema2::Value::DATA:
+      case schema::Value::DATA:
         return kj::strTree(DynamicValue::Reader(value.getData()));
-      case schema2::Value::LIST: {
-        KJ_REQUIRE(type.which() == schema2::Type::LIST, "type/value mismatch");
+      case schema::Value::LIST: {
+        KJ_REQUIRE(type.which() == schema::Type::LIST, "type/value mismatch");
         auto listValue = value.getList<DynamicList>(ListSchema::of(type.getList(), scope));
         return kj::strTree(listValue);
       }
-      case schema2::Value::ENUM: {
-        KJ_REQUIRE(type.which() == schema2::Type::ENUM, "type/value mismatch");
+      case schema::Value::ENUM: {
+        KJ_REQUIRE(type.which() == schema::Type::ENUM, "type/value mismatch");
         auto enumNode = scope.getDependency(type.getEnum()).asEnum().getProto();
         auto enumerants = enumNode.getEnum();
         KJ_REQUIRE(value.getEnum() < enumerants.size(),
                 "Enum value out-of-range.", value.getEnum(), enumNode.getDisplayName());
         return kj::strTree(enumerants[value.getEnum()].getName());
       }
-      case schema2::Value::STRUCT: {
-        KJ_REQUIRE(type.which() == schema2::Type::STRUCT, "type/value mismatch");
+      case schema::Value::STRUCT: {
+        KJ_REQUIRE(type.which() == schema::Type::STRUCT, "type/value mismatch");
         auto structValue = value.getStruct<DynamicStruct>(
             scope.getDependency(type.getStruct()).asStruct());
         return kj::strTree(structValue);
       }
-      case schema2::Value::INTERFACE: {
+      case schema::Value::INTERFACE: {
         return kj::strTree("");
       }
-      case schema2::Value::OBJECT: {
+      case schema::Value::OBJECT: {
         return kj::strTree("");
       }
     }
     return kj::strTree("");
   }
 
-  kj::StringTree genAnnotation(schema2::Annotation::Reader annotation,
+  kj::StringTree genAnnotation(schema::Annotation::Reader annotation,
                                Schema scope,
                                const char* prefix = " ", const char* suffix = "") {
     auto decl = schemaLoader.get(annotation.getId());
     auto proto = decl.getProto();
-    KJ_REQUIRE(proto.which() == schema2::Node::ANNOTATION);
+    KJ_REQUIRE(proto.which() == schema::Node::ANNOTATION);
     auto annDecl = proto.getAnnotation();
 
     return kj::strTree(prefix, "$", nodeName(decl, scope), "(",
                        genValue(annDecl.getType(), annotation.getValue(), scope), ")", suffix);
   }
 
-  kj::StringTree genAnnotations(List<schema2::Annotation>::Reader list, Schema scope) {
+  kj::StringTree genAnnotations(List<schema::Annotation>::Reader list, Schema scope) {
     return kj::strTree(KJ_MAP(list, ann) { return genAnnotation(ann, scope); });
   }
   kj::StringTree genAnnotations(Schema schema) {
@@ -303,16 +303,16 @@ private:
     return genAnnotations(proto.getAnnotations(), schemaLoader.get(proto.getScopeId()));
   }
 
-  const char* elementSizeName(schema2::ElementSize size) {
+  const char* elementSizeName(schema::ElementSize size) {
     switch (size) {
-      case schema2::ElementSize::EMPTY: return "void";
-      case schema2::ElementSize::BIT: return "1-bit";
-      case schema2::ElementSize::BYTE: return "8-bit";
-      case schema2::ElementSize::TWO_BYTES: return "16-bit";
-      case schema2::ElementSize::FOUR_BYTES: return "32-bit";
-      case schema2::ElementSize::EIGHT_BYTES: return "64-bit";
-      case schema2::ElementSize::POINTER: return "pointer";
-      case schema2::ElementSize::INLINE_COMPOSITE: return "inline composite";
+      case schema::ElementSize::EMPTY: return "void";
+      case schema::ElementSize::BIT: return "1-bit";
+      case schema::ElementSize::BYTE: return "8-bit";
+      case schema::ElementSize::TWO_BYTES: return "16-bit";
+      case schema::ElementSize::FOUR_BYTES: return "32-bit";
+      case schema::ElementSize::EIGHT_BYTES: return "64-bit";
+      case schema::ElementSize::POINTER: return "pointer";
+      case schema::ElementSize::INLINE_COMPOSITE: return "inline composite";
     }
     return "";
   }
@@ -358,9 +358,9 @@ private:
     };
   }
 
-  kj::StringTree genStructField(schema2::Field::Reader field, Schema scope, Indent indent) {
+  kj::StringTree genStructField(schema::Field::Reader field, Schema scope, Indent indent) {
     switch (field.which()) {
-      case schema2::Field::REGULAR: {
+      case schema::Field::REGULAR: {
         auto regularField = field.getRegular();
         int size = typeSizeBits(regularField.getType());
         return kj::strTree(
@@ -377,7 +377,7 @@ private:
                 ? kj::strTree(", union tag = ", field.getDiscriminantValue()) : kj::strTree(),
             "\n");
       }
-      case schema2::Field::GROUP: {
+      case schema::Field::GROUP: {
         auto group = scope.getDependency(field.getGroup()).asStruct();
         return kj::strTree(
             indent, field.getName(),
@@ -400,17 +400,17 @@ private:
     }
 
     switch (proto.which()) {
-      case schema2::Node::FILE:
+      case schema::Node::FILE:
         KJ_FAIL_REQUIRE("Encountered nested file node.");
         break;
-      case schema2::Node::STRUCT: {
+      case schema::Node::STRUCT: {
         auto structProto = proto.getStruct();
         return kj::strTree(
             indent, "struct ", name,
             " @0x", kj::hex(proto.getId()), genAnnotations(schema), " {  # ",
             structProto.getDataSectionWordSize() * 8, " bytes, ",
             structProto.getPointerSectionSize(), " ptrs",
-            structProto.getPreferredListEncoding() == schema2::ElementSize::INLINE_COMPOSITE
+            structProto.getPreferredListEncoding() == schema::ElementSize::INLINE_COMPOSITE
                 ? kj::strTree()
                 : kj::strTree(", packed as ", elementSizeName(structProto.getPreferredListEncoding())),
             "\n",
@@ -418,7 +418,7 @@ private:
             genNestedDecls(schema, indent.next()),
             indent, "}\n");
       }
-      case schema2::Node::ENUM: {
+      case schema::Node::ENUM: {
         return kj::strTree(
             indent, "enum ", name, " @0x", kj::hex(proto.getId()), genAnnotations(schema), " {\n",
             KJ_MAP(sortByCodeOrder(schema.asEnum().getEnumerants()), enumerant) {
@@ -430,7 +430,7 @@ private:
             genNestedDecls(schema, indent.next()),
             indent, "}\n");
       }
-      case schema2::Node::INTERFACE: {
+      case schema::Node::INTERFACE: {
         return kj::strTree(
             indent, "interface ", name, " @0x", kj::hex(proto.getId()),
             genAnnotations(schema), " {\n",
@@ -457,14 +457,14 @@ private:
             genNestedDecls(schema, indent.next()),
             indent, "}\n");
       }
-      case schema2::Node::CONST: {
+      case schema::Node::CONST: {
         auto constProto = proto.getConst();
         return kj::strTree(
             indent, "const ", name, " @0x", kj::hex(proto.getId()), " :",
             genType(constProto.getType(), schema), " = ",
             genValue(constProto.getType(), constProto.getValue(), schema), ";\n");
       }
-      case schema2::Node::ANNOTATION: {
+      case schema::Node::ANNOTATION: {
         auto annotationProto = proto.getAnnotation();
 
         kj::Vector<kj::String> targets(8);
@@ -508,7 +508,7 @@ private:
 
   kj::StringTree genFile(Schema file) {
     auto proto = file.getProto();
-    KJ_REQUIRE(proto.which() == schema2::Node::FILE, "Expected a file node.", (uint)proto.which());
+    KJ_REQUIRE(proto.which() == schema::Node::FILE, "Expected a file node.", (uint)proto.which());
 
     return kj::strTree(
       "# ", proto.getDisplayName(), "\n",
@@ -521,7 +521,7 @@ private:
     ReaderOptions options;
     options.traversalLimitInWords = 1 << 30;  // Don't limit.
     StreamFdMessageReader reader(STDIN_FILENO, options);
-    auto request = reader.getRoot<schema2::CodeGeneratorRequest>();
+    auto request = reader.getRoot<schema::CodeGeneratorRequest>();
 
     for (auto node: request.getNodes()) {
       schemaLoader.load(node);

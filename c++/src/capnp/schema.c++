@@ -27,8 +27,8 @@
 
 namespace capnp {
 
-schema2::Node::Reader Schema::getProto() const {
-  return readMessageUnchecked<schema2::Node>(raw->encodedNode);
+schema::Node::Reader Schema::getProto() const {
+  return readMessageUnchecked<schema::Node>(raw->encodedNode);
 }
 
 kj::ArrayPtr<const word> Schema::asUncheckedMessage() const {
@@ -60,21 +60,21 @@ Schema Schema::getDependency(uint64_t id) const {
 }
 
 StructSchema Schema::asStruct() const {
-  KJ_REQUIRE(getProto().which() == schema2::Node::STRUCT,
+  KJ_REQUIRE(getProto().which() == schema::Node::STRUCT,
           "Tried to use non-struct schema as a struct.",
           getProto().getDisplayName());
   return StructSchema(raw);
 }
 
 EnumSchema Schema::asEnum() const {
-  KJ_REQUIRE(getProto().which() == schema2::Node::ENUM,
+  KJ_REQUIRE(getProto().which() == schema::Node::ENUM,
           "Tried to use non-enum schema as an enum.",
           getProto().getDisplayName());
   return EnumSchema(raw);
 }
 
 InterfaceSchema Schema::asInterface() const {
-  KJ_REQUIRE(getProto().which() == schema2::Node::INTERFACE,
+  KJ_REQUIRE(getProto().which() == schema::Node::INTERFACE,
           "Tried to use non-interface schema as an interface.",
           getProto().getDisplayName());
   return InterfaceSchema(raw);
@@ -163,19 +163,19 @@ uint32_t StructSchema::Field::getDefaultValueSchemaOffset() const {
   const word* ptr;
 
   switch (defaultValue.which()) {
-    case schema2::Value::TEXT:
+    case schema::Value::TEXT:
       ptr = reinterpret_cast<const word*>(defaultValue.getText().begin());
       break;
-    case schema2::Value::DATA:
+    case schema::Value::DATA:
       ptr = reinterpret_cast<const word*>(defaultValue.getData().begin());
       break;
-    case schema2::Value::STRUCT:
+    case schema::Value::STRUCT:
       ptr = defaultValue.getStruct<_::UncheckedMessage>();
       break;
-    case schema2::Value::LIST:
+    case schema::Value::LIST:
       ptr = defaultValue.getList<_::UncheckedMessage>();
       break;
-    case schema2::Value::OBJECT:
+    case schema::Value::OBJECT:
       ptr = defaultValue.getObject<_::UncheckedMessage>();
       break;
     default:
@@ -224,32 +224,32 @@ InterfaceSchema::Method InterfaceSchema::getMethodByName(kj::StringPtr name) con
 
 // =======================================================================================
 
-ListSchema ListSchema::of(schema2::Type::Which primitiveType) {
+ListSchema ListSchema::of(schema::Type::Which primitiveType) {
   switch (primitiveType) {
-    case schema2::Type::VOID:
-    case schema2::Type::BOOL:
-    case schema2::Type::INT8:
-    case schema2::Type::INT16:
-    case schema2::Type::INT32:
-    case schema2::Type::INT64:
-    case schema2::Type::UINT8:
-    case schema2::Type::UINT16:
-    case schema2::Type::UINT32:
-    case schema2::Type::UINT64:
-    case schema2::Type::FLOAT32:
-    case schema2::Type::FLOAT64:
-    case schema2::Type::TEXT:
-    case schema2::Type::DATA:
+    case schema::Type::VOID:
+    case schema::Type::BOOL:
+    case schema::Type::INT8:
+    case schema::Type::INT16:
+    case schema::Type::INT32:
+    case schema::Type::INT64:
+    case schema::Type::UINT8:
+    case schema::Type::UINT16:
+    case schema::Type::UINT32:
+    case schema::Type::UINT64:
+    case schema::Type::FLOAT32:
+    case schema::Type::FLOAT64:
+    case schema::Type::TEXT:
+    case schema::Type::DATA:
       break;
 
-    case schema2::Type::STRUCT:
-    case schema2::Type::ENUM:
-    case schema2::Type::INTERFACE:
-    case schema2::Type::LIST:
+    case schema::Type::STRUCT:
+    case schema::Type::ENUM:
+    case schema::Type::INTERFACE:
+    case schema::Type::LIST:
       KJ_FAIL_REQUIRE("Must use one of the other ListSchema::of() overloads for complex types.");
       break;
 
-    case schema2::Type::OBJECT:
+    case schema::Type::OBJECT:
       KJ_FAIL_REQUIRE("List(Object) not supported.");
       break;
   }
@@ -257,37 +257,37 @@ ListSchema ListSchema::of(schema2::Type::Which primitiveType) {
   return ListSchema(primitiveType);
 }
 
-ListSchema ListSchema::of(schema2::Type::Reader elementType, Schema context) {
+ListSchema ListSchema::of(schema::Type::Reader elementType, Schema context) {
   switch (elementType.which()) {
-    case schema2::Type::VOID:
-    case schema2::Type::BOOL:
-    case schema2::Type::INT8:
-    case schema2::Type::INT16:
-    case schema2::Type::INT32:
-    case schema2::Type::INT64:
-    case schema2::Type::UINT8:
-    case schema2::Type::UINT16:
-    case schema2::Type::UINT32:
-    case schema2::Type::UINT64:
-    case schema2::Type::FLOAT32:
-    case schema2::Type::FLOAT64:
-    case schema2::Type::TEXT:
-    case schema2::Type::DATA:
+    case schema::Type::VOID:
+    case schema::Type::BOOL:
+    case schema::Type::INT8:
+    case schema::Type::INT16:
+    case schema::Type::INT32:
+    case schema::Type::INT64:
+    case schema::Type::UINT8:
+    case schema::Type::UINT16:
+    case schema::Type::UINT32:
+    case schema::Type::UINT64:
+    case schema::Type::FLOAT32:
+    case schema::Type::FLOAT64:
+    case schema::Type::TEXT:
+    case schema::Type::DATA:
       return of(elementType.which());
 
-    case schema2::Type::STRUCT:
+    case schema::Type::STRUCT:
       return of(context.getDependency(elementType.getStruct()).asStruct());
 
-    case schema2::Type::ENUM:
+    case schema::Type::ENUM:
       return of(context.getDependency(elementType.getEnum()).asEnum());
 
-    case schema2::Type::INTERFACE:
+    case schema::Type::INTERFACE:
       return of(context.getDependency(elementType.getInterface()).asInterface());
 
-    case schema2::Type::LIST:
+    case schema::Type::LIST:
       return of(of(elementType.getList(), context));
 
-    case schema2::Type::OBJECT:
+    case schema::Type::OBJECT:
       KJ_FAIL_REQUIRE("List(Object) not supported.");
       return ListSchema();
   }
@@ -297,19 +297,19 @@ ListSchema ListSchema::of(schema2::Type::Reader elementType, Schema context) {
 }
 
 StructSchema ListSchema::getStructElementType() const {
-  KJ_REQUIRE(nestingDepth == 0 && elementType == schema2::Type::STRUCT,
+  KJ_REQUIRE(nestingDepth == 0 && elementType == schema::Type::STRUCT,
           "ListSchema::getStructElementType(): The elements are not structs.");
   return elementSchema.asStruct();
 }
 
 EnumSchema ListSchema::getEnumElementType() const {
-  KJ_REQUIRE(nestingDepth == 0 && elementType == schema2::Type::ENUM,
+  KJ_REQUIRE(nestingDepth == 0 && elementType == schema::Type::ENUM,
           "ListSchema::getEnumElementType(): The elements are not enums.");
   return elementSchema.asEnum();
 }
 
 InterfaceSchema ListSchema::getInterfaceElementType() const {
-  KJ_REQUIRE(nestingDepth == 0 && elementType == schema2::Type::INTERFACE,
+  KJ_REQUIRE(nestingDepth == 0 && elementType == schema::Type::INTERFACE,
           "ListSchema::getInterfaceElementType(): The elements are not interfaces.");
   return elementSchema.asInterface();
 }
