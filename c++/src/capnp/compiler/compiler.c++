@@ -67,11 +67,11 @@ public:
   Node(const Node& parent, const Declaration::Reader& declaration);
   // Create a child node.
 
-  Node(kj::StringPtr name, Declaration::Body::Which kind);
+  Node(kj::StringPtr name, Declaration::Which kind);
   // Create a dummy node representing a built-in declaration, like "Int32" or "true".
 
   uint64_t getId() const { return id; }
-  Declaration::Body::Which getKind() const { return kind; }
+  Declaration::Which getKind() const { return kind; }
 
   kj::Maybe<const Node&> lookupMember(kj::StringPtr name) const;
   // Find a direct member of this node with the given name.
@@ -115,7 +115,7 @@ private:
   // Fully-qualified display name for this node.  For files, this is just the file name, otherwise
   // it is "filename:Path.To.Decl".
 
-  Declaration::Body::Which kind;
+  Declaration::Which kind;
   // Kind of node.
 
   bool isBuiltin;
@@ -337,7 +337,7 @@ Compiler::Node::Node(CompiledModule& module)
       declaration(module.getParsedFile().getRoot()),
       id(generateId(0, declaration.getName().getValue(), declaration.getId())),
       displayName(module.getSourceName()),
-      kind(declaration.getBody().which()),
+      kind(declaration.which()),
       isBuiltin(false) {
   auto name = declaration.getName();
   if (name.getValue().size() > 0) {
@@ -358,7 +358,7 @@ Compiler::Node::Node(const Node& parent, const Declaration::Reader& declaration)
       id(generateId(parent.id, declaration.getName().getValue(), declaration.getId())),
       displayName(joinDisplayName(parent.module->getCompiler().getNodeArena(),
                                   parent, declaration.getName().getValue())),
-      kind(declaration.getBody().which()),
+      kind(declaration.which()),
       isBuiltin(false) {
   auto name = declaration.getName();
   if (name.getValue().size() > 0) {
@@ -372,7 +372,7 @@ Compiler::Node::Node(const Node& parent, const Declaration::Reader& declaration)
   id = module->getCompiler().addNode(id, *this);
 }
 
-Compiler::Node::Node(kj::StringPtr name, Declaration::Body::Which kind)
+Compiler::Node::Node(kj::StringPtr name, Declaration::Which kind)
     : module(nullptr),
       parent(nullptr),
       id(0),
@@ -421,13 +421,13 @@ const Compiler::Node::Content& Compiler::Node::getContent(Content::State minimum
       auto& arena = module->getCompiler().getNodeArena();
 
       for (auto nestedDecl: declaration.getNestedDecls()) {
-        switch (nestedDecl.getBody().which()) {
-          case Declaration::Body::FILE_DECL:
-          case Declaration::Body::CONST_DECL:
-          case Declaration::Body::ANNOTATION_DECL:
-          case Declaration::Body::ENUM_DECL:
-          case Declaration::Body::STRUCT_DECL:
-          case Declaration::Body::INTERFACE_DECL: {
+        switch (nestedDecl.which()) {
+          case Declaration::FILE:
+          case Declaration::CONST:
+          case Declaration::ANNOTATION:
+          case Declaration::ENUM:
+          case Declaration::STRUCT:
+          case Declaration::INTERFACE: {
             kj::Own<Node> subNode = arena.allocateOwn<Node>(*this, nestedDecl);
             kj::StringPtr name = nestedDecl.getName().getValue();
             locked->orderedNestedNodes.add(subNode);
@@ -435,20 +435,20 @@ const Compiler::Node::Content& Compiler::Node::getContent(Content::State minimum
             break;
           }
 
-          case Declaration::Body::USING_DECL: {
+          case Declaration::USING: {
             kj::Own<Alias> alias = arena.allocateOwn<Alias>(
-                *this, nestedDecl.getBody().getUsingDecl().getTarget());
+                *this, nestedDecl.getUsing().getTarget());
             kj::StringPtr name = nestedDecl.getName().getValue();
             locked->aliases.insert(std::make_pair(name, kj::mv(alias)));
             break;
           }
-          case Declaration::Body::ENUMERANT_DECL:
-          case Declaration::Body::FIELD_DECL:
-          case Declaration::Body::UNION_DECL:
-          case Declaration::Body::GROUP_DECL:
-          case Declaration::Body::METHOD_DECL:
-          case Declaration::Body::NAKED_ID:
-          case Declaration::Body::NAKED_ANNOTATION:
+          case Declaration::ENUMERANT:
+          case Declaration::FIELD:
+          case Declaration::UNION:
+          case Declaration::GROUP:
+          case Declaration::METHOD:
+          case Declaration::NAKED_ID:
+          case Declaration::NAKED_ANNOTATION:
             // Not a node.  Skip.
             break;
           default:
@@ -841,18 +841,18 @@ static void findImports(TypeExpression::Reader type, std::set<kj::StringPtr>& ou
 }
 
 static void findImports(Declaration::Reader decl, std::set<kj::StringPtr>& output) {
-  switch (decl.getBody().which()) {
-    case Declaration::Body::USING_DECL:
-      findImports(decl.getBody().getUsingDecl().getTarget(), output);
+  switch (decl.which()) {
+    case Declaration::USING:
+      findImports(decl.getUsing().getTarget(), output);
       break;
-    case Declaration::Body::CONST_DECL:
-      findImports(decl.getBody().getConstDecl().getType(), output);
+    case Declaration::CONST:
+      findImports(decl.getConst().getType(), output);
       break;
-    case Declaration::Body::FIELD_DECL:
-      findImports(decl.getBody().getFieldDecl().getType(), output);
+    case Declaration::FIELD:
+      findImports(decl.getField().getType(), output);
       break;
-    case Declaration::Body::METHOD_DECL: {
-      auto method = decl.getBody().getMethodDecl();
+    case Declaration::METHOD: {
+      auto method = decl.getMethod();
       for (auto param: method.getParams()) {
         findImports(param.getType(), output);
         for (auto ann: param.getAnnotations()) {
@@ -905,22 +905,22 @@ Compiler::Impl::Impl(AnnotationFlag annotationFlag)
   // defines a builtin declaration visible in the global scope.
 
 #warning "temporary hack for schema transition"
-  builtinDecls["Void"] = nodeArena.allocateOwn<Node>("Void", Declaration::Body::BUILTIN_VOID);
-  builtinDecls["Bool"] = nodeArena.allocateOwn<Node>("Bool", Declaration::Body::BUILTIN_BOOL);
-  builtinDecls["Int8"] = nodeArena.allocateOwn<Node>("Int8", Declaration::Body::BUILTIN_INT8);
-  builtinDecls["Int16"] = nodeArena.allocateOwn<Node>("Int16", Declaration::Body::BUILTIN_INT16);
-  builtinDecls["Int32"] = nodeArena.allocateOwn<Node>("Int32", Declaration::Body::BUILTIN_INT32);
-  builtinDecls["Int64"] = nodeArena.allocateOwn<Node>("Int64", Declaration::Body::BUILTIN_INT64);
-  builtinDecls["UInt8"] = nodeArena.allocateOwn<Node>("UInt8", Declaration::Body::BUILTIN_U_INT8);
-  builtinDecls["UInt16"] = nodeArena.allocateOwn<Node>("UInt16", Declaration::Body::BUILTIN_U_INT16);
-  builtinDecls["UInt32"] = nodeArena.allocateOwn<Node>("UInt32", Declaration::Body::BUILTIN_U_INT32);
-  builtinDecls["UInt64"] = nodeArena.allocateOwn<Node>("UInt64", Declaration::Body::BUILTIN_U_INT64);
-  builtinDecls["Float32"] = nodeArena.allocateOwn<Node>("Float32", Declaration::Body::BUILTIN_FLOAT32);
-  builtinDecls["Float64"] = nodeArena.allocateOwn<Node>("Float64", Declaration::Body::BUILTIN_FLOAT64);
-  builtinDecls["Text"] = nodeArena.allocateOwn<Node>("Text", Declaration::Body::BUILTIN_TEXT);
-  builtinDecls["Data"] = nodeArena.allocateOwn<Node>("Data", Declaration::Body::BUILTIN_DATA);
-  builtinDecls["List"] = nodeArena.allocateOwn<Node>("List", Declaration::Body::BUILTIN_LIST);
-  builtinDecls["Object"] = nodeArena.allocateOwn<Node>("Object", Declaration::Body::BUILTIN_OBJECT);
+  builtinDecls["Void"] = nodeArena.allocateOwn<Node>("Void", Declaration::BUILTIN_VOID);
+  builtinDecls["Bool"] = nodeArena.allocateOwn<Node>("Bool", Declaration::BUILTIN_BOOL);
+  builtinDecls["Int8"] = nodeArena.allocateOwn<Node>("Int8", Declaration::BUILTIN_INT8);
+  builtinDecls["Int16"] = nodeArena.allocateOwn<Node>("Int16", Declaration::BUILTIN_INT16);
+  builtinDecls["Int32"] = nodeArena.allocateOwn<Node>("Int32", Declaration::BUILTIN_INT32);
+  builtinDecls["Int64"] = nodeArena.allocateOwn<Node>("Int64", Declaration::BUILTIN_INT64);
+  builtinDecls["UInt8"] = nodeArena.allocateOwn<Node>("UInt8", Declaration::BUILTIN_U_INT8);
+  builtinDecls["UInt16"] = nodeArena.allocateOwn<Node>("UInt16", Declaration::BUILTIN_U_INT16);
+  builtinDecls["UInt32"] = nodeArena.allocateOwn<Node>("UInt32", Declaration::BUILTIN_U_INT32);
+  builtinDecls["UInt64"] = nodeArena.allocateOwn<Node>("UInt64", Declaration::BUILTIN_U_INT64);
+  builtinDecls["Float32"] = nodeArena.allocateOwn<Node>("Float32", Declaration::BUILTIN_FLOAT32);
+  builtinDecls["Float64"] = nodeArena.allocateOwn<Node>("Float64", Declaration::BUILTIN_FLOAT64);
+  builtinDecls["Text"] = nodeArena.allocateOwn<Node>("Text", Declaration::BUILTIN_TEXT);
+  builtinDecls["Data"] = nodeArena.allocateOwn<Node>("Data", Declaration::BUILTIN_DATA);
+  builtinDecls["List"] = nodeArena.allocateOwn<Node>("List", Declaration::BUILTIN_LIST);
+  builtinDecls["Object"] = nodeArena.allocateOwn<Node>("Object", Declaration::BUILTIN_OBJECT);
 
 #if 0
   StructSchema::Union declBodySchema =
@@ -930,7 +930,7 @@ Compiler::Impl::Impl(AnnotationFlag annotationFlag)
     if (name.startsWith("builtin")) {
       kj::StringPtr symbolName = name.slice(strlen("builtin"));
       builtinDecls[symbolName] = nodeArena.allocateOwn<Node>(
-          symbolName, static_cast<Declaration::Body::Which>(member.getIndex()));
+          symbolName, static_cast<Declaration::Which>(member.getIndex()));
     }
   }
 #endif

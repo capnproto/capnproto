@@ -46,7 +46,7 @@ public:
   public:
     struct ResolvedName {
       uint64_t id;
-      Declaration::Body::Which kind;
+      Declaration::Which kind;
     };
 
     virtual kj::Maybe<ResolvedName> resolve(const DeclName::Reader& name) const = 0;
@@ -143,11 +143,11 @@ private:
   class StructLayout;
   class StructTranslator;
 
-  void compileEnum(Declaration::Enum::Reader decl, List<Declaration>::Reader members,
+  void compileEnum(Void decl, List<Declaration>::Reader members,
                    schema2::Node::Builder builder);
-  void compileStruct(Declaration::Struct::Reader decl, List<Declaration>::Reader members,
+  void compileStruct(Void decl, List<Declaration>::Reader members,
                      schema2::Node::Builder builder);
-  void compileInterface(Declaration::Interface::Reader decl, List<Declaration>::Reader members,
+  void compileInterface(Void decl, List<Declaration>::Reader members,
                         schema2::Node::Builder builder);
   // The `members` arrays contain only members with ordinal numbers, in code order.  Other members
   // are handled elsewhere.

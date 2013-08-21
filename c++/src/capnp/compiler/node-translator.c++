@@ -555,7 +555,7 @@ class NodeTranslator::DuplicateNameDetector {
 public:
   inline explicit DuplicateNameDetector(const ErrorReporter& errorReporter)
       : errorReporter(errorReporter) {}
-  void check(List<Declaration>::Reader nestedDecls, Declaration::Body::Which parentKind);
+  void check(List<Declaration>::Reader nestedDecls, Declaration::Which parentKind);
 
 private:
   const ErrorReporter& errorReporter;
@@ -564,32 +564,32 @@ private:
 
 void NodeTranslator::compileNode(Declaration::Reader decl, schema2::Node::Builder builder) {
   DuplicateNameDetector(errorReporter)
-      .check(decl.getNestedDecls(), decl.getBody().which());
+      .check(decl.getNestedDecls(), decl.which());
 
   kj::StringPtr targetsFlagName;
 
-  switch (decl.getBody().which()) {
-    case Declaration::Body::FILE_DECL:
+  switch (decl.which()) {
+    case Declaration::FILE:
       targetsFlagName = "targetsFile";
       break;
-    case Declaration::Body::CONST_DECL:
-      compileConst(decl.getBody().getConstDecl(), builder.initConst());
+    case Declaration::CONST:
+      compileConst(decl.getConst(), builder.initConst());
       targetsFlagName = "targetsConst";
       break;
-    case Declaration::Body::ANNOTATION_DECL:
-      compileAnnotation(decl.getBody().getAnnotationDecl(), builder.initAnnotation());
+    case Declaration::ANNOTATION:
+      compileAnnotation(decl.getAnnotation(), builder.initAnnotation());
       targetsFlagName = "targetsAnnotation";
       break;
-    case Declaration::Body::ENUM_DECL:
-      compileEnum(decl.getBody().getEnumDecl(), decl.getNestedDecls(), builder);
+    case Declaration::ENUM:
+      compileEnum(decl.getEnum(), decl.getNestedDecls(), builder);
       targetsFlagName = "targetsEnum";
       break;
-    case Declaration::Body::STRUCT_DECL:
-      compileStruct(decl.getBody().getStructDecl(), decl.getNestedDecls(), builder);
+    case Declaration::STRUCT:
+      compileStruct(decl.getStruct(), decl.getNestedDecls(), builder);
       targetsFlagName = "targetsStruct";
       break;
-    case Declaration::Body::INTERFACE_DECL:
-      compileInterface(decl.getBody().getInterfaceDecl(), decl.getNestedDecls(), builder);
+    case Declaration::INTERFACE:
+      compileInterface(decl.getInterface(), decl.getNestedDecls(), builder);
       targetsFlagName = "targetsInterface";
       break;
 
@@ -602,14 +602,14 @@ void NodeTranslator::compileNode(Declaration::Reader decl, schema2::Node::Builde
 }
 
 void NodeTranslator::DuplicateNameDetector::check(
-    List<Declaration>::Reader nestedDecls, Declaration::Body::Which parentKind) {
+    List<Declaration>::Reader nestedDecls, Declaration::Which parentKind) {
   for (auto decl: nestedDecls) {
     {
       auto name = decl.getName();
       auto nameText = name.getValue();
       auto insertResult = names.insert(std::make_pair(nameText, name));
       if (!insertResult.second) {
-        if (nameText.size() == 0 && decl.getBody().which() == Declaration::Body::UNION_DECL) {
+        if (nameText.size() == 0 && decl.which() == Declaration::UNION) {
           errorReporter.addErrorOn(
               name, kj::str("An unnamed union is already defined in this scope."));
           errorReporter.addErrorOn(
@@ -623,17 +623,17 @@ void NodeTranslator::DuplicateNameDetector::check(
       }
     }
 
-    switch (decl.getBody().which()) {
-      case Declaration::Body::USING_DECL:
-      case Declaration::Body::CONST_DECL:
-      case Declaration::Body::ENUM_DECL:
-      case Declaration::Body::STRUCT_DECL:
-      case Declaration::Body::INTERFACE_DECL:
-      case Declaration::Body::ANNOTATION_DECL:
+    switch (decl.which()) {
+      case Declaration::USING:
+      case Declaration::CONST:
+      case Declaration::ENUM:
+      case Declaration::STRUCT:
+      case Declaration::INTERFACE:
+      case Declaration::ANNOTATION:
         switch (parentKind) {
-          case Declaration::Body::FILE_DECL:
-          case Declaration::Body::STRUCT_DECL:
-          case Declaration::Body::INTERFACE_DECL:
+          case Declaration::FILE:
+          case Declaration::STRUCT:
+          case Declaration::INTERFACE:
             // OK.
             break;
           default:
@@ -642,23 +642,23 @@ void NodeTranslator::DuplicateNameDetector::check(
         }
         break;
 
-      case Declaration::Body::ENUMERANT_DECL:
-        if (parentKind != Declaration::Body::ENUM_DECL) {
+      case Declaration::ENUMERANT:
+        if (parentKind != Declaration::ENUM) {
           errorReporter.addErrorOn(decl, "Enumerants can only appear in enums.");
         }
         break;
-      case Declaration::Body::METHOD_DECL:
-        if (parentKind != Declaration::Body::INTERFACE_DECL) {
+      case Declaration::METHOD:
+        if (parentKind != Declaration::INTERFACE) {
           errorReporter.addErrorOn(decl, "Methods can only appear in interfaces.");
         }
         break;
-      case Declaration::Body::FIELD_DECL:
-      case Declaration::Body::UNION_DECL:
-      case Declaration::Body::GROUP_DECL:
+      case Declaration::FIELD:
+      case Declaration::UNION:
+      case Declaration::GROUP:
         switch (parentKind) {
-          case Declaration::Body::STRUCT_DECL:
-          case Declaration::Body::UNION_DECL:
-          case Declaration::Body::GROUP_DECL:
+          case Declaration::STRUCT:
+          case Declaration::UNION:
+          case Declaration::GROUP:
             // OK.
             break;
           default:
@@ -670,11 +670,11 @@ void NodeTranslator::DuplicateNameDetector::check(
         // is going to do it.
         if (decl.getName().getValue().size() == 0) {
           // Unnamed union.  Check members as if they are in the same scope.
-          check(decl.getNestedDecls(), decl.getBody().which());
+          check(decl.getNestedDecls(), decl.which());
         } else {
           // Children are in their own scope.
           DuplicateNameDetector(errorReporter)
-              .check(decl.getNestedDecls(), decl.getBody().which());
+              .check(decl.getNestedDecls(), decl.which());
         }
 
         break;
@@ -751,7 +751,7 @@ private:
   kj::Maybe<LocatedInteger::Reader> lastOrdinalLocation;
 };
 
-void NodeTranslator::compileEnum(Declaration::Enum::Reader decl,
+void NodeTranslator::compileEnum(Void decl,
                                  List<Declaration>::Reader members,
                                  schema2::Node::Builder builder) {
   // maps ordinal -> (code order, declaration)
@@ -759,7 +759,7 @@ void NodeTranslator::compileEnum(Declaration::Enum::Reader decl,
 
   uint codeOrder = 0;
   for (auto member: members) {
-    if (member.getBody().which() == Declaration::Body::ENUMERANT_DECL) {
+    if (member.which() == Declaration::ENUMERANT) {
       enumerants.insert(
           std::make_pair(member.getId().getOrdinal().getValue(),
                          std::make_pair(codeOrder++, member)));
@@ -792,8 +792,7 @@ public:
       : translator(translator), errorReporter(translator.errorReporter) {}
   KJ_DISALLOW_COPY(StructTranslator);
 
-  void translate(Declaration::Struct::Reader decl, List<Declaration>::Reader members,
-                 schema2::Node::Builder builder) {
+  void translate(Void decl, List<Declaration>::Reader members, schema2::Node::Builder builder) {
     auto structBuilder = builder.initStruct();
 
     // Build the member-info-by-ordinal map.
@@ -812,9 +811,9 @@ public:
       schema2::Field::Builder fieldBuilder = member.getSchema();
       fieldBuilder.getOrdinal().setExplicit(entry.first);
 
-      switch (member.decl.getBody().which()) {
-        case Declaration::Body::FIELD_DECL: {
-          auto fieldReader = member.decl.getBody().getFieldDecl();
+      switch (member.decl.which()) {
+        case Declaration::FIELD: {
+          auto fieldReader = member.decl.getField();
           auto regularField = fieldBuilder.initRegular();
           auto typeBuilder = regularField.initType();
           if (translator.compileType(fieldReader.getType(), typeBuilder)) {
@@ -868,7 +867,7 @@ public:
           break;
         }
 
-        case Declaration::Body::UNION_DECL:
+        case Declaration::UNION:
           if (!member.unionScope->addDiscriminant()) {
             errorReporter.addErrorOn(member.decl.getId().getOrdinal(),
                 "Union ordinal, if specified, must be greater than no more than one of its "
@@ -876,7 +875,7 @@ public:
           }
           break;
 
-        case Declaration::Body::GROUP_DECL:
+        case Declaration::GROUP:
           KJ_FAIL_ASSERT("Groups don't have ordinals.");
           break;
 
@@ -891,17 +890,17 @@ public:
     root.finishGroup();
     for (auto member: allMembers) {
       kj::StringPtr targetsFlagName;
-      switch (member->decl.getBody().which()) {
-        case Declaration::Body::FIELD_DECL:
+      switch (member->decl.which()) {
+        case Declaration::FIELD:
           targetsFlagName = "targetsField";
           break;
 
-        case Declaration::Body::UNION_DECL:
+        case Declaration::UNION:
           member->finishGroup();
           targetsFlagName = "targetsUnion";
           break;
 
-        case Declaration::Body::GROUP_DECL:
+        case Declaration::GROUP:
           member->finishGroup();
           targetsFlagName = "targetsGroup";
           break;
@@ -1080,8 +1079,8 @@ private:
       kj::Maybe<uint> ordinal;
       MemberInfo* memberInfo = nullptr;
 
-      switch (member.getBody().which()) {
-        case Declaration::Body::FIELD_DECL: {
+      switch (member.which()) {
+        case Declaration::FIELD: {
           parent.childCount++;
           // For layout purposes, pretend this field is enclosed in a one-member group.
           StructLayout::Group& singletonGroup =
@@ -1093,11 +1092,11 @@ private:
           break;
         }
 
-        case Declaration::Body::UNION_DECL:
+        case Declaration::UNION:
           errorReporter.addErrorOn(member, "Unions cannot contain unions.");
           break;
 
-        case Declaration::Body::GROUP_DECL: {
+        case Declaration::GROUP: {
           parent.childCount++;
           StructLayout::Group& group = arena.allocate<StructLayout::Group>(layout);
           memberInfo = &arena.allocate<MemberInfo>(
@@ -1137,8 +1136,8 @@ private:
       kj::Maybe<uint> ordinal;
       MemberInfo* memberInfo = nullptr;
 
-      switch (member.getBody().which()) {
-        case Declaration::Body::FIELD_DECL: {
+      switch (member.which()) {
+        case Declaration::FIELD: {
           parent.childCount++;
           memberInfo = &arena.allocate<MemberInfo>(
               parent, codeOrder++, member, layout, false);
@@ -1147,7 +1146,7 @@ private:
           break;
         }
 
-        case Declaration::Body::UNION_DECL: {
+        case Declaration::UNION: {
           StructLayout::Union& unionLayout = arena.allocate<StructLayout::Union>(layout);
 
           uint independentSubCodeOrder = 0;
@@ -1171,7 +1170,7 @@ private:
           break;
         }
 
-        case Declaration::Body::GROUP_DECL:
+        case Declaration::GROUP:
           parent.childCount++;
           memberInfo = &arena.allocate<MemberInfo>(
               parent, codeOrder++, member,
@@ -1214,16 +1213,14 @@ private:
   }
 };
 
-void NodeTranslator::compileStruct(Declaration::Struct::Reader decl,
-                                   List<Declaration>::Reader members,
+void NodeTranslator::compileStruct(Void decl, List<Declaration>::Reader members,
                                    schema2::Node::Builder builder) {
   StructTranslator(*this).translate(decl, members, builder);
 }
 
 // -------------------------------------------------------------------
 
-void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
-                                      List<Declaration>::Reader members,
+void NodeTranslator::compileInterface(Void decl, List<Declaration>::Reader members,
                                       schema2::Node::Builder builder) {
   KJ_FAIL_ASSERT("TODO: compile interfaces");
 }
@@ -1263,11 +1260,11 @@ bool NodeTranslator::compileType(TypeExpression::Reader source, schema2::Type::B
     bool handledParams = false;
 
     switch (base->kind) {
-      case Declaration::Body::ENUM_DECL: target.setEnum(base->id); break;
-      case Declaration::Body::STRUCT_DECL: target.setStruct(base->id); break;
-      case Declaration::Body::INTERFACE_DECL: target.setInterface(base->id); break;
+      case Declaration::ENUM: target.setEnum(base->id); break;
+      case Declaration::STRUCT: target.setStruct(base->id); break;
+      case Declaration::INTERFACE: target.setInterface(base->id); break;
 
-      case Declaration::Body::BUILTIN_LIST: {
+      case Declaration::BUILTIN_LIST: {
         auto params = source.getParams();
         if (params.size() != 1) {
           errorReporter.addErrorOn(source, "'List' requires exactly one parameter.");
@@ -1290,21 +1287,21 @@ bool NodeTranslator::compileType(TypeExpression::Reader source, schema2::Type::B
         break;
       }
 
-      case Declaration::Body::BUILTIN_VOID: target.setVoid(); break;
-      case Declaration::Body::BUILTIN_BOOL: target.setBool(); break;
-      case Declaration::Body::BUILTIN_INT8: target.setInt8(); break;
-      case Declaration::Body::BUILTIN_INT16: target.setInt16(); break;
-      case Declaration::Body::BUILTIN_INT32: target.setInt32(); break;
-      case Declaration::Body::BUILTIN_INT64: target.setInt64(); break;
-      case Declaration::Body::BUILTIN_U_INT8: target.setUint8(); break;
-      case Declaration::Body::BUILTIN_U_INT16: target.setUint16(); break;
-      case Declaration::Body::BUILTIN_U_INT32: target.setUint32(); break;
-      case Declaration::Body::BUILTIN_U_INT64: target.setUint64(); break;
-      case Declaration::Body::BUILTIN_FLOAT32: target.setFloat32(); break;
-      case Declaration::Body::BUILTIN_FLOAT64: target.setFloat64(); break;
-      case Declaration::Body::BUILTIN_TEXT: target.setText(); break;
-      case Declaration::Body::BUILTIN_DATA: target.setData(); break;
-      case Declaration::Body::BUILTIN_OBJECT: target.setObject(); break;
+      case Declaration::BUILTIN_VOID: target.setVoid(); break;
+      case Declaration::BUILTIN_BOOL: target.setBool(); break;
+      case Declaration::BUILTIN_INT8: target.setInt8(); break;
+      case Declaration::BUILTIN_INT16: target.setInt16(); break;
+      case Declaration::BUILTIN_INT32: target.setInt32(); break;
+      case Declaration::BUILTIN_INT64: target.setInt64(); break;
+      case Declaration::BUILTIN_U_INT8: target.setUint8(); break;
+      case Declaration::BUILTIN_U_INT16: target.setUint16(); break;
+      case Declaration::BUILTIN_U_INT32: target.setUint32(); break;
+      case Declaration::BUILTIN_U_INT64: target.setUint64(); break;
+      case Declaration::BUILTIN_FLOAT32: target.setFloat32(); break;
+      case Declaration::BUILTIN_FLOAT64: target.setFloat64(); break;
+      case Declaration::BUILTIN_TEXT: target.setText(); break;
+      case Declaration::BUILTIN_DATA: target.setData(); break;
+      case Declaration::BUILTIN_OBJECT: target.setObject(); break;
 
       default:
         errorReporter.addErrorOn(source, kj::str("'", declNameString(name), "' is not a type."));
@@ -1522,25 +1519,6 @@ void NodeTranslator::compileBootstrapValue(ValueExpression::Reader source,
 
 void NodeTranslator::compileValue(ValueExpression::Reader source, schema2::Type::Reader type,
                                   schema2::Value::Builder target, bool isBootstrap) {
-#warning "temporary hack for schema transition"
-  switch (type.which()) {
-    case schema2::Type::TEXT:
-      target.setText(source.getBody().getString());
-      break;
-
-    case schema2::Type::UINT16:
-      target.setUint16(source.getBody().getPositiveInt());
-      break;
-
-    default:
-#if 0
-      KJ_FAIL_ASSERT("Need to compile value type:", (uint)type.which(),
-                     wipNode.getReader().getDisplayName());
-  }
-#else
-      break;
-  }
-
   auto valueUnion = toDynamic(target);
   auto field = valueUnion.getSchema().getFieldByName(
       getValueUnionFieldNameFor(type.which()));
@@ -1568,7 +1546,6 @@ void NodeTranslator::compileValue(ValueExpression::Reader source, schema2::Type:
       compileValue(source, slot, isBootstrap);
       break;
   }
-#endif
 }
 
 void NodeTranslator::compileValue(ValueExpression::Reader src, DynamicSlot& dst, bool isBootstrap) {
@@ -1585,9 +1562,9 @@ void NodeTranslator::compileValue(ValueExpression::Reader src, DynamicSlot& dst,
 
 void NodeTranslator::compileValueInner(
     ValueExpression::Reader src, DynamicSlot& dst, bool isBootstrap) {
-  switch (src.getBody().which()) {
-    case ValueExpression::Body::NAME: {
-      auto name = src.getBody().getName();
+  switch (src.which()) {
+    case ValueExpression::NAME: {
+      auto name = src.getName();
       bool isBare = name.getBase().which() == DeclName::Base::RELATIVE_NAME &&
                     name.getMemberPath().size() == 0;
       bool wasSet = false;
@@ -1630,19 +1607,19 @@ void NodeTranslator::compileValueInner(
 
       if (!wasSet) {
         // Haven't resolved the name yet.  Try looking up a constant.
-        KJ_IF_MAYBE(constValue, readConstant(src.getBody().getName(), isBootstrap, src)) {
+        KJ_IF_MAYBE(constValue, readConstant(src.getName(), isBootstrap, src)) {
           dst.set(*constValue);
         }
       }
       break;
     }
 
-    case ValueExpression::Body::POSITIVE_INT:
-      dst.set(src.getBody().getPositiveInt());
+    case ValueExpression::POSITIVE_INT:
+      dst.set(src.getPositiveInt());
       break;
 
-    case ValueExpression::Body::NEGATIVE_INT: {
-      uint64_t nValue = src.getBody().getNegativeInt();
+    case ValueExpression::NEGATIVE_INT: {
+      uint64_t nValue = src.getNegativeInt();
       if (nValue > (std::numeric_limits<uint64_t>::max() >> 1) + 1) {
         errorReporter.addErrorOn(src, "Integer is too big to be negative.");
       } else {
@@ -1651,16 +1628,16 @@ void NodeTranslator::compileValueInner(
       break;
     }
 
-    case ValueExpression::Body::FLOAT:
-      dst.set(src.getBody().getFloat());
+    case ValueExpression::FLOAT:
+      dst.set(src.getFloat());
       break;
 
-    case ValueExpression::Body::STRING:
-      dst.set(src.getBody().getString());
+    case ValueExpression::STRING:
+      dst.set(src.getString());
       break;
 
-    case ValueExpression::Body::LIST: {
-      auto srcList = src.getBody().getList();
+    case ValueExpression::LIST: {
+      auto srcList = src.getList();
       auto dstList = dst.initList(srcList.size());
       for (uint i = 0; i < srcList.size(); i++) {
         DynamicSlot slot(dstList, i);
@@ -1669,34 +1646,24 @@ void NodeTranslator::compileValueInner(
       break;
     }
 
-    case ValueExpression::Body::STRUCT_VALUE: {
-      auto srcStruct = src.getBody().getStructValue();
+    case ValueExpression::STRUCT: {
+      auto srcStruct = src.getStruct();
       auto dstStruct = dst.initStruct();
       auto dstSchema = dstStruct.getSchema();
       for (auto assignment: srcStruct) {
         auto fieldName = assignment.getFieldName();
-
-        switch (assignment.which()) {
-          case ValueExpression::FieldAssignment::NOT_UNION:
-            KJ_IF_MAYBE(field, dstSchema.findFieldByName(fieldName.getValue())) {
-              DynamicSlot slot(dstStruct, *field);
-              compileValue(assignment.getValue(), slot, isBootstrap);
-            } else {
-              errorReporter.addErrorOn(fieldName, kj::str(
-                  "Struct has no field named '", fieldName.getValue(), "'."));
-            }
-            break;
-
-          case ValueExpression::FieldAssignment::UNION: {
-            KJ_FAIL_ASSERT("Union literal syntax is obsolete.");
-            break;
-          }
+        KJ_IF_MAYBE(field, dstSchema.findFieldByName(fieldName.getValue())) {
+          DynamicSlot slot(dstStruct, *field);
+          compileValue(assignment.getValue(), slot, isBootstrap);
+        } else {
+          errorReporter.addErrorOn(fieldName, kj::str(
+              "Struct has no field named '", fieldName.getValue(), "'."));
         }
       }
       break;
     }
 
-    case ValueExpression::Body::UNKNOWN:
+    case ValueExpression::UNKNOWN:
       // Ignore earlier error.
       break;
   }
@@ -1705,7 +1672,7 @@ void NodeTranslator::compileValueInner(
 kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
     DeclName::Reader name, bool isBootstrap, ValueExpression::Reader errorLocation) {
   KJ_IF_MAYBE(resolved, resolver.resolve(name)) {
-    if (resolved->kind != Declaration::Body::CONST_DECL) {
+    if (resolved->kind != Declaration::CONST) {
       errorReporter.addErrorOn(errorLocation,
           kj::str("'", declNameString(name), "' does not refer to a constant."));
       return nullptr;
@@ -1838,7 +1805,7 @@ Orphan<List<schema2::Annotation>> NodeTranslator::compileAnnotationApplications(
 
     auto name = annotation.getName();
     KJ_IF_MAYBE(decl, resolver.resolve(name)) {
-      if (decl->kind != Declaration::Body::ANNOTATION_DECL) {
+      if (decl->kind != Declaration::ANNOTATION) {
         errorReporter.addErrorOn(name, kj::str(
             "'", declNameString(name), "' is not an annotation."));
       } else {
