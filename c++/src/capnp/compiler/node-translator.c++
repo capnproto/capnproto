@@ -704,21 +704,16 @@ void NodeTranslator::compileAnnotation(Declaration::Annotation::Reader decl,
                                        schema2::Node::Annotation::Builder builder) {
   compileType(decl.getType(), builder.initType());
 
-#warning "temporary hack for schema transition"
-  builder.setTargetsFile(true);
-
-#if 0
   // Dynamically copy over the values of all of the "targets" members.
   DynamicStruct::Reader src = decl;
   DynamicStruct::Builder dst = builder;
-  for (auto srcMember: src.getSchema().getMembers()) {
-    kj::StringPtr memberName = srcMember.getProto().getName();
-    if (memberName.startsWith("targets")) {
-      auto dstMember = dst.getSchema().getMemberByName(memberName);
-      dst.set(dstMember, src.get(srcMember));
+  for (auto srcField: src.getSchema().getFields()) {
+    kj::StringPtr fieldName = srcField.getProto().getName();
+    if (fieldName.startsWith("targets")) {
+      auto dstField = dst.getSchema().getFieldByName(fieldName);
+      dst.set(dstField, src.get(srcField));
     }
   }
-#endif
 }
 
 class NodeTranslator::DuplicateOrdinalDetector {
@@ -1812,13 +1807,10 @@ Orphan<List<schema2::Annotation>> NodeTranslator::compileAnnotationApplications(
         annotationBuilder.setId(decl->id);
         KJ_IF_MAYBE(annotationSchema, resolver.resolveBootstrapSchema(decl->id)) {
           auto node = annotationSchema->getProto().getAnnotation();
-#warning "temporary hack for schema transition"
-#if 0
           if (!toDynamic(node).get(targetsFlagName).as<bool>()) {
             errorReporter.addErrorOn(name, kj::str(
                 "'", declNameString(name), "' cannot be applied to this kind of declaration."));
           }
-#endif
 
           // Interpret the value.
           auto value = annotation.getValue();

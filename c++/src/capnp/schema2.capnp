@@ -141,10 +141,11 @@ struct Node {
       targetsStruct @23 :Bool;
       targetsField @24 :Bool;
       targetsUnion @25 :Bool;
-      targetsInterface @26 :Bool;
-      targetsMethod @27 :Bool;
-      targetsParam @28 :Bool;
-      targetsAnnotation @29 :Bool;
+      targetsGroup @26 :Bool;
+      targetsInterface @27 :Bool;
+      targetsMethod @28 :Bool;
+      targetsParam @29 :Bool;
+      targetsAnnotation @30 :Bool;
     }
   }
 }

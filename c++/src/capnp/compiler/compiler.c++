@@ -904,36 +904,18 @@ Compiler::Impl::Impl(AnnotationFlag annotationFlag)
   // Reflectively interpret the members of Declaration.body.  Any member prefixed by "builtin"
   // defines a builtin declaration visible in the global scope.
 
-#warning "temporary hack for schema transition"
-  builtinDecls["Void"] = nodeArena.allocateOwn<Node>("Void", Declaration::BUILTIN_VOID);
-  builtinDecls["Bool"] = nodeArena.allocateOwn<Node>("Bool", Declaration::BUILTIN_BOOL);
-  builtinDecls["Int8"] = nodeArena.allocateOwn<Node>("Int8", Declaration::BUILTIN_INT8);
-  builtinDecls["Int16"] = nodeArena.allocateOwn<Node>("Int16", Declaration::BUILTIN_INT16);
-  builtinDecls["Int32"] = nodeArena.allocateOwn<Node>("Int32", Declaration::BUILTIN_INT32);
-  builtinDecls["Int64"] = nodeArena.allocateOwn<Node>("Int64", Declaration::BUILTIN_INT64);
-  builtinDecls["UInt8"] = nodeArena.allocateOwn<Node>("UInt8", Declaration::BUILTIN_U_INT8);
-  builtinDecls["UInt16"] = nodeArena.allocateOwn<Node>("UInt16", Declaration::BUILTIN_U_INT16);
-  builtinDecls["UInt32"] = nodeArena.allocateOwn<Node>("UInt32", Declaration::BUILTIN_U_INT32);
-  builtinDecls["UInt64"] = nodeArena.allocateOwn<Node>("UInt64", Declaration::BUILTIN_U_INT64);
-  builtinDecls["Float32"] = nodeArena.allocateOwn<Node>("Float32", Declaration::BUILTIN_FLOAT32);
-  builtinDecls["Float64"] = nodeArena.allocateOwn<Node>("Float64", Declaration::BUILTIN_FLOAT64);
-  builtinDecls["Text"] = nodeArena.allocateOwn<Node>("Text", Declaration::BUILTIN_TEXT);
-  builtinDecls["Data"] = nodeArena.allocateOwn<Node>("Data", Declaration::BUILTIN_DATA);
-  builtinDecls["List"] = nodeArena.allocateOwn<Node>("List", Declaration::BUILTIN_LIST);
-  builtinDecls["Object"] = nodeArena.allocateOwn<Node>("Object", Declaration::BUILTIN_OBJECT);
-
-#if 0
-  StructSchema::Union declBodySchema =
-      Schema::from<Declaration>().getMemberByName("body").asUnion();
-  for (auto member: declBodySchema.getMembers()) {
-    auto name = member.getProto().getName();
-    if (name.startsWith("builtin")) {
-      kj::StringPtr symbolName = name.slice(strlen("builtin"));
-      builtinDecls[symbolName] = nodeArena.allocateOwn<Node>(
-          symbolName, static_cast<Declaration::Which>(member.getIndex()));
+  StructSchema declSchema = Schema::from<Declaration>();
+  for (auto field: declSchema.getFields()) {
+    auto fieldProto = field.getProto();
+    if (fieldProto.hasDiscriminantValue()) {
+      auto name = fieldProto.getName();
+      if (name.startsWith("builtin")) {
+        kj::StringPtr symbolName = name.slice(strlen("builtin"));
+        builtinDecls[symbolName] = nodeArena.allocateOwn<Node>(
+            symbolName, static_cast<Declaration::Which>(fieldProto.getDiscriminantValue()));
+      }
     }
   }
-#endif
 }
 
 Compiler::Impl::~Impl() noexcept(false) {}

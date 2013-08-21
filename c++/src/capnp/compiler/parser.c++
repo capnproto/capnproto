@@ -855,8 +855,6 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
         DynamicStruct::Builder dynamicBuilder = builder;
         for (auto& maybeTarget: targets.value) {
           KJ_IF_MAYBE(target, maybeTarget) {
-#warning "temporary hack for schema transition"
-#if 0
             if (target->value == "*") {
               // Set all.
               if (targets.value.size() > 1) {
@@ -864,9 +862,9 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
                     "Wildcard should not be specified together with other targets.");
               }
 
-              for (auto member: dynamicBuilder.getSchema().getMembers()) {
-                if (member.getProto().getName().startsWith("targets")) {
-                  dynamicBuilder.set(member, true);
+              for (auto field: dynamicBuilder.getSchema().getFields()) {
+                if (field.getProto().getName().startsWith("targets")) {
+                  dynamicBuilder.set(field, true);
                 }
               }
             } else {
@@ -879,19 +877,18 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
                 strcpy(buffer, "targets");
                 strcat(buffer, target->value.cStr());
                 buffer[strlen("targets")] += 'A' - 'a';
-                KJ_IF_MAYBE(member, dynamicBuilder.getSchema().findMemberByName(buffer)) {
-                  if (dynamicBuilder.get(*member).as<bool>()) {
+                KJ_IF_MAYBE(field, dynamicBuilder.getSchema().findFieldByName(buffer)) {
+                  if (dynamicBuilder.get(*field).as<bool>()) {
                     errorReporter.addError(target->startByte, target->endByte,
                                            "Duplicate target specification.");
                   }
-                  dynamicBuilder.set(*member, true);
+                  dynamicBuilder.set(*field, true);
                 } else {
                   errorReporter.addError(target->startByte, target->endByte,
                                          "Not a valid annotation target.");
                 }
               }
             }
-#endif
           }
         }
         return DeclParserResult(kj::mv(decl));

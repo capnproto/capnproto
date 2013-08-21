@@ -721,6 +721,9 @@ public:
   inline bool hasTargetsUnion() const;
   inline bool getTargetsUnion() const;
 
+  inline bool hasTargetsGroup() const;
+  inline bool getTargetsGroup() const;
+
   inline bool hasTargetsInterface() const;
   inline bool getTargetsInterface() const;
 
@@ -795,6 +798,10 @@ public:
   inline bool hasTargetsUnion();
   inline bool getTargetsUnion();
   inline void setTargetsUnion(bool value);
+
+  inline bool hasTargetsGroup();
+  inline bool getTargetsGroup();
+  inline void setTargetsGroup(bool value);
 
   inline bool hasTargetsInterface();
   inline bool getTargetsInterface();
@@ -2849,88 +2856,109 @@ inline void Node::Annotation::Builder::setTargetsUnion(bool value) {
       118 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Annotation::Reader::hasTargetsInterface() const {
+inline bool Node::Annotation::Reader::hasTargetsGroup() const {
   return _reader.hasDataField<bool>(119 * ::capnp::ELEMENTS);
 }
 
-inline bool Node::Annotation::Builder::hasTargetsInterface() {
+inline bool Node::Annotation::Builder::hasTargetsGroup() {
   return _builder.hasDataField<bool>(119 * ::capnp::ELEMENTS);
 }
-inline bool Node::Annotation::Reader::getTargetsInterface() const {
+inline bool Node::Annotation::Reader::getTargetsGroup() const {
   return _reader.getDataField<bool>(
       119 * ::capnp::ELEMENTS);
 }
 
-inline bool Node::Annotation::Builder::getTargetsInterface() {
+inline bool Node::Annotation::Builder::getTargetsGroup() {
   return _builder.getDataField<bool>(
       119 * ::capnp::ELEMENTS);
 }
-inline void Node::Annotation::Builder::setTargetsInterface(bool value) {
+inline void Node::Annotation::Builder::setTargetsGroup(bool value) {
   _builder.setDataField<bool>(
       119 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Annotation::Reader::hasTargetsMethod() const {
+inline bool Node::Annotation::Reader::hasTargetsInterface() const {
   return _reader.hasDataField<bool>(120 * ::capnp::ELEMENTS);
 }
 
-inline bool Node::Annotation::Builder::hasTargetsMethod() {
+inline bool Node::Annotation::Builder::hasTargetsInterface() {
   return _builder.hasDataField<bool>(120 * ::capnp::ELEMENTS);
 }
-inline bool Node::Annotation::Reader::getTargetsMethod() const {
+inline bool Node::Annotation::Reader::getTargetsInterface() const {
   return _reader.getDataField<bool>(
       120 * ::capnp::ELEMENTS);
 }
 
-inline bool Node::Annotation::Builder::getTargetsMethod() {
+inline bool Node::Annotation::Builder::getTargetsInterface() {
   return _builder.getDataField<bool>(
       120 * ::capnp::ELEMENTS);
 }
-inline void Node::Annotation::Builder::setTargetsMethod(bool value) {
+inline void Node::Annotation::Builder::setTargetsInterface(bool value) {
   _builder.setDataField<bool>(
       120 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Annotation::Reader::hasTargetsParam() const {
+inline bool Node::Annotation::Reader::hasTargetsMethod() const {
   return _reader.hasDataField<bool>(121 * ::capnp::ELEMENTS);
 }
 
-inline bool Node::Annotation::Builder::hasTargetsParam() {
+inline bool Node::Annotation::Builder::hasTargetsMethod() {
   return _builder.hasDataField<bool>(121 * ::capnp::ELEMENTS);
 }
-inline bool Node::Annotation::Reader::getTargetsParam() const {
+inline bool Node::Annotation::Reader::getTargetsMethod() const {
   return _reader.getDataField<bool>(
       121 * ::capnp::ELEMENTS);
 }
 
-inline bool Node::Annotation::Builder::getTargetsParam() {
+inline bool Node::Annotation::Builder::getTargetsMethod() {
   return _builder.getDataField<bool>(
       121 * ::capnp::ELEMENTS);
 }
-inline void Node::Annotation::Builder::setTargetsParam(bool value) {
+inline void Node::Annotation::Builder::setTargetsMethod(bool value) {
   _builder.setDataField<bool>(
       121 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Annotation::Reader::hasTargetsAnnotation() const {
+inline bool Node::Annotation::Reader::hasTargetsParam() const {
   return _reader.hasDataField<bool>(122 * ::capnp::ELEMENTS);
 }
 
-inline bool Node::Annotation::Builder::hasTargetsAnnotation() {
+inline bool Node::Annotation::Builder::hasTargetsParam() {
   return _builder.hasDataField<bool>(122 * ::capnp::ELEMENTS);
 }
-inline bool Node::Annotation::Reader::getTargetsAnnotation() const {
+inline bool Node::Annotation::Reader::getTargetsParam() const {
   return _reader.getDataField<bool>(
       122 * ::capnp::ELEMENTS);
 }
 
-inline bool Node::Annotation::Builder::getTargetsAnnotation() {
+inline bool Node::Annotation::Builder::getTargetsParam() {
   return _builder.getDataField<bool>(
       122 * ::capnp::ELEMENTS);
 }
-inline void Node::Annotation::Builder::setTargetsAnnotation(bool value) {
+inline void Node::Annotation::Builder::setTargetsParam(bool value) {
   _builder.setDataField<bool>(
       122 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Node::Annotation::Reader::hasTargetsAnnotation() const {
+  return _reader.hasDataField<bool>(123 * ::capnp::ELEMENTS);
+}
+
+inline bool Node::Annotation::Builder::hasTargetsAnnotation() {
+  return _builder.hasDataField<bool>(123 * ::capnp::ELEMENTS);
+}
+inline bool Node::Annotation::Reader::getTargetsAnnotation() const {
+  return _reader.getDataField<bool>(
+      123 * ::capnp::ELEMENTS);
+}
+
+inline bool Node::Annotation::Builder::getTargetsAnnotation() {
+  return _builder.getDataField<bool>(
+      123 * ::capnp::ELEMENTS);
+}
+inline void Node::Annotation::Builder::setTargetsAnnotation(bool value) {
+  _builder.setDataField<bool>(
+      123 * ::capnp::ELEMENTS, value);
 }
 
 inline Field::Which Field::Reader::which() const {
