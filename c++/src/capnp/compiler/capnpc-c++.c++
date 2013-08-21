@@ -59,52 +59,46 @@ static constexpr const char* FIELD_SIZE_NAMES[] = {
   "VOID", "BIT", "BYTE", "TWO_BYTES", "FOUR_BYTES", "EIGHT_BYTES", "POINTER", "INLINE_COMPOSITE"
 };
 
-void enumerateDeps(schema::Type::Reader type, std::set<uint64_t>& deps) {
-  switch (type.getBody().which()) {
-    case schema::Type::Body::STRUCT_TYPE:
-      deps.insert(type.getBody().getStructType());
+void enumerateDeps(schema2::Type::Reader type, std::set<uint64_t>& deps) {
+  switch (type.which()) {
+    case schema2::Type::STRUCT:
+      deps.insert(type.getStruct());
       break;
-    case schema::Type::Body::ENUM_TYPE:
-      deps.insert(type.getBody().getEnumType());
+    case schema2::Type::ENUM:
+      deps.insert(type.getEnum());
       break;
-    case schema::Type::Body::INTERFACE_TYPE:
-      deps.insert(type.getBody().getInterfaceType());
+    case schema2::Type::INTERFACE:
+      deps.insert(type.getInterface());
       break;
-    case schema::Type::Body::LIST_TYPE:
-      enumerateDeps(type.getBody().getListType(), deps);
+    case schema2::Type::LIST:
+      enumerateDeps(type.getList(), deps);
       break;
     default:
       break;
   }
 }
 
-void enumerateDeps(schema::StructNode::Member::Reader member, std::set<uint64_t>& deps) {
-  switch (member.getBody().which()) {
-    case schema::StructNode::Member::Body::FIELD_MEMBER:
-      enumerateDeps(member.getBody().getFieldMember().getType(), deps);
-      break;
-    case schema::StructNode::Member::Body::UNION_MEMBER:
-      for (auto subMember: member.getBody().getUnionMember().getMembers()) {
-        enumerateDeps(subMember, deps);
+void enumerateDeps(schema2::Node::Reader node, std::set<uint64_t>& deps) {
+  switch (node.which()) {
+    case schema2::Node::STRUCT: {
+      auto structNode = node.getStruct();
+      for (auto field: structNode.getFields()) {
+        switch (field.which()) {
+          case schema2::Field::REGULAR:
+            enumerateDeps(field.getRegular().getType(), deps);
+            break;
+          case schema2::Field::GROUP:
+            deps.insert(field.getGroup());
+            break;
+        }
+      }
+      if (structNode.getIsGroup()) {
+        deps.insert(node.getScopeId());
       }
       break;
-    case schema::StructNode::Member::Body::GROUP_MEMBER:
-      for (auto subMember: member.getBody().getGroupMember().getMembers()) {
-        enumerateDeps(subMember, deps);
-      }
-      break;
-  }
-}
-
-void enumerateDeps(schema::Node::Reader node, std::set<uint64_t>& deps) {
-  switch (node.getBody().which()) {
-    case schema::Node::Body::STRUCT_NODE:
-      for (auto member: node.getBody().getStructNode().getMembers()) {
-        enumerateDeps(member, deps);
-      }
-      break;
-    case schema::Node::Body::INTERFACE_NODE:
-      for (auto method: node.getBody().getInterfaceNode().getMethods()) {
+    }
+    case schema2::Node::INTERFACE:
+      for (auto method: node.getInterface()) {
         for (auto param: method.getParams()) {
           enumerateDeps(param.getType(), deps);
         }
@@ -119,92 +113,15 @@ void enumerateDeps(schema::Node::Reader node, std::set<uint64_t>& deps) {
 struct OrderByName {
   template <typename T>
   inline bool operator()(const T& a, const T& b) const {
-    return a.member.getProto().getName() < b.member.getProto().getName();
+    return a.getProto().getName() < b.getProto().getName();
   }
 };
 
 template <typename MemberList>
-void makeMemberInfoTable(uint parent, MemberList&& members,
-                         kj::Vector<capnp::_::RawSchema::MemberInfo>& info);
-
-void makeSubMemberInfoTable(const StructSchema::Member& member,
-                            kj::Vector<capnp::_::RawSchema::MemberInfo>& info) {
-  switch (member.getProto().getBody().which()) {
-    case schema::StructNode::Member::Body::FIELD_MEMBER:
-      break;
-    case schema::StructNode::Member::Body::UNION_MEMBER:
-      // Only create a sub-table if the union is named.
-      if (member.getProto().getName().size() > 0) {
-        makeMemberInfoTable(1 + member.getProto().getOrdinal(),
-                            member.asUnion().getMembers(), info);
-      }
-      break;
-    case schema::StructNode::Member::Body::GROUP_MEMBER:
-      makeMemberInfoTable(1 + member.getProto().getOrdinal(), member.asGroup().getMembers(), info);
-      break;
-  }
-}
-void makeSubMemberInfoTable(const EnumSchema::Enumerant& member,
-                            kj::Vector<capnp::_::RawSchema::MemberInfo>& info) {}
-void makeSubMemberInfoTable(const InterfaceSchema::Method& member,
-                            kj::Vector<capnp::_::RawSchema::MemberInfo>& info) {}
-
-template <typename Member>
-struct MemberAndIndex {
-  Member member;
-  uint index;
-
-  MemberAndIndex(Member member): member(member), index(member.getIndex()) {}
-  MemberAndIndex(Member member, uint index): member(member), index(index) {}
-};
-
-void enumerateScope(const StructSchema::MemberList& members,
-                    kj::Vector<MemberAndIndex<StructSchema::Member>>& vec,
-                    uint offset = 0) {
-  // Given a member list, flatten all members of the scope into one vector.  This basically means
-  // copying all the members to the vector, except that unnamed unions are flattened, with their
-  // members' indexes being offset by the size of the parent scope.
-
-  for (auto member: members) {
-    vec.add(member, member.getIndex() + offset);
-    if (member.getProto().getName().size() == 0) {
-      // Flatten unnamed union.
-      enumerateScope(member.asUnion().getMembers(), vec, offset + members.size());
-    }
-  }
-}
-
-void enumerateScope(const EnumSchema::EnumerantList& members,
-                    kj::Vector<MemberAndIndex<EnumSchema::Enumerant>>& vec) {
-  for (auto member: members) {
-    vec.add(member);
-  }
-}
-
-void enumerateScope(const InterfaceSchema::MethodList& members,
-                    kj::Vector<MemberAndIndex<InterfaceSchema::Method>>& vec) {
-  for (auto member: members) {
-    vec.add(member);
-  }
-}
-
-template <typename MemberList>
-void makeMemberInfoTable(uint parent, MemberList&& members,
-                         kj::Vector<capnp::_::RawSchema::MemberInfo>& info) {
-  kj::Vector<MemberAndIndex<decltype(members[0])>> sorted(members.size());
-  enumerateScope(members, sorted);
-
+kj::Array<uint> makeMembersByName(MemberList&& members) {
+  auto sorted = KJ_MAP(members, member) { return member; };
   std::sort(sorted.begin(), sorted.end(), OrderByName());
-
-  for (auto& member: sorted) {
-    info.add(capnp::_::RawSchema::MemberInfo {
-      kj::implicitCast<uint16_t>(parent),
-      kj::implicitCast<uint16_t>(member.index)
-    });
-  }
-  for (auto member: members) {
-    makeSubMemberInfoTable(member, info);
-  }
+  return KJ_MAP(sorted, member) { return member.getIndex(); };
 }
 
 kj::StringPtr baseName(kj::StringPtr path) {
@@ -242,7 +159,7 @@ private:
       usedImports.insert(node.getId());
       for (auto annotation: node.getAnnotations()) {
         if (annotation.getId() == NAMESPACE_ANNOTATION_ID) {
-          return kj::strTree(" ::", annotation.getValue().getBody().getTextValue());
+          return kj::strTree(" ::", annotation.getValue().getText());
         }
       }
       return kj::strTree(" ");
@@ -284,36 +201,36 @@ private:
     return kj::mv(result);
   }
 
-  kj::StringTree typeName(schema::Type::Reader type) {
-    switch (type.getBody().which()) {
-      case schema::Type::Body::VOID_TYPE: return kj::strTree(" ::capnp::Void");
+  kj::StringTree typeName(schema2::Type::Reader type) {
+    switch (type.which()) {
+      case schema2::Type::VOID: return kj::strTree(" ::capnp::Void");
 
-      case schema::Type::Body::BOOL_TYPE: return kj::strTree("bool");
-      case schema::Type::Body::INT8_TYPE: return kj::strTree(" ::int8_t");
-      case schema::Type::Body::INT16_TYPE: return kj::strTree(" ::int16_t");
-      case schema::Type::Body::INT32_TYPE: return kj::strTree(" ::int32_t");
-      case schema::Type::Body::INT64_TYPE: return kj::strTree(" ::int64_t");
-      case schema::Type::Body::UINT8_TYPE: return kj::strTree(" ::uint8_t");
-      case schema::Type::Body::UINT16_TYPE: return kj::strTree(" ::uint16_t");
-      case schema::Type::Body::UINT32_TYPE: return kj::strTree(" ::uint32_t");
-      case schema::Type::Body::UINT64_TYPE: return kj::strTree(" ::uint64_t");
-      case schema::Type::Body::FLOAT32_TYPE: return kj::strTree("float");
-      case schema::Type::Body::FLOAT64_TYPE: return kj::strTree("double");
+      case schema2::Type::BOOL: return kj::strTree("bool");
+      case schema2::Type::INT8: return kj::strTree(" ::int8_t");
+      case schema2::Type::INT16: return kj::strTree(" ::int16_t");
+      case schema2::Type::INT32: return kj::strTree(" ::int32_t");
+      case schema2::Type::INT64: return kj::strTree(" ::int64_t");
+      case schema2::Type::UINT8: return kj::strTree(" ::uint8_t");
+      case schema2::Type::UINT16: return kj::strTree(" ::uint16_t");
+      case schema2::Type::UINT32: return kj::strTree(" ::uint32_t");
+      case schema2::Type::UINT64: return kj::strTree(" ::uint64_t");
+      case schema2::Type::FLOAT32: return kj::strTree("float");
+      case schema2::Type::FLOAT64: return kj::strTree("double");
 
-      case schema::Type::Body::TEXT_TYPE: return kj::strTree(" ::capnp::Text");
-      case schema::Type::Body::DATA_TYPE: return kj::strTree(" ::capnp::Data");
+      case schema2::Type::TEXT: return kj::strTree(" ::capnp::Text");
+      case schema2::Type::DATA: return kj::strTree(" ::capnp::Data");
 
-      case schema::Type::Body::ENUM_TYPE:
-        return cppFullName(schemaLoader.get(type.getBody().getEnumType()));
-      case schema::Type::Body::STRUCT_TYPE:
-        return cppFullName(schemaLoader.get(type.getBody().getStructType()));
-      case schema::Type::Body::INTERFACE_TYPE:
-        return cppFullName(schemaLoader.get(type.getBody().getInterfaceType()));
+      case schema2::Type::ENUM:
+        return cppFullName(schemaLoader.get(type.getEnum()));
+      case schema2::Type::STRUCT:
+        return cppFullName(schemaLoader.get(type.getStruct()));
+      case schema2::Type::INTERFACE:
+        return cppFullName(schemaLoader.get(type.getInterface()));
 
-      case schema::Type::Body::LIST_TYPE:
-        return kj::strTree(" ::capnp::List<", typeName(type.getBody().getListType()), ">");
+      case schema2::Type::LIST:
+        return kj::strTree(" ::capnp::List<", typeName(type.getList()), ">");
 
-      case schema::Type::Body::OBJECT_TYPE:
+      case schema2::Type::OBJECT:
         // Not used.
         return kj::strTree();
     }
@@ -329,29 +246,19 @@ private:
 
   DiscriminantChecks makeDiscriminantChecks(kj::StringPtr scope,
                                             kj::StringPtr memberName,
-                                            StructSchema::Union containingUnion) {
-    auto unionProto = containingUnion.getProto();
-    kj::StringPtr unionScope;
-    kj::String ownUnionScope;
-    if (unionProto.getName().size() > 0) {
-      ownUnionScope = kj::str(toTitleCase(unionProto.getName()), "::");
-      unionScope = ownUnionScope;
-    } else {
-      // Anonymous union.
-      unionScope = scope;
-    }
-    auto discrimOffset = unionProto.getBody().getUnionMember().getDiscriminantOffset();
+                                            StructSchema containingStruct) {
+    auto discrimOffset = containingStruct.getProto().getStruct().getDiscriminantOffset();
 
     kj::String upperCase = toUpperCase(memberName);
 
     return DiscriminantChecks {
         kj::str(
-            "  KJ_IREQUIRE(which() == ", unionScope, upperCase, ",\n"
+            "  KJ_IREQUIRE(which() == ", scope, upperCase, ",\n"
             "              \"Must check which() before get()ing a union member.\");\n"),
         kj::str(
-            "  _builder.setDataField<", unionScope, "Which>(\n"
+            "  _builder.setDataField<", scope, "Which>(\n"
             "      ", discrimOffset, " * ::capnp::ELEMENTS, ",
-                      unionScope, upperCase, ");\n")
+                      scope, upperCase, ");\n")
     };
   }
 
@@ -372,31 +279,71 @@ private:
     OBJECT
   };
 
-  FieldText makeFieldText(kj::StringPtr scope, StructSchema::Field member) {
-    auto proto = member.getProto();
-    auto field = proto.getBody().getFieldMember();
+  FieldText makeFieldText(kj::StringPtr scope, StructSchema::Field field) {
+    auto proto = field.getProto();
+    kj::String titleCase = toTitleCase(proto.getName());
+
+    DiscriminantChecks unionDiscrim;
+    if (proto.hasDiscriminantValue()) {
+      unionDiscrim = makeDiscriminantChecks(scope, proto.getName(), field.getContainingStruct());
+    }
+
+    switch (proto.which()) {
+      case schema2::Field::REGULAR:
+        // Continue below.
+        break;
+
+      case schema2::Field::GROUP:
+        return FieldText {
+            kj::strTree(
+                "  inline ", titleCase, "::Reader get", titleCase, "() const;\n"
+                "\n"),
+
+            kj::strTree(
+                "  inline ", titleCase, "::Builder get", titleCase, "();\n"
+                "  inline ", titleCase, "::Builder init", titleCase, "();\n"
+                "\n"),
+
+            kj::strTree(
+                "inline ", scope, titleCase, "::Reader ", scope, "Reader::get", titleCase, "() const {\n",
+                unionDiscrim.check,
+                "  return ", scope, titleCase, "::Reader(_reader);\n"
+                "}\n"
+                "inline ", scope, titleCase, "::Builder ", scope, "Builder::get", titleCase, "() {\n",
+                unionDiscrim.check,
+                "  return ", scope, titleCase, "::Builder(_builder);\n"
+                "}\n"
+                "inline ", scope, titleCase, "::Builder ", scope, "Builder::init", titleCase, "() {\n",
+                unionDiscrim.set,
+                // TODO(soon):  Zero out fields.
+                "  return ", scope, titleCase, "::Builder(_builder);\n"
+                "}\n")
+          };
+    }
+
+    auto regularField = proto.getRegular();
 
     FieldKind kind;
     kj::String ownedType;
-    kj::String type = typeName(field.getType()).flatten();
+    kj::String type = typeName(regularField.getType()).flatten();
     kj::StringPtr setterDefault;  // only for void
     kj::String defaultMask;    // primitives only
     size_t defaultOffset = 0;    // pointers only: offset of the default value within the schema.
     size_t defaultSize = 0;      // blobs only: byte size of the default value.
 
-    auto typeBody = field.getType().getBody();
-    auto defaultBody = field.getDefaultValue().getBody();
+    auto typeBody = regularField.getType();
+    auto defaultBody = regularField.getDefaultValue();
     switch (typeBody.which()) {
-      case schema::Type::Body::VOID_TYPE:
+      case schema2::Type::VOID:
         kind = FieldKind::PRIMITIVE;
         setterDefault = " = ::capnp::Void::VOID";
         break;
 
 #define HANDLE_PRIMITIVE(discrim, typeName, defaultName, suffix) \
-      case schema::Type::Body::discrim##_TYPE: \
+      case schema2::Type::discrim: \
         kind = FieldKind::PRIMITIVE; \
-        if (defaultBody.get##defaultName##Value() != 0) { \
-          defaultMask = kj::str(defaultBody.get##defaultName##Value(), #suffix); \
+        if (defaultBody.get##defaultName() != 0) { \
+          defaultMask = kj::str(defaultBody.get##defaultName(), #suffix); \
         } \
         break;
 
@@ -411,69 +358,69 @@ private:
       HANDLE_PRIMITIVE(UINT64, ::uint64_t, Uint64, ull);
 #undef HANDLE_PRIMITIVE
 
-      case schema::Type::Body::FLOAT32_TYPE:
+      case schema2::Type::FLOAT32:
         kind = FieldKind::PRIMITIVE;
-        if (defaultBody.getFloat32Value() != 0) {
+        if (defaultBody.getFloat32() != 0) {
           uint32_t mask;
-          float value = defaultBody.getFloat32Value();
+          float value = defaultBody.getFloat32();
           static_assert(sizeof(mask) == sizeof(value), "bug");
           memcpy(&mask, &value, sizeof(mask));
           defaultMask = kj::str(mask, "u");
         }
         break;
 
-      case schema::Type::Body::FLOAT64_TYPE:
+      case schema2::Type::FLOAT64:
         kind = FieldKind::PRIMITIVE;
-        if (defaultBody.getFloat64Value() != 0) {
+        if (defaultBody.getFloat64() != 0) {
           uint64_t mask;
-          double value = defaultBody.getFloat64Value();
+          double value = defaultBody.getFloat64();
           static_assert(sizeof(mask) == sizeof(value), "bug");
           memcpy(&mask, &value, sizeof(mask));
           defaultMask = kj::str(mask, "ull");
         }
         break;
 
-      case schema::Type::Body::TEXT_TYPE:
+      case schema2::Type::TEXT:
         kind = FieldKind::BLOB;
-        if (defaultBody.hasTextValue()) {
-          defaultOffset = member.getDefaultValueSchemaOffset();
-          defaultSize = defaultBody.getTextValue().size();
+        if (defaultBody.hasText()) {
+          defaultOffset = field.getDefaultValueSchemaOffset();
+          defaultSize = defaultBody.getText().size();
         }
         break;
-      case schema::Type::Body::DATA_TYPE:
+      case schema2::Type::DATA:
         kind = FieldKind::BLOB;
-        if (defaultBody.hasDataValue()) {
-          defaultOffset = member.getDefaultValueSchemaOffset();
-          defaultSize = defaultBody.getDataValue().size();
+        if (defaultBody.hasData()) {
+          defaultOffset = field.getDefaultValueSchemaOffset();
+          defaultSize = defaultBody.getData().size();
         }
         break;
 
-      case schema::Type::Body::ENUM_TYPE:
+      case schema2::Type::ENUM:
         kind = FieldKind::PRIMITIVE;
-        if (defaultBody.getEnumValue() != 0) {
-          defaultMask = kj::str(defaultBody.getEnumValue(), "u");
+        if (defaultBody.getEnum() != 0) {
+          defaultMask = kj::str(defaultBody.getEnum(), "u");
         }
         break;
 
-      case schema::Type::Body::STRUCT_TYPE:
+      case schema2::Type::STRUCT:
         kind = FieldKind::STRUCT;
-        if (defaultBody.hasStructValue()) {
-          defaultOffset = member.getDefaultValueSchemaOffset();
+        if (defaultBody.hasStruct()) {
+          defaultOffset = field.getDefaultValueSchemaOffset();
         }
         break;
-      case schema::Type::Body::LIST_TYPE:
+      case schema2::Type::LIST:
         kind = FieldKind::LIST;
-        if (defaultBody.hasListValue()) {
-          defaultOffset = member.getDefaultValueSchemaOffset();
+        if (defaultBody.hasList()) {
+          defaultOffset = field.getDefaultValueSchemaOffset();
         }
         break;
-      case schema::Type::Body::INTERFACE_TYPE:
+      case schema2::Type::INTERFACE:
         kind = FieldKind::INTERFACE;
         break;
-      case schema::Type::Body::OBJECT_TYPE:
+      case schema2::Type::OBJECT:
         kind = FieldKind::OBJECT;
-        if (defaultBody.hasObjectValue()) {
-          defaultOffset = member.getDefaultValueSchemaOffset();
+        if (defaultBody.hasObject()) {
+          defaultOffset = field.getDefaultValueSchemaOffset();
         }
         break;
     }
@@ -483,14 +430,7 @@ private:
       defaultMaskParam = kj::str(", ", defaultMask);
     }
 
-    kj::String titleCase = toTitleCase(proto.getName());
-
-    DiscriminantChecks unionDiscrim;
-    KJ_IF_MAYBE(u, member.getContainingUnion()) {
-      unionDiscrim = makeDiscriminantChecks(scope, proto.getName(), *u);
-    }
-
-    uint offset = field.getOffset();
+    uint offset = regularField.getOffset();
 
     if (kind == FieldKind::PRIMITIVE) {
       return FieldText {
@@ -635,7 +575,7 @@ private:
     } else {
       // Blob, struct, or list.  These have only minor differences.
 
-      uint64_t typeId = member.getContainingStruct().getProto().getId();
+      uint64_t typeId = field.getContainingStruct().getProto().getId();
       kj::String defaultParam = defaultOffset == 0 ? kj::str() : kj::str(
           ",\n        ::capnp::schemas::s_", kj::hex(typeId), ".encodedNode + ", defaultOffset,
           defaultSize == 0 ? kj::strTree() : kj::strTree(", ", defaultSize));
@@ -644,38 +584,38 @@ private:
       bool isStructList = false;
       if (kind == FieldKind::LIST) {
         bool primitiveElement = false;
-        switch (typeBody.getListType().getBody().which()) {
-          case schema::Type::Body::VOID_TYPE:
-          case schema::Type::Body::BOOL_TYPE:
-          case schema::Type::Body::INT8_TYPE:
-          case schema::Type::Body::INT16_TYPE:
-          case schema::Type::Body::INT32_TYPE:
-          case schema::Type::Body::INT64_TYPE:
-          case schema::Type::Body::UINT8_TYPE:
-          case schema::Type::Body::UINT16_TYPE:
-          case schema::Type::Body::UINT32_TYPE:
-          case schema::Type::Body::UINT64_TYPE:
-          case schema::Type::Body::FLOAT32_TYPE:
-          case schema::Type::Body::FLOAT64_TYPE:
-          case schema::Type::Body::ENUM_TYPE:
+        switch (typeBody.getList().which()) {
+          case schema2::Type::VOID:
+          case schema2::Type::BOOL:
+          case schema2::Type::INT8:
+          case schema2::Type::INT16:
+          case schema2::Type::INT32:
+          case schema2::Type::INT64:
+          case schema2::Type::UINT8:
+          case schema2::Type::UINT16:
+          case schema2::Type::UINT32:
+          case schema2::Type::UINT64:
+          case schema2::Type::FLOAT32:
+          case schema2::Type::FLOAT64:
+          case schema2::Type::ENUM:
             primitiveElement = true;
             break;
 
-          case schema::Type::Body::TEXT_TYPE:
-          case schema::Type::Body::DATA_TYPE:
-          case schema::Type::Body::LIST_TYPE:
-          case schema::Type::Body::INTERFACE_TYPE:
-          case schema::Type::Body::OBJECT_TYPE:
+          case schema2::Type::TEXT:
+          case schema2::Type::DATA:
+          case schema2::Type::LIST:
+          case schema2::Type::INTERFACE:
+          case schema2::Type::OBJECT:
             primitiveElement = false;
             break;
 
-          case schema::Type::Body::STRUCT_TYPE:
+          case schema2::Type::STRUCT:
             isStructList = true;
             primitiveElement = false;
             break;
         }
         elementReaderType = kj::str(
-            typeName(typeBody.getListType()),
+            typeName(typeBody.getList()),
             primitiveElement ? "" : "::Reader");
       }
 
@@ -766,7 +706,7 @@ private:
   // -----------------------------------------------------------------
 
   kj::StringTree makeReaderDef(kj::StringPtr fullName, kj::StringPtr unqualifiedParentType,
-                               kj::StringPtr stringifier, kj::StringTree&& methodDecls) {
+                               bool isUnion, kj::Array<kj::StringTree>&& methodDecls) {
     return kj::strTree(
         "class ", fullName, "::Reader {\n"
         "public:\n"
@@ -779,6 +719,7 @@ private:
         "    return _reader.totalSize() / ::capnp::WORDS;\n"
         "  }\n"
         "\n",
+        isUnion ? kj::strTree("  inline Which which() const;\n") : kj::strTree(),
         kj::mv(methodDecls),
         "private:\n"
         "  ::capnp::_::StructReader _reader;\n"
@@ -792,16 +733,15 @@ private:
         "  friend class ::capnp::Orphanage;\n"
         "  friend ::kj::StringTree KJ_STRINGIFY(", fullName, "::Reader reader);\n"
         "};\n"
-        "\n",
-        stringifier.size() > 0 ? kj::strTree(
-          "inline ::kj::StringTree KJ_STRINGIFY(", fullName, "::Reader reader) {\n"
-          "  return ::capnp::_::", stringifier, "<", fullName, ">(reader._reader);\n"
-          "}\n"
-          "\n") : kj::strTree());
+        "\n"
+        "inline ::kj::StringTree KJ_STRINGIFY(", fullName, "::Reader reader) {\n"
+        "  return ::capnp::_::structString<", fullName, ">(reader._reader);\n"
+        "}\n"
+        "\n");
   }
 
   kj::StringTree makeBuilderDef(kj::StringPtr fullName, kj::StringPtr unqualifiedParentType,
-                                kj::StringPtr stringifier, kj::StringTree&& methodDecls) {
+                                bool isUnion, kj::Array<kj::StringTree>&& methodDecls) {
     return kj::strTree(
         "class ", fullName, "::Builder {\n"
         "public:\n"
@@ -814,6 +754,7 @@ private:
         "\n"
         "  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }\n"
         "\n",
+        isUnion ? kj::strTree("  inline Which which();\n") : kj::strTree(),
         kj::mv(methodDecls),
         "private:\n"
         "  ::capnp::_::StructBuilder _builder;\n"
@@ -822,235 +763,11 @@ private:
         "  friend class ::capnp::Orphanage;\n"
         "  friend ::kj::StringTree KJ_STRINGIFY(", fullName, "::Builder builder);\n"
         "};\n"
-        "\n",
-        stringifier.size() > 0 ? kj::strTree(
-            "inline ::kj::StringTree KJ_STRINGIFY(", fullName, "::Builder builder) {\n"
-            "  return ::capnp::_::", stringifier, "<", fullName, ">(builder._builder.asReader());\n"
-            "}\n"
-            "\n") : kj::strTree());
-  }
-
-  // -----------------------------------------------------------------
-
-  struct MembersText {
-    kj::StringTree innerTypeDecls;
-    kj::StringTree innerTypeDefs;
-    kj::StringTree innerTypeReaderBuilderDefs;
-    kj::StringTree readerMethodDecls;
-    kj::StringTree builderMethodDecls;
-    kj::StringTree inlineMethodDefs;
-    kj::StringTree capnpPrivateDecls;
-    kj::StringTree capnpPrivateDefs;
-  };
-
-  MembersText makeMemberText(kj::StringPtr namespace_, kj::StringPtr containingType,
-                             StructSchema::Member member) {
-    auto proto = member.getProto();
-    switch (proto.getBody().which()) {
-      case schema::StructNode::Member::Body::FIELD_MEMBER: {
-        auto fieldText = makeFieldText(kj::str(containingType, "::"), member.asField());
-        return MembersText {
-          kj::strTree(),
-          kj::strTree(),
-          kj::strTree(),
-          kj::mv(fieldText.readerMethodDecls),
-          kj::mv(fieldText.builderMethodDecls),
-          kj::mv(fieldText.inlineMethodDefs),
-          kj::strTree(),
-          kj::strTree(),
-        };
-      }
-
-      case schema::StructNode::Member::Body::UNION_MEMBER: {
-        auto subMembers = member.asUnion().getMembers();
-
-        auto unionName = proto.getName();
-
-        uint discrimOffset = proto.getBody().getUnionMember().getDiscriminantOffset();
-
-        auto whichEnumDef = kj::strTree(
-            "  enum Which: uint16_t {\n",
-            KJ_MAP(subMembers, subMember) {
-              return kj::strTree(
-                  "    ", toUpperCase(subMember.getProto().getName()), ",\n");
-            },
-            "  };\n");
-
-        if (unionName.size() == 0) {
-          // Anonymous union.
-          auto subText = makeMembersText(namespace_, containingType, subMembers);
-
-          return MembersText {
-            kj::strTree(kj::mv(whichEnumDef), kj::mv(subText.innerTypeDecls)),
-            kj::mv(subText.innerTypeDefs),
-            kj::mv(subText.innerTypeReaderBuilderDefs),
-
-            kj::strTree(
-                "  inline Which which() const;\n",
-                kj::mv(subText.readerMethodDecls)),
-            kj::strTree(
-                "  inline Which which();\n",
-                kj::mv(subText.builderMethodDecls)),
-            kj::strTree(
-                "inline ", containingType, "::Which ", containingType, "::Reader::which() const {\n"
-                "  return _reader.getDataField<Which>(", discrimOffset, " * ::capnp::ELEMENTS);\n"
-                "}\n"
-                "inline ", containingType, "::Which ", containingType, "::Builder::which() {\n"
-                "  return _builder.getDataField<Which>(", discrimOffset, " * ::capnp::ELEMENTS);\n"
-                "}\n"
-                "\n",
-                kj::mv(subText.inlineMethodDefs)),
-            kj::mv(subText.capnpPrivateDecls),
-            kj::mv(subText.capnpPrivateDefs),
-          };
-        } else {
-          // Named union.
-          auto titleCase = toTitleCase(unionName);
-          auto fullName = kj::str(containingType, "::", titleCase);
-          auto subText = makeMembersText(namespace_, fullName, subMembers);
-
-          return MembersText {
-            kj::strTree(
-                "  struct ", titleCase, ";\n"),
-
-            kj::strTree(
-                "struct ", fullName, " {\n"
-                "  ", titleCase, "() = delete;\n"
-                "  class Reader;\n"
-                "  class Builder;\n"
-                "\n",
-                kj::mv(whichEnumDef),
-                kj::mv(subText.innerTypeDecls),
-                "};\n"
-                "\n",
-                kj::mv(subText.innerTypeDefs)),
-
-            kj::strTree(
-                makeReaderDef(fullName, titleCase, "unionString", kj::strTree(
-                    "  inline Which which() const;\n",
-                    kj::mv(subText.readerMethodDecls))),
-                makeBuilderDef(fullName, titleCase, "unionString", kj::strTree(
-                    "  inline Which which();\n",
-                    kj::mv(subText.builderMethodDecls))),
-                kj::mv(subText.innerTypeReaderBuilderDefs)),
-
-            kj::strTree(
-                "  inline ", titleCase, "::Reader get", titleCase, "() const;\n"),
-
-            kj::strTree(
-                "  inline ", titleCase, "::Builder get", titleCase, "();\n"),
-
-            kj::strTree(
-                "inline ", fullName, "::Reader ", containingType, "::Reader::get", titleCase, "() const {\n"
-                "  return ", fullName, "::Reader(_reader);\n"
-                "}\n"
-                "inline ", fullName, "::Builder ", containingType, "::Builder::get", titleCase, "() {\n"
-                "  return ", fullName, "::Builder(_builder);\n"
-                "}\n"
-                "inline ", fullName, "::Which ", fullName, "::Reader::which() const {\n"
-                "  return _reader.getDataField<Which>(", discrimOffset, " * ::capnp::ELEMENTS);\n"
-                "}\n"
-                "inline ", fullName, "::Which ", fullName, "::Builder::which() {\n"
-                "  return _builder.getDataField<Which>(", discrimOffset, " * ::capnp::ELEMENTS);\n"
-                "}\n"
-                "\n",
-                kj::mv(subText.inlineMethodDefs)),
-
-            kj::strTree(
-                "CAPNP_DECLARE_UNION(\n"
-                "    ", namespace_, "::", fullName, ",\n"
-                "    ", namespace_, "::", containingType, ", ", member.getIndex(), ");\n",
-                kj::mv(subText.capnpPrivateDecls)),
-            kj::strTree(
-                "CAPNP_DEFINE_UNION(\n"
-                "    ", namespace_, "::", fullName, ");\n",
-                kj::mv(subText.capnpPrivateDefs)),
-          };
-        }
-      }
-
-      case schema::StructNode::Member::Body::GROUP_MEMBER: {
-        auto titleCase = toTitleCase(proto.getName());
-        auto fullName = kj::str(containingType, "::", titleCase);
-        auto subText = makeMembersText(namespace_, fullName, member.asGroup().getMembers());
-
-        DiscriminantChecks unionDiscrim;
-        KJ_IF_MAYBE(u, member.getContainingUnion()) {
-          unionDiscrim = makeDiscriminantChecks(
-              kj::str(containingType, "::"), proto.getName(), *u);
-        }
-
-        return MembersText {
-          kj::strTree(
-              "  struct ", titleCase, ";\n"),
-
-          kj::strTree(
-              "struct ", containingType, "::", titleCase, " {\n"
-              "  ", titleCase, "() = delete;\n"
-              "\n",
-              "  class Reader;\n"
-              "  class Builder;\n",
-              kj::mv(subText.innerTypeDecls),
-              "};\n"
-              "\n",
-              kj::mv(subText.innerTypeDefs)),
-
-          kj::strTree(
-              makeReaderDef(fullName, titleCase, "",
-                            kj::mv(subText.readerMethodDecls)),
-              makeBuilderDef(fullName, titleCase, "",
-                             kj::mv(subText.builderMethodDecls)),
-              kj::mv(subText.innerTypeReaderBuilderDefs)),
-
-          kj::strTree(
-              "  inline ", titleCase, "::Reader get", titleCase, "() const;\n"),
-
-          kj::strTree(
-              "  inline ", titleCase, "::Builder get", titleCase, "();\n"
-              "  inline ", titleCase, "::Builder init", titleCase, "();\n"),
-
-          kj::strTree(
-              "inline ", fullName, "::Reader ", containingType, "::Reader::get", titleCase, "() const {\n",
-              unionDiscrim.check,
-              "  return ", fullName, "::Reader(_reader);\n"
-              "}\n"
-              "inline ", fullName, "::Builder ", containingType, "::Builder::get", titleCase, "() {\n",
-              unionDiscrim.check,
-              "  return ", fullName, "::Builder(_builder);\n"
-              "}\n"
-              // TODO(soon):  This should really zero out the existing group.  Maybe unions should
-              //   support zeroing out the whole union?
-              "inline ", fullName, "::Builder ", containingType, "::Builder::init", titleCase, "() {\n",
-              unionDiscrim.set,
-              "  return ", fullName, "::Builder(_builder);\n"
-              "}\n",
-              kj::mv(subText.inlineMethodDefs)),
-
-          kj::mv(subText.capnpPrivateDecls),
-          kj::mv(subText.capnpPrivateDefs),
-        };
-      }
-    }
-
-    KJ_UNREACHABLE;
-  }
-
-  MembersText makeMembersText(kj::StringPtr namespace_, kj::StringPtr containingType,
-                              StructSchema::MemberList members) {
-    auto memberTexts = KJ_MAP(members, member) {
-      return makeMemberText(namespace_, containingType, member);
-    };
-
-    return MembersText {
-      kj::strTree(KJ_MAP(memberTexts, m) { return kj::mv(m.innerTypeDecls); }),
-      kj::strTree(KJ_MAP(memberTexts, m) { return kj::mv(m.innerTypeDefs); }),
-      kj::strTree(KJ_MAP(memberTexts, m) { return kj::mv(m.innerTypeReaderBuilderDefs); }),
-      kj::strTree(KJ_MAP(memberTexts, m) { return kj::mv(m.readerMethodDecls); }),
-      kj::strTree(KJ_MAP(memberTexts, m) { return kj::mv(m.builderMethodDecls); }),
-      kj::strTree(KJ_MAP(memberTexts, m) { return kj::mv(m.inlineMethodDefs); }),
-      kj::strTree(KJ_MAP(memberTexts, m) { return kj::mv(m.capnpPrivateDecls); }),
-      kj::strTree(KJ_MAP(memberTexts, m) { return kj::mv(m.capnpPrivateDefs); }),
-    };
+        "\n"
+        "inline ::kj::StringTree KJ_STRINGIFY(", fullName, "::Builder builder) {\n"
+        "  return ::capnp::_::structString<", fullName, ">(builder._builder.asReader());\n"
+        "}\n"
+        "\n");
   }
 
   // -----------------------------------------------------------------
@@ -1071,14 +788,27 @@ private:
     auto proto = schema.getProto();
     auto fullName = kj::str(scope, name);
     auto subScope = kj::str(fullName, "::");
-    auto nestedTexts = KJ_MAP(proto.getNestedNodes(), nested) {
-      return makeNodeText(namespace_, subScope, nested.getName(), schemaLoader.get(nested.getId()));
-    };
     auto hexId = kj::hex(proto.getId());
 
-    kj::ArrayPtr<const word> rawSchema = schema.asUncheckedMessage();
+    // Compute nested nodes, including groups.
+    kj::Vector<NodeText> nestedTexts(proto.getNestedNodes().size());
+    for (auto nested: proto.getNestedNodes()) {
+      nestedTexts.add(makeNodeText(
+          namespace_, subScope, nested.getName(), schemaLoader.get(nested.getId())));
+    };
+
+    if (proto.which() == schema2::Node::STRUCT) {
+      for (auto field: proto.getStruct().getFields()) {
+        if (field.which() == schema2::Field::GROUP) {
+          nestedTexts.add(makeNodeText(
+              namespace_, subScope, toTitleCase(field.getName()),
+              schemaLoader.get(field.getGroup())));
+        }
+      }
+    }
 
     // Convert the encoded schema to a literal byte array.
+    kj::ArrayPtr<const word> rawSchema = schema.asUncheckedMessage();
     auto schemaLiteral = kj::StringTree(KJ_MAP(rawSchema, w) {
       const byte* bytes = reinterpret_cast<const byte*>(&w);
 
@@ -1094,16 +824,16 @@ private:
     std::set<uint64_t> deps;
     enumerateDeps(proto, deps);
 
-    kj::Vector<capnp::_::RawSchema::MemberInfo> memberInfos;
-    switch (proto.getBody().which()) {
-      case schema::Node::Body::STRUCT_NODE:
-        makeMemberInfoTable(0, schema.asStruct().getMembers(), memberInfos);
+    kj::Array<uint> membersByName;
+    switch (proto.which()) {
+      case schema2::Node::STRUCT:
+        membersByName = makeMembersByName(schema.asStruct().getFields());
         break;
-      case schema::Node::Body::ENUM_NODE:
-        makeMemberInfoTable(0, schema.asEnum().getEnumerants(), memberInfos);
+      case schema2::Node::ENUM:
+        membersByName = makeMembersByName(schema.asEnum().getEnumerants());
         break;
-      case schema::Node::Body::INTERFACE_NODE:
-        makeMemberInfoTable(0, schema.asInterface().getMethods(), memberInfos);
+      case schema2::Node::INTERFACE:
+        membersByName = makeMembersByName(schema.asInterface().getMethods());
         break;
       default:
         break;
@@ -1119,51 +849,66 @@ private:
         },
         "};\n"
         "static const ::capnp::_::RawSchema::MemberInfo m_", hexId, "[] = {\n",
-        KJ_MAP(memberInfos, info) {
-          return kj::strTree("  { ", info.scopeOrdinal, ", ", info.index, " },\n");
-        },
+        kj::StringTree(KJ_MAP(membersByName, index) { return kj::strTree(index); }, ", "),
         "};\n"
         "const ::capnp::_::RawSchema s_", hexId, " = {\n"
         "  0x", hexId, ", b_", hexId, ".words, ", rawSchema.size(), ", d_", hexId, ", m_", hexId, ",\n"
-        "  ", deps.size(), ", ", memberInfos.size(), ", nullptr, nullptr\n"
+        "  ", deps.size(), ", ", membersByName.size(), ", nullptr, nullptr\n"
         "};\n");
 
-    switch (proto.getBody().which()) {
-      case schema::Node::Body::FILE_NODE:
+    switch (proto.which()) {
+      case schema2::Node::FILE:
         KJ_FAIL_REQUIRE("This method shouldn't be called on file nodes.");
 
-      case schema::Node::Body::STRUCT_NODE: {
-        auto membersText = makeMembersText(namespace_, fullName, schema.asStruct().getMembers());
+      case schema2::Node::STRUCT: {
+        auto fieldTexts =
+            KJ_MAP(schema.asStruct().getFields(), f) { return makeFieldText(subScope, f); };
 
-        auto structNode = proto.getBody().getStructNode();
+        auto structNode = proto.getStruct();
+        uint discrimOffset = structNode.getDiscriminantOffset();
 
         return NodeText {
           kj::strTree(
               "  struct ", name, ";\n"),
 
           kj::strTree(
-              "struct ", scope, name, " {\n",
+              "struct ", fullName, " {\n",
               "  ", name, "() = delete;\n"
               "\n"
               "  class Reader;\n"
               "  class Builder;\n",
-              kj::mv(membersText.innerTypeDecls),
+              structNode.getDiscriminantCount() == 0 ? kj::strTree() : kj::strTree(
+                  "  enum Which: uint16_t {\n",
+                  KJ_MAP(structNode.getFields(), f) {
+                    if (f.hasDiscriminantValue()) {
+                      return kj::strTree("    ", toUpperCase(f.getName()), ",\n");
+                    } else {
+                      return kj::strTree();
+                    }
+                  },
+                  "  };\n"),
               KJ_MAP(nestedTexts, n) { return kj::mv(n.outerTypeDecl); },
               "};\n"
               "\n",
-              kj::mv(membersText.innerTypeDefs),
               KJ_MAP(nestedTexts, n) { return kj::mv(n.outerTypeDef); }),
 
           kj::strTree(
-              makeReaderDef(fullName, name, "structString",
-                            kj::mv(membersText.readerMethodDecls)),
-              makeBuilderDef(fullName, name, "structString",
-                             kj::mv(membersText.builderMethodDecls)),
-              kj::mv(membersText.innerTypeReaderBuilderDefs),
+              makeReaderDef(fullName, name, structNode.getDiscriminantCount() != 0,
+                            KJ_MAP(fieldTexts, f) { return kj::mv(f.readerMethodDecls); }),
+              makeBuilderDef(fullName, name, structNode.getDiscriminantCount() != 0,
+                             KJ_MAP(fieldTexts, f) { return kj::mv(f.builderMethodDecls); }),
               KJ_MAP(nestedTexts, n) { return kj::mv(n.readerBuilderDefs); }),
 
           kj::strTree(
-              kj::mv(membersText.inlineMethodDefs),
+              structNode.getDiscriminantCount() == 0 ? kj::strTree() : kj::strTree(
+                  "inline ", fullName, "::Which ", fullName, "::Reader::which() const {\n"
+                  "  return _reader.getDataField<Which>(", discrimOffset, " * ::capnp::ELEMENTS);\n"
+                  "}\n"
+                  "inline ", fullName, "::Which ", fullName, "::Builder::which() {\n"
+                  "  return _builder.getDataField<Which>(", discrimOffset, " * ::capnp::ELEMENTS);\n"
+                  "}\n"
+                  "\n"),
+              KJ_MAP(fieldTexts, f) { return kj::mv(f.inlineMethodDefs); },
               KJ_MAP(nestedTexts, n) { return kj::mv(n.inlineMethodDefs); }),
 
           kj::strTree(
@@ -1181,18 +926,16 @@ private:
                       structNode.getPointerSectionSize(), ", ",
                       FIELD_SIZE_NAMES[static_cast<uint>(structNode.getPreferredListEncoding())],
                       ");\n",
-              kj::mv(membersText.capnpPrivateDecls),
               KJ_MAP(nestedTexts, n) { return kj::mv(n.capnpPrivateDecls); }),
 
           kj::strTree(
               "CAPNP_DEFINE_STRUCT(\n"
               "    ", namespace_, "::", fullName, ");\n",
-              kj::mv(membersText.capnpPrivateDefs),
               KJ_MAP(nestedTexts, n) { return kj::mv(n.capnpPrivateDefs); }),
         };
       }
 
-      case schema::Node::Body::ENUM_NODE: {
+      case schema2::Node::ENUM: {
         auto enumerants = schema.asEnum().getEnumerants();
 
         return NodeText {
@@ -1227,7 +970,7 @@ private:
         };
       }
 
-      case schema::Node::Body::INTERFACE_NODE: {
+      case schema2::Node::INTERFACE: {
         return NodeText {
           kj::strTree(),
           kj::strTree(),
@@ -1246,7 +989,7 @@ private:
         };
       }
 
-      case schema::Node::Body::CONST_NODE: {
+      case schema2::Node::CONST: {
         return NodeText {
           kj::strTree(),
           kj::strTree(),
@@ -1261,7 +1004,7 @@ private:
         };
       }
 
-      case schema::Node::Body::ANNOTATION_NODE: {
+      case schema2::Node::ANNOTATION: {
         return NodeText {
           kj::strTree(),
           kj::strTree(),
@@ -1287,7 +1030,8 @@ private:
     kj::StringTree source;
   };
 
-  FileText makeFileText(Schema schema) {
+  FileText makeFileText(Schema schema,
+                        schema2::CodeGeneratorRequest::RequestedFile::Reader request) {
     usedImports.clear();
 
     auto node = schema.getProto();
@@ -1298,7 +1042,7 @@ private:
 
     for (auto annotation: node.getAnnotations()) {
       if (annotation.getId() == NAMESPACE_ANNOTATION_ID) {
-        kj::StringPtr ns = annotation.getValue().getBody().getTextValue();
+        kj::StringPtr ns = annotation.getValue().getText();
         kj::StringPtr ns2 = ns;
         namespacePrefix = kj::str("::", ns);
 
@@ -1327,7 +1071,7 @@ private:
     kj::String separator = kj::str("// ", kj::repeat('=', 87), "\n");
 
     kj::Vector<kj::StringPtr> includes;
-    for (auto import: node.getBody().getFileNode().getImports()) {
+    for (auto import: request.getImports()) {
       if (usedImports.count(import.getId()) > 0) {
         includes.add(import.getName());
       }
@@ -1430,7 +1174,7 @@ private:
     ReaderOptions options;
     options.traversalLimitInWords = 1 << 30;  // Don't limit.
     StreamFdMessageReader reader(STDIN_FILENO, options);
-    auto request = reader.getRoot<schema::CodeGeneratorRequest>();
+    auto request = reader.getRoot<schema2::CodeGeneratorRequest>();
 
     for (auto node: request.getNodes()) {
       schemaLoader.load(node);
@@ -1439,9 +1183,9 @@ private:
     kj::FdOutputStream rawOut(STDOUT_FILENO);
     kj::BufferedOutputStreamWrapper out(rawOut);
 
-    for (auto fileId: request.getRequestedFiles()) {
-      auto schema = schemaLoader.get(fileId);
-      auto fileText = makeFileText(schema);
+    for (auto requestedFile: request.getRequestedFiles()) {
+      auto schema = schemaLoader.get(requestedFile.getId());
+      auto fileText = makeFileText(schema, requestedFile);
 
       writeFile(kj::str(schema.getProto().getDisplayName(), ".h"), fileText.header);
       writeFile(kj::str(schema.getProto().getDisplayName(), ".c++"), fileText.source);

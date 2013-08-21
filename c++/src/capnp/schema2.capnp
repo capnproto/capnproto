@@ -42,7 +42,7 @@ struct Node {
   # If you want a shorter version of `displayName` (just naming this node, without its surrounding
   # scope), chop off this many characters from the beginning of `displayName`.
 
-  scopeId @3 :Id = 0;
+  scopeId @3 :Id;
   # ID of the lexical parent node.  Typically, the scope node will have a NestedNode pointing back
   # at this node, but robust code should avoid relying on this (and, in fact, group nodes are not
   # listed in the outer struct's nestedNodes, since they are listed in the fields).  `scopeId` is
@@ -105,7 +105,8 @@ struct Node {
       # `isGroup` = true.
 
       discriminantOffset @12 :UInt32;
-      # If `isUnion` is true, this is the offset of the union discriminant, in multiples of 16 bits.
+      # If `discriminantCount` is non-zero, this is the offset of the union discriminant, in
+      # multiples of 16 bits.
 
       fields @13 :List(Field);
       # Fields defined within this scope (either the struct's top-level fields, or the fields of

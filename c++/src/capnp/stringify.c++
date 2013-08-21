@@ -99,21 +99,19 @@ private:
   }
 };
 
-schema::Type::Body::Which whichMemberType(const StructSchema::Member& member) {
-  auto body = member.getProto().getBody();
-  switch (body.which()) {
-    case schema::StructNode::Member::Body::UNION_MEMBER:
-      return schema::Type::Body::VOID_TYPE;
-    case schema::StructNode::Member::Body::GROUP_MEMBER:
-      return schema::Type::Body::STRUCT_TYPE;
-    case schema::StructNode::Member::Body::FIELD_MEMBER:
-      return body.getFieldMember().getType().getBody().which();
+static schema2::Type::Which whichFieldType(const StructSchema::Field& field) {
+  auto proto = field.getProto();
+  switch (proto.which()) {
+    case schema2::Field::REGULAR:
+      return proto.getRegular().getType().which();
+    case schema2::Field::GROUP:
+      return schema2::Type::STRUCT;
   }
   KJ_UNREACHABLE;
 }
 
 static kj::StringTree print(const DynamicValue::Reader& value,
-                            schema::Type::Body::Which which, Indent indent,
+                            schema2::Type::Which which, Indent indent,
                             PrintMode mode) {
   switch (value.getType()) {
     case DynamicValue::UNKNOWN:
@@ -127,7 +125,7 @@ static kj::StringTree print(const DynamicValue::Reader& value,
     case DynamicValue::UINT:
       return kj::strTree(value.as<uint64_t>());
     case DynamicValue::FLOAT:
-      if (which == schema::Type::Body::FLOAT32_TYPE) {
+      if (which == schema2::Type::FLOAT32) {
         return kj::strTree(value.as<float>());
       } else {
         return kj::strTree(value.as<double>());
@@ -192,40 +190,31 @@ static kj::StringTree print(const DynamicValue::Reader& value,
     }
     case DynamicValue::STRUCT: {
       auto structValue = value.as<DynamicStruct>();
-      auto memberSchemas = structValue.getSchema().getMembers();
+      auto unionFields = structValue.getSchema().getUnionFields();
+      auto nonUnionFields = structValue.getSchema().getNonUnionFields();
 
-      kj::Vector<kj::StringTree> printedMembers(memberSchemas.size());
-      for (auto member: memberSchemas) {
-        if (structValue.has(member)) {
-          auto name = member.getProto().getName();
-          if (name.size() == 0) {
-            // Unnamed union.  Just print the content.
-            printedMembers.add(kj::strTree(
-                print(structValue.get(member), whichMemberType(member), indent.next(), BARE)));
-          } else {
-            printedMembers.add(kj::strTree(
-                name, " = ",
-                print(structValue.get(member), whichMemberType(member), indent.next(), PREFIXED)));
-          }
+      kj::Vector<kj::StringTree> printedFields(nonUnionFields.size() + (unionFields.size() != 0));
+
+      KJ_IF_MAYBE(field, structValue.which()) {
+        if (structValue.has(*field)) {
+          printedFields.add(kj::strTree(
+              field->getProto().getName(), " = ",
+              print(structValue.get(*field), whichFieldType(*field), indent.next(), PREFIXED)));
+        }
+      }
+
+      for (auto field: nonUnionFields) {
+        if (structValue.has(field)) {
+          printedFields.add(kj::strTree(
+              field.getProto().getName(), " = ",
+              print(structValue.get(field), whichFieldType(field), indent.next(), PREFIXED)));
         }
       }
 
       if (mode == PARENTHESIZED) {
-        return indent.delimit(printedMembers.releaseAsArray(), mode);
+        return indent.delimit(printedFields.releaseAsArray(), mode);
       } else {
-        return kj::strTree('(', indent.delimit(printedMembers.releaseAsArray(), mode), ')');
-      }
-    }
-    case DynamicValue::UNION: {
-      auto unionValue = value.as<DynamicUnion>();
-      KJ_IF_MAYBE(tag, unionValue.which()) {
-        return kj::strTree(
-            tag->getProto().getName(), '(',
-            print(unionValue.get(), whichMemberType(*tag), indent, PARENTHESIZED), ')');
-      } else {
-        // Unknown union member; must have come from newer
-        // version of the protocol.
-        return kj::strTree("<unknown union member>");
+        return kj::strTree('(', indent.delimit(printedFields.releaseAsArray(), mode), ')');
       }
     }
     case DynamicValue::INTERFACE:
@@ -240,17 +229,17 @@ static kj::StringTree print(const DynamicValue::Reader& value,
 }
 
 kj::StringTree stringify(DynamicValue::Reader value) {
-  return print(value, schema::Type::Body::STRUCT_TYPE, Indent(false), BARE);
+  return print(value, schema2::Type::STRUCT, Indent(false), BARE);
 }
 
 }  // namespace
 
 kj::StringTree prettyPrint(DynamicStruct::Reader value) {
-  return print(value, schema::Type::Body::STRUCT_TYPE, Indent(true), BARE);
+  return print(value, schema2::Type::STRUCT, Indent(true), BARE);
 }
 
 kj::StringTree prettyPrint(DynamicList::Reader value) {
-  return print(value, schema::Type::Body::LIST_TYPE, Indent(true), BARE);
+  return print(value, schema2::Type::LIST, Indent(true), BARE);
 }
 
 kj::StringTree prettyPrint(DynamicStruct::Builder value) { return prettyPrint(value.asReader()); }
@@ -260,8 +249,6 @@ kj::StringTree KJ_STRINGIFY(const DynamicValue::Reader& value) { return stringif
 kj::StringTree KJ_STRINGIFY(const DynamicValue::Builder& value) { return stringify(value.asReader()); }
 kj::StringTree KJ_STRINGIFY(DynamicEnum value) { return stringify(value); }
 kj::StringTree KJ_STRINGIFY(const DynamicObject& value) { return stringify(value); }
-kj::StringTree KJ_STRINGIFY(const DynamicUnion::Reader& value) { return stringify(value); }
-kj::StringTree KJ_STRINGIFY(const DynamicUnion::Builder& value) { return stringify(value.asReader()); }
 kj::StringTree KJ_STRINGIFY(const DynamicStruct::Reader& value) { return stringify(value); }
 kj::StringTree KJ_STRINGIFY(const DynamicStruct::Builder& value) { return stringify(value.asReader()); }
 kj::StringTree KJ_STRINGIFY(const DynamicList::Reader& value) { return stringify(value); }
@@ -271,11 +258,6 @@ namespace _ {  // private
 
 kj::StringTree structString(StructReader reader, const RawSchema& schema) {
   return stringify(DynamicStruct::Reader(StructSchema(&schema), reader));
-}
-
-kj::StringTree unionString(StructReader reader, const RawSchema& schema, uint memberIndex) {
-  return stringify(DynamicUnion::Reader(
-      StructSchema(&schema).getMembers()[memberIndex].asUnion(), reader));
 }
 
 }  // namespace _ (private)

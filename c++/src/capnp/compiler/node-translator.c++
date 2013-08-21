@@ -810,10 +810,7 @@ public:
       }
 
       schema2::Field::Builder fieldBuilder = member.getSchema();
-
-      fieldBuilder.setName(member.decl.getName().getValue());
       fieldBuilder.getOrdinal().setExplicit(entry.first);
-      fieldBuilder.setCodeOrder(member.codeOrder);
 
       switch (member.decl.getBody().which()) {
         case Declaration::Body::FIELD_DECL: {
@@ -891,7 +888,7 @@ public:
 
     // OK, we should have built all the members.  Now go through and make sure the discriminant
     // offsets have been copied over to the schemas and annotations have been applied.
-    root.setDiscriminantOffsetInSchema();
+    root.finishGroup();
     for (auto member: allMembers) {
       kj::StringPtr targetsFlagName;
       switch (member->decl.getBody().which()) {
@@ -900,13 +897,12 @@ public:
           break;
 
         case Declaration::Body::UNION_DECL:
-          member->setDiscriminantOffsetInSchema();
+          member->finishGroup();
           targetsFlagName = "targetsUnion";
           break;
 
         case Declaration::Body::GROUP_DECL:
-          member->setDiscriminantOffsetInSchema();  // in case it contains an unnamed union
-          member->node.setId(generateGroupId(member->parent->node.getId(), member->index));
+          member->finishGroup();
           targetsFlagName = "targetsGroup";
           break;
 
@@ -1026,6 +1022,8 @@ private:
         if (isInUnion) {
           builder.setDiscriminantValue(parent->unionDiscriminantCount++);
         }
+        builder.setName(decl.getName().getValue());
+        builder.setCodeOrder(codeOrder);
         schema = builder;
         return builder;
       }
@@ -1039,19 +1037,27 @@ private:
 
       auto structNode = node.getStruct();
       if (!structNode.hasFields()) {
-        getSchema();  // Make sure field exists in parent once the first child is added.
+        if (parent != nullptr) {
+          getSchema();  // Make sure field exists in parent once the first child is added.
+        }
         return structNode.initFields(childCount)[childInitializedCount++];
       } else {
         return structNode.getFields()[childInitializedCount++];
       }
     }
 
-    void setDiscriminantOffsetInSchema() {
+    void finishGroup() {
       if (unionScope != nullptr) {
         unionScope->addDiscriminant();  // if it hasn't happened already
         auto structNode = node.getStruct();
         structNode.setDiscriminantCount(unionDiscriminantCount);
         structNode.setDiscriminantOffset(KJ_ASSERT_NONNULL(unionScope->discriminantOffset));
+      }
+
+      if (parent != nullptr) {
+        uint64_t groupId = generateGroupId(parent->node.getId(), index);
+        node.setId(groupId);
+        getSchema().setGroup(groupId);
       }
     }
   };
@@ -1064,9 +1070,7 @@ private:
   // All members, including ones that don't have ordinals.
 
   void traverseUnion(List<Declaration>::Reader members, MemberInfo& parent,
-                     StructLayout::Union& layout) {
-    uint codeOrder = 0;
-
+                     StructLayout::Union& layout, uint& codeOrder) {
     if (members.size() < 2) {
       errorReporter.addErrorOn(parent.decl, "Union must have at least two members.");
     }
@@ -1145,8 +1149,11 @@ private:
         case Declaration::Body::UNION_DECL: {
           StructLayout::Union& unionLayout = arena.allocate<StructLayout::Union>(layout);
 
+          uint independentSubCodeOrder = 0;
+          uint* subCodeOrder = &independentSubCodeOrder;
           if (member.getName().getValue() == "") {
             memberInfo = &parent;
+            subCodeOrder = &codeOrder;
           } else {
             parent.childCount++;
             memberInfo = &arena.allocate<MemberInfo>(
@@ -1156,7 +1163,7 @@ private:
             allMembers.add(memberInfo);
           }
           memberInfo->unionScope = &unionLayout;
-          traverseUnion(member.getNestedDecls(), *memberInfo, unionLayout);
+          traverseUnion(member.getNestedDecls(), *memberInfo, unionLayout, *subCodeOrder);
           if (member.getId().which() == Declaration::Id::ORDINAL) {
             ordinal = member.getId().getOrdinal().getValue();
           }
@@ -1517,8 +1524,17 @@ void NodeTranslator::compileValue(ValueExpression::Reader source, schema2::Type:
                                   schema2::Value::Builder target, bool isBootstrap) {
 #warning "temporary hack for schema transition"
   switch (type.which()) {
+    case schema2::Type::TEXT:
+      target.setText(source.getBody().getString());
+      break;
+
+    case schema2::Type::UINT16:
+      target.setUint16(source.getBody().getPositiveInt());
+      break;
+
     default:
-      KJ_FAIL_ASSERT("Need to compile value type:", (uint)type.which());
+      KJ_FAIL_ASSERT("Need to compile value type:", (uint)type.which(),
+                     wipNode.getReader().getDisplayName());
   }
 
 #if 0

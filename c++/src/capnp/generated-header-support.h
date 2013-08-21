@@ -240,7 +240,8 @@ inline kj::StringTree structString(StructReader reader) {
 
 template <typename T>
 inline kj::StringTree unionString(StructReader reader) {
-  return unionString(reader, rawSchema<UnionParentType<T>>(), unionMemberIndex<T>());
+#warning "remove this"
+  return kj::strTree();
 }
 
 }  // namespace _ (private)
