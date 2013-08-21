@@ -28,18 +28,18 @@ using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("capnp::compiler");
 
 struct Token {
-  body @0 union {
-    identifier @1 :Text;
-    stringLiteral @2 :Text;
-    integerLiteral @3 :UInt64;
-    floatLiteral @4 :Float64;
-    operator @5 :Text;
-    parenthesizedList @6 :List(List(Token));
-    bracketedList @7 :List(List(Token));
+  union {
+    identifier @0 :Text;
+    stringLiteral @1 :Text;
+    integerLiteral @2 :UInt64;
+    floatLiteral @3 :Float64;
+    operator @4 :Text;
+    parenthesizedList @5 :List(List(Token));
+    bracketedList @6 :List(List(Token));
   }
 
-  startByte @8 :UInt32;
-  endByte @9 :UInt32;
+  startByte @7 :UInt32;
+  endByte @8 :UInt32;
 }
 
 struct Statement {

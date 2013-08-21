@@ -186,12 +186,11 @@ struct Located {
 
 // =======================================================================================
 
-template <typename T, Token::Body::Which type, T (Token::Body::Reader::*get)() const>
+template <typename T, Token::Which type, T (Token::Reader::*get)() const>
 struct MatchTokenType {
   kj::Maybe<Located<T>> operator()(Token::Reader token) const {
-    auto body = token.getBody();
-    if (body.which() == type) {
-      return Located<T>((body.*get)(), token.getStartByte(), token.getEndByte());
+    if (token.which() == type) {
+      return Located<T>((token.*get)(), token.getStartByte(), token.getEndByte());
     } else {
       return nullptr;
     }
@@ -200,7 +199,7 @@ struct MatchTokenType {
 
 #define TOKEN_TYPE_PARSER(type, discrim, getter) \
     p::transformOrReject(p::any, \
-        MatchTokenType<type, Token::Body::discrim, &Token::Body::Reader::getter>())
+        MatchTokenType<type, Token::discrim, &Token::Reader::getter>())
 
 constexpr auto identifier = TOKEN_TYPE_PARSER(Text::Reader, IDENTIFIER, getIdentifier);
 constexpr auto stringLiteral = TOKEN_TYPE_PARSER(Text::Reader, STRING_LITERAL, getStringLiteral);

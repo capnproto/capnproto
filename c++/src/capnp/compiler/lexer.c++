@@ -78,11 +78,11 @@ namespace {
 
 typedef p::Span<uint32_t> Location;
 
-Token::Body::Builder initTok(Orphan<Token>& t, const Location& loc) {
-  auto tb = t.get();
-  tb.setStartByte(loc.begin());
-  tb.setEndByte(loc.end());
-  return tb.getBody();
+Token::Builder initTok(Orphan<Token>& t, const Location& loc) {
+  auto builder = t.get();
+  builder.setStartByte(loc.begin());
+  builder.setEndByte(loc.end());
+  return builder;
 }
 
 void buildTokenSequenceList(List<List<Token>>::Builder builder,
