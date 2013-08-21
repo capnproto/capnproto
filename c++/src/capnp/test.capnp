@@ -291,14 +291,14 @@ struct TestGroups {
 
 struct TestUnionDefaults {
   s16s8s64s8Set @0 :TestUnion =
-      (union0 = u0f0s16(321), union1 = u1f0s8(123), union2 = u2f0s64(12345678901234567),
-       union3 = u3f0s8(55));
+      (union0 = (u0f0s16 = 321), union1 = (u1f0s8 = 123), union2 = (u2f0s64 = 12345678901234567),
+       union3 = (u3f0s8 = 55));
   s0sps1s32Set @1 :TestUnion =
-      (union0 = u0f1s0(void), union1 = u1f0sp("foo"), union2 = u2f0s1(true),
-       union3 = u3f0s32(12345678));
+      (union0 = (u0f1s0 = void), union1 = (u1f0sp = "foo"), union2 = (u2f0s1 = true),
+       union3 = (u3f0s32 = 12345678));
 
-  unnamed1 @2 :TestUnnamedUnion = (foo(123));
-  unnamed2 @3 :TestUnnamedUnion = (bar(321), before = "foo", after = "bar");
+  unnamed1 @2 :TestUnnamedUnion = (foo = 123);
+  unnamed2 @3 :TestUnnamedUnion = (bar = 321, before = "foo", after = "bar");
 }
 
 struct TestNestedTypes {

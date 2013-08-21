@@ -65,8 +65,21 @@ public:
   Schema getDependency(uint64_t id) const;
   // Gets the Schema for one of this Schema's dependencies.  For example, if this Schema is for a
   // struct, you could look up the schema for one of its fields' types.  Throws an exception if this
-  // schema doesn't actually depend on the given id.  Note that annotation declarations are not
-  // considered dependencies for this purpose.
+  // schema doesn't actually depend on the given id.
+  //
+  // Note that not all type IDs found in the schema node are considered "dependencies" -- only the
+  // ones that are needed to implement the dynamic API are.  That includes:
+  // - Field types.
+  // - Group types.
+  // - scopeId for group nodes, but NOT otherwise.
+  // - Method parameter and return types.
+  //
+  // The following are NOT considered dependencies:
+  // - Nested nodes.
+  // - scopeId for a non-group node.
+  // - Annotations.
+  //
+  // To obtain schemas for those, you would need a SchemaLoader.
 
   StructSchema asStruct() const;
   EnumSchema asEnum() const;

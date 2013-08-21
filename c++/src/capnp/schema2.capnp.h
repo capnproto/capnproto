@@ -22,10 +22,17 @@ struct Node {
     CONST,
     ANNOTATION,
   };
+  struct NestedNode;
   struct Struct;
   struct Const;
   struct Annotation;
-  struct NestedNode;
+};
+
+struct Node::NestedNode {
+  NestedNode() = delete;
+
+  class Reader;
+  class Builder;
 };
 
 struct Node::Struct {
@@ -44,13 +51,6 @@ struct Node::Const {
 
 struct Node::Annotation {
   Annotation() = delete;
-
-  class Reader;
-  class Builder;
-};
-
-struct Node::NestedNode {
-  NestedNode() = delete;
 
   class Reader;
   class Builder;
@@ -78,9 +78,9 @@ struct Field::Regular {
 
 struct Field::Ordinal {
   Ordinal() = delete;
+
   class Reader;
   class Builder;
-
   enum Which: uint16_t {
     IMPLICIT,
     EXPLICIT,
@@ -216,7 +216,12 @@ namespace schemas {
 
 extern const ::capnp::_::RawSchema s_e682ab4cf923a417;
 extern const ::capnp::_::RawSchema s_debf55bbfa0fc242;
+extern const ::capnp::_::RawSchema s_9ea0b19b37fb4435;
+extern const ::capnp::_::RawSchema s_b18aa5ac7a0d9420;
+extern const ::capnp::_::RawSchema s_ec1619d4400a0290;
 extern const ::capnp::_::RawSchema s_9aad50a41f4af45f;
+extern const ::capnp::_::RawSchema s_c42305476bb4746f;
+extern const ::capnp::_::RawSchema s_bb90d5c287870be6;
 extern const ::capnp::_::RawSchema s_978a7cebdc549a4d;
 extern const ::capnp::_::RawSchema s_9500cce23b334d80;
 extern const ::capnp::_::RawSchema s_cbc0c86dae91fcf6;
@@ -238,11 +243,23 @@ CAPNP_DECLARE_STRUCT(
     ::capnp::schema2::Node::NestedNode, debf55bbfa0fc242,
     1, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
+    ::capnp::schema2::Node::Struct, 9ea0b19b37fb4435,
+    5, 5, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema2::Node::Const, b18aa5ac7a0d9420,
+    5, 5, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema2::Node::Annotation, ec1619d4400a0290,
+    5, 5, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
     ::capnp::schema2::Field, 9aad50a41f4af45f,
     3, 4, INLINE_COMPOSITE);
-CAPNP_DECLARE_UNION(
-    ::capnp::schema2::Field::Ordinal,
-    ::capnp::schema2::Field, 5);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema2::Field::Regular, c42305476bb4746f,
+    3, 4, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema2::Field::Ordinal, bb90d5c287870be6,
+    3, 4, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema2::Enumerant, 978a7cebdc549a4d,
     1, 2, INLINE_COMPOSITE);
@@ -292,6 +309,7 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
+  inline Which which() const;
   inline bool hasId() const;
   inline  ::uint64_t getId() const;
 
@@ -310,11 +328,11 @@ public:
   inline bool hasAnnotations() const;
   inline  ::capnp::List< ::capnp::schema2::Annotation>::Reader getAnnotations() const;
 
-  inline Which which() const;
   inline bool hasFile() const;
   inline  ::capnp::Void getFile() const;
 
   inline Struct::Reader getStruct() const;
+
   inline bool hasEnum() const;
   inline  ::capnp::List< ::capnp::schema2::Enumerant>::Reader getEnum() const;
 
@@ -322,7 +340,9 @@ public:
   inline  ::capnp::List< ::capnp::schema2::Method>::Reader getInterface() const;
 
   inline Const::Reader getConst() const;
+
   inline Annotation::Reader getAnnotation() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename T, ::capnp::Kind k>
@@ -351,6 +371,7 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
+  inline Which which();
   inline bool hasId();
   inline  ::uint64_t getId();
   inline void setId( ::uint64_t value);
@@ -384,13 +405,13 @@ public:
   inline void adoptAnnotations(::capnp::Orphan< ::capnp::List< ::capnp::schema2::Annotation>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::schema2::Annotation>> disownAnnotations();
 
-  inline Which which();
   inline bool hasFile();
   inline  ::capnp::Void getFile();
   inline void setFile( ::capnp::Void value = ::capnp::Void::VOID);
 
   inline Struct::Builder getStruct();
   inline Struct::Builder initStruct();
+
   inline bool hasEnum();
   inline  ::capnp::List< ::capnp::schema2::Enumerant>::Builder getEnum();
   inline void setEnum( ::capnp::List< ::capnp::schema2::Enumerant>::Reader value);
@@ -407,8 +428,10 @@ public:
 
   inline Const::Builder getConst();
   inline Const::Builder initConst();
+
   inline Annotation::Builder getAnnotation();
   inline Annotation::Builder initAnnotation();
+
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename T, ::capnp::Kind k>
@@ -419,6 +442,74 @@ private:
 
 inline ::kj::StringTree KJ_STRINGIFY(Node::Builder builder) {
   return ::capnp::_::structString<Node>(builder._builder.asReader());
+}
+
+class Node::NestedNode::Reader {
+public:
+  typedef NestedNode Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline size_t totalSizeInWords() const {
+    return _reader.totalSize() / ::capnp::WORDS;
+  }
+
+  inline bool hasName() const;
+  inline  ::capnp::Text::Reader getName() const;
+
+  inline bool hasId() const;
+  inline  ::uint64_t getId() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Node::NestedNode::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Node::NestedNode::Reader reader) {
+  return ::capnp::_::structString<Node::NestedNode>(reader._reader);
+}
+
+class Node::NestedNode::Builder {
+public:
+  typedef NestedNode Builds;
+
+  Builder() = default;
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+
+  inline bool hasName();
+  inline  ::capnp::Text::Builder getName();
+  inline void setName( ::capnp::Text::Reader value);
+  inline  ::capnp::Text::Builder initName(unsigned int size);
+  inline void adoptName(::capnp::Orphan< ::capnp::Text>&& value);
+  inline ::capnp::Orphan< ::capnp::Text> disownName();
+
+  inline bool hasId();
+  inline  ::uint64_t getId();
+  inline void setId( ::uint64_t value);
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Node::NestedNode::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Node::NestedNode::Builder builder) {
+  return ::capnp::_::structString<Node::NestedNode>(builder._builder.asReader());
 }
 
 class Node::Struct::Reader {
@@ -465,6 +556,10 @@ private:
   friend class ::capnp::Orphanage;
   friend ::kj::StringTree KJ_STRINGIFY(Node::Struct::Reader reader);
 };
+
+inline ::kj::StringTree KJ_STRINGIFY(Node::Struct::Reader reader) {
+  return ::capnp::_::structString<Node::Struct>(reader._reader);
+}
 
 class Node::Struct::Builder {
 public:
@@ -516,6 +611,10 @@ private:
   friend ::kj::StringTree KJ_STRINGIFY(Node::Struct::Builder builder);
 };
 
+inline ::kj::StringTree KJ_STRINGIFY(Node::Struct::Builder builder) {
+  return ::capnp::_::structString<Node::Struct>(builder._builder.asReader());
+}
+
 class Node::Const::Reader {
 public:
   typedef Const Reads;
@@ -545,6 +644,10 @@ private:
   friend class ::capnp::Orphanage;
   friend ::kj::StringTree KJ_STRINGIFY(Node::Const::Reader reader);
 };
+
+inline ::kj::StringTree KJ_STRINGIFY(Node::Const::Reader reader) {
+  return ::capnp::_::structString<Node::Const>(reader._reader);
+}
 
 class Node::Const::Builder {
 public:
@@ -578,6 +681,10 @@ private:
   friend class ::capnp::Orphanage;
   friend ::kj::StringTree KJ_STRINGIFY(Node::Const::Builder builder);
 };
+
+inline ::kj::StringTree KJ_STRINGIFY(Node::Const::Builder builder) {
+  return ::capnp::_::structString<Node::Const>(builder._builder.asReader());
+}
 
 class Node::Annotation::Reader {
 public:
@@ -638,6 +745,10 @@ private:
   friend class ::capnp::Orphanage;
   friend ::kj::StringTree KJ_STRINGIFY(Node::Annotation::Reader reader);
 };
+
+inline ::kj::StringTree KJ_STRINGIFY(Node::Annotation::Reader reader) {
+  return ::capnp::_::structString<Node::Annotation>(reader._reader);
+}
 
 class Node::Annotation::Builder {
 public:
@@ -709,72 +820,8 @@ private:
   friend ::kj::StringTree KJ_STRINGIFY(Node::Annotation::Builder builder);
 };
 
-class Node::NestedNode::Reader {
-public:
-  typedef NestedNode Reads;
-
-  Reader() = default;
-  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
-
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
-  }
-
-  inline bool hasName() const;
-  inline  ::capnp::Text::Reader getName() const;
-
-  inline bool hasId() const;
-  inline  ::uint64_t getId() const;
-
-private:
-  ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::List;
-  friend class ::capnp::MessageBuilder;
-  friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Node::NestedNode::Reader reader);
-};
-
-inline ::kj::StringTree KJ_STRINGIFY(Node::NestedNode::Reader reader) {
-  return ::capnp::_::structString<Node::NestedNode>(reader._reader);
-}
-
-class Node::NestedNode::Builder {
-public:
-  typedef NestedNode Builds;
-
-  Builder() = default;
-  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
-  inline operator Reader() const { return Reader(_builder.asReader()); }
-  inline Reader asReader() const { return *this; }
-
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
-
-  inline bool hasName();
-  inline  ::capnp::Text::Builder getName();
-  inline void setName( ::capnp::Text::Reader value);
-  inline  ::capnp::Text::Builder initName(unsigned int size);
-  inline void adoptName(::capnp::Orphan< ::capnp::Text>&& value);
-  inline ::capnp::Orphan< ::capnp::Text> disownName();
-
-  inline bool hasId();
-  inline  ::uint64_t getId();
-  inline void setId( ::uint64_t value);
-
-private:
-  ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-  friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Node::NestedNode::Builder builder);
-};
-
-inline ::kj::StringTree KJ_STRINGIFY(Node::NestedNode::Builder builder) {
-  return ::capnp::_::structString<Node::NestedNode>(builder._builder.asReader());
+inline ::kj::StringTree KJ_STRINGIFY(Node::Annotation::Builder builder) {
+  return ::capnp::_::structString<Node::Annotation>(builder._builder.asReader());
 }
 
 class Field::Reader {
@@ -788,6 +835,7 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
+  inline Which which() const;
   inline bool hasName() const;
   inline  ::capnp::Text::Reader getName() const;
 
@@ -800,12 +848,13 @@ public:
   inline bool hasDiscriminantValue() const;
   inline  ::uint16_t getDiscriminantValue() const;
 
-  inline Which which() const;
   inline Regular::Reader getRegular() const;
+
   inline bool hasGroup() const;
   inline  ::uint64_t getGroup() const;
 
   inline Ordinal::Reader getOrdinal() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename T, ::capnp::Kind k>
@@ -834,6 +883,7 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
+  inline Which which();
   inline bool hasName();
   inline  ::capnp::Text::Builder getName();
   inline void setName( ::capnp::Text::Reader value);
@@ -856,14 +906,16 @@ public:
   inline  ::uint16_t getDiscriminantValue();
   inline void setDiscriminantValue( ::uint16_t value);
 
-  inline Which which();
   inline Regular::Builder getRegular();
   inline Regular::Builder initRegular();
+
   inline bool hasGroup();
   inline  ::uint64_t getGroup();
   inline void setGroup( ::uint64_t value);
 
   inline Ordinal::Builder getOrdinal();
+  inline Ordinal::Builder initOrdinal();
+
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename T, ::capnp::Kind k>
@@ -909,6 +961,10 @@ private:
   friend ::kj::StringTree KJ_STRINGIFY(Field::Regular::Reader reader);
 };
 
+inline ::kj::StringTree KJ_STRINGIFY(Field::Regular::Reader reader) {
+  return ::capnp::_::structString<Field::Regular>(reader._reader);
+}
+
 class Field::Regular::Builder {
 public:
   typedef Regular Builds;
@@ -946,6 +1002,10 @@ private:
   friend ::kj::StringTree KJ_STRINGIFY(Field::Regular::Builder builder);
 };
 
+inline ::kj::StringTree KJ_STRINGIFY(Field::Regular::Builder builder) {
+  return ::capnp::_::structString<Field::Regular>(builder._builder.asReader());
+}
+
 class Field::Ordinal::Reader {
 public:
   typedef Ordinal Reads;
@@ -978,7 +1038,7 @@ private:
 };
 
 inline ::kj::StringTree KJ_STRINGIFY(Field::Ordinal::Reader reader) {
-  return ::capnp::_::unionString<Field::Ordinal>(reader._reader);
+  return ::capnp::_::structString<Field::Ordinal>(reader._reader);
 }
 
 class Field::Ordinal::Builder {
@@ -1010,7 +1070,7 @@ private:
 };
 
 inline ::kj::StringTree KJ_STRINGIFY(Field::Ordinal::Builder builder) {
-  return ::capnp::_::unionString<Field::Ordinal>(builder._builder.asReader());
+  return ::capnp::_::structString<Field::Ordinal>(builder._builder.asReader());
 }
 
 class Enumerant::Reader {
@@ -1997,6 +2057,13 @@ inline ::kj::StringTree KJ_STRINGIFY(CodeGeneratorRequest::RequestedFile::Import
 
 // =======================================================================================
 
+inline Node::Which Node::Reader::which() const {
+  return _reader.getDataField<Which>(6 * ::capnp::ELEMENTS);
+}
+inline Node::Which Node::Builder::which() {
+  return _builder.getDataField<Which>(6 * ::capnp::ELEMENTS);
+}
+
 inline bool Node::Reader::hasId() const {
   return _reader.hasDataField< ::uint64_t>(0 * ::capnp::ELEMENTS);
 }
@@ -2156,13 +2223,6 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::schema2::Annotation>> Node::Buil
       _builder, 2 * ::capnp::POINTERS);
 }
 
-inline Node::Which Node::Reader::which() const {
-  return _reader.getDataField<Which>(6 * ::capnp::ELEMENTS);
-}
-inline Node::Which Node::Builder::which() {
-  return _builder.getDataField<Which>(6 * ::capnp::ELEMENTS);
-}
-
 inline bool Node::Reader::hasFile() const {
   KJ_IREQUIRE(which() == Node::FILE,
               "Must check which() before get()ing a union member.");
@@ -2209,6 +2269,185 @@ inline Node::Struct::Builder Node::Builder::initStruct() {
       6 * ::capnp::ELEMENTS, Node::STRUCT);
   return Node::Struct::Builder(_builder);
 }
+inline bool Node::Reader::hasEnum() const {
+  KJ_IREQUIRE(which() == Node::ENUM,
+              "Must check which() before get()ing a union member.");
+  return !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
+}
+inline bool Node::Builder::hasEnum() {
+  KJ_IREQUIRE(which() == Node::ENUM,
+              "Must check which() before get()ing a union member.");
+  return !_builder.isPointerFieldNull(3 * ::capnp::POINTERS);
+}
+inline  ::capnp::List< ::capnp::schema2::Enumerant>::Reader Node::Reader::getEnum() const {
+  KJ_IREQUIRE(which() == Node::ENUM,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Enumerant>>::get(
+      _reader, 3 * ::capnp::POINTERS);
+}
+inline  ::capnp::List< ::capnp::schema2::Enumerant>::Builder Node::Builder::getEnum() {
+  KJ_IREQUIRE(which() == Node::ENUM,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Enumerant>>::get(
+      _builder, 3 * ::capnp::POINTERS);
+}
+inline void Node::Builder::setEnum( ::capnp::List< ::capnp::schema2::Enumerant>::Reader value) {
+  _builder.setDataField<Node::Which>(
+      6 * ::capnp::ELEMENTS, Node::ENUM);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Enumerant>>::set(
+      _builder, 3 * ::capnp::POINTERS, value);
+}
+inline  ::capnp::List< ::capnp::schema2::Enumerant>::Builder Node::Builder::initEnum(unsigned int size) {
+  _builder.setDataField<Node::Which>(
+      6 * ::capnp::ELEMENTS, Node::ENUM);
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Enumerant>>::init(
+      _builder, 3 * ::capnp::POINTERS, size);
+}
+inline void Node::Builder::adoptEnum(
+    ::capnp::Orphan< ::capnp::List< ::capnp::schema2::Enumerant>>&& value) {
+  _builder.setDataField<Node::Which>(
+      6 * ::capnp::ELEMENTS, Node::ENUM);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Enumerant>>::adopt(
+      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::List< ::capnp::schema2::Enumerant>> Node::Builder::disownEnum() {
+  KJ_IREQUIRE(which() == Node::ENUM,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Enumerant>>::disown(
+      _builder, 3 * ::capnp::POINTERS);
+}
+
+inline bool Node::Reader::hasInterface() const {
+  KJ_IREQUIRE(which() == Node::INTERFACE,
+              "Must check which() before get()ing a union member.");
+  return !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
+}
+inline bool Node::Builder::hasInterface() {
+  KJ_IREQUIRE(which() == Node::INTERFACE,
+              "Must check which() before get()ing a union member.");
+  return !_builder.isPointerFieldNull(3 * ::capnp::POINTERS);
+}
+inline  ::capnp::List< ::capnp::schema2::Method>::Reader Node::Reader::getInterface() const {
+  KJ_IREQUIRE(which() == Node::INTERFACE,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Method>>::get(
+      _reader, 3 * ::capnp::POINTERS);
+}
+inline  ::capnp::List< ::capnp::schema2::Method>::Builder Node::Builder::getInterface() {
+  KJ_IREQUIRE(which() == Node::INTERFACE,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Method>>::get(
+      _builder, 3 * ::capnp::POINTERS);
+}
+inline void Node::Builder::setInterface( ::capnp::List< ::capnp::schema2::Method>::Reader value) {
+  _builder.setDataField<Node::Which>(
+      6 * ::capnp::ELEMENTS, Node::INTERFACE);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Method>>::set(
+      _builder, 3 * ::capnp::POINTERS, value);
+}
+inline  ::capnp::List< ::capnp::schema2::Method>::Builder Node::Builder::initInterface(unsigned int size) {
+  _builder.setDataField<Node::Which>(
+      6 * ::capnp::ELEMENTS, Node::INTERFACE);
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Method>>::init(
+      _builder, 3 * ::capnp::POINTERS, size);
+}
+inline void Node::Builder::adoptInterface(
+    ::capnp::Orphan< ::capnp::List< ::capnp::schema2::Method>>&& value) {
+  _builder.setDataField<Node::Which>(
+      6 * ::capnp::ELEMENTS, Node::INTERFACE);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Method>>::adopt(
+      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::List< ::capnp::schema2::Method>> Node::Builder::disownInterface() {
+  KJ_IREQUIRE(which() == Node::INTERFACE,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Method>>::disown(
+      _builder, 3 * ::capnp::POINTERS);
+}
+
+inline Node::Const::Reader Node::Reader::getConst() const {
+  KJ_IREQUIRE(which() == Node::CONST,
+              "Must check which() before get()ing a union member.");
+  return Node::Const::Reader(_reader);
+}
+inline Node::Const::Builder Node::Builder::getConst() {
+  KJ_IREQUIRE(which() == Node::CONST,
+              "Must check which() before get()ing a union member.");
+  return Node::Const::Builder(_builder);
+}
+inline Node::Const::Builder Node::Builder::initConst() {
+  _builder.setDataField<Node::Which>(
+      6 * ::capnp::ELEMENTS, Node::CONST);
+  return Node::Const::Builder(_builder);
+}
+inline Node::Annotation::Reader Node::Reader::getAnnotation() const {
+  KJ_IREQUIRE(which() == Node::ANNOTATION,
+              "Must check which() before get()ing a union member.");
+  return Node::Annotation::Reader(_reader);
+}
+inline Node::Annotation::Builder Node::Builder::getAnnotation() {
+  KJ_IREQUIRE(which() == Node::ANNOTATION,
+              "Must check which() before get()ing a union member.");
+  return Node::Annotation::Builder(_builder);
+}
+inline Node::Annotation::Builder Node::Builder::initAnnotation() {
+  _builder.setDataField<Node::Which>(
+      6 * ::capnp::ELEMENTS, Node::ANNOTATION);
+  return Node::Annotation::Builder(_builder);
+}
+inline bool Node::NestedNode::Reader::hasName() const {
+  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+}
+inline bool Node::NestedNode::Builder::hasName() {
+  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+}
+inline  ::capnp::Text::Reader Node::NestedNode::Reader::getName() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
+      _reader, 0 * ::capnp::POINTERS);
+}
+inline  ::capnp::Text::Builder Node::NestedNode::Builder::getName() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
+      _builder, 0 * ::capnp::POINTERS);
+}
+inline void Node::NestedNode::Builder::setName( ::capnp::Text::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(
+      _builder, 0 * ::capnp::POINTERS, value);
+}
+inline  ::capnp::Text::Builder Node::NestedNode::Builder::initName(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
+      _builder, 0 * ::capnp::POINTERS, size);
+}
+inline void Node::NestedNode::Builder::adoptName(
+    ::capnp::Orphan< ::capnp::Text>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
+      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Text> Node::NestedNode::Builder::disownName() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
+      _builder, 0 * ::capnp::POINTERS);
+}
+
+inline bool Node::NestedNode::Reader::hasId() const {
+  return _reader.hasDataField< ::uint64_t>(0 * ::capnp::ELEMENTS);
+}
+
+inline bool Node::NestedNode::Builder::hasId() {
+  return _builder.hasDataField< ::uint64_t>(0 * ::capnp::ELEMENTS);
+}
+inline  ::uint64_t Node::NestedNode::Reader::getId() const {
+  return _reader.getDataField< ::uint64_t>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint64_t Node::NestedNode::Builder::getId() {
+  return _builder.getDataField< ::uint64_t>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void Node::NestedNode::Builder::setId( ::uint64_t value) {
+  _builder.setDataField< ::uint64_t>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
 inline bool Node::Struct::Reader::hasDataSectionWordSize() const {
   return _reader.hasDataField< ::uint16_t>(7 * ::capnp::ELEMENTS);
 }
@@ -2367,117 +2606,6 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::schema2::Field>> Node::Struct::B
       _builder, 3 * ::capnp::POINTERS);
 }
 
-inline bool Node::Reader::hasEnum() const {
-  KJ_IREQUIRE(which() == Node::ENUM,
-              "Must check which() before get()ing a union member.");
-  return !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
-}
-inline bool Node::Builder::hasEnum() {
-  KJ_IREQUIRE(which() == Node::ENUM,
-              "Must check which() before get()ing a union member.");
-  return !_builder.isPointerFieldNull(3 * ::capnp::POINTERS);
-}
-inline  ::capnp::List< ::capnp::schema2::Enumerant>::Reader Node::Reader::getEnum() const {
-  KJ_IREQUIRE(which() == Node::ENUM,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Enumerant>>::get(
-      _reader, 3 * ::capnp::POINTERS);
-}
-inline  ::capnp::List< ::capnp::schema2::Enumerant>::Builder Node::Builder::getEnum() {
-  KJ_IREQUIRE(which() == Node::ENUM,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Enumerant>>::get(
-      _builder, 3 * ::capnp::POINTERS);
-}
-inline void Node::Builder::setEnum( ::capnp::List< ::capnp::schema2::Enumerant>::Reader value) {
-  _builder.setDataField<Node::Which>(
-      6 * ::capnp::ELEMENTS, Node::ENUM);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Enumerant>>::set(
-      _builder, 3 * ::capnp::POINTERS, value);
-}
-inline  ::capnp::List< ::capnp::schema2::Enumerant>::Builder Node::Builder::initEnum(unsigned int size) {
-  _builder.setDataField<Node::Which>(
-      6 * ::capnp::ELEMENTS, Node::ENUM);
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Enumerant>>::init(
-      _builder, 3 * ::capnp::POINTERS, size);
-}
-inline void Node::Builder::adoptEnum(
-    ::capnp::Orphan< ::capnp::List< ::capnp::schema2::Enumerant>>&& value) {
-  _builder.setDataField<Node::Which>(
-      6 * ::capnp::ELEMENTS, Node::ENUM);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Enumerant>>::adopt(
-      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::List< ::capnp::schema2::Enumerant>> Node::Builder::disownEnum() {
-  KJ_IREQUIRE(which() == Node::ENUM,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Enumerant>>::disown(
-      _builder, 3 * ::capnp::POINTERS);
-}
-
-inline bool Node::Reader::hasInterface() const {
-  KJ_IREQUIRE(which() == Node::INTERFACE,
-              "Must check which() before get()ing a union member.");
-  return !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
-}
-inline bool Node::Builder::hasInterface() {
-  KJ_IREQUIRE(which() == Node::INTERFACE,
-              "Must check which() before get()ing a union member.");
-  return !_builder.isPointerFieldNull(3 * ::capnp::POINTERS);
-}
-inline  ::capnp::List< ::capnp::schema2::Method>::Reader Node::Reader::getInterface() const {
-  KJ_IREQUIRE(which() == Node::INTERFACE,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Method>>::get(
-      _reader, 3 * ::capnp::POINTERS);
-}
-inline  ::capnp::List< ::capnp::schema2::Method>::Builder Node::Builder::getInterface() {
-  KJ_IREQUIRE(which() == Node::INTERFACE,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Method>>::get(
-      _builder, 3 * ::capnp::POINTERS);
-}
-inline void Node::Builder::setInterface( ::capnp::List< ::capnp::schema2::Method>::Reader value) {
-  _builder.setDataField<Node::Which>(
-      6 * ::capnp::ELEMENTS, Node::INTERFACE);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Method>>::set(
-      _builder, 3 * ::capnp::POINTERS, value);
-}
-inline  ::capnp::List< ::capnp::schema2::Method>::Builder Node::Builder::initInterface(unsigned int size) {
-  _builder.setDataField<Node::Which>(
-      6 * ::capnp::ELEMENTS, Node::INTERFACE);
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Method>>::init(
-      _builder, 3 * ::capnp::POINTERS, size);
-}
-inline void Node::Builder::adoptInterface(
-    ::capnp::Orphan< ::capnp::List< ::capnp::schema2::Method>>&& value) {
-  _builder.setDataField<Node::Which>(
-      6 * ::capnp::ELEMENTS, Node::INTERFACE);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Method>>::adopt(
-      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::List< ::capnp::schema2::Method>> Node::Builder::disownInterface() {
-  KJ_IREQUIRE(which() == Node::INTERFACE,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema2::Method>>::disown(
-      _builder, 3 * ::capnp::POINTERS);
-}
-
-inline Node::Const::Reader Node::Reader::getConst() const {
-  KJ_IREQUIRE(which() == Node::CONST,
-              "Must check which() before get()ing a union member.");
-  return Node::Const::Reader(_reader);
-}
-inline Node::Const::Builder Node::Builder::getConst() {
-  KJ_IREQUIRE(which() == Node::CONST,
-              "Must check which() before get()ing a union member.");
-  return Node::Const::Builder(_builder);
-}
-inline Node::Const::Builder Node::Builder::initConst() {
-  _builder.setDataField<Node::Which>(
-      6 * ::capnp::ELEMENTS, Node::CONST);
-  return Node::Const::Builder(_builder);
-}
 inline bool Node::Const::Reader::hasType() const {
   return !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
 }
@@ -2542,21 +2670,6 @@ inline ::capnp::Orphan< ::capnp::schema2::Value> Node::Const::Builder::disownVal
       _builder, 4 * ::capnp::POINTERS);
 }
 
-inline Node::Annotation::Reader Node::Reader::getAnnotation() const {
-  KJ_IREQUIRE(which() == Node::ANNOTATION,
-              "Must check which() before get()ing a union member.");
-  return Node::Annotation::Reader(_reader);
-}
-inline Node::Annotation::Builder Node::Builder::getAnnotation() {
-  KJ_IREQUIRE(which() == Node::ANNOTATION,
-              "Must check which() before get()ing a union member.");
-  return Node::Annotation::Builder(_builder);
-}
-inline Node::Annotation::Builder Node::Builder::initAnnotation() {
-  _builder.setDataField<Node::Which>(
-      6 * ::capnp::ELEMENTS, Node::ANNOTATION);
-  return Node::Annotation::Builder(_builder);
-}
 inline bool Node::Annotation::Reader::hasType() const {
   return !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
 }
@@ -2820,57 +2933,11 @@ inline void Node::Annotation::Builder::setTargetsAnnotation(bool value) {
       122 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::NestedNode::Reader::hasName() const {
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+inline Field::Which Field::Reader::which() const {
+  return _reader.getDataField<Which>(4 * ::capnp::ELEMENTS);
 }
-inline bool Node::NestedNode::Builder::hasName() {
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
-}
-inline  ::capnp::Text::Reader Node::NestedNode::Reader::getName() const {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader, 0 * ::capnp::POINTERS);
-}
-inline  ::capnp::Text::Builder Node::NestedNode::Builder::getName() {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder, 0 * ::capnp::POINTERS);
-}
-inline void Node::NestedNode::Builder::setName( ::capnp::Text::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
-}
-inline  ::capnp::Text::Builder Node::NestedNode::Builder::initName(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder, 0 * ::capnp::POINTERS, size);
-}
-inline void Node::NestedNode::Builder::adoptName(
-    ::capnp::Orphan< ::capnp::Text>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::Text> Node::NestedNode::Builder::disownName() {
-  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder, 0 * ::capnp::POINTERS);
-}
-
-inline bool Node::NestedNode::Reader::hasId() const {
-  return _reader.hasDataField< ::uint64_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::NestedNode::Builder::hasId() {
-  return _builder.hasDataField< ::uint64_t>(0 * ::capnp::ELEMENTS);
-}
-inline  ::uint64_t Node::NestedNode::Reader::getId() const {
-  return _reader.getDataField< ::uint64_t>(
-      0 * ::capnp::ELEMENTS);
-}
-
-inline  ::uint64_t Node::NestedNode::Builder::getId() {
-  return _builder.getDataField< ::uint64_t>(
-      0 * ::capnp::ELEMENTS);
-}
-inline void Node::NestedNode::Builder::setId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
-      0 * ::capnp::ELEMENTS, value);
+inline Field::Which Field::Builder::which() {
+  return _builder.getDataField<Which>(4 * ::capnp::ELEMENTS);
 }
 
 inline bool Field::Reader::hasName() const {
@@ -2979,13 +3046,6 @@ inline void Field::Builder::setDiscriminantValue( ::uint16_t value) {
       1 * ::capnp::ELEMENTS, value, 65535u);
 }
 
-inline Field::Which Field::Reader::which() const {
-  return _reader.getDataField<Which>(4 * ::capnp::ELEMENTS);
-}
-inline Field::Which Field::Builder::which() {
-  return _builder.getDataField<Which>(4 * ::capnp::ELEMENTS);
-}
-
 inline Field::Regular::Reader Field::Reader::getRegular() const {
   KJ_IREQUIRE(which() == Field::REGULAR,
               "Must check which() before get()ing a union member.");
@@ -3000,6 +3060,46 @@ inline Field::Regular::Builder Field::Builder::initRegular() {
   _builder.setDataField<Field::Which>(
       4 * ::capnp::ELEMENTS, Field::REGULAR);
   return Field::Regular::Builder(_builder);
+}
+inline bool Field::Reader::hasGroup() const {
+  KJ_IREQUIRE(which() == Field::GROUP,
+              "Must check which() before get()ing a union member.");
+  return _reader.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
+}
+
+inline bool Field::Builder::hasGroup() {
+  KJ_IREQUIRE(which() == Field::GROUP,
+              "Must check which() before get()ing a union member.");
+  return _builder.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
+}
+inline  ::uint64_t Field::Reader::getGroup() const {
+  KJ_IREQUIRE(which() == Field::GROUP,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::uint64_t>(
+      2 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint64_t Field::Builder::getGroup() {
+  KJ_IREQUIRE(which() == Field::GROUP,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::uint64_t>(
+      2 * ::capnp::ELEMENTS);
+}
+inline void Field::Builder::setGroup( ::uint64_t value) {
+  _builder.setDataField<Field::Which>(
+      4 * ::capnp::ELEMENTS, Field::GROUP);
+  _builder.setDataField< ::uint64_t>(
+      2 * ::capnp::ELEMENTS, value);
+}
+
+inline Field::Ordinal::Reader Field::Reader::getOrdinal() const {
+  return Field::Ordinal::Reader(_reader);
+}
+inline Field::Ordinal::Builder Field::Builder::getOrdinal() {
+  return Field::Ordinal::Builder(_builder);
+}
+inline Field::Ordinal::Builder Field::Builder::initOrdinal() {
+  return Field::Ordinal::Builder(_builder);
 }
 inline bool Field::Regular::Reader::hasOffset() const {
   return _reader.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
@@ -3086,43 +3186,6 @@ inline ::capnp::Orphan< ::capnp::schema2::Value> Field::Regular::Builder::disown
       _builder, 3 * ::capnp::POINTERS);
 }
 
-inline bool Field::Reader::hasGroup() const {
-  KJ_IREQUIRE(which() == Field::GROUP,
-              "Must check which() before get()ing a union member.");
-  return _reader.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
-}
-
-inline bool Field::Builder::hasGroup() {
-  KJ_IREQUIRE(which() == Field::GROUP,
-              "Must check which() before get()ing a union member.");
-  return _builder.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
-}
-inline  ::uint64_t Field::Reader::getGroup() const {
-  KJ_IREQUIRE(which() == Field::GROUP,
-              "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::uint64_t>(
-      2 * ::capnp::ELEMENTS);
-}
-
-inline  ::uint64_t Field::Builder::getGroup() {
-  KJ_IREQUIRE(which() == Field::GROUP,
-              "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::uint64_t>(
-      2 * ::capnp::ELEMENTS);
-}
-inline void Field::Builder::setGroup( ::uint64_t value) {
-  _builder.setDataField<Field::Which>(
-      4 * ::capnp::ELEMENTS, Field::GROUP);
-  _builder.setDataField< ::uint64_t>(
-      2 * ::capnp::ELEMENTS, value);
-}
-
-inline Field::Ordinal::Reader Field::Reader::getOrdinal() const {
-  return Field::Ordinal::Reader(_reader);
-}
-inline Field::Ordinal::Builder Field::Builder::getOrdinal() {
-  return Field::Ordinal::Builder(_builder);
-}
 inline Field::Ordinal::Which Field::Ordinal::Reader::which() const {
   return _reader.getDataField<Which>(5 * ::capnp::ELEMENTS);
 }
@@ -3131,63 +3194,63 @@ inline Field::Ordinal::Which Field::Ordinal::Builder::which() {
 }
 
 inline bool Field::Ordinal::Reader::hasImplicit() const {
-  KJ_IREQUIRE(which() == Ordinal::IMPLICIT,
+  KJ_IREQUIRE(which() == Field::Ordinal::IMPLICIT,
               "Must check which() before get()ing a union member.");
   return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
 }
 
 inline bool Field::Ordinal::Builder::hasImplicit() {
-  KJ_IREQUIRE(which() == Ordinal::IMPLICIT,
+  KJ_IREQUIRE(which() == Field::Ordinal::IMPLICIT,
               "Must check which() before get()ing a union member.");
   return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
 }
 inline  ::capnp::Void Field::Ordinal::Reader::getImplicit() const {
-  KJ_IREQUIRE(which() == Ordinal::IMPLICIT,
+  KJ_IREQUIRE(which() == Field::Ordinal::IMPLICIT,
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
 }
 
 inline  ::capnp::Void Field::Ordinal::Builder::getImplicit() {
-  KJ_IREQUIRE(which() == Ordinal::IMPLICIT,
+  KJ_IREQUIRE(which() == Field::Ordinal::IMPLICIT,
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
 }
 inline void Field::Ordinal::Builder::setImplicit( ::capnp::Void value) {
-  _builder.setDataField<Ordinal::Which>(
-      5 * ::capnp::ELEMENTS, Ordinal::IMPLICIT);
+  _builder.setDataField<Field::Ordinal::Which>(
+      5 * ::capnp::ELEMENTS, Field::Ordinal::IMPLICIT);
   _builder.setDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS, value);
 }
 
 inline bool Field::Ordinal::Reader::hasExplicit() const {
-  KJ_IREQUIRE(which() == Ordinal::EXPLICIT,
+  KJ_IREQUIRE(which() == Field::Ordinal::EXPLICIT,
               "Must check which() before get()ing a union member.");
   return _reader.hasDataField< ::uint16_t>(6 * ::capnp::ELEMENTS);
 }
 
 inline bool Field::Ordinal::Builder::hasExplicit() {
-  KJ_IREQUIRE(which() == Ordinal::EXPLICIT,
+  KJ_IREQUIRE(which() == Field::Ordinal::EXPLICIT,
               "Must check which() before get()ing a union member.");
   return _builder.hasDataField< ::uint16_t>(6 * ::capnp::ELEMENTS);
 }
 inline  ::uint16_t Field::Ordinal::Reader::getExplicit() const {
-  KJ_IREQUIRE(which() == Ordinal::EXPLICIT,
+  KJ_IREQUIRE(which() == Field::Ordinal::EXPLICIT,
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::uint16_t>(
       6 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint16_t Field::Ordinal::Builder::getExplicit() {
-  KJ_IREQUIRE(which() == Ordinal::EXPLICIT,
+  KJ_IREQUIRE(which() == Field::Ordinal::EXPLICIT,
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::uint16_t>(
       6 * ::capnp::ELEMENTS);
 }
 inline void Field::Ordinal::Builder::setExplicit( ::uint16_t value) {
-  _builder.setDataField<Ordinal::Which>(
-      5 * ::capnp::ELEMENTS, Ordinal::EXPLICIT);
+  _builder.setDataField<Field::Ordinal::Which>(
+      5 * ::capnp::ELEMENTS, Field::Ordinal::EXPLICIT);
   _builder.setDataField< ::uint16_t>(
       6 * ::capnp::ELEMENTS, value);
 }

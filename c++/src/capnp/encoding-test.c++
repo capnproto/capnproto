@@ -389,17 +389,11 @@ TEST(Encoding, UnnamedUnion) {
   EXPECT_DEBUG_ANY_THROW(root.asReader().getBar());
 
   StructSchema schema = Schema::from<test::TestUnnamedUnion>();
-  KJ_IF_MAYBE(u, schema.getUnnamedUnion()) {
-    // The discriminant is allocated just before allocating "bar".
-    EXPECT_EQ(2, u->getProto().getBody().getUnionMember().getDiscriminantOffset());
-    EXPECT_EQ(0, u->getMemberByName("foo").getProto().getBody().getFieldMember().getOffset());
-    EXPECT_EQ(2, u->getMemberByName("bar").getProto().getBody().getFieldMember().getOffset());
 
-    // The union receives the ordinal of its first member, since it does not explicitly declare one.
-    EXPECT_EQ(1, u->getProto().getOrdinal());
-  } else {
-    ADD_FAILURE() << "getUnnamedUnion() should have returned non-null.";
-  }
+  // The discriminant is allocated just before allocating "bar".
+  EXPECT_EQ(2, schema.getProto().getStruct().getDiscriminantOffset());
+  EXPECT_EQ(0, schema.getFieldByName("foo").getProto().getRegular().getOffset());
+  EXPECT_EQ(2, schema.getFieldByName("bar").getProto().getRegular().getOffset());
 }
 
 TEST(Encoding, Groups) {

@@ -21,29 +21,6 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Copyright (c) 2013, Kenton Varda <temporal@gmail.com>
-// All rights reserved.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
-//
-// 1. Redistributions of source code must retain the above copyright notice, this
-//    list of conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice,
-//    this list of conditions and the following disclaimer in the documentation
-//    and/or other materials provided with the distribution.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 #include "schema.h"
 #include <gtest/gtest.h>
 #include "test-util.h"
@@ -72,26 +49,22 @@ TEST(Schema, Structs) {
   EXPECT_ANY_THROW(schema.asEnum());
   EXPECT_ANY_THROW(schema.asInterface());
 
-  ASSERT_EQ(schema.getMembers().size(),
-            schema.getProto().getBody().getStructNode().getMembers().size());
-  StructSchema::Member member = schema.getMembers()[0];
-  EXPECT_EQ("voidField", member.getProto().getName());
-  EXPECT_TRUE(member.getContainingStruct() == schema);
-  EXPECT_TRUE(member.getContainingUnion() == nullptr);
+  ASSERT_EQ(schema.getFields().size(), schema.getProto().getStruct().getFields().size());
+  StructSchema::Field field = schema.getFields()[0];
+  EXPECT_EQ("voidField", field.getProto().getName());
+  EXPECT_TRUE(field.getContainingStruct() == schema);
 
-  EXPECT_ANY_THROW(member.asUnion());
+  StructSchema::Field lookup = schema.getFieldByName("voidField");
+  EXPECT_TRUE(lookup == field);
+  EXPECT_TRUE(lookup != schema.getFields()[1]);
 
-  StructSchema::Member lookup = schema.getMemberByName("voidField");
-  EXPECT_TRUE(lookup == member);
-  EXPECT_TRUE(lookup != schema.getMembers()[1]);
+  EXPECT_TRUE(schema.findFieldByName("noSuchField") == nullptr);
 
-  EXPECT_TRUE(schema.findMemberByName("noSuchField") == nullptr);
-
-  EXPECT_TRUE(schema.findMemberByName("int32Field") != nullptr);
-  EXPECT_TRUE(schema.findMemberByName("float32List") != nullptr);
-  EXPECT_TRUE(schema.findMemberByName("dataList") != nullptr);
-  EXPECT_TRUE(schema.findMemberByName("textField") != nullptr);
-  EXPECT_TRUE(schema.findMemberByName("structField") != nullptr);
+  EXPECT_TRUE(schema.findFieldByName("int32Field") != nullptr);
+  EXPECT_TRUE(schema.findFieldByName("float32List") != nullptr);
+  EXPECT_TRUE(schema.findFieldByName("dataList") != nullptr);
+  EXPECT_TRUE(schema.findFieldByName("textField") != nullptr);
+  EXPECT_TRUE(schema.findFieldByName("structField") != nullptr);
 }
 
 TEST(Schema, FieldLookupOutOfOrder) {
@@ -99,54 +72,50 @@ TEST(Schema, FieldLookupOutOfOrder) {
   // file.
   auto schema = Schema::from<test::TestOutOfOrder>().asStruct();
 
-  EXPECT_EQ("qux", schema.getMembers()[0].getProto().getName());
-  EXPECT_EQ("grault", schema.getMembers()[1].getProto().getName());
-  EXPECT_EQ("bar", schema.getMembers()[2].getProto().getName());
-  EXPECT_EQ("foo", schema.getMembers()[3].getProto().getName());
-  EXPECT_EQ("corge", schema.getMembers()[4].getProto().getName());
-  EXPECT_EQ("waldo", schema.getMembers()[5].getProto().getName());
-  EXPECT_EQ("quux", schema.getMembers()[6].getProto().getName());
-  EXPECT_EQ("garply", schema.getMembers()[7].getProto().getName());
-  EXPECT_EQ("baz", schema.getMembers()[8].getProto().getName());
+  EXPECT_EQ("qux", schema.getFields()[0].getProto().getName());
+  EXPECT_EQ("grault", schema.getFields()[1].getProto().getName());
+  EXPECT_EQ("bar", schema.getFields()[2].getProto().getName());
+  EXPECT_EQ("foo", schema.getFields()[3].getProto().getName());
+  EXPECT_EQ("corge", schema.getFields()[4].getProto().getName());
+  EXPECT_EQ("waldo", schema.getFields()[5].getProto().getName());
+  EXPECT_EQ("quux", schema.getFields()[6].getProto().getName());
+  EXPECT_EQ("garply", schema.getFields()[7].getProto().getName());
+  EXPECT_EQ("baz", schema.getFields()[8].getProto().getName());
 
-  EXPECT_EQ(3, schema.getMemberByName("foo").getProto().getOrdinal());
-  EXPECT_EQ(2, schema.getMemberByName("bar").getProto().getOrdinal());
-  EXPECT_EQ(8, schema.getMemberByName("baz").getProto().getOrdinal());
-  EXPECT_EQ(0, schema.getMemberByName("qux").getProto().getOrdinal());
-  EXPECT_EQ(6, schema.getMemberByName("quux").getProto().getOrdinal());
-  EXPECT_EQ(4, schema.getMemberByName("corge").getProto().getOrdinal());
-  EXPECT_EQ(1, schema.getMemberByName("grault").getProto().getOrdinal());
-  EXPECT_EQ(7, schema.getMemberByName("garply").getProto().getOrdinal());
-  EXPECT_EQ(5, schema.getMemberByName("waldo").getProto().getOrdinal());
+  EXPECT_EQ(3, schema.getFieldByName("foo").getProto().getOrdinal().getExplicit());
+  EXPECT_EQ(2, schema.getFieldByName("bar").getProto().getOrdinal().getExplicit());
+  EXPECT_EQ(8, schema.getFieldByName("baz").getProto().getOrdinal().getExplicit());
+  EXPECT_EQ(0, schema.getFieldByName("qux").getProto().getOrdinal().getExplicit());
+  EXPECT_EQ(6, schema.getFieldByName("quux").getProto().getOrdinal().getExplicit());
+  EXPECT_EQ(4, schema.getFieldByName("corge").getProto().getOrdinal().getExplicit());
+  EXPECT_EQ(1, schema.getFieldByName("grault").getProto().getOrdinal().getExplicit());
+  EXPECT_EQ(7, schema.getFieldByName("garply").getProto().getOrdinal().getExplicit());
+  EXPECT_EQ(5, schema.getFieldByName("waldo").getProto().getOrdinal().getExplicit());
 }
 
 TEST(Schema, Unions) {
   auto schema = Schema::from<TestUnion>().asStruct();
 
-  EXPECT_TRUE(schema.findMemberByName("bit0") != nullptr);
-  EXPECT_TRUE(schema.findMemberByName("u1f0s8") == nullptr);
+  EXPECT_TRUE(schema.findFieldByName("bit0") != nullptr);
+  EXPECT_TRUE(schema.findFieldByName("u1f0s8") == nullptr);
 
-  auto union1 = schema.getMemberByName("union1").asUnion();
-  EXPECT_TRUE(union1.findMemberByName("bin0") == nullptr);
-  EXPECT_TRUE(union1.getContainingUnion() == nullptr);
+  auto union1 = schema.getFieldByName("union1");
+  auto union1g = schema.getDependency(union1.getProto().getGroup()).asStruct();
+  EXPECT_EQ(schema, union1g.getDependency(union1g.getProto().getScopeId()));
+  EXPECT_TRUE(union1g.findFieldByName("bin0") == nullptr);
 
-  auto u1f0s8 = union1.getMemberByName("u1f0s8");
+  auto u1f0s8 = union1g.getFieldByName("u1f0s8");
   EXPECT_EQ("u1f0s8", u1f0s8.getProto().getName());
-  EXPECT_TRUE(u1f0s8.getContainingStruct() == schema);
-  KJ_IF_MAYBE(containing, u1f0s8.getContainingUnion()) {
-    EXPECT_TRUE(*containing == union1);
-  } else {
-    ADD_FAILURE() << "u1f0s8.getContainingUnion() returned null";
-  }
+  EXPECT_TRUE(u1f0s8.getContainingStruct() == union1g);
 
-  EXPECT_TRUE(union1.findMemberByName("u1f1s8") != nullptr);
-  EXPECT_TRUE(union1.findMemberByName("u1f0s32") != nullptr);
-  EXPECT_TRUE(union1.findMemberByName("u1f0sp") != nullptr);
-  EXPECT_TRUE(union1.findMemberByName("u1f1s1") != nullptr);
+  EXPECT_TRUE(union1g.findFieldByName("u1f1s8") != nullptr);
+  EXPECT_TRUE(union1g.findFieldByName("u1f0s32") != nullptr);
+  EXPECT_TRUE(union1g.findFieldByName("u1f0sp") != nullptr);
+  EXPECT_TRUE(union1g.findFieldByName("u1f1s1") != nullptr);
 
-  EXPECT_TRUE(union1.findMemberByName("u0f0s1") == nullptr);
-  EXPECT_TRUE(union1.findMemberByName("u2f0s8") == nullptr);
-  EXPECT_TRUE(union1.findMemberByName("noSuchField") == nullptr);
+  EXPECT_TRUE(union1g.findFieldByName("u0f0s1") == nullptr);
+  EXPECT_TRUE(union1g.findFieldByName("u2f0s8") == nullptr);
+  EXPECT_TRUE(union1g.findFieldByName("noSuchField") == nullptr);
 }
 
 TEST(Schema, Enums) {
@@ -162,7 +131,7 @@ TEST(Schema, Enums) {
   EXPECT_TRUE(schema.asEnum() == schema);
 
   ASSERT_EQ(schema.getEnumerants().size(),
-            schema.getProto().getBody().getEnumNode().getEnumerants().size());
+            schema.getProto().getEnum().size());
   EnumSchema::Enumerant enumerant = schema.getEnumerants()[0];
   EXPECT_EQ("foo", enumerant.getProto().getName());
   EXPECT_TRUE(enumerant.getContainingEnum() == schema);
@@ -182,20 +151,20 @@ TEST(Schema, Enums) {
 // TODO(someday):  Test interface schemas when interfaces are implemented.
 
 TEST(Schema, Lists) {
-  EXPECT_EQ(schema::Type::Body::VOID_TYPE, Schema::from<List<Void>>().whichElementType());
-  EXPECT_EQ(schema::Type::Body::BOOL_TYPE, Schema::from<List<bool>>().whichElementType());
-  EXPECT_EQ(schema::Type::Body::INT8_TYPE, Schema::from<List<int8_t>>().whichElementType());
-  EXPECT_EQ(schema::Type::Body::INT16_TYPE, Schema::from<List<int16_t>>().whichElementType());
-  EXPECT_EQ(schema::Type::Body::INT32_TYPE, Schema::from<List<int32_t>>().whichElementType());
-  EXPECT_EQ(schema::Type::Body::INT64_TYPE, Schema::from<List<int64_t>>().whichElementType());
-  EXPECT_EQ(schema::Type::Body::UINT8_TYPE, Schema::from<List<uint8_t>>().whichElementType());
-  EXPECT_EQ(schema::Type::Body::UINT16_TYPE, Schema::from<List<uint16_t>>().whichElementType());
-  EXPECT_EQ(schema::Type::Body::UINT32_TYPE, Schema::from<List<uint32_t>>().whichElementType());
-  EXPECT_EQ(schema::Type::Body::UINT64_TYPE, Schema::from<List<uint64_t>>().whichElementType());
-  EXPECT_EQ(schema::Type::Body::FLOAT32_TYPE, Schema::from<List<float>>().whichElementType());
-  EXPECT_EQ(schema::Type::Body::FLOAT64_TYPE, Schema::from<List<double>>().whichElementType());
-  EXPECT_EQ(schema::Type::Body::TEXT_TYPE, Schema::from<List<Text>>().whichElementType());
-  EXPECT_EQ(schema::Type::Body::DATA_TYPE, Schema::from<List<Data>>().whichElementType());
+  EXPECT_EQ(schema2::Type::VOID, Schema::from<List<Void>>().whichElementType());
+  EXPECT_EQ(schema2::Type::BOOL, Schema::from<List<bool>>().whichElementType());
+  EXPECT_EQ(schema2::Type::INT8, Schema::from<List<int8_t>>().whichElementType());
+  EXPECT_EQ(schema2::Type::INT16, Schema::from<List<int16_t>>().whichElementType());
+  EXPECT_EQ(schema2::Type::INT32, Schema::from<List<int32_t>>().whichElementType());
+  EXPECT_EQ(schema2::Type::INT64, Schema::from<List<int64_t>>().whichElementType());
+  EXPECT_EQ(schema2::Type::UINT8, Schema::from<List<uint8_t>>().whichElementType());
+  EXPECT_EQ(schema2::Type::UINT16, Schema::from<List<uint16_t>>().whichElementType());
+  EXPECT_EQ(schema2::Type::UINT32, Schema::from<List<uint32_t>>().whichElementType());
+  EXPECT_EQ(schema2::Type::UINT64, Schema::from<List<uint64_t>>().whichElementType());
+  EXPECT_EQ(schema2::Type::FLOAT32, Schema::from<List<float>>().whichElementType());
+  EXPECT_EQ(schema2::Type::FLOAT64, Schema::from<List<double>>().whichElementType());
+  EXPECT_EQ(schema2::Type::TEXT, Schema::from<List<Text>>().whichElementType());
+  EXPECT_EQ(schema2::Type::DATA, Schema::from<List<Data>>().whichElementType());
 
   EXPECT_ANY_THROW(Schema::from<List<uint16_t>>().getStructElementType());
   EXPECT_ANY_THROW(Schema::from<List<uint16_t>>().getEnumElementType());
@@ -204,7 +173,7 @@ TEST(Schema, Lists) {
 
   {
     ListSchema schema = Schema::from<List<TestAllTypes>>();
-    EXPECT_EQ(schema::Type::Body::STRUCT_TYPE, schema.whichElementType());
+    EXPECT_EQ(schema2::Type::STRUCT, schema.whichElementType());
     EXPECT_TRUE(schema.getStructElementType() == Schema::from<TestAllTypes>());
     EXPECT_ANY_THROW(schema.getEnumElementType());
     EXPECT_ANY_THROW(schema.getInterfaceElementType());
@@ -213,7 +182,7 @@ TEST(Schema, Lists) {
 
   {
     ListSchema schema = Schema::from<List<TestEnum>>();
-    EXPECT_EQ(schema::Type::Body::ENUM_TYPE, schema.whichElementType());
+    EXPECT_EQ(schema2::Type::ENUM, schema.whichElementType());
     EXPECT_TRUE(schema.getEnumElementType() == Schema::from<TestEnum>());
     EXPECT_ANY_THROW(schema.getStructElementType());
     EXPECT_ANY_THROW(schema.getInterfaceElementType());
@@ -224,45 +193,45 @@ TEST(Schema, Lists) {
 
   {
     ListSchema schema = Schema::from<List<List<int32_t>>>();
-    EXPECT_EQ(schema::Type::Body::LIST_TYPE, schema.whichElementType());
+    EXPECT_EQ(schema2::Type::LIST, schema.whichElementType());
     EXPECT_ANY_THROW(schema.getStructElementType());
     EXPECT_ANY_THROW(schema.getEnumElementType());
     EXPECT_ANY_THROW(schema.getInterfaceElementType());
 
     ListSchema inner = schema.getListElementType();
-    EXPECT_EQ(schema::Type::Body::INT32_TYPE, inner.whichElementType());
+    EXPECT_EQ(schema2::Type::INT32, inner.whichElementType());
   }
 
   {
     ListSchema schema = Schema::from<List<List<TestAllTypes>>>();
-    EXPECT_EQ(schema::Type::Body::LIST_TYPE, schema.whichElementType());
+    EXPECT_EQ(schema2::Type::LIST, schema.whichElementType());
     EXPECT_ANY_THROW(schema.getStructElementType());
     EXPECT_ANY_THROW(schema.getEnumElementType());
     EXPECT_ANY_THROW(schema.getInterfaceElementType());
 
     ListSchema inner = schema.getListElementType();
-    EXPECT_EQ(schema::Type::Body::STRUCT_TYPE, inner.whichElementType());
+    EXPECT_EQ(schema2::Type::STRUCT, inner.whichElementType());
     EXPECT_TRUE(inner.getStructElementType() == Schema::from<TestAllTypes>());
   }
 
   {
     ListSchema schema = Schema::from<List<List<TestEnum>>>();
-    EXPECT_EQ(schema::Type::Body::LIST_TYPE, schema.whichElementType());
+    EXPECT_EQ(schema2::Type::LIST, schema.whichElementType());
     EXPECT_ANY_THROW(schema.getStructElementType());
     EXPECT_ANY_THROW(schema.getEnumElementType());
     EXPECT_ANY_THROW(schema.getInterfaceElementType());
 
     ListSchema inner = schema.getListElementType();
-    EXPECT_EQ(schema::Type::Body::ENUM_TYPE, inner.whichElementType());
+    EXPECT_EQ(schema2::Type::ENUM, inner.whichElementType());
     EXPECT_TRUE(inner.getEnumElementType() == Schema::from<TestEnum>());
   }
 
   {
     auto context = Schema::from<TestAllTypes>();
-    auto type = context.getMemberByName("enumList").getProto().getBody().getFieldMember().getType();
+    auto type = context.getFieldByName("enumList").getProto().getRegular().getType();
 
-    ListSchema schema = ListSchema::of(type.getBody().getListType(), context);
-    EXPECT_EQ(schema::Type::Body::ENUM_TYPE, schema.whichElementType());
+    ListSchema schema = ListSchema::of(type.getList(), context);
+    EXPECT_EQ(schema2::Type::ENUM, schema.whichElementType());
     EXPECT_TRUE(schema.getEnumElementType() == Schema::from<TestEnum>());
     EXPECT_ANY_THROW(schema.getStructElementType());
     EXPECT_ANY_THROW(schema.getInterfaceElementType());
@@ -273,18 +242,12 @@ TEST(Schema, Lists) {
 TEST(Schema, UnnamedUnion) {
   StructSchema schema = Schema::from<test::TestUnnamedUnion>();
 
-  EXPECT_TRUE(schema.findMemberByName("") == nullptr);
+  EXPECT_TRUE(schema.findFieldByName("") == nullptr);
 
-  KJ_IF_MAYBE(u, schema.getUnnamedUnion()) {
-    EXPECT_TRUE(schema.getMemberByName("foo") == u->getMemberByName("foo"));
-    EXPECT_TRUE(schema.getMemberByName("bar") == u->getMemberByName("bar"));
-    EXPECT_TRUE(u->findMemberByName("before") == nullptr);
-    EXPECT_TRUE(u->findMemberByName("after") == nullptr);
-    EXPECT_TRUE(schema.findMemberByName("before") != nullptr);
-    EXPECT_TRUE(schema.findMemberByName("after") != nullptr);
-  } else {
-    ADD_FAILURE() << "getUnnamedUnion() should have returned non-null.";
-  }
+  EXPECT_TRUE(schema.findFieldByName("foo") != nullptr);
+  EXPECT_TRUE(schema.findFieldByName("bar") != nullptr);
+  EXPECT_TRUE(schema.findFieldByName("before") != nullptr);
+  EXPECT_TRUE(schema.findFieldByName("after") != nullptr);
 }
 
 }  // namespace

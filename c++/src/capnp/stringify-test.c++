@@ -318,21 +318,23 @@ TEST(Stringify, PrettyPrintAdvanced) {
 
     auto s = root.getUn().initAllTypes();
     EXPECT_EQ(
-        "(un = allTypes())",
+        "(un = (allTypes = ()))",
         prettyPrint(root).flatten());
 
     s.setInt32Field(123);
     EXPECT_EQ(
-        "( un = allTypes(int32Field = 123) )",
+        "( un = (\n"
+        "    allTypes = (int32Field = 123) ) )",
         prettyPrint(root).flatten());
 
     s.setTextField("foo");
     s.setUInt64Field(0xffffffffffffffffull);
     EXPECT_EQ(
-        "( un = allTypes(\n"
-        "    int32Field = 123,\n"
-        "    uInt64Field = 18446744073709551615,\n"
-        "    textField = \"foo\" ) )",
+        "( un = (\n"
+        "    allTypes = (\n"
+        "      int32Field = 123,\n"
+        "      uInt64Field = 18446744073709551615,\n"
+        "      textField = \"foo\" ) ) )",
         prettyPrint(root).flatten());
   }
 }
@@ -347,16 +349,16 @@ TEST(Stringify, Unions) {
   root.getUnion3().setU3f0s64(123456789012345678ll);
 
   EXPECT_EQ("("
-      "union0 = u0f0s16(321), "
-      "union1 = u1f0sp(\"foo\"), "
-      "union2 = u2f0s1(true), "
-      "union3 = u3f0s64(123456789012345678))",
+      "union0 = (u0f0s16 = 321), "
+      "union1 = (u1f0sp = \"foo\"), "
+      "union2 = (u2f0s1 = true), "
+      "union3 = (u3f0s64 = 123456789012345678))",
       kj::str(root));
 
-  EXPECT_EQ("u0f0s16(321)", kj::str(root.getUnion0()));
-  EXPECT_EQ("u1f0sp(\"foo\")", kj::str(root.getUnion1()));
-  EXPECT_EQ("u2f0s1(true)", kj::str(root.getUnion2()));
-  EXPECT_EQ("u3f0s64(123456789012345678)", kj::str(root.getUnion3()));
+  EXPECT_EQ("(u0f0s16 = 321)", kj::str(root.getUnion0()));
+  EXPECT_EQ("(u1f0sp = \"foo\")", kj::str(root.getUnion1()));
+  EXPECT_EQ("(u2f0s1 = true)", kj::str(root.getUnion2()));
+  EXPECT_EQ("(u3f0s64 = 123456789012345678)", kj::str(root.getUnion3()));
 }
 
 TEST(Stringify, UnnamedUnions) {
@@ -365,24 +367,24 @@ TEST(Stringify, UnnamedUnions) {
 
   root.setBar(123);
 
-  EXPECT_EQ("(bar(123))", kj::str(root));
-  EXPECT_EQ("(bar(123))", prettyPrint(root).flatten());
+  EXPECT_EQ("(bar = 123)", kj::str(root));
+  EXPECT_EQ("(bar = 123)", prettyPrint(root).flatten());
 
   root.setAfter("foooooooooooooooooooooooooooooooo");
 
-  EXPECT_EQ("(bar(123), after = \"foooooooooooooooooooooooooooooooo\")", kj::str(root));
+  EXPECT_EQ("(bar = 123, after = \"foooooooooooooooooooooooooooooooo\")", kj::str(root));
   EXPECT_EQ(
-      "( bar(123),\n"
+      "( bar = 123,\n"
       "  after = \"foooooooooooooooooooooooooooooooo\" )",
       prettyPrint(root).flatten());
 
   root.setBefore("before");
 
-  EXPECT_EQ("(before = \"before\", bar(123), "
+  EXPECT_EQ("(before = \"before\", bar = 123, "
       "after = \"foooooooooooooooooooooooooooooooo\")", kj::str(root));
   EXPECT_EQ(
       "( before = \"before\",\n"
-      "  bar(123),\n"
+      "  bar = 123,\n"
       "  after = \"foooooooooooooooooooooooooooooooo\" )",
       prettyPrint(root).flatten());
 }
@@ -395,7 +397,7 @@ TEST(Stringify, StructUnions) {
   allTypes.setUInt32Field(12345);
   allTypes.setTextField("foo");
 
-  EXPECT_EQ("(un = allTypes(uInt32Field = 12345, textField = \"foo\"))", kj::str(root));
+  EXPECT_EQ("(un = (allTypes = (uInt32Field = 12345, textField = \"foo\")))", kj::str(root));
 }
 
 TEST(Stringify, MoreValues) {
@@ -405,7 +407,7 @@ TEST(Stringify, MoreValues) {
   EXPECT_EQ("\"\\a\\b\\n\\t\\\"\"", kj::str(DynamicValue::Reader("\a\b\n\t\"")));
 
   EXPECT_EQ("foo", kj::str(DynamicValue::Reader(TestEnum::FOO)));
-  EXPECT_EQ("123", kj::str(DynamicValue::Reader(static_cast<TestEnum>(123))));
+  EXPECT_EQ("(123)", kj::str(DynamicValue::Reader(static_cast<TestEnum>(123))));
 }
 
 }  // namespace

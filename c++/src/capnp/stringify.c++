@@ -195,19 +195,32 @@ static kj::StringTree print(const DynamicValue::Reader& value,
 
       kj::Vector<kj::StringTree> printedFields(nonUnionFields.size() + (unionFields.size() != 0));
 
-      KJ_IF_MAYBE(field, structValue.which()) {
-        if (structValue.has(*field)) {
-          printedFields.add(kj::strTree(
-              field->getProto().getName(), " = ",
-              print(structValue.get(*field), whichFieldType(*field), indent.next(), PREFIXED)));
-        }
-      }
+      // We try to write the union field, if any, in proper order with the rest.
+      auto which = structValue.which();
 
       for (auto field: nonUnionFields) {
+        KJ_IF_MAYBE(unionField, which) {
+          if (unionField->getIndex() < field.getIndex()) {
+            if (structValue.has(*unionField)) {
+              printedFields.add(kj::strTree(
+                  unionField->getProto().getName(), " = ",
+                  print(structValue.get(*unionField), whichFieldType(*unionField),
+                        indent.next(), PREFIXED)));
+            }
+            which = nullptr;
+          }
+        }
         if (structValue.has(field)) {
           printedFields.add(kj::strTree(
               field.getProto().getName(), " = ",
               print(structValue.get(field), whichFieldType(field), indent.next(), PREFIXED)));
+        }
+      }
+      KJ_IF_MAYBE(field, which) {
+        if (structValue.has(*field)) {
+          printedFields.add(kj::strTree(
+              field->getProto().getName(), " = ",
+              print(structValue.get(*field), whichFieldType(*field), indent.next(), PREFIXED)));
         }
       }
 

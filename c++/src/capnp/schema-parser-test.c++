@@ -52,6 +52,12 @@ private:
   std::map<kj::StringPtr, kj::StringPtr> files;
 };
 
+static uint64_t getFieldTypeFileId(StructSchema::Field field) {
+  return field.getContainingStruct()
+      .getDependency(field.getProto().getRegular().getType().getStruct())
+      .getProto().getScopeId();
+}
+
 TEST(SchemaParser, Basic) {
   SchemaParser parser;
   FakeFileReader reader;
@@ -90,24 +96,18 @@ TEST(SchemaParser, Basic) {
   auto barProto = barSchema.getProto();
   EXPECT_EQ(0x8123456789abcdefull, barProto.getId());
   EXPECT_EQ("foo2/bar2.capnp", barProto.getDisplayName());
-  auto barImports = barProto.getBody().getFileNode().getImports();
-  ASSERT_EQ(4, barImports.size());
-  EXPECT_EQ("../qux/corge.capnp", barImports[0].getName());
-  EXPECT_EQ(0x83456789abcdef12ull, barImports[0].getId());
-  EXPECT_EQ("/garply.capnp", barImports[1].getName());
-  EXPECT_EQ(0x856789abcdef1234ull, barImports[1].getId());
-  EXPECT_EQ("/grault.capnp", barImports[2].getName());
-  EXPECT_EQ(0x8456789abcdef123ull, barImports[2].getId());
-  EXPECT_EQ("baz.capnp", barImports[3].getName());
-  EXPECT_EQ(0x823456789abcdef1ull, barImports[3].getId());
 
   auto barStruct = barSchema.getNested("Bar");
-  auto barMembers = barStruct.asStruct().getMembers();
-  ASSERT_EQ(4, barMembers.size());
-  EXPECT_EQ("baz", barMembers[0].getProto().getName());
-  EXPECT_EQ("corge", barMembers[1].getProto().getName());
-  EXPECT_EQ("grault", barMembers[2].getProto().getName());
-  EXPECT_EQ("garply", barMembers[3].getProto().getName());
+  auto barFields = barStruct.asStruct().getFields();
+  ASSERT_EQ(4, barFields.size());
+  EXPECT_EQ("baz", barFields[0].getProto().getName());
+  EXPECT_EQ(0x823456789abcdef1ull, getFieldTypeFileId(barFields[0]));
+  EXPECT_EQ("corge", barFields[1].getProto().getName());
+  EXPECT_EQ(0x83456789abcdef12ull, getFieldTypeFileId(barFields[1]));
+  EXPECT_EQ("grault", barFields[2].getProto().getName());
+  EXPECT_EQ(0x8456789abcdef123ull, getFieldTypeFileId(barFields[2]));
+  EXPECT_EQ("garply", barFields[3].getProto().getName());
+  EXPECT_EQ(0x856789abcdef1234ull, getFieldTypeFileId(barFields[3]));
 
   auto bazSchema = parser.parseFile(SchemaFile::newDiskFile(
       kj::str("not/used/because/already/loaded"),

@@ -825,10 +825,21 @@ private:
     enumerateDeps(proto, deps);
 
     kj::Array<uint> membersByName;
+    kj::Array<uint> membersByDiscrim;
     switch (proto.which()) {
-      case schema2::Node::STRUCT:
-        membersByName = makeMembersByName(schema.asStruct().getFields());
+      case schema2::Node::STRUCT: {
+        auto structSchema = schema.asStruct();
+        membersByName = makeMembersByName(structSchema.getFields());
+        auto builder = kj::heapArrayBuilder<uint>(structSchema.getFields().size());
+        for (auto field: structSchema.getUnionFields()) {
+          builder.add(field.getIndex());
+        }
+        for (auto field: structSchema.getNonUnionFields()) {
+          builder.add(field.getIndex());
+        }
+        membersByDiscrim = builder.finish();
         break;
+      }
       case schema2::Node::ENUM:
         membersByName = makeMembersByName(schema.asEnum().getEnumerants());
         break;
@@ -848,12 +859,15 @@ private:
           return kj::strTree("  &s_", kj::hex(depId), ",\n");
         },
         "};\n"
-        "static const ::capnp::_::RawSchema::MemberInfo m_", hexId, "[] = {\n",
+        "static const uint16_t m_", hexId, "[] = {",
         kj::StringTree(KJ_MAP(membersByName, index) { return kj::strTree(index); }, ", "),
+        "};\n"
+        "static const uint16_t i_", hexId, "[] = {",
+        kj::StringTree(KJ_MAP(membersByDiscrim, index) { return kj::strTree(index); }, ", "),
         "};\n"
         "const ::capnp::_::RawSchema s_", hexId, " = {\n"
         "  0x", hexId, ", b_", hexId, ".words, ", rawSchema.size(), ", d_", hexId, ", m_", hexId, ",\n"
-        "  ", deps.size(), ", ", membersByName.size(), ", nullptr, nullptr\n"
+        "  ", deps.size(), ", ", membersByName.size(), ", i_", hexId, ", nullptr, nullptr\n"
         "};\n");
 
     switch (proto.which()) {

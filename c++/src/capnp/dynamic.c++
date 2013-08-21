@@ -719,7 +719,7 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
         case schema2::Type::STRUCT:
         case schema2::Type::OBJECT:
           builder.disown(regularField.getOffset() * POINTERS);
-          break;
+          return;
 
         case schema2::Type::INTERFACE:
           KJ_FAIL_ASSERT("Interfaces not yet implemented.");
@@ -737,7 +737,7 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
       for (auto subField: group.schema.getNonUnionFields()) {
         group.clear(subField);
       }
-      break;
+      return;
     }
   }
 

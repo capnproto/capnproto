@@ -1057,6 +1057,7 @@ private:
       if (parent != nullptr) {
         uint64_t groupId = generateGroupId(parent->node.getId(), index);
         node.setId(groupId);
+        node.setScopeId(parent->node.getId());
         getSchema().setGroup(groupId);
       }
     }
@@ -1201,10 +1202,9 @@ private:
         .newOrphan<schema2::Node>();
     auto node = orphan.get();
 
-    // We'll set the ID later.
+    // We'll set the ID and scope ID later.
     node.setDisplayName(kj::str(parent.getDisplayName(), '.', name));
     node.setDisplayNamePrefixLength(node.getDisplayName().size() - name.size());
-    node.setScopeId(parent.getId());
     node.initStruct().setIsGroup(true);
 
     // The remaining contents of node.struct will be filled in later.
@@ -1475,25 +1475,25 @@ private:
 
 static kj::StringPtr getValueUnionFieldNameFor(schema2::Type::Which type) {
   switch (type) {
-    case schema2::Type::VOID: return "voidValue";
-    case schema2::Type::BOOL: return "boolValue";
-    case schema2::Type::INT8: return "int8Value";
-    case schema2::Type::INT16: return "int16Value";
-    case schema2::Type::INT32: return "int32Value";
-    case schema2::Type::INT64: return "int64Value";
-    case schema2::Type::UINT8: return "uint8Value";
-    case schema2::Type::UINT16: return "uint16Value";
-    case schema2::Type::UINT32: return "uint32Value";
-    case schema2::Type::UINT64: return "uint64Value";
-    case schema2::Type::FLOAT32: return "float32Value";
-    case schema2::Type::FLOAT64: return "float64Value";
-    case schema2::Type::TEXT: return "textValue";
-    case schema2::Type::DATA: return "dataValue";
-    case schema2::Type::LIST: return "listValue";
-    case schema2::Type::ENUM: return "enumValue";
-    case schema2::Type::STRUCT: return "structValue";
-    case schema2::Type::INTERFACE: return "interfaceValue";
-    case schema2::Type::OBJECT: return "objectValue";
+    case schema2::Type::VOID: return "void";
+    case schema2::Type::BOOL: return "bool";
+    case schema2::Type::INT8: return "int8";
+    case schema2::Type::INT16: return "int16";
+    case schema2::Type::INT32: return "int32";
+    case schema2::Type::INT64: return "int64";
+    case schema2::Type::UINT8: return "uint8";
+    case schema2::Type::UINT16: return "uint16";
+    case schema2::Type::UINT32: return "uint32";
+    case schema2::Type::UINT64: return "uint64";
+    case schema2::Type::FLOAT32: return "float32";
+    case schema2::Type::FLOAT64: return "float64";
+    case schema2::Type::TEXT: return "text";
+    case schema2::Type::DATA: return "data";
+    case schema2::Type::LIST: return "list";
+    case schema2::Type::ENUM: return "enum";
+    case schema2::Type::STRUCT: return "struct";
+    case schema2::Type::INTERFACE: return "interface";
+    case schema2::Type::OBJECT: return "object";
   }
   KJ_FAIL_ASSERT("Unknown type.");
 }
@@ -1533,35 +1533,38 @@ void NodeTranslator::compileValue(ValueExpression::Reader source, schema2::Type:
       break;
 
     default:
+#if 0
       KJ_FAIL_ASSERT("Need to compile value type:", (uint)type.which(),
                      wipNode.getReader().getDisplayName());
   }
+#else
+      break;
+  }
 
-#if 0
-  auto valueUnion = toDynamic(target).get("body").as<DynamicUnion>();
-  auto member = valueUnion.getSchema().getMemberByName(
-      getValueUnionFieldNameFor(type.getBody().which()));
-  switch (type.getBody().which()) {
+  auto valueUnion = toDynamic(target);
+  auto field = valueUnion.getSchema().getFieldByName(
+      getValueUnionFieldNameFor(type.which()));
+  switch (type.which()) {
     case schema2::Type::LIST:
-      KJ_IF_MAYBE(listSchema, makeListSchemaOf(type.getBody().getListType())) {
-        DynamicSlot slot(valueUnion, member, *listSchema);
+      KJ_IF_MAYBE(listSchema, makeListSchemaOf(type.getList())) {
+        DynamicSlot slot(valueUnion, field, *listSchema);
         compileValue(source, slot, isBootstrap);
       }
       break;
     case schema2::Type::STRUCT:
-      KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(type.getBody().getStructType())) {
-        DynamicSlot slot(valueUnion, member, structSchema->asStruct());
+      KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(type.getStruct())) {
+        DynamicSlot slot(valueUnion, field, structSchema->asStruct());
         compileValue(source, slot, isBootstrap);
       }
       break;
     case schema2::Type::ENUM:
-      KJ_IF_MAYBE(enumSchema, resolver.resolveBootstrapSchema(type.getBody().getEnumType())) {
-        DynamicSlot slot(valueUnion, member, enumSchema->asEnum());
+      KJ_IF_MAYBE(enumSchema, resolver.resolveBootstrapSchema(type.getEnum())) {
+        DynamicSlot slot(valueUnion, field, enumSchema->asEnum());
         compileValue(source, slot, isBootstrap);
       }
       break;
     default:
-      DynamicSlot slot(valueUnion, member);
+      DynamicSlot slot(valueUnion, field);
       compileValue(source, slot, isBootstrap);
       break;
   }

@@ -170,10 +170,9 @@ public:
     return result.begin();
   }
 
-  const _::RawSchema::MemberInfo* makeMemberInfoArray(uint32_t* count) {
+  const uint16_t* makeMemberInfoArray(uint32_t* count) {
     *count = members.size();
-    kj::ArrayPtr<_::RawSchema::MemberInfo> result =
-        loader.arena.allocateArray<_::RawSchema::MemberInfo>(*count);
+    kj::ArrayPtr<uint16_t> result = loader.arena.allocateArray<uint16_t>(*count);
     uint pos = 0;
     for (auto& member: members) {
       result[pos++] = member.second;

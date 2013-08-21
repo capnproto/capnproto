@@ -163,16 +163,7 @@ struct RawSchema {
   //
   // TODO(someday):  Make this a hashtable.
 
-  struct MemberInfo {
-    uint16_t value;
-
-    inline operator uint16_t() const { return value; }
-    MemberInfo() = default;
-    constexpr MemberInfo(uint16_t value): value(value) {}
-    constexpr MemberInfo(uint16_t value, uint16_t dummy): value(value) {}
-  };
-
-  const MemberInfo* membersByName;
+  const uint16_t* membersByName;
   // Indexes of members sorted by name.  Used to implement name lookup.
   // TODO(someday):  Make this a hashtable.
 
@@ -229,19 +220,12 @@ template <typename T>
 using UnionParentType = typename UnionParentType_<T>::Type;
 
 kj::StringTree structString(StructReader reader, const RawSchema& schema);
-kj::StringTree unionString(StructReader reader, const RawSchema& schema, uint memberIndex);
 // Declared here so that we can declare inline stringify methods on generated types.
 // Defined in stringify.c++, which depends on dynamic.c++, which is allowed not to be linked in.
 
 template <typename T>
 inline kj::StringTree structString(StructReader reader) {
   return structString(reader, rawSchema<T>());
-}
-
-template <typename T>
-inline kj::StringTree unionString(StructReader reader) {
-#warning "remove this"
-  return kj::strTree();
 }
 
 }  // namespace _ (private)
