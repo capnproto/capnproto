@@ -2410,6 +2410,13 @@ inline Node::Struct::Builder Node::Builder::getStruct() {
 inline Node::Struct::Builder Node::Builder::initStruct() {
   _builder.setDataField<Node::Which>(
       6 * ::capnp::ELEMENTS, Node::STRUCT);
+  _builder.setDataField< ::uint16_t>(7 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint16_t>(12 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint16_t>(13 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(224 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint16_t>(15 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint32_t>(8 * ::capnp::ELEMENTS, 0);
+  _builder.clearPointer(3 * ::capnp::POINTERS);
   return Node::Struct::Builder(_builder);
 }
 inline Node::Enum::Reader Node::Reader::getEnum() const {
@@ -2425,6 +2432,7 @@ inline Node::Enum::Builder Node::Builder::getEnum() {
 inline Node::Enum::Builder Node::Builder::initEnum() {
   _builder.setDataField<Node::Which>(
       6 * ::capnp::ELEMENTS, Node::ENUM);
+  _builder.clearPointer(3 * ::capnp::POINTERS);
   return Node::Enum::Builder(_builder);
 }
 inline Node::Interface::Reader Node::Reader::getInterface() const {
@@ -2440,6 +2448,7 @@ inline Node::Interface::Builder Node::Builder::getInterface() {
 inline Node::Interface::Builder Node::Builder::initInterface() {
   _builder.setDataField<Node::Which>(
       6 * ::capnp::ELEMENTS, Node::INTERFACE);
+  _builder.clearPointer(3 * ::capnp::POINTERS);
   return Node::Interface::Builder(_builder);
 }
 inline Node::Const::Reader Node::Reader::getConst() const {
@@ -2455,6 +2464,8 @@ inline Node::Const::Builder Node::Builder::getConst() {
 inline Node::Const::Builder Node::Builder::initConst() {
   _builder.setDataField<Node::Which>(
       6 * ::capnp::ELEMENTS, Node::CONST);
+  _builder.clearPointer(3 * ::capnp::POINTERS);
+  _builder.clearPointer(4 * ::capnp::POINTERS);
   return Node::Const::Builder(_builder);
 }
 inline Node::Annotation::Reader Node::Reader::getAnnotation() const {
@@ -2470,6 +2481,19 @@ inline Node::Annotation::Builder Node::Builder::getAnnotation() {
 inline Node::Annotation::Builder Node::Builder::initAnnotation() {
   _builder.setDataField<Node::Which>(
       6 * ::capnp::ELEMENTS, Node::ANNOTATION);
+  _builder.setDataField<bool>(112 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(113 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(114 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(115 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(116 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(117 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(118 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(119 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(120 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(121 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(122 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(123 * ::capnp::ELEMENTS, 0);
+  _builder.clearPointer(3 * ::capnp::POINTERS);
   return Node::Annotation::Builder(_builder);
 }
 inline bool Node::NestedNode::Reader::hasName() const {
@@ -3221,6 +3245,9 @@ inline Field::NonGroup::Builder Field::Builder::getNonGroup() {
 inline Field::NonGroup::Builder Field::Builder::initNonGroup() {
   _builder.setDataField<Field::Which>(
       4 * ::capnp::ELEMENTS, Field::NON_GROUP);
+  _builder.setDataField< ::uint32_t>(1 * ::capnp::ELEMENTS, 0);
+  _builder.clearPointer(2 * ::capnp::POINTERS);
+  _builder.clearPointer(3 * ::capnp::POINTERS);
   return Field::NonGroup::Builder(_builder);
 }
 inline bool Field::Reader::hasGroup() const {
@@ -3261,6 +3288,8 @@ inline Field::Ordinal::Builder Field::Builder::getOrdinal() {
   return Field::Ordinal::Builder(_builder);
 }
 inline Field::Ordinal::Builder Field::Builder::initOrdinal() {
+  _builder.setDataField< ::uint16_t>(5 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
   return Field::Ordinal::Builder(_builder);
 }
 inline bool Field::NonGroup::Reader::hasOffset() const {

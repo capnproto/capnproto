@@ -368,6 +368,9 @@ public:
   // Detach the given pointer field from this object.  The pointer becomes null, and the child
   // object is returned as an orphan.
 
+  void clearPointer(WirePointerCount ptrIndex);
+  // Equivalent to calling disown() and letting the result simply be destroyed.
+
   void transferContentFrom(StructBuilder other);
   // Adopt all pointers from `other`, and also copy all data.  If `other`'s sections are larger
   // than this, the extra data is not transferred, meaning there is a risk of data loss when

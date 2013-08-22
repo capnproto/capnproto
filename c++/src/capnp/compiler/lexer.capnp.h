@@ -918,6 +918,8 @@ inline Statement::Block::Builder Statement::Builder::getBlock() {
   return Statement::Block::Builder(_builder);
 }
 inline Statement::Block::Builder Statement::Builder::initBlock() {
+  _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
+  _builder.clearPointer(1 * ::capnp::POINTERS);
   return Statement::Block::Builder(_builder);
 }
 inline bool Statement::Reader::hasDocComment() const {

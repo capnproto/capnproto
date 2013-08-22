@@ -2536,6 +2536,8 @@ inline DeclName::Base::Builder DeclName::Builder::getBase() {
   return DeclName::Base::Builder(_builder);
 }
 inline DeclName::Base::Builder DeclName::Builder::initBase() {
+  _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
+  _builder.clearPointer(0 * ::capnp::POINTERS);
   return DeclName::Base::Builder(_builder);
 }
 inline bool DeclName::Reader::hasMemberPath() const {
@@ -3344,6 +3346,8 @@ inline Declaration::Id::Builder Declaration::Builder::getId() {
   return Declaration::Id::Builder(_builder);
 }
 inline Declaration::Id::Builder Declaration::Builder::initId() {
+  _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
+  _builder.clearPointer(1 * ::capnp::POINTERS);
   return Declaration::Id::Builder(_builder);
 }
 inline bool Declaration::Reader::hasNestedDecls() const {
@@ -3528,6 +3532,7 @@ inline Declaration::Using::Builder Declaration::Builder::getUsing() {
 inline Declaration::Using::Builder Declaration::Builder::initUsing() {
   _builder.setDataField<Declaration::Which>(
       1 * ::capnp::ELEMENTS, Declaration::USING);
+  _builder.clearPointer(5 * ::capnp::POINTERS);
   return Declaration::Using::Builder(_builder);
 }
 inline Declaration::Const::Reader Declaration::Reader::getConst() const {
@@ -3543,6 +3548,8 @@ inline Declaration::Const::Builder Declaration::Builder::getConst() {
 inline Declaration::Const::Builder Declaration::Builder::initConst() {
   _builder.setDataField<Declaration::Which>(
       1 * ::capnp::ELEMENTS, Declaration::CONST);
+  _builder.clearPointer(5 * ::capnp::POINTERS);
+  _builder.clearPointer(6 * ::capnp::POINTERS);
   return Declaration::Const::Builder(_builder);
 }
 inline bool Declaration::Reader::hasEnum() const {
@@ -3651,6 +3658,9 @@ inline Declaration::Field::Builder Declaration::Builder::getField() {
 inline Declaration::Field::Builder Declaration::Builder::initField() {
   _builder.setDataField<Declaration::Which>(
       1 * ::capnp::ELEMENTS, Declaration::FIELD);
+  _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
+  _builder.clearPointer(5 * ::capnp::POINTERS);
+  _builder.clearPointer(6 * ::capnp::POINTERS);
   return Declaration::Field::Builder(_builder);
 }
 inline bool Declaration::Reader::hasUnion() const {
@@ -3759,6 +3769,9 @@ inline Declaration::Method::Builder Declaration::Builder::getMethod() {
 inline Declaration::Method::Builder Declaration::Builder::initMethod() {
   _builder.setDataField<Declaration::Which>(
       1 * ::capnp::ELEMENTS, Declaration::METHOD);
+  _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
+  _builder.clearPointer(5 * ::capnp::POINTERS);
+  _builder.clearPointer(6 * ::capnp::POINTERS);
   return Declaration::Method::Builder(_builder);
 }
 inline Declaration::Annotation::Reader Declaration::Reader::getAnnotation() const {
@@ -3774,6 +3787,19 @@ inline Declaration::Annotation::Builder Declaration::Builder::getAnnotation() {
 inline Declaration::Annotation::Builder Declaration::Builder::initAnnotation() {
   _builder.setDataField<Declaration::Which>(
       1 * ::capnp::ELEMENTS, Declaration::ANNOTATION);
+  _builder.setDataField<bool>(96 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(97 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(98 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(99 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(100 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(101 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(102 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(103 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(104 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(105 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(106 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField<bool>(107 * ::capnp::ELEMENTS, 0);
+  _builder.clearPointer(5 * ::capnp::POINTERS);
   return Declaration::Annotation::Builder(_builder);
 }
 inline bool Declaration::Reader::hasNakedId() const {
@@ -4407,6 +4433,8 @@ inline Declaration::AnnotationApplication::Value::Builder Declaration::Annotatio
   return Declaration::AnnotationApplication::Value::Builder(_builder);
 }
 inline Declaration::AnnotationApplication::Value::Builder Declaration::AnnotationApplication::Builder::initValue() {
+  _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
+  _builder.clearPointer(1 * ::capnp::POINTERS);
   return Declaration::AnnotationApplication::Value::Builder(_builder);
 }
 inline Declaration::AnnotationApplication::Value::Which Declaration::AnnotationApplication::Value::Reader::which() const {
@@ -4598,6 +4626,8 @@ inline Declaration::Param::DefaultValue::Builder Declaration::Param::Builder::ge
   return Declaration::Param::DefaultValue::Builder(_builder);
 }
 inline Declaration::Param::DefaultValue::Builder Declaration::Param::Builder::initDefaultValue() {
+  _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
+  _builder.clearPointer(3 * ::capnp::POINTERS);
   return Declaration::Param::DefaultValue::Builder(_builder);
 }
 inline Declaration::Param::DefaultValue::Which Declaration::Param::DefaultValue::Reader::which() const {
@@ -4955,6 +4985,8 @@ inline Declaration::Field::DefaultValue::Builder Declaration::Field::Builder::ge
   return Declaration::Field::DefaultValue::Builder(_builder);
 }
 inline Declaration::Field::DefaultValue::Builder Declaration::Field::Builder::initDefaultValue() {
+  _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
+  _builder.clearPointer(6 * ::capnp::POINTERS);
   return Declaration::Field::DefaultValue::Builder(_builder);
 }
 inline Declaration::Field::DefaultValue::Which Declaration::Field::DefaultValue::Reader::which() const {
@@ -5082,6 +5114,8 @@ inline Declaration::Method::ReturnType::Builder Declaration::Method::Builder::ge
   return Declaration::Method::ReturnType::Builder(_builder);
 }
 inline Declaration::Method::ReturnType::Builder Declaration::Method::Builder::initReturnType() {
+  _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
+  _builder.clearPointer(6 * ::capnp::POINTERS);
   return Declaration::Method::ReturnType::Builder(_builder);
 }
 inline Declaration::Method::ReturnType::Which Declaration::Method::ReturnType::Reader::which() const {

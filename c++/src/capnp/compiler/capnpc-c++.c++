@@ -238,6 +238,210 @@ private:
   }
 
   // -----------------------------------------------------------------
+  // Code to deal with "slots" -- determines what to zero out when we clear a group.
+
+  static uint typeSizeBits(schema::Type::Which whichType) {
+    switch (whichType) {
+      case schema::Type::BOOL: return 1;
+      case schema::Type::INT8: return 8;
+      case schema::Type::INT16: return 16;
+      case schema::Type::INT32: return 32;
+      case schema::Type::INT64: return 64;
+      case schema::Type::UINT8: return 8;
+      case schema::Type::UINT16: return 16;
+      case schema::Type::UINT32: return 32;
+      case schema::Type::UINT64: return 64;
+      case schema::Type::FLOAT32: return 32;
+      case schema::Type::FLOAT64: return 64;
+      case schema::Type::ENUM: return 16;
+
+      case schema::Type::VOID:
+      case schema::Type::TEXT:
+      case schema::Type::DATA:
+      case schema::Type::LIST:
+      case schema::Type::STRUCT:
+      case schema::Type::INTERFACE:
+      case schema::Type::OBJECT:
+        KJ_FAIL_REQUIRE("Should only be called for data types.");
+    }
+    KJ_UNREACHABLE;
+  }
+
+  enum class Section {
+    NONE,
+    DATA,
+    POINTERS
+  };
+
+  static Section sectionFor(schema::Type::Which whichType) {
+    switch (whichType) {
+      case schema::Type::VOID:
+        return Section::NONE;
+      case schema::Type::BOOL:
+      case schema::Type::INT8:
+      case schema::Type::INT16:
+      case schema::Type::INT32:
+      case schema::Type::INT64:
+      case schema::Type::UINT8:
+      case schema::Type::UINT16:
+      case schema::Type::UINT32:
+      case schema::Type::UINT64:
+      case schema::Type::FLOAT32:
+      case schema::Type::FLOAT64:
+      case schema::Type::ENUM:
+        return Section::DATA;
+      case schema::Type::TEXT:
+      case schema::Type::DATA:
+      case schema::Type::LIST:
+      case schema::Type::STRUCT:
+      case schema::Type::INTERFACE:
+      case schema::Type::OBJECT:
+        return Section::POINTERS;
+    }
+    KJ_UNREACHABLE;
+  }
+
+  static kj::StringPtr maskType(schema::Type::Which whichType) {
+    switch (whichType) {
+      case schema::Type::BOOL: return "bool";
+      case schema::Type::INT8: return " ::uint8_t";
+      case schema::Type::INT16: return " ::uint16_t";
+      case schema::Type::INT32: return " ::uint32_t";
+      case schema::Type::INT64: return " ::uint64_t";
+      case schema::Type::UINT8: return " ::uint8_t";
+      case schema::Type::UINT16: return " ::uint16_t";
+      case schema::Type::UINT32: return " ::uint32_t";
+      case schema::Type::UINT64: return " ::uint64_t";
+      case schema::Type::FLOAT32: return " ::uint32_t";
+      case schema::Type::FLOAT64: return " ::uint64_t";
+      case schema::Type::ENUM: return " ::uint16_t";
+
+      case schema::Type::VOID:
+      case schema::Type::TEXT:
+      case schema::Type::DATA:
+      case schema::Type::LIST:
+      case schema::Type::STRUCT:
+      case schema::Type::INTERFACE:
+      case schema::Type::OBJECT:
+        KJ_FAIL_REQUIRE("Should only be called for data types.");
+    }
+    KJ_UNREACHABLE;
+  }
+
+  struct Slot {
+    schema::Type::Which whichType;
+    uint offset;
+
+    bool isSupersetOf(Slot other) const {
+      auto section = sectionFor(whichType);
+      if (section != sectionFor(other.whichType)) return false;
+      switch (section) {
+        case Section::NONE:
+          return true;  // all voids overlap
+        case Section::DATA: {
+          auto bits = typeSizeBits(whichType);
+          auto start = offset * bits;
+          auto otherBits = typeSizeBits(other.whichType);
+          auto otherStart = other.offset * otherBits;
+          return start <= otherStart && otherStart + otherBits <= start + bits;
+        }
+        case Section::POINTERS:
+          return offset == other.offset;
+      }
+      KJ_UNREACHABLE;
+    }
+
+    bool operator<(Slot other) const {
+      // Sort by section, then start position, and finally size.
+
+      auto section = sectionFor(whichType);
+      auto otherSection = sectionFor(other.whichType);
+      if (section < otherSection) {
+        return true;
+      } else if (section > otherSection) {
+        return false;
+      }
+
+      switch (section) {
+        case Section::NONE:
+          return false;
+        case Section::DATA: {
+          auto bits = typeSizeBits(whichType);
+          auto start = offset * bits;
+          auto otherBits = typeSizeBits(other.whichType);
+          auto otherStart = other.offset * otherBits;
+          if (start < otherStart) {
+            return true;
+          } else if (start > otherStart) {
+            return false;
+          }
+
+          // Sort larger sizes before smaller.
+          return bits > otherBits;
+        }
+        case Section::POINTERS:
+          return offset < other.offset;
+      }
+      KJ_UNREACHABLE;
+    }
+  };
+
+  void getSlots(StructSchema schema, kj::Vector<Slot>& slots) {
+    auto structProto = schema.getProto().getStruct();
+    if (structProto.getDiscriminantCount() > 0) {
+      slots.add(Slot { schema::Type::UINT16, structProto.getDiscriminantOffset() });
+    }
+
+    for (auto field: schema.getFields()) {
+      auto proto = field.getProto();
+      switch (proto.which()) {
+        case schema::Field::NON_GROUP: {
+          auto nonGroup = proto.getNonGroup();
+          slots.add(Slot { nonGroup.getType().which(), nonGroup.getOffset() });
+          break;
+        }
+        case schema::Field::GROUP:
+          getSlots(schema.getDependency(proto.getGroup()).asStruct(), slots);
+          break;
+      }
+    }
+  }
+
+  kj::Array<Slot> getSortedSlots(StructSchema schema) {
+    // Get a representation of all of the field locations owned by this schema, e.g. so that they
+    // can be zero'd out.
+
+    kj::Vector<Slot> slots(schema.getFields().size());
+    getSlots(schema, slots);
+    std::sort(slots.begin(), slots.end());
+
+    kj::Vector<Slot> result(slots.size());
+
+    // All void slots are redundant, and they sort towards the front of the list.  By starting out
+    // with `prevSlot` = void, we will end up skipping them all, which is what we want.
+    Slot prevSlot = { schema::Type::VOID, 0 };
+    for (auto slot: slots) {
+      if (prevSlot.isSupersetOf(slot)) {
+        // This slot is redundant as prevSlot is a superset of it.
+        continue;
+      }
+
+      // Since all sizes are power-of-two, if two slots overlap at all, one must be a superset of
+      // the other.  Since we sort slots by starting position, we know that the only way `slot`
+      // could be a superset of `prevSlot` is if they have the same starting position.  However,
+      // since we sort slots with the same starting position by descending size, this is not
+      // possible.
+      KJ_DASSERT(!slot.isSupersetOf(prevSlot));
+
+      result.add(slot);
+
+      prevSlot = slot;
+    }
+
+    return result.releaseAsArray();
+  }
+
+  // -----------------------------------------------------------------
 
   struct DiscriminantChecks {
     kj::String check;
@@ -293,7 +497,8 @@ private:
         // Continue below.
         break;
 
-      case schema::Field::GROUP:
+      case schema::Field::GROUP: {
+        auto slots = getSortedSlots(schemaLoader.get(field.getProto().getGroup()).asStruct());
         return FieldText {
             kj::strTree(
                 "  inline ", titleCase, "::Reader get", titleCase, "() const;\n"
@@ -315,10 +520,23 @@ private:
                 "}\n"
                 "inline ", scope, titleCase, "::Builder ", scope, "Builder::init", titleCase, "() {\n",
                 unionDiscrim.set,
-                // TODO(soon):  Zero out fields.
+                KJ_MAP(slots, slot) {
+                  switch (sectionFor(slot.whichType)) {
+                    case Section::NONE:
+                      return kj::strTree();
+                    case Section::DATA:
+                      return kj::strTree(
+                          "  _builder.setDataField<", maskType(slot.whichType), ">(",
+                              slot.offset, " * ::capnp::ELEMENTS, 0);\n");
+                    case Section::POINTERS:
+                      return kj::strTree(
+                          "  _builder.clearPointer(", slot.offset, " * ::capnp::POINTERS);\n");
+                  }
+                },
                 "  return ", scope, titleCase, "::Builder(_builder);\n"
                 "}\n")
           };
+      }
     }
 
     auto nonGroup = proto.getNonGroup();

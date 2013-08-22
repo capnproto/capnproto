@@ -2143,6 +2143,11 @@ OrphanBuilder StructBuilder::disown(WirePointerCount ptrIndex) {
   return WireHelpers::disown(segment, pointers + ptrIndex);
 }
 
+void StructBuilder::clearPointer(WirePointerCount ptrIndex) {
+  WireHelpers::zeroObject(segment, pointers + ptrIndex);
+  memset(pointers + ptrIndex, 0, sizeof(WirePointer));
+}
+
 void StructBuilder::transferContentFrom(StructBuilder other) {
   // Determine the amount of data the builders have in common.
   BitCount sharedDataSize = kj::min(dataSize, other.dataSize);

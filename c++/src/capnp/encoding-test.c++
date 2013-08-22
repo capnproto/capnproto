@@ -434,6 +434,72 @@ TEST(Encoding, Groups) {
   }
 }
 
+TEST(Encoding, InterleavedGroups) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestInterleavedGroups>();
+
+  // Init both groups to different values.
+  {
+    auto group = root.getGroup1();
+    group.setFoo(12345678u);
+    group.setBar(123456789012345llu);
+    auto corge = group.initCorge();
+    corge.setGrault(987654321098765llu);
+    corge.setGarply(12345u);
+    corge.setPlugh("plugh");
+    corge.setXyzzy("xyzzy");
+    group.setWaldo("waldo");
+  }
+
+  {
+    auto group = root.getGroup2();
+    group.setFoo(23456789u);
+    group.setBar(234567890123456llu);
+    auto corge = group.initCorge();
+    corge.setGrault(876543210987654llu);
+    corge.setGarply(23456u);
+    corge.setPlugh("hgulp");
+    corge.setXyzzy("yzzyx");
+    group.setWaldo("odlaw");
+  }
+
+  // Check group1 is still set correctly.
+  {
+    auto group = root.asReader().getGroup1();
+    EXPECT_EQ(12345678u, group.getFoo());
+    EXPECT_EQ(123456789012345llu, group.getBar());
+    auto corge = group.getCorge();
+    EXPECT_EQ(987654321098765llu, corge.getGrault());
+    EXPECT_EQ(12345u, corge.getGarply());
+    EXPECT_EQ("plugh", corge.getPlugh());
+    EXPECT_EQ("xyzzy", corge.getXyzzy());
+    EXPECT_EQ("waldo", group.getWaldo());
+  }
+
+  // Zero out group 1 and see if it is zero'd.
+  {
+    auto group = root.initGroup1().asReader();
+    EXPECT_EQ(0u, group.getFoo());
+    EXPECT_EQ(0u, group.getBar());
+    EXPECT_EQ(test::TestInterleavedGroups::Group1::QUX, group.which());
+    EXPECT_EQ(0u, group.getQux());
+    EXPECT_FALSE(group.hasWaldo());
+  }
+
+  // Group 2 should not have been touched.
+  {
+    auto group = root.asReader().getGroup2();
+    EXPECT_EQ(23456789u, group.getFoo());
+    EXPECT_EQ(234567890123456llu, group.getBar());
+    auto corge = group.getCorge();
+    EXPECT_EQ(876543210987654llu, corge.getGrault());
+    EXPECT_EQ(23456u, corge.getGarply());
+    EXPECT_EQ("hgulp", corge.getPlugh());
+    EXPECT_EQ("yzzyx", corge.getXyzzy());
+    EXPECT_EQ("odlaw", group.getWaldo());
+  }
+}
+
 TEST(Encoding, UnionDefault) {
   MallocMessageBuilder builder;
   TestUnionDefaults::Reader reader = builder.getRoot<TestUnionDefaults>().asReader();

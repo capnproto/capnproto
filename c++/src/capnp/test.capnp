@@ -270,22 +270,60 @@ struct TestUnnamedUnion {
 }
 
 struct TestGroups {
-  groups union {
-    foo group {
+  groups :union {
+    foo :group {
       corge @0 :Int32;
       grault @2 :Int64;
       garply @8 :Text;
     }
-    bar group {
+    bar :group {
       corge @3 :Int32;
       grault @4 :Text;
       garply @5 :Int64;
     }
-    baz group {
+    baz :group {
       corge @1 :Int32;
       grault @6 :Text;
       garply @7 :Text;
     }
+  }
+}
+
+struct TestInterleavedGroups {
+  group1 :group {
+    foo @0 :UInt32;
+    bar @2 :UInt64;
+    union {
+      qux @4 :UInt16;
+      corge :group {
+        grault @6 :UInt64;
+        garply @8 :UInt16;
+        plugh @14 :Text;
+        xyzzy @16 :Text;
+      }
+
+      fred @12 :Text;
+    }
+
+    waldo @10 :Text;
+  }
+
+  group2 :group {
+    foo @1 :UInt32;
+    bar @3 :UInt64;
+    union {
+      qux @5 :UInt16;
+      corge :group {
+        grault @7 :UInt64;
+        garply @9 :UInt16;
+        plugh @15 :Text;
+        xyzzy @17 :Text;
+      }
+
+      fred @13 :Text;
+    }
+
+    waldo @11 :Text;
   }
 }
 
