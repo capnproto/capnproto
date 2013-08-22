@@ -265,16 +265,6 @@ inline auto expandAndApply(Func&& func, First&& first, Rest&&... rest)
       kj::fwd<Rest>(rest)...);
 }
 
-template <typename Func, typename... FirstTypes, typename... Rest, size_t... indexes>
-inline auto expandAndApplyWithIndexes(
-    Indexes<indexes...>, Func&& func, Tuple<FirstTypes...>&& first, Rest&&... rest)
-    -> ExpandAndApplyResult<Func, FirstTypes&&..., Rest...>;
-
-template <typename Func, typename... FirstTypes, typename... Rest, size_t... indexes>
-inline auto expandAndApplyWithIndexes(
-    Indexes<indexes...>, Func&& func, const Tuple<FirstTypes...>& first, Rest&&... rest)
-    -> ExpandAndApplyResult<Func, FirstTypes..., Rest...>;
-
 template <typename Func, typename... FirstTypes, typename... Rest>
 inline auto expandAndApply(Func&& func, Tuple<FirstTypes...>&& first, Rest&&... rest)
     -> ExpandAndApplyResult<Func, FirstTypes&&..., Rest...> {
