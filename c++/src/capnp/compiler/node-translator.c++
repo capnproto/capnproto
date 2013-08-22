@@ -609,7 +609,7 @@ void NodeTranslator::DuplicateNameDetector::check(
       auto nameText = name.getValue();
       auto insertResult = names.insert(std::make_pair(nameText, name));
       if (!insertResult.second) {
-        if (nameText.size() == 0 && decl.which() == Declaration::UNION) {
+        if (nameText.size() == 0 && decl.isUnion()) {
           errorReporter.addErrorOn(
               name, kj::str("An unnamed union is already defined in this scope."));
           errorReporter.addErrorOn(
@@ -754,7 +754,7 @@ void NodeTranslator::compileEnum(Void decl,
 
   uint codeOrder = 0;
   for (auto member: members) {
-    if (member.which() == Declaration::ENUMERANT) {
+    if (member.isEnumerant()) {
       enumerants.insert(
           std::make_pair(member.getId().getOrdinal().getValue(),
                          std::make_pair(codeOrder++, member)));
@@ -799,7 +799,7 @@ public:
     for (auto& entry: membersByOrdinal) {
       MemberInfo& member = *entry.second;
 
-      if (member.decl.getId().which() == Declaration::Id::ORDINAL) {
+      if (member.decl.getId().isOrdinal()) {
         dupDetector.check(member.decl.getId().getOrdinal());
       }
 
@@ -1159,7 +1159,7 @@ private:
           }
           memberInfo->unionScope = &unionLayout;
           traverseUnion(member.getNestedDecls(), *memberInfo, unionLayout, *subCodeOrder);
-          if (member.getId().which() == Declaration::Id::ORDINAL) {
+          if (member.getId().isOrdinal()) {
             ordinal = member.getId().getOrdinal().getValue();
           }
           break;
@@ -1271,7 +1271,7 @@ bool NodeTranslator::compileType(TypeExpression::Reader source, schema::Type::Bu
           return false;
         }
 
-        if (elementType.which() == schema::Type::OBJECT) {
+        if (elementType.isObject()) {
           errorReporter.addErrorOn(source, "'List(Object)' is not supported.");
           // Seeing List(Object) later can mess things up, so change the type to Void.
           elementType.setVoid();
@@ -1455,9 +1455,9 @@ private:
 
   static kj::Maybe<uint64_t> enumIdForField(StructSchema::Field field) {
     schema::Field::Reader proto = field.getProto();
-    if (proto.which() == schema::Field::NON_GROUP) {
+    if (proto.isNonGroup()) {
       auto type = proto.getNonGroup().getType();
-      if (type.which() == schema::Type::ENUM) {
+      if (type.isEnum()) {
         return type.getEnum();
       }
     }
@@ -1560,7 +1560,7 @@ void NodeTranslator::compileValueInner(
   switch (src.which()) {
     case ValueExpression::NAME: {
       auto name = src.getName();
-      bool isBare = name.getBase().which() == DeclName::Base::RELATIVE_NAME &&
+      bool isBare = name.getBase().isRelativeName() &&
                     name.getMemberPath().size() == 0;
       bool wasSet = false;
       if (isBare) {
@@ -1715,7 +1715,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
         }
       }
 
-      if (name.getBase().which() == DeclName::Base::RELATIVE_NAME &&
+      if (name.getBase().isRelativeName() &&
           name.getMemberPath().size() == 0) {
         // A fully unqualified identifier looks like it might refer to a constant visible in the
         // current scope, but if that's really what the user wanted, we want them to use a
@@ -1723,7 +1723,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
         KJ_IF_MAYBE(scope, resolver.resolveBootstrapSchema(constSchema->getScopeId())) {
           auto scopeReader = scope->getProto();
           kj::StringPtr parent;
-          if (scopeReader.which() == schema::Node::FILE) {
+          if (scopeReader.isFile()) {
             parent = "";
           } else {
             parent = scopeReader.getDisplayName().slice(scopeReader.getDisplayNamePrefixLength());
@@ -1817,7 +1817,7 @@ Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
           switch (value.which()) {
             case Declaration::AnnotationApplication::Value::NONE:
               // No value, i.e. void.
-              if (node.getType().which() == schema::Type::VOID) {
+              if (node.getType().isVoid()) {
                 annotationBuilder.getValue().setVoid();
               } else {
                 errorReporter.addErrorOn(name, kj::str(

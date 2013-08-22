@@ -179,14 +179,13 @@ Schema loadUnderAlternateTypeId(SchemaLoader& loader, uint64_t id) {
   auto root = schemaBuilder.getRoot<schema::Node>();
   root.setId(id);
 
-  if (root.which() == schema::Node::STRUCT) {
+  if (root.isStruct()) {
     // If the struct contains any self-referential members, change their type IDs as well.
     auto fields = root.getStruct().getFields();
     for (auto field: fields) {
-      if (field.which() == schema::Field::NON_GROUP) {
+      if (field.isNonGroup()) {
         auto type = field.getNonGroup().getType();
-        if (type.which() == schema::Type::STRUCT &&
-            type.getStruct() == typeId<T>()) {
+        if (type.isStruct() && type.getStruct() == typeId<T>()) {
           type.setStruct(id);
         }
       }

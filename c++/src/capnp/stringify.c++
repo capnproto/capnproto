@@ -198,15 +198,22 @@ static kj::StringTree print(const DynamicValue::Reader& value,
       // We try to write the union field, if any, in proper order with the rest.
       auto which = structValue.which();
 
+      kj::StringTree unionValue;
+      KJ_IF_MAYBE(field, which) {
+        // Even if the union field has its default value, if it is not the default field of the
+        // union then we have to print it anyway.
+        auto fieldProto = field->getProto();
+        if (fieldProto.getDiscriminantValue() != 0 || structValue.has(*field)) {
+          unionValue = kj::strTree(
+              fieldProto.getName(), " = ",
+              print(structValue.get(*field), whichFieldType(*field), indent.next(), PREFIXED));
+        }
+      }
+
       for (auto field: nonUnionFields) {
         KJ_IF_MAYBE(unionField, which) {
           if (unionField->getIndex() < field.getIndex()) {
-            if (structValue.has(*unionField)) {
-              printedFields.add(kj::strTree(
-                  unionField->getProto().getName(), " = ",
-                  print(structValue.get(*unionField), whichFieldType(*unionField),
-                        indent.next(), PREFIXED)));
-            }
+            printedFields.add(kj::mv(unionValue));
             which = nullptr;
           }
         }
@@ -216,12 +223,9 @@ static kj::StringTree print(const DynamicValue::Reader& value,
               print(structValue.get(field), whichFieldType(field), indent.next(), PREFIXED)));
         }
       }
-      KJ_IF_MAYBE(field, which) {
-        if (structValue.has(*field)) {
-          printedFields.add(kj::strTree(
-              field->getProto().getName(), " = ",
-              print(structValue.get(*field), whichFieldType(*field), indent.next(), PREFIXED)));
-        }
+      if (which != nullptr) {
+        // Union value is last.
+        printedFields.add(kj::mv(unionValue));
       }
 
       if (mode == PARENTHESIZED) {

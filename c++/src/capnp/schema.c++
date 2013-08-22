@@ -60,23 +60,20 @@ Schema Schema::getDependency(uint64_t id) const {
 }
 
 StructSchema Schema::asStruct() const {
-  KJ_REQUIRE(getProto().which() == schema::Node::STRUCT,
-          "Tried to use non-struct schema as a struct.",
-          getProto().getDisplayName());
+  KJ_REQUIRE(getProto().isStruct(), "Tried to use non-struct schema as a struct.",
+             getProto().getDisplayName());
   return StructSchema(raw);
 }
 
 EnumSchema Schema::asEnum() const {
-  KJ_REQUIRE(getProto().which() == schema::Node::ENUM,
-          "Tried to use non-enum schema as an enum.",
-          getProto().getDisplayName());
+  KJ_REQUIRE(getProto().isEnum(), "Tried to use non-enum schema as an enum.",
+             getProto().getDisplayName());
   return EnumSchema(raw);
 }
 
 InterfaceSchema Schema::asInterface() const {
-  KJ_REQUIRE(getProto().which() == schema::Node::INTERFACE,
-          "Tried to use non-interface schema as an interface.",
-          getProto().getDisplayName());
+  KJ_REQUIRE(getProto().isInterface(), "Tried to use non-interface schema as an interface.",
+             getProto().getDisplayName());
   return InterfaceSchema(raw);
 }
 

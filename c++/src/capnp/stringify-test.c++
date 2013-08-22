@@ -343,22 +343,43 @@ TEST(Stringify, Unions) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<TestUnion>();
 
-  root.getUnion0().setU0f0s16(321);
+  root.getUnion0().setU0f0s16(123);
   root.getUnion1().setU1f0sp("foo");
   root.getUnion2().setU2f0s1(true);
   root.getUnion3().setU3f0s64(123456789012345678ll);
 
   EXPECT_EQ("("
-      "union0 = (u0f0s16 = 321), "
+      "union0 = (u0f0s16 = 123), "
       "union1 = (u1f0sp = \"foo\"), "
       "union2 = (u2f0s1 = true), "
       "union3 = (u3f0s64 = 123456789012345678))",
       kj::str(root));
 
-  EXPECT_EQ("(u0f0s16 = 321)", kj::str(root.getUnion0()));
+  EXPECT_EQ("(u0f0s16 = 123)", kj::str(root.getUnion0()));
   EXPECT_EQ("(u1f0sp = \"foo\")", kj::str(root.getUnion1()));
   EXPECT_EQ("(u2f0s1 = true)", kj::str(root.getUnion2()));
   EXPECT_EQ("(u3f0s64 = 123456789012345678)", kj::str(root.getUnion3()));
+}
+
+TEST(Stringify, UnionDefaults) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestUnion>();
+
+  root.getUnion0().setU0f0s16(0);     // Non-default field has default value.
+  root.getUnion1().setU1f0sp("foo");  // Non-default field has non-default value.
+  root.getUnion2().setU2f0s1(false);  // Default field has default value.
+  root.getUnion3().setU3f0s1(true);   // Default field has non-default value.
+
+  EXPECT_EQ("("
+      "union0 = (u0f0s16 = 0), "
+      "union1 = (u1f0sp = \"foo\"), "
+      "union3 = (u3f0s1 = true))",
+      kj::str(root));
+
+  EXPECT_EQ("(u0f0s16 = 0)", kj::str(root.getUnion0()));
+  EXPECT_EQ("(u1f0sp = \"foo\")", kj::str(root.getUnion1()));
+  EXPECT_EQ("()", kj::str(root.getUnion2()));
+  EXPECT_EQ("(u3f0s1 = true)", kj::str(root.getUnion3()));
 }
 
 TEST(Stringify, UnnamedUnions) {

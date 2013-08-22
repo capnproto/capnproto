@@ -255,12 +255,12 @@ private:
       case schema::Value::DATA:
         return kj::strTree(DynamicValue::Reader(value.getData()));
       case schema::Value::LIST: {
-        KJ_REQUIRE(type.which() == schema::Type::LIST, "type/value mismatch");
+        KJ_REQUIRE(type.isList(), "type/value mismatch");
         auto listValue = value.getList<DynamicList>(ListSchema::of(type.getList(), scope));
         return kj::strTree(listValue);
       }
       case schema::Value::ENUM: {
-        KJ_REQUIRE(type.which() == schema::Type::ENUM, "type/value mismatch");
+        KJ_REQUIRE(type.isEnum(), "type/value mismatch");
         auto enumNode = scope.getDependency(type.getEnum()).asEnum().getProto();
         auto enumerants = enumNode.getEnum().getEnumerants();
         KJ_REQUIRE(value.getEnum() < enumerants.size(),
@@ -268,7 +268,7 @@ private:
         return kj::strTree(enumerants[value.getEnum()].getName());
       }
       case schema::Value::STRUCT: {
-        KJ_REQUIRE(type.which() == schema::Type::STRUCT, "type/value mismatch");
+        KJ_REQUIRE(type.isStruct(), "type/value mismatch");
         auto structValue = value.getStruct<DynamicStruct>(
             scope.getDependency(type.getStruct()).asStruct());
         return kj::strTree(structValue);
@@ -288,7 +288,7 @@ private:
                                const char* prefix = " ", const char* suffix = "") {
     auto decl = schemaLoader.get(annotation.getId());
     auto proto = decl.getProto();
-    KJ_REQUIRE(proto.which() == schema::Node::ANNOTATION);
+    KJ_REQUIRE(proto.isAnnotation());
     auto annDecl = proto.getAnnotation();
 
     return kj::strTree(prefix, "$", nodeName(decl, scope), "(",
@@ -508,7 +508,7 @@ private:
 
   kj::StringTree genFile(Schema file) {
     auto proto = file.getProto();
-    KJ_REQUIRE(proto.which() == schema::Node::FILE, "Expected a file node.", (uint)proto.which());
+    KJ_REQUIRE(proto.isFile(), "Expected a file node.", (uint)proto.which());
 
     return kj::strTree(
       "# ", proto.getDisplayName(), "\n",

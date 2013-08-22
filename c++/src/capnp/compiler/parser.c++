@@ -110,7 +110,7 @@ void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
       Declaration::Builder builder = decl->get();
       switch (builder.which()) {
         case Declaration::NAKED_ID:
-          if (fileDecl.getId().which() == Declaration::Id::UID) {
+          if (fileDecl.getId().isUid()) {
             errorReporter.addError(builder.getStartByte(), builder.getEndByte(),
                                    "File can only have one ID.");
           } else {

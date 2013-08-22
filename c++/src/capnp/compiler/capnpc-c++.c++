@@ -444,8 +444,12 @@ private:
   // -----------------------------------------------------------------
 
   struct DiscriminantChecks {
+    kj::String has;
     kj::String check;
     kj::String set;
+    kj::StringTree readerIsDecl;
+    kj::StringTree builderIsDecl;
+    kj::StringTree isDefs;
   };
 
   DiscriminantChecks makeDiscriminantChecks(kj::StringPtr scope,
@@ -453,16 +457,28 @@ private:
                                             StructSchema containingStruct) {
     auto discrimOffset = containingStruct.getProto().getStruct().getDiscriminantOffset();
 
+    kj::String titleCase = toTitleCase(memberName);
     kj::String upperCase = toUpperCase(memberName);
 
     return DiscriminantChecks {
+        kj::str(
+            "  if (which() != ", scope, upperCase, ") return false;\n"),
         kj::str(
             "  KJ_IREQUIRE(which() == ", scope, upperCase, ",\n"
             "              \"Must check which() before get()ing a union member.\");\n"),
         kj::str(
             "  _builder.setDataField<", scope, "Which>(\n"
             "      ", discrimOffset, " * ::capnp::ELEMENTS, ",
-                      scope, upperCase, ");\n")
+                      scope, upperCase, ");\n"),
+        kj::strTree("  inline bool is", titleCase, "() const;\n"),
+        kj::strTree("  inline bool is", titleCase, "();\n"),
+        kj::strTree(
+            "inline bool ", scope, "Reader::is", titleCase, "() const {\n"
+            "  return which() == ", scope, upperCase, ";\n"
+            "}\n"
+            "inline bool ", scope, "Builder::is", titleCase, "() {\n"
+            "  return which() == ", scope, upperCase, ";\n"
+            "}\n")
     };
   }
 
@@ -501,15 +517,54 @@ private:
         auto slots = getSortedSlots(schemaLoader.get(field.getProto().getGroup()).asStruct());
         return FieldText {
             kj::strTree(
+                kj::mv(unionDiscrim.readerIsDecl),
+                "  inline bool has", titleCase, "() const;\n"
                 "  inline ", titleCase, "::Reader get", titleCase, "() const;\n"
                 "\n"),
 
             kj::strTree(
+                kj::mv(unionDiscrim.builderIsDecl),
+                "  inline bool has", titleCase, "();\n"
                 "  inline ", titleCase, "::Builder get", titleCase, "();\n"
                 "  inline ", titleCase, "::Builder init", titleCase, "();\n"
                 "\n"),
 
             kj::strTree(
+                kj::mv(unionDiscrim.isDefs),
+                "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
+                unionDiscrim.has,
+                "  return ",
+                kj::StringTree(KJ_MAP(slots, slot) {
+                  switch (sectionFor(slot.whichType)) {
+                    case Section::NONE:
+                      return kj::strTree();
+                    case Section::DATA:
+                      return kj::strTree(
+                          "_reader.getDataField<", maskType(slot.whichType), ">(",
+                              slot.offset, " * ::capnp::ELEMENTS) != 0");
+                    case Section::POINTERS:
+                      return kj::strTree(
+                          "!_reader.isPointerFieldNull(", slot.offset, " * ::capnp::POINTERS)");
+                  }
+                }, "\n      || "), ";\n"
+                "}\n"
+                "inline bool ", scope, "Builder::has", titleCase, "() {\n",
+                unionDiscrim.has,
+                "  return ",
+                kj::StringTree(KJ_MAP(slots, slot) {
+                  switch (sectionFor(slot.whichType)) {
+                    case Section::NONE:
+                      return kj::strTree();
+                    case Section::DATA:
+                      return kj::strTree(
+                          "_builder.getDataField<", maskType(slot.whichType), ">(",
+                              slot.offset, " * ::capnp::ELEMENTS) != 0");
+                    case Section::POINTERS:
+                      return kj::strTree(
+                          "!_builder.isPointerFieldNull(", slot.offset, " * ::capnp::POINTERS)");
+                  }
+                }, "\n      || "), ";\n"
+                "}\n"
                 "inline ", scope, titleCase, "::Reader ", scope, "Reader::get", titleCase, "() const {\n",
                 unionDiscrim.check,
                 "  return ", scope, titleCase, "::Reader(_reader);\n"
@@ -653,24 +708,27 @@ private:
     if (kind == FieldKind::PRIMITIVE) {
       return FieldText {
         kj::strTree(
+            kj::mv(unionDiscrim.readerIsDecl),
             "  inline bool has", titleCase, "() const;\n"
             "  inline ", type, " get", titleCase, "() const;\n"
             "\n"),
 
         kj::strTree(
+            kj::mv(unionDiscrim.builderIsDecl),
             "  inline bool has", titleCase, "();\n"
             "  inline ", type, " get", titleCase, "();\n"
             "  inline void set", titleCase, "(", type, " value", setterDefault, ");\n"
             "\n"),
 
         kj::strTree(
+            kj::mv(unionDiscrim.isDefs),
             "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
-            unionDiscrim.check,
+            unionDiscrim.has,
             "  return _reader.hasDataField<", type, ">(", offset, " * ::capnp::ELEMENTS);\n",
             "}\n"
             "\n"
             "inline bool ", scope, "Builder::has", titleCase, "() {\n",
-            unionDiscrim.check,
+            unionDiscrim.has,
             "  return _builder.hasDataField<", type, ">(", offset, " * ::capnp::ELEMENTS);\n",
             "}\n"
             "inline ", type, " ", scope, "Reader::get", titleCase, "() const {\n",
@@ -699,6 +757,7 @@ private:
     } else if (kind == FieldKind::OBJECT) {
       return FieldText {
         kj::strTree(
+            kj::mv(unionDiscrim.readerIsDecl),
             "  inline bool has", titleCase, "() const;\n"
             "  template <typename T>\n"
             "  inline typename T::Reader get", titleCase, "() const;\n"
@@ -707,6 +766,7 @@ private:
             "\n"),
 
         kj::strTree(
+            kj::mv(unionDiscrim.builderIsDecl),
             "  inline bool has", titleCase, "();\n"
             "  template <typename T>\n"
             "  inline typename T::Builder get", titleCase, "();\n"
@@ -725,12 +785,13 @@ private:
             "\n"),
 
         kj::strTree(
+            kj::mv(unionDiscrim.isDefs),
             "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
-            unionDiscrim.check,
+            unionDiscrim.has,
             "  return !_reader.isPointerFieldNull(", offset, " * ::capnp::POINTERS);\n"
             "}\n"
             "inline bool ", scope, "Builder::has", titleCase, "() {\n",
-            unionDiscrim.check,
+            unionDiscrim.has,
             "  return !_builder.isPointerFieldNull(", offset, " * ::capnp::POINTERS);\n"
             "}\n"
             "template <typename T>\n"
@@ -839,11 +900,13 @@ private:
 
       return FieldText {
         kj::strTree(
+            kj::mv(unionDiscrim.readerIsDecl),
             "  inline bool has", titleCase, "() const;\n"
             "  inline ", type, "::Reader get", titleCase, "() const;\n"
             "\n"),
 
         kj::strTree(
+            kj::mv(unionDiscrim.builderIsDecl),
             "  inline bool has", titleCase, "();\n"
             "  inline ", type, "::Builder get", titleCase, "();\n"
             "  inline void set", titleCase, "(", type, "::Reader value);\n",
@@ -861,12 +924,13 @@ private:
             "\n"),
 
         kj::strTree(
+            kj::mv(unionDiscrim.isDefs),
             "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
-            unionDiscrim.check,
+            unionDiscrim.has,
             "  return !_reader.isPointerFieldNull(", offset, " * ::capnp::POINTERS);\n"
             "}\n"
             "inline bool ", scope, "Builder::has", titleCase, "() {\n",
-            unionDiscrim.check,
+            unionDiscrim.has,
             "  return !_builder.isPointerFieldNull(", offset, " * ::capnp::POINTERS);\n"
             "}\n"
             "inline ", type, "::Reader ", scope, "Reader::get", titleCase, "() const {\n",
@@ -1015,9 +1079,9 @@ private:
           namespace_, subScope, nested.getName(), schemaLoader.get(nested.getId())));
     };
 
-    if (proto.which() == schema::Node::STRUCT) {
+    if (proto.isStruct()) {
       for (auto field: proto.getStruct().getFields()) {
-        if (field.which() == schema::Field::GROUP) {
+        if (field.isGroup()) {
           nestedTexts.add(makeNodeText(
               namespace_, subScope, toTitleCase(field.getName()),
               schemaLoader.get(field.getGroup())));

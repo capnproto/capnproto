@@ -384,7 +384,7 @@ Compiler::Node::Node(kj::StringPtr name, Declaration::Which kind)
 
 uint64_t Compiler::Node::generateId(uint64_t parentId, kj::StringPtr declName,
                                     Declaration::Id::Reader declId) {
-  if (declId.which() == Declaration::Id::UID) {
+  if (declId.isUid()) {
     return declId.getUid().getValue();
   }
 
@@ -828,7 +828,7 @@ kj::Maybe<const Compiler::CompiledModule&> Compiler::CompiledModule::importRelat
 }
 
 static void findImports(DeclName::Reader name, std::set<kj::StringPtr>& output) {
-  if (name.getBase().which() == DeclName::Base::IMPORT_NAME) {
+  if (name.getBase().isImportName()) {
     output.insert(name.getBase().getImportName().getValue());
   }
 }
@@ -859,7 +859,7 @@ static void findImports(Declaration::Reader decl, std::set<kj::StringPtr>& outpu
           findImports(ann.getName(), output);
         }
       }
-      if (method.getReturnType().which() == Declaration::Method::ReturnType::EXPRESSION) {
+      if (method.getReturnType().isExpression()) {
         findImports(method.getReturnType().getExpression(), output);
       }
       break;

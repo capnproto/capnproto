@@ -400,10 +400,6 @@ bool DynamicStruct::Reader::has(StructSchema::Field field) const {
     if (discrim != proto.getDiscriminantValue()) {
       // Field is not active in the union.
       return false;
-    } else if (discrim != 0) {
-      // Field is active and is not the default active field, therefore it is notable regardless
-      // of the value.
-      return true;
     }
   }
 
@@ -615,8 +611,7 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field) {
     case schema::Field::NON_GROUP: {
       auto nonGroup = proto.getNonGroup();
       auto type = nonGroup.getType();
-      KJ_REQUIRE(type.which() == schema::Type::STRUCT,
-              "init() without a size is only valid for struct fields.");
+      KJ_REQUIRE(type.isStruct(), "init() without a size is only valid for struct fields.");
       auto subSchema = schema.getDependency(type.getStruct()).asStruct();
       return DynamicStruct::Builder(subSchema,
           builder.initStructField(nonGroup.getOffset() * POINTERS,
@@ -751,8 +746,7 @@ WirePointerCount DynamicStruct::Builder::verifyIsObject(StructSchema::Field fiel
   switch (proto.which()) {
     case schema::Field::NON_GROUP: {
       auto nonGroup = proto.getNonGroup();
-      KJ_REQUIRE(nonGroup.getType().which() == schema::Type::OBJECT,
-                 "Expected an Object.");
+      KJ_REQUIRE(nonGroup.getType().isObject(), "Expected an Object.");
       return nonGroup.getOffset() * POINTERS;
     }
 

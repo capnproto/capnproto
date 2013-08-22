@@ -191,9 +191,9 @@ public:
   bool has(StructSchema::Field field) const;
   // Tests whether the given field is set to its default value.  For pointer values, this does
   // not actually traverse the value comparing it with the default, but simply returns true if the
-  // pointer is non-null.  For members of unions, has() returns whether the field is currently
-  // active and the union as a whole is non-default -- so, the only time has() will return false
-  // for an active union field is if it is the default active field and it has its default value.
+  // pointer is non-null.  For members of unions, has() returns false if the union member is not
+  // active, but does not necessarily return true if the member is active (depends on the field's
+  // value).
 
   kj::Maybe<StructSchema::Field> which() const;
   // If the struct contains an (unnamed) union, and the currently-active field within that union

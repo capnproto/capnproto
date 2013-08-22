@@ -289,7 +289,7 @@ private:
       sawCodeOrder[field.getCodeOrder()] = true;
 
       auto ordinal = field.getOrdinal();
-      if (ordinal.which() == schema::Field::Ordinal::EXPLICIT) {
+      if (ordinal.isExplicit()) {
         VALIDATE_SCHEMA(ordinal.getExplicit() >= nextOrdinal,
                         "fields were not ordered by ordinal");
         nextOrdinal = ordinal.getExplicit() + 1;
@@ -785,25 +785,25 @@ private:
                           UpgradeToStructMode upgradeToStructMode) {
     if (replacement.which() != type.which()) {
       // Check for allowed "upgrade" to Data or Object.
-      if (replacement.which() == schema::Type::DATA && canUpgradeToData(type)) {
+      if (replacement.isData() && canUpgradeToData(type)) {
         replacementIsNewer();
         return;
-      } else if (type.which() == schema::Type::DATA && canUpgradeToData(replacement)) {
+      } else if (type.isData() && canUpgradeToData(replacement)) {
         replacementIsOlder();
         return;
-      } else if (replacement.which() == schema::Type::OBJECT && canUpgradeToObject(type)) {
+      } else if (replacement.isObject() && canUpgradeToObject(type)) {
         replacementIsNewer();
         return;
-      } else if (type.which() == schema::Type::OBJECT && canUpgradeToObject(replacement)) {
+      } else if (type.isObject() && canUpgradeToObject(replacement)) {
         replacementIsOlder();
         return;
       }
 
       if (upgradeToStructMode == ALLOW_UPGRADE_TO_STRUCT) {
-        if (type.which() == schema::Type::STRUCT) {
+        if (type.isStruct()) {
           checkUpgradeToStruct(replacement, type.getStruct());
           return;
-        } else if (replacement.which() == schema::Type::STRUCT) {
+        } else if (replacement.isStruct()) {
           checkUpgradeToStruct(type, replacement.getStruct());
           return;
         }
@@ -939,9 +939,9 @@ private:
   }
 
   bool canUpgradeToData(const schema::Type::Reader& type) {
-    if (type.which() == schema::Type::TEXT) {
+    if (type.isText()) {
       return true;
-    } else if (type.which() == schema::Type::LIST) {
+    } else if (type.isList()) {
       switch (type.getList().which()) {
         case schema::Type::INT8:
         case schema::Type::UINT8:
@@ -1238,7 +1238,7 @@ kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNode(schema::Node::Reader no
 
 kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNodeEnforcingSizeRequirements(
     schema::Node::Reader node) {
-  if (node.which() == schema::Node::STRUCT) {
+  if (node.isStruct()) {
     auto iter = structSizeRequirements.find(node.getId());
     if (iter != structSizeRequirements.end()) {
       auto requirement = iter->second;
