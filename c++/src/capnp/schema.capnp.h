@@ -78,15 +78,15 @@ struct Field {
   class Reader;
   class Builder;
   enum Which: uint16_t {
-    REGULAR,
+    NON_GROUP,
     GROUP,
   };
-  struct Regular;
+  struct NonGroup;
   struct Ordinal;
 };
 
-struct Field::Regular {
-  Regular() = delete;
+struct Field::NonGroup {
+  NonGroup() = delete;
 
   class Reader;
   class Builder;
@@ -279,7 +279,7 @@ CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Field, 9aad50a41f4af45f,
     3, 4, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Field::Regular, c42305476bb4746f,
+    ::capnp::schema::Field::NonGroup, c42305476bb4746f,
     3, 4, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Field::Ordinal, bb90d5c287870be6,
@@ -991,7 +991,7 @@ public:
   inline bool hasDiscriminantValue() const;
   inline  ::uint16_t getDiscriminantValue() const;
 
-  inline Regular::Reader getRegular() const;
+  inline NonGroup::Reader getNonGroup() const;
 
   inline bool hasGroup() const;
   inline  ::uint64_t getGroup() const;
@@ -1049,8 +1049,8 @@ public:
   inline  ::uint16_t getDiscriminantValue();
   inline void setDiscriminantValue( ::uint16_t value);
 
-  inline Regular::Builder getRegular();
-  inline Regular::Builder initRegular();
+  inline NonGroup::Builder getNonGroup();
+  inline NonGroup::Builder initNonGroup();
 
   inline bool hasGroup();
   inline  ::uint64_t getGroup();
@@ -1071,9 +1071,9 @@ inline ::kj::StringTree KJ_STRINGIFY(Field::Builder builder) {
   return ::capnp::_::structString<Field>(builder._builder.asReader());
 }
 
-class Field::Regular::Reader {
+class Field::NonGroup::Reader {
 public:
-  typedef Regular Reads;
+  typedef NonGroup Reads;
 
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
@@ -1101,16 +1101,16 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Field::Regular::Reader reader);
+  friend ::kj::StringTree KJ_STRINGIFY(Field::NonGroup::Reader reader);
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(Field::Regular::Reader reader) {
-  return ::capnp::_::structString<Field::Regular>(reader._reader);
+inline ::kj::StringTree KJ_STRINGIFY(Field::NonGroup::Reader reader) {
+  return ::capnp::_::structString<Field::NonGroup>(reader._reader);
 }
 
-class Field::Regular::Builder {
+class Field::NonGroup::Builder {
 public:
-  typedef Regular Builds;
+  typedef NonGroup Builds;
 
   Builder() = default;
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
@@ -1142,11 +1142,11 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Field::Regular::Builder builder);
+  friend ::kj::StringTree KJ_STRINGIFY(Field::NonGroup::Builder builder);
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(Field::Regular::Builder builder) {
-  return ::capnp::_::structString<Field::Regular>(builder._builder.asReader());
+inline ::kj::StringTree KJ_STRINGIFY(Field::NonGroup::Builder builder) {
+  return ::capnp::_::structString<Field::NonGroup>(builder._builder.asReader());
 }
 
 class Field::Ordinal::Reader {
@@ -3208,20 +3208,20 @@ inline void Field::Builder::setDiscriminantValue( ::uint16_t value) {
       1 * ::capnp::ELEMENTS, value, 65535u);
 }
 
-inline Field::Regular::Reader Field::Reader::getRegular() const {
-  KJ_IREQUIRE(which() == Field::REGULAR,
+inline Field::NonGroup::Reader Field::Reader::getNonGroup() const {
+  KJ_IREQUIRE(which() == Field::NON_GROUP,
               "Must check which() before get()ing a union member.");
-  return Field::Regular::Reader(_reader);
+  return Field::NonGroup::Reader(_reader);
 }
-inline Field::Regular::Builder Field::Builder::getRegular() {
-  KJ_IREQUIRE(which() == Field::REGULAR,
+inline Field::NonGroup::Builder Field::Builder::getNonGroup() {
+  KJ_IREQUIRE(which() == Field::NON_GROUP,
               "Must check which() before get()ing a union member.");
-  return Field::Regular::Builder(_builder);
+  return Field::NonGroup::Builder(_builder);
 }
-inline Field::Regular::Builder Field::Builder::initRegular() {
+inline Field::NonGroup::Builder Field::Builder::initNonGroup() {
   _builder.setDataField<Field::Which>(
-      4 * ::capnp::ELEMENTS, Field::REGULAR);
-  return Field::Regular::Builder(_builder);
+      4 * ::capnp::ELEMENTS, Field::NON_GROUP);
+  return Field::NonGroup::Builder(_builder);
 }
 inline bool Field::Reader::hasGroup() const {
   KJ_IREQUIRE(which() == Field::GROUP,
@@ -3263,87 +3263,87 @@ inline Field::Ordinal::Builder Field::Builder::getOrdinal() {
 inline Field::Ordinal::Builder Field::Builder::initOrdinal() {
   return Field::Ordinal::Builder(_builder);
 }
-inline bool Field::Regular::Reader::hasOffset() const {
+inline bool Field::NonGroup::Reader::hasOffset() const {
   return _reader.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
 }
 
-inline bool Field::Regular::Builder::hasOffset() {
+inline bool Field::NonGroup::Builder::hasOffset() {
   return _builder.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
 }
-inline  ::uint32_t Field::Regular::Reader::getOffset() const {
+inline  ::uint32_t Field::NonGroup::Reader::getOffset() const {
   return _reader.getDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS);
 }
 
-inline  ::uint32_t Field::Regular::Builder::getOffset() {
+inline  ::uint32_t Field::NonGroup::Builder::getOffset() {
   return _builder.getDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS);
 }
-inline void Field::Regular::Builder::setOffset( ::uint32_t value) {
+inline void Field::NonGroup::Builder::setOffset( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Field::Regular::Reader::hasType() const {
+inline bool Field::NonGroup::Reader::hasType() const {
   return !_reader.isPointerFieldNull(2 * ::capnp::POINTERS);
 }
-inline bool Field::Regular::Builder::hasType() {
+inline bool Field::NonGroup::Builder::hasType() {
   return !_builder.isPointerFieldNull(2 * ::capnp::POINTERS);
 }
-inline  ::capnp::schema::Type::Reader Field::Regular::Reader::getType() const {
+inline  ::capnp::schema::Type::Reader Field::NonGroup::Reader::getType() const {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
       _reader, 2 * ::capnp::POINTERS);
 }
-inline  ::capnp::schema::Type::Builder Field::Regular::Builder::getType() {
+inline  ::capnp::schema::Type::Builder Field::NonGroup::Builder::getType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
       _builder, 2 * ::capnp::POINTERS);
 }
-inline void Field::Regular::Builder::setType( ::capnp::schema::Type::Reader value) {
+inline void Field::NonGroup::Builder::setType( ::capnp::schema::Type::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
       _builder, 2 * ::capnp::POINTERS, value);
 }
-inline  ::capnp::schema::Type::Builder Field::Regular::Builder::initType() {
+inline  ::capnp::schema::Type::Builder Field::NonGroup::Builder::initType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::init(
       _builder, 2 * ::capnp::POINTERS);
 }
-inline void Field::Regular::Builder::adoptType(
+inline void Field::NonGroup::Builder::adoptType(
     ::capnp::Orphan< ::capnp::schema::Type>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::adopt(
       _builder, 2 * ::capnp::POINTERS, kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::schema::Type> Field::Regular::Builder::disownType() {
+inline ::capnp::Orphan< ::capnp::schema::Type> Field::NonGroup::Builder::disownType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::disown(
       _builder, 2 * ::capnp::POINTERS);
 }
 
-inline bool Field::Regular::Reader::hasDefaultValue() const {
+inline bool Field::NonGroup::Reader::hasDefaultValue() const {
   return !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
 }
-inline bool Field::Regular::Builder::hasDefaultValue() {
+inline bool Field::NonGroup::Builder::hasDefaultValue() {
   return !_builder.isPointerFieldNull(3 * ::capnp::POINTERS);
 }
-inline  ::capnp::schema::Value::Reader Field::Regular::Reader::getDefaultValue() const {
+inline  ::capnp::schema::Value::Reader Field::NonGroup::Reader::getDefaultValue() const {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
       _reader, 3 * ::capnp::POINTERS);
 }
-inline  ::capnp::schema::Value::Builder Field::Regular::Builder::getDefaultValue() {
+inline  ::capnp::schema::Value::Builder Field::NonGroup::Builder::getDefaultValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
       _builder, 3 * ::capnp::POINTERS);
 }
-inline void Field::Regular::Builder::setDefaultValue( ::capnp::schema::Value::Reader value) {
+inline void Field::NonGroup::Builder::setDefaultValue( ::capnp::schema::Value::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Value>::set(
       _builder, 3 * ::capnp::POINTERS, value);
 }
-inline  ::capnp::schema::Value::Builder Field::Regular::Builder::initDefaultValue() {
+inline  ::capnp::schema::Value::Builder Field::NonGroup::Builder::initDefaultValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::init(
       _builder, 3 * ::capnp::POINTERS);
 }
-inline void Field::Regular::Builder::adoptDefaultValue(
+inline void Field::NonGroup::Builder::adoptDefaultValue(
     ::capnp::Orphan< ::capnp::schema::Value>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Value>::adopt(
       _builder, 3 * ::capnp::POINTERS, kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::schema::Value> Field::Regular::Builder::disownDefaultValue() {
+inline ::capnp::Orphan< ::capnp::schema::Value> Field::NonGroup::Builder::disownDefaultValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::disown(
       _builder, 3 * ::capnp::POINTERS);
 }

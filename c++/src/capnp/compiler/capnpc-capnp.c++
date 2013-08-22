@@ -360,19 +360,19 @@ private:
 
   kj::StringTree genStructField(schema::Field::Reader field, Schema scope, Indent indent) {
     switch (field.which()) {
-      case schema::Field::REGULAR: {
-        auto regularField = field.getRegular();
-        int size = typeSizeBits(regularField.getType());
+      case schema::Field::NON_GROUP: {
+        auto nonGroup = field.getNonGroup();
+        int size = typeSizeBits(nonGroup.getType());
         return kj::strTree(
             indent, field.getName(), " @", field.getOrdinal().getExplicit(),
-            " :", genType(regularField.getType(), scope),
-            isEmptyValue(regularField.getDefaultValue()) ? kj::strTree("") :
+            " :", genType(nonGroup.getType(), scope),
+            isEmptyValue(nonGroup.getDefaultValue()) ? kj::strTree("") :
                 kj::strTree(" = ", genValue(
-                    regularField.getType(), regularField.getDefaultValue(), scope)),
+                    nonGroup.getType(), nonGroup.getDefaultValue(), scope)),
             genAnnotations(field.getAnnotations(), scope),
-            ";  # ", size == -1 ? kj::strTree("ptr[", regularField.getOffset(), "]")
-                                : kj::strTree("bits[", regularField.getOffset() * size, ", ",
-                                              (regularField.getOffset() + 1) * size, ")"),
+            ";  # ", size == -1 ? kj::strTree("ptr[", nonGroup.getOffset(), "]")
+                                : kj::strTree("bits[", nonGroup.getOffset() * size, ", ",
+                                              (nonGroup.getOffset() + 1) * size, ")"),
             field.hasDiscriminantValue()
                 ? kj::strTree(", union tag = ", field.getDiscriminantValue()) : kj::strTree(),
             "\n");

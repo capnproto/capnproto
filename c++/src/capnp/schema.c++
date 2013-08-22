@@ -159,7 +159,7 @@ kj::Maybe<StructSchema::Field> StructSchema::getFieldByDiscriminant(uint16_t dis
 }
 
 uint32_t StructSchema::Field::getDefaultValueSchemaOffset() const {
-  auto defaultValue = proto.getRegular().getDefaultValue();
+  auto defaultValue = proto.getNonGroup().getDefaultValue();
   const word* ptr;
 
   switch (defaultValue.which()) {

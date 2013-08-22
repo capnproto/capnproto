@@ -702,8 +702,8 @@ void Compiler::Node::traverseNodeDependencies(
     case schema::Node::STRUCT:
       for (auto field: schemaNode.getStruct().getFields()) {
         switch (field.which()) {
-          case schema::Field::REGULAR:
-            traverseType(field.getRegular().getType(), eagerness, seen);
+          case schema::Field::NON_GROUP:
+            traverseType(field.getNonGroup().getType(), eagerness, seen);
             break;
           case schema::Field::GROUP:
             // Aux node will be scanned later.

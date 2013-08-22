@@ -809,20 +809,20 @@ public:
       switch (member.decl.which()) {
         case Declaration::FIELD: {
           auto fieldReader = member.decl.getField();
-          auto regularField = fieldBuilder.initRegular();
-          auto typeBuilder = regularField.initType();
+          auto nonGroup = fieldBuilder.initNonGroup();
+          auto typeBuilder = nonGroup.initType();
           if (translator.compileType(fieldReader.getType(), typeBuilder)) {
             switch (fieldReader.getDefaultValue().which()) {
               case Declaration::Field::DefaultValue::VALUE:
                 translator.compileBootstrapValue(fieldReader.getDefaultValue().getValue(),
-                                                 typeBuilder, regularField.initDefaultValue());
+                                                 typeBuilder, nonGroup.initDefaultValue());
                 break;
               case Declaration::Field::DefaultValue::NONE:
-                translator.compileDefaultDefaultValue(typeBuilder, regularField.initDefaultValue());
+                translator.compileDefaultDefaultValue(typeBuilder, nonGroup.initDefaultValue());
                 break;
             }
           } else {
-            translator.compileDefaultDefaultValue(typeBuilder, regularField.initDefaultValue());
+            translator.compileDefaultDefaultValue(typeBuilder, nonGroup.initDefaultValue());
           }
 
           int lgSize = -1;
@@ -851,13 +851,13 @@ public:
 
           if (lgSize == -2) {
             // pointer
-            regularField.setOffset(member.fieldScope->addPointer());
+            nonGroup.setOffset(member.fieldScope->addPointer());
           } else if (lgSize == -1) {
             // void
             member.fieldScope->addVoid();
-            regularField.setOffset(0);
+            nonGroup.setOffset(0);
           } else {
-            regularField.setOffset(member.fieldScope->addData(lgSize));
+            nonGroup.setOffset(member.fieldScope->addData(lgSize));
           }
           break;
         }
@@ -1455,8 +1455,8 @@ private:
 
   static kj::Maybe<uint64_t> enumIdForField(StructSchema::Field field) {
     schema::Field::Reader proto = field.getProto();
-    if (proto.which() == schema::Field::REGULAR) {
-      auto type = proto.getRegular().getType();
+    if (proto.which() == schema::Field::NON_GROUP) {
+      auto type = proto.getNonGroup().getType();
       if (type.which() == schema::Type::ENUM) {
         return type.getEnum();
       }

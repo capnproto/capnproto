@@ -178,8 +178,8 @@ struct Field {
   # returns false).
 
   union {
-    regular :group {
-      # A regular (non-group) field.
+    nonGroup :group {
+      # A regular, non-group, field.
 
       offset @4 :UInt32;
       # Offset, in units of the field's size, from the beginning of the section in which the field

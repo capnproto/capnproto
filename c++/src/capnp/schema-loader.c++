@@ -309,17 +309,17 @@ private:
       }
 
       switch (field.which()) {
-        case schema::Field::REGULAR: {
-          auto regularField = field.getRegular();
+        case schema::Field::NON_GROUP: {
+          auto nonGroup = field.getNonGroup();
 
           uint fieldBits;
           bool fieldIsPointer;
-          validate(regularField.getType(), regularField.getDefaultValue(),
+          validate(nonGroup.getType(), nonGroup.getDefaultValue(),
                    &fieldBits, &fieldIsPointer);
-          VALIDATE_SCHEMA(fieldBits * (regularField.getOffset() + 1) <= dataSizeInBits &&
-                          fieldIsPointer * (regularField.getOffset() + 1) <= pointerCount,
+          VALIDATE_SCHEMA(fieldBits * (nonGroup.getOffset() + 1) <= dataSizeInBits &&
+                          fieldIsPointer * (nonGroup.getOffset() + 1) <= pointerCount,
                           "field offset out-of-bounds",
-                          regularField.getOffset(), dataSizeInBits, pointerCount);
+                          nonGroup.getOffset(), dataSizeInBits, pointerCount);
 
           break;
         }
@@ -676,16 +676,16 @@ private:
                     "group field replaced with non-group or vice versa");
 
     switch (field.which()) {
-      case schema::Field::REGULAR: {
-        auto regularField = field.getRegular();
-        auto replacementRegularField = replacement.getRegular();
+      case schema::Field::NON_GROUP: {
+        auto nonGroup = field.getNonGroup();
+        auto replacementNonGroup = replacement.getNonGroup();
 
-        checkCompatibility(regularField.getType(), replacementRegularField.getType(),
+        checkCompatibility(nonGroup.getType(), replacementNonGroup.getType(),
                            NO_UPGRADE_TO_STRUCT);
-        checkDefaultCompatibility(regularField.getDefaultValue(),
-                                  replacementRegularField.getDefaultValue());
+        checkDefaultCompatibility(nonGroup.getDefaultValue(),
+                                  replacementNonGroup.getDefaultValue());
 
-        VALIDATE_SCHEMA(regularField.getOffset() == replacementRegularField.getOffset(),
+        VALIDATE_SCHEMA(nonGroup.getOffset() == replacementNonGroup.getOffset(),
                         "field position changed");
         break;
       }
@@ -933,7 +933,7 @@ private:
     field.setName("member0");
     field.getOrdinal().setExplicit(0);
     field.setCodeOrder(0);
-    field.initRegular().setType(type);
+    field.initNonGroup().setType(type);
 
     loader.load(node, true);
   }
