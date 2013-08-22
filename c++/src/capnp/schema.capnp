@@ -120,11 +120,15 @@ struct Node {
       # most sense to use the field's index in this list rather than its ordinal.
     }
 
-    enum @14 :List(Enumerant);
-    # Enumerants ordered by numeric value (ordinal).
+    enum :group {
+      enumerants@14 :List(Enumerant);
+      # Enumerants ordered by numeric value (ordinal).
+    }
 
-    interface @15 :List(Method);
-    # Methods ordered by ordinal.
+    interface :group {
+      methods @15 :List(Method);
+      # Methods ordered by ordinal.
+    }
 
     const :group {
       type @16 :Type;

@@ -761,7 +761,7 @@ void NodeTranslator::compileEnum(Void decl,
     }
   }
 
-  auto list = builder.initEnum(enumerants.size());
+  auto list = builder.initEnum().initEnumerants(enumerants.size());
   uint i = 0;
   DuplicateOrdinalDetector dupDetector(errorReporter);
 

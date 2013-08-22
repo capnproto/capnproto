@@ -131,7 +131,7 @@ TEST(Schema, Enums) {
   EXPECT_TRUE(schema.asEnum() == schema);
 
   ASSERT_EQ(schema.getEnumerants().size(),
-            schema.getProto().getEnum().size());
+            schema.getProto().getEnum().getEnumerants().size());
   EnumSchema::Enumerant enumerant = schema.getEnumerants()[0];
   EXPECT_EQ("foo", enumerant.getProto().getName());
   EXPECT_TRUE(enumerant.getContainingEnum() == schema);

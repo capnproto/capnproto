@@ -351,7 +351,8 @@ private:
     }
   }
 
-  void validate(const List<schema::Enumerant>::Reader& enumerants) {
+  void validate(const schema::Node::Enum::Reader& enumNode) {
+    auto enumerants = enumNode.getEnumerants();
     KJ_STACK_ARRAY(bool, sawCodeOrder, enumerants.size(), 32, 256);
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
 
@@ -366,7 +367,8 @@ private:
     }
   }
 
-  void validate(const List<schema::Method>::Reader& methods) {
+  void validate(const schema::Node::Interface::Reader& interfaceNode) {
+    auto methods = interfaceNode.getMethods();
     KJ_STACK_ARRAY(bool, sawCodeOrder, methods.size(), 32, 256);
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));
 
@@ -694,10 +696,10 @@ private:
     }
   }
 
-  void checkCompatibility(const List<schema::Enumerant>::Reader& enumerants,
-                          const List<schema::Enumerant>::Reader& replacementEnumerants) {
-    uint size = enumerants.size();
-    uint replacementSize = replacementEnumerants.size();
+  void checkCompatibility(const schema::Node::Enum::Reader& enumNode,
+                          const schema::Node::Enum::Reader& replacement) {
+    uint size = enumNode.getEnumerants().size();
+    uint replacementSize = replacement.getEnumerants().size();
     if (replacementSize > size) {
       replacementIsNewer();
     } else if (replacementSize < size) {
@@ -705,8 +707,11 @@ private:
     }
   }
 
-  void checkCompatibility(const List<schema::Method>::Reader& methods,
-                          const List<schema::Method>::Reader& replacementMethods) {
+  void checkCompatibility(const schema::Node::Interface::Reader& interfaceNode,
+                          const schema::Node::Interface::Reader& replacement) {
+    auto methods = interfaceNode.getMethods();
+    auto replacementMethods = replacement.getMethods();
+
     if (replacementMethods.size() > methods.size()) {
       replacementIsNewer();
     } else if (replacementMethods.size() < methods.size()) {
@@ -1169,8 +1174,8 @@ _::RawSchema* SchemaLoader::Impl::loadEmpty(
   node.setDisplayName(name);
   switch (kind) {
     case schema::Node::STRUCT: node.initStruct(); break;
-    case schema::Node::ENUM: node.initEnum(0); break;
-    case schema::Node::INTERFACE: node.initInterface(0); break;
+    case schema::Node::ENUM: node.initEnum(); break;
+    case schema::Node::INTERFACE: node.initInterface(); break;
 
     case schema::Node::FILE:
     case schema::Node::CONST:

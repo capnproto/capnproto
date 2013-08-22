@@ -262,7 +262,7 @@ private:
       case schema::Value::ENUM: {
         KJ_REQUIRE(type.which() == schema::Type::ENUM, "type/value mismatch");
         auto enumNode = scope.getDependency(type.getEnum()).asEnum().getProto();
-        auto enumerants = enumNode.getEnum();
+        auto enumerants = enumNode.getEnum().getEnumerants();
         KJ_REQUIRE(value.getEnum() < enumerants.size(),
                 "Enum value out-of-range.", value.getEnum(), enumNode.getDisplayName());
         return kj::strTree(enumerants[value.getEnum()].getName());

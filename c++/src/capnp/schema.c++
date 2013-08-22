@@ -189,7 +189,7 @@ uint32_t StructSchema::Field::getDefaultValueSchemaOffset() const {
 // -------------------------------------------------------------------
 
 EnumSchema::EnumerantList EnumSchema::getEnumerants() const {
-  return EnumerantList(*this, getProto().getEnum());
+  return EnumerantList(*this, getProto().getEnum().getEnumerants());
 }
 
 kj::Maybe<EnumSchema::Enumerant> EnumSchema::findEnumerantByName(kj::StringPtr name) const {
@@ -207,7 +207,7 @@ EnumSchema::Enumerant EnumSchema::getEnumerantByName(kj::StringPtr name) const {
 // -------------------------------------------------------------------
 
 InterfaceSchema::MethodList InterfaceSchema::getMethods() const {
-  return MethodList(*this, getProto().getInterface());
+  return MethodList(*this, getProto().getInterface().getMethods());
 }
 
 kj::Maybe<InterfaceSchema::Method> InterfaceSchema::findMethodByName(kj::StringPtr name) const {

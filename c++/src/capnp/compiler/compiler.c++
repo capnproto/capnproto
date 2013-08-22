@@ -715,13 +715,13 @@ void Compiler::Node::traverseNodeDependencies(
       break;
 
     case schema::Node::ENUM:
-      for (auto enumerant: schemaNode.getEnum()) {
+      for (auto enumerant: schemaNode.getEnum().getEnumerants()) {
         traverseAnnotations(enumerant.getAnnotations(), eagerness, seen);
       }
       break;
 
     case schema::Node::INTERFACE:
-      for (auto method: schemaNode.getInterface()) {
+      for (auto method: schemaNode.getInterface().getMethods()) {
         for (auto param: method.getParams()) {
           traverseType(param.getType(), eagerness, seen);
           traverseAnnotations(param.getAnnotations(), eagerness, seen);

@@ -98,7 +98,7 @@ void enumerateDeps(schema::Node::Reader node, std::set<uint64_t>& deps) {
       break;
     }
     case schema::Node::INTERFACE:
-      for (auto method: node.getInterface()) {
+      for (auto method: node.getInterface().getMethods()) {
         for (auto param: method.getParams()) {
           enumerateDeps(param.getType(), deps);
         }

@@ -24,6 +24,8 @@ struct Node {
   };
   struct NestedNode;
   struct Struct;
+  struct Enum;
+  struct Interface;
   struct Const;
   struct Annotation;
 };
@@ -37,6 +39,20 @@ struct Node::NestedNode {
 
 struct Node::Struct {
   Struct() = delete;
+
+  class Reader;
+  class Builder;
+};
+
+struct Node::Enum {
+  Enum() = delete;
+
+  class Reader;
+  class Builder;
+};
+
+struct Node::Interface {
+  Interface() = delete;
 
   class Reader;
   class Builder;
@@ -217,6 +233,8 @@ namespace schemas {
 extern const ::capnp::_::RawSchema s_e682ab4cf923a417;
 extern const ::capnp::_::RawSchema s_debf55bbfa0fc242;
 extern const ::capnp::_::RawSchema s_9ea0b19b37fb4435;
+extern const ::capnp::_::RawSchema s_b54ab3364333f598;
+extern const ::capnp::_::RawSchema s_e82753cff0c2218f;
 extern const ::capnp::_::RawSchema s_b18aa5ac7a0d9420;
 extern const ::capnp::_::RawSchema s_ec1619d4400a0290;
 extern const ::capnp::_::RawSchema s_9aad50a41f4af45f;
@@ -244,6 +262,12 @@ CAPNP_DECLARE_STRUCT(
     1, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Node::Struct, 9ea0b19b37fb4435,
+    5, 5, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::Node::Enum, b54ab3364333f598,
+    5, 5, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::Node::Interface, e82753cff0c2218f,
     5, 5, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Node::Const, b18aa5ac7a0d9420,
@@ -333,11 +357,9 @@ public:
 
   inline Struct::Reader getStruct() const;
 
-  inline bool hasEnum() const;
-  inline  ::capnp::List< ::capnp::schema::Enumerant>::Reader getEnum() const;
+  inline Enum::Reader getEnum() const;
 
-  inline bool hasInterface() const;
-  inline  ::capnp::List< ::capnp::schema::Method>::Reader getInterface() const;
+  inline Interface::Reader getInterface() const;
 
   inline Const::Reader getConst() const;
 
@@ -412,19 +434,11 @@ public:
   inline Struct::Builder getStruct();
   inline Struct::Builder initStruct();
 
-  inline bool hasEnum();
-  inline  ::capnp::List< ::capnp::schema::Enumerant>::Builder getEnum();
-  inline void setEnum( ::capnp::List< ::capnp::schema::Enumerant>::Reader value);
-  inline  ::capnp::List< ::capnp::schema::Enumerant>::Builder initEnum(unsigned int size);
-  inline void adoptEnum(::capnp::Orphan< ::capnp::List< ::capnp::schema::Enumerant>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Enumerant>> disownEnum();
+  inline Enum::Builder getEnum();
+  inline Enum::Builder initEnum();
 
-  inline bool hasInterface();
-  inline  ::capnp::List< ::capnp::schema::Method>::Builder getInterface();
-  inline void setInterface( ::capnp::List< ::capnp::schema::Method>::Reader value);
-  inline  ::capnp::List< ::capnp::schema::Method>::Builder initInterface(unsigned int size);
-  inline void adoptInterface(::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>> disownInterface();
+  inline Interface::Builder getInterface();
+  inline Interface::Builder initInterface();
 
   inline Const::Builder getConst();
   inline Const::Builder initConst();
@@ -613,6 +627,128 @@ private:
 
 inline ::kj::StringTree KJ_STRINGIFY(Node::Struct::Builder builder) {
   return ::capnp::_::structString<Node::Struct>(builder._builder.asReader());
+}
+
+class Node::Enum::Reader {
+public:
+  typedef Enum Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline size_t totalSizeInWords() const {
+    return _reader.totalSize() / ::capnp::WORDS;
+  }
+
+  inline bool hasEnumerants() const;
+  inline  ::capnp::List< ::capnp::schema::Enumerant>::Reader getEnumerants() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Node::Enum::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Node::Enum::Reader reader) {
+  return ::capnp::_::structString<Node::Enum>(reader._reader);
+}
+
+class Node::Enum::Builder {
+public:
+  typedef Enum Builds;
+
+  Builder() = default;
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+
+  inline bool hasEnumerants();
+  inline  ::capnp::List< ::capnp::schema::Enumerant>::Builder getEnumerants();
+  inline void setEnumerants( ::capnp::List< ::capnp::schema::Enumerant>::Reader value);
+  inline  ::capnp::List< ::capnp::schema::Enumerant>::Builder initEnumerants(unsigned int size);
+  inline void adoptEnumerants(::capnp::Orphan< ::capnp::List< ::capnp::schema::Enumerant>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Enumerant>> disownEnumerants();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Node::Enum::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Node::Enum::Builder builder) {
+  return ::capnp::_::structString<Node::Enum>(builder._builder.asReader());
+}
+
+class Node::Interface::Reader {
+public:
+  typedef Interface Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline size_t totalSizeInWords() const {
+    return _reader.totalSize() / ::capnp::WORDS;
+  }
+
+  inline bool hasMethods() const;
+  inline  ::capnp::List< ::capnp::schema::Method>::Reader getMethods() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Node::Interface::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Node::Interface::Reader reader) {
+  return ::capnp::_::structString<Node::Interface>(reader._reader);
+}
+
+class Node::Interface::Builder {
+public:
+  typedef Interface Builds;
+
+  Builder() = default;
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+
+  inline bool hasMethods();
+  inline  ::capnp::List< ::capnp::schema::Method>::Builder getMethods();
+  inline void setMethods( ::capnp::List< ::capnp::schema::Method>::Reader value);
+  inline  ::capnp::List< ::capnp::schema::Method>::Builder initMethods(unsigned int size);
+  inline void adoptMethods(::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>> disownMethods();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Node::Interface::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Node::Interface::Builder builder) {
+  return ::capnp::_::structString<Node::Interface>(builder._builder.asReader());
 }
 
 class Node::Const::Reader {
@@ -2276,102 +2412,36 @@ inline Node::Struct::Builder Node::Builder::initStruct() {
       6 * ::capnp::ELEMENTS, Node::STRUCT);
   return Node::Struct::Builder(_builder);
 }
-inline bool Node::Reader::hasEnum() const {
+inline Node::Enum::Reader Node::Reader::getEnum() const {
   KJ_IREQUIRE(which() == Node::ENUM,
               "Must check which() before get()ing a union member.");
-  return !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
+  return Node::Enum::Reader(_reader);
 }
-inline bool Node::Builder::hasEnum() {
+inline Node::Enum::Builder Node::Builder::getEnum() {
   KJ_IREQUIRE(which() == Node::ENUM,
               "Must check which() before get()ing a union member.");
-  return !_builder.isPointerFieldNull(3 * ::capnp::POINTERS);
+  return Node::Enum::Builder(_builder);
 }
-inline  ::capnp::List< ::capnp::schema::Enumerant>::Reader Node::Reader::getEnum() const {
-  KJ_IREQUIRE(which() == Node::ENUM,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::get(
-      _reader, 3 * ::capnp::POINTERS);
-}
-inline  ::capnp::List< ::capnp::schema::Enumerant>::Builder Node::Builder::getEnum() {
-  KJ_IREQUIRE(which() == Node::ENUM,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::get(
-      _builder, 3 * ::capnp::POINTERS);
-}
-inline void Node::Builder::setEnum( ::capnp::List< ::capnp::schema::Enumerant>::Reader value) {
+inline Node::Enum::Builder Node::Builder::initEnum() {
   _builder.setDataField<Node::Which>(
       6 * ::capnp::ELEMENTS, Node::ENUM);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::set(
-      _builder, 3 * ::capnp::POINTERS, value);
+  return Node::Enum::Builder(_builder);
 }
-inline  ::capnp::List< ::capnp::schema::Enumerant>::Builder Node::Builder::initEnum(unsigned int size) {
-  _builder.setDataField<Node::Which>(
-      6 * ::capnp::ELEMENTS, Node::ENUM);
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::init(
-      _builder, 3 * ::capnp::POINTERS, size);
-}
-inline void Node::Builder::adoptEnum(
-    ::capnp::Orphan< ::capnp::List< ::capnp::schema::Enumerant>>&& value) {
-  _builder.setDataField<Node::Which>(
-      6 * ::capnp::ELEMENTS, Node::ENUM);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::adopt(
-      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Enumerant>> Node::Builder::disownEnum() {
-  KJ_IREQUIRE(which() == Node::ENUM,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::disown(
-      _builder, 3 * ::capnp::POINTERS);
-}
-
-inline bool Node::Reader::hasInterface() const {
+inline Node::Interface::Reader Node::Reader::getInterface() const {
   KJ_IREQUIRE(which() == Node::INTERFACE,
               "Must check which() before get()ing a union member.");
-  return !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
+  return Node::Interface::Reader(_reader);
 }
-inline bool Node::Builder::hasInterface() {
+inline Node::Interface::Builder Node::Builder::getInterface() {
   KJ_IREQUIRE(which() == Node::INTERFACE,
               "Must check which() before get()ing a union member.");
-  return !_builder.isPointerFieldNull(3 * ::capnp::POINTERS);
+  return Node::Interface::Builder(_builder);
 }
-inline  ::capnp::List< ::capnp::schema::Method>::Reader Node::Reader::getInterface() const {
-  KJ_IREQUIRE(which() == Node::INTERFACE,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::get(
-      _reader, 3 * ::capnp::POINTERS);
-}
-inline  ::capnp::List< ::capnp::schema::Method>::Builder Node::Builder::getInterface() {
-  KJ_IREQUIRE(which() == Node::INTERFACE,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::get(
-      _builder, 3 * ::capnp::POINTERS);
-}
-inline void Node::Builder::setInterface( ::capnp::List< ::capnp::schema::Method>::Reader value) {
+inline Node::Interface::Builder Node::Builder::initInterface() {
   _builder.setDataField<Node::Which>(
       6 * ::capnp::ELEMENTS, Node::INTERFACE);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::set(
-      _builder, 3 * ::capnp::POINTERS, value);
+  return Node::Interface::Builder(_builder);
 }
-inline  ::capnp::List< ::capnp::schema::Method>::Builder Node::Builder::initInterface(unsigned int size) {
-  _builder.setDataField<Node::Which>(
-      6 * ::capnp::ELEMENTS, Node::INTERFACE);
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::init(
-      _builder, 3 * ::capnp::POINTERS, size);
-}
-inline void Node::Builder::adoptInterface(
-    ::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>>&& value) {
-  _builder.setDataField<Node::Which>(
-      6 * ::capnp::ELEMENTS, Node::INTERFACE);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::adopt(
-      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>> Node::Builder::disownInterface() {
-  KJ_IREQUIRE(which() == Node::INTERFACE,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::disown(
-      _builder, 3 * ::capnp::POINTERS);
-}
-
 inline Node::Const::Reader Node::Reader::getConst() const {
   KJ_IREQUIRE(which() == Node::CONST,
               "Must check which() before get()ing a union member.");
@@ -2610,6 +2680,70 @@ inline void Node::Struct::Builder::adoptFields(
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Field>> Node::Struct::Builder::disownFields() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Field>>::disown(
+      _builder, 3 * ::capnp::POINTERS);
+}
+
+inline bool Node::Enum::Reader::hasEnumerants() const {
+  return !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
+}
+inline bool Node::Enum::Builder::hasEnumerants() {
+  return !_builder.isPointerFieldNull(3 * ::capnp::POINTERS);
+}
+inline  ::capnp::List< ::capnp::schema::Enumerant>::Reader Node::Enum::Reader::getEnumerants() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::get(
+      _reader, 3 * ::capnp::POINTERS);
+}
+inline  ::capnp::List< ::capnp::schema::Enumerant>::Builder Node::Enum::Builder::getEnumerants() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::get(
+      _builder, 3 * ::capnp::POINTERS);
+}
+inline void Node::Enum::Builder::setEnumerants( ::capnp::List< ::capnp::schema::Enumerant>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::set(
+      _builder, 3 * ::capnp::POINTERS, value);
+}
+inline  ::capnp::List< ::capnp::schema::Enumerant>::Builder Node::Enum::Builder::initEnumerants(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::init(
+      _builder, 3 * ::capnp::POINTERS, size);
+}
+inline void Node::Enum::Builder::adoptEnumerants(
+    ::capnp::Orphan< ::capnp::List< ::capnp::schema::Enumerant>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::adopt(
+      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Enumerant>> Node::Enum::Builder::disownEnumerants() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::disown(
+      _builder, 3 * ::capnp::POINTERS);
+}
+
+inline bool Node::Interface::Reader::hasMethods() const {
+  return !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
+}
+inline bool Node::Interface::Builder::hasMethods() {
+  return !_builder.isPointerFieldNull(3 * ::capnp::POINTERS);
+}
+inline  ::capnp::List< ::capnp::schema::Method>::Reader Node::Interface::Reader::getMethods() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::get(
+      _reader, 3 * ::capnp::POINTERS);
+}
+inline  ::capnp::List< ::capnp::schema::Method>::Builder Node::Interface::Builder::getMethods() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::get(
+      _builder, 3 * ::capnp::POINTERS);
+}
+inline void Node::Interface::Builder::setMethods( ::capnp::List< ::capnp::schema::Method>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::set(
+      _builder, 3 * ::capnp::POINTERS, value);
+}
+inline  ::capnp::List< ::capnp::schema::Method>::Builder Node::Interface::Builder::initMethods(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::init(
+      _builder, 3 * ::capnp::POINTERS, size);
+}
+inline void Node::Interface::Builder::adoptMethods(
+    ::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::adopt(
+      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>> Node::Interface::Builder::disownMethods() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::disown(
       _builder, 3 * ::capnp::POINTERS);
 }
 
