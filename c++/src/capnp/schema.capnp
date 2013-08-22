@@ -72,8 +72,11 @@ struct Node {
     file @6 :Void;
 
     struct :group {
-      dataSectionWordSize @7 :UInt16;
-      pointerSectionSize @8 :UInt16;
+      dataWordCount @7 :UInt16;
+      # Size of the data section, in words.
+
+      pointerCount @8 :UInt16;
+      # Size of the pointer section, in pointers (which are one word each).
 
       preferredListEncoding @9 :ElementSize;
       # The preferred element size to use when encoding a list of this struct.  If this is anything
@@ -85,7 +88,7 @@ struct Node {
       # some named union or group within a particular parent struct.  This node's scopeId refers
       # to the parent struct, which may itself be a union/group in yet another struct.
       #
-      # All group nodes share the same dataSectionWordSize and pointerSectionSize as the top-level
+      # All group nodes share the same dataWordCount and pointerCount as the top-level
       # struct, and their fields live in the same ordinal and offset spaces as all other fields in
       # the struct.
       #

@@ -537,11 +537,11 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasDataSectionWordSize() const;
-  inline  ::uint16_t getDataSectionWordSize() const;
+  inline bool hasDataWordCount() const;
+  inline  ::uint16_t getDataWordCount() const;
 
-  inline bool hasPointerSectionSize() const;
-  inline  ::uint16_t getPointerSectionSize() const;
+  inline bool hasPointerCount() const;
+  inline  ::uint16_t getPointerCount() const;
 
   inline bool hasPreferredListEncoding() const;
   inline  ::capnp::schema::ElementSize getPreferredListEncoding() const;
@@ -586,13 +586,13 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasDataSectionWordSize();
-  inline  ::uint16_t getDataSectionWordSize();
-  inline void setDataSectionWordSize( ::uint16_t value);
+  inline bool hasDataWordCount();
+  inline  ::uint16_t getDataWordCount();
+  inline void setDataWordCount( ::uint16_t value);
 
-  inline bool hasPointerSectionSize();
-  inline  ::uint16_t getPointerSectionSize();
-  inline void setPointerSectionSize( ::uint16_t value);
+  inline bool hasPointerCount();
+  inline  ::uint16_t getPointerCount();
+  inline void setPointerCount( ::uint16_t value);
 
   inline bool hasPreferredListEncoding();
   inline  ::capnp::schema::ElementSize getPreferredListEncoding();
@@ -2525,44 +2525,44 @@ inline void Node::NestedNode::Builder::setId( ::uint64_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Struct::Reader::hasDataSectionWordSize() const {
+inline bool Node::Struct::Reader::hasDataWordCount() const {
   return _reader.hasDataField< ::uint16_t>(7 * ::capnp::ELEMENTS);
 }
 
-inline bool Node::Struct::Builder::hasDataSectionWordSize() {
+inline bool Node::Struct::Builder::hasDataWordCount() {
   return _builder.hasDataField< ::uint16_t>(7 * ::capnp::ELEMENTS);
 }
-inline  ::uint16_t Node::Struct::Reader::getDataSectionWordSize() const {
+inline  ::uint16_t Node::Struct::Reader::getDataWordCount() const {
   return _reader.getDataField< ::uint16_t>(
       7 * ::capnp::ELEMENTS);
 }
 
-inline  ::uint16_t Node::Struct::Builder::getDataSectionWordSize() {
+inline  ::uint16_t Node::Struct::Builder::getDataWordCount() {
   return _builder.getDataField< ::uint16_t>(
       7 * ::capnp::ELEMENTS);
 }
-inline void Node::Struct::Builder::setDataSectionWordSize( ::uint16_t value) {
+inline void Node::Struct::Builder::setDataWordCount( ::uint16_t value) {
   _builder.setDataField< ::uint16_t>(
       7 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Struct::Reader::hasPointerSectionSize() const {
+inline bool Node::Struct::Reader::hasPointerCount() const {
   return _reader.hasDataField< ::uint16_t>(12 * ::capnp::ELEMENTS);
 }
 
-inline bool Node::Struct::Builder::hasPointerSectionSize() {
+inline bool Node::Struct::Builder::hasPointerCount() {
   return _builder.hasDataField< ::uint16_t>(12 * ::capnp::ELEMENTS);
 }
-inline  ::uint16_t Node::Struct::Reader::getPointerSectionSize() const {
+inline  ::uint16_t Node::Struct::Reader::getPointerCount() const {
   return _reader.getDataField< ::uint16_t>(
       12 * ::capnp::ELEMENTS);
 }
 
-inline  ::uint16_t Node::Struct::Builder::getPointerSectionSize() {
+inline  ::uint16_t Node::Struct::Builder::getPointerCount() {
   return _builder.getDataField< ::uint16_t>(
       12 * ::capnp::ELEMENTS);
 }
-inline void Node::Struct::Builder::setPointerSectionSize( ::uint16_t value) {
+inline void Node::Struct::Builder::setPointerCount( ::uint16_t value) {
   _builder.setDataField< ::uint16_t>(
       12 * ::capnp::ELEMENTS, value);
 }

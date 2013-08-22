@@ -936,8 +936,8 @@ private:
           kj::strTree(
               "CAPNP_DECLARE_STRUCT(\n"
               "    ", namespace_, "::", fullName, ", ", hexId, ",\n"
-              "    ", structNode.getDataSectionWordSize(), ", ",
-                      structNode.getPointerSectionSize(), ", ",
+              "    ", structNode.getDataWordCount(), ", ",
+                      structNode.getPointerCount(), ", ",
                       FIELD_SIZE_NAMES[static_cast<uint>(structNode.getPreferredListEncoding())],
                       ");\n",
               KJ_MAP(nestedTexts, n) { return kj::mv(n.capnpPrivateDecls); }),

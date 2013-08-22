@@ -96,8 +96,8 @@ _::FieldSize elementSizeFor(schema::Type::Which elementType) {
 inline _::StructSize structSizeFromSchema(StructSchema schema) {
   auto node = schema.getProto().getStruct();
   return _::StructSize(
-      node.getDataSectionWordSize() * WORDS,
-      node.getPointerSectionSize() * POINTERS,
+      node.getDataWordCount() * WORDS,
+      node.getPointerCount() * POINTERS,
       static_cast<_::FieldSize>(node.getPreferredListEncoding()));
 }
 

@@ -408,8 +408,8 @@ private:
         return kj::strTree(
             indent, "struct ", name,
             " @0x", kj::hex(proto.getId()), genAnnotations(schema), " {  # ",
-            structProto.getDataSectionWordSize() * 8, " bytes, ",
-            structProto.getPointerSectionSize(), " ptrs",
+            structProto.getDataWordCount() * 8, " bytes, ",
+            structProto.getPointerCount(), " ptrs",
             structProto.getPreferredListEncoding() == schema::ElementSize::INLINE_COMPOSITE
                 ? kj::strTree()
                 : kj::strTree(", packed as ", elementSizeName(structProto.getPreferredListEncoding())),

@@ -910,8 +910,8 @@ public:
     }
 
     // And fill in the sizes.
-    structBuilder.setDataSectionWordSize(layout.getTop().dataWordCount);
-    structBuilder.setPointerSectionSize(layout.getTop().pointerCount);
+    structBuilder.setDataWordCount(layout.getTop().dataWordCount);
+    structBuilder.setPointerCount(layout.getTop().pointerCount);
     structBuilder.setPreferredListEncoding(schema::ElementSize::INLINE_COMPOSITE);
 
     if (layout.getTop().pointerCount == 0) {
@@ -936,8 +936,8 @@ public:
 
     for (auto& group: translator.groups) {
       auto groupBuilder = group.get().getStruct();
-      groupBuilder.setDataSectionWordSize(structBuilder.getDataSectionWordSize());
-      groupBuilder.setPointerSectionSize(structBuilder.getPointerSectionSize());
+      groupBuilder.setDataWordCount(structBuilder.getDataWordCount());
+      groupBuilder.setPointerCount(structBuilder.getPointerCount());
       groupBuilder.setPreferredListEncoding(structBuilder.getPreferredListEncoding());
     }
   }
