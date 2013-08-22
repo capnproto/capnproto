@@ -177,7 +177,7 @@ struct TestOutOfOrder {
 }
 
 struct TestUnion {
-  union0 @0 union {
+  union0 @0! :union {
     # Pack union 0 under ideal conditions: there is no unused padding space prior to it.
     u0f0s0  @4: Void;
     u0f0s1  @5: Bool;
@@ -200,7 +200,7 @@ struct TestUnion {
   # Pack one bit in order to make pathological situation for union1.
   bit0 @18: Bool;
 
-  union1 @1 union {
+  union1 @1! :union {
     # Pack pathologically bad case.  Each field takes up new space.
     u1f0s0  @19: Void;
     u1f0s1  @20: Bool;
@@ -237,7 +237,7 @@ struct TestUnion {
   # Interleave two unions to be really annoying.
   # Also declare in reverse order to make sure union discriminant values are sorted by field number
   # and not by declaration order.
-  union2 @2 union {
+  union2 @2! :union {
     u2f0s64 @54: Int64;
     u2f0s32 @52: Int32;
     u2f0s16 @50: Int16;
@@ -245,7 +245,7 @@ struct TestUnion {
     u2f0s1 @45: Bool;
   }
 
-  union3 @3 union {
+  union3 @3! :union {
     u3f0s64 @55: Int64;
     u3f0s32 @53: Int32;
     u3f0s16 @51: Int16;
@@ -422,13 +422,13 @@ struct TestLateUnion {
   bar @1 :Text;
   baz @2 :Int16;
 
-  theUnion @3 union {
+  theUnion @3! :union {
     qux @4 :Text;
     corge @5 :List(Int32);
     grault @6 :Float32;
   }
 
-  anotherUnion @7 union {
+  anotherUnion @7! :union {
     qux @8 :Text;
     corge @9 :List(Int32);
     grault @10 :Float32;
@@ -452,7 +452,7 @@ struct TestNewVersion {
 }
 
 struct TestStructUnion {
-  un @0 union {
+  un @0! :union {
     allTypes @1 :TestAllTypes;
     object @2 :TestObject;
   }

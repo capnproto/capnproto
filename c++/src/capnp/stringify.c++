@@ -207,6 +207,8 @@ static kj::StringTree print(const DynamicValue::Reader& value,
           unionValue = kj::strTree(
               fieldProto.getName(), " = ",
               print(structValue.get(*field), whichFieldType(*field), indent.next(), PREFIXED));
+        } else {
+          which = nullptr;
         }
       }
 

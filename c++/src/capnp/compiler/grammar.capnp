@@ -223,9 +223,9 @@ struct Declaration {
     name @0 :LocatedText;  # If null, param failed to parse.
     type @1 :TypeExpression;
     annotations @2 :List(AnnotationApplication);
-    defaultValue @3 union {
-      none @4 :Void;
-      value @5 :ValueExpression;
+    defaultValue :union {
+      none @3 :Void;
+      value @4 :ValueExpression;
     }
   }
 }

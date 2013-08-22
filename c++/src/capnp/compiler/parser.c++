@@ -706,32 +706,55 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
         return DeclParserResult(kj::mv(decl));
       }));
 
+  // Parse an ordinal followed by an optional colon, or no ordinal but require a colon.
+  auto& ordinalOrColon = arena.copy(p::oneOf(
+      p::transform(p::sequence(parsers.ordinal, p::optional(op("!")), p::optional(op(":"))),
+          [this](Orphan<LocatedInteger>&& ordinal,
+                 kj::Maybe<kj::Tuple<>> exclamation,
+                 kj::Maybe<kj::Tuple<>> colon)
+                   -> kj::Maybe<Orphan<LocatedInteger>> {
+            if (exclamation == nullptr) {
+              errorReporter.addErrorOn(ordinal.getReader(),
+                  "As of Cap'n Proto v0.3, it is no longer necessary to assign numbers to "
+                  "unions. However, removing the number will break binary compatibility. "
+                  "If this is an old protocol and you need to retain compatibility, please "
+                  "add an exclamation point after the number to indicate that it is really "
+                  "needed, e.g. `foo @1! :union {`. If this is a new protocol or compatibility "
+                  "doesn't matter, just remove the @n entirely. Sorry for the inconvenience, "
+                  "and thanks for being an early adopter!  :)");
+            }
+            if (colon == nullptr) {
+              errorReporter.addErrorOn(ordinal.getReader(),
+                  "As of Cap'n Proto v0.3, the 'union' keyword should be prefixed with a colon "
+                  "for named unions, e.g. `foo :union {`.");
+            }
+            return kj::mv(ordinal);
+          }),
+      p::transform(op(":"),
+          []() -> kj::Maybe<Orphan<LocatedInteger>>{ return nullptr; })));
+
   parsers.unionDecl = arena.copy(p::transform(
-      // Hacky:  The first branch of this oneOf() can correctly match named unions as well as
-      //   anonymous unions that have an ordinal, but fails to match anonymous unions wil no
-      //   ordinal because the "union" keyword is matched as an identifier and interpreted as
-      //   the name, and then parsing fails after that.  So, we have the second branch which
-      //   just matches the "union" keyword alone, and injects dummy null values for the
-      //   name and ordinal.
+      // The first branch of this oneOf() matches named unions.  The second branch matches unnamed
+      // unions and generates dummy values for the parse results.
       p::oneOf(
           p::sequence(
-              p::optional(identifier), p::optional(parsers.ordinal),
-              p::optional(op(":")), keyword("union"), p::many(parsers.annotation)),
-          p::sequence(
-              keyword("union"),
-              p::optional([](ParserInput&) -> kj::Maybe<Located<Text::Reader>> { return nullptr; }),
-              p::optional([](ParserInput&) -> kj::Maybe<Orphan<LocatedInteger>>{ return nullptr; }),
-              p::optional([](ParserInput&) -> kj::Maybe<kj::Tuple<>>           { return nullptr; }),
-              p::many(parsers.annotation))),
-      [this](kj::Maybe<Located<Text::Reader>>&& name,
+              identifier, ordinalOrColon,
+              keyword("union"), p::many(parsers.annotation)),
+          p::transform(keyword("union"),
+              []() {
+                return kj::tuple(
+                    Located<Text::Reader>("", 0, 0),
+                    kj::Maybe<Orphan<LocatedInteger>>(nullptr),
+                    kj::Array<Orphan<Declaration::AnnotationApplication>>(nullptr));
+              })),
+      [this](Located<Text::Reader>&& name,
              kj::Maybe<Orphan<LocatedInteger>>&& ordinal,
-             kj::Maybe<kj::Tuple<>>&&,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
         auto builder = decl.get();
-        KJ_IF_MAYBE(n, name) {
-          n->copyTo(builder.initName());
+        if (name.value.size() > 0) {
+          name.copyTo(builder.initName());
         }
         KJ_IF_MAYBE(ord, ordinal) {
           builder.getId().adoptOrdinal(kj::mv(*ord));
@@ -747,9 +770,8 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
       }));
 
   parsers.groupDecl = arena.copy(p::transform(
-      p::sequence(identifier, p::optional(op(":")), keyword("group"), p::many(parsers.annotation)),
+      p::sequence(identifier, op(":"), keyword("group"), p::many(parsers.annotation)),
       [this](Located<Text::Reader>&& name,
-             kj::Maybe<kj::Tuple<>>&&,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
@@ -943,17 +965,17 @@ kj::Maybe<Orphan<Declaration>> CapnpParser::parseStatement(
     builder.setStartByte(statement.getStartByte());
     builder.setEndByte(statement.getEndByte());
 
-    switch (statement.getBlock().which()) {
-      case Statement::Block::NONE:
+    switch (statement.which()) {
+      case Statement::LINE:
         if (output->memberParser != nullptr) {
           errorReporter.addError(statement.getStartByte(), statement.getEndByte(),
               "This statement should end with a semicolon, not a block.");
         }
         break;
 
-      case Statement::Block::STATEMENTS:
+      case Statement::BLOCK:
         KJ_IF_MAYBE(memberParser, output->memberParser) {
-          auto memberStatements = statement.getBlock().getStatements();
+          auto memberStatements = statement.getBlock();
           kj::Vector<Orphan<Declaration>> members(memberStatements.size());
           for (auto memberStatement: memberStatements) {
             KJ_IF_MAYBE(member, parseStatement(memberStatement, *memberParser)) {

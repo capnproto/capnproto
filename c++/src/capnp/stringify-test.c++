@@ -408,6 +408,14 @@ TEST(Stringify, UnnamedUnions) {
       "  bar = 123,\n"
       "  after = \"foooooooooooooooooooooooooooooooo\" )",
       prettyPrint(root).flatten());
+
+  root.setFoo(0);
+
+  EXPECT_EQ("(before = \"before\", after = \"foooooooooooooooooooooooooooooooo\")", kj::str(root));
+  EXPECT_EQ(
+      "( before = \"before\",\n"
+      "  after = \"foooooooooooooooooooooooooooooooo\" )",
+      prettyPrint(root).flatten());
 }
 
 TEST(Stringify, StructUnions) {

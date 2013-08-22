@@ -44,15 +44,15 @@ struct Token {
 
 struct Statement {
   tokens @0 :List(Token);
-  block @1 union {
-    none @2 :Void;
-    statements @3 :List(Statement);
+  union {
+    line @1 :Void;
+    block @2 :List(Statement);
   }
 
-  docComment @4 :Text;
+  docComment @3 :Text;
 
-  startByte @5 :UInt32;
-  endByte @6 :UInt32;
+  startByte @4 :UInt32;
+  endByte @5 :UInt32;
 }
 
 struct LexedTokens {

@@ -37,14 +37,14 @@ enum Operation {
 struct Expression {
   op@0: Operation;
 
-  left @1 union {
-    value@2: Int32;
-    expression@3: Expression;
+  left :union {
+    value@1: Int32;
+    expression@2: Expression;
   }
 
-  right @4 union {
-    value@5: Int32;
-    expression@6: Expression;
+  right :union {
+    value@3: Int32;
+    expression@4: Expression;
   }
 }
 
