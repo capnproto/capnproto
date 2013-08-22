@@ -233,6 +233,7 @@ public:
 
   kj::MainBuilder::Validity generateId() {
     context.exitInfo(kj::str("@0x", kj::hex(generateRandomId())));
+    KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT;
   }
 
   // =====================================================================================

@@ -345,9 +345,12 @@ private:
         } else {
           seenUnion = true;
           uint offset = schema.getProto().getStruct().getDiscriminantOffset();
+
+          // GCC 4.7.3 crashes if you inline unionFields.
+          auto unionFields = sortByCodeOrder(schema.getUnionFields());
           return kj::strTree(
               indent, "union {  # tag bits [", offset * 16, ", ", offset * 16 + 16, ")\n",
-              KJ_MAP(sortByCodeOrder(schema.getUnionFields()), uField) {
+              KJ_MAP(unionFields, uField) {
                 return genStructField(uField.getProto(), schema, indent.next());
               },
               indent, "}\n");

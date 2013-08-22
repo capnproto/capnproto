@@ -99,7 +99,7 @@ TEST(SchemaParser, Basic) {
 
   auto barStruct = barSchema.getNested("Bar");
   auto barFields = barStruct.asStruct().getFields();
-  ASSERT_EQ(4, barFields.size());
+  ASSERT_EQ(4u, barFields.size());
   EXPECT_EQ("baz", barFields[0].getProto().getName());
   EXPECT_EQ(0x823456789abcdef1ull, getFieldTypeFileId(barFields[0]));
   EXPECT_EQ("corge", barFields[1].getProto().getName());

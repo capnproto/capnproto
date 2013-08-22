@@ -379,8 +379,8 @@ TEST(Encoding, UnnamedUnion) {
   EXPECT_TRUE(root.hasBar());
   EXPECT_FALSE(root.asReader().hasFoo());
   EXPECT_TRUE(root.asReader().hasBar());
-  EXPECT_EQ(321, root.getBar());
-  EXPECT_EQ(321, root.asReader().getBar());
+  EXPECT_EQ(321u, root.getBar());
+  EXPECT_EQ(321u, root.asReader().getBar());
   EXPECT_DEBUG_ANY_THROW(root.getFoo());
   EXPECT_DEBUG_ANY_THROW(root.asReader().getFoo());
 
@@ -391,17 +391,17 @@ TEST(Encoding, UnnamedUnion) {
   EXPECT_FALSE(root.hasBar());
   EXPECT_TRUE(root.asReader().hasFoo());
   EXPECT_FALSE(root.asReader().hasBar());
-  EXPECT_EQ(123, root.getFoo());
-  EXPECT_EQ(123, root.asReader().getFoo());
+  EXPECT_EQ(123u, root.getFoo());
+  EXPECT_EQ(123u, root.asReader().getFoo());
   EXPECT_DEBUG_ANY_THROW(root.getBar());
   EXPECT_DEBUG_ANY_THROW(root.asReader().getBar());
 
   StructSchema schema = Schema::from<test::TestUnnamedUnion>();
 
   // The discriminant is allocated just before allocating "bar".
-  EXPECT_EQ(2, schema.getProto().getStruct().getDiscriminantOffset());
-  EXPECT_EQ(0, schema.getFieldByName("foo").getProto().getNonGroup().getOffset());
-  EXPECT_EQ(2, schema.getFieldByName("bar").getProto().getNonGroup().getOffset());
+  EXPECT_EQ(2u, schema.getProto().getStruct().getDiscriminantOffset());
+  EXPECT_EQ(0u, schema.getFieldByName("foo").getProto().getNonGroup().getOffset());
+  EXPECT_EQ(2u, schema.getFieldByName("bar").getProto().getNonGroup().getOffset());
 }
 
 TEST(Encoding, Groups) {
@@ -569,7 +569,7 @@ TEST(Encoding, UnionDefault) {
   {
     auto field = reader.getUnnamed1();
     EXPECT_EQ(test::TestUnnamedUnion::FOO, field.which());
-    EXPECT_EQ(123, field.getFoo());
+    EXPECT_EQ(123u, field.getFoo());
     EXPECT_FALSE(field.hasBefore());
     EXPECT_FALSE(field.hasAfter());
   }
@@ -577,7 +577,7 @@ TEST(Encoding, UnionDefault) {
   {
     auto field = reader.getUnnamed2();
     EXPECT_EQ(test::TestUnnamedUnion::BAR, field.which());
-    EXPECT_EQ(321, field.getBar());
+    EXPECT_EQ(321u, field.getBar());
     EXPECT_EQ("foo", field.getBefore());
     EXPECT_EQ("bar", field.getAfter());
   }

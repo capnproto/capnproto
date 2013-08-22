@@ -546,6 +546,7 @@ private:
                       return kj::strTree(
                           "!_reader.isPointerFieldNull(", slot.offset, " * ::capnp::POINTERS)");
                   }
+                  KJ_UNREACHABLE;
                 }, "\n      || "), ";\n"
                 "}\n"
                 "inline bool ", scope, "Builder::has", titleCase, "() {\n",
@@ -563,6 +564,7 @@ private:
                       return kj::strTree(
                           "!_builder.isPointerFieldNull(", slot.offset, " * ::capnp::POINTERS)");
                   }
+                  KJ_UNREACHABLE;
                 }, "\n      || "), ";\n"
                 "}\n"
                 "inline ", scope, titleCase, "::Reader ", scope, "Reader::get", titleCase, "() const {\n",
@@ -587,6 +589,7 @@ private:
                       return kj::strTree(
                           "  _builder.clearPointer(", slot.offset, " * ::capnp::POINTERS);\n");
                   }
+                  KJ_UNREACHABLE;
                 },
                 "  return ", scope, titleCase, "::Builder(_builder);\n"
                 "}\n")

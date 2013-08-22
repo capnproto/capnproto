@@ -7,29 +7,38 @@ doit() {
   "$@"
 }
 
-if [ $# -gt 0 ]; then
-  if [ "x$1" == "xtest" ]; then
-    : # nothing
-  elif [ "x$1" == "xremote" ]; then
-    if [ "$#" -lt 2 ]; then
-      echo "usage: $0 remote HOST [COMMAND]" >&2
-      exit 1
-    fi
-    HOST=$2
-    shift 2
-    echo "========================================================================="
-    echo "Pushing code to $HOST..."
-    echo "========================================================================="
-    ssh $HOST 'rm -rf tmp-test-capnp && mkdir tmp-test-capnp && git init tmp-test-capnp'
-    git push ssh://$HOST/~/tmp-test-capnp master:test
-    ssh $HOST "cd tmp-test-capnp && git checkout test && ./super-test.sh $@ && cd .. && rm -rf tmp-test-capnp"
-    exit 0
-  elif [ "x$1" == "xclang" ]; then
-    export CXX=clang++
-  elif [ "x$1" == "xgcc-4.8" ]; then
-    export CXX=g++-4.8
-  elif [ "x$1" == "xkenton" ]; then
-    cat << "__EOF__"
+QUICK=
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    test )
+      ;;  # nothing
+    quick )
+      QUICK=quick
+      ;;
+    remote )
+      if [ "$#" -lt 2 ]; then
+        echo "usage: $0 remote HOST [COMMAND]" >&2
+        exit 1
+      fi
+      HOST=$2
+      shift 2
+      echo "========================================================================="
+      echo "Pushing code to $HOST..."
+      echo "========================================================================="
+      ssh $HOST 'rm -rf tmp-test-capnp && mkdir tmp-test-capnp && git init tmp-test-capnp'
+      git push ssh://$HOST/~/tmp-test-capnp master:test
+      ssh $HOST "cd tmp-test-capnp && git checkout test && ./super-test.sh $@ && cd .. && rm -rf tmp-test-capnp"
+      exit 0
+      ;;
+    clang )
+      export CXX=clang++
+      ;;
+    gcc-4.8 )
+      export CXX=g++-4.8
+      ;;
+    kenton )
+      cat << "__EOF__"
 =========================================================================
 *************************************************************************
   _     _                        ____  ____ ____
@@ -41,9 +50,9 @@ if [ $# -gt 0 ]; then
 *************************************************************************
 =========================================================================
 __EOF__
-    $0 test
-    $0 clean
-    cat << "__EOF__"
+      $0 test $QUICK
+      $0 clean
+      cat << "__EOF__"
 =========================================================================
 *************************************************************************
    ___  ______  __      ____ _
@@ -55,8 +64,8 @@ __EOF__
 *************************************************************************
 =========================================================================
 __EOF__
-    $0 remote beat
-    cat << "__EOF__"
+      $0 remote beat $QUICK
+      cat << "__EOF__"
 =========================================================================
 *************************************************************************
    ____                     _
@@ -68,8 +77,8 @@ __EOF__
 *************************************************************************
 =========================================================================
 __EOF__
-    $0 remote Kenton@flashman
-    cat << "__EOF__"
+      $0 remote Kenton@flashman $QUICK
+      cat << "__EOF__"
 =========================================================================
 *************************************************************************
    ____  ____ ____   _  _    ___
@@ -81,9 +90,9 @@ __EOF__
 *************************************************************************
 =========================================================================
 __EOF__
-    $0 gcc-4.8
-    $0 clean
-    cat << "__EOF__"
+      $0 gcc-4.8 $QUICK
+      $0 clean
+      cat << "__EOF__"
 =========================================================================
 *************************************************************************
   _     _                        ____ _
@@ -95,9 +104,9 @@ __EOF__
 *************************************************************************
 =========================================================================
 __EOF__
-    $0 clang
-    $0 clean
-    cat << "__EOF__"
+      $0 clang $QUICK
+      $0 clean
+      cat << "__EOF__"
 =========================================================================
 *************************************************************************
   ____  _   _ ___ ____    ___ _____
@@ -109,48 +118,59 @@ __EOF__
 *************************************************************************
 =========================================================================
 __EOF__
-    exit 0
-  elif [ "x$1" == "xclean" ]; then
-    rm -rf tmp-staging
-    cd c++
-    if [ -e Makefile ]; then
-      doit make maintainer-clean
-    fi
-    rm -f capnproto-*.tar.gz samples/addressbook samples/addressbook.capnp.c++ \
-          samples/addressbook.capnp.h
-    exit 0
-  elif [ "x$1" == "xhelp" ]; then
-    echo "usage: $0 [COMMAND]"
-    echo "commands:"
-    echo "  test          Runs tests (the default)."
-    echo "  clang         Runs tests using Clang compiler."
-    echo "  gcc-4.8       Runs tests using gcc-4.8."
-    echo "  remote HOST   Runs tests on HOST via SSH."
-    echo "  kenton        Kenton's meta-test (uses hosts on Kenton's network)."
-    echo "  clean         Delete temporary files that may be left after failure."
-    echo "  help          Prints this help text."
-    exit 0
-  else
-    echo "unknown command: $1" >&2
-    echo "try: $0 help" >&2
-    exit 1
-  fi
-fi
+      exit 0
+      ;;
+    clean )
+      rm -rf tmp-staging
+      cd c++
+      if [ -e Makefile ]; then
+        doit make maintainer-clean
+      fi
+      rm -f capnproto-*.tar.gz samples/addressbook samples/addressbook.capnp.c++ \
+            samples/addressbook.capnp.h
+      exit 0
+      ;;
+    help )
+      echo "usage: $0 [COMMAND]"
+      echo "commands:"
+      echo "  test          Runs tests (the default)."
+      echo "  clang         Runs tests using Clang compiler."
+      echo "  gcc-4.8       Runs tests using gcc-4.8."
+      echo "  remote HOST   Runs tests on HOST via SSH."
+      echo "  kenton        Kenton's meta-test (uses hosts on Kenton's network)."
+      echo "  clean         Delete temporary files that may be left after failure."
+      echo "  help          Prints this help text."
+      exit 0
+      ;;
+    * )
+      echo "unknown command: $1" >&2
+      echo "try: $0 help" >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
 
-rm -rf tmp-staging
-mkdir tmp-staging
 STAGING=$PWD/tmp-staging
 
-mkdir $STAGING/bin
-mkdir $STAGING/lib
-export PATH=$STAGING/bin:$PATH
-export LD_LIBRARY_PATH=$STAGING/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+if [ "$QUICK" != quick ]; then
+  rm -rf "$STAGING"
+  mkdir "$STAGING"
+  mkdir "$STAGING/bin"
+  mkdir "$STAGING/lib"
+  export PATH=$STAGING/bin:$PATH
+  export LD_LIBRARY_PATH=$STAGING/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+fi
+
+if [ "$QUICK" = quick ]; then
+  echo "************************** QUICK TEST ***********************************"
+fi
 
 echo "========================================================================="
 echo "Building c++"
 echo "========================================================================="
 
-if [ "x`uname`" == xDarwin ]; then
+if [ "x`uname`" = xDarwin ]; then
   if [ ! -e ~/clang-3.2/bin/clang++ ]; then
     echo "You need to put the clang-3.2 binaries in ~/clang-3.2." >&2
     exit 1
@@ -167,14 +187,19 @@ doit autoreconf -i
 doit ./configure --prefix="$STAGING"
 doit make -j6 check
 
+if [ "$QUICK" = quick ]; then
+  make maintainer-clean
+  exit 0
+fi
+
 echo "========================================================================="
 echo "Testing c++ install"
 echo "========================================================================="
 
 doit make install
 
-test "x$(which capnp)" == "x$STAGING/bin/capnp"
-test "x$(which capnpc-c++)" == "x$STAGING/bin/capnpc-c++"
+test "x$(which capnp)" = "x$STAGING/bin/capnp"
+test "x$(which capnpc-c++)" = "x$STAGING/bin/capnpc-c++"
 
 cd samples
 doit capnp compile -oc++ addressbook.capnp -I"$STAGING"/include --no-standard-import
