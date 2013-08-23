@@ -103,7 +103,7 @@ void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
   kj::Vector<Orphan<Declaration::AnnotationApplication>> annotations;
 
   auto fileDecl = result.getRoot();
-  fileDecl.setFile(Void::VOID);
+  fileDecl.setFile(VOID);
 
   for (auto statement: statements) {
     KJ_IF_MAYBE(decl, parser.parseStatement(statement, parser.getParsers().fileLevelDecl)) {

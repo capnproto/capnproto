@@ -6,6 +6,11 @@
 
 #include <capnp/generated-header-support.h>
 
+#if CAPNP_VERSION != 3000
+#error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."
+#endif
+
+
 namespace capnp {
 namespace annotations {
 

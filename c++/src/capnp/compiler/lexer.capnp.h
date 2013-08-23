@@ -6,6 +6,11 @@
 
 #include <capnp/generated-header-support.h>
 
+#if CAPNP_VERSION != 3000
+#error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."
+#endif
+
+
 namespace capnp {
 namespace compiler {
 
@@ -305,7 +310,7 @@ public:
   inline bool isLine();
   inline bool hasLine();
   inline  ::capnp::Void getLine();
-  inline void setLine( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setLine( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isBlock();
   inline bool hasBlock();

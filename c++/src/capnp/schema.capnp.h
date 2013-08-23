@@ -6,6 +6,11 @@
 
 #include <capnp/generated-header-support.h>
 
+#if CAPNP_VERSION != 3000
+#error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."
+#endif
+
+
 namespace capnp {
 namespace schema {
 
@@ -441,7 +446,7 @@ public:
   inline bool isFile();
   inline bool hasFile();
   inline  ::capnp::Void getFile();
-  inline void setFile( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setFile( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isStruct();
   inline bool hasStruct();
@@ -1231,7 +1236,7 @@ public:
   inline bool isImplicit();
   inline bool hasImplicit();
   inline  ::capnp::Void getImplicit();
-  inline void setImplicit( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setImplicit( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isExplicit();
   inline bool hasExplicit();
@@ -1644,72 +1649,72 @@ public:
   inline bool isVoid();
   inline bool hasVoid();
   inline  ::capnp::Void getVoid();
-  inline void setVoid( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setVoid( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isBool();
   inline bool hasBool();
   inline  ::capnp::Void getBool();
-  inline void setBool( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setBool( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isInt8();
   inline bool hasInt8();
   inline  ::capnp::Void getInt8();
-  inline void setInt8( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setInt8( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isInt16();
   inline bool hasInt16();
   inline  ::capnp::Void getInt16();
-  inline void setInt16( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setInt16( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isInt32();
   inline bool hasInt32();
   inline  ::capnp::Void getInt32();
-  inline void setInt32( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setInt32( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isInt64();
   inline bool hasInt64();
   inline  ::capnp::Void getInt64();
-  inline void setInt64( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setInt64( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isUint8();
   inline bool hasUint8();
   inline  ::capnp::Void getUint8();
-  inline void setUint8( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setUint8( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isUint16();
   inline bool hasUint16();
   inline  ::capnp::Void getUint16();
-  inline void setUint16( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setUint16( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isUint32();
   inline bool hasUint32();
   inline  ::capnp::Void getUint32();
-  inline void setUint32( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setUint32( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isUint64();
   inline bool hasUint64();
   inline  ::capnp::Void getUint64();
-  inline void setUint64( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setUint64( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isFloat32();
   inline bool hasFloat32();
   inline  ::capnp::Void getFloat32();
-  inline void setFloat32( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setFloat32( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isFloat64();
   inline bool hasFloat64();
   inline  ::capnp::Void getFloat64();
-  inline void setFloat64( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setFloat64( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isText();
   inline bool hasText();
   inline  ::capnp::Void getText();
-  inline void setText( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setText( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isData();
   inline bool hasData();
   inline  ::capnp::Void getData();
-  inline void setData( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setData( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isList();
   inline bool hasList();
@@ -1737,7 +1742,7 @@ public:
   inline bool isObject();
   inline bool hasObject();
   inline  ::capnp::Void getObject();
-  inline void setObject( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setObject( ::capnp::Void value = ::capnp::VOID);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1880,7 +1885,7 @@ public:
   inline bool isVoid();
   inline bool hasVoid();
   inline  ::capnp::Void getVoid();
-  inline void setVoid( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setVoid( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isBool();
   inline bool hasBool();
@@ -1993,7 +1998,7 @@ public:
   inline bool isInterface();
   inline bool hasInterface();
   inline  ::capnp::Void getInterface();
-  inline void setInterface( ::capnp::Void value = ::capnp::Void::VOID);
+  inline void setInterface( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isObject();
   inline bool hasObject();

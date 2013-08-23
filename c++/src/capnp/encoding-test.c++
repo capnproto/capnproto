@@ -232,7 +232,7 @@ TEST(Encoding, Unions) {
   TestUnion::Builder root = builder.getRoot<TestUnion>();
 
   EXPECT_EQ(TestUnion::Union0::U0F0S0, root.getUnion0().which());
-  EXPECT_EQ(Void::VOID, root.getUnion0().getU0f0s0());
+  EXPECT_EQ(VOID, root.getUnion0().getU0f0s0());
   EXPECT_DEBUG_ANY_THROW(root.getUnion0().getU0f0s1());
 
   root.getUnion0().setU0f0s1(true);
@@ -315,7 +315,7 @@ TEST(Encoding, UnionLayout) {
 #define INIT_UNION(setter) \
   initUnion<TestUnion>([](TestUnion::Builder b) {b.setter;})
 
-  EXPECT_EQ(UnionState({ 0,0,0,0},  -1), INIT_UNION(getUnion0().setU0f0s0(Void::VOID)));
+  EXPECT_EQ(UnionState({ 0,0,0,0},  -1), INIT_UNION(getUnion0().setU0f0s0(VOID)));
   EXPECT_EQ(UnionState({ 1,0,0,0},   0), INIT_UNION(getUnion0().setU0f0s1(1)));
   EXPECT_EQ(UnionState({ 2,0,0,0},   0), INIT_UNION(getUnion0().setU0f0s8(1)));
   EXPECT_EQ(UnionState({ 3,0,0,0},   0), INIT_UNION(getUnion0().setU0f0s16(1)));
@@ -323,7 +323,7 @@ TEST(Encoding, UnionLayout) {
   EXPECT_EQ(UnionState({ 5,0,0,0},   0), INIT_UNION(getUnion0().setU0f0s64(1)));
   EXPECT_EQ(UnionState({ 6,0,0,0}, 448), INIT_UNION(getUnion0().setU0f0sp("1")));
 
-  EXPECT_EQ(UnionState({ 7,0,0,0},  -1), INIT_UNION(getUnion0().setU0f1s0(Void::VOID)));
+  EXPECT_EQ(UnionState({ 7,0,0,0},  -1), INIT_UNION(getUnion0().setU0f1s0(VOID)));
   EXPECT_EQ(UnionState({ 8,0,0,0},   0), INIT_UNION(getUnion0().setU0f1s1(1)));
   EXPECT_EQ(UnionState({ 9,0,0,0},   0), INIT_UNION(getUnion0().setU0f1s8(1)));
   EXPECT_EQ(UnionState({10,0,0,0},   0), INIT_UNION(getUnion0().setU0f1s16(1)));
@@ -331,7 +331,7 @@ TEST(Encoding, UnionLayout) {
   EXPECT_EQ(UnionState({12,0,0,0},   0), INIT_UNION(getUnion0().setU0f1s64(1)));
   EXPECT_EQ(UnionState({13,0,0,0}, 448), INIT_UNION(getUnion0().setU0f1sp("1")));
 
-  EXPECT_EQ(UnionState({0, 0,0,0},  -1), INIT_UNION(getUnion1().setU1f0s0(Void::VOID)));
+  EXPECT_EQ(UnionState({0, 0,0,0},  -1), INIT_UNION(getUnion1().setU1f0s0(VOID)));
   EXPECT_EQ(UnionState({0, 1,0,0},  65), INIT_UNION(getUnion1().setU1f0s1(1)));
   EXPECT_EQ(UnionState({0, 2,0,0},  65), INIT_UNION(getUnion1().setU1f1s1(1)));
   EXPECT_EQ(UnionState({0, 3,0,0},  72), INIT_UNION(getUnion1().setU1f0s8(1)));
@@ -345,7 +345,7 @@ TEST(Encoding, UnionLayout) {
   EXPECT_EQ(UnionState({0,11,0,0}, 512), INIT_UNION(getUnion1().setU1f0sp("1")));
   EXPECT_EQ(UnionState({0,12,0,0}, 512), INIT_UNION(getUnion1().setU1f1sp("1")));
 
-  EXPECT_EQ(UnionState({0,13,0,0},  -1), INIT_UNION(getUnion1().setU1f2s0(Void::VOID)));
+  EXPECT_EQ(UnionState({0,13,0,0},  -1), INIT_UNION(getUnion1().setU1f2s0(VOID)));
   EXPECT_EQ(UnionState({0,14,0,0}, 65), INIT_UNION(getUnion1().setU1f2s1(1)));
   EXPECT_EQ(UnionState({0,15,0,0}, 72), INIT_UNION(getUnion1().setU1f2s8(1)));
   EXPECT_EQ(UnionState({0,16,0,0}, 80), INIT_UNION(getUnion1().setU1f2s16(1)));
@@ -560,7 +560,7 @@ TEST(Encoding, UnionDefault) {
     EXPECT_EQ(TestUnion::Union1::U1F0SP , field.getUnion1().which());
     EXPECT_EQ(TestUnion::Union2::U2F0S1 , field.getUnion2().which());
     EXPECT_EQ(TestUnion::Union3::U3F0S32, field.getUnion3().which());
-    EXPECT_EQ(Void::VOID, field.getUnion0().getU0f1s0());
+    EXPECT_EQ(VOID, field.getUnion0().getU0f1s0());
     EXPECT_EQ("foo", field.getUnion1().getU1f0sp());
     EXPECT_EQ(true, field.getUnion2().getU2f0s1());
     EXPECT_EQ(12345678, field.getUnion3().getU3f0s32());
@@ -624,7 +624,7 @@ TEST(Encoding, SmallStructLists) {
   EXPECT_EQ(0u, sl.getTextListList().size());
   EXPECT_EQ(0u, sl.getStructListList().size());
 
-  { auto l = sl.initList0 (2); l[0].setF(Void::VOID);        l[1].setF(Void::VOID); }
+  { auto l = sl.initList0 (2); l[0].setF(VOID);              l[1].setF(VOID); }
   { auto l = sl.initList1 (4); l[0].setF(true);              l[1].setF(false);
                                l[2].setF(true);              l[3].setF(true); }
   { auto l = sl.initList8 (2); l[0].setF(123u);              l[1].setF(45u); }
@@ -1141,8 +1141,8 @@ TEST(Encoding, UpgradeListInBuilder) {
 
   // -----------------------------------------------------------------
 
-  root.setObjectField<List<Void>>({Void::VOID, Void::VOID, Void::VOID, Void::VOID});
-  checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+  root.setObjectField<List<Void>>({VOID, VOID, VOID, VOID});
+  checkList(root.getObjectField<List<Void>>(), {VOID, VOID, VOID, VOID});
   EXPECT_NONFATAL_FAILURE(root.getObjectField<List<bool>>());
   EXPECT_NONFATAL_FAILURE(root.getObjectField<List<uint8_t>>());
   EXPECT_NONFATAL_FAILURE(root.getObjectField<List<uint16_t>>());
@@ -1156,7 +1156,7 @@ TEST(Encoding, UpgradeListInBuilder) {
   {
     root.setObjectField<List<bool>>({true, false, true, true});
     auto orig = root.asReader().getObjectField<List<bool>>();
-    checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+    checkList(root.getObjectField<List<Void>>(), {VOID, VOID, VOID, VOID});
     checkList(root.getObjectField<List<bool>>(), {true, false, true, true});
     EXPECT_NONFATAL_FAILURE(root.getObjectField<List<uint8_t>>());
     EXPECT_NONFATAL_FAILURE(root.getObjectField<List<uint16_t>>());
@@ -1174,7 +1174,7 @@ TEST(Encoding, UpgradeListInBuilder) {
   {
     root.setObjectField<List<uint8_t>>({0x12, 0x23, 0x33, 0x44});
     auto orig = root.asReader().getObjectField<List<uint8_t>>();
-    checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+    checkList(root.getObjectField<List<Void>>(), {VOID, VOID, VOID, VOID});
     checkList(root.getObjectField<List<bool>>(), {false, true, true, false});
     checkList(root.getObjectField<List<uint8_t>>(), {0x12, 0x23, 0x33, 0x44});
     EXPECT_NONFATAL_FAILURE(root.getObjectField<List<uint16_t>>());
@@ -1192,7 +1192,7 @@ TEST(Encoding, UpgradeListInBuilder) {
   {
     root.setObjectField<List<uint16_t>>({0x5612, 0x7823, 0xab33, 0xcd44});
     auto orig = root.asReader().getObjectField<List<uint16_t>>();
-    checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+    checkList(root.getObjectField<List<Void>>(), {VOID, VOID, VOID, VOID});
     checkList(root.getObjectField<List<bool>>(), {false, true, true, false});
     checkList(root.getObjectField<List<uint8_t>>(), {0x12, 0x23, 0x33, 0x44});
     checkList(root.getObjectField<List<uint16_t>>(), {0x5612, 0x7823, 0xab33, 0xcd44});
@@ -1210,7 +1210,7 @@ TEST(Encoding, UpgradeListInBuilder) {
   {
     root.setObjectField<List<uint32_t>>({0x17595612, 0x29347823, 0x5923ab32, 0x1a39cd45});
     auto orig = root.asReader().getObjectField<List<uint32_t>>();
-    checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+    checkList(root.getObjectField<List<Void>>(), {VOID, VOID, VOID, VOID});
     checkList(root.getObjectField<List<bool>>(), {false, true, false, true});
     checkList(root.getObjectField<List<uint8_t>>(), {0x12, 0x23, 0x32, 0x45});
     checkList(root.getObjectField<List<uint16_t>>(), {0x5612, 0x7823, 0xab32, 0xcd45});
@@ -1228,7 +1228,7 @@ TEST(Encoding, UpgradeListInBuilder) {
   {
     root.setObjectField<List<uint64_t>>({0x1234abcd8735fe21, 0x7173bc0e1923af36});
     auto orig = root.asReader().getObjectField<List<uint64_t>>();
-    checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID});
+    checkList(root.getObjectField<List<Void>>(), {VOID, VOID});
     checkList(root.getObjectField<List<bool>>(), {true, false});
     checkList(root.getObjectField<List<uint8_t>>(), {0x21, 0x36});
     checkList(root.getObjectField<List<uint16_t>>(), {0xfe21, 0xaf36});
@@ -1246,7 +1246,7 @@ TEST(Encoding, UpgradeListInBuilder) {
   {
     root.setObjectField<List<Text>>({"foo", "bar", "baz"});
     auto orig = root.asReader().getObjectField<List<Text>>();
-    checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID});
+    checkList(root.getObjectField<List<Void>>(), {VOID, VOID, VOID});
     EXPECT_NONFATAL_FAILURE(root.getObjectField<List<bool>>());
     EXPECT_NONFATAL_FAILURE(root.getObjectField<List<uint8_t>>());
     EXPECT_NONFATAL_FAILURE(root.getObjectField<List<uint16_t>>());
@@ -1273,7 +1273,7 @@ TEST(Encoding, UpgradeListInBuilder) {
     }
     auto orig = root.asReader().getObjectField<List<test::TestOldVersion>>();
 
-    checkList(root.getObjectField<List<Void>>(), {Void::VOID, Void::VOID, Void::VOID});
+    checkList(root.getObjectField<List<Void>>(), {VOID, VOID, VOID});
     checkList(root.getObjectField<List<bool>>(), {true, true, false});
     checkList(root.getObjectField<List<uint8_t>>(), {0xefu, 0xf1u, 0x12u});
     checkList(root.getObjectField<List<uint16_t>>(), {0xcdefu, 0xdef1u, 0xef12u});
@@ -1343,7 +1343,7 @@ TEST(Encoding, UpgradeListInBuilder) {
   EXPECT_NONFATAL_FAILURE(root.getObjectField<List<Text>>());
 
   // Upgrade from void -> data struct
-  root.setObjectField<List<Void>>({Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+  root.setObjectField<List<Void>>({VOID, VOID, VOID, VOID});
   {
     auto l = root.getObjectField<List<test::TestLists::Struct16>>();
     ASSERT_EQ(4u, l.size());
@@ -1363,7 +1363,7 @@ TEST(Encoding, UpgradeListInBuilder) {
   EXPECT_NONFATAL_FAILURE(root.getObjectField<List<Text>>());
 
   // Upgrade from void -> pointer struct
-  root.setObjectField<List<Void>>({Void::VOID, Void::VOID, Void::VOID, Void::VOID});
+  root.setObjectField<List<Void>>({VOID, VOID, VOID, VOID});
   {
     auto l = root.getObjectField<List<test::TestLists::StructP>>();
     ASSERT_EQ(4u, l.size());

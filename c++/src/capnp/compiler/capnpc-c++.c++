@@ -612,7 +612,7 @@ private:
     switch (typeBody.which()) {
       case schema::Type::VOID:
         kind = FieldKind::PRIMITIVE;
-        setterDefault = " = ::capnp::Void::VOID";
+        setterDefault = " = ::capnp::VOID";
         break;
 
 #define HANDLE_PRIMITIVE(discrim, typeName, defaultName, suffix) \

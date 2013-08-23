@@ -42,11 +42,17 @@ namespace capnp {
 
 typedef unsigned int uint;
 
-enum class Void {
-  // Type used for Void fields.  There is only one value.  Using C++'s "void" type creates a bunch
-  // of issues since it behaves differently from other types.
-  VOID
+struct Void {
+  // Type used for Void fields.  Using C++'s "void" type creates a bunch of issues since it behaves
+  // differently from other types.
+
+  inline constexpr bool operator==(Void other) const { return true; }
+  inline constexpr bool operator!=(Void other) const { return false; }
 };
+
+static constexpr Void VOID = Void();
+// Constant value for `Void`,  which is an empty struct.
+
 template <typename T>
 inline T& operator<<(T& os, Void) { return os << "void"; }
 

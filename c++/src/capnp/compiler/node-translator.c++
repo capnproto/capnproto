@@ -1582,7 +1582,7 @@ void NodeTranslator::compileValueInner(
         } else {
           // Interpret known constant values.
           if (id == "void") {
-            dst.set(Void::VOID);
+            dst.set(VOID);
             wasSet = true;
           } else if (id == "true") {
             dst.set(true);

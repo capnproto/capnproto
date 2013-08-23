@@ -685,7 +685,7 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
 
       switch (type.which()) {
         case schema::Type::VOID:
-          builder.setDataField<Void>(nonGroup.getOffset() * ELEMENTS, Void::VOID);
+          builder.setDataField<Void>(nonGroup.getOffset() * ELEMENTS, VOID);
           return;
 
 #define HANDLE_TYPE(discrim, type) \

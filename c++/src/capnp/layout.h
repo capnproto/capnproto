@@ -847,7 +847,7 @@ inline bool StructBuilder::getDataField<bool>(ElementCount offset) {
 
 template <>
 inline Void StructBuilder::getDataField<Void>(ElementCount offset) {
-  return Void::VOID;
+  return VOID;
 }
 
 template <typename T>
@@ -921,7 +921,7 @@ inline bool StructReader::getDataField<bool>(ElementCount offset) const {
 
 template <>
 inline Void StructReader::getDataField<Void>(ElementCount offset) const {
-  return Void::VOID;
+  return VOID;
 }
 
 template <typename T>
@@ -955,7 +955,7 @@ inline bool ListBuilder::getDataElement<bool>(ElementCount index) {
 
 template <>
 inline Void ListBuilder::getDataElement<Void>(ElementCount index) {
-  return Void::VOID;
+  return VOID;
 }
 
 template <typename T>
@@ -995,7 +995,7 @@ inline bool ListReader::getDataElement<bool>(ElementCount index) const {
 
 template <>
 inline Void ListReader::getDataElement<Void>(ElementCount index) const {
-  return Void::VOID;
+  return VOID;
 }
 
 // These are defined in the source file.
