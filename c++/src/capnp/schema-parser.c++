@@ -350,13 +350,30 @@ kj::Array<const char> SchemaFile::DiskFileReader::read(kj::StringPtr path) const
   struct stat stats;
   KJ_SYSCALL(fstat(fd, &stats));
 
-  const void* mapping = mmap(NULL, stats.st_size, PROT_READ, MAP_SHARED, fd, 0);
-  if (mapping == MAP_FAILED) {
-    KJ_FAIL_SYSCALL("mmap", errno, path);
-  }
+  if (S_ISREG(stats.st_mode)) {
+    // Regular file.  Just mmap() it.
+    const void* mapping = mmap(NULL, stats.st_size, PROT_READ, MAP_SHARED, fd, 0);
+    if (mapping == MAP_FAILED) {
+      KJ_FAIL_SYSCALL("mmap", errno, path);
+    }
 
-  return kj::Array<const char>(
-      reinterpret_cast<const char*>(mapping), stats.st_size, mmapDisposer);
+    return kj::Array<const char>(
+        reinterpret_cast<const char*>(mapping), stats.st_size, mmapDisposer);
+  } else {
+    // This could be a stream of some sort, like a pipe.  Fall back to read().
+    // TODO(cleanup):  This does a lot of copies.  Not sure I care.
+    kj::Vector<char> data(8192);
+
+    char buffer[4096];
+    for (;;) {
+      ssize_t n;
+      KJ_SYSCALL(n = ::read(fd, buffer, sizeof(buffer)));
+      if (n == 0) break;
+      data.addAll(buffer, buffer + n);
+    }
+
+    return data.releaseAsArray();
+  }
 }
 
 // -------------------------------------------------------------------
