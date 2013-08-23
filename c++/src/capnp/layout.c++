@@ -2506,7 +2506,7 @@ StructReader ListReader::getStructElement(ElementCount index) const {
 }
 
 static const WirePointer* checkAlignment(const void* ptr) {
-  KJ_DASSERT((uintptr_t)ptr % sizeof(WirePointer) == 0,
+  KJ_DASSERT((uintptr_t)ptr % sizeof(void*) == 0,
          "Pointer section of struct list element not aligned.");
   return reinterpret_cast<const WirePointer*>(ptr);
 }
