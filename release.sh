@@ -27,6 +27,15 @@ update_version() {
 
   local OLD_REGEX=${OLD//./[.]}
   doit sed -i -e "s/$OLD_REGEX/$NEW/g" c++/configure.ac
+
+  local NEW_NOTAG=${NEW%%-*}
+  declare -a NEW_ARR=(${NEW_NOTAG//./ })
+  doit sed -i -re "
+      s/^#define CAPNP_VERSION_MAJOR [0-9]+\$/#define CAPNP_VERSION_MAJOR ${NEW_ARR[0]}/g;
+      s/^#define CAPNP_VERSION_MINOR [0-9]+\$/#define CAPNP_VERSION_MINOR ${NEW_ARR[1]}/g;
+      s/^#define CAPNP_VERSION_MICRO [0-9]+\$/#define CAPNP_VERSION_MICRO ${NEW_ARR[2]:-0}/g" \
+      c++/src/capnp/common.h
+
   doit git commit -a -m "Set $BRANCH_DESC version to $NEW."
 }
 

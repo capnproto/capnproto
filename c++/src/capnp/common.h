@@ -33,6 +33,13 @@
 
 namespace capnp {
 
+#define CAPNP_VERSION_MAJOR 0
+#define CAPNP_VERSION_MINOR 3
+#define CAPNP_VERSION_MICRO 0
+
+#define CAPNP_VERSION \
+  (CAPNP_VERSION_MAJOR * 1000000 + CAPNP_VERSION_MINOR * 1000 + CAPNP_VERSION_MICRO)
+
 typedef unsigned int uint;
 
 enum class Void {

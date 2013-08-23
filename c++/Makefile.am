@@ -276,6 +276,7 @@ capnp_test_SOURCES =                                           \
   src/kj/mutex-test.c++                                        \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \
+  src/capnp/common-test.c++                                    \
   src/capnp/blob-test.c++                                      \
   src/capnp/endian-test.c++                                    \
   src/capnp/endian-fallback-test.c++                           \

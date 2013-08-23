@@ -1384,7 +1384,13 @@ private:
           "#ifndef CAPNP_INCLUDED_", kj::hex(node.getId()), "_\n",
           "#define CAPNP_INCLUDED_", kj::hex(node.getId()), "_\n"
           "\n"
-          "#include <capnp/generated-header-support.h>\n",
+          "#include <capnp/generated-header-support.h>\n"
+          "\n"
+          "#if CAPNP_VERSION != ", CAPNP_VERSION, "\n"
+          "#error \"Version mismatch between generated code and library headers.  You must "
+              "use the same version of the Cap'n Proto compiler and library.\"\n"
+          "#endif\n"
+          "\n",
           KJ_MAP(includes, path) {
             if (path.startsWith("/")) {
               return kj::strTree("#include <", path.slice(1), ".h>\n");
