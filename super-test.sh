@@ -151,6 +151,10 @@ __EOF__
   shift
 done
 
+# Build optimized builds because they catch more problems, but also enable debugging macros.
+# Enable lots of warnings and make sure the build breaks if they fire.
+export CXXFLAGS="-O2 -DDEBUG -Wall -Werror"
+
 STAGING=$PWD/tmp-staging
 
 if [ "$QUICK" != quick ]; then
@@ -203,7 +207,7 @@ test "x$(which capnpc-c++)" = "x$STAGING/bin/capnpc-c++"
 
 cd samples
 doit capnp compile -oc++ addressbook.capnp -I"$STAGING"/include --no-standard-import
-doit ${CXX:-g++} -std=c++11 $SAMPLE_CXXFLAGS -I"$STAGING"/include -L"$STAGING"/lib \
+doit ${CXX:-g++} -std=c++11 $CXXFLAGS $SAMPLE_CXXFLAGS -I"$STAGING"/include -L"$STAGING"/lib \
     addressbook.c++ addressbook.capnp.c++ -lcapnp -lkj -pthread -o addressbook
 echo "@@@@ ./addressbook (in various configurations)"
 ./addressbook write | ./addressbook read
@@ -268,13 +272,13 @@ echo "========================================================================="
 echo "Testing with -fno-rtti and -fno-exceptions"
 echo "========================================================================="
 
-doit ./configure --disable-shared CXXFLAGS=-fno-rtti
+doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-rtti"
 doit make -j6 check
 doit make distclean
-doit ./configure --disable-shared CXXFLAGS=-fno-exceptions
+doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-exceptions"
 doit make -j6 check
 doit make distclean
-doit ./configure --disable-shared CXXFLAGS="-fno-rtti -fno-exceptions"
+doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-rtti -fno-exceptions"
 doit make -j6 check
 
 doit make maintainer-clean

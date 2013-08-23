@@ -32,7 +32,7 @@
 #include <execinfo.h>
 #endif
 
-#if defined(__linux__) && !defined(NDEBUG)
+#if defined(__linux__) && defined(KJ_DEBUG)
 #include <stdio.h>
 #include <pthread.h>
 #endif
@@ -42,7 +42,7 @@ namespace kj {
 namespace {
 
 String getStackSymbols(ArrayPtr<void* const> trace) {
-#if defined(__linux__) && !defined(NDEBUG)
+#if defined(__linux__) && defined(KJ_DEBUG)
   // We want to generate a human-readable stack trace.
 
   // TODO(someday):  It would be really great if we could avoid farming out to addr2line and do

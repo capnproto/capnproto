@@ -453,7 +453,33 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
             subMain(str(programName, ' ', params[i + 1]), arrayPtr(&dummyArg, 1));
             return;
           } else if (params[i + 1] == "help") {
-            impl->context.exitInfo("Help, I'm trapped in a help text factory!");
+            uint count = 0;
+            for (uint j = i + 2;
+                 j < params.size() && (params[j] == "help" || params[j] == "--help");
+                 j++) {
+              ++count;
+            }
+
+            switch (count) {
+              case 0:
+                impl->context.exitInfo("Help about help?  We must go deeper...");
+                break;
+              case 1:
+                impl->context.exitInfo(
+                    "Yo dawg, I heard you like help.  So I wrote you some help about how to use "
+                    "help so you can get help on help.");
+                break;
+              case 2:
+                impl->context.exitInfo("Help, I'm trapped in a help text factory!");
+                break;
+              default:
+                if (count < 10) {
+                  impl->context.exitError("Killed by signal 911 (SIGHELP)");
+                } else {
+                  impl->context.exitInfo("How to keep an idiot busy...");
+                }
+                break;
+            }
           } else {
             usageError(programName, str(params[i + 1], ": unknown command"));
           }

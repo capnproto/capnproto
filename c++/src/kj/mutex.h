@@ -277,21 +277,21 @@ inline Locked<const T> MutexGuarded<T>::lockShared() const {
 
 template <typename T>
 inline const T& MutexGuarded<T>::getAlreadyLockedShared() const {
-#ifndef NDEBUG
+#ifdef KJ_DEBUG
   mutex.assertLockedByCaller(_::Mutex::SHARED);
 #endif
   return value;
 }
 template <typename T>
 inline T& MutexGuarded<T>::getAlreadyLockedShared() {
-#ifndef NDEBUG
+#ifdef KJ_DEBUG
   mutex.assertLockedByCaller(_::Mutex::SHARED);
 #endif
   return value;
 }
 template <typename T>
 inline T& MutexGuarded<T>::getAlreadyLockedExclusive() const {
-#ifndef NDEBUG
+#ifdef KJ_DEBUG
   mutex.assertLockedByCaller(_::Mutex::EXCLUSIVE);
 #endif
   return const_cast<T&>(value);

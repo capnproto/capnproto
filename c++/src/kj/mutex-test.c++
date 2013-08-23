@@ -41,10 +41,10 @@ inline void delay() { usleep(10000); }
 #define EXPECT_NONFATAL_FAILURE EXPECT_ANY_THROW
 #endif
 
-#ifdef NDEBUG
-#define EXPECT_DEBUG_ANY_THROW(EXP)
-#else
+#ifdef KJ_DEBUG
 #define EXPECT_DEBUG_ANY_THROW EXPECT_ANY_THROW
+#else
+#define EXPECT_DEBUG_ANY_THROW(EXP)
 #endif
 
 TEST(Mutex, MutexGuarded) {

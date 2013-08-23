@@ -98,6 +98,18 @@ typedef unsigned char byte;
   #endif
 #endif
 
+#if __OPTIMIZE__ && !defined(NDEBUG) && !defined(DEBUG) && !defined(KJ_DEBUG)
+#warning "You've enabled optimization but not NDEBUG. Usually optimized builds should #define \
+NDEBUG to disable debug asserts, so I am #defining it for you. If you actually want debug asserts, \
+please #define DEBUG or KJ_DEBUG. To make this warning go away, #define NDEBUG yourself, e.g. with \
+the compiler flag -DNDEBUG."
+#define NDEBUG 1
+#endif
+
+#if !defined(NDEBUG) && !defined(KJ_DEBUG)
+#define KJ_DEBUG
+#endif
+
 #define KJ_DISALLOW_COPY(classname) \
   classname(const classname&) = delete; \
   classname& operator=(const classname&) = delete
@@ -109,12 +121,12 @@ typedef unsigned char byte;
 // expect the condition to be true/false enough of the time that it's worth hard-coding branch
 // prediction.
 
-#if defined(NDEBUG) && !__NO_INLINE__
-#define KJ_ALWAYS_INLINE(prototype) inline prototype __attribute__((always_inline))
-// Force a function to always be inlined.  Apply only to the prototype, not to the definition.
-#else
+#if defined(KJ_DEBUG) || __NO_INLINE__
 #define KJ_ALWAYS_INLINE(prototype) inline prototype
 // Don't force inline in debug mode.
+#else
+#define KJ_ALWAYS_INLINE(prototype) inline prototype __attribute__((always_inline))
+// Force a function to always be inlined.  Apply only to the prototype, not to the definition.
 #endif
 
 #define KJ_NORETURN __attribute__((noreturn))
@@ -138,9 +150,7 @@ void unreachable() KJ_NORETURN;
 
 }  // namespace _ (private)
 
-#ifdef NDEBUG
-#define KJ_IREQUIRE(condition, ...)
-#else
+#ifdef KJ_DEBUG
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
         __FILE__, __LINE__, #condition, #__VA_ARGS__, ##__VA_ARGS__)
@@ -148,6 +158,8 @@ void unreachable() KJ_NORETURN;
 // check preconditions inside inline methods.  KJ_IREQUIRE is particularly useful in that
 // it will be enabled depending on whether the application is compiled in debug mode rather than
 // whether libkj is.
+#else
+#define KJ_IREQUIRE(condition, ...)
 #endif
 
 #define KJ_UNREACHABLE ::kj::_::unreachable();
