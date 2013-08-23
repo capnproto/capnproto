@@ -193,6 +193,16 @@ case ${CXX:-g++} in
     # There's an unused private field in gtest.
     export CXXFLAGS="$CXXFLAGS -Wno-unused-private-field"
     ;;
+  *g++* )
+    if (${CXX:-g++} --version | grep -q ' 4[.]8'); then
+      # GCC 4.8 emits a weird uninitialized warning in kj/parse/char-test, deep in one of the parser
+      # combinators.  It could be a real bug but there is just not enough information to figure out
+      # where the problem is coming from, because GCC does not provide any description of the inlining
+      # that has occurred.  Since I have not observed any actual problem (tests pass, etc.), I'm
+      # muting it for now.
+      CXXFLAGS="$CXXFLAGS -Wno-maybe-uninitialized"
+    fi
+    ;;
 esac
 
 cd c++

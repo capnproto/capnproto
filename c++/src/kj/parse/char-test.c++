@@ -21,14 +21,6 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#if !__clang__ && __GNUC__ == 4 && __GNUC_MINOR__ == 8
-// GCC 4.8 warns that ConstResult_<T, Tuple<>>::operator() returns an uninitialized value from
-// the second branch.  This is bogus AFAICT.  Moreover, the warning comes from the use of the
-// `number` parser.  GCC does not complain when this parser is used in the Cap'n Proto compiler;
-// only when it is used in this test.
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-#endif
-
 #include "char.h"
 #include "../string.h"
 #include <gtest/gtest.h>
