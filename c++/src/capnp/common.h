@@ -269,13 +269,14 @@ constexpr WordCount WORDS = kj::unit<WordCount>();
 constexpr ElementCount ELEMENTS = kj::unit<ElementCount>();
 constexpr WirePointerCount POINTERS = kj::unit<WirePointerCount>();
 
-constexpr auto BITS_PER_BYTE = 8 * BITS / BYTES;
-constexpr auto BITS_PER_WORD = 64 * BITS / WORDS;
-constexpr auto BYTES_PER_WORD = 8 * BYTES / WORDS;
+// GCC 4.7 actually gives unused warnings on these constants in opt mode...
+constexpr auto BITS_PER_BYTE KJ_UNUSED = 8 * BITS / BYTES;
+constexpr auto BITS_PER_WORD KJ_UNUSED = 64 * BITS / WORDS;
+constexpr auto BYTES_PER_WORD KJ_UNUSED = 8 * BYTES / WORDS;
 
-constexpr auto BITS_PER_POINTER = 64 * BITS / POINTERS;
-constexpr auto BYTES_PER_POINTER = 8 * BYTES / POINTERS;
-constexpr auto WORDS_PER_POINTER = 1 * WORDS / POINTERS;
+constexpr auto BITS_PER_POINTER KJ_UNUSED = 64 * BITS / POINTERS;
+constexpr auto BYTES_PER_POINTER KJ_UNUSED = 8 * BYTES / POINTERS;
+constexpr auto WORDS_PER_POINTER KJ_UNUSED = 1 * WORDS / POINTERS;
 
 constexpr WordCount POINTER_SIZE_IN_WORDS = 1 * POINTERS * WORDS_PER_POINTER;
 

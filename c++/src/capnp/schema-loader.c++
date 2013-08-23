@@ -312,8 +312,8 @@ private:
         case schema::Field::NON_GROUP: {
           auto nonGroup = field.getNonGroup();
 
-          uint fieldBits;
-          bool fieldIsPointer;
+          uint fieldBits = 0;
+          bool fieldIsPointer = false;
           validate(nonGroup.getType(), nonGroup.getDefaultValue(),
                    &fieldBits, &fieldIsPointer);
           VALIDATE_SCHEMA(fieldBits * (nonGroup.getOffset() + 1) <= dataSizeInBits &&

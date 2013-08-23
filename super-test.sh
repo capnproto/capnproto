@@ -152,8 +152,9 @@ __EOF__
 done
 
 # Build optimized builds because they catch more problems, but also enable debugging macros.
-# Enable lots of warnings and make sure the build breaks if they fire.
-export CXXFLAGS="-O2 -DDEBUG -Wall -Werror"
+# Enable lots of warnings and make sure the build breaks if they fire.  Disable strict-aliasing
+# because GCC warns about code that I know is OK.
+export CXXFLAGS="-O2 -DDEBUG -Wall -Werror -Wno-strict-aliasing"
 
 STAGING=$PWD/tmp-staging
 
@@ -184,6 +185,13 @@ if [ "x`uname`" = xDarwin ]; then
 else
   SAMPLE_CXXFLAGS=
 fi
+
+case ${CXX:-g++} in
+  *clang* )
+    # There's an unused private field in gtest.
+    export CXXFLAGS="$CXXFLAGS -Wno-unused-private-field"
+    ;;
+esac
 
 cd c++
 doit ./setup-autotools.sh | tr = -

@@ -599,7 +599,7 @@ private:
 
     auto nonGroup = proto.getNonGroup();
 
-    FieldKind kind;
+    FieldKind kind = FieldKind::PRIMITIVE;
     kj::String ownedType;
     kj::String type = typeName(nonGroup.getType()).flatten();
     kj::StringPtr setterDefault;  // only for void

@@ -39,8 +39,8 @@ TEST(StringTree, StrTree) {
     EXPECT_EQ("foobarbaz", tree.flatten());
 
     uint pieceCount = 0;
-    tree.visit([&](ArrayPtr<const char> part) { ++pieceCount; EXPECT_EQ(3, part.size()); });
-    EXPECT_EQ(3, pieceCount);
+    tree.visit([&](ArrayPtr<const char> part) { ++pieceCount; EXPECT_EQ(3u, part.size()); });
+    EXPECT_EQ(3u, pieceCount);
   }
 
   EXPECT_EQ("<foobarbaz>", str('<', strTree(str("foo"), "bar", str("baz")), '>'));
