@@ -53,7 +53,7 @@ public:
     // the child to die.
 
     int pipeFds[2];
-    pipe(pipeFds);
+    KJ_SYSCALL(pipe(pipeFds));
     pid_t child = fork();
     if (child == 0) {
       // This is the child!

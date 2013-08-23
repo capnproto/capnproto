@@ -129,8 +129,8 @@ class Array {
   // single objects.
 
 public:
-  inline Array(): ptr(nullptr), size_(0) {}
-  inline Array(decltype(nullptr)): ptr(nullptr), size_(0) {}
+  inline Array(): ptr(nullptr), size_(0), disposer(nullptr) {}
+  inline Array(decltype(nullptr)): ptr(nullptr), size_(0), disposer(nullptr) {}
   inline Array(Array&& other) noexcept
       : ptr(other.ptr), size_(other.size_), disposer(other.disposer) {
     other.ptr = nullptr;
