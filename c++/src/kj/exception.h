@@ -262,6 +262,16 @@ void UnwindDetector::catchExceptionsIfUnwinding(Func&& func) const {
   }
 }
 
+#define KJ_ON_SCOPE_SUCCESS(code) \
+  ::kj::UnwindDetector KJ_UNIQUE_NAME(_kjUnwindDetector); \
+  KJ_DEFER(if (!KJ_UNIQUE_NAME(_kjUnwindDetector).isUnwinding()) { code; })
+// Runs `code` if the current scope is exited normally (not due to an exception).
+
+#define KJ_ON_SCOPE_FAILURE(code) \
+  ::kj::UnwindDetector KJ_UNIQUE_NAME(_kjUnwindDetector); \
+  KJ_DEFER(if (KJ_UNIQUE_NAME(_kjUnwindDetector).isUnwinding()) { code; })
+// Runs `code` if the current scope is exited due to an exception.
+
 }  // namespace kj
 
 #endif  // KJ_EXCEPTION_H_

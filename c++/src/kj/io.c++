@@ -295,11 +295,11 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
   }
 
   while (current < iov.end()) {
-    ssize_t n;
+    ssize_t n = 0;
     KJ_SYSCALL(n = ::writev(fd, current, iov.end() - current), fd);
     KJ_ASSERT(n > 0, "writev() returned zero.");
 
-    while (static_cast<size_t>(n) >= current->iov_len) {
+    while (n > 0 && static_cast<size_t>(n) >= current->iov_len) {
       n -= current->iov_len;
       ++current;
     }

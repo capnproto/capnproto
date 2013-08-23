@@ -289,6 +289,18 @@ doit make distclean
 doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-rtti -fno-exceptions"
 doit make -j6 check
 
+if which valgrind > /dev/null; then
+  echo "========================================================================="
+  echo "Testing with valgrind"
+  echo "========================================================================="
+
+  doit ./configure --disable-shared CXXFLAGS="-g"
+  doit make -j6
+  doit make -j6 capnp-test
+  doin valgrind --leak-check=full --track-fds=yes --error-exitcode=1 capnp-test
+  doit make distclean
+fi
+
 doit make maintainer-clean
 
 rm -rf "$STAGING"

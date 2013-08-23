@@ -22,6 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "array.h"
+#include "exception.h"
 
 namespace kj {
 
@@ -62,38 +63,43 @@ void NullArrayDisposer::disposeImpl(
 
 namespace _ {  // private
 
+struct AutoDeleter {
+  void* ptr;
+  inline void* release() { void* result = ptr; ptr = nullptr; return result; }
+  inline AutoDeleter(void* ptr): ptr(ptr) {}
+  inline ~AutoDeleter() { operator delete(ptr); }
+};
+
 void* HeapArrayDisposer::allocateImpl(size_t elementSize, size_t elementCount, size_t capacity,
                                       void (*constructElement)(void*),
                                       void (*destroyElement)(void*)) {
-  void* result = operator new(elementSize * capacity);
+  AutoDeleter result(operator new(elementSize * capacity));
 
   if (constructElement == nullptr) {
     // Nothing to do.
   } else if (destroyElement == nullptr) {
-    byte* pos = reinterpret_cast<byte*>(result);
+    byte* pos = reinterpret_cast<byte*>(result.ptr);
     while (elementCount > 0) {
       constructElement(pos);
       pos += elementSize;
       --elementCount;
     }
   } else {
-    ExceptionSafeArrayUtil guard(result, elementSize, 0, destroyElement);
+    ExceptionSafeArrayUtil guard(result.ptr, elementSize, 0, destroyElement);
     guard.construct(elementCount, constructElement);
     guard.release();
   }
 
-  return result;
+  return result.release();
 }
 
 void HeapArrayDisposer::disposeImpl(
     void* firstElement, size_t elementSize, size_t elementCount, size_t capacity,
     void (*destroyElement)(void*)) const {
   // Note that capacity is ignored since operator delete() doesn't care about it.
+  AutoDeleter deleter(firstElement);
 
-  if (destroyElement == nullptr) {
-    operator delete(firstElement);
-  } else {
-    KJ_DEFER(operator delete(firstElement));
+  if (destroyElement != nullptr) {
     ExceptionSafeArrayUtil guard(firstElement, elementSize, elementCount, destroyElement);
     guard.destroyAll();
   }
