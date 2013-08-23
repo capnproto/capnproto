@@ -20,11 +20,11 @@ struct Person {
     }
   }
 
-  employment @4 union {
-    unemployed @5 :Void;
-    employer @6 :Text;
-    school @7 :Text;
-    selfEmployed @8 :Void;
+  employment :union {
+    unemployed @4 :Void;
+    employer @5 :Text;
+    school @6 :Text;
+    selfEmployed @7 :Void;
     # We assume that a person is only one of these.
   }
 }

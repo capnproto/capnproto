@@ -98,7 +98,6 @@ using ::capnp::DynamicValue;
 using ::capnp::DynamicStruct;
 using ::capnp::DynamicEnum;
 using ::capnp::DynamicList;
-using ::capnp::DynamicUnion;
 using ::capnp::List;
 using ::capnp::Schema;
 using ::capnp::StructSchema;
@@ -133,7 +132,7 @@ void dynamicWriteAddressBook(int fd, StructSchema schema) {
   auto phone0 = alicePhones[0].as<DynamicStruct>();
   phone0.set("number", "555-1212");
   phone0.set("type", "mobile");
-  alice.get("employment").as<DynamicUnion>()
+  alice.get("employment").as<DynamicStruct>()
        .set("school", "MIT");
 
   auto bob = people[1].as<DynamicStruct>();
@@ -149,7 +148,7 @@ void dynamicWriteAddressBook(int fd, StructSchema schema) {
   bobPhones[0].setType(Person::PhoneNumber::Type::HOME);
   bobPhones[1].setNumber("555-7654");
   bobPhones[1].setType(Person::PhoneNumber::Type::WORK);
-  bob.get("employment").as<DynamicUnion>()
+  bob.get("employment").as<DynamicStruct>()
      .set("unemployed", ::capnp::VOID);
 
   writePackedMessageToFd(fd, message);
@@ -208,31 +207,18 @@ void dynamicPrintValue(DynamicValue::Reader value) {
       std::cout << "(";
       auto structValue = value.as<DynamicStruct>();
       bool first = true;
-      for (auto member:
-           structValue.getSchema().getMembers()) {
+      for (auto field: structValue.getSchema().getFields()) {
+        if (!structValue.has(field)) continue;
         if (first) {
           first = false;
         } else {
           std::cout << ", ";
         }
-        std::cout << member.getProto().getName().cStr()
+        std::cout << field.getProto().getName().cStr()
                   << " = ";
-        dynamicPrintValue(structValue.get(member));
+        dynamicPrintValue(structValue.get(field));
       }
       std::cout << ")";
-      break;
-    }
-    case DynamicValue::UNION: {
-      auto unionValue = value.as<DynamicUnion>();
-      KJ_IF_MAYBE(tag, unionValue.which()) {
-        std::cout << tag->getProto().getName().cStr() << "(";
-        dynamicPrintValue(unionValue.get());
-        std::cout << ")";
-      } else {
-        // Unknown union member; must have come from newer
-        // version of the protocol.
-        std::cout << "?";
-      }
       break;
     }
     default:
