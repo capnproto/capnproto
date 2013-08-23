@@ -37,9 +37,12 @@ TEST(Common, Version) {
 #ifdef VERSION
   auto expectedVersion =
       kj::str(CAPNP_VERSION_MAJOR, '.', CAPNP_VERSION_MINOR, '.', CAPNP_VERSION_MICRO);
+  auto devVersion =
+      kj::str(CAPNP_VERSION_MAJOR, '.', CAPNP_VERSION_MINOR, "-dev");
   kj::StringPtr actualVersion = VERSION;
   KJ_ASSERT(actualVersion == expectedVersion ||
-            actualVersion.startsWith(kj::str(expectedVersion, '-')),
+            actualVersion.startsWith(kj::str(expectedVersion, '-')) ||
+            (actualVersion == devVersion && CAPNP_VERSION_MICRO == 0),
             expectedVersion, actualVersion);
 #endif
 }
