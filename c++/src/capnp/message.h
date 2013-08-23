@@ -393,12 +393,6 @@ void copyToUnchecked(Reader&& reader, kj::ArrayPtr<word> uncheckedBuffer) {
   builder.requireFilled();
 }
 
-template <typename Type>
-static typename Type::Reader defaultValue() {
-  // TODO(soon):  Correctly handle lists.  Maybe primitives too?
-  return typename Type::Reader(_::StructReader());
-}
-
 }  // namespace capnp
 
 #endif  // CAPNP_MESSAGE_H_

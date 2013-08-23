@@ -937,7 +937,7 @@ template <typename T>
 inline T ListBuilder::getDataElement(ElementCount index) {
   return reinterpret_cast<WireValue<T>*>(ptr + index * step / BITS_PER_BYTE)->get();
 
-  // TODO(soon):  Benchmark this alternate implementation, which I suspect may make better use of
+  // TODO(perf):  Benchmark this alternate implementation, which I suspect may make better use of
   //   the x86 SIB byte.  Also use it for all the other getData/setData implementations below, and
   //   the various non-inline methods that look up pointers.
   //   Also if using this, consider changing ptr back to void* instead of byte*.

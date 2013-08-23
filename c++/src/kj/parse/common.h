@@ -723,46 +723,6 @@ constexpr TransformWithLocation_<SubParser, TransformFunc> transformWithLocation
 }
 
 // -------------------------------------------------------------------
-// acceptIf()
-// Output = Same as SubParser
-
-template <typename SubParser, typename Condition>
-class AcceptIf_ {
-public:
-  explicit constexpr AcceptIf_(SubParser&& subParser, Condition&& condition)
-      : subParser(kj::fwd<SubParser>(subParser)), condition(kj::fwd<Condition>(condition)) {}
-
-  template <typename Input>
-  Maybe<OutputType<SubParser, Input>> operator()(Input& input) const {
-    KJ_IF_MAYBE(subResult, subParser(input)) {
-      if (condition(*subResult)) {
-        return kj::mv(*subResult);
-      } else {
-        return nullptr;
-      }
-    } else {
-      return nullptr;
-    }
-  }
-
-private:
-  SubParser subParser;
-  Condition condition;
-};
-
-template <typename SubParser, typename Condition>
-constexpr AcceptIf_<SubParser, Condition> acceptIf(SubParser&& subParser, Condition&& condition) {
-  // Constructs a parser which executes some other parser and then invokes the functor
-  // `condition` on the result to check if it is valid.  Typically, `condition` is a lambda
-  // returning true or false.  Like with `transform()`, `condition` is invoked using `kj::apply`
-  // to unpack tuples.
-  //
-  // TODO(soon):  Remove in favor of transformOrReject()?
-  return AcceptIf_<SubParser, Condition>(
-      kj::fwd<SubParser>(subParser), kj::fwd<Condition>(condition));
-}
-
-// -------------------------------------------------------------------
 // notLookingAt()
 // Fails if the given parser succeeds at the current location.
 

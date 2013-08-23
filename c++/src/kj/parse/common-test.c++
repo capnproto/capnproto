@@ -486,45 +486,6 @@ TEST(CommonParsers, References) {
   }
 }
 
-TEST(CommonParsers, AcceptIfParser) {
-  auto parser = acceptIf(
-      oneOf(transform(exactly('a'), []() -> uint { return 123; }),
-            transform(exactly('b'), []() -> uint { return 456; }),
-            transform(exactly('c'), []() -> uint { return 789; })),
-      [](uint i) {return i > 200;});
-
-  {
-    StringPtr text = "a";
-    Input input(text.begin(), text.end());
-    Maybe<uint> result = parser(input);
-    EXPECT_TRUE(result == nullptr);
-  }
-
-  {
-    StringPtr text = "b";
-    Input input(text.begin(), text.end());
-    Maybe<uint> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(456u, *value);
-    } else {
-      ADD_FAILURE() << "Expected parse result, got null.";
-    }
-    EXPECT_TRUE(input.atEnd());
-  }
-
-  {
-    StringPtr text = "c";
-    Input input(text.begin(), text.end());
-    Maybe<uint> result = parser(input);
-    KJ_IF_MAYBE(value, result) {
-      EXPECT_EQ(789u, *value);
-    } else {
-      ADD_FAILURE() << "Expected parse result, got null.";
-    }
-    EXPECT_TRUE(input.atEnd());
-  }
-}
-
 TEST(CommonParsers, NotLookingAt) {
   auto parser = notLookingAt(exactly('a'));
 
