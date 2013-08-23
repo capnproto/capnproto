@@ -621,6 +621,43 @@ void NodeTranslator::DuplicateNameDetector::check(
               insertResult.first->second, kj::str("'", nameText, "' previously defined here."));
         }
       }
+
+      switch (decl.which()) {
+        case Declaration::USING:
+        case Declaration::ENUM:
+        case Declaration::STRUCT:
+        case Declaration::INTERFACE:
+          if (nameText.size() > 0 && (nameText[0] < 'A' || nameText[0] > 'Z')) {
+            errorReporter.addErrorOn(name,
+                "Type names must begin with a capital letter.");
+          }
+          break;
+
+        case Declaration::CONST:
+        case Declaration::ANNOTATION:
+        case Declaration::ENUMERANT:
+        case Declaration::METHOD:
+        case Declaration::FIELD:
+        case Declaration::UNION:
+        case Declaration::GROUP:
+          if (nameText.size() > 0 && (nameText[0] < 'a' || nameText[0] > 'z')) {
+            errorReporter.addErrorOn(name,
+                "Non-type names must begin with a lower-case letter.");
+          }
+          break;
+
+        default:
+          KJ_ASSERT(nameText.size() == 0, "Don't know what naming rules to enforce for node type.",
+                    (uint)decl.which());
+          break;
+      }
+
+      if (nameText.findFirst('_') != nullptr) {
+        errorReporter.addErrorOn(name,
+            "Cap'n Proto declaration names should use camelCase and must not contain "
+            "underscores. (Code generators may convert names to the appropriate style for the "
+            "target language.)");
+      }
     }
 
     switch (decl.which()) {
