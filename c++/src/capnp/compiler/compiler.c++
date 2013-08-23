@@ -523,7 +523,7 @@ const Compiler::Node::Content& Compiler::Node::getContent(Content::State minimum
       // Create the final schema.
       KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&](){
         auto nodeSet = locked->translator->finish();
-        locked->auxSchemas = KJ_MAP(nodeSet.auxNodes, auxNode) {
+        locked->auxSchemas = KJ_MAP(auxNode, nodeSet.auxNodes) {
           return module->getCompiler().getFinalLoader().loadOnce(auxNode);
         };
         locked->finalSchema = module->getCompiler().getFinalLoader().loadOnce(nodeSet.node);

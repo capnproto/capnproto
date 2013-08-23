@@ -331,7 +331,7 @@ TEST(Array, OwnConst) {
 
 TEST(Array, Map) {
   StringPtr foo = "abcd";
-  Array<char> bar = KJ_MAP(foo, c) -> char { return c + 1; };
+  Array<char> bar = KJ_MAP(c, foo) -> char { return c + 1; };
   EXPECT_STREQ("bcde", str(bar).cStr());
 }
 

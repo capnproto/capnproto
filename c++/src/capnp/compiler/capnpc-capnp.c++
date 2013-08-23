@@ -296,7 +296,7 @@ private:
   }
 
   kj::StringTree genAnnotations(List<schema::Annotation>::Reader list, Schema scope) {
-    return kj::strTree(KJ_MAP(list, ann) { return genAnnotation(ann, scope); });
+    return kj::strTree(KJ_MAP(ann, list) { return genAnnotation(ann, scope); });
   }
   kj::StringTree genAnnotations(Schema schema) {
     auto proto = schema.getProto();
@@ -326,7 +326,7 @@ private:
 
   template <typename MemberList>
   kj::Array<decltype(kj::instance<MemberList>()[0])> sortByCodeOrder(MemberList&& list) {
-    auto sorted = KJ_MAP(list, item) { return item; };
+    auto sorted = KJ_MAP(item, list) { return item; };
     std::sort(sorted.begin(), sorted.end(), OrderByCodeOrder());
     return kj::mv(sorted);
   }
@@ -338,7 +338,7 @@ private:
     //   subsequent fields.
 
     bool seenUnion = false;
-    return KJ_MAP(sortByCodeOrder(schema.getFields()), field) {
+    return KJ_MAP(field, sortByCodeOrder(schema.getFields())) {
       if (field.getProto().hasDiscriminantValue()) {
         if (seenUnion) {
           return kj::strTree();
@@ -350,7 +350,7 @@ private:
           auto unionFields = sortByCodeOrder(schema.getUnionFields());
           return kj::strTree(
               indent, "union {  # tag bits [", offset * 16, ", ", offset * 16 + 16, ")\n",
-              KJ_MAP(unionFields, uField) {
+              KJ_MAP(uField, unionFields) {
                 return genStructField(uField.getProto(), schema, indent.next());
               },
               indent, "}\n");
@@ -424,7 +424,7 @@ private:
       case schema::Node::ENUM: {
         return kj::strTree(
             indent, "enum ", name, " @0x", kj::hex(proto.getId()), genAnnotations(schema), " {\n",
-            KJ_MAP(sortByCodeOrder(schema.asEnum().getEnumerants()), enumerant) {
+            KJ_MAP(enumerant, sortByCodeOrder(schema.asEnum().getEnumerants())) {
               return kj::strTree(indent.next(), enumerant.getProto().getName(), " @",
                                  enumerant.getIndex(),
                                  genAnnotations(enumerant.getProto().getAnnotations(), schema),
@@ -437,12 +437,12 @@ private:
         return kj::strTree(
             indent, "interface ", name, " @0x", kj::hex(proto.getId()),
             genAnnotations(schema), " {\n",
-            KJ_MAP(sortByCodeOrder(schema.asInterface().getMethods()), method) {
+            KJ_MAP(method, sortByCodeOrder(schema.asInterface().getMethods())) {
               int i = 0;
               auto methodProto = method.getProto();
               return kj::strTree(
                   indent.next(), methodProto.getName(), " @", method.getIndex(), "(",
-                  KJ_MAP(methodProto.getParams(), param) {
+                  KJ_MAP(param, methodProto.getParams()) {
                     bool hasDefault = i >= methodProto.getRequiredParamCount() ||
                         !isEmptyValue(param.getDefaultValue());
                     return kj::strTree(
@@ -504,7 +504,7 @@ private:
 
   kj::StringTree genNestedDecls(Schema schema, Indent indent) {
     uint64_t id = schema.getProto().getId();
-    return kj::strTree(KJ_MAP(schema.getProto().getNestedNodes(), nested) {
+    return kj::strTree(KJ_MAP(nested, schema.getProto().getNestedNodes()) {
       return genDecl(schemaLoader.get(nested.getId()), nested.getName(), id, indent);
     });
   }
@@ -516,7 +516,7 @@ private:
     return kj::strTree(
       "# ", proto.getDisplayName(), "\n",
       "@0x", kj::hex(proto.getId()), ";\n",
-      KJ_MAP(proto.getAnnotations(), ann) { return genAnnotation(ann, file, "", ";\n"); },
+      KJ_MAP(ann, proto.getAnnotations()) { return genAnnotation(ann, file, "", ";\n"); },
       genNestedDecls(file, Indent(0)));
   }
 

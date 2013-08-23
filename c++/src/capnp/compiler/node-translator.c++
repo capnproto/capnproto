@@ -536,7 +536,7 @@ NodeTranslator::NodeTranslator(
 NodeTranslator::NodeSet NodeTranslator::getBootstrapNode() {
   return NodeSet {
     wipNode.getReader(),
-    KJ_MAP(groups, g) { return g.getReader(); }
+    KJ_MAP(g, groups) { return g.getReader(); }
   };
 }
 

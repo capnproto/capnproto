@@ -173,7 +173,7 @@ static kj::StringTree print(const DynamicValue::Reader& value,
     case DynamicValue::LIST: {
       auto listValue = value.as<DynamicList>();
       auto which = listValue.getSchema().whichElementType();
-      kj::Array<kj::StringTree> elements = KJ_MAP(listValue, element) {
+      kj::Array<kj::StringTree> elements = KJ_MAP(element, listValue) {
         return print(element, which, indent.next(), BARE);
       };
       return kj::strTree('[', indent.delimit(kj::mv(elements), mode), ']');

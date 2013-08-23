@@ -119,9 +119,9 @@ struct OrderByName {
 
 template <typename MemberList>
 kj::Array<uint> makeMembersByName(MemberList&& members) {
-  auto sorted = KJ_MAP(members, member) { return member; };
+  auto sorted = KJ_MAP(member, members) { return member; };
   std::sort(sorted.begin(), sorted.end(), OrderByName());
-  return KJ_MAP(sorted, member) { return member.getIndex(); };
+  return KJ_MAP(member, sorted) { return member.getIndex(); };
 }
 
 kj::StringPtr baseName(kj::StringPtr path) {
@@ -534,7 +534,7 @@ private:
                 "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
                 unionDiscrim.has,
                 "  return ",
-                kj::StringTree(KJ_MAP(slots, slot) {
+                kj::StringTree(KJ_MAP(slot, slots) {
                   switch (sectionFor(slot.whichType)) {
                     case Section::NONE:
                       return kj::strTree();
@@ -552,7 +552,7 @@ private:
                 "inline bool ", scope, "Builder::has", titleCase, "() {\n",
                 unionDiscrim.has,
                 "  return ",
-                kj::StringTree(KJ_MAP(slots, slot) {
+                kj::StringTree(KJ_MAP(slot, slots) {
                   switch (sectionFor(slot.whichType)) {
                     case Section::NONE:
                       return kj::strTree();
@@ -577,7 +577,7 @@ private:
                 "}\n"
                 "inline ", scope, titleCase, "::Builder ", scope, "Builder::init", titleCase, "() {\n",
                 unionDiscrim.set,
-                KJ_MAP(slots, slot) {
+                KJ_MAP(slot, slots) {
                   switch (sectionFor(slot.whichType)) {
                     case Section::NONE:
                       return kj::strTree();
@@ -1094,10 +1094,10 @@ private:
 
     // Convert the encoded schema to a literal byte array.
     kj::ArrayPtr<const word> rawSchema = schema.asUncheckedMessage();
-    auto schemaLiteral = kj::StringTree(KJ_MAP(rawSchema, w) {
+    auto schemaLiteral = kj::StringTree(KJ_MAP(w, rawSchema) {
       const byte* bytes = reinterpret_cast<const byte*>(&w);
 
-      return kj::strTree(KJ_MAP(kj::range<uint>(0, sizeof(word)), i) {
+      return kj::strTree(KJ_MAP(i, kj::range<uint>(0, sizeof(word))) {
         auto text = kj::toCharSequence(kj::implicitCast<uint>(bytes[i]));
         return kj::strTree(kj::repeat(' ', 4 - text.size()), text, ",");
       });
@@ -1140,15 +1140,15 @@ private:
         "  {", kj::mv(schemaLiteral), " }\n"
         "};\n"
         "static const ::capnp::_::RawSchema* const d_", hexId, "[] = {\n",
-        KJ_MAP(deps, depId) {
+        KJ_MAP(depId, deps) {
           return kj::strTree("  &s_", kj::hex(depId), ",\n");
         },
         "};\n"
         "static const uint16_t m_", hexId, "[] = {",
-        kj::StringTree(KJ_MAP(membersByName, index) { return kj::strTree(index); }, ", "),
+        kj::StringTree(KJ_MAP(index, membersByName) { return kj::strTree(index); }, ", "),
         "};\n"
         "static const uint16_t i_", hexId, "[] = {",
-        kj::StringTree(KJ_MAP(membersByDiscrim, index) { return kj::strTree(index); }, ", "),
+        kj::StringTree(KJ_MAP(index, membersByDiscrim) { return kj::strTree(index); }, ", "),
         "};\n"
         "const ::capnp::_::RawSchema s_", hexId, " = {\n"
         "  0x", hexId, ", b_", hexId, ".words, ", rawSchema.size(), ", d_", hexId, ", m_", hexId, ",\n"
@@ -1161,7 +1161,7 @@ private:
 
       case schema::Node::STRUCT: {
         auto fieldTexts =
-            KJ_MAP(schema.asStruct().getFields(), f) { return makeFieldText(subScope, f); };
+            KJ_MAP(f, schema.asStruct().getFields()) { return makeFieldText(subScope, f); };
 
         auto structNode = proto.getStruct();
         uint discrimOffset = structNode.getDiscriminantOffset();
@@ -1178,7 +1178,7 @@ private:
               "  class Builder;\n",
               structNode.getDiscriminantCount() == 0 ? kj::strTree() : kj::strTree(
                   "  enum Which: uint16_t {\n",
-                  KJ_MAP(structNode.getFields(), f) {
+                  KJ_MAP(f, structNode.getFields()) {
                     if (f.hasDiscriminantValue()) {
                       return kj::strTree("    ", toUpperCase(f.getName()), ",\n");
                     } else {
@@ -1186,17 +1186,17 @@ private:
                     }
                   },
                   "  };\n"),
-              KJ_MAP(nestedTexts, n) { return kj::mv(n.outerTypeDecl); },
+              KJ_MAP(n, nestedTexts) { return kj::mv(n.outerTypeDecl); },
               "};\n"
               "\n",
-              KJ_MAP(nestedTexts, n) { return kj::mv(n.outerTypeDef); }),
+              KJ_MAP(n, nestedTexts) { return kj::mv(n.outerTypeDef); }),
 
           kj::strTree(
               makeReaderDef(fullName, name, structNode.getDiscriminantCount() != 0,
-                            KJ_MAP(fieldTexts, f) { return kj::mv(f.readerMethodDecls); }),
+                            KJ_MAP(f, fieldTexts) { return kj::mv(f.readerMethodDecls); }),
               makeBuilderDef(fullName, name, structNode.getDiscriminantCount() != 0,
-                             KJ_MAP(fieldTexts, f) { return kj::mv(f.builderMethodDecls); }),
-              KJ_MAP(nestedTexts, n) { return kj::mv(n.readerBuilderDefs); }),
+                             KJ_MAP(f, fieldTexts) { return kj::mv(f.builderMethodDecls); }),
+              KJ_MAP(n, nestedTexts) { return kj::mv(n.readerBuilderDefs); }),
 
           kj::strTree(
               structNode.getDiscriminantCount() == 0 ? kj::strTree() : kj::strTree(
@@ -1207,16 +1207,16 @@ private:
                   "  return _builder.getDataField<Which>(", discrimOffset, " * ::capnp::ELEMENTS);\n"
                   "}\n"
                   "\n"),
-              KJ_MAP(fieldTexts, f) { return kj::mv(f.inlineMethodDefs); },
-              KJ_MAP(nestedTexts, n) { return kj::mv(n.inlineMethodDefs); }),
+              KJ_MAP(f, fieldTexts) { return kj::mv(f.inlineMethodDefs); },
+              KJ_MAP(n, nestedTexts) { return kj::mv(n.inlineMethodDefs); }),
 
           kj::strTree(
               kj::mv(schemaDecl),
-              KJ_MAP(nestedTexts, n) { return kj::mv(n.capnpSchemaDecls); }),
+              KJ_MAP(n, nestedTexts) { return kj::mv(n.capnpSchemaDecls); }),
 
           kj::strTree(
               kj::mv(schemaDef),
-              KJ_MAP(nestedTexts, n) { return kj::mv(n.capnpSchemaDefs); }),
+              KJ_MAP(n, nestedTexts) { return kj::mv(n.capnpSchemaDefs); }),
 
           kj::strTree(
               "CAPNP_DECLARE_STRUCT(\n"
@@ -1225,12 +1225,12 @@ private:
                       structNode.getPointerCount(), ", ",
                       FIELD_SIZE_NAMES[static_cast<uint>(structNode.getPreferredListEncoding())],
                       ");\n",
-              KJ_MAP(nestedTexts, n) { return kj::mv(n.capnpPrivateDecls); }),
+              KJ_MAP(n, nestedTexts) { return kj::mv(n.capnpPrivateDecls); }),
 
           kj::strTree(
               "CAPNP_DEFINE_STRUCT(\n"
               "    ", namespace_, "::", fullName, ");\n",
-              KJ_MAP(nestedTexts, n) { return kj::mv(n.capnpPrivateDefs); }),
+              KJ_MAP(n, nestedTexts) { return kj::mv(n.capnpPrivateDefs); }),
         };
       }
 
@@ -1240,7 +1240,7 @@ private:
         return NodeText {
           scope.size() == 0 ? kj::strTree() : kj::strTree(
               "  enum class ", name, ": uint16_t {\n",
-              KJ_MAP(enumerants, e) {
+              KJ_MAP(e, enumerants) {
                 return kj::strTree("    ", toUpperCase(e.getProto().getName()), ",\n");
               },
               "  };\n"
@@ -1248,7 +1248,7 @@ private:
 
           scope.size() > 0 ? kj::strTree() : kj::strTree(
               "enum class ", name, ": uint16_t {\n",
-              KJ_MAP(enumerants, e) {
+              KJ_MAP(e, enumerants) {
                 return kj::strTree("  ", toUpperCase(e.getProto().getName()), ",\n");
               },
               "};\n"
@@ -1363,7 +1363,7 @@ private:
       }
     }
 
-    auto nodeTexts = KJ_MAP(node.getNestedNodes(), nested) {
+    auto nodeTexts = KJ_MAP(nested, node.getNestedNodes()) {
       return makeNodeText(namespacePrefix, "", nested.getName(), schemaLoader.get(nested.getId()));
     };
 
@@ -1391,7 +1391,7 @@ private:
               "use the same version of the Cap'n Proto compiler and library.\"\n"
           "#endif\n"
           "\n",
-          KJ_MAP(includes, path) {
+          KJ_MAP(path, includes) {
             if (path.startsWith("/")) {
               return kj::strTree("#include <", path.slice(1), ".h>\n");
             } else {
@@ -1400,30 +1400,30 @@ private:
           },
           "\n",
 
-          KJ_MAP(namespaceParts, n) { return kj::strTree("namespace ", n, " {\n"); }, "\n",
-          KJ_MAP(nodeTexts, n) { return kj::mv(n.outerTypeDef); },
-          KJ_MAP(namespaceParts, n) { return kj::strTree("}  // namespace\n"); }, "\n",
+          KJ_MAP(n, namespaceParts) { return kj::strTree("namespace ", n, " {\n"); }, "\n",
+          KJ_MAP(n, nodeTexts) { return kj::mv(n.outerTypeDef); },
+          KJ_MAP(n, namespaceParts) { return kj::strTree("}  // namespace\n"); }, "\n",
 
           separator, "\n"
           "namespace capnp {\n"
           "namespace schemas {\n"
           "\n",
-          KJ_MAP(nodeTexts, n) { return kj::mv(n.capnpSchemaDecls); },
+          KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpSchemaDecls); },
           "\n"
           "}  // namespace schemas\n"
           "namespace _ {  // private\n"
           "\n",
-          KJ_MAP(nodeTexts, n) { return kj::mv(n.capnpPrivateDecls); },
+          KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpPrivateDecls); },
           "\n"
           "}  // namespace _ (private)\n"
           "}  // namespace capnp\n"
 
           "\n", separator, "\n",
-          KJ_MAP(namespaceParts, n) { return kj::strTree("namespace ", n, " {\n"); }, "\n",
-          KJ_MAP(nodeTexts, n) { return kj::mv(n.readerBuilderDefs); },
+          KJ_MAP(n, namespaceParts) { return kj::strTree("namespace ", n, " {\n"); }, "\n",
+          KJ_MAP(n, nodeTexts) { return kj::mv(n.readerBuilderDefs); },
           separator, "\n",
-          KJ_MAP(nodeTexts, n) { return kj::mv(n.inlineMethodDefs); },
-          KJ_MAP(namespaceParts, n) { return kj::strTree("}  // namespace\n"); }, "\n",
+          KJ_MAP(n, nodeTexts) { return kj::mv(n.inlineMethodDefs); },
+          KJ_MAP(n, namespaceParts) { return kj::strTree("}  // namespace\n"); }, "\n",
           "#endif  // CAPNP_INCLUDED_", kj::hex(node.getId()), "_\n"),
 
       kj::strTree(
@@ -1434,10 +1434,10 @@ private:
           "\n"
           "namespace capnp {\n"
           "namespace schemas {\n",
-          KJ_MAP(nodeTexts, n) { return kj::mv(n.capnpSchemaDefs); },
+          KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpSchemaDefs); },
           "}  // namespace schemas\n"
           "namespace _ {  // private\n",
-          KJ_MAP(nodeTexts, n) { return kj::mv(n.capnpPrivateDefs); },
+          KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpPrivateDefs); },
           "}  // namespace _ (private)\n"
           "}  // namespace capnp\n")
     };
