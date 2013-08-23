@@ -153,8 +153,10 @@ done
 
 # Build optimized builds because they catch more problems, but also enable debugging macros.
 # Enable lots of warnings and make sure the build breaks if they fire.  Disable strict-aliasing
-# because GCC warns about code that I know is OK.
-export CXXFLAGS="-O2 -DDEBUG -Wall -Werror -Wno-strict-aliasing"
+# because GCC warns about code that I know is OK.  Disable sign-compare because I've fixed more
+# sign-compare warnings than probably all other warnings combined and I've never seen it flag a
+# real problem.
+export CXXFLAGS="-O2 -DDEBUG -Wall -Werror -Wno-strict-aliasing -Wno-sign-compare"
 
 STAGING=$PWD/tmp-staging
 
