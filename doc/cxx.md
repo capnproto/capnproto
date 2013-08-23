@@ -197,7 +197,7 @@ Primitive types map to the obvious C++ types:
 * `UIntNN` -> `uintNN_t`
 * `Float32` -> `float`
 * `Float64` -> `double`
-* `Void` -> `::capnp::Void` (An enum with one value: `::capnp::Void::VOID`)
+* `Void` -> `::capnp::Void` (An empty struct; its only value is `::capnp::VOID`)
 
 ### Structs
 
@@ -443,7 +443,7 @@ void dynamicWriteAddressBook(int fd, StructSchema schema) {
   bobPhones[1].setNumber("555-7654");
   bobPhones[1].setType(Person::PhoneNumber::Type::WORK);
   bob.get("employment").as<DynamicUnion>()
-     .set("unemployed", Void::VOID);
+     .set("unemployed", ::capnp::VOID);
 
   writePackedMessageToFd(fd, message);
 }

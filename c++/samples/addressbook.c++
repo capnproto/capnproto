@@ -150,7 +150,7 @@ void dynamicWriteAddressBook(int fd, StructSchema schema) {
   bobPhones[1].setNumber("555-7654");
   bobPhones[1].setType(Person::PhoneNumber::Type::WORK);
   bob.get("employment").as<DynamicUnion>()
-     .set("unemployed", Void::VOID);
+     .set("unemployed", ::capnp::VOID);
 
   writePackedMessageToFd(fd, message);
 }
