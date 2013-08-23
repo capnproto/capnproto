@@ -27,8 +27,6 @@
 #include "common.h"
 #include "layout.h"
 
-#include "list.h"  // TODO(cleanup):  For FromReader.  Move elsewhere?
-
 #ifndef CAPNP_MESSAGE_H_
 #define CAPNP_MESSAGE_H_
 
@@ -40,6 +38,7 @@ namespace _ {  // private
 }
 
 class StructSchema;
+class Orphanage;
 
 // =======================================================================================
 
