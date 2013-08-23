@@ -2496,7 +2496,7 @@ StructReader ListReader::getStructElement(ElementCount index) const {
 
   // This check should pass if there are no bugs in the list pointer validation code.
   KJ_DASSERT(structPointerCount == 0 * POINTERS ||
-         (uintptr_t)structPointers % sizeof(WirePointer) == 0,
+         (uintptr_t)structPointers % sizeof(void*) == 0,
          "Pointer section of struct list element not aligned.");
 
   return StructReader(
