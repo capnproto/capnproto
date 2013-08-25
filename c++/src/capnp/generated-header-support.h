@@ -228,6 +228,83 @@ inline kj::StringTree structString(StructReader reader) {
   return structString(reader, rawSchema<T>());
 }
 
+template <typename T>
+class ConstStruct {
+public:
+  ConstStruct() = delete;
+  KJ_DISALLOW_COPY(ConstStruct);
+  inline explicit constexpr ConstStruct(const word* ptr): ptr(ptr) {}
+
+  inline typename T::Reader get() const {
+    return typename T::Reader(StructReader::readRootUnchecked(ptr));
+  }
+
+  inline operator typename T::Reader() const { return get(); }
+  inline typename T::Reader operator*() const { return get(); }
+  inline TemporaryPointer<typename T::Reader> operator->() const { return get(); }
+
+private:
+  const word* ptr;
+};
+
+template <typename T>
+class ConstList {
+public:
+  ConstList() = delete;
+  KJ_DISALLOW_COPY(ConstList);
+  inline explicit constexpr ConstList(const word* ptr): ptr(ptr) {}
+
+  inline typename List<T>::Reader get() const {
+    return typename List<T>::Reader(ListReader::readRootUnchecked(
+        ptr, elementSizeForType<T>()));
+  }
+
+  inline operator typename List<T>::Reader() const { return get(); }
+  inline typename List<T>::Reader operator*() const { return get(); }
+  inline TemporaryPointer<typename List<T>::Reader> operator->() const { return get(); }
+
+private:
+  const word* ptr;
+};
+
+template <size_t size>
+class ConstText {
+public:
+  ConstText() = delete;
+  KJ_DISALLOW_COPY(ConstText);
+  inline explicit constexpr ConstText(const word* ptr): ptr(ptr) {}
+
+  inline Text::Reader get() const {
+    return Text::Reader(reinterpret_cast<const char*>(ptr), size);
+  }
+
+  inline operator Text::Reader() const { return get(); }
+  inline Text::Reader operator*() const { return get(); }
+  inline TemporaryPointer<Text::Reader> operator->() const { return get(); }
+
+private:
+  const word* ptr;
+};
+
+template <size_t size>
+class ConstData {
+public:
+  ConstData() = delete;
+  KJ_DISALLOW_COPY(ConstData);
+  inline explicit constexpr ConstData(const word* ptr): ptr(ptr) {}
+
+  inline Data::Reader get() const {
+    return Data::Reader(reinterpret_cast<const byte*>(ptr), size);
+  }
+
+  inline operator Data::Reader() const { return get(); }
+  inline Data::Reader operator*() const { return get(); }
+  inline TemporaryPointer<Data::Reader> operator->() const { return get(); }
+
+private:
+  const word* ptr;
+};
+
 }  // namespace _ (private)
 
 template <typename T>

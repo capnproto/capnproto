@@ -1586,6 +1586,128 @@ TEST(Encoding, Threads) {
   // each thread, thus waiting for them all to complete.
 }
 
+TEST(Encoding, Constants) {
+  EXPECT_EQ(VOID, test::TestConstants::VOID_CONST);
+  EXPECT_EQ(true, test::TestConstants::BOOL_CONST);
+  EXPECT_EQ(-123, test::TestConstants::INT8_CONST);
+  EXPECT_EQ(-12345, test::TestConstants::INT16_CONST);
+  EXPECT_EQ(-12345678, test::TestConstants::INT32_CONST);
+  EXPECT_EQ(-123456789012345ll, test::TestConstants::INT64_CONST);
+  EXPECT_EQ(234u, test::TestConstants::UINT8_CONST);
+  EXPECT_EQ(45678u, test::TestConstants::UINT16_CONST);
+  EXPECT_EQ(3456789012u, test::TestConstants::UINT32_CONST);
+  EXPECT_EQ(12345678901234567890ull, test::TestConstants::UINT64_CONST);
+  EXPECT_FLOAT_EQ(1234.5f, test::TestConstants::FLOAT32_CONST);
+  EXPECT_DOUBLE_EQ(-123e45, test::TestConstants::FLOAT64_CONST);
+  EXPECT_EQ("foo", *test::TestConstants::TEXT_CONST);
+  EXPECT_EQ(data("bar"), test::TestConstants::DATA_CONST);
+  {
+    TestAllTypes::Reader subReader = test::TestConstants::STRUCT_CONST;
+    EXPECT_EQ(VOID, subReader.getVoidField());
+    EXPECT_EQ(true, subReader.getBoolField());
+    EXPECT_EQ(-12, subReader.getInt8Field());
+    EXPECT_EQ(3456, subReader.getInt16Field());
+    EXPECT_EQ(-78901234, subReader.getInt32Field());
+    EXPECT_EQ(56789012345678ll, subReader.getInt64Field());
+    EXPECT_EQ(90u, subReader.getUInt8Field());
+    EXPECT_EQ(1234u, subReader.getUInt16Field());
+    EXPECT_EQ(56789012u, subReader.getUInt32Field());
+    EXPECT_EQ(345678901234567890ull, subReader.getUInt64Field());
+    EXPECT_FLOAT_EQ(-1.25e-10f, subReader.getFloat32Field());
+    EXPECT_DOUBLE_EQ(345, subReader.getFloat64Field());
+    EXPECT_EQ("baz", subReader.getTextField());
+    EXPECT_EQ(data("qux"), subReader.getDataField());
+    {
+      auto subSubReader = subReader.getStructField();
+      EXPECT_EQ("nested", subSubReader.getTextField());
+      EXPECT_EQ("really nested", subSubReader.getStructField().getTextField());
+    }
+    EXPECT_EQ(TestEnum::BAZ, subReader.getEnumField());
+
+    checkList(subReader.getVoidList(), {VOID, VOID, VOID});
+    checkList(subReader.getBoolList(), {false, true, false, true, true});
+    checkList(subReader.getInt8List(), {12, -34, -0x80, 0x7f});
+    checkList(subReader.getInt16List(), {1234, -5678, -0x8000, 0x7fff});
+    // gcc warns on -0x800... and the only work-around I could find was to do -0x7ff...-1.
+    checkList(subReader.getInt32List(), {12345678, -90123456, -0x7fffffff - 1, 0x7fffffff});
+    checkList(subReader.getInt64List(), {123456789012345ll, -678901234567890ll, -0x7fffffffffffffffll-1, 0x7fffffffffffffffll});
+    checkList(subReader.getUInt8List(), {12u, 34u, 0u, 0xffu});
+    checkList(subReader.getUInt16List(), {1234u, 5678u, 0u, 0xffffu});
+    checkList(subReader.getUInt32List(), {12345678u, 90123456u, 0u, 0xffffffffu});
+    checkList(subReader.getUInt64List(), {123456789012345ull, 678901234567890ull, 0ull, 0xffffffffffffffffull});
+    checkList(subReader.getFloat32List(), {0.0f, 1234567.0f, 1e37f, -1e37f, 1e-37f, -1e-37f});
+    checkList(subReader.getFloat64List(), {0.0, 123456789012345.0, 1e306, -1e306, 1e-306, -1e-306});
+    checkList(subReader.getTextList(), {"quux", "corge", "grault"});
+    checkList(subReader.getDataList(), {data("garply"), data("waldo"), data("fred")});
+    {
+      auto listReader = subReader.getStructList();
+      ASSERT_EQ(3u, listReader.size());
+      EXPECT_EQ("x structlist 1", listReader[0].getTextField());
+      EXPECT_EQ("x structlist 2", listReader[1].getTextField());
+      EXPECT_EQ("x structlist 3", listReader[2].getTextField());
+    }
+    checkList(subReader.getEnumList(), {TestEnum::QUX, TestEnum::BAR, TestEnum::GRAULT});
+  }
+  EXPECT_EQ(TestEnum::CORGE, test::TestConstants::ENUM_CONST);
+
+  EXPECT_EQ(6u, test::TestConstants::VOID_LIST_CONST->size());
+  checkList(*test::TestConstants::BOOL_LIST_CONST, {true, false, false, true});
+  checkList(*test::TestConstants::INT8_LIST_CONST, {111, -111});
+  checkList(*test::TestConstants::INT16_LIST_CONST, {11111, -11111});
+  checkList(*test::TestConstants::INT32_LIST_CONST, {111111111, -111111111});
+  checkList(*test::TestConstants::INT64_LIST_CONST, {1111111111111111111ll, -1111111111111111111ll});
+  checkList(*test::TestConstants::UINT8_LIST_CONST, {111u, 222u});
+  checkList(*test::TestConstants::UINT16_LIST_CONST, {33333u, 44444u});
+  checkList(*test::TestConstants::UINT32_LIST_CONST, {3333333333u});
+  checkList(*test::TestConstants::UINT64_LIST_CONST, {11111111111111111111ull});
+  {
+    List<float>::Reader listReader = test::TestConstants::FLOAT32_LIST_CONST;
+    ASSERT_EQ(4u, listReader.size());
+    EXPECT_EQ(5555.5f, listReader[0]);
+    EXPECT_EQ(std::numeric_limits<float>::infinity(), listReader[1]);
+    EXPECT_EQ(-std::numeric_limits<float>::infinity(), listReader[2]);
+    EXPECT_TRUE(listReader[3] != listReader[3]);
+  }
+  {
+    List<double>::Reader listReader = test::TestConstants::FLOAT64_LIST_CONST;
+    ASSERT_EQ(4u, listReader.size());
+    EXPECT_EQ(7777.75, listReader[0]);
+    EXPECT_EQ(std::numeric_limits<double>::infinity(), listReader[1]);
+    EXPECT_EQ(-std::numeric_limits<double>::infinity(), listReader[2]);
+    EXPECT_TRUE(listReader[3] != listReader[3]);
+  }
+  checkList(*test::TestConstants::TEXT_LIST_CONST, {"plugh", "xyzzy", "thud"});
+  checkList(*test::TestConstants::DATA_LIST_CONST, {data("oops"), data("exhausted"), data("rfc3092")});
+  {
+    List<TestAllTypes>::Reader listReader = test::TestConstants::STRUCT_LIST_CONST;
+    ASSERT_EQ(3u, listReader.size());
+    EXPECT_EQ("structlist 1", listReader[0].getTextField());
+    EXPECT_EQ("structlist 2", listReader[1].getTextField());
+    EXPECT_EQ("structlist 3", listReader[2].getTextField());
+  }
+  checkList(*test::TestConstants::ENUM_LIST_CONST, {TestEnum::FOO, TestEnum::GARPLY});
+}
+
+TEST(Encoding, GlobalConstants) {
+  EXPECT_EQ(12345u, test::GLOBAL_INT);
+  EXPECT_EQ("foobar", test::GLOBAL_TEXT.get());
+  EXPECT_EQ(54321, test::GLOBAL_STRUCT->getInt32Field());
+
+  TestAllTypes::Reader reader = test::DERIVED_CONSTANT;
+
+  EXPECT_EQ(12345, reader.getUInt32Field());
+  EXPECT_EQ("foo", reader.getTextField());
+  checkList(reader.getStructField().getTextList(), {"quux", "corge", "grault"});
+  checkList(reader.getInt16List(), {11111, -11111});
+  {
+    List<TestAllTypes>::Reader listReader = reader.getStructList();
+    ASSERT_EQ(3u, listReader.size());
+    EXPECT_EQ("structlist 1", listReader[0].getTextField());
+    EXPECT_EQ("structlist 2", listReader[1].getTextField());
+    EXPECT_EQ("structlist 3", listReader[2].getTextField());
+  }
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

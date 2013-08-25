@@ -154,6 +154,11 @@ template <> struct ElementSizeForType<Data> {
   static constexpr FieldSize value = FieldSize::POINTER;
 };
 
+template <typename T>
+inline constexpr FieldSize elementSizeForType() {
+  return ElementSizeForType<T>::value;
+}
+
 }  // namespace _ (private)
 
 // =============================================================================
@@ -629,6 +634,8 @@ public:
   inline ListReader()
       : segment(nullptr), ptr(nullptr), elementCount(0), step(0 * BITS / ELEMENTS),
         structDataSize(0), structPointerCount(0), nestingLimit(0x7fffffff) {}
+
+  static ListReader readRootUnchecked(const word* location, FieldSize elementSize);
 
   inline ElementCount size() const;
   // The number of elements in the list.

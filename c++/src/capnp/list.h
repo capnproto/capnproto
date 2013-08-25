@@ -168,28 +168,28 @@ private:
   inline static _::ListBuilder initAsElementOf(
       _::ListBuilder& builder, uint index, uint size) {
     return builder.initListElement(
-        index * ELEMENTS, _::ElementSizeForType<T>::value, size * ELEMENTS);
+        index * ELEMENTS, _::elementSizeForType<T>(), size * ELEMENTS);
   }
   inline static _::ListBuilder getAsElementOf(
       _::ListBuilder& builder, uint index) {
-    return builder.getListElement(index * ELEMENTS, _::ElementSizeForType<T>::value);
+    return builder.getListElement(index * ELEMENTS, _::elementSizeForType<T>());
   }
   inline static _::ListReader getAsElementOf(
       const _::ListReader& reader, uint index) {
-    return reader.getListElement(index * ELEMENTS, _::ElementSizeForType<T>::value);
+    return reader.getListElement(index * ELEMENTS, _::elementSizeForType<T>());
   }
 
   inline static _::ListBuilder initAsFieldOf(
       _::StructBuilder& builder, WirePointerCount index, uint size) {
-    return builder.initListField(index, _::ElementSizeForType<T>::value, size * ELEMENTS);
+    return builder.initListField(index, _::elementSizeForType<T>(), size * ELEMENTS);
   }
   inline static _::ListBuilder getAsFieldOf(
       _::StructBuilder& builder, WirePointerCount index, const word* defaultValue) {
-    return builder.getListField(index, _::ElementSizeForType<T>::value, defaultValue);
+    return builder.getListField(index, _::elementSizeForType<T>(), defaultValue);
   }
   inline static _::ListReader getAsFieldOf(
       const _::StructReader& reader, WirePointerCount index, const word* defaultValue) {
-    return reader.getListField(index, _::ElementSizeForType<T>::value, defaultValue);
+    return reader.getListField(index, _::elementSizeForType<T>(), defaultValue);
   }
 
   template <typename U, Kind k>

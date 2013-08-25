@@ -2317,6 +2317,11 @@ WordCount64 StructReader::totalSize() const {
 // =======================================================================================
 // ListBuilder
 
+ListReader ListReader::readRootUnchecked(const word* location, FieldSize elementSize) {
+  return WireHelpers::readListPointer(nullptr, reinterpret_cast<const WirePointer*>(location),
+                                      nullptr, elementSize, std::numeric_limits<int>::max());
+}
+
 Text::Builder ListBuilder::asText() {
   KJ_REQUIRE(structDataSize == 8 * BITS && structPointerCount == 0 * POINTERS,
              "Expected Text, got list of non-bytes.") {

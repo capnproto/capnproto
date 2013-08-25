@@ -237,6 +237,42 @@ private:
     KJ_UNREACHABLE;
   }
 
+  kj::StringTree literalValue(schema::Type::Reader type, schema::Value::Reader value) {
+    switch (value.which()) {
+      case schema::Value::VOID: return kj::strTree(" ::capnp::VOID");
+      case schema::Value::BOOL: return kj::strTree(value.getBool() ? "true" : "false");
+      case schema::Value::INT8: return kj::strTree(value.getInt8());
+      case schema::Value::INT16: return kj::strTree(value.getInt16());
+      case schema::Value::INT32: return kj::strTree(value.getInt32());
+      case schema::Value::INT64: return kj::strTree(value.getInt64(), "ll");
+      case schema::Value::UINT8: return kj::strTree(value.getUint8(), "u");
+      case schema::Value::UINT16: return kj::strTree(value.getUint16(), "u");
+      case schema::Value::UINT32: return kj::strTree(value.getUint32(), "u");
+      case schema::Value::UINT64: return kj::strTree(value.getUint64(), "llu");
+      case schema::Value::FLOAT32: return kj::strTree(value.getFloat32(), "f");
+      case schema::Value::FLOAT64: return kj::strTree(value.getFloat64());
+      case schema::Value::ENUM: {
+        EnumSchema schema = schemaLoader.get(type.getEnum()).asEnum();
+        if (value.getEnum() < schema.getEnumerants().size()) {
+          return kj::strTree(
+              cppFullName(schema), "::",
+              toUpperCase(schema.getEnumerants()[value.getEnum()].getProto().getName()));
+        } else {
+          return kj::strTree("static_cast<", cppFullName(schema), ">(", value.getEnum(), ")");
+        }
+      }
+
+      case schema::Value::TEXT:
+      case schema::Value::DATA:
+      case schema::Value::STRUCT:
+      case schema::Value::INTERFACE:
+      case schema::Value::LIST:
+      case schema::Value::OBJECT:
+        KJ_FAIL_REQUIRE("literalValue() can only be used on primitive types.");
+    }
+    KJ_UNREACHABLE;
+  }
+
   // -----------------------------------------------------------------
   // Code to deal with "slots" -- determines what to zero out when we clear a group.
 
@@ -1057,6 +1093,98 @@ private:
 
   // -----------------------------------------------------------------
 
+  struct ConstText {
+    bool needsSchema;
+    kj::StringTree decl;
+    kj::StringTree def;
+  };
+
+  ConstText makeConstText(kj::StringPtr scope, kj::StringPtr name, ConstSchema schema) {
+    auto proto = schema.getProto();
+    auto constProto = proto.getConst();
+    auto type = constProto.getType();
+    auto typeName_ = typeName(type).flatten();
+    auto upperCase = toUpperCase(name);
+
+    // Linkage qualifier for non-primitive types.
+    const char* linkage = scope.size() == 0 ? "extern " : "static ";
+
+    switch (type.which()) {
+      case schema::Value::VOID:
+      case schema::Value::BOOL:
+      case schema::Value::INT8:
+      case schema::Value::INT16:
+      case schema::Value::INT32:
+      case schema::Value::INT64:
+      case schema::Value::UINT8:
+      case schema::Value::UINT16:
+      case schema::Value::UINT32:
+      case schema::Value::UINT64:
+      case schema::Value::FLOAT32:
+      case schema::Value::FLOAT64:
+      case schema::Value::ENUM:
+        return ConstText {
+          false,
+          kj::strTree("static constexpr ", typeName_, ' ', upperCase, " = ",
+              literalValue(constProto.getType(), constProto.getValue()), ";\n"),
+          scope.size() == 0 ? kj::strTree() : kj::strTree(
+              "constexpr ", typeName_, ' ', scope, upperCase, ";\n")
+        };
+
+      case schema::Value::TEXT: {
+        kj::String constType = kj::strTree(
+            "::capnp::_::ConstText<", schema.as<Text>().size(), ">").flatten();
+        return ConstText {
+          true,
+          kj::strTree(linkage, "const ", constType, ' ', upperCase, ";\n"),
+          kj::strTree("const ", constType, ' ', scope, upperCase, "(::capnp::schemas::b_",
+                      kj::hex(proto.getId()), ".words + ", schema.getValueSchemaOffset(), ");\n")
+        };
+      }
+
+      case schema::Value::DATA: {
+        kj::String constType = kj::strTree(
+            "::capnp::_::ConstData<", schema.as<Data>().size(), ">").flatten();
+        return ConstText {
+          true,
+          kj::strTree(linkage, "const ", constType, ' ', upperCase, ";\n"),
+          kj::strTree("const ", constType, ' ', scope, upperCase, "(::capnp::schemas::b_",
+                      kj::hex(proto.getId()), ".words + ", schema.getValueSchemaOffset(), ");\n")
+        };
+      }
+
+      case schema::Value::STRUCT: {
+        kj::String constType = kj::strTree(
+            "::capnp::_::ConstStruct<", typeName_, ">").flatten();
+        return ConstText {
+          true,
+          kj::strTree(linkage, "const ", constType, ' ', upperCase, ";\n"),
+          kj::strTree("const ", constType, ' ', scope, upperCase, "(::capnp::schemas::b_",
+                      kj::hex(proto.getId()), ".words + ", schema.getValueSchemaOffset(), ");\n")
+        };
+      }
+
+      case schema::Value::LIST: {
+        kj::String constType = kj::strTree(
+            "::capnp::_::ConstList<", typeName(type.getList()), ">").flatten();
+        return ConstText {
+          true,
+          kj::strTree(linkage, "const ", constType, ' ', upperCase, ";\n"),
+          kj::strTree("const ", constType, ' ', scope, upperCase, "(::capnp::schemas::b_",
+                      kj::hex(proto.getId()), ".words + ", schema.getValueSchemaOffset(), ");\n")
+        };
+      }
+
+      case schema::Value::OBJECT:
+      case schema::Value::INTERFACE:
+        return ConstText { false, kj::strTree(), kj::strTree() };
+    }
+
+    KJ_UNREACHABLE;
+  }
+
+  // -----------------------------------------------------------------
+
   struct NodeText {
     kj::StringTree outerTypeDecl;
     kj::StringTree outerTypeDef;
@@ -1066,6 +1194,7 @@ private:
     kj::StringTree capnpSchemaDefs;
     kj::StringTree capnpPrivateDecls;
     kj::StringTree capnpPrivateDefs;
+    kj::StringTree sourceFileDefs;
   };
 
   NodeText makeNodeText(kj::StringPtr namespace_, kj::StringPtr scope,
@@ -1231,6 +1360,8 @@ private:
               "CAPNP_DEFINE_STRUCT(\n"
               "    ", namespace_, "::", fullName, ");\n",
               KJ_MAP(n, nestedTexts) { return kj::mv(n.capnpPrivateDefs); }),
+
+          kj::strTree(KJ_MAP(n, nestedTexts) { return kj::mv(n.sourceFileDefs); }),
         };
       }
 
@@ -1266,6 +1397,8 @@ private:
           kj::strTree(
               "CAPNP_DEFINE_ENUM(\n"
               "    ", namespace_, "::", fullName, ");\n"),
+
+          kj::strTree(),
         };
       }
 
@@ -1285,21 +1418,27 @@ private:
           kj::strTree(
               "CAPNP_DEFINE_INTERFACE(\n"
               "    ", namespace_, "::", fullName, ");\n"),
+
+          kj::strTree(),
         };
       }
 
       case schema::Node::CONST: {
+        auto constText = makeConstText(scope, name, schema.asConst());
+
         return NodeText {
-          kj::strTree(),
-          kj::strTree(),
+          scope.size() == 0 ? kj::strTree() : kj::strTree("  ", kj::mv(constText.decl)),
+          scope.size() > 0 ? kj::strTree() : kj::mv(constText.decl),
           kj::strTree(),
           kj::strTree(),
 
-          kj::mv(schemaDecl),
-          kj::mv(schemaDef),
+          constText.needsSchema ? kj::mv(schemaDecl) : kj::strTree(),
+          constText.needsSchema ? kj::mv(schemaDef) : kj::strTree(),
 
           kj::strTree(),
           kj::strTree(),
+
+          kj::mv(constText.def),
         };
       }
 
@@ -1314,6 +1453,8 @@ private:
           kj::mv(schemaDef),
 
           kj::strTree(),
+          kj::strTree(),
+
           kj::strTree(),
         };
       }
@@ -1375,6 +1516,9 @@ private:
         includes.add(import.getName());
       }
     }
+
+    kj::StringTree sourceDefs = kj::strTree(
+        KJ_MAP(n, nodeTexts) { return kj::mv(n.sourceFileDefs); });
 
     return FileText {
       kj::strTree(
@@ -1439,7 +1583,12 @@ private:
           "namespace _ {  // private\n",
           KJ_MAP(n, nodeTexts) { return kj::mv(n.capnpPrivateDefs); },
           "}  // namespace _ (private)\n"
-          "}  // namespace capnp\n")
+          "}  // namespace capnp\n",
+          sourceDefs.size() == 0 ? kj::strTree() : kj::strTree(
+              "\n", separator, "\n",
+              KJ_MAP(n, namespaceParts) { return kj::strTree("namespace ", n, " {\n"); }, "\n",
+              kj::mv(sourceDefs), "\n",
+              KJ_MAP(n, namespaceParts) { return kj::strTree("}  // namespace\n"); }, "\n"))
     };
   }
 
