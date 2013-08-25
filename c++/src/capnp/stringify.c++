@@ -267,7 +267,8 @@ kj::StringTree prettyPrint(DynamicList::Builder value) { return prettyPrint(valu
 kj::StringTree KJ_STRINGIFY(const DynamicValue::Reader& value) { return stringify(value); }
 kj::StringTree KJ_STRINGIFY(const DynamicValue::Builder& value) { return stringify(value.asReader()); }
 kj::StringTree KJ_STRINGIFY(DynamicEnum value) { return stringify(value); }
-kj::StringTree KJ_STRINGIFY(const DynamicObject& value) { return stringify(value); }
+kj::StringTree KJ_STRINGIFY(const DynamicObject::Reader& value) { return stringify(value); }
+kj::StringTree KJ_STRINGIFY(const DynamicObject::Builder& value) { return stringify(value.asReader()); }
 kj::StringTree KJ_STRINGIFY(const DynamicStruct::Reader& value) { return stringify(value); }
 kj::StringTree KJ_STRINGIFY(const DynamicStruct::Builder& value) { return stringify(value.asReader()); }
 kj::StringTree KJ_STRINGIFY(const DynamicList::Reader& value) { return stringify(value); }

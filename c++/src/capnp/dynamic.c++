@@ -125,7 +125,7 @@ uint16_t DynamicEnum::asImpl(uint64_t requestedTypeId) const {
 
 // =======================================================================================
 
-DynamicStruct::Reader DynamicObject::as(StructSchema schema) const {
+DynamicStruct::Reader DynamicObject::Reader::as(StructSchema schema) const {
   if (reader.kind == _::ObjectKind::NULL_POINTER) {
     return DynamicStruct::Reader(schema, _::StructReader());
   }
@@ -136,7 +136,7 @@ DynamicStruct::Reader DynamicObject::as(StructSchema schema) const {
   return DynamicStruct::Reader(schema, reader.structReader);
 }
 
-DynamicList::Reader DynamicObject::as(ListSchema schema) const {
+DynamicList::Reader DynamicObject::Reader::as(ListSchema schema) const {
   if (reader.kind == _::ObjectKind::NULL_POINTER) {
     return DynamicList::Reader(schema, _::ListReader());
   }
@@ -206,14 +206,13 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
 
       switch (type.which()) {
         case schema::Type::VOID:
-          return DynamicValue::Reader(
-              reader.getDataField<Void>(nonGroup.getOffset() * ELEMENTS));
+          return reader.getDataField<Void>(nonGroup.getOffset() * ELEMENTS);
 
 #define HANDLE_TYPE(discrim, titleCase, type) \
         case schema::Type::discrim: \
-          return DynamicValue::Reader(reader.getDataField<type>( \
+          return reader.getDataField<type>( \
               nonGroup.getOffset() * ELEMENTS, \
-              bitCast<_::Mask<type>>(dval.get##titleCase())));
+              bitCast<_::Mask<type>>(dval.get##titleCase()));
 
         HANDLE_TYPE(BOOL, Bool, bool)
         HANDLE_TYPE(INT8, Int8, int8_t)
@@ -232,45 +231,43 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
         case schema::Type::ENUM: {
           uint16_t typedDval;
           typedDval = dval.getEnum();
-          return DynamicValue::Reader(DynamicEnum(
+          return DynamicEnum(
               field.getContainingStruct().getDependency(type.getEnum()).asEnum(),
-              reader.getDataField<uint16_t>(nonGroup.getOffset() * ELEMENTS, typedDval)));
+              reader.getDataField<uint16_t>(nonGroup.getOffset() * ELEMENTS, typedDval));
         }
 
         case schema::Type::TEXT: {
           Text::Reader typedDval = dval.getText();
-          return DynamicValue::Reader(
-              reader.getBlobField<Text>(nonGroup.getOffset() * POINTERS,
-                                        typedDval.begin(), typedDval.size() * BYTES));
+          return reader.getBlobField<Text>(nonGroup.getOffset() * POINTERS,
+                                           typedDval.begin(), typedDval.size() * BYTES);
         }
 
         case schema::Type::DATA: {
           Data::Reader typedDval = dval.getData();
-          return DynamicValue::Reader(
-              reader.getBlobField<Data>(nonGroup.getOffset() * POINTERS,
-                                        typedDval.begin(), typedDval.size() * BYTES));
+          return reader.getBlobField<Data>(nonGroup.getOffset() * POINTERS,
+                                           typedDval.begin(), typedDval.size() * BYTES);
         }
 
         case schema::Type::LIST: {
           auto elementType = type.getList();
-          return DynamicValue::Reader(DynamicList::Reader(
+          return DynamicList::Reader(
               ListSchema::of(elementType, field.getContainingStruct()),
               reader.getListField(nonGroup.getOffset() * POINTERS,
                                   elementSizeFor(elementType.which()),
-                                  dval.getList<_::UncheckedMessage>())));
+                                  dval.getList<_::UncheckedMessage>()));
         }
 
         case schema::Type::STRUCT: {
-          return DynamicValue::Reader(DynamicStruct::Reader(
+          return DynamicStruct::Reader(
               field.getContainingStruct().getDependency(type.getStruct()).asStruct(),
               reader.getStructField(nonGroup.getOffset() * POINTERS,
-                                    dval.getStruct<_::UncheckedMessage>())));
+                                    dval.getStruct<_::UncheckedMessage>()));
         }
 
         case schema::Type::OBJECT: {
-          return DynamicValue::Reader(DynamicObject(
+          return DynamicObject::Reader(
               reader.getObjectField(nonGroup.getOffset() * POINTERS,
-                                    dval.getObject<_::UncheckedMessage>())));
+                                    dval.getObject<_::UncheckedMessage>()));
         }
 
         case schema::Type::INTERFACE:
@@ -369,8 +366,8 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
         }
 
         case schema::Type::OBJECT: {
-          return DynamicObject(
-              builder.asReader().getObjectField(
+          return DynamicObject::Builder(
+              builder.getObjectField(
                   nonGroup.getOffset() * POINTERS,
                   dval.getObject<_::UncheckedMessage>()));
         }
@@ -890,7 +887,7 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) const {
   switch (schema.whichElementType()) {
 #define HANDLE_TYPE(name, discrim, typeName) \
     case schema::Type::discrim: \
-      return DynamicValue::Reader(reader.getDataElement<typeName>(index * ELEMENTS));
+      return reader.getDataElement<typeName>(index * ELEMENTS);
 
     HANDLE_TYPE(void, VOID, Void)
     HANDLE_TYPE(bool, BOOL, bool)
@@ -907,28 +904,26 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) const {
 #undef HANDLE_TYPE
 
     case schema::Type::TEXT:
-      return DynamicValue::Reader(reader.getBlobElement<Text>(index * ELEMENTS));
+      return reader.getBlobElement<Text>(index * ELEMENTS);
     case schema::Type::DATA:
-      return DynamicValue::Reader(reader.getBlobElement<Data>(index * ELEMENTS));
+      return reader.getBlobElement<Data>(index * ELEMENTS);
 
     case schema::Type::LIST: {
       auto elementType = schema.getListElementType();
-      return DynamicValue::Reader(DynamicList::Reader(
-          elementType, reader.getListElement(
-              index * ELEMENTS, elementSizeFor(elementType.whichElementType()))));
+      return DynamicList::Reader(elementType, reader.getListElement(
+          index * ELEMENTS, elementSizeFor(elementType.whichElementType())));
     }
 
     case schema::Type::STRUCT:
-      return DynamicValue::Reader(DynamicStruct::Reader(
-          schema.getStructElementType(), reader.getStructElement(index * ELEMENTS)));
+      return DynamicStruct::Reader(schema.getStructElementType(),
+                                   reader.getStructElement(index * ELEMENTS));
 
     case schema::Type::ENUM:
-      return DynamicValue::Reader(DynamicEnum(
-          schema.getEnumElementType(), reader.getDataElement<uint16_t>(index * ELEMENTS)));
+      return DynamicEnum(schema.getEnumElementType(),
+                         reader.getDataElement<uint16_t>(index * ELEMENTS));
 
     case schema::Type::OBJECT:
-      return DynamicValue::Reader(DynamicObject(
-          reader.getObjectElement(index * ELEMENTS)));
+      return DynamicObject::Reader(reader.getObjectElement(index * ELEMENTS));
 
     case schema::Type::INTERFACE:
       KJ_FAIL_ASSERT("Interfaces not implemented.") {
@@ -945,7 +940,7 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) {
   switch (schema.whichElementType()) {
 #define HANDLE_TYPE(name, discrim, typeName) \
     case schema::Type::discrim: \
-      return DynamicValue::Builder(builder.getDataElement<typeName>(index * ELEMENTS));
+      return builder.getDataElement<typeName>(index * ELEMENTS);
 
     HANDLE_TYPE(void, VOID, Void)
     HANDLE_TYPE(bool, BOOL, bool)
@@ -962,32 +957,32 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) {
 #undef HANDLE_TYPE
 
     case schema::Type::TEXT:
-      return DynamicValue::Builder(builder.getBlobElement<Text>(index * ELEMENTS));
+      return builder.getBlobElement<Text>(index * ELEMENTS);
     case schema::Type::DATA:
-      return DynamicValue::Builder(builder.getBlobElement<Data>(index * ELEMENTS));
+      return builder.getBlobElement<Data>(index * ELEMENTS);
 
     case schema::Type::LIST: {
       ListSchema elementType = schema.getListElementType();
       if (elementType.whichElementType() == schema::Type::STRUCT) {
-        return DynamicValue::Builder(DynamicList::Builder(elementType,
+        return DynamicList::Builder(elementType,
             builder.getStructListElement(
                 index * ELEMENTS,
-                structSizeFromSchema(elementType.getStructElementType()))));
+                structSizeFromSchema(elementType.getStructElementType())));
       } else {
-        return DynamicValue::Builder(DynamicList::Builder(elementType,
+        return DynamicList::Builder(elementType,
             builder.getListElement(
                 index * ELEMENTS,
-                elementSizeFor(elementType.whichElementType()))));
+                elementSizeFor(elementType.whichElementType())));
       }
     }
 
     case schema::Type::STRUCT:
-      return DynamicValue::Builder(DynamicStruct::Builder(
-          schema.getStructElementType(), builder.getStructElement(index * ELEMENTS)));
+      return DynamicStruct::Builder(schema.getStructElementType(),
+                                    builder.getStructElement(index * ELEMENTS));
 
     case schema::Type::ENUM:
-      return DynamicValue::Builder(DynamicEnum(
-          schema.getEnumElementType(), builder.getDataElement<uint16_t>(index * ELEMENTS)));
+      return DynamicEnum(schema.getEnumElementType(),
+                         builder.getDataElement<uint16_t>(index * ELEMENTS));
 
     case schema::Type::OBJECT:
       KJ_FAIL_ASSERT("List(Object) not supported.");
@@ -1103,24 +1098,24 @@ DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
       return nullptr;
 
     case schema::Type::TEXT:
-      return DynamicValue::Builder(builder.initBlobElement<Text>(index * ELEMENTS, size * BYTES));
+      return builder.initBlobElement<Text>(index * ELEMENTS, size * BYTES);
 
     case schema::Type::DATA:
-      return DynamicValue::Builder(builder.initBlobElement<Data>(index * ELEMENTS, size * BYTES));
+      return builder.initBlobElement<Data>(index * ELEMENTS, size * BYTES);
 
     case schema::Type::LIST: {
       auto elementType = schema.getListElementType();
 
       if (elementType.whichElementType() == schema::Type::STRUCT) {
-        return DynamicValue::Builder(DynamicList::Builder(
+        return DynamicList::Builder(
             elementType, builder.initStructListElement(
                 index * ELEMENTS, size * ELEMENTS,
-                structSizeFromSchema(elementType.getStructElementType()))));
+                structSizeFromSchema(elementType.getStructElementType())));
       } else {
-        return DynamicValue::Builder(DynamicList::Builder(
+        return DynamicList::Builder(
             elementType, builder.initListElement(
                 index * ELEMENTS, elementSizeFor(elementType.whichElementType()),
-                size * ELEMENTS)));
+                size * ELEMENTS));
       }
     }
 
@@ -1147,6 +1142,47 @@ DynamicList::Reader DynamicList::Builder::asReader() const {
 
 // =======================================================================================
 
+DynamicValue::Reader::Reader(ConstSchema constant) {
+  auto typeSchema = constant.getProto().getConst().getType();
+  auto value = constant.getProto().getConst().getValue();
+  switch (typeSchema.which()) {
+    case schema::Type::VOID: *this = capnp::VOID; break;
+    case schema::Type::BOOL: *this = value.getBool(); break;
+    case schema::Type::INT8: *this = value.getInt8(); break;
+    case schema::Type::INT16: *this = value.getInt16(); break;
+    case schema::Type::INT32: *this = value.getInt32(); break;
+    case schema::Type::INT64: *this = value.getInt64(); break;
+    case schema::Type::UINT8: *this = value.getUint8(); break;
+    case schema::Type::UINT16: *this = value.getUint16(); break;
+    case schema::Type::UINT32: *this = value.getUint32(); break;
+    case schema::Type::UINT64: *this = value.getUint64(); break;
+    case schema::Type::FLOAT32: *this = value.getFloat32(); break;
+    case schema::Type::FLOAT64: *this = value.getFloat64(); break;
+    case schema::Type::TEXT: *this = value.getText(); break;
+    case schema::Type::DATA: *this = value.getData(); break;
+
+    case schema::Type::ENUM:
+      *this = DynamicEnum(constant.getDependency(typeSchema.getEnum()).asEnum(), value.getEnum());
+      break;
+
+    case schema::Type::STRUCT:
+      *this = value.getStruct<DynamicStruct>(
+          constant.getDependency(typeSchema.getStruct()).asStruct());
+      break;
+
+    case schema::Type::LIST:
+      *this = value.getList<DynamicList>(ListSchema::of(typeSchema.getList(), constant));
+      break;
+
+    case schema::Type::OBJECT:
+      *this = value.getObject<DynamicObject>();
+      break;
+
+    case schema::Type::INTERFACE:
+      KJ_FAIL_ASSERT("Constants can't have interface type.");
+  }
+}
+
 DynamicValue::Reader DynamicValue::Builder::asReader() const {
   switch (type) {
     case UNKNOWN: return Reader();
@@ -1161,7 +1197,7 @@ DynamicValue::Reader DynamicValue::Builder::asReader() const {
     case ENUM: return Reader(enumValue);
     case STRUCT: return Reader(structValue.asReader());
     case INTERFACE: KJ_FAIL_ASSERT("Interfaces not implemented."); return Reader();
-    case OBJECT: return Reader(objectValue);
+    case OBJECT: return Reader(objectValue.asReader());
   }
   KJ_FAIL_ASSERT("Missing switch case.");
   return Reader();
@@ -1405,6 +1441,16 @@ DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::init(
     return DynamicList::Builder(schema,
         builder.initListField(index, elementSizeFor(schema.whichElementType()), size * ELEMENTS));
   }
+}
+
+DynamicObject::Reader PointerHelpers<DynamicObject, Kind::UNKNOWN>::get(
+    StructReader reader, WirePointerCount index) {
+  return DynamicObject::Reader(reader.getObjectField(index, nullptr));
+}
+
+DynamicObject::Builder PointerHelpers<DynamicObject, Kind::UNKNOWN>::get(
+    StructBuilder builder, WirePointerCount index) {
+  return DynamicObject::Builder(builder.getObjectField(index, nullptr));
 }
 
 }  // namespace _ (private)

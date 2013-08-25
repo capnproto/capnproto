@@ -32,6 +32,7 @@ class Schema;
 class StructSchema;
 class EnumSchema;
 class InterfaceSchema;
+class ConstSchema;
 class ListSchema;
 
 template <typename T, Kind k = kind<T>()> struct SchemaType_ { typedef Schema Type; };
@@ -57,6 +58,8 @@ public:
   // Get the Schema for a particular compiled-in type.
 
   schema::Node::Reader getProto() const;
+  // Get the underlying Cap'n Proto representation of the schema node.  (Note that this accessor
+  // has performance comparable to accessors of struct-typed fields on Reader classes.)
 
   kj::ArrayPtr<const word> asUncheckedMessage() const;
   // Get the encoded schema node content as a single message segment.  It is safe to read as an
@@ -84,7 +87,9 @@ public:
   StructSchema asStruct() const;
   EnumSchema asEnum() const;
   InterfaceSchema asInterface() const;
-  // Cast the Schema to a specific type.  Throws an exception if the type doesn't match.
+  ConstSchema asConst() const;
+  // Cast the Schema to a specific type.  Throws an exception if the type doesn't match.  Use
+  // getProto() to determine type, e.g. getProto().isStruct().
 
   inline bool operator==(const Schema& other) const { return raw == other.raw; }
   inline bool operator!=(const Schema& other) const { return raw != other.raw; }
@@ -114,9 +119,12 @@ private:
 
   void requireUsableAs(const _::RawSchema* expected) const;
 
+  uint32_t getSchemaOffset(const schema::Value::Reader& value) const;
+
   friend class StructSchema;
   friend class EnumSchema;
   friend class InterfaceSchema;
+  friend class ConstSchema;
   friend class ListSchema;
   friend class SchemaLoader;
 };
@@ -397,6 +405,32 @@ private:
       : parent(parent), list(list) {}
 
   friend class InterfaceSchema;
+};
+
+// -------------------------------------------------------------------
+
+class ConstSchema: public Schema {
+  // Represents a constant declaration.
+  //
+  // `ConstSchema` can be implicitly cast to DynamicValue to read its value.
+
+public:
+  ConstSchema() = default;
+
+  template <typename T>
+  ReaderFor<T> as() const;
+  // Read the constant's value.  This is a convenience method equivalent to casting the ConstSchema
+  // to a DynamicValue and then calling its `as<T>()` method.  For dependency reasons, this method
+  // is defined in <capnp/dynamic.h>, which you must #include explicitly.
+
+  uint32_t getValueSchemaOffset() const;
+  // Much like StructSchema::Field::getDefaultValueSchemaOffset(), if the constant has pointer
+  // type, this gets the offset from the beginning of the constant's schema node to a pointer
+  // representing the constant value.
+
+private:
+  ConstSchema(const _::RawSchema* raw): Schema(raw) {}
+  friend class Schema;
 };
 
 // -------------------------------------------------------------------

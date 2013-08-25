@@ -91,7 +91,7 @@ TEST(SchemaParser, Basic) {
   };
 
   ParsedSchema barSchema = parser.parseFile(SchemaFile::newDiskFile(
-      kj::str("foo2/bar2.capnp"), kj::str("src/foo/bar.capnp"), importPath, reader));
+      "foo2/bar2.capnp", "src/foo/bar.capnp", importPath, reader));
 
   auto barProto = barSchema.getProto();
   EXPECT_EQ(0x8123456789abcdefull, barProto.getId());
@@ -110,24 +110,24 @@ TEST(SchemaParser, Basic) {
   EXPECT_EQ(0x856789abcdef1234ull, getFieldTypeFileId(barFields[3]));
 
   auto bazSchema = parser.parseFile(SchemaFile::newDiskFile(
-      kj::str("not/used/because/already/loaded"),
-      kj::str("src/foo/baz.capnp"), importPath, reader));
+      "not/used/because/already/loaded",
+      "src/foo/baz.capnp", importPath, reader));
   EXPECT_EQ(0x823456789abcdef1ull, bazSchema.getProto().getId());
   EXPECT_EQ("foo2/baz.capnp", bazSchema.getProto().getDisplayName());
   auto bazStruct = bazSchema.getNested("Baz").asStruct();
   EXPECT_EQ(bazStruct, barStruct.getDependency(bazStruct.getProto().getId()));
 
   auto corgeSchema = parser.parseFile(SchemaFile::newDiskFile(
-      kj::str("not/used/because/already/loaded"),
-      kj::str("src/qux/corge.capnp"), importPath, reader));
+      "not/used/because/already/loaded",
+      "src/qux/corge.capnp", importPath, reader));
   EXPECT_EQ(0x83456789abcdef12ull, corgeSchema.getProto().getId());
   EXPECT_EQ("qux/corge.capnp", corgeSchema.getProto().getDisplayName());
   auto corgeStruct = corgeSchema.getNested("Corge").asStruct();
   EXPECT_EQ(corgeStruct, barStruct.getDependency(corgeStruct.getProto().getId()));
 
   auto graultSchema = parser.parseFile(SchemaFile::newDiskFile(
-      kj::str("not/used/because/already/loaded"),
-      kj::str("/usr/include/grault.capnp"), importPath, reader));
+      "not/used/because/already/loaded",
+      "/usr/include/grault.capnp", importPath, reader));
   EXPECT_EQ(0x8456789abcdef123ull, graultSchema.getProto().getId());
   EXPECT_EQ("grault.capnp", graultSchema.getProto().getDisplayName());
   auto graultStruct = graultSchema.getNested("Grault").asStruct();
@@ -136,10 +136,44 @@ TEST(SchemaParser, Basic) {
   // Try importing the other grault.capnp directly.  It'll get the display name we specify since
   // it wasn't imported before.
   auto wrongGraultSchema = parser.parseFile(SchemaFile::newDiskFile(
-      kj::str("weird/display/name.capnp"),
-      kj::str("/opt/include/grault.capnp"), importPath, reader));
+      "weird/display/name.capnp",
+      "/opt/include/grault.capnp", importPath, reader));
   EXPECT_EQ(0x8000000000000001ull, wrongGraultSchema.getProto().getId());
   EXPECT_EQ("weird/display/name.capnp", wrongGraultSchema.getProto().getDisplayName());
+}
+
+TEST(SchemaParser, Constants) {
+  // This is actually a test of the full dynamic API stack for constants, because the schemas for
+  // constants are not actually accessible from the generated code API, so the only way to ever
+  // get a ConstSchema is by parsing it.
+
+  SchemaParser parser;
+  FakeFileReader reader;
+
+  reader.add("const.capnp",
+      "@0x8123456789abcdef;\n"
+      "const uint32Const :UInt32 = 1234;\n"
+      "const listConst :List(Float32) = [1.25, 2.5, 3e4];\n"
+      "const structConst :Foo = (bar = 123, baz = \"qux\");\n"
+      "struct Foo {\n"
+      "  bar @0 :Int16;\n"
+      "  baz @1 :Text;\n"
+      "}\n");
+
+  ParsedSchema barSchema = parser.parseFile(SchemaFile::newDiskFile(
+      "const.capnp", "const.capnp", nullptr, reader));
+
+  EXPECT_EQ(1234, barSchema.getNested("uint32Const").asConst().as<uint32_t>());
+
+  auto list = barSchema.getNested("listConst").asConst().as<DynamicList>();
+  ASSERT_EQ(3u, list.size());
+  EXPECT_EQ(1.25, list[0].as<float>());
+  EXPECT_EQ(2.5, list[1].as<float>());
+  EXPECT_EQ(3e4f, list[2].as<float>());
+
+  auto structConst = barSchema.getNested("structConst").asConst().as<DynamicStruct>();
+  EXPECT_EQ(123, structConst.get("bar").as<int16_t>());
+  EXPECT_EQ("qux", structConst.get("baz").as<Text>());
 }
 
 }  // namespace

@@ -77,10 +77,43 @@ InterfaceSchema Schema::asInterface() const {
   return InterfaceSchema(raw);
 }
 
+ConstSchema Schema::asConst() const {
+  KJ_REQUIRE(getProto().isConst(), "Tried to use non-constant schema as a constant.",
+             getProto().getDisplayName());
+  return ConstSchema(raw);
+}
+
 void Schema::requireUsableAs(const _::RawSchema* expected) const {
   KJ_REQUIRE(raw == expected ||
           (raw != nullptr && expected != nullptr && raw->canCastTo == expected),
           "This schema is not compatible with the requested native type.");
+}
+
+uint32_t Schema::getSchemaOffset(const schema::Value::Reader& value) const {
+  const word* ptr;
+
+  switch (value.which()) {
+    case schema::Value::TEXT:
+      ptr = reinterpret_cast<const word*>(value.getText().begin());
+      break;
+    case schema::Value::DATA:
+      ptr = reinterpret_cast<const word*>(value.getData().begin());
+      break;
+    case schema::Value::STRUCT:
+      ptr = value.getStruct<_::UncheckedMessage>();
+      break;
+    case schema::Value::LIST:
+      ptr = value.getList<_::UncheckedMessage>();
+      break;
+    case schema::Value::OBJECT:
+      ptr = value.getObject<_::UncheckedMessage>();
+      break;
+    default:
+      KJ_FAIL_ASSERT("getDefaultValueSchemaOffset() can only be called on struct, list, "
+                     "and object fields.");
+  }
+
+  return ptr - raw->encodedNode;
 }
 
 // =======================================================================================
@@ -156,31 +189,7 @@ kj::Maybe<StructSchema::Field> StructSchema::getFieldByDiscriminant(uint16_t dis
 }
 
 uint32_t StructSchema::Field::getDefaultValueSchemaOffset() const {
-  auto defaultValue = proto.getNonGroup().getDefaultValue();
-  const word* ptr;
-
-  switch (defaultValue.which()) {
-    case schema::Value::TEXT:
-      ptr = reinterpret_cast<const word*>(defaultValue.getText().begin());
-      break;
-    case schema::Value::DATA:
-      ptr = reinterpret_cast<const word*>(defaultValue.getData().begin());
-      break;
-    case schema::Value::STRUCT:
-      ptr = defaultValue.getStruct<_::UncheckedMessage>();
-      break;
-    case schema::Value::LIST:
-      ptr = defaultValue.getList<_::UncheckedMessage>();
-      break;
-    case schema::Value::OBJECT:
-      ptr = defaultValue.getObject<_::UncheckedMessage>();
-      break;
-    default:
-      KJ_FAIL_ASSERT("getDefaultValueSchemaOffset() can only be called on struct, list, "
-                     "and object fields.");
-  }
-
-  return ptr - parent.raw->encodedNode;
+  return parent.getSchemaOffset(proto.getNonGroup().getDefaultValue());
 }
 
 // -------------------------------------------------------------------
@@ -217,6 +226,12 @@ InterfaceSchema::Method InterfaceSchema::getMethodByName(kj::StringPtr name) con
   } else {
     KJ_FAIL_REQUIRE("interface has no such method", name);
   }
+}
+
+// -------------------------------------------------------------------
+
+uint32_t ConstSchema::getValueSchemaOffset() const {
+  return getSchemaOffset(getProto().getConst().getValue());
 }
 
 // =======================================================================================

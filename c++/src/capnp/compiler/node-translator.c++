@@ -1724,7 +1724,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
 
       if (constValue.getType() == DynamicValue::OBJECT) {
         // We need to assign an appropriate schema to this object.
-        DynamicObject objValue = constValue.as<DynamicObject>();
+        DynamicObject::Reader objValue = constValue.as<DynamicObject>();
         auto constType = constReader.getType();
         switch (constType.which()) {
           case schema::Type::STRUCT:

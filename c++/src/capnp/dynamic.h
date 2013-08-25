@@ -71,7 +71,11 @@ struct DynamicValue {
   class Builder;
 };
 class DynamicEnum;
-class DynamicObject;
+struct DynamicObject {
+  DynamicObject() = delete;
+  class Reader;
+  class Builder;
+};
 struct DynamicStruct {
   DynamicStruct() = delete;
   class Reader;
@@ -134,19 +138,18 @@ private:
 
   friend struct DynamicStruct;
   friend struct DynamicList;
+  friend struct DynamicValue;
   template <typename T>
   friend DynamicTypeFor<TypeIfEnum<T>> toDynamic(T&& value);
 };
 
 // -------------------------------------------------------------------
 
-class DynamicObject {
-  // Represents an "Object" field of unknown type.  This class behaves as a Reader.  There is no
-  // equivalent Builder; you must use getObject() or initObject() on the containing struct and
-  // specify a type if you want to build an Object field.
+class DynamicObject::Reader {
+  // Represents an "Object" field of unknown type.
 
 public:
-  DynamicObject() = default;
+  Reader() = default;
 
   template <typename T>
   inline typename T::Reader as() const { return AsImpl<T>::apply(*this); }
@@ -158,7 +161,7 @@ public:
 private:
   _::ObjectReader reader;
 
-  inline DynamicObject(_::ObjectReader reader): reader(reader) {}
+  inline Reader(_::ObjectReader reader): reader(reader) {}
 
   template <typename T, Kind kind = kind<T>()> struct AsImpl;
   // Implementation backing the as() method.  Needs to be a struct to allow partial
@@ -166,6 +169,34 @@ private:
 
   friend struct DynamicStruct;
   friend struct DynamicList;
+  template <typename T, Kind K>
+  friend struct _::PointerHelpers;
+  friend class DynamicObject::Builder;
+};
+
+class DynamicObject::Builder: kj::DisallowConstCopy {
+  // Represents an "Object" field of unknown type.
+  //
+  // You can't actually do anything with a DynamicObject::Builder except read it.  It can't be
+  // converted to a Builder for any specific type because that could require initializing or
+  // updating the pointer that points *to* this object.  Therefore, you must call
+  // DynamicStruct::Builder::{get,set,init}Object() and pass a type schema to build object fields.
+
+public:
+  Builder() = default;
+  Builder(Builder&) = default;
+  Builder(Builder&&) = default;
+
+  Reader asReader() const { return Reader(builder.asReader()); }
+
+private:
+  _::ObjectBuilder builder;
+
+  inline Builder(_::ObjectBuilder builder): builder(builder) {}
+  friend struct DynamicStruct;
+  friend struct DynamicList;
+  template <typename T, Kind K>
+  friend struct _::PointerHelpers;
 };
 
 // -------------------------------------------------------------------
@@ -219,7 +250,7 @@ private:
 
   template <typename T, Kind K>
   friend struct _::PointerHelpers;
-  friend class DynamicObject;
+  friend struct DynamicObject;
   friend class DynamicStruct::Builder;
   friend struct DynamicList;
   friend class MessageReader;
@@ -366,7 +397,7 @@ private:
   template <typename T, Kind k>
   friend struct _::PointerHelpers;
   friend struct DynamicStruct;
-  friend class DynamicObject;
+  friend struct DynamicObject;
   friend class DynamicList::Builder;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
@@ -428,8 +459,8 @@ private:
 
 template <> struct ReaderFor_ <DynamicEnum, Kind::UNKNOWN> { typedef DynamicEnum Type; };
 template <> struct BuilderFor_<DynamicEnum, Kind::UNKNOWN> { typedef DynamicEnum Type; };
-template <> struct ReaderFor_ <DynamicObject, Kind::UNKNOWN> { typedef DynamicObject Type; };
-template <> struct BuilderFor_<DynamicObject, Kind::UNKNOWN> { typedef DynamicObject Type; };
+template <> struct ReaderFor_ <DynamicObject, Kind::UNKNOWN> { typedef DynamicObject::Reader Type; };
+template <> struct BuilderFor_<DynamicObject, Kind::UNKNOWN> { typedef DynamicObject::Builder Type; };
 template <> struct ReaderFor_ <DynamicStruct, Kind::UNKNOWN> { typedef DynamicStruct::Reader Type; };
 template <> struct BuilderFor_<DynamicStruct, Kind::UNKNOWN> { typedef DynamicStruct::Builder Type; };
 template <> struct ReaderFor_ <DynamicList, Kind::UNKNOWN> { typedef DynamicList::Reader Type; };
@@ -461,7 +492,8 @@ public:
   inline Reader(const DynamicList::Reader& value);
   inline Reader(DynamicEnum value);
   inline Reader(const DynamicStruct::Reader& value);
-  inline Reader(DynamicObject value);
+  inline Reader(const DynamicObject::Reader& value);
+  Reader(ConstSchema constant);
 
   template <typename T, typename = decltype(toDynamic(kj::instance<T>()))>
   inline Reader(T value): Reader(toDynamic(value)) {}
@@ -505,7 +537,7 @@ private:
     DynamicList::Reader listValue;
     DynamicEnum enumValue;
     DynamicStruct::Reader structValue;
-    DynamicObject objectValue;
+    DynamicObject::Reader objectValue;
   };
 
   template <typename T, Kind kind = kind<T>()> struct AsImpl;
@@ -538,7 +570,7 @@ public:
   inline Builder(DynamicList::Builder value);
   inline Builder(DynamicEnum value);
   inline Builder(DynamicStruct::Builder value);
-  inline Builder(DynamicObject value);
+  inline Builder(DynamicObject::Builder value);
 
   template <typename T, typename = decltype(toDynamic(kj::instance<T>()))>
   inline Builder(T value): Builder(toDynamic(value)) {}
@@ -551,6 +583,13 @@ public:
   // Get the type of this value.
 
   Reader asReader() const;
+
+  inline Builder(Builder& other) { memcpy(this, &other, sizeof(*this)); }
+  inline Builder(Builder&& other) { memcpy(this, &other, sizeof(*this)); }
+  static_assert(__has_trivial_copy(StructSchema) && __has_trivial_copy(ListSchema),
+                "Assumptions made here do not hold.");
+  // Hack:  We know this type is trivially constructable but the use of DisallowConstCopy causes
+  //   the compiler to believe otherwise.
 
 private:
   Type type;
@@ -566,7 +605,7 @@ private:
     DynamicList::Builder listValue;
     DynamicEnum enumValue;
     DynamicStruct::Builder structValue;
-    DynamicObject objectValue;
+    DynamicObject::Builder objectValue;
   };
 
   template <typename T, Kind kind = kind<T>()> struct AsImpl;
@@ -577,7 +616,8 @@ private:
 kj::StringTree KJ_STRINGIFY(const DynamicValue::Reader& value);
 kj::StringTree KJ_STRINGIFY(const DynamicValue::Builder& value);
 kj::StringTree KJ_STRINGIFY(DynamicEnum value);
-kj::StringTree KJ_STRINGIFY(const DynamicObject& value);
+kj::StringTree KJ_STRINGIFY(const DynamicObject::Reader& value);
+kj::StringTree KJ_STRINGIFY(const DynamicObject::Builder& value);
 kj::StringTree KJ_STRINGIFY(const DynamicStruct::Reader& value);
 kj::StringTree KJ_STRINGIFY(const DynamicStruct::Builder& value);
 kj::StringTree KJ_STRINGIFY(const DynamicList::Reader& value);
@@ -726,6 +766,14 @@ struct PointerHelpers<DynamicList, Kind::UNKNOWN> {
   }
 };
 
+template <>
+struct PointerHelpers<DynamicObject, Kind::UNKNOWN> {
+  // DynamicObject can only be used with get().
+
+  static DynamicObject::Reader get(StructReader reader, WirePointerCount index);
+  static DynamicObject::Builder get(StructBuilder builder, WirePointerCount index);
+};
+
 }  // namespace _ (private)
 
 // =======================================================================================
@@ -789,7 +837,6 @@ CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(unsigned long long, UINT, uint);
 CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(float, FLOAT, float);
 CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(double, FLOAT, float);
 CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicEnum, ENUM, enum);
-CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicObject, OBJECT, object);
 #undef CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR
 
 #define CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(cppType, typeTag, fieldName) \
@@ -802,6 +849,7 @@ CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Text, TEXT, text);
 CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Data, DATA, data);
 CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicList, LIST, list);
 CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicStruct, STRUCT, struct);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicObject, OBJECT, object);
 
 #undef CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR
 
@@ -891,15 +939,15 @@ struct DynamicValue::Builder::AsImpl<T, Kind::LIST> {
 // -------------------------------------------------------------------
 
 template <typename T>
-struct DynamicObject::AsImpl<T, Kind::STRUCT> {
-  static T apply(DynamicObject value) {
+struct DynamicObject::Reader::AsImpl<T, Kind::STRUCT> {
+  static T apply(DynamicObject::Reader value) {
     return value.as(Schema::from<T>()).template as<T>();
   }
 };
 
 template <typename T>
-struct DynamicObject::AsImpl<T, Kind::LIST> {
-  static T apply(DynamicObject value) {
+struct DynamicObject::Reader::AsImpl<T, Kind::LIST> {
+  static T apply(DynamicObject::Reader value) {
     return value.as(Schema::from<T>()).template as<T>();
   }
 };
@@ -958,6 +1006,13 @@ inline DynamicList::Reader DynamicList::Reader::as<DynamicList>() const {
 template <>
 inline DynamicList::Builder DynamicList::Builder::as<DynamicList>() {
   return *this;
+}
+
+// -------------------------------------------------------------------
+
+template <typename T>
+ReaderFor<T> ConstSchema::as() const {
+  return DynamicValue::Reader(*this).as<T>();
 }
 
 }  // namespace capnp

@@ -2537,6 +2537,18 @@ ObjectReader ListReader::getObjectElement(ElementCount index) const {
       segment, checkAlignment(ptr + index * step / BITS_PER_BYTE), nullptr, nestingLimit);
 }
 
+ObjectReader ObjectBuilder::asReader() const {
+  switch (kind) {
+    case ObjectKind::NULL_POINTER:
+      return ObjectReader();
+    case ObjectKind::STRUCT:
+      return ObjectReader(structBuilder.asReader());
+    case ObjectKind::LIST:
+      return ObjectReader(listBuilder.asReader());
+  }
+  KJ_UNREACHABLE;
+}
+
 // =======================================================================================
 // OrphanBuilder
 

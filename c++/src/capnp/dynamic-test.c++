@@ -193,7 +193,9 @@ TEST(DynamicApi, DynamicGenericObjects) {
   checkDynamicTestMessage(
       root.asReader().get("objectField").as<DynamicObject>().as(Schema::from<TestAllTypes>()));
   checkDynamicTestMessage(
-      root.get("objectField").as<DynamicObject>().as(Schema::from<TestAllTypes>()));
+      root.asReader().get("objectField").as<DynamicObject>().as(Schema::from<TestAllTypes>()));
+  checkDynamicTestMessage(
+      root.get("objectField").as<DynamicObject>().asReader().as(Schema::from<TestAllTypes>()));
   checkDynamicTestMessage(
       root.getObject("objectField", Schema::from<TestAllTypes>()));
 
@@ -219,7 +221,10 @@ TEST(DynamicApi, DynamicGenericObjects) {
         root.asReader().get("objectField").as<DynamicObject>().as(Schema::from<List<uint32_t>>()),
         {123u, 456u, 789u, 123456789u});
     checkList<uint32_t>(
-        root.get("objectField").as<DynamicObject>().as(Schema::from<List<uint32_t>>()),
+        root.asReader().get("objectField").as<DynamicObject>().as(Schema::from<List<uint32_t>>()),
+        {123u, 456u, 789u, 123456789u});
+    checkList<uint32_t>(
+        root.get("objectField").as<DynamicObject>().asReader().as(Schema::from<List<uint32_t>>()),
         {123u, 456u, 789u, 123456789u});
     checkList<uint32_t>(
         root.getObject("objectField", Schema::from<List<uint32_t>>()),

@@ -710,6 +710,14 @@ struct ObjectBuilder {
       : kind(ObjectKind::STRUCT), structBuilder(structBuilder) {}
   ObjectBuilder(ListBuilder listBuilder)
       : kind(ObjectKind::LIST), listBuilder(listBuilder) {}
+
+  ObjectReader asReader() const;
+
+  inline ObjectBuilder(ObjectBuilder& other) { memcpy(this, &other, sizeof(*this)); }
+  inline ObjectBuilder(ObjectBuilder&& other) { memcpy(this, &other, sizeof(*this)); }
+  // Hack:  Compiler thinks StructBuilder and ListBuilder are non-trivially-copyable due to the
+  //   inheritance from DisallowConstCopy, but that means the union causes ObjectBuilder's copy
+  //   constructor to be deleted.  We happen to know that trivial copying works here...
 };
 
 struct ObjectReader {
