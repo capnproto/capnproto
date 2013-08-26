@@ -2056,6 +2056,10 @@ StructBuilder StructBuilder::getRoot(
       reinterpret_cast<WirePointer*>(location), segment, size, nullptr);
 }
 
+void StructBuilder::adoptRoot(SegmentBuilder* segment, word* location, OrphanBuilder orphan) {
+  WireHelpers::adopt(segment, reinterpret_cast<WirePointer*>(location), kj::mv(orphan));
+}
+
 StructBuilder StructBuilder::initStructField(
     WirePointerCount ptrIndex, StructSize size) {
   return WireHelpers::initStructPointer(pointers + ptrIndex, segment, size);

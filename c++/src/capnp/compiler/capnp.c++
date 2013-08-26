@@ -177,6 +177,11 @@ public:
            .addOption({'p', "packed"}, KJ_BIND_METHOD(*this, codePacked),
                       "Pack the output message with standard Cap'n Proto packing, which "
                       "deflates zero-valued bytes.")
+           .addOptionWithArg({"segment-size"}, KJ_BIND_METHOD(*this, setSegmentSize), "<n>",
+                             "Sets the preferred segment size on the MallocMessageBuilder to <n> "
+                             "words and turns off heuristic growth.  This flag is mainly useful "
+                             "for testing.  Without it, each message will be written as a single "
+                             "segment.")
            .expectArg("<schema-file>", KJ_BIND_METHOD(*this, addSource))
            .expectArg("<type>", KJ_BIND_METHOD(*this, setRootType))
            .callAfterParsing(KJ_BIND_METHOD(*this, encode));
@@ -434,6 +439,15 @@ public:
     pretty = false;
     return true;
   }
+  kj::MainBuilder::Validity setSegmentSize(kj::StringPtr size) {
+    if (flat) return "cannot be used with --flat";
+    char* end;
+    segmentSize = strtol(size.cStr(), &end, 0);
+    if (size.size() == 0 || *end != '\0') {
+      return "not an integer";
+    }
+    return true;
+  }
 
   kj::MainBuilder::Validity setRootType(kj::StringPtr type) {
     KJ_ASSERT(sourceFiles.size() == 1);
@@ -582,10 +596,6 @@ public:
     auto tokens = lexedTokens.asReader().getTokens();
     CapnpParser::ParserInput parserInput(tokens.begin(), tokens.end());
 
-    // Allocate some scratch space.
-    kj::Array<word> scratch = kj::heapArray<word>(8192);
-    memset(scratch.begin(), 0, scratch.size() * sizeof(word));
-
     // Set up stuff for the ValueTranslator.
     ValueResolverGlue resolver(compiler->getLoader(), errorReporter);
     auto type = arena.getOrphanage().newOrphan<schema::Type>();
@@ -597,11 +607,22 @@ public:
 
     while (parserInput.getPosition() != tokens.end()) {
       KJ_IF_MAYBE(expression, parser.getParsers().parenthesizedValueExpression(parserInput)) {
-        MallocMessageBuilder item(scratch);
+        MallocMessageBuilder item(
+            segmentSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : segmentSize,
+            segmentSize == 0 ? SUGGESTED_ALLOCATION_STRATEGY : AllocationStrategy::FIXED_SIZE);
         ValueTranslator translator(resolver, errorReporter, item.getOrphanage());
 
         KJ_IF_MAYBE(value, translator.compileValue(expression->getReader(), type.getReader())) {
-          writeEncoded(value->getReader().as<DynamicStruct>(), output);
+          if (segmentSize == 0) {
+            writeFlat(value->getReader().as<DynamicStruct>(), output);
+          } else {
+            item.adoptRoot(value->releaseAs<DynamicStruct>());
+            if (packed) {
+              writePackedMessage(output, item);
+            } else {
+              writeMessage(output, item);
+            }
+          }
         } else {
           // Errors were reported, so we'll exit with a failure status later.
         }
@@ -620,7 +641,7 @@ public:
   }
 
 private:
-  void writeEncoded(DynamicStruct::Reader value, kj::BufferedOutputStream& output) {
+  void writeFlat(DynamicStruct::Reader value, kj::BufferedOutputStream& output) {
     // Always copy the message to a flat array so that the output is predictable (one segment,
     // in canonical order).
     size_t size = value.totalSizeInWords() + 1;
@@ -744,8 +765,9 @@ private:
   bool flat = false;
   bool packed = false;
   bool pretty = true;
+  uint segmentSize = 0;
   StructSchema rootType;
-  // For the "decode" command.
+  // For the "decode" and "encode" commands.
 
   struct SourceFile {
     uint64_t id;

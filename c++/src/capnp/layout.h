@@ -277,6 +277,7 @@ public:
   static StructBuilder initRoot(SegmentBuilder* segment, word* location, StructSize size);
   static void setRoot(SegmentBuilder* segment, word* location, StructReader value);
   static StructBuilder getRoot(SegmentBuilder* segment, word* location, StructSize size);
+  static void adoptRoot(SegmentBuilder* segment, word* location, OrphanBuilder orphan);
 
   inline BitCount getDataSectionSize() const { return dataSize; }
   inline WirePointerCount getPointerSectionSize() const { return pointerCount; }

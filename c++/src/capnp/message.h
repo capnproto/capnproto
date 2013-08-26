@@ -39,6 +39,8 @@ namespace _ {  // private
 
 class StructSchema;
 class Orphanage;
+template <typename T>
+class Orphan;
 
 // =======================================================================================
 
@@ -178,6 +180,10 @@ public:
   // RootType in this case must be DynamicStruct, and you must #include <capnp/dynamic.h> to
   // use this.
 
+  template <typename T>
+  void adoptRoot(Orphan<T>&& orphan);
+  // Like setRoot() but adopts the orphan without copying.
+
   kj::ArrayPtr<const kj::ArrayPtr<const word>> getSegmentsForOutput();
 
   Orphanage getOrphanage();
@@ -201,6 +207,7 @@ private:
   _::StructBuilder initRoot(_::StructSize size);
   void setRootInternal(_::StructReader reader);
   _::StructBuilder getRoot(_::StructSize size);
+  void adoptRootInternal(_::OrphanBuilder orphan);
 };
 
 template <typename RootType>
@@ -378,6 +385,12 @@ template <typename RootType>
 inline typename RootType::Builder MessageBuilder::getRoot() {
   static_assert(kind<RootType>() == Kind::STRUCT, "Root type must be a Cap'n Proto struct type.");
   return typename RootType::Builder(getRoot(_::structSize<RootType>()));
+}
+
+template <typename T>
+void MessageBuilder::adoptRoot(Orphan<T>&& orphan) {
+  static_assert(kind<T>() == Kind::STRUCT, "Root type must be a Cap'n Proto struct type.");
+  adoptRootInternal(kj::mv(orphan.builder));
 }
 
 template <typename RootType>

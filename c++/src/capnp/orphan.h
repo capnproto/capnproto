@@ -70,6 +70,7 @@ private:
   template <typename U>
   friend class Orphan;
   friend class Orphanage;
+  friend class MessageBuilder;
 };
 
 class Orphanage: private kj::DisallowConstCopy {

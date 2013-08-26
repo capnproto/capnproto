@@ -107,6 +107,12 @@ _::StructBuilder MessageBuilder::getRoot(_::StructSize size) {
       rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), size);
 }
 
+void MessageBuilder::adoptRootInternal(_::OrphanBuilder orphan) {
+  _::SegmentBuilder* rootSegment = getRootSegment();
+  _::StructBuilder::adoptRoot(
+      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), kj::mv(orphan));
+}
+
 kj::ArrayPtr<const kj::ArrayPtr<const word>> MessageBuilder::getSegmentsForOutput() {
   if (allocatedArena) {
     return arena()->getSegmentsForOutput();
