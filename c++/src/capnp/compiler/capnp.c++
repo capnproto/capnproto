@@ -675,19 +675,20 @@ private:
         case DeclName::Base::RELATIVE_NAME: {
           auto value = base.getRelativeName();
           errorReporter.addErrorOn(value, kj::str("Not defined: ", value.getValue()));
-          return nullptr;
+          break;
         }
         case DeclName::Base::ABSOLUTE_NAME: {
           auto value = base.getAbsoluteName();
           errorReporter.addErrorOn(value, kj::str("Not defined: ", value.getValue()));
-          return nullptr;
+          break;
         }
         case DeclName::Base::IMPORT_NAME: {
           auto value = base.getImportName();
           errorReporter.addErrorOn(value, "Imports not allowed in encode input.");
-          return nullptr;
+          break;
         }
       }
+      return nullptr;
     }
 
   private:
