@@ -55,8 +55,8 @@ public:
   inline typename T::Builder get();
   inline typename T::Reader getReader() const;
 
-  inline bool operator==(decltype(nullptr)) { return builder == nullptr; }
-  inline bool operator!=(decltype(nullptr)) { return builder == nullptr; }
+  inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
+  inline bool operator!=(decltype(nullptr)) const { return builder != nullptr; }
 
 private:
   _::OrphanBuilder builder;
@@ -67,6 +67,8 @@ private:
   friend struct _::PointerHelpers;
   template <typename, Kind>
   friend struct List;
+  template <typename U>
+  friend class Orphan;
   friend class Orphanage;
 };
 

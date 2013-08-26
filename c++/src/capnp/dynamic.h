@@ -86,6 +86,7 @@ struct DynamicList {
   class Reader;
   class Builder;
 };
+template <> class Orphan<DynamicValue>;
 
 template <Kind k> struct DynamicTypeFor_;
 template <> struct DynamicTypeFor_<Kind::ENUM> { typedef DynamicEnum Type; };
@@ -152,7 +153,7 @@ public:
   Reader() = default;
 
   template <typename T>
-  inline typename T::Reader as() const { return AsImpl<T>::apply(*this); }
+  typename T::Reader as() const;
   // Convert the object to the given struct, list, or blob type.
 
   DynamicStruct::Reader as(StructSchema schema) const;
@@ -163,18 +164,16 @@ private:
 
   inline Reader(_::ObjectReader reader): reader(reader) {}
 
-  template <typename T, Kind kind = kind<T>()> struct AsImpl;
-  // Implementation backing the as() method.  Needs to be a struct to allow partial
-  // specialization.  Has a method apply() which does the work.
-
   friend struct DynamicStruct;
   friend struct DynamicList;
   template <typename T, Kind K>
   friend struct _::PointerHelpers;
   friend class DynamicObject::Builder;
+  friend class Orphan<DynamicObject>;
+  friend class Orphan<DynamicValue>;
 };
 
-class DynamicObject::Builder: kj::DisallowConstCopy {
+class DynamicObject::Builder: public kj::DisallowConstCopy {
   // Represents an "Object" field of unknown type.
   //
   // You can't actually do anything with a DynamicObject::Builder except read it.  It can't be
@@ -197,6 +196,8 @@ private:
   friend struct DynamicList;
   template <typename T, Kind K>
   friend struct _::PointerHelpers;
+  friend class Orphan<DynamicObject>;
+  friend class Orphan<DynamicValue>;
 };
 
 // -------------------------------------------------------------------
@@ -261,6 +262,7 @@ private:
       _::StructReader reader, const _::RawSchema& schema);
   friend class Orphanage;
   friend class Orphan<DynamicStruct>;
+  friend class Orphan<DynamicValue>;
 };
 
 class DynamicStruct::Builder {
@@ -302,6 +304,11 @@ public:
   DynamicValue::Builder init(StructSchema::Field field, uint size);
   // Init a struct, list, or blob field.
 
+  void adopt(StructSchema::Field field, Orphan<DynamicValue>&& orphan);
+  Orphan<DynamicValue> disown(StructSchema::Field field);
+  // Adopt/disown.  This works even for non-pointer fields: adopt() becomes equivalent to set()
+  // and disown() becomes like get() followed by clear().
+
   void clear(StructSchema::Field field);
   // Clear a field, setting it to its default value.  For pointer fields, this actually makes the
   // field null.
@@ -326,6 +333,8 @@ public:
   void set(kj::StringPtr name, std::initializer_list<DynamicValue::Reader> value);
   DynamicValue::Builder init(kj::StringPtr name);
   DynamicValue::Builder init(kj::StringPtr name, uint size);
+  void adopt(kj::StringPtr name, Orphan<DynamicValue>&& orphan);
+  Orphan<DynamicValue> disown(kj::StringPtr name);
   void clear(kj::StringPtr name);
   DynamicStruct::Builder getObject(kj::StringPtr name, StructSchema type);
   DynamicList::Builder getObject(kj::StringPtr name, ListSchema type);
@@ -361,6 +370,8 @@ private:
   friend struct ::capnp::ToDynamic_;
   friend class Orphanage;
   friend class Orphan<DynamicStruct>;
+  friend class Orphan<DynamicObject>;
+  friend class Orphan<DynamicValue>;
 };
 
 // -------------------------------------------------------------------
@@ -403,6 +414,7 @@ private:
   friend struct ::capnp::ToDynamic_;
   friend class Orphanage;
   friend class Orphan<DynamicList>;
+  friend class Orphan<DynamicValue>;
 };
 
 class DynamicList::Builder {
@@ -450,6 +462,8 @@ private:
   template <typename T, Kind k>
   friend struct _::OrphanGetImpl;
   friend class Orphan<DynamicList>;
+  friend class Orphan<DynamicObject>;
+  friend class Orphan<DynamicValue>;
 };
 
 // -------------------------------------------------------------------
@@ -611,6 +625,8 @@ private:
   template <typename T, Kind kind = kind<T>()> struct AsImpl;
   // Implementation backing the as() method.  Needs to be a struct to allow partial
   // specialization.  Has a method apply() which does the work.
+
+  friend class Orphan<DynamicValue>;
 };
 
 kj::StringTree KJ_STRINGIFY(const DynamicValue::Reader& value);
@@ -637,8 +653,14 @@ public:
   DynamicStruct::Builder get();
   DynamicStruct::Reader getReader() const;
 
-  inline bool operator==(decltype(nullptr)) { return builder == nullptr; }
-  inline bool operator!=(decltype(nullptr)) { return builder == nullptr; }
+  template <typename T>
+  Orphan<T> releaseAs();
+  // Like DynamicStruct::Builder::as(), but coerces the Orphan type.  Since Orphans are move-only,
+  // the original Orphan<DynamicStruct> is no longer valid after this call; ownership is
+  // transferred to the returned Orphan<T>.
+
+  inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
+  inline bool operator!=(decltype(nullptr)) const { return builder != nullptr; }
 
 private:
   StructSchema schema;
@@ -651,6 +673,8 @@ private:
   friend struct _::PointerHelpers;
   friend struct DynamicList;
   friend class Orphanage;
+  friend class Orphan<DynamicObject>;
+  friend class Orphan<DynamicValue>;
 };
 
 template <>
@@ -664,8 +688,14 @@ public:
   DynamicList::Builder get();
   DynamicList::Reader getReader() const;
 
-  inline bool operator==(decltype(nullptr)) { return builder == nullptr; }
-  inline bool operator!=(decltype(nullptr)) { return builder == nullptr; }
+  template <typename T>
+  Orphan<T> releaseAs();
+  // Like DynamicList::Builder::as(), but coerces the Orphan type.  Since Orphans are move-only,
+  // the original Orphan<DynamicStruct> is no longer valid after this call; ownership is
+  // transferred to the returned Orphan<T>.
+
+  inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
+  inline bool operator!=(decltype(nullptr)) const { return builder != nullptr; }
 
 private:
   ListSchema schema;
@@ -678,7 +708,156 @@ private:
   friend struct _::PointerHelpers;
   friend struct DynamicList;
   friend class Orphanage;
+  friend class Orphan<DynamicObject>;
+  friend class Orphan<DynamicValue>;
 };
+
+template <>
+class Orphan<DynamicObject> {
+public:
+  Orphan() = default;
+  KJ_DISALLOW_COPY(Orphan);
+  Orphan(Orphan&&) = default;
+  Orphan& operator=(Orphan&&) = default;
+
+  DynamicObject::Builder get();
+  DynamicObject::Reader getReader() const;
+
+  template <typename T>
+  BuilderFor<T> getAs();
+  // Coerce the object to the given type and return a builder for that type.  This may relocate
+  // the object if it was originally created with a previous version of the schema and the sizes
+  // don't match.
+  //
+  // Notice that DynamicObject::Builder does not have an "as<T>()" method, which is why this is
+  // needed.
+
+  template <typename T>
+  Orphan<T> releaseAs();
+  // Like DynamicValue::Builder::as(), but coerces the Orphan type.  Since Orphans are move-only,
+  // the original Orphan<DynamicStruct> is no longer valid after this call; ownership is
+  // transferred to the returned Orphan<T>.
+
+  DynamicStruct::Builder getAs(StructSchema schema);
+  DynamicList::Builder getAs(ListSchema schema);
+  // Dynamic versions of 'getAs()'.
+
+  Orphan<DynamicStruct> releaseAs(StructSchema schema);
+  Orphan<DynamicList> releaseAs(ListSchema schema);
+  // Dynamic versions of 'releaseAs()'.
+
+  inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
+  inline bool operator!=(decltype(nullptr)) const { return builder != nullptr; }
+
+private:
+  _::OrphanBuilder builder;
+
+  explicit Orphan(_::OrphanBuilder&& builder): builder(kj::mv(builder)) {}
+
+  template <typename, Kind>
+  friend struct _::PointerHelpers;
+  friend class Orphan<DynamicValue>;
+};
+
+template <>
+class Orphan<DynamicValue> {
+public:
+  Orphan() = default;
+  KJ_DISALLOW_COPY(Orphan);
+  Orphan(Orphan&&) = default;
+  template <typename T>
+  Orphan(Orphan<T>&&);
+  Orphan& operator=(Orphan&&) = default;
+
+  inline DynamicValue::Type getType() { return type; }
+
+  DynamicValue::Builder get();
+  DynamicValue::Reader getReader() const;
+
+  template <typename T>
+  Orphan<T> releaseAs();
+  // Like DynamicValue::Builder::as(), but coerces the Orphan type.  Since Orphans are move-only,
+  // the original Orphan<DynamicStruct> is no longer valid after this call; ownership is
+  // transferred to the returned Orphan<T>.
+
+  inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
+  inline bool operator!=(decltype(nullptr)) const { return builder != nullptr; }
+
+private:
+  DynamicValue::Type type;
+  union {
+    Void voidValue;
+    bool boolValue;
+    int64_t intValue;
+    uint64_t uintValue;
+    double floatValue;
+    DynamicEnum enumValue;
+    StructSchema structSchema;
+    ListSchema listSchema;
+  };
+
+  _::OrphanBuilder builder;
+  // Only used if `type` is a pointer type.
+
+  Orphan(DynamicValue::Builder value, _::OrphanBuilder&& builder);
+  Orphan(DynamicValue::Type type, _::OrphanBuilder&& builder)
+      : type(type), builder(kj::mv(builder)) {}
+  Orphan(StructSchema structSchema, _::OrphanBuilder&& builder)
+      : type(DynamicValue::STRUCT), structSchema(structSchema), builder(kj::mv(builder)) {}
+  Orphan(ListSchema listSchema, _::OrphanBuilder&& builder)
+      : type(DynamicValue::LIST), listSchema(listSchema), builder(kj::mv(builder)) {}
+
+  template <typename, Kind>
+  friend struct _::PointerHelpers;
+  friend struct DynamicStruct;
+  friend struct DynamicList;
+  friend class Orphanage;
+};
+
+template <typename T>
+BuilderFor<T> Orphan<DynamicObject>::getAs() {
+  return getAs(Schema::from<T>()).template as<T>();
+}
+template <>
+Text::Builder Orphan<DynamicObject>::getAs<Text>();
+template <>
+Data::Builder Orphan<DynamicObject>::getAs<Data>();
+
+template <typename T>
+Orphan<T> Orphan<DynamicObject>::releaseAs() {
+  return releaseAs(Schema::from<T>()).template releaseAs<T>();
+}
+template <>
+Orphan<Text> Orphan<DynamicObject>::releaseAs<Text>();
+template <>
+Orphan<Data> Orphan<DynamicObject>::releaseAs<Data>();
+
+template <typename T>
+Orphan<DynamicValue>::Orphan(Orphan<T>&& other)
+    : Orphan(other.get(), kj::mv(other.builder)) {}
+
+template <typename T>
+Orphan<T> Orphan<DynamicStruct>::releaseAs() {
+  get().as<T>();  // type check
+  return Orphan<T>(kj::mv(builder));
+}
+
+template <typename T>
+Orphan<T> Orphan<DynamicList>::releaseAs() {
+  get().as<T>();  // type check
+  return Orphan<T>(kj::mv(builder));
+}
+
+template <typename T>
+Orphan<T> Orphan<DynamicValue>::releaseAs() {
+  get().as<T>();  // type check
+  return Orphan<T>(kj::mv(builder));
+}
+
+template <>
+Orphan<DynamicStruct> Orphan<DynamicValue>::releaseAs<DynamicStruct>();
+template <>
+Orphan<DynamicList> Orphan<DynamicValue>::releaseAs<DynamicList>();
 
 template <>
 struct Orphanage::GetInnerBuilder<DynamicStruct, Kind::UNKNOWN> {
@@ -768,10 +947,17 @@ struct PointerHelpers<DynamicList, Kind::UNKNOWN> {
 
 template <>
 struct PointerHelpers<DynamicObject, Kind::UNKNOWN> {
-  // DynamicObject can only be used with get().
-
   static DynamicObject::Reader get(StructReader reader, WirePointerCount index);
   static DynamicObject::Builder get(StructBuilder builder, WirePointerCount index);
+  static void set(
+      StructBuilder builder, WirePointerCount index, const DynamicObject::Reader& value);
+  static inline void adopt(StructBuilder builder, WirePointerCount index,
+                           Orphan<DynamicObject>&& value) {
+    builder.adopt(index, kj::mv(value.builder));
+  }
+  static inline Orphan<DynamicObject> disown(StructBuilder builder, WirePointerCount index) {
+    return Orphan<DynamicObject>(builder.disown(index));
+  }
 };
 
 }  // namespace _ (private)
@@ -939,18 +1125,9 @@ struct DynamicValue::Builder::AsImpl<T, Kind::LIST> {
 // -------------------------------------------------------------------
 
 template <typename T>
-struct DynamicObject::Reader::AsImpl<T, Kind::STRUCT> {
-  static T apply(DynamicObject::Reader value) {
-    return value.as(Schema::from<T>()).template as<T>();
-  }
-};
-
-template <typename T>
-struct DynamicObject::Reader::AsImpl<T, Kind::LIST> {
-  static T apply(DynamicObject::Reader value) {
-    return value.as(Schema::from<T>()).template as<T>();
-  }
-};
+inline typename T::Reader DynamicObject::Reader::as() const {
+  return as(Schema::from<T>()).template as<T>();
+}
 
 // -------------------------------------------------------------------
 

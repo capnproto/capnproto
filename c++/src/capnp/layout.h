@@ -751,7 +751,7 @@ public:
   inline OrphanBuilder(): segment(nullptr), location(nullptr) { memset(&tag, 0, sizeof(tag)); }
   OrphanBuilder(const OrphanBuilder& other) = delete;
   inline OrphanBuilder(OrphanBuilder&& other);
-  inline ~OrphanBuilder();
+  inline ~OrphanBuilder() noexcept(false);
 
   static OrphanBuilder initStruct(BuilderArena* arena, StructSize size);
   static OrphanBuilder initList(BuilderArena* arena, ElementCount elementCount,
@@ -769,8 +769,8 @@ public:
   OrphanBuilder& operator=(const OrphanBuilder& other) = delete;
   inline OrphanBuilder& operator=(OrphanBuilder&& other);
 
-  inline bool operator==(decltype(nullptr)) { return location == nullptr; }
-  inline bool operator!=(decltype(nullptr)) { return location != nullptr; }
+  inline bool operator==(decltype(nullptr)) const { return segment == nullptr; }
+  inline bool operator!=(decltype(nullptr)) const { return segment != nullptr; }
 
   StructBuilder asStruct(StructSize size);
   // Interpret as a struct, or throw an exception if not a struct.
@@ -1041,7 +1041,7 @@ inline OrphanBuilder::OrphanBuilder(OrphanBuilder&& other)
   other.location = nullptr;
 }
 
-inline OrphanBuilder::~OrphanBuilder() {
+inline OrphanBuilder::~OrphanBuilder() noexcept(false) {
   if (segment != nullptr) euthanize();
 }
 

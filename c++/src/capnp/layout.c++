@@ -1619,10 +1619,14 @@ struct WireHelpers {
   }
 
   static OrphanBuilder disown(SegmentBuilder* segment, WirePointer* ref) {
-    OrphanBuilder result(ref, segment,
-        ref->kind() == WirePointer::FAR ? nullptr : ref->target());
-    memset(ref, 0, sizeof(*ref));
-    return result;
+    if (ref->isNull()) {
+      return OrphanBuilder();
+    } else {
+      OrphanBuilder result(ref, segment,
+          ref->kind() == WirePointer::FAR ? nullptr : ref->target());
+      memset(ref, 0, sizeof(*ref));
+      return result;
+    }
   }
 
   // -----------------------------------------------------------------
@@ -2744,8 +2748,14 @@ ObjectReader OrphanBuilder::asObjectReader() const {
 }
 
 void OrphanBuilder::euthanize() {
-  WireHelpers::zeroObject(segment, reinterpret_cast<WirePointer*>(&tag), location);
-  memset(&tag, 0, sizeof(tag));  // Use memset to comply with aliasing rules.
+  auto ref = reinterpret_cast<WirePointer*>(&tag);
+  if (ref->kind() == WirePointer::FAR) {
+    WireHelpers::zeroObject(segment, ref);
+  } else {
+    WireHelpers::zeroObject(segment, reinterpret_cast<WirePointer*>(&tag), location);
+  }
+
+  memset(ref, 0, sizeof(*ref));
   segment = nullptr;
   location = nullptr;
 }

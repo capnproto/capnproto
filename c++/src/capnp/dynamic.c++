@@ -669,6 +669,165 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field, ui
   KJ_UNREACHABLE;
 }
 
+void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValue>&& orphan) {
+  KJ_REQUIRE(field.getContainingStruct() == schema, "`field` is not a field of this struct.");
+  setInUnion(field);
+
+  auto proto = field.getProto();
+  switch (proto.which()) {
+    case schema::Field::NON_GROUP: {
+      auto nonGroup = proto.getNonGroup();
+      auto type = nonGroup.getType();
+
+      switch (type.which()) {
+        case schema::Type::VOID:
+        case schema::Type::BOOL:
+        case schema::Type::INT8:
+        case schema::Type::INT16:
+        case schema::Type::INT32:
+        case schema::Type::INT64:
+        case schema::Type::UINT8:
+        case schema::Type::UINT16:
+        case schema::Type::UINT32:
+        case schema::Type::UINT64:
+        case schema::Type::FLOAT32:
+        case schema::Type::FLOAT64:
+        case schema::Type::ENUM:
+          set(field, orphan.getReader());
+          return;
+
+        case schema::Type::TEXT:
+          orphan.getReader().as<Text>();  // type check
+          break;
+
+        case schema::Type::DATA:
+          orphan.getReader().as<Data>();  // type check
+          break;
+
+        case schema::Type::LIST: {
+          ListSchema listType = ListSchema::of(type.getList(), field.getContainingStruct());
+          KJ_REQUIRE(orphan.getType() == DynamicValue::LIST && orphan.listSchema == listType,
+                     "Value type mismatch.");
+          break;
+        }
+
+        case schema::Type::STRUCT: {
+          auto structType =
+              field.getContainingStruct().getDependency(type.getStruct()).asStruct();
+          KJ_REQUIRE(orphan.getType() == DynamicValue::STRUCT && orphan.structSchema == structType,
+                     "Value type mismatch.");
+          break;
+        }
+
+        case schema::Type::OBJECT:
+          KJ_REQUIRE(orphan.getType() == DynamicValue::STRUCT ||
+                     orphan.getType() == DynamicValue::LIST ||
+                     orphan.getType() == DynamicValue::OBJECT,
+                     "Value type mismatch.");
+          break;
+
+        case schema::Type::INTERFACE:
+          KJ_FAIL_ASSERT("Interfaces not yet implemented.");
+          break;
+      }
+
+      builder.adopt(nonGroup.getOffset() * POINTERS, kj::mv(orphan.builder));
+      return;
+    }
+
+    case schema::Field::GROUP:
+      // Have to transfer fields.
+      auto src = orphan.get().as<DynamicStruct>();
+      auto dst = init(field).as<DynamicStruct>();
+
+      KJ_REQUIRE(orphan.getType() == DynamicValue::STRUCT && orphan.structSchema == dst.getSchema(),
+                 "Value type mismatch.");
+
+      KJ_IF_MAYBE(unionField, src.which()) {
+        dst.adopt(*unionField, src.disown(*unionField));
+      }
+
+      for (auto field: src.schema.getNonUnionFields()) {
+        if (src.has(field)) {
+          dst.adopt(field, src.disown(field));
+        }
+      }
+
+      return;
+  }
+
+  KJ_UNREACHABLE;
+}
+
+Orphan<DynamicValue> DynamicStruct::Builder::disown(StructSchema::Field field) {
+  // We end up calling get(field) below, so we don't need to validate `field` here.
+
+  auto proto = field.getProto();
+  switch (proto.which()) {
+    case schema::Field::NON_GROUP: {
+      auto nonGroup = proto.getNonGroup();
+
+      switch (nonGroup.getType().which()) {
+        case schema::Type::VOID:
+        case schema::Type::BOOL:
+        case schema::Type::INT8:
+        case schema::Type::INT16:
+        case schema::Type::INT32:
+        case schema::Type::INT64:
+        case schema::Type::UINT8:
+        case schema::Type::UINT16:
+        case schema::Type::UINT32:
+        case schema::Type::UINT64:
+        case schema::Type::FLOAT32:
+        case schema::Type::FLOAT64:
+        case schema::Type::ENUM: {
+          auto result = Orphan<DynamicValue>(get(field), _::OrphanBuilder());
+          clear(field);
+          return kj::mv(result);
+        }
+
+        case schema::Type::TEXT:
+        case schema::Type::DATA:
+        case schema::Type::LIST:
+        case schema::Type::STRUCT:
+        case schema::Type::OBJECT:
+        case schema::Type::INTERFACE: {
+          auto value = get(field);
+          return Orphan<DynamicValue>(value, builder.disown(nonGroup.getOffset() * POINTERS));
+        }
+      }
+      KJ_UNREACHABLE;
+    }
+
+    case schema::Field::GROUP: {
+      // We have to allocate new space for the group, unfortunately.
+      auto src = get(field).as<DynamicStruct>();
+
+      Orphan<DynamicStruct> result =
+          Orphanage::getForMessageContaining(*this).newOrphan(src.getSchema());
+      auto dst = result.get();
+
+      KJ_IF_MAYBE(unionField, src.which()) {
+        dst.adopt(*unionField, src.disown(*unionField));
+      }
+
+      // We need to explicitly reset the union to its default field.
+      KJ_IF_MAYBE(unionField, src.schema.getFieldByDiscriminant(0)) {
+        src.clear(*unionField);
+      }
+
+      for (auto field: src.schema.getNonUnionFields()) {
+        if (src.has(field)) {
+          dst.adopt(field, src.disown(field));
+        }
+      }
+
+      return kj::mv(result);
+    }
+  }
+
+  KJ_UNREACHABLE;
+}
 
 void DynamicStruct::Builder::clear(StructSchema::Field field) {
   KJ_REQUIRE(field.getContainingStruct() == schema, "`field` is not a field of this struct.");
@@ -723,9 +882,13 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
 
     case schema::Field::GROUP: {
       DynamicStruct::Builder group(schema.getDependency(proto.getGroup()).asStruct(), builder);
+
+      // We clear the union field with discriminant 0 rather than the one that is set because
+      // we want the union to end up with its default field active.
       KJ_IF_MAYBE(unionField, group.schema.getFieldByDiscriminant(0)) {
         group.clear(*unionField);
       }
+
       for (auto subField: group.schema.getNonUnionFields()) {
         group.clear(subField);
       }
@@ -847,6 +1010,12 @@ DynamicValue::Builder DynamicStruct::Builder::init(kj::StringPtr name) {
 }
 DynamicValue::Builder DynamicStruct::Builder::init(kj::StringPtr name, uint size) {
   return init(schema.getFieldByName(name), size);
+}
+void DynamicStruct::Builder::adopt(kj::StringPtr name, Orphan<DynamicValue>&& orphan) {
+  adopt(schema.getFieldByName(name), kj::mv(orphan));
+}
+Orphan<DynamicValue> DynamicStruct::Builder::disown(kj::StringPtr name) {
+  return disown(schema.getFieldByName(name));
 }
 void DynamicStruct::Builder::clear(kj::StringPtr name) {
   clear(schema.getFieldByName(name));
@@ -1447,10 +1616,13 @@ DynamicObject::Reader PointerHelpers<DynamicObject, Kind::UNKNOWN>::get(
     StructReader reader, WirePointerCount index) {
   return DynamicObject::Reader(reader.getObjectField(index, nullptr));
 }
-
 DynamicObject::Builder PointerHelpers<DynamicObject, Kind::UNKNOWN>::get(
     StructBuilder builder, WirePointerCount index) {
   return DynamicObject::Builder(builder.getObjectField(index, nullptr));
+}
+void PointerHelpers<DynamicObject, Kind::UNKNOWN>::set(
+    StructBuilder builder, WirePointerCount index, const DynamicObject::Reader& value) {
+  builder.setObjectField(index, value.reader);
 }
 
 }  // namespace _ (private)
@@ -1493,6 +1665,140 @@ DynamicList::Builder Orphan<DynamicList>::get() {
 DynamicList::Reader Orphan<DynamicList>::getReader() const {
   return DynamicList::Reader(
       schema, builder.asListReader(elementSizeFor(schema.whichElementType())));
+}
+
+DynamicObject::Builder Orphan<DynamicObject>::get() {
+  return DynamicObject::Builder(builder.asObject());
+}
+DynamicObject::Reader Orphan<DynamicObject>::getReader() const {
+  return DynamicObject::Reader(builder.asObjectReader());
+}
+
+DynamicStruct::Builder Orphan<DynamicObject>::getAs(StructSchema schema) {
+  return DynamicStruct::Builder(schema, builder.asStruct(structSizeFromSchema(schema)));
+}
+DynamicList::Builder Orphan<DynamicObject>::getAs(ListSchema schema) {
+  if (schema.whichElementType() == schema::Type::STRUCT) {
+    return DynamicList::Builder(schema,
+        builder.asStructList(structSizeFromSchema(schema.getStructElementType())));
+  } else {
+    return DynamicList::Builder(schema,
+        builder.asList(elementSizeFor(schema.whichElementType())));
+  }
+}
+template <>
+Text::Builder Orphan<DynamicObject>::getAs<Text>() {
+  return builder.asText();
+}
+template <>
+Data::Builder Orphan<DynamicObject>::getAs<Data>() {
+  return builder.asData();
+}
+
+Orphan<DynamicStruct> Orphan<DynamicObject>::releaseAs(StructSchema schema) {
+  getAs(schema);  // type check
+  return Orphan<DynamicStruct>(schema, kj::mv(builder));
+}
+Orphan<DynamicList> Orphan<DynamicObject>::releaseAs(ListSchema schema) {
+  getAs(schema);  // type check
+  return Orphan<DynamicList>(schema, kj::mv(builder));
+}
+template <>
+Orphan<Text> Orphan<DynamicObject>::releaseAs<Text>() {
+  getAs<Text>();  // type check
+  return Orphan<Text>(kj::mv(builder));
+}
+template <>
+Orphan<Data> Orphan<DynamicObject>::releaseAs<Data>() {
+  getAs<Data>();  // type check
+  return Orphan<Data>(kj::mv(builder));
+}
+
+Orphan<DynamicValue>::Orphan(DynamicValue::Builder value, _::OrphanBuilder&& builder)
+    : type(value.getType()), builder(kj::mv(builder)) {
+  switch (type) {
+    case DynamicValue::UNKNOWN: break;
+    case DynamicValue::VOID: voidValue = value.voidValue; break;
+    case DynamicValue::BOOL: boolValue = value.boolValue; break;
+    case DynamicValue::INT: intValue = value.intValue; break;
+    case DynamicValue::UINT: uintValue = value.uintValue; break;
+    case DynamicValue::FLOAT: floatValue = value.floatValue; break;
+    case DynamicValue::ENUM: enumValue = value.enumValue; break;
+
+    case DynamicValue::TEXT: break;
+    case DynamicValue::DATA: break;
+    case DynamicValue::LIST: listSchema = value.listValue.getSchema(); break;
+    case DynamicValue::STRUCT: structSchema = value.structValue.getSchema(); break;
+    case DynamicValue::INTERFACE: KJ_FAIL_ASSERT("Interfaces not implemented.");
+    case DynamicValue::OBJECT: break;
+  }
+}
+
+DynamicValue::Builder Orphan<DynamicValue>::get() {
+  switch (type) {
+    case DynamicValue::UNKNOWN: return nullptr;
+    case DynamicValue::VOID: return voidValue;
+    case DynamicValue::BOOL: return boolValue;
+    case DynamicValue::INT: return intValue;
+    case DynamicValue::UINT: return uintValue;
+    case DynamicValue::FLOAT: return floatValue;
+    case DynamicValue::ENUM: return enumValue;
+
+    case DynamicValue::TEXT: return builder.asText();
+    case DynamicValue::DATA: return builder.asData();
+    case DynamicValue::LIST:
+      if (listSchema.whichElementType() == schema::Type::STRUCT) {
+        return DynamicList::Builder(listSchema,
+            builder.asStructList(structSizeFromSchema(listSchema.getStructElementType())));
+      } else {
+        return DynamicList::Builder(listSchema,
+            builder.asList(elementSizeFor(listSchema.whichElementType())));
+      }
+    case DynamicValue::STRUCT:
+      return DynamicStruct::Builder(structSchema,
+          builder.asStruct(structSizeFromSchema(structSchema)));
+    case DynamicValue::INTERFACE:
+      KJ_FAIL_ASSERT("Interfaces not implemented.");
+    case DynamicValue::OBJECT:
+      return DynamicObject::Builder(builder.asObject());
+  }
+  KJ_UNREACHABLE;
+}
+DynamicValue::Reader Orphan<DynamicValue>::getReader() const {
+  switch (type) {
+    case DynamicValue::UNKNOWN: return nullptr;
+    case DynamicValue::VOID: return voidValue;
+    case DynamicValue::BOOL: return boolValue;
+    case DynamicValue::INT: return intValue;
+    case DynamicValue::UINT: return uintValue;
+    case DynamicValue::FLOAT: return floatValue;
+    case DynamicValue::ENUM: return enumValue;
+
+    case DynamicValue::TEXT: return builder.asTextReader();
+    case DynamicValue::DATA: return builder.asDataReader();
+    case DynamicValue::LIST:
+      return DynamicList::Reader(listSchema,
+          builder.asListReader(elementSizeFor(listSchema.whichElementType())));
+    case DynamicValue::STRUCT:
+      return DynamicStruct::Reader(structSchema,
+          builder.asStructReader(structSizeFromSchema(structSchema)));
+    case DynamicValue::INTERFACE:
+      KJ_FAIL_ASSERT("Interfaces not implemented.");
+    case DynamicValue::OBJECT:
+      return DynamicObject::Reader(builder.asObjectReader());
+  }
+  KJ_UNREACHABLE;
+}
+
+template <>
+Orphan<DynamicStruct> Orphan<DynamicValue>::releaseAs<DynamicStruct>() {
+  KJ_REQUIRE(type == DynamicValue::STRUCT, "Value type mismatch.");
+  return Orphan<DynamicStruct>(structSchema, kj::mv(builder));
+}
+template <>
+Orphan<DynamicList> Orphan<DynamicValue>::releaseAs<DynamicList>() {
+  KJ_REQUIRE(type == DynamicValue::LIST, "Value type mismatch.");
+  return Orphan<DynamicList>(listSchema, kj::mv(builder));
 }
 
 }  // namespace capnp
