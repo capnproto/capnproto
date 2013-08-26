@@ -109,6 +109,7 @@ public:
 private:
   const Resolver& resolver;
   const ErrorReporter& errorReporter;
+  Orphanage orphanage;
   bool compileAnnotations;
 
   Orphan<schema::Node> wipNode;
@@ -168,14 +169,22 @@ private:
                     schema::Value::Builder target, bool isBootstrap);
   // Interprets the value expression and initializes `target` with the result.
 
-  class DynamicSlot;
+  kj::Maybe<Orphan<DynamicValue>> compileValue(
+      ValueExpression::Reader src, schema::Type::Reader type, bool isBootstrap);
+  // Compile the given value as the given type.  Returns null if there was an error, including
+  // if the value doesn't match the type.
 
-  void compileValue(ValueExpression::Reader src, DynamicSlot& dst, bool isBootstrap);
-  // Fill in `dst` (which effectively points to a struct field or list element) with the given
-  // value.
-
-  void compileValueInner(ValueExpression::Reader src, DynamicSlot& dst, bool isBootstrap);
+  Orphan<DynamicValue> compileValueInner(ValueExpression::Reader src, schema::Type::Reader type,
+                                         bool isBootstrap);
   // Helper for compileValue().
+
+  void fillStructValue(DynamicStruct::Builder builder,
+                       List<ValueExpression::FieldAssignment>::Reader assignments,
+                       bool isBootstrap);
+  // Interprets the given assignments and uses them to fill in the given struct builder.
+
+  kj::String makeNodeName(uint64_t id);
+  kj::String makeTypeName(schema::Type::Reader type);
 
   kj::Maybe<DynamicValue::Reader> readConstant(DeclName::Reader name, bool isBootstrap,
                                                ValueExpression::Reader errorLocation);

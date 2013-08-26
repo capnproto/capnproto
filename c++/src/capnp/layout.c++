@@ -1558,19 +1558,19 @@ struct WireHelpers {
       WirePointer* tag = reinterpret_cast<WirePointer*>(ptr);
       tag->setKindAndInlineCompositeListElementCount(WirePointer::STRUCT, value.elementCount);
       tag->structRef.set(dataSize, pointerCount);
-      ptr += POINTER_SIZE_IN_WORDS;
+      word* dst = ptr + POINTER_SIZE_IN_WORDS;
 
       const word* src = reinterpret_cast<const word*>(value.ptr);
       for (uint i = 0; i < value.elementCount / ELEMENTS; i++) {
-        memcpy(ptr, src, value.structDataSize / BITS_PER_BYTE / BYTES);
-        ptr += dataSize;
+        memcpy(dst, src, value.structDataSize / BITS_PER_BYTE / BYTES);
+        dst += dataSize;
         src += dataSize;
 
         for (uint j = 0; j < pointerCount / POINTERS; j++) {
-          setObjectPointer(segment, reinterpret_cast<WirePointer*>(ptr), readObjectPointer(
+          setObjectPointer(segment, reinterpret_cast<WirePointer*>(dst), readObjectPointer(
               value.segment, reinterpret_cast<const WirePointer*>(src), nullptr,
               value.nestingLimit));
-          ptr += POINTER_SIZE_IN_WORDS;
+          dst += POINTER_SIZE_IN_WORDS;
           src += POINTER_SIZE_IN_WORDS;
         }
       }
@@ -2152,6 +2152,19 @@ void StructBuilder::clearPointer(WirePointerCount ptrIndex) {
   memset(pointers + ptrIndex, 0, sizeof(WirePointer));
 }
 
+void StructBuilder::clearAll() {
+  if (dataSize == 1 * BITS) {
+    setDataField<bool>(1 * ELEMENTS, false);
+  } else {
+    memset(data, 0, dataSize / BITS_PER_BYTE / BYTES);
+  }
+
+  for (uint i = 0; i < pointerCount / POINTERS; i++) {
+    WireHelpers::zeroObject(segment, pointers + i);
+  }
+  memset(pointers, 0, pointerCount * BYTES_PER_POINTER / BYTES);
+}
+
 void StructBuilder::transferContentFrom(StructBuilder other) {
   // Determine the amount of data the builders have in common.
   BitCount sharedDataSize = kj::min(dataSize, other.dataSize);
@@ -2679,6 +2692,8 @@ ListBuilder OrphanBuilder::asStructList(StructSize elementSize) {
   // Watch out, the pointer could have been updated if the object had to be relocated.
   if (tagAsPtr()->kind() == WirePointer::FAR) {
     location = nullptr;
+  } else if (result.step * ELEMENTS <= BITS_PER_WORD * WORDS) {
+    location = reinterpret_cast<word*>(result.ptr);
   } else {
     location = reinterpret_cast<word*>(result.ptr) - POINTER_SIZE_IN_WORDS;
   }
@@ -2748,16 +2763,24 @@ ObjectReader OrphanBuilder::asObjectReader() const {
 }
 
 void OrphanBuilder::euthanize() {
-  auto ref = reinterpret_cast<WirePointer*>(&tag);
-  if (ref->kind() == WirePointer::FAR) {
-    WireHelpers::zeroObject(segment, ref);
-  } else {
-    WireHelpers::zeroObject(segment, reinterpret_cast<WirePointer*>(&tag), location);
-  }
+  // Carefully catch any exceptions and rethrow them as recoverable exceptions since we may be in
+  // a destructor.
+  auto exception = kj::runCatchingExceptions([&]() {
+    auto ref = reinterpret_cast<WirePointer*>(&tag);
+    if (ref->kind() == WirePointer::FAR) {
+      WireHelpers::zeroObject(segment, ref);
+    } else {
+      WireHelpers::zeroObject(segment, reinterpret_cast<WirePointer*>(&tag), location);
+    }
 
-  memset(ref, 0, sizeof(*ref));
-  segment = nullptr;
-  location = nullptr;
+    memset(ref, 0, sizeof(*ref));
+    segment = nullptr;
+    location = nullptr;
+  });
+
+  KJ_IF_MAYBE(e, exception) {
+    kj::getExceptionCallback().onRecoverableException(kj::mv(*e));
+  }
 }
 
 }  // namespace _ (private)

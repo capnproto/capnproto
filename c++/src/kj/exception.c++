@@ -326,7 +326,12 @@ public:
 #if KJ_NO_EXCEPTIONS
     logException(mv(exception));
 #else
-    throw ExceptionImpl(mv(exception));
+    if (std::uncaught_exception()) {
+      // Bad time to throw an exception.  Just log instead.
+      logException(mv(exception));
+    } else {
+      throw ExceptionImpl(mv(exception));
+    }
 #endif
   }
 

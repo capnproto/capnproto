@@ -529,6 +529,7 @@ NodeTranslator::NodeTranslator(
     const Declaration::Reader& decl, Orphan<schema::Node> wipNodeParam,
     bool compileAnnotations)
     : resolver(resolver), errorReporter(errorReporter),
+      orphanage(Orphanage::getForMessageContaining(wipNodeParam.get())),
       compileAnnotations(compileAnnotations), wipNode(kj::mv(wipNodeParam)) {
   compileNode(decl, wipNode.get());
 }
@@ -1229,8 +1230,7 @@ private:
   }
 
   schema::Node::Builder newGroupNode(schema::Node::Reader parent, kj::StringPtr name) {
-    auto orphan = Orphanage::getForMessageContaining(translator.wipNode.get())
-        .newOrphan<schema::Node>();
+    auto orphan = translator.orphanage.newOrphan<schema::Node>();
     auto node = orphan.get();
 
     // We'll set the ID and scope ID later.
@@ -1386,147 +1386,6 @@ void NodeTranslator::compileDefaultDefaultValue(
   }
 }
 
-class NodeTranslator::DynamicSlot {
-  // Acts like a pointer to a field or list element.  The target's value can be set or initialized.
-  // This is useful when recursively compiling values.
-  //
-  // TODO(someday):  The Dynamic API should support something like this directly.
-
-public:
-  DynamicSlot(DynamicStruct::Builder structBuilder, StructSchema::Field field)
-      : type(FIELD), struct_{structBuilder, field} {}
-  DynamicSlot(DynamicList::Builder listBuilder, uint index)
-      : type(ELEMENT), list{listBuilder, index} {}
-  DynamicSlot(DynamicStruct::Builder structBuilder, StructSchema::Field field,
-              StructSchema structFieldSchema)
-      : type(STRUCT_OBJECT_FIELD), struct_{structBuilder, field},
-        structFieldSchema(structFieldSchema) {}
-  DynamicSlot(DynamicStruct::Builder structBuilder, StructSchema::Field field,
-              ListSchema listFieldSchema)
-      : type(LIST_OBJECT_FIELD), struct_{structBuilder, field},
-        listFieldSchema(listFieldSchema) {}
-  DynamicSlot(DynamicStruct::Builder structBuilder, StructSchema::Field field,
-              EnumSchema enumFieldSchema)
-      : type(RAW_ENUM_FIELD), struct_{structBuilder, field},
-        enumFieldSchema(enumFieldSchema) {}
-
-  DynamicStruct::Builder initStruct() {
-    switch (type) {
-      case FIELD: return struct_.builder.init(struct_.field).as<DynamicStruct>();
-      case ELEMENT: return list.builder[list.index].as<DynamicStruct>();
-      case STRUCT_OBJECT_FIELD:
-        return struct_.builder.initObject(struct_.field, structFieldSchema);
-      case LIST_OBJECT_FIELD: KJ_FAIL_REQUIRE("Type mismatch.");
-      case RAW_ENUM_FIELD: KJ_FAIL_REQUIRE("Type mismatch.");
-    }
-    KJ_FAIL_ASSERT("can't get here");
-  }
-
-  DynamicList::Builder initList(uint size) {
-    switch (type) {
-      case FIELD: return struct_.builder.init(struct_.field, size).as<DynamicList>();
-      case ELEMENT: return list.builder.init(list.index, size).as<DynamicList>();
-      case STRUCT_OBJECT_FIELD: KJ_FAIL_REQUIRE("Type mismatch.");
-      case LIST_OBJECT_FIELD:
-        return struct_.builder.initObject(struct_.field, listFieldSchema, size);
-      case RAW_ENUM_FIELD: KJ_FAIL_REQUIRE("Type mismatch.");
-    }
-    KJ_FAIL_ASSERT("can't get here");
-  }
-
-  void set(DynamicValue::Reader value) {
-    switch (type) {
-      case FIELD: struct_.builder.set(struct_.field, value); return;
-      case ELEMENT: list.builder.set(list.index, value); return;
-      case STRUCT_OBJECT_FIELD: struct_.builder.set(struct_.field, value); return;
-      case LIST_OBJECT_FIELD: struct_.builder.set(struct_.field, value); return;
-      case RAW_ENUM_FIELD:
-        struct_.builder.set(struct_.field, value.as<DynamicEnum>().getRaw());
-        return;
-    }
-    KJ_FAIL_ASSERT("can't get here");
-  }
-
-  kj::Maybe<uint64_t> getEnumType() {
-    // If the slot type is an enum, get its type ID.  Otherwise return nullptr.
-    //
-    // This is really ugly.
-
-    switch (type) {
-      case FIELD: return enumIdForField(struct_.field);
-      case ELEMENT: {
-        if (list.builder.getSchema().whichElementType() == schema::Type::ENUM) {
-          return list.builder.getSchema().getEnumElementType().getProto().getId();
-        }
-        return nullptr;
-      }
-      case STRUCT_OBJECT_FIELD: return nullptr;
-      case LIST_OBJECT_FIELD: return nullptr;
-      case RAW_ENUM_FIELD: return enumFieldSchema.getProto().getId();
-    }
-    KJ_FAIL_ASSERT("can't get here");
-  }
-
-private:
-  enum Type {
-    FIELD, ELEMENT, STRUCT_OBJECT_FIELD, LIST_OBJECT_FIELD, RAW_ENUM_FIELD
-  };
-  Type type;
-
-  union {
-    struct {
-      DynamicStruct::Builder builder;
-      StructSchema::Field field;
-    } struct_;
-    struct {
-      DynamicList::Builder builder;
-      uint index;
-    } list;
-  };
-
-  union {
-    StructSchema structFieldSchema;
-    ListSchema listFieldSchema;
-    EnumSchema enumFieldSchema;
-  };
-
-  static kj::Maybe<uint64_t> enumIdForField(StructSchema::Field field) {
-    schema::Field::Reader proto = field.getProto();
-    if (proto.isNonGroup()) {
-      auto type = proto.getNonGroup().getType();
-      if (type.isEnum()) {
-        return type.getEnum();
-      }
-    }
-    return nullptr;
-  }
-};
-
-static kj::StringPtr getValueUnionFieldNameFor(schema::Type::Which type) {
-  switch (type) {
-    case schema::Type::VOID: return "void";
-    case schema::Type::BOOL: return "bool";
-    case schema::Type::INT8: return "int8";
-    case schema::Type::INT16: return "int16";
-    case schema::Type::INT32: return "int32";
-    case schema::Type::INT64: return "int64";
-    case schema::Type::UINT8: return "uint8";
-    case schema::Type::UINT16: return "uint16";
-    case schema::Type::UINT32: return "uint32";
-    case schema::Type::UINT64: return "uint64";
-    case schema::Type::FLOAT32: return "float32";
-    case schema::Type::FLOAT64: return "float64";
-    case schema::Type::TEXT: return "text";
-    case schema::Type::DATA: return "data";
-    case schema::Type::LIST: return "list";
-    case schema::Type::ENUM: return "enum";
-    case schema::Type::STRUCT: return "struct";
-    case schema::Type::INTERFACE: return "interface";
-    case schema::Type::OBJECT: return "object";
-  }
-  KJ_FAIL_ASSERT("Unknown type.");
-}
-
 void NodeTranslator::compileBootstrapValue(ValueExpression::Reader source,
                                            schema::Type::Reader type,
                                            schema::Value::Builder target) {
@@ -1551,154 +1410,345 @@ void NodeTranslator::compileBootstrapValue(ValueExpression::Reader source,
 
 void NodeTranslator::compileValue(ValueExpression::Reader source, schema::Type::Reader type,
                                   schema::Value::Builder target, bool isBootstrap) {
-  auto valueUnion = toDynamic(target);
-  auto field = valueUnion.getSchema().getFieldByName(
-      getValueUnionFieldNameFor(type.which()));
-  switch (type.which()) {
-    case schema::Type::LIST:
-      KJ_IF_MAYBE(listSchema, makeListSchemaOf(type.getList())) {
-        DynamicSlot slot(valueUnion, field, *listSchema);
-        compileValue(source, slot, isBootstrap);
-      }
-      break;
-    case schema::Type::STRUCT:
-      KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(type.getStruct())) {
-        DynamicSlot slot(valueUnion, field, structSchema->asStruct());
-        compileValue(source, slot, isBootstrap);
-      }
-      break;
-    case schema::Type::ENUM:
-      KJ_IF_MAYBE(enumSchema, resolver.resolveBootstrapSchema(type.getEnum())) {
-        DynamicSlot slot(valueUnion, field, enumSchema->asEnum());
-        compileValue(source, slot, isBootstrap);
-      }
-      break;
-    default:
-      DynamicSlot slot(valueUnion, field);
-      compileValue(source, slot, isBootstrap);
-      break;
+  kj::StringPtr fieldName = KJ_ASSERT_NONNULL(toDynamic(type).which()).getProto().getName();
+  KJ_IF_MAYBE(value, compileValue(source, type, isBootstrap)) {
+    if (type.isEnum()) {
+      target.setEnum(value->getReader().as<DynamicEnum>().getRaw());
+    } else {
+      toDynamic(target).adopt(fieldName, kj::mv(*value));
+    }
   }
 }
 
-void NodeTranslator::compileValue(ValueExpression::Reader src, DynamicSlot& dst, bool isBootstrap) {
-  // We rely on the dynamic API to detect type errors and throw exceptions.
-  //
-  // TODO(cleanup):  We should perhaps ensure that all exceptions that this might throw are
-  //   recoverable, so that this doesn't crash if -fno-exceptions is enabled.  Or create a better
-  //   way to test for type compatibility without throwing.
-  KJ_IF_MAYBE(exception, kj::runCatchingExceptions(
-      [&]() { compileValueInner(src, dst, isBootstrap); })) {
-    errorReporter.addErrorOn(src, "Type mismatch.");
+kj::Maybe<Orphan<DynamicValue>> NodeTranslator::compileValue(
+    ValueExpression::Reader src, schema::Type::Reader type, bool isBootstrap) {
+  Orphan<DynamicValue> result = compileValueInner(src, type, isBootstrap);
+
+  switch (result.getType()) {
+    case DynamicValue::UNKNOWN:
+      // Error already reported.
+      return nullptr;
+
+    case DynamicValue::VOID:
+      if (type.isVoid()) {
+        return kj::mv(result);
+      }
+      break;
+
+    case DynamicValue::BOOL:
+      if (type.isBool()) {
+        return kj::mv(result);
+      }
+      break;
+
+    case DynamicValue::INT: {
+      int64_t value = result.getReader().as<int64_t>();
+      if (value < 0) {
+        int64_t minValue = 1;
+        switch (type.which()) {
+          case schema::Type::INT8: minValue = std::numeric_limits<int8_t>::min(); break;
+          case schema::Type::INT16: minValue = std::numeric_limits<int16_t>::min(); break;
+          case schema::Type::INT32: minValue = std::numeric_limits<int32_t>::min(); break;
+          case schema::Type::INT64: minValue = std::numeric_limits<int64_t>::min(); break;
+          case schema::Type::UINT8: minValue = std::numeric_limits<uint8_t>::min(); break;
+          case schema::Type::UINT16: minValue = std::numeric_limits<uint16_t>::min(); break;
+          case schema::Type::UINT32: minValue = std::numeric_limits<uint32_t>::min(); break;
+          case schema::Type::UINT64: minValue = std::numeric_limits<uint64_t>::min(); break;
+
+          case schema::Type::FLOAT32:
+          case schema::Type::FLOAT64:
+            // Any integer is acceptable.
+            minValue = std::numeric_limits<int64_t>::min();
+            break;
+
+          default: break;
+        }
+        if (minValue == 1) break;
+
+        if (value < minValue) {
+          errorReporter.addErrorOn(src, "Integer value out of range.");
+          result = minValue;
+        }
+        return kj::mv(result);
+      }
+
+      // No break -- value is positive, so we can just go on to the uint case below.
+    }
+
+    case DynamicValue::UINT: {
+      uint64_t maxValue = 0;
+      switch (type.which()) {
+        case schema::Type::INT8: maxValue = std::numeric_limits<int8_t>::max(); break;
+        case schema::Type::INT16: maxValue = std::numeric_limits<int16_t>::max(); break;
+        case schema::Type::INT32: maxValue = std::numeric_limits<int32_t>::max(); break;
+        case schema::Type::INT64: maxValue = std::numeric_limits<int64_t>::max(); break;
+        case schema::Type::UINT8: maxValue = std::numeric_limits<uint8_t>::max(); break;
+        case schema::Type::UINT16: maxValue = std::numeric_limits<uint16_t>::max(); break;
+        case schema::Type::UINT32: maxValue = std::numeric_limits<uint32_t>::max(); break;
+        case schema::Type::UINT64: maxValue = std::numeric_limits<uint64_t>::max(); break;
+
+        case schema::Type::FLOAT32:
+        case schema::Type::FLOAT64:
+          // Any integer is acceptable.
+          maxValue = std::numeric_limits<uint64_t>::max();
+          break;
+
+        default: break;
+      }
+      if (maxValue == 0) break;
+
+      if (result.getReader().as<uint64_t>() > maxValue) {
+        errorReporter.addErrorOn(src, "Integer value out of range.");
+        result = maxValue;
+      }
+      return kj::mv(result);
+    }
+
+    case DynamicValue::FLOAT:
+      if (type.isFloat32() || type.isFloat64()) {
+        return kj::mv(result);
+      }
+      break;
+
+    case DynamicValue::TEXT:
+      if (type.isText()) {
+        return kj::mv(result);
+      }
+      break;
+
+    case DynamicValue::DATA:
+      if (type.isData()) {
+        return kj::mv(result);
+      }
+      break;
+
+    case DynamicValue::LIST:
+      if (type.isList()) {
+        KJ_IF_MAYBE(schema, makeListSchemaOf(type.getList())) {
+          if (result.getReader().as<DynamicList>().getSchema() == *schema) {
+            return kj::mv(result);
+          }
+        } else {
+          return nullptr;
+        }
+      }
+      break;
+
+    case DynamicValue::ENUM:
+      if (type.isEnum()) {
+        KJ_IF_MAYBE(schema, resolver.resolveBootstrapSchema(type.getEnum())) {
+          if (result.getReader().as<DynamicEnum>().getSchema() == *schema) {
+            return kj::mv(result);
+          }
+        } else {
+          return nullptr;
+        }
+      }
+      break;
+
+    case DynamicValue::STRUCT:
+      if (type.isStruct()) {
+        KJ_IF_MAYBE(schema, resolver.resolveBootstrapSchema(type.getStruct())) {
+          if (result.getReader().as<DynamicStruct>().getSchema() == *schema) {
+            return kj::mv(result);
+          }
+        } else {
+          return nullptr;
+        }
+      }
+      break;
+
+    case DynamicValue::INTERFACE:
+      KJ_FAIL_ASSERT("Interfaces can't have literal values.");
+
+    case DynamicValue::OBJECT:
+      KJ_FAIL_ASSERT("Objects can't have literal values.");
   }
+
+  errorReporter.addErrorOn(src, kj::str("Type mismatch; expected ", makeTypeName(type), "."));
+  return nullptr;
 }
 
-void NodeTranslator::compileValueInner(
-    ValueExpression::Reader src, DynamicSlot& dst, bool isBootstrap) {
+Orphan<DynamicValue> NodeTranslator::compileValueInner(
+    ValueExpression::Reader src, schema::Type::Reader type, bool isBootstrap) {
   switch (src.which()) {
     case ValueExpression::NAME: {
       auto name = src.getName();
       bool isBare = name.getBase().isRelativeName() &&
                     name.getMemberPath().size() == 0;
-      bool wasSet = false;
       if (isBare) {
         // The name is just a bare identifier.  It may be a literal value or an enumerant.
         kj::StringPtr id = name.getBase().getRelativeName().getValue();
 
-        KJ_IF_MAYBE(enumId, dst.getEnumType()) {
-          KJ_IF_MAYBE(enumSchema, resolver.resolveBootstrapSchema(*enumId)) {
+        if (type.isEnum()) {
+          KJ_IF_MAYBE(enumSchema, resolver.resolveBootstrapSchema(type.getEnum())) {
             KJ_IF_MAYBE(enumerant, enumSchema->asEnum().findEnumerantByName(id)) {
-              dst.set(DynamicEnum(*enumerant));
-              wasSet = true;
+              return DynamicEnum(*enumerant);
             }
           } else {
-            // Enum type is broken.  We don't want to report a redundant error here, so just assume
-            // we would have found a matching enumerant.
-            dst.set(kj::implicitCast<uint16_t>(0));
-            wasSet = true;
+            // Enum type is broken.
+            return nullptr;
           }
         } else {
           // Interpret known constant values.
           if (id == "void") {
-            dst.set(VOID);
-            wasSet = true;
+            return VOID;
           } else if (id == "true") {
-            dst.set(true);
-            wasSet = true;
+            return true;
           } else if (id == "false") {
-            dst.set(false);
-            wasSet = true;
+            return false;
           } else if (id == "nan") {
-            dst.set(std::numeric_limits<double>::quiet_NaN());
-            wasSet = true;
+            return std::numeric_limits<double>::quiet_NaN();
           } else if (id == "inf") {
-            dst.set(std::numeric_limits<double>::infinity());
-            wasSet = true;
+            return std::numeric_limits<double>::infinity();
           }
         }
       }
 
-      if (!wasSet) {
-        // Haven't resolved the name yet.  Try looking up a constant.
-        KJ_IF_MAYBE(constValue, readConstant(src.getName(), isBootstrap, src)) {
-          dst.set(*constValue);
-        }
+      // Haven't resolved the name yet.  Try looking up a constant.
+      KJ_IF_MAYBE(constValue, readConstant(src.getName(), isBootstrap, src)) {
+        return orphanage.newOrphanCopy(*constValue);
       }
-      break;
+
+      return nullptr;
     }
 
     case ValueExpression::POSITIVE_INT:
-      dst.set(src.getPositiveInt());
-      break;
+      return src.getPositiveInt();
 
     case ValueExpression::NEGATIVE_INT: {
       uint64_t nValue = src.getNegativeInt();
       if (nValue > (std::numeric_limits<uint64_t>::max() >> 1) + 1) {
         errorReporter.addErrorOn(src, "Integer is too big to be negative.");
+        return nullptr;
       } else {
-        dst.set(kj::implicitCast<int64_t>(-nValue));
+        return kj::implicitCast<int64_t>(-nValue);
       }
-      break;
     }
 
     case ValueExpression::FLOAT:
-      dst.set(src.getFloat());
+      return src.getFloat();
       break;
 
     case ValueExpression::STRING:
-      dst.set(src.getString());
+      if (type.isData()) {
+        Text::Reader text = src.getString();
+        return orphanage.newOrphanCopy(Data::Reader(
+            reinterpret_cast<const byte*>(text.begin()), text.size()));
+      } else {
+        return orphanage.newOrphanCopy(src.getString());
+      }
       break;
 
     case ValueExpression::LIST: {
-      auto srcList = src.getList();
-      auto dstList = dst.initList(srcList.size());
-      for (uint i = 0; i < srcList.size(); i++) {
-        DynamicSlot slot(dstList, i);
-        compileValue(srcList[i], slot, isBootstrap);
+      if (!type.isList()) {
+        errorReporter.addErrorOn(src, "Type mismatch.");
+        return nullptr;
       }
-      break;
+      auto elementType = type.getList();
+      KJ_IF_MAYBE(listSchema, makeListSchemaOf(elementType)) {
+        auto srcList = src.getList();
+        Orphan<DynamicList> result = orphanage.newOrphan(*listSchema, srcList.size());
+        auto dstList = result.get();
+        for (uint i = 0; i < srcList.size(); i++) {
+          KJ_IF_MAYBE(value, compileValue(srcList[i], elementType, isBootstrap)) {
+            dstList.adopt(i, kj::mv(*value));
+          }
+        }
+        return kj::mv(result);
+      } else {
+        return nullptr;
+      }
     }
 
     case ValueExpression::STRUCT: {
-      auto srcStruct = src.getStruct();
-      auto dstStruct = dst.initStruct();
-      auto dstSchema = dstStruct.getSchema();
-      for (auto assignment: srcStruct) {
-        auto fieldName = assignment.getFieldName();
-        KJ_IF_MAYBE(field, dstSchema.findFieldByName(fieldName.getValue())) {
-          DynamicSlot slot(dstStruct, *field);
-          compileValue(assignment.getValue(), slot, isBootstrap);
-        } else {
-          errorReporter.addErrorOn(fieldName, kj::str(
-              "Struct has no field named '", fieldName.getValue(), "'."));
-        }
+      if (!type.isStruct()) {
+        errorReporter.addErrorOn(src, "Type mismatch.");
+        return nullptr;
       }
-      break;
+      KJ_IF_MAYBE(schema, resolver.resolveBootstrapSchema(type.getStruct())) {
+        auto structSchema = schema->asStruct();
+        Orphan<DynamicStruct> result = orphanage.newOrphan(structSchema);
+        fillStructValue(result.get(), src.getStruct(), isBootstrap);
+        return kj::mv(result);
+      } else {
+        return nullptr;
+      }
     }
 
     case ValueExpression::UNKNOWN:
       // Ignore earlier error.
-      break;
+      return nullptr;
   }
+
+  KJ_UNREACHABLE;
+}
+
+void NodeTranslator::fillStructValue(DynamicStruct::Builder builder,
+                                     List<ValueExpression::FieldAssignment>::Reader assignments,
+                                     bool isBootstrap) {
+  for (auto assignment: assignments) {
+    auto fieldName = assignment.getFieldName();
+    KJ_IF_MAYBE(field, builder.getSchema().findFieldByName(fieldName.getValue())) {
+      auto fieldProto = field->getProto();
+      auto value = assignment.getValue();
+
+      switch (fieldProto.which()) {
+        case schema::Field::NON_GROUP:
+          KJ_IF_MAYBE(compiledValue,
+                      compileValue(value, fieldProto.getNonGroup().getType(), isBootstrap)) {
+            builder.adopt(*field, kj::mv(*compiledValue));
+          }
+          break;
+
+        case schema::Field::GROUP:
+          if (value.isStruct()) {
+            fillStructValue(builder.init(*field).as<DynamicStruct>(), value.getStruct(),
+                            isBootstrap);
+          } else {
+            errorReporter.addErrorOn(value, "Type mismatch.");
+          }
+          break;
+      }
+    } else {
+      errorReporter.addErrorOn(fieldName, kj::str(
+          "Struct has no field named '", fieldName.getValue(), "'."));
+    }
+  }
+}
+
+kj::String NodeTranslator::makeNodeName(uint64_t id) {
+  KJ_IF_MAYBE(schema, resolver.resolveBootstrapSchema(id)) {
+    schema::Node::Reader proto = schema->getProto();
+    return kj::str(proto.getDisplayName().slice(proto.getDisplayNamePrefixLength()));
+  } else {
+    return kj::str("@0x", kj::hex(id));
+  }
+}
+
+kj::String NodeTranslator::makeTypeName(schema::Type::Reader type) {
+  switch (type.which()) {
+    case schema::Type::VOID: return kj::str("Void");
+    case schema::Type::BOOL: return kj::str("Bool");
+    case schema::Type::INT8: return kj::str("Int8");
+    case schema::Type::INT16: return kj::str("Int16");
+    case schema::Type::INT32: return kj::str("Int32");
+    case schema::Type::INT64: return kj::str("Int64");
+    case schema::Type::UINT8: return kj::str("UInt8");
+    case schema::Type::UINT16: return kj::str("UInt16");
+    case schema::Type::UINT32: return kj::str("UInt32");
+    case schema::Type::UINT64: return kj::str("UInt64");
+    case schema::Type::FLOAT32: return kj::str("Float32");
+    case schema::Type::FLOAT64: return kj::str("Float64");
+    case schema::Type::TEXT: return kj::str("Text");
+    case schema::Type::DATA: return kj::str("Data");
+    case schema::Type::LIST: return kj::str("List(", makeTypeName(type.getList()), ")");
+    case schema::Type::ENUM: return makeNodeName(type.getEnum());
+    case schema::Type::STRUCT: return makeNodeName(type.getStruct());
+    case schema::Type::INTERFACE: return makeNodeName(type.getInterface());
+    case schema::Type::OBJECT: return kj::str("Object");
+  }
+  KJ_UNREACHABLE;
 }
 
 kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
@@ -1824,7 +1874,6 @@ Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
     return Orphan<List<schema::Annotation>>();
   }
 
-  Orphanage orphanage = Orphanage::getForMessageContaining(wipNode.get());
   auto result = orphanage.newOrphan<List<schema::Annotation>>(annotations.size());
   auto builder = result.get();
 

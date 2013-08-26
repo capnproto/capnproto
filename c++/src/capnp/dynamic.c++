@@ -558,10 +558,12 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
           return;
 
         case schema::Type::LIST:
+          // TODO(soon):  Type check.
           builder.setListField(nonGroup.getOffset() * POINTERS, value.as<DynamicList>().reader);
           return;
 
         case schema::Type::STRUCT:
+          // TODO(soon):  Type check.
           builder.setStructField(
               nonGroup.getOffset() * POINTERS, value.as<DynamicStruct>().reader);
           return;
@@ -697,11 +699,11 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
           return;
 
         case schema::Type::TEXT:
-          orphan.getReader().as<Text>();  // type check
+          KJ_REQUIRE(orphan.getType() == DynamicValue::TEXT, "Value type mismatch.");
           break;
 
         case schema::Type::DATA:
-          orphan.getReader().as<Data>();  // type check
+          KJ_REQUIRE(orphan.getType() == DynamicValue::DATA, "Value type mismatch.");
           break;
 
         case schema::Type::LIST: {
@@ -869,7 +871,7 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
         case schema::Type::LIST:
         case schema::Type::STRUCT:
         case schema::Type::OBJECT:
-          builder.disown(nonGroup.getOffset() * POINTERS);
+          builder.clearPointer(nonGroup.getOffset() * POINTERS);
           return;
 
         case schema::Type::INTERFACE:
@@ -1199,17 +1201,16 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
       return;
 
     case schema::Type::LIST: {
+      // TODO(soon):  Type check.
       builder.setListElement(index * ELEMENTS, value.as<DynamicList>().reader);
       return;
     }
 
-    case schema::Type::STRUCT:
-      // Not supported for the same reason List<struct> doesn't support it -- the space for the
-      // element is already allocated, and if it's smaller than the input value the copy would
-      // have to be lossy.
-      KJ_FAIL_ASSERT("DynamicList of structs does not support set().") {
-        return;
-      }
+    case schema::Type::STRUCT: {
+      // TODO(soon):  Type check.
+      builder.getStructElement(index * ELEMENTS).copyContentFrom(value.as<DynamicStruct>().reader);
+      return;
+    }
 
     case schema::Type::ENUM: {
       uint16_t rawValue;
@@ -1295,6 +1296,114 @@ DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
   }
 
   return nullptr;
+}
+
+void DynamicList::Builder::adopt(uint index, Orphan<DynamicValue>&& orphan) {
+  switch (schema.whichElementType()) {
+    case schema::Type::VOID:
+    case schema::Type::BOOL:
+    case schema::Type::INT8:
+    case schema::Type::INT16:
+    case schema::Type::INT32:
+    case schema::Type::INT64:
+    case schema::Type::UINT8:
+    case schema::Type::UINT16:
+    case schema::Type::UINT32:
+    case schema::Type::UINT64:
+    case schema::Type::FLOAT32:
+    case schema::Type::FLOAT64:
+    case schema::Type::ENUM:
+      set(index, orphan.getReader());
+      return;
+
+    case schema::Type::TEXT:
+      KJ_REQUIRE(orphan.getType() == DynamicValue::TEXT, "Value type mismatch.");
+      builder.adopt(index * ELEMENTS, kj::mv(orphan.builder));
+      return;
+
+    case schema::Type::DATA:
+      KJ_REQUIRE(orphan.getType() == DynamicValue::DATA, "Value type mismatch.");
+      builder.adopt(index * ELEMENTS, kj::mv(orphan.builder));
+      return;
+
+    case schema::Type::LIST: {
+      ListSchema elementType = schema.getListElementType();
+      KJ_REQUIRE(orphan.getType() == DynamicValue::LIST && orphan.listSchema == elementType,
+                 "Value type mismatch.");
+      builder.adopt(index * ELEMENTS, kj::mv(orphan.builder));
+      return;
+    }
+
+    case schema::Type::STRUCT: {
+      auto elementType = schema.getStructElementType();
+      KJ_REQUIRE(orphan.getType() == DynamicValue::STRUCT && orphan.structSchema == elementType,
+                 "Value type mismatch.");
+      builder.getStructElement(index * ELEMENTS).transferContentFrom(
+          orphan.builder.asStruct(structSizeFromSchema(elementType)));
+      return;
+    }
+
+    case schema::Type::OBJECT:
+      KJ_FAIL_ASSERT("List(Object) not supported.");
+
+    case schema::Type::INTERFACE:
+      KJ_FAIL_ASSERT("Interfaces not yet implemented.");
+  }
+
+  KJ_UNREACHABLE;
+}
+
+Orphan<DynamicValue> DynamicList::Builder::disown(uint index) {
+  switch (schema.whichElementType()) {
+    case schema::Type::VOID:
+    case schema::Type::BOOL:
+    case schema::Type::INT8:
+    case schema::Type::INT16:
+    case schema::Type::INT32:
+    case schema::Type::INT64:
+    case schema::Type::UINT8:
+    case schema::Type::UINT16:
+    case schema::Type::UINT32:
+    case schema::Type::UINT64:
+    case schema::Type::FLOAT32:
+    case schema::Type::FLOAT64:
+    case schema::Type::ENUM: {
+      auto result = Orphan<DynamicValue>(operator[](index), _::OrphanBuilder());
+      switch (elementSizeFor(schema.whichElementType())) {
+        case _::FieldSize::VOID: break;
+        case _::FieldSize::BIT: builder.setDataElement<bool>(index * ELEMENTS, false); break;
+        case _::FieldSize::BYTE: builder.setDataElement<uint8_t>(index * ELEMENTS, 0); break;
+        case _::FieldSize::TWO_BYTES: builder.setDataElement<uint16_t>(index * ELEMENTS, 0); break;
+        case _::FieldSize::FOUR_BYTES: builder.setDataElement<uint32_t>(index * ELEMENTS, 0); break;
+        case _::FieldSize::EIGHT_BYTES: builder.setDataElement<uint64_t>(index * ELEMENTS, 0);break;
+
+        case _::FieldSize::POINTER:
+        case _::FieldSize::INLINE_COMPOSITE:
+          KJ_UNREACHABLE;
+      }
+      return kj::mv(result);
+    }
+
+    case schema::Type::TEXT:
+    case schema::Type::DATA:
+    case schema::Type::LIST:
+    case schema::Type::OBJECT:
+    case schema::Type::INTERFACE: {
+      auto value = operator[](index);
+      return Orphan<DynamicValue>(value, builder.disown(index * ELEMENTS));
+    }
+
+    case schema::Type::STRUCT: {
+      // We have to make a copy.
+      Orphan<DynamicStruct> result =
+          Orphanage::getForMessageContaining(*this).newOrphan(schema.getStructElementType());
+      auto element = builder.getStructElement(index * ELEMENTS);
+      result.get().builder.transferContentFrom(element);
+      element.clearAll();
+      return kj::mv(result);
+    }
+  }
+  KJ_UNREACHABLE;
 }
 
 void DynamicList::Builder::copyFrom(std::initializer_list<DynamicValue::Reader> value) {
@@ -1793,12 +1902,50 @@ DynamicValue::Reader Orphan<DynamicValue>::getReader() const {
 template <>
 Orphan<DynamicStruct> Orphan<DynamicValue>::releaseAs<DynamicStruct>() {
   KJ_REQUIRE(type == DynamicValue::STRUCT, "Value type mismatch.");
+  type = DynamicValue::UNKNOWN;
   return Orphan<DynamicStruct>(structSchema, kj::mv(builder));
 }
 template <>
 Orphan<DynamicList> Orphan<DynamicValue>::releaseAs<DynamicList>() {
   KJ_REQUIRE(type == DynamicValue::LIST, "Value type mismatch.");
+  type = DynamicValue::UNKNOWN;
   return Orphan<DynamicList>(listSchema, kj::mv(builder));
+}
+
+template <>
+Orphan<DynamicObject> Orphanage::newOrphanCopy<DynamicObject::Reader>(
+    const DynamicObject::Reader& copyFrom) const {
+  switch (copyFrom.reader.kind) {
+    case _::ObjectKind::NULL_POINTER:
+      return Orphan<DynamicObject>();
+    case _::ObjectKind::STRUCT:
+      return Orphan<DynamicObject>(_::OrphanBuilder::copy(arena, copyFrom.reader.structReader));
+    case _::ObjectKind::LIST:
+      return Orphan<DynamicObject>(_::OrphanBuilder::copy(arena, copyFrom.reader.listReader));
+  }
+  KJ_UNREACHABLE;
+}
+
+template <>
+Orphan<DynamicValue> Orphanage::newOrphanCopy<DynamicValue::Reader>(
+    const DynamicValue::Reader& copyFrom) const {
+  switch (copyFrom.getType()) {
+    case DynamicValue::UNKNOWN: return nullptr;
+    case DynamicValue::VOID: return copyFrom.voidValue;
+    case DynamicValue::BOOL: return copyFrom.boolValue;
+    case DynamicValue::INT: return copyFrom.intValue;
+    case DynamicValue::UINT: return copyFrom.uintValue;
+    case DynamicValue::FLOAT: return copyFrom.floatValue;
+    case DynamicValue::ENUM: return copyFrom.enumValue;
+
+    case DynamicValue::TEXT: return newOrphanCopy(copyFrom.textValue);
+    case DynamicValue::DATA: return newOrphanCopy(copyFrom.dataValue);
+    case DynamicValue::LIST: return newOrphanCopy(copyFrom.listValue);
+    case DynamicValue::STRUCT: return newOrphanCopy(copyFrom.structValue);
+    case DynamicValue::INTERFACE: KJ_FAIL_ASSERT("Interfaces not implemented.");
+    case DynamicValue::OBJECT: return newOrphanCopy(copyFrom.objectValue);
+  }
+  KJ_UNREACHABLE;
 }
 
 }  // namespace capnp

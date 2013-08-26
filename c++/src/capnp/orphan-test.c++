@@ -446,14 +446,14 @@ TEST(Orphans, DynamicStructAs) {
 
   Orphan<DynamicValue> orphan =
       root.disownObjectField<DynamicStruct>(Schema::from<TestAllTypes>());
-  EXPECT_FALSE(orphan == nullptr);
+  EXPECT_EQ(DynamicValue::STRUCT, orphan.getType());
 
   checkTestMessage(orphan.getReader().as<TestAllTypes>());
   checkTestMessage(orphan.get().as<TestAllTypes>());
 
   {
     Orphan<DynamicStruct> structOrphan = orphan.releaseAs<DynamicStruct>();
-    EXPECT_TRUE(orphan == nullptr);
+    EXPECT_EQ(DynamicValue::UNKNOWN, orphan.getType());
     EXPECT_FALSE(structOrphan == nullptr);
     checkDynamicTestMessage(structOrphan.getReader());
     checkDynamicTestMessage(structOrphan.get());
@@ -467,7 +467,7 @@ TEST(Orphans, DynamicStructAs) {
       checkTestMessage(typedOrphan.getReader());
       checkTestMessage(typedOrphan.get());
       orphan = kj::mv(typedOrphan);
-      EXPECT_FALSE(orphan == nullptr);
+      EXPECT_EQ(DynamicValue::STRUCT, orphan.getType());
       EXPECT_TRUE(typedOrphan == nullptr);
     }
   }
@@ -487,14 +487,14 @@ TEST(Orphans, DynamicListAs) {
   EXPECT_TRUE(root.hasObjectField());
 
   Orphan<DynamicValue> orphan = root.disownObjectField<DynamicList>(Schema::from<List<uint32_t>>());
-  EXPECT_FALSE(orphan == nullptr);
+  EXPECT_EQ(DynamicValue::LIST, orphan.getType());
 
   checkList(orphan.getReader().as<List<uint32_t>>(), {12, 34, 56});
   checkList(orphan.get().as<List<uint32_t>>(), {12, 34, 56});
 
   {
     Orphan<DynamicList> listOrphan = orphan.releaseAs<DynamicList>();
-    EXPECT_TRUE(orphan == nullptr);
+    EXPECT_EQ(DynamicValue::UNKNOWN, orphan.getType());
     EXPECT_FALSE(listOrphan == nullptr);
     checkList<uint32_t>(listOrphan.getReader(), {12, 34, 56});
     checkList<uint32_t>(listOrphan.get(), {12, 34, 56});
@@ -508,7 +508,7 @@ TEST(Orphans, DynamicListAs) {
       checkList(typedOrphan.getReader(), {12, 34, 56});
       checkList(typedOrphan.get(), {12, 34, 56});
       orphan = kj::mv(typedOrphan);
-      EXPECT_FALSE(orphan == nullptr);
+      EXPECT_EQ(DynamicValue::LIST, orphan.getType());
       EXPECT_TRUE(typedOrphan == nullptr);
     }
   }
@@ -528,7 +528,7 @@ TEST(Orphans, DynamicObject) {
   EXPECT_TRUE(root.hasObjectField());
 
   Orphan<DynamicValue> orphan = root.disownObjectField<DynamicObject>();
-  EXPECT_FALSE(orphan == nullptr);
+  EXPECT_EQ(DynamicValue::OBJECT, orphan.getType());
 
   checkTestMessage(orphan.getReader().as<DynamicObject>().as<TestAllTypes>());
 

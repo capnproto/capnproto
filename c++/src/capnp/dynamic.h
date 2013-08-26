@@ -150,6 +150,8 @@ class DynamicObject::Reader {
   // Represents an "Object" field of unknown type.
 
 public:
+  typedef DynamicObject Reads;
+
   Reader() = default;
 
   template <typename T>
@@ -171,6 +173,7 @@ private:
   friend class DynamicObject::Builder;
   friend class Orphan<DynamicObject>;
   friend class Orphan<DynamicValue>;
+  friend class Orphanage;
 };
 
 class DynamicObject::Builder: public kj::DisallowConstCopy {
@@ -182,6 +185,8 @@ class DynamicObject::Builder: public kj::DisallowConstCopy {
   // DynamicStruct::Builder::{get,set,init}Object() and pass a type schema to build object fields.
 
 public:
+  typedef DynamicObject Builds;
+
   Builder() = default;
   Builder(Builder&) = default;
   Builder(Builder&&) = default;
@@ -313,8 +318,6 @@ public:
   // Clear a field, setting it to its default value.  For pointer fields, this actually makes the
   // field null.
 
-  // TODO(someday):  Implement adopt() and disown().
-
   DynamicStruct::Builder getObject(StructSchema::Field field, StructSchema type);
   DynamicList::Builder getObject(StructSchema::Field field, ListSchema type);
   Text::Builder getObjectAsText(StructSchema::Field field);
@@ -437,7 +440,8 @@ public:
   DynamicValue::Builder operator[](uint index);
   void set(uint index, const DynamicValue::Reader& value);
   DynamicValue::Builder init(uint index, uint size);
-  // TODO(someday):  Implement adopt() and disown().
+  void adopt(uint index, Orphan<DynamicValue>&& orphan);
+  Orphan<DynamicValue> disown(uint index);
 
   typedef _::IndexingIterator<Builder, DynamicStruct::Builder> Iterator;
   inline Iterator begin() { return Iterator(this, 0); }
@@ -484,7 +488,7 @@ class DynamicValue::Reader {
 public:
   typedef DynamicValue Reads;
 
-  inline Reader(std::nullptr_t n = nullptr);  // UNKNOWN
+  inline Reader(decltype(nullptr) n = nullptr);  // UNKNOWN
   inline Reader(Void value);
   inline Reader(bool value);
   inline Reader(char value);
@@ -557,13 +561,15 @@ private:
   template <typename T, Kind kind = kind<T>()> struct AsImpl;
   // Implementation backing the as() method.  Needs to be a struct to allow partial
   // specialization.  Has a method apply() which does the work.
+
+  friend class Orphanage;  // to speed up newOrphanCopy(DynamicValue::Reader)
 };
 
 class DynamicValue::Builder {
 public:
   typedef DynamicValue Builds;
 
-  inline Builder(std::nullptr_t n = nullptr);  // UNKNOWN
+  inline Builder(decltype(nullptr) n = nullptr);  // UNKNOWN
   inline Builder(Void value);
   inline Builder(bool value);
   inline Builder(char value);
@@ -757,16 +763,34 @@ private:
   template <typename, Kind>
   friend struct _::PointerHelpers;
   friend class Orphan<DynamicValue>;
+  friend class Orphanage;
 };
 
 template <>
 class Orphan<DynamicValue> {
 public:
-  Orphan() = default;
-  KJ_DISALLOW_COPY(Orphan);
+  inline Orphan(decltype(nullptr) n = nullptr): type(DynamicValue::UNKNOWN) {}
+  inline Orphan(Void value);
+  inline Orphan(bool value);
+  inline Orphan(char value);
+  inline Orphan(signed char value);
+  inline Orphan(short value);
+  inline Orphan(int value);
+  inline Orphan(long value);
+  inline Orphan(long long value);
+  inline Orphan(unsigned char value);
+  inline Orphan(unsigned short value);
+  inline Orphan(unsigned int value);
+  inline Orphan(unsigned long value);
+  inline Orphan(unsigned long long value);
+  inline Orphan(float value);
+  inline Orphan(double value);
+  inline Orphan(DynamicEnum value);
   Orphan(Orphan&&) = default;
   template <typename T>
   Orphan(Orphan<T>&&);
+  KJ_DISALLOW_COPY(Orphan);
+
   Orphan& operator=(Orphan&&) = default;
 
   inline DynamicValue::Type getType() { return type; }
@@ -779,9 +803,6 @@ public:
   // Like DynamicValue::Builder::as(), but coerces the Orphan type.  Since Orphans are move-only,
   // the original Orphan<DynamicStruct> is no longer valid after this call; ownership is
   // transferred to the returned Orphan<T>.
-
-  inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
-  inline bool operator!=(decltype(nullptr)) const { return builder != nullptr; }
 
 private:
   DynamicValue::Type type;
@@ -851,6 +872,7 @@ Orphan<T> Orphan<DynamicList>::releaseAs() {
 template <typename T>
 Orphan<T> Orphan<DynamicValue>::releaseAs() {
   get().as<T>();  // type check
+  type = DynamicValue::UNKNOWN;
   return Orphan<T>(kj::mv(builder));
 }
 
@@ -885,6 +907,14 @@ inline Orphan<DynamicList> Orphanage::newOrphanCopy<DynamicList::Reader>(
     const DynamicList::Reader& copyFrom) const {
   return Orphan<DynamicList>(copyFrom.getSchema(), _::OrphanBuilder::copy(arena, copyFrom.reader));
 }
+
+template <>
+Orphan<DynamicObject> Orphanage::newOrphanCopy<DynamicObject::Reader>(
+    const DynamicObject::Reader& copyFrom) const;
+
+template <>
+Orphan<DynamicValue> Orphanage::newOrphanCopy<DynamicValue::Reader>(
+    const DynamicValue::Reader& copyFrom) const;
 
 // -------------------------------------------------------------------
 // Inject the ability to use DynamicStruct for message roots and Dynamic{Struct,List} for
@@ -1001,11 +1031,13 @@ DynamicTypeFor<TypeIfEnum<T>> toDynamic(T&& value) {
 inline DynamicValue::Reader::Reader(std::nullptr_t n): type(UNKNOWN) {}
 inline DynamicValue::Builder::Builder(std::nullptr_t n): type(UNKNOWN) {}
 
-    #define CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(cppType, typeTag, fieldName) \
+#define CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(cppType, typeTag, fieldName) \
 inline DynamicValue::Reader::Reader(cppType value) \
     : type(typeTag), fieldName##Value(value) {} \
 inline DynamicValue::Builder::Builder(cppType value) \
-    : type(typeTag), fieldName##Value(value) {}
+    : type(typeTag), fieldName##Value(value) {} \
+inline Orphan<DynamicValue>::Orphan(cppType value) \
+    : type(DynamicValue::typeTag), fieldName##Value(value) {}
 
 CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Void, VOID, void);
 CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(bool, BOOL, bool);
