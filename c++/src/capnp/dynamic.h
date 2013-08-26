@@ -216,6 +216,8 @@ public:
   template <typename T, typename = kj::EnableIf<kind<FromReader<T>>() == Kind::STRUCT>>
   inline Reader(T&& value): Reader(toDynamic(value)) {}
 
+  inline size_t totalSizeInWords() const { return reader.totalSize() / ::capnp::WORDS; }
+
   template <typename T>
   typename T::Reader as() const;
   // Convert the dynamic struct to its compiled-in type.
@@ -278,6 +280,8 @@ public:
 
   template <typename T, typename = kj::EnableIf<kind<FromBuilder<T>>() == Kind::STRUCT>>
   inline Builder(T&& value): Builder(toDynamic(value)) {}
+
+  inline size_t totalSizeInWords() const { return asReader().totalSizeInWords(); }
 
   template <typename T>
   typename T::Builder as();
@@ -926,6 +930,12 @@ template <>
 DynamicStruct::Builder MessageBuilder::initRoot<DynamicStruct>(StructSchema schema);
 template <>
 DynamicStruct::Builder MessageBuilder::getRoot<DynamicStruct>(StructSchema schema);
+template <>
+void MessageBuilder::setRoot<DynamicStruct::Reader>(DynamicStruct::Reader&& value);
+template <>
+void MessageBuilder::setRoot<const DynamicStruct::Reader&>(const DynamicStruct::Reader& value);
+template <>
+void MessageBuilder::setRoot<DynamicStruct::Reader&>(DynamicStruct::Reader& value);
 
 namespace _ {  // private
 

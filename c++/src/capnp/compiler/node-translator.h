@@ -169,25 +169,7 @@ private:
                     schema::Value::Builder target, bool isBootstrap);
   // Interprets the value expression and initializes `target` with the result.
 
-  kj::Maybe<Orphan<DynamicValue>> compileValue(
-      ValueExpression::Reader src, schema::Type::Reader type, bool isBootstrap);
-  // Compile the given value as the given type.  Returns null if there was an error, including
-  // if the value doesn't match the type.
-
-  Orphan<DynamicValue> compileValueInner(ValueExpression::Reader src, schema::Type::Reader type,
-                                         bool isBootstrap);
-  // Helper for compileValue().
-
-  void fillStructValue(DynamicStruct::Builder builder,
-                       List<ValueExpression::FieldAssignment>::Reader assignments,
-                       bool isBootstrap);
-  // Interprets the given assignments and uses them to fill in the given struct builder.
-
-  kj::String makeNodeName(uint64_t id);
-  kj::String makeTypeName(schema::Type::Reader type);
-
-  kj::Maybe<DynamicValue::Reader> readConstant(DeclName::Reader name, bool isBootstrap,
-                                               ValueExpression::Reader errorLocation);
+  kj::Maybe<DynamicValue::Reader> readConstant(DeclName::Reader name, bool isBootstrap);
   // Get the value of the given constant.  May return null if some error occurs, which will already
   // have been reported.
 
@@ -198,6 +180,38 @@ private:
   Orphan<List<schema::Annotation>> compileAnnotationApplications(
       List<Declaration::AnnotationApplication>::Reader annotations,
       kj::StringPtr targetsFlagName);
+};
+
+class ValueTranslator {
+public:
+  class Resolver {
+  public:
+    virtual kj::Maybe<Schema> resolveType(uint64_t id) = 0;
+    virtual kj::Maybe<DynamicValue::Reader> resolveConstant(DeclName::Reader name) = 0;
+  };
+
+  ValueTranslator(Resolver& resolver, const ErrorReporter& errorReporter, Orphanage orphanage)
+      : resolver(resolver), errorReporter(errorReporter), orphanage(orphanage) {}
+
+  kj::Maybe<Orphan<DynamicValue>> compileValue(
+      ValueExpression::Reader src, schema::Type::Reader type);
+
+private:
+  Resolver& resolver;
+  const ErrorReporter& errorReporter;
+  Orphanage orphanage;
+
+  Orphan<DynamicValue> compileValueInner(ValueExpression::Reader src, schema::Type::Reader type);
+  // Helper for compileValue().
+
+  void fillStructValue(DynamicStruct::Builder builder,
+                       List<ValueExpression::FieldAssignment>::Reader assignments);
+  // Interprets the given assignments and uses them to fill in the given struct builder.
+
+  kj::String makeNodeName(uint64_t id);
+  kj::String makeTypeName(schema::Type::Reader type);
+
+  kj::Maybe<ListSchema> makeListSchemaOf(schema::Type::Reader elementType);
 };
 
 }  // namespace compiler

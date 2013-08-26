@@ -1410,8 +1410,31 @@ void NodeTranslator::compileBootstrapValue(ValueExpression::Reader source,
 
 void NodeTranslator::compileValue(ValueExpression::Reader source, schema::Type::Reader type,
                                   schema::Value::Builder target, bool isBootstrap) {
+  class ResolverGlue: public ValueTranslator::Resolver {
+  public:
+    inline ResolverGlue(NodeTranslator& translator, bool isBootstrap)
+        : translator(translator), isBootstrap(isBootstrap) {}
+
+    kj::Maybe<Schema> resolveType(uint64_t id) override {
+      // Always use bootstrap schemas when resolving types, because final schemas are unsafe to
+      // use with the dynamic API and bootstrap schemas have all the info needed anyway.
+      return translator.resolver.resolveBootstrapSchema(id);
+    }
+
+    kj::Maybe<DynamicValue::Reader> resolveConstant(DeclName::Reader name) override {
+      return translator.readConstant(name, isBootstrap);
+    }
+
+  private:
+    NodeTranslator& translator;
+    bool isBootstrap;
+  };
+
+  ResolverGlue glue(*this, isBootstrap);
+  ValueTranslator valueTranslator(glue, errorReporter, orphanage);
+
   kj::StringPtr fieldName = KJ_ASSERT_NONNULL(toDynamic(type).which()).getProto().getName();
-  KJ_IF_MAYBE(value, compileValue(source, type, isBootstrap)) {
+  KJ_IF_MAYBE(value, valueTranslator.compileValue(source, type)) {
     if (type.isEnum()) {
       target.setEnum(value->getReader().as<DynamicEnum>().getRaw());
     } else {
@@ -1420,9 +1443,9 @@ void NodeTranslator::compileValue(ValueExpression::Reader source, schema::Type::
   }
 }
 
-kj::Maybe<Orphan<DynamicValue>> NodeTranslator::compileValue(
-    ValueExpression::Reader src, schema::Type::Reader type, bool isBootstrap) {
-  Orphan<DynamicValue> result = compileValueInner(src, type, isBootstrap);
+kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(
+    ValueExpression::Reader src, schema::Type::Reader type) {
+  Orphan<DynamicValue> result = compileValueInner(src, type);
 
   switch (result.getType()) {
     case DynamicValue::UNKNOWN:
@@ -1536,7 +1559,7 @@ kj::Maybe<Orphan<DynamicValue>> NodeTranslator::compileValue(
 
     case DynamicValue::ENUM:
       if (type.isEnum()) {
-        KJ_IF_MAYBE(schema, resolver.resolveBootstrapSchema(type.getEnum())) {
+        KJ_IF_MAYBE(schema, resolver.resolveType(type.getEnum())) {
           if (result.getReader().as<DynamicEnum>().getSchema() == *schema) {
             return kj::mv(result);
           }
@@ -1548,7 +1571,7 @@ kj::Maybe<Orphan<DynamicValue>> NodeTranslator::compileValue(
 
     case DynamicValue::STRUCT:
       if (type.isStruct()) {
-        KJ_IF_MAYBE(schema, resolver.resolveBootstrapSchema(type.getStruct())) {
+        KJ_IF_MAYBE(schema, resolver.resolveType(type.getStruct())) {
           if (result.getReader().as<DynamicStruct>().getSchema() == *schema) {
             return kj::mv(result);
           }
@@ -1569,8 +1592,8 @@ kj::Maybe<Orphan<DynamicValue>> NodeTranslator::compileValue(
   return nullptr;
 }
 
-Orphan<DynamicValue> NodeTranslator::compileValueInner(
-    ValueExpression::Reader src, schema::Type::Reader type, bool isBootstrap) {
+Orphan<DynamicValue> ValueTranslator::compileValueInner(
+    ValueExpression::Reader src, schema::Type::Reader type) {
   switch (src.which()) {
     case ValueExpression::NAME: {
       auto name = src.getName();
@@ -1581,7 +1604,7 @@ Orphan<DynamicValue> NodeTranslator::compileValueInner(
         kj::StringPtr id = name.getBase().getRelativeName().getValue();
 
         if (type.isEnum()) {
-          KJ_IF_MAYBE(enumSchema, resolver.resolveBootstrapSchema(type.getEnum())) {
+          KJ_IF_MAYBE(enumSchema, resolver.resolveType(type.getEnum())) {
             KJ_IF_MAYBE(enumerant, enumSchema->asEnum().findEnumerantByName(id)) {
               return DynamicEnum(*enumerant);
             }
@@ -1606,7 +1629,7 @@ Orphan<DynamicValue> NodeTranslator::compileValueInner(
       }
 
       // Haven't resolved the name yet.  Try looking up a constant.
-      KJ_IF_MAYBE(constValue, readConstant(src.getName(), isBootstrap, src)) {
+      KJ_IF_MAYBE(constValue, resolver.resolveConstant(src.getName())) {
         return orphanage.newOrphanCopy(*constValue);
       }
 
@@ -1651,7 +1674,7 @@ Orphan<DynamicValue> NodeTranslator::compileValueInner(
         Orphan<DynamicList> result = orphanage.newOrphan(*listSchema, srcList.size());
         auto dstList = result.get();
         for (uint i = 0; i < srcList.size(); i++) {
-          KJ_IF_MAYBE(value, compileValue(srcList[i], elementType, isBootstrap)) {
+          KJ_IF_MAYBE(value, compileValue(srcList[i], elementType)) {
             dstList.adopt(i, kj::mv(*value));
           }
         }
@@ -1666,10 +1689,10 @@ Orphan<DynamicValue> NodeTranslator::compileValueInner(
         errorReporter.addErrorOn(src, "Type mismatch.");
         return nullptr;
       }
-      KJ_IF_MAYBE(schema, resolver.resolveBootstrapSchema(type.getStruct())) {
+      KJ_IF_MAYBE(schema, resolver.resolveType(type.getStruct())) {
         auto structSchema = schema->asStruct();
         Orphan<DynamicStruct> result = orphanage.newOrphan(structSchema);
-        fillStructValue(result.get(), src.getStruct(), isBootstrap);
+        fillStructValue(result.get(), src.getStruct());
         return kj::mv(result);
       } else {
         return nullptr;
@@ -1684,9 +1707,8 @@ Orphan<DynamicValue> NodeTranslator::compileValueInner(
   KJ_UNREACHABLE;
 }
 
-void NodeTranslator::fillStructValue(DynamicStruct::Builder builder,
-                                     List<ValueExpression::FieldAssignment>::Reader assignments,
-                                     bool isBootstrap) {
+void ValueTranslator::fillStructValue(DynamicStruct::Builder builder,
+                                      List<ValueExpression::FieldAssignment>::Reader assignments) {
   for (auto assignment: assignments) {
     auto fieldName = assignment.getFieldName();
     KJ_IF_MAYBE(field, builder.getSchema().findFieldByName(fieldName.getValue())) {
@@ -1695,16 +1717,14 @@ void NodeTranslator::fillStructValue(DynamicStruct::Builder builder,
 
       switch (fieldProto.which()) {
         case schema::Field::NON_GROUP:
-          KJ_IF_MAYBE(compiledValue,
-                      compileValue(value, fieldProto.getNonGroup().getType(), isBootstrap)) {
+          KJ_IF_MAYBE(compiledValue, compileValue(value, fieldProto.getNonGroup().getType())) {
             builder.adopt(*field, kj::mv(*compiledValue));
           }
           break;
 
         case schema::Field::GROUP:
           if (value.isStruct()) {
-            fillStructValue(builder.init(*field).as<DynamicStruct>(), value.getStruct(),
-                            isBootstrap);
+            fillStructValue(builder.init(*field).as<DynamicStruct>(), value.getStruct());
           } else {
             errorReporter.addErrorOn(value, "Type mismatch.");
           }
@@ -1717,8 +1737,8 @@ void NodeTranslator::fillStructValue(DynamicStruct::Builder builder,
   }
 }
 
-kj::String NodeTranslator::makeNodeName(uint64_t id) {
-  KJ_IF_MAYBE(schema, resolver.resolveBootstrapSchema(id)) {
+kj::String ValueTranslator::makeNodeName(uint64_t id) {
+  KJ_IF_MAYBE(schema, resolver.resolveType(id)) {
     schema::Node::Reader proto = schema->getProto();
     return kj::str(proto.getDisplayName().slice(proto.getDisplayNamePrefixLength()));
   } else {
@@ -1726,7 +1746,7 @@ kj::String NodeTranslator::makeNodeName(uint64_t id) {
   }
 }
 
-kj::String NodeTranslator::makeTypeName(schema::Type::Reader type) {
+kj::String ValueTranslator::makeTypeName(schema::Type::Reader type) {
   switch (type.which()) {
     case schema::Type::VOID: return kj::str("Void");
     case schema::Type::BOOL: return kj::str("Bool");
@@ -1752,10 +1772,10 @@ kj::String NodeTranslator::makeTypeName(schema::Type::Reader type) {
 }
 
 kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
-    DeclName::Reader name, bool isBootstrap, ValueExpression::Reader errorLocation) {
+    DeclName::Reader name, bool isBootstrap) {
   KJ_IF_MAYBE(resolved, resolver.resolve(name)) {
     if (resolved->kind != Declaration::CONST) {
-      errorReporter.addErrorOn(errorLocation,
+      errorReporter.addErrorOn(name,
           kj::str("'", declNameString(name), "' does not refer to a constant."));
       return nullptr;
     }
@@ -1817,7 +1837,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
           }
           kj::StringPtr id = name.getBase().getRelativeName().getValue();
 
-          errorReporter.addErrorOn(errorLocation, kj::str(
+          errorReporter.addErrorOn(name, kj::str(
               "Constant names must be qualified to avoid confusion.  Please replace '",
               declNameString(name), "' with '", parent, ".", id,
               "', if that's what you intended."));
@@ -1835,28 +1855,30 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
   }
 }
 
-kj::Maybe<ListSchema> NodeTranslator::makeListSchemaOf(schema::Type::Reader elementType) {
+template <typename ResolveTypeFunc>
+static kj::Maybe<ListSchema> makeListSchemaImpl(schema::Type::Reader elementType,
+                                                const ResolveTypeFunc& resolveType) {
   switch (elementType.which()) {
     case schema::Type::ENUM:
-      KJ_IF_MAYBE(enumSchema, resolver.resolveBootstrapSchema(elementType.getEnum())) {
+      KJ_IF_MAYBE(enumSchema, resolveType(elementType.getEnum())) {
         return ListSchema::of(enumSchema->asEnum());
       } else {
         return nullptr;
       }
     case schema::Type::STRUCT:
-      KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(elementType.getStruct())) {
+      KJ_IF_MAYBE(structSchema, resolveType(elementType.getStruct())) {
         return ListSchema::of(structSchema->asStruct());
       } else {
         return nullptr;
       }
     case schema::Type::INTERFACE:
-      KJ_IF_MAYBE(interfaceSchema, resolver.resolveBootstrapSchema(elementType.getInterface())) {
+      KJ_IF_MAYBE(interfaceSchema, resolveType(elementType.getInterface())) {
         return ListSchema::of(interfaceSchema->asInterface());
       } else {
         return nullptr;
       }
     case schema::Type::LIST:
-      KJ_IF_MAYBE(listSchema, makeListSchemaOf(elementType.getList())) {
+      KJ_IF_MAYBE(listSchema, makeListSchemaImpl(elementType.getList(), resolveType)) {
         return ListSchema::of(*listSchema);
       } else {
         return nullptr;
@@ -1864,6 +1886,16 @@ kj::Maybe<ListSchema> NodeTranslator::makeListSchemaOf(schema::Type::Reader elem
     default:
       return ListSchema::of(elementType.which());
   }
+}
+
+kj::Maybe<ListSchema> NodeTranslator::makeListSchemaOf(schema::Type::Reader elementType) {
+  return makeListSchemaImpl(elementType,
+      [this](uint64_t id) { return resolver.resolveBootstrapSchema(id); });
+}
+
+kj::Maybe<ListSchema> ValueTranslator::makeListSchemaOf(schema::Type::Reader elementType) {
+  return makeListSchemaImpl(elementType,
+      [this](uint64_t id) { return resolver.resolveType(id); });
 }
 
 Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(

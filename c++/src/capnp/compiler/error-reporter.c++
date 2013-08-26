@@ -22,12 +22,49 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "error-reporter.h"
-#include <unistd.h>
+#include <kj/debug.h>
 
 namespace capnp {
 namespace compiler {
 
-ErrorReporter::~ErrorReporter() noexcept(false) {}
+namespace {
+
+template <typename T>
+static size_t findLargestElementBefore(const kj::Vector<T>& vec, const T& key) {
+  KJ_REQUIRE(vec.size() > 0 && vec[0] <= key);
+
+  size_t lower = 0;
+  size_t upper = vec.size();
+
+  while (upper - lower > 1) {
+    size_t mid = (lower + upper) / 2;
+    if (vec[mid] > key) {
+      upper = mid;
+    } else {
+      lower = mid;
+    }
+  }
+
+  return lower;
+}
+
+}  // namespace
+
+LineBreakTable::LineBreakTable(kj::ArrayPtr<const char> content)
+    : lineBreaks(content.size() / 40) {
+  lineBreaks.add(0);
+  for (const char* pos = content.begin(); pos < content.end(); ++pos) {
+    if (*pos == '\n') {
+      lineBreaks.add(pos + 1 - content.begin());
+    }
+  }
+}
+
+GlobalErrorReporter::SourcePos LineBreakTable::toSourcePos(uint32_t byteOffset) const {
+  uint line = findLargestElementBefore(lineBreaks, byteOffset);
+  uint col = byteOffset - lineBreaks[line];
+  return GlobalErrorReporter::SourcePos { byteOffset, line, col };
+}
 
 }  // namespace compiler
 }  // namespace capnp

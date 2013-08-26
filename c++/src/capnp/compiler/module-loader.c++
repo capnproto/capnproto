@@ -42,25 +42,6 @@ namespace compiler {
 
 namespace {
 
-template <typename T>
-size_t findLargestElementBefore(const kj::Vector<T>& vec, const T& key) {
-  KJ_REQUIRE(vec.size() > 0 && vec[0] <= key);
-
-  size_t lower = 0;
-  size_t upper = vec.size();
-
-  while (upper - lower > 1) {
-    size_t mid = (lower + upper) / 2;
-    if (vec[mid] > key) {
-      upper = mid;
-    } else {
-      lower = mid;
-    }
-  }
-
-  return lower;
-}
-
 class MmapDisposer: public kj::ArrayDisposer {
 protected:
   void disposeImpl(void* firstElement, size_t elementSize, size_t elementCount,
@@ -228,7 +209,7 @@ private:
   kj::MutexGuarded<std::map<kj::StringPtr, kj::Own<Module>>> modules;
 };
 
-class ModuleLoader::ModuleImpl: public Module {
+class ModuleLoader::ModuleImpl final: public Module {
 public:
   ModuleImpl(const ModuleLoader::Impl& loader, kj::String localName, kj::String sourceName)
       : loader(loader), localName(kj::mv(localName)), sourceName(kj::mv(sourceName)) {}
@@ -244,15 +225,8 @@ public:
   Orphan<ParsedFile> loadContent(Orphanage orphanage) const override {
     kj::Array<const char> content = mmapForRead(localName);
 
-    lineBreaks.get([&](kj::SpaceFor<kj::Vector<uint>>& space) {
-      auto vec = space.construct(content.size() / 40);
-      vec->add(0);
-      for (const char* pos = content.begin(); pos < content.end(); ++pos) {
-        if (*pos == '\n') {
-          vec->add(pos + 1 - content.begin());
-        }
-      }
-      return vec;
+    lineBreaks.get([&](kj::SpaceFor<LineBreakTable>& space) {
+      return space.construct(content);
     });
 
     MallocMessageBuilder lexedBuilder;
@@ -274,22 +248,12 @@ public:
 
   void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) const override {
     auto& lines = lineBreaks.get(
-        [](kj::SpaceFor<kj::Vector<uint>>& space) {
+        [](kj::SpaceFor<LineBreakTable>& space) -> kj::Own<LineBreakTable> {
           KJ_FAIL_REQUIRE("Can't report errors until loadContent() is called.");
-          return space.construct();
         });
 
-    // TODO(someday):  This counts tabs as single characters.  Do we care?
-    uint startLine = findLargestElementBefore(lines, startByte);
-    uint startCol = startByte - lines[startLine];
-    uint endLine = findLargestElementBefore(lines, endByte);
-    uint endCol = endByte - lines[endLine];
-
     loader.getErrorReporter().addError(
-        localName,
-        GlobalErrorReporter::SourcePos { startByte, startLine, startCol },
-        GlobalErrorReporter::SourcePos { endByte, endLine, endCol },
-        message);
+        localName, lines.toSourcePos(startByte), lines.toSourcePos(endByte), message);
   }
 
   bool hadErrors() const override {
@@ -301,9 +265,7 @@ private:
   kj::String localName;
   kj::String sourceName;
 
-  kj::Lazy<kj::Vector<uint>> lineBreaks;
-  // Byte offsets of the first byte in each source line.  The first element is always zero.
-  // Initialized the first time the module is loaded.
+  kj::Lazy<LineBreakTable> lineBreaks;
 };
 
 // =======================================================================================

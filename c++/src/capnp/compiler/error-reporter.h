@@ -27,6 +27,7 @@
 #include "../common.h"
 #include <kj/string.h>
 #include <kj/exception.h>
+#include <kj/vector.h>
 
 namespace capnp {
 namespace compiler {
@@ -35,8 +36,6 @@ class ErrorReporter {
   // Callback for reporting errors within a particular file.
 
 public:
-  virtual ~ErrorReporter() noexcept(false);
-
   virtual void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) const = 0;
   // Report an error at the given location in the input text.  `startByte` and `endByte` indicate
   // the span of text that is erroneous.  They may be equal, in which case the parser was only
@@ -76,6 +75,18 @@ public:
   // is to inhibit the reporting of errors which may have been caused by previous errors, or to
   // allow the compiler to bail out entirely if it gets confused and thinks this could be because
   // of previous errors.
+};
+
+class LineBreakTable {
+public:
+  LineBreakTable(kj::ArrayPtr<const char> content);
+
+  GlobalErrorReporter::SourcePos toSourcePos(uint32_t byteOffset) const;
+
+private:
+  kj::Vector<uint> lineBreaks;
+  // Byte offsets of the first byte in each source line.  The first element is always zero.
+  // Initialized the first time the module is loaded.
 };
 
 }  // namespace compiler

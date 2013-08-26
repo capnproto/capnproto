@@ -67,7 +67,7 @@ size_t findLargestElementBefore(const kj::Vector<T>& vec, const T& key) {
 
 // =======================================================================================
 
-class SchemaParser::ModuleImpl: public compiler::Module {
+class SchemaParser::ModuleImpl final: public compiler::Module {
 public:
   ModuleImpl(const SchemaParser& parser, kj::Own<const SchemaFile>&& file)
       : parser(parser), file(kj::mv(file)) {}

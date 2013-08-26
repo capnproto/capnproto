@@ -25,6 +25,7 @@
 #include "parser.h"
 #include "compiler.h"
 #include "module-loader.h"
+#include "node-translator.h"
 #include <capnp/pretty-print.h>
 #include <capnp/schema.capnp.h>
 #include <kj/vector.h>
@@ -99,8 +100,9 @@ public:
              .addSubCommand("id", KJ_BIND_METHOD(*this, getGenIdMain),
                             "Generate a new unique ID.")
              .addSubCommand("decode", KJ_BIND_METHOD(*this, getDecodeMain),
-                            "Decode binary Cap'n Proto message to text.");
-      // TODO(someday):  "encode" -- requires the ability to parse text format.
+                            "Decode binary Cap'n Proto message to text.")
+             .addSubCommand("encode", KJ_BIND_METHOD(*this, getEncodeMain),
+                            "Encode text Cap'n Proto message to binary.");
       addGlobalOptions(builder);
       return builder.build();
     }
@@ -147,6 +149,37 @@ public:
            .expectArg("<schema-file>", KJ_BIND_METHOD(*this, addSource))
            .expectArg("<type>", KJ_BIND_METHOD(*this, setRootType))
            .callAfterParsing(KJ_BIND_METHOD(*this, decode));
+    return builder.build();
+  }
+
+  kj::MainFunc getEncodeMain() {
+    // Only parse the schemas we actually need for decoding.
+    compileEagerness = Compiler::NODE;
+
+    // Drop annotations since we don't need them.  This avoids importing files like c++.capnp.
+    annotationFlag = Compiler::DROP_ANNOTATIONS;
+
+    kj::MainBuilder builder(context, VERSION_STRING,
+          "Encodes one or more textual Cap'n Proto messages to binary.  The messages have root "
+          "type <type> defined in <schema-file>.  Messages are read from standard input.  Each "
+          "mesage is a parenthesized struct literal, like the format used to specify constants "
+          "and default values of struct type in the schema language.  For example:\n"
+          "    (foo = 123, bar = \"hello\", baz = [true, false, true])\n"
+          "The input may contain any number of such values; each will be encoded as a separate "
+          "message.",
+          "Note that the current implementation reads the entire input into memory before "
+          "beginning to encode.  A better implementation would read and encode one message at "
+          "a time.");
+    addGlobalOptions(builder);
+    builder.addOption({'f', "flat"}, KJ_BIND_METHOD(*this, codeFlat),
+                      "Expect only one input value, serializing it as a single-segment message "
+                      "with no framing.")
+           .addOption({'p', "packed"}, KJ_BIND_METHOD(*this, codePacked),
+                      "Pack the output message with standard Cap'n Proto packing, which "
+                      "deflates zero-valued bytes.")
+           .expectArg("<schema-file>", KJ_BIND_METHOD(*this, addSource))
+           .expectArg("<type>", KJ_BIND_METHOD(*this, setRootType))
+           .callAfterParsing(KJ_BIND_METHOD(*this, encode));
     return builder.build();
   }
 
@@ -208,6 +241,19 @@ public:
       addStandardImportPaths = false;
     }
 
+    KJ_IF_MAYBE(module, loadModule(file)) {
+      uint64_t id = compiler->add(*module);
+      compiler->eagerlyCompile(id, compileEagerness);
+      sourceFiles.add(SourceFile { id, module->getSourceName(), &*module });
+    } else {
+      return "no such file";
+    }
+
+    return true;
+  }
+
+private:
+  kj::Maybe<const Module&> loadModule(kj::StringPtr file) {
     size_t longestPrefix = 0;
 
     for (auto& prefix: sourcePrefixes) {
@@ -217,17 +263,10 @@ public:
     }
 
     kj::StringPtr canonicalName = file.slice(longestPrefix);
-    KJ_IF_MAYBE(module, loader.loadModule(file, canonicalName)) {
-      uint64_t id = compiler->add(*module);
-      compiler->eagerlyCompile(id, compileEagerness);
-      sourceFiles.add(SourceFile { id, canonicalName, &*module });
-    } else {
-      return "no such file";
-    }
-
-    return true;
+    return loader.loadModule(file, canonicalName);
   }
 
+public:
   // =====================================================================================
   // "id" command
 
@@ -511,6 +550,150 @@ private:
       context.error(kj::str("*** error in previous message ***\n", *e, "\n*** end error ***"));
     }
   }
+
+public:
+  // =====================================================================================
+
+  kj::MainBuilder::Validity encode() {
+    kj::Vector<char> allText;
+
+    {
+      kj::FdInputStream rawInput(STDIN_FILENO);
+      kj::BufferedInputStreamWrapper input(rawInput);
+
+      for (;;) {
+        auto buf = input.tryGetReadBuffer();
+        if (buf.size() == 0) break;
+        allText.addAll(reinterpret_cast<const char*>(buf.begin()),
+                       reinterpret_cast<const char*>(buf.end()));
+        input.skip(buf.size());
+      }
+    }
+
+    EncoderErrorReporter errorReporter(*this, allText);
+    MallocMessageBuilder arena;
+
+    // Lex the input.
+    auto lexedTokens = arena.initRoot<LexedTokens>();
+    lex(allText, lexedTokens, errorReporter);
+
+    // Set up the parser.
+    CapnpParser parser(arena.getOrphanage(), errorReporter);
+    auto tokens = lexedTokens.asReader().getTokens();
+    CapnpParser::ParserInput parserInput(tokens.begin(), tokens.end());
+
+    // Allocate some scratch space.
+    kj::Array<word> scratch = kj::heapArray<word>(8192);
+    memset(scratch.begin(), 0, scratch.size() * sizeof(word));
+
+    // Set up stuff for the ValueTranslator.
+    ValueResolverGlue resolver(compiler->getLoader(), errorReporter);
+    auto type = arena.getOrphanage().newOrphan<schema::Type>();
+    type.get().setStruct(rootType.getProto().getId());
+
+    // Set up output stream.
+    kj::FdOutputStream rawOutput(STDOUT_FILENO);
+    kj::BufferedOutputStreamWrapper output(rawOutput);
+
+    while (parserInput.getPosition() != tokens.end()) {
+      KJ_IF_MAYBE(expression, parser.getParsers().parenthesizedValueExpression(parserInput)) {
+        MallocMessageBuilder item(scratch);
+        ValueTranslator translator(resolver, errorReporter, item.getOrphanage());
+
+        KJ_IF_MAYBE(value, translator.compileValue(expression->getReader(), type.getReader())) {
+          writeEncoded(value->getReader().as<DynamicStruct>(), output);
+        } else {
+          // Errors were reported, so we'll exit with a failure status later.
+        }
+      } else {
+        auto best = parserInput.getBest();
+        if (best == tokens.end()) {
+          context.exitError("Premature EOF.");
+        } else {
+          errorReporter.addErrorOn(*best, "Parse error.");
+          context.exit();
+        }
+      }
+    }
+
+    return true;
+  }
+
+private:
+  void writeEncoded(DynamicStruct::Reader value, kj::BufferedOutputStream& output) {
+    // Always copy the message to a flat array so that the output is predictable (one segment,
+    // in canonical order).
+    size_t size = value.totalSizeInWords() + 1;
+    kj::Array<word> space = kj::heapArray<word>(size);
+    memset(space.begin(), 0, size * sizeof(word));
+    FlatMessageBuilder flatMessage(space);
+    flatMessage.setRoot(value);
+    flatMessage.requireFilled();
+
+    if (flat) {
+      output.write(space.begin(), space.size() * sizeof(word));
+    } else if (packed) {
+      writePackedMessage(output, flatMessage);
+    } else {
+      writeMessage(output, flatMessage);
+    }
+  }
+
+  class EncoderErrorReporter final: public ErrorReporter {
+  public:
+    EncoderErrorReporter(GlobalErrorReporter& globalReporter,
+                         kj::ArrayPtr<const char> content)
+      : globalReporter(globalReporter), lineBreaks(content) {}
+
+    void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) const override {
+      globalReporter.addError("<stdin>", lineBreaks.toSourcePos(startByte),
+                              lineBreaks.toSourcePos(endByte), message);
+    }
+
+    bool hadErrors() const override {
+      return globalReporter.hadErrors();
+    }
+
+  private:
+    GlobalErrorReporter& globalReporter;
+    LineBreakTable lineBreaks;
+  };
+
+  class ValueResolverGlue final: public ValueTranslator::Resolver {
+  public:
+    ValueResolverGlue(const SchemaLoader& loader, const ErrorReporter& errorReporter)
+        : loader(loader), errorReporter(errorReporter) {}
+
+    kj::Maybe<Schema> resolveType(uint64_t id) {
+      // Don't use tryGet() here because we shouldn't even be here if there were compile errors.
+      return loader.get(id);
+    }
+
+    kj::Maybe<DynamicValue::Reader> resolveConstant(DeclName::Reader name) {
+      auto base = name.getBase();
+      switch (base.which()) {
+        case DeclName::Base::RELATIVE_NAME: {
+          auto value = base.getRelativeName();
+          errorReporter.addErrorOn(value, kj::str("Not defined: ", value.getValue()));
+          return nullptr;
+        }
+        case DeclName::Base::ABSOLUTE_NAME: {
+          auto value = base.getAbsoluteName();
+          errorReporter.addErrorOn(value, kj::str("Not defined: ", value.getValue()));
+          return nullptr;
+        }
+        case DeclName::Base::IMPORT_NAME: {
+          auto value = base.getImportName();
+          errorReporter.addErrorOn(value, "Imports not allowed in encode input.");
+          return nullptr;
+        }
+      }
+    }
+
+  private:
+    const SchemaLoader& loader;
+    const ErrorReporter& errorReporter;
+  };
 
 public:
   // =====================================================================================
