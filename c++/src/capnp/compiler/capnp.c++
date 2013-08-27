@@ -103,7 +103,9 @@ public:
              .addSubCommand("decode", KJ_BIND_METHOD(*this, getDecodeMain),
                             "Decode binary Cap'n Proto message to text.")
              .addSubCommand("encode", KJ_BIND_METHOD(*this, getEncodeMain),
-                            "Encode text Cap'n Proto message to binary.");
+                            "Encode text Cap'n Proto message to binary.")
+             .addSubCommand("eval", KJ_BIND_METHOD(*this, getEvalMain),
+                            "Evaluate a const from a schema file.");
       addGlobalOptions(builder);
       return builder.build();
     }
@@ -138,7 +140,7 @@ public:
           "type <type> defined in <schema-file>.  Messages are read from standard input and "
           "by default are expected to be in standard Cap'n Proto serialization format.");
     addGlobalOptions(builder);
-    builder.addOption({'f', "flat"}, KJ_BIND_METHOD(*this, codeFlat),
+    builder.addOption({"flat"}, KJ_BIND_METHOD(*this, codeFlat),
                       "Interpret the input as one large single-segment message rather than a "
                       "stream in standard serialization format.")
            .addOption({'p', "packed"}, KJ_BIND_METHOD(*this, codePacked),
@@ -168,11 +170,12 @@ public:
           "    (foo = 123, bar = \"hello\", baz = [true, false, true])\n"
           "The input may contain any number of such values; each will be encoded as a separate "
           "message.",
+
           "Note that the current implementation reads the entire input into memory before "
           "beginning to encode.  A better implementation would read and encode one message at "
           "a time.");
     addGlobalOptions(builder);
-    builder.addOption({'f', "flat"}, KJ_BIND_METHOD(*this, codeFlat),
+    builder.addOption({"flat"}, KJ_BIND_METHOD(*this, codeFlat),
                       "Expect only one input value, serializing it as a single-segment message "
                       "with no framing.")
            .addOption({'p', "packed"}, KJ_BIND_METHOD(*this, codePacked),
@@ -186,6 +189,39 @@ public:
            .expectArg("<schema-file>", KJ_BIND_METHOD(*this, addSource))
            .expectArg("<type>", KJ_BIND_METHOD(*this, setRootType))
            .callAfterParsing(KJ_BIND_METHOD(*this, encode));
+    return builder.build();
+  }
+
+  kj::MainFunc getEvalMain() {
+    // Only parse the schemas we actually need for decoding.
+    compileEagerness = Compiler::NODE;
+
+    // Drop annotations since we don't need them.  This avoids importing files like c++.capnp.
+    annotationFlag = Compiler::DROP_ANNOTATIONS;
+
+    kj::MainBuilder builder(context, VERSION_STRING,
+          "Evaluates the `const` declaration <name> defined in <schema-file> and outputs the "
+          "value in text or binary format.  Since consts can have complex struct types, and "
+          "since you can build a const using other const values, this can be a convenient way "
+          "to write text-format config files which are compiled to binary before deployment.",
+
+          "By default the value is written in text format and can have any type.  The -b, -p, "
+          "and --flat flags specify binary output, in which case the const must be of struct "
+          "type.");
+    addGlobalOptions(builder);
+    builder.addOption({'b', "binary"}, KJ_BIND_METHOD(*this, codeBinary),
+                      "Write the output as binary instead of text, using standard Cap'n Proto "
+                      "serialization.")
+           .addOption({"flat"}, KJ_BIND_METHOD(*this, codeFlat),
+                      "Write the output as a flat single-segment binary message, with no framing.")
+           .addOption({'p', "packed"}, KJ_BIND_METHOD(*this, codePacked),
+                      "Write the output as packed binary instead of text, using standard Cap'n "
+                      "Proto packing, which deflates zero-valued bytes.")
+           .addOption({"short"}, KJ_BIND_METHOD(*this, printShort),
+                      "Print in short (non-pretty) text format.  The message will be printed on "
+                      "one line, without using whitespace to improve readability.")
+           .expectArg("<schema-file>", KJ_BIND_METHOD(*this, addSource))
+           .expectArg("<name>", KJ_BIND_METHOD(*this, evalConst));
     return builder.build();
   }
 
@@ -426,12 +462,20 @@ public:
   // =====================================================================================
   // "decode" command
 
+  kj::MainBuilder::Validity codeBinary() {
+    if (packed) return "cannot be used with --packed";
+    if (flat) return "cannot be used with --flat";
+    binary = true;
+    return true;
+  }
   kj::MainBuilder::Validity codeFlat() {
+    if (binary) return "cannot be used with --binary";
     if (packed) return "cannot be used with --packed";
     flat = true;
     return true;
   }
   kj::MainBuilder::Validity codePacked() {
+    if (binary) return "cannot be used with --binary";
     if (flat) return "cannot be used with --flat";
     packed = true;
     return true;
@@ -452,36 +496,42 @@ public:
 
   kj::MainBuilder::Validity setRootType(kj::StringPtr type) {
     KJ_ASSERT(sourceFiles.size() == 1);
-    uint64_t id = sourceFiles[0].id;
 
-    while (type.size() > 0) {
-      kj::String temp;
-      kj::StringPtr part;
-      KJ_IF_MAYBE(dotpos, type.findFirst('.')) {
-        temp = kj::heapString(type.slice(0, *dotpos));
-        part = temp;
-        type = type.slice(*dotpos + 1);
-      } else {
-        part = type;
-        type = nullptr;
+    KJ_IF_MAYBE(schema, resolveName(sourceFiles[0].id, type)) {
+      if (schema->getProto().which() != schema::Node::STRUCT) {
+        return "not a struct type";
       }
-
-      KJ_IF_MAYBE(childId, compiler->lookup(id, part)) {
-        id = *childId;
-      } else {
-        return "no such type";
-      }
+      rootType = schema->asStruct();
+      return true;
+    } else {
+      return "no such type";
     }
-
-    Schema schema = compiler->getLoader().get(id);
-    if (schema.getProto().which() != schema::Node::STRUCT) {
-      return "not a struct type";
-    }
-    rootType = schema.asStruct();
-
-    return true;
   }
 
+private:
+  kj::Maybe<Schema> resolveName(uint64_t scopeId, kj::StringPtr name) {
+    while (name.size() > 0) {
+      kj::String temp;
+      kj::StringPtr part;
+      KJ_IF_MAYBE(dotpos, name.findFirst('.')) {
+        temp = kj::heapString(name.slice(0, *dotpos));
+        part = temp;
+        name = name.slice(*dotpos + 1);
+      } else {
+        part = name;
+        name = nullptr;
+      }
+
+      KJ_IF_MAYBE(childId, compiler->lookup(scopeId, part)) {
+        scopeId = *childId;
+      } else {
+        return nullptr;
+      }
+    }
+    return compiler->getLoader().get(scopeId);
+  }
+
+public:
   kj::MainBuilder::Validity decode() {
     kj::FdInputStream rawInput(STDIN_FILENO);
     kj::BufferedInputStreamWrapper input(rawInput);
@@ -519,7 +569,7 @@ public:
       }
     }
 
-    return true;
+    context.exit();
   }
 
 private:
@@ -567,7 +617,7 @@ private:
   }
 
 public:
-  // =====================================================================================
+  // -----------------------------------------------------------------
 
   kj::MainBuilder::Validity encode() {
     kj::Vector<char> allText;
@@ -638,7 +688,42 @@ public:
       }
     }
 
-    return true;
+    output.flush();
+    context.exit();
+  }
+
+  kj::MainBuilder::Validity evalConst(kj::StringPtr type) {
+    KJ_ASSERT(sourceFiles.size() == 1);
+
+    KJ_IF_MAYBE(schema, resolveName(sourceFiles[0].id, type)) {
+      if (schema->getProto().which() != schema::Node::CONST) {
+        return "not a const";
+      }
+
+      DynamicValue::Reader value = schema->asConst();
+
+      if (binary || packed || flat) {
+        if (value.getType() != DynamicValue::STRUCT) {
+          return "not a struct; binary output is only available on structs";
+        }
+
+        kj::FdOutputStream rawOutput(STDOUT_FILENO);
+        kj::BufferedOutputStreamWrapper output(rawOutput);
+        writeFlat(value.as<DynamicStruct>(), output);
+        output.flush();
+        context.exit();
+      } else {
+        if (pretty && value.getType() == DynamicValue::STRUCT) {
+          context.exitInfo(prettyPrint(value.as<DynamicStruct>()).flatten());
+        } else if (pretty && value.getType() == DynamicValue::LIST) {
+          context.exitInfo(prettyPrint(value.as<DynamicList>()).flatten());
+        } else {
+          context.exitInfo(kj::str(value));
+        }
+      }
+    } else {
+      return "no such type";
+    }
   }
 
 private:
@@ -763,6 +848,7 @@ private:
   kj::Vector<kj::String> sourcePrefixes;
   bool addStandardImportPaths = true;
 
+  bool binary = false;
   bool flat = false;
   bool packed = false;
   bool pretty = true;
