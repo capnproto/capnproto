@@ -377,7 +377,8 @@ inline typename RootType::Builder MessageBuilder::initRoot() {
 template <typename Reader>
 inline void MessageBuilder::setRoot(Reader&& value) {
   typedef FromReader<Reader> RootType;
-  static_assert(kind<RootType>() == Kind::STRUCT, "Root type must be a Cap'n Proto struct type.");
+  static_assert(kind<RootType>() == Kind::STRUCT,
+                "Parameter must be a Reader for a Cap'n Proto struct type.");
   setRootInternal(value._reader);
 }
 

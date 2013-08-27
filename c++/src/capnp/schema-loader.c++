@@ -442,7 +442,8 @@ private:
     }
 
     if (hadCase) {
-      VALIDATE_SCHEMA(value.which() == expectedValueType, "Value did not match type.");
+      VALIDATE_SCHEMA(value.which() == expectedValueType, "Value did not match type.",
+                      (uint)value.which(), (uint)expectedValueType);
     }
   }
 
@@ -511,6 +512,9 @@ public:
   bool shouldReplace(const schema::Node::Reader& existingNode,
                      const schema::Node::Reader& replacement,
                      bool preferReplacementIfEquivalent) {
+    this->existingNode = existingNode;
+    this->replacementNode = replacement;
+
     KJ_CONTEXT("checking compatibility with previously-loaded node of the same id",
                existingNode.getDisplayName());
 
@@ -528,6 +532,8 @@ public:
 private:
   SchemaLoader::Impl& loader;
   Text::Reader nodeName;
+  schema::Node::Reader existingNode;
+  schema::Node::Reader replacementNode;
 
   enum Compatibility {
     EQUIVALENT,
@@ -633,6 +639,17 @@ private:
       replacementIsOlder();
     }
 
+    if (replacement.getDiscriminantCount() > structNode.getDiscriminantCount()) {
+      replacementIsNewer();
+    } else if (replacement.getDiscriminantCount() < structNode.getDiscriminantCount()) {
+      replacementIsOlder();
+    }
+
+    if (replacement.getDiscriminantCount() > 0 && structNode.getDiscriminantCount() > 0) {
+      VALIDATE_SCHEMA(replacement.getDiscriminantOffset() == structNode.getDiscriminantOffset(),
+                      "union discriminant position changed");
+    }
+
     // The shared members should occupy corresponding positions in the member lists, since the
     // lists are sorted by ordinal.
     auto fields = structNode.getFields();
@@ -672,26 +689,48 @@ private:
                           const schema::Field::Reader& replacement) {
     KJ_CONTEXT("comparing struct field", field.getName());
 
-    VALIDATE_SCHEMA(field.which() == replacement.which(),
-                    "group field replaced with non-group or vice versa");
+    // A field that is initially not in a union can be upgraded to be in one, as long as it has
+    // discriminant 0.
+    uint discriminant = field.hasDiscriminantValue() ? field.getDiscriminantValue() : 0;
+    uint replacementDiscriminant =
+        replacement.hasDiscriminantValue() ? replacement.getDiscriminantValue() : 0;
+    VALIDATE_SCHEMA(discriminant == replacementDiscriminant, "Field discriminant changed.");
 
     switch (field.which()) {
       case schema::Field::NON_GROUP: {
         auto nonGroup = field.getNonGroup();
-        auto replacementNonGroup = replacement.getNonGroup();
 
-        checkCompatibility(nonGroup.getType(), replacementNonGroup.getType(),
-                           NO_UPGRADE_TO_STRUCT);
-        checkDefaultCompatibility(nonGroup.getDefaultValue(),
-                                  replacementNonGroup.getDefaultValue());
+        switch (replacement.which()) {
+          case schema::Field::NON_GROUP: {
+            auto replacementNonGroup = replacement.getNonGroup();
 
-        VALIDATE_SCHEMA(nonGroup.getOffset() == replacementNonGroup.getOffset(),
-                        "field position changed");
+            checkCompatibility(nonGroup.getType(), replacementNonGroup.getType(),
+                               NO_UPGRADE_TO_STRUCT);
+            checkDefaultCompatibility(nonGroup.getDefaultValue(),
+                                      replacementNonGroup.getDefaultValue());
+
+            VALIDATE_SCHEMA(nonGroup.getOffset() == replacementNonGroup.getOffset(),
+                            "field position changed");
+            break;
+          }
+          case schema::Field::GROUP:
+            checkUpgradeToStruct(nonGroup.getType(), replacement.getGroup(), existingNode, field);
+            break;
+        }
+
         break;
       }
 
       case schema::Field::GROUP:
-        VALIDATE_SCHEMA(field.getGroup() == replacement.getGroup(), "group id changed");
+        switch (replacement.which()) {
+          case schema::Field::NON_GROUP:
+            checkUpgradeToStruct(replacement.getNonGroup().getType(), field.getGroup(),
+                                 replacementNode, replacement);
+            break;
+          case schema::Field::GROUP:
+            VALIDATE_SCHEMA(field.getGroup() == replacement.getGroup(), "group id changed");
+            break;
+        }
         break;
     }
   }
@@ -859,7 +898,9 @@ private:
     // We assume unknown types (from newer versions of Cap'n Proto?) are equivalent.
   }
 
-  void checkUpgradeToStruct(const schema::Type::Reader& type, uint64_t structTypeId) {
+  void checkUpgradeToStruct(const schema::Type::Reader& type, uint64_t structTypeId,
+                            kj::Maybe<schema::Node::Reader> matchSize = nullptr,
+                            kj::Maybe<schema::Field::Reader> matchPosition = nullptr) {
     // We can't just look up the target struct and check it because it may not have been loaded
     // yet.  Instead, we contrive a struct that looks like what we want and load() that, which
     // guarantees that any incompatibility will be caught either now or when the real version of
@@ -929,11 +970,55 @@ private:
         break;
     }
 
+    KJ_IF_MAYBE(s, matchSize) {
+      auto match = s->getStruct();
+      structNode.setDataWordCount(match.getDataWordCount());
+      structNode.setPointerCount(match.getPointerCount());
+      structNode.setPreferredListEncoding(match.getPreferredListEncoding());
+    }
+
     auto field = structNode.initFields(1)[0];
     field.setName("member0");
-    field.getOrdinal().setExplicit(0);
     field.setCodeOrder(0);
-    field.initNonGroup().setType(type);
+    auto nongroup = field.initNonGroup();
+    nongroup.setType(type);
+
+    KJ_IF_MAYBE(p, matchPosition) {
+      if (p->getOrdinal().isExplicit()) {
+        field.getOrdinal().setExplicit(p->getOrdinal().getExplicit());
+      } else {
+        field.getOrdinal().setImplicit();
+      }
+      auto matchNongroup = p->getNonGroup();
+      nongroup.setOffset(matchNongroup.getOffset());
+      nongroup.setDefaultValue(matchNongroup.getDefaultValue());
+    } else {
+      field.getOrdinal().setExplicit(0);
+      nongroup.setOffset(0);
+
+      schema::Value::Builder value = nongroup.initDefaultValue();
+      switch (type.which()) {
+        case schema::Type::VOID: value.setVoid(); break;
+        case schema::Type::BOOL: value.setBool(false); break;
+        case schema::Type::INT8: value.setInt8(0); break;
+        case schema::Type::INT16: value.setInt16(0); break;
+        case schema::Type::INT32: value.setInt32(0); break;
+        case schema::Type::INT64: value.setInt64(0); break;
+        case schema::Type::UINT8: value.setUint8(0); break;
+        case schema::Type::UINT16: value.setUint16(0); break;
+        case schema::Type::UINT32: value.setUint32(0); break;
+        case schema::Type::UINT64: value.setUint64(0); break;
+        case schema::Type::FLOAT32: value.setFloat32(0); break;
+        case schema::Type::FLOAT64: value.setFloat64(0); break;
+        case schema::Type::ENUM: value.setEnum(0); break;
+        case schema::Type::TEXT: value.adoptText(Orphan<Text>()); break;
+        case schema::Type::DATA: value.adoptData(Orphan<Data>()); break;
+        case schema::Type::LIST: value.adoptList(Orphan<Data>()); break;
+        case schema::Type::STRUCT: value.adoptStruct(Orphan<Data>()); break;
+        case schema::Type::INTERFACE: value.setInterface(); break;
+        case schema::Type::OBJECT: value.adoptObject(Orphan<Data>()); break;
+      }
+    }
 
     loader.load(node, true);
   }

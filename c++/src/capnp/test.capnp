@@ -269,6 +269,17 @@ struct TestUnnamedUnion {
   after @4 :Text;
 }
 
+struct TestUnionInUnion {
+  # There is no reason to ever do this.
+  outer :union {
+    inner :union {
+      foo @0 :Int32;
+      bar @1 :Int32;
+    }
+    baz @2 :Int32;
+  }
+}
+
 struct TestGroups {
   groups :union {
     foo :group {
@@ -380,6 +391,15 @@ struct TestLists {
   struct Struct32 { f @0 :UInt32; }
   struct Struct64 { f @0 :UInt64; }
   struct StructP  { f @0 :Text; }
+
+  # Versions of the above which cannot be encoded as primitive lists.
+  struct Struct0c  { f @0 :Void; pad @1 :Text; }
+  struct Struct1c  { f @0 :Bool; pad @1 :Text; }
+  struct Struct8c  { f @0 :UInt8; pad @1 :Text; }
+  struct Struct16c { f @0 :UInt16; pad @1 :Text; }
+  struct Struct32c { f @0 :UInt32; pad @1 :Text; }
+  struct Struct64c { f @0 :UInt64; pad @1 :Text; }
+  struct StructPc  { f @0 :Text; pad @1 :UInt64; }
 
   list0  @0 :List(Struct0);
   list1  @1 :List(Struct1);

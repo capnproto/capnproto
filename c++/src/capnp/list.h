@@ -111,6 +111,7 @@ struct List<T, Kind::PRIMITIVE> {
 
     inline uint size() const { return reader.size() / ELEMENTS; }
     inline T operator[](uint index) const {
+      KJ_IREQUIRE(index < size());
       return reader.template getDataElement<T>(index * ELEMENTS);
     }
 
@@ -141,6 +142,7 @@ struct List<T, Kind::PRIMITIVE> {
 
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline T operator[](uint index) {
+      KJ_IREQUIRE(index < size());
       return builder.template getDataElement<T>(index * ELEMENTS);
     }
     inline void set(uint index, T value) {
@@ -216,6 +218,7 @@ struct List<T, Kind::STRUCT> {
 
     inline uint size() const { return reader.size() / ELEMENTS; }
     inline typename T::Reader operator[](uint index) const {
+      KJ_IREQUIRE(index < size());
       return typename T::Reader(reader.getStructElement(index * ELEMENTS));
     }
 
@@ -246,6 +249,7 @@ struct List<T, Kind::STRUCT> {
 
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline typename T::Builder operator[](uint index) {
+      KJ_IREQUIRE(index < size());
       return typename T::Builder(builder.getStructElement(index * ELEMENTS));
     }
 
@@ -258,6 +262,8 @@ struct List<T, Kind::STRUCT> {
       // * If the orphan is larger than the target struct -- say, because the orphan was built
       //   using a newer version of the schema that has additional fields -- it will be truncated,
       //   losing data.
+
+      KJ_IREQUIRE(index < size());
 
       // We pass a zero-valued StructSize to asStruct() because we do not want the struct to be
       // expanded under any circumstances.  We're just going to throw it away anyway, and
@@ -273,6 +279,7 @@ struct List<T, Kind::STRUCT> {
       // using a newer version of the schema that has additional fields -- it will be truncated,
       // losing data.
 
+      KJ_IREQUIRE(index < size());
       builder.getStructElement(index * ELEMENTS).copyContentFrom(reader._reader);
     }
 
@@ -341,6 +348,7 @@ struct List<List<T>, Kind::LIST> {
 
     inline uint size() const { return reader.size() / ELEMENTS; }
     inline typename List<T>::Reader operator[](uint index) const {
+      KJ_IREQUIRE(index < size());
       return typename List<T>::Reader(List<T>::getAsElementOf(reader, index));
     }
 
@@ -371,15 +379,19 @@ struct List<List<T>, Kind::LIST> {
 
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline typename List<T>::Builder operator[](uint index) {
+      KJ_IREQUIRE(index < size());
       return typename List<T>::Builder(List<T>::getAsElementOf(builder, index));
     }
     inline typename List<T>::Builder init(uint index, uint size) {
+      KJ_IREQUIRE(index < this->size());
       return typename List<T>::Builder(List<T>::initAsElementOf(builder, index, size));
     }
     inline void set(uint index, typename List<T>::Reader value) {
+      KJ_IREQUIRE(index < size());
       builder.setListElement(index * ELEMENTS, value.reader);
     }
     void set(uint index, std::initializer_list<ReaderFor<T>> value) {
+      KJ_IREQUIRE(index < size());
       auto l = init(index, value.size());
       uint i = 0;
       for (auto& element: value) {
@@ -387,9 +399,11 @@ struct List<List<T>, Kind::LIST> {
       }
     }
     inline void adopt(uint index, Orphan<T>&& value) {
+      KJ_IREQUIRE(index < size());
       builder.adopt(index * ELEMENTS, kj::mv(value));
     }
     inline Orphan<T> disown(uint index) {
+      KJ_IREQUIRE(index < size());
       return Orphan<T>(builder.disown(index * ELEMENTS));
     }
 
@@ -451,6 +465,7 @@ struct List<T, Kind::BLOB> {
 
     inline uint size() const { return reader.size() / ELEMENTS; }
     inline typename T::Reader operator[](uint index) const {
+      KJ_IREQUIRE(index < size());
       return reader.getBlobElement<T>(index * ELEMENTS);
     }
 
@@ -481,18 +496,23 @@ struct List<T, Kind::BLOB> {
 
     inline uint size() const { return builder.size() / ELEMENTS; }
     inline typename T::Builder operator[](uint index) {
+      KJ_IREQUIRE(index < size());
       return builder.getBlobElement<T>(index * ELEMENTS);
     }
     inline void set(uint index, typename T::Reader value) {
+      KJ_IREQUIRE(index < size());
       builder.setBlobElement<T>(index * ELEMENTS, value);
     }
     inline typename T::Builder init(uint index, uint size) {
+      KJ_IREQUIRE(index < this->size());
       return builder.initBlobElement<T>(index * ELEMENTS, size * BYTES);
     }
     inline void adopt(uint index, Orphan<T>&& value) {
+      KJ_IREQUIRE(index < size());
       builder.adopt(index * ELEMENTS, kj::mv(value));
     }
     inline Orphan<T> disown(uint index) {
+      KJ_IREQUIRE(index < size());
       return Orphan<T>(builder.disown(index * ELEMENTS));
     }
 

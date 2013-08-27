@@ -764,6 +764,43 @@ TEST(Encoding, BitListDowngrade) {
   checkList(reader.getObjectField<List<uint16_t>>(), {0x1201u, 0x3400u, 0x5601u, 0x7801u});
 }
 
+TEST(Encoding, BitListDowngradeFromStruct) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestObject>();
+
+  {
+    auto list = root.initObjectField<List<test::TestLists::Struct1c>>(4);
+    list[0].setF(true);
+    list[1].setF(false);
+    list[2].setF(true);
+    list[3].setF(true);
+  }
+
+  checkList(root.getObjectField<List<bool>>(), {true, false, true, true});
+
+  {
+    auto l = root.getObjectField<List<test::TestLists::Struct1>>();
+    ASSERT_EQ(4u, l.size());
+    EXPECT_TRUE(l[0].getF());
+    EXPECT_FALSE(l[1].getF());
+    EXPECT_TRUE(l[2].getF());
+    EXPECT_TRUE(l[3].getF());
+  }
+
+  auto reader = root.asReader();
+
+  checkList(reader.getObjectField<List<bool>>(), {true, false, true, true});
+
+  {
+    auto l = reader.getObjectField<List<test::TestLists::Struct1>>();
+    ASSERT_EQ(4u, l.size());
+    EXPECT_TRUE(l[0].getF());
+    EXPECT_FALSE(l[1].getF());
+    EXPECT_TRUE(l[2].getF());
+    EXPECT_TRUE(l[3].getF());
+  }
+}
+
 TEST(Encoding, BitListUpgrade) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<test::TestObject>();

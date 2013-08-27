@@ -1757,11 +1757,6 @@ struct WireHelpers {
           break;
 
         case FieldSize::BIT:
-          KJ_FAIL_REQUIRE("Expected a bit list, but got a list of structs.") {
-            goto useDefault;
-          }
-          break;
-
         case FieldSize::BYTE:
         case FieldSize::TWO_BYTES:
         case FieldSize::FOUR_BYTES:

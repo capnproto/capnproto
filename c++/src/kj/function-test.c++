@@ -79,5 +79,45 @@ TEST(Function, Method) {
   EXPECT_EQ(9 + 2 + 5, f(2, 9));
 }
 
+struct TestConstType {
+  mutable int callCount;
+
+  TestConstType(int callCount = 0): callCount(callCount) {}
+
+  ~TestConstType() { callCount = 1234; }
+  // Make sure we catch invalid post-destruction uses.
+
+  int foo(int a, int b) const {
+    return a + b + callCount++;
+  }
+};
+
+TEST(ConstFunction, Method) {
+  TestConstType obj;
+  ConstFunction<int(int, int)> f = KJ_BIND_METHOD(obj, foo);
+  ConstFunction<uint(uint, uint)> f2 = KJ_BIND_METHOD(obj, foo);
+
+  EXPECT_EQ(123 + 456, f(123, 456));
+  EXPECT_EQ(7 + 8 + 1, f(7, 8));
+  EXPECT_EQ(9u + 2u + 2u, f2(2, 9));
+
+  EXPECT_EQ(3, obj.callCount);
+
+  // Bind to a temporary.
+  f = KJ_BIND_METHOD(TestConstType(10), foo);
+
+  EXPECT_EQ(123 + 456 + 10, f(123, 456));
+  EXPECT_EQ(7 + 8 + 11, f(7, 8));
+  EXPECT_EQ(9 + 2 + 12, f(2, 9));
+
+  // Bind to a move.
+  f = KJ_BIND_METHOD(kj::mv(obj), foo);
+  obj.callCount = 1234;
+
+  EXPECT_EQ(123 + 456 + 3, f(123, 456));
+  EXPECT_EQ(7 + 8 + 4, f(7, 8));
+  EXPECT_EQ(9 + 2 + 5, f(2, 9));
+}
+
 } // namespace
 } // namespace kj

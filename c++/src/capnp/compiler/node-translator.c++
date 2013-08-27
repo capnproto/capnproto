@@ -71,7 +71,7 @@ public:
     // already allocated and therefore cannot be a hole.
 
     kj::Maybe<UIntType> tryAllocate(UIntType lgSize) {
-      // Try to find space for a field of size lgSize^2 within the set of holes.  If found,
+      // Try to find space for a field of size 2^lgSize within the set of holes.  If found,
       // remove it from the holes, and return its offset (as a multiple of its size).  If there
       // is no such space, returns zero (no hole can be at offset zero, as explained above).
 
@@ -1126,7 +1126,28 @@ private:
         }
 
         case Declaration::UNION:
-          errorReporter.addErrorOn(member, "Unions cannot contain unions.");
+          if (member.getName().getValue() == "") {
+            errorReporter.addErrorOn(member, "Unions cannot contain unnamed unions.");
+          } else {
+            parent.childCount++;
+
+            // For layout purposes, pretend this union is enclosed in a one-member group.
+            StructLayout::Group& singletonGroup =
+                arena.allocate<StructLayout::Group>(layout);
+            StructLayout::Union& unionLayout = arena.allocate<StructLayout::Union>(singletonGroup);
+
+            memberInfo = &arena.allocate<MemberInfo>(
+                parent, codeOrder++, member,
+                newGroupNode(parent.node, member.getName().getValue()),
+                true);
+            allMembers.add(memberInfo);
+            memberInfo->unionScope = &unionLayout;
+            uint subCodeOrder = 0;
+            traverseUnion(member.getNestedDecls(), *memberInfo, unionLayout, subCodeOrder);
+            if (member.getId().isOrdinal()) {
+              ordinal = member.getId().getOrdinal().getValue();
+            }
+          }
           break;
 
         case Declaration::GROUP: {

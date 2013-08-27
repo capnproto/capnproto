@@ -84,6 +84,10 @@ class Function;
 // Notice how KJ_BIND_METHOD is able to figure out which overload to use depending on the kind of
 // Function it is binding to.
 
+template <typename Signature>
+class ConstFunction;
+// Like Function, but wraps a "const" (i.e. thread-safe) call.
+
 template <typename Return, typename... Params>
 class Function<Return(Params...)> {
 public:
@@ -91,8 +95,28 @@ public:
   inline Function(F&& f): impl(heap<Impl<F>>(kj::fwd<F>(f))) {}
   Function() = default;
 
+  // Make sure people don't accidentally end up wrapping a reference when they meant to return
+  // a function.
+  KJ_DISALLOW_COPY(Function);
+  Function(Function&) = delete;
+  Function& operator=(Function&) = delete;
+  template <typename T> Function(const Function<T>&) = delete;
+  template <typename T> Function& operator=(const Function<T>&) = delete;
+  template <typename T> Function(const ConstFunction<T>&) = delete;
+  template <typename T> Function& operator=(const ConstFunction<T>&) = delete;
+  Function(Function&&) = default;
+  Function& operator=(Function&&) = default;
+
   inline Return operator()(Params... params) {
     return (*impl)(kj::fwd<Params>(params)...);
+  }
+
+  Function reference() {
+    // Forms a new Function of the same type that delegates to this Function by reference.
+    // Therefore, this Function must outlive the returned Function, but otherwise they behave
+    // exactly the same.
+
+    return *impl;
   }
 
 private:
@@ -117,6 +141,59 @@ private:
   Own<Iface> impl;
 };
 
+template <typename Return, typename... Params>
+class ConstFunction<Return(Params...)> {
+public:
+  template <typename F>
+  inline ConstFunction(F&& f): impl(heap<Impl<F>>(kj::fwd<F>(f))) {}
+  ConstFunction() = default;
+
+  // Make sure people don't accidentally end up wrapping a reference when they meant to return
+  // a function.
+  KJ_DISALLOW_COPY(ConstFunction);
+  ConstFunction(ConstFunction&) = delete;
+  ConstFunction& operator=(ConstFunction&) = delete;
+  template <typename T> ConstFunction(const ConstFunction<T>&) = delete;
+  template <typename T> ConstFunction& operator=(const ConstFunction<T>&) = delete;
+  template <typename T> ConstFunction(const Function<T>&) = delete;
+  template <typename T> ConstFunction& operator=(const Function<T>&) = delete;
+  ConstFunction(ConstFunction&&) = default;
+  ConstFunction& operator=(ConstFunction&&) = default;
+
+  inline Return operator()(Params... params) const {
+    return (*impl)(kj::fwd<Params>(params)...);
+  }
+
+  ConstFunction reference() const {
+    // Forms a new ConstFunction of the same type that delegates to this ConstFunction by reference.
+    // Therefore, this ConstFunction must outlive the returned ConstFunction, but otherwise they
+    // behave exactly the same.
+
+    return *impl;
+  }
+
+private:
+  class Iface {
+  public:
+    virtual Return operator()(Params... params) const = 0;
+  };
+
+  template <typename F>
+  class Impl final: public Iface {
+  public:
+    explicit Impl(F&& f): f(kj::fwd<F>(f)) {}
+
+    Return operator()(Params... params) const override {
+      return f(kj::fwd<Params>(params)...);
+    }
+
+  private:
+    F f;
+  };
+
+  Own<Iface> impl;
+};
+
 #if 1
 
 namespace _ {  // private
@@ -130,6 +207,20 @@ public:
   BoundMethod(T&& t): t(kj::fwd<T>(t)) {}
 
   Return operator()(Params&&... params) {
+    return (t.*method)(kj::fwd<Params>(params)...);
+  }
+
+private:
+  T t;
+};
+
+template <typename T, typename Return, typename... Params,
+          Return (Decay<T>::*method)(Params...) const>
+class BoundMethod<T, Return (Decay<T>::*)(Params...) const, method> {
+public:
+  BoundMethod(T&& t): t(kj::fwd<T>(t)) {}
+
+  Return operator()(Params&&... params) const {
     return (t.*method)(kj::fwd<Params>(params)...);
   }
 

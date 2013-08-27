@@ -258,7 +258,7 @@ $(test_capnpc_outputs): test_capnpc_middleman
 
 BUILT_SOURCES = $(test_capnpc_outputs)
 
-check_PROGRAMS = capnp-test
+check_PROGRAMS = capnp-test capnp-evolution-test
 capnp_test_LDADD = gtest/lib/libgtest.la gtest/lib/libgtest_main.la libcapnpc.la libcapnp.la libkj.la
 capnp_test_CPPFLAGS = -Igtest/include -I$(srcdir)/gtest/include
 capnp_test_SOURCES =                                           \
@@ -297,4 +297,7 @@ capnp_test_SOURCES =                                           \
   src/capnp/compiler/md5-test.c++
 nodist_capnp_test_SOURCES = $(test_capnpc_outputs)
 
-TESTS = capnp-test
+capnp_evolution_test_LDADD = libcapnpc.la libcapnp.la libkj.la
+capnp_evolution_test_SOURCES = src/capnp/compiler/evolution-test.c++
+
+TESTS = capnp-test capnp-evolution-test
