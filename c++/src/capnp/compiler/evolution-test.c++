@@ -739,18 +739,7 @@ bool checkChange(ParsedFile::Reader file1, ParsedFile::Reader file2, ChangeKind 
   }
 }
 
-kj::MainBuilder::Validity doTest(uint seed) {
-  srand(seed);
-
-  {
-    kj::String text = kj::str(
-        "Randomly testing backwards-compatibility scenarios...\n"
-        "seed = ", seed, " <- PLEASE RECORD THIS NUMBER IF THE TEST FAILS\n");
-    kj::FdOutputStream(STDOUT_FILENO).write(text.begin(), text.size());
-  }
-
-  KJ_CONTEXT(seed, "PLEASE REPORT THIS FAILURE AND INCLUDE THE SEED");
-
+void doTest() {
   auto builder = kj::heap<MallocMessageBuilder>();
 
   {
@@ -840,8 +829,6 @@ kj::MainBuilder::Validity doTest(uint seed) {
       builder = kj::mv(newBuilder);
     }
   }
-
-  return true;
 }
 
 class EvolutionTestMain {
@@ -855,7 +842,7 @@ public:
         "and verifies that they do actually remain compatible.")
         .addOptionWithArg({"seed"}, KJ_BIND_METHOD(*this, setSeed), "<num>",
             "Set random number seed to <num>.  By default, time() is used.")
-        .callAfterParsing([this]() { return doTest(seed); })
+        .callAfterParsing(KJ_BIND_METHOD(*this, run))
         .build();
   }
 
@@ -867,6 +854,23 @@ public:
     } else {
       return true;
     }
+  }
+
+  kj::MainBuilder::Validity run() {
+    srand(seed);
+
+    {
+      kj::String text = kj::str(
+          "Randomly testing backwards-compatibility scenarios...\n"
+          "seed = ", seed, " <- PLEASE RECORD THIS NUMBER IF THE TEST FAILS\n");
+      kj::FdOutputStream(STDOUT_FILENO).write(text.begin(), text.size());
+    }
+
+    KJ_CONTEXT(seed, "PLEASE REPORT THIS FAILURE AND INCLUDE THE SEED");
+
+    doTest();
+
+    return true;
   }
 
 private:

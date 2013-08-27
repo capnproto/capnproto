@@ -570,6 +570,7 @@ public:
     }
 
     context.exit();
+    KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT;
   }
 
 private:
@@ -690,6 +691,7 @@ public:
 
     output.flush();
     context.exit();
+    KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT;
   }
 
   kj::MainBuilder::Validity evalConst(kj::StringPtr type) {
@@ -724,6 +726,7 @@ public:
     } else {
       return "no such type";
     }
+    KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT;
   }
 
 private:

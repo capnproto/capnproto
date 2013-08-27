@@ -292,7 +292,7 @@ inline RepeatChar KJ_STRINGIFY(RepeatChar value) { return value; }
 ExceptionCallback::ExceptionCallback(): next(getExceptionCallback()) {
   char stackVar;
   ptrdiff_t offset = reinterpret_cast<char*>(this) - &stackVar;
-  KJ_ASSERT(offset < 4096 && offset > -4096,
+  KJ_ASSERT(offset < 65536 && offset > -65536,
             "ExceptionCallback must be allocated on the stack.");
 
   threadLocalCallback = this;
