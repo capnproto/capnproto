@@ -251,42 +251,6 @@ namespace {
 
 thread_local ExceptionCallback* threadLocalCallback = nullptr;
 
-class RepeatChar {
-  // A pseudo-sequence of characters that is actually just one character repeated.
-  //
-  // TODO(cleanup):  Put this somewhere reusable.  Maybe templatize it too.
-
-public:
-  inline RepeatChar(char c, uint size): c(c), size_(size) {}
-
-  class Iterator {
-  public:
-    Iterator() = default;
-    inline Iterator(char c, uint index): c(c), index(index) {}
-
-    inline Iterator& operator++() { ++index; return *this; }
-    inline Iterator operator++(int) { ++index; return Iterator(c, index - 1); }
-
-    inline char operator*() const { return c; }
-
-    inline bool operator==(const Iterator& other) const { return index == other.index; }
-    inline bool operator!=(const Iterator& other) const { return index != other.index; }
-
-  private:
-    char c;
-    uint index;
-  };
-
-  inline uint size() const { return size_; }
-  inline Iterator begin() const { return Iterator(c, 0); }
-  inline Iterator end() const { return Iterator(c, size_); }
-
-private:
-  char c;
-  uint size_;
-};
-inline RepeatChar KJ_STRINGIFY(RepeatChar value) { return value; }
-
 }  // namespace
 
 ExceptionCallback::ExceptionCallback(): next(getExceptionCallback()) {
@@ -344,7 +308,7 @@ public:
   }
 
   void logMessage(const char* file, int line, int contextDepth, String&& text) override {
-    text = str(RepeatChar('_', contextDepth), file, ":", line, ": ", mv(text));
+    text = str(kj::repeat('_', contextDepth), file, ":", line, ": ", mv(text));
 
     StringPtr textPtr = text;
 

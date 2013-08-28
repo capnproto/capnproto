@@ -241,8 +241,6 @@ TEST(SchemaLoader, Incompatible) {
       loadUnderAlternateTypeId<test::TestAllTypes>(loader, typeId<test::TestListDefaults>()));
 }
 
-// TODO(test):  More extensively test upgrade/downgrade checks.
-
 TEST(SchemaLoader, Enumerate) {
   SchemaLoader loader;
   loader.loadCompiledTypeAndDependencies<TestAllTypes>();
