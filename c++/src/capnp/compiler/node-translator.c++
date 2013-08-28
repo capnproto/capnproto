@@ -724,12 +724,6 @@ void NodeTranslator::DuplicateNameDetector::check(
   }
 }
 
-void NodeTranslator::disallowNested(List<Declaration>::Reader nestedDecls) {
-  for (auto decl: nestedDecls) {
-    errorReporter.addErrorOn(decl, "Nested declaration not allowed here.");
-  }
-}
-
 void NodeTranslator::compileConst(Declaration::Const::Reader decl,
                                   schema::Node::Const::Builder builder) {
   auto typeBuilder = builder.initType();
@@ -1285,13 +1279,13 @@ static kj::String declNameString(DeclName::Reader name) {
 
   switch (name.getBase().which()) {
     case DeclName::Base::RELATIVE_NAME:
-      prefix = kj::str(name.getBase().getRelativeName());
+      prefix = kj::str(name.getBase().getRelativeName().getValue());
       break;
     case DeclName::Base::ABSOLUTE_NAME:
-      prefix = kj::str(".", name.getBase().getAbsoluteName());
+      prefix = kj::str(".", name.getBase().getAbsoluteName().getValue());
       break;
     case DeclName::Base::IMPORT_NAME:
-      prefix = kj::str("import \"", name.getBase().getImportName(), "\"");
+      prefix = kj::str("import \"", name.getBase().getImportName().getValue(), "\"");
       break;
   }
 
@@ -1686,7 +1680,7 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(
 
     case ValueExpression::LIST: {
       if (!type.isList()) {
-        errorReporter.addErrorOn(src, "Type mismatch.");
+        errorReporter.addErrorOn(src, kj::str("Type mismatch; expected ", makeTypeName(type), "."));
         return nullptr;
       }
       auto elementType = type.getList().getElementType();
@@ -1707,7 +1701,7 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(
 
     case ValueExpression::STRUCT: {
       if (!type.isStruct()) {
-        errorReporter.addErrorOn(src, "Type mismatch.");
+        errorReporter.addErrorOn(src, kj::str("Type mismatch; expected ", makeTypeName(type), "."));
         return nullptr;
       }
       KJ_IF_MAYBE(schema, resolver.resolveType(type.getStruct().getTypeId())) {
@@ -1747,7 +1741,7 @@ void ValueTranslator::fillStructValue(DynamicStruct::Builder builder,
           if (value.isStruct()) {
             fillStructValue(builder.init(*field).as<DynamicStruct>(), value.getStruct());
           } else {
-            errorReporter.addErrorOn(value, "Type mismatch.");
+            errorReporter.addErrorOn(value, "Type mismatch; expected group.");
           }
           break;
       }

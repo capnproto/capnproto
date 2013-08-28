@@ -64,3 +64,6 @@ test_eval 'TestDefaults.structList[1]' '( textField = "structlist 2" )'
 test_eval globalStruct '(int32Field = 54321)'
 test_eval TestConstants.enumConst corge
 test_eval 'TestListDefaults.lists.int32ListList[2][0]' 12341234
+
+$CAPNP compile -ofoo $TESTDATA/errors.capnp.nobuild 2>&1 | sed -e "s,^.*/errors[.]capnp[.]nobuild,file,g" |
+    cmp src/capnp/testdata/errors.txt || fail error output

@@ -132,9 +132,6 @@ private:
 
   void compileNode(Declaration::Reader decl, schema::Node::Builder builder);
 
-  void disallowNested(List<Declaration>::Reader nestedDecls);
-  // Complain if the nested decl list is non-empty.
-
   void compileConst(Declaration::Const::Reader decl, schema::Node::Const::Builder builder);
   void compileAnnotation(Declaration::Annotation::Reader decl,
                          schema::Node::Annotation::Builder builder);

@@ -1,0 +1,50 @@
+file:74:30-32: error: As of Cap'n Proto v0.3, it is no longer necessary to assign numbers to unions. However, removing the number will break binary compatibility. If this is an old protocol and you need to retain compatibility, please add an exclamation point after the number to indicate that it is really needed, e.g. `foo @1! :union {`. If this is a new protocol or compatibility doesn't matter, just remove the @n entirely. Sorry for the inconvenience, and thanks for being an early adopter!  :)
+file:74:30-32: error: As of Cap'n Proto v0.3, the 'union' keyword should be prefixed with a colon for named unions, e.g. `foo :union {`.
+file:79:23-25: error: As of Cap'n Proto v0.3, it is no longer necessary to assign numbers to unions. However, removing the number will break binary compatibility. If this is an old protocol and you need to retain compatibility, please add an exclamation point after the number to indicate that it is really needed, e.g. `foo @1! :union {`. If this is a new protocol or compatibility doesn't matter, just remove the @n entirely. Sorry for the inconvenience, and thanks for being an early adopter!  :)
+file:84:17-19: error: As of Cap'n Proto v0.3, the 'union' keyword should be prefixed with a colon for named unions, e.g. `foo :union {`.
+file:121:38-41: error: Missing field name.
+file:132:7-10: error: 'using' declaration without '=' must use a qualified path.
+file:37:3-10: error: 'dupName' is already defined in this scope.
+file:36:3-10: error: 'dupName' previously defined here.
+file:52:5-12: error: 'dupName' is already defined in this scope.
+file:36:3-10: error: 'dupName' previously defined here.
+file:55:3-8: error: An unnamed union is already defined in this scope.
+file:51:3-8: error: Previously defined here.
+file:60:10-24: error: Type names must begin with a capital letter.
+file:61:3-18: error: Non-type names must begin with a lower-case letter.
+file:62:3-14: error: Cap'n Proto declaration names should use camelCase and must not contain underscores. (Code generators may convert names to the appropriate style for the target language.)
+file:66:5-27: error: This kind of declaration doesn't belong here.
+file:44:3-23: error: Union must have at least two members.
+file:45:3-23: error: Group must have at least one member.
+file:47: error: Union must have at least two members.
+file:92: error: Unions cannot contain unnamed unions.
+file:39:15-16: error: Duplicate ordinal number.
+file:38:15-16: error: Ordinal @2 originally used here.
+file:41:18-19: error: Skipped ordinal @3.  Ordinals must be sequential with no holes.
+file:69:15-17: error: Union ordinal, if specified, must be greater than no more than one of its member ordinals (i.e. there can only be one field retroactively unionized).
+file:116:31-50: error: Import failed: noshuchfile.capnp
+file:118:26-32: error: Not defined: NoSuch
+file:119:28-34: error: No such member: NoSuch
+file:97:25-29: error: 'List' requires exactly one parameter.
+file:98:30-48: error: 'List' requires exactly one parameter.
+file:99:19-31: error: 'List(Object)' is not supported.
+file:100:17-24: error: 'notType' is not a type.
+file:101:17-27: error: 'Foo' does not accept parameters.
+file:103:34-41: error: Integer value out of range.
+file:104:37-38: error: Integer value out of range.
+file:105:32-35: error: Type mismatch; expected Text.
+file:106:33-38: error: Type mismatch; expected Text.
+file:107:33-55: error: Type mismatch; expected Text.
+file:108:43-61: error: Integer is too big to be negative.
+file:109:35-39: error: '.Foo' does not refer to a constant.
+file:110:44-51: error: Constant names must be qualified to avoid confusion.  Please replace 'notType' with '.notType', if that's what you intended.
+file:117:28-34: error: Not defined: NoSuch
+file:112:29-32: error: 'Foo' is not an annotation.
+file:113:29-47: error: 'notFieldAnnotation' cannot be applied to this kind of declaration.
+file:114:33-48: error: 'fieldAnnotation' requires a value.
+file:126:35-46: error: Struct has no field named 'nosuchfield'.
+file:127:49-52: error: Type mismatch; expected group.
+file:136:3-10: error: 'dupName' is already defined in this scope.
+file:135:3-10: error: 'dupName' previously defined here.
+file:138:15-16: error: Duplicate ordinal number.
+file:137:15-16: error: Ordinal @2 originally used here.

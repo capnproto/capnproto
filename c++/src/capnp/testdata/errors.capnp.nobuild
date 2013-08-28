@@ -1,0 +1,139 @@
+# Copyright (c) 2013, Kenton Varda <temporal@gmail.com>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+# ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+# This file is intended to test that various error cases are detected as errors.  The error
+# output is matched against a golden file.  The file name has the .nobuild extension to make
+# sure that a build system which automatically builds .capnp files does not try to build this one.
+
+@0xccd0890aa4926a9b;
+# Can't really test the missing-ID error because the output is intentionally unpredictable.
+
+const notType :Int32 = 123;
+annotation notFieldAnnotation(struct) :Int32;
+annotation fieldAnnotation(field) :Int32;
+
+struct Foo {
+  dupName @0 :Int32;
+  dupName @1 :Int32;
+  dupNumber1 @2 :Int32;
+  dupNumber2 @2 :Int32;
+
+  missingNumber @4 :Int32;
+  next @5 :Int32;
+
+  emptyUnion :union {}
+  emptyGroup :group {}
+
+  singletonUnion :union {
+    field @6 :Int32;
+  }
+
+  union {
+    dupName @7 :Int32;
+    f8 @8 :Int32;
+  }
+  union {
+    f9 @9 :Int32;
+    f10 @10 :Int32;
+  }
+
+  struct wrongTypeStyle {}
+  WrongFieldStyle @11 :Int32;
+  under_score @12 :Int32;
+
+  containsStruct :group {
+    f13 @13 :Int32;
+    struct CantNestHere {}
+  }
+
+  retroUnion @16! :union {
+    f14 @14 :Int32;
+    f15 @15 :Int32;
+  }
+
+  missingColonAndEclamation @18 union {
+    f19 @19 :Int32;
+    f20 @20 :Int32;
+  }
+
+  missingExclamation @21 :union {
+    f22 @22 :Int32;
+    f23 @23 :Int32;
+  }
+
+  missingColon @24! union {
+    f19 @25 :Int32;
+    f20 @26 :Int32;
+  }
+
+  unnamedInNamed :union {
+    f27 @27 :Int32;
+    f28 @28 :Int32;
+    union {
+      # content is ignored
+    }
+  }
+
+  listWithoutParam @31 :List;
+  listWithTooManyParams @32 :List(Int32, Int64);
+  listObject @33 :List(Object);
+  notAType @34 :notType;
+  noParams @35 :Foo(Int32);
+
+  defaultOutOfRange @36 :Int16 = 1234567;
+  defaultOutOfRange2 @37 :UInt16 = -1;
+  defaultWrongType @38 :Text = 123;
+  defaultWrongType2 @39 :Text = [123];
+  defaultWrongType3 @40 :Text = (foo = 123, bar = 456);
+  defaultTooBigToBeNegative @41 :Int64 = -0x8000000000000001;
+  defaultNotConstant @42 :Int32 = .Foo;
+  defaultConstantNotQualified @43 :Int32 = notType;
+
+  notAnnotation @44 :Int32 $Foo(123);
+  badAnnotation @45 :Int32 $notFieldAnnotation(123);
+  notVoidAnnotation @46 :Int32 $fieldAnnotation;
+
+  undefinedImport @17 :import "noshuchfile.capnp".Bar;
+  undefinedAbsolute @47 : .NoSuch;
+  undefinedRelative @29 :NoSuch;
+  undefinedMember @30 :Foo.NoSuch;
+
+  defaultBadStructSyntax @48 :Foo = (123, bar = 456);
+}
+
+struct Bar {
+  someGroup :group {
+    defaultNoSuchField @0 :Bar = (nosuchfield = 123);
+    defaultGroupMismatch @1 :Bar = (someGroup = 123);
+  }
+}
+
+
+using Bar;
+
+enum DupEnumerants {
+  dupName @0;
+  dupName @1;
+  dupNumber1 @2;
+  dupNumber2 @2;
+}

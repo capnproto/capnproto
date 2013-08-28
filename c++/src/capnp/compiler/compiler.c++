@@ -595,7 +595,7 @@ kj::Maybe<const Compiler::Node&> Compiler::Node::lookup(const DeclName::Reader& 
         node = &*n;
       } else {
         module->getErrorReporter().addErrorOn(
-            absoluteName, kj::str("not defined: ", absoluteName.getValue()));
+            absoluteName, kj::str("Not defined: ", absoluteName.getValue()));
         return nullptr;
       }
       break;
@@ -606,7 +606,7 @@ kj::Maybe<const Compiler::Node&> Compiler::Node::lookup(const DeclName::Reader& 
         node = &*n;
       } else {
         module->getErrorReporter().addErrorOn(
-            relativeName, kj::str("not defined: ", relativeName.getValue()));
+            relativeName, kj::str("Not defined: ", relativeName.getValue()));
         return nullptr;
       }
       break;
@@ -617,7 +617,7 @@ kj::Maybe<const Compiler::Node&> Compiler::Node::lookup(const DeclName::Reader& 
         node = &m->getRootNode();
       } else {
         module->getErrorReporter().addErrorOn(
-            importName, kj::str("import failed: ", importName.getValue()));
+            importName, kj::str("Import failed: ", importName.getValue()));
         return nullptr;
       }
       break;
@@ -631,7 +631,7 @@ kj::Maybe<const Compiler::Node&> Compiler::Node::lookup(const DeclName::Reader& 
       node = &*member;
     } else {
       module->getErrorReporter().addErrorOn(
-          partName, kj::str("no such member: ", partName.getValue()));
+          partName, kj::str("No such member: ", partName.getValue()));
       return nullptr;
     }
   }
@@ -689,8 +689,8 @@ void Compiler::Node::traverse(uint eagerness, std::unordered_map<const Node*, ui
   }
 
   if (eagerness & CHILDREN) {
-    for (auto& child: getContent(Content::EXPANDED).nestedNodes) {
-      child.second->traverse(eagerness, seen);
+    for (auto& child: getContent(Content::EXPANDED).orderedNestedNodes) {
+      child->traverse(eagerness, seen);
     }
   }
 }

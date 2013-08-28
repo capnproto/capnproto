@@ -712,26 +712,13 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
           [this](Orphan<LocatedInteger>&& ordinal,
                  kj::Maybe<kj::Tuple<>> exclamation,
                  kj::Maybe<kj::Tuple<>> colon)
-                   -> kj::Maybe<Orphan<LocatedInteger>> {
-            if (exclamation == nullptr) {
-              errorReporter.addErrorOn(ordinal.getReader(),
-                  "As of Cap'n Proto v0.3, it is no longer necessary to assign numbers to "
-                  "unions. However, removing the number will break binary compatibility. "
-                  "If this is an old protocol and you need to retain compatibility, please "
-                  "add an exclamation point after the number to indicate that it is really "
-                  "needed, e.g. `foo @1! :union {`. If this is a new protocol or compatibility "
-                  "doesn't matter, just remove the @n entirely. Sorry for the inconvenience, "
-                  "and thanks for being an early adopter!  :)");
-            }
-            if (colon == nullptr) {
-              errorReporter.addErrorOn(ordinal.getReader(),
-                  "As of Cap'n Proto v0.3, the 'union' keyword should be prefixed with a colon "
-                  "for named unions, e.g. `foo :union {`.");
-            }
-            return kj::mv(ordinal);
+                   -> kj::Tuple<kj::Maybe<Orphan<LocatedInteger>>, bool, bool> {
+            return kj::tuple(kj::mv(ordinal), exclamation == nullptr, colon == nullptr);
           }),
       p::transform(op(":"),
-          []() -> kj::Maybe<Orphan<LocatedInteger>>{ return nullptr; })));
+          []() -> kj::Tuple<kj::Maybe<Orphan<LocatedInteger>>, bool, bool> {
+            return kj::tuple(nullptr, false, false);
+          })));
 
   parsers.unionDecl = arena.copy(p::transform(
       // The first branch of this oneOf() matches named unions.  The second branch matches unnamed
@@ -740,22 +727,39 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
           p::sequence(
               identifier, ordinalOrColon,
               keyword("union"), p::many(parsers.annotation)),
-          p::transform(keyword("union"),
-              []() {
+          p::transformWithLocation(p::sequence(keyword("union"), p::endOfInput),
+              [](kj::parse::Span<List<Token>::Reader::Iterator> location) {
                 return kj::tuple(
-                    Located<Text::Reader>("", 0, 0),
+                    Located<Text::Reader>("", location.begin()->getStartByte(),
+                                          location.begin()->getEndByte()),
                     kj::Maybe<Orphan<LocatedInteger>>(nullptr),
+                    false, false,
                     kj::Array<Orphan<Declaration::AnnotationApplication>>(nullptr));
               })),
       [this](Located<Text::Reader>&& name,
              kj::Maybe<Orphan<LocatedInteger>>&& ordinal,
+             bool missingExclamation, bool missingColon,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
+        if (missingExclamation) {
+          errorReporter.addErrorOn(KJ_ASSERT_NONNULL(ordinal).getReader(),
+              "As of Cap'n Proto v0.3, it is no longer necessary to assign numbers to "
+              "unions. However, removing the number will break binary compatibility. "
+              "If this is an old protocol and you need to retain compatibility, please "
+              "add an exclamation point after the number to indicate that it is really "
+              "needed, e.g. `foo @1! :union {`. If this is a new protocol or compatibility "
+              "doesn't matter, just remove the @n entirely. Sorry for the inconvenience, "
+              "and thanks for being an early adopter!  :)");
+        }
+        if (missingColon) {
+          errorReporter.addErrorOn(KJ_ASSERT_NONNULL(ordinal).getReader(),
+              "As of Cap'n Proto v0.3, the 'union' keyword should be prefixed with a colon "
+              "for named unions, e.g. `foo :union {`.");
+        }
+
         auto decl = orphanage.newOrphan<Declaration>();
         auto builder = decl.get();
-        if (name.value.size() > 0) {
-          name.copyTo(builder.initName());
-        }
+        name.copyTo(builder.initName());
         KJ_IF_MAYBE(ord, ordinal) {
           builder.getId().adoptOrdinal(kj::mv(*ord));
         } else {
@@ -941,7 +945,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
       parsers.genericDecl, nakedId, nakedAnnotation));
   parsers.enumLevelDecl = arena.copy(p::oneOf(parsers.enumerantDecl));
   parsers.structLevelDecl = arena.copy(p::oneOf(
-      parsers.fieldDecl, parsers.unionDecl, parsers.groupDecl, parsers.genericDecl));
+      parsers.unionDecl, parsers.fieldDecl, parsers.groupDecl, parsers.genericDecl));
   parsers.interfaceLevelDecl = arena.copy(p::oneOf(
       parsers.methodDecl, parsers.genericDecl));
 }
@@ -969,7 +973,7 @@ kj::Maybe<Orphan<Declaration>> CapnpParser::parseStatement(
       case Statement::LINE:
         if (output->memberParser != nullptr) {
           errorReporter.addError(statement.getStartByte(), statement.getEndByte(),
-              "This statement should end with a semicolon, not a block.");
+              "This statement should end with a block, not a semicolon.");
         }
         break;
 
@@ -985,7 +989,7 @@ kj::Maybe<Orphan<Declaration>> CapnpParser::parseStatement(
           builder.adoptNestedDecls(arrayToList(orphanage, members.releaseAsArray()));
         } else {
           errorReporter.addError(statement.getStartByte(), statement.getEndByte(),
-              "This statement should end with a block, not a semicolon.");
+              "This statement should end with a semicolon, not a block.");
         }
         break;
     }
