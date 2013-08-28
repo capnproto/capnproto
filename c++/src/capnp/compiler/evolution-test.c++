@@ -265,7 +265,7 @@ static ChangeInfo structGroupifyFields(
     groupNested.adoptWithCaveats(i, kj::mv(groupified[i]));
   }
 
-  newGroup.initName().setValue(kj::str("g", groupNested[0].getName().getValue()));
+  newGroup.initName().setValue(kj::str("g", nextOrdinal, "x", groupNested[0].getName().getValue()));
   newGroup.getId().setUnspecified();
   newGroup.setGroup();
 
@@ -861,8 +861,7 @@ public:
 
     {
       kj::String text = kj::str(
-          "Randomly testing backwards-compatibility scenarios...\n"
-          "seed = ", seed, " <- PLEASE RECORD THIS NUMBER IF THE TEST FAILS\n");
+          "Randomly testing backwards-compatibility scenarios with seed: ", seed, "\n");
       kj::FdOutputStream(STDOUT_FILENO).write(text.begin(), text.size());
     }
 

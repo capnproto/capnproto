@@ -300,4 +300,4 @@ nodist_capnp_test_SOURCES = $(test_capnpc_outputs)
 capnp_evolution_test_LDADD = libcapnpc.la libcapnp.la libkj.la
 capnp_evolution_test_SOURCES = src/capnp/compiler/evolution-test.c++
 
-TESTS = capnp-test capnp-evolution-test
+TESTS = capnp-test capnp-evolution-test src/capnp/compiler/capnp-test.sh
