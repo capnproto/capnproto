@@ -190,8 +190,12 @@ struct Field {
       defaultValue @6 :Value;
     }
 
-    group @7 :Id;
-    # A group.  This is the ID of the group's node.
+    group :group {
+      # A group.
+
+      typeId @7 :Id;
+      # The ID of the group's node.
+    }
   }
 
   ordinal :union {
@@ -264,11 +268,19 @@ struct Type {
     text @12 :Void;
     data @13 :Void;
 
-    list @14 :Type;  # Value = the element type.
+    list :group {
+      elementType @14 :Type;
+    }
 
-    enum @15 :Id;
-    struct @16 :Id;
-    interface @17 :Id;
+    enum :group {
+      typeId @15 :Id;
+    }
+    struct :group {
+      typeId @16 :Id;
+    }
+    interface :group {
+      typeId @17 :Id;
+    }
 
     object @18 :Void;
   }

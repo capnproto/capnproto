@@ -326,7 +326,7 @@ private:
 
         case schema::Field::GROUP:
           // Require that the group is a struct node.
-          validateTypeId(field.getGroup(), schema::Node::STRUCT);
+          validateTypeId(field.getGroup().getTypeId(), schema::Node::STRUCT);
           break;
       }
 
@@ -467,17 +467,17 @@ private:
         break;
 
       case schema::Type::STRUCT:
-        validateTypeId(type.getStruct(), schema::Node::STRUCT);
+        validateTypeId(type.getStruct().getTypeId(), schema::Node::STRUCT);
         break;
       case schema::Type::ENUM:
-        validateTypeId(type.getEnum(), schema::Node::ENUM);
+        validateTypeId(type.getEnum().getTypeId(), schema::Node::ENUM);
         break;
       case schema::Type::INTERFACE:
-        validateTypeId(type.getInterface(), schema::Node::INTERFACE);
+        validateTypeId(type.getInterface().getTypeId(), schema::Node::INTERFACE);
         break;
 
       case schema::Type::LIST:
-        validate(type.getList());
+        validate(type.getList().getElementType());
         break;
     }
 
@@ -714,7 +714,8 @@ private:
             break;
           }
           case schema::Field::GROUP:
-            checkUpgradeToStruct(nonGroup.getType(), replacement.getGroup(), existingNode, field);
+            checkUpgradeToStruct(nonGroup.getType(), replacement.getGroup().getTypeId(),
+                                 existingNode, field);
             break;
         }
 
@@ -724,11 +725,12 @@ private:
       case schema::Field::GROUP:
         switch (replacement.which()) {
           case schema::Field::NON_GROUP:
-            checkUpgradeToStruct(replacement.getNonGroup().getType(), field.getGroup(),
+            checkUpgradeToStruct(replacement.getNonGroup().getType(), field.getGroup().getTypeId(),
                                  replacementNode, replacement);
             break;
           case schema::Field::GROUP:
-            VALIDATE_SCHEMA(field.getGroup() == replacement.getGroup(), "group id changed");
+            VALIDATE_SCHEMA(field.getGroup().getTypeId() == replacement.getGroup().getTypeId(),
+                            "group id changed");
             break;
         }
         break;
@@ -840,10 +842,10 @@ private:
 
       if (upgradeToStructMode == ALLOW_UPGRADE_TO_STRUCT) {
         if (type.isStruct()) {
-          checkUpgradeToStruct(replacement, type.getStruct());
+          checkUpgradeToStruct(replacement, type.getStruct().getTypeId());
           return;
         } else if (replacement.isStruct()) {
-          checkUpgradeToStruct(type, replacement.getStruct());
+          checkUpgradeToStruct(type, replacement.getStruct().getTypeId());
           return;
         }
       }
@@ -870,11 +872,13 @@ private:
         return;
 
       case schema::Type::LIST:
-        checkCompatibility(type.getList(), replacement.getList(), ALLOW_UPGRADE_TO_STRUCT);
+        checkCompatibility(type.getList().getElementType(), replacement.getList().getElementType(),
+                           ALLOW_UPGRADE_TO_STRUCT);
         return;
 
       case schema::Type::ENUM:
-        VALIDATE_SCHEMA(replacement.getEnum() == type.getEnum(), "type changed enum type");
+        VALIDATE_SCHEMA(replacement.getEnum().getTypeId() == type.getEnum().getTypeId(),
+                        "type changed enum type");
         return;
 
       case schema::Type::STRUCT:
@@ -885,12 +889,12 @@ private:
         //   be compatible.  However, that has another problem, which is that it could be that the
         //   whole reason the type was replaced was to fork that type, and so an incompatibility
         //   could be very much expected.  This could be a rat hole...
-        VALIDATE_SCHEMA(replacement.getStruct() == type.getStruct(),
+        VALIDATE_SCHEMA(replacement.getStruct().getTypeId() == type.getStruct().getTypeId(),
                         "type changed to incompatible struct type");
         return;
 
       case schema::Type::INTERFACE:
-        VALIDATE_SCHEMA(replacement.getInterface() == type.getInterface(),
+        VALIDATE_SCHEMA(replacement.getInterface().getTypeId() == type.getInterface().getTypeId(),
                         "type changed to incompatible interface type");
         return;
     }
@@ -1027,7 +1031,7 @@ private:
     if (type.isText()) {
       return true;
     } else if (type.isList()) {
-      switch (type.getList().which()) {
+      switch (type.getList().getElementType().which()) {
         case schema::Type::INT8:
         case schema::Type::UINT8:
           return true;

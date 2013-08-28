@@ -173,13 +173,13 @@ private:
       case schema::Type::TEXT: return kj::strTree("Text");
       case schema::Type::DATA: return kj::strTree("Data");
       case schema::Type::LIST:
-        return kj::strTree("List(", genType(type.getList(), scope), ")");
+        return kj::strTree("List(", genType(type.getList().getElementType(), scope), ")");
       case schema::Type::ENUM:
-        return nodeName(scope.getDependency(type.getEnum()), scope);
+        return nodeName(scope.getDependency(type.getEnum().getTypeId()), scope);
       case schema::Type::STRUCT:
-        return nodeName(scope.getDependency(type.getStruct()), scope);
+        return nodeName(scope.getDependency(type.getStruct().getTypeId()), scope);
       case schema::Type::INTERFACE:
-        return nodeName(scope.getDependency(type.getInterface()), scope);
+        return nodeName(scope.getDependency(type.getInterface().getTypeId()), scope);
       case schema::Type::OBJECT: return kj::strTree("Object");
     }
     return kj::strTree();
@@ -256,12 +256,13 @@ private:
         return kj::strTree(DynamicValue::Reader(value.getData()));
       case schema::Value::LIST: {
         KJ_REQUIRE(type.isList(), "type/value mismatch");
-        auto listValue = value.getList<DynamicList>(ListSchema::of(type.getList(), scope));
+        auto listValue = value.getList<DynamicList>(
+            ListSchema::of(type.getList().getElementType(), scope));
         return kj::strTree(listValue);
       }
       case schema::Value::ENUM: {
         KJ_REQUIRE(type.isEnum(), "type/value mismatch");
-        auto enumNode = scope.getDependency(type.getEnum()).asEnum().getProto();
+        auto enumNode = scope.getDependency(type.getEnum().getTypeId()).asEnum().getProto();
         auto enumerants = enumNode.getEnum().getEnumerants();
         KJ_REQUIRE(value.getEnum() < enumerants.size(),
                 "Enum value out-of-range.", value.getEnum(), enumNode.getDisplayName());
@@ -270,7 +271,7 @@ private:
       case schema::Value::STRUCT: {
         KJ_REQUIRE(type.isStruct(), "type/value mismatch");
         auto structValue = value.getStruct<DynamicStruct>(
-            scope.getDependency(type.getStruct()).asStruct());
+            scope.getDependency(type.getStruct().getTypeId()).asStruct());
         return kj::strTree(structValue);
       }
       case schema::Value::INTERFACE: {
@@ -385,7 +386,7 @@ private:
             "\n");
       }
       case schema::Field::GROUP: {
-        auto group = scope.getDependency(field.getGroup()).asStruct();
+        auto group = scope.getDependency(field.getGroup().getTypeId()).asStruct();
         return kj::strTree(
             indent, field.getName(),
             " :group", genAnnotations(field.getAnnotations(), scope), " {",

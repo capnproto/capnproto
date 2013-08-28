@@ -87,11 +87,19 @@ struct Field {
     GROUP,
   };
   struct NonGroup;
+  struct Group;
   struct Ordinal;
 };
 
 struct Field::NonGroup {
   NonGroup() = delete;
+
+  class Reader;
+  class Builder;
+};
+
+struct Field::Group {
+  Group() = delete;
 
   class Reader;
   class Builder;
@@ -156,6 +164,38 @@ struct Type {
     INTERFACE,
     OBJECT,
   };
+  struct List;
+  struct Enum;
+  struct Struct;
+  struct Interface;
+};
+
+struct Type::List {
+  List() = delete;
+
+  class Reader;
+  class Builder;
+};
+
+struct Type::Enum {
+  Enum() = delete;
+
+  class Reader;
+  class Builder;
+};
+
+struct Type::Struct {
+  Struct() = delete;
+
+  class Reader;
+  class Builder;
+};
+
+struct Type::Interface {
+  Interface() = delete;
+
+  class Reader;
+  class Builder;
 };
 
 struct Value {
@@ -244,11 +284,16 @@ extern const ::capnp::_::RawSchema s_b18aa5ac7a0d9420;
 extern const ::capnp::_::RawSchema s_ec1619d4400a0290;
 extern const ::capnp::_::RawSchema s_9aad50a41f4af45f;
 extern const ::capnp::_::RawSchema s_c42305476bb4746f;
+extern const ::capnp::_::RawSchema s_cafccddb68db1d11;
 extern const ::capnp::_::RawSchema s_bb90d5c287870be6;
 extern const ::capnp::_::RawSchema s_978a7cebdc549a4d;
 extern const ::capnp::_::RawSchema s_9500cce23b334d80;
 extern const ::capnp::_::RawSchema s_cbc0c86dae91fcf6;
 extern const ::capnp::_::RawSchema s_d07378ede1f9cc60;
+extern const ::capnp::_::RawSchema s_87e739250a60ea97;
+extern const ::capnp::_::RawSchema s_9e0e78711a7f87a9;
+extern const ::capnp::_::RawSchema s_ac3a6f60ef4cc6d3;
+extern const ::capnp::_::RawSchema s_ed8bca69f7fb0cbf;
 extern const ::capnp::_::RawSchema s_ce23dcd2d7b00c9b;
 extern const ::capnp::_::RawSchema s_f1c8950dab257542;
 extern const ::capnp::_::RawSchema s_d1958f7dba521926;
@@ -287,6 +332,9 @@ CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Field::NonGroup, c42305476bb4746f,
     3, 4, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::Field::Group, cafccddb68db1d11,
+    3, 4, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Field::Ordinal, bb90d5c287870be6,
     3, 4, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
@@ -300,6 +348,18 @@ CAPNP_DECLARE_STRUCT(
     0, 4, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Type, d07378ede1f9cc60,
+    2, 1, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::Type::List, 87e739250a60ea97,
+    2, 1, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::Type::Enum, 9e0e78711a7f87a9,
+    2, 1, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::Type::Struct, ac3a6f60ef4cc6d3,
+    2, 1, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::Type::Interface, ed8bca69f7fb0cbf,
     2, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Value, ce23dcd2d7b00c9b,
@@ -1024,7 +1084,7 @@ public:
 
   inline bool isGroup() const;
   inline bool hasGroup() const;
-  inline  ::uint64_t getGroup() const;
+  inline Group::Reader getGroup() const;
 
   inline bool hasOrdinal() const;
   inline Ordinal::Reader getOrdinal() const;
@@ -1087,8 +1147,8 @@ public:
 
   inline bool isGroup();
   inline bool hasGroup();
-  inline  ::uint64_t getGroup();
-  inline void setGroup( ::uint64_t value);
+  inline Group::Builder getGroup();
+  inline Group::Builder initGroup();
 
   inline bool hasOrdinal();
   inline Ordinal::Builder getOrdinal();
@@ -1182,6 +1242,64 @@ private:
 
 inline ::kj::StringTree KJ_STRINGIFY(Field::NonGroup::Builder builder) {
   return ::capnp::_::structString<Field::NonGroup>(builder._builder.asReader());
+}
+
+class Field::Group::Reader {
+public:
+  typedef Group Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline size_t totalSizeInWords() const {
+    return _reader.totalSize() / ::capnp::WORDS;
+  }
+
+  inline bool hasTypeId() const;
+  inline  ::uint64_t getTypeId() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Field::Group::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Field::Group::Reader reader) {
+  return ::capnp::_::structString<Field::Group>(reader._reader);
+}
+
+class Field::Group::Builder {
+public:
+  typedef Group Builds;
+
+  Builder() = default;
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+
+  inline bool hasTypeId();
+  inline  ::uint64_t getTypeId();
+  inline void setTypeId( ::uint64_t value);
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Field::Group::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Field::Group::Builder builder) {
+  return ::capnp::_::structString<Field::Group>(builder._builder.asReader());
 }
 
 class Field::Ordinal::Reader {
@@ -1599,19 +1717,19 @@ public:
 
   inline bool isList() const;
   inline bool hasList() const;
-  inline  ::capnp::schema::Type::Reader getList() const;
+  inline List::Reader getList() const;
 
   inline bool isEnum() const;
   inline bool hasEnum() const;
-  inline  ::uint64_t getEnum() const;
+  inline Enum::Reader getEnum() const;
 
   inline bool isStruct() const;
   inline bool hasStruct() const;
-  inline  ::uint64_t getStruct() const;
+  inline Struct::Reader getStruct() const;
 
   inline bool isInterface() const;
   inline bool hasInterface() const;
-  inline  ::uint64_t getInterface() const;
+  inline Interface::Reader getInterface() const;
 
   inline bool isObject() const;
   inline bool hasObject() const;
@@ -1718,26 +1836,23 @@ public:
 
   inline bool isList();
   inline bool hasList();
-  inline  ::capnp::schema::Type::Builder getList();
-  inline void setList( ::capnp::schema::Type::Reader value);
-  inline  ::capnp::schema::Type::Builder initList();
-  inline void adoptList(::capnp::Orphan< ::capnp::schema::Type>&& value);
-  inline ::capnp::Orphan< ::capnp::schema::Type> disownList();
+  inline List::Builder getList();
+  inline List::Builder initList();
 
   inline bool isEnum();
   inline bool hasEnum();
-  inline  ::uint64_t getEnum();
-  inline void setEnum( ::uint64_t value);
+  inline Enum::Builder getEnum();
+  inline Enum::Builder initEnum();
 
   inline bool isStruct();
   inline bool hasStruct();
-  inline  ::uint64_t getStruct();
-  inline void setStruct( ::uint64_t value);
+  inline Struct::Builder getStruct();
+  inline Struct::Builder initStruct();
 
   inline bool isInterface();
   inline bool hasInterface();
-  inline  ::uint64_t getInterface();
-  inline void setInterface( ::uint64_t value);
+  inline Interface::Builder getInterface();
+  inline Interface::Builder initInterface();
 
   inline bool isObject();
   inline bool hasObject();
@@ -1754,6 +1869,241 @@ private:
 
 inline ::kj::StringTree KJ_STRINGIFY(Type::Builder builder) {
   return ::capnp::_::structString<Type>(builder._builder.asReader());
+}
+
+class Type::List::Reader {
+public:
+  typedef List Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline size_t totalSizeInWords() const {
+    return _reader.totalSize() / ::capnp::WORDS;
+  }
+
+  inline bool hasElementType() const;
+  inline  ::capnp::schema::Type::Reader getElementType() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Type::List::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Type::List::Reader reader) {
+  return ::capnp::_::structString<Type::List>(reader._reader);
+}
+
+class Type::List::Builder {
+public:
+  typedef List Builds;
+
+  Builder() = default;
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+
+  inline bool hasElementType();
+  inline  ::capnp::schema::Type::Builder getElementType();
+  inline void setElementType( ::capnp::schema::Type::Reader value);
+  inline  ::capnp::schema::Type::Builder initElementType();
+  inline void adoptElementType(::capnp::Orphan< ::capnp::schema::Type>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::Type> disownElementType();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Type::List::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Type::List::Builder builder) {
+  return ::capnp::_::structString<Type::List>(builder._builder.asReader());
+}
+
+class Type::Enum::Reader {
+public:
+  typedef Enum Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline size_t totalSizeInWords() const {
+    return _reader.totalSize() / ::capnp::WORDS;
+  }
+
+  inline bool hasTypeId() const;
+  inline  ::uint64_t getTypeId() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Type::Enum::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Type::Enum::Reader reader) {
+  return ::capnp::_::structString<Type::Enum>(reader._reader);
+}
+
+class Type::Enum::Builder {
+public:
+  typedef Enum Builds;
+
+  Builder() = default;
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+
+  inline bool hasTypeId();
+  inline  ::uint64_t getTypeId();
+  inline void setTypeId( ::uint64_t value);
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Type::Enum::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Type::Enum::Builder builder) {
+  return ::capnp::_::structString<Type::Enum>(builder._builder.asReader());
+}
+
+class Type::Struct::Reader {
+public:
+  typedef Struct Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline size_t totalSizeInWords() const {
+    return _reader.totalSize() / ::capnp::WORDS;
+  }
+
+  inline bool hasTypeId() const;
+  inline  ::uint64_t getTypeId() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Type::Struct::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Type::Struct::Reader reader) {
+  return ::capnp::_::structString<Type::Struct>(reader._reader);
+}
+
+class Type::Struct::Builder {
+public:
+  typedef Struct Builds;
+
+  Builder() = default;
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+
+  inline bool hasTypeId();
+  inline  ::uint64_t getTypeId();
+  inline void setTypeId( ::uint64_t value);
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Type::Struct::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Type::Struct::Builder builder) {
+  return ::capnp::_::structString<Type::Struct>(builder._builder.asReader());
+}
+
+class Type::Interface::Reader {
+public:
+  typedef Interface Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline size_t totalSizeInWords() const {
+    return _reader.totalSize() / ::capnp::WORDS;
+  }
+
+  inline bool hasTypeId() const;
+  inline  ::uint64_t getTypeId() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Type::Interface::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Type::Interface::Reader reader) {
+  return ::capnp::_::structString<Type::Interface>(reader._reader);
+}
+
+class Type::Interface::Builder {
+public:
+  typedef Interface Builds;
+
+  Builder() = default;
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+
+  inline bool hasTypeId();
+  inline  ::uint64_t getTypeId();
+  inline void setTypeId( ::uint64_t value);
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Type::Interface::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Type::Interface::Builder builder) {
+  return ::capnp::_::structString<Type::Interface>(builder._builder.asReader());
 }
 
 class Value::Reader {
@@ -3503,33 +3853,28 @@ inline bool Field::Builder::isGroup() {
 }
 inline bool Field::Reader::hasGroup() const {
   if (which() != Field::GROUP) return false;
-  return _reader.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
+  return _reader.getDataField< ::uint64_t>(2 * ::capnp::ELEMENTS) != 0;
 }
-
 inline bool Field::Builder::hasGroup() {
   if (which() != Field::GROUP) return false;
-  return _builder.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
+  return _builder.getDataField< ::uint64_t>(2 * ::capnp::ELEMENTS) != 0;
 }
-inline  ::uint64_t Field::Reader::getGroup() const {
+inline Field::Group::Reader Field::Reader::getGroup() const {
   KJ_IREQUIRE(which() == Field::GROUP,
               "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::uint64_t>(
-      2 * ::capnp::ELEMENTS);
+  return Field::Group::Reader(_reader);
 }
-
-inline  ::uint64_t Field::Builder::getGroup() {
+inline Field::Group::Builder Field::Builder::getGroup() {
   KJ_IREQUIRE(which() == Field::GROUP,
               "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::uint64_t>(
-      2 * ::capnp::ELEMENTS);
+  return Field::Group::Builder(_builder);
 }
-inline void Field::Builder::setGroup( ::uint64_t value) {
+inline Field::Group::Builder Field::Builder::initGroup() {
   _builder.setDataField<Field::Which>(
       4 * ::capnp::ELEMENTS, Field::GROUP);
-  _builder.setDataField< ::uint64_t>(
-      2 * ::capnp::ELEMENTS, value);
+  _builder.setDataField< ::uint64_t>(2 * ::capnp::ELEMENTS, 0);
+  return Field::Group::Builder(_builder);
 }
-
 inline bool Field::Reader::hasOrdinal() const {
   return _reader.getDataField< ::uint16_t>(5 * ::capnp::ELEMENTS) != 0
       || _reader.getDataField< ::uint16_t>(6 * ::capnp::ELEMENTS) != 0;
@@ -3632,6 +3977,27 @@ inline void Field::NonGroup::Builder::adoptDefaultValue(
 inline ::capnp::Orphan< ::capnp::schema::Value> Field::NonGroup::Builder::disownDefaultValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::disown(
       _builder, 3 * ::capnp::POINTERS);
+}
+
+inline bool Field::Group::Reader::hasTypeId() const {
+  return _reader.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
+}
+
+inline bool Field::Group::Builder::hasTypeId() {
+  return _builder.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
+}
+inline  ::uint64_t Field::Group::Reader::getTypeId() const {
+  return _reader.getDataField< ::uint64_t>(
+      2 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint64_t Field::Group::Builder::getTypeId() {
+  return _builder.getDataField< ::uint64_t>(
+      2 * ::capnp::ELEMENTS);
+}
+inline void Field::Group::Builder::setTypeId( ::uint64_t value) {
+  _builder.setDataField< ::uint64_t>(
+      2 * ::capnp::ELEMENTS, value);
 }
 
 inline Field::Ordinal::Which Field::Ordinal::Reader::which() const {
@@ -4605,44 +4971,22 @@ inline bool Type::Builder::hasList() {
   if (which() != Type::LIST) return false;
   return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
 }
-inline  ::capnp::schema::Type::Reader Type::Reader::getList() const {
+inline Type::List::Reader Type::Reader::getList() const {
   KJ_IREQUIRE(which() == Type::LIST,
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _reader, 0 * ::capnp::POINTERS);
+  return Type::List::Reader(_reader);
 }
-inline  ::capnp::schema::Type::Builder Type::Builder::getList() {
+inline Type::List::Builder Type::Builder::getList() {
   KJ_IREQUIRE(which() == Type::LIST,
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _builder, 0 * ::capnp::POINTERS);
+  return Type::List::Builder(_builder);
 }
-inline void Type::Builder::setList( ::capnp::schema::Type::Reader value) {
+inline Type::List::Builder Type::Builder::initList() {
   _builder.setDataField<Type::Which>(
       0 * ::capnp::ELEMENTS, Type::LIST);
-  ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+  _builder.clearPointer(0 * ::capnp::POINTERS);
+  return Type::List::Builder(_builder);
 }
-inline  ::capnp::schema::Type::Builder Type::Builder::initList() {
-  _builder.setDataField<Type::Which>(
-      0 * ::capnp::ELEMENTS, Type::LIST);
-  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::init(
-      _builder, 0 * ::capnp::POINTERS);
-}
-inline void Type::Builder::adoptList(
-    ::capnp::Orphan< ::capnp::schema::Type>&& value) {
-  _builder.setDataField<Type::Which>(
-      0 * ::capnp::ELEMENTS, Type::LIST);
-  ::capnp::_::PointerHelpers< ::capnp::schema::Type>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::schema::Type> Type::Builder::disownList() {
-  KJ_IREQUIRE(which() == Type::LIST,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::disown(
-      _builder, 0 * ::capnp::POINTERS);
-}
-
 inline bool Type::Reader::isEnum() const {
   return which() == Type::ENUM;
 }
@@ -4651,33 +4995,28 @@ inline bool Type::Builder::isEnum() {
 }
 inline bool Type::Reader::hasEnum() const {
   if (which() != Type::ENUM) return false;
-  return _reader.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
+  return _reader.getDataField< ::uint64_t>(1 * ::capnp::ELEMENTS) != 0;
 }
-
 inline bool Type::Builder::hasEnum() {
   if (which() != Type::ENUM) return false;
-  return _builder.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
+  return _builder.getDataField< ::uint64_t>(1 * ::capnp::ELEMENTS) != 0;
 }
-inline  ::uint64_t Type::Reader::getEnum() const {
+inline Type::Enum::Reader Type::Reader::getEnum() const {
   KJ_IREQUIRE(which() == Type::ENUM,
               "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::uint64_t>(
-      1 * ::capnp::ELEMENTS);
+  return Type::Enum::Reader(_reader);
 }
-
-inline  ::uint64_t Type::Builder::getEnum() {
+inline Type::Enum::Builder Type::Builder::getEnum() {
   KJ_IREQUIRE(which() == Type::ENUM,
               "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::uint64_t>(
-      1 * ::capnp::ELEMENTS);
+  return Type::Enum::Builder(_builder);
 }
-inline void Type::Builder::setEnum( ::uint64_t value) {
+inline Type::Enum::Builder Type::Builder::initEnum() {
   _builder.setDataField<Type::Which>(
       0 * ::capnp::ELEMENTS, Type::ENUM);
-  _builder.setDataField< ::uint64_t>(
-      1 * ::capnp::ELEMENTS, value);
+  _builder.setDataField< ::uint64_t>(1 * ::capnp::ELEMENTS, 0);
+  return Type::Enum::Builder(_builder);
 }
-
 inline bool Type::Reader::isStruct() const {
   return which() == Type::STRUCT;
 }
@@ -4686,33 +5025,28 @@ inline bool Type::Builder::isStruct() {
 }
 inline bool Type::Reader::hasStruct() const {
   if (which() != Type::STRUCT) return false;
-  return _reader.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
+  return _reader.getDataField< ::uint64_t>(1 * ::capnp::ELEMENTS) != 0;
 }
-
 inline bool Type::Builder::hasStruct() {
   if (which() != Type::STRUCT) return false;
-  return _builder.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
+  return _builder.getDataField< ::uint64_t>(1 * ::capnp::ELEMENTS) != 0;
 }
-inline  ::uint64_t Type::Reader::getStruct() const {
+inline Type::Struct::Reader Type::Reader::getStruct() const {
   KJ_IREQUIRE(which() == Type::STRUCT,
               "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::uint64_t>(
-      1 * ::capnp::ELEMENTS);
+  return Type::Struct::Reader(_reader);
 }
-
-inline  ::uint64_t Type::Builder::getStruct() {
+inline Type::Struct::Builder Type::Builder::getStruct() {
   KJ_IREQUIRE(which() == Type::STRUCT,
               "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::uint64_t>(
-      1 * ::capnp::ELEMENTS);
+  return Type::Struct::Builder(_builder);
 }
-inline void Type::Builder::setStruct( ::uint64_t value) {
+inline Type::Struct::Builder Type::Builder::initStruct() {
   _builder.setDataField<Type::Which>(
       0 * ::capnp::ELEMENTS, Type::STRUCT);
-  _builder.setDataField< ::uint64_t>(
-      1 * ::capnp::ELEMENTS, value);
+  _builder.setDataField< ::uint64_t>(1 * ::capnp::ELEMENTS, 0);
+  return Type::Struct::Builder(_builder);
 }
-
 inline bool Type::Reader::isInterface() const {
   return which() == Type::INTERFACE;
 }
@@ -4721,33 +5055,28 @@ inline bool Type::Builder::isInterface() {
 }
 inline bool Type::Reader::hasInterface() const {
   if (which() != Type::INTERFACE) return false;
-  return _reader.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
+  return _reader.getDataField< ::uint64_t>(1 * ::capnp::ELEMENTS) != 0;
 }
-
 inline bool Type::Builder::hasInterface() {
   if (which() != Type::INTERFACE) return false;
-  return _builder.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
+  return _builder.getDataField< ::uint64_t>(1 * ::capnp::ELEMENTS) != 0;
 }
-inline  ::uint64_t Type::Reader::getInterface() const {
+inline Type::Interface::Reader Type::Reader::getInterface() const {
   KJ_IREQUIRE(which() == Type::INTERFACE,
               "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::uint64_t>(
-      1 * ::capnp::ELEMENTS);
+  return Type::Interface::Reader(_reader);
 }
-
-inline  ::uint64_t Type::Builder::getInterface() {
+inline Type::Interface::Builder Type::Builder::getInterface() {
   KJ_IREQUIRE(which() == Type::INTERFACE,
               "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::uint64_t>(
-      1 * ::capnp::ELEMENTS);
+  return Type::Interface::Builder(_builder);
 }
-inline void Type::Builder::setInterface( ::uint64_t value) {
+inline Type::Interface::Builder Type::Builder::initInterface() {
   _builder.setDataField<Type::Which>(
       0 * ::capnp::ELEMENTS, Type::INTERFACE);
-  _builder.setDataField< ::uint64_t>(
-      1 * ::capnp::ELEMENTS, value);
+  _builder.setDataField< ::uint64_t>(1 * ::capnp::ELEMENTS, 0);
+  return Type::Interface::Builder(_builder);
 }
-
 inline bool Type::Reader::isObject() const {
   return which() == Type::OBJECT;
 }
@@ -4781,6 +5110,101 @@ inline void Type::Builder::setObject( ::capnp::Void value) {
       0 * ::capnp::ELEMENTS, Type::OBJECT);
   _builder.setDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Type::List::Reader::hasElementType() const {
+  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+}
+inline bool Type::List::Builder::hasElementType() {
+  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+}
+inline  ::capnp::schema::Type::Reader Type::List::Reader::getElementType() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
+      _reader, 0 * ::capnp::POINTERS);
+}
+inline  ::capnp::schema::Type::Builder Type::List::Builder::getElementType() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
+      _builder, 0 * ::capnp::POINTERS);
+}
+inline void Type::List::Builder::setElementType( ::capnp::schema::Type::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
+      _builder, 0 * ::capnp::POINTERS, value);
+}
+inline  ::capnp::schema::Type::Builder Type::List::Builder::initElementType() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::init(
+      _builder, 0 * ::capnp::POINTERS);
+}
+inline void Type::List::Builder::adoptElementType(
+    ::capnp::Orphan< ::capnp::schema::Type>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Type>::adopt(
+      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::schema::Type> Type::List::Builder::disownElementType() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::disown(
+      _builder, 0 * ::capnp::POINTERS);
+}
+
+inline bool Type::Enum::Reader::hasTypeId() const {
+  return _reader.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
+}
+
+inline bool Type::Enum::Builder::hasTypeId() {
+  return _builder.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
+}
+inline  ::uint64_t Type::Enum::Reader::getTypeId() const {
+  return _reader.getDataField< ::uint64_t>(
+      1 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint64_t Type::Enum::Builder::getTypeId() {
+  return _builder.getDataField< ::uint64_t>(
+      1 * ::capnp::ELEMENTS);
+}
+inline void Type::Enum::Builder::setTypeId( ::uint64_t value) {
+  _builder.setDataField< ::uint64_t>(
+      1 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Type::Struct::Reader::hasTypeId() const {
+  return _reader.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
+}
+
+inline bool Type::Struct::Builder::hasTypeId() {
+  return _builder.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
+}
+inline  ::uint64_t Type::Struct::Reader::getTypeId() const {
+  return _reader.getDataField< ::uint64_t>(
+      1 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint64_t Type::Struct::Builder::getTypeId() {
+  return _builder.getDataField< ::uint64_t>(
+      1 * ::capnp::ELEMENTS);
+}
+inline void Type::Struct::Builder::setTypeId( ::uint64_t value) {
+  _builder.setDataField< ::uint64_t>(
+      1 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Type::Interface::Reader::hasTypeId() const {
+  return _reader.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
+}
+
+inline bool Type::Interface::Builder::hasTypeId() {
+  return _builder.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
+}
+inline  ::uint64_t Type::Interface::Reader::getTypeId() const {
+  return _reader.getDataField< ::uint64_t>(
+      1 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint64_t Type::Interface::Builder::getTypeId() {
+  return _builder.getDataField< ::uint64_t>(
+      1 * ::capnp::ELEMENTS);
+}
+inline void Type::Interface::Builder::setTypeId( ::uint64_t value) {
+  _builder.setDataField< ::uint64_t>(
+      1 * ::capnp::ELEMENTS, value);
 }
 
 inline Value::Which Value::Reader::which() const {

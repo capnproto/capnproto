@@ -100,7 +100,7 @@ TEST(Schema, Unions) {
   EXPECT_TRUE(schema.findFieldByName("u1f0s8") == nullptr);
 
   auto union1 = schema.getFieldByName("union1");
-  auto union1g = schema.getDependency(union1.getProto().getGroup()).asStruct();
+  auto union1g = schema.getDependency(union1.getProto().getGroup().getTypeId()).asStruct();
   EXPECT_EQ(schema, union1g.getDependency(union1g.getProto().getScopeId()));
   EXPECT_TRUE(union1g.findFieldByName("bin0") == nullptr);
 
@@ -230,7 +230,7 @@ TEST(Schema, Lists) {
     auto context = Schema::from<TestAllTypes>();
     auto type = context.getFieldByName("enumList").getProto().getNonGroup().getType();
 
-    ListSchema schema = ListSchema::of(type.getList(), context);
+    ListSchema schema = ListSchema::of(type.getList().getElementType(), context);
     EXPECT_EQ(schema::Type::ENUM, schema.whichElementType());
     EXPECT_TRUE(schema.getEnumElementType() == Schema::from<TestEnum>());
     EXPECT_ANY_THROW(schema.getStructElementType());

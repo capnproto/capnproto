@@ -64,10 +64,12 @@ TEST(SchemaLoader, LoadLateUnion) {
   loader.load(Schema::from<test::TestLateUnion::TheUnion>().getProto()).asStruct();
   loader.load(Schema::from<test::TestLateUnion::AnotherUnion>().getProto()).asStruct();
 
-  EXPECT_EQ(6, schema.getDependency(schema.getFieldByName("theUnion").getProto().getGroup())
-                     .asStruct().getFieldByName("grault").getProto().getOrdinal().getExplicit());
-  EXPECT_EQ(9, schema.getDependency(schema.getFieldByName("anotherUnion").getProto().getGroup())
-                     .asStruct().getFieldByName("corge").getProto().getOrdinal().getExplicit());
+  EXPECT_EQ(6,
+      schema.getDependency(schema.getFieldByName("theUnion").getProto().getGroup().getTypeId())
+            .asStruct().getFieldByName("grault").getProto().getOrdinal().getExplicit());
+  EXPECT_EQ(9,
+      schema.getDependency(schema.getFieldByName("anotherUnion").getProto().getGroup().getTypeId())
+            .asStruct().getFieldByName("corge").getProto().getOrdinal().getExplicit());
   EXPECT_TRUE(schema.findFieldByName("corge") == nullptr);
   EXPECT_TRUE(schema.findFieldByName("grault") == nullptr);
 }
@@ -185,8 +187,8 @@ Schema loadUnderAlternateTypeId(SchemaLoader& loader, uint64_t id) {
     for (auto field: fields) {
       if (field.isNonGroup()) {
         auto type = field.getNonGroup().getType();
-        if (type.isStruct() && type.getStruct() == typeId<T>()) {
-          type.setStruct(id);
+        if (type.isStruct() && type.getStruct().getTypeId() == typeId<T>()) {
+          type.getStruct().setTypeId(id);
         }
       }
     }

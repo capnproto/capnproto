@@ -995,7 +995,7 @@ public:
     // Set up stuff for the ValueTranslator.
     ValueResolverGlue resolver(compiler->getLoader(), errorReporter);
     auto type = arena.getOrphanage().newOrphan<schema::Type>();
-    type.get().setStruct(rootType.getProto().getId());
+    type.get().initStruct().setTypeId(rootType.getProto().getId());
 
     // Set up output stream.
     kj::FdOutputStream rawOutput(STDOUT_FILENO);

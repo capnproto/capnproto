@@ -447,7 +447,7 @@ uint getOrdinal(StructSchema::Field field) {
 
   KJ_ASSERT(proto.isGroup());
 
-  auto group = field.getContainingStruct().getDependency(proto.getGroup()).asStruct();
+  auto group = field.getContainingStruct().getDependency(proto.getGroup().getTypeId()).asStruct();
   return getOrdinal(group.getFields()[0]);
 }
 
@@ -466,7 +466,7 @@ Orphan<DynamicValue> makeExampleValue(
     case schema::Type::BOOL: return ordinal % 2 == 0;
     case schema::Type::TEXT: return orphanage.newOrphanCopy(Text::Reader(kj::str(ordinal)));
     case schema::Type::STRUCT: {
-      auto structType = scope.getDependency(type.getStruct()).asStruct();
+      auto structType = scope.getDependency(type.getStruct().getTypeId()).asStruct();
       auto result = orphanage.newOrphan(structType);
       auto builder = result.get();
 
@@ -484,11 +484,11 @@ Orphan<DynamicValue> makeExampleValue(
       return kj::mv(result);
     }
     case schema::Type::ENUM: {
-      auto enumerants = scope.getDependency(type.getEnum()).asEnum().getEnumerants();
+      auto enumerants = scope.getDependency(type.getEnum().getTypeId()).asEnum().getEnumerants();
       return DynamicEnum(enumerants[ordinal %enumerants.size()]);
     }
     case schema::Type::LIST: {
-      auto elementType = type.getList();
+      auto elementType = type.getList().getElementType();
       auto listType = ListSchema::of(elementType, scope);
       auto result = orphanage.newOrphan(listType, 1);
       result.get().adopt(0, makeExampleValue(
@@ -531,7 +531,8 @@ void checkExampleValue(DynamicValue::Reader value, uint ordinal, schema::Type::R
       break;
     }
     case schema::Type::LIST:
-      checkExampleValue(value.as<DynamicList>()[0], ordinal, type.getList(), sharedOrdinalCount);
+      checkExampleValue(value.as<DynamicList>()[0], ordinal, type.getList().getElementType(),
+                        sharedOrdinalCount);
       break;
     default:
       KJ_FAIL_ASSERT("You added a new possible field type!");
@@ -550,7 +551,7 @@ void setExampleField(DynamicStruct::Builder builder, StructSchema::Field field,
     case schema::Field::GROUP:
       builder.adopt(field, makeExampleStruct(
           Orphanage::getForMessageContaining(builder),
-          field.getContainingStruct().getDependency(fieldProto.getGroup()).asStruct(),
+          field.getContainingStruct().getDependency(fieldProto.getGroup().getTypeId()).asStruct(),
           sharedOrdinalCount));
       break;
   }
@@ -656,7 +657,7 @@ static void loadStructAndGroups(const SchemaLoader& src, SchemaLoader& dst, uint
 
   for (auto field: proto.getStruct().getFields()) {
     if (field.isGroup()) {
-      loadStructAndGroups(src, dst, field.getGroup());
+      loadStructAndGroups(src, dst, field.getGroup().getTypeId());
     }
   }
 }

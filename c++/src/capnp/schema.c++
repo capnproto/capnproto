@@ -293,16 +293,16 @@ ListSchema ListSchema::of(schema::Type::Reader elementType, Schema context) {
       return of(elementType.which());
 
     case schema::Type::STRUCT:
-      return of(context.getDependency(elementType.getStruct()).asStruct());
+      return of(context.getDependency(elementType.getStruct().getTypeId()).asStruct());
 
     case schema::Type::ENUM:
-      return of(context.getDependency(elementType.getEnum()).asEnum());
+      return of(context.getDependency(elementType.getEnum().getTypeId()).asEnum());
 
     case schema::Type::INTERFACE:
-      return of(context.getDependency(elementType.getInterface()).asInterface());
+      return of(context.getDependency(elementType.getInterface().getTypeId()).asInterface());
 
     case schema::Type::LIST:
-      return of(of(elementType.getList(), context));
+      return of(of(elementType.getList().getElementType(), context));
 
     case schema::Type::OBJECT:
       KJ_FAIL_REQUIRE("List(Object) not supported.");

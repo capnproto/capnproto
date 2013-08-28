@@ -232,7 +232,7 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
           uint16_t typedDval;
           typedDval = dval.getEnum();
           return DynamicEnum(
-              field.getContainingStruct().getDependency(type.getEnum()).asEnum(),
+              field.getContainingStruct().getDependency(type.getEnum().getTypeId()).asEnum(),
               reader.getDataField<uint16_t>(nonGroup.getOffset() * ELEMENTS, typedDval));
         }
 
@@ -249,7 +249,7 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
         }
 
         case schema::Type::LIST: {
-          auto elementType = type.getList();
+          auto elementType = type.getList().getElementType();
           return DynamicList::Reader(
               ListSchema::of(elementType, field.getContainingStruct()),
               reader.getListField(nonGroup.getOffset() * POINTERS,
@@ -259,7 +259,7 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
 
         case schema::Type::STRUCT: {
           return DynamicStruct::Reader(
-              field.getContainingStruct().getDependency(type.getStruct()).asStruct(),
+              field.getContainingStruct().getDependency(type.getStruct().getTypeId()).asStruct(),
               reader.getStructField(nonGroup.getOffset() * POINTERS,
                                     dval.getStruct<_::UncheckedMessage>()));
         }
@@ -279,7 +279,8 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
     }
 
     case schema::Field::GROUP:
-      return DynamicStruct::Reader(schema.getDependency(proto.getGroup()).asStruct(), reader);
+      return DynamicStruct::Reader(
+          schema.getDependency(proto.getGroup().getTypeId()).asStruct(), reader);
   }
 
   KJ_UNREACHABLE;
@@ -324,7 +325,7 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
           uint16_t typedDval;
           typedDval = dval.getEnum();
           return DynamicEnum(
-              field.getContainingStruct().getDependency(type.getEnum()).asEnum(),
+              field.getContainingStruct().getDependency(type.getEnum().getTypeId()).asEnum(),
               builder.getDataField<uint16_t>(nonGroup.getOffset() * ELEMENTS, typedDval));
         }
 
@@ -341,7 +342,8 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
         }
 
         case schema::Type::LIST: {
-          ListSchema listType = ListSchema::of(type.getList(), field.getContainingStruct());
+          ListSchema listType = ListSchema::of(type.getList().getElementType(),
+                                               field.getContainingStruct());
           if (listType.whichElementType() == schema::Type::STRUCT) {
             return DynamicList::Builder(listType,
                 builder.getStructListField(nonGroup.getOffset() * POINTERS,
@@ -357,7 +359,7 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
 
         case schema::Type::STRUCT: {
           auto structSchema =
-              field.getContainingStruct().getDependency(type.getStruct()).asStruct();
+              field.getContainingStruct().getDependency(type.getStruct().getTypeId()).asStruct();
           return DynamicStruct::Builder(structSchema,
               builder.getStructField(
                   nonGroup.getOffset() * POINTERS,
@@ -381,7 +383,8 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
     }
 
     case schema::Field::GROUP:
-      return DynamicStruct::Builder(schema.getDependency(proto.getGroup()).asStruct(), builder);
+      return DynamicStruct::Builder(
+          schema.getDependency(proto.getGroup().getTypeId()).asStruct(), builder);
   }
 
   KJ_UNREACHABLE;
@@ -532,7 +535,8 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
 
         case schema::Type::ENUM: {
           uint16_t rawValue;
-          auto enumSchema = field.getContainingStruct().getDependency(type.getEnum()).asEnum();
+          auto enumSchema = field.getContainingStruct()
+              .getDependency(type.getEnum().getTypeId()).asEnum();
           if (value.getType() == DynamicValue::TEXT) {
             // Convert from text.
             rawValue = enumSchema.getEnumerantByName(value.as<Text>()).getOrdinal();
@@ -611,7 +615,7 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field) {
       auto nonGroup = proto.getNonGroup();
       auto type = nonGroup.getType();
       KJ_REQUIRE(type.isStruct(), "init() without a size is only valid for struct fields.");
-      auto subSchema = schema.getDependency(type.getStruct()).asStruct();
+      auto subSchema = schema.getDependency(type.getStruct().getTypeId()).asStruct();
       return DynamicStruct::Builder(subSchema,
           builder.initStructField(nonGroup.getOffset() * POINTERS,
               structSizeFromSchema(subSchema)));
@@ -619,7 +623,8 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field) {
 
     case schema::Field::GROUP: {
       clear(field);
-      return DynamicStruct::Builder(schema.getDependency(proto.getGroup()).asStruct(), builder);
+      return DynamicStruct::Builder(
+          schema.getDependency(proto.getGroup().getTypeId()).asStruct(), builder);
     }
   }
 
@@ -638,7 +643,7 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field, ui
       auto type = nonGroup.getType();
       switch (type.which()) {
         case schema::Type::LIST: {
-          auto listType = ListSchema::of(type.getList(), schema);
+          auto listType = ListSchema::of(type.getList().getElementType(), schema);
           if (listType.whichElementType() == schema::Type::STRUCT) {
             return DynamicList::Builder(listType,
                 builder.initStructListField(
@@ -707,7 +712,8 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
           break;
 
         case schema::Type::LIST: {
-          ListSchema listType = ListSchema::of(type.getList(), field.getContainingStruct());
+          ListSchema listType = ListSchema::of(type.getList().getElementType(),
+                                               field.getContainingStruct());
           KJ_REQUIRE(orphan.getType() == DynamicValue::LIST && orphan.listSchema == listType,
                      "Value type mismatch.");
           break;
@@ -715,7 +721,7 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
 
         case schema::Type::STRUCT: {
           auto structType =
-              field.getContainingStruct().getDependency(type.getStruct()).asStruct();
+              field.getContainingStruct().getDependency(type.getStruct().getTypeId()).asStruct();
           KJ_REQUIRE(orphan.getType() == DynamicValue::STRUCT && orphan.structSchema == structType,
                      "Value type mismatch.");
           break;
@@ -883,7 +889,8 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
     }
 
     case schema::Field::GROUP: {
-      DynamicStruct::Builder group(schema.getDependency(proto.getGroup()).asStruct(), builder);
+      DynamicStruct::Builder group(
+          schema.getDependency(proto.getGroup().getTypeId()).asStruct(), builder);
 
       // We clear the union field with discriminant 0 rather than the one that is set because
       // we want the union to end up with its default field active.
@@ -1440,16 +1447,18 @@ DynamicValue::Reader::Reader(ConstSchema constant) {
     case schema::Type::DATA: *this = value.getData(); break;
 
     case schema::Type::ENUM:
-      *this = DynamicEnum(constant.getDependency(typeSchema.getEnum()).asEnum(), value.getEnum());
+      *this = DynamicEnum(constant.getDependency(
+          typeSchema.getEnum().getTypeId()).asEnum(), value.getEnum());
       break;
 
     case schema::Type::STRUCT:
       *this = value.getStruct<DynamicStruct>(
-          constant.getDependency(typeSchema.getStruct()).asStruct());
+          constant.getDependency(typeSchema.getStruct().getTypeId()).asStruct());
       break;
 
     case schema::Type::LIST:
-      *this = value.getList<DynamicList>(ListSchema::of(typeSchema.getList(), constant));
+      *this = value.getList<DynamicList>(
+          ListSchema::of(typeSchema.getList().getElementType(), constant));
       break;
 
     case schema::Type::OBJECT:

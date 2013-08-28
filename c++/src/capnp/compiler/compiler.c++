@@ -743,16 +743,16 @@ void Compiler::Node::traverseType(const schema::Type::Reader& type, uint eagerne
   uint64_t id = 0;
   switch (type.which()) {
     case schema::Type::STRUCT:
-      id = type.getStruct();
+      id = type.getStruct().getTypeId();
       break;
     case schema::Type::ENUM:
-      id = type.getEnum();
+      id = type.getEnum().getTypeId();
       break;
     case schema::Type::INTERFACE:
-      id = type.getInterface();
+      id = type.getInterface().getTypeId();
       break;
     case schema::Type::LIST:
-      traverseType(type.getList(), eagerness, seen);
+      traverseType(type.getList().getElementType(), eagerness, seen);
       return;
     default:
       return;

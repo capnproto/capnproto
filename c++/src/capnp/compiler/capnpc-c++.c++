@@ -62,16 +62,16 @@ static constexpr const char* FIELD_SIZE_NAMES[] = {
 void enumerateDeps(schema::Type::Reader type, std::set<uint64_t>& deps) {
   switch (type.which()) {
     case schema::Type::STRUCT:
-      deps.insert(type.getStruct());
+      deps.insert(type.getStruct().getTypeId());
       break;
     case schema::Type::ENUM:
-      deps.insert(type.getEnum());
+      deps.insert(type.getEnum().getTypeId());
       break;
     case schema::Type::INTERFACE:
-      deps.insert(type.getInterface());
+      deps.insert(type.getInterface().getTypeId());
       break;
     case schema::Type::LIST:
-      enumerateDeps(type.getList(), deps);
+      enumerateDeps(type.getList().getElementType(), deps);
       break;
     default:
       break;
@@ -88,7 +88,7 @@ void enumerateDeps(schema::Node::Reader node, std::set<uint64_t>& deps) {
             enumerateDeps(field.getNonGroup().getType(), deps);
             break;
           case schema::Field::GROUP:
-            deps.insert(field.getGroup());
+            deps.insert(field.getGroup().getTypeId());
             break;
         }
       }
@@ -221,14 +221,14 @@ private:
       case schema::Type::DATA: return kj::strTree(" ::capnp::Data");
 
       case schema::Type::ENUM:
-        return cppFullName(schemaLoader.get(type.getEnum()));
+        return cppFullName(schemaLoader.get(type.getEnum().getTypeId()));
       case schema::Type::STRUCT:
-        return cppFullName(schemaLoader.get(type.getStruct()));
+        return cppFullName(schemaLoader.get(type.getStruct().getTypeId()));
       case schema::Type::INTERFACE:
-        return cppFullName(schemaLoader.get(type.getInterface()));
+        return cppFullName(schemaLoader.get(type.getInterface().getTypeId()));
 
       case schema::Type::LIST:
-        return kj::strTree(" ::capnp::List<", typeName(type.getList()), ">");
+        return kj::strTree(" ::capnp::List<", typeName(type.getList().getElementType()), ">");
 
       case schema::Type::OBJECT:
         // Not used.
@@ -252,7 +252,7 @@ private:
       case schema::Value::FLOAT32: return kj::strTree(value.getFloat32(), "f");
       case schema::Value::FLOAT64: return kj::strTree(value.getFloat64());
       case schema::Value::ENUM: {
-        EnumSchema schema = schemaLoader.get(type.getEnum()).asEnum();
+        EnumSchema schema = schemaLoader.get(type.getEnum().getTypeId()).asEnum();
         if (value.getEnum() < schema.getEnumerants().size()) {
           return kj::strTree(
               cppFullName(schema), "::",
@@ -437,7 +437,7 @@ private:
           break;
         }
         case schema::Field::GROUP:
-          getSlots(schema.getDependency(proto.getGroup()).asStruct(), slots);
+          getSlots(schema.getDependency(proto.getGroup().getTypeId()).asStruct(), slots);
           break;
       }
     }
@@ -550,7 +550,8 @@ private:
         break;
 
       case schema::Field::GROUP: {
-        auto slots = getSortedSlots(schemaLoader.get(field.getProto().getGroup()).asStruct());
+        auto slots = getSortedSlots(schemaLoader.get(
+            field.getProto().getGroup().getTypeId()).asStruct());
         return FieldText {
             kj::strTree(
                 kj::mv(unionDiscrim.readerIsDecl),
@@ -902,7 +903,7 @@ private:
       bool isStructList = false;
       if (kind == FieldKind::LIST) {
         bool primitiveElement = false;
-        switch (typeBody.getList().which()) {
+        switch (typeBody.getList().getElementType().which()) {
           case schema::Type::VOID:
           case schema::Type::BOOL:
           case schema::Type::INT8:
@@ -933,7 +934,7 @@ private:
             break;
         }
         elementReaderType = kj::str(
-            typeName(typeBody.getList()),
+            typeName(typeBody.getList().getElementType()),
             primitiveElement ? "" : "::Reader");
       }
 
@@ -1166,7 +1167,7 @@ private:
 
       case schema::Value::LIST: {
         kj::String constType = kj::strTree(
-            "::capnp::_::ConstList<", typeName(type.getList()), ">").flatten();
+            "::capnp::_::ConstList<", typeName(type.getList().getElementType()), ">").flatten();
         return ConstText {
           true,
           kj::strTree(linkage, "const ", constType, ' ', upperCase, ";\n"),
@@ -1216,7 +1217,7 @@ private:
         if (field.isGroup()) {
           nestedTexts.add(makeNodeText(
               namespace_, subScope, toTitleCase(field.getName()),
-              schemaLoader.get(field.getGroup())));
+              schemaLoader.get(field.getGroup().getTypeId())));
         }
       }
     }
