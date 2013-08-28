@@ -228,7 +228,7 @@ TEST(Schema, Lists) {
 
   {
     auto context = Schema::from<TestAllTypes>();
-    auto type = context.getFieldByName("enumList").getProto().getNonGroup().getType();
+    auto type = context.getFieldByName("enumList").getProto().getSlot().getType();
 
     ListSchema schema = ListSchema::of(type.getList().getElementType(), context);
     EXPECT_EQ(schema::Type::ENUM, schema.whichElementType());

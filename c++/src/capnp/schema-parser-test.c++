@@ -54,7 +54,7 @@ private:
 
 static uint64_t getFieldTypeFileId(StructSchema::Field field) {
   return field.getContainingStruct()
-      .getDependency(field.getProto().getNonGroup().getType().getStruct().getTypeId())
+      .getDependency(field.getProto().getSlot().getType().getStruct().getTypeId())
       .getProto().getScopeId();
 }
 

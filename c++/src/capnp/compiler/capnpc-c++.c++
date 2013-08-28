@@ -84,8 +84,8 @@ void enumerateDeps(schema::Node::Reader node, std::set<uint64_t>& deps) {
       auto structNode = node.getStruct();
       for (auto field: structNode.getFields()) {
         switch (field.which()) {
-          case schema::Field::NON_GROUP:
-            enumerateDeps(field.getNonGroup().getType(), deps);
+          case schema::Field::SLOT:
+            enumerateDeps(field.getSlot().getType(), deps);
             break;
           case schema::Field::GROUP:
             deps.insert(field.getGroup().getTypeId());
@@ -431,9 +431,9 @@ private:
     for (auto field: schema.getFields()) {
       auto proto = field.getProto();
       switch (proto.which()) {
-        case schema::Field::NON_GROUP: {
-          auto nonGroup = proto.getNonGroup();
-          slots.add(Slot { nonGroup.getType().which(), nonGroup.getOffset() });
+        case schema::Field::SLOT: {
+          auto slot = proto.getSlot();
+          slots.add(Slot { slot.getType().which(), slot.getOffset() });
           break;
         }
         case schema::Field::GROUP:
@@ -545,7 +545,7 @@ private:
     }
 
     switch (proto.which()) {
-      case schema::Field::NON_GROUP:
+      case schema::Field::SLOT:
         // Continue below.
         break;
 
@@ -634,18 +634,18 @@ private:
       }
     }
 
-    auto nonGroup = proto.getNonGroup();
+    auto slot = proto.getSlot();
 
     FieldKind kind = FieldKind::PRIMITIVE;
     kj::String ownedType;
-    kj::String type = typeName(nonGroup.getType()).flatten();
+    kj::String type = typeName(slot.getType()).flatten();
     kj::StringPtr setterDefault;  // only for void
     kj::String defaultMask;    // primitives only
     size_t defaultOffset = 0;    // pointers only: offset of the default value within the schema.
     size_t defaultSize = 0;      // blobs only: byte size of the default value.
 
-    auto typeBody = nonGroup.getType();
-    auto defaultBody = nonGroup.getDefaultValue();
+    auto typeBody = slot.getType();
+    auto defaultBody = slot.getDefaultValue();
     switch (typeBody.which()) {
       case schema::Type::VOID:
         kind = FieldKind::PRIMITIVE;
@@ -743,7 +743,7 @@ private:
       defaultMaskParam = kj::str(", ", defaultMask);
     }
 
-    uint offset = nonGroup.getOffset();
+    uint offset = slot.getOffset();
 
     if (kind == FieldKind::PRIMITIVE) {
       return FieldText {

@@ -194,7 +194,7 @@ kj::Maybe<StructSchema::Field> StructSchema::getFieldByDiscriminant(uint16_t dis
 }
 
 uint32_t StructSchema::Field::getDefaultValueSchemaOffset() const {
-  return parent.getSchemaOffset(proto.getNonGroup().getDefaultValue());
+  return parent.getSchemaOffset(proto.getSlot().getDefaultValue());
 }
 
 // -------------------------------------------------------------------

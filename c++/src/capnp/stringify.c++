@@ -102,8 +102,8 @@ private:
 static schema::Type::Which whichFieldType(const StructSchema::Field& field) {
   auto proto = field.getProto();
   switch (proto.which()) {
-    case schema::Field::NON_GROUP:
-      return proto.getNonGroup().getType().which();
+    case schema::Field::SLOT:
+      return proto.getSlot().getType().which();
     case schema::Field::GROUP:
       return schema::Type::STRUCT;
   }

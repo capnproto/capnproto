@@ -199,19 +199,19 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
 
   auto proto = field.getProto();
   switch (proto.which()) {
-    case schema::Field::NON_GROUP: {
-      auto nonGroup = proto.getNonGroup();
-      auto type = nonGroup.getType();
-      auto dval = nonGroup.getDefaultValue();
+    case schema::Field::SLOT: {
+      auto slot = proto.getSlot();
+      auto type = slot.getType();
+      auto dval = slot.getDefaultValue();
 
       switch (type.which()) {
         case schema::Type::VOID:
-          return reader.getDataField<Void>(nonGroup.getOffset() * ELEMENTS);
+          return reader.getDataField<Void>(slot.getOffset() * ELEMENTS);
 
 #define HANDLE_TYPE(discrim, titleCase, type) \
         case schema::Type::discrim: \
           return reader.getDataField<type>( \
-              nonGroup.getOffset() * ELEMENTS, \
+              slot.getOffset() * ELEMENTS, \
               bitCast<_::Mask<type>>(dval.get##titleCase()));
 
         HANDLE_TYPE(BOOL, Bool, bool)
@@ -233,18 +233,18 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
           typedDval = dval.getEnum();
           return DynamicEnum(
               field.getContainingStruct().getDependency(type.getEnum().getTypeId()).asEnum(),
-              reader.getDataField<uint16_t>(nonGroup.getOffset() * ELEMENTS, typedDval));
+              reader.getDataField<uint16_t>(slot.getOffset() * ELEMENTS, typedDval));
         }
 
         case schema::Type::TEXT: {
           Text::Reader typedDval = dval.getText();
-          return reader.getBlobField<Text>(nonGroup.getOffset() * POINTERS,
+          return reader.getBlobField<Text>(slot.getOffset() * POINTERS,
                                            typedDval.begin(), typedDval.size() * BYTES);
         }
 
         case schema::Type::DATA: {
           Data::Reader typedDval = dval.getData();
-          return reader.getBlobField<Data>(nonGroup.getOffset() * POINTERS,
+          return reader.getBlobField<Data>(slot.getOffset() * POINTERS,
                                            typedDval.begin(), typedDval.size() * BYTES);
         }
 
@@ -252,7 +252,7 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
           auto elementType = type.getList().getElementType();
           return DynamicList::Reader(
               ListSchema::of(elementType, field.getContainingStruct()),
-              reader.getListField(nonGroup.getOffset() * POINTERS,
+              reader.getListField(slot.getOffset() * POINTERS,
                                   elementSizeFor(elementType.which()),
                                   dval.getList<_::UncheckedMessage>()));
         }
@@ -260,13 +260,13 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
         case schema::Type::STRUCT: {
           return DynamicStruct::Reader(
               field.getContainingStruct().getDependency(type.getStruct().getTypeId()).asStruct(),
-              reader.getStructField(nonGroup.getOffset() * POINTERS,
+              reader.getStructField(slot.getOffset() * POINTERS,
                                     dval.getStruct<_::UncheckedMessage>()));
         }
 
         case schema::Type::OBJECT: {
           return DynamicObject::Reader(
-              reader.getObjectField(nonGroup.getOffset() * POINTERS,
+              reader.getObjectField(slot.getOffset() * POINTERS,
                                     dval.getObject<_::UncheckedMessage>()));
         }
 
@@ -292,19 +292,19 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
 
   auto proto = field.getProto();
   switch (proto.which()) {
-    case schema::Field::NON_GROUP: {
-      auto nonGroup = proto.getNonGroup();
-      auto type = nonGroup.getType();
-      auto dval = nonGroup.getDefaultValue();
+    case schema::Field::SLOT: {
+      auto slot = proto.getSlot();
+      auto type = slot.getType();
+      auto dval = slot.getDefaultValue();
 
       switch (type.which()) {
         case schema::Type::VOID:
-          return builder.getDataField<Void>(nonGroup.getOffset() * ELEMENTS);
+          return builder.getDataField<Void>(slot.getOffset() * ELEMENTS);
 
 #define HANDLE_TYPE(discrim, titleCase, type) \
         case schema::Type::discrim: \
           return builder.getDataField<type>( \
-              nonGroup.getOffset() * ELEMENTS, \
+              slot.getOffset() * ELEMENTS, \
               bitCast<_::Mask<type>>(dval.get##titleCase()));
 
         HANDLE_TYPE(BOOL, Bool, bool)
@@ -326,18 +326,18 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
           typedDval = dval.getEnum();
           return DynamicEnum(
               field.getContainingStruct().getDependency(type.getEnum().getTypeId()).asEnum(),
-              builder.getDataField<uint16_t>(nonGroup.getOffset() * ELEMENTS, typedDval));
+              builder.getDataField<uint16_t>(slot.getOffset() * ELEMENTS, typedDval));
         }
 
         case schema::Type::TEXT: {
           Text::Reader typedDval = dval.getText();
-          return builder.getBlobField<Text>(nonGroup.getOffset() * POINTERS,
+          return builder.getBlobField<Text>(slot.getOffset() * POINTERS,
                                             typedDval.begin(), typedDval.size() * BYTES);
         }
 
         case schema::Type::DATA: {
           Data::Reader typedDval = dval.getData();
-          return builder.getBlobField<Data>(nonGroup.getOffset() * POINTERS,
+          return builder.getBlobField<Data>(slot.getOffset() * POINTERS,
                                             typedDval.begin(), typedDval.size() * BYTES);
         }
 
@@ -346,12 +346,12 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
                                                field.getContainingStruct());
           if (listType.whichElementType() == schema::Type::STRUCT) {
             return DynamicList::Builder(listType,
-                builder.getStructListField(nonGroup.getOffset() * POINTERS,
+                builder.getStructListField(slot.getOffset() * POINTERS,
                                            structSizeFromSchema(listType.getStructElementType()),
                                            dval.getList<_::UncheckedMessage>()));
           } else {
             return DynamicList::Builder(listType,
-                builder.getListField(nonGroup.getOffset() * POINTERS,
+                builder.getListField(slot.getOffset() * POINTERS,
                                      elementSizeFor(listType.whichElementType()),
                                      dval.getList<_::UncheckedMessage>()));
           }
@@ -362,7 +362,7 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
               field.getContainingStruct().getDependency(type.getStruct().getTypeId()).asStruct();
           return DynamicStruct::Builder(structSchema,
               builder.getStructField(
-                  nonGroup.getOffset() * POINTERS,
+                  slot.getOffset() * POINTERS,
                   structSizeFromSchema(structSchema),
                   dval.getStruct<_::UncheckedMessage>()));
         }
@@ -370,7 +370,7 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
         case schema::Type::OBJECT: {
           return DynamicObject::Builder(
               builder.getObjectField(
-                  nonGroup.getOffset() * POINTERS,
+                  slot.getOffset() * POINTERS,
                   dval.getObject<_::UncheckedMessage>()));
         }
 
@@ -404,7 +404,7 @@ bool DynamicStruct::Reader::has(StructSchema::Field field) const {
   }
 
   switch (proto.which()) {
-    case schema::Field::NON_GROUP:
+    case schema::Field::SLOT:
       // Continue to below.
       break;
 
@@ -437,8 +437,8 @@ bool DynamicStruct::Reader::has(StructSchema::Field field) const {
     }
   }
 
-  auto nonGroup = proto.getNonGroup();
-  auto type = nonGroup.getType();
+  auto slot = proto.getSlot();
+  auto type = slot.getType();
 
   switch (type.which()) {
     case schema::Type::VOID:
@@ -446,7 +446,7 @@ bool DynamicStruct::Reader::has(StructSchema::Field field) const {
 
 #define HANDLE_TYPE(discrim, type) \
     case schema::Type::discrim: \
-      return reader.getDataField<type>(nonGroup.getOffset() * ELEMENTS) != 0;
+      return reader.getDataField<type>(slot.getOffset() * ELEMENTS) != 0;
 
     HANDLE_TYPE(BOOL, bool)
     HANDLE_TYPE(INT8, uint8_t)
@@ -469,7 +469,7 @@ bool DynamicStruct::Reader::has(StructSchema::Field field) const {
     case schema::Type::STRUCT:
     case schema::Type::OBJECT:
     case schema::Type::INTERFACE:
-      return !reader.isPointerFieldNull(nonGroup.getOffset() * POINTERS);
+      return !reader.isPointerFieldNull(slot.getOffset() * POINTERS);
   }
 
   // Unknown type.  As far as we know, it isn't set.
@@ -502,20 +502,20 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
 
   auto proto = field.getProto();
   switch (proto.which()) {
-    case schema::Field::NON_GROUP: {
-      auto nonGroup = proto.getNonGroup();
-      auto type = nonGroup.getType();
-      auto dval = nonGroup.getDefaultValue();
+    case schema::Field::SLOT: {
+      auto slot = proto.getSlot();
+      auto type = slot.getType();
+      auto dval = slot.getDefaultValue();
 
       switch (type.which()) {
         case schema::Type::VOID:
-          builder.setDataField<Void>(nonGroup.getOffset() * ELEMENTS, value.as<Void>());
+          builder.setDataField<Void>(slot.getOffset() * ELEMENTS, value.as<Void>());
           return;
 
 #define HANDLE_TYPE(discrim, titleCase, type) \
         case schema::Type::discrim: \
           builder.setDataField<type>( \
-              nonGroup.getOffset() * ELEMENTS, value.as<type>(), \
+              slot.getOffset() * ELEMENTS, value.as<type>(), \
               bitCast<_::Mask<type> >(dval.get##titleCase())); \
           return;
 
@@ -548,33 +548,31 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
             }
             rawValue = enumValue.getRaw();
           }
-          builder.setDataField<uint16_t>(nonGroup.getOffset() * ELEMENTS, rawValue,
+          builder.setDataField<uint16_t>(slot.getOffset() * ELEMENTS, rawValue,
                                          dval.getEnum());
           return;
         }
 
         case schema::Type::TEXT:
-          builder.setBlobField<Text>(nonGroup.getOffset() * POINTERS, value.as<Text>());
+          builder.setBlobField<Text>(slot.getOffset() * POINTERS, value.as<Text>());
           return;
 
         case schema::Type::DATA:
-          builder.setBlobField<Data>(nonGroup.getOffset() * POINTERS, value.as<Data>());
+          builder.setBlobField<Data>(slot.getOffset() * POINTERS, value.as<Data>());
           return;
 
         case schema::Type::LIST:
           // TODO(soon):  Type check.
-          builder.setListField(nonGroup.getOffset() * POINTERS, value.as<DynamicList>().reader);
+          builder.setListField(slot.getOffset() * POINTERS, value.as<DynamicList>().reader);
           return;
 
         case schema::Type::STRUCT:
           // TODO(soon):  Type check.
-          builder.setStructField(
-              nonGroup.getOffset() * POINTERS, value.as<DynamicStruct>().reader);
+          builder.setStructField(slot.getOffset() * POINTERS, value.as<DynamicStruct>().reader);
           return;
 
         case schema::Type::OBJECT:
-          builder.setObjectField(
-              nonGroup.getOffset() * POINTERS, value.as<DynamicObject>().reader);
+          builder.setObjectField(slot.getOffset() * POINTERS, value.as<DynamicObject>().reader);
           return;
 
         case schema::Type::INTERFACE:
@@ -611,13 +609,13 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field) {
   auto proto = field.getProto();
 
   switch (proto.which()) {
-    case schema::Field::NON_GROUP: {
-      auto nonGroup = proto.getNonGroup();
-      auto type = nonGroup.getType();
+    case schema::Field::SLOT: {
+      auto slot = proto.getSlot();
+      auto type = slot.getType();
       KJ_REQUIRE(type.isStruct(), "init() without a size is only valid for struct fields.");
       auto subSchema = schema.getDependency(type.getStruct().getTypeId()).asStruct();
       return DynamicStruct::Builder(subSchema,
-          builder.initStructField(nonGroup.getOffset() * POINTERS,
+          builder.initStructField(slot.getOffset() * POINTERS,
               structSizeFromSchema(subSchema)));
     }
 
@@ -638,30 +636,30 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field, ui
   auto proto = field.getProto();
 
   switch (proto.which()) {
-    case schema::Field::NON_GROUP: {
-      auto nonGroup = proto.getNonGroup();
-      auto type = nonGroup.getType();
+    case schema::Field::SLOT: {
+      auto slot = proto.getSlot();
+      auto type = slot.getType();
       switch (type.which()) {
         case schema::Type::LIST: {
           auto listType = ListSchema::of(type.getList().getElementType(), schema);
           if (listType.whichElementType() == schema::Type::STRUCT) {
             return DynamicList::Builder(listType,
                 builder.initStructListField(
-                    nonGroup.getOffset() * POINTERS, size * ELEMENTS,
+                    slot.getOffset() * POINTERS, size * ELEMENTS,
                     structSizeFromSchema(listType.getStructElementType())));
           } else {
             return DynamicList::Builder(listType,
                 builder.initListField(
-                    nonGroup.getOffset() * POINTERS,
+                    slot.getOffset() * POINTERS,
                     elementSizeFor(listType.whichElementType()), size * ELEMENTS));
           }
         }
         case schema::Type::TEXT:
           return builder.initBlobField<Text>(
-              proto.getNonGroup().getOffset() * POINTERS, size * BYTES);
+              proto.getSlot().getOffset() * POINTERS, size * BYTES);
         case schema::Type::DATA:
           return builder.initBlobField<Data>(
-              proto.getNonGroup().getOffset() * POINTERS, size * BYTES);
+              proto.getSlot().getOffset() * POINTERS, size * BYTES);
         default:
           KJ_FAIL_REQUIRE(
               "init() with size is only valid for list, text, or data fields.", (uint)type.which());
@@ -682,9 +680,9 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
 
   auto proto = field.getProto();
   switch (proto.which()) {
-    case schema::Field::NON_GROUP: {
-      auto nonGroup = proto.getNonGroup();
-      auto type = nonGroup.getType();
+    case schema::Field::SLOT: {
+      auto slot = proto.getSlot();
+      auto type = slot.getType();
 
       switch (type.which()) {
         case schema::Type::VOID:
@@ -739,7 +737,7 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
           break;
       }
 
-      builder.adopt(nonGroup.getOffset() * POINTERS, kj::mv(orphan.builder));
+      builder.adopt(slot.getOffset() * POINTERS, kj::mv(orphan.builder));
       return;
     }
 
@@ -772,10 +770,10 @@ Orphan<DynamicValue> DynamicStruct::Builder::disown(StructSchema::Field field) {
 
   auto proto = field.getProto();
   switch (proto.which()) {
-    case schema::Field::NON_GROUP: {
-      auto nonGroup = proto.getNonGroup();
+    case schema::Field::SLOT: {
+      auto slot = proto.getSlot();
 
-      switch (nonGroup.getType().which()) {
+      switch (slot.getType().which()) {
         case schema::Type::VOID:
         case schema::Type::BOOL:
         case schema::Type::INT8:
@@ -801,7 +799,7 @@ Orphan<DynamicValue> DynamicStruct::Builder::disown(StructSchema::Field field) {
         case schema::Type::OBJECT:
         case schema::Type::INTERFACE: {
           auto value = get(field);
-          return Orphan<DynamicValue>(value, builder.disown(nonGroup.getOffset() * POINTERS));
+          return Orphan<DynamicValue>(value, builder.disown(slot.getOffset() * POINTERS));
         }
       }
       KJ_UNREACHABLE;
@@ -843,18 +841,18 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
 
   auto proto = field.getProto();
   switch (proto.which()) {
-    case schema::Field::NON_GROUP: {
-      auto nonGroup = proto.getNonGroup();
-      auto type = nonGroup.getType();
+    case schema::Field::SLOT: {
+      auto slot = proto.getSlot();
+      auto type = slot.getType();
 
       switch (type.which()) {
         case schema::Type::VOID:
-          builder.setDataField<Void>(nonGroup.getOffset() * ELEMENTS, VOID);
+          builder.setDataField<Void>(slot.getOffset() * ELEMENTS, VOID);
           return;
 
 #define HANDLE_TYPE(discrim, type) \
         case schema::Type::discrim: \
-          builder.setDataField<type>(nonGroup.getOffset() * ELEMENTS, 0); \
+          builder.setDataField<type>(slot.getOffset() * ELEMENTS, 0); \
           return;
 
         HANDLE_TYPE(BOOL, bool)
@@ -877,7 +875,7 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
         case schema::Type::LIST:
         case schema::Type::STRUCT:
         case schema::Type::OBJECT:
-          builder.clearPointer(nonGroup.getOffset() * POINTERS);
+          builder.clearPointer(slot.getOffset() * POINTERS);
           return;
 
         case schema::Type::INTERFACE:
@@ -913,10 +911,10 @@ WirePointerCount DynamicStruct::Builder::verifyIsObject(StructSchema::Field fiel
 
   auto proto = field.getProto();
   switch (proto.which()) {
-    case schema::Field::NON_GROUP: {
-      auto nonGroup = proto.getNonGroup();
-      KJ_REQUIRE(nonGroup.getType().isObject(), "Expected an Object.");
-      return nonGroup.getOffset() * POINTERS;
+    case schema::Field::SLOT: {
+      auto slot = proto.getSlot();
+      KJ_REQUIRE(slot.getType().isObject(), "Expected an Object.");
+      return slot.getOffset() * POINTERS;
     }
 
     case schema::Field::GROUP:

@@ -400,8 +400,8 @@ TEST(Encoding, UnnamedUnion) {
 
   // The discriminant is allocated just before allocating "bar".
   EXPECT_EQ(2u, schema.getProto().getStruct().getDiscriminantOffset());
-  EXPECT_EQ(0u, schema.getFieldByName("foo").getProto().getNonGroup().getOffset());
-  EXPECT_EQ(2u, schema.getFieldByName("bar").getProto().getNonGroup().getOffset());
+  EXPECT_EQ(0u, schema.getFieldByName("foo").getProto().getSlot().getOffset());
+  EXPECT_EQ(2u, schema.getFieldByName("bar").getProto().getSlot().getOffset());
 }
 
 TEST(Encoding, Groups) {

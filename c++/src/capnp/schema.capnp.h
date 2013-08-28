@@ -83,16 +83,18 @@ struct Field {
   class Reader;
   class Builder;
   enum Which: uint16_t {
-    NON_GROUP,
+    SLOT,
     GROUP,
+    FIXED_LIST,
   };
-  struct NonGroup;
+  struct Slot;
   struct Group;
   struct Ordinal;
+  struct FixedList;
 };
 
-struct Field::NonGroup {
-  NonGroup() = delete;
+struct Field::Slot {
+  Slot() = delete;
 
   class Reader;
   class Builder;
@@ -114,6 +116,13 @@ struct Field::Ordinal {
     IMPLICIT,
     EXPLICIT,
   };
+};
+
+struct Field::FixedList {
+  FixedList() = delete;
+
+  class Reader;
+  class Builder;
 };
 
 struct Enumerant {
@@ -286,6 +295,7 @@ extern const ::capnp::_::RawSchema s_9aad50a41f4af45f;
 extern const ::capnp::_::RawSchema s_c42305476bb4746f;
 extern const ::capnp::_::RawSchema s_cafccddb68db1d11;
 extern const ::capnp::_::RawSchema s_bb90d5c287870be6;
+extern const ::capnp::_::RawSchema s_90d100742efd7701;
 extern const ::capnp::_::RawSchema s_978a7cebdc549a4d;
 extern const ::capnp::_::RawSchema s_9500cce23b334d80;
 extern const ::capnp::_::RawSchema s_cbc0c86dae91fcf6;
@@ -329,13 +339,16 @@ CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Field, 9aad50a41f4af45f,
     3, 4, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Field::NonGroup, c42305476bb4746f,
+    ::capnp::schema::Field::Slot, c42305476bb4746f,
     3, 4, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Field::Group, cafccddb68db1d11,
     3, 4, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Field::Ordinal, bb90d5c287870be6,
+    3, 4, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::Field::FixedList, 90d100742efd7701,
     3, 4, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Enumerant, 978a7cebdc549a4d,
@@ -1078,9 +1091,9 @@ public:
   inline bool hasDiscriminantValue() const;
   inline  ::uint16_t getDiscriminantValue() const;
 
-  inline bool isNonGroup() const;
-  inline bool hasNonGroup() const;
-  inline NonGroup::Reader getNonGroup() const;
+  inline bool isSlot() const;
+  inline bool hasSlot() const;
+  inline Slot::Reader getSlot() const;
 
   inline bool isGroup() const;
   inline bool hasGroup() const;
@@ -1088,6 +1101,10 @@ public:
 
   inline bool hasOrdinal() const;
   inline Ordinal::Reader getOrdinal() const;
+
+  inline bool isFixedList() const;
+  inline bool hasFixedList() const;
+  inline FixedList::Reader getFixedList() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1140,10 +1157,10 @@ public:
   inline  ::uint16_t getDiscriminantValue();
   inline void setDiscriminantValue( ::uint16_t value);
 
-  inline bool isNonGroup();
-  inline bool hasNonGroup();
-  inline NonGroup::Builder getNonGroup();
-  inline NonGroup::Builder initNonGroup();
+  inline bool isSlot();
+  inline bool hasSlot();
+  inline Slot::Builder getSlot();
+  inline Slot::Builder initSlot();
 
   inline bool isGroup();
   inline bool hasGroup();
@@ -1153,6 +1170,11 @@ public:
   inline bool hasOrdinal();
   inline Ordinal::Builder getOrdinal();
   inline Ordinal::Builder initOrdinal();
+
+  inline bool isFixedList();
+  inline bool hasFixedList();
+  inline FixedList::Builder getFixedList();
+  inline FixedList::Builder initFixedList();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1166,9 +1188,9 @@ inline ::kj::StringTree KJ_STRINGIFY(Field::Builder builder) {
   return ::capnp::_::structString<Field>(builder._builder.asReader());
 }
 
-class Field::NonGroup::Reader {
+class Field::Slot::Reader {
 public:
-  typedef NonGroup Reads;
+  typedef Slot Reads;
 
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
@@ -1196,16 +1218,16 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Field::NonGroup::Reader reader);
+  friend ::kj::StringTree KJ_STRINGIFY(Field::Slot::Reader reader);
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(Field::NonGroup::Reader reader) {
-  return ::capnp::_::structString<Field::NonGroup>(reader._reader);
+inline ::kj::StringTree KJ_STRINGIFY(Field::Slot::Reader reader) {
+  return ::capnp::_::structString<Field::Slot>(reader._reader);
 }
 
-class Field::NonGroup::Builder {
+class Field::Slot::Builder {
 public:
-  typedef NonGroup Builds;
+  typedef Slot Builds;
 
   Builder() = default;
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
@@ -1237,11 +1259,11 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Field::NonGroup::Builder builder);
+  friend ::kj::StringTree KJ_STRINGIFY(Field::Slot::Builder builder);
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(Field::NonGroup::Builder builder) {
-  return ::capnp::_::structString<Field::NonGroup>(builder._builder.asReader());
+inline ::kj::StringTree KJ_STRINGIFY(Field::Slot::Builder builder) {
+  return ::capnp::_::structString<Field::Slot>(builder._builder.asReader());
 }
 
 class Field::Group::Reader {
@@ -1371,6 +1393,81 @@ private:
 
 inline ::kj::StringTree KJ_STRINGIFY(Field::Ordinal::Builder builder) {
   return ::capnp::_::structString<Field::Ordinal>(builder._builder.asReader());
+}
+
+class Field::FixedList::Reader {
+public:
+  typedef FixedList Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline size_t totalSizeInWords() const {
+    return _reader.totalSize() / ::capnp::WORDS;
+  }
+
+  inline bool hasStartOffset() const;
+  inline  ::uint32_t getStartOffset() const;
+
+  inline bool hasCount() const;
+  inline  ::uint8_t getCount() const;
+
+  inline bool hasElementType() const;
+  inline  ::capnp::schema::Type::Reader getElementType() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Field::FixedList::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Field::FixedList::Reader reader) {
+  return ::capnp::_::structString<Field::FixedList>(reader._reader);
+}
+
+class Field::FixedList::Builder {
+public:
+  typedef FixedList Builds;
+
+  Builder() = default;
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+
+  inline bool hasStartOffset();
+  inline  ::uint32_t getStartOffset();
+  inline void setStartOffset( ::uint32_t value);
+
+  inline bool hasCount();
+  inline  ::uint8_t getCount();
+  inline void setCount( ::uint8_t value);
+
+  inline bool hasElementType();
+  inline  ::capnp::schema::Type::Builder getElementType();
+  inline void setElementType( ::capnp::schema::Type::Reader value);
+  inline  ::capnp::schema::Type::Builder initElementType();
+  inline void adoptElementType(::capnp::Orphan< ::capnp::schema::Type>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::Type> disownElementType();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Field::FixedList::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Field::FixedList::Builder builder) {
+  return ::capnp::_::structString<Field::FixedList>(builder._builder.asReader());
 }
 
 class Enumerant::Reader {
@@ -3809,41 +3906,41 @@ inline void Field::Builder::setDiscriminantValue( ::uint16_t value) {
       1 * ::capnp::ELEMENTS, value, 65535u);
 }
 
-inline bool Field::Reader::isNonGroup() const {
-  return which() == Field::NON_GROUP;
+inline bool Field::Reader::isSlot() const {
+  return which() == Field::SLOT;
 }
-inline bool Field::Builder::isNonGroup() {
-  return which() == Field::NON_GROUP;
+inline bool Field::Builder::isSlot() {
+  return which() == Field::SLOT;
 }
-inline bool Field::Reader::hasNonGroup() const {
-  if (which() != Field::NON_GROUP) return false;
+inline bool Field::Reader::hasSlot() const {
+  if (which() != Field::SLOT) return false;
   return _reader.getDataField< ::uint32_t>(1 * ::capnp::ELEMENTS) != 0
       || !_reader.isPointerFieldNull(2 * ::capnp::POINTERS)
       || !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
 }
-inline bool Field::Builder::hasNonGroup() {
-  if (which() != Field::NON_GROUP) return false;
+inline bool Field::Builder::hasSlot() {
+  if (which() != Field::SLOT) return false;
   return _builder.getDataField< ::uint32_t>(1 * ::capnp::ELEMENTS) != 0
       || !_builder.isPointerFieldNull(2 * ::capnp::POINTERS)
       || !_builder.isPointerFieldNull(3 * ::capnp::POINTERS);
 }
-inline Field::NonGroup::Reader Field::Reader::getNonGroup() const {
-  KJ_IREQUIRE(which() == Field::NON_GROUP,
+inline Field::Slot::Reader Field::Reader::getSlot() const {
+  KJ_IREQUIRE(which() == Field::SLOT,
               "Must check which() before get()ing a union member.");
-  return Field::NonGroup::Reader(_reader);
+  return Field::Slot::Reader(_reader);
 }
-inline Field::NonGroup::Builder Field::Builder::getNonGroup() {
-  KJ_IREQUIRE(which() == Field::NON_GROUP,
+inline Field::Slot::Builder Field::Builder::getSlot() {
+  KJ_IREQUIRE(which() == Field::SLOT,
               "Must check which() before get()ing a union member.");
-  return Field::NonGroup::Builder(_builder);
+  return Field::Slot::Builder(_builder);
 }
-inline Field::NonGroup::Builder Field::Builder::initNonGroup() {
+inline Field::Slot::Builder Field::Builder::initSlot() {
   _builder.setDataField<Field::Which>(
-      4 * ::capnp::ELEMENTS, Field::NON_GROUP);
+      4 * ::capnp::ELEMENTS, Field::SLOT);
   _builder.setDataField< ::uint32_t>(1 * ::capnp::ELEMENTS, 0);
   _builder.clearPointer(2 * ::capnp::POINTERS);
   _builder.clearPointer(3 * ::capnp::POINTERS);
-  return Field::NonGroup::Builder(_builder);
+  return Field::Slot::Builder(_builder);
 }
 inline bool Field::Reader::isGroup() const {
   return which() == Field::GROUP;
@@ -3894,87 +3991,123 @@ inline Field::Ordinal::Builder Field::Builder::initOrdinal() {
   _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
   return Field::Ordinal::Builder(_builder);
 }
-inline bool Field::NonGroup::Reader::hasOffset() const {
+inline bool Field::Reader::isFixedList() const {
+  return which() == Field::FIXED_LIST;
+}
+inline bool Field::Builder::isFixedList() {
+  return which() == Field::FIXED_LIST;
+}
+inline bool Field::Reader::hasFixedList() const {
+  if (which() != Field::FIXED_LIST) return false;
+  return _reader.getDataField< ::uint32_t>(1 * ::capnp::ELEMENTS) != 0
+      || _reader.getDataField< ::uint8_t>(16 * ::capnp::ELEMENTS) != 0
+      || !_reader.isPointerFieldNull(2 * ::capnp::POINTERS);
+}
+inline bool Field::Builder::hasFixedList() {
+  if (which() != Field::FIXED_LIST) return false;
+  return _builder.getDataField< ::uint32_t>(1 * ::capnp::ELEMENTS) != 0
+      || _builder.getDataField< ::uint8_t>(16 * ::capnp::ELEMENTS) != 0
+      || !_builder.isPointerFieldNull(2 * ::capnp::POINTERS);
+}
+inline Field::FixedList::Reader Field::Reader::getFixedList() const {
+  KJ_IREQUIRE(which() == Field::FIXED_LIST,
+              "Must check which() before get()ing a union member.");
+  return Field::FixedList::Reader(_reader);
+}
+inline Field::FixedList::Builder Field::Builder::getFixedList() {
+  KJ_IREQUIRE(which() == Field::FIXED_LIST,
+              "Must check which() before get()ing a union member.");
+  return Field::FixedList::Builder(_builder);
+}
+inline Field::FixedList::Builder Field::Builder::initFixedList() {
+  _builder.setDataField<Field::Which>(
+      4 * ::capnp::ELEMENTS, Field::FIXED_LIST);
+  _builder.setDataField< ::uint32_t>(1 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint8_t>(16 * ::capnp::ELEMENTS, 0);
+  _builder.clearPointer(2 * ::capnp::POINTERS);
+  return Field::FixedList::Builder(_builder);
+}
+inline bool Field::Slot::Reader::hasOffset() const {
   return _reader.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
 }
 
-inline bool Field::NonGroup::Builder::hasOffset() {
+inline bool Field::Slot::Builder::hasOffset() {
   return _builder.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
 }
-inline  ::uint32_t Field::NonGroup::Reader::getOffset() const {
+inline  ::uint32_t Field::Slot::Reader::getOffset() const {
   return _reader.getDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS);
 }
 
-inline  ::uint32_t Field::NonGroup::Builder::getOffset() {
+inline  ::uint32_t Field::Slot::Builder::getOffset() {
   return _builder.getDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS);
 }
-inline void Field::NonGroup::Builder::setOffset( ::uint32_t value) {
+inline void Field::Slot::Builder::setOffset( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Field::NonGroup::Reader::hasType() const {
+inline bool Field::Slot::Reader::hasType() const {
   return !_reader.isPointerFieldNull(2 * ::capnp::POINTERS);
 }
-inline bool Field::NonGroup::Builder::hasType() {
+inline bool Field::Slot::Builder::hasType() {
   return !_builder.isPointerFieldNull(2 * ::capnp::POINTERS);
 }
-inline  ::capnp::schema::Type::Reader Field::NonGroup::Reader::getType() const {
+inline  ::capnp::schema::Type::Reader Field::Slot::Reader::getType() const {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
       _reader, 2 * ::capnp::POINTERS);
 }
-inline  ::capnp::schema::Type::Builder Field::NonGroup::Builder::getType() {
+inline  ::capnp::schema::Type::Builder Field::Slot::Builder::getType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
       _builder, 2 * ::capnp::POINTERS);
 }
-inline void Field::NonGroup::Builder::setType( ::capnp::schema::Type::Reader value) {
+inline void Field::Slot::Builder::setType( ::capnp::schema::Type::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
       _builder, 2 * ::capnp::POINTERS, value);
 }
-inline  ::capnp::schema::Type::Builder Field::NonGroup::Builder::initType() {
+inline  ::capnp::schema::Type::Builder Field::Slot::Builder::initType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::init(
       _builder, 2 * ::capnp::POINTERS);
 }
-inline void Field::NonGroup::Builder::adoptType(
+inline void Field::Slot::Builder::adoptType(
     ::capnp::Orphan< ::capnp::schema::Type>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::adopt(
       _builder, 2 * ::capnp::POINTERS, kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::schema::Type> Field::NonGroup::Builder::disownType() {
+inline ::capnp::Orphan< ::capnp::schema::Type> Field::Slot::Builder::disownType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::disown(
       _builder, 2 * ::capnp::POINTERS);
 }
 
-inline bool Field::NonGroup::Reader::hasDefaultValue() const {
+inline bool Field::Slot::Reader::hasDefaultValue() const {
   return !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
 }
-inline bool Field::NonGroup::Builder::hasDefaultValue() {
+inline bool Field::Slot::Builder::hasDefaultValue() {
   return !_builder.isPointerFieldNull(3 * ::capnp::POINTERS);
 }
-inline  ::capnp::schema::Value::Reader Field::NonGroup::Reader::getDefaultValue() const {
+inline  ::capnp::schema::Value::Reader Field::Slot::Reader::getDefaultValue() const {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
       _reader, 3 * ::capnp::POINTERS);
 }
-inline  ::capnp::schema::Value::Builder Field::NonGroup::Builder::getDefaultValue() {
+inline  ::capnp::schema::Value::Builder Field::Slot::Builder::getDefaultValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
       _builder, 3 * ::capnp::POINTERS);
 }
-inline void Field::NonGroup::Builder::setDefaultValue( ::capnp::schema::Value::Reader value) {
+inline void Field::Slot::Builder::setDefaultValue( ::capnp::schema::Value::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Value>::set(
       _builder, 3 * ::capnp::POINTERS, value);
 }
-inline  ::capnp::schema::Value::Builder Field::NonGroup::Builder::initDefaultValue() {
+inline  ::capnp::schema::Value::Builder Field::Slot::Builder::initDefaultValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::init(
       _builder, 3 * ::capnp::POINTERS);
 }
-inline void Field::NonGroup::Builder::adoptDefaultValue(
+inline void Field::Slot::Builder::adoptDefaultValue(
     ::capnp::Orphan< ::capnp::schema::Value>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Value>::adopt(
       _builder, 3 * ::capnp::POINTERS, kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::schema::Value> Field::NonGroup::Builder::disownDefaultValue() {
+inline ::capnp::Orphan< ::capnp::schema::Value> Field::Slot::Builder::disownDefaultValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::disown(
       _builder, 3 * ::capnp::POINTERS);
 }
@@ -4075,6 +4208,80 @@ inline void Field::Ordinal::Builder::setExplicit( ::uint16_t value) {
       5 * ::capnp::ELEMENTS, Field::Ordinal::EXPLICIT);
   _builder.setDataField< ::uint16_t>(
       6 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Field::FixedList::Reader::hasStartOffset() const {
+  return _reader.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
+}
+
+inline bool Field::FixedList::Builder::hasStartOffset() {
+  return _builder.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
+}
+inline  ::uint32_t Field::FixedList::Reader::getStartOffset() const {
+  return _reader.getDataField< ::uint32_t>(
+      1 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint32_t Field::FixedList::Builder::getStartOffset() {
+  return _builder.getDataField< ::uint32_t>(
+      1 * ::capnp::ELEMENTS);
+}
+inline void Field::FixedList::Builder::setStartOffset( ::uint32_t value) {
+  _builder.setDataField< ::uint32_t>(
+      1 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Field::FixedList::Reader::hasCount() const {
+  return _reader.hasDataField< ::uint8_t>(16 * ::capnp::ELEMENTS);
+}
+
+inline bool Field::FixedList::Builder::hasCount() {
+  return _builder.hasDataField< ::uint8_t>(16 * ::capnp::ELEMENTS);
+}
+inline  ::uint8_t Field::FixedList::Reader::getCount() const {
+  return _reader.getDataField< ::uint8_t>(
+      16 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint8_t Field::FixedList::Builder::getCount() {
+  return _builder.getDataField< ::uint8_t>(
+      16 * ::capnp::ELEMENTS);
+}
+inline void Field::FixedList::Builder::setCount( ::uint8_t value) {
+  _builder.setDataField< ::uint8_t>(
+      16 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Field::FixedList::Reader::hasElementType() const {
+  return !_reader.isPointerFieldNull(2 * ::capnp::POINTERS);
+}
+inline bool Field::FixedList::Builder::hasElementType() {
+  return !_builder.isPointerFieldNull(2 * ::capnp::POINTERS);
+}
+inline  ::capnp::schema::Type::Reader Field::FixedList::Reader::getElementType() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
+      _reader, 2 * ::capnp::POINTERS);
+}
+inline  ::capnp::schema::Type::Builder Field::FixedList::Builder::getElementType() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
+      _builder, 2 * ::capnp::POINTERS);
+}
+inline void Field::FixedList::Builder::setElementType( ::capnp::schema::Type::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
+      _builder, 2 * ::capnp::POINTERS, value);
+}
+inline  ::capnp::schema::Type::Builder Field::FixedList::Builder::initElementType() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::init(
+      _builder, 2 * ::capnp::POINTERS);
+}
+inline void Field::FixedList::Builder::adoptElementType(
+    ::capnp::Orphan< ::capnp::schema::Type>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Type>::adopt(
+      _builder, 2 * ::capnp::POINTERS, kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::schema::Type> Field::FixedList::Builder::disownElementType() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::disown(
+      _builder, 2 * ::capnp::POINTERS);
 }
 
 inline bool Enumerant::Reader::hasName() const {

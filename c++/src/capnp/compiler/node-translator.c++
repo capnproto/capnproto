@@ -847,20 +847,20 @@ public:
       switch (member.decl.which()) {
         case Declaration::FIELD: {
           auto fieldReader = member.decl.getField();
-          auto nonGroup = fieldBuilder.initNonGroup();
-          auto typeBuilder = nonGroup.initType();
+          auto slot = fieldBuilder.initSlot();
+          auto typeBuilder = slot.initType();
           if (translator.compileType(fieldReader.getType(), typeBuilder)) {
             switch (fieldReader.getDefaultValue().which()) {
               case Declaration::Field::DefaultValue::VALUE:
                 translator.compileBootstrapValue(fieldReader.getDefaultValue().getValue(),
-                                                 typeBuilder, nonGroup.initDefaultValue());
+                                                 typeBuilder, slot.initDefaultValue());
                 break;
               case Declaration::Field::DefaultValue::NONE:
-                translator.compileDefaultDefaultValue(typeBuilder, nonGroup.initDefaultValue());
+                translator.compileDefaultDefaultValue(typeBuilder, slot.initDefaultValue());
                 break;
             }
           } else {
-            translator.compileDefaultDefaultValue(typeBuilder, nonGroup.initDefaultValue());
+            translator.compileDefaultDefaultValue(typeBuilder, slot.initDefaultValue());
           }
 
           int lgSize = -1;
@@ -889,13 +889,13 @@ public:
 
           if (lgSize == -2) {
             // pointer
-            nonGroup.setOffset(member.fieldScope->addPointer());
+            slot.setOffset(member.fieldScope->addPointer());
           } else if (lgSize == -1) {
             // void
             member.fieldScope->addVoid();
-            nonGroup.setOffset(0);
+            slot.setOffset(0);
           } else {
-            nonGroup.setOffset(member.fieldScope->addData(lgSize));
+            slot.setOffset(member.fieldScope->addData(lgSize));
           }
           break;
         }
@@ -1737,8 +1737,8 @@ void ValueTranslator::fillStructValue(DynamicStruct::Builder builder,
       auto value = assignment.getValue();
 
       switch (fieldProto.which()) {
-        case schema::Field::NON_GROUP:
-          KJ_IF_MAYBE(compiledValue, compileValue(value, fieldProto.getNonGroup().getType())) {
+        case schema::Field::SLOT:
+          KJ_IF_MAYBE(compiledValue, compileValue(value, fieldProto.getSlot().getType())) {
             builder.adopt(*field, kj::mv(*compiledValue));
           }
           break;

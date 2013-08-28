@@ -185,8 +185,8 @@ Schema loadUnderAlternateTypeId(SchemaLoader& loader, uint64_t id) {
     // If the struct contains any self-referential members, change their type IDs as well.
     auto fields = root.getStruct().getFields();
     for (auto field: fields) {
-      if (field.isNonGroup()) {
-        auto type = field.getNonGroup().getType();
+      if (field.isSlot()) {
+        auto type = field.getSlot().getType();
         if (type.isStruct() && type.getStruct().getTypeId() == typeId<T>()) {
           type.getStruct().setTypeId(id);
         }

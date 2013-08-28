@@ -477,7 +477,7 @@ Orphan<DynamicValue> makeExampleValue(
         // Type is "Int32Struct" or the like.
         auto field = structType.getFieldByName("f0");
         builder.adopt(field, makeExampleValue(orphanage, structType, ordinal,
-                                              field.getProto().getNonGroup().getType(),
+                                              field.getProto().getSlot().getType(),
                                               sharedOrdinalCount));
       }
 
@@ -520,7 +520,7 @@ void checkExampleValue(DynamicValue::Reader value, uint ordinal, schema::Type::R
         // Type is "Int32Struct" or the like.
         auto field = structType.getFieldByName("f0");
         checkExampleValue(structValue.get(field), ordinal,
-                          field.getProto().getNonGroup().getType(), sharedOrdinalCount);
+                          field.getProto().getSlot().getType(), sharedOrdinalCount);
       }
       break;
     }
@@ -543,10 +543,10 @@ void setExampleField(DynamicStruct::Builder builder, StructSchema::Field field,
                      uint sharedOrdinalCount) {
   auto fieldProto = field.getProto();
   switch (fieldProto.which()) {
-    case schema::Field::NON_GROUP:
+    case schema::Field::SLOT:
       builder.adopt(field, makeExampleValue(
           Orphanage::getForMessageContaining(builder), field.getContainingStruct(),
-          getOrdinal(field), fieldProto.getNonGroup().getType(), sharedOrdinalCount));
+          getOrdinal(field), fieldProto.getSlot().getType(), sharedOrdinalCount));
       break;
     case schema::Field::GROUP:
       builder.adopt(field, makeExampleStruct(
@@ -561,11 +561,11 @@ void checkExampleField(DynamicStruct::Reader reader, StructSchema::Field field,
                        uint sharedOrdinalCount) {
   auto fieldProto = field.getProto();
   switch (fieldProto.which()) {
-    case schema::Field::NON_GROUP: {
+    case schema::Field::SLOT: {
       uint ordinal = getOrdinal(field);
       if (ordinal < sharedOrdinalCount) {
         checkExampleValue(reader.get(field), ordinal,
-                          fieldProto.getNonGroup().getType(), sharedOrdinalCount);
+                          fieldProto.getSlot().getType(), sharedOrdinalCount);
       }
       break;
     }

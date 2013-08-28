@@ -178,8 +178,8 @@ struct Field {
   # returns false).
 
   union {
-    nonGroup :group {
-      # A regular, non-group, field.
+    slot :group {
+      # A regular, non-group, non-fixed-list field.
 
       offset @4 :UInt32;
       # Offset, in units of the field's size, from the beginning of the section in which the field
@@ -195,6 +195,19 @@ struct Field {
 
       typeId @7 :Id;
       # The ID of the group's node.
+    }
+
+    fixedList :group {
+      # A fixed list stored inline within the struct.
+
+      startOffset @10 :UInt32;
+      # Offset of the first element, measured in the same way as for slot fields.
+
+      count @11 :UInt8;
+      # Number of elements.
+
+      elementType @12 :Type;
+      # Type of each element.
     }
   }
 

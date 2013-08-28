@@ -309,17 +309,16 @@ private:
       }
 
       switch (field.which()) {
-        case schema::Field::NON_GROUP: {
-          auto nonGroup = field.getNonGroup();
+        case schema::Field::SLOT: {
+          auto slot = field.getSlot();
 
           uint fieldBits = 0;
           bool fieldIsPointer = false;
-          validate(nonGroup.getType(), nonGroup.getDefaultValue(),
-                   &fieldBits, &fieldIsPointer);
-          VALIDATE_SCHEMA(fieldBits * (nonGroup.getOffset() + 1) <= dataSizeInBits &&
-                          fieldIsPointer * (nonGroup.getOffset() + 1) <= pointerCount,
+          validate(slot.getType(), slot.getDefaultValue(), &fieldBits, &fieldIsPointer);
+          VALIDATE_SCHEMA(fieldBits * (slot.getOffset() + 1) <= dataSizeInBits &&
+                          fieldIsPointer * (slot.getOffset() + 1) <= pointerCount,
                           "field offset out-of-bounds",
-                          nonGroup.getOffset(), dataSizeInBits, pointerCount);
+                          slot.getOffset(), dataSizeInBits, pointerCount);
 
           break;
         }
@@ -697,24 +696,24 @@ private:
     VALIDATE_SCHEMA(discriminant == replacementDiscriminant, "Field discriminant changed.");
 
     switch (field.which()) {
-      case schema::Field::NON_GROUP: {
-        auto nonGroup = field.getNonGroup();
+      case schema::Field::SLOT: {
+        auto slot = field.getSlot();
 
         switch (replacement.which()) {
-          case schema::Field::NON_GROUP: {
-            auto replacementNonGroup = replacement.getNonGroup();
+          case schema::Field::SLOT: {
+            auto replacementSlot = replacement.getSlot();
 
-            checkCompatibility(nonGroup.getType(), replacementNonGroup.getType(),
+            checkCompatibility(slot.getType(), replacementSlot.getType(),
                                NO_UPGRADE_TO_STRUCT);
-            checkDefaultCompatibility(nonGroup.getDefaultValue(),
-                                      replacementNonGroup.getDefaultValue());
+            checkDefaultCompatibility(slot.getDefaultValue(),
+                                      replacementSlot.getDefaultValue());
 
-            VALIDATE_SCHEMA(nonGroup.getOffset() == replacementNonGroup.getOffset(),
+            VALIDATE_SCHEMA(slot.getOffset() == replacementSlot.getOffset(),
                             "field position changed");
             break;
           }
           case schema::Field::GROUP:
-            checkUpgradeToStruct(nonGroup.getType(), replacement.getGroup().getTypeId(),
+            checkUpgradeToStruct(slot.getType(), replacement.getGroup().getTypeId(),
                                  existingNode, field);
             break;
         }
@@ -724,8 +723,8 @@ private:
 
       case schema::Field::GROUP:
         switch (replacement.which()) {
-          case schema::Field::NON_GROUP:
-            checkUpgradeToStruct(replacement.getNonGroup().getType(), field.getGroup().getTypeId(),
+          case schema::Field::SLOT:
+            checkUpgradeToStruct(replacement.getSlot().getType(), field.getGroup().getTypeId(),
                                  replacementNode, replacement);
             break;
           case schema::Field::GROUP:
@@ -984,8 +983,8 @@ private:
     auto field = structNode.initFields(1)[0];
     field.setName("member0");
     field.setCodeOrder(0);
-    auto nongroup = field.initNonGroup();
-    nongroup.setType(type);
+    auto slot = field.initSlot();
+    slot.setType(type);
 
     KJ_IF_MAYBE(p, matchPosition) {
       if (p->getOrdinal().isExplicit()) {
@@ -993,14 +992,14 @@ private:
       } else {
         field.getOrdinal().setImplicit();
       }
-      auto matchNongroup = p->getNonGroup();
-      nongroup.setOffset(matchNongroup.getOffset());
-      nongroup.setDefaultValue(matchNongroup.getDefaultValue());
+      auto matchSlot = p->getSlot();
+      slot.setOffset(matchSlot.getOffset());
+      slot.setDefaultValue(matchSlot.getDefaultValue());
     } else {
       field.getOrdinal().setExplicit(0);
-      nongroup.setOffset(0);
+      slot.setOffset(0);
 
-      schema::Value::Builder value = nongroup.initDefaultValue();
+      schema::Value::Builder value = slot.initDefaultValue();
       switch (type.which()) {
         case schema::Type::VOID: value.setVoid(); break;
         case schema::Type::BOOL: value.setBool(false); break;
