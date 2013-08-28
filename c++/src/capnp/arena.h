@@ -171,7 +171,7 @@ private:
   SegmentReader segment0;
 
   typedef std::unordered_map<uint, kj::Own<SegmentReader>> SegmentMap;
-  kj::Maybe<kj::Own<SegmentMap>> moreSegments;
+  kj::MutexGuarded<kj::Maybe<kj::Own<SegmentMap>>> moreSegments;
 };
 
 class BuilderArena final: public Arena {

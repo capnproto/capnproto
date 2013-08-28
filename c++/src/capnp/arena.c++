@@ -63,12 +63,10 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
     }
   }
 
-  // TODO(someday):  Lock a mutex so that reading is thread-safe.  Take a reader lock during the
-  //   first lookup, unlock it before calling getSegment(), then take a writer lock to update the
-  //   map.  Bleh, lazy initialization is sad.
+  auto lock = moreSegments.lockExclusive();
 
   SegmentMap* segments = nullptr;
-  KJ_IF_MAYBE(s, moreSegments) {
+  KJ_IF_MAYBE(s, *lock) {
     auto iter = s->find(id.value);
     if (iter != s->end()) {
       return iter->second.get();
@@ -81,11 +79,11 @@ SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
     return nullptr;
   }
 
-  if (moreSegments == nullptr) {
+  if (*lock == nullptr) {
     // OK, the segment exists, so allocate the map.
     auto s = kj::heap<SegmentMap>();
     segments = s;
-    moreSegments = mv(s);
+    *lock = mv(s);
   }
 
   auto segment = kj::heap<SegmentReader>(this, id, newSegment, &readLimiter);
