@@ -542,8 +542,7 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
             rawValue = enumSchema.getEnumerantByName(value.as<Text>()).getOrdinal();
           } else {
             DynamicEnum enumValue = value.as<DynamicEnum>();
-            KJ_REQUIRE(enumValue.getSchema() == enumSchema,
-                       "Type mismatch when using DynamicList::Builder::set().") {
+            KJ_REQUIRE(enumValue.getSchema() == enumSchema, "Value type mismatch.") {
               return;
             }
             rawValue = enumValue.getRaw();
@@ -561,15 +560,25 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
           builder.setBlobField<Data>(slot.getOffset() * POINTERS, value.as<Data>());
           return;
 
-        case schema::Type::LIST:
-          // TODO(soon):  Type check.
-          builder.setListField(slot.getOffset() * POINTERS, value.as<DynamicList>().reader);
+        case schema::Type::LIST: {
+          ListSchema listType = ListSchema::of(type.getList().getElementType(), schema);
+          auto listValue = value.as<DynamicList>();
+          KJ_REQUIRE(listValue.getSchema() == listType, "Value type mismatch.") {
+            return;
+          }
+          builder.setListField(slot.getOffset() * POINTERS, listValue.reader);
           return;
+        }
 
-        case schema::Type::STRUCT:
-          // TODO(soon):  Type check.
-          builder.setStructField(slot.getOffset() * POINTERS, value.as<DynamicStruct>().reader);
+        case schema::Type::STRUCT: {
+          auto structType = schema.getDependency(type.getStruct().getTypeId()).asStruct();
+          auto structValue = value.as<DynamicStruct>();
+          KJ_REQUIRE(structValue.getSchema() == structType, "Value type mismatch.") {
+            return;
+          }
+          builder.setStructField(slot.getOffset() * POINTERS, structValue.reader);
           return;
+        }
 
         case schema::Type::OBJECT:
           builder.setObjectField(slot.getOffset() * POINTERS, value.as<DynamicObject>().reader);
@@ -710,18 +719,20 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
           break;
 
         case schema::Type::LIST: {
-          ListSchema listType = ListSchema::of(type.getList().getElementType(),
-                                               field.getContainingStruct());
+          ListSchema listType = ListSchema::of(type.getList().getElementType(), schema);
           KJ_REQUIRE(orphan.getType() == DynamicValue::LIST && orphan.listSchema == listType,
-                     "Value type mismatch.");
+                     "Value type mismatch.") {
+            return;
+          }
           break;
         }
 
         case schema::Type::STRUCT: {
-          auto structType =
-              field.getContainingStruct().getDependency(type.getStruct().getTypeId()).asStruct();
+          auto structType = schema.getDependency(type.getStruct().getTypeId()).asStruct();
           KJ_REQUIRE(orphan.getType() == DynamicValue::STRUCT && orphan.structSchema == structType,
-                     "Value type mismatch.");
+                     "Value type mismatch.") {
+            return;
+          }
           break;
         }
 
@@ -729,7 +740,9 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
           KJ_REQUIRE(orphan.getType() == DynamicValue::STRUCT ||
                      orphan.getType() == DynamicValue::LIST ||
                      orphan.getType() == DynamicValue::OBJECT,
-                     "Value type mismatch.");
+                     "Value type mismatch.") {
+            return;
+          }
           break;
 
         case schema::Type::INTERFACE:
@@ -1206,14 +1219,20 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
       return;
 
     case schema::Type::LIST: {
-      // TODO(soon):  Type check.
-      builder.setListElement(index * ELEMENTS, value.as<DynamicList>().reader);
+      auto listValue = value.as<DynamicList>();
+      KJ_REQUIRE(listValue.getSchema() == schema.getListElementType(), "Value type mismatch.") {
+        return;
+      }
+      builder.setListElement(index * ELEMENTS, listValue.reader);
       return;
     }
 
     case schema::Type::STRUCT: {
-      // TODO(soon):  Type check.
-      builder.getStructElement(index * ELEMENTS).copyContentFrom(value.as<DynamicStruct>().reader);
+      auto structValue = value.as<DynamicStruct>();
+      KJ_REQUIRE(structValue.getSchema() == schema.getStructElementType(), "Value type mismatch.") {
+        return;
+      }
+      builder.getStructElement(index * ELEMENTS).copyContentFrom(structValue.reader);
       return;
     }
 
