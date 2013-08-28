@@ -149,6 +149,10 @@ public:
            .addOption({"short"}, KJ_BIND_METHOD(*this, printShort),
                       "Print in short (non-pretty) format.  Each message will be printed on one "
                       "line, without using whitespace to improve readability.")
+           .addOption({"quiet"}, KJ_BIND_METHOD(*this, setQuiet),
+                      "Do not print warning messages about the input being in the wrong format.  "
+                      "Use this if you find the warnings are wrong (but also let us know so "
+                      "we can improve them).")
            .expectArg("<schema-file>", KJ_BIND_METHOD(*this, addSource))
            .expectArg("<type>", KJ_BIND_METHOD(*this, setRootType))
            .callAfterParsing(KJ_BIND_METHOD(*this, decode));
@@ -484,6 +488,10 @@ public:
     pretty = false;
     return true;
   }
+  kj::MainBuilder::Validity setQuiet() {
+    quiet = true;
+    return true;
+  }
   kj::MainBuilder::Validity setSegmentSize(kj::StringPtr size) {
     if (flat) return "cannot be used with --flat";
     char* end;
@@ -536,6 +544,13 @@ public:
     kj::FdInputStream rawInput(STDIN_FILENO);
     kj::BufferedInputStreamWrapper input(rawInput);
 
+    if (!quiet) {
+      auto result = checkPlausibility(input.getReadBuffer());
+      if (result.getError() != nullptr) {
+        return kj::mv(result);
+      }
+    }
+
     if (flat) {
       // Read in the whole input to decode as one segment.
       kj::Array<word> words;
@@ -576,10 +591,17 @@ public:
 private:
   struct ParseErrorCatcher: public kj::ExceptionCallback {
     void onRecoverableException(kj::Exception&& e) {
-      // Only capture the first exception, on the assumption that later exceptions are probably
-      // just cascading problems.
-      if (exception == nullptr) {
-        exception = kj::mv(e);
+      if (e.getNature() == kj::Exception::Nature::PRECONDITION) {
+        // This is probably a problem with the input.  Let's try to report it more nicely.
+
+        // Only capture the first exception, on the assumption that later exceptions are probably
+        // just cascading problems.
+        if (exception == nullptr) {
+          exception = kj::mv(e);
+        }
+      } else {
+        // This is probably a bug, not a problem with the input.
+        ExceptionCallback::onRecoverableException(kj::mv(e));
       }
     }
 
@@ -596,12 +618,12 @@ private:
         std::numeric_limits<decltype(options.traversalLimitInWords)>::max();
 
     MessageReaderType reader(input, options);
-    auto root = reader.template getRoot<DynamicStruct>(rootType);
     kj::String text;
     kj::Maybe<kj::Exception> exception;
 
     {
       ParseErrorCatcher catcher;
+      auto root = reader.template getRoot<DynamicStruct>(rootType);
       if (pretty) {
         text = kj::str(prettyPrint(root), '\n');
       } else {
@@ -613,8 +635,328 @@ private:
     kj::FdOutputStream(STDOUT_FILENO).write(text.begin(), text.size());
 
     KJ_IF_MAYBE(e, exception) {
-      context.error(kj::str("*** error in previous message ***\n", *e, "\n*** end error ***"));
+      context.error(kj::str(
+          "*** ERROR DECODING PREVIOUS MESSAGE ***\n"
+          "The following error occurred while decoding the message above.\n"
+          "This probably means the input data is invalid/corrupted.\n",
+          "Exception description: ", e->getDescription(), "\n"
+          "Code location: ", e->getFile(), ":", e->getLine(), "\n"
+          "*** END ERROR ***"));
     }
+  }
+
+  enum Plausibility {
+    IMPOSSIBLE,
+    IMPLAUSIBLE,
+    WRONG_TYPE,
+    PLAUSIBLE
+  };
+
+  bool plausibleOrWrongType(Plausibility p) {
+    return p == PLAUSIBLE || p == WRONG_TYPE;
+  }
+
+  Plausibility isPlausiblyFlat(kj::ArrayPtr<const byte> prefix) {
+    if (prefix.size() < 8) {
+      // Not enough prefix to say.
+      return PLAUSIBLE;
+    }
+
+    if ((prefix[0] & 3) != 0) {
+      // Not a struct pointer.
+      return IMPOSSIBLE;
+    }
+    if ((prefix[3] & 0x80) != 0) {
+      // Offset is negative (invalid).
+      return IMPOSSIBLE;
+    }
+    if ((prefix[3] & 0xe0) != 0) {
+      // Offset is over a gigabyte (implausible).
+      return IMPLAUSIBLE;
+    }
+
+    uint data = prefix[4] | (prefix[5] << 8);
+    uint pointers = prefix[6] | (prefix[7] << 8);
+
+    if (data + pointers > 2048) {
+      // Root struct is huge (over 16 KiB).
+      return IMPLAUSIBLE;
+    }
+
+    auto structSchema = rootType.getProto().getStruct();
+    if ((data < structSchema.getDataWordCount() && pointers > structSchema.getPointerCount()) ||
+        (data > structSchema.getDataWordCount() && pointers < structSchema.getPointerCount())) {
+      // Struct is neither older nor newer than the schema.
+      return WRONG_TYPE;
+    }
+
+    if (data > structSchema.getDataWordCount() &&
+        data - structSchema.getDataWordCount() > 128) {
+      // Data section appears to have grown by 1k (128 words).  This seems implausible.
+      return WRONG_TYPE;
+    }
+    if (pointers > structSchema.getPointerCount() &&
+        pointers - structSchema.getPointerCount() > 128) {
+      // Pointer section appears to have grown by 1k (128 words).  This seems implausible.
+      return WRONG_TYPE;
+    }
+
+    return PLAUSIBLE;
+  }
+
+  Plausibility isPlausiblyBinary(kj::ArrayPtr<const byte> prefix) {
+    if (prefix.size() < 8) {
+      // Not enough prefix to say.
+      return PLAUSIBLE;
+    }
+
+    uint32_t segmentCount = prefix[0] | (prefix[1] << 8)
+                          | (prefix[2] << 16) | (prefix[3] << 24);
+
+    if (segmentCount > 65536) {
+      // While technically possible, this is so implausible that we should mark it impossible.
+      // This helps to make sure we fail fast on packed input.
+      return IMPOSSIBLE;
+    } else if (segmentCount > 256) {
+      // Implausible segment count.
+      return IMPLAUSIBLE;
+    }
+
+    uint32_t segment0Size = prefix[5] | (prefix[6] << 8)
+                          | (prefix[7] << 16) | (prefix[8] << 24);
+
+    if (segment0Size > (1 << 27)) {
+      // Segment larger than 1G seems implausible.
+      return IMPLAUSIBLE;
+    }
+
+    uint32_t segment0Offset = 4 + segmentCount * 4;
+    if (segment0Offset % 8 != 0) {
+      segment0Offset += 4;
+    }
+    KJ_ASSERT(segment0Offset % 8 == 0);
+
+    if (prefix.size() < segment0Offset + 8) {
+      // Segment 0 is past our prefix, so we can't check it.
+      return PLAUSIBLE;
+    }
+
+    return isPlausiblyFlat(prefix.slice(segment0Offset, prefix.size()));
+  }
+
+  Plausibility isPlausiblyPacked(kj::ArrayPtr<const byte> prefix) {
+    kj::Vector<byte> unpacked;
+
+    // Try to unpack a prefix so that we can check it.
+    const byte* pos = prefix.begin();
+    const byte* end = prefix.end();
+    if (end - pos > 1024) {
+      // Don't bother unpacking more than 1k.
+      end = pos + 1024;
+    }
+    while (pos < end) {
+      byte tag = *pos++;
+      for (uint i = 0; i < 8 && pos < end; i++) {
+        if (tag & (1 << i)) {
+          byte b = *pos++;
+          if (b == 0) {
+            // A zero byte should have been deflated away.
+            return IMPOSSIBLE;
+          }
+          unpacked.add(b);
+        } else {
+          unpacked.add(0);
+        }
+      }
+
+      if (pos == end) {
+        break;
+      }
+
+      if (tag == 0) {
+        uint count = *pos++ * 8;
+        unpacked.addAll(kj::repeat(byte(0), count));
+      } else if (tag == 0xff) {
+        uint count = *pos++ * 8;
+        size_t available = end - pos;
+        uint n = kj::min(count, available);
+        unpacked.addAll(pos, pos + n);
+        pos += n;
+      }
+    }
+
+    return isPlausiblyBinary(unpacked);
+  }
+
+  kj::MainBuilder::Validity checkPlausibility(kj::ArrayPtr<const byte> prefix) {
+    if (flat) {
+      switch (isPlausiblyFlat(prefix)) {
+        case PLAUSIBLE:
+          break;
+        case IMPOSSIBLE:
+          if (plausibleOrWrongType(isPlausiblyPacked(prefix))) {
+            return "The input is not in --flat format.  It looks like it is in --packed format.  "
+                   "Try that instead.";
+          } else if (plausibleOrWrongType(isPlausiblyBinary(prefix))) {
+            return "The input is not in --flat format.  It looks like it is in regular binary "
+                   "format.  Try removing the --flat flag.";
+          } else {
+            return "The input is not a Cap'n Proto message.";
+          }
+        case IMPLAUSIBLE:
+          if (plausibleOrWrongType(isPlausiblyPacked(prefix))) {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be in --flat format.  It looks like it may\n"
+                "be in --packed format.  I'll try to parse it in --flat format as you\n"
+                "requested, but if it doesn't work, try --packed instead.  Use --quiet to\n"
+                "suppress this warning.\n"
+                "*** END WARNING ***\n");
+          } else if (plausibleOrWrongType(isPlausiblyBinary(prefix))) {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be in --flat format.  It looks like it may\n"
+                "be in regular binary format.  I'll try to parse it in --flat format as you\n"
+                "requested, but if it doesn't work, try removing --flat.  Use --quiet to\n"
+                "suppress this warning.\n"
+                "*** END WARNING ***\n");
+          } else {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be a Cap'n Proto message in any known\n"
+                "binary format.  I'll try to parse it anyway, but if it doesn't work, please\n"
+                "check your input.  Use --quiet to suppress this warning.\n"
+                "*** END WARNING ***\n");
+          }
+          break;
+        case WRONG_TYPE:
+          if (plausibleOrWrongType(isPlausiblyBinary(prefix))) {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be the type that you specified.  I'll try\n"
+                "to parse it anyway, but if it doesn't look right, please verify that you\n"
+                "have the right type.  This could also be because the input is not in --flat\n"
+                "format; indeed, it looks like this input may be in regular binary format,\n"
+                "so you might want to try removing --flat.  Use --quiet to suppress this\n"
+                "warning.\n"
+                "*** END WARNING ***\n");
+          } else {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be the type that you specified.  I'll try\n"
+                "to parse it anyway, but if it doesn't look right, please verify that you\n"
+                "have the right type.  Use --quiet to suppress this warning.\n"
+                "*** END WARNING ***\n");
+          }
+          break;
+      }
+    } else if (packed) {
+      switch (isPlausiblyPacked(prefix)) {
+        case PLAUSIBLE:
+          break;
+        case IMPOSSIBLE:
+          if (plausibleOrWrongType(isPlausiblyBinary(prefix))) {
+            return "The input is not in --packed format.  It looks like it is in regular binary "
+                   "format.  Try removing the --packed flag.";
+          } else if (plausibleOrWrongType(isPlausiblyFlat(prefix))) {
+            return "The input is not in --packed format, nor does it look like it is in regular "
+                   "binary format.  It looks like it could be in --flat format, although that "
+                   "is unusual so I could be wrong.";
+          } else {
+            return "The input is not a Cap'n Proto message.";
+          }
+        case IMPLAUSIBLE:
+          if (plausibleOrWrongType(isPlausiblyBinary(prefix))) {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be in --packed format.  It looks like it\n"
+                "may be in regular binary format.  I'll try to parse it in --packed format as\n"
+                "you requested, but if it doesn't work, try removing --packed.  Use --quiet to\n"
+                "suppress this warning.\n"
+                "*** END WARNING ***\n");
+          } else if (plausibleOrWrongType(isPlausiblyFlat(prefix))) {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be in --packed format, nor does it look\n"
+                "like it's in regular binary format.  It looks like it could be in --flat\n"
+                "format, although that is unusual so I could be wrong.  I'll try to parse\n"
+                "it in --flat format as you requested, but if it doesn't work, you might\n"
+                "want to try --flat, or the data may not be Cap'n Proto at all.  Use\n"
+                "--quiet to suppress this warning.\n"
+                "*** END WARNING ***\n");
+          } else {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be a Cap'n Proto message in any known\n"
+                "binary format.  I'll try to parse it anyway, but if it doesn't work, please\n"
+                "check your input.  Use --quiet to suppress this warning.\n"
+                "*** END WARNING ***\n");
+          }
+          break;
+        case WRONG_TYPE:
+          context.warning(
+              "*** WARNING ***\n"
+              "The input data does not appear to be the type that you specified.  I'll try\n"
+              "to parse it anyway, but if it doesn't look right, please verify that you\n"
+              "have the right type.  Use --quiet to suppress this warning.\n"
+              "*** END WARNING ***\n");
+          break;
+      }
+    } else {
+      switch (isPlausiblyBinary(prefix)) {
+        case PLAUSIBLE:
+          break;
+        case IMPOSSIBLE:
+          if (plausibleOrWrongType(isPlausiblyPacked(prefix))) {
+            return "The input is not in regular binary format.  It looks like it is in --packed "
+                   "format.  Try adding the --packed flag.";
+          } else if (plausibleOrWrongType(isPlausiblyFlat(prefix))) {
+            return "The input is not in regular binary format, nor does it look like it is in "
+                   "--packed format.  It looks like it could be in --flat format, although that "
+                   "is unusual so I could be wrong.";
+          } else {
+            return "The input is not a Cap'n Proto message.";
+          }
+        case IMPLAUSIBLE:
+          if (plausibleOrWrongType(isPlausiblyPacked(prefix))) {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be in regular binary format.  It looks like\n"
+                "it may be in --packed format.  I'll try to parse it in regular format as you\n"
+                "requested, but if it doesn't work, try adding --packed.  Use --quiet to\n"
+                "suppress this warning.\n"
+                "*** END WARNING ***\n");
+          } else if (plausibleOrWrongType(isPlausiblyFlat(prefix))) {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be in regular binary format, nor does it\n"
+                "look like it's in --packed format.  It looks like it could be in --flat\n"
+                "format, although that is unusual so I could be wrong.  I'll try to parse\n"
+                "it in regular format as you requested, but if it doesn't work, you might\n"
+                "want to try --flat, or the data may not be Cap'n Proto at all.  Use\n"
+                "--quiet to suppress this warning.\n"
+                "*** END WARNING ***\n");
+          } else {
+            context.warning(
+                "*** WARNING ***\n"
+                "The input data does not appear to be a Cap'n Proto message in any known\n"
+                "binary format.  I'll try to parse it anyway, but if it doesn't work, please\n"
+                "check your input.  Use --quiet to suppress this warning.\n"
+                "*** END WARNING ***\n");
+          }
+          break;
+        case WRONG_TYPE:
+          context.warning(
+              "*** WARNING ***\n"
+              "The input data does not appear to be the type that you specified.  I'll try\n"
+              "to parse it anyway, but if it doesn't look right, please verify that you\n"
+              "have the right type.  Use --quiet to suppress this warning.\n"
+              "*** END WARNING ***\n");
+          break;
+      }
+    }
+
+    return true;
   }
 
 public:
@@ -855,6 +1197,7 @@ private:
   bool flat = false;
   bool packed = false;
   bool pretty = true;
+  bool quiet = false;
   uint segmentSize = 0;
   StructSchema rootType;
   // For the "decode" and "encode" commands.

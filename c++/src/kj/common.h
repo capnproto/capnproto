@@ -350,11 +350,24 @@ public:
     Iterator() = default;
     inline Iterator(const T& value): value(value) {}
 
-    inline const T& operator*() const { return value; }
+    inline const T&  operator* () const { return value; }
+    inline const T&  operator[](size_t index) const { return value + index; }
     inline Iterator& operator++() { ++value; return *this; }
-    inline Iterator operator++(int) { return Iterator(value++); }
+    inline Iterator  operator++(int) { return Iterator(value++); }
+    inline Iterator& operator--() { --value; return *this; }
+    inline Iterator  operator--(int) { return Iterator(value--); }
+    inline Iterator& operator+=(ptrdiff_t amount) { value += amount; return *this; }
+    inline Iterator& operator-=(ptrdiff_t amount) { value -= amount; return *this; }
+    inline Iterator  operator+ (ptrdiff_t amount) const { return Iterator(value + amount); }
+    inline Iterator  operator- (ptrdiff_t amount) const { return Iterator(value - amount); }
+    inline ptrdiff_t operator- (const Iterator& other) const { return value - other.value; }
+
     inline bool operator==(const Iterator& other) const { return value == other.value; }
     inline bool operator!=(const Iterator& other) const { return value != other.value; }
+    inline bool operator<=(const Iterator& other) const { return value <= other.value; }
+    inline bool operator>=(const Iterator& other) const { return value >= other.value; }
+    inline bool operator< (const Iterator& other) const { return value <  other.value; }
+    inline bool operator> (const Iterator& other) const { return value >  other.value; }
 
   private:
     T value;
@@ -388,11 +401,24 @@ public:
     Iterator() = default;
     inline Iterator(const T& value, size_t index): value(value), index(index) {}
 
-    inline const T& operator*() const { return value; }
+    inline const T&  operator* () const { return value; }
+    inline const T&  operator[](ptrdiff_t index) const { return value; }
     inline Iterator& operator++() { ++index; return *this; }
-    inline Iterator operator++(int) { return Iterator(value, index++); }
+    inline Iterator  operator++(int) { return Iterator(value, index++); }
+    inline Iterator& operator--() { --index; return *this; }
+    inline Iterator  operator--(int) { return Iterator(value, index--); }
+    inline Iterator& operator+=(ptrdiff_t amount) { index += amount; return *this; }
+    inline Iterator& operator-=(ptrdiff_t amount) { index -= amount; return *this; }
+    inline Iterator  operator+ (ptrdiff_t amount) const { return Iterator(value, index + amount); }
+    inline Iterator  operator- (ptrdiff_t amount) const { return Iterator(value, index - amount); }
+    inline ptrdiff_t operator- (const Iterator& other) const { return index - other.index; }
+
     inline bool operator==(const Iterator& other) const { return index == other.index; }
     inline bool operator!=(const Iterator& other) const { return index != other.index; }
+    inline bool operator<=(const Iterator& other) const { return index <= other.index; }
+    inline bool operator>=(const Iterator& other) const { return index >= other.index; }
+    inline bool operator< (const Iterator& other) const { return index <  other.index; }
+    inline bool operator> (const Iterator& other) const { return index >  other.index; }
 
   private:
     T value;
