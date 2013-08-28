@@ -56,27 +56,6 @@
 namespace capnp {
 namespace compiler {
 
-class DummyModule: public capnp::compiler::Module {
-public:
-  capnp::compiler::ParsedFile::Reader content;
-
-  kj::StringPtr getLocalName() const {
-    return "(stdin)";
-  }
-  kj::StringPtr getSourceName() const {
-    return "(stdin)";
-  }
-  capnp::Orphan<capnp::compiler::ParsedFile> loadContent(capnp::Orphanage orphanage) const {
-    return orphanage.newOrphanCopy(content);
-  }
-  kj::Maybe<const Module&> importRelative(kj::StringPtr importPath) const {
-    return nullptr;
-  }
-  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) const override {
-    std::cerr << "input:" << startByte << "-" << endByte << ": " << message.cStr() << std::endl;
-  }
-};
-
 static const char VERSION_STRING[] = "Cap'n Proto version " VERSION;
 
 class CompilerMain final: public GlobalErrorReporter {
