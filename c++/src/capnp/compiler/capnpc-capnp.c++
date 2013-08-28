@@ -292,7 +292,7 @@ private:
     auto annDecl = proto.getAnnotation();
 
     return kj::strTree(prefix, "$", nodeName(decl, scope), "(",
-                       genValue(annDecl.getType(), annotation.getValue(), scope), ")", suffix);
+                       genValue(annDecl.getType(), annotation.getValue(), decl), ")", suffix);
   }
 
   kj::StringTree genAnnotations(List<schema::Annotation>::Reader list, Schema scope) {
