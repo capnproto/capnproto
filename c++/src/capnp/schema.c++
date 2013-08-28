@@ -83,6 +83,11 @@ ConstSchema Schema::asConst() const {
   return ConstSchema(raw);
 }
 
+kj::StringPtr Schema::getShortDisplayName() const {
+  auto proto = getProto();
+  return proto.getDisplayName().slice(proto.getDisplayNamePrefixLength());
+}
+
 void Schema::requireUsableAs(const _::RawSchema* expected) const {
   KJ_REQUIRE(raw == expected ||
           (raw != nullptr && expected != nullptr && raw->canCastTo == expected),

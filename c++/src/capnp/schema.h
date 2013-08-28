@@ -105,6 +105,9 @@ public:
   // - This schema was loaded with SchemaLoader, the type ID matches typeId<T>(), and
   //   loadCompiledTypeAndDependencies<T>() was called on the SchemaLoader.
 
+  kj::StringPtr getShortDisplayName() const;
+  // Get the short version of the node's display name.
+
 private:
   const _::RawSchema* raw;
 

@@ -35,6 +35,7 @@
 #include "../message.h"
 #include <iostream>
 #include <kj/main.h>
+#include <kj/parse/char.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -204,10 +205,17 @@ public:
     annotationFlag = Compiler::DROP_ANNOTATIONS;
 
     kj::MainBuilder builder(context, VERSION_STRING,
-          "Evaluates the `const` declaration <name> defined in <schema-file> and outputs the "
-          "value in text or binary format.  Since consts can have complex struct types, and "
-          "since you can build a const using other const values, this can be a convenient way "
-          "to write text-format config files which are compiled to binary before deployment.",
+          "Prints (or encodes) the value of <name>, which must be defined in <schema-file>.  "
+          "<name> must refer to a const declaration, a field of a struct type (prints the default "
+          "value), or a field or list element nested within some other value.  Examples:\n"
+          "    capnp eval myschema.capnp MyType.someField\n"
+          "    capnp eval myschema.capnp someConstant\n"
+          "    capnp eval myschema.capnp someConstant.someField\n"
+          "    capnp eval myschema.capnp someConstant.someList[4]\n"
+          "    capnp eval myschema.capnp someConstant.someList[4].anotherField[1][2][3]\n"
+          "Since consts can have complex struct types, and since you can define a const using "
+          "imporst and variable substitution, this can be a convenient way to write text-format "
+          "config files which are compiled to binary before deployment.",
 
           "By default the value is written in text format and can have any type.  The -b, -p, "
           "and --flat flags specify binary output, in which case the const must be of struct "
@@ -1036,38 +1044,147 @@ public:
     KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT;
   }
 
-  kj::MainBuilder::Validity evalConst(kj::StringPtr type) {
+  kj::MainBuilder::Validity evalConst(kj::StringPtr name) {
     KJ_ASSERT(sourceFiles.size() == 1);
 
-    KJ_IF_MAYBE(schema, resolveName(sourceFiles[0].id, type)) {
-      if (schema->getProto().which() != schema::Node::CONST) {
-        return "not a const";
-      }
+    auto parser = kj::parse::sequence(
+        kj::parse::many(
+            kj::parse::sequence(
+                kj::parse::identifier,
+                kj::parse::many(
+                    kj::parse::sequence(
+                        kj::parse::exactChar<'['>(),
+                        kj::parse::integer,
+                        kj::parse::exactChar<']'>())),
+                kj::parse::oneOf(
+                    kj::parse::endOfInput,
+                    kj::parse::sequence(
+                        kj::parse::exactChar<'.'>(),
+                        kj::parse::notLookingAt(kj::parse::endOfInput))))),
+        kj::parse::endOfInput);
 
-      DynamicValue::Reader value = schema->asConst();
+    kj::parse::IteratorInput<char, const char*> input(name.begin(), name.end());
 
-      if (binary || packed || flat) {
-        if (value.getType() != DynamicValue::STRUCT) {
-          return "not a struct; binary output is only available on structs";
-        }
-
-        kj::FdOutputStream rawOutput(STDOUT_FILENO);
-        kj::BufferedOutputStreamWrapper output(rawOutput);
-        writeFlat(value.as<DynamicStruct>(), output);
-        output.flush();
-        context.exit();
-      } else {
-        if (pretty && value.getType() == DynamicValue::STRUCT) {
-          context.exitInfo(prettyPrint(value.as<DynamicStruct>()).flatten());
-        } else if (pretty && value.getType() == DynamicValue::LIST) {
-          context.exitInfo(prettyPrint(value.as<DynamicList>()).flatten());
-        } else {
-          context.exitInfo(kj::str(value));
-        }
-      }
+    kj::Array<kj::Tuple<kj::String, kj::Array<uint64_t>>> nameParts;
+    KJ_IF_MAYBE(p, parser(input)) {
+      nameParts = kj::mv(*p);
     } else {
-      return "no such type";
+      return "invalid syntax";
     }
+
+    auto pos = nameParts.begin();
+
+    // Traverse the path to find a schema.
+    uint64_t scopeId = sourceFiles[0].id;
+    bool stoppedAtSubscript = false;
+    for (; pos != nameParts.end(); ++pos) {
+      kj::StringPtr part = kj::get<0>(*pos);
+
+      KJ_IF_MAYBE(childId, compiler->lookup(scopeId, part)) {
+        scopeId = *childId;
+
+        if (kj::get<1>(*pos).size() > 0) {
+          stoppedAtSubscript = true;
+          break;
+        }
+      } else {
+        break;
+      }
+    }
+    Schema schema = compiler->getLoader().get(scopeId);
+
+    // Evaluate this schema to a DynamicValue.
+    DynamicValue::Reader value;
+    word zeroWord[1];
+    memset(&zeroWord, 0, sizeof(zeroWord));
+    kj::ArrayPtr<const word> segments[1] = { zeroWord };
+    SegmentArrayMessageReader emptyMessage(segments);
+    switch (schema.getProto().which()) {
+      case schema::Node::CONST:
+        value = schema.asConst();
+        break;
+
+      case schema::Node::STRUCT:
+        if (pos == nameParts.end()) {
+          return kj::str("'", schema.getShortDisplayName(), "' cannot be evaluated.");
+        }
+
+        // Use the struct's default value.
+        value = emptyMessage.getRoot<DynamicStruct>(schema.asStruct());
+        break;
+
+      default:
+        if (stoppedAtSubscript) {
+          return kj::str("'", schema.getShortDisplayName(), "' is not a list.");
+        } else if (pos != nameParts.end()) {
+          return kj::str("'", kj::get<0>(*pos), "' is not defined.");
+        } else {
+          return kj::str("'", schema.getShortDisplayName(), "' cannot be evaluated.");
+        }
+    }
+
+    // Traverse the rest of the path as struct fields.
+    for (; pos != nameParts.end(); ++pos) {
+      kj::StringPtr partName = kj::get<0>(*pos);
+
+      if (!stoppedAtSubscript) {
+        if (value.getType() == DynamicValue::STRUCT) {
+          auto structValue = value.as<DynamicStruct>();
+          KJ_IF_MAYBE(field, structValue.getSchema().findFieldByName(partName)) {
+            value = structValue.get(*field);
+          } else {
+            return kj::str("'", kj::get<0>(pos[-1]), "' has no member '", partName, "'.");
+          }
+        } else {
+          return kj::str("'", kj::get<0>(pos[-1]), "' is not a struct.");
+        }
+      }
+
+      auto& subscripts = kj::get<1>(*pos);
+      for (uint i = 0; i < subscripts.size(); i++) {
+        uint64_t subscript = subscripts[i];
+        if (value.getType() == DynamicValue::LIST) {
+          auto listValue = value.as<DynamicList>();
+          if (subscript < listValue.size()) {
+            value = listValue[subscript];
+          } else {
+            return kj::str("'", partName, "[", kj::strArray(subscripts.slice(0, i + 1), "]["),
+                           "]' is out-of-bounds.");
+          }
+        } else {
+          if (i > 0) {
+            return kj::str("'", partName, "[", kj::strArray(subscripts.slice(0, i), "]["),
+                           "]' is not a list.");
+          } else {
+            return kj::str("'", partName, "' is not a list.");
+          }
+        }
+      }
+
+      stoppedAtSubscript = false;
+    }
+
+    // OK, we have a value.  Print it.
+    if (binary || packed || flat) {
+      if (value.getType() != DynamicValue::STRUCT) {
+        return "not a struct; binary output is only available on structs";
+      }
+
+      kj::FdOutputStream rawOutput(STDOUT_FILENO);
+      kj::BufferedOutputStreamWrapper output(rawOutput);
+      writeFlat(value.as<DynamicStruct>(), output);
+      output.flush();
+      context.exit();
+    } else {
+      if (pretty && value.getType() == DynamicValue::STRUCT) {
+        context.exitInfo(prettyPrint(value.as<DynamicStruct>()).flatten());
+      } else if (pretty && value.getType() == DynamicValue::LIST) {
+        context.exitInfo(prettyPrint(value.as<DynamicList>()).flatten());
+      } else {
+        context.exitInfo(kj::str(value));
+      }
+    }
+
     KJ_CLANG_KNOWS_THIS_IS_UNREACHABLE_BUT_GCC_DOESNT;
   }
 
