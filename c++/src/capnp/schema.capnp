@@ -196,19 +196,6 @@ struct Field {
       typeId @7 :Id;
       # The ID of the group's node.
     }
-
-    fixedList :group {
-      # A fixed list stored inline within the struct.
-
-      startOffset @10 :UInt32;
-      # Offset of the first element, measured in the same way as for slot fields.
-
-      count @11 :UInt8;
-      # Number of elements.
-
-      elementType @12 :Type;
-      # Type of each element.
-    }
   }
 
   ordinal :union {

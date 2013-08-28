@@ -85,12 +85,10 @@ struct Field {
   enum Which: uint16_t {
     SLOT,
     GROUP,
-    FIXED_LIST,
   };
   struct Slot;
   struct Group;
   struct Ordinal;
-  struct FixedList;
 };
 
 struct Field::Slot {
@@ -116,13 +114,6 @@ struct Field::Ordinal {
     IMPLICIT,
     EXPLICIT,
   };
-};
-
-struct Field::FixedList {
-  FixedList() = delete;
-
-  class Reader;
-  class Builder;
 };
 
 struct Enumerant {
@@ -295,7 +286,6 @@ extern const ::capnp::_::RawSchema s_9aad50a41f4af45f;
 extern const ::capnp::_::RawSchema s_c42305476bb4746f;
 extern const ::capnp::_::RawSchema s_cafccddb68db1d11;
 extern const ::capnp::_::RawSchema s_bb90d5c287870be6;
-extern const ::capnp::_::RawSchema s_90d100742efd7701;
 extern const ::capnp::_::RawSchema s_978a7cebdc549a4d;
 extern const ::capnp::_::RawSchema s_9500cce23b334d80;
 extern const ::capnp::_::RawSchema s_cbc0c86dae91fcf6;
@@ -346,9 +336,6 @@ CAPNP_DECLARE_STRUCT(
     3, 4, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Field::Ordinal, bb90d5c287870be6,
-    3, 4, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Field::FixedList, 90d100742efd7701,
     3, 4, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Enumerant, 978a7cebdc549a4d,
@@ -1102,10 +1089,6 @@ public:
   inline bool hasOrdinal() const;
   inline Ordinal::Reader getOrdinal() const;
 
-  inline bool isFixedList() const;
-  inline bool hasFixedList() const;
-  inline FixedList::Reader getFixedList() const;
-
 private:
   ::capnp::_::StructReader _reader;
   template <typename T, ::capnp::Kind k>
@@ -1170,11 +1153,6 @@ public:
   inline bool hasOrdinal();
   inline Ordinal::Builder getOrdinal();
   inline Ordinal::Builder initOrdinal();
-
-  inline bool isFixedList();
-  inline bool hasFixedList();
-  inline FixedList::Builder getFixedList();
-  inline FixedList::Builder initFixedList();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1393,81 +1371,6 @@ private:
 
 inline ::kj::StringTree KJ_STRINGIFY(Field::Ordinal::Builder builder) {
   return ::capnp::_::structString<Field::Ordinal>(builder._builder.asReader());
-}
-
-class Field::FixedList::Reader {
-public:
-  typedef FixedList Reads;
-
-  Reader() = default;
-  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
-
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
-  }
-
-  inline bool hasStartOffset() const;
-  inline  ::uint32_t getStartOffset() const;
-
-  inline bool hasCount() const;
-  inline  ::uint8_t getCount() const;
-
-  inline bool hasElementType() const;
-  inline  ::capnp::schema::Type::Reader getElementType() const;
-
-private:
-  ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::List;
-  friend class ::capnp::MessageBuilder;
-  friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Field::FixedList::Reader reader);
-};
-
-inline ::kj::StringTree KJ_STRINGIFY(Field::FixedList::Reader reader) {
-  return ::capnp::_::structString<Field::FixedList>(reader._reader);
-}
-
-class Field::FixedList::Builder {
-public:
-  typedef FixedList Builds;
-
-  Builder() = default;
-  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
-  inline operator Reader() const { return Reader(_builder.asReader()); }
-  inline Reader asReader() const { return *this; }
-
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
-
-  inline bool hasStartOffset();
-  inline  ::uint32_t getStartOffset();
-  inline void setStartOffset( ::uint32_t value);
-
-  inline bool hasCount();
-  inline  ::uint8_t getCount();
-  inline void setCount( ::uint8_t value);
-
-  inline bool hasElementType();
-  inline  ::capnp::schema::Type::Builder getElementType();
-  inline void setElementType( ::capnp::schema::Type::Reader value);
-  inline  ::capnp::schema::Type::Builder initElementType();
-  inline void adoptElementType(::capnp::Orphan< ::capnp::schema::Type>&& value);
-  inline ::capnp::Orphan< ::capnp::schema::Type> disownElementType();
-
-private:
-  ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-  friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Field::FixedList::Builder builder);
-};
-
-inline ::kj::StringTree KJ_STRINGIFY(Field::FixedList::Builder builder) {
-  return ::capnp::_::structString<Field::FixedList>(builder._builder.asReader());
 }
 
 class Enumerant::Reader {
@@ -3991,42 +3894,6 @@ inline Field::Ordinal::Builder Field::Builder::initOrdinal() {
   _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
   return Field::Ordinal::Builder(_builder);
 }
-inline bool Field::Reader::isFixedList() const {
-  return which() == Field::FIXED_LIST;
-}
-inline bool Field::Builder::isFixedList() {
-  return which() == Field::FIXED_LIST;
-}
-inline bool Field::Reader::hasFixedList() const {
-  if (which() != Field::FIXED_LIST) return false;
-  return _reader.getDataField< ::uint32_t>(1 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField< ::uint8_t>(16 * ::capnp::ELEMENTS) != 0
-      || !_reader.isPointerFieldNull(2 * ::capnp::POINTERS);
-}
-inline bool Field::Builder::hasFixedList() {
-  if (which() != Field::FIXED_LIST) return false;
-  return _builder.getDataField< ::uint32_t>(1 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField< ::uint8_t>(16 * ::capnp::ELEMENTS) != 0
-      || !_builder.isPointerFieldNull(2 * ::capnp::POINTERS);
-}
-inline Field::FixedList::Reader Field::Reader::getFixedList() const {
-  KJ_IREQUIRE(which() == Field::FIXED_LIST,
-              "Must check which() before get()ing a union member.");
-  return Field::FixedList::Reader(_reader);
-}
-inline Field::FixedList::Builder Field::Builder::getFixedList() {
-  KJ_IREQUIRE(which() == Field::FIXED_LIST,
-              "Must check which() before get()ing a union member.");
-  return Field::FixedList::Builder(_builder);
-}
-inline Field::FixedList::Builder Field::Builder::initFixedList() {
-  _builder.setDataField<Field::Which>(
-      4 * ::capnp::ELEMENTS, Field::FIXED_LIST);
-  _builder.setDataField< ::uint32_t>(1 * ::capnp::ELEMENTS, 0);
-  _builder.setDataField< ::uint8_t>(16 * ::capnp::ELEMENTS, 0);
-  _builder.clearPointer(2 * ::capnp::POINTERS);
-  return Field::FixedList::Builder(_builder);
-}
 inline bool Field::Slot::Reader::hasOffset() const {
   return _reader.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
 }
@@ -4208,80 +4075,6 @@ inline void Field::Ordinal::Builder::setExplicit( ::uint16_t value) {
       5 * ::capnp::ELEMENTS, Field::Ordinal::EXPLICIT);
   _builder.setDataField< ::uint16_t>(
       6 * ::capnp::ELEMENTS, value);
-}
-
-inline bool Field::FixedList::Reader::hasStartOffset() const {
-  return _reader.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Field::FixedList::Builder::hasStartOffset() {
-  return _builder.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
-}
-inline  ::uint32_t Field::FixedList::Reader::getStartOffset() const {
-  return _reader.getDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS);
-}
-
-inline  ::uint32_t Field::FixedList::Builder::getStartOffset() {
-  return _builder.getDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS);
-}
-inline void Field::FixedList::Builder::setStartOffset( ::uint32_t value) {
-  _builder.setDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS, value);
-}
-
-inline bool Field::FixedList::Reader::hasCount() const {
-  return _reader.hasDataField< ::uint8_t>(16 * ::capnp::ELEMENTS);
-}
-
-inline bool Field::FixedList::Builder::hasCount() {
-  return _builder.hasDataField< ::uint8_t>(16 * ::capnp::ELEMENTS);
-}
-inline  ::uint8_t Field::FixedList::Reader::getCount() const {
-  return _reader.getDataField< ::uint8_t>(
-      16 * ::capnp::ELEMENTS);
-}
-
-inline  ::uint8_t Field::FixedList::Builder::getCount() {
-  return _builder.getDataField< ::uint8_t>(
-      16 * ::capnp::ELEMENTS);
-}
-inline void Field::FixedList::Builder::setCount( ::uint8_t value) {
-  _builder.setDataField< ::uint8_t>(
-      16 * ::capnp::ELEMENTS, value);
-}
-
-inline bool Field::FixedList::Reader::hasElementType() const {
-  return !_reader.isPointerFieldNull(2 * ::capnp::POINTERS);
-}
-inline bool Field::FixedList::Builder::hasElementType() {
-  return !_builder.isPointerFieldNull(2 * ::capnp::POINTERS);
-}
-inline  ::capnp::schema::Type::Reader Field::FixedList::Reader::getElementType() const {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _reader, 2 * ::capnp::POINTERS);
-}
-inline  ::capnp::schema::Type::Builder Field::FixedList::Builder::getElementType() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _builder, 2 * ::capnp::POINTERS);
-}
-inline void Field::FixedList::Builder::setElementType( ::capnp::schema::Type::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
-      _builder, 2 * ::capnp::POINTERS, value);
-}
-inline  ::capnp::schema::Type::Builder Field::FixedList::Builder::initElementType() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::init(
-      _builder, 2 * ::capnp::POINTERS);
-}
-inline void Field::FixedList::Builder::adoptElementType(
-    ::capnp::Orphan< ::capnp::schema::Type>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::Type>::adopt(
-      _builder, 2 * ::capnp::POINTERS, kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::schema::Type> Field::FixedList::Builder::disownElementType() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::disown(
-      _builder, 2 * ::capnp::POINTERS);
 }
 
 inline bool Enumerant::Reader::hasName() const {
