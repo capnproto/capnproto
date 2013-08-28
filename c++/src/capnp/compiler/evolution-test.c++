@@ -167,7 +167,7 @@ static ChangeInfo declChangeName(Declaration::Builder decl, uint& nextOrdinal,
   auto name = decl.getName();
   if (name.getValue().size() == 0) {
     // Naming an unnamed union.
-    name.setValue("unUnnamed");
+    name.setValue(kj::str("unUnnamed", nextOrdinal));
     return { SUBTLY_COMPATIBLE, "Assign name to unnamed union." };
   } else {
     name.setValue(kj::str(name.getValue(), "Xx"));
