@@ -50,6 +50,9 @@ $CAPNP decode --flat $SCHEMA TestAllTypes < $TESTDATA/flat | cmp $TESTDATA/prett
 $CAPNP decode --packed $SCHEMA TestAllTypes < $TESTDATA/packed | cmp $TESTDATA/pretty.txt || fail decode packed
 $CAPNP decode --short $SCHEMA TestAllTypes < $TESTDATA/binary | cmp $TESTDATA/short.txt || fail decode short
 
+$CAPNP decode $SCHEMA TestAllTypes < $TESTDATA/segmented | cmp $TESTDATA/pretty.txt || fail decode segmented
+$CAPNP decode --packed $SCHEMA TestAllTypes < $TESTDATA/segmented-packed | cmp $TESTDATA/pretty.txt || fail decode segmented-packed
+
 test_eval() {
   test "x$($CAPNP eval $SCHEMA $1)" = "x$2" || fail eval "$1 == $2"
 }
