@@ -57,7 +57,7 @@ uint64_t generateChildId(uint64_t parentId, kj::StringPtr childName) {
   }
 
   Md5 md5;
-  md5.update(kj::arrayPtr(parentIdBytes, KJ_ARRAY_SIZE(parentIdBytes)));
+  md5.update(kj::arrayPtr(parentIdBytes, kj::size(parentIdBytes)));
   md5.update(childName);
 
   kj::ArrayPtr<const kj::byte> resultBytes = md5.finish();

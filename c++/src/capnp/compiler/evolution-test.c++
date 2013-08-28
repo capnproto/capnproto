@@ -749,7 +749,7 @@ void doTest() {
     auto file = parsedFile.initRoot();
     file.setFile();
     file.initId().initUid().setValue(0x8123456789abcdefllu);
-    auto decls = file.initNestedDecls(3 + KJ_ARRAY_SIZE(TYPE_OPTIONS));
+    auto decls = file.initNestedDecls(3 + kj::size(TYPE_OPTIONS));
 
     {
       auto decl = decls[0];
@@ -775,7 +775,7 @@ void doTest() {
 
       auto enumerants = decl.initNestedDecls(4);
 
-      for (uint i = 0; i < KJ_ARRAY_SIZE(RFC3092); i++) {
+      for (uint i = 0; i < kj::size(RFC3092); i++) {
         auto enumerantDecl = enumerants[i];
         enumerantDecl.initName().setValue(RFC3092[i]);
         enumerantDecl.getId().initOrdinal().setValue(i);
@@ -784,7 +784,7 @@ void doTest() {
     }
 
     // For each of TYPE_OPTIONS, declare a struct type that contains that type as its @0 field.
-    for (uint i = 0; i < KJ_ARRAY_SIZE(TYPE_OPTIONS); i++) {
+    for (uint i = 0; i < kj::size(TYPE_OPTIONS); i++) {
       auto decl = decls[3 + i];
       auto& option = TYPE_OPTIONS[i];
 

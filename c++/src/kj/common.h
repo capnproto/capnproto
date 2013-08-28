@@ -198,8 +198,6 @@ void unreachable() KJ_NORETURN;
       kj::arrayPtr(name##_stack, name##_size) : name##_heap
 #endif
 
-#define KJ_ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
-
 #define KJ_CONCAT_(x, y) x##y
 #define KJ_CONCAT(x, y) KJ_CONCAT_(x, y)
 #define KJ_UNIQUE_NAME(prefix) KJ_CONCAT(prefix, __LINE__)
@@ -337,6 +335,13 @@ inline constexpr auto min(T&& a, U&& b) -> decltype(a < b ? a : b) { return a < 
 template <typename T, typename U>
 inline constexpr auto max(T&& a, U&& b) -> decltype(a > b ? a : b) { return a > b ? a : b; }
 
+template <typename T, size_t s>
+inline constexpr size_t size(T (&arr)[s]) { return s; }
+template <typename T>
+inline constexpr size_t size(T&& arr) { return arr.size(); }
+// Returns the size of the parameter, whether the parameter is a regular C array or a container
+// with a `.size()` method.
+
 // =======================================================================================
 // Useful fake containers
 
@@ -384,12 +389,21 @@ private:
 };
 
 template <typename T>
-inline constexpr Range<Decay<T>> range(T&& begin, T&& end) { return Range<Decay<T>>(begin, end); }
+inline constexpr Range<Decay<T>> range(T begin, T end) { return Range<Decay<T>>(begin, end); }
 // Returns a fake iterable container containing all values of T from `begin` (inclusive) to `end`
 // (exclusive).  Example:
 //
 //     // Prints 1, 2, 3, 4, 5, 6, 7, 8, 9.
 //     for (int i: kj::range(1, 10)) { print(i); }
+
+template <typename T>
+inline constexpr Range<size_t> indices(T&& container) {
+  // Shortcut for iterating over the indices of a container:
+  //
+  //     for (size_t i: kj::indices(myArray)) { handle(myArray[i]); }
+
+  return range<size_t>(0, kj::size(container));
+}
 
 template <typename T>
 class Repeat {

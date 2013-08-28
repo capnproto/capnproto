@@ -27,6 +27,16 @@
 namespace kj {
 namespace {
 
+TEST(Common, Size) {
+  int arr[] = {12, 34, 56, 78};
+
+  size_t expected = 0;
+  for (size_t i: indices(arr)) {
+    EXPECT_EQ(expected++, i);
+  }
+  EXPECT_EQ(4, expected);
+}
+
 TEST(Common, Maybe) {
   {
     Maybe<int> m = 123;

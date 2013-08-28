@@ -75,7 +75,7 @@ public:
       // remove it from the holes, and return its offset (as a multiple of its size).  If there
       // is no such space, returns zero (no hole can be at offset zero, as explained above).
 
-      if (lgSize >= KJ_ARRAY_SIZE(holes)) {
+      if (lgSize >= kj::size(holes)) {
         return nullptr;
       } else if (holes[lgSize] != 0) {
         UIntType result = holes[lgSize];
@@ -100,12 +100,12 @@ public:
     }
 
     void addHolesAtEnd(UIntType lgSize, UIntType offset,
-                       UIntType limitLgSize = KJ_ARRAY_SIZE(holes)) {
+                       UIntType limitLgSize = sizeof(holes) / sizeof(holes[0])) {
       // Add new holes of progressively larger sizes in the range [lgSize, limitLgSize) starting
       // from the given offset.  The idea is that you just allocated an lgSize-sized field from
       // an limitLgSize-sized space, such as a newly-added word on the end of the data segment.
 
-      KJ_DREQUIRE(limitLgSize <= KJ_ARRAY_SIZE(holes));
+      KJ_DREQUIRE(limitLgSize <= kj::size(holes));
 
       while (lgSize < limitLgSize) {
         KJ_DREQUIRE(holes[lgSize] == 0);
@@ -144,7 +144,7 @@ public:
     kj::Maybe<uint> smallestAtLeast(uint size) {
       // Return the size of the smallest hole that is equal to or larger than the given size.
 
-      for (uint i = size; i < KJ_ARRAY_SIZE(holes); i++) {
+      for (uint i = size; i < kj::size(holes); i++) {
         if (holes[i] != 0) {
           return i;
         }
@@ -158,7 +158,7 @@ public:
       // If there is a 32-bit hole with a 32-bit offset, no more than the first 32 bits are used.
       // If no more than the first 32 bits are used, and there is a 16-bit hole with a 16-bit
       // offset, then no more than the first 16 bits are used.  And so on.
-      for (uint i = KJ_ARRAY_SIZE(holes); i > 0; i--) {
+      for (uint i = kj::size(holes); i > 0; i--) {
         if (holes[i - 1] != 1) {
           return i;
         }

@@ -82,7 +82,7 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
 
   char line[512];
   size_t i = 0;
-  while (i < KJ_ARRAY_SIZE(lines) && fgets(line, sizeof(line), p) != nullptr) {
+  while (i < kj::size(lines) && fgets(line, sizeof(line), p) != nullptr) {
     // Don't include exception-handling infrastructure in stack trace.
     if (i == 0 &&
         (strstr(line, "kj/common.c++") != nullptr ||
