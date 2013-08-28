@@ -52,12 +52,7 @@ protected:
 
 constexpr MmapDisposer mmapDisposer = MmapDisposer();
 
-kj::Array<const char> mmapForRead(kj::StringPtr filename) {
-  int fd;
-  // We already established that the file exists, so this should not fail.
-  KJ_SYSCALL(fd = open(filename.cStr(), O_RDONLY), filename);
-  kj::AutoCloseFd closer(fd);
-
+kj::Array<const char> mmapForRead(kj::StringPtr filename, int fd) {
   struct stat stats;
   KJ_SYSCALL(fstat(fd, &stats));
 
@@ -86,6 +81,19 @@ kj::Array<const char> mmapForRead(kj::StringPtr filename) {
     return data.releaseAsArray();
   }
 }
+
+kj::Array<const char> mmapForRead(kj::StringPtr filename) {
+  if (filename == "(stdin)")
+    return mmapForRead(filename, STDIN_FILENO);
+
+  int fd;
+  // We already established that the file exists, so this should not fail.
+  KJ_SYSCALL(fd = open(filename.cStr(), O_RDONLY), filename);
+  kj::AutoCloseFd closer(fd);
+
+  return mmapForRead(filename, fd);
+}
+
 
 static char* canonicalizePath(char* path) {
   // Taken from some old C code of mine.
@@ -283,7 +291,8 @@ kj::Maybe<const Module&> ModuleLoader::Impl::loadModule(
     return *iter->second;
   }
 
-  if (access(canonicalLocalName.cStr(), F_OK) < 0) {
+  if (canonicalLocalName != "(stdin)"
+      && access(canonicalLocalName.cStr(), F_OK) < 0) {
     // No such file.
     return nullptr;
   }

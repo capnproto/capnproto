@@ -400,6 +400,8 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
           }
         }
       }
+    } else if (param == "-") {
+      arguments.add(param);
     } else if (param.startsWith("-")) {
       // Short option(s).
       for (uint j = 1; j < param.size(); j++) {
