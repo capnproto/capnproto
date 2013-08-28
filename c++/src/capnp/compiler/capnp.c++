@@ -643,10 +643,22 @@ private:
     return p == PLAUSIBLE || p == WRONG_TYPE;
   }
 
-  Plausibility isPlausiblyFlat(kj::ArrayPtr<const byte> prefix) {
+  Plausibility isPlausiblyFlat(kj::ArrayPtr<const byte> prefix, uint segmentCount = 1) {
     if (prefix.size() < 8) {
       // Not enough prefix to say.
       return PLAUSIBLE;
+    }
+
+    if ((prefix[0] & 3) == 2) {
+      // Far pointer.  Verify the segment ID.
+      uint32_t segmentId = prefix[4] | (prefix[5] << 8)
+                         | (prefix[6] << 16) | (prefix[7] << 24);
+      if (segmentId == 0 || segmentId >= segmentCount) {
+        KJ_DBG(segmentId, segmentCount);
+        return IMPOSSIBLE;
+      } else {
+        return PLAUSIBLE;
+      }
     }
 
     if ((prefix[0] & 3) != 0) {
@@ -700,6 +712,9 @@ private:
     uint32_t segmentCount = prefix[0] | (prefix[1] << 8)
                           | (prefix[2] << 16) | (prefix[3] << 24);
 
+    // Actually, the bytes store segmentCount - 1.
+    ++segmentCount;
+
     if (segmentCount > 65536) {
       // While technically possible, this is so implausible that we should mark it impossible.
       // This helps to make sure we fail fast on packed input.
@@ -709,8 +724,8 @@ private:
       return IMPLAUSIBLE;
     }
 
-    uint32_t segment0Size = prefix[5] | (prefix[6] << 8)
-                          | (prefix[7] << 16) | (prefix[8] << 24);
+    uint32_t segment0Size = prefix[4] | (prefix[5] << 8)
+                          | (prefix[6] << 16) | (prefix[7] << 24);
 
     if (segment0Size > (1 << 27)) {
       // Segment larger than 1G seems implausible.
@@ -728,7 +743,7 @@ private:
       return PLAUSIBLE;
     }
 
-    return isPlausiblyFlat(prefix.slice(segment0Offset, prefix.size()));
+    return isPlausiblyFlat(prefix.slice(segment0Offset, prefix.size()), segmentCount);
   }
 
   Plausibility isPlausiblyPacked(kj::ArrayPtr<const byte> prefix) {
