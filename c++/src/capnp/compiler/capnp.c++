@@ -275,6 +275,9 @@ public:
 
 private:
   kj::Maybe<const Module&> loadModule(kj::StringPtr file) {
+    if (file == "-")
+      return loader.loadModule("(stdin)", "stdin");
+
     size_t longestPrefix = 0;
 
     for (auto& prefix: sourcePrefixes) {
