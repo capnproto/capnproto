@@ -22,7 +22,7 @@ function initSidebar() {
       var y = (window.pageYOffset !== undefined) ? window.pageYOffset :
         (document.documentElement || document.body.parentNode || document.body).scrollTop;
 
-      if (y < 410 || window.innerHeight < menu.clientHeight + 100) {
+      if (y < 444 || window.innerHeight < menu.clientHeight + 100) {
         menu.className = "";
       } else {
         menu.className = "floating";

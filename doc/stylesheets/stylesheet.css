@@ -542,7 +542,7 @@ body.wide #corner_hack>div, body.normal #corner_hack>div {
 body.wide #menu, body.normal #menu {
   position: absolute;
   left: 50px;
-  top: 460px;
+  top: 494px;
   width: 250px;
   z-index: 10;
 }
