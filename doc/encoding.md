@@ -316,13 +316,35 @@ In addition to the above, there are two tag values which are treated specially: 
 * 0x00:  The tag is followed by a single byte which indicates a count of consecutive zero-valued
   words, minus 1.  E.g. if the tag 0x00 is followed by 0x05, the sequence unpacks to 6 words of
   zero.
-* 0xff:  The tag is followed by the bytes of the word as described above, but after those bytes is
-  another byte with value N.  Following that byte is N unpacked words that should be copied
+
+  Or, put another way: the tag is first decoded as if it were not special.  Since none of the bits
+  are set, it is followed by no bytes and expands to a word full of zeros.  After that, the next
+  byte is interpreted as a count of _additional_ words that are also all-zero.
+
+* 0xff:  The tag is followed by the bytes of the word (as if it weren't special), but after those
+  bytes is another byte with value N.  Following that byte is N unpacked words that should be copied
   directly.  These unpacked words may or may not contain zeros -- it is up to the compressor to
   decide when to end the unpacked span and return to packing each word.  The purpose of this rule
   is to minimize the impact of packing on data that doesn't contain any zeros -- in particular,
   long text blobs.  Because of this rule, the worst-case space overhead of packing is 2 bytes per
   2 KiB of input (256 words = 2KiB).
+
+Examples:
+
+    unpacked (hex):  00 (x 32 bytes)
+    packed (hex):  00 03
+
+    unpacked (hex):  8a (x 32 bytes)
+    packed (hex):  ff 8a (x 8 bytes) 03 8a (x 24 bytes)
+
+Notice that both of the special cases begin by treating the tag as if it weren't special.  This
+is intentionally designed to make encoding faster:  you can compute the tag value and encode the
+bytes in a single pass through the input word.  Only after you've finished with that word do you
+need to check whether the tag ended up being 0x00 or 0xff.
+
+It is possible to write both an encoder and a decoder which only branch at the end of each word,
+and only to handle the two special tags.  It is not necessary to branch on every byte.  See the
+C++ reference implementation for an example.
 
 Packing is normally applied on top of the standard stream framing described in the previous
 section.

@@ -101,11 +101,12 @@ cd capnproto-c++-0.2.1
 make -j6 check
 sudo make install</code></pre>
 
-This will install `capnp`, the Cap'n Proto command-line tool.  It will also install `libcapnp` in
-`/usr/local/lib` and headers in `/usr/local/include/capnp` and `/usr/local/include/kj`.
+This will install `capnp`, the Cap'n Proto command-line tool.  It will also install `libcapnp`,
+`libcapnpc`, and `libkj` in `/usr/local/lib` and headers in `/usr/local/include/capnp` and
+`/usr/local/include/kj`.
 
-On Linux, if running `capnp` immediately after installation produces an error saying that the
-`libcapnp` library does not exist, run `sudo ldconfig` and try again.
+On Linux, if running `capnp` immediately after installation produces an error complaining about
+missing libraries, run `sudo ldconfig` and try again.
 
 ### Building from Git with Autotools
 

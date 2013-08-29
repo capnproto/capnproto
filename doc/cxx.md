@@ -162,6 +162,9 @@ together -- KJ is simply the stuff which is not specific to Cap'n Proto serializ
 useful to others independently of Cap'n Proto.  For now, the the two are distributed together.  The
 name "KJ" has no particular meaning; it was chosen to be short and easy-to-type.
 
+As of v0.3, KJ is distributed with Cap'n Proto but built as a separate library.  You may need
+to explicitly link against libraries:  `-lcapnp -lkj`
+
 ## Generating Code
 
 To generate C++ code from your `.capnp` [interface definition](language.html), run:
@@ -169,6 +172,8 @@ To generate C++ code from your `.capnp` [interface definition](language.html), r
     capnp compile -oc++ myproto.capnp
 
 This will create `myproto.capnp.h` and `myproto.capnp.c++` in the same directory as `myproto.capnp`.
+
+To use this code in your app, you must link against both `libcapnp` and `libkj`.
 
 ### Setting a Namespace
 
@@ -278,14 +283,26 @@ void setMyListField(::capnp::List<double>::Reader value);
 ::capnp::List<double>::Builder initMyListField(size_t size);
 {% endhighlight %}
 
+### Groups
+
+Groups look a lot like a combination of a nested type and a field of that type, except that you
+cannot set, adopt, or disown a group -- you can only get and init it.
+
 ### Unions
 
-For each union `foo` declared in the struct, the struct's reader and builder have a method
-`getFoo()` which returns a reader/builder for the union.  The union reader/builder has accessors
-for each field exactly like a struct's accessors.  It also has an accessor `which()` which returns
-an enum indicating which member of the union is currently set.  Setting any member of the union
-updates the value returned by `which()`.  Getting a member other than the currently-set member
-crashes in debug mode or returns garbage when `NDEBUG` is defined.
+A named union (as opposed to an unnamed one) works just like a group, except with some additions:
+
+* For each field `foo`, the union reader and builder have a method `isFoo()` which returns true
+  if `foo` is the currently-set field in the union.
+* The union reader and builder also have a method `which()` that returns an enum value indicating
+  which field is currently set.
+* Calling the set, init, or adopt accessors for a field makes it the currently-set field.
+* Calling the get or disown accessors on a field that isn't currently set will throw an
+  exception in debug mode or return garbage when `NDEBUG` is defined.
+
+Unnamed unions differ from named unions only in that the accessor methods from the union's members
+are added directly to the containing type's reader and builder, rather than generating a nested
+type.
 
 See the [example](#example_usage) at the top of the page for an example of unions.
 
@@ -336,6 +353,12 @@ again, just containers for inner classes `Reader` and `Builder`.  These classes 
 implement `size()` and `operator[]` methods.  `Builder::operator[]` even returns a reference
 (unlike with `List<T>`).  `Text::Reader` additionally has a method `cStr()` which returns a
 NUL-terminated `const char*`.
+
+As a special convenience, if you are using GCC 4.8+ or Clang, `Text::Reader` (and its underlying
+type, `kj::StringPtr`) can be implicitly converted to and from `std::string` format.  This is
+accomplished without actually `#include`ing `<string>`, since some clients do not want to rely
+on this rather-bulky header.  In fact, any class which defines a `.c_str()` method will be
+implicitly convertible in this way.  Unfortunately, this trick doesn't work on GCC 4.7.
 
 ### Interfaces
 
@@ -543,6 +566,11 @@ Notes about the dynamic API:
   use the Dynamic API to manipulate objects of these types.  `MessageBuilder` and `MessageReader`
   have methods for accessing the message root using a dynamic schema.
 
+* While `SchemaLoader` loads binary schemas, you can also parse directly from text using
+  `SchemaParser` (`capnp/schema-parser.h`).  However, this requires linking against `libcapnpc`
+  (in addition to `libcapnp` and `libkj`) -- this code is bulky and not terribly efficient.  If
+  you can arrange to use only binary schemas at runtime, you'll be better off.
+
 * Unlike with Protobufs, there is no "global registry" of compiled-in types.  To get the schema
   for a compiled-in type, use `capnp::Schema::from<MyType>()`.
 
@@ -551,6 +579,14 @@ Notes about the dynamic API:
   and the runtime library support code is relatively small.  Moreover, if you do not use the
   dynamic API or the schema API, you do not even need to link their implementations into your
   executable.
+
+* The dynamic API performs type checks at runtime.  In case of error, it will throw an exception.
+  If you compile with `-fno-exceptions`, it will crash instead.  Correct usage of the API should
+  never throw, but bugs happen.  Enabling and catching exceptions will make your code more robust.
+
+* Loading user-provided schemas has security implications: it greatly increases the attack
+  surface of the Cap'n Proto library.  In particular, it is easy for an attacker to trigger
+  exceptions.  To protect yourself, you are strongly advised to enable exceptions and catch them.
 
 ## Orphans
 

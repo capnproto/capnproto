@@ -87,7 +87,14 @@ support Cap'n Proto in a dynamic language, then, is to wrap the C++ library, in 
 [C++ dynamic API](cxx.html#dynamic_reflection).  This way you get reasonable performance while
 still avoiding the need to generate any code specific to each schema.
 
-Of course, you still need to parse the schema.  Version 0.3 of Cap'n Proto will introduce a public
-C++ API to the schema parser which your bindings can invoke.  By the time you read this, the API
-is probably already available at git head, or will be within a few days;
-[send us a note](https://groups.google.com/group/capnproto) if you want to try it out.
+To parse the schema files, use the `capnp::SchemaParser` class (defined in `capnp/schema-parser.h`).
+This way, schemas are loaded at the same time as all the rest of the program's code -- at startup.
+An advanced implementation might consider caching the compiled schemas in binary format, then
+loading the cached version using `capnp::SchemaLoader`, similar to the way e.g. Python caches
+compiled source files as `.pyc` bytecode, but that's up to you.
+
+### Testing Your Implementation
+
+The easiest way to test that you've implemented the spec correctly is to use the `capnp` tool
+to [encode](http://localhost:4000/capnproto/capnp-tool.html#encoding_messages) test inputs and
+[decode](http://localhost:4000/capnproto/capnp-tool.html#decoding_messages) outputs.
