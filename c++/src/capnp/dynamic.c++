@@ -1608,9 +1608,7 @@ ReaderFor<typeName> DynamicValue::Reader::AsImpl<typeName>::apply(const Reader& 
   return reader.name##Value; \
 } \
 BuilderFor<typeName> DynamicValue::Builder::AsImpl<typeName>::apply(Builder& builder) { \
-  KJ_REQUIRE(builder.type == discrim, "Value type mismatch.") { \
-    return BuilderFor<typeName>(); \
-  } \
+  KJ_REQUIRE(builder.type == discrim, "Value type mismatch."); \
   return builder.name##Value; \
 }
 

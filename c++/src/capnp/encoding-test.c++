@@ -94,6 +94,8 @@ TEST(Encoding, Defaults) {
 
   checkTestMessage(reader.getRoot<TestDefaults>());
   checkTestMessage(readMessageUnchecked<TestDefaults>(nullRoot.words));
+
+  checkTestMessage(TestDefaults::Reader());
 }
 
 TEST(Encoding, DefaultInitialization) {

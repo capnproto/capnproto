@@ -1031,7 +1031,7 @@ private:
                       StructLayout::StructOrGroup& fieldScope,
                       bool isInUnion)
         : parent(&parent), codeOrder(codeOrder), isInUnion(isInUnion),
-          decl(decl), fieldScope(&fieldScope) {}
+          decl(decl), node(nullptr), fieldScope(&fieldScope) {}
     inline MemberInfo(MemberInfo& parent, uint codeOrder,
                       const Declaration::Reader& decl,
                       schema::Node::Builder node,

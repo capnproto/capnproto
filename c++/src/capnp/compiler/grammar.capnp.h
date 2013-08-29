@@ -400,7 +400,9 @@ class LocatedText::Builder {
 public:
   typedef LocatedText Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -475,7 +477,9 @@ class LocatedInteger::Builder {
 public:
   typedef LocatedInteger Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -547,7 +551,9 @@ class LocatedFloat::Builder {
 public:
   typedef LocatedFloat Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -622,7 +628,9 @@ class DeclName::Builder {
 public:
   typedef DeclName Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -705,7 +713,9 @@ class DeclName::Base::Builder {
 public:
   typedef Base Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -793,7 +803,9 @@ class TypeExpression::Builder {
 public:
   typedef TypeExpression Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -905,7 +917,9 @@ class ValueExpression::Builder {
 public:
   typedef ValueExpression Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -1023,7 +1037,9 @@ class ValueExpression::FieldAssignment::Builder {
 public:
   typedef FieldAssignment Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -1230,7 +1246,9 @@ class Declaration::Builder {
 public:
   typedef Declaration Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -1484,7 +1502,9 @@ class Declaration::AnnotationApplication::Builder {
 public:
   typedef AnnotationApplication Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -1555,7 +1575,9 @@ class Declaration::AnnotationApplication::Value::Builder {
 public:
   typedef Value Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -1632,7 +1654,9 @@ class Declaration::Param::Builder {
 public:
   typedef Param Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -1717,7 +1741,9 @@ class Declaration::Param::DefaultValue::Builder {
 public:
   typedef DefaultValue Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -1795,7 +1821,9 @@ class Declaration::Id::Builder {
 public:
   typedef Id Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -1871,7 +1899,9 @@ class Declaration::Using::Builder {
 public:
   typedef Using Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -1935,7 +1965,9 @@ class Declaration::Const::Builder {
 public:
   typedef Const Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -2006,7 +2038,9 @@ class Declaration::Field::Builder {
 public:
   typedef Field Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -2077,7 +2111,9 @@ class Declaration::Field::DefaultValue::Builder {
 public:
   typedef DefaultValue Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -2148,7 +2184,9 @@ class Declaration::Method::Builder {
 public:
   typedef Method Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -2219,7 +2257,9 @@ class Declaration::Method::ReturnType::Builder {
 public:
   typedef ReturnType Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -2323,7 +2363,9 @@ class Declaration::Annotation::Builder {
 public:
   typedef Annotation Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -2432,7 +2474,9 @@ class ParsedFile::Builder {
 public:
   typedef ParsedFile Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }

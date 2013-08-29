@@ -134,7 +134,8 @@ struct List<T, Kind::PRIMITIVE> {
   public:
     typedef List<T> Builds;
 
-    Builder() = default;
+    Builder() = delete;
+    inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
     inline operator Reader() { return Reader(builder.asReader()); }
@@ -241,7 +242,8 @@ struct List<T, Kind::STRUCT> {
   public:
     typedef List<T> Builds;
 
-    Builder() = default;
+    Builder() = delete;
+    inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
     inline operator Reader() { return Reader(builder.asReader()); }
@@ -371,7 +373,8 @@ struct List<List<T>, Kind::LIST> {
   public:
     typedef List<List<T>> Builds;
 
-    Builder() = default;
+    Builder() = delete;
+    inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
     inline operator Reader() { return Reader(builder.asReader()); }
@@ -488,7 +491,8 @@ struct List<T, Kind::BLOB> {
   public:
     typedef List<T> Builds;
 
-    Builder() = default;
+    Builder() = delete;
+    inline Builder(decltype(nullptr)) {}
     inline explicit Builder(_::ListBuilder builder): builder(builder) {}
 
     inline operator Reader() { return Reader(builder.asReader()); }

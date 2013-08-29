@@ -187,7 +187,8 @@ class DynamicObject::Builder: public kj::DisallowConstCopy {
 public:
   typedef DynamicObject Builds;
 
-  Builder() = default;
+  Builder() = delete;
+  inline Builder(decltype(nullptr)) {}
   Builder(Builder&) = default;
   Builder(Builder&&) = default;
 
@@ -276,7 +277,8 @@ class DynamicStruct::Builder {
 public:
   typedef DynamicStruct Builds;
 
-  Builder() = default;
+  Builder() = delete;
+  inline Builder(decltype(nullptr)) {}
 
   template <typename T, typename = kj::EnableIf<kind<FromBuilder<T>>() == Kind::STRUCT>>
   inline Builder(T&& value): Builder(toDynamic(value)) {}
@@ -428,7 +430,8 @@ class DynamicList::Builder {
 public:
   typedef DynamicList Builds;
 
-  Builder() = default;
+  Builder() = delete;
+  inline Builder(decltype(nullptr)) {}
 
   template <typename T, typename = kj::EnableIf<kind<FromBuilder<T>>() == Kind::LIST>>
   inline Builder(T&& value): Builder(toDynamic(value)) {}

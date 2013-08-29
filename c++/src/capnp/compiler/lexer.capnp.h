@@ -159,7 +159,9 @@ class Token::Builder {
 public:
   typedef Token Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -292,7 +294,9 @@ class Statement::Builder {
 public:
   typedef Statement Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -382,7 +386,9 @@ class LexedTokens::Builder {
 public:
   typedef LexedTokens Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
@@ -443,7 +449,9 @@ class LexedStatements::Builder {
 public:
   typedef LexedStatements Builds;
 
-  Builder() = default;
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
   inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
