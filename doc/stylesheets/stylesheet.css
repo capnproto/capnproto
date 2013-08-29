@@ -177,6 +177,10 @@ pre, code {
   -webkit-border-radius: 2px;
 }
 
+h1>code {
+	font-size: 30px;
+}
+
 pre {
   width: -moz-calc(100% - 20px);
   width: -webkit-calc(100% - 20px);

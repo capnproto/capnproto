@@ -267,12 +267,29 @@ reference to an object inherently represents a "capability" to access it.
 ### Constants
 
 You can define constants in Cap'n Proto.  These don't affect what is sent on the wire, but they
-will be included in the generated code.
+will be included in the generated code, and can be [evaluated using the `capnp`
+tool](http://localhost:4000/capnproto/capnp-tool.html#evaluating_constants).
 
 {% highlight capnp %}
 const pi :Float32 = 3.14159;
 const bob :Person = (name = "Bob", email = "bob@example.com");
 {% endhighlight %}
+
+Additionally, you may refer to a constant inside another value (e.g. another constant, or a default
+value of a field).
+
+{% highlight capnp %}
+const foo :Int32 = 123;
+const bar :Text = "Hello";
+const baz :SomeStruct = (id = .foo, message = .bar);
+{% endhighlight %}
+
+Note that when substituting a constant into another value, the constant's name must be qualified
+with its scope.  E.g. if a constant `qux` is declared nested in a type `Corge`, it would need to
+be referenced as `Corge.qux` rather than just `qux`, even when used within the `Corge` scope.
+Constants declared at the top-level scope are prefixed just with `.`.  This rule helps to make it
+clear that the name refers to a user-defined constant, rather than a literal value (like `true` or
+`inf`) or an enum value.
 
 ### Nesting, Scope, and Aliases
 

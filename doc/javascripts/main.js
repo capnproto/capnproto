@@ -40,9 +40,14 @@ function initSidebar() {
     var href = link.href;
     if (href.lastIndexOf(filename) >= 0) {
       var parent = link.parentNode;
-      parent.removeChild(link);
       var p = document.createElement("p");
-      p.appendChild(document.createTextNode(link.innerText || link.textContent));
+
+      while (link.childNodes.length > 0) {
+        var child = link.childNodes[0];
+        link.removeChild(child);
+        p.appendChild(child);
+      }
+      parent.removeChild(link);
       p.onclick = (function(url) {
         return function(event) {
           window.location.href = url;

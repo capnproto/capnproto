@@ -321,7 +321,7 @@ the enum's values are scoped within the type.  E.g. for an enum `Foo` with value
 refer to the value as `Foo::BAR`.
 
 To match prevaling C++ style, an enum's value names are converted to UPPERCASE_WITH_UNDERSCORES
-(whereas in the definition language you'd write them in camelCase).
+(whereas in the schema language you'd write them in camelCase).
 
 Keep in mind when writing `switch` blocks that an enum read off the wire may have a numeric
 value that is not listed in its definition.  This may be the case if the sender is using a newer
@@ -343,7 +343,11 @@ Interfaces (RPC) are not yet implemented at this time.
 
 ### Constants
 
-Constants are not yet implemented at this time.  (They are not hard, but they are low-priority.)
+Constants are exposed with their names converted to UPPERCASE_WITH_UNDERSCORES naming style
+(whereas in the schema language you’d write them in camelCase).  Primitive constants are just
+`constexpr` values.  Pointer-type constants (e.g. structs, lists, and blobs) are represented
+using a proxy object that can be converted to the relevant `Reader` type, either implicitly or
+using the unary `*` or `->` operators.
 
 ## Messages and I/O
 
