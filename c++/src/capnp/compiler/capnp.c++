@@ -122,10 +122,13 @@ public:
     addGlobalOptions(builder);
     builder.addOption({"flat"}, KJ_BIND_METHOD(*this, codeFlat),
                       "Interpret the input as one large single-segment message rather than a "
-                      "stream in standard serialization format.")
+                      "stream in standard serialization format.  (Rarely used.)")
            .addOption({'p', "packed"}, KJ_BIND_METHOD(*this, codePacked),
                       "Expect the input to be packed using standard Cap'n Proto packing, which "
-                      "deflates zero-valued bytes.")
+                      "deflates zero-valued bytes.  (This reads messages written with "
+                      "capnp::writePackedMessage*() from <capnp/serialize-packed.h>.  Do not use "
+                      "this for messages written with capnp::writeMessage*() from "
+                      "<capnp/serialize.h>.)")
            .addOption({"short"}, KJ_BIND_METHOD(*this, printShort),
                       "Print in short (non-pretty) format.  Each message will be printed on one "
                       "line, without using whitespace to improve readability.")
@@ -164,7 +167,9 @@ public:
                       "with no framing.")
            .addOption({'p', "packed"}, KJ_BIND_METHOD(*this, codePacked),
                       "Pack the output message with standard Cap'n Proto packing, which "
-                      "deflates zero-valued bytes.")
+                      "deflates zero-valued bytes.  (This writes messages using "
+                      "capnp::writePackedMessage() from <capnp/serialize-packed.h>.  Without "
+                      "this, capnp::writeMessage() from <capnp/serialize.h> is used.)")
            .addOptionWithArg({"segment-size"}, KJ_BIND_METHOD(*this, setSegmentSize), "<n>",
                              "Sets the preferred segment size on the MallocMessageBuilder to <n> "
                              "words and turns off heuristic growth.  This flag is mainly useful "
@@ -202,12 +207,15 @@ public:
     addGlobalOptions(builder);
     builder.addOption({'b', "binary"}, KJ_BIND_METHOD(*this, codeBinary),
                       "Write the output as binary instead of text, using standard Cap'n Proto "
-                      "serialization.")
+                      "serialization.  (This writes the message using capnp::writeMessage() "
+                      "from <capnp/serialize.h>.)")
            .addOption({"flat"}, KJ_BIND_METHOD(*this, codeFlat),
                       "Write the output as a flat single-segment binary message, with no framing.")
            .addOption({'p', "packed"}, KJ_BIND_METHOD(*this, codePacked),
                       "Write the output as packed binary instead of text, using standard Cap'n "
-                      "Proto packing, which deflates zero-valued bytes.")
+                      "Proto packing, which deflates zero-valued bytes.  (This writes the "
+                      "message using capnp::writePackedMessage() from "
+                      "<capnp/serialize-packed.h>.)")
            .addOption({"short"}, KJ_BIND_METHOD(*this, printShort),
                       "Print in short (non-pretty) text format.  The message will be printed on "
                       "one line, without using whitespace to improve readability.")
