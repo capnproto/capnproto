@@ -50,7 +50,45 @@ variable `CXX=clang++` before following any instructions below, otherwise `g++` 
 This package is officially tested on Linux (GCC 4.7, Clang 3.2), Mac OSX (Clang 3.2), and Cygwin
 (Windows; GCC 4.7), in 32-bit and 64-bit modes.
 
-##### Clang 3.2 on Mac OSX
+**Mac OSX users:**  Don't miss the [special instructions for OSX](#clang_32_on_mac_osx).
+
+### Building from a release package
+
+You may download and install the release version of Cap'n Proto like so:
+
+<pre><code>curl -O <a href="http://capnproto.org/capnproto-c++-0.2.1.tar.gz">http://capnproto.org/capnproto-c++-0.2.1.tar.gz</a>
+tar zxf capnproto-c++-0.2.1.tar.gz
+cd capnproto-c++-0.2.1
+./configure
+make -j6 check
+sudo make install</code></pre>
+
+This will install `capnp`, the Cap'n Proto command-line tool.  It will also install `libcapnp`,
+`libcapnpc`, and `libkj` in `/usr/local/lib` and headers in `/usr/local/include/capnp` and
+`/usr/local/include/kj`.
+
+On Linux, if running `capnp` immediately after installation produces an error complaining about
+missing libraries, run `sudo ldconfig` and try again.
+
+### Building from Git with Autotools
+
+If you download directly from Git, and you don't want to
+[build with Ekam](install.html#building_with_ekam), you will need to have the GNU autotools --
+[autoconf](http://www.gnu.org/software/autoconf/),
+[automake](http://www.gnu.org/software/automake/), and
+[libtool](http://www.gnu.org/software/libtool/) -- installed.  You will also need Subversion
+installed (in addition to Git) in order to fetch the Google Test sources (done by
+`setup-autotools.sh`).
+
+    git clone https://github.com/kentonv/capnproto.git
+    cd capnproto/c++
+    ./setup-autotools.sh
+    autoreconf -i
+    ./configure
+    make -j6 check
+    sudo make install
+
+### Clang 3.2 on Mac OSX
 
 As of this writing, Mac OSX 10.8 with Xcode 4.6 command-line tools is not quite good enough to
 compile Cap'n Proto.  The included version of GCC is ancient.  The included version of Clang --
@@ -89,42 +127,6 @@ newly-downloaded Clang binary:
     ./configure CXX=$HOME/clang-3.2/bin/clang++
 
 Hopefully, Xcode 5.0 will be released soon with a newer Clang, making this extra work unnecessary.
-
-### Building from a release package
-
-You may download and install the release version of Cap'n Proto like so:
-
-<pre><code>curl -O <a href="http://capnproto.org/capnproto-c++-0.2.1.tar.gz">http://capnproto.org/capnproto-c++-0.2.1.tar.gz</a>
-tar zxf capnproto-c++-0.2.1.tar.gz
-cd capnproto-c++-0.2.1
-./configure
-make -j6 check
-sudo make install</code></pre>
-
-This will install `capnp`, the Cap'n Proto command-line tool.  It will also install `libcapnp`,
-`libcapnpc`, and `libkj` in `/usr/local/lib` and headers in `/usr/local/include/capnp` and
-`/usr/local/include/kj`.
-
-On Linux, if running `capnp` immediately after installation produces an error complaining about
-missing libraries, run `sudo ldconfig` and try again.
-
-### Building from Git with Autotools
-
-If you download directly from Git, and you don't want to
-[build with Ekam](install.html#building_with_ekam), you will need to have the GNU autotools --
-[autoconf](http://www.gnu.org/software/autoconf/),
-[automake](http://www.gnu.org/software/automake/), and
-[libtool](http://www.gnu.org/software/libtool/) -- installed.  You will also need Subversion
-installed (in addition to Git) in order to fetch the Google Test sources (done by
-`setup-autotools.sh`).
-
-    git clone https://github.com/kentonv/capnproto.git
-    cd capnproto/c++
-    ./setup-autotools.sh
-    autoreconf -i
-    ./configure
-    make -j6 check
-    sudo make install
 
 ### Building with Ekam
 

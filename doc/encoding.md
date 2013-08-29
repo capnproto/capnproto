@@ -159,71 +159,21 @@ A struct pointer looks like this:
     C (16 bits) = Size of the struct's data section, in words.
     D (16 bits) = Size of the struct's pointer section, in words.
 
-#### Field Positioning
+Fields are positioned within the struct according to an algorithm with the following principles:
 
-_WARNING:  You should not attempt to implement the following algorithm.  The compiled schemas
-produced by the Cap'n Proto compiler are already populated with offset information, so code
-generators and other consumers of compiled schemas should never need to compute them manually.
-The algorithm is complicated and easy to get wrong, so it is best to rely on the canonical
-implementation._
+* The position of each field depends only on its definition and the definitions of lower-numbered
+  fields, never on the definitions of higher-numbered fields.  This ensures backwards-compatibility
+  when new fields are added.
+* Due to alignment reqirements, fields in the data section may be separated by padding.  However,
+  later-numbered fields may be positioned into the padding left between earlier-numbered fields.
+  Because of this, a struct will never contain more than 63 bits of padding.  Since objects are
+  rounded up to a whole number of words anyway, padding never ends up wasting space.
+* Unions and groups need not occupy contiguous memory.  Indeed, they may have to be split into
+  multiple slots if new fields are added later on.
 
-Ignoring unions, the layout of fields within the struct is determined by the following algorithm:
-
-    For each field of the struct, ordered by field number {
-        If the field is a pointer {
-            Add it to the end of the pointer section.
-        } else if the data section layout so far includes properly-aligned
-                padding large enough to hold this field {
-            Replace the padding space with the new field, preferring to
-                put the field as close to the beginning of the section as
-                possible.
-        } else {
-            Add one word to the end of the data section.
-            Place the new field at the beginning of the new word.
-            Mark the rest of the new word as padding.
-        }
-    }
-
-Keep in mind that `Bool` fields are bit-aligned, so multiple booleans will be packed into a
-single byte.  As always, little-endian ordering is the standard -- the first boolean will be
-located at the least-significant bit of its byte.
-
-When unions are present, add the following logic:
-
-    For each field and union of the struct, ordered by field number {
-        If this is a union, not a field {
-            Treat it like a 16-bit field, representing the union tag.
-                (See no-union logic, above.)
-        } else if this field is a member of a union {
-            If an earlier member of the union is in the same section as
-                    this field and it combined with any following padding
-                    is at least as large as the new field {
-                Give the new field the same offset and the highest-numbered
-                    such previous field, so they overlap.
-            } else {
-                Assign a new offset to this field as if it were not a union
-                    member at all.  (See no-union logic, above.)
-            }
-        } else {
-            Assign an offset as normal.  (See no-union logic, above.)
-        }
-    }
-
-Note that in the worst case, the members of a union could end up using 23 bytes plus one bit (one
-pointer plus data section locations of 64, 32, 16, 8, and 1 bits).  This is an unfortunate side
-effect of the desire to pack fields in the smallest space where they will fit and the need to
-maintain backwards-compatibility as fields are added.  The worst case should be rare in practice,
-and can be avoided entirely by always declaring a union's largest member first.
-
-Inline fields add yet more complication.  An inline field may contain some data and some pointers,
-which are positioned independently.  If the data part is non-empty but is less than one word, it is
-rounded up to the nearest of 1, 2, or 4 bytes and treated the same as a field of that size.
-Otherwise, it is added to the end of the data section.  Any pointers are added to the end of the
-pointer section.  When an inline field appears inside a union, it will attempt to overlap with a
-previous union member just like any other field would -- but note that because inline fields can
-have non-power-of-two sizes, such unions can get arbitrarily large, and care should be taken not
-to interleave union field numbers with non-union field numbers due to the problems described in
-the previous paragraph.
+Field offsets are computed by the Cap'n Proto compiler.  The precise algorithm is too complicated
+to describe here, but you need not implement it yourself, as the compiler can produce a compiled
+schema format which includes offset information.
 
 #### Default Values
 

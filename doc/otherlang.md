@@ -12,15 +12,19 @@ maintained by respective authors and have not been reviewed by me
 ##### Ready To Use
 
 * [C++](cxx.html) by [@kentonv](https://github.com/kentonv) -- Official reference implementation
+* [Python](https://github.com/jparyani/capnpc-python-cpp) by
+  [@jparyani](https://github.com/jparyani) -- Based on C extensions wrapping the C++ implementation.
 
 ##### Works In Progress
 
+* [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
+* [Ruby](https://github.com/cstrahan/capnp-ruby) by [@cstrahan](https://github.com/cstrahan)
+* [Rust](https://github.com/dwrensha/capnproto-rust) by [@dwrensha](https://github.com/dwrensha)
+
+##### Inactive
+
 * [C and Go](https://github.com/jmckaskill/go-capnproto) by
   [@jmckaskill](https://github.com/jmckaskill)
-* [Python (via C extensions)](https://github.com/jparyani/capnpc-python-cpp) by
-  [@jparyani](https://github.com/jparyani)
-* [Rust](https://github.com/dwrensha/capnproto-rust) by [@dwrensha](https://github.com/dwrensha)
-* [Ruby](https://github.com/cstrahan/capnp-ruby) by [@cstrahan](https://github.com/cstrahan)
 
 ## Contribute Your Own!
 
