@@ -35,6 +35,12 @@ class String;
 
 class StringTree;   // string-tree.h
 
+// Our STL string SFINAE trick does not work with GCC 4.7, but it works with Clang and GCC 4.8, so
+// we'll just preprocess it out if not supported.
+#if __clang__ || __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 8)
+#define KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP 1
+#endif
+
 // =======================================================================================
 // StringPtr -- A NUL-terminated ArrayPtr<const char> containing UTF-8 text.
 //
@@ -52,6 +58,20 @@ public:
   }
   inline StringPtr(const char* begin, const char* end): StringPtr(begin, end - begin) {}
   inline StringPtr(const String& value);
+
+#if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP
+  template <typename T, typename = decltype(instance<T>().c_str())>
+  inline StringPtr(const T& t): StringPtr(t.c_str()) {}
+  // Allow implicit conversion from any class that has a c_str() method (namely, std::string).
+  // We use a template trick to detect std::string in order to avoid including the header for
+  // those who don't want it.
+
+  template <typename T, typename = decltype(instance<T>().c_str())>
+  inline operator T() const { return cStr(); }
+  // Allow implicit conversion to any class that has a c_str() method (namely, std::string).
+  // We use a template trick to detect std::string in order to avoid including the header for
+  // those who don't want it.
+#endif
 
   inline operator ArrayPtr<const char>() const;
   inline ArrayPtr<const char> asArray() const;

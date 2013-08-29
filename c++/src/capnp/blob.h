@@ -76,6 +76,14 @@ public:
   inline Reader(const char* value, size_t size): StringPtr(value, size) {}
   inline Reader(const kj::String& value): StringPtr(value) {}
   inline Reader(const StringPtr& value): StringPtr(value) {}
+
+#if KJ_COMPILER_SUPPORTS_STL_STRING_INTEROP
+  template <typename T, typename = decltype(kj::instance<T>().c_str())>
+  inline Reader(const T& t): StringPtr(t) {}
+  // Allow implicit conversion from any class that has a c_str() method (namely, std::string).
+  // We use a template trick to detect std::string in order to avoid including the header for
+  // those who don't want it.
+#endif
 };
 
 class Data::Builder: public kj::ArrayPtr<byte> {
