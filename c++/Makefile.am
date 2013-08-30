@@ -40,7 +40,17 @@ AM_LDFLAGS = $(PTHREAD_CFLAGS)
 EXTRA_DIST =                                                                 \
   README.txt                                                                 \
   LICENSE.txt                                                                \
-  $(test_capnpc_inputs)
+  $(test_capnpc_inputs)                                                      \
+  src/capnp/compiler/capnp-test.sh                                           \
+  src/capnp/testdata/segmented-packed                                        \
+  src/capnp/testdata/errors.capnp.nobuild                                    \
+  src/capnp/testdata/short.txt                                               \
+  src/capnp/testdata/flat                                                    \
+  src/capnp/testdata/binary                                                  \
+  src/capnp/testdata/errors.txt                                              \
+  src/capnp/testdata/segmented                                               \
+  src/capnp/testdata/packed                                                  \
+  src/capnp/testdata/pretty.txt
 
 CLEANFILES = $(test_capnpc_outputs) test_capnpc_middleman
 
