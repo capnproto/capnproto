@@ -60,7 +60,8 @@ public:
 
   _::RawSchema* loadNative(const _::RawSchema* nativeSchema);
 
-  _::RawSchema* loadEmpty(uint64_t id, kj::StringPtr name, schema::Node::Which kind);
+  _::RawSchema* loadEmpty(uint64_t id, kj::StringPtr name, schema::Node::Which kind,
+                          bool isPlaceholder);
   // Create a dummy empty schema of the given kind for the given id and load it.
 
   struct TryGetResult {
@@ -495,7 +496,7 @@ private:
     }
 
     dependencies.insert(std::make_pair(id, loader.loadEmpty(
-        id, kj::str("(unknown type used by ", nodeName , ")"), expectedKind)));
+        id, kj::str("(unknown type used by ", nodeName , ")"), expectedKind, true)));
   }
 
 #undef VALIDATE_SCHEMA
@@ -1128,7 +1129,8 @@ _::RawSchema* SchemaLoader::Impl::load(const schema::Node::Reader& reader, bool 
     // Not valid.  Construct an empty schema of the same type and return that.
     return loadEmpty(validatedReader.getId(),
                      validatedReader.getDisplayName(),
-                     validatedReader.which());
+                     validatedReader.which(),
+                     false);
   }
 
   // Check if we already have a schema for this ID.
@@ -1253,7 +1255,7 @@ _::RawSchema* SchemaLoader::Impl::loadNative(const _::RawSchema* nativeSchema) {
 }
 
 _::RawSchema* SchemaLoader::Impl::loadEmpty(
-    uint64_t id, kj::StringPtr name, schema::Node::Which kind) {
+    uint64_t id, kj::StringPtr name, schema::Node::Which kind, bool isPlaceholder) {
   word scratch[32];
   memset(scratch, 0, sizeof(scratch));
   MallocMessageBuilder builder(scratch);
@@ -1272,7 +1274,7 @@ _::RawSchema* SchemaLoader::Impl::loadEmpty(
       break;
   }
 
-  return load(node, true);
+  return load(node, isPlaceholder);
 }
 
 SchemaLoader::Impl::TryGetResult SchemaLoader::Impl::tryGet(uint64_t typeId) const {
