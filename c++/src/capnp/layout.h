@@ -816,7 +816,8 @@ private:
   // FAR pointer.
 
   word* location;
-  // Pointer to the object, or null if the tag is a FAR pointer.
+  // Pointer to the object.  Invalid if the tag is a FAR pointer (in which case you need to follow
+  // the FAR pointer instead).
 
   inline OrphanBuilder(const void* tagPtr, SegmentBuilder* segment, word* location)
       : segment(segment), location(location) {

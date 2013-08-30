@@ -521,8 +521,8 @@ const Compiler::Node::Content& Compiler::Node::getContent(Content::State minimum
       if (minimumState <= Content::BOOTSTRAP) break;
 
       // Create the final schema.
+      auto nodeSet = locked->translator->finish();
       KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&](){
-        auto nodeSet = locked->translator->finish();
         locked->auxSchemas = KJ_MAP(auxNode, nodeSet.auxNodes) {
           return module->getCompiler().getFinalLoader().loadOnce(auxNode);
         };

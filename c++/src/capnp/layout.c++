@@ -272,6 +272,20 @@ struct WireHelpers {
     //   segment belonging to the arena.  `ref` will be initialized as a non-far pointer, but its
     //   target offset will be set to zero.
 
+    if (amount == 0 * WORDS && kind == WirePointer::STRUCT) {
+      // Allocating a zero-sized struct.  If it happens to be allocated in the space immediately
+      // after the pointer, we'll have a problem:  the pointer will end up all-zero, so isNull()
+      // will be true.  This can lead to all kinds of weird behavior later on.  Since the target
+      // has zero-size anyway, we can really set the pointer to point anywhere, as long as it
+      // is in-bounds.  So, we can have the pointer point back at itself (an offset of -1).  This
+      // should be exceedingly rare in practice since empty structs are pretty useless.
+      //
+      // Note that the check for kind == WirePointer::STRUCT will hopefully cause this whole branch
+      // to be optimized away from all the call sites that are allocating non-structs.
+      ref->setKindAndTarget(WirePointer::STRUCT, reinterpret_cast<word*>(ref));
+      return reinterpret_cast<word*>(ref);
+    }
+
     if (orphanArena == nullptr) {
       if (!ref->isNull()) zeroObject(segment, ref);
 
