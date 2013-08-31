@@ -67,7 +67,7 @@ build_packages() {
   doit ./setup-autotools.sh | tr = -
   doit autoreconf -i
   doit ./configure
-  doit make dist
+  doit make distcheck
   doit mv capnproto-c++-$VERSION.tar.gz ..
   doit make maintainer-clean
   cd ..
@@ -86,6 +86,7 @@ cherry_pick() {
 done_banner() {
   local VERSION=$1
   local PUSH=$2
+  local FINAL=$3
   echo "========================================================================="
   echo "Done"
   echo "========================================================================="
@@ -93,6 +94,35 @@ done_banner() {
   echo "  capnproto-c++-$VERSION.tar.gz"
   echo "Don't forget to push changes:"
   echo "  git push origin $PUSH"
+
+  read -s -n 1 -p "Shall I push to git and upload to S3 now? (y/N)" YESNO
+
+  echo
+  case "$YESNO" in
+    y | Y )
+      doit git push origin $PUSH
+      doit s3cmd put --guess-mime-type --acl-public capnproto-c++-$VERSION.tar.gz \
+          s3://capnproto.org/capnproto-c++-$VERSION.tar.gz
+
+      if [ "$FINAL" = yes ]; then
+        echo "========================================================================="
+        echo "Publishing docs"
+        echo "========================================================================="
+        cd doc
+        doit ./push-site.sh
+        cd ..
+        echo "========================================================================="
+        echo "Really done"
+        echo "========================================================================="
+      fi
+
+      echo "Release is available at:"
+      echo "  http://capnproto.org/capnproto-c++-$VERSION.tar.gz"
+      ;;
+    * )
+      echo "OK, do it yourself then."
+      ;;
+  esac
 }
 
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
@@ -131,7 +161,7 @@ case "${1-}:$BRANCH" in
 
     update_version $HEAD_VERSION $NEXT_VERSION-dev "mainlaine"
 
-    done_banner $RELEASE_VERSION-rc1 "master release-$RELEASE_VERSION"
+    done_banner $RELEASE_VERSION-rc1 "master release-$RELEASE_VERSION" no
     ;;
 
   # ======================================================================================
@@ -173,7 +203,7 @@ case "${1-}:$BRANCH" in
 
     build_packages $RC_VERSION
 
-    done_banner $RC_VERSION release-$BRANCH_VERSION
+    done_banner $RC_VERSION release-$BRANCH_VERSION no
     ;;
 
   # ======================================================================================
@@ -200,11 +230,12 @@ case "${1-}:$BRANCH" in
     echo "Updating version number to $NEW_VERSION..."
     echo "========================================================================="
 
+    doit sed -i -re "s/capnproto-c[+][+]-[0-9]+[.][0-9]+[.][0-9]+\>/capnproto-c++-$NEW_VERSION/g" doc/install.md
     update_version $OLD_VERSION $NEW_VERSION "release branch"
 
     build_packages $NEW_VERSION
 
-    done_banner $NEW_VERSION release-$NEW_VERSION
+    done_banner $NEW_VERSION release-$NEW_VERSION yes
     ;;
 
   # ======================================================================================
@@ -225,7 +256,7 @@ case "${1-}:$BRANCH" in
 
     OLD_VERSION=$(get_release_version)
     build_packages $OLD_VERSION
-    done_banner $OLD_VERSION release-$OLD_VERSION
+    done_banner $OLD_VERSION release-$OLD_VERSION no
     ;;
 
   # ======================================================================================
