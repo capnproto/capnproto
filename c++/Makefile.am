@@ -172,7 +172,7 @@ libkj_la_SOURCES=                                              \
   src/kj/main.c++                                              \
   src/kj/parse/char.c++
 
-libcapnp_la_LIBADD = $(PTHREAD_LIBS) libkj.la
+libcapnp_la_LIBADD = libkj.la $(PTHREAD_LIBS)
 libcapnp_la_LDFLAGS = -release $(VERSION) -export-dynamic -no-undefined
 libcapnp_la_SOURCES=                                           \
   src/capnp/c++.capnp.c++                                      \
@@ -190,7 +190,7 @@ libcapnp_la_SOURCES=                                           \
   src/capnp/serialize.c++                                      \
   src/capnp/serialize-packed.c++
 
-libcapnpc_la_LIBADD = $(PTHREAD_LIBS) libcapnp.la
+libcapnpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
 libcapnpc_la_LDFLAGS = -release $(VERSION) -export-dynamic -no-undefined
 libcapnpc_la_SOURCES=                                          \
   src/capnp/compiler/md5.h                                     \
@@ -213,16 +213,16 @@ libcapnpc_la_SOURCES=                                          \
 
 bin_PROGRAMS = capnp capnpc-capnp capnpc-c++
 
-capnp_LDADD = $(PTHREAD_LIBS) libcapnpc.la libcapnp.la libkj.la
+capnp_LDADD = libcapnpc.la libcapnp.la libkj.la $(PTHREAD_LIBS)
 capnp_SOURCES =                                                \
   src/capnp/compiler/module-loader.h                           \
   src/capnp/compiler/module-loader.c++                         \
   src/capnp/compiler/capnp.c++
 
-capnpc_capnp_LDADD = $(PTHREAD_LIBS) libcapnp.la libkj.la
+capnpc_capnp_LDADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
 capnpc_capnp_SOURCES = src/capnp/compiler/capnpc-capnp.c++
 
-capnpc_c___LDADD = $(PTHREAD_LIBS) libcapnp.la libkj.la
+capnpc_c___LDADD = libcapnp.la libkj.la $(PTHREAD_LIBS)
 capnpc_c___SOURCES = src/capnp/compiler/capnpc-c++.c++
 
 # Symlink capnpc -> capnp.  The capnp binary will behave like the old capnpc
