@@ -279,6 +279,10 @@ public:
   static StructBuilder getRoot(SegmentBuilder* segment, word* location, StructSize size);
   static void adoptRoot(SegmentBuilder* segment, word* location, OrphanBuilder orphan);
 
+  inline word* getLocation() { return reinterpret_cast<word*>(data); }
+  // Get the object's location.  Only valid for independently-allocated objects (i.e. not list
+  // elements).
+
   inline BitCount getDataSectionSize() const { return dataSize; }
   inline WirePointerCount getPointerSectionSize() const { return pointerCount; }
   inline Data::Builder getDataSectionAsBlob();
@@ -533,6 +537,17 @@ public:
       : segment(nullptr), ptr(nullptr), elementCount(0 * ELEMENTS),
         step(0 * BITS / ELEMENTS) {}
 
+  inline word* getLocation() {
+    // Get the object's location.  Only valid for independently-allocated objects (i.e. not list
+    // elements).
+
+    if (step * ELEMENTS <= BITS_PER_WORD * WORDS) {
+      return reinterpret_cast<word*>(ptr);
+    } else {
+      return reinterpret_cast<word*>(ptr) - POINTER_SIZE_IN_WORDS;
+    }
+  }
+
   inline ElementCount size() const;
   // The number of elements in the list.
 
@@ -722,6 +737,15 @@ struct ObjectBuilder {
   ObjectBuilder(ListBuilder listBuilder)
       : kind(ObjectKind::LIST), listBuilder(listBuilder) {}
 
+  inline word* getLocation() {
+    switch (kind) {
+      case ObjectKind::NULL_POINTER: return nullptr;
+      case ObjectKind::STRUCT: return structBuilder.getLocation();
+      case ObjectKind::LIST: return listBuilder.getLocation();
+    }
+    return nullptr;
+  }
+
   ObjectReader asReader() const;
 
   inline ObjectBuilder(ObjectBuilder& other) { memcpy(this, &other, sizeof(*this)); }
@@ -773,8 +797,8 @@ public:
   OrphanBuilder& operator=(const OrphanBuilder& other) = delete;
   inline OrphanBuilder& operator=(OrphanBuilder&& other);
 
-  inline bool operator==(decltype(nullptr)) const { return segment == nullptr; }
-  inline bool operator!=(decltype(nullptr)) const { return segment != nullptr; }
+  inline bool operator==(decltype(nullptr)) const { return location == nullptr; }
+  inline bool operator!=(decltype(nullptr)) const { return location != nullptr; }
 
   StructBuilder asStruct(StructSize size);
   // Interpret as a struct, or throw an exception if not a struct.
@@ -816,8 +840,7 @@ private:
   // FAR pointer.
 
   word* location;
-  // Pointer to the object.  Invalid if the tag is a FAR pointer (in which case you need to follow
-  // the FAR pointer instead).
+  // Pointer to the object, or nullptr if the pointer is null.
 
   inline OrphanBuilder(const void* tagPtr, SegmentBuilder* segment, word* location)
       : segment(segment), location(location) {

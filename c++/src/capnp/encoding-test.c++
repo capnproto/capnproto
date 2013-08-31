@@ -1747,6 +1747,51 @@ TEST(Encoding, GlobalConstants) {
   }
 }
 
+TEST(Encoding, HasEmptyStruct) {
+  MallocMessageBuilder message;
+  auto root = message.initRoot<test::TestObject>();
+
+  EXPECT_EQ(1, root.totalSizeInWords());
+
+  EXPECT_FALSE(root.asReader().hasObjectField());
+  EXPECT_FALSE(root.hasObjectField());
+  root.initObjectField<test::TestEmptyStruct>();
+  EXPECT_TRUE(root.asReader().hasObjectField());
+  EXPECT_TRUE(root.hasObjectField());
+
+  EXPECT_EQ(1, root.totalSizeInWords());
+}
+
+TEST(Encoding, HasEmptyList) {
+  MallocMessageBuilder message;
+  auto root = message.initRoot<test::TestObject>();
+
+  EXPECT_EQ(1, root.totalSizeInWords());
+
+  EXPECT_FALSE(root.asReader().hasObjectField());
+  EXPECT_FALSE(root.hasObjectField());
+  root.initObjectField<List<int32_t>>(0);
+  EXPECT_TRUE(root.asReader().hasObjectField());
+  EXPECT_TRUE(root.hasObjectField());
+
+  EXPECT_EQ(1, root.totalSizeInWords());
+}
+
+TEST(Encoding, HasEmptyStructList) {
+  MallocMessageBuilder message;
+  auto root = message.initRoot<test::TestObject>();
+
+  EXPECT_EQ(1, root.totalSizeInWords());
+
+  EXPECT_FALSE(root.asReader().hasObjectField());
+  EXPECT_FALSE(root.hasObjectField());
+  root.initObjectField<List<TestAllTypes>>(0);
+  EXPECT_TRUE(root.asReader().hasObjectField());
+  EXPECT_TRUE(root.hasObjectField());
+
+  EXPECT_EQ(2, root.totalSizeInWords());
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

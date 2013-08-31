@@ -781,10 +781,101 @@ TEST(Orphans, FarPointer) {
   EXPECT_TRUE(orphan != nullptr);
   EXPECT_FALSE(orphan == nullptr);
 
-  KJ_DBG(orphan != nullptr, orphan == nullptr);
-
   checkTestMessage(orphan.getReader());
   checkTestMessage(orphan.get());
+}
+
+TEST(Orphans, UpgradeStruct) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestObject>();
+
+  auto old = root.initObjectField<test::TestOldVersion>();
+  old.setOld1(1234);
+  old.setOld2("foo");
+
+  auto orphan = root.disownObjectField<test::TestNewVersion>();
+
+  // Relocation has not occurred yet.
+  old.setOld1(12345);
+  EXPECT_EQ(12345, orphan.getReader().getOld1());
+  EXPECT_EQ("foo", old.getOld2());
+
+  // This will relocate the struct.
+  auto newVersion = orphan.get();
+
+  EXPECT_EQ(0, old.getOld1());
+  EXPECT_EQ("", old.getOld2());
+
+  EXPECT_EQ(12345, newVersion.getOld1());
+  EXPECT_EQ("foo", newVersion.getOld2());
+}
+
+TEST(Orphans, UpgradeStructList) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<test::TestObject>();
+
+  auto old = root.initObjectField<List<test::TestOldVersion>>(2);
+  old[0].setOld1(1234);
+  old[0].setOld2("foo");
+  old[1].setOld1(4321);
+  old[1].setOld2("bar");
+
+  auto orphan = root.disownObjectField<List<test::TestNewVersion>>();
+
+  // Relocation has not occurred yet.
+  old[0].setOld1(12345);
+  EXPECT_EQ(12345, orphan.getReader()[0].getOld1());
+  EXPECT_EQ("foo", old[0].getOld2());
+
+  // This will relocate the struct.
+  auto newVersion = orphan.get();
+
+  EXPECT_EQ(0, old[0].getOld1());
+  EXPECT_EQ("", old[0].getOld2());
+
+  EXPECT_EQ(12345, newVersion[0].getOld1());
+  EXPECT_EQ("foo", newVersion[0].getOld2());
+  EXPECT_EQ(4321, newVersion[1].getOld1());
+  EXPECT_EQ("bar", newVersion[1].getOld2());
+}
+
+TEST(Orphans, DisownNull) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<TestAllTypes>();
+
+  {
+    Orphan<TestAllTypes> orphan = root.disownStructField();
+    EXPECT_TRUE(orphan == nullptr);
+
+    checkTestMessageAllZero(orphan.getReader());
+    EXPECT_TRUE(orphan == nullptr);
+
+    // get()ing the orphan allocates an object, for security reasons.
+    checkTestMessageAllZero(orphan.get());
+    EXPECT_FALSE(orphan == nullptr);
+  }
+
+  {
+    Orphan<List<int32_t>> orphan = root.disownInt32List();
+    EXPECT_TRUE(orphan == nullptr);
+
+    EXPECT_EQ(0, orphan.getReader().size());
+    EXPECT_TRUE(orphan == nullptr);
+
+    EXPECT_EQ(0, orphan.get().size());
+    EXPECT_TRUE(orphan == nullptr);
+  }
+
+  {
+    Orphan<List<TestAllTypes>> orphan = root.disownStructList();
+    EXPECT_TRUE(orphan == nullptr);
+
+    EXPECT_EQ(0, orphan.getReader().size());
+    EXPECT_TRUE(orphan == nullptr);
+
+    EXPECT_EQ(0, orphan.get().size());
+    EXPECT_TRUE(orphan == nullptr);
+  }
 }
 
 }  // namespace

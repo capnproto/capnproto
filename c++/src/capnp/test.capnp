@@ -162,6 +162,9 @@ struct TestDefaults {
 
 struct TestObject {
   objectField @0 :Object;
+
+  # Do not add any other fields here!  Some tests rely on objectField being the last pointer
+  # in the struct.
 }
 
 struct TestOutOfOrder {
@@ -477,6 +480,8 @@ struct TestStructUnion {
     object @2 :TestObject;
   }
 }
+
+struct TestEmptyStruct {}
 
 struct TestConstants {
   const voidConst      :Void    = void;

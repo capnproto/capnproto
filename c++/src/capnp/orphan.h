@@ -53,6 +53,12 @@ public:
   Orphan& operator=(Orphan&&) = default;
 
   inline typename T::Builder get();
+  // Get the underlying builder.  If the orphan is null, this will allocate and return a default
+  // object rather than crash.  This is done for security -- otherwise, you might enable a DoS
+  // attack any time you disown a field and fail to check if it is null.  In the case of structs,
+  // this means that the orphan is no longer null after get() returns.  In the case of lists,
+  // no actual object is allocated since a simple empty ListBuilder can be returned.
+
   inline typename T::Reader getReader() const;
 
   inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
