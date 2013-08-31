@@ -613,6 +613,8 @@ public:
 
   inline Builder(Builder& other) { memcpy(this, &other, sizeof(*this)); }
   inline Builder(Builder&& other) { memcpy(this, &other, sizeof(*this)); }
+  inline Builder& operator=(Builder& other) { memcpy(this, &other, sizeof(*this)); }
+  inline Builder& operator=(Builder&& other) { memcpy(this, &other, sizeof(*this)); }
   static_assert(__has_trivial_copy(StructSchema) && __has_trivial_copy(ListSchema),
                 "Assumptions made here do not hold.");
   // Hack:  We know this type is trivially constructable but the use of DisallowConstCopy causes

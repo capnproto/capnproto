@@ -439,6 +439,24 @@ TEST(DynamicApi, SetDataFromText) {
   EXPECT_EQ(data("foo"), root.get("dataField").as<Data>());
 }
 
+TEST(DynamicApi, BuilderAssign) {
+  MallocMessageBuilder builder;
+  auto root = builder.initRoot<DynamicStruct>(Schema::from<TestAllTypes>());
+
+  // Declare upfront, assign later.
+  DynamicValue::Builder value;
+  DynamicStruct::Builder structValue = nullptr;
+  DynamicList::Builder listValue = nullptr;
+
+  value = root.get("structField");
+  structValue = value.as<DynamicStruct>();
+  structValue.set("int32Field", 123);
+
+  value = root.init("int32List", 1);
+  listValue = value.as<DynamicList>();
+  listValue.set(0, 123);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
