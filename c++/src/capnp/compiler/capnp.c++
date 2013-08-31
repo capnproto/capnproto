@@ -662,7 +662,6 @@ private:
       uint32_t segmentId = prefix[4] | (prefix[5] << 8)
                          | (prefix[6] << 16) | (prefix[7] << 24);
       if (segmentId == 0 || segmentId >= segmentCount) {
-        KJ_DBG(segmentId, segmentCount);
         return IMPOSSIBLE;
       } else {
         return PLAUSIBLE;
