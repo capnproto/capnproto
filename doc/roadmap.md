@@ -1,9 +1,9 @@
 ---
 layout: page
-title: Other Languages
+title: Road Map
 ---
 
-# Roadmap
+# Road Map
 
 Here's what's (hopefully) in store for future versions of Cap'n Proto!
 
