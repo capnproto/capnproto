@@ -1098,7 +1098,7 @@ public:
     DynamicValue::Reader value;
     word zeroWord[1];
     memset(&zeroWord, 0, sizeof(zeroWord));
-    kj::ArrayPtr<const word> segments[1] = { zeroWord };
+    kj::ArrayPtr<const word> segments[1] = { kj::arrayPtr(zeroWord, 1) };
     SegmentArrayMessageReader emptyMessage(segments);
     switch (schema.getProto().which()) {
       case schema::Node::CONST:
