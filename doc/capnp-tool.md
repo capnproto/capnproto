@@ -30,7 +30,7 @@ and import paths.
 The above example generates C++ code, but the tool is able to generate output in any language
 for which a plugin is available.  Compiler plugins are just regular programs named
 `capnpc-language`.  For example, the above command runs `capnpc-c++`.  [More on how to write
-compiler plugins](http://localhost:4000/capnproto/otherlang.html#how_to_write_compiler_plugins).
+compiler plugins](otherlang.html#how_to_write_compiler_plugins).
 
 Note that some Cap'n Proto implementations (especially for interpreted languages) do not require
 generating source code.
@@ -41,16 +41,16 @@ generating source code.
 
 `capnp decode` reads a binary Cap'n Proto message from standard input and decodes it to a
 human-readable text format (specifically, the format used for specifying constants and default
-values in [the schema language](http://localhost:4000/capnproto/language.html)).  By default it
+values in [the schema language](language.html)).  By default it
 expects an unpacked message, but you can decode a
-[packed](http://localhost:4000/capnproto/encoding.html#packing) message with the `--packed` flag.
+[packed](encoding.html#packing) message with the `--packed` flag.
 
 ## Encoding Messages
 
     capnp encode myschema.capnp MyType < message.txt > message.bin
 
 `capnp encode` is the opposite of `capnp decode`: it takes a text-format message on stdin and
-encodes it to binary (possibly [packed](http://localhost:4000/capnproto/encoding.html#packing),
+encodes it to binary (possibly [packed](encoding.html#packing),
 with the `--packed` flag).
 
 This is mainly useful for debugging purposes, to build test data or to apply tweaks to data
@@ -61,9 +61,9 @@ and maintained in text format long-term -- instead, use `capnp eval`, which is m
 
     capnp eval myschema.capnp myConstant
 
-This prints the value of `myConstant`, a
-[const](http://localhost:4000/capnproto/language.html#constants) declaration, after applying
-variable substitution.  It can also output the value in binary format (`--binary` or `--packed`).
+This prints the value of `myConstant`, a [const](language.html#constants) declaration, after
+applying variable substitution.  It can also output the value in binary format (`--binary` or
+`--packed`).
 
 At first glance, this may seem no more interesting that `capnp encode`:  the syntax used to define
 constants in schema files is the same as the format accepted by `capnp encode`, right?  There is,

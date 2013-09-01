@@ -100,5 +100,5 @@ compiled source files as `.pyc` bytecode, but that's up to you.
 ### Testing Your Implementation
 
 The easiest way to test that you've implemented the spec correctly is to use the `capnp` tool
-to [encode](http://localhost:4000/capnproto/capnp-tool.html#encoding_messages) test inputs and
-[decode](http://localhost:4000/capnproto/capnp-tool.html#decoding_messages) outputs.
+to [encode](capnp-tool.html#encoding_messages) test inputs and
+[decode](capnp-tool.html#decoding_messages) outputs.
