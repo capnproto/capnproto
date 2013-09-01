@@ -12,7 +12,7 @@ maintained by respective authors and have not been reviewed by me
 ##### Ready To Use
 
 * [C++](cxx.html) by [@kentonv](https://github.com/kentonv) -- Official reference implementation
-* [Python](http://jparyani.github.io/capnpc-python-cpp/) by
+* [Python](http://jparyani.github.io/pycapnp/) by
   [@jparyani](https://github.com/jparyani) -- Based on C extensions wrapping the C++ implementation.
 
 ##### Works In Progress
