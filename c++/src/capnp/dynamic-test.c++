@@ -444,9 +444,10 @@ TEST(DynamicApi, BuilderAssign) {
   auto root = builder.initRoot<DynamicStruct>(Schema::from<TestAllTypes>());
 
   // Declare upfront, assign later.
+  // Note that the Python implementation requires defaulted constructors.  Do not delete them!
   DynamicValue::Builder value;
-  DynamicStruct::Builder structValue = nullptr;
-  DynamicList::Builder listValue = nullptr;
+  DynamicStruct::Builder structValue;
+  DynamicList::Builder listValue;
 
   value = root.get("structField");
   structValue = value.as<DynamicStruct>();
