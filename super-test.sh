@@ -26,8 +26,9 @@ while [ $# -gt 0 ]; do
       echo "========================================================================="
       echo "Pushing code to $HOST..."
       echo "========================================================================="
+      BRANCH=$(git rev-parse --abbrev-ref HEAD)
       ssh $HOST 'rm -rf tmp-test-capnp && mkdir tmp-test-capnp && git init tmp-test-capnp'
-      git push ssh://$HOST/~/tmp-test-capnp master:test
+      git push ssh://$HOST/~/tmp-test-capnp "$BRANCH:test"
       ssh $HOST "cd tmp-test-capnp && git checkout test && ./super-test.sh $@ && cd .. && rm -rf tmp-test-capnp"
       exit 0
       ;;
