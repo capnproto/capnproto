@@ -69,12 +69,10 @@ static const ::capnp::_::AlignedData<62> b_e75816b56529d464 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
-static const ::capnp::_::RawSchema* const d_e75816b56529d464[] = {
-};
 static const uint16_t m_e75816b56529d464[] = {2, 1, 0};
 static const uint16_t i_e75816b56529d464[] = {0, 1, 2};
 const ::capnp::_::RawSchema s_e75816b56529d464 = {
-  0xe75816b56529d464, b_e75816b56529d464.words, 62, d_e75816b56529d464, m_e75816b56529d464,
+  0xe75816b56529d464, b_e75816b56529d464.words, 62, nullptr, m_e75816b56529d464,
   0, 3, i_e75816b56529d464, nullptr, nullptr
 };
 static const ::capnp::_::AlignedData<62> b_991c7a3693d62cf2 = {
@@ -141,12 +139,10 @@ static const ::capnp::_::AlignedData<62> b_991c7a3693d62cf2 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
-static const ::capnp::_::RawSchema* const d_991c7a3693d62cf2[] = {
-};
 static const uint16_t m_991c7a3693d62cf2[] = {2, 1, 0};
 static const uint16_t i_991c7a3693d62cf2[] = {0, 1, 2};
 const ::capnp::_::RawSchema s_991c7a3693d62cf2 = {
-  0x991c7a3693d62cf2, b_991c7a3693d62cf2.words, 62, d_991c7a3693d62cf2, m_991c7a3693d62cf2,
+  0x991c7a3693d62cf2, b_991c7a3693d62cf2.words, 62, nullptr, m_991c7a3693d62cf2,
   0, 3, i_991c7a3693d62cf2, nullptr, nullptr
 };
 static const ::capnp::_::AlignedData<62> b_90f2a60678fd2367 = {
@@ -213,12 +209,10 @@ static const ::capnp::_::AlignedData<62> b_90f2a60678fd2367 = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
-static const ::capnp::_::RawSchema* const d_90f2a60678fd2367[] = {
-};
 static const uint16_t m_90f2a60678fd2367[] = {2, 1, 0};
 static const uint16_t i_90f2a60678fd2367[] = {0, 1, 2};
 const ::capnp::_::RawSchema s_90f2a60678fd2367 = {
-  0x90f2a60678fd2367, b_90f2a60678fd2367.words, 62, d_90f2a60678fd2367, m_90f2a60678fd2367,
+  0x90f2a60678fd2367, b_90f2a60678fd2367.words, 62, nullptr, m_90f2a60678fd2367,
   0, 3, i_90f2a60678fd2367, nullptr, nullptr
 };
 static const ::capnp::_::AlignedData<73> b_ce5c2afd239fe34e = {

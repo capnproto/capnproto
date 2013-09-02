@@ -26,13 +26,9 @@ static const ::capnp::_::AlignedData<19> b_b9c6f99ebf805f2c = {
       0,   0,   0,   0,   0,   0,   0,   0,
       0,   0,   0,   0,   0,   0,   0,   0, }
 };
-static const ::capnp::_::RawSchema* const d_b9c6f99ebf805f2c[] = {
-};
-static const uint16_t m_b9c6f99ebf805f2c[] = {};
-static const uint16_t i_b9c6f99ebf805f2c[] = {};
 const ::capnp::_::RawSchema s_b9c6f99ebf805f2c = {
-  0xb9c6f99ebf805f2c, b_b9c6f99ebf805f2c.words, 19, d_b9c6f99ebf805f2c, m_b9c6f99ebf805f2c,
-  0, 0, i_b9c6f99ebf805f2c, nullptr, nullptr
+  0xb9c6f99ebf805f2c, b_b9c6f99ebf805f2c.words, 19, nullptr, nullptr,
+  0, 0, nullptr, nullptr, nullptr
 };
 }  // namespace schemas
 namespace _ {  // private
