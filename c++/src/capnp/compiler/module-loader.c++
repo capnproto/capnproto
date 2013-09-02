@@ -62,6 +62,11 @@ kj::Array<const char> mmapForRead(kj::StringPtr filename) {
   KJ_SYSCALL(fstat(fd, &stats));
 
   if (S_ISREG(stats.st_mode)) {
+    if (stats.st_size == 0) {
+      // mmap()ing zero bytes will fail.
+      return nullptr;
+    }
+
     // Regular file.  Just mmap() it.
     const void* mapping = mmap(NULL, stats.st_size, PROT_READ, MAP_SHARED, fd, 0);
     if (mapping == MAP_FAILED) {
