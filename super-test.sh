@@ -211,10 +211,14 @@ doit autoreconf -i
 doit ./configure --prefix="$STAGING"
 doit make -j6 check
 
-# Verify that generated code compiles with pedantic warnings.  Make sure to treat capnp headers
-# as system headers so warnings in them are ignored.
-doit ${CXX:-g++} -isystem src -std=c++11 -fno-permissive -pedantic -Wall -Wextra -Werror \
-    -c src/capnp/test.capnp.c++ -o /dev/null
+case ${CXX:-g++} in
+  g++* | *-g++* )
+    # Verify that generated code compiles with pedantic warnings.  Make sure to treat capnp headers
+    # as system headers so warnings in them are ignored.
+    doit ${CXX:-g++} -isystem src -std=c++11 -fno-permissive -pedantic -Wall -Wextra -Werror \
+        -c src/capnp/test.capnp.c++ -o /dev/null
+    ;;
+esac
 
 if [ "$QUICK" = quick ]; then
   make maintainer-clean
