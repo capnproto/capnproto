@@ -247,13 +247,16 @@ uninstall-hook:
 
 test_capnpc_inputs =                                           \
   src/capnp/test.capnp                                         \
-  src/capnp/test-import.capnp
+  src/capnp/test-import.capnp                                  \
+  src/capnp/test-import2.capnp
 
 test_capnpc_outputs =                                          \
   src/capnp/test.capnp.c++                                     \
   src/capnp/test.capnp.h                                       \
   src/capnp/test-import.capnp.c++                              \
-  src/capnp/test-import.capnp.h
+  src/capnp/test-import.capnp.h                                \
+  src/capnp/test-import2.capnp.c++                             \
+  src/capnp/test-import2.capnp.h
 
 if USE_EXTERNAL_CAPNP
 

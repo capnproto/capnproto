@@ -889,7 +889,7 @@ Orphan<List<schema::CodeGeneratorRequest::RequestedFile::Import>>
   uint i = 0;
   for (auto name: importNames) {
     // We presumably ran this import before, so it shouldn't throw now.
-    auto entry = builder[i];
+    auto entry = builder[i++];
     entry.setId(KJ_ASSERT_NONNULL(importRelative(name)).rootNode.getId());
     entry.setName(name);
   }

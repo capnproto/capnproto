@@ -22,6 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <capnp/test-import.capnp.h>
+#include <capnp/test-import2.capnp.h>
 #include "message.h"
 #include <kj/thread.h>
 #include <kj/debug.h>
@@ -1450,10 +1451,22 @@ TEST(Encoding, NestedTypes) {
 TEST(Encoding, Imports) {
   // Also just testing the generated code.
 
-  MallocMessageBuilder builder;
-  TestImport::Builder root = builder.getRoot<TestImport>();
-  initTestMessage(root.initField());
-  checkTestMessage(root.asReader().getField());
+  {
+    MallocMessageBuilder builder;
+    TestImport::Builder root = builder.getRoot<TestImport>();
+    initTestMessage(root.initField());
+    checkTestMessage(root.asReader().getField());
+  }
+
+  {
+    MallocMessageBuilder builder;
+    TestImport2::Builder root = builder.getRoot<TestImport2>();
+    initTestMessage(root.initFoo());
+    checkTestMessage(root.asReader().getFoo());
+    root.setBar(Schema::from<TestAllTypes>().getProto());
+    initTestMessage(root.initBaz().initField());
+    checkTestMessage(root.asReader().getBaz().getField());
+  }
 }
 
 TEST(Encoding, Using) {
