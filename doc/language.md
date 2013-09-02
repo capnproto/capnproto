@@ -177,9 +177,9 @@ Notes:
   you do not want any field set by default, simply declare a field called "unset" and make it the
   lowest-numbered field.
 
-* You can move an exsiting field into a new union without breaking compatibility with existing
+* You can move an existing field into a new union without breaking compatibility with existing
   data, as long as all of the other fields in the union are new.  Since the existing field is
-  necessarily the lowest-numebered in the union, it will be the union's default field.
+  necessarily the lowest-numbered in the union, it will be the union's default field.
 
 **Wait, why aren't unions first-class types?**
 
@@ -234,7 +234,7 @@ struct Person {
 {% endhighlight %}
 
 Interface-wise, the above group behaves as if you had defined a nested struct called `Address` and
-then a field `address :Address`.  However, a gorup is _not_ a separate object from its containing
+then a field `address :Address`.  However, a group is _not_ a separate object from its containing
 struct: the fields are numbered in the same space as the containing struct's fields, and are laid
 out exactly the same as if they hadn't been grouped at all.  Essentially, a group is just a
 namespace.

@@ -53,7 +53,7 @@ a 1.0 release would happen nor how many 0.x release might precede it.
 
 These are features we'd like to implement some day but haven't decided yet how to prioritize.
 Some of these features could make their way into Cap'n Proto before version 1.0.  Others will
-certainly come after.  If you have opnions on what you'd like to see next,
+certainly come after.  If you have opinions on what you'd like to see next,
 [tell us](https://groups.google.com/group/capnproto)!
 
 ### Language Features
