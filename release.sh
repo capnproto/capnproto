@@ -258,7 +258,14 @@ case "${1-}:$BRANCH" in
 
     OLD_VERSION=$(get_release_version)
     build_packages $OLD_VERSION
-    done_banner $OLD_VERSION release-$OLD_VERSION no
+
+    if [[ $OLD_VERSION == *-rc* ]]; then
+      BRANCH_VERSION=${OLD_VERSION%%-rc*}
+      done_banner $OLD_VERSION release-$BRANCH_VERSION no
+    else
+      doit git tag v$OLD_VERSION
+      done_banner $OLD_VERSION "v$OLD_VERSION release-$OLD_VERSION" no
+    fi
     ;;
 
   # ======================================================================================
