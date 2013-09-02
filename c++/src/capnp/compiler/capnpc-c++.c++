@@ -1270,21 +1270,28 @@ private:
     auto schemaDef = kj::strTree(
         "static const ::capnp::_::AlignedData<", rawSchema.size(), "> b_", hexId, " = {\n"
         "  {", kj::mv(schemaLiteral), " }\n"
-        "};\n"
-        "static const ::capnp::_::RawSchema* const d_", hexId, "[] = {\n",
-        KJ_MAP(depId, deps) {
-          return kj::strTree("  &s_", kj::hex(depId), ",\n");
-        },
-        "};\n"
-        "static const uint16_t m_", hexId, "[] = {",
-        kj::StringTree(KJ_MAP(index, membersByName) { return kj::strTree(index); }, ", "),
-        "};\n"
-        "static const uint16_t i_", hexId, "[] = {",
-        kj::StringTree(KJ_MAP(index, membersByDiscrim) { return kj::strTree(index); }, ", "),
-        "};\n"
+        "};\n",
+        deps.size() == 0 ? kj::strTree() : kj::strTree(
+            "static const ::capnp::_::RawSchema* const d_", hexId, "[] = {\n",
+            KJ_MAP(depId, deps) {
+              return kj::strTree("  &s_", kj::hex(depId), ",\n");
+            },
+            "};\n"),
+        membersByName.size() == 0 ? kj::strTree() : kj::strTree(
+            "static const uint16_t m_", hexId, "[] = {",
+            kj::StringTree(KJ_MAP(index, membersByName) { return kj::strTree(index); }, ", "),
+            "};\n"),
+        membersByDiscrim.size() == 0 ? kj::strTree() : kj::strTree(
+            "static const uint16_t i_", hexId, "[] = {",
+            kj::StringTree(KJ_MAP(index, membersByDiscrim) { return kj::strTree(index); }, ", "),
+            "};\n"),
         "const ::capnp::_::RawSchema s_", hexId, " = {\n"
-        "  0x", hexId, ", b_", hexId, ".words, ", rawSchema.size(), ", d_", hexId, ", m_", hexId, ",\n"
-        "  ", deps.size(), ", ", membersByName.size(), ", i_", hexId, ", nullptr, nullptr\n"
+        "  0x", hexId, ", b_", hexId, ".words, ", rawSchema.size(), ", ",
+        deps.size() == 0 ? kj::strTree("nullptr") : kj::strTree("d_", hexId), ", ",
+        membersByName.size() == 0 ? kj::strTree("nullptr") : kj::strTree("m_", hexId), ",\n",
+        "  ", deps.size(), ", ", membersByName.size(), ", ",
+        membersByDiscrim.size() == 0 ? kj::strTree("nullptr") : kj::strTree("i_", hexId),
+        ", nullptr, nullptr\n"
         "};\n");
 
     switch (proto.which()) {
