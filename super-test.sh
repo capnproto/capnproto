@@ -193,7 +193,7 @@ case ${CXX:-g++} in
     # There's an unused private field in gtest.
     export CXXFLAGS="$CXXFLAGS -Wno-unused-private-field"
     ;;
-  *g++* )
+  g++* | *-g++* )
     if (${CXX:-g++} --version | grep -q ' 4[.]8'); then
       # GCC 4.8 emits a weird uninitialized warning in kj/parse/char-test, deep in one of the parser
       # combinators.  It could be a real bug but there is just not enough information to figure out
@@ -210,6 +210,11 @@ doit ./setup-autotools.sh | tr = -
 doit autoreconf -i
 doit ./configure --prefix="$STAGING"
 doit make -j6 check
+
+# Verify that generated code compiles with pedantic warnings.  Make sure to treat capnp headers
+# as system headers so warnings in them are ignored.
+doit ${CXX:-g++} -isystem src -std=c++11 -fno-permissive -pedantic -Wall -Wextra -Werror \
+    -c src/capnp/test.capnp.c++ -o /dev/null
 
 if [ "$QUICK" = quick ]; then
   make maintainer-clean

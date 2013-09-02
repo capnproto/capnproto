@@ -322,7 +322,7 @@ inline constexpr uint64_t typeId() { return _::TypeId_<T>::typeId; }
     }
 #define CAPNP_DEFINE_ENUM(type) \
     constexpr Kind Kind_<type>::kind; \
-    constexpr uint64_t TypeId_<type>::typeId;
+    constexpr uint64_t TypeId_<type>::typeId
 
 #define CAPNP_DECLARE_STRUCT(type, id, dataWordSize, pointerCount, preferredElementEncoding) \
     template <> struct Kind_<type> { static constexpr Kind kind = Kind::STRUCT; }; \
@@ -337,7 +337,7 @@ inline constexpr uint64_t typeId() { return _::TypeId_<T>::typeId; }
 #define CAPNP_DEFINE_STRUCT(type) \
     constexpr Kind Kind_<type>::kind; \
     constexpr StructSize StructSize_<type>::value; \
-    constexpr uint64_t TypeId_<type>::typeId;
+    constexpr uint64_t TypeId_<type>::typeId
 
 #define CAPNP_DECLARE_UNION(type, parentType, memberIndex) \
     template <> struct Kind_<type> { static constexpr Kind kind = Kind::UNION; }; \
@@ -345,7 +345,7 @@ inline constexpr uint64_t typeId() { return _::TypeId_<T>::typeId; }
     template <> struct UnionParentType_<type> { typedef parentType Type; }
 #define CAPNP_DEFINE_UNION(type) \
     constexpr Kind Kind_<type>::kind; \
-    constexpr uint UnionMemberIndex_<type>::value;
+    constexpr uint UnionMemberIndex_<type>::value
 
 #define CAPNP_DECLARE_INTERFACE(type, id) \
     template <> struct Kind_<type> { static constexpr Kind kind = Kind::INTERFACE; }; \
@@ -355,6 +355,6 @@ inline constexpr uint64_t typeId() { return _::TypeId_<T>::typeId; }
     }
 #define CAPNP_DEFINE_INTERFACE(type) \
     constexpr Kind Kind_<type>::kind; \
-    constexpr uint64_t TypeId_<type>::typeId;
+    constexpr uint64_t TypeId_<type>::typeId
 
 #endif  // CAPNP_GENERATED_HEADER_SUPPORT_H_
