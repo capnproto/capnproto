@@ -56,9 +56,9 @@ This package is officially tested on Linux (GCC 4.7, Clang 3.2), Mac OSX (Clang 
 
 You may download and install the release version of Cap'n Proto like so:
 
-<pre><code>curl -O <a href="http://capnproto.org/capnproto-c++-0.2.1.tar.gz">http://capnproto.org/capnproto-c++-0.2.1.tar.gz</a>
-tar zxf capnproto-c++-0.2.1.tar.gz
-cd capnproto-c++-0.2.1
+<pre><code>curl -O <a href="http://capnproto.org/capnproto-c++-0.3.0.tar.gz">http://capnproto.org/capnproto-c++-0.3.0.tar.gz</a>
+tar zxf capnproto-c++-0.3.0.tar.gz
+cd capnproto-c++-0.3.0
 ./configure
 make -j6 check
 sudo make install</code></pre>
