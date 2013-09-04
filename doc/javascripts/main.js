@@ -75,6 +75,8 @@ function initSidebar() {
 }
 
 function setupSidebar() {
+  var isNews = document.location.pathname.slice("/capnproto".length).slice(0, 6) == "/news/";
+
   var toc = initSidebar();
   if (toc) {
     var content = document.getElementById("main_content").childNodes;
@@ -82,8 +84,7 @@ function setupSidebar() {
 
     for (var i = 0; i < content.length; i++) {
       if (content[i].tagName == "H2" ||
-          content[i].tagName == "H3" ||
-          content[i].tagName == "H4") {
+          (!isNews && (content[i].tagName == "H3" || content[i].tagName == "H4"))) {
         headings.push(content[i]);
       }
     }
