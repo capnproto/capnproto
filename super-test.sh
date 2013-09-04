@@ -16,6 +16,39 @@ while [ $# -gt 0 ]; do
     quick )
       QUICK=quick
       ;;
+    caffeinate )
+      # Re-run preventing sleep.
+      shift
+      exec caffeinate $0 $@
+      ;;
+    tmpdir )
+      # Clone to a temp directory.
+      if [ "$#" -lt 2 ]; then
+        echo "usage: $0 tmpdir NAME [COMMAND]" >&2
+        exit 1
+      fi
+      DIR=/tmp/$2
+      shift 2
+      if [ -e $DIR ]; then
+        if [ "${DIR/*..*}" = "" ]; then
+          echo "NO DO NOT PUT .. IN THERE IT'S GOING TO GO IN /tmp AND I'M GONNA DELETE IT" >&2
+          exit 1
+        fi
+        if [ ! -e "$DIR/super-test.sh" ]; then
+          echo "$DIR exists and it doesn't look like one of mine." >&2
+          exit 1
+        fi
+        # make distcheck leaves non-writable files when it fails, so we need to chmod to be safe.
+        chmod -R +w $DIR
+        rm -rf $DIR
+      fi
+      git clone . $DIR
+      if [ -e c++/gtest ]; then
+        cp -r c++/gtest $DIR/c++/gtest
+      fi
+      cd $DIR
+      exec ./super-test.sh $@
+      ;;
     remote )
       if [ "$#" -lt 2 ]; then
         echo "usage: $0 remote HOST [COMMAND]" >&2
@@ -29,8 +62,9 @@ while [ $# -gt 0 ]; do
       BRANCH=$(git rev-parse --abbrev-ref HEAD)
       ssh $HOST 'rm -rf tmp-test-capnp && mkdir tmp-test-capnp && git init tmp-test-capnp'
       git push ssh://$HOST/~/tmp-test-capnp "$BRANCH:test"
-      ssh $HOST "cd tmp-test-capnp && git checkout test && ./super-test.sh $@ && cd .. && rm -rf tmp-test-capnp"
-      exit 0
+      ssh $HOST "cd tmp-test-capnp && git checkout test"
+      scp -qr c++/gtest $HOST:~/tmp-test-capnp/c++/gtest
+      exec ssh $HOST "cd tmp-test-capnp && ./super-test.sh $@ && cd .. && rm -rf tmp-test-capnp"
       ;;
     clang )
       export CXX=clang++
@@ -65,7 +99,7 @@ __EOF__
 *************************************************************************
 =========================================================================
 __EOF__
-      $0 remote beat $QUICK
+      $0 remote beat caffeinate $QUICK
       cat << "__EOF__"
 =========================================================================
 *************************************************************************
