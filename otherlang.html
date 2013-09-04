@@ -18,7 +18,7 @@
     <!-- HEADER -->
     <div id="header_wrap" class="outer">
       <header class="inner">
-        <img src="/capnproto/images/captain_proto.png">
+        <img src="/capnproto/images/logo.png">
         <div id="infinitely_faster">
           <img src="/capnproto/images/infinitely_faster.png">
         </div>
@@ -38,8 +38,10 @@
           <li><a href="/capnproto/language.html">Schema Language</a></li>
           <li><a href="/capnproto/encoding.html">Encoding</a></li>
           <li><a href="/capnproto/rpc.html">RPC Protocol</a></li>
+          <li><a href="/capnproto/capnp-tool.html">The <code>capnp</code> Tool</a></li>
           <li><a href="/capnproto/cxx.html">C++ Runtime</a></li>
           <li><a href="/capnproto/otherlang.html">Other Languages</a></li>
+          <li><a href="/capnproto/roadmap.html">Road Map</a></li>
         </ul>
       </section>
       <section id="main_content" class="inner">
@@ -52,18 +54,24 @@
 
 <ul>
 <li><a href='cxx.html'>C++</a> by <a href='https://github.com/kentonv'>@kentonv</a> &#8211; Official reference implementation</li>
+
+<li><a href='http://jparyani.github.io/pycapnp/'>Python</a> by <a href='https://github.com/jparyani'>@jparyani</a> &#8211; Based on C extensions wrapping the C++ implementation.</li>
 </ul>
 
 <h5 id='works_in_progress'>Works In Progress</h5>
 
 <ul>
-<li><a href='https://github.com/jmckaskill/go-capnproto'>C and Go</a> by <a href='https://github.com/jmckaskill'>@jmckaskill</a></li>
-
-<li><a href='https://github.com/jparyani/capnpc-python-cpp'>Python (via C extensions)</a> by <a href='https://github.com/jparyani'>@jparyani</a></li>
-
-<li><a href='https://github.com/dwrensha/capnproto-rust'>Rust</a> by <a href='https://github.com/dwrensha'>@dwrensha</a></li>
+<li><a href='http://ecapnp.astekk.se/'>Erlang</a> by <a href='https://github.com/kaos'>@kaos</a></li>
 
 <li><a href='https://github.com/cstrahan/capnp-ruby'>Ruby</a> by <a href='https://github.com/cstrahan'>@cstrahan</a></li>
+
+<li><a href='https://github.com/dwrensha/capnproto-rust'>Rust</a> by <a href='https://github.com/dwrensha'>@dwrensha</a></li>
+</ul>
+
+<h5 id='inactive'>Inactive</h5>
+
+<ul>
+<li><a href='https://github.com/jmckaskill/go-capnproto'>C and Go</a> by <a href='https://github.com/jmckaskill'>@jmckaskill</a></li>
 </ul>
 
 <h2 id='contribute_your_own'>Contribute Your Own!</h2>
@@ -100,7 +108,11 @@ capnp compile -o ./myplugin addressbook.capnp</code></pre>
 
 <p>Fortunately, dynamic languages usually have facilities for calling native code. The best way to support Cap&#8217;n Proto in a dynamic language, then, is to wrap the C++ library, in particular the <a href='cxx.html#dynamic_reflection'>C++ dynamic API</a>. This way you get reasonable performance while still avoiding the need to generate any code specific to each schema.</p>
 
-<p>Of course, you still need to parse the schema. Version 0.3 of Cap&#8217;n Proto will introduce a public C++ API to the schema parser which your bindings can invoke. By the time you read this, the API is probably already available at git head, or will be within a few days; <a href='https://groups.google.com/group/capnproto'>send us a note</a> if you want to try it out.</p>
+<p>To parse the schema files, use the <code>capnp::SchemaParser</code> class (defined in <code>capnp/schema-parser.h</code>). This way, schemas are loaded at the same time as all the rest of the program&#8217;s code &#8211; at startup. An advanced implementation might consider caching the compiled schemas in binary format, then loading the cached version using <code>capnp::SchemaLoader</code>, similar to the way e.g. Python caches compiled source files as <code>.pyc</code> bytecode, but that&#8217;s up to you.</p>
+
+<h3 id='testing_your_implementation'>Testing Your Implementation</h3>
+
+<p>The easiest way to test that you&#8217;ve implemented the spec correctly is to use the <code>capnp</code> tool to <a href='capnp-tool.html#encoding_messages'>encode</a> test inputs and <a href='capnp-tool.html#decoding_messages'>decode</a> outputs.</p>
 <script type="text/javascript">setupSidebar()</script>
         <div style="clear: both;"></div>
       </section>

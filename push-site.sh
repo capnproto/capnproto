@@ -35,7 +35,7 @@ REV="$(git rev-parse HEAD)"
 
 cd .gh-pages
 git add *
-git commit -m "site generated @$REV"
+git commit -am "site generated @$REV"
 
 if [ "x$(git status --porcelain)" != "x" ]; then
   echo "error:  .gh-pages is not clean after commit." >&2

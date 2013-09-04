@@ -18,7 +18,7 @@
     <!-- HEADER -->
     <div id="header_wrap" class="outer">
       <header class="inner">
-        <img src="/capnproto/images/captain_proto.png">
+        <img src="/capnproto/images/logo.png">
         <div id="infinitely_faster">
           <img src="/capnproto/images/infinitely_faster.png">
         </div>
@@ -38,14 +38,16 @@
           <li><a href="/capnproto/language.html">Schema Language</a></li>
           <li><a href="/capnproto/encoding.html">Encoding</a></li>
           <li><a href="/capnproto/rpc.html">RPC Protocol</a></li>
+          <li><a href="/capnproto/capnp-tool.html">The <code>capnp</code> Tool</a></li>
           <li><a href="/capnproto/cxx.html">C++ Runtime</a></li>
           <li><a href="/capnproto/otherlang.html">Other Languages</a></li>
+          <li><a href="/capnproto/roadmap.html">Road Map</a></li>
         </ul>
       </section>
       <section id="main_content" class="inner">
 
 <h1 id='installation'>Installation</h1>
-<p style='font-size: 125%; font-weight: bold;'>Note: Cap'n Proto is in BETA</p><div style='float: right'><a href='https://groups.google.com/group/capnproto-announce' class='groups_link' style='color: #fff'>Sign Up for Updates</a></div>
+<p style='font-size: 125%; font-weight: bold;'>Note: Cap'n Proto is in BETA</p><div style='float: right'><a class='groups_link' style='color: #fff' href='https://groups.google.com/group/capnproto-announce'>Sign Up for Updates</a></div>
 <p>As of this writing, Cap&#8217;n Proto is in beta. The serialization layer is close to feature-complete and we don&#8217;t anticipate any further changes to the wire format. That said, if you want to use it, you should keep in mind some caveats:</p>
 
 <ul>
@@ -76,7 +78,32 @@
 
 <p>This package is officially tested on Linux (GCC 4.7, Clang 3.2), Mac OSX (Clang 3.2), and Cygwin (Windows; GCC 4.7), in 32-bit and 64-bit modes.</p>
 
-<h5 id='clang_32_on_mac_osx'>Clang 3.2 on Mac OSX</h5>
+<p><strong>Mac OSX users:</strong> Don&#8217;t miss the <a href='#clang_32_on_mac_osx'>special instructions for OSX</a>.</p>
+
+<h3 id='building_from_a_release_package'>Building from a release package</h3>
+
+<p>You may download and install the release version of Cap&#8217;n Proto like so:</p>
+<pre><code>curl -O <a href='http://capnproto.org/capnproto-c++-0.3.0.tar.gz'>http://capnproto.org/capnproto-c++-0.3.0.tar.gz</a>
+tar zxf capnproto-c++-0.3.0.tar.gz
+cd capnproto-c++-0.3.0
+./configure
+make -j6 check
+sudo make install</code></pre>
+<p>This will install <code>capnp</code>, the Cap&#8217;n Proto command-line tool. It will also install <code>libcapnp</code>, <code>libcapnpc</code>, and <code>libkj</code> in <code>/usr/local/lib</code> and headers in <code>/usr/local/include/capnp</code> and <code>/usr/local/include/kj</code>.</p>
+
+<h3 id='building_from_git_with_autotools'>Building from Git with Autotools</h3>
+
+<p>If you download directly from Git, and you don&#8217;t want to <a href='install.html#building_with_ekam'>build with Ekam</a>, you will need to have the GNU autotools &#8211; <a href='http://www.gnu.org/software/autoconf/'>autoconf</a>, <a href='http://www.gnu.org/software/automake/'>automake</a>, and <a href='http://www.gnu.org/software/libtool/'>libtool</a> &#8211; installed. You will also need Subversion installed (in addition to Git) in order to fetch the Google Test sources (done by <code>setup-autotools.sh</code>).</p>
+
+<pre><code>git clone https://github.com/kentonv/capnproto.git
+cd capnproto/c++
+./setup-autotools.sh
+autoreconf -i
+./configure
+make -j6 check
+sudo make install</code></pre>
+
+<h3 id='clang_32_on_mac_osx'>Clang 3.2 on Mac OSX</h3>
 
 <p>As of this writing, Mac OSX 10.8 with Xcode 4.6 command-line tools is not quite good enough to compile Cap&#8217;n Proto. The included version of GCC is ancient. The included version of Clang &#8211; which mysteriously advertises itself as version 4.2 &#8211; was actually cut from LLVM SVN somewhere between versions 3.1 and 3.2; it is not sufficient to build Cap&#8217;n Proto.</p>
 
@@ -115,31 +142,6 @@ mv clang+llvm-3.2-x86_64-apple-darwin11 ~/clang-3.2</code></pre>
 <pre><code>./configure CXX=$HOME/clang-3.2/bin/clang++</code></pre>
 
 <p>Hopefully, Xcode 5.0 will be released soon with a newer Clang, making this extra work unnecessary.</p>
-
-<h3 id='building_from_a_release_package'>Building from a release package</h3>
-
-<p>You may download and install the release version of Cap&#8217;n Proto like so:</p>
-<pre><code>curl -O <a href='http://capnproto.org/capnproto-c++-0.2.1.tar.gz'>http://capnproto.org/capnproto-c++-0.2.1.tar.gz</a>
-tar zxf capnproto-c++-0.2.1.tar.gz
-cd capnproto-c++-0.2.1
-./configure
-make -j6 check
-sudo make install</code></pre>
-<p>This will install <code>capnp</code>, the Cap&#8217;n Proto command-line tool. It will also install <code>libcapnp</code> in <code>/usr/local/lib</code> and headers in <code>/usr/local/include/capnp</code> and <code>/usr/local/include/kj</code>.</p>
-
-<p>On Linux, if running <code>capnp</code> immediately after installation produces an error saying that the <code>libcapnp</code> library does not exist, run <code>sudo ldconfig</code> and try again.</p>
-
-<h3 id='building_from_git_with_autotools'>Building from Git with Autotools</h3>
-
-<p>If you download directly from Git, and you don&#8217;t want to <a href='install.html#building_with_ekam'>build with Ekam</a>, you will need to have the GNU autotools &#8211; <a href='http://www.gnu.org/software/autoconf/'>autoconf</a>, <a href='http://www.gnu.org/software/automake/'>automake</a>, and <a href='http://www.gnu.org/software/libtool/'>libtool</a> &#8211; installed. You will also need Subversion installed (in addition to Git) in order to fetch the Google Test sources (done by <code>setup-autotools.sh</code>).</p>
-
-<pre><code>git clone https://github.com/kentonv/capnproto.git
-cd capnproto/c++
-./setup-autotools.sh
-autoreconf -i
-./configure
-make -j6 check
-sudo make install</code></pre>
 
 <h3 id='building_with_ekam'>Building with Ekam</h3>
 

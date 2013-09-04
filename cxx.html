@@ -18,7 +18,7 @@
     <!-- HEADER -->
     <div id="header_wrap" class="outer">
       <header class="inner">
-        <img src="/capnproto/images/captain_proto.png">
+        <img src="/capnproto/images/logo.png">
         <div id="infinitely_faster">
           <img src="/capnproto/images/infinitely_faster.png">
         </div>
@@ -38,8 +38,10 @@
           <li><a href="/capnproto/language.html">Schema Language</a></li>
           <li><a href="/capnproto/encoding.html">Encoding</a></li>
           <li><a href="/capnproto/rpc.html">RPC Protocol</a></li>
+          <li><a href="/capnproto/capnp-tool.html">The <code>capnp</code> Tool</a></li>
           <li><a href="/capnproto/cxx.html">C++ Runtime</a></li>
           <li><a href="/capnproto/otherlang.html">Other Languages</a></li>
+          <li><a href="/capnproto/roadmap.html">Road Map</a></li>
         </ul>
       </section>
       <section id="main_content" class="inner">
@@ -68,11 +70,11 @@
     }
   }
 
-  <span class='n'>employment</span> <span class='nd'>@4</span> <span class='k'>union</span> {
-    <span class='n'>unemployed</span> <span class='nd'>@5</span> <span class='nc'>:Void</span>;
-    <span class='n'>employer</span> <span class='nd'>@6</span> <span class='nc'>:Text</span>;
-    <span class='n'>school</span> <span class='nd'>@7</span> <span class='nc'>:Text</span>;
-    <span class='n'>selfEmployed</span> <span class='nd'>@8</span> <span class='nc'>:Void</span>;
+  <span class='n'>employment</span> <span class='nc'>:union </span>{
+    <span class='n'>unemployed</span> <span class='nd'>@4</span> <span class='nc'>:Void</span>;
+    <span class='n'>employer</span> <span class='nd'>@5</span> <span class='nc'>:Text</span>;
+    <span class='n'>school</span> <span class='nd'>@6</span> <span class='nc'>:Text</span>;
+    <span class='n'>selfEmployed</span> <span class='nd'>@7</span> <span class='nc'>:Void</span>;
     <span class='c1'># We assume that a person is only one of these.</span>
   }
 }
@@ -170,6 +172,8 @@
 
 <p>Cap&#8217;n Proto is built on top of a basic utility library called KJ. The two were actually developed together &#8211; KJ is simply the stuff which is not specific to Cap&#8217;n Proto serialization, and may be useful to others independently of Cap&#8217;n Proto. For now, the the two are distributed together. The name &#8220;KJ&#8221; has no particular meaning; it was chosen to be short and easy-to-type.</p>
 
+<p>As of v0.3, KJ is distributed with Cap&#8217;n Proto but built as a separate library. You may need to explicitly link against libraries: <code>-lcapnp -lkj</code></p>
+
 <h2 id='generating_code'>Generating Code</h2>
 
 <p>To generate C++ code from your <code>.capnp</code> <a href='language.html'>interface definition</a>, run:</p>
@@ -177,6 +181,8 @@
 <pre><code>capnp compile -oc++ myproto.capnp</code></pre>
 
 <p>This will create <code>myproto.capnp.h</code> and <code>myproto.capnp.c++</code> in the same directory as <code>myproto.capnp</code>.</p>
+
+<p>To use this code in your app, you must link against both <code>libcapnp</code> and <code>libkj</code>.</p>
 
 <h3 id='setting_a_namespace'>Setting a Namespace</h3>
 
@@ -203,7 +209,7 @@
 
 <li><code>Float64</code> -&gt; <code>double</code></li>
 
-<li><code>Void</code> -&gt; <code>::capnp::Void</code> (An enum with one value: <code>::capnp::Void::VOID</code>)</li>
+<li><code>Void</code> -&gt; <code>::capnp::Void</code> (An empty struct; its only value is <code>::capnp::VOID</code>)</li>
 </ul>
 
 <h3 id='structs'>Structs</h3>
@@ -270,9 +276,25 @@
 <span class='kt'>void</span> <span class='nf'>setMyListField</span><span class='p'>(</span><span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;::</span><span class='n'>Reader</span> <span class='n'>value</span><span class='p'>);</span>
 <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='o'>&lt;</span><span class='kt'>double</span><span class='o'>&gt;::</span><span class='n'>Builder</span> <span class='n'>initMyListField</span><span class='p'>(</span><span class='kt'>size_t</span> <span class='n'>size</span><span class='p'>);</span>
 </code></pre></div>
+<h3 id='groups'>Groups</h3>
+
+<p>Groups look a lot like a combination of a nested type and a field of that type, except that you cannot set, adopt, or disown a group &#8211; you can only get and init it.</p>
+
 <h3 id='unions'>Unions</h3>
 
-<p>For each union <code>foo</code> declared in the struct, the struct&#8217;s reader and builder have a method <code>getFoo()</code> which returns a reader/builder for the union. The union reader/builder has accessors for each field exactly like a struct&#8217;s accessors. It also has an accessor <code>which()</code> which returns an enum indicating which member of the union is currently set. Setting any member of the union updates the value returned by <code>which()</code>. Getting a member other than the currently-set member crashes in debug mode or returns garbage when <code>NDEBUG</code> is defined.</p>
+<p>A named union (as opposed to an unnamed one) works just like a group, except with some additions:</p>
+
+<ul>
+<li>For each field <code>foo</code>, the union reader and builder have a method <code>isFoo()</code> which returns true if <code>foo</code> is the currently-set field in the union.</li>
+
+<li>The union reader and builder also have a method <code>which()</code> that returns an enum value indicating which field is currently set.</li>
+
+<li>Calling the set, init, or adopt accessors for a field makes it the currently-set field.</li>
+
+<li>Calling the get or disown accessors on a field that isn&#8217;t currently set will throw an exception in debug mode or return garbage when <code>NDEBUG</code> is defined.</li>
+</ul>
+
+<p>Unnamed unions differ from named unions only in that the accessor methods from the union&#8217;s members are added directly to the containing type&#8217;s reader and builder, rather than generating a nested type.</p>
 
 <p>See the <a href='#example_usage'>example</a> at the top of the page for an example of unions.</p>
 
@@ -292,7 +314,7 @@
 
 <p>Cap&#8217;n Proto enums become C++11 &#8220;enum classes&#8221;. That means they behave like any other enum, but the enum&#8217;s values are scoped within the type. E.g. for an enum <code>Foo</code> with value <code>bar</code>, you must refer to the value as <code>Foo::BAR</code>.</p>
 
-<p>To match prevaling C++ style, an enum&#8217;s value names are converted to UPPERCASE_WITH_UNDERSCORES (whereas in the definition language you&#8217;d write them in camelCase).</p>
+<p>To match prevaling C++ style, an enum&#8217;s value names are converted to UPPERCASE_WITH_UNDERSCORES (whereas in the schema language you&#8217;d write them in camelCase).</p>
 
 <p>Keep in mind when writing <code>switch</code> blocks that an enum read off the wire may have a numeric value that is not listed in its definition. This may be the case if the sender is using a newer version of the protocol, or if the message is corrupt or malicious. In C++11, enums are allowed to have any value that is within the range of their base type, which for Cap&#8217;n Proto enums is <code>uint16_t</code>.</p>
 
@@ -300,13 +322,15 @@
 
 <p>Blobs are manipulated using the classes <code>capnp::Text</code> and <code>capnp::Data</code>. These classes are, again, just containers for inner classes <code>Reader</code> and <code>Builder</code>. These classes are iterable and implement <code>size()</code> and <code>operator[]</code> methods. <code>Builder::operator[]</code> even returns a reference (unlike with <code>List&lt;T&gt;</code>). <code>Text::Reader</code> additionally has a method <code>cStr()</code> which returns a NUL-terminated <code>const char*</code>.</p>
 
+<p>As a special convenience, if you are using GCC 4.8+ or Clang, <code>Text::Reader</code> (and its underlying type, <code>kj::StringPtr</code>) can be implicitly converted to and from <code>std::string</code> format. This is accomplished without actually <code>#include</code>ing <code>&lt;string&gt;</code>, since some clients do not want to rely on this rather-bulky header. In fact, any class which defines a <code>.c_str()</code> method will be implicitly convertible in this way. Unfortunately, this trick doesn&#8217;t work on GCC 4.7.</p>
+
 <h3 id='interfaces'>Interfaces</h3>
 
 <p>Interfaces (RPC) are not yet implemented at this time.</p>
 
 <h3 id='constants'>Constants</h3>
 
-<p>Constants are not yet implemented at this time. (They are not hard, but they are low-priority.)</p>
+<p>Constants are exposed with their names converted to UPPERCASE_WITH_UNDERSCORES naming style (whereas in the schema language you’d write them in camelCase). Primitive constants are just <code>constexpr</code> values. Pointer-type constants (e.g. structs, lists, and blobs) are represented using a proxy object that can be converted to the relevant <code>Reader</code> type, either implicitly or using the unary <code>*</code> or <code>-&gt;</code> operators.</p>
 
 <h2 id='messages_and_io'>Messages and I/O</h2>
 
@@ -317,6 +341,14 @@
 <p>Note that if your stream contains additional data after the message, <code>PackedFdMessageReader</code> may accidentally read some of that data, since it does buffered I/O. To make this work correctly, you will need to set up a multi-use buffered stream. Buffered I/O may also be a good idea with <code>StreamFdMessageReader</code> and also when writing, for performance reasons. See <code>capnp/io.h</code> for details.</p>
 
 <p>There is an <a href='#example_usage'>example</a> of all this at the beginning of this page.</p>
+
+<h3 id='using_mmap'>Using mmap</h3>
+
+<p>Cap&#8217;n Proto can be used together with <code>mmap()</code> (or Win32&#8217;s <code>MapViewOfFile()</code>) for extremely fast reads, especially when you only need to use a subset of the data in the file. Currently, Cap&#8217;n Proto is not well-suited for <em>writing</em> via <code>mmap()</code>, only reading, but this is only because we have not yet invented a mutable segment framing format &#8211; the underlying design should eventually work for both.</p>
+
+<p>To take advantage of <code>mmap()</code> at read time, write your file in regular serialized (but NOT packed) format &#8211; that is, use <code>writeMessageToFd()</code>, <em>not</em> <code>writePackedMessageToFd()</code>. Now, <code>mmap()</code> in the entire file, and then pass the mapped memory to the constructor of <code>capnp::FlatArrayMessageReader</code> (defined in <code>capnp/serialize.h</code>). That&#8217;s it. You can use the reader just like a normal <code>StreamFdMessageReader</code>. The operating system will automatically page in data from disk as you read it.</p>
+
+<p><code>mmap()</code> works best when reading from flash media, or when the file is already hot in cache. It works less well with slow rotating disks. Here, disk seeks make random access relatively expensive. Also, if I/O throughput is your bottleneck, then the fact that mmaped data cannot be packed or compressed may hurt you. However, it all depends on what fraction of the file you&#8217;re actually reading &#8211; if you only pull one field out of one deeply-nested struct in a huge tree, it may still be a win. The only way to know for sure is to do benchmarks! (But be careful to make sure your benchmark is actually interacting with disk and not cache.)</p>
 
 <h2 id='dynamic_reflection'>Dynamic Reflection</h2>
 
@@ -334,7 +366,6 @@
 <span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicStruct</span><span class='p'>;</span>
 <span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicEnum</span><span class='p'>;</span>
 <span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicList</span><span class='p'>;</span>
-<span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>DynamicUnion</span><span class='p'>;</span>
 <span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>List</span><span class='p'>;</span>
 <span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>Schema</span><span class='p'>;</span>
 <span class='k'>using</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>StructSchema</span><span class='p'>;</span>
@@ -369,7 +400,7 @@
   <span class='k'>auto</span> <span class='n'>phone0</span> <span class='o'>=</span> <span class='n'>alicePhones</span><span class='p'>[</span><span class='mi'>0</span><span class='p'>].</span><span class='n'>as</span><span class='o'>&lt;</span><span class='n'>DynamicStruct</span><span class='o'>&gt;</span><span class='p'>();</span>
   <span class='n'>phone0</span><span class='p'>.</span><span class='n'>set</span><span class='p'>(</span><span class='s'>&quot;number&quot;</span><span class='p'>,</span> <span class='s'>&quot;555-1212&quot;</span><span class='p'>);</span>
   <span class='n'>phone0</span><span class='p'>.</span><span class='n'>set</span><span class='p'>(</span><span class='s'>&quot;type&quot;</span><span class='p'>,</span> <span class='s'>&quot;mobile&quot;</span><span class='p'>);</span>
-  <span class='n'>alice</span><span class='p'>.</span><span class='n'>get</span><span class='p'>(</span><span class='s'>&quot;employment&quot;</span><span class='p'>).</span><span class='n'>as</span><span class='o'>&lt;</span><span class='n'>DynamicUnion</span><span class='o'>&gt;</span><span class='p'>()</span>
+  <span class='n'>alice</span><span class='p'>.</span><span class='n'>get</span><span class='p'>(</span><span class='s'>&quot;employment&quot;</span><span class='p'>).</span><span class='n'>as</span><span class='o'>&lt;</span><span class='n'>DynamicStruct</span><span class='o'>&gt;</span><span class='p'>()</span>
        <span class='p'>.</span><span class='n'>set</span><span class='p'>(</span><span class='s'>&quot;school&quot;</span><span class='p'>,</span> <span class='s'>&quot;MIT&quot;</span><span class='p'>);</span>
 
   <span class='k'>auto</span> <span class='n'>bob</span> <span class='o'>=</span> <span class='n'>people</span><span class='p'>[</span><span class='mi'>1</span><span class='p'>].</span><span class='n'>as</span><span class='o'>&lt;</span><span class='n'>DynamicStruct</span><span class='o'>&gt;</span><span class='p'>();</span>
@@ -385,8 +416,8 @@
   <span class='n'>bobPhones</span><span class='p'>[</span><span class='mi'>0</span><span class='p'>].</span><span class='n'>setType</span><span class='p'>(</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>::</span><span class='n'>Type</span><span class='o'>::</span><span class='n'>HOME</span><span class='p'>);</span>
   <span class='n'>bobPhones</span><span class='p'>[</span><span class='mi'>1</span><span class='p'>].</span><span class='n'>setNumber</span><span class='p'>(</span><span class='s'>&quot;555-7654&quot;</span><span class='p'>);</span>
   <span class='n'>bobPhones</span><span class='p'>[</span><span class='mi'>1</span><span class='p'>].</span><span class='n'>setType</span><span class='p'>(</span><span class='n'>Person</span><span class='o'>::</span><span class='n'>PhoneNumber</span><span class='o'>::</span><span class='n'>Type</span><span class='o'>::</span><span class='n'>WORK</span><span class='p'>);</span>
-  <span class='n'>bob</span><span class='p'>.</span><span class='n'>get</span><span class='p'>(</span><span class='s'>&quot;employment&quot;</span><span class='p'>).</span><span class='n'>as</span><span class='o'>&lt;</span><span class='n'>DynamicUnion</span><span class='o'>&gt;</span><span class='p'>()</span>
-     <span class='p'>.</span><span class='n'>set</span><span class='p'>(</span><span class='s'>&quot;unemployed&quot;</span><span class='p'>,</span> <span class='n'>Void</span><span class='o'>::</span><span class='n'>VOID</span><span class='p'>);</span>
+  <span class='n'>bob</span><span class='p'>.</span><span class='n'>get</span><span class='p'>(</span><span class='s'>&quot;employment&quot;</span><span class='p'>).</span><span class='n'>as</span><span class='o'>&lt;</span><span class='n'>DynamicStruct</span><span class='o'>&gt;</span><span class='p'>()</span>
+     <span class='p'>.</span><span class='n'>set</span><span class='p'>(</span><span class='s'>&quot;unemployed&quot;</span><span class='p'>,</span> <span class='o'>::</span><span class='n'>capnp</span><span class='o'>::</span><span class='n'>VOID</span><span class='p'>);</span>
 
   <span class='n'>writePackedMessageToFd</span><span class='p'>(</span><span class='n'>fd</span><span class='p'>,</span> <span class='n'>message</span><span class='p'>);</span>
 <span class='p'>}</span>
@@ -444,31 +475,18 @@
       <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;(&quot;</span><span class='p'>;</span>
       <span class='k'>auto</span> <span class='n'>structValue</span> <span class='o'>=</span> <span class='n'>value</span><span class='p'>.</span><span class='n'>as</span><span class='o'>&lt;</span><span class='n'>DynamicStruct</span><span class='o'>&gt;</span><span class='p'>();</span>
       <span class='kt'>bool</span> <span class='n'>first</span> <span class='o'>=</span> <span class='nb'>true</span><span class='p'>;</span>
-      <span class='k'>for</span> <span class='p'>(</span><span class='k'>auto</span> <span class='n'>member</span><span class='o'>:</span>
-           <span class='n'>structValue</span><span class='p'>.</span><span class='n'>getSchema</span><span class='p'>().</span><span class='n'>getMembers</span><span class='p'>())</span> <span class='p'>{</span>
+      <span class='k'>for</span> <span class='p'>(</span><span class='k'>auto</span> <span class='n'>field</span><span class='o'>:</span> <span class='n'>structValue</span><span class='p'>.</span><span class='n'>getSchema</span><span class='p'>().</span><span class='n'>getFields</span><span class='p'>())</span> <span class='p'>{</span>
+        <span class='k'>if</span> <span class='p'>(</span><span class='o'>!</span><span class='n'>structValue</span><span class='p'>.</span><span class='n'>has</span><span class='p'>(</span><span class='n'>field</span><span class='p'>))</span> <span class='k'>continue</span><span class='p'>;</span>
         <span class='k'>if</span> <span class='p'>(</span><span class='n'>first</span><span class='p'>)</span> <span class='p'>{</span>
           <span class='n'>first</span> <span class='o'>=</span> <span class='nb'>false</span><span class='p'>;</span>
         <span class='p'>}</span> <span class='k'>else</span> <span class='p'>{</span>
           <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;, &quot;</span><span class='p'>;</span>
         <span class='p'>}</span>
-        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>member</span><span class='p'>.</span><span class='n'>getProto</span><span class='p'>().</span><span class='n'>getName</span><span class='p'>().</span><span class='n'>cStr</span><span class='p'>()</span>
+        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>field</span><span class='p'>.</span><span class='n'>getProto</span><span class='p'>().</span><span class='n'>getName</span><span class='p'>().</span><span class='n'>cStr</span><span class='p'>()</span>
                   <span class='o'>&lt;&lt;</span> <span class='s'>&quot; = &quot;</span><span class='p'>;</span>
-        <span class='n'>dynamicPrintValue</span><span class='p'>(</span><span class='n'>structValue</span><span class='p'>.</span><span class='n'>get</span><span class='p'>(</span><span class='n'>member</span><span class='p'>));</span>
+        <span class='n'>dynamicPrintValue</span><span class='p'>(</span><span class='n'>structValue</span><span class='p'>.</span><span class='n'>get</span><span class='p'>(</span><span class='n'>field</span><span class='p'>));</span>
       <span class='p'>}</span>
       <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;)&quot;</span><span class='p'>;</span>
-      <span class='k'>break</span><span class='p'>;</span>
-    <span class='p'>}</span>
-    <span class='k'>case</span> <span class='n'>DynamicValue</span>:<span class='o'>:</span><span class='n'>UNION</span><span class='o'>:</span> <span class='p'>{</span>
-      <span class='k'>auto</span> <span class='n'>unionValue</span> <span class='o'>=</span> <span class='n'>value</span><span class='p'>.</span><span class='n'>as</span><span class='o'>&lt;</span><span class='n'>DynamicUnion</span><span class='o'>&gt;</span><span class='p'>();</span>
-      <span class='n'>KJ_IF_MAYBE</span><span class='p'>(</span><span class='n'>tag</span><span class='p'>,</span> <span class='n'>unionValue</span><span class='p'>.</span><span class='n'>which</span><span class='p'>())</span> <span class='p'>{</span>
-        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='n'>tag</span><span class='o'>-&gt;</span><span class='n'>getProto</span><span class='p'>().</span><span class='n'>getName</span><span class='p'>().</span><span class='n'>cStr</span><span class='p'>()</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;(&quot;</span><span class='p'>;</span>
-        <span class='n'>dynamicPrintValue</span><span class='p'>(</span><span class='n'>unionValue</span><span class='p'>.</span><span class='n'>get</span><span class='p'>());</span>
-        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;)&quot;</span><span class='p'>;</span>
-      <span class='p'>}</span> <span class='k'>else</span> <span class='p'>{</span>
-        <span class='c1'>// Unknown union member; must have come from newer</span>
-        <span class='c1'>// version of the protocol.</span>
-        <span class='n'>std</span><span class='o'>::</span><span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;?&quot;</span><span class='p'>;</span>
-      <span class='p'>}</span>
       <span class='k'>break</span><span class='p'>;</span>
     <span class='p'>}</span>
     <span class='nl'>default:</span>
@@ -496,11 +514,23 @@
 </li>
 
 <li>
+<p>While <code>SchemaLoader</code> loads binary schemas, you can also parse directly from text using <code>SchemaParser</code> (<code>capnp/schema-parser.h</code>). However, this requires linking against <code>libcapnpc</code> (in addition to <code>libcapnp</code> and <code>libkj</code>) &#8211; this code is bulky and not terribly efficient. If you can arrange to use only binary schemas at runtime, you&#8217;ll be better off.</p>
+</li>
+
+<li>
 <p>Unlike with Protobufs, there is no &#8220;global registry&#8221; of compiled-in types. To get the schema for a compiled-in type, use <code>capnp::Schema::from&lt;MyType&gt;()</code>.</p>
 </li>
 
 <li>
 <p>Unlike with Protobufs, the overhead of supporting reflection is small. Generated <code>.capnp.c++</code> files contain only some embedded const data structures describing the schema, no code at all, and the runtime library support code is relatively small. Moreover, if you do not use the dynamic API or the schema API, you do not even need to link their implementations into your executable.</p>
+</li>
+
+<li>
+<p>The dynamic API performs type checks at runtime. In case of error, it will throw an exception. If you compile with <code>-fno-exceptions</code>, it will crash instead. Correct usage of the API should never throw, but bugs happen. Enabling and catching exceptions will make your code more robust.</p>
+</li>
+
+<li>
+<p>Loading user-provided schemas has security implications: it greatly increases the attack surface of the Cap&#8217;n Proto library. In particular, it is easy for an attacker to trigger exceptions. To protect yourself, you are strongly advised to enable exceptions and catch them.</p>
 </li>
 </ul>
 
@@ -531,7 +561,7 @@ capnp/schema.h
 capnp/schema-loader.h
 capnp/dynamic.h</code></pre>
 
-<h2 id='best_practices'>Best Practices</h2>
+<h2 id='tips_and_best_practices'>Tips and Best Practices</h2>
 
 <p>Here are some tips for using the C++ Cap&#8217;n Proto runtime most effectively:</p>
 
@@ -553,12 +583,88 @@ frob(foo.getBar().getBaz(),
 // GOOD
 auto bar = foo.getBar();
 frob(bar.getBaz(), bar.getQux(), bar.getCorge());</code></pre>
+
+<p>It is especially important to use this style when reading messages, for another reason: as described under the &#8220;security tips&#8221; section, below, every time you <code>get</code> a pointer, Cap&#8217;n Proto increments a counter by the size of the target object. If that counter hits a pre-defined limit, an exception is thrown (or a default value is returned, if exceptions are disabled), to prevent a malicious client from sending your server into an infinite loop with a specially-crafted message. If you repeatedly <code>get</code> the same object, you are repeatedly counting the same bytes, and so you may hit the limit prematurely. (Since Cap&#8217;n Proto readers are backed directly by the underlying message buffer and do not have anywhere else to store per-object information, it is impossible to remember whether you&#8217;ve seen a particular object already.)</p>
 </li>
 
+<li>
+<p>Internally, all pointer fields start out &#8220;null&#8221;, even if they have default values. When you have a pointer field <code>foo</code> and you call <code>getFoo()</code> on the containing struct&#8217;s <code>Reader</code>, if the field is &#8220;null&#8221;, you will receive a reader for that field&#8217;s default value. This reader is backed by read-only memory; nothing is allocated. However, when you call <code>get</code> on a <em>builder</em>, and the field is null, then the implementation must make a <em>copy</em> of the default value to return to you. Thus, you&#8217;ve caused the field to become non-null, just by &#8220;reading&#8221; it. On the other hand, if you call <code>init</code> on that field, you are explicitly replacing whatever value is already there (null or not) with a newly-allocated instance, and that newly-allocated instance is <em>not</em> a copy of the field&#8217;s default value, but just a completely-uninitialized instance of the appropriate type.</p>
+</li>
+
+<li>
+<p>It is possible to receive a struct value constructed from a newer version of the protocol than the one your binary was built with, and that struct might have extra fields that you don&#8217;t know about. The Cap&#8217;n Proto implementation tries to avoid discarding this extra data. If you copy the struct from one message to another (e.g. by calling a set() method on a parent object), the extra fields will be preserved. This makes it possible to build proxies that receive messages and forward them on without having to rebuild the proxy every time a new field is added. You must be careful, however: in some cases, it&#8217;s not possible to retain the extra fields, because they need to be copied into a space that is allocated before the expected content is known. In particular, lists of structs are represented as a flat array, not as an array of pointers. Therefore, all memory for all structs in the list must be allocated upfront. Hence, copying a struct value from another message into an element of a list will truncate the value. Because of this, the setter method for struct lists is called <code>setWithCaveats()</code> rather than just <code>set()</code>.</p>
+</li>
+
+<li>
+<p>Messages are built in &#8220;arena&#8221; or &#8220;region&#8221; style: each object is allocated sequentially in memory, until there is no more room in the segment, in which case a new segment is allocated, and objects continue to be allocated sequentially in that segment. This design is what makes Cap&#8217;n Proto possible at all, and it is very fast compared to other allocation strategies. However, it has the disadvantage that if you allocate an object and then discard it, that memory is lost. In fact, the empty space will still become part of the serialized message, even though it is unreachable. The implementation will try to zero it out, so at least it should pack well, but it&#8217;s still better to avoid this situation. Some ways that this can happen include:</p>
+
+<ul>
+<li>If you <code>init</code> a field that is already initialized, the previous value is discarded.</li>
+
+<li>If you create an orphan that is never adopted into the message tree.</li>
+
+<li>If you use <code>adoptWithCaveats</code> to adopt an orphaned struct into a struct list, then a shallow copy is necessary, since the struct list requires that its elements are sequential in memory. The previous copy of the struct is discarded (although child objects are transferred properly).</li>
+
+<li>If you copy a struct value from another message using a <code>set</code> method, the copy will have the same size as the original. However, the original could have been built with an older version of the protocol which lacked some fields compared to the version your program was built with. If you subsequently <code>get</code> that struct, the implementation will be forced to allocate a new (shallow) copy which is large enough to hold all known fields, and the old copy will be discarded. Child objects will be transferred over without being copied &#8211; though they might suffer from the same problem if you <code>get</code> them later on. Sometimes, avoiding these problems is too inconvenient. Fortunately, it&#8217;s also possible to clean up the mess after-the-fact: if you copy the whole message tree into a fresh <code>MessageBuilder</code>, only the reachable objects will be copied, leaving out all of the unreachable dead space.</li>
+</ul>
+
+<p>In the future, Cap&#8217;n Proto may be improved such that it can re-use dead space in a message. However, this will only improve things, not fix them entirely: fragementation could still leave dead space.</p>
+</li>
+</ul>
+
+<h3 id='build_tips'>Build Tips</h3>
+
+<ul>
 <li>
 <p>If you are worried about the binary footprint of the Cap&#8217;n Proto library, consider statically linking with the <code>--gc-sections</code> linker flag. This will allow the linker to drop pieces of the library that you do not actually use. For example, many users do not use the dynamic schema and reflection APIs, which contribute a large fraction of the Cap&#8217;n Proto library&#8217;s overall footprint. Keep in mind that if you ever stringify a Cap&#8217;n Proto type, the stringification code depends on the dynamic API; consider only using stringification in debug builds.</p>
 
 <p>If you are dynamically linking against the system&#8217;s shared copy of <code>libcapnp</code>, don&#8217;t worry about its binary size. Remember that only the code which you actually use will be paged into RAM, and those pages are shared with other applications on the system.</p>
+
+<p>Also remember to strip your binary. In particular, <code>libcapnpc</code> (the schema parser) has excessively large symbol names caused by its use of template-based parser combinators. Stripping the binary greatly reduces its size.</p>
+</li>
+
+<li>
+<p>The Cap&#8217;n Proto library has lots of debug-only asserts that are removed <code>#define NDEBUG</code>, including in headers. If you care at all about performance, you should compile your production binaries with the <code>-DNDEBUG</code> compiler flag. In fact, if Cap&#8217;n Proto detects that you have optimization enabled but have not defined <code>NDEBUG</code>, it will define it for you (with a warning), unless you define <code>DEBUG</code> or <code>KJ_DEBUG</code> to explicitly request debugging.</p>
+</li>
+</ul>
+
+<h3 id='security_tips'>Security Tips</h3>
+
+<p>Cap&#8217;n Proto has not yet undergone security review. It most likely has some vulnerabilities. You should not attempt to decode Cap&#8217;n Proto messages from sources you don&#8217;t trust at this time.</p>
+
+<p>However, assuming the Cap&#8217;n Proto implementation hardens up eventually, then the following security tips will apply.</p>
+
+<ul>
+<li>
+<p>It is highly recommended that you enable exceptions. When compiled with <code>-fno-exceptions</code>, Cap&#8217;n Proto categorizes exceptions into &#8220;fatal&#8221; and &#8220;recoverable&#8221; varieties. Fatal exceptions cause the server to crash, while recoverable exceptions are handled by logging an error and returning a &#8220;safe&#8221; garbage value. Fatal is preferred in cases where it&#8217;s unclear what kind of garbage value would constitute &#8220;safe&#8221;. The more of the library you use, the higher the chance that you will leave yourself open to the possibility that an attacker could trigger a fatal exception somewhere. If you enable exceptions, then you can catch the exception instead of crashing, and return an error just to the attacker rather than to everyone using your server.</p>
+
+<p>Basic parsing of Cap&#8217;n Proto messages shouldn&#8217;t ever trigger fatal exceptions (assuming the implementation is not buggy). However, the dynamic API &#8211; especially if you are loading schemas controlled by the attacker &#8211; is much more exception-happy. If you cannot use exceptions, then you are advised to avoid the dynamic API when dealing with untrusted data.</p>
+</li>
+
+<li>
+<p>If you need to process schemas from untrusted sources, take them in binary format, not text. The text parser is a much larger attack surface and not designed to be secure. For instance, as of this writing, it is trivial to deadlock the parser by simply writing a constant whose value depends on itself.</p>
+</li>
+
+<li>
+<p>Cap&#8217;n Proto automatically applies two artificial limits on messages for security reasons: a limit on nesting dept, and a limit on total bytes traversed.</p>
+
+<ul>
+<li>
+<p>The nesting depth limit is designed to prevent stack overflow when handling a deeply-nested recursive type, and defaults to 64. If your types aren&#8217;t recursive, it is highly unlikely that you would ever hit this limit, and even if they are recursive, it&#8217;s still unlikely.</p>
+</li>
+
+<li>
+<p>The traversal limit is designed to defend against maliciously-crafted messages which use pointer cycles or overlapping objects to make a message appear much larger than it looks off the wire. While cycles and overlapping objects are illegal, they are hard to detect reliably. Instead, Cap&#8217;n Proto places a limit on how many bytes worth of objects you can <em>dereference</em> before it throws an exception. This limit is assessed every time you follow a pointer. By default, the limit is 64MiB (this may change in the future). <code>StreamFdMessageReader</code> will actually reject upfront any message which is larger than the traversal limit, even before you start reading it.</p>
+
+<p>If you need to write your code in such a way that you might frequently re-read the same pointers, instead of increasing the traversal limit to the point where it is no longer useful, consider simply copying the message into a new <code>MallocMessageBuilder</code> before starting. Then, the traversal limit will be enforced only during the copy. There is no traversal limit on objects once they live in a <code>MessageBuilder</code>, even if you use <code>.asReader()</code> to convert a particular object&#8217;s builder to the corresponding reader type.</p>
+</li>
+</ul>
+
+<p>Both limits may be increased using <code>capnp::ReaderOptions</code>, defined in <code>capnp/message.h</code>.</p>
+</li>
+
+<li>
+<p>Remember that enums on the wire may have a numeric value that does not match any value defined in the schema. Your <code>switch()</code> statements must always have a safe default case.</p>
 </li>
 </ul>
 

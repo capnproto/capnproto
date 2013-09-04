@@ -22,7 +22,7 @@ function initSidebar() {
       var y = (window.pageYOffset !== undefined) ? window.pageYOffset :
         (document.documentElement || document.body.parentNode || document.body).scrollTop;
 
-      if (y < 410 || window.innerHeight < menu.clientHeight + 100) {
+      if (y < 444 || window.innerHeight < menu.clientHeight + 100) {
         menu.className = "";
       } else {
         menu.className = "floating";
@@ -40,9 +40,14 @@ function initSidebar() {
     var href = link.href;
     if (href.lastIndexOf(filename) >= 0) {
       var parent = link.parentNode;
-      parent.removeChild(link);
       var p = document.createElement("p");
-      p.appendChild(document.createTextNode(link.innerText || link.textContent));
+
+      while (link.childNodes.length > 0) {
+        var child = link.childNodes[0];
+        link.removeChild(child);
+        p.appendChild(child);
+      }
+      parent.removeChild(link);
       p.onclick = (function(url) {
         return function(event) {
           window.location.href = url;
@@ -70,6 +75,8 @@ function initSidebar() {
 }
 
 function setupSidebar() {
+  var isNews = document.location.pathname.slice("/capnproto".length).slice(0, 6) == "/news/";
+
   var toc = initSidebar();
   if (toc) {
     var content = document.getElementById("main_content").childNodes;
@@ -77,8 +84,7 @@ function setupSidebar() {
 
     for (var i = 0; i < content.length; i++) {
       if (content[i].tagName == "H2" ||
-          content[i].tagName == "H3" ||
-          content[i].tagName == "H4") {
+          (!isNews && (content[i].tagName == "H3" || content[i].tagName == "H4"))) {
         headings.push(content[i]);
       }
     }

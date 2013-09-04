@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="viewport" content="width=480">
+
+    <link rel="stylesheet" type="text/css" media="screen" href="/capnproto/stylesheets/stylesheet.css">
+
+    <title>Cap'n Proto: Cap'n Proto v0.3: Python, tools, new features</title>
+
+    <script type="text/javascript" src="/capnproto/javascripts/main.js"></script>
+  </head>
+
+  <body class="desktop">
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+      <header class="inner">
+        <img src="/capnproto/images/logo.png">
+        <div id="infinitely_faster">
+          <img src="/capnproto/images/infinitely_faster.png">
+        </div>
+      </header>
+      <a id="discuss_banner" href="https://groups.google.com/group/capnproto">Discuss on Groups</a>
+      <a id="forkme_banner" href="https://github.com/kentonv/capnproto">View on GitHub</a>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+
+      <section id="menu">
+        <ul>
+          <li><a href="/capnproto/index.html">Introduction</a></li>
+          <li><a href="/capnproto/news/">News</a></li>
+          <li><a href="/capnproto/install.html">Installation</a></li>
+          <li><a href="/capnproto/language.html">Schema Language</a></li>
+          <li><a href="/capnproto/encoding.html">Encoding</a></li>
+          <li><a href="/capnproto/rpc.html">RPC Protocol</a></li>
+          <li><a href="/capnproto/capnp-tool.html">The <code>capnp</code> Tool</a></li>
+          <li><a href="/capnproto/cxx.html">C++ Runtime</a></li>
+          <li><a href="/capnproto/otherlang.html">Other Languages</a></li>
+          <li><a href="/capnproto/roadmap.html">Road Map</a></li>
+        </ul>
+      </section>
+      <section id="main_content" class="inner">
+
+
+<div class="hmargin" style="float: right"><a class="groups_link" style="color: #fff"
+href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
+
+<h1><a href="/capnproto/news/">News</a></h1>
+
+<h2>Cap'n Proto v0.3: Python, tools, new features</h2>
+<p class="author">
+  <a href="https://github.com/kentonv">kentonv</a>
+  
+  <span class="gplus-followbutton"><span class="g-follow" data-annotation="none" data-height="15" data-href="//plus.google.com/118187272963262049674" data-rel="author"></span></span>
+  <a href="https://www.gittip.com/kentonv/"><img class="gittip" src="/capnproto/images/gittip.png" alt="Gittip"></a>
+  
+  on <span class="date">04 Sep 2013</span>
+</p>
+<p>The first release of Cap&#8217;n Proto came three months after the project was announced. The second release came six weeks after that. And the third release is three weeks later. If the pattern holds, there will be an infinite number of releases before the end of this month.</p>
+
+<p>Version 0.3 is not a paradigm-shifting release, but rather a slew of new features largely made possible by building on the rewritten compiler from the last release. Let&#8217;s go through the list&#8230;</p>
+
+<h3 id='python_support'>Python Support!</h3>
+
+<p>Thanks to the tireless efforts of contributor <a href='https://github.com/jparyani'>Jason Paryani</a>, I can now comfortably claim that Cap&#8217;n Proto supports multiple languages. <a href='http://jparyani.github.io/pycapnp/'>His Python implementation</a> wraps the C++ library and exposes most of its features in a nice, easy-to-use way.</p>
+
+<p>And I have to say, it&#8217;s <em>way</em> better than the old Python Protobuf implementation that I helped put together at Google. Here&#8217;s why:</p>
+
+<ul>
+<li>Jason&#8217;s implementation parses Cap&#8217;n Proto schema files at runtime. There is no need to run a compiler to generate code every time you update your schema, as with protobufs. So, you get to use Python the way Python was intended to be used. In fact, he&#8217;s hooked into the Python import mechanism, so you can basically import a <code>.capnp</code> schema file as if it were a <code>.py</code> module. It&#8217;s even convenient to load schema files and play with Cap&#8217;n Proto messages from the interactive interpreter prompt.</li>
+
+<li>It&#8217;s <em>fast</em>. Whereas the Python Protobuf implementation &#8211; which we made the mistake of implementing in pure-Python &#8211; is <em>slow</em>. And while technically there is an experimental C-extension-based Python Protobuf implementation (which isn&#8217;t enabled by default due to various obscure problems), Jason&#8217;s Cap&#8217;n Proto implementation is faster than that, too.</li>
+</ul>
+
+<p>Go <a href='http://jparyani.github.io/pycapnp/'>check it out</a>!</p>
+
+<p>By the way, there is also a budding <a href='http://ecapnp.astekk.se/'>Erlang implementation</a> (by Andreas Stenius), and work continues on <a href='https://github.com/dwrensha/capnproto-rust'>Rust</a> (David Renshaw) and <a href='https://github.com/cstrahan/capnp-ruby'>Ruby</a> (Charles Strahan) implementations.</p>
+
+<h3 id='tools_capn_proto_on_the_command_line'>Tools: Cap&#8217;n Proto on the Command Line</h3>
+
+<p>The <code>capnp</code> command-line tool previously served mostly to generate code, via the <code>capnp compile</code> command. It now additionally supports converting encoded Cap&#8217;n Proto messages to a human-readable text format via <code>capnp decode</code>, and converting that format back to binary with <code>capnp encode</code>. These tools are, of course, critical for debugging.</p>
+
+<p>You can also use the new <code>capnp eval</code> command to do something interesting: given a schema file and the name of a constant defined therein, it will print out the value of that constant, or optionally encode it to binary. This is more interesting than it sounds because the schema language supports variable substitution in the definitions of these constants. This means you can build a large structure by importing smaller bits from many different files. This may make it convenient to use Cap&#8217;n Proto schemas as a config format: define your service configuration as a constant in a schema file, importing bits specific to each client from other files that those clients submit to you. Use <code>capnp eval</code> to &#8220;compile&#8221; the whole thing to binary for deployment. (This has always been a common use case for Protobuf text format, which doesn&#8217;t even support variable substitution or imports.)</p>
+
+<p>Anyway, check out the <a href='/capnproto/capnp-tool.html'>full documentation</a> for more.</p>
+
+<h3 id='new_features'>New Features</h3>
+
+<p>The core product has been updated as well:</p>
+
+<ul>
+<li>Support for unnamed <a href='/capnproto/language.html#unions'>unions</a> reduces the need for noise-words, improving code readability. Additionally, the syntax for unions has been simplified by removing the unnecessary ordinal number.</li>
+
+<li><a href='/capnproto/language.html#groups'>Groups</a> pair nicely with unions.</li>
+
+<li><a href='/capnproto/language.html#constants'>Constants</a> are now <a href='/capnproto/cxx.html#constants'>implemented in C++</a>. Additionally, they can now be defined in terms of other constants (variable substitution), as described earlier.</li>
+
+<li>The schema API and <code>schema.capnp</code> have been radically refactored, in particular to take advantage of the new union and group features, making the code more readable.</li>
+
+<li>More and better tests, bug fixes, etc.</li>
+</ul>
+
+<h3 id='users'>Users!</h3>
+
+<p>Some news originating outside of the project itself:</p>
+
+<ul>
+<li><a href='http://www.debian.org/releases/sid/'>Debian Unstable (sid)</a> now features <a href='http://packages.debian.org/sid/capnproto'>a Cap&#8217;n Proto package</a>, thanks to <a href='https://github.com/thomaslee'>Tom Lee</a>. Of course, since package updates take some time, this package is still v0.2.1 as of this writing, but it will be updated to v0.3 soon enough.</li>
+
+<li>Popular OSX-based text editor <a href='http://macromates.com/'>TextMate</a> now <a href='https://github.com/textmate/textmate/commit/5c02b4ff5cc0c7c319d3d4f127c8ee19b81f80b7'>uses Cap&#8217;n Proto internally</a>, and the developer&#8217;s feedback lead directly to several usability improvements included in this release.</li>
+
+<li>Many people using Cap&#8217;n Proto <em>haven&#8217;t bothered to tell us about it</em>! Please, if you use it, <a href='https://groups.google.com/group/capnproto'>let us know</a> about your experience, both what you like and especially what you don&#8217;t like. This is the critical time where the system is usable but can still be changed if it&#8217;s not right, so your feedback is critical to our long-term success.</li>
+
+<li>I have revenue! A whopping <a href='https://www.gittip.com/kentonv/'>$1.25 per week</a>! &gt;_&gt; It&#8217;s totally worth it; I love this project. (But thanks for the tips!)</li>
+</ul>
+<script type="text/javascript">setupNewsSidebar([
+    
+      { title: "Cap'n Proto v0.3: Python, tools, new features", url: "/capnproto/news/2013-09-04-capnproto-0.3-python-tools-features.html" },
+    
+      { title: "Cap'n Proto v0.2.1: Minor bug fixes", url: "/capnproto/news/2013-08-19-capnproto-0.2.1.html" },
+    
+      { title: "Cap'n Proto v0.2: Compiler rewritten Haskell -> C++", url: "/capnproto/news/2013-08-12-capnproto-0.2-no-more-haskell.html" },
+    
+      { title: "Cap'n Proto Beta Release", url: "/capnproto/news/2013-06-27-capn-proto-beta-release.html" },
+    
+      { title: "Announcing Cap'n Proto", url: "/capnproto/news/2013-04-01-announcing-capn-proto.html" },
+    
+    ]);</script>
+        <div style="clear: both;"></div>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">Cap'n Proto maintained by <a href="https://github.com/kentonv">kentonv</a>
+          <span class="gplus-followbutton"><span class="g-follow" data-annotation="bubble" data-height="15" data-href="//plus.google.com/118187272963262049674" data-rel="author"></span></span>
+          <a href="https://www.gittip.com/kentonv/"><img class="gittip15" src="/capnproto/images/gittip15.png" alt="Gittip"></a></p>
+        <p>Design by <a href="http://www.starfruit-cafe.net/blog">sailorhg</a> ∙ Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+    <!-- Google+ follow button. -->
+    <script type="text/javascript">
+      (function() {
+        var po = document.createElement('script'); po.type = 'text/javascript'; po.async = true;
+        po.src = 'https://apis.google.com/js/plusone.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(po, s);
+      })();
+    </script>
+
+    <!-- Google Analytics. -->
+    <script type="text/javascript">
+      var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+      document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+    </script>
+    <script type="text/javascript">
+      try {
+        var pageTracker = _gat._getTracker("UA-39711112-1");
+        pageTracker._trackPageview();
+      } catch(err) {}
+    </script>
+  </body>
+</html>
+
