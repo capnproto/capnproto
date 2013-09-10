@@ -81,13 +81,13 @@ namespace compiler {
   SET(n)
 #else
 #define SET(n) \
-  (ctx->block[(n)] = \
+  (ctx.block[(n)] = \
   (MD5_u32plus)ptr[(n) * 4] | \
   ((MD5_u32plus)ptr[(n) * 4 + 1] << 8) | \
   ((MD5_u32plus)ptr[(n) * 4 + 2] << 16) | \
   ((MD5_u32plus)ptr[(n) * 4 + 3] << 24))
 #define GET(n) \
-  (ctx->block[(n)])
+  (ctx.block[(n)])
 #endif
 
 /*
