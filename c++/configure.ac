@@ -48,6 +48,8 @@ AS_IF([test "$external_capnp" != "no"], [
 ])
 AM_CONDITIONAL([USE_EXTERNAL_CAPNP], [test "$external_capnp" != "no"])
 
+AC_SEARCH_LIBS(sched_yield, rt)
+
 LIBS="$PTHREAD_LIBS $LIBS"
 CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
 

@@ -28,7 +28,8 @@
 #include <stdlib.h>
 #include <exception>
 
-#ifndef __CYGWIN__
+#if !defined(__CYGWIN__) && !defined(__sun)
+#define KJ_HAS_BACKTRACE 1
 #include <execinfo.h>
 #endif
 
@@ -177,7 +178,7 @@ Exception::Exception(Nature nature, Durability durability, const char* file, int
                      String description) noexcept
     : file(file), line(line), nature(nature), durability(durability),
       description(mv(description)) {
-#ifdef __CYGWIN__
+#ifndef KJ_HAS_BACKTRACE
   traceCount = 0;
 #else
   traceCount = backtrace(trace, 16);
@@ -188,7 +189,7 @@ Exception::Exception(Nature nature, Durability durability, String file, int line
                      String description) noexcept
     : ownFile(kj::mv(file)), file(ownFile.cStr()), line(line), nature(nature),
       durability(durability), description(mv(description)) {
-#ifdef __CYGWIN__
+#ifndef KJ_HAS_BACKTRACE
   traceCount = 0;
 #else
   traceCount = backtrace(trace, 16);
