@@ -132,6 +132,8 @@ the compiler flag -DNDEBUG."
 #define KJ_NORETURN __attribute__((noreturn))
 #define KJ_UNUSED __attribute__((unused))
 
+#define KJ_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+
 #if __clang__
 #define KJ_UNUSED_MEMBER __attribute__((unused))
 // Inhibits "unused" warning for member variables.  Only Clang produces such a warning, while GCC
@@ -145,6 +147,9 @@ namespace _ {  // private
 void inlineRequireFailure(
     const char* file, int line, const char* expectation, const char* macroArgs,
     const char* message = nullptr) KJ_NORETURN;
+void inlineAssertFailure(
+    const char* file, int line, const char* expectation, const char* macroArgs,
+    const char* message = nullptr) KJ_NORETURN;
 
 void unreachable() KJ_NORETURN;
 
@@ -154,12 +159,19 @@ void unreachable() KJ_NORETURN;
 #define KJ_IREQUIRE(condition, ...) \
     if (KJ_LIKELY(condition)); else ::kj::_::inlineRequireFailure( \
         __FILE__, __LINE__, #condition, #__VA_ARGS__, ##__VA_ARGS__)
-// Version of KJ_REQUIRE() which is safe to use in headers that are #included by users.  Used to
+// Version of KJ_DREQUIRE() which is safe to use in headers that are #included by users.  Used to
 // check preconditions inside inline methods.  KJ_IREQUIRE is particularly useful in that
 // it will be enabled depending on whether the application is compiled in debug mode rather than
 // whether libkj is.
+
+#define KJ_IASSERT(condition, ...) \
+    if (KJ_LIKELY(condition)); else ::kj::_::inlineAssertFailure( \
+        __FILE__, __LINE__, #condition, #__VA_ARGS__, ##__VA_ARGS__)
+// Version of KJ_DASSERT() which is safe to use in headers that are #included by users.  Used to
+// check state inside inline and templated methods.
 #else
 #define KJ_IREQUIRE(condition, ...)
+#define KJ_IASSERT(condition, ...)
 #endif
 
 #define KJ_UNREACHABLE ::kj::_::unreachable();
@@ -590,12 +602,14 @@ private:  // internal interface used by friends only
 
   inline NullableValue& operator=(NullableValue&& other) {
     if (&other != this) {
+      // Careful about throwing destructors/constructors here.
       if (isSet) {
+        isSet = false;
         dtor(value);
       }
-      isSet = other.isSet;
-      if (isSet) {
+      if (other.isSet) {
         ctor(value, kj::mv(other.value));
+        isSet = true;
       }
     }
     return *this;
@@ -603,12 +617,14 @@ private:  // internal interface used by friends only
 
   inline NullableValue& operator=(NullableValue& other) {
     if (&other != this) {
+      // Careful about throwing destructors/constructors here.
       if (isSet) {
+        isSet = false;
         dtor(value);
       }
-      isSet = other.isSet;
-      if (isSet) {
+      if (other.isSet) {
         ctor(value, other.value);
+        isSet = true;
       }
     }
     return *this;
@@ -616,12 +632,14 @@ private:  // internal interface used by friends only
 
   inline NullableValue& operator=(const NullableValue& other) {
     if (&other != this) {
+      // Careful about throwing destructors/constructors here.
       if (isSet) {
+        isSet = false;
         dtor(value);
       }
-      isSet = other.isSet;
-      if (isSet) {
+      if (other.isSet) {
         ctor(value, other.value);
+        isSet = true;
       }
     }
     return *this;

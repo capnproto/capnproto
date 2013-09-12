@@ -342,6 +342,15 @@ ExceptionCallback& getExceptionCallback() {
   return scoped != nullptr ? *scoped : defaultCallback;
 }
 
+void throwFatalException(kj::Exception&& exception) {
+  getExceptionCallback().onFatalException(kj::mv(exception));
+  abort();
+}
+
+void throwRecoverableException(kj::Exception&& exception) {
+  getExceptionCallback().onRecoverableException(kj::mv(exception));
+}
+
 // =======================================================================================
 
 namespace _ {  // private
@@ -422,7 +431,7 @@ public:
   Maybe<Exception> caught;
 };
 
-Maybe<Exception> runCatchingExceptions(Runnable& runnable) {
+Maybe<Exception> runCatchingExceptions(Runnable& runnable) noexcept {
 #if KJ_NO_EXCEPTIONS
   RecoverableExceptionCatcher catcher;
   runnable.run();

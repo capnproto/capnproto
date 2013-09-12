@@ -198,7 +198,7 @@ Debug::Fault::~Fault() noexcept(false) {
   if (exception != nullptr) {
     Exception copy = mv(*exception);
     delete exception;
-    getExceptionCallback().onRecoverableException(mv(copy));
+    throwRecoverableException(mv(copy));
   }
 }
 
@@ -206,7 +206,7 @@ void Debug::Fault::fatal() {
   Exception copy = mv(*exception);
   delete exception;
   exception = nullptr;
-  getExceptionCallback().onFatalException(mv(copy));
+  throwFatalException(mv(copy));
   abort();
 }
 

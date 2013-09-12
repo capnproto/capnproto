@@ -147,12 +147,18 @@ public:
   }
 
   inline Locked& operator=(Locked&& other) {
-    if (mutex != nullptr) mutex->unlock(isConst<T>());
+    if (mutex != nullptr) mutex->unlock(isConst<T>() ? _::Mutex::SHARED : _::Mutex::EXCLUSIVE);
     mutex = other.mutex;
     ptr = other.ptr;
     other.mutex = nullptr;
     other.ptr = nullptr;
     return *this;
+  }
+
+  inline void release() {
+    if (mutex != nullptr) mutex->unlock(isConst<T>() ? _::Mutex::SHARED : _::Mutex::EXCLUSIVE);
+    mutex = nullptr;
+    ptr = nullptr;
   }
 
   inline T* operator->() { return ptr; }

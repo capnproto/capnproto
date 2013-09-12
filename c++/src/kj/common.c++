@@ -39,6 +39,17 @@ void inlineRequireFailure(const char* file, int line, const char* expectation,
   }
 }
 
+void inlineAssertFailure(const char* file, int line, const char* expectation,
+                         const char* macroArgs, const char* message) {
+  if (message == nullptr) {
+    Debug::Fault f(file, line, Exception::Nature::LOCAL_BUG, 0, expectation, macroArgs);
+    f.fatal();
+  } else {
+    Debug::Fault f(file, line, Exception::Nature::LOCAL_BUG, 0, expectation, macroArgs, message);
+    f.fatal();
+  }
+}
+
 void unreachable() {
   KJ_FAIL_ASSERT("Supposendly-unreachable branch executed.");
 

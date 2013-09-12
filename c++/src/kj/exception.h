@@ -182,12 +182,20 @@ private:
 ExceptionCallback& getExceptionCallback();
 // Returns the current exception callback.
 
+void throwFatalException(kj::Exception&& exception) KJ_NORETURN;
+// Invoke the exception callback to throw the given fatal exception.  If the exception callback
+// returns, abort.
+
+void throwRecoverableException(kj::Exception&& exception);
+// Invoke the exception acllback to throw the given recoverable exception.  If the exception
+// callback returns, return normally.
+
 // =======================================================================================
 
 namespace _ { class Runnable; }
 
 template <typename Func>
-Maybe<Exception> runCatchingExceptions(Func&& func);
+Maybe<Exception> runCatchingExceptions(Func&& func) noexcept;
 // Executes the given function (usually, a lambda returning nothing) catching any exceptions that
 // are thrown.  Returns the Exception if there was one, or null if the operation completed normally.
 // Non-KJ exceptions will be wrapped.
@@ -242,12 +250,12 @@ private:
   Func func;
 };
 
-Maybe<Exception> runCatchingExceptions(Runnable& runnable);
+Maybe<Exception> runCatchingExceptions(Runnable& runnable) noexcept;
 
 }  // namespace _ (private)
 
 template <typename Func>
-Maybe<Exception> runCatchingExceptions(Func&& func) {
+Maybe<Exception> runCatchingExceptions(Func&& func) noexcept {
   _::RunnableImpl<Decay<Func>> runnable(kj::fwd<Func>(func));
   return _::runCatchingExceptions(runnable);
 }
