@@ -254,24 +254,27 @@ TEST(Async, Yield) {
   int counter = 0;
   Promise<void> promises[6] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
 
-  promises[0] = loop2.evalLater([&]() {
-    EXPECT_EQ(3, counter++);
-  });
-
   promises[1] = loop2.evalLater([&]() {
     EXPECT_EQ(0, counter++);
     promises[2] = loop2.evalLater([&]() {
-      EXPECT_EQ(2, counter++);
+      EXPECT_EQ(1, counter++);
     });
     promises[3] = loop2.there(loop2.yield(), [&]() {
       EXPECT_EQ(4, counter++);
+      return loop2.evalLater([&]() {
+        EXPECT_EQ(5, counter++);
+      });
     });
     promises[4] = loop2.evalLater([&]() {
-      EXPECT_EQ(1, counter++);
+      EXPECT_EQ(2, counter++);
     });
     promises[5] = loop2.there(loop2.yield(), [&]() {
-      EXPECT_EQ(5, counter++);
+      EXPECT_EQ(6, counter++);
     });
+  });
+
+  promises[0] = loop2.evalLater([&]() {
+    EXPECT_EQ(3, counter++);
   });
 
   auto exitThread = newPromiseAndFulfiller<void>();
@@ -289,7 +292,7 @@ TEST(Async, Yield) {
     loop1.wait(kj::mv(promises[i]));
   }
 
-  EXPECT_EQ(6, counter);
+  EXPECT_EQ(7, counter);
 }
 
 }  // namespace

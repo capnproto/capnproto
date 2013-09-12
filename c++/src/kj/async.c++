@@ -101,7 +101,7 @@ void EventLoop::EventListHead::fire() {
   KJ_FAIL_ASSERT("Fired event list head.");
 }
 
-EventLoop::EventLoop(): queue(*this) {
+EventLoop::EventLoop(): queue(*this), insertPoint(&queue) {
   queue.next = &queue;
   queue.prev = &queue;
 }
@@ -133,6 +133,9 @@ void EventLoop::waitImpl(Own<_::PromiseNode> node, _::ExceptionOrValue& result) 
     event->next = nullptr;
     event->prev = nullptr;
 
+    // New events should be inserted at the beginning of the queue, but in order.
+    insertPoint = queue.next;
+
     // Lock it before we unlock the queue mutex.
     event->mutex.lock(_::Mutex::EXCLUSIVE);
 
@@ -157,6 +160,10 @@ Promise<void> EventLoop::yield() {
   queue.prev->next = node;
   queue.prev = node;
 
+  if (insertPoint == &queue) {
+    insertPoint = node;
+  }
+
   if (node->prev == &queue) {
     // Queue was empty previously.  Make sure to wake it up if it is sleeping.
     wake();
@@ -180,7 +187,7 @@ void EventLoop::Event::arm() {
     // Insert the event into the queue.  We put it at the front rather than the back so that related
     // events are executed together and so that increasing the granularity of events does not cause
     // your code to "lose priority" compared to simultaneously-running code with less granularity.
-    next = loop.queue.next;
+    next = loop.insertPoint;
     prev = next->prev;
     next->prev = this;
     prev->next = this;

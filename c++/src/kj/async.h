@@ -333,6 +333,12 @@ private:
 
   EventListHead queue;
 
+  Event* insertPoint;
+  // The next event after the one that is currently firing.  New events are inserted just before
+  // this event.  When the fire callback completes, the loop continues at the beginning of the
+  // queue -- thus, it starts by running any events that were just enqueued by the previous
+  // callback.  This keeps related events together.
+
   template <typename T, typename Func, typename ErrorFunc>
   Own<_::PromiseNode> thereImpl(Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler) const;
   // Shared implementation of there() and Promise::then().
