@@ -143,7 +143,6 @@ void EventLoop::waitImpl(Own<_::PromiseNode> node, _::ExceptionOrValue& result) 
     event->fire();
   }
 
-  KJ_DBG(&result);
   node->get(result);
 }
 

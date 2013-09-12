@@ -358,7 +358,7 @@ protected:
   void wake() const override;
 
 private:
-  int preparedToSleep = 0;
+  mutable int preparedToSleep = 0;
 };
 
 // -------------------------------------------------------------------
