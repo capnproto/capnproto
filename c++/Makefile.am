@@ -157,7 +157,7 @@ lib_LTLIBRARIES = libkj.la libcapnp.la libcapnpc.la
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libkj_la_LIBADD = $(PTHREAD_LIBS) -lpthread
-libkj_la_LDFLAGS = -release $(VERSION) -Wl,--no-undefined
+libkj_la_LDFLAGS = -release $(VERSION) --no-undefined
 libkj_la_SOURCES=                                              \
   src/kj/common.c++                                            \
   src/kj/units.c++                                             \
@@ -177,7 +177,7 @@ libkj_la_SOURCES=                                              \
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libcapnp_la_LIBADD = libkj.la $(PTHREAD_LIBS) -lpthread
-libcapnp_la_LDFLAGS = -release $(VERSION) -Wl,--no-undefined
+libcapnp_la_LDFLAGS = -release $(VERSION) --no-undefined
 libcapnp_la_SOURCES=                                           \
   src/capnp/c++.capnp.c++                                      \
   src/capnp/blob.c++                                           \
@@ -196,7 +196,7 @@ libcapnp_la_SOURCES=                                           \
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libcapnpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS) -lpthread
-libcapnpc_la_LDFLAGS = -release $(VERSION) -Wl,--no-undefined
+libcapnpc_la_LDFLAGS = -release $(VERSION) --no-undefined
 libcapnpc_la_SOURCES=                                          \
   src/capnp/compiler/md5.h                                     \
   src/capnp/compiler/md5.c++                                   \
