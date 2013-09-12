@@ -25,7 +25,7 @@
 #include "debug.h"
 #include <exception>
 
-#if __linux__
+#if KJ_USE_FUTEX
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <linux/futex.h>
@@ -218,7 +218,7 @@ void EventLoop::Event::disarm() {
 
 // =======================================================================================
 
-#if __linux__
+#if KJ_USE_FUTEX
 
 SimpleEventLoop::SimpleEventLoop() {}
 SimpleEventLoop::~SimpleEventLoop() noexcept(false) {}

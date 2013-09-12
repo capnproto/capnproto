@@ -366,7 +366,7 @@ protected:
 
 private:
   mutable int preparedToSleep = 0;
-#if !__linux__
+#if !KJ_USE_FUTEX
   mutable pthread_mutex_t mutex;
   mutable pthread_cond_t condvar;
 #endif
