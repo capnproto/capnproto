@@ -25,10 +25,11 @@
 #include "debug.h"
 #include <exception>
 
-// TODO(now):  Encapsulate in mutex.h, with portable implementation.
+#if __linux__
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <linux/futex.h>
+#endif
 
 namespace kj {
 
@@ -210,6 +211,8 @@ void EventLoop::Event::disarm() {
 
 // =======================================================================================
 
+#if __linux__
+
 SimpleEventLoop::SimpleEventLoop() {}
 SimpleEventLoop::~SimpleEventLoop() noexcept(false) {}
 
@@ -229,6 +232,57 @@ void SimpleEventLoop::wake() const {
     syscall(SYS_futex, &preparedToSleep, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
   }
 }
+
+#else
+
+#define KJ_PTHREAD_CALL(code) \
+  { \
+    int pthreadError = code; \
+    if (pthreadError != 0) { \
+      KJ_FAIL_SYSCALL(#code, pthreadError); \
+    } \
+  }
+
+#define KJ_PTHREAD_CLEANUP(code) \
+  { \
+    int pthreadError = code; \
+    if (pthreadError != 0) { \
+      KJ_LOG(ERROR, #code, strerror(pthreadError)); \
+    } \
+  }
+
+SimpleEventLoop::SimpleEventLoop() {
+  KJ_PTHREAD_CALL(pthread_mutex_init(&mutex, nullptr));
+  KJ_PTHREAD_CALL(pthread_cond_init(&condvar, nullptr));
+}
+SimpleEventLoop::~SimpleEventLoop() noexcept(false) {
+  KJ_PTHREAD_CLEANUP(pthread_cond_destroy(&condvar));
+  KJ_PTHREAD_CLEANUP(pthread_mutex_destroy(&mutex));
+}
+
+void SimpleEventLoop::prepareToSleep() noexcept {
+  pthread_mutex_lock(&mutex);
+  preparedToSleep = 1;
+}
+
+void SimpleEventLoop::sleep() {
+  while (preparedToSleep == 1) {
+    pthread_cond_wait(&condvar, &mutex);
+  }
+  pthread_mutex_unlock(&mutex);
+}
+
+void SimpleEventLoop::wake() const {
+  pthread_mutex_lock(&mutex);
+  if (preparedToSleep != 0) {
+    // preparedToSleep was 1 before the exchange, so a sleep must be in progress in another thread.
+    preparedToSleep = 0;
+    pthread_cond_signal(&condvar);
+  }
+  pthread_mutex_unlock(&mutex);
+}
+
+#endif
 
 // =======================================================================================
 

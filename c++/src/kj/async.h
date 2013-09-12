@@ -310,8 +310,9 @@ protected:
   // Subclasses should implement these.
 
   virtual void prepareToSleep() noexcept = 0;
-  // Called just before `sleep()`.  `sleep()` may or may not actually be called after this -- it's
-  // possible that some other work will be done and then `prepareToSleep()` will be called again.
+  // Called just before `sleep()`.  After calling this, the caller checks if any events are
+  // scheduled.  If so, it calls `wake()`.  Then, whether or not events were scheduled, it calls
+  // `sleep()`.  Thus, `prepareToSleep()` is always followed by exactly one call to `sleep()`.
 
   virtual void sleep() = 0;
   // Do not return until `wake()` is called.  Always preceded by a call to `prepareToSleep()`.
@@ -359,6 +360,10 @@ protected:
 
 private:
   mutable int preparedToSleep = 0;
+#if !__linux__
+  mutable pthread_mutex_t mutex;
+  mutable pthread_cond_t condvar;
+#endif
 };
 
 // -------------------------------------------------------------------
