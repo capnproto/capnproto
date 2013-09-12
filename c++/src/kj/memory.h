@@ -126,6 +126,11 @@ public:
     return *this;
   }
 
+  inline Own& operator=(decltype(nullptr)) {
+    dispose();
+    return *this;
+  }
+
   inline T* operator->() { return ptr; }
   inline const T* operator->() const { return ptr; }
   inline T& operator*() { return *ptr; }
