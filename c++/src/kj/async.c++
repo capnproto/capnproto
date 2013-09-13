@@ -312,7 +312,7 @@ bool PromiseNode::atomicOnReady(EventLoop::Event*& onReadyEvent, EventLoop::Even
   } else {
     // `onReadyEvent` is not null.  If it is _kJ_ALREADY_READY then this promise was fulfilled
     // before any dependent existed, otherwise there is already a different dependent.
-    KJ_IREQUIRE(oldEvent == _kJ_ALREADY_READY, "onReady() can only be called once.");
+    KJ_REQUIRE(oldEvent == _kJ_ALREADY_READY, "onReady() can only be called once.");
     return true;
   }
 }
@@ -361,7 +361,7 @@ Maybe<const EventLoop&> TransformPromiseNodeBase::getSafeEventLoop() noexcept {
 
 ChainPromiseNode::ChainPromiseNode(const EventLoop& loop, Own<PromiseNode> inner)
     : Event(loop), state(PRE_STEP1), inner(kj::mv(inner)) {
-  KJ_IREQUIRE(this->inner->isSafeEventLoop(loop));
+  KJ_DREQUIRE(this->inner->isSafeEventLoop(loop));
   arm();
 }
 
@@ -373,7 +373,7 @@ bool ChainPromiseNode::onReady(EventLoop::Event& event) noexcept {
   switch (state) {
     case PRE_STEP1:
     case STEP1:
-      KJ_IREQUIRE(onReadyEvent == nullptr, "onReady() can only be called once.");
+      KJ_REQUIRE(onReadyEvent == nullptr, "onReady() can only be called once.");
       onReadyEvent = &event;
       return false;
     case STEP2:
@@ -383,7 +383,7 @@ bool ChainPromiseNode::onReady(EventLoop::Event& event) noexcept {
 }
 
 void ChainPromiseNode::get(ExceptionOrValue& output) noexcept {
-  KJ_IREQUIRE(state == STEP2);
+  KJ_REQUIRE(state == STEP2);
   return inner->get(output);
 }
 
@@ -397,7 +397,7 @@ void ChainPromiseNode::fire() {
     return;
   }
 
-  KJ_IREQUIRE(state != STEP2);
+  KJ_REQUIRE(state != STEP2);
 
   static_assert(sizeof(Promise<int>) == sizeof(PromiseBase),
       "This code assumes Promise<T> does not add any new members to PromiseBase.");
@@ -423,7 +423,7 @@ void ChainPromiseNode::fire() {
   } else {
     // We can only get here if inner->get() returned neither an exception nor a
     // value, which never actually happens.
-    KJ_IASSERT(false, "Inner node returned empty value.");
+    KJ_FAIL_ASSERT("Inner node returned empty value.");
   }
   state = STEP2;
 
@@ -437,7 +437,7 @@ void ChainPromiseNode::fire() {
 CrossThreadPromiseNodeBase::CrossThreadPromiseNodeBase(
     const EventLoop& loop, Own<PromiseNode>&& dependent, ExceptionOrValue& resultRef)
     : Event(loop), dependent(kj::mv(dependent)), resultRef(resultRef) {
-  KJ_IREQUIRE(this->dependent->isSafeEventLoop(loop));
+  KJ_DREQUIRE(this->dependent->isSafeEventLoop(loop));
 
   // The constructor may be called from any thread, so before we can even call onReady() we need
   // to switch threads.
