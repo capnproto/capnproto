@@ -247,7 +247,7 @@ TEST(Async, Threads) {
   EXPECT_ANY_THROW(EventLoop::current());
 }
 
-TEST(Async, Yield) {
+TEST(Async, Ordering) {
   SimpleEventLoop loop1;
   SimpleEventLoop loop2;
 
@@ -256,25 +256,31 @@ TEST(Async, Yield) {
 
   promises[1] = loop2.evalLater([&]() {
     EXPECT_EQ(0, counter++);
-    promises[2] = loop2.evalLater([&]() {
+    promises[2] = Promise<void>(READY_NOW).then([&]() {
       EXPECT_EQ(1, counter++);
+      return Promise<void>(READY_NOW);  // Force proactive evaluation by faking a chain.
     });
-    promises[3] = loop2.there(loop2.yield(), [&]() {
+    promises[3] = loop2.evalLater([&]() {
       EXPECT_EQ(4, counter++);
-      return loop2.evalLater([&]() {
+      return Promise<void>(READY_NOW).then([&]() {
         EXPECT_EQ(5, counter++);
       });
     });
-    promises[4] = loop2.evalLater([&]() {
+    promises[4] = Promise<void>(READY_NOW).then([&]() {
       EXPECT_EQ(2, counter++);
+      return Promise<void>(READY_NOW);  // Force proactive evaluation by faking a chain.
     });
-    promises[5] = loop2.there(loop2.yield(), [&]() {
+    promises[5] = loop2.evalLater([&]() {
       EXPECT_EQ(6, counter++);
     });
   });
 
   promises[0] = loop2.evalLater([&]() {
     EXPECT_EQ(3, counter++);
+
+    // Making this a chain should NOT cause it to preempt promises[1].  (This was a problem at one
+    // point.)
+    return Promise<void>(READY_NOW);
   });
 
   auto exitThread = newPromiseAndFulfiller<void>();
