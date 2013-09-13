@@ -1096,10 +1096,11 @@ private:
   kj::Vector<MemberInfo*> allMembers;
   // All members, including ones that don't have ordinals.
 
-  void traverseUnion(List<Declaration>::Reader members, MemberInfo& parent,
+  void traverseUnion(const Declaration::Reader& decl,
+                     List<Declaration>::Reader members, MemberInfo& parent,
                      StructLayout::Union& layout, uint& codeOrder) {
     if (members.size() < 2) {
-      errorReporter.addErrorOn(parent.decl, "Union must have at least two members.");
+      errorReporter.addErrorOn(decl, "Union must have at least two members.");
     }
 
     for (auto member: members) {
@@ -1137,7 +1138,7 @@ private:
             allMembers.add(memberInfo);
             memberInfo->unionScope = &unionLayout;
             uint subCodeOrder = 0;
-            traverseUnion(member.getNestedDecls(), *memberInfo, unionLayout, subCodeOrder);
+            traverseUnion(member, member.getNestedDecls(), *memberInfo, unionLayout, subCodeOrder);
             if (member.getId().isOrdinal()) {
               ordinal = member.getId().getOrdinal().getValue();
             }
@@ -1211,7 +1212,7 @@ private:
             allMembers.add(memberInfo);
           }
           memberInfo->unionScope = &unionLayout;
-          traverseUnion(member.getNestedDecls(), *memberInfo, unionLayout, *subCodeOrder);
+          traverseUnion(member, member.getNestedDecls(), *memberInfo, unionLayout, *subCodeOrder);
           if (member.getId().isOrdinal()) {
             ordinal = member.getId().getOrdinal().getValue();
           }
