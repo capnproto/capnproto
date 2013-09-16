@@ -24,7 +24,6 @@
 #ifndef KJ_ASYNC_H_
 #define KJ_ASYNC_H_
 
-#include "function.h"
 #include "exception.h"
 #include "mutex.h"
 
@@ -240,19 +239,8 @@ public:
   auto there(Promise<T>&& promise, Func&& func,
              ErrorFunc&& errorHandler = _::PropagateException()) const
       -> PromiseForResult<Func, T>;
-  // When the given promise is fulfilled, execute `func` on its result inside this `EventLoop`.
-  // Returns a promise for the result of `func()` -- or, if `func()` itself returns a promise,
-  // `there()` returns a Promise for the result of resolving that promise.
-  //
-  // If `promise` is broken/rejected (i.e. with an exception), then `errorHandler` is called rather
-  // than `func`.  The default error handler just propagates the exception.
-  //
-  // If the returned promise is destroyed before the callback runs, the callback will be canceled.
-  // If the returned promise is destroyed while the callback is running in another thread, the
-  // destructor will block until the callback completes.  Additionally, canceling the returned
-  // promise will transitively cancel the input `promise`.  Or, if `func()` already ran and
-  // returned another promise, then canceling the returned promise transitively cancels that
-  // promise.
+  // Like `Promise::then()`, but schedules the continuation to be executed on *this* EventLoop
+  // rather than the thread's current loop.  See Promise::then().
 
   // -----------------------------------------------------------------
   // Low-level interface.
@@ -485,10 +473,46 @@ public:
   template <typename Func, typename ErrorFunc = _::PropagateException>
   auto then(Func&& func, ErrorFunc&& errorHandler = _::PropagateException())
       -> PromiseForResult<Func, T>;
-  // Mostly equivalent to `EventLoop::current().there(kj::mv(*this), func, errorHandler)`.
+  // Register a continuation function to be executed when the promise completes.  The continuation
+  // (`func`) takes the promised value (an rvalue of type `T`) as its parameter.  The continuation
+  // may return a new value; `then()` itself returns a promise for the continuation's eventual
+  // result.  If the continuation itself returns a `Promise<U>`, then `then()` shall also return
+  // a `Promise<U>` which first waits for the original promise, then executes the continuation,
+  // then waits for the inner promise (i.e. it automatically "unwraps" the promise).
+  //
+  // In all cases, `then()` returns immediately.  The continuation is executed later.  The
+  // continuation is always executed on the same EventLoop (and, therefore, the same thread) which
+  // called `then()`, therefore no synchronization is necessary on state shared by the continuation
+  // and the surrounding scope.  If no EventLoop is running on the current thread, `then()` throws
+  // an exception; in this case you will have to find an explicit EventLoop instance and use
+  // its `there()` method to schedule the continuation to occur in that loop.
+  // `promise.then(...)` is mostly-equivalent to `EventLoop::current().there(kj::mv(promise), ...)`,
+  // except for some scheduling differences described below.
+  //
+  // You may also specify an error handler continuation as the second parameter.  `errorHandler`
+  // must be a functor taking a parameter of type `kj::Exception&&`.  It must return the same
+  // type as `func` returns (except when `func` returns `Promise<U>`, in which case `errorHandler`
+  // may return either `Promise<U>` or just `U`).  The default error handler simply propagates the
+  // exception to the returned promise.
+  //
+  // Either `func` or `errorHandler` may, of course, throw an exception, in which case the promise
+  // is broken.  When compiled with -fno-exceptions, the framework will detect when a non-fatal
+  // exception was thrown inside of a continuation and will consider the promise broken even though
+  // a (presumably garbage) result was returned.
   //
   // Note that `then()` consumes the promise on which it is called, in the sense of move semantics.
   // After returning, the original promise is no longer valid, but `then()` returns a new promise.
+  // If we were targetting GCC 4.8 / Clang 3.3, this method would be rvalue-qualified; we may
+  // change it to be so in the future.
+  //
+  // If the returned promise is destroyed before the callback runs, the callback will be canceled.
+  // If the returned promise is destroyed while the callback is running in another thread, the
+  // destructor will block until the callback completes.  Additionally, canceling the returned
+  // promise will transitively cancel the input promise, if it hasn't already completed.  Or, if
+  // `func()` already ran and returned another promise, then canceling the returned promise
+  // transitively cancels that promise.  In short, once a Promise's destructor completes, you can
+  // assume that any asynchronous operation it was performing has ceased (at least, locally; stuff
+  // may still be happening on some remote machine).
   //
   // *Advanced implementation tips:*  Most users will never need to worry about the below, but
   // it is good to be aware of.
