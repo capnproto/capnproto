@@ -51,8 +51,8 @@
 # to the intended vat as well as to encrypt transmitted data for privacy and integrity.  See the
 # `VatNetwork` example interface near the end of this file.
 #
-# Once a connection is formed, nothing interesting can happen until one side sends a Restore frame
-# to obtain a persistent capability.
+# Once a connection is formed, nothing interesting can happen until one side sends a Restore
+# message to obtain a persistent capability.
 #
 # Unless otherwise specified, messages must be delivered to the receiving application in the same
 # order in which they were initiated by the sending application, just like in E:
@@ -117,6 +117,12 @@ $Cxx.namespace("capnp::rpc");
 # messages using the ID could be traveling in both directions simultaneously, we must define the
 # end of life of each ID _in each direction_.  The ID is only safe to reuse once it has been
 # released by both sides.
+#
+# When a Cap'n Proto connection is lost, everything on the four tables is lost.  All questions are
+# canceled and throw exceptions.  All imports become broken (all methods throw exceptions).  All
+# exports and answers are implicitly released.  The only things not lost are persistent
+# capabilities (`SturdyRef`s).  The application must plan for this and should respond by
+# establishing a new connection and restoring from these persistent capabilities.
 
 using QuestionId = UInt32;
 # Identifies a question in the questions/answers table.  The questioner (caller) chooses an ID
@@ -128,7 +134,7 @@ using ExportId = UInt32;
 # an ID before sending a capability over the wire.  If the capability is already in the table, the
 # exporter should reuse the same ID.  If the ID is a promise (as opposed to a settled capability),
 # this must be indicated at the time the ID is introduced; in this case, the importer shall expect
-# a later Resolve frame which replaces the promise.
+# a later Resolve message which replaces the promise.
 #
 # ExportIds are subject to reference counting.  When an `ExportId` is received embedded in an
 # question or answer, the export has an implicit reference until that question or answer is
@@ -142,22 +148,21 @@ using ExportId = UInt32;
 # that the `Release` message is sent, so it is necessary for the exporter to keep track of the
 # reference count on its end as well to avoid race conditions.
 #
-# When an `ExportId` is received as part of a Frame but not embedded in a question or answer, its
-# reference count is automatically incremented unless otherwise specified.
+# When an `ExportId` is received as part of a exporter -> importer message but not embedded in a
+# question or answer, its reference count must be incremented unless otherwise specified.
 #
 # An `ExportId` remains valid in importer -> exporter messages until its reference count reaches
 # zero and a `Release` message has been sent to release it.
+#
+# When a connection is lost, all exports are implicitly released.  It is not possible to restore
+# a connection state (or, restoration should be implemented at the transport layer without the RPC
+# layer knowing that anything happened).
 
 # ========================================================================================
-# Frames
+# Messages
 
-struct Frame {
-  # An RPC connection is a bi-directional stream of Frames.
-  #
-  # When the RPC system wants to send a Frame, it instructs the transport layer to keep trying to
-  # send the frame until the transport can guarantee that one of the following is true:
-  # 1) The Frame was received.
-  # 2) The sessing is broken, and no further Frames can be sent.
+struct Message {
+  # An RPC connection is a bi-directional stream of Messages.
 
   union {
     # Level 1 features -----------------------------------------------
@@ -183,15 +188,17 @@ struct Frame {
 }
 
 struct Call {
-  # Frame type initiating a method call on a capability.
+  # Message type initiating a method call on a capability.
 
   questionId @0 :QuestionId;
   # A number, chosen by the caller, which identifies this call in future messages.  This number
   # must be different from all other calls originating from the same end of the connection (but
-  # may overlap with call IDs originating from the opposite end).  A fine strategy is to use
-  # sequential call IDs, but the recipient should not assume this.
+  # may overlap with question IDs originating from the opposite end).  A fine strategy is to use
+  # sequential question IDs, but the recipient should not assume this.
   #
-  # TODO:  Decide if it is safe to reuse a call ID.  If not, extend to 64 bits.
+  # A question ID can be reused once both:
+  # - A matching Return has been received from the callee.
+  # - A matching ReleaseAnswer has been sent from the caller.
 
   target :union {
     exportedCap @1 :ExportId;
@@ -212,11 +219,11 @@ struct Call {
   # The request struct.  The fields of this struct correspond to the parameters of the method.
   #
   # The request may contain capabilities.  These capabilities are automatically released when the
-  # call returns *unless* the Return frame explicitly indicates that they are being retained.
+  # call returns *unless* the Return message explicitly indicates that they are being retained.
 }
 
 struct Return {
-  # Frame type sent from callee to caller indicating that the call has completed.
+  # Message type sent from callee to caller indicating that the call has completed.
 
   questionId @0 :QuestionId;
   # Question ID which is being answered, as specified in the corresponding Call.
@@ -232,8 +239,10 @@ struct Return {
     # (This implies that an method's return type can be upgraded from a non-struct to a struct
     # without breaking wire compatibility.)
     #
-    # If the response contains any capabilities, the caller is expected to send a Release frame for
-    # each one when done with them.
+    # For a `Return` in response to an `Accept`, `answer` is a capability pointer (and therefore
+    # points to a `CapDescriptor`, but is tagged as a capability rather than a struct).  A
+    # `ReleaseAnswer` is still required in this case, and the capability must still be listed in
+    # `retainedCaps` if it is to be retained.
 
     exception @3 :Exception;
     # Indicates that the call failed and explains why.
@@ -245,7 +254,7 @@ struct Return {
 }
 
 struct Resolve {
-  # Frame type sent to indicate that a previously-sent promise has now been resolved to some other
+  # Message type sent to indicate that a previously-sent promise has now been resolved to some other
   # object (possibly another promise) -- or broken, or canceled.
 
   promiseId @0 :ExportId;
@@ -290,22 +299,19 @@ struct Resolve {
 }
 
 struct Release {
-  # Frame type sent to indicate that the sender is done with the given capability and the receiver
+  # Message type sent to indicate that the sender is done with the given capability and the receiver
   # can free resources allocated to it.
 
   id @0 :ExportId;
   # What to release.
 
   referenceCount @1 :UInt32;
-  # The number of times this ID has been received by the importer.  The object is only truly
-  # released when the referenceCount from all Release messages for the ID adds up to the number of
-  # times the exporter has actually sent the object to the importer.  This avoids a race condition
-  # where the exporter happens to send another copy of the same ID at the same time as the importer
-  # is sending a Release message for it.
+  # The amount by which to decrement the reference count.  The export is only actually released
+  # when the reference count reaches zero.
 }
 
 struct ReleaseAnswer {
-  # Frame type sent from the caller to the callee to indicate:
+  # Message type sent from the caller to the callee to indicate:
   # 1) The questionId will no longer be used in any messages sent by the callee (no further
   #    pipelined requests).
   # 2) Any capabilities in the answer other than the ones listed below should be implicitly
@@ -324,7 +330,7 @@ struct ReleaseAnswer {
 }
 
 struct Restore {
-  # Frame type sent to restore a persistent capability obtained during a previous connection, or
+  # Message type sent to restore a persistent capability obtained during a previous connection, or
   # through other means.
 
   questionId @0 :QuestionId;
@@ -332,13 +338,13 @@ struct Restore {
   # message containing the restored capability.
 
   ref @1 :SturdyRef;
-  # An object designating the capability to restore.
+  # Designates the capability to restore.
 }
 
 struct Provide {
   # **Level 2 feature**
   #
-  # Frame type sent to indicate that the sender wishes to make a particular capability implemented
+  # Message type sent to indicate that the sender wishes to make a particular capability implemented
   # by the receiver available to a third party for direct access (without the need for the third
   # party to proxy through the sender).
   #
@@ -368,7 +374,7 @@ struct Provide {
 struct Accept {
   # **Level 2 feature**
   #
-  # Frame type sent to pick up a capability hosted by the receiving vat and provided by a third
+  # Message type sent to pick up a capability hosted by the receiving vat and provided by a third
   # party.  The third party previously designated the capability using `Provide`.
 
   questionId @0 :QuestionId;
@@ -382,10 +388,10 @@ struct Accept {
 struct Join {
   # **Level 3 feature**
   #
-  # Frame type sent to implement E.join(), which, given a number of capabilities which are expected
-  # to be equivalent, finds the underlying object upon which they all agree and forms a direct
-  # connection to it, skipping any proxies which may have been constructed by other vats while
-  # transmitting the capability.  See:
+  # Message type sent to implement E.join(), which, given a number of capabilities which are
+  # expected to be equivalent, finds the underlying object upon which they all agree and forms a
+  # direct connection to it, skipping any proxies which may have been constructed by other vats
+  # while transmitting the capability.  See:
   #     http://erights.org/elib/equality/index.html
   #
   # Note that this should only serve to bypass fully-transparent proxies -- proxies that were
@@ -406,7 +412,7 @@ struct Join {
   # - Dana receives Carol's request and notes that she now has both parts of a JoinKey.  She
   #   combines them in order to form information needed to form a secure connection to Bob.  She
   #   also responds with another JoinAnswer.
-  # - Bob receives the responses from Alice and Carol.  He uses the returned JoinHostIds to
+  # - Bob receives the responses from Alice and Carol.  He uses the returned JoinAnswers to
   #   determine how to connect to Dana and attempts to form the connection.  Since Bob and Dana now
   #   agree on a secret key which neither Alice nor Carol ever saw, this connection can be made
   #   securely even if Alice or Carol is conspiring against the other.  (If Alice and Carol are
@@ -422,6 +428,18 @@ struct Join {
   # Question ID used to respond to this Join.  (Note that this ID only identifies one part of the
   # request for one hop; each part has a different ID and relayed copies of the request have
   # (probably) different IDs still.)
+  #
+  # The receiver will reply with a `Return` whose `answer` is a JoinAnswer.  This `JoinAnswer`
+  # is relayed from the joined object's host, possibly with transformation applied as needed
+  # by the network.
+  #
+  # Like any answer, the answer must be released using a `ReleaseAnswer`.  However, this release
+  # should not occur until the joiner has either successfully connected to the joined object.
+  # Vats relaying a `Join` message similarly must not release the answer they receive until the
+  # answer they relayed back towards the joiner has itself been released.  This allows the
+  # joined object's host to detect when the Join operation is canceled before completing -- if
+  # it receives a `ReleaseAnswer` for one of the join answers before the joiner successfully
+  # connects.  It can then free any resources it had allocated as part of the join.
 
   capId @1 :ExportId;
   # The capability to join.
@@ -429,23 +447,10 @@ struct Join {
   keyPart @2 :JoinKeyPart;
   # A part of the join key.  These combine to form the complete join key which is used to establish
   # a direct connection.
-
-  struct Answer {
-    # The answer to a `Join` frame (sent in a `Return` frame).
-
-    hostId @0 :JoinHostId;
-    # Information indicating where to connect to complete the join.  Also used to verify that all
-    # the joins actually reached the same object.
-
-    vineId @1 :ExportId;
-    # A new capability in the sender's export table which must be released once the join is
-    # complete.  This capability has no methods.  This allows the joined capability's host to
-    # detect when a Join has failed and release the associated resources on its end.
-  }
 }
 
 # ========================================================================================
-# Common structures used in frames
+# Common structures used in messages
 
 struct CapDescriptor {
   # When an application-defined type contains an interface pointer, that pointer's encoding is the
@@ -489,17 +494,23 @@ struct CapDescriptor {
 
   sturdyRef @6 :SturdyRef;
   # If non-null, this is a SturdyRef that can be used to store this capability persistently and
-  # restore access to in in the future (using a `Restore` frame).  If null, this capability will be
-  # lost if the connection dies.  Generally, application interfaces should define when a client can
-  # expect a capability to be persistent (and therefore have a SturdyRef attached).  However,
+  # restore access to in in the future (using a `Restore` message).  If null, this capability will
+  # be lost if the connection dies.  Generally, application interfaces should define when a client
+  # can expect a capability to be persistent (and therefore have a SturdyRef attached).  However,
   # application protocols should never embed SturdyRefs directly, as various infrastructure like
   # transports, gateways, and sandboxes may need to be aware of SturdyRefs being passed over the
   # wire in order to transform them into different namespaces.
 }
 
 struct PromisedAnswer {
+  # Specifies how to derive a promise from an unanswered question, by specifying the path of fields
+  # to follow from the root of the eventual answer struct to get to the desired capability.  Used
+  # to address method calls to a not-yet-returned capability or to pass such a capability as an
+  # input to some other method call.
+
   questionId @0 :QuestionId;
-  # ID of the question whose answer is expected to contain the capability.
+  # ID of the question (in the sender's question table / receiver's answer table) whose answer is
+  # expected to contain the capability.
 
   path @1 :List(UInt16);
   # Path to the capability in the response.  This is a list of indexes into the pointer
@@ -507,8 +518,13 @@ struct PromisedAnswer {
   # pointer except for the last one must point to another struct -- it is an error if one ends
   # up pointing to a list or something else.
   #
+  # If the question refers to an `Accept` (or anything other than a `Call`), this list must be
+  # empty.
+  #
   # TODO(someday):  Would it make sense to support lists in the path, and say that the method
-  #   should be executed on every element of the list?
+  #   should be executed on every element of the list?  Of course, if we wanted to get arbitrarily
+  #   complicated, the ideal would be for the caller to be able to upload a script to run that
+  #   derives the capability given the former answer, but that's probably unreasonable.
 }
 
 struct ThirdPartyCapDescriptor {
@@ -610,7 +626,7 @@ struct Exception {
 #
 # **Level 3 feature**
 #
-# The `Join` frame type and corresponding operation arranges for a direct connection to be formed
+# The `Join` message type and corresponding operation arranges for a direct connection to be formed
 # between the joiner and the host of the joined object, and this connection must be authenticated.
 # Thus, the details are network-dependent.
 #
@@ -624,7 +640,7 @@ struct Exception {
 
 using SturdyRef = Object;
 # Identifies a long-lived capability which can be obtained again in a future connection by sending
-# a `Restore` frame.  The base RPC protocol does not specify under what conditions a SturdyRef can
+# a `Restore` message.  The base RPC protocol does not specify under what conditions a SturdyRef can
 # be restored.  For example:
 # - Do you have to connect to a specific vat to restore the reference?
 # - Is just any vat allowed to restore the SturdyRef, or is it tied to a specific vat requiring
@@ -633,16 +649,16 @@ using SturdyRef = Object;
 using ProvisionId = Object;
 # **Level 2 feature**
 #
-# The information which must be sent in an `Accept` frame to identify the object being accepted.
+# The information which must be sent in an `Accept` message to identify the object being accepted.
 #
 # In a network where each vat has a public/private key pair, this could simply be the public key
-# fingerprint of the provider vat along with the questionId used in the `Provide` frame sent from
+# fingerprint of the provider vat along with the questionId used in the `Provide` message sent from
 # that provider.
 
 using RecipientId = Object;
 # **Level 2 feature**
 #
-# The information which must be sent in a `Provide` frame to identify the recipient of the
+# The information which must be sent in a `Provide` message to identify the recipient of the
 # capability.
 #
 # In a network where each vat has a public/private key pair, this could simply be the public key
@@ -655,13 +671,13 @@ using ThirdPartyCapId = Object;
 #
 # In a network where each vat has a public/private key pair, this could be a combination of the
 # third party's public key fingerprint, hints on how to connect to the third party (e.g. an IP
-# address), and the question ID used in the corresponding `Provide` frame sent to that third party
+# address), and the question ID used in the corresponding `Provide` mesasge sent to that third party
 # (used to identify which capability to pick up).
 
 using JoinKeyPart = Object;
 # A piece of a secret key.  One piece is sent along each path that is expected to lead to the same
 # place.  Once the pieces are combined, a direct connection may be formed between the sender and
-# the receiver, bypassing any men-in-the-middle along the paths.  See the "Join" frame type.
+# the receiver, bypassing any men-in-the-middle along the paths.  See the `Join` message type.
 #
 # The motivation for Joins is discussed under "Supporting Equality" in the "Unibus" protocol
 # sketch: http://www.erights.org/elib/distrib/captp/unibus.html
@@ -680,16 +696,16 @@ using JoinKeyPart = Object;
 # the joiner and the joined object's host.  Each JoinKeyPart should also include an indication of
 # how many parts to expect and a hash of the shared secret (used to match up parts).
 
-using JoinHostId = Object;
-# Information needed by the joiner in order to form a direct connection to a joined object.  One
-# of these is returned in response to each `Join` frame.  This might simply be the address of the
-# joined object's host vat, since the `JoinKey` has already been communicated so the two vats
-# already have a shared secret to use to authenticate each other.
+using JoinAnswer = Object;
+# Information returned in the answer to a `Join` message, needed by the joiner in order to form a
+# direct connection to a joined object.  This might simply be the address of the joined object's
+# host vat, since the `JoinKey` has already been communicated so the two vats already have a shared
+# secret to use to authenticate each other.
 #
-# The `JoinHostId` should also contain information that can be used to detect when the Join
+# The `JoinAnswer` should also contain information that can be used to detect when the Join
 # requests ended up reaching different objects, so that this situation can be detected easily.
 # This could be a simple matter of including a sequence number -- if the joiner receives two
-# `JoinHostId`s with sequence number 0, then they must have come from different objects and the
+# `JoinAnswer`s with sequence number 0, then they must have come from different objects and the
 # whole join is a failure.
 
 # ========================================================================================
@@ -717,13 +733,13 @@ using JoinHostId = Object;
 #   # sends them encrypted such that only the authentic vat would be able to decrypt them.  The
 #   # latter approach avoids a round trip for authentication.
 #   #
-#   # Once connected, the caller should start by sending a `Restore` frame.
+#   # Once connected, the caller should start by sending a `Restore` message.
 #
 #   acceptConnectionAsRefHost() :Connection;
 #   # Wait for the next incoming connection and return it.  Only connections formed by
 #   # connectToHostOf() are returned by this method.
 #   #
-#   # Once connected, the first received frame will usually be a `Restore`.
+#   # Once connected, the first received message will usually be a `Restore`.
 #
 #   # Level 3 features -----------------------------------------------
 #
@@ -733,45 +749,45 @@ using JoinHostId = Object;
 #
 #   struct NewJoinerResponse {
 #     joinKeyParts :List(JoinKeyPart);
-#     # Key parts to send in Join frames to each capability.
+#     # Key parts to send in Join messages to each capability.
 #
 #     joiner :Joiner;
 #     # Used to establish the final connection.
 #   }
 #
 #   interface Joiner {
-#     addHostId(hostId :JoinHostId) :Void;
-#     # Add a host ID at which the host might live.  All `JoinHostId`s returned from all paths
-#     # must be added before trying to connect.
+#     addJoinAnswer(answer :JoinAnswer) :Void;
+#     # Add a JoinAnswer received in response to one of the `Join` messages.  All `JoinAnswer`s
+#     # returned from all paths must be added before trying to connect.
 #
 #     connect() :ConnectionAndProvisionId;
 #     # Try to form a connection to the joined capability's host, verifying that it has received
 #     # all of the JoinKeyParts.  Once the connection is formed, the caller should send an `Accept`
-#     # frame on it with the specified `ProvisionId` in order to receive the final capability.
+#     # message on it with the specified `ProvisionId` in order to receive the final capability.
 #   }
 #
 #   acceptConnectionFromJoiner(parts: List(JoinKeyPart), paths :List(VatPath))
 #       :ConnectionAndProvisionId;
 #   # Called on a joined capability's host to receive the connection from the joiner, once all
-#   # key parts have arrived.  The caller should expect to receive an `Accept` frame over the
+#   # key parts have arrived.  The caller should expect to receive an `Accept` message over the
 #   # connection with the given ProvisionId.
 # }
 #
 # interface Connection {
 #   # Level 1 features -----------------------------------------------
 #
-#   send(frame :Frame) :Void;
-#   # Send the frame.  Returns successfully when the frame (and all preceding frames) has been
-#   # acknowledged by the recipient.
+#   send(message :Message) :Void;
+#   # Send the message.  Returns successfully when the message (and all preceding messages) has
+#   # been acknowledged by the recipient.
 #
-#   receive() :Frame;
-#   # Receive the next frame, and acknowledges receipt to the sender.  Frames are received in the
-#   # order in which they are sent.
+#   receive() :Message;
+#   # Receive the next message, and acknowledges receipt to the sender.  Messages are received in
+#   # the order in which they are sent.
 #
 #   # Level 2 features -----------------------------------------------
 #
 #   introduceTo(recipient :Connection) :IntroductionInfo;
-#   # Call before starting a three-way introduction, assuming a `Provide` frame is to be sent on
+#   # Call before starting a three-way introduction, assuming a `Provide` message is to be sent on
 #   # this connection and a `ThirdPartyCapId` is to be sent to `recipient`.
 #
 #   struct IntroductionInfo {
@@ -781,18 +797,18 @@ using JoinHostId = Object;
 #
 #   connectToIntroduced(capId: ThirdPartyCapId) :ConnectionAndProvisionId;
 #   # Given a ThirdPartyCapId received over this connection, connect to the third party.  The
-#   # caller should then send an `Accept` frame over the new connection.
+#   # caller should then send an `Accept` message over the new connection.
 #
 #   acceptIntroducedConnection(recipientId: RecipientId): Connection
-#   # Given a RecipientId received in a `Provide` frame on this `Connection`, wait for the
-#   # recipient to connect, and return the connection formed.  Usually, the first frame received
-#   # on the new connection will be an `Accept` frame.
+#   # Given a RecipientId received in a `Provide` message on this `Connection`, wait for the
+#   # recipient to connect, and return the connection formed.  Usually, the first message received
+#   # on the new connection will be an `Accept` message.
 # }
 #
 # sturct ConnectionAndProvisionId {
 #   connection :Connection;
-#   # Connection on which to issue `Accept` frame.
+#   # Connection on which to issue `Accept` message.
 #
 #   provision :ProvisionId;
-#   # `ProvisionId` to send in the `Accept` frame.
+#   # `ProvisionId` to send in the `Accept` message.
 # }

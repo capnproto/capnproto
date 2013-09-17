@@ -94,12 +94,12 @@ struct JoinKeyPart {
   # Which part this request targets -- a number in the range [0, partCount).
 }
 
-struct JoinHostId {
+struct JoinAnswer {
   joinId @0 :UInt32;
   # Matches `JoinKeyPart`.
 
   succeeded @1 :Bool;
-  # All JoinHostIds in the set will have the same value for `succeeded`.  The container actually
+  # All JoinAnswers in the set will have the same value for `succeeded`.  The container actually
   # implements the join by waiting for all the `JoinKeyParts` and then performing its own join on
   # them, then going back and answering all the join requests afterwards.
 }
