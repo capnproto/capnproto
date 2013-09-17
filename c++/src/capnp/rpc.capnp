@@ -644,11 +644,32 @@ struct Exception {
 
 using SturdyRef = Object;
 # Identifies a long-lived capability which can be obtained again in a future connection by sending
-# a `Restore` message.  The base RPC protocol does not specify under what conditions a SturdyRef can
+# a `Restore` message.  A SturdyRef is a lot like a URL, but possibly with additional
+# considerations e.g. to support authentication without a certificate authority.
+#
+# The base RPC protocol does not specify under what conditions a SturdyRef can
 # be restored.  For example:
 # - Do you have to connect to a specific vat to restore the reference?
 # - Is just any vat allowed to restore the SturdyRef, or is it tied to a specific vat requiring
 #   some form of authentication?
+#
+# At the very least, a SturdyRef must contain at least enough information to determine where to
+# connect to restore the ref.  Ideally, this information is not a physical machine address, but a
+# logical identifier that can be passed to some lookup service to locate an appropriate vat.  Using
+# a physical machine address would make the network brittle -- a change in topology could
+# invalidate all SturdyRefs.
+#
+# The ref should also contain some kind of signature or certificate which can be used to
+# authenticate the vat, to protect against a malicious lookup service without the need for a
+# centralized certificate authority.
+#
+# For example, a simple internet-friendly SturdyRef might contain a DNS host name, a public key
+# fingerprint, and a Swiss number (large, unguessable random number;
+# http://wiki.erights.org/wiki/Swiss_number) to identify the specific object within that vat.
+# This construction does have the disadvantage, though, that a compromised private key could
+# invalidate all existing refs that share that key, and a compromise of any one client's storage
+# could require revoking all existing refs to that object.  Various more-sophisticated mechanisms
+# can solve these problems but these are beyond the scope of this protocol.
 
 using ProvisionId = Object;
 # **Level 2 feature**
