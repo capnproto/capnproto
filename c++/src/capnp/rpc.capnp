@@ -706,7 +706,7 @@ using JoinHostId = Object;
 # Cap'n Proto RPC implementation should be able to use these interfaces without knowing the
 # definitions of the various network-specific parameters defined above.
 
-# interface Network {
+# interface VatNetwork {
 #   # Represents a vat network, with the ability to connect to particular vats and receive
 #   # connections from vats.
 #   #
