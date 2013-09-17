@@ -488,6 +488,8 @@ struct CapDescriptor {
     # by the sender.
 
     thirdPartyHosted @5 :ThirdPartyCapDescriptor;
+    # **Level 2 feature**
+    #
     # A capability that lives in neither the sender's nor the receiver's vat.  The sender needs
     # to form a direct connection to a third party to pick up the capability.
   }
@@ -528,6 +530,8 @@ struct PromisedAnswer {
 }
 
 struct ThirdPartyCapDescriptor {
+  # **Level 2 feature**
+  #
   # Identifies a capability in a third-party vat which the sender wants the receiver to pick up.
 
   id @0 :ThirdPartyCapId;
