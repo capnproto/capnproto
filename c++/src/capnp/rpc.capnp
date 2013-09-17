@@ -84,7 +84,7 @@
 # "Level 3" is much easier than usual to implement.  When such an implementation is actually run
 # inside a container, the contained app effectively gets to make full use of the container's
 # network at level 3.  And since Cap'n Proto IPC is extremely fast, it may never make sense to
-# bother implementing any other network protocol -- just use the correct container type and get
+# bother implementing any other vat network protocol -- just use the correct container type and get
 # it for free.
 
 using Cxx = import "c++.capnp";
@@ -98,20 +98,20 @@ $Cxx.namespace("capnp::rpc");
 #     http://www.erights.org/elib/distrib/captp/4tables.html
 #
 # The question table corresponds to the other end's answer table, and the imports table corresponds
-# to the other end's exports table.  Additionally, the export table is further subdivited into
-# promises and capabilities.  A promise will eventually be resolved and replaced with a capability,
-# although the eventual replacement capability might live in some other vat and so may not be on
-# the same table.
+# to the other end's exports table.
 #
 # IDs in the questions/answers tables are chosen by the questioner and generally represent method
 # calls that are in progress.
 #
-# IDs in the imports/exports table are chosen by the exporter and generally represent objects on
+# IDs in the imports/exports tables are chosen by the exporter and generally represent objects on
 # which methods may be called.  Exports may be "settled", meaning the exported object is an actual
 # object living in the exporter's vat, or they may be "promises", meaning the exported object is
-# the unknown result of an ongoing operation and will eventually be resolved to some other object
-# once that operation completes.  Calls made to a promise will be forwarded to the eventual target
-# once it is known.
+# the as-yet-unknown result of an ongoing operation and will eventually be resolved to some other
+# object once that operation completes.  Calls made to a promise will be forwarded to the eventual
+# target once it is known.  The eventual replacement object does *not* take the same ID as the
+# promise, as it may turn out to be an object that is already exported (so already has an ID) or
+# may even live in a completely different vat (and so won't get an ID on the same export table
+# at all).
 #
 # IDs can be reused over time.  To make this safe, we carefully define the lifetime of IDs.  Since
 # messages using the ID could be traveling in both directions simultaneously, we must define the
@@ -127,20 +127,22 @@ using ExportId = UInt32;
 # Identifies an exported capability or promise in the exports/imports table.  The exporter chooses
 # an ID before sending a capability over the wire.  If the capability is already in the table, the
 # exporter should reuse the same ID.  If the ID is a promise (as opposed to a settled capability),
-# this must be indicated at the time the ID is transmitted; in this case, the importer shall
-# expect a later Resolve frame which replaces the promise.
+# this must be indicated at the time the ID is introduced; in this case, the importer shall expect
+# a later Resolve frame which replaces the promise.
 #
-# ExportIds are subject to reference counting on the importing end.  When an `ExportId` is received
-# embedded in an question or answer, the export has an implicit reference until that question or
-# answer is released (questions are released by `Return`, answers are released by `ReleaseAnswer`).
-# Such an export can be retained beyond that point by including it in the `retainedCaps` list
-# at the time the question/answer is released, thus incrementing its reference count.  The
-# reference count is later decremented by a `Release` message.  Since the `Release` message can
-# specify an arbitrary number by which to reduce the reference count, the importer should usually
-# batch reference decrements and only send a `Release` when it believes the refererce count has
-# hit zero.
+# ExportIds are subject to reference counting.  When an `ExportId` is received embedded in an
+# question or answer, the export has an implicit reference until that question or answer is
+# released (questions are released by `Return`, answers are released by `ReleaseAnswer`).  Such an
+# export can be retained beyond that point by including it in the `retainedCaps` list at the time
+# the question/answer is released, thus incrementing its reference count.  The reference count is
+# later decremented by a `Release` message.  Since the `Release` message can specify an arbitrary
+# number by which to reduce the reference count, the importer should usually batch reference
+# decrements and only send a `Release` when it believes the reference count has hit zero.  Of
+# course, it is possible that a new reference to the released object is in-flight at the time
+# that the `Release` message is sent, so it is necessary for the exporter to keep track of the
+# reference count on its end as well to avoid race conditions.
 #
-# When an `ExportId` is received as part of a Frame but not embedded in a quention or answer, its
+# When an `ExportId` is received as part of a Frame but not embedded in a question or answer, its
 # reference count is automatically incremented unless otherwise specified.
 #
 # An `ExportId` remains valid in importer -> exporter messages until its reference count reaches
@@ -154,15 +156,8 @@ struct Frame {
   #
   # When the RPC system wants to send a Frame, it instructs the transport layer to keep trying to
   # send the frame until the transport can guarantee that one of the following is true:
-  # 1) The Frame was received, possibly multiple times.
+  # 1) The Frame was received.
   # 2) The sessing is broken, and no further Frames can be sent.
-  # 3) The RPC system has asked to stop trying to send the Frame (e.g. because the call was canceled
-  #    or timed out).
-  #
-  # In case 1, the Frame may have been received multiple times.  In cases 2 and 3, it may have been
-  # received any number of times, including zero.  The RPC system must handle all of these cases
-  # with some modicum of grace.  Moreover, applications should design their interfaces such that
-  # methods are idempotent.
 
   union {
     # Level 1 features -----------------------------------------------
