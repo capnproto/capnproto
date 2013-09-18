@@ -633,34 +633,32 @@ struct PromisedAnswer {
   # ID of the question (in the sender's question table / receiver's answer table) whose answer is
   # expected to contain the capability.
 
-  path @1 :List(PathPart);
-  # Path to the capability in the response.  This is a list of indexes into the pointer
-  # sections of structs forming a path from the root struct to a particular capability.  Each
-  # pointer except for the last one must point to another struct -- it is an error if one ends
-  # up pointing to a list or something else.
-  #
-  # If the question refers to an `Accept` (or anything other than a `Call`), this list must be
-  # empty.
+  transform @1 :List(Op);
+  # Operations / transformations to apply to the answer in order to get the capability actually
+  # being addressed.  E.g. if the answer is a struct and you want to call a method on a capability
+  # pointed to by a field of the struct, you need a `getPointerField` op.
 
-  struct PathPart {
+  struct Op {
+    # If an RPC implementation receives an `Op` of a type it doesn't recognize, it should
+    # reply with a `Return` with `unsupportedPipelineOp` set.
+
     union {
       noop @0 :Void;
-      # Dummy.  Ignore this part.  This field is only here so that we can define PathPart to be
-      # a union which we might extend in the future.  If an RPC implementation receives a PathPart
-      # of a type it doesn't recognize, it should reply with a `Return` with `unsupportedPipelineOp`
-      # set.
+      # Does nothing.  This member is mostly defined so that we can make `Op` a union even
+      # though (as of this writing) only one real operation is defined.
 
-      pointerIndex @1 :UInt16;
-      # Index of a pointer in the pointer section of a struct.  Only valid when addressing a
-      # struct.
+      getPointerField @1 :UInt16;
+      # Get a pointer field within a struct.  The number is an index into the pointer section, NOT
+      # a field ordinal, so that the receiver does not need to understand the schema.
 
       # TODO(someday):  We could add:
       # - For lists, the ability to address every member of the list, or a slice of the list, the
       #   answer to which would be another list.  This is useful for implementing the equivalent of
       #   a SQL table join (not to be confused with the `Join` message type).
+      # - Maybe some ability to test a union.
       # - Probably not a good idea:  the ability to specify an arbitrary script to run on the
-      #   result.  We could define a little stack-based / point-free language where `PathPart`
-      #   specifies one "instruction" or transformation to apply.  Although this is not a good idea
+      #   result.  We could define a little stack-based language where `PathPart` specifies one
+      #   "instruction" or transformation to apply.  Although this is not a good idea
       #   (over-engineered), any narrower additions to `PathPart` should be designed as if this
       #   were the eventual goal.
     }
