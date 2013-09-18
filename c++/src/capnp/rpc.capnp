@@ -285,6 +285,12 @@ struct Return {
     canceled @4 :Void;
     # Indicates that the call was canceled due to the caller sending a Finish message
     # before the call had completed.
+
+    unsupportedPipelineOp @5 :Void;
+    # The call was addressed to a `PromisedAnswer` that was not understood by the callee because
+    # it used features that the callee's RPC implementation does not support.  The caller should
+    # wait for the first call to return and then retry the dependent call as a regular,
+    # non-pipelined call.
   }
 }
 
@@ -627,7 +633,7 @@ struct PromisedAnswer {
   # ID of the question (in the sender's question table / receiver's answer table) whose answer is
   # expected to contain the capability.
 
-  path @1 :List(UInt16);
+  path @1 :List(PathPart);
   # Path to the capability in the response.  This is a list of indexes into the pointer
   # sections of structs forming a path from the root struct to a particular capability.  Each
   # pointer except for the last one must point to another struct -- it is an error if one ends
@@ -635,11 +641,30 @@ struct PromisedAnswer {
   #
   # If the question refers to an `Accept` (or anything other than a `Call`), this list must be
   # empty.
-  #
-  # TODO(someday):  Would it make sense to support lists in the path, and say that the method
-  #   should be executed on every element of the list?  Of course, if we wanted to get arbitrarily
-  #   complicated, the ideal would be for the caller to be able to upload a script to run that
-  #   derives the capability given the former answer, but that's probably unreasonable.
+
+  struct PathPart {
+    union {
+      noop @0 :Void;
+      # Dummy.  Ignore this part.  This field is only here so that we can define PathPart to be
+      # a union which we might extend in the future.  If an RPC implementation receives a PathPart
+      # of a type it doesn't recognize, it should reply with a `Return` with `unsupportedPipelineOp`
+      # set.
+
+      pointerIndex @1 :UInt16;
+      # Index of a pointer in the pointer section of a struct.  Only valid when addressing a
+      # struct.
+
+      # TODO(someday):  We could add:
+      # - For lists, the ability to address every member of the list, or a slice of the list, the
+      #   answer to which would be another list.  This is useful for implementing the equivalent of
+      #   a SQL table join (not to be confused with the `Join` message type).
+      # - Probably not a good idea:  the ability to specify an arbitrary script to run on the
+      #   result.  We could define a little stack-based / point-free language where `PathPart`
+      #   specifies one "instruction" or transformation to apply.  Although this is not a good idea
+      #   (over-engineered), any narrower additions to `PathPart` should be designed as if this
+      #   were the eventual goal.
+    }
+  }
 }
 
 struct ThirdPartyCapDescriptor {
