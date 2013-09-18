@@ -59,31 +59,45 @@
 #     http://erights.org/elib/concurrency/partial-order.html
 #
 # Since the full protocol is complicated, we define multiple levels of support which an
-# implementation may target.  Comments in this file indicate which level requires the corresponding
-# feature to be implemented -- if unspecified, the feature must be implemented at level 1.
+# implementation may target.  For typical applications, level 1 support will be sufficient.
+# Comments in this file indicate which level requires the corresponding feature to be
+# implemented.
 #
-# * **Level 1:** The implementation supports simple bilateral interaction, but interactions between
-#   three or more parties are supported only via proxying of objects.  E.g. if Alice wants to send
-#   Bob a capability pointing to Carol, Alice must host a local proxy of Carol and send Bob a
-#   reference to that; Bob cannot form a direct connection to Carol.  Level 1 implementations do
-#   not support "join" or "eq" across capabilities received from different vats, although they
-#   should be supported on capabilities received from the same vat.
+# * **Level 0:** The implementation does not support object references.  `Restore` is supported
+#   only for looking up singleton objects which exist for the lifetime of the server, and only
+#   these singleton objects can receive calls.  At this level, the implementation does not support
+#   object-oriented protocols and is similar in complexity to JSON-RPC or Protobuf "generic
+#   services".  This level should be considered only a temporary stepping-stone toward level 1 as
+#   the lack of object references drastically changes how protocols are designed.  Applications
+#   _should not_ attempt to design their protocols around the limitations of level 0
+#   implementations.
 #
-# * **Level 2:** The implementation supports three-way interactions but does not implement "Join"
+# * **Level 1:** The implementation supports simple bilateral interaction with object references
+#   and promise pipelining, but interactions between three or more parties are supported only via
+#   proxying of objects.  E.g. if Alice wants to send Bob a capability pointing to Carol, Alice
+#   must host a local proxy of Carol and send Bob a reference to that; Bob cannot form a direct
+#   connection to Carol.  Level 1 implementations do not support "join" or "eq" across capabilities
+#   received from different vats, although they should be supported on capabilities received from
+#   the same vat.  `Restore` is supported only for looking up singleton objects as in level 0.
+#
+# * **Level 2:** The implementation supports saving, restoring, and deleting persistent
+#   capabilities.
+#
+# * **Level 3:** The implementation supports three-way interactions but does not implement "Join"
 #   operations.  The implementation can be used effectively on networks that do not require joins,
 #   or to implement objects that never need to be joined.
 #
-# * **Level 3:** The entire protocol is implemented, including joins.
+# * **Level 4:** The entire protocol is implemented, including joins.
 #
 # Note that an implementation must also support specific networks (transports), as described in
 # the "Network-specific Parameters" section below.  An implementation might have different levels
 # depending on the network used.
 #
 # New implementations of Cap'n Proto should start out targeting the simplistic "confined" network
-# type as defined in `rpc-confined.capnp`.  With this network type, "Level 2" is irrelevant and
-# "Level 3" is much easier than usual to implement.  When such an implementation is actually run
-# inside a container, the contained app effectively gets to make full use of the container's
-# network at level 3.  And since Cap'n Proto IPC is extremely fast, it may never make sense to
+# type as defined in `rpc-confined.capnp`.  With this network type, level 3 is irrelevant and
+# levels 2 and 4 are much easier than usual to implement.  When such an implementation is actually
+# run inside a container, the contained app effectively gets to make full use of the container's
+# network at level 4.  And since Cap'n Proto IPC is extremely fast, it may never make sense to
 # bother implementing any other vat network protocol -- just use the correct container type and get
 # it for free.
 
@@ -125,11 +139,15 @@ $Cxx.namespace("capnp::rpc");
 # establishing a new connection and restoring from these persistent capabilities.
 
 using QuestionId = UInt32;
+# **(level 0)**
+#
 # Identifies a question in the questions/answers table.  The questioner (caller) chooses an ID
-# when making a call.  The ID remains valid in caller -> callee messages until a ReleaseAnswer
+# when making a call.  The ID remains valid in caller -> callee messages until a Finish
 # message is sent, and remains valid in callee -> caller messages until a Return message is sent.
 
 using ExportId = UInt32;
+# **(level 1)**
+#
 # Identifies an exported capability or promise in the exports/imports table.  The exporter chooses
 # an ID before sending a capability over the wire.  If the capability is already in the table, the
 # exporter should reuse the same ID.  If the ID is a promise (as opposed to a settled capability),
@@ -138,7 +156,7 @@ using ExportId = UInt32;
 #
 # ExportIds are subject to reference counting.  When an `ExportId` is received embedded in an
 # question or answer, the export has an implicit reference until that question or answer is
-# released (questions are released by `Return`, answers are released by `ReleaseAnswer`).  Such an
+# released (questions are released by `Return`, answers are released by `Finish`).  Such an
 # export can be retained beyond that point by including it in the `retainedCaps` list at the time
 # the question/answer is released, thus incrementing its reference count.  The reference count is
 # later decremented by a `Release` message.  Since the `Release` message can specify an arbitrary
@@ -165,29 +183,39 @@ struct Message {
   # An RPC connection is a bi-directional stream of Messages.
 
   union {
-    # Level 1 features -----------------------------------------------
+    # Level 0 features -----------------------------------------------
 
     call @0 :Call;        # Begin a method call.
     return @1 :Return;    # Complete a method call.
-    resolve @2 :Resolve;  # Resolve a previously-sent promise.
+    finish @2 :Finish;    # Release a returned answer / cancel a call.
 
-    release @3 :Release;  # Release a capability so that the remote object can be deallocated.
-    releaseAnswer @4 :ReleaseAnswer;  # Release a returned answer / cancel a call.
+    # Level 1 features -----------------------------------------------
 
-    restore @5 :Restore;  # Restore a persistent capability from a previous connection.
+    resolve @3 :Resolve;  # Resolve a previously-sent promise.
+    release @4 :Release;  # Release a capability so that the remote object can be deallocated.
 
     # Level 2 features -----------------------------------------------
 
-    provide @6 :Provide;  # Provide a capability to a third party.
-    accept @7 :Accept;    # Accept a capability provided by a third party.
+    save @5 :Save;        # Save a capability persistently.
+    restore @6 :Restore;  # Restore a persistent capability from a previous connection.
+    delete @7 :Delete;    # Delete a persistent capability.
 
     # Level 3 features -----------------------------------------------
 
-    join @8 :Join;        # Directly connect to the common root of two or more proxied caps.
+    provide @8 :Provide;  # Provide a capability to a third party.
+    accept @9 :Accept;    # Accept a capability provided by a third party.
+
+    # Level 4 features -----------------------------------------------
+
+    join @10 :Join;       # Directly connect to the common root of two or more proxied caps.
   }
 }
 
+# Level 0 message types ----------------------------------------------
+
 struct Call {
+  # **(level 0)**
+  #
   # Message type initiating a method call on a capability.
 
   questionId @0 :QuestionId;
@@ -198,7 +226,7 @@ struct Call {
   #
   # A question ID can be reused once both:
   # - A matching Return has been received from the callee.
-  # - A matching ReleaseAnswer has been sent from the caller.
+  # - A matching Finish has been sent from the caller.
 
   target :union {
     exportedCap @1 :ExportId;
@@ -207,6 +235,9 @@ struct Call {
     promisedAnswer @2 :PromisedAnswer;
     # This call is to a capability that is expected to be returned by another call that has not
     # yet been completed.
+    #
+    # At level 0, this is supported only for addressing the result of a previous `Restore`, so that
+    # initial startup doesn't require a round trip.
   }
 
   interfaceId @3 :UInt64;
@@ -223,12 +254,16 @@ struct Call {
 }
 
 struct Return {
+  # **(level 0)**
+  #
   # Message type sent from callee to caller indicating that the call has completed.
 
   questionId @0 :QuestionId;
   # Question ID which is being answered, as specified in the corresponding Call.
 
   retainedCaps @1 :List(ExportId);
+  # **(level 1)**
+  #
   # List of capabilities from the request to which the callee continues to hold references.  Any
   # other capabilities from the request are implicitly released.
 
@@ -241,21 +276,52 @@ struct Return {
     #
     # For a `Return` in response to an `Accept`, `answer` is a capability pointer (and therefore
     # points to a `CapDescriptor`, but is tagged as a capability rather than a struct).  A
-    # `ReleaseAnswer` is still required in this case, and the capability must still be listed in
+    # `Finish` is still required in this case, and the capability must still be listed in
     # `retainedCaps` if it is to be retained.
 
     exception @3 :Exception;
     # Indicates that the call failed and explains why.
 
     canceled @4 :Void;
-    # Indicates that the call was canceled due to the caller sending a ReleaseAnswer message
+    # Indicates that the call was canceled due to the caller sending a Finish message
     # before the call had completed.
   }
 }
 
+struct Finish {
+  # **(level 0)**
+  #
+  # Message type sent from the caller to the callee to indicate:
+  # 1) The questionId will no longer be used in any messages sent by the callee (no further
+  #    pipelined requests).
+  # 2) Any capabilities in the answer other than the ones listed below should be implicitly
+  #    released.
+  # 3) If the answer has not returned yet, the caller no longer cares about the answer, so the
+  #    callee may wish to immediately cancel the operation and send back a Return message with
+  #    "canceled" set.
+
+  questionId @0 :QuestionId;
+  # ID of the question whose answer is to be released.
+
+  retainedCaps @1 :List(ExportId);
+  # **(level 1)**
+  #
+  # List of capabilities from the answer to which the callee continues to hold references.  Any
+  # other capabilities from the answer that need to be released are implicitly released along
+  # with the answer itself.
+}
+
+# Level 1 message types ----------------------------------------------
+
 struct Resolve {
+  # **(level 1)**
+  #
   # Message type sent to indicate that a previously-sent promise has now been resolved to some other
   # object (possibly another promise) -- or broken, or canceled.
+  #
+  # Level 0 implementations may want to respond to a `Resolve` by sending an appropriate `Release`
+  # message, otherwise the object will stick around until the connection is closed even though
+  # it will never be used.
 
   promiseId @0 :ExportId;
   # The ID of the promise to be resolved.
@@ -299,6 +365,8 @@ struct Resolve {
 }
 
 struct Release {
+  # **(level 1)**
+  #
   # Message type sent to indicate that the sender is done with the given capability and the receiver
   # can free resources allocated to it.
 
@@ -310,39 +378,83 @@ struct Release {
   # when the reference count reaches zero.
 }
 
-struct ReleaseAnswer {
-  # Message type sent from the caller to the callee to indicate:
-  # 1) The questionId will no longer be used in any messages sent by the callee (no further
-  #    pipelined requests).
-  # 2) Any capabilities in the answer other than the ones listed below should be implicitly
-  #    released.
-  # 3) If the answer has not returned yet, the caller no longer cares about the answer, so the
-  #    callee may wish to immediately cancel the operation and send back a Return message with
-  #    "canceled" set.
+# Level 2 message types ----------------------------------------------
+
+struct Save {
+  # **(level 2)**
+  #
+  # Message type sent to save a capability persistently so that it can be restored by a future
+  # connection.  Not all capabilities can be saved -- application interfaces should define which
+  # capabilities support this and which do not.
 
   questionId @0 :QuestionId;
-  # ID of the question whose answer is to be released.
+  # A new question ID identifying this request, which will eventually receive a Return
+  # message whose `answer` is a SturdyRef.
 
-  retainedCaps @1 :List(ExportId);
-  # List of capabilities from the answer to which the callee continues to hold references.  Any
-  # other capabilities from the answer that need to be released are implicitly released along
-  # with the answer itself.
+  target :union {
+    # What is to be saved.
+
+    exportedCap @1 :ExportId;
+    # An exported capability.
+
+    promisedAnswer @2 :PromisedAnswer;
+    # A capability expected to be returned in the answer to an outstanding question.
+  }
 }
 
 struct Restore {
+  # **(mostly level 2)**
+  #
   # Message type sent to restore a persistent capability obtained during a previous connection, or
   # through other means.
+  #
+  # Level 0/1 implementations need to implement a limited version of `Restore` only for the purpose
+  # of bootstrapping a new connection (otherwise, there would be no objects to which to address
+  # methods).  These levels may simply implement singleton services that exist for the lifetime of
+  # the host process and probably have non-secret names.  A level 0 receiver of `Restore` should
+  # never actually send a `Return` message, but should simply expect `Call` messages addressed to
+  # the `PromisedAnswer` corresponding to the `Restore`.  A level 0 sender of `Restore` can ignore
+  # the corresponding `Return` and just keep addressing the `PromisedAnswer`.
 
   questionId @0 :QuestionId;
-  # A new question ID identifying this restore message, which will eventually receive a Return
-  # message containing the restored capability.
+  # A new question ID identifying this request, which will eventually receive a Return message
+  # containing the restored capability.
 
   ref @1 :SturdyRef;
   # Designates the capability to restore.
 }
 
+struct Delete {
+  # **(level 2)**
+  #
+  # Message type sent to delete a previously-saved persistent capability.  In other words, this
+  # means "this ref will no longer be used in the future", so that the host can potentially
+  # garbage collect resources associated with it.  Note that if any ExportId still refers to a
+  # capability restored from this ref, that export should still remain valid until released.
+  #
+  # Different applications may define different policies regarding saved capability lifetimes that
+  # may or may not rely on `Delete`.  For the purpose of implementation freedom, a receiver is
+  # allowed to silently ignore a delete request for a reference it doesn't recognize.  This way,
+  # a persistent capability could be given an expiration time, after which the capability is
+  # automatically deleted, and any future `Delete` message is ignored.
+  #
+  # A client must send no more than one `Delete` message for any given `Save`, so that a host
+  # can potentially implement reference counting.  However, hosts should be wary of reference
+  # counting across multiple clients, as a malicious client could of course send multiple
+  # `Delete`s.
+
+  questionId @0 :QuestionId;
+  # A new question ID identifying this request, which will eventually receive a Return message
+  # with an empty answer.
+
+  ref @1 :SturdyRef;
+  # Designates the capability to delete.
+}
+
+# Level 3 message types ----------------------------------------------
+
 struct Provide {
-  # **Level 2 feature**
+  # **(level 3)**
   #
   # Message type sent to indicate that the sender wishes to make a particular capability implemented
   # by the receiver available to a third party for direct access (without the need for the third
@@ -354,7 +466,7 @@ struct Provide {
   questionId @0 :QuestionId;
   # Question ID to be held open until the recipient has received the capability.  An answer will
   # be returned once the third party has successfully received the capability.  The sender must
-  # at some point send a ReleaseAnswer message as with any other call, and such a message can be
+  # at some point send a `Finish` message as with any other call, and such a message can be
   # used to cancel the whole operation.
 
   target :union {
@@ -372,7 +484,7 @@ struct Provide {
 }
 
 struct Accept {
-  # **Level 2 feature**
+  # **(level 3)**
   #
   # Message type sent to pick up a capability hosted by the receiving vat and provided by a third
   # party.  The third party previously designated the capability using `Provide`.
@@ -385,8 +497,10 @@ struct Accept {
   # Identifies the provided object to be picked up.
 }
 
+# Level 4 message types ----------------------------------------------
+
 struct Join {
-  # **Level 3 feature**
+  # **(level 4)**
   #
   # Message type sent to implement E.join(), which, given a number of capabilities which are
   # expected to be equivalent, finds the underlying object upon which they all agree and forms a
@@ -433,12 +547,12 @@ struct Join {
   # is relayed from the joined object's host, possibly with transformation applied as needed
   # by the network.
   #
-  # Like any answer, the answer must be released using a `ReleaseAnswer`.  However, this release
+  # Like any answer, the answer must be released using a `Finish`.  However, this release
   # should not occur until the joiner has either successfully connected to the joined object.
   # Vats relaying a `Join` message similarly must not release the answer they receive until the
   # answer they relayed back towards the joiner has itself been released.  This allows the
   # joined object's host to detect when the Join operation is canceled before completing -- if
-  # it receives a `ReleaseAnswer` for one of the join answers before the joiner successfully
+  # it receives a `Finish` for one of the join answers before the joiner successfully
   # connects.  It can then free any resources it had allocated as part of the join.
 
   capId @1 :ExportId;
@@ -453,6 +567,8 @@ struct Join {
 # Common structures used in messages
 
 struct CapDescriptor {
+  # **(level 1)**
+  #
   # When an application-defined type contains an interface pointer, that pointer's encoding is the
   # same as a struct pointer except that the bottom two bits are 1's instead of 0's.  The pointer
   # actually points to an instance of `CapDescriptor`.  The runtime API should not reveal the
@@ -488,27 +604,24 @@ struct CapDescriptor {
     # by the sender.
 
     thirdPartyHosted @5 :ThirdPartyCapDescriptor;
-    # **Level 2 feature**
+    # **(level 3)**
     #
     # A capability that lives in neither the sender's nor the receiver's vat.  The sender needs
     # to form a direct connection to a third party to pick up the capability.
   }
-
-  sturdyRef @6 :SturdyRef;
-  # If non-null, this is a SturdyRef that can be used to store this capability persistently and
-  # restore access to in in the future (using a `Restore` message).  If null, this capability will
-  # be lost if the connection dies.  Generally, application interfaces should define when a client
-  # can expect a capability to be persistent (and therefore have a SturdyRef attached).  However,
-  # application protocols should never embed SturdyRefs directly, as various infrastructure like
-  # transports, gateways, and sandboxes may need to be aware of SturdyRefs being passed over the
-  # wire in order to transform them into different namespaces.
 }
 
 struct PromisedAnswer {
+  # **(mostly level 1)**
+  #
   # Specifies how to derive a promise from an unanswered question, by specifying the path of fields
   # to follow from the root of the eventual answer struct to get to the desired capability.  Used
   # to address method calls to a not-yet-returned capability or to pass such a capability as an
   # input to some other method call.
+  #
+  # Level 0 implementations must support `PromisedAnswer` only for the case where the answer is
+  # to a `Restore` message.  In this case, `path` is always empty since `Restore` always returns
+  # a raw capability.
 
   questionId @0 :QuestionId;
   # ID of the question (in the sender's question table / receiver's answer table) whose answer is
@@ -530,7 +643,7 @@ struct PromisedAnswer {
 }
 
 struct ThirdPartyCapDescriptor {
-  # **Level 2 feature**
+  # **(level 3)**
   #
   # Identifies a capability in a third-party vat which the sender wants the receiver to pick up.
 
@@ -546,6 +659,10 @@ struct ThirdPartyCapDescriptor {
 }
 
 struct Exception {
+  # **(level 0)**
+  #
+  # Describes an arbitrary error that prevented an operation (e.g. a call) from completing.
+
   reason @0 :Text;
   # Human-readable failure description.
 
@@ -598,21 +715,31 @@ struct Exception {
 # the outside world entirely through a container/supervisor.  All objects in the world that aren't
 # hosted by the contained vat appear as if they were hosted by the container.  This network type is
 # interesting because from the containee's point of view, there are no three-party interactions at
-# all, and joins are unusually simple to implement, so implementing at level 3 is barely more
+# all, and joins are unusually simple to implement, so implementing at level 4 is barely more
 # complicated than implementing at level 1.  Moreover, if you pair an app implementing the confined
 # network with a container that implements some other network, the app can then participate on
 # the container's network just as if it implemented that network directly.  The types used by the
 # "confined" network are defined in `rpc-confined.capnp`.
 #
 # The things which we need to parameterize are:
-# - How to authenticate vats in three-party introductions.
-# - How to implement `Join`.
-# - How to store capabilities long-term without holding a connection open.
+# - How to store capabilities long-term without holding a connection open (mostly level 2).
+# - How to authenticate vats in three-party introductions (level 3).
+# - How to implement `Join` (level 4).
+#
+# Persistent references
+# ---------------------
+#
+# **(mostly level 2)**
+#
+# We want to allow some capabilities to be stored long-term, even if a connection is lost and later
+# recreated.  ExportId is a short-term identifier that is specific to a connection, so it doesn't
+# help here.  We need a way to specify long-term identifiers, as well as a strategy for
+# reconnecting to a referenced capability later.
 #
 # Three-party interactions
 # ------------------------
 #
-# **Level 2 feature**
+# **(level 3)**
 #
 # In cases where more than two vats are interacting, we have situations where VatA holds a
 # capability hosted by VatB and wants to send that capability to VatC.  This can be accomplished
@@ -628,21 +755,15 @@ struct Exception {
 # Join
 # ----
 #
-# **Level 3 feature**
+# **(level 4)**
 #
 # The `Join` message type and corresponding operation arranges for a direct connection to be formed
 # between the joiner and the host of the joined object, and this connection must be authenticated.
 # Thus, the details are network-dependent.
-#
-# Persistent references
-# ---------------------
-#
-# We want to allow some capabilities to be stored long-term, even if a connection is lost and later
-# recreated.  ExportId is a short-term identifier that is specific to a connection, so it doesn't
-# help here.  We need a way to specify long-term identifiers, as well as a strategy for
-# reconnecting to a referenced capability later.
 
 using SturdyRef = Object;
+# **(mostly level 2)**
+#
 # Identifies a long-lived capability which can be obtained again in a future connection by sending
 # a `Restore` message.  A SturdyRef is a lot like a URL, but possibly with additional
 # considerations e.g. to support authentication without a certificate authority.
@@ -672,7 +793,7 @@ using SturdyRef = Object;
 # can solve these problems but these are beyond the scope of this protocol.
 
 using ProvisionId = Object;
-# **Level 2 feature**
+# **(level 3)**
 #
 # The information which must be sent in an `Accept` message to identify the object being accepted.
 #
@@ -681,7 +802,7 @@ using ProvisionId = Object;
 # that provider.
 
 using RecipientId = Object;
-# **Level 2 feature**
+# **(level 3)**
 #
 # The information which must be sent in a `Provide` message to identify the recipient of the
 # capability.
@@ -690,7 +811,7 @@ using RecipientId = Object;
 # fingerprint of the recipient.
 
 using ThirdPartyCapId = Object;
-# **Level 2 feature**
+# **(level 3)**
 #
 # The information needed to connect to a third party and accept a capability from it.
 #
@@ -700,6 +821,8 @@ using ThirdPartyCapId = Object;
 # (used to identify which capability to pick up).
 
 using JoinKeyPart = Object;
+# **(level 4)**
+#
 # A piece of a secret key.  One piece is sent along each path that is expected to lead to the same
 # place.  Once the pieces are combined, a direct connection may be formed between the sender and
 # the receiver, bypassing any men-in-the-middle along the paths.  See the `Join` message type.
@@ -722,6 +845,8 @@ using JoinKeyPart = Object;
 # how many parts to expect and a hash of the shared secret (used to match up parts).
 
 using JoinAnswer = Object;
+# **(level 4)**
+#
 # Information returned in the answer to a `Join` message, needed by the joiner in order to form a
 # direct connection to a joined object.  This might simply be the address of the joined object's
 # host vat, since the `JoinKey` has already been communicated so the two vats already have a shared
@@ -749,7 +874,7 @@ using JoinAnswer = Object;
 #   # Note that methods returning a `Connection` may return a pre-existing `Connection`, and the
 #   # caller is expected to find and share state with existing users of the connection.
 #
-#   # Level 1 features -----------------------------------------------
+#   # Level 0 features -----------------------------------------------
 #
 #   connectToHostOf(ref :SturdyRef) :Connection;
 #   # Connect to a host which can restore the given SturdyRef.  The transport should return a
@@ -766,7 +891,7 @@ using JoinAnswer = Object;
 #   #
 #   # Once connected, the first received message will usually be a `Restore`.
 #
-#   # Level 3 features -----------------------------------------------
+#   # Level 4 features -----------------------------------------------
 #
 #   newJoiner(count :UInt32): NewJoinerResponse;
 #   # Prepare a new Join operation, which will eventually lead to forming a new direct connection
@@ -799,7 +924,7 @@ using JoinAnswer = Object;
 # }
 #
 # interface Connection {
-#   # Level 1 features -----------------------------------------------
+#   # Level 0 features -----------------------------------------------
 #
 #   send(message :Message) :Void;
 #   # Send the message.  Returns successfully when the message (and all preceding messages) has
@@ -809,7 +934,7 @@ using JoinAnswer = Object;
 #   # Receive the next message, and acknowledges receipt to the sender.  Messages are received in
 #   # the order in which they are sent.
 #
-#   # Level 2 features -----------------------------------------------
+#   # Level 3 features -----------------------------------------------
 #
 #   introduceTo(recipient :Connection) :IntroductionInfo;
 #   # Call before starting a three-way introduction, assuming a `Provide` message is to be sent on
@@ -831,6 +956,8 @@ using JoinAnswer = Object;
 # }
 #
 # sturct ConnectionAndProvisionId {
+#   # **(level 3)**
+#
 #   connection :Connection;
 #   # Connection on which to issue `Accept` message.
 #

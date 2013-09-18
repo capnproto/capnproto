@@ -31,16 +31,17 @@
 # the world only sees the container, and treats it as if it were itself the host of all of the
 # containee's objects.
 #
-# Since there are only two vats in this network, there is never a need for three-way introductions.
-# Joins _could_ be needed in cases where the container itself participates in a network that uses
-# joins, as the container may export two objects to the containee which, unbeknownst to it, are
-# actually proxies of the same remote object.  However, from the containee's point of view, such
-# a join is trivial to request, and the containee never needs to receive join requests.
+# Since there are only two vats in this network, there is never a need for three-way introductions,
+# so level 3 is free.  Joins _could_ be needed in cases where the container itself participates in
+# a network that uses joins, as the container may export two objects to the containee which,
+# unbeknownst to it, are actually proxies of the same remote object.  However, from the containee's
+# point of view, such a join is trivial to request, and the containee never needs to receive join
+# requests.
 #
-# Therefore, a level 3 implementation of the confined network is barely more complicated than a
+# Therefore, a level 4 implementation of the confined network is barely more complicated than a
 # level 1 implementation.  However, such an implementation is able to make use of the container's
 # implementation of whatever network it lives in.  Thus, if you have an application that implements
-# the confined network at level 3, your application can participate in _any_ network at level 3 so
+# the confined network at level 4, your application can participate in _any_ network at level 4 so
 # long as you pair it with the appropriate container.
 #
 # The "confined" network protocol may also be a reasonable basis for simple two-party client-server
@@ -53,18 +54,20 @@ struct SturdyRef {
   union {
     external @0 :Object;
     # The object lives outside the container.  The container can handle `Restore` requests for this
-    # ref.  The content of the ref is defined by the container implementation and opaque to the
-    # containee.  The container ensures that the ref is encoded in such a way that the containee
-    # cannot possibly derive the original bits of the external-world reference, probably by storing
-    # the external ref on a table somewhere.  See:
+    # ref.  The content of the ref is defined by the container implementation and configuration.
+    # It may simply be a SturdyRef in the format of the container's external network.  However,
+    # some containers may actually encrypt external references in order to support distributed
+    # confinement:
     #     http://www.erights.org/elib/capability/dist-confine.html
 
     confined @1 :Object;
     # The object lives inside the container -- it is implemented by the contained app.  That app
     # handles `Restore` requests for this ref.  The content of the ref is defined by the app
-    # and opaque to the container.  The container shall ensure that the raw bits of this ref are
-    # not revealed to the outside world, so as long as the app trusts the container, it need not
-    # worry about encrypting or signing the ref.
+    # and opaque to the container.  The container may offer the ability to encrypt outgoing
+    # `SturdyRefs` so that their content is opaque to the outside world; in this case, so long as
+    # the app trusts the container, it need not encrypt nor sign the ref itself.  However, this
+    # may be undesirable for level 1 applications that only export non-secret singletons anyway,
+    # so it should be configurable.
   }
 }
 
