@@ -183,31 +183,56 @@ struct Message {
   # An RPC connection is a bi-directional stream of Messages.
 
   union {
+    unimplemented @0 :Message;
+    # When a peer receives a message of a type it doesn't recognize or doesn't support, it
+    # must immediately echo the message back to the sender in `unimplemented`.  The sender is
+    # then able to examine the message and decide how to deal with it being unimplemented.
+    #
+    # For example, say `resolve` is received by a level 0 implementation (because a previous call
+    # or return happened to contain a promise).  The receiver will echo it back as `unimplemented`.
+    # The sender can then simply release the cap to which the promise had resolved, thus avoiding
+    # a leak.
+    #
+    # For any message type that introduces a question, if the message comes back unimplemented,
+    # the sender may simply treat it as if the question failed with an exception.
+    #
+    # In cases where there is no sensible way to react to an `unimplemented` message (without
+    # resource leaks or other serious problems), the connection may need to be aborted.  This is
+    # a gray area; different implementations may take different approaches.
+
+    abort @1 :Exception;
+    # Sent when a connection is being aborted due to an unrecoverable error.  This could be e.g.
+    # because the sender received an invalid or nonsensical message (`isCallersFault` is true) or
+    # because the sender had an internal error (`isCallersFault` is false).  The sender will shut
+    # down the outgoing half of the connection after `abort` and will completely close the
+    # connection shortly thereafter (it's up to the sender how much of a time buffer they want to
+    # offer for the client to receive the `abort` before the connection is reset).
+
     # Level 0 features -----------------------------------------------
 
-    call @0 :Call;        # Begin a method call.
-    return @1 :Return;    # Complete a method call.
-    finish @2 :Finish;    # Release a returned answer / cancel a call.
+    call @2 :Call;         # Begin a method call.
+    return @3 :Return;     # Complete a method call.
+    finish @4 :Finish;     # Release a returned answer / cancel a call.
 
     # Level 1 features -----------------------------------------------
 
-    resolve @3 :Resolve;  # Resolve a previously-sent promise.
-    release @4 :Release;  # Release a capability so that the remote object can be deallocated.
+    resolve @5 :Resolve;   # Resolve a previously-sent promise.
+    release @6 :Release;   # Release a capability so that the remote object can be deallocated.
 
     # Level 2 features -----------------------------------------------
 
-    save @5 :Save;        # Save a capability persistently.
-    restore @6 :Restore;  # Restore a persistent capability from a previous connection.
-    delete @7 :Delete;    # Delete a persistent capability.
+    save @7 :Save;         # Save a capability persistently.
+    restore @8 :Restore;   # Restore a persistent capability from a previous connection.
+    delete @9 :Delete;     # Delete a persistent capability.
 
     # Level 3 features -----------------------------------------------
 
-    provide @8 :Provide;  # Provide a capability to a third party.
-    accept @9 :Accept;    # Accept a capability provided by a third party.
+    provide @10 :Provide;  # Provide a capability to a third party.
+    accept @11 :Accept;    # Accept a capability provided by a third party.
 
     # Level 4 features -----------------------------------------------
 
-    join @10 :Join;       # Directly connect to the common root of two or more proxied caps.
+    join @12 :Join;        # Directly connect to the common root of two or more proxied caps.
   }
 }
 
@@ -325,9 +350,13 @@ struct Resolve {
   # Message type sent to indicate that a previously-sent promise has now been resolved to some other
   # object (possibly another promise) -- or broken, or canceled.
   #
-  # Level 0 implementations may want to respond to a `Resolve` by sending an appropriate `Release`
-  # message, otherwise the object will stick around until the connection is closed even though
-  # it will never be used.
+  # Keep in mind that it's possible for a `Resolve` to be sent to a level 0 implementation that
+  # doesn't implement it.  For example, a method call or return might contain a capability in the
+  # payload.  Normally this is fine even if the receiver is level 0, because they will implicitly
+  # release all such capabilities on return / finish.  But if the cap happens to be a promise, then
+  # a follow-up `Resolve` will be sent regardless of this release.  The level 0 receiver will reply
+  # with an `unimplemented` message.  The sender (of the `Resolve`) can respond to this as if the
+  # receiver had immediately released any capability to which the promise resolved.
 
   promiseId @0 :ExportId;
   # The ID of the promise to be resolved.
@@ -689,29 +718,22 @@ struct Exception {
   reason @0 :Text;
   # Human-readable failure description.
 
-  isPermanent @1 :Bool;
+  isCallersFault @1 :Bool;
+  # In the best estimate of the error source, is it the caller's fault that this error occurred
+  # (like HTTP 400), or is it the callee's fault (like HTTP 500)?  Or, put another way, if an
+  # automated bug report were to be generated for this error, should it be initially filed on the
+  # caller's code or the callee's?  This is a guess.  Generally guesses should err towards blaming
+  # the callee -- at the very least, the callee should be on the hook for improving their error
+  # handling to be more confident.
+
+  isPermanent @2 :Bool;
   # In the best estimate of the error source, is this error likely to repeat if the same call is
   # executed again?  Callers might use this to decide when to retry a request.
 
-  isOverloaded @2 :Bool;
+  isOverloaded @3 :Bool;
   # In the best estimate of the error source, is it likely this error was caused by the system
   # being overloaded?  If so, the caller probably should not retry the request now, but may
   # consider retrying it later.
-
-  nature @3 :Nature;
-  # The nature of the failure.  This is intended mostly to allow classification of errors for
-  # reporting and monitoring purposes -- the caller is not expected to handle different natures
-  # differently.
-
-  enum Nature {
-    # These correspond to kj::Exception::Nature.
-
-    precondition @0;
-    localBug @1;
-    osError @2;
-    networkFailure @3;
-    other @4;
-  }
 }
 
 # ========================================================================================
