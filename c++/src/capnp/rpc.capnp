@@ -107,12 +107,18 @@ $Cxx.namespace("capnp::rpc");
 # ========================================================================================
 # The Four Tables
 #
-# As in CapTP, for each open connection, a vat maintains four tables: questions, answers, imports,
-# and exports.  See the diagram at:
+# Cap'n Proto RPC connections are stateful (although an application built on Cap'n Proto could
+# export a stateless interface).  As in CapTP, for each open connection, a vat maintains four state
+# tables: questions, answers, imports, and exports.  See the diagram at:
 #     http://www.erights.org/elib/distrib/captp/4tables.html
 #
 # The question table corresponds to the other end's answer table, and the imports table corresponds
 # to the other end's exports table.
+#
+# The entries in each table are identified by ID numbers (defined below as 32-bit integers).  These
+# numbers are always specific to the connection; a newly-established connection starts with no
+# valid IDs.  Since low-numbered IDs will pack better, it is suggested that IDs be assigned like
+# Unix file descriptors -- prefer the lowest-number ID that is currently available.
 #
 # IDs in the questions/answers tables are chosen by the questioner and generally represent method
 # calls that are in progress.
