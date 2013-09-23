@@ -964,11 +964,11 @@ struct PointerHelpers<DynamicStruct, Kind::UNKNOWN> {
       StructBuilder builder, WirePointerCount index, StructSchema schema);
   static inline void adopt(StructBuilder builder, WirePointerCount index,
                            Orphan<DynamicStruct>&& value) {
-    builder.adopt(index, kj::mv(value.builder));
+    builder.getPointerField(index).adopt(kj::mv(value.builder));
   }
   static inline Orphan<DynamicStruct> disown(StructBuilder builder, WirePointerCount index,
                                              StructSchema schema) {
-    return Orphan<DynamicStruct>(schema, builder.disown(index));
+    return Orphan<DynamicStruct>(schema, builder.getPointerField(index).disown());
   }
 };
 
@@ -987,11 +987,11 @@ struct PointerHelpers<DynamicList, Kind::UNKNOWN> {
       StructBuilder builder, WirePointerCount index, ListSchema schema, uint size);
   static inline void adopt(StructBuilder builder, WirePointerCount index,
                            Orphan<DynamicList>&& value) {
-    builder.adopt(index, kj::mv(value.builder));
+    builder.getPointerField(index).adopt(kj::mv(value.builder));
   }
   static inline Orphan<DynamicList> disown(StructBuilder builder, WirePointerCount index,
                                            ListSchema schema) {
-    return Orphan<DynamicList>(schema, builder.disown(index));
+    return Orphan<DynamicList>(schema, builder.getPointerField(index).disown());
   }
 };
 
@@ -1003,10 +1003,10 @@ struct PointerHelpers<DynamicObject, Kind::UNKNOWN> {
       StructBuilder builder, WirePointerCount index, const DynamicObject::Reader& value);
   static inline void adopt(StructBuilder builder, WirePointerCount index,
                            Orphan<DynamicObject>&& value) {
-    builder.adopt(index, kj::mv(value.builder));
+    builder.getPointerField(index).adopt(kj::mv(value.builder));
   }
   static inline Orphan<DynamicObject> disown(StructBuilder builder, WirePointerCount index) {
-    return Orphan<DynamicObject>(builder.disown(index));
+    return Orphan<DynamicObject>(builder.getPointerField(index).disown());
   }
 };
 

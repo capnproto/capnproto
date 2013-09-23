@@ -494,11 +494,11 @@ inline bool Token::Builder::isIdentifier() {
 }
 inline bool Token::Reader::hasIdentifier() const {
   if (which() != Token::IDENTIFIER) return false;
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool Token::Builder::hasIdentifier() {
   if (which() != Token::IDENTIFIER) return false;
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader Token::Reader::getIdentifier() const {
   KJ_IREQUIRE(which() == Token::IDENTIFIER,
@@ -546,11 +546,11 @@ inline bool Token::Builder::isStringLiteral() {
 }
 inline bool Token::Reader::hasStringLiteral() const {
   if (which() != Token::STRING_LITERAL) return false;
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool Token::Builder::hasStringLiteral() {
   if (which() != Token::STRING_LITERAL) return false;
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader Token::Reader::getStringLiteral() const {
   KJ_IREQUIRE(which() == Token::STRING_LITERAL,
@@ -668,11 +668,11 @@ inline bool Token::Builder::isOperator() {
 }
 inline bool Token::Reader::hasOperator() const {
   if (which() != Token::OPERATOR) return false;
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool Token::Builder::hasOperator() {
   if (which() != Token::OPERATOR) return false;
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader Token::Reader::getOperator() const {
   KJ_IREQUIRE(which() == Token::OPERATOR,
@@ -720,11 +720,11 @@ inline bool Token::Builder::isParenthesizedList() {
 }
 inline bool Token::Reader::hasParenthesizedList() const {
   if (which() != Token::PARENTHESIZED_LIST) return false;
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool Token::Builder::hasParenthesizedList() {
   if (which() != Token::PARENTHESIZED_LIST) return false;
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Reader Token::Reader::getParenthesizedList() const {
   KJ_IREQUIRE(which() == Token::PARENTHESIZED_LIST,
@@ -778,11 +778,11 @@ inline bool Token::Builder::isBracketedList() {
 }
 inline bool Token::Reader::hasBracketedList() const {
   if (which() != Token::BRACKETED_LIST) return false;
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool Token::Builder::hasBracketedList() {
   if (which() != Token::BRACKETED_LIST) return false;
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Reader Token::Reader::getBracketedList() const {
   KJ_IREQUIRE(which() == Token::BRACKETED_LIST,
@@ -878,10 +878,10 @@ inline Statement::Which Statement::Builder::which() {
 }
 
 inline bool Statement::Reader::hasTokens() const {
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool Statement::Builder::hasTokens() {
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::Token>::Reader Statement::Reader::getTokens() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::get(
@@ -952,11 +952,11 @@ inline bool Statement::Builder::isBlock() {
 }
 inline bool Statement::Reader::hasBlock() const {
   if (which() != Statement::BLOCK) return false;
-  return !_reader.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline bool Statement::Builder::hasBlock() {
   if (which() != Statement::BLOCK) return false;
-  return !_builder.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::Statement>::Reader Statement::Reader::getBlock() const {
   KJ_IREQUIRE(which() == Statement::BLOCK,
@@ -997,10 +997,10 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Statement>> Statement:
 }
 
 inline bool Statement::Reader::hasDocComment() const {
-  return !_reader.isPointerFieldNull(2 * ::capnp::POINTERS);
+  return !_reader.getPointerField(2 * ::capnp::POINTERS).isNull();
 }
 inline bool Statement::Builder::hasDocComment() {
-  return !_builder.isPointerFieldNull(2 * ::capnp::POINTERS);
+  return !_builder.getPointerField(2 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader Statement::Reader::getDocComment() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
@@ -1071,10 +1071,10 @@ inline void Statement::Builder::setEndByte( ::uint32_t value) {
 }
 
 inline bool LexedTokens::Reader::hasTokens() const {
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool LexedTokens::Builder::hasTokens() {
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::Token>::Reader LexedTokens::Reader::getTokens() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Token>>::get(
@@ -1103,10 +1103,10 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Token>> LexedTokens::B
 }
 
 inline bool LexedStatements::Reader::hasStatements() const {
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool LexedStatements::Builder::hasStatements() {
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::Statement>::Reader LexedStatements::Reader::getStatements() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Statement>>::get(

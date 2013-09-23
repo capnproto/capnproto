@@ -47,24 +47,25 @@ template <typename T>
 struct PointerHelpers<T, Kind::STRUCT> {
   static inline typename T::Reader get(StructReader reader, WirePointerCount index,
                                        const word* defaultValue = nullptr) {
-    return typename T::Reader(reader.getStructField(index, defaultValue));
+    return typename T::Reader(reader.getPointerField(index).getStruct(defaultValue));
   }
   static inline typename T::Builder get(StructBuilder builder, WirePointerCount index,
                                         const word* defaultValue = nullptr) {
-    return typename T::Builder(builder.getStructField(index, structSize<T>(), defaultValue));
+    return typename T::Builder(
+        builder.getPointerField(index).getStruct(structSize<T>(), defaultValue));
   }
   static inline void set(StructBuilder builder, WirePointerCount index,
                          typename T::Reader value) {
-    builder.setStructField(index, value._reader);
+    builder.getPointerField(index).setStruct(value._reader);
   }
   static inline typename T::Builder init(StructBuilder builder, WirePointerCount index) {
-    return typename T::Builder(builder.initStructField(index, structSize<T>()));
+    return typename T::Builder(builder.getPointerField(index).initStruct(structSize<T>()));
   }
   static inline void adopt(StructBuilder builder, WirePointerCount index, Orphan<T>&& value) {
-    builder.adopt(index, kj::mv(value.builder));
+    builder.getPointerField(index).adopt(kj::mv(value.builder));
   }
   static inline Orphan<T> disown(StructBuilder builder, WirePointerCount index) {
-    return Orphan<T>(builder.disown(index));
+    return Orphan<T>(builder.getPointerField(index).disown());
   }
 };
 
@@ -80,7 +81,7 @@ struct PointerHelpers<List<T>, Kind::LIST> {
   }
   static inline void set(StructBuilder builder, WirePointerCount index,
                          typename List<T>::Reader value) {
-    builder.setListField(index, value.reader);
+    builder.getPointerField(index).setList(value.reader);
   }
   template <typename U>
   static void set(StructBuilder builder, WirePointerCount index, std::initializer_list<U> value) {
@@ -95,10 +96,10 @@ struct PointerHelpers<List<T>, Kind::LIST> {
     return typename List<T>::Builder(List<T>::initAsFieldOf(builder, index, size));
   }
   static inline void adopt(StructBuilder builder, WirePointerCount index, Orphan<List<T>>&& value) {
-    builder.adopt(index, kj::mv(value.builder));
+    builder.getPointerField(index).adopt(kj::mv(value.builder));
   }
   static inline Orphan<List<T>> disown(StructBuilder builder, WirePointerCount index) {
-    return Orphan<List<T>>(builder.disown(index));
+    return Orphan<List<T>>(builder.getPointerField(index).disown());
   }
 };
 
@@ -107,24 +108,24 @@ struct PointerHelpers<T, Kind::BLOB> {
   static inline typename T::Reader get(StructReader reader, WirePointerCount index,
                                        const void* defaultValue = nullptr,
                                        uint defaultBytes = 0) {
-    return reader.getBlobField<T>(index, defaultValue, defaultBytes * BYTES);
+    return reader.getPointerField(index).getBlob<T>(defaultValue, defaultBytes * BYTES);
   }
   static inline typename T::Builder get(StructBuilder builder, WirePointerCount index,
                                         const void* defaultValue = nullptr,
                                         uint defaultBytes = 0) {
-    return builder.getBlobField<T>(index, defaultValue, defaultBytes * BYTES);
+    return builder.getPointerField(index).getBlob<T>(defaultValue, defaultBytes * BYTES);
   }
   static inline void set(StructBuilder builder, WirePointerCount index, typename T::Reader value) {
-    builder.setBlobField<T>(index, value);
+    builder.getPointerField(index).setBlob<T>(value);
   }
   static inline typename T::Builder init(StructBuilder builder, WirePointerCount index, uint size) {
-    return builder.initBlobField<T>(index, size * BYTES);
+    return builder.getPointerField(index).initBlob<T>(size * BYTES);
   }
   static inline void adopt(StructBuilder builder, WirePointerCount index, Orphan<T>&& value) {
-    builder.adopt(index, kj::mv(value.builder));
+    builder.getPointerField(index).adopt(kj::mv(value.builder));
   }
   static inline Orphan<T> disown(StructBuilder builder, WirePointerCount index) {
-    return Orphan<T>(builder.disown(index));
+    return Orphan<T>(builder.getPointerField(index).disown());
   }
 };
 
@@ -139,7 +140,7 @@ struct PointerHelpers<UncheckedMessage> {
   // encoded schemas.
 
   static inline const word* get(StructReader reader, WirePointerCount index) {
-    return reader.getUncheckedPointer(index);
+    return reader.getPointerField(index).getUnchecked();
   }
 };
 

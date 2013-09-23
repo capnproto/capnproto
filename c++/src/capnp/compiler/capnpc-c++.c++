@@ -581,7 +581,8 @@ private:
                               slot.offset, " * ::capnp::ELEMENTS) != 0");
                     case Section::POINTERS:
                       return kj::strTree(
-                          "!_reader.isPointerFieldNull(", slot.offset, " * ::capnp::POINTERS)");
+                          "!_reader.getPointerField(", slot.offset,
+                              " * ::capnp::POINTERS).isNull()");
                   }
                   KJ_UNREACHABLE;
                 }, "\n      || "), ";\n"
@@ -599,7 +600,8 @@ private:
                               slot.offset, " * ::capnp::ELEMENTS) != 0");
                     case Section::POINTERS:
                       return kj::strTree(
-                          "!_builder.isPointerFieldNull(", slot.offset, " * ::capnp::POINTERS)");
+                          "!_builder.getPointerField(", slot.offset,
+                              " * ::capnp::POINTERS).isNull()");
                   }
                   KJ_UNREACHABLE;
                 }, "\n      || "), ";\n"
@@ -624,7 +626,8 @@ private:
                               slot.offset, " * ::capnp::ELEMENTS, 0);\n");
                     case Section::POINTERS:
                       return kj::strTree(
-                          "  _builder.clearPointer(", slot.offset, " * ::capnp::POINTERS);\n");
+                          "  _builder.getPointerField(", slot.offset,
+                              " * ::capnp::POINTERS).clear();\n");
                   }
                   KJ_UNREACHABLE;
                 },
@@ -835,11 +838,11 @@ private:
             kj::mv(unionDiscrim.isDefs),
             "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
             unionDiscrim.has,
-            "  return !_reader.isPointerFieldNull(", offset, " * ::capnp::POINTERS);\n"
+            "  return !_reader.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
             "}\n"
             "inline bool ", scope, "Builder::has", titleCase, "() {\n",
             unionDiscrim.has,
-            "  return !_builder.isPointerFieldNull(", offset, " * ::capnp::POINTERS);\n"
+            "  return !_builder.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
             "}\n"
             "template <typename T>\n"
             "inline typename T::Reader ", scope, "Reader::get", titleCase, "() const {\n",
@@ -974,11 +977,11 @@ private:
             kj::mv(unionDiscrim.isDefs),
             "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
             unionDiscrim.has,
-            "  return !_reader.isPointerFieldNull(", offset, " * ::capnp::POINTERS);\n"
+            "  return !_reader.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
             "}\n"
             "inline bool ", scope, "Builder::has", titleCase, "() {\n",
             unionDiscrim.has,
-            "  return !_builder.isPointerFieldNull(", offset, " * ::capnp::POINTERS);\n"
+            "  return !_builder.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
             "}\n"
             "inline ", type, "::Reader ", scope, "Reader::get", titleCase, "() const {\n",
             unionDiscrim.check,

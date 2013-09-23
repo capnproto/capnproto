@@ -2074,6 +2074,131 @@ struct WireHelpers {
 };
 
 // =======================================================================================
+// PointerBuilder
+
+StructBuilder PointerBuilder::initStruct(StructSize size) {
+  return WireHelpers::initStructPointer(pointer, segment, size);
+}
+
+StructBuilder PointerBuilder::getStruct(StructSize size, const word* defaultValue) {
+  return WireHelpers::getWritableStructPointer(pointer, segment, size, defaultValue);
+}
+
+ListBuilder PointerBuilder::initList(FieldSize elementSize, ElementCount elementCount) {
+  return WireHelpers::initListPointer(pointer, segment, elementCount, elementSize);
+}
+
+ListBuilder PointerBuilder::initStructList(ElementCount elementCount, StructSize elementSize) {
+  return WireHelpers::initStructListPointer(pointer, segment, elementCount, elementSize);
+}
+
+ListBuilder PointerBuilder::getList(FieldSize elementSize, const word* defaultValue) {
+  return WireHelpers::getWritableListPointer(pointer, segment, elementSize, defaultValue);
+}
+
+ListBuilder PointerBuilder::getStructList(StructSize elementSize, const word* defaultValue) {
+  return WireHelpers::getWritableStructListPointer(pointer, segment, elementSize, defaultValue);
+}
+
+template <>
+Text::Builder PointerBuilder::initBlob<Text>(ByteCount size) {
+  return WireHelpers::initTextPointer(pointer, segment, size).value;
+}
+template <>
+void PointerBuilder::setBlob<Text>(Text::Reader value) {
+  WireHelpers::setTextPointer(pointer, segment, value);
+}
+template <>
+Text::Builder PointerBuilder::getBlob<Text>(const void* defaultValue, ByteCount defaultSize) {
+  return WireHelpers::getWritableTextPointer(pointer, segment, defaultValue, defaultSize);
+}
+
+template <>
+Data::Builder PointerBuilder::initBlob<Data>(ByteCount size) {
+  return WireHelpers::initDataPointer(pointer, segment, size).value;
+}
+template <>
+void PointerBuilder::setBlob<Data>(Data::Reader value) {
+  WireHelpers::setDataPointer(pointer, segment, value);
+}
+template <>
+Data::Builder PointerBuilder::getBlob<Data>(const void* defaultValue, ByteCount defaultSize) {
+  return WireHelpers::getWritableDataPointer(pointer, segment, defaultValue, defaultSize);
+}
+
+ObjectBuilder PointerBuilder::getObject(const word* defaultValue) {
+  return WireHelpers::getWritableObjectPointer(segment, pointer, defaultValue);
+}
+
+void PointerBuilder::setStruct(const StructReader& value) {
+  WireHelpers::setStructPointer(segment, pointer, value);
+}
+
+void PointerBuilder::setList(const ListReader& value) {
+  WireHelpers::setListPointer(segment, pointer, value);
+}
+
+void PointerBuilder::setObject(const ObjectReader& value) {
+  return WireHelpers::setObjectPointer(segment, pointer, value);
+}
+
+void PointerBuilder::adopt(OrphanBuilder&& value) {
+  WireHelpers::adopt(segment, pointer, kj::mv(value));
+}
+
+OrphanBuilder PointerBuilder::disown() {
+  return WireHelpers::disown(segment, pointer);
+}
+
+void PointerBuilder::clear() {
+  WireHelpers::zeroObject(segment, pointer);
+  memset(pointer, 0, sizeof(WirePointer));
+}
+
+bool PointerBuilder::isNull() {
+  return pointer->isNull();
+}
+
+// =======================================================================================
+// PointerReader
+
+StructReader PointerReader::getStruct(const word* defaultValue) const {
+  const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
+  return WireHelpers::readStructPointer(segment, ref, defaultValue, nestingLimit);
+}
+
+ListReader PointerReader::getList(FieldSize expectedElementSize, const word* defaultValue) const {
+  const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
+  return WireHelpers::readListPointer(
+      segment, ref, defaultValue, expectedElementSize, nestingLimit);
+}
+
+template <>
+Text::Reader PointerReader::getBlob<Text>(const void* defaultValue, ByteCount defaultSize) const {
+  const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
+  return WireHelpers::readTextPointer(segment, ref, defaultValue, defaultSize);
+}
+
+template <>
+Data::Reader PointerReader::getBlob<Data>(const void* defaultValue, ByteCount defaultSize) const {
+  const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
+  return WireHelpers::readDataPointer(segment, ref, defaultValue, defaultSize);
+}
+
+ObjectReader PointerReader::getObject(const word* defaultValue) const {
+  return WireHelpers::readObjectPointer(segment, pointer, defaultValue, nestingLimit);
+}
+
+const word* PointerReader::getUnchecked() const {
+  KJ_REQUIRE(segment == nullptr, "getUncheckedPointer() only allowed on unchecked messages.");
+  return reinterpret_cast<const word*>(pointer);
+}
+
+bool PointerReader::isNull() const {
+  return pointer == nullptr || pointer->isNull();
+}
+
+// =======================================================================================
 // StructBuilder
 
 StructBuilder StructBuilder::initRoot(
@@ -2094,102 +2219,6 @@ StructBuilder StructBuilder::getRoot(
 
 void StructBuilder::adoptRoot(SegmentBuilder* segment, word* location, OrphanBuilder orphan) {
   WireHelpers::adopt(segment, reinterpret_cast<WirePointer*>(location), kj::mv(orphan));
-}
-
-StructBuilder StructBuilder::initStructField(
-    WirePointerCount ptrIndex, StructSize size) {
-  return WireHelpers::initStructPointer(pointers + ptrIndex, segment, size);
-}
-
-StructBuilder StructBuilder::getStructField(
-    WirePointerCount ptrIndex, StructSize size, const word* defaultValue) {
-  return WireHelpers::getWritableStructPointer(
-      pointers + ptrIndex, segment, size, defaultValue);
-}
-
-ListBuilder StructBuilder::initListField(
-    WirePointerCount ptrIndex, FieldSize elementSize, ElementCount elementCount) {
-  return WireHelpers::initListPointer(
-      pointers + ptrIndex, segment,
-      elementCount, elementSize);
-}
-
-ListBuilder StructBuilder::initStructListField(
-    WirePointerCount ptrIndex, ElementCount elementCount, StructSize elementSize) {
-  return WireHelpers::initStructListPointer(
-      pointers + ptrIndex, segment, elementCount, elementSize);
-}
-
-ListBuilder StructBuilder::getListField(
-    WirePointerCount ptrIndex, FieldSize elementSize, const word* defaultValue) {
-  return WireHelpers::getWritableListPointer(
-      pointers + ptrIndex, segment, elementSize, defaultValue);
-}
-
-ListBuilder StructBuilder::getStructListField(
-    WirePointerCount ptrIndex, StructSize elementSize, const word* defaultValue) {
-  return WireHelpers::getWritableStructListPointer(
-      pointers + ptrIndex, segment, elementSize, defaultValue);
-}
-
-template <>
-Text::Builder StructBuilder::initBlobField<Text>(WirePointerCount ptrIndex, ByteCount size) {
-  return WireHelpers::initTextPointer(pointers + ptrIndex, segment, size).value;
-}
-template <>
-void StructBuilder::setBlobField<Text>(WirePointerCount ptrIndex, Text::Reader value) {
-  WireHelpers::setTextPointer(pointers + ptrIndex, segment, value);
-}
-template <>
-Text::Builder StructBuilder::getBlobField<Text>(
-    WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) {
-  return WireHelpers::getWritableTextPointer(
-      pointers + ptrIndex, segment, defaultValue, defaultSize);
-}
-
-template <>
-Data::Builder StructBuilder::initBlobField<Data>(WirePointerCount ptrIndex, ByteCount size) {
-  return WireHelpers::initDataPointer(pointers + ptrIndex, segment, size).value;
-}
-template <>
-void StructBuilder::setBlobField<Data>(WirePointerCount ptrIndex, Data::Reader value) {
-  WireHelpers::setDataPointer(pointers + ptrIndex, segment, value);
-}
-template <>
-Data::Builder StructBuilder::getBlobField<Data>(
-    WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) {
-  return WireHelpers::getWritableDataPointer(
-      pointers + ptrIndex, segment, defaultValue, defaultSize);
-}
-
-ObjectBuilder StructBuilder::getObjectField(
-    WirePointerCount ptrIndex, const word* defaultValue) {
-  return WireHelpers::getWritableObjectPointer(segment, pointers + ptrIndex, defaultValue);
-}
-
-void StructBuilder::setStructField(WirePointerCount ptrIndex, StructReader value) {
-  WireHelpers::setStructPointer(segment, pointers + ptrIndex, value);
-}
-
-void StructBuilder::setListField(WirePointerCount ptrIndex, ListReader value) {
-  WireHelpers::setListPointer(segment, pointers + ptrIndex, value);
-}
-
-void StructBuilder::setObjectField(WirePointerCount ptrIndex, ObjectReader value) {
-  return WireHelpers::setObjectPointer(segment, pointers + ptrIndex, value);
-}
-
-void StructBuilder::adopt(WirePointerCount ptrIndex, OrphanBuilder&& value) {
-  WireHelpers::adopt(segment, pointers + ptrIndex, kj::mv(value));
-}
-
-OrphanBuilder StructBuilder::disown(WirePointerCount ptrIndex) {
-  return WireHelpers::disown(segment, pointers + ptrIndex);
-}
-
-void StructBuilder::clearPointer(WirePointerCount ptrIndex) {
-  WireHelpers::zeroObject(segment, pointers + ptrIndex);
-  memset(pointers + ptrIndex, 0, sizeof(WirePointer));
 }
 
 void StructBuilder::clearAll() {
@@ -2281,10 +2310,6 @@ void StructBuilder::copyContentFrom(StructReader other) {
   }
 }
 
-bool StructBuilder::isPointerFieldNull(WirePointerCount ptrIndex) {
-  return (pointers + ptrIndex)->isNull();
-}
-
 StructReader StructBuilder::asReader() const {
   return StructReader(segment, data, pointers,
       dataSize, pointerCount, bit0Offset, std::numeric_limits<int>::max());
@@ -2311,48 +2336,6 @@ StructReader StructReader::readRoot(
 
   return WireHelpers::readStructPointer(segment, reinterpret_cast<const WirePointer*>(location),
                                         nullptr, nestingLimit);
-}
-
-StructReader StructReader::getStructField(
-    WirePointerCount ptrIndex, const word* defaultValue) const {
-  const WirePointer* ref = ptrIndex >= pointerCount ? &zero.pointer : pointers + ptrIndex;
-  return WireHelpers::readStructPointer(segment, ref, defaultValue, nestingLimit);
-}
-
-ListReader StructReader::getListField(
-    WirePointerCount ptrIndex, FieldSize expectedElementSize, const word* defaultValue) const {
-  const WirePointer* ref = ptrIndex >= pointerCount ? &zero.pointer : pointers + ptrIndex;
-  return WireHelpers::readListPointer(
-      segment, ref, defaultValue, expectedElementSize, nestingLimit);
-}
-
-template <>
-Text::Reader StructReader::getBlobField<Text>(
-    WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) const {
-  const WirePointer* ref = ptrIndex >= pointerCount ? &zero.pointer : pointers + ptrIndex;
-  return WireHelpers::readTextPointer(segment, ref, defaultValue, defaultSize);
-}
-
-template <>
-Data::Reader StructReader::getBlobField<Data>(
-    WirePointerCount ptrIndex, const void* defaultValue, ByteCount defaultSize) const {
-  const WirePointer* ref = ptrIndex >= pointerCount ? &zero.pointer : pointers + ptrIndex;
-  return WireHelpers::readDataPointer(segment, ref, defaultValue, defaultSize);
-}
-
-ObjectReader StructReader::getObjectField(
-    WirePointerCount ptrIndex, const word* defaultValue) const {
-  return WireHelpers::readObjectPointer(
-      segment, pointers + ptrIndex, defaultValue, nestingLimit);
-}
-
-const word* StructReader::getUncheckedPointer(WirePointerCount ptrIndex) const {
-  KJ_REQUIRE(segment == nullptr, "getUncheckedPointer() only allowed on unchecked messages.");
-  return reinterpret_cast<const word*>(pointers + ptrIndex);
-}
-
-bool StructReader::isPointerFieldNull(WirePointerCount ptrIndex) const {
-  return ptrIndex >= pointerCount || (pointers + ptrIndex)->isNull();
 }
 
 WordCount64 StructReader::totalSize() const {
@@ -2418,90 +2401,6 @@ StructBuilder ListBuilder::getStructElement(ElementCount index) {
       structDataSize, structPointerCount, indexBit % BITS_PER_BYTE);
 }
 
-ListBuilder ListBuilder::initListElement(
-    ElementCount index, FieldSize elementSize, ElementCount elementCount) {
-  return WireHelpers::initListPointer(
-      reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE),
-      segment, elementCount, elementSize);
-}
-
-ListBuilder ListBuilder::initStructListElement(
-    ElementCount index, ElementCount elementCount, StructSize elementSize) {
-  return WireHelpers::initStructListPointer(
-      reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE),
-      segment, elementCount, elementSize);
-}
-
-ListBuilder ListBuilder::getListElement(ElementCount index, FieldSize elementSize) {
-  return WireHelpers::getWritableListPointer(
-      reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment,
-      elementSize, nullptr);
-}
-
-ListBuilder ListBuilder::getStructListElement(ElementCount index, StructSize elementSize) {
-  return WireHelpers::getWritableStructListPointer(
-      reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment,
-      elementSize, nullptr);
-}
-
-template <>
-Text::Builder ListBuilder::initBlobElement<Text>(ElementCount index, ByteCount size) {
-  return WireHelpers::initTextPointer(
-      reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment, size).value;
-}
-template <>
-void ListBuilder::setBlobElement<Text>(ElementCount index, Text::Reader value) {
-  WireHelpers::setTextPointer(
-      reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment, value);
-}
-template <>
-Text::Builder ListBuilder::getBlobElement<Text>(ElementCount index) {
-  return WireHelpers::getWritableTextPointer(
-      reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment, "", 0 * BYTES);
-}
-
-template <>
-Data::Builder ListBuilder::initBlobElement<Data>(ElementCount index, ByteCount size) {
-  return WireHelpers::initDataPointer(
-      reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment, size).value;
-}
-template <>
-void ListBuilder::setBlobElement<Data>(ElementCount index, Data::Reader value) {
-  WireHelpers::setDataPointer(
-      reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment, value);
-}
-template <>
-Data::Builder ListBuilder::getBlobElement<Data>(ElementCount index) {
-  return WireHelpers::getWritableDataPointer(
-      reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), segment, nullptr,
-      0 * BYTES);
-}
-
-ObjectBuilder ListBuilder::getObjectElement(ElementCount index) {
-  return WireHelpers::getWritableObjectPointer(
-      segment, reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), nullptr);
-}
-
-void ListBuilder::setListElement(ElementCount index, ListReader value) {
-  WireHelpers::setListPointer(
-      segment, reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), value);
-}
-
-void ListBuilder::setObjectElement(ElementCount index, ObjectReader value) {
-  return WireHelpers::setObjectPointer(
-      segment, reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), value);
-}
-
-void ListBuilder::adopt(ElementCount index, OrphanBuilder&& value) {
-  WireHelpers::adopt(
-      segment, reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE), kj::mv(value));
-}
-
-OrphanBuilder ListBuilder::disown(ElementCount index) {
-  return WireHelpers::disown(
-      segment, reinterpret_cast<WirePointer*>(ptr + index * step / BITS_PER_BYTE));
-}
-
 ListReader ListBuilder::asReader() const {
   return ListReader(segment, ptr, elementCount, step, structDataSize, structPointerCount,
                     std::numeric_limits<int>::max());
@@ -2565,38 +2464,6 @@ StructReader ListReader::getStructElement(ElementCount index) const {
       segment, structData, structPointers,
       structDataSize, structPointerCount,
       indexBit % BITS_PER_BYTE, nestingLimit - 1);
-}
-
-static const WirePointer* checkAlignment(const void* ptr) {
-  KJ_DASSERT((uintptr_t)ptr % sizeof(void*) == 0,
-         "Pointer section of struct list element not aligned.");
-  return reinterpret_cast<const WirePointer*>(ptr);
-}
-
-ListReader ListReader::getListElement(
-    ElementCount index, FieldSize expectedElementSize) const {
-  return WireHelpers::readListPointer(
-      segment, checkAlignment(ptr + index * step / BITS_PER_BYTE),
-      nullptr, expectedElementSize, nestingLimit);
-}
-
-template <>
-Text::Reader ListReader::getBlobElement<Text>(ElementCount index) const {
-  return WireHelpers::readTextPointer(
-      segment, checkAlignment(ptr + index * step / BITS_PER_BYTE),
-      "", 0 * BYTES);
-}
-
-template <>
-Data::Reader ListReader::getBlobElement<Data>(ElementCount index) const {
-  return WireHelpers::readDataPointer(
-      segment, checkAlignment(ptr + index * step / BITS_PER_BYTE),
-      nullptr, 0 * BYTES);
-}
-
-ObjectReader ListReader::getObjectElement(ElementCount index) const {
-  return WireHelpers::readObjectPointer(
-      segment, checkAlignment(ptr + index * step / BITS_PER_BYTE), nullptr, nestingLimit);
 }
 
 ObjectReader ObjectBuilder::asReader() const {

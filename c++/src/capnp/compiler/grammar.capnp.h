@@ -2505,10 +2505,10 @@ inline ::kj::StringTree KJ_STRINGIFY(ParsedFile::Builder builder) {
 // =======================================================================================
 
 inline bool LocatedText::Reader::hasValue() const {
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool LocatedText::Builder::hasValue() {
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader LocatedText::Reader::getValue() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
@@ -2706,11 +2706,11 @@ inline void LocatedFloat::Builder::setEndByte( ::uint32_t value) {
 
 inline bool DeclName::Reader::hasBase() const {
   return _reader.getDataField< ::uint16_t>(0 * ::capnp::ELEMENTS) != 0
-      || !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+      || !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool DeclName::Builder::hasBase() {
   return _builder.getDataField< ::uint16_t>(0 * ::capnp::ELEMENTS) != 0
-      || !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+      || !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline DeclName::Base::Reader DeclName::Reader::getBase() const {
   return DeclName::Base::Reader(_reader);
@@ -2720,14 +2720,14 @@ inline DeclName::Base::Builder DeclName::Builder::getBase() {
 }
 inline DeclName::Base::Builder DeclName::Builder::initBase() {
   _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
-  _builder.clearPointer(0 * ::capnp::POINTERS);
+  _builder.getPointerField(0 * ::capnp::POINTERS).clear();
   return DeclName::Base::Builder(_builder);
 }
 inline bool DeclName::Reader::hasMemberPath() const {
-  return !_reader.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline bool DeclName::Builder::hasMemberPath() {
-  return !_builder.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::LocatedText>::Reader DeclName::Reader::getMemberPath() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::LocatedText>>::get(
@@ -2812,11 +2812,11 @@ inline bool DeclName::Base::Builder::isAbsoluteName() {
 }
 inline bool DeclName::Base::Reader::hasAbsoluteName() const {
   if (which() != DeclName::Base::ABSOLUTE_NAME) return false;
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool DeclName::Base::Builder::hasAbsoluteName() {
   if (which() != DeclName::Base::ABSOLUTE_NAME) return false;
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::LocatedText::Reader DeclName::Base::Reader::getAbsoluteName() const {
   KJ_IREQUIRE(which() == DeclName::Base::ABSOLUTE_NAME,
@@ -2864,11 +2864,11 @@ inline bool DeclName::Base::Builder::isRelativeName() {
 }
 inline bool DeclName::Base::Reader::hasRelativeName() const {
   if (which() != DeclName::Base::RELATIVE_NAME) return false;
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool DeclName::Base::Builder::hasRelativeName() {
   if (which() != DeclName::Base::RELATIVE_NAME) return false;
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::LocatedText::Reader DeclName::Base::Reader::getRelativeName() const {
   KJ_IREQUIRE(which() == DeclName::Base::RELATIVE_NAME,
@@ -2916,11 +2916,11 @@ inline bool DeclName::Base::Builder::isImportName() {
 }
 inline bool DeclName::Base::Reader::hasImportName() const {
   if (which() != DeclName::Base::IMPORT_NAME) return false;
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool DeclName::Base::Builder::hasImportName() {
   if (which() != DeclName::Base::IMPORT_NAME) return false;
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::LocatedText::Reader DeclName::Base::Reader::getImportName() const {
   KJ_IREQUIRE(which() == DeclName::Base::IMPORT_NAME,
@@ -2961,10 +2961,10 @@ inline ::capnp::Orphan< ::capnp::compiler::LocatedText> DeclName::Base::Builder:
 }
 
 inline bool TypeExpression::Reader::hasName() const {
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool TypeExpression::Builder::hasName() {
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::DeclName::Reader TypeExpression::Reader::getName() const {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::DeclName>::get(
@@ -2993,10 +2993,10 @@ inline ::capnp::Orphan< ::capnp::compiler::DeclName> TypeExpression::Builder::di
 }
 
 inline bool TypeExpression::Reader::hasParams() const {
-  return !_reader.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline bool TypeExpression::Builder::hasParams() {
-  return !_builder.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::TypeExpression>::Reader TypeExpression::Reader::getParams() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::TypeExpression>>::get(
@@ -3221,11 +3221,11 @@ inline bool ValueExpression::Builder::isString() {
 }
 inline bool ValueExpression::Reader::hasString() const {
   if (which() != ValueExpression::STRING) return false;
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool ValueExpression::Builder::hasString() {
   if (which() != ValueExpression::STRING) return false;
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader ValueExpression::Reader::getString() const {
   KJ_IREQUIRE(which() == ValueExpression::STRING,
@@ -3273,11 +3273,11 @@ inline bool ValueExpression::Builder::isName() {
 }
 inline bool ValueExpression::Reader::hasName() const {
   if (which() != ValueExpression::NAME) return false;
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool ValueExpression::Builder::hasName() {
   if (which() != ValueExpression::NAME) return false;
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::DeclName::Reader ValueExpression::Reader::getName() const {
   KJ_IREQUIRE(which() == ValueExpression::NAME,
@@ -3325,11 +3325,11 @@ inline bool ValueExpression::Builder::isList() {
 }
 inline bool ValueExpression::Reader::hasList() const {
   if (which() != ValueExpression::LIST) return false;
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool ValueExpression::Builder::hasList() {
   if (which() != ValueExpression::LIST) return false;
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::ValueExpression>::Reader ValueExpression::Reader::getList() const {
   KJ_IREQUIRE(which() == ValueExpression::LIST,
@@ -3377,11 +3377,11 @@ inline bool ValueExpression::Builder::isStruct() {
 }
 inline bool ValueExpression::Reader::hasStruct() const {
   if (which() != ValueExpression::STRUCT) return false;
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool ValueExpression::Builder::hasStruct() {
   if (which() != ValueExpression::STRUCT) return false;
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::ValueExpression::FieldAssignment>::Reader ValueExpression::Reader::getStruct() const {
   KJ_IREQUIRE(which() == ValueExpression::STRUCT,
@@ -3464,10 +3464,10 @@ inline void ValueExpression::Builder::setEndByte( ::uint32_t value) {
 }
 
 inline bool ValueExpression::FieldAssignment::Reader::hasFieldName() const {
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool ValueExpression::FieldAssignment::Builder::hasFieldName() {
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::LocatedText::Reader ValueExpression::FieldAssignment::Reader::getFieldName() const {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::get(
@@ -3496,10 +3496,10 @@ inline ::capnp::Orphan< ::capnp::compiler::LocatedText> ValueExpression::FieldAs
 }
 
 inline bool ValueExpression::FieldAssignment::Reader::hasValue() const {
-  return !_reader.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline bool ValueExpression::FieldAssignment::Builder::hasValue() {
-  return !_builder.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::ValueExpression::Reader ValueExpression::FieldAssignment::Reader::getValue() const {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression>::get(
@@ -3535,10 +3535,10 @@ inline Declaration::Which Declaration::Builder::which() {
 }
 
 inline bool Declaration::Reader::hasName() const {
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Builder::hasName() {
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::LocatedText::Reader Declaration::Reader::getName() const {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::get(
@@ -3568,11 +3568,11 @@ inline ::capnp::Orphan< ::capnp::compiler::LocatedText> Declaration::Builder::di
 
 inline bool Declaration::Reader::hasId() const {
   return _reader.getDataField< ::uint16_t>(0 * ::capnp::ELEMENTS) != 0
-      || !_reader.isPointerFieldNull(1 * ::capnp::POINTERS);
+      || !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Builder::hasId() {
   return _builder.getDataField< ::uint16_t>(0 * ::capnp::ELEMENTS) != 0
-      || !_builder.isPointerFieldNull(1 * ::capnp::POINTERS);
+      || !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline Declaration::Id::Reader Declaration::Reader::getId() const {
   return Declaration::Id::Reader(_reader);
@@ -3582,14 +3582,14 @@ inline Declaration::Id::Builder Declaration::Builder::getId() {
 }
 inline Declaration::Id::Builder Declaration::Builder::initId() {
   _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
-  _builder.clearPointer(1 * ::capnp::POINTERS);
+  _builder.getPointerField(1 * ::capnp::POINTERS).clear();
   return Declaration::Id::Builder(_builder);
 }
 inline bool Declaration::Reader::hasNestedDecls() const {
-  return !_reader.isPointerFieldNull(2 * ::capnp::POINTERS);
+  return !_reader.getPointerField(2 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Builder::hasNestedDecls() {
-  return !_builder.isPointerFieldNull(2 * ::capnp::POINTERS);
+  return !_builder.getPointerField(2 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::Declaration>::Reader Declaration::Reader::getNestedDecls() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration>>::get(
@@ -3618,10 +3618,10 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration>> Declarat
 }
 
 inline bool Declaration::Reader::hasAnnotations() const {
-  return !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
+  return !_reader.getPointerField(3 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Builder::hasAnnotations() {
-  return !_builder.isPointerFieldNull(3 * ::capnp::POINTERS);
+  return !_builder.getPointerField(3 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Reader Declaration::Reader::getAnnotations() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>::get(
@@ -3692,10 +3692,10 @@ inline void Declaration::Builder::setEndByte( ::uint32_t value) {
 }
 
 inline bool Declaration::Reader::hasDocComment() const {
-  return !_reader.isPointerFieldNull(4 * ::capnp::POINTERS);
+  return !_reader.getPointerField(4 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Builder::hasDocComment() {
-  return !_builder.isPointerFieldNull(4 * ::capnp::POINTERS);
+  return !_builder.getPointerField(4 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::Text::Reader Declaration::Reader::getDocComment() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
@@ -3766,11 +3766,11 @@ inline bool Declaration::Builder::isUsing() {
 }
 inline bool Declaration::Reader::hasUsing() const {
   if (which() != Declaration::USING) return false;
-  return !_reader.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_reader.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Builder::hasUsing() {
   if (which() != Declaration::USING) return false;
-  return !_builder.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_builder.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline Declaration::Using::Reader Declaration::Reader::getUsing() const {
   KJ_IREQUIRE(which() == Declaration::USING,
@@ -3785,7 +3785,7 @@ inline Declaration::Using::Builder Declaration::Builder::getUsing() {
 inline Declaration::Using::Builder Declaration::Builder::initUsing() {
   _builder.setDataField<Declaration::Which>(
       1 * ::capnp::ELEMENTS, Declaration::USING);
-  _builder.clearPointer(5 * ::capnp::POINTERS);
+  _builder.getPointerField(5 * ::capnp::POINTERS).clear();
   return Declaration::Using::Builder(_builder);
 }
 inline bool Declaration::Reader::isConst() const {
@@ -3796,13 +3796,13 @@ inline bool Declaration::Builder::isConst() {
 }
 inline bool Declaration::Reader::hasConst() const {
   if (which() != Declaration::CONST) return false;
-  return !_reader.isPointerFieldNull(5 * ::capnp::POINTERS)
-      || !_reader.isPointerFieldNull(6 * ::capnp::POINTERS);
+  return !_reader.getPointerField(5 * ::capnp::POINTERS).isNull()
+      || !_reader.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Builder::hasConst() {
   if (which() != Declaration::CONST) return false;
-  return !_builder.isPointerFieldNull(5 * ::capnp::POINTERS)
-      || !_builder.isPointerFieldNull(6 * ::capnp::POINTERS);
+  return !_builder.getPointerField(5 * ::capnp::POINTERS).isNull()
+      || !_builder.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline Declaration::Const::Reader Declaration::Reader::getConst() const {
   KJ_IREQUIRE(which() == Declaration::CONST,
@@ -3817,8 +3817,8 @@ inline Declaration::Const::Builder Declaration::Builder::getConst() {
 inline Declaration::Const::Builder Declaration::Builder::initConst() {
   _builder.setDataField<Declaration::Which>(
       1 * ::capnp::ELEMENTS, Declaration::CONST);
-  _builder.clearPointer(5 * ::capnp::POINTERS);
-  _builder.clearPointer(6 * ::capnp::POINTERS);
+  _builder.getPointerField(5 * ::capnp::POINTERS).clear();
+  _builder.getPointerField(6 * ::capnp::POINTERS).clear();
   return Declaration::Const::Builder(_builder);
 }
 inline bool Declaration::Reader::isEnum() const {
@@ -3935,14 +3935,14 @@ inline bool Declaration::Builder::isField() {
 inline bool Declaration::Reader::hasField() const {
   if (which() != Declaration::FIELD) return false;
   return _reader.getDataField< ::uint16_t>(6 * ::capnp::ELEMENTS) != 0
-      || !_reader.isPointerFieldNull(5 * ::capnp::POINTERS)
-      || !_reader.isPointerFieldNull(6 * ::capnp::POINTERS);
+      || !_reader.getPointerField(5 * ::capnp::POINTERS).isNull()
+      || !_reader.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Builder::hasField() {
   if (which() != Declaration::FIELD) return false;
   return _builder.getDataField< ::uint16_t>(6 * ::capnp::ELEMENTS) != 0
-      || !_builder.isPointerFieldNull(5 * ::capnp::POINTERS)
-      || !_builder.isPointerFieldNull(6 * ::capnp::POINTERS);
+      || !_builder.getPointerField(5 * ::capnp::POINTERS).isNull()
+      || !_builder.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline Declaration::Field::Reader Declaration::Reader::getField() const {
   KJ_IREQUIRE(which() == Declaration::FIELD,
@@ -3958,8 +3958,8 @@ inline Declaration::Field::Builder Declaration::Builder::initField() {
   _builder.setDataField<Declaration::Which>(
       1 * ::capnp::ELEMENTS, Declaration::FIELD);
   _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
-  _builder.clearPointer(5 * ::capnp::POINTERS);
-  _builder.clearPointer(6 * ::capnp::POINTERS);
+  _builder.getPointerField(5 * ::capnp::POINTERS).clear();
+  _builder.getPointerField(6 * ::capnp::POINTERS).clear();
   return Declaration::Field::Builder(_builder);
 }
 inline bool Declaration::Reader::isUnion() const {
@@ -4076,14 +4076,14 @@ inline bool Declaration::Builder::isMethod() {
 inline bool Declaration::Reader::hasMethod() const {
   if (which() != Declaration::METHOD) return false;
   return _reader.getDataField< ::uint16_t>(6 * ::capnp::ELEMENTS) != 0
-      || !_reader.isPointerFieldNull(5 * ::capnp::POINTERS)
-      || !_reader.isPointerFieldNull(6 * ::capnp::POINTERS);
+      || !_reader.getPointerField(5 * ::capnp::POINTERS).isNull()
+      || !_reader.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Builder::hasMethod() {
   if (which() != Declaration::METHOD) return false;
   return _builder.getDataField< ::uint16_t>(6 * ::capnp::ELEMENTS) != 0
-      || !_builder.isPointerFieldNull(5 * ::capnp::POINTERS)
-      || !_builder.isPointerFieldNull(6 * ::capnp::POINTERS);
+      || !_builder.getPointerField(5 * ::capnp::POINTERS).isNull()
+      || !_builder.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline Declaration::Method::Reader Declaration::Reader::getMethod() const {
   KJ_IREQUIRE(which() == Declaration::METHOD,
@@ -4099,8 +4099,8 @@ inline Declaration::Method::Builder Declaration::Builder::initMethod() {
   _builder.setDataField<Declaration::Which>(
       1 * ::capnp::ELEMENTS, Declaration::METHOD);
   _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
-  _builder.clearPointer(5 * ::capnp::POINTERS);
-  _builder.clearPointer(6 * ::capnp::POINTERS);
+  _builder.getPointerField(5 * ::capnp::POINTERS).clear();
+  _builder.getPointerField(6 * ::capnp::POINTERS).clear();
   return Declaration::Method::Builder(_builder);
 }
 inline bool Declaration::Reader::isAnnotation() const {
@@ -4123,7 +4123,7 @@ inline bool Declaration::Reader::hasAnnotation() const {
       || _reader.getDataField<bool>(105 * ::capnp::ELEMENTS) != 0
       || _reader.getDataField<bool>(106 * ::capnp::ELEMENTS) != 0
       || _reader.getDataField<bool>(107 * ::capnp::ELEMENTS) != 0
-      || !_reader.isPointerFieldNull(5 * ::capnp::POINTERS);
+      || !_reader.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Builder::hasAnnotation() {
   if (which() != Declaration::ANNOTATION) return false;
@@ -4139,7 +4139,7 @@ inline bool Declaration::Builder::hasAnnotation() {
       || _builder.getDataField<bool>(105 * ::capnp::ELEMENTS) != 0
       || _builder.getDataField<bool>(106 * ::capnp::ELEMENTS) != 0
       || _builder.getDataField<bool>(107 * ::capnp::ELEMENTS) != 0
-      || !_builder.isPointerFieldNull(5 * ::capnp::POINTERS);
+      || !_builder.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline Declaration::Annotation::Reader Declaration::Reader::getAnnotation() const {
   KJ_IREQUIRE(which() == Declaration::ANNOTATION,
@@ -4166,7 +4166,7 @@ inline Declaration::Annotation::Builder Declaration::Builder::initAnnotation() {
   _builder.setDataField<bool>(105 * ::capnp::ELEMENTS, 0);
   _builder.setDataField<bool>(106 * ::capnp::ELEMENTS, 0);
   _builder.setDataField<bool>(107 * ::capnp::ELEMENTS, 0);
-  _builder.clearPointer(5 * ::capnp::POINTERS);
+  _builder.getPointerField(5 * ::capnp::POINTERS).clear();
   return Declaration::Annotation::Builder(_builder);
 }
 inline bool Declaration::Reader::isNakedId() const {
@@ -4177,11 +4177,11 @@ inline bool Declaration::Builder::isNakedId() {
 }
 inline bool Declaration::Reader::hasNakedId() const {
   if (which() != Declaration::NAKED_ID) return false;
-  return !_reader.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_reader.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Builder::hasNakedId() {
   if (which() != Declaration::NAKED_ID) return false;
-  return !_builder.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_builder.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::LocatedInteger::Reader Declaration::Reader::getNakedId() const {
   KJ_IREQUIRE(which() == Declaration::NAKED_ID,
@@ -4229,11 +4229,11 @@ inline bool Declaration::Builder::isNakedAnnotation() {
 }
 inline bool Declaration::Reader::hasNakedAnnotation() const {
   if (which() != Declaration::NAKED_ANNOTATION) return false;
-  return !_reader.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_reader.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Builder::hasNakedAnnotation() {
   if (which() != Declaration::NAKED_ANNOTATION) return false;
-  return !_builder.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_builder.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::Declaration::AnnotationApplication::Reader Declaration::Reader::getNakedAnnotation() const {
   KJ_IREQUIRE(which() == Declaration::NAKED_ANNOTATION,
@@ -4834,10 +4834,10 @@ inline void Declaration::Builder::setBuiltinObject( ::capnp::Void value) {
 }
 
 inline bool Declaration::AnnotationApplication::Reader::hasName() const {
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::AnnotationApplication::Builder::hasName() {
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::DeclName::Reader Declaration::AnnotationApplication::Reader::getName() const {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::DeclName>::get(
@@ -4867,11 +4867,11 @@ inline ::capnp::Orphan< ::capnp::compiler::DeclName> Declaration::AnnotationAppl
 
 inline bool Declaration::AnnotationApplication::Reader::hasValue() const {
   return _reader.getDataField< ::uint16_t>(0 * ::capnp::ELEMENTS) != 0
-      || !_reader.isPointerFieldNull(1 * ::capnp::POINTERS);
+      || !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::AnnotationApplication::Builder::hasValue() {
   return _builder.getDataField< ::uint16_t>(0 * ::capnp::ELEMENTS) != 0
-      || !_builder.isPointerFieldNull(1 * ::capnp::POINTERS);
+      || !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline Declaration::AnnotationApplication::Value::Reader Declaration::AnnotationApplication::Reader::getValue() const {
   return Declaration::AnnotationApplication::Value::Reader(_reader);
@@ -4881,7 +4881,7 @@ inline Declaration::AnnotationApplication::Value::Builder Declaration::Annotatio
 }
 inline Declaration::AnnotationApplication::Value::Builder Declaration::AnnotationApplication::Builder::initValue() {
   _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
-  _builder.clearPointer(1 * ::capnp::POINTERS);
+  _builder.getPointerField(1 * ::capnp::POINTERS).clear();
   return Declaration::AnnotationApplication::Value::Builder(_builder);
 }
 inline Declaration::AnnotationApplication::Value::Which Declaration::AnnotationApplication::Value::Reader::which() const {
@@ -4934,11 +4934,11 @@ inline bool Declaration::AnnotationApplication::Value::Builder::isExpression() {
 }
 inline bool Declaration::AnnotationApplication::Value::Reader::hasExpression() const {
   if (which() != Declaration::AnnotationApplication::Value::EXPRESSION) return false;
-  return !_reader.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::AnnotationApplication::Value::Builder::hasExpression() {
   if (which() != Declaration::AnnotationApplication::Value::EXPRESSION) return false;
-  return !_builder.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::ValueExpression::Reader Declaration::AnnotationApplication::Value::Reader::getExpression() const {
   KJ_IREQUIRE(which() == Declaration::AnnotationApplication::Value::EXPRESSION,
@@ -4979,10 +4979,10 @@ inline ::capnp::Orphan< ::capnp::compiler::ValueExpression> Declaration::Annotat
 }
 
 inline bool Declaration::Param::Reader::hasName() const {
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Param::Builder::hasName() {
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::LocatedText::Reader Declaration::Param::Reader::getName() const {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::get(
@@ -5011,10 +5011,10 @@ inline ::capnp::Orphan< ::capnp::compiler::LocatedText> Declaration::Param::Buil
 }
 
 inline bool Declaration::Param::Reader::hasType() const {
-  return !_reader.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Param::Builder::hasType() {
-  return !_builder.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::TypeExpression::Reader Declaration::Param::Reader::getType() const {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::TypeExpression>::get(
@@ -5043,10 +5043,10 @@ inline ::capnp::Orphan< ::capnp::compiler::TypeExpression> Declaration::Param::B
 }
 
 inline bool Declaration::Param::Reader::hasAnnotations() const {
-  return !_reader.isPointerFieldNull(2 * ::capnp::POINTERS);
+  return !_reader.getPointerField(2 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Param::Builder::hasAnnotations() {
-  return !_builder.isPointerFieldNull(2 * ::capnp::POINTERS);
+  return !_builder.getPointerField(2 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>::Reader Declaration::Param::Reader::getAnnotations() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::AnnotationApplication>>::get(
@@ -5076,11 +5076,11 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::Annotatio
 
 inline bool Declaration::Param::Reader::hasDefaultValue() const {
   return _reader.getDataField< ::uint16_t>(0 * ::capnp::ELEMENTS) != 0
-      || !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
+      || !_reader.getPointerField(3 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Param::Builder::hasDefaultValue() {
   return _builder.getDataField< ::uint16_t>(0 * ::capnp::ELEMENTS) != 0
-      || !_builder.isPointerFieldNull(3 * ::capnp::POINTERS);
+      || !_builder.getPointerField(3 * ::capnp::POINTERS).isNull();
 }
 inline Declaration::Param::DefaultValue::Reader Declaration::Param::Reader::getDefaultValue() const {
   return Declaration::Param::DefaultValue::Reader(_reader);
@@ -5090,7 +5090,7 @@ inline Declaration::Param::DefaultValue::Builder Declaration::Param::Builder::ge
 }
 inline Declaration::Param::DefaultValue::Builder Declaration::Param::Builder::initDefaultValue() {
   _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
-  _builder.clearPointer(3 * ::capnp::POINTERS);
+  _builder.getPointerField(3 * ::capnp::POINTERS).clear();
   return Declaration::Param::DefaultValue::Builder(_builder);
 }
 inline Declaration::Param::DefaultValue::Which Declaration::Param::DefaultValue::Reader::which() const {
@@ -5143,11 +5143,11 @@ inline bool Declaration::Param::DefaultValue::Builder::isValue() {
 }
 inline bool Declaration::Param::DefaultValue::Reader::hasValue() const {
   if (which() != Declaration::Param::DefaultValue::VALUE) return false;
-  return !_reader.isPointerFieldNull(3 * ::capnp::POINTERS);
+  return !_reader.getPointerField(3 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Param::DefaultValue::Builder::hasValue() {
   if (which() != Declaration::Param::DefaultValue::VALUE) return false;
-  return !_builder.isPointerFieldNull(3 * ::capnp::POINTERS);
+  return !_builder.getPointerField(3 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::ValueExpression::Reader Declaration::Param::DefaultValue::Reader::getValue() const {
   KJ_IREQUIRE(which() == Declaration::Param::DefaultValue::VALUE,
@@ -5237,11 +5237,11 @@ inline bool Declaration::Id::Builder::isUid() {
 }
 inline bool Declaration::Id::Reader::hasUid() const {
   if (which() != Declaration::Id::UID) return false;
-  return !_reader.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Id::Builder::hasUid() {
   if (which() != Declaration::Id::UID) return false;
-  return !_builder.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::LocatedInteger::Reader Declaration::Id::Reader::getUid() const {
   KJ_IREQUIRE(which() == Declaration::Id::UID,
@@ -5289,11 +5289,11 @@ inline bool Declaration::Id::Builder::isOrdinal() {
 }
 inline bool Declaration::Id::Reader::hasOrdinal() const {
   if (which() != Declaration::Id::ORDINAL) return false;
-  return !_reader.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Id::Builder::hasOrdinal() {
   if (which() != Declaration::Id::ORDINAL) return false;
-  return !_builder.isPointerFieldNull(1 * ::capnp::POINTERS);
+  return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::LocatedInteger::Reader Declaration::Id::Reader::getOrdinal() const {
   KJ_IREQUIRE(which() == Declaration::Id::ORDINAL,
@@ -5334,10 +5334,10 @@ inline ::capnp::Orphan< ::capnp::compiler::LocatedInteger> Declaration::Id::Buil
 }
 
 inline bool Declaration::Using::Reader::hasTarget() const {
-  return !_reader.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_reader.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Using::Builder::hasTarget() {
-  return !_builder.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_builder.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::DeclName::Reader Declaration::Using::Reader::getTarget() const {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::DeclName>::get(
@@ -5366,10 +5366,10 @@ inline ::capnp::Orphan< ::capnp::compiler::DeclName> Declaration::Using::Builder
 }
 
 inline bool Declaration::Const::Reader::hasType() const {
-  return !_reader.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_reader.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Const::Builder::hasType() {
-  return !_builder.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_builder.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::TypeExpression::Reader Declaration::Const::Reader::getType() const {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::TypeExpression>::get(
@@ -5398,10 +5398,10 @@ inline ::capnp::Orphan< ::capnp::compiler::TypeExpression> Declaration::Const::B
 }
 
 inline bool Declaration::Const::Reader::hasValue() const {
-  return !_reader.isPointerFieldNull(6 * ::capnp::POINTERS);
+  return !_reader.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Const::Builder::hasValue() {
-  return !_builder.isPointerFieldNull(6 * ::capnp::POINTERS);
+  return !_builder.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::ValueExpression::Reader Declaration::Const::Reader::getValue() const {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression>::get(
@@ -5430,10 +5430,10 @@ inline ::capnp::Orphan< ::capnp::compiler::ValueExpression> Declaration::Const::
 }
 
 inline bool Declaration::Field::Reader::hasType() const {
-  return !_reader.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_reader.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Field::Builder::hasType() {
-  return !_builder.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_builder.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::TypeExpression::Reader Declaration::Field::Reader::getType() const {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::TypeExpression>::get(
@@ -5463,11 +5463,11 @@ inline ::capnp::Orphan< ::capnp::compiler::TypeExpression> Declaration::Field::B
 
 inline bool Declaration::Field::Reader::hasDefaultValue() const {
   return _reader.getDataField< ::uint16_t>(6 * ::capnp::ELEMENTS) != 0
-      || !_reader.isPointerFieldNull(6 * ::capnp::POINTERS);
+      || !_reader.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Field::Builder::hasDefaultValue() {
   return _builder.getDataField< ::uint16_t>(6 * ::capnp::ELEMENTS) != 0
-      || !_builder.isPointerFieldNull(6 * ::capnp::POINTERS);
+      || !_builder.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline Declaration::Field::DefaultValue::Reader Declaration::Field::Reader::getDefaultValue() const {
   return Declaration::Field::DefaultValue::Reader(_reader);
@@ -5477,7 +5477,7 @@ inline Declaration::Field::DefaultValue::Builder Declaration::Field::Builder::ge
 }
 inline Declaration::Field::DefaultValue::Builder Declaration::Field::Builder::initDefaultValue() {
   _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
-  _builder.clearPointer(6 * ::capnp::POINTERS);
+  _builder.getPointerField(6 * ::capnp::POINTERS).clear();
   return Declaration::Field::DefaultValue::Builder(_builder);
 }
 inline Declaration::Field::DefaultValue::Which Declaration::Field::DefaultValue::Reader::which() const {
@@ -5530,11 +5530,11 @@ inline bool Declaration::Field::DefaultValue::Builder::isValue() {
 }
 inline bool Declaration::Field::DefaultValue::Reader::hasValue() const {
   if (which() != Declaration::Field::DefaultValue::VALUE) return false;
-  return !_reader.isPointerFieldNull(6 * ::capnp::POINTERS);
+  return !_reader.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Field::DefaultValue::Builder::hasValue() {
   if (which() != Declaration::Field::DefaultValue::VALUE) return false;
-  return !_builder.isPointerFieldNull(6 * ::capnp::POINTERS);
+  return !_builder.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::ValueExpression::Reader Declaration::Field::DefaultValue::Reader::getValue() const {
   KJ_IREQUIRE(which() == Declaration::Field::DefaultValue::VALUE,
@@ -5575,10 +5575,10 @@ inline ::capnp::Orphan< ::capnp::compiler::ValueExpression> Declaration::Field::
 }
 
 inline bool Declaration::Method::Reader::hasParams() const {
-  return !_reader.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_reader.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Method::Builder::hasParams() {
-  return !_builder.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_builder.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::List< ::capnp::compiler::Declaration::Param>::Reader Declaration::Method::Reader::getParams() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::Declaration::Param>>::get(
@@ -5608,11 +5608,11 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::Declaration::Param>> D
 
 inline bool Declaration::Method::Reader::hasReturnType() const {
   return _reader.getDataField< ::uint16_t>(6 * ::capnp::ELEMENTS) != 0
-      || !_reader.isPointerFieldNull(6 * ::capnp::POINTERS);
+      || !_reader.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Method::Builder::hasReturnType() {
   return _builder.getDataField< ::uint16_t>(6 * ::capnp::ELEMENTS) != 0
-      || !_builder.isPointerFieldNull(6 * ::capnp::POINTERS);
+      || !_builder.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline Declaration::Method::ReturnType::Reader Declaration::Method::Reader::getReturnType() const {
   return Declaration::Method::ReturnType::Reader(_reader);
@@ -5622,7 +5622,7 @@ inline Declaration::Method::ReturnType::Builder Declaration::Method::Builder::ge
 }
 inline Declaration::Method::ReturnType::Builder Declaration::Method::Builder::initReturnType() {
   _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
-  _builder.clearPointer(6 * ::capnp::POINTERS);
+  _builder.getPointerField(6 * ::capnp::POINTERS).clear();
   return Declaration::Method::ReturnType::Builder(_builder);
 }
 inline Declaration::Method::ReturnType::Which Declaration::Method::ReturnType::Reader::which() const {
@@ -5675,11 +5675,11 @@ inline bool Declaration::Method::ReturnType::Builder::isExpression() {
 }
 inline bool Declaration::Method::ReturnType::Reader::hasExpression() const {
   if (which() != Declaration::Method::ReturnType::EXPRESSION) return false;
-  return !_reader.isPointerFieldNull(6 * ::capnp::POINTERS);
+  return !_reader.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Method::ReturnType::Builder::hasExpression() {
   if (which() != Declaration::Method::ReturnType::EXPRESSION) return false;
-  return !_builder.isPointerFieldNull(6 * ::capnp::POINTERS);
+  return !_builder.getPointerField(6 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::TypeExpression::Reader Declaration::Method::ReturnType::Reader::getExpression() const {
   KJ_IREQUIRE(which() == Declaration::Method::ReturnType::EXPRESSION,
@@ -5720,10 +5720,10 @@ inline ::capnp::Orphan< ::capnp::compiler::TypeExpression> Declaration::Method::
 }
 
 inline bool Declaration::Annotation::Reader::hasType() const {
-  return !_reader.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_reader.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline bool Declaration::Annotation::Builder::hasType() {
-  return !_builder.isPointerFieldNull(5 * ::capnp::POINTERS);
+  return !_builder.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::TypeExpression::Reader Declaration::Annotation::Reader::getType() const {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::TypeExpression>::get(
@@ -6004,10 +6004,10 @@ inline void Declaration::Annotation::Builder::setTargetsAnnotation(bool value) {
 }
 
 inline bool ParsedFile::Reader::hasRoot() const {
-  return !_reader.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline bool ParsedFile::Builder::hasRoot() {
-  return !_builder.isPointerFieldNull(0 * ::capnp::POINTERS);
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
 inline  ::capnp::compiler::Declaration::Reader ParsedFile::Reader::getRoot() const {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::Declaration>::get(
