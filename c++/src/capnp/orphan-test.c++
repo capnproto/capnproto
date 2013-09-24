@@ -529,14 +529,12 @@ TEST(Orphans, DynamicObject) {
   initTestMessage(root.getObjectField().initAs<TestAllTypes>());
   EXPECT_TRUE(root.hasObjectField());
 
-  Orphan<DynamicValue> orphan = root.getObjectField().disownAs<DynamicObject>();
+  Orphan<DynamicValue> orphan = root.getObjectField().disown();
   EXPECT_EQ(DynamicValue::OBJECT, orphan.getType());
 
-  checkTestMessage(orphan.getReader().as<DynamicObject>().as<TestAllTypes>());
-
-  Orphan<DynamicObject> objectOrphan = orphan.releaseAs<DynamicObject>();
+  Orphan<ObjectPointer> objectOrphan = orphan.releaseAs<ObjectPointer>();
   checkTestMessage(objectOrphan.getAs<TestAllTypes>());
-  checkDynamicTestMessage(objectOrphan.getAs(Schema::from<TestAllTypes>()));
+  checkDynamicTestMessage(objectOrphan.getAs<DynamicStruct>(Schema::from<TestAllTypes>()));
 }
 
 TEST(Orphans, DynamicDisown) {

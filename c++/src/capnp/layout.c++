@@ -1617,19 +1617,19 @@ struct WireHelpers {
     }
   }
 
-  static KJ_ALWAYS_INLINE(void setObjectPointer(
-      SegmentBuilder* segment, WirePointer* ref, ObjectReader value)) {
+  static KJ_ALWAYS_INLINE(SegmentAnd<word*> setObjectPointer(
+      SegmentBuilder* segment, WirePointer* ref, ObjectReader value,
+      BuilderArena* orphanArena = nullptr)) {
     switch (value.kind) {
       case ObjectKind::NULL_POINTER:
         memset(ref, 0, sizeof(*ref));
-        break;
+        return { segment, nullptr };
       case ObjectKind::STRUCT:
-        setStructPointer(segment, ref, value.structReader);
-        break;
+        return setStructPointer(segment, ref, value.structReader, orphanArena);
       case ObjectKind::LIST:
-        setListPointer(segment, ref, value.listReader);
-        break;
+        return setListPointer(segment, ref, value.listReader, orphanArena);
     }
+    KJ_UNREACHABLE;
   }
 
   static void adopt(SegmentBuilder* segment, WirePointer* ref, OrphanBuilder&& value) {
@@ -2139,7 +2139,7 @@ void PointerBuilder::setList(const ListReader& value) {
 }
 
 void PointerBuilder::setObject(const ObjectReader& value) {
-  return WireHelpers::setObjectPointer(segment, pointer, value);
+  WireHelpers::setObjectPointer(segment, pointer, value);
 }
 
 void PointerBuilder::adopt(OrphanBuilder&& value) {
@@ -2157,6 +2157,18 @@ void PointerBuilder::clear() {
 
 bool PointerBuilder::isNull() {
   return pointer->isNull();
+}
+
+void PointerBuilder::transferFrom(PointerBuilder other) {
+  WireHelpers::transferPointer(segment, pointer, other.segment, other.pointer);
+}
+
+void PointerBuilder::copyFrom(PointerReader other) {
+  WireHelpers::setObjectPointer(segment, pointer, other.getObject(nullptr));
+}
+
+PointerReader PointerBuilder::asReader() const {
+  return PointerReader(segment, pointer, std::numeric_limits<int>::max());
 }
 
 // =======================================================================================
@@ -2536,6 +2548,15 @@ OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, StructReader copyFrom) {
 OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, ListReader copyFrom) {
   OrphanBuilder result;
   auto allocation = WireHelpers::setListPointer(nullptr, result.tagAsPtr(), copyFrom, arena);
+  result.segment = allocation.segment;
+  result.location = reinterpret_cast<word*>(allocation.value);
+  return result;
+}
+
+OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, PointerReader copyFrom) {
+  OrphanBuilder result;
+  auto allocation = WireHelpers::setObjectPointer(
+      nullptr, result.tagAsPtr(), copyFrom.getObject(nullptr), arena);
   result.segment = allocation.segment;
   result.location = reinterpret_cast<word*>(allocation.value);
   return result;

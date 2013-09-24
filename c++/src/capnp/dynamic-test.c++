@@ -191,11 +191,14 @@ TEST(DynamicApi, DynamicGenericObjects) {
   checkTestMessage(root.asReader().as<test::TestObject>().getObjectField().getAs<TestAllTypes>());
 
   checkDynamicTestMessage(
-      root.asReader().get("objectField").as<DynamicObject>().as(Schema::from<TestAllTypes>()));
+      root.asReader().get("objectField").as<ObjectPointer>()
+          .getAs<DynamicStruct>(Schema::from<TestAllTypes>()));
   checkDynamicTestMessage(
-      root.asReader().get("objectField").as<DynamicObject>().as(Schema::from<TestAllTypes>()));
+      root.asReader().get("objectField").as<ObjectPointer>()
+          .getAs<DynamicStruct>(Schema::from<TestAllTypes>()));
   checkDynamicTestMessage(
-      root.get("objectField").as<DynamicObject>().asReader().as(Schema::from<TestAllTypes>()));
+      root.get("objectField").as<ObjectPointer>().asReader()
+          .getAs<DynamicStruct>(Schema::from<TestAllTypes>()));
   checkDynamicTestMessage(
       root.getObject("objectField", Schema::from<TestAllTypes>()));
 
@@ -218,13 +221,16 @@ TEST(DynamicApi, DynamicGenericObjects) {
     }
 
     checkList<uint32_t>(
-        root.asReader().get("objectField").as<DynamicObject>().as(Schema::from<List<uint32_t>>()),
+        root.asReader().get("objectField").as<ObjectPointer>()
+            .getAs<DynamicList>(Schema::from<List<uint32_t>>()),
         {123u, 456u, 789u, 123456789u});
     checkList<uint32_t>(
-        root.asReader().get("objectField").as<DynamicObject>().as(Schema::from<List<uint32_t>>()),
+        root.asReader().get("objectField").as<ObjectPointer>()
+            .getAs<DynamicList>(Schema::from<List<uint32_t>>()),
         {123u, 456u, 789u, 123456789u});
     checkList<uint32_t>(
-        root.get("objectField").as<DynamicObject>().asReader().as(Schema::from<List<uint32_t>>()),
+        root.get("objectField").as<ObjectPointer>().asReader()
+            .getAs<DynamicList>(Schema::from<List<uint32_t>>()),
         {123u, 456u, 789u, 123456789u});
     checkList<uint32_t>(
         root.getObject("objectField", Schema::from<List<uint32_t>>()),

@@ -316,6 +316,8 @@ public:
   void copyFrom(PointerReader other);
   // Equivalent to `set(other.get())`.
 
+  PointerReader asReader() const;
+
 private:
   SegmentBuilder* segment;     // Memory segment in which the pointer resides.
   WirePointer* pointer;        // Pointer to the pointer.
@@ -360,6 +362,7 @@ private:
 
   friend class StructReader;
   friend class ListReader;
+  friend class PointerBuilder;
 };
 
 // -------------------------------------------------------------------
@@ -739,6 +742,7 @@ public:
 
   static OrphanBuilder copy(BuilderArena* arena, StructReader copyFrom);
   static OrphanBuilder copy(BuilderArena* arena, ListReader copyFrom);
+  static OrphanBuilder copy(BuilderArena* arena, PointerReader copyFrom);
   static OrphanBuilder copy(BuilderArena* arena, Text::Reader copyFrom);
   static OrphanBuilder copy(BuilderArena* arena, Data::Reader copyFrom);
 

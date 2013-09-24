@@ -1811,13 +1811,13 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
 
       if (constValue.getType() == DynamicValue::OBJECT) {
         // We need to assign an appropriate schema to this object.
-        DynamicObject::Reader objValue = constValue.as<DynamicObject>();
+        ObjectPointer::Reader objValue = constValue.as<ObjectPointer>();
         auto constType = constReader.getType();
         switch (constType.which()) {
           case schema::Type::STRUCT:
             KJ_IF_MAYBE(structSchema, resolver.resolveBootstrapSchema(
                 constType.getStruct().getTypeId())) {
-              constValue = objValue.as(structSchema->asStruct());
+              constValue = objValue.getAs<DynamicStruct>(structSchema->asStruct());
             } else {
               // The struct's schema is broken for reasons already reported.
               return nullptr;
@@ -1825,7 +1825,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
             break;
           case schema::Type::LIST:
             KJ_IF_MAYBE(listSchema, makeListSchemaOf(constType.getList().getElementType())) {
-              constValue = objValue.as(*listSchema);
+              constValue = objValue.getAs<DynamicList>(*listSchema);
             } else {
               // The list's schema is broken for reasons already reported.
               return nullptr;

@@ -26,11 +26,13 @@
 
 #include "layout.h"
 #include "pointer-helpers.h"
+#include "orphan.h"
 
 namespace capnp {
 
 class StructSchema;
 class ListSchema;
+class Orphanage;
 
 struct ObjectPointer {
   // Reader/Builder for the `Object` field type, i.e. a pointer that can point to an arbitrary
@@ -38,6 +40,8 @@ struct ObjectPointer {
 
   class Reader {
   public:
+    typedef ObjectPointer Reads;
+
     Reader() = default;
     inline Reader(_::PointerReader reader): reader(reader) {}
 
@@ -57,10 +61,14 @@ struct ObjectPointer {
 
   private:
     _::PointerReader reader;
+    friend struct ObjectPointer;
+    friend class Orphanage;
   };
 
   class Builder {
   public:
+    typedef ObjectPointer Builds;
+
     Builder() = delete;
     inline Builder(decltype(nullptr)) {}
     inline Builder(_::PointerBuilder builder): builder(builder) {}
@@ -107,6 +115,9 @@ struct ObjectPointer {
     inline void setAs(std::initializer_list<ReaderFor<ListElementType<T>>> list);
     // Valid for T = List<?>.
 
+    inline void set(Reader value) { builder.copyFrom(value.reader); }
+    // Set to a copy of another ObjectPointer.
+
     template <typename T>
     inline void adopt(Orphan<T>&& orphan);
     // Valid for T = any generated struct type, List<U>, Text, Data, DynamicList, DynamicStruct,
@@ -124,9 +135,67 @@ struct ObjectPointer {
     inline Orphan<T> disownAs(ListSchema schema);
     // Only valid for T = DynamicList.  Requires `#include <capnp/dynamic.h>`.
 
+    inline Orphan<ObjectPointer> disown();
+    // Disown without a type.
+
+    inline Reader asReader() const { return Reader(builder.asReader()); }
+    inline operator Reader() const { return Reader(builder.asReader()); }
+
   private:
     _::PointerBuilder builder;
   };
+};
+
+template <>
+class Orphan<ObjectPointer> {
+  // An orphaned object of unknown type.
+
+public:
+  Orphan() = default;
+  KJ_DISALLOW_COPY(Orphan);
+  Orphan(Orphan&&) = default;
+  Orphan& operator=(Orphan&&) = default;
+
+  // It's not possible to get an ObjectPointer::{Reader,Builder} directly since there is no
+  // underlying pointer (the pointer would normally live in the parent, but this object is
+  // orphaned).  It is possible, however, to request readers/builders.
+
+  template <typename T>
+  inline typename T::Builder getAs();
+  template <typename T>
+  inline typename T::Builder getAs(StructSchema schema);
+  template <typename T>
+  inline typename T::Builder getAs(ListSchema schema);
+  template <typename T>
+  inline typename T::Reader getAsReader() const;
+  template <typename T>
+  inline typename T::Reader getAsReader(StructSchema schema) const;
+  template <typename T>
+  inline typename T::Reader getAsReader(ListSchema schema) const;
+
+  template <typename T>
+  inline Orphan<T> releaseAs();
+  template <typename T>
+  inline Orphan<T> releaseAs(StructSchema schema);
+  template <typename T>
+  inline Orphan<T> releaseAs(ListSchema schema);
+  // Down-cast the orphan to a specific type.
+
+  inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
+  inline bool operator!=(decltype(nullptr)) const { return builder != nullptr; }
+
+private:
+  _::OrphanBuilder builder;
+
+  inline Orphan(_::OrphanBuilder&& builder)
+      : builder(kj::mv(builder)) {}
+
+  template <typename, Kind>
+  friend struct _::PointerHelpers;
+  friend class Orphanage;
+  template <typename U>
+  friend class Orphan;
+  friend class ObjectPointer::Builder;
 };
 
 // =======================================================================================
@@ -183,6 +252,33 @@ inline void ObjectPointer::Builder::adopt(Orphan<T>&& orphan) {
 template <typename T>
 inline Orphan<T> ObjectPointer::Builder::disownAs() {
   return _::PointerHelpers<T>::disown(builder);
+}
+
+inline Orphan<ObjectPointer> ObjectPointer::Builder::disown() {
+  return Orphan<ObjectPointer>(builder.disown());
+}
+
+template <> struct ReaderFor_ <ObjectPointer, Kind::UNKNOWN> { typedef ObjectPointer::Reader Type; };
+template <> struct BuilderFor_<ObjectPointer, Kind::UNKNOWN> { typedef ObjectPointer::Builder Type; };
+
+template <>
+struct Orphanage::GetInnerReader<ObjectPointer, Kind::UNKNOWN> {
+  static inline _::PointerReader apply(const ObjectPointer::Reader& t) {
+    return t.reader;
+  }
+};
+
+template <typename T>
+inline typename T::Builder Orphan<ObjectPointer>::getAs() {
+  return _::OrphanGetImpl<T>::apply(builder);
+}
+template <typename T>
+inline typename T::Reader Orphan<ObjectPointer>::getAsReader() const {
+  return _::OrphanGetImpl<T>::applyReader(builder);
+}
+template <typename T>
+inline Orphan<T> Orphan<ObjectPointer>::releaseAs() {
+  return Orphan<T>(kj::mv(builder));
 }
 
 }  // namespace capnp
