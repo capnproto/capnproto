@@ -1006,7 +1006,7 @@ kj::Maybe<Orphan<Declaration>> CapnpParser::parseStatement(
     } else if (tokens.end() != tokens.begin()) {
       bestByte = (tokens.end() - 1)->getEndByte();
     } else {
-      bestByte = 0;
+      bestByte = statement.getStartByte();
     }
 
     errorReporter.addError(bestByte, bestByte, "Parse error.");
