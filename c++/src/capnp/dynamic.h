@@ -954,21 +954,15 @@ struct PointerHelpers<DynamicStruct, Kind::UNKNOWN> {
   // getDynamic() is used when an Object's get() accessor is passed arguments, because for
   // non-dynamic types PointerHelpers::get() takes a default value as the third argument, and we
   // don't want people to accidentally be able to provide their own default value.
-  static DynamicStruct::Reader getDynamic(
-      StructReader reader, WirePointerCount index, StructSchema schema);
-  static DynamicStruct::Builder getDynamic(
-      StructBuilder builder, WirePointerCount index, StructSchema schema);
-  static void set(
-      StructBuilder builder, WirePointerCount index, const DynamicStruct::Reader& value);
-  static DynamicStruct::Builder init(
-      StructBuilder builder, WirePointerCount index, StructSchema schema);
-  static inline void adopt(StructBuilder builder, WirePointerCount index,
-                           Orphan<DynamicStruct>&& value) {
-    builder.getPointerField(index).adopt(kj::mv(value.builder));
+  static DynamicStruct::Reader getDynamic(PointerReader reader, StructSchema schema);
+  static DynamicStruct::Builder getDynamic(PointerBuilder builder, StructSchema schema);
+  static void set(PointerBuilder builder, const DynamicStruct::Reader& value);
+  static DynamicStruct::Builder init(PointerBuilder builder, StructSchema schema);
+  static inline void adopt(PointerBuilder builder, Orphan<DynamicStruct>&& value) {
+    builder.adopt(kj::mv(value.builder));
   }
-  static inline Orphan<DynamicStruct> disown(StructBuilder builder, WirePointerCount index,
-                                             StructSchema schema) {
-    return Orphan<DynamicStruct>(schema, builder.getPointerField(index).disown());
+  static inline Orphan<DynamicStruct> disown(PointerBuilder builder, StructSchema schema) {
+    return Orphan<DynamicStruct>(schema, builder.disown());
   }
 };
 
@@ -977,36 +971,28 @@ struct PointerHelpers<DynamicList, Kind::UNKNOWN> {
   // getDynamic() is used when an Object's get() accessor is passed arguments, because for
   // non-dynamic types PointerHelpers::get() takes a default value as the third argument, and we
   // don't want people to accidentally be able to provide their own default value.
-  static DynamicList::Reader getDynamic(
-      StructReader reader, WirePointerCount index, ListSchema schema);
-  static DynamicList::Builder getDynamic(
-      StructBuilder builder, WirePointerCount index, ListSchema schema);
-  static void set(
-      StructBuilder builder, WirePointerCount index, const DynamicList::Reader& value);
-  static DynamicList::Builder init(
-      StructBuilder builder, WirePointerCount index, ListSchema schema, uint size);
-  static inline void adopt(StructBuilder builder, WirePointerCount index,
-                           Orphan<DynamicList>&& value) {
-    builder.getPointerField(index).adopt(kj::mv(value.builder));
+  static DynamicList::Reader getDynamic(PointerReader reader, ListSchema schema);
+  static DynamicList::Builder getDynamic(PointerBuilder builder, ListSchema schema);
+  static void set(PointerBuilder builder, const DynamicList::Reader& value);
+  static DynamicList::Builder init(PointerBuilder builder, ListSchema schema, uint size);
+  static inline void adopt(PointerBuilder builder, Orphan<DynamicList>&& value) {
+    builder.adopt(kj::mv(value.builder));
   }
-  static inline Orphan<DynamicList> disown(StructBuilder builder, WirePointerCount index,
-                                           ListSchema schema) {
-    return Orphan<DynamicList>(schema, builder.getPointerField(index).disown());
+  static inline Orphan<DynamicList> disown(PointerBuilder builder, ListSchema schema) {
+    return Orphan<DynamicList>(schema, builder.disown());
   }
 };
 
 template <>
 struct PointerHelpers<DynamicObject, Kind::UNKNOWN> {
-  static DynamicObject::Reader get(StructReader reader, WirePointerCount index);
-  static DynamicObject::Builder get(StructBuilder builder, WirePointerCount index);
-  static void set(
-      StructBuilder builder, WirePointerCount index, const DynamicObject::Reader& value);
-  static inline void adopt(StructBuilder builder, WirePointerCount index,
-                           Orphan<DynamicObject>&& value) {
-    builder.getPointerField(index).adopt(kj::mv(value.builder));
+  static DynamicObject::Reader get(PointerReader reader);
+  static DynamicObject::Builder get(PointerBuilder builder);
+  static void set(PointerBuilder builder, const DynamicObject::Reader& value);
+  static inline void adopt(PointerBuilder builder, Orphan<DynamicObject>&& value) {
+    builder.adopt(kj::mv(value.builder));
   }
-  static inline Orphan<DynamicObject> disown(StructBuilder builder, WirePointerCount index) {
-    return Orphan<DynamicObject>(builder.getPointerField(index).disown());
+  static inline Orphan<DynamicObject> disown(PointerBuilder builder) {
+    return Orphan<DynamicObject>(builder.disown());
   }
 };
 

@@ -848,55 +848,59 @@ private:
             "inline typename T::Reader ", scope, "Reader::get", titleCase, "() const {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<T>::get(\n"
-            "      _reader, ", offset, " * ::capnp::POINTERS);\n"
+            "      _reader.getPointerField(", offset, " * ::capnp::POINTERS));\n"
             "}\n"
             "template <typename T>\n"
             "inline typename T::Builder ", scope, "Builder::get", titleCase, "() {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<T>::get(\n"
-            "      _builder, ", offset, " * ::capnp::POINTERS);\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
             "}\n"
             "template <typename T, typename Param>\n"
             "inline typename T::Reader ", scope, "Reader::get", titleCase, "(Param&& param) const {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<T>::getDynamic(\n"
-            "      _reader, ", offset, " * ::capnp::POINTERS, ::kj::fwd<Param>(param));\n"
+            "      _reader.getPointerField(", offset, " * ::capnp::POINTERS),\n"
+            "                              ::kj::fwd<Param>(param));\n"
             "}\n"
             "template <typename T, typename Param>\n"
             "inline typename T::Builder ", scope, "Builder::get", titleCase, "(Param&& param) {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<T>::getDynamic(\n"
-            "      _builder, ", offset, " * ::capnp::POINTERS, ::kj::fwd<Param>(param));\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS),\n"
+            "                               ::kj::fwd<Param>(param));\n"
             "}\n"
             "template <typename T>\n"
             "inline void ", scope, "Builder::set", titleCase, "(typename T::Reader value) {\n",
             unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<T>::set(\n"
-            "      _builder, ", offset, " * ::capnp::POINTERS, value);\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), value);\n"
             "}\n"
             "template <typename T, typename U>"
             "inline void ", scope, "Builder::set", titleCase, "(std::initializer_list<U> value) {\n",
             unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<T>::set(\n"
-            "      _builder, ", offset, " * ::capnp::POINTERS, value);\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), value);\n"
             "}\n"
             "template <typename T, typename... Params>\n"
             "inline typename T::Builder ", scope, "Builder::init", titleCase, "(Params&&... params) {\n",
             unionDiscrim.set,
             "  return ::capnp::_::PointerHelpers<T>::init(\n"
-            "      _builder, ", offset, " * ::capnp::POINTERS, ::kj::fwd<Params>(params)...);\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS),\n"
+            "                               ::kj::fwd<Params>(params)...);\n"
             "}\n"
             "template <typename T>\n"
             "inline void ", scope, "Builder::adopt", titleCase, "(::capnp::Orphan<T>&& value) {\n",
             unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<T>::adopt(\n"
-            "      _builder, ", offset, " * ::capnp::POINTERS, kj::mv(value));\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), kj::mv(value));\n"
             "}\n"
             "template <typename T, typename... Params>\n"
             "inline ::capnp::Orphan<T> ", scope, "Builder::disown", titleCase, "(Params&&... params) {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<T>::disown(\n"
-            "      _builder, ", offset, " * ::capnp::POINTERS, ::kj::fwd<Params>(params)...);\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS),\n"
+            "                               ::kj::fwd<Params>(params)...);\n"
             "}\n"
             "\n")
       };
@@ -986,24 +990,24 @@ private:
             "inline ", type, "::Reader ", scope, "Reader::get", titleCase, "() const {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::get(\n"
-            "      _reader, ", offset, " * ::capnp::POINTERS", defaultParam, ");\n"
+            "      _reader.getPointerField(", offset, " * ::capnp::POINTERS)", defaultParam, ");\n"
             "}\n"
             "inline ", type, "::Builder ", scope, "Builder::get", titleCase, "() {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::get(\n"
-            "      _builder, ", offset, " * ::capnp::POINTERS", defaultParam, ");\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS)", defaultParam, ");\n"
             "}\n"
             "inline void ", scope, "Builder::set", titleCase, "(", type, "::Reader value) {\n",
             unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
-            "      _builder, ", offset, " * ::capnp::POINTERS, value);\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), value);\n"
             "}\n",
             kind == FieldKind::LIST && !isStructList
             ? kj::strTree(
               "inline void ", scope, "Builder::set", titleCase, "(std::initializer_list<", elementReaderType, "> value) {\n",
               unionDiscrim.set,
               "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
-              "      _builder, ", offset, " * ::capnp::POINTERS, value);\n"
+              "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), value);\n"
               "}\n")
             : kj::strTree(),
             kind == FieldKind::STRUCT
@@ -1011,24 +1015,24 @@ private:
                 "inline ", type, "::Builder ", scope, "Builder::init", titleCase, "() {\n",
                 unionDiscrim.set,
                 "  return ::capnp::_::PointerHelpers<", type, ">::init(\n"
-                "      _builder, ", offset, " * ::capnp::POINTERS);\n"
+                "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
                 "}\n")
             : kj::strTree(
               "inline ", type, "::Builder ", scope, "Builder::init", titleCase, "(unsigned int size) {\n",
               unionDiscrim.set,
               "  return ::capnp::_::PointerHelpers<", type, ">::init(\n"
-              "      _builder, ", offset, " * ::capnp::POINTERS, size);\n"
+              "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), size);\n"
               "}\n"),
             "inline void ", scope, "Builder::adopt", titleCase, "(\n"
             "    ::capnp::Orphan<", type, ">&& value) {\n",
             unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<", type, ">::adopt(\n"
-            "      _builder, ", offset, " * ::capnp::POINTERS, kj::mv(value));\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), kj::mv(value));\n"
             "}\n"
             "inline ::capnp::Orphan<", type, "> ", scope, "Builder::disown", titleCase, "() {\n",
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::disown(\n"
-            "      _builder, ", offset, " * ::capnp::POINTERS);\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
             "}\n"
             "\n")
       };

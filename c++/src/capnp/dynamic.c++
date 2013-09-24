@@ -1700,77 +1700,74 @@ void MessageBuilder::setRoot<DynamicStruct::Reader&>(DynamicStruct::Reader& valu
 namespace _ {  // private
 
 DynamicStruct::Reader PointerHelpers<DynamicStruct, Kind::UNKNOWN>::getDynamic(
-    StructReader reader, WirePointerCount index, StructSchema schema) {
+    PointerReader reader, StructSchema schema) {
   KJ_REQUIRE(!schema.getProto().getStruct().getIsGroup(),
              "Cannot form pointer to group type.");
-  return DynamicStruct::Reader(schema, reader.getPointerField(index).getStruct(nullptr));
+  return DynamicStruct::Reader(schema, reader.getStruct(nullptr));
 }
 DynamicStruct::Builder PointerHelpers<DynamicStruct, Kind::UNKNOWN>::getDynamic(
-    StructBuilder builder, WirePointerCount index, StructSchema schema) {
+    PointerBuilder builder, StructSchema schema) {
   KJ_REQUIRE(!schema.getProto().getStruct().getIsGroup(),
              "Cannot form pointer to group type.");
-  return DynamicStruct::Builder(schema, builder.getPointerField(index).getStruct(
+  return DynamicStruct::Builder(schema, builder.getStruct(
       structSizeFromSchema(schema), nullptr));
 }
 void PointerHelpers<DynamicStruct, Kind::UNKNOWN>::set(
-    StructBuilder builder, WirePointerCount index, const DynamicStruct::Reader& value) {
+    PointerBuilder builder, const DynamicStruct::Reader& value) {
   KJ_REQUIRE(!value.schema.getProto().getStruct().getIsGroup(),
              "Cannot form pointer to group type.");
-  builder.getPointerField(index).setStruct(value.reader);
+  builder.setStruct(value.reader);
 }
 DynamicStruct::Builder PointerHelpers<DynamicStruct, Kind::UNKNOWN>::init(
-    StructBuilder builder, WirePointerCount index, StructSchema schema) {
+    PointerBuilder builder, StructSchema schema) {
   KJ_REQUIRE(!schema.getProto().getStruct().getIsGroup(),
              "Cannot form pointer to group type.");
   return DynamicStruct::Builder(schema,
-      builder.getPointerField(index).initStruct(structSizeFromSchema(schema)));
+      builder.initStruct(structSizeFromSchema(schema)));
 }
 
 DynamicList::Reader PointerHelpers<DynamicList, Kind::UNKNOWN>::getDynamic(
-    StructReader reader, WirePointerCount index, ListSchema schema) {
+    PointerReader reader, ListSchema schema) {
   return DynamicList::Reader(schema,
-      reader.getPointerField(index).getList(elementSizeFor(schema.whichElementType()), nullptr));
+      reader.getList(elementSizeFor(schema.whichElementType()), nullptr));
 }
 DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::getDynamic(
-    StructBuilder builder, WirePointerCount index, ListSchema schema) {
+    PointerBuilder builder, ListSchema schema) {
   if (schema.whichElementType() == schema::Type::STRUCT) {
     return DynamicList::Builder(schema,
-        builder.getPointerField(index).getStructList(
+        builder.getStructList(
             structSizeFromSchema(schema.getStructElementType()),
             nullptr));
   } else {
     return DynamicList::Builder(schema,
-        builder.getPointerField(index).getList(elementSizeFor(schema.whichElementType()), nullptr));
+        builder.getList(elementSizeFor(schema.whichElementType()), nullptr));
   }
 }
 void PointerHelpers<DynamicList, Kind::UNKNOWN>::set(
-    StructBuilder builder, WirePointerCount index, const DynamicList::Reader& value) {
-  builder.getPointerField(index).setList(value.reader);
+    PointerBuilder builder, const DynamicList::Reader& value) {
+  builder.setList(value.reader);
 }
 DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::init(
-    StructBuilder builder, WirePointerCount index, ListSchema schema, uint size) {
+    PointerBuilder builder, ListSchema schema, uint size) {
   if (schema.whichElementType() == schema::Type::STRUCT) {
     return DynamicList::Builder(schema,
-        builder.getPointerField(index).initStructList(size * ELEMENTS,
+        builder.initStructList(size * ELEMENTS,
             structSizeFromSchema(schema.getStructElementType())));
   } else {
     return DynamicList::Builder(schema,
-        builder.getPointerField(index)
-               .initList(elementSizeFor(schema.whichElementType()), size * ELEMENTS));
+        builder.initList(elementSizeFor(schema.whichElementType()), size * ELEMENTS));
   }
 }
 
-DynamicObject::Reader PointerHelpers<DynamicObject, Kind::UNKNOWN>::get(
-    StructReader reader, WirePointerCount index) {
-  return DynamicObject::Reader(reader.getPointerField(index).getObject(nullptr));
+DynamicObject::Reader PointerHelpers<DynamicObject, Kind::UNKNOWN>::get(PointerReader reader) {
+  return DynamicObject::Reader(reader.getObject(nullptr));
 }
-DynamicObject::Builder PointerHelpers<DynamicObject, Kind::UNKNOWN>::get(
-    StructBuilder builder, WirePointerCount index) {
-  return DynamicObject::Builder(builder.getPointerField(index).getObject(nullptr));
+DynamicObject::Builder PointerHelpers<DynamicObject, Kind::UNKNOWN>::get(PointerBuilder builder) {
+  return DynamicObject::Builder(builder.getObject(nullptr));
 }
 void PointerHelpers<DynamicObject, Kind::UNKNOWN>::set(
-    StructBuilder builder, WirePointerCount index, const DynamicObject::Reader& value) {
-  builder.getPointerField(index).setObject(value.reader);
+    PointerBuilder builder, const DynamicObject::Reader& value) {
+  builder.setObject(value.reader);
 }
 
 }  // namespace _ (private)

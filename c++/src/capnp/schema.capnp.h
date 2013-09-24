@@ -2749,28 +2749,28 @@ inline bool Node::Builder::hasDisplayName() {
 }
 inline  ::capnp::Text::Reader Node::Reader::getDisplayName() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder Node::Builder::getDisplayName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 inline void Node::Builder::setDisplayName( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder Node::Builder::initDisplayName(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder, 0 * ::capnp::POINTERS, size);
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
 }
 inline void Node::Builder::adoptDisplayName(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> Node::Builder::disownDisplayName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline bool Node::Reader::hasDisplayNamePrefixLength() const {
@@ -2823,28 +2823,28 @@ inline bool Node::Builder::hasNestedNodes() {
 }
 inline  ::capnp::List< ::capnp::schema::Node::NestedNode>::Reader Node::Reader::getNestedNodes() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::NestedNode>>::get(
-      _reader, 1 * ::capnp::POINTERS);
+      _reader.getPointerField(1 * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::schema::Node::NestedNode>::Builder Node::Builder::getNestedNodes() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::NestedNode>>::get(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 inline void Node::Builder::setNestedNodes( ::capnp::List< ::capnp::schema::Node::NestedNode>::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::NestedNode>>::set(
-      _builder, 1 * ::capnp::POINTERS, value);
+      _builder.getPointerField(1 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::schema::Node::NestedNode>::Builder Node::Builder::initNestedNodes(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::NestedNode>>::init(
-      _builder, 1 * ::capnp::POINTERS, size);
+      _builder.getPointerField(1 * ::capnp::POINTERS), size);
 }
 inline void Node::Builder::adoptNestedNodes(
     ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::NestedNode>>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::NestedNode>>::adopt(
-      _builder, 1 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(1 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::NestedNode>> Node::Builder::disownNestedNodes() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::NestedNode>>::disown(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
 inline bool Node::Reader::hasAnnotations() const {
@@ -2855,28 +2855,28 @@ inline bool Node::Builder::hasAnnotations() {
 }
 inline  ::capnp::List< ::capnp::schema::Annotation>::Reader Node::Reader::getAnnotations() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::get(
-      _reader, 2 * ::capnp::POINTERS);
+      _reader.getPointerField(2 * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::schema::Annotation>::Builder Node::Builder::getAnnotations() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::get(
-      _builder, 2 * ::capnp::POINTERS);
+      _builder.getPointerField(2 * ::capnp::POINTERS));
 }
 inline void Node::Builder::setAnnotations( ::capnp::List< ::capnp::schema::Annotation>::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::set(
-      _builder, 2 * ::capnp::POINTERS, value);
+      _builder.getPointerField(2 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::schema::Annotation>::Builder Node::Builder::initAnnotations(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::init(
-      _builder, 2 * ::capnp::POINTERS, size);
+      _builder.getPointerField(2 * ::capnp::POINTERS), size);
 }
 inline void Node::Builder::adoptAnnotations(
     ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::adopt(
-      _builder, 2 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(2 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>> Node::Builder::disownAnnotations() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::disown(
-      _builder, 2 * ::capnp::POINTERS);
+      _builder.getPointerField(2 * ::capnp::POINTERS));
 }
 
 inline bool Node::Reader::isFile() const {
@@ -3129,28 +3129,28 @@ inline bool Node::NestedNode::Builder::hasName() {
 }
 inline  ::capnp::Text::Reader Node::NestedNode::Reader::getName() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder Node::NestedNode::Builder::getName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 inline void Node::NestedNode::Builder::setName( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder Node::NestedNode::Builder::initName(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder, 0 * ::capnp::POINTERS, size);
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
 }
 inline void Node::NestedNode::Builder::adoptName(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> Node::NestedNode::Builder::disownName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline bool Node::NestedNode::Reader::hasId() const {
@@ -3308,28 +3308,28 @@ inline bool Node::Struct::Builder::hasFields() {
 }
 inline  ::capnp::List< ::capnp::schema::Field>::Reader Node::Struct::Reader::getFields() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Field>>::get(
-      _reader, 3 * ::capnp::POINTERS);
+      _reader.getPointerField(3 * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::schema::Field>::Builder Node::Struct::Builder::getFields() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Field>>::get(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 inline void Node::Struct::Builder::setFields( ::capnp::List< ::capnp::schema::Field>::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Field>>::set(
-      _builder, 3 * ::capnp::POINTERS, value);
+      _builder.getPointerField(3 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::schema::Field>::Builder Node::Struct::Builder::initFields(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Field>>::init(
-      _builder, 3 * ::capnp::POINTERS, size);
+      _builder.getPointerField(3 * ::capnp::POINTERS), size);
 }
 inline void Node::Struct::Builder::adoptFields(
     ::capnp::Orphan< ::capnp::List< ::capnp::schema::Field>>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Field>>::adopt(
-      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(3 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Field>> Node::Struct::Builder::disownFields() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Field>>::disown(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 
 inline bool Node::Enum::Reader::hasEnumerants() const {
@@ -3340,28 +3340,28 @@ inline bool Node::Enum::Builder::hasEnumerants() {
 }
 inline  ::capnp::List< ::capnp::schema::Enumerant>::Reader Node::Enum::Reader::getEnumerants() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::get(
-      _reader, 3 * ::capnp::POINTERS);
+      _reader.getPointerField(3 * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::schema::Enumerant>::Builder Node::Enum::Builder::getEnumerants() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::get(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 inline void Node::Enum::Builder::setEnumerants( ::capnp::List< ::capnp::schema::Enumerant>::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::set(
-      _builder, 3 * ::capnp::POINTERS, value);
+      _builder.getPointerField(3 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::schema::Enumerant>::Builder Node::Enum::Builder::initEnumerants(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::init(
-      _builder, 3 * ::capnp::POINTERS, size);
+      _builder.getPointerField(3 * ::capnp::POINTERS), size);
 }
 inline void Node::Enum::Builder::adoptEnumerants(
     ::capnp::Orphan< ::capnp::List< ::capnp::schema::Enumerant>>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::adopt(
-      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(3 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Enumerant>> Node::Enum::Builder::disownEnumerants() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Enumerant>>::disown(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 
 inline bool Node::Interface::Reader::hasMethods() const {
@@ -3372,28 +3372,28 @@ inline bool Node::Interface::Builder::hasMethods() {
 }
 inline  ::capnp::List< ::capnp::schema::Method>::Reader Node::Interface::Reader::getMethods() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::get(
-      _reader, 3 * ::capnp::POINTERS);
+      _reader.getPointerField(3 * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::schema::Method>::Builder Node::Interface::Builder::getMethods() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::get(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 inline void Node::Interface::Builder::setMethods( ::capnp::List< ::capnp::schema::Method>::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::set(
-      _builder, 3 * ::capnp::POINTERS, value);
+      _builder.getPointerField(3 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::schema::Method>::Builder Node::Interface::Builder::initMethods(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::init(
-      _builder, 3 * ::capnp::POINTERS, size);
+      _builder.getPointerField(3 * ::capnp::POINTERS), size);
 }
 inline void Node::Interface::Builder::adoptMethods(
     ::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::adopt(
-      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(3 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>> Node::Interface::Builder::disownMethods() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::disown(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 
 inline bool Node::Const::Reader::hasType() const {
@@ -3404,28 +3404,28 @@ inline bool Node::Const::Builder::hasType() {
 }
 inline  ::capnp::schema::Type::Reader Node::Const::Reader::getType() const {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _reader, 3 * ::capnp::POINTERS);
+      _reader.getPointerField(3 * ::capnp::POINTERS));
 }
 inline  ::capnp::schema::Type::Builder Node::Const::Builder::getType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 inline void Node::Const::Builder::setType( ::capnp::schema::Type::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
-      _builder, 3 * ::capnp::POINTERS, value);
+      _builder.getPointerField(3 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::schema::Type::Builder Node::Const::Builder::initType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::init(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 inline void Node::Const::Builder::adoptType(
     ::capnp::Orphan< ::capnp::schema::Type>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::adopt(
-      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(3 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::schema::Type> Node::Const::Builder::disownType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::disown(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 
 inline bool Node::Const::Reader::hasValue() const {
@@ -3436,28 +3436,28 @@ inline bool Node::Const::Builder::hasValue() {
 }
 inline  ::capnp::schema::Value::Reader Node::Const::Reader::getValue() const {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
-      _reader, 4 * ::capnp::POINTERS);
+      _reader.getPointerField(4 * ::capnp::POINTERS));
 }
 inline  ::capnp::schema::Value::Builder Node::Const::Builder::getValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
-      _builder, 4 * ::capnp::POINTERS);
+      _builder.getPointerField(4 * ::capnp::POINTERS));
 }
 inline void Node::Const::Builder::setValue( ::capnp::schema::Value::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Value>::set(
-      _builder, 4 * ::capnp::POINTERS, value);
+      _builder.getPointerField(4 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::schema::Value::Builder Node::Const::Builder::initValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::init(
-      _builder, 4 * ::capnp::POINTERS);
+      _builder.getPointerField(4 * ::capnp::POINTERS));
 }
 inline void Node::Const::Builder::adoptValue(
     ::capnp::Orphan< ::capnp::schema::Value>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Value>::adopt(
-      _builder, 4 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(4 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::schema::Value> Node::Const::Builder::disownValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::disown(
-      _builder, 4 * ::capnp::POINTERS);
+      _builder.getPointerField(4 * ::capnp::POINTERS));
 }
 
 inline bool Node::Annotation::Reader::hasType() const {
@@ -3468,28 +3468,28 @@ inline bool Node::Annotation::Builder::hasType() {
 }
 inline  ::capnp::schema::Type::Reader Node::Annotation::Reader::getType() const {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _reader, 3 * ::capnp::POINTERS);
+      _reader.getPointerField(3 * ::capnp::POINTERS));
 }
 inline  ::capnp::schema::Type::Builder Node::Annotation::Builder::getType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 inline void Node::Annotation::Builder::setType( ::capnp::schema::Type::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
-      _builder, 3 * ::capnp::POINTERS, value);
+      _builder.getPointerField(3 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::schema::Type::Builder Node::Annotation::Builder::initType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::init(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 inline void Node::Annotation::Builder::adoptType(
     ::capnp::Orphan< ::capnp::schema::Type>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::adopt(
-      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(3 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::schema::Type> Node::Annotation::Builder::disownType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::disown(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 
 inline bool Node::Annotation::Reader::hasTargetsFile() const {
@@ -3759,28 +3759,28 @@ inline bool Field::Builder::hasName() {
 }
 inline  ::capnp::Text::Reader Field::Reader::getName() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder Field::Builder::getName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 inline void Field::Builder::setName( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder Field::Builder::initName(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder, 0 * ::capnp::POINTERS, size);
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
 }
 inline void Field::Builder::adoptName(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> Field::Builder::disownName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline bool Field::Reader::hasCodeOrder() const {
@@ -3812,28 +3812,28 @@ inline bool Field::Builder::hasAnnotations() {
 }
 inline  ::capnp::List< ::capnp::schema::Annotation>::Reader Field::Reader::getAnnotations() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::get(
-      _reader, 1 * ::capnp::POINTERS);
+      _reader.getPointerField(1 * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::schema::Annotation>::Builder Field::Builder::getAnnotations() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::get(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 inline void Field::Builder::setAnnotations( ::capnp::List< ::capnp::schema::Annotation>::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::set(
-      _builder, 1 * ::capnp::POINTERS, value);
+      _builder.getPointerField(1 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::schema::Annotation>::Builder Field::Builder::initAnnotations(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::init(
-      _builder, 1 * ::capnp::POINTERS, size);
+      _builder.getPointerField(1 * ::capnp::POINTERS), size);
 }
 inline void Field::Builder::adoptAnnotations(
     ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::adopt(
-      _builder, 1 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(1 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>> Field::Builder::disownAnnotations() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::disown(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
 inline bool Field::Reader::hasDiscriminantValue() const {
@@ -3971,28 +3971,28 @@ inline bool Field::Slot::Builder::hasType() {
 }
 inline  ::capnp::schema::Type::Reader Field::Slot::Reader::getType() const {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _reader, 2 * ::capnp::POINTERS);
+      _reader.getPointerField(2 * ::capnp::POINTERS));
 }
 inline  ::capnp::schema::Type::Builder Field::Slot::Builder::getType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _builder, 2 * ::capnp::POINTERS);
+      _builder.getPointerField(2 * ::capnp::POINTERS));
 }
 inline void Field::Slot::Builder::setType( ::capnp::schema::Type::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
-      _builder, 2 * ::capnp::POINTERS, value);
+      _builder.getPointerField(2 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::schema::Type::Builder Field::Slot::Builder::initType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::init(
-      _builder, 2 * ::capnp::POINTERS);
+      _builder.getPointerField(2 * ::capnp::POINTERS));
 }
 inline void Field::Slot::Builder::adoptType(
     ::capnp::Orphan< ::capnp::schema::Type>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::adopt(
-      _builder, 2 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(2 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::schema::Type> Field::Slot::Builder::disownType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::disown(
-      _builder, 2 * ::capnp::POINTERS);
+      _builder.getPointerField(2 * ::capnp::POINTERS));
 }
 
 inline bool Field::Slot::Reader::hasDefaultValue() const {
@@ -4003,28 +4003,28 @@ inline bool Field::Slot::Builder::hasDefaultValue() {
 }
 inline  ::capnp::schema::Value::Reader Field::Slot::Reader::getDefaultValue() const {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
-      _reader, 3 * ::capnp::POINTERS);
+      _reader.getPointerField(3 * ::capnp::POINTERS));
 }
 inline  ::capnp::schema::Value::Builder Field::Slot::Builder::getDefaultValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 inline void Field::Slot::Builder::setDefaultValue( ::capnp::schema::Value::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Value>::set(
-      _builder, 3 * ::capnp::POINTERS, value);
+      _builder.getPointerField(3 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::schema::Value::Builder Field::Slot::Builder::initDefaultValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::init(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 inline void Field::Slot::Builder::adoptDefaultValue(
     ::capnp::Orphan< ::capnp::schema::Value>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Value>::adopt(
-      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(3 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::schema::Value> Field::Slot::Builder::disownDefaultValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::disown(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 
 inline bool Field::Group::Reader::hasTypeId() const {
@@ -4133,28 +4133,28 @@ inline bool Enumerant::Builder::hasName() {
 }
 inline  ::capnp::Text::Reader Enumerant::Reader::getName() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder Enumerant::Builder::getName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 inline void Enumerant::Builder::setName( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder Enumerant::Builder::initName(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder, 0 * ::capnp::POINTERS, size);
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
 }
 inline void Enumerant::Builder::adoptName(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> Enumerant::Builder::disownName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline bool Enumerant::Reader::hasCodeOrder() const {
@@ -4186,28 +4186,28 @@ inline bool Enumerant::Builder::hasAnnotations() {
 }
 inline  ::capnp::List< ::capnp::schema::Annotation>::Reader Enumerant::Reader::getAnnotations() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::get(
-      _reader, 1 * ::capnp::POINTERS);
+      _reader.getPointerField(1 * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::schema::Annotation>::Builder Enumerant::Builder::getAnnotations() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::get(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 inline void Enumerant::Builder::setAnnotations( ::capnp::List< ::capnp::schema::Annotation>::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::set(
-      _builder, 1 * ::capnp::POINTERS, value);
+      _builder.getPointerField(1 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::schema::Annotation>::Builder Enumerant::Builder::initAnnotations(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::init(
-      _builder, 1 * ::capnp::POINTERS, size);
+      _builder.getPointerField(1 * ::capnp::POINTERS), size);
 }
 inline void Enumerant::Builder::adoptAnnotations(
     ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::adopt(
-      _builder, 1 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(1 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>> Enumerant::Builder::disownAnnotations() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::disown(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
 inline bool Method::Reader::hasName() const {
@@ -4218,28 +4218,28 @@ inline bool Method::Builder::hasName() {
 }
 inline  ::capnp::Text::Reader Method::Reader::getName() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder Method::Builder::getName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 inline void Method::Builder::setName( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder Method::Builder::initName(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder, 0 * ::capnp::POINTERS, size);
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
 }
 inline void Method::Builder::adoptName(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> Method::Builder::disownName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline bool Method::Reader::hasCodeOrder() const {
@@ -4271,28 +4271,28 @@ inline bool Method::Builder::hasParams() {
 }
 inline  ::capnp::List< ::capnp::schema::Method::Param>::Reader Method::Reader::getParams() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method::Param>>::get(
-      _reader, 1 * ::capnp::POINTERS);
+      _reader.getPointerField(1 * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::schema::Method::Param>::Builder Method::Builder::getParams() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method::Param>>::get(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 inline void Method::Builder::setParams( ::capnp::List< ::capnp::schema::Method::Param>::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method::Param>>::set(
-      _builder, 1 * ::capnp::POINTERS, value);
+      _builder.getPointerField(1 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::schema::Method::Param>::Builder Method::Builder::initParams(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method::Param>>::init(
-      _builder, 1 * ::capnp::POINTERS, size);
+      _builder.getPointerField(1 * ::capnp::POINTERS), size);
 }
 inline void Method::Builder::adoptParams(
     ::capnp::Orphan< ::capnp::List< ::capnp::schema::Method::Param>>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method::Param>>::adopt(
-      _builder, 1 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(1 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Method::Param>> Method::Builder::disownParams() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method::Param>>::disown(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
 inline bool Method::Reader::hasRequiredParamCount() const {
@@ -4324,28 +4324,28 @@ inline bool Method::Builder::hasReturnType() {
 }
 inline  ::capnp::schema::Type::Reader Method::Reader::getReturnType() const {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _reader, 2 * ::capnp::POINTERS);
+      _reader.getPointerField(2 * ::capnp::POINTERS));
 }
 inline  ::capnp::schema::Type::Builder Method::Builder::getReturnType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _builder, 2 * ::capnp::POINTERS);
+      _builder.getPointerField(2 * ::capnp::POINTERS));
 }
 inline void Method::Builder::setReturnType( ::capnp::schema::Type::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
-      _builder, 2 * ::capnp::POINTERS, value);
+      _builder.getPointerField(2 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::schema::Type::Builder Method::Builder::initReturnType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::init(
-      _builder, 2 * ::capnp::POINTERS);
+      _builder.getPointerField(2 * ::capnp::POINTERS));
 }
 inline void Method::Builder::adoptReturnType(
     ::capnp::Orphan< ::capnp::schema::Type>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::adopt(
-      _builder, 2 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(2 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::schema::Type> Method::Builder::disownReturnType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::disown(
-      _builder, 2 * ::capnp::POINTERS);
+      _builder.getPointerField(2 * ::capnp::POINTERS));
 }
 
 inline bool Method::Reader::hasAnnotations() const {
@@ -4356,28 +4356,28 @@ inline bool Method::Builder::hasAnnotations() {
 }
 inline  ::capnp::List< ::capnp::schema::Annotation>::Reader Method::Reader::getAnnotations() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::get(
-      _reader, 3 * ::capnp::POINTERS);
+      _reader.getPointerField(3 * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::schema::Annotation>::Builder Method::Builder::getAnnotations() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::get(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 inline void Method::Builder::setAnnotations( ::capnp::List< ::capnp::schema::Annotation>::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::set(
-      _builder, 3 * ::capnp::POINTERS, value);
+      _builder.getPointerField(3 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::schema::Annotation>::Builder Method::Builder::initAnnotations(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::init(
-      _builder, 3 * ::capnp::POINTERS, size);
+      _builder.getPointerField(3 * ::capnp::POINTERS), size);
 }
 inline void Method::Builder::adoptAnnotations(
     ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::adopt(
-      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(3 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>> Method::Builder::disownAnnotations() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::disown(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 
 inline bool Method::Param::Reader::hasName() const {
@@ -4388,28 +4388,28 @@ inline bool Method::Param::Builder::hasName() {
 }
 inline  ::capnp::Text::Reader Method::Param::Reader::getName() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder Method::Param::Builder::getName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 inline void Method::Param::Builder::setName( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder Method::Param::Builder::initName(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder, 0 * ::capnp::POINTERS, size);
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
 }
 inline void Method::Param::Builder::adoptName(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> Method::Param::Builder::disownName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline bool Method::Param::Reader::hasType() const {
@@ -4420,28 +4420,28 @@ inline bool Method::Param::Builder::hasType() {
 }
 inline  ::capnp::schema::Type::Reader Method::Param::Reader::getType() const {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _reader, 1 * ::capnp::POINTERS);
+      _reader.getPointerField(1 * ::capnp::POINTERS));
 }
 inline  ::capnp::schema::Type::Builder Method::Param::Builder::getType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 inline void Method::Param::Builder::setType( ::capnp::schema::Type::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
-      _builder, 1 * ::capnp::POINTERS, value);
+      _builder.getPointerField(1 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::schema::Type::Builder Method::Param::Builder::initType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::init(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 inline void Method::Param::Builder::adoptType(
     ::capnp::Orphan< ::capnp::schema::Type>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::adopt(
-      _builder, 1 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(1 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::schema::Type> Method::Param::Builder::disownType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::disown(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
 inline bool Method::Param::Reader::hasDefaultValue() const {
@@ -4452,28 +4452,28 @@ inline bool Method::Param::Builder::hasDefaultValue() {
 }
 inline  ::capnp::schema::Value::Reader Method::Param::Reader::getDefaultValue() const {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
-      _reader, 2 * ::capnp::POINTERS);
+      _reader.getPointerField(2 * ::capnp::POINTERS));
 }
 inline  ::capnp::schema::Value::Builder Method::Param::Builder::getDefaultValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
-      _builder, 2 * ::capnp::POINTERS);
+      _builder.getPointerField(2 * ::capnp::POINTERS));
 }
 inline void Method::Param::Builder::setDefaultValue( ::capnp::schema::Value::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Value>::set(
-      _builder, 2 * ::capnp::POINTERS, value);
+      _builder.getPointerField(2 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::schema::Value::Builder Method::Param::Builder::initDefaultValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::init(
-      _builder, 2 * ::capnp::POINTERS);
+      _builder.getPointerField(2 * ::capnp::POINTERS));
 }
 inline void Method::Param::Builder::adoptDefaultValue(
     ::capnp::Orphan< ::capnp::schema::Value>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Value>::adopt(
-      _builder, 2 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(2 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::schema::Value> Method::Param::Builder::disownDefaultValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::disown(
-      _builder, 2 * ::capnp::POINTERS);
+      _builder.getPointerField(2 * ::capnp::POINTERS));
 }
 
 inline bool Method::Param::Reader::hasAnnotations() const {
@@ -4484,28 +4484,28 @@ inline bool Method::Param::Builder::hasAnnotations() {
 }
 inline  ::capnp::List< ::capnp::schema::Annotation>::Reader Method::Param::Reader::getAnnotations() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::get(
-      _reader, 3 * ::capnp::POINTERS);
+      _reader.getPointerField(3 * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::schema::Annotation>::Builder Method::Param::Builder::getAnnotations() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::get(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 inline void Method::Param::Builder::setAnnotations( ::capnp::List< ::capnp::schema::Annotation>::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::set(
-      _builder, 3 * ::capnp::POINTERS, value);
+      _builder.getPointerField(3 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::schema::Annotation>::Builder Method::Param::Builder::initAnnotations(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::init(
-      _builder, 3 * ::capnp::POINTERS, size);
+      _builder.getPointerField(3 * ::capnp::POINTERS), size);
 }
 inline void Method::Param::Builder::adoptAnnotations(
     ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::adopt(
-      _builder, 3 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(3 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>> Method::Param::Builder::disownAnnotations() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Annotation>>::disown(
-      _builder, 3 * ::capnp::POINTERS);
+      _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 
 inline Type::Which Type::Reader::which() const {
@@ -5168,28 +5168,28 @@ inline bool Type::List::Builder::hasElementType() {
 }
 inline  ::capnp::schema::Type::Reader Type::List::Reader::getElementType() const {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::schema::Type::Builder Type::List::Builder::getElementType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 inline void Type::List::Builder::setElementType( ::capnp::schema::Type::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::schema::Type::Builder Type::List::Builder::initElementType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::init(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 inline void Type::List::Builder::adoptElementType(
     ::capnp::Orphan< ::capnp::schema::Type>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::schema::Type> Type::List::Builder::disownElementType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::disown(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline bool Type::Enum::Reader::hasTypeId() const {
@@ -5700,38 +5700,38 @@ inline  ::capnp::Text::Reader Value::Reader::getText() const {
   KJ_IREQUIRE(which() == Value::TEXT,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder Value::Builder::getText() {
   KJ_IREQUIRE(which() == Value::TEXT,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 inline void Value::Builder::setText( ::capnp::Text::Reader value) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::TEXT);
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder Value::Builder::initText(unsigned int size) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::TEXT);
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder, 0 * ::capnp::POINTERS, size);
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
 }
 inline void Value::Builder::adoptText(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::TEXT);
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> Value::Builder::disownText() {
   KJ_IREQUIRE(which() == Value::TEXT,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline bool Value::Reader::isData() const {
@@ -5752,38 +5752,38 @@ inline  ::capnp::Data::Reader Value::Reader::getData() const {
   KJ_IREQUIRE(which() == Value::DATA,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::Data>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::Data::Builder Value::Builder::getData() {
   KJ_IREQUIRE(which() == Value::DATA,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::Data>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 inline void Value::Builder::setData( ::capnp::Data::Reader value) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::DATA);
   ::capnp::_::PointerHelpers< ::capnp::Data>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Data::Builder Value::Builder::initData(unsigned int size) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::DATA);
   return ::capnp::_::PointerHelpers< ::capnp::Data>::init(
-      _builder, 0 * ::capnp::POINTERS, size);
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
 }
 inline void Value::Builder::adoptData(
     ::capnp::Orphan< ::capnp::Data>&& value) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::DATA);
   ::capnp::_::PointerHelpers< ::capnp::Data>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Data> Value::Builder::disownData() {
   KJ_IREQUIRE(which() == Value::DATA,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::Data>::disown(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline bool Value::Reader::isList() const {
@@ -5805,62 +5805,66 @@ inline typename T::Reader Value::Reader::getList() const {
   KJ_IREQUIRE(which() == Value::LIST,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers<T>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 template <typename T>
 inline typename T::Builder Value::Builder::getList() {
   KJ_IREQUIRE(which() == Value::LIST,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers<T>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 template <typename T, typename Param>
 inline typename T::Reader Value::Reader::getList(Param&& param) const {
   KJ_IREQUIRE(which() == Value::LIST,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers<T>::getDynamic(
-      _reader, 0 * ::capnp::POINTERS, ::kj::fwd<Param>(param));
+      _reader.getPointerField(0 * ::capnp::POINTERS),
+                              ::kj::fwd<Param>(param));
 }
 template <typename T, typename Param>
 inline typename T::Builder Value::Builder::getList(Param&& param) {
   KJ_IREQUIRE(which() == Value::LIST,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers<T>::getDynamic(
-      _builder, 0 * ::capnp::POINTERS, ::kj::fwd<Param>(param));
+      _builder.getPointerField(0 * ::capnp::POINTERS),
+                               ::kj::fwd<Param>(param));
 }
 template <typename T>
 inline void Value::Builder::setList(typename T::Reader value) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::LIST);
   ::capnp::_::PointerHelpers<T>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 template <typename T, typename U>inline void Value::Builder::setList(std::initializer_list<U> value) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::LIST);
   ::capnp::_::PointerHelpers<T>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 template <typename T, typename... Params>
 inline typename T::Builder Value::Builder::initList(Params&&... params) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::LIST);
   return ::capnp::_::PointerHelpers<T>::init(
-      _builder, 0 * ::capnp::POINTERS, ::kj::fwd<Params>(params)...);
+      _builder.getPointerField(0 * ::capnp::POINTERS),
+                               ::kj::fwd<Params>(params)...);
 }
 template <typename T>
 inline void Value::Builder::adoptList(::capnp::Orphan<T>&& value) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::LIST);
   ::capnp::_::PointerHelpers<T>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 template <typename T, typename... Params>
 inline ::capnp::Orphan<T> Value::Builder::disownList(Params&&... params) {
   KJ_IREQUIRE(which() == Value::LIST,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers<T>::disown(
-      _builder, 0 * ::capnp::POINTERS, ::kj::fwd<Params>(params)...);
+      _builder.getPointerField(0 * ::capnp::POINTERS),
+                               ::kj::fwd<Params>(params)...);
 }
 
 inline bool Value::Reader::isEnum() const {
@@ -5917,62 +5921,66 @@ inline typename T::Reader Value::Reader::getStruct() const {
   KJ_IREQUIRE(which() == Value::STRUCT,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers<T>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 template <typename T>
 inline typename T::Builder Value::Builder::getStruct() {
   KJ_IREQUIRE(which() == Value::STRUCT,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers<T>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 template <typename T, typename Param>
 inline typename T::Reader Value::Reader::getStruct(Param&& param) const {
   KJ_IREQUIRE(which() == Value::STRUCT,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers<T>::getDynamic(
-      _reader, 0 * ::capnp::POINTERS, ::kj::fwd<Param>(param));
+      _reader.getPointerField(0 * ::capnp::POINTERS),
+                              ::kj::fwd<Param>(param));
 }
 template <typename T, typename Param>
 inline typename T::Builder Value::Builder::getStruct(Param&& param) {
   KJ_IREQUIRE(which() == Value::STRUCT,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers<T>::getDynamic(
-      _builder, 0 * ::capnp::POINTERS, ::kj::fwd<Param>(param));
+      _builder.getPointerField(0 * ::capnp::POINTERS),
+                               ::kj::fwd<Param>(param));
 }
 template <typename T>
 inline void Value::Builder::setStruct(typename T::Reader value) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::STRUCT);
   ::capnp::_::PointerHelpers<T>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 template <typename T, typename U>inline void Value::Builder::setStruct(std::initializer_list<U> value) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::STRUCT);
   ::capnp::_::PointerHelpers<T>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 template <typename T, typename... Params>
 inline typename T::Builder Value::Builder::initStruct(Params&&... params) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::STRUCT);
   return ::capnp::_::PointerHelpers<T>::init(
-      _builder, 0 * ::capnp::POINTERS, ::kj::fwd<Params>(params)...);
+      _builder.getPointerField(0 * ::capnp::POINTERS),
+                               ::kj::fwd<Params>(params)...);
 }
 template <typename T>
 inline void Value::Builder::adoptStruct(::capnp::Orphan<T>&& value) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::STRUCT);
   ::capnp::_::PointerHelpers<T>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 template <typename T, typename... Params>
 inline ::capnp::Orphan<T> Value::Builder::disownStruct(Params&&... params) {
   KJ_IREQUIRE(which() == Value::STRUCT,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers<T>::disown(
-      _builder, 0 * ::capnp::POINTERS, ::kj::fwd<Params>(params)...);
+      _builder.getPointerField(0 * ::capnp::POINTERS),
+                               ::kj::fwd<Params>(params)...);
 }
 
 inline bool Value::Reader::isInterface() const {
@@ -6029,62 +6037,66 @@ inline typename T::Reader Value::Reader::getObject() const {
   KJ_IREQUIRE(which() == Value::OBJECT,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers<T>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 template <typename T>
 inline typename T::Builder Value::Builder::getObject() {
   KJ_IREQUIRE(which() == Value::OBJECT,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers<T>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 template <typename T, typename Param>
 inline typename T::Reader Value::Reader::getObject(Param&& param) const {
   KJ_IREQUIRE(which() == Value::OBJECT,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers<T>::getDynamic(
-      _reader, 0 * ::capnp::POINTERS, ::kj::fwd<Param>(param));
+      _reader.getPointerField(0 * ::capnp::POINTERS),
+                              ::kj::fwd<Param>(param));
 }
 template <typename T, typename Param>
 inline typename T::Builder Value::Builder::getObject(Param&& param) {
   KJ_IREQUIRE(which() == Value::OBJECT,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers<T>::getDynamic(
-      _builder, 0 * ::capnp::POINTERS, ::kj::fwd<Param>(param));
+      _builder.getPointerField(0 * ::capnp::POINTERS),
+                               ::kj::fwd<Param>(param));
 }
 template <typename T>
 inline void Value::Builder::setObject(typename T::Reader value) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::OBJECT);
   ::capnp::_::PointerHelpers<T>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 template <typename T, typename U>inline void Value::Builder::setObject(std::initializer_list<U> value) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::OBJECT);
   ::capnp::_::PointerHelpers<T>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 template <typename T, typename... Params>
 inline typename T::Builder Value::Builder::initObject(Params&&... params) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::OBJECT);
   return ::capnp::_::PointerHelpers<T>::init(
-      _builder, 0 * ::capnp::POINTERS, ::kj::fwd<Params>(params)...);
+      _builder.getPointerField(0 * ::capnp::POINTERS),
+                               ::kj::fwd<Params>(params)...);
 }
 template <typename T>
 inline void Value::Builder::adoptObject(::capnp::Orphan<T>&& value) {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::OBJECT);
   ::capnp::_::PointerHelpers<T>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 template <typename T, typename... Params>
 inline ::capnp::Orphan<T> Value::Builder::disownObject(Params&&... params) {
   KJ_IREQUIRE(which() == Value::OBJECT,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers<T>::disown(
-      _builder, 0 * ::capnp::POINTERS, ::kj::fwd<Params>(params)...);
+      _builder.getPointerField(0 * ::capnp::POINTERS),
+                               ::kj::fwd<Params>(params)...);
 }
 
 inline bool Annotation::Reader::hasId() const {
@@ -6116,28 +6128,28 @@ inline bool Annotation::Builder::hasValue() {
 }
 inline  ::capnp::schema::Value::Reader Annotation::Reader::getValue() const {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::schema::Value::Builder Annotation::Builder::getValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 inline void Annotation::Builder::setValue( ::capnp::schema::Value::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Value>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::schema::Value::Builder Annotation::Builder::initValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::init(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 inline void Annotation::Builder::adoptValue(
     ::capnp::Orphan< ::capnp::schema::Value>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Value>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::schema::Value> Annotation::Builder::disownValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::disown(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline bool CodeGeneratorRequest::Reader::hasNodes() const {
@@ -6148,28 +6160,28 @@ inline bool CodeGeneratorRequest::Builder::hasNodes() {
 }
 inline  ::capnp::List< ::capnp::schema::Node>::Reader CodeGeneratorRequest::Reader::getNodes() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node>>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::schema::Node>::Builder CodeGeneratorRequest::Builder::getNodes() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node>>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 inline void CodeGeneratorRequest::Builder::setNodes( ::capnp::List< ::capnp::schema::Node>::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node>>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::schema::Node>::Builder CodeGeneratorRequest::Builder::initNodes(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node>>::init(
-      _builder, 0 * ::capnp::POINTERS, size);
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
 }
 inline void CodeGeneratorRequest::Builder::adoptNodes(
     ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node>>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node>>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node>> CodeGeneratorRequest::Builder::disownNodes() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node>>::disown(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline bool CodeGeneratorRequest::Reader::hasRequestedFiles() const {
@@ -6180,28 +6192,28 @@ inline bool CodeGeneratorRequest::Builder::hasRequestedFiles() {
 }
 inline  ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>::Reader CodeGeneratorRequest::Reader::getRequestedFiles() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>>::get(
-      _reader, 1 * ::capnp::POINTERS);
+      _reader.getPointerField(1 * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>::Builder CodeGeneratorRequest::Builder::getRequestedFiles() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>>::get(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 inline void CodeGeneratorRequest::Builder::setRequestedFiles( ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>>::set(
-      _builder, 1 * ::capnp::POINTERS, value);
+      _builder.getPointerField(1 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>::Builder CodeGeneratorRequest::Builder::initRequestedFiles(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>>::init(
-      _builder, 1 * ::capnp::POINTERS, size);
+      _builder.getPointerField(1 * ::capnp::POINTERS), size);
 }
 inline void CodeGeneratorRequest::Builder::adoptRequestedFiles(
     ::capnp::Orphan< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>>::adopt(
-      _builder, 1 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(1 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>> CodeGeneratorRequest::Builder::disownRequestedFiles() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile>>::disown(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
 inline bool CodeGeneratorRequest::RequestedFile::Reader::hasId() const {
@@ -6233,28 +6245,28 @@ inline bool CodeGeneratorRequest::RequestedFile::Builder::hasFilename() {
 }
 inline  ::capnp::Text::Reader CodeGeneratorRequest::RequestedFile::Reader::getFilename() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder CodeGeneratorRequest::RequestedFile::Builder::getFilename() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 inline void CodeGeneratorRequest::RequestedFile::Builder::setFilename( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder CodeGeneratorRequest::RequestedFile::Builder::initFilename(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder, 0 * ::capnp::POINTERS, size);
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
 }
 inline void CodeGeneratorRequest::RequestedFile::Builder::adoptFilename(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> CodeGeneratorRequest::RequestedFile::Builder::disownFilename() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline bool CodeGeneratorRequest::RequestedFile::Reader::hasImports() const {
@@ -6265,28 +6277,28 @@ inline bool CodeGeneratorRequest::RequestedFile::Builder::hasImports() {
 }
 inline  ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile::Import>::Reader CodeGeneratorRequest::RequestedFile::Reader::getImports() const {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile::Import>>::get(
-      _reader, 1 * ::capnp::POINTERS);
+      _reader.getPointerField(1 * ::capnp::POINTERS));
 }
 inline  ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile::Import>::Builder CodeGeneratorRequest::RequestedFile::Builder::getImports() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile::Import>>::get(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 inline void CodeGeneratorRequest::RequestedFile::Builder::setImports( ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile::Import>::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile::Import>>::set(
-      _builder, 1 * ::capnp::POINTERS, value);
+      _builder.getPointerField(1 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile::Import>::Builder CodeGeneratorRequest::RequestedFile::Builder::initImports(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile::Import>>::init(
-      _builder, 1 * ::capnp::POINTERS, size);
+      _builder.getPointerField(1 * ::capnp::POINTERS), size);
 }
 inline void CodeGeneratorRequest::RequestedFile::Builder::adoptImports(
     ::capnp::Orphan< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile::Import>>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile::Import>>::adopt(
-      _builder, 1 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(1 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile::Import>> CodeGeneratorRequest::RequestedFile::Builder::disownImports() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::RequestedFile::Import>>::disown(
-      _builder, 1 * ::capnp::POINTERS);
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
 inline bool CodeGeneratorRequest::RequestedFile::Import::Reader::hasId() const {
@@ -6318,28 +6330,28 @@ inline bool CodeGeneratorRequest::RequestedFile::Import::Builder::hasName() {
 }
 inline  ::capnp::Text::Reader CodeGeneratorRequest::RequestedFile::Import::Reader::getName() const {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _reader, 0 * ::capnp::POINTERS);
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
 inline  ::capnp::Text::Builder CodeGeneratorRequest::RequestedFile::Import::Builder::getName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 inline void CodeGeneratorRequest::RequestedFile::Import::Builder::setName( ::capnp::Text::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::set(
-      _builder, 0 * ::capnp::POINTERS, value);
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
 inline  ::capnp::Text::Builder CodeGeneratorRequest::RequestedFile::Import::Builder::initName(unsigned int size) {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
-      _builder, 0 * ::capnp::POINTERS, size);
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
 }
 inline void CodeGeneratorRequest::RequestedFile::Import::Builder::adoptName(
     ::capnp::Orphan< ::capnp::Text>&& value) {
   ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
-      _builder, 0 * ::capnp::POINTERS, kj::mv(value));
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
 inline ::capnp::Orphan< ::capnp::Text> CodeGeneratorRequest::RequestedFile::Import::Builder::disownName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
-      _builder, 0 * ::capnp::POINTERS);
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 }  // namespace
