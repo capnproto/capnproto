@@ -809,29 +809,14 @@ private:
         kj::strTree(
             kj::mv(unionDiscrim.readerIsDecl),
             "  inline bool has", titleCase, "() const;\n"
-            "  template <typename T>\n"
-            "  inline typename T::Reader get", titleCase, "() const;\n"
-            "  template <typename T, typename Param>\n"
-            "  inline typename T::Reader get", titleCase, "(Param&& param) const;\n"
+            "  inline ::capnp::ObjectPointer::Reader get", titleCase, "() const;\n"
             "\n"),
 
         kj::strTree(
             kj::mv(unionDiscrim.builderIsDecl),
             "  inline bool has", titleCase, "();\n"
-            "  template <typename T>\n"
-            "  inline typename T::Builder get", titleCase, "();\n"
-            "  template <typename T, typename Param>\n"
-            "  inline typename T::Builder get", titleCase, "(Param&& param);\n"
-            "  template <typename T>\n"
-            "  inline void set", titleCase, "(typename T::Reader value);\n"
-            "  template <typename T, typename U>"
-            "  inline void set", titleCase, "(std::initializer_list<U> value);\n"
-            "  template <typename T, typename... Params>\n"
-            "  inline typename T::Builder init", titleCase, "(Params&&... params);\n"
-            "  template <typename T>\n"
-            "  inline void adopt", titleCase, "(::capnp::Orphan<T>&& value);\n"
-            "  template <typename T, typename... Params>\n"
-            "  inline ::capnp::Orphan<T> disown", titleCase, "(Params&&... params);\n"
+            "  inline ::capnp::ObjectPointer::Builder get", titleCase, "();\n"
+            "  inline ::capnp::ObjectPointer::Builder init", titleCase, "();\n"
             "\n"),
 
         kj::strTree(
@@ -844,63 +829,22 @@ private:
             unionDiscrim.has,
             "  return !_builder.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
             "}\n"
-            "template <typename T>\n"
-            "inline typename T::Reader ", scope, "Reader::get", titleCase, "() const {\n",
+            "inline ::capnp::ObjectPointer::Reader ", scope, "Reader::get", titleCase, "() const {\n",
             unionDiscrim.check,
-            "  return ::capnp::_::PointerHelpers<T>::get(\n"
+            "  return ::capnp::ObjectPointer::Reader(\n"
             "      _reader.getPointerField(", offset, " * ::capnp::POINTERS));\n"
             "}\n"
-            "template <typename T>\n"
-            "inline typename T::Builder ", scope, "Builder::get", titleCase, "() {\n",
+            "inline ::capnp::ObjectPointer::Builder ", scope, "Builder::get", titleCase, "() {\n",
             unionDiscrim.check,
-            "  return ::capnp::_::PointerHelpers<T>::get(\n"
+            "  return ::capnp::ObjectPointer::Builder(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
             "}\n"
-            "template <typename T, typename Param>\n"
-            "inline typename T::Reader ", scope, "Reader::get", titleCase, "(Param&& param) const {\n",
-            unionDiscrim.check,
-            "  return ::capnp::_::PointerHelpers<T>::getDynamic(\n"
-            "      _reader.getPointerField(", offset, " * ::capnp::POINTERS),\n"
-            "                              ::kj::fwd<Param>(param));\n"
-            "}\n"
-            "template <typename T, typename Param>\n"
-            "inline typename T::Builder ", scope, "Builder::get", titleCase, "(Param&& param) {\n",
-            unionDiscrim.check,
-            "  return ::capnp::_::PointerHelpers<T>::getDynamic(\n"
-            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS),\n"
-            "                               ::kj::fwd<Param>(param));\n"
-            "}\n"
-            "template <typename T>\n"
-            "inline void ", scope, "Builder::set", titleCase, "(typename T::Reader value) {\n",
+            "inline ::capnp::ObjectPointer::Builder ", scope, "Builder::init", titleCase, "() {\n",
             unionDiscrim.set,
-            "  ::capnp::_::PointerHelpers<T>::set(\n"
-            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), value);\n"
-            "}\n"
-            "template <typename T, typename U>"
-            "inline void ", scope, "Builder::set", titleCase, "(std::initializer_list<U> value) {\n",
-            unionDiscrim.set,
-            "  ::capnp::_::PointerHelpers<T>::set(\n"
-            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), value);\n"
-            "}\n"
-            "template <typename T, typename... Params>\n"
-            "inline typename T::Builder ", scope, "Builder::init", titleCase, "(Params&&... params) {\n",
-            unionDiscrim.set,
-            "  return ::capnp::_::PointerHelpers<T>::init(\n"
-            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS),\n"
-            "                               ::kj::fwd<Params>(params)...);\n"
-            "}\n"
-            "template <typename T>\n"
-            "inline void ", scope, "Builder::adopt", titleCase, "(::capnp::Orphan<T>&& value) {\n",
-            unionDiscrim.set,
-            "  ::capnp::_::PointerHelpers<T>::adopt(\n"
-            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), kj::mv(value));\n"
-            "}\n"
-            "template <typename T, typename... Params>\n"
-            "inline ::capnp::Orphan<T> ", scope, "Builder::disown", titleCase, "(Params&&... params) {\n",
-            unionDiscrim.check,
-            "  return ::capnp::_::PointerHelpers<T>::disown(\n"
-            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS),\n"
-            "                               ::kj::fwd<Params>(params)...);\n"
+            "  auto result = ::capnp::ObjectPointer::Builder(\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
+            "  result.clear();\n"
+            "  return result;\n"
             "}\n"
             "\n")
       };

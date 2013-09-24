@@ -151,16 +151,16 @@ TEST(DynamicApi, GenericObjects) {
   MallocMessageBuilder builder;
   auto root = builder.getRoot<test::TestObject>();
 
-  initDynamicTestMessage(root.initObjectField<DynamicStruct>(Schema::from<TestAllTypes>()));
-  checkTestMessage(root.asReader().getObjectField<TestAllTypes>());
+  initDynamicTestMessage(root.getObjectField().initAs<DynamicStruct>(Schema::from<TestAllTypes>()));
+  checkTestMessage(root.asReader().getObjectField().getAs<TestAllTypes>());
 
   checkDynamicTestMessage(
-      root.asReader().getObjectField<DynamicStruct>(Schema::from<TestAllTypes>()));
-  checkDynamicTestMessage(root.getObjectField<DynamicStruct>(Schema::from<TestAllTypes>()));
+      root.asReader().getObjectField().getAs<DynamicStruct>(Schema::from<TestAllTypes>()));
+  checkDynamicTestMessage(root.getObjectField().getAs<DynamicStruct>(Schema::from<TestAllTypes>()));
 
   {
     {
-      auto list = root.initObjectField<DynamicList>(Schema::from<List<uint32_t>>(), 4);
+      auto list = root.getObjectField().initAs<DynamicList>(Schema::from<List<uint32_t>>(), 4);
       list.set(0, 123);
       list.set(1, 456);
       list.set(2, 789);
@@ -168,7 +168,7 @@ TEST(DynamicApi, GenericObjects) {
     }
 
     {
-      auto list = root.asReader().getObjectField<List<uint32_t>>();
+      auto list = root.asReader().getObjectField().getAs<List<uint32_t>>();
       ASSERT_EQ(4u, list.size());
       EXPECT_EQ(123u, list[0]);
       EXPECT_EQ(456u, list[1]);
@@ -176,10 +176,10 @@ TEST(DynamicApi, GenericObjects) {
       EXPECT_EQ(123456789u, list[3]);
     }
 
-    checkList<uint32_t>(root.asReader().getObjectField<DynamicList>(Schema::from<List<uint32_t>>()),
-                        {123u, 456u, 789u, 123456789u});
-    checkList<uint32_t>(root.getObjectField<DynamicList>(Schema::from<List<uint32_t>>()),
-                        {123u, 456u, 789u, 123456789u});
+    checkList<uint32_t>(root.asReader().getObjectField().getAs<DynamicList>(
+        Schema::from<List<uint32_t>>()), {123u, 456u, 789u, 123456789u});
+    checkList<uint32_t>(root.getObjectField().getAs<DynamicList>(
+        Schema::from<List<uint32_t>>()), {123u, 456u, 789u, 123456789u});
   }
 }
 
@@ -188,7 +188,7 @@ TEST(DynamicApi, DynamicGenericObjects) {
   auto root = builder.getRoot<DynamicStruct>(Schema::from<test::TestObject>());
 
   initDynamicTestMessage(root.initObject("objectField", Schema::from<TestAllTypes>()));
-  checkTestMessage(root.asReader().as<test::TestObject>().getObjectField<TestAllTypes>());
+  checkTestMessage(root.asReader().as<test::TestObject>().getObjectField().getAs<TestAllTypes>());
 
   checkDynamicTestMessage(
       root.asReader().get("objectField").as<DynamicObject>().as(Schema::from<TestAllTypes>()));
@@ -209,7 +209,7 @@ TEST(DynamicApi, DynamicGenericObjects) {
     }
 
     {
-      auto list = root.asReader().as<test::TestObject>().getObjectField<List<uint32_t>>();
+      auto list = root.asReader().as<test::TestObject>().getObjectField().getAs<List<uint32_t>>();
       ASSERT_EQ(4u, list.size());
       EXPECT_EQ(123u, list[0]);
       EXPECT_EQ(456u, list[1]);

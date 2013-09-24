@@ -38,6 +38,7 @@
 #include "schema.h"
 #include "layout.h"
 #include "message.h"
+#include "object.h"
 
 namespace capnp {
 
@@ -842,6 +843,7 @@ private:
   friend struct _::PointerHelpers;
   friend struct DynamicStruct;
   friend struct DynamicList;
+  friend struct ObjectPointer;
   friend class Orphanage;
 };
 
@@ -997,6 +999,49 @@ struct PointerHelpers<DynamicObject, Kind::UNKNOWN> {
 };
 
 }  // namespace _ (private)
+
+template <typename T>
+inline typename T::Reader ObjectPointer::Reader::getAs(StructSchema schema) {
+  return _::PointerHelpers<T>::getDynamic(reader, schema);
+}
+template <typename T>
+inline typename T::Reader ObjectPointer::Reader::getAs(ListSchema schema) {
+  return _::PointerHelpers<T>::getDynamic(reader, schema);
+}
+template <typename T>
+inline typename T::Builder ObjectPointer::Builder::getAs(StructSchema schema) {
+  return _::PointerHelpers<T>::getDynamic(builder, schema);
+}
+template <typename T>
+inline typename T::Builder ObjectPointer::Builder::getAs(ListSchema schema) {
+  return _::PointerHelpers<T>::getDynamic(builder, schema);
+}
+template <typename T>
+inline typename T::Builder ObjectPointer::Builder::initAs(StructSchema schema) {
+  return _::PointerHelpers<T>::init(builder, schema);
+}
+template <typename T>
+inline typename T::Builder ObjectPointer::Builder::initAs(ListSchema schema, uint elementCount) {
+  return _::PointerHelpers<T>::init(builder, schema, elementCount);
+}
+template <>
+inline void ObjectPointer::Builder::setAs<DynamicStruct>(DynamicStruct::Reader value) {
+  return _::PointerHelpers<DynamicStruct>::set(builder, value);
+}
+template <>
+inline void ObjectPointer::Builder::setAs<DynamicList>(DynamicList::Reader value) {
+  return _::PointerHelpers<DynamicList>::set(builder, value);
+}
+template <>
+void ObjectPointer::Builder::adopt<DynamicValue>(Orphan<DynamicValue>&& orphan);
+template <typename T>
+inline Orphan<T> ObjectPointer::Builder::disownAs(StructSchema schema) {
+  return _::PointerHelpers<T>::disown(builder, schema);
+}
+template <typename T>
+inline Orphan<T> ObjectPointer::Builder::disownAs(ListSchema schema) {
+  return _::PointerHelpers<T>::disown(builder, schema);
+}
 
 // =======================================================================================
 // Inline implementation details.

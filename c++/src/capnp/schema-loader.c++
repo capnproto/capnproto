@@ -1017,10 +1017,10 @@ private:
         case schema::Type::ENUM: value.setEnum(0); break;
         case schema::Type::TEXT: value.adoptText(Orphan<Text>()); break;
         case schema::Type::DATA: value.adoptData(Orphan<Data>()); break;
-        case schema::Type::LIST: value.adoptList(Orphan<Data>()); break;
-        case schema::Type::STRUCT: value.adoptStruct(Orphan<Data>()); break;
+        case schema::Type::LIST: value.initList(); break;
+        case schema::Type::STRUCT: value.initStruct(); break;
         case schema::Type::INTERFACE: value.setInterface(); break;
-        case schema::Type::OBJECT: value.adoptObject(Orphan<Data>()); break;
+        case schema::Type::OBJECT: value.initObject(); break;
       }
     }
 

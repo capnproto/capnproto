@@ -1392,13 +1392,13 @@ void NodeTranslator::compileDefaultDefaultValue(
     case schema::Type::ENUM: target.setEnum(0); break;
     case schema::Type::INTERFACE: target.setInterface(); break;
 
-    // Bit of a hack:  For "Object" types, we adopt a null orphan, which sets the field to null.
+    // Bit of a hack:  For Text/Data, we adopt a null orphan, which sets the field to null.
     // TODO(cleanup):  Create a cleaner way to do this.
     case schema::Type::TEXT: target.adoptText(Orphan<Text>()); break;
     case schema::Type::DATA: target.adoptData(Orphan<Data>()); break;
-    case schema::Type::STRUCT: target.adoptStruct(Orphan<Data>()); break;
-    case schema::Type::LIST: target.adoptList(Orphan<Data>()); break;
-    case schema::Type::OBJECT: target.adoptObject(Orphan<Data>()); break;
+    case schema::Type::STRUCT: target.initStruct(); break;
+    case schema::Type::LIST: target.initList(); break;
+    case schema::Type::OBJECT: target.initObject(); break;
   }
 }
 

@@ -256,7 +256,7 @@ private:
         return kj::strTree(DynamicValue::Reader(value.getData()));
       case schema::Value::LIST: {
         KJ_REQUIRE(type.isList(), "type/value mismatch");
-        auto listValue = value.getList<DynamicList>(
+        auto listValue = value.getList().getAs<DynamicList>(
             ListSchema::of(type.getList().getElementType(), scope));
         return kj::strTree(listValue);
       }
@@ -270,7 +270,7 @@ private:
       }
       case schema::Value::STRUCT: {
         KJ_REQUIRE(type.isStruct(), "type/value mismatch");
-        auto structValue = value.getStruct<DynamicStruct>(
+        auto structValue = value.getStruct().getAs<DynamicStruct>(
             scope.getDependency(type.getStruct().getTypeId()).asStruct());
         return kj::strTree(structValue);
       }

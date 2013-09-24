@@ -30,6 +30,7 @@
 #include "list.h"
 #include "orphan.h"
 #include "pointer-helpers.h"
+#include "object.h"
 #include <kj/string.h>
 #include <kj/string-tree.h>
 

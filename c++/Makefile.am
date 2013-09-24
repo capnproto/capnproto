@@ -151,6 +151,8 @@ includecapnp_HEADERS =                                         \
   src/capnp/pretty-print.h                                     \
   src/capnp/serialize.h                                        \
   src/capnp/serialize-packed.h                                 \
+  src/capnp/pointer-helpers.h                                  \
+  src/capnp/object.h                                           \
   src/capnp/generated-header-support.h
 
 lib_LTLIBRARIES = libkj.la libcapnp.la libcapnpc.la
@@ -313,6 +315,7 @@ capnp_test_SOURCES =                                           \
   src/capnp/stringify-test.c++                                 \
   src/capnp/encoding-test.c++                                  \
   src/capnp/orphan-test.c++                                    \
+  src/capnp/object-test.c++                                    \
   src/capnp/serialize-test.c++                                 \
   src/capnp/serialize-packed-test.c++                          \
   src/capnp/test-util.c++                                      \

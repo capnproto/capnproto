@@ -254,20 +254,20 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
               ListSchema::of(elementType, field.getContainingStruct()),
               reader.getPointerField(slot.getOffset() * POINTERS)
                     .getList(elementSizeFor(elementType.which()),
-                             dval.getList<_::UncheckedMessage>()));
+                             dval.getList().getAs<_::UncheckedMessage>()));
         }
 
         case schema::Type::STRUCT: {
           return DynamicStruct::Reader(
               field.getContainingStruct().getDependency(type.getStruct().getTypeId()).asStruct(),
               reader.getPointerField(slot.getOffset() * POINTERS)
-                    .getStruct(dval.getStruct<_::UncheckedMessage>()));
+                    .getStruct(dval.getStruct().getAs<_::UncheckedMessage>()));
         }
 
         case schema::Type::OBJECT: {
           return DynamicObject::Reader(
               reader.getPointerField(slot.getOffset() * POINTERS)
-                    .getObject(dval.getObject<_::UncheckedMessage>()));
+                    .getObject(dval.getObject().getAs<_::UncheckedMessage>()));
         }
 
         case schema::Type::INTERFACE:
@@ -348,12 +348,12 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
             return DynamicList::Builder(listType,
                 builder.getPointerField(slot.getOffset() * POINTERS)
                        .getStructList(structSizeFromSchema(listType.getStructElementType()),
-                                      dval.getList<_::UncheckedMessage>()));
+                                      dval.getList().getAs<_::UncheckedMessage>()));
           } else {
             return DynamicList::Builder(listType,
                 builder.getPointerField(slot.getOffset() * POINTERS)
                        .getList(elementSizeFor(listType.whichElementType()),
-                                dval.getList<_::UncheckedMessage>()));
+                                dval.getList().getAs<_::UncheckedMessage>()));
           }
         }
 
@@ -363,13 +363,13 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
           return DynamicStruct::Builder(structSchema,
               builder.getPointerField(slot.getOffset() * POINTERS)
                      .getStruct(structSizeFromSchema(structSchema),
-                                dval.getStruct<_::UncheckedMessage>()));
+                                dval.getStruct().getAs<_::UncheckedMessage>()));
         }
 
         case schema::Type::OBJECT: {
           return DynamicObject::Builder(
               builder.getPointerField(slot.getOffset() * POINTERS)
-                     .getObject(dval.getObject<_::UncheckedMessage>()));
+                     .getObject(dval.getObject().getAs<_::UncheckedMessage>()));
         }
 
         case schema::Type::INTERFACE:
@@ -1470,17 +1470,17 @@ DynamicValue::Reader::Reader(ConstSchema constant) {
       break;
 
     case schema::Type::STRUCT:
-      *this = value.getStruct<DynamicStruct>(
+      *this = value.getStruct().getAs<DynamicStruct>(
           constant.getDependency(typeSchema.getStruct().getTypeId()).asStruct());
       break;
 
     case schema::Type::LIST:
-      *this = value.getList<DynamicList>(
+      *this = value.getList().getAs<DynamicList>(
           ListSchema::of(typeSchema.getList().getElementType(), constant));
       break;
 
     case schema::Type::OBJECT:
-      *this = value.getObject<DynamicObject>();
+      *this = value.getObject().getAs<DynamicObject>();
       break;
 
     case schema::Type::INTERFACE:
@@ -1771,6 +1771,29 @@ void PointerHelpers<DynamicObject, Kind::UNKNOWN>::set(
 }
 
 }  // namespace _ (private)
+
+template <>
+void ObjectPointer::Builder::adopt<DynamicValue>(Orphan<DynamicValue>&& orphan) {
+  switch (orphan.getType()) {
+    case DynamicValue::UNKNOWN:
+    case DynamicValue::VOID:
+    case DynamicValue::BOOL:
+    case DynamicValue::INT:
+    case DynamicValue::UINT:
+    case DynamicValue::FLOAT:
+    case DynamicValue::ENUM:
+      KJ_FAIL_REQUIRE("ObjectPointer cannot adopt primitive (non-object) value.");
+
+    case DynamicValue::STRUCT:
+    case DynamicValue::LIST:
+    case DynamicValue::TEXT:
+    case DynamicValue::DATA:
+    case DynamicValue::INTERFACE:
+    case DynamicValue::OBJECT:
+      builder.adopt(kj::mv(orphan.builder));
+      break;
+  }
+}
 
 // -------------------------------------------------------------------
 

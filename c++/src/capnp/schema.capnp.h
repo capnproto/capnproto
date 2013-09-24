@@ -2214,10 +2214,7 @@ public:
 
   inline bool isList() const;
   inline bool hasList() const;
-  template <typename T>
-  inline typename T::Reader getList() const;
-  template <typename T, typename Param>
-  inline typename T::Reader getList(Param&& param) const;
+  inline ::capnp::ObjectPointer::Reader getList() const;
 
   inline bool isEnum() const;
   inline bool hasEnum() const;
@@ -2225,10 +2222,7 @@ public:
 
   inline bool isStruct() const;
   inline bool hasStruct() const;
-  template <typename T>
-  inline typename T::Reader getStruct() const;
-  template <typename T, typename Param>
-  inline typename T::Reader getStruct(Param&& param) const;
+  inline ::capnp::ObjectPointer::Reader getStruct() const;
 
   inline bool isInterface() const;
   inline bool hasInterface() const;
@@ -2236,10 +2230,7 @@ public:
 
   inline bool isObject() const;
   inline bool hasObject() const;
-  template <typename T>
-  inline typename T::Reader getObject() const;
-  template <typename T, typename Param>
-  inline typename T::Reader getObject(Param&& param) const;
+  inline ::capnp::ObjectPointer::Reader getObject() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -2350,19 +2341,8 @@ public:
 
   inline bool isList();
   inline bool hasList();
-  template <typename T>
-  inline typename T::Builder getList();
-  template <typename T, typename Param>
-  inline typename T::Builder getList(Param&& param);
-  template <typename T>
-  inline void setList(typename T::Reader value);
-  template <typename T, typename U>  inline void setList(std::initializer_list<U> value);
-  template <typename T, typename... Params>
-  inline typename T::Builder initList(Params&&... params);
-  template <typename T>
-  inline void adoptList(::capnp::Orphan<T>&& value);
-  template <typename T, typename... Params>
-  inline ::capnp::Orphan<T> disownList(Params&&... params);
+  inline ::capnp::ObjectPointer::Builder getList();
+  inline ::capnp::ObjectPointer::Builder initList();
 
   inline bool isEnum();
   inline bool hasEnum();
@@ -2371,19 +2351,8 @@ public:
 
   inline bool isStruct();
   inline bool hasStruct();
-  template <typename T>
-  inline typename T::Builder getStruct();
-  template <typename T, typename Param>
-  inline typename T::Builder getStruct(Param&& param);
-  template <typename T>
-  inline void setStruct(typename T::Reader value);
-  template <typename T, typename U>  inline void setStruct(std::initializer_list<U> value);
-  template <typename T, typename... Params>
-  inline typename T::Builder initStruct(Params&&... params);
-  template <typename T>
-  inline void adoptStruct(::capnp::Orphan<T>&& value);
-  template <typename T, typename... Params>
-  inline ::capnp::Orphan<T> disownStruct(Params&&... params);
+  inline ::capnp::ObjectPointer::Builder getStruct();
+  inline ::capnp::ObjectPointer::Builder initStruct();
 
   inline bool isInterface();
   inline bool hasInterface();
@@ -2392,19 +2361,8 @@ public:
 
   inline bool isObject();
   inline bool hasObject();
-  template <typename T>
-  inline typename T::Builder getObject();
-  template <typename T, typename Param>
-  inline typename T::Builder getObject(Param&& param);
-  template <typename T>
-  inline void setObject(typename T::Reader value);
-  template <typename T, typename U>  inline void setObject(std::initializer_list<U> value);
-  template <typename T, typename... Params>
-  inline typename T::Builder initObject(Params&&... params);
-  template <typename T>
-  inline void adoptObject(::capnp::Orphan<T>&& value);
-  template <typename T, typename... Params>
-  inline ::capnp::Orphan<T> disownObject(Params&&... params);
+  inline ::capnp::ObjectPointer::Builder getObject();
+  inline ::capnp::ObjectPointer::Builder initObject();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -5800,71 +5758,25 @@ inline bool Value::Builder::hasList() {
   if (which() != Value::LIST) return false;
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-template <typename T>
-inline typename T::Reader Value::Reader::getList() const {
+inline ::capnp::ObjectPointer::Reader Value::Reader::getList() const {
   KJ_IREQUIRE(which() == Value::LIST,
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers<T>::get(
+  return ::capnp::ObjectPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-template <typename T>
-inline typename T::Builder Value::Builder::getList() {
+inline ::capnp::ObjectPointer::Builder Value::Builder::getList() {
   KJ_IREQUIRE(which() == Value::LIST,
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers<T>::get(
+  return ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-template <typename T, typename Param>
-inline typename T::Reader Value::Reader::getList(Param&& param) const {
-  KJ_IREQUIRE(which() == Value::LIST,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers<T>::getDynamic(
-      _reader.getPointerField(0 * ::capnp::POINTERS),
-                              ::kj::fwd<Param>(param));
-}
-template <typename T, typename Param>
-inline typename T::Builder Value::Builder::getList(Param&& param) {
-  KJ_IREQUIRE(which() == Value::LIST,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers<T>::getDynamic(
-      _builder.getPointerField(0 * ::capnp::POINTERS),
-                               ::kj::fwd<Param>(param));
-}
-template <typename T>
-inline void Value::Builder::setList(typename T::Reader value) {
+inline ::capnp::ObjectPointer::Builder Value::Builder::initList() {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::LIST);
-  ::capnp::_::PointerHelpers<T>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
-}
-template <typename T, typename U>inline void Value::Builder::setList(std::initializer_list<U> value) {
-  _builder.setDataField<Value::Which>(
-      0 * ::capnp::ELEMENTS, Value::LIST);
-  ::capnp::_::PointerHelpers<T>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
-}
-template <typename T, typename... Params>
-inline typename T::Builder Value::Builder::initList(Params&&... params) {
-  _builder.setDataField<Value::Which>(
-      0 * ::capnp::ELEMENTS, Value::LIST);
-  return ::capnp::_::PointerHelpers<T>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS),
-                               ::kj::fwd<Params>(params)...);
-}
-template <typename T>
-inline void Value::Builder::adoptList(::capnp::Orphan<T>&& value) {
-  _builder.setDataField<Value::Which>(
-      0 * ::capnp::ELEMENTS, Value::LIST);
-  ::capnp::_::PointerHelpers<T>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
-}
-template <typename T, typename... Params>
-inline ::capnp::Orphan<T> Value::Builder::disownList(Params&&... params) {
-  KJ_IREQUIRE(which() == Value::LIST,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers<T>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS),
-                               ::kj::fwd<Params>(params)...);
+  auto result = ::capnp::ObjectPointer::Builder(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+  result.clear();
+  return result;
 }
 
 inline bool Value::Reader::isEnum() const {
@@ -5916,71 +5828,25 @@ inline bool Value::Builder::hasStruct() {
   if (which() != Value::STRUCT) return false;
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-template <typename T>
-inline typename T::Reader Value::Reader::getStruct() const {
+inline ::capnp::ObjectPointer::Reader Value::Reader::getStruct() const {
   KJ_IREQUIRE(which() == Value::STRUCT,
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers<T>::get(
+  return ::capnp::ObjectPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-template <typename T>
-inline typename T::Builder Value::Builder::getStruct() {
+inline ::capnp::ObjectPointer::Builder Value::Builder::getStruct() {
   KJ_IREQUIRE(which() == Value::STRUCT,
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers<T>::get(
+  return ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-template <typename T, typename Param>
-inline typename T::Reader Value::Reader::getStruct(Param&& param) const {
-  KJ_IREQUIRE(which() == Value::STRUCT,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers<T>::getDynamic(
-      _reader.getPointerField(0 * ::capnp::POINTERS),
-                              ::kj::fwd<Param>(param));
-}
-template <typename T, typename Param>
-inline typename T::Builder Value::Builder::getStruct(Param&& param) {
-  KJ_IREQUIRE(which() == Value::STRUCT,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers<T>::getDynamic(
-      _builder.getPointerField(0 * ::capnp::POINTERS),
-                               ::kj::fwd<Param>(param));
-}
-template <typename T>
-inline void Value::Builder::setStruct(typename T::Reader value) {
+inline ::capnp::ObjectPointer::Builder Value::Builder::initStruct() {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::STRUCT);
-  ::capnp::_::PointerHelpers<T>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
-}
-template <typename T, typename U>inline void Value::Builder::setStruct(std::initializer_list<U> value) {
-  _builder.setDataField<Value::Which>(
-      0 * ::capnp::ELEMENTS, Value::STRUCT);
-  ::capnp::_::PointerHelpers<T>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
-}
-template <typename T, typename... Params>
-inline typename T::Builder Value::Builder::initStruct(Params&&... params) {
-  _builder.setDataField<Value::Which>(
-      0 * ::capnp::ELEMENTS, Value::STRUCT);
-  return ::capnp::_::PointerHelpers<T>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS),
-                               ::kj::fwd<Params>(params)...);
-}
-template <typename T>
-inline void Value::Builder::adoptStruct(::capnp::Orphan<T>&& value) {
-  _builder.setDataField<Value::Which>(
-      0 * ::capnp::ELEMENTS, Value::STRUCT);
-  ::capnp::_::PointerHelpers<T>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
-}
-template <typename T, typename... Params>
-inline ::capnp::Orphan<T> Value::Builder::disownStruct(Params&&... params) {
-  KJ_IREQUIRE(which() == Value::STRUCT,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers<T>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS),
-                               ::kj::fwd<Params>(params)...);
+  auto result = ::capnp::ObjectPointer::Builder(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+  result.clear();
+  return result;
 }
 
 inline bool Value::Reader::isInterface() const {
@@ -6032,71 +5898,25 @@ inline bool Value::Builder::hasObject() {
   if (which() != Value::OBJECT) return false;
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-template <typename T>
-inline typename T::Reader Value::Reader::getObject() const {
+inline ::capnp::ObjectPointer::Reader Value::Reader::getObject() const {
   KJ_IREQUIRE(which() == Value::OBJECT,
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers<T>::get(
+  return ::capnp::ObjectPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-template <typename T>
-inline typename T::Builder Value::Builder::getObject() {
+inline ::capnp::ObjectPointer::Builder Value::Builder::getObject() {
   KJ_IREQUIRE(which() == Value::OBJECT,
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers<T>::get(
+  return ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-template <typename T, typename Param>
-inline typename T::Reader Value::Reader::getObject(Param&& param) const {
-  KJ_IREQUIRE(which() == Value::OBJECT,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers<T>::getDynamic(
-      _reader.getPointerField(0 * ::capnp::POINTERS),
-                              ::kj::fwd<Param>(param));
-}
-template <typename T, typename Param>
-inline typename T::Builder Value::Builder::getObject(Param&& param) {
-  KJ_IREQUIRE(which() == Value::OBJECT,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers<T>::getDynamic(
-      _builder.getPointerField(0 * ::capnp::POINTERS),
-                               ::kj::fwd<Param>(param));
-}
-template <typename T>
-inline void Value::Builder::setObject(typename T::Reader value) {
+inline ::capnp::ObjectPointer::Builder Value::Builder::initObject() {
   _builder.setDataField<Value::Which>(
       0 * ::capnp::ELEMENTS, Value::OBJECT);
-  ::capnp::_::PointerHelpers<T>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
-}
-template <typename T, typename U>inline void Value::Builder::setObject(std::initializer_list<U> value) {
-  _builder.setDataField<Value::Which>(
-      0 * ::capnp::ELEMENTS, Value::OBJECT);
-  ::capnp::_::PointerHelpers<T>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
-}
-template <typename T, typename... Params>
-inline typename T::Builder Value::Builder::initObject(Params&&... params) {
-  _builder.setDataField<Value::Which>(
-      0 * ::capnp::ELEMENTS, Value::OBJECT);
-  return ::capnp::_::PointerHelpers<T>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS),
-                               ::kj::fwd<Params>(params)...);
-}
-template <typename T>
-inline void Value::Builder::adoptObject(::capnp::Orphan<T>&& value) {
-  _builder.setDataField<Value::Which>(
-      0 * ::capnp::ELEMENTS, Value::OBJECT);
-  ::capnp::_::PointerHelpers<T>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
-}
-template <typename T, typename... Params>
-inline ::capnp::Orphan<T> Value::Builder::disownObject(Params&&... params) {
-  KJ_IREQUIRE(which() == Value::OBJECT,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers<T>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS),
-                               ::kj::fwd<Params>(params)...);
+  auto result = ::capnp::ObjectPointer::Builder(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+  result.clear();
+  return result;
 }
 
 inline bool Annotation::Reader::hasId() const {

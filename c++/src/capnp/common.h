@@ -99,6 +99,10 @@ inline constexpr Kind kind() {
 template <typename T, Kind k = kind<T>()>
 struct List;
 
+template <typename T> struct ListElementType_;
+template <typename T> struct ListElementType_<List<T>> { typedef T Type; };
+template <typename T> using ListElementType = typename ListElementType_<T>::Type;
+
 namespace _ {  // private
 template <typename T, Kind k> struct Kind_<List<T, k>> { static constexpr Kind kind = Kind::LIST; };
 }  // namespace _ (private)
