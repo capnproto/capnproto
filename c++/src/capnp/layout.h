@@ -46,8 +46,6 @@ class StructReader;
 class ListBuilder;
 class ListReader;
 class OrphanBuilder;
-struct ObjectBuilder;
-struct ObjectReader;
 struct WirePointer;
 struct WireHelpers;
 class SegmentReader;
@@ -279,10 +277,9 @@ public:
   bool isNull();
 
   StructBuilder getStruct(StructSize size, const word* defaultValue);
-  ListBuilder getList(FieldSize elementSize, const word* defaultValue);
+  ListBuilder getList(FieldSize elementSize, const word* defaultValzue);
   ListBuilder getStructList(StructSize elementSize, const word* defaultValue);
   template <typename T> typename T::Builder getBlob(const void* defaultValue,ByteCount defaultSize);
-  ObjectBuilder getObject(const word* defaultValue);
   // Get methods:  Get the value.  If it is null, initialize it to a copy of the default value.
   // The default value is encoded as an "unchecked message" for structs, lists, and objects, or a
   // simple byte array for blobs.
@@ -297,7 +294,6 @@ public:
   void setStruct(const StructReader& value);
   void setList(const ListReader& value);
   template <typename T> void setBlob(typename T::Reader value);
-  void setObject(const ObjectReader& value);
   // Set methods:  Initialize the pointer to a newly-allocated copy of the given value, discarding
   // the existing object.
 
@@ -339,7 +335,6 @@ public:
   ListReader getList(FieldSize expectedElementSize, const word* defaultValue) const;
   template <typename T>
   typename T::Reader getBlob(const void* defaultValue, ByteCount defaultSize) const;
-  ObjectReader getObject(const word* defaultValue) const;
   // Get methods:  Get the value.  If it is null, return the default value instead.
   // The default value is encoded as an "unchecked message" for structs, lists, and objects, or a
   // simple byte array for blobs.
@@ -363,6 +358,7 @@ private:
   friend class StructReader;
   friend class ListReader;
   friend class PointerBuilder;
+  friend class OrphanBuilder;
 };
 
 // -------------------------------------------------------------------
@@ -666,65 +662,6 @@ private:
 
 // -------------------------------------------------------------------
 
-enum class ObjectKind {
-  NULL_POINTER,   // Object was read from a null pointer.
-  STRUCT,
-  LIST
-};
-
-struct ObjectBuilder {
-  // A reader for any kind of object.
-
-  ObjectKind kind;
-
-  union {
-    StructBuilder structBuilder;
-    ListBuilder listBuilder;
-  };
-
-  ObjectBuilder(): kind(ObjectKind::NULL_POINTER), structBuilder() {}
-  ObjectBuilder(StructBuilder structBuilder)
-      : kind(ObjectKind::STRUCT), structBuilder(structBuilder) {}
-  ObjectBuilder(ListBuilder listBuilder)
-      : kind(ObjectKind::LIST), listBuilder(listBuilder) {}
-
-  inline word* getLocation() {
-    switch (kind) {
-      case ObjectKind::NULL_POINTER: return nullptr;
-      case ObjectKind::STRUCT: return structBuilder.getLocation();
-      case ObjectKind::LIST: return listBuilder.getLocation();
-    }
-    return nullptr;
-  }
-
-  ObjectReader asReader() const;
-
-  inline ObjectBuilder(ObjectBuilder& other) { memcpy(this, &other, sizeof(*this)); }
-  inline ObjectBuilder(ObjectBuilder&& other) { memcpy(this, &other, sizeof(*this)); }
-  // Hack:  Compiler thinks StructBuilder and ListBuilder are non-trivially-copyable due to the
-  //   inheritance from DisallowConstCopy, but that means the union causes ObjectBuilder's copy
-  //   constructor to be deleted.  We happen to know that trivial copying works here...
-};
-
-struct ObjectReader {
-  // A reader for any kind of object.
-
-  ObjectKind kind;
-
-  union {
-    StructReader structReader;
-    ListReader listReader;
-  };
-
-  ObjectReader(): kind(ObjectKind::NULL_POINTER), structReader() {}
-  ObjectReader(StructReader structReader)
-      : kind(ObjectKind::STRUCT), structReader(structReader) {}
-  ObjectReader(ListReader listReader)
-      : kind(ObjectKind::LIST), listReader(listReader) {}
-};
-
-// -------------------------------------------------------------------
-
 class OrphanBuilder {
 public:
   inline OrphanBuilder(): segment(nullptr), location(nullptr) { memset(&tag, 0, sizeof(tag)); }
@@ -766,14 +703,10 @@ public:
   Data::Builder asData();
   // Interpret as a blob, or throw an exception if not a blob.
 
-  ObjectBuilder asObject();
-  // Interpret as an arbitrary object.
-
   StructReader asStructReader(StructSize size) const;
   ListReader asListReader(FieldSize elementSize) const;
   Text::Reader asTextReader() const;
   Data::Reader asDataReader() const;
-  ObjectReader asObjectReader() const;
 
 private:
   static_assert(1 * POINTERS * WORDS_PER_POINTER == 1 * WORDS,

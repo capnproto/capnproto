@@ -776,6 +776,7 @@ struct WireHelpers {
         }
         break;
       }
+      case WirePointer::RESERVED_3:
       default:
         KJ_FAIL_REQUIRE("Copy source message contained unexpected kind.");
         break;
@@ -1472,57 +1473,6 @@ struct WireHelpers {
     }
   }
 
-  static KJ_ALWAYS_INLINE(ObjectBuilder getWritableObjectPointer(
-      SegmentBuilder* segment, WirePointer* ref, const word* defaultValue)) {
-    return getWritableObjectPointer(segment, ref, ref->target(), defaultValue);
-  }
-
-  static KJ_ALWAYS_INLINE(ObjectBuilder getWritableObjectPointer(
-      SegmentBuilder* segment, WirePointer* ref, word* refTarget, const word* defaultValue)) {
-    word* ptr;
-
-    if (ref->isNull()) {
-      if (defaultValue == nullptr ||
-          reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
-        return ObjectBuilder();
-      } else {
-        ptr = copyMessage(segment, ref, reinterpret_cast<const WirePointer*>(defaultValue));
-      }
-    } else {
-      ptr = followFars(ref, refTarget, segment);
-    }
-
-    if (ref->kind() == WirePointer::LIST) {
-      if (ref->listRef.elementSize() == FieldSize::INLINE_COMPOSITE) {
-        // Read the tag to get the actual element count.
-        WirePointer* tag = reinterpret_cast<WirePointer*>(ptr);
-        KJ_REQUIRE(tag->kind() == WirePointer::STRUCT,
-            "INLINE_COMPOSITE list with non-STRUCT elements not supported.");
-
-        // First list element is at tag + 1 pointer.
-        return ObjectBuilder(
-            ListBuilder(segment, tag + 1, tag->structRef.wordSize() * BITS_PER_WORD / ELEMENTS,
-                        tag->inlineCompositeListElementCount(),
-                        tag->structRef.dataSize.get() * BITS_PER_WORD,
-                        tag->structRef.ptrCount.get()));
-      } else {
-        BitCount dataSize = dataBitsPerElement(ref->listRef.elementSize()) * ELEMENTS;
-        WirePointerCount pointerCount =
-            pointersPerElement(ref->listRef.elementSize()) * ELEMENTS;
-        auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
-        return ObjectBuilder(ListBuilder(
-            segment, ptr, step, ref->listRef.elementCount(), dataSize, pointerCount));
-      }
-    } else {
-      return ObjectBuilder(StructBuilder(
-          segment, ptr,
-          reinterpret_cast<WirePointer*>(ptr + ref->structRef.dataSize.get()),
-          ref->structRef.dataSize.get() * BITS_PER_WORD,
-          ref->structRef.ptrCount.get(),
-          0 * BITS));
-    }
-  }
-
   static SegmentAnd<word*> setStructPointer(
       SegmentBuilder* segment, WirePointer* ref, StructReader value,
       BuilderArena* orphanArena = nullptr) {
@@ -1540,8 +1490,8 @@ struct WireHelpers {
 
     WirePointer* pointerSection = reinterpret_cast<WirePointer*>(ptr + dataSize);
     for (uint i = 0; i < value.pointerCount / POINTERS; i++) {
-      setObjectPointer(segment, pointerSection + i, readObjectPointer(
-          value.segment, value.pointers + i, nullptr, value.nestingLimit));
+      copyPointer(segment, pointerSection + i, value.segment, value.pointers + i,
+                  value.nestingLimit);
     }
 
     return { segment, ptr };
@@ -1560,9 +1510,9 @@ struct WireHelpers {
         // List of pointers.
         ref->listRef.set(FieldSize::POINTER, value.elementCount);
         for (uint i = 0; i < value.elementCount / ELEMENTS; i++) {
-          setObjectPointer(segment, reinterpret_cast<WirePointer*>(ptr) + i, readObjectPointer(
-              value.segment, reinterpret_cast<const WirePointer*>(value.ptr) + i,
-              nullptr, value.nestingLimit));
+          copyPointer(segment, reinterpret_cast<WirePointer*>(ptr) + i,
+                      value.segment, reinterpret_cast<const WirePointer*>(value.ptr) + i,
+                      value.nestingLimit);
         }
       } else {
         // List of data.
@@ -1605,9 +1555,8 @@ struct WireHelpers {
         src += dataSize;
 
         for (uint j = 0; j < pointerCount / POINTERS; j++) {
-          setObjectPointer(segment, reinterpret_cast<WirePointer*>(dst), readObjectPointer(
-              value.segment, reinterpret_cast<const WirePointer*>(src), nullptr,
-              value.nestingLimit));
+          copyPointer(segment, reinterpret_cast<WirePointer*>(dst),
+              value.segment, reinterpret_cast<const WirePointer*>(src), value.nestingLimit);
           dst += POINTER_SIZE_IN_WORDS;
           src += POINTER_SIZE_IN_WORDS;
         }
@@ -1617,19 +1566,113 @@ struct WireHelpers {
     }
   }
 
-  static KJ_ALWAYS_INLINE(SegmentAnd<word*> setObjectPointer(
-      SegmentBuilder* segment, WirePointer* ref, ObjectReader value,
-      BuilderArena* orphanArena = nullptr)) {
-    switch (value.kind) {
-      case ObjectKind::NULL_POINTER:
-        memset(ref, 0, sizeof(*ref));
-        return { segment, nullptr };
-      case ObjectKind::STRUCT:
-        return setStructPointer(segment, ref, value.structReader, orphanArena);
-      case ObjectKind::LIST:
-        return setListPointer(segment, ref, value.listReader, orphanArena);
+  static KJ_ALWAYS_INLINE(SegmentAnd<word*> copyPointer(
+      SegmentBuilder* dstSegment, WirePointer* dst,
+      SegmentReader* srcSegment, const WirePointer* src,
+      int nestingLimit, BuilderArena* orphanArena = nullptr)) {
+    return copyPointer(dstSegment, dst, srcSegment, src, src->target(), nestingLimit, orphanArena);
+  }
+
+  static SegmentAnd<word*> copyPointer(
+      SegmentBuilder* dstSegment, WirePointer* dst,
+      SegmentReader* srcSegment, const WirePointer* src, const word* srcTarget,
+      int nestingLimit, BuilderArena* orphanArena = nullptr) {
+    // Deep-copy the object pointed to by src into dst.  It turns out we can't reuse
+    // readStructPointer(), etc. because they do type checking whereas here we want to accept any
+    // valid pointer.
+
+    if (src == nullptr || src->isNull()) {
+    useDefault:
+      memset(dst, 0, sizeof(*dst));
+      return { dstSegment, nullptr };
     }
-    KJ_UNREACHABLE;
+
+    const word* ptr = WireHelpers::followFars(src, srcTarget, srcSegment);
+    if (KJ_UNLIKELY(ptr == nullptr)) {
+      // Already reported the error.
+      goto useDefault;
+    }
+
+    switch (src->kind()) {
+      case WirePointer::STRUCT:
+        KJ_REQUIRE(nestingLimit > 0,
+              "Message is too deeply-nested or contains cycles.  See capnp::ReadOptions.") {
+          goto useDefault;
+        }
+
+        KJ_REQUIRE(boundsCheck(srcSegment, ptr, ptr + src->structRef.wordSize()),
+                   "Message contained out-of-bounds struct pointer.") {
+          goto useDefault;
+        }
+        return setStructPointer(dstSegment, dst,
+            StructReader(srcSegment, ptr,
+                         reinterpret_cast<const WirePointer*>(ptr + src->structRef.dataSize.get()),
+                         src->structRef.dataSize.get() * BITS_PER_WORD,
+                         src->structRef.ptrCount.get(),
+                         0 * BITS, nestingLimit - 1),
+            orphanArena);
+
+      case WirePointer::LIST: {
+        FieldSize elementSize = src->listRef.elementSize();
+
+        KJ_REQUIRE(nestingLimit > 0,
+              "Message is too deeply-nested or contains cycles.  See capnp::ReadOptions.") {
+          goto useDefault;
+        }
+
+        if (elementSize == FieldSize::INLINE_COMPOSITE) {
+          WordCount wordCount = src->listRef.inlineCompositeWordCount();
+          const WirePointer* tag = reinterpret_cast<const WirePointer*>(ptr);
+          ptr += POINTER_SIZE_IN_WORDS;
+
+          KJ_REQUIRE(boundsCheck(srcSegment, ptr - POINTER_SIZE_IN_WORDS, ptr + wordCount),
+                     "Message contains out-of-bounds list pointer.") {
+            goto useDefault;
+          }
+
+          KJ_REQUIRE(tag->kind() == WirePointer::STRUCT,
+                     "INLINE_COMPOSITE lists of non-STRUCT type are not supported.") {
+            goto useDefault;
+          }
+
+          ElementCount elementCount = tag->inlineCompositeListElementCount();
+          auto wordsPerElement = tag->structRef.wordSize() / ELEMENTS;
+
+          KJ_REQUIRE(wordsPerElement * elementCount <= wordCount,
+                     "INLINE_COMPOSITE list's elements overrun its word count.") {
+            goto useDefault;
+          }
+
+          return setListPointer(dstSegment, dst,
+              ListReader(srcSegment, ptr, elementCount, wordsPerElement * BITS_PER_WORD,
+                         tag->structRef.dataSize.get() * BITS_PER_WORD,
+                         tag->structRef.ptrCount.get(), nestingLimit - 1),
+              orphanArena);
+        } else {
+          BitCount dataSize = dataBitsPerElement(elementSize) * ELEMENTS;
+          WirePointerCount pointerCount = pointersPerElement(elementSize) * ELEMENTS;
+          auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
+          ElementCount elementCount = src->listRef.elementCount();
+          WordCount wordCount = roundBitsUpToWords(ElementCount64(elementCount) * step);
+
+          KJ_REQUIRE(boundsCheck(srcSegment, ptr, ptr + wordCount),
+                     "Message contains out-of-bounds list pointer.") {
+            goto useDefault;
+          }
+
+          return setListPointer(dstSegment, dst,
+              ListReader(srcSegment, ptr, elementCount, step, dataSize, pointerCount,
+                         nestingLimit - 1),
+              orphanArena);
+        }
+      }
+
+      case WirePointer::RESERVED_3:
+      default:
+        KJ_FAIL_REQUIRE("Message contained invalid pointer.") {
+          goto useDefault;
+        }
+    }
   }
 
   static void adopt(SegmentBuilder* segment, WirePointer* ref, OrphanBuilder&& value) {
@@ -1657,8 +1700,16 @@ struct WireHelpers {
   }
 
   static OrphanBuilder disown(SegmentBuilder* segment, WirePointer* ref) {
-    OrphanBuilder result(ref, segment,
-        getWritableObjectPointer(segment, ref, nullptr).getLocation());
+    word* location;
+
+    if (ref->isNull()) {
+      location = nullptr;
+    } else {
+      WirePointer* refCopy = ref;
+      location = followFars(refCopy, ref->target(), segment);
+    }
+
+    OrphanBuilder result(ref, segment, location);
 
     if (!ref->isNull() && ref->kind() != WirePointer::FAR) {
       result.tagAsPtr()->setKindForOrphan(ref->kind());
@@ -1961,116 +2012,6 @@ struct WireHelpers {
       return Data::Reader(reinterpret_cast<const byte*>(ptr), size);
     }
   }
-
-  static ObjectReader readObjectPointer(
-      SegmentReader* segment, const WirePointer* ref,
-      const word* defaultValue, int nestingLimit) {
-    return readObjectPointer(segment, ref, ref->target(), defaultValue, nestingLimit);
-  }
-
-  static ObjectReader readObjectPointer(
-      SegmentReader* segment, const WirePointer* ref, const word* refTarget,
-      const word* defaultValue, int nestingLimit) {
-    // We can't really reuse readStructPointer() and readListPointer() because they are designed
-    // for the case where we are expecting a specific type, and they do validation around that,
-    // whereas this method is for the case where we accept any pointer.
-    //
-    // Not always-inline because it is called from several places in the copying code, and anyway
-    // is relatively rarely used.
-
-    if (ref == nullptr || ref->isNull()) {
-    useDefault:
-      if (defaultValue == nullptr ||
-          reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
-        return ObjectReader();
-      }
-      segment = nullptr;
-      ref = reinterpret_cast<const WirePointer*>(defaultValue);
-      refTarget = ref->target();
-      defaultValue = nullptr;  // If the default value is itself invalid, don't use it again.
-    }
-
-    const word* ptr = WireHelpers::followFars(ref, refTarget, segment);
-    if (KJ_UNLIKELY(ptr == nullptr)) {
-      // Already reported the error.
-      goto useDefault;
-    }
-
-    switch (ref->kind()) {
-      case WirePointer::STRUCT:
-        KJ_REQUIRE(nestingLimit > 0,
-              "Message is too deeply-nested or contains cycles.  See capnp::ReadOptions.") {
-          goto useDefault;
-        }
-
-        KJ_REQUIRE(boundsCheck(segment, ptr, ptr + ref->structRef.wordSize()),
-                   "Message contained out-of-bounds struct pointer.") {
-          goto useDefault;
-        }
-        return ObjectReader(
-            StructReader(segment, ptr,
-                         reinterpret_cast<const WirePointer*>(ptr + ref->structRef.dataSize.get()),
-                         ref->structRef.dataSize.get() * BITS_PER_WORD,
-                         ref->structRef.ptrCount.get(),
-                         0 * BITS, nestingLimit - 1));
-      case WirePointer::LIST: {
-        FieldSize elementSize = ref->listRef.elementSize();
-
-        KJ_REQUIRE(nestingLimit > 0,
-              "Message is too deeply-nested or contains cycles.  See capnp::ReadOptions.") {
-          goto useDefault;
-        }
-
-        if (elementSize == FieldSize::INLINE_COMPOSITE) {
-          WordCount wordCount = ref->listRef.inlineCompositeWordCount();
-          const WirePointer* tag = reinterpret_cast<const WirePointer*>(ptr);
-          ptr += POINTER_SIZE_IN_WORDS;
-
-          KJ_REQUIRE(boundsCheck(segment, ptr - POINTER_SIZE_IN_WORDS, ptr + wordCount),
-                     "Message contains out-of-bounds list pointer.") {
-            goto useDefault;
-          }
-
-          KJ_REQUIRE(tag->kind() == WirePointer::STRUCT,
-                     "INLINE_COMPOSITE lists of non-STRUCT type are not supported.") {
-            goto useDefault;
-          }
-
-          ElementCount elementCount = tag->inlineCompositeListElementCount();
-          auto wordsPerElement = tag->structRef.wordSize() / ELEMENTS;
-
-          KJ_REQUIRE(wordsPerElement * elementCount <= wordCount,
-                     "INLINE_COMPOSITE list's elements overrun its word count.") {
-            goto useDefault;
-          }
-
-          return ObjectReader(
-              ListReader(segment, ptr, elementCount, wordsPerElement * BITS_PER_WORD,
-                         tag->structRef.dataSize.get() * BITS_PER_WORD,
-                         tag->structRef.ptrCount.get(), nestingLimit - 1));
-        } else {
-          BitCount dataSize = dataBitsPerElement(elementSize) * ELEMENTS;
-          WirePointerCount pointerCount = pointersPerElement(elementSize) * ELEMENTS;
-          auto step = (dataSize + pointerCount * BITS_PER_POINTER) / ELEMENTS;
-          ElementCount elementCount = ref->listRef.elementCount();
-          WordCount wordCount = roundBitsUpToWords(ElementCount64(elementCount) * step);
-
-          KJ_REQUIRE(boundsCheck(segment, ptr, ptr + wordCount),
-                     "Message contains out-of-bounds list pointer.") {
-            goto useDefault;
-          }
-
-          return ObjectReader(
-              ListReader(segment, ptr, elementCount, step, dataSize, pointerCount,
-                         nestingLimit - 1));
-        }
-      }
-      default:
-        KJ_FAIL_REQUIRE("Message contained invalid pointer.") {
-          goto useDefault;
-        }
-    }
-  }
 };
 
 // =======================================================================================
@@ -2126,20 +2067,12 @@ Data::Builder PointerBuilder::getBlob<Data>(const void* defaultValue, ByteCount 
   return WireHelpers::getWritableDataPointer(pointer, segment, defaultValue, defaultSize);
 }
 
-ObjectBuilder PointerBuilder::getObject(const word* defaultValue) {
-  return WireHelpers::getWritableObjectPointer(segment, pointer, defaultValue);
-}
-
 void PointerBuilder::setStruct(const StructReader& value) {
   WireHelpers::setStructPointer(segment, pointer, value);
 }
 
 void PointerBuilder::setList(const ListReader& value) {
   WireHelpers::setListPointer(segment, pointer, value);
-}
-
-void PointerBuilder::setObject(const ObjectReader& value) {
-  WireHelpers::setObjectPointer(segment, pointer, value);
 }
 
 void PointerBuilder::adopt(OrphanBuilder&& value) {
@@ -2164,7 +2097,7 @@ void PointerBuilder::transferFrom(PointerBuilder other) {
 }
 
 void PointerBuilder::copyFrom(PointerReader other) {
-  WireHelpers::setObjectPointer(segment, pointer, other.getObject(nullptr));
+  WireHelpers::copyPointer(segment, pointer, other.segment, other.pointer, other.nestingLimit);
 }
 
 PointerReader PointerBuilder::asReader() const {
@@ -2195,10 +2128,6 @@ template <>
 Data::Reader PointerReader::getBlob<Data>(const void* defaultValue, ByteCount defaultSize) const {
   const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
   return WireHelpers::readDataPointer(segment, ref, defaultValue, defaultSize);
-}
-
-ObjectReader PointerReader::getObject(const word* defaultValue) const {
-  return WireHelpers::readObjectPointer(segment, pointer, defaultValue, nestingLimit);
 }
 
 const word* PointerReader::getUnchecked() const {
@@ -2317,8 +2246,8 @@ void StructBuilder::copyContentFrom(StructReader other) {
   // Copy the pointers.
   WirePointerCount sharedPointerCount = kj::min(pointerCount, other.pointerCount);
   for (uint i = 0; i < sharedPointerCount / POINTERS; i++) {
-    WireHelpers::setObjectPointer(segment, pointers + i, WireHelpers::readObjectPointer(
-        other.segment, other.pointers + i, nullptr, other.nestingLimit));
+    WireHelpers::copyPointer(segment, pointers + i,
+        other.segment, other.pointers + i, other.nestingLimit);
   }
 }
 
@@ -2478,18 +2407,6 @@ StructReader ListReader::getStructElement(ElementCount index) const {
       indexBit % BITS_PER_BYTE, nestingLimit - 1);
 }
 
-ObjectReader ObjectBuilder::asReader() const {
-  switch (kind) {
-    case ObjectKind::NULL_POINTER:
-      return ObjectReader();
-    case ObjectKind::STRUCT:
-      return ObjectReader(structBuilder.asReader());
-    case ObjectKind::LIST:
-      return ObjectReader(listBuilder.asReader());
-  }
-  KJ_UNREACHABLE;
-}
-
 // =======================================================================================
 // OrphanBuilder
 
@@ -2555,8 +2472,8 @@ OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, ListReader copyFrom) {
 
 OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, PointerReader copyFrom) {
   OrphanBuilder result;
-  auto allocation = WireHelpers::setObjectPointer(
-      nullptr, result.tagAsPtr(), copyFrom.getObject(nullptr), arena);
+  auto allocation = WireHelpers::copyPointer(
+      nullptr, result.tagAsPtr(), copyFrom.segment, copyFrom.pointer, copyFrom.nestingLimit, arena);
   result.segment = allocation.segment;
   result.location = reinterpret_cast<word*>(allocation.value);
   return result;
@@ -2632,18 +2549,6 @@ Data::Builder OrphanBuilder::asData() {
   return WireHelpers::getWritableDataPointer(tagAsPtr(), location, segment, nullptr, 0 * BYTES);
 }
 
-ObjectBuilder OrphanBuilder::asObject() {
-  KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
-
-  ObjectBuilder result = WireHelpers::getWritableObjectPointer(
-      segment, tagAsPtr(), location, nullptr);
-
-  // Watch out, the pointer could have been updated if the object had to be relocated.
-  location = result.getLocation();
-
-  return result;
-}
-
 StructReader OrphanBuilder::asStructReader(StructSize size) const {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
   return WireHelpers::readStructPointer(
@@ -2664,12 +2569,6 @@ Text::Reader OrphanBuilder::asTextReader() const {
 Data::Reader OrphanBuilder::asDataReader() const {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
   return WireHelpers::readDataPointer(segment, tagAsPtr(), location, nullptr, 0 * BYTES);
-}
-
-ObjectReader OrphanBuilder::asObjectReader() const {
-  KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
-  return WireHelpers::readObjectPointer(
-      segment, tagAsPtr(), location, nullptr, std::numeric_limits<int>::max());
 }
 
 void OrphanBuilder::euthanize() {
