@@ -258,18 +258,6 @@ public:
   // Clear a field, setting it to its default value.  For pointer fields, this actually makes the
   // field null.
 
-  DynamicStruct::Builder getObject(StructSchema::Field field, StructSchema type);
-  DynamicList::Builder getObject(StructSchema::Field field, ListSchema type);
-  Text::Builder getObjectAsText(StructSchema::Field field);
-  Data::Builder getObjectAsData(StructSchema::Field field);
-  // Get an object field.  You must specify the type.
-
-  DynamicStruct::Builder initObject(StructSchema::Field field, StructSchema type);
-  DynamicList::Builder initObject(StructSchema::Field field, ListSchema type, uint size);
-  Text::Builder initObjectAsText(StructSchema::Field field, uint size);
-  Data::Builder initObjectAsData(StructSchema::Field field, uint size);
-  // Init an object field.  You must specify the type.
-
   DynamicValue::Builder get(kj::StringPtr name);
   bool has(kj::StringPtr name);
   void set(kj::StringPtr name, const DynamicValue::Reader& value);
@@ -279,14 +267,6 @@ public:
   void adopt(kj::StringPtr name, Orphan<DynamicValue>&& orphan);
   Orphan<DynamicValue> disown(kj::StringPtr name);
   void clear(kj::StringPtr name);
-  DynamicStruct::Builder getObject(kj::StringPtr name, StructSchema type);
-  DynamicList::Builder getObject(kj::StringPtr name, ListSchema type);
-  Text::Builder getObjectAsText(kj::StringPtr name);
-  Data::Builder getObjectAsData(kj::StringPtr name);
-  DynamicStruct::Builder initObject(kj::StringPtr name, StructSchema type);
-  DynamicList::Builder initObject(kj::StringPtr name, ListSchema type, uint size);
-  Text::Builder initObjectAsText(kj::StringPtr name, uint size);
-  Data::Builder initObjectAsData(kj::StringPtr name, uint size);
   // Shortcuts to access fields by name.  These throw exceptions if no such field exists.
 
   Reader asReader() const;
@@ -301,8 +281,6 @@ private:
   bool isSetInUnion(StructSchema::Field field);
   void verifySetInUnion(StructSchema::Field field);
   void setInUnion(StructSchema::Field field);
-
-  WirePointerCount verifyIsObject(StructSchema::Field field);
 
   template <typename T, Kind k>
   friend struct _::PointerHelpers;

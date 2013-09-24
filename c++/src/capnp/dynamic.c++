@@ -589,11 +589,21 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field) {
     case schema::Field::SLOT: {
       auto slot = proto.getSlot();
       auto type = slot.getType();
-      KJ_REQUIRE(type.isStruct(), "init() without a size is only valid for struct fields.");
-      auto subSchema = schema.getDependency(type.getStruct().getTypeId()).asStruct();
-      return DynamicStruct::Builder(subSchema,
-          builder.getPointerField(slot.getOffset() * POINTERS)
-                 .initStruct(structSizeFromSchema(subSchema)));
+      switch (type.which()) {
+        case schema::Type::STRUCT: {
+          auto subSchema = schema.getDependency(type.getStruct().getTypeId()).asStruct();
+          return DynamicStruct::Builder(subSchema,
+              builder.getPointerField(slot.getOffset() * POINTERS)
+                     .initStruct(structSizeFromSchema(subSchema)));
+        }
+        case schema::Type::OBJECT: {
+          auto pointer = builder.getPointerField(slot.getOffset() * POINTERS);
+          pointer.clear();
+          return ObjectPointer::Builder(pointer);
+        }
+        default:
+          KJ_FAIL_REQUIRE("init() without a size is only valid for struct and object fields.");
+      }
     }
 
     case schema::Field::GROUP: {
@@ -887,92 +897,6 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
   KJ_UNREACHABLE;
 }
 
-WirePointerCount DynamicStruct::Builder::verifyIsObject(StructSchema::Field field) {
-  KJ_REQUIRE(field.getContainingStruct() == schema, "`field` is not a field of this struct.");
-
-  auto proto = field.getProto();
-  switch (proto.which()) {
-    case schema::Field::SLOT: {
-      auto slot = proto.getSlot();
-      KJ_REQUIRE(slot.getType().isObject(), "Expected an Object.");
-      return slot.getOffset() * POINTERS;
-    }
-
-    case schema::Field::GROUP:
-      KJ_FAIL_REQUIRE("Expected an Object.");
-  }
-
-  KJ_UNREACHABLE;
-}
-
-DynamicStruct::Builder DynamicStruct::Builder::getObject(
-    StructSchema::Field field, StructSchema type) {
-  auto offset = verifyIsObject(field);
-  verifySetInUnion(field);
-  return DynamicStruct::Builder(type,
-      builder.getPointerField(offset)
-             .getStruct(structSizeFromSchema(type), nullptr));
-}
-
-DynamicList::Builder DynamicStruct::Builder::getObject(
-    StructSchema::Field field, ListSchema type) {
-  auto offset = verifyIsObject(field);
-  verifySetInUnion(field);
-  if (type.whichElementType() == schema::Type::STRUCT) {
-    return DynamicList::Builder(type,
-        builder.getPointerField(offset)
-               .getStructList(structSizeFromSchema(type.getStructElementType()), nullptr));
-  } else {
-    return DynamicList::Builder(type,
-        builder.getPointerField(offset)
-               .getList(elementSizeFor(type.whichElementType()), nullptr));
-  }
-}
-
-Text::Builder DynamicStruct::Builder::getObjectAsText(StructSchema::Field field) {
-  auto offset = verifyIsObject(field);
-  verifySetInUnion(field);
-  return builder.getPointerField(offset).getBlob<Text>(nullptr, 0 * BYTES);
-}
-
-Data::Builder DynamicStruct::Builder::getObjectAsData(StructSchema::Field field) {
-  auto offset = verifyIsObject(field);
-  verifySetInUnion(field);
-  return builder.getPointerField(offset).getBlob<Data>(nullptr, 0 * BYTES);
-}
-
-DynamicStruct::Builder DynamicStruct::Builder::initObject(
-    StructSchema::Field field, StructSchema type) {
-  auto offset = verifyIsObject(field);
-  setInUnion(field);
-  return DynamicStruct::Builder(type,
-      builder.getPointerField(offset).initStruct(structSizeFromSchema(type)));
-}
-DynamicList::Builder DynamicStruct::Builder::initObject(
-    StructSchema::Field field, ListSchema type, uint size) {
-  auto offset = verifyIsObject(field);
-  setInUnion(field);
-  if (type.whichElementType() == schema::Type::STRUCT) {
-    return DynamicList::Builder(type,
-        builder.getPointerField(offset)
-               .initStructList(size * ELEMENTS, structSizeFromSchema(type.getStructElementType())));
-  } else {
-    return DynamicList::Builder(type,
-        builder.getPointerField(offset)
-               .initList(elementSizeFor(type.whichElementType()), size * ELEMENTS));
-  }
-}
-Text::Builder DynamicStruct::Builder::initObjectAsText(StructSchema::Field field, uint size) {
-  auto offset = verifyIsObject(field);
-  setInUnion(field);
-  return builder.getPointerField(offset).initBlob<Text>(size * BYTES);
-}
-Data::Builder DynamicStruct::Builder::initObjectAsData(StructSchema::Field field, uint size) {
-  auto offset = verifyIsObject(field);
-  setInUnion(field);
-  return builder.getPointerField(offset).initBlob<Data>(size * BYTES);
-}
-
 DynamicValue::Reader DynamicStruct::Reader::get(kj::StringPtr name) const {
   return get(schema.getFieldByName(name));
 }
@@ -1010,33 +934,6 @@ Orphan<DynamicValue> DynamicStruct::Builder::disown(kj::StringPtr name) {
 }
 void DynamicStruct::Builder::clear(kj::StringPtr name) {
   clear(schema.getFieldByName(name));
-}
-DynamicStruct::Builder DynamicStruct::Builder::getObject(
-    kj::StringPtr name, StructSchema type) {
-  return getObject(schema.getFieldByName(name), type);
-}
-DynamicList::Builder DynamicStruct::Builder::getObject(kj::StringPtr name, ListSchema type) {
-  return getObject(schema.getFieldByName(name), type);
-}
-Text::Builder DynamicStruct::Builder::getObjectAsText(kj::StringPtr name) {
-  return getObjectAsText(schema.getFieldByName(name));
-}
-Data::Builder DynamicStruct::Builder::getObjectAsData(kj::StringPtr name) {
-  return getObjectAsData(schema.getFieldByName(name));
-}
-DynamicStruct::Builder DynamicStruct::Builder::initObject(
-    kj::StringPtr name, StructSchema type) {
-  return initObject(schema.getFieldByName(name), type);
-}
-DynamicList::Builder DynamicStruct::Builder::initObject(
-    kj::StringPtr name, ListSchema type, uint size) {
-  return initObject(schema.getFieldByName(name), type, size);
-}
-Text::Builder DynamicStruct::Builder::initObjectAsText(kj::StringPtr name, uint size) {
-  return initObjectAsText(schema.getFieldByName(name), size);
-}
-Data::Builder DynamicStruct::Builder::initObjectAsData(kj::StringPtr name, uint size) {
-  return initObjectAsData(schema.getFieldByName(name), size);
 }
 
 // =======================================================================================
