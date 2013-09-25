@@ -32,11 +32,15 @@
 #define CAPNP_LAYOUT_H_
 
 #include <kj/common.h>
+#include <kj/memory.h>
 #include "common.h"
 #include "blob.h"
 #include "endian.h"
 
 namespace capnp {
+
+class TypelessCapability;
+
 namespace _ {  // private
 
 class PointerBuilder;
@@ -280,6 +284,7 @@ public:
   ListBuilder getList(FieldSize elementSize, const word* defaultValzue);
   ListBuilder getStructList(StructSize elementSize, const word* defaultValue);
   template <typename T> typename T::Builder getBlob(const void* defaultValue,ByteCount defaultSize);
+  kj::Own<TypelessCapability> getCapability();
   // Get methods:  Get the value.  If it is null, initialize it to a copy of the default value.
   // The default value is encoded as an "unchecked message" for structs, lists, and objects, or a
   // simple byte array for blobs.
@@ -288,12 +293,14 @@ public:
   ListBuilder initList(FieldSize elementSize, ElementCount elementCount);
   ListBuilder initStructList(ElementCount elementCount, StructSize size);
   template <typename T> typename T::Builder initBlob(ByteCount size);
+  StructBuilder initCapDescriptor(StructSize size);
   // Init methods:  Initialize the pointer to a newly-allocated object, discarding the existing
   // object.
 
   void setStruct(const StructReader& value);
   void setList(const ListReader& value);
   template <typename T> void setBlob(typename T::Reader value);
+  void setCapability(kj::Own<TypelessCapability>&& cap);
   // Set methods:  Initialize the pointer to a newly-allocated copy of the given value, discarding
   // the existing object.
 
@@ -335,6 +342,7 @@ public:
   ListReader getList(FieldSize expectedElementSize, const word* defaultValue) const;
   template <typename T>
   typename T::Reader getBlob(const void* defaultValue, ByteCount defaultSize) const;
+  kj::Own<TypelessCapability> getCapability();
   // Get methods:  Get the value.  If it is null, return the default value instead.
   // The default value is encoded as an "unchecked message" for structs, lists, and objects, or a
   // simple byte array for blobs.

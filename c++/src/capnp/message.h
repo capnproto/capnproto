@@ -33,8 +33,8 @@
 namespace capnp {
 
 namespace _ {  // private
-  class ReaderArena;
-  class BuilderArena;
+  class BasicReaderArena;
+  class BasicBuilderArena;
 }
 
 class StructSchema;
@@ -127,7 +127,7 @@ private:
   void* arenaSpace[15 + sizeof(kj::MutexGuarded<void*>) / sizeof(void*)];
   bool allocatedArena;
 
-  _::ReaderArena* arena() { return reinterpret_cast<_::ReaderArena*>(arenaSpace); }
+  _::BasicReaderArena* arena() { return reinterpret_cast<_::BasicReaderArena*>(arenaSpace); }
   _::StructReader getRootInternal();
 };
 
@@ -202,7 +202,7 @@ private:
   // isn't constructed yet.  This is kind of annoying because it means that getOrphanage() is
   // not thread-safe, but that shouldn't be a huge deal...
 
-  _::BuilderArena* arena() { return reinterpret_cast<_::BuilderArena*>(arenaSpace); }
+  _::BasicBuilderArena* arena() { return reinterpret_cast<_::BasicBuilderArena*>(arenaSpace); }
   _::SegmentBuilder* getRootSegment();
   _::StructBuilder initRoot(_::StructSize size);
   void setRootInternal(_::StructReader reader);

@@ -602,6 +602,12 @@ struct Join {
   keyPart @2 :JoinKeyPart;
   # A part of the join key.  These combine to form the complete join key which is used to establish
   # a direct connection.
+
+  # TODO(now):  Change this so that multiple parts can be sent in a single Join message, so that
+  # if multiple join parts are going to cross the same connection they can be sent together, so that
+  # the receive can potentially optimize its handling of them.  In the case where all parts are
+  # bundled together, should the recipient be expected to simply return a cap, so that the caller
+  # can immediately start pipelining to it?
 }
 
 # ========================================================================================

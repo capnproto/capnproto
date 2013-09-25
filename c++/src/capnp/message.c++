@@ -38,16 +38,16 @@ namespace capnp {
 MessageReader::MessageReader(ReaderOptions options): options(options), allocatedArena(false) {}
 MessageReader::~MessageReader() noexcept(false) {
   if (allocatedArena) {
-    arena()->~ReaderArena();
+    arena()->~BasicReaderArena();
   }
 }
 
 _::StructReader MessageReader::getRootInternal() {
   if (!allocatedArena) {
-    static_assert(sizeof(_::ReaderArena) <= sizeof(arenaSpace),
-        "arenaSpace is too small to hold a ReaderArena.  Please increase it.  This will break "
+    static_assert(sizeof(_::BasicReaderArena) <= sizeof(arenaSpace),
+        "arenaSpace is too small to hold a BasicReaderArena.  Please increase it.  This will break "
         "ABI compatibility.");
-    new(arena()) _::ReaderArena(this);
+    new(arena()) _::BasicReaderArena(this);
     allocatedArena = true;
   }
 
@@ -74,7 +74,7 @@ _::SegmentBuilder* MessageBuilder::getRootSegment() {
   if (allocatedArena) {
     return arena()->getSegment(_::SegmentId(0));
   } else {
-    static_assert(sizeof(_::BuilderArena) <= sizeof(arenaSpace),
+    static_assert(sizeof(_::BasicBuilderArena) <= sizeof(arenaSpace),
         "arenaSpace is too small to hold a BuilderArena.  Please increase it.");
     kj::ctor(*arena(), this);
     allocatedArena = true;
