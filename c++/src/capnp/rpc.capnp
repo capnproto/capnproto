@@ -42,7 +42,7 @@
 #
 # Cap'n Proto does not distinguish between "clients" and "servers" -- this is up to the application.
 # Either end of any connection can potentially hold capabilities pointing to the other end, and
-# can call methods on those capabilities.  In the doc comments below, we user the words "sender"
+# can call methods on those capabilities.  In the doc comments below, we use the words "sender"
 # and "receiver".  These refer to the sender and receiver of an instance of the struct or field
 # being documented.  Sometimes we refer to a "third-party" which is neither the sender nor the
 # receiver.
