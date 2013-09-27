@@ -1038,8 +1038,8 @@
   <span class="c1"># Given a ThirdPartyCapId received over this connection, connect to the third party.  The</span>
   <span class="c1"># caller should then send an `Accept` message over the new connection.</span>
 
-  <span class="n">acceptIntroducedConnection</span>(<span class="n">recipientId</span><span class="nc">: RecipientId</span>)<span class="nc">: Connection</span>
-<span class="nc">  # Given a RecipientId received in a `Provide` message on this `Connection`</span>, <span class="n">wait</span> <span class="n">for</span> <span class="n">the</span>
+  <span class="n">acceptIntroducedConnection</span>(<span class="n">recipientId</span><span class="nc">: RecipientId</span>)<span class="nc">: Connection</span>;
+  <span class="c1"># Given a RecipientId received in a `Provide` message on this `Connection`, wait for the</span>
   <span class="c1"># recipient to connect, and return the connection formed.  Usually, the first message received</span>
   <span class="c1"># on the new connection will be an `Accept` message.</span>
 }
