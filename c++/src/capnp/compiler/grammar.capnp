@@ -166,7 +166,9 @@ struct Declaration {
     union @19 :Void;
     group @20 :Void;
 
-    interface @21 :Void;
+    interface :group {
+      extends @21 :List(DeclName);
+    }
     method :group {
       params @22 :List(Param);
       returnType :union {

@@ -792,12 +792,24 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
 
   parsers.interfaceDecl = arena.copy(p::transform(
       p::sequence(keyword("interface"), identifier, p::optional(parsers.uid),
+                  p::optional(p::sequence(
+                      keyword("extends"), parenthesizedList(parsers.declName, errorReporter))),
                   p::many(parsers.annotation)),
       [this](Located<Text::Reader>&& name, kj::Maybe<Orphan<LocatedInteger>>&& id,
+             kj::Maybe<Located<kj::Array<kj::Maybe<Orphan<DeclName>>>>>&& extends,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
-        initDecl(decl.get(), kj::mv(name), kj::mv(id), kj::mv(annotations)).setInterface();
+        auto builder = initDecl(
+            decl.get(), kj::mv(name), kj::mv(id), kj::mv(annotations)).initInterface();
+        KJ_IF_MAYBE(e, extends) {
+          auto extendsBuilder = builder.initExtends(e->value.size());
+          for (uint i: kj::indices(e->value)) {
+            KJ_IF_MAYBE(extend, e->value[i]) {
+              extendsBuilder.adoptWithCaveats(i, kj::mv(*extend));
+            }
+          }
+        }
         return DeclParserResult(kj::mv(decl), parsers.interfaceLevelDecl);
       }));
 

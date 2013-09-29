@@ -145,7 +145,8 @@ private:
                    schema::Node::Builder builder);
   void compileStruct(Void decl, List<Declaration>::Reader members,
                      schema::Node::Builder builder);
-  void compileInterface(Void decl, List<Declaration>::Reader members,
+  void compileInterface(Declaration::Interface::Reader decl,
+                        List<Declaration>::Reader members,
                         schema::Node::Builder builder);
   // The `members` arrays contain only members with ordinal numbers, in code order.  Other members
   // are handled elsewhere.

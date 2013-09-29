@@ -1268,9 +1268,86 @@ void NodeTranslator::compileStruct(Void decl, List<Declaration>::Reader members,
 
 // -------------------------------------------------------------------
 
-void NodeTranslator::compileInterface(Void decl, List<Declaration>::Reader members,
+static kj::String declNameString(DeclName::Reader name);
+
+void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
+                                      List<Declaration>::Reader members,
                                       schema::Node::Builder builder) {
-  KJ_FAIL_ASSERT("TODO: compile interfaces");
+  auto interfaceBuilder = builder.initInterface();
+
+  auto extendsDecl = decl.getExtends();
+  auto extendsBuilder = interfaceBuilder.initExtends(extendsDecl.size());
+  for (uint i: kj::indices(extendsDecl)) {
+    auto extend = extendsDecl[i];
+    if (extend.getBase().isAbsoluteName() && !extend.getBase().hasAbsoluteName()) {
+      // Compile error reported earlier.
+    } else KJ_IF_MAYBE(target, resolver.resolve(extend)) {
+      if (target->kind == Declaration::INTERFACE) {
+        extendsBuilder.set(i, target->id);
+      } else {
+        errorReporter.addErrorOn(
+            extend, kj::str("'", declNameString(extend), "' is not an interface type."));
+      }
+    }
+  }
+
+  // maps ordinal -> (code order, declaration)
+  std::multimap<uint, std::pair<uint, Declaration::Reader>> methods;
+
+  uint codeOrder = 0;
+  for (auto member: members) {
+    if (member.isMethod()) {
+      methods.insert(
+          std::make_pair(member.getId().getOrdinal().getValue(),
+                         std::make_pair(codeOrder++, member)));
+    }
+  }
+
+  auto list = interfaceBuilder.initMethods(methods.size());
+  uint i = 0;
+  DuplicateOrdinalDetector dupDetector(errorReporter);
+
+  for (auto& entry: methods) {
+    uint codeOrder = entry.second.first;
+    Declaration::Reader methodDecl = entry.second.second;
+    auto methodReader = methodDecl.getMethod();
+
+    dupDetector.check(methodDecl.getId().getOrdinal());
+
+    auto methodBuilder = list[i++];
+    methodBuilder.setName(methodDecl.getName().getValue());
+    methodBuilder.setCodeOrder(codeOrder);
+
+    auto paramsReader = methodReader.getParams();
+    auto paramsBuilder = methodBuilder.initParams(paramsReader.size());
+    for (uint i: kj::indices(paramsReader)) {
+      auto param = paramsReader[i];
+      auto paramBuilder = paramsBuilder[i];
+
+      paramBuilder.setName(param.getName().getValue());
+
+      auto defaultValue = param.getDefaultValue();
+      if (compileType(param.getType(), paramBuilder.initType()) && defaultValue.isValue()) {
+        compileBootstrapValue(defaultValue.getValue(), paramBuilder.getType(),
+                              paramBuilder.initDefaultValue());
+      } else {
+        compileDefaultDefaultValue(paramBuilder.getType(), paramBuilder.initDefaultValue());
+      }
+
+      paramBuilder.adoptAnnotations(compileAnnotationApplications(
+          param.getAnnotations(), "targetsParam"));
+    }
+
+    auto returnType = methodReader.getReturnType();
+    if (returnType.isExpression()) {
+      compileType(returnType.getExpression(), methodBuilder.initReturnType());
+    } else {
+      methodBuilder.initReturnType().setVoid();
+    }
+
+    methodBuilder.adoptAnnotations(compileAnnotationApplications(
+        methodDecl.getAnnotations(), "targetsMethod"));
+  }
 }
 
 // -------------------------------------------------------------------

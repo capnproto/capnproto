@@ -97,14 +97,19 @@ void enumerateDeps(schema::Node::Reader node, std::set<uint64_t>& deps) {
       }
       break;
     }
-    case schema::Node::INTERFACE:
-      for (auto method: node.getInterface().getMethods()) {
+    case schema::Node::INTERFACE: {
+      auto interfaceNode = node.getInterface();
+      for (auto extend: interfaceNode.getExtends()) {
+        deps.insert(extend);
+      }
+      for (auto method: interfaceNode.getMethods()) {
         for (auto param: method.getParams()) {
           enumerateDeps(param.getType(), deps);
         }
         enumerateDeps(method.getReturnType(), deps);
       }
       break;
+    }
     default:
       break;
   }
@@ -1372,8 +1377,17 @@ private:
 
       case schema::Node::INTERFACE: {
         return NodeText {
-          kj::strTree(),
-          kj::strTree(),
+          kj::strTree(
+              "  struct ", name, ";\n"),
+
+          kj::strTree(
+              "struct ", fullName, " {\n",
+              "  ", name, "() = delete;\n"
+              "\n"
+              "  class Client;\n"
+              "  class Server;\n",
+              "};\n"),
+
           kj::strTree(),
           kj::strTree(),
 

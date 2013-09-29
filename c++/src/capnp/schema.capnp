@@ -131,6 +131,9 @@ struct Node {
     interface :group {
       methods @15 :List(Method);
       # Methods ordered by ordinal.
+
+      extends @31 :List(Id);
+      # Superclasses of this interface.
     }
 
     const :group {

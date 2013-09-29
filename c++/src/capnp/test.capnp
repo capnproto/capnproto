@@ -572,3 +572,13 @@ const derivedConstant :TestAllTypes = (
     structField = TestConstants.structConst,
     int16List = TestConstants.int16ListConst,
     structList = TestConstants.structListConst);
+
+interface TestInterface {
+  foo @0 (i :UInt32, j :Bool) :Text;
+  bar @1 () :Void;
+  baz @2 (s: TestAllTypes);
+}
+
+interface TestExtends extends(TestInterface) {
+  qux @0 ();
+}

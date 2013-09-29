@@ -130,6 +130,7 @@ struct Declaration {
   struct Using;
   struct Const;
   struct Field;
+  struct Interface;
   struct Method;
   struct Annotation;
 };
@@ -217,6 +218,13 @@ struct Declaration::Field::DefaultValue {
   };
 };
 
+struct Declaration::Interface {
+  Interface() = delete;
+
+  class Reader;
+  class Builder;
+};
+
 struct Declaration::Method {
   Method() = delete;
 
@@ -276,6 +284,7 @@ extern const ::capnp::_::RawSchema s_e93164a80bfe2ccf;
 extern const ::capnp::_::RawSchema s_b348322a8dcf0d0c;
 extern const ::capnp::_::RawSchema s_8f2622208fb358c8;
 extern const ::capnp::_::RawSchema s_d0d1a21de617951f;
+extern const ::capnp::_::RawSchema s_992a90eaf30235d3;
 extern const ::capnp::_::RawSchema s_eb971847d617c0b9;
 extern const ::capnp::_::RawSchema s_c6238c7d62d65173;
 extern const ::capnp::_::RawSchema s_9cb9e86e3198037f;
@@ -337,6 +346,9 @@ CAPNP_DECLARE_STRUCT(
     2, 7, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::compiler::Declaration::Field::DefaultValue, d0d1a21de617951f,
+    2, 7, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::compiler::Declaration::Interface, 992a90eaf30235d3,
     2, 7, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::compiler::Declaration::Method, eb971847d617c0b9,
@@ -1143,7 +1155,7 @@ public:
 
   inline bool isInterface() const;
   inline bool hasInterface() const;
-  inline  ::capnp::Void getInterface() const;
+  inline Interface::Reader getInterface() const;
 
   inline bool isMethod() const;
   inline bool hasMethod() const;
@@ -1343,8 +1355,8 @@ public:
 
   inline bool isInterface();
   inline bool hasInterface();
-  inline  ::capnp::Void getInterface();
-  inline void setInterface( ::capnp::Void value = ::capnp::VOID);
+  inline Interface::Builder getInterface();
+  inline Interface::Builder initInterface();
 
   inline bool isMethod();
   inline bool hasMethod();
@@ -2144,6 +2156,69 @@ private:
 
 inline ::kj::StringTree KJ_STRINGIFY(Declaration::Field::DefaultValue::Builder builder) {
   return ::capnp::_::structString<Declaration::Field::DefaultValue>(builder._builder.asReader());
+}
+
+class Declaration::Interface::Reader {
+public:
+  typedef Interface Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline size_t totalSizeInWords() const {
+    return _reader.totalSize() / ::capnp::WORDS;
+  }
+
+  inline bool hasExtends() const;
+  inline  ::capnp::List< ::capnp::compiler::DeclName>::Reader getExtends() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Declaration::Interface::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Declaration::Interface::Reader reader) {
+  return ::capnp::_::structString<Declaration::Interface>(reader._reader);
+}
+
+class Declaration::Interface::Builder {
+public:
+  typedef Interface Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+
+  inline bool hasExtends();
+  inline  ::capnp::List< ::capnp::compiler::DeclName>::Builder getExtends();
+  inline void setExtends( ::capnp::List< ::capnp::compiler::DeclName>::Reader value);
+  inline  ::capnp::List< ::capnp::compiler::DeclName>::Builder initExtends(unsigned int size);
+  inline void adoptExtends(::capnp::Orphan< ::capnp::List< ::capnp::compiler::DeclName>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::DeclName>> disownExtends();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Declaration::Interface::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Declaration::Interface::Builder builder) {
+  return ::capnp::_::structString<Declaration::Interface>(builder._builder.asReader());
 }
 
 class Declaration::Method::Reader {
@@ -4040,33 +4115,28 @@ inline bool Declaration::Builder::isInterface() {
 }
 inline bool Declaration::Reader::hasInterface() const {
   if (which() != Declaration::INTERFACE) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
+  return !_reader.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
-
 inline bool Declaration::Builder::hasInterface() {
   if (which() != Declaration::INTERFACE) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
+  return !_builder.getPointerField(5 * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::Void Declaration::Reader::getInterface() const {
+inline Declaration::Interface::Reader Declaration::Reader::getInterface() const {
   KJ_IREQUIRE(which() == Declaration::INTERFACE,
               "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS);
+  return Declaration::Interface::Reader(_reader);
 }
-
-inline  ::capnp::Void Declaration::Builder::getInterface() {
+inline Declaration::Interface::Builder Declaration::Builder::getInterface() {
   KJ_IREQUIRE(which() == Declaration::INTERFACE,
               "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS);
+  return Declaration::Interface::Builder(_builder);
 }
-inline void Declaration::Builder::setInterface( ::capnp::Void value) {
+inline Declaration::Interface::Builder Declaration::Builder::initInterface() {
   _builder.setDataField<Declaration::Which>(
       1 * ::capnp::ELEMENTS, Declaration::INTERFACE);
-  _builder.setDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS, value);
+  _builder.getPointerField(5 * ::capnp::POINTERS).clear();
+  return Declaration::Interface::Builder(_builder);
 }
-
 inline bool Declaration::Reader::isMethod() const {
   return which() == Declaration::METHOD;
 }
@@ -5572,6 +5642,38 @@ inline ::capnp::Orphan< ::capnp::compiler::ValueExpression> Declaration::Field::
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression>::disown(
       _builder.getPointerField(6 * ::capnp::POINTERS));
+}
+
+inline bool Declaration::Interface::Reader::hasExtends() const {
+  return !_reader.getPointerField(5 * ::capnp::POINTERS).isNull();
+}
+inline bool Declaration::Interface::Builder::hasExtends() {
+  return !_builder.getPointerField(5 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::List< ::capnp::compiler::DeclName>::Reader Declaration::Interface::Reader::getExtends() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::DeclName>>::get(
+      _reader.getPointerField(5 * ::capnp::POINTERS));
+}
+inline  ::capnp::List< ::capnp::compiler::DeclName>::Builder Declaration::Interface::Builder::getExtends() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::DeclName>>::get(
+      _builder.getPointerField(5 * ::capnp::POINTERS));
+}
+inline void Declaration::Interface::Builder::setExtends( ::capnp::List< ::capnp::compiler::DeclName>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::DeclName>>::set(
+      _builder.getPointerField(5 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::List< ::capnp::compiler::DeclName>::Builder Declaration::Interface::Builder::initExtends(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::DeclName>>::init(
+      _builder.getPointerField(5 * ::capnp::POINTERS), size);
+}
+inline void Declaration::Interface::Builder::adoptExtends(
+    ::capnp::Orphan< ::capnp::List< ::capnp::compiler::DeclName>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::DeclName>>::adopt(
+      _builder.getPointerField(5 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::List< ::capnp::compiler::DeclName>> Declaration::Interface::Builder::disownExtends() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::compiler::DeclName>>::disown(
+      _builder.getPointerField(5 * ::capnp::POINTERS));
 }
 
 inline bool Declaration::Method::Reader::hasParams() const {

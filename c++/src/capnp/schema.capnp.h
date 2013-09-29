@@ -799,6 +799,9 @@ public:
   inline bool hasMethods() const;
   inline  ::capnp::List< ::capnp::schema::Method>::Reader getMethods() const;
 
+  inline bool hasExtends() const;
+  inline  ::capnp::List< ::uint64_t>::Reader getExtends() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename T, ::capnp::Kind k>
@@ -835,6 +838,14 @@ public:
   inline  ::capnp::List< ::capnp::schema::Method>::Builder initMethods(unsigned int size);
   inline void adoptMethods(::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>> disownMethods();
+
+  inline bool hasExtends();
+  inline  ::capnp::List< ::uint64_t>::Builder getExtends();
+  inline void setExtends( ::capnp::List< ::uint64_t>::Reader value);
+  inline void setExtends(std::initializer_list< ::uint64_t> value);
+  inline  ::capnp::List< ::uint64_t>::Builder initExtends(unsigned int size);
+  inline void adoptExtends(::capnp::Orphan< ::capnp::List< ::uint64_t>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::uint64_t>> disownExtends();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -2958,11 +2969,13 @@ inline bool Node::Builder::isInterface() {
 }
 inline bool Node::Reader::hasInterface() const {
   if (which() != Node::INTERFACE) return false;
-  return !_reader.getPointerField(3 * ::capnp::POINTERS).isNull();
+  return !_reader.getPointerField(3 * ::capnp::POINTERS).isNull()
+      || !_reader.getPointerField(4 * ::capnp::POINTERS).isNull();
 }
 inline bool Node::Builder::hasInterface() {
   if (which() != Node::INTERFACE) return false;
-  return !_builder.getPointerField(3 * ::capnp::POINTERS).isNull();
+  return !_builder.getPointerField(3 * ::capnp::POINTERS).isNull()
+      || !_builder.getPointerField(4 * ::capnp::POINTERS).isNull();
 }
 inline Node::Interface::Reader Node::Reader::getInterface() const {
   KJ_IREQUIRE(which() == Node::INTERFACE,
@@ -2978,6 +2991,7 @@ inline Node::Interface::Builder Node::Builder::initInterface() {
   _builder.setDataField<Node::Which>(
       6 * ::capnp::ELEMENTS, Node::INTERFACE);
   _builder.getPointerField(3 * ::capnp::POINTERS).clear();
+  _builder.getPointerField(4 * ::capnp::POINTERS).clear();
   return Node::Interface::Builder(_builder);
 }
 inline bool Node::Reader::isConst() const {
@@ -3352,6 +3366,42 @@ inline void Node::Interface::Builder::adoptMethods(
 inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>> Node::Interface::Builder::disownMethods() {
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Method>>::disown(
       _builder.getPointerField(3 * ::capnp::POINTERS));
+}
+
+inline bool Node::Interface::Reader::hasExtends() const {
+  return !_reader.getPointerField(4 * ::capnp::POINTERS).isNull();
+}
+inline bool Node::Interface::Builder::hasExtends() {
+  return !_builder.getPointerField(4 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::List< ::uint64_t>::Reader Node::Interface::Reader::getExtends() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::get(
+      _reader.getPointerField(4 * ::capnp::POINTERS));
+}
+inline  ::capnp::List< ::uint64_t>::Builder Node::Interface::Builder::getExtends() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::get(
+      _builder.getPointerField(4 * ::capnp::POINTERS));
+}
+inline void Node::Interface::Builder::setExtends( ::capnp::List< ::uint64_t>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::set(
+      _builder.getPointerField(4 * ::capnp::POINTERS), value);
+}
+inline void Node::Interface::Builder::setExtends(std::initializer_list< ::uint64_t> value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::set(
+      _builder.getPointerField(4 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::List< ::uint64_t>::Builder Node::Interface::Builder::initExtends(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::init(
+      _builder.getPointerField(4 * ::capnp::POINTERS), size);
+}
+inline void Node::Interface::Builder::adoptExtends(
+    ::capnp::Orphan< ::capnp::List< ::uint64_t>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::adopt(
+      _builder.getPointerField(4 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::List< ::uint64_t>> Node::Interface::Builder::disownExtends() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::disown(
+      _builder.getPointerField(4 * ::capnp::POINTERS));
 }
 
 inline bool Node::Const::Reader::hasType() const {

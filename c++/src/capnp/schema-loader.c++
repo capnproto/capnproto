@@ -368,6 +368,10 @@ private:
   }
 
   void validate(const schema::Node::Interface::Reader& interfaceNode) {
+    for (auto extend: interfaceNode.getExtends()) {
+      validateTypeId(extend, schema::Node::INTERFACE);
+    }
+
     auto methods = interfaceNode.getMethods();
     KJ_STACK_ARRAY(bool, sawCodeOrder, methods.size(), 32, 256);
     memset(sawCodeOrder.begin(), 0, sawCodeOrder.size() * sizeof(sawCodeOrder[0]));

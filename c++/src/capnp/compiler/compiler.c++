@@ -198,6 +198,8 @@ private:
                     std::unordered_map<const Node*, uint>& seen) const;
   void traverseAnnotations(const List<schema::Annotation>::Reader& annotations, uint eagerness,
                            std::unordered_map<const Node*, uint>& seen) const;
+  void traverseDependency(uint64_t depId, uint eagerness,
+                          std::unordered_map<const Node*, uint>& seen) const;
   // Helpers for traverse().
 };
 
@@ -720,8 +722,14 @@ void Compiler::Node::traverseNodeDependencies(
       }
       break;
 
-    case schema::Node::INTERFACE:
-      for (auto method: schemaNode.getInterface().getMethods()) {
+    case schema::Node::INTERFACE: {
+      auto interface = schemaNode.getInterface();
+      for (auto extend: interface.getExtends()) {
+        if (extend != 0) {  // if zero, we reported an error earlier
+          traverseDependency(extend, eagerness, seen);
+        }
+      }
+      for (auto method: interface.getMethods()) {
         for (auto param: method.getParams()) {
           traverseType(param.getType(), eagerness, seen);
           traverseAnnotations(param.getAnnotations(), eagerness, seen);
@@ -730,6 +738,7 @@ void Compiler::Node::traverseNodeDependencies(
         traverseAnnotations(method.getAnnotations(), eagerness, seen);
       }
       break;
+    }
 
     default:
       break;
@@ -758,10 +767,15 @@ void Compiler::Node::traverseType(const schema::Type::Reader& type, uint eagerne
       return;
   }
 
-  KJ_IF_MAYBE(node, module->getCompiler().findNode(id)) {
+  traverseDependency(id, eagerness, seen);
+}
+
+void Compiler::Node::traverseDependency(uint64_t depId, uint eagerness,
+                                        std::unordered_map<const Node*, uint>& seen) const {
+  KJ_IF_MAYBE(node, module->getCompiler().findNode(depId)) {
     node->traverse(eagerness, seen);
   } else {
-    KJ_FAIL_ASSERT("Dependency ID not present in compiler?", id);
+    KJ_FAIL_ASSERT("Dependency ID not present in compiler?", depId);
   }
 }
 
@@ -850,6 +864,11 @@ static void findImports(Declaration::Reader decl, std::set<kj::StringPtr>& outpu
       break;
     case Declaration::FIELD:
       findImports(decl.getField().getType(), output);
+      break;
+    case Declaration::INTERFACE:
+      for (auto extend: decl.getInterface().getExtends()) {
+        findImports(extend, output);
+      }
       break;
     case Declaration::METHOD: {
       auto method = decl.getMethod();
