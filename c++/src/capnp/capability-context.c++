@@ -21,21 +21,44 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "capability.h"
+#define CAPNP_PRIVATE
+
+#include "capability-context.h"
+#include "arena.h"
+#include <kj/debug.h>
 
 namespace capnp {
 
-TypelessAnswer::Pipeline TypelessAnswer::Pipeline::getPointerField(
-    uint16_t pointerIndex) const {
-  auto newOps = kj::heapArray<PipelineOp>(ops.size() + 1);
-  for (auto i: kj::indices(ops)) {
-    newOps[i] = ops[i];
+CapReaderContext::CapReaderContext(CapExtractorBase& extractor): extractor(&extractor) {}
+CapReaderContext::~CapReaderContext() noexcept(false) {
+  if (extractor == nullptr) {
+    kj::dtor(arena());
   }
-  auto& newOp = newOps[ops.size()];
-  newOp.type = PipelineOp::GET_POINTER_FIELD;
-  newOp.pointerIndex = pointerIndex;
+}
 
-  return Pipeline(hook->addRef(), kj::mv(newOps));
+ObjectPointer::Reader CapReaderContext::imbue(ObjectPointer::Reader base) {
+  KJ_REQUIRE(extractor != nullptr, "imbue() can only be called once.");
+  KJ_IF_MAYBE(oldArena, base.reader.getArena()) {
+    kj::ctor(arena(), oldArena, extractor);
+  } else {
+    KJ_FAIL_REQUIRE("Cannot imbue unchecked message.");
+  }
+  extractor = nullptr;
+  return ObjectPointer::Reader(base.reader.imbue(arena()));
+}
+
+CapBuilderContext::CapBuilderContext(CapInjectorBase& injector): injector(&injector) {}
+CapBuilderContext::~CapBuilderContext() noexcept(false) {
+  if (injector == nullptr) {
+    kj::dtor(arena());
+  }
+}
+
+ObjectPointer::Builder CapBuilderContext::imbue(ObjectPointer::Builder base) {
+  KJ_REQUIRE(injector != nullptr, "imbue() can only be called once.");
+  kj::ctor(arena(), &base.builder.getArena(), injector);
+  injector = nullptr;
+  return ObjectPointer::Builder(base.builder.imbue(arena()));
 }
 
 }  // namespace capnp

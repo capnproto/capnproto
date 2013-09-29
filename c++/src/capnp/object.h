@@ -63,6 +63,7 @@ struct ObjectPointer {
     _::PointerReader reader;
     friend struct ObjectPointer;
     friend class Orphanage;
+    friend class CapReaderContext;
   };
 
   class Builder {
@@ -143,6 +144,7 @@ struct ObjectPointer {
 
   private:
     _::PointerBuilder builder;
+    friend class CapBuilderContext;
   };
 };
 
@@ -279,6 +281,38 @@ inline typename T::Reader Orphan<ObjectPointer>::getAsReader() const {
 template <typename T>
 inline Orphan<T> Orphan<ObjectPointer>::releaseAs() {
   return Orphan<T>(kj::mv(builder));
+}
+
+// Using ObjectPointer as the template type should work...
+
+template <>
+inline typename ObjectPointer::Reader ObjectPointer::Reader::getAs<ObjectPointer>() {
+  return *this;
+}
+template <>
+inline typename ObjectPointer::Builder ObjectPointer::Builder::getAs<ObjectPointer>() {
+  return *this;
+}
+template <>
+inline typename ObjectPointer::Builder ObjectPointer::Builder::initAs<ObjectPointer>() {
+  clear();
+  return *this;
+}
+template <>
+inline void ObjectPointer::Builder::setAs<ObjectPointer>(ObjectPointer::Reader value) {
+  return builder.copyFrom(value.reader);
+}
+template <>
+inline void ObjectPointer::Builder::adopt<ObjectPointer>(Orphan<ObjectPointer>&& orphan) {
+  builder.adopt(kj::mv(orphan.builder));
+}
+template <>
+inline Orphan<ObjectPointer> ObjectPointer::Builder::disownAs<ObjectPointer>() {
+  return Orphan<ObjectPointer>(builder.disown());
+}
+template <>
+inline Orphan<ObjectPointer> Orphan<ObjectPointer>::releaseAs() {
+  return kj::mv(*this);
 }
 
 }  // namespace capnp

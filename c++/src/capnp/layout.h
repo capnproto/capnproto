@@ -39,7 +39,7 @@
 
 namespace capnp {
 
-class TypelessCapability;
+class ClientHook;
 
 namespace _ {  // private
 
@@ -54,7 +54,10 @@ struct WirePointer;
 struct WireHelpers;
 class SegmentReader;
 class SegmentBuilder;
+class Arena;
 class BuilderArena;
+class ImbuedReaderArena;
+class ImbuedBuilderArena;
 
 // =============================================================================
 
@@ -284,7 +287,7 @@ public:
   ListBuilder getList(FieldSize elementSize, const word* defaultValzue);
   ListBuilder getStructList(StructSize elementSize, const word* defaultValue);
   template <typename T> typename T::Builder getBlob(const void* defaultValue,ByteCount defaultSize);
-  kj::Own<TypelessCapability> getCapability();
+  kj::Own<ClientHook> getCapability();
   // Get methods:  Get the value.  If it is null, initialize it to a copy of the default value.
   // The default value is encoded as an "unchecked message" for structs, lists, and objects, or a
   // simple byte array for blobs.
@@ -300,7 +303,7 @@ public:
   void setStruct(const StructReader& value);
   void setList(const ListReader& value);
   template <typename T> void setBlob(typename T::Reader value);
-  void setCapability(kj::Own<TypelessCapability>&& cap);
+  void setCapability(kj::Own<ClientHook>&& cap);
   // Set methods:  Initialize the pointer to a newly-allocated copy of the given value, discarding
   // the existing object.
 
@@ -320,6 +323,12 @@ public:
   // Equivalent to `set(other.get())`.
 
   PointerReader asReader() const;
+
+  BuilderArena& getArena() const;
+  // Get the arena containing this pointer.
+
+  PointerBuilder imbue(ImbuedBuilderArena& newArena) const;
+  // Imbue the pointer with a capability context, returning the imbued pointer.
 
 private:
   SegmentBuilder* segment;     // Memory segment in which the pointer resides.
@@ -342,7 +351,7 @@ public:
   ListReader getList(FieldSize expectedElementSize, const word* defaultValue) const;
   template <typename T>
   typename T::Reader getBlob(const void* defaultValue, ByteCount defaultSize) const;
-  kj::Own<TypelessCapability> getCapability();
+  kj::Own<ClientHook> getCapability();
   // Get methods:  Get the value.  If it is null, return the default value instead.
   // The default value is encoded as an "unchecked message" for structs, lists, and objects, or a
   // simple byte array for blobs.
@@ -351,6 +360,12 @@ public:
   // If this is an unchecked message, get a word* pointing at the location of the pointer.  This
   // word* can actually be passed to readUnchecked() to read the designated sub-object later.  If
   // this isn't an unchecked message, throws an exception.
+
+  kj::Maybe<Arena&> getArena() const;
+  // Get the arena containing this pointer.
+
+  PointerReader imbue(ImbuedReaderArena& newArena) const;
+  // Imbue the pointer with a capability context, returning the imbued pointer.
 
 private:
   SegmentReader* segment;      // Memory segment in which the pointer resides.

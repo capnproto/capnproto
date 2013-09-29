@@ -2104,6 +2104,14 @@ PointerReader PointerBuilder::asReader() const {
   return PointerReader(segment, pointer, std::numeric_limits<int>::max());
 }
 
+BuilderArena& PointerBuilder::getArena() const {
+  return *segment->getArena();
+}
+
+PointerBuilder PointerBuilder::imbue(ImbuedBuilderArena& newArena) const {
+  return PointerBuilder(newArena.imbue(segment), pointer);
+}
+
 // =======================================================================================
 // PointerReader
 
@@ -2137,6 +2145,14 @@ const word* PointerReader::getUnchecked() const {
 
 bool PointerReader::isNull() const {
   return pointer == nullptr || pointer->isNull();
+}
+
+kj::Maybe<Arena&> PointerReader::getArena() const {
+  return segment == nullptr ? nullptr : segment->getArena();
+}
+
+PointerReader PointerReader::imbue(ImbuedReaderArena& newArena) const {
+  return PointerReader(newArena.imbue(segment), pointer, nestingLimit);
 }
 
 // =======================================================================================

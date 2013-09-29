@@ -24,10 +24,13 @@
 #define CAPNP_PRIVATE
 #include "arena.h"
 #include "message.h"
+#include "capability.h"
 #include <kj/debug.h>
 #include <vector>
 #include <string.h>
 #include <stdio.h>
+#include "capability.h"
+#include "capability-context.h"
 
 namespace capnp {
 namespace _ {  // private
@@ -99,10 +102,42 @@ void BasicReaderArena::reportReadLimitReached() {
   }
 }
 
+namespace {
+
+class DummyClientHook final: public ClientHook {
+public:
+  Request<ObjectPointer, TypelessAnswer> newCall(
+      uint64_t interfaceId, uint16_t methodId) const override {
+    KJ_FAIL_REQUIRE("Calling capability that was extracted from a message that had no "
+                    "capability context.");
+  }
+
+  kj::Promise<void> whenResolved() const override {
+    return kj::READY_NOW;
+  }
+
+  kj::Own<ClientHook> addRef() const override {
+    return kj::heap<DummyClientHook>();
+  }
+
+  void* getBrand() const override {
+    return nullptr;
+  }
+};
+
+}  // namespace
+
+kj::Own<ClientHook> BasicReaderArena::extractCap(const _::StructReader& capDescriptor) {
+  KJ_FAIL_REQUIRE("Message contained a capability but is not imbued with a capability context.") {
+    return kj::heap<DummyClientHook>();
+  }
+}
+
 // =======================================================================================
 
-ImbuedReaderArena::ImbuedReaderArena(Arena* base)
-    : base(base), segment0(nullptr, SegmentId(0), nullptr, nullptr) {}
+ImbuedReaderArena::ImbuedReaderArena(Arena* base, CapExtractorBase* capExtractor)
+    : base(base), capExtractor(capExtractor),
+      segment0(nullptr, SegmentId(0), nullptr, nullptr) {}
 ImbuedReaderArena::~ImbuedReaderArena() noexcept(false) {}
 
 SegmentReader* ImbuedReaderArena::imbue(SegmentReader* baseSegment) {
@@ -139,14 +174,16 @@ SegmentReader* ImbuedReaderArena::imbue(SegmentReader* baseSegment) {
   return result;
 }
 
-// implements Arena ------------------------------------------------
-
 SegmentReader* ImbuedReaderArena::tryGetSegment(SegmentId id) {
   return imbue(base->tryGetSegment(id));
 }
 
 void ImbuedReaderArena::reportReadLimitReached() {
   return base->reportReadLimitReached();
+}
+
+kj::Own<ClientHook> ImbuedReaderArena::extractCap(const _::StructReader& capDescriptor) {
+  return capExtractor->extractCapInternal(capDescriptor);
 }
 
 // =======================================================================================
@@ -288,10 +325,19 @@ void BasicBuilderArena::reportReadLimitReached() {
   }
 }
 
+kj::Own<ClientHook> BasicBuilderArena::extractCap(const _::StructReader& capDescriptor) {
+  KJ_FAIL_REQUIRE("Message contains no capabilities.");
+}
+
+void BasicBuilderArena::injectCap(_::PointerBuilder pointer, kj::Own<ClientHook>&& cap) {
+  KJ_FAIL_REQUIRE("Cannot inject capability into a builder that has not been imbued with a "
+                  "capability context.");
+}
+
 // =======================================================================================
 
-ImbuedBuilderArena::ImbuedBuilderArena(BuilderArena* base)
-    : base(base), segment0(nullptr) {}
+ImbuedBuilderArena::ImbuedBuilderArena(BuilderArena* base, CapInjectorBase* capInjector)
+    : base(base), capInjector(capInjector), segment0(nullptr) {}
 ImbuedBuilderArena::~ImbuedBuilderArena() noexcept(false) {}
 
 SegmentBuilder* ImbuedBuilderArena::imbue(SegmentBuilder* baseSegment) {
@@ -334,6 +380,10 @@ void ImbuedBuilderArena::reportReadLimitReached() {
   base->reportReadLimitReached();
 }
 
+kj::Own<ClientHook> ImbuedBuilderArena::extractCap(const _::StructReader& capDescriptor) {
+  return capInjector->getInjectedCapInternal(capDescriptor);
+}
+
 SegmentBuilder* ImbuedBuilderArena::getSegment(SegmentId id) {
   return imbue(base->getSegment(id));
 }
@@ -342,6 +392,10 @@ BuilderArena::AllocateResult ImbuedBuilderArena::allocate(WordCount amount) {
   auto result = allocate(amount);
   result.segment = imbue(result.segment);
   return result;
+}
+
+void ImbuedBuilderArena::injectCap(_::PointerBuilder pointer, kj::Own<ClientHook>&& cap) {
+  return capInjector->injectCapInternal(pointer, kj::mv(cap));
 }
 
 }  // namespace _ (private)

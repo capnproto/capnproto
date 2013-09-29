@@ -950,7 +950,7 @@ using JoinAnswer = Object;
 #
 #   # Level 4 features -----------------------------------------------
 #
-#   newJoiner(count :UInt32): NewJoinerResponse;
+#   newJoiner(count :UInt32) :NewJoinerResponse;
 #   # Prepare a new Join operation, which will eventually lead to forming a new direct connection
 #   # to the host of the joined capability.  `count` is the number of capabilities to join.
 #
@@ -973,7 +973,7 @@ using JoinAnswer = Object;
 #     # message on it with the specified `ProvisionId` in order to receive the final capability.
 #   }
 #
-#   acceptConnectionFromJoiner(parts: List(JoinKeyPart), paths :List(VatPath))
+#   acceptConnectionFromJoiner(parts :List(JoinKeyPart), paths :List(VatPath))
 #       :ConnectionAndProvisionId;
 #   # Called on a joined capability's host to receive the connection from the joiner, once all
 #   # key parts have arrived.  The caller should expect to receive an `Accept` message over the
@@ -1002,17 +1002,17 @@ using JoinAnswer = Object;
 #     sendToTarget :RecipientId;
 #   }
 #
-#   connectToIntroduced(capId: ThirdPartyCapId) :ConnectionAndProvisionId;
+#   connectToIntroduced(capId :ThirdPartyCapId) :ConnectionAndProvisionId;
 #   # Given a ThirdPartyCapId received over this connection, connect to the third party.  The
 #   # caller should then send an `Accept` message over the new connection.
 #
-#   acceptIntroducedConnection(recipientId: RecipientId): Connection
+#   acceptIntroducedConnection(recipientId :RecipientId) :Connection;
 #   # Given a RecipientId received in a `Provide` message on this `Connection`, wait for the
 #   # recipient to connect, and return the connection formed.  Usually, the first message received
 #   # on the new connection will be an `Accept` message.
 # }
 #
-# sturct ConnectionAndProvisionId {
+# struct ConnectionAndProvisionId {
 #   # **(level 3)**
 #
 #   connection :Connection;

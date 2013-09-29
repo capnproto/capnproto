@@ -34,10 +34,13 @@
 #include <kj/mutex.h>
 #include "common.h"
 #include "message.h"
+#include "layout.h"
 
 namespace capnp {
 
-class TypelessCapability;
+class CapExtractorBase;
+class CapInjectorBase;
+class ClientHook;
 
 namespace _ {  // private
 
@@ -182,7 +185,7 @@ public:
   // the VALIDATE_INPUT() macro which may throw an exception; if it return normally, the caller
   // will need to continue with default values.
 
-  virtual kj::Own<TypelessCapability> extractCap(const _::StructReader& capDescriptor);
+  virtual kj::Own<ClientHook> extractCap(const _::StructReader& capDescriptor) = 0;
   // Given a StructReader for a capability descriptor embedded in the message, return the
   // corresponding capability.
 };
@@ -196,6 +199,7 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
+  kj::Own<ClientHook> extractCap(const _::StructReader& capDescriptor);
 
 private:
   MessageReader* message;
@@ -210,7 +214,7 @@ private:
 
 class ImbuedReaderArena final: public Arena {
 public:
-  ImbuedReaderArena(Arena* base);
+  ImbuedReaderArena(Arena* base, CapExtractorBase* capExtractor);
   ~ImbuedReaderArena() noexcept(false);
   KJ_DISALLOW_COPY(ImbuedReaderArena);
 
@@ -219,9 +223,11 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
+  kj::Own<ClientHook> extractCap(const _::StructReader& capDescriptor);
 
 private:
   Arena* base;
+  CapExtractorBase* capExtractor;
 
   // Optimize for single-segment messages so that small messages are handled quickly.
   SegmentReader segment0;
@@ -248,7 +254,7 @@ public:
   // the arena is guaranteed to succeed.  Therefore callers should try to allocate from a specific
   // segment first if there is one, then fall back to the arena.
 
-  virtual void injectCap(_::PointerBuilder pointer, kj::Own<TypelessCapability>&& cap) = 0;
+  virtual void injectCap(_::PointerBuilder pointer, kj::Own<ClientHook>&& cap) = 0;
   // Add the capability to the message and initialize the given pointer as an interface pointer
   // pointing to this cap.
 };
@@ -271,10 +277,12 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
+  kj::Own<ClientHook> extractCap(const _::StructReader& capDescriptor);
 
   // implements BuilderArena -----------------------------------------
   SegmentBuilder* getSegment(SegmentId id) override;
   AllocateResult allocate(WordCount amount) override;
+  void injectCap(_::PointerBuilder pointer, kj::Own<ClientHook>&& cap);
 
 private:
   MessageBuilder* message;
@@ -294,7 +302,7 @@ class ImbuedBuilderArena final: public BuilderArena {
   // A BuilderArena imbued with the ability to inject capabilities.
 
 public:
-  ImbuedBuilderArena(BuilderArena* base);
+  ImbuedBuilderArena(BuilderArena* base, CapInjectorBase* capInjector);
   ~ImbuedBuilderArena() noexcept(false);
   KJ_DISALLOW_COPY(ImbuedBuilderArena);
 
@@ -304,13 +312,16 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
+  kj::Own<ClientHook> extractCap(const _::StructReader& capDescriptor);
 
   // implements BuilderArena -----------------------------------------
   SegmentBuilder* getSegment(SegmentId id) override;
   AllocateResult allocate(WordCount amount) override;
+  void injectCap(_::PointerBuilder pointer, kj::Own<ClientHook>&& cap);
 
 private:
   BuilderArena* base;
+  CapInjectorBase* capInjector;
 
   ImbuedSegmentBuilder segment0;
 
