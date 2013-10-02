@@ -48,6 +48,9 @@ uint64_t generateChildId(uint64_t parentId, kj::StringPtr childName);
 
 uint64_t generateGroupId(uint64_t parentId, uint16_t groupIndex);
 // Generate the ID for a group within a struct.
+
+uint64_t generateMethodParamsId(uint64_t parentId, uint16_t methodOrdinal, bool isResults);
+// Generate the ID for a struct representing method params / results.
 //
 // TODO(cleanup):  Move generate*Id() somewhere more sensible.
 

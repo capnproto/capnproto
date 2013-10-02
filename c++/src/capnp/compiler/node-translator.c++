@@ -535,10 +535,18 @@ NodeTranslator::NodeTranslator(
 }
 
 NodeTranslator::NodeSet NodeTranslator::getBootstrapNode() {
-  return NodeSet {
-    wipNode.getReader(),
-    KJ_MAP(g, groups) { return g.getReader(); }
-  };
+  auto nodeReader = wipNode.getReader();
+  if (nodeReader.isInterface()) {
+    return NodeSet {
+      nodeReader,
+      KJ_MAP(g, paramStructs) { return g.getReader(); }
+    };
+  } else {
+    return NodeSet {
+      nodeReader,
+      KJ_MAP(g, groups) { return g.getReader(); }
+    };
+  }
 }
 
 NodeTranslator::NodeSet NodeTranslator::finish() {
@@ -820,158 +828,17 @@ public:
   KJ_DISALLOW_COPY(StructTranslator);
 
   void translate(Void decl, List<Declaration>::Reader members, schema::Node::Builder builder) {
-    auto structBuilder = builder.initStruct();
-
     // Build the member-info-by-ordinal map.
     MemberInfo root(builder);
     traverseTopOrGroup(members, root, layout.getTop());
+    translateInternal(root, builder);
+  }
 
-    // Go through each member in ordinal order, building each member schema.
-    DuplicateOrdinalDetector dupDetector(errorReporter);
-    for (auto& entry: membersByOrdinal) {
-      MemberInfo& member = *entry.second;
-
-      if (member.decl.getId().isOrdinal()) {
-        dupDetector.check(member.decl.getId().getOrdinal());
-      }
-
-      schema::Field::Builder fieldBuilder = member.getSchema();
-      fieldBuilder.getOrdinal().setExplicit(entry.first);
-
-      switch (member.decl.which()) {
-        case Declaration::FIELD: {
-          auto fieldReader = member.decl.getField();
-          auto slot = fieldBuilder.initSlot();
-          auto typeBuilder = slot.initType();
-          if (translator.compileType(fieldReader.getType(), typeBuilder)) {
-            switch (fieldReader.getDefaultValue().which()) {
-              case Declaration::Field::DefaultValue::VALUE:
-                translator.compileBootstrapValue(fieldReader.getDefaultValue().getValue(),
-                                                 typeBuilder, slot.initDefaultValue());
-                break;
-              case Declaration::Field::DefaultValue::NONE:
-                translator.compileDefaultDefaultValue(typeBuilder, slot.initDefaultValue());
-                break;
-            }
-          } else {
-            translator.compileDefaultDefaultValue(typeBuilder, slot.initDefaultValue());
-          }
-
-          int lgSize = -1;
-          switch (typeBuilder.which()) {
-            case schema::Type::VOID: lgSize = -1; break;
-            case schema::Type::BOOL: lgSize = 0; break;
-            case schema::Type::INT8: lgSize = 3; break;
-            case schema::Type::INT16: lgSize = 4; break;
-            case schema::Type::INT32: lgSize = 5; break;
-            case schema::Type::INT64: lgSize = 6; break;
-            case schema::Type::UINT8: lgSize = 3; break;
-            case schema::Type::UINT16: lgSize = 4; break;
-            case schema::Type::UINT32: lgSize = 5; break;
-            case schema::Type::UINT64: lgSize = 6; break;
-            case schema::Type::FLOAT32: lgSize = 5; break;
-            case schema::Type::FLOAT64: lgSize = 6; break;
-
-            case schema::Type::TEXT: lgSize = -2; break;
-            case schema::Type::DATA: lgSize = -2; break;
-            case schema::Type::LIST: lgSize = -2; break;
-            case schema::Type::ENUM: lgSize = 4; break;
-            case schema::Type::STRUCT: lgSize = -2; break;
-            case schema::Type::INTERFACE: lgSize = -2; break;
-            case schema::Type::OBJECT: lgSize = -2; break;
-          }
-
-          if (lgSize == -2) {
-            // pointer
-            slot.setOffset(member.fieldScope->addPointer());
-          } else if (lgSize == -1) {
-            // void
-            member.fieldScope->addVoid();
-            slot.setOffset(0);
-          } else {
-            slot.setOffset(member.fieldScope->addData(lgSize));
-          }
-          break;
-        }
-
-        case Declaration::UNION:
-          if (!member.unionScope->addDiscriminant()) {
-            errorReporter.addErrorOn(member.decl.getId().getOrdinal(),
-                "Union ordinal, if specified, must be greater than no more than one of its "
-                "member ordinals (i.e. there can only be one field retroactively unionized).");
-          }
-          break;
-
-        case Declaration::GROUP:
-          KJ_FAIL_ASSERT("Groups don't have ordinals.");
-          break;
-
-        default:
-          KJ_FAIL_ASSERT("Unexpected member type.");
-          break;
-      }
-    }
-
-    // OK, we should have built all the members.  Now go through and make sure the discriminant
-    // offsets have been copied over to the schemas and annotations have been applied.
-    root.finishGroup();
-    for (auto member: allMembers) {
-      kj::StringPtr targetsFlagName;
-      switch (member->decl.which()) {
-        case Declaration::FIELD:
-          targetsFlagName = "targetsField";
-          break;
-
-        case Declaration::UNION:
-          member->finishGroup();
-          targetsFlagName = "targetsUnion";
-          break;
-
-        case Declaration::GROUP:
-          member->finishGroup();
-          targetsFlagName = "targetsGroup";
-          break;
-
-        default:
-          KJ_FAIL_ASSERT("Unexpected member type.");
-          break;
-      }
-
-      builder.adoptAnnotations(translator.compileAnnotationApplications(
-          member->decl.getAnnotations(), targetsFlagName));
-    }
-
-    // And fill in the sizes.
-    structBuilder.setDataWordCount(layout.getTop().dataWordCount);
-    structBuilder.setPointerCount(layout.getTop().pointerCount);
-    structBuilder.setPreferredListEncoding(schema::ElementSize::INLINE_COMPOSITE);
-
-    if (layout.getTop().pointerCount == 0) {
-      if (layout.getTop().dataWordCount == 0) {
-        structBuilder.setPreferredListEncoding(schema::ElementSize::EMPTY);
-      } else if (layout.getTop().dataWordCount == 1) {
-        switch (layout.getTop().holes.getFirstWordUsed()) {
-          case 0: structBuilder.setPreferredListEncoding(schema::ElementSize::BIT); break;
-          case 1:
-          case 2:
-          case 3: structBuilder.setPreferredListEncoding(schema::ElementSize::BYTE); break;
-          case 4: structBuilder.setPreferredListEncoding(schema::ElementSize::TWO_BYTES); break;
-          case 5: structBuilder.setPreferredListEncoding(schema::ElementSize::FOUR_BYTES); break;
-          case 6: structBuilder.setPreferredListEncoding(schema::ElementSize::EIGHT_BYTES); break;
-          default: KJ_FAIL_ASSERT("Expected 0, 1, 2, 3, 4, 5, or 6."); break;
-        }
-      }
-    } else if (layout.getTop().pointerCount == 1 &&
-               layout.getTop().dataWordCount == 0) {
-      structBuilder.setPreferredListEncoding(schema::ElementSize::POINTER);
-    }
-
-    for (auto& group: translator.groups) {
-      auto groupBuilder = group.get().getStruct();
-      groupBuilder.setDataWordCount(structBuilder.getDataWordCount());
-      groupBuilder.setPointerCount(structBuilder.getPointerCount());
-      groupBuilder.setPreferredListEncoding(structBuilder.getPreferredListEncoding());
-    }
+  void translate(List<Declaration::Param>::Reader params, schema::Node::Builder builder) {
+    // Build a struct from a method param / result list.
+    MemberInfo root(builder);
+    traverseParams(params, root, layout.getTop());
+    translateInternal(root, builder);
   }
 
 private:
@@ -1004,7 +871,18 @@ private:
     bool isInUnion;
     // Whether or not this field is in the parent's union.
 
-    Declaration::Reader decl;
+    kj::StringPtr name;
+    Declaration::Id::Reader declId;
+    Declaration::Which declKind;
+    bool isParam = false;
+    bool hasDefaultValue = false;               // if declKind == FIELD
+    TypeExpression::Reader fieldType;           // if declKind == FIELD
+    ValueExpression::Reader fieldDefaultValue;  // if declKind == FIELD && hasDefaultValue
+    List<Declaration::AnnotationApplication>::Reader declAnnotations;
+    uint startByte = 0;
+    uint endByte = 0;
+    // Information about the field declaration.  We don't use Declaration::Reader because it might
+    // have come from a Declaration::Param instead.
 
     kj::Maybe<schema::Field::Builder> schema;
     // Schema for the field.  Initialized when getSchema() is first called.
@@ -1031,13 +909,44 @@ private:
                       StructLayout::StructOrGroup& fieldScope,
                       bool isInUnion)
         : parent(&parent), codeOrder(codeOrder), isInUnion(isInUnion),
-          decl(decl), node(nullptr), fieldScope(&fieldScope) {}
+          name(decl.getName().getValue()), declId(decl.getId()), declKind(Declaration::FIELD),
+          declAnnotations(decl.getAnnotations()),
+          startByte(decl.getStartByte()), endByte(decl.getEndByte()),
+          node(nullptr), fieldScope(&fieldScope) {
+      KJ_REQUIRE(decl.which() == Declaration::FIELD);
+      auto fieldDecl = decl.getField();
+      fieldType = fieldDecl.getType();
+      if (fieldDecl.getDefaultValue().isValue()) {
+        hasDefaultValue = true;
+        fieldDefaultValue = fieldDecl.getDefaultValue().getValue();
+      }
+    }
+    inline MemberInfo(MemberInfo& parent, uint codeOrder,
+                      const Declaration::Param::Reader& decl,
+                      StructLayout::StructOrGroup& fieldScope,
+                      bool isInUnion)
+        : parent(&parent), codeOrder(codeOrder), isInUnion(isInUnion),
+          name(decl.getName().getValue()), declKind(Declaration::FIELD), isParam(true),
+          declAnnotations(decl.getAnnotations()),
+          startByte(decl.getStartByte()), endByte(decl.getEndByte()),
+          node(nullptr), fieldScope(&fieldScope) {
+      fieldType = decl.getType();
+      if (decl.getDefaultValue().isValue()) {
+        hasDefaultValue = true;
+        fieldDefaultValue = decl.getDefaultValue().getValue();
+      }
+    }
     inline MemberInfo(MemberInfo& parent, uint codeOrder,
                       const Declaration::Reader& decl,
                       schema::Node::Builder node,
                       bool isInUnion)
         : parent(&parent), codeOrder(codeOrder), isInUnion(isInUnion),
-          decl(decl), node(node), unionScope(nullptr) {}
+          name(decl.getName().getValue()), declId(decl.getId()), declKind(decl.which()),
+          declAnnotations(decl.getAnnotations()),
+          startByte(decl.getStartByte()), endByte(decl.getEndByte()),
+          node(node), unionScope(nullptr) {
+      KJ_REQUIRE(decl.which() != Declaration::FIELD);
+    }
 
     schema::Field::Builder getSchema() {
       KJ_IF_MAYBE(result, schema) {
@@ -1048,7 +957,7 @@ private:
         if (isInUnion) {
           builder.setDiscriminantValue(parent->unionDiscriminantCount++);
         }
-        builder.setName(decl.getName().getValue());
+        builder.setName(name);
         builder.setCodeOrder(codeOrder);
         schema = builder;
         return builder;
@@ -1171,7 +1080,8 @@ private:
   void traverseGroup(List<Declaration>::Reader members, MemberInfo& parent,
                      StructLayout::StructOrGroup& layout) {
     if (members.size() < 1) {
-      errorReporter.addErrorOn(parent.decl, "Group must have at least one member.");
+      errorReporter.addError(parent.startByte, parent.endByte,
+                             "Group must have at least one member.");
     }
 
     traverseTopOrGroup(members, parent, layout);
@@ -1245,6 +1155,17 @@ private:
     }
   }
 
+  void traverseParams(List<Declaration::Param>::Reader params, MemberInfo& parent,
+                      StructLayout::StructOrGroup& layout) {
+    for (uint i: kj::indices(params)) {
+      auto param = params[i];
+      parent.childCount++;
+      MemberInfo* memberInfo = &arena.allocate<MemberInfo>(parent, i, param, layout, false);
+      allMembers.add(memberInfo);
+      membersByOrdinal.insert(std::make_pair(i, memberInfo));
+    }
+  }
+
   schema::Node::Builder newGroupNode(schema::Node::Reader parent, kj::StringPtr name) {
     auto orphan = translator.orphanage.newOrphan<schema::Node>();
     auto node = orphan.get();
@@ -1258,6 +1179,157 @@ private:
 
     translator.groups.add(kj::mv(orphan));
     return node;
+  }
+
+  void translateInternal(MemberInfo& root, schema::Node::Builder builder) {
+    auto structBuilder = builder.initStruct();
+
+    // Go through each member in ordinal order, building each member schema.
+    DuplicateOrdinalDetector dupDetector(errorReporter);
+    for (auto& entry: membersByOrdinal) {
+      MemberInfo& member = *entry.second;
+
+      if (member.declId.isOrdinal()) {
+        dupDetector.check(member.declId.getOrdinal());
+      }
+
+      schema::Field::Builder fieldBuilder = member.getSchema();
+      fieldBuilder.getOrdinal().setExplicit(entry.first);
+
+      switch (member.declKind) {
+        case Declaration::FIELD: {
+          auto slot = fieldBuilder.initSlot();
+          auto typeBuilder = slot.initType();
+          if (translator.compileType(member.fieldType, typeBuilder)) {
+            if (member.hasDefaultValue) {
+              translator.compileBootstrapValue(member.fieldDefaultValue,
+                                               typeBuilder, slot.initDefaultValue());
+            } else {
+              translator.compileDefaultDefaultValue(typeBuilder, slot.initDefaultValue());
+            }
+          } else {
+            translator.compileDefaultDefaultValue(typeBuilder, slot.initDefaultValue());
+          }
+
+          int lgSize = -1;
+          switch (typeBuilder.which()) {
+            case schema::Type::VOID: lgSize = -1; break;
+            case schema::Type::BOOL: lgSize = 0; break;
+            case schema::Type::INT8: lgSize = 3; break;
+            case schema::Type::INT16: lgSize = 4; break;
+            case schema::Type::INT32: lgSize = 5; break;
+            case schema::Type::INT64: lgSize = 6; break;
+            case schema::Type::UINT8: lgSize = 3; break;
+            case schema::Type::UINT16: lgSize = 4; break;
+            case schema::Type::UINT32: lgSize = 5; break;
+            case schema::Type::UINT64: lgSize = 6; break;
+            case schema::Type::FLOAT32: lgSize = 5; break;
+            case schema::Type::FLOAT64: lgSize = 6; break;
+
+            case schema::Type::TEXT: lgSize = -2; break;
+            case schema::Type::DATA: lgSize = -2; break;
+            case schema::Type::LIST: lgSize = -2; break;
+            case schema::Type::ENUM: lgSize = 4; break;
+            case schema::Type::STRUCT: lgSize = -2; break;
+            case schema::Type::INTERFACE: lgSize = -2; break;
+            case schema::Type::OBJECT: lgSize = -2; break;
+          }
+
+          if (lgSize == -2) {
+            // pointer
+            slot.setOffset(member.fieldScope->addPointer());
+          } else if (lgSize == -1) {
+            // void
+            member.fieldScope->addVoid();
+            slot.setOffset(0);
+          } else {
+            slot.setOffset(member.fieldScope->addData(lgSize));
+          }
+          break;
+        }
+
+        case Declaration::UNION:
+          if (!member.unionScope->addDiscriminant()) {
+            errorReporter.addErrorOn(member.declId.getOrdinal(),
+                "Union ordinal, if specified, must be greater than no more than one of its "
+                "member ordinals (i.e. there can only be one field retroactively unionized).");
+          }
+          break;
+
+        case Declaration::GROUP:
+          KJ_FAIL_ASSERT("Groups don't have ordinals.");
+          break;
+
+        default:
+          KJ_FAIL_ASSERT("Unexpected member type.");
+          break;
+      }
+    }
+
+    // OK, we should have built all the members.  Now go through and make sure the discriminant
+    // offsets have been copied over to the schemas and annotations have been applied.
+    root.finishGroup();
+    for (auto member: allMembers) {
+      kj::StringPtr targetsFlagName;
+      if (member->isParam) {
+        targetsFlagName = "targetsParam";
+      } else {
+        switch (member->declKind) {
+          case Declaration::FIELD:
+            targetsFlagName = "targetsField";
+            break;
+
+          case Declaration::UNION:
+            member->finishGroup();
+            targetsFlagName = "targetsUnion";
+            break;
+
+          case Declaration::GROUP:
+            member->finishGroup();
+            targetsFlagName = "targetsGroup";
+            break;
+
+          default:
+            KJ_FAIL_ASSERT("Unexpected member type.");
+            break;
+        }
+      }
+
+      builder.adoptAnnotations(translator.compileAnnotationApplications(
+          member->declAnnotations, targetsFlagName));
+    }
+
+    // And fill in the sizes.
+    structBuilder.setDataWordCount(layout.getTop().dataWordCount);
+    structBuilder.setPointerCount(layout.getTop().pointerCount);
+    structBuilder.setPreferredListEncoding(schema::ElementSize::INLINE_COMPOSITE);
+
+    if (layout.getTop().pointerCount == 0) {
+      if (layout.getTop().dataWordCount == 0) {
+        structBuilder.setPreferredListEncoding(schema::ElementSize::EMPTY);
+      } else if (layout.getTop().dataWordCount == 1) {
+        switch (layout.getTop().holes.getFirstWordUsed()) {
+          case 0: structBuilder.setPreferredListEncoding(schema::ElementSize::BIT); break;
+          case 1:
+          case 2:
+          case 3: structBuilder.setPreferredListEncoding(schema::ElementSize::BYTE); break;
+          case 4: structBuilder.setPreferredListEncoding(schema::ElementSize::TWO_BYTES); break;
+          case 5: structBuilder.setPreferredListEncoding(schema::ElementSize::FOUR_BYTES); break;
+          case 6: structBuilder.setPreferredListEncoding(schema::ElementSize::EIGHT_BYTES); break;
+          default: KJ_FAIL_ASSERT("Expected 0, 1, 2, 3, 4, 5, or 6."); break;
+        }
+      }
+    } else if (layout.getTop().pointerCount == 1 &&
+               layout.getTop().dataWordCount == 0) {
+      structBuilder.setPreferredListEncoding(schema::ElementSize::POINTER);
+    }
+
+    for (auto& group: translator.groups) {
+      auto groupBuilder = group.get().getStruct();
+      groupBuilder.setDataWordCount(structBuilder.getDataWordCount());
+      groupBuilder.setPointerCount(structBuilder.getPointerCount());
+      groupBuilder.setPreferredListEncoding(structBuilder.getPreferredListEncoding());
+    }
   }
 };
 
@@ -1312,42 +1384,69 @@ void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
     Declaration::Reader methodDecl = entry.second.second;
     auto methodReader = methodDecl.getMethod();
 
-    dupDetector.check(methodDecl.getId().getOrdinal());
+    auto ordinalDecl = methodDecl.getId().getOrdinal();
+    dupDetector.check(ordinalDecl);
+    uint16_t ordinal = ordinalDecl.getValue();
 
     auto methodBuilder = list[i++];
     methodBuilder.setName(methodDecl.getName().getValue());
     methodBuilder.setCodeOrder(codeOrder);
 
-    auto paramsReader = methodReader.getParams();
-    auto paramsBuilder = methodBuilder.initParams(paramsReader.size());
-    for (uint i: kj::indices(paramsReader)) {
-      auto param = paramsReader[i];
-      auto paramBuilder = paramsBuilder[i];
+    methodBuilder.setParamStructType(compileParamList(
+        methodDecl.getName().getValue(), ordinal, false, methodReader.getParams()));
 
-      paramBuilder.setName(param.getName().getValue());
-
-      auto defaultValue = param.getDefaultValue();
-      if (compileType(param.getType(), paramBuilder.initType()) && defaultValue.isValue()) {
-        compileBootstrapValue(defaultValue.getValue(), paramBuilder.getType(),
-                              paramBuilder.initDefaultValue());
-      } else {
-        compileDefaultDefaultValue(paramBuilder.getType(), paramBuilder.initDefaultValue());
-      }
-
-      paramBuilder.adoptAnnotations(compileAnnotationApplications(
-          param.getAnnotations(), "targetsParam"));
-    }
-
-    auto returnType = methodReader.getReturnType();
-    if (returnType.isExpression()) {
-      compileType(returnType.getExpression(), methodBuilder.initReturnType());
+    auto results = methodReader.getResults();
+    if (results.isExplicit()) {
+      methodBuilder.setResultStructType(compileParamList(
+          methodDecl.getName().getValue(), ordinal, true, results.getExplicit()));
     } else {
-      methodBuilder.initReturnType().setVoid();
+      // This works because namedList is the default kind of ParamList, and it will default to
+      // an empty list.
+      methodBuilder.setResultStructType(compileParamList(
+          methodDecl.getName().getValue(), ordinal, true, Declaration::ParamList::Reader()));
     }
 
     methodBuilder.adoptAnnotations(compileAnnotationApplications(
         methodDecl.getAnnotations(), "targetsMethod"));
   }
+}
+
+uint64_t NodeTranslator::compileParamList(
+    kj::StringPtr methodName, uint16_t ordinal, bool isResults,
+    Declaration::ParamList::Reader paramList) {
+  switch (paramList.which()) {
+    case Declaration::ParamList::NAMED_LIST: {
+      auto newStruct = orphanage.newOrphan<schema::Node>();
+      auto builder = newStruct.get();
+      auto parent = wipNode.getReader();
+
+      kj::String typeName = kj::str(methodName, isResults ? "$Results" : "$Params");
+
+      builder.setId(generateMethodParamsId(parent.getId(), ordinal, isResults));
+      builder.setDisplayName(kj::str(parent.getDisplayName(), '.', typeName));
+      builder.setDisplayNamePrefixLength(builder.getDisplayName().size() - typeName.size());
+      builder.setScopeId(0);  // detached struct type
+
+      builder.initStruct();
+
+      StructTranslator(*this).translate(paramList.getNamedList(), builder);
+      uint64_t id = builder.getId();
+      paramStructs.add(kj::mv(newStruct));
+      return id;
+    }
+    case Declaration::ParamList::TYPE:
+      KJ_IF_MAYBE(target, resolver.resolve(paramList.getType())) {
+        if (target->kind == Declaration::STRUCT) {
+          return target->id;
+        } else {
+          errorReporter.addErrorOn(
+              paramList.getType(),
+              kj::str("'", declNameString(paramList.getType()), "' is not a struct type."));
+        }
+      }
+      return 0;
+  }
+  KJ_UNREACHABLE;
 }
 
 // -------------------------------------------------------------------

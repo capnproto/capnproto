@@ -574,11 +574,13 @@ const derivedConstant :TestAllTypes = (
     structList = TestConstants.structListConst);
 
 interface TestInterface {
-  foo @0 (i :UInt32, j :Bool) :Text;
-  bar @1 () :Void;
+  foo @0 (i :UInt32, j :Bool) -> (x: Text);
+  bar @1 () -> ();
   baz @2 (s: TestAllTypes);
 }
 
 interface TestExtends extends(TestInterface) {
   qux @0 ();
+  corge @1 TestAllTypes -> ();
+  grault @2 () -> TestAllTypes;
 }

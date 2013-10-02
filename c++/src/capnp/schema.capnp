@@ -191,6 +191,12 @@ struct Field {
 
       type @5 :Type;
       defaultValue @6 :Value;
+
+      hadExplicitDefault @10 :Bool;
+      # Whether the default value was specified explicitly.  Non-explicit default values are always
+      # zero or empty values.  Usually, whether the default value was explicit shouldn't matter.
+      # The main use case for this flag is for structs representing method parameters:
+      # explicitly-defaulted parameters may be allowed to be omitted when calling the method.
     }
 
     group :group {
@@ -232,22 +238,16 @@ struct Method {
   # Specifies order in which the methods were declared in the code.
   # Like Struct.Field.codeOrder.
 
-  params @2 :List(Param);
-  struct Param {
-    name @0 :Text;
-    type @1 :Type;
-    defaultValue @2 :Value;
-    annotations @3 :List(Annotation);
-  }
+  paramStructType @2 :Id;
+  # ID of the parameter struct type.  If a named parameter list was specified in the method
+  # declaration (rather than a single struct parameter type) then a corresponding struct type is
+  # auto-generated.  Such an auto-generated type will not be listed in the interface's
+  # `nestedNodes` and its `scopeId` will be zero -- it is completely detached from the namespace.
 
-  requiredParamCount @3 :UInt16;
-  # One plus the index of the last parameter that has no default value.  In languages where
-  # method calls look like function calls, this is the minimum number of parameters that must
-  # always be specified, while subsequent parameters are optional.
+  resultStructType @3 :Id;
+  # ID of the return struct type; similar to `paramStructType`.
 
-  returnType @4 :Type;
-
-  annotations @5 :List(Annotation);
+  annotations @4 :List(Annotation);
 }
 
 struct Type {

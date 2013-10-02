@@ -175,11 +175,11 @@ private:
       case schema::Type::LIST:
         return kj::strTree("List(", genType(type.getList().getElementType(), scope), ")");
       case schema::Type::ENUM:
-        return nodeName(scope.getDependency(type.getEnum().getTypeId()), scope);
+        return nodeName(schemaLoader.get(type.getEnum().getTypeId()), scope);
       case schema::Type::STRUCT:
-        return nodeName(scope.getDependency(type.getStruct().getTypeId()), scope);
+        return nodeName(schemaLoader.get(type.getStruct().getTypeId()), scope);
       case schema::Type::INTERFACE:
-        return nodeName(scope.getDependency(type.getInterface().getTypeId()), scope);
+        return nodeName(schemaLoader.get(type.getInterface().getTypeId()), scope);
       case schema::Type::OBJECT: return kj::strTree("Object");
     }
     return kj::strTree();
@@ -262,7 +262,7 @@ private:
       }
       case schema::Value::ENUM: {
         KJ_REQUIRE(type.isEnum(), "type/value mismatch");
-        auto enumNode = scope.getDependency(type.getEnum().getTypeId()).asEnum().getProto();
+        auto enumNode = schemaLoader.get(type.getEnum().getTypeId()).asEnum().getProto();
         auto enumerants = enumNode.getEnum().getEnumerants();
         KJ_REQUIRE(value.getEnum() < enumerants.size(),
                 "Enum value out-of-range.", value.getEnum(), enumNode.getDisplayName());
@@ -271,7 +271,7 @@ private:
       case schema::Value::STRUCT: {
         KJ_REQUIRE(type.isStruct(), "type/value mismatch");
         auto structValue = value.getStruct().getAs<DynamicStruct>(
-            scope.getDependency(type.getStruct().getTypeId()).asStruct());
+            schemaLoader.get(type.getStruct().getTypeId()).asStruct());
         return kj::strTree(structValue);
       }
       case schema::Value::INTERFACE: {
@@ -386,7 +386,7 @@ private:
             "\n");
       }
       case schema::Field::GROUP: {
-        auto group = scope.getDependency(field.getGroup().getTypeId()).asStruct();
+        auto group = schemaLoader.get(field.getGroup().getTypeId()).asStruct();
         return kj::strTree(
             indent, field.getName(),
             " :group", genAnnotations(field.getAnnotations(), scope), " {",
@@ -398,6 +398,25 @@ private:
       }
     }
     return kj::strTree();
+  }
+
+  kj::StringTree genParamList(InterfaceSchema interface, StructSchema schema) {
+    if (schema.getProto().getScopeId() == 0) {
+      // A named parameter list.
+      return kj::strTree("(", kj::StringTree(
+          KJ_MAP(field, schema.getFields()) {
+            auto proto = field.getProto();
+            auto slot = proto.getSlot();
+
+            return kj::strTree(
+                proto.getName(), " :", genType(slot.getType(), interface),
+                isEmptyValue(slot.getDefaultValue()) ? kj::strTree("") :
+                    kj::strTree(" = ", genValue(
+                        slot.getType(), slot.getDefaultValue(), interface)));
+          }, ", "), ")");
+    } else {
+      return nodeName(schema, interface);
+    }
   }
 
   kj::StringTree genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent indent) {
@@ -439,28 +458,17 @@ private:
             indent, "}\n");
       }
       case schema::Node::INTERFACE: {
+        auto interface = schema.asInterface();
         return kj::strTree(
             indent, "interface ", name, " @0x", kj::hex(proto.getId()),
             genAnnotations(schema), " {\n",
-            KJ_MAP(method, sortByCodeOrder(schema.asInterface().getMethods())) {
-              int i = 0;
+            KJ_MAP(method, sortByCodeOrder(interface.getMethods())) {
               auto methodProto = method.getProto();
+              auto params = schemaLoader.get(methodProto.getParamStructType()).asStruct();
+              auto results = schemaLoader.get(methodProto.getResultStructType()).asStruct();
               return kj::strTree(
-                  indent.next(), methodProto.getName(), " @", method.getIndex(), "(",
-                  KJ_MAP(param, methodProto.getParams()) {
-                    bool hasDefault = i >= methodProto.getRequiredParamCount() ||
-                        !isEmptyValue(param.getDefaultValue());
-                    return kj::strTree(
-                        i++ > 0 ? ", " : "",
-                        param.getName(), ": ", genType(param.getType(), schema),
-                        hasDefault
-                            ? kj::strTree(" = ", genValue(
-                                param.getType(), param.getDefaultValue(), schema))
-                            : kj::strTree(),
-                        genAnnotations(param.getAnnotations(), schema));
-                  },
-                  ") :", genType(methodProto.getReturnType(), schema),
-                  genAnnotations(methodProto.getAnnotations(), schema), ";\n");
+                  indent.next(), methodProto.getName(), " @", method.getIndex(), " ",
+                  genParamList(interface, params), " -> ", genParamList(interface, results), ";\n");
             },
             genNestedDecls(schema, indent.next()),
             indent, "}\n");

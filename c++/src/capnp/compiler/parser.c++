@@ -95,6 +95,33 @@ uint64_t generateGroupId(uint64_t parentId, uint16_t groupIndex) {
   return result | (1ull << 63);
 }
 
+uint64_t generateMethodParamsId(uint64_t parentId, uint16_t methodOrdinal, bool isResults) {
+  // Compute ID by MD5 hashing the concatenation of the parent ID, the method ordinal, and a
+  // boolean indicating whether this is the params or the results, and then taking the first 8
+  // bytes.
+
+  kj::byte bytes[sizeof(uint64_t) + sizeof(uint16_t) + 1];
+  for (uint i = 0; i < sizeof(uint64_t); i++) {
+    bytes[i] = (parentId >> (i * 8)) & 0xff;
+  }
+  for (uint i = 0; i < sizeof(uint16_t); i++) {
+    bytes[sizeof(uint64_t) + i] = (methodOrdinal >> (i * 8)) & 0xff;
+  }
+  bytes[sizeof(bytes) - 1] = isResults;
+
+  Md5 md5;
+  md5.update(bytes);
+
+  kj::ArrayPtr<const kj::byte> resultBytes = md5.finish();
+
+  uint64_t result = 0;
+  for (uint i = 0; i < sizeof(uint64_t); i++) {
+    result = (result << 8) | resultBytes[i];
+  }
+
+  return result | (1ull << 63);
+}
+
 void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
                const ErrorReporter& errorReporter) {
   CapnpParser parser(Orphanage::getForMessageContaining(result), errorReporter);
@@ -813,16 +840,19 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
         return DeclParserResult(kj::mv(decl), parsers.interfaceLevelDecl);
       }));
 
-  parsers.param = arena.copy(p::transform(
+  parsers.param = arena.copy(p::transformWithLocation(
       p::sequence(identifier, op(":"), parsers.typeExpression,
                   p::optional(p::sequence(op("="), parsers.valueExpression)),
                   p::many(parsers.annotation)),
-      [this](Located<Text::Reader>&& name, Orphan<TypeExpression>&& type,
+      [this](kj::parse::Span<List<Token>::Reader::Iterator> location,
+             Located<Text::Reader>&& name, Orphan<TypeExpression>&& type,
              kj::Maybe<Orphan<ValueExpression>>&& defaultValue,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> Orphan<Declaration::Param> {
         auto result = orphanage.newOrphan<Declaration::Param>();
         auto builder = result.get();
+
+        initLocation(location, builder);
 
         name.copyTo(builder.initName());
         builder.adoptType(kj::mv(type));
@@ -836,14 +866,39 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
         return kj::mv(result);
       }));
 
+  auto& paramList = arena.copy(p::oneOf(
+      p::transform(parenthesizedList(parsers.param, errorReporter),
+          [this](Located<kj::Array<kj::Maybe<Orphan<Declaration::Param>>>>&& params)
+                -> Orphan<Declaration::ParamList> {
+            auto decl = orphanage.newOrphan<Declaration::ParamList>();
+            auto builder = decl.get();
+            params.copyLocationTo(builder);
+            auto listBuilder = builder.initNamedList(params.value.size());
+            for (uint i: kj::indices(params.value)) {
+              KJ_IF_MAYBE(param, params.value[i]) {
+                listBuilder.adoptWithCaveats(i, kj::mv(*param));
+              }
+            }
+            return decl;
+          }),
+      p::transform(parsers.declName,
+          [this](Orphan<DeclName>&& name) -> Orphan<Declaration::ParamList> {
+            auto decl = orphanage.newOrphan<Declaration::ParamList>();
+            auto builder = decl.get();
+            auto nameReader = name.getReader();
+            builder.setStartByte(nameReader.getStartByte());
+            builder.setEndByte(nameReader.getEndByte());
+            builder.adoptType(kj::mv(name));
+            return decl;
+          })));
+
   parsers.methodDecl = arena.copy(p::transform(
-      p::sequence(identifier, parsers.ordinal,
-                  parenthesizedList(parsers.param, errorReporter),
-                  p::optional(p::sequence(op(":"), parsers.typeExpression)),
+      p::sequence(identifier, parsers.ordinal, paramList,
+                  p::optional(p::sequence(op("->"), paramList)),
                   p::many(parsers.annotation)),
       [this](Located<Text::Reader>&& name, Orphan<LocatedInteger>&& ordinal,
-             Located<kj::Array<kj::Maybe<Orphan<Declaration::Param>>>>&& params,
-             kj::Maybe<Orphan<TypeExpression>>&& returnType,
+             Orphan<Declaration::ParamList>&& params,
+             kj::Maybe<Orphan<Declaration::ParamList>>&& results,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
@@ -851,18 +906,14 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
             initMemberDecl(decl.get(), kj::mv(name), kj::mv(ordinal), kj::mv(annotations))
                 .initMethod();
 
-        auto paramsBuilder = builder.initParams(params.value.size());
-        for (uint i = 0; i < params.value.size(); i++) {
-          KJ_IF_MAYBE(param, params.value[i]) {
-            paramsBuilder.adoptWithCaveats(i, kj::mv(*param));
-          }
+        builder.adoptParams(kj::mv(params));
+
+        KJ_IF_MAYBE(r, results) {
+          builder.getResults().adoptExplicit(kj::mv(*r));
+        } else {
+          builder.getResults().setNone();
         }
 
-        KJ_IF_MAYBE(t, returnType) {
-          builder.getReturnType().adoptExpression(kj::mv(*t));
-        } else {
-          builder.getReturnType().setNone();
-        }
         return DeclParserResult(kj::mv(decl));
       }));
 

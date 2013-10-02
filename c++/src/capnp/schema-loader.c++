@@ -30,6 +30,8 @@
 #include <kj/debug.h>
 #include <kj/exception.h>
 #include <kj/arena.h>
+#include <kj/vector.h>
+#include <algorithm>
 
 namespace capnp {
 
@@ -386,17 +388,8 @@ private:
                       "invalid codeOrder");
       sawCodeOrder[method.getCodeOrder()] = true;
 
-      auto params = method.getParams();
-      for (auto param: params) {
-        KJ_CONTEXT("validating parameter", param.getName());
-        uint dummy1;
-        bool dummy2;
-        validate(param.getType(), param.getDefaultValue(), &dummy1, &dummy2);
-      }
-
-      VALIDATE_SCHEMA(method.getRequiredParamCount() <= params.size(),
-                      "invalid requiredParamCount");
-      validate(method.getReturnType());
+      validateTypeId(method.getParamStructType(), schema::Node::STRUCT);
+      validateTypeId(method.getResultStructType(), schema::Node::STRUCT);
     }
   }
 
@@ -754,6 +747,43 @@ private:
 
   void checkCompatibility(const schema::Node::Interface::Reader& interfaceNode,
                           const schema::Node::Interface::Reader& replacement) {
+    {
+      // Check superclasses.
+
+      kj::Vector<uint64_t> extends;
+      kj::Vector<uint64_t> replacementExtends;
+      for (uint64_t extend: interfaceNode.getExtends()) {
+        extends.add(extend);
+      }
+      for (uint64_t extend: replacement.getExtends()) {
+        replacementExtends.add(extend);
+      }
+      std::sort(extends.begin(), extends.end());
+      std::sort(replacementExtends.begin(), replacementExtends.end());
+
+      auto iter = extends.begin();
+      auto replacementIter = replacementExtends.begin();
+
+      while (iter != extends.end() || replacementIter != replacementExtends.end()) {
+        if (iter == extends.end()) {
+          replacementIsNewer();
+          break;
+        } else if (replacementIter == replacementExtends.end()) {
+          replacementIsOlder();
+          break;
+        } else if (*iter < *replacementIter) {
+          replacementIsOlder();
+          ++iter;
+        } else if (*iter > *replacementIter) {
+          replacementIsNewer();
+          ++replacementIter;
+        } else {
+          ++iter;
+          ++replacementIter;
+        }
+      }
+    }
+
     auto methods = interfaceNode.getMethods();
     auto replacementMethods = replacement.getMethods();
 
@@ -774,40 +804,11 @@ private:
                           const schema::Method::Reader& replacement) {
     KJ_CONTEXT("comparing method", method.getName());
 
-    auto params = method.getParams();
-    auto replacementParams = replacement.getParams();
-
-    if (replacementParams.size() > params.size()) {
-      replacementIsNewer();
-    } else if (replacementParams.size() < params.size()) {
-      replacementIsOlder();
-    }
-
-    uint count = std::min(params.size(), replacementParams.size());
-    for (uint i = 0; i < count; i++) {
-      auto param = params[i];
-      auto replacementParam = replacementParams[i];
-
-      KJ_CONTEXT("comparing parameter", param.getName());
-
-      checkCompatibility(param.getType(), replacementParam.getType(),
-                         NO_UPGRADE_TO_STRUCT);
-      checkDefaultCompatibility(param.getDefaultValue(), replacementParam.getDefaultValue());
-    }
-
-    // Before checking that the required parameter counts are equal, check if the user added new
-    // parameters without defaulting them, as this is the most common reason for this error and we
-    // can provide a nicer error message.
-    VALIDATE_SCHEMA(replacement.getRequiredParamCount() <= count &&
-                    method.getRequiredParamCount() <= count,
-        "Updated method signature contains additional parameters that lack default values");
-
-    VALIDATE_SCHEMA(replacement.getRequiredParamCount() == method.getRequiredParamCount(),
-        "Updated method signature has different number of required parameters (parameters without "
-        "default values)");
-
-    checkCompatibility(method.getReturnType(), replacement.getReturnType(),
-                       ALLOW_UPGRADE_TO_STRUCT);
+    // TODO(someday):  Allow named parameter list to be replaced by compatible struct type.
+    VALIDATE_SCHEMA(method.getParamStructType() == replacement.getParamStructType(),
+                    "Updated method has different parameters.");
+    VALIDATE_SCHEMA(method.getResultStructType() == replacement.getResultStructType(),
+                    "Updated method has different results.");
   }
 
   void checkCompatibility(const schema::Node::Const::Reader& constNode,

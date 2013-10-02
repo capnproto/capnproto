@@ -22,10 +22,35 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "capability.h"
+#include <kj/debug.h>
 
 namespace capnp {
 
-TypelessAnswer::Pipeline TypelessAnswer::Pipeline::getPointerField(
+kj::Promise<void> Capability::Server::internalUnimplemented(
+    const char* actualInterfaceName, uint64_t requestedTypeId) {
+  KJ_FAIL_REQUIRE("Requested interface not implemented.", actualInterfaceName, requestedTypeId) {
+    // Recoverable exception will be caught by promise framework.
+    return kj::READY_NOW;
+  }
+}
+
+kj::Promise<void> Capability::Server::internalUnimplemented(
+    const char* interfaceName, uint64_t typeId, uint16_t methodId) {
+  KJ_FAIL_REQUIRE("Method not implemented.", interfaceName, typeId, methodId) {
+    // Recoverable exception will be caught by promise framework.
+    return kj::READY_NOW;
+  }
+}
+
+kj::Promise<void> Capability::Server::internalUnimplemented(
+    const char* interfaceName, const char* methodName, uint64_t typeId, uint16_t methodId) {
+  KJ_FAIL_REQUIRE("Method not implemented.", interfaceName, typeId, methodName, methodId) {
+    // Recoverable exception will be caught by promise framework.
+    return kj::READY_NOW;
+  }
+}
+
+TypelessResults::Pipeline TypelessResults::Pipeline::getPointerField(
     uint16_t pointerIndex) const {
   auto newOps = kj::heapArray<PipelineOp>(ops.size() + 1);
   for (auto i: kj::indices(ops)) {

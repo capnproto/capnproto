@@ -106,7 +106,7 @@ namespace {
 
 class DummyClientHook final: public ClientHook {
 public:
-  Request<ObjectPointer, TypelessAnswer> newCall(
+  Request<ObjectPointer, TypelessResults> newCall(
       uint64_t interfaceId, uint16_t methodId) const override {
     KJ_FAIL_REQUIRE("Calling capability that was extracted from a message that had no "
                     "capability context.");

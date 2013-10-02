@@ -170,10 +170,10 @@ struct Declaration {
       extends @21 :List(DeclName);
     }
     method :group {
-      params @22 :List(Param);
-      returnType :union {
+      params @22 :ParamList;
+      results :union {
         none @23 :Void;
-        expression @24 :TypeExpression;
+        explicit @24 :ParamList;
       }
     }
 
@@ -221,6 +221,19 @@ struct Declaration {
     builtinObject @55 :Void;
   }
 
+  struct ParamList {
+    # A list of method parameters or method returns.
+
+    union {
+      namedList @0 :List(Param);
+
+      type @1 :DeclName;
+      # Specified some other struct type instead of a named list.
+    }
+
+    startByte @2 :UInt32;
+    endByte @3 :UInt32;
+  }
   struct Param {
     name @0 :LocatedText;  # If null, param failed to parse.
     type @1 :TypeExpression;
@@ -229,6 +242,9 @@ struct Declaration {
       none @3 :Void;
       value @4 :ValueExpression;
     }
+
+    startByte @5 :UInt32;
+    endByte @6 :UInt32;
   }
 }
 

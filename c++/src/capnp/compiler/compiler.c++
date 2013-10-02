@@ -199,7 +199,8 @@ private:
   void traverseAnnotations(const List<schema::Annotation>::Reader& annotations, uint eagerness,
                            std::unordered_map<const Node*, uint>& seen) const;
   void traverseDependency(uint64_t depId, uint eagerness,
-                          std::unordered_map<const Node*, uint>& seen) const;
+                          std::unordered_map<const Node*, uint>& seen,
+                          bool ignoreIfNotFound = false) const;
   // Helpers for traverse().
 };
 
@@ -730,11 +731,8 @@ void Compiler::Node::traverseNodeDependencies(
         }
       }
       for (auto method: interface.getMethods()) {
-        for (auto param: method.getParams()) {
-          traverseType(param.getType(), eagerness, seen);
-          traverseAnnotations(param.getAnnotations(), eagerness, seen);
-        }
-        traverseType(method.getReturnType(), eagerness, seen);
+        traverseDependency(method.getParamStructType(), eagerness, seen, true);
+        traverseDependency(method.getResultStructType(), eagerness, seen, true);
         traverseAnnotations(method.getAnnotations(), eagerness, seen);
       }
       break;
@@ -771,10 +769,11 @@ void Compiler::Node::traverseType(const schema::Type::Reader& type, uint eagerne
 }
 
 void Compiler::Node::traverseDependency(uint64_t depId, uint eagerness,
-                                        std::unordered_map<const Node*, uint>& seen) const {
+                                        std::unordered_map<const Node*, uint>& seen,
+                                        bool ignoreIfNotFound) const {
   KJ_IF_MAYBE(node, module->getCompiler().findNode(depId)) {
     node->traverse(eagerness, seen);
-  } else {
+  } else if (!ignoreIfNotFound) {
     KJ_FAIL_ASSERT("Dependency ID not present in compiler?", depId);
   }
 }
@@ -872,14 +871,31 @@ static void findImports(Declaration::Reader decl, std::set<kj::StringPtr>& outpu
       break;
     case Declaration::METHOD: {
       auto method = decl.getMethod();
-      for (auto param: method.getParams()) {
-        findImports(param.getType(), output);
-        for (auto ann: param.getAnnotations()) {
-          findImports(ann.getName(), output);
+
+      auto params = method.getParams();
+      if (params.isNamedList()) {
+        for (auto param: params.getNamedList()) {
+          findImports(param.getType(), output);
+          for (auto ann: param.getAnnotations()) {
+            findImports(ann.getName(), output);
+          }
         }
+      } else {
+        findImports(params.getType(), output);
       }
-      if (method.getReturnType().isExpression()) {
-        findImports(method.getReturnType().getExpression(), output);
+
+      if (method.getResults().isExplicit()) {
+        auto results = method.getResults().getExplicit();
+        if (results.isNamedList()) {
+          for (auto param: results.getNamedList()) {
+            findImports(param.getType(), output);
+            for (auto ann: param.getAnnotations()) {
+              findImports(ann.getName(), output);
+            }
+          }
+        } else {
+          findImports(results.getType(), output);
+        }
       }
       break;
     }

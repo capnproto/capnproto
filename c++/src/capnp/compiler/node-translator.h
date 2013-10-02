@@ -90,7 +90,7 @@ public:
     kj::Array<schema::Node::Reader> auxNodes;
     // Auxiliary nodes that were produced when translating this node and should be loaded along
     // with it.  In particular, structs that contain groups (or named unions) spawn extra nodes
-    // representing those.
+    // representing those, and interfaces spawn struct nodes representing method params/results.
   };
 
   NodeSet getBootstrapNode();
@@ -118,6 +118,9 @@ private:
   kj::Vector<Orphan<schema::Node>> groups;
   // If this is a struct node and it contains groups, these are the nodes for those groups,  which
   // must be loaded together with the top-level node.
+
+  kj::Vector<Orphan<schema::Node>> paramStructs;
+  // If this is an interface, these are the auto-generated structs representing params and results.
 
   struct UnfinishedValue {
     ValueExpression::Reader source;
@@ -150,6 +153,10 @@ private:
                         schema::Node::Builder builder);
   // The `members` arrays contain only members with ordinal numbers, in code order.  Other members
   // are handled elsewhere.
+
+  uint64_t compileParamList(kj::StringPtr methodName, uint16_t ordinal, bool isResults,
+                            Declaration::ParamList::Reader paramList);
+  // Compile a param (or result) list and return the type ID of the struct type.
 
   bool compileType(TypeExpression::Reader source, schema::Type::Builder target);
   // Returns false if there was a problem, in which case value expressions of this type should
