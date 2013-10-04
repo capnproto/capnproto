@@ -33,6 +33,8 @@ namespace capnp {
 class StructSchema;
 class ListSchema;
 class Orphanage;
+struct PipelineOp;
+class ClientHook;
 
 struct ObjectPointer {
   // Reader/Builder for the `Object` field type, i.e. a pointer that can point to an arbitrary
@@ -58,6 +60,10 @@ struct ObjectPointer {
     template <typename T>
     inline typename T::Reader getAs(ListSchema schema);
     // Only valid for T = DynamicList.  Requires `#include <capnp/dynamic.h>`.
+
+    kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops);
+    // Used by RPC system to implement pipelining.  Applications generally shouldn't use this
+    // directly.
 
   private:
     _::PointerReader reader;

@@ -110,7 +110,7 @@ class Capability::Client {
   // Base type for capability clients.
 
 public:
-  explicit Client(kj::Own<ClientHook>&& hook);
+  explicit Client(kj::Own<const ClientHook>&& hook);
 
   Client(const Client& other);
   Client& operator=(const Client& other);
@@ -131,13 +131,14 @@ public:
   // TODO(soon):  method(s) for Join
 
 private:
-  kj::Own<ClientHook> hook;
+  kj::Own<const ClientHook> hook;
 
 protected:
   Client() = default;
 
   template <typename Params, typename Results>
-  Request<Params, Results> newCall(uint64_t interfaceId, uint16_t methodId);
+  Request<Params, Results> newCall(uint64_t interfaceId, uint16_t methodId,
+                                   uint firstSegmentWordSize);
 };
 
 // =======================================================================================
@@ -164,17 +165,19 @@ public:
   // requests.  Long-running asynchronous methods should try to call this as early as is
   // convenient.
 
-  typename Results::Builder getResults();
-  typename Results::Builder initResults();
-  typename Results::Builder initResults(uint size);
+  typename Results::Builder getResults(uint firstSegmentWordSize = 0);
+  typename Results::Builder initResults(uint firstSegmentWordSize = 0);
   void setResults(typename Results::Reader value);
   void adoptResults(Orphan<Results>&& value);
-  Orphanage getResultsOrphanage();
+  Orphanage getResultsOrphanage(uint firstSegmentWordSize = 0);
   // Manipulate the results payload.  The "Return" message (part of the RPC protocol) will
   // typically be allocated the first time one of these is called.  Some RPC systems may
   // allocate these messages in a limited space (such as a shared memory segment), therefore the
   // application should delay calling these as long as is convenient to do so (but don't delay
   // if doing so would require extra copies later).
+  //
+  // `firstSegmentWordSize` indicates the suggested size of the message's first segment.  This
+  // is a hint only.  If not specified, the system will decide on its own.
 
   void allowAsyncCancellation(bool allow = true);
   // Indicate that it is OK for the RPC system to discard its Promise for this call's result if
@@ -189,6 +192,12 @@ public:
   // Keep in mind that asynchronous cancellation cannot occur while the method is synchronously
   // executing on a local thread.  The method must perform an asynchronous operation or call
   // `EventLoop::current().runLater()` to yield control.
+  //
+  // TODO(soon):  This doesn't work for local calls, because there's no one to own the object
+  //   in the meantime.  What do we do about that?  Is the security issue here actually a real
+  //   threat?  Maybe we can just always enable cancellation.  After all, you need to be fault
+  //   tolerant and exception-safe, and those are pretty similar to being cancel-tolerant, though
+  //   with less direct control by the attacker...
 
   bool isCanceled();
   // As an alternative to `allowAsyncCancellation()`, a server can call this to check for
@@ -230,8 +239,10 @@ protected:
                                           uint64_t typeId, uint16_t methodId);
 };
 
-Capability::Client makeLocalClient(kj::Own<Capability::Server>&& server);
-// Make a client capability that wraps the given server capability.
+kj::Own<const ClientHook> makeLocalClient(kj::Own<Capability::Server>&& server,
+                                          kj::EventLoop& eventLoop = kj::EventLoop::current());
+// Make a client capability that wraps the given server capability.  The server's methods will
+// only be executed in the given EventLoop, regardless of what thread calls the client's methods.
 
 // =======================================================================================
 
@@ -257,7 +268,7 @@ struct TypelessResults {
 
   class Pipeline {
   public:
-    inline explicit Pipeline(kj::Own<PipelineHook>&& hook): hook(kj::mv(hook)) {}
+    inline explicit Pipeline(kj::Own<const PipelineHook>&& hook): hook(kj::mv(hook)) {}
 
     Pipeline getPointerField(uint16_t pointerIndex) const;
     // Return a new Promise representing a sub-object of the result.  `pointerIndex` is the index
@@ -270,10 +281,10 @@ struct TypelessResults {
     // Expect that the result is a capability and construct a pipelined version of it now.
 
   private:
-    kj::Own<PipelineHook> hook;
+    kj::Own<const PipelineHook> hook;
     kj::Array<PipelineOp> ops;
 
-    inline Pipeline(kj::Own<PipelineHook>&& hook, kj::Array<PipelineOp>&& ops)
+    inline Pipeline(kj::Own<const PipelineHook>&& hook, kj::Array<PipelineOp>&& ops)
         : hook(kj::mv(hook)), ops(kj::mv(ops)) {}
   };
 };
@@ -286,9 +297,6 @@ class RequestHook {
   // Hook interface implemented by RPC system representing a request being built.
 
 public:
-  virtual ObjectPointer::Builder getRequest() = 0;
-  // Get the request object for this call, to be filled in before sending.
-
   virtual RemotePromise<TypelessResults> send() = 0;
   // Send the call and return a promise for the result.
 };
@@ -300,26 +308,50 @@ class ResponseHook {
   // ResponseHook is destroyed, the results can be freed.
 
 public:
+  virtual ~ResponseHook() noexcept(false);
+  // Just here to make sure the type is dynamic.
 };
 
 class PipelineHook {
   // Represents a currently-running call, and implements pipelined requests on its result.
 
 public:
-  virtual kj::Own<PipelineHook> addRef() const = 0;
+  virtual kj::Own<const PipelineHook> addRef() const = 0;
   // Increment this object's reference count.
 
-  virtual kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const = 0;
+  virtual kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const = 0;
   // Extract a promised Capability from the results.
 };
 
 class ClientHook {
 public:
   virtual Request<ObjectPointer, TypelessResults> newCall(
-      uint64_t interfaceId, uint16_t methodId) const = 0;
-  virtual kj::Promise<void> whenResolved() const = 0;
+      uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const = 0;
+  // Start a new call, allowing the client to allocate request/response objects as it sees fit.
+  // This version is used when calls are made from application code in the local process.
 
-  virtual kj::Own<ClientHook> addRef() const = 0;
+  struct VoidPromiseAndPipeline {
+    kj::Promise<void> promise;
+    TypelessResults::Pipeline pipeline;
+  };
+
+  virtual VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
+                                      CallContext<ObjectPointer, ObjectPointer> context) const = 0;
+  // Call the object, but the caller controls allocation of the request/response objects.  If the
+  // callee insists on allocating this objects itself, it must make a copy.  This version is used
+  // when calls come in over the network via an RPC system.  During the call, the context object
+  // may be used from any thread so long as it is only used from one thread at a time.  Once the
+  // returned promise resolves or has been canceled, the context can no longer be used.  The caller
+  // must not allow the ClientHook to be destroyed until the call completes or is canceled.
+  //
+  // The call must not begin synchronously, as the caller may hold arbitrary mutexes.
+
+  virtual kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const = 0;
+  // If this client is a settled reference (not a promise), return nullptr.  Otherwise, return a
+  // promise that eventually resolves to a new client that is closer to being the final, settled
+  // client.  Calling this repeatedly should eventually produce a settled client.
+
+  virtual kj::Own<const ClientHook> addRef() const = 0;
   // Return a new reference to the same capability.
 
   virtual void* getBrand() const = 0;
@@ -335,7 +367,7 @@ class CallContextHook {
 public:
   virtual ObjectPointer::Reader getParams() = 0;
   virtual void releaseParams() = 0;
-  virtual ObjectPointer::Builder getResults() = 0;
+  virtual ObjectPointer::Builder getResults(uint firstSegmentWordSize) = 0;
   virtual void allowAsyncCancellation(bool allow) = 0;
   virtual bool isCanceled() = 0;
 };
@@ -366,7 +398,7 @@ inline Capability::Client TypelessResults::Pipeline::asCap() const {
   return Capability::Client(hook->getPipelinedCap(ops));
 }
 
-inline Capability::Client::Client(kj::Own<ClientHook>&& hook): hook(kj::mv(hook)) {}
+inline Capability::Client::Client(kj::Own<const ClientHook>&& hook): hook(kj::mv(hook)) {}
 inline Capability::Client::Client(const Client& other): hook(other.hook->addRef()) {}
 inline Capability::Client& Capability::Client::operator=(const Client& other) {
   hook = other.hook->addRef();
@@ -377,8 +409,8 @@ inline kj::Promise<void> Capability::Client::whenResolved() const {
 }
 template <typename Params, typename Results>
 inline Request<Params, Results> Capability::Client::newCall(
-    uint64_t interfaceId, uint16_t methodId) {
-  auto typeless = hook->newCall(interfaceId, methodId);
+    uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) {
+  auto typeless = hook->newCall(interfaceId, methodId, firstSegmentWordSize);
   return Request<Params, Results>(typeless.template getAs<Params>(), kj::mv(typeless.hook));
 }
 
@@ -393,31 +425,28 @@ inline void CallContext<Params, Results>::releaseParams() {
   hook->releaseParams();
 }
 template <typename Params, typename Results>
-inline typename Results::Builder CallContext<Params, Results>::getResults() {
+inline typename Results::Builder CallContext<Params, Results>::getResults(
+    uint firstSegmentWordSize) {
   // `template` keyword needed due to: http://llvm.org/bugs/show_bug.cgi?id=17401
-  return hook->getResults().template getAs<Results>();
+  return hook->getResults(firstSegmentWordSize).template getAs<Results>();
 }
 template <typename Params, typename Results>
-inline typename Results::Builder CallContext<Params, Results>::initResults() {
+inline typename Results::Builder CallContext<Params, Results>::initResults(
+    uint firstSegmentWordSize) {
   // `template` keyword needed due to: http://llvm.org/bugs/show_bug.cgi?id=17401
-  return hook->getResults().template initAs<Results>();
-}
-template <typename Params, typename Results>
-inline typename Results::Builder CallContext<Params, Results>::initResults(uint size) {
-  // `template` keyword needed due to: http://llvm.org/bugs/show_bug.cgi?id=17401
-  return hook->getResults().template initAs<Results>(size);
+  return hook->getResults(firstSegmentWordSize).template initAs<Results>();
 }
 template <typename Params, typename Results>
 inline void CallContext<Params, Results>::setResults(typename Results::Reader value) {
-  hook->getResults().set(value);
+  hook->getResults(value.totalSizeInWords() + 1).set(value);
 }
 template <typename Params, typename Results>
 inline void CallContext<Params, Results>::adoptResults(Orphan<Results>&& value) {
-  hook->getResults().adopt(kj::mv(value));
+  hook->getResults(0).adopt(kj::mv(value));
 }
 template <typename Params, typename Results>
-inline Orphanage CallContext<Params, Results>::getResultsOrphanage() {
-  return Orphanage::getForMessageContaining(hook->getResults());
+inline Orphanage CallContext<Params, Results>::getResultsOrphanage(uint firstSegmentWordSize) {
+  return Orphanage::getForMessageContaining(hook->getResults(firstSegmentWordSize));
 }
 template <typename Params, typename Results>
 inline void CallContext<Params, Results>::allowAsyncCancellation(bool allow) {

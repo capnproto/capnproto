@@ -1529,40 +1529,6 @@ Void DynamicValue::Builder::AsImpl<Void>::apply(Builder& builder) {
 
 // =======================================================================================
 
-template <>
-DynamicStruct::Reader MessageReader::getRoot<DynamicStruct>(StructSchema schema) {
-  KJ_REQUIRE(!schema.getProto().getStruct().getIsGroup(),
-             "Can't use group type as the root of a message.");
-  return DynamicStruct::Reader(schema, getRootInternal());
-}
-
-template <>
-DynamicStruct::Builder MessageBuilder::initRoot<DynamicStruct>(StructSchema schema) {
-  KJ_REQUIRE(!schema.getProto().getStruct().getIsGroup(),
-             "Can't use group type as the root of a message.");
-  return DynamicStruct::Builder(schema, initRoot(structSizeFromSchema(schema)));
-}
-
-template <>
-DynamicStruct::Builder MessageBuilder::getRoot<DynamicStruct>(StructSchema schema) {
-  KJ_REQUIRE(!schema.getProto().getStruct().getIsGroup(),
-             "Can't use group type as the root of a message.");
-  return DynamicStruct::Builder(schema, getRoot(structSizeFromSchema(schema)));
-}
-
-template <>
-void MessageBuilder::setRoot<DynamicStruct::Reader>(DynamicStruct::Reader&& value) {
-  setRootInternal(value.reader);
-}
-template <>
-void MessageBuilder::setRoot<const DynamicStruct::Reader&>(const DynamicStruct::Reader& value) {
-  setRootInternal(value.reader);
-}
-template <>
-void MessageBuilder::setRoot<DynamicStruct::Reader&>(DynamicStruct::Reader& value) {
-  setRootInternal(value.reader);
-}
-
 namespace _ {  // private
 
 DynamicStruct::Reader PointerHelpers<DynamicStruct, Kind::UNKNOWN>::getDynamic(

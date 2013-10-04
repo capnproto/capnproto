@@ -26,6 +26,7 @@
 #include <kj/mutex.h>
 #include "common.h"
 #include "layout.h"
+#include "object.h"
 
 #ifndef CAPNP_MESSAGE_H_
 #define CAPNP_MESSAGE_H_
@@ -111,9 +112,9 @@ public:
   typename RootType::Reader getRoot();
   // Get the root struct of the message, interpreting it as the given struct type.
 
-  template <typename RootType>
-  typename RootType::Reader getRoot(StructSchema schema);
-  // Dynamically interpret the root struct of the message using the given schema.
+  template <typename RootType, typename SchemaType>
+  typename RootType::Reader getRoot(SchemaType schema);
+  // Dynamically interpret the root struct of the message using the given schema (a StructSchema).
   // RootType in this case must be DynamicStruct, and you must #include <capnp/dynamic.h> to
   // use this.
 
@@ -128,7 +129,7 @@ private:
   bool allocatedArena;
 
   _::BasicReaderArena* arena() { return reinterpret_cast<_::BasicReaderArena*>(arenaSpace); }
-  _::StructReader getRootInternal();
+  ObjectPointer::Reader getRootInternal();
 };
 
 class MessageBuilder {
@@ -168,15 +169,15 @@ public:
   typename RootType::Builder getRoot();
   // Get the root struct of the message, interpreting it as the given struct type.
 
-  template <typename RootType>
-  typename RootType::Builder getRoot(StructSchema schema);
-  // Dynamically interpret the root struct of the message using the given schema.
+  template <typename RootType, typename SchemaType>
+  typename RootType::Builder getRoot(SchemaType schema);
+  // Dynamically interpret the root struct of the message using the given schema (a StructSchema).
   // RootType in this case must be DynamicStruct, and you must #include <capnp/dynamic.h> to
   // use this.
 
-  template <typename RootType>
-  typename RootType::Builder initRoot(StructSchema schema);
-  // Dynamically init the root struct of the message using the given schema.
+  template <typename RootType, typename SchemaType>
+  typename RootType::Builder initRoot(SchemaType schema);
+  // Dynamically init the root struct of the message using the given schema (a StructSchema).
   // RootType in this case must be DynamicStruct, and you must #include <capnp/dynamic.h> to
   // use this.
 
@@ -204,10 +205,7 @@ private:
 
   _::BasicBuilderArena* arena() { return reinterpret_cast<_::BasicBuilderArena*>(arenaSpace); }
   _::SegmentBuilder* getRootSegment();
-  _::StructBuilder initRoot(_::StructSize size);
-  void setRootInternal(_::StructReader reader);
-  _::StructBuilder getRoot(_::StructSize size);
-  void adoptRootInternal(_::OrphanBuilder orphan);
+  ObjectPointer::Builder getRootInternal();
 };
 
 template <typename RootType>
@@ -295,7 +293,7 @@ class MallocMessageBuilder: public MessageBuilder {
   // a specific location in memory.
 
 public:
-  explicit MallocMessageBuilder(uint firstSegmentWords = 1024,
+  explicit MallocMessageBuilder(uint firstSegmentWords = SUGGESTED_FIRST_SEGMENT_WORDS,
       AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY);
   // Creates a BuilderContext which allocates at least the given number of words for the first
   // segment, and then uses the given strategy to decide how much to allocate for subsequent
@@ -364,39 +362,47 @@ inline const ReaderOptions& MessageReader::getOptions() {
 
 template <typename RootType>
 inline typename RootType::Reader MessageReader::getRoot() {
-  static_assert(kind<RootType>() == Kind::STRUCT, "Root type must be a Cap'n Proto struct type.");
-  return typename RootType::Reader(getRootInternal());
+  return getRootInternal().getAs<RootType>();
 }
 
 template <typename RootType>
 inline typename RootType::Builder MessageBuilder::initRoot() {
-  static_assert(kind<RootType>() == Kind::STRUCT, "Root type must be a Cap'n Proto struct type.");
-  return typename RootType::Builder(initRoot(_::structSize<RootType>()));
+  return getRootInternal().initAs<RootType>();
 }
 
 template <typename Reader>
 inline void MessageBuilder::setRoot(Reader&& value) {
-  typedef FromReader<Reader> RootType;
-  static_assert(kind<RootType>() == Kind::STRUCT,
-                "Parameter must be a Reader for a Cap'n Proto struct type.");
-  setRootInternal(value._reader);
+  getRootInternal().setAs<FromReader<Reader>>(value);
 }
 
 template <typename RootType>
 inline typename RootType::Builder MessageBuilder::getRoot() {
-  static_assert(kind<RootType>() == Kind::STRUCT, "Root type must be a Cap'n Proto struct type.");
-  return typename RootType::Builder(getRoot(_::structSize<RootType>()));
+  return getRootInternal().getAs<RootType>();
 }
 
 template <typename T>
 void MessageBuilder::adoptRoot(Orphan<T>&& orphan) {
-  static_assert(kind<T>() == Kind::STRUCT, "Root type must be a Cap'n Proto struct type.");
-  adoptRootInternal(kj::mv(orphan.builder));
+  return getRootInternal().adopt(kj::mv(orphan));
+}
+
+template <typename RootType, typename SchemaType>
+typename RootType::Reader MessageReader::getRoot(SchemaType schema) {
+  return getRootInternal().getAs<RootType>(schema);
+}
+
+template <typename RootType, typename SchemaType>
+typename RootType::Builder MessageBuilder::getRoot(SchemaType schema) {
+  return getRootInternal().getAs<RootType>(schema);
+}
+
+template <typename RootType, typename SchemaType>
+typename RootType::Builder MessageBuilder::initRoot(SchemaType schema) {
+  return getRootInternal().initAs<RootType>(schema);
 }
 
 template <typename RootType>
 typename RootType::Reader readMessageUnchecked(const word* data) {
-  return typename RootType::Reader(_::StructReader::readRootUnchecked(data));
+  return ObjectPointer::Reader(_::PointerReader::getRootUnchecked(data)).getAs<RootType>();
 }
 
 template <typename Reader>

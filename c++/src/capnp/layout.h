@@ -281,13 +281,17 @@ class PointerBuilder: public kj::DisallowConstCopy {
 public:
   inline PointerBuilder(): segment(nullptr), pointer(nullptr) {}
 
+  static inline PointerBuilder getRoot(SegmentBuilder* segment, word* location);
+  // Get a PointerBuilder representing a message root located in the given segment at the given
+  // location.
+
   bool isNull();
 
   StructBuilder getStruct(StructSize size, const word* defaultValue);
   ListBuilder getList(FieldSize elementSize, const word* defaultValzue);
   ListBuilder getStructList(StructSize elementSize, const word* defaultValue);
   template <typename T> typename T::Builder getBlob(const void* defaultValue,ByteCount defaultSize);
-  kj::Own<ClientHook> getCapability();
+  kj::Own<const ClientHook> getCapability();
   // Get methods:  Get the value.  If it is null, initialize it to a copy of the default value.
   // The default value is encoded as an "unchecked message" for structs, lists, and objects, or a
   // simple byte array for blobs.
@@ -303,7 +307,7 @@ public:
   void setStruct(const StructReader& value);
   void setList(const ListReader& value);
   template <typename T> void setBlob(typename T::Reader value);
-  void setCapability(kj::Own<ClientHook>&& cap);
+  void setCapability(kj::Own<const ClientHook>&& cap);
   // Set methods:  Initialize the pointer to a newly-allocated copy of the given value, discarding
   // the existing object.
 
@@ -345,13 +349,20 @@ class PointerReader {
 public:
   inline PointerReader(): segment(nullptr), pointer(nullptr), nestingLimit(0x7fffffff) {}
 
+  static PointerReader getRoot(SegmentReader* segment, const word* location, int nestingLimit);
+  // Get a PointerReader representing a message root located in the given segment at the given
+  // location.
+
+  static inline PointerReader getRootUnchecked(const word* location);
+  // Get a PointerReader for an unchecked message.
+
   bool isNull() const;
 
   StructReader getStruct(const word* defaultValue) const;
   ListReader getList(FieldSize expectedElementSize, const word* defaultValue) const;
   template <typename T>
   typename T::Reader getBlob(const void* defaultValue, ByteCount defaultSize) const;
-  kj::Own<ClientHook> getCapability();
+  kj::Own<const ClientHook> getCapability();
   // Get methods:  Get the value.  If it is null, return the default value instead.
   // The default value is encoded as an "unchecked message" for structs, lists, and objects, or a
   // simple byte array for blobs.
@@ -389,11 +400,6 @@ private:
 class StructBuilder: public kj::DisallowConstCopy {
 public:
   inline StructBuilder(): segment(nullptr), data(nullptr), pointers(nullptr), bit0Offset(0) {}
-
-  static StructBuilder initRoot(SegmentBuilder* segment, word* location, StructSize size);
-  static void setRoot(SegmentBuilder* segment, word* location, StructReader value);
-  static StructBuilder getRoot(SegmentBuilder* segment, word* location, StructSize size);
-  static void adoptRoot(SegmentBuilder* segment, word* location, OrphanBuilder orphan);
 
   inline word* getLocation() { return reinterpret_cast<word*>(data); }
   // Get the object's location.  Only valid for independently-allocated objects (i.e. not list
@@ -481,9 +487,6 @@ public:
   inline StructReader()
       : segment(nullptr), data(nullptr), pointers(nullptr), dataSize(0),
         pointerCount(0), bit0Offset(0), nestingLimit(0x7fffffff) {}
-
-  static StructReader readRootUnchecked(const word* location);
-  static StructReader readRoot(const word* location, SegmentReader* segment, int nestingLimit);
 
   inline BitCount getDataSectionSize() const { return dataSize; }
   inline WirePointerCount getPointerSectionSize() const { return pointerCount; }
@@ -633,8 +636,6 @@ public:
       : segment(nullptr), ptr(nullptr), elementCount(0), step(0 * BITS / ELEMENTS),
         structDataSize(0), structPointerCount(0), nestingLimit(0x7fffffff) {}
 
-  static ListReader readRootUnchecked(const word* location, FieldSize elementSize);
-
   inline ElementCount size() const;
   // The number of elements in the list.
 
@@ -778,6 +779,14 @@ template <> typename Data::Builder PointerBuilder::initBlob<Data>(ByteCount size
 template <> void PointerBuilder::setBlob<Data>(typename Data::Reader value);
 template <> typename Data::Builder PointerBuilder::getBlob<Data>(const void* defaultValue, ByteCount defaultSize);
 template <> typename Data::Reader PointerReader::getBlob<Data>(const void* defaultValue, ByteCount defaultSize) const;
+
+inline PointerBuilder PointerBuilder::getRoot(SegmentBuilder* segment, word* location) {
+  return PointerBuilder(segment, reinterpret_cast<WirePointer*>(location));
+}
+
+inline PointerReader PointerReader::getRootUnchecked(const word* location) {
+  return PointerReader(nullptr, reinterpret_cast<const WirePointer*>(location), 0x7fffffff);
+}
 
 // -------------------------------------------------------------------
 

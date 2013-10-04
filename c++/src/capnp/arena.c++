@@ -107,16 +107,22 @@ namespace {
 class DummyClientHook final: public ClientHook {
 public:
   Request<ObjectPointer, TypelessResults> newCall(
-      uint64_t interfaceId, uint16_t methodId) const override {
+      uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
     KJ_FAIL_REQUIRE("Calling capability that was extracted from a message that had no "
                     "capability context.");
   }
 
-  kj::Promise<void> whenResolved() const override {
-    return kj::READY_NOW;
+  VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
+                              CallContext<ObjectPointer, ObjectPointer> context) const override {
+    KJ_FAIL_REQUIRE("Calling capability that was extracted from a message that had no "
+                    "capability context.");
   }
 
-  kj::Own<ClientHook> addRef() const override {
+  kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const override {
+    return nullptr;
+  }
+
+  kj::Own<const ClientHook> addRef() const override {
     return kj::heap<DummyClientHook>();
   }
 

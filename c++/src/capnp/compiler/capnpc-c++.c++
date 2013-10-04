@@ -1148,7 +1148,8 @@ private:
 
     return MethodText {
       kj::strTree(
-          "  ::capnp::Request<", paramType, ", ", resultType, "> ", name, "Request();\n"),
+          "  ::capnp::Request<", paramType, ", ", resultType, "> ", name, "Request(\n"
+          "      uint firstSegmentWordSize = 0);\n"),
 
       kj::strTree(
           "  virtual ::kj::Promise<void> ", name, "(\n"
@@ -1161,9 +1162,9 @@ private:
 
       kj::strTree(
           "::capnp::Request<", paramType, ", ", resultType, ">\n",
-          interfaceName, "::Client::", name, "Request() {\n"
+          interfaceName, "::Client::", name, "Request(uint firstSegmentWordSize) {\n"
           "  return newCall<", paramType, ", ", resultType, ">(\n"
-          "      0x", interfaceIdHex, "ull, ", methodId, ");\n"
+          "      0x", interfaceIdHex, "ull, ", methodId, ", firstSegmentWordSize);\n"
           "}\n"
           "::kj::Promise<void> ", interfaceName, "::Server::", name, "(\n"
           "      ", paramType, "::Reader params,\n"
@@ -1231,7 +1232,7 @@ private:
             return kj::strTree(",\n      public virtual ", e.typeName, "::Client");
           }, " {\n"
           "public:\n"
-          "  inline Client(::kj::Own< ::capnp::ClientHook>&& hook)\n"
+          "  inline Client(::kj::Own<const ::capnp::ClientHook>&& hook)\n"
           "      : ::capnp::Capability::Client(::kj::mv(hook)) {}\n"
           "\n",
           KJ_MAP(m, methods) { return kj::mv(m.clientDecls); },

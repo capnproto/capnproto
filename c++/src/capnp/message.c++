@@ -42,7 +42,7 @@ MessageReader::~MessageReader() noexcept(false) {
   }
 }
 
-_::StructReader MessageReader::getRootInternal() {
+ObjectPointer::Reader MessageReader::getRootInternal() {
   if (!allocatedArena) {
     static_assert(sizeof(_::BasicReaderArena) <= sizeof(arenaSpace),
         "arenaSpace is too small to hold a BasicReaderArena.  Please increase it.  This will break "
@@ -55,10 +55,11 @@ _::StructReader MessageReader::getRootInternal() {
   KJ_REQUIRE(segment != nullptr &&
              segment->containsInterval(segment->getStartPtr(), segment->getStartPtr() + 1),
              "Message did not contain a root pointer.") {
-    return _::StructReader();
+    return ObjectPointer::Reader();
   }
 
-  return _::StructReader::readRoot(segment->getStartPtr(), segment, options.nestingLimit);
+  return ObjectPointer::Reader(_::PointerReader::getRoot(
+      segment, segment->getStartPtr(), options.nestingLimit));
 }
 
 // -------------------------------------------------------------------
@@ -89,28 +90,10 @@ _::SegmentBuilder* MessageBuilder::getRootSegment() {
   }
 }
 
-_::StructBuilder MessageBuilder::initRoot(_::StructSize size) {
+ObjectPointer::Builder MessageBuilder::getRootInternal() {
   _::SegmentBuilder* rootSegment = getRootSegment();
-  return _::StructBuilder::initRoot(
-      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), size);
-}
-
-void MessageBuilder::setRootInternal(_::StructReader reader) {
-  _::SegmentBuilder* rootSegment = getRootSegment();
-  _::StructBuilder::setRoot(
-      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), reader);
-}
-
-_::StructBuilder MessageBuilder::getRoot(_::StructSize size) {
-  _::SegmentBuilder* rootSegment = getRootSegment();
-  return _::StructBuilder::getRoot(
-      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), size);
-}
-
-void MessageBuilder::adoptRootInternal(_::OrphanBuilder orphan) {
-  _::SegmentBuilder* rootSegment = getRootSegment();
-  _::StructBuilder::adoptRoot(
-      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS), kj::mv(orphan));
+  return ObjectPointer::Builder(_::PointerBuilder::getRoot(
+      rootSegment, rootSegment->getPtrUnchecked(0 * WORDS)));
 }
 
 kj::ArrayPtr<const kj::ArrayPtr<const word>> MessageBuilder::getSegmentsForOutput() {

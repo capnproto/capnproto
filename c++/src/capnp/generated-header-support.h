@@ -130,6 +130,7 @@ inline kj::StringTree structString(StructReader reader) {
   return structString(reader, rawSchema<T>());
 }
 
+// TODO(soon):  Unify ConstStruct and ConstList.
 template <typename T>
 class ConstStruct {
 public:
@@ -138,7 +139,7 @@ public:
   inline explicit constexpr ConstStruct(const word* ptr): ptr(ptr) {}
 
   inline typename T::Reader get() const {
-    return typename T::Reader(StructReader::readRootUnchecked(ptr));
+    return ObjectPointer::Reader(PointerReader::getRootUnchecked(ptr)).getAs<T>();
   }
 
   inline operator typename T::Reader() const { return get(); }
@@ -157,8 +158,7 @@ public:
   inline explicit constexpr ConstList(const word* ptr): ptr(ptr) {}
 
   inline typename List<T>::Reader get() const {
-    return typename List<T>::Reader(ListReader::readRootUnchecked(
-        ptr, elementSizeForType<T>()));
+    return ObjectPointer::Reader(PointerReader::getRootUnchecked(ptr)).getAs<List<T>>();
   }
 
   inline operator typename List<T>::Reader() const { return get(); }

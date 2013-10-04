@@ -2115,6 +2115,16 @@ PointerBuilder PointerBuilder::imbue(ImbuedBuilderArena& newArena) const {
 // =======================================================================================
 // PointerReader
 
+PointerReader PointerReader::getRoot(SegmentReader* segment, const word* location,
+                                     int nestingLimit) {
+  KJ_REQUIRE(WireHelpers::boundsCheck(segment, location, location + POINTER_SIZE_IN_WORDS),
+             "Root location out-of-bounds.") {
+    location = nullptr;
+  }
+
+  return PointerReader(segment, reinterpret_cast<const WirePointer*>(location), nestingLimit);
+}
+
 StructReader PointerReader::getStruct(const word* defaultValue) const {
   const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
   return WireHelpers::readStructPointer(segment, ref, defaultValue, nestingLimit);
@@ -2157,26 +2167,6 @@ PointerReader PointerReader::imbue(ImbuedReaderArena& newArena) const {
 
 // =======================================================================================
 // StructBuilder
-
-StructBuilder StructBuilder::initRoot(
-    SegmentBuilder* segment, word* location, StructSize size) {
-  return WireHelpers::initStructPointer(
-      reinterpret_cast<WirePointer*>(location), segment, size);
-}
-
-void StructBuilder::setRoot(SegmentBuilder* segment, word* location, StructReader value) {
-  WireHelpers::setStructPointer(segment, reinterpret_cast<WirePointer*>(location), value);
-}
-
-StructBuilder StructBuilder::getRoot(
-    SegmentBuilder* segment, word* location, StructSize size) {
-  return WireHelpers::getWritableStructPointer(
-      reinterpret_cast<WirePointer*>(location), segment, size, nullptr);
-}
-
-void StructBuilder::adoptRoot(SegmentBuilder* segment, word* location, OrphanBuilder orphan) {
-  WireHelpers::adopt(segment, reinterpret_cast<WirePointer*>(location), kj::mv(orphan));
-}
 
 void StructBuilder::clearAll() {
   if (dataSize == 1 * BITS) {
@@ -2279,22 +2269,6 @@ BuilderArena* StructBuilder::getArena() {
 // =======================================================================================
 // StructReader
 
-StructReader StructReader::readRootUnchecked(const word* location) {
-  return WireHelpers::readStructPointer(nullptr, reinterpret_cast<const WirePointer*>(location),
-                                        nullptr, std::numeric_limits<int>::max());
-}
-
-StructReader StructReader::readRoot(
-    const word* location, SegmentReader* segment, int nestingLimit) {
-  KJ_REQUIRE(WireHelpers::boundsCheck(segment, location, location + POINTER_SIZE_IN_WORDS),
-             "Root location out-of-bounds.") {
-    location = nullptr;
-  }
-
-  return WireHelpers::readStructPointer(segment, reinterpret_cast<const WirePointer*>(location),
-                                        nullptr, nestingLimit);
-}
-
 WordCount64 StructReader::totalSize() const {
   WordCount64 result = WireHelpers::roundBitsUpToWords(dataSize) + pointerCount * WORDS_PER_POINTER;
 
@@ -2313,11 +2287,6 @@ WordCount64 StructReader::totalSize() const {
 
 // =======================================================================================
 // ListBuilder
-
-ListReader ListReader::readRootUnchecked(const word* location, FieldSize elementSize) {
-  return WireHelpers::readListPointer(nullptr, reinterpret_cast<const WirePointer*>(location),
-                                      nullptr, elementSize, std::numeric_limits<int>::max());
-}
 
 Text::Builder ListBuilder::asText() {
   KJ_REQUIRE(structDataSize == 8 * BITS && structPointerCount == 0 * POINTERS,

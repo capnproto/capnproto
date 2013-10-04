@@ -771,27 +771,6 @@ template <>
 Orphan<DynamicValue> Orphanage::newOrphanCopy<DynamicValue::Reader>(
     const DynamicValue::Reader& copyFrom) const;
 
-// -------------------------------------------------------------------
-// Inject the ability to use DynamicStruct for message roots and Dynamic{Struct,List} for
-// generated Object accessors.
-
-template <>
-DynamicStruct::Reader MessageReader::getRoot<DynamicStruct>(StructSchema schema);
-template <>
-DynamicStruct::Builder MessageBuilder::initRoot<DynamicStruct>(StructSchema schema);
-template <>
-DynamicStruct::Builder MessageBuilder::getRoot<DynamicStruct>(StructSchema schema);
-template <>
-void MessageBuilder::setRoot<DynamicStruct::Reader>(DynamicStruct::Reader&& value);
-template <>
-void MessageBuilder::setRoot<const DynamicStruct::Reader&>(const DynamicStruct::Reader& value);
-template <>
-void MessageBuilder::setRoot<DynamicStruct::Reader&>(DynamicStruct::Reader& value);
-template <>
-inline void MessageBuilder::adoptRoot<DynamicStruct>(Orphan<DynamicStruct>&& orphan) {
-  adoptRootInternal(kj::mv(orphan.builder));
-}
-
 namespace _ {  // private
 
 template <>

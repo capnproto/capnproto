@@ -46,7 +46,7 @@ TEST(WireFormat, SimpleRawDataStruct) {
     0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef
   }};
 
-  StructReader reader = StructReader::readRootUnchecked(data.words);
+  StructReader reader = PointerReader::getRootUnchecked(data.words).getStruct(nullptr);
 
   EXPECT_EQ(0xefcdab8967452301ull, reader.getDataField<uint64_t>(0 * ELEMENTS));
   EXPECT_EQ(0u, reader.getDataField<uint64_t>(1 * ELEMENTS));
@@ -284,8 +284,8 @@ TEST(WireFormat, StructRoundTrip_OneSegment) {
   SegmentBuilder* segment = allocation.segment;
   word* rootLocation = allocation.words;
 
-  StructBuilder builder = StructBuilder::initRoot(
-      segment, rootLocation, StructSize(2 * WORDS, 4 * POINTERS, FieldSize::INLINE_COMPOSITE));
+  StructBuilder builder = PointerBuilder::getRoot(segment, rootLocation)
+      .initStruct(StructSize(2 * WORDS, 4 * POINTERS, FieldSize::INLINE_COMPOSITE));
   setupStruct(builder);
 
   // word count:
@@ -310,8 +310,8 @@ TEST(WireFormat, StructRoundTrip_OneSegment) {
 
   checkStruct(builder);
   checkStruct(builder.asReader());
-  checkStruct(StructReader::readRootUnchecked(segment->getStartPtr()));
-  checkStruct(StructReader::readRoot(segment->getStartPtr(), segment, 4));
+  checkStruct(PointerReader::getRootUnchecked(segment->getStartPtr()).getStruct(nullptr));
+  checkStruct(PointerReader::getRoot(segment, segment->getStartPtr(), 4).getStruct(nullptr));
 }
 
 TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
@@ -321,8 +321,8 @@ TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
   SegmentBuilder* segment = allocation.segment;
   word* rootLocation = allocation.words;
 
-  StructBuilder builder = StructBuilder::initRoot(
-      segment, rootLocation, StructSize(2 * WORDS, 4 * POINTERS, FieldSize::INLINE_COMPOSITE));
+  StructBuilder builder = PointerBuilder::getRoot(segment, rootLocation)
+      .initStruct(StructSize(2 * WORDS, 4 * POINTERS, FieldSize::INLINE_COMPOSITE));
   setupStruct(builder);
 
   // Verify that we made 15 segments.
@@ -349,7 +349,7 @@ TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
 
   checkStruct(builder);
   checkStruct(builder.asReader());
-  checkStruct(StructReader::readRoot(segment->getStartPtr(), segment, 4));
+  checkStruct(PointerReader::getRoot(segment, segment->getStartPtr(), 4).getStruct(nullptr));
 }
 
 TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
@@ -359,8 +359,8 @@ TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
   SegmentBuilder* segment = allocation.segment;
   word* rootLocation = allocation.words;
 
-  StructBuilder builder = StructBuilder::initRoot(
-      segment, rootLocation, StructSize(2 * WORDS, 4 * POINTERS, FieldSize::INLINE_COMPOSITE));
+  StructBuilder builder = PointerBuilder::getRoot(segment, rootLocation)
+      .initStruct(StructSize(2 * WORDS, 4 * POINTERS, FieldSize::INLINE_COMPOSITE));
   setupStruct(builder);
 
   // Verify that we made 6 segments.
@@ -378,7 +378,7 @@ TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
 
   checkStruct(builder);
   checkStruct(builder.asReader());
-  checkStruct(StructReader::readRoot(segment->getStartPtr(), segment, 4));
+  checkStruct(PointerReader::getRoot(segment, segment->getStartPtr(), 4).getStruct(nullptr));
 }
 
 }  // namespace
