@@ -168,11 +168,27 @@ private:
 namespace _ {  // private
 
 template <typename T>
-Own<T>&& readMaybe(Maybe<Own<T>>&& maybe) { return kj::mv(maybe.ptr); }
+class OwnOwn {
+public:
+  inline OwnOwn(Own<T>&& value) noexcept: value(kj::mv(value)) {}
+
+  inline Own<T>& operator*() { return value; }
+  inline const Own<T>& operator*() const { return value; }
+  inline Own<T>* operator->() { return &value; }
+  inline const Own<T>* operator->() const { return &value; }
+  inline operator Own<T>*() { return value ? &value : nullptr; }
+  inline operator const Own<T>*() const { return value ? &value : nullptr; }
+
+private:
+  Own<T> value;
+};
+
 template <typename T>
-T* readMaybe(Maybe<Own<T>>& maybe) { return maybe.ptr; }
+OwnOwn<T> readMaybe(Maybe<Own<T>>&& maybe) { return OwnOwn<T>(kj::mv(maybe.ptr)); }
 template <typename T>
-const T* readMaybe(const Maybe<Own<T>>& maybe) { return maybe.ptr; }
+Own<T>* readMaybe(Maybe<Own<T>>& maybe) { return maybe.ptr ? &maybe.ptr : nullptr; }
+template <typename T>
+const Own<T>* readMaybe(const Maybe<Own<T>>& maybe) { return maybe.ptr ? &maybe.ptr : nullptr; }
 
 }  // namespace _ (private)
 
@@ -223,11 +239,11 @@ private:
   template <typename U>
   friend class Maybe;
   template <typename U>
-  friend Own<U>&& _::readMaybe(Maybe<Own<U>>&& maybe);
+  friend _::OwnOwn<U> _::readMaybe(Maybe<Own<U>>&& maybe);
   template <typename U>
-  friend U* _::readMaybe(Maybe<Own<U>>& maybe);
+  friend Own<U>* _::readMaybe(Maybe<Own<U>>& maybe);
   template <typename U>
-  friend const U* _::readMaybe(const Maybe<Own<U>>& maybe);
+  friend const Own<U>* _::readMaybe(const Maybe<Own<U>>& maybe);
 };
 
 namespace _ {  // private

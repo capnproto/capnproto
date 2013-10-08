@@ -206,6 +206,21 @@ TEST(Async, SeparateFulfillerCanceled) {
   EXPECT_FALSE(pair.fulfiller->isWaiting());
 }
 
+TEST(Async, SeparateFulfillerChained) {
+  SimpleEventLoop loop;
+
+  auto pair = newPromiseAndFulfiller<Promise<int>>(loop);
+  auto inner = newPromiseAndFulfiller<int>();
+
+  EXPECT_TRUE(pair.fulfiller->isWaiting());
+  pair.fulfiller->fulfill(kj::mv(inner.promise));
+  EXPECT_FALSE(pair.fulfiller->isWaiting());
+
+  inner.fulfiller->fulfill(123);
+
+  EXPECT_EQ(123, loop.wait(kj::mv(pair.promise)));
+}
+
 #if KJ_NO_EXCEPTIONS
 #undef EXPECT_ANY_THROW
 #define EXPECT_ANY_THROW(code) EXPECT_DEATH(code, ".")

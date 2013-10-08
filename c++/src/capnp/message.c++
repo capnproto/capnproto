@@ -165,7 +165,7 @@ MallocMessageBuilder::~MallocMessageBuilder() noexcept(false) {
     }
 
     KJ_IF_MAYBE(s, moreSegments) {
-      for (void* ptr: s->segments) {
+      for (void* ptr: s->get()->segments) {
         free(ptr);
       }
     }
@@ -201,7 +201,7 @@ kj::ArrayPtr<word> MallocMessageBuilder::allocateSegment(uint minimumSize) {
   } else {
     MoreSegments* segments;
     KJ_IF_MAYBE(s, moreSegments) {
-      segments = s;
+      segments = *s;
     } else {
       auto newSegments = kj::heap<MoreSegments>();
       segments = newSegments;

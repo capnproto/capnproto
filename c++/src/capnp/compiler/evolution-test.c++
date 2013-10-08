@@ -676,8 +676,8 @@ static kj::Maybe<kj::Exception> loadFile(
 
     KJ_IF_MAYBE(m, messageBuilder) {
       // Build an example struct using the compiled schema.
-      m->adoptRoot(makeExampleStruct(
-          m->getOrphanage(), compiler.getLoader().get(0x823456789abcdef1llu).asStruct(),
+      m->get()->adoptRoot(makeExampleStruct(
+          m->get()->getOrphanage(), compiler.getLoader().get(0x823456789abcdef1llu).asStruct(),
           sharedOrdinalCount));
     }
 
@@ -692,7 +692,7 @@ static kj::Maybe<kj::Exception> loadFile(
 
     KJ_IF_MAYBE(m, messageBuilder) {
       // Check that the example struct matches the compiled schema.
-      auto root = m->getRoot<DynamicStruct>(
+      auto root = m->get()->getRoot<DynamicStruct>(
           compiler.getLoader().get(0x823456789abcdef1llu).asStruct()).asReader();
       KJ_CONTEXT(root);
       checkExampleStruct(root, sharedOrdinalCount);

@@ -36,6 +36,8 @@ template <typename T>
 class Promise;
 template <typename T>
 class PromiseFulfiller;
+template <typename T>
+struct PromiseFulfillerPair;
 
 // =======================================================================================
 // ***************************************************************************************
@@ -468,11 +470,14 @@ public:
   //
   // For void promises, use `kj::READY_NOW` as the value, e.g. `return kj::READY_NOW`.
 
+  Promise(kj::Exception&& e);
+  // Construct an already-broken Promise.
+
   inline Promise(decltype(nullptr)) {}
 
   template <typename Func, typename ErrorFunc = _::PropagateException>
-  auto then(Func&& func, ErrorFunc&& errorHandler = _::PropagateException())
-      -> PromiseForResult<Func, T>;
+  PromiseForResult<Func, T> then(Func&& func, ErrorFunc&& errorHandler = _::PropagateException())
+      KJ_WARN_UNUSED_RESULT;
   // Register a continuation function to be executed when the promise completes.  The continuation
   // (`func`) takes the promised value (an rvalue of type `T`) as its parameter.  The continuation
   // may return a new value; `then()` itself returns a promise for the continuation's eventual
@@ -561,6 +566,10 @@ private:
   friend class EventLoop;
   template <typename U, typename Adapter, typename... Params>
   friend Promise<U> newAdaptedPromise(Params&&... adapterConstructorParams);
+  template <typename U>
+  friend PromiseFulfillerPair<U> newPromiseAndFulfiller();
+  template <typename U>
+  friend PromiseFulfillerPair<U> newPromiseAndFulfiller(const EventLoop& loop);
 };
 
 constexpr _::Void READY_NOW = _::Void();
@@ -672,18 +681,28 @@ Promise<T> newAdaptedPromise(Params&&... adapterConstructorParams);
 
 template <typename T>
 struct PromiseFulfillerPair {
-  Promise<T> promise;
+  Promise<_::JoinPromises<T>> promise;
   Own<PromiseFulfiller<T>> fulfiller;
 };
 
 template <typename T>
 PromiseFulfillerPair<T> newPromiseAndFulfiller();
+template <typename T>
+PromiseFulfillerPair<T> newPromiseAndFulfiller(const EventLoop& loop);
 // Construct a Promise and a separate PromiseFulfiller which can be used to fulfill the promise.
 // If the PromiseFulfiller is destroyed before either of its methods are called, the Promise is
 // implicitly rejected.
 //
 // Although this function is easier to use than `newAdaptedPromise()`, it has the serious drawback
 // that there is no way to handle cancellation (i.e. detect when the Promise is discarded).
+//
+// You can arrange to fulfill a promise with another promise by using a promise type for T.  E.g.
+// if `T` is `Promise<U>`, then the returned promise will be of type `Promise<U>` but the fulfiller
+// will be of type `PromiseFulfiller<Promise<U>>`.  Thus you pass a `Promise<U>` to the `fulfill()`
+// callback, and the promises are chained.  In this case, an `EventLoop` is needed in order to wait
+// on the chained promise; you can specify one as a parameter, otherwise the current loop in the
+// thread that called `newPromiseAndFulfiller` will be used.  If `T` is *not* a promise type, then
+// no `EventLoop` is needed and the `loop` parameter, if specified, is ignored.
 
 // =======================================================================================
 // internal implementation details follow
@@ -891,6 +910,16 @@ Own<PromiseNode>&& maybeChain(Own<PromiseNode>&& node, const EventLoop& loop,
   return kj::mv(node);
 }
 
+template <typename T>
+Own<PromiseNode> maybeChain(Own<PromiseNode>&& node, Promise<T>*) {
+  return heap<ChainPromiseNode>(EventLoop::current(), kj::mv(node), EventLoop::Event::PREEMPT);
+}
+
+template <typename T>
+Own<PromiseNode>&& maybeChain(Own<PromiseNode>&& node, T*) {
+  return kj::mv(node);
+}
+
 class CrossThreadPromiseNodeBase: public PromiseNode, private EventLoop::Event {
   // A PromiseNode that safely imports a promised value from one EventLoop to another (which
   // implies crossing threads).
@@ -1049,8 +1078,12 @@ Promise<T>::Promise(_::FixVoid<T> value)
     : PromiseBase(heap<_::ImmediatePromiseNode<_::FixVoid<T>>>(kj::mv(value))) {}
 
 template <typename T>
+Promise<T>::Promise(kj::Exception&& exception)
+    : PromiseBase(heap<_::ImmediateBrokenPromiseNode>(kj::mv(exception))) {}
+
+template <typename T>
 template <typename Func, typename ErrorFunc>
-auto Promise<T>::then(Func&& func, ErrorFunc&& errorHandler) -> PromiseForResult<Func, T> {
+PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler) {
   return EventLoop::current().thereImpl(
       kj::mv(*this), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler),
       EventLoop::Event::PREEMPT);
@@ -1130,7 +1163,25 @@ Promise<T> newAdaptedPromise(Params&&... adapterConstructorParams) {
 template <typename T>
 PromiseFulfillerPair<T> newPromiseAndFulfiller() {
   auto wrapper = heap<_::WeakFulfiller<T>>();
-  Promise<T> promise = newAdaptedPromise<T, _::PromiseAndFulfillerAdapter<T>>(*wrapper);
+
+  Own<_::PromiseNode> intermediate(
+      heap<_::AdapterPromiseNode<_::FixVoid<T>, _::PromiseAndFulfillerAdapter<T>>>(*wrapper));
+  Promise<_::JoinPromises<T>> promise(
+      _::maybeChain(kj::mv(intermediate), implicitCast<T*>(nullptr)));
+
+  return PromiseFulfillerPair<T> { kj::mv(promise), kj::mv(wrapper) };
+}
+
+template <typename T>
+PromiseFulfillerPair<T> newPromiseAndFulfiller(const EventLoop& loop) {
+  auto wrapper = heap<_::WeakFulfiller<T>>();
+
+  Own<_::PromiseNode> intermediate(
+      heap<_::AdapterPromiseNode<_::FixVoid<T>, _::PromiseAndFulfillerAdapter<T>>>(*wrapper));
+  Promise<_::JoinPromises<T>> promise(
+      _::maybeChain(kj::mv(intermediate), loop, EventLoop::Event::YIELD,
+                    implicitCast<T*>(nullptr)));
+
   return PromiseFulfillerPair<T> { kj::mv(promise), kj::mv(wrapper) };
 }
 

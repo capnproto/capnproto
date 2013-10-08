@@ -71,11 +71,11 @@ SegmentReader* BasicReaderArena::tryGetSegment(SegmentId id) {
 
   SegmentMap* segments = nullptr;
   KJ_IF_MAYBE(s, *lock) {
-    auto iter = s->find(id.value);
-    if (iter != s->end()) {
+    auto iter = s->get()->find(id.value);
+    if (iter != s->get()->end()) {
       return iter->second;
     }
-    segments = s;
+    segments = *s;
   }
 
   kj::ArrayPtr<const word> newSegment = message->getSegment(id.value);
@@ -113,7 +113,7 @@ public:
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              CallContext<ObjectPointer, ObjectPointer> context) const override {
+                              CallContextHook& context) const override {
     KJ_FAIL_REQUIRE("Calling capability that was extracted from a message that had no "
                     "capability context.");
   }
@@ -162,12 +162,12 @@ SegmentReader* ImbuedReaderArena::imbue(SegmentReader* baseSegment) {
 
   SegmentMap* segments = nullptr;
   KJ_IF_MAYBE(s, *lock) {
-    auto iter = s->find(baseSegment);
-    if (iter != s->end()) {
+    auto iter = s->get()->find(baseSegment);
+    if (iter != s->get()->end()) {
       KJ_DASSERT(iter->second->getArray().begin() == baseSegment->getArray().begin());
       return iter->second;
     }
-    segments = s;
+    segments = *s;
   } else {
     auto newMap = kj::heap<SegmentMap>();
     segments = newMap;
@@ -205,10 +205,10 @@ SegmentBuilder* BasicBuilderArena::getSegment(SegmentId id) {
   } else {
     auto lock = moreSegments.lockShared();
     KJ_IF_MAYBE(s, *lock) {
-      KJ_REQUIRE(id.value - 1 < s->builders.size(), "invalid segment id", id.value);
+      KJ_REQUIRE(id.value - 1 < s->get()->builders.size(), "invalid segment id", id.value);
       // TODO(cleanup):  Return a const SegmentBuilder and tediously constify all SegmentBuilder
       //   pointers throughout the codebase.
-      return const_cast<BasicSegmentBuilder*>(s->builders[id.value - 1].get());
+      return const_cast<BasicSegmentBuilder*>(s->get()->builders[id.value - 1].get());
     } else {
       KJ_FAIL_REQUIRE("invalid segment id", id.value);
     }
@@ -245,11 +245,11 @@ BasicBuilderArena::AllocateResult BasicBuilderArena::allocate(WordCount amount) 
       //   on the last-known available size, and then re-check the size when we pop segments off it
       //   and shove them to the back of the queue if they have become too small.
 
-      attempt = s->builders.back()->allocate(amount);
+      attempt = s->get()->builders.back()->allocate(amount);
       if (attempt != nullptr) {
-        return AllocateResult { s->builders.back().get(), attempt };
+        return AllocateResult { s->get()->builders.back().get(), attempt };
       }
-      segmentState = s;
+      segmentState = *s;
     } else {
       auto newSegmentState = kj::heap<MultiSegmentState>();
       segmentState = newSegmentState;
@@ -279,15 +279,15 @@ kj::ArrayPtr<const kj::ArrayPtr<const word>> BasicBuilderArena::getSegmentsForOu
   // problem regardless of locking here.
 
   KJ_IF_MAYBE(segmentState, moreSegments.getWithoutLock()) {
-    KJ_DASSERT(segmentState->forOutput.size() == segmentState->builders.size() + 1,
+    KJ_DASSERT(segmentState->get()->forOutput.size() == segmentState->get()->builders.size() + 1,
         "segmentState->forOutput wasn't resized correctly when the last builder was added.",
-        segmentState->forOutput.size(), segmentState->builders.size());
+        segmentState->get()->forOutput.size(), segmentState->get()->builders.size());
 
     kj::ArrayPtr<kj::ArrayPtr<const word>> result(
-        &segmentState->forOutput[0], segmentState->forOutput.size());
+        &segmentState->get()->forOutput[0], segmentState->get()->forOutput.size());
     uint i = 0;
     result[i++] = segment0.currentlyAllocated();
-    for (auto& builder: segmentState->builders) {
+    for (auto& builder: segmentState->get()->builders) {
       result[i++] = builder->currentlyAllocated();
     }
     return result;
@@ -314,11 +314,11 @@ SegmentReader* BasicBuilderArena::tryGetSegment(SegmentId id) {
   } else {
     auto lock = moreSegments.lockShared();
     KJ_IF_MAYBE(segmentState, *lock) {
-      if (id.value <= segmentState->builders.size()) {
+      if (id.value <= segmentState->get()->builders.size()) {
         // TODO(cleanup):  Return a const SegmentReader and tediously constify all SegmentBuilder
         //   pointers throughout the codebase.
         return const_cast<SegmentReader*>(kj::implicitCast<const SegmentReader*>(
-            segmentState->builders[id.value - 1].get()));
+            segmentState->get()->builders[id.value - 1].get()));
       }
     }
     return nullptr;
@@ -360,15 +360,15 @@ SegmentBuilder* ImbuedBuilderArena::imbue(SegmentBuilder* baseSegment) {
     auto lock = moreSegments.lockExclusive();
     KJ_IF_MAYBE(segmentState, *lock) {
       auto id = baseSegment->getSegmentId().value;
-      if (id >= segmentState->builders.size()) {
-        segmentState->builders.resize(id + 1);
+      if (id >= segmentState->get()->builders.size()) {
+        segmentState->get()->builders.resize(id + 1);
       }
-      KJ_IF_MAYBE(segment, segmentState->builders[id]) {
-        result = segment;
+      KJ_IF_MAYBE(segment, segmentState->get()->builders[id]) {
+        result = *segment;
       } else {
         auto newBuilder = kj::heap<ImbuedSegmentBuilder>(baseSegment);
         result = newBuilder;
-        segmentState->builders[id] = kj::mv(newBuilder);
+        segmentState->get()->builders[id] = kj::mv(newBuilder);
       }
     }
     return nullptr;

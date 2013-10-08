@@ -101,7 +101,7 @@ public:
 
   kj::Maybe<const Module&> importRelative(kj::StringPtr importPath) const override {
     KJ_IF_MAYBE(importedFile, file->import(importPath)) {
-      return parser.getModuleImpl(kj::mv(importedFile));
+      return parser.getModuleImpl(kj::mv(*importedFile));
     } else {
       return nullptr;
     }

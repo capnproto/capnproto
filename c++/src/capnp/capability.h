@@ -321,6 +321,12 @@ public:
 
   virtual kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const = 0;
   // Extract a promised Capability from the results.
+
+  virtual kj::Own<const ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) const {
+    // Version of getPipelinedCap() passing the array by move.  May avoid a copy in some cases.
+    // Default implementation just calls the other version.
+    return getPipelinedCap(ops.asPtr());
+  }
 };
 
 class ClientHook {
@@ -332,11 +338,11 @@ public:
 
   struct VoidPromiseAndPipeline {
     kj::Promise<void> promise;
-    TypelessResults::Pipeline pipeline;
+    kj::Own<const PipelineHook> pipeline;
   };
 
   virtual VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                      CallContext<ObjectPointer, ObjectPointer> context) const = 0;
+                                      CallContextHook& context) const = 0;
   // Call the object, but the caller controls allocation of the request/response objects.  If the
   // callee insists on allocating this objects itself, it must make a copy.  This version is used
   // when calls come in over the network via an RPC system.  During the call, the context object
@@ -350,6 +356,9 @@ public:
   // If this client is a settled reference (not a promise), return nullptr.  Otherwise, return a
   // promise that eventually resolves to a new client that is closer to being the final, settled
   // client.  Calling this repeatedly should eventually produce a settled client.
+
+  kj::Promise<void> whenResolved() const;
+  // Repeatedly calls whenMoreResolved() until it returns nullptr.
 
   virtual kj::Own<const ClientHook> addRef() const = 0;
   // Return a new reference to the same capability.
@@ -370,6 +379,11 @@ public:
   virtual ObjectPointer::Builder getResults(uint firstSegmentWordSize) = 0;
   virtual void allowAsyncCancellation(bool allow) = 0;
   virtual bool isCanceled() = 0;
+
+  virtual Response<ObjectPointer> getResponseForPipeline() = 0;
+  // Get a copy or reference to the response which will be used to execute pipelined calls.  This
+  // will be called no more than once, just after the server implementation successfully returns
+  // from the call.
 };
 
 // =======================================================================================

@@ -810,11 +810,11 @@ struct PointerHelpers<DynamicList, Kind::UNKNOWN> {
 }  // namespace _ (private)
 
 template <typename T>
-inline typename T::Reader ObjectPointer::Reader::getAs(StructSchema schema) {
+inline typename T::Reader ObjectPointer::Reader::getAs(StructSchema schema) const {
   return _::PointerHelpers<T>::getDynamic(reader, schema);
 }
 template <typename T>
-inline typename T::Reader ObjectPointer::Reader::getAs(ListSchema schema) {
+inline typename T::Reader ObjectPointer::Reader::getAs(ListSchema schema) const {
   return _::PointerHelpers<T>::getDynamic(reader, schema);
 }
 template <typename T>

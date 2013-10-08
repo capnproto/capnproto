@@ -47,21 +47,21 @@ struct ObjectPointer {
     Reader() = default;
     inline Reader(_::PointerReader reader): reader(reader) {}
 
-    inline bool isNull();
+    inline bool isNull() const;
 
     template <typename T>
-    inline typename T::Reader getAs();
+    inline typename T::Reader getAs() const;
     // Valid for T = any generated struct type, List<U>, Text, or Data.
 
     template <typename T>
-    inline typename T::Reader getAs(StructSchema schema);
+    inline typename T::Reader getAs(StructSchema schema) const;
     // Only valid for T = DynamicStruct.  Requires `#include <capnp/dynamic.h>`.
 
     template <typename T>
-    inline typename T::Reader getAs(ListSchema schema);
+    inline typename T::Reader getAs(ListSchema schema) const;
     // Only valid for T = DynamicList.  Requires `#include <capnp/dynamic.h>`.
 
-    kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops);
+    kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const;
     // Used by RPC system to implement pipelining.  Applications generally shouldn't use this
     // directly.
 
@@ -209,12 +209,12 @@ private:
 // =======================================================================================
 // Inline implementation details
 
-inline bool ObjectPointer::Reader::isNull() {
+inline bool ObjectPointer::Reader::isNull() const {
   return reader.isNull();
 }
 
 template <typename T>
-inline typename T::Reader ObjectPointer::Reader::getAs() {
+inline typename T::Reader ObjectPointer::Reader::getAs() const {
   return _::PointerHelpers<T>::get(reader);
 }
 
@@ -292,7 +292,7 @@ inline Orphan<T> Orphan<ObjectPointer>::releaseAs() {
 // Using ObjectPointer as the template type should work...
 
 template <>
-inline typename ObjectPointer::Reader ObjectPointer::Reader::getAs<ObjectPointer>() {
+inline typename ObjectPointer::Reader ObjectPointer::Reader::getAs<ObjectPointer>() const {
   return *this;
 }
 template <>

@@ -342,6 +342,10 @@ T refIfLvalue(T&&);
 template<typename T> constexpr T&& mv(T& t) noexcept { return static_cast<T&&>(t); }
 template<typename T> constexpr T&& fwd(NoInfer<T>& t) noexcept { return static_cast<T&&>(t); }
 
+template<typename T> constexpr T cp(T& t) noexcept { return t; }
+template<typename T> constexpr T cp(const T& t) noexcept { return t; }
+// Useful to force a copy, particularly to pass into a function that expects T&&.
+
 template <typename T, typename U>
 inline constexpr auto min(T&& a, U&& b) -> decltype(a < b ? a : b) { return a < b ? a : b; }
 template <typename T, typename U>

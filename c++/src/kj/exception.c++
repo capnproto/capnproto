@@ -207,7 +207,7 @@ Exception::Exception(const Exception& other) noexcept
   memcpy(trace, other.trace, sizeof(trace[0]) * traceCount);
 
   KJ_IF_MAYBE(c, other.context) {
-    context = heap(*c);
+    context = heap(**c);
   }
 }
 
@@ -216,7 +216,7 @@ Exception::~Exception() noexcept {}
 Exception::Context::Context(const Context& other) noexcept
     : file(other.file), line(other.line), description(str(other.description)) {
   KJ_IF_MAYBE(n, other.next) {
-    next = heap(*n);
+    next = heap(**n);
   }
 }
 

@@ -1149,7 +1149,7 @@ private:
     return MethodText {
       kj::strTree(
           "  ::capnp::Request<", paramType, ", ", resultType, "> ", name, "Request(\n"
-          "      uint firstSegmentWordSize = 0);\n"),
+          "      unsigned int firstSegmentWordSize = 0);\n"),
 
       kj::strTree(
           "  virtual ::kj::Promise<void> ", name, "(\n"
@@ -1162,7 +1162,7 @@ private:
 
       kj::strTree(
           "::capnp::Request<", paramType, ", ", resultType, ">\n",
-          interfaceName, "::Client::", name, "Request(uint firstSegmentWordSize) {\n"
+          interfaceName, "::Client::", name, "Request(unsigned int firstSegmentWordSize) {\n"
           "  return newCall<", paramType, ", ", resultType, ">(\n"
           "      0x", interfaceIdHex, "ull, ", methodId, ", firstSegmentWordSize);\n"
           "}\n"

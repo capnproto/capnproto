@@ -21,24 +21,67 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "object.h"
-#include "capability.h"
+#include "one-of.h"
+#include "string.h"
+#include <gtest/gtest.h>
 
-namespace capnp {
+namespace kj {
 
-kj::Own<const ClientHook> ObjectPointer::Reader::getPipelinedCap(
-    kj::ArrayPtr<const PipelineOp> ops) const {
-  _::PointerReader pointer = reader;
+TEST(OneOf, Basic) {
+  OneOf<int, float, String> var;
 
-  for (auto& op: ops) {
-    switch (op.type) {
-      case PipelineOp::Type::GET_POINTER_FIELD:
-        pointer = pointer.getStruct(nullptr).getPointerField(op.pointerIndex * POINTERS);
-        break;
-    }
-  }
+  EXPECT_FALSE(var.is<int>());
+  EXPECT_FALSE(var.is<float>());
+  EXPECT_FALSE(var.is<String>());
 
-  return pointer.getCapability();
+  var.init<int>(123);
+
+  EXPECT_TRUE(var.is<int>());
+  EXPECT_FALSE(var.is<float>());
+  EXPECT_FALSE(var.is<String>());
+
+  EXPECT_EQ(123, var.get<int>());
+#if !KJ_NO_EXCEPTIONS
+  EXPECT_ANY_THROW(var.get<float>());
+  EXPECT_ANY_THROW(var.get<String>());
+#endif
+
+  var.init<String>(kj::str("foo"));
+
+  EXPECT_FALSE(var.is<int>());
+  EXPECT_FALSE(var.is<float>());
+  EXPECT_TRUE(var.is<String>());
+
+  EXPECT_EQ("foo", var.get<String>());
+
+  OneOf<int, float, String> var2 = kj::mv(var);
+  EXPECT_EQ("", var.get<String>());
+  EXPECT_EQ("foo", var2.get<String>());
+
+  var = kj::mv(var2);
+  EXPECT_EQ("foo", var.get<String>());
+  EXPECT_EQ("", var2.get<String>());
 }
 
-}  // namespace capnp
+TEST(OneOf, Copy) {
+  OneOf<int, float, const char*> var;
+
+  OneOf<int, float, const char*> var2 = var;
+  EXPECT_FALSE(var2.is<int>());
+  EXPECT_FALSE(var2.is<float>());
+  EXPECT_FALSE(var2.is<const char*>());
+
+  var.init<int>(123);
+
+  var2 = var;
+  EXPECT_TRUE(var2.is<int>());
+  EXPECT_EQ(123, var2.get<int>());
+
+  var.init<const char*>("foo");
+
+  var2 = var;
+  EXPECT_TRUE(var2.is<const char*>());
+  EXPECT_STREQ("foo", var2.get<const char*>());
+}
+
+}  // namespace kj
