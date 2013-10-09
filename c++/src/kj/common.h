@@ -766,8 +766,8 @@ public:
   inline Maybe(const Maybe<const U&>& other) noexcept: ptr(other.ptr) {}
   inline Maybe(decltype(nullptr)) noexcept: ptr(nullptr) {}
 
-  inline Maybe& operator=(T& other) noexcept { ptr = &other; }
-  inline Maybe& operator=(T* other) noexcept { ptr = other; }
+  inline Maybe& operator=(T& other) noexcept { ptr = &other; return *this; }
+  inline Maybe& operator=(T* other) noexcept { ptr = other; return *this; }
   template <typename U>
   inline Maybe& operator=(Maybe<U&>& other) noexcept { ptr = other.ptr; return *this; }
   template <typename U>

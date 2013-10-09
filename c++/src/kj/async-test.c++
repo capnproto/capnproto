@@ -316,5 +316,29 @@ TEST(Async, Ordering) {
   EXPECT_EQ(7, counter);
 }
 
+TEST(Async, Fork) {
+  SimpleEventLoop loop;
+
+  auto outer = loop.evalLater([&]() {
+    Promise<String> promise = loop.evalLater([&]() { return str("foo"); });
+
+    auto fork = promise.fork();
+
+    auto branch1 = fork->addBranch().then([](const String& s) {
+      EXPECT_EQ("foo", s);
+      return 456;
+    });
+    auto branch2 = fork->addBranch().then([](const String& s) {
+      EXPECT_EQ("foo", s);
+      return 789;
+    });
+
+    EXPECT_EQ(456, loop.wait(kj::mv(branch1)));
+    EXPECT_EQ(789, loop.wait(kj::mv(branch2)));
+  });
+
+  loop.wait(kj::mv(outer));
+}
+
 }  // namespace
 }  // namespace kj

@@ -52,9 +52,6 @@ class Refcounted: private Disposer {
 public:
   virtual ~Refcounted() noexcept(false);
 
-  template <typename T>
-  static Own<T> addRef(T& object);
-
 private:
   mutable volatile uint refcount = 0;
 

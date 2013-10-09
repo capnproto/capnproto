@@ -26,6 +26,7 @@
 
 #include "exception.h"
 #include "mutex.h"
+#include "refcount.h"
 
 namespace kj {
 
@@ -77,6 +78,9 @@ public:
   Bottom operator()(Exception&& e) {
     return Bottom(kj::mv(e));
   }
+  Bottom operator()(const  Exception& e) {
+    return Bottom(kj::cp(e));
+  }
 };
 
 template <typename Func, typename T>
@@ -88,6 +92,19 @@ template <typename Func, typename T>
 using ReturnType = typename ReturnType_<Func, T>::Type;
 // The return type of functor Func given a parameter of type T, with the special exception that if
 // T is void, this is the return type of Func called with no arguments.
+
+template <typename T>
+struct ConstReferenceTo_ { typedef const T& Type; };
+template <typename T>
+struct ConstReferenceTo_<T&> { typedef const T& Type; };
+template <typename T>
+struct ConstReferenceTo_<const T&> { typedef const T& Type; };
+template <>
+struct ConstReferenceTo_<void> { typedef void Type; };
+
+template <typename T>
+using ConstReferenceTo = typename ConstReferenceTo_<T>::Type;
+// Resolves to `const T&`, or to `void` if `T` is `void`.
 
 struct Void {};
 // Application code should NOT refer to this!  See `kj::READY_NOW` instead.
@@ -112,6 +129,13 @@ struct MaybeVoidCaller {
     return func(kj::mv(in));
   }
 };
+template <typename In, typename Out>
+struct MaybeVoidCaller<In&, Out> {
+  template <typename Func>
+  static inline Out apply(Func& func, In& in) {
+    return func(in);
+  }
+};
 template <typename Out>
 struct MaybeVoidCaller<Void, Out> {
   template <typename Func>
@@ -124,6 +148,14 @@ struct MaybeVoidCaller<In, Void> {
   template <typename Func>
   static inline Void apply(Func& func, In&& in) {
     func(kj::mv(in));
+    return Void();
+  }
+};
+template <typename In>
+struct MaybeVoidCaller<In&, Void> {
+  template <typename Func>
+  static inline Void apply(Func& func, In& in) {
+    func(in);
     return Void();
   }
 };
@@ -145,6 +177,8 @@ inline void returnMaybeVoid(Void&& v) {}
 class ExceptionOrValue;
 class PromiseNode;
 class ChainPromiseNode;
+template <typename T>
+class ForkHub;
 
 }  // namespace _ (private)
 
@@ -238,9 +272,9 @@ public:
   // `evalLater()` is equivalent to `there()` chained on `Promise<void>(READY_NOW)`.
 
   template <typename T, typename Func, typename ErrorFunc = _::PropagateException>
-  auto there(Promise<T>&& promise, Func&& func,
-             ErrorFunc&& errorHandler = _::PropagateException()) const
-      -> PromiseForResult<Func, T>;
+  PromiseForResult<Func, T> there(Promise<T>&& promise, Func&& func,
+                                  ErrorFunc&& errorHandler = _::PropagateException()) const
+                                  KJ_WARN_UNUSED_RESULT;
   // Like `Promise::then()`, but schedules the continuation to be executed on *this* EventLoop
   // rather than the thread's current loop.  See Promise::then().
 
@@ -558,6 +592,23 @@ public:
   // After returning, the promise is no longer valid, and cannot be `wait()`ed on or `then()`ed
   // again.
 
+  class Fork {
+  public:
+    virtual Promise<_::ConstReferenceTo<T>> addBranch() = 0;
+    // Add a new branch to the fork.  The branch is equivalent to the original promise except that
+    // its type is `Promise<const T&>` rather than `Promise<T>` (except when `T` was already a
+    // reference, or was `void`).
+  };
+
+  Own<Fork> fork();
+  // Forks the promise, so that multiple different clients can independently wait on the result.
+  // Returns an object that can be used to construct branches, all of which are equivalent to the
+  // original promise except that they produce references to its result rather than passing the
+  // result by move.
+  //
+  // As with `then()` and `wait()`, `fork()` consumes the original promise, in the sense of move
+  // semantics.
+
 private:
   Promise(Own<_::PromiseNode>&& node): PromiseBase(kj::mv(node)) {}
 
@@ -570,6 +621,8 @@ private:
   friend PromiseFulfillerPair<U> newPromiseAndFulfiller();
   template <typename U>
   friend PromiseFulfillerPair<U> newPromiseAndFulfiller(const EventLoop& loop);
+  template <typename>
+  friend class _::ForkHub;
 };
 
 constexpr _::Void READY_NOW = _::Void();
@@ -725,6 +778,8 @@ public:
 
   template <typename T>
   ExceptionOr<T>& as() { return *static_cast<ExceptionOr<T>*>(this); }
+  template <typename T>
+  const ExceptionOr<T>& as() const { return *static_cast<const ExceptionOr<T>*>(this); }
 
   Maybe<Exception> exception;
 
@@ -788,6 +843,8 @@ protected:
   // Useful for firing events in conjuction with atomicOnReady().
 };
 
+// -------------------------------------------------------------------
+
 class ImmediatePromiseNodeBase: public PromiseNode {
 public:
   bool onReady(EventLoop::Event& event) noexcept override;
@@ -818,6 +875,8 @@ public:
 private:
   Exception exception;
 };
+
+// -------------------------------------------------------------------
 
 class TransformPromiseNodeBase: public PromiseNode {
 public:
@@ -871,6 +930,110 @@ private:
   }
 };
 
+// -------------------------------------------------------------------
+
+class ForkHubBase;
+
+class ForkBranchBase: public PromiseNode {
+public:
+  ForkBranchBase(Own<ForkHubBase>&& hub);
+  ~ForkBranchBase();
+
+  void hubReady() noexcept;
+  // Called by the hub to indicate that it is ready.
+
+  // implements PromiseNode ------------------------------------------
+  bool onReady(EventLoop::Event& event) noexcept override;
+  Maybe<const EventLoop&> getSafeEventLoop() noexcept override;
+
+protected:
+  inline const ExceptionOrValue& getHubResultRef() const;
+
+  void releaseHub(ExceptionOrValue& output);
+  // Release the hub.  If an exception is thrown, add it to `output`.
+
+private:
+  EventLoop::Event* onReadyEvent = nullptr;
+
+  Own<ForkHubBase> hub;
+  ForkBranchBase* next = nullptr;
+  ForkBranchBase** prevPtr = nullptr;
+
+  friend class ForkHubBase;
+};
+
+template <typename T>
+class ForkBranch final: public ForkBranchBase {
+  // A PromiseNode that implements one branch of a fork -- i.e. one of the branches that receives
+  // a const reference.
+
+public:
+  ForkBranch(Own<ForkHubBase>&& hub): ForkBranchBase(kj::mv(hub)) {}
+
+  void get(ExceptionOrValue& output) noexcept override {
+    const ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
+    KJ_IF_MAYBE(value, hubResult.value) {
+      output.as<ConstReferenceTo<T>>().value = *value;
+    } else {
+      output.as<ConstReferenceTo<T>>().value = nullptr;
+    }
+    output.exception = hubResult.exception;
+    releaseHub(output);
+  }
+};
+
+// -------------------------------------------------------------------
+
+class ForkHubBase: public Refcounted, private EventLoop::Event {
+public:
+  ForkHubBase(const EventLoop& loop, Own<PromiseNode>&& inner, ExceptionOrValue& resultRef);
+  ~ForkHubBase() noexcept(false);
+
+  inline const ExceptionOrValue& getResultRef() const { return resultRef; }
+
+private:
+  struct BranchList {
+    ForkBranchBase* first = nullptr;
+    ForkBranchBase** lastPtr = &first;
+  };
+
+  Own<PromiseNode> inner;
+  ExceptionOrValue& resultRef;
+
+  bool isWaiting = false;
+
+  MutexGuarded<BranchList> branchList;
+  // Becomes null once the inner promise is ready and all branches have been notified.
+
+  void fire() override;
+
+  friend class ForkBranchBase;
+};
+
+template <typename T>
+class ForkHub final: public ForkHubBase, public Promise<T>::Fork {
+  // A PromiseNode that implements the hub of a fork.  The first call to Promise::fork() replaces
+  // the promise's outer node with a ForkHub, and subsequent calls add branches to that hub (if
+  // possible).
+
+public:
+  ForkHub(const EventLoop& loop, Own<PromiseNode>&& inner)
+      : ForkHubBase(loop, kj::mv(inner), result) {}
+
+  Promise<_::ConstReferenceTo<T>> addBranch() override {
+    return Promise<_::ConstReferenceTo<T>>(kj::heap<ForkBranch<T>>(addRef(*this)));
+  }
+
+private:
+  ExceptionOr<T> result;
+};
+
+inline const ExceptionOrValue& ForkBranchBase::getHubResultRef() const {
+  return hub->getResultRef();
+}
+
+// -------------------------------------------------------------------
+
 class ChainPromiseNode final: public PromiseNode, private EventLoop::Event {
 public:
   ChainPromiseNode(const EventLoop& loop, Own<PromiseNode> inner, Schedule schedule);
@@ -920,12 +1083,14 @@ Own<PromiseNode>&& maybeChain(Own<PromiseNode>&& node, T*) {
   return kj::mv(node);
 }
 
+// -------------------------------------------------------------------
+
 class CrossThreadPromiseNodeBase: public PromiseNode, private EventLoop::Event {
   // A PromiseNode that safely imports a promised value from one EventLoop to another (which
   // implies crossing threads).
 
 public:
-  CrossThreadPromiseNodeBase(const EventLoop& loop, Own<PromiseNode>&& dependent,
+  CrossThreadPromiseNodeBase(const EventLoop& loop, Own<PromiseNode>&& dependency,
                              ExceptionOrValue& resultRef);
   ~CrossThreadPromiseNodeBase() noexcept(false);
 
@@ -933,7 +1098,7 @@ public:
   Maybe<const EventLoop&> getSafeEventLoop() noexcept override;
 
 private:
-  Own<PromiseNode> dependent;
+  Own<PromiseNode> dependency;
   EventLoop::Event* onReadyEvent = nullptr;
 
   ExceptionOrValue& resultRef;
@@ -946,8 +1111,8 @@ private:
 template <typename T>
 class CrossThreadPromiseNode final: public CrossThreadPromiseNodeBase {
 public:
-  CrossThreadPromiseNode(const EventLoop& loop, Own<PromiseNode>&& dependent)
-      : CrossThreadPromiseNodeBase(loop, kj::mv(dependent), result) {}
+  CrossThreadPromiseNode(const EventLoop& loop, Own<PromiseNode>&& dependency)
+      : CrossThreadPromiseNodeBase(loop, kj::mv(dependency), result) {}
 
   void get(ExceptionOrValue& output) noexcept override {
     output.as<T>() = kj::mv(result);
@@ -975,6 +1140,8 @@ Own<PromiseNode> spark(Own<PromiseNode>&& node, const EventLoop& loop) {
   // on it.
   return heap<CrossThreadPromiseNode<T>>(loop, kj::mv(node));
 }
+
+// -------------------------------------------------------------------
 
 class AdapterPromiseNodeBase: public PromiseNode {
 public:
@@ -1029,6 +1196,8 @@ private:
 
 }  // namespace _ (private)
 
+// =======================================================================================
+
 template <typename T>
 T EventLoop::wait(Promise<T>&& promise) {
   _::ExceptionOr<_::FixVoid<T>> result;
@@ -1054,8 +1223,8 @@ auto EventLoop::evalLater(Func&& func) const -> PromiseForResult<Func, void> {
 }
 
 template <typename T, typename Func, typename ErrorFunc>
-auto EventLoop::there(Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler) const
-    -> PromiseForResult<Func, T> {
+PromiseForResult<Func, T> EventLoop::there(
+    Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler) const {
   return _::spark<_::FixVoid<_::JoinPromises<_::ReturnType<Func, T>>>>(thereImpl(
       kj::mv(promise), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler), Event::YIELD), *this);
 }
@@ -1092,6 +1261,12 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler
 template <typename T>
 T Promise<T>::wait() {
   return EventLoop::current().wait(kj::mv(*this));
+}
+
+template <typename T>
+Own<typename Promise<T>::Fork> Promise<T>::fork() {
+  auto& loop = EventLoop::current();
+  return refcounted<_::ForkHub<T>>(loop, _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(node), loop));
 }
 
 // =======================================================================================

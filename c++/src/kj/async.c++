@@ -296,6 +296,8 @@ void PromiseNode::atomicReady(EventLoop::Event*& onReadyEvent,
   }
 }
 
+// -------------------------------------------------------------------
+
 bool ImmediatePromiseNodeBase::onReady(EventLoop::Event& event) noexcept { return true; }
 Maybe<const EventLoop&> ImmediatePromiseNodeBase::getSafeEventLoop() noexcept { return nullptr; }
 
@@ -305,6 +307,8 @@ ImmediateBrokenPromiseNode::ImmediateBrokenPromiseNode(Exception&& exception)
 void ImmediateBrokenPromiseNode::get(ExceptionOrValue& output) noexcept {
   output.exception = kj::mv(exception);
 }
+
+// -------------------------------------------------------------------
 
 TransformPromiseNodeBase::TransformPromiseNodeBase(
     const EventLoop& loop, Own<PromiseNode>&& dependency)
@@ -325,6 +329,94 @@ void TransformPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
 Maybe<const EventLoop&> TransformPromiseNodeBase::getSafeEventLoop() noexcept {
   return loop;
 }
+
+// -------------------------------------------------------------------
+
+ForkBranchBase::ForkBranchBase(Own<ForkHubBase>&& hubParam): hub(kj::mv(hubParam)) {
+  auto lock = hub->branchList.lockExclusive();
+
+  if (lock->lastPtr == nullptr) {
+    onReadyEvent = _kJ_ALREADY_READY;
+  } else {
+    // Insert into hub's linked list of branches.
+    prevPtr = lock->lastPtr;
+    *prevPtr = this;
+    next = nullptr;
+    lock->lastPtr = &next;
+  }
+}
+
+ForkBranchBase::~ForkBranchBase() {
+  if (prevPtr != nullptr) {
+    // Remove from hub's linked list of branches.
+    auto lock = hub->branchList.lockExclusive();
+    *prevPtr = next;
+    (next == nullptr ? lock->lastPtr : next->prevPtr) = prevPtr;
+  }
+}
+
+void ForkBranchBase::hubReady() noexcept {
+  // TODO(soon):  This should only yield if queuing cross-thread.
+  atomicReady(onReadyEvent, EventLoop::Event::YIELD);
+}
+
+void ForkBranchBase::releaseHub(ExceptionOrValue& output) {
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([this]() {
+    auto deleteMe = kj::mv(hub);
+  })) {
+    output.addException(kj::mv(*exception));
+  }
+}
+
+bool ForkBranchBase::onReady(EventLoop::Event& event) noexcept {
+  return atomicOnReady(onReadyEvent, event);
+}
+
+Maybe<const EventLoop&> ForkBranchBase::getSafeEventLoop() noexcept {
+  // It's safe to read the hub's value from multiple threads, once it is ready, since we'll only
+  // be reading a const reference.
+  return nullptr;
+}
+
+// -------------------------------------------------------------------
+
+ForkHubBase::ForkHubBase(const EventLoop& loop, Own<PromiseNode>&& inner,
+                         ExceptionOrValue& resultRef)
+    : EventLoop::Event(loop), inner(kj::mv(inner)), resultRef(resultRef) {
+  KJ_DREQUIRE(this->inner->isSafeEventLoop(loop));
+
+  // TODO(soon):  This should only yield if queuing cross-thread.
+  arm(YIELD);
+}
+
+ForkHubBase::~ForkHubBase() noexcept(false) {}
+
+void ForkHubBase::fire() {
+  if (!isWaiting && !inner->onReady(*this)) {
+    isWaiting = true;
+  } else {
+    // Dependency is ready.  Fetch its result and then delete the node.
+    inner->get(resultRef);
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([this]() {
+      auto deleteMe = kj::mv(inner);
+    })) {
+      resultRef.addException(kj::mv(*exception));
+    }
+
+    auto lock = branchList.lockExclusive();
+    for (auto branch = lock->first; branch != nullptr; branch = branch->next) {
+      branch->hubReady();
+      *branch->prevPtr = nullptr;
+      branch->prevPtr = nullptr;
+    }
+    *lock->lastPtr = nullptr;
+
+    // Indicate that the list is no longer active.
+    lock->lastPtr = nullptr;
+  }
+}
+
+// -------------------------------------------------------------------
 
 ChainPromiseNode::ChainPromiseNode(const EventLoop& loop, Own<PromiseNode> inner, Schedule schedule)
     : Event(loop), state(PRE_STEP1), inner(kj::mv(inner)) {
@@ -401,10 +493,12 @@ void ChainPromiseNode::fire() {
   }
 }
 
+// -------------------------------------------------------------------
+
 CrossThreadPromiseNodeBase::CrossThreadPromiseNodeBase(
-    const EventLoop& loop, Own<PromiseNode>&& dependent, ExceptionOrValue& resultRef)
-    : Event(loop), dependent(kj::mv(dependent)), resultRef(resultRef) {
-  KJ_DREQUIRE(this->dependent->isSafeEventLoop(loop));
+    const EventLoop& loop, Own<PromiseNode>&& dependency, ExceptionOrValue& resultRef)
+    : Event(loop), dependency(kj::mv(dependency)), resultRef(resultRef) {
+  KJ_DREQUIRE(this->dependency->isSafeEventLoop(loop));
 
   // The constructor may be called from any thread, so before we can even call onReady() we need
   // to switch threads.  We yield here so that the event is added to the end of the queue, which
@@ -426,12 +520,12 @@ Maybe<const EventLoop&> CrossThreadPromiseNodeBase::getSafeEventLoop() noexcept 
 }
 
 void CrossThreadPromiseNodeBase::fire() {
-  if (!isWaiting && !this->dependent->onReady(*this)) {
+  if (!isWaiting && !dependency->onReady(*this)) {
     isWaiting = true;
   } else {
-    dependent->get(resultRef);
+    dependency->get(resultRef);
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions([this]() {
-      auto deleteMe = kj::mv(dependent);
+      auto deleteMe = kj::mv(dependency);
     })) {
       resultRef.addException(kj::mv(*exception));
     }
@@ -440,6 +534,8 @@ void CrossThreadPromiseNodeBase::fire() {
     PromiseNode::atomicReady(onReadyEvent, YIELD);
   }
 }
+
+// -------------------------------------------------------------------
 
 bool AdapterPromiseNodeBase::onReady(EventLoop::Event& event) noexcept {
   return PromiseNode::atomicOnReady(onReadyEvent, event);
