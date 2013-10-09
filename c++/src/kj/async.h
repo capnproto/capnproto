@@ -93,19 +93,6 @@ using ReturnType = typename ReturnType_<Func, T>::Type;
 // The return type of functor Func given a parameter of type T, with the special exception that if
 // T is void, this is the return type of Func called with no arguments.
 
-template <typename T>
-struct ConstReferenceTo_ { typedef const T& Type; };
-template <typename T>
-struct ConstReferenceTo_<T&> { typedef const T& Type; };
-template <typename T>
-struct ConstReferenceTo_<const T&> { typedef const T& Type; };
-template <>
-struct ConstReferenceTo_<void> { typedef void Type; };
-
-template <typename T>
-using ConstReferenceTo = typename ConstReferenceTo_<T>::Type;
-// Resolves to `const T&`, or to `void` if `T` is `void`.
-
 struct Void {};
 // Application code should NOT refer to this!  See `kj::READY_NOW` instead.
 
@@ -118,6 +105,13 @@ template <typename T> struct UnfixVoid_ { typedef T Type; };
 template <> struct UnfixVoid_<Void> { typedef void Type; };
 template <typename T> using UnfixVoid = typename UnfixVoid_<T>::Type;
 // UnfixVoid is the opposite of FixVoid.
+
+template <typename T> struct Forked_ { typedef T Type; };
+template <typename T> struct Forked_<T&> { typedef const T& Type; };
+template <typename T> struct Forked_<Own<T>> { typedef Own<const T> Type; };
+template <typename T> using Forked = typename Forked_<T>::Type;
+// Forked<T> transforms T as a result of being forked.  If T is an owned pointer or reference,
+// it becomes const.
 
 template <typename In, typename Out>
 struct MaybeVoidCaller {
@@ -594,23 +588,20 @@ public:
 
   class Fork {
   public:
-    virtual Promise<_::ConstReferenceTo<T>> addBranch() = 0;
-    // Add a new branch to the fork.  The branch is equivalent to the original promise except that
-    // its type is `Promise<const T&>` rather than `Promise<T>` (except when `T` was already a
-    // reference, or was `void`).
+    virtual Promise<_::Forked<T>> addBranch() = 0;
+    // Add a new branch to the fork.  The branch is equivalent to the original promise, except
+    // that if T is a reference or owned pointer, the target becomes const.
   };
 
   Own<Fork> fork();
   // Forks the promise, so that multiple different clients can independently wait on the result.
-  // Returns an object that can be used to construct branches, all of which are equivalent to the
-  // original promise except that they produce references to its result rather than passing the
-  // result by move.
-  //
-  // As with `then()` and `wait()`, `fork()` consumes the original promise, in the sense of move
-  // semantics.
+  // `T` must be copy-constructable for this to work.  Or, in the special case where `T` is
+  // `Own<U>`, `U` must have a method `Own<const U> addRef() const` which returns a new reference
+  // to the same (or an equivalent) object (probably implemented via reference counting).
 
 private:
-  Promise(Own<_::PromiseNode>&& node): PromiseBase(kj::mv(node)) {}
+  Promise(bool, Own<_::PromiseNode>&& node): PromiseBase(kj::mv(node)) {}
+  // Second parameter prevent ambiguity with immediate-value constructor.
 
   template <typename>
   friend class Promise;
@@ -962,6 +953,10 @@ private:
   friend class ForkHubBase;
 };
 
+template <typename T> T copyOrAddRef(const T& t) { return t; }
+template <typename T> Own<const T> copyOrAddRef(const Own<T>& t) { return t->addRef(); }
+template <typename T> Own<const T> copyOrAddRef(const Own<const T>& t) { return t->addRef(); }
+
 template <typename T>
 class ForkBranch final: public ForkBranchBase {
   // A PromiseNode that implements one branch of a fork -- i.e. one of the branches that receives
@@ -973,9 +968,9 @@ public:
   void get(ExceptionOrValue& output) noexcept override {
     const ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
     KJ_IF_MAYBE(value, hubResult.value) {
-      output.as<ConstReferenceTo<T>>().value = *value;
+      output.as<Forked<T>>().value = copyOrAddRef(*value);
     } else {
-      output.as<ConstReferenceTo<T>>().value = nullptr;
+      output.as<Forked<T>>().value = nullptr;
     }
     output.exception = hubResult.exception;
     releaseHub(output);
@@ -1020,8 +1015,8 @@ public:
   ForkHub(const EventLoop& loop, Own<PromiseNode>&& inner)
       : ForkHubBase(loop, kj::mv(inner), result) {}
 
-  Promise<_::ConstReferenceTo<T>> addBranch() override {
-    return Promise<_::ConstReferenceTo<T>>(kj::heap<ForkBranch<T>>(addRef(*this)));
+  Promise<_::Forked<T>> addBranch() override {
+    return Promise<_::Forked<T>>(false, kj::heap<ForkBranch<T>>(addRef(*this)));
   }
 
 private:
@@ -1225,8 +1220,10 @@ auto EventLoop::evalLater(Func&& func) const -> PromiseForResult<Func, void> {
 template <typename T, typename Func, typename ErrorFunc>
 PromiseForResult<Func, T> EventLoop::there(
     Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler) const {
-  return _::spark<_::FixVoid<_::JoinPromises<_::ReturnType<Func, T>>>>(thereImpl(
-      kj::mv(promise), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler), Event::YIELD), *this);
+  return PromiseForResult<Func, T>(false,
+      _::spark<_::FixVoid<_::JoinPromises<_::ReturnType<Func, T>>>>(thereImpl(
+          kj::mv(promise), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler), Event::YIELD),
+          *this));
 }
 
 template <typename T, typename Func, typename ErrorFunc>
@@ -1253,9 +1250,9 @@ Promise<T>::Promise(kj::Exception&& exception)
 template <typename T>
 template <typename Func, typename ErrorFunc>
 PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler) {
-  return EventLoop::current().thereImpl(
+  return PromiseForResult<Func, T>(false, EventLoop::current().thereImpl(
       kj::mv(*this), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler),
-      EventLoop::Event::PREEMPT);
+      EventLoop::Event::PREEMPT));
 }
 
 template <typename T>
@@ -1341,7 +1338,7 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller() {
 
   Own<_::PromiseNode> intermediate(
       heap<_::AdapterPromiseNode<_::FixVoid<T>, _::PromiseAndFulfillerAdapter<T>>>(*wrapper));
-  Promise<_::JoinPromises<T>> promise(
+  Promise<_::JoinPromises<T>> promise(false,
       _::maybeChain(kj::mv(intermediate), implicitCast<T*>(nullptr)));
 
   return PromiseFulfillerPair<T> { kj::mv(promise), kj::mv(wrapper) };
@@ -1353,7 +1350,7 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller(const EventLoop& loop) {
 
   Own<_::PromiseNode> intermediate(
       heap<_::AdapterPromiseNode<_::FixVoid<T>, _::PromiseAndFulfillerAdapter<T>>>(*wrapper));
-  Promise<_::JoinPromises<T>> promise(
+  Promise<_::JoinPromises<T>> promise(false,
       _::maybeChain(kj::mv(intermediate), loop, EventLoop::Event::YIELD,
                     implicitCast<T*>(nullptr)));
 

@@ -320,18 +320,58 @@ TEST(Async, Fork) {
   SimpleEventLoop loop;
 
   auto outer = loop.evalLater([&]() {
-    Promise<String> promise = loop.evalLater([&]() { return str("foo"); });
+    Promise<int> promise = loop.evalLater([&]() { return 123; });
 
     auto fork = promise.fork();
 
-    auto branch1 = fork->addBranch().then([](const String& s) {
-      EXPECT_EQ("foo", s);
+    auto branch1 = fork->addBranch().then([](int i) {
+      EXPECT_EQ(123, i);
       return 456;
     });
-    auto branch2 = fork->addBranch().then([](const String& s) {
-      EXPECT_EQ("foo", s);
+    auto branch2 = fork->addBranch().then([](int i) {
+      EXPECT_EQ(123, i);
       return 789;
     });
+
+    {
+      auto releaseFork = kj::mv(fork);
+    }
+
+    EXPECT_EQ(456, loop.wait(kj::mv(branch1)));
+    EXPECT_EQ(789, loop.wait(kj::mv(branch2)));
+  });
+
+  loop.wait(kj::mv(outer));
+}
+
+struct RefcountedInt: public Refcounted {
+  RefcountedInt(int i): i(i) {}
+  int i;
+  Own<const RefcountedInt> addRef() const { return kj::addRef(*this); }
+};
+
+TEST(Async, ForkRef) {
+  SimpleEventLoop loop;
+
+  auto outer = loop.evalLater([&]() {
+    Promise<Own<RefcountedInt>> promise = loop.evalLater([&]() {
+      return refcounted<RefcountedInt>(123);
+    });
+
+    auto fork = promise.fork();
+
+    auto branch1 = fork->addBranch().then([](Own<const RefcountedInt>&& i) {
+      EXPECT_EQ(123, i->i);
+      return 456;
+    });
+    auto branch2 = fork->addBranch().then([](Own<const RefcountedInt>&& i) {
+      EXPECT_EQ(123, i->i);
+      return 789;
+    });
+
+    {
+      auto releaseFork = kj::mv(fork);
+    }
 
     EXPECT_EQ(456, loop.wait(kj::mv(branch1)));
     EXPECT_EQ(789, loop.wait(kj::mv(branch2)));
