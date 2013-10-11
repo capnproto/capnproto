@@ -260,7 +260,7 @@ void SimpleEventLoop::wake() const {
 // =======================================================================================
 
 void PromiseBase::absolve() {
-  runCatchingExceptions([this]() { auto deleteMe = kj::mv(node); });
+  runCatchingExceptions([this]() { node = nullptr; });
 }
 
 namespace _ {  // private
@@ -330,9 +330,13 @@ Maybe<const EventLoop&> TransformPromiseNodeBase::getSafeEventLoop() noexcept {
   return loop;
 }
 
+void TransformPromiseNodeBase::dropDependency() {
+  dependency = nullptr;
+}
+
 // -------------------------------------------------------------------
 
-ForkBranchBase::ForkBranchBase(Own<ForkHubBase>&& hubParam): hub(kj::mv(hubParam)) {
+ForkBranchBase::ForkBranchBase(Own<const ForkHubBase>&& hubParam): hub(kj::mv(hubParam)) {
   auto lock = hub->branchList.lockExclusive();
 
   if (lock->lastPtr == nullptr) {
@@ -362,7 +366,7 @@ void ForkBranchBase::hubReady() noexcept {
 
 void ForkBranchBase::releaseHub(ExceptionOrValue& output) {
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([this]() {
-    auto deleteMe = kj::mv(hub);
+    hub = nullptr;
   })) {
     output.addException(kj::mv(*exception));
   }
@@ -398,7 +402,7 @@ void ForkHubBase::fire() {
     // Dependency is ready.  Fetch its result and then delete the node.
     inner->get(resultRef);
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions([this]() {
-      auto deleteMe = kj::mv(inner);
+      inner = nullptr;
     })) {
       resultRef.addException(kj::mv(*exception));
     }
@@ -525,7 +529,7 @@ void CrossThreadPromiseNodeBase::fire() {
   } else {
     dependency->get(resultRef);
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions([this]() {
-      auto deleteMe = kj::mv(dependency);
+      dependency = nullptr;
     })) {
       resultRef.addException(kj::mv(*exception));
     }

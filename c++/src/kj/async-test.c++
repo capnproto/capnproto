@@ -324,11 +324,11 @@ TEST(Async, Fork) {
 
     auto fork = promise.fork();
 
-    auto branch1 = fork->addBranch().then([](int i) {
+    auto branch1 = fork.addBranch().then([](int i) {
       EXPECT_EQ(123, i);
       return 456;
     });
-    auto branch2 = fork->addBranch().then([](int i) {
+    auto branch2 = fork.addBranch().then([](int i) {
       EXPECT_EQ(123, i);
       return 789;
     });
@@ -360,11 +360,11 @@ TEST(Async, ForkRef) {
 
     auto fork = promise.fork();
 
-    auto branch1 = fork->addBranch().then([](Own<const RefcountedInt>&& i) {
+    auto branch1 = fork.addBranch().then([](Own<const RefcountedInt>&& i) {
       EXPECT_EQ(123, i->i);
       return 456;
     });
-    auto branch2 = fork->addBranch().then([](Own<const RefcountedInt>&& i) {
+    auto branch2 = fork.addBranch().then([](Own<const RefcountedInt>&& i) {
       EXPECT_EQ(123, i->i);
       return 789;
     });

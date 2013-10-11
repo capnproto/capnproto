@@ -36,6 +36,8 @@ class SimpleEventLoop;
 template <typename T>
 class Promise;
 template <typename T>
+class ForkedPromise;
+template <typename T>
 class PromiseFulfiller;
 template <typename T>
 struct PromiseFulfillerPair;
@@ -271,6 +273,11 @@ public:
                                   KJ_WARN_UNUSED_RESULT;
   // Like `Promise::then()`, but schedules the continuation to be executed on *this* EventLoop
   // rather than the thread's current loop.  See Promise::then().
+
+  template <typename T>
+  ForkedPromise<T> fork(Promise<T>&& promise);
+  // Like `Promise::fork()`, but manages the fork on *this* EventLoop rather than the thread's
+  // current loop.  See Promise::fork().
 
   // -----------------------------------------------------------------
   // Low-level interface.
@@ -586,14 +593,7 @@ public:
   // After returning, the promise is no longer valid, and cannot be `wait()`ed on or `then()`ed
   // again.
 
-  class Fork {
-  public:
-    virtual Promise<_::Forked<T>> addBranch() = 0;
-    // Add a new branch to the fork.  The branch is equivalent to the original promise, except
-    // that if T is a reference or owned pointer, the target becomes const.
-  };
-
-  Own<Fork> fork();
+  ForkedPromise<T> fork();
   // Forks the promise, so that multiple different clients can independently wait on the result.
   // `T` must be copy-constructable for this to work.  Or, in the special case where `T` is
   // `Own<U>`, `U` must have a method `Own<const U> addRef() const` which returns a new reference
@@ -614,6 +614,27 @@ private:
   friend PromiseFulfillerPair<U> newPromiseAndFulfiller(const EventLoop& loop);
   template <typename>
   friend class _::ForkHub;
+};
+
+template <typename T>
+class ForkedPromise {
+  // The result of `Promise::fork()` and `EventLoop::fork()`.  Allows branches to be created.
+  // Like `Promise<T>`, this is a pass-by-move type.
+
+public:
+  inline ForkedPromise(decltype(nullptr)): hub(nullptr) {}
+
+  Promise<_::Forked<T>> addBranch() const;
+  // Add a new branch to the fork.  The branch is equivalent to the original promise, except
+  // that if T is a reference or owned pointer, the target becomes const.
+
+private:
+  Own<const _::ForkHub<_::FixVoid<T>>> hub;
+
+  inline ForkedPromise(bool, Own<const _::ForkHub<_::FixVoid<T>>>&& hub): hub(kj::mv(hub)) {}
+
+  friend class Promise<T>;
+  friend class EventLoop;
 };
 
 constexpr _::Void READY_NOW = _::Void();
@@ -881,6 +902,8 @@ private:
   const EventLoop& loop;
   Own<PromiseNode> dependency;
 
+  void dropDependency();
+
   virtual void getImpl(ExceptionOrValue& output) = 0;
 
   template <typename, typename, typename, typename>
@@ -897,6 +920,13 @@ public:
                        Func&& func, ErrorFunc&& errorHandler)
       : TransformPromiseNodeBase(loop, kj::mv(dependency)),
         func(kj::fwd<Func>(func)), errorHandler(kj::fwd<ErrorFunc>(errorHandler)) {}
+
+  ~TransformPromiseNode() noexcept(false) {
+    // We need to make sure the dependency is deleted before we delete the continuations because it
+    // is a common pattern for the continuations to hold ownership of objects that might be in-use
+    // by the dependency.
+    dropDependency();
+  }
 
 private:
   Func func;
@@ -927,7 +957,7 @@ class ForkHubBase;
 
 class ForkBranchBase: public PromiseNode {
 public:
-  ForkBranchBase(Own<ForkHubBase>&& hub);
+  ForkBranchBase(Own<const ForkHubBase>&& hub);
   ~ForkBranchBase();
 
   void hubReady() noexcept;
@@ -946,7 +976,7 @@ protected:
 private:
   EventLoop::Event* onReadyEvent = nullptr;
 
-  Own<ForkHubBase> hub;
+  Own<const ForkHubBase> hub;
   ForkBranchBase* next = nullptr;
   ForkBranchBase** prevPtr = nullptr;
 
@@ -963,7 +993,7 @@ class ForkBranch final: public ForkBranchBase {
   // a const reference.
 
 public:
-  ForkBranch(Own<ForkHubBase>&& hub): ForkBranchBase(kj::mv(hub)) {}
+  ForkBranch(Own<const ForkHubBase>&& hub): ForkBranchBase(kj::mv(hub)) {}
 
   void get(ExceptionOrValue& output) noexcept override {
     const ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
@@ -1006,7 +1036,7 @@ private:
 };
 
 template <typename T>
-class ForkHub final: public ForkHubBase, public Promise<T>::Fork {
+class ForkHub final: public ForkHubBase {
   // A PromiseNode that implements the hub of a fork.  The first call to Promise::fork() replaces
   // the promise's outer node with a ForkHub, and subsequent calls add branches to that hub (if
   // possible).
@@ -1015,8 +1045,8 @@ public:
   ForkHub(const EventLoop& loop, Own<PromiseNode>&& inner)
       : ForkHubBase(loop, kj::mv(inner), result) {}
 
-  Promise<_::Forked<T>> addBranch() override {
-    return Promise<_::Forked<T>>(false, kj::heap<ForkBranch<T>>(addRef(*this)));
+  Promise<_::Forked<_::UnfixVoid<T>>> addBranch() const {
+    return Promise<_::Forked<_::UnfixVoid<T>>>(false, kj::heap<ForkBranch<T>>(addRef(*this)));
   }
 
 private:
@@ -1261,9 +1291,23 @@ T Promise<T>::wait() {
 }
 
 template <typename T>
-Own<typename Promise<T>::Fork> Promise<T>::fork() {
+ForkedPromise<T> Promise<T>::fork() {
   auto& loop = EventLoop::current();
-  return refcounted<_::ForkHub<T>>(loop, _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(node), loop));
+  return ForkedPromise<T>(false,
+      refcounted<_::ForkHub<_::FixVoid<T>>>(
+          loop, _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(node), loop)));
+}
+
+template <typename T>
+ForkedPromise<T> EventLoop::fork(Promise<T>&& promise) {
+  return ForkedPromise<T>(false,
+      refcounted<_::ForkHub<_::FixVoid<T>>>(*this,
+          _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(promise.node), *this)));
+}
+
+template <typename T>
+Promise<_::Forked<T>> ForkedPromise<T>::addBranch() const {
+  return hub->addBranch();
 }
 
 // =======================================================================================

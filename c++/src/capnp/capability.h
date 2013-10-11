@@ -342,13 +342,14 @@ public:
   };
 
   virtual VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                      CallContextHook& context) const = 0;
+                                      kj::Own<CallContextHook>&& context) const = 0;
   // Call the object, but the caller controls allocation of the request/response objects.  If the
   // callee insists on allocating this objects itself, it must make a copy.  This version is used
   // when calls come in over the network via an RPC system.  During the call, the context object
-  // may be used from any thread so long as it is only used from one thread at a time.  Once the
-  // returned promise resolves or has been canceled, the context can no longer be used.  The caller
-  // must not allow the ClientHook to be destroyed until the call completes or is canceled.
+  // may be used from any thread so long as it is only used from one thread at a time.  Note that
+  // even if the returned `Promise<void>` is discarded, the call may continue executing if any
+  // pipelined calls are waiting for it; the call is only truly done when the CallContextHook is
+  // destroyed.
   //
   // The call must not begin synchronously, as the caller may hold arbitrary mutexes.
 
@@ -380,10 +381,7 @@ public:
   virtual void allowAsyncCancellation(bool allow) = 0;
   virtual bool isCanceled() = 0;
 
-  virtual Response<ObjectPointer> getResponseForPipeline() = 0;
-  // Get a copy or reference to the response which will be used to execute pipelined calls.  This
-  // will be called no more than once, just after the server implementation successfully returns
-  // from the call.
+  virtual kj::Own<CallContextHook> addRef() = 0;
 };
 
 // =======================================================================================

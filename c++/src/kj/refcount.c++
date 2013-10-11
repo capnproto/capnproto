@@ -22,13 +22,22 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "refcount.h"
+#include <memory>
 
 namespace kj {
 
 Refcounted::~Refcounted() noexcept(false) {}
 
 void Refcounted::disposeImpl(void* pointer) const {
-  if (__atomic_sub_fetch(&refcount, 1, __ATOMIC_RELAXED) == 0) {
+  // The load is a fast-path for the common case where this is the last reference.  An acquire-load
+  // is just a regular load on x86.  If there is more than one reference, then we need to do a full
+  // atomic decrement with full memory barrier, because:
+  // - If this is the final decrement then we need to acquire the object state in order to destroy
+  //   it.
+  // - If this is not the final decrement then we need to release the object state so that another
+  //   thread may destroy it.
+  if (__atomic_load_n(&refcount, __ATOMIC_ACQUIRE) == 1 ||
+      __atomic_sub_fetch(&refcount, 1, __ATOMIC_ACQ_REL) == 0) {
     delete this;
   }
 }

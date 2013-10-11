@@ -113,7 +113,7 @@ public:
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              CallContextHook& context) const override {
+                              kj::Own<CallContextHook>&& context) const override {
     KJ_FAIL_REQUIRE("Calling capability that was extracted from a message that had no "
                     "capability context.");
   }
