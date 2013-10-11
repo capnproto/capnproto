@@ -97,7 +97,11 @@ public:
       : request(kj::mv(request)), clientRef(kj::mv(clientRef)) {}
 
   ObjectPointer::Reader getParams() override {
-    return request->getRoot<ObjectPointer>();
+    KJ_IF_MAYBE(r, request) {
+      return r->get()->getRoot<ObjectPointer>();
+    } else {
+      KJ_FAIL_REQUIRE("Can't call getParams() after releaseParams().");
+    }
   }
   void releaseParams() override {
     request = nullptr;
@@ -118,7 +122,7 @@ public:
     return kj::addRef(*this);
   }
 
-  kj::Own<MallocMessageBuilder> request;
+  kj::Maybe<kj::Own<MallocMessageBuilder>> request;
   kj::Own<LocalResponse> response;
   kj::Own<const ClientHook> clientRef;
 };
@@ -137,7 +141,7 @@ public:
     uint64_t interfaceId = this->interfaceId;
     uint16_t methodId = this->methodId;
 
-    auto context = kj::refcounted<LocalCallContext>(kj::mv(message), kj::mv(client));
+    auto context = kj::refcounted<LocalCallContext>(kj::mv(message), client->addRef());
     auto promiseAndPipeline = client->call(interfaceId, methodId, kj::addRef(*context));
 
     auto promise = loop.there(kj::mv(promiseAndPipeline.promise),
@@ -328,8 +332,8 @@ kj::Own<const ClientHook> QueuedPipeline::getPipelinedCap(kj::Array<PipelineOp>&
 
 class LocalPipeline final: public PipelineHook, public kj::Refcounted {
 public:
-  inline LocalPipeline(kj::Own<CallContextHook>&& context)
-      : context(kj::mv(context)),
+  inline LocalPipeline(kj::Own<CallContextHook>&& contextParam)
+      : context(kj::mv(contextParam)),
         results(context->getResults(1)) {}
 
   kj::Own<const PipelineHook> addRef() const {
@@ -376,7 +380,7 @@ public:
     // Note also that QueuedClient depends on this evalLater() to ensure that pipelined calls don't
     // complete before 'whenMoreResolved()' promises resolve.
     auto promise = eventLoop.evalLater(
-        [=]() mutable {
+        [=]() {
           return server->dispatchCall(interfaceId, methodId,
                                       CallContext<ObjectPointer, ObjectPointer>(*contextPtr));
         });
@@ -394,6 +398,9 @@ public:
         [=](kj::Own<CallContextHook>&& context) {
           // Nothing to do here.  We just wanted to make sure to hold on to a reference to the
           // context even if the pipeline was discarded.
+          //
+          // TODO(someday):  We could probably make this less ugly if we had the ability to
+          //   convert Promise<Tuple<T, U>> -> Tuple<Promise<T>, Promise<U>>...
         }));
 
     return VoidPromiseAndPipeline { kj::mv(completionPromise),

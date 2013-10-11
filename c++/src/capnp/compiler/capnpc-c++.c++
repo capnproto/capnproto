@@ -527,6 +527,7 @@ private:
   struct FieldText {
     kj::StringTree readerMethodDecls;
     kj::StringTree builderMethodDecls;
+    kj::StringTree pipelineMethodDecls;
     kj::StringTree inlineMethodDefs;
   };
 
@@ -569,6 +570,8 @@ private:
                 "  inline ", titleCase, "::Builder get", titleCase, "();\n"
                 "  inline ", titleCase, "::Builder init", titleCase, "();\n"
                 "\n"),
+
+            kj::strTree(),
 
             kj::strTree(
                 kj::mv(unionDiscrim.isDefs),
@@ -774,6 +777,8 @@ private:
             "  inline void set", titleCase, "(", type, " value", setterDefault, ");\n"
             "\n"),
 
+        kj::strTree(),
+
         kj::strTree(
             kj::mv(unionDiscrim.isDefs),
             "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
@@ -806,7 +811,7 @@ private:
 
     } else if (kind == FieldKind::INTERFACE) {
       // Not implemented.
-      return FieldText { kj::strTree(), kj::strTree(), kj::strTree() };
+      return FieldText { kj::strTree(), kj::strTree(), kj::strTree(), kj::strTree() };
 
     } else if (kind == FieldKind::OBJECT) {
       return FieldText {
@@ -822,6 +827,8 @@ private:
             "  inline ::capnp::ObjectPointer::Builder get", titleCase, "();\n"
             "  inline ::capnp::ObjectPointer::Builder init", titleCase, "();\n"
             "\n"),
+
+        kj::strTree(),
 
         kj::strTree(
             kj::mv(unionDiscrim.isDefs),
@@ -924,6 +931,8 @@ private:
             "  inline void adopt", titleCase, "(::capnp::Orphan<", type, ">&& value);\n"
             "  inline ::capnp::Orphan<", type, "> disown", titleCase, "();\n"
             "\n"),
+
+        kj::strTree(),
 
         kj::strTree(
             kj::mv(unionDiscrim.isDefs),
@@ -1063,6 +1072,25 @@ private:
         "\n");
   }
 
+  kj::StringTree makePipelineDef(kj::StringPtr fullName, kj::StringPtr unqualifiedParentType,
+                                 bool isUnion, kj::Array<kj::StringTree>&& methodDecls) {
+    return kj::strTree(
+        "class ", fullName, "::Pipeline {\n"
+        "public:\n"
+        "  typedef ", unqualifiedParentType, " Pipelines;\n"
+        "\n"
+        "  inline explicit Pipeline(::capnp::TypelessResults::Pipeline&& typeless)\n"
+        "      : _typeless(kj::mv(typeless)) {}\n"
+        "\n",
+        kj::mv(methodDecls),
+        "private:\n"
+        "  ::capnp::TypelessResults::Pipeline _typeless;\n"
+        "  template <typename T, ::capnp::Kind k>\n"
+        "  friend struct ::capnp::ToDynamic_;\n"
+        "};\n"
+        "\n");
+  }
+
   StructText makeStructText(kj::StringPtr scope, kj::StringPtr name, StructSchema schema,
                             kj::Array<kj::StringTree> nestedTypeDecls) {
     auto proto = schema.getProto();
@@ -1082,7 +1110,8 @@ private:
           "  ", name, "() = delete;\n"
           "\n"
           "  class Reader;\n"
-          "  class Builder;\n",
+          "  class Builder;\n"
+          "  class Pipeline;\n",
           structNode.getDiscriminantCount() == 0 ? kj::strTree() : kj::strTree(
               "  enum Which: uint16_t {\n",
               KJ_MAP(f, structNode.getFields()) {
@@ -1101,7 +1130,9 @@ private:
           makeReaderDef(fullName, name, structNode.getDiscriminantCount() != 0,
                         KJ_MAP(f, fieldTexts) { return kj::mv(f.readerMethodDecls); }),
           makeBuilderDef(fullName, name, structNode.getDiscriminantCount() != 0,
-                         KJ_MAP(f, fieldTexts) { return kj::mv(f.builderMethodDecls); })),
+                         KJ_MAP(f, fieldTexts) { return kj::mv(f.builderMethodDecls); }),
+          makePipelineDef(fullName, name, structNode.getDiscriminantCount() != 0,
+                          KJ_MAP(f, fieldTexts) { return kj::mv(f.pipelineMethodDecls); })),
 
       kj::strTree(
           structNode.getDiscriminantCount() == 0 ? kj::strTree() : kj::strTree(
@@ -1267,7 +1298,9 @@ private:
           "::kj::Promise<void> ", fullName, "::Server::dispatchCall(\n"
           "    uint64_t interfaceId, uint16_t methodId,\n"
           "    ::capnp::CallContext< ::capnp::ObjectPointer, ::capnp::ObjectPointer> context) {\n"
-          "  switch (interfaceId) {\n",
+          "  switch (interfaceId) {\n"
+          "    case 0x", kj::hex(proto.getId()), "ull:\n"
+          "      return dispatchCallInternal(methodId, context);\n",
           KJ_MAP(e, extends) {
             return kj::strTree(
               "    case 0x", kj::hex(e.id), "ull:\n"

@@ -243,6 +243,8 @@ kj::Own<const ClientHook> makeLocalClient(kj::Own<Capability::Server>&& server,
                                           kj::EventLoop& eventLoop = kj::EventLoop::current());
 // Make a client capability that wraps the given server capability.  The server's methods will
 // only be executed in the given EventLoop, regardless of what thread calls the client's methods.
+//
+// TODO(now):  Templated version or something.
 
 // =======================================================================================
 
@@ -395,7 +397,7 @@ RemotePromise<Results> Request<Params, Results>::send() {
   // Explicitly upcast to kj::Promise to make clear that calling .then() doesn't invalidate the
   // Pipeline part of the RemotePromise.
   auto typedPromise = kj::implicitCast<kj::Promise<Response<TypelessResults>>&>(typelessPromise)
-      .then([](Response<TypelessResults>&& response) -> Response<Results> {
+      .thenInAnyThread([](Response<TypelessResults>&& response) -> Response<Results> {
         return Response<Results>(response.getAs<Results>(), kj::mv(response.hook));
       });
 

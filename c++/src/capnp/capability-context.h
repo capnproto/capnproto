@@ -54,7 +54,8 @@ class CapExtractorBase {
   // Non-template base class for CapExtractor<T>.
 
 private:
-  virtual kj::Own<ClientHook> extractCapInternal(const _::StructReader& capDescriptor) = 0;
+  virtual kj::Own<const ClientHook> extractCapInternal(
+      const _::StructReader& capDescriptor) const = 0;
   friend class _::ImbuedReaderArena;
 };
 
@@ -62,8 +63,11 @@ class CapInjectorBase {
   // Non-template base class for CapInjector<T>.
 
 private:
-  virtual void injectCapInternal(_::PointerBuilder builder, kj::Own<ClientHook>&& cap) = 0;
-  virtual kj::Own<ClientHook> getInjectedCapInternal(const _::StructReader& capDescriptor) = 0;
+  virtual _::OrphanBuilder injectCapInternal(
+      _::BuilderArena* arena, kj::Own<const ClientHook>&& cap) const = 0;
+  virtual void dropCapInternal(const _::StructReader& capDescriptor) const = 0;
+  virtual kj::Own<const ClientHook> getInjectedCapInternal(
+      const _::StructReader& capDescriptor) const = 0;
   friend class _::ImbuedBuilderArena;
 };
 
@@ -74,11 +78,12 @@ class CapExtractor: public CapExtractorBase {
   // capabilities.  (On the wire, an interface pointer actually points to a struct of this type.)
 
 public:
-  virtual kj::Own<ClientHook> extractCap(typename CapDescriptor::Reader descriptor) = 0;
+  virtual kj::Own<const ClientHook> extractCap(typename CapDescriptor::Reader descriptor) const = 0;
   // Given the descriptor read off the wire, construct a live capability.
 
 private:
-  kj::Own<ClientHook> extractCapInternal(const _::StructReader& capDescriptor) override final {
+  kj::Own<const ClientHook> extractCapInternal(
+      const _::StructReader& capDescriptor) const override final {
     return extractCap(typename CapDescriptor::Reader(capDescriptor));
   }
 };
@@ -90,21 +95,34 @@ class CapInjector: public CapInjectorBase {
   // capabilities.  (On the wire, an interface pointer actually points to a struct of this type.)
 
 public:
-  virtual void injectCap(typename CapDescriptor::Builder descriptor, kj::Own<ClientHook>&& cap) = 0;
+  virtual void injectCap(typename CapDescriptor::Builder descriptor,
+                         kj::Own<const ClientHook>&& cap) const = 0;
   // Fill in the given descriptor so that it describes the given capability.
 
-  virtual kj::Own<ClientHook> getInjectedCap(typename CapDescriptor::Reader descriptor) = 0;
+  virtual kj::Own<const ClientHook> getInjectedCap(
+      typename CapDescriptor::Reader descriptor) const = 0;
+  // Read back a cap that was previously injected with `injectCap`.  This should return a new
+  // reference.
+
+  virtual void dropCap(typename CapDescriptor::Reader descriptor) const = 0;
   // Read back a cap that was previously injected with `injectCap`.  This should return a new
   // reference.
 
 private:
-  void injectCapInternal(_::PointerBuilder builder, kj::Own<ClientHook>&& cap) override final {
-    injectCap(
-        typename CapDescriptor::Builder(builder.initCapDescriptor(_::structSize<CapDescriptor>())),
-        kj::mv(cap));
+  _::OrphanBuilder injectCapInternal(_::BuilderArena* arena,
+                                     kj::Own<const ClientHook>&& cap) const override final {
+    auto result = _::OrphanBuilder::initStruct(arena, _::structSize<CapDescriptor>());
+    injectCap(typename CapDescriptor::Builder(result.asStruct(_::structSize<CapDescriptor>())),
+              kj::mv(cap));
+    return kj::mv(result);
   }
 
-  kj::Own<ClientHook> getInjectedCapInternal(const _::StructReader& capDescriptor) {
+  void dropCapInternal(const _::StructReader& capDescriptor) const override final {
+    dropCap(typename CapDescriptor::Reader(capDescriptor));
+  }
+
+  kj::Own<const ClientHook> getInjectedCapInternal(
+      const _::StructReader& capDescriptor) const override final {
     return getInjectedCap(typename CapDescriptor::Reader(capDescriptor));
   }
 };

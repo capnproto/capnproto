@@ -185,9 +185,13 @@ public:
   // the VALIDATE_INPUT() macro which may throw an exception; if it return normally, the caller
   // will need to continue with default values.
 
-  virtual kj::Own<ClientHook> extractCap(const _::StructReader& capDescriptor) = 0;
+  virtual kj::Own<const ClientHook> extractCap(const _::StructReader& capDescriptor) = 0;
   // Given a StructReader for a capability descriptor embedded in the message, return the
   // corresponding capability.
+
+  kj::Own<const ClientHook> extractNullCap();
+  // Like extractCap() but called when the pointer was null.  This just returns a dummy capability
+  // that throws exceptions on any call.
 };
 
 class BasicReaderArena final: public Arena {
@@ -199,7 +203,7 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Own<ClientHook> extractCap(const _::StructReader& capDescriptor);
+  kj::Own<const ClientHook> extractCap(const _::StructReader& capDescriptor);
 
 private:
   MessageReader* message;
@@ -223,7 +227,7 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Own<ClientHook> extractCap(const _::StructReader& capDescriptor);
+  kj::Own<const ClientHook> extractCap(const _::StructReader& capDescriptor);
 
 private:
   Arena* base;
@@ -254,9 +258,12 @@ public:
   // the arena is guaranteed to succeed.  Therefore callers should try to allocate from a specific
   // segment first if there is one, then fall back to the arena.
 
-  virtual void injectCap(_::PointerBuilder pointer, kj::Own<ClientHook>&& cap) = 0;
+  virtual OrphanBuilder injectCap(kj::Own<const ClientHook>&& cap) = 0;
   // Add the capability to the message and initialize the given pointer as an interface pointer
   // pointing to this cap.
+
+  virtual void dropCap(const StructReader& capDescriptor) = 0;
+  // Remove a capability injected earlier.  Called when the pointer is overwritten or zero'd out.
 };
 
 class BasicBuilderArena final: public BuilderArena {
@@ -277,12 +284,13 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Own<ClientHook> extractCap(const _::StructReader& capDescriptor);
+  kj::Own<const ClientHook> extractCap(const _::StructReader& capDescriptor);
 
   // implements BuilderArena -----------------------------------------
   SegmentBuilder* getSegment(SegmentId id) override;
   AllocateResult allocate(WordCount amount) override;
-  void injectCap(_::PointerBuilder pointer, kj::Own<ClientHook>&& cap);
+  OrphanBuilder injectCap(kj::Own<const ClientHook>&& cap);
+  void dropCap(const StructReader& capDescriptor);
 
 private:
   MessageBuilder* message;
@@ -312,12 +320,13 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Own<ClientHook> extractCap(const _::StructReader& capDescriptor);
+  kj::Own<const ClientHook> extractCap(const _::StructReader& capDescriptor);
 
   // implements BuilderArena -----------------------------------------
   SegmentBuilder* getSegment(SegmentId id) override;
   AllocateResult allocate(WordCount amount) override;
-  void injectCap(_::PointerBuilder pointer, kj::Own<ClientHook>&& cap);
+  OrphanBuilder injectCap(kj::Own<const ClientHook>&& cap);
+  void dropCap(const StructReader& capDescriptor);
 
 private:
   BuilderArena* base;

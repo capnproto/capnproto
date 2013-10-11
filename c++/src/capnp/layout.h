@@ -300,7 +300,6 @@ public:
   ListBuilder initList(FieldSize elementSize, ElementCount elementCount);
   ListBuilder initStructList(ElementCount elementCount, StructSize size);
   template <typename T> typename T::Builder initBlob(ByteCount size);
-  StructBuilder initCapDescriptor(StructSize size);
   // Init methods:  Initialize the pointer to a newly-allocated object, discarding the existing
   // object.
 
@@ -362,7 +361,7 @@ public:
   ListReader getList(FieldSize expectedElementSize, const word* defaultValue) const;
   template <typename T>
   typename T::Reader getBlob(const void* defaultValue, ByteCount defaultSize) const;
-  kj::Own<const ClientHook> getCapability();
+  kj::Own<const ClientHook> getCapability() const;
   // Get methods:  Get the value.  If it is null, return the default value instead.
   // The default value is encoded as an "unchecked message" for structs, lists, and objects, or a
   // simple byte array for blobs.

@@ -58,6 +58,15 @@ template <typename T>
 using JoinPromises = typename JoinPromises_<T>::Type;
 // If T is Promise<U>, resolves to U, otherwise resolves to T.
 
+template <typename T> struct DisallowChain_ { typedef T Type; };
+template <typename T> struct DisallowChain_<Promise<T>> {
+  static_assert(sizeof(T) < 0, "Continuation passed to thenInAnyThread() cannot return a promise.");
+};
+
+template <typename T>
+using DisallowChain = typename DisallowChain_<T>::Type;
+// If T is Promise<U>, error, otherwise resolves to T.
+
 class PropagateException {
   // A functor which accepts a kj::Exception as a parameter and returns a broken promise of
   // arbitrary type which simply propagates the exception.
@@ -65,11 +74,6 @@ public:
   class Bottom {
   public:
     Bottom(Exception&& exception): exception(kj::mv(exception)) {}
-
-    template <typename T>
-    operator T() {
-      throwFatalException(kj::mv(exception));
-    }
 
     Exception asException() { return kj::mv(exception); }
 
@@ -189,6 +193,10 @@ using PromiseForResult = Promise<_::JoinPromises<_::ReturnType<Func, T>>>;
 // Evaluates to the type of Promise for the result of calling functor type Func with parameter type
 // T.  If T is void, then the promise is for the result of calling Func with no arguments.  If
 // Func itself returns a promise, the promises are joined, so you never get Promise<Promise<T>>.
+
+template <typename Func, typename T>
+using PromiseForResultNoChaining = Promise<_::DisallowChain<_::ReturnType<Func, T>>>;
+// Like PromiseForResult but chaining (continuations that return another promise) is now allowed.
 
 class EventLoop {
   // Represents a queue of events being executed in a loop.  Most code won't interact with
@@ -582,6 +590,14 @@ public:
   // to yield control; this way, all other events in the queue will get a chance to run before your
   // callback is executed.
 
+  template <typename Func, typename ErrorFunc = _::PropagateException>
+  PromiseForResultNoChaining<Func, T> thenInAnyThread(
+      Func&& func, ErrorFunc&& errorHandler = _::PropagateException()) KJ_WARN_UNUSED_RESULT;
+  // Like then(), but the continuation will be executed in an arbitrary thread, not the calling
+  // thread.  The continuation MUST NOT return another promise.  It's suggested that you use a
+  // lambda with an empty capture as the continuation.  In the vast majority of cases, this ends
+  // up doing the same thing as then(); don't use this unless you really know you need it.
+
   T wait();
   // Equivalent to `EventLoop::current().wait(kj::mv(*this))`.  WARNING:  Although `wait()`
   // advances the event loop, calls to `wait()` obviously can only return in the reverse of the
@@ -892,14 +908,14 @@ private:
 
 class TransformPromiseNodeBase: public PromiseNode {
 public:
-  TransformPromiseNodeBase(const EventLoop& loop, Own<PromiseNode>&& dependency);
+  TransformPromiseNodeBase(Maybe<const EventLoop&> loop, Own<PromiseNode>&& dependency);
 
   bool onReady(EventLoop::Event& event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   Maybe<const EventLoop&> getSafeEventLoop() noexcept override;
 
 private:
-  const EventLoop& loop;
+  Maybe<const EventLoop&> loop;
   Own<PromiseNode> dependency;
 
   void dropDependency();
@@ -916,7 +932,7 @@ class TransformPromiseNode final: public TransformPromiseNodeBase {
   // function (implements `then()`).
 
 public:
-  TransformPromiseNode(const EventLoop& loop, Own<PromiseNode>&& dependency,
+  TransformPromiseNode(Maybe<const EventLoop&> loop, Own<PromiseNode>&& dependency,
                        Func&& func, ErrorFunc&& errorHandler)
       : TransformPromiseNodeBase(loop, kj::mv(dependency)),
         func(kj::fwd<Func>(func)), errorHandler(kj::fwd<ErrorFunc>(errorHandler)) {}
@@ -936,8 +952,9 @@ private:
     ExceptionOr<DepT> depResult;
     dependency->get(depResult);
     KJ_IF_MAYBE(depException, depResult.exception) {
-      output.as<T>() = handle(MaybeVoidCaller<Exception&&, T>::apply(
-          errorHandler, kj::mv(*depException)));
+      output.as<T>() = handle(
+          MaybeVoidCaller<Exception, FixVoid<ReturnType<ErrorFunc, Exception>>>::apply(
+              errorHandler, kj::mv(*depException)));
     } else KJ_IF_MAYBE(depValue, depResult.value) {
       output.as<T>() = handle(MaybeVoidCaller<DepT, T>::apply(func, kj::mv(*depValue)));
     }
@@ -1283,6 +1300,17 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler
   return PromiseForResult<Func, T>(false, EventLoop::current().thereImpl(
       kj::mv(*this), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler),
       EventLoop::Event::PREEMPT));
+}
+
+template <typename T>
+template <typename Func, typename ErrorFunc>
+PromiseForResultNoChaining<Func, T> Promise<T>::thenInAnyThread(
+    Func&& func, ErrorFunc&& errorHandler) {
+  typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
+
+  return PromiseForResultNoChaining<Func, T>(false,
+      heap<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
+          nullptr, kj::mv(node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler)));
 }
 
 template <typename T>

@@ -25,6 +25,7 @@
 #include "layout.h"
 #include <kj/debug.h>
 #include "arena.h"
+#include "capability.h"
 #include <string.h>
 #include <limits>
 #include <stdlib.h>
@@ -69,8 +70,9 @@ struct WirePointer {
     // Reference is a "far pointer", which points at data located in a different segment.  The
     // eventual target is one of the other kinds.
 
-    RESERVED_3 = 3
-    // Reserved for future use.
+    CAPABILITY = 3
+    // Reference points at a capability descriptor struct.  Other than the kind, the pointer has
+    // the same format as a struct.
   };
 
   WireValue<uint32_t> offsetAndKind;
@@ -430,9 +432,8 @@ struct WireHelpers {
 
     switch (ref->kind()) {
       case WirePointer::STRUCT:
-        zeroObject(segment, ref, ref->target());
-        break;
       case WirePointer::LIST:
+      case WirePointer::CAPABILITY:
         zeroObject(segment, ref, ref->target());
         break;
       case WirePointer::FAR: {
@@ -450,16 +451,20 @@ struct WireHelpers {
         }
         break;
       }
-      case WirePointer::RESERVED_3:
-        KJ_FAIL_ASSERT("Don't know how to handle RESERVED_3.") {
-          break;
-        }
-        break;
     }
   }
 
   static void zeroObject(SegmentBuilder* segment, WirePointer* tag, word* ptr) {
     switch (tag->kind()) {
+      case WirePointer::CAPABILITY:
+        segment->getArena()->dropCap(StructReader(
+            segment, ptr,
+            reinterpret_cast<const WirePointer*>(ptr + tag->structRef.dataSize.get()),
+            tag->structRef.dataSize.get() * BITS_PER_WORD,
+            tag->structRef.ptrCount.get(),
+            0 * BITS, std::numeric_limits<int>::max()));
+        // no break:  treat like struct pointer
+
       case WirePointer::STRUCT: {
         WirePointer* pointerSection =
             reinterpret_cast<WirePointer*>(ptr + tag->structRef.dataSize.get());
@@ -524,11 +529,6 @@ struct WireHelpers {
           break;
         }
         break;
-      case WirePointer::RESERVED_3:
-        KJ_FAIL_ASSERT("Don't know how to handle RESERVED_3.") {
-          break;
-        }
-        break;
     }
   }
 
@@ -565,7 +565,8 @@ struct WireHelpers {
     WordCount64 result = 0 * WORDS;
 
     switch (ref->kind()) {
-      case WirePointer::STRUCT: {
+      case WirePointer::STRUCT:
+      case WirePointer::CAPABILITY: {
         KJ_REQUIRE(boundsCheck(segment, ptr, ptr + ref->structRef.wordSize()),
                    "Message contained out-of-bounds struct pointer.") {
           return result;
@@ -659,11 +660,6 @@ struct WireHelpers {
       case WirePointer::FAR:
         KJ_FAIL_ASSERT("Unexpected FAR pointer.") {
           break;
-        }
-        break;
-      case WirePointer::RESERVED_3:
-        KJ_FAIL_REQUIRE("Don't know how to handle RESERVED_3.") {
-          return result;
         }
         break;
     }
@@ -776,9 +772,11 @@ struct WireHelpers {
         }
         break;
       }
-      case WirePointer::RESERVED_3:
-      default:
-        KJ_FAIL_REQUIRE("Copy source message contained unexpected kind.");
+      case WirePointer::CAPABILITY:
+        KJ_FAIL_REQUIRE("Unchecked messages cannot contain capabilities.");
+        break;
+      case WirePointer::FAR:
+        KJ_FAIL_REQUIRE("Unchecked messages cannot contain far pointers.");
         break;
     }
 
@@ -1497,6 +1495,42 @@ struct WireHelpers {
     return { segment, ptr };
   }
 
+  static SegmentAnd<word*> setCapabilityPointer(
+      SegmentBuilder* segment, WirePointer* ref, kj::Own<const ClientHook>&& cap,
+      BuilderArena* orphanArena = nullptr) {
+    if (orphanArena == nullptr) {
+      auto orphan = segment->getArena()->injectCap(kj::mv(cap));
+      SegmentAnd<word*> result = { orphan.segment, orphan.location };
+
+      adopt(segment, ref, kj::mv(orphan));
+
+      if (ref->kind() == WirePointer::STRUCT) {
+        ref->setKindAndTarget(WirePointer::CAPABILITY, ref->target(), segment);
+      }
+
+      return result;
+
+    } else {
+      // We're actually writing into another OrphanBuilder.  If we had direct access to it, we
+      // could just use the move constructor, but we don't quite...
+      auto orphan = orphanArena->injectCap(kj::mv(cap));
+      SegmentAnd<word*> result = { orphan.segment, orphan.location };
+
+      memcpy(ref, orphan.tagAsPtr(), sizeof(*ref));
+
+      if (ref->kind() == WirePointer::STRUCT) {
+        ref->setKindForOrphan(WirePointer::CAPABILITY);
+      }
+
+      // Zero out the orphan because we have transferred ownership manually.
+      memset(orphan.tagAsPtr(), 0, sizeof(WirePointer));
+      orphan.location = nullptr;
+      orphan.segment = nullptr;
+
+      return result;
+    }
+  }
+
   static SegmentAnd<word*> setListPointer(
       SegmentBuilder* segment, WirePointer* ref, ListReader value,
       BuilderArena* orphanArena = nullptr) {
@@ -1667,9 +1701,29 @@ struct WireHelpers {
         }
       }
 
-      case WirePointer::RESERVED_3:
-      default:
-        KJ_FAIL_REQUIRE("Message contained invalid pointer.") {
+      case WirePointer::CAPABILITY: {
+        KJ_REQUIRE(nestingLimit > 0,
+              "Message is too deeply-nested or contains cycles.  See capnp::ReadOptions.") {
+          goto useDefault;
+        }
+
+        KJ_REQUIRE(boundsCheck(srcSegment, ptr, ptr + src->structRef.wordSize()),
+                   "Message contained out-of-bounds struct pointer.") {
+          goto useDefault;
+        }
+
+        setCapabilityPointer(dstSegment, dst,
+            srcSegment->getArena()->extractCap(StructReader(
+                srcSegment, ptr,
+                reinterpret_cast<const WirePointer*>(ptr + src->structRef.dataSize.get()),
+                src->structRef.dataSize.get() * BITS_PER_WORD,
+                src->structRef.ptrCount.get(),
+                0 * BITS, nestingLimit - 1)),
+            orphanArena);
+      }
+
+      case WirePointer::FAR:
+        KJ_FAIL_ASSERT("Far pointer should have been handled above.") {
           goto useDefault;
         }
     }
@@ -1732,6 +1786,28 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(StructReader readStructPointer(
       SegmentReader* segment, const WirePointer* ref, const word* refTarget,
       const word* defaultValue, int nestingLimit)) {
+    return readStructOrCapDescPointer(WirePointer::STRUCT, segment, ref, refTarget, defaultValue,
+                                      nestingLimit);
+  }
+
+  static KJ_ALWAYS_INLINE(kj::Own<const ClientHook> readCapabilityPointer(
+      SegmentReader* segment, const WirePointer* ref, int nestingLimit)) {
+    return readCapabilityPointer(segment, ref, ref->target(), nestingLimit);
+  }
+
+  static KJ_ALWAYS_INLINE(kj::Own<const ClientHook> readCapabilityPointer(
+      SegmentReader* segment, const WirePointer* ref, const word* refTarget, int nestingLimit)) {
+    if (ref->isNull()) {
+      return segment->getArena()->extractNullCap();
+    } else {
+      return segment->getArena()->extractCap(readStructOrCapDescPointer(
+          WirePointer::CAPABILITY, segment, ref, refTarget, nullptr, nestingLimit));
+    }
+  }
+
+  static KJ_ALWAYS_INLINE(StructReader readStructOrCapDescPointer(WirePointer::Kind kind,
+      SegmentReader* segment, const WirePointer* ref, const word* refTarget,
+      const word* defaultValue, int nestingLimit)) {
     if (ref == nullptr || ref->isNull()) {
     useDefault:
       if (defaultValue == nullptr ||
@@ -1755,8 +1831,10 @@ struct WireHelpers {
       goto useDefault;
     }
 
-    KJ_REQUIRE(ref->kind() == WirePointer::STRUCT,
-               "Message contains non-struct pointer where struct pointer was expected.") {
+    KJ_REQUIRE(ref->kind() == kind,
+               kind == WirePointer::CAPABILITY
+               ? "Message contains non-capability pointer where capability pointer was expected."
+               : "Message contains non-struct pointer where struct pointer was expected.") {
       goto useDefault;
     }
 
@@ -2075,6 +2153,15 @@ void PointerBuilder::setList(const ListReader& value) {
   WireHelpers::setListPointer(segment, pointer, value);
 }
 
+kj::Own<const ClientHook> PointerBuilder::getCapability() {
+  return WireHelpers::readCapabilityPointer(
+      segment, pointer, std::numeric_limits<int>::max());
+}
+
+void PointerBuilder::setCapability(kj::Own<const ClientHook>&& cap) {
+  WireHelpers::setCapabilityPointer(segment, pointer, kj::mv(cap));
+}
+
 void PointerBuilder::adopt(OrphanBuilder&& value) {
   WireHelpers::adopt(segment, pointer, kj::mv(value));
 }
@@ -2146,6 +2233,11 @@ template <>
 Data::Reader PointerReader::getBlob<Data>(const void* defaultValue, ByteCount defaultSize) const {
   const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
   return WireHelpers::readDataPointer(segment, ref, defaultValue, defaultSize);
+}
+
+kj::Own<const ClientHook> PointerReader::getCapability() const {
+  const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
+  return WireHelpers::readCapabilityPointer(segment, ref, nestingLimit);
 }
 
 const word* PointerReader::getUnchecked() const {

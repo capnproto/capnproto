@@ -311,7 +311,7 @@ void ImmediateBrokenPromiseNode::get(ExceptionOrValue& output) noexcept {
 // -------------------------------------------------------------------
 
 TransformPromiseNodeBase::TransformPromiseNodeBase(
-    const EventLoop& loop, Own<PromiseNode>&& dependency)
+    Maybe<const EventLoop&> loop, Own<PromiseNode>&& dependency)
     : loop(loop), dependency(kj::mv(dependency)) {}
 
 bool TransformPromiseNodeBase::onReady(EventLoop::Event& event) noexcept {
@@ -327,7 +327,7 @@ void TransformPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
 }
 
 Maybe<const EventLoop&> TransformPromiseNodeBase::getSafeEventLoop() noexcept {
-  return loop;
+  return loop == nullptr ? dependency->getSafeEventLoop() : loop;
 }
 
 void TransformPromiseNodeBase::dropDependency() {

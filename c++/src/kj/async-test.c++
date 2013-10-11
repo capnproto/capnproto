@@ -156,6 +156,18 @@ TEST(Async, Then) {
   EXPECT_TRUE(innerDone);
 }
 
+TEST(Async, ThenInAnyThread) {
+  SimpleEventLoop loop;
+
+  Promise<int> a = 123;
+  bool done = false;
+
+  Promise<int> promise = a.thenInAnyThread([&](int ai) { done = true; return ai + 321; });
+  EXPECT_FALSE(done);
+  EXPECT_EQ(444, loop.wait(kj::mv(promise)));
+  EXPECT_TRUE(done);
+}
+
 TEST(Async, Chain) {
   SimpleEventLoop loop;
 

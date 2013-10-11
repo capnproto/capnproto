@@ -25,18 +25,94 @@
 #include "arena.h"
 #include "message.h"
 #include "capability.h"
+#include "capability-context.h"
 #include <kj/debug.h>
+#include <kj/refcount.h>
 #include <vector>
 #include <string.h>
 #include <stdio.h>
-#include "capability.h"
-#include "capability-context.h"
 
 namespace capnp {
 namespace _ {  // private
 
 Arena::~Arena() noexcept(false) {}
 BuilderArena::~BuilderArena() noexcept(false) {}
+
+namespace {
+
+class BrokenPipeline final: public PipelineHook, public kj::Refcounted {
+public:
+  BrokenPipeline(const kj::Exception& exception): exception(exception) {}
+
+  kj::Own<const PipelineHook> addRef() const override {
+    return kj::addRef(*this);
+  }
+
+  kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const override;
+
+private:
+  kj::Exception exception;
+};
+
+class BrokenRequest final: public RequestHook {
+public:
+  BrokenRequest(const kj::Exception& exception, uint firstSegmentWordSize)
+      : exception(exception), message(firstSegmentWordSize) {}
+
+  RemotePromise<TypelessResults> send() override {
+    return RemotePromise<TypelessResults>(kj::cp(exception),
+        TypelessResults::Pipeline(kj::refcounted<BrokenPipeline>(exception)));
+  }
+
+  kj::Exception exception;
+  MallocMessageBuilder message;
+};
+
+class BrokenClient final: public ClientHook, public kj::Refcounted {
+public:
+  BrokenClient(const kj::Exception& exception): exception(exception) {}
+  BrokenClient(const char* description)
+      : exception(kj::Exception::Nature::PRECONDITION, kj::Exception::Durability::PERMANENT,
+                  "", 0, kj::str(description)) {}
+
+  Request<ObjectPointer, TypelessResults> newCall(
+      uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
+    auto hook = kj::heap<BrokenRequest>(exception, firstSegmentWordSize);
+    return Request<ObjectPointer, TypelessResults>(
+        hook->message.getRoot<ObjectPointer>(), kj::mv(hook));
+  }
+
+  VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
+                              kj::Own<CallContextHook>&& context) const override {
+    return VoidPromiseAndPipeline { kj::cp(exception), kj::heap<BrokenPipeline>(exception) };
+  }
+
+  kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const override {
+    return kj::Promise<kj::Own<const ClientHook>>(kj::cp(exception));
+  }
+
+  kj::Own<const ClientHook> addRef() const override {
+    return kj::addRef(*this);
+  }
+
+  void* getBrand() const override {
+    return nullptr;
+  }
+
+private:
+  kj::Exception exception;
+};
+
+kj::Own<const ClientHook> BrokenPipeline::getPipelinedCap(
+    kj::ArrayPtr<const PipelineOp> ops) const {
+  return kj::heap<BrokenClient>(exception);
+}
+
+}  // namespace
+
+kj::Own<const ClientHook> Arena::extractNullCap() {
+  return kj::refcounted<BrokenClient>("Calling null capability pointer.");
+}
 
 void ReadLimiter::unread(WordCount64 amount) {
   // Be careful not to overflow here.  Since ReadLimiter has no thread-safety, it's possible that
@@ -102,40 +178,11 @@ void BasicReaderArena::reportReadLimitReached() {
   }
 }
 
-namespace {
-
-class DummyClientHook final: public ClientHook {
-public:
-  Request<ObjectPointer, TypelessResults> newCall(
-      uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
-    KJ_FAIL_REQUIRE("Calling capability that was extracted from a message that had no "
-                    "capability context.");
-  }
-
-  VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context) const override {
-    KJ_FAIL_REQUIRE("Calling capability that was extracted from a message that had no "
-                    "capability context.");
-  }
-
-  kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const override {
-    return nullptr;
-  }
-
-  kj::Own<const ClientHook> addRef() const override {
-    return kj::heap<DummyClientHook>();
-  }
-
-  void* getBrand() const override {
-    return nullptr;
-  }
-};
-
-}  // namespace
-
-kj::Own<ClientHook> BasicReaderArena::extractCap(const _::StructReader& capDescriptor) {
+kj::Own<const ClientHook> BasicReaderArena::extractCap(const _::StructReader& capDescriptor) {
   KJ_FAIL_REQUIRE("Message contained a capability but is not imbued with a capability context.") {
-    return kj::heap<DummyClientHook>();
+    return kj::heap<BrokenClient>(
+        "Calling capability extracted from message that was not imbued with a capability "
+        "context.");
   }
 }
 
@@ -188,7 +235,7 @@ void ImbuedReaderArena::reportReadLimitReached() {
   return base->reportReadLimitReached();
 }
 
-kj::Own<ClientHook> ImbuedReaderArena::extractCap(const _::StructReader& capDescriptor) {
+kj::Own<const ClientHook> ImbuedReaderArena::extractCap(const _::StructReader& capDescriptor) {
   return capExtractor->extractCapInternal(capDescriptor);
 }
 
@@ -331,13 +378,19 @@ void BasicBuilderArena::reportReadLimitReached() {
   }
 }
 
-kj::Own<ClientHook> BasicBuilderArena::extractCap(const _::StructReader& capDescriptor) {
+kj::Own<const ClientHook> BasicBuilderArena::extractCap(const _::StructReader& capDescriptor) {
   KJ_FAIL_REQUIRE("Message contains no capabilities.");
 }
 
-void BasicBuilderArena::injectCap(_::PointerBuilder pointer, kj::Own<ClientHook>&& cap) {
+OrphanBuilder BasicBuilderArena::injectCap(kj::Own<const ClientHook>&& cap) {
   KJ_FAIL_REQUIRE("Cannot inject capability into a builder that has not been imbued with a "
-                  "capability context.");
+                  "capability context.") {
+    return OrphanBuilder();
+  }
+}
+
+void BasicBuilderArena::dropCap(const _::StructReader& capDescriptor) {
+  // They only way we could have a cap in the first place is if the error was already reported...
 }
 
 // =======================================================================================
@@ -386,7 +439,7 @@ void ImbuedBuilderArena::reportReadLimitReached() {
   base->reportReadLimitReached();
 }
 
-kj::Own<ClientHook> ImbuedBuilderArena::extractCap(const _::StructReader& capDescriptor) {
+kj::Own<const ClientHook> ImbuedBuilderArena::extractCap(const _::StructReader& capDescriptor) {
   return capInjector->getInjectedCapInternal(capDescriptor);
 }
 
@@ -400,8 +453,12 @@ BuilderArena::AllocateResult ImbuedBuilderArena::allocate(WordCount amount) {
   return result;
 }
 
-void ImbuedBuilderArena::injectCap(_::PointerBuilder pointer, kj::Own<ClientHook>&& cap) {
-  return capInjector->injectCapInternal(pointer, kj::mv(cap));
+OrphanBuilder ImbuedBuilderArena::injectCap(kj::Own<const ClientHook>&& cap) {
+  return capInjector->injectCapInternal(this, kj::mv(cap));
+}
+
+void ImbuedBuilderArena::dropCap(const StructReader& capDescriptor) {
+  capInjector->dropCapInternal(capDescriptor);
 }
 
 }  // namespace _ (private)
