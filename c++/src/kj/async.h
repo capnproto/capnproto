@@ -975,7 +975,7 @@ class ForkHubBase;
 class ForkBranchBase: public PromiseNode {
 public:
   ForkBranchBase(Own<const ForkHubBase>&& hub);
-  ~ForkBranchBase();
+  ~ForkBranchBase() noexcept(false);
 
   void hubReady() noexcept;
   // Called by the hub to indicate that it is ready.

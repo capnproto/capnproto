@@ -352,7 +352,7 @@ ForkBranchBase::ForkBranchBase(Own<const ForkHubBase>&& hubParam): hub(kj::mv(hu
   }
 }
 
-ForkBranchBase::~ForkBranchBase() {
+ForkBranchBase::~ForkBranchBase() noexcept(false) {
   if (prevPtr != nullptr) {
     // Remove from hub's linked list of branches.
     auto lock = hub->branchList.lockExclusive();

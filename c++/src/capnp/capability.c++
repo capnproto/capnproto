@@ -121,7 +121,7 @@ struct LocalCapDescriptor {
 };
 
 template <>
-StructSize structSize<LocalCapDescriptor>() {
+constexpr StructSize structSize<LocalCapDescriptor>() {
   return StructSize(1 * WORDS, 0 * POINTERS, FieldSize::FOUR_BYTES);
 }
 
