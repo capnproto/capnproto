@@ -100,7 +100,7 @@ private:
   inline void doAll(T... t) {}
 
   template <typename T>
-  KJ_ALWAYS_INLINE(bool destroyVariant()) {
+  inline bool destroyVariant() {
     if (tag == typeIndex<T>()) {
       tag = 0;
       dtor(*reinterpret_cast<T*>(space));
@@ -112,7 +112,7 @@ private:
   }
 
   template <typename T>
-  KJ_ALWAYS_INLINE(bool copyVariantFrom(const OneOf& other)) {
+  inline bool copyVariantFrom(const OneOf& other) {
     if (other.is<T>()) {
       ctor(*reinterpret_cast<T*>(space), other.get<T>());
       tag = typeIndex<T>();
@@ -126,7 +126,7 @@ private:
   }
 
   template <typename T>
-  KJ_ALWAYS_INLINE(bool moveVariantFrom(OneOf& other)) {
+  inline bool moveVariantFrom(OneOf& other) {
     if (other.is<T>()) {
       ctor(*reinterpret_cast<T*>(space), kj::mv(other.get<T>()));
       tag = typeIndex<T>();

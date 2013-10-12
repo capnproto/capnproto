@@ -245,8 +245,9 @@ public:
 
     auto promise = loop.there(kj::mv(promiseAndPipeline.promise),
         kj::mvCapture(context, [=](kj::Own<LocalCallContext> context) {
-          return Response<ObjectPointer>(context->getResults(1).asReader(),
-                                         kj::mv(context->response));
+          // Do not inline `reader` -- kj::mv on next line may occur first.
+          auto reader = context->getResults(1).asReader();
+          return Response<ObjectPointer>(reader, kj::mv(context->response));
         }));
 
     return RemotePromise<ObjectPointer>(
@@ -309,7 +310,8 @@ public:
       uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
     auto hook = kj::heap<LocalRequest>(
         loop, interfaceId, methodId, firstSegmentWordSize, kj::addRef(*this));
-    return Request<ObjectPointer, ObjectPointer>(hook->message->getRoot(), kj::mv(hook));
+    auto root = hook->message->getRoot();  // Do not inline `root` -- kj::mv may happen first.
+    return Request<ObjectPointer, ObjectPointer>(root, kj::mv(hook));
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
@@ -456,7 +458,8 @@ public:
       uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
     auto hook = kj::heap<LocalRequest>(
         eventLoop, interfaceId, methodId, firstSegmentWordSize, kj::addRef(*this));
-    return Request<ObjectPointer, ObjectPointer>(hook->message->getRoot(), kj::mv(hook));
+    auto root = hook->message->getRoot();  // Do not inline `root` -- kj::mv may happen first.
+    return Request<ObjectPointer, ObjectPointer>(root, kj::mv(hook));
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,

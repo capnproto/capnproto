@@ -115,6 +115,7 @@ includekj_HEADERS =                                            \
   src/kj/common.h                                              \
   src/kj/units.h                                               \
   src/kj/memory.h                                              \
+  src/kj/refcount.h                                            \
   src/kj/array.h                                               \
   src/kj/vector.h                                              \
   src/kj/string.h                                              \
@@ -124,6 +125,7 @@ includekj_HEADERS =                                            \
   src/kj/arena.h                                               \
   src/kj/io.h                                                  \
   src/kj/tuple.h                                               \
+  src/kj/one-of.h                                              \
   src/kj/function.h                                            \
   src/kj/mutex.h                                               \
   src/kj/thread.h                                              \
@@ -142,7 +144,10 @@ includecapnp_HEADERS =                                         \
   src/capnp/layout.h                                           \
   src/capnp/orphan.h                                           \
   src/capnp/list.h                                             \
+  src/capnp/object.h                                           \
   src/capnp/message.h                                          \
+  src/capnp/capability.h                                       \
+  src/capnp/capability-context.h                               \
   src/capnp/schema.capnp.h                                     \
   src/capnp/schema.h                                           \
   src/capnp/schema-loader.h                                    \
@@ -152,7 +157,6 @@ includecapnp_HEADERS =                                         \
   src/capnp/serialize.h                                        \
   src/capnp/serialize-packed.h                                 \
   src/capnp/pointer-helpers.h                                  \
-  src/capnp/object.h                                           \
   src/capnp/generated-header-support.h
 
 lib_LTLIBRARIES = libkj.la libcapnp.la libcapnpc.la
@@ -164,6 +168,7 @@ libkj_la_SOURCES=                                              \
   src/kj/common.c++                                            \
   src/kj/units.c++                                             \
   src/kj/memory.c++                                            \
+  src/kj/refcount.c++                                          \
   src/kj/array.c++                                             \
   src/kj/string.c++                                            \
   src/kj/string-tree.c++                                       \
@@ -187,7 +192,10 @@ libcapnp_la_SOURCES=                                           \
   src/capnp/arena.c++                                          \
   src/capnp/layout.c++                                         \
   src/capnp/list.c++                                           \
+  src/capnp/object.c++                                         \
   src/capnp/message.c++                                        \
+  src/capnp/capability.c++                                     \
+  src/capnp/capability-context.c++                             \
   src/capnp/schema.capnp.c++                                   \
   src/capnp/schema.c++                                         \
   src/capnp/schema-loader.c++                                  \
@@ -289,6 +297,7 @@ capnp_test_CPPFLAGS = -Igtest/include -I$(srcdir)/gtest/include
 capnp_test_SOURCES =                                           \
   src/kj/common-test.c++                                       \
   src/kj/memory-test.c++                                       \
+  src/kj/refcount-test.c++                                     \
   src/kj/array-test.c++                                        \
   src/kj/string-test.c++                                       \
   src/kj/string-tree-test.c++                                  \
@@ -297,6 +306,7 @@ capnp_test_SOURCES =                                           \
   src/kj/arena-test.c++                                        \
   src/kj/units-test.c++                                        \
   src/kj/tuple-test.c++                                        \
+  src/kj/one-of-test.c++                                       \
   src/kj/function-test.c++                                     \
   src/kj/mutex-test.c++                                        \
   src/kj/async-test.c++                                        \
@@ -308,14 +318,15 @@ capnp_test_SOURCES =                                           \
   src/capnp/endian-fallback-test.c++                           \
   src/capnp/endian-reverse-test.c++                            \
   src/capnp/layout-test.c++                                    \
+  src/capnp/object-test.c++                                    \
   src/capnp/message-test.c++                                   \
+  src/capnp/capability-test.c++                                \
   src/capnp/schema-test.c++                                    \
   src/capnp/schema-loader-test.c++                             \
   src/capnp/dynamic-test.c++                                   \
   src/capnp/stringify-test.c++                                 \
   src/capnp/encoding-test.c++                                  \
   src/capnp/orphan-test.c++                                    \
-  src/capnp/object-test.c++                                    \
   src/capnp/serialize-test.c++                                 \
   src/capnp/serialize-packed-test.c++                          \
   src/capnp/test-util.c++                                      \
