@@ -35,9 +35,6 @@
 namespace capnp {
 namespace _ {  // private
 
-Arena::~Arena() noexcept(false) {}
-BuilderArena::~BuilderArena() noexcept(false) {}
-
 namespace {
 
 class BrokenPipeline final: public PipelineHook, public kj::Refcounted {
@@ -110,9 +107,12 @@ kj::Own<const ClientHook> BrokenPipeline::getPipelinedCap(
 
 }  // namespace
 
-kj::Own<const ClientHook> Arena::extractNullCap() {
-  return kj::refcounted<BrokenClient>("Calling null capability pointer.");
+kj::Own<const ClientHook> newBrokenCap(const char* reason) {
+  return kj::refcounted<BrokenClient>(reason);
 }
+
+Arena::~Arena() noexcept(false) {}
+BuilderArena::~BuilderArena() noexcept(false) {}
 
 void ReadLimiter::unread(WordCount64 amount) {
   // Be careful not to overflow here.  Since ReadLimiter has no thread-safety, it's possible that
@@ -180,7 +180,7 @@ void BasicReaderArena::reportReadLimitReached() {
 
 kj::Own<const ClientHook> BasicReaderArena::extractCap(const _::StructReader& capDescriptor) {
   KJ_FAIL_REQUIRE("Message contained a capability but is not imbued with a capability context.") {
-    return kj::heap<BrokenClient>(
+    return newBrokenCap(
         "Calling capability extracted from message that was not imbued with a capability "
         "context.");
   }
@@ -406,7 +406,7 @@ SegmentBuilder* ImbuedBuilderArena::imbue(SegmentBuilder* baseSegment) {
   if (baseSegment->getSegmentId() == SegmentId(0)) {
     if (segment0.getArena() == nullptr) {
       kj::dtor(segment0);
-      kj::ctor(segment0, baseSegment);
+      kj::ctor(segment0, this, baseSegment);
     }
     result = &segment0;
   } else {
@@ -419,7 +419,7 @@ SegmentBuilder* ImbuedBuilderArena::imbue(SegmentBuilder* baseSegment) {
       KJ_IF_MAYBE(segment, segmentState->get()->builders[id]) {
         result = *segment;
       } else {
-        auto newBuilder = kj::heap<ImbuedSegmentBuilder>(baseSegment);
+        auto newBuilder = kj::heap<ImbuedSegmentBuilder>(this, baseSegment);
         result = newBuilder;
         segmentState->get()->builders[id] = kj::mv(newBuilder);
       }
@@ -448,7 +448,7 @@ SegmentBuilder* ImbuedBuilderArena::getSegment(SegmentId id) {
 }
 
 BuilderArena::AllocateResult ImbuedBuilderArena::allocate(WordCount amount) {
-  auto result = allocate(amount);
+  auto result = base->allocate(amount);
   result.segment = imbue(result.segment);
   return result;
 }

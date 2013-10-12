@@ -52,14 +52,14 @@ public:
   Orphan(Orphan&&) = default;
   Orphan& operator=(Orphan&&) = default;
 
-  inline typename T::Builder get();
+  inline BuilderFor<T> get();
   // Get the underlying builder.  If the orphan is null, this will allocate and return a default
   // object rather than crash.  This is done for security -- otherwise, you might enable a DoS
   // attack any time you disown a field and fail to check if it is null.  In the case of structs,
   // this means that the orphan is no longer null after get() returns.  In the case of lists,
   // no actual object is allocated since a simple empty ListBuilder can be returned.
 
-  inline typename T::Reader getReader() const;
+  inline ReaderFor<T> getReader() const;
 
   inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return builder != nullptr; }
@@ -198,12 +198,12 @@ struct OrphanGetImpl<Data, Kind::BLOB> {
 }  // namespace _ (private)
 
 template <typename T>
-inline typename T::Builder Orphan<T>::get() {
+inline BuilderFor<T> Orphan<T>::get() {
   return _::OrphanGetImpl<T>::apply(builder);
 }
 
 template <typename T>
-inline typename T::Reader Orphan<T>::getReader() const {
+inline ReaderFor<T> Orphan<T>::getReader() const {
   return _::OrphanGetImpl<T>::applyReader(builder);
 }
 

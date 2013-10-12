@@ -19,6 +19,7 @@ struct LocatedText {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct LocatedInteger {
@@ -26,6 +27,7 @@ struct LocatedInteger {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct LocatedFloat {
@@ -33,6 +35,7 @@ struct LocatedFloat {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct DeclName {
@@ -40,6 +43,7 @@ struct DeclName {
 
   class Reader;
   class Builder;
+  class Pipeline;
   struct Base;
 };
 
@@ -48,6 +52,7 @@ struct DeclName::Base {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     ABSOLUTE_NAME,
     RELATIVE_NAME,
@@ -60,6 +65,7 @@ struct TypeExpression {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct ValueExpression {
@@ -67,6 +73,7 @@ struct ValueExpression {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     UNKNOWN,
     POSITIVE_INT,
@@ -85,6 +92,7 @@ struct ValueExpression::FieldAssignment {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Declaration {
@@ -92,6 +100,7 @@ struct Declaration {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     FILE,
     USING,
@@ -141,6 +150,7 @@ struct Declaration::AnnotationApplication {
 
   class Reader;
   class Builder;
+  class Pipeline;
   struct Value;
 };
 
@@ -149,6 +159,7 @@ struct Declaration::AnnotationApplication::Value {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     NONE,
     EXPRESSION,
@@ -160,6 +171,7 @@ struct Declaration::ParamList {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     NAMED_LIST,
     TYPE,
@@ -171,6 +183,7 @@ struct Declaration::Param {
 
   class Reader;
   class Builder;
+  class Pipeline;
   struct DefaultValue;
 };
 
@@ -179,6 +192,7 @@ struct Declaration::Param::DefaultValue {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     NONE,
     VALUE,
@@ -190,6 +204,7 @@ struct Declaration::Id {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     UNSPECIFIED,
     UID,
@@ -202,6 +217,7 @@ struct Declaration::Using {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Declaration::Const {
@@ -209,6 +225,7 @@ struct Declaration::Const {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Declaration::Field {
@@ -216,6 +233,7 @@ struct Declaration::Field {
 
   class Reader;
   class Builder;
+  class Pipeline;
   struct DefaultValue;
 };
 
@@ -224,6 +242,7 @@ struct Declaration::Field::DefaultValue {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     NONE,
     VALUE,
@@ -235,6 +254,7 @@ struct Declaration::Interface {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Declaration::Method {
@@ -242,6 +262,7 @@ struct Declaration::Method {
 
   class Reader;
   class Builder;
+  class Pipeline;
   struct Results;
 };
 
@@ -250,6 +271,7 @@ struct Declaration::Method::Results {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     NONE,
     EXPLICIT,
@@ -261,6 +283,7 @@ struct Declaration::Annotation {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct ParsedFile {
@@ -268,6 +291,7 @@ struct ParsedFile {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 }  // namespace
@@ -464,6 +488,19 @@ inline ::kj::StringTree KJ_STRINGIFY(LocatedText::Builder builder) {
   return ::capnp::_::structString<LocatedText>(builder._builder.asReader());
 }
 
+class LocatedText::Pipeline {
+public:
+  typedef LocatedText Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class LocatedInteger::Reader {
 public:
   typedef LocatedInteger Reads;
@@ -538,6 +575,19 @@ inline ::kj::StringTree KJ_STRINGIFY(LocatedInteger::Builder builder) {
   return ::capnp::_::structString<LocatedInteger>(builder._builder.asReader());
 }
 
+class LocatedInteger::Pipeline {
+public:
+  typedef LocatedInteger Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class LocatedFloat::Reader {
 public:
   typedef LocatedFloat Reads;
@@ -611,6 +661,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(LocatedFloat::Builder builder) {
   return ::capnp::_::structString<LocatedFloat>(builder._builder.asReader());
 }
+
+class LocatedFloat::Pipeline {
+public:
+  typedef LocatedFloat Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class DeclName::Reader {
 public:
@@ -695,6 +758,20 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(DeclName::Builder builder) {
   return ::capnp::_::structString<DeclName>(builder._builder.asReader());
 }
+
+class DeclName::Pipeline {
+public:
+  typedef DeclName Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline Base::Pipeline getBase() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class DeclName::Base::Reader {
 public:
@@ -787,6 +864,19 @@ inline ::kj::StringTree KJ_STRINGIFY(DeclName::Base::Builder builder) {
   return ::capnp::_::structString<DeclName::Base>(builder._builder.asReader());
 }
 
+class DeclName::Base::Pipeline {
+public:
+  typedef Base Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class TypeExpression::Reader {
 public:
   typedef TypeExpression Reads;
@@ -873,6 +963,20 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(TypeExpression::Builder builder) {
   return ::capnp::_::structString<TypeExpression>(builder._builder.asReader());
 }
+
+class TypeExpression::Pipeline {
+public:
+  typedef TypeExpression Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::compiler::DeclName::Pipeline getName() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class ValueExpression::Reader {
 public:
@@ -1027,6 +1131,19 @@ inline ::kj::StringTree KJ_STRINGIFY(ValueExpression::Builder builder) {
   return ::capnp::_::structString<ValueExpression>(builder._builder.asReader());
 }
 
+class ValueExpression::Pipeline {
+public:
+  typedef ValueExpression Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class ValueExpression::FieldAssignment::Reader {
 public:
   typedef FieldAssignment Reads;
@@ -1099,6 +1216,21 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(ValueExpression::FieldAssignment::Builder builder) {
   return ::capnp::_::structString<ValueExpression::FieldAssignment>(builder._builder.asReader());
 }
+
+class ValueExpression::FieldAssignment::Pipeline {
+public:
+  typedef FieldAssignment Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::compiler::LocatedText::Pipeline getFieldName() const;
+  inline  ::capnp::compiler::ValueExpression::Pipeline getValue() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Declaration::Reader {
 public:
@@ -1492,6 +1624,21 @@ inline ::kj::StringTree KJ_STRINGIFY(Declaration::Builder builder) {
   return ::capnp::_::structString<Declaration>(builder._builder.asReader());
 }
 
+class Declaration::Pipeline {
+public:
+  typedef Declaration Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::compiler::LocatedText::Pipeline getName() const;
+  inline Id::Pipeline getId() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Declaration::AnnotationApplication::Reader {
 public:
   typedef AnnotationApplication Reads;
@@ -1561,6 +1708,21 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Declaration::AnnotationApplication::Builder builder) {
   return ::capnp::_::structString<Declaration::AnnotationApplication>(builder._builder.asReader());
 }
+
+class Declaration::AnnotationApplication::Pipeline {
+public:
+  typedef AnnotationApplication Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::compiler::DeclName::Pipeline getName() const;
+  inline Value::Pipeline getValue() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Declaration::AnnotationApplication::Value::Reader {
 public:
@@ -1637,6 +1799,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Declaration::AnnotationApplication::Value::Builder builder) {
   return ::capnp::_::structString<Declaration::AnnotationApplication::Value>(builder._builder.asReader());
 }
+
+class Declaration::AnnotationApplication::Value::Pipeline {
+public:
+  typedef Value Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Declaration::ParamList::Reader {
 public:
@@ -1730,6 +1905,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Declaration::ParamList::Builder builder) {
   return ::capnp::_::structString<Declaration::ParamList>(builder._builder.asReader());
 }
+
+class Declaration::ParamList::Pipeline {
+public:
+  typedef ParamList Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Declaration::Param::Reader {
 public:
@@ -1835,6 +2023,22 @@ inline ::kj::StringTree KJ_STRINGIFY(Declaration::Param::Builder builder) {
   return ::capnp::_::structString<Declaration::Param>(builder._builder.asReader());
 }
 
+class Declaration::Param::Pipeline {
+public:
+  typedef Param Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::compiler::LocatedText::Pipeline getName() const;
+  inline  ::capnp::compiler::TypeExpression::Pipeline getType() const;
+  inline DefaultValue::Pipeline getDefaultValue() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Declaration::Param::DefaultValue::Reader {
 public:
   typedef DefaultValue Reads;
@@ -1910,6 +2114,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Declaration::Param::DefaultValue::Builder builder) {
   return ::capnp::_::structString<Declaration::Param::DefaultValue>(builder._builder.asReader());
 }
+
+class Declaration::Param::DefaultValue::Pipeline {
+public:
+  typedef DefaultValue Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Declaration::Id::Reader {
 public:
@@ -1999,6 +2216,19 @@ inline ::kj::StringTree KJ_STRINGIFY(Declaration::Id::Builder builder) {
   return ::capnp::_::structString<Declaration::Id>(builder._builder.asReader());
 }
 
+class Declaration::Id::Pipeline {
+public:
+  typedef Id Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Declaration::Using::Reader {
 public:
   typedef Using Reads;
@@ -2061,6 +2291,20 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Declaration::Using::Builder builder) {
   return ::capnp::_::structString<Declaration::Using>(builder._builder.asReader());
 }
+
+class Declaration::Using::Pipeline {
+public:
+  typedef Using Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::compiler::DeclName::Pipeline getTarget() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Declaration::Const::Reader {
 public:
@@ -2135,6 +2379,21 @@ inline ::kj::StringTree KJ_STRINGIFY(Declaration::Const::Builder builder) {
   return ::capnp::_::structString<Declaration::Const>(builder._builder.asReader());
 }
 
+class Declaration::Const::Pipeline {
+public:
+  typedef Const Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::compiler::TypeExpression::Pipeline getType() const;
+  inline  ::capnp::compiler::ValueExpression::Pipeline getValue() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Declaration::Field::Reader {
 public:
   typedef Field Reads;
@@ -2204,6 +2463,21 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Declaration::Field::Builder builder) {
   return ::capnp::_::structString<Declaration::Field>(builder._builder.asReader());
 }
+
+class Declaration::Field::Pipeline {
+public:
+  typedef Field Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::compiler::TypeExpression::Pipeline getType() const;
+  inline DefaultValue::Pipeline getDefaultValue() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Declaration::Field::DefaultValue::Reader {
 public:
@@ -2281,6 +2555,19 @@ inline ::kj::StringTree KJ_STRINGIFY(Declaration::Field::DefaultValue::Builder b
   return ::capnp::_::structString<Declaration::Field::DefaultValue>(builder._builder.asReader());
 }
 
+class Declaration::Field::DefaultValue::Pipeline {
+public:
+  typedef DefaultValue Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Declaration::Interface::Reader {
 public:
   typedef Interface Reads;
@@ -2343,6 +2630,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Declaration::Interface::Builder builder) {
   return ::capnp::_::structString<Declaration::Interface>(builder._builder.asReader());
 }
+
+class Declaration::Interface::Pipeline {
+public:
+  typedef Interface Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Declaration::Method::Reader {
 public:
@@ -2413,6 +2713,21 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Declaration::Method::Builder builder) {
   return ::capnp::_::structString<Declaration::Method>(builder._builder.asReader());
 }
+
+class Declaration::Method::Pipeline {
+public:
+  typedef Method Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::compiler::Declaration::ParamList::Pipeline getParams() const;
+  inline Results::Pipeline getResults() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Declaration::Method::Results::Reader {
 public:
@@ -2489,6 +2804,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Declaration::Method::Results::Builder builder) {
   return ::capnp::_::structString<Declaration::Method::Results>(builder._builder.asReader());
 }
+
+class Declaration::Method::Results::Pipeline {
+public:
+  typedef Results Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Declaration::Annotation::Reader {
 public:
@@ -2637,6 +2965,20 @@ inline ::kj::StringTree KJ_STRINGIFY(Declaration::Annotation::Builder builder) {
   return ::capnp::_::structString<Declaration::Annotation>(builder._builder.asReader());
 }
 
+class Declaration::Annotation::Pipeline {
+public:
+  typedef Annotation Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::compiler::TypeExpression::Pipeline getType() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class ParsedFile::Reader {
 public:
   typedef ParsedFile Reads;
@@ -2699,6 +3041,20 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(ParsedFile::Builder builder) {
   return ::capnp::_::structString<ParsedFile>(builder._builder.asReader());
 }
+
+class ParsedFile::Pipeline {
+public:
+  typedef ParsedFile Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::compiler::Declaration::Pipeline getRoot() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 // =======================================================================================
 
@@ -2915,6 +3271,9 @@ inline DeclName::Base::Reader DeclName::Reader::getBase() const {
 }
 inline DeclName::Base::Builder DeclName::Builder::getBase() {
   return DeclName::Base::Builder(_builder);
+}
+inline DeclName::Base::Pipeline DeclName::Pipeline::getBase() const {
+  return DeclName::Base::Pipeline(_typeless.noop());
 }
 inline DeclName::Base::Builder DeclName::Builder::initBase() {
   _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
@@ -3171,6 +3530,9 @@ inline  ::capnp::compiler::DeclName::Reader TypeExpression::Reader::getName() co
 inline  ::capnp::compiler::DeclName::Builder TypeExpression::Builder::getName() {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::DeclName>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::compiler::DeclName::Pipeline TypeExpression::Pipeline::getName() const {
+  return  ::capnp::compiler::DeclName::Pipeline(_typeless.getPointerField(0));
 }
 inline void TypeExpression::Builder::setName( ::capnp::compiler::DeclName::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::DeclName>::set(
@@ -3675,6 +4037,9 @@ inline  ::capnp::compiler::LocatedText::Builder ValueExpression::FieldAssignment
   return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
+inline  ::capnp::compiler::LocatedText::Pipeline ValueExpression::FieldAssignment::Pipeline::getFieldName() const {
+  return  ::capnp::compiler::LocatedText::Pipeline(_typeless.getPointerField(0));
+}
 inline void ValueExpression::FieldAssignment::Builder::setFieldName( ::capnp::compiler::LocatedText::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::set(
       _builder.getPointerField(0 * ::capnp::POINTERS), value);
@@ -3706,6 +4071,9 @@ inline  ::capnp::compiler::ValueExpression::Reader ValueExpression::FieldAssignm
 inline  ::capnp::compiler::ValueExpression::Builder ValueExpression::FieldAssignment::Builder::getValue() {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression>::get(
       _builder.getPointerField(1 * ::capnp::POINTERS));
+}
+inline  ::capnp::compiler::ValueExpression::Pipeline ValueExpression::FieldAssignment::Pipeline::getValue() const {
+  return  ::capnp::compiler::ValueExpression::Pipeline(_typeless.getPointerField(1));
 }
 inline void ValueExpression::FieldAssignment::Builder::setValue( ::capnp::compiler::ValueExpression::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression>::set(
@@ -3746,6 +4114,9 @@ inline  ::capnp::compiler::LocatedText::Builder Declaration::Builder::getName() 
   return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
+inline  ::capnp::compiler::LocatedText::Pipeline Declaration::Pipeline::getName() const {
+  return  ::capnp::compiler::LocatedText::Pipeline(_typeless.getPointerField(0));
+}
 inline void Declaration::Builder::setName( ::capnp::compiler::LocatedText::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::set(
       _builder.getPointerField(0 * ::capnp::POINTERS), value);
@@ -3777,6 +4148,9 @@ inline Declaration::Id::Reader Declaration::Reader::getId() const {
 }
 inline Declaration::Id::Builder Declaration::Builder::getId() {
   return Declaration::Id::Builder(_builder);
+}
+inline Declaration::Id::Pipeline Declaration::Pipeline::getId() const {
+  return Declaration::Id::Pipeline(_typeless.noop());
 }
 inline Declaration::Id::Builder Declaration::Builder::initId() {
   _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
@@ -5040,6 +5414,9 @@ inline  ::capnp::compiler::DeclName::Builder Declaration::AnnotationApplication:
   return ::capnp::_::PointerHelpers< ::capnp::compiler::DeclName>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
+inline  ::capnp::compiler::DeclName::Pipeline Declaration::AnnotationApplication::Pipeline::getName() const {
+  return  ::capnp::compiler::DeclName::Pipeline(_typeless.getPointerField(0));
+}
 inline void Declaration::AnnotationApplication::Builder::setName( ::capnp::compiler::DeclName::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::DeclName>::set(
       _builder.getPointerField(0 * ::capnp::POINTERS), value);
@@ -5071,6 +5448,9 @@ inline Declaration::AnnotationApplication::Value::Reader Declaration::Annotation
 }
 inline Declaration::AnnotationApplication::Value::Builder Declaration::AnnotationApplication::Builder::getValue() {
   return Declaration::AnnotationApplication::Value::Builder(_builder);
+}
+inline Declaration::AnnotationApplication::Value::Pipeline Declaration::AnnotationApplication::Pipeline::getValue() const {
+  return Declaration::AnnotationApplication::Value::Pipeline(_typeless.noop());
 }
 inline Declaration::AnnotationApplication::Value::Builder Declaration::AnnotationApplication::Builder::initValue() {
   _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
@@ -5338,6 +5718,9 @@ inline  ::capnp::compiler::LocatedText::Builder Declaration::Param::Builder::get
   return ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
+inline  ::capnp::compiler::LocatedText::Pipeline Declaration::Param::Pipeline::getName() const {
+  return  ::capnp::compiler::LocatedText::Pipeline(_typeless.getPointerField(0));
+}
 inline void Declaration::Param::Builder::setName( ::capnp::compiler::LocatedText::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::LocatedText>::set(
       _builder.getPointerField(0 * ::capnp::POINTERS), value);
@@ -5369,6 +5752,9 @@ inline  ::capnp::compiler::TypeExpression::Reader Declaration::Param::Reader::ge
 inline  ::capnp::compiler::TypeExpression::Builder Declaration::Param::Builder::getType() {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::TypeExpression>::get(
       _builder.getPointerField(1 * ::capnp::POINTERS));
+}
+inline  ::capnp::compiler::TypeExpression::Pipeline Declaration::Param::Pipeline::getType() const {
+  return  ::capnp::compiler::TypeExpression::Pipeline(_typeless.getPointerField(1));
 }
 inline void Declaration::Param::Builder::setType( ::capnp::compiler::TypeExpression::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::TypeExpression>::set(
@@ -5433,6 +5819,9 @@ inline Declaration::Param::DefaultValue::Reader Declaration::Param::Reader::getD
 }
 inline Declaration::Param::DefaultValue::Builder Declaration::Param::Builder::getDefaultValue() {
   return Declaration::Param::DefaultValue::Builder(_builder);
+}
+inline Declaration::Param::DefaultValue::Pipeline Declaration::Param::Pipeline::getDefaultValue() const {
+  return Declaration::Param::DefaultValue::Pipeline(_typeless.noop());
 }
 inline Declaration::Param::DefaultValue::Builder Declaration::Param::Builder::initDefaultValue() {
   _builder.setDataField< ::uint16_t>(0 * ::capnp::ELEMENTS, 0);
@@ -5735,6 +6124,9 @@ inline  ::capnp::compiler::DeclName::Builder Declaration::Using::Builder::getTar
   return ::capnp::_::PointerHelpers< ::capnp::compiler::DeclName>::get(
       _builder.getPointerField(5 * ::capnp::POINTERS));
 }
+inline  ::capnp::compiler::DeclName::Pipeline Declaration::Using::Pipeline::getTarget() const {
+  return  ::capnp::compiler::DeclName::Pipeline(_typeless.getPointerField(5));
+}
 inline void Declaration::Using::Builder::setTarget( ::capnp::compiler::DeclName::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::DeclName>::set(
       _builder.getPointerField(5 * ::capnp::POINTERS), value);
@@ -5766,6 +6158,9 @@ inline  ::capnp::compiler::TypeExpression::Reader Declaration::Const::Reader::ge
 inline  ::capnp::compiler::TypeExpression::Builder Declaration::Const::Builder::getType() {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::TypeExpression>::get(
       _builder.getPointerField(5 * ::capnp::POINTERS));
+}
+inline  ::capnp::compiler::TypeExpression::Pipeline Declaration::Const::Pipeline::getType() const {
+  return  ::capnp::compiler::TypeExpression::Pipeline(_typeless.getPointerField(5));
 }
 inline void Declaration::Const::Builder::setType( ::capnp::compiler::TypeExpression::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::TypeExpression>::set(
@@ -5799,6 +6194,9 @@ inline  ::capnp::compiler::ValueExpression::Builder Declaration::Const::Builder:
   return ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression>::get(
       _builder.getPointerField(6 * ::capnp::POINTERS));
 }
+inline  ::capnp::compiler::ValueExpression::Pipeline Declaration::Const::Pipeline::getValue() const {
+  return  ::capnp::compiler::ValueExpression::Pipeline(_typeless.getPointerField(6));
+}
 inline void Declaration::Const::Builder::setValue( ::capnp::compiler::ValueExpression::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::ValueExpression>::set(
       _builder.getPointerField(6 * ::capnp::POINTERS), value);
@@ -5831,6 +6229,9 @@ inline  ::capnp::compiler::TypeExpression::Builder Declaration::Field::Builder::
   return ::capnp::_::PointerHelpers< ::capnp::compiler::TypeExpression>::get(
       _builder.getPointerField(5 * ::capnp::POINTERS));
 }
+inline  ::capnp::compiler::TypeExpression::Pipeline Declaration::Field::Pipeline::getType() const {
+  return  ::capnp::compiler::TypeExpression::Pipeline(_typeless.getPointerField(5));
+}
 inline void Declaration::Field::Builder::setType( ::capnp::compiler::TypeExpression::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::TypeExpression>::set(
       _builder.getPointerField(5 * ::capnp::POINTERS), value);
@@ -5862,6 +6263,9 @@ inline Declaration::Field::DefaultValue::Reader Declaration::Field::Reader::getD
 }
 inline Declaration::Field::DefaultValue::Builder Declaration::Field::Builder::getDefaultValue() {
   return Declaration::Field::DefaultValue::Builder(_builder);
+}
+inline Declaration::Field::DefaultValue::Pipeline Declaration::Field::Pipeline::getDefaultValue() const {
+  return Declaration::Field::DefaultValue::Pipeline(_typeless.noop());
 }
 inline Declaration::Field::DefaultValue::Builder Declaration::Field::Builder::initDefaultValue() {
   _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
@@ -6008,6 +6412,9 @@ inline  ::capnp::compiler::Declaration::ParamList::Builder Declaration::Method::
   return ::capnp::_::PointerHelpers< ::capnp::compiler::Declaration::ParamList>::get(
       _builder.getPointerField(5 * ::capnp::POINTERS));
 }
+inline  ::capnp::compiler::Declaration::ParamList::Pipeline Declaration::Method::Pipeline::getParams() const {
+  return  ::capnp::compiler::Declaration::ParamList::Pipeline(_typeless.getPointerField(5));
+}
 inline void Declaration::Method::Builder::setParams( ::capnp::compiler::Declaration::ParamList::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::Declaration::ParamList>::set(
       _builder.getPointerField(5 * ::capnp::POINTERS), value);
@@ -6039,6 +6446,9 @@ inline Declaration::Method::Results::Reader Declaration::Method::Reader::getResu
 }
 inline Declaration::Method::Results::Builder Declaration::Method::Builder::getResults() {
   return Declaration::Method::Results::Builder(_builder);
+}
+inline Declaration::Method::Results::Pipeline Declaration::Method::Pipeline::getResults() const {
+  return Declaration::Method::Results::Pipeline(_typeless.noop());
 }
 inline Declaration::Method::Results::Builder Declaration::Method::Builder::initResults() {
   _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
@@ -6152,6 +6562,9 @@ inline  ::capnp::compiler::TypeExpression::Reader Declaration::Annotation::Reade
 inline  ::capnp::compiler::TypeExpression::Builder Declaration::Annotation::Builder::getType() {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::TypeExpression>::get(
       _builder.getPointerField(5 * ::capnp::POINTERS));
+}
+inline  ::capnp::compiler::TypeExpression::Pipeline Declaration::Annotation::Pipeline::getType() const {
+  return  ::capnp::compiler::TypeExpression::Pipeline(_typeless.getPointerField(5));
 }
 inline void Declaration::Annotation::Builder::setType( ::capnp::compiler::TypeExpression::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::TypeExpression>::set(
@@ -6436,6 +6849,9 @@ inline  ::capnp::compiler::Declaration::Reader ParsedFile::Reader::getRoot() con
 inline  ::capnp::compiler::Declaration::Builder ParsedFile::Builder::getRoot() {
   return ::capnp::_::PointerHelpers< ::capnp::compiler::Declaration>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::compiler::Declaration::Pipeline ParsedFile::Pipeline::getRoot() const {
+  return  ::capnp::compiler::Declaration::Pipeline(_typeless.getPointerField(0));
 }
 inline void ParsedFile::Builder::setRoot( ::capnp::compiler::Declaration::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::compiler::Declaration>::set(

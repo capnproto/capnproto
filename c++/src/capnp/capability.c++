@@ -21,12 +21,17 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#define CAPNP_PRIVATE
+
 #include "capability.h"
+#include "capability-context.h"
 #include "message.h"
+#include "arena.h"
 #include <kj/refcount.h>
 #include <kj/debug.h>
 #include <kj/vector.h>
 #include <kj/one-of.h>
+#include <map>
 
 namespace capnp {
 
@@ -54,19 +59,6 @@ kj::Promise<void> Capability::Server::internalUnimplemented(
   }
 }
 
-TypelessResults::Pipeline TypelessResults::Pipeline::getPointerField(
-    uint16_t pointerIndex) const {
-  auto newOps = kj::heapArray<PipelineOp>(ops.size() + 1);
-  for (auto i: kj::indices(ops)) {
-    newOps[i] = ops[i];
-  }
-  auto& newOp = newOps[ops.size()];
-  newOp.type = PipelineOp::GET_POINTER_FIELD;
-  newOp.pointerIndex = pointerIndex;
-
-  return Pipeline(hook->addRef(), kj::mv(newOps));
-}
-
 ResponseHook::~ResponseHook() noexcept(false) {}
 
 kj::Promise<void> ClientHook::whenResolved() const {
@@ -79,26 +71,133 @@ kj::Promise<void> ClientHook::whenResolved() const {
   }
 }
 
+kj::Own<const ClientHook> newBrokenCap(const char* reason) {
+  return _::newBrokenCap(reason);
+}
+
 // =======================================================================================
 
+namespace _ {  // private
+
+struct LocalCapDescriptor {
+  // This is basically code for a struct defined as follows:
+  //
+  //     struct TestCapDescriptor {
+  //       index @0 :UInt32;
+  //     }
+  //
+  // I have the code hand-written here because I didn't want to add yet another bootstrap file.
+
+  class Reader {
+  public:
+    typedef LocalCapDescriptor Reads;
+
+    inline explicit Reader(_::StructReader base): _reader(base) {}
+
+    inline uint32_t getIndex() const {
+      return _reader.getDataField<uint32_t>(0 * ELEMENTS);
+    }
+
+  private:
+    _::StructReader _reader;
+  };
+
+  class Builder {
+  public:
+    typedef LocalCapDescriptor Builds;
+
+    inline explicit Builder(_::StructBuilder base): _builder(base) {}
+    inline operator Reader() const { return Reader(_builder.asReader()); }
+
+    inline uint32_t getIndex() {
+      return _builder.getDataField<uint32_t>(0 * ELEMENTS);
+    }
+    inline void setIndex(uint32_t value) {
+      _builder.setDataField<uint32_t>(0 * ELEMENTS, value);
+    }
+
+  private:
+    _::StructBuilder _builder;
+  };
+};
+
+template <>
+StructSize structSize<LocalCapDescriptor>() {
+  return StructSize(1 * WORDS, 0 * POINTERS, FieldSize::FOUR_BYTES);
+}
+
+}  // namespace _ (private)
+
 namespace {
+
+class LocalImbuedMessage final: private CapInjector<_::LocalCapDescriptor> {
+public:
+  LocalImbuedMessage(uint sizeHint)
+      : message(sizeHint == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : sizeHint),
+        capContext(*this),
+        root(capContext.imbue(message.getRoot<ObjectPointer>())) {}
+
+  inline ObjectPointer::Builder getRoot() { return root; }
+
+private:
+  MallocMessageBuilder message;
+  CapBuilderContext capContext;
+  ObjectPointer::Builder root;
+
+  struct State {
+    uint counter;
+    std::map<uint, kj::Own<const ClientHook>> caps;
+  };
+  kj::MutexGuarded<State> state;
+
+  void injectCap(_::LocalCapDescriptor::Builder descriptor,
+                 kj::Own<const ClientHook>&& cap) const override {
+    auto lock = state.lockExclusive();
+    uint index = lock->counter++;
+    descriptor.setIndex(index);
+    lock->caps.insert(std::make_pair(index, kj::mv(cap)));
+  }
+
+  kj::Own<const ClientHook> getInjectedCap(
+      _::LocalCapDescriptor::Reader descriptor) const override {
+    auto lock = state.lockExclusive();
+    auto iter = lock->caps.find(descriptor.getIndex());
+    if (iter == lock->caps.end()) {
+      KJ_FAIL_ASSERT("Invalid capability descriptor in message.") {
+        return newBrokenCap("Calling capability from invalid descriptor.");
+      }
+    } else {
+      return iter->second->addRef();
+    }
+  }
+
+  void dropCap(_::LocalCapDescriptor::Reader descriptor) const override {
+    if (state.lockExclusive()->caps.erase(descriptor.getIndex()) == 0) {
+      KJ_FAIL_ASSERT("Invalid capability descriptor in message.") {
+        break;
+      }
+    }
+  }
+};
+
+// =======================================================================================
 
 class LocalResponse final: public ResponseHook, public kj::Refcounted {
 public:
   LocalResponse(uint sizeHint)
       : message(sizeHint == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : sizeHint) {}
 
-  MallocMessageBuilder message;
+  LocalImbuedMessage message;
 };
 
 class LocalCallContext final: public CallContextHook, public kj::Refcounted {
 public:
-  LocalCallContext(kj::Own<MallocMessageBuilder>&& request, kj::Own<const ClientHook> clientRef)
+  LocalCallContext(kj::Own<LocalImbuedMessage>&& request, kj::Own<const ClientHook> clientRef)
       : request(kj::mv(request)), clientRef(kj::mv(clientRef)) {}
 
   ObjectPointer::Reader getParams() override {
     KJ_IF_MAYBE(r, request) {
-      return r->get()->getRoot<ObjectPointer>();
+      return r->get()->getRoot();
     } else {
       KJ_FAIL_REQUIRE("Can't call getParams() after releaseParams().");
     }
@@ -110,7 +209,7 @@ public:
     if (!response) {
       response = kj::refcounted<LocalResponse>(firstSegmentWordSize);
     }
-    return response->message.getRoot<ObjectPointer>();
+    return response->message.getRoot();
   }
   void allowAsyncCancellation(bool allow) override {
     // ignored for local calls
@@ -122,7 +221,7 @@ public:
     return kj::addRef(*this);
   }
 
-  kj::Maybe<kj::Own<MallocMessageBuilder>> request;
+  kj::Maybe<kj::Own<LocalImbuedMessage>> request;
   kj::Own<LocalResponse> response;
   kj::Own<const ClientHook> clientRef;
 };
@@ -131,12 +230,12 @@ class LocalRequest final: public RequestHook {
 public:
   inline LocalRequest(kj::EventLoop& loop, uint64_t interfaceId, uint16_t methodId,
                       uint firstSegmentWordSize, kj::Own<const ClientHook> client)
-      : message(kj::heap<MallocMessageBuilder>(
+      : message(kj::heap<LocalImbuedMessage>(
             firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : firstSegmentWordSize)),
         loop(loop),
         interfaceId(interfaceId), methodId(methodId), client(kj::mv(client)) {}
 
-  RemotePromise<TypelessResults> send() override {
+  RemotePromise<ObjectPointer> send() override {
     // For the lambda capture.
     uint64_t interfaceId = this->interfaceId;
     uint16_t methodId = this->methodId;
@@ -146,15 +245,15 @@ public:
 
     auto promise = loop.there(kj::mv(promiseAndPipeline.promise),
         kj::mvCapture(context, [=](kj::Own<LocalCallContext> context) {
-          return Response<TypelessResults>(context->getResults(1).asReader(),
-                                           kj::mv(context->response));
+          return Response<ObjectPointer>(context->getResults(1).asReader(),
+                                         kj::mv(context->response));
         }));
 
-    return RemotePromise<TypelessResults>(
-        kj::mv(promise), TypelessResults::Pipeline(kj::mv(promiseAndPipeline.pipeline)));
+    return RemotePromise<ObjectPointer>(
+        kj::mv(promise), ObjectPointer::Pipeline(kj::mv(promiseAndPipeline.pipeline)));
   }
 
-  kj::Own<MallocMessageBuilder> message;
+  kj::Own<LocalImbuedMessage> message;
 
 private:
   kj::EventLoop& loop;
@@ -187,7 +286,7 @@ public:
     for (auto& op: ops) {
       copy.add(op);
     }
-    return getPipelinedCap(kj::mv(copy));
+    return getPipelinedCap(copy.finish());
   }
 
   kj::Own<const ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) const override;
@@ -206,12 +305,11 @@ public:
       : loop(loop),
         promise(loop.fork(kj::mv(promise))) {}
 
-  Request<ObjectPointer, TypelessResults> newCall(
+  Request<ObjectPointer, ObjectPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
     auto hook = kj::heap<LocalRequest>(
         loop, interfaceId, methodId, firstSegmentWordSize, kj::addRef(*this));
-    return Request<ObjectPointer, TypelessResults>(
-        hook->message->getRoot<ObjectPointer>(), kj::mv(hook));
+    return Request<ObjectPointer, ObjectPointer>(hook->message->getRoot(), kj::mv(hook));
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
@@ -244,12 +342,12 @@ public:
     };
 
     // Create a promise for the call initiation.
-    kj::ForkedPromise<kj::Own<CallResultHolder>> callResultPromise = loop.there(
+    kj::ForkedPromise<kj::Own<CallResultHolder>> callResultPromise = loop.fork(loop.there(
         getPromiseForCallForwarding().addBranch(), kj::mvCapture(context,
         [=](kj::Own<CallContextHook>&& context, kj::Own<const ClientHook>&& client){
           return kj::refcounted<CallResultHolder>(
               client->call(interfaceId, methodId, kj::mv(context)));
-        })).fork();
+        })));
 
     // Create a promise that extracts the pipeline from the call initiation, and construct our
     // QueuedPipeline to chain to it.
@@ -307,14 +405,14 @@ private:
 
   const ClientHookPromiseFork& getPromiseForCallForwarding() const {
     return promiseForCallForwarding.get([this](kj::SpaceFor<ClientHookPromiseFork>& space) {
-      return space.construct(promise.addBranch().fork());
+      return space.construct(loop.fork(promise.addBranch()));
     });
   }
 
   const kj::ForkedPromise<kj::Own<const ClientHook>>& getPromiseForClientResolution() const {
     return promiseForClientResolution.get([this](kj::SpaceFor<ClientHookPromiseFork>& space) {
       getPromiseForCallForwarding();  // must be initialized first.
-      return space.construct(promise.addBranch().fork());
+      return space.construct(loop.fork(promise.addBranch()));
     });
   }
 };
@@ -354,12 +452,11 @@ public:
   LocalClient(kj::EventLoop& eventLoop, kj::Own<Capability::Server>&& server)
       : eventLoop(eventLoop), server(kj::mv(server)) {}
 
-  Request<ObjectPointer, TypelessResults> newCall(
+  Request<ObjectPointer, ObjectPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
     auto hook = kj::heap<LocalRequest>(
         eventLoop, interfaceId, methodId, firstSegmentWordSize, kj::addRef(*this));
-    return Request<ObjectPointer, TypelessResults>(
-        hook->message->getRoot<ObjectPointer>(), kj::mv(hook));
+    return Request<ObjectPointer, ObjectPointer>(hook->message->getRoot(), kj::mv(hook));
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,

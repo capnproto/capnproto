@@ -110,12 +110,14 @@ template <typename T, Kind k> struct Kind_<List<T, k>> { static constexpr Kind k
 template <typename T, Kind k = kind<T>()> struct ReaderFor_ { typedef typename T::Reader Type; };
 template <typename T> struct ReaderFor_<T, Kind::PRIMITIVE> { typedef T Type; };
 template <typename T> struct ReaderFor_<T, Kind::ENUM> { typedef T Type; };
+template <typename T> struct ReaderFor_<T, Kind::INTERFACE> { typedef typename T::Client Type; };
 template <typename T> using ReaderFor = typename ReaderFor_<T>::Type;
 // The type returned by List<T>::Reader::operator[].
 
 template <typename T, Kind k = kind<T>()> struct BuilderFor_ { typedef typename T::Builder Type; };
 template <typename T> struct BuilderFor_<T, Kind::PRIMITIVE> { typedef T Type; };
 template <typename T> struct BuilderFor_<T, Kind::ENUM> { typedef T Type; };
+template <typename T> struct BuilderFor_<T, Kind::INTERFACE> { typedef typename T::Client Type; };
 template <typename T> using BuilderFor = typename BuilderFor_<T>::Type;
 // The type returned by List<T>::Builder::operator[].
 

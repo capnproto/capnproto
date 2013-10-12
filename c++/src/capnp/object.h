@@ -33,8 +33,47 @@ namespace capnp {
 class StructSchema;
 class ListSchema;
 class Orphanage;
-struct PipelineOp;
 class ClientHook;
+class PipelineHook;
+
+// =======================================================================================
+// Pipeline helpers
+//
+// These relate to capabilities, but we don't declare them in capability.h because generated code
+// for structs needs to know about these, even in files that contain no interfaces.
+
+struct PipelineOp {
+  // Corresponds to rpc.capnp's PromisedAnswer.Op.
+
+  enum Type {
+    GET_POINTER_FIELD
+
+    // There may be other types in the future...
+  };
+
+  Type type;
+  union {
+    uint16_t pointerIndex;  // for GET_POINTER_FIELD
+  };
+};
+
+class PipelineHook {
+  // Represents a currently-running call, and implements pipelined requests on its result.
+
+public:
+  virtual kj::Own<const PipelineHook> addRef() const = 0;
+  // Increment this object's reference count.
+
+  virtual kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const = 0;
+  // Extract a promised Capability from the results.
+
+  virtual kj::Own<const ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) const;
+  // Version of getPipelinedCap() passing the array by move.  May avoid a copy in some cases.
+  // Default implementation just calls the other version.
+};
+
+// =======================================================================================
+// ObjectPointer!
 
 struct ObjectPointer {
   // Reader/Builder for the `Object` field type, i.e. a pointer that can point to an arbitrary
@@ -152,7 +191,35 @@ struct ObjectPointer {
     _::PointerBuilder builder;
     friend class CapBuilderContext;
   };
+
+  class Pipeline {
+  public:
+    inline explicit Pipeline(kj::Own<const PipelineHook>&& hook): hook(kj::mv(hook)) {}
+
+    Pipeline noop() const;
+    // Just make a copy.
+
+    Pipeline getPointerField(uint16_t pointerIndex) const;
+    // Return a new Promise representing a sub-object of the result.  `pointerIndex` is the index
+    // of the sub-object within the pointer section of the result (the result must be a struct).
+    //
+    // TODO(kenton):  On GCC 4.8 / Clang 3.3, use rvalue qualifiers to avoid the need for copies.
+    //   Also make `ops` into a Vector to optimize this.
+
+    kj::Own<const ClientHook> asCap() const;
+    // Expect that the result is a capability and construct a pipelined version of it now.
+
+  private:
+    kj::Own<const PipelineHook> hook;
+    kj::Array<PipelineOp> ops;
+
+    inline Pipeline(kj::Own<const PipelineHook>&& hook, kj::Array<PipelineOp>&& ops)
+        : hook(kj::mv(hook)), ops(kj::mv(ops)) {}
+  };
 };
+
+// TODO(now):  delete
+typedef ObjectPointer TypelessResults;
 
 template <>
 class Orphan<ObjectPointer> {

@@ -571,7 +571,8 @@ private:
                 "  inline ", titleCase, "::Builder init", titleCase, "();\n"
                 "\n"),
 
-            kj::strTree(),
+            proto.hasDiscriminantValue() ? kj::strTree() :
+                kj::strTree("  inline ", titleCase, "::Pipeline get", titleCase, "() const;\n"),
 
             kj::strTree(
                 kj::mv(unionDiscrim.isDefs),
@@ -620,7 +621,11 @@ private:
                 "inline ", scope, titleCase, "::Builder ", scope, "Builder::get", titleCase, "() {\n",
                 unionDiscrim.check,
                 "  return ", scope, titleCase, "::Builder(_builder);\n"
-                "}\n"
+                "}\n",
+                proto.hasDiscriminantValue() ? kj::strTree() : kj::strTree(
+                  "inline ", scope, titleCase, "::Pipeline ", scope, "Pipeline::get", titleCase, "() const {\n",
+                  "  return ", scope, titleCase, "::Pipeline(_typeless.noop());\n"
+                  "}\n"),
                 "inline ", scope, titleCase, "::Builder ", scope, "Builder::init", titleCase, "() {\n",
                 unionDiscrim.set,
                 KJ_MAP(slot, slots) {
@@ -810,8 +815,68 @@ private:
       };
 
     } else if (kind == FieldKind::INTERFACE) {
-      // Not implemented.
-      return FieldText { kj::strTree(), kj::strTree(), kj::strTree(), kj::strTree() };
+      return FieldText {
+        kj::strTree(
+            kj::mv(unionDiscrim.readerIsDecl),
+            "  inline bool has", titleCase, "() const;\n"
+            "  inline ", type, "::Client get", titleCase, "() const;\n"
+            "\n"),
+
+        kj::strTree(
+            kj::mv(unionDiscrim.builderIsDecl),
+            "  inline bool has", titleCase, "();\n"
+            "  inline ", type, "::Client get", titleCase, "();\n"
+            "  inline void set", titleCase, "(", type, "::Client&& value);\n",
+            "  inline void adopt", titleCase, "(::capnp::Orphan<", type, ">&& value);\n"
+            "  inline ::capnp::Orphan<", type, "> disown", titleCase, "();\n"
+            "\n"),
+
+        kj::strTree(
+            proto.hasDiscriminantValue() ? kj::strTree() : kj::strTree(
+              "  inline ", type, "::Client get", titleCase, "() const;\n")),
+
+        kj::strTree(
+            kj::mv(unionDiscrim.isDefs),
+            "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
+            unionDiscrim.has,
+            "  return !_reader.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
+            "}\n"
+            "inline bool ", scope, "Builder::has", titleCase, "() {\n",
+            unionDiscrim.has,
+            "  return !_builder.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
+            "}\n"
+            "inline ", type, "::Client ", scope, "Reader::get", titleCase, "() const {\n",
+            unionDiscrim.check,
+            "  return ::capnp::_::PointerHelpers<", type, ">::get(\n"
+            "      _reader.getPointerField(", offset, " * ::capnp::POINTERS));\n"
+            "}\n"
+            "inline ", type, "::Client ", scope, "Builder::get", titleCase, "() {\n",
+            unionDiscrim.check,
+            "  return ::capnp::_::PointerHelpers<", type, ">::get(\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
+            "}\n",
+            proto.hasDiscriminantValue() ? kj::strTree() : kj::strTree(
+              "inline ", type, "::Client ", scope, "Pipeline::get", titleCase, "() const {\n",
+              "  return ", type, "::Client(_typeless.getPointerField(", offset, ").asCap());\n"
+              "}\n"),
+            "inline void ", scope, "Builder::set", titleCase, "(", type, "::Client&& cap) {\n",
+            unionDiscrim.set,
+            "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), kj::mv(cap));\n"
+            "}\n",
+            "inline void ", scope, "Builder::adopt", titleCase, "(\n"
+            "    ::capnp::Orphan<", type, ">&& value) {\n",
+            unionDiscrim.set,
+            "  ::capnp::_::PointerHelpers<", type, ">::adopt(\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), kj::mv(value));\n"
+            "}\n"
+            "inline ::capnp::Orphan<", type, "> ", scope, "Builder::disown", titleCase, "() {\n",
+            unionDiscrim.check,
+            "  return ::capnp::_::PointerHelpers<", type, ">::disown(\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
+            "}\n"
+            "\n")
+      };
 
     } else if (kind == FieldKind::OBJECT) {
       return FieldText {
@@ -932,7 +997,11 @@ private:
             "  inline ::capnp::Orphan<", type, "> disown", titleCase, "();\n"
             "\n"),
 
-        kj::strTree(),
+        kj::strTree(
+            kind == FieldKind::STRUCT && !proto.hasDiscriminantValue()
+            ? kj::strTree(
+              "  inline ", type, "::Pipeline get", titleCase, "() const;\n")
+            : kj::strTree()),
 
         kj::strTree(
             kj::mv(unionDiscrim.isDefs),
@@ -953,7 +1022,13 @@ private:
             unionDiscrim.check,
             "  return ::capnp::_::PointerHelpers<", type, ">::get(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS)", defaultParam, ");\n"
-            "}\n"
+            "}\n",
+            kind == FieldKind::STRUCT && !proto.hasDiscriminantValue()
+            ? kj::strTree(
+              "inline ", type, "::Pipeline ", scope, "Pipeline::get", titleCase, "() const {\n",
+              "  return ", type, "::Pipeline(_typeless.getPointerField(", offset, "));\n"
+              "}\n")
+            : kj::strTree(),
             "inline void ", scope, "Builder::set", titleCase, "(", type, "::Reader value) {\n",
             unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
@@ -1079,12 +1154,12 @@ private:
         "public:\n"
         "  typedef ", unqualifiedParentType, " Pipelines;\n"
         "\n"
-        "  inline explicit Pipeline(::capnp::TypelessResults::Pipeline&& typeless)\n"
+        "  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)\n"
         "      : _typeless(kj::mv(typeless)) {}\n"
         "\n",
         kj::mv(methodDecls),
         "private:\n"
-        "  ::capnp::TypelessResults::Pipeline _typeless;\n"
+        "  ::capnp::ObjectPointer::Pipeline _typeless;\n"
         "  template <typename T, ::capnp::Kind k>\n"
         "  friend struct ::capnp::ToDynamic_;\n"
         "};\n"
@@ -1263,7 +1338,7 @@ private:
             return kj::strTree(",\n      public virtual ", e.typeName, "::Client");
           }, " {\n"
           "public:\n"
-          "  inline Client(::kj::Own<const ::capnp::ClientHook>&& hook)\n"
+          "  inline explicit Client(::kj::Own<const ::capnp::ClientHook>&& hook)\n"
           "      : ::capnp::Capability::Client(::kj::mv(hook)) {}\n"
           "\n",
           KJ_MAP(m, methods) { return kj::mv(m.clientDecls); },

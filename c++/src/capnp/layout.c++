@@ -1798,7 +1798,7 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(kj::Own<const ClientHook> readCapabilityPointer(
       SegmentReader* segment, const WirePointer* ref, const word* refTarget, int nestingLimit)) {
     if (ref->isNull()) {
-      return segment->getArena()->extractNullCap();
+      return newBrokenCap("Calling null capability pointer.");
     } else {
       return segment->getArena()->extractCap(readStructOrCapDescPointer(
           WirePointer::CAPABILITY, segment, ref, refTarget, nullptr, nestingLimit));

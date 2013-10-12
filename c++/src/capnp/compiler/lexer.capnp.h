@@ -19,6 +19,7 @@ struct Token {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     IDENTIFIER,
     STRING_LITERAL,
@@ -35,6 +36,7 @@ struct Statement {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     LINE,
     BLOCK,
@@ -46,6 +48,7 @@ struct LexedTokens {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct LexedStatements {
@@ -53,6 +56,7 @@ struct LexedStatements {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 }  // namespace
@@ -241,6 +245,19 @@ inline ::kj::StringTree KJ_STRINGIFY(Token::Builder builder) {
   return ::capnp::_::structString<Token>(builder._builder.asReader());
 }
 
+class Token::Pipeline {
+public:
+  typedef Token Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Statement::Reader {
 public:
   typedef Statement Reads;
@@ -351,6 +368,19 @@ inline ::kj::StringTree KJ_STRINGIFY(Statement::Builder builder) {
   return ::capnp::_::structString<Statement>(builder._builder.asReader());
 }
 
+class Statement::Pipeline {
+public:
+  typedef Statement Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class LexedTokens::Reader {
 public:
   typedef LexedTokens Reads;
@@ -414,6 +444,19 @@ inline ::kj::StringTree KJ_STRINGIFY(LexedTokens::Builder builder) {
   return ::capnp::_::structString<LexedTokens>(builder._builder.asReader());
 }
 
+class LexedTokens::Pipeline {
+public:
+  typedef LexedTokens Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class LexedStatements::Reader {
 public:
   typedef LexedStatements Reads;
@@ -476,6 +519,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(LexedStatements::Builder builder) {
   return ::capnp::_::structString<LexedStatements>(builder._builder.asReader());
 }
+
+class LexedStatements::Pipeline {
+public:
+  typedef LexedStatements Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 // =======================================================================================
 

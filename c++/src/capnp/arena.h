@@ -57,6 +57,11 @@ class ReadLimiter;
 class Segment;
 typedef kj::Id<uint32_t, Segment> SegmentId;
 
+kj::Own<const ClientHook> newBrokenCap(const char* reason);
+// Helper function that creates a capability which simply throws exceptions when called.
+// Implemented in arena.c++ rather than capability.c++ because it is needed by layout.c++ and we
+// don't want capability.c++ to be required by people not using caps.
+
 class ReadLimiter {
   // Used to keep track of how much data has been processed from a message, and cut off further
   // processing if and when a particular limit is reached.  This is primarily intended to guard
@@ -167,7 +172,7 @@ private:
 
 class ImbuedSegmentBuilder: public SegmentBuilder {
 public:
-  inline ImbuedSegmentBuilder(SegmentBuilder* base);
+  inline ImbuedSegmentBuilder(ImbuedBuilderArena* arena, SegmentBuilder* base);
   inline ImbuedSegmentBuilder(decltype(nullptr));
 
   KJ_DISALLOW_COPY(ImbuedSegmentBuilder);
@@ -188,10 +193,6 @@ public:
   virtual kj::Own<const ClientHook> extractCap(const _::StructReader& capDescriptor) = 0;
   // Given a StructReader for a capability descriptor embedded in the message, return the
   // corresponding capability.
-
-  kj::Own<const ClientHook> extractNullCap();
-  // Like extractCap() but called when the pointer was null.  This just returns a dummy capability
-  // that throws exceptions on any call.
 };
 
 class BasicReaderArena final: public Arena {
@@ -444,8 +445,8 @@ inline BasicSegmentBuilder::BasicSegmentBuilder(
     : SegmentBuilder(arena, id, ptr, readLimiter, &actualPos),
       actualPos(ptr.begin()) {}
 
-inline ImbuedSegmentBuilder::ImbuedSegmentBuilder(SegmentBuilder* base)
-    : SegmentBuilder(static_cast<BuilderArena*>(base->arena), base->id,
+inline ImbuedSegmentBuilder::ImbuedSegmentBuilder(ImbuedBuilderArena* arena, SegmentBuilder* base)
+    : SegmentBuilder(arena, base->id,
                      kj::arrayPtr(const_cast<word*>(base->ptr.begin()), base->ptr.size()),
                      base->readLimiter, base->pos) {}
 inline ImbuedSegmentBuilder::ImbuedSegmentBuilder(decltype(nullptr))

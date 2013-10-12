@@ -118,7 +118,9 @@ void EventLoop::waitImpl(Own<_::PromiseNode> node, _::ExceptionOrValue& result) 
 
 EventLoop::Event::~Event() noexcept(false) {
   if (this != &loop.queue) {
-    KJ_ASSERT(next == nullptr || std::uncaught_exception(), "Event destroyed while armed.");
+    KJ_ASSERT(next == nullptr || std::uncaught_exception(),
+              "Event destroyed while armed.  You must call disarm() in the subclass's destructor "
+              "in order to ensure that fire() is not running when the event is destroyed.");
   }
 }
 
@@ -393,7 +395,9 @@ ForkHubBase::ForkHubBase(const EventLoop& loop, Own<PromiseNode>&& inner,
   arm(YIELD);
 }
 
-ForkHubBase::~ForkHubBase() noexcept(false) {}
+ForkHubBase::~ForkHubBase() noexcept(false) {
+  disarm();
+}
 
 void ForkHubBase::fire() {
   if (!isWaiting && !inner->onReady(*this)) {

@@ -26,6 +26,7 @@
 
 #include <kj/async.h>
 #include "object.h"
+#include "pointer-helpers.h"
 
 namespace capnp {
 
@@ -133,6 +134,9 @@ public:
 private:
   kj::Own<const ClientHook> hook;
 
+  template <typename, ::capnp::Kind>
+  friend struct ::capnp::_::PointerHelpers;
+
 protected:
   Client() = default;
 
@@ -148,7 +152,7 @@ class CallContextHook;
 
 template <typename Params, typename Results>
 class CallContext: public kj::DisallowConstCopy {
-  // Wrapper around TypelessCallContext with a specific return type.
+  // Wrapper around CallContextHook with a specific return type.
   //
   // Methods of this class may only be called from within the server's event loop, not from other
   // threads.
@@ -247,51 +251,6 @@ kj::Own<const ClientHook> makeLocalClient(kj::Own<Capability::Server>&& server,
 // TODO(now):  Templated version or something.
 
 // =======================================================================================
-
-struct PipelineOp {
-  enum Type {
-    GET_POINTER_FIELD
-
-    // There may be other types in the future...
-  };
-
-  Type type;
-  union {
-    uint16_t pointerIndex;  // for GET_POINTER_FIELD
-  };
-};
-
-struct TypelessResults {
-  // Result of a call, before it has been type-wrapped.  Designed to be used as
-  // RemotePromise<CallResult>.
-
-  typedef ObjectPointer::Reader Reader;
-  // So RemotePromise<CallResult> resolves to Own<ObjectPointer::Reader>.
-
-  class Pipeline {
-  public:
-    inline explicit Pipeline(kj::Own<const PipelineHook>&& hook): hook(kj::mv(hook)) {}
-
-    Pipeline getPointerField(uint16_t pointerIndex) const;
-    // Return a new Promise representing a sub-object of the result.  `pointerIndex` is the index
-    // of the sub-object within the pointer section of the result (the result must be a struct).
-    //
-    // TODO(kenton):  On GCC 4.8 / Clang 3.3, use rvalue qualifiers to avoid the need for copies.
-    //   Also make `ops` into a Vector to optimize this.
-
-    Capability::Client asCap() const;
-    // Expect that the result is a capability and construct a pipelined version of it now.
-
-  private:
-    kj::Own<const PipelineHook> hook;
-    kj::Array<PipelineOp> ops;
-
-    inline Pipeline(kj::Own<const PipelineHook>&& hook, kj::Array<PipelineOp>&& ops)
-        : hook(kj::mv(hook)), ops(kj::mv(ops)) {}
-  };
-};
-
-// =======================================================================================
 // Hook interfaces which must be implemented by the RPC system.  Applications never call these
 // directly; the RPC system implements them and the types defined earlier in this file wrap them.
 
@@ -299,7 +258,7 @@ class RequestHook {
   // Hook interface implemented by RPC system representing a request being built.
 
 public:
-  virtual RemotePromise<TypelessResults> send() = 0;
+  virtual RemotePromise<ObjectPointer> send() = 0;
   // Send the call and return a promise for the result.
 };
 
@@ -314,26 +273,11 @@ public:
   // Just here to make sure the type is dynamic.
 };
 
-class PipelineHook {
-  // Represents a currently-running call, and implements pipelined requests on its result.
-
-public:
-  virtual kj::Own<const PipelineHook> addRef() const = 0;
-  // Increment this object's reference count.
-
-  virtual kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const = 0;
-  // Extract a promised Capability from the results.
-
-  virtual kj::Own<const ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) const {
-    // Version of getPipelinedCap() passing the array by move.  May avoid a copy in some cases.
-    // Default implementation just calls the other version.
-    return getPipelinedCap(ops.asPtr());
-  }
-};
+// class PipelineHook is declared in object.h because it is needed there.
 
 class ClientHook {
 public:
-  virtual Request<ObjectPointer, TypelessResults> newCall(
+  virtual Request<ObjectPointer, ObjectPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const = 0;
   // Start a new call, allowing the client to allocate request/response objects as it sees fit.
   // This version is used when calls are made from application code in the local process.
@@ -386,6 +330,35 @@ public:
   virtual kj::Own<CallContextHook> addRef() = 0;
 };
 
+kj::Own<const ClientHook> newBrokenCap(const char* reason);
+// Helper function that creates a capability which simply throws exceptions when called.
+
+// =======================================================================================
+// Extend PointerHelpers for interfaces
+
+namespace _ {  // private
+
+template <typename T>
+struct PointerHelpers<T, Kind::INTERFACE> {
+  static inline typename T::Client get(PointerReader reader) {
+    return typename T::Client(reader.getCapability());
+  }
+  static inline typename T::Client get(PointerBuilder builder) {
+    return typename T::Client(builder.getCapability());
+  }
+  static inline void set(PointerBuilder builder, typename T::Client&& value) {
+    builder.setCapability(kj::mv(value.Capability::Client::hook));
+  }
+  static inline void adopt(PointerBuilder builder, Orphan<T>&& value) {
+    builder.adopt(kj::mv(value.builder));
+  }
+  static inline Orphan<T> disown(PointerBuilder builder) {
+    return Orphan<T>(builder.disown());
+  }
+};
+
+}  // namespace _ (private)
+
 // =======================================================================================
 // Inline implementation details
 
@@ -396,20 +369,16 @@ RemotePromise<Results> Request<Params, Results>::send() {
   // Convert the Promise to return the correct response type.
   // Explicitly upcast to kj::Promise to make clear that calling .then() doesn't invalidate the
   // Pipeline part of the RemotePromise.
-  auto typedPromise = kj::implicitCast<kj::Promise<Response<TypelessResults>>&>(typelessPromise)
-      .thenInAnyThread([](Response<TypelessResults>&& response) -> Response<Results> {
+  auto typedPromise = kj::implicitCast<kj::Promise<Response<ObjectPointer>>&>(typelessPromise)
+      .thenInAnyThread([](Response<ObjectPointer>&& response) -> Response<Results> {
         return Response<Results>(response.getAs<Results>(), kj::mv(response.hook));
       });
 
   // Wrap the typeless pipeline in a typed wrapper.
   typename Results::Pipeline typedPipeline(
-      kj::mv(kj::implicitCast<TypelessResults::Pipeline&>(typelessPromise)));
+      kj::mv(kj::implicitCast<ObjectPointer::Pipeline&>(typelessPromise)));
 
   return RemotePromise<Results>(kj::mv(typedPromise), kj::mv(typedPipeline));
-}
-
-inline Capability::Client TypelessResults::Pipeline::asCap() const {
-  return Capability::Client(hook->getPipelinedCap(ops));
 }
 
 inline Capability::Client::Client(kj::Own<const ClientHook>&& hook): hook(kj::mv(hook)) {}

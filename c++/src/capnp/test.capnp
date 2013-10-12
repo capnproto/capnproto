@@ -584,3 +584,7 @@ interface TestExtends extends(TestInterface) {
   corge @1 TestAllTypes -> ();
   grault @2 () -> TestAllTypes;
 }
+
+interface TestPipeline {
+  getCap @0 (s: Text, inCap :TestInterface) -> (n :UInt32, outCap :TestExtends);
+}

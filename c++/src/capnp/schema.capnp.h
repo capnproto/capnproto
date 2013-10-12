@@ -19,6 +19,7 @@ struct Node {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     FILE,
     STRUCT,
@@ -40,6 +41,7 @@ struct Node::NestedNode {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Node::Struct {
@@ -47,6 +49,7 @@ struct Node::Struct {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Node::Enum {
@@ -54,6 +57,7 @@ struct Node::Enum {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Node::Interface {
@@ -61,6 +65,7 @@ struct Node::Interface {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Node::Const {
@@ -68,6 +73,7 @@ struct Node::Const {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Node::Annotation {
@@ -75,6 +81,7 @@ struct Node::Annotation {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Field {
@@ -82,6 +89,7 @@ struct Field {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     SLOT,
     GROUP,
@@ -96,6 +104,7 @@ struct Field::Slot {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Field::Group {
@@ -103,6 +112,7 @@ struct Field::Group {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Field::Ordinal {
@@ -110,6 +120,7 @@ struct Field::Ordinal {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     IMPLICIT,
     EXPLICIT,
@@ -121,6 +132,7 @@ struct Enumerant {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Method {
@@ -128,6 +140,7 @@ struct Method {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Type {
@@ -135,6 +148,7 @@ struct Type {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     VOID,
     BOOL,
@@ -167,6 +181,7 @@ struct Type::List {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Type::Enum {
@@ -174,6 +189,7 @@ struct Type::Enum {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Type::Struct {
@@ -181,6 +197,7 @@ struct Type::Struct {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Type::Interface {
@@ -188,6 +205,7 @@ struct Type::Interface {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 struct Value {
@@ -195,6 +213,7 @@ struct Value {
 
   class Reader;
   class Builder;
+  class Pipeline;
   enum Which: uint16_t {
     VOID,
     BOOL,
@@ -223,6 +242,7 @@ struct Annotation {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 enum class ElementSize: uint16_t {
@@ -241,6 +261,7 @@ struct CodeGeneratorRequest {
 
   class Reader;
   class Builder;
+  class Pipeline;
   struct RequestedFile;
 };
 
@@ -249,6 +270,7 @@ struct CodeGeneratorRequest::RequestedFile {
 
   class Reader;
   class Builder;
+  class Pipeline;
   struct Import;
 };
 
@@ -257,6 +279,7 @@ struct CodeGeneratorRequest::RequestedFile::Import {
 
   class Reader;
   class Builder;
+  class Pipeline;
 };
 
 }  // namespace
@@ -535,6 +558,19 @@ inline ::kj::StringTree KJ_STRINGIFY(Node::Builder builder) {
   return ::capnp::_::structString<Node>(builder._builder.asReader());
 }
 
+class Node::Pipeline {
+public:
+  typedef Node Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Node::NestedNode::Reader {
 public:
   typedef NestedNode Reads;
@@ -604,6 +640,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Node::NestedNode::Builder builder) {
   return ::capnp::_::structString<Node::NestedNode>(builder._builder.asReader());
 }
+
+class Node::NestedNode::Pipeline {
+public:
+  typedef NestedNode Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Node::Struct::Reader {
 public:
@@ -710,6 +759,19 @@ inline ::kj::StringTree KJ_STRINGIFY(Node::Struct::Builder builder) {
   return ::capnp::_::structString<Node::Struct>(builder._builder.asReader());
 }
 
+class Node::Struct::Pipeline {
+public:
+  typedef Struct Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Node::Enum::Reader {
 public:
   typedef Enum Reads;
@@ -772,6 +834,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Node::Enum::Builder builder) {
   return ::capnp::_::structString<Node::Enum>(builder._builder.asReader());
 }
+
+class Node::Enum::Pipeline {
+public:
+  typedef Enum Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Node::Interface::Reader {
 public:
@@ -847,6 +922,19 @@ inline ::kj::StringTree KJ_STRINGIFY(Node::Interface::Builder builder) {
   return ::capnp::_::structString<Node::Interface>(builder._builder.asReader());
 }
 
+class Node::Interface::Pipeline {
+public:
+  typedef Interface Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Node::Const::Reader {
 public:
   typedef Const Reads;
@@ -919,6 +1007,21 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Node::Const::Builder builder) {
   return ::capnp::_::structString<Node::Const>(builder._builder.asReader());
 }
+
+class Node::Const::Pipeline {
+public:
+  typedef Const Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::schema::Type::Pipeline getType() const;
+  inline  ::capnp::schema::Value::Pipeline getValue() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Node::Annotation::Reader {
 public:
@@ -1067,6 +1170,20 @@ inline ::kj::StringTree KJ_STRINGIFY(Node::Annotation::Builder builder) {
   return ::capnp::_::structString<Node::Annotation>(builder._builder.asReader());
 }
 
+class Node::Annotation::Pipeline {
+public:
+  typedef Annotation Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::schema::Type::Pipeline getType() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Field::Reader {
 public:
   typedef Field Reads;
@@ -1181,6 +1298,20 @@ inline ::kj::StringTree KJ_STRINGIFY(Field::Builder builder) {
   return ::capnp::_::structString<Field>(builder._builder.asReader());
 }
 
+class Field::Pipeline {
+public:
+  typedef Field Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline Ordinal::Pipeline getOrdinal() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Field::Slot::Reader {
 public:
   typedef Slot Reads;
@@ -1268,6 +1399,21 @@ inline ::kj::StringTree KJ_STRINGIFY(Field::Slot::Builder builder) {
   return ::capnp::_::structString<Field::Slot>(builder._builder.asReader());
 }
 
+class Field::Slot::Pipeline {
+public:
+  typedef Slot Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::schema::Type::Pipeline getType() const;
+  inline  ::capnp::schema::Value::Pipeline getDefaultValue() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Field::Group::Reader {
 public:
   typedef Group Reads;
@@ -1327,6 +1473,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Field::Group::Builder builder) {
   return ::capnp::_::structString<Field::Group>(builder._builder.asReader());
 }
+
+class Field::Group::Pipeline {
+public:
+  typedef Group Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Field::Ordinal::Reader {
 public:
@@ -1400,6 +1559,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Field::Ordinal::Builder builder) {
   return ::capnp::_::structString<Field::Ordinal>(builder._builder.asReader());
 }
+
+class Field::Ordinal::Pipeline {
+public:
+  typedef Ordinal Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Enumerant::Reader {
 public:
@@ -1480,6 +1652,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Enumerant::Builder builder) {
   return ::capnp::_::structString<Enumerant>(builder._builder.asReader());
 }
+
+class Enumerant::Pipeline {
+public:
+  typedef Enumerant Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Method::Reader {
 public:
@@ -1574,6 +1759,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Method::Builder builder) {
   return ::capnp::_::structString<Method>(builder._builder.asReader());
 }
+
+class Method::Pipeline {
+public:
+  typedef Method Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Type::Reader {
 public:
@@ -1801,6 +1999,19 @@ inline ::kj::StringTree KJ_STRINGIFY(Type::Builder builder) {
   return ::capnp::_::structString<Type>(builder._builder.asReader());
 }
 
+class Type::Pipeline {
+public:
+  typedef Type Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Type::List::Reader {
 public:
   typedef List Reads;
@@ -1864,6 +2075,20 @@ inline ::kj::StringTree KJ_STRINGIFY(Type::List::Builder builder) {
   return ::capnp::_::structString<Type::List>(builder._builder.asReader());
 }
 
+class Type::List::Pipeline {
+public:
+  typedef List Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::schema::Type::Pipeline getElementType() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Type::Enum::Reader {
 public:
   typedef Enum Reads;
@@ -1923,6 +2148,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Type::Enum::Builder builder) {
   return ::capnp::_::structString<Type::Enum>(builder._builder.asReader());
 }
+
+class Type::Enum::Pipeline {
+public:
+  typedef Enum Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Type::Struct::Reader {
 public:
@@ -1984,6 +2222,19 @@ inline ::kj::StringTree KJ_STRINGIFY(Type::Struct::Builder builder) {
   return ::capnp::_::structString<Type::Struct>(builder._builder.asReader());
 }
 
+class Type::Struct::Pipeline {
+public:
+  typedef Struct Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Type::Interface::Reader {
 public:
   typedef Interface Reads;
@@ -2043,6 +2294,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Type::Interface::Builder builder) {
   return ::capnp::_::structString<Type::Interface>(builder._builder.asReader());
 }
+
+class Type::Interface::Pipeline {
+public:
+  typedef Interface Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class Value::Reader {
 public:
@@ -2276,6 +2540,19 @@ inline ::kj::StringTree KJ_STRINGIFY(Value::Builder builder) {
   return ::capnp::_::structString<Value>(builder._builder.asReader());
 }
 
+class Value::Pipeline {
+public:
+  typedef Value Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Annotation::Reader {
 public:
   typedef Annotation Reads;
@@ -2345,6 +2622,20 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(Annotation::Builder builder) {
   return ::capnp::_::structString<Annotation>(builder._builder.asReader());
 }
+
+class Annotation::Pipeline {
+public:
+  typedef Annotation Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::schema::Value::Pipeline getValue() const;
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class CodeGeneratorRequest::Reader {
 public:
@@ -2418,6 +2709,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(CodeGeneratorRequest::Builder builder) {
   return ::capnp::_::structString<CodeGeneratorRequest>(builder._builder.asReader());
 }
+
+class CodeGeneratorRequest::Pipeline {
+public:
+  typedef CodeGeneratorRequest Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 class CodeGeneratorRequest::RequestedFile::Reader {
 public:
@@ -2499,6 +2803,19 @@ inline ::kj::StringTree KJ_STRINGIFY(CodeGeneratorRequest::RequestedFile::Builde
   return ::capnp::_::structString<CodeGeneratorRequest::RequestedFile>(builder._builder.asReader());
 }
 
+class CodeGeneratorRequest::RequestedFile::Pipeline {
+public:
+  typedef RequestedFile Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class CodeGeneratorRequest::RequestedFile::Import::Reader {
 public:
   typedef Import Reads;
@@ -2568,6 +2885,19 @@ private:
 inline ::kj::StringTree KJ_STRINGIFY(CodeGeneratorRequest::RequestedFile::Import::Builder builder) {
   return ::capnp::_::structString<CodeGeneratorRequest::RequestedFile::Import>(builder._builder.asReader());
 }
+
+class CodeGeneratorRequest::RequestedFile::Import::Pipeline {
+public:
+  typedef Import Pipelines;
+
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
 
 // =======================================================================================
 
@@ -3307,6 +3637,9 @@ inline  ::capnp::schema::Type::Builder Node::Const::Builder::getType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
       _builder.getPointerField(3 * ::capnp::POINTERS));
 }
+inline  ::capnp::schema::Type::Pipeline Node::Const::Pipeline::getType() const {
+  return  ::capnp::schema::Type::Pipeline(_typeless.getPointerField(3));
+}
 inline void Node::Const::Builder::setType( ::capnp::schema::Type::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
       _builder.getPointerField(3 * ::capnp::POINTERS), value);
@@ -3339,6 +3672,9 @@ inline  ::capnp::schema::Value::Builder Node::Const::Builder::getValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
       _builder.getPointerField(4 * ::capnp::POINTERS));
 }
+inline  ::capnp::schema::Value::Pipeline Node::Const::Pipeline::getValue() const {
+  return  ::capnp::schema::Value::Pipeline(_typeless.getPointerField(4));
+}
 inline void Node::Const::Builder::setValue( ::capnp::schema::Value::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Value>::set(
       _builder.getPointerField(4 * ::capnp::POINTERS), value);
@@ -3370,6 +3706,9 @@ inline  ::capnp::schema::Type::Reader Node::Annotation::Reader::getType() const 
 inline  ::capnp::schema::Type::Builder Node::Annotation::Builder::getType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
       _builder.getPointerField(3 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::Type::Pipeline Node::Annotation::Pipeline::getType() const {
+  return  ::capnp::schema::Type::Pipeline(_typeless.getPointerField(3));
 }
 inline void Node::Annotation::Builder::setType( ::capnp::schema::Type::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
@@ -3837,6 +4176,9 @@ inline Field::Ordinal::Reader Field::Reader::getOrdinal() const {
 inline Field::Ordinal::Builder Field::Builder::getOrdinal() {
   return Field::Ordinal::Builder(_builder);
 }
+inline Field::Ordinal::Pipeline Field::Pipeline::getOrdinal() const {
+  return Field::Ordinal::Pipeline(_typeless.noop());
+}
 inline Field::Ordinal::Builder Field::Builder::initOrdinal() {
   _builder.setDataField< ::uint16_t>(5 * ::capnp::ELEMENTS, 0);
   _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
@@ -3877,6 +4219,9 @@ inline  ::capnp::schema::Type::Builder Field::Slot::Builder::getType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
       _builder.getPointerField(2 * ::capnp::POINTERS));
 }
+inline  ::capnp::schema::Type::Pipeline Field::Slot::Pipeline::getType() const {
+  return  ::capnp::schema::Type::Pipeline(_typeless.getPointerField(2));
+}
 inline void Field::Slot::Builder::setType( ::capnp::schema::Type::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
       _builder.getPointerField(2 * ::capnp::POINTERS), value);
@@ -3908,6 +4253,9 @@ inline  ::capnp::schema::Value::Reader Field::Slot::Reader::getDefaultValue() co
 inline  ::capnp::schema::Value::Builder Field::Slot::Builder::getDefaultValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
       _builder.getPointerField(3 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::Value::Pipeline Field::Slot::Pipeline::getDefaultValue() const {
+  return  ::capnp::schema::Value::Pipeline(_typeless.getPointerField(3));
 }
 inline void Field::Slot::Builder::setDefaultValue( ::capnp::schema::Value::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Value>::set(
@@ -4924,6 +5272,9 @@ inline  ::capnp::schema::Type::Builder Type::List::Builder::getElementType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
+inline  ::capnp::schema::Type::Pipeline Type::List::Pipeline::getElementType() const {
+  return  ::capnp::schema::Type::Pipeline(_typeless.getPointerField(0));
+}
 inline void Type::List::Builder::setElementType( ::capnp::schema::Type::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
       _builder.getPointerField(0 * ::capnp::POINTERS), value);
@@ -5745,6 +6096,9 @@ inline  ::capnp::schema::Value::Reader Annotation::Reader::getValue() const {
 inline  ::capnp::schema::Value::Builder Annotation::Builder::getValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::Value::Pipeline Annotation::Pipeline::getValue() const {
+  return  ::capnp::schema::Value::Pipeline(_typeless.getPointerField(0));
 }
 inline void Annotation::Builder::setValue( ::capnp::schema::Value::Reader value) {
   ::capnp::_::PointerHelpers< ::capnp::schema::Value>::set(
