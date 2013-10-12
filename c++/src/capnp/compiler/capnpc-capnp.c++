@@ -391,7 +391,7 @@ private:
             indent, field.getName(),
             " :group", genAnnotations(field.getAnnotations(), scope), " {",
             field.hasDiscriminantValue()
-                ? kj::strTree(", union tag = ", field.getDiscriminantValue()) : kj::strTree(),
+                ? kj::strTree("  # union tag = ", field.getDiscriminantValue()) : kj::strTree(),
             "\n",
             genStructFields(group, indent.next()),
             indent, "}\n");
