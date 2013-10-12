@@ -115,13 +115,13 @@ private:
   inline bool copyVariantFrom(const OneOf& other) {
     if (other.is<T>()) {
       ctor(*reinterpret_cast<T*>(space), other.get<T>());
-      tag = typeIndex<T>();
     }
     return false;
   }
   void copyFrom(const OneOf& other) {
     // Initialize as a copy of `other`.  Expects that `this` starts out uninitialized, so the tag
     // is invalid.
+    tag = other.tag;
     doAll(copyVariantFrom<Variants>(other)...);
   }
 
@@ -129,13 +129,13 @@ private:
   inline bool moveVariantFrom(OneOf& other) {
     if (other.is<T>()) {
       ctor(*reinterpret_cast<T*>(space), kj::mv(other.get<T>()));
-      tag = typeIndex<T>();
     }
     return false;
   }
   void moveFrom(OneOf& other) {
     // Initialize as a copy of `other`.  Expects that `this` starts out uninitialized, so the tag
     // is invalid.
+    tag = other.tag;
     doAll(moveVariantFrom<Variants>(other)...);
   }
 };

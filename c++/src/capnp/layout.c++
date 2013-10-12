@@ -1712,7 +1712,7 @@ struct WireHelpers {
           goto useDefault;
         }
 
-        setCapabilityPointer(dstSegment, dst,
+        return setCapabilityPointer(dstSegment, dst,
             srcSegment->getArena()->extractCap(StructReader(
                 srcSegment, ptr,
                 reinterpret_cast<const WirePointer*>(ptr + src->structRef.dataSize.get()),
@@ -1727,6 +1727,8 @@ struct WireHelpers {
           goto useDefault;
         }
     }
+
+    KJ_UNREACHABLE;
   }
 
   static void adopt(SegmentBuilder* segment, WirePointer* ref, OrphanBuilder&& value) {

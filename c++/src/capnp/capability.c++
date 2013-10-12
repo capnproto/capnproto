@@ -30,7 +30,6 @@
 #include <kj/refcount.h>
 #include <kj/debug.h>
 #include <kj/vector.h>
-#include <kj/one-of.h>
 #include <map>
 
 namespace capnp {
