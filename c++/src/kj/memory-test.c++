@@ -39,6 +39,14 @@ TEST(Memory, OwnConst) {
   EXPECT_EQ(3, *ci2);
 }
 
+TEST(Memory, CanConvert) {
+  struct Super { virtual ~Super(); };
+  struct Sub: public Super {};
+
+  static_assert(canConvert<Own<Sub>, Own<Super>>(), "failure");
+  static_assert(!canConvert<Own<Super>, Own<Sub>>(), "failure");
+}
+
 // TODO(test):  More tests.
 
 }  // namespace

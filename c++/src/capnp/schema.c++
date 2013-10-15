@@ -222,7 +222,38 @@ InterfaceSchema::MethodList InterfaceSchema::getMethods() const {
 }
 
 kj::Maybe<InterfaceSchema::Method> InterfaceSchema::findMethodByName(kj::StringPtr name) const {
-  return findSchemaMemberByName(raw, name, getMethods());
+  uint counter = 0;
+  return findMethodByName(name, counter);
+}
+
+static constexpr uint MAX_SUPERCLASSES = 64;
+
+kj::Maybe<InterfaceSchema::Method> InterfaceSchema::findMethodByName(
+    kj::StringPtr name, uint& counter) const {
+  // Security:  Don't let someone DOS us with a dynamic schema containing cyclic inheritance.
+  KJ_REQUIRE(counter++ < MAX_SUPERCLASSES, "Cyclic or absurdly-large inheritance graph detected.") {
+    return nullptr;
+  }
+
+  auto result = findSchemaMemberByName(raw, name, getMethods());
+
+  if (result == nullptr) {
+    // Search superclasses.
+    // TODO(perf):  This may be somewhat slow, and in the case of lots of diamond dependencies it
+    //   could get pathological.  Arguably we should generate a flat list of transitive
+    //   superclasses to search and store it in the RawSchema.  It's problematic, though, because
+    //   this means that a dynamically-loaded RawSchema cannot be correctly constructed until all
+    //   superclasses have been loaded, which imposes an ordering requirement on SchemaLoader or
+    //   requires updating subclasses whenever a new superclass is loaded.
+    for (auto extendId: getProto().getInterface().getExtends()) {
+      result = getDependency(extendId).asInterface().findMethodByName(name, counter);
+      if (result != nullptr) {
+        break;
+      }
+    }
+  }
+
+  return result;
 }
 
 InterfaceSchema::Method InterfaceSchema::getMethodByName(kj::StringPtr name) const {
@@ -231,6 +262,56 @@ InterfaceSchema::Method InterfaceSchema::getMethodByName(kj::StringPtr name) con
   } else {
     KJ_FAIL_REQUIRE("interface has no such method", name);
   }
+}
+
+bool InterfaceSchema::extends(InterfaceSchema other) const {
+  uint counter = 0;
+  return extends(other, counter);
+}
+
+bool InterfaceSchema::extends(InterfaceSchema other, uint& counter) const {
+  // Security:  Don't let someone DOS us with a dynamic schema containing cyclic inheritance.
+  KJ_REQUIRE(counter++ < MAX_SUPERCLASSES, "Cyclic or absurdly-large inheritance graph detected.") {
+    return nullptr;
+  }
+
+  if (other == *this) {
+    return true;
+  }
+
+  // TODO(perf):  This may be somewhat slow.  See findMethodByName() for discussion.
+  for (auto extendId: getProto().getInterface().getExtends()) {
+    if (getDependency(extendId).asInterface().extends(other, counter)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+kj::Maybe<InterfaceSchema> InterfaceSchema::findSuperclass(uint64_t typeId) const {
+  uint counter = 0;
+  return findSuperclass(typeId, counter);
+}
+
+kj::Maybe<InterfaceSchema> InterfaceSchema::findSuperclass(uint64_t typeId, uint& counter) const {
+  // Security:  Don't let someone DOS us with a dynamic schema containing cyclic inheritance.
+  KJ_REQUIRE(counter++ < MAX_SUPERCLASSES, "Cyclic or absurdly-large inheritance graph detected.") {
+    return nullptr;
+  }
+
+  if (typeId == raw->id) {
+    return *this;
+  }
+
+  // TODO(perf):  This may be somewhat slow.  See findMethodByName() for discussion.
+  for (auto extendId: getProto().getInterface().getExtends()) {
+    KJ_IF_MAYBE(result, getDependency(extendId).asInterface().findSuperclass(typeId, counter)) {
+      return *result;
+    }
+  }
+
+  return nullptr;
 }
 
 // -------------------------------------------------------------------

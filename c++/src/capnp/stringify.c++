@@ -236,10 +236,8 @@ static kj::StringTree print(const DynamicValue::Reader& value,
         return kj::strTree('(', indent.delimit(printedFields.releaseAsArray(), mode), ')');
       }
     }
-    case DynamicValue::INTERFACE:
-      KJ_FAIL_ASSERT("Don't know how to print interfaces.") {
-        return kj::String();
-      }
+    case DynamicValue::CAPABILITY:
+      return kj::strTree("<external capability>");
     case DynamicValue::OBJECT:
       return kj::strTree("<opaque object>");
   }

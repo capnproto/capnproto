@@ -331,6 +331,17 @@ T refIfLvalue(T&&);
 //     KJ_DECLTYPE_REF(i) i3(i);                  // i3 has type int&.
 //     KJ_DECLTYPE_REF(kj::mv(i)) i4(kj::mv(i));  // i4 has type int.
 
+template <typename T>
+struct CanConvert_ {
+  static int sfinae(T);
+  static bool sfinae(...);
+};
+
+template <typename T, typename U>
+constexpr bool canConvert() {
+  return sizeof(CanConvert_<U>::sfinae(instance<T>())) == sizeof(int);
+}
+
 // =======================================================================================
 // Equivalents to std::move() and std::forward(), since these are very commonly needed and the
 // std header <utility> pulls in lots of other stuff.

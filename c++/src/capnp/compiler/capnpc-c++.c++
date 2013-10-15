@@ -827,6 +827,7 @@ private:
             "  inline bool has", titleCase, "();\n"
             "  inline ", type, "::Client get", titleCase, "();\n"
             "  inline void set", titleCase, "(", type, "::Client&& value);\n",
+            "  inline void set", titleCase, "(const ", type, "::Client& value);\n",
             "  inline void adopt", titleCase, "(::capnp::Orphan<", type, ">&& value);\n"
             "  inline ::capnp::Orphan<", type, "> disown", titleCase, "();\n"
             "\n"),
@@ -863,6 +864,11 @@ private:
             unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), kj::mv(cap));\n"
+            "}\n",
+            "inline void ", scope, "Builder::set", titleCase, "(const ", type, "::Client& cap) {\n",
+            unionDiscrim.set,
+            "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
+            "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), cap);\n"
             "}\n",
             "inline void ", scope, "Builder::adopt", titleCase, "(\n"
             "    ::capnp::Orphan<", type, ">&& value) {\n",
@@ -937,6 +943,7 @@ private:
       bool isStructList = false;
       if (kind == FieldKind::LIST) {
         bool primitiveElement = false;
+        bool interface = false;
         switch (typeBody.getList().getElementType().which()) {
           case schema::Type::VOID:
           case schema::Type::BOOL:
@@ -957,9 +964,13 @@ private:
           case schema::Type::TEXT:
           case schema::Type::DATA:
           case schema::Type::LIST:
-          case schema::Type::INTERFACE:
           case schema::Type::OBJECT:
             primitiveElement = false;
+            break;
+
+          case schema::Type::INTERFACE:
+            primitiveElement = false;
+            interface = true;
             break;
 
           case schema::Type::STRUCT:
@@ -969,7 +980,7 @@ private:
         }
         elementReaderType = kj::str(
             typeName(typeBody.getList().getElementType()),
-            primitiveElement ? "" : "::Reader");
+            primitiveElement ? "" : interface ? "::Client" : "::Reader");
       }
 
       return FieldText {
@@ -1154,6 +1165,7 @@ private:
         "public:\n"
         "  typedef ", unqualifiedParentType, " Pipelines;\n"
         "\n"
+        "  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}\n"
         "  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)\n"
         "      : _typeless(kj::mv(typeless)) {}\n"
         "\n",
@@ -1255,7 +1267,7 @@ private:
     return MethodText {
       kj::strTree(
           "  ::capnp::Request<", paramType, ", ", resultType, "> ", name, "Request(\n"
-          "      unsigned int firstSegmentWordSize = 0);\n"),
+          "      unsigned int firstSegmentWordSize = 0) const;\n"),
 
       kj::strTree(
           "  virtual ::kj::Promise<void> ", name, "(\n"
@@ -1268,7 +1280,7 @@ private:
 
       kj::strTree(
           "::capnp::Request<", paramType, ", ", resultType, ">\n",
-          interfaceName, "::Client::", name, "Request(unsigned int firstSegmentWordSize) {\n"
+          interfaceName, "::Client::", name, "Request(unsigned int firstSegmentWordSize) const {\n"
           "  return newCall<", paramType, ", ", resultType, ">(\n"
           "      0x", interfaceIdHex, "ull, ", methodId, ", firstSegmentWordSize);\n"
           "}\n"
@@ -1337,8 +1349,18 @@ private:
             return kj::strTree(",\n      public virtual ", e.typeName, "::Client");
           }, " {\n"
           "public:\n"
+          "  typedef ", fullName, " Calls;\n"
+          "  typedef ", fullName, " Reads;\n"
+          "\n"
+          "  inline explicit Client(decltype(nullptr))\n"
+          "      : ::capnp::Capability::Client(nullptr) {}\n"
           "  inline explicit Client(::kj::Own<const ::capnp::ClientHook>&& hook)\n"
           "      : ::capnp::Capability::Client(::kj::mv(hook)) {}\n"
+          "  template <typename T,\n"
+          "            typename = ::kj::EnableIf< ::kj::canConvert<T*, Server*>()>>\n"
+          "  inline Client(::kj::Own<T>&& server,\n"
+          "                const ::kj::EventLoop& loop = ::kj::EventLoop::current())\n"
+          "      : ::capnp::Capability::Client(::kj::mv(server), loop) {}\n"
           "\n",
           KJ_MAP(m, methods) { return kj::mv(m.clientDecls); },
           "\n"
@@ -1352,6 +1374,8 @@ private:
             return kj::strTree(",\n      public virtual ", e.typeName, "::Server");
           }, " {\n"
           "public:\n",
+          "  typedef ", fullName, " Serves;\n"
+          "\n"
           "  ::kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,\n"
           "      ::capnp::CallContext< ::capnp::ObjectPointer, ::capnp::ObjectPointer> context)\n"
           "      override;\n"

@@ -37,7 +37,9 @@
 
 #include "layout.h"
 #include "object.h"
+#include "message.h"
 #include <kj/mutex.h>
+#include <kj/vector.h>
 
 namespace capnp {
 
@@ -169,6 +171,47 @@ private:
   _::ImbuedBuilderArena& arena() { return *reinterpret_cast<_::ImbuedBuilderArena*>(arenaSpace); }
 
   friend class _::ImbuedBuilderArena;
+};
+
+// -------------------------------------------------------------------
+
+namespace _ {  // private
+
+struct LocalCapDescriptor {
+  class Reader;
+  class Builder;
+};
+
+}  // namespace _ (private)
+
+class LocalMessage final: private CapInjector<_::LocalCapDescriptor> {
+  // An in-process message which can contain capabilities.  Use in place of MallocMessageBuilder
+  // when you need to be able to construct a message in-memory that contains capabilities, and this
+  // message will never leave the process.  You cannot serialize this message, since it doesn't
+  // know how to properly serialize its capabilities.
+
+public:
+  LocalMessage(uint firstSegmentWords = SUGGESTED_FIRST_SEGMENT_WORDS,
+               AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY);
+
+  inline ObjectPointer::Builder getRoot() { return root; }
+
+private:
+  MallocMessageBuilder message;
+  CapBuilderContext capContext;
+  ObjectPointer::Builder root;
+
+  struct State {
+    uint counter;
+    kj::Vector<kj::Own<const ClientHook>> caps;
+  };
+  kj::MutexGuarded<State> state;
+
+  void injectCap(_::LocalCapDescriptor::Builder descriptor,
+                 kj::Own<const ClientHook>&& cap) const override;
+  kj::Own<const ClientHook> getInjectedCap(
+      _::LocalCapDescriptor::Reader descriptor) const override;
+  void dropCap(_::LocalCapDescriptor::Reader descriptor) const override;
 };
 
 }  // namespace capnp

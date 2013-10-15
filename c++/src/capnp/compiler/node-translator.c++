@@ -1773,7 +1773,7 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(
       }
       break;
 
-    case DynamicValue::INTERFACE:
+    case DynamicValue::CAPABILITY:
       KJ_FAIL_ASSERT("Interfaces can't have literal values.");
 
     case DynamicValue::OBJECT:

@@ -2193,8 +2193,8 @@ PointerReader PointerBuilder::asReader() const {
   return PointerReader(segment, pointer, std::numeric_limits<int>::max());
 }
 
-BuilderArena& PointerBuilder::getArena() const {
-  return *segment->getArena();
+BuilderArena* PointerBuilder::getArena() const {
+  return segment->getArena();
 }
 
 PointerBuilder PointerBuilder::imbue(ImbuedBuilderArena& newArena) const {
@@ -2576,6 +2576,15 @@ OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, Data::Reader copyFrom) {
   return result;
 }
 
+OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, kj::Own<const ClientHook> copyFrom) {
+  OrphanBuilder result;
+  auto allocation = WireHelpers::setCapabilityPointer(
+      nullptr, result.tagAsPtr(), kj::mv(copyFrom), arena);
+  result.segment = allocation.segment;
+  result.location = reinterpret_cast<word*>(allocation.value);
+  return result;
+}
+
 StructBuilder OrphanBuilder::asStruct(StructSize size) {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
 
@@ -2638,6 +2647,12 @@ ListReader OrphanBuilder::asListReader(FieldSize elementSize) const {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
   return WireHelpers::readListPointer(
       segment, tagAsPtr(), location, nullptr, elementSize, std::numeric_limits<int>::max());
+}
+
+kj::Own<const ClientHook> OrphanBuilder::asCapability() const {
+  KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
+  return WireHelpers::readCapabilityPointer(
+      segment, tagAsPtr(), location, std::numeric_limits<int>::max());
 }
 
 Text::Reader OrphanBuilder::asTextReader() const {

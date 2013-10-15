@@ -107,7 +107,7 @@ public:
       : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
   inline Own(Own<RemoveConstOrDisable<T>>&& other) noexcept
       : disposer(other.disposer), ptr(other.ptr) { other.ptr = nullptr; }
-  template <typename U>
+  template <typename U, typename = EnableIf<canConvert<U*, T*>()>>
   inline Own(Own<U>&& other) noexcept
       : disposer(other.disposer), ptr(other.ptr) {
     static_assert(__is_polymorphic(T),

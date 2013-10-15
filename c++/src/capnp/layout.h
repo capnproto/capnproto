@@ -327,7 +327,7 @@ public:
 
   PointerReader asReader() const;
 
-  BuilderArena& getArena() const;
+  BuilderArena* getArena() const;
   // Get the arena containing this pointer.
 
   PointerBuilder imbue(ImbuedBuilderArena& newArena) const;
@@ -705,6 +705,7 @@ public:
   static OrphanBuilder copy(BuilderArena* arena, PointerReader copyFrom);
   static OrphanBuilder copy(BuilderArena* arena, Text::Reader copyFrom);
   static OrphanBuilder copy(BuilderArena* arena, Data::Reader copyFrom);
+  static OrphanBuilder copy(BuilderArena* arena, kj::Own<const ClientHook> copyFrom);
 
   OrphanBuilder& operator=(const OrphanBuilder& other) = delete;
   inline OrphanBuilder& operator=(OrphanBuilder&& other);
@@ -728,6 +729,7 @@ public:
 
   StructReader asStructReader(StructSize size) const;
   ListReader asListReader(FieldSize elementSize) const;
+  kj::Own<const ClientHook> asCapability() const;
   Text::Reader asTextReader() const;
   Data::Reader asDataReader() const;
 

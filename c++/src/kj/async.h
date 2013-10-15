@@ -283,7 +283,7 @@ public:
   // rather than the thread's current loop.  See Promise::then().
 
   template <typename T>
-  ForkedPromise<T> fork(Promise<T>&& promise);
+  ForkedPromise<T> fork(Promise<T>&& promise) const;
   // Like `Promise::fork()`, but manages the fork on *this* EventLoop rather than the thread's
   // current loop.  See Promise::fork().
 
@@ -1327,7 +1327,7 @@ ForkedPromise<T> Promise<T>::fork() {
 }
 
 template <typename T>
-ForkedPromise<T> EventLoop::fork(Promise<T>&& promise) {
+ForkedPromise<T> EventLoop::fork(Promise<T>&& promise) const {
   return ForkedPromise<T>(false,
       refcounted<_::ForkHub<_::FixVoid<T>>>(*this,
           _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(promise.node), *this)));

@@ -356,12 +356,25 @@ public:
   Method getMethodByName(kj::StringPtr name) const;
   // Like findMethodByName() but throws an exception on failure.
 
+  bool extends(InterfaceSchema other) const;
+  // Returns true if `other` is a superclass of this interface (including if `other == *this`).
+
+  kj::Maybe<InterfaceSchema> findSuperclass(uint64_t typeId) const;
+  // Find the superclass of this interface with the given type ID.  Returns null if the interface
+  // extends no such type.
+
 private:
   InterfaceSchema(const _::RawSchema* raw): Schema(raw) {}
   template <typename T> static inline InterfaceSchema fromImpl() {
     return InterfaceSchema(&_::rawSchema<T>());
   }
   friend class Schema;
+
+  kj::Maybe<Method> findMethodByName(kj::StringPtr name, uint& counter) const;
+  bool extends(InterfaceSchema other, uint& counter) const;
+  kj::Maybe<InterfaceSchema> findSuperclass(uint64_t typeId, uint& counter) const;
+  // We protect against malicious schemas with large or cyclic hierarchies by cutting off the
+  // search when the counter reaches a threshold.
 };
 
 class InterfaceSchema::Method {

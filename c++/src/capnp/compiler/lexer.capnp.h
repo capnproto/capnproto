@@ -249,6 +249,7 @@ class Token::Pipeline {
 public:
   typedef Token Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -372,6 +373,7 @@ class Statement::Pipeline {
 public:
   typedef Statement Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -448,6 +450,7 @@ class LexedTokens::Pipeline {
 public:
   typedef LexedTokens Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -524,6 +527,7 @@ class LexedStatements::Pipeline {
 public:
   typedef LexedStatements Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 

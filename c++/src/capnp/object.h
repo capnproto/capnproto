@@ -32,6 +32,7 @@ namespace capnp {
 
 class StructSchema;
 class ListSchema;
+class InterfaceSchema;
 class Orphanage;
 class ClientHook;
 class PipelineHook;
@@ -89,16 +90,20 @@ struct ObjectPointer {
     inline bool isNull() const;
 
     template <typename T>
-    inline typename T::Reader getAs() const;
-    // Valid for T = any generated struct type, List<U>, Text, or Data.
+    inline ReaderFor<T> getAs() const;
+    // Valid for T = any generated struct type, interface type, List<U>, Text, or Data.
 
     template <typename T>
-    inline typename T::Reader getAs(StructSchema schema) const;
+    inline ReaderFor<T> getAs(StructSchema schema) const;
     // Only valid for T = DynamicStruct.  Requires `#include <capnp/dynamic.h>`.
 
     template <typename T>
-    inline typename T::Reader getAs(ListSchema schema) const;
+    inline ReaderFor<T> getAs(ListSchema schema) const;
     // Only valid for T = DynamicList.  Requires `#include <capnp/dynamic.h>`.
+
+    template <typename T>
+    inline ReaderFor<T> getAs(InterfaceSchema schema) const;
+    // Only valid for T = DynamicCapability.  Requires `#include <capnp/dynamic.h>`.
 
     kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const;
     // Used by RPC system to implement pipelining.  Applications generally shouldn't use this
@@ -125,35 +130,39 @@ struct ObjectPointer {
     // Set to null.
 
     template <typename T>
-    inline typename T::Builder getAs();
+    inline BuilderFor<T> getAs();
     // Valid for T = any generated struct type, List<U>, Text, or Data.
 
     template <typename T>
-    inline typename T::Builder getAs(StructSchema schema);
+    inline BuilderFor<T> getAs(StructSchema schema);
     // Only valid for T = DynamicStruct.  Requires `#include <capnp/dynamic.h>`.
 
     template <typename T>
-    inline typename T::Builder getAs(ListSchema schema);
+    inline BuilderFor<T> getAs(ListSchema schema);
     // Only valid for T = DynamicList.  Requires `#include <capnp/dynamic.h>`.
 
     template <typename T>
-    inline typename T::Builder initAs();
+    inline BuilderFor<T> getAs(InterfaceSchema schema);
+    // Only valid for T = DynamicCapability.  Requires `#include <capnp/dynamic.h>`.
+
+    template <typename T>
+    inline BuilderFor<T> initAs();
     // Valid for T = any generated struct type.
 
     template <typename T>
-    inline typename T::Builder initAs(uint elementCount);
+    inline BuilderFor<T> initAs(uint elementCount);
     // Valid for T = List<U>, Text, or Data.
 
     template <typename T>
-    inline typename T::Builder initAs(StructSchema schema);
+    inline BuilderFor<T> initAs(StructSchema schema);
     // Only valid for T = DynamicStruct.  Requires `#include <capnp/dynamic.h>`.
 
     template <typename T>
-    inline typename T::Builder initAs(ListSchema schema, uint elementCount);
+    inline BuilderFor<T> initAs(ListSchema schema, uint elementCount);
     // Only valid for T = DynamicList.  Requires `#include <capnp/dynamic.h>`.
 
     template <typename T>
-    inline void setAs(typename T::Reader value);
+    inline void setAs(ReaderFor<T> value);
     // Valid for ReaderType = T::Reader for T = any generated struct type, List<U>, Text, Data,
     // DynamicStruct, or DynamicList (the dynamic types require `#include <capnp/dynamic.h>`).
 
@@ -181,6 +190,10 @@ struct ObjectPointer {
     inline Orphan<T> disownAs(ListSchema schema);
     // Only valid for T = DynamicList.  Requires `#include <capnp/dynamic.h>`.
 
+    template <typename T>
+    inline Orphan<T> disownAs(InterfaceSchema schema);
+    // Only valid for T = DynamicCapability.  Requires `#include <capnp/dynamic.h>`.
+
     inline Orphan<ObjectPointer> disown();
     // Disown without a type.
 
@@ -189,11 +202,13 @@ struct ObjectPointer {
 
   private:
     _::PointerBuilder builder;
+    friend class Orphanage;
     friend class CapBuilderContext;
   };
 
   class Pipeline {
   public:
+    inline Pipeline(decltype(nullptr)) {}
     inline explicit Pipeline(kj::Own<const PipelineHook>&& hook): hook(kj::mv(hook)) {}
 
     Pipeline noop() const;
@@ -236,17 +251,21 @@ public:
   // orphaned).  It is possible, however, to request readers/builders.
 
   template <typename T>
-  inline typename T::Builder getAs();
+  inline BuilderFor<T> getAs();
   template <typename T>
-  inline typename T::Builder getAs(StructSchema schema);
+  inline BuilderFor<T> getAs(StructSchema schema);
   template <typename T>
-  inline typename T::Builder getAs(ListSchema schema);
+  inline BuilderFor<T> getAs(ListSchema schema);
   template <typename T>
-  inline typename T::Reader getAsReader() const;
+  inline typename T::Client getAs(InterfaceSchema schema);
   template <typename T>
-  inline typename T::Reader getAsReader(StructSchema schema) const;
+  inline ReaderFor<T> getAsReader() const;
   template <typename T>
-  inline typename T::Reader getAsReader(ListSchema schema) const;
+  inline ReaderFor<T> getAsReader(StructSchema schema) const;
+  template <typename T>
+  inline ReaderFor<T> getAsReader(ListSchema schema) const;
+  template <typename T>
+  inline typename T::Client getAsReader(InterfaceSchema schema) const;
 
   template <typename T>
   inline Orphan<T> releaseAs();
@@ -254,6 +273,8 @@ public:
   inline Orphan<T> releaseAs(StructSchema schema);
   template <typename T>
   inline Orphan<T> releaseAs(ListSchema schema);
+  template <typename T>
+  inline Orphan<T> releaseAs(InterfaceSchema schema);
   // Down-cast the orphan to a specific type.
 
   inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
@@ -281,7 +302,7 @@ inline bool ObjectPointer::Reader::isNull() const {
 }
 
 template <typename T>
-inline typename T::Reader ObjectPointer::Reader::getAs() const {
+inline ReaderFor<T> ObjectPointer::Reader::getAs() const {
   return _::PointerHelpers<T>::get(reader);
 }
 
@@ -294,22 +315,22 @@ inline void ObjectPointer::Builder::clear() {
 }
 
 template <typename T>
-inline typename T::Builder ObjectPointer::Builder::getAs() {
+inline BuilderFor<T> ObjectPointer::Builder::getAs() {
   return _::PointerHelpers<T>::get(builder);
 }
 
 template <typename T>
-inline typename T::Builder ObjectPointer::Builder::initAs() {
+inline BuilderFor<T> ObjectPointer::Builder::initAs() {
   return _::PointerHelpers<T>::init(builder);
 }
 
 template <typename T>
-inline typename T::Builder ObjectPointer::Builder::initAs(uint elementCount) {
+inline BuilderFor<T> ObjectPointer::Builder::initAs(uint elementCount) {
   return _::PointerHelpers<T>::init(builder, elementCount);
 }
 
 template <typename T>
-inline void ObjectPointer::Builder::setAs(typename T::Reader value) {
+inline void ObjectPointer::Builder::setAs(ReaderFor<T> value) {
   return _::PointerHelpers<T>::set(builder, value);
 }
 
@@ -343,12 +364,19 @@ struct Orphanage::GetInnerReader<ObjectPointer, Kind::UNKNOWN> {
   }
 };
 
+template <>
+struct Orphanage::GetInnerBuilder<ObjectPointer, Kind::UNKNOWN> {
+  static inline _::PointerBuilder apply(ObjectPointer::Builder& t) {
+    return t.builder;
+  }
+};
+
 template <typename T>
-inline typename T::Builder Orphan<ObjectPointer>::getAs() {
+inline BuilderFor<T> Orphan<ObjectPointer>::getAs() {
   return _::OrphanGetImpl<T>::apply(builder);
 }
 template <typename T>
-inline typename T::Reader Orphan<ObjectPointer>::getAsReader() const {
+inline ReaderFor<T> Orphan<ObjectPointer>::getAsReader() const {
   return _::OrphanGetImpl<T>::applyReader(builder);
 }
 template <typename T>

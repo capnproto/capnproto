@@ -274,5 +274,21 @@ TEST(Common, Defer) {
   EXPECT_TRUE(k);
 }
 
+TEST(Common, CanConvert) {
+  static_assert(canConvert<long, int>(), "failure");
+  static_assert(!canConvert<long, void*>(), "failure");
+
+  struct Super {};
+  struct Sub: public Super {};
+
+  static_assert(canConvert<Sub, Super>(), "failure");
+  static_assert(!canConvert<Super, Sub>(), "failure");
+  static_assert(canConvert<Sub*, Super*>(), "failure");
+  static_assert(!canConvert<Super*, Sub*>(), "failure");
+
+  static_assert(canConvert<void*, const void*>(), "failure");
+  static_assert(!canConvert<const void*, void*>(), "failure");
+}
+
 }  // namespace
 }  // namespace kj

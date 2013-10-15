@@ -243,8 +243,10 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
           return ObjectPointer::Reader(reader.getPointerField(slot.getOffset() * POINTERS));
 
         case schema::Type::INTERFACE:
-          KJ_FAIL_ASSERT("Interfaces not yet implemented.");
-          break;
+          return DynamicCapability::Client(
+              field.getContainingStruct().getDependency(
+                  type.getInterface().getTypeId()).asInterface(),
+              reader.getPointerField(slot.getOffset() * POINTERS).getCapability());
       }
 
       KJ_UNREACHABLE;
@@ -342,8 +344,10 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
           return ObjectPointer::Builder(builder.getPointerField(slot.getOffset() * POINTERS));
 
         case schema::Type::INTERFACE:
-          KJ_FAIL_ASSERT("Interfaces not yet implemented.");
-          break;
+          return DynamicCapability::Client(
+              field.getContainingStruct().getDependency(
+                  type.getInterface().getTypeId()).asInterface(),
+              builder.getPointerField(slot.getOffset() * POINTERS).getCapability());
       }
 
       KJ_UNREACHABLE;
@@ -352,6 +356,44 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
     case schema::Field::GROUP:
       return DynamicStruct::Builder(
           schema.getDependency(proto.getGroup().getTypeId()).asStruct(), builder);
+  }
+
+  KJ_UNREACHABLE;
+}
+
+DynamicValue::Pipeline DynamicStruct::Pipeline::get(StructSchema::Field field) const {
+  KJ_REQUIRE(field.getContainingStruct() == schema, "`field` is not a field of this struct.");
+
+  auto proto = field.getProto();
+  KJ_REQUIRE(!proto.hasDiscriminantValue(), "Can't pipeline on union members.");
+
+  switch (proto.which()) {
+    case schema::Field::SLOT: {
+      auto slot = proto.getSlot();
+      auto type = slot.getType();
+
+      switch (type.which()) {
+        case schema::Type::STRUCT:
+          return DynamicStruct::Pipeline(
+              field.getContainingStruct().getDependency(type.getStruct().getTypeId()).asStruct(),
+              typeless.getPointerField(slot.getOffset()));
+
+        case schema::Type::INTERFACE:
+          return DynamicCapability::Client(
+              field.getContainingStruct().getDependency(
+                  type.getInterface().getTypeId()).asInterface(),
+              typeless.getPointerField(slot.getOffset()).asCap());
+
+        default:
+          KJ_FAIL_REQUIRE("Can only pipeline on struct and interface fields.");
+      }
+
+      KJ_UNREACHABLE;
+    }
+
+    case schema::Field::GROUP:
+      return DynamicStruct::Pipeline(
+          schema.getDependency(proto.getGroup().getTypeId()).asStruct(), typeless.noop());
   }
 
   KJ_UNREACHABLE;
@@ -553,7 +595,13 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
           return;
 
         case schema::Type::INTERFACE:
-          KJ_FAIL_ASSERT("Interfaces not yet implemented.");
+          auto interfaceType = schema.getDependency(type.getInterface().getTypeId()).asInterface();
+          auto capability = value.as<DynamicCapability>();
+          KJ_REQUIRE(capability.getSchema().extends(interfaceType), "Value type mismatch.") {
+            return;
+          }
+          builder.getPointerField(slot.getOffset() * POINTERS).setCapability(
+              kj::mv(capability.hook));
           return;
       }
 
@@ -723,7 +771,12 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
           break;
 
         case schema::Type::INTERFACE:
-          KJ_FAIL_ASSERT("Interfaces not yet implemented.");
+          auto interfaceType = schema.getDependency(type.getInterface().getTypeId()).asInterface();
+          KJ_REQUIRE(orphan.getType() == DynamicValue::CAPABILITY &&
+                     orphan.interfaceSchema.extends(interfaceType),
+                     "Value type mismatch.") {
+            return;
+          }
           break;
       }
 
@@ -866,11 +919,8 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
         case schema::Type::LIST:
         case schema::Type::STRUCT:
         case schema::Type::OBJECT:
-          builder.getPointerField(slot.getOffset() * POINTERS).clear();
-          return;
-
         case schema::Type::INTERFACE:
-          KJ_FAIL_ASSERT("Interfaces not yet implemented.");
+          builder.getPointerField(slot.getOffset() * POINTERS).clear();
           return;
       }
 
@@ -901,6 +951,9 @@ DynamicValue::Reader DynamicStruct::Reader::get(kj::StringPtr name) const {
   return get(schema.getFieldByName(name));
 }
 DynamicValue::Builder DynamicStruct::Builder::get(kj::StringPtr name) {
+  return get(schema.getFieldByName(name));
+}
+DynamicValue::Pipeline DynamicStruct::Pipeline::get(kj::StringPtr name) const {
   return get(schema.getFieldByName(name));
 }
 bool DynamicStruct::Reader::has(kj::StringPtr name) const {
@@ -984,9 +1037,8 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) const {
       return ObjectPointer::Reader(reader.getPointerElement(index * ELEMENTS));
 
     case schema::Type::INTERFACE:
-      KJ_FAIL_ASSERT("Interfaces not implemented.") {
-        return nullptr;
-      }
+      return DynamicCapability::Client(schema.getInterfaceElementType(),
+                                       reader.getPointerElement(index * ELEMENTS).getCapability());
   }
 
   return nullptr;
@@ -1046,9 +1098,8 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) {
       return nullptr;
 
     case schema::Type::INTERFACE:
-      KJ_FAIL_ASSERT("Interfaces not implemented.") {
-        return nullptr;
-      }
+      return DynamicCapability::Client(schema.getInterfaceElementType(),
+                                       builder.getPointerElement(index * ELEMENTS).getCapability());
   }
 
   return nullptr;
@@ -1126,10 +1177,15 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
         return;
       }
 
-    case schema::Type::INTERFACE:
-      KJ_FAIL_ASSERT("Interfaces not implemented.") {
+    case schema::Type::INTERFACE: {
+      auto capValue = value.as<DynamicCapability>();
+      KJ_REQUIRE(capValue.getSchema().extends(schema.getInterfaceElementType()),
+                 "Value type mismatch.") {
         return;
       }
+      builder.getPointerElement(index * ELEMENTS).setCapability(kj::mv(capValue.hook));
+      return;
+    }
   }
 
   KJ_FAIL_REQUIRE("can't set element of unknown type", (uint)schema.whichElementType()) {
@@ -1237,8 +1293,14 @@ void DynamicList::Builder::adopt(uint index, Orphan<DynamicValue>&& orphan) {
     case schema::Type::OBJECT:
       KJ_FAIL_ASSERT("List(Object) not supported.");
 
-    case schema::Type::INTERFACE:
-      KJ_FAIL_ASSERT("Interfaces not yet implemented.");
+    case schema::Type::INTERFACE: {
+      auto elementType = schema.getInterfaceElementType();
+      KJ_REQUIRE(orphan.getType() == DynamicValue::CAPABILITY &&
+                 orphan.interfaceSchema.extends(elementType),
+                 "Value type mismatch.");
+      builder.getPointerElement(index * ELEMENTS).adopt(kj::mv(orphan.builder));
+      return;
+    }
   }
 
   KJ_UNREACHABLE;
@@ -1311,6 +1373,75 @@ DynamicList::Reader DynamicList::Builder::asReader() const {
 
 // =======================================================================================
 
+DynamicCapability::Client DynamicCapability::Client::upcast(InterfaceSchema requestedSchema) const {
+  KJ_REQUIRE(schema.extends(requestedSchema), "Can't upcast to non-superclass.") {}
+  return DynamicCapability::Client(requestedSchema, hook->addRef());
+}
+
+Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(
+    InterfaceSchema::Method method, uint firstSegmentWordSize) const {
+  auto methodInterface = method.getContainingInterface();
+
+  KJ_REQUIRE(schema.extends(methodInterface), "Interface does not implement this method.");
+
+  auto proto = method.getProto();
+  auto paramType = methodInterface.getDependency(proto.getParamStructType()).asStruct();
+  auto resultType = methodInterface.getDependency(proto.getResultStructType()).asStruct();
+
+  auto typeless = hook->newCall(
+      methodInterface.getProto().getId(), method.getIndex(), firstSegmentWordSize);
+
+  return Request<DynamicStruct, DynamicStruct>(
+      typeless.getAs<DynamicStruct>(paramType), kj::mv(typeless.hook), resultType);
+}
+
+Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(
+    kj::StringPtr methodName, uint firstSegmentWordSize) const {
+  return newRequest(schema.getMethodByName(methodName), firstSegmentWordSize);
+}
+
+kj::Promise<void> DynamicCapability::Server::dispatchCall(
+    uint64_t interfaceId, uint16_t methodId,
+    CallContext<ObjectPointer, ObjectPointer> context) {
+  KJ_IF_MAYBE(interface, schema.findSuperclass(interfaceId)) {
+    auto methods = interface->getMethods();
+    if (methodId < methods.size()) {
+      auto method = methods[methodId];
+      auto proto = method.getProto();
+      return call(method, CallContext<DynamicStruct, DynamicStruct>(*context.hook,
+          interface->getDependency(proto.getParamStructType()).asStruct(),
+          interface->getDependency(proto.getResultStructType()).asStruct()));
+    } else {
+      return internalUnimplemented(
+          interface->getProto().getDisplayName().cStr(), interfaceId, methodId);
+    }
+  } else {
+    return internalUnimplemented(schema.getProto().getDisplayName().cStr(), interfaceId);
+  }
+}
+
+RemotePromise<DynamicStruct> Request<DynamicStruct, DynamicStruct>::send() {
+  auto typelessPromise = hook->send();
+  auto resultSchemaCopy = resultSchema;
+
+  // Convert the Promise to return the correct response type.
+  // Explicitly upcast to kj::Promise to make clear that calling .then() doesn't invalidate the
+  // Pipeline part of the RemotePromise.
+  auto typedPromise = kj::implicitCast<kj::Promise<Response<ObjectPointer>>&>(typelessPromise)
+      .thenInAnyThread([=](Response<ObjectPointer>&& response) -> Response<DynamicStruct> {
+        return Response<DynamicStruct>(response.getAs<DynamicStruct>(resultSchemaCopy),
+                                       kj::mv(response.hook));
+      });
+
+  // Wrap the typeless pipeline in a typed wrapper.
+  DynamicStruct::Pipeline typedPipeline(resultSchema,
+      kj::mv(kj::implicitCast<ObjectPointer::Pipeline&>(typelessPromise)));
+
+  return RemotePromise<DynamicStruct>(kj::mv(typedPromise), kj::mv(typedPipeline));
+}
+
+// =======================================================================================
+
 DynamicValue::Reader::Reader(ConstSchema constant) {
   auto typeSchema = constant.getProto().getConst().getType();
   auto value = constant.getProto().getConst().getValue();
@@ -1354,6 +1485,178 @@ DynamicValue::Reader::Reader(ConstSchema constant) {
   }
 }
 
+DynamicValue::Reader::Reader(const Reader& other) {
+  switch (type) {
+    case UNKNOWN:
+    case VOID:
+    case BOOL:
+    case INT:
+    case UINT:
+    case FLOAT:
+    case TEXT:
+    case DATA:
+    case LIST:
+    case ENUM:
+    case STRUCT:
+    case OBJECT:
+      static_assert(__has_trivial_copy(Text::Reader) &&
+                    __has_trivial_copy(Data::Reader) &&
+                    __has_trivial_copy(DynamicList::Reader) &&
+                    __has_trivial_copy(DynamicEnum) &&
+                    __has_trivial_copy(DynamicStruct::Reader) &&
+                    __has_trivial_copy(ObjectPointer::Reader),
+                    "Assumptions here don't hold.");
+      break;
+
+    case CAPABILITY:
+      type = CAPABILITY;
+      kj::ctor(capabilityValue, other.capabilityValue);
+      return;
+  }
+
+  memcpy(this, &other, sizeof(*this));
+}
+DynamicValue::Reader::Reader(Reader&& other) {
+  switch (type) {
+    case UNKNOWN:
+    case VOID:
+    case BOOL:
+    case INT:
+    case UINT:
+    case FLOAT:
+    case TEXT:
+    case DATA:
+    case LIST:
+    case ENUM:
+    case STRUCT:
+    case OBJECT:
+      static_assert(__has_trivial_copy(Text::Reader) &&
+                    __has_trivial_copy(Data::Reader) &&
+                    __has_trivial_copy(DynamicList::Reader) &&
+                    __has_trivial_copy(DynamicEnum) &&
+                    __has_trivial_copy(DynamicStruct::Reader) &&
+                    __has_trivial_copy(ObjectPointer::Reader),
+                    "Assumptions here don't hold.");
+      break;
+
+    case CAPABILITY:
+      type = CAPABILITY;
+      kj::ctor(capabilityValue, kj::mv(other.capabilityValue));
+      return;
+  }
+
+  memcpy(this, &other, sizeof(*this));
+}
+DynamicValue::Reader::~Reader() {
+  if (type == CAPABILITY) {
+    kj::dtor(capabilityValue);
+  }
+}
+
+DynamicValue::Reader& DynamicValue::Reader::operator=(const Reader& other) {
+  if (type == CAPABILITY) {
+    kj::dtor(capabilityValue);
+  }
+  kj::ctor(*this, other);
+  return *this;
+}
+DynamicValue::Reader& DynamicValue::Reader::operator=(Reader&& other) {
+  if (type == CAPABILITY) {
+    kj::dtor(capabilityValue);
+  }
+  kj::ctor(*this, kj::mv(other));
+  return *this;
+}
+
+DynamicValue::Builder::Builder(Builder& other) {
+  switch (type) {
+    case UNKNOWN:
+    case VOID:
+    case BOOL:
+    case INT:
+    case UINT:
+    case FLOAT:
+    case TEXT:
+    case DATA:
+    case LIST:
+    case ENUM:
+    case STRUCT:
+    case OBJECT:
+      // Unfortunately __has_trivial_copy doesn't work on these types due to the use of
+      // DisallowConstCopy, but __has_trivial_destructor should detect if any of these types
+      // become non-trivial.
+      static_assert(__has_trivial_destructor(Text::Builder) &&
+                    __has_trivial_destructor(Data::Builder) &&
+                    __has_trivial_destructor(DynamicList::Builder) &&
+                    __has_trivial_destructor(DynamicEnum) &&
+                    __has_trivial_destructor(DynamicStruct::Builder) &&
+                    __has_trivial_destructor(ObjectPointer::Builder),
+                    "Assumptions here don't hold.");
+      break;
+
+    case CAPABILITY:
+      type = CAPABILITY;
+      kj::ctor(capabilityValue, other.capabilityValue);
+      return;
+  }
+
+  memcpy(this, &other, sizeof(*this));
+}
+DynamicValue::Builder::Builder(Builder&& other) {
+  switch (type) {
+    case UNKNOWN:
+    case VOID:
+    case BOOL:
+    case INT:
+    case UINT:
+    case FLOAT:
+    case TEXT:
+    case DATA:
+    case LIST:
+    case ENUM:
+    case STRUCT:
+    case OBJECT:
+      // Unfortunately __has_trivial_copy doesn't work on these types due to the use of
+      // DisallowConstCopy, but __has_trivial_destructor should detect if any of these types
+      // become non-trivial.
+      static_assert(__has_trivial_destructor(Text::Builder) &&
+                    __has_trivial_destructor(Data::Builder) &&
+                    __has_trivial_destructor(DynamicList::Builder) &&
+                    __has_trivial_destructor(DynamicEnum) &&
+                    __has_trivial_destructor(DynamicStruct::Builder) &&
+                    __has_trivial_destructor(ObjectPointer::Builder),
+                    "Assumptions here don't hold.");
+      break;
+
+    case CAPABILITY:
+      type = CAPABILITY;
+      kj::ctor(capabilityValue, kj::mv(other.capabilityValue));
+      return;
+  }
+
+  memcpy(this, &other, sizeof(*this));
+}
+DynamicValue::Builder::~Builder() {
+  if (type == CAPABILITY) {
+    kj::dtor(capabilityValue);
+  }
+}
+
+DynamicValue::Builder& DynamicValue::Builder::operator=(Builder& other) {
+  if (type == CAPABILITY) {
+    kj::dtor(capabilityValue);
+  }
+  kj::ctor(*this, other);
+  return *this;
+}
+DynamicValue::Builder& DynamicValue::Builder::operator=(Builder&& other) {
+  if (type == CAPABILITY) {
+    kj::dtor(capabilityValue);
+  }
+  kj::ctor(*this, kj::mv(other));
+  return *this;
+}
+
 DynamicValue::Reader DynamicValue::Builder::asReader() const {
   switch (type) {
     case UNKNOWN: return Reader();
@@ -1367,11 +1670,37 @@ DynamicValue::Reader DynamicValue::Builder::asReader() const {
     case LIST: return Reader(listValue.asReader());
     case ENUM: return Reader(enumValue);
     case STRUCT: return Reader(structValue.asReader());
-    case INTERFACE: KJ_FAIL_ASSERT("Interfaces not implemented."); return Reader();
+    case CAPABILITY: return Reader(capabilityValue);
     case OBJECT: return Reader(objectValue.asReader());
   }
   KJ_FAIL_ASSERT("Missing switch case.");
   return Reader();
+}
+
+DynamicValue::Pipeline::Pipeline(Pipeline&& other): type(other.type) {
+  switch (type) {
+    case UNKNOWN: break;
+    case STRUCT: kj::ctor(structValue, kj::mv(other.structValue)); break;
+    case CAPABILITY: kj::ctor(capabilityValue, kj::mv(other.capabilityValue)); break;
+    default:
+      KJ_FAIL_ASSERT("Unexpected pipeline type.", (uint)type) { type = UNKNOWN; break; }
+      break;
+  }
+}
+DynamicValue::Pipeline& DynamicValue::Pipeline::operator=(Pipeline&& other) {
+  kj::dtor(*this);
+  kj::ctor(*this, kj::mv(other));
+  return *this;
+}
+DynamicValue::Pipeline::~Pipeline() noexcept(false) {
+  switch (type) {
+    case UNKNOWN: break;
+    case STRUCT: kj::dtor(structValue); break;
+    case CAPABILITY: kj::dtor(capabilityValue); break;
+    default:
+      KJ_FAIL_ASSERT("Unexpected pipeline type.", (uint)type) { type = UNKNOWN; break; }
+      break;
+  }
 }
 
 namespace {
@@ -1490,6 +1819,34 @@ HANDLE_TYPE(object, OBJECT, ObjectPointer)
 
 #undef HANDLE_TYPE
 
+PipelineFor<DynamicStruct> DynamicValue::Pipeline::AsImpl<DynamicStruct>::apply(
+    Pipeline& pipeline) {
+  KJ_REQUIRE(pipeline.type == STRUCT, "Pipeline type mismatch.");
+  return kj::mv(pipeline.structValue);
+}
+
+ReaderFor<DynamicCapability> DynamicValue::Reader::AsImpl<DynamicCapability>::apply(
+    const Reader& reader) {
+  KJ_REQUIRE(reader.type == CAPABILITY, "Value type mismatch.") {
+    return DynamicCapability::Client();
+  }
+  return reader.capabilityValue;
+}
+BuilderFor<DynamicCapability> DynamicValue::Builder::AsImpl<DynamicCapability>::apply(
+    Builder& builder) {
+  KJ_REQUIRE(builder.type == CAPABILITY, "Value type mismatch.") {
+    return DynamicCapability::Client();
+  }
+  return builder.capabilityValue;
+}
+PipelineFor<DynamicCapability> DynamicValue::Pipeline::AsImpl<DynamicCapability>::apply(
+    Pipeline& pipeline) {
+  KJ_REQUIRE(pipeline.type == CAPABILITY, "Pipeline type mismatch.") {
+    return DynamicCapability::Client();
+  }
+  return kj::mv(pipeline.capabilityValue);
+}
+
 Data::Reader DynamicValue::Reader::AsImpl<Data>::apply(const Reader& reader) {
   if (reader.type == TEXT) {
     // Coerce text to data.
@@ -1591,6 +1948,23 @@ DynamicList::Builder PointerHelpers<DynamicList, Kind::UNKNOWN>::init(
   }
 }
 
+DynamicCapability::Client PointerHelpers<DynamicCapability, Kind::UNKNOWN>::getDynamic(
+    PointerReader reader, InterfaceSchema schema) {
+  return DynamicCapability::Client(schema, reader.getCapability());
+}
+DynamicCapability::Client PointerHelpers<DynamicCapability, Kind::UNKNOWN>::getDynamic(
+    PointerBuilder builder, InterfaceSchema schema) {
+  return DynamicCapability::Client(schema, builder.getCapability());
+}
+void PointerHelpers<DynamicCapability, Kind::UNKNOWN>::set(
+    PointerBuilder builder, const DynamicCapability::Client& value) {
+  builder.setCapability(value.hook->addRef());
+}
+void PointerHelpers<DynamicCapability, Kind::UNKNOWN>::set(
+    PointerBuilder builder, DynamicCapability::Client&& value) {
+  builder.setCapability(kj::mv(value.hook));
+}
+
 }  // namespace _ (private)
 
 template <>
@@ -1609,7 +1983,7 @@ void ObjectPointer::Builder::adopt<DynamicValue>(Orphan<DynamicValue>&& orphan) 
     case DynamicValue::LIST:
     case DynamicValue::TEXT:
     case DynamicValue::DATA:
-    case DynamicValue::INTERFACE:
+    case DynamicValue::CAPABILITY:
     case DynamicValue::OBJECT:
       builder.adopt(kj::mv(orphan.builder));
       break;
@@ -1646,6 +2020,21 @@ DynamicList::Reader Orphan<ObjectPointer>::getAsReader<DynamicList>(ListSchema s
 template <>
 Orphan<DynamicList> Orphan<ObjectPointer>::releaseAs<DynamicList>(ListSchema schema) {
   return Orphan<DynamicList>(schema, kj::mv(builder));
+}
+
+template <>
+DynamicCapability::Client Orphan<ObjectPointer>::getAs<DynamicCapability>(InterfaceSchema schema) {
+  return DynamicCapability::Client(schema, builder.asCapability());
+}
+template <>
+DynamicCapability::Client Orphan<ObjectPointer>::getAsReader<DynamicCapability>(
+    InterfaceSchema schema) const {
+  return DynamicCapability::Client(schema, builder.asCapability());
+}
+template <>
+Orphan<DynamicCapability> Orphan<ObjectPointer>::releaseAs<DynamicCapability>(
+    InterfaceSchema schema) {
+  return Orphan<DynamicCapability>(schema, kj::mv(builder));
 }
 
 // -------------------------------------------------------------------
@@ -1688,6 +2077,14 @@ DynamicList::Reader Orphan<DynamicList>::getReader() const {
       schema, builder.asListReader(elementSizeFor(schema.whichElementType())));
 }
 
+DynamicCapability::Client Orphan<DynamicCapability>::get() {
+  return DynamicCapability::Client(schema, builder.asCapability());
+}
+
+DynamicCapability::Client Orphan<DynamicCapability>::getReader() const {
+  return DynamicCapability::Client(schema, builder.asCapability());
+}
+
 Orphan<DynamicValue>::Orphan(DynamicValue::Builder value, _::OrphanBuilder&& builder)
     : type(value.getType()), builder(kj::mv(builder)) {
   switch (type) {
@@ -1703,7 +2100,7 @@ Orphan<DynamicValue>::Orphan(DynamicValue::Builder value, _::OrphanBuilder&& bui
     case DynamicValue::DATA: break;
     case DynamicValue::LIST: listSchema = value.listValue.getSchema(); break;
     case DynamicValue::STRUCT: structSchema = value.structValue.getSchema(); break;
-    case DynamicValue::INTERFACE: KJ_FAIL_ASSERT("Interfaces not implemented.");
+    case DynamicValue::CAPABILITY: interfaceSchema = value.capabilityValue.getSchema(); break;
     case DynamicValue::OBJECT: break;
   }
 }
@@ -1731,8 +2128,8 @@ DynamicValue::Builder Orphan<DynamicValue>::get() {
     case DynamicValue::STRUCT:
       return DynamicStruct::Builder(structSchema,
           builder.asStruct(structSizeFromSchema(structSchema)));
-    case DynamicValue::INTERFACE:
-      KJ_FAIL_ASSERT("Interfaces not implemented.");
+    case DynamicValue::CAPABILITY:
+      return DynamicCapability::Client(interfaceSchema, builder.asCapability());
     case DynamicValue::OBJECT:
       KJ_FAIL_REQUIRE("Can't get() an untyped Object orphan; there is no underlying pointer to "
                       "wrap in an ObjectPointer::Builder.");
@@ -1757,8 +2154,8 @@ DynamicValue::Reader Orphan<DynamicValue>::getReader() const {
     case DynamicValue::STRUCT:
       return DynamicStruct::Reader(structSchema,
           builder.asStructReader(structSizeFromSchema(structSchema)));
-    case DynamicValue::INTERFACE:
-      KJ_FAIL_ASSERT("Interfaces not implemented.");
+    case DynamicValue::CAPABILITY:
+      return DynamicCapability::Client(interfaceSchema, builder.asCapability());
     case DynamicValue::OBJECT:
       KJ_FAIL_ASSERT("Can't get() an untyped Object orphan; there is no underlying pointer to "
                      "wrap in an ObjectPointer::Builder.");
@@ -1801,7 +2198,7 @@ Orphan<DynamicValue> Orphanage::newOrphanCopy<DynamicValue::Reader>(
     case DynamicValue::DATA: return newOrphanCopy(copyFrom.dataValue);
     case DynamicValue::LIST: return newOrphanCopy(copyFrom.listValue);
     case DynamicValue::STRUCT: return newOrphanCopy(copyFrom.structValue);
-    case DynamicValue::INTERFACE: KJ_FAIL_ASSERT("Interfaces not implemented.");
+    case DynamicValue::CAPABILITY: return newOrphanCopy(copyFrom.capabilityValue);
     case DynamicValue::OBJECT: return newOrphanCopy(copyFrom.objectValue);
   }
   KJ_UNREACHABLE;

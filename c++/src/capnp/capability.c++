@@ -34,6 +34,9 @@
 
 namespace capnp {
 
+Capability::Client::Client(decltype(nullptr))
+    : hook(newBrokenCap("Called null capability.")) {}
+
 kj::Promise<void> Capability::Server::internalUnimplemented(
     const char* actualInterfaceName, uint64_t requestedTypeId) {
   KJ_FAIL_REQUIRE("Requested interface not implemented.", actualInterfaceName, requestedTypeId) {
@@ -76,122 +79,19 @@ kj::Own<const ClientHook> newBrokenCap(const char* reason) {
 
 // =======================================================================================
 
-namespace _ {  // private
-
-struct LocalCapDescriptor {
-  // This is basically code for a struct defined as follows:
-  //
-  //     struct TestCapDescriptor {
-  //       index @0 :UInt32;
-  //     }
-  //
-  // I have the code hand-written here because I didn't want to add yet another bootstrap file.
-
-  class Reader {
-  public:
-    typedef LocalCapDescriptor Reads;
-
-    inline explicit Reader(_::StructReader base): _reader(base) {}
-
-    inline uint32_t getIndex() const {
-      return _reader.getDataField<uint32_t>(0 * ELEMENTS);
-    }
-
-  private:
-    _::StructReader _reader;
-  };
-
-  class Builder {
-  public:
-    typedef LocalCapDescriptor Builds;
-
-    inline explicit Builder(_::StructBuilder base): _builder(base) {}
-    inline operator Reader() const { return Reader(_builder.asReader()); }
-
-    inline uint32_t getIndex() {
-      return _builder.getDataField<uint32_t>(0 * ELEMENTS);
-    }
-    inline void setIndex(uint32_t value) {
-      _builder.setDataField<uint32_t>(0 * ELEMENTS, value);
-    }
-
-  private:
-    _::StructBuilder _builder;
-  };
-};
-
-template <>
-constexpr StructSize structSize<LocalCapDescriptor>() {
-  return StructSize(1 * WORDS, 0 * POINTERS, FieldSize::FOUR_BYTES);
-}
-
-}  // namespace _ (private)
-
 namespace {
-
-class LocalImbuedMessage final: private CapInjector<_::LocalCapDescriptor> {
-public:
-  LocalImbuedMessage(uint sizeHint)
-      : message(sizeHint == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : sizeHint),
-        capContext(*this),
-        root(capContext.imbue(message.getRoot<ObjectPointer>())) {}
-
-  inline ObjectPointer::Builder getRoot() { return root; }
-
-private:
-  MallocMessageBuilder message;
-  CapBuilderContext capContext;
-  ObjectPointer::Builder root;
-
-  struct State {
-    uint counter;
-    std::map<uint, kj::Own<const ClientHook>> caps;
-  };
-  kj::MutexGuarded<State> state;
-
-  void injectCap(_::LocalCapDescriptor::Builder descriptor,
-                 kj::Own<const ClientHook>&& cap) const override {
-    auto lock = state.lockExclusive();
-    uint index = lock->counter++;
-    descriptor.setIndex(index);
-    lock->caps.insert(std::make_pair(index, kj::mv(cap)));
-  }
-
-  kj::Own<const ClientHook> getInjectedCap(
-      _::LocalCapDescriptor::Reader descriptor) const override {
-    auto lock = state.lockExclusive();
-    auto iter = lock->caps.find(descriptor.getIndex());
-    if (iter == lock->caps.end()) {
-      KJ_FAIL_ASSERT("Invalid capability descriptor in message.") {
-        return newBrokenCap("Calling capability from invalid descriptor.");
-      }
-    } else {
-      return iter->second->addRef();
-    }
-  }
-
-  void dropCap(_::LocalCapDescriptor::Reader descriptor) const override {
-    if (state.lockExclusive()->caps.erase(descriptor.getIndex()) == 0) {
-      KJ_FAIL_ASSERT("Invalid capability descriptor in message.") {
-        break;
-      }
-    }
-  }
-};
-
-// =======================================================================================
 
 class LocalResponse final: public ResponseHook, public kj::Refcounted {
 public:
   LocalResponse(uint sizeHint)
       : message(sizeHint == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : sizeHint) {}
 
-  LocalImbuedMessage message;
+  LocalMessage message;
 };
 
 class LocalCallContext final: public CallContextHook, public kj::Refcounted {
 public:
-  LocalCallContext(kj::Own<LocalImbuedMessage>&& request, kj::Own<const ClientHook> clientRef)
+  LocalCallContext(kj::Own<LocalMessage>&& request, kj::Own<const ClientHook> clientRef)
       : request(kj::mv(request)), clientRef(kj::mv(clientRef)) {}
 
   ObjectPointer::Reader getParams() override {
@@ -220,16 +120,16 @@ public:
     return kj::addRef(*this);
   }
 
-  kj::Maybe<kj::Own<LocalImbuedMessage>> request;
+  kj::Maybe<kj::Own<LocalMessage>> request;
   kj::Own<LocalResponse> response;
   kj::Own<const ClientHook> clientRef;
 };
 
 class LocalRequest final: public RequestHook {
 public:
-  inline LocalRequest(kj::EventLoop& loop, uint64_t interfaceId, uint16_t methodId,
+  inline LocalRequest(const kj::EventLoop& loop, uint64_t interfaceId, uint16_t methodId,
                       uint firstSegmentWordSize, kj::Own<const ClientHook> client)
-      : message(kj::heap<LocalImbuedMessage>(
+      : message(kj::heap<LocalMessage>(
             firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : firstSegmentWordSize)),
         loop(loop),
         interfaceId(interfaceId), methodId(methodId), client(kj::mv(client)) {}
@@ -253,10 +153,10 @@ public:
         kj::mv(promise), ObjectPointer::Pipeline(kj::mv(promiseAndPipeline.pipeline)));
   }
 
-  kj::Own<LocalImbuedMessage> message;
+  kj::Own<LocalMessage> message;
 
 private:
-  kj::EventLoop& loop;
+  const kj::EventLoop& loop;
   uint64_t interfaceId;
   uint16_t methodId;
   kj::Own<const ClientHook> client;
@@ -273,7 +173,7 @@ class QueuedPipeline final: public PipelineHook, public kj::Refcounted {
   // them.
 
 public:
-  QueuedPipeline(kj::EventLoop& loop, kj::Promise<kj::Own<const PipelineHook>>&& promise)
+  QueuedPipeline(const kj::EventLoop& loop, kj::Promise<kj::Own<const PipelineHook>>&& promise)
       : loop(loop),
         promise(loop.fork(kj::mv(promise))) {}
 
@@ -292,7 +192,7 @@ public:
   kj::Own<const ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) const override;
 
 private:
-  kj::EventLoop& loop;
+  const kj::EventLoop& loop;
   kj::ForkedPromise<kj::Own<const PipelineHook>> promise;
 };
 
@@ -301,7 +201,7 @@ class QueuedClient final: public ClientHook, public kj::Refcounted {
   // them.
 
 public:
-  QueuedClient(kj::EventLoop& loop, kj::Promise<kj::Own<const ClientHook>>&& promise)
+  QueuedClient(const kj::EventLoop& loop, kj::Promise<kj::Own<const ClientHook>>&& promise)
       : loop(loop),
         promise(loop.fork(kj::mv(promise))) {}
 
@@ -381,7 +281,7 @@ public:
   }
 
 private:
-  kj::EventLoop& loop;
+  const kj::EventLoop& loop;
 
   typedef kj::ForkedPromise<kj::Own<const ClientHook>> ClientHookPromiseFork;
 
@@ -450,7 +350,7 @@ private:
 
 class LocalClient final: public ClientHook, public kj::Refcounted {
 public:
-  LocalClient(kj::EventLoop& eventLoop, kj::Own<Capability::Server>&& server)
+  LocalClient(const kj::EventLoop& eventLoop, kj::Own<Capability::Server>&& server)
       : eventLoop(eventLoop), server(kj::mv(server)) {}
 
   Request<ObjectPointer, ObjectPointer> newCall(
@@ -520,14 +420,14 @@ public:
   }
 
 private:
-  kj::EventLoop& eventLoop;
+  const kj::EventLoop& eventLoop;
   kj::Own<Capability::Server> server;
 };
 
 }  // namespace
 
-kj::Own<const ClientHook> makeLocalClient(kj::Own<Capability::Server>&& server,
-                                          kj::EventLoop& eventLoop) {
+kj::Own<const ClientHook> Capability::Client::makeLocalClient(
+    kj::Own<Capability::Server>&& server, const kj::EventLoop& eventLoop) {
   return kj::refcounted<LocalClient>(eventLoop, kj::mv(server));
 }
 

@@ -492,6 +492,7 @@ class LocatedText::Pipeline {
 public:
   typedef LocatedText Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -579,6 +580,7 @@ class LocatedInteger::Pipeline {
 public:
   typedef LocatedInteger Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -666,6 +668,7 @@ class LocatedFloat::Pipeline {
 public:
   typedef LocatedFloat Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -763,6 +766,7 @@ class DeclName::Pipeline {
 public:
   typedef DeclName Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -868,6 +872,7 @@ class DeclName::Base::Pipeline {
 public:
   typedef Base Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -968,6 +973,7 @@ class TypeExpression::Pipeline {
 public:
   typedef TypeExpression Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -1135,6 +1141,7 @@ class ValueExpression::Pipeline {
 public:
   typedef ValueExpression Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -1221,6 +1228,7 @@ class ValueExpression::FieldAssignment::Pipeline {
 public:
   typedef FieldAssignment Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -1628,6 +1636,7 @@ class Declaration::Pipeline {
 public:
   typedef Declaration Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -1713,6 +1722,7 @@ class Declaration::AnnotationApplication::Pipeline {
 public:
   typedef AnnotationApplication Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -1804,6 +1814,7 @@ class Declaration::AnnotationApplication::Value::Pipeline {
 public:
   typedef Value Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -1910,6 +1921,7 @@ class Declaration::ParamList::Pipeline {
 public:
   typedef ParamList Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -2027,6 +2039,7 @@ class Declaration::Param::Pipeline {
 public:
   typedef Param Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -2119,6 +2132,7 @@ class Declaration::Param::DefaultValue::Pipeline {
 public:
   typedef DefaultValue Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -2220,6 +2234,7 @@ class Declaration::Id::Pipeline {
 public:
   typedef Id Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -2296,6 +2311,7 @@ class Declaration::Using::Pipeline {
 public:
   typedef Using Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -2383,6 +2399,7 @@ class Declaration::Const::Pipeline {
 public:
   typedef Const Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -2468,6 +2485,7 @@ class Declaration::Field::Pipeline {
 public:
   typedef Field Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -2559,6 +2577,7 @@ class Declaration::Field::DefaultValue::Pipeline {
 public:
   typedef DefaultValue Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -2635,6 +2654,7 @@ class Declaration::Interface::Pipeline {
 public:
   typedef Interface Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -2718,6 +2738,7 @@ class Declaration::Method::Pipeline {
 public:
   typedef Method Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -2809,6 +2830,7 @@ class Declaration::Method::Results::Pipeline {
 public:
   typedef Results Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -2969,6 +2991,7 @@ class Declaration::Annotation::Pipeline {
 public:
   typedef Annotation Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
@@ -3046,6 +3069,7 @@ class ParsedFile::Pipeline {
 public:
   typedef ParsedFile Pipelines;
 
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 

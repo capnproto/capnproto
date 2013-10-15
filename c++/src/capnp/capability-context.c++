@@ -24,6 +24,7 @@
 #define CAPNP_PRIVATE
 
 #include "capability-context.h"
+#include "capability.h"
 #include "arena.h"
 #include <kj/debug.h>
 
@@ -56,9 +57,92 @@ CapBuilderContext::~CapBuilderContext() noexcept(false) {
 
 ObjectPointer::Builder CapBuilderContext::imbue(ObjectPointer::Builder base) {
   KJ_REQUIRE(injector != nullptr, "imbue() can only be called once.");
-  kj::ctor(arena(), &base.builder.getArena(), injector);
+  kj::ctor(arena(), base.builder.getArena(), injector);
   injector = nullptr;
   return ObjectPointer::Builder(base.builder.imbue(arena()));
+}
+
+// =======================================================================================
+
+namespace _ {  // private
+
+// This is basically code for a struct defined as follows:
+//
+//     struct TestCapDescriptor {
+//       index @0 :UInt32;
+//     }
+//
+// I have the code hand-written here because I didn't want to add yet another bootstrap file.
+
+class LocalCapDescriptor::Reader {
+public:
+  typedef LocalCapDescriptor Reads;
+
+  inline explicit Reader(_::StructReader base): _reader(base) {}
+
+  inline uint32_t getIndex() const {
+    return _reader.getDataField<uint32_t>(0 * ELEMENTS);
+  }
+
+private:
+  _::StructReader _reader;
+};
+
+class LocalCapDescriptor::Builder {
+public:
+  typedef LocalCapDescriptor Builds;
+
+  inline explicit Builder(_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+
+  inline uint32_t getIndex() {
+    return _builder.getDataField<uint32_t>(0 * ELEMENTS);
+  }
+  inline void setIndex(uint32_t value) {
+    _builder.setDataField<uint32_t>(0 * ELEMENTS, value);
+  }
+
+private:
+  _::StructBuilder _builder;
+};
+
+template <>
+constexpr StructSize structSize<LocalCapDescriptor>() {
+  return StructSize(1 * WORDS, 0 * POINTERS, FieldSize::FOUR_BYTES);
+}
+
+}  // namespace _ (private)
+
+LocalMessage::LocalMessage(uint firstSegmentWords, AllocationStrategy allocationStrategy)
+    : message(firstSegmentWords, allocationStrategy),
+      capContext(*this),
+      root(capContext.imbue(message.getRoot<ObjectPointer>())) {}
+
+void LocalMessage::injectCap(_::LocalCapDescriptor::Builder descriptor,
+                             kj::Own<const ClientHook>&& cap) const {
+  auto lock = state.lockExclusive();
+  uint index = lock->counter++;
+  descriptor.setIndex(index);
+  lock->caps.add(kj::mv(cap));
+}
+
+kj::Own<const ClientHook> LocalMessage::getInjectedCap(
+    _::LocalCapDescriptor::Reader descriptor) const {
+  auto lock = state.lockExclusive();
+  KJ_ASSERT(descriptor.getIndex() < lock->caps.size(),
+            "Invalid capability descriptor in message.") {
+    return _::newBrokenCap("Calling capability from invalid descriptor.");
+  }
+  return lock->caps[descriptor.getIndex()]->addRef();
+}
+
+void LocalMessage::dropCap(_::LocalCapDescriptor::Reader descriptor) const {
+  auto lock = state.lockExclusive();
+  KJ_ASSERT(descriptor.getIndex() < lock->caps.size(),
+            "Invalid capability descriptor in message.") {
+    return;
+  }
+  lock->caps[descriptor.getIndex()] = nullptr;
 }
 
 }  // namespace capnp

@@ -54,7 +54,8 @@ private:
 class BrokenRequest final: public RequestHook {
 public:
   BrokenRequest(const kj::Exception& exception, uint firstSegmentWordSize)
-      : exception(exception), message(firstSegmentWordSize) {}
+      : exception(exception),
+        message(firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : firstSegmentWordSize) {}
 
   RemotePromise<TypelessResults> send() override {
     return RemotePromise<TypelessResults>(kj::cp(exception),
@@ -62,7 +63,7 @@ public:
   }
 
   kj::Exception exception;
-  MallocMessageBuilder message;
+  LocalMessage message;
 };
 
 class BrokenClient final: public ClientHook, public kj::Refcounted {
@@ -75,8 +76,7 @@ public:
   Request<ObjectPointer, TypelessResults> newCall(
       uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
     auto hook = kj::heap<BrokenRequest>(exception, firstSegmentWordSize);
-    return Request<ObjectPointer, TypelessResults>(
-        hook->message.getRoot<ObjectPointer>(), kj::mv(hook));
+    return Request<ObjectPointer, TypelessResults>(hook->message.getRoot(), kj::mv(hook));
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,

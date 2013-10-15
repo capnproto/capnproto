@@ -48,7 +48,8 @@ public:
       : kj::Promise<Response<T>>(kj::mv(promise)),
         T::Pipeline(kj::mv(pipeline)) {}
   inline RemotePromise(decltype(nullptr))
-      : kj::Promise<Response<T>>(nullptr) {}
+      : kj::Promise<Response<T>>(nullptr),
+        T::Pipeline(nullptr) {}
   KJ_DISALLOW_COPY(RemotePromise);
   RemotePromise(RemotePromise&& other) = default;
   RemotePromise& operator=(RemotePromise&& other) = default;
@@ -89,6 +90,7 @@ private:
   kj::Own<RequestHook> hook;
 
   friend class Capability::Client;
+  friend struct DynamicCapability;
 };
 
 template <typename Results>
@@ -111,7 +113,13 @@ class Capability::Client {
   // Base type for capability clients.
 
 public:
+  explicit Client(decltype(nullptr));
   explicit Client(kj::Own<const ClientHook>&& hook);
+
+  template <typename T, typename = kj::EnableIf<kj::canConvert<T*, Capability::Server*>()>>
+  Client(kj::Own<T>&& server, const kj::EventLoop& loop = kj::EventLoop::current());
+  // Make a client capability that wraps the given server capability.  The server's methods will
+  // only be executed in the given EventLoop, regardless of what thread calls the client's methods.
 
   Client(const Client& other);
   Client& operator=(const Client& other);
@@ -122,6 +130,19 @@ public:
   Client& operator=(Client&&) = default;
   // Move is fast.
 
+  template <typename T>
+  typename T::Client castAs() const;
+  // Reinterpret the capability as implementing the given interface.  Note that no error will occur
+  // here if the capability does not actually implement this interface, but later method calls will
+  // fail.  It's up to the application to decide how indicate that additional interfaces are
+  // supported.
+  //
+  // TODO(kenton):  GCC 4.8 / Clang 3.3:  rvalue-qualified version for better performance.
+
+  template <typename T>
+  typename T::Client castAs(InterfaceSchema schema) const;
+  // Dynamic version.  `T` must be `DynamicCapability`, and you must `#include <capnp/dynamic.h>`.
+
   kj::Promise<void> whenResolved() const;
   // If the capability is actually only a promise, the returned promise resolves once the
   // capability itself has resolved to its final destination (or propagates the exception if
@@ -131,18 +152,30 @@ public:
 
   // TODO(soon):  method(s) for Join
 
+protected:
+  Client() = default;
+
+  template <typename Params, typename Results>
+  Request<Params, Results> newCall(uint64_t interfaceId, uint16_t methodId,
+                                   uint firstSegmentWordSize) const;
+
 private:
   kj::Own<const ClientHook> hook;
 
   template <typename, ::capnp::Kind>
   friend struct ::capnp::_::PointerHelpers;
 
-protected:
-  Client() = default;
+  static kj::Own<const ClientHook> makeLocalClient(
+      kj::Own<Capability::Server>&& server, const kj::EventLoop& eventLoop);
 
-  template <typename Params, typename Results>
-  Request<Params, Results> newCall(uint64_t interfaceId, uint16_t methodId,
-                                   uint firstSegmentWordSize);
+  friend struct DynamicCapability;
+  friend class Orphanage;
+  template <typename T, Kind k>
+  friend struct _::PointerHelpers;
+  friend struct DynamicStruct;
+  friend struct DynamicList;
+  template <typename, Kind>
+  friend struct List;
 };
 
 // =======================================================================================
@@ -214,6 +247,7 @@ private:
   CallContextHook* hook;
 
   friend class Capability::Server;
+  friend struct DynamicCapability;
 };
 
 class Capability::Server {
@@ -242,13 +276,6 @@ protected:
   kj::Promise<void> internalUnimplemented(const char* interfaceName, const char* methodName,
                                           uint64_t typeId, uint16_t methodId);
 };
-
-kj::Own<const ClientHook> makeLocalClient(kj::Own<Capability::Server>&& server,
-                                          kj::EventLoop& eventLoop = kj::EventLoop::current());
-// Make a client capability that wraps the given server capability.  The server's methods will
-// only be executed in the given EventLoop, regardless of what thread calls the client's methods.
-//
-// TODO(now):  Templated version or something.
 
 // =======================================================================================
 // Hook interfaces which must be implemented by the RPC system.  Applications never call these
@@ -349,6 +376,9 @@ struct PointerHelpers<T, Kind::INTERFACE> {
   static inline void set(PointerBuilder builder, typename T::Client&& value) {
     builder.setCapability(kj::mv(value.Capability::Client::hook));
   }
+  static inline void set(PointerBuilder builder, const typename T::Client& value) {
+    builder.setCapability(value.Capability::Client::hook->addRef());
+  }
   static inline void adopt(PointerBuilder builder, Orphan<T>&& value) {
     builder.adopt(kj::mv(value.builder));
   }
@@ -358,6 +388,99 @@ struct PointerHelpers<T, Kind::INTERFACE> {
 };
 
 }  // namespace _ (private)
+
+// =======================================================================================
+// Extend List for interfaces
+
+template <typename T>
+struct List<T, Kind::INTERFACE> {
+  List() = delete;
+
+  class Reader {
+  public:
+    typedef List<T> Reads;
+
+    Reader() = default;
+    inline explicit Reader(_::ListReader reader): reader(reader) {}
+
+    inline uint size() const { return reader.size() / ELEMENTS; }
+    inline typename T::Client operator[](uint index) const {
+      KJ_IREQUIRE(index < size());
+      return typename T::Client(reader.getPointerElement(index * ELEMENTS).getCapability());
+    }
+
+    typedef _::IndexingIterator<const Reader, typename T::Client> Iterator;
+    inline Iterator begin() const { return Iterator(this, 0); }
+    inline Iterator end() const { return Iterator(this, size()); }
+
+  private:
+    _::ListReader reader;
+    template <typename U, Kind K>
+    friend struct _::PointerHelpers;
+    template <typename U, Kind K>
+    friend struct List;
+    friend class Orphanage;
+    template <typename U, Kind K>
+    friend struct ToDynamic_;
+  };
+
+  class Builder {
+  public:
+    typedef List<T> Builds;
+
+    Builder() = delete;
+    inline Builder(decltype(nullptr)) {}
+    inline explicit Builder(_::ListBuilder builder): builder(builder) {}
+
+    inline operator Reader() { return Reader(builder.asReader()); }
+    inline Reader asReader() { return Reader(builder.asReader()); }
+
+    inline uint size() const { return builder.size() / ELEMENTS; }
+    inline typename T::Client operator[](uint index) {
+      KJ_IREQUIRE(index < size());
+      return typename T::Client(builder.getPointerElement(index * ELEMENTS).getCapability());
+    }
+    inline void set(uint index, typename T::Client value) {
+      KJ_IREQUIRE(index < size());
+      builder.getPointerElement(index * ELEMENTS).setCapability(kj::mv(value.hook));
+    }
+    inline void adopt(uint index, Orphan<T>&& value) {
+      KJ_IREQUIRE(index < size());
+      builder.getPointerElement(index * ELEMENTS).adopt(kj::mv(value));
+    }
+    inline Orphan<T> disown(uint index) {
+      KJ_IREQUIRE(index < size());
+      return Orphan<T>(builder.getPointerElement(index * ELEMENTS).disown());
+    }
+
+    typedef _::IndexingIterator<Builder, typename T::Client> Iterator;
+    inline Iterator begin() { return Iterator(this, 0); }
+    inline Iterator end() { return Iterator(this, size()); }
+
+  private:
+    _::ListBuilder builder;
+    friend class Orphanage;
+    template <typename U, Kind K>
+    friend struct ToDynamic_;
+  };
+
+private:
+  inline static _::ListBuilder initPointer(_::PointerBuilder builder, uint size) {
+    return builder.initList(_::FieldSize::POINTER, size * ELEMENTS);
+  }
+  inline static _::ListBuilder getFromPointer(_::PointerBuilder builder, const word* defaultValue) {
+    return builder.getList(_::FieldSize::POINTER, defaultValue);
+  }
+  inline static _::ListReader getFromPointer(
+      const _::PointerReader& reader, const word* defaultValue) {
+    return reader.getList(_::FieldSize::POINTER, defaultValue);
+  }
+
+  template <typename U, Kind k>
+  friend struct List;
+  template <typename U, Kind K>
+  friend struct _::PointerHelpers;
+};
 
 // =======================================================================================
 // Inline implementation details
@@ -382,17 +505,24 @@ RemotePromise<Results> Request<Params, Results>::send() {
 }
 
 inline Capability::Client::Client(kj::Own<const ClientHook>&& hook): hook(kj::mv(hook)) {}
+template <typename T, typename>
+inline Capability::Client::Client(kj::Own<T>&& server, const kj::EventLoop& loop)
+    : hook(makeLocalClient(kj::mv(server), loop)) {}
 inline Capability::Client::Client(const Client& other): hook(other.hook->addRef()) {}
 inline Capability::Client& Capability::Client::operator=(const Client& other) {
   hook = other.hook->addRef();
   return *this;
+}
+template <typename T>
+inline typename T::Client Capability::Client::castAs() const {
+  return typename T::Client(hook->addRef());
 }
 inline kj::Promise<void> Capability::Client::whenResolved() const {
   return hook->whenResolved();
 }
 template <typename Params, typename Results>
 inline Request<Params, Results> Capability::Client::newCall(
-    uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) {
+    uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const {
   auto typeless = hook->newCall(interfaceId, methodId, firstSegmentWordSize);
   return Request<Params, Results>(typeless.template getAs<Params>(), kj::mv(typeless.hook));
 }

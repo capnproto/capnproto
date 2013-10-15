@@ -155,6 +155,16 @@ struct OrphanGetImpl<T, Kind::STRUCT> {
   }
 };
 
+template <typename T>
+struct OrphanGetImpl<T, Kind::INTERFACE> {
+  static inline typename T::Client apply(_::OrphanBuilder& builder) {
+    return typename T::Client(builder.asCapability());
+  }
+  static inline typename T::Client applyReader(const _::OrphanBuilder& builder) {
+    return typename T::Client(builder.asCapability());
+  }
+};
+
 template <typename T, Kind k>
 struct OrphanGetImpl<List<T, k>, Kind::LIST> {
   static inline typename List<T>::Builder apply(_::OrphanBuilder& builder) {

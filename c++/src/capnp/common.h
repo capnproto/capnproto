@@ -121,6 +121,10 @@ template <typename T> struct BuilderFor_<T, Kind::INTERFACE> { typedef typename 
 template <typename T> using BuilderFor = typename BuilderFor_<T>::Type;
 // The type returned by List<T>::Builder::operator[].
 
+template <typename T, Kind k = kind<T>()> struct PipelineFor_ { typedef typename T::Pipeline Type;};
+template <typename T> struct PipelineFor_<T, Kind::INTERFACE> { typedef typename T::Client Type; };
+template <typename T> using PipelineFor = typename PipelineFor_<T>::Type;
+
 template <typename T, Kind k = kind<T>()> struct TypeIfEnum_;
 template <typename T> struct TypeIfEnum_<T, Kind::ENUM> { typedef T Type; };
 
@@ -134,6 +138,14 @@ using FromReader = typename kj::Decay<T>::Reads;
 template <typename T>
 using FromBuilder = typename kj::Decay<T>::Builds;
 // FromBuilder<MyType::Builder> = MyType (for any Cap'n Proto type).
+
+template <typename T>
+using FromClient = typename kj::Decay<T>::Calls;
+// FromReader<MyType::Client> = MyType (for any Cap'n Proto interface type).
+
+template <typename T>
+using FromServer = typename kj::Decay<T>::Serves;
+// FromBuilder<MyType::Server> = MyType (for any Cap'n Proto interface type).
 
 namespace _ {  // private
 template <typename T, Kind k = kind<T>()>
