@@ -597,8 +597,8 @@ public:
   inline Reader(T&& value): Reader(toDynamic(kj::mv(value))) {}
 
   Reader(const Reader& other);
-  Reader(Reader&& other);
-  ~Reader();
+  Reader(Reader&& other) noexcept;
+  ~Reader() noexcept(false);
   Reader& operator=(const Reader& other);
   Reader& operator=(Reader&& other);
   // Unfortunately, we cannot use the implicit definitions of these since DynamicCapability is not
@@ -694,8 +694,8 @@ public:
   inline Builder(T value): Builder(toDynamic(value)) {}
 
   Builder(Builder& other);
-  Builder(Builder&& other);
-  ~Builder();
+  Builder(Builder&& other) noexcept;
+  ~Builder() noexcept(false);
   Builder& operator=(Builder& other);
   Builder& operator=(Builder&& other);
   // Unfortunately, we cannot use the implicit definitions of these since DynamicCapability is not

@@ -1486,7 +1486,7 @@ DynamicValue::Reader::Reader(ConstSchema constant) {
 }
 
 DynamicValue::Reader::Reader(const Reader& other) {
-  switch (type) {
+  switch (other.type) {
     case UNKNOWN:
     case VOID:
     case BOOL:
@@ -1516,8 +1516,8 @@ DynamicValue::Reader::Reader(const Reader& other) {
 
   memcpy(this, &other, sizeof(*this));
 }
-DynamicValue::Reader::Reader(Reader&& other) {
-  switch (type) {
+DynamicValue::Reader::Reader(Reader&& other) noexcept {
+  switch (other.type) {
     case UNKNOWN:
     case VOID:
     case BOOL:
@@ -1547,7 +1547,7 @@ DynamicValue::Reader::Reader(Reader&& other) {
 
   memcpy(this, &other, sizeof(*this));
 }
-DynamicValue::Reader::~Reader() {
+DynamicValue::Reader::~Reader() noexcept(false) {
   if (type == CAPABILITY) {
     kj::dtor(capabilityValue);
   }
@@ -1569,7 +1569,7 @@ DynamicValue::Reader& DynamicValue::Reader::operator=(Reader&& other) {
 }
 
 DynamicValue::Builder::Builder(Builder& other) {
-  switch (type) {
+  switch (other.type) {
     case UNKNOWN:
     case VOID:
     case BOOL:
@@ -1602,8 +1602,8 @@ DynamicValue::Builder::Builder(Builder& other) {
 
   memcpy(this, &other, sizeof(*this));
 }
-DynamicValue::Builder::Builder(Builder&& other) {
-  switch (type) {
+DynamicValue::Builder::Builder(Builder&& other) noexcept {
+  switch (other.type) {
     case UNKNOWN:
     case VOID:
     case BOOL:
@@ -1636,7 +1636,7 @@ DynamicValue::Builder::Builder(Builder&& other) {
 
   memcpy(this, &other, sizeof(*this));
 }
-DynamicValue::Builder::~Builder() {
+DynamicValue::Builder::~Builder() noexcept(false) {
   if (type == CAPABILITY) {
     kj::dtor(capabilityValue);
   }
