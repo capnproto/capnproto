@@ -1425,6 +1425,28 @@ TEST(Encoding, StructSetters) {
   }
 }
 
+TEST(Encoding, OneBitStructSetters) {
+  // Test case of setting a 1-bit struct.
+
+  MallocMessageBuilder builder;
+  auto root = builder.getRoot<test::TestLists>();
+  auto list = root.initList1(8);
+  list[0].setF(true);
+  list[1].setF(true);
+  list[2].setF(false);
+  list[3].setF(true);
+  list[4].setF(true);
+  list[5].setF(false);
+  list[6].setF(true);
+  list[7].setF(false);
+
+  MallocMessageBuilder builder2;
+  builder2.setRoot(list.asReader()[2]);
+  EXPECT_FALSE(builder2.getRoot<test::TestLists::Struct1>().getF());
+  builder2.setRoot(list.asReader()[6]);
+  EXPECT_TRUE(builder2.getRoot<test::TestLists::Struct1>().getF());
+}
+
 TEST(Encoding, ListSetters) {
   MallocMessageBuilder builder;
   auto root = builder.getRoot<TestListDefaults>();
