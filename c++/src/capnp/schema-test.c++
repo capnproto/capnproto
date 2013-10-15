@@ -250,6 +250,20 @@ TEST(Schema, UnnamedUnion) {
   EXPECT_TRUE(schema.findFieldByName("after") != nullptr);
 }
 
+TEST(Schema, NullSchemas) {
+  EXPECT_EQ(0xff, (uint)Schema().getProto().which());
+  EXPECT_TRUE(StructSchema().getProto().isStruct());
+  EXPECT_TRUE(EnumSchema().getProto().isEnum());
+  EXPECT_TRUE(InterfaceSchema().getProto().isInterface());
+  EXPECT_TRUE(ConstSchema().getProto().isConst());
+
+  EXPECT_EQ("(null schema)", Schema().getProto().getDisplayName());
+  EXPECT_EQ("(null struct schema)", StructSchema().getProto().getDisplayName());
+  EXPECT_EQ("(null enum schema)", EnumSchema().getProto().getDisplayName());
+  EXPECT_EQ("(null interface schema)", InterfaceSchema().getProto().getDisplayName());
+  EXPECT_EQ("(null const schema)", ConstSchema().getProto().getDisplayName());
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

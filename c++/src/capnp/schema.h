@@ -47,11 +47,21 @@ template <typename T>
 using SchemaType = typename SchemaType_<T>::Type;
 // SchemaType<T> is the type of T's schema, e.g. StructSchema if T is a struct.
 
+namespace _ {  // private
+extern const RawSchema NULL_SCHEMA;
+extern const RawSchema NULL_STRUCT_SCHEMA;
+extern const RawSchema NULL_ENUM_SCHEMA;
+extern const RawSchema NULL_INTERFACE_SCHEMA;
+extern const RawSchema NULL_CONST_SCHEMA;
+// The schema types default to these null (empty) schemas in case of error, especially when
+// exceptions are disabled.
+}  // namespace _ (private)
+
 class Schema {
   // Convenience wrapper around capnp::schema::Node.
 
 public:
-  inline Schema(): raw(nullptr) {}
+  inline Schema(): raw(&_::NULL_SCHEMA) {}
 
   template <typename T>
   static inline SchemaType<T> from() { return SchemaType<T>::template fromImpl<T>(); }
@@ -136,7 +146,7 @@ private:
 
 class StructSchema: public Schema {
 public:
-  StructSchema() = default;
+  inline StructSchema(): Schema(&_::NULL_STRUCT_SCHEMA) {}
 
   class Field;
   class FieldList;
@@ -275,7 +285,7 @@ private:
 
 class EnumSchema: public Schema {
 public:
-  EnumSchema() = default;
+  inline EnumSchema(): Schema(&_::NULL_ENUM_SCHEMA) {}
 
   class Enumerant;
   class EnumerantList;
@@ -344,7 +354,7 @@ private:
 
 class InterfaceSchema: public Schema {
 public:
-  InterfaceSchema() = default;
+  inline InterfaceSchema(): Schema(&_::NULL_INTERFACE_SCHEMA) {}
 
   class Method;
   class MethodList;
@@ -431,7 +441,7 @@ class ConstSchema: public Schema {
   // `ConstSchema` can be implicitly cast to DynamicValue to read its value.
 
 public:
-  ConstSchema() = default;
+  inline ConstSchema(): Schema(&_::NULL_CONST_SCHEMA) {}
 
   template <typename T>
   ReaderFor<T> as() const;
