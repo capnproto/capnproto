@@ -55,7 +55,7 @@ class ThrowingDestructor: public UnwindDetector {
 public:
   ~ThrowingDestructor() noexcept(false) {
     catchExceptionsIfUnwinding([]() {
-      KJ_FAIL_ASSERT("bar") { break; }
+      KJ_FAIL_ASSERT("this is a test, not a real bug") { break; }
     });
   }
 };
@@ -67,7 +67,7 @@ TEST(Exception, UnwindDetector) {
   });
 
   KJ_IF_MAYBE(ex, e) {
-    EXPECT_EQ("bar", ex->getDescription());
+    EXPECT_EQ("this is a test, not a real bug", ex->getDescription());
   } else {
     ADD_FAILURE() << "Expected exception";
   }

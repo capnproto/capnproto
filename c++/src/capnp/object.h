@@ -233,9 +233,6 @@ struct ObjectPointer {
   };
 };
 
-// TODO(now):  delete
-typedef ObjectPointer TypelessResults;
-
 template <>
 class Orphan<ObjectPointer> {
   // An orphaned object of unknown type.

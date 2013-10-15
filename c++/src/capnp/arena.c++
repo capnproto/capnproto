@@ -57,9 +57,9 @@ public:
       : exception(exception),
         message(firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : firstSegmentWordSize) {}
 
-  RemotePromise<TypelessResults> send() override {
-    return RemotePromise<TypelessResults>(kj::cp(exception),
-        TypelessResults::Pipeline(kj::refcounted<BrokenPipeline>(exception)));
+  RemotePromise<ObjectPointer> send() override {
+    return RemotePromise<ObjectPointer>(kj::cp(exception),
+        ObjectPointer::Pipeline(kj::refcounted<BrokenPipeline>(exception)));
   }
 
   kj::Exception exception;
@@ -73,10 +73,11 @@ public:
       : exception(kj::Exception::Nature::PRECONDITION, kj::Exception::Durability::PERMANENT,
                   "", 0, kj::str(description)) {}
 
-  Request<ObjectPointer, TypelessResults> newCall(
+  Request<ObjectPointer, ObjectPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
     auto hook = kj::heap<BrokenRequest>(exception, firstSegmentWordSize);
-    return Request<ObjectPointer, TypelessResults>(hook->message.getRoot(), kj::mv(hook));
+    auto root = hook->message.getRoot();
+    return Request<ObjectPointer, ObjectPointer>(root, kj::mv(hook));
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,

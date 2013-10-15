@@ -162,16 +162,13 @@ protected:
 private:
   kj::Own<const ClientHook> hook;
 
-  template <typename, ::capnp::Kind>
-  friend struct ::capnp::_::PointerHelpers;
-
   static kj::Own<const ClientHook> makeLocalClient(
       kj::Own<Capability::Server>&& server, const kj::EventLoop& eventLoop);
 
+  template <typename, Kind>
+  friend struct _::PointerHelpers;
   friend struct DynamicCapability;
   friend class Orphanage;
-  template <typename T, Kind k>
-  friend struct _::PointerHelpers;
   friend struct DynamicStruct;
   friend struct DynamicList;
   template <typename, Kind>
