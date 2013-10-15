@@ -502,7 +502,7 @@ private:
 
         if (targetsAll) {
           targets = kj::Vector<kj::String>(1);
-          targets[0] = kj::heapString("*");
+          targets.add(kj::heapString("*"));
         }
 
         return kj::strTree(
