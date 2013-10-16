@@ -55,14 +55,6 @@ public:
   RemotePromise& operator=(RemotePromise&& other) = default;
 };
 
-struct Capability {
-  // A capability without type-safe methods.  Typed capability clients wrap `Client` and typed
-  // capability servers subclass `Server` to dispatch to the regular, typed methods.
-
-  class Client;
-  class Server;
-};
-
 // =======================================================================================
 
 class RequestHook;

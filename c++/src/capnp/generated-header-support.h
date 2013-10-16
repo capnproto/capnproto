@@ -108,8 +108,13 @@ inline const RawSchema& rawSchema() {
   return RawSchema_<T>::get();
 }
 
-template <typename T>
-struct TypeId_;
+template <typename T> struct TypeId_;
+
+extern const RawSchema NULL_INTERFACE_SCHEMA;  // defined in schema.c++
+template <> struct TypeId_<Capability> { static constexpr uint64_t typeId = 0x03; };
+template <> struct RawSchema_<Capability> {
+  static inline const RawSchema& get() { return NULL_INTERFACE_SCHEMA; }
+};
 
 template <typename T>
 struct UnionMemberIndex_;

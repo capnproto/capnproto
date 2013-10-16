@@ -262,6 +262,9 @@ TEST(Schema, NullSchemas) {
   EXPECT_EQ("(null enum schema)", EnumSchema().getProto().getDisplayName());
   EXPECT_EQ("(null interface schema)", InterfaceSchema().getProto().getDisplayName());
   EXPECT_EQ("(null const schema)", ConstSchema().getProto().getDisplayName());
+
+  EXPECT_TRUE(Schema::from<Capability>() == InterfaceSchema());
+  EXPECT_EQ(InterfaceSchema().getProto().getId(), typeId<Capability>());
 }
 
 }  // namespace

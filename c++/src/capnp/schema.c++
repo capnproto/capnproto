@@ -31,7 +31,7 @@ namespace _ {  // private
 
 // Null schemas generated using the below schema file with:
 //
-//     capnp eval -Isrc null-schemas.capnp interface --flat |
+//     capnp eval -Isrc null-schemas.capnp node --flat |
 //         hexdump -v -e '8/1 "0x%02x, "' -e '1/8 "\n"'; echo
 //
 // I totally don't understand hexdump format strings and came up with this command based on trial
@@ -428,6 +428,10 @@ InterfaceSchema::Method InterfaceSchema::getMethodByName(kj::StringPtr name) con
 }
 
 bool InterfaceSchema::extends(InterfaceSchema other) const {
+  if (other.raw == &_::NULL_INTERFACE_SCHEMA) {
+    // We consider all interfaces to extend the null schema.
+    return true;
+  }
   uint counter = 0;
   return extends(other, counter);
 }
@@ -453,6 +457,10 @@ bool InterfaceSchema::extends(InterfaceSchema other, uint& counter) const {
 }
 
 kj::Maybe<InterfaceSchema> InterfaceSchema::findSuperclass(uint64_t typeId) const {
+  if (typeId == _::NULL_INTERFACE_SCHEMA.id) {
+    // We consider all interfaces to extend the null schema.
+    return InterfaceSchema();
+  }
   uint counter = 0;
   return findSuperclass(typeId, counter);
 }

@@ -107,6 +107,20 @@ namespace _ {  // private
 template <typename T, Kind k> struct Kind_<List<T, k>> { static constexpr Kind kind = Kind::LIST; };
 }  // namespace _ (private)
 
+struct Capability {
+  // A capability without type-safe methods.  Typed capability clients wrap `Client` and typed
+  // capability servers subclass `Server` to dispatch to the regular, typed methods.
+  //
+  // Contents defined in capability.h.  Declared here just so we can specialize Kind_.
+
+  class Client;
+  class Server;
+};
+
+namespace _ {  // private
+template <> struct Kind_<Capability> { static constexpr Kind kind = Kind::INTERFACE; };
+}  // namespace _ (private)
+
 template <typename T, Kind k = kind<T>()> struct ReaderFor_ { typedef typename T::Reader Type; };
 template <typename T> struct ReaderFor_<T, Kind::PRIMITIVE> { typedef T Type; };
 template <typename T> struct ReaderFor_<T, Kind::ENUM> { typedef T Type; };
