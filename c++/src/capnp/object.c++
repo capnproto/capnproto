@@ -36,6 +36,9 @@ kj::Own<const ClientHook> ObjectPointer::Reader::getPipelinedCap(
 
   for (auto& op: ops) {
     switch (op.type) {
+      case PipelineOp::Type::NOOP:
+        break;
+
       case PipelineOp::Type::GET_POINTER_FIELD:
         pointer = pointer.getStruct(nullptr).getPointerField(op.pointerIndex * POINTERS);
         break;

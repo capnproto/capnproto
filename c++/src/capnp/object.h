@@ -47,6 +47,8 @@ struct PipelineOp {
   // Corresponds to rpc.capnp's PromisedAnswer.Op.
 
   enum Type {
+    NOOP,  // for convenience
+
     GET_POINTER_FIELD
 
     // There may be other types in the future...

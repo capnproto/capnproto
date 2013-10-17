@@ -55,6 +55,13 @@ struct PointerHelpers<T, Kind::STRUCT> {
   static inline Orphan<T> disown(PointerBuilder builder) {
     return Orphan<T>(builder.disown());
   }
+
+  static inline _::StructReader getInternalReader(const typename T::Reader& reader) {
+    // TODO(cleanup):  This is used by RpcSystem::Connect, but perhaps it should be used more
+    //   broadly so that we can reduce the number of friends declared by every Reader type.
+
+    return reader._reader;
+  }
 };
 
 template <typename T>
