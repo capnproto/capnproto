@@ -626,31 +626,25 @@ struct CapDescriptor {
   # description of `ExportId`.
 
   union {
-    senderHosted :group {
-      # A capability newly exported by the sender.
+    senderHosted @0 :ExportId;
+    # A capability newly exported by the sender.  This is the ID of the new capability in the
+    # sender's export table (receiver's import table).
 
-      id @0 :ExportId;
-      # The ID of the new capability in the sender's export table (receiver's import table).
-
-      interfaces @1 :List(UInt64);
-      # Type IDs of interfaces supported by this descriptor.  This must include at least the
-      # interface type as defined in the schema file, but could include others.  The runtime API
-      # should allow the interface wrapper to be dynamically cast to these other types (probably
-      # not using the language's built-in cast syntax, but something equivalent).
-    }
-
-    senderPromise @2 :ExportId;
+    senderPromise @1 :ExportId;
     # A promise which the sender will resolve later.  The sender will send exactly one Resolve
     # message at a future point in time to replace this promise.
+    #
+    # TODO(soon):  Can we merge this with senderHosted?  Change `Resolve` to be allowed on any
+    #   export (i.e. it can be delivered zero or one times).  Maybe rename it to `Replace`.
 
-    receiverHosted @3 :ExportId;
+    receiverHosted @2 :ExportId;
     # A capability (or promise) previously exported by the receiver.
 
-    receiverAnswer @4 :PromisedAnswer;
+    receiverAnswer @3 :PromisedAnswer;
     # A capability expected to be returned in the answer for a currently-outstanding question posed
     # by the sender.
 
-    thirdPartyHosted @5 :ThirdPartyCapDescriptor;
+    thirdPartyHosted @4 :ThirdPartyCapDescriptor;
     # **(level 3)**
     #
     # A capability that lives in neither the sender's nor the receiver's vat.  The sender needs
@@ -680,8 +674,20 @@ struct PromisedAnswer {
   # pointed to by a field of the struct, you need a `getPointerField` op.
 
   struct Op {
-    # If an RPC implementation receives an `Op` of a type it doesn't recognize, it should
-    # reply with a `Return` with `unsupportedPipelineOp` set.
+    # If an RPC implementation receives an `Op` of a type it doesn't recognize, it must immediately
+    # stop serving pipeline requests on this question ID.  The crurrent request, as well as
+    # all future pipeline requests on the same question ID, must return with
+    # `unsupportedPipelineOp` set.  The caller must then arrange to re-send the calls as normal
+    # calls later.  The reason that all future pipeline calls on the same question must fail is
+    # so that if the caller was relying on the calls being delivered in a particular order, this
+    # requirement is not violated.
+    #
+    # TODO(soon):  There's still a problem here in that if the call returns then the caller might
+    # start making regular (non-pipeline) calls to it before it finds out that the pipelined calls
+    # failed.  Also, what about PromisedAnswers that appear in CapDescriptors?  Maybe what really
+    # needs to happen here is, the callee echos the PromisedAnswer back to the caller to say
+    # "I don't know how to resolve this; please do it for me", and in the meantime it blocks all
+    # calls to the capability?  Ick...
 
     union {
       noop @0 :Void;
