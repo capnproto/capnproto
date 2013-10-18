@@ -24,6 +24,7 @@
 #include "async.h"
 #include "debug.h"
 #include <exception>
+#include <map>
 
 #if KJ_USE_FUTEX
 #include <unistd.h>
@@ -263,6 +264,69 @@ void SimpleEventLoop::wake() const {
 
 void PromiseBase::absolve() {
   runCatchingExceptions([this]() { node = nullptr; });
+}
+
+class TaskSet::Impl {
+public:
+  inline Impl(const EventLoop& loop, ErrorHandler& errorHandler)
+    : loop(loop), errorHandler(errorHandler) {}
+
+  class Task final: public EventLoop::Event {
+  public:
+    Task(const Impl& taskSet, Own<_::PromiseNode>&& nodeParam)
+        : EventLoop::Event(taskSet.loop), taskSet(taskSet), node(kj::mv(nodeParam)) {
+      if (node->onReady(*this)) {
+        // TODO(soon):  Only yield cross-thread.
+        arm(EventLoop::Event::YIELD);
+      }
+    }
+
+  protected:
+    void fire() override {
+      // Get the result.
+      _::ExceptionOr<_::Void> result;
+      node->get(result);
+
+      // Delete the node, catching any exceptions.
+      KJ_IF_MAYBE(exception, runCatchingExceptions([this]() {
+        node = nullptr;
+      })) {
+        result.addException(kj::mv(*exception));
+      }
+
+      // Call the error handler if there was an exception.
+      KJ_IF_MAYBE(e, result.exception) {
+        taskSet.errorHandler.taskFailed(kj::mv(*e));
+      }
+    }
+
+  private:
+    const Impl& taskSet;
+    kj::Own<_::PromiseNode> node;
+  };
+
+  void add(Promise<void>&& promise) const {
+    auto task = heap<Task>(*this, _::makeSafeForLoop<_::Void>(kj::mv(promise.node), loop));
+    Task* ptr = task;
+    tasks.lockExclusive()->insert(std::make_pair(ptr, kj::mv(task)));
+  }
+
+private:
+  const EventLoop& loop;
+  ErrorHandler& errorHandler;
+
+  // TODO(soon):  Use a linked list instead.  We should factor out the intrusive linked list code
+  //   that appears in EventLoop and ForkHub.
+  MutexGuarded<std::map<Task*, Own<Task>>> tasks;
+};
+
+TaskSet::TaskSet(const EventLoop& loop, ErrorHandler& errorHandler)
+    : impl(heap<Impl>(loop, errorHandler)) {}
+
+TaskSet::~TaskSet() noexcept(false) {}
+
+void TaskSet::add(Promise<void>&& promise) const {
+  impl->add(kj::mv(promise));
 }
 
 namespace _ {  // private

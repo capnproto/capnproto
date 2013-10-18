@@ -259,7 +259,7 @@ public:
   // non-fatal exception and return the same dummy value.
 
   template <typename Func>
-  auto evalLater(Func&& func) const -> PromiseForResult<Func, void>;
+  PromiseForResult<Func, void> evalLater(Func&& func) const KJ_WARN_UNUSED_RESULT;
   // Schedule for the given zero-parameter function to be executed in the event loop at some
   // point in the near future.  Returns a Promise for its result -- or, if `func()` itself returns
   // a promise, `evalLater()` returns a Promise for the result of resolving that promise.
@@ -439,6 +439,7 @@ private:
   friend class _::ChainPromiseNode;
   template <typename>
   friend class Promise;
+  friend class TaskSet;
 };
 
 template <typename T>
@@ -651,6 +652,37 @@ private:
 
   friend class Promise<T>;
   friend class EventLoop;
+};
+
+class TaskSet {
+  // Holds a collection of Promise<void>s and ensures that each executes to completion.  Memory
+  // associated with each promise is automatically freed when the promise completes.  Destroying
+  // the TaskSet itself automatically cancels all unfinished promises.
+  //
+  // This is useful for "daemon" objects that perform background tasks which aren't intended to
+  // fulfill any particular external promise.  The daemon object holds a TaskSet to collect these
+  // tasks it is working on.  This way, if the daemon itself is destroyed, the TaskSet is detroyed
+  // as well, and everything the daemon is doing is canceled.  (The only alternative -- creating
+  // a promise that owns itself and deletes itself on completion -- does not allow for clean
+  // shutdown.)
+
+public:
+  class ErrorHandler {
+  public:
+    virtual void taskFailed(kj::Exception&& exception) = 0;
+  };
+
+  TaskSet(const EventLoop& loop, ErrorHandler& errorHandler);
+  // `loop` will be used to wait on promises.  `errorHandler` will be executed any time a task
+  // throws an exception, and will execute within the given EventLoop.
+
+  ~TaskSet() noexcept(false);
+
+  void add(Promise<void>&& promise) const;
+
+private:
+  class Impl;
+  Own<Impl> impl;
 };
 
 constexpr _::Void READY_NOW = _::Void();

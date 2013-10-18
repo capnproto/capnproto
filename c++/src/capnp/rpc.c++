@@ -157,12 +157,16 @@ struct Import {
   // at exactly the moment that we call addRef() on it.)
 };
 
-class RpcConnectionState {
+class RpcConnectionState: public kj::TaskSet::ErrorHandler {
 public:
   RpcConnectionState(const kj::EventLoop& eventLoop,
                      kj::Own<VatNetworkBase::Connection>&& connection)
-      : eventLoop(eventLoop), connection(kj::mv(connection)) {
+      : eventLoop(eventLoop), connection(kj::mv(connection)), tasks(eventLoop, *this) {
     tasks.add(messageLoop());
+  }
+
+  void taskFailed(kj::Exception&& exception) override {
+    // TODO(now):  Kill the connection.
   }
 
 private:

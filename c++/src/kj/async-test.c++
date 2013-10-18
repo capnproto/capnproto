@@ -392,5 +392,44 @@ TEST(Async, ForkRef) {
   loop.wait(kj::mv(outer));
 }
 
+class ErrorHandlerImpl: public TaskSet::ErrorHandler {
+public:
+  uint exceptionCount = 0;
+  void taskFailed(kj::Exception&& exception) override {
+    EXPECT_TRUE(exception.getDescription().endsWith("example TaskSet failure"));
+    ++exceptionCount;
+  }
+};
+
+TEST(Async, TaskSet) {
+  SimpleEventLoop loop;
+  ErrorHandlerImpl errorHandler;
+  TaskSet tasks(loop, errorHandler);
+
+  int counter = 0;
+
+  tasks.add(loop.evalLater([&]() {
+    EXPECT_EQ(0, counter++);
+  }));
+  tasks.add(loop.evalLater([&]() {
+    EXPECT_EQ(1, counter++);
+    KJ_FAIL_ASSERT("example TaskSet failure") { break; }
+  }));
+  tasks.add(loop.evalLater([&]() {
+    EXPECT_EQ(2, counter++);
+  }));
+
+  (void)loop.evalLater([&]() {
+    ADD_FAILURE() << "Promise without waiter shouldn't execute.";
+  });
+
+  loop.wait(loop.evalLater([&]() {
+    EXPECT_EQ(3, counter++);
+  }));
+
+  EXPECT_EQ(4, counter);
+  EXPECT_EQ(1, errorHandler.exceptionCount);
+}
+
 }  // namespace
 }  // namespace kj
