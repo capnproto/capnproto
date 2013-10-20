@@ -739,6 +739,7 @@ class DynamicValue::Pipeline {
 public:
   typedef DynamicValue Pipelines;
 
+  inline Pipeline(decltype(nullptr) n = nullptr);
   inline Pipeline(DynamicStruct::Pipeline&& value);
   inline Pipeline(DynamicCapability::Client&& value);
 
@@ -748,6 +749,9 @@ public:
 
   template <typename T>
   inline PipelineFor<T> releaseAs() { return AsImpl<T>::apply(*this); }
+
+  inline Type getType() { return type; }
+  // Get the type of this value.
 
 private:
   Type type;
@@ -1366,6 +1370,7 @@ struct DynamicValue::Builder::AsImpl<T, Kind::INTERFACE> {
   }
 };
 
+inline DynamicValue::Pipeline::Pipeline(std::nullptr_t n): type(UNKNOWN) {}
 inline DynamicValue::Pipeline::Pipeline(DynamicStruct::Pipeline&& value)
     : type(STRUCT), structValue(kj::mv(value)) {}
 inline DynamicValue::Pipeline::Pipeline(DynamicCapability::Client&& value)
