@@ -51,7 +51,7 @@ void inlineAssertFailure(const char* file, int line, const char* expectation,
 }
 
 void unreachable() {
-  KJ_FAIL_ASSERT("Supposendly-unreachable branch executed.");
+  KJ_FAIL_ASSERT("Supposedly-unreachable branch executed.");
 
   // Really make sure we abort.
   abort();
