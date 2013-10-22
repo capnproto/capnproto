@@ -336,6 +336,10 @@ struct Finish {
   # 3) If the answer has not returned yet, the caller no longer cares about the answer, so the
   #    callee may wish to immediately cancel the operation and send back a Return message with
   #    "canceled" set.
+  #
+  # TODO(soon):  Should we separate (1) and (2)?  It would be possible and useful to notify the
+  #   server that it doesn't need to keep around the response to service pipeline requests even
+  #   though the caller hasn't yet finished processing the response.
 
   questionId @0 :QuestionId;
   # ID of the question whose answer is to be released.

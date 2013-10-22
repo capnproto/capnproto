@@ -276,7 +276,7 @@ public:
     return kj::addRef(*this);
   }
 
-  void* getBrand() const override {
+  const void* getBrand() const override {
     return nullptr;
   }
 
@@ -414,7 +414,7 @@ public:
     return kj::addRef(*this);
   }
 
-  void* getBrand() const override {
+  const void* getBrand() const override {
     // We have no need to detect local objects.
     return nullptr;
   }

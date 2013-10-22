@@ -59,8 +59,12 @@ private:
   template <typename T>
   static Own<T> addRefInternal(T* object);
 
+  bool tryAddRefInternal() const;
+
   template <typename T>
   friend Own<T> addRef(T& object);
+  template <typename T>
+  friend Maybe<Own<T>> tryAddRef(T& object);
   template <typename T, typename... Params>
   friend Own<T> refcounted(Params&&... params);
 };
@@ -81,6 +85,23 @@ Own<T> addRef(T& object) {
 
   KJ_IREQUIRE(object.Refcounted::refcount > 0, "Object not allocated with kj::refcounted().");
   return Refcounted::addRefInternal(&object);
+}
+
+template <typename T>
+Maybe<Own<T>> tryAddRef(T& object) {
+  // Like `addRef`, but if the object's refcount is already zero or if the object was not allocated
+  // with `refcounted`, returns nullptr.  This can be used to implement weak references in a
+  // thread-safe way:  store a (regular, non-owned) pointer to the object, and have the object's
+  // destructor null out that pointer.  To convert the pointer to a full reference, use tryAddRef().
+  // If it fails, the object is already being destroyed.  Be sure to also use some sort of mutex
+  // locking to synchronize access to the raw pointer, since you'll want the object's destructor
+  // to block if another thread is currently trying to restore the ref.
+
+  if (object.Refcounted::tryAddRefInternal()) {
+    return Own<T>(&object, kj::implicitCast<const Refcounted&>(object));
+  } else {
+    return nullptr;
+  }
 }
 
 template <typename T>

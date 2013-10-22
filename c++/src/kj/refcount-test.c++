@@ -54,4 +54,22 @@ TEST(Refcount, Basic) {
 #endif
 }
 
+TEST(Refcount, Weak) {
+  {
+    bool b = false;
+    SetTrueInDestructor obj(&b);
+    EXPECT_TRUE(tryAddRef(obj) == nullptr);
+  }
+
+  {
+    bool b = false;
+    Own<SetTrueInDestructor> ref = kj::refcounted<SetTrueInDestructor>(&b);
+    KJ_IF_MAYBE(ref2, tryAddRef(*ref)) {
+      EXPECT_EQ(ref.get(), ref2->get());
+    } else {
+      ADD_FAILURE() << "tryAddRef() failed.";
+    }
+  }
+}
+
 }  // namespace kj

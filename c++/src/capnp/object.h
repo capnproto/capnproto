@@ -89,6 +89,9 @@ struct ObjectPointer {
     Reader() = default;
     inline Reader(_::PointerReader reader): reader(reader) {}
 
+    inline size_t targetSizeInWords() const;
+    // Get the total size, in words, of the target object and all its children.
+
     inline bool isNull() const;
 
     template <typename T>
@@ -125,6 +128,9 @@ struct ObjectPointer {
     Builder() = delete;
     inline Builder(decltype(nullptr)) {}
     inline Builder(_::PointerBuilder builder): builder(builder) {}
+
+    inline size_t targetSizeInWords() const;
+    // Get the total size, in words, of the target object and all its children.
 
     inline bool isNull();
 
@@ -296,6 +302,10 @@ private:
 // =======================================================================================
 // Inline implementation details
 
+inline size_t ObjectPointer::Reader::targetSizeInWords() const {
+  return reader.targetSize() / WORDS;
+}
+
 inline bool ObjectPointer::Reader::isNull() const {
   return reader.isNull();
 }
@@ -303,6 +313,10 @@ inline bool ObjectPointer::Reader::isNull() const {
 template <typename T>
 inline ReaderFor<T> ObjectPointer::Reader::getAs() const {
   return _::PointerHelpers<T>::get(reader);
+}
+
+inline size_t ObjectPointer::Builder::targetSizeInWords() const {
+  return asReader().targetSizeInWords();
 }
 
 inline bool ObjectPointer::Builder::isNull() {

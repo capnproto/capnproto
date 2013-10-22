@@ -326,7 +326,7 @@ public:
   virtual kj::Own<const ClientHook> addRef() const = 0;
   // Return a new reference to the same capability.
 
-  virtual void* getBrand() const = 0;
+  virtual const void* getBrand() const = 0;
   // Returns a void* that identifies who made this client.  This can be used by an RPC adapter to
   // discover when a capability it needs to marshal is one that it created in the first place, and
   // therefore it can transfer the capability without proxying.

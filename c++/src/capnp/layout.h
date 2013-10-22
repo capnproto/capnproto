@@ -355,6 +355,13 @@ public:
   static inline PointerReader getRootUnchecked(const word* location);
   // Get a PointerReader for an unchecked message.
 
+  WordCount64 targetSize() const;
+  // Return the total size of the target object and everything to which it points.  Does not count
+  // far pointer overhead.  This is useful for deciding how much space is needed to copy the object
+  // into a flat array.  However, the caller is advised NOT to treat this value as secure.  Instead,
+  // use the result as a hint for allocating the first segment, do the copy, and then throw an
+  // exception if it overruns.
+
   bool isNull() const;
 
   StructReader getStruct(const word* defaultValue) const;

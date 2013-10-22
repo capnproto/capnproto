@@ -2247,6 +2247,10 @@ const word* PointerReader::getUnchecked() const {
   return reinterpret_cast<const word*>(pointer);
 }
 
+WordCount64 PointerReader::targetSize() const {
+  return WireHelpers::totalSize(segment, pointer, nestingLimit);
+}
+
 bool PointerReader::isNull() const {
   return pointer == nullptr || pointer->isNull();
 }

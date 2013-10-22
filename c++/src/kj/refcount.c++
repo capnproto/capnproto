@@ -22,23 +22,38 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "refcount.h"
+#include "debug.h"
 #include <memory>
 
 namespace kj {
 
-Refcounted::~Refcounted() noexcept(false) {}
+Refcounted::~Refcounted() noexcept(false) {
+  KJ_ASSERT(refcount == 0, "Refcounted object deleted with non-zero refcount.");
+}
 
 void Refcounted::disposeImpl(void* pointer) const {
-  // The load is a fast-path for the common case where this is the last reference.  An acquire-load
-  // is just a regular load on x86.  If there is more than one reference, then we need to do a full
-  // atomic decrement with full memory barrier, because:
-  // - If this is the final decrement then we need to acquire the object state in order to destroy
-  //   it.
-  // - If this is not the final decrement then we need to release the object state so that another
-  //   thread may destroy it.
-  if (__atomic_load_n(&refcount, __ATOMIC_ACQUIRE) == 1 ||
-      __atomic_sub_fetch(&refcount, 1, __ATOMIC_ACQ_REL) == 0) {
+  // Need to do a "release" decrement in order to release the object's state to any other thread
+  // which seeks to destroy it.
+  if (__atomic_sub_fetch(&refcount, 1, __ATOMIC_RELEASE) == 0) {
+    // This was the last reference.  Acquire the memory so that we can destroy it.
+    __atomic_thread_fence(__ATOMIC_ACQUIRE);
     delete this;
+  }
+}
+
+bool Refcounted::tryAddRefInternal() const {
+  // We want to increment the refcount, but only if it is non-zero.  We have to use a cmpxchg for
+  // this.
+
+  uint old = __atomic_load_n(&refcount, __ATOMIC_RELAXED);
+  for (;;) {
+    if (old == 0) {
+      return false;
+    }
+    if (__atomic_compare_exchange_n(&refcount, &old, old + 1, true,
+                                    __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+      return true;
+    }
   }
 }
 

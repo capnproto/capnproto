@@ -93,7 +93,7 @@ public:
     return kj::addRef(*this);
   }
 
-  void* getBrand() const override {
+  const void* getBrand() const override {
     return nullptr;
   }
 
