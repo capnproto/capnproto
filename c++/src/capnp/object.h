@@ -232,6 +232,9 @@ struct ObjectPointer {
     kj::Own<const ClientHook> asCap() const;
     // Expect that the result is a capability and construct a pipelined version of it now.
 
+    inline kj::Own<const PipelineHook> releasePipelineHook() { return kj::mv(hook); }
+    // For use by RPC implementations.
+
   private:
     kj::Own<const PipelineHook> hook;
     kj::Array<PipelineOp> ops;

@@ -85,6 +85,46 @@ Orphan<List<rpc::PromisedAnswer::Op>> fromPipelineOps(
   return result;
 }
 
+kj::Exception toException(const rpc::Exception::Reader& exception) {
+  kj::Exception::Nature nature =
+      exception.getIsCallersFault()
+          ? kj::Exception::Nature::PRECONDITION
+          : kj::Exception::Nature::LOCAL_BUG;
+
+  kj::Exception::Durability durability;
+  switch (exception.getDurability()) {
+    default:
+    case rpc::Exception::Durability::PERMANENT:
+      durability = kj::Exception::Durability::PERMANENT;
+      break;
+    case rpc::Exception::Durability::TEMPORARY:
+      durability = kj::Exception::Durability::TEMPORARY;
+      break;
+    case rpc::Exception::Durability::OVERLOADED:
+      durability = kj::Exception::Durability::OVERLOADED;
+      break;
+  }
+
+  return kj::Exception(nature, durability, "(remote)", 0, kj::heapString(exception.getReason()));
+}
+
+void fromException(const kj::Exception& exception, rpc::Exception::Builder builder) {
+  builder.setReason(exception.getDescription());
+  builder.setIsCallersFault(exception.getNature() == kj::Exception::Nature::PRECONDITION);
+  switch (exception.getDurability()) {
+    case kj::Exception::Durability::PERMANENT:
+      builder.setDurability(rpc::Exception::Durability::PERMANENT);
+      break;
+    case kj::Exception::Durability::TEMPORARY:
+      builder.setDurability(rpc::Exception::Durability::TEMPORARY);
+      break;
+    case kj::Exception::Durability::OVERLOADED:
+      builder.setDurability(rpc::Exception::Durability::OVERLOADED);
+      break;
+  }
+}
+
+// =======================================================================================
 
 typedef uint32_t QuestionId;
 typedef uint32_t ExportId;
@@ -141,6 +181,19 @@ public:
     }
   }
 
+  kj::Maybe<T&> find(Id id) {
+    if (id < kj::size(low)) {
+      return low[id];
+    } else {
+      auto iter = high.find(id);
+      if (iter == nullptr) {
+        return nullptr;
+      } else {
+        return iter->second;
+      }
+    }
+  }
+
   void erase(Id id) {
     if (id < kj::size(low)) {
       low[id] = T();
@@ -181,14 +234,21 @@ struct Question {
   inline bool operator!=(decltype(nullptr)) const { return isStarted; }
 };
 
+template <typename CallContext>
 struct Answer {
   bool active = false;
+  // True from the point when the Call message is received to the point when both the `Finish`
+  // message has been received and the `Return` has been sent.
 
-  kj::Own<const PipelineHook> pipeline;
-  // Send pipelined calls here.
+  kj::Maybe<kj::Own<const PipelineHook>> pipeline;
+  // Send pipelined calls here.  Becomes null as soon as a `Finish` is received.
 
   kj::Promise<void> asyncOp = nullptr;
   // Delete this promise to cancel the call.
+
+  kj::Maybe<const CallContext&> callContext;
+  // The call context, if it's still active.  Becomes null when the `Return` message is sent.  This
+  // object, if non-null, is owned by `asyncOp`.
 };
 
 struct Export {
@@ -200,6 +260,8 @@ struct Export {
   inline bool operator==(decltype(nullptr)) const { return refcount == 0; }
   inline bool operator!=(decltype(nullptr)) const { return refcount != 0; }
 };
+
+// =======================================================================================
 
 class RpcConnectionState: public kj::TaskSet::ErrorHandler {
 public:
@@ -222,10 +284,11 @@ private:
   class CapInjectorImpl;
   class CapExtractorImpl;
   class RpcPipeline;
+  class RpcCallContext;
 
   struct Tables {
     ExportTable<QuestionId, Question<CapInjectorImpl, RpcPipeline>> questions;
-    ImportTable<QuestionId, Answer> answers;
+    ImportTable<QuestionId, Answer<RpcCallContext>> answers;
     ExportTable<ExportId, Export> exports;
     ImportTable<ExportId, kj::Maybe<ImportClient&>> imports;
   };
@@ -282,9 +345,43 @@ private:
                                 kj::Own<CallContextHook>&& context) const override {
       auto params = context->getParams();
 
-      newOutgoingMessage
+      size_t sizeHint = params.targetSizeInWords();
 
-      newCall(interfaceId, methodId, params.targetSizeInWords() + CALL_MESSAGE_SIZE);
+      // TODO(perf):  Extend targetSizeInWords() to include a capability count?  Here we increase
+      //   the size by 1/16 to deal with cap descriptors possibly expanding.  See also below, when
+      //   handling the response.
+      sizeHint += sizeHint / 16;
+
+      // Don't overflow.
+      if (uint(sizeHint) != sizeHint) {
+        sizeHint = ~uint(0);
+      }
+
+      auto request = newCall(interfaceId, methodId, sizeHint);
+
+      request.set(context->getParams());
+      context->releaseParams();
+
+      auto promise = request.send();
+
+      auto pipeline = promise.releasePipelineHook();
+
+      auto voidPromise = promise.then(kj::mvCapture(context,
+          [](kj::Own<CallContextHook>&& context, Response<ObjectPointer> response) {
+            size_t sizeHint = response.targetSizeInWords();
+
+            // See above TODO.
+            sizeHint += sizeHint / 16;
+
+            // Don't overflow.
+            if (uint(sizeHint) != sizeHint) {
+              sizeHint = ~uint(0);
+            }
+
+            context->getResults(sizeHint).set(response);
+          }));
+
+      return { kj::mv(voidPromise), kj::mv(pipeline) };
     }
 
     kj::Own<const ClientHook> addRef() const override {
@@ -298,10 +395,12 @@ private:
     const RpcConnectionState& connectionState;
   };
 
-  class ImportClient final: public RpcClient {
+  class ImportClient: public RpcClient {
+  protected:
+    ImportClient(const RpcConnectionState& connectionState, ExportId importId)
+        : RpcClient(connectionState), importId(importId) {}
+
   public:
-    ImportClient(const RpcConnectionState& connectionState, ExportId importId, bool isPromise)
-        : RpcClient(connectionState), importId(importId), isPromise(isPromise) {}
     ~ImportClient() noexcept(false) {
       {
         // Remove self from the import table, if the table is still pointing at us.  (It's possible
@@ -321,6 +420,10 @@ private:
         connectionState.sendReleaseLater(importId, remoteRefcount);
       }
     }
+
+    virtual bool settle(kj::Own<const ClientHook> replacement) = 0;
+    // Replace the PromiseImportClient with its resolution.  Returns false if this is not a promise
+    // (i.e. it is a SettledImportClient).
 
     kj::Maybe<kj::Own<ImportClient>> tryAddRemoteRef() {
       // Add a new RemoteRef and return a new ref to this client representing it.  Returns null
@@ -343,15 +446,67 @@ private:
 
     // implements ClientHook -----------------------------------------
     Request<ObjectPointer, ObjectPointer> newCall(
-        uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override;
-    kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const override;
+        uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
+      auto request = kj::heap<RpcRequest>(connectionState, firstSegmentWordSize);
+      auto callBuilder = request->getCall();
+
+      callBuilder.getTarget().setExportedCap(importId);
+      callBuilder.setInterfaceId(interfaceId);
+      callBuilder.setMethodId(methodId);
+      request->holdRef(writeTarget(callBuilder.getTarget()));
+
+      auto root = request->getRoot();
+      return Request<ObjectPointer, ObjectPointer>(root, kj::mv(request));
+    }
 
   private:
     ExportId importId;
-    bool isPromise;
 
     uint remoteRefcount = 0;
     // Number of times we've received this import from the peer.
+  };
+
+  class SettledImportClient final: public ImportClient {
+  public:
+    inline SettledImportClient(const RpcConnectionState& connectionState, ExportId importId)
+        : ImportClient(connectionState, importId) {}
+
+    bool settle(kj::Own<const ClientHook> replacement) override {
+      return false;
+    }
+
+    kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const override {
+      return nullptr;
+    }
+  };
+
+  class PromiseImportClient final: public ImportClient {
+  public:
+    PromiseImportClient(const RpcConnectionState& connectionState, ExportId importId)
+        : ImportClient(connectionState, importId),
+          fork(nullptr) {
+      auto paf = kj::newPromiseAndFulfiller<kj::Own<const ClientHook>>(connectionState.eventLoop);
+      fulfiller = kj::mv(paf.fulfiller);
+      fork = paf.promise.fork();
+    }
+
+    bool settle(kj::Own<const ClientHook> replacement) override {
+      fulfiller->fulfill(kj::mv(replacement));
+      return true;
+    }
+
+    kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const override {
+      // We need the returned promise to hold a reference back to this object, so that it doesn't
+      // disappear while the promise is still outstanding.
+      return fork.addBranch().thenInAnyThread(kj::mvCapture(kj::addRef(*this),
+          [](kj::Own<const PromiseImportClient>&&, kj::Own<const ClientHook>&& replacement) {
+            return kj::mv(replacement);
+          }));
+    }
+
+  private:
+    kj::Own<kj::PromiseFulfiller<kj::Own<const ClientHook>>> fulfiller;
+    kj::ForkedPromise<kj::Own<const ClientHook>> fork;
   };
 
   class PromisedAnswerClient final: public RpcClient {
@@ -470,7 +625,8 @@ private:
 
     kj::Own<const ClientHook> extractCap(rpc::CapDescriptor::Reader descriptor) const override {
       switch (descriptor.which()) {
-        case rpc::CapDescriptor::SENDER_HOSTED: {
+        case rpc::CapDescriptor::SENDER_HOSTED:
+        case rpc::CapDescriptor::SENDER_PROMISE: {
           ExportId importId = descriptor.getSenderHosted();
 
           auto lock = connectionState.tables.lockExclusive();
@@ -488,7 +644,14 @@ private:
           }
 
           // No import for this ID exists currently, so create one.
-          auto result = kj::refcounted<ImportClient>(connectionState, importId);
+          kj::Own<ImportClient> result;
+          if (descriptor.which() == rpc::CapDescriptor::SENDER_PROMISE) {
+            // TODO(now):  Check for pending `Resolve` messages replacing this import ID, and if
+            //   one exists, use that client instead.
+            kj::refcounted<PromiseImportClient>(connectionState, importId);
+          } else {
+            kj::refcounted<SettledImportClient>(connectionState, importId);
+          }
           lock->imports[importId] = *result;
 
           // Note that we need to retain this import later if it still exists.
@@ -496,10 +659,6 @@ private:
 
           return kj::mv(result);
         }
-
-        case rpc::CapDescriptor::SENDER_PROMISE:
-          // TODO(now):  Implement this or remove `senderPromise`.
-          return newBrokenCap("senderPromise not implemented");
 
         case rpc::CapDescriptor::RECEIVER_HOSTED: {
           auto lock = connectionState.tables.lockExclusive();  // TODO(perf): shared?
@@ -613,7 +772,7 @@ private:
   // =====================================================================================
   // RequestHook/PipelineHook/ResponseHook implementations
 
-  class RpcRequest: public RequestHook {
+  class RpcRequest final: public RequestHook {
   public:
     RpcRequest(const RpcConnectionState& connectionState, uint firstSegmentWordSize)
         : connectionState(connectionState),
@@ -626,6 +785,9 @@ private:
 
     inline ObjectPointer::Builder getRoot() {
       return paramsBuilder;
+    }
+    inline rpc::Call::Builder getCall() {
+      return callBuilder;
     }
 
     RemotePromise<ObjectPointer> send() override {
@@ -731,11 +893,35 @@ private:
     kj::Maybe<CapExtractorImpl&> capExtractor;
   };
 
-  class RpcResponse {
+  class RpcResponse: public ResponseHook {
   public:
-    RpcResponse(RpcConnectionState& connectionState,
-                kj::Own<OutgoingRpcMessage>&& message,
-                ObjectPointer::Builder results)
+    RpcResponse(const RpcConnectionState& connectionState,
+                kj::Own<IncomingRpcMessage>&& message,
+                ObjectPointer::Reader results)
+        : message(kj::mv(message)),
+          extractor(connectionState),
+          context(extractor),
+          reader(context.imbue(results)) {}
+
+    ObjectPointer::Reader getResults() {
+      return reader;
+    }
+
+  private:
+    kj::Own<IncomingRpcMessage> message;
+    CapExtractorImpl extractor;
+    CapReaderContext context;
+    ObjectPointer::Reader reader;
+  };
+
+  // =====================================================================================
+  // CallContextHook implementation
+
+  class RpcServerResponse {
+  public:
+    RpcServerResponse(const RpcConnectionState& connectionState,
+                      kj::Own<OutgoingRpcMessage>&& message,
+                      ObjectPointer::Builder results)
         : message(kj::mv(message)),
           injector(connectionState),
           context(injector),
@@ -756,9 +942,6 @@ private:
     ObjectPointer::Builder builder;
   };
 
-  // =====================================================================================
-  // CallContextHook implementation
-
   class RpcCallContext final: public CallContextHook, public kj::Refcounted {
   public:
     RpcCallContext(RpcConnectionState& connectionState, QuestionId questionId,
@@ -772,15 +955,66 @@ private:
           returnMessage(nullptr) {}
 
     void sendReturn() {
-      if (response == nullptr) getResults(1);  // force initialization of response
+      if (isFirstResponder()) {
+        if (response == nullptr) getResults(1);  // force initialization of response
 
-      returnMessage.setQuestionId(questionId);
-      returnMessage.adoptRetainedCaps(requestCapExtractor.finalizeRetainedCaps(
-          Orphanage::getForMessageContaining(returnMessage)));
+        returnMessage.setQuestionId(questionId);
+        returnMessage.adoptRetainedCaps(requestCapExtractor.finalizeRetainedCaps(
+            Orphanage::getForMessageContaining(returnMessage)));
 
-      KJ_ASSERT_NONNULL(response)->send();
+        KJ_ASSERT_NONNULL(response)->send();
+      }
     }
-    void sendErrorReturn(kj::Exception&& exception);
+    void sendErrorReturn(kj::Exception&& exception) {
+      if (isFirstResponder()) {
+        auto message = connectionState.connection->newOutgoingMessage(
+            messageSizeHint<rpc::Return>() + sizeInWords<rpc::Exception>() +
+            exception.getDescription().size() / sizeof(word) + 1);
+        auto builder = message->getBody().initAs<rpc::Message>().initReturn();
+
+        builder.setQuestionId(questionId);
+        builder.adoptRetainedCaps(requestCapExtractor.finalizeRetainedCaps(
+            Orphanage::getForMessageContaining(returnMessage)));
+        fromException(exception, builder.initException());
+
+        message->send();
+      }
+    }
+    void sendCancel() {
+      if (isFirstResponder()) {
+        auto message = connectionState.connection->newOutgoingMessage(
+            messageSizeHint<rpc::Return>());
+        auto builder = message->getBody().initAs<rpc::Message>().initReturn();
+
+        builder.setQuestionId(questionId);
+        builder.adoptRetainedCaps(requestCapExtractor.finalizeRetainedCaps(
+            Orphanage::getForMessageContaining(returnMessage)));
+        builder.setCanceled();
+
+        message->send();
+      }
+    }
+
+    void requestCancel() const {
+      // Hints that the caller wishes to cancel this call.  At the next time when cancellation is
+      // deemed safe, the RpcCallContext shall send a canceled Return -- or if it never becomes
+      // safe, the RpcCallContext will send a normal return when the call completes.  Either way
+      // the RpcCallContext is now responsible for cleaning up the entry in the answer table, since
+      // a Finish message was already received.
+
+      // Verify that we're holding the tables mutex.  This is important because we're handing off
+      // responsibility for deleting the answer.  Moreover, the callContext pointer in the answer
+      // table should not be null as this would indicate that we've already returned a result.
+      KJ_DASSERT(connectionState.tables.getAlreadyLockedExclusive()
+                     .answers[questionId].callContext != nullptr);
+
+      if (__atomic_fetch_or(&cancellationFlags, CANCEL_REQUESTED, __ATOMIC_RELAXED) ==
+          CANCEL_ALLOWED) {
+        // We just set CANCEL_REQUESTED, and CANCEL_ALLOWED was already set previously.  Schedule
+        // the cancellation.
+        scheduleCancel();
+      }
+    }
 
     // implements CallContextHook ------------------------------------
 
@@ -800,20 +1034,27 @@ private:
             firstSegmentWordSize + messageSizeHint<rpc::Return>() +
             requestCapExtractor.retainedListSizeHint(request == nullptr));
         returnMessage = message->getBody().initAs<rpc::Message>().initReturn();
-        auto response = kj::heap<RpcResponse>(connectionState, kj::mv(message),
-                                              returnMessage.getAnswer());
+        auto response = kj::heap<RpcServerResponse>(
+            connectionState, kj::mv(message), returnMessage.getAnswer());
         auto results = response->getResults();
         this->response = kj::mv(response);
         return results;
       }
     }
-    void allowAsyncCancellation(bool allow) override {
-      // TODO(soon):  Do we want this or not?
-      KJ_FAIL_REQUIRE("not implemented");
+    void allowAsyncCancellation() override {
+      if (threadAcceptingCancellation != nullptr) {
+        threadAcceptingCancellation = &kj::EventLoop::current();
+
+        if (__atomic_fetch_or(&cancellationFlags, CANCEL_ALLOWED, __ATOMIC_RELAXED) ==
+            CANCEL_REQUESTED) {
+          // We just set CANCEL_ALLOWED, and CANCEL_REQUESTED was already set previously.  Schedule
+          // the cancellation.
+          scheduleCancel();
+        }
+      }
     }
     bool isCanceled() override {
-      // TODO(soon):  Do we want this or not?
-      KJ_FAIL_REQUIRE("not implemented");
+      return __atomic_load_n(&cancellationFlags, __ATOMIC_RELAXED) & CANCEL_REQUESTED;
     }
     kj::Own<CallContextHook> addRef() override {
       return kj::addRef(*this);
@@ -822,14 +1063,109 @@ private:
   private:
     RpcConnectionState& connectionState;
     QuestionId questionId;
-    kj::Maybe<kj::Own<IncomingRpcMessage>> request;
 
+    // Request ---------------------------------------------
+
+    kj::Maybe<kj::Own<IncomingRpcMessage>> request;
     CapExtractorImpl requestCapExtractor;
     CapReaderContext requestCapContext;
     ObjectPointer::Reader params;
 
-    kj::Maybe<kj::Own<RpcResponse>> response;
+    // Response --------------------------------------------
+
+    kj::Maybe<kj::Own<RpcServerResponse>> response;
     rpc::Return::Builder returnMessage;
+    bool responseSent = false;
+
+    // Cancellation state ----------------------------------
+
+    enum CancellationFlags {
+      CANCEL_REQUESTED = 1,
+      CANCEL_ALLOWED = 2
+    };
+
+    mutable uint8_t cancellationFlags = 0;
+    // When both flags are set, the cancellation process will begin.  Must be manipulated atomically
+    // as it may be accessed from multiple threads.
+
+    mutable kj::Promise<void> deferredCancellation = nullptr;
+    // Cancellation operation scheduled by cancelLater().  Must only be scheduled once, from one
+    // thread.
+
+    kj::EventLoop* threadAcceptingCancellation = nullptr;
+    // EventLoop for the thread that first called allowAsyncCancellation().  We store this as an
+    // optimization:  if the application thread is independent from the network thread, we'd rather
+    // perform the cancellation in the application thread, because otherwise we might block waiting
+    // on an application promise continuation callback to finish executing, which could take
+    // arbitrary time.
+
+    // -----------------------------------------------------
+
+    void scheduleCancel() const {
+      // Arranges for the answer's asyncOp to be deleted, thus canceling all processing related to
+      // this call, shortly.  We have to do it asynchronously because the caller might hold
+      // arbitrary locks or might in fact be part of the task being canceled.
+
+      deferredCancellation = threadAcceptingCancellation->evalLater([this]() {
+        // Make sure we don't accidentally delete ourselves in the process of canceling, since the
+        // last reference to the context may be owned by the asyncOp.
+        auto self = kj::addRef(*this);
+
+        // Extract from the answer table the promise representing the executing call.
+        kj::Promise<void> asyncOp = nullptr;
+        {
+          auto lock = connectionState.tables.lockExclusive();
+          asyncOp = kj::mv(lock->answers[questionId].asyncOp);
+        }
+
+        // Delete the promise, thereby canceling the operation.  Note that if a continuation is
+        // running in another thread, this line blocks waiting for it to complete.  This is why
+        // we try to schedule doCancel() on the application thread, so that it won't need to block.
+        asyncOp = nullptr;
+
+        // OK, now that we know the call isn't running in another thread, we can drop our thread
+        // safety and send a return message.
+        const_cast<RpcCallContext*>(this)->sendCancel();
+      });
+    }
+
+    bool isFirstResponder() {
+      // The first time it is called, removes self from the answer table and returns true.
+      // On subsequent calls, returns false.
+
+      if (responseSent) {
+        return false;
+      } else {
+        responseSent = true;
+
+        // We need to remove the `callContext` pointer -- which points back to us -- from the
+        // answer table.  Or we might even be responsible for removing the entire answer table
+        // entry.
+        auto lock = connectionState.tables.lockExclusive();
+
+        if (__atomic_load_n(&cancellationFlags, __ATOMIC_RELAXED) & CANCEL_REQUESTED) {
+          // We are responsible for deleting the answer table entry.  Awkwardly, however, the
+          // answer table may be the only thing holding a reference to the context, and we may even
+          // be called from the continuation represented by answer.asyncOp.  So we have to do the
+          // actual deletion asynchronously.  But we have to remove it from the table *now*, while
+          // we still hold the lock, because once we send the return message the answer ID is free
+          // for reuse.
+          connectionState.tasks.add(connectionState.eventLoop.evalLater(
+              kj::mvCapture(lock->answers[questionId],
+                [](Answer<RpcCallContext>&& answer) {
+                  // Just let the answer be deleted.
+                })));
+
+          // Erase from the table.
+          lock->answers.erase(questionId);
+        } else {
+          // We just have to null out callContext.
+          lock->answers[questionId].callContext = nullptr;
+        }
+
+        return true;
+      }
+    }
   };
 
   // =====================================================================================
@@ -861,6 +1197,14 @@ private:
 
       case rpc::Message::CALL:
         doCall(kj::mv(message), reader.getCall());
+        break;
+
+      case rpc::Message::RETURN:
+        doReturn(kj::mv(message), reader.getReturn());
+        break;
+
+      case rpc::Message::FINISH:
+        doFinish(reader.getFinish());
         break;
 
       default: {
@@ -904,11 +1248,17 @@ private:
 
         {
           auto lock = tables.lockExclusive();  // TODO(perf):  shared?
-          const Answer& base = lock->answers[promisedAnswer.getQuestionId()];
+          auto& base = lock->answers[promisedAnswer.getQuestionId()];
           KJ_REQUIRE(base.active, "PromisedAnswer.questionId is not a current question.") {
             return;
           }
-          pipeline = base.pipeline->addRef();
+          KJ_IF_MAYBE(p, base.pipeline) {
+            pipeline = p->get()->addRef();
+          } else {
+            KJ_FAIL_REQUIRE("PromisedAnswer.questionId is already finished.") {
+              return;
+            }
+          }
         }
 
         KJ_IF_MAYBE(ops, toPipelineOps(promisedAnswer.getTransform())) {
@@ -927,8 +1277,6 @@ private:
         }
     }
 
-    // TODO(now):  Imbue the message!
-
     QuestionId questionId = call.getQuestionId();
     auto context = kj::refcounted<RpcCallContext>(
         *this, questionId, kj::mv(message), call.getRequest());
@@ -940,7 +1288,7 @@ private:
     {
       auto lock = tables.lockExclusive();
 
-      Answer& answer = lock->answers[questionId];
+      auto& answer = lock->answers[questionId];
 
       // We don't want to overwrite an active question because the destructors for the promise and
       // pipeline could try to lock our mutex.  Of course, we did already fire off the new call
@@ -951,6 +1299,7 @@ private:
       }
 
       answer.active = true;
+      answer.callContext = *context;
       answer.pipeline = kj::mv(promiseAndPipeline.pipeline);
 
       // Hack:  Both the success and error continuations need to use the context.  We could
@@ -971,12 +1320,66 @@ private:
     }
   }
 
+  void doReturn(kj::Own<IncomingRpcMessage>&& message, const rpc::Return::Reader& ret) {
+    kj::Own<CapInjectorImpl> paramCapsToRelease;
 
+    auto lock = tables.lockExclusive();
+    KJ_IF_MAYBE(question, lock->questions.find(ret.getQuestionId())) {
+      KJ_REQUIRE(!question->isReturned, "Duplicate Return.") { return; }
+      question->isReturned = true;
 
+      for (ExportId retained: ret.getRetainedCaps()) {
+        KJ_IF_MAYBE(exp, lock->exports.find(retained)) {
+          ++exp->refcount;
+        } else {
+          KJ_FAIL_REQUIRE("Invalid export ID in Return.retainedCaps list.") { return; }
+        }
+      }
 
-  kj::Exception toException(const rpc::Exception::Reader& exception) {
-    // TODO(now)
+      // We can now release the caps in the parameter message.  Well...  we can release them once
+      // we release the lock, at least.
+      paramCapsToRelease = kj::mv(question->paramCaps);
+
+      // TODO(now):  Handle exception/cancel response
+
+      auto response = kj::heap<RpcResponse>(*this, kj::mv(message), ret.getAnswer());
+      auto imbuedResults = response->getResults();
+      question->fulfiller->fulfill(Response<ObjectPointer>(imbuedResults, kj::mv(response)));
+
+      if (question->pipeline == nullptr) {
+        lock->questions.erase(ret.getQuestionId());
+      }
+    } else {
+      KJ_FAIL_REQUIRE("Invalid question ID in Return message.") { return; }
+    }
   }
+
+  void doFinish(const rpc::Finish::Reader& finish) {
+    kj::Maybe<kj::Own<const PipelineHook>> pipelineToRelease;
+
+    auto lock = tables.lockExclusive();
+
+    for (ExportId retained: finish.getRetainedCaps()) {
+      KJ_IF_MAYBE(exp, lock->exports.find(retained)) {
+        ++exp->refcount;
+      } else {
+        KJ_FAIL_REQUIRE("Invalid export ID in Return.retainedCaps list.") { return; }
+      }
+    }
+
+    auto& answer = lock->answers[finish.getQuestionId()];
+
+    // `Finish` indicates that no further pipeline requests will be made.
+    pipelineToRelease = kj::mv(answer.pipeline);
+
+    KJ_IF_MAYBE(context, answer.callContext) {
+      context->requestCancel();
+    } else {
+      lock->answers.erase(finish.getQuestionId());
+    }
+  }
+
+  // =====================================================================================
 
   void sendReleaseLater(ExportId importId, uint remoteRefcount) const {
     tasks.add(eventLoop.evalLater([this,importId,remoteRefcount]() {

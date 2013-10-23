@@ -178,6 +178,8 @@ class CallContext: public kj::DisallowConstCopy {
   //
   // Methods of this class may only be called from within the server's event loop, not from other
   // threads.
+  //
+  // The CallContext becomes invalid as soon as the call reports completion.
 
 public:
   explicit CallContext(CallContextHook& hook);
@@ -205,15 +207,13 @@ public:
   // `firstSegmentWordSize` indicates the suggested size of the message's first segment.  This
   // is a hint only.  If not specified, the system will decide on its own.
 
-  void allowAsyncCancellation(bool allow = true);
+  void allowAsyncCancellation();
   // Indicate that it is OK for the RPC system to discard its Promise for this call's result if
   // the caller cancels the call, thereby transitively canceling any asynchronous operations the
   // call implementation was performing.  This is not done by default because it could represent a
   // security risk:  applications must be carefully written to ensure that they do not end up in
   // a bad state if an operation is canceled at an arbitrary point.  However, for long-running
   // method calls that hold significant resources, prompt cancellation is often useful.
-  //
-  // You can also switch back to disallowing cancellation by passing `false` as the argument.
   //
   // Keep in mind that asynchronous cancellation cannot occur while the method is synchronously
   // executing on a local thread.  The method must perform an asynchronous operation or call
@@ -340,7 +340,7 @@ public:
   virtual ObjectPointer::Reader getParams() = 0;
   virtual void releaseParams() = 0;
   virtual ObjectPointer::Builder getResults(uint firstSegmentWordSize) = 0;
-  virtual void allowAsyncCancellation(bool allow) = 0;
+  virtual void allowAsyncCancellation() = 0;
   virtual bool isCanceled() = 0;
 
   virtual kj::Own<CallContextHook> addRef() = 0;
@@ -551,8 +551,8 @@ inline Orphanage CallContext<Params, Results>::getResultsOrphanage(uint firstSeg
   return Orphanage::getForMessageContaining(hook->getResults(firstSegmentWordSize));
 }
 template <typename Params, typename Results>
-inline void CallContext<Params, Results>::allowAsyncCancellation(bool allow) {
-  hook->allowAsyncCancellation(allow);
+inline void CallContext<Params, Results>::allowAsyncCancellation() {
+  hook->allowAsyncCancellation();
 }
 template <typename Params, typename Results>
 inline bool CallContext<Params, Results>::isCanceled() {

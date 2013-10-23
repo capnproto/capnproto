@@ -110,7 +110,7 @@ public:
     }
     return response->message.getRoot();
   }
-  void allowAsyncCancellation(bool allow) override {
+  void allowAsyncCancellation() override {
     // ignored for local calls
   }
   bool isCanceled() override {

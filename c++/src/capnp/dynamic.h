@@ -534,7 +534,7 @@ public:
   void setResults(DynamicStruct::Reader value);
   void adoptResults(Orphan<DynamicStruct>&& value);
   Orphanage getResultsOrphanage(uint firstSegmentWordSize = 0);
-  void allowAsyncCancellation(bool allow = true);
+  void allowAsyncCancellation();
   bool isCanceled();
 
 private:
@@ -1513,8 +1513,8 @@ inline Orphanage CallContext<DynamicStruct, DynamicStruct>::getResultsOrphanage(
     uint firstSegmentWordSize) {
   return Orphanage::getForMessageContaining(hook->getResults(firstSegmentWordSize));
 }
-inline void CallContext<DynamicStruct, DynamicStruct>::allowAsyncCancellation(bool allow) {
-  hook->allowAsyncCancellation(allow);
+inline void CallContext<DynamicStruct, DynamicStruct>::allowAsyncCancellation() {
+  hook->allowAsyncCancellation();
 }
 inline bool CallContext<DynamicStruct, DynamicStruct>::isCanceled() {
   return hook->isCanceled();

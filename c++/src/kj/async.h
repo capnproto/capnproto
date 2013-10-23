@@ -639,7 +639,7 @@ class ForkedPromise {
   // Like `Promise<T>`, this is a pass-by-move type.
 
 public:
-  inline ForkedPromise(decltype(nullptr)): hub(nullptr) {}
+  inline ForkedPromise(decltype(nullptr)) {}
 
   Promise<_::Forked<T>> addBranch() const;
   // Add a new branch to the fork.  The branch is equivalent to the original promise, except

@@ -131,8 +131,9 @@ ArrayPtr<const char> KJ_STRINGIFY(Exception::Nature nature) {
 
 ArrayPtr<const char> KJ_STRINGIFY(Exception::Durability durability) {
   static const char* DURABILITY_STRINGS[] = {
+    "permanent",
     "temporary",
-    "permanent"
+    "overloaded"
   };
 
   const char* s = DURABILITY_STRINGS[static_cast<uint>(durability)];

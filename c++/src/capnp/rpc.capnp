@@ -746,16 +746,19 @@ struct Exception {
   # automated bug report were to be generated for this error, should it be initially filed on the
   # caller's code or the callee's?  This is a guess.  Generally guesses should err towards blaming
   # the callee -- at the very least, the callee should be on the hook for improving their error
-  # handling to be more confident.
+  # handling to be more confident in assigning blame.
 
-  isPermanent @2 :Bool;
+  durability @2 :Durability;
   # In the best estimate of the error source, is this error likely to repeat if the same call is
   # executed again?  Callers might use this to decide when to retry a request.
 
-  isOverloaded @3 :Bool;
-  # In the best estimate of the error source, is it likely this error was caused by the system
-  # being overloaded?  If so, the caller probably should not retry the request now, but may
-  # consider retrying it later.
+  enum Durability {
+    permanent @0;     # Retrying the exact same operation will fail in the same way.
+    temporary @1;     # Retrying the exact same operation might succeed.
+    overloaded @2;    # The error may be due to the system being overloaded.  Retrying may work
+                      # later on, but for now the caller should not retry right away as this will
+                      # likely exacerbate the problem.
+  }
 }
 
 # ========================================================================================

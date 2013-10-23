@@ -61,8 +61,11 @@ public:
   };
 
   enum class Durability {
+    PERMANENT,  // Retrying the exact same operation will fail in exactly the same way.
     TEMPORARY,  // Retrying the exact same operation might succeed.
-    PERMANENT   // Retrying the exact same operation will fail in exactly the same way.
+    OVERLOADED  // The error was possibly caused by the system being overloaded.  Retrying the
+                // operation might work at a later point in time, but the caller should NOT retry
+                // immediately as this will probably exacerbate the problem.
 
     // Make sure to update the stringifier if you add a new durability.
   };
