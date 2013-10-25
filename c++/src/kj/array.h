@@ -156,6 +156,9 @@ public:
   inline ArrayPtr<T> asPtr() {
     return ArrayPtr<T>(ptr, size_);
   }
+  inline ArrayPtr<const T> asPtr() const {
+    return ArrayPtr<T>(ptr, size_);
+  }
 
   inline size_t size() const { return size_; }
   inline T& operator[](size_t index) const {

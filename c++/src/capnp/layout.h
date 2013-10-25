@@ -494,6 +494,8 @@ public:
       : segment(nullptr), data(nullptr), pointers(nullptr), dataSize(0),
         pointerCount(0), bit0Offset(0), nestingLimit(0x7fffffff) {}
 
+  const void* getLocation() const { return data; }
+
   inline BitCount getDataSectionSize() const { return dataSize; }
   inline WirePointerCount getPointerSectionSize() const { return pointerCount; }
   inline Data::Reader getDataSectionAsBlob();

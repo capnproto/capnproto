@@ -91,11 +91,11 @@ class Response: public Results::Reader {
   // is move-only -- once it goes out-of-scope, the underlying message will be freed.
 
 public:
-  inline Response(typename Results::Reader reader, kj::Own<ResponseHook>&& hook)
+  inline Response(typename Results::Reader reader, kj::Own<const ResponseHook>&& hook)
       : Results::Reader(reader), hook(kj::mv(hook)) {}
 
 private:
-  kj::Own<ResponseHook> hook;
+  kj::Own<const ResponseHook> hook;
 
   template <typename, typename>
   friend class Request;
@@ -347,6 +347,7 @@ public:
 };
 
 kj::Own<const ClientHook> newBrokenCap(const char* reason);
+kj::Own<const ClientHook> newBrokenCap(kj::Exception&& reason);
 // Helper function that creates a capability which simply throws exceptions when called.
 
 // =======================================================================================
