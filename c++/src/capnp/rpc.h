@@ -67,7 +67,7 @@ public:
     virtual kj::Own<Connection> baseAcceptIntroducedConnection(
         ObjectPointer::Reader recipientId) = 0;
   };
-  virtual kj::Own<Connection> baseConnectToHostOf(ObjectPointer::Reader ref) = 0;
+  virtual kj::Own<Connection> baseConnectToHostOf(_::StructReader ref) = 0;
   virtual kj::Promise<kj::Own<Connection>> baseAcceptConnectionAsRefHost() = 0;
 };
 
@@ -86,7 +86,7 @@ private:
   class Impl;
   kj::Own<Impl> impl;
 
-  Capability::Client baseConnect(_::StructReader reader);
+  Capability::Client baseConnect(_::StructReader ref);
   // TODO(someday):  Maybe define a public API called `TypelessStruct` so we don't have to rely
   // on `_::StructReader` here?
 
@@ -220,7 +220,7 @@ public:
 
 private:
   kj::Own<_::VatNetworkBase::Connection>
-      baseConnectToHostOf(ObjectPointer::Reader ref) override final;
+      baseConnectToHostOf(_::StructReader ref) override final;
   kj::Promise<kj::Own<_::VatNetworkBase::Connection>>
       baseAcceptConnectionAsRefHost() override final;
 };
@@ -317,8 +317,8 @@ template <typename SturdyRef, typename ProvisionId, typename RecipientId,
           typename ThirdPartyCapId, typename JoinAnswer>
 kj::Own<_::VatNetworkBase::Connection>
     VatNetwork<SturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinAnswer>::
-    baseConnectToHostOf(ObjectPointer::Reader ref) {
-  return connectToHostOf(ref.getAs<SturdyRef>());
+    baseConnectToHostOf(_::StructReader ref) {
+  return connectToHostOf(typename SturdyRef::Reader(ref));
 }
 
 template <typename SturdyRef, typename ProvisionId, typename RecipientId,
