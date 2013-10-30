@@ -24,6 +24,32 @@
 # setup-ekam.sh
 /c++/.ekam
 
+# Autotools build artifacts.
+/c++/**/*.o
+/c++/**/*.lo
+/c++/**/*.la
+/c++/**/.dirstamp
+/c++/**/.deps/
+/c++/.libs/
+/c++/m4/
+/c++/stamp-h1
+/c++/config.h.in
+/c++/config.h
+/c++/config.log
+/c++/config.status
+/c++/configure
+/c++/Makefile
+/c++/Makefile.in
+/c++/aclocal.m4
+/c++/autom4te.cache/
+/c++/build-aux/
+/c++/libtool
+/c++/capnp
+/c++/capnpc-c++
+/c++/capnpc-capnp
+/c++/test_capnpc_middleman
+/c++/src/capnp/test*.capnp.*
+
 # setup-autotools.sh
 /c++/gtest
 
