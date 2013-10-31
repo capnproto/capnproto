@@ -189,7 +189,7 @@ public:
 
   virtual void reportReadLimitReached() = 0;
   // Called to report that the read limit has been reached.  See ReadLimiter, below.  This invokes
-  // the VALIDATE_INPUT() macro which may throw an exception; if it return normally, the caller
+  // the VALIDATE_INPUT() macro which may throw an exception; if it returns normally, the caller
   // will need to continue with default values.
 
   virtual kj::Own<const ClientHook> extractCap(const _::StructReader& capDescriptor) = 0;
