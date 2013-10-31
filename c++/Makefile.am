@@ -92,6 +92,7 @@ public_capnpc_inputs =                                         \
 
 capnpc_inputs =                                                \
   $(public_capnpc_inputs)                                      \
+  src/capnp/rpc.capnp                                          \
   src/capnp/compiler/lexer.capnp                               \
   src/capnp/compiler/grammar.capnp
 
@@ -100,6 +101,8 @@ capnpc_outputs =                                               \
   src/capnp/c++.capnp.h                                        \
   src/capnp/schema.capnp.c++                                   \
   src/capnp/schema.capnp.h                                     \
+  src/capnp/rpc.capnp.c++                                      \
+  src/capnp/rpc.capnp.h                                        \
   src/capnp/compiler/lexer.capnp.c++                           \
   src/capnp/compiler/lexer.capnp.h                             \
   src/capnp/compiler/grammar.capnp.c++                         \
@@ -157,7 +160,8 @@ includecapnp_HEADERS =                                         \
   src/capnp/serialize.h                                        \
   src/capnp/serialize-packed.h                                 \
   src/capnp/pointer-helpers.h                                  \
-  src/capnp/generated-header-support.h
+  src/capnp/generated-header-support.h                         \
+  src/capnp/rpc.h
 
 lib_LTLIBRARIES = libkj.la libcapnp.la libcapnpc.la
 
@@ -202,7 +206,10 @@ libcapnp_la_SOURCES=                                           \
   src/capnp/dynamic.c++                                        \
   src/capnp/stringify.c++                                      \
   src/capnp/serialize.c++                                      \
-  src/capnp/serialize-packed.c++
+  src/capnp/serialize-packed.c++                               \
+  src/capnp/rpc.c++                                            \
+  src/capnp/rpc.capnp.c++                                      \
+  src/capnp/rpc.capnp.h
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libcapnpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS) -lpthread
@@ -329,6 +336,7 @@ capnp_test_SOURCES =                                           \
   src/capnp/orphan-test.c++                                    \
   src/capnp/serialize-test.c++                                 \
   src/capnp/serialize-packed-test.c++                          \
+  src/capnp/rpc-test.c++                                       \
   src/capnp/test-util.c++                                      \
   src/capnp/test-util.h                                        \
   src/capnp/compiler/lexer-test.c++                            \

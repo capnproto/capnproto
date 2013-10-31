@@ -241,7 +241,7 @@ struct Answer {
   kj::Maybe<kj::Own<const PipelineHook>> pipeline;
   // Send pipelined calls here.  Becomes null as soon as a `Finish` is received.
 
-  kj::Promise<void> asyncOp = nullptr;
+  kj::Promise<void> asyncOp = kj::Promise<void>(nullptr);
   // Delete this promise to cancel the call.
 
   kj::Maybe<const CallContext&> callContext;

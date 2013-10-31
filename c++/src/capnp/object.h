@@ -263,7 +263,7 @@ public:
   template <typename T>
   inline Orphan(Orphan<T>&& other): builder(kj::mv(other.builder)) {}
   template <typename T>
-  inline Orphan& operator=(Orphan<T>&& other) { builder = kj::mv(other.builder); }
+  inline Orphan& operator=(Orphan<T>&& other) { builder = kj::mv(other.builder); return *this; }
   // Cast from typed orphan.
 
   // It's not possible to get an ObjectPointer::{Reader,Builder} directly since there is no
