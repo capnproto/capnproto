@@ -923,8 +923,11 @@ private:
       exports = kj::Vector<ExportId>(caps.getWithoutLock().size());
 
       for (auto& entry: caps.getWithoutLock()) {
-        KJ_IF_MAYBE(exportId, connectionState.writeDescriptor(
-            entry.second.cap->addRef(), entry.second.builder, tables)) {
+        // If maybeExportId is inlined, GCC 4.7 reports a spurious "may be used uninitialized"
+        // error (GCC 4.8 and Clang do not complain).
+        auto maybeExportId = connectionState.writeDescriptor(
+            entry.second.cap->addRef(), entry.second.builder, tables);
+        KJ_IF_MAYBE(exportId, maybeExportId) {
           exports.add(*exportId);
         }
       }

@@ -163,7 +163,7 @@ includecapnp_HEADERS =                                         \
   src/capnp/generated-header-support.h                         \
   src/capnp/rpc.h
 
-lib_LTLIBRARIES = libkj.la libcapnp.la libcapnpc.la
+lib_LTLIBRARIES = libkj.la libcapnp.la libcapnp-rpc.la libcapnpc.la
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libkj_la_LIBADD = $(PTHREAD_LIBS) -lpthread
@@ -206,7 +206,12 @@ libcapnp_la_SOURCES=                                           \
   src/capnp/dynamic.c++                                        \
   src/capnp/stringify.c++                                      \
   src/capnp/serialize.c++                                      \
-  src/capnp/serialize-packed.c++                               \
+  src/capnp/serialize-packed.c++
+
+# -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
+libcapnp_rpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS) -lpthread
+libcapnp_rpc_la_LDFLAGS = -release $(VERSION) -no-undefined
+libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/rpc.c++                                            \
   src/capnp/rpc.capnp.c++                                      \
   src/capnp/rpc.capnp.h
@@ -299,7 +304,8 @@ $(test_capnpc_outputs): test_capnpc_middleman
 BUILT_SOURCES = $(test_capnpc_outputs)
 
 check_PROGRAMS = capnp-test capnp-evolution-test
-capnp_test_LDADD = gtest/lib/libgtest.la gtest/lib/libgtest_main.la libcapnpc.la libcapnp.la libkj.la
+capnp_test_LDADD = gtest/lib/libgtest.la gtest/lib/libgtest_main.la \
+                   libcapnpc.la libcapnp-rpc.la libcapnp.la libkj.la
 capnp_test_CPPFLAGS = -Igtest/include -I$(srcdir)/gtest/include
 capnp_test_SOURCES =                                           \
   src/kj/common-test.c++                                       \
