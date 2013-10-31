@@ -35,6 +35,8 @@ namespace capnp {
 // ***************************************************************************************
 // =======================================================================================
 
+// TODO(cleanup):  Put these in rpc-internal.h?
+
 class OutgoingRpcMessage;
 class IncomingRpcMessage;
 
@@ -78,8 +80,9 @@ public:
 
 class RpcSystemBase {
 public:
-  RpcSystemBase(VatNetworkBase& network, SturdyRefRestorerBase& restorer,
+  RpcSystemBase(VatNetworkBase& network, kj::Maybe<SturdyRefRestorerBase&> restorer,
                 const kj::EventLoop& eventLoop);
+  RpcSystemBase(RpcSystemBase&& other);
   ~RpcSystemBase() noexcept(false);
 
 private:
@@ -189,7 +192,7 @@ public:
     // on the new connection will be an `Accept` message.
 
   private:
-    void baseIntroduceTo(Connection& recipient,
+    void baseIntroduceTo(VatNetworkBase::Connection& recipient,
         ObjectPointer::Builder sendToRecipient,
         ObjectPointer::Builder sendToTarget) override final;
     _::VatNetworkBase::ConnectionAndProvisionId baseConnectToIntroduced(
@@ -232,7 +235,8 @@ class SturdyRefRestorer: public _::SturdyRefRestorerBase {
 
 public:
   virtual Capability::Client restore(typename SturdyRef::Reader ref) = 0;
-  // Restore the given SturdyRef, returning a capability representing it.
+  // Restore the given SturdyRef, returning a capability representing it.  This is guaranteed only
+  // to be called on the RpcSystem's EventLoop's thread.
 
 private:
   Capability::Client baseRestore(ObjectPointer::Reader ref) override final;
@@ -246,6 +250,7 @@ public:
   RpcSystem(
       VatNetwork<OutgoingSturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinAnswer>& network,
       kj::Maybe<SturdyRefRestorer<IncomingSturdyRef>&> restorer, const kj::EventLoop& eventLoop);
+  RpcSystem(RpcSystem&& other) = default;
 
   Capability::Client connect(typename OutgoingSturdyRef::Reader ref);
   // Restore the given SturdyRef from the network and return the capability representing it.
@@ -255,7 +260,7 @@ template <typename OutgoingSturdyRef, typename IncomingSturdyRef,
           typename ProvisionId, typename RecipientId, typename ThirdPartyCapId, typename JoinAnswer>
 RpcSystem<OutgoingSturdyRef, IncomingSturdyRef> makeRpcServer(
     VatNetwork<OutgoingSturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinAnswer>& network,
-    kj::Maybe<SturdyRefRestorer<IncomingSturdyRef>&> restorer,
+    SturdyRefRestorer<IncomingSturdyRef>& restorer,
     const kj::EventLoop& eventLoop = kj::EventLoop::current());
 // Make an RPC server.  Typical usage (e.g. in a main() function):
 //
@@ -270,7 +275,7 @@ template <typename OutgoingSturdyRef, typename ProvisionId,
 RpcSystem<OutgoingSturdyRef> makeRpcClient(
     VatNetwork<OutgoingSturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinAnswer>& network,
     const kj::EventLoop& eventLoop = kj::EventLoop::current());
-// Make an RPC server.  Typical usage (e.g. in a main() function):
+// Make an RPC client.  Typical usage (e.g. in a main() function):
 //
 //    MyEventLoop eventLoop;
 //    MyNetwork network(eventLoop);
@@ -289,10 +294,10 @@ RpcSystem<OutgoingSturdyRef> makeRpcClient(
 template <typename SturdyRef, typename ProvisionId, typename RecipientId,
           typename ThirdPartyCapId, typename JoinAnswer>
 void VatNetwork<SturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinAnswer>::
-    Connection::baseIntroduceTo(Connection& recipient,
+    Connection::baseIntroduceTo(VatNetworkBase::Connection& recipient,
                                 ObjectPointer::Builder sendToRecipient,
                                 ObjectPointer::Builder sendToTarget) {
-  introduceTo(recipient, sendToRecipient.initAs<ThirdPartyCapId>(),
+  introduceTo(kj::downcast<Connection>(recipient), sendToRecipient.initAs<ThirdPartyCapId>(),
               sendToTarget.initAs<RecipientId>());
 }
 
@@ -349,6 +354,22 @@ template <typename OutgoingSturdyRef, typename IncomingSturdyRef>
 Capability::Client RpcSystem<OutgoingSturdyRef, IncomingSturdyRef>::connect(
     typename OutgoingSturdyRef::Reader ref) {
   return baseConnect(_::PointerHelpers<OutgoingSturdyRef>::getInternalReader(ref));
+}
+
+template <typename OutgoingSturdyRef, typename IncomingSturdyRef,
+          typename ProvisionId, typename RecipientId, typename ThirdPartyCapId, typename JoinAnswer>
+RpcSystem<OutgoingSturdyRef, IncomingSturdyRef> makeRpcServer(
+    VatNetwork<OutgoingSturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinAnswer>& network,
+    SturdyRefRestorer<IncomingSturdyRef>& restorer, const kj::EventLoop& eventLoop) {
+  return RpcSystem<OutgoingSturdyRef, IncomingSturdyRef>(network, restorer, eventLoop);
+}
+
+template <typename OutgoingSturdyRef, typename ProvisionId,
+          typename RecipientId, typename ThirdPartyCapId, typename JoinAnswer>
+RpcSystem<OutgoingSturdyRef> makeRpcClient(
+    VatNetwork<OutgoingSturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinAnswer>& network,
+    const kj::EventLoop& eventLoop) {
+  return RpcSystem<OutgoingSturdyRef>(network, nullptr, eventLoop);
 }
 
 }  // namespace capnp

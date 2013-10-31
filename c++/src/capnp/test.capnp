@@ -593,3 +593,17 @@ interface TestPipeline {
     cap @0 :TestInterface;
   }
 }
+
+struct TestSturdyRef {
+  host @0 :Text;
+  tag @1 :Tag;
+  enum Tag {
+    testInterface @0;
+    testPipeline @1;
+  }
+}
+
+struct TestProvisionId {}
+struct TestRecipientId {}
+struct TestThirdPartyCapId {}
+struct TestJoinAnswer {}

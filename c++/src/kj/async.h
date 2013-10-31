@@ -1242,29 +1242,33 @@ public:
       : adapter(static_cast<PromiseFulfiller<UnfixVoid<T>>&>(*this), kj::fwd<Params>(params)...) {}
 
   void get(ExceptionOrValue& output) noexcept override {
+    KJ_IREQUIRE(!isWaiting());
     output.as<T>() = kj::mv(result);
   }
 
 private:
   Adapter adapter;
   ExceptionOr<T> result;
+  bool waiting = true;
 
   void fulfill(T&& value) override {
-    if (isWaiting()) {
+    if (waiting) {
+      waiting = false;
       result = ExceptionOr<T>(kj::mv(value));
       setReady();
     }
   }
 
   void reject(Exception&& exception) override {
-    if (isWaiting()) {
+    if (waiting) {
+      waiting = false;
       result = ExceptionOr<T>(false, kj::mv(exception));
       setReady();
     }
   }
 
   bool isWaiting() override {
-    return result.value == nullptr && result.exception == nullptr;
+    return waiting;
   }
 };
 
@@ -1375,10 +1379,27 @@ Promise<_::Forked<T>> ForkedPromise<T>::addBranch() const {
 namespace _ {  // private
 
 template <typename T>
-class WeakFulfiller final: public PromiseFulfiller<T> {
+class WeakFulfiller final: public PromiseFulfiller<T>, private kj::Disposer {
   // A wrapper around PromiseFulfiller which can be detached.
+  //
+  // There are a couple non-trivialities here:
+  // - If the WeakFulfiller is discarded, we want the promise it fulfills to be implicitly
+  //   rejected.
+  // - We cannot destroy the WeakFulfiller until the application has discarded it *and* it has been
+  //   detached from the underlying fulfiller, because otherwise the later detach() call will go
+  //   to a dangling pointer.  Essentially, WeakFulfiller is reference counted, although the
+  //   refcount never goes over 2 and we manually implement the refcounting because we already need
+  //   a mutex anyway.  To this end, WeakFulfiller is its own Disposer -- dispose() is called when
+  //   the application discards its owned pointer to the fulfiller and detach() is called when the
+  //   promise is destroyed.
+
 public:
-  WeakFulfiller(): inner(nullptr) {}
+  KJ_DISALLOW_COPY(WeakFulfiller);
+
+  static kj::Own<WeakFulfiller> make() {
+    WeakFulfiller* ptr = new WeakFulfiller;
+    return Own<WeakFulfiller>(ptr, *ptr);
+  }
 
   void fulfill(FixVoid<T>&& value) override {
     auto lock = inner.lockExclusive();
@@ -1403,12 +1424,39 @@ public:
     inner.getWithoutLock() = &newInner;
   }
 
-  void detach() {
-    *inner.lockExclusive() = nullptr;
+  void detach(PromiseFulfiller<T>& from) {
+    auto lock = inner.lockExclusive();
+    if (*lock == nullptr) {
+      // Already disposed.
+      lock.release();
+      delete this;
+    } else {
+      KJ_IREQUIRE(*lock == &from);
+      *lock = nullptr;
+    }
   }
 
 private:
   MutexGuarded<PromiseFulfiller<T>*> inner;
+
+  WeakFulfiller(): inner(nullptr) {}
+
+  void disposeImpl(void* pointer) const override {
+    // TODO(perf): Factor some of this out so it isn't regenerated for every fulfiller type?
+
+    auto lock = inner.lockExclusive();
+    if (*lock == nullptr) {
+      // Already detached.
+      lock.release();
+      delete this;
+    } else if ((*lock)->isWaiting()) {
+      (*lock)->reject(kj::Exception(
+          kj::Exception::Nature::LOCAL_BUG, kj::Exception::Durability::PERMANENT,
+          __FILE__, __LINE__,
+          kj::heapString("PromiseFulfiller was destroyed without fulfilling the promise.")));
+      *lock = nullptr;
+    }
+  }
 };
 
 template <typename T>
@@ -1416,15 +1464,16 @@ class PromiseAndFulfillerAdapter {
 public:
   PromiseAndFulfillerAdapter(PromiseFulfiller<T>& fulfiller,
                              WeakFulfiller<T>& wrapper)
-      : wrapper(wrapper) {
+      : fulfiller(fulfiller), wrapper(wrapper) {
     wrapper.attach(fulfiller);
   }
 
-  ~PromiseAndFulfillerAdapter() {
-    wrapper.detach();
+  ~PromiseAndFulfillerAdapter() noexcept(false) {
+    wrapper.detach(fulfiller);
   }
 
 private:
+  PromiseFulfiller<T>& fulfiller;
   WeakFulfiller<T>& wrapper;
 };
 
@@ -1438,7 +1487,7 @@ Promise<T> newAdaptedPromise(Params&&... adapterConstructorParams) {
 
 template <typename T>
 PromiseFulfillerPair<T> newPromiseAndFulfiller() {
-  auto wrapper = heap<_::WeakFulfiller<T>>();
+  auto wrapper = _::WeakFulfiller<T>::make();
 
   Own<_::PromiseNode> intermediate(
       heap<_::AdapterPromiseNode<_::FixVoid<T>, _::PromiseAndFulfillerAdapter<T>>>(*wrapper));
@@ -1450,7 +1499,7 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller() {
 
 template <typename T>
 PromiseFulfillerPair<T> newPromiseAndFulfiller(const EventLoop& loop) {
-  auto wrapper = heap<_::WeakFulfiller<T>>();
+  auto wrapper = _::WeakFulfiller<T>::make();
 
   Own<_::PromiseNode> intermediate(
       heap<_::AdapterPromiseNode<_::FixVoid<T>, _::PromiseAndFulfillerAdapter<T>>>(*wrapper));

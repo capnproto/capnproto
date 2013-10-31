@@ -77,6 +77,10 @@ kj::Own<const ClientHook> newBrokenCap(const char* reason) {
   return _::newBrokenCap(reason);
 }
 
+kj::Own<const ClientHook> newBrokenCap(kj::Exception&& reason) {
+  return _::newBrokenCap(kj::mv(reason));
+}
+
 // =======================================================================================
 
 namespace {
@@ -384,6 +388,10 @@ public:
                                       CallContext<ObjectPointer, ObjectPointer>(*contextPtr));
         });
 
+    // Make sure that this client cannot be destroyed until the promise completes.
+    promise = eventLoop.there(kj::mv(promise), kj::mvCapture(kj::addRef(*this),
+        [=](kj::Own<const LocalClient>&& ref) {}));
+
     // We have to fork this promise for the pipeline to receive a copy of the answer.
     auto forked = eventLoop.fork(kj::mv(promise));
 
@@ -393,7 +401,7 @@ public:
           return kj::refcounted<LocalPipeline>(kj::mv(context));
         }));
 
-    auto completionPromise = eventLoop.there(forked.addBranch(), kj::mvCapture(context->addRef(),
+    auto completionPromise = eventLoop.there(forked.addBranch(), kj::mvCapture(context,
         [=](kj::Own<CallContextHook>&& context) {
           // Nothing to do here.  We just wanted to make sure to hold on to a reference to the
           // context even if the pipeline was discarded.

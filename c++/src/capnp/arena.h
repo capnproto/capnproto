@@ -32,6 +32,7 @@
 #include <unordered_map>
 #include <kj/common.h>
 #include <kj/mutex.h>
+#include <kj/exception.h>
 #include "common.h"
 #include "message.h"
 #include "layout.h"
@@ -58,6 +59,7 @@ class Segment;
 typedef kj::Id<uint32_t, Segment> SegmentId;
 
 kj::Own<const ClientHook> newBrokenCap(const char* reason);
+kj::Own<const ClientHook> newBrokenCap(kj::Exception&& reason);
 // Helper function that creates a capability which simply throws exceptions when called.
 // Implemented in arena.c++ rather than capability.c++ because it is needed by layout.c++ and we
 // don't want capability.c++ to be required by people not using caps.

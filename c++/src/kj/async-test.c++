@@ -238,6 +238,15 @@ TEST(Async, SeparateFulfillerChained) {
 #define EXPECT_ANY_THROW(code) EXPECT_DEATH(code, ".")
 #endif
 
+TEST(Async, SeparateFulfillerDiscarded) {
+  SimpleEventLoop loop;
+
+  auto pair = newPromiseAndFulfiller<int>();
+  pair.fulfiller = nullptr;
+
+  EXPECT_ANY_THROW(loop.wait(kj::mv(pair.promise)));
+}
+
 TEST(Async, Threads) {
   EXPECT_ANY_THROW(EventLoop::current());
 

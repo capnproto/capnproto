@@ -65,6 +65,7 @@ kj::Maybe<kj::Array<PipelineOp>> toPipelineOps(List<rpc::PromisedAnswer::Op>::Re
           return nullptr;
         }
     }
+    result.add(op);
   }
   return result.finish();
 }
@@ -220,13 +221,6 @@ struct Question {
   // received and `retainedCaps` processed.  (If this is non-null, then the call has not returned
   // yet.)
 
-  kj::Maybe<RpcPipeline&> pipeline;
-  // The local pipeline object.  The RpcPipeline's own destructor sets this value to null.
-  //
-  // TODO(cleanup):  We only have this pointer here because CapInjectorImpl::getInjectedCap() needs
-  //   it, but perhaps CapInjectorImpl should instead hold on to the ClientHook it got in the first
-  //   place.
-
   bool isStarted = false;
   // Is this Question ID currently in-use?  (This is true until both `Return` has been received and
   // `Finish` has been sent.)
@@ -275,16 +269,56 @@ struct Import {
 // =======================================================================================
 
 class RpcConnectionState final: public kj::TaskSet::ErrorHandler {
+  class PromisedAnswerClient;
+
 public:
   RpcConnectionState(const kj::EventLoop& eventLoop,
+                     kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connection)
-      : eventLoop(eventLoop), connection(kj::mv(connection)), tasks(eventLoop, *this),
-        exportDisposer(*this) {
+      : eventLoop(eventLoop), restorer(restorer), connection(kj::mv(connection)),
+        tasks(eventLoop, *this), exportDisposer(*this) {
     tasks.add(messageLoop());
   }
 
   kj::Own<const ClientHook> restore(_::StructReader ref) {
-    // TODO(now)
+    QuestionId questionId;
+    auto paf = kj::newPromiseAndFulfiller<kj::Own<RpcResponse>>(eventLoop);
+
+    {
+      auto lock = tables.lockExclusive();
+      auto& question = lock->questions.next(questionId);
+      question.isStarted = true;
+      question.fulfiller = kj::mv(paf.fulfiller);
+
+      // We need a dummy paramCaps since null normally indicates that the question has completed.
+      question.paramCaps = kj::heap<CapInjectorImpl>(*this);
+    }
+
+    {
+      auto message = connection->newOutgoingMessage(
+          ref.totalSize() / WORDS + messageSizeHint<rpc::Restore>());
+
+      auto builder = message->getBody().initAs<rpc::Message>().initRestore();
+      builder.setQuestionId(questionId);
+      builder.getRef().setInternal(ref);
+
+      message->send();
+    }
+
+    auto questionRef = kj::refcounted<QuestionRef>(*this, questionId);
+
+    auto promiseWithQuestionRef = eventLoop.there(kj::mv(paf.promise),
+        kj::mvCapture(kj::addRef(*questionRef),
+            [](kj::Own<const QuestionRef>&& questionRef, kj::Own<RpcResponse>&& response)
+            -> kj::Own<const RpcResponse> {
+          response->setQuestionRef(kj::mv(questionRef));
+          return kj::mv(response);
+        }));
+
+    auto pipeline = kj::refcounted<RpcPipeline>(
+        *this, questionId, eventLoop.fork(kj::mv(promiseWithQuestionRef)));
+
+    return kj::refcounted<PromisedAnswerClient>(*this, kj::mv(pipeline), nullptr);
   }
 
   void taskFailed(kj::Exception&& exception) override {
@@ -295,10 +329,13 @@ public:
     // - All imported promises resolve to exceptions.
     // - Send abort message.
     // - Remove from connection map.
+
+    kj::throwRecoverableException(kj::mv(exception));
   }
 
 private:
   const kj::EventLoop& eventLoop;
+  kj::Maybe<SturdyRefRestorerBase&> restorer;
   kj::Own<VatNetworkBase::Connection> connection;
 
   class ImportClient;
@@ -403,7 +440,7 @@ private:
 
       auto pipeline = promise.releasePipelineHook();
 
-      auto voidPromise = promise.then(kj::mvCapture(context,
+      auto voidPromise = promise.thenInAnyThread(kj::mvCapture(context,
           [](kj::Own<CallContextHook>&& context, Response<ObjectPointer> response) {
             size_t sizeHint = response.targetSizeInWords();
 
@@ -488,6 +525,7 @@ private:
     }
 
     // implements ClientHook -----------------------------------------
+
     Request<ObjectPointer, ObjectPointer> newCall(
         uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
       auto request = kj::heap<RpcRequest>(connectionState, firstSegmentWordSize, kj::addRef(*this));
@@ -529,7 +567,7 @@ private:
           fork(nullptr) {
       auto paf = kj::newPromiseAndFulfiller<kj::Own<const ClientHook>>(connectionState.eventLoop);
       fulfiller = kj::mv(paf.fulfiller);
-      fork = paf.promise.fork();
+      fork = connectionState.eventLoop.fork(kj::mv(paf.promise));
     }
 
     bool settle(kj::Own<const ClientHook> replacement) override {
@@ -560,7 +598,7 @@ private:
                          kj::Own<const RpcPipeline>&& pipeline,
                          kj::Array<PipelineOp>&& ops)
         : RpcClient(connectionState), ops(kj::mv(ops)),
-          resolveSelfPromise(pipeline->onResponse().then(
+          resolveSelfPromise(connectionState.eventLoop.there(pipeline->onResponse(),
               [this](kj::Own<const RpcResponse>&& response) -> kj::Promise<void> {
                 resolve(kj::mv(response));
                 return kj::READY_NOW;  // hack to force eager resolution.
@@ -626,8 +664,9 @@ private:
       auto lock = state.lockShared();
 
       if (lock->is<Waiting>()) {
-        return lock->get<Waiting>()->onResponse().then(kj::mvCapture(kj::heapArray(ops.asPtr()),
-            [](kj::Array<PipelineOp>&& ops, kj::Own<const RpcResponse>&& response) {
+        return lock->get<Waiting>()->onResponse().thenInAnyThread(
+            kj::mvCapture(kj::heapArray(ops.asPtr()),
+                [](kj::Array<PipelineOp>&& ops, kj::Own<const RpcResponse>&& response) {
               return response->getResults().getPipelinedCap(ops);
             }));
       } else if (lock->is<Resolved>()) {
@@ -719,7 +758,7 @@ private:
         : connectionState(connectionState) {}
 
     ~CapExtractorImpl() noexcept(false) {
-      KJ_ASSERT(retainedCaps.getWithoutLock().size() > 0,
+      KJ_ASSERT(retainedCaps.getWithoutLock().size() == 0,
                 "CapExtractorImpl destroyed without getting a chance to retain the caps!") {
         break;
       }
@@ -795,9 +834,9 @@ private:
           if (descriptor.which() == rpc::CapDescriptor::SENDER_PROMISE) {
             // TODO(now):  Check for pending `Resolve` messages replacing this import ID, and if
             //   one exists, use that client instead.
-            kj::refcounted<PromiseImportClient>(connectionState, importId);
+            result = kj::refcounted<PromiseImportClient>(connectionState, importId);
           } else {
-            kj::refcounted<SettledImportClient>(connectionState, importId);
+            result = kj::refcounted<SettledImportClient>(connectionState, importId);
           }
           import.client = result;
 
@@ -885,7 +924,7 @@ private:
 
       for (auto& entry: caps.getWithoutLock()) {
         KJ_IF_MAYBE(exportId, connectionState.writeDescriptor(
-            kj::mv(entry.second.cap), entry.second.builder, tables)) {
+            entry.second.cap->addRef(), entry.second.builder, tables)) {
           exports.add(*exportId);
         }
       }
@@ -899,7 +938,6 @@ private:
       auto result = lock->insert(std::make_pair(
           identity(descriptor), CapInfo(descriptor, kj::mv(cap))));
       KJ_REQUIRE(result.second, "A cap has already been injected at this location.") {
-        result.first->second.cap = kj::mv(cap);
         break;
       }
     }
@@ -1057,19 +1095,20 @@ private:
 
       auto questionRef = kj::refcounted<QuestionRef>(connectionState, questionId);
 
-      auto promiseWithQuestionRef = promise.then(kj::mvCapture(kj::addRef(*questionRef),
+      auto promiseWithQuestionRef = promise.thenInAnyThread(kj::mvCapture(kj::addRef(*questionRef),
           [](kj::Own<const QuestionRef>&& questionRef, kj::Own<RpcResponse>&& response)
               -> kj::Own<const RpcResponse> {
             response->setQuestionRef(kj::mv(questionRef));
             return kj::mv(response);
           }));
 
-      auto forkedPromise = promiseWithQuestionRef.fork();
+      auto forkedPromise = connectionState.eventLoop.fork(kj::mv(promiseWithQuestionRef));
 
-      auto appPromise = forkedPromise.addBranch().then([](kj::Own<const RpcResponse>&& response) {
-        auto reader = response->getResults();
-        return Response<ObjectPointer>(reader, kj::mv(response));
-      });
+      auto appPromise = forkedPromise.addBranch().thenInAnyThread(
+          [](kj::Own<const RpcResponse>&& response) {
+            auto reader = response->getResults();
+            return Response<ObjectPointer>(reader, kj::mv(response));
+          });
 
       auto pipeline = kj::refcounted<RpcPipeline>(
           connectionState, questionId, kj::mv(forkedPromise));
@@ -1096,7 +1135,7 @@ private:
                 kj::ForkedPromise<kj::Own<const RpcResponse>>&& redirectLaterParam)
         : connectionState(connectionState),
           redirectLater(kj::mv(redirectLaterParam)),
-          resolveSelfPromise(redirectLater.addBranch().then(
+          resolveSelfPromise(connectionState.eventLoop.there(redirectLater.addBranch(),
               [this](kj::Own<const RpcResponse>&& response) -> kj::Promise<void> {
                 resolve(kj::mv(response));
                 return kj::READY_NOW;  // hack to force eager resolution.
@@ -1304,7 +1343,7 @@ private:
 
         builder.setQuestionId(questionId);
         builder.adoptRetainedCaps(requestCapExtractor.finalizeRetainedCaps(
-            Orphanage::getForMessageContaining(returnMessage)));
+            Orphanage::getForMessageContaining(builder)));
         fromException(exception, builder.initException());
 
         message->send();
@@ -1318,7 +1357,7 @@ private:
 
         builder.setQuestionId(questionId);
         builder.adoptRetainedCaps(requestCapExtractor.finalizeRetainedCaps(
-            Orphanage::getForMessageContaining(returnMessage)));
+            Orphanage::getForMessageContaining(builder)));
         builder.setCanceled();
 
         message->send();
@@ -1515,10 +1554,12 @@ private:
   // Message handling
 
   kj::Promise<void> messageLoop() {
-    return connection->receiveIncomingMessage().then(
+    auto receive = eventLoop.there(connection->receiveIncomingMessage(),
         [this](kj::Own<IncomingRpcMessage>&& message) {
           handleMessage(kj::mv(message));
-        }).then([this]() {
+        });
+    return eventLoop.there(kj::mv(receive),
+        [this]() {
           // No exceptions; continue loop.
           //
           // (We do this in a separate continuation to handle the case where exceptions are
@@ -1558,6 +1599,10 @@ private:
         // TODO(now)
         break;
 
+      case rpc::Message::RESTORE:
+        handleRestore(kj::mv(message), reader.getRestore());
+        break;
+
       default: {
         auto message = connection->newOutgoingMessage(
             reader.totalSizeInWords() + messageSizeHint<void>());
@@ -1583,6 +1628,9 @@ private:
   void handleAbort(const rpc::Exception::Reader& exception) {
     kj::throwRecoverableException(toException(exception));
   }
+
+  // ---------------------------------------------------------------------------
+  // Level 0
 
   void handleCall(kj::Own<IncomingRpcMessage>&& message, const rpc::Call::Reader& call) {
     kj::Own<const ClientHook> capability;
@@ -1670,10 +1718,10 @@ private:
       //   this tricks the promise framework into making sure the continuations actually run
       //   without anyone waiting on them.  We should find a cleaner way to do this.
       answer.asyncOp = promiseAndPipeline.promise.then(
-          kj::mvCapture(context, [this](kj::Own<RpcCallContext>&& context) -> kj::Promise<void> {
+          kj::mvCapture(context, [](kj::Own<RpcCallContext>&& context) -> kj::Promise<void> {
             context->sendReturn();
             return kj::READY_NOW;
-          }), [this,contextPtr](kj::Exception&& exception) -> kj::Promise<void> {
+          }), [contextPtr](kj::Exception&& exception) -> kj::Promise<void> {
             contextPtr->sendErrorReturn(kj::mv(exception));
             return kj::READY_NOW;
           });
@@ -1758,6 +1806,81 @@ private:
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Level 1
+
+  // ---------------------------------------------------------------------------
+  // Level 2
+
+  class SingleCapPipeline: public PipelineHook, public kj::Refcounted {
+  public:
+    SingleCapPipeline(kj::Own<const ClientHook>&& cap): cap(kj::mv(cap)) {}
+
+    kj::Own<const PipelineHook> addRef() const override {
+      return kj::addRef(*this);
+    }
+
+    kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const override {
+      if (ops.size() == 0) {
+        return cap->addRef();
+      } else {
+        return newBrokenCap("Invalid pipeline transform.");
+      }
+    }
+
+  private:
+    kj::Own<const ClientHook> cap;
+  };
+
+  void handleRestore(kj::Own<IncomingRpcMessage>&& message, const rpc::Restore::Reader& restore) {
+    QuestionId questionId = restore.getQuestionId();
+
+    auto response = connection->newOutgoingMessage(
+        messageSizeHint<rpc::Return>() + sizeInWords<rpc::CapDescriptor>() + 32);
+
+    rpc::Return::Builder ret = response->getBody().getAs<rpc::Message>().initReturn();
+    ret.setQuestionId(questionId);
+
+    CapInjectorImpl injector(*this);
+    CapBuilderContext context(injector);
+
+    kj::Own<const ClientHook> capHook;
+
+    // Call the restorer and initialize the answer.
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      KJ_IF_MAYBE(r, restorer) {
+        Capability::Client cap = r->baseRestore(restore.getRef());
+        auto answer = context.imbue(ret.initAnswer());
+        answer.setAs<Capability>(cap);
+        capHook = answer.asReader().getPipelinedCap(nullptr);
+      } else {
+        KJ_FAIL_REQUIRE("This vat cannot restore this SturdyRef.") { break; }
+      }
+    })) {
+      fromException(*exception, ret.initException());
+      capHook = newBrokenCap(kj::mv(*exception));
+    }
+
+    message = nullptr;
+
+    // Add the answer to the answer table for pipelining and send the response.
+    {
+      auto lock = tables.lockExclusive();
+
+      auto& answer = lock->answers[questionId];
+      KJ_REQUIRE(!answer.active, "questionId is already in use") {
+        return;
+      }
+
+      answer.active = true;
+      answer.pipeline = kj::Own<const PipelineHook>(
+          kj::refcounted<SingleCapPipeline>(kj::mv(capHook)));
+
+      injector.finishDescriptors(*lock);
+      response->send();
+    }
+  }
+
   // =====================================================================================
 
   void sendReleaseLater(ExportId importId, uint remoteRefcount) const {
@@ -1773,40 +1896,84 @@ private:
 
 }  // namespace
 
-class RpcSystemBase::Impl {
+class RpcSystemBase::Impl final: public kj::TaskSet::ErrorHandler {
 public:
-  Impl(VatNetworkBase& network, SturdyRefRestorerBase& restorer, const kj::EventLoop& eventLoop)
-      : network(network), restorer(restorer), eventLoop(eventLoop) {}
+  Impl(VatNetworkBase& network, kj::Maybe<SturdyRefRestorerBase&> restorer,
+       const kj::EventLoop& eventLoop)
+      : network(network), restorer(restorer), eventLoop(eventLoop), tasks(eventLoop, *this) {
+    tasks.add(acceptLoop());
+  }
+
+  ~Impl() noexcept(false) {
+    // std::unordered_map doesn't like it when elements' destructors throw, so carefully
+    // disassemble it.
+    auto& connectionMap = connections.getWithoutLock();
+    if (!connectionMap.empty()) {
+      kj::Vector<kj::Own<RpcConnectionState>> deleteMe(connectionMap.size());
+      for (auto& entry: connectionMap) {
+        deleteMe.add(kj::mv(entry.second));
+      }
+    }
+  }
 
   Capability::Client connect(_::StructReader ref) {
     auto connection = network.baseConnectToHostOf(ref);
     auto lock = connections.lockExclusive();
-    auto iter = lock->find(connection);
-    RpcConnectionState* state;
-    if (iter == lock->end()) {
-      VatNetworkBase::Connection* connectionPtr = connection;
-      auto newState = kj::heap<RpcConnectionState>(eventLoop, kj::mv(connection));
-      state = newState;
-      lock->insert(std::make_pair(connectionPtr, kj::mv(newState)));
-    } else {
-      state = iter->second;
-    }
+    auto& state = getConnectionState(kj::mv(connection), *lock);
+    return Capability::Client(state.restore(ref));
+  }
 
-    return Capability::Client(state->restore(ref));
+  void taskFailed(kj::Exception&& exception) override {
+    // TODO(now):  What do we do?
+
+    kj::throwRecoverableException(kj::mv(exception));
   }
 
 private:
   VatNetworkBase& network;
-  SturdyRefRestorerBase& restorer;
+  kj::Maybe<SturdyRefRestorerBase&> restorer;
   const kj::EventLoop& eventLoop;
+  kj::TaskSet tasks;
 
-  kj::MutexGuarded<std::unordered_map<VatNetworkBase::Connection*, kj::Own<RpcConnectionState>>>
-      connections;
+  typedef std::unordered_map<VatNetworkBase::Connection*, kj::Own<RpcConnectionState>>
+      ConnectionMap;
+  kj::MutexGuarded<ConnectionMap> connections;
+
+  RpcConnectionState& getConnectionState(kj::Own<VatNetworkBase::Connection>&& connection,
+                                         ConnectionMap& lockedMap) {
+    auto iter = lockedMap.find(connection);
+    if (iter == lockedMap.end()) {
+      VatNetworkBase::Connection* connectionPtr = connection;
+      auto newState = kj::heap<RpcConnectionState>(eventLoop, restorer, kj::mv(connection));
+      RpcConnectionState& result = *newState;
+      lockedMap.insert(std::make_pair(connectionPtr, kj::mv(newState)));
+      return result;
+    } else {
+      return *iter->second;
+    }
+  }
+
+  kj::Promise<void> acceptLoop() {
+    auto receive = eventLoop.there(network.baseAcceptConnectionAsRefHost(),
+        [this](kj::Own<VatNetworkBase::Connection>&& connection) {
+          auto lock = connections.lockExclusive();
+          getConnectionState(kj::mv(connection), *lock);
+        });
+    return eventLoop.there(kj::mv(receive),
+        [this]() {
+          // No exceptions; continue loop.
+          //
+          // (We do this in a separate continuation to handle the case where exceptions are
+          // disabled.)
+          tasks.add(acceptLoop());
+        });
+  }
 };
 
-RpcSystemBase::RpcSystemBase(VatNetworkBase& network, SturdyRefRestorerBase& restorer,
+RpcSystemBase::RpcSystemBase(VatNetworkBase& network, kj::Maybe<SturdyRefRestorerBase&> restorer,
                              const kj::EventLoop& eventLoop)
     : impl(kj::heap<Impl>(network, restorer, eventLoop)) {}
+RpcSystemBase::RpcSystemBase(RpcSystemBase&& other) = default;
 RpcSystemBase::~RpcSystemBase() noexcept(false) {}
 
 Capability::Client RpcSystemBase::baseConnect(_::StructReader ref) {

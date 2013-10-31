@@ -208,6 +208,12 @@ struct ObjectPointer {
     inline Reader asReader() const { return Reader(builder.asReader()); }
     inline operator Reader() const { return Reader(builder.asReader()); }
 
+    inline void setInternal(_::StructReader value) { builder.setStruct(value); }
+    // For internal use.
+    //
+    // TODO(cleanup):  RPC implementation uses this, but wouldn't have to if we had an AnyStruct
+    //   type, which would be useful anyawy.
+
   private:
     _::PointerBuilder builder;
     friend class Orphanage;
@@ -254,9 +260,15 @@ public:
   Orphan(Orphan&&) = default;
   Orphan& operator=(Orphan&&) = default;
 
+  template <typename T>
+  inline Orphan(Orphan<T>&& other): builder(kj::mv(other.builder)) {}
+  template <typename T>
+  inline Orphan& operator=(Orphan<T>&& other) { builder = kj::mv(other.builder); }
+  // Cast from typed orphan.
+
   // It's not possible to get an ObjectPointer::{Reader,Builder} directly since there is no
   // underlying pointer (the pointer would normally live in the parent, but this object is
-  // orphaned).  It is possible, however, to request readers/builders.
+  // orphaned).  It is possible, however, to request typed readers/builders.
 
   template <typename T>
   inline BuilderFor<T> getAs();

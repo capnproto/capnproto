@@ -112,6 +112,10 @@ kj::Own<const ClientHook> newBrokenCap(const char* reason) {
   return kj::refcounted<BrokenClient>(reason);
 }
 
+kj::Own<const ClientHook> newBrokenCap(kj::Exception&& reason) {
+  return kj::refcounted<BrokenClient>(kj::mv(reason));
+}
+
 Arena::~Arena() noexcept(false) {}
 BuilderArena::~BuilderArena() noexcept(false) {}
 
@@ -412,20 +416,26 @@ SegmentBuilder* ImbuedBuilderArena::imbue(SegmentBuilder* baseSegment) {
     result = &segment0;
   } else {
     auto lock = moreSegments.lockExclusive();
-    KJ_IF_MAYBE(segmentState, *lock) {
-      auto id = baseSegment->getSegmentId().value;
-      if (id >= segmentState->get()->builders.size()) {
-        segmentState->get()->builders.resize(id + 1);
-      }
-      KJ_IF_MAYBE(segment, segmentState->get()->builders[id]) {
-        result = *segment;
-      } else {
-        auto newBuilder = kj::heap<ImbuedSegmentBuilder>(this, baseSegment);
-        result = newBuilder;
-        segmentState->get()->builders[id] = kj::mv(newBuilder);
-      }
+    MultiSegmentState* segmentState;
+    KJ_IF_MAYBE(s, *lock) {
+      segmentState = *s;
+    } else {
+      auto newState = kj::heap<MultiSegmentState>();
+      segmentState = newState;
+      *lock = kj::mv(newState);
     }
-    return nullptr;
+
+    auto id = baseSegment->getSegmentId().value;
+    if (id >= segmentState->builders.size()) {
+      segmentState->builders.resize(id + 1);
+    }
+    KJ_IF_MAYBE(segment, segmentState->builders[id]) {
+      result = *segment;
+    } else {
+      auto newBuilder = kj::heap<ImbuedSegmentBuilder>(this, baseSegment);
+      result = newBuilder;
+      segmentState->builders[id] = kj::mv(newBuilder);
+    }
   }
 
   KJ_DASSERT(result->getArray().begin() == baseSegment->getArray().begin());

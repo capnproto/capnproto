@@ -23,6 +23,7 @@
 
 #include "async.h"
 #include "debug.h"
+#include "vector.h"
 #include <exception>
 #include <map>
 
@@ -271,6 +272,17 @@ public:
   inline Impl(const EventLoop& loop, ErrorHandler& errorHandler)
     : loop(loop), errorHandler(errorHandler) {}
 
+  ~Impl() noexcept(false) {
+    // std::map doesn't like it when elements' destructors throw, so carefully disassemble it.
+    auto& taskMap = tasks.getWithoutLock();
+    if (!taskMap.empty()) {
+      Vector<Own<Task>> deleteMe(taskMap.size());
+      for (auto& entry: taskMap) {
+        deleteMe.add(kj::mv(entry.second));
+      }
+    }
+  }
+
   class Task final: public EventLoop::Event {
   public:
     Task(const Impl& taskSet, Own<_::PromiseNode>&& nodeParam)
@@ -279,6 +291,10 @@ public:
         // TODO(soon):  Only yield cross-thread.
         arm(EventLoop::Event::YIELD);
       }
+    }
+
+    ~Task() {
+      disarm();
     }
 
   protected:
@@ -387,6 +403,7 @@ bool TransformPromiseNodeBase::onReady(EventLoop::Event& event) noexcept {
 void TransformPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
     getImpl(output);
+    dropDependency();
   })) {
     output.addException(kj::mv(*exception));
   }
