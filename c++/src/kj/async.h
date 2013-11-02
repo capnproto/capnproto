@@ -1481,8 +1481,8 @@ private:
 
 template <typename T, typename Adapter, typename... Params>
 Promise<T> newAdaptedPromise(Params&&... adapterConstructorParams) {
-  return Promise<T>(Own<_::PromiseNode>(heap<_::AdapterPromiseNode<_::FixVoid<T>, Adapter>>(
-      kj::fwd<Params>(adapterConstructorParams)...)));
+  return Promise<T>(false, heap<_::AdapterPromiseNode<_::FixVoid<T>, Adapter>>(
+      kj::fwd<Params>(adapterConstructorParams)...));
 }
 
 template <typename T>
