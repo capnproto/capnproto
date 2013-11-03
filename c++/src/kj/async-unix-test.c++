@@ -117,7 +117,9 @@ TEST_F(AsyncUnixTest, SignalsAsync) {
       [&](siginfo_t&& info) {
     received = true;
     EXPECT_EQ(SIGUSR2, info.si_signo);
+#if __linux__
     EXPECT_SI_CODE(SI_TKILL, info.si_code);
+#endif
   });
 
   delay();
