@@ -61,20 +61,24 @@ public:
       }
     }
 
-    template <typename... Params>
-    void fire(Params&&... params) const {
+    template <typename Param>
+    void fire(Param&& param) const {
       // If the listener has not yet dropped its pointer to the Item, invokes the item's `fire()`
       // method with the given parameters.
+      //
+      // TODO(someday):  This ought to be a variadic template, letting you pass any number of
+      //   params.  However, GCC 4.7 and 4.8 appear to get confused by param packs used inside
+      //   lambdas.  Clang handles it fine.
 
       doOnce([&]() {
-        const_cast<Item&>(item).fire(kj::fwd<Params>(params)...);
+        const_cast<Item&>(item).fire(kj::fwd<Param>(param));
       });
     }
 
   private:
     Item item;
     mutable _::Once once;
-    uint refcount = 2;
+    mutable uint refcount = 2;
 
     ItemWrapper* next = nullptr;
     // The ItemWrapper cannot be destroyed until this pointer becomes non-null.
@@ -248,7 +252,7 @@ private:
   // updating this pointer, so there's a chance it will remain behind indefinitely (if two threads
   // adding items at the same time race to update `tail`), but it should not be too far behind.
 
-  NewWorkCallback* newWorkCallback = nullptr;
+  mutable NewWorkCallback* newWorkCallback = nullptr;
 };
 
 // =======================================================================================

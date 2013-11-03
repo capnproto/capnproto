@@ -92,7 +92,7 @@ private:
   Own<Impl> impl;
 
   pthread_t waitThread;
-  bool isSleeping = false;
+  mutable bool isSleeping = false;
 };
 
 }  // namespace kj

@@ -133,6 +133,7 @@ includekj_HEADERS =                                            \
   src/kj/mutex.h                                               \
   src/kj/thread.h                                              \
   src/kj/async.h                                               \
+  src/kj/async-unix.h                                          \
   src/kj/main.h
 
 includekjparse_HEADERS =                                       \
@@ -183,6 +184,7 @@ libkj_la_SOURCES=                                              \
   src/kj/mutex.c++                                             \
   src/kj/thread.c++                                            \
   src/kj/async.c++                                             \
+  src/kj/async-unix.c++                                        \
   src/kj/main.c++                                              \
   src/kj/parse/char.c++
 
@@ -323,6 +325,7 @@ capnp_test_SOURCES =                                           \
   src/kj/function-test.c++                                     \
   src/kj/mutex-test.c++                                        \
   src/kj/async-test.c++                                        \
+  src/kj/async-unix-test.c++                                   \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \
   src/capnp/common-test.c++                                    \
