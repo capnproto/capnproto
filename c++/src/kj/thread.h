@@ -40,6 +40,9 @@ public:
 
   ~Thread();
 
+  void sendSignal(int signo);
+  // Send a Unix signal to the given thread, using pthread_kill or an equivalent.
+
 private:
   unsigned long long threadId;  // actually pthread_t
 

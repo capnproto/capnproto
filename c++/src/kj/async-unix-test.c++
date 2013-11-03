@@ -34,6 +34,13 @@ namespace kj {
 
 inline void delay() { usleep(10000); }
 
+// On OSX, si_code seems to be zero when SI_USER is expected.
+#if __linux__ || __CYGWIN__
+#define EXPECT_SI_CODE EXPECT_EQ
+#else
+#define EXPECT_SI_CODE(a,b)
+#endif
+
 class DummyErrorHandler: public TaskSet::ErrorHandler {
 public:
   void taskFailed(kj::Exception&& exception) override {
@@ -56,7 +63,7 @@ TEST_F(AsyncUnixTest, Signals) {
 
   siginfo_t info = loop.wait(loop.onSignal(SIGUSR2));
   EXPECT_EQ(SIGUSR2, info.si_signo);
-  EXPECT_EQ(SI_USER, info.si_code);
+  EXPECT_SI_CODE(SI_USER, info.si_code);
 }
 
 #ifdef SIGRTMIN
@@ -74,7 +81,7 @@ TEST_F(AsyncUnixTest, SignalWithValue) {
 
   siginfo_t info = loop.wait(loop.onSignal(SIGUSR2));
   EXPECT_EQ(SIGUSR2, info.si_signo);
-  EXPECT_EQ(SI_QUEUE, info.si_code);
+  EXPECT_SI_CODE(SI_QUEUE, info.si_code);
   EXPECT_EQ(123, info.si_value.sival_int);
 }
 #endif
@@ -92,7 +99,7 @@ TEST_F(AsyncUnixTest, SignalsMulti) {
 
   siginfo_t info = loop.wait(loop.onSignal(SIGUSR2));
   EXPECT_EQ(SIGUSR2, info.si_signo);
-  EXPECT_EQ(SI_USER, info.si_code);
+  EXPECT_SI_CODE(SI_USER, info.si_code);
 }
 
 TEST_F(AsyncUnixTest, SignalsAsync) {
@@ -110,14 +117,14 @@ TEST_F(AsyncUnixTest, SignalsAsync) {
       [&](siginfo_t&& info) {
     received = true;
     EXPECT_EQ(SIGUSR2, info.si_signo);
-    EXPECT_EQ(SI_USER, info.si_code);
+    EXPECT_SI_CODE(SI_TKILL, info.si_code);
   });
 
   delay();
 
   EXPECT_FALSE(received);
 
-  kill(getpid(), SIGUSR2);
+  thread.sendSignal(SIGUSR2);
 
   SimpleEventLoop mainLoop;
   mainLoop.wait(kj::mv(promise));

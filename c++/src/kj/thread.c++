@@ -24,6 +24,7 @@
 #include "thread.h"
 #include "debug.h"
 #include <pthread.h>
+#include <signal.h>
 
 namespace kj {
 
@@ -39,7 +40,17 @@ Thread::Thread(void* (*run)(void*), void (*deleteArg)(void*), void* arg) {
 }
 
 Thread::~Thread() {
-  KJ_ASSERT(pthread_join(*reinterpret_cast<pthread_t*>(&threadId), nullptr) == 0);
+  int pthreadResult = pthread_join(*reinterpret_cast<pthread_t*>(&threadId), nullptr);
+  if (pthreadResult != 0) {
+    KJ_FAIL_SYSCALL("pthread_join", pthreadResult) { break; }
+  }
+}
+
+void Thread::sendSignal(int signo) {
+  int pthreadResult = pthread_kill(*reinterpret_cast<pthread_t*>(&threadId), signo);
+  if (pthreadResult != 0) {
+    KJ_FAIL_SYSCALL("pthread_kill", pthreadResult) { break; }
+  }
 }
 
 }  // namespace kj

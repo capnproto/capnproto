@@ -469,15 +469,22 @@ void UnixEventLoop::sleep() {
   sigset_t origMask;
   sigprocmask(SIG_UNBLOCK, &newMask, &origMask);
 
-  int pollResult = poll(pollfds.begin(), pollfds.size(), -1);
-  int error = pollResult < 0 ? errno : 0;
+  int pollResult;
+  int pollError;
+  do {
+    pollResult = poll(pollfds.begin(), pollfds.size(), -1);
+    pollError = pollResult < 0 ? errno : 0;
+
+    // EINTR should only happen if we received a signal *other than* the ones registered via
+    // the UnixEventLoop, so we don't care about that case.
+  } while (pollError == EINTR);
 
   sigprocmask(SIG_SETMASK, &origMask, nullptr);
   threadCapture = nullptr;
   __atomic_store_n(&isSleeping, false, __ATOMIC_RELAXED);
 
   if (pollResult < 0) {
-    KJ_FAIL_SYSCALL("poll()", error);
+    KJ_FAIL_SYSCALL("poll()", pollError);
   }
 
   for (auto i: indices(pollfds)) {
