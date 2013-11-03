@@ -34,7 +34,7 @@ TEST(Common, Size) {
   for (size_t i: indices(arr)) {
     EXPECT_EQ(expected++, i);
   }
-  EXPECT_EQ(4, expected);
+  EXPECT_EQ(4u, expected);
 }
 
 TEST(Common, Maybe) {

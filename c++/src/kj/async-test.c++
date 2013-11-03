@@ -437,7 +437,7 @@ TEST(Async, TaskSet) {
   }));
 
   EXPECT_EQ(4, counter);
-  EXPECT_EQ(1, errorHandler.exceptionCount);
+  EXPECT_EQ(1u, errorHandler.exceptionCount);
 }
 
 }  // namespace

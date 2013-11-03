@@ -52,6 +52,22 @@ public:
 TEST_F(AsyncUnixTest, Signals) {
   UnixEventLoop loop;
 
+  kill(getpid(), SIGUSR2);
+
+  siginfo_t info = loop.wait(loop.onSignal(SIGUSR2));
+  EXPECT_EQ(SIGUSR2, info.si_signo);
+  EXPECT_EQ(SI_USER, info.si_code);
+}
+
+#ifdef SIGRTMIN
+TEST_F(AsyncUnixTest, SignalWithValue) {
+  // This tests that if we use sigqueue() to attach a value to the signal, that value is received
+  // correctly.  Note that this only works on platforms that support real-time signals -- even
+  // though the signal we're sending is SIGUSR2, the sigqueue() system call is introduced by RT
+  // signals.  Hence this test won't run on e.g. Mac OSX.
+
+  UnixEventLoop loop;
+
   union sigval value;
   value.sival_int = 123;
   sigqueue(getpid(), SIGUSR2, value);
@@ -61,6 +77,7 @@ TEST_F(AsyncUnixTest, Signals) {
   EXPECT_EQ(SI_QUEUE, info.si_code);
   EXPECT_EQ(123, info.si_value.sival_int);
 }
+#endif
 
 TEST_F(AsyncUnixTest, SignalsMulti) {
   UnixEventLoop loop;
@@ -71,14 +88,11 @@ TEST_F(AsyncUnixTest, SignalsMulti) {
         ADD_FAILURE() << "Received wrong signal.";
       }));
 
-  union sigval value;
-  value.sival_int = 123;
-  sigqueue(getpid(), SIGUSR2, value);
+  kill(getpid(), SIGUSR2);
 
   siginfo_t info = loop.wait(loop.onSignal(SIGUSR2));
   EXPECT_EQ(SIGUSR2, info.si_signo);
-  EXPECT_EQ(SI_QUEUE, info.si_code);
-  EXPECT_EQ(123, info.si_value.sival_int);
+  EXPECT_EQ(SI_USER, info.si_code);
 }
 
 TEST_F(AsyncUnixTest, SignalsAsync) {
@@ -96,17 +110,14 @@ TEST_F(AsyncUnixTest, SignalsAsync) {
       [&](siginfo_t&& info) {
     received = true;
     EXPECT_EQ(SIGUSR2, info.si_signo);
-    EXPECT_EQ(SI_QUEUE, info.si_code);
-    EXPECT_EQ(123, info.si_value.sival_int);
+    EXPECT_EQ(SI_USER, info.si_code);
   });
 
   delay();
 
   EXPECT_FALSE(received);
 
-  union sigval value;
-  value.sival_int = 123;
-  sigqueue(getpid(), SIGUSR2, value);
+  kill(getpid(), SIGUSR2);
 
   SimpleEventLoop mainLoop;
   mainLoop.wait(kj::mv(promise));
