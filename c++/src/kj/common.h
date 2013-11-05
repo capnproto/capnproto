@@ -730,6 +730,21 @@ public:
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
 
+  T& orDefault(T& defaultValue) {
+    if (ptr == nullptr) {
+      return defaultValue;
+    } else {
+      return *ptr;
+    }
+  }
+  const T& orDefault(const T& defaultValue) const {
+    if (ptr == nullptr) {
+      return defaultValue;
+    } else {
+      return *ptr;
+    }
+  }
+
   template <typename Func>
   auto map(Func&& f) -> Maybe<decltype(f(instance<T&>()))> {
     if (ptr == nullptr) {
@@ -786,6 +801,21 @@ public:
 
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
+
+  T& orDefault(T& defaultValue) {
+    if (ptr == nullptr) {
+      return defaultValue;
+    } else {
+      return *ptr;
+    }
+  }
+  const T& orDefault(const T& defaultValue) const {
+    if (ptr == nullptr) {
+      return defaultValue;
+    } else {
+      return *ptr;
+    }
+  }
 
   template <typename Func>
   auto map(Func&& f) -> Maybe<decltype(f(instance<T&>()))> {

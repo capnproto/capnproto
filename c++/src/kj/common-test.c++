@@ -52,6 +52,7 @@ TEST(Common, Maybe) {
     } else {
       ADD_FAILURE();
     }
+    EXPECT_EQ(123, m.orDefault(456));
   }
 
   {
@@ -66,6 +67,7 @@ TEST(Common, Maybe) {
       ADD_FAILURE();
       EXPECT_EQ(0, *v);  // avoid unused warning
     }
+    EXPECT_EQ(456, m.orDefault(456));
   }
 
   int i = 234;
@@ -83,6 +85,7 @@ TEST(Common, Maybe) {
     } else {
       ADD_FAILURE();
     }
+    EXPECT_EQ(234, m.orDefault(456));
   }
 
   {
@@ -97,6 +100,7 @@ TEST(Common, Maybe) {
       ADD_FAILURE();
       EXPECT_EQ(0, *v);  // avoid unused warning
     }
+    EXPECT_EQ(456, m.orDefault(456));
   }
 
   {
@@ -113,6 +117,7 @@ TEST(Common, Maybe) {
     } else {
       ADD_FAILURE();
     }
+    EXPECT_EQ(234, m.orDefault(456));
   }
 
   {
@@ -127,6 +132,7 @@ TEST(Common, Maybe) {
       ADD_FAILURE();
       EXPECT_EQ(0, *v);  // avoid unused warning
     }
+    EXPECT_EQ(456, m.orDefault(456));
   }
 
   {

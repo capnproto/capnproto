@@ -212,6 +212,21 @@ public:
   inline bool operator==(decltype(nullptr)) const { return ptr == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return ptr != nullptr; }
 
+  Own<T>& orDefault(Own<T>& defaultValue) {
+    if (ptr == nullptr) {
+      return defaultValue;
+    } else {
+      return ptr;
+    }
+  }
+  const Own<T>& orDefault(const Own<T>& defaultValue) const {
+    if (ptr == nullptr) {
+      return defaultValue;
+    } else {
+      return ptr;
+    }
+  }
+
   template <typename Func>
   auto map(Func&& f) -> Maybe<decltype(f(instance<T&>()))> {
     if (ptr == nullptr) {

@@ -79,6 +79,11 @@
 //
 //   `KJ_SYSCALL` can be followed by a recovery block, just like `KJ_ASSERT`.
 //
+// * `KJ_NONBLOCKING_SYSCALL(code, ...)`:  Like KJ_SYSCALL, but will not throw an exception on
+//   EAGAIN/EWOULDBLOCK.  The calling code should check the syscall's return value to see if it
+//   indicates an error; in this case, it can assume the error was EAGAIN because any other error
+//   would have caused an exception to be thrown.
+//
 // * `KJ_CONTEXT(...)`:  Notes additional contextual information relevant to any exceptions thrown
 //   from within the current scope.  That is, until control exits the block in which KJ_CONTEXT()
 //   is used, if any exception is generated, it will contain the given information in its context
@@ -129,7 +134,13 @@ namespace kj {
 #define KJ_FAIL_REQUIRE(...) _kJ_FAIL_FAULT(PRECONDITION, ##__VA_ARGS__)
 
 #define KJ_SYSCALL(call, ...) \
-  if (auto _kjSyscallResult = ::kj::_::Debug::syscall([&](){return (call);})) {} else \
+  if (auto _kjSyscallResult = ::kj::_::Debug::syscall([&](){return (call);}, false)) {} else \
+    for (::kj::_::Debug::Fault f( \
+             __FILE__, __LINE__, ::kj::Exception::Nature::OS_ERROR, \
+             _kjSyscallResult.getErrorNumber(), #call, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
+
+#define KJ_NONBLOCKING_SYSCALL(call, ...) \
+  if (auto _kjSyscallResult = ::kj::_::Debug::syscall([&](){return (call);}, true)) {} else \
     for (::kj::_::Debug::Fault f( \
              __FILE__, __LINE__, ::kj::Exception::Nature::OS_ERROR, \
              _kjSyscallResult.getErrorNumber(), #call, #__VA_ARGS__, ##__VA_ARGS__);; f.fatal())
@@ -227,7 +238,7 @@ public:
   };
 
   template <typename Call>
-  static SyscallResult syscall(Call&& call);
+  static SyscallResult syscall(Call&& call, bool nonblocking);
 
   class Context: public ExceptionCallback {
   public:
@@ -280,7 +291,7 @@ private:
                           ArrayPtr<String> argValues);
   static String makeContextDescriptionInternal(const char* macroArgs, ArrayPtr<String> argValues);
 
-  static int getOsErrorNumber();
+  static int getOsErrorNumber(bool nonblocking);
   // Get the error code of the last error (e.g. from errno).  Returns -1 on EINTR.
 };
 
@@ -303,10 +314,12 @@ Debug::Fault::Fault(const char* file, int line, Exception::Nature nature, int er
 }
 
 template <typename Call>
-Debug::SyscallResult Debug::syscall(Call&& call) {
+Debug::SyscallResult Debug::syscall(Call&& call, bool nonblocking) {
   while (call() < 0) {
-    int errorNum = getOsErrorNumber();
-    // getOsErrorNumber() returns -1 to indicate EINTR
+    int errorNum = getOsErrorNumber(nonblocking);
+    // getOsErrorNumber() returns -1 to indicate EINTR.
+    // Also, if nonblocking is true, then it returns 0 on EAGAIN, which will then be treated as a
+    // non-error.
     if (errorNum != -1) {
       return SyscallResult(errorNum);
     }
