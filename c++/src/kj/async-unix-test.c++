@@ -86,7 +86,7 @@ TEST_F(AsyncUnixTest, SignalWithValue) {
 }
 #endif
 
-TEST_F(AsyncUnixTest, SignalsMulti) {
+TEST_F(AsyncUnixTest, SignalsMultiListen) {
   UnixEventLoop loop;
   DummyErrorHandler dummyHandler;
 
@@ -99,6 +99,22 @@ TEST_F(AsyncUnixTest, SignalsMulti) {
 
   siginfo_t info = loop.wait(loop.onSignal(SIGUSR2));
   EXPECT_EQ(SIGUSR2, info.si_signo);
+  EXPECT_SI_CODE(SI_USER, info.si_code);
+}
+
+TEST_F(AsyncUnixTest, SignalsMultiReceive) {
+  UnixEventLoop loop;
+  DummyErrorHandler dummyHandler;
+
+  kill(getpid(), SIGUSR2);
+  kill(getpid(), SIGIO);
+
+  siginfo_t info = loop.wait(loop.onSignal(SIGUSR2));
+  EXPECT_EQ(SIGUSR2, info.si_signo);
+  EXPECT_SI_CODE(SI_USER, info.si_code);
+
+  info = loop.wait(loop.onSignal(SIGIO));
+  EXPECT_EQ(SIGIO, info.si_signo);
   EXPECT_SI_CODE(SI_USER, info.si_code);
 }
 
@@ -145,7 +161,7 @@ TEST_F(AsyncUnixTest, Poll) {
   EXPECT_EQ(POLLIN, loop.wait(loop.onFdEvent(pipefds[0], POLLIN | POLLPRI)));
 }
 
-TEST_F(AsyncUnixTest, PollMulti) {
+TEST_F(AsyncUnixTest, PollMultiListen) {
   UnixEventLoop loop;
   DummyErrorHandler dummyHandler;
 
@@ -165,6 +181,24 @@ TEST_F(AsyncUnixTest, PollMulti) {
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
 
   EXPECT_EQ(POLLIN, loop.wait(loop.onFdEvent(pipefds[0], POLLIN | POLLPRI)));
+}
+
+TEST_F(AsyncUnixTest, PollMultiReceive) {
+  UnixEventLoop loop;
+  DummyErrorHandler dummyHandler;
+
+  int pipefds[2];
+  KJ_SYSCALL(pipe(pipefds));
+  KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
+  KJ_SYSCALL(write(pipefds[1], "foo", 3));
+
+  int pipefds2[2];
+  KJ_SYSCALL(pipe(pipefds2));
+  KJ_DEFER({ close(pipefds2[1]); close(pipefds2[0]); });
+  KJ_SYSCALL(write(pipefds2[1], "bar", 3));
+
+  EXPECT_EQ(POLLIN, loop.wait(loop.onFdEvent(pipefds[0], POLLIN | POLLPRI)));
+  EXPECT_EQ(POLLIN, loop.wait(loop.onFdEvent(pipefds2[0], POLLIN | POLLPRI)));
 }
 
 TEST_F(AsyncUnixTest, PollAsync) {
