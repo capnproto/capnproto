@@ -50,6 +50,14 @@ UnixEventLoop& eventLoop() {
   return downcast<UnixEventLoop>(EventLoop::current());
 }
 
+void setNonblocking(int fd) {
+  int flags;
+  KJ_SYSCALL(flags = fcntl(fd, F_GETFL));
+  if ((flags & O_NONBLOCK) == 0) {
+    KJ_SYSCALL(fcntl(fd, F_SETFL, flags | O_NONBLOCK));
+  }
+}
+
 class OwnedFileDescriptor {
 public:
   OwnedFileDescriptor(int fd): fd(fd) {
@@ -60,8 +68,8 @@ public:
     KJ_DREQUIRE(fcntl(fd, F_GETFL) & O_NONBLOCK, "You forgot to set NONBLOCK.");
 #else
     // On non-Linux, we have to set the flags non-atomically.
-    fcntl(newFd, F_SETFD, fcntl(newFd, F_GETFD) | FD_CLOEXEC);
-    fcntl(newFd, F_SETFL, fcntl(newFd, F_GETFL) | O_NONBLOCK);
+    fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
 #endif
   }
 
@@ -84,6 +92,7 @@ protected:
 class AsyncStreamFd: public AsyncIoStream {
 public:
   AsyncStreamFd(int readFd, int writeFd): readFd(readFd), writeFd(writeFd) {}
+  virtual ~AsyncStreamFd() noexcept(false) {}
 
   Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
     return tryReadInternal(buffer, minBytes, maxBytes, 0).then([=](size_t result) {
@@ -214,7 +223,7 @@ private:
         });
       } else if (morePieces.size() == 0) {
         // First piece was fully-consumed and there are no more pieces, so we're done.
-        KJ_DASSERT(n == 0);
+        KJ_DASSERT(n == firstPiece.size(), n);
         return READY_NOW;
       } else {
         // First piece was fully consumed, so move on to the next piece.
@@ -620,6 +629,25 @@ private:
 };
 
 }  // namespace
+
+Promise<void> AsyncInputStream::read(void* buffer, size_t bytes) {
+  return read(buffer, bytes, bytes).thenInAnyThread([](size_t) {});
+}
+
+Own<AsyncInputStream> AsyncInputStream::wrapFd(int fd) {
+  setNonblocking(fd);
+  return heap<AsyncStreamFd>(fd, -1);
+}
+
+Own<AsyncOutputStream> AsyncOutputStream::wrapFd(int fd) {
+  setNonblocking(fd);
+  return heap<AsyncStreamFd>(-1, fd);
+}
+
+Own<AsyncIoStream> AsyncIoStream::wrapFd(int fd) {
+  setNonblocking(fd);
+  return heap<AsyncStreamFd>(fd, fd);
+}
 
 OperatingSystem& getOperatingSystemSingleton() {
   static UnixKernel os;

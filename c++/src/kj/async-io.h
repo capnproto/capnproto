@@ -29,26 +29,50 @@
 namespace kj {
 
 class AsyncInputStream {
+  // Asynchronous equivalent of InputStream (from io.h).
+
 public:
   virtual Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) = 0;
   virtual Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) = 0;
 
-  Promise<size_t> read(void* buffer, size_t bytes);
+  Promise<void> read(void* buffer, size_t bytes);
+
+  static Own<AsyncInputStream> wrapFd(int fd);
+  // Create an AsyncInputStream wrapping a file descriptor.
+  //
+  // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
 };
 
 class AsyncOutputStream {
+  // Asynchronous equivalent of OutputStream (from io.h).
+
 public:
   virtual Promise<void> write(const void* buffer, size_t size) = 0;
   virtual Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) = 0;
+
+  static Own<AsyncOutputStream> wrapFd(int fd);
+  // Create an AsyncOutputStream wrapping a file descriptor.
+  //
+  // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
 };
 
 class AsyncIoStream: public AsyncInputStream, public AsyncOutputStream {
+  // A combination input and output stream.
+
 public:
+
+  static Own<AsyncIoStream> wrapFd(int fd);
+  // Create an AsyncIoStream wrapping a file descriptor.
+  //
+  // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
 };
 
 class ConnectionReceiver {
+  // Represents a server socket listening on a port.
+
 public:
   virtual Promise<Own<AsyncIoStream>> accept() = 0;
+  // Accept the next incoming connection.
 
   virtual uint getPort() = 0;
   // Gets the port number, if applicable (i.e. if listening on IP).  This is useful if you didn't
@@ -60,6 +84,7 @@ class RemoteAddress {
 
 public:
   virtual Promise<Own<AsyncIoStream>> connect() = 0;
+  // Make a new connection to this address.
 
   virtual String toString() = 0;
   // Produce a human-readable string which hopefully can be passed to Network::parseRemoteAddress()
@@ -73,6 +98,7 @@ class LocalAddress {
 
 public:
   virtual Own<ConnectionReceiver> listen() = 0;
+  // Listen for incoming connections on this address.
 
   virtual String toString() = 0;
   // Produce a human-readable string which hopefully can be passed to Network::parseRemoteAddress()
