@@ -53,7 +53,8 @@ fi
 
 mkdir -p tmp/capnp/bootstrap-test-tmp
 
-INPUTS="capnp/c++.capnp capnp/schema.capnp capnp/compiler/lexer.capnp capnp/compiler/grammar.capnp"
+INPUTS="capnp/c++.capnp capnp/schema.capnp capnp/compiler/lexer.capnp capnp/compiler/grammar.capnp \
+capnp/rpc.capnp capnp/rpc-twoparty.capnp"
 
 SRC_INPUTS=""
 for file in $INPUTS; do

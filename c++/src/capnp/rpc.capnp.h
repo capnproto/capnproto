@@ -211,6 +211,14 @@ struct PromisedAnswer::Op {
   };
 };
 
+struct SturdyRef {
+  SturdyRef() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+};
+
 struct ThirdPartyCapDescriptor {
   ThirdPartyCapDescriptor() = delete;
 
@@ -259,6 +267,7 @@ extern const ::capnp::_::RawSchema s_fbe1980490e001af;
 extern const ::capnp::_::RawSchema s_8523ddc40b86b8b0;
 extern const ::capnp::_::RawSchema s_d800b1d6cd6f1ca0;
 extern const ::capnp::_::RawSchema s_f316944415569081;
+extern const ::capnp::_::RawSchema s_ce8c7a90684b48ff;
 extern const ::capnp::_::RawSchema s_d37007fde1f0027d;
 extern const ::capnp::_::RawSchema s_d625b7063acf691a;
 extern const ::capnp::_::RawSchema s_bbaeda2607b6f958;
@@ -320,6 +329,9 @@ CAPNP_DECLARE_STRUCT(
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::PromisedAnswer::Op, f316944415569081,
     1, 0, FOUR_BYTES);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::rpc::SturdyRef, ce8c7a90684b48ff,
+    0, 2, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::ThirdPartyCapDescriptor, d37007fde1f0027d,
     1, 1, INLINE_COMPOSITE);
@@ -1342,8 +1354,8 @@ public:
   inline bool hasQuestionId() const;
   inline  ::uint32_t getQuestionId() const;
 
-  inline bool hasRef() const;
-  inline ::capnp::ObjectPointer::Reader getRef() const;
+  inline bool hasObjectId() const;
+  inline ::capnp::ObjectPointer::Reader getObjectId() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1379,9 +1391,9 @@ public:
   inline  ::uint32_t getQuestionId();
   inline void setQuestionId( ::uint32_t value);
 
-  inline bool hasRef();
-  inline ::capnp::ObjectPointer::Builder getRef();
-  inline ::capnp::ObjectPointer::Builder initRef();
+  inline bool hasObjectId();
+  inline ::capnp::ObjectPointer::Builder getObjectId();
+  inline ::capnp::ObjectPointer::Builder initObjectId();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1423,8 +1435,8 @@ public:
   inline bool hasQuestionId() const;
   inline  ::uint32_t getQuestionId() const;
 
-  inline bool hasRef() const;
-  inline ::capnp::ObjectPointer::Reader getRef() const;
+  inline bool hasObjectId() const;
+  inline ::capnp::ObjectPointer::Reader getObjectId() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1460,9 +1472,9 @@ public:
   inline  ::uint32_t getQuestionId();
   inline void setQuestionId( ::uint32_t value);
 
-  inline bool hasRef();
-  inline ::capnp::ObjectPointer::Builder getRef();
-  inline ::capnp::ObjectPointer::Builder initRef();
+  inline bool hasObjectId();
+  inline ::capnp::ObjectPointer::Builder getObjectId();
+  inline ::capnp::ObjectPointer::Builder initObjectId();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -2118,6 +2130,87 @@ inline ::kj::StringTree KJ_STRINGIFY(PromisedAnswer::Op::Builder builder) {
 class PromisedAnswer::Op::Pipeline {
 public:
   typedef Op Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
+class SturdyRef::Reader {
+public:
+  typedef SturdyRef Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline size_t totalSizeInWords() const {
+    return _reader.totalSize() / ::capnp::WORDS;
+  }
+
+  inline bool hasHostId() const;
+  inline ::capnp::ObjectPointer::Reader getHostId() const;
+
+  inline bool hasObjectId() const;
+  inline ::capnp::ObjectPointer::Reader getObjectId() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(SturdyRef::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(SturdyRef::Reader reader) {
+  return ::capnp::_::structString<SturdyRef>(reader._reader);
+}
+
+class SturdyRef::Builder {
+public:
+  typedef SturdyRef Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+
+  inline bool hasHostId();
+  inline ::capnp::ObjectPointer::Builder getHostId();
+  inline ::capnp::ObjectPointer::Builder initHostId();
+
+  inline bool hasObjectId();
+  inline ::capnp::ObjectPointer::Builder getObjectId();
+  inline ::capnp::ObjectPointer::Builder initObjectId();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(SturdyRef::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(SturdyRef::Builder builder) {
+  return ::capnp::_::structString<SturdyRef>(builder._builder.asReader());
+}
+
+class SturdyRef::Pipeline {
+public:
+  typedef SturdyRef Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
@@ -3837,21 +3930,21 @@ inline void Restore::Builder::setQuestionId( ::uint32_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Restore::Reader::hasRef() const {
+inline bool Restore::Reader::hasObjectId() const {
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline bool Restore::Builder::hasRef() {
+inline bool Restore::Builder::hasObjectId() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader Restore::Reader::getRef() const {
+inline ::capnp::ObjectPointer::Reader Restore::Reader::getObjectId() const {
   return ::capnp::ObjectPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Restore::Builder::getRef() {
+inline ::capnp::ObjectPointer::Builder Restore::Builder::getObjectId() {
   return ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Restore::Builder::initRef() {
+inline ::capnp::ObjectPointer::Builder Restore::Builder::initObjectId() {
   auto result = ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
   result.clear();
@@ -3879,21 +3972,21 @@ inline void Delete::Builder::setQuestionId( ::uint32_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Delete::Reader::hasRef() const {
+inline bool Delete::Reader::hasObjectId() const {
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline bool Delete::Builder::hasRef() {
+inline bool Delete::Builder::hasObjectId() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader Delete::Reader::getRef() const {
+inline ::capnp::ObjectPointer::Reader Delete::Reader::getObjectId() const {
   return ::capnp::ObjectPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Delete::Builder::getRef() {
+inline ::capnp::ObjectPointer::Builder Delete::Builder::getObjectId() {
   return ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Delete::Builder::initRef() {
+inline ::capnp::ObjectPointer::Builder Delete::Builder::initObjectId() {
   auto result = ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
   result.clear();
@@ -4510,6 +4603,48 @@ inline void PromisedAnswer::Op::Builder::setGetPointerField( ::uint16_t value) {
       0 * ::capnp::ELEMENTS, PromisedAnswer::Op::GET_POINTER_FIELD);
   _builder.setDataField< ::uint16_t>(
       1 * ::capnp::ELEMENTS, value);
+}
+
+inline bool SturdyRef::Reader::hasHostId() const {
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool SturdyRef::Builder::hasHostId() {
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline ::capnp::ObjectPointer::Reader SturdyRef::Reader::getHostId() const {
+  return ::capnp::ObjectPointer::Reader(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline ::capnp::ObjectPointer::Builder SturdyRef::Builder::getHostId() {
+  return ::capnp::ObjectPointer::Builder(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline ::capnp::ObjectPointer::Builder SturdyRef::Builder::initHostId() {
+  auto result = ::capnp::ObjectPointer::Builder(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+  result.clear();
+  return result;
+}
+
+inline bool SturdyRef::Reader::hasObjectId() const {
+  return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
+}
+inline bool SturdyRef::Builder::hasObjectId() {
+  return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
+}
+inline ::capnp::ObjectPointer::Reader SturdyRef::Reader::getObjectId() const {
+  return ::capnp::ObjectPointer::Reader(
+      _reader.getPointerField(1 * ::capnp::POINTERS));
+}
+inline ::capnp::ObjectPointer::Builder SturdyRef::Builder::getObjectId() {
+  return ::capnp::ObjectPointer::Builder(
+      _builder.getPointerField(1 * ::capnp::POINTERS));
+}
+inline ::capnp::ObjectPointer::Builder SturdyRef::Builder::initObjectId() {
+  auto result = ::capnp::ObjectPointer::Builder(
+      _builder.getPointerField(1 * ::capnp::POINTERS));
+  result.clear();
+  return result;
 }
 
 inline bool ThirdPartyCapDescriptor::Reader::hasId() const {

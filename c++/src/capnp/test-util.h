@@ -141,6 +141,52 @@ void checkList(T reader, std::initializer_list<ReaderFor<Element>> expected) {
 
 #undef as
 
+// =======================================================================================
+// Interface implementations.
+
+class TestInterfaceImpl final: public test::TestInterface::Server {
+public:
+  TestInterfaceImpl(int& callCount);
+
+  ::kj::Promise<void> foo(
+      test::TestInterface::FooParams::Reader params,
+      test::TestInterface::FooResults::Builder result) override;
+
+  ::kj::Promise<void> bazAdvanced(
+      ::capnp::CallContext<test::TestInterface::BazParams,
+                           test::TestInterface::BazResults> context) override;
+
+private:
+  int& callCount;
+};
+
+class TestExtendsImpl final: public test::TestExtends::Server {
+public:
+  TestExtendsImpl(int& callCount);
+
+  ::kj::Promise<void> foo(
+      test::TestInterface::FooParams::Reader params,
+      test::TestInterface::FooResults::Builder result) override;
+
+  ::kj::Promise<void> graultAdvanced(
+      ::capnp::CallContext<test::TestExtends::GraultParams, test::TestAllTypes> context) override;
+
+private:
+  int& callCount;
+};
+
+class TestPipelineImpl final: public test::TestPipeline::Server {
+public:
+  TestPipelineImpl(int& callCount);
+
+  ::kj::Promise<void> getCapAdvanced(
+      capnp::CallContext<test::TestPipeline::GetCapParams,
+                         test::TestPipeline::GetCapResults> context) override;
+
+private:
+  int& callCount;
+};
+
 }  // namespace _ (private)
 }  // namespace capnp
 

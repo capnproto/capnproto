@@ -594,12 +594,16 @@ interface TestPipeline {
   }
 }
 
-struct TestSturdyRef {
+struct TestSturdyRefHostId {
   host @0 :Text;
-  tag @1 :Tag;
+}
+
+struct TestSturdyRefObjectId {
+  tag @0 :Tag;
   enum Tag {
     testInterface @0;
-    testPipeline @1;
+    testExtends @1;
+    testPipeline @2;
   }
 }
 

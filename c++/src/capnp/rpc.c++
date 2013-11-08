@@ -280,7 +280,7 @@ public:
     tasks.add(messageLoop());
   }
 
-  kj::Own<const ClientHook> restore(_::StructReader ref) {
+  kj::Own<const ClientHook> restore(ObjectPointer::Reader objectId) {
     QuestionId questionId;
     auto paf = kj::newPromiseAndFulfiller<kj::Own<RpcResponse>>(eventLoop);
 
@@ -296,11 +296,11 @@ public:
 
     {
       auto message = connection->newOutgoingMessage(
-          ref.totalSize() / WORDS + messageSizeHint<rpc::Restore>());
+          objectId.targetSizeInWords() + messageSizeHint<rpc::Restore>());
 
       auto builder = message->getBody().initAs<rpc::Message>().initRestore();
       builder.setQuestionId(questionId);
-      builder.getRef().setInternal(ref);
+      builder.getObjectId().set(objectId);
 
       message->send();
     }
@@ -1852,7 +1852,7 @@ private:
     // Call the restorer and initialize the answer.
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
       KJ_IF_MAYBE(r, restorer) {
-        Capability::Client cap = r->baseRestore(restore.getRef());
+        Capability::Client cap = r->baseRestore(restore.getObjectId());
         auto answer = context.imbue(ret.initAnswer());
         answer.setAs<Capability>(cap);
         capHook = answer.asReader().getPipelinedCap(nullptr);
@@ -1919,11 +1919,17 @@ public:
     }
   }
 
-  Capability::Client connect(_::StructReader ref) {
-    auto connection = network.baseConnectToHostOf(ref);
-    auto lock = connections.lockExclusive();
-    auto& state = getConnectionState(kj::mv(connection), *lock);
-    return Capability::Client(state.restore(ref));
+  Capability::Client connect(_::StructReader hostId, ObjectPointer::Reader objectId) {
+    KJ_IF_MAYBE(connection, network.baseConnectToRefHost(hostId)) {
+      auto lock = connections.lockExclusive();
+      auto& state = getConnectionState(kj::mv(*connection), *lock);
+      return Capability::Client(state.restore(objectId));
+    } else KJ_IF_MAYBE(r, restorer) {
+      return r->baseRestore(objectId);
+    } else {
+      return Capability::Client(newBrokenCap(
+          "SturdyRef referred to a local object but there is no local SturdyRef restorer."));
+    }
   }
 
   void taskFailed(kj::Exception&& exception) override {
@@ -1979,8 +1985,9 @@ RpcSystemBase::RpcSystemBase(VatNetworkBase& network, kj::Maybe<SturdyRefRestore
 RpcSystemBase::RpcSystemBase(RpcSystemBase&& other) = default;
 RpcSystemBase::~RpcSystemBase() noexcept(false) {}
 
-Capability::Client RpcSystemBase::baseConnect(_::StructReader ref) {
-  return impl->connect(ref);
+Capability::Client RpcSystemBase::baseConnect(
+    _::StructReader hostId, ObjectPointer::Reader objectId) {
+  return impl->connect(hostId, objectId);
 }
 
 }  // namespace _ (private)

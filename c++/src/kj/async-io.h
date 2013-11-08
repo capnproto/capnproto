@@ -60,7 +60,6 @@ class AsyncIoStream: public AsyncInputStream, public AsyncOutputStream {
   // A combination input and output stream.
 
 public:
-
   static Own<AsyncIoStream> wrapFd(int fd);
   // Create an AsyncIoStream wrapping a file descriptor.
   //
@@ -150,6 +149,21 @@ public:
 //  virtual Directory& getCurrentDir() = 0;
 //  virtual Directory& getRootDir() = 0;
 };
+
+struct OneWayPipe {
+  Own<AsyncInputStream> in;
+  Own<AsyncOutputStream> out;
+};
+OneWayPipe newOneWayPipe();
+// Creates an input/output stream pair representing the ends of a one-way OS pipe (created with
+// pipe(2)).
+
+struct TwoWayPipe {
+  Own<AsyncIoStream> ends[2];
+};
+TwoWayPipe newTwoWayPipe();
+// Creates two AsyncIoStreams representing the two ends of a two-way OS pipe (created with
+// socketpair(2)).  Data written to one end can be read from the other.
 
 OperatingSystem& getOperatingSystemSingleton();
 // Get the EVIL singleton instance of OperatingSystem representing the real kernel.

@@ -25,6 +25,7 @@
 #include "test-util.h"
 #include <kj/debug.h>
 #include <gtest/gtest.h>
+#include <capnp/rpc.capnp.h>
 #include <map>
 #include <queue>
 
@@ -55,8 +56,8 @@ private:
 };
 
 typedef VatNetwork<
-    test::TestSturdyRef, test::TestProvisionId, test::TestRecipientId, test::TestThirdPartyCapId,
-    test::TestJoinAnswer> TestNetworkAdapterBase;
+    test::TestSturdyRefHostId, test::TestProvisionId, test::TestRecipientId,
+    test::TestThirdPartyCapId, test::TestJoinAnswer> TestNetworkAdapterBase;
 
 class TestNetworkAdapter final: public TestNetworkAdapterBase {
 public:
@@ -153,8 +154,9 @@ public:
     kj::MutexGuarded<Queues> queues;
   };
 
-  kj::Own<Connection> connectToHostOf(test::TestSturdyRef::Reader ref) override {
-    const TestNetworkAdapter& dst = KJ_REQUIRE_NONNULL(network.find(ref.getHost()));
+  kj::Maybe<kj::Own<Connection>> connectToRefHost(
+      test::TestSturdyRefHostId::Reader hostId) override {
+    const TestNetworkAdapter& dst = KJ_REQUIRE_NONNULL(network.find(hostId.getHost()));
 
     kj::Locked<State> myLock;
     kj::Locked<State> dstLock;
@@ -183,9 +185,9 @@ public:
         dstLock->fulfillerQueue.pop();
       }
 
-      return kj::mv(local);
+      return kj::Own<Connection>(kj::mv(local));
     } else {
-      return kj::addRef(*iter->second);
+      return kj::Own<Connection>(kj::addRef(*iter->second));
     }
   }
 
@@ -222,103 +224,17 @@ TestNetworkAdapter& TestNetwork::add(kj::StringPtr name) {
 
 // =======================================================================================
 
-class TestInterfaceImpl final: public test::TestInterface::Server {
-public:
-  TestInterfaceImpl(int& callCount): callCount(callCount) {}
-
-  int& callCount;
-
-  ::kj::Promise<void> foo(
-      test::TestInterface::FooParams::Reader params,
-      test::TestInterface::FooResults::Builder result) override {
-    ++callCount;
-    EXPECT_EQ(123, params.getI());
-    EXPECT_TRUE(params.getJ());
-    result.setX("foo");
-    return kj::READY_NOW;
-  }
-
-  ::kj::Promise<void> bazAdvanced(
-      ::capnp::CallContext<test::TestInterface::BazParams,
-                           test::TestInterface::BazResults> context) override {
-    ++callCount;
-    auto params = context.getParams();
-    checkTestMessage(params.getS());
-    context.releaseParams();
-    EXPECT_ANY_THROW(context.getParams());
-
-    return kj::READY_NOW;
-  }
-};
-
-class TestExtendsImpl final: public test::TestExtends::Server {
-public:
-  TestExtendsImpl(int& callCount): callCount(callCount) {}
-
-  int& callCount;
-
-  ::kj::Promise<void> foo(
-      test::TestInterface::FooParams::Reader params,
-      test::TestInterface::FooResults::Builder result) override {
-    ++callCount;
-    EXPECT_EQ(321, params.getI());
-    EXPECT_FALSE(params.getJ());
-    result.setX("bar");
-    return kj::READY_NOW;
-  }
-
-  ::kj::Promise<void> graultAdvanced(
-      ::capnp::CallContext<test::TestExtends::GraultParams, test::TestAllTypes> context) override {
-    ++callCount;
-    context.releaseParams();
-
-    initTestMessage(context.getResults());
-
-    return kj::READY_NOW;
-  }
-};
-
-class TestPipelineImpl final: public test::TestPipeline::Server {
-public:
-  TestPipelineImpl(int& callCount): callCount(callCount) {}
-
-  int& callCount;
-
-  ::kj::Promise<void> getCapAdvanced(
-      capnp::CallContext<test::TestPipeline::GetCapParams,
-                         test::TestPipeline::GetCapResults> context) override {
-    ++callCount;
-
-    auto params = context.getParams();
-    EXPECT_EQ(234, params.getN());
-
-    auto cap = params.getInCap();
-    context.releaseParams();
-
-    auto request = cap.fooRequest();
-    request.setI(123);
-    request.setJ(true);
-
-    return request.send().then(
-        [this,context](capnp::Response<test::TestInterface::FooResults>&& response) mutable {
-          EXPECT_EQ("foo", response.getX());
-
-          auto result = context.getResults();
-          result.setS("bar");
-          result.initOutBox().setCap(kj::heap<TestExtendsImpl>(callCount));
-        });
-  }
-};
-
-class TestRestorer final: public SturdyRefRestorer<test::TestSturdyRef> {
+class TestRestorer final: public SturdyRefRestorer<test::TestSturdyRefObjectId> {
 public:
   int callCount = 0;
 
-  Capability::Client restore(test::TestSturdyRef::Reader ref) override {
-    switch (ref.getTag()) {
-      case test::TestSturdyRef::Tag::TEST_INTERFACE:
+  Capability::Client restore(test::TestSturdyRefObjectId::Reader objectId) override {
+    switch (objectId.getTag()) {
+      case test::TestSturdyRefObjectId::Tag::TEST_INTERFACE:
         return kj::heap<TestInterfaceImpl>(callCount);
-      case test::TestSturdyRef::Tag::TEST_PIPELINE:
+      case test::TestSturdyRefObjectId::Tag::TEST_EXTENDS:
+        return Capability::Client(newBrokenCap("No TestExtends implemented."));
+      case test::TestSturdyRefObjectId::Tag::TEST_PIPELINE:
         return kj::heap<TestPipelineImpl>(callCount);
     }
     KJ_UNREACHABLE;
@@ -330,16 +246,17 @@ protected:
   TestNetwork network;
   TestRestorer restorer;
   kj::SimpleEventLoop loop;
-  RpcSystem<test::TestSturdyRef> rpcClient;
-  RpcSystem<test::TestSturdyRef> rpcServer;
+  RpcSystem<test::TestSturdyRefHostId> rpcClient;
+  RpcSystem<test::TestSturdyRefHostId> rpcServer;
 
-  Capability::Client connect(test::TestSturdyRef::Tag tag) {
+  Capability::Client connect(test::TestSturdyRefObjectId::Tag tag) {
     MallocMessageBuilder refMessage(128);
-    auto ref = refMessage.initRoot<test::TestSturdyRef>();
-    ref.setHost("server");
-    ref.setTag(tag);
+    auto ref = refMessage.initRoot<rpc::SturdyRef>();
+    auto hostId = ref.getHostId().initAs<test::TestSturdyRefHostId>();
+    hostId.setHost("server");
+    ref.getObjectId().initAs<test::TestSturdyRefObjectId>().setTag(tag);
 
-    return rpcClient.connect(ref);
+    return rpcClient.connect(hostId, ref.getObjectId());
   }
 
   RpcTest()
@@ -352,7 +269,8 @@ protected:
 };
 
 TEST_F(RpcTest, Basic) {
-  auto client = connect(test::TestSturdyRef::Tag::TEST_INTERFACE).castAs<test::TestInterface>();
+  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_INTERFACE)
+      .castAs<test::TestInterface>();
 
   auto request1 = client.fooRequest();
   request1.setI(123);
@@ -387,7 +305,8 @@ TEST_F(RpcTest, Basic) {
 }
 
 TEST_F(RpcTest, Pipelining) {
-  auto client = connect(test::TestSturdyRef::Tag::TEST_PIPELINE).castAs<test::TestPipeline>();
+  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_PIPELINE)
+      .castAs<test::TestPipeline>();
 
   int chainedCallCount = 0;
 

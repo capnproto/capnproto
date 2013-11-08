@@ -50,35 +50,6 @@ namespace {
 #define EXPECT_NONFATAL_FAILURE EXPECT_ANY_THROW
 #endif
 
-class TestInterfaceImpl final: public test::TestInterface::Server {
-public:
-  TestInterfaceImpl(int& callCount): callCount(callCount) {}
-
-  int& callCount;
-
-  ::kj::Promise<void> foo(
-      test::TestInterface::FooParams::Reader params,
-      test::TestInterface::FooResults::Builder result) override {
-    ++callCount;
-    EXPECT_EQ(123, params.getI());
-    EXPECT_TRUE(params.getJ());
-    result.setX("foo");
-    return kj::READY_NOW;
-  }
-
-  ::kj::Promise<void> bazAdvanced(
-      ::capnp::CallContext<test::TestInterface::BazParams,
-                           test::TestInterface::BazResults> context) override {
-    ++callCount;
-    auto params = context.getParams();
-    checkTestMessage(params.getS());
-    context.releaseParams();
-    EXPECT_ANY_THROW(context.getParams());
-
-    return kj::READY_NOW;
-  }
-};
-
 TEST(Capability, Basic) {
   kj::SimpleEventLoop loop;
 
@@ -117,33 +88,6 @@ TEST(Capability, Basic) {
   EXPECT_TRUE(barFailed);
 }
 
-class TestExtendsImpl final: public test::TestExtends::Server {
-public:
-  TestExtendsImpl(int& callCount): callCount(callCount) {}
-
-  int& callCount;
-
-  ::kj::Promise<void> foo(
-      test::TestInterface::FooParams::Reader params,
-      test::TestInterface::FooResults::Builder result) override {
-    ++callCount;
-    EXPECT_EQ(321, params.getI());
-    EXPECT_FALSE(params.getJ());
-    result.setX("bar");
-    return kj::READY_NOW;
-  }
-
-  ::kj::Promise<void> graultAdvanced(
-      ::capnp::CallContext<test::TestExtends::GraultParams, test::TestAllTypes> context) override {
-    ++callCount;
-    context.releaseParams();
-
-    initTestMessage(context.getResults());
-
-    return kj::READY_NOW;
-  }
-};
-
 TEST(Capability, Inheritance) {
   kj::SimpleEventLoop loop;
 
@@ -171,38 +115,6 @@ TEST(Capability, Inheritance) {
 
   EXPECT_EQ(2, callCount);
 }
-
-class TestPipelineImpl final: public test::TestPipeline::Server {
-public:
-  TestPipelineImpl(int& callCount): callCount(callCount) {}
-
-  int& callCount;
-
-  ::kj::Promise<void> getCapAdvanced(
-      capnp::CallContext<test::TestPipeline::GetCapParams,
-                         test::TestPipeline::GetCapResults> context) override {
-    ++callCount;
-
-    auto params = context.getParams();
-    EXPECT_EQ(234, params.getN());
-
-    auto cap = params.getInCap();
-    context.releaseParams();
-
-    auto request = cap.fooRequest();
-    request.setI(123);
-    request.setJ(true);
-
-    return request.send().then(
-        [this,context](capnp::Response<test::TestInterface::FooResults>&& response) mutable {
-          EXPECT_EQ("foo", response.getX());
-
-          auto result = context.getResults();
-          result.setS("bar");
-          result.initOutBox().setCap(kj::heap<TestExtendsImpl>(callCount));
-        });
-  }
-};
 
 TEST(Capability, Pipelining) {
   kj::SimpleEventLoop loop;

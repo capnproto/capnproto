@@ -228,20 +228,20 @@ public:
   }
 
   template <typename Func>
-  auto map(Func&& f) -> Maybe<decltype(f(instance<T&>()))> {
+  auto map(Func&& f) -> Maybe<decltype(f(instance<Own<T>&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
-      return f(*ptr);
+      return f(ptr);
     }
   }
 
   template <typename Func>
-  auto map(Func&& f) const -> Maybe<decltype(f(instance<const T&>()))> {
+  auto map(Func&& f) const -> Maybe<decltype(f(instance<const Own<T>&>()))> {
     if (ptr == nullptr) {
       return nullptr;
     } else {
-      return f(*ptr);
+      return f(ptr);
     }
   }
 

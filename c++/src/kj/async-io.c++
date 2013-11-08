@@ -649,6 +649,26 @@ Own<AsyncIoStream> AsyncIoStream::wrapFd(int fd) {
   return heap<AsyncStreamFd>(fd, fd);
 }
 
+OneWayPipe newOneWayPipe() {
+  int fds[2];
+#if __linux__
+  KJ_SYSCALL(pipe2(fds, O_NONBLOCK | O_CLOEXEC));
+#else
+  KJ_SYSCALL(pipe(fds));
+#endif
+  return OneWayPipe { heap<Socket>(fds[0]), heap<Socket>(fds[1]) };
+}
+
+TwoWayPipe newTwoWayPipe() {
+  int fds[2];
+  int type = SOCK_STREAM;
+#if __linux__
+  type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
+#endif
+  KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+  return TwoWayPipe { { heap<Socket>(fds[0]), heap<Socket>(fds[1]) } };
+}
+
 OperatingSystem& getOperatingSystemSingleton() {
   static UnixKernel os;
   return os;

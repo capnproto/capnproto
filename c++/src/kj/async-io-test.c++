@@ -108,5 +108,62 @@ TEST(AsyncIo, AddressParsing) {
   EXPECT_EQ("unix:foo/bar/baz", tryParseRemote(loop, network, "unix:foo/bar/baz"));
 }
 
+TEST(AsyncIo, OneWayPipe) {
+  UnixEventLoop loop;
+  DummyErrorHandler dummyHandler;
+  TaskSet tasks(loop, dummyHandler);
+
+  auto pipe = newOneWayPipe();
+  char receiveBuffer[4];
+
+  tasks.add(loop.evalLater([&]() {
+    return pipe.out->write("foo", 3);
+  }));
+
+  kj::String result = loop.wait(loop.evalLater([&]() {
+    return pipe.in->tryRead(receiveBuffer, 3, 4)
+        .then([&](size_t n) {
+          EXPECT_EQ(3u, n);
+          return heapString(receiveBuffer, n);
+        });
+  }));
+
+  EXPECT_EQ("foo", result);
+}
+
+TEST(AsyncIo, TwoWayPipe) {
+  UnixEventLoop loop;
+  DummyErrorHandler dummyHandler;
+
+  auto pipe = newTwoWayPipe();
+  char receiveBuffer1[4];
+  char receiveBuffer2[4];
+
+  auto promise = loop.evalLater([&]() {
+    return pipe.ends[0]->write("foo", 3)
+        .then([&]() {
+          return pipe.ends[0]->tryRead(receiveBuffer1, 3, 4);
+        }).then([&](size_t n) {
+          EXPECT_EQ(3u, n);
+          return heapString(receiveBuffer1, n);
+        });
+  });
+
+  kj::String result = loop.wait(loop.evalLater([&]() {
+    return pipe.ends[1]->write("bar", 3)
+        .then([&]() {
+          return pipe.ends[1]->tryRead(receiveBuffer2, 3, 4);
+        }).then([&](size_t n) {
+          EXPECT_EQ(3u, n);
+          return heapString(receiveBuffer2, n);
+        });
+  }));
+
+  kj::String result2 = loop.wait(kj::mv(promise));
+
+  EXPECT_EQ("foo", result);
+  EXPECT_EQ("bar", result2);
+}
+
 }  // namespace
 }  // namespace kj

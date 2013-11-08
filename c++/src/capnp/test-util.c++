@@ -868,5 +868,81 @@ void checkDynamicTestMessageAllZero(DynamicStruct::Reader reader) {
   dynamicCheckTestMessageAllZero(reader);
 }
 
+// =======================================================================================
+// Interface implementations.
+
+TestInterfaceImpl::TestInterfaceImpl(int& callCount): callCount(callCount) {}
+
+::kj::Promise<void> TestInterfaceImpl::foo(
+    test::TestInterface::FooParams::Reader params,
+    test::TestInterface::FooResults::Builder result) {
+  ++callCount;
+  EXPECT_EQ(123, params.getI());
+  EXPECT_TRUE(params.getJ());
+  result.setX("foo");
+  return kj::READY_NOW;
+}
+
+::kj::Promise<void> TestInterfaceImpl::bazAdvanced(
+    ::capnp::CallContext<test::TestInterface::BazParams,
+                         test::TestInterface::BazResults> context) {
+  ++callCount;
+  auto params = context.getParams();
+  checkTestMessage(params.getS());
+  context.releaseParams();
+  EXPECT_ANY_THROW(context.getParams());
+
+  return kj::READY_NOW;
+}
+
+TestExtendsImpl::TestExtendsImpl(int& callCount): callCount(callCount) {}
+
+::kj::Promise<void> TestExtendsImpl::foo(
+    test::TestInterface::FooParams::Reader params,
+    test::TestInterface::FooResults::Builder result) {
+  ++callCount;
+  EXPECT_EQ(321, params.getI());
+  EXPECT_FALSE(params.getJ());
+  result.setX("bar");
+  return kj::READY_NOW;
+}
+
+::kj::Promise<void> TestExtendsImpl::graultAdvanced(
+    ::capnp::CallContext<test::TestExtends::GraultParams, test::TestAllTypes> context) {
+  ++callCount;
+  context.releaseParams();
+
+  initTestMessage(context.getResults());
+
+  return kj::READY_NOW;
+}
+
+TestPipelineImpl::TestPipelineImpl(int& callCount): callCount(callCount) {}
+
+::kj::Promise<void> TestPipelineImpl::getCapAdvanced(
+    capnp::CallContext<test::TestPipeline::GetCapParams,
+                       test::TestPipeline::GetCapResults> context) {
+  ++callCount;
+
+  auto params = context.getParams();
+  EXPECT_EQ(234, params.getN());
+
+  auto cap = params.getInCap();
+  context.releaseParams();
+
+  auto request = cap.fooRequest();
+  request.setI(123);
+  request.setJ(true);
+
+  return request.send().then(
+      [this,context](capnp::Response<test::TestInterface::FooResults>&& response) mutable {
+        EXPECT_EQ("foo", response.getX());
+
+        auto result = context.getResults();
+        result.setS("bar");
+        result.initOutBox().setCap(kj::heap<TestExtendsImpl>(callCount));
+      });
+}
+
 }  // namespace _ (private)
 }  // namespace capnp

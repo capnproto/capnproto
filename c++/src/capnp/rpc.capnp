@@ -93,10 +93,10 @@
 # the "Network-specific Parameters" section below.  An implementation might have different levels
 # depending on the network used.
 #
-# New implementations of Cap'n Proto should start out targeting the simplistic "confined" network
-# type as defined in `rpc-confined.capnp`.  With this network type, level 3 is irrelevant and
-# levels 2 and 4 are much easier than usual to implement.  When such an implementation is actually
-# run inside a container, the contained app effectively gets to make full use of the container's
+# New implementations of Cap'n Proto should start out targeting the simplistic two-party network
+# type as defined in `rpc-twoparty.capnp`.  With this network type, level 3 is irrelevant and
+# levels 2 and 4 are much easier than usual to implement.  When such an implementation is paired
+# with a container proxy, the contained app effectively gets to make full use of the proxy's
 # network at level 4.  And since Cap'n Proto IPC is extremely fast, it may never make sense to
 # bother implementing any other vat network protocol -- just use the correct container type and get
 # it for free.
@@ -465,7 +465,7 @@ struct Restore {
   # A new question ID identifying this request, which will eventually receive a Return message
   # containing the restored capability.
 
-  ref @1 :SturdyRef;
+  objectId @1 :SturdyRefObjectId;
   # Designates the capability to restore.
 }
 
@@ -492,7 +492,7 @@ struct Delete {
   # A new question ID identifying this request, which will eventually receive a Return message
   # with an empty answer.
 
-  ref @1 :SturdyRef;
+  objectId @1 :SturdyRefObjectId;
   # Designates the capability to delete.
 }
 
@@ -716,6 +716,20 @@ struct PromisedAnswer {
   }
 }
 
+struct SturdyRef {
+  # **(level 2)**
+  #
+  # A combination of a SturdyRefObjectId and SturdyRefHostId.  This is what a client of the ref
+  # would typically save in its own storage.  This type is also the answer to a `Save` message.
+
+  hostId @0 :SturdyRefHostId;
+  # Describes how to connect to and authenticate a vat that hosts this SturdyRef (and can therefore
+  # accept a `Restore` message for it).
+
+  objectId @1 :SturdyRefObjectId;
+  # The opaque ref in the scope of the host vat, to be sent in the `Restore` message.
+}
+
 struct ThirdPartyCapDescriptor {
   # **(level 3)**
   #
@@ -781,15 +795,18 @@ struct Exception {
 # particular set of bindings for these types is defined elsewhere.  (TODO(soon): Specify where
 # these common definitions live.)
 #
-# Another common network type is the "confined" network, in which a contained vat interacts with
-# the outside world entirely through a container/supervisor.  All objects in the world that aren't
-# hosted by the contained vat appear as if they were hosted by the container.  This network type is
-# interesting because from the containee's point of view, there are no three-party interactions at
-# all, and joins are unusually simple to implement, so implementing at level 4 is barely more
-# complicated than implementing at level 1.  Moreover, if you pair an app implementing the confined
-# network with a container that implements some other network, the app can then participate on
-# the container's network just as if it implemented that network directly.  The types used by the
-# "confined" network are defined in `rpc-confined.capnp`.
+# Another common network type is the two-party network, in which one of the parties typically
+# interacts with the outside world entirely through the other party.  In such a connection between
+# Alice and Bob, all objects that exist on Bob's other networks appear to Alice as if they were
+# hosted by Bob himself, and similarly all objects on Alice's network (if she even has one) appear
+# to Bob as if they were hosted by Alice.  This network type is interesting because from the point
+# of view of a simple application that communicates with only one other party via the two-party
+# protocol, there are no three-party interactions at all, and joins are unusually simple to
+# implement, so implementing at level 4 is barely more complicated than implementing at level 1.
+# Moreover, if you pair an app implementing the two-party network with a container that implements
+# some other network, the app can then participate on the container's network just as if it
+# implemented that network directly.  The types used by the two-party network are defined in
+# `rpc-twoparty.capnp`.
 #
 # The things which we need to parameterize are:
 # - How to store capabilities long-term without holding a connection open (mostly level 2).
@@ -831,36 +848,31 @@ struct Exception {
 # between the joiner and the host of the joined object, and this connection must be authenticated.
 # Thus, the details are network-dependent.
 
-using SturdyRef = Object;
+using SturdyRefHostId = Object;
+# **(level 2)**
+#
+# Identifies the host of a persistent capability which can be restored using a `Restore` message.
+# That is, this identifies where the `Restore` message should be sent, but does not provide any
+# part of the `Restore` message's content.  `SturdyRefHostId` is usually paired with a
+# `SturdyRefObjectId`, often in the form of a `SturdyRef`.
+#
+# `SturdyRefHostId` could be as simple as a network address and public key fingerprint.  Or, it
+# might be more complicated or abstract.  For example, on some kinds of networks, `SturdyRefHostId`
+# might be an abstract service name without any information on where that service is physically
+# located; the network itself might provide a separate service for mapping such names to locations.
+# It could even be the case that a particular service name maps to a group of vats, where any vat
+# in the group is able to restore the ref.  Such an approach would make `SturdyRefHostId`s more
+# robust against changes in network topology.
+
+using SturdyRefObjectId = Object;
 # **(mostly level 2)**
 #
-# Identifies a long-lived capability which can be obtained again in a future connection by sending
-# a `Restore` message.  A SturdyRef is a lot like a URL, but possibly with additional
-# considerations e.g. to support authentication without a certificate authority.
-#
-# The base RPC protocol does not specify under what conditions a SturdyRef can
-# be restored.  For example:
-# - Do you have to connect to a specific vat to restore the reference?
-# - Is just any vat allowed to restore the SturdyRef, or is it tied to a specific vat requiring
-#   some form of authentication?
-#
-# At the very least, a SturdyRef must contain at least enough information to determine where to
-# connect to restore the ref.  Ideally, this information is not a physical machine address, but a
-# logical identifier that can be passed to some lookup service to locate an appropriate vat.  Using
-# a physical machine address would make the network brittle -- a change in topology could
-# invalidate all SturdyRefs.
-#
-# The ref should also contain some kind of signature or certificate which can be used to
-# authenticate the vat, to protect against a malicious lookup service without the need for a
-# centralized certificate authority.
-#
-# For example, a simple internet-friendly SturdyRef might contain a DNS host name, a public key
-# fingerprint, and a Swiss number (large, unguessable random number;
-# http://wiki.erights.org/wiki/Swiss_number) to identify the specific object within that vat.
-# This construction does have the disadvantage, though, that a compromised private key could
-# invalidate all existing refs that share that key, and a compromise of any one client's storage
-# could require revoking all existing refs to that object.  Various more-sophisticated mechanisms
-# can solve these problems but these are beyond the scope of this protocol.
+# A SturdyRefObjectId identifies a persistent object which may be restored later, within the scope
+# of some host.  The contents of a SturdyRefObjectId are entirely determined by the vat that hosts
+# it.  In fact, different vats on the same network may actually use different definitions for
+# SturdyRefObjectId, so SturdyRefObjectId is not actually parameterized per-network but rather
+# per-vat.  A SturdyRefObjectId is typically paired with a `SturdyRefHostId` (in a
+# `SturdyRef`) which describes how to find a vat capable of restoring the ref.
 
 using ProvisionId = Object;
 # **(level 3)**
@@ -946,12 +958,12 @@ using JoinAnswer = Object;
 #
 #   # Level 0 features -----------------------------------------------
 #
-#   connectToHostOf(ref :SturdyRef) :Connection;
-#   # Connect to a host which can restore the given SturdyRef.  The transport should return a
-#   # promise which does not resolve until authentication has completed, but allows messages to be
-#   # pipelined in before that; the transport either queues these messages until authenticated, or
-#   # sends them encrypted such that only the authentic vat would be able to decrypt them.  The
-#   # latter approach avoids a round trip for authentication.
+#   connectToRefHost(hostId :SturdyRefHostId) :Connection;
+#   # Connect to the given SturdyRef host.  The transport should return a promise which does not
+#   # resolve until authentication has completed, but allows messages to be pipelined in before
+#   # that; the transport either queues these messages until authenticated, or sends them encrypted
+#   # such that only the authentic vat would be able to decrypt them.  The latter approach avoids a
+#   # round trip for authentication.
 #   #
 #   # Once connected, the caller should start by sending a `Restore` message.
 #
