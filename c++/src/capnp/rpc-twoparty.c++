@@ -111,10 +111,10 @@ kj::Promise<kj::Own<IncomingRpcMessage>> TwoPartyVatNetwork::receiveIncomingMess
   });
 }
 
-void TwoPartyVatNetwork::introduceTo(Connection& recipient,
+void TwoPartyVatNetwork::introduceTo(TwoPartyVatNetworkBase::Connection& recipient,
     rpc::twoparty::ThirdPartyCapId::Builder sendToRecipient,
     rpc::twoparty::RecipientId::Builder sendToTarget) {
-
+  KJ_FAIL_REQUIRE("Three-party introductions should never occur on two-party network.");
 }
 
 TwoPartyVatNetworkBase::ConnectionAndProvisionId TwoPartyVatNetwork::connectToIntroduced(

@@ -43,9 +43,9 @@ public:
 
   // implements VatNetwork -----------------------------------------------------
 
-  kj::Maybe<kj::Own<Connection>> connectToRefHost(
+  kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> connectToRefHost(
       rpc::twoparty::SturdyRefHostId::Reader ref) override;
-  kj::Promise<kj::Own<Connection>> acceptConnectionAsRefHost() override;
+  kj::Promise<kj::Own<TwoPartyVatNetworkBase::Connection>> acceptConnectionAsRefHost() override;
 
 private:
   class OutgoingMessageImpl;
@@ -68,12 +68,12 @@ private:
 
   kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) const override;
   kj::Promise<kj::Own<IncomingRpcMessage>> receiveIncomingMessage() override;
-  void introduceTo(Connection& recipient,
+  void introduceTo(TwoPartyVatNetworkBase::Connection& recipient,
       rpc::twoparty::ThirdPartyCapId::Builder sendToRecipient,
       rpc::twoparty::RecipientId::Builder sendToTarget) override;
   ConnectionAndProvisionId connectToIntroduced(
       rpc::twoparty::ThirdPartyCapId::Reader capId) override;
-  kj::Own<Connection> acceptIntroducedConnection(
+  kj::Own<TwoPartyVatNetworkBase::Connection> acceptIntroducedConnection(
       rpc::twoparty::RecipientId::Reader recipientId) override;
 };
 

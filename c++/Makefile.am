@@ -93,6 +93,7 @@ public_capnpc_inputs =                                         \
 capnpc_inputs =                                                \
   $(public_capnpc_inputs)                                      \
   src/capnp/rpc.capnp                                          \
+  src/capnp/rpc-twoparty.capnp                                 \
   src/capnp/compiler/lexer.capnp                               \
   src/capnp/compiler/grammar.capnp
 
@@ -103,6 +104,8 @@ capnpc_outputs =                                               \
   src/capnp/schema.capnp.h                                     \
   src/capnp/rpc.capnp.c++                                      \
   src/capnp/rpc.capnp.h                                        \
+  src/capnp/rpc-twoparty.capnp.c++                             \
+  src/capnp/rpc-twoparty.capnp.h                               \
   src/capnp/compiler/lexer.capnp.c++                           \
   src/capnp/compiler/lexer.capnp.h                             \
   src/capnp/compiler/grammar.capnp.c++                         \
@@ -134,6 +137,7 @@ includekj_HEADERS =                                            \
   src/kj/thread.h                                              \
   src/kj/async.h                                               \
   src/kj/async-unix.h                                          \
+  src/kj/async-io.h                                            \
   src/kj/main.h
 
 includekjparse_HEADERS =                                       \
@@ -159,10 +163,12 @@ includecapnp_HEADERS =                                         \
   src/capnp/dynamic.h                                          \
   src/capnp/pretty-print.h                                     \
   src/capnp/serialize.h                                        \
+  src/capnp/serialize-async.h                                  \
   src/capnp/serialize-packed.h                                 \
   src/capnp/pointer-helpers.h                                  \
   src/capnp/generated-header-support.h                         \
-  src/capnp/rpc.h
+  src/capnp/rpc.h                                              \
+  src/capnp/rpc-twoparty.h
 
 lib_LTLIBRARIES = libkj.la libcapnp.la libcapnp-rpc.la libcapnpc.la
 
@@ -185,6 +191,7 @@ libkj_la_SOURCES=                                              \
   src/kj/thread.c++                                            \
   src/kj/async.c++                                             \
   src/kj/async-unix.c++                                        \
+  src/kj/async-io.c++                                          \
   src/kj/main.c++                                              \
   src/kj/parse/char.c++
 
@@ -208,6 +215,7 @@ libcapnp_la_SOURCES=                                           \
   src/capnp/dynamic.c++                                        \
   src/capnp/stringify.c++                                      \
   src/capnp/serialize.c++                                      \
+  src/capnp/serialize-async.c++                                \
   src/capnp/serialize-packed.c++
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
@@ -216,7 +224,10 @@ libcapnp_rpc_la_LDFLAGS = -release $(VERSION) -no-undefined
 libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/rpc.c++                                            \
   src/capnp/rpc.capnp.c++                                      \
-  src/capnp/rpc.capnp.h
+  src/capnp/rpc.capnp.h                                        \
+  src/capnp/rpc-twoparty.c++                                   \
+  src/capnp/rpc-twoparty.capnp.c++                             \
+  src/capnp/rpc-twoparty.capnp.h
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libcapnpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS) -lpthread
@@ -326,6 +337,7 @@ capnp_test_SOURCES =                                           \
   src/kj/mutex-test.c++                                        \
   src/kj/async-test.c++                                        \
   src/kj/async-unix-test.c++                                   \
+  src/kj/async-io-test.c++                                     \
   src/kj/parse/common-test.c++                                 \
   src/kj/parse/char-test.c++                                   \
   src/capnp/common-test.c++                                    \
@@ -344,8 +356,10 @@ capnp_test_SOURCES =                                           \
   src/capnp/encoding-test.c++                                  \
   src/capnp/orphan-test.c++                                    \
   src/capnp/serialize-test.c++                                 \
+  src/capnp/serialize-async-test.c++                           \
   src/capnp/serialize-packed-test.c++                          \
   src/capnp/rpc-test.c++                                       \
+  src/capnp/rpc-twoparty-test.c++                              \
   src/capnp/test-util.c++                                      \
   src/capnp/test-util.h                                        \
   src/capnp/compiler/lexer-test.c++                            \
