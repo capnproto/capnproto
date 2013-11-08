@@ -31,8 +31,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <netinet/ip.h>
-#include <netinet/ip6.h>
+#include <netinet/in.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
