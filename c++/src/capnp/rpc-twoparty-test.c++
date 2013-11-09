@@ -134,6 +134,59 @@ TEST(TwoPartyNetwork, Basic) {
   EXPECT_TRUE(barFailed);
 }
 
+TEST(TwoPartyNetwork, Pipelining) {
+  int callCount = 0;
+  int reverseCallCount = 0;  // Calls back from server to client.
+
+  // We'll communicate over this two-way pipe (actually, a socketpair).
+  auto pipe = kj::newTwoWayPipe();
+
+  // Start up server in another thread.
+  auto quitter = kj::newPromiseAndFulfiller<void>();
+  kj::Thread thread([&]() {
+    runServer(kj::mv(quitter.promise), kj::mv(pipe.ends[1]), callCount);
+  });
+  KJ_DEFER(quitter.fulfiller->fulfill());  // Stop the server loop before destroying the thread.
+
+  // Set up the client-side objects.
+  kj::UnixEventLoop loop;
+  TwoPartyVatNetwork network(loop, *pipe.ends[0], rpc::twoparty::Side::CLIENT);
+  auto rpcClient = makeRpcClient(network, loop);
+
+  // Request the particular capability from the server.
+  auto client = getPersistentCap(rpcClient, rpc::twoparty::Side::SERVER,
+      test::TestSturdyRefObjectId::Tag::TEST_PIPELINE).castAs<test::TestPipeline>();
+
+  // Use the capability.
+  auto request = client.getCapRequest();
+  request.setN(234);
+  request.setInCap(test::TestInterface::Client(
+      kj::heap<TestInterfaceImpl>(reverseCallCount), loop));
+
+  auto promise = request.send();
+
+  auto pipelineRequest = promise.getOutBox().getCap().fooRequest();
+  pipelineRequest.setI(321);
+  auto pipelinePromise = pipelineRequest.send();
+
+  auto pipelineRequest2 = promise.getOutBox().getCap().castAs<test::TestExtends>().graultRequest();
+  auto pipelinePromise2 = pipelineRequest2.send();
+
+  promise = nullptr;  // Just to be annoying, drop the original promise.
+
+  EXPECT_EQ(0, callCount);
+  EXPECT_EQ(0, reverseCallCount);
+
+  auto response = loop.wait(kj::mv(pipelinePromise));
+  EXPECT_EQ("bar", response.getX());
+
+  auto response2 = loop.wait(kj::mv(pipelinePromise2));
+  checkTestMessage(response2);
+
+  EXPECT_EQ(3, callCount);
+  EXPECT_EQ(1, reverseCallCount);
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp
