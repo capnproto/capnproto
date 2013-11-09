@@ -53,41 +53,55 @@ private:
 };
 
 void runServer(kj::Promise<void> quit, kj::Own<kj::AsyncIoStream> stream, int& callCount) {
+  // Set up the server.
   kj::UnixEventLoop eventLoop;
   TwoPartyVatNetwork network(eventLoop, *stream, rpc::twoparty::Side::SERVER);
   TestRestorer restorer(callCount);
   auto server = makeRpcServer(network, restorer, eventLoop);
+
+  // Wait until quit promise is fulfilled.
   eventLoop.wait(kj::mv(quit));
 }
 
-Capability::Client connect(RpcSystem<rpc::twoparty::SturdyRefHostId>& client,
-                           rpc::twoparty::Side side,
-                           test::TestSturdyRefObjectId::Tag tag) {
+Capability::Client getPersistentCap(RpcSystem<rpc::twoparty::SturdyRefHostId>& client,
+                                    rpc::twoparty::Side side,
+                                    test::TestSturdyRefObjectId::Tag tag) {
+  // Create the SturdyRefHostId.
   MallocMessageBuilder hostIdMessage(8);
-  MallocMessageBuilder objectIdMessage(8);
   auto hostId = hostIdMessage.initRoot<rpc::twoparty::SturdyRefHostId>();
   hostId.setSide(side);
+
+  // Create the SturdyRefObjectId.
+  MallocMessageBuilder objectIdMessage(8);
   objectIdMessage.initRoot<test::TestSturdyRefObjectId>().setTag(tag);
+
+  // Connect to the remote capability.
   return client.connect(hostId, objectIdMessage.getRoot<ObjectPointer>());
 }
 
 TEST(TwoPartyNetwork, Basic) {
-  auto quitter = kj::newPromiseAndFulfiller<void>();
-  auto pipe = kj::newTwoWayPipe();
   int callCount = 0;
 
+  // We'll communicate over this two-way pipe (actually, a socketpair).
+  auto pipe = kj::newTwoWayPipe();
+
+  // Start up server in another thread.
+  auto quitter = kj::newPromiseAndFulfiller<void>();
   kj::Thread thread([&]() {
     runServer(kj::mv(quitter.promise), kj::mv(pipe.ends[1]), callCount);
   });
-  KJ_DEFER(quitter.fulfiller->fulfill());
+  KJ_DEFER(quitter.fulfiller->fulfill());  // Stop the server loop before destroying the thread.
 
+  // Set up the client-side objects.
   kj::UnixEventLoop loop;
   TwoPartyVatNetwork network(loop, *pipe.ends[0], rpc::twoparty::Side::CLIENT);
   auto rpcClient = makeRpcClient(network, loop);
 
-  auto client = connect(rpcClient, rpc::twoparty::Side::SERVER,
+  // Request the particular capability from the server.
+  auto client = getPersistentCap(rpcClient, rpc::twoparty::Side::SERVER,
       test::TestSturdyRefObjectId::Tag::TEST_INTERFACE).castAs<test::TestInterface>();
 
+  // Use the capability.
   auto request1 = client.fooRequest();
   request1.setI(123);
   request1.setJ(true);
