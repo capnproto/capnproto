@@ -168,7 +168,9 @@ includecapnp_HEADERS =                                         \
   src/capnp/pointer-helpers.h                                  \
   src/capnp/generated-header-support.h                         \
   src/capnp/rpc.h                                              \
-  src/capnp/rpc-twoparty.h
+  src/capnp/rpc-twoparty.h                                     \
+  src/capnp/rpc.capnp.h                                        \
+  src/capnp/rpc-twoparty.capnp.h
 
 lib_LTLIBRARIES = libkj.la libcapnp.la libcapnp-rpc.la libcapnpc.la
 
@@ -224,10 +226,8 @@ libcapnp_rpc_la_LDFLAGS = -release $(VERSION) -no-undefined
 libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/rpc.c++                                            \
   src/capnp/rpc.capnp.c++                                      \
-  src/capnp/rpc.capnp.h                                        \
   src/capnp/rpc-twoparty.c++                                   \
-  src/capnp/rpc-twoparty.capnp.c++                             \
-  src/capnp/rpc-twoparty.capnp.h
+  src/capnp/rpc-twoparty.capnp.c++
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libcapnpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS) -lpthread
