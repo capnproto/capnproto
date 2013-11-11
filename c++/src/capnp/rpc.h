@@ -89,7 +89,7 @@ private:
   class Impl;
   kj::Own<Impl> impl;
 
-  Capability::Client baseConnect(_::StructReader hostId, ObjectPointer::Reader objectId);
+  Capability::Client baseRestore(_::StructReader hostId, ObjectPointer::Reader objectId);
   // TODO(someday):  Maybe define a public API called `TypelessStruct` so we don't have to rely
   // on `_::StructReader` here?
 
@@ -259,7 +259,7 @@ public:
       const kj::EventLoop& eventLoop);
   RpcSystem(RpcSystem&& other) = default;
 
-  Capability::Client connect(typename SturdyRefHostId::Reader hostId,
+  Capability::Client restore(typename SturdyRefHostId::Reader hostId,
                              ObjectPointer::Reader objectId);
   // Restore the given SturdyRef from the network and return the capability representing it.
 };
@@ -289,7 +289,7 @@ RpcSystem<SturdyRefHostId> makeRpcClient(
 //    MyNetwork network(eventLoop);
 //    MyRestorer restorer;
 //    auto client = makeRpcClient(network, restorer);
-//    MyCapability::Client cap = client.connect(myRef).castAs<MyCapability>();
+//    MyCapability::Client cap = client.restore(hostId, objId).castAs<MyCapability>();
 //    auto response = eventLoop.wait(cap.fooRequest().send());
 //    handleMyResponse(response);
 
@@ -364,9 +364,9 @@ RpcSystem<SturdyRefHostId>::RpcSystem(
     : _::RpcSystemBase(network, restorer, eventLoop) {}
 
 template <typename SturdyRefHostId>
-Capability::Client RpcSystem<SturdyRefHostId>::connect(
+Capability::Client RpcSystem<SturdyRefHostId>::restore(
     typename SturdyRefHostId::Reader hostId, ObjectPointer::Reader objectId) {
-  return baseConnect(_::PointerHelpers<SturdyRefHostId>::getInternalReader(hostId), objectId);
+  return baseRestore(_::PointerHelpers<SturdyRefHostId>::getInternalReader(hostId), objectId);
 }
 
 template <typename SturdyRefHostId, typename LocalSturdyRefObjectId,

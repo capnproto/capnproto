@@ -1919,7 +1919,7 @@ public:
     }
   }
 
-  Capability::Client connect(_::StructReader hostId, ObjectPointer::Reader objectId) {
+  Capability::Client restore(_::StructReader hostId, ObjectPointer::Reader objectId) {
     KJ_IF_MAYBE(connection, network.baseConnectToRefHost(hostId)) {
       auto lock = connections.lockExclusive();
       auto& state = getConnectionState(kj::mv(*connection), *lock);
@@ -1985,9 +1985,9 @@ RpcSystemBase::RpcSystemBase(VatNetworkBase& network, kj::Maybe<SturdyRefRestore
 RpcSystemBase::RpcSystemBase(RpcSystemBase&& other) = default;
 RpcSystemBase::~RpcSystemBase() noexcept(false) {}
 
-Capability::Client RpcSystemBase::baseConnect(
+Capability::Client RpcSystemBase::baseRestore(
     _::StructReader hostId, ObjectPointer::Reader objectId) {
-  return impl->connect(hostId, objectId);
+  return impl->restore(hostId, objectId);
 }
 
 }  // namespace _ (private)

@@ -256,7 +256,7 @@ protected:
     hostId.setHost("server");
     ref.getObjectId().initAs<test::TestSturdyRefObjectId>().setTag(tag);
 
-    return rpcClient.connect(hostId, ref.getObjectId());
+    return rpcClient.restore(hostId, ref.getObjectId());
   }
 
   RpcTest()

@@ -76,7 +76,7 @@ Capability::Client getPersistentCap(RpcSystem<rpc::twoparty::SturdyRefHostId>& c
   objectIdMessage.initRoot<test::TestSturdyRefObjectId>().setTag(tag);
 
   // Connect to the remote capability.
-  return client.connect(hostId, objectIdMessage.getRoot<ObjectPointer>());
+  return client.restore(hostId, objectIdMessage.getRoot<ObjectPointer>());
 }
 
 TEST(TwoPartyNetwork, Basic) {
