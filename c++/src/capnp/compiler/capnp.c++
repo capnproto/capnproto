@@ -268,6 +268,11 @@ public:
     // Strip redundant "./" prefixes to make src-prefix matching more lenient.
     while (file.startsWith("./")) {
       file = file.slice(2);
+
+      // Remove redundant slashes as well (e.g. ".////foo" -> "foo").
+      while (file.startsWith("/")) {
+        file = file.slice(1);
+      }
     }
 
     if (!compilerConstructed) {

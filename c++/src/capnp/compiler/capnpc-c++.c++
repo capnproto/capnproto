@@ -1967,9 +1967,11 @@ private:
   }
 
   void writeFile(kj::StringPtr filename, const kj::StringTree& text) {
-    KJ_IF_MAYBE(slashpos, filename.findLast('/')) {
-      // Make the parent dir.
-      makeDirectory(kj::str(filename.slice(0, *slashpos)));
+    if (!filename.startsWith("/")) {
+      KJ_IF_MAYBE(slashpos, filename.findLast('/')) {
+        // Make the parent dir.
+        makeDirectory(kj::str(filename.slice(0, *slashpos)));
+      }
     }
 
     int fd;
