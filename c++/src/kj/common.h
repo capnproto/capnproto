@@ -369,6 +369,69 @@ inline constexpr size_t size(T&& arr) { return arr.size(); }
 // Returns the size of the parameter, whether the parameter is a regular C array or a container
 // with a `.size()` method.
 
+class MaxValue_ {
+private:
+  template <typename T>
+  inline constexpr T maxSigned() const {
+    return (1ull << (sizeof(T) * 8 - 1)) - 1;
+  }
+  template <typename T>
+  inline constexpr T maxUnsigned() const {
+    return ~static_cast<T>(0u);
+  }
+
+public:
+#define _kJ_HANDLE_TYPE(T) \
+  inline constexpr operator   signed T() const { return MaxValue_::maxSigned  <  signed T>(); } \
+  inline constexpr operator unsigned T() const { return MaxValue_::maxUnsigned<unsigned T>(); }
+  _kJ_HANDLE_TYPE(char)
+  _kJ_HANDLE_TYPE(short)
+  _kJ_HANDLE_TYPE(int)
+  _kJ_HANDLE_TYPE(long)
+  _kJ_HANDLE_TYPE(long long)
+#undef _kJ_HANDLE_TYPE
+};
+
+class MinValue_ {
+private:
+  template <typename T>
+  inline constexpr T minSigned() const {
+    return 1ull << (sizeof(T) * 8 - 1);
+  }
+  template <typename T>
+  inline constexpr T minUnsigned() const {
+    return 0u;
+  }
+
+public:
+#define _kJ_HANDLE_TYPE(T) \
+  inline constexpr operator   signed T() const { return MinValue_::minSigned  <  signed T>(); } \
+  inline constexpr operator unsigned T() const { return MinValue_::minUnsigned<unsigned T>(); }
+  _kJ_HANDLE_TYPE(char)
+  _kJ_HANDLE_TYPE(short)
+  _kJ_HANDLE_TYPE(int)
+  _kJ_HANDLE_TYPE(long)
+  _kJ_HANDLE_TYPE(long long)
+#undef _kJ_HANDLE_TYPE
+};
+
+static constexpr MaxValue_ maxValue = MaxValue_();
+// A special constant which, when cast to an integer type, takes on the maximum possible value of
+// that type.  This is useful to use as e.g. a parameter to a function because it will be robust
+// in the face of changes to the parameter's type.
+//
+// `char` is not supported, but `signed char` and `unsigned char` are.
+
+static constexpr MinValue_ minValue = MinValue_();
+// A special constant which, when cast to an integer type, takes on the minimum possible value
+// of that type.  This is useful to use as e.g. a parameter to a function because it will be robust
+// in the face of changes to the parameter's type.
+//
+// `char` is not supported, but `signed char` and `unsigned char` are.
+
+inline double inf() { return 1.0 / 0.0; }
+inline double nan() { return 0.0 / 0.0; }
+
 // =======================================================================================
 // Useful fake containers
 

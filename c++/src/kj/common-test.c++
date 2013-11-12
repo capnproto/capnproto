@@ -262,6 +262,32 @@ TEST(Common, MinMax) {
   EXPECT_EQ(1234567890123456789ll, kj::max('a', 1234567890123456789ll));
 }
 
+TEST(Common, MinMaxValue) {
+  EXPECT_EQ(0x7f, int8_t(maxValue));
+  EXPECT_EQ(0xffu, uint8_t(maxValue));
+  EXPECT_EQ(0x7fff, int16_t(maxValue));
+  EXPECT_EQ(0xffffu, uint16_t(maxValue));
+  EXPECT_EQ(0x7fffffff, int32_t(maxValue));
+  EXPECT_EQ(0xffffffffu, uint32_t(maxValue));
+  EXPECT_EQ(0x7fffffffffffffffll, int64_t(maxValue));
+  EXPECT_EQ(0xffffffffffffffffull, uint64_t(maxValue));
+
+  EXPECT_EQ(-0x80, int8_t(minValue));
+  EXPECT_EQ(0, uint8_t(minValue));
+  EXPECT_EQ(-0x8000, int16_t(minValue));
+  EXPECT_EQ(0, uint16_t(minValue));
+  EXPECT_EQ(-0x80000000, int32_t(minValue));
+  EXPECT_EQ(0, uint32_t(minValue));
+  EXPECT_EQ(-0x8000000000000000ll, int64_t(minValue));
+  EXPECT_EQ(0, uint64_t(minValue));
+
+  double f = inf();
+  EXPECT_TRUE(f * 2 == f);
+
+  f = nan();
+  EXPECT_FALSE(f == f);
+}
+
 TEST(Common, Defer) {
   uint i = 0;
   uint j = 1;

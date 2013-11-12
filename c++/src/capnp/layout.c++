@@ -27,7 +27,6 @@
 #include "arena.h"
 #include "capability.h"
 #include <string.h>
-#include <limits>
 #include <stdlib.h>
 
 namespace capnp {
@@ -462,7 +461,7 @@ struct WireHelpers {
             reinterpret_cast<const WirePointer*>(ptr + tag->structRef.dataSize.get()),
             tag->structRef.dataSize.get() * BITS_PER_WORD,
             tag->structRef.ptrCount.get(),
-            0 * BITS, std::numeric_limits<int>::max()));
+            0 * BITS, kj::maxValue));
         // no break:  treat like struct pointer
 
       case WirePointer::STRUCT: {
@@ -548,7 +547,7 @@ struct WireHelpers {
 
   // -----------------------------------------------------------------
 
-  static WordCount64 totalSize(SegmentReader* segment, const WirePointer* ref, uint nestingLimit) {
+  static WordCount64 totalSize(SegmentReader* segment, const WirePointer* ref, int nestingLimit) {
     // Compute the total size of the object pointed to, not counting far pointer overhead.
 
     if (ref->isNull()) {
@@ -2173,7 +2172,7 @@ void PointerBuilder::setList(const ListReader& value) {
 
 kj::Own<const ClientHook> PointerBuilder::getCapability() {
   return WireHelpers::readCapabilityPointer(
-      segment, pointer, std::numeric_limits<int>::max());
+      segment, pointer, kj::maxValue);
 }
 
 void PointerBuilder::setCapability(kj::Own<const ClientHook>&& cap) {
@@ -2206,7 +2205,7 @@ void PointerBuilder::copyFrom(PointerReader other) {
 }
 
 PointerReader PointerBuilder::asReader() const {
-  return PointerReader(segment, pointer, std::numeric_limits<int>::max());
+  return PointerReader(segment, pointer, kj::maxValue);
 }
 
 BuilderArena* PointerBuilder::getArena() const {
@@ -2373,7 +2372,7 @@ void StructBuilder::copyContentFrom(StructReader other) {
 
 StructReader StructBuilder::asReader() const {
   return StructReader(segment, data, pointers,
-      dataSize, pointerCount, bit0Offset, std::numeric_limits<int>::max());
+      dataSize, pointerCount, bit0Offset, kj::maxValue);
 }
 
 BuilderArena* StructBuilder::getArena() {
@@ -2451,7 +2450,7 @@ StructBuilder ListBuilder::getStructElement(ElementCount index) {
 
 ListReader ListBuilder::asReader() const {
   return ListReader(segment, ptr, elementCount, step, structDataSize, structPointerCount,
-                    std::numeric_limits<int>::max());
+                    kj::maxValue);
 }
 
 BuilderArena* ListBuilder::getArena() {
@@ -2668,19 +2667,19 @@ Data::Builder OrphanBuilder::asData() {
 StructReader OrphanBuilder::asStructReader(StructSize size) const {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
   return WireHelpers::readStructPointer(
-      segment, tagAsPtr(), location, nullptr, std::numeric_limits<int>::max());
+      segment, tagAsPtr(), location, nullptr, kj::maxValue);
 }
 
 ListReader OrphanBuilder::asListReader(FieldSize elementSize) const {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
   return WireHelpers::readListPointer(
-      segment, tagAsPtr(), location, nullptr, elementSize, std::numeric_limits<int>::max());
+      segment, tagAsPtr(), location, nullptr, elementSize, kj::maxValue);
 }
 
 kj::Own<const ClientHook> OrphanBuilder::asCapability() const {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
   return WireHelpers::readCapabilityPointer(
-      segment, tagAsPtr(), location, std::numeric_limits<int>::max());
+      segment, tagAsPtr(), location, kj::maxValue);
 }
 
 Text::Reader OrphanBuilder::asTextReader() const {

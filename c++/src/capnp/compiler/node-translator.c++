@@ -27,7 +27,6 @@
 #include <kj/arena.h>
 #include <set>
 #include <map>
-#include <limits>
 
 namespace capnp {
 namespace compiler {
@@ -440,7 +439,7 @@ public:
     uint addData(uint lgSize) override {
       addVoid();
 
-      uint bestSize = std::numeric_limits<uint>::max();
+      uint bestSize = kj::maxValue;
       kj::Maybe<uint> bestLocation = nullptr;
 
       for (uint i = 0; i < parent.dataLocations.size(); i++) {
@@ -1661,19 +1660,19 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(
       if (value < 0) {
         int64_t minValue = 1;
         switch (type.which()) {
-          case schema::Type::INT8: minValue = std::numeric_limits<int8_t>::min(); break;
-          case schema::Type::INT16: minValue = std::numeric_limits<int16_t>::min(); break;
-          case schema::Type::INT32: minValue = std::numeric_limits<int32_t>::min(); break;
-          case schema::Type::INT64: minValue = std::numeric_limits<int64_t>::min(); break;
-          case schema::Type::UINT8: minValue = std::numeric_limits<uint8_t>::min(); break;
-          case schema::Type::UINT16: minValue = std::numeric_limits<uint16_t>::min(); break;
-          case schema::Type::UINT32: minValue = std::numeric_limits<uint32_t>::min(); break;
-          case schema::Type::UINT64: minValue = std::numeric_limits<uint64_t>::min(); break;
+          case schema::Type::INT8: minValue = (int8_t)kj::minValue; break;
+          case schema::Type::INT16: minValue = (int16_t)kj::minValue; break;
+          case schema::Type::INT32: minValue = (int32_t)kj::minValue; break;
+          case schema::Type::INT64: minValue = (int64_t)kj::minValue; break;
+          case schema::Type::UINT8: minValue = (uint8_t)kj::minValue; break;
+          case schema::Type::UINT16: minValue = (uint16_t)kj::minValue; break;
+          case schema::Type::UINT32: minValue = (uint32_t)kj::minValue; break;
+          case schema::Type::UINT64: minValue = (uint64_t)kj::minValue; break;
 
           case schema::Type::FLOAT32:
           case schema::Type::FLOAT64:
             // Any integer is acceptable.
-            minValue = std::numeric_limits<int64_t>::min();
+            minValue = (int64_t)kj::minValue;
             break;
 
           default: break;
@@ -1693,19 +1692,19 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(
     case DynamicValue::UINT: {
       uint64_t maxValue = 0;
       switch (type.which()) {
-        case schema::Type::INT8: maxValue = std::numeric_limits<int8_t>::max(); break;
-        case schema::Type::INT16: maxValue = std::numeric_limits<int16_t>::max(); break;
-        case schema::Type::INT32: maxValue = std::numeric_limits<int32_t>::max(); break;
-        case schema::Type::INT64: maxValue = std::numeric_limits<int64_t>::max(); break;
-        case schema::Type::UINT8: maxValue = std::numeric_limits<uint8_t>::max(); break;
-        case schema::Type::UINT16: maxValue = std::numeric_limits<uint16_t>::max(); break;
-        case schema::Type::UINT32: maxValue = std::numeric_limits<uint32_t>::max(); break;
-        case schema::Type::UINT64: maxValue = std::numeric_limits<uint64_t>::max(); break;
+        case schema::Type::INT8: maxValue = (int8_t)kj::maxValue; break;
+        case schema::Type::INT16: maxValue = (int16_t)kj::maxValue; break;
+        case schema::Type::INT32: maxValue = (int32_t)kj::maxValue; break;
+        case schema::Type::INT64: maxValue = (int64_t)kj::maxValue; break;
+        case schema::Type::UINT8: maxValue = (uint8_t)kj::maxValue; break;
+        case schema::Type::UINT16: maxValue = (uint16_t)kj::maxValue; break;
+        case schema::Type::UINT32: maxValue = (uint32_t)kj::maxValue; break;
+        case schema::Type::UINT64: maxValue = (uint64_t)kj::maxValue; break;
 
         case schema::Type::FLOAT32:
         case schema::Type::FLOAT64:
           // Any integer is acceptable.
-          maxValue = std::numeric_limits<uint64_t>::max();
+          maxValue = (uint64_t)kj::maxValue;
           break;
 
         default: break;
@@ -1813,9 +1812,9 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(
           } else if (id == "false") {
             return false;
           } else if (id == "nan") {
-            return std::numeric_limits<double>::quiet_NaN();
+            return kj::nan();
           } else if (id == "inf") {
-            return std::numeric_limits<double>::infinity();
+            return kj::inf();
           }
         }
       }
@@ -1833,7 +1832,7 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(
 
     case ValueExpression::NEGATIVE_INT: {
       uint64_t nValue = src.getNegativeInt();
-      if (nValue > (std::numeric_limits<uint64_t>::max() >> 1) + 1) {
+      if (nValue > ((uint64_t)kj::maxValue >> 1) + 1) {
         errorReporter.addErrorOn(src, "Integer is too big to be negative.");
         return nullptr;
       } else {

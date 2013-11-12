@@ -41,7 +41,6 @@
 #include <sys/wait.h>
 #include <capnp/serialize.h>
 #include <capnp/serialize-packed.h>
-#include <limits>
 #include <errno.h>
 #include <stdlib.h>
 
@@ -608,9 +607,8 @@ private:
     // Since this is a debug tool, lift the usual security limits.  Worse case is the process
     // crashes or has to be killed.
     ReaderOptions options;
-    options.nestingLimit = std::numeric_limits<decltype(options.nestingLimit)>::max() >> 1;
-    options.traversalLimitInWords =
-        std::numeric_limits<decltype(options.traversalLimitInWords)>::max();
+    options.nestingLimit = kj::maxValue;
+    options.traversalLimitInWords = kj::maxValue;
 
     MessageReaderType reader(input, options);
     kj::String text;

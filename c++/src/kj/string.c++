@@ -25,7 +25,6 @@
 #include "debug.h"
 #include <stdio.h>
 #include <float.h>
-#include <limits>
 #include <errno.h>
 #include <stdlib.h>
 
@@ -217,10 +216,10 @@ char* DoubleToBuffer(double value, char* buffer) {
   // this assert.
   static_assert(DBL_DIG < 20, "DBL_DIG is too big.");
 
-  if (value == std::numeric_limits<double>::infinity()) {
+  if (value == inf()) {
     strcpy(buffer, "inf");
     return buffer;
-  } else if (value == -std::numeric_limits<double>::infinity()) {
+  } else if (value == -inf()) {
     strcpy(buffer, "-inf");
     return buffer;
   } else if (IsNaN(value)) {
@@ -273,10 +272,10 @@ char* FloatToBuffer(float value, char* buffer) {
   // this assert.
   static_assert(FLT_DIG < 10, "FLT_DIG is too big");
 
-  if (value == std::numeric_limits<double>::infinity()) {
+  if (value == inf()) {
     strcpy(buffer, "inf");
     return buffer;
-  } else if (value == -std::numeric_limits<double>::infinity()) {
+  } else if (value == -inf()) {
     strcpy(buffer, "-inf");
     return buffer;
   } else if (IsNaN(value)) {

@@ -69,7 +69,7 @@ struct ReaderOptions {
   // but probably at least prevents easy exploitation while also avoiding causing problems in most
   // typical cases.
 
-  uint nestingLimit = 64;
+  int nestingLimit = 64;
   // Limits how deeply-nested a message structure can be, e.g. structs containing other structs or
   // lists of structs.
   //

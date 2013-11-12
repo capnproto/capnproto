@@ -364,8 +364,7 @@ private:
 // =======================================================================================
 
 inline ReadLimiter::ReadLimiter()
-    // I didn't want to #include <limits> just for this one lousy constant.
-    : limit(0x7fffffffffffffffllu) {}
+    : limit(kj::maxValue) {}
 
 inline ReadLimiter::ReadLimiter(WordCount64 limit): limit(limit / WORDS) {}
 

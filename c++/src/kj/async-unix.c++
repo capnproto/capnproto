@@ -25,7 +25,6 @@
 #include "debug.h"
 #include <setjmp.h>
 #include <errno.h>
-#include <limits>
 
 namespace kj {
 
@@ -169,7 +168,7 @@ public:
     }
   }
 
-  void cleanup(uint count = std::numeric_limits<uint>::max()) {
+  void cleanup(uint count = maxValue) {
     // Goes through the list (up to a max of `count` items) and removes any that are no longer
     // relevant.
 

@@ -1661,16 +1661,16 @@ TEST(Encoding, Constants) {
     List<float>::Reader listReader = test::TestConstants::FLOAT32_LIST_CONST;
     ASSERT_EQ(4u, listReader.size());
     EXPECT_EQ(5555.5f, listReader[0]);
-    EXPECT_EQ(std::numeric_limits<float>::infinity(), listReader[1]);
-    EXPECT_EQ(-std::numeric_limits<float>::infinity(), listReader[2]);
+    EXPECT_EQ(kj::inf(), listReader[1]);
+    EXPECT_EQ(-kj::inf(), listReader[2]);
     EXPECT_TRUE(listReader[3] != listReader[3]);
   }
   {
     List<double>::Reader listReader = test::TestConstants::FLOAT64_LIST_CONST;
     ASSERT_EQ(4u, listReader.size());
     EXPECT_EQ(7777.75, listReader[0]);
-    EXPECT_EQ(std::numeric_limits<double>::infinity(), listReader[1]);
-    EXPECT_EQ(-std::numeric_limits<double>::infinity(), listReader[2]);
+    EXPECT_EQ(kj::inf(), listReader[1]);
+    EXPECT_EQ(-kj::inf(), listReader[2]);
     EXPECT_TRUE(listReader[3] != listReader[3]);
   }
   checkList(*test::TestConstants::TEXT_LIST_CONST, {"plugh", "xyzzy", "thud"});

@@ -29,7 +29,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <limits>
 
 namespace capnp {
 namespace compiler {
@@ -544,7 +543,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorRep
               -> Orphan<ValueExpression> {
             auto result = orphanage.newOrphan<ValueExpression>();
             auto builder = result.get();
-            builder.setFloat(-std::numeric_limits<double>::infinity());
+            builder.setFloat(-kj::inf());
             initLocation(location, builder);
             return result;
           }),

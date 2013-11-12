@@ -67,7 +67,7 @@ private:
 class TestPipe: public kj::BufferedInputStream, public kj::OutputStream {
 public:
   TestPipe()
-      : preferredReadSize(std::numeric_limits<size_t>::max()), readPos(0) {}
+      : preferredReadSize(kj::maxValue), readPos(0) {}
   explicit TestPipe(size_t preferredReadSize)
       : preferredReadSize(preferredReadSize), readPos(0) {}
   ~TestPipe() {}
@@ -76,7 +76,7 @@ public:
   std::string getUnreadData() { return data.substr(readPos); }
   std::string::size_type getReadPos() { return readPos; }
 
-  void resetRead(size_t preferredReadSize = std::numeric_limits<size_t>::max()) {
+  void resetRead(size_t preferredReadSize = kj::maxValue) {
     readPos = 0;
     this->preferredReadSize = preferredReadSize;
   }
@@ -85,7 +85,7 @@ public:
     return readPos == data.size();
   }
 
-  void clear(size_t preferredReadSize = std::numeric_limits<size_t>::max()) {
+  void clear(size_t preferredReadSize = kj::maxValue) {
     resetRead(preferredReadSize);
     data.clear();
   }
