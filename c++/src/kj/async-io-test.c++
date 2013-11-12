@@ -40,7 +40,7 @@ TEST(AsyncIo, SimpleNetwork) {
   UnixEventLoop loop;
   DummyErrorHandler dummyHandler;
   TaskSet tasks(loop, dummyHandler);
-  auto& network = getOperatingSystemSingleton().getNetwork();
+  auto network = Network::newSystemNetwork();
 
   Own<ConnectionReceiver> listener;
   Own<AsyncIoStream> server;
@@ -53,7 +53,7 @@ TEST(AsyncIo, SimpleNetwork) {
   tasks.add(loop.evalLater([&]() {
     return port.promise
         .then([&](uint portnum) {
-          return network.parseRemoteAddress("127.0.0.1", portnum);
+          return network->parseRemoteAddress("127.0.0.1", portnum);
         }).then([&](Own<RemoteAddress>&& result) {
           return result->connect();
         }).then([&](Own<AsyncIoStream>&& result) {
@@ -63,7 +63,7 @@ TEST(AsyncIo, SimpleNetwork) {
   }));
 
   kj::String result = loop.wait(loop.evalLater([&]() {
-    return network.parseLocalAddress("*")
+    return network->parseLocalAddress("*")
         .then([&](Own<LocalAddress>&& result) {
           listener = result->listen();
           port.fulfiller->fulfill(listener->getPort());
@@ -94,18 +94,18 @@ String tryParseRemote(EventLoop& loop, Network& network, StringPtr text, uint po
 
 TEST(AsyncIo, AddressParsing) {
   UnixEventLoop loop;
-  auto& network = getOperatingSystemSingleton().getNetwork();
+  auto network = Network::newSystemNetwork();
 
-  EXPECT_EQ("*:0", tryParseLocal(loop, network, "*"));
-  EXPECT_EQ("*:123", tryParseLocal(loop, network, "123"));
-  EXPECT_EQ("*:123", tryParseLocal(loop, network, ":123"));
-  EXPECT_EQ("[::]:123", tryParseLocal(loop, network, "0::0", 123));
-  EXPECT_EQ("0.0.0.0:0", tryParseLocal(loop, network, "0.0.0.0"));
-  EXPECT_EQ("1.2.3.4:5678", tryParseRemote(loop, network, "1.2.3.4", 5678));
-  EXPECT_EQ("[12ab:cd::34]:321", tryParseRemote(loop, network, "[12ab:cd:0::0:34]:321", 432));
+  EXPECT_EQ("*:0", tryParseLocal(loop, *network, "*"));
+  EXPECT_EQ("*:123", tryParseLocal(loop, *network, "123"));
+  EXPECT_EQ("*:123", tryParseLocal(loop, *network, ":123"));
+  EXPECT_EQ("[::]:123", tryParseLocal(loop, *network, "0::0", 123));
+  EXPECT_EQ("0.0.0.0:0", tryParseLocal(loop, *network, "0.0.0.0"));
+  EXPECT_EQ("1.2.3.4:5678", tryParseRemote(loop, *network, "1.2.3.4", 5678));
+  EXPECT_EQ("[12ab:cd::34]:321", tryParseRemote(loop, *network, "[12ab:cd:0::0:34]:321", 432));
 
-  EXPECT_EQ("unix:foo/bar/baz", tryParseLocal(loop, network, "unix:foo/bar/baz"));
-  EXPECT_EQ("unix:foo/bar/baz", tryParseRemote(loop, network, "unix:foo/bar/baz"));
+  EXPECT_EQ("unix:foo/bar/baz", tryParseLocal(loop, *network, "unix:foo/bar/baz"));
+  EXPECT_EQ("unix:foo/bar/baz", tryParseRemote(loop, *network, "unix:foo/bar/baz"));
 }
 
 TEST(AsyncIo, OneWayPipe) {

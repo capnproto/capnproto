@@ -582,49 +582,25 @@ private:
 
 class SocketNetwork final: public Network {
 public:
-  Promise<Own<LocalAddress>> parseLocalAddress(StringPtr addr, uint portHint = 0) override {
+  Promise<Own<LocalAddress>> parseLocalAddress(StringPtr addr, uint portHint = 0) const override {
     return EventLoop::current().evalLater(mvCapture(heapString(addr),
         [portHint](String&& addr) -> Own<LocalAddress> {
           return heap<LocalSocketAddress>(SocketAddress::parseLocal(addr, portHint));
         }));
   }
-  Promise<Own<RemoteAddress>> parseRemoteAddress(StringPtr addr, uint portHint = 0) override {
+  Promise<Own<RemoteAddress>> parseRemoteAddress(StringPtr addr, uint portHint = 0) const override {
     return EventLoop::current().evalLater(mvCapture(heapString(addr),
         [portHint](String&& addr) -> Own<RemoteAddress> {
           return heap<RemoteSocketAddress>(SocketAddress::parse(addr, portHint));
         }));
   }
 
-  Own<LocalAddress> getLocalSockaddr(const void* sockaddr, uint len) override {
+  Own<LocalAddress> getLocalSockaddr(const void* sockaddr, uint len) const override {
     return Own<LocalAddress>(heap<LocalSocketAddress>(SocketAddress(sockaddr, len)));
   }
-  Own<RemoteAddress> getRemoteSockaddr(const void* sockaddr, uint len) override {
+  Own<RemoteAddress> getRemoteSockaddr(const void* sockaddr, uint len) const override {
     return Own<RemoteAddress>(heap<RemoteSocketAddress>(SocketAddress(sockaddr, len)));
   }
-};
-
-class UnixKernel: public OperatingSystem {
-public:
-  UnixKernel()
-      : standardIo(STDIN_FILENO, STDOUT_FILENO),
-        standardError(-1, STDERR_FILENO) {}
-
-  AsyncIoStream& getStandardIo() override {
-    return standardIo;
-  }
-
-  AsyncOutputStream& getStandardError() override {
-    return standardError;
-  }
-
-  Network& getNetwork() override {
-    return network;
-  }
-
-private:
-  AsyncStreamFd standardIo;
-  AsyncStreamFd standardError;
-  SocketNetwork network;
 };
 
 }  // namespace
@@ -648,6 +624,10 @@ Own<AsyncIoStream> AsyncIoStream::wrapFd(int fd) {
   return heap<AsyncStreamFd>(fd, fd);
 }
 
+Own<Network> Network::newSystemNetwork() {
+  return heap<SocketNetwork>();
+}
+
 OneWayPipe newOneWayPipe() {
   int fds[2];
 #if __linux__
@@ -666,11 +646,6 @@ TwoWayPipe newTwoWayPipe() {
 #endif
   KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
   return TwoWayPipe { { heap<Socket>(fds[0]), heap<Socket>(fds[1]) } };
-}
-
-OperatingSystem& getOperatingSystemSingleton() {
-  static UnixKernel os;
-  return os;
 }
 
 }  // namespace kj

@@ -181,7 +181,7 @@ public:
 class BrokenClient final: public ClientHook, public kj::Refcounted {
 public:
   BrokenClient(const kj::Exception& exception): exception(exception) {}
-  BrokenClient(const char* description)
+  BrokenClient(const kj::StringPtr description)
       : exception(kj::Exception::Nature::PRECONDITION, kj::Exception::Durability::PERMANENT,
                   "", 0, kj::str(description)) {}
 
@@ -220,7 +220,7 @@ kj::Own<const ClientHook> BrokenPipeline::getPipelinedCap(
 
 }  // namespace
 
-kj::Own<const ClientHook> newBrokenCap(const char* reason) {
+kj::Own<const ClientHook> newBrokenCap(kj::StringPtr reason) {
   return kj::refcounted<BrokenClient>(reason);
 }
 

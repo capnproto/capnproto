@@ -41,6 +41,8 @@ public:
   // Create an AsyncInputStream wrapping a file descriptor.
   //
   // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
+  //
+  // The returned object can only be called from within a system event loop (e.g. `UnixEventLoop`).
 };
 
 class AsyncOutputStream {
@@ -54,6 +56,8 @@ public:
   // Create an AsyncOutputStream wrapping a file descriptor.
   //
   // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
+  //
+  // The returned object can only be called from within a system event loop (e.g. `UnixEventLoop`).
 };
 
 class AsyncIoStream: public AsyncInputStream, public AsyncOutputStream {
@@ -64,6 +68,8 @@ public:
   // Create an AsyncIoStream wrapping a file descriptor.
   //
   // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
+  //
+  // The returned object can only be called from within a system event loop (e.g. `UnixEventLoop`).
 };
 
 class ConnectionReceiver {
@@ -115,8 +121,33 @@ class Network {
   // LocalAddress and/or RemoteAddress instances directly and work from there, if at all possible.
 
 public:
-  virtual Promise<Own<LocalAddress>> parseLocalAddress(StringPtr addr, uint portHint = 0) = 0;
-  virtual Promise<Own<RemoteAddress>> parseRemoteAddress(StringPtr addr, uint portHint = 0) = 0;
+  static Own<Network> newSystemNetwork();
+  // Creates a new `Network` instance representing the networks exposed by the operating system.
+  //
+  // DO NOT CALL THIS except at the highest levels of your code, ideally in the main() function.  If
+  // you call this from low-level code, then you are preventing higher-level code from injecting an
+  // alternative implementation.  Instead, if your code needs to use network functionality, it
+  // should ask for a `Network` as a constructor or method parameter, so that higher-level code can
+  // chose what implementation to use.  The system network is essentially a singleton.  See:
+  //     http://www.object-oriented-security.org/lets-argue/singletons
+  //
+  // Code that uses the system network should not make any assumptions about what kinds of
+  // addresses it will parse, as this could differ across platforms.  String addresses should come
+  // strictly from the user, who will know how to write them correctly for their system.
+  //
+  // With that said, KJ currently supports the following string address formats:
+  // - IPv4: "1.2.3.4", "1.2.3.4:80"
+  // - IPv6: "1234:5678::abcd", "[1234:5678::abcd]:80"
+  // - Local IP wildcard (local addresses only; covers both v4 and v6):  "*", "*:80", ":80", "80"
+  // - Unix domain: "unix:/path/to/socket"
+  //
+  // The system network -- and all objects it creates -- can only be used from threads running
+  // a system event loop (e.g. `UnixEventLoop`).
+
+  virtual Promise<Own<LocalAddress>> parseLocalAddress(
+      StringPtr addr, uint portHint = 0) const = 0;
+  virtual Promise<Own<RemoteAddress>> parseRemoteAddress(
+      StringPtr addr, uint portHint = 0) const = 0;
   // Construct a local or remote address from a user-provided string.  The format of the address
   // strings is not specified at the API level, and application code should make no assumptions
   // about them.  These strings should always be provided by humans, and said humans will know
@@ -129,25 +160,9 @@ public:
   // In practice, a local address is usually just a port number (or even an empty string, if a
   // reasonable `portHint` is provided), whereas a remote address usually requires a hostname.
 
-  virtual Own<LocalAddress> getLocalSockaddr(const void* sockaddr, uint len) = 0;
-  virtual Own<RemoteAddress> getRemoteSockaddr(const void* sockaddr, uint len) = 0;
+  virtual Own<LocalAddress> getLocalSockaddr(const void* sockaddr, uint len) const = 0;
+  virtual Own<RemoteAddress> getRemoteSockaddr(const void* sockaddr, uint len) const = 0;
   // Construct a local or remote address from a legacy struct sockaddr.
-};
-
-class OperatingSystem {
-  // Interface representing the I/O facilities offered to a process by the operating system.  This
-  // interface usually should be used only in the highest levels of the application, in order to
-  // set up the right connections to pass down to lower levels that do the actual work.
-
-public:
-  virtual AsyncIoStream& getStandardIo() = 0;
-  virtual AsyncOutputStream& getStandardError() = 0;
-
-  virtual Network& getNetwork() = 0;
-
-  // TODO(someday):  Filesystem.  Should it even be async?
-//  virtual Directory& getCurrentDir() = 0;
-//  virtual Directory& getRootDir() = 0;
 };
 
 struct OneWayPipe {
@@ -164,18 +179,6 @@ struct TwoWayPipe {
 TwoWayPipe newTwoWayPipe();
 // Creates two AsyncIoStreams representing the two ends of a two-way OS pipe (created with
 // socketpair(2)).  Data written to one end can be read from the other.
-
-OperatingSystem& getOperatingSystemSingleton();
-// Get the EVIL singleton instance of OperatingSystem representing the real kernel.
-//
-// DO NOT USE THIS except at the highest levels of your code, ideally in the main() function.  If
-// you call this from low-level code, then you are preventing higher-level code from injecting an
-// alternative implementation.  Instead, if your code needs to use OS functionality, it should ask
-// for an OperatingSystem as a parameter.  See:
-//     http://www.object-oriented-security.org/lets-argue/singletons
-//
-// If you use KJ_MAIN, you never have to call this at all, because your main function will receive
-// an OperatingSystem as part of the process context.
 
 }  // namespace kj
 

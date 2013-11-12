@@ -207,7 +207,7 @@ private:
   void dropCap(_::LocalCapDescriptor::Reader descriptor) const override;
 };
 
-kj::Own<const ClientHook> newBrokenCap(const char* reason);
+kj::Own<const ClientHook> newBrokenCap(kj::StringPtr reason);
 kj::Own<const ClientHook> newBrokenCap(kj::Exception&& reason);
 // Helper function that creates a capability which simply throws exceptions when called.
 
