@@ -270,17 +270,19 @@ struct Stringifier {
 
   StringPtr operator*(bool b) const;
 
-  CappedArray<char, sizeof(short) * 4> operator*(short i) const;
-  CappedArray<char, sizeof(unsigned short) * 4> operator*(unsigned short i) const;
-  CappedArray<char, sizeof(int) * 4> operator*(int i) const;
-  CappedArray<char, sizeof(unsigned int) * 4> operator*(unsigned int i) const;
-  CappedArray<char, sizeof(long) * 4> operator*(long i) const;
-  CappedArray<char, sizeof(unsigned long) * 4> operator*(unsigned long i) const;
-  CappedArray<char, sizeof(long long) * 4> operator*(long long i) const;
-  CappedArray<char, sizeof(unsigned long long) * 4> operator*(unsigned long long i) const;
+  CappedArray<char, 5> operator*(signed char i) const;
+  CappedArray<char, 5> operator*(unsigned char i) const;
+  CappedArray<char, sizeof(short) * 3 + 2> operator*(short i) const;
+  CappedArray<char, sizeof(unsigned short) * 3 + 2> operator*(unsigned short i) const;
+  CappedArray<char, sizeof(int) * 3 + 2> operator*(int i) const;
+  CappedArray<char, sizeof(unsigned int) * 3 + 2> operator*(unsigned int i) const;
+  CappedArray<char, sizeof(long) * 3 + 2> operator*(long i) const;
+  CappedArray<char, sizeof(unsigned long) * 3 + 2> operator*(unsigned long i) const;
+  CappedArray<char, sizeof(long long) * 3 + 2> operator*(long long i) const;
+  CappedArray<char, sizeof(unsigned long long) * 3 + 2> operator*(unsigned long long i) const;
   CappedArray<char, 24> operator*(float f) const;
   CappedArray<char, 32> operator*(double f) const;
-  CappedArray<char, sizeof(const void*) * 4> operator*(const void* s) const;
+  CappedArray<char, sizeof(const void*) * 3 + 2> operator*(const void* s) const;
 
   template <typename T>
   String operator*(ArrayPtr<T> arr) const;
@@ -304,10 +306,11 @@ auto toCharSequence(T&& value) -> decltype(_::STR * kj::fwd<T>(value)) {
   return _::STR * kj::fwd<T>(value);
 }
 
-CappedArray<char, sizeof(unsigned short) * 4> hex(unsigned short i);
-CappedArray<char, sizeof(unsigned int) * 4> hex(unsigned int i);
-CappedArray<char, sizeof(unsigned long) * 4> hex(unsigned long i);
-CappedArray<char, sizeof(unsigned long long) * 4> hex(unsigned long long i);
+CappedArray<char, sizeof(unsigned char) * 2 + 1> hex(unsigned char i);
+CappedArray<char, sizeof(unsigned short) * 2 + 1> hex(unsigned short i);
+CappedArray<char, sizeof(unsigned int) * 2 + 1> hex(unsigned int i);
+CappedArray<char, sizeof(unsigned long) * 2 + 1> hex(unsigned long i);
+CappedArray<char, sizeof(unsigned long long) * 2 + 1> hex(unsigned long long i);
 
 template <typename... Params>
 String str(Params&&... params) {

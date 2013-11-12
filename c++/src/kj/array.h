@@ -447,7 +447,7 @@ public:
   inline explicit constexpr CappedArray(size_t s): currentSize(s) {}
 
   inline size_t size() const { return currentSize; }
-  inline void setSize(size_t s) { currentSize = s; }
+  inline void setSize(size_t s) { KJ_IREQUIRE(s <= fixedSize); currentSize = s; }
   inline T* begin() { return content; }
   inline T* end() { return content + currentSize; }
   inline const T* begin() const { return content; }

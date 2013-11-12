@@ -245,7 +245,7 @@ private:
     switch (value.which()) {
       case schema::Value::VOID: return kj::strTree(" ::capnp::VOID");
       case schema::Value::BOOL: return kj::strTree(value.getBool() ? "true" : "false");
-      case schema::Value::INT8: return kj::strTree(int(value.getInt8()));
+      case schema::Value::INT8: return kj::strTree(value.getInt8());
       case schema::Value::INT16: return kj::strTree(value.getInt16());
       case schema::Value::INT32: return kj::strTree(value.getInt32());
       case schema::Value::INT64: return kj::strTree(value.getInt64(), "ll");
@@ -667,13 +667,6 @@ private:
         setterDefault = " = ::capnp::VOID";
         break;
 
-      case schema::Type::INT8:
-        kind = FieldKind::PRIMITIVE;
-        if (defaultBody.getInt8() != 0) {
-          defaultMask = kj::str(int(defaultBody.getInt8()), "");
-        }
-        break;
-
 #define HANDLE_PRIMITIVE(discrim, typeName, defaultName, suffix) \
       case schema::Type::discrim: \
         kind = FieldKind::PRIMITIVE; \
@@ -683,7 +676,7 @@ private:
         break;
 
       HANDLE_PRIMITIVE(BOOL, bool, Bool, );
-      //HANDLE_PRIMITIVE(INT8 , ::int8_t , Int8 , );
+      HANDLE_PRIMITIVE(INT8 , ::int8_t , Int8 , );
       HANDLE_PRIMITIVE(INT16, ::int16_t, Int16, );
       HANDLE_PRIMITIVE(INT32, ::int32_t, Int32, );
       HANDLE_PRIMITIVE(INT64, ::int64_t, Int64, ll);

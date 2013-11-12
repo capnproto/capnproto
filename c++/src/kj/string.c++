@@ -44,12 +44,13 @@ String heapString(const char* value, size_t size) {
 }
 
 #define HEXIFY_INT(type, format) \
-CappedArray<char, sizeof(type) * 4> hex(type i) { \
-  CappedArray<char, sizeof(type) * 4> result; \
+CappedArray<char, sizeof(type) * 2 + 1> hex(type i) { \
+  CappedArray<char, sizeof(type) * 2 + 1> result; \
   result.setSize(sprintf(result.begin(), format, i)); \
   return result; \
 }
 
+HEXIFY_INT(unsigned char, "%x");
 HEXIFY_INT(unsigned short, "%x");
 HEXIFY_INT(unsigned int, "%x");
 HEXIFY_INT(unsigned long, "%lx");
@@ -64,12 +65,14 @@ StringPtr Stringifier::operator*(bool b) const {
 }
 
 #define STRINGIFY_INT(type, format) \
-CappedArray<char, sizeof(type) * 4> Stringifier::operator*(type i) const { \
-  CappedArray<char, sizeof(type) * 4> result; \
+CappedArray<char, sizeof(type) * 3 + 2> Stringifier::operator*(type i) const { \
+  CappedArray<char, sizeof(type) * 3 + 2> result; \
   result.setSize(sprintf(result.begin(), format, i)); \
   return result; \
 }
 
+STRINGIFY_INT(signed char, "%d");
+STRINGIFY_INT(unsigned char, "%u");
 STRINGIFY_INT(short, "%d");
 STRINGIFY_INT(unsigned short, "%u");
 STRINGIFY_INT(int, "%d");

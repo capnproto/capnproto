@@ -34,6 +34,8 @@ TEST(String, Str) {
   EXPECT_EQ("1 2 3 4", str(1, " ", 2u, " ", 3l, " ", 4ll));
   EXPECT_EQ("1.5 foo 1e15 bar -3", str(1.5f, " foo ", 1e15, " bar ", -3));
   EXPECT_EQ("foo", str('f', 'o', 'o'));
+  EXPECT_EQ("123 234 -123 e7",
+            str((int8_t)123, " ", (uint8_t)234, " ", (int8_t)-123, " ", hex((uint8_t)0xe7)));
 }
 
 TEST(String, StartsEndsWith) {
