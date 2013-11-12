@@ -784,6 +784,9 @@ public:
   Orphan(Orphan&&) = default;
   Orphan& operator=(Orphan&&) = default;
 
+  template <typename T, typename = kj::EnableIf<kind<T>() == Kind::STRUCT>>
+  inline Orphan(Orphan<T>&& other): schema(Schema::from<T>()), builder(kj::mv(other.builder)) {}
+
   DynamicStruct::Builder get();
   DynamicStruct::Reader getReader() const;
 
@@ -820,6 +823,9 @@ public:
   Orphan(Orphan&&) = default;
   Orphan& operator=(Orphan&&) = default;
 
+  template <typename T, typename = kj::EnableIf<kind<T>() == Kind::LIST>>
+  inline Orphan(Orphan<T>&& other): schema(Schema::from<T>()), builder(kj::mv(other.builder)) {}
+
   DynamicList::Builder get();
   DynamicList::Reader getReader() const;
 
@@ -854,6 +860,9 @@ public:
   KJ_DISALLOW_COPY(Orphan);
   Orphan(Orphan&&) = default;
   Orphan& operator=(Orphan&&) = default;
+
+  template <typename T, typename = kj::EnableIf<kind<T>() == Kind::INTERFACE>>
+  inline Orphan(Orphan<T>&& other): schema(Schema::from<T>()), builder(kj::mv(other.builder)) {}
 
   DynamicCapability::Client get();
   DynamicCapability::Client getReader() const;

@@ -561,6 +561,10 @@ TEST(Capability, ObjectsAndOrphans) {
   EXPECT_TRUE(orphan == nullptr);
 
   verifyClient(request.getCap(), loop, callCount2);
+
+  Orphan<DynamicCapability> dynamicOrphan2 = request.disownCap();
+  verifyClient(dynamicOrphan2.get(), loop, callCount2);
+  verifyClient(dynamicOrphan2.getReader(), loop, callCount2);
 }
 
 TEST(Capability, Lists) {

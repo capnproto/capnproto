@@ -332,6 +332,11 @@ TEST(Orphans, DynamicStruct) {
   EXPECT_TRUE(orphan == nullptr);
   EXPECT_TRUE(root.hasObjectField());
   checkTestMessage(root.asReader().getObjectField().getAs<TestAllTypes>());
+
+  Orphan<DynamicStruct> orphan2 = root.getObjectField().disownAs<TestAllTypes>();
+  EXPECT_FALSE(orphan2 == nullptr);
+  EXPECT_TRUE(orphan2.get().getSchema() == Schema::from<TestAllTypes>());
+  checkDynamicTestMessage(orphan2.getReader());
 }
 
 TEST(Orphans, DynamicList) {
@@ -352,6 +357,10 @@ TEST(Orphans, DynamicList) {
   EXPECT_TRUE(orphan == nullptr);
   EXPECT_TRUE(root.hasObjectField());
   checkList(root.asReader().getObjectField().getAs<List<uint32_t>>(), {12u, 34u, 56u});
+
+  Orphan<DynamicList> orphan2 = root.getObjectField().disownAs<List<uint32_t>>();
+  EXPECT_FALSE(orphan2 == nullptr);
+  checkList<uint32_t>(orphan2.getReader(), {12, 34, 56});
 }
 
 TEST(Orphans, DynamicStructList) {
