@@ -73,14 +73,6 @@ kj::Promise<void> ClientHook::whenResolved() const {
   }
 }
 
-kj::Own<const ClientHook> newBrokenCap(const char* reason) {
-  return _::newBrokenCap(reason);
-}
-
-kj::Own<const ClientHook> newBrokenCap(kj::Exception&& reason) {
-  return _::newBrokenCap(kj::mv(reason));
-}
-
 // =======================================================================================
 
 namespace {

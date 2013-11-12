@@ -1712,14 +1712,19 @@ struct WireHelpers {
           goto useDefault;
         }
 
-        return setCapabilityPointer(dstSegment, dst,
-            srcSegment->getArena()->extractCap(StructReader(
+        KJ_IF_MAYBE(cap, srcSegment->getArena()->extractCap(StructReader(
                 srcSegment, ptr,
                 reinterpret_cast<const WirePointer*>(ptr + src->structRef.dataSize.get()),
                 src->structRef.dataSize.get() * BITS_PER_WORD,
                 src->structRef.ptrCount.get(),
-                0 * BITS, nestingLimit - 1)),
-            orphanArena);
+                0 * BITS, nestingLimit - 1))) {
+          return setCapabilityPointer(dstSegment, dst, kj::mv(*cap), orphanArena);
+        } else {
+          KJ_FAIL_REQUIRE("Message contained capability pointer but is not imbued with a "
+                          "capability context.") {
+            goto useDefault;
+          }
+        }
       }
 
       case WirePointer::FAR:
@@ -1799,11 +1804,22 @@ struct WireHelpers {
 
   static KJ_ALWAYS_INLINE(kj::Own<const ClientHook> readCapabilityPointer(
       SegmentReader* segment, const WirePointer* ref, const word* refTarget, int nestingLimit)) {
+    kj::Maybe<kj::Own<const ClientHook>> maybeCap;
+
     if (ref->isNull()) {
-      return newBrokenCap("Calling null capability pointer.");
+      maybeCap = segment->getArena()->newBrokenCap("Calling null capability pointer.");
     } else {
-      return segment->getArena()->extractCap(readStructOrCapDescPointer(
+      maybeCap = segment->getArena()->extractCap(readStructOrCapDescPointer(
           WirePointer::CAPABILITY, segment, ref, refTarget, nullptr, nestingLimit));
+    }
+
+    KJ_IF_MAYBE(cap, maybeCap) {
+      return kj::mv(*cap);
+    } else {
+      // We can't really recover from this.  Luckily, this is the caller's error, not the message
+      // sender's.
+      KJ_FAIL_REQUIRE("Tried to read a capability out of a message that doesn't have a "
+                      "capability context.");
     }
   }
 

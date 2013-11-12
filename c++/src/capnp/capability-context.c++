@@ -131,7 +131,7 @@ kj::Own<const ClientHook> LocalMessage::getInjectedCap(
   auto lock = state.lockExclusive();
   KJ_ASSERT(descriptor.getIndex() < lock->caps.size(),
             "Invalid capability descriptor in message.") {
-    return _::newBrokenCap("Calling capability from invalid descriptor.");
+    return newBrokenCap("Calling capability from invalid descriptor.");
   }
   return lock->caps[descriptor.getIndex()]->addRef();
 }
@@ -143,6 +143,89 @@ void LocalMessage::dropCap(_::LocalCapDescriptor::Reader descriptor) const {
     return;
   }
   lock->caps[descriptor.getIndex()] = nullptr;
+}
+
+// =======================================================================================
+
+namespace {
+
+class BrokenPipeline final: public PipelineHook, public kj::Refcounted {
+public:
+  BrokenPipeline(const kj::Exception& exception): exception(exception) {}
+
+  kj::Own<const PipelineHook> addRef() const override {
+    return kj::addRef(*this);
+  }
+
+  kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const override;
+
+private:
+  kj::Exception exception;
+};
+
+class BrokenRequest final: public RequestHook {
+public:
+  BrokenRequest(const kj::Exception& exception, uint firstSegmentWordSize)
+      : exception(exception),
+        message(firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : firstSegmentWordSize) {}
+
+  RemotePromise<ObjectPointer> send() override {
+    return RemotePromise<ObjectPointer>(kj::cp(exception),
+        ObjectPointer::Pipeline(kj::refcounted<BrokenPipeline>(exception)));
+  }
+
+  kj::Exception exception;
+  LocalMessage message;
+};
+
+class BrokenClient final: public ClientHook, public kj::Refcounted {
+public:
+  BrokenClient(const kj::Exception& exception): exception(exception) {}
+  BrokenClient(const char* description)
+      : exception(kj::Exception::Nature::PRECONDITION, kj::Exception::Durability::PERMANENT,
+                  "", 0, kj::str(description)) {}
+
+  Request<ObjectPointer, ObjectPointer> newCall(
+      uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
+    auto hook = kj::heap<BrokenRequest>(exception, firstSegmentWordSize);
+    auto root = hook->message.getRoot();
+    return Request<ObjectPointer, ObjectPointer>(root, kj::mv(hook));
+  }
+
+  VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
+                              kj::Own<CallContextHook>&& context) const override {
+    return VoidPromiseAndPipeline { kj::cp(exception), kj::heap<BrokenPipeline>(exception) };
+  }
+
+  kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const override {
+    return kj::Promise<kj::Own<const ClientHook>>(kj::cp(exception));
+  }
+
+  kj::Own<const ClientHook> addRef() const override {
+    return kj::addRef(*this);
+  }
+
+  const void* getBrand() const override {
+    return nullptr;
+  }
+
+private:
+  kj::Exception exception;
+};
+
+kj::Own<const ClientHook> BrokenPipeline::getPipelinedCap(
+    kj::ArrayPtr<const PipelineOp> ops) const {
+  return kj::heap<BrokenClient>(exception);
+}
+
+}  // namespace
+
+kj::Own<const ClientHook> newBrokenCap(const char* reason) {
+  return kj::refcounted<BrokenClient>(reason);
+}
+
+kj::Own<const ClientHook> newBrokenCap(kj::Exception&& reason) {
+  return kj::refcounted<BrokenClient>(kj::mv(reason));
 }
 
 }  // namespace capnp

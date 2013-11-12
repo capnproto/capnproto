@@ -346,10 +346,6 @@ public:
   virtual kj::Own<CallContextHook> addRef() = 0;
 };
 
-kj::Own<const ClientHook> newBrokenCap(const char* reason);
-kj::Own<const ClientHook> newBrokenCap(kj::Exception&& reason);
-// Helper function that creates a capability which simply throws exceptions when called.
-
 // =======================================================================================
 // Extend PointerHelpers for interfaces
 

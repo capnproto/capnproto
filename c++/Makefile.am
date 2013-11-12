@@ -172,7 +172,7 @@ includecapnp_HEADERS =                                         \
   src/capnp/rpc.capnp.h                                        \
   src/capnp/rpc-twoparty.capnp.h
 
-lib_LTLIBRARIES = libkj.la libcapnp.la libcapnp-rpc.la libcapnpc.la
+lib_LTLIBRARIES = libkj.la libkj-async.la libcapnp.la libcapnp-rpc.la libcapnpc.la
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libkj_la_LIBADD = $(PTHREAD_LIBS) -lpthread
@@ -191,11 +191,16 @@ libkj_la_SOURCES=                                              \
   src/kj/io.c++                                                \
   src/kj/mutex.c++                                             \
   src/kj/thread.c++                                            \
-  src/kj/async.c++                                             \
-  src/kj/async-unix.c++                                        \
-  src/kj/async-io.c++                                          \
   src/kj/main.c++                                              \
   src/kj/parse/char.c++
+
+# -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
+libkj_async_la_LIBADD = libkj.la $(PTHREAD_LIBS) -lpthread
+libkj_async_la_LDFLAGS = -release $(VERSION) -no-undefined
+libkj_async_la_SOURCES=                                        \
+  src/kj/async.c++                                             \
+  src/kj/async-unix.c++                                        \
+  src/kj/async-io.c++
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libcapnp_la_LIBADD = libkj.la $(PTHREAD_LIBS) -lpthread
@@ -209,21 +214,22 @@ libcapnp_la_SOURCES=                                           \
   src/capnp/list.c++                                           \
   src/capnp/object.c++                                         \
   src/capnp/message.c++                                        \
-  src/capnp/capability.c++                                     \
-  src/capnp/capability-context.c++                             \
   src/capnp/schema.capnp.c++                                   \
   src/capnp/schema.c++                                         \
   src/capnp/schema-loader.c++                                  \
   src/capnp/dynamic.c++                                        \
   src/capnp/stringify.c++                                      \
   src/capnp/serialize.c++                                      \
-  src/capnp/serialize-async.c++                                \
   src/capnp/serialize-packed.c++
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
-libcapnp_rpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS) -lpthread
+libcapnp_rpc_la_LIBADD = libcapnp.la libkj-async.la libkj.la $(PTHREAD_LIBS) -lpthread
 libcapnp_rpc_la_LDFLAGS = -release $(VERSION) -no-undefined
 libcapnp_rpc_la_SOURCES=                                       \
+  src/capnp/serialize-async.c++                                \
+  src/capnp/capability.c++                                     \
+  src/capnp/capability-context.c++                             \
+  src/capnp/dynamic-capability.c++                             \
   src/capnp/rpc.c++                                            \
   src/capnp/rpc.capnp.c++                                      \
   src/capnp/rpc-twoparty.c++                                   \
@@ -318,7 +324,7 @@ BUILT_SOURCES = $(test_capnpc_outputs)
 
 check_PROGRAMS = capnp-test capnp-evolution-test
 capnp_test_LDADD = gtest/lib/libgtest.la gtest/lib/libgtest_main.la \
-                   libcapnpc.la libcapnp-rpc.la libcapnp.la libkj.la
+                   libcapnpc.la libcapnp-rpc.la libcapnp.la libkj-async.la libkj.la
 capnp_test_CPPFLAGS = -Igtest/include -I$(srcdir)/gtest/include
 capnp_test_SOURCES =                                           \
   src/kj/common-test.c++                                       \

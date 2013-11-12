@@ -22,6 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "rpc.h"
+#include "capability-context.h"
 #include "test-util.h"
 #include <kj/debug.h>
 #include <gtest/gtest.h>

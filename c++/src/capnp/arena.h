@@ -58,12 +58,6 @@ class ReadLimiter;
 class Segment;
 typedef kj::Id<uint32_t, Segment> SegmentId;
 
-kj::Own<const ClientHook> newBrokenCap(const char* reason);
-kj::Own<const ClientHook> newBrokenCap(kj::Exception&& reason);
-// Helper function that creates a capability which simply throws exceptions when called.
-// Implemented in arena.c++ rather than capability.c++ because it is needed by layout.c++ and we
-// don't want capability.c++ to be required by people not using caps.
-
 class ReadLimiter {
   // Used to keep track of how much data has been processed from a message, and cut off further
   // processing if and when a particular limit is reached.  This is primarily intended to guard
@@ -192,9 +186,13 @@ public:
   // the VALIDATE_INPUT() macro which may throw an exception; if it returns normally, the caller
   // will need to continue with default values.
 
-  virtual kj::Own<const ClientHook> extractCap(const _::StructReader& capDescriptor) = 0;
+  virtual kj::Maybe<kj::Own<const ClientHook>> extractCap(const _::StructReader& capDescriptor) = 0;
   // Given a StructReader for a capability descriptor embedded in the message, return the
-  // corresponding capability.
+  // corresponding capability.  Returns null if the message is not imbued with a capability context.
+
+  virtual kj::Maybe<kj::Own<const ClientHook>> newBrokenCap(kj::StringPtr description) = 0;
+  // Returns a capability which, when called, always throws an exception with the given description.
+  // Returns null if the message is not imbued with a capability context.
 };
 
 class BasicReaderArena final: public Arena {
@@ -206,7 +204,8 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Own<const ClientHook> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<const ClientHook>> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<const ClientHook>> newBrokenCap(kj::StringPtr description);
 
 private:
   MessageReader* message;
@@ -230,7 +229,8 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Own<const ClientHook> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<const ClientHook>> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<const ClientHook>> newBrokenCap(kj::StringPtr description);
 
 private:
   Arena* base;
@@ -287,7 +287,8 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Own<const ClientHook> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<const ClientHook>> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<const ClientHook>> newBrokenCap(kj::StringPtr description);
 
   // implements BuilderArena -----------------------------------------
   SegmentBuilder* getSegment(SegmentId id) override;
@@ -323,7 +324,8 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Own<const ClientHook> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<const ClientHook>> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<const ClientHook>> newBrokenCap(kj::StringPtr description);
 
   // implements BuilderArena -----------------------------------------
   SegmentBuilder* getSegment(SegmentId id) override;
