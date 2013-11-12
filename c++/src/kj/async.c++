@@ -37,11 +37,7 @@ namespace kj {
 
 namespace {
 
-#if __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 8)
-#define thread_local __thread
-#endif
-
-thread_local EventLoop* threadLocalEventLoop = nullptr;
+static __thread EventLoop* threadLocalEventLoop = nullptr;
 
 #define _kJ_ALREADY_READY reinterpret_cast< ::kj::EventLoop::Event*>(1)
 
