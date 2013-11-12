@@ -114,8 +114,7 @@ kj::Maybe<kj::Own<const ClientHook>> BasicReaderArena::newBrokenCap(kj::StringPt
 // =======================================================================================
 
 ImbuedReaderArena::ImbuedReaderArena(Arena* base, CapExtractorBase* capExtractor)
-    : base(base), capExtractor(capExtractor),
-      segment0(nullptr, SegmentId(0), nullptr, nullptr) {}
+    : base(base), capExtractor(capExtractor), segment0(nullptr) {}
 ImbuedReaderArena::~ImbuedReaderArena() noexcept(false) {}
 
 SegmentReader* ImbuedReaderArena::imbue(SegmentReader* baseSegment) {
@@ -124,7 +123,7 @@ SegmentReader* ImbuedReaderArena::imbue(SegmentReader* baseSegment) {
   if (baseSegment->getSegmentId() == SegmentId(0)) {
     if (segment0.getArena() == nullptr) {
       kj::dtor(segment0);
-      kj::ctor(segment0, this, *baseSegment);
+      kj::ctor(segment0, this, baseSegment);
     }
     KJ_DASSERT(segment0.getArray().begin() == baseSegment->getArray().begin());
     return &segment0;
@@ -146,7 +145,7 @@ SegmentReader* ImbuedReaderArena::imbue(SegmentReader* baseSegment) {
     *lock = kj::mv(newMap);
   }
 
-  auto newSegment = kj::heap<SegmentReader>(this, *baseSegment);
+  auto newSegment = kj::heap<ImbuedSegmentReader>(this, baseSegment);
   SegmentReader* result = newSegment;
   segments->insert(std::make_pair(baseSegment, mv(newSegment)));
   return result;
@@ -162,7 +161,9 @@ void ImbuedReaderArena::reportReadLimitReached() {
 
 kj::Maybe<kj::Own<const ClientHook>> ImbuedReaderArena::extractCap(
     const _::StructReader& capDescriptor) {
-  return capExtractor->extractCapInternal(capDescriptor);
+  _::StructReader copy = capDescriptor;
+  copy.unimbue();
+  return capExtractor->extractCapInternal(copy);
 }
 
 kj::Maybe<kj::Own<const ClientHook>> ImbuedReaderArena::newBrokenCap(kj::StringPtr description) {
@@ -382,7 +383,9 @@ void ImbuedBuilderArena::reportReadLimitReached() {
 
 kj::Maybe<kj::Own<const ClientHook>> ImbuedBuilderArena::extractCap(
     const _::StructReader& capDescriptor) {
-  return capInjector->getInjectedCapInternal(capDescriptor);
+  _::StructReader copy = capDescriptor;
+  copy.unimbue();
+  return capInjector->getInjectedCapInternal(copy);
 }
 
 kj::Maybe<kj::Own<const ClientHook>> ImbuedBuilderArena::newBrokenCap(kj::StringPtr description) {
@@ -404,7 +407,9 @@ OrphanBuilder ImbuedBuilderArena::injectCap(kj::Own<const ClientHook>&& cap) {
 }
 
 void ImbuedBuilderArena::dropCap(const StructReader& capDescriptor) {
-  capInjector->dropCapInternal(capDescriptor);
+  _::StructReader copy = capDescriptor;
+  copy.unimbue();
+  capInjector->dropCapInternal(copy);
 }
 
 }  // namespace _ (private)

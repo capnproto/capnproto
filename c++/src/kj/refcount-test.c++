@@ -36,8 +36,8 @@ struct SetTrueInDestructor: public Refcounted {
 TEST(Refcount, Basic) {
   bool b = false;
   Own<SetTrueInDestructor> ref1 = kj::refcounted<SetTrueInDestructor>(&b);
-  Own<SetTrueInDestructor> ref2 = kj::addRef(*ref1);
-  Own<SetTrueInDestructor> ref3 = kj::addRef(*ref2);
+  Own<const SetTrueInDestructor> ref2 = kj::addRef(*ref1);
+  Own<const SetTrueInDestructor> ref3 = kj::addRef(*ref2);
 
   EXPECT_FALSE(b);
   ref1 = Own<SetTrueInDestructor>();

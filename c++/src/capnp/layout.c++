@@ -2380,6 +2380,10 @@ BuilderArena* StructBuilder::getArena() {
   return segment->getArena();
 }
 
+void StructBuilder::unimbue() {
+  segment = static_cast<ImbuedSegmentBuilder*>(segment)->unimbue();
+}
+
 // =======================================================================================
 // StructReader
 
@@ -2397,6 +2401,10 @@ WordCount64 StructReader::totalSize() const {
   }
 
   return result;
+}
+
+void StructReader::unimbue() {
+  segment = static_cast<ImbuedSegmentReader*>(segment)->unimbue();
 }
 
 // =======================================================================================

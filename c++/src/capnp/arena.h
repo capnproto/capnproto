@@ -102,7 +102,6 @@ class SegmentReader {
 public:
   inline SegmentReader(Arena* arena, SegmentId id, kj::ArrayPtr<const word> ptr,
                        ReadLimiter* readLimiter);
-  inline SegmentReader(Arena* arena, const SegmentReader& base);
 
   KJ_ALWAYS_INLINE(bool containsInterval(const void* from, const void* to));
 
@@ -128,6 +127,18 @@ private:
 
   friend class SegmentBuilder;
   friend class ImbuedSegmentBuilder;
+  friend class ImbuedSegmentReader;
+};
+
+class ImbuedSegmentReader: public SegmentReader {
+public:
+  inline ImbuedSegmentReader(Arena* arena, SegmentReader* base);
+  inline ImbuedSegmentReader(decltype(nullptr));
+
+  inline SegmentReader* unimbue();
+
+private:
+  SegmentReader* base;
 };
 
 class SegmentBuilder: public SegmentReader {
@@ -172,6 +183,11 @@ public:
   inline ImbuedSegmentBuilder(decltype(nullptr));
 
   KJ_DISALLOW_COPY(ImbuedSegmentBuilder);
+
+  inline SegmentBuilder* unimbue();
+
+private:
+  SegmentBuilder* base;
 };
 
 class Arena {
@@ -237,9 +253,9 @@ private:
   CapExtractorBase* capExtractor;
 
   // Optimize for single-segment messages so that small messages are handled quickly.
-  SegmentReader segment0;
+  ImbuedSegmentReader segment0;
 
-  typedef std::unordered_map<SegmentReader*, kj::Own<SegmentReader>> SegmentMap;
+  typedef std::unordered_map<SegmentReader*, kj::Own<ImbuedSegmentReader>> SegmentMap;
   kj::MutexGuarded<kj::Maybe<kj::Own<SegmentMap>>> moreSegments;
 };
 
@@ -374,9 +390,6 @@ inline SegmentReader::SegmentReader(Arena* arena, SegmentId id, kj::ArrayPtr<con
                                     ReadLimiter* readLimiter)
     : arena(arena), id(id), ptr(ptr), readLimiter(readLimiter) {}
 
-inline SegmentReader::SegmentReader(Arena* arena, const SegmentReader& base)
-    : arena(arena), id(base.id), ptr(base.ptr), readLimiter(base.readLimiter) {}
-
 inline bool SegmentReader::containsInterval(const void* from, const void* to) {
   return from >= this->ptr.begin() && to <= this->ptr.end() &&
       readLimiter->canRead(
@@ -394,6 +407,14 @@ inline WordCount SegmentReader::getOffsetTo(const word* ptr) {
 inline WordCount SegmentReader::getSize() { return ptr.size() * WORDS; }
 inline kj::ArrayPtr<const word> SegmentReader::getArray() { return ptr; }
 inline void SegmentReader::unread(WordCount64 amount) { readLimiter->unread(amount); }
+
+inline ImbuedSegmentReader::ImbuedSegmentReader(Arena* arena, SegmentReader* base)
+    : SegmentReader(arena, base->id, base->ptr, base->readLimiter), base(base) {}
+inline ImbuedSegmentReader::ImbuedSegmentReader(decltype(nullptr))
+    : SegmentReader(nullptr, SegmentId(0), nullptr, nullptr), base(nullptr) {}
+inline SegmentReader* ImbuedSegmentReader::unimbue() {
+  return base;
+}
 
 // -------------------------------------------------------------------
 
@@ -452,9 +473,13 @@ inline BasicSegmentBuilder::BasicSegmentBuilder(
 inline ImbuedSegmentBuilder::ImbuedSegmentBuilder(ImbuedBuilderArena* arena, SegmentBuilder* base)
     : SegmentBuilder(arena, base->id,
                      kj::arrayPtr(const_cast<word*>(base->ptr.begin()), base->ptr.size()),
-                     base->readLimiter, base->pos) {}
+                     base->readLimiter, base->pos),
+      base(base) {}
 inline ImbuedSegmentBuilder::ImbuedSegmentBuilder(decltype(nullptr))
-    : SegmentBuilder(nullptr, SegmentId(0), nullptr, nullptr, nullptr) {}
+    : SegmentBuilder(nullptr, SegmentId(0), nullptr, nullptr, nullptr),
+      base(nullptr) {}
+
+inline SegmentBuilder* ImbuedSegmentBuilder::unimbue() { return base; }
 
 }  // namespace _ (private)
 }  // namespace capnp

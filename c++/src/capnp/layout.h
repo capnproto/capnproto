@@ -462,6 +462,10 @@ public:
   BuilderArena* getArena();
   // Gets the arena in which this object is allocated.
 
+  void unimbue();
+  // Removes the capability context from the builder.  This means replacing the segment pointer --
+  // which is assumed to point to an ImbuedSegmentBuilder -- with the non-imbued base segment.
+
 private:
   SegmentBuilder* segment;     // Memory segment in which the struct resides.
   void* data;                  // Pointer to the encoded data.
@@ -526,6 +530,10 @@ public:
   // into a flat array.  However, the caller is advised NOT to treat this value as secure.  Instead,
   // use the result as a hint for allocating the first segment, do the copy, and then throw an
   // exception if it overruns.
+
+  void unimbue();
+  // Removes the capability context from the reader.  This means replacing the segment pointer --
+  // which is assumed to point to an ImbuedSegmentReader -- with the non-imbued base segment.
 
 private:
   SegmentReader* segment;  // Memory segment in which the struct resides.
