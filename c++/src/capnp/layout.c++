@@ -1614,7 +1614,7 @@ struct WireHelpers {
     // readStructPointer(), etc. because they do type checking whereas here we want to accept any
     // valid pointer.
 
-    if (src == nullptr || src->isNull()) {
+    if (src->isNull()) {
     useDefault:
       memset(dst, 0, sizeof(*dst));
       return { dstSegment, nullptr };
@@ -1825,7 +1825,7 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(StructReader readStructOrCapDescPointer(WirePointer::Kind kind,
       SegmentReader* segment, const WirePointer* ref, const word* refTarget,
       const word* defaultValue, int nestingLimit)) {
-    if (ref == nullptr || ref->isNull()) {
+    if (ref->isNull()) {
     useDefault:
       if (defaultValue == nullptr ||
           reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
@@ -1877,7 +1877,7 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(ListReader readListPointer(
       SegmentReader* segment, const WirePointer* ref, const word* refTarget,
       const word* defaultValue, FieldSize expectedElementSize, int nestingLimit)) {
-    if (ref == nullptr || ref->isNull()) {
+    if (ref->isNull()) {
     useDefault:
       if (defaultValue == nullptr ||
           reinterpret_cast<const WirePointer*>(defaultValue)->isNull()) {
@@ -2021,7 +2021,7 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(Text::Reader readTextPointer(
       SegmentReader* segment, const WirePointer* ref, const word* refTarget,
       const void* defaultValue, ByteCount defaultSize)) {
-    if (ref == nullptr || ref->isNull()) {
+    if (ref->isNull()) {
     useDefault:
       if (defaultValue == nullptr) defaultValue = "";
       return Text::Reader(reinterpret_cast<const char*>(defaultValue), defaultSize / BYTES);
@@ -2075,7 +2075,7 @@ struct WireHelpers {
   static KJ_ALWAYS_INLINE(Data::Reader readDataPointer(
       SegmentReader* segment, const WirePointer* ref, const word* refTarget,
       const void* defaultValue, ByteCount defaultSize)) {
-    if (ref == nullptr || ref->isNull()) {
+    if (ref->isNull()) {
     useDefault:
       return Data::Reader(reinterpret_cast<const byte*>(defaultValue), defaultSize / BYTES);
     } else {
