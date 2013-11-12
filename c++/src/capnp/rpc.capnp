@@ -455,11 +455,12 @@ struct Restore {
   #
   # Level 0/1 implementations need to implement a limited version of `Restore` only for the purpose
   # of bootstrapping a new connection (otherwise, there would be no objects to which to address
-  # methods).  These levels may simply implement singleton services that exist for the lifetime of
-  # the host process and probably have non-secret names.  A level 0 receiver of `Restore` should
-  # never actually send a `Return` message, but should simply expect `Call` messages addressed to
-  # the `PromisedAnswer` corresponding to the `Restore`.  A level 0 sender of `Restore` can ignore
-  # the corresponding `Return` and just keep addressing the `PromisedAnswer`.
+  # methods).  These levels may simply implement public singleton services that exist for the
+  # lifetime of the host process and probably have non-secret names.  A level 0 receiver of
+  # `Restore` should never actually send a `Return` message, but should simply expect `Call`
+  # messages addressed to the `PromisedAnswer` corresponding to the `Restore`.  A level 0 sender
+  # of `Restore` can ignore the corresponding `Return` and just keep addressing the
+  # `PromisedAnswer`.
 
   questionId @0 :QuestionId;
   # A new question ID identifying this request, which will eventually receive a Return message
