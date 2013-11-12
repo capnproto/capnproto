@@ -429,8 +429,8 @@ static constexpr MinValue_ minValue = MinValue_();
 //
 // `char` is not supported, but `signed char` and `unsigned char` are.
 
-inline float inf() { return 1.0f / 0.0f; }
-inline float nan() { return 0.0f / 0.0f; }
+inline constexpr float inf() { return __builtin_huge_valf(); }
+inline constexpr float nan() { return __builtin_nanf(""); }
 
 // =======================================================================================
 // Useful fake containers
