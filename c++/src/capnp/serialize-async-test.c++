@@ -29,6 +29,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 #include "test-util.h"
 #include <gtest/gtest.h>
 
@@ -90,13 +92,16 @@ protected:
   int fds[2];
 
   SerializeAsyncTest() {
-    KJ_SYSCALL(pipe(fds));
+    // Use a socketpair rather than a pipe so that we can set the buffer size extremely small.
+    KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
 
-#ifdef F_SETPIPE_SZ
-    // Force pipe to be small, to test what happens when the write buffer fills up.  Note that
-    // Linux rounds this up to the page size, so we'll still need a large message to hit the limit.
-    KJ_SYSCALL(fcntl(fds[1], F_SETPIPE_SZ, (int)64));
-#endif
+    KJ_SYSCALL(shutdown(fds[0], SHUT_WR));
+    KJ_SYSCALL(shutdown(fds[1], SHUT_RD));
+
+    // Request that the buffer size be as small as possible, to force the event loop to kick in.
+    uint zero = 0;
+    KJ_SYSCALL(setsockopt(fds[0], SOL_SOCKET, SO_RCVBUF, &zero, sizeof(zero)));
+    KJ_SYSCALL(setsockopt(fds[1], SOL_SOCKET, SO_SNDBUF, &zero, sizeof(zero)));
   }
   ~SerializeAsyncTest() {
     close(fds[0]);
