@@ -96,7 +96,7 @@ protected:
     KJ_SYSCALL(socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
 
     KJ_SYSCALL(shutdown(fds[0], SHUT_WR));
-    KJ_SYSCALL(shutdown(fds[1], SHUT_RD));
+    // Note:  OSX reports ENOTCONN if we also try to shutdown(fds[1], SHUT_RD).
 
     // Request that the buffer size be as small as possible, to force the event loop to kick in.
     uint zero = 0;
