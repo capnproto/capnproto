@@ -200,11 +200,6 @@ void UnixEventLoop::sleep() {
     return;
   }
 
-  // Make sure we don't wait for any events that are no longer relevant, either because we fired
-  // them last time around or because the application has discarded the corresponding promises.
-  impl->signalQueue.cleanup();
-  impl->pollQueue.cleanup();
-
   sigset_t newMask;
   sigemptyset(&newMask);
   sigaddset(&newMask, SIGUSR1);
@@ -222,7 +217,7 @@ void UnixEventLoop::sleep() {
   }
 
   kj::Vector<struct pollfd> pollfds;
-  kj::Vector<const _::WorkQueue<PollJob>::JobWrapper*> pollJobs;
+  kj::Vector<_::WorkQueue<PollJob>::JobWrapper*> pollJobs;
 
   {
     auto job = impl->pollQueue.peek(*impl);
