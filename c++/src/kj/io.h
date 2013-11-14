@@ -236,7 +236,7 @@ public:
   inline AutoCloseFd(): fd(-1) {}
   inline AutoCloseFd(decltype(nullptr)): fd(-1) {}
   inline explicit AutoCloseFd(int fd): fd(fd) {}
-  inline AutoCloseFd(AutoCloseFd&& other): fd(other.fd) { other.fd = -1; }
+  inline AutoCloseFd(AutoCloseFd&& other) noexcept: fd(other.fd) { other.fd = -1; }
   KJ_DISALLOW_COPY(AutoCloseFd);
   ~AutoCloseFd() noexcept(false);
 

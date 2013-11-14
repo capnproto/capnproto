@@ -1982,7 +1982,7 @@ private:
 RpcSystemBase::RpcSystemBase(VatNetworkBase& network, kj::Maybe<SturdyRefRestorerBase&> restorer,
                              const kj::EventLoop& eventLoop)
     : impl(kj::heap<Impl>(network, restorer, eventLoop)) {}
-RpcSystemBase::RpcSystemBase(RpcSystemBase&& other) = default;
+RpcSystemBase::RpcSystemBase(RpcSystemBase&& other) noexcept = default;
 RpcSystemBase::~RpcSystemBase() noexcept(false) {}
 
 Capability::Client RpcSystemBase::baseRestore(

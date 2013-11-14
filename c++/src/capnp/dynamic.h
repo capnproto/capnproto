@@ -743,7 +743,7 @@ public:
   inline Pipeline(DynamicStruct::Pipeline&& value);
   inline Pipeline(DynamicCapability::Client&& value);
 
-  Pipeline(Pipeline&& other);
+  Pipeline(Pipeline&& other) noexcept;
   Pipeline& operator=(Pipeline&& other);
   ~Pipeline() noexcept(false);
 

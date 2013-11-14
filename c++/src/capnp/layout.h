@@ -706,7 +706,7 @@ class OrphanBuilder {
 public:
   inline OrphanBuilder(): segment(nullptr), location(nullptr) { memset(&tag, 0, sizeof(tag)); }
   OrphanBuilder(const OrphanBuilder& other) = delete;
-  inline OrphanBuilder(OrphanBuilder&& other);
+  inline OrphanBuilder(OrphanBuilder&& other) noexcept;
   inline ~OrphanBuilder() noexcept(false);
 
   static OrphanBuilder initStruct(BuilderArena* arena, StructSize size);
@@ -1017,7 +1017,7 @@ inline PointerReader ListReader::getPointerElement(ElementCount index) const {
 
 // -------------------------------------------------------------------
 
-inline OrphanBuilder::OrphanBuilder(OrphanBuilder&& other)
+inline OrphanBuilder::OrphanBuilder(OrphanBuilder&& other) noexcept
     : segment(other.segment), location(other.location) {
   memcpy(&tag, &other.tag, sizeof(tag));  // Needs memcpy to comply with aliasing rules.
   other.segment = nullptr;

@@ -1608,13 +1608,14 @@ DynamicValue::Reader DynamicValue::Builder::asReader() const {
   return Reader();
 }
 
-DynamicValue::Pipeline::Pipeline(Pipeline&& other): type(other.type) {
+DynamicValue::Pipeline::Pipeline(Pipeline&& other) noexcept: type(other.type) {
   switch (type) {
     case UNKNOWN: break;
     case STRUCT: kj::ctor(structValue, kj::mv(other.structValue)); break;
     case CAPABILITY: kj::ctor(capabilityValue, kj::mv(other.capabilityValue)); break;
     default:
-      KJ_FAIL_ASSERT("Unexpected pipeline type.", (uint)type) { type = UNKNOWN; break; }
+      KJ_LOG(ERROR, "Unexpected pipeline type.", (uint)type);
+      type = UNKNOWN;
       break;
   }
 }

@@ -82,7 +82,7 @@ class RpcSystemBase {
 public:
   RpcSystemBase(VatNetworkBase& network, kj::Maybe<SturdyRefRestorerBase&> restorer,
                 const kj::EventLoop& eventLoop);
-  RpcSystemBase(RpcSystemBase&& other);
+  RpcSystemBase(RpcSystemBase&& other) noexcept;
   ~RpcSystemBase() noexcept(false);
 
 private:
