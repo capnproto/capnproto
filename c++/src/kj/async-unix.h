@@ -83,9 +83,9 @@ protected:
   void wake() const override;
 
 private:
-  class PollItem;
+  class PollJob;
   class PollPromiseAdapter;
-  class SignalItem;
+  class SignalJob;
   class SignalPromiseAdapter;
 
   struct Impl;
