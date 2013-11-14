@@ -99,9 +99,12 @@ protected:
     // Note:  OSX reports ENOTCONN if we also try to shutdown(fds[1], SHUT_RD).
 
     // Request that the buffer size be as small as possible, to force the event loop to kick in.
-    uint zero = 0;
-    KJ_SYSCALL(setsockopt(fds[0], SOL_SOCKET, SO_RCVBUF, &zero, sizeof(zero)));
-    KJ_SYSCALL(setsockopt(fds[1], SOL_SOCKET, SO_SNDBUF, &zero, sizeof(zero)));
+    // The kernel will round this up.  We use 1 instead of 0 because OSX reports EINVAL for 0 and
+    // Cygwin will apparently actually use a buffer size of 0 and therefore blocks forever waiting
+    // for buffer space.
+    uint one = 1;
+    KJ_SYSCALL(setsockopt(fds[0], SOL_SOCKET, SO_RCVBUF, &one, sizeof(one)));
+    KJ_SYSCALL(setsockopt(fds[1], SOL_SOCKET, SO_SNDBUF, &one, sizeof(one)));
   }
   ~SerializeAsyncTest() {
     close(fds[0]);
