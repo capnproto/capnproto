@@ -60,8 +60,8 @@ struct JoinKeyPart {
   class Pipeline;
 };
 
-struct JoinAnswer {
-  JoinAnswer() = delete;
+struct JoinResult {
+  JoinResult() = delete;
 
   class Reader;
   class Builder;
@@ -83,7 +83,7 @@ extern const ::capnp::_::RawSchema s_b88d09a9c5f39817;
 extern const ::capnp::_::RawSchema s_89f389b6fd4082c1;
 extern const ::capnp::_::RawSchema s_b47f4979672cb59d;
 extern const ::capnp::_::RawSchema s_95b29059097fca83;
-extern const ::capnp::_::RawSchema s_e34f40bff3af6b96;
+extern const ::capnp::_::RawSchema s_9d263a3630b7ebee;
 
 }  // namespace schemas
 namespace _ {  // private
@@ -106,8 +106,8 @@ CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::twoparty::JoinKeyPart, 95b29059097fca83,
     1, 0, EIGHT_BYTES);
 CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::twoparty::JoinAnswer, e34f40bff3af6b96,
-    1, 0, EIGHT_BYTES);
+    ::capnp::rpc::twoparty::JoinResult, 9d263a3630b7ebee,
+    1, 1, INLINE_COMPOSITE);
 
 }  // namespace _ (private)
 }  // namespace capnp
@@ -478,9 +478,9 @@ private:
   friend struct ::capnp::ToDynamic_;
 };
 
-class JoinAnswer::Reader {
+class JoinResult::Reader {
 public:
-  typedef JoinAnswer Reads;
+  typedef JoinResult Reads;
 
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
@@ -493,6 +493,9 @@ public:
 
   inline bool getSucceeded() const;
 
+  inline bool hasCap() const;
+  inline ::capnp::ObjectPointer::Reader getCap() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename T, ::capnp::Kind k>
@@ -503,16 +506,16 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(JoinAnswer::Reader reader);
+  friend ::kj::StringTree KJ_STRINGIFY(JoinResult::Reader reader);
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(JoinAnswer::Reader reader) {
-  return ::capnp::_::structString<JoinAnswer>(reader._reader);
+inline ::kj::StringTree KJ_STRINGIFY(JoinResult::Reader reader) {
+  return ::capnp::_::structString<JoinResult>(reader._reader);
 }
 
-class JoinAnswer::Builder {
+class JoinResult::Builder {
 public:
-  typedef JoinAnswer Builds;
+  typedef JoinResult Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
                        // You can explicitly initialize to nullptr instead.
@@ -529,21 +532,25 @@ public:
   inline bool getSucceeded();
   inline void setSucceeded(bool value);
 
+  inline bool hasCap();
+  inline ::capnp::ObjectPointer::Builder getCap();
+  inline ::capnp::ObjectPointer::Builder initCap();
+
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(JoinAnswer::Builder builder);
+  friend ::kj::StringTree KJ_STRINGIFY(JoinResult::Builder builder);
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(JoinAnswer::Builder builder) {
-  return ::capnp::_::structString<JoinAnswer>(builder._builder.asReader());
+inline ::kj::StringTree KJ_STRINGIFY(JoinResult::Builder builder) {
+  return ::capnp::_::structString<JoinResult>(builder._builder.asReader());
 }
 
-class JoinAnswer::Pipeline {
+class JoinResult::Pipeline {
 public:
-  typedef JoinAnswer Pipelines;
+  typedef JoinResult Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
@@ -627,32 +634,53 @@ inline void JoinKeyPart::Builder::setPartNum( ::uint16_t value) {
       3 * ::capnp::ELEMENTS, value);
 }
 
-inline  ::uint32_t JoinAnswer::Reader::getJoinId() const {
+inline  ::uint32_t JoinResult::Reader::getJoinId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
 }
 
-inline  ::uint32_t JoinAnswer::Builder::getJoinId() {
+inline  ::uint32_t JoinResult::Builder::getJoinId() {
   return _builder.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
 }
-inline void JoinAnswer::Builder::setJoinId( ::uint32_t value) {
+inline void JoinResult::Builder::setJoinId( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool JoinAnswer::Reader::getSucceeded() const {
+inline bool JoinResult::Reader::getSucceeded() const {
   return _reader.getDataField<bool>(
       32 * ::capnp::ELEMENTS);
 }
 
-inline bool JoinAnswer::Builder::getSucceeded() {
+inline bool JoinResult::Builder::getSucceeded() {
   return _builder.getDataField<bool>(
       32 * ::capnp::ELEMENTS);
 }
-inline void JoinAnswer::Builder::setSucceeded(bool value) {
+inline void JoinResult::Builder::setSucceeded(bool value) {
   _builder.setDataField<bool>(
       32 * ::capnp::ELEMENTS, value);
+}
+
+inline bool JoinResult::Reader::hasCap() const {
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool JoinResult::Builder::hasCap() {
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline ::capnp::ObjectPointer::Reader JoinResult::Reader::getCap() const {
+  return ::capnp::ObjectPointer::Reader(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline ::capnp::ObjectPointer::Builder JoinResult::Builder::getCap() {
+  return ::capnp::ObjectPointer::Builder(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline ::capnp::ObjectPointer::Builder JoinResult::Builder::initCap() {
+  auto result = ::capnp::ObjectPointer::Builder(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+  result.clear();
+  return result;
 }
 
 }  // namespace

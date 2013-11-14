@@ -65,7 +65,7 @@ struct Return {
   class Builder;
   class Pipeline;
   enum Which: uint16_t {
-    ANSWER,
+    RESULTS,
     EXCEPTION,
     CANCELED,
     UNSUPPORTED_PIPELINE_OP,
@@ -593,8 +593,8 @@ public:
 
   inline  ::uint16_t getMethodId() const;
 
-  inline bool hasRequest() const;
-  inline ::capnp::ObjectPointer::Reader getRequest() const;
+  inline bool hasParams() const;
+  inline ::capnp::ObjectPointer::Reader getParams() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -638,9 +638,9 @@ public:
   inline  ::uint16_t getMethodId();
   inline void setMethodId( ::uint16_t value);
 
-  inline bool hasRequest();
-  inline ::capnp::ObjectPointer::Builder getRequest();
-  inline ::capnp::ObjectPointer::Builder initRequest();
+  inline bool hasParams();
+  inline ::capnp::ObjectPointer::Builder getParams();
+  inline ::capnp::ObjectPointer::Builder initParams();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -774,9 +774,9 @@ public:
   inline bool hasRetainedCaps() const;
   inline  ::capnp::List< ::uint32_t>::Reader getRetainedCaps() const;
 
-  inline bool isAnswer() const;
-  inline bool hasAnswer() const;
-  inline ::capnp::ObjectPointer::Reader getAnswer() const;
+  inline bool isResults() const;
+  inline bool hasResults() const;
+  inline ::capnp::ObjectPointer::Reader getResults() const;
 
   inline bool isException() const;
   inline bool hasException() const;
@@ -830,10 +830,10 @@ public:
   inline void adoptRetainedCaps(::capnp::Orphan< ::capnp::List< ::uint32_t>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::uint32_t>> disownRetainedCaps();
 
-  inline bool isAnswer();
-  inline bool hasAnswer();
-  inline ::capnp::ObjectPointer::Builder getAnswer();
-  inline ::capnp::ObjectPointer::Builder initAnswer();
+  inline bool isResults();
+  inline bool hasResults();
+  inline ::capnp::ObjectPointer::Builder getResults();
+  inline ::capnp::ObjectPointer::Builder initResults();
 
   inline bool isException();
   inline bool hasException();
@@ -3070,21 +3070,21 @@ inline void Call::Builder::setMethodId( ::uint16_t value) {
       5 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Call::Reader::hasRequest() const {
+inline bool Call::Reader::hasParams() const {
   return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
-inline bool Call::Builder::hasRequest() {
+inline bool Call::Builder::hasParams() {
   return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader Call::Reader::getRequest() const {
+inline ::capnp::ObjectPointer::Reader Call::Reader::getParams() const {
   return ::capnp::ObjectPointer::Reader(
       _reader.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Call::Builder::getRequest() {
+inline ::capnp::ObjectPointer::Builder Call::Builder::getParams() {
   return ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Call::Builder::initRequest() {
+inline ::capnp::ObjectPointer::Builder Call::Builder::initParams() {
   auto result = ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
   result.clear();
@@ -3233,35 +3233,35 @@ inline ::capnp::Orphan< ::capnp::List< ::uint32_t>> Return::Builder::disownRetai
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Return::Reader::isAnswer() const {
-  return which() == Return::ANSWER;
+inline bool Return::Reader::isResults() const {
+  return which() == Return::RESULTS;
 }
-inline bool Return::Builder::isAnswer() {
-  return which() == Return::ANSWER;
+inline bool Return::Builder::isResults() {
+  return which() == Return::RESULTS;
 }
-inline bool Return::Reader::hasAnswer() const {
-  if (which() != Return::ANSWER) return false;
+inline bool Return::Reader::hasResults() const {
+  if (which() != Return::RESULTS) return false;
   return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
-inline bool Return::Builder::hasAnswer() {
-  if (which() != Return::ANSWER) return false;
+inline bool Return::Builder::hasResults() {
+  if (which() != Return::RESULTS) return false;
   return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader Return::Reader::getAnswer() const {
-  KJ_IREQUIRE(which() == Return::ANSWER,
+inline ::capnp::ObjectPointer::Reader Return::Reader::getResults() const {
+  KJ_IREQUIRE(which() == Return::RESULTS,
               "Must check which() before get()ing a union member.");
   return ::capnp::ObjectPointer::Reader(
       _reader.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Return::Builder::getAnswer() {
-  KJ_IREQUIRE(which() == Return::ANSWER,
+inline ::capnp::ObjectPointer::Builder Return::Builder::getResults() {
+  KJ_IREQUIRE(which() == Return::RESULTS,
               "Must check which() before get()ing a union member.");
   return ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Return::Builder::initAnswer() {
+inline ::capnp::ObjectPointer::Builder Return::Builder::initResults() {
   _builder.setDataField<Return::Which>(
-      2 * ::capnp::ELEMENTS, Return::ANSWER);
+      2 * ::capnp::ELEMENTS, Return::RESULTS);
   auto result = ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
   result.clear();

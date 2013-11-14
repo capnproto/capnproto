@@ -32,7 +32,7 @@
 namespace capnp {
 
 typedef VatNetwork<rpc::twoparty::SturdyRefHostId, rpc::twoparty::ProvisionId,
-    rpc::twoparty::RecipientId, rpc::twoparty::ThirdPartyCapId, rpc::twoparty::JoinAnswer>
+    rpc::twoparty::RecipientId, rpc::twoparty::ThirdPartyCapId, rpc::twoparty::JoinResult>
     TwoPartyVatNetworkBase;
 
 class TwoPartyVatNetwork: public TwoPartyVatNetworkBase,

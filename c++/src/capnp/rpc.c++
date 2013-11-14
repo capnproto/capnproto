@@ -1043,7 +1043,7 @@ private:
           injector(kj::heap<CapInjectorImpl>(connectionState)),
           context(*injector),
           callBuilder(message->getBody().getAs<rpc::Message>().initCall()),
-          paramsBuilder(context.imbue(callBuilder.getRequest())) {}
+          paramsBuilder(context.imbue(callBuilder.getParams())) {}
 
     inline ObjectPointer::Builder getRoot() {
       return paramsBuilder;
@@ -1407,7 +1407,7 @@ private:
             requestCapExtractor.retainedListSizeHint(request == nullptr));
         returnMessage = message->getBody().initAs<rpc::Message>().initReturn();
         auto response = kj::heap<RpcServerResponse>(
-            connectionState, kj::mv(message), returnMessage.getAnswer());
+            connectionState, kj::mv(message), returnMessage.getResults());
         auto results = response->getResults();
         this->response = kj::mv(response);
         return results;
@@ -1690,7 +1690,7 @@ private:
 
     QuestionId questionId = call.getQuestionId();
     auto context = kj::refcounted<RpcCallContext>(
-        *this, questionId, kj::mv(message), call.getRequest());
+        *this, questionId, kj::mv(message), call.getParams());
     auto promiseAndPipeline = capability->call(
         call.getInterfaceId(), call.getMethodId(), context->addRef());
 
@@ -1754,9 +1754,9 @@ private:
       }
 
       switch (ret.which()) {
-        case rpc::Return::ANSWER:
+        case rpc::Return::RESULTS:
           question->fulfiller->fulfill(
-              kj::refcounted<RpcResponse>(*this, kj::mv(message), ret.getAnswer()));
+              kj::refcounted<RpcResponse>(*this, kj::mv(message), ret.getResults()));
           break;
 
         case rpc::Return::EXCEPTION:
@@ -1853,9 +1853,12 @@ private:
     KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
       KJ_IF_MAYBE(r, restorer) {
         Capability::Client cap = r->baseRestore(restore.getObjectId());
-        auto answer = context.imbue(ret.initAnswer());
-        answer.setAs<Capability>(cap);
-        capHook = answer.asReader().getPipelinedCap(nullptr);
+        auto results = context.imbue(ret.initResults());
+        results.setAs<Capability>(cap);
+
+        // Hack to extract the ClientHook, because Capability::Client doesn't provide direct
+        // access.  Maybe it should?
+        capHook = results.asReader().getPipelinedCap(nullptr);
       } else {
         KJ_FAIL_REQUIRE("This vat cannot restore this SturdyRef.") { break; }
       }

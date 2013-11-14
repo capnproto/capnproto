@@ -277,10 +277,10 @@ struct Call {
   methodId @4 :UInt16;
   # The ordinal number of the method to call within the requested interface.
 
-  request @5 :Object;
-  # The request struct.  The fields of this struct correspond to the parameters of the method.
+  params @5 :Object;
+  # The params struct.  The fields of this struct correspond to the parameters of the method.
   #
-  # The request may contain capabilities.  These capabilities are automatically released when the
+  # The params may contain capabilities.  These capabilities are automatically released when the
   # call returns *unless* the Return message explicitly indicates that they are being retained.
 }
 
@@ -295,17 +295,17 @@ struct Return {
   retainedCaps @1 :List(ExportId);
   # **(level 1)**
   #
-  # List of capabilities from the request to which the callee continues to hold references.  Any
-  # other capabilities from the request are implicitly released.
+  # List of capabilities from the params to which the callee continues to hold references.  Any
+  # other capabilities from the params are implicitly released.
 
   union {
-    answer @2 :Object;
+    results @2 :Object;
     # Result object.  If the method returns a struct, this is it.  Otherwise, this points to
     # a struct which contains exactly one field, corresponding to the method's return type.
     # (This implies that an method's return type can be upgraded from a non-struct to a struct
     # without breaking wire compatibility.)
     #
-    # For a `Return` in response to an `Accept`, `answer` is a capability pointer (and therefore
+    # For a `Return` in response to an `Accept`, `results` is a capability pointer (and therefore
     # points to a `CapDescriptor`, but is tagged as a capability rather than a struct).  A
     # `Finish` is still required in this case, and the capability must still be listed in
     # `retainedCaps` if it is to be retained.
@@ -331,9 +331,9 @@ struct Finish {
   # Message type sent from the caller to the callee to indicate:
   # 1) The questionId will no longer be used in any messages sent by the callee (no further
   #    pipelined requests).
-  # 2) Any capabilities in the answer other than the ones listed below should be implicitly
+  # 2) Any capabilities in the results other than the ones listed below should be implicitly
   #    released.
-  # 3) If the answer has not returned yet, the caller no longer cares about the answer, so the
+  # 3) If the call has not returned yet, the caller no longer cares about the result, so the
   #    callee may wish to immediately cancel the operation and send back a Return message with
   #    "canceled" set.
   #
@@ -342,14 +342,14 @@ struct Finish {
   #   though the caller hasn't yet finished processing the response.
 
   questionId @0 :QuestionId;
-  # ID of the question whose answer is to be released.
+  # ID of the call whose result is to be released.
 
   retainedCaps @1 :List(ExportId);
   # **(level 1)**
   #
-  # List of capabilities from the answer to which the callee continues to hold references.  Any
-  # other capabilities from the answer that need to be released are implicitly released along
-  # with the answer itself.
+  # List of capabilities from the results to which the callee continues to hold references.  Any
+  # other capabilities from the results that need to be released are implicitly released along
+  # with the result itself.
 }
 
 # Level 1 message types ----------------------------------------------
@@ -434,7 +434,7 @@ struct Save {
 
   questionId @0 :QuestionId;
   # A new question ID identifying this request, which will eventually receive a Return
-  # message whose `answer` is a SturdyRef.
+  # message whose `results` is a SturdyRef.
 
   target :union {
     # What is to be saved.
@@ -491,7 +491,7 @@ struct Delete {
 
   questionId @0 :QuestionId;
   # A new question ID identifying this request, which will eventually receive a Return message
-  # with an empty answer.
+  # with an empty (null) result.
 
   objectId @1 :SturdyRefObjectId;
   # Designates the capability to delete.
@@ -510,7 +510,7 @@ struct Provide {
   # every vat.  In Cap'n Proto, we bake this into the core protocol.)
 
   questionId @0 :QuestionId;
-  # Question ID to be held open until the recipient has received the capability.  An answer will
+  # Question ID to be held open until the recipient has received the capability.  A result will
   # be returned once the third party has successfully received the capability.  The sender must
   # at some point send a `Finish` message as with any other call, and such a message can be
   # used to cancel the whole operation.
@@ -522,7 +522,7 @@ struct Provide {
     # An exported capability.
 
     promisedAnswer @2 :PromisedAnswer;
-    # A capability expected to be returned in the answer to an outstanding question.
+    # A capability expected to be returned in the results of an outstanding question.
   }
 
   recipient @3 :RecipientId;
@@ -565,14 +565,14 @@ struct Join {
   # - Alice is proxying a capability hosted by Dana, so forwards the request to Dana's cap.
   # - Dana receives the first request and sees that the JoinKeyPart is one of two.  She notes that
   #   she doesn't have the other part yet, so she records the request and responds with a
-  #   JoinAnswer.
+  #   JoinResult.
   # - Alice relays the JoinAswer back to Bob.
   # - Carol is also proxying a capability from Dana, and so forwards her Join request to Dana as
   #   well.
   # - Dana receives Carol's request and notes that she now has both parts of a JoinKey.  She
   #   combines them in order to form information needed to form a secure connection to Bob.  She
-  #   also responds with another JoinAnswer.
-  # - Bob receives the responses from Alice and Carol.  He uses the returned JoinAnswers to
+  #   also responds with another JoinResult.
+  # - Bob receives the responses from Alice and Carol.  He uses the returned JoinResults to
   #   determine how to connect to Dana and attempts to form the connection.  Since Bob and Dana now
   #   agree on a secret key which neither Alice nor Carol ever saw, this connection can be made
   #   securely even if Alice or Carol is conspiring against the other.  (If Alice and Carol are
@@ -589,16 +589,16 @@ struct Join {
   # request for one hop; each part has a different ID and relayed copies of the request have
   # (probably) different IDs still.)
   #
-  # The receiver will reply with a `Return` whose `answer` is a JoinAnswer.  This `JoinAnswer`
+  # The receiver will reply with a `Return` whose `results` is a JoinResult.  This `JoinResult`
   # is relayed from the joined object's host, possibly with transformation applied as needed
   # by the network.
   #
-  # Like any answer, the answer must be released using a `Finish`.  However, this release
+  # Like any return, the result must be released using a `Finish`.  However, this release
   # should not occur until the joiner has either successfully connected to the joined object.
-  # Vats relaying a `Join` message similarly must not release the answer they receive until the
-  # answer they relayed back towards the joiner has itself been released.  This allows the
+  # Vats relaying a `Join` message similarly must not release the result they receive until the
+  # return they relayed back towards the joiner has itself been released.  This allows the
   # joined object's host to detect when the Join operation is canceled before completing -- if
-  # it receives a `Finish` for one of the join answers before the joiner successfully
+  # it receives a `Finish` for one of the join results before the joiner successfully
   # connects.  It can then free any resources it had allocated as part of the join.
 
   capId @1 :ExportId;
@@ -646,7 +646,7 @@ struct CapDescriptor {
     # A capability (or promise) previously exported by the receiver.
 
     receiverAnswer @3 :PromisedAnswer;
-    # A capability expected to be returned in the answer for a currently-outstanding question posed
+    # A capability expected to be returned in the results of a currently-outstanding call posed
     # by the sender.
 
     thirdPartyHosted @4 :ThirdPartyCapDescriptor;
@@ -661,7 +661,7 @@ struct PromisedAnswer {
   # **(mostly level 1)**
   #
   # Specifies how to derive a promise from an unanswered question, by specifying the path of fields
-  # to follow from the root of the eventual answer struct to get to the desired capability.  Used
+  # to follow from the root of the eventual result struct to get to the desired capability.  Used
   # to address method calls to a not-yet-returned capability or to pass such a capability as an
   # input to some other method call.
   #
@@ -674,8 +674,8 @@ struct PromisedAnswer {
   # expected to contain the capability.
 
   transform @1 :List(Op);
-  # Operations / transformations to apply to the answer in order to get the capability actually
-  # being addressed.  E.g. if the answer is a struct and you want to call a method on a capability
+  # Operations / transformations to apply to the result in order to get the capability actually
+  # being addressed.  E.g. if the result is a struct and you want to call a method on a capability
   # pointed to by a field of the struct, you need a `getPointerField` op.
 
   struct Op {
@@ -705,7 +705,7 @@ struct PromisedAnswer {
 
       # TODO(someday):  We could add:
       # - For lists, the ability to address every member of the list, or a slice of the list, the
-      #   answer to which would be another list.  This is useful for implementing the equivalent of
+      #   result of which would be another list.  This is useful for implementing the equivalent of
       #   a SQL table join (not to be confused with the `Join` message type).
       # - Maybe some ability to test a union.
       # - Probably not a good idea:  the ability to specify an arbitrary script to run on the
@@ -721,7 +721,7 @@ struct SturdyRef {
   # **(level 2)**
   #
   # A combination of a SturdyRefObjectId and SturdyRefHostId.  This is what a client of the ref
-  # would typically save in its own storage.  This type is also the answer to a `Save` message.
+  # would typically save in its own storage.  This type is also the result of a `Save` message.
 
   hostId @0 :SturdyRefHostId;
   # Describes how to connect to and authenticate a vat that hosts this SturdyRef (and can therefore
@@ -891,7 +891,8 @@ using RecipientId = Object;
 # capability.
 #
 # In a network where each vat has a public/private key pair, this could simply be the public key
-# fingerprint of the recipient.
+# fingerprint of the recipient.  (CapTP also calls for a nonce to identify the object.  In our
+# case, the `Provide` message's `questionId` can serve as the nonce.)
 
 using ThirdPartyCapId = Object;
 # **(level 3)**
@@ -927,18 +928,18 @@ using JoinKeyPart = Object;
 # the joiner and the joined object's host.  Each JoinKeyPart should also include an indication of
 # how many parts to expect and a hash of the shared secret (used to match up parts).
 
-using JoinAnswer = Object;
+using JoinResult = Object;
 # **(level 4)**
 #
-# Information returned in the answer to a `Join` message, needed by the joiner in order to form a
+# Information returned as the result to a `Join` message, needed by the joiner in order to form a
 # direct connection to a joined object.  This might simply be the address of the joined object's
 # host vat, since the `JoinKey` has already been communicated so the two vats already have a shared
 # secret to use to authenticate each other.
 #
-# The `JoinAnswer` should also contain information that can be used to detect when the Join
+# The `JoinResult` should also contain information that can be used to detect when the Join
 # requests ended up reaching different objects, so that this situation can be detected easily.
 # This could be a simple matter of including a sequence number -- if the joiner receives two
-# `JoinAnswer`s with sequence number 0, then they must have come from different objects and the
+# `JoinResult`s with sequence number 0, then they must have come from different objects and the
 # whole join is a failure.
 
 # ========================================================================================
@@ -989,8 +990,8 @@ using JoinAnswer = Object;
 #   }
 #
 #   interface Joiner {
-#     addJoinAnswer(answer :JoinAnswer) :Void;
-#     # Add a JoinAnswer received in response to one of the `Join` messages.  All `JoinAnswer`s
+#     addJoinResult(result :JoinResult) :Void;
+#     # Add a JoinResult received in response to one of the `Join` messages.  All `JoinResult`s
 #     # returned from all paths must be added before trying to connect.
 #
 #     connect() :ConnectionAndProvisionId;

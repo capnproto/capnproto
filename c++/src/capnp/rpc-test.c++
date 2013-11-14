@@ -58,7 +58,7 @@ private:
 
 typedef VatNetwork<
     test::TestSturdyRefHostId, test::TestProvisionId, test::TestRecipientId,
-    test::TestThirdPartyCapId, test::TestJoinAnswer> TestNetworkAdapterBase;
+    test::TestThirdPartyCapId, test::TestJoinResult> TestNetworkAdapterBase;
 
 class TestNetworkAdapter final: public TestNetworkAdapterBase {
 public:

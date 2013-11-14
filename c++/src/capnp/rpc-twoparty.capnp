@@ -110,10 +110,40 @@ struct ThirdPartyCapId {}
 # Never used, because there is no third party.
 
 struct JoinKeyPart {
+  # Joins in the two-party case are simplified by a few observations.
+  #
+  # First, on a two-party network, a Join only ever makes sense if the receiving end is also
+  # connected to other networks.  A vat which is not connected to any other network can safely
+  # reject all joins.
+  #
+  # Second, since a two-party connection bisects the network -- there can be no other connections
+  # between the networks at either end of the connection -- if one part of a join crosses the
+  # connection, then _all_ parts must cross it.  Therefore, a vat which is receiving a Join request
+  # off some other network which needs to be forwarded across the two-party connection can
+  # collect all the parts on its end and only forward them across the two-party connection when all
+  # have been received.
+  #
+  # For example, imagine that Alice and Bob are vats connected over a two-party connection, and
+  # each is also connected to other networks.  At some point, Alice receives one part of a Join
+  # request off her network.  The request is addressed to a capability that Alice received from
+  # Bob and is proxying to her other network.  Alice goes ahead and responds to the Join part as
+  # if she hosted the capability locally (this is important so that if not all the Join parts end
+  # up at Alice, the original sender can detect the failed Join without hanging).  As other parts
+  # trickle in, Alice verifies that each part is addressed to a capability from Bob and continues
+  # to respond to each one.  Once the complete set of join parts is received, Alice checks if they
+  # were all for the exact same capability.  If so, she doesn't need to send anything to Bob at
+  # all.  Otherwise, she collects the set of capabilities (from Bob) to which the join parts were
+  # addressed and essentially initiates a _new_ Join request on those capabilities to Bob.  Alice
+  # does not forward the Join parts she received herself, but essentially forwards the Join as a
+  # whole.
+  #
+  # On Bob's end, since he knows that Alice will always send all parts of a Join together, he
+  # simply waits until he's received them all, then performs a join on the respective capabilities
+  # as if it had been requested locally.
+
   joinId @0 :UInt32;
-  # A number identifying this join, chosen by the contained app.  Since the container will never
-  # issue a join _to_ the contained app, all ongoing joins across the whole (two-vat) network are
-  # uniquely identified by this ID.
+  # A number identifying this join, chosen by the sender.  May be reused once `Finish` messages are
+  # sent corresponding to all of the `Join` messages.
 
   partCount @1 :UInt16;
   # The number of capabilities to be joined.
@@ -122,12 +152,17 @@ struct JoinKeyPart {
   # Which part this request targets -- a number in the range [0, partCount).
 }
 
-struct JoinAnswer {
+struct JoinResult {
   joinId @0 :UInt32;
   # Matches `JoinKeyPart`.
 
   succeeded @1 :Bool;
-  # All JoinAnswers in the set will have the same value for `succeeded`.  The container actually
+  # All JoinResults in the set will have the same value for `succeeded`.  The receiver actually
   # implements the join by waiting for all the `JoinKeyParts` and then performing its own join on
   # them, then going back and answering all the join requests afterwards.
+
+  cap @2 :Object;
+  # One of the JoinResults will have a non-null `cap` which is the joined capability.
+  #
+  # TODO(cleanup):  Change `Object` to `Capability` when that is supported.
 }

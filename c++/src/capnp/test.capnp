@@ -626,4 +626,4 @@ struct TestSturdyRefObjectId {
 struct TestProvisionId {}
 struct TestRecipientId {}
 struct TestThirdPartyCapId {}
-struct TestJoinAnswer {}
+struct TestJoinResult {}
