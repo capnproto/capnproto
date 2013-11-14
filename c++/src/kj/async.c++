@@ -138,9 +138,11 @@ Promise<void> EventLoop::yieldIfSameThread() const {
 
 EventLoop::Event::~Event() noexcept(false) {
   if (this != &loop.queue) {
-    KJ_ASSERT(next == nullptr || std::uncaught_exception(),
+    KJ_ASSERT(next == this,
               "Event destroyed while armed.  You must call disarm() in the subclass's destructor "
-              "in order to ensure that fire() is not running when the event is destroyed.");
+              "in order to ensure that fire() is not running when the event is destroyed.") {
+      break;
+    }
   }
 }
 
@@ -180,9 +182,9 @@ void EventLoop::Event::arm(bool preemptIfSameThread) {
 }
 
 void EventLoop::Event::disarm() {
-  if (next != nullptr) {
-    loop.queue.mutex.lock(_::Mutex::EXCLUSIVE);
+  loop.queue.mutex.lock(_::Mutex::EXCLUSIVE);
 
+  if (next != nullptr && next != this) {
     if (loop.insertPoint == this) {
       loop.insertPoint = next;
     }
@@ -191,9 +193,11 @@ void EventLoop::Event::disarm() {
     prev->next = next;
     next = nullptr;
     prev = nullptr;
-
-    loop.queue.mutex.unlock(_::Mutex::EXCLUSIVE);
   }
+
+  next = this;
+
+  loop.queue.mutex.unlock(_::Mutex::EXCLUSIVE);
 
   // Ensure that if fire() is currently running, it completes before disarm() returns.
   mutex.lock(_::Mutex::EXCLUSIVE);
@@ -482,11 +486,6 @@ ForkHubBase::ForkHubBase(const EventLoop& loop, Own<PromiseNode>&& inner,
                          ExceptionOrValue& resultRef)
     : EventLoop::Event(loop), inner(kj::mv(inner)), resultRef(resultRef) {
   KJ_DREQUIRE(this->inner->isSafeEventLoop(loop));
-  arm();
-}
-
-ForkHubBase::~ForkHubBase() noexcept(false) {
-  disarm();
 }
 
 void ForkHubBase::fire() {
@@ -597,11 +596,6 @@ CrossThreadPromiseNodeBase::CrossThreadPromiseNodeBase(
     const EventLoop& loop, Own<PromiseNode>&& dependency, ExceptionOrValue& resultRef)
     : Event(loop), dependency(kj::mv(dependency)), resultRef(resultRef) {
   KJ_DREQUIRE(this->dependency->isSafeEventLoop(loop));
-  arm();
-}
-
-CrossThreadPromiseNodeBase::~CrossThreadPromiseNodeBase() noexcept(false) {
-  disarm();
 }
 
 bool CrossThreadPromiseNodeBase::onReady(EventLoop::Event& event) noexcept {

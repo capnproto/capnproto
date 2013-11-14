@@ -296,6 +296,9 @@ public:
   class Event {
     // An event waiting to be executed.  Not for direct use by applications -- promises use this
     // internally.
+    //
+    // WARNING: This class is difficult to use correctly.  It's easy to have subtle race
+    //   conditions.
 
   public:
     Event(const EventLoop& loop): loop(loop), next(nullptr), prev(nullptr) {}
@@ -318,10 +321,10 @@ public:
     // order in which they were queued.
 
     void disarm();
-    // Cancel this event if it is armed.  If it is already running, block until it finishes
-    // before returning.  MUST be called in the subclass's destructor if it is possible that
-    // the event is still armed, because once Event's destructor is reached, fire() is a
-    // pure-virtual function.
+    // Cancel this event if it is armed, and ignore any further arm()s.  If it is already running,
+    // block until it finishes before returning.  MUST be called in the subclass's destructor if
+    // it is possible that the event is still armed, because once Event's destructor is reached,
+    // fire() is a pure-virtual function.
 
     inline const EventLoop& getEventLoop() { return loop; }
     // Get the event loop on which this event will run.
@@ -333,7 +336,7 @@ public:
   private:
     friend class EventLoop;
     const EventLoop& loop;
-    Event* next;
+    Event* next;  // if == this, disarm() has been called.
     Event* prev;
 
     mutable kj::_::Mutex mutex;
@@ -1066,10 +1069,9 @@ public:
 
 // -------------------------------------------------------------------
 
-class ForkHubBase: public Refcounted, private EventLoop::Event {
+class ForkHubBase: public Refcounted, protected EventLoop::Event {
 public:
   ForkHubBase(const EventLoop& loop, Own<PromiseNode>&& inner, ExceptionOrValue& resultRef);
-  ~ForkHubBase() noexcept(false);
 
   inline const ExceptionOrValue& getResultRef() const { return resultRef; }
 
@@ -1100,7 +1102,16 @@ class ForkHub final: public ForkHubBase {
 
 public:
   ForkHub(const EventLoop& loop, Own<PromiseNode>&& inner)
-      : ForkHubBase(loop, kj::mv(inner), result) {}
+      : ForkHubBase(loop, kj::mv(inner), result) {
+    // Note that it's unsafe to call this from the superclass's constructor because `result` won't
+    // be initialized yet and the event could fire in another thread immediately.
+    arm();
+  }
+  ~ForkHub() noexcept(false) {
+    // Note that it's unsafe to call this from the superclass's destructor because we must disarm
+    // before `result` is destroyed.
+    disarm();
+  }
 
   Promise<_::Forked<_::UnfixVoid<T>>> addBranch() const {
     return Promise<_::Forked<_::UnfixVoid<T>>>(false, kj::heap<ForkBranch<T>>(addRef(*this)));
@@ -1165,14 +1176,13 @@ Own<PromiseNode>&& maybeChain(Own<PromiseNode>&& node, T*) {
 
 // -------------------------------------------------------------------
 
-class CrossThreadPromiseNodeBase: public PromiseNode, private EventLoop::Event {
+class CrossThreadPromiseNodeBase: public PromiseNode, protected EventLoop::Event {
   // A PromiseNode that safely imports a promised value from one EventLoop to another (which
   // implies crossing threads).
 
 public:
   CrossThreadPromiseNodeBase(const EventLoop& loop, Own<PromiseNode>&& dependency,
                              ExceptionOrValue& resultRef);
-  ~CrossThreadPromiseNodeBase() noexcept(false);
 
   bool onReady(EventLoop::Event& event) noexcept override;
   Maybe<const EventLoop&> getSafeEventLoop() noexcept override;
@@ -1192,7 +1202,16 @@ template <typename T>
 class CrossThreadPromiseNode final: public CrossThreadPromiseNodeBase {
 public:
   CrossThreadPromiseNode(const EventLoop& loop, Own<PromiseNode>&& dependency)
-      : CrossThreadPromiseNodeBase(loop, kj::mv(dependency), result) {}
+      : CrossThreadPromiseNodeBase(loop, kj::mv(dependency), result) {
+    // Note that it's unsafe to call this from the superclass's constructor because `result` won't
+    // be initialized yet and the event could fire in another thread immediately.
+    arm();
+  }
+  ~CrossThreadPromiseNode() noexcept(false) {
+    // Note that it's unsafe to call this from the superclass's destructor because we must disarm
+    // before `result` is destroyed.
+    disarm();
+  }
 
   void get(ExceptionOrValue& output) noexcept override {
     output.as<T>() = kj::mv(result);
