@@ -53,12 +53,30 @@ public:
   }
 };
 
+class YieldPromiseNode final: public _::PromiseNode {
+public:
+  bool onReady(EventLoop::Event& event) noexcept override {
+    event.arm(false);
+    return false;
+  }
+  void get(_::ExceptionOrValue& output) noexcept override {
+    output.as<_::Void>().value = _::Void();
+  }
+  Maybe<const EventLoop&> getSafeEventLoop() noexcept override {
+    return nullptr;
+  }
+};
+
 }  // namespace
 
 EventLoop& EventLoop::current() {
   EventLoop* result = threadLocalEventLoop;
   KJ_REQUIRE(result != nullptr, "No event loop is running on this thread.");
   return *result;
+}
+
+bool EventLoop::isCurrent() const {
+  return threadLocalEventLoop == this;
 }
 
 void EventLoop::EventListHead::fire() {
@@ -114,6 +132,10 @@ void EventLoop::waitImpl(Own<_::PromiseNode> node, _::ExceptionOrValue& result) 
   node->get(result);
 }
 
+Promise<void> EventLoop::yieldIfSameThread() const {
+  return Promise<void>(false, kj::heap<YieldPromiseNode>());
+}
+
 EventLoop::Event::~Event() noexcept(false) {
   if (this != &loop.queue) {
     KJ_ASSERT(next == nullptr || std::uncaught_exception(),
@@ -122,36 +144,32 @@ EventLoop::Event::~Event() noexcept(false) {
   }
 }
 
-void EventLoop::Event::arm(Schedule schedule) {
+void EventLoop::Event::arm(bool preemptIfSameThread) {
   loop.queue.mutex.lock(_::Mutex::EXCLUSIVE);
   KJ_DEFER(loop.queue.mutex.unlock(_::Mutex::EXCLUSIVE));
 
   if (next == nullptr) {
     bool queueIsEmpty = loop.queue.next == &loop.queue;
 
-    switch (schedule) {
-      case PREEMPT:
-        // Insert the event into the queue.  We put it at the front rather than the back so that
-        // related events are executed together and so that increasing the granularity of events
-        // does not cause your code to "lose priority" compared to simultaneously-running code
-        // with less granularity.
-        next = loop.insertPoint;
-        prev = next->prev;
-        next->prev = this;
-        prev->next = this;
-        break;
+    if (preemptIfSameThread && threadLocalEventLoop == &loop) {
+      // Insert the event into the queue.  We put it at the front rather than the back so that
+      // related events are executed together and so that increasing the granularity of events
+      // does not cause your code to "lose priority" compared to simultaneously-running code
+      // with less granularity.
+      next = loop.insertPoint;
+      prev = next->prev;
+      next->prev = this;
+      prev->next = this;
+    } else {
+      // Insert the node at the *end* of the queue.
+      prev = loop.queue.prev;
+      next = prev->next;
+      prev->next = this;
+      next->prev = this;
 
-      case YIELD:
-        // Insert the node at the *end* of the queue.
-        prev = loop.queue.prev;
-        next = prev->next;
-        prev->next = this;
-        next->prev = this;
-
-        if (loop.insertPoint == &loop.queue) {
-          loop.insertPoint = this;
-        }
-        break;
+      if (loop.insertPoint == &loop.queue) {
+        loop.insertPoint = this;
+      }
     }
 
     if (queueIsEmpty) {
@@ -284,8 +302,7 @@ public:
     Task(const Impl& taskSet, Own<_::PromiseNode>&& nodeParam)
         : EventLoop::Event(taskSet.loop), taskSet(taskSet), node(kj::mv(nodeParam)) {
       if (node->onReady(*this)) {
-        // TODO(soon):  Only yield cross-thread.
-        arm(EventLoop::Event::YIELD);
+        arm();
       }
     }
 
@@ -361,8 +378,7 @@ bool PromiseNode::atomicOnReady(EventLoop::Event*& onReadyEvent, EventLoop::Even
   }
 }
 
-void PromiseNode::atomicReady(EventLoop::Event*& onReadyEvent,
-                              EventLoop::Event::Schedule schedule) {
+void PromiseNode::atomicReady(EventLoop::Event*& onReadyEvent) {
   // If onReadyEvent is null, atomically set it to _kJ_ALREADY_READY.
   // Otherwise, arm whatever it points at.
   // Useful for firing events in conjuction with atomicOnReady().
@@ -370,7 +386,7 @@ void PromiseNode::atomicReady(EventLoop::Event*& onReadyEvent,
   EventLoop::Event* oldEvent = nullptr;
   if (!__atomic_compare_exchange_n(&onReadyEvent, &oldEvent, _kJ_ALREADY_READY, false,
                                    __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
-    oldEvent->arm(schedule);
+    oldEvent->arm();
   }
 }
 
@@ -439,8 +455,7 @@ ForkBranchBase::~ForkBranchBase() noexcept(false) {
 }
 
 void ForkBranchBase::hubReady() noexcept {
-  // TODO(soon):  This should only yield if queuing cross-thread.
-  atomicReady(onReadyEvent, EventLoop::Event::YIELD);
+  atomicReady(onReadyEvent);
 }
 
 void ForkBranchBase::releaseHub(ExceptionOrValue& output) {
@@ -467,9 +482,7 @@ ForkHubBase::ForkHubBase(const EventLoop& loop, Own<PromiseNode>&& inner,
                          ExceptionOrValue& resultRef)
     : EventLoop::Event(loop), inner(kj::mv(inner)), resultRef(resultRef) {
   KJ_DREQUIRE(this->inner->isSafeEventLoop(loop));
-
-  // TODO(soon):  This should only yield if queuing cross-thread.
-  arm(YIELD);
+  arm();
 }
 
 ForkHubBase::~ForkHubBase() noexcept(false) {
@@ -503,10 +516,10 @@ void ForkHubBase::fire() {
 
 // -------------------------------------------------------------------
 
-ChainPromiseNode::ChainPromiseNode(const EventLoop& loop, Own<PromiseNode> inner, Schedule schedule)
+ChainPromiseNode::ChainPromiseNode(const EventLoop& loop, Own<PromiseNode> inner)
     : Event(loop), state(PRE_STEP1), inner(kj::mv(inner)) {
   KJ_DREQUIRE(this->inner->isSafeEventLoop(loop));
-  arm(schedule);
+  arm();
 }
 
 ChainPromiseNode::~ChainPromiseNode() noexcept(false) {
@@ -573,7 +586,7 @@ void ChainPromiseNode::fire() {
 
   if (onReadyEvent != nullptr) {
     if (inner->onReady(*onReadyEvent)) {
-      onReadyEvent->arm(PREEMPT);
+      onReadyEvent->arm();
     }
   }
 }
@@ -584,12 +597,7 @@ CrossThreadPromiseNodeBase::CrossThreadPromiseNodeBase(
     const EventLoop& loop, Own<PromiseNode>&& dependency, ExceptionOrValue& resultRef)
     : Event(loop), dependency(kj::mv(dependency)), resultRef(resultRef) {
   KJ_DREQUIRE(this->dependency->isSafeEventLoop(loop));
-
-  // The constructor may be called from any thread, so before we can even call onReady() we need
-  // to switch threads.  We yield here so that the event is added to the end of the queue, which
-  // ensures that multiple events added in sequence are added in order.  If we used PREEMPT, events
-  // we queue cross-thread would end up executing in a non-deterministic order.
-  arm(YIELD);
+  arm();
 }
 
 CrossThreadPromiseNodeBase::~CrossThreadPromiseNodeBase() noexcept(false) {
@@ -616,7 +624,7 @@ void CrossThreadPromiseNodeBase::fire() {
     }
 
     // If onReadyEvent is null, set it to _kJ_ALREADY_READY.  Otherwise, arm it.
-    PromiseNode::atomicReady(onReadyEvent, YIELD);
+    PromiseNode::atomicReady(onReadyEvent);
   }
 }
 

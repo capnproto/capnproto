@@ -228,6 +228,9 @@ public:
   static EventLoop& current();
   // Get the event loop for the current thread.  Throws an exception if no event loop is active.
 
+  bool isCurrent() const;
+  // Is this EventLoop the current one for this thread?
+
   template <typename T>
   T wait(Promise<T>&& promise);
   // Run the event loop until the promise is fulfilled, then return its result.  If the promise
@@ -299,22 +302,20 @@ public:
     ~Event() noexcept(false);
     KJ_DISALLOW_COPY(Event);
 
-    enum Schedule {
-      PREEMPT,
-      // The event gets added to the front of the queue, so that it runs immediately after the
-      // event that is currently running, even if other events were armed before that.  If one
-      // event's firing arms multiple other events, those events still occur in the order in which
-      // they were armed.  PREEMPT should generally only be used when arming an event to run in
-      // the current thread.
-
-      YIELD
-      // The event gets added to the end of the queue, so that it runs after all other events
-      // currently scheduled.
-    };
-
-    void arm(Schedule schedule);
+    void arm(bool preemptIfSameThread = true);
     // Enqueue this event so that run() will be called from the event loop soon.  Does nothing
     // if the event is already armed.
+    //
+    // If called from the event loop's own thread (i.e. from within an event handler fired from
+    // this event loop), and `preemptIfSameThread` is true, the event will be scheduled
+    // "preemptively": it fires before any event that was already in the queue when the current
+    // event callback started.  This ensures that chains of events that trigger each other occur
+    // quickly together, and reduces the unpredictability possible from other event callbacks
+    // running between them.
+    //
+    // If called from a different thread (or `preemptIfSameThread` is false), the event is placed
+    // at the end of the queue, to ensure that multiple events queued cross-thread fire in the
+    // order in which they were queued.
 
     void disarm();
     // Cancel this event if it is armed.  If it is already running, block until it finishes
@@ -378,12 +379,16 @@ private:
   // callback.  This keeps related events together.
 
   template <typename T, typename Func, typename ErrorFunc>
-  Own<_::PromiseNode> thereImpl(Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler,
-                                Event::Schedule schedule) const;
+  Own<_::PromiseNode> thereImpl(Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler) const;
   // Shared implementation of there() and Promise::then().
 
   void waitImpl(Own<_::PromiseNode> node, _::ExceptionOrValue& result);
   // Run the event loop until `node` is fulfilled, and then `get()` its result into `result`.
+
+  Promise<void> yieldIfSameThread() const;
+  // If called from the event loop's thread, returns a promise that won't resolve until all events
+  // currently on the queue are fired.  Otherwise, returns an already-resolved promise.  Used to
+  // implement evalLater().
 
   template <typename>
   friend class Promise;
@@ -577,19 +582,22 @@ public:
   // as soon as possible, because the promise it returns might be for a newly-scheduled
   // long-running asynchronous task.
   //
-  // On the gripping hand, `EventLoop::there()` is _always_ proactive about evaluating `func`.  This
-  // is because `there()` is commonly used to schedule a long-running computation on another thread.
-  // It is important that such a computation begin as soon as possible, even if no one is yet
-  // waiting for the result.
-  //
   // As another optimization, when a callback function registered with `then()` is actually
   // scheduled, it is scheduled to occur immediately, preempting other work in the event queue.
   // This allows a long chain of `then`s to execute all at once, improving cache locality by
   // clustering operations on the same data.  However, this implies that starvation can occur
   // if a chain of `then()`s takes a very long time to execute without ever stopping to wait for
-  // actual I/O.  To solve this, use `EventLoop::current()`'s `evalLater()` or `there()` methods
-  // to yield control; this way, all other events in the queue will get a chance to run before your
-  // callback is executed.
+  // actual I/O.  To solve this, use `EventLoop::current()`'s `evalLater()` method to yield
+  // control; this way, all other events in the queue will get a chance to run before your callback
+  // is executed.
+  //
+  // `EventLoop::there()` behaves like `then()` when called on the current thread's EventLoop.
+  // However, when used to schedule work on some other thread's loop, `there()` does _not_ schedule
+  // preemptively as this would make the ordering of events unpredictable.  Also, again only when
+  // scheduling cross-thread, `there()` will always evaluate the continuation eagerly even if
+  // nothing is waiting on the returned promise, on the assumption that it is being used to
+  // schedule a long-running computation in another thread.  In other words, when scheduling
+  // cross-thread, both of the "optimizations" described above are avoided.
 
   template <typename Func, typename ErrorFunc = _::PropagateException>
   PromiseForResultNoChaining<Func, T> thenInAnyThread(
@@ -897,7 +905,7 @@ protected:
   // If onReadyEvent is _kJ_ALREADY_READY, return true.
   // Useful for implementing onReady() thread-safely.
 
-  static void atomicReady(EventLoop::Event*& onReadyEvent, EventLoop::Event::Schedule schedule);
+  static void atomicReady(EventLoop::Event*& onReadyEvent);
   // If onReadyEvent is null, atomically set it to _kJ_ALREADY_READY.
   // Otherwise, arm whatever it points at.
   // Useful for firing events in conjuction with atomicOnReady().
@@ -1110,7 +1118,7 @@ inline const ExceptionOrValue& ForkBranchBase::getHubResultRef() const {
 
 class ChainPromiseNode final: public PromiseNode, private EventLoop::Event {
 public:
-  ChainPromiseNode(const EventLoop& loop, Own<PromiseNode> inner, Schedule schedule);
+  ChainPromiseNode(const EventLoop& loop, Own<PromiseNode> inner);
   ~ChainPromiseNode() noexcept(false);
 
   bool onReady(EventLoop::Event& event) noexcept override;
@@ -1136,20 +1144,18 @@ private:
 };
 
 template <typename T>
-Own<PromiseNode> maybeChain(Own<PromiseNode>&& node, const EventLoop& loop,
-                            EventLoop::Event::Schedule schedule, Promise<T>*) {
-  return heap<ChainPromiseNode>(loop, kj::mv(node), schedule);
+Own<PromiseNode> maybeChain(Own<PromiseNode>&& node, const EventLoop& loop, Promise<T>*) {
+  return heap<ChainPromiseNode>(loop, kj::mv(node));
 }
 
 template <typename T>
-Own<PromiseNode>&& maybeChain(Own<PromiseNode>&& node, const EventLoop& loop,
-                              EventLoop::Event::Schedule schedule, T*) {
+Own<PromiseNode>&& maybeChain(Own<PromiseNode>&& node, const EventLoop& loop, T*) {
   return kj::mv(node);
 }
 
 template <typename T>
 Own<PromiseNode> maybeChain(Own<PromiseNode>&& node, Promise<T>*) {
-  return heap<ChainPromiseNode>(EventLoop::current(), kj::mv(node), EventLoop::Event::PREEMPT);
+  return heap<ChainPromiseNode>(EventLoop::current(), kj::mv(node));
 }
 
 template <typename T>
@@ -1224,7 +1230,7 @@ public:
 
 protected:
   inline void setReady() {
-    PromiseNode::atomicReady(onReadyEvent, EventLoop::Event::PREEMPT);
+    PromiseNode::atomicReady(onReadyEvent);
   }
 
 private:
@@ -1297,29 +1303,34 @@ T EventLoop::wait(Promise<T>&& promise) {
 
 template <typename Func>
 auto EventLoop::evalLater(Func&& func) const -> PromiseForResult<Func, void> {
-  return there(Promise<void>(READY_NOW), kj::fwd<Func>(func));
+  // Invoke thereImpl() on yieldIfSameThread().  Always spark the result.
+  return PromiseForResult<Func, void>(false,
+      _::spark<_::FixVoid<_::JoinPromises<_::ReturnType<Func, void>>>>(
+          thereImpl(yieldIfSameThread(), kj::fwd<Func>(func), _::PropagateException()),
+          *this));
 }
 
 template <typename T, typename Func, typename ErrorFunc>
 PromiseForResult<Func, T> EventLoop::there(
     Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler) const {
-  return PromiseForResult<Func, T>(false,
-      _::spark<_::FixVoid<_::JoinPromises<_::ReturnType<Func, T>>>>(thereImpl(
-          kj::mv(promise), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler), Event::YIELD),
-          *this));
+  Own<_::PromiseNode> node = thereImpl(
+      kj::mv(promise), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler));
+  if (!isCurrent()) {
+    node = _::spark<_::FixVoid<_::JoinPromises<_::ReturnType<Func, T>>>>(kj::mv(node), *this);
+  }
+  return PromiseForResult<Func, T>(false, kj::mv(node));
 }
 
 template <typename T, typename Func, typename ErrorFunc>
 Own<_::PromiseNode> EventLoop::thereImpl(Promise<T>&& promise, Func&& func,
-                                         ErrorFunc&& errorHandler,
-                                         Event::Schedule schedule) const {
+                                         ErrorFunc&& errorHandler) const {
   typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
 
   Own<_::PromiseNode> intermediate =
       heap<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
           *this, _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(promise.node), *this),
           kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler));
-  return _::maybeChain(kj::mv(intermediate), *this, schedule, implicitCast<ResultT*>(nullptr));
+  return _::maybeChain(kj::mv(intermediate), *this, implicitCast<ResultT*>(nullptr));
 }
 
 template <typename T>
@@ -1334,8 +1345,7 @@ template <typename T>
 template <typename Func, typename ErrorFunc>
 PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler) {
   return PromiseForResult<Func, T>(false, EventLoop::current().thereImpl(
-      kj::mv(*this), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler),
-      EventLoop::Event::PREEMPT));
+      kj::mv(*this), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler)));
 }
 
 template <typename T>
@@ -1504,8 +1514,7 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller(const EventLoop& loop) {
   Own<_::PromiseNode> intermediate(
       heap<_::AdapterPromiseNode<_::FixVoid<T>, _::PromiseAndFulfillerAdapter<T>>>(*wrapper));
   Promise<_::JoinPromises<T>> promise(false,
-      _::maybeChain(kj::mv(intermediate), loop, EventLoop::Event::YIELD,
-                    implicitCast<T*>(nullptr)));
+      _::maybeChain(kj::mv(intermediate), loop, implicitCast<T*>(nullptr)));
 
   return PromiseFulfillerPair<T> { kj::mv(promise), kj::mv(wrapper) };
 }

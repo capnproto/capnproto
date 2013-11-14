@@ -46,7 +46,7 @@ public:
     while (size > 0) {
       size_t n = rand() % size + 1;
       inner.write(buffer, n);
-      usleep(5);
+      usleep(10000);
       buffer = reinterpret_cast<const byte*>(buffer) + n;
       size -= n;
     }

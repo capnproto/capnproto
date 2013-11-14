@@ -337,6 +337,38 @@ TEST(Async, Ordering) {
   EXPECT_EQ(7, counter);
 }
 
+TEST(Async, Spark) {
+  // Tests that EventLoop::there() only runs eagerly when queued cross-thread.
+
+  SimpleEventLoop loop;
+
+  auto notification = newPromiseAndFulfiller<void>();;
+  Promise<void> unsparked = nullptr;
+  Promise<void> then = nullptr;
+  Promise<void> later = nullptr;
+
+  // `sparked` will evaluate eagerly, even though we never wait on it, because there() is being
+  // called from outside the event loop.
+  Promise<void> sparked = loop.there(Promise<void>(READY_NOW), [&]() {
+    // `unsparked` will never execute because it's attached to the current loop and we never wait
+    // on it.
+    unsparked = loop.there(Promise<void>(READY_NOW), [&]() {
+      ADD_FAILURE() << "This continuation shouldn't happen because no one waits on it.";
+    });
+    // `then` will similarly never execute.
+    then = Promise<void>(READY_NOW).then([&]() {
+      ADD_FAILURE() << "This continuation shouldn't happen because no one waits on it.";
+    });
+
+    // `evalLater` *does* eagerly execute even when queued to the same loop.
+    later = loop.evalLater([&]() {
+      notification.fulfiller->fulfill();
+    });
+  });
+
+  loop.wait(kj::mv(notification.promise));
+}
+
 TEST(Async, Fork) {
   SimpleEventLoop loop;
 
