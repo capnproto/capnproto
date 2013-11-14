@@ -48,6 +48,10 @@
 namespace capnp {
 namespace {
 
+bool hasDiscriminantValue(const schema::Field::Reader& reader) {
+  return reader.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;
+}
+
 struct Indent {
   uint amount;
   Indent() = default;
@@ -344,7 +348,7 @@ private:
 
     bool seenUnion = false;
     return KJ_MAP(field, sortByCodeOrder(schema.getFields())) {
-      if (field.getProto().hasDiscriminantValue()) {
+      if (hasDiscriminantValue(field.getProto())) {
         if (seenUnion) {
           return kj::strTree();
         } else {
@@ -381,7 +385,7 @@ private:
             ";  # ", size == -1 ? kj::strTree("ptr[", slot.getOffset(), "]")
                                 : kj::strTree("bits[", slot.getOffset() * size, ", ",
                                               (slot.getOffset() + 1) * size, ")"),
-            field.hasDiscriminantValue()
+            hasDiscriminantValue(field)
                 ? kj::strTree(", union tag = ", field.getDiscriminantValue()) : kj::strTree(),
             "\n");
       }
@@ -390,7 +394,7 @@ private:
         return kj::strTree(
             indent, field.getName(),
             " :group", genAnnotations(field.getAnnotations(), scope), " {",
-            field.hasDiscriminantValue()
+            hasDiscriminantValue(field)
                 ? kj::strTree("  # union tag = ", field.getDiscriminantValue()) : kj::strTree(),
             "\n",
             genStructFields(group, indent.next()),

@@ -43,6 +43,11 @@ enum PrintMode {
   // The value is printed in parenthesized (a union value).
 };
 
+enum class PrintKind {
+  LIST,
+  RECORD
+};
+
 class Indent {
 public:
   explicit Indent(bool enable): amount(enable ? 1 : 0) {}
@@ -51,8 +56,8 @@ public:
     return Indent(amount == 0 ? 0 : amount + 1);
   }
 
-  kj::StringTree delimit(kj::Array<kj::StringTree> items, PrintMode mode) {
-    if (amount == 0 || canPrintAllInline(items)) {
+  kj::StringTree delimit(kj::Array<kj::StringTree> items, PrintMode mode, PrintKind kind) {
+    if (amount == 0 || canPrintAllInline(items, kind)) {
       return kj::StringTree(kj::mv(items), ", ");
     } else {
       char delim[amount * 2 + 3];
@@ -75,6 +80,7 @@ private:
   explicit Indent(uint amount): amount(amount) {}
 
   static constexpr size_t maxInlineValueSize = 24;
+  static constexpr size_t maxInlineRecordSize = 64;
 
   static bool canPrintInline(const kj::StringTree& text) {
     if (text.size() > maxInlineValueSize) {
@@ -91,9 +97,14 @@ private:
     return true;
   }
 
-  static bool canPrintAllInline(const kj::Array<kj::StringTree>& items) {
+  static bool canPrintAllInline(const kj::Array<kj::StringTree>& items, PrintKind kind) {
+    size_t totalSize = 0;
     for (auto& item: items) {
       if (!canPrintInline(item)) return false;
+      if (kind == PrintKind::RECORD) {
+        totalSize += item.size();
+        if (totalSize > maxInlineRecordSize) return false;
+      }
     }
     return true;
   }
@@ -176,7 +187,7 @@ static kj::StringTree print(const DynamicValue::Reader& value,
       kj::Array<kj::StringTree> elements = KJ_MAP(element, listValue) {
         return print(element, which, indent.next(), BARE);
       };
-      return kj::strTree('[', indent.delimit(kj::mv(elements), mode), ']');
+      return kj::strTree('[', indent.delimit(kj::mv(elements), mode, PrintKind::LIST), ']');
     }
     case DynamicValue::ENUM: {
       auto enumValue = value.as<DynamicEnum>();
@@ -231,9 +242,10 @@ static kj::StringTree print(const DynamicValue::Reader& value,
       }
 
       if (mode == PARENTHESIZED) {
-        return indent.delimit(printedFields.releaseAsArray(), mode);
+        return indent.delimit(printedFields.releaseAsArray(), mode, PrintKind::RECORD);
       } else {
-        return kj::strTree('(', indent.delimit(printedFields.releaseAsArray(), mode), ')');
+        return kj::strTree(
+            '(', indent.delimit(printedFields.releaseAsArray(), mode, PrintKind::RECORD), ')');
       }
     }
     case DynamicValue::CAPABILITY:

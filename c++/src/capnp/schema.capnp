@@ -175,10 +175,11 @@ struct Field {
 
   annotations @2 :List(Annotation);
 
-  discriminantValue @3 :UInt16 = 0xffff;
+  const noDiscriminant :UInt16 = 0xffff;
+
+  discriminantValue @3 :UInt16 = Field.noDiscriminant;
   # If the field is in a union, this is the value which the union's discriminant should take when
-  # the field is active.  If the field is not in a union, this is 0xffff (so hasDiscriminantValue()
-  # returns false).
+  # the field is active.  If the field is not in a union, this is 0xffff.
 
   union {
     slot :group {

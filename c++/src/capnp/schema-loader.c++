@@ -35,6 +35,10 @@
 
 namespace capnp {
 
+bool hasDiscriminantValue(const schema::Field::Reader& reader) {
+  return reader.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;
+}
+
 class SchemaLoader::InitializerImpl: public _::RawSchema::Initializer {
 public:
   inline explicit InitializerImpl(const SchemaLoader& loader): loader(loader), callback(nullptr) {}
@@ -298,7 +302,7 @@ private:
         nextOrdinal = ordinal.getExplicit() + 1;
       }
 
-      if (field.hasDiscriminantValue()) {
+      if (hasDiscriminantValue(field)) {
         VALIDATE_SCHEMA(field.getDiscriminantValue() < sawDiscriminantValue.size() &&
                         !sawDiscriminantValue[field.getDiscriminantValue()],
                         "invalid discriminantValue");
@@ -688,9 +692,9 @@ private:
 
     // A field that is initially not in a union can be upgraded to be in one, as long as it has
     // discriminant 0.
-    uint discriminant = field.hasDiscriminantValue() ? field.getDiscriminantValue() : 0;
+    uint discriminant = hasDiscriminantValue(field) ? field.getDiscriminantValue() : 0;
     uint replacementDiscriminant =
-        replacement.hasDiscriminantValue() ? replacement.getDiscriminantValue() : 0;
+        hasDiscriminantValue(replacement) ? replacement.getDiscriminantValue() : 0;
     VALIDATE_SCHEMA(discriminant == replacementDiscriminant, "Field discriminant changed.");
 
     switch (field.which()) {

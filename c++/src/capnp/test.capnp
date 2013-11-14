@@ -476,8 +476,23 @@ struct TestNewVersion {
 
 struct TestStructUnion {
   un @0! :union {
-    allTypes @1 :TestAllTypes;
+    struct @1 :SomeStruct;
     object @2 :TestObject;
+  }
+
+  struct SomeStruct {
+    someText @0 :Text;
+    moreText @1 :Text;
+  }
+}
+
+struct TestPrintInlineStructs {
+  someText @0 :Text;
+
+  structList @1 :List(InlineStruct);
+  struct InlineStruct {
+    int32Field @0 :Int32;
+    textField @1 :Text;
   }
 }
 
@@ -566,6 +581,7 @@ struct TestConstants {
 const globalInt :UInt32 = 12345;
 const globalText :Text = "foobar";
 const globalStruct :TestAllTypes = (int32Field = 54321);
+const globalPrintableStruct :TestPrintInlineStructs = (someText = "foo");
 const derivedConstant :TestAllTypes = (
     uInt32Field = .globalInt,
     textField = TestConstants.textConst,

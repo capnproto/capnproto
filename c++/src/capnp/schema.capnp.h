@@ -94,6 +94,7 @@ struct Field {
     SLOT,
     GROUP,
   };
+  static constexpr  ::uint16_t NO_DISCRIMINANT = 65535u;
   struct Slot;
   struct Group;
   struct Ordinal;
@@ -298,6 +299,7 @@ extern const ::capnp::_::RawSchema s_e82753cff0c2218f;
 extern const ::capnp::_::RawSchema s_b18aa5ac7a0d9420;
 extern const ::capnp::_::RawSchema s_ec1619d4400a0290;
 extern const ::capnp::_::RawSchema s_9aad50a41f4af45f;
+extern const ::capnp::_::RawSchema s_97b14cbe7cfec712;
 extern const ::capnp::_::RawSchema s_c42305476bb4746f;
 extern const ::capnp::_::RawSchema s_cafccddb68db1d11;
 extern const ::capnp::_::RawSchema s_bb90d5c287870be6;
@@ -410,16 +412,13 @@ public:
   }
 
   inline Which which() const;
-  inline bool hasId() const;
   inline  ::uint64_t getId() const;
 
   inline bool hasDisplayName() const;
   inline  ::capnp::Text::Reader getDisplayName() const;
 
-  inline bool hasDisplayNamePrefixLength() const;
   inline  ::uint32_t getDisplayNamePrefixLength() const;
 
-  inline bool hasScopeId() const;
   inline  ::uint64_t getScopeId() const;
 
   inline bool hasNestedNodes() const;
@@ -429,27 +428,21 @@ public:
   inline  ::capnp::List< ::capnp::schema::Annotation>::Reader getAnnotations() const;
 
   inline bool isFile() const;
-  inline bool hasFile() const;
   inline  ::capnp::Void getFile() const;
 
   inline bool isStruct() const;
-  inline bool hasStruct() const;
   inline Struct::Reader getStruct() const;
 
   inline bool isEnum() const;
-  inline bool hasEnum() const;
   inline Enum::Reader getEnum() const;
 
   inline bool isInterface() const;
-  inline bool hasInterface() const;
   inline Interface::Reader getInterface() const;
 
   inline bool isConst() const;
-  inline bool hasConst() const;
   inline Const::Reader getConst() const;
 
   inline bool isAnnotation() const;
-  inline bool hasAnnotation() const;
   inline Annotation::Reader getAnnotation() const;
 
 private:
@@ -483,7 +476,6 @@ public:
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
   inline Which which();
-  inline bool hasId();
   inline  ::uint64_t getId();
   inline void setId( ::uint64_t value);
 
@@ -494,11 +486,9 @@ public:
   inline void adoptDisplayName(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownDisplayName();
 
-  inline bool hasDisplayNamePrefixLength();
   inline  ::uint32_t getDisplayNamePrefixLength();
   inline void setDisplayNamePrefixLength( ::uint32_t value);
 
-  inline bool hasScopeId();
   inline  ::uint64_t getScopeId();
   inline void setScopeId( ::uint64_t value);
 
@@ -517,32 +507,26 @@ public:
   inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>> disownAnnotations();
 
   inline bool isFile();
-  inline bool hasFile();
   inline  ::capnp::Void getFile();
   inline void setFile( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isStruct();
-  inline bool hasStruct();
   inline Struct::Builder getStruct();
   inline Struct::Builder initStruct();
 
   inline bool isEnum();
-  inline bool hasEnum();
   inline Enum::Builder getEnum();
   inline Enum::Builder initEnum();
 
   inline bool isInterface();
-  inline bool hasInterface();
   inline Interface::Builder getInterface();
   inline Interface::Builder initInterface();
 
   inline bool isConst();
-  inline bool hasConst();
   inline Const::Builder getConst();
   inline Const::Builder initConst();
 
   inline bool isAnnotation();
-  inline bool hasAnnotation();
   inline Annotation::Builder getAnnotation();
   inline Annotation::Builder initAnnotation();
 
@@ -586,7 +570,6 @@ public:
   inline bool hasName() const;
   inline  ::capnp::Text::Reader getName() const;
 
-  inline bool hasId() const;
   inline  ::uint64_t getId() const;
 
 private:
@@ -626,7 +609,6 @@ public:
   inline void adoptName(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownName();
 
-  inline bool hasId();
   inline  ::uint64_t getId();
   inline void setId( ::uint64_t value);
 
@@ -667,22 +649,16 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasDataWordCount() const;
   inline  ::uint16_t getDataWordCount() const;
 
-  inline bool hasPointerCount() const;
   inline  ::uint16_t getPointerCount() const;
 
-  inline bool hasPreferredListEncoding() const;
   inline  ::capnp::schema::ElementSize getPreferredListEncoding() const;
 
-  inline bool hasIsGroup() const;
   inline bool getIsGroup() const;
 
-  inline bool hasDiscriminantCount() const;
   inline  ::uint16_t getDiscriminantCount() const;
 
-  inline bool hasDiscriminantOffset() const;
   inline  ::uint32_t getDiscriminantOffset() const;
 
   inline bool hasFields() const;
@@ -718,27 +694,21 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasDataWordCount();
   inline  ::uint16_t getDataWordCount();
   inline void setDataWordCount( ::uint16_t value);
 
-  inline bool hasPointerCount();
   inline  ::uint16_t getPointerCount();
   inline void setPointerCount( ::uint16_t value);
 
-  inline bool hasPreferredListEncoding();
   inline  ::capnp::schema::ElementSize getPreferredListEncoding();
   inline void setPreferredListEncoding( ::capnp::schema::ElementSize value);
 
-  inline bool hasIsGroup();
   inline bool getIsGroup();
   inline void setIsGroup(bool value);
 
-  inline bool hasDiscriminantCount();
   inline  ::uint16_t getDiscriminantCount();
   inline void setDiscriminantCount( ::uint16_t value);
 
-  inline bool hasDiscriminantOffset();
   inline  ::uint32_t getDiscriminantOffset();
   inline void setDiscriminantOffset( ::uint32_t value);
 
@@ -1043,40 +1013,28 @@ public:
   inline bool hasType() const;
   inline  ::capnp::schema::Type::Reader getType() const;
 
-  inline bool hasTargetsFile() const;
   inline bool getTargetsFile() const;
 
-  inline bool hasTargetsConst() const;
   inline bool getTargetsConst() const;
 
-  inline bool hasTargetsEnum() const;
   inline bool getTargetsEnum() const;
 
-  inline bool hasTargetsEnumerant() const;
   inline bool getTargetsEnumerant() const;
 
-  inline bool hasTargetsStruct() const;
   inline bool getTargetsStruct() const;
 
-  inline bool hasTargetsField() const;
   inline bool getTargetsField() const;
 
-  inline bool hasTargetsUnion() const;
   inline bool getTargetsUnion() const;
 
-  inline bool hasTargetsGroup() const;
   inline bool getTargetsGroup() const;
 
-  inline bool hasTargetsInterface() const;
   inline bool getTargetsInterface() const;
 
-  inline bool hasTargetsMethod() const;
   inline bool getTargetsMethod() const;
 
-  inline bool hasTargetsParam() const;
   inline bool getTargetsParam() const;
 
-  inline bool hasTargetsAnnotation() const;
   inline bool getTargetsAnnotation() const;
 
 private:
@@ -1116,51 +1074,39 @@ public:
   inline void adoptType(::capnp::Orphan< ::capnp::schema::Type>&& value);
   inline ::capnp::Orphan< ::capnp::schema::Type> disownType();
 
-  inline bool hasTargetsFile();
   inline bool getTargetsFile();
   inline void setTargetsFile(bool value);
 
-  inline bool hasTargetsConst();
   inline bool getTargetsConst();
   inline void setTargetsConst(bool value);
 
-  inline bool hasTargetsEnum();
   inline bool getTargetsEnum();
   inline void setTargetsEnum(bool value);
 
-  inline bool hasTargetsEnumerant();
   inline bool getTargetsEnumerant();
   inline void setTargetsEnumerant(bool value);
 
-  inline bool hasTargetsStruct();
   inline bool getTargetsStruct();
   inline void setTargetsStruct(bool value);
 
-  inline bool hasTargetsField();
   inline bool getTargetsField();
   inline void setTargetsField(bool value);
 
-  inline bool hasTargetsUnion();
   inline bool getTargetsUnion();
   inline void setTargetsUnion(bool value);
 
-  inline bool hasTargetsGroup();
   inline bool getTargetsGroup();
   inline void setTargetsGroup(bool value);
 
-  inline bool hasTargetsInterface();
   inline bool getTargetsInterface();
   inline void setTargetsInterface(bool value);
 
-  inline bool hasTargetsMethod();
   inline bool getTargetsMethod();
   inline void setTargetsMethod(bool value);
 
-  inline bool hasTargetsParam();
   inline bool getTargetsParam();
   inline void setTargetsParam(bool value);
 
-  inline bool hasTargetsAnnotation();
   inline bool getTargetsAnnotation();
   inline void setTargetsAnnotation(bool value);
 
@@ -1206,24 +1152,19 @@ public:
   inline bool hasName() const;
   inline  ::capnp::Text::Reader getName() const;
 
-  inline bool hasCodeOrder() const;
   inline  ::uint16_t getCodeOrder() const;
 
   inline bool hasAnnotations() const;
   inline  ::capnp::List< ::capnp::schema::Annotation>::Reader getAnnotations() const;
 
-  inline bool hasDiscriminantValue() const;
   inline  ::uint16_t getDiscriminantValue() const;
 
   inline bool isSlot() const;
-  inline bool hasSlot() const;
   inline Slot::Reader getSlot() const;
 
   inline bool isGroup() const;
-  inline bool hasGroup() const;
   inline Group::Reader getGroup() const;
 
-  inline bool hasOrdinal() const;
   inline Ordinal::Reader getOrdinal() const;
 
 private:
@@ -1264,7 +1205,6 @@ public:
   inline void adoptName(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownName();
 
-  inline bool hasCodeOrder();
   inline  ::uint16_t getCodeOrder();
   inline void setCodeOrder( ::uint16_t value);
 
@@ -1275,21 +1215,17 @@ public:
   inline void adoptAnnotations(::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>> disownAnnotations();
 
-  inline bool hasDiscriminantValue();
   inline  ::uint16_t getDiscriminantValue();
   inline void setDiscriminantValue( ::uint16_t value);
 
   inline bool isSlot();
-  inline bool hasSlot();
   inline Slot::Builder getSlot();
   inline Slot::Builder initSlot();
 
   inline bool isGroup();
-  inline bool hasGroup();
   inline Group::Builder getGroup();
   inline Group::Builder initGroup();
 
-  inline bool hasOrdinal();
   inline Ordinal::Builder getOrdinal();
   inline Ordinal::Builder initOrdinal();
 
@@ -1331,7 +1267,6 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasOffset() const;
   inline  ::uint32_t getOffset() const;
 
   inline bool hasType() const;
@@ -1340,7 +1275,6 @@ public:
   inline bool hasDefaultValue() const;
   inline  ::capnp::schema::Value::Reader getDefaultValue() const;
 
-  inline bool hasHadExplicitDefault() const;
   inline bool getHadExplicitDefault() const;
 
 private:
@@ -1373,7 +1307,6 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasOffset();
   inline  ::uint32_t getOffset();
   inline void setOffset( ::uint32_t value);
 
@@ -1391,7 +1324,6 @@ public:
   inline void adoptDefaultValue(::capnp::Orphan< ::capnp::schema::Value>&& value);
   inline ::capnp::Orphan< ::capnp::schema::Value> disownDefaultValue();
 
-  inline bool hasHadExplicitDefault();
   inline bool getHadExplicitDefault();
   inline void setHadExplicitDefault(bool value);
 
@@ -1434,7 +1366,6 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasTypeId() const;
   inline  ::uint64_t getTypeId() const;
 
 private:
@@ -1467,7 +1398,6 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasTypeId();
   inline  ::uint64_t getTypeId();
   inline void setTypeId( ::uint64_t value);
 
@@ -1510,11 +1440,9 @@ public:
 
   inline Which which() const;
   inline bool isImplicit() const;
-  inline bool hasImplicit() const;
   inline  ::capnp::Void getImplicit() const;
 
   inline bool isExplicit() const;
-  inline bool hasExplicit() const;
   inline  ::uint16_t getExplicit() const;
 
 private:
@@ -1549,12 +1477,10 @@ public:
 
   inline Which which();
   inline bool isImplicit();
-  inline bool hasImplicit();
   inline  ::capnp::Void getImplicit();
   inline void setImplicit( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isExplicit();
-  inline bool hasExplicit();
   inline  ::uint16_t getExplicit();
   inline void setExplicit( ::uint16_t value);
 
@@ -1598,7 +1524,6 @@ public:
   inline bool hasName() const;
   inline  ::capnp::Text::Reader getName() const;
 
-  inline bool hasCodeOrder() const;
   inline  ::uint16_t getCodeOrder() const;
 
   inline bool hasAnnotations() const;
@@ -1641,7 +1566,6 @@ public:
   inline void adoptName(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownName();
 
-  inline bool hasCodeOrder();
   inline  ::uint16_t getCodeOrder();
   inline void setCodeOrder( ::uint16_t value);
 
@@ -1692,13 +1616,10 @@ public:
   inline bool hasName() const;
   inline  ::capnp::Text::Reader getName() const;
 
-  inline bool hasCodeOrder() const;
   inline  ::uint16_t getCodeOrder() const;
 
-  inline bool hasParamStructType() const;
   inline  ::uint64_t getParamStructType() const;
 
-  inline bool hasResultStructType() const;
   inline  ::uint64_t getResultStructType() const;
 
   inline bool hasAnnotations() const;
@@ -1741,15 +1662,12 @@ public:
   inline void adoptName(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownName();
 
-  inline bool hasCodeOrder();
   inline  ::uint16_t getCodeOrder();
   inline void setCodeOrder( ::uint16_t value);
 
-  inline bool hasParamStructType();
   inline  ::uint64_t getParamStructType();
   inline void setParamStructType( ::uint64_t value);
 
-  inline bool hasResultStructType();
   inline  ::uint64_t getResultStructType();
   inline void setResultStructType( ::uint64_t value);
 
@@ -1799,79 +1717,60 @@ public:
 
   inline Which which() const;
   inline bool isVoid() const;
-  inline bool hasVoid() const;
   inline  ::capnp::Void getVoid() const;
 
   inline bool isBool() const;
-  inline bool hasBool() const;
   inline  ::capnp::Void getBool() const;
 
   inline bool isInt8() const;
-  inline bool hasInt8() const;
   inline  ::capnp::Void getInt8() const;
 
   inline bool isInt16() const;
-  inline bool hasInt16() const;
   inline  ::capnp::Void getInt16() const;
 
   inline bool isInt32() const;
-  inline bool hasInt32() const;
   inline  ::capnp::Void getInt32() const;
 
   inline bool isInt64() const;
-  inline bool hasInt64() const;
   inline  ::capnp::Void getInt64() const;
 
   inline bool isUint8() const;
-  inline bool hasUint8() const;
   inline  ::capnp::Void getUint8() const;
 
   inline bool isUint16() const;
-  inline bool hasUint16() const;
   inline  ::capnp::Void getUint16() const;
 
   inline bool isUint32() const;
-  inline bool hasUint32() const;
   inline  ::capnp::Void getUint32() const;
 
   inline bool isUint64() const;
-  inline bool hasUint64() const;
   inline  ::capnp::Void getUint64() const;
 
   inline bool isFloat32() const;
-  inline bool hasFloat32() const;
   inline  ::capnp::Void getFloat32() const;
 
   inline bool isFloat64() const;
-  inline bool hasFloat64() const;
   inline  ::capnp::Void getFloat64() const;
 
   inline bool isText() const;
-  inline bool hasText() const;
   inline  ::capnp::Void getText() const;
 
   inline bool isData() const;
-  inline bool hasData() const;
   inline  ::capnp::Void getData() const;
 
   inline bool isList() const;
-  inline bool hasList() const;
   inline List::Reader getList() const;
 
   inline bool isEnum() const;
-  inline bool hasEnum() const;
   inline Enum::Reader getEnum() const;
 
   inline bool isStruct() const;
-  inline bool hasStruct() const;
   inline Struct::Reader getStruct() const;
 
   inline bool isInterface() const;
-  inline bool hasInterface() const;
   inline Interface::Reader getInterface() const;
 
   inline bool isObject() const;
-  inline bool hasObject() const;
   inline  ::capnp::Void getObject() const;
 
 private:
@@ -1906,97 +1805,78 @@ public:
 
   inline Which which();
   inline bool isVoid();
-  inline bool hasVoid();
   inline  ::capnp::Void getVoid();
   inline void setVoid( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isBool();
-  inline bool hasBool();
   inline  ::capnp::Void getBool();
   inline void setBool( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isInt8();
-  inline bool hasInt8();
   inline  ::capnp::Void getInt8();
   inline void setInt8( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isInt16();
-  inline bool hasInt16();
   inline  ::capnp::Void getInt16();
   inline void setInt16( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isInt32();
-  inline bool hasInt32();
   inline  ::capnp::Void getInt32();
   inline void setInt32( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isInt64();
-  inline bool hasInt64();
   inline  ::capnp::Void getInt64();
   inline void setInt64( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isUint8();
-  inline bool hasUint8();
   inline  ::capnp::Void getUint8();
   inline void setUint8( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isUint16();
-  inline bool hasUint16();
   inline  ::capnp::Void getUint16();
   inline void setUint16( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isUint32();
-  inline bool hasUint32();
   inline  ::capnp::Void getUint32();
   inline void setUint32( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isUint64();
-  inline bool hasUint64();
   inline  ::capnp::Void getUint64();
   inline void setUint64( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isFloat32();
-  inline bool hasFloat32();
   inline  ::capnp::Void getFloat32();
   inline void setFloat32( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isFloat64();
-  inline bool hasFloat64();
   inline  ::capnp::Void getFloat64();
   inline void setFloat64( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isText();
-  inline bool hasText();
   inline  ::capnp::Void getText();
   inline void setText( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isData();
-  inline bool hasData();
   inline  ::capnp::Void getData();
   inline void setData( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isList();
-  inline bool hasList();
   inline List::Builder getList();
   inline List::Builder initList();
 
   inline bool isEnum();
-  inline bool hasEnum();
   inline Enum::Builder getEnum();
   inline Enum::Builder initEnum();
 
   inline bool isStruct();
-  inline bool hasStruct();
   inline Struct::Builder getStruct();
   inline Struct::Builder initStruct();
 
   inline bool isInterface();
-  inline bool hasInterface();
   inline Interface::Builder getInterface();
   inline Interface::Builder initInterface();
 
   inline bool isObject();
-  inline bool hasObject();
   inline  ::capnp::Void getObject();
   inline void setObject( ::capnp::Void value = ::capnp::VOID);
 
@@ -2115,7 +1995,6 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasTypeId() const;
   inline  ::uint64_t getTypeId() const;
 
 private:
@@ -2148,7 +2027,6 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasTypeId();
   inline  ::uint64_t getTypeId();
   inline void setTypeId( ::uint64_t value);
 
@@ -2189,7 +2067,6 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasTypeId() const;
   inline  ::uint64_t getTypeId() const;
 
 private:
@@ -2222,7 +2099,6 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasTypeId();
   inline  ::uint64_t getTypeId();
   inline void setTypeId( ::uint64_t value);
 
@@ -2263,7 +2139,6 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasTypeId() const;
   inline  ::uint64_t getTypeId() const;
 
 private:
@@ -2296,7 +2171,6 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasTypeId();
   inline  ::uint64_t getTypeId();
   inline void setTypeId( ::uint64_t value);
 
@@ -2339,51 +2213,39 @@ public:
 
   inline Which which() const;
   inline bool isVoid() const;
-  inline bool hasVoid() const;
   inline  ::capnp::Void getVoid() const;
 
   inline bool isBool() const;
-  inline bool hasBool() const;
   inline bool getBool() const;
 
   inline bool isInt8() const;
-  inline bool hasInt8() const;
   inline  ::int8_t getInt8() const;
 
   inline bool isInt16() const;
-  inline bool hasInt16() const;
   inline  ::int16_t getInt16() const;
 
   inline bool isInt32() const;
-  inline bool hasInt32() const;
   inline  ::int32_t getInt32() const;
 
   inline bool isInt64() const;
-  inline bool hasInt64() const;
   inline  ::int64_t getInt64() const;
 
   inline bool isUint8() const;
-  inline bool hasUint8() const;
   inline  ::uint8_t getUint8() const;
 
   inline bool isUint16() const;
-  inline bool hasUint16() const;
   inline  ::uint16_t getUint16() const;
 
   inline bool isUint32() const;
-  inline bool hasUint32() const;
   inline  ::uint32_t getUint32() const;
 
   inline bool isUint64() const;
-  inline bool hasUint64() const;
   inline  ::uint64_t getUint64() const;
 
   inline bool isFloat32() const;
-  inline bool hasFloat32() const;
   inline float getFloat32() const;
 
   inline bool isFloat64() const;
-  inline bool hasFloat64() const;
   inline double getFloat64() const;
 
   inline bool isText() const;
@@ -2399,7 +2261,6 @@ public:
   inline ::capnp::ObjectPointer::Reader getList() const;
 
   inline bool isEnum() const;
-  inline bool hasEnum() const;
   inline  ::uint16_t getEnum() const;
 
   inline bool isStruct() const;
@@ -2407,7 +2268,6 @@ public:
   inline ::capnp::ObjectPointer::Reader getStruct() const;
 
   inline bool isInterface() const;
-  inline bool hasInterface() const;
   inline  ::capnp::Void getInterface() const;
 
   inline bool isObject() const;
@@ -2446,62 +2306,50 @@ public:
 
   inline Which which();
   inline bool isVoid();
-  inline bool hasVoid();
   inline  ::capnp::Void getVoid();
   inline void setVoid( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isBool();
-  inline bool hasBool();
   inline bool getBool();
   inline void setBool(bool value);
 
   inline bool isInt8();
-  inline bool hasInt8();
   inline  ::int8_t getInt8();
   inline void setInt8( ::int8_t value);
 
   inline bool isInt16();
-  inline bool hasInt16();
   inline  ::int16_t getInt16();
   inline void setInt16( ::int16_t value);
 
   inline bool isInt32();
-  inline bool hasInt32();
   inline  ::int32_t getInt32();
   inline void setInt32( ::int32_t value);
 
   inline bool isInt64();
-  inline bool hasInt64();
   inline  ::int64_t getInt64();
   inline void setInt64( ::int64_t value);
 
   inline bool isUint8();
-  inline bool hasUint8();
   inline  ::uint8_t getUint8();
   inline void setUint8( ::uint8_t value);
 
   inline bool isUint16();
-  inline bool hasUint16();
   inline  ::uint16_t getUint16();
   inline void setUint16( ::uint16_t value);
 
   inline bool isUint32();
-  inline bool hasUint32();
   inline  ::uint32_t getUint32();
   inline void setUint32( ::uint32_t value);
 
   inline bool isUint64();
-  inline bool hasUint64();
   inline  ::uint64_t getUint64();
   inline void setUint64( ::uint64_t value);
 
   inline bool isFloat32();
-  inline bool hasFloat32();
   inline float getFloat32();
   inline void setFloat32(float value);
 
   inline bool isFloat64();
-  inline bool hasFloat64();
   inline double getFloat64();
   inline void setFloat64(double value);
 
@@ -2527,7 +2375,6 @@ public:
   inline ::capnp::ObjectPointer::Builder initList();
 
   inline bool isEnum();
-  inline bool hasEnum();
   inline  ::uint16_t getEnum();
   inline void setEnum( ::uint16_t value);
 
@@ -2537,7 +2384,6 @@ public:
   inline ::capnp::ObjectPointer::Builder initStruct();
 
   inline bool isInterface();
-  inline bool hasInterface();
   inline  ::capnp::Void getInterface();
   inline void setInterface( ::capnp::Void value = ::capnp::VOID);
 
@@ -2583,7 +2429,6 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasId() const;
   inline  ::uint64_t getId() const;
 
   inline bool hasValue() const;
@@ -2619,7 +2464,6 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasId();
   inline  ::uint64_t getId();
   inline void setId( ::uint64_t value);
 
@@ -2755,7 +2599,6 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasId() const;
   inline  ::uint64_t getId() const;
 
   inline bool hasFilename() const;
@@ -2794,7 +2637,6 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasId();
   inline  ::uint64_t getId();
   inline void setId( ::uint64_t value);
 
@@ -2849,7 +2691,6 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasId() const;
   inline  ::uint64_t getId() const;
 
   inline bool hasName() const;
@@ -2885,7 +2726,6 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasId();
   inline  ::uint64_t getId();
   inline void setId( ::uint64_t value);
 
@@ -2931,13 +2771,6 @@ inline Node::Which Node::Builder::which() {
   return _builder.getDataField<Which>(6 * ::capnp::ELEMENTS);
 }
 
-inline bool Node::Reader::hasId() const {
-  return _reader.hasDataField< ::uint64_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Builder::hasId() {
-  return _builder.hasDataField< ::uint64_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint64_t Node::Reader::getId() const {
   return _reader.getDataField< ::uint64_t>(
       0 * ::capnp::ELEMENTS);
@@ -2984,13 +2817,6 @@ inline ::capnp::Orphan< ::capnp::Text> Node::Builder::disownDisplayName() {
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Node::Reader::hasDisplayNamePrefixLength() const {
-  return _reader.hasDataField< ::uint32_t>(2 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Builder::hasDisplayNamePrefixLength() {
-  return _builder.hasDataField< ::uint32_t>(2 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Node::Reader::getDisplayNamePrefixLength() const {
   return _reader.getDataField< ::uint32_t>(
       2 * ::capnp::ELEMENTS);
@@ -3005,13 +2831,6 @@ inline void Node::Builder::setDisplayNamePrefixLength( ::uint32_t value) {
       2 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Reader::hasScopeId() const {
-  return _reader.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Builder::hasScopeId() {
-  return _builder.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
-}
 inline  ::uint64_t Node::Reader::getScopeId() const {
   return _reader.getDataField< ::uint64_t>(
       2 * ::capnp::ELEMENTS);
@@ -3096,15 +2915,6 @@ inline bool Node::Reader::isFile() const {
 inline bool Node::Builder::isFile() {
   return which() == Node::FILE;
 }
-inline bool Node::Reader::hasFile() const {
-  if (which() != Node::FILE) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Builder::hasFile() {
-  if (which() != Node::FILE) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::Void Node::Reader::getFile() const {
   KJ_IREQUIRE(which() == Node::FILE,
               "Must check which() before get()ing a union member.");
@@ -3130,26 +2940,6 @@ inline bool Node::Reader::isStruct() const {
 }
 inline bool Node::Builder::isStruct() {
   return which() == Node::STRUCT;
-}
-inline bool Node::Reader::hasStruct() const {
-  if (which() != Node::STRUCT) return false;
-  return _reader.getDataField< ::uint16_t>(7 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField< ::uint16_t>(12 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField< ::uint16_t>(13 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField<bool>(224 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField< ::uint16_t>(15 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField< ::uint32_t>(8 * ::capnp::ELEMENTS) != 0
-      || !_reader.getPointerField(3 * ::capnp::POINTERS).isNull();
-}
-inline bool Node::Builder::hasStruct() {
-  if (which() != Node::STRUCT) return false;
-  return _builder.getDataField< ::uint16_t>(7 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField< ::uint16_t>(12 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField< ::uint16_t>(13 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField<bool>(224 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField< ::uint16_t>(15 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField< ::uint32_t>(8 * ::capnp::ELEMENTS) != 0
-      || !_builder.getPointerField(3 * ::capnp::POINTERS).isNull();
 }
 inline Node::Struct::Reader Node::Reader::getStruct() const {
   KJ_IREQUIRE(which() == Node::STRUCT,
@@ -3179,14 +2969,6 @@ inline bool Node::Reader::isEnum() const {
 inline bool Node::Builder::isEnum() {
   return which() == Node::ENUM;
 }
-inline bool Node::Reader::hasEnum() const {
-  if (which() != Node::ENUM) return false;
-  return !_reader.getPointerField(3 * ::capnp::POINTERS).isNull();
-}
-inline bool Node::Builder::hasEnum() {
-  if (which() != Node::ENUM) return false;
-  return !_builder.getPointerField(3 * ::capnp::POINTERS).isNull();
-}
 inline Node::Enum::Reader Node::Reader::getEnum() const {
   KJ_IREQUIRE(which() == Node::ENUM,
               "Must check which() before get()ing a union member.");
@@ -3208,16 +2990,6 @@ inline bool Node::Reader::isInterface() const {
 }
 inline bool Node::Builder::isInterface() {
   return which() == Node::INTERFACE;
-}
-inline bool Node::Reader::hasInterface() const {
-  if (which() != Node::INTERFACE) return false;
-  return !_reader.getPointerField(3 * ::capnp::POINTERS).isNull()
-      || !_reader.getPointerField(4 * ::capnp::POINTERS).isNull();
-}
-inline bool Node::Builder::hasInterface() {
-  if (which() != Node::INTERFACE) return false;
-  return !_builder.getPointerField(3 * ::capnp::POINTERS).isNull()
-      || !_builder.getPointerField(4 * ::capnp::POINTERS).isNull();
 }
 inline Node::Interface::Reader Node::Reader::getInterface() const {
   KJ_IREQUIRE(which() == Node::INTERFACE,
@@ -3242,16 +3014,6 @@ inline bool Node::Reader::isConst() const {
 inline bool Node::Builder::isConst() {
   return which() == Node::CONST;
 }
-inline bool Node::Reader::hasConst() const {
-  if (which() != Node::CONST) return false;
-  return !_reader.getPointerField(3 * ::capnp::POINTERS).isNull()
-      || !_reader.getPointerField(4 * ::capnp::POINTERS).isNull();
-}
-inline bool Node::Builder::hasConst() {
-  if (which() != Node::CONST) return false;
-  return !_builder.getPointerField(3 * ::capnp::POINTERS).isNull()
-      || !_builder.getPointerField(4 * ::capnp::POINTERS).isNull();
-}
 inline Node::Const::Reader Node::Reader::getConst() const {
   KJ_IREQUIRE(which() == Node::CONST,
               "Must check which() before get()ing a union member.");
@@ -3274,38 +3036,6 @@ inline bool Node::Reader::isAnnotation() const {
 }
 inline bool Node::Builder::isAnnotation() {
   return which() == Node::ANNOTATION;
-}
-inline bool Node::Reader::hasAnnotation() const {
-  if (which() != Node::ANNOTATION) return false;
-  return _reader.getDataField<bool>(112 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField<bool>(113 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField<bool>(114 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField<bool>(115 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField<bool>(116 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField<bool>(117 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField<bool>(118 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField<bool>(119 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField<bool>(120 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField<bool>(121 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField<bool>(122 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField<bool>(123 * ::capnp::ELEMENTS) != 0
-      || !_reader.getPointerField(3 * ::capnp::POINTERS).isNull();
-}
-inline bool Node::Builder::hasAnnotation() {
-  if (which() != Node::ANNOTATION) return false;
-  return _builder.getDataField<bool>(112 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField<bool>(113 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField<bool>(114 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField<bool>(115 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField<bool>(116 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField<bool>(117 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField<bool>(118 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField<bool>(119 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField<bool>(120 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField<bool>(121 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField<bool>(122 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField<bool>(123 * ::capnp::ELEMENTS) != 0
-      || !_builder.getPointerField(3 * ::capnp::POINTERS).isNull();
 }
 inline Node::Annotation::Reader Node::Reader::getAnnotation() const {
   KJ_IREQUIRE(which() == Node::ANNOTATION,
@@ -3367,13 +3097,6 @@ inline ::capnp::Orphan< ::capnp::Text> Node::NestedNode::Builder::disownName() {
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Node::NestedNode::Reader::hasId() const {
-  return _reader.hasDataField< ::uint64_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::NestedNode::Builder::hasId() {
-  return _builder.hasDataField< ::uint64_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint64_t Node::NestedNode::Reader::getId() const {
   return _reader.getDataField< ::uint64_t>(
       0 * ::capnp::ELEMENTS);
@@ -3388,13 +3111,6 @@ inline void Node::NestedNode::Builder::setId( ::uint64_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Struct::Reader::hasDataWordCount() const {
-  return _reader.hasDataField< ::uint16_t>(7 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Struct::Builder::hasDataWordCount() {
-  return _builder.hasDataField< ::uint16_t>(7 * ::capnp::ELEMENTS);
-}
 inline  ::uint16_t Node::Struct::Reader::getDataWordCount() const {
   return _reader.getDataField< ::uint16_t>(
       7 * ::capnp::ELEMENTS);
@@ -3409,13 +3125,6 @@ inline void Node::Struct::Builder::setDataWordCount( ::uint16_t value) {
       7 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Struct::Reader::hasPointerCount() const {
-  return _reader.hasDataField< ::uint16_t>(12 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Struct::Builder::hasPointerCount() {
-  return _builder.hasDataField< ::uint16_t>(12 * ::capnp::ELEMENTS);
-}
 inline  ::uint16_t Node::Struct::Reader::getPointerCount() const {
   return _reader.getDataField< ::uint16_t>(
       12 * ::capnp::ELEMENTS);
@@ -3430,13 +3139,6 @@ inline void Node::Struct::Builder::setPointerCount( ::uint16_t value) {
       12 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Struct::Reader::hasPreferredListEncoding() const {
-  return _reader.hasDataField< ::capnp::schema::ElementSize>(13 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Struct::Builder::hasPreferredListEncoding() {
-  return _builder.hasDataField< ::capnp::schema::ElementSize>(13 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::schema::ElementSize Node::Struct::Reader::getPreferredListEncoding() const {
   return _reader.getDataField< ::capnp::schema::ElementSize>(
       13 * ::capnp::ELEMENTS);
@@ -3451,13 +3153,6 @@ inline void Node::Struct::Builder::setPreferredListEncoding( ::capnp::schema::El
       13 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Struct::Reader::hasIsGroup() const {
-  return _reader.hasDataField<bool>(224 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Struct::Builder::hasIsGroup() {
-  return _builder.hasDataField<bool>(224 * ::capnp::ELEMENTS);
-}
 inline bool Node::Struct::Reader::getIsGroup() const {
   return _reader.getDataField<bool>(
       224 * ::capnp::ELEMENTS);
@@ -3472,13 +3167,6 @@ inline void Node::Struct::Builder::setIsGroup(bool value) {
       224 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Struct::Reader::hasDiscriminantCount() const {
-  return _reader.hasDataField< ::uint16_t>(15 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Struct::Builder::hasDiscriminantCount() {
-  return _builder.hasDataField< ::uint16_t>(15 * ::capnp::ELEMENTS);
-}
 inline  ::uint16_t Node::Struct::Reader::getDiscriminantCount() const {
   return _reader.getDataField< ::uint16_t>(
       15 * ::capnp::ELEMENTS);
@@ -3493,13 +3181,6 @@ inline void Node::Struct::Builder::setDiscriminantCount( ::uint16_t value) {
       15 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Struct::Reader::hasDiscriminantOffset() const {
-  return _reader.hasDataField< ::uint32_t>(8 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Struct::Builder::hasDiscriminantOffset() {
-  return _builder.hasDataField< ::uint32_t>(8 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Node::Struct::Reader::getDiscriminantOffset() const {
   return _reader.getDataField< ::uint32_t>(
       8 * ::capnp::ELEMENTS);
@@ -3751,13 +3432,6 @@ inline ::capnp::Orphan< ::capnp::schema::Type> Node::Annotation::Builder::disown
       _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 
-inline bool Node::Annotation::Reader::hasTargetsFile() const {
-  return _reader.hasDataField<bool>(112 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Annotation::Builder::hasTargetsFile() {
-  return _builder.hasDataField<bool>(112 * ::capnp::ELEMENTS);
-}
 inline bool Node::Annotation::Reader::getTargetsFile() const {
   return _reader.getDataField<bool>(
       112 * ::capnp::ELEMENTS);
@@ -3772,13 +3446,6 @@ inline void Node::Annotation::Builder::setTargetsFile(bool value) {
       112 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Annotation::Reader::hasTargetsConst() const {
-  return _reader.hasDataField<bool>(113 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Annotation::Builder::hasTargetsConst() {
-  return _builder.hasDataField<bool>(113 * ::capnp::ELEMENTS);
-}
 inline bool Node::Annotation::Reader::getTargetsConst() const {
   return _reader.getDataField<bool>(
       113 * ::capnp::ELEMENTS);
@@ -3793,13 +3460,6 @@ inline void Node::Annotation::Builder::setTargetsConst(bool value) {
       113 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Annotation::Reader::hasTargetsEnum() const {
-  return _reader.hasDataField<bool>(114 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Annotation::Builder::hasTargetsEnum() {
-  return _builder.hasDataField<bool>(114 * ::capnp::ELEMENTS);
-}
 inline bool Node::Annotation::Reader::getTargetsEnum() const {
   return _reader.getDataField<bool>(
       114 * ::capnp::ELEMENTS);
@@ -3814,13 +3474,6 @@ inline void Node::Annotation::Builder::setTargetsEnum(bool value) {
       114 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Annotation::Reader::hasTargetsEnumerant() const {
-  return _reader.hasDataField<bool>(115 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Annotation::Builder::hasTargetsEnumerant() {
-  return _builder.hasDataField<bool>(115 * ::capnp::ELEMENTS);
-}
 inline bool Node::Annotation::Reader::getTargetsEnumerant() const {
   return _reader.getDataField<bool>(
       115 * ::capnp::ELEMENTS);
@@ -3835,13 +3488,6 @@ inline void Node::Annotation::Builder::setTargetsEnumerant(bool value) {
       115 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Annotation::Reader::hasTargetsStruct() const {
-  return _reader.hasDataField<bool>(116 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Annotation::Builder::hasTargetsStruct() {
-  return _builder.hasDataField<bool>(116 * ::capnp::ELEMENTS);
-}
 inline bool Node::Annotation::Reader::getTargetsStruct() const {
   return _reader.getDataField<bool>(
       116 * ::capnp::ELEMENTS);
@@ -3856,13 +3502,6 @@ inline void Node::Annotation::Builder::setTargetsStruct(bool value) {
       116 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Annotation::Reader::hasTargetsField() const {
-  return _reader.hasDataField<bool>(117 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Annotation::Builder::hasTargetsField() {
-  return _builder.hasDataField<bool>(117 * ::capnp::ELEMENTS);
-}
 inline bool Node::Annotation::Reader::getTargetsField() const {
   return _reader.getDataField<bool>(
       117 * ::capnp::ELEMENTS);
@@ -3877,13 +3516,6 @@ inline void Node::Annotation::Builder::setTargetsField(bool value) {
       117 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Annotation::Reader::hasTargetsUnion() const {
-  return _reader.hasDataField<bool>(118 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Annotation::Builder::hasTargetsUnion() {
-  return _builder.hasDataField<bool>(118 * ::capnp::ELEMENTS);
-}
 inline bool Node::Annotation::Reader::getTargetsUnion() const {
   return _reader.getDataField<bool>(
       118 * ::capnp::ELEMENTS);
@@ -3898,13 +3530,6 @@ inline void Node::Annotation::Builder::setTargetsUnion(bool value) {
       118 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Annotation::Reader::hasTargetsGroup() const {
-  return _reader.hasDataField<bool>(119 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Annotation::Builder::hasTargetsGroup() {
-  return _builder.hasDataField<bool>(119 * ::capnp::ELEMENTS);
-}
 inline bool Node::Annotation::Reader::getTargetsGroup() const {
   return _reader.getDataField<bool>(
       119 * ::capnp::ELEMENTS);
@@ -3919,13 +3544,6 @@ inline void Node::Annotation::Builder::setTargetsGroup(bool value) {
       119 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Annotation::Reader::hasTargetsInterface() const {
-  return _reader.hasDataField<bool>(120 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Annotation::Builder::hasTargetsInterface() {
-  return _builder.hasDataField<bool>(120 * ::capnp::ELEMENTS);
-}
 inline bool Node::Annotation::Reader::getTargetsInterface() const {
   return _reader.getDataField<bool>(
       120 * ::capnp::ELEMENTS);
@@ -3940,13 +3558,6 @@ inline void Node::Annotation::Builder::setTargetsInterface(bool value) {
       120 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Annotation::Reader::hasTargetsMethod() const {
-  return _reader.hasDataField<bool>(121 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Annotation::Builder::hasTargetsMethod() {
-  return _builder.hasDataField<bool>(121 * ::capnp::ELEMENTS);
-}
 inline bool Node::Annotation::Reader::getTargetsMethod() const {
   return _reader.getDataField<bool>(
       121 * ::capnp::ELEMENTS);
@@ -3961,13 +3572,6 @@ inline void Node::Annotation::Builder::setTargetsMethod(bool value) {
       121 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Annotation::Reader::hasTargetsParam() const {
-  return _reader.hasDataField<bool>(122 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Annotation::Builder::hasTargetsParam() {
-  return _builder.hasDataField<bool>(122 * ::capnp::ELEMENTS);
-}
 inline bool Node::Annotation::Reader::getTargetsParam() const {
   return _reader.getDataField<bool>(
       122 * ::capnp::ELEMENTS);
@@ -3982,13 +3586,6 @@ inline void Node::Annotation::Builder::setTargetsParam(bool value) {
       122 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Node::Annotation::Reader::hasTargetsAnnotation() const {
-  return _reader.hasDataField<bool>(123 * ::capnp::ELEMENTS);
-}
-
-inline bool Node::Annotation::Builder::hasTargetsAnnotation() {
-  return _builder.hasDataField<bool>(123 * ::capnp::ELEMENTS);
-}
 inline bool Node::Annotation::Reader::getTargetsAnnotation() const {
   return _reader.getDataField<bool>(
       123 * ::capnp::ELEMENTS);
@@ -4042,13 +3639,6 @@ inline ::capnp::Orphan< ::capnp::Text> Field::Builder::disownName() {
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Field::Reader::hasCodeOrder() const {
-  return _reader.hasDataField< ::uint16_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Field::Builder::hasCodeOrder() {
-  return _builder.hasDataField< ::uint16_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint16_t Field::Reader::getCodeOrder() const {
   return _reader.getDataField< ::uint16_t>(
       0 * ::capnp::ELEMENTS);
@@ -4095,13 +3685,6 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>> Field::Buil
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
-inline bool Field::Reader::hasDiscriminantValue() const {
-  return _reader.hasDataField< ::uint16_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Field::Builder::hasDiscriminantValue() {
-  return _builder.hasDataField< ::uint16_t>(1 * ::capnp::ELEMENTS);
-}
 inline  ::uint16_t Field::Reader::getDiscriminantValue() const {
   return _reader.getDataField< ::uint16_t>(
       1 * ::capnp::ELEMENTS, 65535u);
@@ -4121,20 +3704,6 @@ inline bool Field::Reader::isSlot() const {
 }
 inline bool Field::Builder::isSlot() {
   return which() == Field::SLOT;
-}
-inline bool Field::Reader::hasSlot() const {
-  if (which() != Field::SLOT) return false;
-  return _reader.getDataField< ::uint32_t>(1 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField<bool>(128 * ::capnp::ELEMENTS) != 0
-      || !_reader.getPointerField(2 * ::capnp::POINTERS).isNull()
-      || !_reader.getPointerField(3 * ::capnp::POINTERS).isNull();
-}
-inline bool Field::Builder::hasSlot() {
-  if (which() != Field::SLOT) return false;
-  return _builder.getDataField< ::uint32_t>(1 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField<bool>(128 * ::capnp::ELEMENTS) != 0
-      || !_builder.getPointerField(2 * ::capnp::POINTERS).isNull()
-      || !_builder.getPointerField(3 * ::capnp::POINTERS).isNull();
 }
 inline Field::Slot::Reader Field::Reader::getSlot() const {
   KJ_IREQUIRE(which() == Field::SLOT,
@@ -4161,14 +3730,6 @@ inline bool Field::Reader::isGroup() const {
 inline bool Field::Builder::isGroup() {
   return which() == Field::GROUP;
 }
-inline bool Field::Reader::hasGroup() const {
-  if (which() != Field::GROUP) return false;
-  return _reader.getDataField< ::uint64_t>(2 * ::capnp::ELEMENTS) != 0;
-}
-inline bool Field::Builder::hasGroup() {
-  if (which() != Field::GROUP) return false;
-  return _builder.getDataField< ::uint64_t>(2 * ::capnp::ELEMENTS) != 0;
-}
 inline Field::Group::Reader Field::Reader::getGroup() const {
   KJ_IREQUIRE(which() == Field::GROUP,
               "Must check which() before get()ing a union member.");
@@ -4185,14 +3746,6 @@ inline Field::Group::Builder Field::Builder::initGroup() {
   _builder.setDataField< ::uint64_t>(2 * ::capnp::ELEMENTS, 0);
   return Field::Group::Builder(_builder);
 }
-inline bool Field::Reader::hasOrdinal() const {
-  return _reader.getDataField< ::uint16_t>(5 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField< ::uint16_t>(6 * ::capnp::ELEMENTS) != 0;
-}
-inline bool Field::Builder::hasOrdinal() {
-  return _builder.getDataField< ::uint16_t>(5 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField< ::uint16_t>(6 * ::capnp::ELEMENTS) != 0;
-}
 inline Field::Ordinal::Reader Field::Reader::getOrdinal() const {
   return Field::Ordinal::Reader(_reader);
 }
@@ -4206,13 +3759,6 @@ inline Field::Ordinal::Builder Field::Builder::initOrdinal() {
   _builder.setDataField< ::uint16_t>(5 * ::capnp::ELEMENTS, 0);
   _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
   return Field::Ordinal::Builder(_builder);
-}
-inline bool Field::Slot::Reader::hasOffset() const {
-  return _reader.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Field::Slot::Builder::hasOffset() {
-  return _builder.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
 }
 inline  ::uint32_t Field::Slot::Reader::getOffset() const {
   return _reader.getDataField< ::uint32_t>(
@@ -4298,13 +3844,6 @@ inline ::capnp::Orphan< ::capnp::schema::Value> Field::Slot::Builder::disownDefa
       _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 
-inline bool Field::Slot::Reader::hasHadExplicitDefault() const {
-  return _reader.hasDataField<bool>(128 * ::capnp::ELEMENTS);
-}
-
-inline bool Field::Slot::Builder::hasHadExplicitDefault() {
-  return _builder.hasDataField<bool>(128 * ::capnp::ELEMENTS);
-}
 inline bool Field::Slot::Reader::getHadExplicitDefault() const {
   return _reader.getDataField<bool>(
       128 * ::capnp::ELEMENTS);
@@ -4319,13 +3858,6 @@ inline void Field::Slot::Builder::setHadExplicitDefault(bool value) {
       128 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Field::Group::Reader::hasTypeId() const {
-  return _reader.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
-}
-
-inline bool Field::Group::Builder::hasTypeId() {
-  return _builder.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
-}
 inline  ::uint64_t Field::Group::Reader::getTypeId() const {
   return _reader.getDataField< ::uint64_t>(
       2 * ::capnp::ELEMENTS);
@@ -4353,15 +3885,6 @@ inline bool Field::Ordinal::Reader::isImplicit() const {
 inline bool Field::Ordinal::Builder::isImplicit() {
   return which() == Field::Ordinal::IMPLICIT;
 }
-inline bool Field::Ordinal::Reader::hasImplicit() const {
-  if (which() != Field::Ordinal::IMPLICIT) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Field::Ordinal::Builder::hasImplicit() {
-  if (which() != Field::Ordinal::IMPLICIT) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::Void Field::Ordinal::Reader::getImplicit() const {
   KJ_IREQUIRE(which() == Field::Ordinal::IMPLICIT,
               "Must check which() before get()ing a union member.");
@@ -4387,15 +3910,6 @@ inline bool Field::Ordinal::Reader::isExplicit() const {
 }
 inline bool Field::Ordinal::Builder::isExplicit() {
   return which() == Field::Ordinal::EXPLICIT;
-}
-inline bool Field::Ordinal::Reader::hasExplicit() const {
-  if (which() != Field::Ordinal::EXPLICIT) return false;
-  return _reader.hasDataField< ::uint16_t>(6 * ::capnp::ELEMENTS);
-}
-
-inline bool Field::Ordinal::Builder::hasExplicit() {
-  if (which() != Field::Ordinal::EXPLICIT) return false;
-  return _builder.hasDataField< ::uint16_t>(6 * ::capnp::ELEMENTS);
 }
 inline  ::uint16_t Field::Ordinal::Reader::getExplicit() const {
   KJ_IREQUIRE(which() == Field::Ordinal::EXPLICIT,
@@ -4449,13 +3963,6 @@ inline ::capnp::Orphan< ::capnp::Text> Enumerant::Builder::disownName() {
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Enumerant::Reader::hasCodeOrder() const {
-  return _reader.hasDataField< ::uint16_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Enumerant::Builder::hasCodeOrder() {
-  return _builder.hasDataField< ::uint16_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint16_t Enumerant::Reader::getCodeOrder() const {
   return _reader.getDataField< ::uint16_t>(
       0 * ::capnp::ELEMENTS);
@@ -4534,13 +4041,6 @@ inline ::capnp::Orphan< ::capnp::Text> Method::Builder::disownName() {
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Method::Reader::hasCodeOrder() const {
-  return _reader.hasDataField< ::uint16_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Method::Builder::hasCodeOrder() {
-  return _builder.hasDataField< ::uint16_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint16_t Method::Reader::getCodeOrder() const {
   return _reader.getDataField< ::uint16_t>(
       0 * ::capnp::ELEMENTS);
@@ -4555,13 +4055,6 @@ inline void Method::Builder::setCodeOrder( ::uint16_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Method::Reader::hasParamStructType() const {
-  return _reader.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Method::Builder::hasParamStructType() {
-  return _builder.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
-}
 inline  ::uint64_t Method::Reader::getParamStructType() const {
   return _reader.getDataField< ::uint64_t>(
       1 * ::capnp::ELEMENTS);
@@ -4576,13 +4069,6 @@ inline void Method::Builder::setParamStructType( ::uint64_t value) {
       1 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Method::Reader::hasResultStructType() const {
-  return _reader.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
-}
-
-inline bool Method::Builder::hasResultStructType() {
-  return _builder.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
-}
 inline  ::uint64_t Method::Reader::getResultStructType() const {
   return _reader.getDataField< ::uint64_t>(
       2 * ::capnp::ELEMENTS);
@@ -4642,15 +4128,6 @@ inline bool Type::Reader::isVoid() const {
 inline bool Type::Builder::isVoid() {
   return which() == Type::VOID;
 }
-inline bool Type::Reader::hasVoid() const {
-  if (which() != Type::VOID) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Builder::hasVoid() {
-  if (which() != Type::VOID) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::Void Type::Reader::getVoid() const {
   KJ_IREQUIRE(which() == Type::VOID,
               "Must check which() before get()ing a union member.");
@@ -4676,15 +4153,6 @@ inline bool Type::Reader::isBool() const {
 }
 inline bool Type::Builder::isBool() {
   return which() == Type::BOOL;
-}
-inline bool Type::Reader::hasBool() const {
-  if (which() != Type::BOOL) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Builder::hasBool() {
-  if (which() != Type::BOOL) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
 }
 inline  ::capnp::Void Type::Reader::getBool() const {
   KJ_IREQUIRE(which() == Type::BOOL,
@@ -4712,15 +4180,6 @@ inline bool Type::Reader::isInt8() const {
 inline bool Type::Builder::isInt8() {
   return which() == Type::INT8;
 }
-inline bool Type::Reader::hasInt8() const {
-  if (which() != Type::INT8) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Builder::hasInt8() {
-  if (which() != Type::INT8) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::Void Type::Reader::getInt8() const {
   KJ_IREQUIRE(which() == Type::INT8,
               "Must check which() before get()ing a union member.");
@@ -4746,15 +4205,6 @@ inline bool Type::Reader::isInt16() const {
 }
 inline bool Type::Builder::isInt16() {
   return which() == Type::INT16;
-}
-inline bool Type::Reader::hasInt16() const {
-  if (which() != Type::INT16) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Builder::hasInt16() {
-  if (which() != Type::INT16) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
 }
 inline  ::capnp::Void Type::Reader::getInt16() const {
   KJ_IREQUIRE(which() == Type::INT16,
@@ -4782,15 +4232,6 @@ inline bool Type::Reader::isInt32() const {
 inline bool Type::Builder::isInt32() {
   return which() == Type::INT32;
 }
-inline bool Type::Reader::hasInt32() const {
-  if (which() != Type::INT32) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Builder::hasInt32() {
-  if (which() != Type::INT32) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::Void Type::Reader::getInt32() const {
   KJ_IREQUIRE(which() == Type::INT32,
               "Must check which() before get()ing a union member.");
@@ -4816,15 +4257,6 @@ inline bool Type::Reader::isInt64() const {
 }
 inline bool Type::Builder::isInt64() {
   return which() == Type::INT64;
-}
-inline bool Type::Reader::hasInt64() const {
-  if (which() != Type::INT64) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Builder::hasInt64() {
-  if (which() != Type::INT64) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
 }
 inline  ::capnp::Void Type::Reader::getInt64() const {
   KJ_IREQUIRE(which() == Type::INT64,
@@ -4852,15 +4284,6 @@ inline bool Type::Reader::isUint8() const {
 inline bool Type::Builder::isUint8() {
   return which() == Type::UINT8;
 }
-inline bool Type::Reader::hasUint8() const {
-  if (which() != Type::UINT8) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Builder::hasUint8() {
-  if (which() != Type::UINT8) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::Void Type::Reader::getUint8() const {
   KJ_IREQUIRE(which() == Type::UINT8,
               "Must check which() before get()ing a union member.");
@@ -4886,15 +4309,6 @@ inline bool Type::Reader::isUint16() const {
 }
 inline bool Type::Builder::isUint16() {
   return which() == Type::UINT16;
-}
-inline bool Type::Reader::hasUint16() const {
-  if (which() != Type::UINT16) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Builder::hasUint16() {
-  if (which() != Type::UINT16) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
 }
 inline  ::capnp::Void Type::Reader::getUint16() const {
   KJ_IREQUIRE(which() == Type::UINT16,
@@ -4922,15 +4336,6 @@ inline bool Type::Reader::isUint32() const {
 inline bool Type::Builder::isUint32() {
   return which() == Type::UINT32;
 }
-inline bool Type::Reader::hasUint32() const {
-  if (which() != Type::UINT32) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Builder::hasUint32() {
-  if (which() != Type::UINT32) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::Void Type::Reader::getUint32() const {
   KJ_IREQUIRE(which() == Type::UINT32,
               "Must check which() before get()ing a union member.");
@@ -4956,15 +4361,6 @@ inline bool Type::Reader::isUint64() const {
 }
 inline bool Type::Builder::isUint64() {
   return which() == Type::UINT64;
-}
-inline bool Type::Reader::hasUint64() const {
-  if (which() != Type::UINT64) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Builder::hasUint64() {
-  if (which() != Type::UINT64) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
 }
 inline  ::capnp::Void Type::Reader::getUint64() const {
   KJ_IREQUIRE(which() == Type::UINT64,
@@ -4992,15 +4388,6 @@ inline bool Type::Reader::isFloat32() const {
 inline bool Type::Builder::isFloat32() {
   return which() == Type::FLOAT32;
 }
-inline bool Type::Reader::hasFloat32() const {
-  if (which() != Type::FLOAT32) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Builder::hasFloat32() {
-  if (which() != Type::FLOAT32) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::Void Type::Reader::getFloat32() const {
   KJ_IREQUIRE(which() == Type::FLOAT32,
               "Must check which() before get()ing a union member.");
@@ -5026,15 +4413,6 @@ inline bool Type::Reader::isFloat64() const {
 }
 inline bool Type::Builder::isFloat64() {
   return which() == Type::FLOAT64;
-}
-inline bool Type::Reader::hasFloat64() const {
-  if (which() != Type::FLOAT64) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Builder::hasFloat64() {
-  if (which() != Type::FLOAT64) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
 }
 inline  ::capnp::Void Type::Reader::getFloat64() const {
   KJ_IREQUIRE(which() == Type::FLOAT64,
@@ -5062,15 +4440,6 @@ inline bool Type::Reader::isText() const {
 inline bool Type::Builder::isText() {
   return which() == Type::TEXT;
 }
-inline bool Type::Reader::hasText() const {
-  if (which() != Type::TEXT) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Builder::hasText() {
-  if (which() != Type::TEXT) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::Void Type::Reader::getText() const {
   KJ_IREQUIRE(which() == Type::TEXT,
               "Must check which() before get()ing a union member.");
@@ -5096,15 +4465,6 @@ inline bool Type::Reader::isData() const {
 }
 inline bool Type::Builder::isData() {
   return which() == Type::DATA;
-}
-inline bool Type::Reader::hasData() const {
-  if (which() != Type::DATA) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Builder::hasData() {
-  if (which() != Type::DATA) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
 }
 inline  ::capnp::Void Type::Reader::getData() const {
   KJ_IREQUIRE(which() == Type::DATA,
@@ -5132,14 +4492,6 @@ inline bool Type::Reader::isList() const {
 inline bool Type::Builder::isList() {
   return which() == Type::LIST;
 }
-inline bool Type::Reader::hasList() const {
-  if (which() != Type::LIST) return false;
-  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
-inline bool Type::Builder::hasList() {
-  if (which() != Type::LIST) return false;
-  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
 inline Type::List::Reader Type::Reader::getList() const {
   KJ_IREQUIRE(which() == Type::LIST,
               "Must check which() before get()ing a union member.");
@@ -5161,14 +4513,6 @@ inline bool Type::Reader::isEnum() const {
 }
 inline bool Type::Builder::isEnum() {
   return which() == Type::ENUM;
-}
-inline bool Type::Reader::hasEnum() const {
-  if (which() != Type::ENUM) return false;
-  return _reader.getDataField< ::uint64_t>(1 * ::capnp::ELEMENTS) != 0;
-}
-inline bool Type::Builder::hasEnum() {
-  if (which() != Type::ENUM) return false;
-  return _builder.getDataField< ::uint64_t>(1 * ::capnp::ELEMENTS) != 0;
 }
 inline Type::Enum::Reader Type::Reader::getEnum() const {
   KJ_IREQUIRE(which() == Type::ENUM,
@@ -5192,14 +4536,6 @@ inline bool Type::Reader::isStruct() const {
 inline bool Type::Builder::isStruct() {
   return which() == Type::STRUCT;
 }
-inline bool Type::Reader::hasStruct() const {
-  if (which() != Type::STRUCT) return false;
-  return _reader.getDataField< ::uint64_t>(1 * ::capnp::ELEMENTS) != 0;
-}
-inline bool Type::Builder::hasStruct() {
-  if (which() != Type::STRUCT) return false;
-  return _builder.getDataField< ::uint64_t>(1 * ::capnp::ELEMENTS) != 0;
-}
 inline Type::Struct::Reader Type::Reader::getStruct() const {
   KJ_IREQUIRE(which() == Type::STRUCT,
               "Must check which() before get()ing a union member.");
@@ -5222,14 +4558,6 @@ inline bool Type::Reader::isInterface() const {
 inline bool Type::Builder::isInterface() {
   return which() == Type::INTERFACE;
 }
-inline bool Type::Reader::hasInterface() const {
-  if (which() != Type::INTERFACE) return false;
-  return _reader.getDataField< ::uint64_t>(1 * ::capnp::ELEMENTS) != 0;
-}
-inline bool Type::Builder::hasInterface() {
-  if (which() != Type::INTERFACE) return false;
-  return _builder.getDataField< ::uint64_t>(1 * ::capnp::ELEMENTS) != 0;
-}
 inline Type::Interface::Reader Type::Reader::getInterface() const {
   KJ_IREQUIRE(which() == Type::INTERFACE,
               "Must check which() before get()ing a union member.");
@@ -5251,15 +4579,6 @@ inline bool Type::Reader::isObject() const {
 }
 inline bool Type::Builder::isObject() {
   return which() == Type::OBJECT;
-}
-inline bool Type::Reader::hasObject() const {
-  if (which() != Type::OBJECT) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Builder::hasObject() {
-  if (which() != Type::OBJECT) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
 }
 inline  ::capnp::Void Type::Reader::getObject() const {
   KJ_IREQUIRE(which() == Type::OBJECT,
@@ -5316,13 +4635,6 @@ inline ::capnp::Orphan< ::capnp::schema::Type> Type::List::Builder::disownElemen
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Type::Enum::Reader::hasTypeId() const {
-  return _reader.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Enum::Builder::hasTypeId() {
-  return _builder.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
-}
 inline  ::uint64_t Type::Enum::Reader::getTypeId() const {
   return _reader.getDataField< ::uint64_t>(
       1 * ::capnp::ELEMENTS);
@@ -5337,13 +4649,6 @@ inline void Type::Enum::Builder::setTypeId( ::uint64_t value) {
       1 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Type::Struct::Reader::hasTypeId() const {
-  return _reader.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Struct::Builder::hasTypeId() {
-  return _builder.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
-}
 inline  ::uint64_t Type::Struct::Reader::getTypeId() const {
   return _reader.getDataField< ::uint64_t>(
       1 * ::capnp::ELEMENTS);
@@ -5358,13 +4663,6 @@ inline void Type::Struct::Builder::setTypeId( ::uint64_t value) {
       1 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Type::Interface::Reader::hasTypeId() const {
-  return _reader.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Type::Interface::Builder::hasTypeId() {
-  return _builder.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
-}
 inline  ::uint64_t Type::Interface::Reader::getTypeId() const {
   return _reader.getDataField< ::uint64_t>(
       1 * ::capnp::ELEMENTS);
@@ -5392,15 +4690,6 @@ inline bool Value::Reader::isVoid() const {
 inline bool Value::Builder::isVoid() {
   return which() == Value::VOID;
 }
-inline bool Value::Reader::hasVoid() const {
-  if (which() != Value::VOID) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Value::Builder::hasVoid() {
-  if (which() != Value::VOID) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::Void Value::Reader::getVoid() const {
   KJ_IREQUIRE(which() == Value::VOID,
               "Must check which() before get()ing a union member.");
@@ -5426,15 +4715,6 @@ inline bool Value::Reader::isBool() const {
 }
 inline bool Value::Builder::isBool() {
   return which() == Value::BOOL;
-}
-inline bool Value::Reader::hasBool() const {
-  if (which() != Value::BOOL) return false;
-  return _reader.hasDataField<bool>(16 * ::capnp::ELEMENTS);
-}
-
-inline bool Value::Builder::hasBool() {
-  if (which() != Value::BOOL) return false;
-  return _builder.hasDataField<bool>(16 * ::capnp::ELEMENTS);
 }
 inline bool Value::Reader::getBool() const {
   KJ_IREQUIRE(which() == Value::BOOL,
@@ -5462,15 +4742,6 @@ inline bool Value::Reader::isInt8() const {
 inline bool Value::Builder::isInt8() {
   return which() == Value::INT8;
 }
-inline bool Value::Reader::hasInt8() const {
-  if (which() != Value::INT8) return false;
-  return _reader.hasDataField< ::int8_t>(2 * ::capnp::ELEMENTS);
-}
-
-inline bool Value::Builder::hasInt8() {
-  if (which() != Value::INT8) return false;
-  return _builder.hasDataField< ::int8_t>(2 * ::capnp::ELEMENTS);
-}
 inline  ::int8_t Value::Reader::getInt8() const {
   KJ_IREQUIRE(which() == Value::INT8,
               "Must check which() before get()ing a union member.");
@@ -5496,15 +4767,6 @@ inline bool Value::Reader::isInt16() const {
 }
 inline bool Value::Builder::isInt16() {
   return which() == Value::INT16;
-}
-inline bool Value::Reader::hasInt16() const {
-  if (which() != Value::INT16) return false;
-  return _reader.hasDataField< ::int16_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Value::Builder::hasInt16() {
-  if (which() != Value::INT16) return false;
-  return _builder.hasDataField< ::int16_t>(1 * ::capnp::ELEMENTS);
 }
 inline  ::int16_t Value::Reader::getInt16() const {
   KJ_IREQUIRE(which() == Value::INT16,
@@ -5532,15 +4794,6 @@ inline bool Value::Reader::isInt32() const {
 inline bool Value::Builder::isInt32() {
   return which() == Value::INT32;
 }
-inline bool Value::Reader::hasInt32() const {
-  if (which() != Value::INT32) return false;
-  return _reader.hasDataField< ::int32_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Value::Builder::hasInt32() {
-  if (which() != Value::INT32) return false;
-  return _builder.hasDataField< ::int32_t>(1 * ::capnp::ELEMENTS);
-}
 inline  ::int32_t Value::Reader::getInt32() const {
   KJ_IREQUIRE(which() == Value::INT32,
               "Must check which() before get()ing a union member.");
@@ -5566,15 +4819,6 @@ inline bool Value::Reader::isInt64() const {
 }
 inline bool Value::Builder::isInt64() {
   return which() == Value::INT64;
-}
-inline bool Value::Reader::hasInt64() const {
-  if (which() != Value::INT64) return false;
-  return _reader.hasDataField< ::int64_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Value::Builder::hasInt64() {
-  if (which() != Value::INT64) return false;
-  return _builder.hasDataField< ::int64_t>(1 * ::capnp::ELEMENTS);
 }
 inline  ::int64_t Value::Reader::getInt64() const {
   KJ_IREQUIRE(which() == Value::INT64,
@@ -5602,15 +4846,6 @@ inline bool Value::Reader::isUint8() const {
 inline bool Value::Builder::isUint8() {
   return which() == Value::UINT8;
 }
-inline bool Value::Reader::hasUint8() const {
-  if (which() != Value::UINT8) return false;
-  return _reader.hasDataField< ::uint8_t>(2 * ::capnp::ELEMENTS);
-}
-
-inline bool Value::Builder::hasUint8() {
-  if (which() != Value::UINT8) return false;
-  return _builder.hasDataField< ::uint8_t>(2 * ::capnp::ELEMENTS);
-}
 inline  ::uint8_t Value::Reader::getUint8() const {
   KJ_IREQUIRE(which() == Value::UINT8,
               "Must check which() before get()ing a union member.");
@@ -5636,15 +4871,6 @@ inline bool Value::Reader::isUint16() const {
 }
 inline bool Value::Builder::isUint16() {
   return which() == Value::UINT16;
-}
-inline bool Value::Reader::hasUint16() const {
-  if (which() != Value::UINT16) return false;
-  return _reader.hasDataField< ::uint16_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Value::Builder::hasUint16() {
-  if (which() != Value::UINT16) return false;
-  return _builder.hasDataField< ::uint16_t>(1 * ::capnp::ELEMENTS);
 }
 inline  ::uint16_t Value::Reader::getUint16() const {
   KJ_IREQUIRE(which() == Value::UINT16,
@@ -5672,15 +4898,6 @@ inline bool Value::Reader::isUint32() const {
 inline bool Value::Builder::isUint32() {
   return which() == Value::UINT32;
 }
-inline bool Value::Reader::hasUint32() const {
-  if (which() != Value::UINT32) return false;
-  return _reader.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Value::Builder::hasUint32() {
-  if (which() != Value::UINT32) return false;
-  return _builder.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Value::Reader::getUint32() const {
   KJ_IREQUIRE(which() == Value::UINT32,
               "Must check which() before get()ing a union member.");
@@ -5706,15 +4923,6 @@ inline bool Value::Reader::isUint64() const {
 }
 inline bool Value::Builder::isUint64() {
   return which() == Value::UINT64;
-}
-inline bool Value::Reader::hasUint64() const {
-  if (which() != Value::UINT64) return false;
-  return _reader.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Value::Builder::hasUint64() {
-  if (which() != Value::UINT64) return false;
-  return _builder.hasDataField< ::uint64_t>(1 * ::capnp::ELEMENTS);
 }
 inline  ::uint64_t Value::Reader::getUint64() const {
   KJ_IREQUIRE(which() == Value::UINT64,
@@ -5742,15 +4950,6 @@ inline bool Value::Reader::isFloat32() const {
 inline bool Value::Builder::isFloat32() {
   return which() == Value::FLOAT32;
 }
-inline bool Value::Reader::hasFloat32() const {
-  if (which() != Value::FLOAT32) return false;
-  return _reader.hasDataField<float>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Value::Builder::hasFloat32() {
-  if (which() != Value::FLOAT32) return false;
-  return _builder.hasDataField<float>(1 * ::capnp::ELEMENTS);
-}
 inline float Value::Reader::getFloat32() const {
   KJ_IREQUIRE(which() == Value::FLOAT32,
               "Must check which() before get()ing a union member.");
@@ -5776,15 +4975,6 @@ inline bool Value::Reader::isFloat64() const {
 }
 inline bool Value::Builder::isFloat64() {
   return which() == Value::FLOAT64;
-}
-inline bool Value::Reader::hasFloat64() const {
-  if (which() != Value::FLOAT64) return false;
-  return _reader.hasDataField<double>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Value::Builder::hasFloat64() {
-  if (which() != Value::FLOAT64) return false;
-  return _builder.hasDataField<double>(1 * ::capnp::ELEMENTS);
 }
 inline double Value::Reader::getFloat64() const {
   KJ_IREQUIRE(which() == Value::FLOAT64,
@@ -5951,15 +5141,6 @@ inline bool Value::Reader::isEnum() const {
 inline bool Value::Builder::isEnum() {
   return which() == Value::ENUM;
 }
-inline bool Value::Reader::hasEnum() const {
-  if (which() != Value::ENUM) return false;
-  return _reader.hasDataField< ::uint16_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Value::Builder::hasEnum() {
-  if (which() != Value::ENUM) return false;
-  return _builder.hasDataField< ::uint16_t>(1 * ::capnp::ELEMENTS);
-}
 inline  ::uint16_t Value::Reader::getEnum() const {
   KJ_IREQUIRE(which() == Value::ENUM,
               "Must check which() before get()ing a union member.");
@@ -6021,15 +5202,6 @@ inline bool Value::Reader::isInterface() const {
 inline bool Value::Builder::isInterface() {
   return which() == Value::INTERFACE;
 }
-inline bool Value::Reader::hasInterface() const {
-  if (which() != Value::INTERFACE) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Value::Builder::hasInterface() {
-  if (which() != Value::INTERFACE) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::Void Value::Reader::getInterface() const {
   KJ_IREQUIRE(which() == Value::INTERFACE,
               "Must check which() before get()ing a union member.");
@@ -6085,13 +5257,6 @@ inline ::capnp::ObjectPointer::Builder Value::Builder::initObject() {
   return result;
 }
 
-inline bool Annotation::Reader::hasId() const {
-  return _reader.hasDataField< ::uint64_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Annotation::Builder::hasId() {
-  return _builder.hasDataField< ::uint64_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint64_t Annotation::Reader::getId() const {
   return _reader.getDataField< ::uint64_t>(
       0 * ::capnp::ELEMENTS);
@@ -6205,13 +5370,6 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::Re
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
-inline bool CodeGeneratorRequest::RequestedFile::Reader::hasId() const {
-  return _reader.hasDataField< ::uint64_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool CodeGeneratorRequest::RequestedFile::Builder::hasId() {
-  return _builder.hasDataField< ::uint64_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint64_t CodeGeneratorRequest::RequestedFile::Reader::getId() const {
   return _reader.getDataField< ::uint64_t>(
       0 * ::capnp::ELEMENTS);
@@ -6290,13 +5448,6 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::CodeGeneratorRequest::Re
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
-inline bool CodeGeneratorRequest::RequestedFile::Import::Reader::hasId() const {
-  return _reader.hasDataField< ::uint64_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool CodeGeneratorRequest::RequestedFile::Import::Builder::hasId() {
-  return _builder.hasDataField< ::uint64_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint64_t CodeGeneratorRequest::RequestedFile::Import::Reader::getId() const {
   return _reader.getDataField< ::uint64_t>(
       0 * ::capnp::ELEMENTS);

@@ -129,7 +129,6 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasSide() const;
   inline  ::capnp::rpc::twoparty::Side getSide() const;
 
 private:
@@ -162,7 +161,6 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasSide();
   inline  ::capnp::rpc::twoparty::Side getSide();
   inline void setSide( ::capnp::rpc::twoparty::Side value);
 
@@ -203,7 +201,6 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasJoinId() const;
   inline  ::uint32_t getJoinId() const;
 
 private:
@@ -236,7 +233,6 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasJoinId();
   inline  ::uint32_t getJoinId();
   inline void setJoinId( ::uint32_t value);
 
@@ -411,13 +407,10 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasJoinId() const;
   inline  ::uint32_t getJoinId() const;
 
-  inline bool hasPartCount() const;
   inline  ::uint16_t getPartCount() const;
 
-  inline bool hasPartNum() const;
   inline  ::uint16_t getPartNum() const;
 
 private:
@@ -450,15 +443,12 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasJoinId();
   inline  ::uint32_t getJoinId();
   inline void setJoinId( ::uint32_t value);
 
-  inline bool hasPartCount();
   inline  ::uint16_t getPartCount();
   inline void setPartCount( ::uint16_t value);
 
-  inline bool hasPartNum();
   inline  ::uint16_t getPartNum();
   inline void setPartNum( ::uint16_t value);
 
@@ -499,10 +489,8 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasJoinId() const;
   inline  ::uint32_t getJoinId() const;
 
-  inline bool hasSucceeded() const;
   inline bool getSucceeded() const;
 
 private:
@@ -535,11 +523,9 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasJoinId();
   inline  ::uint32_t getJoinId();
   inline void setJoinId( ::uint32_t value);
 
-  inline bool hasSucceeded();
   inline bool getSucceeded();
   inline void setSucceeded(bool value);
 
@@ -571,13 +557,6 @@ private:
 
 // =======================================================================================
 
-inline bool SturdyRefHostId::Reader::hasSide() const {
-  return _reader.hasDataField< ::capnp::rpc::twoparty::Side>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool SturdyRefHostId::Builder::hasSide() {
-  return _builder.hasDataField< ::capnp::rpc::twoparty::Side>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::rpc::twoparty::Side SturdyRefHostId::Reader::getSide() const {
   return _reader.getDataField< ::capnp::rpc::twoparty::Side>(
       0 * ::capnp::ELEMENTS);
@@ -592,13 +571,6 @@ inline void SturdyRefHostId::Builder::setSide( ::capnp::rpc::twoparty::Side valu
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool ProvisionId::Reader::hasJoinId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool ProvisionId::Builder::hasJoinId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t ProvisionId::Reader::getJoinId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -613,13 +585,6 @@ inline void ProvisionId::Builder::setJoinId( ::uint32_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool JoinKeyPart::Reader::hasJoinId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool JoinKeyPart::Builder::hasJoinId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t JoinKeyPart::Reader::getJoinId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -634,13 +599,6 @@ inline void JoinKeyPart::Builder::setJoinId( ::uint32_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool JoinKeyPart::Reader::hasPartCount() const {
-  return _reader.hasDataField< ::uint16_t>(2 * ::capnp::ELEMENTS);
-}
-
-inline bool JoinKeyPart::Builder::hasPartCount() {
-  return _builder.hasDataField< ::uint16_t>(2 * ::capnp::ELEMENTS);
-}
 inline  ::uint16_t JoinKeyPart::Reader::getPartCount() const {
   return _reader.getDataField< ::uint16_t>(
       2 * ::capnp::ELEMENTS);
@@ -655,13 +613,6 @@ inline void JoinKeyPart::Builder::setPartCount( ::uint16_t value) {
       2 * ::capnp::ELEMENTS, value);
 }
 
-inline bool JoinKeyPart::Reader::hasPartNum() const {
-  return _reader.hasDataField< ::uint16_t>(3 * ::capnp::ELEMENTS);
-}
-
-inline bool JoinKeyPart::Builder::hasPartNum() {
-  return _builder.hasDataField< ::uint16_t>(3 * ::capnp::ELEMENTS);
-}
 inline  ::uint16_t JoinKeyPart::Reader::getPartNum() const {
   return _reader.getDataField< ::uint16_t>(
       3 * ::capnp::ELEMENTS);
@@ -676,13 +627,6 @@ inline void JoinKeyPart::Builder::setPartNum( ::uint16_t value) {
       3 * ::capnp::ELEMENTS, value);
 }
 
-inline bool JoinAnswer::Reader::hasJoinId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool JoinAnswer::Builder::hasJoinId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t JoinAnswer::Reader::getJoinId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -697,13 +641,6 @@ inline void JoinAnswer::Builder::setJoinId( ::uint32_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool JoinAnswer::Reader::hasSucceeded() const {
-  return _reader.hasDataField<bool>(32 * ::capnp::ELEMENTS);
-}
-
-inline bool JoinAnswer::Builder::hasSucceeded() {
-  return _builder.hasDataField<bool>(32 * ::capnp::ELEMENTS);
-}
 inline bool JoinAnswer::Reader::getSucceeded() const {
   return _reader.getDataField<bool>(
       32 * ::capnp::ELEMENTS);

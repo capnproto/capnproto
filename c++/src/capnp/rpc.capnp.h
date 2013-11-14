@@ -585,16 +585,12 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasQuestionId() const;
   inline  ::uint32_t getQuestionId() const;
 
-  inline bool hasTarget() const;
   inline Target::Reader getTarget() const;
 
-  inline bool hasInterfaceId() const;
   inline  ::uint64_t getInterfaceId() const;
 
-  inline bool hasMethodId() const;
   inline  ::uint16_t getMethodId() const;
 
   inline bool hasRequest() const;
@@ -630,19 +626,15 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasQuestionId();
   inline  ::uint32_t getQuestionId();
   inline void setQuestionId( ::uint32_t value);
 
-  inline bool hasTarget();
   inline Target::Builder getTarget();
   inline Target::Builder initTarget();
 
-  inline bool hasInterfaceId();
   inline  ::uint64_t getInterfaceId();
   inline void setInterfaceId( ::uint64_t value);
 
-  inline bool hasMethodId();
   inline  ::uint16_t getMethodId();
   inline void setMethodId( ::uint16_t value);
 
@@ -690,7 +682,6 @@ public:
 
   inline Which which() const;
   inline bool isExportedCap() const;
-  inline bool hasExportedCap() const;
   inline  ::uint32_t getExportedCap() const;
 
   inline bool isPromisedAnswer() const;
@@ -729,7 +720,6 @@ public:
 
   inline Which which();
   inline bool isExportedCap();
-  inline bool hasExportedCap();
   inline  ::uint32_t getExportedCap();
   inline void setExportedCap( ::uint32_t value);
 
@@ -779,7 +769,6 @@ public:
   }
 
   inline Which which() const;
-  inline bool hasQuestionId() const;
   inline  ::uint32_t getQuestionId() const;
 
   inline bool hasRetainedCaps() const;
@@ -794,11 +783,9 @@ public:
   inline  ::capnp::rpc::Exception::Reader getException() const;
 
   inline bool isCanceled() const;
-  inline bool hasCanceled() const;
   inline  ::capnp::Void getCanceled() const;
 
   inline bool isUnsupportedPipelineOp() const;
-  inline bool hasUnsupportedPipelineOp() const;
   inline  ::capnp::Void getUnsupportedPipelineOp() const;
 
 private:
@@ -832,7 +819,6 @@ public:
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
   inline Which which();
-  inline bool hasQuestionId();
   inline  ::uint32_t getQuestionId();
   inline void setQuestionId( ::uint32_t value);
 
@@ -858,12 +844,10 @@ public:
   inline ::capnp::Orphan< ::capnp::rpc::Exception> disownException();
 
   inline bool isCanceled();
-  inline bool hasCanceled();
   inline  ::capnp::Void getCanceled();
   inline void setCanceled( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isUnsupportedPipelineOp();
-  inline bool hasUnsupportedPipelineOp();
   inline  ::capnp::Void getUnsupportedPipelineOp();
   inline void setUnsupportedPipelineOp( ::capnp::Void value = ::capnp::VOID);
 
@@ -904,7 +888,6 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasQuestionId() const;
   inline  ::uint32_t getQuestionId() const;
 
   inline bool hasRetainedCaps() const;
@@ -940,7 +923,6 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasQuestionId();
   inline  ::uint32_t getQuestionId();
   inline void setQuestionId( ::uint32_t value);
 
@@ -990,7 +972,6 @@ public:
   }
 
   inline Which which() const;
-  inline bool hasPromiseId() const;
   inline  ::uint32_t getPromiseId() const;
 
   inline bool isCap() const;
@@ -1002,7 +983,6 @@ public:
   inline  ::capnp::rpc::Exception::Reader getException() const;
 
   inline bool isCanceled() const;
-  inline bool hasCanceled() const;
   inline  ::capnp::Void getCanceled() const;
 
 private:
@@ -1036,7 +1016,6 @@ public:
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
   inline Which which();
-  inline bool hasPromiseId();
   inline  ::uint32_t getPromiseId();
   inline void setPromiseId( ::uint32_t value);
 
@@ -1057,7 +1036,6 @@ public:
   inline ::capnp::Orphan< ::capnp::rpc::Exception> disownException();
 
   inline bool isCanceled();
-  inline bool hasCanceled();
   inline  ::capnp::Void getCanceled();
   inline void setCanceled( ::capnp::Void value = ::capnp::VOID);
 
@@ -1098,10 +1076,8 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasId() const;
   inline  ::uint32_t getId() const;
 
-  inline bool hasReferenceCount() const;
   inline  ::uint32_t getReferenceCount() const;
 
 private:
@@ -1134,11 +1110,9 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasId();
   inline  ::uint32_t getId();
   inline void setId( ::uint32_t value);
 
-  inline bool hasReferenceCount();
   inline  ::uint32_t getReferenceCount();
   inline void setReferenceCount( ::uint32_t value);
 
@@ -1179,10 +1153,8 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasQuestionId() const;
   inline  ::uint32_t getQuestionId() const;
 
-  inline bool hasTarget() const;
   inline Target::Reader getTarget() const;
 
 private:
@@ -1215,11 +1187,9 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasQuestionId();
   inline  ::uint32_t getQuestionId();
   inline void setQuestionId( ::uint32_t value);
 
-  inline bool hasTarget();
   inline Target::Builder getTarget();
   inline Target::Builder initTarget();
 
@@ -1263,7 +1233,6 @@ public:
 
   inline Which which() const;
   inline bool isExportedCap() const;
-  inline bool hasExportedCap() const;
   inline  ::uint32_t getExportedCap() const;
 
   inline bool isPromisedAnswer() const;
@@ -1302,7 +1271,6 @@ public:
 
   inline Which which();
   inline bool isExportedCap();
-  inline bool hasExportedCap();
   inline  ::uint32_t getExportedCap();
   inline void setExportedCap( ::uint32_t value);
 
@@ -1351,7 +1319,6 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasQuestionId() const;
   inline  ::uint32_t getQuestionId() const;
 
   inline bool hasObjectId() const;
@@ -1387,7 +1354,6 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasQuestionId();
   inline  ::uint32_t getQuestionId();
   inline void setQuestionId( ::uint32_t value);
 
@@ -1432,7 +1398,6 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasQuestionId() const;
   inline  ::uint32_t getQuestionId() const;
 
   inline bool hasObjectId() const;
@@ -1468,7 +1433,6 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasQuestionId();
   inline  ::uint32_t getQuestionId();
   inline void setQuestionId( ::uint32_t value);
 
@@ -1513,10 +1477,8 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasQuestionId() const;
   inline  ::uint32_t getQuestionId() const;
 
-  inline bool hasTarget() const;
   inline Target::Reader getTarget() const;
 
   inline bool hasRecipient() const;
@@ -1552,11 +1514,9 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasQuestionId();
   inline  ::uint32_t getQuestionId();
   inline void setQuestionId( ::uint32_t value);
 
-  inline bool hasTarget();
   inline Target::Builder getTarget();
   inline Target::Builder initTarget();
 
@@ -1604,7 +1564,6 @@ public:
 
   inline Which which() const;
   inline bool isExportedCap() const;
-  inline bool hasExportedCap() const;
   inline  ::uint32_t getExportedCap() const;
 
   inline bool isPromisedAnswer() const;
@@ -1643,7 +1602,6 @@ public:
 
   inline Which which();
   inline bool isExportedCap();
-  inline bool hasExportedCap();
   inline  ::uint32_t getExportedCap();
   inline void setExportedCap( ::uint32_t value);
 
@@ -1692,7 +1650,6 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasQuestionId() const;
   inline  ::uint32_t getQuestionId() const;
 
   inline bool hasProvision() const;
@@ -1728,7 +1685,6 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasQuestionId();
   inline  ::uint32_t getQuestionId();
   inline void setQuestionId( ::uint32_t value);
 
@@ -1773,10 +1729,8 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasQuestionId() const;
   inline  ::uint32_t getQuestionId() const;
 
-  inline bool hasCapId() const;
   inline  ::uint32_t getCapId() const;
 
   inline bool hasKeyPart() const;
@@ -1812,11 +1766,9 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasQuestionId();
   inline  ::uint32_t getQuestionId();
   inline void setQuestionId( ::uint32_t value);
 
-  inline bool hasCapId();
   inline  ::uint32_t getCapId();
   inline void setCapId( ::uint32_t value);
 
@@ -1863,15 +1815,12 @@ public:
 
   inline Which which() const;
   inline bool isSenderHosted() const;
-  inline bool hasSenderHosted() const;
   inline  ::uint32_t getSenderHosted() const;
 
   inline bool isSenderPromise() const;
-  inline bool hasSenderPromise() const;
   inline  ::uint32_t getSenderPromise() const;
 
   inline bool isReceiverHosted() const;
-  inline bool hasReceiverHosted() const;
   inline  ::uint32_t getReceiverHosted() const;
 
   inline bool isReceiverAnswer() const;
@@ -1914,17 +1863,14 @@ public:
 
   inline Which which();
   inline bool isSenderHosted();
-  inline bool hasSenderHosted();
   inline  ::uint32_t getSenderHosted();
   inline void setSenderHosted( ::uint32_t value);
 
   inline bool isSenderPromise();
-  inline bool hasSenderPromise();
   inline  ::uint32_t getSenderPromise();
   inline void setSenderPromise( ::uint32_t value);
 
   inline bool isReceiverHosted();
-  inline bool hasReceiverHosted();
   inline  ::uint32_t getReceiverHosted();
   inline void setReceiverHosted( ::uint32_t value);
 
@@ -1981,7 +1927,6 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline bool hasQuestionId() const;
   inline  ::uint32_t getQuestionId() const;
 
   inline bool hasTransform() const;
@@ -2017,7 +1962,6 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline bool hasQuestionId();
   inline  ::uint32_t getQuestionId();
   inline void setQuestionId( ::uint32_t value);
 
@@ -2067,11 +2011,9 @@ public:
 
   inline Which which() const;
   inline bool isNoop() const;
-  inline bool hasNoop() const;
   inline  ::capnp::Void getNoop() const;
 
   inline bool isGetPointerField() const;
-  inline bool hasGetPointerField() const;
   inline  ::uint16_t getGetPointerField() const;
 
 private:
@@ -2106,12 +2048,10 @@ public:
 
   inline Which which();
   inline bool isNoop();
-  inline bool hasNoop();
   inline  ::capnp::Void getNoop();
   inline void setNoop( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isGetPointerField();
-  inline bool hasGetPointerField();
   inline  ::uint16_t getGetPointerField();
   inline void setGetPointerField( ::uint16_t value);
 
@@ -2236,7 +2176,6 @@ public:
   inline bool hasId() const;
   inline ::capnp::ObjectPointer::Reader getId() const;
 
-  inline bool hasVineId() const;
   inline  ::uint32_t getVineId() const;
 
 private:
@@ -2273,7 +2212,6 @@ public:
   inline ::capnp::ObjectPointer::Builder getId();
   inline ::capnp::ObjectPointer::Builder initId();
 
-  inline bool hasVineId();
   inline  ::uint32_t getVineId();
   inline void setVineId( ::uint32_t value);
 
@@ -2317,10 +2255,8 @@ public:
   inline bool hasReason() const;
   inline  ::capnp::Text::Reader getReason() const;
 
-  inline bool hasIsCallersFault() const;
   inline bool getIsCallersFault() const;
 
-  inline bool hasDurability() const;
   inline  ::capnp::rpc::Exception::Durability getDurability() const;
 
 private:
@@ -2360,11 +2296,9 @@ public:
   inline void adoptReason(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownReason();
 
-  inline bool hasIsCallersFault();
   inline bool getIsCallersFault();
   inline void setIsCallersFault(bool value);
 
-  inline bool hasDurability();
   inline  ::capnp::rpc::Exception::Durability getDurability();
   inline void setDurability( ::capnp::rpc::Exception::Durability value);
 
@@ -3079,13 +3013,6 @@ inline ::capnp::Orphan< ::capnp::rpc::Join> Message::Builder::disownJoin() {
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Call::Reader::hasQuestionId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Call::Builder::hasQuestionId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Call::Reader::getQuestionId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -3100,16 +3027,6 @@ inline void Call::Builder::setQuestionId( ::uint32_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Call::Reader::hasTarget() const {
-  return _reader.getDataField< ::uint32_t>(1 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField< ::uint16_t>(4 * ::capnp::ELEMENTS) != 0
-      || !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
-inline bool Call::Builder::hasTarget() {
-  return _builder.getDataField< ::uint32_t>(1 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField< ::uint16_t>(4 * ::capnp::ELEMENTS) != 0
-      || !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
 inline Call::Target::Reader Call::Reader::getTarget() const {
   return Call::Target::Reader(_reader);
 }
@@ -3125,13 +3042,6 @@ inline Call::Target::Builder Call::Builder::initTarget() {
   _builder.getPointerField(0 * ::capnp::POINTERS).clear();
   return Call::Target::Builder(_builder);
 }
-inline bool Call::Reader::hasInterfaceId() const {
-  return _reader.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
-}
-
-inline bool Call::Builder::hasInterfaceId() {
-  return _builder.hasDataField< ::uint64_t>(2 * ::capnp::ELEMENTS);
-}
 inline  ::uint64_t Call::Reader::getInterfaceId() const {
   return _reader.getDataField< ::uint64_t>(
       2 * ::capnp::ELEMENTS);
@@ -3146,13 +3056,6 @@ inline void Call::Builder::setInterfaceId( ::uint64_t value) {
       2 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Call::Reader::hasMethodId() const {
-  return _reader.hasDataField< ::uint16_t>(5 * ::capnp::ELEMENTS);
-}
-
-inline bool Call::Builder::hasMethodId() {
-  return _builder.hasDataField< ::uint16_t>(5 * ::capnp::ELEMENTS);
-}
 inline  ::uint16_t Call::Reader::getMethodId() const {
   return _reader.getDataField< ::uint16_t>(
       5 * ::capnp::ELEMENTS);
@@ -3200,15 +3103,6 @@ inline bool Call::Target::Reader::isExportedCap() const {
 }
 inline bool Call::Target::Builder::isExportedCap() {
   return which() == Call::Target::EXPORTED_CAP;
-}
-inline bool Call::Target::Reader::hasExportedCap() const {
-  if (which() != Call::Target::EXPORTED_CAP) return false;
-  return _reader.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Call::Target::Builder::hasExportedCap() {
-  if (which() != Call::Target::EXPORTED_CAP) return false;
-  return _builder.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
 }
 inline  ::uint32_t Call::Target::Reader::getExportedCap() const {
   KJ_IREQUIRE(which() == Call::Target::EXPORTED_CAP,
@@ -3289,13 +3183,6 @@ inline Return::Which Return::Builder::which() {
   return _builder.getDataField<Which>(2 * ::capnp::ELEMENTS);
 }
 
-inline bool Return::Reader::hasQuestionId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Return::Builder::hasQuestionId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Return::Reader::getQuestionId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -3439,15 +3326,6 @@ inline bool Return::Reader::isCanceled() const {
 inline bool Return::Builder::isCanceled() {
   return which() == Return::CANCELED;
 }
-inline bool Return::Reader::hasCanceled() const {
-  if (which() != Return::CANCELED) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Return::Builder::hasCanceled() {
-  if (which() != Return::CANCELED) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::Void Return::Reader::getCanceled() const {
   KJ_IREQUIRE(which() == Return::CANCELED,
               "Must check which() before get()ing a union member.");
@@ -3474,15 +3352,6 @@ inline bool Return::Reader::isUnsupportedPipelineOp() const {
 inline bool Return::Builder::isUnsupportedPipelineOp() {
   return which() == Return::UNSUPPORTED_PIPELINE_OP;
 }
-inline bool Return::Reader::hasUnsupportedPipelineOp() const {
-  if (which() != Return::UNSUPPORTED_PIPELINE_OP) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Return::Builder::hasUnsupportedPipelineOp() {
-  if (which() != Return::UNSUPPORTED_PIPELINE_OP) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::Void Return::Reader::getUnsupportedPipelineOp() const {
   KJ_IREQUIRE(which() == Return::UNSUPPORTED_PIPELINE_OP,
               "Must check which() before get()ing a union member.");
@@ -3503,13 +3372,6 @@ inline void Return::Builder::setUnsupportedPipelineOp( ::capnp::Void value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Finish::Reader::hasQuestionId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Finish::Builder::hasQuestionId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Finish::Reader::getQuestionId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -3567,13 +3429,6 @@ inline Resolve::Which Resolve::Builder::which() {
   return _builder.getDataField<Which>(2 * ::capnp::ELEMENTS);
 }
 
-inline bool Resolve::Reader::hasPromiseId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Resolve::Builder::hasPromiseId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Resolve::Reader::getPromiseId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -3698,15 +3553,6 @@ inline bool Resolve::Reader::isCanceled() const {
 inline bool Resolve::Builder::isCanceled() {
   return which() == Resolve::CANCELED;
 }
-inline bool Resolve::Reader::hasCanceled() const {
-  if (which() != Resolve::CANCELED) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Resolve::Builder::hasCanceled() {
-  if (which() != Resolve::CANCELED) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::Void Resolve::Reader::getCanceled() const {
   KJ_IREQUIRE(which() == Resolve::CANCELED,
               "Must check which() before get()ing a union member.");
@@ -3727,13 +3573,6 @@ inline void Resolve::Builder::setCanceled( ::capnp::Void value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Release::Reader::hasId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Release::Builder::hasId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Release::Reader::getId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -3748,13 +3587,6 @@ inline void Release::Builder::setId( ::uint32_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Release::Reader::hasReferenceCount() const {
-  return _reader.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Release::Builder::hasReferenceCount() {
-  return _builder.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Release::Reader::getReferenceCount() const {
   return _reader.getDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS);
@@ -3769,13 +3601,6 @@ inline void Release::Builder::setReferenceCount( ::uint32_t value) {
       1 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Save::Reader::hasQuestionId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Save::Builder::hasQuestionId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Save::Reader::getQuestionId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -3790,16 +3615,6 @@ inline void Save::Builder::setQuestionId( ::uint32_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Save::Reader::hasTarget() const {
-  return _reader.getDataField< ::uint32_t>(1 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField< ::uint16_t>(4 * ::capnp::ELEMENTS) != 0
-      || !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
-inline bool Save::Builder::hasTarget() {
-  return _builder.getDataField< ::uint32_t>(1 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField< ::uint16_t>(4 * ::capnp::ELEMENTS) != 0
-      || !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
 inline Save::Target::Reader Save::Reader::getTarget() const {
   return Save::Target::Reader(_reader);
 }
@@ -3827,15 +3642,6 @@ inline bool Save::Target::Reader::isExportedCap() const {
 }
 inline bool Save::Target::Builder::isExportedCap() {
   return which() == Save::Target::EXPORTED_CAP;
-}
-inline bool Save::Target::Reader::hasExportedCap() const {
-  if (which() != Save::Target::EXPORTED_CAP) return false;
-  return _reader.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Save::Target::Builder::hasExportedCap() {
-  if (which() != Save::Target::EXPORTED_CAP) return false;
-  return _builder.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
 }
 inline  ::uint32_t Save::Target::Reader::getExportedCap() const {
   KJ_IREQUIRE(which() == Save::Target::EXPORTED_CAP,
@@ -3909,13 +3715,6 @@ inline ::capnp::Orphan< ::capnp::rpc::PromisedAnswer> Save::Target::Builder::dis
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Restore::Reader::hasQuestionId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Restore::Builder::hasQuestionId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Restore::Reader::getQuestionId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -3951,13 +3750,6 @@ inline ::capnp::ObjectPointer::Builder Restore::Builder::initObjectId() {
   return result;
 }
 
-inline bool Delete::Reader::hasQuestionId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Delete::Builder::hasQuestionId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Delete::Reader::getQuestionId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -3993,13 +3785,6 @@ inline ::capnp::ObjectPointer::Builder Delete::Builder::initObjectId() {
   return result;
 }
 
-inline bool Provide::Reader::hasQuestionId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Provide::Builder::hasQuestionId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Provide::Reader::getQuestionId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -4014,16 +3799,6 @@ inline void Provide::Builder::setQuestionId( ::uint32_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Provide::Reader::hasTarget() const {
-  return _reader.getDataField< ::uint32_t>(1 * ::capnp::ELEMENTS) != 0
-      || _reader.getDataField< ::uint16_t>(4 * ::capnp::ELEMENTS) != 0
-      || !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
-inline bool Provide::Builder::hasTarget() {
-  return _builder.getDataField< ::uint32_t>(1 * ::capnp::ELEMENTS) != 0
-      || _builder.getDataField< ::uint16_t>(4 * ::capnp::ELEMENTS) != 0
-      || !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
 inline Provide::Target::Reader Provide::Reader::getTarget() const {
   return Provide::Target::Reader(_reader);
 }
@@ -4072,15 +3847,6 @@ inline bool Provide::Target::Reader::isExportedCap() const {
 }
 inline bool Provide::Target::Builder::isExportedCap() {
   return which() == Provide::Target::EXPORTED_CAP;
-}
-inline bool Provide::Target::Reader::hasExportedCap() const {
-  if (which() != Provide::Target::EXPORTED_CAP) return false;
-  return _reader.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Provide::Target::Builder::hasExportedCap() {
-  if (which() != Provide::Target::EXPORTED_CAP) return false;
-  return _builder.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
 }
 inline  ::uint32_t Provide::Target::Reader::getExportedCap() const {
   KJ_IREQUIRE(which() == Provide::Target::EXPORTED_CAP,
@@ -4154,13 +3920,6 @@ inline ::capnp::Orphan< ::capnp::rpc::PromisedAnswer> Provide::Target::Builder::
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Accept::Reader::hasQuestionId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Accept::Builder::hasQuestionId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Accept::Reader::getQuestionId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -4196,13 +3955,6 @@ inline ::capnp::ObjectPointer::Builder Accept::Builder::initProvision() {
   return result;
 }
 
-inline bool Join::Reader::hasQuestionId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Join::Builder::hasQuestionId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Join::Reader::getQuestionId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -4217,13 +3969,6 @@ inline void Join::Builder::setQuestionId( ::uint32_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Join::Reader::hasCapId() const {
-  return _reader.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Join::Builder::hasCapId() {
-  return _builder.hasDataField< ::uint32_t>(1 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t Join::Reader::getCapId() const {
   return _reader.getDataField< ::uint32_t>(
       1 * ::capnp::ELEMENTS);
@@ -4272,15 +4017,6 @@ inline bool CapDescriptor::Reader::isSenderHosted() const {
 inline bool CapDescriptor::Builder::isSenderHosted() {
   return which() == CapDescriptor::SENDER_HOSTED;
 }
-inline bool CapDescriptor::Reader::hasSenderHosted() const {
-  if (which() != CapDescriptor::SENDER_HOSTED) return false;
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool CapDescriptor::Builder::hasSenderHosted() {
-  if (which() != CapDescriptor::SENDER_HOSTED) return false;
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t CapDescriptor::Reader::getSenderHosted() const {
   KJ_IREQUIRE(which() == CapDescriptor::SENDER_HOSTED,
               "Must check which() before get()ing a union member.");
@@ -4307,15 +4043,6 @@ inline bool CapDescriptor::Reader::isSenderPromise() const {
 inline bool CapDescriptor::Builder::isSenderPromise() {
   return which() == CapDescriptor::SENDER_PROMISE;
 }
-inline bool CapDescriptor::Reader::hasSenderPromise() const {
-  if (which() != CapDescriptor::SENDER_PROMISE) return false;
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool CapDescriptor::Builder::hasSenderPromise() {
-  if (which() != CapDescriptor::SENDER_PROMISE) return false;
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t CapDescriptor::Reader::getSenderPromise() const {
   KJ_IREQUIRE(which() == CapDescriptor::SENDER_PROMISE,
               "Must check which() before get()ing a union member.");
@@ -4341,15 +4068,6 @@ inline bool CapDescriptor::Reader::isReceiverHosted() const {
 }
 inline bool CapDescriptor::Builder::isReceiverHosted() {
   return which() == CapDescriptor::RECEIVER_HOSTED;
-}
-inline bool CapDescriptor::Reader::hasReceiverHosted() const {
-  if (which() != CapDescriptor::RECEIVER_HOSTED) return false;
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool CapDescriptor::Builder::hasReceiverHosted() {
-  if (which() != CapDescriptor::RECEIVER_HOSTED) return false;
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
 }
 inline  ::uint32_t CapDescriptor::Reader::getReceiverHosted() const {
   KJ_IREQUIRE(which() == CapDescriptor::RECEIVER_HOSTED,
@@ -4475,13 +4193,6 @@ inline ::capnp::Orphan< ::capnp::rpc::ThirdPartyCapDescriptor> CapDescriptor::Bu
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool PromisedAnswer::Reader::hasQuestionId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool PromisedAnswer::Builder::hasQuestionId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t PromisedAnswer::Reader::getQuestionId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -4541,15 +4252,6 @@ inline bool PromisedAnswer::Op::Reader::isNoop() const {
 inline bool PromisedAnswer::Op::Builder::isNoop() {
   return which() == PromisedAnswer::Op::NOOP;
 }
-inline bool PromisedAnswer::Op::Reader::hasNoop() const {
-  if (which() != PromisedAnswer::Op::NOOP) return false;
-  return _reader.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool PromisedAnswer::Op::Builder::hasNoop() {
-  if (which() != PromisedAnswer::Op::NOOP) return false;
-  return _builder.hasDataField< ::capnp::Void>(0 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::Void PromisedAnswer::Op::Reader::getNoop() const {
   KJ_IREQUIRE(which() == PromisedAnswer::Op::NOOP,
               "Must check which() before get()ing a union member.");
@@ -4575,15 +4277,6 @@ inline bool PromisedAnswer::Op::Reader::isGetPointerField() const {
 }
 inline bool PromisedAnswer::Op::Builder::isGetPointerField() {
   return which() == PromisedAnswer::Op::GET_POINTER_FIELD;
-}
-inline bool PromisedAnswer::Op::Reader::hasGetPointerField() const {
-  if (which() != PromisedAnswer::Op::GET_POINTER_FIELD) return false;
-  return _reader.hasDataField< ::uint16_t>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool PromisedAnswer::Op::Builder::hasGetPointerField() {
-  if (which() != PromisedAnswer::Op::GET_POINTER_FIELD) return false;
-  return _builder.hasDataField< ::uint16_t>(1 * ::capnp::ELEMENTS);
 }
 inline  ::uint16_t PromisedAnswer::Op::Reader::getGetPointerField() const {
   KJ_IREQUIRE(which() == PromisedAnswer::Op::GET_POINTER_FIELD,
@@ -4668,13 +4361,6 @@ inline ::capnp::ObjectPointer::Builder ThirdPartyCapDescriptor::Builder::initId(
   return result;
 }
 
-inline bool ThirdPartyCapDescriptor::Reader::hasVineId() const {
-  return _reader.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool ThirdPartyCapDescriptor::Builder::hasVineId() {
-  return _builder.hasDataField< ::uint32_t>(0 * ::capnp::ELEMENTS);
-}
 inline  ::uint32_t ThirdPartyCapDescriptor::Reader::getVineId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -4721,13 +4407,6 @@ inline ::capnp::Orphan< ::capnp::Text> Exception::Builder::disownReason() {
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Exception::Reader::hasIsCallersFault() const {
-  return _reader.hasDataField<bool>(0 * ::capnp::ELEMENTS);
-}
-
-inline bool Exception::Builder::hasIsCallersFault() {
-  return _builder.hasDataField<bool>(0 * ::capnp::ELEMENTS);
-}
 inline bool Exception::Reader::getIsCallersFault() const {
   return _reader.getDataField<bool>(
       0 * ::capnp::ELEMENTS);
@@ -4742,13 +4421,6 @@ inline void Exception::Builder::setIsCallersFault(bool value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Exception::Reader::hasDurability() const {
-  return _reader.hasDataField< ::capnp::rpc::Exception::Durability>(1 * ::capnp::ELEMENTS);
-}
-
-inline bool Exception::Builder::hasDurability() {
-  return _builder.hasDataField< ::capnp::rpc::Exception::Durability>(1 * ::capnp::ELEMENTS);
-}
 inline  ::capnp::rpc::Exception::Durability Exception::Reader::getDurability() const {
   return _reader.getDataField< ::capnp::rpc::Exception::Durability>(
       1 * ::capnp::ELEMENTS);

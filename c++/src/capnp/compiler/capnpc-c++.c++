@@ -59,6 +59,10 @@ static constexpr const char* FIELD_SIZE_NAMES[] = {
   "VOID", "BIT", "BYTE", "TWO_BYTES", "FOUR_BYTES", "EIGHT_BYTES", "POINTER", "INLINE_COMPOSITE"
 };
 
+bool hasDiscriminantValue(const schema::Field::Reader& reader) {
+  return reader.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;
+}
+
 void enumerateDeps(schema::Type::Reader type, std::set<uint64_t>& deps) {
   switch (type.which()) {
     case schema::Type::STRUCT:
@@ -545,7 +549,7 @@ private:
     kj::String titleCase = toTitleCase(proto.getName());
 
     DiscriminantChecks unionDiscrim;
-    if (proto.hasDiscriminantValue()) {
+    if (hasDiscriminantValue(proto)) {
       unionDiscrim = makeDiscriminantChecks(scope, proto.getName(), field.getContainingStruct());
     }
 
@@ -560,60 +564,20 @@ private:
         return FieldText {
             kj::strTree(
                 kj::mv(unionDiscrim.readerIsDecl),
-                "  inline bool has", titleCase, "() const;\n"
                 "  inline ", titleCase, "::Reader get", titleCase, "() const;\n"
                 "\n"),
 
             kj::strTree(
                 kj::mv(unionDiscrim.builderIsDecl),
-                "  inline bool has", titleCase, "();\n"
                 "  inline ", titleCase, "::Builder get", titleCase, "();\n"
                 "  inline ", titleCase, "::Builder init", titleCase, "();\n"
                 "\n"),
 
-            proto.hasDiscriminantValue() ? kj::strTree() :
+            hasDiscriminantValue(proto) ? kj::strTree() :
                 kj::strTree("  inline ", titleCase, "::Pipeline get", titleCase, "() const;\n"),
 
             kj::strTree(
                 kj::mv(unionDiscrim.isDefs),
-                "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
-                unionDiscrim.has,
-                "  return ",
-                kj::StringTree(KJ_MAP(slot, slots) {
-                  switch (sectionFor(slot.whichType)) {
-                    case Section::NONE:
-                      return kj::strTree();
-                    case Section::DATA:
-                      return kj::strTree(
-                          "_reader.getDataField<", maskType(slot.whichType), ">(",
-                              slot.offset, " * ::capnp::ELEMENTS) != 0");
-                    case Section::POINTERS:
-                      return kj::strTree(
-                          "!_reader.getPointerField(", slot.offset,
-                              " * ::capnp::POINTERS).isNull()");
-                  }
-                  KJ_UNREACHABLE;
-                }, "\n      || "), ";\n"
-                "}\n"
-                "inline bool ", scope, "Builder::has", titleCase, "() {\n",
-                unionDiscrim.has,
-                "  return ",
-                kj::StringTree(KJ_MAP(slot, slots) {
-                  switch (sectionFor(slot.whichType)) {
-                    case Section::NONE:
-                      return kj::strTree();
-                    case Section::DATA:
-                      return kj::strTree(
-                          "_builder.getDataField<", maskType(slot.whichType), ">(",
-                              slot.offset, " * ::capnp::ELEMENTS) != 0");
-                    case Section::POINTERS:
-                      return kj::strTree(
-                          "!_builder.getPointerField(", slot.offset,
-                              " * ::capnp::POINTERS).isNull()");
-                  }
-                  KJ_UNREACHABLE;
-                }, "\n      || "), ";\n"
-                "}\n"
                 "inline ", scope, titleCase, "::Reader ", scope, "Reader::get", titleCase, "() const {\n",
                 unionDiscrim.check,
                 "  return ", scope, titleCase, "::Reader(_reader);\n"
@@ -622,7 +586,7 @@ private:
                 unionDiscrim.check,
                 "  return ", scope, titleCase, "::Builder(_builder);\n"
                 "}\n",
-                proto.hasDiscriminantValue() ? kj::strTree() : kj::strTree(
+                hasDiscriminantValue(proto) ? kj::strTree() : kj::strTree(
                   "inline ", scope, titleCase, "::Pipeline ", scope, "Pipeline::get", titleCase, "() const {\n",
                   "  return ", scope, titleCase, "::Pipeline(_typeless.noop());\n"
                   "}\n"),
@@ -764,13 +728,11 @@ private:
       return FieldText {
         kj::strTree(
             kj::mv(unionDiscrim.readerIsDecl),
-            "  inline bool has", titleCase, "() const;\n"
             "  inline ", type, " get", titleCase, "() const;\n"
             "\n"),
 
         kj::strTree(
             kj::mv(unionDiscrim.builderIsDecl),
-            "  inline bool has", titleCase, "();\n"
             "  inline ", type, " get", titleCase, "();\n"
             "  inline void set", titleCase, "(", type, " value", setterDefault, ");\n"
             "\n"),
@@ -779,15 +741,6 @@ private:
 
         kj::strTree(
             kj::mv(unionDiscrim.isDefs),
-            "inline bool ", scope, "Reader::has", titleCase, "() const {\n",
-            unionDiscrim.has,
-            "  return _reader.hasDataField<", type, ">(", offset, " * ::capnp::ELEMENTS);\n",
-            "}\n"
-            "\n"
-            "inline bool ", scope, "Builder::has", titleCase, "() {\n",
-            unionDiscrim.has,
-            "  return _builder.hasDataField<", type, ">(", offset, " * ::capnp::ELEMENTS);\n",
-            "}\n"
             "inline ", type, " ", scope, "Reader::get", titleCase, "() const {\n",
             unionDiscrim.check,
             "  return _reader.getDataField<", type, ">(\n"
@@ -826,7 +779,7 @@ private:
             "\n"),
 
         kj::strTree(
-            proto.hasDiscriminantValue() ? kj::strTree() : kj::strTree(
+            hasDiscriminantValue(proto) ? kj::strTree() : kj::strTree(
               "  inline ", type, "::Client get", titleCase, "() const;\n")),
 
         kj::strTree(
@@ -849,7 +802,7 @@ private:
             "  return ::capnp::_::PointerHelpers<", type, ">::get(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
             "}\n",
-            proto.hasDiscriminantValue() ? kj::strTree() : kj::strTree(
+            hasDiscriminantValue(proto) ? kj::strTree() : kj::strTree(
               "inline ", type, "::Client ", scope, "Pipeline::get", titleCase, "() const {\n",
               "  return ", type, "::Client(_typeless.getPointerField(", offset, ").asCap());\n"
               "}\n"),
@@ -1002,7 +955,7 @@ private:
             "\n"),
 
         kj::strTree(
-            kind == FieldKind::STRUCT && !proto.hasDiscriminantValue()
+            kind == FieldKind::STRUCT && !hasDiscriminantValue(proto)
             ? kj::strTree(
               "  inline ", type, "::Pipeline get", titleCase, "() const;\n")
             : kj::strTree()),
@@ -1027,7 +980,7 @@ private:
             "  return ::capnp::_::PointerHelpers<", type, ">::get(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS)", defaultParam, ");\n"
             "}\n",
-            kind == FieldKind::STRUCT && !proto.hasDiscriminantValue()
+            kind == FieldKind::STRUCT && !hasDiscriminantValue(proto)
             ? kj::strTree(
               "inline ", type, "::Pipeline ", scope, "Pipeline::get", titleCase, "() const {\n",
               "  return ", type, "::Pipeline(_typeless.getPointerField(", offset, "));\n"
@@ -1195,7 +1148,7 @@ private:
           structNode.getDiscriminantCount() == 0 ? kj::strTree() : kj::strTree(
               "  enum Which: uint16_t {\n",
               KJ_MAP(f, structNode.getFields()) {
-                if (f.hasDiscriminantValue()) {
+                if (hasDiscriminantValue(f)) {
                   return kj::strTree("    ", toUpperCase(f.getName()), ",\n");
                 } else {
                   return kj::strTree();

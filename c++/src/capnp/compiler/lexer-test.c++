@@ -72,14 +72,14 @@ kj::String doLex(kj::StringPtr constText) {
 TEST(Lexer, Tokens) {
   EXPECT_STREQ(
       "(tokens = ["
-        "(identifier = 'foo', endByte = 3), "
+        "(identifier = 'foo', startByte = 0, endByte = 3), "
         "(identifier = 'bar', startByte = 4, endByte = 7)"
       "])",
       doLex<LexedTokens>("foo bar").cStr());
 
   EXPECT_STREQ(
       "(tokens = ["
-        "(identifier = 'foo', endByte = 3), "
+        "(identifier = 'foo', startByte = 0, endByte = 3), "
         "(identifier = 'bar', startByte = 15, endByte = 18)"
       "])",
       doLex<LexedTokens>("foo # comment\n bar").cStr());
@@ -108,7 +108,7 @@ TEST(Lexer, Tokens) {
             "(identifier = 'corge', startByte = 19, endByte = 24), "
             "(identifier = 'grault', startByte = 25, endByte = 31)"
           "]"
-        "], endByte = 32)"
+        "], startByte = 0, endByte = 32)"
       "])",
       doLex<LexedTokens>("(foo bar, baz qux, corge grault)").cStr());
 
@@ -119,7 +119,7 @@ TEST(Lexer, Tokens) {
             "(identifier = 'foo', startByte = 1, endByte = 4), "
             "(identifier = 'bar', startByte = 5, endByte = 8)"
           "]"
-        "], endByte = 9)"
+        "], startByte = 0, endByte = 9)"
       "])",
       doLex<LexedTokens>("(foo bar)").cStr());
 
@@ -127,7 +127,7 @@ TEST(Lexer, Tokens) {
   // list.
   EXPECT_STREQ(
       "(tokens = ["
-        "(parenthesizedList = [], endByte = 4)"
+        "(parenthesizedList = [], startByte = 0, endByte = 4)"
       "])",
       doLex<LexedTokens>("(  )").cStr());
 
@@ -144,7 +144,7 @@ TEST(Lexer, Tokens) {
             "(identifier = 'corge', startByte = 19, endByte = 24), "
             "(identifier = 'grault', startByte = 25, endByte = 31)"
           "]"
-        "], endByte = 32)"
+        "], startByte = 0, endByte = 32)"
       "])",
       doLex<LexedTokens>("[foo bar, baz qux, corge grault]").cStr());
 
@@ -162,14 +162,14 @@ TEST(Lexer, Tokens) {
               "]"
             "], startByte = 6, endByte = 16)"
           "]"
-        "], endByte = 17), "
+        "], startByte = 0, endByte = 17), "
         "(identifier = 'qux', startByte = 18, endByte = 21)"
       "])",
       doLex<LexedTokens>("[foo, (bar, baz)] qux").cStr());
 
   EXPECT_STREQ(
       "(tokens = ["
-        "(identifier = 'foo', endByte = 3), "
+        "(identifier = 'foo', startByte = 0, endByte = 3), "
         "(identifier = 'bar', startByte = 7, endByte = 10)"
       "])",
       doLex<LexedTokens>("foo\n\r\t\vbar").cStr());
@@ -179,23 +179,23 @@ TEST(Lexer, Statements) {
   EXPECT_STREQ(
       "(statements = ["
         "(tokens = ["
-          "(identifier = 'foo', endByte = 3), "
+          "(identifier = 'foo', startByte = 0, endByte = 3), "
           "(identifier = 'bar', startByte = 4, endByte = 7)"
-        "], endByte = 8)"
+        "], line = void, startByte = 0, endByte = 8)"
       "])",
       doLex<LexedStatements>("foo bar;").cStr());
 
   EXPECT_STREQ(
       "(statements = ["
         "(tokens = ["
-          "(identifier = 'foo', endByte = 3)"
-        "], endByte = 4), "
+          "(identifier = 'foo', startByte = 0, endByte = 3)"
+        "], line = void, startByte = 0, endByte = 4), "
         "(tokens = ["
           "(identifier = 'bar', startByte = 5, endByte = 8)"
-        "], startByte = 5, endByte = 9), "
+        "], line = void, startByte = 5, endByte = 9), "
         "(tokens = ["
           "(identifier = 'baz', startByte = 10, endByte = 13)"
-        "], startByte = 10, endByte = 14)"
+        "], line = void, startByte = 10, endByte = 14)"
       "])",
       doLex<LexedStatements>("foo; bar; baz; ").cStr());
 
@@ -203,21 +203,21 @@ TEST(Lexer, Statements) {
       "(statements = ["
         "("
           "tokens = ["
-            "(identifier = 'foo', endByte = 3)"
+            "(identifier = 'foo', startByte = 0, endByte = 3)"
           "], "
           "block = ["
             "(tokens = ["
               "(identifier = 'bar', startByte = 5, endByte = 8)"
-            "], startByte = 5, endByte = 9), "
+            "], line = void, startByte = 5, endByte = 9), "
             "(tokens = ["
               "(identifier = 'baz', startByte = 10, endByte = 13)"
-            "], startByte = 10, endByte = 14)"
+            "], line = void, startByte = 10, endByte = 14)"
           "], "
-          "endByte = 15"
+          "startByte = 0, endByte = 15"
         "), "
         "(tokens = ["
           "(identifier = 'qux', startByte = 16, endByte = 19)"
-        "], startByte = 16, endByte = 20)"
+        "], line = void, startByte = 16, endByte = 20)"
       "])",
       doLex<LexedStatements>("foo {bar; baz;} qux;").cStr());
 }
@@ -227,10 +227,11 @@ TEST(Lexer, DocComments) {
       "(statements = ["
         "("
           "tokens = ["
-            "(identifier = 'foo', endByte = 3)"
+            "(identifier = 'foo', startByte = 0, endByte = 3)"
           "], "
+          "line = void, "
           "docComment = 'blah blah\\n', "
-          "endByte = 16"
+          "startByte = 0, endByte = 16"
         ")"
       "])",
       doLex<LexedStatements>("foo; # blah blah").cStr());
@@ -239,10 +240,11 @@ TEST(Lexer, DocComments) {
       "(statements = ["
         "("
           "tokens = ["
-            "(identifier = 'foo', endByte = 3)"
+            "(identifier = 'foo', startByte = 0, endByte = 3)"
           "], "
+          "line = void, "
           "docComment = 'blah blah\\n', "
-          "endByte = 15"
+          "startByte = 0, endByte = 15"
         ")"
       "])",
       doLex<LexedStatements>("foo; #blah blah").cStr());
@@ -251,10 +253,11 @@ TEST(Lexer, DocComments) {
       "(statements = ["
         "("
           "tokens = ["
-            "(identifier = 'foo', endByte = 3)"
+            "(identifier = 'foo', startByte = 0, endByte = 3)"
           "], "
+          "line = void, "
           "docComment = ' blah blah\\n', "
-          "endByte = 17"
+          "startByte = 0, endByte = 17"
         ")"
       "])",
       doLex<LexedStatements>("foo; #  blah blah").cStr());
@@ -263,10 +266,11 @@ TEST(Lexer, DocComments) {
       "(statements = ["
         "("
           "tokens = ["
-            "(identifier = 'foo', endByte = 3)"
+            "(identifier = 'foo', startByte = 0, endByte = 3)"
           "], "
+          "line = void, "
           "docComment = 'blah blah\\n', "
-          "endByte = 16"
+          "startByte = 0, endByte = 16"
         ")"
       "])",
       doLex<LexedStatements>("foo;\n# blah blah").cStr());
@@ -275,9 +279,10 @@ TEST(Lexer, DocComments) {
       "(statements = ["
         "("
           "tokens = ["
-            "(identifier = 'foo', endByte = 3)"
+            "(identifier = 'foo', startByte = 0, endByte = 3)"
           "], "
-          "endByte = 4"
+          "line = void, "
+          "startByte = 0, endByte = 4"
         ")"
       "])",
       doLex<LexedStatements>("foo;\n\n# blah blah").cStr());
@@ -286,10 +291,11 @@ TEST(Lexer, DocComments) {
       "(statements = ["
         "("
           "tokens = ["
-            "(identifier = 'foo', endByte = 3)"
+            "(identifier = 'foo', startByte = 0, endByte = 3)"
           "], "
+          "line = void, "
           "docComment = 'bar baz\\nqux corge\\n', "
-          "endByte = 30"
+          "startByte = 0, endByte = 30"
         ")"
       "])",
       doLex<LexedStatements>("foo;\n # bar baz\n  # qux corge\n\n# grault\n# garply").cStr());
@@ -298,22 +304,22 @@ TEST(Lexer, DocComments) {
       "(statements = ["
         "("
           "tokens = ["
-            "(identifier = 'foo', endByte = 3)"
+            "(identifier = 'foo', startByte = 0, endByte = 3)"
           "], "
           "block = ["
             "(tokens = ["
               "(identifier = 'bar', startByte = 17, endByte = 20)"
-            "], docComment = 'hi\\n', startByte = 17, endByte = 27), "
+            "], line = void, docComment = 'hi\\n', startByte = 17, endByte = 27), "
             "(tokens = ["
               "(identifier = 'baz', startByte = 28, endByte = 31)"
-            "], startByte = 28, endByte = 32)"
+            "], line = void, startByte = 28, endByte = 32)"
           "], "
           "docComment = 'blah blah\\n', "
-          "endByte = 44"
+          "startByte = 0, endByte = 44"
         "), "
         "(tokens = ["
           "(identifier = 'qux', startByte = 44, endByte = 47)"
-        "], startByte = 44, endByte = 48)"
+        "], line = void, startByte = 44, endByte = 48)"
       "])",
       doLex<LexedStatements>("foo {# blah blah\nbar; # hi\n baz;} # ignored\nqux;").cStr());
 
@@ -321,22 +327,22 @@ TEST(Lexer, DocComments) {
       "(statements = ["
         "("
           "tokens = ["
-            "(identifier = 'foo', endByte = 3)"
+            "(identifier = 'foo', startByte = 0, endByte = 3)"
           "], "
           "block = ["
             "(tokens = ["
               "(identifier = 'bar', startByte = 5, endByte = 8)"
-            "], startByte = 5, endByte = 9), "
+            "], line = void, startByte = 5, endByte = 9), "
             "(tokens = ["
               "(identifier = 'baz', startByte = 10, endByte = 13)"
-            "], startByte = 10, endByte = 14)"
+            "], line = void, startByte = 10, endByte = 14)"
           "], "
           "docComment = 'late comment\\n', "
-          "endByte = 31"
+          "startByte = 0, endByte = 31"
         "), "
         "(tokens = ["
           "(identifier = 'qux', startByte = 31, endByte = 34)"
-        "], startByte = 31, endByte = 35)"
+        "], line = void, startByte = 31, endByte = 35)"
       "])",
       doLex<LexedStatements>("foo {bar; baz;}\n# late comment\nqux;").cStr());
 }

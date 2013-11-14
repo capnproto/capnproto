@@ -60,8 +60,8 @@ test_eval() {
 test_eval TestDefaults.uInt32Field 3456789012
 test_eval TestDefaults.structField.textField '"baz"'
 test_eval TestDefaults.int8List "[111, -111]"
-test_eval 'TestDefaults.structList[1]' '( textField = "structlist 2" )'
-test_eval globalStruct '(int32Field = 54321)'
+test_eval 'TestDefaults.structList[1].textField' '"structlist 2"'
+test_eval globalPrintableStruct '(someText = "foo")'
 test_eval TestConstants.enumConst corge
 test_eval 'TestListDefaults.lists.int32ListList[2][0]' 12341234
 

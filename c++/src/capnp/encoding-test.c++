@@ -301,10 +301,6 @@ TEST(Encoding, UnnamedUnion) {
   root.setBar(321);
   EXPECT_EQ(test::TestUnnamedUnion::BAR, root.which());
   EXPECT_EQ(test::TestUnnamedUnion::BAR, root.asReader().which());
-  EXPECT_FALSE(root.hasFoo());
-  EXPECT_TRUE(root.hasBar());
-  EXPECT_FALSE(root.asReader().hasFoo());
-  EXPECT_TRUE(root.asReader().hasBar());
   EXPECT_EQ(321u, root.getBar());
   EXPECT_EQ(321u, root.asReader().getBar());
   EXPECT_DEBUG_ANY_THROW(root.getFoo());
@@ -313,10 +309,6 @@ TEST(Encoding, UnnamedUnion) {
   root.setFoo(123);
   EXPECT_EQ(test::TestUnnamedUnion::FOO, root.which());
   EXPECT_EQ(test::TestUnnamedUnion::FOO, root.asReader().which());
-  EXPECT_TRUE(root.hasFoo());
-  EXPECT_FALSE(root.hasBar());
-  EXPECT_TRUE(root.asReader().hasFoo());
-  EXPECT_FALSE(root.asReader().hasBar());
   EXPECT_EQ(123u, root.getFoo());
   EXPECT_EQ(123u, root.asReader().getFoo());
   EXPECT_DEBUG_ANY_THROW(root.getBar());
@@ -372,26 +364,6 @@ TEST(Encoding, InterleavedGroups) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<test::TestInterleavedGroups>();
 
-  EXPECT_FALSE(root.hasGroup1());
-  EXPECT_FALSE(root.hasGroup2());
-  EXPECT_FALSE(root.asReader().hasGroup1());
-  EXPECT_FALSE(root.asReader().hasGroup2());
-
-  root.getGroup1().setBar(1);
-
-  EXPECT_TRUE(root.hasGroup1());
-  EXPECT_FALSE(root.hasGroup2());
-  EXPECT_TRUE(root.asReader().hasGroup1());
-  EXPECT_FALSE(root.asReader().hasGroup2());
-
-  // Merely setting the union to a non-default field should also make "has" light up.
-  root.getGroup2().initCorge();
-
-  EXPECT_TRUE(root.hasGroup1());
-  EXPECT_TRUE(root.hasGroup2());
-  EXPECT_TRUE(root.asReader().hasGroup1());
-  EXPECT_TRUE(root.asReader().hasGroup2());
-
   // Init both groups to different values.
   {
     auto group = root.getGroup1();
@@ -417,11 +389,6 @@ TEST(Encoding, InterleavedGroups) {
     group.setWaldo("odlaw");
   }
 
-  EXPECT_TRUE(root.hasGroup1());
-  EXPECT_TRUE(root.hasGroup2());
-  EXPECT_TRUE(root.asReader().hasGroup1());
-  EXPECT_TRUE(root.asReader().hasGroup2());
-
   // Check group1 is still set correctly.
   {
     auto group = root.asReader().getGroup1();
@@ -444,11 +411,6 @@ TEST(Encoding, InterleavedGroups) {
     EXPECT_EQ(0u, group.getQux());
     EXPECT_FALSE(group.hasWaldo());
   }
-
-  EXPECT_FALSE(root.hasGroup1());
-  EXPECT_TRUE(root.hasGroup2());
-  EXPECT_FALSE(root.asReader().hasGroup1());
-  EXPECT_TRUE(root.asReader().hasGroup2());
 
   // Group 2 should not have been touched.
   {

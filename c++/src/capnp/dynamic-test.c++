@@ -409,12 +409,14 @@ TEST(DynamicApi, Has) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<DynamicStruct>(Schema::from<TestDefaults>());
 
-  EXPECT_FALSE(root.has("int32Field"));
+  // Primitive fields are always present even if set to default.
+  EXPECT_TRUE(root.has("int32Field"));
   root.set("int32Field", 123);
   EXPECT_TRUE(root.has("int32Field"));
   root.set("int32Field", -12345678);
-  EXPECT_FALSE(root.has("int32Field"));
+  EXPECT_TRUE(root.has("int32Field"));
 
+  // Pointers are absent until initialized.
   EXPECT_FALSE(root.has("structField"));
   root.init("structField");
   EXPECT_TRUE(root.has("structField"));
@@ -426,8 +428,8 @@ TEST(DynamicApi, HasWhenEmpty) {
   SegmentArrayMessageReader reader(kj::arrayPtr(segments, 1));
   auto root = reader.getRoot<DynamicStruct>(Schema::from<TestDefaults>());
 
-  EXPECT_FALSE(root.has("voidField"));
-  EXPECT_FALSE(root.has("int32Field"));
+  EXPECT_TRUE(root.has("voidField"));
+  EXPECT_TRUE(root.has("int32Field"));
   EXPECT_FALSE(root.has("structField"));
   EXPECT_FALSE(root.has("int32List"));
 }

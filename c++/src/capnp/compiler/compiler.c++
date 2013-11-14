@@ -942,7 +942,7 @@ Compiler::Impl::Impl(AnnotationFlag annotationFlag)
   StructSchema declSchema = Schema::from<Declaration>();
   for (auto field: declSchema.getFields()) {
     auto fieldProto = field.getProto();
-    if (fieldProto.hasDiscriminantValue()) {
+    if (fieldProto.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT) {
       auto name = fieldProto.getName();
       if (name.startsWith("builtin")) {
         kj::StringPtr symbolName = name.slice(strlen("builtin"));

@@ -28,6 +28,10 @@ namespace capnp {
 
 namespace {
 
+bool hasDiscriminantValue(const schema::Field::Reader& reader) {
+  return reader.getDiscriminantValue() != schema::Field::NO_DISCRIMINANT;
+}
+
 template <typename T, typename U>
 KJ_ALWAYS_INLINE(T bitCast(U value));
 
@@ -127,7 +131,7 @@ uint16_t DynamicEnum::asImpl(uint64_t requestedTypeId) const {
 
 bool DynamicStruct::Reader::isSetInUnion(StructSchema::Field field) const {
   auto proto = field.getProto();
-  if (proto.hasDiscriminantValue()) {
+  if (hasDiscriminantValue(proto)) {
     uint16_t discrim = reader.getDataField<uint16_t>(
         schema.getProto().getStruct().getDiscriminantOffset() * ELEMENTS);
     return discrim == proto.getDiscriminantValue();
@@ -144,7 +148,7 @@ void DynamicStruct::Reader::verifySetInUnion(StructSchema::Field field) const {
 
 bool DynamicStruct::Builder::isSetInUnion(StructSchema::Field field) {
   auto proto = field.getProto();
-  if (proto.hasDiscriminantValue()) {
+  if (hasDiscriminantValue(proto)) {
     uint16_t discrim = builder.getDataField<uint16_t>(
         schema.getProto().getStruct().getDiscriminantOffset() * ELEMENTS);
     return discrim == proto.getDiscriminantValue();
@@ -162,7 +166,7 @@ void DynamicStruct::Builder::verifySetInUnion(StructSchema::Field field) {
 void DynamicStruct::Builder::setInUnion(StructSchema::Field field) {
   // If a union member, set the discriminant to match.
   auto proto = field.getProto();
-  if (proto.hasDiscriminantValue()) {
+  if (hasDiscriminantValue(proto)) {
     builder.setDataField<uint16_t>(
         schema.getProto().getStruct().getDiscriminantOffset() * ELEMENTS,
         proto.getDiscriminantValue());
@@ -365,7 +369,7 @@ DynamicValue::Pipeline DynamicStruct::Pipeline::get(StructSchema::Field field) c
   KJ_REQUIRE(field.getContainingStruct() == schema, "`field` is not a field of this struct.");
 
   auto proto = field.getProto();
-  KJ_REQUIRE(!proto.hasDiscriminantValue(), "Can't pipeline on union members.");
+  KJ_REQUIRE(!hasDiscriminantValue(proto), "Can't pipeline on union members.");
 
   switch (proto.which()) {
     case schema::Field::SLOT: {
@@ -403,7 +407,7 @@ bool DynamicStruct::Reader::has(StructSchema::Field field) const {
   KJ_REQUIRE(field.getContainingStruct() == schema, "`field` is not a field of this struct.");
 
   auto proto = field.getProto();
-  if (proto.hasDiscriminantValue()) {
+  if (hasDiscriminantValue(proto)) {
     uint16_t discrim = reader.getDataField<uint16_t>(
         schema.getProto().getStruct().getDiscriminantOffset() * ELEMENTS);
     if (discrim != proto.getDiscriminantValue()) {
@@ -417,33 +421,8 @@ bool DynamicStruct::Reader::has(StructSchema::Field field) const {
       // Continue to below.
       break;
 
-    case schema::Field::GROUP: {
-      // Bleh, we have to check all of the members to see if any are set.
-      auto group = get(field).as<DynamicStruct>();
-
-      if (group.schema.getProto().getStruct().getDiscriminantCount() > 0) {
-        // This group contains a union.  If the discriminant is non-zero, or if it is zero but the
-        // field with discriminant zero is non-default, then we consider the group to be
-        // non-default.
-        KJ_IF_MAYBE(unionField, group.which()) {
-          if (unionField->getProto().getDiscriminantValue() != 0 ||
-              group.has(*unionField)) {
-            return true;
-          }
-        } else {
-          // Unrecognized discriminant.  Must be non-zero.
-          return true;
-        }
-      }
-
-      // Check if any of the non-union fields are non-default.
-      for (auto field: group.schema.getNonUnionFields()) {
-        if (group.has(field)) {
-          return true;
-        }
-      }
-      return false;
-    }
+    case schema::Field::GROUP:
+      return true;
   }
 
   auto slot = proto.getSlot();
@@ -451,26 +430,20 @@ bool DynamicStruct::Reader::has(StructSchema::Field field) const {
 
   switch (type.which()) {
     case schema::Type::VOID:
-      return false;
-
-#define HANDLE_TYPE(discrim, type) \
-    case schema::Type::discrim: \
-      return reader.getDataField<type>(slot.getOffset() * ELEMENTS) != 0;
-
-    HANDLE_TYPE(BOOL, bool)
-    HANDLE_TYPE(INT8, uint8_t)
-    HANDLE_TYPE(INT16, uint16_t)
-    HANDLE_TYPE(INT32, uint32_t)
-    HANDLE_TYPE(INT64, uint64_t)
-    HANDLE_TYPE(UINT8, uint8_t)
-    HANDLE_TYPE(UINT16, uint16_t)
-    HANDLE_TYPE(UINT32, uint32_t)
-    HANDLE_TYPE(UINT64, uint64_t)
-    HANDLE_TYPE(FLOAT32, uint32_t)
-    HANDLE_TYPE(FLOAT64, uint64_t)
-    HANDLE_TYPE(ENUM, uint16_t)
-
-#undef HANDLE_TYPE
+    case schema::Type::BOOL:
+    case schema::Type::INT8:
+    case schema::Type::INT16:
+    case schema::Type::INT32:
+    case schema::Type::INT64:
+    case schema::Type::UINT8:
+    case schema::Type::UINT16:
+    case schema::Type::UINT32:
+    case schema::Type::UINT64:
+    case schema::Type::FLOAT32:
+    case schema::Type::FLOAT64:
+    case schema::Type::ENUM:
+      // Primitive types are always present.
+      return true;
 
     case schema::Type::TEXT:
     case schema::Type::DATA:
