@@ -669,6 +669,59 @@ private:
   friend class EventLoop;
 };
 
+template <typename T>
+class EventLoopGuarded {
+  // An instance of T that is bound to a particular EventLoop and may only be modified within that
+  // loop.
+
+public:
+  template <typename... Params>
+  inline EventLoopGuarded(const EventLoop& loop, Params&&... params)
+      : loop(loop), value(kj::fwd<Params>(params)...) {}
+
+  const T& getValue() const { return value; }
+  // Get a const (thread-safe) reference to the value.
+
+  const EventLoop& getEventLoop() const { return loop; }
+  // Get the EventLoop in which this value can be modified.
+
+  template <typename Func>
+  PromiseForResult<Func, T&> applyNow(Func&& func) const KJ_WARN_UNUSED_RESULT {
+    // Calls the given function, passing the guarded object to it as a mutable reference, and
+    // returning a pointer to the function's result.  When called from within the object's event
+    // loop, the function runs synchronously, but when called from any other thread, the function
+    // is queued to run on the object's loop later.
+
+    if (loop.isCurrent()) {
+      return func(const_cast<T&>(value));
+    } else {
+      return applyLater(kj::fwd<Func>(func));
+    }
+  }
+
+  template <typename Func>
+  PromiseForResult<Func, T&> applyLater(Func&& func) const KJ_WARN_UNUSED_RESULT {
+    // Like `applyNow` but always queues the function to run later regardless of which thread
+    // called it.
+
+    return loop.evalLater(Capture<Func> { const_cast<T&>(value), kj::fwd<Func>(func) });
+  }
+
+private:
+  const EventLoop& loop;
+  T value;
+
+  template <typename Func>
+  struct Capture {
+    T& value;
+    Func func;
+
+    decltype(func(value)) operator()() {
+      return func(value);
+    }
+  };
+};
+
 class TaskSet {
   // Holds a collection of Promise<void>s and ensures that each executes to completion.  Memory
   // associated with each promise is automatically freed when the promise completes.  Destroying

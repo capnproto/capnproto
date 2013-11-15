@@ -472,5 +472,69 @@ TEST(Async, TaskSet) {
   EXPECT_EQ(1u, errorHandler.exceptionCount);
 }
 
+TEST(Async, EventLoopGuarded) {
+  SimpleEventLoop loop;
+  EventLoopGuarded<int> guarded(loop, 123);
+
+  {
+    EXPECT_EQ(123, guarded.getValue());
+
+    // We're not in the event loop, so the function will be applied later.
+    auto promise = guarded.applyNow([](int& i) -> const char* {
+      EXPECT_EQ(123, i);
+      i = 234;
+      return "foo";
+    });
+
+    EXPECT_EQ(123, guarded.getValue());
+
+    EXPECT_STREQ("foo", loop.wait(kj::mv(promise)));
+
+    EXPECT_EQ(234, guarded.getValue());
+  }
+
+  {
+    auto promise = loop.evalLater([&]() {
+      EXPECT_EQ(234, guarded.getValue());
+
+      // Since we're in the event loop, applyNow() will apply synchronously.
+      auto promise = guarded.applyNow([](int& i) -> const char* {
+        EXPECT_EQ(234, i);
+        i = 345;
+        return "bar";
+      });
+
+      EXPECT_EQ(345, guarded.getValue());  // already applied
+
+      return kj::mv(promise);
+    });
+
+    EXPECT_STREQ("bar", loop.wait(kj::mv(promise)));
+
+    EXPECT_EQ(345, guarded.getValue());
+  }
+
+  {
+    auto promise = loop.evalLater([&]() {
+      EXPECT_EQ(345, guarded.getValue());
+
+      // applyLater() is never synchronous.
+      auto promise = guarded.applyLater([](int& i) -> const char* {
+        EXPECT_EQ(345, i);
+        i = 456;
+        return "baz";
+      });
+
+      EXPECT_EQ(345, guarded.getValue());
+
+      return kj::mv(promise);
+    });
+
+    EXPECT_STREQ("baz", loop.wait(kj::mv(promise)));
+
+    EXPECT_EQ(456, guarded.getValue());
+  }
+}
+
 }  // namespace
 }  // namespace kj

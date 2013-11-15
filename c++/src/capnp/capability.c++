@@ -347,21 +347,18 @@ private:
 class LocalClient final: public ClientHook, public kj::Refcounted {
 public:
   LocalClient(const kj::EventLoop& eventLoop, kj::Own<Capability::Server>&& server)
-      : eventLoop(eventLoop), server(kj::mv(server)) {}
+      : server(eventLoop, kj::mv(server)) {}
 
   Request<ObjectPointer, ObjectPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
     auto hook = kj::heap<LocalRequest>(
-        eventLoop, interfaceId, methodId, firstSegmentWordSize, kj::addRef(*this));
+        server.getEventLoop(), interfaceId, methodId, firstSegmentWordSize, kj::addRef(*this));
     auto root = hook->message->getRoot();  // Do not inline `root` -- kj::mv may happen first.
     return Request<ObjectPointer, ObjectPointer>(root, kj::mv(hook));
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                               kj::Own<CallContextHook>&& context) const override {
-    // We can const-cast the server because we're synchronizing on the event loop.
-    auto server = const_cast<Capability::Server*>(this->server.get());
-
     auto contextPtr = context.get();
 
     // We don't want to actually dispatch the call synchronously, because:
@@ -374,26 +371,26 @@ public:
     //
     // Note also that QueuedClient depends on this evalLater() to ensure that pipelined calls don't
     // complete before 'whenMoreResolved()' promises resolve.
-    auto promise = eventLoop.evalLater(
-        [=]() {
+    auto promise = server.applyLater(
+        [=](kj::Own<Capability::Server>& server) {
           return server->dispatchCall(interfaceId, methodId,
                                       CallContext<ObjectPointer, ObjectPointer>(*contextPtr));
         });
 
     // Make sure that this client cannot be destroyed until the promise completes.
-    promise = eventLoop.there(kj::mv(promise), kj::mvCapture(kj::addRef(*this),
-        [=](kj::Own<const LocalClient>&& ref) {}));
+    promise = promise.thenInAnyThread(kj::mvCapture(kj::addRef(*this),
+        [](kj::Own<const LocalClient>&& ref) {}));
 
     // We have to fork this promise for the pipeline to receive a copy of the answer.
-    auto forked = eventLoop.fork(kj::mv(promise));
+    auto forked = server.getEventLoop().fork(kj::mv(promise));
 
-    auto pipelinePromise = eventLoop.there(forked.addBranch(), kj::mvCapture(context->addRef(),
+    auto pipelinePromise = forked.addBranch().thenInAnyThread(kj::mvCapture(context->addRef(),
         [=](kj::Own<CallContextHook>&& context) -> kj::Own<const PipelineHook> {
           context->releaseParams();
           return kj::refcounted<LocalPipeline>(kj::mv(context));
         }));
 
-    auto completionPromise = eventLoop.there(forked.addBranch(), kj::mvCapture(context,
+    auto completionPromise = forked.addBranch().thenInAnyThread(kj::mvCapture(context,
         [=](kj::Own<CallContextHook>&& context) {
           // Nothing to do here.  We just wanted to make sure to hold on to a reference to the
           // context even if the pipeline was discarded.
@@ -403,7 +400,7 @@ public:
         }));
 
     return VoidPromiseAndPipeline { kj::mv(completionPromise),
-        kj::refcounted<QueuedPipeline>(eventLoop, kj::mv(pipelinePromise)) };
+        kj::refcounted<QueuedPipeline>(server.getEventLoop(), kj::mv(pipelinePromise)) };
   }
 
   kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const override {
@@ -420,8 +417,7 @@ public:
   }
 
 private:
-  const kj::EventLoop& eventLoop;
-  kj::Own<Capability::Server> server;
+  kj::EventLoopGuarded<kj::Own<Capability::Server>> server;
 };
 
 }  // namespace
