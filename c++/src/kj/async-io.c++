@@ -648,4 +648,12 @@ TwoWayPipe newTwoWayPipe() {
   return TwoWayPipe { { heap<Socket>(fds[0]), heap<Socket>(fds[1]) } };
 }
 
+namespace _ {  // private
+
+void runIoEventLoopInternal(IoLoopMain& func) {
+  UnixEventLoop loop;
+  func.run(loop);
+}
+
+}  // namespace _ (private)
 }  // namespace kj

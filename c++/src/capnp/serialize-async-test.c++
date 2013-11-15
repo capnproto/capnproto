@@ -25,7 +25,6 @@
 #include "serialize.h"
 #include <kj/debug.h>
 #include <kj/thread.h>
-#include <kj/async-unix.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -44,9 +43,9 @@ public:
 
   void write(const void* buffer, size_t size) override {
     while (size > 0) {
+      usleep(5000);
       size_t n = rand() % size + 1;
       inner.write(buffer, n);
-      usleep(10000);
       buffer = reinterpret_cast<const byte*>(buffer) + n;
       size -= n;
     }
@@ -113,8 +112,6 @@ protected:
 };
 
 TEST_F(SerializeAsyncTest, ParseAsync) {
-  kj::UnixEventLoop loop;
-
   auto input = kj::AsyncInputStream::wrapFd(fds[0]);
   kj::FdOutputStream rawOutput(fds[1]);
   FragmentingOutputStream output(rawOutput);
@@ -122,21 +119,18 @@ TEST_F(SerializeAsyncTest, ParseAsync) {
   TestMessageBuilder message(1);
   initTestMessage(message.getRoot<TestAllTypes>());
 
-  auto promise = loop.evalLater([&]() {
-    return readMessage(*input);
-  });
-
   kj::Thread thread([&]() {
     writeMessage(output, message);
   });
 
-  auto received = loop.wait(kj::mv(promise));
+  auto received = kj::runIoEventLoop([&]() {
+    return readMessage(*input);
+  });
+
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
 
 TEST_F(SerializeAsyncTest, ParseAsyncOddSegmentCount) {
-  kj::UnixEventLoop loop;
-
   auto input = kj::AsyncInputStream::wrapFd(fds[0]);
   kj::FdOutputStream rawOutput(fds[1]);
   FragmentingOutputStream output(rawOutput);
@@ -144,21 +138,18 @@ TEST_F(SerializeAsyncTest, ParseAsyncOddSegmentCount) {
   TestMessageBuilder message(7);
   initTestMessage(message.getRoot<TestAllTypes>());
 
-  auto promise = loop.evalLater([&]() {
-    return readMessage(*input);
-  });
-
   kj::Thread thread([&]() {
     writeMessage(output, message);
   });
 
-  auto received = loop.wait(kj::mv(promise));
+  auto received = kj::runIoEventLoop([&]() {
+    return readMessage(*input);
+  });
+
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
 
 TEST_F(SerializeAsyncTest, ParseAsyncEvenSegmentCount) {
-  kj::UnixEventLoop loop;
-
   auto input = kj::AsyncInputStream::wrapFd(fds[0]);
   kj::FdOutputStream rawOutput(fds[1]);
   FragmentingOutputStream output(rawOutput);
@@ -166,21 +157,18 @@ TEST_F(SerializeAsyncTest, ParseAsyncEvenSegmentCount) {
   TestMessageBuilder message(10);
   initTestMessage(message.getRoot<TestAllTypes>());
 
-  auto promise = loop.evalLater([&]() {
-    return readMessage(*input);
-  });
-
   kj::Thread thread([&]() {
     writeMessage(output, message);
   });
 
-  auto received = loop.wait(kj::mv(promise));
+  auto received = kj::runIoEventLoop([&]() {
+    return readMessage(*input);
+  });
+
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
 
 TEST_F(SerializeAsyncTest, WriteAsync) {
-  kj::UnixEventLoop loop;
-
   auto output = kj::AsyncOutputStream::wrapFd(fds[1]);
 
   TestMessageBuilder message(1);
@@ -199,14 +187,12 @@ TEST_F(SerializeAsyncTest, WriteAsync) {
     }
   });
 
-  loop.wait(loop.evalLater([&]() {
+  kj::runIoEventLoop([&]() {
     return writeMessage(*output, message);
-  }));
+  });
 }
 
 TEST_F(SerializeAsyncTest, WriteAsyncOddSegmentCount) {
-  kj::UnixEventLoop loop;
-
   auto output = kj::AsyncOutputStream::wrapFd(fds[1]);
 
   TestMessageBuilder message(7);
@@ -225,14 +211,12 @@ TEST_F(SerializeAsyncTest, WriteAsyncOddSegmentCount) {
     }
   });
 
-  loop.wait(loop.evalLater([&]() {
+  kj::runIoEventLoop([&]() {
     return writeMessage(*output, message);
-  }));
+  });
 }
 
 TEST_F(SerializeAsyncTest, WriteAsyncEvenSegmentCount) {
-  kj::UnixEventLoop loop;
-
   auto output = kj::AsyncOutputStream::wrapFd(fds[1]);
 
   TestMessageBuilder message(10);
@@ -251,9 +235,9 @@ TEST_F(SerializeAsyncTest, WriteAsyncEvenSegmentCount) {
     }
   });
 
-  loop.wait(loop.evalLater([&]() {
+  kj::runIoEventLoop([&]() {
     return writeMessage(*output, message);
-  }));
+  });
 }
 
 }  // namespace

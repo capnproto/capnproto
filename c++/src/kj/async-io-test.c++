@@ -165,5 +165,24 @@ TEST(AsyncIo, TwoWayPipe) {
   EXPECT_EQ("bar", result2);
 }
 
+TEST(AsyncIo, RunIoEventLoop) {
+  auto pipe = newOneWayPipe();
+  char receiveBuffer[4];
+
+  String result = runIoEventLoop([&]() {
+    auto promise1 = pipe.out->write("foo", 3);
+
+    auto promise2 = pipe.in->tryRead(receiveBuffer, 3, 4)
+      .then([&](size_t n) {
+        EXPECT_EQ(3u, n);
+        return heapString(receiveBuffer, n);
+      });
+
+    return promise1.then(mvCapture(promise2, [](Promise<String> promise2) { return promise2; }));
+  });
+
+  EXPECT_EQ("foo", result);
+}
+
 }  // namespace
 }  // namespace kj

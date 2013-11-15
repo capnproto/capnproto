@@ -180,6 +180,67 @@ TwoWayPipe newTwoWayPipe();
 // Creates two AsyncIoStreams representing the two ends of a two-way OS pipe (created with
 // socketpair(2)).  Data written to one end can be read from the other.
 
+// =======================================================================================
+
+namespace _ {  // private
+
+class IoLoopMain {
+public:
+  virtual void run(EventLoop& loop) = 0;
+};
+
+template <typename Func, typename Result>
+class IoLoopMainImpl: public IoLoopMain {
+public:
+  IoLoopMainImpl(Func&& func): func(kj::mv(func)) {}
+  void run(EventLoop& loop) override {
+    result = space.construct(loop.wait(loop.evalLater(func)));
+  }
+  Result getResult() { return kj::mv(*result); }
+
+private:
+  Func func;
+  SpaceFor<Result> space;
+  Own<Result> result;
+};
+
+template <typename Func>
+class IoLoopMainImpl<Func, void>: public IoLoopMain {
+public:
+  IoLoopMainImpl(Func&& func): func(kj::mv(func)) {}
+  void run(EventLoop& loop) override {
+    loop.wait(loop.evalLater(func));
+  }
+  void getResult() {}
+
+private:
+  Func func;
+};
+
+void runIoEventLoopInternal(IoLoopMain& func);
+
+}  // namespace _ (private)
+
+template <typename Func>
+auto runIoEventLoop(Func&& func) -> decltype(instance<EventLoop&>().wait(func())) {
+  // Sets up an appropriate EventLoop for doing I/O, then executes the given function.  The function
+  // returns a promise.  The EventLoop will continue running until that promise resolves, then the
+  // whole function will return its resolution.  On return, the EventLoop is destroyed, cancelling
+  // all outstanding I/O.
+  //
+  // This function is great for running inside main() to set up an Async I/O environment without
+  // specifying a platform-specific EventLoop or other such things.
+
+  // TODO(cleanup):  I wanted to forward-declare this function in order to document it separate
+  //   from the implementation details but GCC claimed the two declarations were overloads rather
+  //   than the same function, even though the signature was identical.  FFFFFFFFFFUUUUUUUUUUUUUUU-
+
+  typedef decltype(instance<EventLoop&>().wait(instance<Func>()())) Result;
+  _::IoLoopMainImpl<Func, Result> func2(kj::fwd<Func>(func));
+  _::runIoEventLoopInternal(func2);
+  return func2.getResult();
+}
+
 }  // namespace kj
 
 #endif  // KJ_ASYNC_IO_H_
