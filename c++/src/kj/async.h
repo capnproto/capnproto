@@ -27,6 +27,7 @@
 #include "exception.h"
 #include "mutex.h"
 #include "refcount.h"
+#include "work-queue.h"
 
 namespace kj {
 
@@ -198,7 +199,7 @@ template <typename Func, typename T>
 using PromiseForResultNoChaining = Promise<_::DisallowChain<_::ReturnType<Func, T>>>;
 // Like PromiseForResult but chaining (continuations that return another promise) is now allowed.
 
-class EventLoop {
+class EventLoop: private _::NewJobCallback {
   // Represents a queue of events being executed in a loop.  Most code won't interact with
   // EventLoop directly, but instead use `Promise`s to interact with it indirectly.  See the
   // documentation for `Promise`.
@@ -221,6 +222,8 @@ class EventLoop {
   //       print(text);
   //       return 0;
   //     }
+
+  class EventJob;
 
 public:
   EventLoop();
@@ -301,13 +304,13 @@ public:
     //   conditions.
 
   public:
-    Event(const EventLoop& loop): loop(loop), next(nullptr), prev(nullptr) {}
+    Event(const EventLoop& loop);
     ~Event() noexcept(false);
     KJ_DISALLOW_COPY(Event);
 
     void arm(bool preemptIfSameThread = true);
-    // Enqueue this event so that run() will be called from the event loop soon.  Does nothing
-    // if the event is already armed.
+    // Enqueue this event so that run() will be called from the event loop soon.  It is an error
+    // to call this when the event is already armed.
     //
     // If called from the event loop's own thread (i.e. from within an event handler fired from
     // this event loop), and `preemptIfSameThread` is true, the event will be scheduled
@@ -336,13 +339,11 @@ public:
   private:
     friend class EventLoop;
     const EventLoop& loop;
-    Event* next;  // if == this, disarm() has been called.
-    Event* prev;
 
-    mutable kj::_::Mutex mutex;
-    // Hack:  The mutex on the list head is treated as protecting the next/prev links across the
-    //   whole list.  The mutex on each Event other than the head is treated as protecting that
-    //   event's armed/disarmed state.
+    // TODO(cleanup):  This is dumb.  We allocate two jobs and alternate between them so that an
+    //   event's fire() can re-arm itself without deadlocking or causing other trouble.
+    Own<_::WorkQueue<EventJob>::JobWrapper> jobs[2];
+    uint currentJob = 0;
   };
 
 protected:
@@ -365,21 +366,21 @@ protected:
   // is armed; it should return quickly if the loop isn't prepared to sleep.
 
 private:
-  class EventListHead: public Event {
+  class EventJob {
   public:
-    inline EventListHead(EventLoop& loop): Event(loop) {}
-    void fire() override;  // throws
+    EventJob(Event& event): event(event) {}
+
+    inline void complete(int dummyArg) { event.fire(); }
+    inline void cancel() {}
+
+  private:
+    Event& event;
   };
 
-  mutable EventListHead queue;
-  // Head of the event list.  queue.mutex protects all next/prev pointers across the list, as well
-  // as `insertPoint`.  Each actual event's mutex protects its own `fire()` callback.
+  _::WorkQueue<EventJob> queue;
 
-  mutable Event* insertPoint;
-  // The next event after the one that is currently firing.  New events are inserted just before
-  // this event.  When the fire callback completes, the loop continues at the beginning of the
-  // queue -- thus, it starts by running any events that were just enqueued by the previous
-  // callback.  This keeps related events together.
+  Maybe<_::WorkQueue<EventJob>::JobWrapper&> insertionPoint;
+  // Where to insert preemptively-scheduled events into the queue.
 
   template <typename T, typename Func, typename ErrorFunc>
   Own<_::PromiseNode> thereImpl(Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler) const;
@@ -392,6 +393,9 @@ private:
   // If called from the event loop's thread, returns a promise that won't resolve until all events
   // currently on the queue are fired.  Otherwise, returns an already-resolved promise.  Used to
   // implement evalLater().
+
+  void receivedNewJob() const override;
+  // Implements NewJobCallback.
 
   template <typename>
   friend class Promise;
@@ -1272,9 +1276,11 @@ public:
   }
 
 private:
-  Adapter adapter;
   ExceptionOr<T> result;
   bool waiting = true;
+  Adapter adapter;
+  // `adapter` must come last so that it is destroyed first, since fulfill() could be called up
+  // until that point.
 
   void fulfill(T&& value) override {
     if (waiting) {

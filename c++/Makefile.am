@@ -199,6 +199,7 @@ libkj_async_la_LIBADD = libkj.la $(PTHREAD_LIBS) -lpthread
 libkj_async_la_LDFLAGS = -release $(VERSION) -no-undefined
 libkj_async_la_SOURCES=                                        \
   src/kj/work-queue.h                                          \
+  src/kj/work-queue.c++                                        \
   src/kj/async.c++                                             \
   src/kj/async-unix.c++                                        \
   src/kj/async-io.c++

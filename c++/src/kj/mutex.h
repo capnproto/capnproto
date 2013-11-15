@@ -26,7 +26,7 @@
 
 #include "memory.h"
 
-#if __linux__ && !defined(KJ_FUTEX)
+#if __linux__ && !defined(KJ_USE_FUTEX)
 #define KJ_USE_FUTEX 1
 #endif
 
@@ -87,9 +87,10 @@ class Once {
 
 public:
 #if KJ_USE_FUTEX
-  inline Once(): futex(UNINITIALIZED) {}
+  inline Once(bool startInitialized = false)
+      : futex(startInitialized ? INITIALIZED : UNINITIALIZED) {}
 #else
-  Once();
+  Once(bool startInitialized = false);
   ~Once();
 #endif
   KJ_DISALLOW_COPY(Once);
@@ -106,7 +107,26 @@ public:
 #if KJ_USE_FUTEX
     return __atomic_load_n(&futex, __ATOMIC_ACQUIRE) == INITIALIZED;
 #else
-    return __atomic_load_n(&initialized, __ATOMIC_ACQUIRE);
+    return __atomic_load_n(&state, __ATOMIC_ACQUIRE) == INITIALIZED;
+#endif
+  }
+
+  void reset();
+  // Returns the state from initialized to uninitialized.  It is an error to call this when
+  // not already initialized, or when runOnce() or isInitialized() might be called concurrently in
+  // another thread.
+
+  void disable() noexcept;
+  // Prevent future calls to runOnce() and reset() from having any effect, and make isInitialized()
+  // return false forever.  If an initializer is currently running, block until it completes.
+
+  bool isDisabled() noexcept {
+    // Returns true if `disable()` has been called.
+
+#if KJ_USE_FUTEX
+    return __atomic_load_n(&futex, __ATOMIC_ACQUIRE) == DISABLED;
+#else
+    return __atomic_load_n(&state, __ATOMIC_ACQUIRE) == DISABLED;
 #endif
   }
 
@@ -114,13 +134,21 @@ private:
 #if KJ_USE_FUTEX
   uint futex;
 
-  static constexpr uint UNINITIALIZED = 0;
-  static constexpr uint INITIALIZING = 1;
-  static constexpr uint INITIALIZING_WITH_WAITERS = 2;
-  static constexpr uint INITIALIZED = 3;
+  enum State {
+    UNINITIALIZED,
+    INITIALIZING,
+    INITIALIZING_WITH_WAITERS,
+    INITIALIZED,
+    DISABLED
+  };
 
 #else
-  bool initialized;
+  enum State {
+    UNINITIALIZED,
+    INITIALIZED,
+    DISABLED
+  };
+  State state;
   pthread_mutex_t mutex;
 #endif
 };

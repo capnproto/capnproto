@@ -108,10 +108,16 @@ public:
   inline SignalPromiseAdapter(PromiseFulfiller<siginfo_t>& fulfiller,
                               const _::WorkQueue<SignalJob>& signalQueue,
                               int signum)
-      : job(signalQueue.add(fulfiller, signum)) {}
+      : job(signalQueue.createJob(fulfiller, signum)) {
+    job->addToQueue();
+  }
+
+  ~SignalPromiseAdapter() noexcept(false) {
+    job->cancel();
+  }
 
 private:
-  Own<const SignalJob> job;
+  Own<_::WorkQueue<SignalJob>::JobWrapper> job;
 };
 
 class UnixEventLoop::PollJob {
@@ -142,10 +148,16 @@ public:
   inline PollPromiseAdapter(PromiseFulfiller<short>& fulfiller,
                             const _::WorkQueue<PollJob>& pollQueue,
                             int fd, short eventMask)
-      : job(pollQueue.add(fulfiller, fd, eventMask)) {}
+      : job(pollQueue.createJob(fulfiller, fd, eventMask)) {
+    job->addToQueue();
+  }
+
+  ~PollPromiseAdapter() noexcept(false) {
+    job->cancel();
+  }
 
 private:
-  Own<const PollJob> job;
+  Own<_::WorkQueue<PollJob>::JobWrapper> job;
 };
 
 UnixEventLoop::UnixEventLoop(): impl(heap<Impl>(*this)) {

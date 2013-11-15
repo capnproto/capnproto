@@ -30,6 +30,8 @@
 namespace kj {
 namespace _ {  // private
 
+void yieldThread();
+
 class NewJobCallback {
 public:
   virtual void receivedNewJob() const = 0;
@@ -46,8 +48,13 @@ class WorkQueue {
   // before complete() gets a chance to be called.  Often, cancel() does nothing.  Either
   // complete() or cancel() will have been called and returned before Own<Job>'s destructor
   // finishes; the destructor will block if complete() is still running in another thread.
+  //
+  // This class is extraordinarily difficult to use correctly and therefore remains private for
+  // now.
 
 public:
+  ~WorkQueue() noexcept(false);
+
   class JobWrapper final: private Disposer {
     // Holds one Job in the queue.
 
@@ -55,8 +62,10 @@ public:
     const Job& get() const;
     // Get the wrapped Job.
 
+    // methods called by the consumer ------------------------------------------
+
     Maybe<JobWrapper&> getNext();
-    // Get the next job in the queue.  Returns nullptr if there are no more jobs.  Removes any
+    // Gets the next job in the queue.  Returns nullptr if there are no more jobs.  Removes any
     // jobs in the list that are already canceled.
 
     template <typename Param>
@@ -69,10 +78,36 @@ public:
     //   params.  However, GCC 4.7 and 4.8 appear to get confused by param packs used inside
     //   lambdas.  Clang handles it fine.
 
+    // methods called by the producer ------------------------------------------
+
+    void addToQueue();
+    // Add the job to the queue.
+    //
+    // It is an error to call this if the job is already in the queue.  However, once complete()
+    // has been called on the underlying `Job`, `addToQueue()` can be called again (including
+    // recursively during `complete()`.  On the other hand, it is *not* safe to call `addToQueue()`
+    // after `cancel()`.
+
+    void cancel();
+    // Cancels the job before completion, preventing complete() from being called.  If complete()
+    // is already being called, blocks until it finishes.  Causes subsequent calls to `addToQueue()`
+    // to have no effect.
+
+    // methods called by the single producer/consumer --------------------------
+
+    void insertAfter(Maybe<JobWrapper&> position, WorkQueue& queue);
+    // Like `addToQueue()`, but insert the job into the queue after `position` or the beginning of
+    // the queue if `position` is null.  This can only be used if the calling thread is also the
+    // consuming thread.
+    //
+    // The non-const WorkQueue must be provided to allow thread-unsafe access.
+
   private:
+    const WorkQueue& queue;
     Job job;
+
     mutable _::Once once;
-    mutable uint refcount = 2;
+    mutable uint refcount = 1;
 
     JobWrapper* next = nullptr;
     // The JobWrapper cannot be destroyed until this pointer becomes non-null.
@@ -83,7 +118,7 @@ public:
     friend class WorkQueue;
 
     template <typename... Params>
-    JobWrapper(Params&&... params);
+    JobWrapper(const WorkQueue& queue, Params&&... params);
 
     void disposeImpl(void* pointer) const override;
     // Called when the listener discards its Own<Job>.
@@ -93,6 +128,11 @@ public:
     // Once both complete() and done() have been called, the job wrapper is deleted.
     //
     // `drop()` is also responsible for calling the job's destructor.
+
+    typename WorkQueue<Job>::JobWrapper* unlink();
+    // Safely remove the job from the queue.  Only the consumer can call this.  Does not call
+    // removeRef(); the caller must arrange to call this afterwards.  Returns the following item
+    // in the queue, if any.
 
     void removeRef() const;
 
@@ -118,9 +158,9 @@ public:
   // you are sure that you don't need to be notified, pass null for the callback.
 
   template <typename... Params>
-  Own<const Job> add(Params&&... params) const;
-  // Adds an job to the list, passing the given parameters to its constructor.  Can be called
-  // from any thread.
+  Own<JobWrapper> createJob(Params&&... params) const;
+  // Creates a new job, passing the given parameters to the `Job` constructor, but does not yet
+  // add the job to the queue.  Call addToQueue() on the `JobWrapper` to do so.
   //
   // If the caller discards the returned pointer before the job completes, it will be canceled.
   // Either the job's complete() or cancel() method will be called exactly once and will have
@@ -141,7 +181,20 @@ private:
 
   mutable NewJobCallback* newJobCallback = nullptr;
   // If non-null, run this the next time `add()` is called, then set null.
+
+  void notifyNewJob() const;
+  // Atomically call the new job callback (if non-null) and then set it to null.
 };
+
+template <typename Job>
+WorkQueue<Job>::~WorkQueue() noexcept(false) {
+  JobWrapper* ptr = head;
+  while (ptr != nullptr) {
+    JobWrapper* next = ptr->next;
+    ptr->removeRef();
+    ptr = next;
+  }
+}
 
 template <typename Job>
 Maybe<typename WorkQueue<Job>::JobWrapper&> WorkQueue<Job>::peek(
@@ -162,27 +215,22 @@ Maybe<typename WorkQueue<Job>::JobWrapper&> WorkQueue<Job>::peek(
 
 template <typename Job>
 template <typename... Params>
-Own<const Job> WorkQueue<Job>::add(Params&&... params) const {
-  JobWrapper* job = new JobWrapper(kj::fwd<Params>(params)...);
-  Own<const Job> result(&job->job, *job);
+Own<typename WorkQueue<Job>::JobWrapper> WorkQueue<Job>::createJob(Params&&... params) const {
+  JobWrapper* job = new JobWrapper(*this, kj::fwd<Params>(params)...);
+  return Own<JobWrapper>(job, *job);
+}
 
-  job->prev = __atomic_load_n(&tail, __ATOMIC_ACQUIRE);
-  while (!__atomic_compare_exchange_n(&tail, &job->prev, &job->next, true,
-                                      __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
-    // Oops, someone else updated the tail pointer.  Try again.
-  }
-
-  __atomic_store_n(job->prev, job, __ATOMIC_RELEASE);
-
+template <typename Job>
+void WorkQueue<Job>::notifyNewJob() const {
+  // Check if there is a NewJobCallback.
   if (__atomic_load_n(&newJobCallback, __ATOMIC_RELAXED) != nullptr) {
-    // There is a callback.  Do an atomic exchange to acquire it.
+    // There is a callback.  Atomically acquire it so that it is only caleld once.
     NewJobCallback* callback = __atomic_exchange_n(&newJobCallback, nullptr, __ATOMIC_ACQUIRE);
     if (callback != nullptr) {
+      // Acquired by this thread.  Call it.
       callback->receivedNewJob();
     }
   }
-
-  return kj::mv(result);
 }
 
 template <typename Job>
@@ -203,32 +251,61 @@ Maybe<typename WorkQueue<Job>::JobWrapper&> WorkQueue<Job>::JobWrapper::getNext(
 template <typename Job>
 template <typename Param>
 Maybe<typename WorkQueue<Job>::JobWrapper&> WorkQueue<Job>::JobWrapper::complete(Param&& param) {
-  doOnce([&]() {
-    const_cast<Job&>(job).complete(kj::fwd<Param>(param));
-  });
+  // Remove from the queue first, so that it can be re-added during the callback.
+  JobWrapper* result = unlink();
 
-  JobWrapper* nextCopy = __atomic_load_n(&next, __ATOMIC_ACQUIRE);
-  if (nextCopy == nullptr) {
-    return nullptr;
+  // Run the callback.
+  {
+    KJ_DEFER(removeRef());
+    doOnce([&]() {
+      const_cast<Job&>(job).complete(kj::fwd<Param>(param));
+    });
   }
-  *prev = nextCopy;
-  nextCopy->prev = prev;
-  removeRef();
 
-  return nextCopy->skipDead();
+  // Return the next job.
+  if (result == nullptr) {
+    return nullptr;
+  } else {
+    return result->skipDead();
+  }
 }
 
 template <typename Job>
 template <typename... Params>
-inline WorkQueue<Job>::JobWrapper::JobWrapper(Params&&... params)
-    : job(kj::fwd<Params>(params)...) {}
+inline WorkQueue<Job>::JobWrapper::JobWrapper(const WorkQueue& queue, Params&&... params)
+    : queue(queue), job(kj::fwd<Params>(params)...), once(true) {}
 
 template <typename Job>
 void WorkQueue<Job>::JobWrapper::disposeImpl(void* pointer) const {
-  if (!once.isInitialized()) {
-    doOnce([this]() { const_cast<Job&>(job).cancel(); });
-  }
+  KJ_IREQUIRE(once.isDisabled());
   removeRef();
+}
+
+template <typename Job>
+typename WorkQueue<Job>::JobWrapper* WorkQueue<Job>::JobWrapper::unlink() {
+  JobWrapper* result;
+
+  result = *prev = __atomic_load_n(&next, __ATOMIC_ACQUIRE);
+  if (result == nullptr) {
+    // Oops, we're at the end of the queue.  We need to back up the tail pointer.
+    JobWrapper** oldTail = &next;
+    if (!__atomic_compare_exchange_n(&queue.tail, &oldTail, prev, false,
+                                     __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+      // Crap, another thread is busy inserting.  Gotta wait for it.
+      do {
+        yieldThread();
+        result = *prev = __atomic_load_n(&next, __ATOMIC_ACQUIRE);
+      } while (result == nullptr);
+      result->prev = prev;
+    }
+  } else {
+    result->prev = prev;
+  }
+
+  next = nullptr;
+  prev = nullptr;
+
+  return result;
 }
 
 template <typename Job>
@@ -262,17 +339,83 @@ Maybe<typename WorkQueue<Job>::JobWrapper&> WorkQueue<Job>::JobWrapper::skipDead
 
   while (current->once.isInitialized()) {
     // This job has already been taken care of.  Remove it.
-    JobWrapper* next = __atomic_load_n(&current->next, __ATOMIC_ACQUIRE);
-    if (next == nullptr) {
+    current = current->unlink();
+    if (current == nullptr) {
       return nullptr;
     }
-    *current->prev = next;
-    next->prev = current->prev;
-    current->removeRef();
-    current = next;
   }
 
   return *current;
+}
+
+template <typename Job>
+void WorkQueue<Job>::JobWrapper::addToQueue() {
+  KJ_IREQUIRE(prev == nullptr, "Job is already in the queue.");
+  once.reset();
+
+  // Increment refcount to indicate insertion into the queue.
+  __atomic_add_fetch(&refcount, 1, __ATOMIC_RELAXED);
+
+  // Atomically set our `prev` to the tail pointer, and the tail pointer point to our `next`.
+  prev = __atomic_load_n(&queue.tail, __ATOMIC_ACQUIRE);
+  while (!__atomic_compare_exchange_n(&queue.tail, &prev, &next, true,
+                                      __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
+    // Oops, someone else updated the tail pointer.  Try again.
+  }
+
+  // Update the target of the prev pointer to point back to us.  This inserts the job into the
+  // list; the consumer thread may now consume it.
+  __atomic_store_n(prev, this, __ATOMIC_RELEASE);
+
+  queue.notifyNewJob();
+}
+
+template <typename Job>
+void WorkQueue<Job>::JobWrapper::cancel() {
+  once.disable();
+}
+
+template <typename Job>
+void WorkQueue<Job>::JobWrapper::insertAfter(Maybe<JobWrapper&> position, WorkQueue& queue) {
+  KJ_IREQUIRE(prev == nullptr, "Job is already in the queue.");
+  once.reset();
+
+  // Increment refcount to indicate insertion into the queue.
+  __atomic_add_fetch(&refcount, 1, __ATOMIC_RELAXED);
+
+
+  KJ_IF_MAYBE(p, position) {
+    KJ_IREQUIRE(p->prev != nullptr, "position is not in the queue");
+
+    prev = &p->next;
+  } else {
+    prev = &queue.head;
+  }
+
+  next = __atomic_load_n(prev, __ATOMIC_ACQUIRE);
+
+  if (next == nullptr) {
+    // It appears we're trying to insert at the end of the queue, so we could interfere with other
+    // threads.  We need to update the tail pointer to claim our spot.
+
+    if (!__atomic_compare_exchange_n(&queue.tail, &prev, &next, false,
+                                     __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
+      // Oh, someone else claimed the spot.  Our job needs to be inserted ahead of theirs so
+      // we'll need to spin until they finish linking their job into the list.
+      do {
+        yieldThread();
+        next = __atomic_load_n(prev, __ATOMIC_ACQUIRE);
+      } while (next == nullptr);
+      next->prev = &next;
+    }
+  } else {
+    next->prev = &next;
+  }
+
+  // No more thread interference.
+  *prev = this;
+
+  queue.notifyNewJob();
 }
 
 }  // namespace _ (private)

@@ -79,14 +79,7 @@ bool EventLoop::isCurrent() const {
   return threadLocalEventLoop == this;
 }
 
-void EventLoop::EventListHead::fire() {
-  KJ_FAIL_ASSERT("Fired event list head.");
-}
-
-EventLoop::EventLoop(): queue(*this), insertPoint(&queue) {
-  queue.next = &queue;
-  queue.prev = &queue;
-}
+EventLoop::EventLoop() {}
 
 void EventLoop::waitImpl(Own<_::PromiseNode> node, _::ExceptionOrValue& result) {
   EventLoop* oldEventLoop = threadLocalEventLoop;
@@ -97,36 +90,22 @@ void EventLoop::waitImpl(Own<_::PromiseNode> node, _::ExceptionOrValue& result) 
   event.fired = node->onReady(event);
 
   while (!event.fired) {
-    queue.mutex.lock(_::Mutex::EXCLUSIVE);
+    KJ_IF_MAYBE(event, queue.peek(nullptr)) {
+      // Arrange for events armed during the event callback to be inserted at the beginning
+      // of the queue.
+      insertionPoint = nullptr;
 
-    // Get the first event in the queue.
-    Event* event = queue.next;
-    if (event == &queue) {
-      // No events in the queue.
+      // Fire the first event.
+      event->complete(0);
+    } else {
+      // No events in the queue.  Wait for callback.
       prepareToSleep();
-      queue.mutex.unlock(_::Mutex::EXCLUSIVE);
+      if (queue.peek(*this) != nullptr) {
+        // Whoa, new job was just added.
+        wake();
+      }
       sleep();
-      continue;
     }
-
-    // Remove it from the queue.
-    queue.next = event->next;
-    event->next->prev = &queue;
-    event->next = nullptr;
-    event->prev = nullptr;
-
-    // New events should be inserted at the beginning of the queue, but in order.
-    insertPoint = queue.next;
-
-    // Lock it before we unlock the queue mutex.
-    event->mutex.lock(_::Mutex::EXCLUSIVE);
-
-    // Now we can unlock the queue.
-    queue.mutex.unlock(_::Mutex::EXCLUSIVE);
-
-    // Fire the event, making sure we unlock the mutex afterwards.
-    KJ_DEFER(event->mutex.unlock(_::Mutex::EXCLUSIVE));
-    event->fire();
   }
 
   node->get(result);
@@ -136,72 +115,35 @@ Promise<void> EventLoop::yieldIfSameThread() const {
   return Promise<void>(false, kj::heap<YieldPromiseNode>());
 }
 
-EventLoop::Event::~Event() noexcept(false) {
-  if (this != &loop.queue) {
-    KJ_ASSERT(next == this,
-              "Event destroyed while armed.  You must call disarm() in the subclass's destructor "
-              "in order to ensure that fire() is not running when the event is destroyed.") {
-      break;
-    }
-  }
+void EventLoop::receivedNewJob() const {
+  wake();
 }
 
+EventLoop::Event::Event(const EventLoop& loop)
+    : loop(loop),
+      jobs { loop.queue.createJob(*this), loop.queue.createJob(*this) } {}
+
+EventLoop::Event::~Event() noexcept(false) {}
+
 void EventLoop::Event::arm(bool preemptIfSameThread) {
-  loop.queue.mutex.lock(_::Mutex::EXCLUSIVE);
-  KJ_DEFER(loop.queue.mutex.unlock(_::Mutex::EXCLUSIVE));
-
-  if (next == nullptr) {
-    bool queueIsEmpty = loop.queue.next == &loop.queue;
-
-    if (preemptIfSameThread && threadLocalEventLoop == &loop) {
-      // Insert the event into the queue.  We put it at the front rather than the back so that
-      // related events are executed together and so that increasing the granularity of events
-      // does not cause your code to "lose priority" compared to simultaneously-running code
-      // with less granularity.
-      next = loop.insertPoint;
-      prev = next->prev;
-      next->prev = this;
-      prev->next = this;
-    } else {
-      // Insert the node at the *end* of the queue.
-      prev = loop.queue.prev;
-      next = prev->next;
-      prev->next = this;
-      next->prev = this;
-
-      if (loop.insertPoint == &loop.queue) {
-        loop.insertPoint = this;
-      }
-    }
-
-    if (queueIsEmpty) {
-      // Queue was empty previously.  Make sure to wake it up if it is sleeping.
-      loop.wake();
-    }
+  EventLoop* localLoop = threadLocalEventLoop;
+  if (preemptIfSameThread && localLoop == &loop) {
+    // Insert the event into the queue.  We put it at the front rather than the back so that
+    // related events are executed together and so that increasing the granularity of events
+    // does not cause your code to "lose priority" compared to simultaneously-running code
+    // with less granularity.
+    jobs[currentJob]->insertAfter(localLoop->insertionPoint, localLoop->queue);
+    localLoop->insertionPoint = *jobs[currentJob];
+  } else {
+    // Insert the node at the *end* of the queue.
+    jobs[currentJob]->addToQueue();
   }
+  currentJob = !currentJob;
 }
 
 void EventLoop::Event::disarm() {
-  loop.queue.mutex.lock(_::Mutex::EXCLUSIVE);
-
-  if (next != nullptr && next != this) {
-    if (loop.insertPoint == this) {
-      loop.insertPoint = next;
-    }
-
-    next->prev = prev;
-    prev->next = next;
-    next = nullptr;
-    prev = nullptr;
-  }
-
-  next = this;
-
-  loop.queue.mutex.unlock(_::Mutex::EXCLUSIVE);
-
-  // Ensure that if fire() is currently running, it completes before disarm() returns.
-  mutex.lock(_::Mutex::EXCLUSIVE);
-  mutex.unlock(_::Mutex::EXCLUSIVE);
+  jobs[0]->cancel();
+  jobs[1]->cancel();
 }
 
 // =======================================================================================
