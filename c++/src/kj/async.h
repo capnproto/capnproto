@@ -686,26 +686,16 @@ public:
   // Get the EventLoop in which this value can be modified.
 
   template <typename Func>
-  PromiseForResult<Func, T&> applyNow(Func&& func) const KJ_WARN_UNUSED_RESULT {
-    // Calls the given function, passing the guarded object to it as a mutable reference, and
-    // returning a pointer to the function's result.  When called from within the object's event
-    // loop, the function runs synchronously, but when called from any other thread, the function
-    // is queued to run on the object's loop later.
-
-    if (loop.isCurrent()) {
-      return func(const_cast<T&>(value));
-    } else {
-      return applyLater(kj::fwd<Func>(func));
-    }
-  }
+  PromiseForResult<Func, T&> applyNow(Func&& func) const KJ_WARN_UNUSED_RESULT;
+  // Calls the given function, passing the guarded object to it as a mutable reference, and
+  // returning a pointer to the function's result.  When called from within the object's event
+  // loop, the function runs synchronously, but when called from any other thread, the function
+  // is queued to run on the object's loop later.
 
   template <typename Func>
-  PromiseForResult<Func, T&> applyLater(Func&& func) const KJ_WARN_UNUSED_RESULT {
-    // Like `applyNow` but always queues the function to run later regardless of which thread
-    // called it.
-
-    return loop.evalLater(Capture<Func> { const_cast<T&>(value), kj::fwd<Func>(func) });
-  }
+  PromiseForResult<Func, T&> applyLater(Func&& func) const KJ_WARN_UNUSED_RESULT;
+  // Like `applyNow` but always queues the function to run later regardless of which thread
+  // called it.
 
 private:
   const EventLoop& loop;
@@ -1595,6 +1585,30 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller(const EventLoop& loop) {
       _::maybeChain(kj::mv(intermediate), loop, implicitCast<T*>(nullptr)));
 
   return PromiseFulfillerPair<T> { kj::mv(promise), kj::mv(wrapper) };
+}
+
+template <typename T>
+template <typename Func>
+PromiseForResult<Func, T&> EventLoopGuarded<T>::applyNow(Func&& func) const {
+  // Calls the given function, passing the guarded object to it as a mutable reference, and
+  // returning a pointer to the function's result.  When called from within the object's event
+  // loop, the function runs synchronously, but when called from any other thread, the function
+  // is queued to run on the object's loop later.
+
+  if (loop.isCurrent()) {
+    return func(const_cast<T&>(value));
+  } else {
+    return applyLater(kj::fwd<Func>(func));
+  }
+}
+
+template <typename T>
+template <typename Func>
+PromiseForResult<Func, T&> EventLoopGuarded<T>::applyLater(Func&& func) const {
+  // Like `applyNow` but always queues the function to run later regardless of which thread
+  // called it.
+
+  return loop.evalLater(Capture<Func> { const_cast<T&>(value), kj::fwd<Func>(func) });
 }
 
 }  // namespace kj
