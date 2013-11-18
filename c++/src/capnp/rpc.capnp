@@ -282,6 +282,49 @@ struct Call {
   #
   # The params may contain capabilities.  These capabilities are automatically released when the
   # call returns *unless* the Return message explicitly indicates that they are being retained.
+
+  sendReturnTo :union {
+    # Where should the return message be sent?
+
+    caller @6 :Void;
+    # Send the return message back to the caller (the usual).
+
+    yourself @7 :QuestionId;
+    # **(level 1)**
+    #
+    # This is actually an echo of a call originally made by the receiver, with the given question
+    # ID.  The result of this call should directly resolve the original call, without ever sending
+    # a `Return` over the wire.
+    #
+    # For example:
+    # - Alice, in Vat A, call foo() on Bob in Vat B.
+    # - Alice makes a pipelined call bar() on the promise returned by foo().
+    # - Later on, Bob resolves the promise from foo() to point at Carol, who lives in Vat A (next
+    #   to Alice).
+    # - Vat B dutifully forwards the bar() call to Carol.  Let us call this forwarded call bar'().
+    # - The `Call` for bar'() has `sendReturnTo` set to `yourself`, with the value being the
+    #   question ID originally assigned to the bar() call.
+    # - Vat A receives bar'() and delivers it to Carol.
+    # - When bar'() returns, Vat A does *not* send a `Return` message to Vat B.  Instead, it
+    #   directly returns the result to Alice.
+    # - Vat A then sends a `Finish` message for bar().
+    # - Vat B, on receiving the `Finish`, sends a corresponding `Finish` for bar'().
+    # - Neither bar() nor bar'() ever see a `Return` message sent over the wire.
+
+    thirdParty @8 :RecipientId;
+    # **(level 3)**
+    #
+    # The call's result should be returned to a different vat.  The receiver (the callee) expects
+    # to receive an `Accept` message from the indicated vat, and should return the call's result
+    # to it, rather than to the sender of the `Call`.
+    #
+    # This operates much like `yourself`, above, except that Carol is in a separate Vat C.  `Call`
+    # messages are sent from Vat A -> Vat B and Vat B -> Vat C.  A `Return` message is sent from
+    # Vat B -> Vat A that contains a `redirect` to Vat C.  When Vat A sends an `Accept` to Vat C,
+    # it receives back a `Return` containing the call's actual result.  Vat C never sends a `Return`
+    # to Vat B, although `Finish` messages must still be sent corresponding to every `Call` as well
+    # as the `Accept`.
+  }
 }
 
 struct Return {
@@ -322,6 +365,13 @@ struct Return {
     # it used features that the callee's RPC implementation does not support.  The caller should
     # wait for the first call to return and then retry the dependent call as a regular,
     # non-pipelined call.
+
+    redirect @6 :ThirdPartyCapId;
+    # **(level 3)**
+    #
+    # The call has been redirected to another vat, and the result should be obtained by connecting
+    # to that vat directly.  An `Accept` message sent to the vat will return the result.  See
+    # `Call.sendReturnTo.thirdParty`.
   }
 }
 
@@ -534,10 +584,13 @@ struct Accept {
   #
   # Message type sent to pick up a capability hosted by the receiving vat and provided by a third
   # party.  The third party previously designated the capability using `Provide`.
+  #
+  # This message is also used to pick up a redirected return -- see `Return.redirect`.
 
   questionId @0 :QuestionId;
   # A new question ID identifying this accept message, which will eventually receive a Return
-  # message containing the provided capability.
+  # message containing the provided capability (or the call result in the case of a redirected
+  # return).
 
   provision @1 :ProvisionId;
   # Identifies the provided object to be picked up.
