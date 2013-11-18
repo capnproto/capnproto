@@ -224,6 +224,7 @@ struct Message {
 
     resolve @5 :Resolve;   # Resolve a previously-sent promise.
     release @6 :Release;   # Release a capability so that the remote object can be deallocated.
+    disembargo @13 :Disembargo;  # Lift an embargo used to enforce E-order over promise resolution.
 
     # Level 2 features -----------------------------------------------
 
@@ -473,6 +474,97 @@ struct Release {
   # when the reference count reaches zero.
 }
 
+struct Disembargo {
+  # **(level 1)**
+  #
+  # Message sent to indicate that an embargo on a recently-resolved promise may now be lifted.
+  #
+  # Embargos are used to enforce E-order in the presence of promise resolution.  That is, if an
+  # application makes two calls foo() and bar() on the same capability reference, in that order,
+  # the calls should be delivered in the order in which they were made.  But if foo() is called
+  # on a promise, and that promise happens to resolve before bar() is called, then the two calls
+  # may travel different paths over the network, and thus could arrive in the wrong order.  In
+  # this case, the call to `bar()` must be embargoed, and a `Disembargo` message must be sent along
+  # the same path as `foo()` to ensure that the `Disembargo` arrives after `foo()`.  Once the
+  # `Disembargo` arrives, `bar()` can then be delivered.
+  #
+  # There are two particular cases where embargos are important.  Consider object Alice, in Vat A,
+  # who holds a promise P, pointing towards Vat B, which eventually resolves to Carol.  The two
+  # cases are:
+  # - Carol lives in Vat A, i.e. next to Alice.  In this case, Vat A needs to send a `Disembargo`
+  #   message that echos through Vat B and back, to ensure that all pipelined calls on the promise
+  #   have been delivered.
+  # - Carol lives in a different Vat C.  When the promise resolves, a three-party handoff occurs
+  #   (see `Provide` and `Accept`, which constitute level 3 of the protocol).  In this case, we
+  #   piggyback on the state that has already been set up to handle the handoff:  the `Accept`
+  #   message (from Vat A to Vat C) is embargoed, as are all pipelined messages sent to it, while
+  #   a `Disembargo` message is sent from Vat A through Vat B to Vat C.  See `Accept.embargo` for
+  #   an example.
+  #
+  # Note that in the case where Carol actually lives in Vat B (i.e., the same vat that the promise
+  # already pointed at), no embargo is needed, because the pipelined calls are delivered over the
+  # same path as the later direct calls.
+  #
+  # An alternative strategy for enforcing E-order over promise resolution could be for Vat A to
+  # implement the embargo internally.  When Vat A is notified of promise resolution, it could
+  # send a dummy no-op call to promise P and wait for it to complete.  Until that call completes,
+  # all calls to the capability are queued locally.  This strategy works, but is pessimistic:
+  # in the three-party case, it requires an A -> B -> C -> B -> A round trip before calls can start
+  # being delivered directly to from Vat A to Vat C.  The `Disembargo` message allows latency to be
+  # reduced.  (In the two-party loopback case, the `Disembargo` message is just a more explicit way
+  # of accomplishing the same thing as a no-op call, but isn't any faster.)
+
+  target :union {
+    # What is to be disembargoed.
+
+    exportedCap @0 :ExportId;
+    # An exported capability.
+
+    promisedAnswer @1 :PromisedAnswer;
+    # A capability expected to be returned in the answer to an outstanding question.
+  }
+
+  using EmbargoId = UInt32;
+  # Used in `senderLoopback` and `receiverLoopback`, below.
+
+  context :union {
+    senderLoopback @2 :EmbargoId;
+    # The sender is requesting a disembargo on a promise which is known to resolve back to a
+    # capability hoste by the sender.  As soon as the receiver has echoed back all pipelined calls
+    # on this promise, it will deliver the Disembargo back to the sender with `receiverLoopback`
+    # set to the same value as `senderLoopback`.  This value is chosen by the sender, and since
+    # it is also consumed be the sender, the sender can use whatever strategy it wants to make sure
+    # the value is unambiguous.
+    #
+    # The receiver must verify that the target capability actually resolves back to the sender's
+    # vat.  Otherwise, the sender has committed a protocol error and should be disconnected.
+
+    receiverLoopback @3 :EmbargoId;
+    # The receiver previously sent a `senderLoopback` Disembargo towards a promise resolving to
+    # this capability, and that Disembargo is now being echoed back.
+
+    accept @4 :Void;
+    # **(level 3)**
+    #
+    # The sender is requesting a disembargo on a promise which is known to resolve to a third-party
+    # capability which the sender is currently in the process of accepting (using `Accept`).
+    # The receiver of this `Disembargo` has an outstanding `Provide` on said capability.  The
+    # receiver should now send a `Disembargo` with `provide` set to the question ID of that
+    # `Provide` message.
+    #
+    # See `Accept.embargo` for an example.
+
+    provide @5 :QuestionId;
+    # **(level 3)**
+    #
+    # The sender is requesting a disembargo on a capability currently being provided to a third
+    # party.  The question ID identifies the `Provide` message previously sent by the sender to
+    # this capability.  On receipt, the receiver (the capability host) shall release the embargo
+    # on the `Accept` message that it has received from the third party.  See `Accept.embargo` for
+    # an example.
+  }
+}
+
 # Level 2 message types ----------------------------------------------
 
 struct Save {
@@ -594,6 +686,40 @@ struct Accept {
 
   provision @1 :ProvisionId;
   # Identifies the provided object to be picked up.
+
+  embargo @2 :Bool;
+  # If true, this accept shall be temporarily embargoed.  The resulting `Return` will not be sent,
+  # and any pipelined calls will not be delivered, until the embargo is released.  The receiver
+  # (the capability host) will expect the provider (the vat that sent the `Provide` message) to
+  # eventually send a `Disembargo` message with the field `context.provide` set to the question ID
+  # of the original `Provide` message.  At that point, the embargo is released and the queued
+  # messages are delivered.
+  #
+  # For example:
+  # - Alice, in Vat A, holds a promise P, which currently points toward Vat B.
+  # - Alice calls foo() on P.  The `Call` message is sent to Vat B.
+  # - The promise P in Vat B ends up resolving to Carol, in Vat C.
+  # - Vat B sends a `Provide` message to Vat C, identifying Vat A as the recipient.
+  # - Vat B sends a `Resolve` message to Vat A, indicating that the promise has resolved to a
+  #   `ThirdPartyCapId` identifying Carol in Vat C.
+  # - Vat A sends an `Accept` message to Vat C to pick up the capability.  Since Vat A knows that
+  #   it has an outstanding call to the promise, it sets `embargo` to `true` in the `Accept`
+  #   message.
+  # - Vat A sends a `Disembargo` message to Vat B on promise P, with `context.accept` set.
+  # - Alice makes a call bar() to promise P, which is now pointing towards Vat C.  Alice doesn't
+  #   know anything about the mechanics of promise resolution happening under the hood, but she
+  #   expects that bar() will be delivered after foo() because that is the order in which she
+  #   initiated the calls.
+  # - Vat A sends the bar() call to Vat C, as a pipelined call on the result of the `Accept` (which
+  #   hasn't returned yet, due to the embargo).  Since calls to the newly-accepted capability
+  #   are embargoed, Vat C does not deliver the call yet.
+  # - At some point, Vat B forwards the foo() call from the beginning of this example on to Vat C.
+  # - Vat B forwards the `Disembargo` from Vat A on to vat C.  It sets `context.provide` to the
+  #   question ID of the `Provide` message it had sent previously.
+  # - Vat C receives foo() before `ReleaseEmbargo`, thus allowing it to correctly deliver foo()
+  #   before delivering bar().
+  # - Vat C receives `ReleaseEmbargo` from Vat B.  It can now send a `Return` for the `Accept` from
+  #   Vat A, as well as deliver bar().
 }
 
 # Level 4 message types ----------------------------------------------
