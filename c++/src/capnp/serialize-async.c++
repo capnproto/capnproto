@@ -30,10 +30,12 @@ namespace {
 
 class AsyncMessageReader: public MessageReader {
 public:
-  inline AsyncMessageReader(ReaderOptions options): MessageReader(options) {}
+  inline AsyncMessageReader(ReaderOptions options): MessageReader(options) {
+    memset(firstWord, 0, sizeof(firstWord));
+  }
   ~AsyncMessageReader() noexcept(false) {}
 
-  kj::Promise<void> read(kj::AsyncInputStream& inputStream, kj::ArrayPtr<word> scratchSpace);
+  kj::Promise<bool> read(kj::AsyncInputStream& inputStream, kj::ArrayPtr<word> scratchSpace);
 
   // implements MessageReader ----------------------------------------
 
@@ -56,68 +58,93 @@ private:
 
   inline uint segmentCount() { return firstWord[0].get() + 1; }
   inline uint segment0Size() { return firstWord[1].get(); }
+
+  kj::Promise<void> readAfterFirstWord(
+      kj::AsyncInputStream& inputStream, kj::ArrayPtr<word> scratchSpace);
+  kj::Promise<void> readSegments(
+      kj::AsyncInputStream& inputStream, kj::ArrayPtr<word> scratchSpace);
 };
 
-kj::Promise<void> AsyncMessageReader::read(kj::AsyncInputStream& inputStream,
+kj::Promise<bool> AsyncMessageReader::read(kj::AsyncInputStream& inputStream,
                                            kj::ArrayPtr<word> scratchSpace) {
-  return inputStream.read(firstWord, sizeof(firstWord))
-      .then([this,&inputStream]() -> kj::Promise<void> {
-    if (segmentCount() == 0) {
-      firstWord[1].set(0);
-    }
-
-    // Reject messages with too many segments for security reasons.
-    KJ_REQUIRE(segmentCount() < 512, "Message has too many segments.") {
-      return kj::READY_NOW;  // exception will be propagated
-    }
-
-    if (segmentCount() > 1) {
-      // Read sizes for all segments except the first.  Include padding if necessary.
-      moreSizes = kj::heapArray<_::WireValue<uint32_t>>(segmentCount() & ~1);
-      return inputStream.read(moreSizes.begin(), moreSizes.size() * sizeof(moreSizes[0]));
-    } else {
-      return kj::READY_NOW;
-    }
-  }).then([this,&inputStream,scratchSpace]() mutable -> kj::Promise<void> {
-    size_t totalWords = segment0Size();
-
-    if (segmentCount() > 1) {
-      for (uint i = 0; i < segmentCount() - 1; i++) {
-        totalWords += moreSizes[i].get();
+  return inputStream.tryRead(firstWord, sizeof(firstWord), sizeof(firstWord))
+      .then([this,&inputStream,scratchSpace](size_t n) mutable -> kj::Promise<bool> {
+    if (n == 0) {
+      return false;
+    } else if (n < sizeof(firstWord)) {
+      // EOF in first word.
+      KJ_FAIL_REQUIRE("Premature EOF.") {
+        return false;
       }
     }
 
-    // Don't accept a message which the receiver couldn't possibly traverse without hitting the
-    // traversal limit.  Without this check, a malicious client could transmit a very large segment
-    // size to make the receiver allocate excessive space and possibly crash.
-    KJ_REQUIRE(totalWords <= getOptions().traversalLimitInWords,
-               "Message is too large.  To increase the limit on the receiving end, see "
-               "capnp::ReaderOptions.") {
-      return kj::READY_NOW;  // exception will be propagated
-    }
-
-    if (scratchSpace.size() < totalWords) {
-      // TODO(perf):  Consider allocating each segment as a separate chunk to reduce memory
-      //   fragmentation.
-      ownedSpace = kj::heapArray<word>(totalWords);
-      scratchSpace = ownedSpace;
-    }
-
-    segmentStarts = kj::heapArray<const word*>(segmentCount());
-
-    segmentStarts[0] = scratchSpace.begin();
-
-    if (segmentCount() > 1) {
-      size_t offset = segment0Size();
-
-      for (uint i = 1; i < segmentCount(); i++) {
-        segmentStarts[i] = scratchSpace.begin() + offset;
-        offset += moreSizes[i-1].get();
-      }
-    }
-
-    return inputStream.read(scratchSpace.begin(), totalWords * sizeof(word));
+    return readAfterFirstWord(inputStream, scratchSpace).then([]() { return true; });
   });
+}
+
+kj::Promise<void> AsyncMessageReader::readAfterFirstWord(kj::AsyncInputStream& inputStream,
+                                                         kj::ArrayPtr<word> scratchSpace) {
+  if (segmentCount() == 0) {
+    firstWord[1].set(0);
+  }
+
+  // Reject messages with too many segments for security reasons.
+  KJ_REQUIRE(segmentCount() < 512, "Message has too many segments.") {
+    return kj::READY_NOW;  // exception will be propagated
+  }
+
+  if (segmentCount() > 1) {
+    // Read sizes for all segments except the first.  Include padding if necessary.
+    moreSizes = kj::heapArray<_::WireValue<uint32_t>>(segmentCount() & ~1);
+    return inputStream.read(moreSizes.begin(), moreSizes.size() * sizeof(moreSizes[0]))
+        .then([this,&inputStream,scratchSpace]() mutable {
+          return readSegments(inputStream, scratchSpace);
+        });
+  } else {
+    return readSegments(inputStream, scratchSpace);
+  }
+}
+
+kj::Promise<void> AsyncMessageReader::readSegments(kj::AsyncInputStream& inputStream,
+                                                   kj::ArrayPtr<word> scratchSpace) {
+  size_t totalWords = segment0Size();
+
+  if (segmentCount() > 1) {
+    for (uint i = 0; i < segmentCount() - 1; i++) {
+      totalWords += moreSizes[i].get();
+    }
+  }
+
+  // Don't accept a message which the receiver couldn't possibly traverse without hitting the
+  // traversal limit.  Without this check, a malicious client could transmit a very large segment
+  // size to make the receiver allocate excessive space and possibly crash.
+  KJ_REQUIRE(totalWords <= getOptions().traversalLimitInWords,
+             "Message is too large.  To increase the limit on the receiving end, see "
+             "capnp::ReaderOptions.") {
+    return kj::READY_NOW;  // exception will be propagated
+  }
+
+  if (scratchSpace.size() < totalWords) {
+    // TODO(perf):  Consider allocating each segment as a separate chunk to reduce memory
+    //   fragmentation.
+    ownedSpace = kj::heapArray<word>(totalWords);
+    scratchSpace = ownedSpace;
+  }
+
+  segmentStarts = kj::heapArray<const word*>(segmentCount());
+
+  segmentStarts[0] = scratchSpace.begin();
+
+  if (segmentCount() > 1) {
+    size_t offset = segment0Size();
+
+    for (uint i = 1; i < segmentCount(); i++) {
+      segmentStarts[i] = scratchSpace.begin() + offset;
+      offset += moreSizes[i-1].get();
+    }
+  }
+
+  return inputStream.read(scratchSpace.begin(), totalWords * sizeof(word));
 }
 
 
@@ -127,8 +154,23 @@ kj::Promise<kj::Own<MessageReader>> readMessage(
     kj::AsyncInputStream& input, ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
   auto reader = kj::heap<AsyncMessageReader>(options);
   auto promise = reader->read(input, scratchSpace);
-  return promise.then(kj::mvCapture(reader, [](kj::Own<MessageReader>&& reader) {
+  return promise.then(kj::mvCapture(reader, [](kj::Own<MessageReader>&& reader, bool success) {
+    KJ_REQUIRE(success, "Premature EOF.") { break; }
     return kj::mv(reader);
+  }));
+}
+
+kj::Promise<kj::Maybe<kj::Own<MessageReader>>> tryReadMessage(
+    kj::AsyncInputStream& input, ReaderOptions options, kj::ArrayPtr<word> scratchSpace) {
+  auto reader = kj::heap<AsyncMessageReader>(options);
+  auto promise = reader->read(input, scratchSpace);
+  return promise.then(kj::mvCapture(reader,
+        [](kj::Own<MessageReader>&& reader, bool success) -> kj::Maybe<kj::Own<MessageReader>> {
+    if (success) {
+      return kj::mv(reader);
+    } else {
+      return nullptr;
+    }
   }));
 }
 

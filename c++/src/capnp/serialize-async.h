@@ -38,6 +38,11 @@ kj::Promise<kj::Own<MessageReader>> readMessage(
 //
 // `scratchSpace`, if provided, must remain valid until the returned MessageReader is destroyed.
 
+kj::Promise<kj::Maybe<kj::Own<MessageReader>>> tryReadMessage(
+    kj::AsyncInputStream& input, ReaderOptions options = ReaderOptions(),
+    kj::ArrayPtr<word> scratchSpace = nullptr);
+// Like `readMessage` but returns null on EOF.
+
 kj::Promise<void> writeMessage(kj::AsyncOutputStream& output,
                                kj::ArrayPtr<const kj::ArrayPtr<const word>> segments)
     KJ_WARN_UNUSED_RESULT;

@@ -215,7 +215,7 @@ private:
 
 kj::Own<const ClientHook> BrokenPipeline::getPipelinedCap(
     kj::ArrayPtr<const PipelineOp> ops) const {
-  return kj::heap<BrokenClient>(exception);
+  return kj::refcounted<BrokenClient>(exception);
 }
 
 }  // namespace
@@ -226,6 +226,10 @@ kj::Own<const ClientHook> newBrokenCap(kj::StringPtr reason) {
 
 kj::Own<const ClientHook> newBrokenCap(kj::Exception&& reason) {
   return kj::refcounted<BrokenClient>(kj::mv(reason));
+}
+
+kj::Own<const PipelineHook> newBrokenPipeline(kj::Exception&& reason) {
+  return kj::refcounted<BrokenPipeline>(kj::mv(reason));
 }
 
 }  // namespace capnp

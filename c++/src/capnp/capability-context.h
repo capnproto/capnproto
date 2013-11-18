@@ -211,6 +211,9 @@ kj::Own<const ClientHook> newBrokenCap(kj::StringPtr reason);
 kj::Own<const ClientHook> newBrokenCap(kj::Exception&& reason);
 // Helper function that creates a capability which simply throws exceptions when called.
 
+kj::Own<const PipelineHook> newBrokenPipeline(kj::Exception&& reason);
+// Helper function that creates a pipeline which simply throws exceptions when called.
+
 // =======================================================================================
 // inline implementation details
 

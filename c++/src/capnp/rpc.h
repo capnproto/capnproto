@@ -31,7 +31,7 @@ namespace capnp {
 // =======================================================================================
 // ***************************************************************************************
 // This section contains various internal stuff that needs to be declared upfront.
-// Scroll down to `class EventLoop` or `class Promise` for the public interfaces.
+// Scroll down to `class VatNetwork` or `class RpcSystem` for the public interfaces.
 // ***************************************************************************************
 // =======================================================================================
 
@@ -60,7 +60,7 @@ public:
   class Connection {
   public:
     virtual kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) const = 0;
-    virtual kj::Promise<kj::Own<IncomingRpcMessage>> receiveIncomingMessage() = 0;
+    virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() = 0;
     virtual void baseIntroduceTo(Connection& recipient,
         ObjectPointer::Builder sendToRecipient,
         ObjectPointer::Builder sendToTarget) = 0;
@@ -163,10 +163,9 @@ public:
     //
     // Notice that this may be called from any thread.
 
-    virtual kj::Promise<kj::Own<IncomingRpcMessage>> receiveIncomingMessage() = 0;
-    // Wait for a message to be received and return it.  If the connection fails before a message
-    // is received, the promise will be broken -- this is the only way to tell if a connection has
-    // died.
+    virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() = 0;
+    // Wait for a message to be received and return it.  If the read stream cleanly terminates,
+    // return null.  If any other problem occurs, throw an exception.
 
     // Level 3 features ----------------------------------------------
 

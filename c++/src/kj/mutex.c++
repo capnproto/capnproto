@@ -137,11 +137,23 @@ void Mutex::assertLockedByCaller(Exclusivity exclusivity) {
 }
 
 void Once::runOnce(Initializer& init) {
+startOver:
   uint state = UNINITIALIZED;
   if (__atomic_compare_exchange_n(&futex, &state, INITIALIZING, false,
                                   __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
     // It's our job to initialize!
-    init.run();
+    {
+      KJ_ON_SCOPE_FAILURE({
+        // An exception was thrown by the initializer.  We have to revert.
+        if (__atomic_exchange_n(&futex, UNINITIALIZED, __ATOMIC_RELEASE) ==
+            INITIALIZING_WITH_WAITERS) {
+          // Someone was waiting for us to finish.
+          syscall(SYS_futex, &futex, FUTEX_WAKE_PRIVATE, INT_MAX, NULL, NULL, 0);
+        }
+      });
+
+      init.run();
+    }
     if (__atomic_exchange_n(&futex, INITIALIZED, __ATOMIC_RELEASE) ==
         INITIALIZING_WITH_WAITERS) {
       // Someone was waiting for us to finish.
@@ -165,6 +177,12 @@ void Once::runOnce(Initializer& init) {
       // Wait for initialization.
       syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, INITIALIZING_WITH_WAITERS, NULL, NULL, 0);
       state = __atomic_load_n(&futex, __ATOMIC_ACQUIRE);
+
+      if (state == UNINITIALIZED) {
+        // Oh hey, apparently whoever was trying to initialize gave up.  Let's take it from the
+        // top.
+        goto startOver;
+      }
     }
   }
 }
@@ -209,7 +227,7 @@ void Once::disable() noexcept {
         // Wait for initialization.
         syscall(SYS_futex, &futex, FUTEX_WAIT_PRIVATE, INITIALIZING_WITH_WAITERS, NULL, NULL, 0);
         state = __atomic_load_n(&futex, __ATOMIC_ACQUIRE);
-        break;
+        continue;
     }
   }
 }

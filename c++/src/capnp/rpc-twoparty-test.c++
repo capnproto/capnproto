@@ -144,7 +144,7 @@ TEST(TwoPartyNetwork, Pipelining) {
 
   // Start up server in another thread.
   auto quitter = kj::newPromiseAndFulfiller<void>();
-  kj::Thread thread([&]() {
+  auto thread = kj::heap<kj::Thread>([&]() {
     runServer(kj::mv(quitter.promise), kj::mv(pipe.ends[1]), callCount);
   });
   KJ_DEFER(quitter.fulfiller->fulfill());  // Stop the server loop before destroying the thread.
@@ -154,38 +154,88 @@ TEST(TwoPartyNetwork, Pipelining) {
   TwoPartyVatNetwork network(loop, *pipe.ends[0], rpc::twoparty::Side::CLIENT);
   auto rpcClient = makeRpcClient(network, loop);
 
-  // Request the particular capability from the server.
-  auto client = getPersistentCap(rpcClient, rpc::twoparty::Side::SERVER,
-      test::TestSturdyRefObjectId::Tag::TEST_PIPELINE).castAs<test::TestPipeline>();
+  bool disconnected = false;
+  bool drained = false;
+  kj::Promise<void> disconnectPromise = loop.there(network.onDisconnect(),
+      [&]() { disconnected = true; });
+  kj::Promise<void> drainedPromise = loop.there(network.onDrained(),
+      [&]() { drained = true; });
 
-  // Use the capability.
-  auto request = client.getCapRequest();
-  request.setN(234);
-  request.setInCap(test::TestInterface::Client(
-      kj::heap<TestInterfaceImpl>(reverseCallCount), loop));
+  {
+    // Request the particular capability from the server.
+    auto client = getPersistentCap(rpcClient, rpc::twoparty::Side::SERVER,
+        test::TestSturdyRefObjectId::Tag::TEST_PIPELINE).castAs<test::TestPipeline>();
 
-  auto promise = request.send();
+    {
+      // Use the capability.
+      auto request = client.getCapRequest();
+      request.setN(234);
+      request.setInCap(test::TestInterface::Client(
+          kj::heap<TestInterfaceImpl>(reverseCallCount), loop));
 
-  auto pipelineRequest = promise.getOutBox().getCap().fooRequest();
-  pipelineRequest.setI(321);
-  auto pipelinePromise = pipelineRequest.send();
+      auto promise = request.send();
 
-  auto pipelineRequest2 = promise.getOutBox().getCap().castAs<test::TestExtends>().graultRequest();
-  auto pipelinePromise2 = pipelineRequest2.send();
+      auto pipelineRequest = promise.getOutBox().getCap().fooRequest();
+      pipelineRequest.setI(321);
+      auto pipelinePromise = pipelineRequest.send();
 
-  promise = nullptr;  // Just to be annoying, drop the original promise.
+      auto pipelineRequest2 = promise.getOutBox().getCap()
+          .castAs<test::TestExtends>().graultRequest();
+      auto pipelinePromise2 = pipelineRequest2.send();
 
-  EXPECT_EQ(0, callCount);
-  EXPECT_EQ(0, reverseCallCount);
+      promise = nullptr;  // Just to be annoying, drop the original promise.
 
-  auto response = loop.wait(kj::mv(pipelinePromise));
-  EXPECT_EQ("bar", response.getX());
+      EXPECT_EQ(0, callCount);
+      EXPECT_EQ(0, reverseCallCount);
 
-  auto response2 = loop.wait(kj::mv(pipelinePromise2));
-  checkTestMessage(response2);
+      auto response = loop.wait(kj::mv(pipelinePromise));
+      EXPECT_EQ("bar", response.getX());
 
-  EXPECT_EQ(3, callCount);
-  EXPECT_EQ(1, reverseCallCount);
+      auto response2 = loop.wait(kj::mv(pipelinePromise2));
+      checkTestMessage(response2);
+
+      EXPECT_EQ(3, callCount);
+      EXPECT_EQ(1, reverseCallCount);
+    }
+
+    EXPECT_FALSE(disconnected);
+    EXPECT_FALSE(drained);
+
+    // What if the other side disconnects?
+    quitter.fulfiller->fulfill();
+    thread = nullptr;
+
+    loop.wait(kj::mv(disconnectPromise));
+    EXPECT_FALSE(drained);
+
+    {
+      // Use the now-broken capability.
+      auto request = client.getCapRequest();
+      request.setN(234);
+      request.setInCap(test::TestInterface::Client(
+          kj::heap<TestInterfaceImpl>(reverseCallCount), loop));
+
+      auto promise = request.send();
+
+      auto pipelineRequest = promise.getOutBox().getCap().fooRequest();
+      pipelineRequest.setI(321);
+      auto pipelinePromise = pipelineRequest.send();
+
+      auto pipelineRequest2 = promise.getOutBox().getCap()
+          .castAs<test::TestExtends>().graultRequest();
+      auto pipelinePromise2 = pipelineRequest2.send();
+
+      EXPECT_ANY_THROW(loop.wait(kj::mv(pipelinePromise)));
+      EXPECT_ANY_THROW(loop.wait(kj::mv(pipelinePromise2)));
+
+      EXPECT_EQ(3, callCount);
+      EXPECT_EQ(1, reverseCallCount);
+    }
+
+    EXPECT_FALSE(drained);
+  }
+
+  loop.wait(kj::mv(drainedPromise));
 }
 
 }  // namespace

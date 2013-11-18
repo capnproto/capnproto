@@ -81,6 +81,15 @@ public:
 template <typename T>
 const DestructorOnlyDisposer<T> DestructorOnlyDisposer<T>::instance = DestructorOnlyDisposer<T>();
 
+class NullDisposer: public Disposer {
+  // A disposer that does nothing.
+
+public:
+  static const NullDisposer instance;
+
+  void disposeImpl(void* pointer) const override {}
+};
+
 // =======================================================================================
 // Own<T> -- An owned pointer.
 

@@ -31,15 +31,25 @@ TwoPartyVatNetwork::TwoPartyVatNetwork(
     const kj::EventLoop& eventLoop, kj::AsyncIoStream& stream, rpc::twoparty::Side side,
     ReaderOptions receiveOptions)
     : eventLoop(eventLoop), stream(stream), side(side), receiveOptions(receiveOptions),
-      previousWrite(kj::READY_NOW) {}
+      previousWrite(kj::READY_NOW) {
+  {
+    auto paf = kj::newPromiseAndFulfiller<void>();
+    disconnectPromise = eventLoop.fork(kj::mv(paf.promise));
+    disconnectFulfiller.getWithoutLock() = kj::mv(paf.fulfiller);
+  }
+  {
+    auto paf = kj::newPromiseAndFulfiller<void>();
+    drainedPromise = eventLoop.fork(kj::mv(paf.promise));
+    drainedFulfiller.fulfiller.getWithoutLock() = kj::mv(paf.fulfiller);
+  }
+}
 
 kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> TwoPartyVatNetwork::connectToRefHost(
     rpc::twoparty::SturdyRefHostId::Reader ref) {
   if (ref.getSide() == side) {
     return nullptr;
   } else {
-    return kj::Own<TwoPartyVatNetworkBase::Connection>(this,
-        kj::DestructorOnlyDisposer<TwoPartyVatNetworkBase::Connection>::instance);
+    return kj::Own<TwoPartyVatNetworkBase::Connection>(this, drainedFulfiller);
   }
 }
 
@@ -70,13 +80,21 @@ public:
 
   void send() override {
     auto lock = network.previousWrite.lockExclusive();
-    *lock = network.eventLoop.there(network.eventLoop.there(kj::mv(*lock), [this]() {
-      return writeMessage(network.stream, message);
-    }), kj::mvCapture(kj::addRef(*this),
-          [](kj::Own<OutgoingMessageImpl>&& self) -> kj::Promise<void> {
-      // Hack to force this continuation to run (thus allowing `self` to be released) even if
-      // no one is waiting on the promise.
-      return kj::READY_NOW;
+    *lock = network.eventLoop.there(kj::mv(*lock),
+          kj::mvCapture(kj::addRef(*this), [&](kj::Own<OutgoingMessageImpl>&& self) {
+      return writeMessage(network.stream, message)
+          .then(kj::mvCapture(kj::mv(self),
+              [](kj::Own<OutgoingMessageImpl>&& self) -> kj::Promise<void> {
+        // Just here to hold a reference to `self` until the write completes.
+
+        // Hack to force this continuation to run (thus allowing `self` to be released) even if
+        // no one is waiting on the promise.
+        return kj::READY_NOW;
+      }), [&](kj::Exception&& exception) -> kj::Promise<void> {
+        // Exception during write!
+        network.disconnectFulfiller.lockExclusive()->get()->fulfill();
+        return kj::READY_NOW;
+      });
     }));
   }
 
@@ -102,11 +120,21 @@ kj::Own<OutgoingRpcMessage> TwoPartyVatNetwork::newOutgoingMessage(
   return kj::refcounted<OutgoingMessageImpl>(*this, firstSegmentWordSize);
 }
 
-kj::Promise<kj::Own<IncomingRpcMessage>> TwoPartyVatNetwork::receiveIncomingMessage() {
+kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveIncomingMessage() {
   return eventLoop.evalLater([&]() {
-    return readMessage(stream, receiveOptions)
-        .then([](kj::Own<MessageReader>&& message) -> kj::Own<IncomingRpcMessage> {
-      return kj::heap<IncomingMessageImpl>(kj::mv(message));
+    return tryReadMessage(stream, receiveOptions)
+        .then([&](kj::Maybe<kj::Own<MessageReader>>&& message)
+              -> kj::Maybe<kj::Own<IncomingRpcMessage>> {
+      KJ_IF_MAYBE(m, message) {
+        return kj::Own<IncomingRpcMessage>(kj::heap<IncomingMessageImpl>(kj::mv(*m)));
+      } else {
+        disconnectFulfiller.lockExclusive()->get()->fulfill();
+        return nullptr;
+      }
+    }, [&](kj::Exception&& exception) {
+      disconnectFulfiller.lockExclusive()->get()->fulfill();
+      kj::throwRecoverableException(kj::mv(exception));
+      return nullptr;
     });
   });
 }

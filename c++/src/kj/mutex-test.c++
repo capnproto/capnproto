@@ -142,5 +142,23 @@ TEST(Mutex, Lazy) {
   EXPECT_EQ(123u, lazy.get([](SpaceFor<uint>& space) { return space.construct(789); }));
 }
 
+TEST(Mutex, LazyException) {
+  Lazy<uint> lazy;
+
+  auto exception = kj::runCatchingExceptions([&]() {
+    lazy.get([&](SpaceFor<uint>& space) -> Own<uint> {
+          KJ_FAIL_ASSERT("foo") { break; }
+          return space.construct(123);
+        });
+  });
+  EXPECT_TRUE(exception != nullptr);
+
+  uint i = lazy.get([&](SpaceFor<uint>& space) -> Own<uint> {
+        return space.construct(456);
+      });
+
+  EXPECT_EQ(456, i);
+}
+
 }  // namespace
 }  // namespace kj

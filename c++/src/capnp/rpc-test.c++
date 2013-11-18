@@ -105,7 +105,7 @@ public:
           if (lock->fulfillers.empty()) {
             lock->messages.push(kj::mv(message));
           } else {
-            lock->fulfillers.front()->fulfill(kj::mv(message));
+            lock->fulfillers.front()->fulfill(kj::Own<IncomingRpcMessage>(kj::mv(message)));
             lock->fulfillers.pop();
           }
         }
@@ -119,16 +119,16 @@ public:
     kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) const override {
       return kj::heap<OutgoingRpcMessageImpl>(*this, firstSegmentWordSize);
     }
-    kj::Promise<kj::Own<IncomingRpcMessage>> receiveIncomingMessage() override {
+    kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override {
       auto lock = queues.lockExclusive();
       if (lock->messages.empty()) {
-        auto paf = kj::newPromiseAndFulfiller<kj::Own<IncomingRpcMessage>>();
+        auto paf = kj::newPromiseAndFulfiller<kj::Maybe<kj::Own<IncomingRpcMessage>>>();
         lock->fulfillers.push(kj::mv(paf.fulfiller));
         return kj::mv(paf.promise);
       } else {
         auto result = kj::mv(lock->messages.front());
         lock->messages.pop();
-        return kj::mv(result);
+        return kj::Maybe<kj::Own<IncomingRpcMessage>>(kj::mv(result));
       }
     }
     void introduceTo(Connection& recipient,
@@ -149,7 +149,7 @@ public:
     kj::Maybe<ConnectionImpl&> partner;
 
     struct Queues {
-      std::queue<kj::Own<kj::PromiseFulfiller<kj::Own<IncomingRpcMessage>>>> fulfillers;
+      std::queue<kj::Own<kj::PromiseFulfiller<kj::Maybe<kj::Own<IncomingRpcMessage>>>>> fulfillers;
       std::queue<kj::Own<IncomingRpcMessage>> messages;
     };
     kj::MutexGuarded<Queues> queues;

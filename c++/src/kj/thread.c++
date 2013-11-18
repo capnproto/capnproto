@@ -28,21 +28,25 @@
 
 namespace kj {
 
-Thread::Thread(void* (*run)(void*), void (*deleteArg)(void*), void* arg) {
+Thread::Thread(Function<void()> func): func(kj::mv(func)) {
   static_assert(sizeof(threadId) >= sizeof(pthread_t),
                 "pthread_t is larger than a long long on your platform.  Please port.");
 
-  int pthreadResult = pthread_create(reinterpret_cast<pthread_t*>(&threadId), nullptr, run, arg);
+  int pthreadResult = pthread_create(reinterpret_cast<pthread_t*>(&threadId),
+                                     nullptr, &runThread, this);
   if (pthreadResult != 0) {
-    deleteArg(arg);
     KJ_FAIL_SYSCALL("pthread_create", pthreadResult);
   }
 }
 
-Thread::~Thread() {
+Thread::~Thread() noexcept(false) {
   int pthreadResult = pthread_join(*reinterpret_cast<pthread_t*>(&threadId), nullptr);
   if (pthreadResult != 0) {
     KJ_FAIL_SYSCALL("pthread_join", pthreadResult) { break; }
+  }
+
+  KJ_IF_MAYBE(e, exception) {
+    kj::throwRecoverableException(kj::mv(*e));
   }
 }
 
@@ -51,6 +55,16 @@ void Thread::sendSignal(int signo) {
   if (pthreadResult != 0) {
     KJ_FAIL_SYSCALL("pthread_kill", pthreadResult) { break; }
   }
+}
+
+void* Thread::runThread(void* ptr) {
+  Thread* thread = reinterpret_cast<Thread*>(ptr);
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    thread->func();
+  })) {
+    thread->exception = kj::mv(*exception);
+  }
+  return nullptr;
 }
 
 }  // namespace kj

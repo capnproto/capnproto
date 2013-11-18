@@ -41,6 +41,15 @@ public:
   TwoPartyVatNetwork(const kj::EventLoop& eventLoop, kj::AsyncIoStream& stream,
                      rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions());
 
+  kj::Promise<void> onDisconnect() { return disconnectPromise.addBranch(); }
+  // Returns a promise that resolves when the peer disconnects.
+
+  kj::Promise<void> onDrained() { return drainedPromise.addBranch(); }
+  // Returns a promise that resolves once the peer has disconnected *and* all local objects
+  // referencing this connection have been destroyed.  A caller might use this to decide when it
+  // is safe to destroy the RpcSystem, if it isn't able to reliably destroy all objects using it
+  // directly.
+
   // implements VatNetwork -----------------------------------------------------
 
   kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> connectToRefHost(
@@ -64,10 +73,22 @@ private:
   // Fulfiller for the promise returned by acceptConnectionAsRefHost() on the client side, or the
   // second call on the server side.  Never fulfilled, because there is only one connection.
 
+  kj::ForkedPromise<void> disconnectPromise = nullptr;
+  kj::MutexGuarded<kj::Own<kj::PromiseFulfiller<void>>> disconnectFulfiller;
+  kj::ForkedPromise<void> drainedPromise = nullptr;
+
+  class FulfillerDisposer: public kj::Disposer {
+  public:
+    kj::MutexGuarded<kj::Own<kj::PromiseFulfiller<void>>> fulfiller;
+
+    void disposeImpl(void* pointer) const override { fulfiller.lockExclusive()->get()->fulfill(); }
+  };
+  FulfillerDisposer drainedFulfiller;
+
   // implements Connection -----------------------------------------------------
 
   kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) const override;
-  kj::Promise<kj::Own<IncomingRpcMessage>> receiveIncomingMessage() override;
+  kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override;
   void introduceTo(TwoPartyVatNetworkBase::Connection& recipient,
       rpc::twoparty::ThirdPartyCapId::Builder sendToRecipient,
       rpc::twoparty::RecipientId::Builder sendToTarget) override;

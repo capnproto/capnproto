@@ -25,43 +25,30 @@
 #define KJ_THREAD_H_
 
 #include "common.h"
+#include "function.h"
+#include "exception.h"
 
 namespace kj {
 
 class Thread {
-  // A thread!  Pass a lambda to the constructor.  The destructor joins the thread.
+  // A thread!  Pass a lambda to the constructor, and it runs in the thread.  The destructor joins
+  // the thread.  If the function throws an exception, it is rethrown from the thread's destructor
+  // (if not unwinding from another exception).
 
 public:
-  template <typename Func>
-  explicit Thread(Func&& func)
-      : Thread(&runThread<Decay<Func>>,
-               &deleteArg<Decay<Func>>,
-               new Decay<Func>(kj::fwd<Func>(func))) {}
+  explicit Thread(Function<void()> func);
 
-  ~Thread();
+  ~Thread() noexcept(false);
 
   void sendSignal(int signo);
   // Send a Unix signal to the given thread, using pthread_kill or an equivalent.
 
 private:
+  Function<void()> func;
   unsigned long long threadId;  // actually pthread_t
+  kj::Maybe<kj::Exception> exception;
 
-  Thread(void* (*run)(void*), void (*deleteArg)(void*), void* arg);
-
-  template <typename Func>
-  static void* runThread(void* ptr) {
-    // TODO(someday):  Catch exceptions and propagate to the joiner.
-
-    Func* func = reinterpret_cast<Func*>(ptr);
-    KJ_DEFER(delete func);
-    (*func)();
-    return nullptr;
-  }
-
-  template <typename Func>
-  static void deleteArg(void* ptr) {
-    delete reinterpret_cast<Func*>(ptr);
-  }
+  static void* runThread(void* ptr);
 };
 
 }  // namespace kj

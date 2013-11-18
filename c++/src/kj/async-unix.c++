@@ -64,6 +64,9 @@ void registerSignalHandler(int signum) {
 
 void registerSigusr1() {
   registerSignalHandler(SIGUSR1);
+
+  // We also disable SIGPIPE because users of UnixEventLoop almost certainly don't want it.
+  signal(SIGPIPE, SIG_IGN);
 }
 
 pthread_once_t registerSigusr1Once = PTHREAD_ONCE_INIT;
