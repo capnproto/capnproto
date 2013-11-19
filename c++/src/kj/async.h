@@ -28,6 +28,7 @@
 #include "mutex.h"
 #include "refcount.h"
 #include "work-queue.h"
+#include "tuple.h"
 
 namespace kj {
 
@@ -631,6 +632,18 @@ public:
   // `Own<U>`, `U` must have a method `Own<const U> addRef() const` which returns a new reference
   // to the same (or an equivalent) object (probably implemented via reference counting).
 
+  template <typename... Attachments>
+  void attach(Attachments&&... attachments);
+  // "Attaches" one or more movable objects (often, Own<T>s) to the promise, such that they will
+  // be destroyed when the promise resolves.  This is useful when a promise's callback contains
+  // pointers into some object and you want to make sure the object still exists when the callback
+  // runs -- after calling then(), use attach() to add necessary objects to the result.
+
+  void eagerlyEvaluate(const EventLoop& eventLoop = EventLoop::current());
+  // Force eager evaluation of this promise.  Use this if you are going to hold on to the promise
+  // for awhile without consuming the result, but you want to make sure that the system actually
+  // processes it.
+
 private:
   Promise(bool, Own<_::PromiseNode>&& node): PromiseBase(kj::mv(node)) {}
   // Second parameter prevent ambiguity with immediate-value constructor.
@@ -996,6 +1009,45 @@ private:
 
 // -------------------------------------------------------------------
 
+class AttachmentPromiseNodeBase: public PromiseNode {
+public:
+  AttachmentPromiseNodeBase(Own<PromiseNode>&& dependency);
+
+  bool onReady(EventLoop::Event& event) noexcept override;
+  void get(ExceptionOrValue& output) noexcept override;
+  Maybe<const EventLoop&> getSafeEventLoop() noexcept override;
+
+private:
+  Own<PromiseNode> dependency;
+
+  void dropDependency();
+
+  template <typename>
+  friend class AttachmentPromiseNode;
+};
+
+template <typename Attachment>
+class AttachmentPromiseNode final: public AttachmentPromiseNodeBase {
+  // A PromiseNode that holds on to some object (usually, an Own<T>, but could be any movable
+  // object) until the promise resolves.
+
+public:
+  AttachmentPromiseNode(Own<PromiseNode>&& dependency, Attachment&& attachment)
+      : AttachmentPromiseNodeBase(kj::mv(dependency)),
+        attachment(kj::mv<Attachment>(attachment)) {}
+
+  ~AttachmentPromiseNode() noexcept(false) {
+    // We need to make sure the dependency is deleted before we delete the attachment because the
+    // dependency may be using the attachment.
+    dropDependency();
+  }
+
+private:
+  Attachment attachment;
+};
+
+// -------------------------------------------------------------------
+
 class TransformPromiseNodeBase: public PromiseNode {
 public:
   TransformPromiseNodeBase(Maybe<const EventLoop&> loop, Own<PromiseNode>&& dependency);
@@ -1009,6 +1061,7 @@ private:
   Own<PromiseNode> dependency;
 
   void dropDependency();
+  void getDepResult(ExceptionOrValue& output);
 
   virtual void getImpl(ExceptionOrValue& output) = 0;
 
@@ -1040,7 +1093,7 @@ private:
 
   void getImpl(ExceptionOrValue& output) override {
     ExceptionOr<DepT> depResult;
-    dependency->get(depResult);
+    getDepResult(depResult);
     KJ_IF_MAYBE(depException, depResult.exception) {
       output.as<T>() = handle(
           MaybeVoidCaller<Exception, FixVoid<ReturnType<ErrorFunc, Exception>>>::apply(
@@ -1450,6 +1503,18 @@ ForkedPromise<T> EventLoop::fork(Promise<T>&& promise) const {
 template <typename T>
 Promise<_::Forked<T>> ForkedPromise<T>::addBranch() const {
   return hub->addBranch();
+}
+
+template <typename T>
+template <typename... Attachments>
+void Promise<T>::attach(Attachments&&... attachments) {
+  node = kj::heap<_::AttachmentPromiseNode<Tuple<Attachments...>>>(
+      kj::mv(node), kj::tuple(kj::fwd<Attachments>(attachments)...));
+}
+
+template <typename T>
+void Promise<T>::eagerlyEvaluate(const EventLoop& eventLoop) {
+  node = _::spark<_::FixVoid<T>>(kj::mv(node), eventLoop);
 }
 
 // =======================================================================================

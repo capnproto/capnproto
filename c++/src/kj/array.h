@@ -259,6 +259,7 @@ inline Array<T> heapArray(size_t size) {
 }
 
 template <typename T> Array<T> heapArray(const T* content, size_t size);
+template <typename T> Array<T> heapArray(ArrayPtr<T> content);
 template <typename T> Array<T> heapArray(ArrayPtr<const T> content);
 template <typename T, typename Iterator> Array<T> heapArray(Iterator begin, Iterator end);
 template <typename T> Array<T> heapArray(std::initializer_list<T> init);
@@ -651,6 +652,13 @@ template <typename T>
 Array<T> heapArray(const T* content, size_t size) {
   ArrayBuilder<T> builder = heapArrayBuilder<T>(size);
   builder.addAll(content, content + size);
+  return builder.finish();
+}
+
+template <typename T>
+Array<T> heapArray(ArrayPtr<T> content) {
+  ArrayBuilder<T> builder = heapArrayBuilder<T>(content.size());
+  builder.addAll(content);
   return builder.finish();
 }
 

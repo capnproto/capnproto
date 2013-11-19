@@ -536,5 +536,59 @@ TEST(Async, EventLoopGuarded) {
   }
 }
 
+class DestructorDetector {
+public:
+  DestructorDetector(bool& setTrue): setTrue(setTrue) {}
+  ~DestructorDetector() { setTrue = true; }
+
+private:
+  bool& setTrue;
+};
+
+TEST(Async, Attach) {
+  bool destroyed = false;
+
+  SimpleEventLoop loop;
+
+  Promise<int> promise = loop.evalLater([&]() {
+    EXPECT_FALSE(destroyed);
+    return 123;
+  });
+
+  promise.attach(kj::heap<DestructorDetector>(destroyed));
+
+  promise = loop.there(kj::mv(promise), [&](int i) {
+    EXPECT_TRUE(destroyed);
+    return i + 321;
+  });
+
+  EXPECT_FALSE(destroyed);
+  EXPECT_EQ(444, loop.wait(kj::mv(promise)));
+  EXPECT_TRUE(destroyed);
+}
+
+TEST(Async, EagerlyEvaluate) {
+  bool called = false;
+
+  SimpleEventLoop loop;
+
+  Promise<void> promise = nullptr;
+
+  loop.wait(loop.evalLater([&]() {
+    promise = Promise<void>(READY_NOW).then([&]() {
+      called = true;
+    });
+  }));
+  loop.wait(loop.evalLater([]() {}));
+
+  EXPECT_FALSE(called);
+
+  promise.eagerlyEvaluate(loop);
+
+  loop.wait(loop.evalLater([]() {}));
+
+  EXPECT_TRUE(called);
+}
+
 }  // namespace
 }  // namespace kj

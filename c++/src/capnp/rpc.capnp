@@ -428,7 +428,7 @@ struct Resolve {
   # When a promise ID is first sent over the wire (e.g. in a `CapDescriptor`), the sender (exporter)
   # guarantees that it will follow up at some point with exactly one `Resolve` message.  If the
   # same `promiseId` is sent again before `Resolve`, still only one `Resolve` is sent.  If the
-  # same ID is reused again later _after_ a `Resolve`, it can only be because the export's
+  # same ID is sent again later _after_ a `Resolve`, it can only be because the export's
   # reference count hit zero in the meantime and the ID was re-assigned to a new export, therefore
   # this later promise does _not_ correspond to the earlier `Resolve`.
   #
@@ -816,10 +816,10 @@ struct CapDescriptor {
 
     senderPromise @1 :ExportId;
     # A promise which the sender will resolve later.  The sender will send exactly one Resolve
-    # message at a future point in time to replace this promise.
-    #
-    # TODO(soon):  Can we merge this with senderHosted?  Change `Resolve` to be allowed on any
-    #   export (i.e. it can be delivered zero or one times).  Maybe rename it to `Replace`.
+    # message at a future point in time to replace this promise.  Note that even if the same
+    # `senderPromise` is received multiple times, only one `Resolve` is sent to cover all of
+    # them.  The `Resolve` is delivered even if `senderPromise` is not retained, or is retained
+    # but then released before the `Resolve` is sent.
 
     receiverHosted @2 :ExportId;
     # A capability (or promise) previously exported by the receiver.

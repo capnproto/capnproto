@@ -350,6 +350,27 @@ void ImmediateBrokenPromiseNode::get(ExceptionOrValue& output) noexcept {
 
 // -------------------------------------------------------------------
 
+AttachmentPromiseNodeBase::AttachmentPromiseNodeBase(Own<PromiseNode>&& dependency)
+    : dependency(kj::mv(dependency)) {}
+
+bool AttachmentPromiseNodeBase::onReady(EventLoop::Event& event) noexcept {
+  return dependency->onReady(event);
+}
+
+void AttachmentPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
+  dependency->get(output);
+}
+
+Maybe<const EventLoop&> AttachmentPromiseNodeBase::getSafeEventLoop() noexcept {
+  return dependency->getSafeEventLoop();
+}
+
+void AttachmentPromiseNodeBase::dropDependency() {
+  dependency = nullptr;
+}
+
+// -------------------------------------------------------------------
+
 TransformPromiseNodeBase::TransformPromiseNodeBase(
     Maybe<const EventLoop&> loop, Own<PromiseNode>&& dependency)
     : loop(loop), dependency(kj::mv(dependency)) {}
@@ -373,6 +394,15 @@ Maybe<const EventLoop&> TransformPromiseNodeBase::getSafeEventLoop() noexcept {
 
 void TransformPromiseNodeBase::dropDependency() {
   dependency = nullptr;
+}
+
+void TransformPromiseNodeBase::getDepResult(ExceptionOrValue& output) {
+  dependency->get(output);
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    dependency = nullptr;
+  })) {
+    output.addException(kj::mv(*exception));
+  }
 }
 
 // -------------------------------------------------------------------
