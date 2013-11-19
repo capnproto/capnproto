@@ -130,9 +130,6 @@ void fromException(const kj::Exception& exception, rpc::Exception::Builder build
 
 // =======================================================================================
 
-typedef uint32_t QuestionId;
-typedef uint32_t ExportId;
-
 template <typename Id, typename T>
 class ExportTable {
   // Table mapping integers to T, where the integers are chosen locally.
@@ -230,69 +227,6 @@ private:
   std::unordered_map<Id, T> high;
 };
 
-template <typename ParamCaps, typename RpcPipeline, typename RpcResponse>
-struct Question {
-  kj::Own<kj::PromiseFulfiller<kj::Own<RpcResponse>>> fulfiller;
-  // Fulfill with the response.
-
-  kj::Maybe<kj::Own<ParamCaps>> paramCaps;
-  // CapInjector from the parameter struct.  This will be released once the `Return` message is
-  // received and `retainedCaps` processed.  (If this is non-null, then the call has not returned
-  // yet.)
-
-  bool isStarted = false;
-  // Is this Question ID currently in-use?  (This is true until both `Return` has been received and
-  // `Finish` has been sent.)
-
-  bool isFinished = false;
-  // Has the `Finish` message been sent?
-
-  inline bool operator==(decltype(nullptr)) const { return !isStarted; }
-  inline bool operator!=(decltype(nullptr)) const { return isStarted; }
-};
-
-template <typename CallContext>
-struct Answer {
-  bool active = false;
-  // True from the point when the Call message is received to the point when both the `Finish`
-  // message has been received and the `Return` has been sent.
-
-  kj::Maybe<kj::Own<const PipelineHook>> pipeline;
-  // Send pipelined calls here.  Becomes null as soon as a `Finish` is received.
-
-  kj::Promise<void> asyncOp = kj::Promise<void>(nullptr);
-  // Delete this promise to cancel the call.
-
-  kj::Maybe<const CallContext&> callContext;
-  // The call context, if it's still active.  Becomes null when the `Return` message is sent.  This
-  // object, if non-null, is owned by `asyncOp`.
-};
-
-struct Export {
-  uint refcount = 0;
-  // When this reaches 0, drop `clientHook` and free this export.
-
-  kj::Own<const ClientHook> clientHook;
-
-  inline bool operator==(decltype(nullptr)) const { return refcount == 0; }
-  inline bool operator!=(decltype(nullptr)) const { return refcount != 0; }
-};
-
-template <typename ImportClient>
-struct Import {
-  Import() = default;
-  Import(const Import&) = delete;
-  Import(Import&&) = default;
-  Import& operator=(Import&&) = default;
-  // If we don't explicitly write all this, we get some stupid error deep in STL.
-
-  kj::Maybe<ImportClient&> client;
-  // Becomes null when the import is destroyed.
-
-  kj::Maybe<kj::Own<kj::PromiseFulfiller<kj::Own<const ClientHook>>>> promiseFulfiller;
-  // If non-null, the import is a promise.
-};
-
 // =======================================================================================
 
 class RpcConnectionState final: public kj::TaskSet::ErrorHandler, public kj::Refcounted {
@@ -368,15 +302,14 @@ public:
           __FILE__, __LINE__, kj::str("Disconnected: ", exception.getDescription()));
 
       // All current questions complete with exceptions.
-      lock->questions.forEach([&](QuestionId id,
-          Question<CapInjectorImpl, RpcPipeline, RpcResponse>& question) {
+      lock->questions.forEach([&](QuestionId id, Question& question) {
         question.fulfiller->reject(kj::cp(networkException));
         KJ_IF_MAYBE(pc, question.paramCaps) {
           paramCapsToRelease.add(kj::mv(*pc));
         }
       });
 
-      lock->answers.forEach([&](QuestionId id, Answer<RpcCallContext>& answer) {
+      lock->answers.forEach([&](QuestionId id, Answer& answer) {
         KJ_IF_MAYBE(p, answer.pipeline) {
           pipelinesToRelease.add(kj::mv(*p));
         }
@@ -391,7 +324,7 @@ public:
         exp = Export();
       });
 
-      lock->imports.forEach([&](ExportId id, Import<ImportClient>& import) {
+      lock->imports.forEach([&](ExportId id, Import& import) {
         KJ_IF_MAYBE(f, import.promiseFulfiller) {
           f->get()->reject(kj::cp(networkException));
         }
@@ -414,11 +347,6 @@ public:
   }
 
 private:
-  const kj::EventLoop& eventLoop;
-  kj::Maybe<SturdyRefRestorerBase&> restorer;
-  kj::Own<VatNetworkBase::Connection> connection;
-  kj::Own<kj::PromiseFulfiller<void>> disconnectFulfiller;
-
   class ImportClient;
   class PromiseClient;
   class CapInjectorImpl;
@@ -427,11 +355,87 @@ private:
   class RpcCallContext;
   class RpcResponse;
 
+  // =======================================================================================
+  // The Four Tables entry types
+  //
+  // We have to define these before we can define the class's fields.
+
+  typedef uint32_t QuestionId;
+  typedef uint32_t ExportId;
+
+  struct Question {
+    kj::Own<kj::PromiseFulfiller<kj::Own<RpcResponse>>> fulfiller;
+    // Fulfill with the response.
+
+    kj::Maybe<kj::Own<CapInjectorImpl>> paramCaps;
+    // CapInjector from the parameter struct.  This will be released once the `Return` message is
+    // received and `retainedCaps` processed.  (If this is non-null, then the call has not returned
+    // yet.)
+
+    bool isStarted = false;
+    // Is this Question ID currently in-use?  (This is true until both `Return` has been received and
+    // `Finish` has been sent.)
+
+    bool isFinished = false;
+    // Has the `Finish` message been sent?
+
+    inline bool operator==(decltype(nullptr)) const { return !isStarted; }
+    inline bool operator!=(decltype(nullptr)) const { return isStarted; }
+  };
+
+  struct Answer {
+    bool active = false;
+    // True from the point when the Call message is received to the point when both the `Finish`
+    // message has been received and the `Return` has been sent.
+
+    kj::Maybe<kj::Own<const PipelineHook>> pipeline;
+    // Send pipelined calls here.  Becomes null as soon as a `Finish` is received.
+
+    kj::Promise<void> asyncOp = kj::Promise<void>(nullptr);
+    // Delete this promise to cancel the call.
+
+    kj::Maybe<const RpcCallContext&> callContext;
+    // The call context, if it's still active.  Becomes null when the `Return` message is sent.  This
+    // object, if non-null, is owned by `asyncOp`.
+  };
+
+  struct Export {
+    uint refcount = 0;
+    // When this reaches 0, drop `clientHook` and free this export.
+
+    kj::Own<const ClientHook> clientHook;
+
+    inline bool operator==(decltype(nullptr)) const { return refcount == 0; }
+    inline bool operator!=(decltype(nullptr)) const { return refcount != 0; }
+  };
+
+  struct Import {
+    Import() = default;
+    Import(const Import&) = delete;
+    Import(Import&&) = default;
+    Import& operator=(Import&&) = default;
+    // If we don't explicitly write all this, we get some stupid error deep in STL.
+
+    kj::Maybe<ImportClient&> client;
+    // Becomes null when the import is destroyed.
+
+    kj::Maybe<kj::Own<kj::PromiseFulfiller<kj::Own<const ClientHook>>>> promiseFulfiller;
+    // If non-null, the import is a promise.
+  };
+
+  // =======================================================================================
+  // OK, now we can define RpcConnectionState's member data.
+
+  const kj::EventLoop& eventLoop;
+  kj::Maybe<SturdyRefRestorerBase&> restorer;
+  kj::Own<VatNetworkBase::Connection> connection;
+  kj::Own<kj::PromiseFulfiller<void>> disconnectFulfiller;
+
   struct Tables {
     ExportTable<ExportId, Export> exports;
-    ExportTable<QuestionId, Question<CapInjectorImpl, RpcPipeline, RpcResponse>> questions;
-    ImportTable<QuestionId, Answer<RpcCallContext>> answers;
-    ImportTable<ExportId, Import<ImportClient>> imports;
+    ExportTable<QuestionId, Question> questions;
+    ImportTable<QuestionId, Answer> answers;
+    ImportTable<ExportId, Import> imports;
     // The order of the tables is important for correct destruction.
 
     std::unordered_map<const ClientHook*, ExportId> exportsByCap;
