@@ -278,10 +278,9 @@ TEST_F(RpcTest, Basic) {
   request1.setJ(true);
   auto promise1 = request1.send();
 
-  auto request2 = client.bazRequest();
-  initTestMessage(request2.initS());
-  auto promise2 = request2.send();
-
+  // We used to call bar() after baz(), hence the numbering, but this masked the case where the
+  // RPC system actually disconnected on bar() (thus returning an exception, which we decided
+  // was expected).
   bool barFailed = false;
   auto request3 = client.barRequest();
   auto promise3 = loop.there(request3.send(),
@@ -290,6 +289,10 @@ TEST_F(RpcTest, Basic) {
       }, [&](kj::Exception&& e) {
         barFailed = true;
       });
+
+  auto request2 = client.bazRequest();
+  initTestMessage(request2.initS());
+  auto promise2 = request2.send();
 
   EXPECT_EQ(0, restorer.callCount);
 
