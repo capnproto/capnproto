@@ -37,6 +37,8 @@
 #include <stdexcept>
 #include <stdio.h>
 #include <string.h>
+#include <string>
+#include <vector>
 
 namespace capnp {
 namespace benchmark {
