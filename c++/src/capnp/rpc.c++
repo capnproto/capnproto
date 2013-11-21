@@ -128,6 +128,11 @@ void fromException(const kj::Exception& exception, rpc::Exception::Builder build
   }
 }
 
+uint exceptionSizeHint(const kj::Exception& exception) {
+  return sizeInWords<rpc::Exception>() +
+      (exception.getDescription().size() + strlen("remote exception: ")) / sizeof(word) + 1;
+}
+
 // =======================================================================================
 
 template <typename Id, typename T>
@@ -343,8 +348,7 @@ public:
     {
       // Send an abort message.
       auto message = connection->newOutgoingMessage(
-            messageSizeHint<rpc::Exception>() +
-            (exception.getDescription().size() + 7) / sizeof(word));
+          messageSizeHint<void>() + exceptionSizeHint(exception));
       fromException(exception, message->getBody().getAs<rpc::Message>().initAbort());
       message->send();
     }
@@ -619,7 +623,7 @@ private:
     // later.
 
     virtual kj::Maybe<kj::Own<const ClientHook>> writeTarget(
-        rpc::Call::Target::Builder target) const = 0;
+        rpc::MessageTarget::Builder target) const = 0;
     // Writes the appropriate call target for calls to this capability and returns null.
     //
     // - OR -
@@ -732,7 +736,7 @@ private:
     }
 
     kj::Maybe<kj::Own<const ClientHook>> writeTarget(
-        rpc::Call::Target::Builder target) const override {
+        rpc::MessageTarget::Builder target) const override {
       target.setExportedCap(importId);
       return nullptr;
     }
@@ -787,7 +791,7 @@ private:
     }
 
     kj::Maybe<kj::Own<const ClientHook>> writeTarget(
-        rpc::Call::Target::Builder target) const override {
+        rpc::MessageTarget::Builder target) const override {
       auto builder = target.initPromisedAnswer();
       builder.setQuestionId(questionRef->getId());
       builder.adoptTransform(fromPipelineOps(Orphanage::getForMessageContaining(builder), ops));
@@ -873,7 +877,7 @@ private:
     }
 
     kj::Maybe<kj::Own<const ClientHook>> writeTarget(
-        rpc::Call::Target::Builder target) const override {
+        rpc::MessageTarget::Builder target) const override {
       return connectionState->writeTarget(*inner.lockExclusive()->cap, target);
     }
 
@@ -969,8 +973,7 @@ private:
               }, [this,exportId](kj::Exception&& exception) {
                 // send resolve
                 auto message = connection->newOutgoingMessage(
-                    messageSizeHint<rpc::Resolve>() + sizeInWords<rpc::Exception>() +
-                    (exception.getDescription().size() + 7 / 8) + 8);
+                    messageSizeHint<rpc::Resolve>() + exceptionSizeHint(exception) + 8);
                 auto resolve = message->getBody().initAs<rpc::Message>().initResolve();
                 resolve.setPromiseId(exportId);
                 fromException(exception, resolve.initException());
@@ -985,7 +988,7 @@ private:
   }
 
   kj::Maybe<kj::Own<const ClientHook>> writeTarget(
-      const ClientHook& cap, rpc::Call::Target::Builder target) const {
+      const ClientHook& cap, rpc::MessageTarget::Builder target) const {
     // If calls to the given capability should pass over this connection, fill in `target`
     // appropriately for such a call and return nullptr.  Otherwise, return a `ClientHook` to which
     // the call should be forwarded; the caller should then delegate the call to that `ClientHook`.
@@ -1031,7 +1034,7 @@ private:
       // access is possible.  It's probably not worth taking the lock to look; we'll just return
       // a silly estimate.
       uint count = final ? retainedCaps.getWithoutLock().size() : 32;
-      return (count * sizeof(ExportId) + (sizeof(ExportId) - 1)) / sizeof(word);
+      return (count * sizeof(ExportId) + (sizeof(word) - 1)) / sizeof(word);
     }
 
     struct FinalizedRetainedCaps {
@@ -1399,7 +1402,8 @@ private:
         : connectionState(kj::addRef(connectionState)),
           target(kj::mv(target)),
           message(connectionState.connection->newOutgoingMessage(
-              firstSegmentWordSize == 0 ? 0 : firstSegmentWordSize + messageSizeHint<rpc::Call>())),
+              firstSegmentWordSize == 0 ? 0 : firstSegmentWordSize + messageSizeHint<rpc::Call>() +
+                  sizeInWords<rpc::MessageTarget>() + sizeInWords<rpc::PromisedAnswer>())),
           injector(kj::heap<CapInjectorImpl>(connectionState)),
           context(*injector),
           callBuilder(message->getBody().getAs<rpc::Message>().initCall()),
@@ -1672,8 +1676,8 @@ private:
     void sendErrorReturn(kj::Exception&& exception) {
       if (isFirstResponder()) {
         auto message = connectionState->connection->newOutgoingMessage(
-            messageSizeHint<rpc::Return>() + sizeInWords<rpc::Exception>() +
-            exception.getDescription().size() / sizeof(word) + 1);
+            messageSizeHint<rpc::Return>() + requestCapExtractor.retainedListSizeHint(true) +
+            exceptionSizeHint(exception));
         auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
         builder.setQuestionId(questionId);
@@ -1688,7 +1692,7 @@ private:
     void sendCancel() {
       if (isFirstResponder()) {
         auto message = connectionState->connection->newOutgoingMessage(
-            messageSizeHint<rpc::Return>());
+            requestCapExtractor.retainedListSizeHint(true) + messageSizeHint<rpc::Return>());
         auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
         builder.setQuestionId(questionId);
@@ -1894,7 +1898,9 @@ private:
           KJ_IF_MAYBE(m, message) {
             handleMessage(kj::mv(*m));
           } else {
-            KJ_FAIL_REQUIRE("Peer disconnected.") { break; }
+            disconnect(kj::Exception(
+                kj::Exception::Nature::PRECONDITION, kj::Exception::Durability::PERMANENT,
+                __FILE__, __LINE__, kj::str("Peer disconnected.")));
           }
         });
     return eventLoop.there(kj::mv(receive),
@@ -1996,7 +2002,7 @@ private:
 
     auto target = call.getTarget();
     switch (target.which()) {
-      case rpc::Call::Target::EXPORTED_CAP: {
+      case rpc::MessageTarget::EXPORTED_CAP: {
         auto lock = tables.lockExclusive();  // TODO(perf):  shared?
         KJ_IF_MAYBE(exp, lock->exports.find(target.getExportedCap())) {
           capability = exp->clientHook->addRef();
@@ -2008,7 +2014,7 @@ private:
         break;
       }
 
-      case rpc::Call::Target::PROMISED_ANSWER: {
+      case rpc::MessageTarget::PROMISED_ANSWER: {
         auto promisedAnswer = target.getPromisedAnswer();
         kj::Own<const PipelineHook> pipeline;
 
@@ -2212,12 +2218,6 @@ private:
       case rpc::Resolve::EXCEPTION:
         replacement = newBrokenCap(toException(resolve.getException()));
         break;
-
-      case rpc::Resolve::CANCELED:
-        // Right, this can't possibly affect anything, then.
-        //
-        // TODO(now):  Am I doing something wrong or is this not needed?
-        return;
 
       default:
         KJ_FAIL_REQUIRE("Unknown 'Resolve' type.") { return; }

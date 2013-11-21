@@ -44,20 +44,7 @@ struct Call {
   class Reader;
   class Builder;
   class Pipeline;
-  struct Target;
   struct SendReturnTo;
-};
-
-struct Call::Target {
-  Target() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  enum Which: uint16_t {
-    EXPORTED_CAP,
-    PROMISED_ANSWER,
-  };
 };
 
 struct Call::SendReturnTo {
@@ -105,7 +92,6 @@ struct Resolve {
   enum Which: uint16_t {
     CAP,
     EXCEPTION,
-    CANCELED,
   };
 };
 
@@ -123,20 +109,7 @@ struct Disembargo {
   class Reader;
   class Builder;
   class Pipeline;
-  struct Target;
   struct Context;
-};
-
-struct Disembargo::Target {
-  Target() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  enum Which: uint16_t {
-    EXPORTED_CAP,
-    PROMISED_ANSWER,
-  };
 };
 
 struct Disembargo::Context {
@@ -159,19 +132,6 @@ struct Save {
   class Reader;
   class Builder;
   class Pipeline;
-  struct Target;
-};
-
-struct Save::Target {
-  Target() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  enum Which: uint16_t {
-    EXPORTED_CAP,
-    PROMISED_ANSWER,
-  };
 };
 
 struct Restore {
@@ -196,19 +156,6 @@ struct Provide {
   class Reader;
   class Builder;
   class Pipeline;
-  struct Target;
-};
-
-struct Provide::Target {
-  Target() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-  enum Which: uint16_t {
-    EXPORTED_CAP,
-    PROMISED_ANSWER,
-  };
 };
 
 struct Accept {
@@ -225,6 +172,18 @@ struct Join {
   class Reader;
   class Builder;
   class Pipeline;
+};
+
+struct MessageTarget {
+  MessageTarget() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  enum Which: uint16_t {
+    EXPORTED_CAP,
+    PROMISED_ANSWER,
+  };
 };
 
 struct CapDescriptor {
@@ -303,23 +262,20 @@ namespace schemas {
 
 extern const ::capnp::_::RawSchema s_91b79f1f808db032;
 extern const ::capnp::_::RawSchema s_836a53ce789d4cd4;
-extern const ::capnp::_::RawSchema s_cb72865a863459a7;
 extern const ::capnp::_::RawSchema s_dae8b0f61aab5f99;
 extern const ::capnp::_::RawSchema s_9e19b28d3db3573a;
 extern const ::capnp::_::RawSchema s_d37d2eb2c2f80e63;
 extern const ::capnp::_::RawSchema s_bbc29655fa89086e;
 extern const ::capnp::_::RawSchema s_ad1a6c0d7dd07497;
 extern const ::capnp::_::RawSchema s_f964368b0fbd3711;
-extern const ::capnp::_::RawSchema s_96fdbc4a664241eb;
 extern const ::capnp::_::RawSchema s_d562b4df655bdd4d;
 extern const ::capnp::_::RawSchema s_e40ef0b4b02e882c;
-extern const ::capnp::_::RawSchema s_80bdec2a81f867ac;
 extern const ::capnp::_::RawSchema s_ec0c922151b8b0a8;
 extern const ::capnp::_::RawSchema s_86267432565dee97;
 extern const ::capnp::_::RawSchema s_9c6a046bfbc1ac5a;
-extern const ::capnp::_::RawSchema s_dc1d25c4f9a2c4e4;
 extern const ::capnp::_::RawSchema s_d4c9b56290554016;
 extern const ::capnp::_::RawSchema s_fbe1980490e001af;
+extern const ::capnp::_::RawSchema s_95bc14545813fbc1;
 extern const ::capnp::_::RawSchema s_8523ddc40b86b8b0;
 extern const ::capnp::_::RawSchema s_d800b1d6cd6f1ca0;
 extern const ::capnp::_::RawSchema s_f316944415569081;
@@ -336,13 +292,10 @@ CAPNP_DECLARE_STRUCT(
     1, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::Call, 836a53ce789d4cd4,
-    4, 3, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Call::Target, cb72865a863459a7,
-    4, 3, INLINE_COMPOSITE);
+    3, 3, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::Call::SendReturnTo, dae8b0f61aab5f99,
-    4, 3, INLINE_COMPOSITE);
+    3, 3, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::Return, 9e19b28d3db3573a,
     1, 2, INLINE_COMPOSITE);
@@ -357,19 +310,13 @@ CAPNP_DECLARE_STRUCT(
     1, 0, EIGHT_BYTES);
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::Disembargo, f964368b0fbd3711,
-    2, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Disembargo::Target, 96fdbc4a664241eb,
-    2, 1, INLINE_COMPOSITE);
+    1, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::Disembargo::Context, d562b4df655bdd4d,
-    2, 1, INLINE_COMPOSITE);
+    1, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::Save, e40ef0b4b02e882c,
-    2, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Save::Target, 80bdec2a81f867ac,
-    2, 1, INLINE_COMPOSITE);
+    1, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::Restore, ec0c922151b8b0a8,
     1, 1, INLINE_COMPOSITE);
@@ -378,15 +325,15 @@ CAPNP_DECLARE_STRUCT(
     1, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::Provide, 9c6a046bfbc1ac5a,
-    2, 2, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Provide::Target, dc1d25c4f9a2c4e4,
-    2, 2, INLINE_COMPOSITE);
+    1, 2, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::Accept, d4c9b56290554016,
     1, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::Join, fbe1980490e001af,
+    1, 1, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::rpc::MessageTarget, 95bc14545813fbc1,
     1, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::CapDescriptor, 8523ddc40b86b8b0,
@@ -667,7 +614,8 @@ public:
 
   inline  ::uint32_t getQuestionId() const;
 
-  inline Target::Reader getTarget() const;
+  inline bool hasTarget() const;
+  inline  ::capnp::rpc::MessageTarget::Reader getTarget() const;
 
   inline  ::uint64_t getInterfaceId() const;
 
@@ -711,8 +659,12 @@ public:
   inline  ::uint32_t getQuestionId();
   inline void setQuestionId( ::uint32_t value);
 
-  inline Target::Builder getTarget();
-  inline Target::Builder initTarget();
+  inline bool hasTarget();
+  inline  ::capnp::rpc::MessageTarget::Builder getTarget();
+  inline void setTarget( ::capnp::rpc::MessageTarget::Reader value);
+  inline  ::capnp::rpc::MessageTarget::Builder initTarget();
+  inline void adoptTarget(::capnp::Orphan< ::capnp::rpc::MessageTarget>&& value);
+  inline ::capnp::Orphan< ::capnp::rpc::MessageTarget> disownTarget();
 
   inline  ::uint64_t getInterfaceId();
   inline void setInterfaceId( ::uint64_t value);
@@ -747,96 +699,8 @@ public:
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline Target::Pipeline getTarget() const;
+  inline  ::capnp::rpc::MessageTarget::Pipeline getTarget() const;
   inline SendReturnTo::Pipeline getSendReturnTo() const;
-private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-};
-
-class Call::Target::Reader {
-public:
-  typedef Target Reads;
-
-  Reader() = default;
-  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
-
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
-  }
-
-  inline Which which() const;
-  inline bool isExportedCap() const;
-  inline  ::uint32_t getExportedCap() const;
-
-  inline bool isPromisedAnswer() const;
-  inline bool hasPromisedAnswer() const;
-  inline  ::capnp::rpc::PromisedAnswer::Reader getPromisedAnswer() const;
-
-private:
-  ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::List;
-  friend class ::capnp::MessageBuilder;
-  friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Call::Target::Reader reader);
-};
-
-inline ::kj::StringTree KJ_STRINGIFY(Call::Target::Reader reader) {
-  return ::capnp::_::structString<Call::Target>(reader._reader);
-}
-
-class Call::Target::Builder {
-public:
-  typedef Target Builds;
-
-  Builder() = delete;  // Deleted to discourage incorrect usage.
-                       // You can explicitly initialize to nullptr instead.
-  inline Builder(decltype(nullptr)) {}
-  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
-  inline operator Reader() const { return Reader(_builder.asReader()); }
-  inline Reader asReader() const { return *this; }
-
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
-
-  inline Which which();
-  inline bool isExportedCap();
-  inline  ::uint32_t getExportedCap();
-  inline void setExportedCap( ::uint32_t value);
-
-  inline bool isPromisedAnswer();
-  inline bool hasPromisedAnswer();
-  inline  ::capnp::rpc::PromisedAnswer::Builder getPromisedAnswer();
-  inline void setPromisedAnswer( ::capnp::rpc::PromisedAnswer::Reader value);
-  inline  ::capnp::rpc::PromisedAnswer::Builder initPromisedAnswer();
-  inline void adoptPromisedAnswer(::capnp::Orphan< ::capnp::rpc::PromisedAnswer>&& value);
-  inline ::capnp::Orphan< ::capnp::rpc::PromisedAnswer> disownPromisedAnswer();
-
-private:
-  ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-  friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Call::Target::Builder builder);
-};
-
-inline ::kj::StringTree KJ_STRINGIFY(Call::Target::Builder builder) {
-  return ::capnp::_::structString<Call::Target>(builder._builder.asReader());
-}
-
-class Call::Target::Pipeline {
-public:
-  typedef Target Pipelines;
-
-  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
-      : _typeless(kj::mv(typeless)) {}
-
 private:
   ::capnp::ObjectPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -1169,9 +1033,6 @@ public:
   inline bool hasException() const;
   inline  ::capnp::rpc::Exception::Reader getException() const;
 
-  inline bool isCanceled() const;
-  inline  ::capnp::Void getCanceled() const;
-
 private:
   ::capnp::_::StructReader _reader;
   template <typename T, ::capnp::Kind k>
@@ -1221,10 +1082,6 @@ public:
   inline  ::capnp::rpc::Exception::Builder initException();
   inline void adoptException(::capnp::Orphan< ::capnp::rpc::Exception>&& value);
   inline ::capnp::Orphan< ::capnp::rpc::Exception> disownException();
-
-  inline bool isCanceled();
-  inline  ::capnp::Void getCanceled();
-  inline void setCanceled( ::capnp::Void value = ::capnp::VOID);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1340,7 +1197,8 @@ public:
     return _reader.totalSize() / ::capnp::WORDS;
   }
 
-  inline Target::Reader getTarget() const;
+  inline bool hasTarget() const;
+  inline  ::capnp::rpc::MessageTarget::Reader getTarget() const;
 
   inline Context::Reader getContext() const;
 
@@ -1374,8 +1232,12 @@ public:
 
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
-  inline Target::Builder getTarget();
-  inline Target::Builder initTarget();
+  inline bool hasTarget();
+  inline  ::capnp::rpc::MessageTarget::Builder getTarget();
+  inline void setTarget( ::capnp::rpc::MessageTarget::Reader value);
+  inline  ::capnp::rpc::MessageTarget::Builder initTarget();
+  inline void adoptTarget(::capnp::Orphan< ::capnp::rpc::MessageTarget>&& value);
+  inline ::capnp::Orphan< ::capnp::rpc::MessageTarget> disownTarget();
 
   inline Context::Builder getContext();
   inline Context::Builder initContext();
@@ -1400,96 +1262,8 @@ public:
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline Target::Pipeline getTarget() const;
+  inline  ::capnp::rpc::MessageTarget::Pipeline getTarget() const;
   inline Context::Pipeline getContext() const;
-private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-};
-
-class Disembargo::Target::Reader {
-public:
-  typedef Target Reads;
-
-  Reader() = default;
-  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
-
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
-  }
-
-  inline Which which() const;
-  inline bool isExportedCap() const;
-  inline  ::uint32_t getExportedCap() const;
-
-  inline bool isPromisedAnswer() const;
-  inline bool hasPromisedAnswer() const;
-  inline  ::capnp::rpc::PromisedAnswer::Reader getPromisedAnswer() const;
-
-private:
-  ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::List;
-  friend class ::capnp::MessageBuilder;
-  friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Disembargo::Target::Reader reader);
-};
-
-inline ::kj::StringTree KJ_STRINGIFY(Disembargo::Target::Reader reader) {
-  return ::capnp::_::structString<Disembargo::Target>(reader._reader);
-}
-
-class Disembargo::Target::Builder {
-public:
-  typedef Target Builds;
-
-  Builder() = delete;  // Deleted to discourage incorrect usage.
-                       // You can explicitly initialize to nullptr instead.
-  inline Builder(decltype(nullptr)) {}
-  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
-  inline operator Reader() const { return Reader(_builder.asReader()); }
-  inline Reader asReader() const { return *this; }
-
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
-
-  inline Which which();
-  inline bool isExportedCap();
-  inline  ::uint32_t getExportedCap();
-  inline void setExportedCap( ::uint32_t value);
-
-  inline bool isPromisedAnswer();
-  inline bool hasPromisedAnswer();
-  inline  ::capnp::rpc::PromisedAnswer::Builder getPromisedAnswer();
-  inline void setPromisedAnswer( ::capnp::rpc::PromisedAnswer::Reader value);
-  inline  ::capnp::rpc::PromisedAnswer::Builder initPromisedAnswer();
-  inline void adoptPromisedAnswer(::capnp::Orphan< ::capnp::rpc::PromisedAnswer>&& value);
-  inline ::capnp::Orphan< ::capnp::rpc::PromisedAnswer> disownPromisedAnswer();
-
-private:
-  ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-  friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Disembargo::Target::Builder builder);
-};
-
-inline ::kj::StringTree KJ_STRINGIFY(Disembargo::Target::Builder builder) {
-  return ::capnp::_::structString<Disembargo::Target>(builder._builder.asReader());
-}
-
-class Disembargo::Target::Pipeline {
-public:
-  typedef Target Pipelines;
-
-  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
-      : _typeless(kj::mv(typeless)) {}
-
 private:
   ::capnp::ObjectPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -1606,7 +1380,8 @@ public:
 
   inline  ::uint32_t getQuestionId() const;
 
-  inline Target::Reader getTarget() const;
+  inline bool hasTarget() const;
+  inline  ::capnp::rpc::MessageTarget::Reader getTarget() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1641,8 +1416,12 @@ public:
   inline  ::uint32_t getQuestionId();
   inline void setQuestionId( ::uint32_t value);
 
-  inline Target::Builder getTarget();
-  inline Target::Builder initTarget();
+  inline bool hasTarget();
+  inline  ::capnp::rpc::MessageTarget::Builder getTarget();
+  inline void setTarget( ::capnp::rpc::MessageTarget::Reader value);
+  inline  ::capnp::rpc::MessageTarget::Builder initTarget();
+  inline void adoptTarget(::capnp::Orphan< ::capnp::rpc::MessageTarget>&& value);
+  inline ::capnp::Orphan< ::capnp::rpc::MessageTarget> disownTarget();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1664,95 +1443,7 @@ public:
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline Target::Pipeline getTarget() const;
-private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-};
-
-class Save::Target::Reader {
-public:
-  typedef Target Reads;
-
-  Reader() = default;
-  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
-
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
-  }
-
-  inline Which which() const;
-  inline bool isExportedCap() const;
-  inline  ::uint32_t getExportedCap() const;
-
-  inline bool isPromisedAnswer() const;
-  inline bool hasPromisedAnswer() const;
-  inline  ::capnp::rpc::PromisedAnswer::Reader getPromisedAnswer() const;
-
-private:
-  ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::List;
-  friend class ::capnp::MessageBuilder;
-  friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Save::Target::Reader reader);
-};
-
-inline ::kj::StringTree KJ_STRINGIFY(Save::Target::Reader reader) {
-  return ::capnp::_::structString<Save::Target>(reader._reader);
-}
-
-class Save::Target::Builder {
-public:
-  typedef Target Builds;
-
-  Builder() = delete;  // Deleted to discourage incorrect usage.
-                       // You can explicitly initialize to nullptr instead.
-  inline Builder(decltype(nullptr)) {}
-  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
-  inline operator Reader() const { return Reader(_builder.asReader()); }
-  inline Reader asReader() const { return *this; }
-
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
-
-  inline Which which();
-  inline bool isExportedCap();
-  inline  ::uint32_t getExportedCap();
-  inline void setExportedCap( ::uint32_t value);
-
-  inline bool isPromisedAnswer();
-  inline bool hasPromisedAnswer();
-  inline  ::capnp::rpc::PromisedAnswer::Builder getPromisedAnswer();
-  inline void setPromisedAnswer( ::capnp::rpc::PromisedAnswer::Reader value);
-  inline  ::capnp::rpc::PromisedAnswer::Builder initPromisedAnswer();
-  inline void adoptPromisedAnswer(::capnp::Orphan< ::capnp::rpc::PromisedAnswer>&& value);
-  inline ::capnp::Orphan< ::capnp::rpc::PromisedAnswer> disownPromisedAnswer();
-
-private:
-  ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-  friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Save::Target::Builder builder);
-};
-
-inline ::kj::StringTree KJ_STRINGIFY(Save::Target::Builder builder) {
-  return ::capnp::_::structString<Save::Target>(builder._builder.asReader());
-}
-
-class Save::Target::Pipeline {
-public:
-  typedef Target Pipelines;
-
-  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
-      : _typeless(kj::mv(typeless)) {}
-
+  inline  ::capnp::rpc::MessageTarget::Pipeline getTarget() const;
 private:
   ::capnp::ObjectPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -1930,7 +1621,8 @@ public:
 
   inline  ::uint32_t getQuestionId() const;
 
-  inline Target::Reader getTarget() const;
+  inline bool hasTarget() const;
+  inline  ::capnp::rpc::MessageTarget::Reader getTarget() const;
 
   inline bool hasRecipient() const;
   inline ::capnp::ObjectPointer::Reader getRecipient() const;
@@ -1968,8 +1660,12 @@ public:
   inline  ::uint32_t getQuestionId();
   inline void setQuestionId( ::uint32_t value);
 
-  inline Target::Builder getTarget();
-  inline Target::Builder initTarget();
+  inline bool hasTarget();
+  inline  ::capnp::rpc::MessageTarget::Builder getTarget();
+  inline void setTarget( ::capnp::rpc::MessageTarget::Reader value);
+  inline  ::capnp::rpc::MessageTarget::Builder initTarget();
+  inline void adoptTarget(::capnp::Orphan< ::capnp::rpc::MessageTarget>&& value);
+  inline ::capnp::Orphan< ::capnp::rpc::MessageTarget> disownTarget();
 
   inline bool hasRecipient();
   inline ::capnp::ObjectPointer::Builder getRecipient();
@@ -1995,95 +1691,7 @@ public:
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline Target::Pipeline getTarget() const;
-private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-};
-
-class Provide::Target::Reader {
-public:
-  typedef Target Reads;
-
-  Reader() = default;
-  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
-
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
-  }
-
-  inline Which which() const;
-  inline bool isExportedCap() const;
-  inline  ::uint32_t getExportedCap() const;
-
-  inline bool isPromisedAnswer() const;
-  inline bool hasPromisedAnswer() const;
-  inline  ::capnp::rpc::PromisedAnswer::Reader getPromisedAnswer() const;
-
-private:
-  ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::List;
-  friend class ::capnp::MessageBuilder;
-  friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Provide::Target::Reader reader);
-};
-
-inline ::kj::StringTree KJ_STRINGIFY(Provide::Target::Reader reader) {
-  return ::capnp::_::structString<Provide::Target>(reader._reader);
-}
-
-class Provide::Target::Builder {
-public:
-  typedef Target Builds;
-
-  Builder() = delete;  // Deleted to discourage incorrect usage.
-                       // You can explicitly initialize to nullptr instead.
-  inline Builder(decltype(nullptr)) {}
-  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
-  inline operator Reader() const { return Reader(_builder.asReader()); }
-  inline Reader asReader() const { return *this; }
-
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
-
-  inline Which which();
-  inline bool isExportedCap();
-  inline  ::uint32_t getExportedCap();
-  inline void setExportedCap( ::uint32_t value);
-
-  inline bool isPromisedAnswer();
-  inline bool hasPromisedAnswer();
-  inline  ::capnp::rpc::PromisedAnswer::Builder getPromisedAnswer();
-  inline void setPromisedAnswer( ::capnp::rpc::PromisedAnswer::Reader value);
-  inline  ::capnp::rpc::PromisedAnswer::Builder initPromisedAnswer();
-  inline void adoptPromisedAnswer(::capnp::Orphan< ::capnp::rpc::PromisedAnswer>&& value);
-  inline ::capnp::Orphan< ::capnp::rpc::PromisedAnswer> disownPromisedAnswer();
-
-private:
-  ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-  friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Provide::Target::Builder builder);
-};
-
-inline ::kj::StringTree KJ_STRINGIFY(Provide::Target::Builder builder) {
-  return ::capnp::_::structString<Provide::Target>(builder._builder.asReader());
-}
-
-class Provide::Target::Pipeline {
-public:
-  typedef Target Pipelines;
-
-  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
-      : _typeless(kj::mv(typeless)) {}
-
+  inline  ::capnp::rpc::MessageTarget::Pipeline getTarget() const;
 private:
   ::capnp::ObjectPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -2247,6 +1855,94 @@ inline ::kj::StringTree KJ_STRINGIFY(Join::Builder builder) {
 class Join::Pipeline {
 public:
   typedef Join Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::ObjectPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
+class MessageTarget::Reader {
+public:
+  typedef MessageTarget Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline size_t totalSizeInWords() const {
+    return _reader.totalSize() / ::capnp::WORDS;
+  }
+
+  inline Which which() const;
+  inline bool isExportedCap() const;
+  inline  ::uint32_t getExportedCap() const;
+
+  inline bool isPromisedAnswer() const;
+  inline bool hasPromisedAnswer() const;
+  inline  ::capnp::rpc::PromisedAnswer::Reader getPromisedAnswer() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(MessageTarget::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(MessageTarget::Reader reader) {
+  return ::capnp::_::structString<MessageTarget>(reader._reader);
+}
+
+class MessageTarget::Builder {
+public:
+  typedef MessageTarget Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+
+  inline Which which();
+  inline bool isExportedCap();
+  inline  ::uint32_t getExportedCap();
+  inline void setExportedCap( ::uint32_t value);
+
+  inline bool isPromisedAnswer();
+  inline bool hasPromisedAnswer();
+  inline  ::capnp::rpc::PromisedAnswer::Builder getPromisedAnswer();
+  inline void setPromisedAnswer( ::capnp::rpc::PromisedAnswer::Reader value);
+  inline  ::capnp::rpc::PromisedAnswer::Builder initPromisedAnswer();
+  inline void adoptPromisedAnswer(::capnp::Orphan< ::capnp::rpc::PromisedAnswer>&& value);
+  inline ::capnp::Orphan< ::capnp::rpc::PromisedAnswer> disownPromisedAnswer();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(MessageTarget::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(MessageTarget::Builder builder) {
+  return ::capnp::_::structString<MessageTarget>(builder._builder.asReader());
+}
+
+class MessageTarget::Pipeline {
+public:
+  typedef MessageTarget Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
@@ -3535,47 +3231,67 @@ inline void Call::Builder::setQuestionId( ::uint32_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline Call::Target::Reader Call::Reader::getTarget() const {
-  return Call::Target::Reader(_reader);
+inline bool Call::Reader::hasTarget() const {
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline Call::Target::Builder Call::Builder::getTarget() {
-  return Call::Target::Builder(_builder);
+inline bool Call::Builder::hasTarget() {
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline Call::Target::Pipeline Call::Pipeline::getTarget() const {
-  return Call::Target::Pipeline(_typeless.noop());
+inline  ::capnp::rpc::MessageTarget::Reader Call::Reader::getTarget() const {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline Call::Target::Builder Call::Builder::initTarget() {
-  _builder.setDataField< ::uint32_t>(1 * ::capnp::ELEMENTS, 0);
-  _builder.setDataField< ::uint16_t>(4 * ::capnp::ELEMENTS, 0);
-  _builder.getPointerField(0 * ::capnp::POINTERS).clear();
-  return Call::Target::Builder(_builder);
+inline  ::capnp::rpc::MessageTarget::Builder Call::Builder::getTarget() {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
+inline  ::capnp::rpc::MessageTarget::Pipeline Call::Pipeline::getTarget() const {
+  return  ::capnp::rpc::MessageTarget::Pipeline(_typeless.getPointerField(0));
+}
+inline void Call::Builder::setTarget( ::capnp::rpc::MessageTarget::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::rpc::MessageTarget::Builder Call::Builder::initTarget() {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void Call::Builder::adoptTarget(
+    ::capnp::Orphan< ::capnp::rpc::MessageTarget>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::rpc::MessageTarget> Call::Builder::disownTarget() {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+
 inline  ::uint64_t Call::Reader::getInterfaceId() const {
   return _reader.getDataField< ::uint64_t>(
-      2 * ::capnp::ELEMENTS);
+      1 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint64_t Call::Builder::getInterfaceId() {
   return _builder.getDataField< ::uint64_t>(
-      2 * ::capnp::ELEMENTS);
+      1 * ::capnp::ELEMENTS);
 }
 inline void Call::Builder::setInterfaceId( ::uint64_t value) {
   _builder.setDataField< ::uint64_t>(
-      2 * ::capnp::ELEMENTS, value);
+      1 * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint16_t Call::Reader::getMethodId() const {
   return _reader.getDataField< ::uint16_t>(
-      5 * ::capnp::ELEMENTS);
+      2 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint16_t Call::Builder::getMethodId() {
   return _builder.getDataField< ::uint16_t>(
-      5 * ::capnp::ELEMENTS);
+      2 * ::capnp::ELEMENTS);
 }
 inline void Call::Builder::setMethodId( ::uint16_t value) {
   _builder.setDataField< ::uint16_t>(
-      5 * ::capnp::ELEMENTS, value);
+      2 * ::capnp::ELEMENTS, value);
 }
 
 inline bool Call::Reader::hasParams() const {
@@ -3609,101 +3325,16 @@ inline Call::SendReturnTo::Pipeline Call::Pipeline::getSendReturnTo() const {
   return Call::SendReturnTo::Pipeline(_typeless.noop());
 }
 inline Call::SendReturnTo::Builder Call::Builder::initSendReturnTo() {
-  _builder.setDataField< ::uint16_t>(6 * ::capnp::ELEMENTS, 0);
-  _builder.setDataField< ::uint32_t>(6 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint16_t>(3 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint32_t>(4 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(2 * ::capnp::POINTERS).clear();
   return Call::SendReturnTo::Builder(_builder);
 }
-inline Call::Target::Which Call::Target::Reader::which() const {
-  return _reader.getDataField<Which>(4 * ::capnp::ELEMENTS);
-}
-inline Call::Target::Which Call::Target::Builder::which() {
-  return _builder.getDataField<Which>(4 * ::capnp::ELEMENTS);
-}
-
-inline bool Call::Target::Reader::isExportedCap() const {
-  return which() == Call::Target::EXPORTED_CAP;
-}
-inline bool Call::Target::Builder::isExportedCap() {
-  return which() == Call::Target::EXPORTED_CAP;
-}
-inline  ::uint32_t Call::Target::Reader::getExportedCap() const {
-  KJ_IREQUIRE(which() == Call::Target::EXPORTED_CAP,
-              "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS);
-}
-
-inline  ::uint32_t Call::Target::Builder::getExportedCap() {
-  KJ_IREQUIRE(which() == Call::Target::EXPORTED_CAP,
-              "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS);
-}
-inline void Call::Target::Builder::setExportedCap( ::uint32_t value) {
-  _builder.setDataField<Call::Target::Which>(
-      4 * ::capnp::ELEMENTS, Call::Target::EXPORTED_CAP);
-  _builder.setDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS, value);
-}
-
-inline bool Call::Target::Reader::isPromisedAnswer() const {
-  return which() == Call::Target::PROMISED_ANSWER;
-}
-inline bool Call::Target::Builder::isPromisedAnswer() {
-  return which() == Call::Target::PROMISED_ANSWER;
-}
-inline bool Call::Target::Reader::hasPromisedAnswer() const {
-  if (which() != Call::Target::PROMISED_ANSWER) return false;
-  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
-inline bool Call::Target::Builder::hasPromisedAnswer() {
-  if (which() != Call::Target::PROMISED_ANSWER) return false;
-  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
-inline  ::capnp::rpc::PromisedAnswer::Reader Call::Target::Reader::getPromisedAnswer() const {
-  KJ_IREQUIRE(which() == Call::Target::PROMISED_ANSWER,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::get(
-      _reader.getPointerField(0 * ::capnp::POINTERS));
-}
-inline  ::capnp::rpc::PromisedAnswer::Builder Call::Target::Builder::getPromisedAnswer() {
-  KJ_IREQUIRE(which() == Call::Target::PROMISED_ANSWER,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::get(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
-}
-inline void Call::Target::Builder::setPromisedAnswer( ::capnp::rpc::PromisedAnswer::Reader value) {
-  _builder.setDataField<Call::Target::Which>(
-      4 * ::capnp::ELEMENTS, Call::Target::PROMISED_ANSWER);
-  ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
-}
-inline  ::capnp::rpc::PromisedAnswer::Builder Call::Target::Builder::initPromisedAnswer() {
-  _builder.setDataField<Call::Target::Which>(
-      4 * ::capnp::ELEMENTS, Call::Target::PROMISED_ANSWER);
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
-}
-inline void Call::Target::Builder::adoptPromisedAnswer(
-    ::capnp::Orphan< ::capnp::rpc::PromisedAnswer>&& value) {
-  _builder.setDataField<Call::Target::Which>(
-      4 * ::capnp::ELEMENTS, Call::Target::PROMISED_ANSWER);
-  ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::rpc::PromisedAnswer> Call::Target::Builder::disownPromisedAnswer() {
-  KJ_IREQUIRE(which() == Call::Target::PROMISED_ANSWER,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
-}
-
 inline Call::SendReturnTo::Which Call::SendReturnTo::Reader::which() const {
-  return _reader.getDataField<Which>(6 * ::capnp::ELEMENTS);
+  return _reader.getDataField<Which>(3 * ::capnp::ELEMENTS);
 }
 inline Call::SendReturnTo::Which Call::SendReturnTo::Builder::which() {
-  return _builder.getDataField<Which>(6 * ::capnp::ELEMENTS);
+  return _builder.getDataField<Which>(3 * ::capnp::ELEMENTS);
 }
 
 inline bool Call::SendReturnTo::Reader::isCaller() const {
@@ -3727,7 +3358,7 @@ inline  ::capnp::Void Call::SendReturnTo::Builder::getCaller() {
 }
 inline void Call::SendReturnTo::Builder::setCaller( ::capnp::Void value) {
   _builder.setDataField<Call::SendReturnTo::Which>(
-      6 * ::capnp::ELEMENTS, Call::SendReturnTo::CALLER);
+      3 * ::capnp::ELEMENTS, Call::SendReturnTo::CALLER);
   _builder.setDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS, value);
 }
@@ -3742,20 +3373,20 @@ inline  ::uint32_t Call::SendReturnTo::Reader::getYourself() const {
   KJ_IREQUIRE(which() == Call::SendReturnTo::YOURSELF,
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::uint32_t>(
-      6 * ::capnp::ELEMENTS);
+      4 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t Call::SendReturnTo::Builder::getYourself() {
   KJ_IREQUIRE(which() == Call::SendReturnTo::YOURSELF,
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::uint32_t>(
-      6 * ::capnp::ELEMENTS);
+      4 * ::capnp::ELEMENTS);
 }
 inline void Call::SendReturnTo::Builder::setYourself( ::uint32_t value) {
   _builder.setDataField<Call::SendReturnTo::Which>(
-      6 * ::capnp::ELEMENTS, Call::SendReturnTo::YOURSELF);
+      3 * ::capnp::ELEMENTS, Call::SendReturnTo::YOURSELF);
   _builder.setDataField< ::uint32_t>(
-      6 * ::capnp::ELEMENTS, value);
+      4 * ::capnp::ELEMENTS, value);
 }
 
 inline bool Call::SendReturnTo::Reader::isThirdParty() const {
@@ -3786,7 +3417,7 @@ inline ::capnp::ObjectPointer::Builder Call::SendReturnTo::Builder::getThirdPart
 }
 inline ::capnp::ObjectPointer::Builder Call::SendReturnTo::Builder::initThirdParty() {
   _builder.setDataField<Call::SendReturnTo::Which>(
-      6 * ::capnp::ELEMENTS, Call::SendReturnTo::THIRD_PARTY);
+      3 * ::capnp::ELEMENTS, Call::SendReturnTo::THIRD_PARTY);
   auto result = ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(2 * ::capnp::POINTERS));
   result.clear();
@@ -4199,32 +3830,6 @@ inline ::capnp::Orphan< ::capnp::rpc::Exception> Resolve::Builder::disownExcepti
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Resolve::Reader::isCanceled() const {
-  return which() == Resolve::CANCELED;
-}
-inline bool Resolve::Builder::isCanceled() {
-  return which() == Resolve::CANCELED;
-}
-inline  ::capnp::Void Resolve::Reader::getCanceled() const {
-  KJ_IREQUIRE(which() == Resolve::CANCELED,
-              "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS);
-}
-
-inline  ::capnp::Void Resolve::Builder::getCanceled() {
-  KJ_IREQUIRE(which() == Resolve::CANCELED,
-              "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS);
-}
-inline void Resolve::Builder::setCanceled( ::capnp::Void value) {
-  _builder.setDataField<Resolve::Which>(
-      2 * ::capnp::ELEMENTS, Resolve::CANCELED);
-  _builder.setDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS, value);
-}
-
 inline  ::uint32_t Release::Reader::getId() const {
   return _reader.getDataField< ::uint32_t>(
       0 * ::capnp::ELEMENTS);
@@ -4253,21 +3858,41 @@ inline void Release::Builder::setReferenceCount( ::uint32_t value) {
       1 * ::capnp::ELEMENTS, value);
 }
 
-inline Disembargo::Target::Reader Disembargo::Reader::getTarget() const {
-  return Disembargo::Target::Reader(_reader);
+inline bool Disembargo::Reader::hasTarget() const {
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline Disembargo::Target::Builder Disembargo::Builder::getTarget() {
-  return Disembargo::Target::Builder(_builder);
+inline bool Disembargo::Builder::hasTarget() {
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline Disembargo::Target::Pipeline Disembargo::Pipeline::getTarget() const {
-  return Disembargo::Target::Pipeline(_typeless.noop());
+inline  ::capnp::rpc::MessageTarget::Reader Disembargo::Reader::getTarget() const {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline Disembargo::Target::Builder Disembargo::Builder::initTarget() {
-  _builder.setDataField< ::uint32_t>(0 * ::capnp::ELEMENTS, 0);
-  _builder.setDataField< ::uint16_t>(2 * ::capnp::ELEMENTS, 0);
-  _builder.getPointerField(0 * ::capnp::POINTERS).clear();
-  return Disembargo::Target::Builder(_builder);
+inline  ::capnp::rpc::MessageTarget::Builder Disembargo::Builder::getTarget() {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
+inline  ::capnp::rpc::MessageTarget::Pipeline Disembargo::Pipeline::getTarget() const {
+  return  ::capnp::rpc::MessageTarget::Pipeline(_typeless.getPointerField(0));
+}
+inline void Disembargo::Builder::setTarget( ::capnp::rpc::MessageTarget::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::rpc::MessageTarget::Builder Disembargo::Builder::initTarget() {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void Disembargo::Builder::adoptTarget(
+    ::capnp::Orphan< ::capnp::rpc::MessageTarget>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::rpc::MessageTarget> Disembargo::Builder::disownTarget() {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+
 inline Disembargo::Context::Reader Disembargo::Reader::getContext() const {
   return Disembargo::Context::Reader(_reader);
 }
@@ -4278,100 +3903,15 @@ inline Disembargo::Context::Pipeline Disembargo::Pipeline::getContext() const {
   return Disembargo::Context::Pipeline(_typeless.noop());
 }
 inline Disembargo::Context::Builder Disembargo::Builder::initContext() {
-  _builder.setDataField< ::uint16_t>(3 * ::capnp::ELEMENTS, 0);
-  _builder.setDataField< ::uint32_t>(2 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint32_t>(0 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint16_t>(2 * ::capnp::ELEMENTS, 0);
   return Disembargo::Context::Builder(_builder);
 }
-inline Disembargo::Target::Which Disembargo::Target::Reader::which() const {
+inline Disembargo::Context::Which Disembargo::Context::Reader::which() const {
   return _reader.getDataField<Which>(2 * ::capnp::ELEMENTS);
 }
-inline Disembargo::Target::Which Disembargo::Target::Builder::which() {
-  return _builder.getDataField<Which>(2 * ::capnp::ELEMENTS);
-}
-
-inline bool Disembargo::Target::Reader::isExportedCap() const {
-  return which() == Disembargo::Target::EXPORTED_CAP;
-}
-inline bool Disembargo::Target::Builder::isExportedCap() {
-  return which() == Disembargo::Target::EXPORTED_CAP;
-}
-inline  ::uint32_t Disembargo::Target::Reader::getExportedCap() const {
-  KJ_IREQUIRE(which() == Disembargo::Target::EXPORTED_CAP,
-              "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::uint32_t>(
-      0 * ::capnp::ELEMENTS);
-}
-
-inline  ::uint32_t Disembargo::Target::Builder::getExportedCap() {
-  KJ_IREQUIRE(which() == Disembargo::Target::EXPORTED_CAP,
-              "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::uint32_t>(
-      0 * ::capnp::ELEMENTS);
-}
-inline void Disembargo::Target::Builder::setExportedCap( ::uint32_t value) {
-  _builder.setDataField<Disembargo::Target::Which>(
-      2 * ::capnp::ELEMENTS, Disembargo::Target::EXPORTED_CAP);
-  _builder.setDataField< ::uint32_t>(
-      0 * ::capnp::ELEMENTS, value);
-}
-
-inline bool Disembargo::Target::Reader::isPromisedAnswer() const {
-  return which() == Disembargo::Target::PROMISED_ANSWER;
-}
-inline bool Disembargo::Target::Builder::isPromisedAnswer() {
-  return which() == Disembargo::Target::PROMISED_ANSWER;
-}
-inline bool Disembargo::Target::Reader::hasPromisedAnswer() const {
-  if (which() != Disembargo::Target::PROMISED_ANSWER) return false;
-  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
-inline bool Disembargo::Target::Builder::hasPromisedAnswer() {
-  if (which() != Disembargo::Target::PROMISED_ANSWER) return false;
-  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
-inline  ::capnp::rpc::PromisedAnswer::Reader Disembargo::Target::Reader::getPromisedAnswer() const {
-  KJ_IREQUIRE(which() == Disembargo::Target::PROMISED_ANSWER,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::get(
-      _reader.getPointerField(0 * ::capnp::POINTERS));
-}
-inline  ::capnp::rpc::PromisedAnswer::Builder Disembargo::Target::Builder::getPromisedAnswer() {
-  KJ_IREQUIRE(which() == Disembargo::Target::PROMISED_ANSWER,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::get(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
-}
-inline void Disembargo::Target::Builder::setPromisedAnswer( ::capnp::rpc::PromisedAnswer::Reader value) {
-  _builder.setDataField<Disembargo::Target::Which>(
-      2 * ::capnp::ELEMENTS, Disembargo::Target::PROMISED_ANSWER);
-  ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
-}
-inline  ::capnp::rpc::PromisedAnswer::Builder Disembargo::Target::Builder::initPromisedAnswer() {
-  _builder.setDataField<Disembargo::Target::Which>(
-      2 * ::capnp::ELEMENTS, Disembargo::Target::PROMISED_ANSWER);
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
-}
-inline void Disembargo::Target::Builder::adoptPromisedAnswer(
-    ::capnp::Orphan< ::capnp::rpc::PromisedAnswer>&& value) {
-  _builder.setDataField<Disembargo::Target::Which>(
-      2 * ::capnp::ELEMENTS, Disembargo::Target::PROMISED_ANSWER);
-  ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::rpc::PromisedAnswer> Disembargo::Target::Builder::disownPromisedAnswer() {
-  KJ_IREQUIRE(which() == Disembargo::Target::PROMISED_ANSWER,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
-}
-
-inline Disembargo::Context::Which Disembargo::Context::Reader::which() const {
-  return _reader.getDataField<Which>(3 * ::capnp::ELEMENTS);
-}
 inline Disembargo::Context::Which Disembargo::Context::Builder::which() {
-  return _builder.getDataField<Which>(3 * ::capnp::ELEMENTS);
+  return _builder.getDataField<Which>(2 * ::capnp::ELEMENTS);
 }
 
 inline bool Disembargo::Context::Reader::isSenderLoopback() const {
@@ -4384,20 +3924,20 @@ inline  ::uint32_t Disembargo::Context::Reader::getSenderLoopback() const {
   KJ_IREQUIRE(which() == Disembargo::Context::SENDER_LOOPBACK,
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::uint32_t>(
-      2 * ::capnp::ELEMENTS);
+      0 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t Disembargo::Context::Builder::getSenderLoopback() {
   KJ_IREQUIRE(which() == Disembargo::Context::SENDER_LOOPBACK,
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::uint32_t>(
-      2 * ::capnp::ELEMENTS);
+      0 * ::capnp::ELEMENTS);
 }
 inline void Disembargo::Context::Builder::setSenderLoopback( ::uint32_t value) {
   _builder.setDataField<Disembargo::Context::Which>(
-      3 * ::capnp::ELEMENTS, Disembargo::Context::SENDER_LOOPBACK);
+      2 * ::capnp::ELEMENTS, Disembargo::Context::SENDER_LOOPBACK);
   _builder.setDataField< ::uint32_t>(
-      2 * ::capnp::ELEMENTS, value);
+      0 * ::capnp::ELEMENTS, value);
 }
 
 inline bool Disembargo::Context::Reader::isReceiverLoopback() const {
@@ -4410,20 +3950,20 @@ inline  ::uint32_t Disembargo::Context::Reader::getReceiverLoopback() const {
   KJ_IREQUIRE(which() == Disembargo::Context::RECEIVER_LOOPBACK,
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::uint32_t>(
-      2 * ::capnp::ELEMENTS);
+      0 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t Disembargo::Context::Builder::getReceiverLoopback() {
   KJ_IREQUIRE(which() == Disembargo::Context::RECEIVER_LOOPBACK,
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::uint32_t>(
-      2 * ::capnp::ELEMENTS);
+      0 * ::capnp::ELEMENTS);
 }
 inline void Disembargo::Context::Builder::setReceiverLoopback( ::uint32_t value) {
   _builder.setDataField<Disembargo::Context::Which>(
-      3 * ::capnp::ELEMENTS, Disembargo::Context::RECEIVER_LOOPBACK);
+      2 * ::capnp::ELEMENTS, Disembargo::Context::RECEIVER_LOOPBACK);
   _builder.setDataField< ::uint32_t>(
-      2 * ::capnp::ELEMENTS, value);
+      0 * ::capnp::ELEMENTS, value);
 }
 
 inline bool Disembargo::Context::Reader::isAccept() const {
@@ -4447,7 +3987,7 @@ inline  ::capnp::Void Disembargo::Context::Builder::getAccept() {
 }
 inline void Disembargo::Context::Builder::setAccept( ::capnp::Void value) {
   _builder.setDataField<Disembargo::Context::Which>(
-      3 * ::capnp::ELEMENTS, Disembargo::Context::ACCEPT);
+      2 * ::capnp::ELEMENTS, Disembargo::Context::ACCEPT);
   _builder.setDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS, value);
 }
@@ -4462,20 +4002,20 @@ inline  ::uint32_t Disembargo::Context::Reader::getProvide() const {
   KJ_IREQUIRE(which() == Disembargo::Context::PROVIDE,
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::uint32_t>(
-      2 * ::capnp::ELEMENTS);
+      0 * ::capnp::ELEMENTS);
 }
 
 inline  ::uint32_t Disembargo::Context::Builder::getProvide() {
   KJ_IREQUIRE(which() == Disembargo::Context::PROVIDE,
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::uint32_t>(
-      2 * ::capnp::ELEMENTS);
+      0 * ::capnp::ELEMENTS);
 }
 inline void Disembargo::Context::Builder::setProvide( ::uint32_t value) {
   _builder.setDataField<Disembargo::Context::Which>(
-      3 * ::capnp::ELEMENTS, Disembargo::Context::PROVIDE);
+      2 * ::capnp::ELEMENTS, Disembargo::Context::PROVIDE);
   _builder.setDataField< ::uint32_t>(
-      2 * ::capnp::ELEMENTS, value);
+      0 * ::capnp::ELEMENTS, value);
 }
 
 inline  ::uint32_t Save::Reader::getQuestionId() const {
@@ -4492,103 +4032,38 @@ inline void Save::Builder::setQuestionId( ::uint32_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline Save::Target::Reader Save::Reader::getTarget() const {
-  return Save::Target::Reader(_reader);
-}
-inline Save::Target::Builder Save::Builder::getTarget() {
-  return Save::Target::Builder(_builder);
-}
-inline Save::Target::Pipeline Save::Pipeline::getTarget() const {
-  return Save::Target::Pipeline(_typeless.noop());
-}
-inline Save::Target::Builder Save::Builder::initTarget() {
-  _builder.setDataField< ::uint32_t>(1 * ::capnp::ELEMENTS, 0);
-  _builder.setDataField< ::uint16_t>(4 * ::capnp::ELEMENTS, 0);
-  _builder.getPointerField(0 * ::capnp::POINTERS).clear();
-  return Save::Target::Builder(_builder);
-}
-inline Save::Target::Which Save::Target::Reader::which() const {
-  return _reader.getDataField<Which>(4 * ::capnp::ELEMENTS);
-}
-inline Save::Target::Which Save::Target::Builder::which() {
-  return _builder.getDataField<Which>(4 * ::capnp::ELEMENTS);
-}
-
-inline bool Save::Target::Reader::isExportedCap() const {
-  return which() == Save::Target::EXPORTED_CAP;
-}
-inline bool Save::Target::Builder::isExportedCap() {
-  return which() == Save::Target::EXPORTED_CAP;
-}
-inline  ::uint32_t Save::Target::Reader::getExportedCap() const {
-  KJ_IREQUIRE(which() == Save::Target::EXPORTED_CAP,
-              "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS);
-}
-
-inline  ::uint32_t Save::Target::Builder::getExportedCap() {
-  KJ_IREQUIRE(which() == Save::Target::EXPORTED_CAP,
-              "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS);
-}
-inline void Save::Target::Builder::setExportedCap( ::uint32_t value) {
-  _builder.setDataField<Save::Target::Which>(
-      4 * ::capnp::ELEMENTS, Save::Target::EXPORTED_CAP);
-  _builder.setDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS, value);
-}
-
-inline bool Save::Target::Reader::isPromisedAnswer() const {
-  return which() == Save::Target::PROMISED_ANSWER;
-}
-inline bool Save::Target::Builder::isPromisedAnswer() {
-  return which() == Save::Target::PROMISED_ANSWER;
-}
-inline bool Save::Target::Reader::hasPromisedAnswer() const {
-  if (which() != Save::Target::PROMISED_ANSWER) return false;
+inline bool Save::Reader::hasTarget() const {
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline bool Save::Target::Builder::hasPromisedAnswer() {
-  if (which() != Save::Target::PROMISED_ANSWER) return false;
+inline bool Save::Builder::hasTarget() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::rpc::PromisedAnswer::Reader Save::Target::Reader::getPromisedAnswer() const {
-  KJ_IREQUIRE(which() == Save::Target::PROMISED_ANSWER,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::get(
+inline  ::capnp::rpc::MessageTarget::Reader Save::Reader::getTarget() const {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::rpc::PromisedAnswer::Builder Save::Target::Builder::getPromisedAnswer() {
-  KJ_IREQUIRE(which() == Save::Target::PROMISED_ANSWER,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::get(
+inline  ::capnp::rpc::MessageTarget::Builder Save::Builder::getTarget() {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline void Save::Target::Builder::setPromisedAnswer( ::capnp::rpc::PromisedAnswer::Reader value) {
-  _builder.setDataField<Save::Target::Which>(
-      4 * ::capnp::ELEMENTS, Save::Target::PROMISED_ANSWER);
-  ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::set(
+inline  ::capnp::rpc::MessageTarget::Pipeline Save::Pipeline::getTarget() const {
+  return  ::capnp::rpc::MessageTarget::Pipeline(_typeless.getPointerField(0));
+}
+inline void Save::Builder::setTarget( ::capnp::rpc::MessageTarget::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::set(
       _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
-inline  ::capnp::rpc::PromisedAnswer::Builder Save::Target::Builder::initPromisedAnswer() {
-  _builder.setDataField<Save::Target::Which>(
-      4 * ::capnp::ELEMENTS, Save::Target::PROMISED_ANSWER);
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::init(
+inline  ::capnp::rpc::MessageTarget::Builder Save::Builder::initTarget() {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::init(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline void Save::Target::Builder::adoptPromisedAnswer(
-    ::capnp::Orphan< ::capnp::rpc::PromisedAnswer>&& value) {
-  _builder.setDataField<Save::Target::Which>(
-      4 * ::capnp::ELEMENTS, Save::Target::PROMISED_ANSWER);
-  ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::adopt(
+inline void Save::Builder::adoptTarget(
+    ::capnp::Orphan< ::capnp::rpc::MessageTarget>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::adopt(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::rpc::PromisedAnswer> Save::Target::Builder::disownPromisedAnswer() {
-  KJ_IREQUIRE(which() == Save::Target::PROMISED_ANSWER,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::disown(
+inline ::capnp::Orphan< ::capnp::rpc::MessageTarget> Save::Builder::disownTarget() {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
@@ -4676,21 +4151,41 @@ inline void Provide::Builder::setQuestionId( ::uint32_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline Provide::Target::Reader Provide::Reader::getTarget() const {
-  return Provide::Target::Reader(_reader);
+inline bool Provide::Reader::hasTarget() const {
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline Provide::Target::Builder Provide::Builder::getTarget() {
-  return Provide::Target::Builder(_builder);
+inline bool Provide::Builder::hasTarget() {
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline Provide::Target::Pipeline Provide::Pipeline::getTarget() const {
-  return Provide::Target::Pipeline(_typeless.noop());
+inline  ::capnp::rpc::MessageTarget::Reader Provide::Reader::getTarget() const {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline Provide::Target::Builder Provide::Builder::initTarget() {
-  _builder.setDataField< ::uint32_t>(1 * ::capnp::ELEMENTS, 0);
-  _builder.setDataField< ::uint16_t>(4 * ::capnp::ELEMENTS, 0);
-  _builder.getPointerField(0 * ::capnp::POINTERS).clear();
-  return Provide::Target::Builder(_builder);
+inline  ::capnp::rpc::MessageTarget::Builder Provide::Builder::getTarget() {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
+inline  ::capnp::rpc::MessageTarget::Pipeline Provide::Pipeline::getTarget() const {
+  return  ::capnp::rpc::MessageTarget::Pipeline(_typeless.getPointerField(0));
+}
+inline void Provide::Builder::setTarget( ::capnp::rpc::MessageTarget::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::rpc::MessageTarget::Builder Provide::Builder::initTarget() {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void Provide::Builder::adoptTarget(
+    ::capnp::Orphan< ::capnp::rpc::MessageTarget>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::rpc::MessageTarget> Provide::Builder::disownTarget() {
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+
 inline bool Provide::Reader::hasRecipient() const {
   return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
@@ -4710,91 +4205,6 @@ inline ::capnp::ObjectPointer::Builder Provide::Builder::initRecipient() {
       _builder.getPointerField(1 * ::capnp::POINTERS));
   result.clear();
   return result;
-}
-
-inline Provide::Target::Which Provide::Target::Reader::which() const {
-  return _reader.getDataField<Which>(4 * ::capnp::ELEMENTS);
-}
-inline Provide::Target::Which Provide::Target::Builder::which() {
-  return _builder.getDataField<Which>(4 * ::capnp::ELEMENTS);
-}
-
-inline bool Provide::Target::Reader::isExportedCap() const {
-  return which() == Provide::Target::EXPORTED_CAP;
-}
-inline bool Provide::Target::Builder::isExportedCap() {
-  return which() == Provide::Target::EXPORTED_CAP;
-}
-inline  ::uint32_t Provide::Target::Reader::getExportedCap() const {
-  KJ_IREQUIRE(which() == Provide::Target::EXPORTED_CAP,
-              "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS);
-}
-
-inline  ::uint32_t Provide::Target::Builder::getExportedCap() {
-  KJ_IREQUIRE(which() == Provide::Target::EXPORTED_CAP,
-              "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS);
-}
-inline void Provide::Target::Builder::setExportedCap( ::uint32_t value) {
-  _builder.setDataField<Provide::Target::Which>(
-      4 * ::capnp::ELEMENTS, Provide::Target::EXPORTED_CAP);
-  _builder.setDataField< ::uint32_t>(
-      1 * ::capnp::ELEMENTS, value);
-}
-
-inline bool Provide::Target::Reader::isPromisedAnswer() const {
-  return which() == Provide::Target::PROMISED_ANSWER;
-}
-inline bool Provide::Target::Builder::isPromisedAnswer() {
-  return which() == Provide::Target::PROMISED_ANSWER;
-}
-inline bool Provide::Target::Reader::hasPromisedAnswer() const {
-  if (which() != Provide::Target::PROMISED_ANSWER) return false;
-  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
-inline bool Provide::Target::Builder::hasPromisedAnswer() {
-  if (which() != Provide::Target::PROMISED_ANSWER) return false;
-  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
-inline  ::capnp::rpc::PromisedAnswer::Reader Provide::Target::Reader::getPromisedAnswer() const {
-  KJ_IREQUIRE(which() == Provide::Target::PROMISED_ANSWER,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::get(
-      _reader.getPointerField(0 * ::capnp::POINTERS));
-}
-inline  ::capnp::rpc::PromisedAnswer::Builder Provide::Target::Builder::getPromisedAnswer() {
-  KJ_IREQUIRE(which() == Provide::Target::PROMISED_ANSWER,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::get(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
-}
-inline void Provide::Target::Builder::setPromisedAnswer( ::capnp::rpc::PromisedAnswer::Reader value) {
-  _builder.setDataField<Provide::Target::Which>(
-      4 * ::capnp::ELEMENTS, Provide::Target::PROMISED_ANSWER);
-  ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
-}
-inline  ::capnp::rpc::PromisedAnswer::Builder Provide::Target::Builder::initPromisedAnswer() {
-  _builder.setDataField<Provide::Target::Which>(
-      4 * ::capnp::ELEMENTS, Provide::Target::PROMISED_ANSWER);
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
-}
-inline void Provide::Target::Builder::adoptPromisedAnswer(
-    ::capnp::Orphan< ::capnp::rpc::PromisedAnswer>&& value) {
-  _builder.setDataField<Provide::Target::Which>(
-      4 * ::capnp::ELEMENTS, Provide::Target::PROMISED_ANSWER);
-  ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::rpc::PromisedAnswer> Provide::Target::Builder::disownPromisedAnswer() {
-  KJ_IREQUIRE(which() == Provide::Target::PROMISED_ANSWER,
-              "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline  ::uint32_t Accept::Reader::getQuestionId() const {
@@ -4893,6 +4303,91 @@ inline ::capnp::ObjectPointer::Builder Join::Builder::initKeyPart() {
       _builder.getPointerField(0 * ::capnp::POINTERS));
   result.clear();
   return result;
+}
+
+inline MessageTarget::Which MessageTarget::Reader::which() const {
+  return _reader.getDataField<Which>(2 * ::capnp::ELEMENTS);
+}
+inline MessageTarget::Which MessageTarget::Builder::which() {
+  return _builder.getDataField<Which>(2 * ::capnp::ELEMENTS);
+}
+
+inline bool MessageTarget::Reader::isExportedCap() const {
+  return which() == MessageTarget::EXPORTED_CAP;
+}
+inline bool MessageTarget::Builder::isExportedCap() {
+  return which() == MessageTarget::EXPORTED_CAP;
+}
+inline  ::uint32_t MessageTarget::Reader::getExportedCap() const {
+  KJ_IREQUIRE(which() == MessageTarget::EXPORTED_CAP,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::uint32_t>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint32_t MessageTarget::Builder::getExportedCap() {
+  KJ_IREQUIRE(which() == MessageTarget::EXPORTED_CAP,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::uint32_t>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void MessageTarget::Builder::setExportedCap( ::uint32_t value) {
+  _builder.setDataField<MessageTarget::Which>(
+      2 * ::capnp::ELEMENTS, MessageTarget::EXPORTED_CAP);
+  _builder.setDataField< ::uint32_t>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool MessageTarget::Reader::isPromisedAnswer() const {
+  return which() == MessageTarget::PROMISED_ANSWER;
+}
+inline bool MessageTarget::Builder::isPromisedAnswer() {
+  return which() == MessageTarget::PROMISED_ANSWER;
+}
+inline bool MessageTarget::Reader::hasPromisedAnswer() const {
+  if (which() != MessageTarget::PROMISED_ANSWER) return false;
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool MessageTarget::Builder::hasPromisedAnswer() {
+  if (which() != MessageTarget::PROMISED_ANSWER) return false;
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::rpc::PromisedAnswer::Reader MessageTarget::Reader::getPromisedAnswer() const {
+  KJ_IREQUIRE(which() == MessageTarget::PROMISED_ANSWER,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::rpc::PromisedAnswer::Builder MessageTarget::Builder::getPromisedAnswer() {
+  KJ_IREQUIRE(which() == MessageTarget::PROMISED_ANSWER,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void MessageTarget::Builder::setPromisedAnswer( ::capnp::rpc::PromisedAnswer::Reader value) {
+  _builder.setDataField<MessageTarget::Which>(
+      2 * ::capnp::ELEMENTS, MessageTarget::PROMISED_ANSWER);
+  ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::rpc::PromisedAnswer::Builder MessageTarget::Builder::initPromisedAnswer() {
+  _builder.setDataField<MessageTarget::Which>(
+      2 * ::capnp::ELEMENTS, MessageTarget::PROMISED_ANSWER);
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void MessageTarget::Builder::adoptPromisedAnswer(
+    ::capnp::Orphan< ::capnp::rpc::PromisedAnswer>&& value) {
+  _builder.setDataField<MessageTarget::Which>(
+      2 * ::capnp::ELEMENTS, MessageTarget::PROMISED_ANSWER);
+  ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::rpc::PromisedAnswer> MessageTarget::Builder::disownPromisedAnswer() {
+  KJ_IREQUIRE(which() == MessageTarget::PROMISED_ANSWER,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::rpc::PromisedAnswer>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline CapDescriptor::Which CapDescriptor::Reader::which() const {

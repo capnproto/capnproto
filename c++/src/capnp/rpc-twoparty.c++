@@ -80,22 +80,17 @@ public:
 
   void send() override {
     auto lock = network.previousWrite.lockExclusive();
-    *lock = network.eventLoop.there(kj::mv(*lock),
-          kj::mvCapture(kj::addRef(*this), [&](kj::Own<OutgoingMessageImpl>&& self) {
-      return writeMessage(network.stream, message)
-          .then(kj::mvCapture(kj::mv(self),
-              [](kj::Own<OutgoingMessageImpl>&& self) -> kj::Promise<void> {
-        // Just here to hold a reference to `self` until the write completes.
-
-        // Hack to force this continuation to run (thus allowing `self` to be released) even if
-        // no one is waiting on the promise.
-        return kj::READY_NOW;
-      }), [&](kj::Exception&& exception) -> kj::Promise<void> {
+    *lock = network.eventLoop.there(kj::mv(*lock), [&]() {
+      auto promise = writeMessage(network.stream, message).then([]() {
+        // success; do nothing
+      }, [&](kj::Exception&& exception) {
         // Exception during write!
         network.disconnectFulfiller.lockExclusive()->get()->fulfill();
-        return kj::READY_NOW;
       });
-    }));
+      promise.eagerlyEvaluate();
+      return kj::mv(promise);
+    });
+    lock->attach(kj::addRef(*this));
   }
 
 private:
