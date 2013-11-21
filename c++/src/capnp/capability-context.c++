@@ -197,6 +197,10 @@ public:
     return VoidPromiseAndPipeline { kj::cp(exception), kj::heap<BrokenPipeline>(exception) };
   }
 
+  kj::Maybe<const ClientHook&> getResolved() const {
+    return nullptr;
+  }
+
   kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const override {
     return kj::Promise<kj::Own<const ClientHook>>(kj::cp(exception));
   }

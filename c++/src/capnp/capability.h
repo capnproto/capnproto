@@ -315,10 +315,17 @@ public:
   //
   // The call must not begin synchronously, as the caller may hold arbitrary mutexes.
 
+  virtual kj::Maybe<const ClientHook&> getResolved() const = 0;
+  // If this ClientHook is a promise that has already resolved, returns the inner, resolved version
+  // of the capability.  The caller may permanently replace this client with the resolved one if
+  // desired.  Returns null if the client isn't a promise or hasn't resolved yet -- use
+  // `whenMoreResolved()` to distinguish between them.
+
   virtual kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const = 0;
   // If this client is a settled reference (not a promise), return nullptr.  Otherwise, return a
   // promise that eventually resolves to a new client that is closer to being the final, settled
-  // client.  Calling this repeatedly should eventually produce a settled client.
+  // client (i.e. the value eventually returned by `getResolved()`).  Calling this repeatedly
+  // should eventually produce a settled client.
 
   kj::Promise<void> whenResolved() const;
   // Repeatedly calls whenMoreResolved() until it returns nullptr.

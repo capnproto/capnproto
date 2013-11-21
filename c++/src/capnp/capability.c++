@@ -199,7 +199,11 @@ class QueuedClient final: public ClientHook, public kj::Refcounted {
 public:
   QueuedClient(const kj::EventLoop& loop, kj::Promise<kj::Own<const ClientHook>>&& promise)
       : loop(loop),
-        promise(loop.fork(kj::mv(promise))) {}
+        promise(loop.fork(kj::mv(promise))),
+        selfResolutionOp(loop.there(this->promise.addBranch(),
+            [this](kj::Own<const ClientHook>&& inner) {
+              *redirect.lockExclusive() = kj::mv(inner);
+            })) {}
 
   Request<ObjectPointer, ObjectPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
@@ -264,6 +268,14 @@ public:
     return VoidPromiseAndPipeline { kj::mv(completionPromise), kj::mv(pipeline) };
   }
 
+  kj::Maybe<const ClientHook&> getResolved() const {
+    KJ_IF_MAYBE(inner, *redirect.lockExclusive()) {
+      return **inner;
+    } else {
+      return nullptr;
+    }
+  }
+
   kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const override {
     return getPromiseForClientResolution().addBranch();
   }
@@ -299,6 +311,12 @@ private:
   // confuse the application if a queued call returns before the capability on which it was made
   // resolves).  Luckily, we know that queued calls will involve, at the very least, an
   // eventLoop.evalLater.
+
+  kj::MutexGuarded<kj::Maybe<kj::Own<const ClientHook>>> redirect;
+  // Once the promise resolves, this will become non-null and point to the underlying object.
+
+  kj::Promise<void> selfResolutionOp;
+  // Represents the operation which will set `redirect` when possible.
 
   const ClientHookPromiseFork& getPromiseForCallForwarding() const {
     return promiseForCallForwarding.get([this](kj::SpaceFor<ClientHookPromiseFork>& space) {
@@ -401,6 +419,10 @@ public:
 
     return VoidPromiseAndPipeline { kj::mv(completionPromise),
         kj::refcounted<QueuedPipeline>(server.getEventLoop(), kj::mv(pipelinePromise)) };
+  }
+
+  kj::Maybe<const ClientHook&> getResolved() const {
+    return nullptr;
   }
 
   kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const override {

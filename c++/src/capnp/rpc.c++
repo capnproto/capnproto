@@ -406,6 +406,10 @@ private:
 
     kj::Own<const ClientHook> clientHook;
 
+    kj::Promise<void> resolveOp = nullptr;
+    // If this export is a promise (not a settled capability), the `resolveOp` represents the
+    // ongoing operation to wait for that promise to resolve and then send a `Resolve` message.
+
     inline bool operator==(decltype(nullptr)) const { return refcount == 0; }
     inline bool operator!=(decltype(nullptr)) const { return refcount != 0; }
   };
@@ -675,6 +679,10 @@ private:
       return Request<ObjectPointer, ObjectPointer>(root, kj::mv(request));
     }
 
+    kj::Maybe<const ClientHook&> getResolved() const {
+      return nullptr;
+    }
+
     kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const override {
       return nullptr;
     }
@@ -727,6 +735,10 @@ private:
       return Request<ObjectPointer, ObjectPointer>(root, kj::mv(request));
     }
 
+    kj::Maybe<const ClientHook&> getResolved() const {
+      return nullptr;
+    }
+
     kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const override {
       return nullptr;
     }
@@ -746,7 +758,7 @@ private:
                   kj::Promise<kj::Own<const ClientHook>> eventual,
                   kj::Maybe<ExportId> importId)
         : RpcClient(connectionState),
-          inner(kj::mv(initial)),
+          inner(Inner {false, kj::mv(initial)}),
           importId(importId),
           fork(connectionState.eventLoop.fork(kj::mv(eventual))),
           resolveSelfPromise(connectionState.eventLoop.there(fork.addBranch(),
@@ -783,20 +795,28 @@ private:
 
     kj::Maybe<ExportId> writeDescriptor(
         rpc::CapDescriptor::Builder descriptor, Tables& tables) const override {
-      auto cap = inner.lockExclusive()->get()->addRef();
-      return connectionState->writeDescriptor(kj::mv(cap), descriptor, tables);
+      return connectionState->writeDescriptor(*inner.lockExclusive()->cap, descriptor, tables);
     }
 
     kj::Maybe<kj::Own<const ClientHook>> writeTarget(
         rpc::Call::Target::Builder target) const override {
-      return connectionState->writeTarget(**inner.lockExclusive(), target);
+      return connectionState->writeTarget(*inner.lockExclusive()->cap, target);
     }
 
     // implements ClientHook -----------------------------------------
 
     Request<ObjectPointer, ObjectPointer> newCall(
         uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
-      return inner.lockExclusive()->get()->newCall(interfaceId, methodId, firstSegmentWordSize);
+      return inner.lockExclusive()->cap->newCall(interfaceId, methodId, firstSegmentWordSize);
+    }
+
+    kj::Maybe<const ClientHook&> getResolved() const {
+      auto lock = inner.lockShared();
+      if (lock->isResolved) {
+        return *lock->cap;
+      } else {
+        return nullptr;
+      }
     }
 
     kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const override {
@@ -804,7 +824,12 @@ private:
     }
 
   private:
-    kj::MutexGuarded<kj::Own<const ClientHook>> inner;
+    struct Inner {
+      bool isResolved;
+      kj::Own<const ClientHook> cap;
+    };
+
+    kj::MutexGuarded<Inner> inner;
     kj::Maybe<ExportId> importId;
     kj::ForkedPromise<kj::Own<const ClientHook>> fork;
 
@@ -816,33 +841,70 @@ private:
       // Careful to make sure the old client is not destroyed until we release the lock.
       kj::Own<const ClientHook> old;
       auto lock = inner.lockExclusive();
-      old = kj::mv(*lock);
-      *lock = replacement->addRef();
+      old = kj::mv(lock->cap);
+      lock->cap = replacement->addRef();
+      lock->isResolved = true;
     }
   };
 
   kj::Maybe<ExportId> writeDescriptor(
-      kj::Own<const ClientHook> cap, rpc::CapDescriptor::Builder descriptor,
+      const ClientHook& cap, rpc::CapDescriptor::Builder descriptor,
       Tables& tables) const {
     // Write a descriptor for the given capability.  The tables must be locked by the caller and
     // passed in as a parameter.
 
-    if (cap->getBrand() == this) {
-      return kj::downcast<const RpcClient>(*cap).writeDescriptor(descriptor, tables);
+    // Find the innermost wrapped capability.
+    const ClientHook* inner = &cap;
+    for (;;) {
+      KJ_IF_MAYBE(resolved, inner->getResolved()) {
+        inner = resolved;
+      } else {
+        break;
+      }
+    }
+
+    if (inner->getBrand() == this) {
+      return kj::downcast<const RpcClient>(*inner).writeDescriptor(descriptor, tables);
     } else {
-      auto iter = tables.exportsByCap.find(cap);
+      auto iter = tables.exportsByCap.find(inner);
       if (iter != tables.exportsByCap.end()) {
+        // We've already seen and exported this capability before.  Just up the refcount.
         auto& exp = KJ_ASSERT_NONNULL(tables.exports.find(iter->second));
         ++exp.refcount;
-        // TODO(now):  Check if it's a promise.
         descriptor.setSenderHosted(iter->second);
         return iter->second;
       } else {
+        // This is the first time we've seen this capability.
         ExportId exportId;
         auto& exp = tables.exports.next(exportId);
         exp.refcount = 1;
-        exp.clientHook = kj::mv(cap);
+        exp.clientHook = inner->addRef();
         descriptor.setSenderHosted(exportId);
+
+        KJ_IF_MAYBE(wrapped, inner->whenMoreResolved()) {
+          // This is a promise.  Arrange for the `Resolve` message to be sent later.
+          exp.resolveOp = eventLoop.there(kj::mv(*wrapped),
+              [this,exportId](kj::Own<const ClientHook>&& resolution) {
+                // send resolve
+                auto message = connection->newOutgoingMessage(
+                    messageSizeHint<rpc::Resolve>() + sizeInWords<rpc::CapDescriptor>() + 16);
+                auto resolve = message->getBody().initAs<rpc::Message>().initResolve();
+                resolve.setPromiseId(exportId);
+                writeDescriptor(*resolution, resolve.initCap(), *this->tables.lockExclusive());
+                message->send();
+              }, [this,exportId](kj::Exception&& exception) {
+                // send resolve
+                auto message = connection->newOutgoingMessage(
+                    messageSizeHint<rpc::Resolve>() + sizeInWords<rpc::Exception>() +
+                    (exception.getDescription().size() + 7 / 8) + 8);
+                auto resolve = message->getBody().initAs<rpc::Message>().initResolve();
+                resolve.setPromiseId(exportId);
+                fromException(exception, resolve.initException());
+                message->send();
+              });
+          exp.resolveOp.eagerlyEvaluate(eventLoop);
+        }
+
         return exportId;
       }
     }
@@ -1097,6 +1159,7 @@ private:
         for (auto exportId: exports) {
           auto& exp = KJ_ASSERT_NONNULL(lock->exports.find(exportId));
           if (--exp.refcount == 0) {
+            lock->exportsByCap.erase(exp.clientHook);
             clientsToRelease.add(kj::mv(exp.clientHook));
             lock->exports.erase(exportId);
           }
@@ -1121,7 +1184,7 @@ private:
         // If maybeExportId is inlined, GCC 4.7 reports a spurious "may be used uninitialized"
         // error (GCC 4.8 and Clang do not complain).
         auto maybeExportId = connectionState.writeDescriptor(
-            entry.second.cap->addRef(), entry.second.builder, tables);
+            *entry.second.cap, entry.second.builder, tables);
         KJ_IF_MAYBE(exportId, maybeExportId) {
           KJ_ASSERT(tables.exports.find(*exportId) != nullptr);
           exports.add(*exportId);
@@ -1788,6 +1851,10 @@ private:
         break;
 
       case rpc::Message::RELEASE:
+        // TODO(now)
+        break;
+
+      case rpc::Message::DISEMBARGO:
         // TODO(now)
         break;
 
