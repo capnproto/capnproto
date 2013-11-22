@@ -953,9 +953,13 @@ private:
     mutable bool receivedCall = false;
 
     void resolve(kj::Own<const ClientHook> replacement) {
-      if (__atomic_load_n(&receivedCall, __ATOMIC_RELAXED)) {
-        // There were calls to the old inner.  We have to send it an embargo and temporarily
-        // delay resolution.
+      if (replacement->getBrand() != this &&
+          __atomic_load_n(&receivedCall, __ATOMIC_RELAXED)) {
+        // The new capability is hosted locally, not on the remote machine.  And, we had made calls
+        // to the promise.  We need to make sure those calls echo back to us before we allow new
+        // calls to go directly to the local capability, so we need to set a local embargo and send
+        // a `Disembargo` to echo through the peer.
+
         auto message = connectionState->connection->newOutgoingMessage(
             messageSizeHint<rpc::Disembargo>() + sizeInWords<rpc::MessageTarget>() +
             sizeInWords<rpc::PromisedAnswer>());
