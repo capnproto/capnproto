@@ -352,13 +352,7 @@ struct Return {
     # Indicates that the call was canceled due to the caller sending a Finish message
     # before the call had completed.
 
-    unsupportedPipelineOp @5 :Void;
-    # The call was addressed to a `PromisedAnswer` that was not understood by the callee because
-    # it used features that the callee's RPC implementation does not support.  The caller should
-    # wait for the first call to return and then retry the dependent call as a regular,
-    # non-pipelined call.
-
-    redirect @6 :ThirdPartyCapId;
+    redirect @5 :ThirdPartyCapId;
     # **(level 3)**
     #
     # The call has been redirected to another vat, and the result should be obtained by connecting
@@ -861,21 +855,6 @@ struct PromisedAnswer {
   # pointed to by a field of the struct, you need a `getPointerField` op.
 
   struct Op {
-    # If an RPC implementation receives an `Op` of a type it doesn't recognize, it must immediately
-    # stop serving pipeline requests on this question ID.  The crurrent request, as well as
-    # all future pipeline requests on the same question ID, must return with
-    # `unsupportedPipelineOp` set.  The caller must then arrange to re-send the calls as normal
-    # calls later.  The reason that all future pipeline calls on the same question must fail is
-    # so that if the caller was relying on the calls being delivered in a particular order, this
-    # requirement is not violated.
-    #
-    # TODO(soon):  There's still a problem here in that if the call returns then the caller might
-    # start making regular (non-pipeline) calls to it before it finds out that the pipelined calls
-    # failed.  Also, what about PromisedAnswers that appear in CapDescriptors?  Maybe what really
-    # needs to happen here is, the callee echos the PromisedAnswer back to the caller to say
-    # "I don't know how to resolve this; please do it for me", and in the meantime it blocks all
-    # calls to the capability?  Ick...
-
     union {
       noop @0 :Void;
       # Does nothing.  This member is mostly defined so that we can make `Op` a union even

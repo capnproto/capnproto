@@ -70,7 +70,6 @@ struct Return {
     RESULTS,
     EXCEPTION,
     CANCELED,
-    UNSUPPORTED_PIPELINE_OP,
     REDIRECT,
   };
 };
@@ -827,9 +826,6 @@ public:
   inline bool isCanceled() const;
   inline  ::capnp::Void getCanceled() const;
 
-  inline bool isUnsupportedPipelineOp() const;
-  inline  ::capnp::Void getUnsupportedPipelineOp() const;
-
   inline bool isRedirect() const;
   inline bool hasRedirect() const;
   inline ::capnp::ObjectPointer::Reader getRedirect() const;
@@ -892,10 +888,6 @@ public:
   inline bool isCanceled();
   inline  ::capnp::Void getCanceled();
   inline void setCanceled( ::capnp::Void value = ::capnp::VOID);
-
-  inline bool isUnsupportedPipelineOp();
-  inline  ::capnp::Void getUnsupportedPipelineOp();
-  inline void setUnsupportedPipelineOp( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isRedirect();
   inline bool hasRedirect();
@@ -3590,32 +3582,6 @@ inline  ::capnp::Void Return::Builder::getCanceled() {
 inline void Return::Builder::setCanceled( ::capnp::Void value) {
   _builder.setDataField<Return::Which>(
       2 * ::capnp::ELEMENTS, Return::CANCELED);
-  _builder.setDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS, value);
-}
-
-inline bool Return::Reader::isUnsupportedPipelineOp() const {
-  return which() == Return::UNSUPPORTED_PIPELINE_OP;
-}
-inline bool Return::Builder::isUnsupportedPipelineOp() {
-  return which() == Return::UNSUPPORTED_PIPELINE_OP;
-}
-inline  ::capnp::Void Return::Reader::getUnsupportedPipelineOp() const {
-  KJ_IREQUIRE(which() == Return::UNSUPPORTED_PIPELINE_OP,
-              "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS);
-}
-
-inline  ::capnp::Void Return::Builder::getUnsupportedPipelineOp() {
-  KJ_IREQUIRE(which() == Return::UNSUPPORTED_PIPELINE_OP,
-              "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS);
-}
-inline void Return::Builder::setUnsupportedPipelineOp( ::capnp::Void value) {
-  _builder.setDataField<Return::Which>(
-      2 * ::capnp::ELEMENTS, Return::UNSUPPORTED_PIPELINE_OP);
   _builder.setDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS, value);
 }
