@@ -441,6 +441,15 @@ struct Resolve {
   union {
     cap @1 :CapDescriptor;
     # The object to which the promise resolved.
+    #
+    # The sender promises that from this point forth, until `promiseId` is released, it shall
+    # simply forward all messages to the capability designated by `cap`.  This is true even if
+    # `cap` itself happens to desigate another promise, and that other promise later resolves --
+    # messages sent to `promiseId` shall still go to that other promise, not to its resolution.
+    # This is important in the case that the receiver of the `Resolve` ends up sending a
+    # `Disembargo` message towards `promiseId` in order to control message ordering -- that
+    # `Disembargo` really needs to reflect back to exactly the object designated by `cap` even
+    # if that object is itself a promise.
 
     exception @2 :Exception;
     # Indicates that the promise was broken.

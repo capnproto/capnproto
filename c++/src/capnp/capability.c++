@@ -203,7 +203,9 @@ public:
         selfResolutionOp(loop.there(this->promise.addBranch(),
             [this](kj::Own<const ClientHook>&& inner) {
               *redirect.lockExclusive() = kj::mv(inner);
-            })) {}
+            })) {
+    selfResolutionOp.eagerlyEvaluate(loop);
+  }
 
   Request<ObjectPointer, ObjectPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
@@ -447,6 +449,11 @@ private:
 kj::Own<const ClientHook> Capability::Client::makeLocalClient(
     kj::Own<Capability::Server>&& server, const kj::EventLoop& eventLoop) {
   return kj::refcounted<LocalClient>(eventLoop, kj::mv(server));
+}
+
+kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<const ClientHook>>&& promise,
+                                          const kj::EventLoop& loop) {
+  return kj::refcounted<QueuedClient>(loop, kj::mv(promise));
 }
 
 }  // namespace capnp

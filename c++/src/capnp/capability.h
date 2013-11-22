@@ -353,6 +353,12 @@ public:
   virtual kj::Own<CallContextHook> addRef() = 0;
 };
 
+kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<const ClientHook>>&& promise,
+                                          const kj::EventLoop& loop = kj::EventLoop::current());
+// Returns a ClientHook that queues up calls until `promise` resolves, then forwards them to
+// the new client.  This hook's `getResolved()` and `whenMoreResolved()` methods will reflect the
+// redirection to the eventual replacement client.
+
 // =======================================================================================
 // Extend PointerHelpers for interfaces
 
