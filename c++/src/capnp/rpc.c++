@@ -655,6 +655,19 @@ private:
 
     // implements ClientHook -----------------------------------------
 
+    Request<ObjectPointer, ObjectPointer> newCall(
+        uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
+      auto request = kj::heap<RpcRequest>(
+          *connectionState, firstSegmentWordSize, kj::addRef(*this));
+      auto callBuilder = request->getCall();
+
+      callBuilder.setInterfaceId(interfaceId);
+      callBuilder.setMethodId(methodId);
+
+      auto root = request->getRoot();
+      return Request<ObjectPointer, ObjectPointer>(root, kj::mv(request));
+    }
+
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                                 kj::Own<CallContextHook>&& context) const override {
       // Implement call() by copying params and results messages.
@@ -769,20 +782,6 @@ private:
 
     // implements ClientHook -----------------------------------------
 
-    Request<ObjectPointer, ObjectPointer> newCall(
-        uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
-      auto request = kj::heap<RpcRequest>(
-          *connectionState, firstSegmentWordSize, kj::addRef(*this));
-      auto callBuilder = request->getCall();
-
-      callBuilder.getTarget().setExportedCap(importId);
-      callBuilder.setInterfaceId(interfaceId);
-      callBuilder.setMethodId(methodId);
-
-      auto root = request->getRoot();
-      return Request<ObjectPointer, ObjectPointer>(root, kj::mv(request));
-    }
-
     kj::Maybe<const ClientHook&> getResolved() const {
       return nullptr;
     }
@@ -829,19 +828,6 @@ private:
     }
 
     // implements ClientHook -----------------------------------------
-
-    Request<ObjectPointer, ObjectPointer> newCall(
-        uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
-      auto request = kj::heap<RpcRequest>(
-          *connectionState, firstSegmentWordSize, kj::addRef(*this));
-      auto callBuilder = request->getCall();
-
-      callBuilder.setInterfaceId(interfaceId);
-      callBuilder.setMethodId(methodId);
-
-      auto root = request->getRoot();
-      return Request<ObjectPointer, ObjectPointer>(root, kj::mv(request));
-    }
 
     kj::Maybe<const ClientHook&> getResolved() const {
       return nullptr;
@@ -921,6 +907,11 @@ private:
     Request<ObjectPointer, ObjectPointer> newCall(
         uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
       return inner.lockExclusive()->cap->newCall(interfaceId, methodId, firstSegmentWordSize);
+    }
+
+    VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
+                                kj::Own<CallContextHook>&& context) const override {
+      return inner.lockExclusive()->cap->call(interfaceId, methodId, kj::mv(context));
     }
 
     kj::Maybe<const ClientHook&> getResolved() const {
