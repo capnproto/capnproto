@@ -433,6 +433,52 @@ TEST(Async, ForkRef) {
   loop.wait(kj::mv(outer));
 }
 
+TEST(Async, ExclusiveJoin) {
+  {
+    SimpleEventLoop loop;
+
+    auto left = loop.evalLater([&]() { return 123; });
+    auto right = newPromiseAndFulfiller<int>();  // never fulfilled
+
+    auto promise = loop.exclusiveJoin(kj::mv(left), kj::mv(right.promise));
+
+    EXPECT_EQ(123, loop.wait(kj::mv(promise)));
+  }
+
+  {
+    SimpleEventLoop loop;
+
+    auto left = newPromiseAndFulfiller<int>();  // never fulfilled
+    auto right = loop.evalLater([&]() { return 123; });
+
+    auto promise = loop.exclusiveJoin(kj::mv(left.promise), kj::mv(right));
+
+    EXPECT_EQ(123, loop.wait(kj::mv(promise)));
+  }
+
+  {
+    SimpleEventLoop loop;
+
+    auto left = loop.evalLater([&]() { return 123; });
+    auto right = loop.evalLater([&]() { return 456; });
+
+    auto promise = loop.exclusiveJoin(kj::mv(left), kj::mv(right));
+
+    EXPECT_EQ(123, loop.wait(kj::mv(promise)));
+  }
+
+  {
+    SimpleEventLoop loop;
+
+    auto right = loop.evalLater([&]() { return 456; });
+    auto left = loop.evalLater([&]() { return 123; });
+
+    auto promise = loop.exclusiveJoin(kj::mv(left), kj::mv(right));
+
+    EXPECT_EQ(456, loop.wait(kj::mv(promise)));
+  }
+}
+
 class ErrorHandlerImpl: public TaskSet::ErrorHandler {
 public:
   uint exceptionCount = 0;

@@ -294,6 +294,10 @@ public:
   // Like `Promise::fork()`, but manages the fork on *this* EventLoop rather than the thread's
   // current loop.  See Promise::fork().
 
+  template <typename T>
+  Promise<T> exclusiveJoin(Promise<T>&& promise1, Promise<T>&& promise2) const;
+  // Like `promise1.exclusiveJoin(promise2)`, returning the joined promise.
+
   // -----------------------------------------------------------------
   // Low-level interface.
 
@@ -631,6 +635,13 @@ public:
   // `T` must be copy-constructable for this to work.  Or, in the special case where `T` is
   // `Own<U>`, `U` must have a method `Own<const U> addRef() const` which returns a new reference
   // to the same (or an equivalent) object (probably implemented via reference counting).
+
+  void exclusiveJoin(Promise<T>&& other);
+  // Replace this promise with one that resolves when either the original promise resolves or
+  // `other` resolves (whichever comes first).  The promise that didn't resolve first is canceled.
+
+  // TODO(someday): inclusiveJoin(), or perhaps just join(), which waits for both completions
+  //   and produces a tuple?
 
   template <typename... Attachments>
   void attach(Attachments&&... attachments);
@@ -1276,6 +1287,40 @@ Own<PromiseNode>&& maybeChain(Own<PromiseNode>&& node, T*) {
 
 // -------------------------------------------------------------------
 
+class ExclusiveJoinPromiseNode final: public PromiseNode {
+public:
+  ExclusiveJoinPromiseNode(const EventLoop& loop, Own<PromiseNode> left, Own<PromiseNode> right);
+  ~ExclusiveJoinPromiseNode() noexcept(false);
+
+  bool onReady(EventLoop::Event& event) noexcept override;
+  void get(ExceptionOrValue& output) noexcept override;
+  Maybe<const EventLoop&> getSafeEventLoop() noexcept override;
+
+private:
+  class Branch: public EventLoop::Event {
+  public:
+    Branch(const EventLoop& loop, ExclusiveJoinPromiseNode& joinNode, Own<PromiseNode> dependency);
+    ~Branch() noexcept(false);
+
+    bool get(ExceptionOrValue& output);
+    // Returns true if this is the side that finished.
+
+    void fire() override;
+
+  private:
+    bool isWaiting = false;
+    bool finished = false;
+    ExclusiveJoinPromiseNode& joinNode;
+    Own<PromiseNode> dependency;
+  };
+
+  Branch left;
+  Branch right;
+  EventLoop::Event* onReadyEvent = nullptr;
+};
+
+// -------------------------------------------------------------------
+
 class CrossThreadPromiseNodeBase: public PromiseNode, protected EventLoop::Event {
   // A PromiseNode that safely imports a promised value from one EventLoop to another (which
   // implies crossing threads).
@@ -1503,6 +1548,21 @@ ForkedPromise<T> EventLoop::fork(Promise<T>&& promise) const {
 template <typename T>
 Promise<_::Forked<T>> ForkedPromise<T>::addBranch() const {
   return hub->addBranch();
+}
+
+template <typename T>
+void Promise<T>::exclusiveJoin(Promise<T>&& other) {
+  auto& loop = EventLoop::current();
+  node = heap<_::ExclusiveJoinPromiseNode>(loop,
+      _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(node), loop),
+      _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(other.node), loop));
+}
+
+template <typename T>
+Promise<T> EventLoop::exclusiveJoin(Promise<T>&& promise1, Promise<T>&& promise2) const {
+  return Promise<T>(false, heap<_::ExclusiveJoinPromiseNode>(*this,
+      _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(promise1.node), *this),
+      _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(promise2.node), *this)));
 }
 
 template <typename T>

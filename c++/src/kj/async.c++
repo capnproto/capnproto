@@ -564,6 +564,76 @@ void ChainPromiseNode::fire() {
 
 // -------------------------------------------------------------------
 
+ExclusiveJoinPromiseNode::ExclusiveJoinPromiseNode(
+    const EventLoop& loop, Own<PromiseNode> left, Own<PromiseNode> right)
+    : left(loop, *this, kj::mv(left)),
+      right(loop, *this, kj::mv(right)) {}
+
+ExclusiveJoinPromiseNode::~ExclusiveJoinPromiseNode() noexcept(false) {}
+
+bool ExclusiveJoinPromiseNode::onReady(EventLoop::Event& event) noexcept {
+  if (onReadyEvent == _kJ_ALREADY_READY) {
+    return true;
+  } else {
+    onReadyEvent = &event;
+    return false;
+  }
+}
+
+void ExclusiveJoinPromiseNode::get(ExceptionOrValue& output) noexcept {
+  KJ_REQUIRE(left.get(output) || right.get(output),
+             "get() called before ready.");
+}
+
+Maybe<const EventLoop&> ExclusiveJoinPromiseNode::getSafeEventLoop() noexcept {
+  return left.getEventLoop();
+}
+
+ExclusiveJoinPromiseNode::Branch::Branch(
+    const EventLoop& loop, ExclusiveJoinPromiseNode& joinNode, Own<PromiseNode> dependency)
+    : Event(loop), joinNode(joinNode), dependency(kj::mv(dependency)) {
+  KJ_DREQUIRE(this->dependency->isSafeEventLoop(loop));
+  arm();
+}
+
+ExclusiveJoinPromiseNode::Branch::~Branch() noexcept(false) {
+  disarm();
+}
+
+bool ExclusiveJoinPromiseNode::Branch::get(ExceptionOrValue& output) {
+  if (finished) {
+    dependency->get(output);
+    return true;
+  } else {
+    return false;
+  }
+}
+
+void ExclusiveJoinPromiseNode::Branch::fire() {
+  if (!isWaiting && !dependency->onReady(*this)) {
+    isWaiting = true;
+  } else {
+    finished = true;
+
+    // Cancel the branch that didn't return first.  Ignore exceptions caused by cancellation.
+    if (this == &joinNode.left) {
+      joinNode.right.disarm();
+      kj::runCatchingExceptions([&]() { joinNode.right.dependency = nullptr; });
+    } else {
+      joinNode.left.disarm();
+      kj::runCatchingExceptions([&]() { joinNode.left.dependency = nullptr; });
+    }
+
+    if (joinNode.onReadyEvent == nullptr) {
+      joinNode.onReadyEvent = _kJ_ALREADY_READY;
+    } else {
+      joinNode.onReadyEvent->arm();
+    }
+  }
+}
+
+// -------------------------------------------------------------------
+
 CrossThreadPromiseNodeBase::CrossThreadPromiseNodeBase(
     const EventLoop& loop, Own<PromiseNode>&& dependency, ExceptionOrValue& resultRef)
     : Event(loop), dependency(kj::mv(dependency)), resultRef(resultRef) {
