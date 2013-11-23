@@ -75,8 +75,6 @@ kj::Promise<void> ClientHook::whenResolved() const {
 
 // =======================================================================================
 
-namespace {
-
 class LocalResponse final: public ResponseHook, public kj::Refcounted {
 public:
   LocalResponse(uint sizeHint)
@@ -101,10 +99,33 @@ public:
     request = nullptr;
   }
   ObjectPointer::Builder getResults(uint firstSegmentWordSize) override {
-    if (!response) {
-      response = kj::refcounted<LocalResponse>(firstSegmentWordSize);
+    if (response == nullptr) {
+      auto localResponse = kj::refcounted<LocalResponse>(firstSegmentWordSize);
+      responseBuilder = localResponse->message.getRoot();
+      response = Response<ObjectPointer>(responseBuilder.asReader(), kj::mv(localResponse));
     }
-    return response->message.getRoot();
+    return responseBuilder;
+  }
+  kj::Promise<void> tailCall(kj::Own<RequestHook> request) override {
+    KJ_REQUIRE(response == nullptr, "Can't call tailCall() after initializing the results struct.");
+    releaseParams();
+
+    auto promise = request->send();
+
+    // Link pipelines.
+    KJ_IF_MAYBE(f, tailCallPipelineFulfiller) {
+      f->get()->fulfill(kj::mv(kj::implicitCast<ObjectPointer::Pipeline&>(promise)));
+    }
+
+    // Wait for response.
+    return promise.then([this](Response<ObjectPointer>&& tailResponse) {
+      response = kj::mv(tailResponse);
+    });
+  }
+  kj::Promise<ObjectPointer::Pipeline> onTailCall() override {
+    auto paf = kj::newPromiseAndFulfiller<ObjectPointer::Pipeline>();
+    tailCallPipelineFulfiller = kj::mv(paf.fulfiller);
+    return kj::mv(paf.promise);
   }
   void allowAsyncCancellation() override {
     // ignored for local calls
@@ -117,8 +138,10 @@ public:
   }
 
   kj::Maybe<kj::Own<LocalMessage>> request;
-  kj::Own<LocalResponse> response;
+  kj::Maybe<Response<ObjectPointer>> response;
+  ObjectPointer::Builder responseBuilder = nullptr;  // only valid if `response` is non-null
   kj::Own<const ClientHook> clientRef;
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<ObjectPointer::Pipeline>>> tailCallPipelineFulfiller;
 };
 
 class LocalRequest final: public RequestHook {
@@ -131,6 +154,8 @@ public:
         interfaceId(interfaceId), methodId(methodId), client(kj::mv(client)) {}
 
   RemotePromise<ObjectPointer> send() override {
+    KJ_REQUIRE(message.get() != nullptr, "Already called send() on this request.");
+
     // For the lambda capture.
     uint64_t interfaceId = this->interfaceId;
     uint16_t methodId = this->methodId;
@@ -140,13 +165,19 @@ public:
 
     auto promise = loop.there(kj::mv(promiseAndPipeline.promise),
         kj::mvCapture(context, [=](kj::Own<LocalCallContext> context) {
-          // Do not inline `reader` -- kj::mv on next line may occur first.
-          auto reader = context->getResults(1).asReader();
-          return Response<ObjectPointer>(reader, kj::mv(context->response));
+          KJ_IF_MAYBE(r, context->response) {
+            return kj::mv(*r);
+          } else {
+            KJ_FAIL_ASSERT("Method implementation failed to fill in results.");
+          }
         }));
 
     return RemotePromise<ObjectPointer>(
         kj::mv(promise), ObjectPointer::Pipeline(kj::mv(promiseAndPipeline.pipeline)));
+  }
+
+  const void* getBrand() const {
+    return nullptr;
   }
 
   kj::Own<LocalMessage> message;
@@ -398,8 +429,7 @@ public:
         });
 
     // Make sure that this client cannot be destroyed until the promise completes.
-    promise = promise.thenInAnyThread(kj::mvCapture(kj::addRef(*this),
-        [](kj::Own<const LocalClient>&& ref) {}));
+    promise.attach(kj::addRef(*this));
 
     // We have to fork this promise for the pipeline to receive a copy of the answer.
     auto forked = server.getEventLoop().fork(kj::mv(promise));
@@ -410,14 +440,16 @@ public:
           return kj::refcounted<LocalPipeline>(kj::mv(context));
         }));
 
-    auto completionPromise = forked.addBranch().thenInAnyThread(kj::mvCapture(context,
-        [=](kj::Own<CallContextHook>&& context) {
-          // Nothing to do here.  We just wanted to make sure to hold on to a reference to the
-          // context even if the pipeline was discarded.
-          //
-          // TODO(someday):  We could probably make this less ugly if we had the ability to
-          //   convert Promise<Tuple<T, U>> -> Tuple<Promise<T>, Promise<U>>...
-        }));
+    auto tailPipelinePromise = context->onTailCall().thenInAnyThread(
+        [](ObjectPointer::Pipeline&& pipeline) {
+      return kj::mv(pipeline.hook);
+    });
+
+    pipelinePromise = server.getEventLoop().exclusiveJoin(
+        kj::mv(pipelinePromise), kj::mv(tailPipelinePromise));
+
+    auto completionPromise = forked.addBranch();
+    completionPromise.attach(kj::mv(context));
 
     return VoidPromiseAndPipeline { kj::mv(completionPromise),
         kj::refcounted<QueuedPipeline>(server.getEventLoop(), kj::mv(pipelinePromise)) };
@@ -443,8 +475,6 @@ public:
 private:
   kj::EventLoopGuarded<kj::Own<Capability::Server>> server;
 };
-
-}  // namespace
 
 kj::Own<const ClientHook> Capability::Client::makeLocalClient(
     kj::Own<Capability::Server>&& server, const kj::EventLoop& eventLoop) {

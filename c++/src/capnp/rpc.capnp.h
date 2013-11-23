@@ -44,11 +44,11 @@ struct Call {
   class Reader;
   class Builder;
   class Pipeline;
-  struct SendReturnTo;
+  struct SendResultsTo;
 };
 
-struct Call::SendReturnTo {
-  SendReturnTo() = delete;
+struct Call::SendResultsTo {
+  SendResultsTo() = delete;
 
   class Reader;
   class Builder;
@@ -70,7 +70,9 @@ struct Return {
     RESULTS,
     EXCEPTION,
     CANCELED,
-    REDIRECT,
+    RESULTS_SENT_ELSEWHERE,
+    TAKE_FROM_OTHER_ANSWER,
+    ACCEPT_FROM_THIRD_PARTY,
   };
 };
 
@@ -291,13 +293,13 @@ CAPNP_DECLARE_STRUCT(
     1, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::Call, 836a53ce789d4cd4,
-    3, 3, INLINE_COMPOSITE);
+    2, 3, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
-    ::capnp::rpc::Call::SendReturnTo, dae8b0f61aab5f99,
-    3, 3, INLINE_COMPOSITE);
+    ::capnp::rpc::Call::SendResultsTo, dae8b0f61aab5f99,
+    2, 3, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::Return, 9e19b28d3db3573a,
-    1, 2, INLINE_COMPOSITE);
+    2, 2, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::rpc::Finish, d37d2eb2c2f80e63,
     1, 1, INLINE_COMPOSITE);
@@ -623,7 +625,7 @@ public:
   inline bool hasParams() const;
   inline ::capnp::ObjectPointer::Reader getParams() const;
 
-  inline SendReturnTo::Reader getSendReturnTo() const;
+  inline SendResultsTo::Reader getSendResultsTo() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -675,8 +677,8 @@ public:
   inline ::capnp::ObjectPointer::Builder getParams();
   inline ::capnp::ObjectPointer::Builder initParams();
 
-  inline SendReturnTo::Builder getSendReturnTo();
-  inline SendReturnTo::Builder initSendReturnTo();
+  inline SendResultsTo::Builder getSendResultsTo();
+  inline SendResultsTo::Builder initSendResultsTo();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -699,16 +701,16 @@ public:
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::rpc::MessageTarget::Pipeline getTarget() const;
-  inline SendReturnTo::Pipeline getSendReturnTo() const;
+  inline SendResultsTo::Pipeline getSendResultsTo() const;
 private:
   ::capnp::ObjectPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
 
-class Call::SendReturnTo::Reader {
+class Call::SendResultsTo::Reader {
 public:
-  typedef SendReturnTo Reads;
+  typedef SendResultsTo Reads;
 
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
@@ -722,7 +724,7 @@ public:
   inline  ::capnp::Void getCaller() const;
 
   inline bool isYourself() const;
-  inline  ::uint32_t getYourself() const;
+  inline  ::capnp::Void getYourself() const;
 
   inline bool isThirdParty() const;
   inline bool hasThirdParty() const;
@@ -738,16 +740,16 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Call::SendReturnTo::Reader reader);
+  friend ::kj::StringTree KJ_STRINGIFY(Call::SendResultsTo::Reader reader);
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(Call::SendReturnTo::Reader reader) {
-  return ::capnp::_::structString<Call::SendReturnTo>(reader._reader);
+inline ::kj::StringTree KJ_STRINGIFY(Call::SendResultsTo::Reader reader) {
+  return ::capnp::_::structString<Call::SendResultsTo>(reader._reader);
 }
 
-class Call::SendReturnTo::Builder {
+class Call::SendResultsTo::Builder {
 public:
-  typedef SendReturnTo Builds;
+  typedef SendResultsTo Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
                        // You can explicitly initialize to nullptr instead.
@@ -764,8 +766,8 @@ public:
   inline void setCaller( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isYourself();
-  inline  ::uint32_t getYourself();
-  inline void setYourself( ::uint32_t value);
+  inline  ::capnp::Void getYourself();
+  inline void setYourself( ::capnp::Void value = ::capnp::VOID);
 
   inline bool isThirdParty();
   inline bool hasThirdParty();
@@ -777,16 +779,16 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Call::SendReturnTo::Builder builder);
+  friend ::kj::StringTree KJ_STRINGIFY(Call::SendResultsTo::Builder builder);
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(Call::SendReturnTo::Builder builder) {
-  return ::capnp::_::structString<Call::SendReturnTo>(builder._builder.asReader());
+inline ::kj::StringTree KJ_STRINGIFY(Call::SendResultsTo::Builder builder) {
+  return ::capnp::_::structString<Call::SendResultsTo>(builder._builder.asReader());
 }
 
-class Call::SendReturnTo::Pipeline {
+class Call::SendResultsTo::Pipeline {
 public:
-  typedef SendReturnTo Pipelines;
+  typedef SendResultsTo Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
@@ -826,9 +828,15 @@ public:
   inline bool isCanceled() const;
   inline  ::capnp::Void getCanceled() const;
 
-  inline bool isRedirect() const;
-  inline bool hasRedirect() const;
-  inline ::capnp::ObjectPointer::Reader getRedirect() const;
+  inline bool isResultsSentElsewhere() const;
+  inline  ::capnp::Void getResultsSentElsewhere() const;
+
+  inline bool isTakeFromOtherAnswer() const;
+  inline  ::uint32_t getTakeFromOtherAnswer() const;
+
+  inline bool isAcceptFromThirdParty() const;
+  inline bool hasAcceptFromThirdParty() const;
+  inline ::capnp::ObjectPointer::Reader getAcceptFromThirdParty() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -889,10 +897,18 @@ public:
   inline  ::capnp::Void getCanceled();
   inline void setCanceled( ::capnp::Void value = ::capnp::VOID);
 
-  inline bool isRedirect();
-  inline bool hasRedirect();
-  inline ::capnp::ObjectPointer::Builder getRedirect();
-  inline ::capnp::ObjectPointer::Builder initRedirect();
+  inline bool isResultsSentElsewhere();
+  inline  ::capnp::Void getResultsSentElsewhere();
+  inline void setResultsSentElsewhere( ::capnp::Void value = ::capnp::VOID);
+
+  inline bool isTakeFromOtherAnswer();
+  inline  ::uint32_t getTakeFromOtherAnswer();
+  inline void setTakeFromOtherAnswer( ::uint32_t value);
+
+  inline bool isAcceptFromThirdParty();
+  inline bool hasAcceptFromThirdParty();
+  inline ::capnp::ObjectPointer::Builder getAcceptFromThirdParty();
+  inline ::capnp::ObjectPointer::Builder initAcceptFromThirdParty();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -3307,109 +3323,108 @@ inline ::capnp::ObjectPointer::Builder Call::Builder::initParams() {
   return result;
 }
 
-inline Call::SendReturnTo::Reader Call::Reader::getSendReturnTo() const {
-  return Call::SendReturnTo::Reader(_reader);
+inline Call::SendResultsTo::Reader Call::Reader::getSendResultsTo() const {
+  return Call::SendResultsTo::Reader(_reader);
 }
-inline Call::SendReturnTo::Builder Call::Builder::getSendReturnTo() {
-  return Call::SendReturnTo::Builder(_builder);
+inline Call::SendResultsTo::Builder Call::Builder::getSendResultsTo() {
+  return Call::SendResultsTo::Builder(_builder);
 }
-inline Call::SendReturnTo::Pipeline Call::Pipeline::getSendReturnTo() const {
-  return Call::SendReturnTo::Pipeline(_typeless.noop());
+inline Call::SendResultsTo::Pipeline Call::Pipeline::getSendResultsTo() const {
+  return Call::SendResultsTo::Pipeline(_typeless.noop());
 }
-inline Call::SendReturnTo::Builder Call::Builder::initSendReturnTo() {
+inline Call::SendResultsTo::Builder Call::Builder::initSendResultsTo() {
   _builder.setDataField< ::uint16_t>(3 * ::capnp::ELEMENTS, 0);
-  _builder.setDataField< ::uint32_t>(4 * ::capnp::ELEMENTS, 0);
   _builder.getPointerField(2 * ::capnp::POINTERS).clear();
-  return Call::SendReturnTo::Builder(_builder);
+  return Call::SendResultsTo::Builder(_builder);
 }
-inline Call::SendReturnTo::Which Call::SendReturnTo::Reader::which() const {
+inline Call::SendResultsTo::Which Call::SendResultsTo::Reader::which() const {
   return _reader.getDataField<Which>(3 * ::capnp::ELEMENTS);
 }
-inline Call::SendReturnTo::Which Call::SendReturnTo::Builder::which() {
+inline Call::SendResultsTo::Which Call::SendResultsTo::Builder::which() {
   return _builder.getDataField<Which>(3 * ::capnp::ELEMENTS);
 }
 
-inline bool Call::SendReturnTo::Reader::isCaller() const {
-  return which() == Call::SendReturnTo::CALLER;
+inline bool Call::SendResultsTo::Reader::isCaller() const {
+  return which() == Call::SendResultsTo::CALLER;
 }
-inline bool Call::SendReturnTo::Builder::isCaller() {
-  return which() == Call::SendReturnTo::CALLER;
+inline bool Call::SendResultsTo::Builder::isCaller() {
+  return which() == Call::SendResultsTo::CALLER;
 }
-inline  ::capnp::Void Call::SendReturnTo::Reader::getCaller() const {
-  KJ_IREQUIRE(which() == Call::SendReturnTo::CALLER,
+inline  ::capnp::Void Call::SendResultsTo::Reader::getCaller() const {
+  KJ_IREQUIRE(which() == Call::SendResultsTo::CALLER,
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
 }
 
-inline  ::capnp::Void Call::SendReturnTo::Builder::getCaller() {
-  KJ_IREQUIRE(which() == Call::SendReturnTo::CALLER,
+inline  ::capnp::Void Call::SendResultsTo::Builder::getCaller() {
+  KJ_IREQUIRE(which() == Call::SendResultsTo::CALLER,
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
 }
-inline void Call::SendReturnTo::Builder::setCaller( ::capnp::Void value) {
-  _builder.setDataField<Call::SendReturnTo::Which>(
-      3 * ::capnp::ELEMENTS, Call::SendReturnTo::CALLER);
+inline void Call::SendResultsTo::Builder::setCaller( ::capnp::Void value) {
+  _builder.setDataField<Call::SendResultsTo::Which>(
+      3 * ::capnp::ELEMENTS, Call::SendResultsTo::CALLER);
   _builder.setDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Call::SendReturnTo::Reader::isYourself() const {
-  return which() == Call::SendReturnTo::YOURSELF;
+inline bool Call::SendResultsTo::Reader::isYourself() const {
+  return which() == Call::SendResultsTo::YOURSELF;
 }
-inline bool Call::SendReturnTo::Builder::isYourself() {
-  return which() == Call::SendReturnTo::YOURSELF;
+inline bool Call::SendResultsTo::Builder::isYourself() {
+  return which() == Call::SendResultsTo::YOURSELF;
 }
-inline  ::uint32_t Call::SendReturnTo::Reader::getYourself() const {
-  KJ_IREQUIRE(which() == Call::SendReturnTo::YOURSELF,
+inline  ::capnp::Void Call::SendResultsTo::Reader::getYourself() const {
+  KJ_IREQUIRE(which() == Call::SendResultsTo::YOURSELF,
               "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::uint32_t>(
-      4 * ::capnp::ELEMENTS);
+  return _reader.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
 }
 
-inline  ::uint32_t Call::SendReturnTo::Builder::getYourself() {
-  KJ_IREQUIRE(which() == Call::SendReturnTo::YOURSELF,
+inline  ::capnp::Void Call::SendResultsTo::Builder::getYourself() {
+  KJ_IREQUIRE(which() == Call::SendResultsTo::YOURSELF,
               "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::uint32_t>(
-      4 * ::capnp::ELEMENTS);
+  return _builder.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
 }
-inline void Call::SendReturnTo::Builder::setYourself( ::uint32_t value) {
-  _builder.setDataField<Call::SendReturnTo::Which>(
-      3 * ::capnp::ELEMENTS, Call::SendReturnTo::YOURSELF);
-  _builder.setDataField< ::uint32_t>(
-      4 * ::capnp::ELEMENTS, value);
+inline void Call::SendResultsTo::Builder::setYourself( ::capnp::Void value) {
+  _builder.setDataField<Call::SendResultsTo::Which>(
+      3 * ::capnp::ELEMENTS, Call::SendResultsTo::YOURSELF);
+  _builder.setDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Call::SendReturnTo::Reader::isThirdParty() const {
-  return which() == Call::SendReturnTo::THIRD_PARTY;
+inline bool Call::SendResultsTo::Reader::isThirdParty() const {
+  return which() == Call::SendResultsTo::THIRD_PARTY;
 }
-inline bool Call::SendReturnTo::Builder::isThirdParty() {
-  return which() == Call::SendReturnTo::THIRD_PARTY;
+inline bool Call::SendResultsTo::Builder::isThirdParty() {
+  return which() == Call::SendResultsTo::THIRD_PARTY;
 }
-inline bool Call::SendReturnTo::Reader::hasThirdParty() const {
-  if (which() != Call::SendReturnTo::THIRD_PARTY) return false;
+inline bool Call::SendResultsTo::Reader::hasThirdParty() const {
+  if (which() != Call::SendResultsTo::THIRD_PARTY) return false;
   return !_reader.getPointerField(2 * ::capnp::POINTERS).isNull();
 }
-inline bool Call::SendReturnTo::Builder::hasThirdParty() {
-  if (which() != Call::SendReturnTo::THIRD_PARTY) return false;
+inline bool Call::SendResultsTo::Builder::hasThirdParty() {
+  if (which() != Call::SendResultsTo::THIRD_PARTY) return false;
   return !_builder.getPointerField(2 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader Call::SendReturnTo::Reader::getThirdParty() const {
-  KJ_IREQUIRE(which() == Call::SendReturnTo::THIRD_PARTY,
+inline ::capnp::ObjectPointer::Reader Call::SendResultsTo::Reader::getThirdParty() const {
+  KJ_IREQUIRE(which() == Call::SendResultsTo::THIRD_PARTY,
               "Must check which() before get()ing a union member.");
   return ::capnp::ObjectPointer::Reader(
       _reader.getPointerField(2 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Call::SendReturnTo::Builder::getThirdParty() {
-  KJ_IREQUIRE(which() == Call::SendReturnTo::THIRD_PARTY,
+inline ::capnp::ObjectPointer::Builder Call::SendResultsTo::Builder::getThirdParty() {
+  KJ_IREQUIRE(which() == Call::SendResultsTo::THIRD_PARTY,
               "Must check which() before get()ing a union member.");
   return ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(2 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Call::SendReturnTo::Builder::initThirdParty() {
-  _builder.setDataField<Call::SendReturnTo::Which>(
-      3 * ::capnp::ELEMENTS, Call::SendReturnTo::THIRD_PARTY);
+inline ::capnp::ObjectPointer::Builder Call::SendResultsTo::Builder::initThirdParty() {
+  _builder.setDataField<Call::SendResultsTo::Which>(
+      3 * ::capnp::ELEMENTS, Call::SendResultsTo::THIRD_PARTY);
   auto result = ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(2 * ::capnp::POINTERS));
   result.clear();
@@ -3586,35 +3601,87 @@ inline void Return::Builder::setCanceled( ::capnp::Void value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Return::Reader::isRedirect() const {
-  return which() == Return::REDIRECT;
+inline bool Return::Reader::isResultsSentElsewhere() const {
+  return which() == Return::RESULTS_SENT_ELSEWHERE;
 }
-inline bool Return::Builder::isRedirect() {
-  return which() == Return::REDIRECT;
+inline bool Return::Builder::isResultsSentElsewhere() {
+  return which() == Return::RESULTS_SENT_ELSEWHERE;
 }
-inline bool Return::Reader::hasRedirect() const {
-  if (which() != Return::REDIRECT) return false;
+inline  ::capnp::Void Return::Reader::getResultsSentElsewhere() const {
+  KJ_IREQUIRE(which() == Return::RESULTS_SENT_ELSEWHERE,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::Void Return::Builder::getResultsSentElsewhere() {
+  KJ_IREQUIRE(which() == Return::RESULTS_SENT_ELSEWHERE,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void Return::Builder::setResultsSentElsewhere( ::capnp::Void value) {
+  _builder.setDataField<Return::Which>(
+      2 * ::capnp::ELEMENTS, Return::RESULTS_SENT_ELSEWHERE);
+  _builder.setDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Return::Reader::isTakeFromOtherAnswer() const {
+  return which() == Return::TAKE_FROM_OTHER_ANSWER;
+}
+inline bool Return::Builder::isTakeFromOtherAnswer() {
+  return which() == Return::TAKE_FROM_OTHER_ANSWER;
+}
+inline  ::uint32_t Return::Reader::getTakeFromOtherAnswer() const {
+  KJ_IREQUIRE(which() == Return::TAKE_FROM_OTHER_ANSWER,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::uint32_t>(
+      2 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint32_t Return::Builder::getTakeFromOtherAnswer() {
+  KJ_IREQUIRE(which() == Return::TAKE_FROM_OTHER_ANSWER,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::uint32_t>(
+      2 * ::capnp::ELEMENTS);
+}
+inline void Return::Builder::setTakeFromOtherAnswer( ::uint32_t value) {
+  _builder.setDataField<Return::Which>(
+      2 * ::capnp::ELEMENTS, Return::TAKE_FROM_OTHER_ANSWER);
+  _builder.setDataField< ::uint32_t>(
+      2 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Return::Reader::isAcceptFromThirdParty() const {
+  return which() == Return::ACCEPT_FROM_THIRD_PARTY;
+}
+inline bool Return::Builder::isAcceptFromThirdParty() {
+  return which() == Return::ACCEPT_FROM_THIRD_PARTY;
+}
+inline bool Return::Reader::hasAcceptFromThirdParty() const {
+  if (which() != Return::ACCEPT_FROM_THIRD_PARTY) return false;
   return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
-inline bool Return::Builder::hasRedirect() {
-  if (which() != Return::REDIRECT) return false;
+inline bool Return::Builder::hasAcceptFromThirdParty() {
+  if (which() != Return::ACCEPT_FROM_THIRD_PARTY) return false;
   return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader Return::Reader::getRedirect() const {
-  KJ_IREQUIRE(which() == Return::REDIRECT,
+inline ::capnp::ObjectPointer::Reader Return::Reader::getAcceptFromThirdParty() const {
+  KJ_IREQUIRE(which() == Return::ACCEPT_FROM_THIRD_PARTY,
               "Must check which() before get()ing a union member.");
   return ::capnp::ObjectPointer::Reader(
       _reader.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Return::Builder::getRedirect() {
-  KJ_IREQUIRE(which() == Return::REDIRECT,
+inline ::capnp::ObjectPointer::Builder Return::Builder::getAcceptFromThirdParty() {
+  KJ_IREQUIRE(which() == Return::ACCEPT_FROM_THIRD_PARTY,
               "Must check which() before get()ing a union member.");
   return ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Return::Builder::initRedirect() {
+inline ::capnp::ObjectPointer::Builder Return::Builder::initAcceptFromThirdParty() {
   _builder.setDataField<Return::Which>(
-      2 * ::capnp::ELEMENTS, Return::REDIRECT);
+      2 * ::capnp::ELEMENTS, Return::ACCEPT_FROM_THIRD_PARTY);
   auto result = ::capnp::ObjectPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
   result.clear();

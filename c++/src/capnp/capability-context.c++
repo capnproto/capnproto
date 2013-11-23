@@ -174,6 +174,10 @@ public:
         ObjectPointer::Pipeline(kj::refcounted<BrokenPipeline>(exception)));
   }
 
+  const void* getBrand() const {
+    return nullptr;
+  }
+
   kj::Exception exception;
   LocalMessage message;
 };

@@ -610,6 +610,25 @@ interface TestPipeline {
   }
 }
 
+interface TestCallOrder {
+  getCallSequence @0 () -> (n: UInt32);
+  # First call returns 0, next returns 1, ...
+}
+
+interface TestTailCallee {
+  struct TailResult {
+    i @0 :UInt32;
+    t @1 :Text;
+    c @2 :TestCallOrder;
+  }
+
+  foo @0 (i :Int32, t :Text) -> TailResult;
+}
+
+interface TestTailCaller {
+  foo @0 (i :Int32, callee :TestTailCallee) -> TestTailCallee.TailResult;
+}
+
 struct TestSturdyRefHostId {
   host @0 :Text;
 }
@@ -620,6 +639,8 @@ struct TestSturdyRefObjectId {
     testInterface @0;
     testExtends @1;
     testPipeline @2;
+    testTailCallee @3;
+    testTailCaller @4;
   }
 }
 

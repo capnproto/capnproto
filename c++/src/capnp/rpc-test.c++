@@ -68,7 +68,7 @@ public:
 
   class ConnectionImpl final: public Connection, public kj::Refcounted {
   public:
-    ConnectionImpl() {}
+    ConnectionImpl(const char* name): name(name) {}
 
     void attach(ConnectionImpl& other) {
       KJ_REQUIRE(partner == nullptr);
@@ -100,6 +100,9 @@ public:
         return message->message.getRoot<ObjectPointer>();
       }
       void send() override {
+        //kj::String msg = kj::str(connection.name, ": ", message->message.getRoot<rpc::Message>());
+        //KJ_DBG(msg);
+
         KJ_IF_MAYBE(p, connection.partner) {
           auto lock = p->queues.lockExclusive();
           if (lock->fulfillers.empty()) {
@@ -146,6 +149,7 @@ public:
     }
 
   private:
+    const char* name;
     kj::Maybe<ConnectionImpl&> partner;
 
     struct Queues {
@@ -172,8 +176,8 @@ public:
 
     auto iter = myLock->connections.find(&dst);
     if (iter == myLock->connections.end()) {
-      auto local = kj::refcounted<ConnectionImpl>();
-      auto remote = kj::refcounted<ConnectionImpl>();
+      auto local = kj::refcounted<ConnectionImpl>("client");
+      auto remote = kj::refcounted<ConnectionImpl>("server");
       local->attach(*remote);
 
       myLock->connections[&dst] = kj::addRef(*local);
@@ -237,6 +241,10 @@ public:
         return Capability::Client(newBrokenCap("No TestExtends implemented."));
       case test::TestSturdyRefObjectId::Tag::TEST_PIPELINE:
         return kj::heap<TestPipelineImpl>(callCount);
+      case test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLEE:
+        return kj::heap<TestTailCalleeImpl>(callCount);
+      case test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLER:
+        return kj::heap<TestTailCallerImpl>(callCount);
     }
     KJ_UNREACHABLE;
   }
@@ -341,6 +349,38 @@ TEST_F(RpcTest, Pipelining) {
 
   EXPECT_EQ(3, restorer.callCount);
   EXPECT_EQ(1, chainedCallCount);
+}
+
+TEST_F(RpcTest, TailCall) {
+  auto caller = connect(test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLER)
+      .castAs<test::TestTailCaller>();
+
+  int calleeCallCount = 0;
+
+  test::TestTailCallee::Client callee(kj::heap<TestTailCalleeImpl>(calleeCallCount), loop);
+
+  auto request = caller.fooRequest();
+  request.setI(456);
+  request.setCallee(callee);
+
+  auto promise = request.send();
+
+  auto dependentCall0 = promise.getC().getCallSequenceRequest().send();
+
+  auto response = loop.wait(kj::mv(promise));
+  EXPECT_EQ(456, response.getI());
+  EXPECT_EQ(456, response.getI());
+
+  auto dependentCall1 = promise.getC().getCallSequenceRequest().send();
+
+  auto dependentCall2 = response.getC().getCallSequenceRequest().send();
+
+  EXPECT_EQ(0, loop.wait(kj::mv(dependentCall0)).getN());
+  EXPECT_EQ(1, loop.wait(kj::mv(dependentCall1)).getN());
+  EXPECT_EQ(2, loop.wait(kj::mv(dependentCall2)).getN());
+
+  EXPECT_EQ(1, calleeCallCount);
+  EXPECT_EQ(1, restorer.callCount);
 }
 
 }  // namespace

@@ -22,6 +22,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "test-util.h"
+#include <kj/debug.h>
 #include <gtest/gtest.h>
 
 namespace capnp {
@@ -930,6 +931,44 @@ TestPipelineImpl::TestPipelineImpl(int& callCount): callCount(callCount) {}
         result.setS("bar");
         result.initOutBox().setCap(kj::heap<TestExtendsImpl>(callCount));
       });
+}
+
+kj::Promise<void> TestCallOrderImpl::getCallSequence(
+    test::TestCallOrder::GetCallSequenceParams::Reader params,
+    test::TestCallOrder::GetCallSequenceResults::Builder result) {
+  result.setN(count++);
+  return kj::READY_NOW;
+}
+
+TestTailCallerImpl::TestTailCallerImpl(int& callCount): callCount(callCount) {}
+
+kj::Promise<void> TestTailCallerImpl::fooAdvanced(
+    capnp::CallContext<test::TestTailCaller::FooParams,
+                       test::TestTailCallee::TailResult> context) {
+  ++callCount;
+
+  auto params = context.getParams();
+  auto tailRequest = params.getCallee().fooRequest();
+  tailRequest.setI(params.getI());
+  tailRequest.setT("from TestTailCaller");
+  return context.tailCall(kj::mv(tailRequest));
+}
+
+TestTailCalleeImpl::TestTailCalleeImpl(int& callCount): callCount(callCount) {}
+
+kj::Promise<void> TestTailCalleeImpl::fooAdvanced(
+    capnp::CallContext<test::TestTailCallee::FooParams,
+                       test::TestTailCallee::TailResult> context) {
+  ++callCount;
+
+  auto params = context.getParams();
+  auto results = context.getResults();
+
+  results.setI(params.getI());
+  results.setT(params.getT());
+  results.setC(kj::heap<TestCallOrderImpl>());
+
+  return kj::READY_NOW;
 }
 
 }  // namespace _ (private)

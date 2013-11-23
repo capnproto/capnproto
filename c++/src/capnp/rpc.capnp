@@ -275,18 +275,31 @@ struct Call {
   # The params may contain capabilities.  These capabilities are automatically released when the
   # call returns *unless* the Return message explicitly indicates that they are being retained.
 
-  sendReturnTo :union {
+  sendResultsTo :union {
     # Where should the return message be sent?
 
     caller @5 :Void;
     # Send the return message back to the caller (the usual).
 
-    yourself @6 :QuestionId;
+    yourself @6 :Void;
     # **(level 1)**
     #
-    # This is actually an echo of a call originally made by the receiver, with the given question
-    # ID.  The result of this call should directly resolve the original call, without ever sending
-    # a `Return` over the wire.
+    # Don't actually return the results to the sender.  Instead, hold on to them and await
+    # instructions from the sender regarding what to do with them.  In particular, the sender
+    # may subsequently send a `Return` for some other call (which the receiver had previously made
+    # to the sender) with `takeFromOtherAnswer` set.  The results from this call are then used
+    # as the results of the other call.
+    #
+    # When `yourself` is used, the receiver must still send a `Return` for the call, but sets the
+    # field `resultsSentElsewhere` in that `Return` rather than including the results.
+    #
+    # This feature can be used to implement tail calls in which a call from Vat A to Vat B ends up
+    # returning the result of a call from Vat B back to Vat A.
+    #
+    # In particular, the most common use case for this feature is when Vat A makes a call to a
+    # promise in Vat B, and then that promise ends up resolving to a capability back in Vat A.
+    # Vat B must forward all the queued calls on that promise back to Vat A, but can set `yourself`
+    # in the calls so that the results need not pass back through Vat B.
     #
     # For example:
     # - Alice, in Vat A, call foo() on Bob in Vat B.
@@ -294,14 +307,18 @@ struct Call {
     # - Later on, Bob resolves the promise from foo() to point at Carol, who lives in Vat A (next
     #   to Alice).
     # - Vat B dutifully forwards the bar() call to Carol.  Let us call this forwarded call bar'().
-    # - The `Call` for bar'() has `sendReturnTo` set to `yourself`, with the value being the
+    #   Notice that bar() and bar'() are travelling in opposite directions on the same network
+    #   link.
+    # - The `Call` for bar'() has `sendResultsTo` set to `yourself`, with the value being the
     #   question ID originally assigned to the bar() call.
     # - Vat A receives bar'() and delivers it to Carol.
-    # - When bar'() returns, Vat A does *not* send a `Return` message to Vat B.  Instead, it
-    #   directly returns the result to Alice.
-    # - Vat A then sends a `Finish` message for bar().
-    # - Vat B, on receiving the `Finish`, sends a corresponding `Finish` for bar'().
-    # - Neither bar() nor bar'() ever see a `Return` message sent over the wire.
+    # - When bar'() returns, Vat A immediately takes the results and returns them from bar().
+    # - Meanwhile, Vat A sends a `Return` for bar'() to Vat B, with `resultsSentElsewhere` set in
+    #   place of results.
+    # - Vat A sends a `Finish` for that call to Vat B.
+    # - Vat B receives the `Return` for bar'() and sends a `Return` for bar(), with
+    #   `receivedFromYourself` set in place of the results.
+    # - Vat B receives the `Finish` for bar() and sends a `Finish` to bar'().
 
     thirdParty @7 :RecipientId;
     # **(level 3)**
@@ -312,10 +329,9 @@ struct Call {
     #
     # This operates much like `yourself`, above, except that Carol is in a separate Vat C.  `Call`
     # messages are sent from Vat A -> Vat B and Vat B -> Vat C.  A `Return` message is sent from
-    # Vat B -> Vat A that contains a `redirect` to Vat C.  When Vat A sends an `Accept` to Vat C,
-    # it receives back a `Return` containing the call's actual result.  Vat C never sends a `Return`
-    # to Vat B, although `Finish` messages must still be sent corresponding to every `Call` as well
-    # as the `Accept`.
+    # Vat B -> Vat A that contains `acceptFromThirdParty` in place of results.  When Vat A sends
+    # an `Accept` to Vat C, it receives back a `Return` containing the call's actual result.  Vat C
+    # also sends a `Return` to Vat B with `resultsSentElsewhere`.
   }
 }
 
@@ -352,12 +368,20 @@ struct Return {
     # Indicates that the call was canceled due to the caller sending a Finish message
     # before the call had completed.
 
-    redirect @5 :ThirdPartyCapId;
+    resultsSentElsewhere @5 :Void;
+    # This is set when returning from a `Call` which had `sendResultsTo` set to something other
+    # than `caller`.
+
+    takeFromOtherAnswer @6 :QuestionId;
+    # The sender has also sent (before this message) a `Call` with the given question ID and with
+    # `sendResultsTo.yourself` set, and the results of that other call should be used as the
+    # results here.
+
+    acceptFromThirdParty @7 :ThirdPartyCapId;
     # **(level 3)**
     #
-    # The call has been redirected to another vat, and the result should be obtained by connecting
-    # to that vat directly.  An `Accept` message sent to the vat will return the result.  See
-    # `Call.sendReturnTo.thirdParty`.
+    # The caller should contact a third-party vat to pick up the results.  An `Accept` message
+    # sent to the vat will return the result.  This pairs with `Call.sendResultsTo.thirdParty`.
   }
 }
 

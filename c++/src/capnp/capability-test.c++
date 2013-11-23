@@ -152,6 +152,39 @@ TEST(Capability, Pipelining) {
   EXPECT_EQ(1, chainedCallCount);
 }
 
+TEST(Capability, TailCall) {
+  kj::SimpleEventLoop loop;
+
+  int calleeCallCount = 0;
+  int callerCallCount = 0;
+
+  test::TestTailCallee::Client callee(kj::heap<TestTailCalleeImpl>(calleeCallCount), loop);
+  test::TestTailCaller::Client caller(kj::heap<TestTailCallerImpl>(callerCallCount), loop);
+
+  auto request = caller.fooRequest();
+  request.setI(456);
+  request.setCallee(callee);
+
+  auto promise = request.send();
+
+  auto dependentCall0 = promise.getC().getCallSequenceRequest().send();
+
+  auto response = loop.wait(kj::mv(promise));
+  EXPECT_EQ(456, response.getI());
+  EXPECT_EQ(456, response.getI());
+
+  auto dependentCall1 = promise.getC().getCallSequenceRequest().send();
+
+  auto dependentCall2 = response.getC().getCallSequenceRequest().send();
+
+  EXPECT_EQ(0, loop.wait(kj::mv(dependentCall0)).getN());
+  EXPECT_EQ(1, loop.wait(kj::mv(dependentCall1)).getN());
+  EXPECT_EQ(2, loop.wait(kj::mv(dependentCall2)).getN());
+
+  EXPECT_EQ(1, calleeCallCount);
+  EXPECT_EQ(1, callerCallCount);
+}
+
 // =======================================================================================
 
 TEST(Capability, DynamicClient) {

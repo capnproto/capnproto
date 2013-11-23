@@ -187,6 +187,40 @@ private:
   int& callCount;
 };
 
+class TestCallOrderImpl final: public test::TestCallOrder::Server {
+public:
+  kj::Promise<void> getCallSequence(
+      test::TestCallOrder::GetCallSequenceParams::Reader params,
+      test::TestCallOrder::GetCallSequenceResults::Builder result) override;
+
+private:
+  uint count = 0;
+};
+
+class TestTailCallerImpl final: public test::TestTailCaller::Server {
+public:
+  TestTailCallerImpl(int& callCount);
+
+  kj::Promise<void> fooAdvanced(
+      capnp::CallContext<test::TestTailCaller::FooParams,
+                         test::TestTailCallee::TailResult> context) override;
+
+private:
+  int& callCount;
+};
+
+class TestTailCalleeImpl final: public test::TestTailCallee::Server {
+public:
+  TestTailCalleeImpl(int& callCount);
+
+  kj::Promise<void> fooAdvanced(
+      capnp::CallContext<test::TestTailCallee::FooParams,
+                         test::TestTailCallee::TailResult> context) override;
+
+private:
+  int& callCount;
+};
+
 }  // namespace _ (private)
 }  // namespace capnp
 

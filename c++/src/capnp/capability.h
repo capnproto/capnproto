@@ -83,6 +83,8 @@ private:
 
   friend class Capability::Client;
   friend struct DynamicCapability;
+  template <typename, typename>
+  friend class CallContext;
 };
 
 template <typename Results>
@@ -207,6 +209,20 @@ public:
   // `firstSegmentWordSize` indicates the suggested size of the message's first segment.  This
   // is a hint only.  If not specified, the system will decide on its own.
 
+  template <typename SubParams>
+  kj::Promise<void> tailCall(Request<SubParams, Results>&& tailRequest);
+  // Resolve the call by making a tail call.  `tailRequest` is a request that has been filled in
+  // but not yet sent.  The context will send the call, then fill in the results with the result
+  // of the call.  If tailCall() is used, {get,init,set,adopt}Results (above) *must not* be called.
+  //
+  // The RPC implementation may be able to optimize a tail call to another machine such that the
+  // results never actually pass through this machine.  Even if no such optimization is possible,
+  // `tailCall()` may allow pipelined calls to be forwarded optimistically to the new call site.
+  //
+  // `tailCall()` implies a call to `releaseParams()`, to simplify certain implementations.
+  // In general, this should be the last thing a method implementation calls, and the promise
+  // returned from `tailCall()` should then be returned by the method implementation.
+
   void allowAsyncCancellation();
   // Indicate that it is OK for the RPC system to discard its Promise for this call's result if
   // the caller cancels the call, thereby transitively canceling any asynchronous operations the
@@ -276,6 +292,11 @@ class RequestHook {
 public:
   virtual RemotePromise<ObjectPointer> send() = 0;
   // Send the call and return a promise for the result.
+
+  virtual const void* getBrand() const = 0;
+  // Returns a void* that identifies who made this request.  This can be used by an RPC adapter to
+  // discover when tail call is going to be sent over its own connection and therefore can be
+  // optimized into a remote tail call.
 };
 
 class ResponseHook {
@@ -347,8 +368,13 @@ public:
   virtual ObjectPointer::Reader getParams() = 0;
   virtual void releaseParams() = 0;
   virtual ObjectPointer::Builder getResults(uint firstSegmentWordSize) = 0;
+  virtual kj::Promise<void> tailCall(kj::Own<RequestHook> request) = 0;
   virtual void allowAsyncCancellation() = 0;
   virtual bool isCanceled() = 0;
+
+  virtual kj::Promise<ObjectPointer::Pipeline> onTailCall() = 0;
+  // If `tailCall()` is called, resolves to the PipelineHook from the tail call.  An
+  // implementation of `ClientHook::call()` is allowed to call this at most once.
 
   virtual kj::Own<CallContextHook> addRef() = 0;
 };
@@ -559,6 +585,12 @@ inline void CallContext<Params, Results>::adoptResults(Orphan<Results>&& value) 
 template <typename Params, typename Results>
 inline Orphanage CallContext<Params, Results>::getResultsOrphanage(uint firstSegmentWordSize) {
   return Orphanage::getForMessageContaining(hook->getResults(firstSegmentWordSize));
+}
+template <typename Params, typename Results>
+template <typename SubParams>
+inline kj::Promise<void> CallContext<Params, Results>::tailCall(
+    Request<SubParams, Results>&& tailRequest) {
+  return hook->tailCall(kj::mv(tailRequest.hook));
 }
 template <typename Params, typename Results>
 inline void CallContext<Params, Results>::allowAsyncCancellation() {

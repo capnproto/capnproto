@@ -247,6 +247,8 @@ struct ObjectPointer {
 
     inline Pipeline(kj::Own<const PipelineHook>&& hook, kj::Array<PipelineOp>&& ops)
         : hook(kj::mv(hook)), ops(kj::mv(ops)) {}
+
+    friend class LocalClient;
   };
 };
 
