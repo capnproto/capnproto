@@ -393,9 +393,12 @@ struct Finish {
   #    pipelined requests).
   # 2) Any capabilities in the results other than the ones listed below should be implicitly
   #    released.
-  # 3) If the call has not returned yet, the caller no longer cares about the result, so the
-  #    callee may wish to immediately cancel the operation and send back a Return message with
-  #    "canceled" set.
+  # 3) If the call has not returned yet, the caller no longer cares about the result.  If nothing
+  #    else cares about the result either (e.g. there are to other outstanding calls pipelined on
+  #    the result of this one) then the callee may wish to immediately cancel the operation and
+  #    send back a Return message with "canceled" set.  However, implementations are not requried
+  #    to support premature cancellation -- instead, the implementation may wait until the call
+  #    actually completes and send a normal `Return` message.
   #
   # TODO(soon):  Should we separate (1) and (2)?  It would be possible and useful to notify the
   #   server that it doesn't need to keep around the response to service pipeline requests even

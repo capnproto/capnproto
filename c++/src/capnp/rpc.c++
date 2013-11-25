@@ -411,8 +411,8 @@ private:
     // Delete this promise to cancel the call.
 
     kj::Maybe<const RpcCallContext&> callContext;
-    // The call context, if it's still active.  Becomes null when the `Return` message is sent.  This
-    // object, if non-null, is owned by `asyncOp`.
+    // The call context, if it's still active.  Becomes null when the `Return` message is sent.
+    // This object, if non-null, is owned by `asyncOp`.
 
     kj::Maybe<kj::Own<CapInjectorImpl>> resultCaps;
     // Set when `Return` is sent, free when `Finish` is received.
@@ -1877,6 +1877,26 @@ private:
           params(requestCapContext.imbue(params)),
           returnMessage(nullptr) {}
 
+    ~RpcCallContext() noexcept(false) {
+      if (isFirstResponder()) {
+        // We haven't sent a return yet, so we must have been canceled.  Send a cancellation return.
+        unwindDetector.catchExceptionsIfUnwinding([&]() {
+          auto message = connectionState->connection->newOutgoingMessage(
+              requestCapExtractor.retainedListSizeHint(true) + messageSizeHint<rpc::Return>());
+          auto builder = message->getBody().initAs<rpc::Message>().initReturn();
+
+          builder.setQuestionId(questionId);
+          auto retainedCaps = requestCapExtractor.finalizeRetainedCaps(
+              Orphanage::getForMessageContaining(builder));
+          builder.adoptRetainedCaps(kj::mv(retainedCaps.exportList));
+          builder.setCanceled();
+
+          message->send();
+          cleanupAnswerTable(connectionState->tables.lockExclusive(), nullptr);
+        });
+      }
+    }
+
     void sendReturn() {
       if (isFirstResponder()) {
         if (response == nullptr) getResults(1);  // force initialization of response
@@ -1904,22 +1924,6 @@ private:
             Orphanage::getForMessageContaining(builder));
         builder.adoptRetainedCaps(kj::mv(retainedCaps.exportList));
         fromException(exception, builder.initException());
-
-        message->send();
-        cleanupAnswerTable(connectionState->tables.lockExclusive(), nullptr);
-      }
-    }
-    void sendCancel() {
-      if (isFirstResponder()) {
-        auto message = connectionState->connection->newOutgoingMessage(
-            requestCapExtractor.retainedListSizeHint(true) + messageSizeHint<rpc::Return>());
-        auto builder = message->getBody().initAs<rpc::Message>().initReturn();
-
-        builder.setQuestionId(questionId);
-        auto retainedCaps = requestCapExtractor.finalizeRetainedCaps(
-            Orphanage::getForMessageContaining(builder));
-        builder.adoptRetainedCaps(kj::mv(retainedCaps.exportList));
-        builder.setCanceled();
 
         message->send();
         cleanupAnswerTable(connectionState->tables.lockExclusive(), nullptr);
@@ -2009,9 +2013,9 @@ private:
       auto promise = request->send();
 
       // Link pipelines.
-//      KJ_IF_MAYBE(f, tailCallPipelineFulfiller) {
-//        f->get()->fulfill(kj::mv(kj::implicitCast<ObjectPointer::Pipeline&>(promise)));
-//      }
+      KJ_IF_MAYBE(f, tailCallPipelineFulfiller) {
+        f->get()->fulfill(kj::mv(kj::implicitCast<ObjectPointer::Pipeline&>(promise)));
+      }
 
       // Wait for response.
       return promise.then([this](Response<ObjectPointer>&& tailResponse) {
@@ -2085,6 +2089,8 @@ private:
     // on an application promise continuation callback to finish executing, which could take
     // arbitrary time.
 
+    kj::UnwindDetector unwindDetector;
+
     // -----------------------------------------------------
 
     void scheduleCancel() const {
@@ -2109,9 +2115,13 @@ private:
         // we try to schedule doCancel() on the application thread, so that it won't need to block.
         asyncOp = nullptr;
 
-        // OK, now that we know the call isn't running in another thread, we can drop our thread
-        // safety and send a return message.
-        const_cast<RpcCallContext*>(this)->sendCancel();
+        // The `Return` will be sent when the context is destroyed.  That might be right now, when
+        // `self` goes out of scope.  However, it is also possible that the pipeline is still in
+        // use:  although `Finish` removes the pipeline reference from the answer table, it might
+        // be held by an outstanding pipelined call, or by a pipelined promise that was echoed back
+        // to us later (as a `receiverAnswer` in a `CapDescriptor`), or it may be held in the
+        // resolution chain.  In all of these cases, the call will continue running until those
+        // references are dropped or the call completes.
       });
     }
 
