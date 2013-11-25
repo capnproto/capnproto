@@ -188,6 +188,7 @@ public:
                AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY);
 
   inline ObjectPointer::Builder getRoot() { return root; }
+  inline ObjectPointer::Reader getRootReader() const { return root.asReader(); }
 
 private:
   MallocMessageBuilder message;
