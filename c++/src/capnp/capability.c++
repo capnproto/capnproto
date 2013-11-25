@@ -131,7 +131,9 @@ public:
     return kj::mv(paf.promise);
   }
   void allowAsyncCancellation() override {
-    // ignored for local calls
+    releaseParams();
+
+    // TODO(soon):  Implement.
   }
   bool isCanceled() override {
     return false;

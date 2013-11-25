@@ -148,13 +148,9 @@ class TestInterfaceImpl final: public test::TestInterface::Server {
 public:
   TestInterfaceImpl(int& callCount);
 
-  ::kj::Promise<void> foo(
-      test::TestInterface::FooParams::Reader params,
-      test::TestInterface::FooResults::Builder result) override;
+  kj::Promise<void> foo(FooParams::Reader params, FooResults::Builder result) override;
 
-  ::kj::Promise<void> bazAdvanced(
-      ::capnp::CallContext<test::TestInterface::BazParams,
-                           test::TestInterface::BazResults> context) override;
+  kj::Promise<void> bazAdvanced(CallContext<BazParams, BazResults> context) override;
 
 private:
   int& callCount;
@@ -164,12 +160,9 @@ class TestExtendsImpl final: public test::TestExtends::Server {
 public:
   TestExtendsImpl(int& callCount);
 
-  ::kj::Promise<void> foo(
-      test::TestInterface::FooParams::Reader params,
-      test::TestInterface::FooResults::Builder result) override;
+  kj::Promise<void> foo(FooParams::Reader params, FooResults::Builder result) override;
 
-  ::kj::Promise<void> graultAdvanced(
-      ::capnp::CallContext<test::TestExtends::GraultParams, test::TestAllTypes> context) override;
+  kj::Promise<void> graultAdvanced(CallContext<GraultParams, test::TestAllTypes> context) override;
 
 private:
   int& callCount;
@@ -179,9 +172,7 @@ class TestPipelineImpl final: public test::TestPipeline::Server {
 public:
   TestPipelineImpl(int& callCount);
 
-  ::kj::Promise<void> getCapAdvanced(
-      capnp::CallContext<test::TestPipeline::GetCapParams,
-                         test::TestPipeline::GetCapResults> context) override;
+  kj::Promise<void> getCapAdvanced(CallContext<GetCapParams, GetCapResults> context) override;
 
 private:
   int& callCount;
@@ -190,8 +181,8 @@ private:
 class TestCallOrderImpl final: public test::TestCallOrder::Server {
 public:
   kj::Promise<void> getCallSequence(
-      test::TestCallOrder::GetCallSequenceParams::Reader params,
-      test::TestCallOrder::GetCallSequenceResults::Builder result) override;
+      GetCallSequenceParams::Reader params,
+      GetCallSequenceResults::Builder result) override;
 
 private:
   uint count = 0;
@@ -202,8 +193,7 @@ public:
   TestTailCallerImpl(int& callCount);
 
   kj::Promise<void> fooAdvanced(
-      capnp::CallContext<test::TestTailCaller::FooParams,
-                         test::TestTailCallee::TailResult> context) override;
+      CallContext<FooParams, test::TestTailCallee::TailResult> context) override;
 
 private:
   int& callCount;
@@ -214,8 +204,7 @@ public:
   TestTailCalleeImpl(int& callCount);
 
   kj::Promise<void> fooAdvanced(
-      capnp::CallContext<test::TestTailCallee::FooParams,
-                         test::TestTailCallee::TailResult> context) override;
+      CallContext<FooParams, test::TestTailCallee::TailResult> context) override;
 
 private:
   int& callCount;
@@ -226,19 +215,32 @@ public:
   TestMoreStuffImpl(int& callCount);
 
   kj::Promise<void> getCallSequence(
-      test::TestCallOrder::GetCallSequenceParams::Reader params,
-      test::TestCallOrder::GetCallSequenceResults::Builder result) override;
+      GetCallSequenceParams::Reader params,
+      GetCallSequenceResults::Builder result) override;
 
-  ::kj::Promise<void> callFoo(
-      test::TestMoreStuff::CallFooParams::Reader params,
-      test::TestMoreStuff::CallFooResults::Builder result) override;
+  kj::Promise<void> callFoo(
+      CallFooParams::Reader params,
+      CallFooResults::Builder result) override;
 
   kj::Promise<void> callFooWhenResolved(
-      test::TestMoreStuff::CallFooWhenResolvedParams::Reader params,
-      test::TestMoreStuff::CallFooWhenResolvedResults::Builder result) override;
+      CallFooWhenResolvedParams::Reader params,
+      CallFooWhenResolvedResults::Builder result) override;
+
+  kj::Promise<void> neverReturnAdvanced(
+      CallContext<NeverReturnParams, NeverReturnResults> context) override;
+
+  kj::Promise<void> hold(HoldParams::Reader params, HoldResults::Builder result) override;
+
+  kj::Promise<void> callHeld(CallHeldParams::Reader params,
+                             CallHeldResults::Builder result) override;
+
+  kj::Promise<void> getHeld(GetHeldParams::Reader params,
+                            GetHeldResults::Builder result) override;
 
 private:
   int& callCount;
+  kj::Own<kj::PromiseFulfiller<void>> neverFulfill;
+  test::TestInterface::Client clientToHold = nullptr;
 };
 
 }  // namespace _ (private)

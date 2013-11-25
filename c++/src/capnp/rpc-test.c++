@@ -42,10 +42,9 @@ public:
 
   TestNetworkAdapter& add(kj::StringPtr name);
 
-  kj::Maybe<const TestNetworkAdapter&> find(kj::StringPtr name) const {
-    auto lock = map.lockShared();
-    auto iter = lock->find(name);
-    if (iter == lock->end()) {
+  kj::Maybe<TestNetworkAdapter&> find(kj::StringPtr name) {
+    auto iter = map.find(name);
+    if (iter == map.end()) {
       return nullptr;
     } else {
       return *iter->second;
@@ -53,7 +52,7 @@ public:
   }
 
 private:
-  kj::MutexGuarded<std::map<kj::StringPtr, kj::Own<TestNetworkAdapter>>> map;
+  std::map<kj::StringPtr, kj::Own<TestNetworkAdapter>> map;
 };
 
 typedef VatNetwork<
@@ -62,13 +61,16 @@ typedef VatNetwork<
 
 class TestNetworkAdapter final: public TestNetworkAdapterBase {
 public:
-  TestNetworkAdapter(const TestNetwork& network): network(network) {}
+  TestNetworkAdapter(TestNetwork& network): network(network) {}
+
+  uint getSentCount() { return sent; }
+  uint getReceivedCount() { return received; }
 
   typedef TestNetworkAdapterBase::Connection Connection;
 
   class ConnectionImpl final: public Connection, public kj::Refcounted {
   public:
-    ConnectionImpl(const char* name): name(name) {}
+    ConnectionImpl(TestNetworkAdapter& network, const char* name): network(network), name(name) {}
 
     void attach(ConnectionImpl& other) {
       KJ_REQUIRE(partner == nullptr);
@@ -100,6 +102,8 @@ public:
         return message->message.getRoot<ObjectPointer>();
       }
       void send() override {
+        ++connection.network.sent;
+
         kj::String msg = kj::str(connection.name, ": ", message->message.getRoot<rpc::Message>());
         //KJ_DBG(msg);
 
@@ -108,6 +112,7 @@ public:
           if (lock->fulfillers.empty()) {
             lock->messages.push(kj::mv(message));
           } else {
+            ++connection.network.received;
             lock->fulfillers.front()->fulfill(kj::Own<IncomingRpcMessage>(kj::mv(message)));
             lock->fulfillers.pop();
           }
@@ -129,6 +134,7 @@ public:
         lock->fulfillers.push(kj::mv(paf.fulfiller));
         return kj::mv(paf.promise);
       } else {
+        ++network.received;
         auto result = kj::mv(lock->messages.front());
         lock->messages.pop();
         return kj::Maybe<kj::Own<IncomingRpcMessage>>(kj::mv(result));
@@ -149,6 +155,7 @@ public:
     }
 
   private:
+    TestNetworkAdapter& network;
     const char* name;
     kj::Maybe<ConnectionImpl&> partner;
 
@@ -161,7 +168,7 @@ public:
 
   kj::Maybe<kj::Own<Connection>> connectToRefHost(
       test::TestSturdyRefHostId::Reader hostId) override {
-    const TestNetworkAdapter& dst = KJ_REQUIRE_NONNULL(network.find(hostId.getHost()));
+    TestNetworkAdapter& dst = KJ_REQUIRE_NONNULL(network.find(hostId.getHost()));
 
     kj::Locked<State> myLock;
     kj::Locked<State> dstLock;
@@ -176,8 +183,8 @@ public:
 
     auto iter = myLock->connections.find(&dst);
     if (iter == myLock->connections.end()) {
-      auto local = kj::refcounted<ConnectionImpl>("client");
-      auto remote = kj::refcounted<ConnectionImpl>("server");
+      auto local = kj::refcounted<ConnectionImpl>(*this, "client");
+      auto remote = kj::refcounted<ConnectionImpl>(dst, "server");
       local->attach(*remote);
 
       myLock->connections[&dst] = kj::addRef(*local);
@@ -210,7 +217,9 @@ public:
   }
 
 private:
-  const TestNetwork& network;
+  TestNetwork& network;
+  uint sent = 0;
+  uint received = 0;
 
   struct State {
     std::map<const TestNetworkAdapter*, kj::Own<ConnectionImpl>> connections;
@@ -223,8 +232,7 @@ private:
 TestNetwork::~TestNetwork() noexcept(false) {}
 
 TestNetworkAdapter& TestNetwork::add(kj::StringPtr name) {
-  auto lock = map.lockExclusive();
-  return *((*lock)[name] = kj::heap<TestNetworkAdapter>(*this));
+  return *(map[name] = kj::heap<TestNetworkAdapter>(*this));
 }
 
 // =======================================================================================
@@ -257,6 +265,8 @@ protected:
   TestNetwork network;
   TestRestorer restorer;
   kj::SimpleEventLoop loop;
+  TestNetworkAdapter& clientNetwork;
+  TestNetworkAdapter& serverNetwork;
   RpcSystem<test::TestSturdyRefHostId> rpcClient;
   RpcSystem<test::TestSturdyRefHostId> rpcServer;
 
@@ -271,8 +281,10 @@ protected:
   }
 
   RpcTest()
-      : rpcClient(makeRpcClient(network.add("client"), loop)),
-        rpcServer(makeRpcServer(network.add("server"), restorer, loop)) {}
+      : clientNetwork(network.add("client")),
+        serverNetwork(network.add("server")),
+        rpcClient(makeRpcClient(clientNetwork, loop)),
+        rpcServer(makeRpcServer(serverNetwork, restorer, loop)) {}
 
   ~RpcTest() noexcept {}
   // Need to declare this with explicit noexcept otherwise it conflicts with testing::Test::~Test.
@@ -405,12 +417,10 @@ TEST_F(RpcTest, PromiseResolve) {
   auto promise = request.send();
   auto promise2 = request2.send();
 
-  {
-    // Make sure getCap() has been called on the server side by sending another call and waiting
-    // for it.
-    EXPECT_EQ(2, loop.wait(client.getCallSequenceRequest().send()).getN());
-    EXPECT_EQ(3, restorer.callCount);
-  }
+  // Make sure getCap() has been called on the server side by sending another call and waiting
+  // for it.
+  EXPECT_EQ(2, loop.wait(client.getCallSequenceRequest().send()).getN());
+  EXPECT_EQ(3, restorer.callCount);
 
   // OK, now fulfill the local promise.
   paf.fulfiller->fulfill(test::TestInterface::Client(
@@ -422,6 +432,159 @@ TEST_F(RpcTest, PromiseResolve) {
 
   EXPECT_EQ(3, restorer.callCount);
   EXPECT_EQ(2, chainedCallCount);
+}
+
+class TestCapDestructor final: public test::TestInterface::Server {
+public:
+  TestCapDestructor(kj::Own<kj::PromiseFulfiller<void>>&& fulfiller)
+      : fulfiller(kj::mv(fulfiller)), impl(dummy) {}
+
+  ~TestCapDestructor() {
+    fulfiller->fulfill();
+  }
+
+  kj::Promise<void> foo(FooParams::Reader params, FooResults::Builder result) {
+    return impl.foo(params, result);
+  }
+
+private:
+  kj::Own<kj::PromiseFulfiller<void>> fulfiller;
+  int dummy = 0;
+  TestInterfaceImpl impl;
+};
+
+TEST_F(RpcTest, RetainAndRelease) {
+  auto paf = kj::newPromiseAndFulfiller<void>();
+  bool destroyed = false;
+  auto destructionPromise = loop.there(kj::mv(paf.promise), [&]() { destroyed = true; });
+  destructionPromise.eagerlyEvaluate(loop);
+
+  {
+    auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+        .castAs<test::TestMoreStuff>();
+
+    {
+      auto request = client.holdRequest();
+      request.setCap(test::TestInterface::Client(
+          kj::heap<TestCapDestructor>(kj::mv(paf.fulfiller)), loop));
+      loop.wait(request.send());
+    }
+
+    // Do some other call to add a round trip.
+    EXPECT_EQ(1, loop.wait(client.getCallSequenceRequest().send()).getN());
+
+    // Shouldn't be destroyed because it's being held by the server.
+    EXPECT_FALSE(destroyed);
+
+    // We can ask it to call the held capability.
+    EXPECT_EQ("bar", loop.wait(client.callHeldRequest().send()).getS());
+
+    {
+      // We can get the cap back from it.
+      auto capCopy = loop.wait(client.getHeldRequest().send()).getCap();
+
+      {
+        // And call it, without any network communications.
+        uint oldSentCount = clientNetwork.getSentCount();
+        auto request = capCopy.fooRequest();
+        request.setI(123);
+        request.setJ(true);
+        EXPECT_EQ("foo", loop.wait(request.send()).getX());
+        EXPECT_EQ(oldSentCount, clientNetwork.getSentCount());
+      }
+
+      {
+        // We can send another copy of the same cap to another method, and it works.
+        auto request = client.callFooRequest();
+        request.setCap(capCopy);
+        EXPECT_EQ("bar", loop.wait(request.send()).getS());
+      }
+    }
+
+    // Give some time to settle.
+    EXPECT_EQ(5, loop.wait(client.getCallSequenceRequest().send()).getN());
+    EXPECT_EQ(6, loop.wait(client.getCallSequenceRequest().send()).getN());
+    EXPECT_EQ(7, loop.wait(client.getCallSequenceRequest().send()).getN());
+
+    // Can't be destroyed, we haven't released it.
+    EXPECT_FALSE(destroyed);
+  }
+
+  // We released our client, which should cause the server to be released, which in turn will
+  // release the cap pointing back to us.
+  loop.wait(kj::mv(destructionPromise));
+  EXPECT_TRUE(destroyed);
+}
+
+TEST_F(RpcTest, Cancel) {
+  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  auto paf = kj::newPromiseAndFulfiller<void>();
+  bool destroyed = false;
+  auto destructionPromise = loop.there(kj::mv(paf.promise), [&]() { destroyed = true; });
+  destructionPromise.eagerlyEvaluate(loop);
+
+  {
+    auto request = client.neverReturnRequest();
+    request.setCap(test::TestInterface::Client(
+        kj::heap<TestCapDestructor>(kj::mv(paf.fulfiller)), loop));
+
+    {
+      auto responsePromise = request.send();
+
+      // Allow some time to settle.
+      EXPECT_EQ(1, loop.wait(client.getCallSequenceRequest().send()).getN());
+      EXPECT_EQ(2, loop.wait(client.getCallSequenceRequest().send()).getN());
+
+      // The cap shouldn't have been destroyed yet because the call never returned.
+      EXPECT_FALSE(destroyed);
+    }
+  }
+
+  // Now the cap should be released.
+  loop.wait(kj::mv(destructionPromise));
+  EXPECT_TRUE(destroyed);
+}
+
+TEST_F(RpcTest, SendTwice) {
+  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  auto paf = kj::newPromiseAndFulfiller<void>();
+  bool destroyed = false;
+  auto destructionPromise = loop.there(kj::mv(paf.promise), [&]() { destroyed = true; });
+  destructionPromise.eagerlyEvaluate(loop);
+
+  auto cap = test::TestInterface::Client(kj::heap<TestCapDestructor>(kj::mv(paf.fulfiller)), loop);
+
+  {
+    auto request = client.callFooRequest();
+    request.setCap(cap);
+
+    EXPECT_EQ("bar", loop.wait(request.send()).getS());
+  }
+
+  // Allow some time for the server to release `cap`.
+  EXPECT_EQ(1, loop.wait(client.getCallSequenceRequest().send()).getN());
+
+  {
+    // More requests with the same cap.
+    auto request = client.callFooRequest();
+    auto request2 = client.callFooRequest();
+    request.setCap(cap);
+    request2.setCap(kj::mv(cap));
+
+    auto promise = request.send();
+    auto promise2 = request2.send();
+
+    EXPECT_EQ("bar", loop.wait(kj::mv(promise)).getS());
+    EXPECT_EQ("bar", loop.wait(kj::mv(promise2)).getS());
+  }
+
+  // Now the cap should be released.
+  loop.wait(kj::mv(destructionPromise));
+  EXPECT_TRUE(destroyed);
 }
 
 }  // namespace

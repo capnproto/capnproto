@@ -1205,6 +1205,11 @@ private:
     kj::String resultType = resultProto.getScopeId() == 0 ?
         kj::str(interfaceName, "::", titleCase, "Results") : cppFullName(resultSchema).flatten();
 
+    kj::String shortParamType = paramProto.getScopeId() == 0 ?
+        kj::str(titleCase, "Params") : cppFullName(paramSchema).flatten();
+    kj::String shortResultType = resultProto.getScopeId() == 0 ?
+        kj::str(titleCase, "Results") : cppFullName(resultSchema).flatten();
+
     auto interfaceProto = method.getContainingInterface().getProto();
     uint64_t interfaceId = interfaceProto.getId();
     auto interfaceIdHex = kj::hex(interfaceId);
@@ -1216,11 +1221,15 @@ private:
           "      unsigned int firstSegmentWordSize = 0) const;\n"),
 
       kj::strTree(
+          paramProto.getScopeId() != 0 ? kj::strTree() : kj::strTree(
+              "  typedef ", paramType, " ", titleCase, "Params;\n"),
+          resultProto.getScopeId() != 0 ? kj::strTree() : kj::strTree(
+              "  typedef ", resultType, " ", titleCase, "Results;\n"),
           "  virtual ::kj::Promise<void> ", name, "(\n"
-          "      ", paramType, "::Reader params,\n"
-          "      ", resultType, "::Builder result);\n"
+          "      ", shortParamType, "::Reader params,\n"
+          "      ", shortResultType, "::Builder result);\n"
           "  virtual ::kj::Promise<void> ", name, "Advanced(\n"
-          "      ::capnp::CallContext<", paramType, ", ", resultType, "> context);\n"),
+          "      ::capnp::CallContext<", shortParamType, ", ", shortResultType, "> context);\n"),
 
       kj::strTree(),
 
@@ -1298,17 +1307,15 @@ private:
           "  typedef ", fullName, " Calls;\n"
           "  typedef ", fullName, " Reads;\n"
           "\n"
-          "  inline explicit Client(decltype(nullptr))\n"
+          "  inline Client(decltype(nullptr))\n"
           "      : ::capnp::Capability::Client(nullptr) {}\n"
           "  inline explicit Client(::kj::Own<const ::capnp::ClientHook>&& hook)\n"
           "      : ::capnp::Capability::Client(::kj::mv(hook)) {}\n"
-          "  template <typename T,\n"
-          "            typename = ::kj::EnableIf< ::kj::canConvert<T*, Server*>()>>\n"
+          "  template <typename T, typename = ::kj::EnableIf< ::kj::canConvert<T*, Server*>()>>\n"
           "  inline Client(::kj::Own<T>&& server,\n"
           "                const ::kj::EventLoop& loop = ::kj::EventLoop::current())\n"
           "      : ::capnp::Capability::Client(::kj::mv(server), loop) {}\n"
-          "  template <typename T,\n"
-          "            typename = ::kj::EnableIf< ::kj::canConvert<T*, Client*>()>>\n"
+          "  template <typename T, typename = ::kj::EnableIf< ::kj::canConvert<T*, Client*>()>>\n"
           "  inline Client(::kj::Promise<T>&& promise,\n"
           "                const ::kj::EventLoop& loop = ::kj::EventLoop::current())\n"
           "      : ::capnp::Capability::Client(::kj::mv(promise), loop) {}\n"

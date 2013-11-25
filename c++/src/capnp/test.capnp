@@ -637,6 +637,18 @@ interface TestMoreStuff extends(TestCallOrder) {
 
   callFooWhenResolved @1 (cap :TestInterface) -> (s: Text);
   # Like callFoo but waits for `cap` to resolve first.
+
+  neverReturn @2 (cap :TestInterface) -> (capCopy :TestInterface);
+  # Doesn't return.  You should cancel it.
+
+  hold @3 (cap :TestInterface) -> ();
+  # Returns immediately but holds on to the capability.
+
+  callHeld @4 () -> (s: Text);
+  # Calls the capability previously held using `hold` (and keeps holding it).
+
+  getHeld @5 () -> (cap :TestInterface);
+  # Returns the capability previously held using `hold` (and keeps holding it).
 }
 
 struct TestSturdyRefHostId {

@@ -107,7 +107,7 @@ class Capability::Client {
   // Base type for capability clients.
 
 public:
-  explicit Client(decltype(nullptr));
+  Client(decltype(nullptr));
   // If you need to declare a Client before you have anything to assign to it (perhaps because
   // the assignment is going to occur in an if/else scope), you can start by initializing it to
   // `nullptr`.  The resulting client is not meant to be called and throws exceptions from all
@@ -248,6 +248,10 @@ public:
   // Keep in mind that asynchronous cancellation cannot occur while the method is synchronously
   // executing on a local thread.  The method must perform an asynchronous operation or call
   // `EventLoop::current().runLater()` to yield control.
+  //
+  // This method implies `releaseParams()` -- you cannot allow async cancellation while still
+  // holding the params.  (This is because of a quirk of the current RPC implementation; in theory
+  // it could be fixed.)
   //
   // TODO(soon):  This doesn't work for local calls, because there's no one to own the object
   //   in the meantime.  What do we do about that?  Is the security issue here actually a real

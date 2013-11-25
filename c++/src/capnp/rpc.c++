@@ -690,9 +690,6 @@ private:
                                 kj::Own<CallContextHook>&& context) const override {
       // Implement call() by copying params and results messages.
 
-      // We can and should propagate cancellation.
-      context->allowAsyncCancellation();
-
       auto params = context->getParams();
 
       size_t sizeHint = params.targetSizeInWords();
@@ -709,8 +706,11 @@ private:
 
       auto request = newCall(interfaceId, methodId, sizeHint);
 
-      request.set(context->getParams());
+      request.set(params);
       context->releaseParams();
+
+      // We can and should propagate cancellation.
+      context->allowAsyncCancellation();
 
       auto promise = request.send();
 
@@ -738,7 +738,7 @@ private:
       return kj::addRef(*this);
     }
     const void* getBrand() const override {
-      return &connectionState;
+      return connectionState.get();
     }
 
   protected:
@@ -1181,6 +1181,10 @@ private:
                 "CapExtractorImpl destroyed without getting a chance to retain the caps!") {
         break;
       }
+    }
+
+    void doneExtracting() {
+      resolutionChain = nullptr;
     }
 
     uint retainedListSizeHint(bool final) {
@@ -2029,6 +2033,7 @@ private:
     }
     void releaseParams() override {
       request = nullptr;
+      requestCapExtractor.doneExtracting();
     }
     ObjectPointer::Builder getResults(uint firstSegmentWordSize) override {
       KJ_IF_MAYBE(r, response) {
@@ -2108,7 +2113,17 @@ private:
       return kj::mv(paf.promise);
     }
     void allowAsyncCancellation() override {
-      if (threadAcceptingCancellation != nullptr) {
+      if (threadAcceptingCancellation == nullptr) {
+        // TODO(cleanup):  We need to drop the request because it is holding on to the resolution
+        //   chain which in turn holds on to the pipeline which holds on to this object thus
+        //   preventing cancellation from working.  This is a bit silly because obviously our
+        //   request couldn't contain PromisedAnswers referring to itself, but currently the chain
+        //   is a linear list and we have no way to tell that a reference to the chain taken before
+        //   a call started doesn't really need to hold the call open.  To fix this we'd presumably
+        //   need to make the answer table snapshot-able and have CapExtractorImpl take a snapshot
+        //   at creation.
+        releaseParams();
+
         threadAcceptingCancellation = &kj::EventLoop::current();
 
         if (__atomic_fetch_or(&cancellationFlags, CANCEL_ALLOWED, __ATOMIC_RELAXED) ==
@@ -2156,10 +2171,6 @@ private:
     // When both flags are set, the cancellation process will begin.  Must be manipulated atomically
     // as it may be accessed from multiple threads.
 
-    mutable kj::Promise<void> deferredCancellation = nullptr;
-    // Cancellation operation scheduled by cancelLater().  Must only be scheduled once, from one
-    // thread.
-
     kj::EventLoop* threadAcceptingCancellation = nullptr;
     // EventLoop for the thread that first called allowAsyncCancellation().  We store this as an
     // optimization:  if the application thread is independent from the network thread, we'd rather
@@ -2176,31 +2187,29 @@ private:
       // this call, shortly.  We have to do it asynchronously because the caller might hold
       // arbitrary locks or might in fact be part of the task being canceled.
 
-      deferredCancellation = threadAcceptingCancellation->evalLater([this]() {
-        // Make sure we don't accidentally delete ourselves in the process of canceling, since the
-        // last reference to the context may be owned by the asyncOp.
-        auto self = kj::addRef(*this);
-
+      connectionState->tasks.add(threadAcceptingCancellation->evalLater(
+          kj::mvCapture(kj::addRef(*this), [](kj::Own<const RpcCallContext>&& self) {
         // Extract from the answer table the promise representing the executing call.
         kj::Promise<void> asyncOp = nullptr;
         {
-          auto lock = connectionState->tables.lockExclusive();
-          asyncOp = kj::mv(lock->answers[questionId].asyncOp);
+          auto lock = self->connectionState->tables.lockExclusive();
+          asyncOp = kj::mv(lock->answers[self->questionId].asyncOp);
         }
 
-        // Delete the promise, thereby canceling the operation.  Note that if a continuation is
-        // running in another thread, this line blocks waiting for it to complete.  This is why
-        // we try to schedule doCancel() on the application thread, so that it won't need to block.
-        asyncOp = nullptr;
+        // When `asyncOp` goes out of scope, if it holds the last reference to the ongoing
+        // operation, that operation will be canceled.  Note that if a continuation is
+        // running in another thread, the destructor will block waiting for it to complete.  This
+        // is why we try to schedule doCancel() on the application thread, so that it won't need
+        // to block.
 
         // The `Return` will be sent when the context is destroyed.  That might be right now, when
-        // `self` goes out of scope.  However, it is also possible that the pipeline is still in
-        // use:  although `Finish` removes the pipeline reference from the answer table, it might
-        // be held by an outstanding pipelined call, or by a pipelined promise that was echoed back
-        // to us later (as a `receiverAnswer` in a `CapDescriptor`), or it may be held in the
-        // resolution chain.  In all of these cases, the call will continue running until those
-        // references are dropped or the call completes.
-      });
+        // `self` and `asyncOp` go out of scope.  However, it is also possible that the pipeline
+        // is still in use:  although `Finish` removes the pipeline reference from the answer
+        // table, it might be held by an outstanding pipelined call, or by a pipelined promise that
+        // was echoed back to us later (as a `receiverAnswer` in a `CapDescriptor`), or it may be
+        // held in the resolution chain.  In all of these cases, the call will continue running
+        // until those references are dropped or the call completes.
+      })));
     }
 
     bool isFirstResponder() {
@@ -2423,10 +2432,12 @@ private:
       answer.pipeline = kj::mv(promiseAndPipeline.pipeline);
 
       if (redirectResults) {
-        answer.redirectedResults = promiseAndPipeline.promise.then(
+        auto promise = promiseAndPipeline.promise.then(
             kj::mvCapture(context, [](kj::Own<RpcCallContext>&& context) {
               return context->consumeRedirectedResponse();
             }));
+        promise.eagerlyEvaluate(eventLoop);
+        answer.redirectedResults = kj::mv(promise);
       } else {
         // Hack:  Both the success and error continuations need to use the context.  We could
         //   refcount, but both will be destroyed at the same time anyway.
@@ -2688,7 +2699,8 @@ private:
   }
 
   void handleRelease(const rpc::Release::Reader& release) {
-    releaseExport(*tables.lockExclusive(), release.getId(), release.getReferenceCount());
+    auto chainToRelease = releaseExport(
+        *tables.lockExclusive(), release.getId(), release.getReferenceCount());
   }
 
   static kj::Own<ResolutionChain> releaseExport(Tables& lockedTables, ExportId id, uint refcount) {
