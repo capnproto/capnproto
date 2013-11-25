@@ -534,6 +534,8 @@ public:
   void setResults(DynamicStruct::Reader value);
   void adoptResults(Orphan<DynamicStruct>&& value);
   Orphanage getResultsOrphanage(uint firstSegmentWordSize = 0);
+  template <typename SubParams>
+  kj::Promise<void> tailCall(Request<SubParams, DynamicStruct>&& tailRequest);
   void allowAsyncCancellation();
   bool isCanceled();
 
@@ -1526,6 +1528,11 @@ inline void CallContext<DynamicStruct, DynamicStruct>::adoptResults(Orphan<Dynam
 inline Orphanage CallContext<DynamicStruct, DynamicStruct>::getResultsOrphanage(
     uint firstSegmentWordSize) {
   return Orphanage::getForMessageContaining(hook->getResults(firstSegmentWordSize));
+}
+template <typename SubParams>
+inline kj::Promise<void> CallContext<DynamicStruct, DynamicStruct>::tailCall(
+    Request<SubParams, DynamicStruct>&& tailRequest) {
+  return hook->tailCall(kj::mv(tailRequest.hook));
 }
 inline void CallContext<DynamicStruct, DynamicStruct>::allowAsyncCancellation() {
   hook->allowAsyncCancellation();

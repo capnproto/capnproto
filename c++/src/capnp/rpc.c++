@@ -2465,7 +2465,7 @@ private:
           break;
 
         default:
-          KJ_FAIL_REQUIRE("Unknown return type (not answer, exception, or canceled).") { return; }
+          KJ_FAIL_REQUIRE("Unknown 'Return' type.") { return; }
       }
 
       if (question->selfRef == nullptr) {

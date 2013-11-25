@@ -100,7 +100,7 @@ public:
         return message->message.getRoot<ObjectPointer>();
       }
       void send() override {
-        //kj::String msg = kj::str(connection.name, ": ", message->message.getRoot<rpc::Message>());
+        kj::String msg = kj::str(connection.name, ": ", message->message.getRoot<rpc::Message>());
         //KJ_DBG(msg);
 
         KJ_IF_MAYBE(p, connection.partner) {

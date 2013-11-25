@@ -45,6 +45,10 @@ public:
         return Capability::Client(newBrokenCap("No TestExtends implemented."));
       case test::TestSturdyRefObjectId::Tag::TEST_PIPELINE:
         return kj::heap<TestPipelineImpl>(callCount);
+      case test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLEE:
+        return kj::heap<TestTailCalleeImpl>(callCount);
+      case test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLER:
+        return kj::heap<TestTailCallerImpl>(callCount);
     }
     KJ_UNREACHABLE;
   }
