@@ -108,21 +108,35 @@ class Capability::Client {
 
 public:
   explicit Client(decltype(nullptr));
-  explicit Client(kj::Own<const ClientHook>&& hook);
+  // If you need to declare a Client before you have anything to assign to it (perhaps because
+  // the assignment is going to occur in an if/else scope), you can start by initializing it to
+  // `nullptr`.  The resulting client is not meant to be called and throws exceptions from all
+  // methods.
 
   template <typename T, typename = kj::EnableIf<kj::canConvert<T*, Capability::Server*>()>>
   Client(kj::Own<T>&& server, const kj::EventLoop& loop = kj::EventLoop::current());
   // Make a client capability that wraps the given server capability.  The server's methods will
   // only be executed in the given EventLoop, regardless of what thread calls the client's methods.
 
+  template <typename T, typename = kj::EnableIf<kj::canConvert<T*, Client*>()>>
+  Client(kj::Promise<T>&& promise, const kj::EventLoop& loop = kj::EventLoop::current());
+  // Make a client from a promise for a future client.  The resulting client queues calls until the
+  // promise resolves.
+
+  Client(kj::Exception&& exception);
+  // Make a broken client that throws the given exception from all calls.
+
   Client(const Client& other);
   Client& operator=(const Client& other);
-  // Copies by reference counting.  Warning:  Refcounting is slow due to atomic ops.  Try to only
-  // use move instead.
+  // Copies by reference counting.  Warning:  Refcounting may be slow due to atomic ops.  Try to
+  // only use move instead.
 
   Client(Client&&) = default;
   Client& operator=(Client&&) = default;
   // Move is fast.
+
+  explicit Client(kj::Own<const ClientHook>&& hook);
+  // For use by the RPC implementation:  Wrap a ClientHook.
 
   template <typename T>
   typename T::Client castAs() const;
@@ -533,6 +547,11 @@ inline Capability::Client::Client(kj::Own<const ClientHook>&& hook): hook(kj::mv
 template <typename T, typename>
 inline Capability::Client::Client(kj::Own<T>&& server, const kj::EventLoop& loop)
     : hook(makeLocalClient(kj::mv(server), loop)) {}
+template <typename T, typename>
+inline Capability::Client::Client(kj::Promise<T>&& promise, const kj::EventLoop& loop)
+    : hook(newLocalPromiseClient(
+        promise.thenInAnyThread([](T&& t) { return kj::mv(t.hook); }),
+        loop)) {}
 inline Capability::Client::Client(const Client& other): hook(other.hook->addRef()) {}
 inline Capability::Client& Capability::Client::operator=(const Client& other) {
   hook = other.hook->addRef();

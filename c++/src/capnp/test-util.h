@@ -221,6 +221,26 @@ private:
   int& callCount;
 };
 
+class TestMoreStuffImpl final: public test::TestMoreStuff::Server {
+public:
+  TestMoreStuffImpl(int& callCount);
+
+  kj::Promise<void> getCallSequence(
+      test::TestCallOrder::GetCallSequenceParams::Reader params,
+      test::TestCallOrder::GetCallSequenceResults::Builder result) override;
+
+  ::kj::Promise<void> callFoo(
+      test::TestMoreStuff::CallFooParams::Reader params,
+      test::TestMoreStuff::CallFooResults::Builder result) override;
+
+  kj::Promise<void> callFooWhenResolved(
+      test::TestMoreStuff::CallFooWhenResolvedParams::Reader params,
+      test::TestMoreStuff::CallFooWhenResolvedResults::Builder result) override;
+
+private:
+  int& callCount;
+};
+
 }  // namespace _ (private)
 }  // namespace capnp
 

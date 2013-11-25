@@ -49,6 +49,8 @@ public:
         return kj::heap<TestTailCalleeImpl>(callCount);
       case test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLER:
         return kj::heap<TestTailCallerImpl>(callCount);
+      case test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF:
+        return kj::heap<TestMoreStuffImpl>(callCount);
     }
     KJ_UNREACHABLE;
   }

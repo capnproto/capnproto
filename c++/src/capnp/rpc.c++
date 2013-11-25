@@ -1121,11 +1121,11 @@ private:
       lock->exportsByCap.erase(exp.clientHook);
       exp.clientHook = kj::mv(resolution);
 
-      if (resolution->getBrand() != this) {
+      if (exp.clientHook->getBrand() != this) {
         // We're resolving to a local capability.  If we're resolving to a promise, we might be
         // able to reuse our export table entry and avoid sending a message.
 
-        KJ_IF_MAYBE(promise, resolution->whenMoreResolved()) {
+        KJ_IF_MAYBE(promise, exp.clientHook->whenMoreResolved()) {
           // We're replacing a promise with another local promise.  In this case, we might actually
           // be able to just reuse the existing export table entry to represent the new promise --
           // unless it already has an entry.  Let's check.
@@ -1147,7 +1147,7 @@ private:
           messageSizeHint<rpc::Resolve>() + sizeInWords<rpc::CapDescriptor>() + 16);
       auto resolve = message->getBody().initAs<rpc::Message>().initResolve();
       resolve.setPromiseId(exportId);
-      writeDescriptor(*resolution, resolve.initCap(), *this->tables.lockExclusive());
+      writeDescriptor(*exp.clientHook, resolve.initCap(), *lock);
       message->send();
 
       return kj::READY_NOW;
@@ -2670,9 +2670,9 @@ private:
     }
 
     // Extend the resolution chain.
-    auto oldTail = kj::mv(lock->resolutionChainTail);
-    lock->resolutionChainTail = oldTail->addResolve(resolve.getPromiseId(), kj::mv(replacement));
-    lock.release();  // in case oldTail is destroyed
+    oldResolutionChainTail = kj::mv(lock->resolutionChainTail);
+    lock->resolutionChainTail = oldResolutionChainTail->addResolve(
+        resolve.getPromiseId(), kj::mv(replacement));
 
     // If the import is on the table, fulfill it.
     KJ_IF_MAYBE(import, lock->imports.find(resolve.getPromiseId())) {

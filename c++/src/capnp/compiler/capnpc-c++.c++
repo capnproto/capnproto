@@ -1307,6 +1307,13 @@ private:
           "  inline Client(::kj::Own<T>&& server,\n"
           "                const ::kj::EventLoop& loop = ::kj::EventLoop::current())\n"
           "      : ::capnp::Capability::Client(::kj::mv(server), loop) {}\n"
+          "  template <typename T,\n"
+          "            typename = ::kj::EnableIf< ::kj::canConvert<T*, Client*>()>>\n"
+          "  inline Client(::kj::Promise<T>&& promise,\n"
+          "                const ::kj::EventLoop& loop = ::kj::EventLoop::current())\n"
+          "      : ::capnp::Capability::Client(::kj::mv(promise), loop) {}\n"
+          "  inline Client(::kj::Exception&& exception)\n"
+          "      : ::capnp::Capability::Client(::kj::mv(exception)) {}\n"
           "\n",
           KJ_MAP(m, methods) { return kj::mv(m.clientDecls); },
           "\n"

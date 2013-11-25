@@ -971,5 +971,54 @@ kj::Promise<void> TestTailCalleeImpl::fooAdvanced(
   return kj::READY_NOW;
 }
 
+TestMoreStuffImpl::TestMoreStuffImpl(int& callCount): callCount(callCount) {}
+
+kj::Promise<void> TestMoreStuffImpl::getCallSequence(
+    test::TestCallOrder::GetCallSequenceParams::Reader params,
+    test::TestCallOrder::GetCallSequenceResults::Builder result) {
+  result.setN(callCount++);
+  return kj::READY_NOW;
+}
+
+::kj::Promise<void> TestMoreStuffImpl::callFoo(
+    test::TestMoreStuff::CallFooParams::Reader params,
+    test::TestMoreStuff::CallFooResults::Builder result) {
+  ++callCount;
+
+  auto cap = params.getCap();
+
+  auto request = cap.fooRequest();
+  request.setI(123);
+  request.setJ(true);
+
+  return request.send().then(
+      [result](capnp::Response<test::TestInterface::FooResults>&& response) mutable {
+        EXPECT_EQ("foo", response.getX());
+
+        result.setS("bar");
+      });
+}
+
+kj::Promise<void> TestMoreStuffImpl::callFooWhenResolved(
+    test::TestMoreStuff::CallFooWhenResolvedParams::Reader params,
+    test::TestMoreStuff::CallFooWhenResolvedResults::Builder result) {
+  ++callCount;
+
+  auto cap = params.getCap();
+
+  return cap.whenResolved().then([cap,result]() mutable {
+    auto request = cap.fooRequest();
+    request.setI(123);
+    request.setJ(true);
+
+    return request.send().then(
+        [result](capnp::Response<test::TestInterface::FooResults>&& response) mutable {
+          EXPECT_EQ("foo", response.getX());
+
+          result.setS("bar");
+        });
+  });
+}
+
 }  // namespace _ (private)
 }  // namespace capnp

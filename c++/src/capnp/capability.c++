@@ -37,6 +37,9 @@ namespace capnp {
 Capability::Client::Client(decltype(nullptr))
     : hook(newBrokenCap("Called null capability.")) {}
 
+Capability::Client::Client(kj::Exception&& exception)
+    : hook(newBrokenCap(kj::mv(exception))) {}
+
 kj::Promise<void> Capability::Server::internalUnimplemented(
     const char* actualInterfaceName, uint64_t requestedTypeId) {
   KJ_FAIL_REQUIRE("Requested interface not implemented.", actualInterfaceName, requestedTypeId) {

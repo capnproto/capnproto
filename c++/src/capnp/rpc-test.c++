@@ -245,6 +245,8 @@ public:
         return kj::heap<TestTailCalleeImpl>(callCount);
       case test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLER:
         return kj::heap<TestTailCallerImpl>(callCount);
+      case test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF:
+        return kj::heap<TestMoreStuffImpl>(callCount);
     }
     KJ_UNREACHABLE;
   }
@@ -381,6 +383,45 @@ TEST_F(RpcTest, TailCall) {
 
   EXPECT_EQ(1, calleeCallCount);
   EXPECT_EQ(1, restorer.callCount);
+}
+
+TEST_F(RpcTest, PromiseResolve) {
+  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  int chainedCallCount = 0;
+
+  auto request = client.callFooRequest();
+  auto request2 = client.callFooWhenResolvedRequest();
+
+  auto paf = kj::newPromiseAndFulfiller<test::TestInterface::Client>();
+
+  {
+    auto fork = loop.fork(kj::mv(paf.promise));
+    request.setCap(test::TestInterface::Client(fork.addBranch(), loop));
+    request2.setCap(test::TestInterface::Client(fork.addBranch(), loop));
+  }
+
+  auto promise = request.send();
+  auto promise2 = request2.send();
+
+  {
+    // Make sure getCap() has been called on the server side by sending another call and waiting
+    // for it.
+    EXPECT_EQ(2, loop.wait(client.getCallSequenceRequest().send()).getN());
+    EXPECT_EQ(3, restorer.callCount);
+  }
+
+  // OK, now fulfill the local promise.
+  paf.fulfiller->fulfill(test::TestInterface::Client(
+      kj::heap<TestInterfaceImpl>(chainedCallCount), loop));
+
+  // We should now be able to wait for getCap() to finish.
+  EXPECT_EQ("bar", loop.wait(kj::mv(promise)).getS());
+  EXPECT_EQ("bar", loop.wait(kj::mv(promise2)).getS());
+
+  EXPECT_EQ(3, restorer.callCount);
+  EXPECT_EQ(2, chainedCallCount);
 }
 
 }  // namespace

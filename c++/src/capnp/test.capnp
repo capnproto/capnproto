@@ -590,7 +590,7 @@ const derivedConstant :TestAllTypes = (
     structList = TestConstants.structListConst);
 
 interface TestInterface {
-  foo @0 (i :UInt32, j :Bool) -> (x: Text);
+  foo @0 (i :UInt32, j :Bool) -> (x :Text);
   bar @1 () -> ();
   baz @2 (s: TestAllTypes);
 }
@@ -629,6 +629,16 @@ interface TestTailCaller {
   foo @0 (i :Int32, callee :TestTailCallee) -> TestTailCallee.TailResult;
 }
 
+interface TestMoreStuff extends(TestCallOrder) {
+  # Catch-all type that contains lots of testing methods.
+
+  callFoo @0 (cap :TestInterface) -> (s: Text);
+  # Call `cap.foo()`, check the result, and return "bar".
+
+  callFooWhenResolved @1 (cap :TestInterface) -> (s: Text);
+  # Like callFoo but waits for `cap` to resolve first.
+}
+
 struct TestSturdyRefHostId {
   host @0 :Text;
 }
@@ -641,6 +651,7 @@ struct TestSturdyRefObjectId {
     testPipeline @2;
     testTailCallee @3;
     testTailCaller @4;
+    testMoreStuff @5;
   }
 }
 
