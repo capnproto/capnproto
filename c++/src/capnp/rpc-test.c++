@@ -75,7 +75,9 @@ public:
         auto paramType = schema.getDependency(methodProto.getParamStructType()).asStruct();
         auto resultType = schema.getDependency(methodProto.getResultStructType()).asStruct();
 
-        returnTypes[std::make_pair(sender, call.getQuestionId())] = resultType;
+        if (call.getSendResultsTo().isCaller()) {
+          returnTypes[std::make_pair(sender, call.getQuestionId())] = resultType;
+        }
 
         CapExtractorImpl extractor;
         CapReaderContext context(extractor);

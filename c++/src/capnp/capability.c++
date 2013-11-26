@@ -109,21 +109,24 @@ public:
     }
     return responseBuilder;
   }
-  kj::Promise<void> tailCall(kj::Own<RequestHook> request) override {
+  kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) override {
+    auto result = directTailCall(kj::mv(request));
+    KJ_IF_MAYBE(f, tailCallPipelineFulfiller) {
+      f->get()->fulfill(ObjectPointer::Pipeline(kj::mv(result.pipeline)));
+    }
+    return kj::mv(result.promise);
+  }
+  ClientHook::VoidPromiseAndPipeline directTailCall(kj::Own<RequestHook>&& request) override {
     KJ_REQUIRE(response == nullptr, "Can't call tailCall() after initializing the results struct.");
     releaseParams();
 
     auto promise = request->send();
 
-    // Link pipelines.
-    KJ_IF_MAYBE(f, tailCallPipelineFulfiller) {
-      f->get()->fulfill(kj::mv(kj::implicitCast<ObjectPointer::Pipeline&>(promise)));
-    }
-
-    // Wait for response.
-    return promise.then([this](Response<ObjectPointer>&& tailResponse) {
+    auto voidPromise = promise.then([this](Response<ObjectPointer>&& tailResponse) {
       response = kj::mv(tailResponse);
     });
+
+    return { kj::mv(voidPromise), PipelineHook::from(kj::mv(promise)) };
   }
   kj::Promise<ObjectPointer::Pipeline> onTailCall() override {
     auto paf = kj::newPromiseAndFulfiller<ObjectPointer::Pipeline>();

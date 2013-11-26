@@ -85,6 +85,7 @@ private:
   friend struct DynamicCapability;
   template <typename, typename>
   friend class CallContext;
+  friend class RequestHook;
 };
 
 template <typename Results>
@@ -315,6 +316,11 @@ public:
   // Returns a void* that identifies who made this request.  This can be used by an RPC adapter to
   // discover when tail call is going to be sent over its own connection and therefore can be
   // optimized into a remote tail call.
+
+  template <typename T, typename U>
+  inline static kj::Own<RequestHook> from(Request<T, U>&& request) {
+    return kj::mv(request.hook);
+  }
 };
 
 class ResponseHook {
@@ -386,13 +392,18 @@ public:
   virtual ObjectPointer::Reader getParams() = 0;
   virtual void releaseParams() = 0;
   virtual ObjectPointer::Builder getResults(uint firstSegmentWordSize) = 0;
-  virtual kj::Promise<void> tailCall(kj::Own<RequestHook> request) = 0;
+  virtual kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) = 0;
   virtual void allowAsyncCancellation() = 0;
   virtual bool isCanceled() = 0;
 
   virtual kj::Promise<ObjectPointer::Pipeline> onTailCall() = 0;
   // If `tailCall()` is called, resolves to the PipelineHook from the tail call.  An
   // implementation of `ClientHook::call()` is allowed to call this at most once.
+
+  virtual ClientHook::VoidPromiseAndPipeline directTailCall(kj::Own<RequestHook>&& request) = 0;
+  // Call this when you would otherwise call onTailCall() immediately followed by tailCall().
+  // Implementations of tailCall() should typically call directTailCall() and then fulfill the
+  // promise fulfiller for onTailCall() with the returned pipeline.
 
   virtual kj::Own<CallContextHook> addRef() = 0;
 };

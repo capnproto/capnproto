@@ -691,8 +691,8 @@ private:
       size_t sizeHint = params.targetSizeInWords();
 
       // TODO(perf):  Extend targetSizeInWords() to include a capability count?  Here we increase
-      //   the size by 1/16 to deal with cap descriptors possibly expanding.  See also below, when
-      //   handling the response, and in RpcRequest::send().
+      //   the size by 1/16 to deal with cap descriptors possibly expanding.  See also in
+      //   RpcRequest::send() and RpcCallContext::directTailCall().
       sizeHint += sizeHint / 16;
 
       // Don't overflow.
@@ -708,26 +708,7 @@ private:
       // We can and should propagate cancellation.
       context->allowAsyncCancellation();
 
-      auto promise = request.send();
-
-      auto pipeline = promise.releasePipelineHook();
-
-      auto voidPromise = promise.thenInAnyThread(kj::mvCapture(context,
-          [](kj::Own<CallContextHook>&& context, Response<ObjectPointer> response) {
-            size_t sizeHint = response.targetSizeInWords();
-
-            // See above TODO.
-            sizeHint += sizeHint / 16;
-
-            // Don't overflow.
-            if (uint(sizeHint) != sizeHint) {
-              sizeHint = ~uint(0);
-            }
-
-            context->getResults(sizeHint).set(response);
-          }));
-
-      return { kj::mv(voidPromise), kj::mv(pipeline) };
+      return context->directTailCall(RequestHook::from(kj::mv(request)));
     }
 
     kj::Own<const ClientHook> addRef() const override {
@@ -2068,7 +2049,14 @@ private:
         return results;
       }
     }
-    kj::Promise<void> tailCall(kj::Own<RequestHook> request) override {
+    kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) override {
+      auto result = directTailCall(kj::mv(request));
+      KJ_IF_MAYBE(f, tailCallPipelineFulfiller) {
+        f->get()->fulfill(ObjectPointer::Pipeline(kj::mv(result.pipeline)));
+      }
+      return kj::mv(result.promise);
+    }
+    ClientHook::VoidPromiseAndPipeline directTailCall(kj::Own<RequestHook>&& request) override {
       KJ_REQUIRE(response == nullptr,
                  "Can't call tailCall() after initializing the results struct.");
       releaseParams();
@@ -2078,11 +2066,6 @@ private:
         // optimize out the return trip.
 
         KJ_IF_MAYBE(tailInfo, kj::downcast<RpcRequest>(*request).tailSend()) {
-          // Link pipelines.
-          KJ_IF_MAYBE(f, tailCallPipelineFulfiller) {
-            f->get()->fulfill(ObjectPointer::Pipeline(kj::mv(tailInfo->pipeline)));
-          }
-
           if (isFirstResponder()) {
             auto message = connectionState->connection->newOutgoingMessage(
                 messageSizeHint<rpc::Return>() + requestCapExtractor.retainedListSizeHint(true));
@@ -2097,25 +2080,24 @@ private:
             message->send();
             cleanupAnswerTable(connectionState->tables.lockExclusive(), nullptr);
           }
-          return kj::mv(tailInfo->promise);
+          return { kj::mv(tailInfo->promise), kj::mv(tailInfo->pipeline) };
         }
       }
 
       // Just forwarding to another local call.
       auto promise = request->send();
 
-      // Link pipelines.
-      KJ_IF_MAYBE(f, tailCallPipelineFulfiller) {
-        f->get()->fulfill(kj::mv(kj::implicitCast<ObjectPointer::Pipeline&>(promise)));
-      }
-
       // Wait for response.
-      return promise.then([this](Response<ObjectPointer>&& tailResponse) {
+      auto voidPromise = promise.then([this](Response<ObjectPointer>&& tailResponse) {
         // Copy the response.
         // TODO(perf):  It would be nice if we could somehow make the response get built in-place
         //   but requires some refactoring.
-        getResults(tailResponse.targetSizeInWords()).set(tailResponse);
+        size_t sizeHint = tailResponse.targetSizeInWords();
+        sizeHint += sizeHint / 16;  // see TODO in RpcClient::call().
+        getResults(sizeHint).set(tailResponse);
       });
+
+      return { kj::mv(voidPromise), PipelineHook::from(kj::mv(promise)) };
     }
     kj::Promise<ObjectPointer::Pipeline> onTailCall() override {
       auto paf = kj::newPromiseAndFulfiller<ObjectPointer::Pipeline>();

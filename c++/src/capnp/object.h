@@ -36,44 +36,7 @@ class InterfaceSchema;
 class Orphanage;
 class ClientHook;
 class PipelineHook;
-
-// =======================================================================================
-// Pipeline helpers
-//
-// These relate to capabilities, but we don't declare them in capability.h because generated code
-// for structs needs to know about these, even in files that contain no interfaces.
-
-struct PipelineOp {
-  // Corresponds to rpc.capnp's PromisedAnswer.Op.
-
-  enum Type {
-    NOOP,  // for convenience
-
-    GET_POINTER_FIELD
-
-    // There may be other types in the future...
-  };
-
-  Type type;
-  union {
-    uint16_t pointerIndex;  // for GET_POINTER_FIELD
-  };
-};
-
-class PipelineHook {
-  // Represents a currently-running call, and implements pipelined requests on its result.
-
-public:
-  virtual kj::Own<const PipelineHook> addRef() const = 0;
-  // Increment this object's reference count.
-
-  virtual kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const = 0;
-  // Extract a promised Capability from the results.
-
-  virtual kj::Own<const ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) const;
-  // Version of getPipelinedCap() passing the array by move.  May avoid a copy in some cases.
-  // Default implementation just calls the other version.
-};
+struct PipelineOp;
 
 // =======================================================================================
 // ObjectPointer!
@@ -249,6 +212,7 @@ struct ObjectPointer {
         : hook(kj::mv(hook)), ops(kj::mv(ops)) {}
 
     friend class LocalClient;
+    friend class PipelineHook;
   };
 };
 
@@ -314,6 +278,48 @@ private:
   template <typename U>
   friend class Orphan;
   friend class ObjectPointer::Builder;
+};
+
+// =======================================================================================
+// Pipeline helpers
+//
+// These relate to capabilities, but we don't declare them in capability.h because generated code
+// for structs needs to know about these, even in files that contain no interfaces.
+
+struct PipelineOp {
+  // Corresponds to rpc.capnp's PromisedAnswer.Op.
+
+  enum Type {
+    NOOP,  // for convenience
+
+    GET_POINTER_FIELD
+
+    // There may be other types in the future...
+  };
+
+  Type type;
+  union {
+    uint16_t pointerIndex;  // for GET_POINTER_FIELD
+  };
+};
+
+class PipelineHook {
+  // Represents a currently-running call, and implements pipelined requests on its result.
+
+public:
+  virtual kj::Own<const PipelineHook> addRef() const = 0;
+  // Increment this object's reference count.
+
+  virtual kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const = 0;
+  // Extract a promised Capability from the results.
+
+  virtual kj::Own<const ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) const;
+  // Version of getPipelinedCap() passing the array by move.  May avoid a copy in some cases.
+  // Default implementation just calls the other version.
+
+  static inline kj::Own<const PipelineHook> from(ObjectPointer::Pipeline&& pipeline) {
+    return kj::mv(pipeline.hook);
+  }
 };
 
 // =======================================================================================
