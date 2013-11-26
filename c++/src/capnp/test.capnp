@@ -654,6 +654,13 @@ interface TestMoreStuff extends(TestCallOrder) {
 
   echo @6 (cap :TestCallOrder) -> (cap :TestCallOrder);
   # Just returns the input cap.
+
+  expectAsyncCancel @7 (cap :TestInterface) -> ();
+  # evalLater()-loops forever, holding `cap`.  Must be canceled.
+
+  expectSyncCancel @8 (cap :TestInterface) -> ();
+  # evalLater()-loops until context.isCanceled() returns true, then makes a call to `cap` before
+  # returning.
 }
 
 struct TestSturdyRefHostId {

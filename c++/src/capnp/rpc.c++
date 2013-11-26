@@ -2113,7 +2113,7 @@ private:
       //   a call started doesn't really need to hold the call open.  To fix this we'd presumably
       //   need to make the answer table snapshot-able and have CapExtractorImpl take a snapshot
       //   at creation.
-      releaseParams();
+      KJ_REQUIRE(request == nullptr, "Must call releaseParams() before allowAsyncCancellation().");
 
       if (__atomic_fetch_or(&cancellationFlags, CANCEL_ALLOWED, __ATOMIC_RELAXED) ==
           CANCEL_REQUESTED) {

@@ -88,8 +88,10 @@ public:
 
 class LocalCallContext final: public CallContextHook, public kj::Refcounted {
 public:
-  LocalCallContext(kj::Own<LocalMessage>&& request, kj::Own<const ClientHook> clientRef)
-      : request(kj::mv(request)), clientRef(kj::mv(clientRef)) {}
+  LocalCallContext(kj::Own<LocalMessage>&& request, kj::Own<const ClientHook> clientRef,
+                   kj::Own<kj::PromiseFulfiller<void>> cancelAllowedFulfiller)
+      : request(kj::mv(request)), clientRef(kj::mv(clientRef)),
+        cancelAllowedFulfiller(kj::mv(cancelAllowedFulfiller)) {}
 
   ObjectPointer::Reader getParams() override {
     KJ_IF_MAYBE(r, request) {
@@ -134,12 +136,11 @@ public:
     return kj::mv(paf.promise);
   }
   void allowAsyncCancellation() override {
-    releaseParams();
-
-    // TODO(soon):  Implement.
+    KJ_REQUIRE(request == nullptr, "Must call releaseParams() before allowAsyncCancellation().");
+    cancelAllowedFulfiller->fulfill();
   }
   bool isCanceled() override {
-    return false;
+    return cancelRequested;
   }
   kj::Own<CallContextHook> addRef() override {
     return kj::addRef(*this);
@@ -150,6 +151,21 @@ public:
   ObjectPointer::Builder responseBuilder = nullptr;  // only valid if `response` is non-null
   kj::Own<const ClientHook> clientRef;
   kj::Maybe<kj::Own<kj::PromiseFulfiller<ObjectPointer::Pipeline>>> tailCallPipelineFulfiller;
+  kj::Own<kj::PromiseFulfiller<void>> cancelAllowedFulfiller;
+  bool cancelRequested = false;
+
+  class Canceler {
+  public:
+    Canceler(kj::Own<LocalCallContext>&& context): context(kj::mv(context)) {}
+    Canceler(Canceler&&) = default;
+
+    ~Canceler() {
+      if (context) context->cancelRequested = true;
+    }
+
+  private:
+    kj::Own<LocalCallContext> context;
+  };
 };
 
 class LocalRequest final: public RequestHook {
@@ -168,18 +184,37 @@ public:
     uint64_t interfaceId = this->interfaceId;
     uint16_t methodId = this->methodId;
 
-    auto context = kj::refcounted<LocalCallContext>(kj::mv(message), client->addRef());
+    auto cancelPaf = kj::newPromiseAndFulfiller<void>();
+
+    auto context = kj::refcounted<LocalCallContext>(
+        kj::mv(message), client->addRef(), kj::mv(cancelPaf.fulfiller));
     auto promiseAndPipeline = client->call(interfaceId, methodId, kj::addRef(*context));
 
-    auto promise = loop.there(kj::mv(promiseAndPipeline.promise),
-        kj::mvCapture(context, [=](kj::Own<LocalCallContext> context) {
-          KJ_IF_MAYBE(r, context->response) {
-            return kj::mv(*r);
-          } else {
-            KJ_FAIL_ASSERT("Method implementation failed to fill in results.");
-          }
-        }));
+    // We have to make sure the call is not canceled unless permitted.  We need to fork the promise
+    // so that if the client drops their copy, the promise isn't necessarily canceled.
+    auto forked = loop.fork(kj::mv(promiseAndPipeline.promise));
 
+    // We daemonize one branch, but only after joining it with the promise that fires if
+    // cancellation is allowed.
+    auto daemonPromise = forked.addBranch();
+    daemonPromise.attach(kj::addRef(*context));
+    daemonPromise = loop.exclusiveJoin(kj::mv(cancelPaf.promise), kj::mv(daemonPromise));
+    // Ignore exceptions.
+    daemonPromise = loop.there(kj::mv(daemonPromise), []() {}, [](kj::Exception&&) {});
+    loop.daemonize(kj::mv(daemonPromise));
+
+    // Now the other branch returns the response from the context.
+    auto contextPtr = context.get();
+    auto promise = loop.there(forked.addBranch(), [contextPtr]() {
+      contextPtr->getResults(1);  // force response allocation
+      return kj::mv(KJ_ASSERT_NONNULL(contextPtr->response));
+    });
+
+    // We also want to notify the context that cancellation was requested in this branch is
+    // destroyed.
+    promise.attach(LocalCallContext::Canceler(kj::mv(context)));
+
+    // We return the other branch.
     return RemotePromise<ObjectPointer>(
         kj::mv(promise), ObjectPointer::Pipeline(kj::mv(promiseAndPipeline.pipeline)));
   }

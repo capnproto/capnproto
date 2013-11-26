@@ -239,10 +239,42 @@ public:
 
   kj::Promise<void> echo(EchoParams::Reader params, EchoResults::Builder result) override;
 
+  kj::Promise<void> expectAsyncCancelAdvanced(
+      CallContext<ExpectAsyncCancelParams, ExpectAsyncCancelResults> context) override;
+
+  kj::Promise<void> expectSyncCancelAdvanced(
+      CallContext<ExpectSyncCancelParams, ExpectSyncCancelResults> context) override;
+
 private:
   int& callCount;
   kj::Own<kj::PromiseFulfiller<void>> neverFulfill;
   test::TestInterface::Client clientToHold = nullptr;
+
+  kj::Promise<void> loop(uint depth, test::TestInterface::Client cap,
+      CallContext<ExpectAsyncCancelParams, ExpectAsyncCancelResults> context);
+  kj::Promise<void> loop(uint depth, test::TestInterface::Client cap,
+      CallContext<ExpectSyncCancelParams, ExpectSyncCancelResults> context);
+};
+
+class TestCapDestructor final: public test::TestInterface::Server {
+  // Implementation of TestInterface that notifies when it is destroyed.
+
+public:
+  TestCapDestructor(kj::Own<kj::PromiseFulfiller<void>>&& fulfiller)
+      : fulfiller(kj::mv(fulfiller)), impl(dummy) {}
+
+  ~TestCapDestructor() {
+    fulfiller->fulfill();
+  }
+
+  kj::Promise<void> foo(FooParams::Reader params, FooResults::Builder result) {
+    return impl.foo(params, result);
+  }
+
+private:
+  kj::Own<kj::PromiseFulfiller<void>> fulfiller;
+  int dummy = 0;
+  TestInterfaceImpl impl;
 };
 
 }  // namespace _ (private)

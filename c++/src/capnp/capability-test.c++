@@ -185,6 +185,90 @@ TEST(Capability, TailCall) {
   EXPECT_EQ(1, callerCallCount);
 }
 
+TEST(Capability, AsyncCancelation) {
+  // Tests allowAsyncCancellation().
+
+  kj::SimpleEventLoop loop;
+
+  auto paf = kj::newPromiseAndFulfiller<void>();
+  bool destroyed = false;
+  auto destructionPromise = loop.there(kj::mv(paf.promise), [&]() { destroyed = true; });
+  destructionPromise.eagerlyEvaluate(loop);
+
+  int callCount = 0;
+
+  test::TestMoreStuff::Client client(kj::heap<TestMoreStuffImpl>(callCount), loop);
+
+  kj::Promise<void> promise = nullptr;
+
+  bool returned = false;
+  {
+    auto request = client.expectAsyncCancelRequest();
+    request.setCap(test::TestInterface::Client(
+        kj::heap<TestCapDestructor>(kj::mv(paf.fulfiller)), loop));
+    promise = loop.there(request.send(),
+        [&](Response<test::TestMoreStuff::ExpectAsyncCancelResults>&& response) {
+      returned = true;
+    });
+    promise.eagerlyEvaluate(loop);
+  }
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+
+  // We can detect that the method was canceled because it will drop the cap.
+  EXPECT_FALSE(destroyed);
+  EXPECT_FALSE(returned);
+
+  promise = nullptr;  // request cancellation
+  loop.wait(kj::mv(destructionPromise));
+
+  EXPECT_TRUE(destroyed);
+  EXPECT_FALSE(returned);
+}
+
+TEST(Capability, SyncCancelation) {
+  // Tests isCanceled() without allowAsyncCancellation().
+
+  kj::SimpleEventLoop loop;
+
+  int callCount = 0;
+  int innerCallCount = 0;
+
+  test::TestMoreStuff::Client client(kj::heap<TestMoreStuffImpl>(callCount), loop);
+
+  kj::Promise<void> promise = nullptr;
+
+  bool returned = false;
+  {
+    auto request = client.expectSyncCancelRequest();
+    request.setCap(test::TestInterface::Client(
+        kj::heap<TestInterfaceImpl>(innerCallCount), loop));
+    promise = loop.there(request.send(),
+        [&](Response<test::TestMoreStuff::ExpectSyncCancelResults>&& response) {
+      returned = true;
+    });
+    promise.eagerlyEvaluate(loop);
+  }
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+
+  // expectSyncCancel() will make a call to the TestInterfaceImpl only once it noticed isCanceled()
+  // is true.
+  EXPECT_EQ(0, innerCallCount);
+  EXPECT_FALSE(returned);
+
+  promise = nullptr;  // request cancellation
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+
+  EXPECT_EQ(1, innerCallCount);
+  EXPECT_FALSE(returned);
+}
+
 // =======================================================================================
 
 TEST(Capability, DynamicClient) {

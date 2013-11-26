@@ -314,7 +314,7 @@ public:
 
   private:
     TestNetworkAdapter& network;
-    RpcDumper::Sender sender;
+    RpcDumper::Sender sender KJ_UNUSED_MEMBER;
     kj::Maybe<ConnectionImpl&> partner;
 
     struct Queues {
@@ -559,6 +559,91 @@ TEST_F(RpcTest, TailCall) {
   EXPECT_EQ(1, restorer.callCount);
 }
 
+TEST_F(RpcTest, AsyncCancelation) {
+  // Tests allowAsyncCancellation().
+
+  auto paf = kj::newPromiseAndFulfiller<void>();
+  bool destroyed = false;
+  auto destructionPromise = loop.there(kj::mv(paf.promise), [&]() { destroyed = true; });
+  destructionPromise.eagerlyEvaluate(loop);
+
+  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  kj::Promise<void> promise = nullptr;
+
+  bool returned = false;
+  {
+    auto request = client.expectAsyncCancelRequest();
+    request.setCap(test::TestInterface::Client(
+        kj::heap<TestCapDestructor>(kj::mv(paf.fulfiller)), loop));
+    promise = loop.there(request.send(),
+        [&](Response<test::TestMoreStuff::ExpectAsyncCancelResults>&& response) {
+      returned = true;
+    });
+    promise.eagerlyEvaluate(loop);
+  }
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+
+  // We can detect that the method was canceled because it will drop the cap.
+  EXPECT_FALSE(destroyed);
+  EXPECT_FALSE(returned);
+
+  promise = nullptr;  // request cancellation
+  loop.wait(kj::mv(destructionPromise));
+
+  EXPECT_TRUE(destroyed);
+  EXPECT_FALSE(returned);
+}
+
+TEST_F(RpcTest, SyncCancelation) {
+  // Tests isCanceled() without allowAsyncCancellation().
+
+  int innerCallCount = 0;
+
+  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  kj::Promise<void> promise = nullptr;
+
+  bool returned = false;
+  {
+    auto request = client.expectSyncCancelRequest();
+    request.setCap(test::TestInterface::Client(
+        kj::heap<TestInterfaceImpl>(innerCallCount), loop));
+    promise = loop.there(request.send(),
+        [&](Response<test::TestMoreStuff::ExpectSyncCancelResults>&& response) {
+      returned = true;
+    });
+    promise.eagerlyEvaluate(loop);
+  }
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+
+  // expectSyncCancel() will make a call to the TestInterfaceImpl only once it noticed isCanceled()
+  // is true.
+  EXPECT_EQ(0, innerCallCount);
+  EXPECT_FALSE(returned);
+
+  promise = nullptr;  // request cancellation
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+  loop.wait(loop.evalLater([]() {}));
+
+  EXPECT_EQ(1, innerCallCount);
+  EXPECT_FALSE(returned);
+}
+
 TEST_F(RpcTest, PromiseResolve) {
   auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
       .castAs<test::TestMoreStuff>();
@@ -595,25 +680,6 @@ TEST_F(RpcTest, PromiseResolve) {
   EXPECT_EQ(3, restorer.callCount);
   EXPECT_EQ(2, chainedCallCount);
 }
-
-class TestCapDestructor final: public test::TestInterface::Server {
-public:
-  TestCapDestructor(kj::Own<kj::PromiseFulfiller<void>>&& fulfiller)
-      : fulfiller(kj::mv(fulfiller)), impl(dummy) {}
-
-  ~TestCapDestructor() {
-    fulfiller->fulfill();
-  }
-
-  kj::Promise<void> foo(FooParams::Reader params, FooResults::Builder result) {
-    return impl.foo(params, result);
-  }
-
-private:
-  kj::Own<kj::PromiseFulfiller<void>> fulfiller;
-  int dummy = 0;
-  TestInterfaceImpl impl;
-};
 
 TEST_F(RpcTest, RetainAndRelease) {
   auto paf = kj::newPromiseAndFulfiller<void>();

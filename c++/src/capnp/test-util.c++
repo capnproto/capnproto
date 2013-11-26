@@ -1058,5 +1058,53 @@ kj::Promise<void> TestMoreStuffImpl::echo(EchoParams::Reader params, EchoResults
   return kj::READY_NOW;
 }
 
+kj::Promise<void> TestMoreStuffImpl::expectAsyncCancelAdvanced(
+    CallContext<ExpectAsyncCancelParams, ExpectAsyncCancelResults> context) {
+  auto cap = context.getParams().getCap();
+  context.releaseParams();
+  context.allowAsyncCancellation();
+  return loop(0, cap, context);
+}
+
+kj::Promise<void> TestMoreStuffImpl::loop(uint depth, test::TestInterface::Client cap,
+    CallContext<ExpectAsyncCancelParams, ExpectAsyncCancelResults> context) {
+  if (depth > 100) {
+    ADD_FAILURE() << "Looped too long, giving up.";
+    return kj::READY_NOW;
+  } else {
+    return kj::EventLoop::current().evalLater([=]() mutable {
+      return loop(depth + 1, cap, context);
+    });
+  }
+}
+
+kj::Promise<void> TestMoreStuffImpl::expectSyncCancelAdvanced(
+    CallContext<ExpectSyncCancelParams, ExpectSyncCancelResults> context) {
+  auto cap = context.getParams().getCap();
+  context.releaseParams();
+  return loop(0, cap, context);
+}
+
+kj::Promise<void> TestMoreStuffImpl::loop(uint depth, test::TestInterface::Client cap,
+    CallContext<ExpectSyncCancelParams, ExpectSyncCancelResults> context) {
+  if (depth > 100) {
+    ADD_FAILURE() << "Looped too long, giving up.";
+    return kj::READY_NOW;
+  } else if (context.isCanceled()) {
+    auto request = cap.fooRequest();
+    request.setI(123);
+    request.setJ(true);
+
+    return request.send().then(
+        [](Response<test::TestInterface::FooResults>&& response) mutable {
+          EXPECT_EQ("foo", response.getX());
+        });
+  } else {
+    return kj::EventLoop::current().evalLater([=]() mutable {
+      return loop(depth + 1, cap, context);
+    });
+  }
+}
+
 }  // namespace _ (private)
 }  // namespace capnp

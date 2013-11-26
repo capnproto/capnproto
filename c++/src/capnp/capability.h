@@ -250,15 +250,9 @@ public:
   // executing on a local thread.  The method must perform an asynchronous operation or call
   // `EventLoop::current().runLater()` to yield control.
   //
-  // This method implies `releaseParams()` -- you cannot allow async cancellation while still
-  // holding the params.  (This is because of a quirk of the current RPC implementation; in theory
-  // it could be fixed.)
-  //
-  // TODO(soon):  This doesn't work for local calls, because there's no one to own the object
-  //   in the meantime.  What do we do about that?  Is the security issue here actually a real
-  //   threat?  Maybe we can just always enable cancellation.  After all, you need to be fault
-  //   tolerant and exception-safe, and those are pretty similar to being cancel-tolerant, though
-  //   with less direct control by the attacker...
+  // Currently, you must call `releaseParams()` before `allowAsyncCancellation()`, otherwise the
+  // latter will throw an exception.  This is a limitation of the current RPC implementation, but
+  // this requirement could be lifted in the future.
 
   bool isCanceled();
   // As an alternative to `allowAsyncCancellation()`, a server can call this to check for
@@ -357,6 +351,10 @@ public:
   // even if the returned `Promise<void>` is discarded, the call may continue executing if any
   // pipelined calls are waiting for it; the call is only truly done when the CallContextHook is
   // destroyed.
+  //
+  // Since the caller of this method chooses the CallContext implementation, it is the caller's
+  // responsibility to ensure that the returned promise is not canceled unless allowed via
+  // the context's `allowAsyncCancellation()`.
   //
   // The call must not begin synchronously, as the caller may hold arbitrary mutexes.
 
