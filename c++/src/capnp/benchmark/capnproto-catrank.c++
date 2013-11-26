@@ -56,10 +56,11 @@ public:
       int urlSize = fastRand(100);
 
       static const char URL_PREFIX[] = "http://example.com/";
-      auto url = result.initUrl(urlSize + sizeof(URL_PREFIX));
+      size_t urlPrefixLength = strlen(URL_PREFIX);
+      auto url = result.initUrl(urlSize + urlPrefixLength);
 
       strcpy(url.begin(), URL_PREFIX);
-      char* pos = url.begin() + strlen(URL_PREFIX);
+      char* pos = url.begin() + urlPrefixLength;
       for (int j = 0; j < urlSize; j++) {
         *pos++ = 'a' + fastRand(26);
       }
