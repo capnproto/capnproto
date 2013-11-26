@@ -421,8 +421,7 @@ public:
   }
 };
 
-class RpcTest: public testing::Test {
-protected:
+struct TestContext {
   kj::SimpleEventLoop loop;
   TestNetwork network;
   TestRestorer restorer;
@@ -430,6 +429,13 @@ protected:
   TestNetworkAdapter& serverNetwork;
   RpcSystem<test::TestSturdyRefHostId> rpcClient;
   RpcSystem<test::TestSturdyRefHostId> rpcServer;
+
+  TestContext()
+      : network(loop),
+        clientNetwork(network.add("client")),
+        serverNetwork(network.add("server")),
+        rpcClient(makeRpcClient(clientNetwork, loop)),
+        rpcServer(makeRpcServer(serverNetwork, restorer, loop)) {}
 
   Capability::Client connect(test::TestSturdyRefObjectId::Tag tag) {
     MallocMessageBuilder refMessage(128);
@@ -440,21 +446,13 @@ protected:
 
     return rpcClient.restore(hostId, ref.getObjectId());
   }
-
-  RpcTest()
-      : network(loop),
-        clientNetwork(network.add("client")),
-        serverNetwork(network.add("server")),
-        rpcClient(makeRpcClient(clientNetwork, loop)),
-        rpcServer(makeRpcServer(serverNetwork, restorer, loop)) {}
-
-  ~RpcTest() noexcept {}
-  // Need to declare this with explicit noexcept otherwise it conflicts with testing::Test::~Test.
-  // (Urgh, C++11, why did you change this?)
 };
 
-TEST_F(RpcTest, Basic) {
-  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_INTERFACE)
+TEST(Rpc, Basic) {
+  TestContext context;
+  auto& loop = context.loop;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_INTERFACE)
       .castAs<test::TestInterface>();
 
   auto request1 = client.fooRequest();
@@ -478,7 +476,7 @@ TEST_F(RpcTest, Basic) {
   initTestMessage(request2.initS());
   auto promise2 = request2.send();
 
-  EXPECT_EQ(0, restorer.callCount);
+  EXPECT_EQ(0, context.restorer.callCount);
 
   auto response1 = loop.wait(kj::mv(promise1));
 
@@ -488,12 +486,15 @@ TEST_F(RpcTest, Basic) {
 
   loop.wait(kj::mv(promise3));
 
-  EXPECT_EQ(2, restorer.callCount);
+  EXPECT_EQ(2, context.restorer.callCount);
   EXPECT_TRUE(barFailed);
 }
 
-TEST_F(RpcTest, Pipelining) {
-  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_PIPELINE)
+TEST(Rpc, Pipelining) {
+  TestContext context;
+  auto& loop = context.loop;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_PIPELINE)
       .castAs<test::TestPipeline>();
 
   int chainedCallCount = 0;
@@ -514,7 +515,7 @@ TEST_F(RpcTest, Pipelining) {
 
   promise = nullptr;  // Just to be annoying, drop the original promise.
 
-  EXPECT_EQ(0, restorer.callCount);
+  EXPECT_EQ(0, context.restorer.callCount);
   EXPECT_EQ(0, chainedCallCount);
 
   auto response = loop.wait(kj::mv(pipelinePromise));
@@ -523,12 +524,15 @@ TEST_F(RpcTest, Pipelining) {
   auto response2 = loop.wait(kj::mv(pipelinePromise2));
   checkTestMessage(response2);
 
-  EXPECT_EQ(3, restorer.callCount);
+  EXPECT_EQ(3, context.restorer.callCount);
   EXPECT_EQ(1, chainedCallCount);
 }
 
-TEST_F(RpcTest, TailCall) {
-  auto caller = connect(test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLER)
+TEST(Rpc, TailCall) {
+  TestContext context;
+  auto& loop = context.loop;
+
+  auto caller = context.connect(test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLER)
       .castAs<test::TestTailCaller>();
 
   int calleeCallCount = 0;
@@ -556,18 +560,21 @@ TEST_F(RpcTest, TailCall) {
   EXPECT_EQ(2, loop.wait(kj::mv(dependentCall2)).getN());
 
   EXPECT_EQ(1, calleeCallCount);
-  EXPECT_EQ(1, restorer.callCount);
+  EXPECT_EQ(1, context.restorer.callCount);
 }
 
-TEST_F(RpcTest, AsyncCancelation) {
+TEST(Rpc, AsyncCancelation) {
   // Tests allowAsyncCancellation().
+
+  TestContext context;
+  auto& loop = context.loop;
 
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
   auto destructionPromise = loop.there(kj::mv(paf.promise), [&]() { destroyed = true; });
   destructionPromise.eagerlyEvaluate(loop);
 
-  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
       .castAs<test::TestMoreStuff>();
 
   kj::Promise<void> promise = nullptr;
@@ -601,12 +608,15 @@ TEST_F(RpcTest, AsyncCancelation) {
   EXPECT_FALSE(returned);
 }
 
-TEST_F(RpcTest, SyncCancelation) {
+TEST(Rpc, SyncCancelation) {
   // Tests isCanceled() without allowAsyncCancellation().
+
+  TestContext context;
+  auto& loop = context.loop;
 
   int innerCallCount = 0;
 
-  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
       .castAs<test::TestMoreStuff>();
 
   kj::Promise<void> promise = nullptr;
@@ -644,8 +654,11 @@ TEST_F(RpcTest, SyncCancelation) {
   EXPECT_FALSE(returned);
 }
 
-TEST_F(RpcTest, PromiseResolve) {
-  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+TEST(Rpc, PromiseResolve) {
+  TestContext context;
+  auto& loop = context.loop;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
       .castAs<test::TestMoreStuff>();
 
   int chainedCallCount = 0;
@@ -667,7 +680,7 @@ TEST_F(RpcTest, PromiseResolve) {
   // Make sure getCap() has been called on the server side by sending another call and waiting
   // for it.
   EXPECT_EQ(2, loop.wait(client.getCallSequenceRequest().send()).getN());
-  EXPECT_EQ(3, restorer.callCount);
+  EXPECT_EQ(3, context.restorer.callCount);
 
   // OK, now fulfill the local promise.
   paf.fulfiller->fulfill(test::TestInterface::Client(
@@ -677,18 +690,21 @@ TEST_F(RpcTest, PromiseResolve) {
   EXPECT_EQ("bar", loop.wait(kj::mv(promise)).getS());
   EXPECT_EQ("bar", loop.wait(kj::mv(promise2)).getS());
 
-  EXPECT_EQ(3, restorer.callCount);
+  EXPECT_EQ(3, context.restorer.callCount);
   EXPECT_EQ(2, chainedCallCount);
 }
 
-TEST_F(RpcTest, RetainAndRelease) {
+TEST(Rpc, RetainAndRelease) {
+  TestContext context;
+  auto& loop = context.loop;
+
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
   auto destructionPromise = loop.there(kj::mv(paf.promise), [&]() { destroyed = true; });
   destructionPromise.eagerlyEvaluate(loop);
 
   {
-    auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+    auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
         .castAs<test::TestMoreStuff>();
 
     {
@@ -713,12 +729,12 @@ TEST_F(RpcTest, RetainAndRelease) {
 
       {
         // And call it, without any network communications.
-        uint oldSentCount = clientNetwork.getSentCount();
+        uint oldSentCount = context.clientNetwork.getSentCount();
         auto request = capCopy.fooRequest();
         request.setI(123);
         request.setJ(true);
         EXPECT_EQ("foo", loop.wait(request.send()).getX());
-        EXPECT_EQ(oldSentCount, clientNetwork.getSentCount());
+        EXPECT_EQ(oldSentCount, context.clientNetwork.getSentCount());
       }
 
       {
@@ -744,8 +760,11 @@ TEST_F(RpcTest, RetainAndRelease) {
   EXPECT_TRUE(destroyed);
 }
 
-TEST_F(RpcTest, Cancel) {
-  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+TEST(Rpc, Cancel) {
+  TestContext context;
+  auto& loop = context.loop;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
       .castAs<test::TestMoreStuff>();
 
   auto paf = kj::newPromiseAndFulfiller<void>();
@@ -775,8 +794,11 @@ TEST_F(RpcTest, Cancel) {
   EXPECT_TRUE(destroyed);
 }
 
-TEST_F(RpcTest, SendTwice) {
-  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+TEST(Rpc, SendTwice) {
+  TestContext context;
+  auto& loop = context.loop;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
       .castAs<test::TestMoreStuff>();
 
   auto paf = kj::newPromiseAndFulfiller<void>();
@@ -822,8 +844,11 @@ RemotePromise<test::TestCallOrder::GetCallSequenceResults> getCallSequence(
   return req.send();
 }
 
-TEST_F(RpcTest, Embargo) {
-  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+TEST(Rpc, Embargo) {
+  TestContext context;
+  auto& loop = context.loop;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
       .castAs<test::TestMoreStuff>();
 
   auto cap = test::TestCallOrder::Client(kj::heap<TestCallOrderImpl>(), loop);

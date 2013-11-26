@@ -210,7 +210,7 @@ public:
       return kj::mv(KJ_ASSERT_NONNULL(contextPtr->response));
     });
 
-    // We also want to notify the context that cancellation was requested in this branch is
+    // We also want to notify the context that cancellation was requested if this branch is
     // destroyed.
     promise.attach(LocalCallContext::Canceler(kj::mv(context)));
 

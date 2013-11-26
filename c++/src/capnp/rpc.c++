@@ -1162,7 +1162,8 @@ private:
           resolutionChain(kj::mv(resolutionChain)) {}
 
     ~CapExtractorImpl() noexcept(false) {
-      KJ_ASSERT(retainedCaps.getWithoutLock().size() == 0,
+      KJ_ASSERT(retainedCaps.getWithoutLock().size() == 0 ||
+                connectionState.tables.lockShared()->networkException != nullptr,
                 "CapExtractorImpl destroyed without getting a chance to retain the caps!") {
         break;
       }
@@ -1927,23 +1928,28 @@ private:
       if (isFirstResponder()) {
         // We haven't sent a return yet, so we must have been canceled.  Send a cancellation return.
         unwindDetector.catchExceptionsIfUnwinding([&]() {
-          auto message = connectionState->connection->newOutgoingMessage(
-              requestCapExtractor.retainedListSizeHint(true) + messageSizeHint<rpc::Return>());
-          auto builder = message->getBody().initAs<rpc::Message>().initReturn();
+          // Don't send anything if the connection is broken.
+          if (connectionState->tables.lockShared()->networkException == nullptr) {
+            auto message = connectionState->connection->newOutgoingMessage(
+                requestCapExtractor.retainedListSizeHint(true) + messageSizeHint<rpc::Return>());
+            auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
-          builder.setQuestionId(questionId);
-          auto retainedCaps = requestCapExtractor.finalizeRetainedCaps(
-              Orphanage::getForMessageContaining(builder));
-          builder.adoptRetainedCaps(kj::mv(retainedCaps.exportList));
+            builder.setQuestionId(questionId);
+            auto retainedCaps = requestCapExtractor.finalizeRetainedCaps(
+                Orphanage::getForMessageContaining(builder));
+            builder.adoptRetainedCaps(kj::mv(retainedCaps.exportList));
 
-          if (redirectResults) {
-            // The reason we haven't sent a return is because the results were sent somewhere else.
-            builder.setResultsSentElsewhere();
-          } else {
-            builder.setCanceled();
+            if (redirectResults) {
+              // The reason we haven't sent a return is because the results were sent somewhere
+              // else.
+              builder.setResultsSentElsewhere();
+            } else {
+              builder.setCanceled();
+            }
+
+            message->send();
           }
 
-          message->send();
           cleanupAnswerTable(connectionState->tables.lockExclusive(), nullptr);
         });
       }
@@ -2195,11 +2201,10 @@ private:
 
       if (__atomic_load_n(&cancellationFlags, __ATOMIC_RELAXED) & CANCEL_REQUESTED) {
         // We are responsible for deleting the answer table entry.  Awkwardly, however, the
-        // answer table may be the only thing holding a reference to the context, and we may even
-        // be called from the continuation represented by answer.asyncOp.  So we have to do the
-        // actual deletion asynchronously.  But we have to remove it from the table *now*, while
-        // we still hold the lock, because once we send the return message the answer ID is free
-        // for reuse.
+        // answer table may be the only thing holding a reference to the context.  So we have to
+        // do the actual deletion asynchronously.  But we have to remove it from the table *now*,
+        // while we still hold the lock, because once we send the return message the answer ID is
+        // free for reuse.
         auto promise = connectionState->eventLoop.evalLater([]() {});
         promise.attach(kj::mv(lock->answers[questionId]));
         connectionState->tasks.add(kj::mv(promise));
@@ -2361,32 +2366,38 @@ private:
     auto cancelPaf = kj::newPromiseAndFulfiller<void>();
 
     QuestionId questionId = call.getQuestionId();
+
     // Note:  resolutionChainTail couldn't possibly be changing here because we only handle one
     //   message at a time, so we can hold off locking the tables for a bit longer.
     auto context = kj::refcounted<RpcCallContext>(
         *this, questionId, kj::mv(message), call.getParams(),
         kj::addRef(*tables.getWithoutLock().resolutionChainTail),
         redirectResults, kj::mv(cancelPaf.fulfiller));
-    auto promiseAndPipeline = capability->call(
-        call.getInterfaceId(), call.getMethodId(), context->addRef());
 
     // No more using `call` after this point!
 
     {
       auto lock = tables.lockExclusive();
-
       auto& answer = lock->answers[questionId];
 
-      // We don't want to overwrite an active question because the destructors for the promise and
-      // pipeline could try to lock our mutex.  Of course, we did already fire off the new call
-      // above, but that's OK because it won't actually ever inspect the Answer table itself, and
-      // we're about to close the connection anyway.
       KJ_REQUIRE(!answer.active, "questionId is already in use") {
         return;
       }
 
       answer.active = true;
       answer.callContext = *context;
+    }
+
+    auto promiseAndPipeline = capability->call(
+        call.getInterfaceId(), call.getMethodId(), context->addRef());
+
+    // Things may have changed -- in particular if call() immediately called
+    // context->directTailCall().
+
+    {
+      auto lock = tables.lockExclusive();
+      auto& answer = lock->answers[questionId];
+
       answer.pipeline = kj::mv(promiseAndPipeline.pipeline);
 
       if (redirectResults) {
