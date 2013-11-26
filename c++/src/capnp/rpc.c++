@@ -2491,6 +2491,8 @@ private:
           return nullptr;
         }
     }
+
+    KJ_UNREACHABLE;
   }
 
   void handleReturn(kj::Own<IncomingRpcMessage>&& message, const rpc::Return::Reader& ret) {
