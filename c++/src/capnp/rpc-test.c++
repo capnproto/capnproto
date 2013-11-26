@@ -24,7 +24,9 @@
 #include "rpc.h"
 #include "capability-context.h"
 #include "test-util.h"
+#include "schema.h"
 #include <kj/debug.h>
+#include <kj/string-tree.h>
 #include <gtest/gtest.h>
 #include <capnp/rpc.capnp.h>
 #include <map>
@@ -34,10 +36,148 @@ namespace capnp {
 namespace _ {  // private
 namespace {
 
+class RpcDumper {
+  // Class which stringifies RPC messages for debugging purposes, including decoding params and
+  // results based on the call's interface and method IDs and extracting cap descriptors.
+
+public:
+  void addSchema(InterfaceSchema schema) {
+    schemas[schema.getProto().getId()] = schema;
+  }
+
+  enum Sender {
+    CLIENT,
+    SERVER
+  };
+
+  kj::String dump(rpc::Message::Reader message, Sender sender) {
+    const char* senderName = sender == CLIENT ? "client" : "server";
+
+    switch (message.which()) {
+      case rpc::Message::CALL: {
+        auto call = message.getCall();
+        auto iter = schemas.find(call.getInterfaceId());
+        if (iter == schemas.end()) {
+          break;
+        }
+        InterfaceSchema schema = iter->second;
+        auto methods = schema.getMethods();
+        if (call.getMethodId() >= methods.size()) {
+          break;
+        }
+        InterfaceSchema::Method method = methods[call.getMethodId()];
+
+        auto schemaProto = schema.getProto();
+        auto interfaceName =
+            schemaProto.getDisplayName().slice(schemaProto.getDisplayNamePrefixLength());
+
+        auto methodProto = method.getProto();
+        auto paramType = schema.getDependency(methodProto.getParamStructType()).asStruct();
+        auto resultType = schema.getDependency(methodProto.getResultStructType()).asStruct();
+
+        returnTypes[std::make_pair(sender, call.getQuestionId())] = resultType;
+
+        CapExtractorImpl extractor;
+        CapReaderContext context(extractor);
+
+        auto params = kj::str(context.imbue(call.getParams()).getAs<DynamicStruct>(paramType));
+
+        auto sendResultsTo = call.getSendResultsTo();
+
+        return kj::str(senderName, "(", call.getQuestionId(), "): call ",
+                       call.getTarget(), " <- ", interfaceName, ".",
+                       methodProto.getName(), params,
+                       " caps:[", extractor.printCaps(), "]",
+                       sendResultsTo.isCaller() ? kj::str()
+                                                : kj::str(" sendResultsTo:", sendResultsTo));
+      }
+
+      case rpc::Message::RETURN: {
+        auto ret = message.getReturn();
+
+        auto iter = returnTypes.find(
+            std::make_pair(sender == CLIENT ? SERVER : CLIENT, ret.getQuestionId()));
+        if (iter == returnTypes.end()) {
+          break;
+        }
+
+        auto schema = iter->second;
+        returnTypes.erase(iter);
+        if (ret.which() != rpc::Return::RESULTS) {
+          // Oops, no results returned.  We don't check this earlier because we want to make sure
+          // returnTypes.erase() gets a chance to happen.
+          break;
+        }
+
+        CapExtractorImpl extractor;
+        CapReaderContext context(extractor);
+        auto imbued = context.imbue(ret.getResults());
+
+        if (schema.getProto().isStruct()) {
+          auto results = kj::str(imbued.getAs<DynamicStruct>(schema.asStruct()));
+
+          return kj::str(senderName, "(", ret.getQuestionId(), "): return ", results,
+                         " caps:[", extractor.printCaps(), "]");
+        } else if (schema.getProto().isInterface()) {
+          imbued.getAs<DynamicCapability>(schema.asInterface());
+          return kj::str(senderName, "(", ret.getQuestionId(), "): return cap ",
+                         extractor.printCaps());
+        } else {
+          break;
+        }
+      }
+
+      case rpc::Message::RESTORE: {
+        auto restore = message.getRestore();
+
+        returnTypes[std::make_pair(sender, restore.getQuestionId())] = InterfaceSchema();
+
+        return kj::str(senderName, "(", restore.getQuestionId(), "): restore ",
+                       restore.getObjectId().getAs<test::TestSturdyRefObjectId>());
+      }
+
+      default:
+        break;
+    }
+
+    return kj::str(senderName, ": ", message);
+  }
+
+private:
+  std::map<uint64_t, InterfaceSchema> schemas;
+  std::map<std::pair<Sender, uint32_t>, Schema> returnTypes;
+
+  class CapExtractorImpl: public CapExtractor<rpc::CapDescriptor> {
+  public:
+    kj::Own<const ClientHook> extractCap(rpc::CapDescriptor::Reader descriptor) const {
+      caps.add(kj::str(descriptor));
+      return newBrokenCap("fake cap");
+    }
+
+    kj::String printCaps() {
+      return kj::strArray(caps, ", ");
+    }
+
+  private:
+    mutable kj::Vector<kj::String> caps;
+  };
+};
+
+// =======================================================================================
+
 class TestNetworkAdapter;
 
 class TestNetwork {
 public:
+  TestNetwork(kj::EventLoop& loop): loop(loop) {
+    dumper.addSchema(Schema::from<test::TestInterface>());
+    dumper.addSchema(Schema::from<test::TestExtends>());
+    dumper.addSchema(Schema::from<test::TestPipeline>());
+    dumper.addSchema(Schema::from<test::TestCallOrder>());
+    dumper.addSchema(Schema::from<test::TestTailCallee>());
+    dumper.addSchema(Schema::from<test::TestTailCaller>());
+    dumper.addSchema(Schema::from<test::TestMoreStuff>());
+  }
   ~TestNetwork() noexcept(false);
 
   TestNetworkAdapter& add(kj::StringPtr name);
@@ -51,7 +191,10 @@ public:
     }
   }
 
+  RpcDumper dumper;
+
 private:
+  kj::EventLoop& loop;
   std::map<kj::StringPtr, kj::Own<TestNetworkAdapter>> map;
 };
 
@@ -61,16 +204,18 @@ typedef VatNetwork<
 
 class TestNetworkAdapter final: public TestNetworkAdapterBase {
 public:
-  TestNetworkAdapter(TestNetwork& network): network(network) {}
+  TestNetworkAdapter(kj::EventLoop& loop, TestNetwork& network): loop(loop), network(network) {}
 
   uint getSentCount() { return sent; }
   uint getReceivedCount() { return received; }
 
   typedef TestNetworkAdapterBase::Connection Connection;
 
-  class ConnectionImpl final: public Connection, public kj::Refcounted {
+  class ConnectionImpl final
+      : public Connection, public kj::Refcounted, public kj::TaskSet::ErrorHandler {
   public:
-    ConnectionImpl(TestNetworkAdapter& network, const char* name): network(network), name(name) {}
+    ConnectionImpl(TestNetworkAdapter& network, RpcDumper::Sender sender)
+        : network(network), sender(sender), tasks(network.loop, *this) {}
 
     void attach(ConnectionImpl& other) {
       KJ_REQUIRE(partner == nullptr);
@@ -79,7 +224,7 @@ public:
       other.partner = *this;
     }
 
-    class IncomingRpcMessageImpl final: public IncomingRpcMessage {
+    class IncomingRpcMessageImpl final: public IncomingRpcMessage, public kj::Refcounted {
     public:
       IncomingRpcMessageImpl(uint firstSegmentWordSize)
           : message(firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS
@@ -96,7 +241,7 @@ public:
     public:
       OutgoingRpcMessageImpl(const ConnectionImpl& connection, uint firstSegmentWordSize)
           : connection(connection),
-            message(kj::heap<IncomingRpcMessageImpl>(firstSegmentWordSize)) {}
+            message(kj::refcounted<IncomingRpcMessageImpl>(firstSegmentWordSize)) {}
 
       ObjectPointer::Builder getBody() override {
         return message->message.getRoot<ObjectPointer>();
@@ -104,19 +249,26 @@ public:
       void send() override {
         ++connection.network.sent;
 
-        kj::String msg = kj::str(connection.name, ": ", message->message.getRoot<rpc::Message>());
-        //KJ_DBG(msg);
+        // Uncomment to get a debug dump.
+//        kj::String msg = connection.network.network.dumper.dump(
+//            message->message.getRoot<rpc::Message>(), connection.sender);
+//        KJ_ DBG(msg);
 
-        KJ_IF_MAYBE(p, connection.partner) {
-          auto lock = p->queues.lockExclusive();
-          if (lock->fulfillers.empty()) {
-            lock->messages.push(kj::mv(message));
-          } else {
-            ++connection.network.received;
-            lock->fulfillers.front()->fulfill(kj::Own<IncomingRpcMessage>(kj::mv(message)));
-            lock->fulfillers.pop();
+        auto connectionPtr = &connection;
+        connection.tasks.add(connection.network.loop.evalLater(
+            kj::mvCapture(kj::addRef(*message),
+                [connectionPtr](kj::Own<IncomingRpcMessageImpl>&& message) {
+          KJ_IF_MAYBE(p, connectionPtr->partner) {
+            auto lock = p->queues.lockExclusive();
+            if (lock->fulfillers.empty()) {
+              lock->messages.push(kj::mv(message));
+            } else {
+              ++connectionPtr->network.received;
+              lock->fulfillers.front()->fulfill(kj::Own<IncomingRpcMessage>(kj::mv(message)));
+              lock->fulfillers.pop();
+            }
           }
-        }
+        })));
       }
 
     private:
@@ -154,9 +306,13 @@ public:
       KJ_FAIL_ASSERT("not implemented");
     }
 
+    void taskFailed(kj::Exception&& exception) override {
+      ADD_FAILURE() << kj::str(exception).cStr();
+    }
+
   private:
     TestNetworkAdapter& network;
-    const char* name;
+    RpcDumper::Sender sender;
     kj::Maybe<ConnectionImpl&> partner;
 
     struct Queues {
@@ -164,6 +320,8 @@ public:
       std::queue<kj::Own<IncomingRpcMessage>> messages;
     };
     kj::MutexGuarded<Queues> queues;
+
+    kj::TaskSet tasks;
   };
 
   kj::Maybe<kj::Own<Connection>> connectToRefHost(
@@ -183,8 +341,8 @@ public:
 
     auto iter = myLock->connections.find(&dst);
     if (iter == myLock->connections.end()) {
-      auto local = kj::refcounted<ConnectionImpl>(*this, "client");
-      auto remote = kj::refcounted<ConnectionImpl>(dst, "server");
+      auto local = kj::refcounted<ConnectionImpl>(*this, RpcDumper::CLIENT);
+      auto remote = kj::refcounted<ConnectionImpl>(dst, RpcDumper::SERVER);
       local->attach(*remote);
 
       myLock->connections[&dst] = kj::addRef(*local);
@@ -217,6 +375,7 @@ public:
   }
 
 private:
+  kj::EventLoop& loop;
   TestNetwork& network;
   uint sent = 0;
   uint received = 0;
@@ -232,7 +391,7 @@ private:
 TestNetwork::~TestNetwork() noexcept(false) {}
 
 TestNetworkAdapter& TestNetwork::add(kj::StringPtr name) {
-  return *(map[name] = kj::heap<TestNetworkAdapter>(*this));
+  return *(map[name] = kj::heap<TestNetworkAdapter>(loop, *this));
 }
 
 // =======================================================================================
@@ -262,9 +421,9 @@ public:
 
 class RpcTest: public testing::Test {
 protected:
+  kj::SimpleEventLoop loop;
   TestNetwork network;
   TestRestorer restorer;
-  kj::SimpleEventLoop loop;
   TestNetworkAdapter& clientNetwork;
   TestNetworkAdapter& serverNetwork;
   RpcSystem<test::TestSturdyRefHostId> rpcClient;
@@ -281,7 +440,8 @@ protected:
   }
 
   RpcTest()
-      : clientNetwork(network.add("client")),
+      : network(loop),
+        clientNetwork(network.add("client")),
         serverNetwork(network.add("server")),
         rpcClient(makeRpcClient(clientNetwork, loop)),
         rpcServer(makeRpcServer(serverNetwork, restorer, loop)) {}
@@ -585,6 +745,48 @@ TEST_F(RpcTest, SendTwice) {
   // Now the cap should be released.
   loop.wait(kj::mv(destructionPromise));
   EXPECT_TRUE(destroyed);
+}
+
+RemotePromise<test::TestCallOrder::GetCallSequenceResults> getCallSequence(
+    const test::TestCallOrder::Client& client, uint expected) {
+  auto req = client.getCallSequenceRequest();
+  req.setExpected(expected);
+  return req.send();
+}
+
+TEST_F(RpcTest, Embargo) {
+  auto client = connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  auto cap = test::TestCallOrder::Client(kj::heap<TestCallOrderImpl>(), loop);
+
+  auto earlyCall = client.getCallSequenceRequest().send();
+
+  auto echoRequest = client.echoRequest();
+  echoRequest.setCap(cap);
+  auto echo = echoRequest.send();
+
+  auto pipeline = echo.getCap();
+
+  auto call0 = getCallSequence(pipeline, 0);
+  auto call1 = getCallSequence(pipeline, 1);
+
+  loop.wait(kj::mv(earlyCall));
+
+  auto call2 = getCallSequence(pipeline, 2);
+
+  auto resolved = loop.wait(kj::mv(echo)).getCap();
+
+  auto call3 = getCallSequence(pipeline, 3);
+  auto call4 = getCallSequence(pipeline, 4);
+  auto call5 = getCallSequence(pipeline, 5);
+
+  EXPECT_EQ(0, loop.wait(kj::mv(call0)).getN());
+  EXPECT_EQ(1, loop.wait(kj::mv(call1)).getN());
+  EXPECT_EQ(2, loop.wait(kj::mv(call2)).getN());
+  EXPECT_EQ(3, loop.wait(kj::mv(call3)).getN());
+  EXPECT_EQ(4, loop.wait(kj::mv(call4)).getN());
+  EXPECT_EQ(5, loop.wait(kj::mv(call5)).getN());
 }
 
 }  // namespace

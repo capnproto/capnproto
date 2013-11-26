@@ -182,6 +182,8 @@ class ChainPromiseNode;
 template <typename T>
 class ForkHub;
 
+class TaskSetImpl;
+
 }  // namespace _ (private)
 
 // =======================================================================================
@@ -228,6 +230,7 @@ class EventLoop: private _::NewJobCallback {
 
 public:
   EventLoop();
+  ~EventLoop() noexcept(false);
 
   static EventLoop& current();
   // Get the event loop for the current thread.  Throws an exception if no event loop is active.
@@ -297,6 +300,15 @@ public:
   template <typename T>
   Promise<T> exclusiveJoin(Promise<T>&& promise1, Promise<T>&& promise2) const;
   // Like `promise1.exclusiveJoin(promise2)`, returning the joined promise.
+
+  void daemonize(kj::Promise<void>&& promise) const;
+  // Allows the given promise to continue running in the background until it completes or the
+  // `EventLoop` is destroyed.  Be careful when using this: you need to make sure that the promise
+  // owns all the objects it touches or make sure those objects outlive the EventLoop.  Also, be
+  // careful about error handling: exceptions will merely be logged with KJ_LOG(ERROR, ...).
+  //
+  // This method exists mainly to implement the Cap'n Proto requirement that RPC calls cannot be
+  // canceled unless the callee explicitly permits it.
 
   // -----------------------------------------------------------------
   // Low-level interface.
@@ -387,6 +399,8 @@ private:
   Maybe<_::WorkQueue<EventJob>::JobWrapper&> insertionPoint;
   // Where to insert preemptively-scheduled events into the queue.
 
+  Own<_::TaskSetImpl> daemons;
+
   template <typename T, typename Func, typename ErrorFunc>
   Own<_::PromiseNode> thereImpl(Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler) const;
   // Shared implementation of there() and Promise::then().
@@ -456,7 +470,7 @@ private:
   friend class _::ChainPromiseNode;
   template <typename>
   friend class Promise;
-  friend class TaskSet;
+  friend class _::TaskSetImpl;
 };
 
 template <typename T>
@@ -763,8 +777,7 @@ public:
   void add(Promise<void>&& promise) const;
 
 private:
-  class Impl;
-  Own<Impl> impl;
+  Own<_::TaskSetImpl> impl;
 };
 
 constexpr _::Void READY_NOW = _::Void();

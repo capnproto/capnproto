@@ -207,7 +207,13 @@ class QueuedPipeline final: public PipelineHook, public kj::Refcounted {
 public:
   QueuedPipeline(const kj::EventLoop& loop, kj::Promise<kj::Own<const PipelineHook>>&& promise)
       : loop(loop),
-        promise(loop.fork(kj::mv(promise))) {}
+        promise(loop.fork(kj::mv(promise))),
+        selfResolutionOp(loop.there(this->promise.addBranch(),
+            [this](kj::Own<const PipelineHook>&& inner) {
+              *redirect.lockExclusive() = kj::mv(inner);
+            })) {
+    selfResolutionOp.eagerlyEvaluate(loop);
+  }
 
   kj::Own<const PipelineHook> addRef() const override {
     return kj::addRef(*this);
@@ -226,6 +232,12 @@ public:
 private:
   const kj::EventLoop& loop;
   kj::ForkedPromise<kj::Own<const PipelineHook>> promise;
+
+  kj::MutexGuarded<kj::Maybe<kj::Own<const PipelineHook>>> redirect;
+  // Once the promise resolves, this will become non-null and point to the underlying object.
+
+  kj::Promise<void> selfResolutionOp;
+  // Represents the operation which will set `redirect` when possible.
 };
 
 class QueuedClient final: public ClientHook, public kj::Refcounted {
@@ -371,12 +383,18 @@ private:
 };
 
 kj::Own<const ClientHook> QueuedPipeline::getPipelinedCap(kj::Array<PipelineOp>&& ops) const {
-  auto clientPromise = loop.there(promise.addBranch(), kj::mvCapture(ops,
-      [](kj::Array<PipelineOp>&& ops, kj::Own<const PipelineHook> pipeline) {
-        return pipeline->getPipelinedCap(kj::mv(ops));
-      }));
+  auto lock = redirect.lockShared();
 
-  return kj::refcounted<QueuedClient>(loop, kj::mv(clientPromise));
+  KJ_IF_MAYBE(redirect, *lock) {
+    return redirect->get()->getPipelinedCap(kj::mv(ops));
+  } else {
+    auto clientPromise = loop.there(promise.addBranch(), kj::mvCapture(ops,
+        [](kj::Array<PipelineOp>&& ops, kj::Own<const PipelineHook> pipeline) {
+          return pipeline->getPipelinedCap(kj::mv(ops));
+        }));
+
+    return kj::refcounted<QueuedClient>(loop, kj::mv(clientPromise));
+  }
 }
 
 // =======================================================================================

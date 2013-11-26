@@ -298,6 +298,7 @@ public:
       kj::Vector<kj::Own<const PipelineHook>> pipelinesToRelease;
       kj::Vector<kj::Own<const ClientHook>> clientsToRelease;
       kj::Vector<kj::Own<CapInjectorImpl>> paramCapsToRelease;
+      kj::Vector<kj::Promise<kj::Own<const RpcResponse>>> promisesToRelease;
 
       auto lock = tables.lockExclusive();
 
@@ -330,9 +331,7 @@ public:
         }
 
         KJ_IF_MAYBE(promise, answer.redirectedResults) {
-          // Answer contains a result redirection that hasn't been picked up yet.  Make the call
-          // properly cancelable by transforming the redirect promise into a regular asyncOp.
-          answer.asyncOp = promise->thenInAnyThread([](kj::Own<const RpcResponse>&& response) {});
+          promisesToRelease.add(kj::mv(*promise));
         }
 
         KJ_IF_MAYBE(context, answer.callContext) {
@@ -412,9 +411,6 @@ private:
 
     kj::Maybe<kj::Own<const PipelineHook>> pipeline;
     // Send pipelined calls here.  Becomes null as soon as a `Finish` is received.
-
-    kj::Promise<void> asyncOp = kj::Promise<void>(nullptr);
-    // Delete this promise to cancel the call.  For redirected calls, this is null.
 
     kj::Maybe<kj::Promise<kj::Own<const RpcResponse>>> redirectedResults;
     // For locally-redirected calls (Call.sendResultsTo.yourself), this is a promise for the call
@@ -885,6 +881,10 @@ private:
       // the `PromiseClient` is destroyed; `eventual` must therefore make sure to hold references to
       // anything that needs to stay alive in order to resolve it correctly (such as making sure the
       // import ID is not released).
+
+      resolveSelfPromise = connectionState.eventLoop.there(kj::mv(resolveSelfPromise),
+          []() {}, [&](kj::Exception&& e) { connectionState.tasks.add(kj::mv(e)); });
+
       resolveSelfPromise.eagerlyEvaluate(connectionState.eventLoop);
     }
 
@@ -907,6 +907,7 @@ private:
 
     kj::Maybe<ExportId> writeDescriptor(
         rpc::CapDescriptor::Builder descriptor, Tables& tables) const override {
+      __atomic_store_n(&receivedCall, true, __ATOMIC_RELAXED);
       return connectionState->writeDescriptor(*inner.lockExclusive()->cap, descriptor, tables);
     }
 
@@ -917,6 +918,7 @@ private:
     }
 
     kj::Own<const ClientHook> getInnermostClient() const override {
+      __atomic_store_n(&receivedCall, true, __ATOMIC_RELAXED);
       return connectionState->getInnermostClient(*inner.lockExclusive()->cap);
     }
 
@@ -924,11 +926,13 @@ private:
 
     Request<ObjectPointer, ObjectPointer> newCall(
         uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
+      __atomic_store_n(&receivedCall, true, __ATOMIC_RELAXED);
       return inner.lockExclusive()->cap->newCall(interfaceId, methodId, firstSegmentWordSize);
     }
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                                 kj::Own<CallContextHook>&& context) const override {
+      __atomic_store_n(&receivedCall, true, __ATOMIC_RELAXED);
       return inner.lockExclusive()->cap->call(interfaceId, methodId, kj::mv(context));
     }
 
@@ -962,7 +966,7 @@ private:
     mutable bool receivedCall = false;
 
     void resolve(kj::Own<const ClientHook> replacement) {
-      if (replacement->getBrand() != this &&
+      if (replacement->getBrand() != connectionState.get() &&
           __atomic_load_n(&receivedCall, __ATOMIC_RELAXED)) {
         // The new capability is hosted locally, not on the remote machine.  And, we had made calls
         // to the promise.  We need to make sure those calls echo back to us before we allow new
@@ -972,7 +976,7 @@ private:
         auto message = connectionState->connection->newOutgoingMessage(
             messageSizeHint<rpc::Disembargo>() + MESSAGE_TARGET_SIZE_HINT);
 
-        auto disembargo = message->getBody().initAs<rpc::Message>().getDisembargo();
+        auto disembargo = message->getBody().initAs<rpc::Message>().initDisembargo();
 
         {
           auto redirect = connectionState->writeTarget(
@@ -1511,6 +1515,10 @@ private:
           resultCaps(connectionState, kj::mv(resolutionChain)) {}
 
     ~QuestionRef() {
+      if (connectionState->tables.lockShared()->networkException != nullptr) {
+        return;
+      }
+
       // Send the "Finish" message.
       {
         auto message = connectionState->connection->newOutgoingMessage(
@@ -1922,7 +1930,8 @@ private:
   public:
     RpcCallContext(const RpcConnectionState& connectionState, QuestionId questionId,
                    kj::Own<IncomingRpcMessage>&& request, const ObjectPointer::Reader& params,
-                   kj::Own<const ResolutionChain> resolutionChain, bool redirectResults)
+                   kj::Own<const ResolutionChain> resolutionChain, bool redirectResults,
+                   kj::Own<kj::PromiseFulfiller<void>>&& cancelFulfiller)
         : connectionState(kj::addRef(connectionState)),
           questionId(questionId),
           request(kj::mv(request)),
@@ -1930,7 +1939,8 @@ private:
           requestCapContext(requestCapExtractor),
           params(requestCapContext.imbue(params)),
           returnMessage(nullptr),
-          redirectResults(redirectResults) {}
+          redirectResults(redirectResults),
+          cancelFulfiller(kj::mv(cancelFulfiller)) {}
 
     ~RpcCallContext() noexcept(false) {
       if (isFirstResponder()) {
@@ -2019,9 +2029,9 @@ private:
 
       if (__atomic_fetch_or(&cancellationFlags, CANCEL_REQUESTED, __ATOMIC_RELAXED) ==
           CANCEL_ALLOWED) {
-        // We just set CANCEL_REQUESTED, and CANCEL_ALLOWED was already set previously.  Schedule
+        // We just set CANCEL_REQUESTED, and CANCEL_ALLOWED was already set previously.  Initiate
         // the cancellation.
-        scheduleCancel();
+        cancelFulfiller->fulfill();
       }
     }
 
@@ -2113,25 +2123,21 @@ private:
       return kj::mv(paf.promise);
     }
     void allowAsyncCancellation() override {
-      if (threadAcceptingCancellation == nullptr) {
-        // TODO(cleanup):  We need to drop the request because it is holding on to the resolution
-        //   chain which in turn holds on to the pipeline which holds on to this object thus
-        //   preventing cancellation from working.  This is a bit silly because obviously our
-        //   request couldn't contain PromisedAnswers referring to itself, but currently the chain
-        //   is a linear list and we have no way to tell that a reference to the chain taken before
-        //   a call started doesn't really need to hold the call open.  To fix this we'd presumably
-        //   need to make the answer table snapshot-able and have CapExtractorImpl take a snapshot
-        //   at creation.
-        releaseParams();
+      // TODO(cleanup):  We need to drop the request because it is holding on to the resolution
+      //   chain which in turn holds on to the pipeline which holds on to this object thus
+      //   preventing cancellation from working.  This is a bit silly because obviously our
+      //   request couldn't contain PromisedAnswers referring to itself, but currently the chain
+      //   is a linear list and we have no way to tell that a reference to the chain taken before
+      //   a call started doesn't really need to hold the call open.  To fix this we'd presumably
+      //   need to make the answer table snapshot-able and have CapExtractorImpl take a snapshot
+      //   at creation.
+      releaseParams();
 
-        threadAcceptingCancellation = &kj::EventLoop::current();
-
-        if (__atomic_fetch_or(&cancellationFlags, CANCEL_ALLOWED, __ATOMIC_RELAXED) ==
-            CANCEL_REQUESTED) {
-          // We just set CANCEL_ALLOWED, and CANCEL_REQUESTED was already set previously.  Schedule
-          // the cancellation.
-          scheduleCancel();
-        }
+      if (__atomic_fetch_or(&cancellationFlags, CANCEL_ALLOWED, __ATOMIC_RELAXED) ==
+          CANCEL_REQUESTED) {
+        // We just set CANCEL_ALLOWED, and CANCEL_REQUESTED was already set previously.  Initiate
+        // the cancellation.
+        cancelFulfiller->fulfill();
       }
     }
     bool isCanceled() override {
@@ -2171,46 +2177,14 @@ private:
     // When both flags are set, the cancellation process will begin.  Must be manipulated atomically
     // as it may be accessed from multiple threads.
 
-    kj::EventLoop* threadAcceptingCancellation = nullptr;
-    // EventLoop for the thread that first called allowAsyncCancellation().  We store this as an
-    // optimization:  if the application thread is independent from the network thread, we'd rather
-    // perform the cancellation in the application thread, because otherwise we might block waiting
-    // on an application promise continuation callback to finish executing, which could take
-    // arbitrary time.
+    mutable kj::Own<kj::PromiseFulfiller<void>> cancelFulfiller;
+    // Fulfilled when cancellation has been both requested and permitted.  The fulfilled promise is
+    // exclusive-joined with the outermost promise waiting on the call return, so fulfilling it
+    // cancels that promise.
 
     kj::UnwindDetector unwindDetector;
 
     // -----------------------------------------------------
-
-    void scheduleCancel() const {
-      // Arranges for the answer's asyncOp to be deleted, thus canceling all processing related to
-      // this call, shortly.  We have to do it asynchronously because the caller might hold
-      // arbitrary locks or might in fact be part of the task being canceled.
-
-      connectionState->tasks.add(threadAcceptingCancellation->evalLater(
-          kj::mvCapture(kj::addRef(*this), [](kj::Own<const RpcCallContext>&& self) {
-        // Extract from the answer table the promise representing the executing call.
-        kj::Promise<void> asyncOp = nullptr;
-        {
-          auto lock = self->connectionState->tables.lockExclusive();
-          asyncOp = kj::mv(lock->answers[self->questionId].asyncOp);
-        }
-
-        // When `asyncOp` goes out of scope, if it holds the last reference to the ongoing
-        // operation, that operation will be canceled.  Note that if a continuation is
-        // running in another thread, the destructor will block waiting for it to complete.  This
-        // is why we try to schedule doCancel() on the application thread, so that it won't need
-        // to block.
-
-        // The `Return` will be sent when the context is destroyed.  That might be right now, when
-        // `self` and `asyncOp` go out of scope.  However, it is also possible that the pipeline
-        // is still in use:  although `Finish` removes the pipeline reference from the answer
-        // table, it might be held by an outstanding pipelined call, or by a pipelined promise that
-        // was echoed back to us later (as a `receiverAnswer` in a `CapDescriptor`), or it may be
-        // held in the resolution chain.  In all of these cases, the call will continue running
-        // until those references are dropped or the call completes.
-      })));
-    }
 
     bool isFirstResponder() {
       if (responseSent) {
@@ -2402,13 +2376,15 @@ private:
         KJ_FAIL_REQUIRE("Unsupported `Call.sendResultsTo`.") { return; }
     }
 
+    auto cancelPaf = kj::newPromiseAndFulfiller<void>();
+
     QuestionId questionId = call.getQuestionId();
     // Note:  resolutionChainTail couldn't possibly be changing here because we only handle one
     //   message at a time, so we can hold off locking the tables for a bit longer.
     auto context = kj::refcounted<RpcCallContext>(
         *this, questionId, kj::mv(message), call.getParams(),
         kj::addRef(*tables.getWithoutLock().resolutionChainTail),
-        redirectResults);
+        redirectResults, kj::mv(cancelPaf.fulfiller));
     auto promiseAndPipeline = capability->call(
         call.getInterfaceId(), call.getMethodId(), context->addRef());
 
@@ -2432,18 +2408,27 @@ private:
       answer.pipeline = kj::mv(promiseAndPipeline.pipeline);
 
       if (redirectResults) {
-        auto promise = promiseAndPipeline.promise.then(
+        auto resultsPromise = promiseAndPipeline.promise.then(
             kj::mvCapture(context, [](kj::Own<RpcCallContext>&& context) {
               return context->consumeRedirectedResponse();
             }));
-        promise.eagerlyEvaluate(eventLoop);
-        answer.redirectedResults = kj::mv(promise);
+
+        // If the call that later picks up `redirectedResults` decides to discard it, we need to
+        // make sure our call is not itself canceled unless it has called allowAsyncCancellation().
+        // So we fork the promise and join one branch with the cancellation promise, in order to
+        // hold on to it.
+        auto forked = eventLoop.fork(kj::mv(resultsPromise));
+        answer.redirectedResults = forked.addBranch();
+
+        auto promise = kj::mv(cancelPaf.promise);
+        promise.exclusiveJoin(forked.addBranch().then([](kj::Own<const RpcResponse>&&){}));
+        eventLoop.daemonize(kj::mv(promise));
       } else {
         // Hack:  Both the success and error continuations need to use the context.  We could
         //   refcount, but both will be destroyed at the same time anyway.
         RpcCallContext* contextPtr = context;
 
-        answer.asyncOp = promiseAndPipeline.promise.then(
+        auto promise = promiseAndPipeline.promise.then(
             [contextPtr]() {
               contextPtr->sendReturn();
             }, [contextPtr](kj::Exception&& exception) {
@@ -2452,8 +2437,9 @@ private:
               // Handle exceptions that occur in sendReturn()/sendErrorReturn().
               taskFailed(kj::mv(exception));
             });
-        answer.asyncOp.attach(kj::mv(context));
-        answer.asyncOp.eagerlyEvaluate(eventLoop);
+        promise.attach(kj::mv(context));
+        promise.exclusiveJoin(kj::mv(cancelPaf.promise));
+        eventLoop.daemonize(kj::mv(promise));
       }
     }
   }
@@ -2729,8 +2715,6 @@ private:
   }
 
   void handleDisembargo(const rpc::Disembargo::Reader& disembargo) {
-    auto lock = tables.lockExclusive();
-
     auto context = disembargo.getContext();
     switch (context.which()) {
       case rpc::Disembargo::Context::SENDER_LOOPBACK: {
@@ -2757,34 +2741,42 @@ private:
           return;
         }
 
-        const RpcClient& downcasted = kj::downcast<const RpcClient>(*target);
+        EmbargoId embargoId = context.getSenderLoopback();
 
-        auto message = connection->newOutgoingMessage(
-            messageSizeHint<rpc::Disembargo>() + MESSAGE_TARGET_SIZE_HINT);
-        auto builder = message->getBody().initAs<rpc::Message>().initDisembargo();
+        // We need to insert an evalLater() here to make sure that any pending calls towards this
+        // cap have had time to find their way through the event loop.
+        tasks.add(eventLoop.evalLater(kj::mvCapture(
+            target, [this,embargoId](kj::Own<const ClientHook>&& target) {
+          const RpcClient& downcasted = kj::downcast<const RpcClient>(*target);
 
-        {
-          auto redirect = downcasted.writeTarget(builder.initTarget());
+          auto message = connection->newOutgoingMessage(
+              messageSizeHint<rpc::Disembargo>() + MESSAGE_TARGET_SIZE_HINT);
+          auto builder = message->getBody().initAs<rpc::Message>().initDisembargo();
 
-          // Disembargoes should only be sent to capabilities that were previously the object of
-          // a `Resolve` message.  But `writeTarget` only ever returns non-null when called on
-          // a PromiseClient.  The code which sends `Resolve` should have replaced any promise
-          // with a direct node in order to solve the Tribble 4-way race condition.
-          KJ_REQUIRE(redirect == nullptr,
-                     "'Disembargo' of type 'senderLoopback' sent to an object that does not appear "
-                     "to have been the object of a previous 'Resolve' message.") {
-            return;
+          {
+            auto redirect = downcasted.writeTarget(builder.initTarget());
+
+            // Disembargoes should only be sent to capabilities that were previously the object of
+            // a `Resolve` message.  But `writeTarget` only ever returns non-null when called on
+            // a PromiseClient.  The code which sends `Resolve` should have replaced any promise
+            // with a direct node in order to solve the Tribble 4-way race condition.
+            KJ_REQUIRE(redirect == nullptr,
+                       "'Disembargo' of type 'senderLoopback' sent to an object that does not "
+                       "appear to have been the object of a previous 'Resolve' message.") {
+              return;
+            }
           }
-        }
 
-        builder.getContext().setReceiverLoopback(context.getSenderLoopback());
+          builder.getContext().setReceiverLoopback(embargoId);
 
-        message->send();
+          message->send();
+        })));
 
         break;
       }
 
-      case rpc::Disembargo::Context::RECEIVER_LOOPBACK:
+      case rpc::Disembargo::Context::RECEIVER_LOOPBACK: {
+        auto lock = tables.lockExclusive();
         KJ_IF_MAYBE(embargo, lock->embargoes.find(context.getReceiverLoopback())) {
           KJ_ASSERT_NONNULL(embargo->fulfiller)->fulfill();
           lock->embargoes.erase(context.getReceiverLoopback());
@@ -2794,6 +2786,7 @@ private:
           }
         }
         break;
+      }
 
       default:
         KJ_FAIL_REQUIRE("Unimplemented Disembargo type.", disembargo) { return; }

@@ -237,6 +237,8 @@ public:
   kj::Promise<void> getHeld(GetHeldParams::Reader params,
                             GetHeldResults::Builder result) override;
 
+  kj::Promise<void> echo(EchoParams::Reader params, EchoResults::Builder result) override;
+
 private:
   int& callCount;
   kj::Own<kj::PromiseFulfiller<void>> neverFulfill;

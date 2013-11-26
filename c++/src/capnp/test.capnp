@@ -611,8 +611,10 @@ interface TestPipeline {
 }
 
 interface TestCallOrder {
-  getCallSequence @0 () -> (n: UInt32);
+  getCallSequence @0 (expected: UInt32) -> (n: UInt32);
   # First call returns 0, next returns 1, ...
+  #
+  # The input `expected` is ignored but useful for disambiguating debug logs.
 }
 
 interface TestTailCallee {
@@ -649,6 +651,9 @@ interface TestMoreStuff extends(TestCallOrder) {
 
   getHeld @5 () -> (cap :TestInterface);
   # Returns the capability previously held using `hold` (and keeps holding it).
+
+  echo @6 (cap :TestCallOrder) -> (cap :TestCallOrder);
+  # Just returns the input cap.
 }
 
 struct TestSturdyRefHostId {

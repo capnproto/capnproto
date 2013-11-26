@@ -1052,5 +1052,11 @@ kj::Promise<void> TestMoreStuffImpl::getHeld(
   return kj::READY_NOW;
 }
 
+kj::Promise<void> TestMoreStuffImpl::echo(EchoParams::Reader params, EchoResults::Builder result) {
+  ++callCount;
+  result.setCap(params.getCap());
+  return kj::READY_NOW;
+}
+
 }  // namespace _ (private)
 }  // namespace capnp

@@ -69,6 +69,91 @@ public:
 
 }  // namespace
 
+namespace _ {  // private
+
+class TaskSetImpl {
+public:
+  inline TaskSetImpl(const EventLoop& loop, TaskSet::ErrorHandler& errorHandler)
+    : loop(loop), errorHandler(errorHandler) {}
+
+  ~TaskSetImpl() noexcept(false) {
+    // std::map doesn't like it when elements' destructors throw, so carefully disassemble it.
+    auto& taskMap = tasks.getWithoutLock();
+    if (!taskMap.empty()) {
+      Vector<Own<Task>> deleteMe(taskMap.size());
+      for (auto& entry: taskMap) {
+        deleteMe.add(kj::mv(entry.second));
+      }
+    }
+  }
+
+  class Task final: public EventLoop::Event {
+  public:
+    Task(const TaskSetImpl& taskSet, Own<_::PromiseNode>&& nodeParam)
+        : EventLoop::Event(taskSet.loop), taskSet(taskSet), node(kj::mv(nodeParam)) {
+      if (node->onReady(*this)) {
+        arm();
+      }
+    }
+
+    ~Task() {
+      disarm();
+    }
+
+  protected:
+    void fire() override {
+      // Get the result.
+      _::ExceptionOr<_::Void> result;
+      node->get(result);
+
+      // Delete the node, catching any exceptions.
+      KJ_IF_MAYBE(exception, kj::runCatchingExceptions([this]() {
+        node = nullptr;
+      })) {
+        result.addException(kj::mv(*exception));
+      }
+
+      // Call the error handler if there was an exception.
+      KJ_IF_MAYBE(e, result.exception) {
+        taskSet.errorHandler.taskFailed(kj::mv(*e));
+      }
+    }
+
+  private:
+    const TaskSetImpl& taskSet;
+    kj::Own<_::PromiseNode> node;
+  };
+
+  void add(Promise<void>&& promise) const {
+    auto task = heap<Task>(*this, _::makeSafeForLoop<_::Void>(kj::mv(promise.node), loop));
+    Task* ptr = task;
+    tasks.lockExclusive()->insert(std::make_pair(ptr, kj::mv(task)));
+  }
+
+private:
+  const EventLoop& loop;
+  TaskSet::ErrorHandler& errorHandler;
+
+  // TODO(soon):  Use a linked list instead.  We should factor out the intrusive linked list code
+  //   that appears in EventLoop and ForkHub.
+  MutexGuarded<std::map<Task*, Own<Task>>> tasks;
+};
+
+class LoggingErrorHandler: public TaskSet::ErrorHandler {
+public:
+  static LoggingErrorHandler instance;
+
+  void taskFailed(kj::Exception&& exception) override {
+    KJ_LOG(ERROR, "Uncaught exception in daemonized task.", exception);
+  }
+};
+
+LoggingErrorHandler LoggingErrorHandler::instance = LoggingErrorHandler();
+
+}  // namespace _ (private)
+
+// =======================================================================================
+
 EventLoop& EventLoop::current() {
   EventLoop* result = threadLocalEventLoop;
   KJ_REQUIRE(result != nullptr, "No event loop is running on this thread.");
@@ -79,7 +164,10 @@ bool EventLoop::isCurrent() const {
   return threadLocalEventLoop == this;
 }
 
-EventLoop::EventLoop() {}
+EventLoop::EventLoop()
+    : daemons(kj::heap<_::TaskSetImpl>(*this, _::LoggingErrorHandler::instance)) {}
+
+EventLoop::~EventLoop() noexcept(false) {}
 
 void EventLoop::waitImpl(Own<_::PromiseNode> node, _::ExceptionOrValue& result) {
   EventLoop* oldEventLoop = threadLocalEventLoop;
@@ -117,6 +205,10 @@ Promise<void> EventLoop::yieldIfSameThread() const {
 
 void EventLoop::receivedNewJob() const {
   wake();
+}
+
+void EventLoop::daemonize(kj::Promise<void>&& promise) const {
+  daemons->add(kj::mv(promise));
 }
 
 EventLoop::Event::Event(const EventLoop& loop)
@@ -227,76 +319,8 @@ void PromiseBase::absolve() {
   runCatchingExceptions([this]() { node = nullptr; });
 }
 
-class TaskSet::Impl {
-public:
-  inline Impl(const EventLoop& loop, ErrorHandler& errorHandler)
-    : loop(loop), errorHandler(errorHandler) {}
-
-  ~Impl() noexcept(false) {
-    // std::map doesn't like it when elements' destructors throw, so carefully disassemble it.
-    auto& taskMap = tasks.getWithoutLock();
-    if (!taskMap.empty()) {
-      Vector<Own<Task>> deleteMe(taskMap.size());
-      for (auto& entry: taskMap) {
-        deleteMe.add(kj::mv(entry.second));
-      }
-    }
-  }
-
-  class Task final: public EventLoop::Event {
-  public:
-    Task(const Impl& taskSet, Own<_::PromiseNode>&& nodeParam)
-        : EventLoop::Event(taskSet.loop), taskSet(taskSet), node(kj::mv(nodeParam)) {
-      if (node->onReady(*this)) {
-        arm();
-      }
-    }
-
-    ~Task() {
-      disarm();
-    }
-
-  protected:
-    void fire() override {
-      // Get the result.
-      _::ExceptionOr<_::Void> result;
-      node->get(result);
-
-      // Delete the node, catching any exceptions.
-      KJ_IF_MAYBE(exception, runCatchingExceptions([this]() {
-        node = nullptr;
-      })) {
-        result.addException(kj::mv(*exception));
-      }
-
-      // Call the error handler if there was an exception.
-      KJ_IF_MAYBE(e, result.exception) {
-        taskSet.errorHandler.taskFailed(kj::mv(*e));
-      }
-    }
-
-  private:
-    const Impl& taskSet;
-    kj::Own<_::PromiseNode> node;
-  };
-
-  void add(Promise<void>&& promise) const {
-    auto task = heap<Task>(*this, _::makeSafeForLoop<_::Void>(kj::mv(promise.node), loop));
-    Task* ptr = task;
-    tasks.lockExclusive()->insert(std::make_pair(ptr, kj::mv(task)));
-  }
-
-private:
-  const EventLoop& loop;
-  ErrorHandler& errorHandler;
-
-  // TODO(soon):  Use a linked list instead.  We should factor out the intrusive linked list code
-  //   that appears in EventLoop and ForkHub.
-  MutexGuarded<std::map<Task*, Own<Task>>> tasks;
-};
-
 TaskSet::TaskSet(const EventLoop& loop, ErrorHandler& errorHandler)
-    : impl(heap<Impl>(loop, errorHandler)) {}
+    : impl(heap<_::TaskSetImpl>(loop, errorHandler)) {}
 
 TaskSet::~TaskSet() noexcept(false) {}
 
