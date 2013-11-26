@@ -166,6 +166,8 @@ public:
   // Either the job's complete() or cancel() method will be called exactly once and will have
   // returned before the Own<const Job>'s destructor finishes.
 
+  void clearCallback() { newJobCallback = nullptr; }
+
 private:
   JobWrapper* head = nullptr;
   // Pointer to the first job.

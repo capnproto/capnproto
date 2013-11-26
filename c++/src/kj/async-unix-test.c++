@@ -29,6 +29,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <gtest/gtest.h>
+#include <pthread.h>
 
 namespace kj {
 
@@ -40,13 +41,6 @@ inline void delay() { usleep(10000); }
 #else
 #define EXPECT_SI_CODE(a,b)
 #endif
-
-class DummyErrorHandler: public TaskSet::ErrorHandler {
-public:
-  void taskFailed(kj::Exception&& exception) override {
-    kj::throwRecoverableException(kj::mv(exception));
-  }
-};
 
 class AsyncUnixTest: public testing::Test {
 public:
@@ -61,7 +55,7 @@ TEST_F(AsyncUnixTest, Signals) {
 
   kill(getpid(), SIGUSR2);
 
-  siginfo_t info = loop.wait(loop.onSignal(SIGUSR2));
+  siginfo_t info = loop.onSignal(SIGUSR2).wait();
   EXPECT_EQ(SIGUSR2, info.si_signo);
   EXPECT_SI_CODE(SI_USER, info.si_code);
 }
@@ -79,7 +73,7 @@ TEST_F(AsyncUnixTest, SignalWithValue) {
   value.sival_int = 123;
   sigqueue(getpid(), SIGUSR2, value);
 
-  siginfo_t info = loop.wait(loop.onSignal(SIGUSR2));
+  siginfo_t info = loop.onSignal(SIGUSR2).wait();
   EXPECT_EQ(SIGUSR2, info.si_signo);
   EXPECT_SI_CODE(SI_QUEUE, info.si_code);
   EXPECT_EQ(123, info.si_value.sival_int);
@@ -88,66 +82,48 @@ TEST_F(AsyncUnixTest, SignalWithValue) {
 
 TEST_F(AsyncUnixTest, SignalsMultiListen) {
   UnixEventLoop loop;
-  DummyErrorHandler dummyHandler;
 
-  TaskSet tasks(loop, dummyHandler);
-  tasks.add(loop.onSignal(SIGIO).thenInAnyThread([](siginfo_t&&) {
-        ADD_FAILURE() << "Received wrong signal.";
-      }));
+  loop.daemonize(loop.onSignal(SIGIO).then([](siginfo_t&&) {
+    ADD_FAILURE() << "Received wrong signal.";
+  }));
 
   kill(getpid(), SIGUSR2);
 
-  siginfo_t info = loop.wait(loop.onSignal(SIGUSR2));
+  siginfo_t info = loop.onSignal(SIGUSR2).wait();
   EXPECT_EQ(SIGUSR2, info.si_signo);
   EXPECT_SI_CODE(SI_USER, info.si_code);
 }
 
 TEST_F(AsyncUnixTest, SignalsMultiReceive) {
   UnixEventLoop loop;
-  DummyErrorHandler dummyHandler;
 
   kill(getpid(), SIGUSR2);
   kill(getpid(), SIGIO);
 
-  siginfo_t info = loop.wait(loop.onSignal(SIGUSR2));
+  siginfo_t info = loop.onSignal(SIGUSR2).wait();
   EXPECT_EQ(SIGUSR2, info.si_signo);
   EXPECT_SI_CODE(SI_USER, info.si_code);
 
-  info = loop.wait(loop.onSignal(SIGIO));
+  info = loop.onSignal(SIGIO).wait();
   EXPECT_EQ(SIGIO, info.si_signo);
   EXPECT_SI_CODE(SI_USER, info.si_code);
 }
 
 TEST_F(AsyncUnixTest, SignalsAsync) {
-  // Arrange for another thread to wait on a UnixEventLoop...
-  auto exitThread = newPromiseAndFulfiller<void>();
-  UnixEventLoop unixLoop;
+  UnixEventLoop loop;
+
+  // Arrange for a signal to be sent from another thread.
+  pthread_t mainThread = pthread_self();
   Thread thread([&]() {
-    unixLoop.wait(kj::mv(exitThread.promise));
+    delay();
+    pthread_kill(mainThread, SIGUSR2);
   });
-  KJ_DEFER(exitThread.fulfiller->fulfill());
 
-  // Arrange to catch a signal in the other thread.  But we haven't sent one yet.
-  bool received = false;
-  Promise<void> promise = unixLoop.there(unixLoop.onSignal(SIGUSR2),
-      [&](siginfo_t&& info) {
-    received = true;
-    EXPECT_EQ(SIGUSR2, info.si_signo);
+  siginfo_t info = loop.onSignal(SIGUSR2).wait();
+  EXPECT_EQ(SIGUSR2, info.si_signo);
 #if __linux__
-    EXPECT_SI_CODE(SI_TKILL, info.si_code);
+  EXPECT_SI_CODE(SI_TKILL, info.si_code);
 #endif
-  });
-
-  delay();
-
-  EXPECT_FALSE(received);
-
-  thread.sendSignal(SIGUSR2);
-
-  SimpleEventLoop mainLoop;
-  mainLoop.wait(kj::mv(promise));
-
-  EXPECT_TRUE(received);
 }
 
 TEST_F(AsyncUnixTest, Poll) {
@@ -158,34 +134,31 @@ TEST_F(AsyncUnixTest, Poll) {
   KJ_SYSCALL(pipe(pipefds));
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
 
-  EXPECT_EQ(POLLIN, loop.wait(loop.onFdEvent(pipefds[0], POLLIN | POLLPRI)));
+  EXPECT_EQ(POLLIN, loop.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait());
 }
 
 TEST_F(AsyncUnixTest, PollMultiListen) {
   UnixEventLoop loop;
-  DummyErrorHandler dummyHandler;
 
   int bogusPipefds[2];
   KJ_SYSCALL(pipe(bogusPipefds));
   KJ_DEFER({ close(bogusPipefds[1]); close(bogusPipefds[0]); });
 
-  TaskSet tasks(loop, dummyHandler);
-  tasks.add(loop.onFdEvent(bogusPipefds[0], POLLIN | POLLPRI).thenInAnyThread([](short s) {
-        KJ_DBG(s);
-        ADD_FAILURE() << "Received wrong poll.";
-      }));
+  loop.daemonize(loop.onFdEvent(bogusPipefds[0], POLLIN | POLLPRI).then([](short s) {
+    KJ_DBG(s);
+    ADD_FAILURE() << "Received wrong poll.";
+  }));
 
   int pipefds[2];
   KJ_SYSCALL(pipe(pipefds));
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
 
-  EXPECT_EQ(POLLIN, loop.wait(loop.onFdEvent(pipefds[0], POLLIN | POLLPRI)));
+  EXPECT_EQ(POLLIN, loop.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait());
 }
 
 TEST_F(AsyncUnixTest, PollMultiReceive) {
   UnixEventLoop loop;
-  DummyErrorHandler dummyHandler;
 
   int pipefds[2];
   KJ_SYSCALL(pipe(pipefds));
@@ -197,40 +170,24 @@ TEST_F(AsyncUnixTest, PollMultiReceive) {
   KJ_DEFER({ close(pipefds2[1]); close(pipefds2[0]); });
   KJ_SYSCALL(write(pipefds2[1], "bar", 3));
 
-  EXPECT_EQ(POLLIN, loop.wait(loop.onFdEvent(pipefds[0], POLLIN | POLLPRI)));
-  EXPECT_EQ(POLLIN, loop.wait(loop.onFdEvent(pipefds2[0], POLLIN | POLLPRI)));
+  EXPECT_EQ(POLLIN, loop.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait());
+  EXPECT_EQ(POLLIN, loop.onFdEvent(pipefds2[0], POLLIN | POLLPRI).wait());
 }
 
 TEST_F(AsyncUnixTest, PollAsync) {
-  // Arrange for another thread to wait on a UnixEventLoop...
-  auto exitThread = newPromiseAndFulfiller<void>();
-  UnixEventLoop unixLoop;
-  Thread thread([&]() {
-    unixLoop.wait(kj::mv(exitThread.promise));
-  });
-  KJ_DEFER(exitThread.fulfiller->fulfill());
+  UnixEventLoop loop;
 
-  // Make a pipe and wait on its read end in another thread.  But don't write to it yet.
+  // Make a pipe and wait on its read end while another thread writes to it.
   int pipefds[2];
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
   KJ_SYSCALL(pipe(pipefds));
-  bool received = false;
-  Promise<void> promise = unixLoop.there(unixLoop.onFdEvent(pipefds[0], POLLIN | POLLPRI),
-      [&](short events) {
-    received = true;
-    EXPECT_EQ(POLLIN, events);
+  Thread thread([&]() {
+    delay();
+    KJ_SYSCALL(write(pipefds[1], "foo", 3));
   });
 
-  delay();
-
-  EXPECT_FALSE(received);
-
-  KJ_SYSCALL(write(pipefds[1], "foo", 3));
-
-  SimpleEventLoop mainLoop;
-  mainLoop.wait(kj::mv(promise));
-
-  EXPECT_TRUE(received);
+  // Wait for the event in this thread.
+  EXPECT_EQ(POLLIN, loop.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait());
 }
 
 }  // namespace kj

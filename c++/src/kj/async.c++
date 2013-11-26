@@ -165,17 +165,26 @@ bool EventLoop::isCurrent() const {
 }
 
 EventLoop::EventLoop()
-    : daemons(kj::heap<_::TaskSetImpl>(*this, _::LoggingErrorHandler::instance)) {}
+    : daemons(kj::heap<_::TaskSetImpl>(*this, _::LoggingErrorHandler::instance)) {
+  KJ_REQUIRE(threadLocalEventLoop == nullptr, "This thread already has an EventLoop.");
+  threadLocalEventLoop = this;
+}
 
-EventLoop::~EventLoop() noexcept(false) {}
+EventLoop::~EventLoop() noexcept(false) {
+  KJ_REQUIRE(threadLocalEventLoop == this,
+             "EventLoop being destroyed in a different thread than it was created.");
+  threadLocalEventLoop = nullptr;
+  queue.clearCallback();
+}
 
 void EventLoop::waitImpl(Own<_::PromiseNode> node, _::ExceptionOrValue& result) {
-  EventLoop* oldEventLoop = threadLocalEventLoop;
-  threadLocalEventLoop = this;
-  KJ_DEFER(threadLocalEventLoop = oldEventLoop);
+  KJ_REQUIRE(!running, "wait() is not allowed from within event callbacks.");
 
   BoolEvent event(*this);
   event.fired = node->onReady(event);
+
+  running = true;
+  KJ_DEFER(running = false);
 
   while (!event.fired) {
     KJ_IF_MAYBE(event, queue.peek(nullptr)) {

@@ -207,8 +207,13 @@ class EventLoop: private _::NewJobCallback {
   // EventLoop directly, but instead use `Promise`s to interact with it indirectly.  See the
   // documentation for `Promise`.
   //
-  // You will need to construct an `EventLoop` at the top level of your program.  You can then
-  // use it to construct some promises and wait on the result.  Example:
+  // Each thread can have at most one EventLoop.  When an EventLoop is created, it becomes the
+  // default loop for the current thread.  Async APIs require that the thread has a current
+  // EventLoop, or they will throw exceptions.
+  //
+  // Generally, you will want to construct an `EventLoop` at the top level of your program, e.g.
+  // in the main() function, or in the start function of a thread.  You can then use it to
+  // construct some promises and wait on the result.  Example:
   //
   //     int main() {
   //       SimpleEventLoop loop;
@@ -243,30 +248,24 @@ public:
   // Run the event loop until the promise is fulfilled, then return its result.  If the promise
   // is rejected, throw an exception.
   //
-  // It is possible to call wait() multiple times on the same event loop simultaneously, but you
-  // must be very careful about this.  Here's the deal:
-  // - If wait() is called from thread A when it is already being executed in thread B, then
-  //   thread A will block at least until thread B's call to wait() completes, _even if_ the
-  //   promise is fulfilled before that.
-  // - If wait() is called recursively from a thread in which wait() is already running, then
-  //   the inner wait() will proceed, but the outer wait() obviously cannot return until the inner
-  //   wait() completes.
-  // - Keep in mind that while wait() is running the event loop, it may be firing events that have
-  //   nothing to do with the thing you're actually waiting for.  Avoid holding any mutex locks
-  //   when you call wait() as if some other event handler happens to try to take that lock, you
-  //   will deadlock.
+  // wait() cannot be called recursively -- that is, an event callback cannot call wait().
+  // Instead, callbacks that need to perform more async operations should return a promise and
+  // rely on promise chaining.
   //
-  // In general, it is only a good idea to use `wait()` in high-level code that has a simple
-  // goal, e.g. in the main() function of a program that does one or two specific things and then
-  // exits.  On the other hand, `wait()` should be avoided in library code, unless you spawn a
-  // private thread and event loop to use it on.  Put another way, `wait()` is useful for quick
-  // prototyping but generally bad for "real code".
+  // wait() is primarily useful at the top level of a program -- typically, within the function
+  // that allocated the EventLoop.  For example, a program that performs one or two RPCs and then
+  // exits would likely use wait() in its main() function to wait on each RPC.  On the other hand,
+  // server-side code generally cannot use wait(), because it has to be able to accept multiple
+  // requests at once.
   //
   // If the promise is rejected, `wait()` throws an exception.  This exception is usually fatal,
   // so if compiled with -fno-exceptions, the process will abort.  You may work around this by
   // using `there()` with an error handler to handle this case.  If your error handler throws a
   // non-fatal exception and then recovers by returning a dummy value, wait() will also throw a
   // non-fatal exception and return the same dummy value.
+  //
+  // TODO(someday):  Implement fibers, and let them call wait() even when they are handling an
+  //   event.
 
   template <typename Func>
   PromiseForResult<Func, void> evalLater(Func&& func) const KJ_WARN_UNUSED_RESULT;
@@ -394,6 +393,9 @@ private:
     Event& event;
   };
 
+  bool running = false;
+  // True while looping -- wait() is then not allowed.
+
   _::WorkQueue<EventJob> queue;
 
   Maybe<_::WorkQueue<EventJob>::JobWrapper&> insertionPoint;
@@ -418,6 +420,7 @@ private:
 
   template <typename>
   friend class Promise;
+  friend Promise<void> yield();
 };
 
 // -------------------------------------------------------------------
@@ -634,11 +637,7 @@ public:
   // up doing the same thing as then(); don't use this unless you really know you need it.
 
   T wait();
-  // Equivalent to `EventLoop::current().wait(kj::mv(*this))`.  WARNING:  Although `wait()`
-  // advances the event loop, calls to `wait()` obviously can only return in the reverse of the
-  // order in which they were made.  `wait()` should therefore be considered a hack that should be
-  // avoided.  Consider using it only in high-level and one-off code.  In deep library code, use
-  // `then()` instead.
+  // Equivalent to `EventLoop::current().wait(kj::mv(*this))`.
   //
   // Note that `wait()` consumes the promise on which it is called, in the sense of move semantics.
   // After returning, the promise is no longer valid, and cannot be `wait()`ed on or `then()`ed
@@ -783,6 +782,11 @@ private:
 constexpr _::Void READY_NOW = _::Void();
 // Use this when you need a Promise<void> that is already fulfilled -- this value can be implicitly
 // cast to `Promise<void>`.
+
+template <typename Func>
+inline PromiseForResult<Func, void> evalLater(Func&& func) {
+  return EventLoop::current().evalLater(func);
+}
 
 // -------------------------------------------------------------------
 // Hack for creating a lambda that holds an owned pointer.
@@ -1481,7 +1485,7 @@ T EventLoop::wait(Promise<T>&& promise) {
 }
 
 template <typename Func>
-auto EventLoop::evalLater(Func&& func) const -> PromiseForResult<Func, void> {
+PromiseForResult<Func, void> EventLoop::evalLater(Func&& func) const {
   // Invoke thereImpl() on yieldIfSameThread().  Always spark the result.
   return PromiseForResult<Func, void>(false,
       _::spark<_::FixVoid<_::JoinPromises<_::ReturnType<Func, void>>>>(

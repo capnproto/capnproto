@@ -29,17 +29,8 @@
 namespace kj {
 namespace {
 
-class DummyErrorHandler: public TaskSet::ErrorHandler {
-public:
-  void taskFailed(kj::Exception&& exception) override {
-    kj::throwRecoverableException(kj::mv(exception));
-  }
-};
-
 TEST(AsyncIo, SimpleNetwork) {
   UnixEventLoop loop;
-  DummyErrorHandler dummyHandler;
-  TaskSet tasks(loop, dummyHandler);
   auto network = Network::newSystemNetwork();
 
   Own<ConnectionReceiver> listener;
@@ -50,46 +41,36 @@ TEST(AsyncIo, SimpleNetwork) {
 
   auto port = newPromiseAndFulfiller<uint>();
 
-  tasks.add(loop.evalLater([&]() {
-    return port.promise
-        .then([&](uint portnum) {
-          return network->parseRemoteAddress("127.0.0.1", portnum);
-        }).then([&](Own<RemoteAddress>&& result) {
-          return result->connect();
-        }).then([&](Own<AsyncIoStream>&& result) {
-          client = kj::mv(result);
-          return client->write("foo", 3);
-        });
+  loop.daemonize(port.promise.then([&](uint portnum) {
+    return network->parseRemoteAddress("127.0.0.1", portnum);
+  }).then([&](Own<RemoteAddress>&& result) {
+    return result->connect();
+  }).then([&](Own<AsyncIoStream>&& result) {
+    client = kj::mv(result);
+    return client->write("foo", 3);
   }));
 
-  kj::String result = loop.wait(loop.evalLater([&]() {
-    return network->parseLocalAddress("*")
-        .then([&](Own<LocalAddress>&& result) {
-          listener = result->listen();
-          port.fulfiller->fulfill(listener->getPort());
-          return listener->accept();
-        }).then([&](Own<AsyncIoStream>&& result) {
-          server = kj::mv(result);
-          return server->tryRead(receiveBuffer, 3, 4);
-        }).then([&](size_t n) {
-          EXPECT_EQ(3u, n);
-          return heapString(receiveBuffer, n);
-        });
-  }));
+  kj::String result = network->parseLocalAddress("*").then([&](Own<LocalAddress>&& result) {
+    listener = result->listen();
+    port.fulfiller->fulfill(listener->getPort());
+    return listener->accept();
+  }).then([&](Own<AsyncIoStream>&& result) {
+    server = kj::mv(result);
+    return server->tryRead(receiveBuffer, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return heapString(receiveBuffer, n);
+  }).wait();
 
   EXPECT_EQ("foo", result);
 }
 
 String tryParseLocal(EventLoop& loop, Network& network, StringPtr text, uint portHint = 0) {
-  return loop.wait(loop.evalLater([&]() {
-    return network.parseLocalAddress(text, portHint);
-  }))->toString();
+  return network.parseLocalAddress(text, portHint).wait()->toString();
 }
 
 String tryParseRemote(EventLoop& loop, Network& network, StringPtr text, uint portHint = 0) {
-  return loop.wait(loop.evalLater([&]() {
-    return network.parseRemoteAddress(text, portHint);
-  }))->toString();
+  return network.parseRemoteAddress(text, portHint).wait()->toString();
 }
 
 TEST(AsyncIo, AddressParsing) {
@@ -110,56 +91,42 @@ TEST(AsyncIo, AddressParsing) {
 
 TEST(AsyncIo, OneWayPipe) {
   UnixEventLoop loop;
-  DummyErrorHandler dummyHandler;
-  TaskSet tasks(loop, dummyHandler);
 
   auto pipe = newOneWayPipe();
   char receiveBuffer[4];
 
-  tasks.add(loop.evalLater([&]() {
-    return pipe.out->write("foo", 3);
-  }));
+  loop.daemonize(pipe.out->write("foo", 3));
 
-  kj::String result = loop.wait(loop.evalLater([&]() {
-    return pipe.in->tryRead(receiveBuffer, 3, 4)
-        .then([&](size_t n) {
-          EXPECT_EQ(3u, n);
-          return heapString(receiveBuffer, n);
-        });
-  }));
+  kj::String result = pipe.in->tryRead(receiveBuffer, 3, 4).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return heapString(receiveBuffer, n);
+  }).wait();
 
   EXPECT_EQ("foo", result);
 }
 
 TEST(AsyncIo, TwoWayPipe) {
   UnixEventLoop loop;
-  DummyErrorHandler dummyHandler;
 
   auto pipe = newTwoWayPipe();
   char receiveBuffer1[4];
   char receiveBuffer2[4];
 
-  auto promise = loop.evalLater([&]() {
-    return pipe.ends[0]->write("foo", 3)
-        .then([&]() {
-          return pipe.ends[0]->tryRead(receiveBuffer1, 3, 4);
-        }).then([&](size_t n) {
-          EXPECT_EQ(3u, n);
-          return heapString(receiveBuffer1, n);
-        });
+  auto promise = pipe.ends[0]->write("foo", 3).then([&]() {
+    return pipe.ends[0]->tryRead(receiveBuffer1, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return heapString(receiveBuffer1, n);
   });
 
-  kj::String result = loop.wait(loop.evalLater([&]() {
-    return pipe.ends[1]->write("bar", 3)
-        .then([&]() {
-          return pipe.ends[1]->tryRead(receiveBuffer2, 3, 4);
-        }).then([&](size_t n) {
-          EXPECT_EQ(3u, n);
-          return heapString(receiveBuffer2, n);
-        });
-  }));
+  kj::String result = pipe.ends[1]->write("bar", 3).then([&]() {
+    return pipe.ends[1]->tryRead(receiveBuffer2, 3, 4);
+  }).then([&](size_t n) {
+    EXPECT_EQ(3u, n);
+    return heapString(receiveBuffer2, n);
+  }).wait();
 
-  kj::String result2 = loop.wait(kj::mv(promise));
+  kj::String result2 = promise.wait();
 
   EXPECT_EQ("foo", result);
   EXPECT_EQ("bar", result2);
