@@ -202,11 +202,11 @@ public:
   // the VALIDATE_INPUT() macro which may throw an exception; if it returns normally, the caller
   // will need to continue with default values.
 
-  virtual kj::Maybe<kj::Own<const ClientHook>> extractCap(const _::StructReader& capDescriptor) = 0;
+  virtual kj::Maybe<kj::Own<ClientHook>> extractCap(const _::StructReader& capDescriptor) = 0;
   // Given a StructReader for a capability descriptor embedded in the message, return the
   // corresponding capability.  Returns null if the message is not imbued with a capability context.
 
-  virtual kj::Maybe<kj::Own<const ClientHook>> newBrokenCap(kj::StringPtr description) = 0;
+  virtual kj::Maybe<kj::Own<ClientHook>> newBrokenCap(kj::StringPtr description) = 0;
   // Returns a capability which, when called, always throws an exception with the given description.
   // Returns null if the message is not imbued with a capability context.
 };
@@ -220,8 +220,8 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Maybe<kj::Own<const ClientHook>> extractCap(const _::StructReader& capDescriptor);
-  kj::Maybe<kj::Own<const ClientHook>> newBrokenCap(kj::StringPtr description);
+  kj::Maybe<kj::Own<ClientHook>> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<ClientHook>> newBrokenCap(kj::StringPtr description);
 
 private:
   MessageReader* message;
@@ -245,8 +245,8 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Maybe<kj::Own<const ClientHook>> extractCap(const _::StructReader& capDescriptor);
-  kj::Maybe<kj::Own<const ClientHook>> newBrokenCap(kj::StringPtr description);
+  kj::Maybe<kj::Own<ClientHook>> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<ClientHook>> newBrokenCap(kj::StringPtr description);
 
 private:
   Arena* base;
@@ -277,7 +277,7 @@ public:
   // the arena is guaranteed to succeed.  Therefore callers should try to allocate from a specific
   // segment first if there is one, then fall back to the arena.
 
-  virtual OrphanBuilder injectCap(kj::Own<const ClientHook>&& cap) = 0;
+  virtual OrphanBuilder injectCap(kj::Own<ClientHook>&& cap) = 0;
   // Add the capability to the message and initialize the given pointer as an interface pointer
   // pointing to this cap.
 
@@ -303,13 +303,13 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Maybe<kj::Own<const ClientHook>> extractCap(const _::StructReader& capDescriptor);
-  kj::Maybe<kj::Own<const ClientHook>> newBrokenCap(kj::StringPtr description);
+  kj::Maybe<kj::Own<ClientHook>> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<ClientHook>> newBrokenCap(kj::StringPtr description);
 
   // implements BuilderArena -----------------------------------------
   SegmentBuilder* getSegment(SegmentId id) override;
   AllocateResult allocate(WordCount amount) override;
-  OrphanBuilder injectCap(kj::Own<const ClientHook>&& cap);
+  OrphanBuilder injectCap(kj::Own<ClientHook>&& cap);
   void dropCap(const StructReader& capDescriptor);
 
 private:
@@ -340,13 +340,13 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Maybe<kj::Own<const ClientHook>> extractCap(const _::StructReader& capDescriptor);
-  kj::Maybe<kj::Own<const ClientHook>> newBrokenCap(kj::StringPtr description);
+  kj::Maybe<kj::Own<ClientHook>> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<ClientHook>> newBrokenCap(kj::StringPtr description);
 
   // implements BuilderArena -----------------------------------------
   SegmentBuilder* getSegment(SegmentId id) override;
   AllocateResult allocate(WordCount amount) override;
-  OrphanBuilder injectCap(kj::Own<const ClientHook>&& cap);
+  OrphanBuilder injectCap(kj::Own<ClientHook>&& cap);
   void dropCap(const StructReader& capDescriptor);
 
 private:

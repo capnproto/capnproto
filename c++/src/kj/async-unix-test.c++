@@ -70,6 +70,7 @@ TEST_F(AsyncUnixTest, SignalWithValue) {
   UnixEventLoop loop;
 
   union sigval value;
+  memset(&value, 0, sizeof(value));
   value.sival_int = 123;
   sigqueue(getpid(), SIGUSR2, value);
 

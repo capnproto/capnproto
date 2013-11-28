@@ -54,7 +54,7 @@ TEST(Capability, Basic) {
   kj::SimpleEventLoop loop;
 
   int callCount = 0;
-  test::TestInterface::Client client(kj::heap<TestInterfaceImpl>(callCount), loop);
+  test::TestInterface::Client client(kj::heap<TestInterfaceImpl>(callCount));
 
   auto request1 = client.fooRequest();
   request1.setI(123);
@@ -92,7 +92,7 @@ TEST(Capability, Inheritance) {
   kj::SimpleEventLoop loop;
 
   int callCount = 0;
-  test::TestExtends::Client client1(kj::heap<TestExtendsImpl>(callCount), loop);
+  test::TestExtends::Client client1(kj::heap<TestExtendsImpl>(callCount));
   test::TestInterface::Client client2 = client1;
   auto client = client2.castAs<test::TestExtends>();
 
@@ -121,12 +121,11 @@ TEST(Capability, Pipelining) {
 
   int callCount = 0;
   int chainedCallCount = 0;
-  test::TestPipeline::Client client(kj::heap<TestPipelineImpl>(callCount), loop);
+  test::TestPipeline::Client client(kj::heap<TestPipelineImpl>(callCount));
 
   auto request = client.getCapRequest();
   request.setN(234);
-  request.setInCap(test::TestInterface::Client(
-      kj::heap<TestInterfaceImpl>(chainedCallCount), loop));
+  request.setInCap(test::TestInterface::Client(kj::heap<TestInterfaceImpl>(chainedCallCount)));
 
   auto promise = request.send();
 
@@ -158,8 +157,8 @@ TEST(Capability, TailCall) {
   int calleeCallCount = 0;
   int callerCallCount = 0;
 
-  test::TestTailCallee::Client callee(kj::heap<TestTailCalleeImpl>(calleeCallCount), loop);
-  test::TestTailCaller::Client caller(kj::heap<TestTailCallerImpl>(callerCallCount), loop);
+  test::TestTailCallee::Client callee(kj::heap<TestTailCalleeImpl>(calleeCallCount));
+  test::TestTailCaller::Client caller(kj::heap<TestTailCallerImpl>(callerCallCount));
 
   auto request = caller.fooRequest();
   request.setI(456);
@@ -193,24 +192,23 @@ TEST(Capability, AsyncCancelation) {
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
   auto destructionPromise = loop.there(kj::mv(paf.promise), [&]() { destroyed = true; });
-  destructionPromise.eagerlyEvaluate(loop);
+  destructionPromise.eagerlyEvaluate();
 
   int callCount = 0;
 
-  test::TestMoreStuff::Client client(kj::heap<TestMoreStuffImpl>(callCount), loop);
+  test::TestMoreStuff::Client client(kj::heap<TestMoreStuffImpl>(callCount));
 
   kj::Promise<void> promise = nullptr;
 
   bool returned = false;
   {
     auto request = client.expectAsyncCancelRequest();
-    request.setCap(test::TestInterface::Client(
-        kj::heap<TestCapDestructor>(kj::mv(paf.fulfiller)), loop));
+    request.setCap(test::TestInterface::Client(kj::heap<TestCapDestructor>(kj::mv(paf.fulfiller))));
     promise = loop.there(request.send(),
         [&](Response<test::TestMoreStuff::ExpectAsyncCancelResults>&& response) {
       returned = true;
     });
-    promise.eagerlyEvaluate(loop);
+    promise.eagerlyEvaluate();
   }
   loop.wait(loop.evalLater([]() {}));
   loop.wait(loop.evalLater([]() {}));
@@ -234,20 +232,19 @@ TEST(Capability, SyncCancelation) {
   int callCount = 0;
   int innerCallCount = 0;
 
-  test::TestMoreStuff::Client client(kj::heap<TestMoreStuffImpl>(callCount), loop);
+  test::TestMoreStuff::Client client(kj::heap<TestMoreStuffImpl>(callCount));
 
   kj::Promise<void> promise = nullptr;
 
   bool returned = false;
   {
     auto request = client.expectSyncCancelRequest();
-    request.setCap(test::TestInterface::Client(
-        kj::heap<TestInterfaceImpl>(innerCallCount), loop));
+    request.setCap(test::TestInterface::Client(kj::heap<TestInterfaceImpl>(innerCallCount)));
     promise = loop.there(request.send(),
         [&](Response<test::TestMoreStuff::ExpectSyncCancelResults>&& response) {
       returned = true;
     });
-    promise.eagerlyEvaluate(loop);
+    promise.eagerlyEvaluate();
   }
   loop.wait(loop.evalLater([]() {}));
   loop.wait(loop.evalLater([]() {}));
@@ -276,7 +273,7 @@ TEST(Capability, DynamicClient) {
 
   int callCount = 0;
   DynamicCapability::Client client =
-      test::TestInterface::Client(kj::heap<TestInterfaceImpl>(callCount), loop);
+      test::TestInterface::Client(kj::heap<TestInterfaceImpl>(callCount));
 
   auto request1 = client.newRequest("foo");
   request1.set("i", 123);
@@ -316,7 +313,7 @@ TEST(Capability, DynamicClientInheritance) {
   int callCount = 0;
 
   DynamicCapability::Client client1 =
-      test::TestExtends::Client(kj::heap<TestExtendsImpl>(callCount), loop);
+      test::TestExtends::Client(kj::heap<TestExtendsImpl>(callCount));
   EXPECT_EQ(Schema::from<test::TestExtends>(), client1.getSchema());
   EXPECT_NE(Schema::from<test::TestInterface>(), client1.getSchema());
 
@@ -352,12 +349,11 @@ TEST(Capability, DynamicClientPipelining) {
   int callCount = 0;
   int chainedCallCount = 0;
   DynamicCapability::Client client =
-      test::TestPipeline::Client(kj::heap<TestPipelineImpl>(callCount), loop);
+      test::TestPipeline::Client(kj::heap<TestPipelineImpl>(callCount));
 
   auto request = client.newRequest("getCap");
   request.set("n", 234);
-  request.set("inCap", test::TestInterface::Client(
-      kj::heap<TestInterfaceImpl>(chainedCallCount), loop));
+  request.set("inCap", test::TestInterface::Client(kj::heap<TestInterfaceImpl>(chainedCallCount)));
 
   auto promise = request.send();
 
@@ -423,7 +419,7 @@ TEST(Capability, DynamicServer) {
 
   int callCount = 0;
   test::TestInterface::Client client =
-      DynamicCapability::Client(kj::heap<TestInterfaceDynamicImpl>(callCount), loop)
+      DynamicCapability::Client(kj::heap<TestInterfaceDynamicImpl>(callCount))
           .castAs<test::TestInterface>();
 
   auto request1 = client.fooRequest();
@@ -492,7 +488,7 @@ TEST(Capability, DynamicServerInheritance) {
 
   int callCount = 0;
   test::TestExtends::Client client1 =
-      DynamicCapability::Client(kj::heap<TestExtendsDynamicImpl>(callCount), loop)
+      DynamicCapability::Client(kj::heap<TestExtendsDynamicImpl>(callCount))
           .castAs<test::TestExtends>();
   test::TestInterface::Client client2 = client1;
   auto client = client2.castAs<test::TestExtends>();
@@ -566,12 +562,11 @@ TEST(Capability, DynamicServerPipelining) {
 
   int callCount = 0;
   int chainedCallCount = 0;
-  test::TestPipeline::Client client(kj::heap<TestPipelineImpl>(callCount), loop);
+  test::TestPipeline::Client client(kj::heap<TestPipelineImpl>(callCount));
 
   auto request = client.getCapRequest();
   request.setN(234);
-  request.setInCap(test::TestInterface::Client(
-      kj::heap<TestInterfaceImpl>(chainedCallCount), loop));
+  request.setInCap(test::TestInterface::Client(kj::heap<TestInterfaceImpl>(chainedCallCount)));
 
   auto promise = request.send();
 
@@ -599,24 +594,22 @@ TEST(Capability, DynamicServerPipelining) {
 
 // =======================================================================================
 
-void verifyClient(const test::TestInterface::Client& client, kj::SimpleEventLoop& loop,
-                  const int& callCount) {
+void verifyClient(test::TestInterface::Client client, const int& callCount) {
   int origCount = callCount;
   auto request = client.fooRequest();
   request.setI(123);
   request.setJ(true);
-  auto response = loop.wait(request.send());
+  auto response = request.send().wait();
   EXPECT_EQ("foo", response.getX());
   EXPECT_EQ(origCount + 1, callCount);
 }
 
-void verifyClient(const DynamicCapability::Client& client, kj::SimpleEventLoop& loop,
-                  const int& callCount) {
+void verifyClient(DynamicCapability::Client client, const int& callCount) {
   int origCount = callCount;
   auto request = client.newRequest("foo");
   request.set("i", 123);
   request.set("j", true);
-  auto response = loop.wait(request.send());
+  auto response = request.send().wait();
   EXPECT_EQ("foo", response.get("x").as<Text>());
   EXPECT_EQ(origCount + 1, callCount);
 }
@@ -630,8 +623,8 @@ TEST(Capability, ObjectsAndOrphans) {
   // We use a TestPipeline instance here merely as a way to conveniently obtain an imbued message
   // instance.
   test::TestPipeline::Client baseClient(nullptr);
-  test::TestInterface::Client client1(kj::heap<TestInterfaceImpl>(callCount1), loop);
-  test::TestInterface::Client client2(kj::heap<TestInterfaceImpl>(callCount2), loop);
+  test::TestInterface::Client client1(kj::heap<TestInterfaceImpl>(callCount1));
+  test::TestInterface::Client client2(kj::heap<TestInterfaceImpl>(callCount2));
 
   auto request = baseClient.testPointersRequest();
   request.setCap(client1);
@@ -643,45 +636,45 @@ TEST(Capability, ObjectsAndOrphans) {
 
   EXPECT_FALSE(request.hasCap());
 
-  verifyClient(orphan.get(), loop, callCount1);
-  verifyClient(orphan.getReader(), loop, callCount1);
+  verifyClient(orphan.get(), callCount1);
+  verifyClient(orphan.getReader(), callCount1);
 
   request.getObj().adopt(kj::mv(orphan));
   EXPECT_TRUE(orphan == nullptr);
 
-  verifyClient(request.getObj().getAs<test::TestInterface>(), loop, callCount1);
-  verifyClient(request.asReader().getObj().getAs<test::TestInterface>(), loop, callCount1);
+  verifyClient(request.getObj().getAs<test::TestInterface>(), callCount1);
+  verifyClient(request.asReader().getObj().getAs<test::TestInterface>(), callCount1);
   verifyClient(request.getObj().getAs<DynamicCapability>(
-      Schema::from<test::TestInterface>()), loop, callCount1);
+      Schema::from<test::TestInterface>()), callCount1);
   verifyClient(request.asReader().getObj().getAs<DynamicCapability>(
-      Schema::from<test::TestInterface>()), loop, callCount1);
+      Schema::from<test::TestInterface>()), callCount1);
 
   request.getObj().clear();
   EXPECT_FALSE(request.hasObj());
 
   request.getObj().setAs<test::TestInterface>(client2);
-  verifyClient(request.getObj().getAs<test::TestInterface>(), loop, callCount2);
+  verifyClient(request.getObj().getAs<test::TestInterface>(), callCount2);
 
   Orphan<DynamicCapability> dynamicOrphan = request.getObj().disownAs<DynamicCapability>(
       Schema::from<test::TestInterface>());
-  verifyClient(dynamicOrphan.get(), loop, callCount2);
-  verifyClient(dynamicOrphan.getReader(), loop, callCount2);
+  verifyClient(dynamicOrphan.get(), callCount2);
+  verifyClient(dynamicOrphan.getReader(), callCount2);
 
   Orphan<DynamicValue> dynamicValueOrphan = kj::mv(dynamicOrphan);
-  verifyClient(dynamicValueOrphan.get().as<DynamicCapability>(), loop, callCount2);
+  verifyClient(dynamicValueOrphan.get().as<DynamicCapability>(), callCount2);
 
   orphan = dynamicValueOrphan.releaseAs<test::TestInterface>();
   EXPECT_FALSE(orphan == nullptr);
-  verifyClient(orphan.get(), loop, callCount2);
+  verifyClient(orphan.get(), callCount2);
 
   request.adoptCap(kj::mv(orphan));
   EXPECT_TRUE(orphan == nullptr);
 
-  verifyClient(request.getCap(), loop, callCount2);
+  verifyClient(request.getCap(), callCount2);
 
   Orphan<DynamicCapability> dynamicOrphan2 = request.disownCap();
-  verifyClient(dynamicOrphan2.get(), loop, callCount2);
-  verifyClient(dynamicOrphan2.getReader(), loop, callCount2);
+  verifyClient(dynamicOrphan2.get(), callCount2);
+  verifyClient(dynamicOrphan2.getReader(), callCount2);
 }
 
 TEST(Capability, Lists) {
@@ -690,10 +683,10 @@ TEST(Capability, Lists) {
   int callCount1 = 0;
   int callCount2 = 0;
   int callCount3 = 0;
-  test::TestPipeline::Client baseClient(kj::heap<TestPipelineImpl>(callCount1), loop);
-  test::TestInterface::Client client1(kj::heap<TestInterfaceImpl>(callCount1), loop);
-  test::TestInterface::Client client2(kj::heap<TestInterfaceImpl>(callCount2), loop);
-  test::TestInterface::Client client3(kj::heap<TestInterfaceImpl>(callCount3), loop);
+  test::TestPipeline::Client baseClient(kj::heap<TestPipelineImpl>(callCount1));
+  test::TestInterface::Client client1(kj::heap<TestInterfaceImpl>(callCount1));
+  test::TestInterface::Client client2(kj::heap<TestInterfaceImpl>(callCount2));
+  test::TestInterface::Client client3(kj::heap<TestInterfaceImpl>(callCount3));
 
   auto request = baseClient.testPointersRequest();
 
@@ -702,24 +695,24 @@ TEST(Capability, Lists) {
   list.set(1, client2);
   list.set(2, client3);
 
-  verifyClient(list[0], loop, callCount1);
-  verifyClient(list[1], loop, callCount2);
-  verifyClient(list[2], loop, callCount3);
+  verifyClient(list[0], callCount1);
+  verifyClient(list[1], callCount2);
+  verifyClient(list[2], callCount3);
 
   auto listReader = request.asReader().getList();
-  verifyClient(listReader[0], loop, callCount1);
-  verifyClient(listReader[1], loop, callCount2);
-  verifyClient(listReader[2], loop, callCount3);
+  verifyClient(listReader[0], callCount1);
+  verifyClient(listReader[1], callCount2);
+  verifyClient(listReader[2], callCount3);
 
   auto dynamicList = toDynamic(list);
-  verifyClient(dynamicList[0].as<DynamicCapability>(), loop, callCount1);
-  verifyClient(dynamicList[1].as<DynamicCapability>(), loop, callCount2);
-  verifyClient(dynamicList[2].as<DynamicCapability>(), loop, callCount3);
+  verifyClient(dynamicList[0].as<DynamicCapability>(), callCount1);
+  verifyClient(dynamicList[1].as<DynamicCapability>(), callCount2);
+  verifyClient(dynamicList[2].as<DynamicCapability>(), callCount3);
 
   auto dynamicListReader = toDynamic(listReader);
-  verifyClient(dynamicListReader[0].as<DynamicCapability>(), loop, callCount1);
-  verifyClient(dynamicListReader[1].as<DynamicCapability>(), loop, callCount2);
-  verifyClient(dynamicListReader[2].as<DynamicCapability>(), loop, callCount3);
+  verifyClient(dynamicListReader[0].as<DynamicCapability>(), callCount1);
+  verifyClient(dynamicListReader[1].as<DynamicCapability>(), callCount2);
+  verifyClient(dynamicListReader[2].as<DynamicCapability>(), callCount3);
 }
 
 }  // namespace

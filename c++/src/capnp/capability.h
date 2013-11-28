@@ -94,11 +94,11 @@ class Response: public Results::Reader {
   // is move-only -- once it goes out-of-scope, the underlying message will be freed.
 
 public:
-  inline Response(typename Results::Reader reader, kj::Own<const ResponseHook>&& hook)
+  inline Response(typename Results::Reader reader, kj::Own<ResponseHook>&& hook)
       : Results::Reader(reader), hook(kj::mv(hook)) {}
 
 private:
-  kj::Own<const ResponseHook> hook;
+  kj::Own<ResponseHook> hook;
 
   template <typename, typename>
   friend class Request;
@@ -115,32 +115,32 @@ public:
   // methods.
 
   template <typename T, typename = kj::EnableIf<kj::canConvert<T*, Capability::Server*>()>>
-  Client(kj::Own<T>&& server, const kj::EventLoop& loop = kj::EventLoop::current());
+  Client(kj::Own<T>&& server);
   // Make a client capability that wraps the given server capability.  The server's methods will
   // only be executed in the given EventLoop, regardless of what thread calls the client's methods.
 
   template <typename T, typename = kj::EnableIf<kj::canConvert<T*, Client*>()>>
-  Client(kj::Promise<T>&& promise, const kj::EventLoop& loop = kj::EventLoop::current());
+  Client(kj::Promise<T>&& promise);
   // Make a client from a promise for a future client.  The resulting client queues calls until the
   // promise resolves.
 
   Client(kj::Exception&& exception);
   // Make a broken client that throws the given exception from all calls.
 
-  Client(const Client& other);
-  Client& operator=(const Client& other);
-  // Copies by reference counting.  Warning:  Refcounting may be slow due to atomic ops.  Try to
-  // only use move instead.
+  Client(Client& other);
+  Client& operator=(Client& other);
+  // Copies by reference counting.  Warning:  This refcounting is not thread-safe.  All copies of
+  // the client must remain in one thread.
 
   Client(Client&&) = default;
   Client& operator=(Client&&) = default;
-  // Move is fast.
+  // Move constructor avoids reference counting.
 
-  explicit Client(kj::Own<const ClientHook>&& hook);
+  explicit Client(kj::Own<ClientHook>&& hook);
   // For use by the RPC implementation:  Wrap a ClientHook.
 
   template <typename T>
-  typename T::Client castAs() const;
+  typename T::Client castAs();
   // Reinterpret the capability as implementing the given interface.  Note that no error will occur
   // here if the capability does not actually implement this interface, but later method calls will
   // fail.  It's up to the application to decide how indicate that additional interfaces are
@@ -149,10 +149,10 @@ public:
   // TODO(kenton):  GCC 4.8 / Clang 3.3:  rvalue-qualified version for better performance.
 
   template <typename T>
-  typename T::Client castAs(InterfaceSchema schema) const;
+  typename T::Client castAs(InterfaceSchema schema);
   // Dynamic version.  `T` must be `DynamicCapability`, and you must `#include <capnp/dynamic.h>`.
 
-  kj::Promise<void> whenResolved() const;
+  kj::Promise<void> whenResolved();
   // If the capability is actually only a promise, the returned promise resolves once the
   // capability itself has resolved to its final destination (or propagates the exception if
   // the capability promise is rejected).  This is mainly useful for error-checking in the case
@@ -166,13 +166,12 @@ protected:
 
   template <typename Params, typename Results>
   Request<Params, Results> newCall(uint64_t interfaceId, uint16_t methodId,
-                                   uint firstSegmentWordSize) const;
+                                   uint firstSegmentWordSize);
 
 private:
-  kj::Own<const ClientHook> hook;
+  kj::Own<ClientHook> hook;
 
-  static kj::Own<const ClientHook> makeLocalClient(
-      kj::Own<Capability::Server>&& server, const kj::EventLoop& eventLoop);
+  static kj::Own<ClientHook> makeLocalClient(kj::Own<Capability::Server>&& server);
 
   template <typename, Kind>
   friend struct _::PointerHelpers;
@@ -306,7 +305,7 @@ public:
   virtual RemotePromise<ObjectPointer> send() = 0;
   // Send the call and return a promise for the result.
 
-  virtual const void* getBrand() const = 0;
+  virtual const void* getBrand() = 0;
   // Returns a void* that identifies who made this request.  This can be used by an RPC adapter to
   // discover when tail call is going to be sent over its own connection and therefore can be
   // optimized into a remote tail call.
@@ -333,17 +332,17 @@ public:
 class ClientHook {
 public:
   virtual Request<ObjectPointer, ObjectPointer> newCall(
-      uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const = 0;
+      uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) = 0;
   // Start a new call, allowing the client to allocate request/response objects as it sees fit.
   // This version is used when calls are made from application code in the local process.
 
   struct VoidPromiseAndPipeline {
     kj::Promise<void> promise;
-    kj::Own<const PipelineHook> pipeline;
+    kj::Own<PipelineHook> pipeline;
   };
 
   virtual VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                                      kj::Own<CallContextHook>&& context) const = 0;
+                                      kj::Own<CallContextHook>&& context) = 0;
   // Call the object, but the caller controls allocation of the request/response objects.  If the
   // callee insists on allocating this objects itself, it must make a copy.  This version is used
   // when calls come in over the network via an RPC system.  During the call, the context object
@@ -358,25 +357,25 @@ public:
   //
   // The call must not begin synchronously, as the caller may hold arbitrary mutexes.
 
-  virtual kj::Maybe<const ClientHook&> getResolved() const = 0;
+  virtual kj::Maybe<ClientHook&> getResolved() = 0;
   // If this ClientHook is a promise that has already resolved, returns the inner, resolved version
   // of the capability.  The caller may permanently replace this client with the resolved one if
   // desired.  Returns null if the client isn't a promise or hasn't resolved yet -- use
   // `whenMoreResolved()` to distinguish between them.
 
-  virtual kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const = 0;
+  virtual kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() = 0;
   // If this client is a settled reference (not a promise), return nullptr.  Otherwise, return a
   // promise that eventually resolves to a new client that is closer to being the final, settled
   // client (i.e. the value eventually returned by `getResolved()`).  Calling this repeatedly
   // should eventually produce a settled client.
 
-  kj::Promise<void> whenResolved() const;
+  kj::Promise<void> whenResolved();
   // Repeatedly calls whenMoreResolved() until it returns nullptr.
 
-  virtual kj::Own<const ClientHook> addRef() const = 0;
+  virtual kj::Own<ClientHook> addRef() = 0;
   // Return a new reference to the same capability.
 
-  virtual const void* getBrand() const = 0;
+  virtual const void* getBrand() = 0;
   // Returns a void* that identifies who made this client.  This can be used by an RPC adapter to
   // discover when a capability it needs to marshal is one that it created in the first place, and
   // therefore it can transfer the capability without proxying.
@@ -406,8 +405,7 @@ public:
   virtual kj::Own<CallContextHook> addRef() = 0;
 };
 
-kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<const ClientHook>>&& promise,
-                                          const kj::EventLoop& loop = kj::EventLoop::current());
+kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<ClientHook>>&& promise);
 // Returns a ClientHook that queues up calls until `promise` resolves, then forwards them to
 // the new client.  This hook's `getResolved()` and `whenMoreResolved()` methods will reflect the
 // redirection to the eventual replacement client.
@@ -428,7 +426,7 @@ struct PointerHelpers<T, Kind::INTERFACE> {
   static inline void set(PointerBuilder builder, typename T::Client&& value) {
     builder.setCapability(kj::mv(value.Capability::Client::hook));
   }
-  static inline void set(PointerBuilder builder, const typename T::Client& value) {
+  static inline void set(PointerBuilder builder, typename T::Client& value) {
     builder.setCapability(value.Capability::Client::hook->addRef());
   }
   static inline void adopt(PointerBuilder builder, Orphan<T>&& value) {
@@ -545,7 +543,7 @@ RemotePromise<Results> Request<Params, Results>::send() {
   // Explicitly upcast to kj::Promise to make clear that calling .then() doesn't invalidate the
   // Pipeline part of the RemotePromise.
   auto typedPromise = kj::implicitCast<kj::Promise<Response<ObjectPointer>>&>(typelessPromise)
-      .thenInAnyThread([](Response<ObjectPointer>&& response) -> Response<Results> {
+      .then([](Response<ObjectPointer>&& response) -> Response<Results> {
         return Response<Results>(response.getAs<Results>(), kj::mv(response.hook));
       });
 
@@ -556,30 +554,28 @@ RemotePromise<Results> Request<Params, Results>::send() {
   return RemotePromise<Results>(kj::mv(typedPromise), kj::mv(typedPipeline));
 }
 
-inline Capability::Client::Client(kj::Own<const ClientHook>&& hook): hook(kj::mv(hook)) {}
+inline Capability::Client::Client(kj::Own<ClientHook>&& hook): hook(kj::mv(hook)) {}
 template <typename T, typename>
-inline Capability::Client::Client(kj::Own<T>&& server, const kj::EventLoop& loop)
-    : hook(makeLocalClient(kj::mv(server), loop)) {}
+inline Capability::Client::Client(kj::Own<T>&& server)
+    : hook(makeLocalClient(kj::mv(server))) {}
 template <typename T, typename>
-inline Capability::Client::Client(kj::Promise<T>&& promise, const kj::EventLoop& loop)
-    : hook(newLocalPromiseClient(
-        promise.thenInAnyThread([](T&& t) { return kj::mv(t.hook); }),
-        loop)) {}
-inline Capability::Client::Client(const Client& other): hook(other.hook->addRef()) {}
-inline Capability::Client& Capability::Client::operator=(const Client& other) {
+inline Capability::Client::Client(kj::Promise<T>&& promise)
+    : hook(newLocalPromiseClient(promise.then([](T&& t) { return kj::mv(t.hook); }))) {}
+inline Capability::Client::Client(Client& other): hook(other.hook->addRef()) {}
+inline Capability::Client& Capability::Client::operator=(Client& other) {
   hook = other.hook->addRef();
   return *this;
 }
 template <typename T>
-inline typename T::Client Capability::Client::castAs() const {
+inline typename T::Client Capability::Client::castAs() {
   return typename T::Client(hook->addRef());
 }
-inline kj::Promise<void> Capability::Client::whenResolved() const {
+inline kj::Promise<void> Capability::Client::whenResolved() {
   return hook->whenResolved();
 }
 template <typename Params, typename Results>
 inline Request<Params, Results> Capability::Client::newCall(
-    uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const {
+    uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) {
   auto typeless = hook->newCall(interfaceId, methodId, firstSegmentWordSize);
   return Request<Params, Results>(typeless.template getAs<Params>(), kj::mv(typeless.hook));
 }

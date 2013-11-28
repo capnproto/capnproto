@@ -58,9 +58,8 @@ class CapExtractorBase {
   // Non-template base class for CapExtractor<T>.
 
 private:
-  virtual kj::Own<const ClientHook> extractCapInternal(
-      const _::StructReader& capDescriptor) const = 0;
-  virtual kj::Own<const ClientHook> newBrokenCapInternal(kj::StringPtr description) const = 0;
+  virtual kj::Own<ClientHook> extractCapInternal(const _::StructReader& capDescriptor) = 0;
+  virtual kj::Own<ClientHook> newBrokenCapInternal(kj::StringPtr description) = 0;
   friend class _::ImbuedReaderArena;
 };
 
@@ -69,11 +68,10 @@ class CapInjectorBase {
 
 private:
   virtual _::OrphanBuilder injectCapInternal(
-      _::BuilderArena* arena, kj::Own<const ClientHook>&& cap) const = 0;
-  virtual void dropCapInternal(const _::StructReader& capDescriptor) const = 0;
-  virtual kj::Own<const ClientHook> getInjectedCapInternal(
-      const _::StructReader& capDescriptor) const = 0;
-  virtual kj::Own<const ClientHook> newBrokenCapInternal(kj::StringPtr description) const = 0;
+      _::BuilderArena* arena, kj::Own<ClientHook>&& cap) = 0;
+  virtual void dropCapInternal(const _::StructReader& capDescriptor) = 0;
+  virtual kj::Own<ClientHook> getInjectedCapInternal(const _::StructReader& capDescriptor) = 0;
+  virtual kj::Own<ClientHook> newBrokenCapInternal(kj::StringPtr description) = 0;
   friend class _::ImbuedBuilderArena;
 };
 
@@ -84,13 +82,12 @@ class CapExtractor: public CapExtractorBase {
   // capabilities.  (On the wire, an interface pointer actually points to a struct of this type.)
 
 public:
-  virtual kj::Own<const ClientHook> extractCap(typename CapDescriptor::Reader descriptor) const = 0;
+  virtual kj::Own<ClientHook> extractCap(typename CapDescriptor::Reader descriptor) = 0;
   // Given the descriptor read off the wire, construct a live capability.
 
 private:
-  kj::Own<const ClientHook> extractCapInternal(
-      const _::StructReader& capDescriptor) const override final;
-  kj::Own<const ClientHook> newBrokenCapInternal(kj::StringPtr description) const override final;
+  kj::Own<ClientHook> extractCapInternal(const _::StructReader& capDescriptor) override final;
+  kj::Own<ClientHook> newBrokenCapInternal(kj::StringPtr description) override final;
 };
 
 template <typename CapDescriptor>
@@ -100,26 +97,23 @@ class CapInjector: public CapInjectorBase {
   // capabilities.  (On the wire, an interface pointer actually points to a struct of this type.)
 
 public:
-  virtual void injectCap(typename CapDescriptor::Builder descriptor,
-                         kj::Own<const ClientHook>&& cap) const = 0;
+  virtual void injectCap(typename CapDescriptor::Builder descriptor, kj::Own<ClientHook>&& cap) = 0;
   // Fill in the given descriptor so that it describes the given capability.
 
-  virtual kj::Own<const ClientHook> getInjectedCap(
-      typename CapDescriptor::Reader descriptor) const = 0;
+  virtual kj::Own<ClientHook> getInjectedCap(typename CapDescriptor::Reader descriptor) = 0;
   // Read back a cap that was previously injected with `injectCap`.  This should return a new
   // reference.
 
-  virtual void dropCap(typename CapDescriptor::Reader descriptor) const = 0;
+  virtual void dropCap(typename CapDescriptor::Reader descriptor) = 0;
   // Read back a cap that was previously injected with `injectCap`.  This should return a new
   // reference.
 
 private:
   _::OrphanBuilder injectCapInternal(_::BuilderArena* arena,
-                                     kj::Own<const ClientHook>&& cap) const override final;
-  void dropCapInternal(const _::StructReader& capDescriptor) const override final;
-  kj::Own<const ClientHook> getInjectedCapInternal(
-      const _::StructReader& capDescriptor) const override final;
-  kj::Own<const ClientHook> newBrokenCapInternal(kj::StringPtr description) const override final;
+                                     kj::Own<ClientHook>&& cap) override final;
+  void dropCapInternal(const _::StructReader& capDescriptor) override final;
+  kj::Own<ClientHook> getInjectedCapInternal(const _::StructReader& capDescriptor) override final;
+  kj::Own<ClientHook> newBrokenCapInternal(kj::StringPtr description) override final;
 };
 
 // -------------------------------------------------------------------
@@ -197,36 +191,33 @@ private:
 
   struct State {
     uint counter;
-    kj::Vector<kj::Own<const ClientHook>> caps;
+    kj::Vector<kj::Own<ClientHook>> caps;
   };
   kj::MutexGuarded<State> state;
 
-  void injectCap(_::LocalCapDescriptor::Builder descriptor,
-                 kj::Own<const ClientHook>&& cap) const override;
-  kj::Own<const ClientHook> getInjectedCap(
-      _::LocalCapDescriptor::Reader descriptor) const override;
-  void dropCap(_::LocalCapDescriptor::Reader descriptor) const override;
+  void injectCap(_::LocalCapDescriptor::Builder descriptor, kj::Own<ClientHook>&& cap) override;
+  kj::Own<ClientHook> getInjectedCap(_::LocalCapDescriptor::Reader descriptor) override;
+  void dropCap(_::LocalCapDescriptor::Reader descriptor) override;
 };
 
-kj::Own<const ClientHook> newBrokenCap(kj::StringPtr reason);
-kj::Own<const ClientHook> newBrokenCap(kj::Exception&& reason);
+kj::Own<ClientHook> newBrokenCap(kj::StringPtr reason);
+kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason);
 // Helper function that creates a capability which simply throws exceptions when called.
 
-kj::Own<const PipelineHook> newBrokenPipeline(kj::Exception&& reason);
+kj::Own<PipelineHook> newBrokenPipeline(kj::Exception&& reason);
 // Helper function that creates a pipeline which simply throws exceptions when called.
 
 // =======================================================================================
 // inline implementation details
 
 template <typename CapDescriptor>
-kj::Own<const ClientHook> CapExtractor<CapDescriptor>::extractCapInternal(
-    const _::StructReader& capDescriptor) const {
+kj::Own<ClientHook> CapExtractor<CapDescriptor>::extractCapInternal(
+    const _::StructReader& capDescriptor) {
   return extractCap(typename CapDescriptor::Reader(capDescriptor));
 }
 
 template <typename CapDescriptor>
-kj::Own<const ClientHook> CapExtractor<CapDescriptor>::newBrokenCapInternal(
-    kj::StringPtr description) const {
+kj::Own<ClientHook> CapExtractor<CapDescriptor>::newBrokenCapInternal(kj::StringPtr description) {
   // Notice that because this method was virtualized and then implemented in the template,
   // we can call newBrokenCap which is only implemented in libcapnp-rpc even though arena.c++
   // (in libcapnp proper) is the only caller of this method.
@@ -235,7 +226,7 @@ kj::Own<const ClientHook> CapExtractor<CapDescriptor>::newBrokenCapInternal(
 
 template <typename CapDescriptor>
 _::OrphanBuilder CapInjector<CapDescriptor>::injectCapInternal(
-    _::BuilderArena* arena, kj::Own<const ClientHook>&& cap) const {
+    _::BuilderArena* arena, kj::Own<ClientHook>&& cap) {
   auto result = _::OrphanBuilder::initStruct(arena, _::structSize<CapDescriptor>());
   injectCap(typename CapDescriptor::Builder(result.asStruct(_::structSize<CapDescriptor>())),
             kj::mv(cap));
@@ -243,19 +234,18 @@ _::OrphanBuilder CapInjector<CapDescriptor>::injectCapInternal(
 }
 
 template <typename CapDescriptor>
-void CapInjector<CapDescriptor>::dropCapInternal(const _::StructReader& capDescriptor) const {
+void CapInjector<CapDescriptor>::dropCapInternal(const _::StructReader& capDescriptor) {
   dropCap(typename CapDescriptor::Reader(capDescriptor));
 }
 
 template <typename CapDescriptor>
-kj::Own<const ClientHook> CapInjector<CapDescriptor>::getInjectedCapInternal(
-    const _::StructReader& capDescriptor) const {
+kj::Own<ClientHook> CapInjector<CapDescriptor>::getInjectedCapInternal(
+    const _::StructReader& capDescriptor) {
   return getInjectedCap(typename CapDescriptor::Reader(capDescriptor));
 }
 
 template <typename CapDescriptor>
-kj::Own<const ClientHook> CapInjector<CapDescriptor>::newBrokenCapInternal(
-    kj::StringPtr description) const {
+kj::Own<ClientHook> CapInjector<CapDescriptor>::newBrokenCapInternal(kj::StringPtr description) {
   // Notice that because this method was virtualized and then implemented in the template,
   // we can call newBrokenCap which is only implemented in libcapnp-rpc even though arena.c++
   // (in libcapnp proper) is the only caller of this method.

@@ -118,16 +118,14 @@ LocalMessage::LocalMessage(uint firstSegmentWords, AllocationStrategy allocation
       capContext(*this),
       root(capContext.imbue(message.getRoot<ObjectPointer>())) {}
 
-void LocalMessage::injectCap(_::LocalCapDescriptor::Builder descriptor,
-                             kj::Own<const ClientHook>&& cap) const {
+void LocalMessage::injectCap(_::LocalCapDescriptor::Builder descriptor, kj::Own<ClientHook>&& cap) {
   auto lock = state.lockExclusive();
   uint index = lock->counter++;
   descriptor.setIndex(index);
   lock->caps.add(kj::mv(cap));
 }
 
-kj::Own<const ClientHook> LocalMessage::getInjectedCap(
-    _::LocalCapDescriptor::Reader descriptor) const {
+kj::Own<ClientHook> LocalMessage::getInjectedCap(_::LocalCapDescriptor::Reader descriptor) {
   auto lock = state.lockExclusive();
   KJ_ASSERT(descriptor.getIndex() < lock->caps.size(),
             "Invalid capability descriptor in message.") {
@@ -136,7 +134,7 @@ kj::Own<const ClientHook> LocalMessage::getInjectedCap(
   return lock->caps[descriptor.getIndex()]->addRef();
 }
 
-void LocalMessage::dropCap(_::LocalCapDescriptor::Reader descriptor) const {
+void LocalMessage::dropCap(_::LocalCapDescriptor::Reader descriptor) {
   auto lock = state.lockExclusive();
   KJ_ASSERT(descriptor.getIndex() < lock->caps.size(),
             "Invalid capability descriptor in message.") {
@@ -153,11 +151,11 @@ class BrokenPipeline final: public PipelineHook, public kj::Refcounted {
 public:
   BrokenPipeline(const kj::Exception& exception): exception(exception) {}
 
-  kj::Own<const PipelineHook> addRef() const override {
+  kj::Own<PipelineHook> addRef() override {
     return kj::addRef(*this);
   }
 
-  kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const override;
+  kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override;
 
 private:
   kj::Exception exception;
@@ -174,7 +172,7 @@ public:
         ObjectPointer::Pipeline(kj::refcounted<BrokenPipeline>(exception)));
   }
 
-  const void* getBrand() const {
+  const void* getBrand() {
     return nullptr;
   }
 
@@ -190,30 +188,30 @@ public:
                   "", 0, kj::str(description)) {}
 
   Request<ObjectPointer, ObjectPointer> newCall(
-      uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) const override {
+      uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) override {
     auto hook = kj::heap<BrokenRequest>(exception, firstSegmentWordSize);
     auto root = hook->message.getRoot();
     return Request<ObjectPointer, ObjectPointer>(root, kj::mv(hook));
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
-                              kj::Own<CallContextHook>&& context) const override {
+                              kj::Own<CallContextHook>&& context) override {
     return VoidPromiseAndPipeline { kj::cp(exception), kj::heap<BrokenPipeline>(exception) };
   }
 
-  kj::Maybe<const ClientHook&> getResolved() const {
+  kj::Maybe<ClientHook&> getResolved() {
     return nullptr;
   }
 
-  kj::Maybe<kj::Promise<kj::Own<const ClientHook>>> whenMoreResolved() const override {
-    return kj::Promise<kj::Own<const ClientHook>>(kj::cp(exception));
+  kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+    return kj::Promise<kj::Own<ClientHook>>(kj::cp(exception));
   }
 
-  kj::Own<const ClientHook> addRef() const override {
+  kj::Own<ClientHook> addRef() override {
     return kj::addRef(*this);
   }
 
-  const void* getBrand() const override {
+  const void* getBrand() override {
     return nullptr;
   }
 
@@ -221,22 +219,21 @@ private:
   kj::Exception exception;
 };
 
-kj::Own<const ClientHook> BrokenPipeline::getPipelinedCap(
-    kj::ArrayPtr<const PipelineOp> ops) const {
+kj::Own<ClientHook> BrokenPipeline::getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) {
   return kj::refcounted<BrokenClient>(exception);
 }
 
 }  // namespace
 
-kj::Own<const ClientHook> newBrokenCap(kj::StringPtr reason) {
+kj::Own<ClientHook> newBrokenCap(kj::StringPtr reason) {
   return kj::refcounted<BrokenClient>(reason);
 }
 
-kj::Own<const ClientHook> newBrokenCap(kj::Exception&& reason) {
+kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason) {
   return kj::refcounted<BrokenClient>(kj::mv(reason));
 }
 
-kj::Own<const PipelineHook> newBrokenPipeline(kj::Exception&& reason) {
+kj::Own<PipelineHook> newBrokenPipeline(kj::Exception&& reason) {
   return kj::refcounted<BrokenPipeline>(kj::mv(reason));
 }
 

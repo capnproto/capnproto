@@ -23,7 +23,6 @@
 
 #include "async-unix.h"
 #include "debug.h"
-#include "work-queue.h"
 #include <setjmp.h>
 #include <errno.h>
 
@@ -75,107 +74,99 @@ pthread_once_t registerSigusr1Once = PTHREAD_ONCE_INIT;
 
 // =======================================================================================
 
-struct UnixEventLoop::Impl final: public _::NewJobCallback {
-  Impl(UnixEventLoop& loop): loop(loop) {}
-
-  UnixEventLoop& loop;
-
-  _::WorkQueue<PollJob> pollQueue;
-  _::WorkQueue<SignalJob> signalQueue;
-
-  void receivedNewJob() const override {
-    loop.wake();
-  }
-};
-
-class UnixEventLoop::SignalJob {
-public:
-  inline SignalJob(PromiseFulfiller<siginfo_t>& fulfiller, int signum)
-      : fulfiller(fulfiller), signum(signum) {}
-
-  inline void cancel() {}
-
-  void complete(const siginfo_t& siginfo) {
-    fulfiller.fulfill(kj::cp(siginfo));
-  }
-
-  inline int getSignum() const { return signum; }
-
-private:
-  PromiseFulfiller<siginfo_t>& fulfiller;
-  int signum;
-};
-
 class UnixEventLoop::SignalPromiseAdapter {
 public:
   inline SignalPromiseAdapter(PromiseFulfiller<siginfo_t>& fulfiller,
-                              const _::WorkQueue<SignalJob>& signalQueue,
-                              int signum)
-      : job(signalQueue.createJob(fulfiller, signum)) {
-    job->addToQueue();
+                              UnixEventLoop& loop, int signum)
+      : loop(loop), signum(signum), fulfiller(fulfiller) {
+    prev = loop.signalTail;
+    *loop.signalTail = this;
+    loop.signalTail = &next;
   }
 
   ~SignalPromiseAdapter() noexcept(false) {
-    job->cancel();
+    if (prev != nullptr) {
+      if (next == nullptr) {
+        loop.signalTail = prev;
+      } else {
+        next->prev = prev;
+      }
+      *prev = next;
+    }
   }
 
-private:
-  Own<_::WorkQueue<SignalJob>::JobWrapper> job;
-};
-
-class UnixEventLoop::PollJob {
-public:
-  inline PollJob(PromiseFulfiller<short>& fulfiller, int fd, short eventMask)
-      : fulfiller(fulfiller), fd(fd), eventMask(eventMask) {}
-
-  inline void cancel() {}
-
-  void complete(const struct pollfd& pollfd) {
-    fulfiller.fulfill(kj::cp(pollfd.revents));
+  SignalPromiseAdapter* removeFromList() {
+    auto result = next;
+    if (next == nullptr) {
+      loop.signalTail = prev;
+    } else {
+      next->prev = prev;
+    }
+    *prev = next;
+    next = nullptr;
+    prev = nullptr;
+    return result;
   }
 
-  inline void prepare(struct pollfd& pollfd) const {
-    pollfd.fd = fd;
-    pollfd.events = eventMask;
-    pollfd.revents = 0;
-  }
-
-private:
-  PromiseFulfiller<short>& fulfiller;
-  int fd;
-  short eventMask;
+  UnixEventLoop& loop;
+  int signum;
+  PromiseFulfiller<siginfo_t>& fulfiller;
+  SignalPromiseAdapter* next = nullptr;
+  SignalPromiseAdapter** prev = nullptr;
 };
 
 class UnixEventLoop::PollPromiseAdapter {
 public:
   inline PollPromiseAdapter(PromiseFulfiller<short>& fulfiller,
-                            const _::WorkQueue<PollJob>& pollQueue,
-                            int fd, short eventMask)
-      : job(pollQueue.createJob(fulfiller, fd, eventMask)) {
-    job->addToQueue();
+                            UnixEventLoop& loop, int fd, short eventMask)
+      : loop(loop), fd(fd), eventMask(eventMask), fulfiller(fulfiller) {
+    prev = loop.pollTail;
+    *loop.pollTail = this;
+    loop.pollTail = &next;
   }
 
   ~PollPromiseAdapter() noexcept(false) {
-    job->cancel();
+    if (prev != nullptr) {
+      if (next == nullptr) {
+        loop.pollTail = prev;
+      } else {
+        next->prev = prev;
+      }
+      *prev = next;
+    }
   }
 
-private:
-  Own<_::WorkQueue<PollJob>::JobWrapper> job;
+  void removeFromList() {
+    if (next == nullptr) {
+      loop.pollTail = prev;
+    } else {
+      next->prev = prev;
+    }
+    *prev = next;
+    next = nullptr;
+    prev = nullptr;
+  }
+
+  UnixEventLoop& loop;
+  int fd;
+  short eventMask;
+  PromiseFulfiller<short>& fulfiller;
+  PollPromiseAdapter* next = nullptr;
+  PollPromiseAdapter** prev = nullptr;
 };
 
-UnixEventLoop::UnixEventLoop(): impl(heap<Impl>(*this)) {
+UnixEventLoop::UnixEventLoop() {
   pthread_once(&registerSigusr1Once, &registerSigusr1);
 }
 
-UnixEventLoop::~UnixEventLoop() {
+UnixEventLoop::~UnixEventLoop() {}
+
+Promise<short> UnixEventLoop::onFdEvent(int fd, short eventMask) {
+  return newAdaptedPromise<short, PollPromiseAdapter>(*this, fd, eventMask);
 }
 
-Promise<short> UnixEventLoop::onFdEvent(int fd, short eventMask) const {
-  return newAdaptedPromise<short, PollPromiseAdapter>(impl->pollQueue, fd, eventMask);
-}
-
-Promise<siginfo_t> UnixEventLoop::onSignal(int signum) const {
-  return newAdaptedPromise<siginfo_t, SignalPromiseAdapter>(impl->signalQueue, signum);
+Promise<siginfo_t> UnixEventLoop::onSignal(int signum) {
+  return newAdaptedPromise<siginfo_t, SignalPromiseAdapter>(*this, signum);
 }
 
 void UnixEventLoop::captureSignal(int signum) {
@@ -199,15 +190,13 @@ void UnixEventLoop::sleep() {
 
     if (capture.siginfo.si_signo != SIGUSR1) {
       // Fire any events waiting on this signal.
-      auto job = impl->signalQueue.peek(nullptr);
-      for (;;) {
-        KJ_IF_MAYBE(j, job) {
-          if (j->get().getSignum() == capture.siginfo.si_signo) {
-            j->complete(capture.siginfo);
-          }
-          job = j->getNext();
+      auto ptr = signalHead;
+      while (ptr != nullptr) {
+        if (ptr->signum == capture.siginfo.si_signo) {
+          ptr->fulfiller.fulfill(kj::cp(capture.siginfo));
+          ptr = ptr->removeFromList();
         } else {
-          break;
+          ptr = ptr->next;
         }
       }
     }
@@ -220,33 +209,26 @@ void UnixEventLoop::sleep() {
   sigaddset(&newMask, SIGUSR1);
 
   {
-    auto job = impl->signalQueue.peek(*impl);
-    for (;;) {
-      KJ_IF_MAYBE(j, job) {
-        sigaddset(&newMask, j->get().getSignum());
-        job = j->getNext();
-      } else {
-        break;
-      }
+    auto ptr = signalHead;
+    while (ptr != nullptr) {
+      sigaddset(&newMask, ptr->signum);
+      ptr = ptr->next;
     }
   }
 
   kj::Vector<struct pollfd> pollfds;
-  kj::Vector<_::WorkQueue<PollJob>::JobWrapper*> pollJobs;
+  kj::Vector<PollPromiseAdapter*> pollEvents;
 
   {
-    auto job = impl->pollQueue.peek(*impl);
-    for (;;) {
-      KJ_IF_MAYBE(j, job) {
-        struct pollfd pollfd;
-        memset(&pollfd, 0, sizeof(pollfd));
-        j->get().prepare(pollfd);
-        pollfds.add(pollfd);
-        pollJobs.add(j);
-        job = j->getNext();
-      } else {
-        break;
-      }
+    auto ptr = pollHead;
+    while (ptr != nullptr) {
+      struct pollfd pollfd;
+      memset(&pollfd, 0, sizeof(pollfd));
+      pollfd.fd = ptr->fd;
+      pollfd.events = ptr->eventMask;
+      pollfds.add(pollfd);
+      pollEvents.add(ptr);
+      ptr = ptr->next;
     }
   }
 
@@ -273,7 +255,8 @@ void UnixEventLoop::sleep() {
 
   for (auto i: indices(pollfds)) {
     if (pollfds[i].revents != 0) {
-      pollJobs[i]->complete(pollfds[i]);
+      pollEvents[i]->fulfiller.fulfill(kj::mv(pollfds[i].revents));
+      pollEvents[i]->removeFromList();
       if (--pollResult <= 0) {
         break;
       }

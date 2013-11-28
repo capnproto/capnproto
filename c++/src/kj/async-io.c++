@@ -606,7 +606,7 @@ public:
 }  // namespace
 
 Promise<void> AsyncInputStream::read(void* buffer, size_t bytes) {
-  return read(buffer, bytes, bytes).thenInAnyThread([](size_t) {});
+  return read(buffer, bytes, bytes).then([](size_t) {});
 }
 
 Own<AsyncInputStream> AsyncInputStream::wrapFd(int fd) {

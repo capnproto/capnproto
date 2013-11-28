@@ -291,7 +291,7 @@ public:
   ListBuilder getList(FieldSize elementSize, const word* defaultValzue);
   ListBuilder getStructList(StructSize elementSize, const word* defaultValue);
   template <typename T> typename T::Builder getBlob(const void* defaultValue,ByteCount defaultSize);
-  kj::Own<const ClientHook> getCapability();
+  kj::Own<ClientHook> getCapability();
   // Get methods:  Get the value.  If it is null, initialize it to a copy of the default value.
   // The default value is encoded as an "unchecked message" for structs, lists, and objects, or a
   // simple byte array for blobs.
@@ -306,7 +306,7 @@ public:
   void setStruct(const StructReader& value);
   void setList(const ListReader& value);
   template <typename T> void setBlob(typename T::Reader value);
-  void setCapability(kj::Own<const ClientHook>&& cap);
+  void setCapability(kj::Own<ClientHook>&& cap);
   // Set methods:  Initialize the pointer to a newly-allocated copy of the given value, discarding
   // the existing object.
 
@@ -368,7 +368,7 @@ public:
   ListReader getList(FieldSize expectedElementSize, const word* defaultValue) const;
   template <typename T>
   typename T::Reader getBlob(const void* defaultValue, ByteCount defaultSize) const;
-  kj::Own<const ClientHook> getCapability() const;
+  kj::Own<ClientHook> getCapability() const;
   // Get methods:  Get the value.  If it is null, return the default value instead.
   // The default value is encoded as an "unchecked message" for structs, lists, and objects, or a
   // simple byte array for blobs.
@@ -722,7 +722,7 @@ public:
   static OrphanBuilder copy(BuilderArena* arena, PointerReader copyFrom);
   static OrphanBuilder copy(BuilderArena* arena, Text::Reader copyFrom);
   static OrphanBuilder copy(BuilderArena* arena, Data::Reader copyFrom);
-  static OrphanBuilder copy(BuilderArena* arena, kj::Own<const ClientHook> copyFrom);
+  static OrphanBuilder copy(BuilderArena* arena, kj::Own<ClientHook> copyFrom);
 
   OrphanBuilder& operator=(const OrphanBuilder& other) = delete;
   inline OrphanBuilder& operator=(OrphanBuilder&& other);
@@ -746,7 +746,7 @@ public:
 
   StructReader asStructReader(StructSize size) const;
   ListReader asListReader(FieldSize elementSize) const;
-  kj::Own<const ClientHook> asCapability() const;
+  kj::Own<ClientHook> asCapability() const;
   Text::Reader asTextReader() const;
   Data::Reader asDataReader() const;
 

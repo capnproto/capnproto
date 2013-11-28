@@ -365,7 +365,7 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
   KJ_UNREACHABLE;
 }
 
-DynamicValue::Pipeline DynamicStruct::Pipeline::get(StructSchema::Field field) const {
+DynamicValue::Pipeline DynamicStruct::Pipeline::get(StructSchema::Field field) {
   KJ_REQUIRE(field.getContainingStruct() == schema, "`field` is not a field of this struct.");
 
   auto proto = field.getProto();
@@ -926,7 +926,7 @@ DynamicValue::Reader DynamicStruct::Reader::get(kj::StringPtr name) const {
 DynamicValue::Builder DynamicStruct::Builder::get(kj::StringPtr name) {
   return get(schema.getFieldByName(name));
 }
-DynamicValue::Pipeline DynamicStruct::Pipeline::get(kj::StringPtr name) const {
+DynamicValue::Pipeline DynamicStruct::Pipeline::get(kj::StringPtr name) {
   return get(schema.getFieldByName(name));
 }
 bool DynamicStruct::Reader::has(kj::StringPtr name) const {
@@ -1862,7 +1862,7 @@ DynamicCapability::Client PointerHelpers<DynamicCapability, Kind::UNKNOWN>::getD
   return DynamicCapability::Client(schema, builder.getCapability());
 }
 void PointerHelpers<DynamicCapability, Kind::UNKNOWN>::set(
-    PointerBuilder builder, const DynamicCapability::Client& value) {
+    PointerBuilder builder, DynamicCapability::Client& value) {
   builder.setCapability(value.hook->addRef());
 }
 void PointerHelpers<DynamicCapability, Kind::UNKNOWN>::set(

@@ -26,11 +26,11 @@
 
 namespace capnp {
 
-kj::Own<const ClientHook> PipelineHook::getPipelinedCap(kj::Array<PipelineOp>&& ops) const {
+kj::Own<ClientHook> PipelineHook::getPipelinedCap(kj::Array<PipelineOp>&& ops) {
   return getPipelinedCap(ops.asPtr());
 }
 
-kj::Own<const ClientHook> ObjectPointer::Reader::getPipelinedCap(
+kj::Own<ClientHook> ObjectPointer::Reader::getPipelinedCap(
     kj::ArrayPtr<const PipelineOp> ops) const {
   _::PointerReader pointer = reader;
 
@@ -48,7 +48,7 @@ kj::Own<const ClientHook> ObjectPointer::Reader::getPipelinedCap(
   return pointer.getCapability();
 }
 
-ObjectPointer::Pipeline ObjectPointer::Pipeline::noop() const {
+ObjectPointer::Pipeline ObjectPointer::Pipeline::noop() {
   auto newOps = kj::heapArray<PipelineOp>(ops.size());
   for (auto i: kj::indices(ops)) {
     newOps[i] = ops[i];
@@ -56,8 +56,7 @@ ObjectPointer::Pipeline ObjectPointer::Pipeline::noop() const {
   return Pipeline(hook->addRef(), kj::mv(newOps));
 }
 
-ObjectPointer::Pipeline ObjectPointer::Pipeline::getPointerField(
-    uint16_t pointerIndex) const {
+ObjectPointer::Pipeline ObjectPointer::Pipeline::getPointerField(uint16_t pointerIndex) {
   auto newOps = kj::heapArray<PipelineOp>(ops.size() + 1);
   for (auto i: kj::indices(ops)) {
     newOps[i] = ops[i];
@@ -69,7 +68,7 @@ ObjectPointer::Pipeline ObjectPointer::Pipeline::getPointerField(
   return Pipeline(hook->addRef(), kj::mv(newOps));
 }
 
-kj::Own<const ClientHook> ObjectPointer::Pipeline::asCap() const {
+kj::Own<ClientHook> ObjectPointer::Pipeline::asCap() {
   return hook->getPipelinedCap(ops);
 }
 

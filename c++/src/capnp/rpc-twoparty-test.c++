@@ -59,15 +59,14 @@ private:
   int& callCount;
 };
 
-void runServer(kj::Promise<void> quit, kj::Own<kj::AsyncIoStream> stream, int& callCount) {
+void runServer(kj::Own<kj::AsyncIoStream> stream, int& callCount) {
   // Set up the server.
   kj::UnixEventLoop eventLoop;
-  TwoPartyVatNetwork network(eventLoop, *stream, rpc::twoparty::Side::SERVER);
+  TwoPartyVatNetwork network(*stream, rpc::twoparty::Side::SERVER);
   TestRestorer restorer(callCount);
-  auto server = makeRpcServer(network, restorer, eventLoop);
+  auto server = makeRpcServer(network, restorer);
 
-  // Wait until quit promise is fulfilled.
-  eventLoop.wait(kj::mv(quit));
+  eventLoop.onSignal(SIGUSR2).wait();
 }
 
 Capability::Client getPersistentCap(RpcSystem<rpc::twoparty::SturdyRefHostId>& client,
@@ -86,6 +85,14 @@ Capability::Client getPersistentCap(RpcSystem<rpc::twoparty::SturdyRefHostId>& c
   return client.restore(hostId, objectIdMessage.getRoot<ObjectPointer>());
 }
 
+class CaptureSignalsOnInit {
+public:
+  CaptureSignalsOnInit() {
+    kj::UnixEventLoop::captureSignal(SIGUSR2);
+  }
+};
+static CaptureSignalsOnInit captureSignalsOnInit;
+
 TEST(TwoPartyNetwork, Basic) {
   int callCount = 0;
 
@@ -93,16 +100,15 @@ TEST(TwoPartyNetwork, Basic) {
   auto pipe = kj::newTwoWayPipe();
 
   // Start up server in another thread.
-  auto quitter = kj::newPromiseAndFulfiller<void>();
   kj::Thread thread([&]() {
-    runServer(kj::mv(quitter.promise), kj::mv(pipe.ends[1]), callCount);
+    runServer(kj::mv(pipe.ends[1]), callCount);
   });
-  KJ_DEFER(quitter.fulfiller->fulfill());  // Stop the server loop before destroying the thread.
+  KJ_DEFER(thread.sendSignal(SIGUSR2));
 
   // Set up the client-side objects.
   kj::UnixEventLoop loop;
-  TwoPartyVatNetwork network(loop, *pipe.ends[0], rpc::twoparty::Side::CLIENT);
-  auto rpcClient = makeRpcClient(network, loop);
+  TwoPartyVatNetwork network(*pipe.ends[0], rpc::twoparty::Side::CLIENT);
+  auto rpcClient = makeRpcClient(network);
 
   // Request the particular capability from the server.
   auto client = getPersistentCap(rpcClient, rpc::twoparty::Side::SERVER,
@@ -149,16 +155,15 @@ TEST(TwoPartyNetwork, Pipelining) {
   auto pipe = kj::newTwoWayPipe();
 
   // Start up server in another thread.
-  auto quitter = kj::newPromiseAndFulfiller<void>();
   auto thread = kj::heap<kj::Thread>([&]() {
-    runServer(kj::mv(quitter.promise), kj::mv(pipe.ends[1]), callCount);
+    runServer(kj::mv(pipe.ends[1]), callCount);
   });
-  KJ_DEFER(quitter.fulfiller->fulfill());  // Stop the server loop before destroying the thread.
+  KJ_ON_SCOPE_FAILURE(thread->sendSignal(SIGUSR2));
 
   // Set up the client-side objects.
   kj::UnixEventLoop loop;
-  TwoPartyVatNetwork network(loop, *pipe.ends[0], rpc::twoparty::Side::CLIENT);
-  auto rpcClient = makeRpcClient(network, loop);
+  TwoPartyVatNetwork network(*pipe.ends[0], rpc::twoparty::Side::CLIENT);
+  auto rpcClient = makeRpcClient(network);
 
   bool disconnected = false;
   bool drained = false;
@@ -176,8 +181,7 @@ TEST(TwoPartyNetwork, Pipelining) {
       // Use the capability.
       auto request = client.getCapRequest();
       request.setN(234);
-      request.setInCap(test::TestInterface::Client(
-          kj::heap<TestInterfaceImpl>(reverseCallCount), loop));
+      request.setInCap(kj::heap<TestInterfaceImpl>(reverseCallCount));
 
       auto promise = request.send();
 
@@ -208,7 +212,7 @@ TEST(TwoPartyNetwork, Pipelining) {
     EXPECT_FALSE(drained);
 
     // What if the other side disconnects?
-    quitter.fulfiller->fulfill();
+    thread->sendSignal(SIGUSR2);
     thread = nullptr;
 
     loop.wait(kj::mv(disconnectPromise));
@@ -218,8 +222,7 @@ TEST(TwoPartyNetwork, Pipelining) {
       // Use the now-broken capability.
       auto request = client.getCapRequest();
       request.setN(234);
-      request.setInCap(test::TestInterface::Client(
-          kj::heap<TestInterfaceImpl>(reverseCallCount), loop));
+      request.setInCap(kj::heap<TestInterfaceImpl>(reverseCallCount));
 
       auto promise = request.send();
 

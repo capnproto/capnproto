@@ -48,13 +48,13 @@ public:
   UnixEventLoop();
   ~UnixEventLoop();
 
-  Promise<short> onFdEvent(int fd, short eventMask) const;
+  Promise<short> onFdEvent(int fd, short eventMask);
   // `eventMask` is a bitwise-OR of poll events (e.g. `POLLIN`, `POLLOUT`, etc.).  The next time
   // one or more of the given events occurs on `fd`, the set of events that occurred are returned.
   //
   // The result of waiting on the same FD twice at once is undefined.
 
-  Promise<siginfo_t> onSignal(int signum) const;
+  Promise<siginfo_t> onSignal(int signum);
   // When the given signal is delivered to this thread, return the corresponding siginfo_t.
   // The signal must have been captured using `captureSignal()`.
   //
@@ -83,13 +83,13 @@ protected:
   void wake() const override;
 
 private:
-  class PollJob;
   class PollPromiseAdapter;
-  class SignalJob;
   class SignalPromiseAdapter;
 
-  struct Impl;
-  Own<Impl> impl;
+  PollPromiseAdapter* pollHead = nullptr;
+  PollPromiseAdapter** pollTail = &pollHead;
+  SignalPromiseAdapter* signalHead = nullptr;
+  SignalPromiseAdapter** signalTail = &signalHead;
 
   pthread_t waitThread;
   mutable bool isSleeping = false;

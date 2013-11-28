@@ -700,8 +700,8 @@ public:
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::capnp::rpc::MessageTarget::Pipeline getTarget() const;
-  inline SendResultsTo::Pipeline getSendResultsTo() const;
+  inline  ::capnp::rpc::MessageTarget::Pipeline getTarget();
+  inline SendResultsTo::Pipeline getSendResultsTo();
 private:
   ::capnp::ObjectPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -1270,8 +1270,8 @@ public:
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::capnp::rpc::MessageTarget::Pipeline getTarget() const;
-  inline Context::Pipeline getContext() const;
+  inline  ::capnp::rpc::MessageTarget::Pipeline getTarget();
+  inline Context::Pipeline getContext();
 private:
   ::capnp::ObjectPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -1451,7 +1451,7 @@ public:
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::capnp::rpc::MessageTarget::Pipeline getTarget() const;
+  inline  ::capnp::rpc::MessageTarget::Pipeline getTarget();
 private:
   ::capnp::ObjectPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -1699,7 +1699,7 @@ public:
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::capnp::rpc::MessageTarget::Pipeline getTarget() const;
+  inline  ::capnp::rpc::MessageTarget::Pipeline getTarget();
 private:
   ::capnp::ObjectPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -3253,7 +3253,7 @@ inline  ::capnp::rpc::MessageTarget::Builder Call::Builder::getTarget() {
   return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::rpc::MessageTarget::Pipeline Call::Pipeline::getTarget() const {
+inline  ::capnp::rpc::MessageTarget::Pipeline Call::Pipeline::getTarget() {
   return  ::capnp::rpc::MessageTarget::Pipeline(_typeless.getPointerField(0));
 }
 inline void Call::Builder::setTarget( ::capnp::rpc::MessageTarget::Reader value) {
@@ -3329,7 +3329,7 @@ inline Call::SendResultsTo::Reader Call::Reader::getSendResultsTo() const {
 inline Call::SendResultsTo::Builder Call::Builder::getSendResultsTo() {
   return Call::SendResultsTo::Builder(_builder);
 }
-inline Call::SendResultsTo::Pipeline Call::Pipeline::getSendResultsTo() const {
+inline Call::SendResultsTo::Pipeline Call::Pipeline::getSendResultsTo() {
   return Call::SendResultsTo::Pipeline(_typeless.noop());
 }
 inline Call::SendResultsTo::Builder Call::Builder::initSendResultsTo() {
@@ -3905,7 +3905,7 @@ inline  ::capnp::rpc::MessageTarget::Builder Disembargo::Builder::getTarget() {
   return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::rpc::MessageTarget::Pipeline Disembargo::Pipeline::getTarget() const {
+inline  ::capnp::rpc::MessageTarget::Pipeline Disembargo::Pipeline::getTarget() {
   return  ::capnp::rpc::MessageTarget::Pipeline(_typeless.getPointerField(0));
 }
 inline void Disembargo::Builder::setTarget( ::capnp::rpc::MessageTarget::Reader value) {
@@ -3932,7 +3932,7 @@ inline Disembargo::Context::Reader Disembargo::Reader::getContext() const {
 inline Disembargo::Context::Builder Disembargo::Builder::getContext() {
   return Disembargo::Context::Builder(_builder);
 }
-inline Disembargo::Context::Pipeline Disembargo::Pipeline::getContext() const {
+inline Disembargo::Context::Pipeline Disembargo::Pipeline::getContext() {
   return Disembargo::Context::Pipeline(_typeless.noop());
 }
 inline Disembargo::Context::Builder Disembargo::Builder::initContext() {
@@ -4079,7 +4079,7 @@ inline  ::capnp::rpc::MessageTarget::Builder Save::Builder::getTarget() {
   return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::rpc::MessageTarget::Pipeline Save::Pipeline::getTarget() const {
+inline  ::capnp::rpc::MessageTarget::Pipeline Save::Pipeline::getTarget() {
   return  ::capnp::rpc::MessageTarget::Pipeline(_typeless.getPointerField(0));
 }
 inline void Save::Builder::setTarget( ::capnp::rpc::MessageTarget::Reader value) {
@@ -4198,7 +4198,7 @@ inline  ::capnp::rpc::MessageTarget::Builder Provide::Builder::getTarget() {
   return ::capnp::_::PointerHelpers< ::capnp::rpc::MessageTarget>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::rpc::MessageTarget::Pipeline Provide::Pipeline::getTarget() const {
+inline  ::capnp::rpc::MessageTarget::Pipeline Provide::Pipeline::getTarget() {
   return  ::capnp::rpc::MessageTarget::Pipeline(_typeless.getPointerField(0));
 }
 inline void Provide::Builder::setTarget( ::capnp::rpc::MessageTarget::Reader value) {

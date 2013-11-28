@@ -38,8 +38,8 @@ typedef VatNetwork<rpc::twoparty::SturdyRefHostId, rpc::twoparty::ProvisionId,
 class TwoPartyVatNetwork: public TwoPartyVatNetworkBase,
                           private TwoPartyVatNetworkBase::Connection {
 public:
-  TwoPartyVatNetwork(const kj::EventLoop& eventLoop, kj::AsyncIoStream& stream,
-                     rpc::twoparty::Side side, ReaderOptions receiveOptions = ReaderOptions());
+  TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
+                     ReaderOptions receiveOptions = ReaderOptions());
 
   kj::Promise<void> onDisconnect() { return disconnectPromise.addBranch(); }
   // Returns a promise that resolves when the peer disconnects.
@@ -60,7 +60,6 @@ private:
   class OutgoingMessageImpl;
   class IncomingMessageImpl;
 
-  const kj::EventLoop& eventLoop;
   kj::AsyncIoStream& stream;
   rpc::twoparty::Side side;
   ReaderOptions receiveOptions;
@@ -87,7 +86,7 @@ private:
 
   // implements Connection -----------------------------------------------------
 
-  kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) const override;
+  kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override;
   kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() override;
   void introduceTo(TwoPartyVatNetworkBase::Connection& recipient,
       rpc::twoparty::ThirdPartyCapId::Builder sendToRecipient,

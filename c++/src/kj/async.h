@@ -27,7 +27,6 @@
 #include "exception.h"
 #include "mutex.h"
 #include "refcount.h"
-#include "work-queue.h"
 #include "tuple.h"
 
 namespace kj {
@@ -59,15 +58,6 @@ template <typename T> struct JoinPromises_<Promise<T>> { typedef T Type; };
 template <typename T>
 using JoinPromises = typename JoinPromises_<T>::Type;
 // If T is Promise<U>, resolves to U, otherwise resolves to T.
-
-template <typename T> struct DisallowChain_ { typedef T Type; };
-template <typename T> struct DisallowChain_<Promise<T>> {
-  static_assert(sizeof(T) < 0, "Continuation passed to thenInAnyThread() cannot return a promise.");
-};
-
-template <typename T>
-using DisallowChain = typename DisallowChain_<T>::Type;
-// If T is Promise<U>, error, otherwise resolves to T.
 
 class PropagateException {
   // A functor which accepts a kj::Exception as a parameter and returns a broken promise of
@@ -113,13 +103,6 @@ template <typename T> struct UnfixVoid_ { typedef T Type; };
 template <> struct UnfixVoid_<Void> { typedef void Type; };
 template <typename T> using UnfixVoid = typename UnfixVoid_<T>::Type;
 // UnfixVoid is the opposite of FixVoid.
-
-template <typename T> struct Forked_ { typedef T Type; };
-template <typename T> struct Forked_<T&> { typedef const T& Type; };
-template <typename T> struct Forked_<Own<T>> { typedef Own<const T> Type; };
-template <typename T> using Forked = typename Forked_<T>::Type;
-// Forked<T> transforms T as a result of being forked.  If T is an owned pointer or reference,
-// it becomes const.
 
 template <typename In, typename Out>
 struct MaybeVoidCaller {
@@ -198,11 +181,7 @@ using PromiseForResult = Promise<_::JoinPromises<_::ReturnType<Func, T>>>;
 // T.  If T is void, then the promise is for the result of calling Func with no arguments.  If
 // Func itself returns a promise, the promises are joined, so you never get Promise<Promise<T>>.
 
-template <typename Func, typename T>
-using PromiseForResultNoChaining = Promise<_::DisallowChain<_::ReturnType<Func, T>>>;
-// Like PromiseForResult but chaining (continuations that return another promise) is now allowed.
-
-class EventLoop: private _::NewJobCallback {
+class EventLoop {
   // Represents a queue of events being executed in a loop.  Most code won't interact with
   // EventLoop directly, but instead use `Promise`s to interact with it indirectly.  See the
   // documentation for `Promise`.
@@ -268,7 +247,7 @@ public:
   //   event.
 
   template <typename Func>
-  PromiseForResult<Func, void> evalLater(Func&& func) const KJ_WARN_UNUSED_RESULT;
+  PromiseForResult<Func, void> evalLater(Func&& func) KJ_WARN_UNUSED_RESULT;
   // Schedule for the given zero-parameter function to be executed in the event loop at some
   // point in the near future.  Returns a Promise for its result -- or, if `func()` itself returns
   // a promise, `evalLater()` returns a Promise for the result of resolving that promise.
@@ -286,21 +265,21 @@ public:
 
   template <typename T, typename Func, typename ErrorFunc = _::PropagateException>
   PromiseForResult<Func, T> there(Promise<T>&& promise, Func&& func,
-                                  ErrorFunc&& errorHandler = _::PropagateException()) const
+                                  ErrorFunc&& errorHandler = _::PropagateException())
                                   KJ_WARN_UNUSED_RESULT;
   // Like `Promise::then()`, but schedules the continuation to be executed on *this* EventLoop
   // rather than the thread's current loop.  See Promise::then().
 
   template <typename T>
-  ForkedPromise<T> fork(Promise<T>&& promise) const;
+  ForkedPromise<T> fork(Promise<T>&& promise);
   // Like `Promise::fork()`, but manages the fork on *this* EventLoop rather than the thread's
   // current loop.  See Promise::fork().
 
   template <typename T>
-  Promise<T> exclusiveJoin(Promise<T>&& promise1, Promise<T>&& promise2) const;
+  Promise<T> exclusiveJoin(Promise<T>&& promise1, Promise<T>&& promise2);
   // Like `promise1.exclusiveJoin(promise2)`, returning the joined promise.
 
-  void daemonize(kj::Promise<void>&& promise) const;
+  void daemonize(kj::Promise<void>&& promise);
   // Allows the given promise to continue running in the background until it completes or the
   // `EventLoop` is destroyed.  Be careful when using this: you need to make sure that the promise
   // owns all the objects it touches or make sure those objects outlive the EventLoop.  Also, be
@@ -320,46 +299,47 @@ public:
     //   conditions.
 
   public:
-    Event(const EventLoop& loop);
+    Event();
     ~Event() noexcept(false);
     KJ_DISALLOW_COPY(Event);
 
-    void arm(bool preemptIfSameThread = true);
-    // Enqueue this event so that run() will be called from the event loop soon.  It is an error
-    // to call this when the event is already armed.
+    void armDepthFirst();
+    // Enqueue this event so that `fire()` will be called from the event loop soon.
     //
-    // If called from the event loop's own thread (i.e. from within an event handler fired from
-    // this event loop), and `preemptIfSameThread` is true, the event will be scheduled
-    // "preemptively": it fires before any event that was already in the queue when the current
-    // event callback started.  This ensures that chains of events that trigger each other occur
-    // quickly together, and reduces the unpredictability possible from other event callbacks
-    // running between them.
+    // Events scheduled in this way are executed in depth-first order:  if an event callback arms
+    // more events, those events are placed at the front of the queue (in the order in which they
+    // were armed), so that they run immediately after the first event's callback returns.
     //
-    // If called from a different thread (or `preemptIfSameThread` is false), the event is placed
-    // at the end of the queue, to ensure that multiple events queued cross-thread fire in the
-    // order in which they were queued.
+    // Depth-first event scheduling is appropriate for events that represent simple continuations
+    // of a previous event that should be globbed together for performance.  Depth-first scheduling
+    // can lead to starvation, so any long-running task must occasionally yield with
+    // `armBreadthFirst()`.  (Promise::then() uses depth-first whereas evalLater() uses
+    // breadth-first.)
+    //
+    // To use breadth-first scheduling instead, use `armLater()`.
 
-    void disarm();
-    // Cancel this event if it is armed, and ignore any further arm()s.  If it is already running,
-    // block until it finishes before returning.  MUST be called in the subclass's destructor if
-    // it is possible that the event is still armed, because once Event's destructor is reached,
-    // fire() is a pure-virtual function.
+    void armBreadthFirst();
+    // Like `armDepthFirst()` except that the event is placed at the end of the queue.
 
-    inline const EventLoop& getEventLoop() { return loop; }
-    // Get the event loop on which this event will run.
+    kj::String trace();
+    // Dump debug info about this event.
 
   protected:
-    virtual void fire() = 0;
-    // Fire the event.
+    virtual Maybe<Own<Event>> fire() = 0;
+    // Fire the event.  Possibly returns a pointer to itself, which will be discarded by the
+    // caller.  This is the only way that an event can delete itself as a result of firing, as
+    // doing so from within fire() will throw an exception.
+
+    virtual _::PromiseNode* getInnerForTrace();
+    // If this event wraps a PromiseNode, get that node.  Used for debug tracing.
+    // Default implementation returns nullptr.
 
   private:
     friend class EventLoop;
-    const EventLoop& loop;
-
-    // TODO(cleanup):  This is dumb.  We allocate two jobs and alternate between them so that an
-    //   event's fire() can re-arm itself without deadlocking or causing other trouble.
-    Own<_::WorkQueue<EventJob>::JobWrapper> jobs[2];
-    uint currentJob = 0;
+    EventLoop& loop;
+    Event* next;
+    Event** prev;
+    bool firing = false;
   };
 
 protected:
@@ -382,41 +362,25 @@ protected:
   // is armed; it should return quickly if the loop isn't prepared to sleep.
 
 private:
-  class EventJob {
-  public:
-    EventJob(Event& event): event(event) {}
-
-    inline void complete(int dummyArg) { event.fire(); }
-    inline void cancel() {}
-
-  private:
-    Event& event;
-  };
-
   bool running = false;
   // True while looping -- wait() is then not allowed.
 
-  _::WorkQueue<EventJob> queue;
-
-  Maybe<_::WorkQueue<EventJob>::JobWrapper&> insertionPoint;
-  // Where to insert preemptively-scheduled events into the queue.
+  Event* head = nullptr;
+  Event** tail = &head;
+  Event** depthFirstInsertPoint = &head;
 
   Own<_::TaskSetImpl> daemons;
 
   template <typename T, typename Func, typename ErrorFunc>
-  Own<_::PromiseNode> thereImpl(Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler) const;
+  Own<_::PromiseNode> thereImpl(Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler);
   // Shared implementation of there() and Promise::then().
 
-  void waitImpl(Own<_::PromiseNode> node, _::ExceptionOrValue& result);
+  void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result);
   // Run the event loop until `node` is fulfilled, and then `get()` its result into `result`.
 
-  Promise<void> yieldIfSameThread() const;
-  // If called from the event loop's thread, returns a promise that won't resolve until all events
-  // currently on the queue are fired.  Otherwise, returns an already-resolved promise.  Used to
-  // implement evalLater().
-
-  void receivedNewJob() const override;
-  // Implements NewJobCallback.
+  Promise<void> yield();
+  // Returns a promise that won't resolve until all events currently on the queue are fired.
+  // Otherwise, returns an already-resolved promise.  Used to implement evalLater().
 
   template <typename>
   friend class Promise;
@@ -462,6 +426,9 @@ public:
   // these structures while they were in the middle of doing something.  Presumably, you do not
   // care.  In contrast, if you were to call `then()` or `wait()`, such exceptions would be caught
   // and propagated.
+
+  kj::String trace();
+  // Dump debug info about this promise.
 
 private:
   Own<_::PromiseNode> node;
@@ -628,14 +595,6 @@ public:
   // schedule a long-running computation in another thread.  In other words, when scheduling
   // cross-thread, both of the "optimizations" described above are avoided.
 
-  template <typename Func, typename ErrorFunc = _::PropagateException>
-  PromiseForResultNoChaining<Func, T> thenInAnyThread(
-      Func&& func, ErrorFunc&& errorHandler = _::PropagateException()) KJ_WARN_UNUSED_RESULT;
-  // Like then(), but the continuation will be executed in an arbitrary thread, not the calling
-  // thread.  The continuation MUST NOT return another promise.  It's suggested that you use a
-  // lambda with an empty capture as the continuation.  In the vast majority of cases, this ends
-  // up doing the same thing as then(); don't use this unless you really know you need it.
-
   T wait();
   // Equivalent to `EventLoop::current().wait(kj::mv(*this))`.
   //
@@ -646,8 +605,8 @@ public:
   ForkedPromise<T> fork();
   // Forks the promise, so that multiple different clients can independently wait on the result.
   // `T` must be copy-constructable for this to work.  Or, in the special case where `T` is
-  // `Own<U>`, `U` must have a method `Own<const U> addRef() const` which returns a new reference
-  // to the same (or an equivalent) object (probably implemented via reference counting).
+  // `Own<U>`, `U` must have a method `Own<U> addRef()` which returns a new reference to the same
+  // (or an equivalent) object (probably implemented via reference counting).
 
   void exclusiveJoin(Promise<T>&& other);
   // Replace this promise with one that resolves when either the original promise resolves or
@@ -663,7 +622,7 @@ public:
   // pointers into some object and you want to make sure the object still exists when the callback
   // runs -- after calling then(), use attach() to add necessary objects to the result.
 
-  void eagerlyEvaluate(const EventLoop& eventLoop = EventLoop::current());
+  void eagerlyEvaluate();
   // Force eager evaluation of this promise.  Use this if you are going to hold on to the promise
   // for awhile without consuming the result, but you want to make sure that the system actually
   // processes it.
@@ -679,8 +638,6 @@ private:
   friend Promise<U> newAdaptedPromise(Params&&... adapterConstructorParams);
   template <typename U>
   friend PromiseFulfillerPair<U> newPromiseAndFulfiller();
-  template <typename U>
-  friend PromiseFulfillerPair<U> newPromiseAndFulfiller(const EventLoop& loop);
   template <typename>
   friend class _::ForkHub;
 };
@@ -693,60 +650,16 @@ class ForkedPromise {
 public:
   inline ForkedPromise(decltype(nullptr)) {}
 
-  Promise<_::Forked<T>> addBranch() const;
-  // Add a new branch to the fork.  The branch is equivalent to the original promise, except
-  // that if T is a reference or owned pointer, the target becomes const.
+  Promise<T> addBranch();
+  // Add a new branch to the fork.  The branch is equivalent to the original promise.
 
 private:
-  Own<const _::ForkHub<_::FixVoid<T>>> hub;
+  Own<_::ForkHub<_::FixVoid<T>>> hub;
 
-  inline ForkedPromise(bool, Own<const _::ForkHub<_::FixVoid<T>>>&& hub): hub(kj::mv(hub)) {}
+  inline ForkedPromise(bool, Own<_::ForkHub<_::FixVoid<T>>>&& hub): hub(kj::mv(hub)) {}
 
   friend class Promise<T>;
   friend class EventLoop;
-};
-
-template <typename T>
-class EventLoopGuarded {
-  // An instance of T that is bound to a particular EventLoop and may only be modified within that
-  // loop.
-
-public:
-  template <typename... Params>
-  inline EventLoopGuarded(const EventLoop& loop, Params&&... params)
-      : loop(loop), value(kj::fwd<Params>(params)...) {}
-
-  const T& getValue() const { return value; }
-  // Get a const (thread-safe) reference to the value.
-
-  const EventLoop& getEventLoop() const { return loop; }
-  // Get the EventLoop in which this value can be modified.
-
-  template <typename Func>
-  PromiseForResult<Func, T&> applyNow(Func&& func) const KJ_WARN_UNUSED_RESULT;
-  // Calls the given function, passing the guarded object to it as a mutable reference, and
-  // returning a pointer to the function's result.  When called from within the object's event
-  // loop, the function runs synchronously, but when called from any other thread, the function
-  // is queued to run on the object's loop later.
-
-  template <typename Func>
-  PromiseForResult<Func, T&> applyLater(Func&& func) const KJ_WARN_UNUSED_RESULT;
-  // Like `applyNow` but always queues the function to run later regardless of which thread
-  // called it.
-
-private:
-  const EventLoop& loop;
-  T value;
-
-  template <typename Func>
-  struct Capture {
-    T& value;
-    Func func;
-
-    decltype(func(value)) operator()() {
-      return func(value);
-    }
-  };
 };
 
 class TaskSet {
@@ -767,13 +680,16 @@ public:
     virtual void taskFailed(kj::Exception&& exception) = 0;
   };
 
-  TaskSet(const EventLoop& loop, ErrorHandler& errorHandler);
+  TaskSet(ErrorHandler& errorHandler);
   // `loop` will be used to wait on promises.  `errorHandler` will be executed any time a task
   // throws an exception, and will execute within the given EventLoop.
 
   ~TaskSet() noexcept(false);
 
-  void add(Promise<void>&& promise) const;
+  void add(Promise<void>&& promise);
+
+  kj::String trace();
+  // Return debug info about all promises currently in the TaskSet.
 
 private:
   Own<_::TaskSetImpl> impl;
@@ -785,7 +701,7 @@ constexpr _::Void READY_NOW = _::Void();
 
 template <typename Func>
 inline PromiseForResult<Func, void> evalLater(Func&& func) {
-  return EventLoop::current().evalLater(func);
+  return EventLoop::current().evalLater(kj::fwd<Func>(func));
 }
 
 // -------------------------------------------------------------------
@@ -899,8 +815,6 @@ struct PromiseFulfillerPair {
 
 template <typename T>
 PromiseFulfillerPair<T> newPromiseAndFulfiller();
-template <typename T>
-PromiseFulfillerPair<T> newPromiseAndFulfiller(const EventLoop& loop);
 // Construct a Promise and a separate PromiseFulfiller which can be used to fulfill the promise.
 // If the PromiseFulfiller is destroyed before either of its methods are called, the Promise is
 // implicitly rejected.
@@ -909,12 +823,9 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller(const EventLoop& loop);
 // that there is no way to handle cancellation (i.e. detect when the Promise is discarded).
 //
 // You can arrange to fulfill a promise with another promise by using a promise type for T.  E.g.
-// if `T` is `Promise<U>`, then the returned promise will be of type `Promise<U>` but the fulfiller
-// will be of type `PromiseFulfiller<Promise<U>>`.  Thus you pass a `Promise<U>` to the `fulfill()`
-// callback, and the promises are chained.  In this case, an `EventLoop` is needed in order to wait
-// on the chained promise; you can specify one as a parameter, otherwise the current loop in the
-// thread that called `newPromiseAndFulfiller` will be used.  If `T` is *not* a promise type, then
-// no `EventLoop` is needed and the `loop` parameter, if specified, is ignored.
+// `newPromiseAndFulfiller<Promise<U>>()` will produce a promise of type `Promise<U>` but the
+// fulfiller will be of type `PromiseFulfiller<Promise<U>>`.  Thus you pass a `Promise<U>` to the
+// `fulfill()` callback, and the promises are chained.
 
 // =======================================================================================
 // internal implementation details follow
@@ -978,28 +889,25 @@ public:
   // Can only be called once, and only after the node is ready.  Must be called directly from the
   // event loop, with no application code on the stack.
 
-  virtual Maybe<const EventLoop&> getSafeEventLoop() noexcept = 0;
-  // Returns an EventLoop from which get() and onReady() may safely be called.  If the node has
-  // no preference, it should return null.
-
-  inline bool isSafeEventLoop(const EventLoop& loop) {
-    KJ_IF_MAYBE(preferred, getSafeEventLoop()) {
-      return preferred == &loop;
-    } else {
-      return true;
-    }
-  }
+  virtual PromiseNode* getInnerForTrace();
+  // If this node wraps some other PromiseNode, get the wrapped node.  Used for debug tracing.
+  // Default implementation returns nullptr.
 
 protected:
-  static bool atomicOnReady(EventLoop::Event*& onReadyEvent, EventLoop::Event& newEvent);
-  // If onReadyEvent is null, atomically set it to point at newEvent and return false.
-  // If onReadyEvent is _kJ_ALREADY_READY, return true.
-  // Useful for implementing onReady() thread-safely.
+  class OnReadyEvent {
+    // Helper class for implementing onReady().
 
-  static void atomicReady(EventLoop::Event*& onReadyEvent);
-  // If onReadyEvent is null, atomically set it to _kJ_ALREADY_READY.
-  // Otherwise, arm whatever it points at.
-  // Useful for firing events in conjuction with atomicOnReady().
+  public:
+    bool init(EventLoop::Event& newEvent);
+    // Returns true if arm() was already called.
+
+    void arm();
+    // Arms the event if init() has already been called and makes future calls to init() return
+    // true.
+
+  private:
+    EventLoop::Event* event = nullptr;
+  };
 };
 
 // -------------------------------------------------------------------
@@ -1007,7 +915,6 @@ protected:
 class ImmediatePromiseNodeBase: public PromiseNode {
 public:
   bool onReady(EventLoop::Event& event) noexcept override;
-  Maybe<const EventLoop&> getSafeEventLoop() noexcept override;
 };
 
 template <typename T>
@@ -1043,7 +950,7 @@ public:
 
   bool onReady(EventLoop::Event& event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
-  Maybe<const EventLoop&> getSafeEventLoop() noexcept override;
+  PromiseNode* getInnerForTrace() override;
 
 private:
   Own<PromiseNode> dependency;
@@ -1078,14 +985,13 @@ private:
 
 class TransformPromiseNodeBase: public PromiseNode {
 public:
-  TransformPromiseNodeBase(Maybe<const EventLoop&> loop, Own<PromiseNode>&& dependency);
+  TransformPromiseNodeBase(Own<PromiseNode>&& dependency);
 
   bool onReady(EventLoop::Event& event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
-  Maybe<const EventLoop&> getSafeEventLoop() noexcept override;
+  PromiseNode* getInnerForTrace() override;
 
 private:
-  Maybe<const EventLoop&> loop;
   Own<PromiseNode> dependency;
 
   void dropDependency();
@@ -1103,9 +1009,8 @@ class TransformPromiseNode final: public TransformPromiseNodeBase {
   // function (implements `then()`).
 
 public:
-  TransformPromiseNode(Maybe<const EventLoop&> loop, Own<PromiseNode>&& dependency,
-                       Func&& func, ErrorFunc&& errorHandler)
-      : TransformPromiseNodeBase(loop, kj::mv(dependency)),
+  TransformPromiseNode(Own<PromiseNode>&& dependency, Func&& func, ErrorFunc&& errorHandler)
+      : TransformPromiseNodeBase(kj::mv(dependency)),
         func(kj::fwd<Func>(func)), errorHandler(kj::fwd<ErrorFunc>(errorHandler)) {}
 
   ~TransformPromiseNode() noexcept(false) {
@@ -1145,7 +1050,7 @@ class ForkHubBase;
 
 class ForkBranchBase: public PromiseNode {
 public:
-  ForkBranchBase(Own<const ForkHubBase>&& hub);
+  ForkBranchBase(Own<ForkHubBase>&& hub);
   ~ForkBranchBase() noexcept(false);
 
   void hubReady() noexcept;
@@ -1153,27 +1058,26 @@ public:
 
   // implements PromiseNode ------------------------------------------
   bool onReady(EventLoop::Event& event) noexcept override;
-  Maybe<const EventLoop&> getSafeEventLoop() noexcept override;
+  PromiseNode* getInnerForTrace() override;
 
 protected:
-  inline const ExceptionOrValue& getHubResultRef() const;
+  inline ExceptionOrValue& getHubResultRef();
 
   void releaseHub(ExceptionOrValue& output);
   // Release the hub.  If an exception is thrown, add it to `output`.
 
 private:
-  EventLoop::Event* onReadyEvent = nullptr;
+  OnReadyEvent onReadyEvent;
 
-  Own<const ForkHubBase> hub;
+  Own<ForkHubBase> hub;
   ForkBranchBase* next = nullptr;
   ForkBranchBase** prevPtr = nullptr;
 
   friend class ForkHubBase;
 };
 
-template <typename T> T copyOrAddRef(const T& t) { return t; }
-template <typename T> Own<const T> copyOrAddRef(const Own<T>& t) { return t->addRef(); }
-template <typename T> Own<const T> copyOrAddRef(const Own<const T>& t) { return t->addRef(); }
+template <typename T> T copyOrAddRef(T& t) { return t; }
+template <typename T> Own<T> copyOrAddRef(Own<T>& t) { return t->addRef(); }
 
 template <typename T>
 class ForkBranch final: public ForkBranchBase {
@@ -1181,14 +1085,14 @@ class ForkBranch final: public ForkBranchBase {
   // a const reference.
 
 public:
-  ForkBranch(Own<const ForkHubBase>&& hub): ForkBranchBase(kj::mv(hub)) {}
+  ForkBranch(Own<ForkHubBase>&& hub): ForkBranchBase(kj::mv(hub)) {}
 
   void get(ExceptionOrValue& output) noexcept override {
-    const ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
+    ExceptionOr<T>& hubResult = getHubResultRef().template as<T>();
     KJ_IF_MAYBE(value, hubResult.value) {
-      output.as<Forked<T>>().value = copyOrAddRef(*value);
+      output.as<T>().value = copyOrAddRef(*value);
     } else {
-      output.as<Forked<T>>().value = nullptr;
+      output.as<T>().value = nullptr;
     }
     output.exception = hubResult.exception;
     releaseHub(output);
@@ -1199,9 +1103,9 @@ public:
 
 class ForkHubBase: public Refcounted, protected EventLoop::Event {
 public:
-  ForkHubBase(const EventLoop& loop, Own<PromiseNode>&& inner, ExceptionOrValue& resultRef);
+  ForkHubBase(Own<PromiseNode>&& inner, ExceptionOrValue& resultRef);
 
-  inline const ExceptionOrValue& getResultRef() const { return resultRef; }
+  inline ExceptionOrValue& getResultRef() { return resultRef; }
 
 private:
   struct BranchList {
@@ -1212,12 +1116,11 @@ private:
   Own<PromiseNode> inner;
   ExceptionOrValue& resultRef;
 
-  bool isWaiting = false;
-
   MutexGuarded<BranchList> branchList;
   // Becomes null once the inner promise is ready and all branches have been notified.
 
-  void fire() override;
+  Maybe<Own<Event>> fire() override;
+  _::PromiseNode* getInnerForTrace() override;
 
   friend class ForkBranchBase;
 };
@@ -1229,27 +1132,17 @@ class ForkHub final: public ForkHubBase {
   // possible).
 
 public:
-  ForkHub(const EventLoop& loop, Own<PromiseNode>&& inner)
-      : ForkHubBase(loop, kj::mv(inner), result) {
-    // Note that it's unsafe to call this from the superclass's constructor because `result` won't
-    // be initialized yet and the event could fire in another thread immediately.
-    arm();
-  }
-  ~ForkHub() noexcept(false) {
-    // Note that it's unsafe to call this from the superclass's destructor because we must disarm
-    // before `result` is destroyed.
-    disarm();
-  }
+  ForkHub(Own<PromiseNode>&& inner): ForkHubBase(kj::mv(inner), result) {}
 
-  Promise<_::Forked<_::UnfixVoid<T>>> addBranch() const {
-    return Promise<_::Forked<_::UnfixVoid<T>>>(false, kj::heap<ForkBranch<T>>(addRef(*this)));
+  Promise<_::UnfixVoid<T>> addBranch() {
+    return Promise<_::UnfixVoid<T>>(false, kj::heap<ForkBranch<T>>(addRef(*this)));
   }
 
 private:
   ExceptionOr<T> result;
 };
 
-inline const ExceptionOrValue& ForkBranchBase::getHubResultRef() const {
+inline ExceptionOrValue& ForkBranchBase::getHubResultRef() {
   return hub->getResultRef();
 }
 
@@ -1257,16 +1150,15 @@ inline const ExceptionOrValue& ForkBranchBase::getHubResultRef() const {
 
 class ChainPromiseNode final: public PromiseNode, private EventLoop::Event {
 public:
-  ChainPromiseNode(const EventLoop& loop, Own<PromiseNode> inner);
+  explicit ChainPromiseNode(Own<PromiseNode> inner);
   ~ChainPromiseNode() noexcept(false);
 
   bool onReady(EventLoop::Event& event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
-  Maybe<const EventLoop&> getSafeEventLoop() noexcept override;
+  PromiseNode* getInnerForTrace() override;
 
 private:
   enum State {
-    PRE_STEP1,  // Between the constructor and initial call to fire().
     STEP1,
     STEP2
   };
@@ -1277,24 +1169,14 @@ private:
   // In PRE_STEP1 / STEP1, a PromiseNode for a Promise<T>.
   // In STEP2, a PromiseNode for a T.
 
-  EventLoop::Event* onReadyEvent = nullptr;
+  Event* onReadyEvent = nullptr;
 
-  void fire() override;
+  Maybe<Own<Event>> fire() override;
 };
 
 template <typename T>
-Own<PromiseNode> maybeChain(Own<PromiseNode>&& node, const EventLoop& loop, Promise<T>*) {
-  return heap<ChainPromiseNode>(loop, kj::mv(node));
-}
-
-template <typename T>
-Own<PromiseNode>&& maybeChain(Own<PromiseNode>&& node, const EventLoop& loop, T*) {
-  return kj::mv(node);
-}
-
-template <typename T>
 Own<PromiseNode> maybeChain(Own<PromiseNode>&& node, Promise<T>*) {
-  return heap<ChainPromiseNode>(EventLoop::current(), kj::mv(node));
+  return heap<ChainPromiseNode>(kj::mv(node));
 }
 
 template <typename T>
@@ -1306,74 +1188,61 @@ Own<PromiseNode>&& maybeChain(Own<PromiseNode>&& node, T*) {
 
 class ExclusiveJoinPromiseNode final: public PromiseNode {
 public:
-  ExclusiveJoinPromiseNode(const EventLoop& loop, Own<PromiseNode> left, Own<PromiseNode> right);
+  ExclusiveJoinPromiseNode(Own<PromiseNode> left, Own<PromiseNode> right);
   ~ExclusiveJoinPromiseNode() noexcept(false);
 
   bool onReady(EventLoop::Event& event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
-  Maybe<const EventLoop&> getSafeEventLoop() noexcept override;
+  PromiseNode* getInnerForTrace() override;
 
 private:
   class Branch: public EventLoop::Event {
   public:
-    Branch(const EventLoop& loop, ExclusiveJoinPromiseNode& joinNode, Own<PromiseNode> dependency);
+    Branch(ExclusiveJoinPromiseNode& joinNode, Own<PromiseNode> dependency);
     ~Branch() noexcept(false);
 
     bool get(ExceptionOrValue& output);
     // Returns true if this is the side that finished.
 
-    void fire() override;
+    Maybe<Own<Event>> fire() override;
+    _::PromiseNode* getInnerForTrace() override;
 
   private:
-    bool isWaiting = false;
-    bool finished = false;
     ExclusiveJoinPromiseNode& joinNode;
     Own<PromiseNode> dependency;
   };
 
   Branch left;
   Branch right;
-  EventLoop::Event* onReadyEvent = nullptr;
+  OnReadyEvent onReadyEvent;
 };
 
 // -------------------------------------------------------------------
 
-class CrossThreadPromiseNodeBase: public PromiseNode, protected EventLoop::Event {
-  // A PromiseNode that safely imports a promised value from one EventLoop to another (which
-  // implies crossing threads).
+class EagerPromiseNodeBase: public PromiseNode, protected EventLoop::Event {
+  // A PromiseNode that eagerly evaluates its dependency even if its dependent does not eagerly
+  // evaluate it.
 
 public:
-  CrossThreadPromiseNodeBase(const EventLoop& loop, Own<PromiseNode>&& dependency,
-                             ExceptionOrValue& resultRef);
+  EagerPromiseNodeBase(Own<PromiseNode>&& dependency, ExceptionOrValue& resultRef);
 
   bool onReady(EventLoop::Event& event) noexcept override;
-  Maybe<const EventLoop&> getSafeEventLoop() noexcept override;
+  PromiseNode* getInnerForTrace() override;
 
 private:
   Own<PromiseNode> dependency;
-  EventLoop::Event* onReadyEvent = nullptr;
+  OnReadyEvent onReadyEvent;
 
   ExceptionOrValue& resultRef;
 
-  bool isWaiting = false;
-
-  void fire() override;
+  Maybe<Own<Event>> fire() override;
 };
 
 template <typename T>
-class CrossThreadPromiseNode final: public CrossThreadPromiseNodeBase {
+class EagerPromiseNode final: public EagerPromiseNodeBase {
 public:
-  CrossThreadPromiseNode(const EventLoop& loop, Own<PromiseNode>&& dependency)
-      : CrossThreadPromiseNodeBase(loop, kj::mv(dependency), result) {
-    // Note that it's unsafe to call this from the superclass's constructor because `result` won't
-    // be initialized yet and the event could fire in another thread immediately.
-    arm();
-  }
-  ~CrossThreadPromiseNode() noexcept(false) {
-    // Note that it's unsafe to call this from the superclass's destructor because we must disarm
-    // before `result` is destroyed.
-    disarm();
-  }
+  EagerPromiseNode(Own<PromiseNode>&& dependency)
+      : EagerPromiseNodeBase(kj::mv(dependency), result) {}
 
   void get(ExceptionOrValue& output) noexcept override {
     output.as<T>() = kj::mv(result);
@@ -1384,22 +1253,10 @@ private:
 };
 
 template <typename T>
-Own<PromiseNode> makeSafeForLoop(Own<PromiseNode>&& node, const EventLoop& loop) {
-  // If the node cannot safely be used in the given loop (thread), wrap it in one that can.
-
-  KJ_IF_MAYBE(preferred, node->getSafeEventLoop()) {
-    if (&loop != preferred) {
-      return heap<CrossThreadPromiseNode<T>>(*preferred, kj::mv(node));
-    }
-  }
-  return kj::mv(node);
-}
-
-template <typename T>
-Own<PromiseNode> spark(Own<PromiseNode>&& node, const EventLoop& loop) {
+Own<PromiseNode> spark(Own<PromiseNode>&& node) {
   // Forces evaluation of the given node to begin as soon as possible, even if no one is waiting
   // on it.
-  return heap<CrossThreadPromiseNode<T>>(loop, kj::mv(node));
+  return heap<EagerPromiseNode<T>>(kj::mv(node));
 }
 
 // -------------------------------------------------------------------
@@ -1407,15 +1264,14 @@ Own<PromiseNode> spark(Own<PromiseNode>&& node, const EventLoop& loop) {
 class AdapterPromiseNodeBase: public PromiseNode {
 public:
   bool onReady(EventLoop::Event& event) noexcept override;
-  Maybe<const EventLoop&> getSafeEventLoop() noexcept override;
 
 protected:
   inline void setReady() {
-    PromiseNode::atomicReady(onReadyEvent);
+    onReadyEvent.arm();
   }
 
 private:
-  EventLoop::Event* onReadyEvent = nullptr;
+  OnReadyEvent onReadyEvent;
 };
 
 template <typename T, typename Adapter>
@@ -1437,8 +1293,6 @@ private:
   ExceptionOr<T> result;
   bool waiting = true;
   Adapter adapter;
-  // `adapter` must come last so that it is destroyed first, since fulfill() could be called up
-  // until that point.
 
   void fulfill(T&& value) override {
     if (waiting) {
@@ -1469,7 +1323,7 @@ template <typename T>
 T EventLoop::wait(Promise<T>&& promise) {
   _::ExceptionOr<_::FixVoid<T>> result;
 
-  waitImpl(_::makeSafeForLoop<_::FixVoid<T>>(kj::mv(promise.node), *this), result);
+  waitImpl(kj::mv(promise.node), result);
 
   KJ_IF_MAYBE(value, result.value) {
     KJ_IF_MAYBE(exception, result.exception) {
@@ -1485,35 +1339,29 @@ T EventLoop::wait(Promise<T>&& promise) {
 }
 
 template <typename Func>
-PromiseForResult<Func, void> EventLoop::evalLater(Func&& func) const {
-  // Invoke thereImpl() on yieldIfSameThread().  Always spark the result.
+PromiseForResult<Func, void> EventLoop::evalLater(Func&& func) {
+  // Invoke thereImpl() on yield().  Always spark the result.
   return PromiseForResult<Func, void>(false,
       _::spark<_::FixVoid<_::JoinPromises<_::ReturnType<Func, void>>>>(
-          thereImpl(yieldIfSameThread(), kj::fwd<Func>(func), _::PropagateException()),
-          *this));
+          thereImpl(yield(), kj::fwd<Func>(func), _::PropagateException())));
 }
 
 template <typename T, typename Func, typename ErrorFunc>
 PromiseForResult<Func, T> EventLoop::there(
-    Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler) const {
-  Own<_::PromiseNode> node = thereImpl(
-      kj::mv(promise), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler));
-  if (!isCurrent()) {
-    node = _::spark<_::FixVoid<_::JoinPromises<_::ReturnType<Func, T>>>>(kj::mv(node), *this);
-  }
-  return PromiseForResult<Func, T>(false, kj::mv(node));
+    Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler) {
+  return PromiseForResult<Func, T>(false, thereImpl(
+      kj::mv(promise), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler)));
 }
 
 template <typename T, typename Func, typename ErrorFunc>
 Own<_::PromiseNode> EventLoop::thereImpl(Promise<T>&& promise, Func&& func,
-                                         ErrorFunc&& errorHandler) const {
+                                         ErrorFunc&& errorHandler) {
   typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
 
   Own<_::PromiseNode> intermediate =
       heap<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
-          *this, _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(promise.node), *this),
-          kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler));
-  return _::maybeChain(kj::mv(intermediate), *this, implicitCast<ResultT*>(nullptr));
+          kj::mv(promise.node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler));
+  return _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr));
 }
 
 template <typename T>
@@ -1532,54 +1380,35 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler
 }
 
 template <typename T>
-template <typename Func, typename ErrorFunc>
-PromiseForResultNoChaining<Func, T> Promise<T>::thenInAnyThread(
-    Func&& func, ErrorFunc&& errorHandler) {
-  typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
-
-  return PromiseForResultNoChaining<Func, T>(false,
-      heap<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
-          nullptr, kj::mv(node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler)));
-}
-
-template <typename T>
 T Promise<T>::wait() {
   return EventLoop::current().wait(kj::mv(*this));
 }
 
 template <typename T>
 ForkedPromise<T> Promise<T>::fork() {
-  auto& loop = EventLoop::current();
-  return ForkedPromise<T>(false,
-      refcounted<_::ForkHub<_::FixVoid<T>>>(
-          loop, _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(node), loop)));
+  return ForkedPromise<T>(false, refcounted<_::ForkHub<_::FixVoid<T>>>(kj::mv(node)));
 }
 
 template <typename T>
-ForkedPromise<T> EventLoop::fork(Promise<T>&& promise) const {
+ForkedPromise<T> EventLoop::fork(Promise<T>&& promise) {
   return ForkedPromise<T>(false,
-      refcounted<_::ForkHub<_::FixVoid<T>>>(*this,
-          _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(promise.node), *this)));
+      refcounted<_::ForkHub<_::FixVoid<T>>>(kj::mv(promise.node)));
 }
 
 template <typename T>
-Promise<_::Forked<T>> ForkedPromise<T>::addBranch() const {
+Promise<T> ForkedPromise<T>::addBranch() {
   return hub->addBranch();
 }
 
 template <typename T>
 void Promise<T>::exclusiveJoin(Promise<T>&& other) {
-  auto& loop = EventLoop::current();
-  node = heap<_::ExclusiveJoinPromiseNode>(loop,
-      _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(node), loop),
-      _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(other.node), loop));
+  node = heap<_::ExclusiveJoinPromiseNode>(kj::mv(node), kj::mv(other.node));
 }
 
 template <typename T>
-Promise<T> EventLoop::exclusiveJoin(Promise<T>&& promise1, Promise<T>&& promise2) const {
-  return Promise<T>(false, heap<_::ExclusiveJoinPromiseNode>(*this,
-      _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(promise1.node), *this),
-      _::makeSafeForLoop<_::FixVoid<T>>(kj::mv(promise2.node), *this)));
+Promise<T> EventLoop::exclusiveJoin(Promise<T>&& promise1, Promise<T>&& promise2) {
+  return Promise<T>(false, heap<_::ExclusiveJoinPromiseNode>(
+      kj::mv(promise1.node), kj::mv(promise2.node)));
 }
 
 template <typename T>
@@ -1590,8 +1419,8 @@ void Promise<T>::attach(Attachments&&... attachments) {
 }
 
 template <typename T>
-void Promise<T>::eagerlyEvaluate(const EventLoop& eventLoop) {
-  node = _::spark<_::FixVoid<T>>(kj::mv(node), eventLoop);
+void Promise<T>::eagerlyEvaluate() {
+  node = _::spark<_::FixVoid<T>>(kj::mv(node));
 }
 
 // =======================================================================================
@@ -1669,11 +1498,13 @@ private:
       // Already detached.
       lock.release();
       delete this;
-    } else if ((*lock)->isWaiting()) {
-      (*lock)->reject(kj::Exception(
-          kj::Exception::Nature::LOCAL_BUG, kj::Exception::Durability::PERMANENT,
-          __FILE__, __LINE__,
-          kj::heapString("PromiseFulfiller was destroyed without fulfilling the promise.")));
+    } else {
+      if ((*lock)->isWaiting()) {
+        (*lock)->reject(kj::Exception(
+            kj::Exception::Nature::LOCAL_BUG, kj::Exception::Durability::PERMANENT,
+            __FILE__, __LINE__,
+            kj::heapString("PromiseFulfiller was destroyed without fulfilling the promise.")));
+      }
       *lock = nullptr;
     }
   }
@@ -1715,42 +1546,6 @@ PromiseFulfillerPair<T> newPromiseAndFulfiller() {
       _::maybeChain(kj::mv(intermediate), implicitCast<T*>(nullptr)));
 
   return PromiseFulfillerPair<T> { kj::mv(promise), kj::mv(wrapper) };
-}
-
-template <typename T>
-PromiseFulfillerPair<T> newPromiseAndFulfiller(const EventLoop& loop) {
-  auto wrapper = _::WeakFulfiller<T>::make();
-
-  Own<_::PromiseNode> intermediate(
-      heap<_::AdapterPromiseNode<_::FixVoid<T>, _::PromiseAndFulfillerAdapter<T>>>(*wrapper));
-  Promise<_::JoinPromises<T>> promise(false,
-      _::maybeChain(kj::mv(intermediate), loop, implicitCast<T*>(nullptr)));
-
-  return PromiseFulfillerPair<T> { kj::mv(promise), kj::mv(wrapper) };
-}
-
-template <typename T>
-template <typename Func>
-PromiseForResult<Func, T&> EventLoopGuarded<T>::applyNow(Func&& func) const {
-  // Calls the given function, passing the guarded object to it as a mutable reference, and
-  // returning a pointer to the function's result.  When called from within the object's event
-  // loop, the function runs synchronously, but when called from any other thread, the function
-  // is queued to run on the object's loop later.
-
-  if (loop.isCurrent()) {
-    return func(const_cast<T&>(value));
-  } else {
-    return applyLater(kj::fwd<Func>(func));
-  }
-}
-
-template <typename T>
-template <typename Func>
-PromiseForResult<Func, T&> EventLoopGuarded<T>::applyLater(Func&& func) const {
-  // Like `applyNow` but always queues the function to run later regardless of which thread
-  // called it.
-
-  return loop.evalLater(Capture<Func> { const_cast<T&>(value), kj::fwd<Func>(func) });
 }
 
 }  // namespace kj

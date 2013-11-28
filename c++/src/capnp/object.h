@@ -73,7 +73,7 @@ struct ObjectPointer {
     inline ReaderFor<T> getAs(InterfaceSchema schema) const;
     // Only valid for T = DynamicCapability.  Requires `#include <capnp/dynamic.h>`.
 
-    kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const;
+    kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const;
     // Used by RPC system to implement pipelining.  Applications generally shouldn't use this
     // directly.
 
@@ -186,29 +186,29 @@ struct ObjectPointer {
   class Pipeline {
   public:
     inline Pipeline(decltype(nullptr)) {}
-    inline explicit Pipeline(kj::Own<const PipelineHook>&& hook): hook(kj::mv(hook)) {}
+    inline explicit Pipeline(kj::Own<PipelineHook>&& hook): hook(kj::mv(hook)) {}
 
-    Pipeline noop() const;
+    Pipeline noop();
     // Just make a copy.
 
-    Pipeline getPointerField(uint16_t pointerIndex) const;
+    Pipeline getPointerField(uint16_t pointerIndex);
     // Return a new Promise representing a sub-object of the result.  `pointerIndex` is the index
     // of the sub-object within the pointer section of the result (the result must be a struct).
     //
     // TODO(kenton):  On GCC 4.8 / Clang 3.3, use rvalue qualifiers to avoid the need for copies.
     //   Also make `ops` into a Vector to optimize this.
 
-    kj::Own<const ClientHook> asCap() const;
+    kj::Own<ClientHook> asCap();
     // Expect that the result is a capability and construct a pipelined version of it now.
 
-    inline kj::Own<const PipelineHook> releasePipelineHook() { return kj::mv(hook); }
+    inline kj::Own<PipelineHook> releasePipelineHook() { return kj::mv(hook); }
     // For use by RPC implementations.
 
   private:
-    kj::Own<const PipelineHook> hook;
+    kj::Own<PipelineHook> hook;
     kj::Array<PipelineOp> ops;
 
-    inline Pipeline(kj::Own<const PipelineHook>&& hook, kj::Array<PipelineOp>&& ops)
+    inline Pipeline(kj::Own<PipelineHook>&& hook, kj::Array<PipelineOp>&& ops)
         : hook(kj::mv(hook)), ops(kj::mv(ops)) {}
 
     friend class LocalClient;
@@ -307,17 +307,17 @@ class PipelineHook {
   // Represents a currently-running call, and implements pipelined requests on its result.
 
 public:
-  virtual kj::Own<const PipelineHook> addRef() const = 0;
+  virtual kj::Own<PipelineHook> addRef() = 0;
   // Increment this object's reference count.
 
-  virtual kj::Own<const ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) const = 0;
+  virtual kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) = 0;
   // Extract a promised Capability from the results.
 
-  virtual kj::Own<const ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops) const;
+  virtual kj::Own<ClientHook> getPipelinedCap(kj::Array<PipelineOp>&& ops);
   // Version of getPipelinedCap() passing the array by move.  May avoid a copy in some cases.
   // Default implementation just calls the other version.
 
-  static inline kj::Own<const PipelineHook> from(ObjectPointer::Pipeline&& pipeline) {
+  static inline kj::Own<PipelineHook> from(ObjectPointer::Pipeline&& pipeline) {
     return kj::mv(pipeline.hook);
   }
 };

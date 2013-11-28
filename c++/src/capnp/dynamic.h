@@ -316,12 +316,12 @@ public:
   typename T::Pipeline releaseAs();
   // Convert the dynamic pipeline to its compiled-in type.
 
-  inline StructSchema getSchema() const { return schema; }
+  inline StructSchema getSchema() { return schema; }
 
-  DynamicValue::Pipeline get(StructSchema::Field field) const;
+  DynamicValue::Pipeline get(StructSchema::Field field);
   // Read the given field value.
 
-  DynamicValue::Pipeline get(kj::StringPtr name) const;
+  DynamicValue::Pipeline get(kj::StringPtr name);
   // Get by string name.
 
 private:
@@ -441,32 +441,32 @@ public:
   inline Client(T&& client);
 
   template <typename T, typename = kj::EnableIf<kj::canConvert<T*, DynamicCapability::Server*>()>>
-  inline Client(kj::Own<T>&& server, const kj::EventLoop& loop = kj::EventLoop::current());
+  inline Client(kj::Own<T>&& server);
 
   template <typename T, typename = kj::EnableIf<kind<T>() == Kind::INTERFACE>>
-  typename T::Client as() const;
+  typename T::Client as();
   template <typename T, typename = kj::EnableIf<kind<T>() == Kind::INTERFACE>>
   typename T::Client releaseAs();
   // Convert to any client type.
 
-  Client upcast(InterfaceSchema requestedSchema) const;
+  Client upcast(InterfaceSchema requestedSchema);
   // Upcast to a superclass.  Throws an exception if `schema` is not a superclass.
 
-  inline InterfaceSchema getSchema() const { return schema; }
+  inline InterfaceSchema getSchema() { return schema; }
 
   Request<DynamicStruct, DynamicStruct> newRequest(
-      InterfaceSchema::Method method, uint firstSegmentWordSize = 0) const;
+      InterfaceSchema::Method method, uint firstSegmentWordSize = 0);
   Request<DynamicStruct, DynamicStruct> newRequest(
-      kj::StringPtr methodName, uint firstSegmentWordSize = 0) const;
+      kj::StringPtr methodName, uint firstSegmentWordSize = 0);
 
 private:
   InterfaceSchema schema;
 
-  Client(InterfaceSchema schema, kj::Own<const ClientHook>&& hook)
+  Client(InterfaceSchema schema, kj::Own<ClientHook>&& hook)
       : Capability::Client(kj::mv(hook)), schema(schema) {}
 
   template <typename T>
-  inline Client(InterfaceSchema schema, kj::Own<T>&& server, const kj::EventLoop& loop);
+  inline Client(InterfaceSchema schema, kj::Own<T>&& server);
 
   friend struct Capability;
   friend struct DynamicStruct;
@@ -589,7 +589,7 @@ public:
   inline Reader(DynamicEnum value);
   inline Reader(const DynamicStruct::Reader& value);
   inline Reader(const ObjectPointer::Reader& value);
-  inline Reader(const DynamicCapability::Client& value);
+  inline Reader(DynamicCapability::Client& value);
   inline Reader(DynamicCapability::Client&& value);
   template <typename T, typename = kj::EnableIf<kj::canConvert<T*, DynamicCapability::Server*>()>>
   inline Reader(kj::Own<T>&& value);
@@ -650,7 +650,9 @@ private:
     DynamicEnum enumValue;
     DynamicStruct::Reader structValue;
     ObjectPointer::Reader objectValue;
-    DynamicCapability::Client capabilityValue;
+
+    mutable DynamicCapability::Client capabilityValue;
+    // Declared mutable because `Client`s normally cannot be const.
 
     // Warning:  Copy/move constructors assume all these types are trivially copyable except
     //   Capability.
@@ -689,7 +691,7 @@ public:
   inline Builder(DynamicEnum value);
   inline Builder(DynamicStruct::Builder value);
   inline Builder(ObjectPointer::Builder value);
-  inline Builder(const DynamicCapability::Client& value);
+  inline Builder(DynamicCapability::Client& value);
   inline Builder(DynamicCapability::Client&& value);
 
   template <typename T, typename = decltype(toDynamic(kj::instance<T>()))>
@@ -727,7 +729,9 @@ private:
     DynamicEnum enumValue;
     DynamicStruct::Builder structValue;
     ObjectPointer::Builder objectValue;
-    DynamicCapability::Client capabilityValue;
+
+    mutable DynamicCapability::Client capabilityValue;
+    // Declared mutable because `Client`s normally cannot be const.
   };
 
   template <typename T, Kind kind = kind<T>()> struct AsImpl;
@@ -1035,7 +1039,7 @@ inline Orphan<DynamicList> Orphanage::newOrphanCopy<DynamicList::Reader>(
 
 template <>
 inline Orphan<DynamicCapability> Orphanage::newOrphanCopy<DynamicCapability::Client>(
-    const DynamicCapability::Client& copyFrom) const {
+    DynamicCapability::Client& copyFrom) const {
   return Orphan<DynamicCapability>(
       copyFrom.getSchema(), _::OrphanBuilder::copy(arena, copyFrom.hook->addRef()));
 }
@@ -1087,7 +1091,7 @@ struct PointerHelpers<DynamicCapability, Kind::UNKNOWN> {
   // don't want people to accidentally be able to provide their own default value.
   static DynamicCapability::Client getDynamic(PointerReader reader, InterfaceSchema schema);
   static DynamicCapability::Client getDynamic(PointerBuilder builder, InterfaceSchema schema);
-  static void set(PointerBuilder builder, const DynamicCapability::Client& value);
+  static void set(PointerBuilder builder, DynamicCapability::Client& value);
   static void set(PointerBuilder builder, DynamicCapability::Client&& value);
   static inline void adopt(PointerBuilder builder, Orphan<DynamicCapability>&& value) {
     builder.adopt(kj::mv(value.builder));
@@ -1204,8 +1208,8 @@ struct ToDynamic_<T, Kind::LIST> {
 
 template <typename T>
 struct ToDynamic_<T, Kind::INTERFACE> {
-  static inline DynamicCapability::Client apply(const typename T::Client& value) {
-    return DynamicCapability::Client(value);
+  static inline DynamicCapability::Client apply(typename T::Client value) {
+    return DynamicCapability::Client(kj::mv(value));
   }
   static inline DynamicCapability::Client apply(typename T::Client&& value) {
     return DynamicCapability::Client(kj::mv(value));
@@ -1272,14 +1276,14 @@ CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(ObjectPointer, OBJECT, object);
 
 #undef CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR
 
-inline DynamicValue::Reader::Reader(const DynamicCapability::Client& value)
+inline DynamicValue::Reader::Reader(DynamicCapability::Client& value)
     : type(CAPABILITY), capabilityValue(value) {}
 inline DynamicValue::Reader::Reader(DynamicCapability::Client&& value)
     : type(CAPABILITY), capabilityValue(kj::mv(value)) {}
 template <typename T, typename>
 inline DynamicValue::Reader::Reader(kj::Own<T>&& value)
     : type(CAPABILITY), capabilityValue(kj::mv(value)) {}
-inline DynamicValue::Builder::Builder(const DynamicCapability::Client& value)
+inline DynamicValue::Builder::Builder(DynamicCapability::Client& value)
     : type(CAPABILITY), capabilityValue(value) {}
 inline DynamicValue::Builder::Builder(DynamicCapability::Client&& value)
     : type(CAPABILITY), capabilityValue(kj::mv(value)) {}
@@ -1479,15 +1483,14 @@ inline DynamicCapability::Client::Client(T&& client)
     : Capability::Client(kj::mv(client)), schema(Schema::from<FromClient<T>>()) {}
 
 template <typename T, typename>
-inline DynamicCapability::Client::Client(kj::Own<T>&& server, const kj::EventLoop& loop)
-    : Client(server->getSchema(), kj::mv(server), loop) {}
+inline DynamicCapability::Client::Client(kj::Own<T>&& server)
+    : Client(server->getSchema(), kj::mv(server)) {}
 template <typename T>
-inline DynamicCapability::Client::Client(
-    InterfaceSchema schema, kj::Own<T>&& server, const kj::EventLoop& loop)
-    : Capability::Client(kj::mv(server), loop), schema(schema) {}
+inline DynamicCapability::Client::Client(InterfaceSchema schema, kj::Own<T>&& server)
+    : Capability::Client(kj::mv(server)), schema(schema) {}
 
 template <typename T, typename>
-typename T::Client DynamicCapability::Client::as() const {
+typename T::Client DynamicCapability::Client::as() {
   static_assert(kind<T>() == Kind::INTERFACE,
                 "DynamicCapability::Client::as<T>() can only convert to interface types.");
   schema.requireUsableAs<T>();
@@ -1543,7 +1546,7 @@ inline bool CallContext<DynamicStruct, DynamicStruct>::isCanceled() {
 
 template <>
 inline DynamicCapability::Client Capability::Client::castAs<DynamicCapability>(
-    InterfaceSchema schema) const {
+    InterfaceSchema schema) {
   return DynamicCapability::Client(schema, hook->addRef());
 }
 

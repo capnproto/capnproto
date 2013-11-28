@@ -991,8 +991,8 @@ public:
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::capnp::schema::Type::Pipeline getType() const;
-  inline  ::capnp::schema::Value::Pipeline getValue() const;
+  inline  ::capnp::schema::Type::Pipeline getType();
+  inline  ::capnp::schema::Value::Pipeline getValue();
 private:
   ::capnp::ObjectPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -1130,7 +1130,7 @@ public:
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::capnp::schema::Type::Pipeline getType() const;
+  inline  ::capnp::schema::Type::Pipeline getType();
 private:
   ::capnp::ObjectPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -1249,7 +1249,7 @@ public:
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline Ordinal::Pipeline getOrdinal() const;
+  inline Ordinal::Pipeline getOrdinal();
 private:
   ::capnp::ObjectPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -1347,8 +1347,8 @@ public:
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::capnp::schema::Type::Pipeline getType() const;
-  inline  ::capnp::schema::Value::Pipeline getDefaultValue() const;
+  inline  ::capnp::schema::Type::Pipeline getType();
+  inline  ::capnp::schema::Value::Pipeline getDefaultValue();
 private:
   ::capnp::ObjectPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -1977,7 +1977,7 @@ public:
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::capnp::schema::Type::Pipeline getElementType() const;
+  inline  ::capnp::schema::Type::Pipeline getElementType();
 private:
   ::capnp::ObjectPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -2494,7 +2494,7 @@ public:
   inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::capnp::schema::Value::Pipeline getValue() const;
+  inline  ::capnp::schema::Value::Pipeline getValue();
 private:
   ::capnp::ObjectPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -3341,7 +3341,7 @@ inline  ::capnp::schema::Type::Builder Node::Const::Builder::getType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
       _builder.getPointerField(3 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::Type::Pipeline Node::Const::Pipeline::getType() const {
+inline  ::capnp::schema::Type::Pipeline Node::Const::Pipeline::getType() {
   return  ::capnp::schema::Type::Pipeline(_typeless.getPointerField(3));
 }
 inline void Node::Const::Builder::setType( ::capnp::schema::Type::Reader value) {
@@ -3376,7 +3376,7 @@ inline  ::capnp::schema::Value::Builder Node::Const::Builder::getValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
       _builder.getPointerField(4 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::Value::Pipeline Node::Const::Pipeline::getValue() const {
+inline  ::capnp::schema::Value::Pipeline Node::Const::Pipeline::getValue() {
   return  ::capnp::schema::Value::Pipeline(_typeless.getPointerField(4));
 }
 inline void Node::Const::Builder::setValue( ::capnp::schema::Value::Reader value) {
@@ -3411,7 +3411,7 @@ inline  ::capnp::schema::Type::Builder Node::Annotation::Builder::getType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
       _builder.getPointerField(3 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::Type::Pipeline Node::Annotation::Pipeline::getType() const {
+inline  ::capnp::schema::Type::Pipeline Node::Annotation::Pipeline::getType() {
   return  ::capnp::schema::Type::Pipeline(_typeless.getPointerField(3));
 }
 inline void Node::Annotation::Builder::setType( ::capnp::schema::Type::Reader value) {
@@ -3752,7 +3752,7 @@ inline Field::Ordinal::Reader Field::Reader::getOrdinal() const {
 inline Field::Ordinal::Builder Field::Builder::getOrdinal() {
   return Field::Ordinal::Builder(_builder);
 }
-inline Field::Ordinal::Pipeline Field::Pipeline::getOrdinal() const {
+inline Field::Ordinal::Pipeline Field::Pipeline::getOrdinal() {
   return Field::Ordinal::Pipeline(_typeless.noop());
 }
 inline Field::Ordinal::Builder Field::Builder::initOrdinal() {
@@ -3788,7 +3788,7 @@ inline  ::capnp::schema::Type::Builder Field::Slot::Builder::getType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
       _builder.getPointerField(2 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::Type::Pipeline Field::Slot::Pipeline::getType() const {
+inline  ::capnp::schema::Type::Pipeline Field::Slot::Pipeline::getType() {
   return  ::capnp::schema::Type::Pipeline(_typeless.getPointerField(2));
 }
 inline void Field::Slot::Builder::setType( ::capnp::schema::Type::Reader value) {
@@ -3823,7 +3823,7 @@ inline  ::capnp::schema::Value::Builder Field::Slot::Builder::getDefaultValue() 
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
       _builder.getPointerField(3 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::Value::Pipeline Field::Slot::Pipeline::getDefaultValue() const {
+inline  ::capnp::schema::Value::Pipeline Field::Slot::Pipeline::getDefaultValue() {
   return  ::capnp::schema::Value::Pipeline(_typeless.getPointerField(3));
 }
 inline void Field::Slot::Builder::setDefaultValue( ::capnp::schema::Value::Reader value) {
@@ -4614,7 +4614,7 @@ inline  ::capnp::schema::Type::Builder Type::List::Builder::getElementType() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::Type::Pipeline Type::List::Pipeline::getElementType() const {
+inline  ::capnp::schema::Type::Pipeline Type::List::Pipeline::getElementType() {
   return  ::capnp::schema::Type::Pipeline(_typeless.getPointerField(0));
 }
 inline void Type::List::Builder::setElementType( ::capnp::schema::Type::Reader value) {
@@ -5285,7 +5285,7 @@ inline  ::capnp::schema::Value::Builder Annotation::Builder::getValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::Value::Pipeline Annotation::Pipeline::getValue() const {
+inline  ::capnp::schema::Value::Pipeline Annotation::Pipeline::getValue() {
   return  ::capnp::schema::Value::Pipeline(_typeless.getPointerField(0));
 }
 inline void Annotation::Builder::setValue( ::capnp::schema::Value::Reader value) {

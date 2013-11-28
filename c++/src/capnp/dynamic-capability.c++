@@ -28,13 +28,13 @@
 
 namespace capnp {
 
-DynamicCapability::Client DynamicCapability::Client::upcast(InterfaceSchema requestedSchema) const {
+DynamicCapability::Client DynamicCapability::Client::upcast(InterfaceSchema requestedSchema) {
   KJ_REQUIRE(schema.extends(requestedSchema), "Can't upcast to non-superclass.") {}
   return DynamicCapability::Client(requestedSchema, hook->addRef());
 }
 
 Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(
-    InterfaceSchema::Method method, uint firstSegmentWordSize) const {
+    InterfaceSchema::Method method, uint firstSegmentWordSize) {
   auto methodInterface = method.getContainingInterface();
 
   KJ_REQUIRE(schema.extends(methodInterface), "Interface does not implement this method.");
@@ -51,7 +51,7 @@ Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(
 }
 
 Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(
-    kj::StringPtr methodName, uint firstSegmentWordSize) const {
+    kj::StringPtr methodName, uint firstSegmentWordSize) {
   return newRequest(schema.getMethodByName(methodName), firstSegmentWordSize);
 }
 
@@ -83,7 +83,7 @@ RemotePromise<DynamicStruct> Request<DynamicStruct, DynamicStruct>::send() {
   // Explicitly upcast to kj::Promise to make clear that calling .then() doesn't invalidate the
   // Pipeline part of the RemotePromise.
   auto typedPromise = kj::implicitCast<kj::Promise<Response<ObjectPointer>>&>(typelessPromise)
-      .thenInAnyThread([=](Response<ObjectPointer>&& response) -> Response<DynamicStruct> {
+      .then([=](Response<ObjectPointer>&& response) -> Response<DynamicStruct> {
         return Response<DynamicStruct>(response.getAs<DynamicStruct>(resultSchemaCopy),
                                        kj::mv(response.hook));
       });

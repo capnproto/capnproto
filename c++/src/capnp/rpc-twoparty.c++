@@ -27,19 +27,17 @@
 
 namespace capnp {
 
-TwoPartyVatNetwork::TwoPartyVatNetwork(
-    const kj::EventLoop& eventLoop, kj::AsyncIoStream& stream, rpc::twoparty::Side side,
-    ReaderOptions receiveOptions)
-    : eventLoop(eventLoop), stream(stream), side(side), receiveOptions(receiveOptions),
-      previousWrite(kj::READY_NOW) {
+TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
+                                       ReaderOptions receiveOptions)
+    : stream(stream), side(side), receiveOptions(receiveOptions), previousWrite(kj::READY_NOW) {
   {
     auto paf = kj::newPromiseAndFulfiller<void>();
-    disconnectPromise = eventLoop.fork(kj::mv(paf.promise));
+    disconnectPromise = paf.promise.fork();
     disconnectFulfiller.getWithoutLock() = kj::mv(paf.fulfiller);
   }
   {
     auto paf = kj::newPromiseAndFulfiller<void>();
-    drainedPromise = eventLoop.fork(kj::mv(paf.promise));
+    drainedPromise = paf.promise.fork();
     drainedFulfiller.fulfiller.getWithoutLock() = kj::mv(paf.fulfiller);
   }
 }
@@ -80,7 +78,7 @@ public:
 
   void send() override {
     auto lock = network.previousWrite.lockExclusive();
-    *lock = network.eventLoop.there(kj::mv(*lock), [&]() {
+    *lock = lock->then([&]() {
       auto promise = writeMessage(network.stream, message).then([]() {
         // success; do nothing
       }, [&](kj::Exception&& exception) {
@@ -110,13 +108,12 @@ private:
   kj::Own<MessageReader> message;
 };
 
-kj::Own<OutgoingRpcMessage> TwoPartyVatNetwork::newOutgoingMessage(
-    uint firstSegmentWordSize) const {
+kj::Own<OutgoingRpcMessage> TwoPartyVatNetwork::newOutgoingMessage(uint firstSegmentWordSize) {
   return kj::refcounted<OutgoingMessageImpl>(*this, firstSegmentWordSize);
 }
 
 kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveIncomingMessage() {
-  return eventLoop.evalLater([&]() {
+  return kj::evalLater([&]() {
     return tryReadMessage(stream, receiveOptions)
         .then([&](kj::Maybe<kj::Own<MessageReader>>&& message)
               -> kj::Maybe<kj::Own<IncomingRpcMessage>> {

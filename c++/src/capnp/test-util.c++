@@ -942,6 +942,7 @@ kj::Promise<void> TestTailCallerImpl::fooAdvanced(
   auto tailRequest = params.getCallee().fooRequest();
   tailRequest.setI(params.getI());
   tailRequest.setT("from TestTailCaller");
+  context.releaseParams();
   return context.tailCall(kj::mv(tailRequest));
 }
 

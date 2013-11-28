@@ -117,6 +117,8 @@ public:
 
   template <typename Reader>
   Orphan<FromReader<Reader>> newOrphanCopy(const Reader& copyFrom) const;
+  template <typename Reader>
+  Orphan<FromReader<Reader>> newOrphanCopy(Reader& copyFrom) const;
   // Allocate a new orphaned object (struct, list, or blob) and initialize it as a copy of the
   // given object.
 
@@ -296,9 +298,13 @@ struct Orphanage::GetInnerReader<T, Kind::BLOB> {
 };
 
 template <typename Reader>
-Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(const Reader& copyFrom) const {
+inline Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(const Reader& copyFrom) const {
   return Orphan<FromReader<Reader>>(_::OrphanBuilder::copy(
       arena, GetInnerReader<FromReader<Reader>>::apply(copyFrom)));
+}
+template <typename Reader>
+inline Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(Reader& copyFrom) const {
+  return newOrphanCopy(kj::implicitCast<const Reader&>(copyFrom));
 }
 
 }  // namespace capnp

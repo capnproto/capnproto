@@ -1495,7 +1495,7 @@ struct WireHelpers {
   }
 
   static SegmentAnd<word*> setCapabilityPointer(
-      SegmentBuilder* segment, WirePointer* ref, kj::Own<const ClientHook>&& cap,
+      SegmentBuilder* segment, WirePointer* ref, kj::Own<ClientHook>&& cap,
       BuilderArena* orphanArena = nullptr) {
     if (orphanArena == nullptr) {
       auto orphan = segment->getArena()->injectCap(kj::mv(cap));
@@ -1796,14 +1796,14 @@ struct WireHelpers {
                                       nestingLimit);
   }
 
-  static KJ_ALWAYS_INLINE(kj::Own<const ClientHook> readCapabilityPointer(
+  static KJ_ALWAYS_INLINE(kj::Own<ClientHook> readCapabilityPointer(
       SegmentReader* segment, const WirePointer* ref, int nestingLimit)) {
     return readCapabilityPointer(segment, ref, ref->target(), nestingLimit);
   }
 
-  static KJ_ALWAYS_INLINE(kj::Own<const ClientHook> readCapabilityPointer(
+  static KJ_ALWAYS_INLINE(kj::Own<ClientHook> readCapabilityPointer(
       SegmentReader* segment, const WirePointer* ref, const word* refTarget, int nestingLimit)) {
-    kj::Maybe<kj::Own<const ClientHook>> maybeCap;
+    kj::Maybe<kj::Own<ClientHook>> maybeCap;
 
     if (ref->isNull()) {
       maybeCap = segment->getArena()->newBrokenCap("Calling null capability pointer.");
@@ -2170,12 +2170,12 @@ void PointerBuilder::setList(const ListReader& value) {
   WireHelpers::setListPointer(segment, pointer, value);
 }
 
-kj::Own<const ClientHook> PointerBuilder::getCapability() {
+kj::Own<ClientHook> PointerBuilder::getCapability() {
   return WireHelpers::readCapabilityPointer(
       segment, pointer, kj::maxValue);
 }
 
-void PointerBuilder::setCapability(kj::Own<const ClientHook>&& cap) {
+void PointerBuilder::setCapability(kj::Own<ClientHook>&& cap) {
   WireHelpers::setCapabilityPointer(segment, pointer, kj::mv(cap));
 }
 
@@ -2252,7 +2252,7 @@ Data::Reader PointerReader::getBlob<Data>(const void* defaultValue, ByteCount de
   return WireHelpers::readDataPointer(segment, ref, defaultValue, defaultSize);
 }
 
-kj::Own<const ClientHook> PointerReader::getCapability() const {
+kj::Own<ClientHook> PointerReader::getCapability() const {
   const WirePointer* ref = pointer == nullptr ? &zero.pointer : pointer;
   return WireHelpers::readCapabilityPointer(segment, ref, nestingLimit);
 }
@@ -2603,7 +2603,7 @@ OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, Data::Reader copyFrom) {
   return result;
 }
 
-OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, kj::Own<const ClientHook> copyFrom) {
+OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, kj::Own<ClientHook> copyFrom) {
   OrphanBuilder result;
   auto allocation = WireHelpers::setCapabilityPointer(
       nullptr, result.tagAsPtr(), kj::mv(copyFrom), arena);
@@ -2676,7 +2676,7 @@ ListReader OrphanBuilder::asListReader(FieldSize elementSize) const {
       segment, tagAsPtr(), location, nullptr, elementSize, kj::maxValue);
 }
 
-kj::Own<const ClientHook> OrphanBuilder::asCapability() const {
+kj::Own<ClientHook> OrphanBuilder::asCapability() const {
   KJ_DASSERT(tagAsPtr()->isNull() == (location == nullptr));
   return WireHelpers::readCapabilityPointer(
       segment, tagAsPtr(), location, kj::maxValue);

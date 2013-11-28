@@ -102,12 +102,12 @@ void BasicReaderArena::reportReadLimitReached() {
   }
 }
 
-kj::Maybe<kj::Own<const ClientHook>> BasicReaderArena::extractCap(
+kj::Maybe<kj::Own<ClientHook>> BasicReaderArena::extractCap(
     const _::StructReader& capDescriptor) {
   return nullptr;
 }
 
-kj::Maybe<kj::Own<const ClientHook>> BasicReaderArena::newBrokenCap(kj::StringPtr description) {
+kj::Maybe<kj::Own<ClientHook>> BasicReaderArena::newBrokenCap(kj::StringPtr description) {
   return nullptr;
 }
 
@@ -159,14 +159,14 @@ void ImbuedReaderArena::reportReadLimitReached() {
   return base->reportReadLimitReached();
 }
 
-kj::Maybe<kj::Own<const ClientHook>> ImbuedReaderArena::extractCap(
+kj::Maybe<kj::Own<ClientHook>> ImbuedReaderArena::extractCap(
     const _::StructReader& capDescriptor) {
   _::StructReader copy = capDescriptor;
   copy.unimbue();
   return capExtractor->extractCapInternal(copy);
 }
 
-kj::Maybe<kj::Own<const ClientHook>> ImbuedReaderArena::newBrokenCap(kj::StringPtr description) {
+kj::Maybe<kj::Own<ClientHook>> ImbuedReaderArena::newBrokenCap(kj::StringPtr description) {
   return capExtractor->newBrokenCapInternal(description);
 }
 
@@ -309,16 +309,16 @@ void BasicBuilderArena::reportReadLimitReached() {
   }
 }
 
-kj::Maybe<kj::Own<const ClientHook>> BasicBuilderArena::extractCap(
+kj::Maybe<kj::Own<ClientHook>> BasicBuilderArena::extractCap(
     const _::StructReader& capDescriptor) {
   return nullptr;
 }
 
-kj::Maybe<kj::Own<const ClientHook>> BasicBuilderArena::newBrokenCap(kj::StringPtr description) {
+kj::Maybe<kj::Own<ClientHook>> BasicBuilderArena::newBrokenCap(kj::StringPtr description) {
   return nullptr;
 }
 
-OrphanBuilder BasicBuilderArena::injectCap(kj::Own<const ClientHook>&& cap) {
+OrphanBuilder BasicBuilderArena::injectCap(kj::Own<ClientHook>&& cap) {
   KJ_FAIL_REQUIRE("Cannot inject capability into a builder that has not been imbued with a "
                   "capability context.") {
     return OrphanBuilder();
@@ -381,14 +381,14 @@ void ImbuedBuilderArena::reportReadLimitReached() {
   base->reportReadLimitReached();
 }
 
-kj::Maybe<kj::Own<const ClientHook>> ImbuedBuilderArena::extractCap(
+kj::Maybe<kj::Own<ClientHook>> ImbuedBuilderArena::extractCap(
     const _::StructReader& capDescriptor) {
   _::StructReader copy = capDescriptor;
   copy.unimbue();
   return capInjector->getInjectedCapInternal(copy);
 }
 
-kj::Maybe<kj::Own<const ClientHook>> ImbuedBuilderArena::newBrokenCap(kj::StringPtr description) {
+kj::Maybe<kj::Own<ClientHook>> ImbuedBuilderArena::newBrokenCap(kj::StringPtr description) {
   return capInjector->newBrokenCapInternal(description);
 }
 
@@ -402,7 +402,7 @@ BuilderArena::AllocateResult ImbuedBuilderArena::allocate(WordCount amount) {
   return result;
 }
 
-OrphanBuilder ImbuedBuilderArena::injectCap(kj::Own<const ClientHook>&& cap) {
+OrphanBuilder ImbuedBuilderArena::injectCap(kj::Own<ClientHook>&& cap) {
   return capInjector->injectCapInternal(this, kj::mv(cap));
 }
 

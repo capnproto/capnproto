@@ -574,7 +574,7 @@ private:
                 "\n"),
 
             hasDiscriminantValue(proto) ? kj::strTree() :
-                kj::strTree("  inline ", titleCase, "::Pipeline get", titleCase, "() const;\n"),
+                kj::strTree("  inline ", titleCase, "::Pipeline get", titleCase, "();\n"),
 
             kj::strTree(
                 kj::mv(unionDiscrim.isDefs),
@@ -587,7 +587,7 @@ private:
                 "  return ", scope, titleCase, "::Builder(_builder);\n"
                 "}\n",
                 hasDiscriminantValue(proto) ? kj::strTree() : kj::strTree(
-                  "inline ", scope, titleCase, "::Pipeline ", scope, "Pipeline::get", titleCase, "() const {\n",
+                  "inline ", scope, titleCase, "::Pipeline ", scope, "Pipeline::get", titleCase, "() {\n",
                   "  return ", scope, titleCase, "::Pipeline(_typeless.noop());\n"
                   "}\n"),
                 "inline ", scope, titleCase, "::Builder ", scope, "Builder::init", titleCase, "() {\n",
@@ -773,14 +773,14 @@ private:
             "  inline bool has", titleCase, "();\n"
             "  inline ", type, "::Client get", titleCase, "();\n"
             "  inline void set", titleCase, "(", type, "::Client&& value);\n",
-            "  inline void set", titleCase, "(const ", type, "::Client& value);\n",
+            "  inline void set", titleCase, "(", type, "::Client& value);\n",
             "  inline void adopt", titleCase, "(::capnp::Orphan<", type, ">&& value);\n"
             "  inline ::capnp::Orphan<", type, "> disown", titleCase, "();\n"
             "\n"),
 
         kj::strTree(
             hasDiscriminantValue(proto) ? kj::strTree() : kj::strTree(
-              "  inline ", type, "::Client get", titleCase, "() const;\n")),
+              "  inline ", type, "::Client get", titleCase, "();\n")),
 
         kj::strTree(
             kj::mv(unionDiscrim.isDefs),
@@ -803,7 +803,7 @@ private:
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
             "}\n",
             hasDiscriminantValue(proto) ? kj::strTree() : kj::strTree(
-              "inline ", type, "::Client ", scope, "Pipeline::get", titleCase, "() const {\n",
+              "inline ", type, "::Client ", scope, "Pipeline::get", titleCase, "() {\n",
               "  return ", type, "::Client(_typeless.getPointerField(", offset, ").asCap());\n"
               "}\n"),
             "inline void ", scope, "Builder::set", titleCase, "(", type, "::Client&& cap) {\n",
@@ -811,7 +811,7 @@ private:
             "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), kj::mv(cap));\n"
             "}\n",
-            "inline void ", scope, "Builder::set", titleCase, "(const ", type, "::Client& cap) {\n",
+            "inline void ", scope, "Builder::set", titleCase, "(", type, "::Client& cap) {\n",
             unionDiscrim.set,
             "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), cap);\n"
@@ -886,7 +886,7 @@ private:
           defaultSize == 0 ? kj::strTree() : kj::strTree(", ", defaultSize));
 
       kj::String elementReaderType;
-      bool isStructList = false;
+      bool isStructOrCapList = false;
       if (kind == FieldKind::LIST) {
         bool primitiveElement = false;
         bool interface = false;
@@ -915,12 +915,13 @@ private:
             break;
 
           case schema::Type::INTERFACE:
+            isStructOrCapList = true;
             primitiveElement = false;
             interface = true;
             break;
 
           case schema::Type::STRUCT:
-            isStructList = true;
+            isStructOrCapList = true;
             primitiveElement = false;
             break;
         }
@@ -941,7 +942,7 @@ private:
             "  inline bool has", titleCase, "();\n"
             "  inline ", type, "::Builder get", titleCase, "();\n"
             "  inline void set", titleCase, "(", type, "::Reader value);\n",
-            kind == FieldKind::LIST && !isStructList
+            kind == FieldKind::LIST && !isStructOrCapList
             ? kj::strTree(
               "  inline void set", titleCase, "(std::initializer_list<", elementReaderType, "> value);\n")
             : kj::strTree(),
@@ -957,7 +958,7 @@ private:
         kj::strTree(
             kind == FieldKind::STRUCT && !hasDiscriminantValue(proto)
             ? kj::strTree(
-              "  inline ", type, "::Pipeline get", titleCase, "() const;\n")
+              "  inline ", type, "::Pipeline get", titleCase, "();\n")
             : kj::strTree()),
 
         kj::strTree(
@@ -982,7 +983,7 @@ private:
             "}\n",
             kind == FieldKind::STRUCT && !hasDiscriminantValue(proto)
             ? kj::strTree(
-              "inline ", type, "::Pipeline ", scope, "Pipeline::get", titleCase, "() const {\n",
+              "inline ", type, "::Pipeline ", scope, "Pipeline::get", titleCase, "() {\n",
               "  return ", type, "::Pipeline(_typeless.getPointerField(", offset, "));\n"
               "}\n")
             : kj::strTree(),
@@ -991,7 +992,7 @@ private:
             "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), value);\n"
             "}\n",
-            kind == FieldKind::LIST && !isStructList
+            kind == FieldKind::LIST && !isStructOrCapList
             ? kj::strTree(
               "inline void ", scope, "Builder::set", titleCase, "(std::initializer_list<", elementReaderType, "> value) {\n",
               unionDiscrim.set,
@@ -1218,7 +1219,7 @@ private:
     return MethodText {
       kj::strTree(
           "  ::capnp::Request<", paramType, ", ", resultType, "> ", name, "Request(\n"
-          "      unsigned int firstSegmentWordSize = 0) const;\n"),
+          "      unsigned int firstSegmentWordSize = 0);\n"),
 
       kj::strTree(
           paramProto.getScopeId() != 0 ? kj::strTree() : kj::strTree(
@@ -1235,7 +1236,7 @@ private:
 
       kj::strTree(
           "::capnp::Request<", paramType, ", ", resultType, ">\n",
-          interfaceName, "::Client::", name, "Request(unsigned int firstSegmentWordSize) const {\n"
+          interfaceName, "::Client::", name, "Request(unsigned int firstSegmentWordSize) {\n"
           "  return newCall<", paramType, ", ", resultType, ">(\n"
           "      0x", interfaceIdHex, "ull, ", methodId, ", firstSegmentWordSize);\n"
           "}\n"
@@ -1308,17 +1309,15 @@ private:
           "  typedef ", fullName, " Reads;\n"
           "\n"
           "  Client(decltype(nullptr));\n"
-          "  explicit Client(::kj::Own<const ::capnp::ClientHook>&& hook);\n"
+          "  explicit Client(::kj::Own< ::capnp::ClientHook>&& hook);\n"
           "  template <typename T, typename = ::kj::EnableIf< ::kj::canConvert<T*, Server*>()>>\n"
-          "  Client(::kj::Own<T>&& server,\n"
-          "         const ::kj::EventLoop& loop = ::kj::EventLoop::current());\n"
+          "  Client(::kj::Own<T>&& server);\n"
           "  template <typename T, typename = ::kj::EnableIf< ::kj::canConvert<T*, Client*>()>>\n"
-          "  Client(::kj::Promise<T>&& promise,\n"
-          "         const ::kj::EventLoop& loop = ::kj::EventLoop::current());\n"
+          "  Client(::kj::Promise<T>&& promise);\n"
           "  Client(::kj::Exception&& exception);\n"
-          "  Client(const Client&) = default;\n"
+          "  Client(Client&) = default;\n"
           "  Client(Client&&) = default;\n"
-          "  Client& operator=(const Client& other);\n"
+          "  Client& operator=(Client& other);\n"
           "  Client& operator=(Client&& other);\n"
           "\n",
           KJ_MAP(m, methods) { return kj::mv(m.clientDecls); },
@@ -1352,19 +1351,17 @@ private:
           "inline ", fullName, "::Client::Client(decltype(nullptr))\n"
           "    : ::capnp::Capability::Client(nullptr) {}\n"
           "inline ", fullName, "::Client::Client(\n"
-          "    ::kj::Own<const ::capnp::ClientHook>&& hook)\n"
+          "    ::kj::Own< ::capnp::ClientHook>&& hook)\n"
           "    : ::capnp::Capability::Client(::kj::mv(hook)) {}\n"
           "template <typename T, typename>\n"
-          "inline ", fullName, "::Client::Client(\n"
-          "    ::kj::Own<T>&& server, const ::kj::EventLoop& loop)\n"
-          "    : ::capnp::Capability::Client(::kj::mv(server), loop) {}\n"
+          "inline ", fullName, "::Client::Client(::kj::Own<T>&& server)\n"
+          "    : ::capnp::Capability::Client(::kj::mv(server)) {}\n"
           "template <typename T, typename>\n"
-          "inline ", fullName, "::Client::Client(\n"
-          "    ::kj::Promise<T>&& promise, const ::kj::EventLoop& loop)\n"
-          "    : ::capnp::Capability::Client(::kj::mv(promise), loop) {}\n"
+          "inline ", fullName, "::Client::Client(::kj::Promise<T>&& promise)\n"
+          "    : ::capnp::Capability::Client(::kj::mv(promise)) {}\n"
           "inline ", fullName, "::Client::Client(::kj::Exception&& exception)\n"
           "    : ::capnp::Capability::Client(::kj::mv(exception)) {}\n"
-          "inline ", fullName, "::Client& ", fullName, "::Client::operator=(const Client& other) {\n"
+          "inline ", fullName, "::Client& ", fullName, "::Client::operator=(Client& other) {\n"
           "  ::capnp::Capability::Client::operator=(other);\n"
           "  return *this;\n"
           "}\n"
