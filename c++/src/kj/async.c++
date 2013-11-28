@@ -424,12 +424,12 @@ SimpleEventLoop::~SimpleEventLoop() noexcept(false) {
 }
 
 void SimpleEventLoop::prepareToSleep() noexcept {
-  pthread_mutex_lock(&mutex);
-  preparedToSleep = 1;
+  __atomic_store_n(&preparedToSleep, 1, __ATOMIC_RELAXED);
 }
 
 void SimpleEventLoop::sleep() {
-  while (preparedToSleep == 1) {
+  pthread_mutex_lock(&mutex);
+  while (__atomic_load_n(&preparedToSleep, __ATOMIC_RELAXED) == 1) {
     pthread_cond_wait(&condvar, &mutex);
   }
   pthread_mutex_unlock(&mutex);
@@ -437,9 +437,8 @@ void SimpleEventLoop::sleep() {
 
 void SimpleEventLoop::wake() const {
   pthread_mutex_lock(&mutex);
-  if (preparedToSleep != 0) {
+  if (__atomic_exchange_n(&preparedToSleep, 0, __ATOMIC_RELAXED) != 0) {
     // preparedToSleep was 1 before the exchange, so a sleep must be in progress in another thread.
-    preparedToSleep = 0;
     pthread_cond_signal(&condvar);
   }
   pthread_mutex_unlock(&mutex);
