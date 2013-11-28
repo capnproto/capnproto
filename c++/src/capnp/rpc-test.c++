@@ -161,7 +161,7 @@ private:
     }
 
   private:
-    mutable kj::Vector<kj::String> caps;
+    kj::Vector<kj::String> caps;
   };
 };
 

@@ -560,25 +560,22 @@ void TransformPromiseNodeBase::getDepResult(ExceptionOrValue& output) {
 // -------------------------------------------------------------------
 
 ForkBranchBase::ForkBranchBase(Own<ForkHubBase>&& hubParam): hub(kj::mv(hubParam)) {
-  auto lock = hub->branchList.lockExclusive();
-
-  if (lock->lastPtr == nullptr) {
+  if (hub->tailBranch == nullptr) {
     onReadyEvent.arm();
   } else {
     // Insert into hub's linked list of branches.
-    prevPtr = lock->lastPtr;
+    prevPtr = hub->tailBranch;
     *prevPtr = this;
     next = nullptr;
-    lock->lastPtr = &next;
+    hub->tailBranch = &next;
   }
 }
 
 ForkBranchBase::~ForkBranchBase() noexcept(false) {
   if (prevPtr != nullptr) {
     // Remove from hub's linked list of branches.
-    auto lock = hub->branchList.lockExclusive();
     *prevPtr = next;
-    (next == nullptr ? lock->lastPtr : next->prevPtr) = prevPtr;
+    (next == nullptr ? hub->tailBranch : next->prevPtr) = prevPtr;
   }
 }
 
@@ -618,16 +615,15 @@ Maybe<Own<EventLoop::Event>> ForkHubBase::fire() {
     resultRef.addException(kj::mv(*exception));
   }
 
-  auto lock = branchList.lockExclusive();
-  for (auto branch = lock->first; branch != nullptr; branch = branch->next) {
+  for (auto branch = headBranch; branch != nullptr; branch = branch->next) {
     branch->hubReady();
     *branch->prevPtr = nullptr;
     branch->prevPtr = nullptr;
   }
-  *lock->lastPtr = nullptr;
+  *tailBranch = nullptr;
 
   // Indicate that the list is no longer active.
-  lock->lastPtr = nullptr;
+  tailBranch = nullptr;
 
   return nullptr;
 }

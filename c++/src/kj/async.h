@@ -1108,16 +1108,12 @@ public:
   inline ExceptionOrValue& getResultRef() { return resultRef; }
 
 private:
-  struct BranchList {
-    ForkBranchBase* first = nullptr;
-    ForkBranchBase** lastPtr = &first;
-  };
-
   Own<PromiseNode> inner;
   ExceptionOrValue& resultRef;
 
-  MutexGuarded<BranchList> branchList;
-  // Becomes null once the inner promise is ready and all branches have been notified.
+  ForkBranchBase* headBranch = nullptr;
+  ForkBranchBase** tailBranch = &headBranch;
+  // Tail becomes null once the inner promise is ready and all branches have been notified.
 
   Maybe<Own<Event>> fire() override;
   _::PromiseNode* getInnerForTrace() override;
@@ -1451,61 +1447,54 @@ public:
   }
 
   void fulfill(FixVoid<T>&& value) override {
-    auto lock = inner.lockExclusive();
-    if (*lock != nullptr) {
-      (*lock)->fulfill(kj::mv(value));
+    if (inner != nullptr) {
+      inner->fulfill(kj::mv(value));
     }
   }
 
   void reject(Exception&& exception) override {
-    auto lock = inner.lockExclusive();
-    if (*lock != nullptr) {
-      (*lock)->reject(kj::mv(exception));
+    if (inner != nullptr) {
+      inner->reject(kj::mv(exception));
     }
   }
 
   bool isWaiting() override {
-    auto lock = inner.lockExclusive();
-    return *lock != nullptr && (*lock)->isWaiting();
+    return inner != nullptr && inner->isWaiting();
   }
 
   void attach(PromiseFulfiller<T>& newInner) {
-    inner.getWithoutLock() = &newInner;
+    inner = &newInner;
   }
 
   void detach(PromiseFulfiller<T>& from) {
-    auto lock = inner.lockExclusive();
-    if (*lock == nullptr) {
+    if (inner == nullptr) {
       // Already disposed.
-      lock.release();
       delete this;
     } else {
-      KJ_IREQUIRE(*lock == &from);
-      *lock = nullptr;
+      KJ_IREQUIRE(inner == &from);
+      inner = nullptr;
     }
   }
 
 private:
-  MutexGuarded<PromiseFulfiller<T>*> inner;
+  mutable PromiseFulfiller<T>* inner;
 
   WeakFulfiller(): inner(nullptr) {}
 
   void disposeImpl(void* pointer) const override {
     // TODO(perf): Factor some of this out so it isn't regenerated for every fulfiller type?
 
-    auto lock = inner.lockExclusive();
-    if (*lock == nullptr) {
+    if (inner == nullptr) {
       // Already detached.
-      lock.release();
       delete this;
     } else {
-      if ((*lock)->isWaiting()) {
-        (*lock)->reject(kj::Exception(
+      if (inner->isWaiting()) {
+        inner->reject(kj::Exception(
             kj::Exception::Nature::LOCAL_BUG, kj::Exception::Durability::PERMANENT,
             __FILE__, __LINE__,
             kj::heapString("PromiseFulfiller was destroyed without fulfilling the promise.")));
       }
-      *lock = nullptr;
+      inner = nullptr;
     }
   }
 };
