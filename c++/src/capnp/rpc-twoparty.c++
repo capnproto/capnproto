@@ -33,12 +33,12 @@ TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty:
   {
     auto paf = kj::newPromiseAndFulfiller<void>();
     disconnectPromise = paf.promise.fork();
-    disconnectFulfiller.getWithoutLock() = kj::mv(paf.fulfiller);
+    disconnectFulfiller = kj::mv(paf.fulfiller);
   }
   {
     auto paf = kj::newPromiseAndFulfiller<void>();
     drainedPromise = paf.promise.fork();
-    drainedFulfiller.fulfiller.getWithoutLock() = kj::mv(paf.fulfiller);
+    drainedFulfiller.fulfiller = kj::mv(paf.fulfiller);
   }
 }
 
@@ -68,7 +68,7 @@ kj::Promise<kj::Own<TwoPartyVatNetworkBase::Connection>>
 class TwoPartyVatNetwork::OutgoingMessageImpl final
     : public OutgoingRpcMessage, public kj::Refcounted {
 public:
-  OutgoingMessageImpl(const TwoPartyVatNetwork& network, uint firstSegmentWordSize)
+  OutgoingMessageImpl(TwoPartyVatNetwork& network, uint firstSegmentWordSize)
       : network(network),
         message(firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : firstSegmentWordSize) {}
 
@@ -77,22 +77,21 @@ public:
   }
 
   void send() override {
-    auto lock = network.previousWrite.lockExclusive();
-    *lock = lock->then([&]() {
+    network.previousWrite = network.previousWrite.then([&]() {
       auto promise = writeMessage(network.stream, message).then([]() {
         // success; do nothing
       }, [&](kj::Exception&& exception) {
         // Exception during write!
-        network.disconnectFulfiller.lockExclusive()->get()->fulfill();
+        network.disconnectFulfiller->fulfill();
       });
       promise.eagerlyEvaluate();
       return kj::mv(promise);
     });
-    lock->attach(kj::addRef(*this));
+    network.previousWrite.attach(kj::addRef(*this));
   }
 
 private:
-  const TwoPartyVatNetwork& network;
+  TwoPartyVatNetwork& network;
   MallocMessageBuilder message;
 };
 
@@ -120,11 +119,11 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
       KJ_IF_MAYBE(m, message) {
         return kj::Own<IncomingRpcMessage>(kj::heap<IncomingMessageImpl>(kj::mv(*m)));
       } else {
-        disconnectFulfiller.lockExclusive()->get()->fulfill();
+        disconnectFulfiller->fulfill();
         return nullptr;
       }
     }, [&](kj::Exception&& exception) {
-      disconnectFulfiller.lockExclusive()->get()->fulfill();
+      disconnectFulfiller->fulfill();
       kj::throwRecoverableException(kj::mv(exception));
       return nullptr;
     });

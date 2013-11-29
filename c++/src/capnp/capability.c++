@@ -253,7 +253,7 @@ public:
       : promise(promiseParam.fork()),
         selfResolutionOp(promise.addBranch().then(
             [this](kj::Own<PipelineHook>&& inner) {
-              *redirect.lockExclusive() = kj::mv(inner);
+              redirect = kj::mv(inner);
             })) {
     selfResolutionOp.eagerlyEvaluate();
   }
@@ -275,7 +275,7 @@ public:
 private:
   kj::ForkedPromise<kj::Own<PipelineHook>> promise;
 
-  kj::MutexGuarded<kj::Maybe<kj::Own<PipelineHook>>> redirect;
+  kj::Maybe<kj::Own<PipelineHook>> redirect;
   // Once the promise resolves, this will become non-null and point to the underlying object.
 
   kj::Promise<void> selfResolutionOp;
@@ -291,8 +291,10 @@ public:
       : promise(promiseParam.fork()),
         selfResolutionOp(promise.addBranch().then(
             [this](kj::Own<ClientHook>&& inner) {
-              *redirect.lockExclusive() = kj::mv(inner);
-            })) {
+              redirect = kj::mv(inner);
+            })),
+        promiseForCallForwarding(promise.addBranch().fork()),
+        promiseForClientResolution(promise.addBranch().fork()) {
     selfResolutionOp.eagerlyEvaluate();
   }
 
@@ -334,7 +336,7 @@ public:
 
     // Create a promise for the call initiation.
     kj::ForkedPromise<kj::Own<CallResultHolder>> callResultPromise =
-        getPromiseForCallForwarding().addBranch().then(kj::mvCapture(context,
+        promiseForCallForwarding.addBranch().then(kj::mvCapture(context,
         [=](kj::Own<CallContextHook>&& context, kj::Own<ClientHook>&& client){
           return kj::refcounted<CallResultHolder>(
               client->call(interfaceId, methodId, kj::mv(context)));
@@ -359,7 +361,7 @@ public:
   }
 
   kj::Maybe<ClientHook&> getResolved() override {
-    KJ_IF_MAYBE(inner, *redirect.lockExclusive()) {
+    KJ_IF_MAYBE(inner, redirect) {
       return **inner;
     } else {
       return nullptr;
@@ -367,7 +369,7 @@ public:
   }
 
   kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
-    return getPromiseForClientResolution().addBranch();
+    return promiseForClientResolution.addBranch();
   }
 
   kj::Own<ClientHook> addRef() override {
@@ -381,50 +383,35 @@ public:
 private:
   typedef kj::ForkedPromise<kj::Own<ClientHook>> ClientHookPromiseFork;
 
+  kj::Maybe<kj::Own<ClientHook>> redirect;
+  // Once the promise resolves, this will become non-null and point to the underlying object.
+
   ClientHookPromiseFork promise;
   // Promise that resolves when we have a new ClientHook to forward to.
   //
-  // This fork shall only have two branches:  `promiseForCallForwarding` and
+  // This fork shall only have three branches:  `selfResolutionOp`, `promiseForCallForwarding`, and
   // `promiseForClientResolution`, in that order.
 
-  kj::Lazy<ClientHookPromiseFork> promiseForCallForwarding;
+  kj::Promise<void> selfResolutionOp;
+  // Represents the operation which will set `redirect` when possible.
+
+  ClientHookPromiseFork promiseForCallForwarding;
   // When this promise resolves, each queued call will be forwarded to the real client.  This needs
   // to occur *before* any 'whenMoreResolved()' promises resolve, because we want to make sure
   // previously-queued calls are delivered before any new calls made in response to the resolution.
 
-  kj::Lazy<ClientHookPromiseFork> promiseForClientResolution;
+  ClientHookPromiseFork promiseForClientResolution;
   // whenMoreResolved() returns forks of this promise.  These must resolve *after* queued calls
   // have been initiated (so that any calls made in the whenMoreResolved() handler are correctly
   // delivered after calls made earlier), but *before* any queued calls return (because it might
   // confuse the application if a queued call returns before the capability on which it was made
   // resolves).  Luckily, we know that queued calls will involve, at the very least, an
   // eventLoop.evalLater.
-
-  kj::MutexGuarded<kj::Maybe<kj::Own<ClientHook>>> redirect;
-  // Once the promise resolves, this will become non-null and point to the underlying object.
-
-  kj::Promise<void> selfResolutionOp;
-  // Represents the operation which will set `redirect` when possible.
-
-  ClientHookPromiseFork& getPromiseForCallForwarding() {
-    return promiseForCallForwarding.get([this](kj::SpaceFor<ClientHookPromiseFork>& space) {
-      return space.construct(promise.addBranch().fork());
-    });
-  }
-
-  kj::ForkedPromise<kj::Own<ClientHook>>& getPromiseForClientResolution() {
-    return promiseForClientResolution.get([this](kj::SpaceFor<ClientHookPromiseFork>& space) {
-      getPromiseForCallForwarding();  // must be initialized first.
-      return space.construct(promise.addBranch().fork());
-    });
-  }
 };
 
 kj::Own<ClientHook> QueuedPipeline::getPipelinedCap(kj::Array<PipelineOp>&& ops) {
-  auto lock = redirect.lockExclusive();
-
-  KJ_IF_MAYBE(redirect, *lock) {
-    return redirect->get()->getPipelinedCap(kj::mv(ops));
+  KJ_IF_MAYBE(r, redirect) {
+    return r->get()->getPipelinedCap(kj::mv(ops));
   } else {
     auto clientPromise = promise.addBranch().then(kj::mvCapture(ops,
         [](kj::Array<PipelineOp>&& ops, kj::Own<PipelineHook> pipeline) {

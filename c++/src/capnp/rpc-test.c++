@@ -211,7 +211,7 @@ public:
     kj::Exception exception(
         kj::Exception::Nature::PRECONDITION, kj::Exception::Durability::PERMANENT,
         __FILE__, __LINE__, kj::str("Network was destroyed."));
-    for (auto& entry: state.getWithoutLock().connections) {
+    for (auto& entry: connections) {
       entry.second->disconnect(kj::cp(exception));
     }
   }
@@ -235,11 +235,9 @@ public:
     }
 
     void disconnect(kj::Exception&& exception) {
-      auto lock = queues.lockExclusive();
-
-      while (!lock->fulfillers.empty()) {
-        lock->fulfillers.front()->reject(kj::cp(exception));
-        lock->fulfillers.pop();
+      while (!fulfillers.empty()) {
+        fulfillers.front()->reject(kj::cp(exception));
+        fulfillers.pop();
       }
 
       networkException = kj::mv(exception);
@@ -285,13 +283,13 @@ public:
         connection.tasks->add(kj::evalLater(kj::mvCapture(kj::addRef(*message),
             [connectionPtr](kj::Own<IncomingRpcMessageImpl>&& message) {
           KJ_IF_MAYBE(p, connectionPtr->partner) {
-            auto lock = p->queues.lockExclusive();
-            if (lock->fulfillers.empty()) {
-              lock->messages.push(kj::mv(message));
+            if (p->fulfillers.empty()) {
+              p->messages.push(kj::mv(message));
             } else {
-              ++connectionPtr->network.received;
-              lock->fulfillers.front()->fulfill(kj::Own<IncomingRpcMessage>(kj::mv(message)));
-              lock->fulfillers.pop();
+              ++p->network.received;
+              p->fulfillers.front()->fulfill(
+                  kj::Own<IncomingRpcMessage>(kj::mv(message)));
+              p->fulfillers.pop();
             }
           }
         })));
@@ -310,15 +308,14 @@ public:
         return kj::cp(*e);
       }
 
-      auto lock = queues.lockExclusive();
-      if (lock->messages.empty()) {
+      if (messages.empty()) {
         auto paf = kj::newPromiseAndFulfiller<kj::Maybe<kj::Own<IncomingRpcMessage>>>();
-        lock->fulfillers.push(kj::mv(paf.fulfiller));
+        fulfillers.push(kj::mv(paf.fulfiller));
         return kj::mv(paf.promise);
       } else {
         ++network.received;
-        auto result = kj::mv(lock->messages.front());
-        lock->messages.pop();
+        auto result = kj::mv(messages.front());
+        messages.pop();
         return kj::Maybe<kj::Own<IncomingRpcMessage>>(kj::mv(result));
       }
     }
@@ -347,11 +344,8 @@ public:
 
     kj::Maybe<kj::Exception> networkException;
 
-    struct Queues {
-      std::queue<kj::Own<kj::PromiseFulfiller<kj::Maybe<kj::Own<IncomingRpcMessage>>>>> fulfillers;
-      std::queue<kj::Own<IncomingRpcMessage>> messages;
-    };
-    kj::MutexGuarded<Queues> queues;
+    std::queue<kj::Own<kj::PromiseFulfiller<kj::Maybe<kj::Own<IncomingRpcMessage>>>>> fulfillers;
+    std::queue<kj::Own<IncomingRpcMessage>> messages;
 
     kj::Own<kj::TaskSet> tasks;
   };
@@ -360,31 +354,20 @@ public:
       test::TestSturdyRefHostId::Reader hostId) override {
     TestNetworkAdapter& dst = KJ_REQUIRE_NONNULL(network.find(hostId.getHost()));
 
-    kj::Locked<State> myLock;
-    kj::Locked<State> dstLock;
-
-    if (&dst < this) {
-      dstLock = dst.state.lockExclusive();
-      myLock = state.lockExclusive();
-    } else {
-      myLock = state.lockExclusive();
-      dstLock = dst.state.lockExclusive();
-    }
-
-    auto iter = myLock->connections.find(&dst);
-    if (iter == myLock->connections.end()) {
+    auto iter = connections.find(&dst);
+    if (iter == connections.end()) {
       auto local = kj::refcounted<ConnectionImpl>(*this, RpcDumper::CLIENT);
       auto remote = kj::refcounted<ConnectionImpl>(dst, RpcDumper::SERVER);
       local->attach(*remote);
 
-      myLock->connections[&dst] = kj::addRef(*local);
-      dstLock->connections[this] = kj::addRef(*remote);
+      connections[&dst] = kj::addRef(*local);
+      dst.connections[this] = kj::addRef(*remote);
 
-      if (dstLock->fulfillerQueue.empty()) {
-        dstLock->connectionQueue.push(kj::mv(remote));
+      if (dst.fulfillerQueue.empty()) {
+        dst.connectionQueue.push(kj::mv(remote));
       } else {
-        dstLock->fulfillerQueue.front()->fulfill(kj::mv(remote));
-        dstLock->fulfillerQueue.pop();
+        dst.fulfillerQueue.front()->fulfill(kj::mv(remote));
+        dst.fulfillerQueue.pop();
       }
 
       return kj::Own<Connection>(kj::mv(local));
@@ -394,14 +377,13 @@ public:
   }
 
   kj::Promise<kj::Own<Connection>> acceptConnectionAsRefHost() override {
-    auto lock = state.lockExclusive();
-    if (lock->connectionQueue.empty()) {
+    if (connectionQueue.empty()) {
       auto paf = kj::newPromiseAndFulfiller<kj::Own<Connection>>();
-      lock->fulfillerQueue.push(kj::mv(paf.fulfiller));
+      fulfillerQueue.push(kj::mv(paf.fulfiller));
       return kj::mv(paf.promise);
     } else {
-      auto result = kj::mv(lock->connectionQueue.front());
-      lock->connectionQueue.pop();
+      auto result = kj::mv(connectionQueue.front());
+      connectionQueue.pop();
       return kj::mv(result);
     }
   }
@@ -411,12 +393,9 @@ private:
   uint sent = 0;
   uint received = 0;
 
-  struct State {
-    std::map<const TestNetworkAdapter*, kj::Own<ConnectionImpl>> connections;
-    std::queue<kj::Own<kj::PromiseFulfiller<kj::Own<Connection>>>> fulfillerQueue;
-    std::queue<kj::Own<Connection>> connectionQueue;
-  };
-  kj::MutexGuarded<State> state;
+  std::map<const TestNetworkAdapter*, kj::Own<ConnectionImpl>> connections;
+  std::queue<kj::Own<kj::PromiseFulfiller<kj::Own<Connection>>>> fulfillerQueue;
+  std::queue<kj::Own<Connection>> connectionQueue;
 };
 
 TestNetwork::~TestNetwork() noexcept(false) {}

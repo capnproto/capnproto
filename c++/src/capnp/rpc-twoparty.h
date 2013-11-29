@@ -65,7 +65,7 @@ private:
   ReaderOptions receiveOptions;
   bool accepted = false;
 
-  kj::MutexGuarded<kj::Promise<void>> previousWrite;
+  kj::Promise<void> previousWrite;
   // Resolves when the previous write completes.  This effectively serves as the write queue.
 
   kj::Own<kj::PromiseFulfiller<kj::Own<TwoPartyVatNetworkBase::Connection>>> acceptFulfiller;
@@ -73,14 +73,14 @@ private:
   // second call on the server side.  Never fulfilled, because there is only one connection.
 
   kj::ForkedPromise<void> disconnectPromise = nullptr;
-  kj::MutexGuarded<kj::Own<kj::PromiseFulfiller<void>>> disconnectFulfiller;
+  kj::Own<kj::PromiseFulfiller<void>> disconnectFulfiller;
   kj::ForkedPromise<void> drainedPromise = nullptr;
 
   class FulfillerDisposer: public kj::Disposer {
   public:
-    kj::MutexGuarded<kj::Own<kj::PromiseFulfiller<void>>> fulfiller;
+    mutable kj::Own<kj::PromiseFulfiller<void>> fulfiller;
 
-    void disposeImpl(void* pointer) const override { fulfiller.lockExclusive()->get()->fulfill(); }
+    void disposeImpl(void* pointer) const override { fulfiller->fulfill(); }
   };
   FulfillerDisposer drainedFulfiller;
 
