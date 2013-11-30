@@ -1085,16 +1085,7 @@ void Compiler::Impl::load(const SchemaLoader& loader, uint64_t id) const {
 
 void Compiler::Impl::loadFinal(const SchemaLoader& loader, uint64_t id) {
   KJ_IF_MAYBE(node, findNode(id)) {
-    KJ_IF_MAYBE(schema, node->getFinalSchema()) {
-      loader.loadOnce(*schema);
-    }
-
-    // Schema loads can happen lazily while using the dynamic API.  The caller doesn't necessarily
-    // know that the compiler was invoked and so won't know to clear the workspace.  Probably, if
-    // we don't clear the workspace, it will waste memory for the lifetime of the process, whereas
-    // if we do clear it, we're only imposing a little more work at startup time / the first time
-    // each type is used.
-    clearWorkspace();
+    node->loadFinalSchema(loader);
   }
 }
 
