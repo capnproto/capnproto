@@ -27,10 +27,10 @@
 
 namespace kj {
 
-Arena::Arena(size_t chunkSizeHint): state(kj::max(sizeof(ChunkHeader), chunkSizeHint)) {}
+Arena::Arena(size_t chunkSizeHint): nextChunkSize(kj::max(sizeof(ChunkHeader), chunkSizeHint)) {}
 
 Arena::Arena(ArrayPtr<byte> scratch)
-    : state(kj::max(sizeof(ChunkHeader), scratch.size())) {
+    : nextChunkSize(kj::max(sizeof(ChunkHeader), scratch.size())) {
   if (scratch.size() > sizeof(ChunkHeader)) {
     ChunkHeader* chunk = reinterpret_cast<ChunkHeader*>(scratch.begin());
     chunk->end = scratch.end();
@@ -39,19 +39,19 @@ Arena::Arena(ArrayPtr<byte> scratch)
 
     // Don't place the chunk in the chunk list because it's not ours to delete.  Just make it the
     // current chunk so that we'll allocate from it until it is empty.
-    state.getWithoutLock().currentChunk = chunk;
+    currentChunk = chunk;
   }
 }
 
 Arena::~Arena() noexcept(false) {
-  // Run cleanup explicitly.  It will be executed again implicitly when state's destructor is
-  // called.  This ensures that if the first pass throws an exception, remaining objects are still
-  // destroyed.  If the second pass throws, the program terminates, but any destructors that could
-  // throw should be using UnwindDetector to avoid this.
-  state.getWithoutLock().cleanup();
+  // Run cleanup() explicitly, but if it throws an exception, make sure to run it again as part of
+  // unwind.  The second call will not throw because destructors are required to guard against
+  // exceptions when already unwinding.
+  KJ_ON_SCOPE_FAILURE(cleanup());
+  cleanup();
 }
 
-void Arena::State::cleanup() {
+void Arena::cleanup() {
   while (objectList != nullptr) {
     void* ptr = objectList + 1;
     auto destructor = objectList->destructor;
@@ -91,17 +91,13 @@ inline size_t alignTo(size_t s, uint alignment) {
 
 }  // namespace
 
-void* Arena::allocateBytes(size_t amount, uint alignment, bool hasDisposer) const {
+void* Arena::allocateBytes(size_t amount, uint alignment, bool hasDisposer) {
   if (hasDisposer) {
     alignment = kj::max(alignment, alignof(ObjectHeader));
     amount += alignTo(sizeof(ObjectHeader), alignment);
   }
 
-  void* result = allocateBytesLockless(amount, alignment);
-
-  if (result == nullptr) {
-    result = allocateBytesFallback(amount, alignment);
-  }
+  void* result = allocateBytesInternal(amount, alignment);
 
   if (hasDisposer) {
     // Reserve space for the ObjectHeader, but don't add it to the object list yet.
@@ -112,90 +108,62 @@ void* Arena::allocateBytes(size_t amount, uint alignment, bool hasDisposer) cons
   return result;
 }
 
-void* Arena::allocateBytesLockless(size_t amount, uint alignment) const {
-  for (;;) {
-    ChunkHeader* chunk = __atomic_load_n(&state.getWithoutLock().currentChunk, __ATOMIC_ACQUIRE);
+void* Arena::allocateBytesInternal(size_t amount, uint alignment) {
+  if (currentChunk != nullptr) {
+    ChunkHeader* chunk = currentChunk;
+    byte* alignedPos = alignTo(chunk->pos, alignment);
 
-    if (chunk == nullptr) {
-      // No chunks allocated yet.
-      return nullptr;
-    }
-
-    byte* pos = __atomic_load_n(&chunk->pos, __ATOMIC_RELAXED);
-    byte* alignedPos = alignTo(pos, alignment);
-    byte* endPos = alignedPos + amount;
-
-    // Careful about pointer wrapping (e.g. if the chunk is near the end of the address space).
-    if (chunk->end - endPos < 0) {
-      // Not enough space.
-      return nullptr;
-    }
-
-    // There appears to be enough space in this chunk, unless another thread stole it.
-    if (KJ_LIKELY(__atomic_compare_exchange_n(
-          &chunk->pos, &pos, endPos, true, __ATOMIC_RELAXED, __ATOMIC_RELAXED))) {
+    // Careful about overflow here.
+    if (amount + (alignedPos - chunk->pos) <= chunk->end - chunk->pos) {
+      // There's enough space in this chunk.
+      chunk->pos = alignedPos + amount;
       return alignedPos;
     }
-
-    // Contention.  Retry.
-  }
-}
-
-void* Arena::allocateBytesFallback(size_t amount, uint alignment) const {
-  auto lock = state.lockExclusive();
-
-  // Now that we have the lock, try one more time to allocate from the current chunk.  This could
-  // work if another thread allocated a new chunk while we were waiting for the lock.
-  void* locklessResult = allocateBytesLockless(amount, alignment);
-  if (locklessResult != nullptr) {
-    return locklessResult;
   }
 
-  // OK, we know the current chunk is out of space and we hold the lock so no one else is
-  // allocating a new one.  Let's do it!
+  // Not enough space in the current chunk.  Allocate a new one.
 
+  // We need to allocate at least enough space for the ChunkHeader and the requested allocation.
+
+  // If the alignment is less than that of the chunk header, we'll need to increase it.
   alignment = kj::max(alignment, alignof(ChunkHeader));
+
+  // If the ChunkHeader size does not match the alignment, we'll need to pad it up.
   amount += alignTo(sizeof(ChunkHeader), alignment);
 
-  while (lock->nextChunkSize < amount) {
-    lock->nextChunkSize *= 2;
+  // Make sure we're going to allocate enough space.
+  while (nextChunkSize < amount) {
+    nextChunkSize *= 2;
   }
 
-  byte* bytes = reinterpret_cast<byte*>(operator new(lock->nextChunkSize));
+  // Allocate.
+  byte* bytes = reinterpret_cast<byte*>(operator new(nextChunkSize));
 
+  // Set up the ChunkHeader at the beginning of the allocation.
   ChunkHeader* newChunk = reinterpret_cast<ChunkHeader*>(bytes);
-  newChunk->next = lock->chunkList;
+  newChunk->next = chunkList;
   newChunk->pos = bytes + amount;
-  newChunk->end = bytes + lock->nextChunkSize;
-  __atomic_store_n(&lock->currentChunk, newChunk, __ATOMIC_RELEASE);
+  newChunk->end = bytes + nextChunkSize;
+  currentChunk = newChunk;
+  chunkList = newChunk;
+  nextChunkSize *= 2;
 
-  lock->nextChunkSize *= 2;
-
-  byte* result = alignTo(bytes + sizeof(ChunkHeader), alignment);
-  lock->chunkList = newChunk;
-
-  return result;
+  // Move past the ChunkHeader to find the position of the allocated object.
+  return alignTo(bytes + sizeof(ChunkHeader), alignment);
 }
 
-StringPtr Arena::copyString(StringPtr content) const {
+StringPtr Arena::copyString(StringPtr content) {
   char* data = reinterpret_cast<char*>(allocateBytes(content.size() + 1, 1, false));
   memcpy(data, content.cStr(), content.size() + 1);
   return StringPtr(data, content.size());
 }
 
-void Arena::setDestructor(void* ptr, void (*destructor)(void*)) const {
+void Arena::setDestructor(void* ptr, void (*destructor)(void*)) {
   ObjectHeader* header = reinterpret_cast<ObjectHeader*>(ptr) - 1;
   KJ_DASSERT(reinterpret_cast<uintptr_t>(header) % alignof(ObjectHeader) == 0);
   header->destructor = destructor;
-  header->next = state.getWithoutLock().objectList;
-
-  // We can use relaxed atomics here because the object list is not actually traversed until the
-  // destructor, which needs to be synchronized in its own way.
-  while (!__atomic_compare_exchange_n(
-      &state.getWithoutLock().objectList, &header->next, header, true,
-      __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
-    // Retry.
-  }
+  header->next = objectList;
+  objectList = header;
 }
 
 }  // namespace kj

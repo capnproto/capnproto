@@ -185,8 +185,7 @@ private:
   // Extract the ID from the declaration, or if it has none, generate one based on the name and
   // parent ID.
 
-  static kj::StringPtr joinDisplayName(const kj::Arena& arena, Node& parent,
-                                       kj::StringPtr declName);
+  static kj::StringPtr joinDisplayName(kj::Arena& arena, Node& parent, kj::StringPtr declName);
   // Join the parent's display name with the child's unqualified name to construct the child's
   // display name.
 
@@ -274,10 +273,10 @@ public:
           bootstrapLoader(loaderCallback) {}
   };
 
-  const kj::Arena& getNodeArena() { return nodeArena; }
+  kj::Arena& getNodeArena() { return nodeArena; }
   // Arena where nodes and other permanent objects should be allocated.
 
-  const Workspace& getWorkspace() { return workspace; }
+  Workspace& getWorkspace() { return workspace; }
   // Temporary workspace that can be used to construct bootstrap objects.
 
   inline bool shouldCompileAnnotations() {
@@ -395,7 +394,7 @@ uint64_t Compiler::Node::generateId(uint64_t parentId, kj::StringPtr declName,
 }
 
 kj::StringPtr Compiler::Node::joinDisplayName(
-    const kj::Arena& arena, Node& parent, kj::StringPtr declName) {
+    kj::Arena& arena, Node& parent, kj::StringPtr declName) {
   kj::ArrayPtr<char> result = arena.allocateArray<char>(
       parent.displayName.size() + declName.size() + 2);
 
