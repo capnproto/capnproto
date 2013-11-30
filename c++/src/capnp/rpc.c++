@@ -309,11 +309,8 @@ public:
       // All current questions complete with exceptions.
       questions.forEach([&](QuestionId id, Question& question) {
         KJ_IF_MAYBE(questionRef, question.selfRef) {
-          // QuestionRef still present.  Make sure it's not in the midst of being destroyed, then
-          // reject it.
-          KJ_IF_MAYBE(ownRef, kj::tryAddRef(*questionRef)) {
-            questionRef->reject(kj::cp(networkException));
-          }
+          // QuestionRef still present.
+          questionRef->reject(kj::cp(networkException));
         }
         KJ_IF_MAYBE(pc, question.paramCaps) {
           capInjectorsToRelease.add(kj::mv(*pc));
@@ -1200,13 +1197,11 @@ private:
         // Check if the import still exists under this ID.
         KJ_IF_MAYBE(import, connectionState.imports.find(importId)) {
           KJ_IF_MAYBE(ic, import->importClient) {
-            KJ_IF_MAYBE(ref, kj::tryAddRef(*ic)) {
-              // Import indeed still exists!  We'll return it in the retained caps, which means it
-              // now has a new remote ref.
-              ic->addRemoteRef();
-              *actualRetained++ = importId;
-              refs.add(kj::mv(*ref));
-            }
+            // Import indeed still exists!  We'll return it in the retained caps, which means it
+            // now has a new remote ref.
+            ic->addRemoteRef();
+            *actualRetained++ = importId;
+            refs.add(kj::addRef(*ic));
           }
         }
       }
@@ -1275,15 +1270,10 @@ private:
           // No recent resolutions.  Check the import table then.
           auto& import = connectionState.imports[importId];
           KJ_IF_MAYBE(c, import.appClient) {
-            // The import is already on the table, but it could be being deleted in another
-            // thread.
-            KJ_IF_MAYBE(ref, kj::tryAddRef(*c)) {
-              // We successfully grabbed a reference to the import without it being deleted in
-              // another thread.  Since this import already exists, we don't have to take
-              // responsibility for retaining it.  We can just return the existing object and
-              // be done with it.
-              return kj::mv(*ref);
-            }
+            // The import is already on the table.  Since this import already exists, we don't have
+            // to take responsibility for retaining it.  We can just return the existing object and
+            // be done with it.
+            return kj::addRef(*c);
           }
 
           // No import for this ID exists currently, so create one.
@@ -2442,7 +2432,7 @@ private:
 
   void handleReturn(kj::Own<IncomingRpcMessage>&& message, const rpc::Return::Reader& ret) {
     kj::Own<CapInjectorImpl> paramCapsToRelease;
-    kj::Promise<kj::Own<RpcResponse>> promiseToRelease = nullptr;
+    kj::Maybe<kj::Promise<kj::Own<RpcResponse>>> promiseToRelease;
 
     KJ_IF_MAYBE(question, questions.find(ret.getQuestionId())) {
       KJ_REQUIRE(question->paramCaps != nullptr, "Duplicate Return.") { return; }
@@ -2462,87 +2452,69 @@ private:
         }
       }
 
-      switch (ret.which()) {
-        case rpc::Return::RESULTS:
-          KJ_REQUIRE(!question->isTailCall,
-              "Tail call `Return` must set `resultsSentElsewhere`, not `results`.");
-
-          KJ_IF_MAYBE(questionRef, question->selfRef) {
-            // The questionRef still exists, but could be being deleted in another thread.
-            KJ_IF_MAYBE(ownRef, kj::tryAddRef(*questionRef)) {
-              // Not being deleted.
-              questionRef->fulfill(kj::refcounted<RpcResponseImpl>(
-                  *this, kj::mv(*ownRef), kj::mv(message), ret.getResults(),
-                  kj::addRef(*resolutionChainTail)));
+      KJ_IF_MAYBE(questionRef, question->selfRef) {
+        switch (ret.which()) {
+          case rpc::Return::RESULTS:
+            KJ_REQUIRE(!question->isTailCall,
+                "Tail call `Return` must set `resultsSentElsewhere`, not `results`.") {
+              return;
             }
-          }
-          break;
 
-        case rpc::Return::EXCEPTION:
-          KJ_REQUIRE(!question->isTailCall,
-              "Tail call `Return` must set `resultsSentElsewhere`, not `results`.");
+            questionRef->fulfill(kj::refcounted<RpcResponseImpl>(
+                *this, kj::addRef(*questionRef), kj::mv(message), ret.getResults(),
+                kj::addRef(*resolutionChainTail)));
+            break;
 
-          KJ_IF_MAYBE(questionRef, question->selfRef) {
-            // The questionRef still exists, but could be being deleted in another thread.
-            KJ_IF_MAYBE(ownRef, kj::tryAddRef(*questionRef)) {
-              questionRef->reject(toException(ret.getException()));
+          case rpc::Return::EXCEPTION:
+            KJ_REQUIRE(!question->isTailCall,
+                "Tail call `Return` must set `resultsSentElsewhere`, not `exception`.") {
+              return;
             }
-          }
-          break;
 
-        case rpc::Return::CANCELED:
-          KJ_REQUIRE(!question->isTailCall,
-              "Tail call `Return` must set `resultsSentElsewhere`, not `results`.");
+            questionRef->reject(toException(ret.getException()));
+            break;
 
-          KJ_REQUIRE(question->selfRef == nullptr,
-                     "Return message falsely claims call was canceled.") { return; }
-          // We don't bother fulfilling the result.  If someone is somehow still waiting on it
-          // (shouldn't be possible), that's OK:  they'll get an exception due to the fulfiller
-          // being destroyed.
-          break;
+          case rpc::Return::CANCELED:
+            KJ_FAIL_REQUIRE("Return message falsely claims call was canceled.") { return; }
+            break;
 
-        case rpc::Return::RESULTS_SENT_ELSEWHERE:
-          KJ_REQUIRE(question->isTailCall,
-              "`Return` had `resultsSentElsewhere` but this was not a tail call.");
-
-          KJ_IF_MAYBE(questionRef, question->selfRef) {
-            // The questionRef still exists, but could be being deleted in another thread.
-            KJ_IF_MAYBE(ownRef, kj::tryAddRef(*questionRef)) {
-              // Not being deleted.  Tail calls are fulfilled with a null pointer.
-              questionRef->fulfill(kj::Own<RpcResponse>());
+          case rpc::Return::RESULTS_SENT_ELSEWHERE:
+            KJ_REQUIRE(question->isTailCall,
+                "`Return` had `resultsSentElsewhere` but this was not a tail call.") {
+              return;
             }
-          }
-          break;
 
-        case rpc::Return::TAKE_FROM_OTHER_ANSWER:
-          KJ_IF_MAYBE(answer, answers.find(ret.getTakeFromOtherAnswer())) {
-            KJ_IF_MAYBE(response, answer->redirectedResults) {
-              // If we don't manage to fill in a questionRef here, we will want to release the
-              // promise.
-              promiseToRelease = kj::mv(*response);
+            // Tail calls are fulfilled with a null pointer.
+            questionRef->fulfill(kj::Own<RpcResponse>());
+            break;
 
-              KJ_IF_MAYBE(questionRef, question->selfRef) {
-                // The questionRef still exists, but could be being deleted in another thread.
-                KJ_IF_MAYBE(ownRef, kj::tryAddRef(*questionRef)) {
-                  // Not being deleted.
-                  questionRef->fulfill(kj::mv(promiseToRelease));
-                }
+          case rpc::Return::TAKE_FROM_OTHER_ANSWER:
+            KJ_IF_MAYBE(answer, answers.find(ret.getTakeFromOtherAnswer())) {
+              KJ_IF_MAYBE(response, answer->redirectedResults) {
+                questionRef->fulfill(kj::mv(*response));
+              } else {
+                KJ_FAIL_REQUIRE("`Return.takeFromOtherAnswer` referenced a call that did not "
+                                "use `sendResultsTo.yourself`.") { return; }
               }
             } else {
-              KJ_FAIL_REQUIRE("`Return.takeFromOtherAnswer` referenced a call that did not "
-                              "use `sendResultsTo.yourself`.") { return; }
+              KJ_FAIL_REQUIRE("`Return.takeFromOtherAnswer` had invalid answer ID.") { return; }
             }
-          } else {
-            KJ_FAIL_REQUIRE("`Return.takeFromOtherAnswer` had invalid answer ID.") { return; }
+
+            break;
+
+          default:
+            KJ_FAIL_REQUIRE("Unknown 'Return' type.") { return; }
+        }
+      } else {
+        if (ret.isTakeFromOtherAnswer()) {
+          // Be sure to release the tail call's promise.
+          KJ_IF_MAYBE(answer, answers.find(ret.getTakeFromOtherAnswer())) {
+            promiseToRelease = kj::mv(answer->redirectedResults);
           }
+        }
 
-          break;
-
-        default:
-          KJ_FAIL_REQUIRE("Unknown 'Return' type.") { return; }
-      }
-
-      if (question->selfRef == nullptr) {
+        // Looks like this question was canceled earlier, so `Finish` was already sent.  We can go
+        // ahead and delete it from the table.
         questions.erase(ret.getQuestionId());
       }
 

@@ -36,8 +36,8 @@ struct SetTrueInDestructor: public Refcounted {
 TEST(Refcount, Basic) {
   bool b = false;
   Own<SetTrueInDestructor> ref1 = kj::refcounted<SetTrueInDestructor>(&b);
-  Own<const SetTrueInDestructor> ref2 = kj::addRef(*ref1);
-  Own<const SetTrueInDestructor> ref3 = kj::addRef(*ref2);
+  Own<SetTrueInDestructor> ref2 = kj::addRef(*ref1);
+  Own<SetTrueInDestructor> ref3 = kj::addRef(*ref2);
 
   EXPECT_FALSE(b);
   ref1 = Own<SetTrueInDestructor>();
@@ -52,24 +52,6 @@ TEST(Refcount, Basic) {
   SetTrueInDestructor obj(&b);
   EXPECT_ANY_THROW(addRef(obj));
 #endif
-}
-
-TEST(Refcount, Weak) {
-  {
-    bool b = false;
-    SetTrueInDestructor obj(&b);
-    EXPECT_TRUE(tryAddRef(obj) == nullptr);
-  }
-
-  {
-    bool b = false;
-    Own<SetTrueInDestructor> ref = kj::refcounted<SetTrueInDestructor>(&b);
-    KJ_IF_MAYBE(ref2, tryAddRef(*ref)) {
-      EXPECT_EQ(ref.get(), ref2->get());
-    } else {
-      ADD_FAILURE() << "tryAddRef() failed.";
-    }
-  }
 }
 
 }  // namespace kj

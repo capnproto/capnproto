@@ -33,11 +33,12 @@ class Refcounted: private Disposer {
   // `kj::refcounted<T>()` to allocate a new refcounted pointer.
   //
   // Do NOT use this lightly.  Refcounting is a crutch.  Good designs should strive to make object
-  // ownership clear, so that refcounting is not necessary.  Keep in mind that reference counting
-  // must use atomic operations and therefore is surprisingly slow -- often slower than allocating
-  // a copy on the heap.  All that said, reference counting can sometimes simplify code that would
-  // otherwise become convoluted with explicit ownership, even when ownership relationships are
-  // clear at an abstract level.
+  // ownership clear, so that refcounting is not necessary.  All that said, reference counting can
+  // sometimes simplify code that would otherwise become convoluted with explicit ownership, even
+  // when ownership relationships are clear at an abstract level.
+  //
+  // NOT THREADSAFE:  This refcounting implementation assumes that an object's references are
+  // manipulated only in one thread, because atomic (thread-safe) refcounting is surprisingly slow.
   //
   // In general, abstract classes should _not_ subclass this.  The concrete class at the bottom
   // of the heirarchy should be the one to decide how it implements refcounting.  Interfaces should
@@ -48,23 +49,24 @@ class Refcounted: private Disposer {
   //    inefficient.
   // 2. An implementation may decide that it would rather return a copy than a refcount, or use
   //    some other strategy.
+  //
+  // TODO(cleanup):  Rethink above.  Virtual inheritance is not necessarily that bad.  OTOH, a
+  //   virtual function call for every refcount is sad in its own way.  A Ref<T> type to replace
+  //   Own<T> could also be nice.
 
 public:
   virtual ~Refcounted() noexcept(false);
 
 private:
-  mutable volatile uint refcount = 0;
+  mutable uint refcount = 0;
+  // "mutable" because disposeImpl() is const.  Bleh.
 
   void disposeImpl(void* pointer) const override;
   template <typename T>
   static Own<T> addRefInternal(T* object);
 
-  bool tryAddRefInternal() const;
-
   template <typename T>
   friend Own<T> addRef(T& object);
-  template <typename T>
-  friend Maybe<Own<T>> tryAddRef(T& object);
   template <typename T, typename... Params>
   friend Own<T> refcounted(Params&&... params);
 };
@@ -88,26 +90,9 @@ Own<T> addRef(T& object) {
 }
 
 template <typename T>
-Maybe<Own<T>> tryAddRef(T& object) {
-  // Like `addRef`, but if the object's refcount is already zero or if the object was not allocated
-  // with `refcounted`, returns nullptr.  This can be used to implement weak references in a
-  // thread-safe way:  store a (regular, non-owned) pointer to the object, and have the object's
-  // destructor null out that pointer.  To convert the pointer to a full reference, use tryAddRef().
-  // If it fails, the object is already being destroyed.  Be sure to also use some sort of mutex
-  // locking to synchronize access to the raw pointer, since you'll want the object's destructor
-  // to block if another thread is currently trying to restore the ref.
-
-  if (object.Refcounted::tryAddRefInternal()) {
-    return Own<T>(&object, kj::implicitCast<const Refcounted&>(object));
-  } else {
-    return nullptr;
-  }
-}
-
-template <typename T>
 Own<T> Refcounted::addRefInternal(T* object) {
-  const Refcounted* refcounted = object;
-  __atomic_add_fetch(&refcounted->refcount, 1, __ATOMIC_RELAXED);
+  Refcounted* refcounted = object;
+  ++refcounted->refcount;
   return Own<T>(object, *refcounted);
 }
 

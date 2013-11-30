@@ -32,28 +32,8 @@ Refcounted::~Refcounted() noexcept(false) {
 }
 
 void Refcounted::disposeImpl(void* pointer) const {
-  // Need to do a "release" decrement in order to release the object's state to any other thread
-  // which seeks to destroy it.
-  if (__atomic_sub_fetch(&refcount, 1, __ATOMIC_RELEASE) == 0) {
-    // This was the last reference.  Acquire the memory so that we can destroy it.
-    __atomic_thread_fence(__ATOMIC_ACQUIRE);
+  if (--refcount == 0) {
     delete this;
-  }
-}
-
-bool Refcounted::tryAddRefInternal() const {
-  // We want to increment the refcount, but only if it is non-zero.  We have to use a cmpxchg for
-  // this.
-
-  uint old = __atomic_load_n(&refcount, __ATOMIC_RELAXED);
-  for (;;) {
-    if (old == 0) {
-      return false;
-    }
-    if (__atomic_compare_exchange_n(&refcount, &old, old + 1, true,
-                                    __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
-      return true;
-    }
   }
 }
 
