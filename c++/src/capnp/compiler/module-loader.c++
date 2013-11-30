@@ -211,7 +211,7 @@ public:
 private:
   GlobalErrorReporter& errorReporter;
   kj::Vector<kj::String> searchPath;
-  kj::MutexGuarded<std::map<kj::StringPtr, kj::Own<Module>>> modules;
+  std::map<kj::StringPtr, kj::Own<Module>> modules;
 };
 
 class ModuleLoader::ModuleImpl final: public Module {
@@ -278,10 +278,8 @@ kj::Maybe<Module&> ModuleLoader::Impl::loadModule(
   kj::String canonicalLocalName = canonicalizePath(localName);
   kj::String canonicalSourceName = canonicalizePath(sourceName);
 
-  auto locked = modules.lockExclusive();
-
-  auto iter = locked->find(canonicalLocalName);
-  if (iter != locked->end()) {
+  auto iter = modules.find(canonicalLocalName);
+  if (iter != modules.end()) {
     // Return existing file.
     return *iter->second;
   }
@@ -294,7 +292,7 @@ kj::Maybe<Module&> ModuleLoader::Impl::loadModule(
   auto module = kj::heap<ModuleImpl>(
       *this, kj::mv(canonicalLocalName), kj::mv(canonicalSourceName));
   auto& result = *module;
-  locked->insert(std::make_pair(result.getLocalName(), kj::mv(module)));
+  modules.insert(std::make_pair(result.getLocalName(), kj::mv(module)));
   return result;
 }
 

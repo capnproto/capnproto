@@ -896,18 +896,18 @@ private:
     }
 
     kj::Maybe<ExportId> writeDescriptor(rpc::CapDescriptor::Builder descriptor) override {
-      __atomic_store_n(&receivedCall, true, __ATOMIC_RELAXED);
+      receivedCall = true;
       return connectionState->writeDescriptor(*cap, descriptor);
     }
 
     kj::Maybe<kj::Own<ClientHook>> writeTarget(
         rpc::MessageTarget::Builder target) override {
-      __atomic_store_n(&receivedCall, true, __ATOMIC_RELAXED);
+      receivedCall = true;
       return connectionState->writeTarget(*cap, target);
     }
 
     kj::Own<ClientHook> getInnermostClient() override {
-      __atomic_store_n(&receivedCall, true, __ATOMIC_RELAXED);
+      receivedCall = true;
       return connectionState->getInnermostClient(*cap);
     }
 
@@ -915,13 +915,13 @@ private:
 
     Request<ObjectPointer, ObjectPointer> newCall(
         uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) override {
-      __atomic_store_n(&receivedCall, true, __ATOMIC_RELAXED);
+      receivedCall = true;
       return cap->newCall(interfaceId, methodId, firstSegmentWordSize);
     }
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                                 kj::Own<CallContextHook>&& context) override {
-      __atomic_store_n(&receivedCall, true, __ATOMIC_RELAXED);
+      receivedCall = true;
       return cap->call(interfaceId, methodId, kj::mv(context));
     }
 
@@ -951,8 +951,7 @@ private:
     bool receivedCall = false;
 
     void resolve(kj::Own<ClientHook> replacement) {
-      if (replacement->getBrand() != connectionState.get() &&
-          __atomic_load_n(&receivedCall, __ATOMIC_RELAXED)) {
+      if (replacement->getBrand() != connectionState.get() && receivedCall) {
         // The new capability is hosted locally, not on the remote machine.  And, we had made calls
         // to the promise.  We need to make sure those calls echo back to us before we allow new
         // calls to go directly to the local capability, so we need to set a local embargo and send
@@ -1984,8 +1983,10 @@ private:
       // the RpcCallContext is now responsible for cleaning up the entry in the answer table, since
       // a Finish message was already received.
 
-      if (__atomic_fetch_or(&cancellationFlags, CANCEL_REQUESTED, __ATOMIC_RELAXED) ==
-          CANCEL_ALLOWED) {
+      bool previouslyAllowedButNotRequested = cancellationFlags == CANCEL_ALLOWED;
+      cancellationFlags |= CANCEL_REQUESTED;
+
+      if (previouslyAllowedButNotRequested) {
         // We just set CANCEL_REQUESTED, and CANCEL_ALLOWED was already set previously.  Initiate
         // the cancellation.
         cancelFulfiller->fulfill();
@@ -2092,15 +2093,17 @@ private:
       //   at creation.
       KJ_REQUIRE(request == nullptr, "Must call releaseParams() before allowAsyncCancellation().");
 
-      if (__atomic_fetch_or(&cancellationFlags, CANCEL_ALLOWED, __ATOMIC_RELAXED) ==
-          CANCEL_REQUESTED) {
+      bool previouslyRequestedButNotAllowed = cancellationFlags == CANCEL_REQUESTED;
+      cancellationFlags |= CANCEL_ALLOWED;
+
+      if (previouslyRequestedButNotAllowed) {
         // We just set CANCEL_ALLOWED, and CANCEL_REQUESTED was already set previously.  Initiate
         // the cancellation.
         cancelFulfiller->fulfill();
       }
     }
     bool isCanceled() override {
-      return __atomic_load_n(&cancellationFlags, __ATOMIC_RELAXED) & CANCEL_REQUESTED;
+      return cancellationFlags & CANCEL_REQUESTED;
     }
     kj::Own<CallContextHook> addRef() override {
       return kj::addRef(*this);
@@ -2133,8 +2136,7 @@ private:
     };
 
     uint8_t cancellationFlags = 0;
-    // When both flags are set, the cancellation process will begin.  Must be manipulated atomically
-    // as it may be accessed from multiple threads.
+    // When both flags are set, the cancellation process will begin.
 
     kj::Own<kj::PromiseFulfiller<void>> cancelFulfiller;
     // Fulfilled when cancellation has been both requested and permitted.  The fulfilled promise is
@@ -2160,14 +2162,10 @@ private:
       // answer table.  Or we might even be responsible for removing the entire answer table
       // entry.
 
-      // TODO(cleanup):  This code and the code that calls it is really ugly.  Moving a lock as
-      //   a parameter?  Yuck.  Maybe when cancellation and thread-safety are removed this will
-      //   get simpler?
-
       kj::Own<PipelineHook> pipelineToRelease;
       Answer answerToDelete;
 
-      if (__atomic_load_n(&cancellationFlags, __ATOMIC_RELAXED) & CANCEL_REQUESTED) {
+      if (cancellationFlags & CANCEL_REQUESTED) {
         answerToDelete = kj::mv(connectionState->answers[questionId]);
 
         // Erase from the table.

@@ -47,7 +47,8 @@ public:
 private:
   Node& parent;
   DeclName::Reader targetName;
-  kj::Lazy<kj::Maybe<Node&>> target;
+  bool initialized = false;
+  kj::Maybe<Node&> target;
 };
 
 class Compiler::Node: public NodeTranslator::Resolver {
@@ -326,9 +327,11 @@ private:
 // =======================================================================================
 
 kj::Maybe<Compiler::Node&> Compiler::Alias::getTarget() {
-  return target.get([this](kj::SpaceFor<kj::Maybe<Node&>>& space) {
-    return space.construct(parent.lookup(targetName));
-  });
+  if (!initialized) {
+    initialized = true;
+    target = parent.lookup(targetName);
+  }
+  return target;
 }
 
 // =======================================================================================

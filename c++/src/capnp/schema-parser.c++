@@ -126,11 +126,11 @@ public:
         message);
 
     // We intentionally only set hadErrors true if reportError() didn't throw.
-    __atomic_store_n(&parser.hadErrors, true, __ATOMIC_RELAXED);
+    parser.hadErrors = true;
   }
 
   bool hadErrors() override {
-    return __atomic_load_n(&parser.hadErrors, __ATOMIC_RELAXED);
+    return parser.hadErrors;
   }
 
 private:
