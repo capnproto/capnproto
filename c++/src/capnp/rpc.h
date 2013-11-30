@@ -159,8 +159,6 @@ public:
     // If `firstSegmentWordSize` is non-zero, it should be treated as a hint suggesting how large
     // to make the first segment.  This is entirely a hint and the connection may adjust it up or
     // down.  If it is zero, the connection should choose the size itself.
-    //
-    // Notice that this may be called from any thread.
 
     virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() = 0;
     // Wait for a message to be received and return it.  If the read stream cleanly terminates,

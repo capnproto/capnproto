@@ -688,10 +688,10 @@ class WeakFulfiller final: public PromiseFulfiller<T>, private kj::Disposer {
   // - We cannot destroy the WeakFulfiller until the application has discarded it *and* it has been
   //   detached from the underlying fulfiller, because otherwise the later detach() call will go
   //   to a dangling pointer.  Essentially, WeakFulfiller is reference counted, although the
-  //   refcount never goes over 2 and we manually implement the refcounting because we already need
-  //   a mutex anyway.  To this end, WeakFulfiller is its own Disposer -- dispose() is called when
-  //   the application discards its owned pointer to the fulfiller and detach() is called when the
-  //   promise is destroyed.
+  //   refcount never goes over 2 and we manually implement the refcounting because we need to do
+  //   other special things when each side detaches anyway.  To this end, WeakFulfiller is its own
+  //   Disposer -- dispose() is called when the application discards its owned pointer to the
+  //   fulfiller and detach() is called when the promise is destroyed.
 
 public:
   KJ_DISALLOW_COPY(WeakFulfiller);

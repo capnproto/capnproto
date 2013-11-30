@@ -459,11 +459,9 @@ public:
                               kj::Own<CallContextHook>&& context) override {
     auto contextPtr = context.get();
 
-    // We don't want to actually dispatch the call synchronously, because:
-    // 1) The server may prefer a different EventLoop.
-    // 2) If the server is in the same EventLoop, calling it synchronously could be dangerous due
-    //    to risk of deadlocks if it happens to take a mutex that the client already holds.  One
-    //    of the main goals of message-passing architectures is to avoid this!
+    // We don't want to actually dispatch the call synchronously, because we don't want the callee
+    // to have any side effects before the promise is returned to the caller.  This helps avoid
+    // race conditions.
     //
     // So, we do an evalLater() here.
     //

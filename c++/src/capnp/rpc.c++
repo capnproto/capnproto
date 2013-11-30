@@ -742,11 +742,7 @@ private:
 
     ~ImportClient() noexcept(false) {
       unwindDetector.catchExceptionsIfUnwinding([&]() {
-        // Remove self from the import table, if the table is still pointing at us.  (It's possible
-        // that another thread attempted to obtain this import just as the destructor started, in
-        // which case that other thread will have constructed a new ImportClient and placed it in
-        // the import table.  Therefore, we must actually verify that the import table points at
-        // this object.)
+        // Remove self from the import table, if the table is still pointing at us.
         KJ_IF_MAYBE(import, connectionState->imports.find(importId)) {
           KJ_IF_MAYBE(i, import->importClient) {
             if (i == this) {
@@ -1002,8 +998,7 @@ private:
   };
 
   kj::Maybe<ExportId> writeDescriptor(ClientHook& cap, rpc::CapDescriptor::Builder descriptor) {
-    // Write a descriptor for the given capability.  The tables must be locked by the caller and
-    // passed in as a parameter.
+    // Write a descriptor for the given capability.
 
     // Find the innermost wrapped capability.
     ClientHook* inner = &cap;
@@ -1174,10 +1169,7 @@ private:
       // is known that no more caps will be extracted after this point, so an exact value can be
       // returned.  Otherwise, the returned size includes room for error.
 
-      // If `final` is true then there's no need to lock.  If it is false, then asynchronous
-      // access is possible.  It's probably not worth taking the lock to look; we'll just return
-      // a silly estimate.
-      uint count = final ? retainedCaps.size() : 32;
+      uint count = retainedCaps.size() + (final ? 0 : 32);
       return (count * sizeof(ExportId) + (sizeof(word) - 1)) / sizeof(word);
     }
 
@@ -1197,7 +1189,6 @@ private:
       // Build the list of export IDs found in this message which are to be retained past the
       // message's release.
 
-      // Called on finalization, when all extractions have ceased, so we can skip the lock.
       kj::Vector<ExportId> retainedCaps = kj::mv(this->retainedCaps);
       kj::Vector<kj::Own<ClientHook>> refs(retainedCaps.size());
 
@@ -1391,8 +1382,8 @@ private:
     }
 
     void finishDescriptors() {
-      // Finish writing all of the CapDescriptors.  Must be called with the tables locked, and the
-      // message must be sent before the tables are unlocked.
+      // Finish writing all of the CapDescriptors.  The message containing the injected
+      // capabilities must be sent immediately after this returns.
 
       exports = kj::Vector<ExportId>(caps.size());
 
@@ -2313,14 +2304,12 @@ private:
 
     QuestionId questionId = call.getQuestionId();
 
-    // Note:  resolutionChainTail couldn't possibly be changing here because we only handle one
-    //   message at a time, so we can hold off locking the tables for a bit longer.
     auto context = kj::refcounted<RpcCallContext>(
         *this, questionId, kj::mv(message), call.getParams(),
         kj::addRef(*resolutionChainTail),
         redirectResults, kj::mv(cancelPaf.fulfiller));
 
-    // No more using `call` after this point!
+    // No more using `call` after this point, as it now belongs to the context.
 
     {
       auto& answer = answers[questionId];
@@ -2565,8 +2554,6 @@ private:
   // Level 1
 
   void handleResolve(const rpc::Resolve::Reader& resolve) {
-    kj::Own<ResolutionChain> oldResolutionChainTail;  // must be freed outside of lock
-
     kj::Own<ClientHook> replacement;
 
     // Extract the replacement capability.
@@ -2584,8 +2571,7 @@ private:
     }
 
     // Extend the resolution chain.
-    oldResolutionChainTail = kj::mv(resolutionChainTail);
-    resolutionChainTail = oldResolutionChainTail->addResolve(
+    resolutionChainTail = resolutionChainTail->addResolve(
         resolve.getPromiseId(), kj::mv(replacement));
 
     // If the import is on the table, fulfill it.

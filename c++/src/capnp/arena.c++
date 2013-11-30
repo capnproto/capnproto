@@ -194,8 +194,7 @@ SegmentBuilder* BasicBuilderArena::getSegment(SegmentId id) {
 
 BasicBuilderArena::AllocateResult BasicBuilderArena::allocate(WordCount amount) {
   if (segment0.getArena() == nullptr) {
-    // We're allocating the first segment.  We don't need to worry about threads at this point
-    // because calling MessageBuilder::initRoot() from multiple threads is not intended to be safe.
+    // We're allocating the first segment.
     kj::ArrayPtr<word> ptr = message->allocateSegment(amount / WORDS);
 
     // Re-allocate segment0 in-place.  This is a bit of a hack, but we have not returned any
@@ -204,7 +203,7 @@ BasicBuilderArena::AllocateResult BasicBuilderArena::allocate(WordCount amount) 
     kj::ctor(segment0, this, SegmentId(0), ptr, &this->dummyLimiter);
     return AllocateResult { &segment0, segment0.allocate(amount) };
   } else {
-    // Check if there is space in the first segment.  We can do this without locking.
+    // Check if there is space in the first segment.
     word* attempt = segment0.allocate(amount);
     if (attempt != nullptr) {
       return AllocateResult { &segment0, attempt };
@@ -242,8 +241,7 @@ BasicBuilderArena::AllocateResult BasicBuilderArena::allocate(WordCount amount) 
     // getSegmentsForOutput(), which callers might reasonably expect is a thread-safe method.
     segmentState->forOutput.resize(segmentState->builders.size() + 1);
 
-    // Allocating from the new segment is guaranteed to succeed since no other thread could have
-    // received a pointer to it yet (since we still hold the lock).
+    // Allocating from the new segment is guaranteed to succeed since we made it big enough.
     return AllocateResult { result, result->allocate(amount) };
   }
 }
