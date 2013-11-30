@@ -195,17 +195,15 @@ class EventLoop {
   // construct some promises and wait on the result.  Example:
   //
   //     int main() {
+  //       // `loop` becomes the official EventLoop for the thread.
   //       SimpleEventLoop loop;
   //
-  //       // Most code that does I/O needs to be run from within an
-  //       // EventLoop, so it can use Promise::then().  So, we need to
-  //       // use `evalLater()` to run `getHttp()` inside the event
-  //       // loop.
-  //       Promise<String> textPromise = loop.evalLater(
-  //           []() { return getHttp("http://example.com"); });
+  //       // Now we can call an async function.
+  //       Promise<String> textPromise = getHttp("http://example.com");
   //
-  //       // Now we can wait for the promise to complete.
-  //       String text = loop.wait(kj::mv(textPromise));
+  //       // And we can wait for the promise to complete.  Note that you can only use `wait()`
+  //       // from the top level, not from inside a promise callback.
+  //       String text = textPromise.wait();
   //       print(text);
   //       return 0;
   //     }
