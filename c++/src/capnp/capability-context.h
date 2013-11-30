@@ -153,7 +153,7 @@ public:
 
 private:
   CapInjectorBase* injector;  // becomes null once arena is allocated
-  void* arenaSpace[12 + sizeof(kj::MutexGuarded<void*>) / sizeof(void*)];
+  void* arenaSpace[13];
 
   _::ImbuedBuilderArena& arena() { return *reinterpret_cast<_::ImbuedBuilderArena*>(arenaSpace); }
 

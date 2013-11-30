@@ -232,6 +232,13 @@ private:
 
   typedef std::unordered_map<uint, kj::Own<SegmentReader>> SegmentMap;
   kj::MutexGuarded<kj::Maybe<kj::Own<SegmentMap>>> moreSegments;
+  // We need to mutex-guard the segment map because we lazily initialize segments when they are
+  // first requested, but a Reader is allowed to be used concurrently in multiple threads.  Luckily
+  // this only applies to large messages.
+  //
+  // TODO(perf):  Thread-local thing instead?  Some kind of lockless map?  Or do sharing of data
+  //   in a different way, where you have to construct a new MessageReader in each thread (but
+  //   possibly backed by the same data)?
 };
 
 class ImbuedReaderArena final: public Arena {
@@ -323,7 +330,7 @@ private:
     std::vector<kj::Own<BasicSegmentBuilder>> builders;
     std::vector<kj::ArrayPtr<const word>> forOutput;
   };
-  kj::MutexGuarded<kj::Maybe<kj::Own<MultiSegmentState>>> moreSegments;
+  kj::Maybe<kj::Own<MultiSegmentState>> moreSegments;
 };
 
 class ImbuedBuilderArena final: public BuilderArena {
@@ -358,7 +365,7 @@ private:
   struct MultiSegmentState {
     std::vector<kj::Maybe<kj::Own<ImbuedSegmentBuilder>>> builders;
   };
-  kj::MutexGuarded<kj::Maybe<kj::Own<MultiSegmentState>>> moreSegments;
+  kj::Maybe<kj::Own<MultiSegmentState>> moreSegments;
 };
 
 // =======================================================================================
@@ -422,22 +429,13 @@ inline SegmentBuilder::SegmentBuilder(
     : SegmentReader(arena, id, ptr, readLimiter), pos(pos) {}
 
 inline word* SegmentBuilder::allocate(WordCount amount) {
-  word* result = __atomic_fetch_add(pos, amount * BYTES_PER_WORD / BYTES, __ATOMIC_RELAXED);
-
-  // Careful about pointer arithmetic here.  The segment might be at the end of the address space,
-  // or `amount` could be ridiculously huge.
-  if (ptr.end() - (result + amount) < 0) {
+  if (intervalLength(*pos, ptr.end()) < amount) {
     // Not enough space in the segment for this allocation.
-    if (ptr.end() - result >= 0) {
-      // It was our increment that pushed the pointer past the end of the segment.  Therefore no
-      // other thread could have accidentally allocated space in this segment in the meantime.
-      // We need to back up the pointer so that it will be correct when the data is written out
-      // (and also so that another allocation can potentially use the remaining space).
-      __atomic_store_n(pos, result, __ATOMIC_RELAXED);
-    }
     return nullptr;
   } else {
     // Success.
+    word* result = *pos;
+    *pos = *pos + amount;
     return result;
   }
 }

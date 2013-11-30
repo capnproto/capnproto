@@ -181,8 +181,7 @@ SegmentBuilder* BasicBuilderArena::getSegment(SegmentId id) {
   if (id == SegmentId(0)) {
     return &segment0;
   } else {
-    auto lock = moreSegments.lockShared();
-    KJ_IF_MAYBE(s, *lock) {
+    KJ_IF_MAYBE(s, moreSegments) {
       KJ_REQUIRE(id.value - 1 < s->get()->builders.size(), "invalid segment id", id.value);
       // TODO(cleanup):  Return a const SegmentBuilder and tediously constify all SegmentBuilder
       //   pointers throughout the codebase.
@@ -213,9 +212,8 @@ BasicBuilderArena::AllocateResult BasicBuilderArena::allocate(WordCount amount) 
 
     // Need to fall back to additional segments.
 
-    auto lock = moreSegments.lockExclusive();
     MultiSegmentState* segmentState;
-    KJ_IF_MAYBE(s, *lock) {
+    KJ_IF_MAYBE(s, moreSegments) {
       // TODO(perf):  Check for available space in more than just the last segment.  We don't
       //   want this to be O(n), though, so we'll need to maintain some sort of table.  Complicating
       //   matters, we want SegmentBuilders::allocate() to be fast, so we can't update any such
@@ -231,7 +229,7 @@ BasicBuilderArena::AllocateResult BasicBuilderArena::allocate(WordCount amount) 
     } else {
       auto newSegmentState = kj::heap<MultiSegmentState>();
       segmentState = newSegmentState;
-      *lock = kj::mv(newSegmentState);
+      moreSegments = kj::mv(newSegmentState);
     }
 
     kj::Own<BasicSegmentBuilder> newBuilder = kj::heap<BasicSegmentBuilder>(
@@ -251,12 +249,12 @@ BasicBuilderArena::AllocateResult BasicBuilderArena::allocate(WordCount amount) 
 }
 
 kj::ArrayPtr<const kj::ArrayPtr<const word>> BasicBuilderArena::getSegmentsForOutput() {
-  // We shouldn't need to lock a mutex here because if this is called multiple times simultaneously,
-  // we should only be overwriting the array with the exact same data.  If the number or size of
-  // segments is actually changing due to an activity in another thread, then the caller has a
-  // problem regardless of locking here.
+  // Although this is a read-only method, we shouldn't need to lock a mutex here because if this
+  // is called multiple times simultaneously, we should only be overwriting the array with the
+  // exact same data.  If the number or size of segments is actually changing due to an activity
+  // in another thread, then the caller has a problem regardless of locking here.
 
-  KJ_IF_MAYBE(segmentState, moreSegments.getWithoutLock()) {
+  KJ_IF_MAYBE(segmentState, moreSegments) {
     KJ_DASSERT(segmentState->get()->forOutput.size() == segmentState->get()->builders.size() + 1,
         "segmentState->forOutput wasn't resized correctly when the last builder was added.",
         segmentState->get()->forOutput.size(), segmentState->get()->builders.size());
@@ -290,8 +288,7 @@ SegmentReader* BasicBuilderArena::tryGetSegment(SegmentId id) {
       return &segment0;
     }
   } else {
-    auto lock = moreSegments.lockShared();
-    KJ_IF_MAYBE(segmentState, *lock) {
+    KJ_IF_MAYBE(segmentState, moreSegments) {
       if (id.value <= segmentState->get()->builders.size()) {
         // TODO(cleanup):  Return a const SegmentReader and tediously constify all SegmentBuilder
         //   pointers throughout the codebase.
@@ -346,14 +343,13 @@ SegmentBuilder* ImbuedBuilderArena::imbue(SegmentBuilder* baseSegment) {
     }
     result = &segment0;
   } else {
-    auto lock = moreSegments.lockExclusive();
     MultiSegmentState* segmentState;
-    KJ_IF_MAYBE(s, *lock) {
+    KJ_IF_MAYBE(s, moreSegments) {
       segmentState = *s;
     } else {
       auto newState = kj::heap<MultiSegmentState>();
       segmentState = newState;
-      *lock = kj::mv(newState);
+      moreSegments = kj::mv(newState);
     }
 
     auto id = baseSegment->getSegmentId().value;
