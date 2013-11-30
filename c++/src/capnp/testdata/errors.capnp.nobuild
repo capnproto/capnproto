@@ -137,3 +137,5 @@ enum DupEnumerants {
   dupNumber1 @2;
   dupNumber2 @2;
 }
+
+const recursive: UInt32 = .recursive;

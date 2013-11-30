@@ -34,7 +34,7 @@ namespace capnp {
 namespace compiler {
 
 void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
-               const ErrorReporter& errorReporter);
+               ErrorReporter& errorReporter);
 // Parse a list of statements to build a ParsedFile.
 //
 // If any errors are reported, then the output is not usable.  However, it may be passed on through
@@ -59,7 +59,7 @@ class CapnpParser {
   // them into your own parsers.
 
 public:
-  CapnpParser(Orphanage orphanage, const ErrorReporter& errorReporter);
+  CapnpParser(Orphanage orphanage, ErrorReporter& errorReporter);
   // `orphanage` is used to allocate Cap'n Proto message objects in the result.  `inputStart` is
   // a pointer to the beginning of the input, used to compute byte offsets.
 
@@ -141,7 +141,7 @@ public:
 
 private:
   Orphanage orphanage;
-  const ErrorReporter& errorReporter;
+  ErrorReporter& errorReporter;
   kj::Arena arena;
   Parsers parsers;
 };

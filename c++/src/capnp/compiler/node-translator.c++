@@ -524,7 +524,7 @@ private:
 // =======================================================================================
 
 NodeTranslator::NodeTranslator(
-    const Resolver& resolver, const ErrorReporter& errorReporter,
+    Resolver& resolver, ErrorReporter& errorReporter,
     const Declaration::Reader& decl, Orphan<schema::Node> wipNodeParam,
     bool compileAnnotations)
     : resolver(resolver), errorReporter(errorReporter),
@@ -561,12 +561,12 @@ NodeTranslator::NodeSet NodeTranslator::finish() {
 
 class NodeTranslator::DuplicateNameDetector {
 public:
-  inline explicit DuplicateNameDetector(const ErrorReporter& errorReporter)
+  inline explicit DuplicateNameDetector(ErrorReporter& errorReporter)
       : errorReporter(errorReporter) {}
   void check(List<Declaration>::Reader nestedDecls, Declaration::Which parentKind);
 
 private:
-  const ErrorReporter& errorReporter;
+  ErrorReporter& errorReporter;
   std::map<kj::StringPtr, LocatedText::Reader> names;
 };
 
@@ -757,7 +757,7 @@ void NodeTranslator::compileAnnotation(Declaration::Annotation::Reader decl,
 
 class NodeTranslator::DuplicateOrdinalDetector {
 public:
-  DuplicateOrdinalDetector(const ErrorReporter& errorReporter): errorReporter(errorReporter) {}
+  DuplicateOrdinalDetector(ErrorReporter& errorReporter): errorReporter(errorReporter) {}
 
   void check(LocatedInteger::Reader ordinal) {
     if (ordinal.getValue() < expectedOrdinal) {
@@ -780,7 +780,7 @@ public:
   }
 
 private:
-  const ErrorReporter& errorReporter;
+  ErrorReporter& errorReporter;
   uint expectedOrdinal = 0;
   kj::Maybe<LocatedInteger::Reader> lastOrdinalLocation;
 };
@@ -842,7 +842,7 @@ public:
 
 private:
   NodeTranslator& translator;
-  const ErrorReporter& errorReporter;
+  ErrorReporter& errorReporter;
   StructLayout layout;
   kj::Arena arena;
 

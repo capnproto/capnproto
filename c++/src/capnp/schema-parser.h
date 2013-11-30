@@ -34,13 +34,15 @@ class SchemaFile;
 
 class SchemaParser {
   // Parses `.capnp` files to produce `Schema` objects.
+  //
+  // This class is thread-safe, hence all its methods are const.
 
 public:
   SchemaParser();
   ~SchemaParser() noexcept(false);
 
   ParsedSchema parseDiskFile(kj::StringPtr displayName, kj::StringPtr diskPath,
-                             kj::ArrayPtr<const kj::StringPtr> importPath);
+                             kj::ArrayPtr<const kj::StringPtr> importPath) const;
   // Parse a file located on disk.  Throws an exception if the file dosen't exist.
   //
   // Parameters:
@@ -61,7 +63,7 @@ public:
   // anything in the imported file -- only the imported types which are actually used are
   // "dependencies".
 
-  ParsedSchema parseFile(kj::Own<SchemaFile>&& file);
+  ParsedSchema parseFile(kj::Own<SchemaFile>&& file) const;
   // Advanced interface for parsing a file that may or may not be located in any global namespace.
   // Most users will prefer `parseDiskFile()`.
   //
@@ -79,7 +81,7 @@ private:
   kj::Own<Impl> impl;
   mutable bool hadErrors = false;
 
-  const ModuleImpl& getModuleImpl(kj::Own<SchemaFile>&& file) const;
+  ModuleImpl& getModuleImpl(kj::Own<SchemaFile>&& file) const;
 
   friend class ParsedSchema;
 };
@@ -91,11 +93,11 @@ class ParsedSchema: public Schema {
 public:
   inline ParsedSchema(): parser(nullptr) {}
 
-  kj::Maybe<ParsedSchema> findNested(kj::StringPtr name);
+  kj::Maybe<ParsedSchema> findNested(kj::StringPtr name) const;
   // Gets the nested node with the given name, or returns null if there is no such nested
   // declaration.
 
-  ParsedSchema getNested(kj::StringPtr name);
+  ParsedSchema getNested(kj::StringPtr name) const;
   // Gets the nested node with the given name, or throws an exception if there is no such nested
   // declaration.
 

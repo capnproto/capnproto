@@ -122,7 +122,7 @@ uint64_t generateMethodParamsId(uint64_t parentId, uint16_t methodOrdinal, bool 
 }
 
 void parseFile(List<Statement>::Reader statements, ParsedFile::Builder result,
-               const ErrorReporter& errorReporter) {
+               ErrorReporter& errorReporter) {
   CapnpParser parser(Orphanage::getForMessageContaining(result), errorReporter);
 
   kj::Vector<Orphan<Declaration>> decls(statements.size());
@@ -272,7 +272,7 @@ class ParseListItems {
   // Transformer that parses all items in the input token sequence list using the given parser.
 
 public:
-  constexpr ParseListItems(ItemParser&& itemParser, const ErrorReporter& errorReporter)
+  constexpr ParseListItems(ItemParser&& itemParser, ErrorReporter& errorReporter)
       : itemParser(p::sequence(kj::fwd<ItemParser>(itemParser), p::endOfInput)),
         errorReporter(errorReporter) {}
 
@@ -310,12 +310,11 @@ public:
 
 private:
   decltype(p::sequence(kj::instance<ItemParser>(), p::endOfInput)) itemParser;
-  const ErrorReporter& errorReporter;
+  ErrorReporter& errorReporter;
 };
 
 template <typename ItemParser>
-constexpr auto parenthesizedList(ItemParser&& itemParser,
-                                 const ErrorReporter& errorReporter) -> decltype(
+constexpr auto parenthesizedList(ItemParser&& itemParser, ErrorReporter& errorReporter) -> decltype(
          transform(rawParenthesizedList, ParseListItems<ItemParser>(
              kj::fwd<ItemParser>(itemParser), errorReporter))) {
   return transform(rawParenthesizedList, ParseListItems<ItemParser>(
@@ -323,8 +322,7 @@ constexpr auto parenthesizedList(ItemParser&& itemParser,
 }
 
 template <typename ItemParser>
-constexpr auto bracketedList(ItemParser&& itemParser,
-                             const ErrorReporter& errorReporter) -> decltype(
+constexpr auto bracketedList(ItemParser&& itemParser, ErrorReporter& errorReporter) -> decltype(
          transform(rawBracketedList, ParseListItems<ItemParser>(
              kj::fwd<ItemParser>(itemParser), errorReporter))) {
   return transform(rawBracketedList, ParseListItems<ItemParser>(
@@ -384,7 +382,7 @@ void initLocation(kj::parse::Span<List<Token>::Reader::Iterator> location,
 
 // =======================================================================================
 
-CapnpParser::CapnpParser(Orphanage orphanageParam, const ErrorReporter& errorReporterParam)
+CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterParam)
     : orphanage(orphanageParam), errorReporter(errorReporterParam) {
   parsers.declName = arena.copy(p::transformWithLocation(
       p::sequence(

@@ -36,20 +36,20 @@ class ErrorReporter {
   // Callback for reporting errors within a particular file.
 
 public:
-  virtual void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) const = 0;
+  virtual void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) = 0;
   // Report an error at the given location in the input text.  `startByte` and `endByte` indicate
   // the span of text that is erroneous.  They may be equal, in which case the parser was only
   // able to identify where the error begins, not where it ends.
 
   template <typename T>
-  inline void addErrorOn(T&& decl, kj::StringPtr message) const {
+  inline void addErrorOn(T&& decl, kj::StringPtr message) {
     // Works for any `T` that defines `getStartByte()` and `getEndByte()` methods, which many
     // of the Cap'n Proto types defined in `grammar.capnp` do.
 
     addError(decl.getStartByte(), decl.getEndByte(), message);
   }
 
-  virtual bool hadErrors() const = 0;
+  virtual bool hadErrors() = 0;
   // Return true if any errors have been reported, globally.  The main use case for this callback
   // is to inhibit the reporting of errors which may have been caused by previous errors, or to
   // allow the compiler to bail out entirely if it gets confused and thinks this could be because
@@ -67,10 +67,10 @@ public:
   };
 
   virtual void addError(kj::StringPtr file, SourcePos start, SourcePos end,
-                        kj::StringPtr message) const = 0;
+                        kj::StringPtr message) = 0;
   // Report an error at the given location in the given file.
 
-  virtual bool hadErrors() const = 0;
+  virtual bool hadErrors() = 0;
   // Return true if any errors have been reported, globally.  The main use case for this callback
   // is to inhibit the reporting of errors which may have been caused by previous errors, or to
   // allow the compiler to bail out entirely if it gets confused and thinks this could be because

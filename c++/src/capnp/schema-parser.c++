@@ -72,11 +72,11 @@ public:
   ModuleImpl(const SchemaParser& parser, kj::Own<const SchemaFile>&& file)
       : parser(parser), file(kj::mv(file)) {}
 
-  kj::StringPtr getSourceName() const override {
+  kj::StringPtr getSourceName() override {
     return file->getDisplayName();
   }
 
-  Orphan<compiler::ParsedFile> loadContent(Orphanage orphanage) const override {
+  Orphan<compiler::ParsedFile> loadContent(Orphanage orphanage) override {
     kj::Array<const char> content = file->readContent();
 
     lineBreaks.get([&](kj::SpaceFor<kj::Vector<uint>>& space) {
@@ -99,7 +99,7 @@ public:
     return parsed;
   }
 
-  kj::Maybe<const Module&> importRelative(kj::StringPtr importPath) const override {
+  kj::Maybe<Module&> importRelative(kj::StringPtr importPath) override {
     KJ_IF_MAYBE(importedFile, file->import(importPath)) {
       return parser.getModuleImpl(kj::mv(*importedFile));
     } else {
@@ -107,7 +107,7 @@ public:
     }
   }
 
-  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) const override {
+  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
     auto& lines = lineBreaks.get(
         [](kj::SpaceFor<kj::Vector<uint>>& space) {
           KJ_FAIL_REQUIRE("Can't report errors until loadContent() is called.");
@@ -129,7 +129,7 @@ public:
     __atomic_store_n(&parser.hadErrors, true, __ATOMIC_RELAXED);
   }
 
-  bool hadErrors() const override {
+  bool hadErrors() override {
     return __atomic_load_n(&parser.hadErrors, __ATOMIC_RELAXED);
   }
 
@@ -162,7 +162,7 @@ struct SchemaFileEq {
 
 struct SchemaParser::Impl {
   typedef std::unordered_map<
-      const SchemaFile*, kj::Own<const ModuleImpl>, SchemaFileHash, SchemaFileEq> FileMap;
+      const SchemaFile*, kj::Own<ModuleImpl>, SchemaFileHash, SchemaFileEq> FileMap;
   kj::MutexGuarded<FileMap> fileMap;
   compiler::Compiler compiler;
 };
@@ -172,11 +172,11 @@ SchemaParser::~SchemaParser() noexcept(false) {}
 
 ParsedSchema SchemaParser::parseDiskFile(
     kj::StringPtr displayName, kj::StringPtr diskPath,
-    kj::ArrayPtr<const kj::StringPtr> importPath) {
+    kj::ArrayPtr<const kj::StringPtr> importPath) const {
   return parseFile(SchemaFile::newDiskFile(displayName, diskPath, importPath));
 }
 
-ParsedSchema SchemaParser::parseFile(kj::Own<SchemaFile>&& file) {
+ParsedSchema SchemaParser::parseFile(kj::Own<SchemaFile>&& file) const {
   KJ_DEFER(impl->compiler.clearWorkspace());
   uint64_t id = impl->compiler.add(getModuleImpl(kj::mv(file)));
   impl->compiler.eagerlyCompile(id,
@@ -185,7 +185,7 @@ ParsedSchema SchemaParser::parseFile(kj::Own<SchemaFile>&& file) {
   return ParsedSchema(impl->compiler.getLoader().get(id), *this);
 }
 
-const SchemaParser::ModuleImpl& SchemaParser::getModuleImpl(kj::Own<SchemaFile>&& file) const {
+SchemaParser::ModuleImpl& SchemaParser::getModuleImpl(kj::Own<SchemaFile>&& file) const {
   auto lock = impl->fileMap.lockExclusive();
 
   auto insertResult = lock->insert(std::make_pair(file.get(), kj::Own<ModuleImpl>()));
@@ -196,14 +196,14 @@ const SchemaParser::ModuleImpl& SchemaParser::getModuleImpl(kj::Own<SchemaFile>&
   return *insertResult.first->second;
 }
 
-kj::Maybe<ParsedSchema> ParsedSchema::findNested(kj::StringPtr name) {
+kj::Maybe<ParsedSchema> ParsedSchema::findNested(kj::StringPtr name) const {
   return parser->impl->compiler.lookup(getProto().getId(), name).map(
       [this](uint64_t childId) {
         return ParsedSchema(parser->impl->compiler.getLoader().get(childId), *parser);
       });
 }
 
-ParsedSchema ParsedSchema::getNested(kj::StringPtr nestedName) {
+ParsedSchema ParsedSchema::getNested(kj::StringPtr nestedName) const {
   KJ_IF_MAYBE(nested, findNested(nestedName)) {
     return *nested;
   } else {

@@ -298,7 +298,7 @@ public:
   }
 
 private:
-  kj::Maybe<const Module&> loadModule(kj::StringPtr file) {
+  kj::Maybe<Module&> loadModule(kj::StringPtr file) {
     size_t longestPrefix = 0;
 
     for (auto& prefix: sourcePrefixes) {
@@ -1218,12 +1218,12 @@ private:
                          kj::ArrayPtr<const char> content)
       : globalReporter(globalReporter), lineBreaks(content) {}
 
-    void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) const override {
+    void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
       globalReporter.addError("<stdin>", lineBreaks.toSourcePos(startByte),
                               lineBreaks.toSourcePos(endByte), message);
     }
 
-    bool hadErrors() const override {
+    bool hadErrors() override {
       return globalReporter.hadErrors();
     }
 
@@ -1234,7 +1234,7 @@ private:
 
   class ValueResolverGlue final: public ValueTranslator::Resolver {
   public:
-    ValueResolverGlue(const SchemaLoader& loader, const ErrorReporter& errorReporter)
+    ValueResolverGlue(const SchemaLoader& loader, ErrorReporter& errorReporter)
         : loader(loader), errorReporter(errorReporter) {}
 
     kj::Maybe<Schema> resolveType(uint64_t id) {
@@ -1266,14 +1266,14 @@ private:
 
   private:
     const SchemaLoader& loader;
-    const ErrorReporter& errorReporter;
+    ErrorReporter& errorReporter;
   };
 
 public:
   // =====================================================================================
 
   void addError(kj::StringPtr file, SourcePos start, SourcePos end,
-                kj::StringPtr message) const override {
+                kj::StringPtr message) override {
     kj::String wholeMessage;
     if (end.line == start.line) {
       if (end.column == start.column) {
@@ -1289,11 +1289,11 @@ public:
     }
 
     context.error(wholeMessage);
-    __atomic_store_n(&hadErrors_, true, __ATOMIC_RELAXED);
+    hadErrors_ = true;
   }
 
-  bool hadErrors() const override {
-    return __atomic_load_n(&hadErrors_, __ATOMIC_RELAXED);
+  bool hadErrors() override {
+    return hadErrors_;
   }
 
 private:
@@ -1326,7 +1326,7 @@ private:
   struct SourceFile {
     uint64_t id;
     kj::StringPtr name;
-    const Module* module;
+    Module* module;
   };
 
   kj::Vector<SourceFile> sourceFiles;
@@ -1337,7 +1337,7 @@ private:
   };
   kj::Vector<OutputDirective> outputs;
 
-  mutable bool hadErrors_ = false;
+  bool hadErrors_ = false;
 };
 
 }  // namespace compiler

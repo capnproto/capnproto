@@ -34,21 +34,23 @@ namespace compiler {
 
 class Module: public ErrorReporter {
 public:
-  virtual kj::StringPtr getSourceName() const = 0;
+  virtual kj::StringPtr getSourceName() = 0;
   // The name of the module file relative to the source tree.  Used to decide where to output
   // generated code and to form the `displayName` in the schema.
 
-  virtual Orphan<ParsedFile> loadContent(Orphanage orphanage) const = 0;
+  virtual Orphan<ParsedFile> loadContent(Orphanage orphanage) = 0;
   // Loads the module content, using the given orphanage to allocate objects if necessary.
 
-  virtual kj::Maybe<const Module&> importRelative(kj::StringPtr importPath) const = 0;
+  virtual kj::Maybe<Module&> importRelative(kj::StringPtr importPath) = 0;
   // Find another module, relative to this one.  Importing the same logical module twice should
   // produce the exact same object, comparable by identity.  These objects are owned by some
   // outside pool that outlives the Compiler instance.
 };
 
-class Compiler {
+class Compiler: private SchemaLoader::LazyLoadCallback {
   // Cross-links separate modules (schema files) and translates them into schema nodes.
+  //
+  // This class is thread-safe, hence all its methods are const.
 
 public:
   enum AnnotationFlag {
@@ -71,7 +73,7 @@ public:
   ~Compiler() noexcept(false);
   KJ_DISALLOW_COPY(Compiler);
 
-  uint64_t add(const Module& module) const;
+  uint64_t add(Module& module) const;
   // Add a module to the Compiler, returning the module's file ID.  The ID can then be looked up in
   // the `SchemaLoader` returned by `getLoader()`.  However, the SchemaLoader may behave as if the
   // schema node doesn't exist if any compilation errors occur (reported via the module's
@@ -85,7 +87,7 @@ public:
   // given name.  Neither the parent nor the child schema node is actually compiled.
 
   Orphan<List<schema::CodeGeneratorRequest::RequestedFile::Import>>
-      getFileImportTable(const Module& module, Orphanage orphanage) const;
+      getFileImportTable(Module& module, Orphanage orphanage) const;
   // Build the import table for the CodeGeneratorRequest for the given module.
 
   enum Eagerness: uint32_t {
@@ -159,11 +161,11 @@ public:
   // If this returns and no errors have been reported, then it is guaranteed that the compiled
   // nodes can be found in the SchemaLoader returned by `getLoader()`.
 
-  const SchemaLoader& getLoader() const;
+  const SchemaLoader& getLoader() const { return loader; }
   // Get a SchemaLoader backed by this compiler.  Schema nodes will be lazily constructed as you
   // traverse them using this loader.
 
-  void clearWorkspace();
+  void clearWorkspace() const;
   // The compiler builds a lot of temporary tables and data structures while it works.  It's
   // useful to keep these around if more work is expected (especially if you are using lazy
   // compilation and plan to look up Schema nodes that haven't already been seen), but once
@@ -174,11 +176,14 @@ public:
 
 private:
   class Impl;
-  kj::Own<Impl> impl;
+  kj::MutexGuarded<kj::Own<Impl>> impl;
+  SchemaLoader loader;
 
   class CompiledModule;
   class Node;
   class Alias;
+
+  void load(const SchemaLoader& loader, uint64_t id) const override;
 };
 
 }  // namespace compiler

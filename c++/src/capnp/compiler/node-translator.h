@@ -49,11 +49,11 @@ public:
       Declaration::Which kind;
     };
 
-    virtual kj::Maybe<ResolvedName> resolve(const DeclName::Reader& name) const = 0;
+    virtual kj::Maybe<ResolvedName> resolve(const DeclName::Reader& name) = 0;
     // Look up the given name, relative to this node, and return basic information about the
     // target.
 
-    virtual kj::Maybe<Schema> resolveBootstrapSchema(uint64_t id) const = 0;
+    virtual kj::Maybe<Schema> resolveBootstrapSchema(uint64_t id) = 0;
     // Get the schema for the given ID.  If a schema is returned, it must be safe to traverse its
     // dependencies using Schema::getDependency().  A schema that is only at the bootstrap stage
     // is acceptable.
@@ -62,7 +62,7 @@ public:
     // traversing other schemas.  Returns null if the ID is recognized, but the corresponding
     // schema node failed to be built for reasons that were already reported.
 
-    virtual kj::Maybe<schema::Node::Reader> resolveFinalSchema(uint64_t id) const = 0;
+    virtual kj::Maybe<schema::Node::Reader> resolveFinalSchema(uint64_t id) = 0;
     // Get the final schema for the given ID.  A bootstrap schema is not acceptable.  A raw
     // node reader is returned rather than a Schema object because using a Schema object built
     // by the final schema loader could trigger lazy initialization of dependencies which could
@@ -72,11 +72,11 @@ public:
     // traversing other schemas.  Returns null if the ID is recognized, but the corresponding
     // schema node failed to be built for reasons that were already reported.
 
-    virtual kj::Maybe<uint64_t> resolveImport(kj::StringPtr name) const = 0;
+    virtual kj::Maybe<uint64_t> resolveImport(kj::StringPtr name) = 0;
     // Get the ID of an imported file given the import path.
   };
 
-  NodeTranslator(const Resolver& resolver, const ErrorReporter& errorReporter,
+  NodeTranslator(Resolver& resolver, ErrorReporter& errorReporter,
                  const Declaration::Reader& decl, Orphan<schema::Node> wipNode,
                  bool compileAnnotations);
   // Construct a NodeTranslator to translate the given declaration.  The wipNode starts out with
@@ -107,8 +107,8 @@ public:
   // bootstrap node) and return it.
 
 private:
-  const Resolver& resolver;
-  const ErrorReporter& errorReporter;
+  Resolver& resolver;
+  ErrorReporter& errorReporter;
   Orphanage orphanage;
   bool compileAnnotations;
 
@@ -195,7 +195,7 @@ public:
     virtual kj::Maybe<DynamicValue::Reader> resolveConstant(DeclName::Reader name) = 0;
   };
 
-  ValueTranslator(Resolver& resolver, const ErrorReporter& errorReporter, Orphanage orphanage)
+  ValueTranslator(Resolver& resolver, ErrorReporter& errorReporter, Orphanage orphanage)
       : resolver(resolver), errorReporter(errorReporter), orphanage(orphanage) {}
 
   kj::Maybe<Orphan<DynamicValue>> compileValue(
@@ -203,7 +203,7 @@ public:
 
 private:
   Resolver& resolver;
-  const ErrorReporter& errorReporter;
+  ErrorReporter& errorReporter;
   Orphanage orphanage;
 
   Orphan<DynamicValue> compileValueInner(ValueExpression::Reader src, schema::Type::Reader type);

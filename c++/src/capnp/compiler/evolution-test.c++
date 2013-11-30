@@ -632,18 +632,18 @@ class ModuleImpl final: public Module {
 public:
   explicit ModuleImpl(ParsedFile::Reader content): content(content) {}
 
-  kj::StringPtr getSourceName() const override { return "evolving-schema.capnp"; }
-  Orphan<ParsedFile> loadContent(Orphanage orphanage) const override {
+  kj::StringPtr getSourceName() override { return "evolving-schema.capnp"; }
+  Orphan<ParsedFile> loadContent(Orphanage orphanage) override {
     return orphanage.newOrphanCopy(content);
   }
-  kj::Maybe<const Module&> importRelative(kj::StringPtr importPath) const override {
+  kj::Maybe<Module&> importRelative(kj::StringPtr importPath) override {
     return nullptr;
   }
 
-  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) const override {
+  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
     KJ_FAIL_ASSERT("Unexpected parse error.", startByte, endByte, message);
   }
-  bool hadErrors() const override {
+  bool hadErrors() override {
     return false;
   }
 

@@ -31,11 +31,11 @@ namespace {
 
 class TestFailingErrorReporter: public ErrorReporter {
 public:
-  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) const override {
+  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
     ADD_FAILURE() << "Parse failed: (" << startByte << "-" << endByte << ") " << message.cStr();
   }
 
-  bool hadErrors() const override {
+  bool hadErrors() override {
     // Not used by lexer.
     return false;
   }

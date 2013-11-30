@@ -198,41 +198,40 @@ kj::String catPath(kj::StringPtr base, kj::StringPtr add) {
 
 class ModuleLoader::Impl {
 public:
-  Impl(const GlobalErrorReporter& errorReporter): errorReporter(errorReporter) {}
+  Impl(GlobalErrorReporter& errorReporter): errorReporter(errorReporter) {}
 
   void addImportPath(kj::String path) {
     searchPath.add(kj::heapString(kj::mv(path)));
   }
 
-  kj::Maybe<const Module&> loadModule(kj::StringPtr localName, kj::StringPtr sourceName) const;
-  kj::Maybe<const Module&> loadModuleFromSearchPath(kj::StringPtr sourceName) const;
-  const GlobalErrorReporter& getErrorReporter() const { return errorReporter; }
+  kj::Maybe<Module&> loadModule(kj::StringPtr localName, kj::StringPtr sourceName);
+  kj::Maybe<Module&> loadModuleFromSearchPath(kj::StringPtr sourceName);
+  GlobalErrorReporter& getErrorReporter() { return errorReporter; }
 
 private:
-  const GlobalErrorReporter& errorReporter;
+  GlobalErrorReporter& errorReporter;
   kj::Vector<kj::String> searchPath;
   kj::MutexGuarded<std::map<kj::StringPtr, kj::Own<Module>>> modules;
 };
 
 class ModuleLoader::ModuleImpl final: public Module {
 public:
-  ModuleImpl(const ModuleLoader::Impl& loader, kj::String localName, kj::String sourceName)
+  ModuleImpl(ModuleLoader::Impl& loader, kj::String localName, kj::String sourceName)
       : loader(loader), localName(kj::mv(localName)), sourceName(kj::mv(sourceName)) {}
 
-  kj::StringPtr getLocalName() const {
+  kj::StringPtr getLocalName() {
     return localName;
   }
 
-  kj::StringPtr getSourceName() const override {
+  kj::StringPtr getSourceName() override {
     return sourceName;
   }
 
-  Orphan<ParsedFile> loadContent(Orphanage orphanage) const override {
+  Orphan<ParsedFile> loadContent(Orphanage orphanage) override {
     kj::Array<const char> content = mmapForRead(localName);
 
-    lineBreaks.get([&](kj::SpaceFor<LineBreakTable>& space) {
-      return space.construct(content);
-    });
+    lineBreaks = nullptr;  // In case loadContent() is called multiple times.
+    lineBreaks = lineBreaksSpace.construct(content);
 
     MallocMessageBuilder lexedBuilder;
     auto statements = lexedBuilder.initRoot<LexedStatements>();
@@ -243,7 +242,7 @@ public:
     return parsed;
   }
 
-  kj::Maybe<const Module&> importRelative(kj::StringPtr importPath) const override {
+  kj::Maybe<Module&> importRelative(kj::StringPtr importPath) override {
     if (importPath.size() > 0 && importPath[0] == '/') {
       return loader.loadModuleFromSearchPath(importPath.slice(1));
     } else {
@@ -251,32 +250,31 @@ public:
     }
   }
 
-  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) const override {
-    auto& lines = lineBreaks.get(
-        [](kj::SpaceFor<LineBreakTable>& space) -> kj::Own<LineBreakTable> {
-          KJ_FAIL_REQUIRE("Can't report errors until loadContent() is called.");
-        });
+  void addError(uint32_t startByte, uint32_t endByte, kj::StringPtr message) override {
+    auto& lines = *KJ_REQUIRE_NONNULL(lineBreaks,
+        "Can't report errors until loadContent() is called.");
 
     loader.getErrorReporter().addError(
         localName, lines.toSourcePos(startByte), lines.toSourcePos(endByte), message);
   }
 
-  bool hadErrors() const override {
+  bool hadErrors() override {
     return loader.getErrorReporter().hadErrors();
   }
 
 private:
-  const ModuleLoader::Impl& loader;
+  ModuleLoader::Impl& loader;
   kj::String localName;
   kj::String sourceName;
 
-  kj::Lazy<LineBreakTable> lineBreaks;
+  kj::SpaceFor<LineBreakTable> lineBreaksSpace;
+  kj::Maybe<kj::Own<LineBreakTable>> lineBreaks;
 };
 
 // =======================================================================================
 
-kj::Maybe<const Module&> ModuleLoader::Impl::loadModule(
-    kj::StringPtr localName, kj::StringPtr sourceName) const {
+kj::Maybe<Module&> ModuleLoader::Impl::loadModule(
+    kj::StringPtr localName, kj::StringPtr sourceName) {
   kj::String canonicalLocalName = canonicalizePath(localName);
   kj::String canonicalSourceName = canonicalizePath(sourceName);
 
@@ -300,8 +298,7 @@ kj::Maybe<const Module&> ModuleLoader::Impl::loadModule(
   return result;
 }
 
-kj::Maybe<const Module&> ModuleLoader::Impl::loadModuleFromSearchPath(
-    kj::StringPtr sourceName) const {
+kj::Maybe<Module&> ModuleLoader::Impl::loadModuleFromSearchPath(kj::StringPtr sourceName) {
   for (auto& search: searchPath) {
     kj::String candidate = kj::str(search, "/", sourceName);
     char* end = canonicalizePath(candidate.begin() + (candidate[0] == '/'));
@@ -316,14 +313,13 @@ kj::Maybe<const Module&> ModuleLoader::Impl::loadModuleFromSearchPath(
 
 // =======================================================================================
 
-ModuleLoader::ModuleLoader(const GlobalErrorReporter& errorReporter)
+ModuleLoader::ModuleLoader(GlobalErrorReporter& errorReporter)
     : impl(kj::heap<Impl>(errorReporter)) {}
 ModuleLoader::~ModuleLoader() noexcept(false) {}
 
 void ModuleLoader::addImportPath(kj::String path) { impl->addImportPath(kj::mv(path)); }
 
-kj::Maybe<const Module&> ModuleLoader::loadModule(
-    kj::StringPtr localName, kj::StringPtr sourceName) const {
+kj::Maybe<Module&> ModuleLoader::loadModule(kj::StringPtr localName, kj::StringPtr sourceName) {
   return impl->loadModule(localName, sourceName);
 }
 
