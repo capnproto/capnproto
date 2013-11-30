@@ -44,13 +44,13 @@ namespace {
 
 static __thread EventLoop* threadLocalEventLoop = nullptr;
 
-#define _kJ_ALREADY_READY reinterpret_cast< ::kj::EventLoop::Event*>(1)
+#define _kJ_ALREADY_READY reinterpret_cast< ::kj::_::Event*>(1)
 
-class BoolEvent: public EventLoop::Event {
+class BoolEvent: public _::Event {
 public:
   bool fired = false;
 
-  Maybe<Own<Event>> fire() override {
+  Maybe<Own<_::Event>> fire() override {
     fired = true;
     return nullptr;
   }
@@ -58,7 +58,7 @@ public:
 
 class YieldPromiseNode final: public _::PromiseNode {
 public:
-  bool onReady(EventLoop::Event& event) noexcept override {
+  bool onReady(_::Event& event) noexcept override {
     event.armBreadthFirst();
     return false;
   }
@@ -86,7 +86,7 @@ public:
     }
   }
 
-  class Task final: public EventLoop::Event {
+  class Task final: public Event {
   public:
     Task(TaskSetImpl& taskSet, Own<_::PromiseNode>&& nodeParam)
         : taskSet(taskSet), node(kj::mv(nodeParam)) {
@@ -199,9 +199,9 @@ EventLoop::~EventLoop() noexcept(false) {
   KJ_REQUIRE(head == nullptr, "EventLoop destroyed with events still in the queue.  Memory leak?",
              head->trace()) {
     // Unlink all the events and hope that no one ever fires them...
-    Event* event = head;
+    _::Event* event = head;
     while (event != nullptr) {
-      Event* next = event->next;
+      _::Event* next = event->next;
       event->next = nullptr;
       event->prev = nullptr;
       event = next;
@@ -232,7 +232,7 @@ void EventLoop::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result
       }
       sleep();
     } else {
-      Event* event = head;
+      _::Event* event = head;
 
       head = event->next;
       depthFirstInsertPoint = &head;
@@ -243,7 +243,7 @@ void EventLoop::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result
       event->next = nullptr;
       event->prev = nullptr;
 
-      Maybe<Own<Event>> eventToDestroy;
+      Maybe<Own<_::Event>> eventToDestroy;
       {
         event->firing = true;
         KJ_DEFER(event->firing = false);
@@ -271,10 +271,12 @@ void EventLoop::daemonize(kj::Promise<void>&& promise) {
   daemons->add(kj::mv(promise));
 }
 
-EventLoop::Event::Event()
+namespace _ {  // private
+
+Event::Event()
     : loop(EventLoop::current()), next(nullptr), prev(nullptr) {}
 
-EventLoop::Event::~Event() noexcept(false) {
+Event::~Event() noexcept(false) {
   if (prev != nullptr) {
     if (loop.head == this) {
       loop.head = next;
@@ -297,7 +299,7 @@ EventLoop::Event::~Event() noexcept(false) {
              "Promise destroyed from a different thread than it was created in.");
 }
 
-void EventLoop::Event::armDepthFirst() {
+void Event::armDepthFirst() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
              "the thread-safe work queue to queue events cross-thread.");
@@ -318,7 +320,7 @@ void EventLoop::Event::armDepthFirst() {
   }
 }
 
-void EventLoop::Event::armBreadthFirst() {
+void Event::armBreadthFirst() {
   KJ_REQUIRE(threadLocalEventLoop == &loop || threadLocalEventLoop == nullptr,
              "Event armed from different thread than it was created in.  You must use "
              "the thread-safe work queue to queue events cross-thread.");
@@ -335,7 +337,7 @@ void EventLoop::Event::armBreadthFirst() {
   }
 }
 
-_::PromiseNode* EventLoop::Event::getInnerForTrace() {
+_::PromiseNode* Event::getInnerForTrace() {
   return nullptr;
 }
 
@@ -353,7 +355,7 @@ static kj::String demangleTypeName(const char* name) {
 }
 #endif
 
-static kj::String traceImpl(EventLoop::Event* event, _::PromiseNode* node) {
+static kj::String traceImpl(Event* event, _::PromiseNode* node) {
   kj::Vector<kj::String> trace;
 
   if (event != nullptr) {
@@ -368,9 +370,11 @@ static kj::String traceImpl(EventLoop::Event* event, _::PromiseNode* node) {
   return strArray(trace, "\n");
 }
 
-kj::String EventLoop::Event::trace() {
+kj::String Event::trace() {
   return traceImpl(this, getInnerForTrace());
 }
+
+}  // namespace _ (private)
 
 // =======================================================================================
 
@@ -473,7 +477,7 @@ namespace _ {  // private
 
 PromiseNode* PromiseNode::getInnerForTrace() { return nullptr; }
 
-bool PromiseNode::OnReadyEvent::init(EventLoop::Event& newEvent) {
+bool PromiseNode::OnReadyEvent::init(Event& newEvent) {
   if (event == _kJ_ALREADY_READY) {
     return true;
   } else {
@@ -492,7 +496,7 @@ void PromiseNode::OnReadyEvent::arm() {
 
 // -------------------------------------------------------------------
 
-bool ImmediatePromiseNodeBase::onReady(EventLoop::Event& event) noexcept { return true; }
+bool ImmediatePromiseNodeBase::onReady(Event& event) noexcept { return true; }
 
 ImmediateBrokenPromiseNode::ImmediateBrokenPromiseNode(Exception&& exception)
     : exception(kj::mv(exception)) {}
@@ -506,7 +510,7 @@ void ImmediateBrokenPromiseNode::get(ExceptionOrValue& output) noexcept {
 AttachmentPromiseNodeBase::AttachmentPromiseNodeBase(Own<PromiseNode>&& dependency)
     : dependency(kj::mv(dependency)) {}
 
-bool AttachmentPromiseNodeBase::onReady(EventLoop::Event& event) noexcept {
+bool AttachmentPromiseNodeBase::onReady(Event& event) noexcept {
   return dependency->onReady(event);
 }
 
@@ -527,7 +531,7 @@ void AttachmentPromiseNodeBase::dropDependency() {
 TransformPromiseNodeBase::TransformPromiseNodeBase(Own<PromiseNode>&& dependency)
     : dependency(kj::mv(dependency)) {}
 
-bool TransformPromiseNodeBase::onReady(EventLoop::Event& event) noexcept {
+bool TransformPromiseNodeBase::onReady(Event& event) noexcept {
   return dependency->onReady(event);
 }
 
@@ -591,7 +595,7 @@ void ForkBranchBase::releaseHub(ExceptionOrValue& output) {
   }
 }
 
-bool ForkBranchBase::onReady(EventLoop::Event& event) noexcept {
+bool ForkBranchBase::onReady(Event& event) noexcept {
   return onReadyEvent.init(event);
 }
 
@@ -606,7 +610,7 @@ ForkHubBase::ForkHubBase(Own<PromiseNode>&& innerParam, ExceptionOrValue& result
   if (inner->onReady(*this)) armDepthFirst();
 }
 
-Maybe<Own<EventLoop::Event>> ForkHubBase::fire() {
+Maybe<Own<Event>> ForkHubBase::fire() {
   // Dependency is ready.  Fetch its result and then delete the node.
   inner->get(resultRef);
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([this]() {
@@ -641,7 +645,7 @@ ChainPromiseNode::ChainPromiseNode(Own<PromiseNode> innerParam)
 
 ChainPromiseNode::~ChainPromiseNode() noexcept(false) {}
 
-bool ChainPromiseNode::onReady(EventLoop::Event& event) noexcept {
+bool ChainPromiseNode::onReady(Event& event) noexcept {
   switch (state) {
     case STEP1:
       KJ_REQUIRE(onReadyEvent == nullptr, "onReady() can only be called once.");
@@ -662,7 +666,7 @@ PromiseNode* ChainPromiseNode::getInnerForTrace() {
   return inner;
 }
 
-Maybe<Own<EventLoop::Event>> ChainPromiseNode::fire() {
+Maybe<Own<Event>> ChainPromiseNode::fire() {
   KJ_REQUIRE(state != STEP2);
 
   static_assert(sizeof(Promise<int>) == sizeof(PromiseBase),
@@ -709,7 +713,7 @@ ExclusiveJoinPromiseNode::ExclusiveJoinPromiseNode(Own<PromiseNode> left, Own<Pr
 
 ExclusiveJoinPromiseNode::~ExclusiveJoinPromiseNode() noexcept(false) {}
 
-bool ExclusiveJoinPromiseNode::onReady(EventLoop::Event& event) noexcept {
+bool ExclusiveJoinPromiseNode::onReady(Event& event) noexcept {
   return onReadyEvent.init(event);
 }
 
@@ -742,7 +746,7 @@ bool ExclusiveJoinPromiseNode::Branch::get(ExceptionOrValue& output) {
   }
 }
 
-Maybe<Own<EventLoop::Event>> ExclusiveJoinPromiseNode::Branch::fire() {
+Maybe<Own<Event>> ExclusiveJoinPromiseNode::Branch::fire() {
   // Cancel the branch that didn't return first.  Ignore exceptions caused by cancellation.
   if (this == &joinNode.left) {
     kj::runCatchingExceptions([&]() { joinNode.right.dependency = nullptr; });
@@ -766,7 +770,7 @@ EagerPromiseNodeBase::EagerPromiseNodeBase(
   if (dependency->onReady(*this)) armDepthFirst();
 }
 
-bool EagerPromiseNodeBase::onReady(EventLoop::Event& event) noexcept {
+bool EagerPromiseNodeBase::onReady(Event& event) noexcept {
   return onReadyEvent.init(event);
 }
 
@@ -774,7 +778,7 @@ PromiseNode* EagerPromiseNodeBase::getInnerForTrace() {
   return dependency;
 }
 
-Maybe<Own<EventLoop::Event>> EagerPromiseNodeBase::fire() {
+Maybe<Own<Event>> EagerPromiseNodeBase::fire() {
   dependency->get(resultRef);
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([this]() {
     dependency = nullptr;
@@ -788,7 +792,7 @@ Maybe<Own<EventLoop::Event>> EagerPromiseNodeBase::fire() {
 
 // -------------------------------------------------------------------
 
-bool AdapterPromiseNodeBase::onReady(EventLoop::Event& event) noexcept {
+bool AdapterPromiseNodeBase::onReady(Event& event) noexcept {
   return onReadyEvent.init(event);
 }
 

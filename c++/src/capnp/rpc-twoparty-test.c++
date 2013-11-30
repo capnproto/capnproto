@@ -126,7 +126,7 @@ TEST(TwoPartyNetwork, Basic) {
 
   bool barFailed = false;
   auto request3 = client.barRequest();
-  auto promise3 = loop.there(request3.send(),
+  auto promise3 = request3.send().then(
       [](Response<test::TestInterface::BarResults>&& response) {
         ADD_FAILURE() << "Expected bar() call to fail.";
       }, [&](kj::Exception&& e) {
@@ -135,13 +135,13 @@ TEST(TwoPartyNetwork, Basic) {
 
   EXPECT_EQ(0, callCount);
 
-  auto response1 = loop.wait(kj::mv(promise1));
+  auto response1 = promise1.wait();
 
   EXPECT_EQ("foo", response1.getX());
 
-  auto response2 = loop.wait(kj::mv(promise2));
+  auto response2 = promise2.wait();
 
-  loop.wait(kj::mv(promise3));
+  promise3.wait();
 
   EXPECT_EQ(2, callCount);
   EXPECT_TRUE(barFailed);
@@ -167,10 +167,8 @@ TEST(TwoPartyNetwork, Pipelining) {
 
   bool disconnected = false;
   bool drained = false;
-  kj::Promise<void> disconnectPromise = loop.there(network.onDisconnect(),
-      [&]() { disconnected = true; });
-  kj::Promise<void> drainedPromise = loop.there(network.onDrained(),
-      [&]() { drained = true; });
+  kj::Promise<void> disconnectPromise = network.onDisconnect().then([&]() { disconnected = true; });
+  kj::Promise<void> drainedPromise = network.onDrained().then([&]() { drained = true; });
 
   {
     // Request the particular capability from the server.
@@ -198,10 +196,10 @@ TEST(TwoPartyNetwork, Pipelining) {
       EXPECT_EQ(0, callCount);
       EXPECT_EQ(0, reverseCallCount);
 
-      auto response = loop.wait(kj::mv(pipelinePromise));
+      auto response = pipelinePromise.wait();
       EXPECT_EQ("bar", response.getX());
 
-      auto response2 = loop.wait(kj::mv(pipelinePromise2));
+      auto response2 = pipelinePromise2.wait();
       checkTestMessage(response2);
 
       EXPECT_EQ(3, callCount);
@@ -215,7 +213,7 @@ TEST(TwoPartyNetwork, Pipelining) {
     thread->sendSignal(SIGUSR2);
     thread = nullptr;
 
-    loop.wait(kj::mv(disconnectPromise));
+    disconnectPromise.wait();
     EXPECT_FALSE(drained);
 
     {
@@ -234,8 +232,8 @@ TEST(TwoPartyNetwork, Pipelining) {
           .castAs<test::TestExtends>().graultRequest();
       auto pipelinePromise2 = pipelineRequest2.send();
 
-      EXPECT_ANY_THROW(loop.wait(kj::mv(pipelinePromise)));
-      EXPECT_ANY_THROW(loop.wait(kj::mv(pipelinePromise2)));
+      EXPECT_ANY_THROW(pipelinePromise.wait());
+      EXPECT_ANY_THROW(pipelinePromise2.wait());
 
       EXPECT_EQ(3, callCount);
       EXPECT_EQ(1, reverseCallCount);
@@ -244,7 +242,7 @@ TEST(TwoPartyNetwork, Pipelining) {
     EXPECT_FALSE(drained);
   }
 
-  loop.wait(kj::mv(drainedPromise));
+  drainedPromise.wait();
 }
 
 }  // namespace

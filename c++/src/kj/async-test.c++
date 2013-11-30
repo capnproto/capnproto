@@ -238,13 +238,13 @@ TEST(Async, Ordering) {
   int counter = 0;
   Promise<void> promises[6] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
 
-  promises[1] = loop.evalLater([&]() {
+  promises[1] = evalLater([&]() {
     EXPECT_EQ(0, counter++);
     promises[2] = Promise<void>(READY_NOW).then([&]() {
       EXPECT_EQ(1, counter++);
       return Promise<void>(READY_NOW);  // Force proactive evaluation by faking a chain.
     });
-    promises[3] = loop.evalLater([&]() {
+    promises[3] = evalLater([&]() {
       EXPECT_EQ(4, counter++);
       return Promise<void>(READY_NOW).then([&]() {
         EXPECT_EQ(5, counter++);
@@ -254,12 +254,12 @@ TEST(Async, Ordering) {
       EXPECT_EQ(2, counter++);
       return Promise<void>(READY_NOW);  // Force proactive evaluation by faking a chain.
     });
-    promises[5] = loop.evalLater([&]() {
+    promises[5] = evalLater([&]() {
       EXPECT_EQ(6, counter++);
     });
   });
 
-  promises[0] = loop.evalLater([&]() {
+  promises[0] = evalLater([&]() {
     EXPECT_EQ(3, counter++);
 
     // Making this a chain should NOT cause it to preempt promises[1].  (This was a problem at one
@@ -463,6 +463,28 @@ TEST(Async, EagerlyEvaluate) {
   evalLater([]() {}).wait();
 
   EXPECT_TRUE(called);
+}
+
+TEST(Async, Daemonize) {
+  SimpleEventLoop loop;
+
+  bool ran1 = false;
+  bool ran2 = false;
+  bool ran3 = false;
+
+  evalLater([&]() { ran1 = true; });
+  daemonize(evalLater([&]() { ran2 = true; }), [](kj::Exception&&) { ADD_FAILURE(); });
+  daemonize(evalLater([]() { KJ_FAIL_ASSERT("foo"); }), [&](kj::Exception&& e) { ran3 = true; });
+
+  EXPECT_FALSE(ran1);
+  EXPECT_FALSE(ran2);
+  EXPECT_FALSE(ran3);
+
+  evalLater([]() {}).wait();
+
+  EXPECT_FALSE(ran1);
+  EXPECT_TRUE(ran2);
+  EXPECT_TRUE(ran3);
 }
 
 }  // namespace

@@ -67,7 +67,7 @@ TEST(Capability, Basic) {
 
   bool barFailed = false;
   auto request3 = client.barRequest();
-  auto promise3 = loop.there(request3.send(),
+  auto promise3 = request3.send().then(
       [](Response<test::TestInterface::BarResults>&& response) {
         ADD_FAILURE() << "Expected bar() call to fail.";
       }, [&](kj::Exception&& e) {
@@ -76,13 +76,13 @@ TEST(Capability, Basic) {
 
   EXPECT_EQ(0, callCount);
 
-  auto response1 = loop.wait(kj::mv(promise1));
+  auto response1 = promise1.wait();
 
   EXPECT_EQ("foo", response1.getX());
 
-  auto response2 = loop.wait(kj::mv(promise2));
+  auto response2 = promise2.wait();
 
-  loop.wait(kj::mv(promise3));
+  promise3.wait();
 
   EXPECT_EQ(2, callCount);
   EXPECT_TRUE(barFailed);
@@ -105,11 +105,11 @@ TEST(Capability, Inheritance) {
 
   EXPECT_EQ(0, callCount);
 
-  auto response2 = loop.wait(kj::mv(promise2));
+  auto response2 = promise2.wait();
 
   checkTestMessage(response2);
 
-  auto response1 = loop.wait(kj::mv(promise1));
+  auto response1 = promise1.wait();
 
   EXPECT_EQ("bar", response1.getX());
 
@@ -141,10 +141,10 @@ TEST(Capability, Pipelining) {
   EXPECT_EQ(0, callCount);
   EXPECT_EQ(0, chainedCallCount);
 
-  auto response = loop.wait(kj::mv(pipelinePromise));
+  auto response = pipelinePromise.wait();
   EXPECT_EQ("bar", response.getX());
 
-  auto response2 = loop.wait(kj::mv(pipelinePromise2));
+  auto response2 = pipelinePromise2.wait();
   checkTestMessage(response2);
 
   EXPECT_EQ(3, callCount);
@@ -168,7 +168,7 @@ TEST(Capability, TailCall) {
 
   auto dependentCall0 = promise.getC().getCallSequenceRequest().send();
 
-  auto response = loop.wait(kj::mv(promise));
+  auto response = promise.wait();
   EXPECT_EQ(456, response.getI());
   EXPECT_EQ(456, response.getI());
 
@@ -176,9 +176,9 @@ TEST(Capability, TailCall) {
 
   auto dependentCall2 = response.getC().getCallSequenceRequest().send();
 
-  EXPECT_EQ(0, loop.wait(kj::mv(dependentCall0)).getN());
-  EXPECT_EQ(1, loop.wait(kj::mv(dependentCall1)).getN());
-  EXPECT_EQ(2, loop.wait(kj::mv(dependentCall2)).getN());
+  EXPECT_EQ(0, dependentCall0.wait().getN());
+  EXPECT_EQ(1, dependentCall1.wait().getN());
+  EXPECT_EQ(2, dependentCall2.wait().getN());
 
   EXPECT_EQ(1, calleeCallCount);
   EXPECT_EQ(1, callerCallCount);
@@ -191,7 +191,7 @@ TEST(Capability, AsyncCancelation) {
 
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
-  auto destructionPromise = loop.there(kj::mv(paf.promise), [&]() { destroyed = true; });
+  auto destructionPromise = paf.promise.then([&]() { destroyed = true; });
   destructionPromise.eagerlyEvaluate();
 
   int callCount = 0;
@@ -204,21 +204,21 @@ TEST(Capability, AsyncCancelation) {
   {
     auto request = client.expectAsyncCancelRequest();
     request.setCap(test::TestInterface::Client(kj::heap<TestCapDestructor>(kj::mv(paf.fulfiller))));
-    promise = loop.there(request.send(),
+    promise = request.send().then(
         [&](Response<test::TestMoreStuff::ExpectAsyncCancelResults>&& response) {
       returned = true;
     });
     promise.eagerlyEvaluate();
   }
-  loop.wait(loop.evalLater([]() {}));
-  loop.wait(loop.evalLater([]() {}));
+  kj::evalLater([]() {}).wait();
+  kj::evalLater([]() {}).wait();
 
   // We can detect that the method was canceled because it will drop the cap.
   EXPECT_FALSE(destroyed);
   EXPECT_FALSE(returned);
 
   promise = nullptr;  // request cancellation
-  loop.wait(kj::mv(destructionPromise));
+  destructionPromise.wait();
 
   EXPECT_TRUE(destroyed);
   EXPECT_FALSE(returned);
@@ -240,16 +240,16 @@ TEST(Capability, SyncCancelation) {
   {
     auto request = client.expectSyncCancelRequest();
     request.setCap(test::TestInterface::Client(kj::heap<TestInterfaceImpl>(innerCallCount)));
-    promise = loop.there(request.send(),
+    promise = request.send().then(
         [&](Response<test::TestMoreStuff::ExpectSyncCancelResults>&& response) {
       returned = true;
     });
     promise.eagerlyEvaluate();
   }
-  loop.wait(loop.evalLater([]() {}));
-  loop.wait(loop.evalLater([]() {}));
-  loop.wait(loop.evalLater([]() {}));
-  loop.wait(loop.evalLater([]() {}));
+  kj::evalLater([]() {}).wait();
+  kj::evalLater([]() {}).wait();
+  kj::evalLater([]() {}).wait();
+  kj::evalLater([]() {}).wait();
 
   // expectSyncCancel() will make a call to the TestInterfaceImpl only once it noticed isCanceled()
   // is true.
@@ -257,10 +257,10 @@ TEST(Capability, SyncCancelation) {
   EXPECT_FALSE(returned);
 
   promise = nullptr;  // request cancellation
-  loop.wait(loop.evalLater([]() {}));
-  loop.wait(loop.evalLater([]() {}));
-  loop.wait(loop.evalLater([]() {}));
-  loop.wait(loop.evalLater([]() {}));
+  kj::evalLater([]() {}).wait();
+  kj::evalLater([]() {}).wait();
+  kj::evalLater([]() {}).wait();
+  kj::evalLater([]() {}).wait();
 
   EXPECT_EQ(1, innerCallCount);
   EXPECT_FALSE(returned);
@@ -286,7 +286,7 @@ TEST(Capability, DynamicClient) {
 
   bool barFailed = false;
   auto request3 = client.newRequest("bar");
-  auto promise3 = loop.there(request3.send(),
+  auto promise3 = request3.send().then(
       [](Response<DynamicStruct>&& response) {
         ADD_FAILURE() << "Expected bar() call to fail.";
       }, [&](kj::Exception&& e) {
@@ -295,13 +295,13 @@ TEST(Capability, DynamicClient) {
 
   EXPECT_EQ(0, callCount);
 
-  auto response1 = loop.wait(kj::mv(promise1));
+  auto response1 = promise1.wait();
 
   EXPECT_EQ("foo", response1.get("x").as<Text>());
 
-  auto response2 = loop.wait(kj::mv(promise2));
+  auto response2 = promise2.wait();
 
-  loop.wait(kj::mv(promise3));
+  promise3.wait();
 
   EXPECT_EQ(2, callCount);
   EXPECT_TRUE(barFailed);
@@ -332,11 +332,11 @@ TEST(Capability, DynamicClientInheritance) {
 
   EXPECT_EQ(0, callCount);
 
-  auto response2 = loop.wait(kj::mv(promise2));
+  auto response2 = promise2.wait();
 
   checkDynamicTestMessage(response2.as<DynamicStruct>());
 
-  auto response1 = loop.wait(kj::mv(promise1));
+  auto response1 = promise1.wait();
 
   EXPECT_EQ("bar", response1.get("x").as<Text>());
 
@@ -371,10 +371,10 @@ TEST(Capability, DynamicClientPipelining) {
   EXPECT_EQ(0, callCount);
   EXPECT_EQ(0, chainedCallCount);
 
-  auto response = loop.wait(kj::mv(pipelinePromise));
+  auto response = pipelinePromise.wait();
   EXPECT_EQ("bar", response.get("x").as<Text>());
 
-  auto response2 = loop.wait(kj::mv(pipelinePromise2));
+  auto response2 = pipelinePromise2.wait();
   checkTestMessage(response2);
 
   EXPECT_EQ(3, callCount);
@@ -433,7 +433,7 @@ TEST(Capability, DynamicServer) {
 
   bool barFailed = false;
   auto request3 = client.barRequest();
-  auto promise3 = loop.there(request3.send(),
+  auto promise3 = request3.send().then(
       [](Response<test::TestInterface::BarResults>&& response) {
         ADD_FAILURE() << "Expected bar() call to fail.";
       }, [&](kj::Exception&& e) {
@@ -442,13 +442,13 @@ TEST(Capability, DynamicServer) {
 
   EXPECT_EQ(0, callCount);
 
-  auto response1 = loop.wait(kj::mv(promise1));
+  auto response1 = promise1.wait();
 
   EXPECT_EQ("foo", response1.getX());
 
-  auto response2 = loop.wait(kj::mv(promise2));
+  auto response2 = promise2.wait();
 
-  loop.wait(kj::mv(promise3));
+  promise3.wait();
 
   EXPECT_EQ(2, callCount);
   EXPECT_TRUE(barFailed);
@@ -502,11 +502,11 @@ TEST(Capability, DynamicServerInheritance) {
 
   EXPECT_EQ(0, callCount);
 
-  auto response2 = loop.wait(kj::mv(promise2));
+  auto response2 = promise2.wait();
 
   checkTestMessage(response2);
 
-  auto response1 = loop.wait(kj::mv(promise1));
+  auto response1 = promise1.wait();
 
   EXPECT_EQ("bar", response1.getX());
 
@@ -582,10 +582,10 @@ TEST(Capability, DynamicServerPipelining) {
   EXPECT_EQ(0, callCount);
   EXPECT_EQ(0, chainedCallCount);
 
-  auto response = loop.wait(kj::mv(pipelinePromise));
+  auto response = pipelinePromise.wait();
   EXPECT_EQ("bar", response.getX());
 
-  auto response2 = loop.wait(kj::mv(pipelinePromise2));
+  auto response2 = pipelinePromise2.wait();
   checkTestMessage(response2);
 
   EXPECT_EQ(3, callCount);

@@ -583,13 +583,13 @@ private:
 class SocketNetwork final: public Network {
 public:
   Promise<Own<LocalAddress>> parseLocalAddress(StringPtr addr, uint portHint = 0) const override {
-    return EventLoop::current().evalLater(mvCapture(heapString(addr),
+    return evalLater(mvCapture(heapString(addr),
         [portHint](String&& addr) -> Own<LocalAddress> {
           return heap<LocalSocketAddress>(SocketAddress::parseLocal(addr, portHint));
         }));
   }
   Promise<Own<RemoteAddress>> parseRemoteAddress(StringPtr addr, uint portHint = 0) const override {
-    return EventLoop::current().evalLater(mvCapture(heapString(addr),
+    return evalLater(mvCapture(heapString(addr),
         [portHint](String&& addr) -> Own<RemoteAddress> {
           return heap<RemoteSocketAddress>(SocketAddress::parse(addr, portHint));
         }));

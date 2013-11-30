@@ -2345,6 +2345,7 @@ private:
       answer.pipeline = kj::mv(promiseAndPipeline.pipeline);
 
       if (redirectResults) {
+        // TODO(now):  Handle exceptions, dummy.
         auto resultsPromise = promiseAndPipeline.promise.then(
             kj::mvCapture(context, [](kj::Own<RpcCallContext>&& context) {
               return context->consumeRedirectedResponse();
@@ -2359,7 +2360,7 @@ private:
 
         auto promise = kj::mv(cancelPaf.promise);
         promise.exclusiveJoin(forked.addBranch().then([](kj::Own<RpcResponse>&&){}));
-        kj::EventLoop::current().daemonize(kj::mv(promise));
+        daemonize(kj::mv(promise), [](kj::Exception&&) {});
       } else {
         // Hack:  Both the success and error continuations need to use the context.  We could
         //   refcount, but both will be destroyed at the same time anyway.
@@ -2376,7 +2377,7 @@ private:
             });
         promise.attach(kj::mv(context));
         promise.exclusiveJoin(kj::mv(cancelPaf.promise));
-        kj::EventLoop::current().daemonize(kj::mv(promise));
+        daemonize(kj::mv(promise), [](kj::Exception&&) {});
       }
     }
   }

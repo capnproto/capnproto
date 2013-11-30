@@ -206,9 +206,8 @@ public:
     auto daemonPromise = forked.addBranch();
     daemonPromise.attach(kj::addRef(*context));
     daemonPromise.exclusiveJoin(kj::mv(cancelPaf.promise));
-    // Ignore exceptions.
-    daemonPromise = daemonPromise.then([]() {}, [](kj::Exception&&) {});
-    kj::EventLoop::current().daemonize(kj::mv(daemonPromise));
+    // Daemonize, ignoring exceptions.
+    kj::daemonize(kj::mv(daemonPromise), [](kj::Exception&&) {});
 
     // Now the other branch returns the response from the context.
     auto contextPtr = context.get();

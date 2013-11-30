@@ -1073,7 +1073,7 @@ kj::Promise<void> TestMoreStuffImpl::loop(uint depth, test::TestInterface::Clien
     ADD_FAILURE() << "Looped too long, giving up.";
     return kj::READY_NOW;
   } else {
-    return kj::EventLoop::current().evalLater([=]() mutable {
+    return kj::evalLater([=]() mutable {
       return loop(depth + 1, cap, context);
     });
   }
@@ -1101,7 +1101,7 @@ kj::Promise<void> TestMoreStuffImpl::loop(uint depth, test::TestInterface::Clien
           EXPECT_EQ("foo", response.getX());
         });
   } else {
-    return kj::EventLoop::current().evalLater([=]() mutable {
+    return kj::evalLater([=]() mutable {
       return loop(depth + 1, cap, context);
     });
   }

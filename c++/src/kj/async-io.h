@@ -194,7 +194,7 @@ class IoLoopMainImpl: public IoLoopMain {
 public:
   IoLoopMainImpl(Func&& func): func(kj::mv(func)) {}
   void run(EventLoop& loop) override {
-    result = space.construct(loop.wait(loop.evalLater(func)));
+    result = space.construct(kj::evalLater(func).wait());
   }
   Result getResult() { return kj::mv(*result); }
 
@@ -209,7 +209,7 @@ class IoLoopMainImpl<Func, void>: public IoLoopMain {
 public:
   IoLoopMainImpl(Func&& func): func(kj::mv(func)) {}
   void run(EventLoop& loop) override {
-    loop.wait(loop.evalLater(func));
+    kj::evalLater(func).wait();
   }
   void getResult() {}
 
@@ -222,7 +222,7 @@ void runIoEventLoopInternal(IoLoopMain& func);
 }  // namespace _ (private)
 
 template <typename Func>
-auto runIoEventLoop(Func&& func) -> decltype(instance<EventLoop&>().wait(func())) {
+auto runIoEventLoop(Func&& func) -> decltype(func().wait()) {
   // Sets up an appropriate EventLoop for doing I/O, then executes the given function.  The function
   // returns a promise.  The EventLoop will continue running until that promise resolves, then the
   // whole function will return its resolution.  On return, the EventLoop is destroyed, cancelling
@@ -235,7 +235,7 @@ auto runIoEventLoop(Func&& func) -> decltype(instance<EventLoop&>().wait(func())
   //   from the implementation details but GCC claimed the two declarations were overloads rather
   //   than the same function, even though the signature was identical.  FFFFFFFFFFUUUUUUUUUUUUUUU-
 
-  typedef decltype(instance<EventLoop&>().wait(instance<Func>()())) Result;
+  typedef decltype(instance<Func>()().wait()) Result;
   _::IoLoopMainImpl<Func, Result> func2(kj::fwd<Func>(func));
   _::runIoEventLoopInternal(func2);
   return func2.getResult();

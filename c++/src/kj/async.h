@@ -167,6 +167,8 @@ class ForkHub;
 
 class TaskSetImpl;
 
+class Event;
+
 }  // namespace _ (private)
 
 // =======================================================================================
@@ -218,127 +220,10 @@ public:
   // Get the event loop for the current thread.  Throws an exception if no event loop is active.
 
   bool isCurrent() const;
-  // Is this EventLoop the current one for this thread?
+  // Is this EventLoop the current one for this thread?  This can safely be called from any thread.
 
-  template <typename T>
-  T wait(Promise<T>&& promise);
-  // Run the event loop until the promise is fulfilled, then return its result.  If the promise
-  // is rejected, throw an exception.
-  //
-  // wait() cannot be called recursively -- that is, an event callback cannot call wait().
-  // Instead, callbacks that need to perform more async operations should return a promise and
-  // rely on promise chaining.
-  //
-  // wait() is primarily useful at the top level of a program -- typically, within the function
-  // that allocated the EventLoop.  For example, a program that performs one or two RPCs and then
-  // exits would likely use wait() in its main() function to wait on each RPC.  On the other hand,
-  // server-side code generally cannot use wait(), because it has to be able to accept multiple
-  // requests at once.
-  //
-  // If the promise is rejected, `wait()` throws an exception.  This exception is usually fatal,
-  // so if compiled with -fno-exceptions, the process will abort.  You may work around this by
-  // using `there()` with an error handler to handle this case.  If your error handler throws a
-  // non-fatal exception and then recovers by returning a dummy value, wait() will also throw a
-  // non-fatal exception and return the same dummy value.
-  //
-  // TODO(someday):  Implement fibers, and let them call wait() even when they are handling an
-  //   event.
-
-  template <typename Func>
-  PromiseForResult<Func, void> evalLater(Func&& func) KJ_WARN_UNUSED_RESULT;
-  // Schedule for the given zero-parameter function to be executed in the event loop at some
-  // point in the near future.  Returns a Promise for its result -- or, if `func()` itself returns
-  // a promise, `evalLater()` returns a Promise for the result of resolving that promise.
-  //
-  // Example usage:
-  //     Promise<int> x = loop.evalLater([]() { return 123; });
-  //
-  // If the returned promise is destroyed before the callback runs, the callback will be canceled.
-  // If the returned promise is destroyed while the callback is running in another thread, the
-  // destructor will block until the callback completes.
-  //
-  // If you schedule several evaluations with `evalLater`, they will be executed in order.
-  //
-  // `evalLater()` is equivalent to `there()` chained on `Promise<void>(READY_NOW)`.
-
-  template <typename T, typename Func, typename ErrorFunc = _::PropagateException>
-  PromiseForResult<Func, T> there(Promise<T>&& promise, Func&& func,
-                                  ErrorFunc&& errorHandler = _::PropagateException())
-                                  KJ_WARN_UNUSED_RESULT;
-  // Like `Promise::then()`, but schedules the continuation to be executed on *this* EventLoop
-  // rather than the thread's current loop.  See Promise::then().
-
-  template <typename T>
-  ForkedPromise<T> fork(Promise<T>&& promise);
-  // Like `Promise::fork()`, but manages the fork on *this* EventLoop rather than the thread's
-  // current loop.  See Promise::fork().
-
-  template <typename T>
-  Promise<T> exclusiveJoin(Promise<T>&& promise1, Promise<T>&& promise2);
-  // Like `promise1.exclusiveJoin(promise2)`, returning the joined promise.
-
-  void daemonize(kj::Promise<void>&& promise);
-  // Allows the given promise to continue running in the background until it completes or the
-  // `EventLoop` is destroyed.  Be careful when using this: you need to make sure that the promise
-  // owns all the objects it touches or make sure those objects outlive the EventLoop.  Also, be
-  // careful about error handling: exceptions will merely be logged with KJ_LOG(ERROR, ...).
-  //
-  // This method exists mainly to implement the Cap'n Proto requirement that RPC calls cannot be
-  // canceled unless the callee explicitly permits it.
-
-  // -----------------------------------------------------------------
-  // Low-level interface.
-
-  class Event {
-    // An event waiting to be executed.  Not for direct use by applications -- promises use this
-    // internally.
-    //
-    // WARNING: This class is difficult to use correctly.  It's easy to have subtle race
-    //   conditions.
-
-  public:
-    Event();
-    ~Event() noexcept(false);
-    KJ_DISALLOW_COPY(Event);
-
-    void armDepthFirst();
-    // Enqueue this event so that `fire()` will be called from the event loop soon.
-    //
-    // Events scheduled in this way are executed in depth-first order:  if an event callback arms
-    // more events, those events are placed at the front of the queue (in the order in which they
-    // were armed), so that they run immediately after the first event's callback returns.
-    //
-    // Depth-first event scheduling is appropriate for events that represent simple continuations
-    // of a previous event that should be globbed together for performance.  Depth-first scheduling
-    // can lead to starvation, so any long-running task must occasionally yield with
-    // `armBreadthFirst()`.  (Promise::then() uses depth-first whereas evalLater() uses
-    // breadth-first.)
-    //
-    // To use breadth-first scheduling instead, use `armLater()`.
-
-    void armBreadthFirst();
-    // Like `armDepthFirst()` except that the event is placed at the end of the queue.
-
-    kj::String trace();
-    // Dump debug info about this event.
-
-  protected:
-    virtual Maybe<Own<Event>> fire() = 0;
-    // Fire the event.  Possibly returns a pointer to itself, which will be discarded by the
-    // caller.  This is the only way that an event can delete itself as a result of firing, as
-    // doing so from within fire() will throw an exception.
-
-    virtual _::PromiseNode* getInnerForTrace();
-    // If this event wraps a PromiseNode, get that node.  Used for debug tracing.
-    // Default implementation returns nullptr.
-
-  private:
-    friend class EventLoop;
-    EventLoop& loop;
-    Event* next;
-    Event** prev;
-    bool firing = false;
-  };
+  void runForever() KJ_NORETURN;
+  // Runs the loop forever.  Useful for servers.
 
 protected:
   // -----------------------------------------------------------------
@@ -363,15 +248,14 @@ private:
   bool running = false;
   // True while looping -- wait() is then not allowed.
 
-  Event* head = nullptr;
-  Event** tail = &head;
-  Event** depthFirstInsertPoint = &head;
+  _::Event* head = nullptr;
+  _::Event** tail = &head;
+  _::Event** depthFirstInsertPoint = &head;
 
   Own<_::TaskSetImpl> daemons;
 
   template <typename T, typename Func, typename ErrorFunc>
-  Own<_::PromiseNode> thereImpl(Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler);
-  // Shared implementation of there() and Promise::then().
+  Own<_::PromiseNode> thenImpl(Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler);
 
   void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result);
   // Run the event loop until `node` is fulfilled, and then `get()` its result into `result`.
@@ -380,9 +264,22 @@ private:
   // Returns a promise that won't resolve until all events currently on the queue are fired.
   // Otherwise, returns an already-resolved promise.  Used to implement evalLater().
 
+  template <typename T>
+  T wait(Promise<T>&& promise);
+
+  template <typename Func>
+  PromiseForResult<Func, void> evalLater(Func&& func) KJ_WARN_UNUSED_RESULT;
+
+  void daemonize(kj::Promise<void>&& promise);
+
   template <typename>
   friend class Promise;
   friend Promise<void> yield();
+  template <typename ErrorFunc>
+  friend void daemonize(kj::Promise<void>&& promise, ErrorFunc&& errorHandler);
+  template <typename Func>
+  friend PromiseForResult<Func, void> evalLater(Func&& func);
+  friend class _::Event;
 };
 
 // -------------------------------------------------------------------
@@ -594,11 +491,26 @@ public:
   // cross-thread, both of the "optimizations" described above are avoided.
 
   T wait();
-  // Equivalent to `EventLoop::current().wait(kj::mv(*this))`.
+  // Run the event loop until the promise is fulfilled, then return its result.  If the promise
+  // is rejected, throw an exception.
   //
-  // Note that `wait()` consumes the promise on which it is called, in the sense of move semantics.
-  // After returning, the promise is no longer valid, and cannot be `wait()`ed on or `then()`ed
-  // again.
+  // wait() cannot be called recursively -- that is, an event callback cannot call wait().
+  // Instead, callbacks that need to perform more async operations should return a promise and
+  // rely on promise chaining.
+  //
+  // wait() is primarily useful at the top level of a program -- typically, within the function
+  // that allocated the EventLoop.  For example, a program that performs one or two RPCs and then
+  // exits would likely use wait() in its main() function to wait on each RPC.  On the other hand,
+  // server-side code generally cannot use wait(), because it has to be able to accept multiple
+  // requests at once.
+  //
+  // If the promise is rejected, `wait()` throws an exception.  If the program was compiled without
+  // exceptions (-fno-exceptions), this will usually abort.  In this case you really should first
+  // use `then()` to set an appropriate handler for the exception case, so that the promise you
+  // actually wait on never throws.
+  //
+  // TODO(someday):  Implement fibers, and let them call wait() even when they are handling an
+  //   event.
 
   ForkedPromise<T> fork();
   // Forks the promise, so that multiple different clients can independently wait on the result.
@@ -698,9 +610,31 @@ constexpr _::Void READY_NOW = _::Void();
 // cast to `Promise<void>`.
 
 template <typename Func>
-inline PromiseForResult<Func, void> evalLater(Func&& func) {
-  return EventLoop::current().evalLater(kj::fwd<Func>(func));
-}
+PromiseForResult<Func, void> evalLater(Func&& func);
+// Schedule for the given zero-parameter function to be executed in the event loop at some
+// point in the near future.  Returns a Promise for its result -- or, if `func()` itself returns
+// a promise, `evalLater()` returns a Promise for the result of resolving that promise.
+//
+// Example usage:
+//     Promise<int> x = evalLater([]() { return 123; });
+//
+// If the returned promise is destroyed before the callback runs, the callback will be canceled
+// (never called).
+//
+// If you schedule several evaluations with `evalLater`, they will be executed in order.
+
+template <typename ErrorFunc>
+void daemonize(kj::Promise<void>&& promise, ErrorFunc&& errorHandler);
+// Allows the given promise to continue running in the background until it completes or the
+// `EventLoop` is destroyed.  Be careful when using this: since you can no longer cancel this
+// promise, you need to make sure that the promise owns all the objects it touches or make sure
+// those objects outlive the EventLoop.
+//
+// `errorHandler` is a function that takes `kj::Exception&&`, like the second parameter to `then()`,
+// except that it must return void.
+//
+// This function exists mainly to implement the Cap'n Proto requirement that RPC calls cannot be
+// canceled unless the callee explicitly permits it.
 
 // -------------------------------------------------------------------
 // Hack for creating a lambda that holds an owned pointer.
@@ -870,6 +804,54 @@ public:
   Maybe<T> value;
 };
 
+class Event {
+  // An event waiting to be executed.  Not for direct use by applications -- promises use this
+  // internally.
+
+public:
+  Event();
+  ~Event() noexcept(false);
+  KJ_DISALLOW_COPY(Event);
+
+  void armDepthFirst();
+  // Enqueue this event so that `fire()` will be called from the event loop soon.
+  //
+  // Events scheduled in this way are executed in depth-first order:  if an event callback arms
+  // more events, those events are placed at the front of the queue (in the order in which they
+  // were armed), so that they run immediately after the first event's callback returns.
+  //
+  // Depth-first event scheduling is appropriate for events that represent simple continuations
+  // of a previous event that should be globbed together for performance.  Depth-first scheduling
+  // can lead to starvation, so any long-running task must occasionally yield with
+  // `armBreadthFirst()`.  (Promise::then() uses depth-first whereas evalLater() uses
+  // breadth-first.)
+  //
+  // To use breadth-first scheduling instead, use `armLater()`.
+
+  void armBreadthFirst();
+  // Like `armDepthFirst()` except that the event is placed at the end of the queue.
+
+  kj::String trace();
+  // Dump debug info about this event.
+
+  virtual _::PromiseNode* getInnerForTrace();
+  // If this event wraps a PromiseNode, get that node.  Used for debug tracing.
+  // Default implementation returns nullptr.
+
+protected:
+  virtual Maybe<Own<Event>> fire() = 0;
+  // Fire the event.  Possibly returns a pointer to itself, which will be discarded by the
+  // caller.  This is the only way that an event can delete itself as a result of firing, as
+  // doing so from within fire() will throw an exception.
+
+private:
+  friend class kj::EventLoop;
+  EventLoop& loop;
+  Event* next;
+  Event** prev;
+  bool firing = false;
+};
+
 class PromiseNode {
   // A Promise<T> contains a chain of PromiseNodes tracking the pending transformations.
   //
@@ -879,7 +861,7 @@ class PromiseNode {
   // internal implementation details.
 
 public:
-  virtual bool onReady(EventLoop::Event& event) noexcept = 0;
+  virtual bool onReady(Event& event) noexcept = 0;
   // Returns true if already ready, otherwise arms the given event when ready.
 
   virtual void get(ExceptionOrValue& output) noexcept = 0;
@@ -896,7 +878,7 @@ protected:
     // Helper class for implementing onReady().
 
   public:
-    bool init(EventLoop::Event& newEvent);
+    bool init(Event& newEvent);
     // Returns true if arm() was already called.
 
     void arm();
@@ -904,7 +886,7 @@ protected:
     // true.
 
   private:
-    EventLoop::Event* event = nullptr;
+    Event* event = nullptr;
   };
 };
 
@@ -912,7 +894,7 @@ protected:
 
 class ImmediatePromiseNodeBase: public PromiseNode {
 public:
-  bool onReady(EventLoop::Event& event) noexcept override;
+  bool onReady(Event& event) noexcept override;
 };
 
 template <typename T>
@@ -946,7 +928,7 @@ class AttachmentPromiseNodeBase: public PromiseNode {
 public:
   AttachmentPromiseNodeBase(Own<PromiseNode>&& dependency);
 
-  bool onReady(EventLoop::Event& event) noexcept override;
+  bool onReady(Event& event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
@@ -985,7 +967,7 @@ class TransformPromiseNodeBase: public PromiseNode {
 public:
   TransformPromiseNodeBase(Own<PromiseNode>&& dependency);
 
-  bool onReady(EventLoop::Event& event) noexcept override;
+  bool onReady(Event& event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
@@ -1055,7 +1037,7 @@ public:
   // Called by the hub to indicate that it is ready.
 
   // implements PromiseNode ------------------------------------------
-  bool onReady(EventLoop::Event& event) noexcept override;
+  bool onReady(Event& event) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
 protected:
@@ -1099,7 +1081,7 @@ public:
 
 // -------------------------------------------------------------------
 
-class ForkHubBase: public Refcounted, protected EventLoop::Event {
+class ForkHubBase: public Refcounted, protected Event {
 public:
   ForkHubBase(Own<PromiseNode>&& inner, ExceptionOrValue& resultRef);
 
@@ -1142,12 +1124,12 @@ inline ExceptionOrValue& ForkBranchBase::getHubResultRef() {
 
 // -------------------------------------------------------------------
 
-class ChainPromiseNode final: public PromiseNode, private EventLoop::Event {
+class ChainPromiseNode final: public PromiseNode, private Event {
 public:
   explicit ChainPromiseNode(Own<PromiseNode> inner);
   ~ChainPromiseNode() noexcept(false);
 
-  bool onReady(EventLoop::Event& event) noexcept override;
+  bool onReady(Event& event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
@@ -1185,12 +1167,12 @@ public:
   ExclusiveJoinPromiseNode(Own<PromiseNode> left, Own<PromiseNode> right);
   ~ExclusiveJoinPromiseNode() noexcept(false);
 
-  bool onReady(EventLoop::Event& event) noexcept override;
+  bool onReady(Event& event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
 private:
-  class Branch: public EventLoop::Event {
+  class Branch: public Event {
   public:
     Branch(ExclusiveJoinPromiseNode& joinNode, Own<PromiseNode> dependency);
     ~Branch() noexcept(false);
@@ -1213,14 +1195,14 @@ private:
 
 // -------------------------------------------------------------------
 
-class EagerPromiseNodeBase: public PromiseNode, protected EventLoop::Event {
+class EagerPromiseNodeBase: public PromiseNode, protected Event {
   // A PromiseNode that eagerly evaluates its dependency even if its dependent does not eagerly
   // evaluate it.
 
 public:
   EagerPromiseNodeBase(Own<PromiseNode>&& dependency, ExceptionOrValue& resultRef);
 
-  bool onReady(EventLoop::Event& event) noexcept override;
+  bool onReady(Event& event) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
 private:
@@ -1257,7 +1239,7 @@ Own<PromiseNode> spark(Own<PromiseNode>&& node) {
 
 class AdapterPromiseNodeBase: public PromiseNode {
 public:
-  bool onReady(EventLoop::Event& event) noexcept override;
+  bool onReady(Event& event) noexcept override;
 
 protected:
   inline void setReady() {
@@ -1334,22 +1316,15 @@ T EventLoop::wait(Promise<T>&& promise) {
 
 template <typename Func>
 PromiseForResult<Func, void> EventLoop::evalLater(Func&& func) {
-  // Invoke thereImpl() on yield().  Always spark the result.
+  // Invoke thenImpl() on yield().  Always spark the result.
   return PromiseForResult<Func, void>(false,
       _::spark<_::FixVoid<_::JoinPromises<_::ReturnType<Func, void>>>>(
-          thereImpl(yield(), kj::fwd<Func>(func), _::PropagateException())));
+          thenImpl(yield(), kj::fwd<Func>(func), _::PropagateException())));
 }
 
 template <typename T, typename Func, typename ErrorFunc>
-PromiseForResult<Func, T> EventLoop::there(
-    Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler) {
-  return PromiseForResult<Func, T>(false, thereImpl(
-      kj::mv(promise), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler)));
-}
-
-template <typename T, typename Func, typename ErrorFunc>
-Own<_::PromiseNode> EventLoop::thereImpl(Promise<T>&& promise, Func&& func,
-                                         ErrorFunc&& errorHandler) {
+Own<_::PromiseNode> EventLoop::thenImpl(Promise<T>&& promise, Func&& func,
+                                        ErrorFunc&& errorHandler) {
   typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
 
   Own<_::PromiseNode> intermediate =
@@ -1369,7 +1344,7 @@ Promise<T>::Promise(kj::Exception&& exception)
 template <typename T>
 template <typename Func, typename ErrorFunc>
 PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler) {
-  return PromiseForResult<Func, T>(false, EventLoop::current().thereImpl(
+  return PromiseForResult<Func, T>(false, EventLoop::current().thenImpl(
       kj::mv(*this), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler)));
 }
 
@@ -1384,12 +1359,6 @@ ForkedPromise<T> Promise<T>::fork() {
 }
 
 template <typename T>
-ForkedPromise<T> EventLoop::fork(Promise<T>&& promise) {
-  return ForkedPromise<T>(false,
-      refcounted<_::ForkHub<_::FixVoid<T>>>(kj::mv(promise.node)));
-}
-
-template <typename T>
 Promise<T> ForkedPromise<T>::addBranch() {
   return hub->addBranch();
 }
@@ -1397,12 +1366,6 @@ Promise<T> ForkedPromise<T>::addBranch() {
 template <typename T>
 void Promise<T>::exclusiveJoin(Promise<T>&& other) {
   node = heap<_::ExclusiveJoinPromiseNode>(kj::mv(node), kj::mv(other.node));
-}
-
-template <typename T>
-Promise<T> EventLoop::exclusiveJoin(Promise<T>&& promise1, Promise<T>&& promise2) {
-  return Promise<T>(false, heap<_::ExclusiveJoinPromiseNode>(
-      kj::mv(promise1.node), kj::mv(promise2.node)));
 }
 
 template <typename T>
@@ -1415,6 +1378,16 @@ void Promise<T>::attach(Attachments&&... attachments) {
 template <typename T>
 void Promise<T>::eagerlyEvaluate() {
   node = _::spark<_::FixVoid<T>>(kj::mv(node));
+}
+
+template <typename Func>
+inline PromiseForResult<Func, void> evalLater(Func&& func) {
+  return EventLoop::current().evalLater(kj::fwd<Func>(func));
+}
+
+template <typename ErrorFunc>
+void daemonize(kj::Promise<void>&& promise, ErrorFunc&& errorHandler) {
+  return EventLoop::current().daemonize(promise.then([]() {}, kj::fwd<ErrorFunc>(errorHandler)));
 }
 
 // =======================================================================================
