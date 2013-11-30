@@ -194,7 +194,7 @@ TEST(Async, SeparateFulfillerCanceled) {
   auto pair = newPromiseAndFulfiller<void>();
 
   EXPECT_TRUE(pair.fulfiller->isWaiting());
-  pair.promise.absolve();
+  pair.promise = nullptr;
   EXPECT_FALSE(pair.fulfiller->isWaiting());
 }
 
@@ -473,8 +473,8 @@ TEST(Async, Daemonize) {
   bool ran3 = false;
 
   evalLater([&]() { ran1 = true; });
-  daemonize(evalLater([&]() { ran2 = true; }), [](kj::Exception&&) { ADD_FAILURE(); });
-  daemonize(evalLater([]() { KJ_FAIL_ASSERT("foo"); }), [&](kj::Exception&& e) { ran3 = true; });
+  evalLater([&]() { ran2 = true; }).daemonize([](kj::Exception&&) { ADD_FAILURE(); });
+  evalLater([]() { KJ_FAIL_ASSERT("foo"); }).daemonize([&](kj::Exception&& e) { ran3 = true; });
 
   EXPECT_FALSE(ran1);
   EXPECT_FALSE(ran2);

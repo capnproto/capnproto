@@ -84,9 +84,9 @@ TEST_F(AsyncUnixTest, SignalWithValue) {
 TEST_F(AsyncUnixTest, SignalsMultiListen) {
   UnixEventLoop loop;
 
-  daemonize(loop.onSignal(SIGIO).then([](siginfo_t&&) {
+  loop.onSignal(SIGIO).then([](siginfo_t&&) {
     ADD_FAILURE() << "Received wrong signal.";
-  }), [](kj::Exception&& exception) {
+  }).daemonize([](kj::Exception&& exception) {
     ADD_FAILURE() << kj::str(exception).cStr();
   });
 
@@ -147,10 +147,10 @@ TEST_F(AsyncUnixTest, PollMultiListen) {
   KJ_SYSCALL(pipe(bogusPipefds));
   KJ_DEFER({ close(bogusPipefds[1]); close(bogusPipefds[0]); });
 
-  daemonize(loop.onFdEvent(bogusPipefds[0], POLLIN | POLLPRI).then([](short s) {
+  loop.onFdEvent(bogusPipefds[0], POLLIN | POLLPRI).then([](short s) {
     KJ_DBG(s);
     ADD_FAILURE() << "Received wrong poll.";
-  }), [](kj::Exception&& exception) {
+  }).daemonize([](kj::Exception&& exception) {
     ADD_FAILURE() << kj::str(exception).cStr();
   });
 

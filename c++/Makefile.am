@@ -136,7 +136,9 @@ includekj_HEADERS =                                            \
   src/kj/mutex.h                                               \
   src/kj/thread.h                                              \
   src/kj/work-queue.h                                          \
+  src/kj/async-prelude.h                                       \
   src/kj/async.h                                               \
+  src/kj/async-impl.h                                          \
   src/kj/async-unix.h                                          \
   src/kj/async-io.h                                            \
   src/kj/main.h

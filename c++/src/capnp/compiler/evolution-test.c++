@@ -807,7 +807,7 @@ void doTest() {
 
   uint nextOrdinal = 0;
 
-  for (uint i = 0; i < 128; i++) {
+  for (uint i = 0; i < 96; i++) {
     uint oldOrdinalCount = nextOrdinal;
 
     auto newBuilder = kj::heap<MallocMessageBuilder>();

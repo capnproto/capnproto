@@ -41,14 +41,14 @@ TEST(AsyncIo, SimpleNetwork) {
 
   auto port = newPromiseAndFulfiller<uint>();
 
-  daemonize(port.promise.then([&](uint portnum) {
+  port.promise.then([&](uint portnum) {
     return network->parseRemoteAddress("127.0.0.1", portnum);
   }).then([&](Own<RemoteAddress>&& result) {
     return result->connect();
   }).then([&](Own<AsyncIoStream>&& result) {
     client = kj::mv(result);
     return client->write("foo", 3);
-  }), [](kj::Exception&& exception) {
+  }).daemonize([](kj::Exception&& exception) {
     ADD_FAILURE() << kj::str(exception).cStr();
   });
 
@@ -97,7 +97,7 @@ TEST(AsyncIo, OneWayPipe) {
   auto pipe = newOneWayPipe();
   char receiveBuffer[4];
 
-  daemonize(pipe.out->write("foo", 3), [](kj::Exception&& exception) {
+  pipe.out->write("foo", 3).daemonize([](kj::Exception&& exception) {
     ADD_FAILURE() << kj::str(exception).cStr();
   });
 

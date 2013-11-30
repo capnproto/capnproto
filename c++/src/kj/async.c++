@@ -67,6 +67,16 @@ public:
   }
 };
 
+class NeverReadyPromiseNode final: public _::PromiseNode {
+public:
+  bool onReady(_::Event& event) noexcept override {
+    return false;
+  }
+  void get(_::ExceptionOrValue& output) noexcept override {
+    KJ_FAIL_REQUIRE("Not ready.");
+  }
+};
+
 }  // namespace
 
 namespace _ {  // private
@@ -208,6 +218,12 @@ EventLoop::~EventLoop() noexcept(false) {
     }
     break;
   }
+}
+
+void EventLoop::runForever() {
+  _::ExceptionOr<_::Void> result;
+  waitImpl(kj::heap<NeverReadyPromiseNode>(), result);
+  KJ_UNREACHABLE;
 }
 
 void EventLoop::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result) {
@@ -452,14 +468,6 @@ void SimpleEventLoop::wake() const {
 
 // =======================================================================================
 
-void PromiseBase::absolve() {
-  runCatchingExceptions([this]() { node = nullptr; });
-}
-
-kj::String PromiseBase::trace() {
-  return traceImpl(nullptr, node);
-}
-
 TaskSet::TaskSet(ErrorHandler& errorHandler)
     : impl(heap<_::TaskSetImpl>(errorHandler)) {}
 
@@ -474,6 +482,10 @@ kj::String TaskSet::trace() {
 }
 
 namespace _ {  // private
+
+kj::String PromiseBase::trace() {
+  return traceImpl(nullptr, node);
+}
 
 PromiseNode* PromiseNode::getInnerForTrace() { return nullptr; }
 

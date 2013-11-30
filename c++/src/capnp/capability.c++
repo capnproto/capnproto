@@ -207,7 +207,7 @@ public:
     daemonPromise.attach(kj::addRef(*context));
     daemonPromise.exclusiveJoin(kj::mv(cancelPaf.promise));
     // Daemonize, ignoring exceptions.
-    kj::daemonize(kj::mv(daemonPromise), [](kj::Exception&&) {});
+    daemonPromise.daemonize([](kj::Exception&&) {});
 
     // Now the other branch returns the response from the context.
     auto contextPtr = context.get();
