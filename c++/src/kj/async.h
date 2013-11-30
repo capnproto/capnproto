@@ -309,10 +309,14 @@ PromiseForResult<Func, void> evalLater(Func&& func);
 // Example usage:
 //     Promise<int> x = evalLater([]() { return 123; });
 //
+// The above is exactly equivalent to:
+//     Promise<int> x = Promise<void>(READY_NOW).then([]() { return 123; });
+//
 // If the returned promise is destroyed before the callback runs, the callback will be canceled
 // (never called).
 //
-// If you schedule several evaluations with `evalLater`, they will be executed in order.
+// If you schedule several evaluations with `evalLater` during the same callback, they are
+// guaranteed to be executed in order.
 
 // =======================================================================================
 // Hack for creating a lambda that holds an owned pointer.

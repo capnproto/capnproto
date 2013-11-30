@@ -58,19 +58,18 @@ public:
 
 class YieldPromiseNode final: public _::PromiseNode {
 public:
-  bool onReady(_::Event& event) noexcept override {
+  void onReady(_::Event& event) noexcept override {
     event.armBreadthFirst();
-    return false;
   }
   void get(_::ExceptionOrValue& output) noexcept override {
-    output.as<_::Void>().value = _::Void();
+    output.as<_::Void>() = _::Void();
   }
 };
 
 class NeverReadyPromiseNode final: public _::PromiseNode {
 public:
-  bool onReady(_::Event& event) noexcept override {
-    return false;
+  void onReady(_::Event& event) noexcept override {
+    // ignore
   }
   void get(_::ExceptionOrValue& output) noexcept override {
     KJ_FAIL_REQUIRE("Not ready.");
@@ -100,9 +99,7 @@ public:
   public:
     Task(TaskSetImpl& taskSet, Own<_::PromiseNode>&& nodeParam)
         : taskSet(taskSet), node(kj::mv(nodeParam)) {
-      if (node->onReady(*this)) {
-        armDepthFirst();
-      }
+      node->onReady(*this);
     }
 
   protected:
@@ -232,7 +229,7 @@ void EventLoop::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result
   KJ_REQUIRE(!running, "wait() is not allowed from within event callbacks.");
 
   BoolEvent doneEvent;
-  doneEvent.fired = node->onReady(doneEvent);
+  node->onReady(doneEvent);
 
   running = true;
   KJ_DEFER(running = false);
@@ -251,6 +248,10 @@ void EventLoop::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result
       _::Event* event = head;
 
       head = event->next;
+      if (head != nullptr) {
+        head->prev = &head;
+      }
+
       depthFirstInsertPoint = &head;
       if (tail == &event->next) {
         tail = &head;
@@ -294,9 +295,6 @@ Event::Event()
 
 Event::~Event() noexcept(false) {
   if (prev != nullptr) {
-    if (loop.head == this) {
-      loop.head = next;
-    }
     if (loop.tail == &next) {
       loop.tail = prev;
     }
@@ -489,12 +487,14 @@ kj::String PromiseBase::trace() {
 
 PromiseNode* PromiseNode::getInnerForTrace() { return nullptr; }
 
-bool PromiseNode::OnReadyEvent::init(Event& newEvent) {
+void PromiseNode::OnReadyEvent::init(Event& newEvent) {
   if (event == _kJ_ALREADY_READY) {
-    return true;
+    // A new continuation was added to a promise that was already ready.  In this case, we schedule
+    // breadth-first, to make it difficult for applications to accidentally starve the event loop
+    // by repeatedly waiting on immediate promises.
+    newEvent.armBreadthFirst();
   } else {
     event = &newEvent;
-    return false;
   }
 }
 
@@ -502,13 +502,18 @@ void PromiseNode::OnReadyEvent::arm() {
   if (event == nullptr) {
     event = _kJ_ALREADY_READY;
   } else {
+    // A promise resolved and an event is already waiting on it.  In this case, arm in depth-first
+    // order so that the event runs immediately after the current one.  This way, chained promises
+    // execute together for better cache locality and lower latency.
     event->armDepthFirst();
   }
 }
 
 // -------------------------------------------------------------------
 
-bool ImmediatePromiseNodeBase::onReady(Event& event) noexcept { return true; }
+void ImmediatePromiseNodeBase::onReady(Event& event) noexcept {
+  event.armBreadthFirst();
+}
 
 ImmediateBrokenPromiseNode::ImmediateBrokenPromiseNode(Exception&& exception)
     : exception(kj::mv(exception)) {}
@@ -522,8 +527,8 @@ void ImmediateBrokenPromiseNode::get(ExceptionOrValue& output) noexcept {
 AttachmentPromiseNodeBase::AttachmentPromiseNodeBase(Own<PromiseNode>&& dependency)
     : dependency(kj::mv(dependency)) {}
 
-bool AttachmentPromiseNodeBase::onReady(Event& event) noexcept {
-  return dependency->onReady(event);
+void AttachmentPromiseNodeBase::onReady(Event& event) noexcept {
+  dependency->onReady(event);
 }
 
 void AttachmentPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
@@ -543,8 +548,8 @@ void AttachmentPromiseNodeBase::dropDependency() {
 TransformPromiseNodeBase::TransformPromiseNodeBase(Own<PromiseNode>&& dependency)
     : dependency(kj::mv(dependency)) {}
 
-bool TransformPromiseNodeBase::onReady(Event& event) noexcept {
-  return dependency->onReady(event);
+void TransformPromiseNodeBase::onReady(Event& event) noexcept {
+  dependency->onReady(event);
 }
 
 void TransformPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
@@ -607,8 +612,8 @@ void ForkBranchBase::releaseHub(ExceptionOrValue& output) {
   }
 }
 
-bool ForkBranchBase::onReady(Event& event) noexcept {
-  return onReadyEvent.init(event);
+void ForkBranchBase::onReady(Event& event) noexcept {
+  onReadyEvent.init(event);
 }
 
 PromiseNode* ForkBranchBase::getInnerForTrace() {
@@ -619,7 +624,7 @@ PromiseNode* ForkBranchBase::getInnerForTrace() {
 
 ForkHubBase::ForkHubBase(Own<PromiseNode>&& innerParam, ExceptionOrValue& resultRef)
     : inner(kj::mv(innerParam)), resultRef(resultRef) {
-  if (inner->onReady(*this)) armDepthFirst();
+  inner->onReady(*this);
 }
 
 Maybe<Own<Event>> ForkHubBase::fire() {
@@ -652,19 +657,20 @@ _::PromiseNode* ForkHubBase::getInnerForTrace() {
 
 ChainPromiseNode::ChainPromiseNode(Own<PromiseNode> innerParam)
     : state(STEP1), inner(kj::mv(innerParam)) {
-  if (inner->onReady(*this)) armDepthFirst();
+  inner->onReady(*this);
 }
 
 ChainPromiseNode::~ChainPromiseNode() noexcept(false) {}
 
-bool ChainPromiseNode::onReady(Event& event) noexcept {
+void ChainPromiseNode::onReady(Event& event) noexcept {
   switch (state) {
     case STEP1:
       KJ_REQUIRE(onReadyEvent == nullptr, "onReady() can only be called once.");
       onReadyEvent = &event;
-      return false;
+      return;
     case STEP2:
-      return inner->onReady(event);
+      inner->onReady(event);
+      return;
   }
   KJ_UNREACHABLE;
 }
@@ -710,9 +716,7 @@ Maybe<Own<Event>> ChainPromiseNode::fire() {
   state = STEP2;
 
   if (onReadyEvent != nullptr) {
-    if (inner->onReady(*onReadyEvent)) {
-      onReadyEvent->armDepthFirst();
-    }
+    inner->onReady(*onReadyEvent);
   }
 
   return nullptr;
@@ -725,8 +729,8 @@ ExclusiveJoinPromiseNode::ExclusiveJoinPromiseNode(Own<PromiseNode> left, Own<Pr
 
 ExclusiveJoinPromiseNode::~ExclusiveJoinPromiseNode() noexcept(false) {}
 
-bool ExclusiveJoinPromiseNode::onReady(Event& event) noexcept {
-  return onReadyEvent.init(event);
+void ExclusiveJoinPromiseNode::onReady(Event& event) noexcept {
+  onReadyEvent.init(event);
 }
 
 void ExclusiveJoinPromiseNode::get(ExceptionOrValue& output) noexcept {
@@ -744,7 +748,7 @@ PromiseNode* ExclusiveJoinPromiseNode::getInnerForTrace() {
 ExclusiveJoinPromiseNode::Branch::Branch(
     ExclusiveJoinPromiseNode& joinNode, Own<PromiseNode> dependencyParam)
     : joinNode(joinNode), dependency(kj::mv(dependencyParam)) {
-  if (dependency->onReady(*this)) armDepthFirst();
+  dependency->onReady(*this);
 }
 
 ExclusiveJoinPromiseNode::Branch::~Branch() noexcept(false) {}
@@ -779,11 +783,11 @@ PromiseNode* ExclusiveJoinPromiseNode::Branch::getInnerForTrace() {
 EagerPromiseNodeBase::EagerPromiseNodeBase(
     Own<PromiseNode>&& dependencyParam, ExceptionOrValue& resultRef)
     : dependency(kj::mv(dependencyParam)), resultRef(resultRef) {
-  if (dependency->onReady(*this)) armDepthFirst();
+  dependency->onReady(*this);
 }
 
-bool EagerPromiseNodeBase::onReady(Event& event) noexcept {
-  return onReadyEvent.init(event);
+void EagerPromiseNodeBase::onReady(Event& event) noexcept {
+  onReadyEvent.init(event);
 }
 
 PromiseNode* EagerPromiseNodeBase::getInnerForTrace() {
@@ -804,8 +808,8 @@ Maybe<Own<Event>> EagerPromiseNodeBase::fire() {
 
 // -------------------------------------------------------------------
 
-bool AdapterPromiseNodeBase::onReady(Event& event) noexcept {
-  return onReadyEvent.init(event);
+void AdapterPromiseNodeBase::onReady(Event& event) noexcept {
+  onReadyEvent.init(event);
 }
 
 }  // namespace _ (private)

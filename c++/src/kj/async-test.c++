@@ -240,24 +240,43 @@ TEST(Async, Ordering) {
 
   promises[1] = evalLater([&]() {
     EXPECT_EQ(0, counter++);
-    promises[2] = Promise<void>(READY_NOW).then([&]() {
-      EXPECT_EQ(1, counter++);
-      return Promise<void>(READY_NOW);  // Force proactive evaluation by faking a chain.
-    });
-    promises[3] = evalLater([&]() {
-      EXPECT_EQ(4, counter++);
-      return Promise<void>(READY_NOW).then([&]() {
-        EXPECT_EQ(5, counter++);
+
+    {
+      // Use a promise and fulfiller so that we can fulfill the promise after waiting on it in
+      // order to induce depth-first scheduling.
+      auto paf = kj::newPromiseAndFulfiller<void>();
+      promises[2] = paf.promise.then([&]() {
+        EXPECT_EQ(1, counter++);
       });
+      promises[2].eagerlyEvaluate();
+      paf.fulfiller->fulfill();
+    }
+
+    // .then() is scheduled breadth-first if the promise has already resolved, but depth-first
+    // if the promise resolves later.
+    promises[3] = Promise<void>(READY_NOW).then([&]() {
+      EXPECT_EQ(4, counter++);
+    }).then([&]() {
+      EXPECT_EQ(5, counter++);
     });
-    promises[4] = Promise<void>(READY_NOW).then([&]() {
-      EXPECT_EQ(2, counter++);
-      return Promise<void>(READY_NOW);  // Force proactive evaluation by faking a chain.
-    });
+    promises[3].eagerlyEvaluate();
+
+    {
+      auto paf = kj::newPromiseAndFulfiller<void>();
+      promises[4] = paf.promise.then([&]() {
+        EXPECT_EQ(2, counter++);
+      });
+      promises[4].eagerlyEvaluate();
+      paf.fulfiller->fulfill();
+    }
+
+    // evalLater() is like READY_NOW.then().
     promises[5] = evalLater([&]() {
       EXPECT_EQ(6, counter++);
     });
+    promises[5].eagerlyEvaluate();
   });
+  promises[1].eagerlyEvaluate();
 
   promises[0] = evalLater([&]() {
     EXPECT_EQ(3, counter++);
@@ -266,6 +285,7 @@ TEST(Async, Ordering) {
     // point.)
     return Promise<void>(READY_NOW);
   });
+  promises[0].eagerlyEvaluate();
 
   for (auto i: indices(promises)) {
     kj::mv(promises[i]).wait();
@@ -367,8 +387,10 @@ TEST(Async, ExclusiveJoin) {
   {
     SimpleEventLoop loop;
 
-    auto right = evalLater([&]() { return 456; });
     auto left = evalLater([&]() { return 123; });
+    auto right = evalLater([&]() { return 456; });
+
+    right.eagerlyEvaluate();
 
     left.exclusiveJoin(kj::mv(right));
 

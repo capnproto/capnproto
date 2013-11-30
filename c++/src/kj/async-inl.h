@@ -133,8 +133,8 @@ class PromiseNode {
   // internal implementation details.
 
 public:
-  virtual bool onReady(Event& event) noexcept = 0;
-  // Returns true if already ready, otherwise arms the given event when ready.
+  virtual void onReady(Event& event) noexcept = 0;
+  // Arms the given event when ready.
 
   virtual void get(ExceptionOrValue& output) noexcept = 0;
   // Get the result.  `output` points to an ExceptionOr<T> into which the result will be written.
@@ -150,7 +150,7 @@ protected:
     // Helper class for implementing onReady().
 
   public:
-    bool init(Event& newEvent);
+    void init(Event& newEvent);
     // Returns true if arm() was already called.
 
     void arm();
@@ -166,7 +166,7 @@ protected:
 
 class ImmediatePromiseNodeBase: public PromiseNode {
 public:
-  bool onReady(Event& event) noexcept override;
+  void onReady(Event& event) noexcept override;
 };
 
 template <typename T>
@@ -200,7 +200,7 @@ class AttachmentPromiseNodeBase: public PromiseNode {
 public:
   AttachmentPromiseNodeBase(Own<PromiseNode>&& dependency);
 
-  bool onReady(Event& event) noexcept override;
+  void onReady(Event& event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
@@ -239,7 +239,7 @@ class TransformPromiseNodeBase: public PromiseNode {
 public:
   TransformPromiseNodeBase(Own<PromiseNode>&& dependency);
 
-  bool onReady(Event& event) noexcept override;
+  void onReady(Event& event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
@@ -309,7 +309,7 @@ public:
   // Called by the hub to indicate that it is ready.
 
   // implements PromiseNode ------------------------------------------
-  bool onReady(Event& event) noexcept override;
+  void onReady(Event& event) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
 protected:
@@ -401,7 +401,7 @@ public:
   explicit ChainPromiseNode(Own<PromiseNode> inner);
   ~ChainPromiseNode() noexcept(false);
 
-  bool onReady(Event& event) noexcept override;
+  void onReady(Event& event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
@@ -439,7 +439,7 @@ public:
   ExclusiveJoinPromiseNode(Own<PromiseNode> left, Own<PromiseNode> right);
   ~ExclusiveJoinPromiseNode() noexcept(false);
 
-  bool onReady(Event& event) noexcept override;
+  void onReady(Event& event) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
@@ -474,7 +474,7 @@ class EagerPromiseNodeBase: public PromiseNode, protected Event {
 public:
   EagerPromiseNodeBase(Own<PromiseNode>&& dependency, ExceptionOrValue& resultRef);
 
-  bool onReady(Event& event) noexcept override;
+  void onReady(Event& event) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
 private:
@@ -511,7 +511,7 @@ Own<PromiseNode> spark(Own<PromiseNode>&& node) {
 
 class AdapterPromiseNodeBase: public PromiseNode {
 public:
-  bool onReady(Event& event) noexcept override;
+  void onReady(Event& event) noexcept override;
 
 protected:
   inline void setReady() {
@@ -588,10 +588,9 @@ T EventLoop::wait(Promise<T>&& promise) {
 
 template <typename Func>
 PromiseForResult<Func, void> EventLoop::evalLater(Func&& func) {
-  // Invoke thenImpl() on yield().  Always spark the result.
+  // Invoke thenImpl() on yield().
   return PromiseForResult<Func, void>(false,
-      _::spark<_::FixVoid<_::JoinPromises<_::ReturnType<Func, void>>>>(
-          thenImpl(yield(), kj::fwd<Func>(func), _::PropagateException())));
+      thenImpl(yield(), kj::fwd<Func>(func), _::PropagateException()));
 }
 
 template <typename T, typename Func, typename ErrorFunc>
