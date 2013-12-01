@@ -26,7 +26,6 @@
 #include "vector.h"
 #include <exception>
 #include <map>
-#include <typeinfo>
 
 #if KJ_USE_FUTEX
 #include <unistd.h>
@@ -34,8 +33,12 @@
 #include <linux/futex.h>
 #endif
 
+#if !KJ_NO_RTTI
+#include <typeinfo>
 #if __GNUC__
 #include <cxxabi.h>
+#include <stdlib.h>
+#endif
 #endif
 
 namespace kj {
@@ -355,6 +358,7 @@ _::PromiseNode* Event::getInnerForTrace() {
   return nullptr;
 }
 
+#if !KJ_NO_RTTI
 #if __GNUC__
 static kj::String demangleTypeName(const char* name) {
   int status;
@@ -368,8 +372,12 @@ static kj::String demangleTypeName(const char* name) {
   return kj::heapString(name);
 }
 #endif
+#endif
 
 static kj::String traceImpl(Event* event, _::PromiseNode* node) {
+#if KJ_NO_RTTI
+  return heapString("Trace not available because RTTI is disabled.");
+#else
   kj::Vector<kj::String> trace;
 
   if (event != nullptr) {
@@ -382,6 +390,7 @@ static kj::String traceImpl(Event* event, _::PromiseNode* node) {
   }
 
   return strArray(trace, "\n");
+#endif
 }
 
 kj::String Event::trace() {
