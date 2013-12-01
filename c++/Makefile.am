@@ -135,10 +135,9 @@ includekj_HEADERS =                                            \
   src/kj/function.h                                            \
   src/kj/mutex.h                                               \
   src/kj/thread.h                                              \
-  src/kj/work-queue.h                                          \
   src/kj/async-prelude.h                                       \
   src/kj/async.h                                               \
-  src/kj/async-impl.h                                          \
+  src/kj/async-inl.h                                           \
   src/kj/async-unix.h                                          \
   src/kj/async-io.h                                            \
   src/kj/main.h
@@ -201,7 +200,6 @@ libkj_la_SOURCES=                                              \
 libkj_async_la_LIBADD = libkj.la $(PTHREAD_LIBS) -lpthread
 libkj_async_la_LDFLAGS = -release $(VERSION) -no-undefined
 libkj_async_la_SOURCES=                                        \
-  src/kj/work-queue.c++                                        \
   src/kj/async.c++                                             \
   src/kj/async-unix.c++                                        \
   src/kj/async-io.c++
