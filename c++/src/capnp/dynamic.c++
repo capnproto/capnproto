@@ -1346,7 +1346,7 @@ DynamicList::Reader DynamicList::Builder::asReader() const {
 
 // =======================================================================================
 
-DynamicValue::Reader::Reader(ConstSchema constant) {
+DynamicValue::Reader::Reader(ConstSchema constant): type(VOID) {
   auto typeSchema = constant.getProto().getConst().getType();
   auto value = constant.getProto().getConst().getValue();
   switch (typeSchema.which()) {

@@ -179,6 +179,10 @@ private:
   Content guardedContent;     // Read using getContent() only!
   bool inGetContent = false;  // True while getContent() is running; detects cycles.
 
+  kj::Maybe<schema::Node::Reader> loadedFinalSchema;
+  // Copy of `finalSchema` as loaded into the final schema loader.  This doesn't go away if the
+  // workspace is destroyed.
+
   // ---------------------------------------------
 
   static uint64_t generateId(uint64_t parentId, kj::StringPtr declName,
@@ -515,12 +519,11 @@ kj::Maybe<Compiler::Node::Content&> Compiler::Node::getContent(Content::State mi
         }
       }
 
-      // If the Workspace is destroyed while this Node is still in the BOOTSTRAP state,
-      // revert it to the EXPANDED state, because the NodeTranslator is no longer valid in this
-      // case.
+      // If the Workspace is destroyed, revert the node to the EXPANDED state, because the
+      // NodeTranslator is no longer valid in this case.
       workspace.arena.copy(kj::defer([&content]() {
         content.bootstrapSchema = nullptr;
-        if (content.state == Content::BOOTSTRAP) {
+        if (content.state > Content::EXPANDED) {
           content.state = Content::EXPANDED;
         }
       }));
@@ -640,7 +643,10 @@ kj::Maybe<Compiler::Node&> Compiler::Node::lookup(const DeclName::Reader& name) 
 }
 
 kj::Maybe<Schema> Compiler::Node::getBootstrapSchema() {
-  KJ_IF_MAYBE(content, getContent(Content::BOOTSTRAP)) {
+  KJ_IF_MAYBE(schema, loadedFinalSchema) {
+    // We don't need to rebuild the bootstrap schema if we already have a final schema.
+    return module->getCompiler().getWorkspace().bootstrapLoader.loadOnce(*schema);
+  } else KJ_IF_MAYBE(content, getContent(Content::BOOTSTRAP)) {
     if (content->state == Content::FINISHED && content->bootstrapSchema == nullptr) {
       // The bootstrap schema was discarded.  Copy it from the final schema.
       // (We can't just return the final schema because using it could trigger schema loader
@@ -658,7 +664,9 @@ kj::Maybe<Schema> Compiler::Node::getBootstrapSchema() {
   }
 }
 kj::Maybe<schema::Node::Reader> Compiler::Node::getFinalSchema() {
-  KJ_IF_MAYBE(content, getContent(Content::FINISHED)) {
+  KJ_IF_MAYBE(schema, loadedFinalSchema) {
+    return *schema;
+  } else KJ_IF_MAYBE(content, getContent(Content::FINISHED)) {
     return content->finalSchema;
   } else {
     return nullptr;
@@ -671,9 +679,11 @@ void Compiler::Node::loadFinalSchema(const SchemaLoader& loader) {
         KJ_MAP(auxSchema, content->auxSchemas) {
           return loader.loadOnce(auxSchema);
         };
-        loader.loadOnce(*finalSchema);
+        loadedFinalSchema = loader.loadOnce(*finalSchema).getProto();
       }
     })) {
+      // Schema validation threw an exception.
+
       // Don't try loading this again.
       content->finalSchema = nullptr;
 
