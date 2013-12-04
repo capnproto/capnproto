@@ -26,7 +26,7 @@
 
 #include "rpc.h"
 
-namespace kj { class AsyncIoProvider; }
+namespace kj { class AsyncIoProvider; class LowLevelAsyncIoProvider; }
 
 namespace capnp {
 
@@ -109,6 +109,10 @@ public:
   // Get the underlying AsyncIoProvider set up by the RPC system.  This is useful if you want
   // to do some non-RPC I/O in asynchronous fashion.
 
+  kj::LowLevelAsyncIoProvider& getLowLevelIoProvider();
+  // Get the underlying LowLevelAsyncIoProvider set up by the RPC system.  This is useful if you
+  // want to do some non-RPC I/O in asynchronous fashion.
+
 private:
   struct Impl;
   kj::Own<Impl> impl;
@@ -158,6 +162,10 @@ public:
   kj::AsyncIoProvider& getIoProvider();
   // Get the underlying AsyncIoProvider set up by the RPC system.  This is useful if you want
   // to do some non-RPC I/O in asynchronous fashion.
+
+  kj::LowLevelAsyncIoProvider& getLowLevelIoProvider();
+  // Get the underlying LowLevelAsyncIoProvider set up by the RPC system.  This is useful if you
+  // want to do some non-RPC I/O in asynchronous fashion.
 
 private:
   struct Impl;

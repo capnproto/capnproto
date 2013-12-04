@@ -30,8 +30,8 @@ namespace kj {
 namespace {
 
 TEST(AsyncIo, SimpleNetwork) {
-  auto ioProvider = setupIoEventLoop();
-  auto& network = ioProvider->getNetwork();
+  auto ioContext = setupAsyncIo();
+  auto& network = ioContext.provider->getNetwork();
 
   Own<ConnectionReceiver> listener;
   Own<AsyncIoStream> server;
@@ -76,8 +76,8 @@ String tryParseRemote(Network& network, StringPtr text, uint portHint = 0) {
 }
 
 TEST(AsyncIo, AddressParsing) {
-  auto ioProvider = setupIoEventLoop();
-  auto& network = ioProvider->getNetwork();
+  auto ioContext = setupAsyncIo();
+  auto& network = ioContext.provider->getNetwork();
 
   EXPECT_EQ("*:0", tryParseLocal(network, "*"));
   EXPECT_EQ("*:123", tryParseLocal(network, "123"));
@@ -92,9 +92,9 @@ TEST(AsyncIo, AddressParsing) {
 }
 
 TEST(AsyncIo, OneWayPipe) {
-  auto ioProvider = setupIoEventLoop();
+  auto ioContext = setupAsyncIo();
 
-  auto pipe = ioProvider->newOneWayPipe();
+  auto pipe = ioContext.provider->newOneWayPipe();
   char receiveBuffer[4];
 
   pipe.out->write("foo", 3).daemonize([](kj::Exception&& exception) {
@@ -110,9 +110,9 @@ TEST(AsyncIo, OneWayPipe) {
 }
 
 TEST(AsyncIo, TwoWayPipe) {
-  auto ioProvider = setupIoEventLoop();
+  auto ioContext = setupAsyncIo();
 
-  auto pipe = ioProvider->newTwoWayPipe();
+  auto pipe = ioContext.provider->newTwoWayPipe();
   char receiveBuffer1[4];
   char receiveBuffer2[4];
 
@@ -137,9 +137,10 @@ TEST(AsyncIo, TwoWayPipe) {
 }
 
 TEST(AsyncIo, PipeThread) {
-  auto ioProvider = setupIoEventLoop();
+  auto ioContext = setupAsyncIo();
 
-  auto stream = ioProvider->newPipeThread([](AsyncIoProvider& ioProvider, AsyncIoStream& stream) {
+  auto pipeThread = ioContext.provider->newPipeThread(
+      [](AsyncIoProvider& ioProvider, AsyncIoStream& stream) {
     char buf[4];
     stream.write("foo", 3).wait();
     EXPECT_EQ(3u, stream.tryRead(buf, 3, 4).wait());
@@ -150,17 +151,18 @@ TEST(AsyncIo, PipeThread) {
   });
 
   char buf[4];
-  stream->write("bar", 3).wait();
-  EXPECT_EQ(3u, stream->tryRead(buf, 3, 4).wait());
+  pipeThread.pipe->write("bar", 3).wait();
+  EXPECT_EQ(3u, pipeThread.pipe->tryRead(buf, 3, 4).wait());
   EXPECT_EQ("foo", heapString(buf, 3));
 }
 
 TEST(AsyncIo, PipeThreadDisconnects) {
   // Like above, but in this case we expect the main thread to detect the pipe thread disconnecting.
 
-  auto ioProvider = setupIoEventLoop();
+  auto ioContext = setupAsyncIo();
 
-  auto stream = ioProvider->newPipeThread([](AsyncIoProvider& ioProvider, AsyncIoStream& stream) {
+  auto pipeThread = ioContext.provider->newPipeThread(
+      [](AsyncIoProvider& ioProvider, AsyncIoStream& stream) {
     char buf[4];
     stream.write("foo", 3).wait();
     EXPECT_EQ(3u, stream.tryRead(buf, 3, 4).wait());
@@ -168,13 +170,13 @@ TEST(AsyncIo, PipeThreadDisconnects) {
   });
 
   char buf[4];
-  EXPECT_EQ(3u, stream->tryRead(buf, 3, 4).wait());
+  EXPECT_EQ(3u, pipeThread.pipe->tryRead(buf, 3, 4).wait());
   EXPECT_EQ("foo", heapString(buf, 3));
 
-  stream->write("bar", 3).wait();
+  pipeThread.pipe->write("bar", 3).wait();
 
   // Expect disconnect.
-  EXPECT_EQ(0, stream->tryRead(buf, 1, 1).wait());
+  EXPECT_EQ(0, pipeThread.pipe->tryRead(buf, 1, 1).wait());
 }
 
 }  // namespace

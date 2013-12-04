@@ -59,7 +59,7 @@ private:
   int& callCount;
 };
 
-kj::Own<kj::AsyncIoStream> runServer(kj::AsyncIoProvider& ioProvider, int& callCount) {
+kj::AsyncIoProvider::PipeThread runServer(kj::AsyncIoProvider& ioProvider, int& callCount) {
   return ioProvider.newPipeThread(
       [&callCount](kj::AsyncIoProvider& ioProvider, kj::AsyncIoStream& stream) {
     TwoPartyVatNetwork network(stream, rpc::twoparty::Side::SERVER);
@@ -86,11 +86,11 @@ Capability::Client getPersistentCap(RpcSystem<rpc::twoparty::SturdyRefHostId>& c
 }
 
 TEST(TwoPartyNetwork, Basic) {
-  auto ioProvider = kj::setupIoEventLoop();
+  auto ioContext = kj::setupAsyncIo();
   int callCount = 0;
 
-  auto stream = runServer(*ioProvider, callCount);
-  TwoPartyVatNetwork network(*stream, rpc::twoparty::Side::CLIENT);
+  auto serverThread = runServer(*ioContext.provider, callCount);
+  TwoPartyVatNetwork network(*serverThread.pipe, rpc::twoparty::Side::CLIENT);
   auto rpcClient = makeRpcClient(network);
 
   // Request the particular capability from the server.
@@ -131,12 +131,12 @@ TEST(TwoPartyNetwork, Basic) {
 }
 
 TEST(TwoPartyNetwork, Pipelining) {
-  auto ioProvider = kj::setupIoEventLoop();
+  auto ioContext = kj::setupAsyncIo();
   int callCount = 0;
   int reverseCallCount = 0;  // Calls back from server to client.
 
-  auto stream = runServer(*ioProvider, callCount);
-  TwoPartyVatNetwork network(*stream, rpc::twoparty::Side::CLIENT);
+  auto serverThread = runServer(*ioContext.provider, callCount);
+  TwoPartyVatNetwork network(*serverThread.pipe, rpc::twoparty::Side::CLIENT);
   auto rpcClient = makeRpcClient(network);
 
   bool disconnected = false;
@@ -184,7 +184,7 @@ TEST(TwoPartyNetwork, Pipelining) {
     EXPECT_FALSE(drained);
 
     // What if we disconnect?
-    stream->shutdownWrite();
+    serverThread.pipe->shutdownWrite();
 
     // The other side should also disconnect.
     disconnectPromise.wait();

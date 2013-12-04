@@ -34,7 +34,7 @@ static __thread EzRpcContext* threadEzContext = nullptr;
 
 class EzRpcContext: public kj::Refcounted {
 public:
-  EzRpcContext(): ioProvider(kj::setupIoEventLoop()) {
+  EzRpcContext(): ioContext(kj::setupAsyncIo()) {
     threadEzContext = this;
   }
 
@@ -47,7 +47,11 @@ public:
   }
 
   kj::AsyncIoProvider& getIoProvider() {
-    return *ioProvider;
+    return *ioContext.provider;
+  }
+
+  kj::LowLevelAsyncIoProvider& getLowLevelIoProvider() {
+    return *ioContext.lowLevelProvider;
   }
 
   static kj::Own<EzRpcContext> getThreadLocal() {
@@ -60,7 +64,7 @@ public:
   }
 
 private:
-  kj::Own<kj::AsyncIoProvider> ioProvider;
+  kj::AsyncIoContext ioContext;
 };
 
 // =======================================================================================
@@ -116,7 +120,8 @@ struct EzRpcClient::Impl {
   Impl(int socketFd)
       : context(EzRpcContext::getThreadLocal()),
         setupPromise(kj::Promise<void>(kj::READY_NOW).fork()),
-        clientContext(kj::heap<ClientContext>(context->getIoProvider().wrapSocketFd(socketFd))) {}
+        clientContext(kj::heap<ClientContext>(
+            context->getLowLevelIoProvider().wrapSocketFd(socketFd))) {}
 };
 
 EzRpcClient::EzRpcClient(kj::StringPtr serverAddress, uint defaultPort)
@@ -143,6 +148,10 @@ Capability::Client EzRpcClient::importCap(kj::StringPtr name) {
 
 kj::AsyncIoProvider& EzRpcClient::getIoProvider() {
   return impl->context->getIoProvider();
+}
+
+kj::LowLevelAsyncIoProvider& EzRpcClient::getLowLevelIoProvider() {
+  return impl->context->getLowLevelIoProvider();
 }
 
 // =======================================================================================
@@ -209,7 +218,7 @@ struct EzRpcServer::Impl final: public SturdyRefRestorer<Text>, public kj::TaskS
       : context(EzRpcContext::getThreadLocal()),
         portPromise(kj::Promise<uint>(port).fork()),
         tasks(*this) {
-    acceptLoop(context->getIoProvider().wrapListenSocketFd(socketFd));
+    acceptLoop(context->getLowLevelIoProvider().wrapListenSocketFd(socketFd));
   }
 
   void acceptLoop(kj::Own<kj::ConnectionReceiver>&& listener) {
@@ -266,6 +275,10 @@ kj::Promise<uint> EzRpcServer::getPort() {
 
 kj::AsyncIoProvider& EzRpcServer::getIoProvider() {
   return impl->context->getIoProvider();
+}
+
+kj::LowLevelAsyncIoProvider& EzRpcServer::getLowLevelIoProvider() {
+  return impl->context->getLowLevelIoProvider();
 }
 
 }  // namespace capnp
