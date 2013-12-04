@@ -567,6 +567,9 @@ private:
   bool running = false;
   // True while looping -- wait() is then not allowed.
 
+  bool lastRunnableState = false;
+  // What did we last pass to port.setRunnable()?
+
   _::Event* head = nullptr;
   _::Event** tail = &head;
   _::Event** depthFirstInsertPoint = &head;
@@ -574,6 +577,7 @@ private:
   Own<_::TaskSetImpl> daemons;
 
   bool turn();
+  void setRunnable(bool runnable);
 
   friend void _::daemonize(kj::Promise<void>&& promise);
   friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result);

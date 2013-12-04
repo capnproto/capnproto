@@ -245,6 +245,8 @@ void EventLoop::run(uint maxTurnCount) {
       break;
     }
   }
+
+  setRunnable(head != nullptr);
 }
 
 bool EventLoop::turn() {
@@ -279,6 +281,13 @@ bool EventLoop::turn() {
   }
 }
 
+void EventLoop::setRunnable(bool runnable) {
+  if (runnable != lastRunnableState) {
+    port.setRunnable(runnable);
+    lastRunnableState = runnable;
+  }
+}
+
 namespace _ {  // private
 
 void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result) {
@@ -297,6 +306,8 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result) {
       loop.port.wait();
     }
   }
+
+  loop.setRunnable(loop.head != nullptr);
 
   node->get(result);
   KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
@@ -357,6 +368,8 @@ void Event::armDepthFirst() {
     if (loop.tail == prev) {
       loop.tail = &next;
     }
+
+    loop.setRunnable(true);
   }
 }
 
@@ -374,6 +387,8 @@ void Event::armBreadthFirst() {
     }
 
     loop.tail = &next;
+
+    loop.setRunnable(true);
   }
 }
 

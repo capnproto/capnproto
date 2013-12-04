@@ -506,5 +506,62 @@ TEST(Async, Daemonize) {
   EXPECT_TRUE(ran3);
 }
 
+class DummyEventPort: public EventPort {
+public:
+  bool runnable = false;
+  int callCount = 0;
+
+  void wait() override { KJ_FAIL_ASSERT("Nothing to wait for."); }
+  void poll() override {}
+  void setRunnable(bool runnable) {
+    this->runnable = runnable;
+    ++callCount;
+  }
+};
+
+TEST(Async, SetRunnable) {
+  DummyEventPort port;
+  EventLoop loop(port);
+
+  EXPECT_FALSE(port.runnable);
+  EXPECT_EQ(0, port.callCount);
+
+  {
+    auto promise = evalLater([]() {});
+    promise.eagerlyEvaluate();
+
+    EXPECT_TRUE(port.runnable);
+    loop.run(1);
+    EXPECT_FALSE(port.runnable);
+    EXPECT_EQ(2, port.callCount);
+
+    promise.wait();
+    EXPECT_FALSE(port.runnable);
+    EXPECT_EQ(4, port.callCount);
+  }
+
+  {
+    auto paf = newPromiseAndFulfiller<void>();
+    auto promise = paf.promise.then([]() {});
+    promise.eagerlyEvaluate();
+    EXPECT_FALSE(port.runnable);
+
+    auto promise2 = evalLater([]() {});
+    promise2.eagerlyEvaluate();
+    paf.fulfiller->fulfill();
+
+    EXPECT_TRUE(port.runnable);
+    loop.run(1);
+    EXPECT_TRUE(port.runnable);
+    loop.run(10);
+    EXPECT_FALSE(port.runnable);
+
+    promise.wait();
+    EXPECT_FALSE(port.runnable);
+
+    EXPECT_EQ(8, port.callCount);
+  }
+}
+
 }  // namespace
 }  // namespace kj
