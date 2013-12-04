@@ -512,25 +512,45 @@ public:
   Promise<Own<AsyncIoStream>> accept() override {
     int newFd;
 
+  retry:
 #if __linux__
-    KJ_NONBLOCKING_SYSCALL(newFd = ::accept4(fd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC)) {
-      // error
-      return nullptr;
-    }
+    newFd = ::accept4(fd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
 #else
-    KJ_NONBLOCKING_SYSCALL(newFd = ::accept(fd, nullptr, nullptr)) {
-      // error
-      return nullptr;
-    }
+    newFd = ::accept(fd, nullptr, nullptr);
 #endif
 
-    if (newFd < 0) {
-      // Gotta wait.
-      return eventPort.onFdEvent(fd, POLLIN).then([this](short) {
-        return accept();
-      });
-    } else {
+    if (newFd >= 0) {
       return Own<AsyncIoStream>(heap<Socket>(eventPort, newFd));
+    } else {
+      int error = errno;
+
+      switch (error) {
+        case EAGAIN:
+#if EAGAIN != EWOULDBLOCK
+        case EWOULDBLOCK:
+#endif
+          // Not ready yet.
+          return eventPort.onFdEvent(fd, POLLIN).then([this](short) {
+            return accept();
+          });
+
+        case EINTR:
+        case ENETDOWN:
+        case EPROTO:
+        case ENOPROTOOPT:
+        case EHOSTDOWN:
+        case ENONET:
+        case EHOSTUNREACH:
+        case EOPNOTSUPP:
+        case ENETUNREACH:
+        case ECONNABORTED:
+          // The incoming connection is dead-on-arrival.  Just ignore it.
+          goto retry;
+
+        default:
+          KJ_FAIL_SYSCALL("accept", error);
+      }
+
     }
   }
 
@@ -698,6 +718,10 @@ public:
   Own<AsyncIoStream> wrapSocketFd(int fd) override {
     setNonblocking(fd);
     return heap<AsyncStreamFd>(eventPort, fd, fd);
+  }
+  Own<ConnectionReceiver> wrapListenSocketFd(int fd) override {
+    setNonblocking(fd);
+    return heap<FdConnectionReceiver>(eventPort, fd);
   }
 
 private:

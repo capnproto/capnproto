@@ -217,6 +217,14 @@ public:
   //
   // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
 
+  virtual Own<ConnectionReceiver> wrapListenSocketFd(int fd) = 0;
+  // Create an AsyncIoStream wrapping a listen socket file descriptor.  This socket should already
+  // have had `bind()` and `listen()` called on it, so it's ready for `accept()`.
+  //
+  // Does not take ownership of the descriptor.
+  //
+  // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
+
   // ---------------------------------------------------------------------------
   // Windows-only methods
 
