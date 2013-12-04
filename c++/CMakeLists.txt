@@ -390,9 +390,6 @@ foreach(filename ${test_capnpc_inputs})
   )
 endforeach()
 
-
-add_custom_target(ttt DEPENDS "src/capnp/test.capnp.c++")
-
 # BUILT_SOURCES = $(test_capnpc_outputs)
 
 if(0)
