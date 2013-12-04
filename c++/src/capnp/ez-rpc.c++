@@ -102,8 +102,8 @@ struct EzRpcClient::Impl {
   Impl(kj::StringPtr serverAddress, uint defaultPort)
       : context(EzRpcContext::getThreadLocal()),
         setupPromise(context->getIoProvider().getNetwork()
-            .parseRemoteAddress(serverAddress, defaultPort)
-            .then([](kj::Own<kj::RemoteAddress>&& addr) {
+            .parseAddress(serverAddress, defaultPort)
+            .then([](kj::Own<kj::NetworkAddress>&& addr) {
               return addr->connect();
             }).then([this](kj::Own<kj::AsyncIoStream>&& stream) {
               clientContext = kj::heap<ClientContext>(kj::mv(stream));
@@ -112,7 +112,7 @@ struct EzRpcClient::Impl {
   Impl(struct sockaddr* serverAddress, uint addrSize)
       : context(EzRpcContext::getThreadLocal()),
         setupPromise(context->getIoProvider().getNetwork()
-            .getRemoteSockaddr(serverAddress, addrSize)->connect()
+            .getSockaddr(serverAddress, addrSize)->connect()
             .then([this](kj::Own<kj::AsyncIoStream>&& stream) {
               clientContext = kj::heap<ClientContext>(kj::mv(stream));
             }).fork()) {}
@@ -196,10 +196,10 @@ struct EzRpcServer::Impl final: public SturdyRefRestorer<Text>, public kj::TaskS
     auto paf = kj::newPromiseAndFulfiller<uint>();
     portPromise = paf.promise.fork();
 
-    tasks.add(context->getIoProvider().getNetwork().parseLocalAddress(bindAddress, defaultPort)
+    tasks.add(context->getIoProvider().getNetwork().parseAddress(bindAddress, defaultPort)
         .then(kj::mvCapture(paf.fulfiller,
           [this](kj::Own<kj::PromiseFulfiller<uint>>&& portFulfiller,
-                 kj::Own<kj::LocalAddress>&& addr) {
+                 kj::Own<kj::NetworkAddress>&& addr) {
       auto listener = addr->listen();
       portFulfiller->fulfill(listener->getPort());
       acceptLoop(kj::mv(listener));
@@ -209,7 +209,7 @@ struct EzRpcServer::Impl final: public SturdyRefRestorer<Text>, public kj::TaskS
   Impl(struct sockaddr* bindAddress, uint addrSize)
       : context(EzRpcContext::getThreadLocal()), portPromise(nullptr), tasks(*this) {
     auto listener = context->getIoProvider().getNetwork()
-        .getLocalSockaddr(bindAddress, addrSize)->listen();
+        .getSockaddr(bindAddress, addrSize)->listen();
     portPromise = kj::Promise<uint>(listener->getPort()).fork();
     acceptLoop(kj::mv(listener));
   }

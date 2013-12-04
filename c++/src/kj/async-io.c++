@@ -25,6 +25,7 @@
 #include "async-unix.h"
 #include "debug.h"
 #include "thread.h"
+#include "io.h"
 #include <unistd.h>
 #include <sys/uio.h>
 #include <errno.h>
@@ -36,6 +37,8 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
+#include <netdb.h>
+#include <set>
 
 #ifndef POLLRDHUP
 // Linux-only optimization.  If not available, define to 0, as this will make it a no-op.
@@ -61,6 +64,14 @@ void setCloseOnExec(int fd) {
     KJ_SYSCALL(fcntl(fd, F_SETFD, flags | FD_CLOEXEC));
   }
 }
+
+static constexpr uint NEW_FD_FLAGS =
+#if __linux__
+    LowLevelAsyncIoProvider::ALREADY_CLOEXEC || LowLevelAsyncIoProvider::ALREADY_NONBLOCK ||
+#endif
+    LowLevelAsyncIoProvider::TAKE_OWNERSHIP;
+// We always try to open FDs with CLOEXEC and NONBLOCK already set on Linux, but on other platforms
+// this is not possible.
 
 class OwnedFileDescriptor {
 public:
@@ -261,6 +272,18 @@ public:
     memcpy(&addr.generic, sockaddr, len);
   }
 
+  bool operator<(const SocketAddress& other) const {
+    // So we can use std::set<SocketAddress>...  see DNS lookup code.
+
+    if (wildcard < other.wildcard) return true;
+    if (wildcard > other.wildcard) return false;
+
+    if (addrlen < other.addrlen) return true;
+    if (addrlen > other.addrlen) return false;
+
+    return memcmp(&addr.generic, &other.addr.generic, addrlen) < 0;
+  }
+
   int socket(int type) const {
     int result;
 #if __linux__
@@ -340,7 +363,14 @@ public:
     }
   }
 
-  static SocketAddress parse(StringPtr str, uint portHint, bool requirePort = true) {
+  static Promise<Array<SocketAddress>> lookupHost(
+      LowLevelAsyncIoProvider& lowLevel, kj::String host, kj::String service, uint portHint);
+  // Perform a DNS lookup.
+
+  static Promise<Array<SocketAddress>> parse(
+      LowLevelAsyncIoProvider& lowLevel, StringPtr str, uint portHint) {
+    // TODO(someday):  Allow commas in `str`.
+
     SocketAddress result;
 
     if (str.startsWith("unix:")) {
@@ -350,7 +380,9 @@ public:
       result.addr.unixDomain.sun_family = AF_UNIX;
       strcpy(result.addr.unixDomain.sun_path, path.cStr());
       result.addrlen = offsetof(struct sockaddr_un, sun_path) + path.size() + 1;
-      return result;
+      auto array = kj::heapArrayBuilder<SocketAddress>(1);
+      array.add(result);
+      return array.finish();
     }
 
     // Try to separate the address and port.
@@ -399,14 +431,23 @@ public:
       char* endptr;
       port = strtoul(portText->cStr(), &endptr, 0);
       if (portText->size() == 0 || *endptr != '\0') {
-        KJ_FAIL_REQUIRE("Invalid IP port number.", *portText);
+        // Not a number.  Maybe it's a service name.  Fall back to DNS.
+        return lookupHost(lowLevel, kj::heapString(addrPart), kj::heapString(*portText), portHint);
       }
       KJ_REQUIRE(port < 65536, "Port number too large.");
     } else {
-      if (requirePort) {
-        KJ_REQUIRE(portHint != 0, "You must specify a port with this address.", str);
-      }
       port = portHint;
+    }
+
+    // Check for wildcard.
+    if (addrPart.size() == 1 && addrPart[0] == '*') {
+      result.wildcard = true;
+      result.addrlen = sizeof(addr.inet6);
+      result.addr.inet6.sin6_family = AF_INET6;
+      result.addr.inet6.sin6_port = htons(port);
+      auto array = kj::heapArrayBuilder<SocketAddress>(1);
+      array.add(result);
+      return array.finish();
     }
 
     void* addrTarget;
@@ -430,47 +471,17 @@ public:
 
     // OK, parse it!
     switch (inet_pton(af, buffer, addrTarget)) {
-      case 1:
+      case 1: {
         // success.
-        return result;
+        auto array = kj::heapArrayBuilder<SocketAddress>(1);
+        array.add(result);
+        return array.finish();
+      }
       case 0:
-        KJ_FAIL_REQUIRE("Invalid IP address.", addrPart);
+        // It's apparently not a simple address...  fall back to DNS.
+        return lookupHost(lowLevel, kj::heapString(addrPart), nullptr, port);
       default:
         KJ_FAIL_SYSCALL("inet_pton", errno, af, addrPart);
-    }
-  }
-
-  static SocketAddress parseLocal(StringPtr str, uint portHint) {
-    // If the address contains no colons, or only a leading colon, and no periods, then it is a
-    // port only.  If is empty, then it is a total wildcard.  Otherwise, it is a full address
-    // specified the same as any remote address.
-    if (str == "*" ||
-        (str.findLast(':').orDefault(0) <= 1 &&
-         str.findFirst('.') == nullptr)) {
-      unsigned long port;
-      if (str == "*") {
-        port = portHint;
-      } else {
-        if (str[0] == ':') {
-          str = str.slice(1);
-        }
-        char* endptr;
-        port = strtoul(str.cStr(), &endptr, 0);
-        if (str.size() == 0 || *endptr != '\0') {
-          KJ_FAIL_REQUIRE("Invalid IP port number.", str);
-        }
-        KJ_REQUIRE(port < 65536, "Port number too large.");
-      }
-
-      // Prepare to bind to ALL IP interfaces.  SocketAddress is zero'd by default.
-      SocketAddress result;
-      result.wildcard = true;
-      result.addrlen = sizeof(addr.inet6);
-      result.addr.inet6.sin6_family = AF_INET6;
-      result.addr.inet6.sin6_port = htons(port);
-      return result;
-    } else {
-      return parse(str, portHint, false);
     }
   }
 
@@ -495,15 +506,155 @@ private:
     struct sockaddr_un unixDomain;
     struct sockaddr_storage storage;
   } addr;
+
+  struct LookupParams;
+  class LookupReader;
 };
 
-// =======================================================================================
+class SocketAddress::LookupReader {
+  // Reads SocketAddresses off of a pipe coming from another thread that is performing
+  // getaddrinfo.
 
-static constexpr uint NEW_FD_FLAGS =
+public:
+  LookupReader(kj::Own<Thread>&& thread, kj::Own<AsyncInputStream>&& input)
+      : thread(kj::mv(thread)), input(kj::mv(input)) {}
+
+  ~LookupReader() {
+    if (thread) thread->detach();
+  }
+
+  Promise<Array<SocketAddress>> read() {
+    return input->tryRead(&current, sizeof(current), sizeof(current)).then(
+        [this](size_t n) -> Promise<Array<SocketAddress>> {
+      if (n < sizeof(current)) {
+        thread = nullptr;
+        // getaddrinfo()'s docs seem to say it will never return an empty list, but let's check
+        // anyway.
+        KJ_REQUIRE(addresses.size() > 0, "DNS lookup returned no addresses.") { break; }
+        return addresses.releaseAsArray();
+      } else {
+        // getaddrinfo() can return multiple copies of the same address for several reasons.
+        // A major one is that we don't give it a socket type (SOCK_STREAM vs. SOCK_DGRAM), so
+        // it may return two copies of the same address, one for each type, unless it explicitly
+        // knows that the service name given is specific to one type.  But we can't tell it a type,
+        // because we don't actually know which one the user wants, and if we specify SOCK_STREAM
+        // while the user specified a UDP service name then they'll get a resolution error which
+        // is lame.  (At least, I think that's how it works.)
+        //
+        // So we instead resort to de-duping results.
+        if (alreadySeen.insert(current).second) {
+          addresses.add(current);
+        }
+        return read();
+      }
+    });
+  }
+
+private:
+  kj::Own<Thread> thread;
+  kj::Own<AsyncInputStream> input;
+  SocketAddress current;
+  kj::Vector<SocketAddress> addresses;
+  std::set<SocketAddress> alreadySeen;
+};
+
+struct SocketAddress::LookupParams {
+  kj::String host;
+  kj::String service;
+};
+
+Promise<Array<SocketAddress>> SocketAddress::lookupHost(
+    LowLevelAsyncIoProvider& lowLevel, kj::String host, kj::String service, uint portHint) {
+  // This shitty function spawns a thread to run getaddrinfo().  Unfortunately, getaddrinfo() is
+  // the only cross-platform DNS API and it is blocking.
+  //
+  // TODO(perf):  Use a thread pool?  Maybe kj::Thread should use a thread pool automatically?
+  //   Maybe use the various platform-specific asynchronous DNS libraries?  Please do not implement
+  //   a custom DNS resolver...
+
+  int fds[2];
 #if __linux__
-    LowLevelAsyncIoProvider::ALREADY_CLOEXEC || LowLevelAsyncIoProvider::ALREADY_NONBLOCK ||
+  KJ_SYSCALL(pipe2(fds, O_NONBLOCK | O_CLOEXEC));
+#else
+  KJ_SYSCALL(pipe(fds));
 #endif
-    LowLevelAsyncIoProvider::TAKE_OWNERSHIP;
+
+  auto input = lowLevel.wrapInputFd(fds[0], NEW_FD_FLAGS);
+
+  int outFd = fds[1];
+
+  LookupParams params = { kj::mv(host), kj::mv(service) };
+
+  auto thread = heap<Thread>(kj::mvCapture(params, [outFd,portHint](LookupParams&& params) {
+    FdOutputStream output((AutoCloseFd(outFd)));
+
+    struct addrinfo* list;
+    int status = getaddrinfo(
+        params.host == "*" ? nullptr : params.host.cStr(),
+        params.service == nullptr ? nullptr : params.service.cStr(),
+        nullptr, &list);
+    if (status == 0) {
+      KJ_DEFER(freeaddrinfo(list));
+
+      struct addrinfo* cur = list;
+      while (cur != nullptr) {
+        if (params.service == nullptr) {
+          switch (cur->ai_addr->sa_family) {
+            case AF_INET:
+              ((struct sockaddr_in*)cur->ai_addr)->sin_port = htons(portHint);
+              break;
+            case AF_INET6:
+              ((struct sockaddr_in6*)cur->ai_addr)->sin6_port = htons(portHint);
+              break;
+            default:
+              break;
+          }
+        }
+
+        SocketAddress addr;
+        if (params.host == "*") {
+          // Set up a wildcard SocketAddress.  Only use the port number returned by getaddrinfo().
+          addr.wildcard = true;
+          addr.addrlen = sizeof(addr.addr.inet6);
+          addr.addr.inet6.sin6_family = AF_INET6;
+          switch (cur->ai_addr->sa_family) {
+            case AF_INET:
+              addr.addr.inet6.sin6_port = ((struct sockaddr_in*)cur->ai_addr)->sin_port;
+              break;
+            case AF_INET6:
+              addr.addr.inet6.sin6_port = ((struct sockaddr_in6*)cur->ai_addr)->sin6_port;
+              break;
+            default:
+              addr.addr.inet6.sin6_port = portHint;
+              break;
+          }
+        } else {
+          addr.addrlen = cur->ai_addrlen;
+          memcpy(&addr.addr.generic, cur->ai_addr, cur->ai_addrlen);
+        }
+        static_assert(__has_trivial_copy(SocketAddress), "Can't write() SocketAddress...");
+        output.write(&addr, sizeof(addr));
+        cur = cur->ai_next;
+      }
+    } else if (status == EAI_SYSTEM) {
+      KJ_FAIL_SYSCALL("getaddrinfo", errno, params.host, params.service) {
+        return;
+      }
+    } else {
+      KJ_FAIL_REQUIRE("DNS lookup failed.",
+                      params.host, params.service, gai_strerror(status)) {
+        return;
+      }
+    }
+  }));
+
+  auto reader = heap<LookupReader>(kj::mv(thread), kj::mv(input));
+  auto result = reader->read();
+  result.attach(kj::mv(reader));
+  return kj::mv(result);
+}
+
+// =======================================================================================
 
 class FdConnectionReceiver final: public ConnectionReceiver, public OwnedFileDescriptor {
 public:
@@ -600,13 +751,20 @@ private:
 
 // =======================================================================================
 
-class LocalSocketAddress final: public LocalAddress {
+class NetworkAddressImpl final: public NetworkAddress {
 public:
-  LocalSocketAddress(LowLevelAsyncIoProvider& lowLevel, SocketAddress addr)
-      : lowLevel(lowLevel), addr(addr) {}
+  NetworkAddressImpl(LowLevelAsyncIoProvider& lowLevel, Array<SocketAddress> addrs)
+      : lowLevel(lowLevel), addrs(kj::mv(addrs)) {}
+
+  Promise<Own<AsyncIoStream>> connect() override {
+    return connectImpl(0);
+  }
 
   Own<ConnectionReceiver> listen() override {
-    int fd = addr.socket(SOCK_STREAM);
+    KJ_ASSERT(addrs.size() == 1,
+              "Sorry, unimplemented: Binding listen socket to multiple addresses.");
+
+    int fd = addrs[0].socket(SOCK_STREAM);
 
     {
       KJ_ON_SCOPE_FAILURE(close(fd));
@@ -616,7 +774,7 @@ public:
       int optval = 1;
       KJ_SYSCALL(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)));
 
-      addr.bind(fd);
+      addrs[0].bind(fd);
 
       // TODO(someday):  Let queue size be specified explicitly in string addresses.
       KJ_SYSCALL(::listen(fd, SOMAXCONN));
@@ -626,63 +784,67 @@ public:
   }
 
   String toString() override {
-    return addr.toString();
+    return strArray(KJ_MAP(addr, addrs) { return addr.toString(); }, ",");
   }
 
 private:
   LowLevelAsyncIoProvider& lowLevel;
-  SocketAddress addr;
-};
+  Array<SocketAddress> addrs;
 
-class RemoteSocketAddress final: public RemoteAddress {
-public:
-  RemoteSocketAddress(LowLevelAsyncIoProvider& lowLevel, SocketAddress addr)
-      : lowLevel(lowLevel), addr(addr) {}
+  Promise<Own<AsyncIoStream>> connectImpl(uint index) {
+    KJ_ASSERT(index < addrs.size());
 
-  Promise<Own<AsyncIoStream>> connect() override {
-    int fd = addr.socket(SOCK_STREAM);
+    int fd = addrs[index].socket(SOCK_STREAM);
 
-    {
-      KJ_ON_SCOPE_FAILURE(close(fd));
-      addr.connect(fd);
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      addrs[index].connect(fd);
+    })) {
+      // Connect failed.
+      close(fd);
+      if (index + 1 < addrs.size()) {
+        // Try the next address instead.
+        return connectImpl(index + 1);
+      } else {
+        // No more addresses to try, so propagate the exception.
+        return kj::mv(*exception);
+      }
     }
 
-    return lowLevel.wrapConnectingSocketFd(fd, NEW_FD_FLAGS);
+    return lowLevel.wrapConnectingSocketFd(fd, NEW_FD_FLAGS).then(
+        [](Own<AsyncIoStream>&& stream) -> Promise<Own<AsyncIoStream>> {
+      // Success, pass along.
+      return kj::mv(stream);
+    }, [this,index](Exception&& exception) -> Promise<Own<AsyncIoStream>> {
+      // Connect failed.
+      if (index + 1 < addrs.size()) {
+        // Try the next address instead.
+        return connectImpl(index + 1);
+      } else {
+        // No more addresses to try, so propagate the exception.
+        return kj::mv(exception);
+      }
+    });
   }
-
-  String toString() override {
-    return addr.toString();
-  }
-
-private:
-  LowLevelAsyncIoProvider& lowLevel;
-  SocketAddress addr;
 };
 
 class SocketNetwork final: public Network {
 public:
   explicit SocketNetwork(LowLevelAsyncIoProvider& lowLevel): lowLevel(lowLevel) {}
 
-  Promise<Own<LocalAddress>> parseLocalAddress(StringPtr addr, uint portHint = 0) override {
+  Promise<Own<NetworkAddress>> parseAddress(StringPtr addr, uint portHint = 0) override {
     auto& lowLevelCopy = lowLevel;
     return evalLater(mvCapture(heapString(addr),
-        [&lowLevelCopy,portHint](String&& addr) -> Own<LocalAddress> {
-          return heap<LocalSocketAddress>(lowLevelCopy, SocketAddress::parseLocal(addr, portHint));
-        }));
-  }
-  Promise<Own<RemoteAddress>> parseRemoteAddress(StringPtr addr, uint portHint = 0) override {
-    auto& lowLevelCopy = lowLevel;
-    return evalLater(mvCapture(heapString(addr),
-        [&lowLevelCopy,portHint](String&& addr) -> Own<RemoteAddress> {
-          return heap<RemoteSocketAddress>(lowLevelCopy, SocketAddress::parse(addr, portHint));
-        }));
+        [&lowLevelCopy,portHint](String&& addr) {
+      return SocketAddress::parse(lowLevelCopy, addr, portHint);
+    })).then([&lowLevelCopy](Array<SocketAddress> addresses) -> Own<NetworkAddress> {
+      return heap<NetworkAddressImpl>(lowLevelCopy, kj::mv(addresses));
+    });
   }
 
-  Own<LocalAddress> getLocalSockaddr(const void* sockaddr, uint len) override {
-    return Own<LocalAddress>(heap<LocalSocketAddress>(lowLevel, SocketAddress(sockaddr, len)));
-  }
-  Own<RemoteAddress> getRemoteSockaddr(const void* sockaddr, uint len) override {
-    return Own<RemoteAddress>(heap<RemoteSocketAddress>(lowLevel, SocketAddress(sockaddr, len)));
+  Own<NetworkAddress> getSockaddr(const void* sockaddr, uint len) override {
+    auto array = kj::heapArrayBuilder<SocketAddress>(1);
+    array.add(SocketAddress(sockaddr, len));
+    return Own<NetworkAddress>(heap<NetworkAddressImpl>(lowLevel, array.finish()));
   }
 
 private:

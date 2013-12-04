@@ -42,8 +42,8 @@ TEST(AsyncIo, SimpleNetwork) {
   auto port = newPromiseAndFulfiller<uint>();
 
   port.promise.then([&](uint portnum) {
-    return network.parseRemoteAddress("127.0.0.1", portnum);
-  }).then([&](Own<RemoteAddress>&& result) {
+    return network.parseAddress("localhost", portnum);
+  }).then([&](Own<NetworkAddress>&& result) {
     return result->connect();
   }).then([&](Own<AsyncIoStream>&& result) {
     client = kj::mv(result);
@@ -52,7 +52,7 @@ TEST(AsyncIo, SimpleNetwork) {
     ADD_FAILURE() << kj::str(exception).cStr();
   });
 
-  kj::String result = network.parseLocalAddress("*").then([&](Own<LocalAddress>&& result) {
+  kj::String result = network.parseAddress("*").then([&](Own<NetworkAddress>&& result) {
     listener = result->listen();
     port.fulfiller->fulfill(listener->getPort());
     return listener->accept();
@@ -67,28 +67,32 @@ TEST(AsyncIo, SimpleNetwork) {
   EXPECT_EQ("foo", result);
 }
 
-String tryParseLocal(Network& network, StringPtr text, uint portHint = 0) {
-  return network.parseLocalAddress(text, portHint).wait()->toString();
-}
-
-String tryParseRemote(Network& network, StringPtr text, uint portHint = 0) {
-  return network.parseRemoteAddress(text, portHint).wait()->toString();
+String tryParse(Network& network, StringPtr text, uint portHint = 0) {
+  return network.parseAddress(text, portHint).wait()->toString();
 }
 
 TEST(AsyncIo, AddressParsing) {
   auto ioContext = setupAsyncIo();
   auto& network = ioContext.provider->getNetwork();
 
-  EXPECT_EQ("*:0", tryParseLocal(network, "*"));
-  EXPECT_EQ("*:123", tryParseLocal(network, "123"));
-  EXPECT_EQ("*:123", tryParseLocal(network, ":123"));
-  EXPECT_EQ("[::]:123", tryParseLocal(network, "0::0", 123));
-  EXPECT_EQ("0.0.0.0:0", tryParseLocal(network, "0.0.0.0"));
-  EXPECT_EQ("1.2.3.4:5678", tryParseRemote(network, "1.2.3.4", 5678));
-  EXPECT_EQ("[12ab:cd::34]:321", tryParseRemote(network, "[12ab:cd:0::0:34]:321", 432));
+  EXPECT_EQ("*:0", tryParse(network, "*"));
+  EXPECT_EQ("*:123", tryParse(network, "*:123"));
+  EXPECT_EQ("[::]:123", tryParse(network, "0::0", 123));
+  EXPECT_EQ("0.0.0.0:0", tryParse(network, "0.0.0.0"));
+  EXPECT_EQ("1.2.3.4:5678", tryParse(network, "1.2.3.4", 5678));
+  EXPECT_EQ("[12ab:cd::34]:321", tryParse(network, "[12ab:cd:0::0:34]:321", 432));
 
-  EXPECT_EQ("unix:foo/bar/baz", tryParseLocal(network, "unix:foo/bar/baz"));
-  EXPECT_EQ("unix:foo/bar/baz", tryParseRemote(network, "unix:foo/bar/baz"));
+  EXPECT_EQ("unix:foo/bar/baz", tryParse(network, "unix:foo/bar/baz"));
+
+  // We can parse services by name...
+  EXPECT_EQ("1.2.3.4:80", tryParse(network, "1.2.3.4:http", 5678));
+  EXPECT_EQ("[::]:80", tryParse(network, "[::]:http", 5678));
+  EXPECT_EQ("[12ab:cd::34]:80", tryParse(network, "[12ab:cd::34]:http", 5678));
+  EXPECT_EQ("*:80", tryParse(network, "*:http", 5678));
+
+  // It would be nice to test DNS lookup here but the test would not be very hermetic.  Even
+  // localhost can map to different addresses depending on whether IPv6 is enabled.  We do
+  // connect to "localhost" in a different test, though.
 }
 
 TEST(AsyncIo, OneWayPipe) {

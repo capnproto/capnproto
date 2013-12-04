@@ -30,12 +30,12 @@ namespace _ {
 namespace {
 
 TEST(EzRpc, Basic) {
-  EzRpcServer server("127.0.0.1");
+  EzRpcServer server("localhost");
   int callCount = 0;
   server.exportCap("cap1", kj::heap<TestInterfaceImpl>(callCount));
   server.exportCap("cap2", kj::heap<TestCallOrderImpl>());
 
-  EzRpcClient client("127.0.0.1", server.getPort().wait());
+  EzRpcClient client("localhost", server.getPort().wait());
 
   auto cap = client.importCap<test::TestInterface>("cap1");
   auto request = cap.fooRequest();

@@ -43,10 +43,14 @@ public:
   void sendSignal(int signo);
   // Send a Unix signal to the given thread, using pthread_kill or an equivalent.
 
+  void detach();
+  // Don't join the thread in ~Thread().
+
 private:
   Function<void()> func;
   unsigned long long threadId;  // actually pthread_t
   kj::Maybe<kj::Exception> exception;
+  bool detached = false;
 
   static void* runThread(void* ptr);
 };
