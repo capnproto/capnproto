@@ -49,6 +49,12 @@ static __thread EventLoop* threadLocalEventLoop = nullptr;
 
 #define _kJ_ALREADY_READY reinterpret_cast< ::kj::_::Event*>(1)
 
+EventLoop& currentEventLoop() {
+  EventLoop* loop = threadLocalEventLoop;
+  KJ_REQUIRE(loop != nullptr, "No event loop is running on this thread.");
+  return *loop;
+}
+
 class BoolEvent: public _::Event {
 public:
   bool fired = false;
@@ -172,22 +178,35 @@ public:
 
 LoggingErrorHandler LoggingErrorHandler::instance = LoggingErrorHandler();
 
+class NullEventPort: public EventPort {
+public:
+  void wait() override {
+    KJ_FAIL_REQUIRE("Nothing to wait for; this thread would hang forever.");
+  }
+
+  void poll() override {}
+
+  static NullEventPort instance;
+};
+
+NullEventPort NullEventPort::instance = NullEventPort();
+
 }  // namespace _ (private)
 
 // =======================================================================================
 
-EventLoop& EventLoop::current() {
-  EventLoop* result = threadLocalEventLoop;
-  KJ_REQUIRE(result != nullptr, "No event loop is running on this thread.");
-  return *result;
-}
-
-bool EventLoop::isCurrent() const {
-  return threadLocalEventLoop == this;
-}
+void EventPort::setRunnable(bool runnable) {}
 
 EventLoop::EventLoop()
-    : daemons(kj::heap<_::TaskSetImpl>(_::LoggingErrorHandler::instance)) {
+    : port(_::NullEventPort::instance),
+      daemons(kj::heap<_::TaskSetImpl>(_::LoggingErrorHandler::instance)) {
+  KJ_REQUIRE(threadLocalEventLoop == nullptr, "This thread already has an EventLoop.");
+  threadLocalEventLoop = this;
+}
+
+EventLoop::EventLoop(EventPort& port)
+    : port(port),
+      daemons(kj::heap<_::TaskSetImpl>(_::LoggingErrorHandler::instance)) {
   KJ_REQUIRE(threadLocalEventLoop == nullptr, "This thread already has an EventLoop.");
   threadLocalEventLoop = this;
 }
@@ -220,81 +239,85 @@ EventLoop::~EventLoop() noexcept(false) {
   }
 }
 
-void EventLoop::runForever() {
-  _::ExceptionOr<_::Void> result;
-  waitImpl(kj::heap<NeverReadyPromiseNode>(), result);
-  KJ_UNREACHABLE;
+void EventLoop::run(uint maxTurnCount) {
+  for (uint i = 0; i < maxTurnCount; i++) {
+    if (!turn()) {
+      break;
+    }
+  }
 }
 
-void EventLoop::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result) {
-  KJ_REQUIRE(threadLocalEventLoop == this,
-             "Can only call wait() in the thread that created this EventLoop.");
-  KJ_REQUIRE(!running, "wait() is not allowed from within event callbacks.");
+bool EventLoop::turn() {
+  _::Event* event = head;
+
+  if (event == nullptr) {
+    // No events in the queue.
+    return false;
+  } else {
+    head = event->next;
+    if (head != nullptr) {
+      head->prev = &head;
+    }
+
+    depthFirstInsertPoint = &head;
+    if (tail == &event->next) {
+      tail = &head;
+    }
+
+    event->next = nullptr;
+    event->prev = nullptr;
+
+    Maybe<Own<_::Event>> eventToDestroy;
+    {
+      event->firing = true;
+      KJ_DEFER(event->firing = false);
+      eventToDestroy = event->fire();
+    }
+
+    depthFirstInsertPoint = &head;
+    return true;
+  }
+}
+
+namespace _ {  // private
+
+void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result) {
+  EventLoop& loop = currentEventLoop();
+  KJ_REQUIRE(!loop.running, "wait() is not allowed from within event callbacks.");
 
   BoolEvent doneEvent;
   node->onReady(doneEvent);
 
-  running = true;
-  KJ_DEFER(running = false);
+  loop.running = true;
+  KJ_DEFER(loop.running = false);
 
   while (!doneEvent.fired) {
-    if (head == nullptr) {
+    if (!loop.turn()) {
       // No events in the queue.  Wait for callback.
-      prepareToSleep();
-      if (head != nullptr) {
-        // Whoa, new job was just added.
-        // TODO(now):  Can't happen anymore?
-        wake();
-      }
-      sleep();
-    } else {
-      _::Event* event = head;
-
-      head = event->next;
-      if (head != nullptr) {
-        head->prev = &head;
-      }
-
-      depthFirstInsertPoint = &head;
-      if (tail == &event->next) {
-        tail = &head;
-      }
-
-      event->next = nullptr;
-      event->prev = nullptr;
-
-      Maybe<Own<_::Event>> eventToDestroy;
-      {
-        event->firing = true;
-        KJ_DEFER(event->firing = false);
-        eventToDestroy = event->fire();
-      }
+      loop.port.wait();
     }
-
-    depthFirstInsertPoint = &head;
   }
 
   node->get(result);
-  KJ_IF_MAYBE(exception, runCatchingExceptions([&]() {
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
     node = nullptr;
   })) {
     result.addException(kj::mv(*exception));
   }
 }
 
-Promise<void> EventLoop::yield() {
+Promise<void> yield() {
   return Promise<void>(false, kj::heap<YieldPromiseNode>());
 }
 
-void EventLoop::daemonize(kj::Promise<void>&& promise) {
-  KJ_REQUIRE(daemons.get() != nullptr, "EventLoop is shutting down.") { return; }
-  daemons->add(kj::mv(promise));
+void daemonize(kj::Promise<void>&& promise) {
+  EventLoop& loop = currentEventLoop();
+  KJ_REQUIRE(loop.daemons.get() != nullptr, "EventLoop is shutting down.") { return; }
+  loop.daemons->add(kj::mv(promise));
 }
 
-namespace _ {  // private
-
 Event::Event()
-    : loop(EventLoop::current()), next(nullptr), prev(nullptr) {}
+    : loop(currentEventLoop()), next(nullptr), prev(nullptr) {}
 
 Event::~Event() noexcept(false) {
   if (prev != nullptr) {
@@ -398,80 +421,6 @@ kj::String Event::trace() {
 }
 
 }  // namespace _ (private)
-
-// =======================================================================================
-
-#if KJ_USE_FUTEX
-
-SimpleEventLoop::SimpleEventLoop() {}
-SimpleEventLoop::~SimpleEventLoop() noexcept(false) {}
-
-void SimpleEventLoop::prepareToSleep() noexcept {
-  __atomic_store_n(&preparedToSleep, 1, __ATOMIC_RELAXED);
-}
-
-void SimpleEventLoop::sleep() {
-  while (__atomic_load_n(&preparedToSleep, __ATOMIC_RELAXED) == 1) {
-    syscall(SYS_futex, &preparedToSleep, FUTEX_WAIT_PRIVATE, 1, NULL, NULL, 0);
-  }
-}
-
-void SimpleEventLoop::wake() const {
-  if (__atomic_exchange_n(&preparedToSleep, 0, __ATOMIC_RELAXED) != 0) {
-    // preparedToSleep was 1 before the exchange, so a sleep must be in progress in another thread.
-    syscall(SYS_futex, &preparedToSleep, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
-  }
-}
-
-#else
-
-#define KJ_PTHREAD_CALL(code) \
-  { \
-    int pthreadError = code; \
-    if (pthreadError != 0) { \
-      KJ_FAIL_SYSCALL(#code, pthreadError); \
-    } \
-  }
-
-#define KJ_PTHREAD_CLEANUP(code) \
-  { \
-    int pthreadError = code; \
-    if (pthreadError != 0) { \
-      KJ_LOG(ERROR, #code, strerror(pthreadError)); \
-    } \
-  }
-
-SimpleEventLoop::SimpleEventLoop() {
-  KJ_PTHREAD_CALL(pthread_mutex_init(&mutex, nullptr));
-  KJ_PTHREAD_CALL(pthread_cond_init(&condvar, nullptr));
-}
-SimpleEventLoop::~SimpleEventLoop() noexcept(false) {
-  KJ_PTHREAD_CLEANUP(pthread_cond_destroy(&condvar));
-  KJ_PTHREAD_CLEANUP(pthread_mutex_destroy(&mutex));
-}
-
-void SimpleEventLoop::prepareToSleep() noexcept {
-  __atomic_store_n(&preparedToSleep, 1, __ATOMIC_RELAXED);
-}
-
-void SimpleEventLoop::sleep() {
-  pthread_mutex_lock(&mutex);
-  while (__atomic_load_n(&preparedToSleep, __ATOMIC_RELAXED) == 1) {
-    pthread_cond_wait(&condvar, &mutex);
-  }
-  pthread_mutex_unlock(&mutex);
-}
-
-void SimpleEventLoop::wake() const {
-  pthread_mutex_lock(&mutex);
-  if (__atomic_exchange_n(&preparedToSleep, 0, __ATOMIC_RELAXED) != 0) {
-    // preparedToSleep was 1 before the exchange, so a sleep must be in progress in another thread.
-    pthread_cond_signal(&condvar);
-  }
-  pthread_mutex_unlock(&mutex);
-}
-
-#endif
 
 // =======================================================================================
 

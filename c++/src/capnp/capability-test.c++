@@ -51,7 +51,7 @@ namespace {
 #endif
 
 TEST(Capability, Basic) {
-  kj::SimpleEventLoop loop;
+  kj::EventLoop loop;
 
   int callCount = 0;
   test::TestInterface::Client client(kj::heap<TestInterfaceImpl>(callCount));
@@ -89,7 +89,7 @@ TEST(Capability, Basic) {
 }
 
 TEST(Capability, Inheritance) {
-  kj::SimpleEventLoop loop;
+  kj::EventLoop loop;
 
   int callCount = 0;
   test::TestExtends::Client client1(kj::heap<TestExtendsImpl>(callCount));
@@ -117,7 +117,7 @@ TEST(Capability, Inheritance) {
 }
 
 TEST(Capability, Pipelining) {
-  kj::SimpleEventLoop loop;
+  kj::EventLoop loop;
 
   int callCount = 0;
   int chainedCallCount = 0;
@@ -152,7 +152,7 @@ TEST(Capability, Pipelining) {
 }
 
 TEST(Capability, TailCall) {
-  kj::SimpleEventLoop loop;
+  kj::EventLoop loop;
 
   int calleeCallCount = 0;
   int callerCallCount = 0;
@@ -187,7 +187,7 @@ TEST(Capability, TailCall) {
 TEST(Capability, AsyncCancelation) {
   // Tests allowAsyncCancellation().
 
-  kj::SimpleEventLoop loop;
+  kj::EventLoop loop;
 
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
@@ -227,7 +227,7 @@ TEST(Capability, AsyncCancelation) {
 TEST(Capability, SyncCancelation) {
   // Tests isCanceled() without allowAsyncCancellation().
 
-  kj::SimpleEventLoop loop;
+  kj::EventLoop loop;
 
   int callCount = 0;
   int innerCallCount = 0;
@@ -269,7 +269,7 @@ TEST(Capability, SyncCancelation) {
 // =======================================================================================
 
 TEST(Capability, DynamicClient) {
-  kj::SimpleEventLoop loop;
+  kj::EventLoop loop;
 
   int callCount = 0;
   DynamicCapability::Client client =
@@ -308,7 +308,7 @@ TEST(Capability, DynamicClient) {
 }
 
 TEST(Capability, DynamicClientInheritance) {
-  kj::SimpleEventLoop loop;
+  kj::EventLoop loop;
 
   int callCount = 0;
 
@@ -344,7 +344,7 @@ TEST(Capability, DynamicClientInheritance) {
 }
 
 TEST(Capability, DynamicClientPipelining) {
-  kj::SimpleEventLoop loop;
+  kj::EventLoop loop;
 
   int callCount = 0;
   int chainedCallCount = 0;
@@ -415,7 +415,7 @@ public:
 };
 
 TEST(Capability, DynamicServer) {
-  kj::SimpleEventLoop loop;
+  kj::EventLoop loop;
 
   int callCount = 0;
   test::TestInterface::Client client =
@@ -484,7 +484,7 @@ public:
 };
 
 TEST(Capability, DynamicServerInheritance) {
-  kj::SimpleEventLoop loop;
+  kj::EventLoop loop;
 
   int callCount = 0;
   test::TestExtends::Client client1 =
@@ -558,7 +558,7 @@ public:
 };
 
 TEST(Capability, DynamicServerPipelining) {
-  kj::SimpleEventLoop loop;
+  kj::EventLoop loop;
 
   int callCount = 0;
   int chainedCallCount = 0;
@@ -615,7 +615,7 @@ void verifyClient(DynamicCapability::Client client, const int& callCount) {
 }
 
 TEST(Capability, ObjectsAndOrphans) {
-  kj::SimpleEventLoop loop;
+  kj::EventLoop loop;
 
   int callCount1 = 0;
   int callCount2 = 0;
@@ -678,7 +678,7 @@ TEST(Capability, ObjectsAndOrphans) {
 }
 
 TEST(Capability, Lists) {
-  kj::SimpleEventLoop loop;
+  kj::EventLoop loop;
 
   int callCount1 = 0;
   int callCount2 = 0;

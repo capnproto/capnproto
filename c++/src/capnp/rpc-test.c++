@@ -430,7 +430,7 @@ public:
 };
 
 struct TestContext {
-  kj::SimpleEventLoop loop;
+  kj::EventLoop loop;
   TestNetwork network;
   TestRestorer restorer;
   TestNetworkAdapter& clientNetwork;

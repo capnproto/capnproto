@@ -25,6 +25,7 @@
 #define KJ_ASYNC_IO_H_
 
 #include "async.h"
+#include "function.h"
 
 namespace kj {
 
@@ -36,13 +37,6 @@ public:
   virtual Promise<size_t> tryRead(void* buffer, size_t minBytes, size_t maxBytes) = 0;
 
   Promise<void> read(void* buffer, size_t bytes);
-
-  static Own<AsyncInputStream> wrapFd(int fd);
-  // Create an AsyncInputStream wrapping a file descriptor.
-  //
-  // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
-  //
-  // The returned object can only be called from within a system event loop (e.g. `UnixEventLoop`).
 };
 
 class AsyncOutputStream {
@@ -51,25 +45,14 @@ class AsyncOutputStream {
 public:
   virtual Promise<void> write(const void* buffer, size_t size) = 0;
   virtual Promise<void> write(ArrayPtr<const ArrayPtr<const byte>> pieces) = 0;
-
-  static Own<AsyncOutputStream> wrapFd(int fd);
-  // Create an AsyncOutputStream wrapping a file descriptor.
-  //
-  // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
-  //
-  // The returned object can only be called from within a system event loop (e.g. `UnixEventLoop`).
 };
 
 class AsyncIoStream: public AsyncInputStream, public AsyncOutputStream {
   // A combination input and output stream.
 
 public:
-  static Own<AsyncIoStream> wrapFd(int fd);
-  // Create an AsyncIoStream wrapping a file descriptor.
-  //
-  // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
-  //
-  // The returned object can only be called from within a system event loop (e.g. `UnixEventLoop`).
+  virtual void shutdownWrite() = 0;
+  // Cleanly shut down just the write end of the stream, while keeping the read end open.
 };
 
 class ConnectionReceiver {
@@ -121,7 +104,60 @@ class Network {
   // LocalAddress and/or RemoteAddress instances directly and work from there, if at all possible.
 
 public:
-  static Own<Network> newSystemNetwork();
+  virtual Promise<Own<LocalAddress>> parseLocalAddress(
+      StringPtr addr, uint portHint = 0) = 0;
+  virtual Promise<Own<RemoteAddress>> parseRemoteAddress(
+      StringPtr addr, uint portHint = 0) = 0;
+  // Construct a local or remote address from a user-provided string.  The format of the address
+  // strings is not specified at the API level, and application code should make no assumptions
+  // about them.  These strings should always be provided by humans, and said humans will know
+  // what format to use in their particular context.
+  //
+  // `portHint`, if provided, specifies the "standard" IP port number for the application-level
+  // service in play.  If the address turns out to be an IP address (v4 or v6), and it lacks a
+  // port number, this port will be used.
+  //
+  // In practice, a local address is usually just a port number (or even an empty string, if a
+  // reasonable `portHint` is provided), whereas a remote address usually requires a hostname.
+
+  virtual Own<LocalAddress> getLocalSockaddr(const void* sockaddr, uint len) = 0;
+  virtual Own<RemoteAddress> getRemoteSockaddr(const void* sockaddr, uint len) = 0;
+  // Construct a local or remote address from a legacy struct sockaddr.
+};
+
+struct OneWayPipe {
+  // A data pipe with an input end and an output end.  The two ends are safe to use in different
+  // threads.  (Typically backed by pipe() system call.)
+
+  Own<AsyncInputStream> in;
+  Own<AsyncOutputStream> out;
+};
+
+struct TwoWayPipe {
+  // A data pipe that supports sending in both directions.  Each end's output sends data to the
+  // other end's input.  The ends can be used in separate threads.  (Typically backed by
+  // socketpair() system call.)
+
+  Own<AsyncIoStream> ends[2];
+};
+
+class AsyncIoProvider {
+  // Class which constructs asynchronous wrappers around the operating system's I/O facilities.
+  //
+  // Generally, the implementation of this interface must integrate closely with a particular
+  // `EventLoop` implementation.  Typically, the EventLoop implementation itself will provide
+  // an AsyncIoProvider.
+
+public:
+  virtual OneWayPipe newOneWayPipe() = 0;
+  // Creates an input/output stream pair representing the ends of a one-way pipe (e.g. created with
+  // the pipe(2) system call).
+
+  virtual TwoWayPipe newTwoWayPipe() = 0;
+  // Creates two AsyncIoStreams representing the two ends of a two-way pipe (e.g. created with
+  // socketpair(2) system call).  Data written to one end can be read from the other.
+
+  virtual Network& getNetwork() = 0;
   // Creates a new `Network` instance representing the networks exposed by the operating system.
   //
   // DO NOT CALL THIS except at the highest levels of your code, ideally in the main() function.  If
@@ -140,106 +176,74 @@ public:
   // - IPv6: "1234:5678::abcd", "[1234:5678::abcd]:80"
   // - Local IP wildcard (local addresses only; covers both v4 and v6):  "*", "*:80", ":80", "80"
   // - Unix domain: "unix:/path/to/socket"
+
+  virtual Own<AsyncIoStream> newPipeThread(
+      Function<void(AsyncIoProvider& ioProvider, AsyncIoStream& stream)> startFunc) = 0;
+  // Create a new thread and set up a two-way pipe (socketpair) which can be used to communicate
+  // with it.  One end of the pipe is passed to the thread's starct function and the other end of
+  // the pipe is returned.  The new thread also gets its own `AsyncIoProvider` instance and will
+  // already have an active `EventLoop` when `startFunc` is called.
   //
-  // The system network -- and all objects it creates -- can only be used from threads running
-  // a system event loop (e.g. `UnixEventLoop`).
-
-  virtual Promise<Own<LocalAddress>> parseLocalAddress(
-      StringPtr addr, uint portHint = 0) const = 0;
-  virtual Promise<Own<RemoteAddress>> parseRemoteAddress(
-      StringPtr addr, uint portHint = 0) const = 0;
-  // Construct a local or remote address from a user-provided string.  The format of the address
-  // strings is not specified at the API level, and application code should make no assumptions
-  // about them.  These strings should always be provided by humans, and said humans will know
-  // what format to use in their particular context.
+  // The returned stream's destructor first closes its end of the pipe then waits for the thread to
+  // finish (joins it).  The thread should therefore be designed to exit soon after receiving EOF
+  // on the input stream.
   //
-  // `portHint`, if provided, specifies the "standard" IP port number for the application-level
-  // service in play.  If the address turns out to be an IP address (v4 or v6), and it lacks a
-  // port number, this port will be used.
+  // TODO(someday):  I'm not entirely comfortable with this interface.  It seems to be doing too
+  //   much at once but I'm not sure how to cleanly break it down.
+
+  // ---------------------------------------------------------------------------
+  // Unix-only methods
   //
-  // In practice, a local address is usually just a port number (or even an empty string, if a
-  // reasonable `portHint` is provided), whereas a remote address usually requires a hostname.
+  // TODO(cleanup):  Should these be in a subclass?
 
-  virtual Own<LocalAddress> getLocalSockaddr(const void* sockaddr, uint len) const = 0;
-  virtual Own<RemoteAddress> getRemoteSockaddr(const void* sockaddr, uint len) const = 0;
-  // Construct a local or remote address from a legacy struct sockaddr.
-};
-
-struct OneWayPipe {
-  Own<AsyncInputStream> in;
-  Own<AsyncOutputStream> out;
-};
-OneWayPipe newOneWayPipe();
-// Creates an input/output stream pair representing the ends of a one-way OS pipe (created with
-// pipe(2)).
-
-struct TwoWayPipe {
-  Own<AsyncIoStream> ends[2];
-};
-TwoWayPipe newTwoWayPipe();
-// Creates two AsyncIoStreams representing the two ends of a two-way OS pipe (created with
-// socketpair(2)).  Data written to one end can be read from the other.
-
-// =======================================================================================
-
-namespace _ {  // private
-
-class IoLoopMain {
-public:
-  virtual void run(EventLoop& loop) = 0;
-};
-
-template <typename Func, typename Result>
-class IoLoopMainImpl: public IoLoopMain {
-public:
-  IoLoopMainImpl(Func&& func): func(kj::mv(func)) {}
-  void run(EventLoop& loop) override {
-    result = space.construct(kj::evalLater(func).wait());
-  }
-  Result getResult() { return kj::mv(*result); }
-
-private:
-  Func func;
-  SpaceFor<Result> space;
-  Own<Result> result;
-};
-
-template <typename Func>
-class IoLoopMainImpl<Func, void>: public IoLoopMain {
-public:
-  IoLoopMainImpl(Func&& func): func(kj::mv(func)) {}
-  void run(EventLoop& loop) override {
-    kj::evalLater(func).wait();
-  }
-  void getResult() {}
-
-private:
-  Func func;
-};
-
-void runIoEventLoopInternal(IoLoopMain& func);
-
-}  // namespace _ (private)
-
-template <typename Func>
-auto runIoEventLoop(Func&& func) -> decltype(func().wait()) {
-  // Sets up an appropriate EventLoop for doing I/O, then executes the given function.  The function
-  // returns a promise.  The EventLoop will continue running until that promise resolves, then the
-  // whole function will return its resolution.  On return, the EventLoop is destroyed, cancelling
-  // all outstanding I/O.
+  virtual Own<AsyncInputStream> wrapInputFd(int fd) = 0;
+  // Create an AsyncInputStream wrapping a file descriptor.
   //
-  // This function is great for running inside main() to set up an Async I/O environment without
-  // specifying a platform-specific EventLoop or other such things.
+  // Does not take ownership of the descriptor.
+  //
+  // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
 
-  // TODO(cleanup):  I wanted to forward-declare this function in order to document it separate
-  //   from the implementation details but GCC claimed the two declarations were overloads rather
-  //   than the same function, even though the signature was identical.  FFFFFFFFFFUUUUUUUUUUUUUUU-
+  virtual Own<AsyncOutputStream> wrapOutputFd(int fd) = 0;
+  // Create an AsyncOutputStream wrapping a file descriptor.
+  //
+  // Does not take ownership of the descriptor.
+  //
+  // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
 
-  typedef decltype(instance<Func>()().wait()) Result;
-  _::IoLoopMainImpl<Func, Result> func2(kj::fwd<Func>(func));
-  _::runIoEventLoopInternal(func2);
-  return func2.getResult();
-}
+  virtual Own<AsyncIoStream> wrapSocketFd(int fd) = 0;
+  // Create an AsyncIoStream wrapping a socket file descriptor.
+  //
+  // Does not take ownership of the descriptor.
+  //
+  // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
+
+  // ---------------------------------------------------------------------------
+  // Windows-only methods
+
+  // TODO(port):  IOCP
+};
+
+Own<AsyncIoProvider> setupIoEventLoop();
+// Convenience method which sets up the current thread with everything it needs to do async I/O.
+// The returned object contains an `EventLoop` which is wrapping an appropriate `EventPort` for
+// doing I/O on the host system, so everything is ready for the thread to start making async calls
+// and waiting on promises.
+//
+// You would typically call this in your main() loop or in the start function of a thread.
+// Example:
+//
+//     int main() {
+//       auto ioSystem = kj::setupIoEventLoop();
+//
+//       // Now we can call an async function.
+//       Promise<String> textPromise = getHttp(ioSystem->getNetwork(), "http://example.com");
+//
+//       // And we can wait for the promise to complete.  Note that you can only use `wait()`
+//       // from the top level, not from inside a promise callback.
+//       String text = textPromise.wait();
+//       print(text);
+//       return 0;
+//     }
 
 }  // namespace kj
 

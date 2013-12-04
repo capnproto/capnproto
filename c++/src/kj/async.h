@@ -26,14 +26,12 @@
 
 #include "async-prelude.h"
 #include "exception.h"
-#include "mutex.h"
 #include "refcount.h"
 #include "tuple.h"
 
 namespace kj {
 
 class EventLoop;
-class SimpleEventLoop;
 
 template <typename T>
 class Promise;
@@ -274,6 +272,7 @@ private:
   template <typename>
   friend class _::ForkHub;
   friend class _::TaskSetImpl;
+  friend Promise<void> _::yield();
 };
 
 template <typename T>
@@ -299,6 +298,11 @@ private:
 constexpr _::Void READY_NOW = _::Void();
 // Use this when you need a Promise<void> that is already fulfilled -- this value can be implicitly
 // cast to `Promise<void>`.
+
+constexpr _::NeverDone NEVER_DONE = _::NeverDone();
+// The opposite of `READY_NOW`, return this when the promise should never resolve.  This can be
+// implicitly converted to any promise type.  You may also call `NEVER_DONE.wait()` to wait
+// forever (useful for servers).
 
 template <typename Func>
 PromiseForResult<Func, void> evalLater(Func&& func);
@@ -475,6 +479,40 @@ private:
 // =======================================================================================
 // The EventLoop class
 
+class EventPort {
+  // Interfaces between an `EventLoop` and events originating from outside of the loop's thread.
+  // All such events come in through the `EventPort` implementation.
+  //
+  // An `EventPort` implementation may interface with low-level operating system APIs and/or other
+  // threads.  You can also write an `EventPort` which wraps some other (non-KJ) event loop
+  // framework, allowing the two to coexist in a single thread.
+
+public:
+  virtual void wait() = 0;
+  // Wait for an external event to arrive, sleeping if necessary.  Once at least one event has
+  // arrived, queue it to the event loop (e.g. by fulfilling a promise) and return.
+  //
+  // It is safe to return even if nothing has actually been queued, so long as calling `wait()` in
+  // a loop will eventually sleep.  (That is to say, false positives are fine.)
+  //
+  // If the implementation knows that no event will ever arrive, it should throw an exception
+  // rather than deadlock.
+  //
+  // This is called only during `Promise::wait()`.
+
+  virtual void poll() = 0;
+  // Check if any external events have arrived, but do not sleep.  If any events have arrived,
+  // add them to the event queue (e.g. by fulfilling promises) before returning.
+  //
+  // This is called only during `Promise::wait()`.
+
+  virtual void setRunnable(bool runnable);
+  // Called to notify the `EventPort` when the `EventLoop` has work to do; specifically when it
+  // transitions from empty -> runnable or runnable -> empty.  This is typically useful when
+  // integrating with an external event loop; if the loop is currently runnable then you should
+  // arrange to call run() on it soon.  The default implementation does nothing.
+};
+
 class EventLoop {
   // Represents a queue of events being executed in a loop.  Most code won't interact with
   // EventLoop directly, but instead use `Promise`s to interact with it indirectly.  See the
@@ -490,7 +528,8 @@ class EventLoop {
   //
   //     int main() {
   //       // `loop` becomes the official EventLoop for the thread.
-  //       SimpleEventLoop loop;
+  //       MyEventPort eventPort;
+  //       EventLoop loop(eventPort);
   //
   //       // Now we can call an async function.
   //       Promise<String> textPromise = getHttp("http://example.com");
@@ -501,42 +540,30 @@ class EventLoop {
   //       print(text);
   //       return 0;
   //     }
-
-  class EventJob;
+  //
+  // Most applications that do I/O will prefer to use `setupIoEventLoop()` from `async-io.h` rather
+  // than allocate an `EventLoop` directly.
 
 public:
   EventLoop();
+  // Construct an `EventLoop` which does not receive external events at all.
+
+  explicit EventLoop(EventPort& port);
+  // Construct an `EventLoop` which receives external events through the given `EventPort`.
+
   ~EventLoop() noexcept(false);
 
-  static EventLoop& current();
-  // Get the event loop for the current thread.  Throws an exception if no event loop is active.
+  void run(uint maxTurnCount = maxValue);
+  // Run the event loop for `maxTurnCount` turns or until there is nothing left to be done,
+  // whichever comes first.  This never calls the `EventPort`'s `sleep()` or `poll()`.  It will
+  // call the `EventPort`'s `setRunnable(false)` if the queue becomes empty.
 
-  bool isCurrent() const;
-  // Is this EventLoop the current one for this thread?  This can safely be called from any thread.
-
-  void runForever() KJ_NORETURN;
-  // Runs the loop forever.  Useful for servers.
-
-protected:
-  // -----------------------------------------------------------------
-  // Subclasses should implement these.
-
-  virtual void prepareToSleep() noexcept = 0;
-  // Called just before `sleep()`.  After calling this, the caller checks if any events are
-  // scheduled.  If so, it calls `wake()`.  Then, whether or not events were scheduled, it calls
-  // `sleep()`.  Thus, `prepareToSleep()` is always followed by exactly one call to `sleep()`.
-
-  virtual void sleep() = 0;
-  // Do not return until `wake()` is called.  Always preceded by a call to `prepareToSleep()`.
-
-  virtual void wake() const = 0;
-  // Cancel any calls to sleep() that occurred *after* the last call to `prepareToSleep()`.
-  // May be called from a different thread.  The interaction with `prepareToSleep()` is important:
-  // a `wake()` may occur between a call to `prepareToSleep()` and `sleep()`, in which case
-  // the subsequent `sleep()` must return immediately.  `wake()` may be called any time an event
-  // is armed; it should return quickly if the loop isn't prepared to sleep.
+  bool isRunnable();
+  // Returns true if run() would currently do anything, or false if the queue is empty.
 
 private:
+  EventPort& port;
+
   bool running = false;
   // True while looping -- wait() is then not allowed.
 
@@ -546,54 +573,11 @@ private:
 
   Own<_::TaskSetImpl> daemons;
 
-  template <typename T, typename Func, typename ErrorFunc>
-  Own<_::PromiseNode> thenImpl(Promise<T>&& promise, Func&& func, ErrorFunc&& errorHandler);
+  bool turn();
 
-  void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result);
-  // Run the event loop until `node` is fulfilled, and then `get()` its result into `result`.
-
-  Promise<void> yield();
-  // Returns a promise that won't resolve until all events currently on the queue are fired.
-  // Otherwise, returns an already-resolved promise.  Used to implement evalLater().
-
-  template <typename T>
-  T wait(Promise<T>&& promise);
-
-  template <typename Func>
-  PromiseForResult<Func, void> evalLater(Func&& func) KJ_WARN_UNUSED_RESULT;
-
-  void daemonize(kj::Promise<void>&& promise);
-
-  template <typename>
-  friend class Promise;
-  friend Promise<void> yield();
-  template <typename ErrorFunc>
-  friend void daemonize(kj::Promise<void>&& promise, ErrorFunc&& errorHandler);
-  template <typename Func>
-  friend PromiseForResult<Func, void> evalLater(Func&& func);
+  friend void _::daemonize(kj::Promise<void>&& promise);
+  friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result);
   friend class _::Event;
-};
-
-// -------------------------------------------------------------------
-
-class SimpleEventLoop final: public EventLoop {
-  // A simple EventLoop implementation that does not know how to wait for any external I/O.
-
-public:
-  SimpleEventLoop();
-  ~SimpleEventLoop() noexcept(false);
-
-protected:
-  void prepareToSleep() noexcept override;
-  void sleep() override;
-  void wake() const override;
-
-private:
-  mutable int preparedToSleep = 0;
-#if !KJ_USE_FUTEX
-  mutable pthread_mutex_t mutex;
-  mutable pthread_cond_t condvar;
-#endif
 };
 
 }  // namespace kj

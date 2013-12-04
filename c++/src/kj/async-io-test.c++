@@ -30,8 +30,8 @@ namespace kj {
 namespace {
 
 TEST(AsyncIo, SimpleNetwork) {
-  UnixEventLoop loop;
-  auto network = Network::newSystemNetwork();
+  auto ioProvider = setupIoEventLoop();
+  auto& network = ioProvider->getNetwork();
 
   Own<ConnectionReceiver> listener;
   Own<AsyncIoStream> server;
@@ -42,7 +42,7 @@ TEST(AsyncIo, SimpleNetwork) {
   auto port = newPromiseAndFulfiller<uint>();
 
   port.promise.then([&](uint portnum) {
-    return network->parseRemoteAddress("127.0.0.1", portnum);
+    return network.parseRemoteAddress("127.0.0.1", portnum);
   }).then([&](Own<RemoteAddress>&& result) {
     return result->connect();
   }).then([&](Own<AsyncIoStream>&& result) {
@@ -52,7 +52,7 @@ TEST(AsyncIo, SimpleNetwork) {
     ADD_FAILURE() << kj::str(exception).cStr();
   });
 
-  kj::String result = network->parseLocalAddress("*").then([&](Own<LocalAddress>&& result) {
+  kj::String result = network.parseLocalAddress("*").then([&](Own<LocalAddress>&& result) {
     listener = result->listen();
     port.fulfiller->fulfill(listener->getPort());
     return listener->accept();
@@ -67,34 +67,34 @@ TEST(AsyncIo, SimpleNetwork) {
   EXPECT_EQ("foo", result);
 }
 
-String tryParseLocal(EventLoop& loop, Network& network, StringPtr text, uint portHint = 0) {
+String tryParseLocal(Network& network, StringPtr text, uint portHint = 0) {
   return network.parseLocalAddress(text, portHint).wait()->toString();
 }
 
-String tryParseRemote(EventLoop& loop, Network& network, StringPtr text, uint portHint = 0) {
+String tryParseRemote(Network& network, StringPtr text, uint portHint = 0) {
   return network.parseRemoteAddress(text, portHint).wait()->toString();
 }
 
 TEST(AsyncIo, AddressParsing) {
-  UnixEventLoop loop;
-  auto network = Network::newSystemNetwork();
+  auto ioProvider = setupIoEventLoop();
+  auto& network = ioProvider->getNetwork();
 
-  EXPECT_EQ("*:0", tryParseLocal(loop, *network, "*"));
-  EXPECT_EQ("*:123", tryParseLocal(loop, *network, "123"));
-  EXPECT_EQ("*:123", tryParseLocal(loop, *network, ":123"));
-  EXPECT_EQ("[::]:123", tryParseLocal(loop, *network, "0::0", 123));
-  EXPECT_EQ("0.0.0.0:0", tryParseLocal(loop, *network, "0.0.0.0"));
-  EXPECT_EQ("1.2.3.4:5678", tryParseRemote(loop, *network, "1.2.3.4", 5678));
-  EXPECT_EQ("[12ab:cd::34]:321", tryParseRemote(loop, *network, "[12ab:cd:0::0:34]:321", 432));
+  EXPECT_EQ("*:0", tryParseLocal(network, "*"));
+  EXPECT_EQ("*:123", tryParseLocal(network, "123"));
+  EXPECT_EQ("*:123", tryParseLocal(network, ":123"));
+  EXPECT_EQ("[::]:123", tryParseLocal(network, "0::0", 123));
+  EXPECT_EQ("0.0.0.0:0", tryParseLocal(network, "0.0.0.0"));
+  EXPECT_EQ("1.2.3.4:5678", tryParseRemote(network, "1.2.3.4", 5678));
+  EXPECT_EQ("[12ab:cd::34]:321", tryParseRemote(network, "[12ab:cd:0::0:34]:321", 432));
 
-  EXPECT_EQ("unix:foo/bar/baz", tryParseLocal(loop, *network, "unix:foo/bar/baz"));
-  EXPECT_EQ("unix:foo/bar/baz", tryParseRemote(loop, *network, "unix:foo/bar/baz"));
+  EXPECT_EQ("unix:foo/bar/baz", tryParseLocal(network, "unix:foo/bar/baz"));
+  EXPECT_EQ("unix:foo/bar/baz", tryParseRemote(network, "unix:foo/bar/baz"));
 }
 
 TEST(AsyncIo, OneWayPipe) {
-  UnixEventLoop loop;
+  auto ioProvider = setupIoEventLoop();
 
-  auto pipe = newOneWayPipe();
+  auto pipe = ioProvider->newOneWayPipe();
   char receiveBuffer[4];
 
   pipe.out->write("foo", 3).daemonize([](kj::Exception&& exception) {
@@ -110,9 +110,9 @@ TEST(AsyncIo, OneWayPipe) {
 }
 
 TEST(AsyncIo, TwoWayPipe) {
-  UnixEventLoop loop;
+  auto ioProvider = setupIoEventLoop();
 
-  auto pipe = newTwoWayPipe();
+  auto pipe = ioProvider->newTwoWayPipe();
   char receiveBuffer1[4];
   char receiveBuffer2[4];
 
@@ -136,23 +136,45 @@ TEST(AsyncIo, TwoWayPipe) {
   EXPECT_EQ("bar", result2);
 }
 
-TEST(AsyncIo, RunIoEventLoop) {
-  auto pipe = newOneWayPipe();
-  char receiveBuffer[4];
+TEST(AsyncIo, PipeThread) {
+  auto ioProvider = setupIoEventLoop();
 
-  String result = runIoEventLoop([&]() {
-    auto promise1 = pipe.out->write("foo", 3);
+  auto stream = ioProvider->newPipeThread([](AsyncIoProvider& ioProvider, AsyncIoStream& stream) {
+    char buf[4];
+    stream.write("foo", 3).wait();
+    EXPECT_EQ(3u, stream.tryRead(buf, 3, 4).wait());
+    EXPECT_EQ("bar", heapString(buf, 3));
 
-    auto promise2 = pipe.in->tryRead(receiveBuffer, 3, 4)
-      .then([&](size_t n) {
-        EXPECT_EQ(3u, n);
-        return heapString(receiveBuffer, n);
-      });
-
-    return promise1.then(mvCapture(promise2, [](Promise<String> promise2) { return promise2; }));
+    // Expect disconnect.
+    EXPECT_EQ(0, stream.tryRead(buf, 1, 1).wait());
   });
 
-  EXPECT_EQ("foo", result);
+  char buf[4];
+  stream->write("bar", 3).wait();
+  EXPECT_EQ(3u, stream->tryRead(buf, 3, 4).wait());
+  EXPECT_EQ("foo", heapString(buf, 3));
+}
+
+TEST(AsyncIo, PipeThreadDisconnects) {
+  // Like above, but in this case we expect the main thread to detect the pipe thread disconnecting.
+
+  auto ioProvider = setupIoEventLoop();
+
+  auto stream = ioProvider->newPipeThread([](AsyncIoProvider& ioProvider, AsyncIoStream& stream) {
+    char buf[4];
+    stream.write("foo", 3).wait();
+    EXPECT_EQ(3u, stream.tryRead(buf, 3, 4).wait());
+    EXPECT_EQ("bar", heapString(buf, 3));
+  });
+
+  char buf[4];
+  EXPECT_EQ(3u, stream->tryRead(buf, 3, 4).wait());
+  EXPECT_EQ("foo", heapString(buf, 3));
+
+  stream->write("bar", 3).wait();
+
+  // Expect disconnect.
+  EXPECT_EQ(0, stream->tryRead(buf, 1, 1).wait());
 }
 
 }  // namespace

@@ -74,10 +74,10 @@ pthread_once_t registerSigusr1Once = PTHREAD_ONCE_INIT;
 
 // =======================================================================================
 
-class UnixEventLoop::SignalPromiseAdapter {
+class UnixEventPort::SignalPromiseAdapter {
 public:
   inline SignalPromiseAdapter(PromiseFulfiller<siginfo_t>& fulfiller,
-                              UnixEventLoop& loop, int signum)
+                              UnixEventPort& loop, int signum)
       : loop(loop), signum(signum), fulfiller(fulfiller) {
     prev = loop.signalTail;
     *loop.signalTail = this;
@@ -108,17 +108,17 @@ public:
     return result;
   }
 
-  UnixEventLoop& loop;
+  UnixEventPort& loop;
   int signum;
   PromiseFulfiller<siginfo_t>& fulfiller;
   SignalPromiseAdapter* next = nullptr;
   SignalPromiseAdapter** prev = nullptr;
 };
 
-class UnixEventLoop::PollPromiseAdapter {
+class UnixEventPort::PollPromiseAdapter {
 public:
   inline PollPromiseAdapter(PromiseFulfiller<short>& fulfiller,
-                            UnixEventLoop& loop, int fd, short eventMask)
+                            UnixEventPort& loop, int fd, short eventMask)
       : loop(loop), fd(fd), eventMask(eventMask), fulfiller(fulfiller) {
     prev = loop.pollTail;
     *loop.pollTail = this;
@@ -147,7 +147,7 @@ public:
     prev = nullptr;
   }
 
-  UnixEventLoop& loop;
+  UnixEventPort& loop;
   int fd;
   short eventMask;
   PromiseFulfiller<short>& fulfiller;
@@ -155,55 +155,73 @@ public:
   PollPromiseAdapter** prev = nullptr;
 };
 
-UnixEventLoop::UnixEventLoop() {
+UnixEventPort::UnixEventPort() {
   pthread_once(&registerSigusr1Once, &registerSigusr1);
 }
 
-UnixEventLoop::~UnixEventLoop() {}
+UnixEventPort::~UnixEventPort() {}
 
-Promise<short> UnixEventLoop::onFdEvent(int fd, short eventMask) {
+Promise<short> UnixEventPort::onFdEvent(int fd, short eventMask) {
   return newAdaptedPromise<short, PollPromiseAdapter>(*this, fd, eventMask);
 }
 
-Promise<siginfo_t> UnixEventLoop::onSignal(int signum) {
+Promise<siginfo_t> UnixEventPort::onSignal(int signum) {
   return newAdaptedPromise<siginfo_t, SignalPromiseAdapter>(*this, signum);
 }
 
-void UnixEventLoop::captureSignal(int signum) {
-  KJ_REQUIRE(signum != SIGUSR1, "Sorry, SIGUSR1 is reserved by the UnixEventLoop implementation.");
+void UnixEventPort::captureSignal(int signum) {
+  KJ_REQUIRE(signum != SIGUSR1, "Sorry, SIGUSR1 is reserved by the UnixEventPort implementation.");
   registerSignalHandler(signum);
 }
 
-void UnixEventLoop::prepareToSleep() noexcept {
-  waitThread = pthread_self();
-  __atomic_store_n(&isSleeping, true, __ATOMIC_RELEASE);
-}
+class UnixEventPort::PollContext {
+public:
+  PollContext(PollPromiseAdapter* ptr) {
+    while (ptr != nullptr) {
+      struct pollfd pollfd;
+      memset(&pollfd, 0, sizeof(pollfd));
+      pollfd.fd = ptr->fd;
+      pollfd.events = ptr->eventMask;
+      pollfds.add(pollfd);
+      pollEvents.add(ptr);
+      ptr = ptr->next;
+    }
+  }
 
-void UnixEventLoop::sleep() {
-  SignalCapture capture;
-  threadCapture = &capture;
+  void run(int timeout) {
+    do {
+      pollResult = ::poll(pollfds.begin(), pollfds.size(), timeout);
+      pollError = pollResult < 0 ? errno : 0;
 
-  if (sigsetjmp(capture.jumpTo, true)) {
-    // We received a signal and longjmp'd back out of the signal handler.
-    threadCapture = nullptr;
-    __atomic_store_n(&isSleeping, false, __ATOMIC_RELAXED);
+      // EINTR should only happen if we received a signal *other than* the ones registered via
+      // the UnixEventPort, so we don't care about that case.
+    } while (pollError == EINTR);
+  }
 
-    if (capture.siginfo.si_signo != SIGUSR1) {
-      // Fire any events waiting on this signal.
-      auto ptr = signalHead;
-      while (ptr != nullptr) {
-        if (ptr->signum == capture.siginfo.si_signo) {
-          ptr->fulfiller.fulfill(kj::cp(capture.siginfo));
-          ptr = ptr->removeFromList();
-        } else {
-          ptr = ptr->next;
+  void processResults() {
+    if (pollResult < 0) {
+      KJ_FAIL_SYSCALL("poll()", pollError);
+    }
+
+    for (auto i: indices(pollfds)) {
+      if (pollfds[i].revents != 0) {
+        pollEvents[i]->fulfiller.fulfill(kj::mv(pollfds[i].revents));
+        pollEvents[i]->removeFromList();
+        if (--pollResult <= 0) {
+          break;
         }
       }
     }
-
-    return;
   }
 
+private:
+  kj::Vector<struct pollfd> pollfds;
+  kj::Vector<PollPromiseAdapter*> pollEvents;
+  int pollResult = 0;
+  int pollError = 0;
+};
+
+void UnixEventPort::wait() {
   sigset_t newMask;
   sigemptyset(&newMask);
   sigaddset(&newMask, SIGUSR1);
@@ -216,62 +234,94 @@ void UnixEventLoop::sleep() {
     }
   }
 
-  kj::Vector<struct pollfd> pollfds;
-  kj::Vector<PollPromiseAdapter*> pollEvents;
+  PollContext pollContext(pollHead);
+
+  // Capture signals.
+  SignalCapture capture;
+
+  if (sigsetjmp(capture.jumpTo, true)) {
+    // We received a signal and longjmp'd back out of the signal handler.
+    threadCapture = nullptr;
+
+    if (capture.siginfo.si_signo != SIGUSR1) {
+      gotSignal(capture.siginfo);
+    }
+
+    return;
+  }
+
+  // Enable signals, run the poll, then mask them again.
+  sigset_t origMask;
+  threadCapture = &capture;
+  sigprocmask(SIG_UNBLOCK, &newMask, &origMask);
+
+  pollContext.run(-1);
+
+  sigprocmask(SIG_SETMASK, &origMask, nullptr);
+  threadCapture = nullptr;
+
+  // Queue events.
+  pollContext.processResults();
+}
+
+void UnixEventPort::poll() {
+  sigset_t pending;
+  sigset_t waitMask;
+  sigemptyset(&pending);
+  sigfillset(&waitMask);
+
+  // Count how many signals that we care about are pending.
+  KJ_SYSCALL(sigpending(&pending));
+  uint signalCount = 0;
 
   {
-    auto ptr = pollHead;
+    auto ptr = signalHead;
     while (ptr != nullptr) {
-      struct pollfd pollfd;
-      memset(&pollfd, 0, sizeof(pollfd));
-      pollfd.fd = ptr->fd;
-      pollfd.events = ptr->eventMask;
-      pollfds.add(pollfd);
-      pollEvents.add(ptr);
+      if (sigismember(&pending, ptr->signum)) {
+        ++signalCount;
+        sigdelset(&pending, ptr->signum);
+        sigdelset(&waitMask, ptr->signum);
+      }
       ptr = ptr->next;
     }
   }
 
-  sigset_t origMask;
-  sigprocmask(SIG_UNBLOCK, &newMask, &origMask);
-
-  int pollResult;
-  int pollError;
-  do {
-    pollResult = poll(pollfds.begin(), pollfds.size(), -1);
-    pollError = pollResult < 0 ? errno : 0;
-
-    // EINTR should only happen if we received a signal *other than* the ones registered via
-    // the UnixEventLoop, so we don't care about that case.
-  } while (pollError == EINTR);
-
-  sigprocmask(SIG_SETMASK, &origMask, nullptr);
-  threadCapture = nullptr;
-  __atomic_store_n(&isSleeping, false, __ATOMIC_RELAXED);
-
-  if (pollResult < 0) {
-    KJ_FAIL_SYSCALL("poll()", pollError);
+  // Wait for each pending signal.  It would be nice to use sigtimedwait() here but it is not
+  // available on OSX.  :(  Instead, we call sigsuspend() once per expected signal.
+  while (signalCount-- > 0) {
+    SignalCapture capture;
+    threadCapture = &capture;
+    if (sigsetjmp(capture.jumpTo, true)) {
+      // We received a signal and longjmp'd back out of the signal handler.
+      KJ_DBG("unsuspend", signalCount);
+      sigdelset(&waitMask, capture.siginfo.si_signo);
+      gotSignal(capture.siginfo);
+    } else {
+      KJ_DBG("suspend", signalCount);
+      sigsuspend(&waitMask);
+      KJ_FAIL_ASSERT("sigsuspend() shouldn't return because the signal handler should "
+                     "have siglongjmp()ed.");
+    }
+    threadCapture = nullptr;
   }
 
-  for (auto i: indices(pollfds)) {
-    if (pollfds[i].revents != 0) {
-      pollEvents[i]->fulfiller.fulfill(kj::mv(pollfds[i].revents));
-      pollEvents[i]->removeFromList();
-      if (--pollResult <= 0) {
-        break;
-      }
-    }
+  {
+    PollContext pollContext(pollHead);
+    pollContext.run(0);
+    pollContext.processResults();
   }
 }
 
-void UnixEventLoop::wake() const {
-  // The first load is a fast-path check -- if false, we can avoid a barrier.  If true, then we
-  // follow up with an exchange to set it false.  If it turns out we were in fact the one thread
-  // to transition the value from true to false, then we go ahead and raise SIGUSR1 on the target
-  // thread to wake it up.
-  if (__atomic_load_n(&isSleeping, __ATOMIC_RELAXED) &&
-      __atomic_exchange_n(&isSleeping, false, __ATOMIC_ACQUIRE)) {
-    pthread_kill(waitThread, SIGUSR1);
+void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
+  // Fire any events waiting on this signal.
+  auto ptr = signalHead;
+  while (ptr != nullptr) {
+    if (ptr->signum == siginfo.si_signo) {
+      ptr->fulfiller.fulfill(kj::cp(siginfo));
+      ptr = ptr->removeFromList();
+    } else {
+      ptr = ptr->next;
+    }
   }
 }
 

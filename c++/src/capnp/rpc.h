@@ -269,7 +269,7 @@ RpcSystem<SturdyRefHostId> makeRpcServer(
 //    MyNetwork network;
 //    MyRestorer restorer;
 //    auto server = makeRpcServer(network, restorer);
-//    eventLoop.wait(...);  // (e.g. wait on a promise that never returns)
+//    kj::NEVER_DONE.wait();  // run forever
 
 template <typename SturdyRefHostId, typename ProvisionId,
           typename RecipientId, typename ThirdPartyCapId, typename JoinResult>

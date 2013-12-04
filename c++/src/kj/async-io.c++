@@ -24,6 +24,7 @@
 #include "async-io.h"
 #include "async-unix.h"
 #include "debug.h"
+#include "thread.h"
 #include <unistd.h>
 #include <sys/uio.h>
 #include <errno.h>
@@ -44,10 +45,6 @@
 namespace kj {
 
 namespace {
-
-UnixEventLoop& eventLoop() {
-  return downcast<UnixEventLoop>(EventLoop::current());
-}
 
 void setNonblocking(int fd) {
   int flags;
@@ -90,7 +87,8 @@ protected:
 
 class AsyncStreamFd: public AsyncIoStream {
 public:
-  AsyncStreamFd(int readFd, int writeFd): readFd(readFd), writeFd(writeFd) {}
+  AsyncStreamFd(UnixEventPort& eventPort, int readFd, int writeFd)
+      : eventPort(eventPort), readFd(readFd), writeFd(writeFd) {}
   virtual ~AsyncStreamFd() noexcept(false) {}
 
   Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
@@ -124,7 +122,7 @@ public:
       size -= n;
     }
 
-    return eventLoop().onFdEvent(writeFd, POLLOUT).then([=](short) {
+    return eventPort.onFdEvent(writeFd, POLLOUT).then([=](short) {
       return write(buffer, size);
     });
   }
@@ -137,7 +135,15 @@ public:
     }
   }
 
+  void shutdownWrite() override {
+    // There's no legitimate way to get an AsyncStreamFd that isn't a socket through the
+    // UnixAsyncIoProvider interface.
+    KJ_REQUIRE(readFd == writeFd, "shutdownWrite() is only implemented on sockets.");
+    KJ_SYSCALL(shutdown(writeFd, SHUT_WR));
+  }
+
 private:
+  UnixEventPort& eventPort;
   int readFd;
   int writeFd;
   bool gotHup = false;
@@ -155,7 +161,7 @@ private:
 
     if (n < 0) {
       // Read would block.
-      return eventLoop().onFdEvent(readFd, POLLIN | POLLRDHUP).then([=](short events) {
+      return eventPort.onFdEvent(readFd, POLLIN | POLLRDHUP).then([=](short events) {
         gotHup = events & (POLLHUP | POLLRDHUP);
         return tryReadInternal(buffer, minBytes, maxBytes, alreadyRead);
       });
@@ -180,7 +186,7 @@ private:
         minBytes -= n;
         maxBytes -= n;
         alreadyRead += n;
-        return eventLoop().onFdEvent(readFd, POLLIN | POLLRDHUP).then([=](short events) {
+        return eventPort.onFdEvent(readFd, POLLIN | POLLRDHUP).then([=](short events) {
           gotHup = events & (POLLHUP | POLLRDHUP);
           return tryReadInternal(buffer, minBytes, maxBytes, alreadyRead);
         });
@@ -217,7 +223,7 @@ private:
       if (n < firstPiece.size()) {
         // Only part of the first piece was consumed.  Wait for POLLOUT and then write again.
         firstPiece = firstPiece.slice(n, firstPiece.size());
-        return eventLoop().onFdEvent(writeFd, POLLOUT).then([=](short) {
+        return eventPort.onFdEvent(writeFd, POLLOUT).then([=](short) {
           return writeInternal(firstPiece, morePieces);
         });
       } else if (morePieces.size() == 0) {
@@ -236,7 +242,19 @@ private:
 
 class Socket final: public OwnedFileDescriptor, public AsyncStreamFd {
 public:
-  Socket(int fd): OwnedFileDescriptor(fd), AsyncStreamFd(fd, fd) {}
+  Socket(UnixEventPort& eventPort, int fd)
+      : OwnedFileDescriptor(fd), AsyncStreamFd(eventPort, fd, fd) {}
+};
+
+class ThreadSocket final: public Thread, public OwnedFileDescriptor, public AsyncStreamFd {
+  // Combination thread and socket.  The thread must be joined strictly after the socket is closed.
+
+public:
+  template <typename StartFunc>
+  ThreadSocket(UnixEventPort& eventPort, int fd, StartFunc&& startFunc)
+      : Thread(kj::fwd<StartFunc>(startFunc)),
+        OwnedFileDescriptor(fd),
+        AsyncStreamFd(eventPort, fd, fd) {}
 };
 
 // =======================================================================================
@@ -488,7 +506,8 @@ private:
 
 class FdConnectionReceiver final: public ConnectionReceiver, public OwnedFileDescriptor {
 public:
-  FdConnectionReceiver(int fd): OwnedFileDescriptor(fd) {}
+  FdConnectionReceiver(UnixEventPort& eventPort, int fd)
+      : OwnedFileDescriptor(fd), eventPort(eventPort) {}
 
   Promise<Own<AsyncIoStream>> accept() override {
     int newFd;
@@ -507,28 +526,32 @@ public:
 
     if (newFd < 0) {
       // Gotta wait.
-      return eventLoop().onFdEvent(fd, POLLIN).then([this](short) {
+      return eventPort.onFdEvent(fd, POLLIN).then([this](short) {
         return accept();
       });
     } else {
-      return Own<AsyncIoStream>(heap<Socket>(newFd));
+      return Own<AsyncIoStream>(heap<Socket>(eventPort, newFd));
     }
   }
 
   uint getPort() override {
     return SocketAddress::getLocalAddress(fd).getPort();
   }
+
+public:
+  UnixEventPort& eventPort;
 };
 
 // =======================================================================================
 
 class LocalSocketAddress final: public LocalAddress {
 public:
-  LocalSocketAddress(SocketAddress addr): addr(addr) {}
+  LocalSocketAddress(UnixEventPort& eventPort, SocketAddress addr)
+      : eventPort(eventPort), addr(addr) {}
 
   Own<ConnectionReceiver> listen() override {
     int fd = addr.socket(SOCK_STREAM);
-    auto result = heap<FdConnectionReceiver>(fd);
+    auto result = heap<FdConnectionReceiver>(eventPort, fd);
 
     // We always enable SO_REUSEADDR because having to take your server down for five minutes
     // before it can restart really sucks.
@@ -548,19 +571,21 @@ public:
   }
 
 private:
+  UnixEventPort& eventPort;
   SocketAddress addr;
 };
 
 class RemoteSocketAddress final: public RemoteAddress {
 public:
-  RemoteSocketAddress(SocketAddress addr): addr(addr) {}
+  RemoteSocketAddress(UnixEventPort& eventPort, SocketAddress addr)
+      : eventPort(eventPort), addr(addr) {}
 
   Promise<Own<AsyncIoStream>> connect() override {
     int fd = addr.socket(SOCK_STREAM);
-    auto result = heap<Socket>(fd);
+    auto result = heap<Socket>(eventPort, fd);
     addr.connect(fd);
 
-    return eventLoop().onFdEvent(fd, POLLOUT).then(kj::mvCapture(result,
+    return eventPort.onFdEvent(fd, POLLOUT).then(kj::mvCapture(result,
         [fd](Own<AsyncIoStream>&& stream, short events) {
           int err;
           socklen_t errlen = sizeof(err);
@@ -577,30 +602,108 @@ public:
   }
 
 private:
+  UnixEventPort& eventPort;
   SocketAddress addr;
 };
 
 class SocketNetwork final: public Network {
 public:
-  Promise<Own<LocalAddress>> parseLocalAddress(StringPtr addr, uint portHint = 0) const override {
+  explicit SocketNetwork(UnixEventPort& eventPort): eventPort(eventPort) {}
+
+  Promise<Own<LocalAddress>> parseLocalAddress(StringPtr addr, uint portHint = 0) override {
+    auto& eventPortCopy = eventPort;
     return evalLater(mvCapture(heapString(addr),
-        [portHint](String&& addr) -> Own<LocalAddress> {
-          return heap<LocalSocketAddress>(SocketAddress::parseLocal(addr, portHint));
+        [&eventPortCopy,portHint](String&& addr) -> Own<LocalAddress> {
+          return heap<LocalSocketAddress>(eventPortCopy, SocketAddress::parseLocal(addr, portHint));
         }));
   }
-  Promise<Own<RemoteAddress>> parseRemoteAddress(StringPtr addr, uint portHint = 0) const override {
+  Promise<Own<RemoteAddress>> parseRemoteAddress(StringPtr addr, uint portHint = 0) override {
+    auto& eventPortCopy = eventPort;
     return evalLater(mvCapture(heapString(addr),
-        [portHint](String&& addr) -> Own<RemoteAddress> {
-          return heap<RemoteSocketAddress>(SocketAddress::parse(addr, portHint));
+        [&eventPortCopy,portHint](String&& addr) -> Own<RemoteAddress> {
+          return heap<RemoteSocketAddress>(eventPortCopy, SocketAddress::parse(addr, portHint));
         }));
   }
 
-  Own<LocalAddress> getLocalSockaddr(const void* sockaddr, uint len) const override {
-    return Own<LocalAddress>(heap<LocalSocketAddress>(SocketAddress(sockaddr, len)));
+  Own<LocalAddress> getLocalSockaddr(const void* sockaddr, uint len) override {
+    return Own<LocalAddress>(heap<LocalSocketAddress>(eventPort, SocketAddress(sockaddr, len)));
   }
-  Own<RemoteAddress> getRemoteSockaddr(const void* sockaddr, uint len) const override {
-    return Own<RemoteAddress>(heap<RemoteSocketAddress>(SocketAddress(sockaddr, len)));
+  Own<RemoteAddress> getRemoteSockaddr(const void* sockaddr, uint len) override {
+    return Own<RemoteAddress>(heap<RemoteSocketAddress>(eventPort, SocketAddress(sockaddr, len)));
   }
+
+private:
+  UnixEventPort& eventPort;
+};
+
+// =======================================================================================
+
+class UnixAsyncIoProvider final: public AsyncIoProvider {
+public:
+  UnixAsyncIoProvider()
+      : eventLoop(eventPort), network(eventPort) {}
+
+  OneWayPipe newOneWayPipe() override {
+    int fds[2];
+#if __linux__
+    KJ_SYSCALL(pipe2(fds, O_NONBLOCK | O_CLOEXEC));
+#else
+    KJ_SYSCALL(pipe(fds));
+#endif
+    return OneWayPipe { heap<Socket>(eventPort, fds[0]), heap<Socket>(eventPort, fds[1]) };
+  }
+
+  TwoWayPipe newTwoWayPipe() override {
+    int fds[2];
+    int type = SOCK_STREAM;
+#if __linux__
+    type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
+#endif
+    KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+    return TwoWayPipe { { heap<Socket>(eventPort, fds[0]), heap<Socket>(eventPort, fds[1]) } };
+  }
+
+  Network& getNetwork() override {
+    return network;
+  }
+
+  Own<AsyncIoStream> newPipeThread(
+      Function<void(AsyncIoProvider& ioProvider, AsyncIoStream& stream)> startFunc) override {
+    int fds[2];
+    int type = SOCK_STREAM;
+#if __linux__
+    type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
+#endif
+    KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
+
+    int threadFd = fds[1];
+
+    return heap<ThreadSocket>(eventPort, fds[0], kj::mvCapture(startFunc,
+        [threadFd](Function<void(AsyncIoProvider& ioProvider, AsyncIoStream& stream)>&& startFunc) {
+      KJ_DEFER(KJ_SYSCALL(close(threadFd)));
+      UnixAsyncIoProvider ioProvider;
+      auto stream = ioProvider.wrapSocketFd(threadFd);
+      startFunc(ioProvider, *stream);
+    }));
+  }
+
+  Own<AsyncInputStream> wrapInputFd(int fd) override {
+    setNonblocking(fd);
+    return heap<AsyncStreamFd>(eventPort, fd, -1);
+  }
+  Own<AsyncOutputStream> wrapOutputFd(int fd) override {
+    setNonblocking(fd);
+    return heap<AsyncStreamFd>(eventPort, -1, fd);
+  }
+  Own<AsyncIoStream> wrapSocketFd(int fd) override {
+    setNonblocking(fd);
+    return heap<AsyncStreamFd>(eventPort, fd, fd);
+  }
+
+private:
+  UnixEventPort eventPort;
+  EventLoop eventLoop;
+  SocketNetwork network;
 };
 
 }  // namespace
@@ -609,51 +712,8 @@ Promise<void> AsyncInputStream::read(void* buffer, size_t bytes) {
   return read(buffer, bytes, bytes).then([](size_t) {});
 }
 
-Own<AsyncInputStream> AsyncInputStream::wrapFd(int fd) {
-  setNonblocking(fd);
-  return heap<AsyncStreamFd>(fd, -1);
+Own<AsyncIoProvider> setupIoEventLoop() {
+  return heap<UnixAsyncIoProvider>();
 }
 
-Own<AsyncOutputStream> AsyncOutputStream::wrapFd(int fd) {
-  setNonblocking(fd);
-  return heap<AsyncStreamFd>(-1, fd);
-}
-
-Own<AsyncIoStream> AsyncIoStream::wrapFd(int fd) {
-  setNonblocking(fd);
-  return heap<AsyncStreamFd>(fd, fd);
-}
-
-Own<Network> Network::newSystemNetwork() {
-  return heap<SocketNetwork>();
-}
-
-OneWayPipe newOneWayPipe() {
-  int fds[2];
-#if __linux__
-  KJ_SYSCALL(pipe2(fds, O_NONBLOCK | O_CLOEXEC));
-#else
-  KJ_SYSCALL(pipe(fds));
-#endif
-  return OneWayPipe { heap<Socket>(fds[0]), heap<Socket>(fds[1]) };
-}
-
-TwoWayPipe newTwoWayPipe() {
-  int fds[2];
-  int type = SOCK_STREAM;
-#if __linux__
-  type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
-#endif
-  KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
-  return TwoWayPipe { { heap<Socket>(fds[0]), heap<Socket>(fds[1]) } };
-}
-
-namespace _ {  // private
-
-void runIoEventLoopInternal(IoLoopMain& func) {
-  UnixEventLoop loop;
-  func.run(loop);
-}
-
-}  // namespace _ (private)
 }  // namespace kj

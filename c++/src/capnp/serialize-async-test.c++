@@ -120,7 +120,8 @@ protected:
 };
 
 TEST_F(SerializeAsyncTest, ParseAsync) {
-  auto input = kj::AsyncInputStream::wrapFd(fds[0]);
+  auto ioProvider = kj::setupIoEventLoop();
+  auto input = ioProvider->wrapInputFd(fds[0]);
   kj::FdOutputStream rawOutput(fds[1]);
   FragmentingOutputStream output(rawOutput);
 
@@ -131,15 +132,14 @@ TEST_F(SerializeAsyncTest, ParseAsync) {
     writeMessage(output, message);
   });
 
-  auto received = kj::runIoEventLoop([&]() {
-    return readMessage(*input);
-  });
+  auto received = readMessage(*input).wait();
 
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
 
 TEST_F(SerializeAsyncTest, ParseAsyncOddSegmentCount) {
-  auto input = kj::AsyncInputStream::wrapFd(fds[0]);
+  auto ioProvider = kj::setupIoEventLoop();
+  auto input = ioProvider->wrapInputFd(fds[0]);
   kj::FdOutputStream rawOutput(fds[1]);
   FragmentingOutputStream output(rawOutput);
 
@@ -150,15 +150,14 @@ TEST_F(SerializeAsyncTest, ParseAsyncOddSegmentCount) {
     writeMessage(output, message);
   });
 
-  auto received = kj::runIoEventLoop([&]() {
-    return readMessage(*input);
-  });
+  auto received = readMessage(*input).wait();
 
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
 
 TEST_F(SerializeAsyncTest, ParseAsyncEvenSegmentCount) {
-  auto input = kj::AsyncInputStream::wrapFd(fds[0]);
+  auto ioProvider = kj::setupIoEventLoop();
+  auto input = ioProvider->wrapInputFd(fds[0]);
   kj::FdOutputStream rawOutput(fds[1]);
   FragmentingOutputStream output(rawOutput);
 
@@ -169,15 +168,14 @@ TEST_F(SerializeAsyncTest, ParseAsyncEvenSegmentCount) {
     writeMessage(output, message);
   });
 
-  auto received = kj::runIoEventLoop([&]() {
-    return readMessage(*input);
-  });
+  auto received = readMessage(*input).wait();
 
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
 
 TEST_F(SerializeAsyncTest, WriteAsync) {
-  auto output = kj::AsyncOutputStream::wrapFd(fds[1]);
+  auto ioProvider = kj::setupIoEventLoop();
+  auto output = ioProvider->wrapOutputFd(fds[1]);
 
   TestMessageBuilder message(1);
   auto root = message.getRoot<TestAllTypes>();
@@ -195,13 +193,12 @@ TEST_F(SerializeAsyncTest, WriteAsync) {
     }
   });
 
-  kj::runIoEventLoop([&]() {
-    return writeMessage(*output, message);
-  });
+  writeMessage(*output, message).wait();
 }
 
 TEST_F(SerializeAsyncTest, WriteAsyncOddSegmentCount) {
-  auto output = kj::AsyncOutputStream::wrapFd(fds[1]);
+  auto ioProvider = kj::setupIoEventLoop();
+  auto output = ioProvider->wrapOutputFd(fds[1]);
 
   TestMessageBuilder message(7);
   auto root = message.getRoot<TestAllTypes>();
@@ -219,13 +216,12 @@ TEST_F(SerializeAsyncTest, WriteAsyncOddSegmentCount) {
     }
   });
 
-  kj::runIoEventLoop([&]() {
-    return writeMessage(*output, message);
-  });
+  writeMessage(*output, message).wait();
 }
 
 TEST_F(SerializeAsyncTest, WriteAsyncEvenSegmentCount) {
-  auto output = kj::AsyncOutputStream::wrapFd(fds[1]);
+  auto ioProvider = kj::setupIoEventLoop();
+  auto output = ioProvider->wrapOutputFd(fds[1]);
 
   TestMessageBuilder message(10);
   auto root = message.getRoot<TestAllTypes>();
@@ -243,9 +239,7 @@ TEST_F(SerializeAsyncTest, WriteAsyncEvenSegmentCount) {
     }
   });
 
-  kj::runIoEventLoop([&]() {
-    return writeMessage(*output, message);
-  });
+  writeMessage(*output, message).wait();
 }
 
 }  // namespace

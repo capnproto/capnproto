@@ -29,7 +29,7 @@ namespace kj {
 namespace {
 
 TEST(Async, EvalVoid) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   bool done = false;
 
@@ -40,7 +40,7 @@ TEST(Async, EvalVoid) {
 }
 
 TEST(Async, EvalInt) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   bool done = false;
 
@@ -51,7 +51,7 @@ TEST(Async, EvalInt) {
 }
 
 TEST(Async, There) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   Promise<int> a = 123;
   bool done = false;
@@ -63,7 +63,7 @@ TEST(Async, There) {
 }
 
 TEST(Async, ThereVoid) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   Promise<int> a = 123;
   int value = 0;
@@ -75,7 +75,7 @@ TEST(Async, ThereVoid) {
 }
 
 TEST(Async, Exception) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   Promise<int> promise = evalLater(
       [&]() -> int { KJ_FAIL_ASSERT("foo") { return 123; } });
@@ -86,7 +86,7 @@ TEST(Async, Exception) {
 }
 
 TEST(Async, HandleException) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   Promise<int> promise = evalLater(
       [&]() -> int { KJ_FAIL_ASSERT("foo") { return 123; } });
@@ -100,7 +100,7 @@ TEST(Async, HandleException) {
 }
 
 TEST(Async, PropagateException) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   Promise<int> promise = evalLater(
       [&]() -> int { KJ_FAIL_ASSERT("foo") { return 123; } });
@@ -116,7 +116,7 @@ TEST(Async, PropagateException) {
 }
 
 TEST(Async, PropagateExceptionTypeChange) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   Promise<int> promise = evalLater(
       [&]() -> int { KJ_FAIL_ASSERT("foo") { return 123; } });
@@ -132,12 +132,11 @@ TEST(Async, PropagateExceptionTypeChange) {
 }
 
 TEST(Async, Then) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   bool done = false;
 
   Promise<int> promise = Promise<int>(123).then([&](int i) {
-    EXPECT_EQ(&loop, &EventLoop::current());
     done = true;
     return i + 321;
   });
@@ -150,15 +149,13 @@ TEST(Async, Then) {
 }
 
 TEST(Async, Chain) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   Promise<int> promise = evalLater([&]() -> int { return 123; });
   Promise<int> promise2 = evalLater([&]() -> int { return 321; });
 
   auto promise3 = promise.then([&](int i) {
-    EXPECT_EQ(&loop, &EventLoop::current());
     return promise2.then([&loop,i](int j) {
-      EXPECT_EQ(&loop, &EventLoop::current());
       return i + j;
     });
   });
@@ -167,7 +164,7 @@ TEST(Async, Chain) {
 }
 
 TEST(Async, SeparateFulfiller) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   auto pair = newPromiseAndFulfiller<int>();
 
@@ -179,7 +176,7 @@ TEST(Async, SeparateFulfiller) {
 }
 
 TEST(Async, SeparateFulfillerVoid) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   auto pair = newPromiseAndFulfiller<void>();
 
@@ -199,7 +196,7 @@ TEST(Async, SeparateFulfillerCanceled) {
 }
 
 TEST(Async, SeparateFulfillerChained) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   auto pair = newPromiseAndFulfiller<Promise<int>>();
   auto inner = newPromiseAndFulfiller<int>();
@@ -219,7 +216,7 @@ TEST(Async, SeparateFulfillerChained) {
 #endif
 
 TEST(Async, SeparateFulfillerDiscarded) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   auto pair = newPromiseAndFulfiller<int>();
   pair.fulfiller = nullptr;
@@ -233,7 +230,7 @@ TEST(Async, SeparateFulfillerMemoryLeak) {
 }
 
 TEST(Async, Ordering) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   int counter = 0;
   Promise<void> promises[6] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
@@ -295,7 +292,7 @@ TEST(Async, Ordering) {
 }
 
 TEST(Async, Fork) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   Promise<int> promise = evalLater([&]() { return 123; });
 
@@ -325,7 +322,7 @@ struct RefcountedInt: public Refcounted {
 };
 
 TEST(Async, ForkRef) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   Promise<Own<RefcountedInt>> promise = evalLater([&]() {
     return refcounted<RefcountedInt>(123);
@@ -352,7 +349,7 @@ TEST(Async, ForkRef) {
 
 TEST(Async, ExclusiveJoin) {
   {
-    SimpleEventLoop loop;
+    EventLoop loop;
 
     auto left = evalLater([&]() { return 123; });
     auto right = newPromiseAndFulfiller<int>();  // never fulfilled
@@ -363,7 +360,7 @@ TEST(Async, ExclusiveJoin) {
   }
 
   {
-    SimpleEventLoop loop;
+    EventLoop loop;
 
     auto left = newPromiseAndFulfiller<int>();  // never fulfilled
     auto right = evalLater([&]() { return 123; });
@@ -374,7 +371,7 @@ TEST(Async, ExclusiveJoin) {
   }
 
   {
-    SimpleEventLoop loop;
+    EventLoop loop;
 
     auto left = evalLater([&]() { return 123; });
     auto right = evalLater([&]() { return 456; });
@@ -385,7 +382,7 @@ TEST(Async, ExclusiveJoin) {
   }
 
   {
-    SimpleEventLoop loop;
+    EventLoop loop;
 
     auto left = evalLater([&]() { return 123; });
     auto right = evalLater([&]() { return 456; });
@@ -408,7 +405,7 @@ public:
 };
 
 TEST(Async, TaskSet) {
-  SimpleEventLoop loop;
+  EventLoop loop;
   ErrorHandlerImpl errorHandler;
   TaskSet tasks(errorHandler);
 
@@ -449,7 +446,7 @@ private:
 TEST(Async, Attach) {
   bool destroyed = false;
 
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   Promise<int> promise = evalLater([&]() {
     EXPECT_FALSE(destroyed);
@@ -471,7 +468,7 @@ TEST(Async, Attach) {
 TEST(Async, EagerlyEvaluate) {
   bool called = false;
 
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   Promise<void> promise = Promise<void>(READY_NOW).then([&]() {
     called = true;
@@ -488,7 +485,7 @@ TEST(Async, EagerlyEvaluate) {
 }
 
 TEST(Async, Daemonize) {
-  SimpleEventLoop loop;
+  EventLoop loop;
 
   bool ran1 = false;
   bool ran2 = false;

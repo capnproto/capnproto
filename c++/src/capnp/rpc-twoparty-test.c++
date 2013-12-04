@@ -59,14 +59,14 @@ private:
   int& callCount;
 };
 
-void runServer(kj::Own<kj::AsyncIoStream> stream, int& callCount) {
-  // Set up the server.
-  kj::UnixEventLoop eventLoop;
-  TwoPartyVatNetwork network(*stream, rpc::twoparty::Side::SERVER);
-  TestRestorer restorer(callCount);
-  auto server = makeRpcServer(network, restorer);
-
-  eventLoop.onSignal(SIGUSR2).wait();
+kj::Own<kj::AsyncIoStream> runServer(kj::AsyncIoProvider& ioProvider, int& callCount) {
+  return ioProvider.newPipeThread(
+      [&callCount](kj::AsyncIoProvider& ioProvider, kj::AsyncIoStream& stream) {
+    TwoPartyVatNetwork network(stream, rpc::twoparty::Side::SERVER);
+    TestRestorer restorer(callCount);
+    auto server = makeRpcServer(network, restorer);
+    network.onDisconnect().wait();
+  });
 }
 
 Capability::Client getPersistentCap(RpcSystem<rpc::twoparty::SturdyRefHostId>& client,
@@ -85,29 +85,12 @@ Capability::Client getPersistentCap(RpcSystem<rpc::twoparty::SturdyRefHostId>& c
   return client.restore(hostId, objectIdMessage.getRoot<ObjectPointer>());
 }
 
-class CaptureSignalsOnInit {
-public:
-  CaptureSignalsOnInit() {
-    kj::UnixEventLoop::captureSignal(SIGUSR2);
-  }
-};
-static CaptureSignalsOnInit captureSignalsOnInit;
-
 TEST(TwoPartyNetwork, Basic) {
+  auto ioProvider = kj::setupIoEventLoop();
   int callCount = 0;
 
-  // We'll communicate over this two-way pipe (actually, a socketpair).
-  auto pipe = kj::newTwoWayPipe();
-
-  // Start up server in another thread.
-  kj::Thread thread([&]() {
-    runServer(kj::mv(pipe.ends[1]), callCount);
-  });
-  KJ_DEFER(thread.sendSignal(SIGUSR2));
-
-  // Set up the client-side objects.
-  kj::UnixEventLoop loop;
-  TwoPartyVatNetwork network(*pipe.ends[0], rpc::twoparty::Side::CLIENT);
+  auto stream = runServer(*ioProvider, callCount);
+  TwoPartyVatNetwork network(*stream, rpc::twoparty::Side::CLIENT);
   auto rpcClient = makeRpcClient(network);
 
   // Request the particular capability from the server.
@@ -148,21 +131,12 @@ TEST(TwoPartyNetwork, Basic) {
 }
 
 TEST(TwoPartyNetwork, Pipelining) {
+  auto ioProvider = kj::setupIoEventLoop();
   int callCount = 0;
   int reverseCallCount = 0;  // Calls back from server to client.
 
-  // We'll communicate over this two-way pipe (actually, a socketpair).
-  auto pipe = kj::newTwoWayPipe();
-
-  // Start up server in another thread.
-  auto thread = kj::heap<kj::Thread>([&]() {
-    runServer(kj::mv(pipe.ends[1]), callCount);
-  });
-  KJ_ON_SCOPE_FAILURE(thread->sendSignal(SIGUSR2));
-
-  // Set up the client-side objects.
-  kj::UnixEventLoop loop;
-  TwoPartyVatNetwork network(*pipe.ends[0], rpc::twoparty::Side::CLIENT);
+  auto stream = runServer(*ioProvider, callCount);
+  TwoPartyVatNetwork network(*stream, rpc::twoparty::Side::CLIENT);
   auto rpcClient = makeRpcClient(network);
 
   bool disconnected = false;
@@ -209,10 +183,10 @@ TEST(TwoPartyNetwork, Pipelining) {
     EXPECT_FALSE(disconnected);
     EXPECT_FALSE(drained);
 
-    // What if the other side disconnects?
-    thread->sendSignal(SIGUSR2);
-    thread = nullptr;
+    // What if we disconnect?
+    stream->shutdownWrite();
 
+    // The other side should also disconnect.
     disconnectPromise.wait();
     EXPECT_FALSE(drained);
 

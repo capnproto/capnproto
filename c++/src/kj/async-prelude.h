@@ -172,6 +172,18 @@ private:
   friend class TaskSetImpl;
 };
 
+void daemonize(kj::Promise<void>&& promise);
+void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result);
+Promise<void> yield();
+
+class NeverDone {
+public:
+  template <typename T>
+  operator Promise<T>() const;
+
+  void wait() KJ_NORETURN;
+};
+
 }  // namespace _ (private)
 }  // namespace kj
 

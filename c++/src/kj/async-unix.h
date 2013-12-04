@@ -32,8 +32,10 @@
 
 namespace kj {
 
-class UnixEventLoop: public EventLoop {
-  // An EventLoop implementation which can wait for events on file descriptors as well as signals.
+class UnixEventPort: public EventPort {
+  // THIS INTERFACE IS LIKELY TO CHANGE; consider using only what is defined in async-io.h instead.
+  //
+  // An EventPort implementation which can wait for events on file descriptors as well as signals.
   // This API only makes sense on Unix.
   //
   // The implementation uses `poll()` or possibly a platform-specific API (e.g. epoll, kqueue).
@@ -45,8 +47,8 @@ class UnixEventLoop: public EventLoop {
   // purposes.
 
 public:
-  UnixEventLoop();
-  ~UnixEventLoop();
+  UnixEventPort();
+  ~UnixEventPort();
 
   Promise<short> onFdEvent(int fd, short eventMask);
   // `eventMask` is a bitwise-OR of poll events (e.g. `POLLIN`, `POLLOUT`, etc.).  The next time
@@ -66,7 +68,7 @@ public:
   // The result of waiting on the same signal twice at once is undefined.
 
   static void captureSignal(int signum);
-  // Arranges for the given signal to be captured and handled via UnixEventLoop, so that you may
+  // Arranges for the given signal to be captured and handled via UnixEventPort, so that you may
   // then pass it to `onSignal()`.  This method is static because it registers a signal handler
   // which applies process-wide.  If any other threads exist in the process when `captureSignal()`
   // is called, you *must* set the signal mask in those threads to block this signal, otherwise
@@ -77,22 +79,21 @@ public:
   // To un-capture a signal, simply install a different signal handler and then un-block it from
   // the signal mask.
 
-protected:
-  void prepareToSleep() noexcept override;
-  void sleep() override;
-  void wake() const override;
+  // implements EventPort ------------------------------------------------------
+  void wait() override;
+  void poll() override;
 
 private:
   class PollPromiseAdapter;
   class SignalPromiseAdapter;
+  class PollContext;
 
   PollPromiseAdapter* pollHead = nullptr;
   PollPromiseAdapter** pollTail = &pollHead;
   SignalPromiseAdapter* signalHead = nullptr;
   SignalPromiseAdapter** signalTail = &signalHead;
 
-  pthread_t waitThread;
-  mutable bool isSleeping = false;
+  void gotSignal(const siginfo_t& siginfo);
 };
 
 }  // namespace kj

@@ -568,10 +568,30 @@ private:
 // =======================================================================================
 
 template <typename T>
-T EventLoop::wait(Promise<T>&& promise) {
+Promise<T>::Promise(_::FixVoid<T> value)
+    : PromiseBase(heap<_::ImmediatePromiseNode<_::FixVoid<T>>>(kj::mv(value))) {}
+
+template <typename T>
+Promise<T>::Promise(kj::Exception&& exception)
+    : PromiseBase(heap<_::ImmediateBrokenPromiseNode>(kj::mv(exception))) {}
+
+template <typename T>
+template <typename Func, typename ErrorFunc>
+PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler) {
+  typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
+
+  Own<_::PromiseNode> intermediate =
+      heap<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
+          kj::mv(node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler));
+  return PromiseForResult<Func, T>(false,
+      _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr)));
+}
+
+template <typename T>
+T Promise<T>::wait() {
   _::ExceptionOr<_::FixVoid<T>> result;
 
-  waitImpl(kj::mv(promise.node), result);
+  waitImpl(kj::mv(node), result);
 
   KJ_IF_MAYBE(value, result.value) {
     KJ_IF_MAYBE(exception, result.exception) {
@@ -584,44 +604,6 @@ T EventLoop::wait(Promise<T>&& promise) {
     // Result contained neither a value nor an exception?
     KJ_UNREACHABLE;
   }
-}
-
-template <typename Func>
-PromiseForResult<Func, void> EventLoop::evalLater(Func&& func) {
-  // Invoke thenImpl() on yield().
-  return PromiseForResult<Func, void>(false,
-      thenImpl(yield(), kj::fwd<Func>(func), _::PropagateException()));
-}
-
-template <typename T, typename Func, typename ErrorFunc>
-Own<_::PromiseNode> EventLoop::thenImpl(Promise<T>&& promise, Func&& func,
-                                        ErrorFunc&& errorHandler) {
-  typedef _::FixVoid<_::ReturnType<Func, T>> ResultT;
-
-  Own<_::PromiseNode> intermediate =
-      heap<_::TransformPromiseNode<ResultT, _::FixVoid<T>, Func, ErrorFunc>>(
-          kj::mv(promise.node), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler));
-  return _::maybeChain(kj::mv(intermediate), implicitCast<ResultT*>(nullptr));
-}
-
-template <typename T>
-Promise<T>::Promise(_::FixVoid<T> value)
-    : PromiseBase(heap<_::ImmediatePromiseNode<_::FixVoid<T>>>(kj::mv(value))) {}
-
-template <typename T>
-Promise<T>::Promise(kj::Exception&& exception)
-    : PromiseBase(heap<_::ImmediateBrokenPromiseNode>(kj::mv(exception))) {}
-
-template <typename T>
-template <typename Func, typename ErrorFunc>
-PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler) {
-  return PromiseForResult<Func, T>(false, EventLoop::current().thenImpl(
-      kj::mv(*this), kj::fwd<Func>(func), kj::fwd<ErrorFunc>(errorHandler)));
-}
-
-template <typename T>
-T Promise<T>::wait() {
-  return EventLoop::current().wait(kj::mv(*this));
 }
 
 template <typename T>
@@ -658,19 +640,19 @@ kj::String Promise<T>::trace() {
 
 template <typename Func>
 inline PromiseForResult<Func, void> evalLater(Func&& func) {
-  return EventLoop::current().evalLater(kj::fwd<Func>(func));
+  return _::yield().then(kj::fwd<Func>(func), _::PropagateException());
 }
 
 template <typename T>
 template <typename ErrorFunc>
 void Promise<T>::daemonize(ErrorFunc&& errorHandler) {
-  return EventLoop::current().daemonize(then([](T&&) {}, kj::fwd<ErrorFunc>(errorHandler)));
+  return _::daemonize(then([](T&&) {}, kj::fwd<ErrorFunc>(errorHandler)));
 }
 
 template <>
 template <typename ErrorFunc>
 void Promise<void>::daemonize(ErrorFunc&& errorHandler) {
-  return EventLoop::current().daemonize(then([]() {}, kj::fwd<ErrorFunc>(errorHandler)));
+  return _::daemonize(then([]() {}, kj::fwd<ErrorFunc>(errorHandler)));
 }
 
 // =======================================================================================
