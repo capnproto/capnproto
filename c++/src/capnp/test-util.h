@@ -148,9 +148,9 @@ class TestInterfaceImpl final: public test::TestInterface::Server {
 public:
   TestInterfaceImpl(int& callCount);
 
-  kj::Promise<void> foo(FooParams::Reader params, FooResults::Builder result) override;
+  kj::Promise<void> foo(FooContext context) override;
 
-  kj::Promise<void> bazAdvanced(CallContext<BazParams, BazResults> context) override;
+  kj::Promise<void> baz(BazContext context) override;
 
 private:
   int& callCount;
@@ -160,9 +160,9 @@ class TestExtendsImpl final: public test::TestExtends::Server {
 public:
   TestExtendsImpl(int& callCount);
 
-  kj::Promise<void> foo(FooParams::Reader params, FooResults::Builder result) override;
+  kj::Promise<void> foo(FooContext context) override;
 
-  kj::Promise<void> graultAdvanced(CallContext<GraultParams, test::TestAllTypes> context) override;
+  kj::Promise<void> grault(GraultContext context) override;
 
 private:
   int& callCount;
@@ -172,7 +172,7 @@ class TestPipelineImpl final: public test::TestPipeline::Server {
 public:
   TestPipelineImpl(int& callCount);
 
-  kj::Promise<void> getCapAdvanced(CallContext<GetCapParams, GetCapResults> context) override;
+  kj::Promise<void> getCap(GetCapContext context) override;
 
 private:
   int& callCount;
@@ -180,9 +180,7 @@ private:
 
 class TestCallOrderImpl final: public test::TestCallOrder::Server {
 public:
-  kj::Promise<void> getCallSequence(
-      GetCallSequenceParams::Reader params,
-      GetCallSequenceResults::Builder result) override;
+  kj::Promise<void> getCallSequence(GetCallSequenceContext context) override;
 
 private:
   uint count = 0;
@@ -192,8 +190,7 @@ class TestTailCallerImpl final: public test::TestTailCaller::Server {
 public:
   TestTailCallerImpl(int& callCount);
 
-  kj::Promise<void> fooAdvanced(
-      CallContext<FooParams, test::TestTailCallee::TailResult> context) override;
+  kj::Promise<void> foo(FooContext context) override;
 
 private:
   int& callCount;
@@ -203,8 +200,7 @@ class TestTailCalleeImpl final: public test::TestTailCallee::Server {
 public:
   TestTailCalleeImpl(int& callCount);
 
-  kj::Promise<void> fooAdvanced(
-      CallContext<FooParams, test::TestTailCallee::TailResult> context) override;
+  kj::Promise<void> foo(FooContext context) override;
 
 private:
   int& callCount;
@@ -214,36 +210,25 @@ class TestMoreStuffImpl final: public test::TestMoreStuff::Server {
 public:
   TestMoreStuffImpl(int& callCount);
 
-  kj::Promise<void> getCallSequence(
-      GetCallSequenceParams::Reader params,
-      GetCallSequenceResults::Builder result) override;
+  kj::Promise<void> getCallSequence(GetCallSequenceContext context) override;
 
-  kj::Promise<void> callFoo(
-      CallFooParams::Reader params,
-      CallFooResults::Builder result) override;
+  kj::Promise<void> callFoo(CallFooContext context) override;
 
-  kj::Promise<void> callFooWhenResolved(
-      CallFooWhenResolvedParams::Reader params,
-      CallFooWhenResolvedResults::Builder result) override;
+  kj::Promise<void> callFooWhenResolved(CallFooWhenResolvedContext context) override;
 
-  kj::Promise<void> neverReturnAdvanced(
-      CallContext<NeverReturnParams, NeverReturnResults> context) override;
+  kj::Promise<void> neverReturn(NeverReturnContext context) override;
 
-  kj::Promise<void> hold(HoldParams::Reader params, HoldResults::Builder result) override;
+  kj::Promise<void> hold(HoldContext context) override;
 
-  kj::Promise<void> callHeld(CallHeldParams::Reader params,
-                             CallHeldResults::Builder result) override;
+  kj::Promise<void> callHeld(CallHeldContext context) override;
 
-  kj::Promise<void> getHeld(GetHeldParams::Reader params,
-                            GetHeldResults::Builder result) override;
+  kj::Promise<void> getHeld(GetHeldContext context) override;
 
-  kj::Promise<void> echo(EchoParams::Reader params, EchoResults::Builder result) override;
+  kj::Promise<void> echo(EchoContext context) override;
 
-  kj::Promise<void> expectAsyncCancelAdvanced(
-      CallContext<ExpectAsyncCancelParams, ExpectAsyncCancelResults> context) override;
+  kj::Promise<void> expectAsyncCancel(ExpectAsyncCancelContext context) override;
 
-  kj::Promise<void> expectSyncCancelAdvanced(
-      CallContext<ExpectSyncCancelParams, ExpectSyncCancelResults> context) override;
+  kj::Promise<void> expectSyncCancel(ExpectSyncCancelContext context) override;
 
 private:
   int& callCount;
@@ -267,8 +252,8 @@ public:
     fulfiller->fulfill();
   }
 
-  kj::Promise<void> foo(FooParams::Reader params, FooResults::Builder result) {
-    return impl.foo(params, result);
+  kj::Promise<void> foo(FooContext context) {
+    return impl.foo(context);
   }
 
 private:

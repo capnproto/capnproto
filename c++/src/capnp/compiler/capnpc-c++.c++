@@ -1226,11 +1226,9 @@ private:
               "  typedef ", paramType, " ", titleCase, "Params;\n"),
           resultProto.getScopeId() != 0 ? kj::strTree() : kj::strTree(
               "  typedef ", resultType, " ", titleCase, "Results;\n"),
-          "  virtual ::kj::Promise<void> ", name, "(\n"
-          "      ", shortParamType, "::Reader params,\n"
-          "      ", shortResultType, "::Builder result);\n"
-          "  virtual ::kj::Promise<void> ", name, "Advanced(\n"
-          "      ::capnp::CallContext<", shortParamType, ", ", shortResultType, "> context);\n"),
+          "  typedef ::capnp::CallContext<", shortParamType, ", ", shortResultType, "> ",
+                titleCase, "Context;\n"
+          "  virtual ::kj::Promise<void> ", name, "(", titleCase, "Context context);\n"),
 
       kj::strTree(),
 
@@ -1240,20 +1238,15 @@ private:
           "  return newCall<", paramType, ", ", resultType, ">(\n"
           "      0x", interfaceIdHex, "ull, ", methodId, ", firstSegmentWordSize);\n"
           "}\n"
-          "::kj::Promise<void> ", interfaceName, "::Server::", name, "(\n"
-          "      ", paramType, "::Reader, ", resultType, "::Builder) {\n"
+          "::kj::Promise<void> ", interfaceName, "::Server::", name, "(", titleCase, "Context) {\n"
           "  return ::capnp::Capability::Server::internalUnimplemented(\n"
           "      \"", interfaceProto.getDisplayName(), "\", \"", name, "\",\n"
           "      0x", interfaceIdHex, "ull, ", methodId, ");\n"
-          "}\n"
-          "::kj::Promise<void> ", interfaceName, "::Server::", name, "Advanced(\n"
-          "      ::capnp::CallContext<", paramType, ", ", resultType, "> context) {\n"
-          "  return ", name, "(context.getParams(), context.getResults());\n"
           "}\n"),
 
       kj::strTree(
           "    case ", methodId, ":\n"
-          "      return ", name, "Advanced(::capnp::Capability::Server::internalGetTypedContext<\n"
+          "      return ", name, "(::capnp::Capability::Server::internalGetTypedContext<\n"
           "          ", paramType, ", ", resultType, ">(context));\n")
     };
   }
@@ -1338,8 +1331,7 @@ private:
           "      ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context)\n"
           "      override;\n"
           "\n"
-          "protected:\n"
-          "  // Implementation should implement one of each method (normal or advanced).\n",
+          "protected:\n",
           KJ_MAP(m, methods) { return kj::mv(m.serverDecls); },
           "\n"
           "  ::kj::Promise<void> dispatchCallInternal(uint16_t methodId,\n"

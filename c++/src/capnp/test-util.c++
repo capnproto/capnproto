@@ -862,15 +862,17 @@ void checkDynamicTestMessageAllZero(DynamicStruct::Reader reader) {
 
 TestInterfaceImpl::TestInterfaceImpl(int& callCount): callCount(callCount) {}
 
-kj::Promise<void> TestInterfaceImpl::foo(FooParams::Reader params, FooResults::Builder result) {
+kj::Promise<void> TestInterfaceImpl::foo(FooContext context) {
   ++callCount;
+  auto params = context.getParams();
+  auto result = context.getResults();
   EXPECT_EQ(123, params.getI());
   EXPECT_TRUE(params.getJ());
   result.setX("foo");
   return kj::READY_NOW;
 }
 
-kj::Promise<void> TestInterfaceImpl::bazAdvanced(CallContext<BazParams, BazResults> context) {
+kj::Promise<void> TestInterfaceImpl::baz(BazContext context) {
   ++callCount;
   auto params = context.getParams();
   checkTestMessage(params.getS());
@@ -882,16 +884,17 @@ kj::Promise<void> TestInterfaceImpl::bazAdvanced(CallContext<BazParams, BazResul
 
 TestExtendsImpl::TestExtendsImpl(int& callCount): callCount(callCount) {}
 
-kj::Promise<void> TestExtendsImpl::foo(FooParams::Reader params, FooResults::Builder result) {
+kj::Promise<void> TestExtendsImpl::foo(FooContext context) {
   ++callCount;
+  auto params = context.getParams();
+  auto result = context.getResults();
   EXPECT_EQ(321, params.getI());
   EXPECT_FALSE(params.getJ());
   result.setX("bar");
   return kj::READY_NOW;
 }
 
-kj::Promise<void> TestExtendsImpl::graultAdvanced(
-    CallContext<GraultParams, test::TestAllTypes> context) {
+kj::Promise<void> TestExtendsImpl::grault(GraultContext context) {
   ++callCount;
   context.releaseParams();
 
@@ -902,8 +905,7 @@ kj::Promise<void> TestExtendsImpl::graultAdvanced(
 
 TestPipelineImpl::TestPipelineImpl(int& callCount): callCount(callCount) {}
 
-kj::Promise<void> TestPipelineImpl::getCapAdvanced(
-    CallContext<GetCapParams, GetCapResults> context) {
+kj::Promise<void> TestPipelineImpl::getCap(GetCapContext context) {
   ++callCount;
 
   auto params = context.getParams();
@@ -926,16 +928,15 @@ kj::Promise<void> TestPipelineImpl::getCapAdvanced(
       });
 }
 
-kj::Promise<void> TestCallOrderImpl::getCallSequence(
-    GetCallSequenceParams::Reader params, GetCallSequenceResults::Builder result) {
+kj::Promise<void> TestCallOrderImpl::getCallSequence(GetCallSequenceContext context) {
+  auto result = context.getResults();
   result.setN(count++);
   return kj::READY_NOW;
 }
 
 TestTailCallerImpl::TestTailCallerImpl(int& callCount): callCount(callCount) {}
 
-kj::Promise<void> TestTailCallerImpl::fooAdvanced(
-    CallContext<FooParams, test::TestTailCallee::TailResult> context) {
+kj::Promise<void> TestTailCallerImpl::foo(FooContext context) {
   ++callCount;
 
   auto params = context.getParams();
@@ -948,8 +949,7 @@ kj::Promise<void> TestTailCallerImpl::fooAdvanced(
 
 TestTailCalleeImpl::TestTailCalleeImpl(int& callCount): callCount(callCount) {}
 
-kj::Promise<void> TestTailCalleeImpl::fooAdvanced(
-    CallContext<FooParams, test::TestTailCallee::TailResult> context) {
+kj::Promise<void> TestTailCalleeImpl::foo(FooContext context) {
   ++callCount;
 
   auto params = context.getParams();
@@ -964,16 +964,16 @@ kj::Promise<void> TestTailCalleeImpl::fooAdvanced(
 
 TestMoreStuffImpl::TestMoreStuffImpl(int& callCount): callCount(callCount) {}
 
-kj::Promise<void> TestMoreStuffImpl::getCallSequence(
-    GetCallSequenceParams::Reader params, GetCallSequenceResults::Builder result) {
+kj::Promise<void> TestMoreStuffImpl::getCallSequence(GetCallSequenceContext context) {
+  auto result = context.getResults();
   result.setN(callCount++);
   return kj::READY_NOW;
 }
 
-kj::Promise<void> TestMoreStuffImpl::callFoo(
-    CallFooParams::Reader params, CallFooResults::Builder result) {
+kj::Promise<void> TestMoreStuffImpl::callFoo(CallFooContext context) {
   ++callCount;
 
+  auto params = context.getParams();
   auto cap = params.getCap();
 
   auto request = cap.fooRequest();
@@ -981,34 +981,32 @@ kj::Promise<void> TestMoreStuffImpl::callFoo(
   request.setJ(true);
 
   return request.send().then(
-      [result](Response<test::TestInterface::FooResults>&& response) mutable {
+      [context](Response<test::TestInterface::FooResults>&& response) mutable {
         EXPECT_EQ("foo", response.getX());
-        result.setS("bar");
+        context.getResults().setS("bar");
       });
 }
 
-kj::Promise<void> TestMoreStuffImpl::callFooWhenResolved(
-    test::TestMoreStuff::CallFooWhenResolvedParams::Reader params,
-    test::TestMoreStuff::CallFooWhenResolvedResults::Builder result) {
+kj::Promise<void> TestMoreStuffImpl::callFooWhenResolved(CallFooWhenResolvedContext context) {
   ++callCount;
 
+  auto params = context.getParams();
   auto cap = params.getCap();
 
-  return cap.whenResolved().then([cap,result]() mutable {
+  return cap.whenResolved().then([cap,context]() mutable {
     auto request = cap.fooRequest();
     request.setI(123);
     request.setJ(true);
 
     return request.send().then(
-        [result](Response<test::TestInterface::FooResults>&& response) mutable {
+        [context](Response<test::TestInterface::FooResults>&& response) mutable {
           EXPECT_EQ("foo", response.getX());
-          result.setS("bar");
+          context.getResults().setS("bar");
         });
   });
 }
 
-kj::Promise<void> TestMoreStuffImpl::neverReturnAdvanced(
-    CallContext<NeverReturnParams, NeverReturnResults> context) {
+kj::Promise<void> TestMoreStuffImpl::neverReturn(NeverReturnContext context) {
   ++callCount;
 
   auto paf = kj::newPromiseAndFulfiller<void>();
@@ -1024,15 +1022,15 @@ kj::Promise<void> TestMoreStuffImpl::neverReturnAdvanced(
   return kj::mv(paf.promise);
 }
 
-kj::Promise<void> TestMoreStuffImpl::hold(HoldParams::Reader params, HoldResults::Builder result) {
+kj::Promise<void> TestMoreStuffImpl::hold(HoldContext context) {
   ++callCount;
 
+  auto params = context.getParams();
   clientToHold = params.getCap();
   return kj::READY_NOW;
 }
 
-kj::Promise<void> TestMoreStuffImpl::callHeld(
-    CallHeldParams::Reader params, CallHeldResults::Builder result) {
+kj::Promise<void> TestMoreStuffImpl::callHeld(CallHeldContext context) {
   ++callCount;
 
   auto request = clientToHold.fooRequest();
@@ -1040,27 +1038,28 @@ kj::Promise<void> TestMoreStuffImpl::callHeld(
   request.setJ(true);
 
   return request.send().then(
-      [result](Response<test::TestInterface::FooResults>&& response) mutable {
+      [context](Response<test::TestInterface::FooResults>&& response) mutable {
         EXPECT_EQ("foo", response.getX());
-        result.setS("bar");
+        context.getResults().setS("bar");
       });
 }
 
-kj::Promise<void> TestMoreStuffImpl::getHeld(
-    GetHeldParams::Reader params, GetHeldResults::Builder result) {
+kj::Promise<void> TestMoreStuffImpl::getHeld(GetHeldContext context) {
   ++callCount;
+  auto result = context.getResults();
   result.setCap(clientToHold);
   return kj::READY_NOW;
 }
 
-kj::Promise<void> TestMoreStuffImpl::echo(EchoParams::Reader params, EchoResults::Builder result) {
+kj::Promise<void> TestMoreStuffImpl::echo(EchoContext context) {
   ++callCount;
+  auto params = context.getParams();
+  auto result = context.getResults();
   result.setCap(params.getCap());
   return kj::READY_NOW;
 }
 
-kj::Promise<void> TestMoreStuffImpl::expectAsyncCancelAdvanced(
-    CallContext<ExpectAsyncCancelParams, ExpectAsyncCancelResults> context) {
+kj::Promise<void> TestMoreStuffImpl::expectAsyncCancel(ExpectAsyncCancelContext context) {
   auto cap = context.getParams().getCap();
   context.releaseParams();
   context.allowAsyncCancellation();
@@ -1068,7 +1067,7 @@ kj::Promise<void> TestMoreStuffImpl::expectAsyncCancelAdvanced(
 }
 
 kj::Promise<void> TestMoreStuffImpl::loop(uint depth, test::TestInterface::Client cap,
-    CallContext<ExpectAsyncCancelParams, ExpectAsyncCancelResults> context) {
+                                          ExpectAsyncCancelContext context) {
   if (depth > 100) {
     ADD_FAILURE() << "Looped too long, giving up.";
     return kj::READY_NOW;
@@ -1079,15 +1078,14 @@ kj::Promise<void> TestMoreStuffImpl::loop(uint depth, test::TestInterface::Clien
   }
 }
 
-kj::Promise<void> TestMoreStuffImpl::expectSyncCancelAdvanced(
-    CallContext<ExpectSyncCancelParams, ExpectSyncCancelResults> context) {
+kj::Promise<void> TestMoreStuffImpl::expectSyncCancel(ExpectSyncCancelContext context) {
   auto cap = context.getParams().getCap();
   context.releaseParams();
   return loop(0, cap, context);
 }
 
 kj::Promise<void> TestMoreStuffImpl::loop(uint depth, test::TestInterface::Client cap,
-    CallContext<ExpectSyncCancelParams, ExpectSyncCancelResults> context) {
+                                          ExpectSyncCancelContext context) {
   if (depth > 100) {
     ADD_FAILURE() << "Looped too long, giving up.";
     return kj::READY_NOW;
