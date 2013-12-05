@@ -515,6 +515,9 @@ private:
 
   friend class Capability::Client;
   friend struct DynamicCapability;
+  template <typename, typename>
+  friend class CallContext;
+  friend class RequestHook;
 };
 
 template <>

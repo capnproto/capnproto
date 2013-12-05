@@ -527,7 +527,7 @@ TEST(Capability, DynamicServerInheritance) {
 class TestPipelineDynamicImpl final: public DynamicCapability::Server {
 public:
   TestPipelineDynamicImpl(int& callCount)
-      : DynamicCapability::Server(Schema::from<test::TestExtends>()),
+      : DynamicCapability::Server(Schema::from<test::TestPipeline>()),
         callCount(callCount) {}
 
   int& callCount;
@@ -559,8 +559,8 @@ public:
 
             // Too lazy to write a whole separate test for each of these cases...  so just make
             // sure they both compile here, and only actually test the latter.
-            box.set("outCap", kj::heap<TestExtendsDynamicImpl>(callCount));
-            box.set("outCap", kj::heap<TestExtendsImpl>(callCount));
+            box.set("cap", kj::heap<TestExtendsDynamicImpl>(callCount));
+            box.set("cap", kj::heap<TestExtendsImpl>(callCount));
           });
     } else {
       KJ_FAIL_ASSERT("Method not implemented", methodName);
@@ -574,7 +574,9 @@ TEST(Capability, DynamicServerPipelining) {
 
   int callCount = 0;
   int chainedCallCount = 0;
-  test::TestPipeline::Client client(kj::heap<TestPipelineImpl>(callCount));
+  test::TestPipeline::Client client =
+      DynamicCapability::Client(kj::heap<TestPipelineDynamicImpl>(callCount))
+          .castAs<test::TestPipeline>();
 
   auto request = client.getCapRequest();
   request.setN(234);
@@ -602,6 +604,68 @@ TEST(Capability, DynamicServerPipelining) {
 
   EXPECT_EQ(3, callCount);
   EXPECT_EQ(1, chainedCallCount);
+}
+
+class TestTailCallerDynamicImpl final: public DynamicCapability::Server {
+public:
+  TestTailCallerDynamicImpl(int& callCount)
+      : DynamicCapability::Server(Schema::from<test::TestTailCaller>()),
+        callCount(callCount) {}
+
+  int& callCount;
+
+  kj::Promise<void> call(InterfaceSchema::Method method,
+                         CallContext<DynamicStruct, DynamicStruct> context) {
+    auto methodName = method.getProto().getName();
+    if (methodName == "foo") {
+      ++callCount;
+
+      auto params = context.getParams();
+      auto tailRequest = params.get("callee").as<DynamicCapability>().newRequest("foo");
+      tailRequest.set("i", params.get("i"));
+      tailRequest.set("t", "from TestTailCaller");
+      context.releaseParams();
+      return context.tailCall(kj::mv(tailRequest));
+    } else {
+      KJ_FAIL_ASSERT("Method not implemented", methodName);
+    }
+  }
+};
+
+TEST(Capability, DynamicServerTailCall) {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  int calleeCallCount = 0;
+  int callerCallCount = 0;
+
+  test::TestTailCallee::Client callee(kj::heap<TestTailCalleeImpl>(calleeCallCount));
+  test::TestTailCaller::Client caller =
+      DynamicCapability::Client(kj::heap<TestTailCallerDynamicImpl>(callerCallCount))
+          .castAs<test::TestTailCaller>();
+
+  auto request = caller.fooRequest();
+  request.setI(456);
+  request.setCallee(callee);
+
+  auto promise = request.send();
+
+  auto dependentCall0 = promise.getC().getCallSequenceRequest().send();
+
+  auto response = promise.wait(waitScope);
+  EXPECT_EQ(456, response.getI());
+  EXPECT_EQ(456, response.getI());
+
+  auto dependentCall1 = promise.getC().getCallSequenceRequest().send();
+
+  auto dependentCall2 = response.getC().getCallSequenceRequest().send();
+
+  EXPECT_EQ(0, dependentCall0.wait(waitScope).getN());
+  EXPECT_EQ(1, dependentCall1.wait(waitScope).getN());
+  EXPECT_EQ(2, dependentCall2.wait(waitScope).getN());
+
+  EXPECT_EQ(1, calleeCallCount);
+  EXPECT_EQ(1, callerCallCount);
 }
 
 // =======================================================================================
