@@ -34,6 +34,7 @@ namespace kj {
 class EventLoop;
 template <typename T>
 class Promise;
+class WaitScope;
 
 namespace _ {  // private
 
@@ -173,7 +174,7 @@ private:
 };
 
 void daemonize(kj::Promise<void>&& promise);
-void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result);
+void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope);
 Promise<void> yield();
 
 class NeverDone {

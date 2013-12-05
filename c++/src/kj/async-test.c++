@@ -30,63 +30,69 @@ namespace {
 
 TEST(Async, EvalVoid) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   bool done = false;
 
   Promise<void> promise = evalLater([&]() { done = true; });
   EXPECT_FALSE(done);
-  promise.wait();
+  promise.wait(waitScope);
   EXPECT_TRUE(done);
 }
 
 TEST(Async, EvalInt) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   bool done = false;
 
   Promise<int> promise = evalLater([&]() { done = true; return 123; });
   EXPECT_FALSE(done);
-  EXPECT_EQ(123, promise.wait());
+  EXPECT_EQ(123, promise.wait(waitScope));
   EXPECT_TRUE(done);
 }
 
 TEST(Async, There) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   Promise<int> a = 123;
   bool done = false;
 
   Promise<int> promise = a.then([&](int ai) { done = true; return ai + 321; });
   EXPECT_FALSE(done);
-  EXPECT_EQ(444, promise.wait());
+  EXPECT_EQ(444, promise.wait(waitScope));
   EXPECT_TRUE(done);
 }
 
 TEST(Async, ThereVoid) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   Promise<int> a = 123;
   int value = 0;
 
   Promise<void> promise = a.then([&](int ai) { value = ai; });
   EXPECT_EQ(0, value);
-  promise.wait();
+  promise.wait(waitScope);
   EXPECT_EQ(123, value);
 }
 
 TEST(Async, Exception) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   Promise<int> promise = evalLater(
       [&]() -> int { KJ_FAIL_ASSERT("foo") { return 123; } });
   EXPECT_TRUE(kj::runCatchingExceptions([&]() {
     // wait() only returns when compiling with -fno-exceptions.
-    EXPECT_EQ(123, promise.wait());
+    EXPECT_EQ(123, promise.wait(waitScope));
   }) != nullptr);
 }
 
 TEST(Async, HandleException) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   Promise<int> promise = evalLater(
       [&]() -> int { KJ_FAIL_ASSERT("foo") { return 123; } });
@@ -96,11 +102,12 @@ TEST(Async, HandleException) {
       [](int i) { return i + 1; },
       [&](Exception&& e) { EXPECT_EQ(line, e.getLine()); return 345; });
 
-  EXPECT_EQ(345, promise.wait());
+  EXPECT_EQ(345, promise.wait(waitScope));
 }
 
 TEST(Async, PropagateException) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   Promise<int> promise = evalLater(
       [&]() -> int { KJ_FAIL_ASSERT("foo") { return 123; } });
@@ -112,11 +119,12 @@ TEST(Async, PropagateException) {
       [](int i) { return i + 2; },
       [&](Exception&& e) { EXPECT_EQ(line, e.getLine()); return 345; });
 
-  EXPECT_EQ(345, promise.wait());
+  EXPECT_EQ(345, promise.wait(waitScope));
 }
 
 TEST(Async, PropagateExceptionTypeChange) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   Promise<int> promise = evalLater(
       [&]() -> int { KJ_FAIL_ASSERT("foo") { return 123; } });
@@ -128,11 +136,12 @@ TEST(Async, PropagateExceptionTypeChange) {
       [](StringPtr s) -> StringPtr { return "bar"; },
       [&](Exception&& e) -> StringPtr { EXPECT_EQ(line, e.getLine()); return "baz"; });
 
-  EXPECT_EQ("baz", promise2.wait());
+  EXPECT_EQ("baz", promise2.wait(waitScope));
 }
 
 TEST(Async, Then) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   bool done = false;
 
@@ -143,13 +152,14 @@ TEST(Async, Then) {
 
   EXPECT_FALSE(done);
 
-  EXPECT_EQ(444, promise.wait());
+  EXPECT_EQ(444, promise.wait(waitScope));
 
   EXPECT_TRUE(done);
 }
 
 TEST(Async, Chain) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   Promise<int> promise = evalLater([&]() -> int { return 123; });
   Promise<int> promise2 = evalLater([&]() -> int { return 321; });
@@ -160,11 +170,12 @@ TEST(Async, Chain) {
     });
   });
 
-  EXPECT_EQ(444, promise3.wait());
+  EXPECT_EQ(444, promise3.wait(waitScope));
 }
 
 TEST(Async, SeparateFulfiller) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   auto pair = newPromiseAndFulfiller<int>();
 
@@ -172,11 +183,12 @@ TEST(Async, SeparateFulfiller) {
   pair.fulfiller->fulfill(123);
   EXPECT_FALSE(pair.fulfiller->isWaiting());
 
-  EXPECT_EQ(123, pair.promise.wait());
+  EXPECT_EQ(123, pair.promise.wait(waitScope));
 }
 
 TEST(Async, SeparateFulfillerVoid) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   auto pair = newPromiseAndFulfiller<void>();
 
@@ -184,7 +196,7 @@ TEST(Async, SeparateFulfillerVoid) {
   pair.fulfiller->fulfill();
   EXPECT_FALSE(pair.fulfiller->isWaiting());
 
-  pair.promise.wait();
+  pair.promise.wait(waitScope);
 }
 
 TEST(Async, SeparateFulfillerCanceled) {
@@ -197,6 +209,7 @@ TEST(Async, SeparateFulfillerCanceled) {
 
 TEST(Async, SeparateFulfillerChained) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   auto pair = newPromiseAndFulfiller<Promise<int>>();
   auto inner = newPromiseAndFulfiller<int>();
@@ -207,7 +220,7 @@ TEST(Async, SeparateFulfillerChained) {
 
   inner.fulfiller->fulfill(123);
 
-  EXPECT_EQ(123, pair.promise.wait());
+  EXPECT_EQ(123, pair.promise.wait(waitScope));
 }
 
 #if KJ_NO_EXCEPTIONS
@@ -217,11 +230,12 @@ TEST(Async, SeparateFulfillerChained) {
 
 TEST(Async, SeparateFulfillerDiscarded) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   auto pair = newPromiseAndFulfiller<int>();
   pair.fulfiller = nullptr;
 
-  EXPECT_ANY_THROW(pair.promise.wait());
+  EXPECT_ANY_THROW(pair.promise.wait(waitScope));
 }
 
 TEST(Async, SeparateFulfillerMemoryLeak) {
@@ -231,6 +245,7 @@ TEST(Async, SeparateFulfillerMemoryLeak) {
 
 TEST(Async, Ordering) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   int counter = 0;
   Promise<void> promises[6] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
@@ -285,7 +300,7 @@ TEST(Async, Ordering) {
   promises[0].eagerlyEvaluate();
 
   for (auto i: indices(promises)) {
-    kj::mv(promises[i]).wait();
+    kj::mv(promises[i]).wait(waitScope);
   }
 
   EXPECT_EQ(7, counter);
@@ -293,6 +308,7 @@ TEST(Async, Ordering) {
 
 TEST(Async, Fork) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   Promise<int> promise = evalLater([&]() { return 123; });
 
@@ -311,8 +327,8 @@ TEST(Async, Fork) {
     auto releaseFork = kj::mv(fork);
   }
 
-  EXPECT_EQ(456, branch1.wait());
-  EXPECT_EQ(789, branch2.wait());
+  EXPECT_EQ(456, branch1.wait(waitScope));
+  EXPECT_EQ(789, branch2.wait(waitScope));
 }
 
 struct RefcountedInt: public Refcounted {
@@ -323,6 +339,7 @@ struct RefcountedInt: public Refcounted {
 
 TEST(Async, ForkRef) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   Promise<Own<RefcountedInt>> promise = evalLater([&]() {
     return refcounted<RefcountedInt>(123);
@@ -343,46 +360,50 @@ TEST(Async, ForkRef) {
     auto releaseFork = kj::mv(fork);
   }
 
-  EXPECT_EQ(456, branch1.wait());
-  EXPECT_EQ(789, branch2.wait());
+  EXPECT_EQ(456, branch1.wait(waitScope));
+  EXPECT_EQ(789, branch2.wait(waitScope));
 }
 
 TEST(Async, ExclusiveJoin) {
   {
     EventLoop loop;
+    WaitScope waitScope(loop);
 
     auto left = evalLater([&]() { return 123; });
     auto right = newPromiseAndFulfiller<int>();  // never fulfilled
 
     left.exclusiveJoin(kj::mv(right.promise));
 
-    EXPECT_EQ(123, left.wait());
+    EXPECT_EQ(123, left.wait(waitScope));
   }
 
   {
     EventLoop loop;
+    WaitScope waitScope(loop);
 
     auto left = newPromiseAndFulfiller<int>();  // never fulfilled
     auto right = evalLater([&]() { return 123; });
 
     left.promise.exclusiveJoin(kj::mv(right));
 
-    EXPECT_EQ(123, left.promise.wait());
+    EXPECT_EQ(123, left.promise.wait(waitScope));
   }
 
   {
     EventLoop loop;
+    WaitScope waitScope(loop);
 
     auto left = evalLater([&]() { return 123; });
     auto right = evalLater([&]() { return 456; });
 
     left.exclusiveJoin(kj::mv(right));
 
-    EXPECT_EQ(123, left.wait());
+    EXPECT_EQ(123, left.wait(waitScope));
   }
 
   {
     EventLoop loop;
+    WaitScope waitScope(loop);
 
     auto left = evalLater([&]() { return 123; });
     auto right = evalLater([&]() { return 456; });
@@ -391,7 +412,7 @@ TEST(Async, ExclusiveJoin) {
 
     left.exclusiveJoin(kj::mv(right));
 
-    EXPECT_EQ(456, left.wait());
+    EXPECT_EQ(456, left.wait(waitScope));
   }
 }
 
@@ -406,6 +427,7 @@ public:
 
 TEST(Async, TaskSet) {
   EventLoop loop;
+  WaitScope waitScope(loop);
   ErrorHandlerImpl errorHandler;
   TaskSet tasks(errorHandler);
 
@@ -428,7 +450,7 @@ TEST(Async, TaskSet) {
 
   evalLater([&]() {
     EXPECT_EQ(3, counter++);
-  }).wait();
+  }).wait(waitScope);
 
   EXPECT_EQ(4, counter);
   EXPECT_EQ(1u, errorHandler.exceptionCount);
@@ -447,6 +469,7 @@ TEST(Async, Attach) {
   bool destroyed = false;
 
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   Promise<int> promise = evalLater([&]() {
     EXPECT_FALSE(destroyed);
@@ -461,7 +484,7 @@ TEST(Async, Attach) {
   });
 
   EXPECT_FALSE(destroyed);
-  EXPECT_EQ(444, promise.wait());
+  EXPECT_EQ(444, promise.wait(waitScope));
   EXPECT_TRUE(destroyed);
 }
 
@@ -469,23 +492,25 @@ TEST(Async, EagerlyEvaluate) {
   bool called = false;
 
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   Promise<void> promise = Promise<void>(READY_NOW).then([&]() {
     called = true;
   });
-  evalLater([]() {}).wait();
+  evalLater([]() {}).wait(waitScope);
 
   EXPECT_FALSE(called);
 
   promise.eagerlyEvaluate();
 
-  evalLater([]() {}).wait();
+  evalLater([]() {}).wait(waitScope);
 
   EXPECT_TRUE(called);
 }
 
 TEST(Async, Daemonize) {
   EventLoop loop;
+  WaitScope waitScope(loop);
 
   bool ran1 = false;
   bool ran2 = false;
@@ -499,7 +524,7 @@ TEST(Async, Daemonize) {
   EXPECT_FALSE(ran2);
   EXPECT_FALSE(ran3);
 
-  evalLater([]() {}).wait();
+  evalLater([]() {}).wait(waitScope);
 
   EXPECT_FALSE(ran1);
   EXPECT_TRUE(ran2);
@@ -522,6 +547,7 @@ public:
 TEST(Async, SetRunnable) {
   DummyEventPort port;
   EventLoop loop(port);
+  WaitScope waitScope(loop);
 
   EXPECT_FALSE(port.runnable);
   EXPECT_EQ(0, port.callCount);
@@ -535,7 +561,7 @@ TEST(Async, SetRunnable) {
     EXPECT_FALSE(port.runnable);
     EXPECT_EQ(2, port.callCount);
 
-    promise.wait();
+    promise.wait(waitScope);
     EXPECT_FALSE(port.runnable);
     EXPECT_EQ(4, port.callCount);
   }
@@ -556,7 +582,7 @@ TEST(Async, SetRunnable) {
     loop.run(10);
     EXPECT_FALSE(port.runnable);
 
-    promise.wait();
+    promise.wait(waitScope);
     EXPECT_FALSE(port.runnable);
 
     EXPECT_EQ(8, port.callCount);

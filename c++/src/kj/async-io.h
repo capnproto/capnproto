@@ -188,7 +188,7 @@ public:
   };
 
   virtual PipeThread newPipeThread(
-      Function<void(AsyncIoProvider& ioProvider, AsyncIoStream& stream)> startFunc) = 0;
+      Function<void(AsyncIoProvider&, AsyncIoStream&, WaitScope&)> startFunc) = 0;
   // Create a new thread and set up a two-way pipe (socketpair) which can be used to communicate
   // with it.  One end of the pipe is passed to the thread's start function and the other end of
   // the pipe is returned.  The new thread also gets its own `AsyncIoProvider` instance and will
@@ -278,6 +278,7 @@ Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel);
 struct AsyncIoContext {
   Own<LowLevelAsyncIoProvider> lowLevelProvider;
   Own<AsyncIoProvider> provider;
+  WaitScope& waitScope;
 };
 
 AsyncIoContext setupAsyncIo();

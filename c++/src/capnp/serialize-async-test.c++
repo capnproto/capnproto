@@ -132,7 +132,7 @@ TEST_F(SerializeAsyncTest, ParseAsync) {
     writeMessage(output, message);
   });
 
-  auto received = readMessage(*input).wait();
+  auto received = readMessage(*input).wait(ioContext.waitScope);
 
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
@@ -150,7 +150,7 @@ TEST_F(SerializeAsyncTest, ParseAsyncOddSegmentCount) {
     writeMessage(output, message);
   });
 
-  auto received = readMessage(*input).wait();
+  auto received = readMessage(*input).wait(ioContext.waitScope);
 
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
@@ -168,7 +168,7 @@ TEST_F(SerializeAsyncTest, ParseAsyncEvenSegmentCount) {
     writeMessage(output, message);
   });
 
-  auto received = readMessage(*input).wait();
+  auto received = readMessage(*input).wait(ioContext.waitScope);
 
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
@@ -193,7 +193,7 @@ TEST_F(SerializeAsyncTest, WriteAsync) {
     }
   });
 
-  writeMessage(*output, message).wait();
+  writeMessage(*output, message).wait(ioContext.waitScope);
 }
 
 TEST_F(SerializeAsyncTest, WriteAsyncOddSegmentCount) {
@@ -216,7 +216,7 @@ TEST_F(SerializeAsyncTest, WriteAsyncOddSegmentCount) {
     }
   });
 
-  writeMessage(*output, message).wait();
+  writeMessage(*output, message).wait(ioContext.waitScope);
 }
 
 TEST_F(SerializeAsyncTest, WriteAsyncEvenSegmentCount) {
@@ -239,7 +239,7 @@ TEST_F(SerializeAsyncTest, WriteAsyncEvenSegmentCount) {
     }
   });
 
-  writeMessage(*output, message).wait();
+  writeMessage(*output, message).wait(ioContext.waitScope);
 }
 
 }  // namespace

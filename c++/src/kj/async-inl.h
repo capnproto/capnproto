@@ -588,10 +588,10 @@ PromiseForResult<Func, T> Promise<T>::then(Func&& func, ErrorFunc&& errorHandler
 }
 
 template <typename T>
-T Promise<T>::wait() {
+T Promise<T>::wait(WaitScope& waitScope) {
   _::ExceptionOr<_::FixVoid<T>> result;
 
-  waitImpl(kj::mv(node), result);
+  waitImpl(kj::mv(node), result, waitScope);
 
   KJ_IF_MAYBE(value, result.value) {
     KJ_IF_MAYBE(exception, result.exception) {

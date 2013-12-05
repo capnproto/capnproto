@@ -61,11 +61,12 @@ private:
 
 kj::AsyncIoProvider::PipeThread runServer(kj::AsyncIoProvider& ioProvider, int& callCount) {
   return ioProvider.newPipeThread(
-      [&callCount](kj::AsyncIoProvider& ioProvider, kj::AsyncIoStream& stream) {
+      [&callCount](kj::AsyncIoProvider& ioProvider, kj::AsyncIoStream& stream,
+                   kj::WaitScope& waitScope) {
     TwoPartyVatNetwork network(stream, rpc::twoparty::Side::SERVER);
     TestRestorer restorer(callCount);
     auto server = makeRpcServer(network, restorer);
-    network.onDisconnect().wait();
+    network.onDisconnect().wait(waitScope);
   });
 }
 
@@ -118,13 +119,13 @@ TEST(TwoPartyNetwork, Basic) {
 
   EXPECT_EQ(0, callCount);
 
-  auto response1 = promise1.wait();
+  auto response1 = promise1.wait(ioContext.waitScope);
 
   EXPECT_EQ("foo", response1.getX());
 
-  auto response2 = promise2.wait();
+  auto response2 = promise2.wait(ioContext.waitScope);
 
-  promise3.wait();
+  promise3.wait(ioContext.waitScope);
 
   EXPECT_EQ(2, callCount);
   EXPECT_TRUE(barFailed);
@@ -170,10 +171,10 @@ TEST(TwoPartyNetwork, Pipelining) {
       EXPECT_EQ(0, callCount);
       EXPECT_EQ(0, reverseCallCount);
 
-      auto response = pipelinePromise.wait();
+      auto response = pipelinePromise.wait(ioContext.waitScope);
       EXPECT_EQ("bar", response.getX());
 
-      auto response2 = pipelinePromise2.wait();
+      auto response2 = pipelinePromise2.wait(ioContext.waitScope);
       checkTestMessage(response2);
 
       EXPECT_EQ(3, callCount);
@@ -187,7 +188,7 @@ TEST(TwoPartyNetwork, Pipelining) {
     serverThread.pipe->shutdownWrite();
 
     // The other side should also disconnect.
-    disconnectPromise.wait();
+    disconnectPromise.wait(ioContext.waitScope);
     EXPECT_FALSE(drained);
 
     {
@@ -206,8 +207,8 @@ TEST(TwoPartyNetwork, Pipelining) {
           .castAs<test::TestExtends>().graultRequest();
       auto pipelinePromise2 = pipelineRequest2.send();
 
-      EXPECT_ANY_THROW(pipelinePromise.wait());
-      EXPECT_ANY_THROW(pipelinePromise2.wait());
+      EXPECT_ANY_THROW(pipelinePromise.wait(ioContext.waitScope));
+      EXPECT_ANY_THROW(pipelinePromise2.wait(ioContext.waitScope));
 
       EXPECT_EQ(3, callCount);
       EXPECT_EQ(1, reverseCallCount);
@@ -216,7 +217,7 @@ TEST(TwoPartyNetwork, Pipelining) {
     EXPECT_FALSE(drained);
   }
 
-  drainedPromise.wait();
+  drainedPromise.wait(ioContext.waitScope);
 }
 
 }  // namespace

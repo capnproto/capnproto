@@ -716,7 +716,9 @@ public:
 
 class LowLevelAsyncIoProviderImpl final: public LowLevelAsyncIoProvider {
 public:
-  LowLevelAsyncIoProviderImpl(): eventLoop(eventPort) {}
+  LowLevelAsyncIoProviderImpl(): eventLoop(eventPort), waitScope(eventLoop) {}
+
+  inline WaitScope& getWaitScope() { return waitScope; }
 
   Own<AsyncInputStream> wrapInputFd(int fd, uint flags = 0) override {
     return heap<AsyncStreamFd>(eventPort, fd, flags);
@@ -747,6 +749,7 @@ public:
 private:
   UnixEventPort eventPort;
   EventLoop eventLoop;
+  WaitScope waitScope;
 };
 
 // =======================================================================================
@@ -889,7 +892,7 @@ public:
   }
 
   PipeThread newPipeThread(
-      Function<void(AsyncIoProvider& ioProvider, AsyncIoStream& stream)> startFunc) override {
+      Function<void(AsyncIoProvider&, AsyncIoStream&, WaitScope&)> startFunc) override {
     int fds[2];
     int type = SOCK_STREAM;
 #if __linux__
@@ -903,11 +906,11 @@ public:
     auto pipe = lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS);
 
     auto thread = heap<Thread>(kj::mvCapture(startFunc,
-        [threadFd](Function<void(AsyncIoProvider& ioProvider, AsyncIoStream& stream)>&& startFunc) {
+        [threadFd](Function<void(AsyncIoProvider&, AsyncIoStream&, WaitScope&)>&& startFunc) {
       LowLevelAsyncIoProviderImpl lowLevel;
       auto stream = lowLevel.wrapSocketFd(threadFd, NEW_FD_FLAGS);
       AsyncIoProviderImpl ioProvider(lowLevel);
-      startFunc(ioProvider, *stream);
+      startFunc(ioProvider, *stream, lowLevel.getWaitScope());
     }));
 
     return { kj::mv(thread), kj::mv(pipe) };
@@ -931,7 +934,8 @@ Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel) {
 AsyncIoContext setupAsyncIo() {
   auto lowLevel = heap<LowLevelAsyncIoProviderImpl>();
   auto ioProvider = kj::heap<AsyncIoProviderImpl>(*lowLevel);
-  return { kj::mv(lowLevel), kj::mv(ioProvider) };
+  auto& waitScope = lowLevel->getWaitScope();
+  return { kj::mv(lowLevel), kj::mv(ioProvider), waitScope };
 }
 
 }  // namespace kj

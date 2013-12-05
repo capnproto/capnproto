@@ -35,7 +35,7 @@ TEST(EzRpc, Basic) {
   server.exportCap("cap1", kj::heap<TestInterfaceImpl>(callCount));
   server.exportCap("cap2", kj::heap<TestCallOrderImpl>());
 
-  EzRpcClient client("localhost", server.getPort().wait());
+  EzRpcClient client("localhost", server.getPort().wait(server.getWaitScope()));
 
   auto cap = client.importCap<test::TestInterface>("cap1");
   auto request = cap.fooRequest();
@@ -43,14 +43,14 @@ TEST(EzRpc, Basic) {
   request.setJ(true);
 
   EXPECT_EQ(0, callCount);
-  auto response = request.send().wait();
+  auto response = request.send().wait(server.getWaitScope());
   EXPECT_EQ("foo", response.getX());
   EXPECT_EQ(1, callCount);
 
   EXPECT_EQ(0, client.importCap("cap2").castAs<test::TestCallOrder>()
-      .getCallSequenceRequest().send().wait().getN());
+      .getCallSequenceRequest().send().wait(server.getWaitScope()).getN());
   EXPECT_EQ(1, client.importCap("cap2").castAs<test::TestCallOrder>()
-      .getCallSequenceRequest().send().wait().getN());
+      .getCallSequenceRequest().send().wait(server.getWaitScope()).getN());
 }
 
 }  // namespace

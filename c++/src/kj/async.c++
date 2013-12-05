@@ -199,26 +199,13 @@ void EventPort::setRunnable(bool runnable) {}
 
 EventLoop::EventLoop()
     : port(_::NullEventPort::instance),
-      daemons(kj::heap<_::TaskSetImpl>(_::LoggingErrorHandler::instance)) {
-  KJ_REQUIRE(threadLocalEventLoop == nullptr, "This thread already has an EventLoop.");
-  threadLocalEventLoop = this;
-}
+      daemons(kj::heap<_::TaskSetImpl>(_::LoggingErrorHandler::instance)) {}
 
 EventLoop::EventLoop(EventPort& port)
     : port(port),
-      daemons(kj::heap<_::TaskSetImpl>(_::LoggingErrorHandler::instance)) {
-  KJ_REQUIRE(threadLocalEventLoop == nullptr, "This thread already has an EventLoop.");
-  threadLocalEventLoop = this;
-}
+      daemons(kj::heap<_::TaskSetImpl>(_::LoggingErrorHandler::instance)) {}
 
 EventLoop::~EventLoop() noexcept(false) {
-  KJ_REQUIRE(threadLocalEventLoop == this,
-             "EventLoop being destroyed in a different thread than it was created.") {
-    break;
-  }
-
-  KJ_DEFER(threadLocalEventLoop = nullptr);
-
   // Destroy all "daemon" tasks, noting that their destructors might try to access the EventLoop
   // some more.
   daemons = nullptr;
@@ -235,6 +222,12 @@ EventLoop::~EventLoop() noexcept(false) {
       event->prev = nullptr;
       event = next;
     }
+    break;
+  }
+
+  KJ_REQUIRE(threadLocalEventLoop != this,
+             "EventLoop destroyed while still current for the thread.") {
+    threadLocalEventLoop = nullptr;
     break;
   }
 }
@@ -291,10 +284,24 @@ void EventLoop::setRunnable(bool runnable) {
   }
 }
 
+void EventLoop::enterScope() {
+  KJ_REQUIRE(threadLocalEventLoop == nullptr, "This thread already has an EventLoop.");
+  threadLocalEventLoop = this;
+}
+
+void EventLoop::leaveScope() {
+  KJ_REQUIRE(threadLocalEventLoop == this,
+             "WaitScope destroyed in a different thread than it was created in.") {
+    break;
+  }
+  threadLocalEventLoop = nullptr;
+}
+
 namespace _ {  // private
 
-void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result) {
-  EventLoop& loop = currentEventLoop();
+void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope) {
+  EventLoop& loop = waitScope.loop;
+  KJ_REQUIRE(&loop == threadLocalEventLoop, "WaitScope not valid for this thread.");
   KJ_REQUIRE(!loop.running, "wait() is not allowed from within event callbacks.");
 
   BoolEvent doneEvent;

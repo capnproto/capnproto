@@ -47,7 +47,7 @@ class EzRpcClient {
   //       auto request = adder.frobRequest();
   //       request.setLeft(12);
   //       request.setRight(34);
-  //       auto response = request.wait();
+  //       auto response = request.wait(client.getWaitScope());
   //       assert(response.getResult() == 46);
   //       return 0;
   //     }
@@ -64,7 +64,7 @@ class EzRpcClient {
   //     int main() {
   //       EzRpcServer server(":3456");
   //       server.exportCap("adder", kj::heap<AdderImpl>());
-  //       kj::NEVER_DONE.wait();
+  //       kj::NEVER_DONE.wait(server.getWaitScope());
   //     }
   //
   // This interface is easy, but it hides a lot of useful features available from the lower-level
@@ -72,10 +72,11 @@ class EzRpcClient {
   // - The server can only export a small set of public, singleton capabilities under well-known
   //   string names.  This is fine for transient services where no state needs to be kept between
   //   connections, but hides the power of Cap'n Proto when it comes to long-lived resources.
-  // - EzRpcClient/EzRpcServer automatically set up a `kj::EventLoop`.  Only one `kj::EventLoop`
-  //   can exist per thread, so you cannot use these interfaces if you wish to set up your own
-  //   event loop.  (However, you can safely create multiple EzRpcClient / EzRpcServer objects
-  //   in a single thread; they will make sure to make no more than one EventLoop.)
+  // - EzRpcClient/EzRpcServer automatically set up a `kj::EventLoop` and make it current for the
+  //   thread.  Only one `kj::EventLoop` can exist per thread, so you cannot use these interfaces
+  //   if you wish to set up your own event loop.  (However, you can safely create multiple
+  //   EzRpcClient / EzRpcServer objects in a single thread; they will make sure to make no more
+  //   than one EventLoop.)
   // - These classes only support simple two-party connections, not multilateral VatNetworks.
 
 public:
@@ -104,6 +105,10 @@ public:
   Capability::Client importCap(kj::StringPtr name);
   // Ask the sever for the capability with the given name.  You may specify a type to automatically
   // down-cast to that type.  It is up to you to specify the correct expected type.
+
+  kj::WaitScope& getWaitScope();
+  // Get the `WaitScope` for the client's `EventLoop`, which allows you to synchronously wait on
+  // promises.
 
   kj::AsyncIoProvider& getIoProvider();
   // Get the underlying AsyncIoProvider set up by the RPC system.  This is useful if you want
@@ -158,6 +163,10 @@ public:
   // Get the IP port number on which this server is listening.  This promise won't resolve until
   // the server is actually listening.  If the address was not an IP address (e.g. it was a Unix
   // domain socket) then getPort() resolves to zero.
+
+  kj::WaitScope& getWaitScope();
+  // Get the `WaitScope` for the client's `EventLoop`, which allows you to synchronously wait on
+  // promises.
 
   kj::AsyncIoProvider& getIoProvider();
   // Get the underlying AsyncIoProvider set up by the RPC system.  This is useful if you want

@@ -32,6 +32,7 @@
 namespace kj {
 
 class EventLoop;
+class WaitScope;
 
 template <typename T>
 class Promise;
@@ -186,13 +187,9 @@ public:
   // actual I/O.  To solve this, use `kj::evalLater()` to yield control; this way, all other events
   // in the queue will get a chance to run before your callback is executed.
 
-  T wait();
+  T wait(WaitScope& waitScope);
   // Run the event loop until the promise is fulfilled, then return its result.  If the promise
   // is rejected, throw an exception.
-  //
-  // wait() cannot be called recursively -- that is, an event callback cannot call wait().
-  // Instead, callbacks that need to perform more async operations should return a promise and
-  // rely on promise chaining.
   //
   // wait() is primarily useful at the top level of a program -- typically, within the function
   // that allocated the EventLoop.  For example, a program that performs one or two RPCs and then
@@ -205,13 +202,27 @@ public:
   // use `then()` to set an appropriate handler for the exception case, so that the promise you
   // actually wait on never throws.
   //
+  // `waitScope` is an object proving that the caller is in a scope where wait() is allowed.  By
+  // convention, any function which might call wait(), or which might call another function which
+  // might call wait(), must take `WaitScope&` as one of its parameters.  This is needed for two
+  // reasons:
+  // * `wait()` is not allowed during an event callback, because event callbacks are themselves
+  //   called during some other `wait()`, and such recursive `wait()`s would only be able to
+  //   complete in LIFO order, which might mean that the outer `wait()` ends up waiting longer
+  //   than it is supposed to.  To prevent this, a `WaitScope` cannot be constructed or used during
+  //   an event callback.
+  // * Since `wait()` runs the event loop, unrelated event callbacks may execute before `wait()`
+  //   returns.  This means that anyone calling `wait()` must be reentrant -- state may change
+  //   around them in arbitrary ways.  Therefore, callers really need to know if a function they
+  //   are calling might wait(), and the `WaitScope&` parameter makes this clear.
+  //
   // Note that `wait()` consumes the promise on which it is called, in the sense of move semantics.
   // After returning, the original promise is no longer valid.
   //
   // TODO(someday):  Implement fibers, and let them call wait() even when they are handling an
   //   event.
 
-  ForkedPromise<T> fork();
+  ForkedPromise<T> fork() KJ_WARN_UNUSED_RESULT;
   // Forks the promise, so that multiple different clients can independently wait on the result.
   // `T` must be copy-constructable for this to work.  Or, in the special case where `T` is
   // `Own<U>`, `U` must have a method `Own<U> addRef()` which returns a new reference to the same
@@ -578,10 +589,35 @@ private:
 
   bool turn();
   void setRunnable(bool runnable);
+  void enterScope();
+  void leaveScope();
 
   friend void _::daemonize(kj::Promise<void>&& promise);
-  friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result);
+  friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
+                          WaitScope& waitScope);
   friend class _::Event;
+  friend class WaitScope;
+};
+
+class WaitScope {
+  // Represents a scope in which asynchronous programming can occur.  A `WaitScope` should usually
+  // be allocated on the stack and serves two purposes:
+  // * While the `WaitScope` exists, its `EventLoop` is registered as the current loop for the
+  //   thread.  Most operations dealing with `Promise` (including all of its methods) do not work
+  //   unless the thread has a current `EventLoop`.
+  // * `WaitScope` may be passed to `Promise::wait()` to synchronously wait for a particular
+  //   promise to complete.  See `Promise::wait()` for an extended discussion.
+
+public:
+  inline explicit WaitScope(EventLoop& loop): loop(loop) { loop.enterScope(); }
+  inline ~WaitScope() { loop.leaveScope(); }
+  KJ_DISALLOW_COPY(WaitScope);
+
+private:
+  EventLoop& loop;
+  friend class EventLoop;
+  friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
+                          WaitScope& waitScope);
 };
 
 }  // namespace kj

@@ -46,6 +46,10 @@ public:
     threadEzContext = nullptr;
   }
 
+  kj::WaitScope& getWaitScope() {
+    return ioContext.waitScope;
+  }
+
   kj::AsyncIoProvider& getIoProvider() {
     return *ioContext.provider;
   }
@@ -144,6 +148,10 @@ Capability::Client EzRpcClient::importCap(kj::StringPtr name) {
       return KJ_ASSERT_NONNULL(impl->clientContext)->restore(name);
     }));
   }
+}
+
+kj::WaitScope& EzRpcClient::getWaitScope() {
+  return impl->context->getWaitScope();
 }
 
 kj::AsyncIoProvider& EzRpcClient::getIoProvider() {
@@ -271,6 +279,10 @@ void EzRpcServer::exportCap(kj::StringPtr name, Capability::Client cap) {
 
 kj::Promise<uint> EzRpcServer::getPort() {
   return impl->portPromise.addBranch();
+}
+
+kj::WaitScope& EzRpcServer::getWaitScope() {
+  return impl->context->getWaitScope();
 }
 
 kj::AsyncIoProvider& EzRpcServer::getIoProvider() {
