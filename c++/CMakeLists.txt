@@ -453,8 +453,7 @@ libcapnp-rpc
 add_executable(capnp_evolution_test
   src/capnp/compiler/evolution-test.c++
 )
-get_target_property(CAPNP_EVOLUTION_TEST_EXECUTABLE capnp_evolution_test LOCATION)
-add_test(capnp_evolution_test ${CAPNP_EVOLUTION_TEST_EXECUTABLE})
+add_test(capnp_evolution_test capnp_evolution_test)
 target_link_libraries(capnp_evolution_test
   libcapnpc
   libcapnp
