@@ -529,9 +529,10 @@ class EventLoop {
   // EventLoop directly, but instead use `Promise`s to interact with it indirectly.  See the
   // documentation for `Promise`.
   //
-  // Each thread can have at most one EventLoop.  When an EventLoop is created, it becomes the
-  // default loop for the current thread.  Async APIs require that the thread has a current
-  // EventLoop, or they will throw exceptions.
+  // Each thread can have at most one current EventLoop.  To make an `EventLoop` current for
+  // the thread, create a `WaitScope`.  Async APIs require that the thread has a current EventLoop,
+  // or they will throw exceptions.  APIs that use `Promise::wait()` additionally must explicitly
+  // be passed a reference to the `WaitScope` to make the caller aware that they might block.
   //
   // Generally, you will want to construct an `EventLoop` at the top level of your program, e.g.
   // in the main() function, or in the start function of a thread.  You can then use it to

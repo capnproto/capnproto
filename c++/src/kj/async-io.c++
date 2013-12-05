@@ -689,14 +689,15 @@ public:
         case EINTR:
         case ENETDOWN:
         case EPROTO:
-        case ENOPROTOOPT:
         case EHOSTDOWN:
-        case ENONET:
         case EHOSTUNREACH:
-        case EOPNOTSUPP:
         case ENETUNREACH:
         case ECONNABORTED:
-          // The incoming connection is dead-on-arrival.  Just ignore it.
+        case ETIMEDOUT:
+          // According to the Linux man page, accept() may report an error if the accepted
+          // connection is already broken.  In this case, we really ought to just ignore it and
+          // keep waiting.  But it's hard to say exactly what errors are such network errors and
+          // which ones are permanent errors.  We've made a guess here.
           goto retry;
 
         default:
@@ -764,8 +765,11 @@ public:
   }
 
   Own<ConnectionReceiver> listen() override {
-    KJ_ASSERT(addrs.size() == 1,
-              "Sorry, unimplemented: Binding listen socket to multiple addresses.");
+    if (addrs.size() > 1) {
+      KJ_LOG(WARNING, "Bind address resolved to multiple addresses.  Only the first address will "
+          "be used.  If this is incorrect, specify the address numerically.  This may be fixed "
+          "in the future.", addrs[0].toString());
+    }
 
     int fd = addrs[0].socket(SOCK_STREAM);
 
