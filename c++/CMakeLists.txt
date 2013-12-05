@@ -391,67 +391,64 @@ foreach(filename ${test_capnpc_inputs})
 endforeach()
 
 # BUILT_SOURCES = $(test_capnpc_outputs)
-
-if(0)
-  add_executable(capnp_test
-    src/kj/common-test.c++
-    src/kj/memory-test.c++
-    src/kj/refcount-test.c++
-    src/kj/array-test.c++
-    src/kj/string-test.c++
-    src/kj/string-tree-test.c++
-    src/kj/exception-test.c++
-    src/kj/debug-test.c++
-    src/kj/arena-test.c++
-    src/kj/units-test.c++
-    src/kj/tuple-test.c++
-    src/kj/one-of-test.c++
-    src/kj/function-test.c++
-    src/kj/mutex-test.c++
-    src/kj/async-test.c++
-    src/kj/async-unix-test.c++
-    src/kj/async-io-test.c++
-    src/kj/parse/common-test.c++
-    src/kj/parse/char-test.c++
-    src/capnp/common-test.c++
-    src/capnp/blob-test.c++
-    src/capnp/endian-test.c++
-    src/capnp/endian-fallback-test.c++
-    src/capnp/endian-reverse-test.c++
-    src/capnp/layout-test.c++
-    src/capnp/object-test.c++
-    src/capnp/message-test.c++
-    src/capnp/capability-test.c++
-    src/capnp/schema-test.c++
-    src/capnp/schema-loader-test.c++
-    src/capnp/dynamic-test.c++
-    src/capnp/stringify-test.c++
-    src/capnp/encoding-test.c++
-    src/capnp/orphan-test.c++
-    src/capnp/serialize-test.c++
-    src/capnp/serialize-async-test.c++
-    src/capnp/serialize-packed-test.c++
-    src/capnp/rpc-test.c++
-    src/capnp/rpc-twoparty-test.c++
-    src/capnp/test-util.c++
-    src/capnp/test-util.h
-    src/capnp/compiler/lexer-test.c++
-    src/capnp/compiler/md5-test.c++
-  )
-  add_test(capnp_test capnp_test)
-  foreach(filename ${test_capnpc_outputs})
-    add_dependencies(capnp_test ${filename})
-  endforeach()
-  target_link_libraries(capnp_test
-    gtest
-    libkj
-    libcapnp
-    libcapnpc
-    libkj-async
-    libcapnp-rpc
-  )
-  # nodist_capnp_test_SOURCES = $(test_capnpc_outputs)
-endif(0)
+add_executable(capnp_test
+src/kj/common-test.c++
+src/kj/memory-test.c++
+src/kj/refcount-test.c++
+src/kj/array-test.c++
+src/kj/string-test.c++
+src/kj/string-tree-test.c++
+src/kj/exception-test.c++
+src/kj/debug-test.c++
+src/kj/arena-test.c++
+src/kj/units-test.c++
+src/kj/tuple-test.c++
+src/kj/one-of-test.c++
+src/kj/function-test.c++
+src/kj/mutex-test.c++
+src/kj/async-test.c++
+src/kj/async-unix-test.c++
+src/kj/async-io-test.c++
+src/kj/parse/common-test.c++
+src/kj/parse/char-test.c++
+src/capnp/common-test.c++
+src/capnp/blob-test.c++
+src/capnp/endian-test.c++
+src/capnp/endian-fallback-test.c++
+src/capnp/endian-reverse-test.c++
+src/capnp/layout-test.c++
+src/capnp/object-test.c++
+src/capnp/message-test.c++
+src/capnp/capability-test.c++
+src/capnp/schema-test.c++
+src/capnp/schema-loader-test.c++
+src/capnp/dynamic-test.c++
+src/capnp/stringify-test.c++
+src/capnp/encoding-test.c++
+src/capnp/orphan-test.c++
+src/capnp/serialize-test.c++
+src/capnp/serialize-async-test.c++
+src/capnp/serialize-packed-test.c++
+src/capnp/rpc-test.c++
+src/capnp/rpc-twoparty-test.c++
+src/capnp/test-util.c++
+src/capnp/test-util.h
+src/capnp/compiler/lexer-test.c++
+src/capnp/compiler/md5-test.c++
+${test_capnpc_outputs}
+)
+add_test(capnp_test capnp_test)
+add_dependencies(capnp_test ${test_capnpc_outputs})
+target_link_libraries(capnp_test
+gtest
+gtest_main
+libkj
+libcapnp
+libcapnpc
+libkj-async
+libcapnp-rpc
+)
+# nodist_capnp_test_SOURCES = $(test_capnpc_outputs)
 
 add_executable(capnp_evolution_test
   src/capnp/compiler/evolution-test.c++
