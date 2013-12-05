@@ -1231,7 +1231,7 @@ private:
             case schema::Type::ENUM: lgSize = 4; break;
             case schema::Type::STRUCT: lgSize = -2; break;
             case schema::Type::INTERFACE: lgSize = -2; break;
-            case schema::Type::OBJECT: lgSize = -2; break;
+            case schema::Type::ANY_POINTER: lgSize = -2; break;
           }
 
           if (lgSize == -2) {
@@ -1499,9 +1499,9 @@ bool NodeTranslator::compileType(TypeExpression::Reader source, schema::Type::Bu
           return false;
         }
 
-        if (elementType.isObject()) {
-          errorReporter.addErrorOn(source, "'List(Object)' is not supported.");
-          // Seeing List(Object) later can mess things up, so change the type to Void.
+        if (elementType.isAnyPointer()) {
+          errorReporter.addErrorOn(source, "'List(AnyPointer)' is not supported.");
+          // Seeing List(AnyPointer) later can mess things up, so change the type to Void.
           elementType.setVoid();
           return false;
         }
@@ -1524,7 +1524,13 @@ bool NodeTranslator::compileType(TypeExpression::Reader source, schema::Type::Bu
       case Declaration::BUILTIN_FLOAT64: target.setFloat64(); break;
       case Declaration::BUILTIN_TEXT: target.setText(); break;
       case Declaration::BUILTIN_DATA: target.setData(); break;
-      case Declaration::BUILTIN_OBJECT: target.setObject(); break;
+
+      case Declaration::BUILTIN_OBJECT:
+        errorReporter.addErrorOn(source,
+            "As of Cap'n Proto 0.4, 'Object' has been renamed to 'AnyPointer'.  Sorry for the "
+            "inconvenience, and thanks for being an early adopter.  :)");
+        // no break
+      case Declaration::BUILTIN_ANY_POINTER: target.setAnyPointer(); break;
 
       default:
         errorReporter.addErrorOn(source, kj::str("'", declNameString(name), "' is not a type."));
@@ -1573,7 +1579,7 @@ void NodeTranslator::compileDefaultDefaultValue(
     case schema::Type::DATA: target.adoptData(Orphan<Data>()); break;
     case schema::Type::STRUCT: target.initStruct(); break;
     case schema::Type::LIST: target.initList(); break;
-    case schema::Type::OBJECT: target.initObject(); break;
+    case schema::Type::ANY_POINTER: target.initAnyPointer(); break;
   }
 }
 
@@ -1588,7 +1594,7 @@ void NodeTranslator::compileBootstrapValue(ValueExpression::Reader source,
     case schema::Type::LIST:
     case schema::Type::STRUCT:
     case schema::Type::INTERFACE:
-    case schema::Type::OBJECT:
+    case schema::Type::ANY_POINTER:
       unfinishedValues.add(UnfinishedValue { source, type, target });
       break;
 
@@ -1775,8 +1781,8 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(
     case DynamicValue::CAPABILITY:
       KJ_FAIL_ASSERT("Interfaces can't have literal values.");
 
-    case DynamicValue::OBJECT:
-      KJ_FAIL_ASSERT("Objects can't have literal values.");
+    case DynamicValue::ANY_POINTER:
+      KJ_FAIL_ASSERT("AnyPointers can't have literal values.");
   }
 
   errorReporter.addErrorOn(src, kj::str("Type mismatch; expected ", makeTypeName(type), "."));
@@ -1958,7 +1964,7 @@ kj::String ValueTranslator::makeTypeName(schema::Type::Reader type) {
     case schema::Type::ENUM: return makeNodeName(type.getEnum().getTypeId());
     case schema::Type::STRUCT: return makeNodeName(type.getStruct().getTypeId());
     case schema::Type::INTERFACE: return makeNodeName(type.getInterface().getTypeId());
-    case schema::Type::OBJECT: return kj::str("Object");
+    case schema::Type::ANY_POINTER: return kj::str("AnyPointer");
   }
   KJ_UNREACHABLE;
 }
@@ -1984,9 +1990,9 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
       auto dynamicConst = toDynamic(constReader.getValue());
       auto constValue = dynamicConst.get(KJ_ASSERT_NONNULL(dynamicConst.which()));
 
-      if (constValue.getType() == DynamicValue::OBJECT) {
-        // We need to assign an appropriate schema to this object.
-        ObjectPointer::Reader objValue = constValue.as<ObjectPointer>();
+      if (constValue.getType() == DynamicValue::ANY_POINTER) {
+        // We need to assign an appropriate schema to this pointer.
+        AnyPointer::Reader objValue = constValue.as<AnyPointer>();
         auto constType = constReader.getType();
         switch (constType.which()) {
           case schema::Type::STRUCT:
@@ -2006,11 +2012,11 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
               return nullptr;
             }
             break;
-          case schema::Type::OBJECT:
+          case schema::Type::ANY_POINTER:
             // Fine as-is.
             break;
           default:
-            KJ_FAIL_ASSERT("Unrecognized Object-typed member of schema::Value.");
+            KJ_FAIL_ASSERT("Unrecognized AnyPointer-typed member of schema::Value.");
             break;
         }
       }

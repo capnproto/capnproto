@@ -48,7 +48,7 @@ public:
   struct ConnectionAndProvisionId {
     kj::Own<Connection> connection;
     kj::Own<OutgoingRpcMessage> firstMessage;
-    Orphan<ObjectPointer> provisionId;
+    Orphan<AnyPointer> provisionId;
   };
 
   class Connection {
@@ -56,12 +56,9 @@ public:
     virtual kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) = 0;
     virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() = 0;
     virtual void baseIntroduceTo(Connection& recipient,
-        ObjectPointer::Builder sendToRecipient,
-        ObjectPointer::Builder sendToTarget) = 0;
-    virtual ConnectionAndProvisionId baseConnectToIntroduced(
-        ObjectPointer::Reader capId) = 0;
-    virtual kj::Own<Connection> baseAcceptIntroducedConnection(
-        ObjectPointer::Reader recipientId) = 0;
+        AnyPointer::Builder sendToRecipient, AnyPointer::Builder sendToTarget) = 0;
+    virtual ConnectionAndProvisionId baseConnectToIntroduced(AnyPointer::Reader capId) = 0;
+    virtual kj::Own<Connection> baseAcceptIntroducedConnection(AnyPointer::Reader recipientId) = 0;
   };
   virtual kj::Maybe<kj::Own<Connection>> baseConnectToRefHost(_::StructReader hostId) = 0;
   virtual kj::Promise<kj::Own<Connection>> baseAcceptConnectionAsRefHost() = 0;
@@ -69,7 +66,7 @@ public:
 
 class SturdyRefRestorerBase {
 public:
-  virtual Capability::Client baseRestore(ObjectPointer::Reader ref) = 0;
+  virtual Capability::Client baseRestore(AnyPointer::Reader ref) = 0;
 };
 
 class RpcSystemBase {
@@ -82,7 +79,7 @@ private:
   class Impl;
   kj::Own<Impl> impl;
 
-  Capability::Client baseRestore(_::StructReader hostId, ObjectPointer::Reader objectId);
+  Capability::Client baseRestore(_::StructReader hostId, AnyPointer::Reader objectId);
   // TODO(someday):  Maybe define a public API called `TypelessStruct` so we don't have to rely
   // on `_::StructReader` here?
 

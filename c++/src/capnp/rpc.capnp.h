@@ -593,11 +593,11 @@ public:
   typedef Message Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -623,7 +623,7 @@ public:
   inline  ::uint16_t getMethodId() const;
 
   inline bool hasParams() const;
-  inline ::capnp::ObjectPointer::Reader getParams() const;
+  inline ::capnp::AnyPointer::Reader getParams() const;
 
   inline SendResultsTo::Reader getSendResultsTo() const;
 
@@ -674,8 +674,8 @@ public:
   inline void setMethodId( ::uint16_t value);
 
   inline bool hasParams();
-  inline ::capnp::ObjectPointer::Builder getParams();
-  inline ::capnp::ObjectPointer::Builder initParams();
+  inline ::capnp::AnyPointer::Builder getParams();
+  inline ::capnp::AnyPointer::Builder initParams();
 
   inline SendResultsTo::Builder getSendResultsTo();
   inline SendResultsTo::Builder initSendResultsTo();
@@ -697,13 +697,13 @@ public:
   typedef Call Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::rpc::MessageTarget::Pipeline getTarget();
   inline SendResultsTo::Pipeline getSendResultsTo();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -728,7 +728,7 @@ public:
 
   inline bool isThirdParty() const;
   inline bool hasThirdParty() const;
-  inline ::capnp::ObjectPointer::Reader getThirdParty() const;
+  inline ::capnp::AnyPointer::Reader getThirdParty() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -771,8 +771,8 @@ public:
 
   inline bool isThirdParty();
   inline bool hasThirdParty();
-  inline ::capnp::ObjectPointer::Builder getThirdParty();
-  inline ::capnp::ObjectPointer::Builder initThirdParty();
+  inline ::capnp::AnyPointer::Builder getThirdParty();
+  inline ::capnp::AnyPointer::Builder initThirdParty();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -791,11 +791,11 @@ public:
   typedef SendResultsTo Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -819,7 +819,7 @@ public:
 
   inline bool isResults() const;
   inline bool hasResults() const;
-  inline ::capnp::ObjectPointer::Reader getResults() const;
+  inline ::capnp::AnyPointer::Reader getResults() const;
 
   inline bool isException() const;
   inline bool hasException() const;
@@ -836,7 +836,7 @@ public:
 
   inline bool isAcceptFromThirdParty() const;
   inline bool hasAcceptFromThirdParty() const;
-  inline ::capnp::ObjectPointer::Reader getAcceptFromThirdParty() const;
+  inline ::capnp::AnyPointer::Reader getAcceptFromThirdParty() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -882,8 +882,8 @@ public:
 
   inline bool isResults();
   inline bool hasResults();
-  inline ::capnp::ObjectPointer::Builder getResults();
-  inline ::capnp::ObjectPointer::Builder initResults();
+  inline ::capnp::AnyPointer::Builder getResults();
+  inline ::capnp::AnyPointer::Builder initResults();
 
   inline bool isException();
   inline bool hasException();
@@ -907,8 +907,8 @@ public:
 
   inline bool isAcceptFromThirdParty();
   inline bool hasAcceptFromThirdParty();
-  inline ::capnp::ObjectPointer::Builder getAcceptFromThirdParty();
-  inline ::capnp::ObjectPointer::Builder initAcceptFromThirdParty();
+  inline ::capnp::AnyPointer::Builder getAcceptFromThirdParty();
+  inline ::capnp::AnyPointer::Builder initAcceptFromThirdParty();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -927,11 +927,11 @@ public:
   typedef Return Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1010,11 +1010,11 @@ public:
   typedef Finish Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1108,11 +1108,11 @@ public:
   typedef Resolve Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1185,11 +1185,11 @@ public:
   typedef Release Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1267,13 +1267,13 @@ public:
   typedef Disembargo Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::rpc::MessageTarget::Pipeline getTarget();
   inline Context::Pipeline getContext();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1366,11 +1366,11 @@ public:
   typedef Context Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1448,12 +1448,12 @@ public:
   typedef Save Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::rpc::MessageTarget::Pipeline getTarget();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1472,7 +1472,7 @@ public:
   inline  ::uint32_t getQuestionId() const;
 
   inline bool hasObjectId() const;
-  inline ::capnp::ObjectPointer::Reader getObjectId() const;
+  inline ::capnp::AnyPointer::Reader getObjectId() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1508,8 +1508,8 @@ public:
   inline void setQuestionId( ::uint32_t value);
 
   inline bool hasObjectId();
-  inline ::capnp::ObjectPointer::Builder getObjectId();
-  inline ::capnp::ObjectPointer::Builder initObjectId();
+  inline ::capnp::AnyPointer::Builder getObjectId();
+  inline ::capnp::AnyPointer::Builder initObjectId();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1528,11 +1528,11 @@ public:
   typedef Restore Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1551,7 +1551,7 @@ public:
   inline  ::uint32_t getQuestionId() const;
 
   inline bool hasObjectId() const;
-  inline ::capnp::ObjectPointer::Reader getObjectId() const;
+  inline ::capnp::AnyPointer::Reader getObjectId() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1587,8 +1587,8 @@ public:
   inline void setQuestionId( ::uint32_t value);
 
   inline bool hasObjectId();
-  inline ::capnp::ObjectPointer::Builder getObjectId();
-  inline ::capnp::ObjectPointer::Builder initObjectId();
+  inline ::capnp::AnyPointer::Builder getObjectId();
+  inline ::capnp::AnyPointer::Builder initObjectId();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1607,11 +1607,11 @@ public:
   typedef Delete Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1633,7 +1633,7 @@ public:
   inline  ::capnp::rpc::MessageTarget::Reader getTarget() const;
 
   inline bool hasRecipient() const;
-  inline ::capnp::ObjectPointer::Reader getRecipient() const;
+  inline ::capnp::AnyPointer::Reader getRecipient() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1676,8 +1676,8 @@ public:
   inline ::capnp::Orphan< ::capnp::rpc::MessageTarget> disownTarget();
 
   inline bool hasRecipient();
-  inline ::capnp::ObjectPointer::Builder getRecipient();
-  inline ::capnp::ObjectPointer::Builder initRecipient();
+  inline ::capnp::AnyPointer::Builder getRecipient();
+  inline ::capnp::AnyPointer::Builder initRecipient();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1696,12 +1696,12 @@ public:
   typedef Provide Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::rpc::MessageTarget::Pipeline getTarget();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1720,7 +1720,7 @@ public:
   inline  ::uint32_t getQuestionId() const;
 
   inline bool hasProvision() const;
-  inline ::capnp::ObjectPointer::Reader getProvision() const;
+  inline ::capnp::AnyPointer::Reader getProvision() const;
 
   inline bool getEmbargo() const;
 
@@ -1758,8 +1758,8 @@ public:
   inline void setQuestionId( ::uint32_t value);
 
   inline bool hasProvision();
-  inline ::capnp::ObjectPointer::Builder getProvision();
-  inline ::capnp::ObjectPointer::Builder initProvision();
+  inline ::capnp::AnyPointer::Builder getProvision();
+  inline ::capnp::AnyPointer::Builder initProvision();
 
   inline bool getEmbargo();
   inline void setEmbargo(bool value);
@@ -1781,11 +1781,11 @@ public:
   typedef Accept Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1806,7 +1806,7 @@ public:
   inline  ::uint32_t getCapId() const;
 
   inline bool hasKeyPart() const;
-  inline ::capnp::ObjectPointer::Reader getKeyPart() const;
+  inline ::capnp::AnyPointer::Reader getKeyPart() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1845,8 +1845,8 @@ public:
   inline void setCapId( ::uint32_t value);
 
   inline bool hasKeyPart();
-  inline ::capnp::ObjectPointer::Builder getKeyPart();
-  inline ::capnp::ObjectPointer::Builder initKeyPart();
+  inline ::capnp::AnyPointer::Builder getKeyPart();
+  inline ::capnp::AnyPointer::Builder initKeyPart();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1865,11 +1865,11 @@ public:
   typedef Join Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1953,11 +1953,11 @@ public:
   typedef MessageTarget Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2067,11 +2067,11 @@ public:
   typedef CapDescriptor Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2149,11 +2149,11 @@ public:
   typedef PromisedAnswer Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2232,11 +2232,11 @@ public:
   typedef Op Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2253,10 +2253,10 @@ public:
   }
 
   inline bool hasHostId() const;
-  inline ::capnp::ObjectPointer::Reader getHostId() const;
+  inline ::capnp::AnyPointer::Reader getHostId() const;
 
   inline bool hasObjectId() const;
-  inline ::capnp::ObjectPointer::Reader getObjectId() const;
+  inline ::capnp::AnyPointer::Reader getObjectId() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -2289,12 +2289,12 @@ public:
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
   inline bool hasHostId();
-  inline ::capnp::ObjectPointer::Builder getHostId();
-  inline ::capnp::ObjectPointer::Builder initHostId();
+  inline ::capnp::AnyPointer::Builder getHostId();
+  inline ::capnp::AnyPointer::Builder initHostId();
 
   inline bool hasObjectId();
-  inline ::capnp::ObjectPointer::Builder getObjectId();
-  inline ::capnp::ObjectPointer::Builder initObjectId();
+  inline ::capnp::AnyPointer::Builder getObjectId();
+  inline ::capnp::AnyPointer::Builder initObjectId();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -2313,11 +2313,11 @@ public:
   typedef SturdyRef Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2334,7 +2334,7 @@ public:
   }
 
   inline bool hasId() const;
-  inline ::capnp::ObjectPointer::Reader getId() const;
+  inline ::capnp::AnyPointer::Reader getId() const;
 
   inline  ::uint32_t getVineId() const;
 
@@ -2369,8 +2369,8 @@ public:
   inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
 
   inline bool hasId();
-  inline ::capnp::ObjectPointer::Builder getId();
-  inline ::capnp::ObjectPointer::Builder initId();
+  inline ::capnp::AnyPointer::Builder getId();
+  inline ::capnp::AnyPointer::Builder initId();
 
   inline  ::uint32_t getVineId();
   inline void setVineId( ::uint32_t value);
@@ -2392,11 +2392,11 @@ public:
   typedef ThirdPartyCapDescriptor Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2479,11 +2479,11 @@ public:
   typedef Exception Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -3308,16 +3308,16 @@ inline bool Call::Reader::hasParams() const {
 inline bool Call::Builder::hasParams() {
   return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader Call::Reader::getParams() const {
-  return ::capnp::ObjectPointer::Reader(
+inline ::capnp::AnyPointer::Reader Call::Reader::getParams() const {
+  return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Call::Builder::getParams() {
-  return ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder Call::Builder::getParams() {
+  return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Call::Builder::initParams() {
-  auto result = ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder Call::Builder::initParams() {
+  auto result = ::capnp::AnyPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
   result.clear();
   return result;
@@ -3410,22 +3410,22 @@ inline bool Call::SendResultsTo::Builder::hasThirdParty() {
   if (which() != Call::SendResultsTo::THIRD_PARTY) return false;
   return !_builder.getPointerField(2 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader Call::SendResultsTo::Reader::getThirdParty() const {
+inline ::capnp::AnyPointer::Reader Call::SendResultsTo::Reader::getThirdParty() const {
   KJ_IREQUIRE(which() == Call::SendResultsTo::THIRD_PARTY,
               "Must check which() before get()ing a union member.");
-  return ::capnp::ObjectPointer::Reader(
+  return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(2 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Call::SendResultsTo::Builder::getThirdParty() {
+inline ::capnp::AnyPointer::Builder Call::SendResultsTo::Builder::getThirdParty() {
   KJ_IREQUIRE(which() == Call::SendResultsTo::THIRD_PARTY,
               "Must check which() before get()ing a union member.");
-  return ::capnp::ObjectPointer::Builder(
+  return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(2 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Call::SendResultsTo::Builder::initThirdParty() {
+inline ::capnp::AnyPointer::Builder Call::SendResultsTo::Builder::initThirdParty() {
   _builder.setDataField<Call::SendResultsTo::Which>(
       3 * ::capnp::ELEMENTS, Call::SendResultsTo::THIRD_PARTY);
-  auto result = ::capnp::ObjectPointer::Builder(
+  auto result = ::capnp::AnyPointer::Builder(
       _builder.getPointerField(2 * ::capnp::POINTERS));
   result.clear();
   return result;
@@ -3502,22 +3502,22 @@ inline bool Return::Builder::hasResults() {
   if (which() != Return::RESULTS) return false;
   return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader Return::Reader::getResults() const {
+inline ::capnp::AnyPointer::Reader Return::Reader::getResults() const {
   KJ_IREQUIRE(which() == Return::RESULTS,
               "Must check which() before get()ing a union member.");
-  return ::capnp::ObjectPointer::Reader(
+  return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Return::Builder::getResults() {
+inline ::capnp::AnyPointer::Builder Return::Builder::getResults() {
   KJ_IREQUIRE(which() == Return::RESULTS,
               "Must check which() before get()ing a union member.");
-  return ::capnp::ObjectPointer::Builder(
+  return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Return::Builder::initResults() {
+inline ::capnp::AnyPointer::Builder Return::Builder::initResults() {
   _builder.setDataField<Return::Which>(
       2 * ::capnp::ELEMENTS, Return::RESULTS);
-  auto result = ::capnp::ObjectPointer::Builder(
+  auto result = ::capnp::AnyPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
   result.clear();
   return result;
@@ -3667,22 +3667,22 @@ inline bool Return::Builder::hasAcceptFromThirdParty() {
   if (which() != Return::ACCEPT_FROM_THIRD_PARTY) return false;
   return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader Return::Reader::getAcceptFromThirdParty() const {
+inline ::capnp::AnyPointer::Reader Return::Reader::getAcceptFromThirdParty() const {
   KJ_IREQUIRE(which() == Return::ACCEPT_FROM_THIRD_PARTY,
               "Must check which() before get()ing a union member.");
-  return ::capnp::ObjectPointer::Reader(
+  return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Return::Builder::getAcceptFromThirdParty() {
+inline ::capnp::AnyPointer::Builder Return::Builder::getAcceptFromThirdParty() {
   KJ_IREQUIRE(which() == Return::ACCEPT_FROM_THIRD_PARTY,
               "Must check which() before get()ing a union member.");
-  return ::capnp::ObjectPointer::Builder(
+  return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Return::Builder::initAcceptFromThirdParty() {
+inline ::capnp::AnyPointer::Builder Return::Builder::initAcceptFromThirdParty() {
   _builder.setDataField<Return::Which>(
       2 * ::capnp::ELEMENTS, Return::ACCEPT_FROM_THIRD_PARTY);
-  auto result = ::capnp::ObjectPointer::Builder(
+  auto result = ::capnp::AnyPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
   result.clear();
   return result;
@@ -4120,16 +4120,16 @@ inline bool Restore::Reader::hasObjectId() const {
 inline bool Restore::Builder::hasObjectId() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader Restore::Reader::getObjectId() const {
-  return ::capnp::ObjectPointer::Reader(
+inline ::capnp::AnyPointer::Reader Restore::Reader::getObjectId() const {
+  return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Restore::Builder::getObjectId() {
-  return ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder Restore::Builder::getObjectId() {
+  return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Restore::Builder::initObjectId() {
-  auto result = ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder Restore::Builder::initObjectId() {
+  auto result = ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
   result.clear();
   return result;
@@ -4155,16 +4155,16 @@ inline bool Delete::Reader::hasObjectId() const {
 inline bool Delete::Builder::hasObjectId() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader Delete::Reader::getObjectId() const {
-  return ::capnp::ObjectPointer::Reader(
+inline ::capnp::AnyPointer::Reader Delete::Reader::getObjectId() const {
+  return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Delete::Builder::getObjectId() {
-  return ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder Delete::Builder::getObjectId() {
+  return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Delete::Builder::initObjectId() {
-  auto result = ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder Delete::Builder::initObjectId() {
+  auto result = ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
   result.clear();
   return result;
@@ -4225,16 +4225,16 @@ inline bool Provide::Reader::hasRecipient() const {
 inline bool Provide::Builder::hasRecipient() {
   return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader Provide::Reader::getRecipient() const {
-  return ::capnp::ObjectPointer::Reader(
+inline ::capnp::AnyPointer::Reader Provide::Reader::getRecipient() const {
+  return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Provide::Builder::getRecipient() {
-  return ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder Provide::Builder::getRecipient() {
+  return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Provide::Builder::initRecipient() {
-  auto result = ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder Provide::Builder::initRecipient() {
+  auto result = ::capnp::AnyPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
   result.clear();
   return result;
@@ -4260,16 +4260,16 @@ inline bool Accept::Reader::hasProvision() const {
 inline bool Accept::Builder::hasProvision() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader Accept::Reader::getProvision() const {
-  return ::capnp::ObjectPointer::Reader(
+inline ::capnp::AnyPointer::Reader Accept::Reader::getProvision() const {
+  return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Accept::Builder::getProvision() {
-  return ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder Accept::Builder::getProvision() {
+  return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Accept::Builder::initProvision() {
-  auto result = ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder Accept::Builder::initProvision() {
+  auto result = ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
   result.clear();
   return result;
@@ -4323,16 +4323,16 @@ inline bool Join::Reader::hasKeyPart() const {
 inline bool Join::Builder::hasKeyPart() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader Join::Reader::getKeyPart() const {
-  return ::capnp::ObjectPointer::Reader(
+inline ::capnp::AnyPointer::Reader Join::Reader::getKeyPart() const {
+  return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Join::Builder::getKeyPart() {
-  return ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder Join::Builder::getKeyPart() {
+  return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder Join::Builder::initKeyPart() {
-  auto result = ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder Join::Builder::initKeyPart() {
+  auto result = ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
   result.clear();
   return result;
@@ -4723,16 +4723,16 @@ inline bool SturdyRef::Reader::hasHostId() const {
 inline bool SturdyRef::Builder::hasHostId() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader SturdyRef::Reader::getHostId() const {
-  return ::capnp::ObjectPointer::Reader(
+inline ::capnp::AnyPointer::Reader SturdyRef::Reader::getHostId() const {
+  return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder SturdyRef::Builder::getHostId() {
-  return ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder SturdyRef::Builder::getHostId() {
+  return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder SturdyRef::Builder::initHostId() {
-  auto result = ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder SturdyRef::Builder::initHostId() {
+  auto result = ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
   result.clear();
   return result;
@@ -4744,16 +4744,16 @@ inline bool SturdyRef::Reader::hasObjectId() const {
 inline bool SturdyRef::Builder::hasObjectId() {
   return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader SturdyRef::Reader::getObjectId() const {
-  return ::capnp::ObjectPointer::Reader(
+inline ::capnp::AnyPointer::Reader SturdyRef::Reader::getObjectId() const {
+  return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder SturdyRef::Builder::getObjectId() {
-  return ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder SturdyRef::Builder::getObjectId() {
+  return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder SturdyRef::Builder::initObjectId() {
-  auto result = ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder SturdyRef::Builder::initObjectId() {
+  auto result = ::capnp::AnyPointer::Builder(
       _builder.getPointerField(1 * ::capnp::POINTERS));
   result.clear();
   return result;
@@ -4765,16 +4765,16 @@ inline bool ThirdPartyCapDescriptor::Reader::hasId() const {
 inline bool ThirdPartyCapDescriptor::Builder::hasId() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader ThirdPartyCapDescriptor::Reader::getId() const {
-  return ::capnp::ObjectPointer::Reader(
+inline ::capnp::AnyPointer::Reader ThirdPartyCapDescriptor::Reader::getId() const {
+  return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder ThirdPartyCapDescriptor::Builder::getId() {
-  return ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder ThirdPartyCapDescriptor::Builder::getId() {
+  return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder ThirdPartyCapDescriptor::Builder::initId() {
-  auto result = ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder ThirdPartyCapDescriptor::Builder::initId() {
+  auto result = ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
   result.clear();
   return result;

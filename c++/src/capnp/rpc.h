@@ -59,8 +59,7 @@ public:
       kj::Maybe<SturdyRefRestorer<LocalSturdyRefObjectId>&> restorer);
   RpcSystem(RpcSystem&& other) = default;
 
-  Capability::Client restore(typename SturdyRefHostId::Reader hostId,
-                             ObjectPointer::Reader objectId);
+  Capability::Client restore(typename SturdyRefHostId::Reader hostId, AnyPointer::Reader objectId);
   // Restore the given SturdyRef from the network and return the capability representing it.
   //
   // `hostId` identifies the host from which to request the ref, in the format specified by the
@@ -113,7 +112,7 @@ public:
   // Restore the given object, returning a capability representing it.
 
 private:
-  Capability::Client baseRestore(ObjectPointer::Reader ref) override final;
+  Capability::Client baseRestore(AnyPointer::Reader ref) override final;
 };
 
 // =======================================================================================
@@ -123,7 +122,7 @@ class OutgoingRpcMessage {
   // A message to be sent by a `VatNetwork`.
 
 public:
-  virtual ObjectPointer::Builder getBody() = 0;
+  virtual AnyPointer::Builder getBody() = 0;
   // Get the message body, which the caller may fill in any way it wants.  (The standard RPC
   // implementation initializes it as a Message as defined in rpc.capnp.)
 
@@ -136,7 +135,7 @@ class IncomingRpcMessage {
   // A message received from a `VatNetwork`.
 
 public:
-  virtual ObjectPointer::Reader getBody() = 0;
+  virtual AnyPointer::Reader getBody() = 0;
   // Get the message body, to be interpreted by the caller.  (The standard RPC implementation
   // interprets it as a Message as defined in rpc.capnp.)
 };
@@ -223,12 +222,11 @@ public:
 
   private:
     void baseIntroduceTo(VatNetworkBase::Connection& recipient,
-        ObjectPointer::Builder sendToRecipient,
-        ObjectPointer::Builder sendToTarget) override final;
+        AnyPointer::Builder sendToRecipient, AnyPointer::Builder sendToTarget) override final;
     _::VatNetworkBase::ConnectionAndProvisionId baseConnectToIntroduced(
-        ObjectPointer::Reader capId) override final;
+        AnyPointer::Reader capId) override final;
     kj::Own<_::VatNetworkBase::Connection> baseAcceptIntroducedConnection(
-        ObjectPointer::Reader recipientId) override final;
+        AnyPointer::Reader recipientId) override final;
   };
 
   // Level 0 features ------------------------------------------------
@@ -273,8 +271,8 @@ template <typename SturdyRef, typename ProvisionId, typename RecipientId,
           typename ThirdPartyCapId, typename JoinResult>
 void VatNetwork<SturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>::
     Connection::baseIntroduceTo(VatNetworkBase::Connection& recipient,
-                                ObjectPointer::Builder sendToRecipient,
-                                ObjectPointer::Builder sendToTarget) {
+                                AnyPointer::Builder sendToRecipient,
+                                AnyPointer::Builder sendToTarget) {
   introduceTo(kj::downcast<Connection>(recipient), sendToRecipient.initAs<ThirdPartyCapId>(),
               sendToTarget.initAs<RecipientId>());
 }
@@ -283,7 +281,7 @@ template <typename SturdyRef, typename ProvisionId, typename RecipientId,
           typename ThirdPartyCapId, typename JoinResult>
 _::VatNetworkBase::ConnectionAndProvisionId
     VatNetwork<SturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>::
-    Connection::baseConnectToIntroduced(ObjectPointer::Reader capId) {
+    Connection::baseConnectToIntroduced(AnyPointer::Reader capId) {
   auto result = connectToIntroduced(capId.getAs<ThirdPartyCapId>());
   return { kj::mv(result.connection), kj::mv(result.firstMessage), kj::mv(result.provisionId) };
 }
@@ -292,7 +290,7 @@ template <typename SturdyRef, typename ProvisionId, typename RecipientId,
           typename ThirdPartyCapId, typename JoinResult>
 kj::Own<_::VatNetworkBase::Connection>
     VatNetwork<SturdyRef, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>::
-    Connection::baseAcceptIntroducedConnection(ObjectPointer::Reader recipientId) {
+    Connection::baseAcceptIntroducedConnection(AnyPointer::Reader recipientId) {
   return acceptIntroducedConnection(recipientId.getAs<RecipientId>());
 }
 
@@ -319,7 +317,7 @@ kj::Promise<kj::Own<_::VatNetworkBase::Connection>>
 }
 
 template <typename SturdyRef>
-Capability::Client SturdyRefRestorer<SturdyRef>::baseRestore(ObjectPointer::Reader ref) {
+Capability::Client SturdyRefRestorer<SturdyRef>::baseRestore(AnyPointer::Reader ref) {
   return restore(ref.getAs<SturdyRef>());
 }
 
@@ -334,7 +332,7 @@ RpcSystem<SturdyRefHostId>::RpcSystem(
 
 template <typename SturdyRefHostId>
 Capability::Client RpcSystem<SturdyRefHostId>::restore(
-    typename SturdyRefHostId::Reader hostId, ObjectPointer::Reader objectId) {
+    typename SturdyRefHostId::Reader hostId, AnyPointer::Reader objectId) {
   return baseRestore(_::PointerHelpers<SturdyRefHostId>::getInternalReader(hostId), objectId);
 }
 
@@ -352,7 +350,7 @@ template <typename SturdyRefHostId, typename ProvisionId,
 RpcSystem<SturdyRefHostId> makeRpcClient(
     VatNetwork<SturdyRefHostId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network) {
   return RpcSystem<SturdyRefHostId>(network,
-      kj::Maybe<SturdyRefRestorer<ObjectPointer>&>(nullptr));
+      kj::Maybe<SturdyRefRestorer<AnyPointer>&>(nullptr));
 }
 
 }  // namespace capnp

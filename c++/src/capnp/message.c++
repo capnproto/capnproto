@@ -42,7 +42,7 @@ MessageReader::~MessageReader() noexcept(false) {
   }
 }
 
-ObjectPointer::Reader MessageReader::getRootInternal() {
+AnyPointer::Reader MessageReader::getRootInternal() {
   if (!allocatedArena) {
     static_assert(sizeof(_::BasicReaderArena) <= sizeof(arenaSpace),
         "arenaSpace is too small to hold a BasicReaderArena.  Please increase it.  This will break "
@@ -55,10 +55,10 @@ ObjectPointer::Reader MessageReader::getRootInternal() {
   KJ_REQUIRE(segment != nullptr &&
              segment->containsInterval(segment->getStartPtr(), segment->getStartPtr() + 1),
              "Message did not contain a root pointer.") {
-    return ObjectPointer::Reader();
+    return AnyPointer::Reader();
   }
 
-  return ObjectPointer::Reader(_::PointerReader::getRoot(
+  return AnyPointer::Reader(_::PointerReader::getRoot(
       segment, segment->getStartPtr(), options.nestingLimit));
 }
 
@@ -90,9 +90,9 @@ _::SegmentBuilder* MessageBuilder::getRootSegment() {
   }
 }
 
-ObjectPointer::Builder MessageBuilder::getRootInternal() {
+AnyPointer::Builder MessageBuilder::getRootInternal() {
   _::SegmentBuilder* rootSegment = getRootSegment();
-  return ObjectPointer::Builder(_::PointerBuilder::getRoot(
+  return AnyPointer::Builder(_::PointerBuilder::getRoot(
       rootSegment, rootSegment->getPtrUnchecked(0 * WORDS)));
 }
 

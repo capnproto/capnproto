@@ -101,7 +101,7 @@ public:
       : request(kj::mv(request)), clientRef(kj::mv(clientRef)),
         cancelAllowedFulfiller(kj::mv(cancelAllowedFulfiller)) {}
 
-  ObjectPointer::Reader getParams() override {
+  AnyPointer::Reader getParams() override {
     KJ_IF_MAYBE(r, request) {
       return r->get()->getRoot();
     } else {
@@ -111,18 +111,18 @@ public:
   void releaseParams() override {
     request = nullptr;
   }
-  ObjectPointer::Builder getResults(uint firstSegmentWordSize) override {
+  AnyPointer::Builder getResults(uint firstSegmentWordSize) override {
     if (response == nullptr) {
       auto localResponse = kj::refcounted<LocalResponse>(firstSegmentWordSize);
       responseBuilder = localResponse->message.getRoot();
-      response = Response<ObjectPointer>(responseBuilder.asReader(), kj::mv(localResponse));
+      response = Response<AnyPointer>(responseBuilder.asReader(), kj::mv(localResponse));
     }
     return responseBuilder;
   }
   kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) override {
     auto result = directTailCall(kj::mv(request));
     KJ_IF_MAYBE(f, tailCallPipelineFulfiller) {
-      f->get()->fulfill(ObjectPointer::Pipeline(kj::mv(result.pipeline)));
+      f->get()->fulfill(AnyPointer::Pipeline(kj::mv(result.pipeline)));
     }
     return kj::mv(result.promise);
   }
@@ -132,14 +132,14 @@ public:
 
     auto promise = request->send();
 
-    auto voidPromise = promise.then([this](Response<ObjectPointer>&& tailResponse) {
+    auto voidPromise = promise.then([this](Response<AnyPointer>&& tailResponse) {
       response = kj::mv(tailResponse);
     });
 
     return { kj::mv(voidPromise), PipelineHook::from(kj::mv(promise)) };
   }
-  kj::Promise<ObjectPointer::Pipeline> onTailCall() override {
-    auto paf = kj::newPromiseAndFulfiller<ObjectPointer::Pipeline>();
+  kj::Promise<AnyPointer::Pipeline> onTailCall() override {
+    auto paf = kj::newPromiseAndFulfiller<AnyPointer::Pipeline>();
     tailCallPipelineFulfiller = kj::mv(paf.fulfiller);
     return kj::mv(paf.promise);
   }
@@ -155,10 +155,10 @@ public:
   }
 
   kj::Maybe<kj::Own<LocalMessage>> request;
-  kj::Maybe<Response<ObjectPointer>> response;
-  ObjectPointer::Builder responseBuilder = nullptr;  // only valid if `response` is non-null
+  kj::Maybe<Response<AnyPointer>> response;
+  AnyPointer::Builder responseBuilder = nullptr;  // only valid if `response` is non-null
   kj::Own<ClientHook> clientRef;
-  kj::Maybe<kj::Own<kj::PromiseFulfiller<ObjectPointer::Pipeline>>> tailCallPipelineFulfiller;
+  kj::Maybe<kj::Own<kj::PromiseFulfiller<AnyPointer::Pipeline>>> tailCallPipelineFulfiller;
   kj::Own<kj::PromiseFulfiller<void>> cancelAllowedFulfiller;
   bool cancelRequested = false;
 
@@ -184,7 +184,7 @@ public:
             firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : firstSegmentWordSize)),
         interfaceId(interfaceId), methodId(methodId), client(kj::mv(client)) {}
 
-  RemotePromise<ObjectPointer> send() override {
+  RemotePromise<AnyPointer> send() override {
     KJ_REQUIRE(message.get() != nullptr, "Already called send() on this request.");
 
     // For the lambda capture.
@@ -220,8 +220,8 @@ public:
     promise = promise.attach(LocalCallContext::Canceler(kj::mv(context)));
 
     // We return the other branch.
-    return RemotePromise<ObjectPointer>(
-        kj::mv(promise), ObjectPointer::Pipeline(kj::mv(promiseAndPipeline.pipeline)));
+    return RemotePromise<AnyPointer>(
+        kj::mv(promise), AnyPointer::Pipeline(kj::mv(promiseAndPipeline.pipeline)));
   }
 
   const void* getBrand() override {
@@ -294,12 +294,12 @@ public:
         promiseForCallForwarding(promise.addBranch().fork()),
         promiseForClientResolution(promise.addBranch().fork()) {}
 
-  Request<ObjectPointer, ObjectPointer> newCall(
+  Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) override {
     auto hook = kj::heap<LocalRequest>(
         interfaceId, methodId, firstSegmentWordSize, kj::addRef(*this));
     auto root = hook->message->getRoot();  // Do not inline `root` -- kj::mv may happen first.
-    return Request<ObjectPointer, ObjectPointer>(root, kj::mv(hook));
+    return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
@@ -436,7 +436,7 @@ public:
 
 private:
   kj::Own<CallContextHook> context;
-  ObjectPointer::Reader results;
+  AnyPointer::Reader results;
 };
 
 class LocalClient final: public ClientHook, public kj::Refcounted {
@@ -444,12 +444,12 @@ public:
   LocalClient(kj::Own<Capability::Server>&& server)
       : server(kj::mv(server)) {}
 
-  Request<ObjectPointer, ObjectPointer> newCall(
+  Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) override {
     auto hook = kj::heap<LocalRequest>(
         interfaceId, methodId, firstSegmentWordSize, kj::addRef(*this));
     auto root = hook->message->getRoot();  // Do not inline `root` -- kj::mv may happen first.
-    return Request<ObjectPointer, ObjectPointer>(root, kj::mv(hook));
+    return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
@@ -466,7 +466,7 @@ public:
     // complete before 'whenMoreResolved()' promises resolve.
     auto promise = kj::evalLater([this,interfaceId,methodId,contextPtr]() {
       return server->dispatchCall(interfaceId, methodId,
-                                  CallContext<ObjectPointer, ObjectPointer>(*contextPtr));
+                                  CallContext<AnyPointer, AnyPointer>(*contextPtr));
     }).attach(kj::addRef(*this));
 
     // We have to fork this promise for the pipeline to receive a copy of the answer.
@@ -478,7 +478,7 @@ public:
           return kj::refcounted<LocalPipeline>(kj::mv(context));
         }));
 
-    auto tailPipelinePromise = context->onTailCall().then([](ObjectPointer::Pipeline&& pipeline) {
+    auto tailPipelinePromise = context->onTailCall().then([](AnyPointer::Pipeline&& pipeline) {
       return kj::mv(pipeline.hook);
     });
 

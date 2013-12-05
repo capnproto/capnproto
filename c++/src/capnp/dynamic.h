@@ -38,7 +38,7 @@
 #include "schema.h"
 #include "layout.h"
 #include "message.h"
-#include "object.h"
+#include "any.h"
 #include "capability.h"
 
 namespace capnp {
@@ -66,7 +66,7 @@ struct DynamicValue {
     ENUM,
     STRUCT,
     CAPABILITY,
-    OBJECT
+    ANY_POINTER
   };
 
   class Reader;
@@ -215,7 +215,7 @@ private:
   friend class Orphanage;
   friend class Orphan<DynamicStruct>;
   friend class Orphan<DynamicValue>;
-  friend class Orphan<ObjectPointer>;
+  friend class Orphan<AnyPointer>;
 };
 
 class DynamicStruct::Builder {
@@ -303,7 +303,7 @@ private:
   friend class Orphanage;
   friend class Orphan<DynamicStruct>;
   friend class Orphan<DynamicValue>;
-  friend class Orphan<ObjectPointer>;
+  friend class Orphan<AnyPointer>;
 };
 
 class DynamicStruct::Pipeline {
@@ -326,9 +326,9 @@ public:
 
 private:
   StructSchema schema;
-  ObjectPointer::Pipeline typeless;
+  AnyPointer::Pipeline typeless;
 
-  inline explicit Pipeline(StructSchema schema, ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(StructSchema schema, AnyPointer::Pipeline&& typeless)
       : schema(schema), typeless(kj::mv(typeless)) {}
 
   friend class Request<DynamicStruct, DynamicStruct>;
@@ -374,7 +374,7 @@ private:
   friend class Orphanage;
   friend class Orphan<DynamicList>;
   friend class Orphan<DynamicValue>;
-  friend class Orphan<ObjectPointer>;
+  friend class Orphan<AnyPointer>;
 };
 
 class DynamicList::Builder {
@@ -425,7 +425,7 @@ private:
   friend struct _::OrphanGetImpl;
   friend class Orphan<DynamicList>;
   friend class Orphan<DynamicValue>;
-  friend class Orphan<ObjectPointer>;
+  friend class Orphan<AnyPointer>;
 };
 
 // -------------------------------------------------------------------
@@ -474,7 +474,7 @@ private:
   friend struct DynamicValue;
   friend class Orphan<DynamicCapability>;
   friend class Orphan<DynamicValue>;
-  friend class Orphan<ObjectPointer>;
+  friend class Orphan<AnyPointer>;
   template <typename T, Kind k>
   friend struct _::PointerHelpers;
 };
@@ -489,7 +489,7 @@ public:
                                  CallContext<DynamicStruct, DynamicStruct> context) = 0;
 
   kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,
-                                 CallContext<ObjectPointer, ObjectPointer> context) override final;
+                                 CallContext<AnyPointer, AnyPointer> context) override final;
 
   inline InterfaceSchema getSchema() const { return schema; }
 
@@ -591,7 +591,7 @@ public:
   inline Reader(const DynamicList::Reader& value);
   inline Reader(DynamicEnum value);
   inline Reader(const DynamicStruct::Reader& value);
-  inline Reader(const ObjectPointer::Reader& value);
+  inline Reader(const AnyPointer::Reader& value);
   inline Reader(DynamicCapability::Client& value);
   inline Reader(DynamicCapability::Client&& value);
   template <typename T, typename = kj::EnableIf<kj::canConvert<T*, DynamicCapability::Server*>()>>
@@ -613,7 +613,7 @@ public:
   inline ReaderFor<T> as() const { return AsImpl<T>::apply(*this); }
   // Use to interpret the value as some Cap'n Proto type.  Allowed types are:
   // - Void, bool, [u]int{8,16,32,64}_t, float, double, any enum:  Returns the raw value.
-  // - Text, Data, ObjectPointer, any struct type:  Returns the corresponding Reader.
+  // - Text, Data, AnyPointer, any struct type:  Returns the corresponding Reader.
   // - List<T> for any T listed above:  Returns List<T>::Reader.
   // - DynamicEnum:  Returns the corresponding type.
   // - DynamicStruct, DynamicList:  Returns the corresponding Reader.
@@ -652,7 +652,7 @@ private:
     DynamicList::Reader listValue;
     DynamicEnum enumValue;
     DynamicStruct::Reader structValue;
-    ObjectPointer::Reader objectValue;
+    AnyPointer::Reader anyPointerValue;
 
     mutable DynamicCapability::Client capabilityValue;
     // Declared mutable because `Client`s normally cannot be const.
@@ -693,7 +693,7 @@ public:
   inline Builder(DynamicList::Builder value);
   inline Builder(DynamicEnum value);
   inline Builder(DynamicStruct::Builder value);
-  inline Builder(ObjectPointer::Builder value);
+  inline Builder(AnyPointer::Builder value);
   inline Builder(DynamicCapability::Client& value);
   inline Builder(DynamicCapability::Client&& value);
 
@@ -731,7 +731,7 @@ private:
     DynamicList::Builder listValue;
     DynamicEnum enumValue;
     DynamicStruct::Builder structValue;
-    ObjectPointer::Builder objectValue;
+    AnyPointer::Builder anyPointerValue;
 
     mutable DynamicCapability::Client capabilityValue;
     // Declared mutable because `Client`s normally cannot be const.
@@ -820,7 +820,7 @@ private:
   friend struct DynamicList;
   friend class Orphanage;
   friend class Orphan<DynamicValue>;
-  friend class Orphan<ObjectPointer>;
+  friend class Orphan<AnyPointer>;
   friend class MessageBuilder;
 };
 
@@ -859,7 +859,7 @@ private:
   friend struct DynamicList;
   friend class Orphanage;
   friend class Orphan<DynamicValue>;
-  friend class Orphan<ObjectPointer>;
+  friend class Orphan<AnyPointer>;
 };
 
 template <>
@@ -897,7 +897,7 @@ private:
   friend struct DynamicList;
   friend class Orphanage;
   friend class Orphan<DynamicValue>;
-  friend class Orphan<ObjectPointer>;
+  friend class Orphan<AnyPointer>;
 };
 
 template <>
@@ -923,7 +923,7 @@ public:
   Orphan(Orphan&&) = default;
   template <typename T>
   Orphan(Orphan<T>&&);
-  Orphan(Orphan<ObjectPointer>&&);
+  Orphan(Orphan<AnyPointer>&&);
   KJ_DISALLOW_COPY(Orphan);
 
   Orphan& operator=(Orphan&&) = default;
@@ -968,7 +968,7 @@ private:
   friend struct _::PointerHelpers;
   friend struct DynamicStruct;
   friend struct DynamicList;
-  friend struct ObjectPointer;
+  friend struct AnyPointer;
   friend class Orphanage;
 };
 
@@ -976,8 +976,8 @@ template <typename T>
 inline Orphan<DynamicValue>::Orphan(Orphan<T>&& other)
     : Orphan(other.get(), kj::mv(other.builder)) {}
 
-inline Orphan<DynamicValue>::Orphan(Orphan<ObjectPointer>&& other)
-    : type(DynamicValue::OBJECT), builder(kj::mv(other.builder)) {}
+inline Orphan<DynamicValue>::Orphan(Orphan<AnyPointer>&& other)
+    : type(DynamicValue::ANY_POINTER), builder(kj::mv(other.builder)) {}
 
 template <typename T>
 Orphan<T> Orphan<DynamicStruct>::releaseAs() {
@@ -1005,7 +1005,7 @@ Orphan<T> Orphan<DynamicValue>::releaseAs() {
 }
 
 template <>
-Orphan<ObjectPointer> Orphan<DynamicValue>::releaseAs<ObjectPointer>();
+Orphan<AnyPointer> Orphan<DynamicValue>::releaseAs<AnyPointer>();
 template <>
 Orphan<DynamicStruct> Orphan<DynamicValue>::releaseAs<DynamicStruct>();
 template <>
@@ -1055,7 +1055,7 @@ namespace _ {  // private
 
 template <>
 struct PointerHelpers<DynamicStruct, Kind::UNKNOWN> {
-  // getDynamic() is used when an Object's get() accessor is passed arguments, because for
+  // getDynamic() is used when an AnyPointer's get() accessor is passed arguments, because for
   // non-dynamic types PointerHelpers::get() takes a default value as the third argument, and we
   // don't want people to accidentally be able to provide their own default value.
   static DynamicStruct::Reader getDynamic(PointerReader reader, StructSchema schema);
@@ -1072,7 +1072,7 @@ struct PointerHelpers<DynamicStruct, Kind::UNKNOWN> {
 
 template <>
 struct PointerHelpers<DynamicList, Kind::UNKNOWN> {
-  // getDynamic() is used when an Object's get() accessor is passed arguments, because for
+  // getDynamic() is used when an AnyPointer's get() accessor is passed arguments, because for
   // non-dynamic types PointerHelpers::get() takes a default value as the third argument, and we
   // don't want people to accidentally be able to provide their own default value.
   static DynamicList::Reader getDynamic(PointerReader reader, ListSchema schema);
@@ -1089,7 +1089,7 @@ struct PointerHelpers<DynamicList, Kind::UNKNOWN> {
 
 template <>
 struct PointerHelpers<DynamicCapability, Kind::UNKNOWN> {
-  // getDynamic() is used when an Object's get() accessor is passed arguments, because for
+  // getDynamic() is used when an AnyPointer's get() accessor is passed arguments, because for
   // non-dynamic types PointerHelpers::get() takes a default value as the third argument, and we
   // don't want people to accidentally be able to provide their own default value.
   static DynamicCapability::Client getDynamic(PointerReader reader, InterfaceSchema schema);
@@ -1107,83 +1107,83 @@ struct PointerHelpers<DynamicCapability, Kind::UNKNOWN> {
 }  // namespace _ (private)
 
 template <typename T>
-inline ReaderFor<T> ObjectPointer::Reader::getAs(StructSchema schema) const {
+inline ReaderFor<T> AnyPointer::Reader::getAs(StructSchema schema) const {
   return _::PointerHelpers<T>::getDynamic(reader, schema);
 }
 template <typename T>
-inline ReaderFor<T> ObjectPointer::Reader::getAs(ListSchema schema) const {
+inline ReaderFor<T> AnyPointer::Reader::getAs(ListSchema schema) const {
   return _::PointerHelpers<T>::getDynamic(reader, schema);
 }
 template <typename T>
-inline ReaderFor<T> ObjectPointer::Reader::getAs(InterfaceSchema schema) const {
+inline ReaderFor<T> AnyPointer::Reader::getAs(InterfaceSchema schema) const {
   return _::PointerHelpers<T>::getDynamic(reader, schema);
 }
 template <typename T>
-inline BuilderFor<T> ObjectPointer::Builder::getAs(StructSchema schema) {
+inline BuilderFor<T> AnyPointer::Builder::getAs(StructSchema schema) {
   return _::PointerHelpers<T>::getDynamic(builder, schema);
 }
 template <typename T>
-inline BuilderFor<T> ObjectPointer::Builder::getAs(ListSchema schema) {
+inline BuilderFor<T> AnyPointer::Builder::getAs(ListSchema schema) {
   return _::PointerHelpers<T>::getDynamic(builder, schema);
 }
 template <typename T>
-inline BuilderFor<T> ObjectPointer::Builder::getAs(InterfaceSchema schema) {
+inline BuilderFor<T> AnyPointer::Builder::getAs(InterfaceSchema schema) {
   return _::PointerHelpers<T>::getDynamic(builder, schema);
 }
 template <typename T>
-inline BuilderFor<T> ObjectPointer::Builder::initAs(StructSchema schema) {
+inline BuilderFor<T> AnyPointer::Builder::initAs(StructSchema schema) {
   return _::PointerHelpers<T>::init(builder, schema);
 }
 template <typename T>
-inline BuilderFor<T> ObjectPointer::Builder::initAs(ListSchema schema, uint elementCount) {
+inline BuilderFor<T> AnyPointer::Builder::initAs(ListSchema schema, uint elementCount) {
   return _::PointerHelpers<T>::init(builder, schema, elementCount);
 }
 template <>
-inline void ObjectPointer::Builder::setAs<DynamicStruct>(DynamicStruct::Reader value) {
+inline void AnyPointer::Builder::setAs<DynamicStruct>(DynamicStruct::Reader value) {
   return _::PointerHelpers<DynamicStruct>::set(builder, value);
 }
 template <>
-inline void ObjectPointer::Builder::setAs<DynamicList>(DynamicList::Reader value) {
+inline void AnyPointer::Builder::setAs<DynamicList>(DynamicList::Reader value) {
   return _::PointerHelpers<DynamicList>::set(builder, value);
 }
 template <>
-inline void ObjectPointer::Builder::setAs<DynamicCapability>(DynamicCapability::Client value) {
+inline void AnyPointer::Builder::setAs<DynamicCapability>(DynamicCapability::Client value) {
   return _::PointerHelpers<DynamicCapability>::set(builder, kj::mv(value));
 }
 template <>
-void ObjectPointer::Builder::adopt<DynamicValue>(Orphan<DynamicValue>&& orphan);
+void AnyPointer::Builder::adopt<DynamicValue>(Orphan<DynamicValue>&& orphan);
 template <typename T>
-inline Orphan<T> ObjectPointer::Builder::disownAs(StructSchema schema) {
+inline Orphan<T> AnyPointer::Builder::disownAs(StructSchema schema) {
   return _::PointerHelpers<T>::disown(builder, schema);
 }
 template <typename T>
-inline Orphan<T> ObjectPointer::Builder::disownAs(ListSchema schema) {
+inline Orphan<T> AnyPointer::Builder::disownAs(ListSchema schema) {
   return _::PointerHelpers<T>::disown(builder, schema);
 }
 template <typename T>
-inline Orphan<T> ObjectPointer::Builder::disownAs(InterfaceSchema schema) {
+inline Orphan<T> AnyPointer::Builder::disownAs(InterfaceSchema schema) {
   return _::PointerHelpers<T>::disown(builder, schema);
 }
 
 template <>
-DynamicStruct::Builder Orphan<ObjectPointer>::getAs<DynamicStruct>(StructSchema schema);
+DynamicStruct::Builder Orphan<AnyPointer>::getAs<DynamicStruct>(StructSchema schema);
 template <>
-DynamicList::Builder Orphan<ObjectPointer>::getAs<DynamicList>(ListSchema schema);
+DynamicList::Builder Orphan<AnyPointer>::getAs<DynamicList>(ListSchema schema);
 template <>
-DynamicCapability::Client Orphan<ObjectPointer>::getAs<DynamicCapability>(InterfaceSchema schema);
+DynamicCapability::Client Orphan<AnyPointer>::getAs<DynamicCapability>(InterfaceSchema schema);
 template <>
-DynamicStruct::Reader Orphan<ObjectPointer>::getAsReader<DynamicStruct>(StructSchema schema) const;
+DynamicStruct::Reader Orphan<AnyPointer>::getAsReader<DynamicStruct>(StructSchema schema) const;
 template <>
-DynamicList::Reader Orphan<ObjectPointer>::getAsReader<DynamicList>(ListSchema schema) const;
+DynamicList::Reader Orphan<AnyPointer>::getAsReader<DynamicList>(ListSchema schema) const;
 template <>
-DynamicCapability::Client Orphan<ObjectPointer>::getAsReader<DynamicCapability>(
+DynamicCapability::Client Orphan<AnyPointer>::getAsReader<DynamicCapability>(
     InterfaceSchema schema) const;
 template <>
-Orphan<DynamicStruct> Orphan<ObjectPointer>::releaseAs<DynamicStruct>(StructSchema schema);
+Orphan<DynamicStruct> Orphan<AnyPointer>::releaseAs<DynamicStruct>(StructSchema schema);
 template <>
-Orphan<DynamicList> Orphan<ObjectPointer>::releaseAs<DynamicList>(ListSchema schema);
+Orphan<DynamicList> Orphan<AnyPointer>::releaseAs<DynamicList>(ListSchema schema);
 template <>
-Orphan<DynamicCapability> Orphan<ObjectPointer>::releaseAs<DynamicCapability>(
+Orphan<DynamicCapability> Orphan<AnyPointer>::releaseAs<DynamicCapability>(
     InterfaceSchema schema);
 
 // =======================================================================================
@@ -1275,7 +1275,7 @@ CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Text, TEXT, text);
 CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(Data, DATA, data);
 CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicList, LIST, list);
 CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(DynamicStruct, STRUCT, struct);
-CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(ObjectPointer, OBJECT, object);
+CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR(AnyPointer, ANY_POINTER, anyPointer);
 
 #undef CAPNP_DECLARE_DYNAMIC_VALUE_CONSTRUCTOR
 
@@ -1293,7 +1293,7 @@ inline DynamicValue::Builder::Builder(DynamicCapability::Client&& value)
 
 inline DynamicValue::Reader::Reader(const char* value): Reader(Text::Reader(value)) {}
 
-#define CAPNP_DECLARE_TYPE(name, discrim, typeName) \
+#define CAPNP_DECLARE_TYPE(discrim, typeName) \
 template <> \
 struct DynamicValue::Reader::AsImpl<typeName> { \
   static ReaderFor<typeName> apply(const Reader& reader); \
@@ -1303,26 +1303,26 @@ struct DynamicValue::Builder::AsImpl<typeName> { \
   static BuilderFor<typeName> apply(Builder& builder); \
 };
 
-//CAPNP_DECLARE_TYPE(void, VOID, Void)
-CAPNP_DECLARE_TYPE(bool, BOOL, bool)
-CAPNP_DECLARE_TYPE(int8, INT8, int8_t)
-CAPNP_DECLARE_TYPE(int16, INT16, int16_t)
-CAPNP_DECLARE_TYPE(int32, INT32, int32_t)
-CAPNP_DECLARE_TYPE(int64, INT64, int64_t)
-CAPNP_DECLARE_TYPE(uint8, UINT8, uint8_t)
-CAPNP_DECLARE_TYPE(uint16, UINT16, uint16_t)
-CAPNP_DECLARE_TYPE(uint32, UINT32, uint32_t)
-CAPNP_DECLARE_TYPE(uint64, UINT64, uint64_t)
-CAPNP_DECLARE_TYPE(float32, FLOAT32, float)
-CAPNP_DECLARE_TYPE(float64, FLOAT64, double)
+//CAPNP_DECLARE_TYPE(VOID, Void)
+CAPNP_DECLARE_TYPE(BOOL, bool)
+CAPNP_DECLARE_TYPE(INT8, int8_t)
+CAPNP_DECLARE_TYPE(INT16, int16_t)
+CAPNP_DECLARE_TYPE(INT32, int32_t)
+CAPNP_DECLARE_TYPE(INT64, int64_t)
+CAPNP_DECLARE_TYPE(UINT8, uint8_t)
+CAPNP_DECLARE_TYPE(UINT16, uint16_t)
+CAPNP_DECLARE_TYPE(UINT32, uint32_t)
+CAPNP_DECLARE_TYPE(UINT64, uint64_t)
+CAPNP_DECLARE_TYPE(FLOAT32, float)
+CAPNP_DECLARE_TYPE(FLOAT64, double)
 
-CAPNP_DECLARE_TYPE(text, TEXT, Text)
-CAPNP_DECLARE_TYPE(data, DATA, Data)
-CAPNP_DECLARE_TYPE(list, LIST, DynamicList)
-CAPNP_DECLARE_TYPE(struct, STRUCT, DynamicStruct)
-CAPNP_DECLARE_TYPE(interface, INTERFACE, DynamicCapability)
-CAPNP_DECLARE_TYPE(enum, ENUM, DynamicEnum)
-CAPNP_DECLARE_TYPE(object, OBJECT, ObjectPointer)
+CAPNP_DECLARE_TYPE(TEXT, Text)
+CAPNP_DECLARE_TYPE(DATA, Data)
+CAPNP_DECLARE_TYPE(LIST, DynamicList)
+CAPNP_DECLARE_TYPE(STRUCT, DynamicStruct)
+CAPNP_DECLARE_TYPE(INTERFACE, DynamicCapability)
+CAPNP_DECLARE_TYPE(ENUM, DynamicEnum)
+CAPNP_DECLARE_TYPE(ANY_POINTER, AnyPointer)
 #undef CAPNP_DECLARE_TYPE
 
 // CAPNP_DECLARE_TYPE(Void) causes gcc 4.7 to segfault.  If I do it manually and remove the

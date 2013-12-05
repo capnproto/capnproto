@@ -269,7 +269,7 @@ struct Call {
   methodId @3 :UInt16;
   # The ordinal number of the method to call within the requested interface.
 
-  params @4 :Object;
+  params @4 :AnyPointer;
   # The params struct.  The fields of this struct correspond to the parameters of the method.
   #
   # The params may contain capabilities.  These capabilities are automatically released when the
@@ -350,11 +350,8 @@ struct Return {
   # other capabilities from the params are implicitly released.
 
   union {
-    results @2 :Object;
-    # Result object.  If the method returns a struct, this is it.  Otherwise, this points to
-    # a struct which contains exactly one field, corresponding to the method's return type.
-    # (This implies that an method's return type can be upgraded from a non-struct to a struct
-    # without breaking wire compatibility.)
+    results @2 :AnyPointer;
+    # For regular method calls, points to the result struct.
     #
     # For a `Return` in response to an `Accept`, `results` is a capability pointer (and therefore
     # points to a `CapDescriptor`, but is tagged as a capability rather than a struct).  A
@@ -974,7 +971,7 @@ struct Exception {
 # lightweight mechanism.
 #
 # To accommodate this, we specify several "parameter" types.  Each type is defined here as an
-# alias for `Object`, but a specific network will want to define a specific set of types to use.
+# alias for `AnyPointer`, but a specific network will want to define a specific set of types to use.
 # All vats in a vat network must agree on these parameters in order to be able to communicate.
 # Inter-network communication can be accomplished through "gateways" that perform translation
 # between the primitives used on each network; these gateways may need to be deeply stateful,
@@ -1037,7 +1034,7 @@ struct Exception {
 # between the joiner and the host of the joined object, and this connection must be authenticated.
 # Thus, the details are network-dependent.
 
-using SturdyRefHostId = Object;
+using SturdyRefHostId = AnyPointer;
 # **(level 2)**
 #
 # Identifies the host of a persistent capability which can be restored using a `Restore` message.
@@ -1053,7 +1050,7 @@ using SturdyRefHostId = Object;
 # in the group is able to restore the ref.  Such an approach would make `SturdyRefHostId`s more
 # robust against changes in network topology.
 
-using SturdyRefObjectId = Object;
+using SturdyRefObjectId = AnyPointer;
 # **(mostly level 2)**
 #
 # A SturdyRefObjectId identifies a persistent object which may be restored later, within the scope
@@ -1063,7 +1060,7 @@ using SturdyRefObjectId = Object;
 # per-vat.  A SturdyRefObjectId is typically paired with a `SturdyRefHostId` (in a
 # `SturdyRef`) which describes how to find a vat capable of restoring the ref.
 
-using ProvisionId = Object;
+using ProvisionId = AnyPointer;
 # **(level 3)**
 #
 # The information which must be sent in an `Accept` message to identify the object being accepted.
@@ -1072,7 +1069,7 @@ using ProvisionId = Object;
 # fingerprint of the provider vat along with the questionId used in the `Provide` message sent from
 # that provider.
 
-using RecipientId = Object;
+using RecipientId = AnyPointer;
 # **(level 3)**
 #
 # The information which must be sent in a `Provide` message to identify the recipient of the
@@ -1082,7 +1079,7 @@ using RecipientId = Object;
 # fingerprint of the recipient.  (CapTP also calls for a nonce to identify the object.  In our
 # case, the `Provide` message's `questionId` can serve as the nonce.)
 
-using ThirdPartyCapId = Object;
+using ThirdPartyCapId = AnyPointer;
 # **(level 3)**
 #
 # The information needed to connect to a third party and accept a capability from it.
@@ -1092,7 +1089,7 @@ using ThirdPartyCapId = Object;
 # address), and the question ID used in the corresponding `Provide` mesasge sent to that third party
 # (used to identify which capability to pick up).
 
-using JoinKeyPart = Object;
+using JoinKeyPart = AnyPointer;
 # **(level 4)**
 #
 # A piece of a secret key.  One piece is sent along each path that is expected to lead to the same
@@ -1116,7 +1113,7 @@ using JoinKeyPart = Object;
 # the joiner and the joined object's host.  Each JoinKeyPart should also include an indication of
 # how many parts to expect and a hash of the shared secret (used to match up parts).
 
-using JoinResult = Object;
+using JoinResult = AnyPointer;
 # **(level 4)**
 #
 # Information returned as the result to a `Join` message, needed by the joiner in order to form a

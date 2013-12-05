@@ -36,7 +36,7 @@
 #define CAPNP_CAPABILITY_CONTEXT_H_
 
 #include "layout.h"
-#include "object.h"
+#include "any.h"
 #include "message.h"
 #include <kj/mutex.h>
 #include <kj/vector.h>
@@ -128,7 +128,7 @@ public:
   CapReaderContext(CapExtractorBase& extractor);
   ~CapReaderContext() noexcept(false);
 
-  ObjectPointer::Reader imbue(ObjectPointer::Reader base);
+  AnyPointer::Reader imbue(AnyPointer::Reader base);
 
 private:
   CapExtractorBase* extractor;  // becomes null once arena is allocated
@@ -149,7 +149,7 @@ public:
   CapBuilderContext(CapInjectorBase& injector);
   ~CapBuilderContext() noexcept(false);
 
-  ObjectPointer::Builder imbue(ObjectPointer::Builder base);
+  AnyPointer::Builder imbue(AnyPointer::Builder base);
 
 private:
   CapInjectorBase* injector;  // becomes null once arena is allocated
@@ -181,13 +181,13 @@ public:
   LocalMessage(uint firstSegmentWords = SUGGESTED_FIRST_SEGMENT_WORDS,
                AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY);
 
-  inline ObjectPointer::Builder getRoot() { return root; }
-  inline ObjectPointer::Reader getRootReader() const { return root.asReader(); }
+  inline AnyPointer::Builder getRoot() { return root; }
+  inline AnyPointer::Reader getRootReader() const { return root.asReader(); }
 
 private:
   MallocMessageBuilder message;
   CapBuilderContext capContext;
-  ObjectPointer::Builder root;
+  AnyPointer::Builder root;
 
   struct State {
     uint counter;

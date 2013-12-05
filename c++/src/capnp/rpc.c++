@@ -261,7 +261,7 @@ public:
     resolutionChainTail = kj::refcounted<ResolutionChain>();
   }
 
-  kj::Own<ClientHook> restore(ObjectPointer::Reader objectId) {
+  kj::Own<ClientHook> restore(AnyPointer::Reader objectId) {
     QuestionId questionId;
     auto& question = questions.next(questionId);
 
@@ -680,7 +680,7 @@ private:
 
     // implements ClientHook -----------------------------------------
 
-    Request<ObjectPointer, ObjectPointer> newCall(
+    Request<AnyPointer, AnyPointer> newCall(
         uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) override {
       auto request = kj::heap<RpcRequest>(
           *connectionState, firstSegmentWordSize, kj::addRef(*this));
@@ -690,7 +690,7 @@ private:
       callBuilder.setMethodId(methodId);
 
       auto root = request->getRoot();
-      return Request<ObjectPointer, ObjectPointer>(root, kj::mv(request));
+      return Request<AnyPointer, AnyPointer>(root, kj::mv(request));
     }
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
@@ -912,7 +912,7 @@ private:
 
     // implements ClientHook -----------------------------------------
 
-    Request<ObjectPointer, ObjectPointer> newCall(
+    Request<AnyPointer, AnyPointer> newCall(
         uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) override {
       receivedCall = true;
       return cap->newCall(interfaceId, methodId, firstSegmentWordSize);
@@ -1545,20 +1545,20 @@ private:
           callBuilder(message->getBody().getAs<rpc::Message>().initCall()),
           paramsBuilder(context.imbue(callBuilder.getParams())) {}
 
-    inline ObjectPointer::Builder getRoot() {
+    inline AnyPointer::Builder getRoot() {
       return paramsBuilder;
     }
     inline rpc::Call::Builder getCall() {
       return callBuilder;
     }
 
-    RemotePromise<ObjectPointer> send() override {
+    RemotePromise<AnyPointer> send() override {
       SendInternalResult sendResult;
 
       KJ_IF_MAYBE(e, connectionState->networkException) {
-        return RemotePromise<ObjectPointer>(
-            kj::Promise<Response<ObjectPointer>>(kj::cp(*e)),
-            ObjectPointer::Pipeline(newBrokenPipeline(kj::cp(*e))));
+        return RemotePromise<AnyPointer>(
+            kj::Promise<Response<AnyPointer>>(kj::cp(*e)),
+            AnyPointer::Pipeline(newBrokenPipeline(kj::cp(*e))));
       }
 
       KJ_IF_MAYBE(redirect, target->writeTarget(callBuilder.getTarget())) {
@@ -1592,12 +1592,12 @@ private:
       auto appPromise = forkedPromise.addBranch().then(
           [=](kj::Own<RpcResponse>&& response) {
             auto reader = response->getResults();
-            return Response<ObjectPointer>(reader, kj::mv(response));
+            return Response<AnyPointer>(reader, kj::mv(response));
           });
 
-      return RemotePromise<ObjectPointer>(
+      return RemotePromise<AnyPointer>(
           kj::mv(appPromise),
-          ObjectPointer::Pipeline(kj::mv(pipeline)));
+          AnyPointer::Pipeline(kj::mv(pipeline)));
     }
 
     struct TailInfo {
@@ -1651,7 +1651,7 @@ private:
     kj::Own<CapInjectorImpl> injector;
     CapBuilderContext context;
     rpc::Call::Builder callBuilder;
-    ObjectPointer::Builder paramsBuilder;
+    AnyPointer::Builder paramsBuilder;
 
     struct SendInternalResult {
       kj::Own<QuestionRef> questionRef;
@@ -1782,7 +1782,7 @@ private:
 
   class RpcResponse: public ResponseHook {
   public:
-    virtual ObjectPointer::Reader getResults() = 0;
+    virtual AnyPointer::Reader getResults() = 0;
     virtual kj::Own<RpcResponse> addRef() = 0;
   };
 
@@ -1791,7 +1791,7 @@ private:
     RpcResponseImpl(RpcConnectionState& connectionState,
                     kj::Own<QuestionRef>&& questionRef,
                     kj::Own<IncomingRpcMessage>&& message,
-                    ObjectPointer::Reader results,
+                    AnyPointer::Reader results,
                     kj::Own<ResolutionChain>&& resolutionChain)
         : connectionState(kj::addRef(connectionState)),
           message(kj::mv(message)),
@@ -1799,7 +1799,7 @@ private:
           reader(context.imbue(results)),
           questionRef(kj::mv(questionRef)) {}
 
-    ObjectPointer::Reader getResults() override {
+    AnyPointer::Reader getResults() override {
       return reader;
     }
 
@@ -1811,7 +1811,7 @@ private:
     kj::Own<RpcConnectionState> connectionState;
     kj::Own<IncomingRpcMessage> message;
     CapReaderContext context;
-    ObjectPointer::Reader reader;
+    AnyPointer::Reader reader;
     kj::Own<QuestionRef> questionRef;
   };
 
@@ -1820,20 +1820,20 @@ private:
 
   class RpcServerResponse {
   public:
-    virtual ObjectPointer::Builder getResultsBuilder() = 0;
+    virtual AnyPointer::Builder getResultsBuilder() = 0;
   };
 
   class RpcServerResponseImpl final: public RpcServerResponse {
   public:
     RpcServerResponseImpl(RpcConnectionState& connectionState,
                           kj::Own<OutgoingRpcMessage>&& message,
-                          ObjectPointer::Builder results)
+                          AnyPointer::Builder results)
         : message(kj::mv(message)),
           injector(kj::heap<CapInjectorImpl>(connectionState)),
           context(*injector),
           builder(context.imbue(results)) {}
 
-    ObjectPointer::Builder getResultsBuilder() override {
+    AnyPointer::Builder getResultsBuilder() override {
       return builder;
     }
 
@@ -1847,7 +1847,7 @@ private:
     kj::Own<OutgoingRpcMessage> message;
     kj::Own<CapInjectorImpl> injector;
     CapBuilderContext context;
-    ObjectPointer::Builder builder;
+    AnyPointer::Builder builder;
   };
 
   class LocallyRedirectedRpcResponse final
@@ -1857,11 +1857,11 @@ private:
         : message(firstSegmentWordSize == 0 ?
             SUGGESTED_FIRST_SEGMENT_WORDS : firstSegmentWordSize + 1) {}
 
-    ObjectPointer::Builder getResultsBuilder() override {
+    AnyPointer::Builder getResultsBuilder() override {
       return message.getRoot();
     }
 
-    ObjectPointer::Reader getResults() override {
+    AnyPointer::Reader getResults() override {
       return message.getRootReader();
     }
 
@@ -1876,7 +1876,7 @@ private:
   class RpcCallContext final: public CallContextHook, public kj::Refcounted {
   public:
     RpcCallContext(RpcConnectionState& connectionState, QuestionId questionId,
-                   kj::Own<IncomingRpcMessage>&& request, const ObjectPointer::Reader& params,
+                   kj::Own<IncomingRpcMessage>&& request, const AnyPointer::Reader& params,
                    kj::Own<ResolutionChain> resolutionChain, bool redirectResults,
                    kj::Own<kj::PromiseFulfiller<void>>&& cancelFulfiller)
         : connectionState(kj::addRef(connectionState)),
@@ -1982,7 +1982,7 @@ private:
 
     // implements CallContextHook ------------------------------------
 
-    ObjectPointer::Reader getParams() override {
+    AnyPointer::Reader getParams() override {
       KJ_REQUIRE(request != nullptr, "Can't call getParams() after releaseParams().");
       return params;
     }
@@ -1990,7 +1990,7 @@ private:
       request = nullptr;
       requestCapExtractor.doneExtracting();
     }
-    ObjectPointer::Builder getResults(uint firstSegmentWordSize) override {
+    AnyPointer::Builder getResults(uint firstSegmentWordSize) override {
       KJ_IF_MAYBE(r, response) {
         return r->get()->getResultsBuilder();
       } else {
@@ -2016,7 +2016,7 @@ private:
     kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) override {
       auto result = directTailCall(kj::mv(request));
       KJ_IF_MAYBE(f, tailCallPipelineFulfiller) {
-        f->get()->fulfill(ObjectPointer::Pipeline(kj::mv(result.pipeline)));
+        f->get()->fulfill(AnyPointer::Pipeline(kj::mv(result.pipeline)));
       }
       return kj::mv(result.promise);
     }
@@ -2053,7 +2053,7 @@ private:
       auto promise = request->send();
 
       // Wait for response.
-      auto voidPromise = promise.then([this](Response<ObjectPointer>&& tailResponse) {
+      auto voidPromise = promise.then([this](Response<AnyPointer>&& tailResponse) {
         // Copy the response.
         // TODO(perf):  It would be nice if we could somehow make the response get built in-place
         //   but requires some refactoring.
@@ -2064,8 +2064,8 @@ private:
 
       return { kj::mv(voidPromise), PipelineHook::from(kj::mv(promise)) };
     }
-    kj::Promise<ObjectPointer::Pipeline> onTailCall() override {
-      auto paf = kj::newPromiseAndFulfiller<ObjectPointer::Pipeline>();
+    kj::Promise<AnyPointer::Pipeline> onTailCall() override {
+      auto paf = kj::newPromiseAndFulfiller<AnyPointer::Pipeline>();
       tailCallPipelineFulfiller = kj::mv(paf.fulfiller);
       return kj::mv(paf.promise);
     }
@@ -2105,7 +2105,7 @@ private:
     kj::Maybe<kj::Own<IncomingRpcMessage>> request;
     CapExtractorImpl requestCapExtractor;
     CapReaderContext requestCapContext;
-    ObjectPointer::Reader params;
+    AnyPointer::Reader params;
 
     // Response --------------------------------------------
 
@@ -2113,7 +2113,7 @@ private:
     rpc::Return::Builder returnMessage;
     bool redirectResults = false;
     bool responseSent = false;
-    kj::Maybe<kj::Own<kj::PromiseFulfiller<ObjectPointer::Pipeline>>> tailCallPipelineFulfiller;
+    kj::Maybe<kj::Own<kj::PromiseFulfiller<AnyPointer::Pipeline>>> tailCallPipelineFulfiller;
 
     // Cancellation state ----------------------------------
 
@@ -2790,7 +2790,7 @@ public:
     });
   }
 
-  Capability::Client restore(_::StructReader hostId, ObjectPointer::Reader objectId) {
+  Capability::Client restore(_::StructReader hostId, AnyPointer::Reader objectId) {
     KJ_IF_MAYBE(connection, network.baseConnectToRefHost(hostId)) {
       auto& state = getConnectionState(kj::mv(*connection));
       return Capability::Client(state.restore(objectId));
@@ -2856,7 +2856,7 @@ RpcSystemBase::RpcSystemBase(RpcSystemBase&& other) noexcept = default;
 RpcSystemBase::~RpcSystemBase() noexcept(false) {}
 
 Capability::Client RpcSystemBase::baseRestore(
-    _::StructReader hostId, ObjectPointer::Reader objectId) {
+    _::StructReader hostId, AnyPointer::Reader objectId) {
   return impl->restore(hostId, objectId);
 }
 

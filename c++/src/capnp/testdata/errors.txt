@@ -27,7 +27,7 @@ file:118:26-32: error: Not defined: NoSuch
 file:119:28-34: error: No such member: NoSuch
 file:97:25-29: error: 'List' requires exactly one parameter.
 file:98:30-48: error: 'List' requires exactly one parameter.
-file:99:19-31: error: 'List(Object)' is not supported.
+file:99:23-39: error: 'List(AnyPointer)' is not supported.
 file:100:17-24: error: 'notType' is not a type.
 file:101:17-27: error: 'Foo' does not accept parameters.
 file:103:34-41: error: Integer value out of range.

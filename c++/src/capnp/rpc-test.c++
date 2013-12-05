@@ -251,8 +251,8 @@ public:
           : message(firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS
                                               : firstSegmentWordSize) {}
 
-      ObjectPointer::Reader getBody() override {
-        return message.getRoot<ObjectPointer>().asReader();
+      AnyPointer::Reader getBody() override {
+        return message.getRoot<AnyPointer>().asReader();
       }
 
       MallocMessageBuilder message;
@@ -264,8 +264,8 @@ public:
           : connection(connection),
             message(kj::refcounted<IncomingRpcMessageImpl>(firstSegmentWordSize)) {}
 
-      ObjectPointer::Builder getBody() override {
-        return message->message.getRoot<ObjectPointer>();
+      AnyPointer::Builder getBody() override {
+        return message->message.getRoot<AnyPointer>();
       }
       void send() override {
         if (connection.networkException != nullptr) {

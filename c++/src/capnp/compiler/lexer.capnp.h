@@ -242,11 +242,11 @@ public:
   typedef Token Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -360,11 +360,11 @@ public:
   typedef Statement Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -437,11 +437,11 @@ public:
   typedef LexedTokens Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -514,11 +514,11 @@ public:
   typedef LexedStatements Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };

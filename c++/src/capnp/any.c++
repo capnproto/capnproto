@@ -21,7 +21,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "object.h"
+#include "any.h"
 #include "capability.h"
 
 namespace capnp {
@@ -30,7 +30,7 @@ kj::Own<ClientHook> PipelineHook::getPipelinedCap(kj::Array<PipelineOp>&& ops) {
   return getPipelinedCap(ops.asPtr());
 }
 
-kj::Own<ClientHook> ObjectPointer::Reader::getPipelinedCap(
+kj::Own<ClientHook> AnyPointer::Reader::getPipelinedCap(
     kj::ArrayPtr<const PipelineOp> ops) const {
   _::PointerReader pointer = reader;
 
@@ -48,7 +48,7 @@ kj::Own<ClientHook> ObjectPointer::Reader::getPipelinedCap(
   return pointer.getCapability();
 }
 
-ObjectPointer::Pipeline ObjectPointer::Pipeline::noop() {
+AnyPointer::Pipeline AnyPointer::Pipeline::noop() {
   auto newOps = kj::heapArray<PipelineOp>(ops.size());
   for (auto i: kj::indices(ops)) {
     newOps[i] = ops[i];
@@ -56,7 +56,7 @@ ObjectPointer::Pipeline ObjectPointer::Pipeline::noop() {
   return Pipeline(hook->addRef(), kj::mv(newOps));
 }
 
-ObjectPointer::Pipeline ObjectPointer::Pipeline::getPointerField(uint16_t pointerIndex) {
+AnyPointer::Pipeline AnyPointer::Pipeline::getPointerField(uint16_t pointerIndex) {
   auto newOps = kj::heapArray<PipelineOp>(ops.size() + 1);
   for (auto i: kj::indices(ops)) {
     newOps[i] = ops[i];
@@ -68,7 +68,7 @@ ObjectPointer::Pipeline ObjectPointer::Pipeline::getPointerField(uint16_t pointe
   return Pipeline(hook->addRef(), kj::mv(newOps));
 }
 
-kj::Own<ClientHook> ObjectPointer::Pipeline::asCap() {
+kj::Own<ClientHook> AnyPointer::Pipeline::asCap() {
   return hook->getPipelinedCap(ops);
 }
 

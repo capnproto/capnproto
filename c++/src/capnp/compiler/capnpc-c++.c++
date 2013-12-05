@@ -238,7 +238,7 @@ private:
       case schema::Type::LIST:
         return kj::strTree(" ::capnp::List<", typeName(type.getList().getElementType()), ">");
 
-      case schema::Type::OBJECT:
+      case schema::Type::ANY_POINTER:
         // Not used.
         return kj::strTree();
     }
@@ -275,7 +275,7 @@ private:
       case schema::Value::STRUCT:
       case schema::Value::INTERFACE:
       case schema::Value::LIST:
-      case schema::Value::OBJECT:
+      case schema::Value::ANY_POINTER:
         KJ_FAIL_REQUIRE("literalValue() can only be used on primitive types.");
     }
     KJ_UNREACHABLE;
@@ -305,7 +305,7 @@ private:
       case schema::Type::LIST:
       case schema::Type::STRUCT:
       case schema::Type::INTERFACE:
-      case schema::Type::OBJECT:
+      case schema::Type::ANY_POINTER:
         KJ_FAIL_REQUIRE("Should only be called for data types.");
     }
     KJ_UNREACHABLE;
@@ -339,7 +339,7 @@ private:
       case schema::Type::LIST:
       case schema::Type::STRUCT:
       case schema::Type::INTERFACE:
-      case schema::Type::OBJECT:
+      case schema::Type::ANY_POINTER:
         return Section::POINTERS;
     }
     KJ_UNREACHABLE;
@@ -366,7 +366,7 @@ private:
       case schema::Type::LIST:
       case schema::Type::STRUCT:
       case schema::Type::INTERFACE:
-      case schema::Type::OBJECT:
+      case schema::Type::ANY_POINTER:
         KJ_FAIL_REQUIRE("Should only be called for data types.");
     }
     KJ_UNREACHABLE;
@@ -541,7 +541,7 @@ private:
     STRUCT,
     LIST,
     INTERFACE,
-    OBJECT
+    ANY_POINTER
   };
 
   FieldText makeFieldText(kj::StringPtr scope, StructSchema::Field field) {
@@ -709,9 +709,9 @@ private:
       case schema::Type::INTERFACE:
         kind = FieldKind::INTERFACE;
         break;
-      case schema::Type::OBJECT:
-        kind = FieldKind::OBJECT;
-        if (defaultBody.hasObject()) {
+      case schema::Type::ANY_POINTER:
+        kind = FieldKind::ANY_POINTER;
+        if (defaultBody.hasAnyPointer()) {
           defaultOffset = field.getDefaultValueSchemaOffset();
         }
         break;
@@ -830,19 +830,19 @@ private:
             "\n")
       };
 
-    } else if (kind == FieldKind::OBJECT) {
+    } else if (kind == FieldKind::ANY_POINTER) {
       return FieldText {
         kj::strTree(
             kj::mv(unionDiscrim.readerIsDecl),
             "  inline bool has", titleCase, "() const;\n"
-            "  inline ::capnp::ObjectPointer::Reader get", titleCase, "() const;\n"
+            "  inline ::capnp::AnyPointer::Reader get", titleCase, "() const;\n"
             "\n"),
 
         kj::strTree(
             kj::mv(unionDiscrim.builderIsDecl),
             "  inline bool has", titleCase, "();\n"
-            "  inline ::capnp::ObjectPointer::Builder get", titleCase, "();\n"
-            "  inline ::capnp::ObjectPointer::Builder init", titleCase, "();\n"
+            "  inline ::capnp::AnyPointer::Builder get", titleCase, "();\n"
+            "  inline ::capnp::AnyPointer::Builder init", titleCase, "();\n"
             "\n"),
 
         kj::strTree(),
@@ -857,19 +857,19 @@ private:
             unionDiscrim.has,
             "  return !_builder.getPointerField(", offset, " * ::capnp::POINTERS).isNull();\n"
             "}\n"
-            "inline ::capnp::ObjectPointer::Reader ", scope, "Reader::get", titleCase, "() const {\n",
+            "inline ::capnp::AnyPointer::Reader ", scope, "Reader::get", titleCase, "() const {\n",
             unionDiscrim.check,
-            "  return ::capnp::ObjectPointer::Reader(\n"
+            "  return ::capnp::AnyPointer::Reader(\n"
             "      _reader.getPointerField(", offset, " * ::capnp::POINTERS));\n"
             "}\n"
-            "inline ::capnp::ObjectPointer::Builder ", scope, "Builder::get", titleCase, "() {\n",
+            "inline ::capnp::AnyPointer::Builder ", scope, "Builder::get", titleCase, "() {\n",
             unionDiscrim.check,
-            "  return ::capnp::ObjectPointer::Builder(\n"
+            "  return ::capnp::AnyPointer::Builder(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
             "}\n"
-            "inline ::capnp::ObjectPointer::Builder ", scope, "Builder::init", titleCase, "() {\n",
+            "inline ::capnp::AnyPointer::Builder ", scope, "Builder::init", titleCase, "() {\n",
             unionDiscrim.set,
-            "  auto result = ::capnp::ObjectPointer::Builder(\n"
+            "  auto result = ::capnp::AnyPointer::Builder(\n"
             "      _builder.getPointerField(", offset, " * ::capnp::POINTERS));\n"
             "  result.clear();\n"
             "  return result;\n"
@@ -910,7 +910,7 @@ private:
           case schema::Type::TEXT:
           case schema::Type::DATA:
           case schema::Type::LIST:
-          case schema::Type::OBJECT:
+          case schema::Type::ANY_POINTER:
             primitiveElement = false;
             break;
 
@@ -1113,12 +1113,12 @@ private:
         "  typedef ", unqualifiedParentType, " Pipelines;\n"
         "\n"
         "  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}\n"
-        "  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)\n"
+        "  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)\n"
         "      : _typeless(kj::mv(typeless)) {}\n"
         "\n",
         kj::mv(methodDecls),
         "private:\n"
-        "  ::capnp::ObjectPointer::Pipeline _typeless;\n"
+        "  ::capnp::AnyPointer::Pipeline _typeless;\n"
         "  template <typename T, ::capnp::Kind k>\n"
         "  friend struct ::capnp::ToDynamic_;\n"
         "};\n"
@@ -1335,7 +1335,7 @@ private:
           "  typedef ", fullName, " Serves;\n"
           "\n"
           "  ::kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,\n"
-          "      ::capnp::CallContext< ::capnp::ObjectPointer, ::capnp::ObjectPointer> context)\n"
+          "      ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context)\n"
           "      override;\n"
           "\n"
           "protected:\n"
@@ -1343,7 +1343,7 @@ private:
           KJ_MAP(m, methods) { return kj::mv(m.serverDecls); },
           "\n"
           "  ::kj::Promise<void> dispatchCallInternal(uint16_t methodId,\n"
-          "      ::capnp::CallContext< ::capnp::ObjectPointer, ::capnp::ObjectPointer> context);\n"
+          "      ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context);\n"
           "};\n"
           "\n"),
 
@@ -1375,7 +1375,7 @@ private:
           KJ_MAP(m, methods) { return kj::mv(m.sourceDefs); },
           "::kj::Promise<void> ", fullName, "::Server::dispatchCall(\n"
           "    uint64_t interfaceId, uint16_t methodId,\n"
-          "    ::capnp::CallContext< ::capnp::ObjectPointer, ::capnp::ObjectPointer> context) {\n"
+          "    ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context) {\n"
           "  switch (interfaceId) {\n"
           "    case 0x", kj::hex(proto.getId()), "ull:\n"
           "      return dispatchCallInternal(methodId, context);\n",
@@ -1390,7 +1390,7 @@ private:
           "}\n"
           "::kj::Promise<void> ", fullName, "::Server::dispatchCallInternal(\n"
           "    uint16_t methodId,\n"
-          "    ::capnp::CallContext< ::capnp::ObjectPointer, ::capnp::ObjectPointer> context) {\n"
+          "    ::capnp::CallContext< ::capnp::AnyPointer, ::capnp::AnyPointer> context) {\n"
           "  switch (methodId) {\n",
           KJ_MAP(m, methods) { return kj::mv(m.dispatchCase); },
           "    default:\n"
@@ -1486,7 +1486,7 @@ private:
         };
       }
 
-      case schema::Value::OBJECT:
+      case schema::Value::ANY_POINTER:
       case schema::Value::INTERFACE:
         return ConstText { false, kj::strTree(), kj::strTree() };
     }

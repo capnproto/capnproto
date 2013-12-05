@@ -26,7 +26,7 @@
 #include <kj/mutex.h>
 #include "common.h"
 #include "layout.h"
-#include "object.h"
+#include "any.h"
 
 #ifndef CAPNP_MESSAGE_H_
 #define CAPNP_MESSAGE_H_
@@ -129,7 +129,7 @@ private:
   bool allocatedArena;
 
   _::BasicReaderArena* arena() { return reinterpret_cast<_::BasicReaderArena*>(arenaSpace); }
-  ObjectPointer::Reader getRootInternal();
+  AnyPointer::Reader getRootInternal();
 };
 
 class MessageBuilder {
@@ -205,7 +205,7 @@ private:
 
   _::BasicBuilderArena* arena() { return reinterpret_cast<_::BasicBuilderArena*>(arenaSpace); }
   _::SegmentBuilder* getRootSegment();
-  ObjectPointer::Builder getRootInternal();
+  AnyPointer::Builder getRootInternal();
 };
 
 template <typename RootType>
@@ -402,7 +402,7 @@ typename RootType::Builder MessageBuilder::initRoot(SchemaType schema) {
 
 template <typename RootType>
 typename RootType::Reader readMessageUnchecked(const word* data) {
-  return ObjectPointer::Reader(_::PointerReader::getRootUnchecked(data)).getAs<RootType>();
+  return AnyPointer::Reader(_::PointerReader::getRootUnchecked(data)).getAs<RootType>();
 }
 
 template <typename Reader>

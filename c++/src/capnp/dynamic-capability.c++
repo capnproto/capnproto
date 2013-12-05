@@ -57,7 +57,7 @@ Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(
 
 kj::Promise<void> DynamicCapability::Server::dispatchCall(
     uint64_t interfaceId, uint16_t methodId,
-    CallContext<ObjectPointer, ObjectPointer> context) {
+    CallContext<AnyPointer, AnyPointer> context) {
   KJ_IF_MAYBE(interface, schema.findSuperclass(interfaceId)) {
     auto methods = interface->getMethods();
     if (methodId < methods.size()) {
@@ -82,15 +82,15 @@ RemotePromise<DynamicStruct> Request<DynamicStruct, DynamicStruct>::send() {
   // Convert the Promise to return the correct response type.
   // Explicitly upcast to kj::Promise to make clear that calling .then() doesn't invalidate the
   // Pipeline part of the RemotePromise.
-  auto typedPromise = kj::implicitCast<kj::Promise<Response<ObjectPointer>>&>(typelessPromise)
-      .then([=](Response<ObjectPointer>&& response) -> Response<DynamicStruct> {
+  auto typedPromise = kj::implicitCast<kj::Promise<Response<AnyPointer>>&>(typelessPromise)
+      .then([=](Response<AnyPointer>&& response) -> Response<DynamicStruct> {
         return Response<DynamicStruct>(response.getAs<DynamicStruct>(resultSchemaCopy),
                                        kj::mv(response.hook));
       });
 
   // Wrap the typeless pipeline in a typed wrapper.
   DynamicStruct::Pipeline typedPipeline(resultSchema,
-      kj::mv(kj::implicitCast<ObjectPointer::Pipeline&>(typelessPromise)));
+      kj::mv(kj::implicitCast<AnyPointer::Pipeline&>(typelessPromise)));
 
   return RemotePromise<DynamicStruct>(kj::mv(typedPromise), kj::mv(typedPipeline));
 }

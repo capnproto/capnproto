@@ -37,7 +37,7 @@ CapReaderContext::~CapReaderContext() noexcept(false) {
   }
 }
 
-ObjectPointer::Reader CapReaderContext::imbue(ObjectPointer::Reader base) {
+AnyPointer::Reader CapReaderContext::imbue(AnyPointer::Reader base) {
   KJ_REQUIRE(extractor != nullptr, "imbue() can only be called once.");
   KJ_IF_MAYBE(oldArena, base.reader.getArena()) {
     kj::ctor(arena(), oldArena, extractor);
@@ -45,7 +45,7 @@ ObjectPointer::Reader CapReaderContext::imbue(ObjectPointer::Reader base) {
     KJ_FAIL_REQUIRE("Cannot imbue unchecked message.");
   }
   extractor = nullptr;
-  return ObjectPointer::Reader(base.reader.imbue(arena()));
+  return AnyPointer::Reader(base.reader.imbue(arena()));
 }
 
 CapBuilderContext::CapBuilderContext(CapInjectorBase& injector): injector(&injector) {}
@@ -55,11 +55,11 @@ CapBuilderContext::~CapBuilderContext() noexcept(false) {
   }
 }
 
-ObjectPointer::Builder CapBuilderContext::imbue(ObjectPointer::Builder base) {
+AnyPointer::Builder CapBuilderContext::imbue(AnyPointer::Builder base) {
   KJ_REQUIRE(injector != nullptr, "imbue() can only be called once.");
   kj::ctor(arena(), base.builder.getArena(), injector);
   injector = nullptr;
-  return ObjectPointer::Builder(base.builder.imbue(arena()));
+  return AnyPointer::Builder(base.builder.imbue(arena()));
 }
 
 // =======================================================================================
@@ -116,7 +116,7 @@ constexpr StructSize structSize<LocalCapDescriptor>() {
 LocalMessage::LocalMessage(uint firstSegmentWords, AllocationStrategy allocationStrategy)
     : message(firstSegmentWords, allocationStrategy),
       capContext(*this),
-      root(capContext.imbue(message.getRoot<ObjectPointer>())) {}
+      root(capContext.imbue(message.getRoot<AnyPointer>())) {}
 
 void LocalMessage::injectCap(_::LocalCapDescriptor::Builder descriptor, kj::Own<ClientHook>&& cap) {
   auto lock = state.lockExclusive();
@@ -167,9 +167,9 @@ public:
       : exception(exception),
         message(firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : firstSegmentWordSize) {}
 
-  RemotePromise<ObjectPointer> send() override {
-    return RemotePromise<ObjectPointer>(kj::cp(exception),
-        ObjectPointer::Pipeline(kj::refcounted<BrokenPipeline>(exception)));
+  RemotePromise<AnyPointer> send() override {
+    return RemotePromise<AnyPointer>(kj::cp(exception),
+        AnyPointer::Pipeline(kj::refcounted<BrokenPipeline>(exception)));
   }
 
   const void* getBrand() {
@@ -187,11 +187,11 @@ public:
       : exception(kj::Exception::Nature::PRECONDITION, kj::Exception::Durability::PERMANENT,
                   "", 0, kj::str(description)) {}
 
-  Request<ObjectPointer, ObjectPointer> newCall(
+  Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) override {
     auto hook = kj::heap<BrokenRequest>(exception, firstSegmentWordSize);
     auto root = hook->message.getRoot();
-    return Request<ObjectPointer, ObjectPointer>(root, kj::mv(hook));
+    return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,

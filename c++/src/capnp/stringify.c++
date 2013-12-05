@@ -250,8 +250,8 @@ static kj::StringTree print(const DynamicValue::Reader& value,
     }
     case DynamicValue::CAPABILITY:
       return kj::strTree("<external capability>");
-    case DynamicValue::OBJECT:
-      return kj::strTree("<opaque object>");
+    case DynamicValue::ANY_POINTER:
+      return kj::strTree("<opaque pointer>");
   }
 
   KJ_UNREACHABLE;

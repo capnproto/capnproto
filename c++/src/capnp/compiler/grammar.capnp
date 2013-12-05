@@ -218,7 +218,8 @@ struct Declaration {
     builtinText @52 :Void;
     builtinData @53 :Void;
     builtinList @54 :Void;
-    builtinObject @55 :Void;
+    builtinObject @55 :Void;  # only for "renamed to AnyPointer" error message
+    builtinAnyPointer @56 :Void;
   }
 
   struct ParamList {

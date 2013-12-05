@@ -72,8 +72,8 @@ public:
       : network(network),
         message(firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : firstSegmentWordSize) {}
 
-  ObjectPointer::Builder getBody() override {
-    return message.getRoot<ObjectPointer>();
+  AnyPointer::Builder getBody() override {
+    return message.getRoot<AnyPointer>();
   }
 
   void send() override {
@@ -97,8 +97,8 @@ class TwoPartyVatNetwork::IncomingMessageImpl final: public IncomingRpcMessage {
 public:
   IncomingMessageImpl(kj::Own<MessageReader> message): message(kj::mv(message)) {}
 
-  ObjectPointer::Reader getBody() override {
-    return message->getRoot<ObjectPointer>();
+  AnyPointer::Reader getBody() override {
+    return message->getRoot<AnyPointer>();
   }
 
 private:

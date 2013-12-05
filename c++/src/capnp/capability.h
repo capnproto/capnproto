@@ -25,7 +25,7 @@
 #define CAPNP_CAPABILITY_H_
 
 #include <kj/async.h>
-#include "object.h"
+#include "any.h"
 #include "pointer-helpers.h"
 
 namespace capnp {
@@ -274,7 +274,7 @@ class Capability::Server {
 
 public:
   virtual kj::Promise<void> dispatchCall(uint64_t interfaceId, uint16_t methodId,
-                                         CallContext<ObjectPointer, ObjectPointer> context) = 0;
+                                         CallContext<AnyPointer, AnyPointer> context) = 0;
   // Call the given method.  `params` is the input struct, and should be released as soon as it
   // is no longer needed.  `context` may be used to allocate the output struct and deal with
   // cancellation.
@@ -285,7 +285,7 @@ public:
 protected:
   template <typename Params, typename Results>
   CallContext<Params, Results> internalGetTypedContext(
-      CallContext<ObjectPointer, ObjectPointer> typeless);
+      CallContext<AnyPointer, AnyPointer> typeless);
   kj::Promise<void> internalUnimplemented(const char* actualInterfaceName,
                                           uint64_t requestedTypeId);
   kj::Promise<void> internalUnimplemented(const char* interfaceName,
@@ -302,7 +302,7 @@ class RequestHook {
   // Hook interface implemented by RPC system representing a request being built.
 
 public:
-  virtual RemotePromise<ObjectPointer> send() = 0;
+  virtual RemotePromise<AnyPointer> send() = 0;
   // Send the call and return a promise for the result.
 
   virtual const void* getBrand() = 0;
@@ -327,11 +327,11 @@ public:
   // Just here to make sure the type is dynamic.
 };
 
-// class PipelineHook is declared in object.h because it is needed there.
+// class PipelineHook is declared in any.h because it is needed there.
 
 class ClientHook {
 public:
-  virtual Request<ObjectPointer, ObjectPointer> newCall(
+  virtual Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) = 0;
   // Start a new call, allowing the client to allocate request/response objects as it sees fit.
   // This version is used when calls are made from application code in the local process.
@@ -386,14 +386,14 @@ class CallContextHook {
   // CallContext<T>.
 
 public:
-  virtual ObjectPointer::Reader getParams() = 0;
+  virtual AnyPointer::Reader getParams() = 0;
   virtual void releaseParams() = 0;
-  virtual ObjectPointer::Builder getResults(uint firstSegmentWordSize) = 0;
+  virtual AnyPointer::Builder getResults(uint firstSegmentWordSize) = 0;
   virtual kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) = 0;
   virtual void allowAsyncCancellation() = 0;
   virtual bool isCanceled() = 0;
 
-  virtual kj::Promise<ObjectPointer::Pipeline> onTailCall() = 0;
+  virtual kj::Promise<AnyPointer::Pipeline> onTailCall() = 0;
   // If `tailCall()` is called, resolves to the PipelineHook from the tail call.  An
   // implementation of `ClientHook::call()` is allowed to call this at most once.
 
@@ -542,14 +542,14 @@ RemotePromise<Results> Request<Params, Results>::send() {
   // Convert the Promise to return the correct response type.
   // Explicitly upcast to kj::Promise to make clear that calling .then() doesn't invalidate the
   // Pipeline part of the RemotePromise.
-  auto typedPromise = kj::implicitCast<kj::Promise<Response<ObjectPointer>>&>(typelessPromise)
-      .then([](Response<ObjectPointer>&& response) -> Response<Results> {
+  auto typedPromise = kj::implicitCast<kj::Promise<Response<AnyPointer>>&>(typelessPromise)
+      .then([](Response<AnyPointer>&& response) -> Response<Results> {
         return Response<Results>(response.getAs<Results>(), kj::mv(response.hook));
       });
 
   // Wrap the typeless pipeline in a typed wrapper.
   typename Results::Pipeline typedPipeline(
-      kj::mv(kj::implicitCast<ObjectPointer::Pipeline&>(typelessPromise)));
+      kj::mv(kj::implicitCast<AnyPointer::Pipeline&>(typelessPromise)));
 
   return RemotePromise<Results>(kj::mv(typedPromise), kj::mv(typedPipeline));
 }
@@ -631,7 +631,7 @@ inline bool CallContext<Params, Results>::isCanceled() {
 
 template <typename Params, typename Results>
 CallContext<Params, Results> Capability::Server::internalGetTypedContext(
-    CallContext<ObjectPointer, ObjectPointer> typeless) {
+    CallContext<AnyPointer, AnyPointer> typeless) {
   return CallContext<Params, Results>(*typeless.hook);
 }
 

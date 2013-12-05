@@ -30,7 +30,7 @@
 #include "list.h"
 #include "orphan.h"
 #include "pointer-helpers.h"
-#include "object.h"
+#include "any.h"
 #include <kj/string.h>
 #include <kj/string-tree.h>
 
@@ -144,7 +144,7 @@ public:
   inline explicit constexpr ConstStruct(const word* ptr): ptr(ptr) {}
 
   inline typename T::Reader get() const {
-    return ObjectPointer::Reader(PointerReader::getRootUnchecked(ptr)).getAs<T>();
+    return AnyPointer::Reader(PointerReader::getRootUnchecked(ptr)).getAs<T>();
   }
 
   inline operator typename T::Reader() const { return get(); }
@@ -163,7 +163,7 @@ public:
   inline explicit constexpr ConstList(const word* ptr): ptr(ptr) {}
 
   inline typename List<T>::Reader get() const {
-    return ObjectPointer::Reader(PointerReader::getRootUnchecked(ptr)).getAs<List<T>>();
+    return AnyPointer::Reader(PointerReader::getRootUnchecked(ptr)).getAs<List<T>>();
   }
 
   inline operator typename List<T>::Reader() const { return get(); }

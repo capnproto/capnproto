@@ -181,11 +181,11 @@ public:
   typedef SturdyRefHostId Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -253,11 +253,11 @@ public:
   typedef ProvisionId Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -320,11 +320,11 @@ public:
   typedef RecipientId Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -387,11 +387,11 @@ public:
   typedef ThirdPartyCapId Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -469,11 +469,11 @@ public:
   typedef JoinKeyPart Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -494,7 +494,7 @@ public:
   inline bool getSucceeded() const;
 
   inline bool hasCap() const;
-  inline ::capnp::ObjectPointer::Reader getCap() const;
+  inline ::capnp::AnyPointer::Reader getCap() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -533,8 +533,8 @@ public:
   inline void setSucceeded(bool value);
 
   inline bool hasCap();
-  inline ::capnp::ObjectPointer::Builder getCap();
-  inline ::capnp::ObjectPointer::Builder initCap();
+  inline ::capnp::AnyPointer::Builder getCap();
+  inline ::capnp::AnyPointer::Builder initCap();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -553,11 +553,11 @@ public:
   typedef JoinResult Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -668,16 +668,16 @@ inline bool JoinResult::Reader::hasCap() const {
 inline bool JoinResult::Builder::hasCap() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline ::capnp::ObjectPointer::Reader JoinResult::Reader::getCap() const {
-  return ::capnp::ObjectPointer::Reader(
+inline ::capnp::AnyPointer::Reader JoinResult::Reader::getCap() const {
+  return ::capnp::AnyPointer::Reader(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder JoinResult::Builder::getCap() {
-  return ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder JoinResult::Builder::getCap() {
+  return ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline ::capnp::ObjectPointer::Builder JoinResult::Builder::initCap() {
-  auto result = ::capnp::ObjectPointer::Builder(
+inline ::capnp::AnyPointer::Builder JoinResult::Builder::initCap() {
+  auto result = ::capnp::AnyPointer::Builder(
       _builder.getPointerField(0 * ::capnp::POINTERS));
   result.clear();
   return result;

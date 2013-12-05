@@ -90,7 +90,7 @@ _::FieldSize elementSizeFor(schema::Type::Which elementType) {
     case schema::Type::ENUM: return _::FieldSize::TWO_BYTES;
     case schema::Type::STRUCT: return _::FieldSize::INLINE_COMPOSITE;
     case schema::Type::INTERFACE: return _::FieldSize::POINTER;
-    case schema::Type::OBJECT: KJ_FAIL_ASSERT("List(Object) not supported."); break;
+    case schema::Type::ANY_POINTER: KJ_FAIL_ASSERT("List(AnyPointer) not supported."); break;
   }
 
   // Unknown type.  Treat it as zero-size.
@@ -243,8 +243,8 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
               reader.getPointerField(slot.getOffset() * POINTERS)
                     .getStruct(dval.getStruct().getAs<_::UncheckedMessage>()));
 
-        case schema::Type::OBJECT:
-          return ObjectPointer::Reader(reader.getPointerField(slot.getOffset() * POINTERS));
+        case schema::Type::ANY_POINTER:
+          return AnyPointer::Reader(reader.getPointerField(slot.getOffset() * POINTERS));
 
         case schema::Type::INTERFACE:
           return DynamicCapability::Client(
@@ -344,8 +344,8 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
                                 dval.getStruct().getAs<_::UncheckedMessage>()));
         }
 
-        case schema::Type::OBJECT:
-          return ObjectPointer::Builder(builder.getPointerField(slot.getOffset() * POINTERS));
+        case schema::Type::ANY_POINTER:
+          return AnyPointer::Builder(builder.getPointerField(slot.getOffset() * POINTERS));
 
         case schema::Type::INTERFACE:
           return DynamicCapability::Client(
@@ -449,7 +449,7 @@ bool DynamicStruct::Reader::has(StructSchema::Field field) const {
     case schema::Type::DATA:
     case schema::Type::LIST:
     case schema::Type::STRUCT:
-    case schema::Type::OBJECT:
+    case schema::Type::ANY_POINTER:
     case schema::Type::INTERFACE:
       return !reader.getPointerField(slot.getOffset() * POINTERS).isNull();
   }
@@ -562,9 +562,9 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
           return;
         }
 
-        case schema::Type::OBJECT:
-          ObjectPointer::Builder(builder.getPointerField(slot.getOffset() * POINTERS))
-                 .set(value.as<ObjectPointer>());
+        case schema::Type::ANY_POINTER:
+          AnyPointer::Builder(builder.getPointerField(slot.getOffset() * POINTERS))
+                 .set(value.as<AnyPointer>());
           return;
 
         case schema::Type::INTERFACE:
@@ -617,10 +617,10 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field) {
               builder.getPointerField(slot.getOffset() * POINTERS)
                      .initStruct(structSizeFromSchema(subSchema)));
         }
-        case schema::Type::OBJECT: {
+        case schema::Type::ANY_POINTER: {
           auto pointer = builder.getPointerField(slot.getOffset() * POINTERS);
           pointer.clear();
-          return ObjectPointer::Builder(pointer);
+          return AnyPointer::Builder(pointer);
         }
         default:
           KJ_FAIL_REQUIRE("init() without a size is only valid for struct and object fields.");
@@ -734,10 +734,10 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
           break;
         }
 
-        case schema::Type::OBJECT:
+        case schema::Type::ANY_POINTER:
           KJ_REQUIRE(orphan.getType() == DynamicValue::STRUCT ||
                      orphan.getType() == DynamicValue::LIST ||
-                     orphan.getType() == DynamicValue::OBJECT,
+                     orphan.getType() == DynamicValue::ANY_POINTER,
                      "Value type mismatch.") {
             return;
           }
@@ -812,7 +812,7 @@ Orphan<DynamicValue> DynamicStruct::Builder::disown(StructSchema::Field field) {
         case schema::Type::DATA:
         case schema::Type::LIST:
         case schema::Type::STRUCT:
-        case schema::Type::OBJECT:
+        case schema::Type::ANY_POINTER:
         case schema::Type::INTERFACE: {
           auto value = get(field);
           return Orphan<DynamicValue>(
@@ -891,7 +891,7 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
         case schema::Type::DATA:
         case schema::Type::LIST:
         case schema::Type::STRUCT:
-        case schema::Type::OBJECT:
+        case schema::Type::ANY_POINTER:
         case schema::Type::INTERFACE:
           builder.getPointerField(slot.getOffset() * POINTERS).clear();
           return;
@@ -1006,8 +1006,8 @@ DynamicValue::Reader DynamicList::Reader::operator[](uint index) const {
       return DynamicEnum(schema.getEnumElementType(),
                          reader.getDataElement<uint16_t>(index * ELEMENTS));
 
-    case schema::Type::OBJECT:
-      return ObjectPointer::Reader(reader.getPointerElement(index * ELEMENTS));
+    case schema::Type::ANY_POINTER:
+      return AnyPointer::Reader(reader.getPointerElement(index * ELEMENTS));
 
     case schema::Type::INTERFACE:
       return DynamicCapability::Client(schema.getInterfaceElementType(),
@@ -1066,8 +1066,8 @@ DynamicValue::Builder DynamicList::Builder::operator[](uint index) {
       return DynamicEnum(schema.getEnumElementType(),
                          builder.getDataElement<uint16_t>(index * ELEMENTS));
 
-    case schema::Type::OBJECT:
-      KJ_FAIL_ASSERT("List(Object) not supported.");
+    case schema::Type::ANY_POINTER:
+      KJ_FAIL_ASSERT("List(AnyPointer) not supported.");
       return nullptr;
 
     case schema::Type::INTERFACE:
@@ -1145,8 +1145,8 @@ void DynamicList::Builder::set(uint index, const DynamicValue::Reader& value) {
       return;
     }
 
-    case schema::Type::OBJECT:
-      KJ_FAIL_ASSERT("List(Object) not supported.") {
+    case schema::Type::ANY_POINTER:
+      KJ_FAIL_ASSERT("List(AnyPointer) not supported.") {
         return;
       }
 
@@ -1209,8 +1209,8 @@ DynamicValue::Builder DynamicList::Builder::init(uint index, uint size) {
       }
     }
 
-    case schema::Type::OBJECT: {
-      KJ_FAIL_ASSERT("List(Object) not supported.");
+    case schema::Type::ANY_POINTER: {
+      KJ_FAIL_ASSERT("List(AnyPointer) not supported.");
       return nullptr;
     }
   }
@@ -1263,8 +1263,8 @@ void DynamicList::Builder::adopt(uint index, Orphan<DynamicValue>&& orphan) {
       return;
     }
 
-    case schema::Type::OBJECT:
-      KJ_FAIL_ASSERT("List(Object) not supported.");
+    case schema::Type::ANY_POINTER:
+      KJ_FAIL_ASSERT("List(AnyPointer) not supported.");
 
     case schema::Type::INTERFACE: {
       auto elementType = schema.getInterfaceElementType();
@@ -1313,7 +1313,7 @@ Orphan<DynamicValue> DynamicList::Builder::disown(uint index) {
     case schema::Type::TEXT:
     case schema::Type::DATA:
     case schema::Type::LIST:
-    case schema::Type::OBJECT:
+    case schema::Type::ANY_POINTER:
     case schema::Type::INTERFACE: {
       auto value = operator[](index);
       return Orphan<DynamicValue>(value, builder.getPointerElement(index * ELEMENTS).disown());
@@ -1380,8 +1380,8 @@ DynamicValue::Reader::Reader(ConstSchema constant): type(VOID) {
           ListSchema::of(typeSchema.getList().getElementType(), constant));
       break;
 
-    case schema::Type::OBJECT:
-      *this = value.getObject();
+    case schema::Type::ANY_POINTER:
+      *this = value.getAnyPointer();
       break;
 
     case schema::Type::INTERFACE:
@@ -1402,13 +1402,13 @@ DynamicValue::Reader::Reader(const Reader& other) {
     case LIST:
     case ENUM:
     case STRUCT:
-    case OBJECT:
+    case ANY_POINTER:
       static_assert(__has_trivial_copy(Text::Reader) &&
                     __has_trivial_copy(Data::Reader) &&
                     __has_trivial_copy(DynamicList::Reader) &&
                     __has_trivial_copy(DynamicEnum) &&
                     __has_trivial_copy(DynamicStruct::Reader) &&
-                    __has_trivial_copy(ObjectPointer::Reader),
+                    __has_trivial_copy(AnyPointer::Reader),
                     "Assumptions here don't hold.");
       break;
 
@@ -1433,13 +1433,13 @@ DynamicValue::Reader::Reader(Reader&& other) noexcept {
     case LIST:
     case ENUM:
     case STRUCT:
-    case OBJECT:
+    case ANY_POINTER:
       static_assert(__has_trivial_copy(Text::Reader) &&
                     __has_trivial_copy(Data::Reader) &&
                     __has_trivial_copy(DynamicList::Reader) &&
                     __has_trivial_copy(DynamicEnum) &&
                     __has_trivial_copy(DynamicStruct::Reader) &&
-                    __has_trivial_copy(ObjectPointer::Reader),
+                    __has_trivial_copy(AnyPointer::Reader),
                     "Assumptions here don't hold.");
       break;
 
@@ -1485,7 +1485,7 @@ DynamicValue::Builder::Builder(Builder& other) {
     case LIST:
     case ENUM:
     case STRUCT:
-    case OBJECT:
+    case ANY_POINTER:
       // Unfortunately __has_trivial_copy doesn't work on these types due to the use of
       // DisallowConstCopy, but __has_trivial_destructor should detect if any of these types
       // become non-trivial.
@@ -1494,7 +1494,7 @@ DynamicValue::Builder::Builder(Builder& other) {
                     __has_trivial_destructor(DynamicList::Builder) &&
                     __has_trivial_destructor(DynamicEnum) &&
                     __has_trivial_destructor(DynamicStruct::Builder) &&
-                    __has_trivial_destructor(ObjectPointer::Builder),
+                    __has_trivial_destructor(AnyPointer::Builder),
                     "Assumptions here don't hold.");
       break;
 
@@ -1519,7 +1519,7 @@ DynamicValue::Builder::Builder(Builder&& other) noexcept {
     case LIST:
     case ENUM:
     case STRUCT:
-    case OBJECT:
+    case ANY_POINTER:
       // Unfortunately __has_trivial_copy doesn't work on these types due to the use of
       // DisallowConstCopy, but __has_trivial_destructor should detect if any of these types
       // become non-trivial.
@@ -1528,7 +1528,7 @@ DynamicValue::Builder::Builder(Builder&& other) noexcept {
                     __has_trivial_destructor(DynamicList::Builder) &&
                     __has_trivial_destructor(DynamicEnum) &&
                     __has_trivial_destructor(DynamicStruct::Builder) &&
-                    __has_trivial_destructor(ObjectPointer::Builder),
+                    __has_trivial_destructor(AnyPointer::Builder),
                     "Assumptions here don't hold.");
       break;
 
@@ -1575,7 +1575,7 @@ DynamicValue::Reader DynamicValue::Builder::asReader() const {
     case ENUM: return Reader(enumValue);
     case STRUCT: return Reader(structValue.asReader());
     case CAPABILITY: return Reader(capabilityValue);
-    case OBJECT: return Reader(objectValue.asReader());
+    case ANY_POINTER: return Reader(anyPointerValue.asReader());
   }
   KJ_FAIL_ASSERT("Missing switch case.");
   return Reader();
@@ -1720,7 +1720,7 @@ HANDLE_TYPE(text, TEXT, Text)
 HANDLE_TYPE(list, LIST, DynamicList)
 HANDLE_TYPE(struct, STRUCT, DynamicStruct)
 HANDLE_TYPE(enum, ENUM, DynamicEnum)
-HANDLE_TYPE(object, OBJECT, ObjectPointer)
+HANDLE_TYPE(anyPointer, ANY_POINTER, AnyPointer)
 
 #undef HANDLE_TYPE
 
@@ -1873,7 +1873,7 @@ void PointerHelpers<DynamicCapability, Kind::UNKNOWN>::set(
 }  // namespace _ (private)
 
 template <>
-void ObjectPointer::Builder::adopt<DynamicValue>(Orphan<DynamicValue>&& orphan) {
+void AnyPointer::Builder::adopt<DynamicValue>(Orphan<DynamicValue>&& orphan) {
   switch (orphan.getType()) {
     case DynamicValue::UNKNOWN:
     case DynamicValue::VOID:
@@ -1882,34 +1882,34 @@ void ObjectPointer::Builder::adopt<DynamicValue>(Orphan<DynamicValue>&& orphan) 
     case DynamicValue::UINT:
     case DynamicValue::FLOAT:
     case DynamicValue::ENUM:
-      KJ_FAIL_REQUIRE("ObjectPointer cannot adopt primitive (non-object) value.");
+      KJ_FAIL_REQUIRE("AnyPointer cannot adopt primitive (non-object) value.");
 
     case DynamicValue::STRUCT:
     case DynamicValue::LIST:
     case DynamicValue::TEXT:
     case DynamicValue::DATA:
     case DynamicValue::CAPABILITY:
-    case DynamicValue::OBJECT:
+    case DynamicValue::ANY_POINTER:
       builder.adopt(kj::mv(orphan.builder));
       break;
   }
 }
 
 template <>
-DynamicStruct::Builder Orphan<ObjectPointer>::getAs<DynamicStruct>(StructSchema schema) {
+DynamicStruct::Builder Orphan<AnyPointer>::getAs<DynamicStruct>(StructSchema schema) {
   return DynamicStruct::Builder(schema, builder.asStruct(structSizeFromSchema(schema)));
 }
 template <>
-DynamicStruct::Reader Orphan<ObjectPointer>::getAsReader<DynamicStruct>(StructSchema schema) const {
+DynamicStruct::Reader Orphan<AnyPointer>::getAsReader<DynamicStruct>(StructSchema schema) const {
   return DynamicStruct::Reader(schema, builder.asStructReader(structSizeFromSchema(schema)));
 }
 template <>
-Orphan<DynamicStruct> Orphan<ObjectPointer>::releaseAs<DynamicStruct>(StructSchema schema) {
+Orphan<DynamicStruct> Orphan<AnyPointer>::releaseAs<DynamicStruct>(StructSchema schema) {
   return Orphan<DynamicStruct>(schema, kj::mv(builder));
 }
 
 template <>
-DynamicList::Builder Orphan<ObjectPointer>::getAs<DynamicList>(ListSchema schema) {
+DynamicList::Builder Orphan<AnyPointer>::getAs<DynamicList>(ListSchema schema) {
   if (schema.whichElementType() == schema::Type::STRUCT) {
     return DynamicList::Builder(schema, builder.asStructList(
         structSizeFromSchema(schema.getStructElementType())));
@@ -1918,26 +1918,26 @@ DynamicList::Builder Orphan<ObjectPointer>::getAs<DynamicList>(ListSchema schema
   }
 }
 template <>
-DynamicList::Reader Orphan<ObjectPointer>::getAsReader<DynamicList>(ListSchema schema) const {
+DynamicList::Reader Orphan<AnyPointer>::getAsReader<DynamicList>(ListSchema schema) const {
   return DynamicList::Reader(schema, builder.asListReader(
       elementSizeFor(schema.whichElementType())));
 }
 template <>
-Orphan<DynamicList> Orphan<ObjectPointer>::releaseAs<DynamicList>(ListSchema schema) {
+Orphan<DynamicList> Orphan<AnyPointer>::releaseAs<DynamicList>(ListSchema schema) {
   return Orphan<DynamicList>(schema, kj::mv(builder));
 }
 
 template <>
-DynamicCapability::Client Orphan<ObjectPointer>::getAs<DynamicCapability>(InterfaceSchema schema) {
+DynamicCapability::Client Orphan<AnyPointer>::getAs<DynamicCapability>(InterfaceSchema schema) {
   return DynamicCapability::Client(schema, builder.asCapability());
 }
 template <>
-DynamicCapability::Client Orphan<ObjectPointer>::getAsReader<DynamicCapability>(
+DynamicCapability::Client Orphan<AnyPointer>::getAsReader<DynamicCapability>(
     InterfaceSchema schema) const {
   return DynamicCapability::Client(schema, builder.asCapability());
 }
 template <>
-Orphan<DynamicCapability> Orphan<ObjectPointer>::releaseAs<DynamicCapability>(
+Orphan<DynamicCapability> Orphan<AnyPointer>::releaseAs<DynamicCapability>(
     InterfaceSchema schema) {
   return Orphan<DynamicCapability>(schema, kj::mv(builder));
 }
@@ -2006,7 +2006,7 @@ Orphan<DynamicValue>::Orphan(DynamicValue::Builder value, _::OrphanBuilder&& bui
     case DynamicValue::LIST: listSchema = value.listValue.getSchema(); break;
     case DynamicValue::STRUCT: structSchema = value.structValue.getSchema(); break;
     case DynamicValue::CAPABILITY: interfaceSchema = value.capabilityValue.getSchema(); break;
-    case DynamicValue::OBJECT: break;
+    case DynamicValue::ANY_POINTER: break;
   }
 }
 
@@ -2035,9 +2035,9 @@ DynamicValue::Builder Orphan<DynamicValue>::get() {
           builder.asStruct(structSizeFromSchema(structSchema)));
     case DynamicValue::CAPABILITY:
       return DynamicCapability::Client(interfaceSchema, builder.asCapability());
-    case DynamicValue::OBJECT:
-      KJ_FAIL_REQUIRE("Can't get() an untyped Object orphan; there is no underlying pointer to "
-                      "wrap in an ObjectPointer::Builder.");
+    case DynamicValue::ANY_POINTER:
+      KJ_FAIL_REQUIRE("Can't get() an AnyPointer orphan; there is no underlying pointer to "
+                      "wrap in an AnyPointer::Builder.");
   }
   KJ_UNREACHABLE;
 }
@@ -2061,18 +2061,18 @@ DynamicValue::Reader Orphan<DynamicValue>::getReader() const {
           builder.asStructReader(structSizeFromSchema(structSchema)));
     case DynamicValue::CAPABILITY:
       return DynamicCapability::Client(interfaceSchema, builder.asCapability());
-    case DynamicValue::OBJECT:
-      KJ_FAIL_ASSERT("Can't get() an untyped Object orphan; there is no underlying pointer to "
-                     "wrap in an ObjectPointer::Builder.");
+    case DynamicValue::ANY_POINTER:
+      KJ_FAIL_ASSERT("Can't get() an AnyPointer orphan; there is no underlying pointer to "
+                     "wrap in an AnyPointer::Builder.");
   }
   KJ_UNREACHABLE;
 }
 
 template <>
-Orphan<ObjectPointer> Orphan<DynamicValue>::releaseAs<ObjectPointer>() {
-  KJ_REQUIRE(type == DynamicValue::OBJECT, "Value type mismatch.");
+Orphan<AnyPointer> Orphan<DynamicValue>::releaseAs<AnyPointer>() {
+  KJ_REQUIRE(type == DynamicValue::ANY_POINTER, "Value type mismatch.");
   type = DynamicValue::UNKNOWN;
-  return Orphan<ObjectPointer>(kj::mv(builder));
+  return Orphan<AnyPointer>(kj::mv(builder));
 }
 template <>
 Orphan<DynamicStruct> Orphan<DynamicValue>::releaseAs<DynamicStruct>() {
@@ -2104,7 +2104,7 @@ Orphan<DynamicValue> Orphanage::newOrphanCopy<DynamicValue::Reader>(
     case DynamicValue::LIST: return newOrphanCopy(copyFrom.listValue);
     case DynamicValue::STRUCT: return newOrphanCopy(copyFrom.structValue);
     case DynamicValue::CAPABILITY: return newOrphanCopy(copyFrom.capabilityValue);
-    case DynamicValue::OBJECT: return newOrphanCopy(copyFrom.objectValue);
+    case DynamicValue::ANY_POINTER: return newOrphanCopy(copyFrom.anyPointerValue);
   }
   KJ_UNREACHABLE;
 }

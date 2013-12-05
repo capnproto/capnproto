@@ -689,7 +689,7 @@ void verifyClient(DynamicCapability::Client client, const int& callCount,
   EXPECT_EQ(origCount + 1, callCount);
 }
 
-TEST(Capability, ObjectsAndOrphans) {
+TEST(Capability, AnyPointersAndOrphans) {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
 

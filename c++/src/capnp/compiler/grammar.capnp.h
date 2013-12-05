@@ -132,6 +132,7 @@ struct Declaration {
     BUILTIN_DATA,
     BUILTIN_LIST,
     BUILTIN_OBJECT,
+    BUILTIN_ANY_POINTER,
   };
   struct AnnotationApplication;
   struct ParamList;
@@ -489,11 +490,11 @@ public:
   typedef LocatedText Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -571,11 +572,11 @@ public:
   typedef LocatedInteger Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -653,11 +654,11 @@ public:
   typedef LocatedFloat Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -745,12 +746,12 @@ public:
   typedef DeclName Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline Base::Pipeline getBase();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -851,11 +852,11 @@ public:
   typedef Base Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -948,12 +949,12 @@ public:
   typedef TypeExpression Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::DeclName::Pipeline getName();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1104,11 +1105,11 @@ public:
   typedef ValueExpression Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1191,13 +1192,13 @@ public:
   typedef FieldAssignment Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::LocatedText::Pipeline getFieldName();
   inline  ::capnp::compiler::ValueExpression::Pipeline getValue();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1323,6 +1324,9 @@ public:
 
   inline bool isBuiltinObject() const;
   inline  ::capnp::Void getBuiltinObject() const;
+
+  inline bool isBuiltinAnyPointer() const;
+  inline  ::capnp::Void getBuiltinAnyPointer() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1520,6 +1524,10 @@ public:
   inline  ::capnp::Void getBuiltinObject();
   inline void setBuiltinObject( ::capnp::Void value = ::capnp::VOID);
 
+  inline bool isBuiltinAnyPointer();
+  inline  ::capnp::Void getBuiltinAnyPointer();
+  inline void setBuiltinAnyPointer( ::capnp::Void value = ::capnp::VOID);
+
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename T, ::capnp::Kind k>
@@ -1537,13 +1545,13 @@ public:
   typedef Declaration Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::LocatedText::Pipeline getName();
   inline Id::Pipeline getId();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1621,13 +1629,13 @@ public:
   typedef AnnotationApplication Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::DeclName::Pipeline getName();
   inline Value::Pipeline getValue();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1711,11 +1719,11 @@ public:
   typedef Value Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1814,11 +1822,11 @@ public:
   typedef ParamList Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -1926,14 +1934,14 @@ public:
   typedef Param Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::LocatedText::Pipeline getName();
   inline  ::capnp::compiler::TypeExpression::Pipeline getType();
   inline DefaultValue::Pipeline getDefaultValue();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2017,11 +2025,11 @@ public:
   typedef DefaultValue Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2117,11 +2125,11 @@ public:
   typedef Id Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2194,12 +2202,12 @@ public:
   typedef Using Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::DeclName::Pipeline getTarget();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2282,13 +2290,13 @@ public:
   typedef Const Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::TypeExpression::Pipeline getType();
   inline  ::capnp::compiler::ValueExpression::Pipeline getValue();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2366,13 +2374,13 @@ public:
   typedef Field Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::TypeExpression::Pipeline getType();
   inline DefaultValue::Pipeline getDefaultValue();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2456,11 +2464,11 @@ public:
   typedef DefaultValue Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2533,11 +2541,11 @@ public:
   typedef Interface Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2615,13 +2623,13 @@ public:
   typedef Method Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::Declaration::ParamList::Pipeline getParams();
   inline Results::Pipeline getResults();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2705,11 +2713,11 @@ public:
   typedef Results Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2842,12 +2850,12 @@ public:
   typedef Annotation Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::TypeExpression::Pipeline getType();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -2920,12 +2928,12 @@ public:
   typedef ParsedFile Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::ObjectPointer::Pipeline&& typeless)
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::compiler::Declaration::Pipeline getRoot();
 private:
-  ::capnp::ObjectPointer::Pipeline _typeless;
+  ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
 };
@@ -4826,6 +4834,32 @@ inline  ::capnp::Void Declaration::Builder::getBuiltinObject() {
 inline void Declaration::Builder::setBuiltinObject( ::capnp::Void value) {
   _builder.setDataField<Declaration::Which>(
       1 * ::capnp::ELEMENTS, Declaration::BUILTIN_OBJECT);
+  _builder.setDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Declaration::Reader::isBuiltinAnyPointer() const {
+  return which() == Declaration::BUILTIN_ANY_POINTER;
+}
+inline bool Declaration::Builder::isBuiltinAnyPointer() {
+  return which() == Declaration::BUILTIN_ANY_POINTER;
+}
+inline  ::capnp::Void Declaration::Reader::getBuiltinAnyPointer() const {
+  KJ_IREQUIRE(which() == Declaration::BUILTIN_ANY_POINTER,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::Void Declaration::Builder::getBuiltinAnyPointer() {
+  KJ_IREQUIRE(which() == Declaration::BUILTIN_ANY_POINTER,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void Declaration::Builder::setBuiltinAnyPointer( ::capnp::Void value) {
+  _builder.setDataField<Declaration::Which>(
+      1 * ::capnp::ELEMENTS, Declaration::BUILTIN_ANY_POINTER);
   _builder.setDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS, value);
 }

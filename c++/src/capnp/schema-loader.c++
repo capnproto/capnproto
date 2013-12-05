@@ -438,7 +438,7 @@ private:
       HANDLE_TYPE(ENUM, 16, false)
       HANDLE_TYPE(STRUCT, 0, true)
       HANDLE_TYPE(INTERFACE, 0, true)
-      HANDLE_TYPE(OBJECT, 0, true)
+      HANDLE_TYPE(ANY_POINTER, 0, true)
 #undef HANDLE_TYPE
     }
 
@@ -464,7 +464,7 @@ private:
       case schema::Type::FLOAT64:
       case schema::Type::TEXT:
       case schema::Type::DATA:
-      case schema::Type::OBJECT:
+      case schema::Type::ANY_POINTER:
         break;
 
       case schema::Type::STRUCT:
@@ -834,17 +834,17 @@ private:
                           const schema::Type::Reader& replacement,
                           UpgradeToStructMode upgradeToStructMode) {
     if (replacement.which() != type.which()) {
-      // Check for allowed "upgrade" to Data or Object.
+      // Check for allowed "upgrade" to Data or AnyPointer.
       if (replacement.isData() && canUpgradeToData(type)) {
         replacementIsNewer();
         return;
       } else if (type.isData() && canUpgradeToData(replacement)) {
         replacementIsOlder();
         return;
-      } else if (replacement.isObject() && canUpgradeToObject(type)) {
+      } else if (replacement.isAnyPointer() && canUpgradeToAnyPointer(type)) {
         replacementIsNewer();
         return;
-      } else if (type.isObject() && canUpgradeToObject(replacement)) {
+      } else if (type.isAnyPointer() && canUpgradeToAnyPointer(replacement)) {
         replacementIsOlder();
         return;
       }
@@ -877,7 +877,7 @@ private:
       case schema::Type::FLOAT64:
       case schema::Type::TEXT:
       case schema::Type::DATA:
-      case schema::Type::OBJECT:
+      case schema::Type::ANY_POINTER:
         return;
 
       case schema::Type::LIST:
@@ -976,7 +976,7 @@ private:
       case schema::Type::LIST:
       case schema::Type::STRUCT:
       case schema::Type::INTERFACE:
-      case schema::Type::OBJECT:
+      case schema::Type::ANY_POINTER:
         structNode.setDataWordCount(0);
         structNode.setPointerCount(1);
         structNode.setPreferredListEncoding(schema::ElementSize::POINTER);
@@ -1029,7 +1029,7 @@ private:
         case schema::Type::LIST: value.initList(); break;
         case schema::Type::STRUCT: value.initStruct(); break;
         case schema::Type::INTERFACE: value.setInterface(); break;
-        case schema::Type::OBJECT: value.initObject(); break;
+        case schema::Type::ANY_POINTER: value.initAnyPointer(); break;
       }
     }
 
@@ -1052,7 +1052,7 @@ private:
     }
   }
 
-  bool canUpgradeToObject(const schema::Type::Reader& type) {
+  bool canUpgradeToAnyPointer(const schema::Type::Reader& type) {
     switch (type.which()) {
       case schema::Type::VOID:
       case schema::Type::BOOL:
@@ -1074,7 +1074,7 @@ private:
       case schema::Type::LIST:
       case schema::Type::STRUCT:
       case schema::Type::INTERFACE:
-      case schema::Type::OBJECT:
+      case schema::Type::ANY_POINTER:
         return true;
     }
 
@@ -1116,7 +1116,7 @@ private:
       case schema::Value::LIST:
       case schema::Value::STRUCT:
       case schema::Value::INTERFACE:
-      case schema::Value::OBJECT:
+      case schema::Value::ANY_POINTER:
         // It's not a big deal if default values for pointers change, and it would be difficult for
         // us to compare these defaults here, so just let it slide.
         break;

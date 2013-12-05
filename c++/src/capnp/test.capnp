@@ -160,10 +160,10 @@ struct TestDefaults {
   interfaceList @33 : List(Void);  # TODO
 }
 
-struct TestObject {
-  objectField @0 :Object;
+struct TestAnyPointer {
+  anyPointerField @0 :AnyPointer;
 
-  # Do not add any other fields here!  Some tests rely on objectField being the last pointer
+  # Do not add any other fields here!  Some tests rely on anyPointerField being the last pointer
   # in the struct.
 }
 
@@ -477,7 +477,7 @@ struct TestNewVersion {
 struct TestStructUnion {
   un @0! :union {
     struct @1 :SomeStruct;
-    object @2 :TestObject;
+    object @2 :TestAnyPointer;
   }
 
   struct SomeStruct {
@@ -603,7 +603,7 @@ interface TestExtends extends(TestInterface) {
 
 interface TestPipeline {
   getCap @0 (n: UInt32, inCap :TestInterface) -> (s: Text, outBox :Box);
-  testPointers @1 (cap :TestInterface, obj :Object, list :List(TestInterface)) -> ();
+  testPointers @1 (cap :TestInterface, obj :AnyPointer, list :List(TestInterface)) -> ();
 
   struct Box {
     cap @0 :TestInterface;

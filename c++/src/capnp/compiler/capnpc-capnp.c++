@@ -184,7 +184,7 @@ private:
         return nodeName(schemaLoader.get(type.getStruct().getTypeId()), scope);
       case schema::Type::INTERFACE:
         return nodeName(schemaLoader.get(type.getInterface().getTypeId()), scope);
-      case schema::Type::OBJECT: return kj::strTree("Object");
+      case schema::Type::ANY_POINTER: return kj::strTree("AnyPointer");
     }
     return kj::strTree();
   }
@@ -209,7 +209,7 @@ private:
       case schema::Type::ENUM: return 16;
       case schema::Type::STRUCT: return -1;
       case schema::Type::INTERFACE: return -1;
-      case schema::Type::OBJECT: return -1;
+      case schema::Type::ANY_POINTER: return -1;
     }
     return 0;
   }
@@ -234,7 +234,7 @@ private:
       case schema::Value::ENUM: return value.getEnum() == 0;
       case schema::Value::STRUCT: return !value.hasStruct();
       case schema::Value::INTERFACE: return true;
-      case schema::Value::OBJECT: return true;
+      case schema::Value::ANY_POINTER: return true;
     }
     return true;
   }
@@ -281,7 +281,7 @@ private:
       case schema::Value::INTERFACE: {
         return kj::strTree("");
       }
-      case schema::Value::OBJECT: {
+      case schema::Value::ANY_POINTER: {
         return kj::strTree("");
       }
     }

@@ -286,7 +286,7 @@ struct Type {
       typeId @17 :Id;
     }
 
-    object @18 :Void;
+    anyPointer @18 :Void;
   }
 }
 
@@ -311,16 +311,16 @@ struct Value {
     text @12 :Text;
     data @13 :Data;
 
-    list @14 :Object;
+    list @14 :AnyPointer;
 
     enum @15 :UInt16;
-    struct @16 :Object;
+    struct @16 :AnyPointer;
 
     interface @17 :Void;
     # The only interface value that can be represented statically is "null", whose methods always
     # throw exceptions.
 
-    object @18 :Object;
+    anyPointer @18 :AnyPointer;
   }
 }
 

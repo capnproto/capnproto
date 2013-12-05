@@ -273,12 +273,12 @@ uint32_t Schema::getSchemaOffset(const schema::Value::Reader& value) const {
     case schema::Value::LIST:
       ptr = value.getList().getAs<_::UncheckedMessage>();
       break;
-    case schema::Value::OBJECT:
-      ptr = value.getObject().getAs<_::UncheckedMessage>();
+    case schema::Value::ANY_POINTER:
+      ptr = value.getAnyPointer().getAs<_::UncheckedMessage>();
       break;
     default:
       KJ_FAIL_ASSERT("getDefaultValueSchemaOffset() can only be called on struct, list, "
-                     "and object fields.");
+                     "and any-pointer fields.");
   }
 
   return ptr - raw->encodedNode;
@@ -518,8 +518,8 @@ ListSchema ListSchema::of(schema::Type::Which primitiveType) {
       KJ_FAIL_REQUIRE("Must use one of the other ListSchema::of() overloads for complex types.");
       break;
 
-    case schema::Type::OBJECT:
-      KJ_FAIL_REQUIRE("List(Object) not supported.");
+    case schema::Type::ANY_POINTER:
+      KJ_FAIL_REQUIRE("List(AnyPointer) not supported.");
       break;
   }
 
@@ -556,8 +556,8 @@ ListSchema ListSchema::of(schema::Type::Reader elementType, Schema context) {
     case schema::Type::LIST:
       return of(of(elementType.getList().getElementType(), context));
 
-    case schema::Type::OBJECT:
-      KJ_FAIL_REQUIRE("List(Object) not supported.");
+    case schema::Type::ANY_POINTER:
+      KJ_FAIL_REQUIRE("List(AnyPointer) not supported.");
       return ListSchema();
   }
 

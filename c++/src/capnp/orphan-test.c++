@@ -275,65 +275,65 @@ TEST(Orphans, ZeroOut) {
   checkTestMessageAllZero(orphanReader);
 }
 
-TEST(Orphans, StructObject) {
+TEST(Orphans, StructAnyPointer) {
   MallocMessageBuilder builder;
-  auto root = builder.initRoot<test::TestObject>();
+  auto root = builder.initRoot<test::TestAnyPointer>();
 
-  initTestMessage(root.getObjectField().initAs<TestAllTypes>());
-  EXPECT_TRUE(root.hasObjectField());
+  initTestMessage(root.getAnyPointerField().initAs<TestAllTypes>());
+  EXPECT_TRUE(root.hasAnyPointerField());
 
-  Orphan<TestAllTypes> orphan = root.getObjectField().disownAs<TestAllTypes>();
+  Orphan<TestAllTypes> orphan = root.getAnyPointerField().disownAs<TestAllTypes>();
   EXPECT_FALSE(orphan == nullptr);
 
   checkTestMessage(orphan.getReader());
-  EXPECT_FALSE(root.hasObjectField());
+  EXPECT_FALSE(root.hasAnyPointerField());
 
-  root.getObjectField().adopt(kj::mv(orphan));
+  root.getAnyPointerField().adopt(kj::mv(orphan));
   EXPECT_TRUE(orphan == nullptr);
-  EXPECT_TRUE(root.hasObjectField());
-  checkTestMessage(root.asReader().getObjectField().getAs<TestAllTypes>());
+  EXPECT_TRUE(root.hasAnyPointerField());
+  checkTestMessage(root.asReader().getAnyPointerField().getAs<TestAllTypes>());
 }
 
-TEST(Orphans, ListObject) {
+TEST(Orphans, ListAnyPointer) {
   MallocMessageBuilder builder;
-  auto root = builder.initRoot<test::TestObject>();
+  auto root = builder.initRoot<test::TestAnyPointer>();
 
-  root.getObjectField().setAs<List<uint32_t>>({12, 34, 56});
-  EXPECT_TRUE(root.hasObjectField());
+  root.getAnyPointerField().setAs<List<uint32_t>>({12, 34, 56});
+  EXPECT_TRUE(root.hasAnyPointerField());
 
-  Orphan<List<uint32_t>> orphan = root.getObjectField().disownAs<List<uint32_t>>();
+  Orphan<List<uint32_t>> orphan = root.getAnyPointerField().disownAs<List<uint32_t>>();
   EXPECT_FALSE(orphan == nullptr);
 
   checkList(orphan.getReader(), {12u, 34u, 56u});
-  EXPECT_FALSE(root.hasObjectField());
+  EXPECT_FALSE(root.hasAnyPointerField());
 
-  root.getObjectField().adopt(kj::mv(orphan));
+  root.getAnyPointerField().adopt(kj::mv(orphan));
   EXPECT_TRUE(orphan == nullptr);
-  EXPECT_TRUE(root.hasObjectField());
-  checkList(root.asReader().getObjectField().getAs<List<uint32_t>>(), {12u, 34u, 56u});
+  EXPECT_TRUE(root.hasAnyPointerField());
+  checkList(root.asReader().getAnyPointerField().getAs<List<uint32_t>>(), {12u, 34u, 56u});
 }
 
 TEST(Orphans, DynamicStruct) {
   MallocMessageBuilder builder;
-  auto root = builder.initRoot<test::TestObject>();
+  auto root = builder.initRoot<test::TestAnyPointer>();
 
-  initTestMessage(root.getObjectField().initAs<TestAllTypes>());
-  EXPECT_TRUE(root.hasObjectField());
+  initTestMessage(root.getAnyPointerField().initAs<TestAllTypes>());
+  EXPECT_TRUE(root.hasAnyPointerField());
 
   Orphan<DynamicStruct> orphan =
-      root.getObjectField().disownAs<DynamicStruct>(Schema::from<TestAllTypes>());
+      root.getAnyPointerField().disownAs<DynamicStruct>(Schema::from<TestAllTypes>());
   EXPECT_FALSE(orphan == nullptr);
 
   EXPECT_TRUE(orphan.get().getSchema() == Schema::from<TestAllTypes>());
   checkDynamicTestMessage(orphan.getReader());
-  EXPECT_FALSE(root.hasObjectField());
+  EXPECT_FALSE(root.hasAnyPointerField());
 
-  root.getObjectField().adopt(kj::mv(orphan));
+  root.getAnyPointerField().adopt(kj::mv(orphan));
   EXPECT_TRUE(orphan == nullptr);
-  EXPECT_TRUE(root.hasObjectField());
-  checkTestMessage(root.asReader().getObjectField().getAs<TestAllTypes>());
+  EXPECT_TRUE(root.hasAnyPointerField());
+  checkTestMessage(root.asReader().getAnyPointerField().getAs<TestAllTypes>());
 
-  Orphan<DynamicStruct> orphan2 = root.getObjectField().disownAs<TestAllTypes>();
+  Orphan<DynamicStruct> orphan2 = root.getAnyPointerField().disownAs<TestAllTypes>();
   EXPECT_FALSE(orphan2 == nullptr);
   EXPECT_TRUE(orphan2.get().getSchema() == Schema::from<TestAllTypes>());
   checkDynamicTestMessage(orphan2.getReader());
@@ -341,52 +341,54 @@ TEST(Orphans, DynamicStruct) {
 
 TEST(Orphans, DynamicList) {
   MallocMessageBuilder builder;
-  auto root = builder.initRoot<test::TestObject>();
+  auto root = builder.initRoot<test::TestAnyPointer>();
 
-  root.getObjectField().setAs<List<uint32_t>>({12, 34, 56});
-  EXPECT_TRUE(root.hasObjectField());
+  root.getAnyPointerField().setAs<List<uint32_t>>({12, 34, 56});
+  EXPECT_TRUE(root.hasAnyPointerField());
 
   Orphan<DynamicList> orphan =
-      root.getObjectField().disownAs<DynamicList>(Schema::from<List<uint32_t>>());
+      root.getAnyPointerField().disownAs<DynamicList>(Schema::from<List<uint32_t>>());
   EXPECT_FALSE(orphan == nullptr);
 
   checkList<uint32_t>(orphan.getReader(), {12, 34, 56});
-  EXPECT_FALSE(root.hasObjectField());
+  EXPECT_FALSE(root.hasAnyPointerField());
 
-  root.getObjectField().adopt(kj::mv(orphan));
+  root.getAnyPointerField().adopt(kj::mv(orphan));
   EXPECT_TRUE(orphan == nullptr);
-  EXPECT_TRUE(root.hasObjectField());
-  checkList(root.asReader().getObjectField().getAs<List<uint32_t>>(), {12u, 34u, 56u});
+  EXPECT_TRUE(root.hasAnyPointerField());
+  checkList(root.asReader().getAnyPointerField().getAs<List<uint32_t>>(), {12u, 34u, 56u});
 
-  Orphan<DynamicList> orphan2 = root.getObjectField().disownAs<List<uint32_t>>();
+  Orphan<DynamicList> orphan2 = root.getAnyPointerField().disownAs<List<uint32_t>>();
   EXPECT_FALSE(orphan2 == nullptr);
   checkList<uint32_t>(orphan2.getReader(), {12, 34, 56});
 }
 
 TEST(Orphans, DynamicStructList) {
   MallocMessageBuilder builder;
-  auto root = builder.initRoot<test::TestObject>();
+  auto root = builder.initRoot<test::TestAnyPointer>();
 
-  auto list = root.getObjectField().initAs<List<TestAllTypes>>(2);
+  auto list = root.getAnyPointerField().initAs<List<TestAllTypes>>(2);
   list[0].setTextField("foo");
   list[1].setTextField("bar");
-  EXPECT_TRUE(root.hasObjectField());
+  EXPECT_TRUE(root.hasAnyPointerField());
 
   Orphan<DynamicList> orphan =
-      root.getObjectField().disownAs<DynamicList>(Schema::from<List<TestAllTypes>>());
+      root.getAnyPointerField().disownAs<DynamicList>(Schema::from<List<TestAllTypes>>());
   EXPECT_FALSE(orphan == nullptr);
 
   ASSERT_EQ(2u, orphan.get().size());
   EXPECT_EQ("foo", orphan.get()[0].as<TestAllTypes>().getTextField());
   EXPECT_EQ("bar", orphan.get()[1].as<TestAllTypes>().getTextField());
-  EXPECT_FALSE(root.hasObjectField());
+  EXPECT_FALSE(root.hasAnyPointerField());
 
-  root.getObjectField().adopt(kj::mv(orphan));
+  root.getAnyPointerField().adopt(kj::mv(orphan));
   EXPECT_TRUE(orphan == nullptr);
-  EXPECT_TRUE(root.hasObjectField());
-  ASSERT_EQ(2u, root.asReader().getObjectField().getAs<List<TestAllTypes>>().size());
-  EXPECT_EQ("foo", root.asReader().getObjectField().getAs<List<TestAllTypes>>()[0].getTextField());
-  EXPECT_EQ("bar", root.asReader().getObjectField().getAs<List<TestAllTypes>>()[1].getTextField());
+  EXPECT_TRUE(root.hasAnyPointerField());
+  ASSERT_EQ(2u, root.asReader().getAnyPointerField().getAs<List<TestAllTypes>>().size());
+  EXPECT_EQ("foo", root.asReader().getAnyPointerField()
+                       .getAs<List<TestAllTypes>>()[0].getTextField());
+  EXPECT_EQ("bar", root.asReader().getAnyPointerField()
+                       .getAs<List<TestAllTypes>>()[1].getTextField());
 }
 
 TEST(Orphans, OrphanageDynamicStruct) {
@@ -396,9 +398,9 @@ TEST(Orphans, OrphanageDynamicStruct) {
   initDynamicTestMessage(orphan.get());
   checkDynamicTestMessage(orphan.getReader());
 
-  auto root = builder.initRoot<test::TestObject>();
-  root.getObjectField().adopt(kj::mv(orphan));
-  checkTestMessage(root.asReader().getObjectField().getAs<TestAllTypes>());
+  auto root = builder.initRoot<test::TestAnyPointer>();
+  root.getAnyPointerField().adopt(kj::mv(orphan));
+  checkTestMessage(root.asReader().getAnyPointerField().getAs<TestAllTypes>());
 }
 
 TEST(Orphans, OrphanageDynamicList) {
@@ -410,52 +412,52 @@ TEST(Orphans, OrphanageDynamicList) {
 
   checkList<uint32_t>(orphan.getReader(), {123, 456});
 
-  auto root = builder.initRoot<test::TestObject>();
-  root.getObjectField().adopt(kj::mv(orphan));
-  checkList(root.getObjectField().getAs<List<uint32_t>>(), {123u, 456u});
+  auto root = builder.initRoot<test::TestAnyPointer>();
+  root.getAnyPointerField().adopt(kj::mv(orphan));
+  checkList(root.getAnyPointerField().getAs<List<uint32_t>>(), {123u, 456u});
 }
 
 TEST(Orphans, OrphanageDynamicStructCopy) {
   MallocMessageBuilder builder1;
   MallocMessageBuilder builder2;
 
-  auto root1 = builder1.initRoot<test::TestObject>();
-  initTestMessage(root1.getObjectField().initAs<TestAllTypes>());
+  auto root1 = builder1.initRoot<test::TestAnyPointer>();
+  initTestMessage(root1.getAnyPointerField().initAs<TestAllTypes>());
 
   Orphan<DynamicStruct> orphan = builder2.getOrphanage().newOrphanCopy(
-      root1.asReader().getObjectField().getAs<DynamicStruct>(Schema::from<TestAllTypes>()));
+      root1.asReader().getAnyPointerField().getAs<DynamicStruct>(Schema::from<TestAllTypes>()));
   checkDynamicTestMessage(orphan.getReader());
 
-  auto root2 = builder2.initRoot<test::TestObject>();
-  root2.getObjectField().adopt(kj::mv(orphan));
-  checkTestMessage(root2.asReader().getObjectField().getAs<TestAllTypes>());
+  auto root2 = builder2.initRoot<test::TestAnyPointer>();
+  root2.getAnyPointerField().adopt(kj::mv(orphan));
+  checkTestMessage(root2.asReader().getAnyPointerField().getAs<TestAllTypes>());
 }
 
 TEST(Orphans, OrphanageDynamicListCopy) {
   MallocMessageBuilder builder1;
   MallocMessageBuilder builder2;
 
-  auto root1 = builder1.initRoot<test::TestObject>();
-  root1.getObjectField().setAs<List<uint32_t>>({12, 34, 56});
+  auto root1 = builder1.initRoot<test::TestAnyPointer>();
+  root1.getAnyPointerField().setAs<List<uint32_t>>({12, 34, 56});
 
   Orphan<DynamicList> orphan = builder2.getOrphanage().newOrphanCopy(
-      root1.asReader().getObjectField().getAs<DynamicList>(Schema::from<List<uint32_t>>()));
+      root1.asReader().getAnyPointerField().getAs<DynamicList>(Schema::from<List<uint32_t>>()));
   checkList<uint32_t>(orphan.getReader(), {12, 34, 56});
 
-  auto root2 = builder2.initRoot<test::TestObject>();
-  root2.getObjectField().adopt(kj::mv(orphan));
-  checkList(root2.getObjectField().getAs<List<uint32_t>>(), {12u, 34u, 56u});
+  auto root2 = builder2.initRoot<test::TestAnyPointer>();
+  root2.getAnyPointerField().adopt(kj::mv(orphan));
+  checkList(root2.getAnyPointerField().getAs<List<uint32_t>>(), {12u, 34u, 56u});
 }
 
 TEST(Orphans, DynamicStructAs) {
   MallocMessageBuilder builder;
-  auto root = builder.initRoot<test::TestObject>();
+  auto root = builder.initRoot<test::TestAnyPointer>();
 
-  initTestMessage(root.getObjectField().initAs<TestAllTypes>());
-  EXPECT_TRUE(root.hasObjectField());
+  initTestMessage(root.getAnyPointerField().initAs<TestAllTypes>());
+  EXPECT_TRUE(root.hasAnyPointerField());
 
   Orphan<DynamicValue> orphan =
-      root.getObjectField().disownAs<DynamicStruct>(Schema::from<TestAllTypes>());
+      root.getAnyPointerField().disownAs<DynamicStruct>(Schema::from<TestAllTypes>());
   EXPECT_EQ(DynamicValue::STRUCT, orphan.getType());
 
   checkTestMessage(orphan.getReader().as<TestAllTypes>());
@@ -491,13 +493,13 @@ TEST(Orphans, DynamicStructAs) {
 
 TEST(Orphans, DynamicListAs) {
   MallocMessageBuilder builder;
-  auto root = builder.initRoot<test::TestObject>();
+  auto root = builder.initRoot<test::TestAnyPointer>();
 
-  root.getObjectField().setAs<List<uint32_t>>({12, 34, 56});
-  EXPECT_TRUE(root.hasObjectField());
+  root.getAnyPointerField().setAs<List<uint32_t>>({12, 34, 56});
+  EXPECT_TRUE(root.hasAnyPointerField());
 
   Orphan<DynamicValue> orphan =
-      root.getObjectField().disownAs<DynamicList>(Schema::from<List<uint32_t>>());
+      root.getAnyPointerField().disownAs<DynamicList>(Schema::from<List<uint32_t>>());
   EXPECT_EQ(DynamicValue::LIST, orphan.getType());
 
   checkList(orphan.getReader().as<List<uint32_t>>(), {12, 34, 56});
@@ -531,17 +533,17 @@ TEST(Orphans, DynamicListAs) {
   }
 }
 
-TEST(Orphans, DynamicObject) {
+TEST(Orphans, DynamicAnyPointer) {
   MallocMessageBuilder builder;
-  auto root = builder.initRoot<test::TestObject>();
+  auto root = builder.initRoot<test::TestAnyPointer>();
 
-  initTestMessage(root.getObjectField().initAs<TestAllTypes>());
-  EXPECT_TRUE(root.hasObjectField());
+  initTestMessage(root.getAnyPointerField().initAs<TestAllTypes>());
+  EXPECT_TRUE(root.hasAnyPointerField());
 
-  Orphan<DynamicValue> orphan = root.getObjectField().disown();
-  EXPECT_EQ(DynamicValue::OBJECT, orphan.getType());
+  Orphan<DynamicValue> orphan = root.getAnyPointerField().disown();
+  EXPECT_EQ(DynamicValue::ANY_POINTER, orphan.getType());
 
-  Orphan<ObjectPointer> objectOrphan = orphan.releaseAs<ObjectPointer>();
+  Orphan<AnyPointer> objectOrphan = orphan.releaseAs<AnyPointer>();
   checkTestMessage(objectOrphan.getAs<TestAllTypes>());
   checkDynamicTestMessage(objectOrphan.getAs<DynamicStruct>(Schema::from<TestAllTypes>()));
 }
@@ -796,13 +798,13 @@ TEST(Orphans, FarPointer) {
 
 TEST(Orphans, UpgradeStruct) {
   MallocMessageBuilder builder;
-  auto root = builder.initRoot<test::TestObject>();
+  auto root = builder.initRoot<test::TestAnyPointer>();
 
-  auto old = root.getObjectField().initAs<test::TestOldVersion>();
+  auto old = root.getAnyPointerField().initAs<test::TestOldVersion>();
   old.setOld1(1234);
   old.setOld2("foo");
 
-  auto orphan = root.getObjectField().disownAs<test::TestNewVersion>();
+  auto orphan = root.getAnyPointerField().disownAs<test::TestNewVersion>();
 
   // Relocation has not occurred yet.
   old.setOld1(12345);
@@ -821,15 +823,15 @@ TEST(Orphans, UpgradeStruct) {
 
 TEST(Orphans, UpgradeStructList) {
   MallocMessageBuilder builder;
-  auto root = builder.initRoot<test::TestObject>();
+  auto root = builder.initRoot<test::TestAnyPointer>();
 
-  auto old = root.getObjectField().initAs<List<test::TestOldVersion>>(2);
+  auto old = root.getAnyPointerField().initAs<List<test::TestOldVersion>>(2);
   old[0].setOld1(1234);
   old[0].setOld2("foo");
   old[1].setOld1(4321);
   old[1].setOld2("bar");
 
-  auto orphan = root.getObjectField().disownAs<List<test::TestNewVersion>>();
+  auto orphan = root.getAnyPointerField().disownAs<List<test::TestNewVersion>>();
 
   // Relocation has not occurred yet.
   old[0].setOld1(12345);

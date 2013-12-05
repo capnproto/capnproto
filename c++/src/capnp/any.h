@@ -21,8 +21,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef CAPNP_OBJECT_H_
-#define CAPNP_OBJECT_H_
+#ifndef CAPNP_ANY_H_
+#define CAPNP_ANY_H_
 
 #include "layout.h"
 #include "pointer-helpers.h"
@@ -39,15 +39,15 @@ class PipelineHook;
 struct PipelineOp;
 
 // =======================================================================================
-// ObjectPointer!
+// AnyPointer!
 
-struct ObjectPointer {
-  // Reader/Builder for the `Object` field type, i.e. a pointer that can point to an arbitrary
+struct AnyPointer {
+  // Reader/Builder for the `AnyPointer` field type, i.e. a pointer that can point to an arbitrary
   // object.
 
   class Reader {
   public:
-    typedef ObjectPointer Reads;
+    typedef AnyPointer Reads;
 
     Reader() = default;
     inline Reader(_::PointerReader reader): reader(reader) {}
@@ -79,14 +79,14 @@ struct ObjectPointer {
 
   private:
     _::PointerReader reader;
-    friend struct ObjectPointer;
+    friend struct AnyPointer;
     friend class Orphanage;
     friend class CapReaderContext;
   };
 
   class Builder {
   public:
-    typedef ObjectPointer Builds;
+    typedef AnyPointer Builds;
 
     Builder() = delete;
     inline Builder(decltype(nullptr)) {}
@@ -142,7 +142,7 @@ struct ObjectPointer {
     // Valid for T = List<?>.
 
     inline void set(Reader value) { builder.copyFrom(value.reader); }
-    // Set to a copy of another ObjectPointer.
+    // Set to a copy of another AnyPointer.
 
     template <typename T>
     inline void adopt(Orphan<T>&& orphan);
@@ -165,7 +165,7 @@ struct ObjectPointer {
     inline Orphan<T> disownAs(InterfaceSchema schema);
     // Only valid for T = DynamicCapability.  Requires `#include <capnp/dynamic.h>`.
 
-    inline Orphan<ObjectPointer> disown();
+    inline Orphan<AnyPointer> disown();
     // Disown without a type.
 
     inline Reader asReader() const { return Reader(builder.asReader()); }
@@ -217,7 +217,7 @@ struct ObjectPointer {
 };
 
 template <>
-class Orphan<ObjectPointer> {
+class Orphan<AnyPointer> {
   // An orphaned object of unknown type.
 
 public:
@@ -232,7 +232,7 @@ public:
   inline Orphan& operator=(Orphan<T>&& other) { builder = kj::mv(other.builder); return *this; }
   // Cast from typed orphan.
 
-  // It's not possible to get an ObjectPointer::{Reader,Builder} directly since there is no
+  // It's not possible to get an AnyPointer::{Reader,Builder} directly since there is no
   // underlying pointer (the pointer would normally live in the parent, but this object is
   // orphaned).  It is possible, however, to request typed readers/builders.
 
@@ -277,7 +277,7 @@ private:
   friend class Orphanage;
   template <typename U>
   friend class Orphan;
-  friend class ObjectPointer::Builder;
+  friend class AnyPointer::Builder;
 };
 
 // =======================================================================================
@@ -317,7 +317,7 @@ public:
   // Version of getPipelinedCap() passing the array by move.  May avoid a copy in some cases.
   // Default implementation just calls the other version.
 
-  static inline kj::Own<PipelineHook> from(ObjectPointer::Pipeline&& pipeline) {
+  static inline kj::Own<PipelineHook> from(AnyPointer::Pipeline&& pipeline) {
     return kj::mv(pipeline.hook);
   }
 };
@@ -325,133 +325,133 @@ public:
 // =======================================================================================
 // Inline implementation details
 
-inline size_t ObjectPointer::Reader::targetSizeInWords() const {
+inline size_t AnyPointer::Reader::targetSizeInWords() const {
   return reader.targetSize() / WORDS;
 }
 
-inline bool ObjectPointer::Reader::isNull() const {
+inline bool AnyPointer::Reader::isNull() const {
   return reader.isNull();
 }
 
 template <typename T>
-inline ReaderFor<T> ObjectPointer::Reader::getAs() const {
+inline ReaderFor<T> AnyPointer::Reader::getAs() const {
   return _::PointerHelpers<T>::get(reader);
 }
 
-inline size_t ObjectPointer::Builder::targetSizeInWords() const {
+inline size_t AnyPointer::Builder::targetSizeInWords() const {
   return asReader().targetSizeInWords();
 }
 
-inline bool ObjectPointer::Builder::isNull() {
+inline bool AnyPointer::Builder::isNull() {
   return builder.isNull();
 }
 
-inline void ObjectPointer::Builder::clear() {
+inline void AnyPointer::Builder::clear() {
   return builder.clear();
 }
 
 template <typename T>
-inline BuilderFor<T> ObjectPointer::Builder::getAs() {
+inline BuilderFor<T> AnyPointer::Builder::getAs() {
   return _::PointerHelpers<T>::get(builder);
 }
 
 template <typename T>
-inline BuilderFor<T> ObjectPointer::Builder::initAs() {
+inline BuilderFor<T> AnyPointer::Builder::initAs() {
   return _::PointerHelpers<T>::init(builder);
 }
 
 template <typename T>
-inline BuilderFor<T> ObjectPointer::Builder::initAs(uint elementCount) {
+inline BuilderFor<T> AnyPointer::Builder::initAs(uint elementCount) {
   return _::PointerHelpers<T>::init(builder, elementCount);
 }
 
 template <typename T>
-inline void ObjectPointer::Builder::setAs(ReaderFor<T> value) {
+inline void AnyPointer::Builder::setAs(ReaderFor<T> value) {
   return _::PointerHelpers<T>::set(builder, value);
 }
 
 template <typename T>
-inline void ObjectPointer::Builder::setAs(
+inline void AnyPointer::Builder::setAs(
     std::initializer_list<ReaderFor<ListElementType<T>>> list) {
   return _::PointerHelpers<T>::set(builder, list);
 }
 
 template <typename T>
-inline void ObjectPointer::Builder::adopt(Orphan<T>&& orphan) {
+inline void AnyPointer::Builder::adopt(Orphan<T>&& orphan) {
   _::PointerHelpers<T>::adopt(builder, kj::mv(orphan));
 }
 
 template <typename T>
-inline Orphan<T> ObjectPointer::Builder::disownAs() {
+inline Orphan<T> AnyPointer::Builder::disownAs() {
   return _::PointerHelpers<T>::disown(builder);
 }
 
-inline Orphan<ObjectPointer> ObjectPointer::Builder::disown() {
-  return Orphan<ObjectPointer>(builder.disown());
+inline Orphan<AnyPointer> AnyPointer::Builder::disown() {
+  return Orphan<AnyPointer>(builder.disown());
 }
 
-template <> struct ReaderFor_ <ObjectPointer, Kind::UNKNOWN> { typedef ObjectPointer::Reader Type; };
-template <> struct BuilderFor_<ObjectPointer, Kind::UNKNOWN> { typedef ObjectPointer::Builder Type; };
+template <> struct ReaderFor_ <AnyPointer, Kind::UNKNOWN> { typedef AnyPointer::Reader Type; };
+template <> struct BuilderFor_<AnyPointer, Kind::UNKNOWN> { typedef AnyPointer::Builder Type; };
 
 template <>
-struct Orphanage::GetInnerReader<ObjectPointer, Kind::UNKNOWN> {
-  static inline _::PointerReader apply(const ObjectPointer::Reader& t) {
+struct Orphanage::GetInnerReader<AnyPointer, Kind::UNKNOWN> {
+  static inline _::PointerReader apply(const AnyPointer::Reader& t) {
     return t.reader;
   }
 };
 
 template <>
-struct Orphanage::GetInnerBuilder<ObjectPointer, Kind::UNKNOWN> {
-  static inline _::PointerBuilder apply(ObjectPointer::Builder& t) {
+struct Orphanage::GetInnerBuilder<AnyPointer, Kind::UNKNOWN> {
+  static inline _::PointerBuilder apply(AnyPointer::Builder& t) {
     return t.builder;
   }
 };
 
 template <typename T>
-inline BuilderFor<T> Orphan<ObjectPointer>::getAs() {
+inline BuilderFor<T> Orphan<AnyPointer>::getAs() {
   return _::OrphanGetImpl<T>::apply(builder);
 }
 template <typename T>
-inline ReaderFor<T> Orphan<ObjectPointer>::getAsReader() const {
+inline ReaderFor<T> Orphan<AnyPointer>::getAsReader() const {
   return _::OrphanGetImpl<T>::applyReader(builder);
 }
 template <typename T>
-inline Orphan<T> Orphan<ObjectPointer>::releaseAs() {
+inline Orphan<T> Orphan<AnyPointer>::releaseAs() {
   return Orphan<T>(kj::mv(builder));
 }
 
-// Using ObjectPointer as the template type should work...
+// Using AnyPointer as the template type should work...
 
 template <>
-inline typename ObjectPointer::Reader ObjectPointer::Reader::getAs<ObjectPointer>() const {
+inline typename AnyPointer::Reader AnyPointer::Reader::getAs<AnyPointer>() const {
   return *this;
 }
 template <>
-inline typename ObjectPointer::Builder ObjectPointer::Builder::getAs<ObjectPointer>() {
+inline typename AnyPointer::Builder AnyPointer::Builder::getAs<AnyPointer>() {
   return *this;
 }
 template <>
-inline typename ObjectPointer::Builder ObjectPointer::Builder::initAs<ObjectPointer>() {
+inline typename AnyPointer::Builder AnyPointer::Builder::initAs<AnyPointer>() {
   clear();
   return *this;
 }
 template <>
-inline void ObjectPointer::Builder::setAs<ObjectPointer>(ObjectPointer::Reader value) {
+inline void AnyPointer::Builder::setAs<AnyPointer>(AnyPointer::Reader value) {
   return builder.copyFrom(value.reader);
 }
 template <>
-inline void ObjectPointer::Builder::adopt<ObjectPointer>(Orphan<ObjectPointer>&& orphan) {
+inline void AnyPointer::Builder::adopt<AnyPointer>(Orphan<AnyPointer>&& orphan) {
   builder.adopt(kj::mv(orphan.builder));
 }
 template <>
-inline Orphan<ObjectPointer> ObjectPointer::Builder::disownAs<ObjectPointer>() {
-  return Orphan<ObjectPointer>(builder.disown());
+inline Orphan<AnyPointer> AnyPointer::Builder::disownAs<AnyPointer>() {
+  return Orphan<AnyPointer>(builder.disown());
 }
 template <>
-inline Orphan<ObjectPointer> Orphan<ObjectPointer>::releaseAs() {
+inline Orphan<AnyPointer> Orphan<AnyPointer>::releaseAs() {
   return kj::mv(*this);
 }
 
 }  // namespace capnp
 
-#endif  // CAPNP_OBJECT_H_
+#endif  // CAPNP_ANY_H_

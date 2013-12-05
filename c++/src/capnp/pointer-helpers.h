@@ -128,9 +128,9 @@ struct UncheckedMessage {
 
 template <>
 struct PointerHelpers<UncheckedMessage> {
-  // Reads an Object field as an unchecked message pointer.  Requires that the containing message is
-  // itself unchecked.  This hack is currently private.  It is used to locate default values within
-  // encoded schemas.
+  // Reads an AnyPointer field as an unchecked message pointer.  Requires that the containing
+  // message is itself unchecked.  This hack is currently private.  It is used to locate default
+  // values within encoded schemas.
 
   static inline const word* get(PointerReader reader) {
     return reader.getUnchecked();
