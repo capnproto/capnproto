@@ -163,7 +163,7 @@ public:
 private:
   TaskSet::ErrorHandler& errorHandler;
 
-  // TODO(soon):  Use a linked list instead.
+  // TODO(perf):  Use a linked list instead.
   std::map<Task*, Own<Task>> tasks;
 };
 

@@ -135,7 +135,7 @@ inline kj::StringTree structString(StructReader reader) {
   return structString(reader, rawSchema<T>());
 }
 
-// TODO(soon):  Unify ConstStruct and ConstList.
+// TODO(cleanup):  Unify ConstStruct and ConstList.
 template <typename T>
 class ConstStruct {
 public:

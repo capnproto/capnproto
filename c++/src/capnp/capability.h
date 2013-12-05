@@ -159,7 +159,7 @@ public:
   // where no calls are being made.  There is no reason to wait for this before making calls; if
   // the capability does not resolve, the call results will propagate the error.
 
-  // TODO(soon):  method(s) for Join
+  // TODO(someday):  method(s) for Join
 
 protected:
   Client() = default;
@@ -279,7 +279,7 @@ public:
   // is no longer needed.  `context` may be used to allocate the output struct and deal with
   // cancellation.
 
-  // TODO(soon):  Method which can optionally be overridden to implement Join when the object is
+  // TODO(someday):  Method which can optionally be overridden to implement Join when the object is
   //   a proxy.
 
 protected:

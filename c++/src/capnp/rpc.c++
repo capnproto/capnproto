@@ -63,7 +63,6 @@ kj::Maybe<kj::Array<PipelineOp>> toPipelineOps(List<rpc::PromisedAnswer::Op>::Re
         op.pointerIndex = opReader.getGetPointerField();
         break;
       default:
-        // TODO(soon):  Handle better?
         KJ_FAIL_REQUIRE("Unsupported pipeline op.", (uint)opReader.which()) {
           return nullptr;
         }
@@ -1261,8 +1260,10 @@ private:
           // message was received.  In this case, the original import ID will already have been
           // dropped and could even have been reused for another capability.  Luckily, the
           // resolution chain holds the capability we actually want.
-          KJ_IF_MAYBE(resolution, resolutionChain.findImport(importId)) {
-            return resolution->addRef();
+          if (descriptor.which() == rpc::CapDescriptor::SENDER_PROMISE) {
+            KJ_IF_MAYBE(resolution, resolutionChain.findImport(importId)) {
+              return resolution->addRef();
+            }
           }
 
           // No recent resolutions.  Check the import table then.
@@ -1289,9 +1290,6 @@ private:
 
           kj::Own<RpcClient> result;
           if (descriptor.which() == rpc::CapDescriptor::SENDER_PROMISE) {
-            // TODO(now):  Check for pending `Resolve` messages replacing this import ID, and if
-            //   one exists, use that client instead.
-
             auto paf = kj::newPromiseAndFulfiller<kj::Own<ClientHook>>();
             import.promiseFulfiller = kj::mv(paf.fulfiller);
             paf.promise = paf.promise.attach(kj::addRef(*importClient));
@@ -2334,7 +2332,6 @@ private:
       answer.pipeline = kj::mv(promiseAndPipeline.pipeline);
 
       if (redirectResults) {
-        // TODO(now):  Handle exceptions, dummy.
         auto resultsPromise = promiseAndPipeline.promise.then(
             kj::mvCapture(context, [](kj::Own<RpcCallContext>&& context) {
               return context->consumeRedirectedResponse();

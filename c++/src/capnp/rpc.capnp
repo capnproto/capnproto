@@ -397,9 +397,9 @@ struct Finish {
   #    to support premature cancellation -- instead, the implementation may wait until the call
   #    actually completes and send a normal `Return` message.
   #
-  # TODO(soon):  Should we separate (1) and (2)?  It would be possible and useful to notify the
+  # TODO(someday):  Should we separate (1) and (2)?  It would be possible and useful to notify the
   #   server that it doesn't need to keep around the response to service pipeline requests even
-  #   though the caller hasn't yet finished processing the response.
+  #   though the caller still wants to receive it / hasn't yet finished processing it.
 
   questionId @0 :QuestionId;
   # ID of the call whose result is to be released.
@@ -780,11 +780,11 @@ struct Join {
   # A part of the join key.  These combine to form the complete join key which is used to establish
   # a direct connection.
 
-  # TODO(now):  Change this so that multiple parts can be sent in a single Join message, so that
-  # if multiple join parts are going to cross the same connection they can be sent together, so that
-  # the receive can potentially optimize its handling of them.  In the case where all parts are
-  # bundled together, should the recipient be expected to simply return a cap, so that the caller
-  # can immediately start pipelining to it?
+  # TODO(before implementing):  Change this so that multiple parts can be sent in a single Join
+  # message, so that if multiple join parts are going to cross the same connection they can be sent
+  # together, so that the receive can potentially optimize its handling of them.  In the case where
+  # all parts are bundled together, should the recipient be expected to simply return a cap, so
+  # that the caller can immediately start pipelining to it?
 }
 
 # ========================================================================================
@@ -978,7 +978,7 @@ struct Exception {
 # depending on the translations they perform.
 #
 # For interaction over the global internet between parties with no other prior arrangement, a
-# particular set of bindings for these types is defined elsewhere.  (TODO(soon): Specify where
+# particular set of bindings for these types is defined elsewhere.  (TODO(someday): Specify where
 # these common definitions live.)
 #
 # Another common network type is the two-party network, in which one of the parties typically
