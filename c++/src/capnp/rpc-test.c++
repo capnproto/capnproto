@@ -575,8 +575,7 @@ TEST(Rpc, AsyncCancelation) {
 
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
-  auto destructionPromise = paf.promise.then([&]() { destroyed = true; });
-  destructionPromise.eagerlyEvaluate();
+  auto destructionPromise = paf.promise.then([&]() { destroyed = true; }).eagerlyEvaluate(nullptr);
 
   auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
       .castAs<test::TestMoreStuff>();
@@ -590,8 +589,7 @@ TEST(Rpc, AsyncCancelation) {
     promise = request.send().then(
         [&](Response<test::TestMoreStuff::ExpectAsyncCancelResults>&& response) {
       returned = true;
-    });
-    promise.eagerlyEvaluate();
+    }).eagerlyEvaluate(nullptr);
   }
   kj::evalLater([]() {}).wait(context.waitScope);
   kj::evalLater([]() {}).wait(context.waitScope);
@@ -630,8 +628,7 @@ TEST(Rpc, SyncCancelation) {
     promise = request.send().then(
         [&](Response<test::TestMoreStuff::ExpectSyncCancelResults>&& response) {
       returned = true;
-    });
-    promise.eagerlyEvaluate();
+    }).eagerlyEvaluate(nullptr);
   }
   kj::evalLater([]() {}).wait(context.waitScope);
   kj::evalLater([]() {}).wait(context.waitScope);
@@ -698,8 +695,7 @@ TEST(Rpc, RetainAndRelease) {
 
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
-  auto destructionPromise = paf.promise.then([&]() { destroyed = true; });
-  destructionPromise.eagerlyEvaluate();
+  auto destructionPromise = paf.promise.then([&]() { destroyed = true; }).eagerlyEvaluate(nullptr);
 
   {
     auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
@@ -765,8 +761,7 @@ TEST(Rpc, Cancel) {
 
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
-  auto destructionPromise = paf.promise.then([&]() { destroyed = true; });
-  destructionPromise.eagerlyEvaluate();
+  auto destructionPromise = paf.promise.then([&]() { destroyed = true; }).eagerlyEvaluate(nullptr);
 
   {
     auto request = client.neverReturnRequest();
@@ -797,8 +792,7 @@ TEST(Rpc, SendTwice) {
 
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
-  auto destructionPromise = paf.promise.then([&]() { destroyed = true; });
-  destructionPromise.eagerlyEvaluate();
+  auto destructionPromise = paf.promise.then([&]() { destroyed = true; }).eagerlyEvaluate(nullptr);
 
   auto cap = test::TestInterface::Client(kj::heap<TestCapDestructor>(kj::mv(paf.fulfiller)));
 

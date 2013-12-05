@@ -48,7 +48,7 @@ TEST(AsyncIo, SimpleNetwork) {
   }).then([&](Own<AsyncIoStream>&& result) {
     client = kj::mv(result);
     return client->write("foo", 3);
-  }).daemonize([](kj::Exception&& exception) {
+  }).detach([](kj::Exception&& exception) {
     ADD_FAILURE() << kj::str(exception).cStr();
   });
 
@@ -102,7 +102,7 @@ TEST(AsyncIo, OneWayPipe) {
   auto pipe = ioContext.provider->newOneWayPipe();
   char receiveBuffer[4];
 
-  pipe.out->write("foo", 3).daemonize([](kj::Exception&& exception) {
+  pipe.out->write("foo", 3).detach([](kj::Exception&& exception) {
     ADD_FAILURE() << kj::str(exception).cStr();
   });
 

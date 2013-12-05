@@ -240,9 +240,7 @@ struct EzRpcServer::Impl final: public SturdyRefRestorer<Text>, public kj::TaskS
 
       // Arrange to destroy the server context when all references are gone, or when the
       // EzRpcServer is destroyed (which will destroy the TaskSet).
-      auto promise = server->network.onDrained();
-      promise.attach(kj::mv(server));
-      tasks.add(kj::mv(promise));
+      tasks.add(server->network.onDrained().attach(kj::mv(server)));
     })));
   }
 

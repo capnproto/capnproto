@@ -1015,7 +1015,7 @@ kj::Promise<void> TestMoreStuffImpl::neverReturnAdvanced(
   neverFulfill = kj::mv(paf.fulfiller);
 
   // Attach `cap` to the promise to make sure it is released.
-  paf.promise.attach(context.getParams().getCap());
+  paf.promise = paf.promise.attach(context.getParams().getCap());
 
   // Also attach `cap` to the result struct to make sure that is released.
   context.getResults().setCapCopy(context.getParams().getCap());

@@ -92,7 +92,7 @@ TEST_F(AsyncUnixTest, SignalsMultiListen) {
 
   port.onSignal(SIGIO).then([](siginfo_t&&) {
     ADD_FAILURE() << "Received wrong signal.";
-  }).daemonize([](kj::Exception&& exception) {
+  }).detach([](kj::Exception&& exception) {
     ADD_FAILURE() << kj::str(exception).cStr();
   });
 
@@ -152,12 +152,12 @@ TEST_F(AsyncUnixTest, SignalsNoWait) {
     receivedSigusr2 = true;
     EXPECT_EQ(SIGUSR2, info.si_signo);
     EXPECT_SI_CODE(SI_USER, info.si_code);
-  }).daemonize([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
+  }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
   port.onSignal(SIGIO).then([&](siginfo_t&& info) {
     receivedSigio = true;
     EXPECT_EQ(SIGIO, info.si_signo);
     EXPECT_SI_CODE(SI_USER, info.si_code);
-  }).daemonize([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
+  }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
 
   kill(getpid(), SIGUSR2);
   kill(getpid(), SIGIO);
@@ -205,7 +205,7 @@ TEST_F(AsyncUnixTest, PollMultiListen) {
 
   port.onFdEvent(bogusPipefds[0], POLLIN | POLLPRI).then([](short s) {
     ADD_FAILURE() << "Received wrong poll.";
-  }).daemonize([](kj::Exception&& exception) {
+  }).detach([](kj::Exception&& exception) {
     ADD_FAILURE() << kj::str(exception).cStr();
   });
 
@@ -273,11 +273,11 @@ TEST_F(AsyncUnixTest, PollNoWait) {
   port.onFdEvent(pipefds[0], POLLIN | POLLPRI).then([&](short&& events) {
     receivedCount++;
     EXPECT_EQ(POLLIN, events);
-  }).daemonize([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
+  }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
   port.onFdEvent(pipefds2[0], POLLIN | POLLPRI).then([&](short&& events) {
     receivedCount++;
     EXPECT_EQ(POLLIN, events);
-  }).daemonize([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
+  }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
 
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
   KJ_SYSCALL(write(pipefds2[1], "bar", 3));

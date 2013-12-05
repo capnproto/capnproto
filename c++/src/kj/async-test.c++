@@ -259,8 +259,7 @@ TEST(Async, Ordering) {
       auto paf = kj::newPromiseAndFulfiller<void>();
       promises[2] = paf.promise.then([&]() {
         EXPECT_EQ(1, counter++);
-      });
-      promises[2].eagerlyEvaluate();
+      }).eagerlyEvaluate(nullptr);
       paf.fulfiller->fulfill();
     }
 
@@ -270,25 +269,21 @@ TEST(Async, Ordering) {
       EXPECT_EQ(4, counter++);
     }).then([&]() {
       EXPECT_EQ(5, counter++);
-    });
-    promises[3].eagerlyEvaluate();
+    }).eagerlyEvaluate(nullptr);
 
     {
       auto paf = kj::newPromiseAndFulfiller<void>();
       promises[4] = paf.promise.then([&]() {
         EXPECT_EQ(2, counter++);
-      });
-      promises[4].eagerlyEvaluate();
+      }).eagerlyEvaluate(nullptr);
       paf.fulfiller->fulfill();
     }
 
     // evalLater() is like READY_NOW.then().
     promises[5] = evalLater([&]() {
       EXPECT_EQ(6, counter++);
-    });
-    promises[5].eagerlyEvaluate();
-  });
-  promises[1].eagerlyEvaluate();
+    }).eagerlyEvaluate(nullptr);
+  }).eagerlyEvaluate(nullptr);
 
   promises[0] = evalLater([&]() {
     EXPECT_EQ(3, counter++);
@@ -296,8 +291,7 @@ TEST(Async, Ordering) {
     // Making this a chain should NOT cause it to preempt promises[1].  (This was a problem at one
     // point.)
     return Promise<void>(READY_NOW);
-  });
-  promises[0].eagerlyEvaluate();
+  }).eagerlyEvaluate(nullptr);
 
   for (auto i: indices(promises)) {
     kj::mv(promises[i]).wait(waitScope);
@@ -372,9 +366,7 @@ TEST(Async, ExclusiveJoin) {
     auto left = evalLater([&]() { return 123; });
     auto right = newPromiseAndFulfiller<int>();  // never fulfilled
 
-    left.exclusiveJoin(kj::mv(right.promise));
-
-    EXPECT_EQ(123, left.wait(waitScope));
+    EXPECT_EQ(123, left.exclusiveJoin(kj::mv(right.promise)).wait(waitScope));
   }
 
   {
@@ -384,9 +376,7 @@ TEST(Async, ExclusiveJoin) {
     auto left = newPromiseAndFulfiller<int>();  // never fulfilled
     auto right = evalLater([&]() { return 123; });
 
-    left.promise.exclusiveJoin(kj::mv(right));
-
-    EXPECT_EQ(123, left.promise.wait(waitScope));
+    EXPECT_EQ(123, left.promise.exclusiveJoin(kj::mv(right)).wait(waitScope));
   }
 
   {
@@ -396,9 +386,7 @@ TEST(Async, ExclusiveJoin) {
     auto left = evalLater([&]() { return 123; });
     auto right = evalLater([&]() { return 456; });
 
-    left.exclusiveJoin(kj::mv(right));
-
-    EXPECT_EQ(123, left.wait(waitScope));
+    EXPECT_EQ(123, left.exclusiveJoin(kj::mv(right)).wait(waitScope));
   }
 
   {
@@ -406,13 +394,9 @@ TEST(Async, ExclusiveJoin) {
     WaitScope waitScope(loop);
 
     auto left = evalLater([&]() { return 123; });
-    auto right = evalLater([&]() { return 456; });
+    auto right = evalLater([&]() { return 456; }).eagerlyEvaluate(nullptr);
 
-    right.eagerlyEvaluate();
-
-    left.exclusiveJoin(kj::mv(right));
-
-    EXPECT_EQ(456, left.wait(waitScope));
+    EXPECT_EQ(456, left.exclusiveJoin(kj::mv(right)).wait(waitScope));
   }
 }
 
@@ -474,9 +458,7 @@ TEST(Async, Attach) {
   Promise<int> promise = evalLater([&]() {
     EXPECT_FALSE(destroyed);
     return 123;
-  });
-
-  promise.attach(kj::heap<DestructorDetector>(destroyed));
+  }).attach(kj::heap<DestructorDetector>(destroyed));
 
   promise = promise.then([&](int i) {
     EXPECT_TRUE(destroyed);
@@ -501,14 +483,14 @@ TEST(Async, EagerlyEvaluate) {
 
   EXPECT_FALSE(called);
 
-  promise.eagerlyEvaluate();
+  promise = promise.eagerlyEvaluate(nullptr);
 
   evalLater([]() {}).wait(waitScope);
 
   EXPECT_TRUE(called);
 }
 
-TEST(Async, Daemonize) {
+TEST(Async, Detach) {
   EventLoop loop;
   WaitScope waitScope(loop);
 
@@ -517,8 +499,8 @@ TEST(Async, Daemonize) {
   bool ran3 = false;
 
   evalLater([&]() { ran1 = true; });
-  evalLater([&]() { ran2 = true; }).daemonize([](kj::Exception&&) { ADD_FAILURE(); });
-  evalLater([]() { KJ_FAIL_ASSERT("foo"); }).daemonize([&](kj::Exception&& e) { ran3 = true; });
+  evalLater([&]() { ran2 = true; }).detach([](kj::Exception&&) { ADD_FAILURE(); });
+  evalLater([]() { KJ_FAIL_ASSERT("foo"); }).detach([&](kj::Exception&& e) { ran3 = true; });
 
   EXPECT_FALSE(ran1);
   EXPECT_FALSE(ran2);
@@ -553,8 +535,7 @@ TEST(Async, SetRunnable) {
   EXPECT_EQ(0, port.callCount);
 
   {
-    auto promise = evalLater([]() {});
-    promise.eagerlyEvaluate();
+    auto promise = evalLater([]() {}).eagerlyEvaluate(nullptr);
 
     EXPECT_TRUE(port.runnable);
     loop.run(1);
@@ -568,12 +549,10 @@ TEST(Async, SetRunnable) {
 
   {
     auto paf = newPromiseAndFulfiller<void>();
-    auto promise = paf.promise.then([]() {});
-    promise.eagerlyEvaluate();
+    auto promise = paf.promise.then([]() {}).eagerlyEvaluate(nullptr);
     EXPECT_FALSE(port.runnable);
 
-    auto promise2 = evalLater([]() {});
-    promise2.eagerlyEvaluate();
+    auto promise2 = evalLater([]() {}).eagerlyEvaluate(nullptr);
     paf.fulfiller->fulfill();
 
     EXPECT_TRUE(port.runnable);

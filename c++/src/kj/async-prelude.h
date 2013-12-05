@@ -173,7 +173,7 @@ private:
   friend class TaskSetImpl;
 };
 
-void daemonize(kj::Promise<void>&& promise);
+void detach(kj::Promise<void>&& promise);
 void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope);
 Promise<void> yield();
 

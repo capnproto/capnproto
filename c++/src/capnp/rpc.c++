@@ -273,7 +273,7 @@ public:
     auto questionRef = kj::refcounted<QuestionRef>(*this, questionId, kj::mv(paf.fulfiller));
     question.selfRef = *questionRef;
 
-    paf.promise.attach(kj::addRef(*questionRef));
+    paf.promise = paf.promise.attach(kj::addRef(*questionRef));
 
     {
       auto message = connection->newOutgoingMessage(
@@ -865,6 +865,10 @@ private:
                 resolve(kj::mv(resolution));
               }, [this](kj::Exception&& exception) {
                 resolve(newBrokenCap(kj::mv(exception)));
+              }).eagerlyEvaluate([&](kj::Exception&& e) {
+                // Make any exceptions thrown from resolve() go to the connection's TaskSet which
+                // will cause the connection to be terminated.
+                connectionState.tasks.add(kj::mv(e));
               })) {
       // Create a client that starts out forwarding all calls to `initial` but, once `eventual`
       // resolves, will forward there instead.  In addition, `whenMoreResolved()` will return a fork
@@ -872,13 +876,6 @@ private:
       // the `PromiseClient` is destroyed; `eventual` must therefore make sure to hold references to
       // anything that needs to stay alive in order to resolve it correctly (such as making sure the
       // import ID is not released).
-
-      // Make any exceptions thrown from resolveSelfPromise go to the connection's TaskSet which
-      // will cause the connection to be terminated.
-      resolveSelfPromise = resolveSelfPromise.then(
-          []() {}, [&](kj::Exception&& e) { connectionState.tasks.add(kj::mv(e)); });
-
-      resolveSelfPromise.eagerlyEvaluate();
     }
 
     ~PromiseClient() noexcept(false) {
@@ -1080,7 +1077,7 @@ private:
     // to eventually resolve to the ClientHook produced by `promise`.  This method waits for that
     // resolve to happen and then sends the appropriate `Resolve` message to the peer.
 
-    auto result = promise.then(
+    return promise.then(
         [this,exportId](kj::Own<ClientHook>&& resolution) -> kj::Promise<void> {
       // Successful resolution.
 
@@ -1136,9 +1133,10 @@ private:
       resolve.setPromiseId(exportId);
       fromException(exception, resolve.initException());
       message->send();
+    }).eagerlyEvaluate([this](kj::Exception&& exception) {
+      // Put the exception on the TaskSet which will cause the connection to be terminated.
+      tasks.add(kj::mv(exception));
     });
-    result.eagerlyEvaluate();
-    return kj::mv(result);
   }
 
   // =====================================================================================
@@ -1296,7 +1294,7 @@ private:
 
             auto paf = kj::newPromiseAndFulfiller<kj::Own<ClientHook>>();
             import.promiseFulfiller = kj::mv(paf.fulfiller);
-            paf.promise.attach(kj::addRef(*importClient));
+            paf.promise = paf.promise.attach(kj::addRef(*importClient));
             result = kj::refcounted<PromiseClient>(
                 connectionState, kj::mv(importClient), kj::mv(paf.promise), importId);
           } else {
@@ -1683,8 +1681,7 @@ private:
 
       message->send();
 
-      result.promise = kj::mv(paf.promise);
-      result.promise.attach(kj::addRef(*result.questionRef));
+      result.promise = paf.promise.attach(kj::addRef(*result.questionRef));
 
       return kj::mv(result);
     }
@@ -1701,10 +1698,13 @@ private:
                 resolve(kj::mv(response));
               }, [this](kj::Exception&& exception) {
                 resolve(kj::mv(exception));
+              }).eagerlyEvaluate([&](kj::Exception&& e) {
+                // Make any exceptions thrown from resolve() go to the connection's TaskSet which
+                // will cause the connection to be terminated.
+                connectionState.tasks.add(kj::mv(e));
               })) {
       // Construct a new RpcPipeline.
 
-      resolveSelfPromise.eagerlyEvaluate();
       state.init<Waiting>(kj::mv(questionRef));
     }
 
@@ -2347,15 +2347,15 @@ private:
         auto forked = resultsPromise.fork();
         answer.redirectedResults = forked.addBranch();
 
-        auto promise = kj::mv(cancelPaf.promise);
-        promise.exclusiveJoin(forked.addBranch().then([](kj::Own<RpcResponse>&&){}));
-        promise.daemonize([](kj::Exception&&) {});
+        cancelPaf.promise
+            .exclusiveJoin(forked.addBranch().then([](kj::Own<RpcResponse>&&){}))
+            .detach([](kj::Exception&&) {});
       } else {
         // Hack:  Both the success and error continuations need to use the context.  We could
         //   refcount, but both will be destroyed at the same time anyway.
         RpcCallContext* contextPtr = context;
 
-        auto promise = promiseAndPipeline.promise.then(
+        promiseAndPipeline.promise.then(
             [contextPtr]() {
               contextPtr->sendReturn();
             }, [contextPtr](kj::Exception&& exception) {
@@ -2363,10 +2363,9 @@ private:
             }).then([]() {}, [&](kj::Exception&& exception) {
               // Handle exceptions that occur in sendReturn()/sendErrorReturn().
               taskFailed(kj::mv(exception));
-            });
-        promise.attach(kj::mv(context));
-        promise.exclusiveJoin(kj::mv(cancelPaf.promise));
-        promise.daemonize([](kj::Exception&&) {});
+            }).attach(kj::mv(context))
+            .exclusiveJoin(kj::mv(cancelPaf.promise))
+            .detach([](kj::Exception&&) {});
       }
     }
   }

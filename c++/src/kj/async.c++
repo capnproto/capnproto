@@ -331,7 +331,7 @@ Promise<void> yield() {
   return Promise<void>(false, kj::heap<YieldPromiseNode>());
 }
 
-void daemonize(kj::Promise<void>&& promise) {
+void detach(kj::Promise<void>&& promise) {
   EventLoop& loop = currentEventLoop();
   KJ_REQUIRE(loop.daemons.get() != nullptr, "EventLoop is shutting down.") { return; }
   loop.daemons->add(kj::mv(promise));

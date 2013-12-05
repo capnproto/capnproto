@@ -196,8 +196,7 @@ TEST(Capability, AsyncCancelation) {
 
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
-  auto destructionPromise = paf.promise.then([&]() { destroyed = true; });
-  destructionPromise.eagerlyEvaluate();
+  auto destructionPromise = paf.promise.then([&]() { destroyed = true; }).eagerlyEvaluate(nullptr);
 
   int callCount = 0;
 
@@ -212,8 +211,7 @@ TEST(Capability, AsyncCancelation) {
     promise = request.send().then(
         [&](Response<test::TestMoreStuff::ExpectAsyncCancelResults>&& response) {
       returned = true;
-    });
-    promise.eagerlyEvaluate();
+    }).eagerlyEvaluate(nullptr);
   }
   kj::evalLater([]() {}).wait(waitScope);
   kj::evalLater([]() {}).wait(waitScope);
@@ -249,8 +247,7 @@ TEST(Capability, SyncCancelation) {
     promise = request.send().then(
         [&](Response<test::TestMoreStuff::ExpectSyncCancelResults>&& response) {
       returned = true;
-    });
-    promise.eagerlyEvaluate();
+    }).eagerlyEvaluate(nullptr);
   }
   kj::evalLater([]() {}).wait(waitScope);
   kj::evalLater([]() {}).wait(waitScope);

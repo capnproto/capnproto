@@ -649,9 +649,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
   }));
 
   auto reader = heap<LookupReader>(kj::mv(thread), kj::mv(input));
-  auto result = reader->read();
-  result.attach(kj::mv(reader));
-  return kj::mv(result);
+  return reader->read().attach(kj::mv(reader));
 }
 
 // =======================================================================================

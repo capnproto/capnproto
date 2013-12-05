@@ -66,7 +66,11 @@ class Promise: protected _::PromiseBase {
   //
   // Promises are linear types -- they are moveable but not copyable.  If a Promise is destroyed
   // or goes out of scope (without being moved elsewhere), any ongoing asynchronous operations
-  // meant to fulfill the promise will be canceled if possible.
+  // meant to fulfill the promise will be canceled if possible.  All methods of `Promise` (unless
+  // otherwise noted) actually consume the promise in the sense of move semantics.  (Arguably they
+  // should be rvalue-qualified, but at the time this interface was created compilers didn't widely
+  // support that yet and anyway it would be pretty ugly typing kj::mv(promise).whatever().)  If
+  // you want to use one Promise in two different places, you must fork it with `fork()`.
   //
   // To use the result of a Promise, you must call `then()` and supply a callback function to
   // call with the result.  `then()` returns another promise, for the result of the callback.
@@ -161,8 +165,9 @@ public:
   // If the returned promise is destroyed before the callback runs, the callback will be canceled
   // (it will never run).
   //
-  // Note that `then()` consumes the promise on which it is called, in the sense of move semantics.
-  // After returning, the original promise is no longer valid, but `then()` returns a new promise.
+  // Note that `then()` -- like all other Promise methods -- consumes the promise on which it is
+  // called, in the sense of move semantics.  After returning, the original promise is no longer
+  // valid, but `then()` returns a new promise.
   //
   // *Advanced implementation tips:*  Most users will never need to worry about the below, but
   // it is good to be aware of.
@@ -216,9 +221,6 @@ public:
   //   around them in arbitrary ways.  Therefore, callers really need to know if a function they
   //   are calling might wait(), and the `WaitScope&` parameter makes this clear.
   //
-  // Note that `wait()` consumes the promise on which it is called, in the sense of move semantics.
-  // After returning, the original promise is no longer valid.
-  //
   // TODO(someday):  Implement fibers, and let them call wait() even when they are handling an
   //   event.
 
@@ -227,31 +229,36 @@ public:
   // `T` must be copy-constructable for this to work.  Or, in the special case where `T` is
   // `Own<U>`, `U` must have a method `Own<U> addRef()` which returns a new reference to the same
   // (or an equivalent) object (probably implemented via reference counting).
-  //
-  // Note that `fork()` consumes the promise on which it is called, in the sense of move semantics.
-  // After returning, the original promise is no longer valid.
 
-  void exclusiveJoin(Promise<T>&& other);
-  // Replace this promise with one that resolves when either the original promise resolves or
-  // `other` resolves (whichever comes first).  The promise that didn't resolve first is canceled.
+  Promise<T> exclusiveJoin(Promise<T>&& other) KJ_WARN_UNUSED_RESULT;
+  // Return a new promise that resolves when either the original promise resolves or `other`
+  // resolves (whichever comes first).  The promise that didn't resolve first is canceled.
 
   // TODO(someday): inclusiveJoin(), or perhaps just join(), which waits for both completions
   //   and produces a tuple?
 
   template <typename... Attachments>
-  void attach(Attachments&&... attachments);
+  Promise<T> attach(Attachments&&... attachments) KJ_WARN_UNUSED_RESULT;
   // "Attaches" one or more movable objects (often, Own<T>s) to the promise, such that they will
   // be destroyed when the promise resolves.  This is useful when a promise's callback contains
   // pointers into some object and you want to make sure the object still exists when the callback
   // runs -- after calling then(), use attach() to add necessary objects to the result.
 
-  void eagerlyEvaluate();
+  template <typename ErrorFunc>
+  Promise<T> eagerlyEvaluate(ErrorFunc&& errorHandler) KJ_WARN_UNUSED_RESULT;
+  Promise<T> eagerlyEvaluate(decltype(nullptr)) KJ_WARN_UNUSED_RESULT;
   // Force eager evaluation of this promise.  Use this if you are going to hold on to the promise
   // for awhile without consuming the result, but you want to make sure that the system actually
   // processes it.
+  //
+  // `errorHandler` is a function that takes `kj::Exception&&`, like the second parameter to
+  // `then()`, except that it must return void.  We make you specify this because otherwise it's
+  // easy to forget to handle errors in a promise that you never use.  You may specify nullptr for
+  // the error handler if you are sure that ignoring errors is fine, or if you know that you'll
+  // eventually wait on the promise somewhere.
 
   template <typename ErrorFunc>
-  void daemonize(ErrorFunc&& errorHandler);
+  void detach(ErrorFunc&& errorHandler);
   // Allows the promise to continue running in the background until it completes or the
   // `EventLoop` is destroyed.  Be careful when using this: since you can no longer cancel this
   // promise, you need to make sure that the promise owns all the objects it touches or make sure
@@ -262,12 +269,10 @@ public:
   //
   // This function exists mainly to implement the Cap'n Proto requirement that RPC calls cannot be
   // canceled unless the callee explicitly permits it.
-  //
-  // Note that `daemonize()` consumes the promise on which it is called, in the sense of move
-  // semantics.  After returning, the original promise is no longer valid.
 
   kj::String trace();
   // Returns a dump of debug info about this promise.  Not for production use.  Requires RTTI.
+  // This method does NOT consume the promise as other methods do.
 
 private:
   Promise(bool, Own<_::PromiseNode>&& node): PromiseBase(kj::mv(node)) {}
@@ -462,7 +467,7 @@ class TaskSet {
   //
   // This is useful for "daemon" objects that perform background tasks which aren't intended to
   // fulfill any particular external promise, but which may need to be canceled (and thus can't
-  // use `Promise::daemonize()`).  The daemon object holds a TaskSet to collect these tasks it is
+  // use `Promise::detach()`).  The daemon object holds a TaskSet to collect these tasks it is
   // working on.  This way, if the daemon itself is destroyed, the TaskSet is detroyed as well,
   // and everything the daemon is doing is canceled.
 
@@ -593,7 +598,7 @@ private:
   void enterScope();
   void leaveScope();
 
-  friend void _::daemonize(kj::Promise<void>&& promise);
+  friend void _::detach(kj::Promise<void>&& promise);
   friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope);
   friend class _::Event;

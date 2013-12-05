@@ -617,20 +617,34 @@ Promise<T> ForkedPromise<T>::addBranch() {
 }
 
 template <typename T>
-void Promise<T>::exclusiveJoin(Promise<T>&& other) {
-  node = heap<_::ExclusiveJoinPromiseNode>(kj::mv(node), kj::mv(other.node));
+Promise<T> Promise<T>::exclusiveJoin(Promise<T>&& other) {
+  return Promise(false, heap<_::ExclusiveJoinPromiseNode>(kj::mv(node), kj::mv(other.node)));
 }
 
 template <typename T>
 template <typename... Attachments>
-void Promise<T>::attach(Attachments&&... attachments) {
-  node = kj::heap<_::AttachmentPromiseNode<Tuple<Attachments...>>>(
-      kj::mv(node), kj::tuple(kj::fwd<Attachments>(attachments)...));
+Promise<T> Promise<T>::attach(Attachments&&... attachments) {
+  return Promise(false, kj::heap<_::AttachmentPromiseNode<Tuple<Attachments...>>>(
+      kj::mv(node), kj::tuple(kj::fwd<Attachments>(attachments)...)));
 }
 
 template <typename T>
-void Promise<T>::eagerlyEvaluate() {
-  node = _::spark<_::FixVoid<T>>(kj::mv(node));
+template <typename ErrorFunc>
+Promise<T> Promise<T>::eagerlyEvaluate(ErrorFunc&& errorHandler) {
+  return Promise(false, _::spark<_::FixVoid<T>>(
+      then([](T&& value) -> T { return kj::mv(value); }, kj::fwd<ErrorFunc>(errorHandler)).node));
+}
+
+template <>
+template <typename ErrorFunc>
+Promise<void> Promise<void>::eagerlyEvaluate(ErrorFunc&& errorHandler) {
+  return Promise(false, _::spark<_::Void>(
+      then([]() {}, kj::fwd<ErrorFunc>(errorHandler)).node));
+}
+
+template <typename T>
+Promise<T> Promise<T>::eagerlyEvaluate(decltype(nullptr)) {
+  return Promise(false, _::spark<_::FixVoid<T>>(kj::mv(node)));
 }
 
 template <typename T>
@@ -645,14 +659,14 @@ inline PromiseForResult<Func, void> evalLater(Func&& func) {
 
 template <typename T>
 template <typename ErrorFunc>
-void Promise<T>::daemonize(ErrorFunc&& errorHandler) {
-  return _::daemonize(then([](T&&) {}, kj::fwd<ErrorFunc>(errorHandler)));
+void Promise<T>::detach(ErrorFunc&& errorHandler) {
+  return _::detach(then([](T&&) {}, kj::fwd<ErrorFunc>(errorHandler)));
 }
 
 template <>
 template <typename ErrorFunc>
-void Promise<void>::daemonize(ErrorFunc&& errorHandler) {
-  return _::daemonize(then([]() {}, kj::fwd<ErrorFunc>(errorHandler)));
+void Promise<void>::detach(ErrorFunc&& errorHandler) {
+  return _::detach(then([]() {}, kj::fwd<ErrorFunc>(errorHandler)));
 }
 
 // =======================================================================================
