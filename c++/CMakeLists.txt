@@ -358,15 +358,6 @@ set(test_capnpc_inputs
   src/capnp/test-import2.capnp
 )
 
-set(test_capnpc_outputs
-  src/capnp/test.capnp.c++
-  src/capnp/test.capnp.h
-  src/capnp/test-import.capnp.c++
-  src/capnp/test-import.capnp.h
-  src/capnp/test-import2.capnp.c++
-  src/capnp/test-import2.capnp.h
-)
-
 if(USE_EXTERNAL_CAPNP)
   set(CAPNP_EXECUTABLE "*location*")
 else(USE_EXTERNAL_CAPNP)
@@ -388,6 +379,7 @@ foreach(filename ${test_capnpc_inputs})
     OUTPUT "${filename}.h" "${filename}.c++"
     COMMENT "Compiling ${filename} into ${filename}.h and ${filename}.c++"
   )
+  set(test_capnpc_outputs ${filename}.h ${filename}.c++ ${test_capnpc_outputs})
 endforeach()
 
 # BUILT_SOURCES = $(test_capnpc_outputs)
