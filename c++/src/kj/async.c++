@@ -108,6 +108,7 @@ public:
   public:
     Task(TaskSetImpl& taskSet, Own<_::PromiseNode>&& nodeParam)
         : taskSet(taskSet), node(kj::mv(nodeParam)) {
+      node->setSelfPointer(&node);
       node->onReady(*this);
     }
 
@@ -305,6 +306,7 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
   KJ_REQUIRE(!loop.running, "wait() is not allowed from within event callbacks.");
 
   BoolEvent doneEvent;
+  node->setSelfPointer(&node);
   node->onReady(doneEvent);
 
   loop.running = true;
@@ -421,7 +423,7 @@ _::PromiseNode* Event::getInnerForTrace() {
 static kj::String demangleTypeName(const char* name) {
   int status;
   char* buf = abi::__cxa_demangle(name, nullptr, nullptr, &status);
-  kj::String result = kj::heapString(buf);
+  kj::String result = kj::heapString(buf == nullptr ? name : buf);
   free(buf);
   return kj::mv(result);
 }
@@ -478,6 +480,8 @@ kj::String PromiseBase::trace() {
   return traceImpl(nullptr, node);
 }
 
+void PromiseNode::setSelfPointer(Own<PromiseNode>* selfPtr) noexcept {}
+
 PromiseNode* PromiseNode::getInnerForTrace() { return nullptr; }
 
 void PromiseNode::OnReadyEvent::init(Event& newEvent) {
@@ -517,8 +521,10 @@ void ImmediateBrokenPromiseNode::get(ExceptionOrValue& output) noexcept {
 
 // -------------------------------------------------------------------
 
-AttachmentPromiseNodeBase::AttachmentPromiseNodeBase(Own<PromiseNode>&& dependency)
-    : dependency(kj::mv(dependency)) {}
+AttachmentPromiseNodeBase::AttachmentPromiseNodeBase(Own<PromiseNode>&& dependencyParam)
+    : dependency(kj::mv(dependencyParam)) {
+  dependency->setSelfPointer(&dependency);
+}
 
 void AttachmentPromiseNodeBase::onReady(Event& event) noexcept {
   dependency->onReady(event);
@@ -538,8 +544,10 @@ void AttachmentPromiseNodeBase::dropDependency() {
 
 // -------------------------------------------------------------------
 
-TransformPromiseNodeBase::TransformPromiseNodeBase(Own<PromiseNode>&& dependency)
-    : dependency(kj::mv(dependency)) {}
+TransformPromiseNodeBase::TransformPromiseNodeBase(Own<PromiseNode>&& dependencyParam)
+    : dependency(kj::mv(dependencyParam)) {
+  dependency->setSelfPointer(&dependency);
+}
 
 void TransformPromiseNodeBase::onReady(Event& event) noexcept {
   dependency->onReady(event);
@@ -617,6 +625,7 @@ PromiseNode* ForkBranchBase::getInnerForTrace() {
 
 ForkHubBase::ForkHubBase(Own<PromiseNode>&& innerParam, ExceptionOrValue& resultRef)
     : inner(kj::mv(innerParam)), resultRef(resultRef) {
+  inner->setSelfPointer(&inner);
   inner->onReady(*this);
 }
 
@@ -650,6 +659,7 @@ _::PromiseNode* ForkHubBase::getInnerForTrace() {
 
 ChainPromiseNode::ChainPromiseNode(Own<PromiseNode> innerParam)
     : state(STEP1), inner(kj::mv(innerParam)) {
+  inner->setSelfPointer(&inner);
   inner->onReady(*this);
 }
 
@@ -666,6 +676,15 @@ void ChainPromiseNode::onReady(Event& event) noexcept {
       return;
   }
   KJ_UNREACHABLE;
+}
+
+void ChainPromiseNode::setSelfPointer(Own<PromiseNode>* selfPtr) noexcept {
+  if (state == STEP2) {
+    *selfPtr = kj::mv(inner);  // deletes this!
+    selfPtr->get()->setSelfPointer(selfPtr);
+  } else {
+    this->selfPtr = selfPtr;
+  }
 }
 
 void ChainPromiseNode::get(ExceptionOrValue& output) noexcept {
@@ -708,11 +727,25 @@ Maybe<Own<Event>> ChainPromiseNode::fire() {
   }
   state = STEP2;
 
-  if (onReadyEvent != nullptr) {
-    inner->onReady(*onReadyEvent);
-  }
+  if (selfPtr != nullptr) {
+    // Hey, we can shorten the chain here.
+    auto chain = selfPtr->downcast<ChainPromiseNode>();
+    *selfPtr = kj::mv(inner);
+    selfPtr->get()->setSelfPointer(selfPtr);
+    if (onReadyEvent != nullptr) {
+      selfPtr->get()->onReady(*onReadyEvent);
+    }
 
-  return nullptr;
+    // Return our self-pointer so that the caller takes care of deleting it.
+    return Own<Event>(kj::mv(chain));
+  } else {
+    inner->setSelfPointer(&inner);
+    if (onReadyEvent != nullptr) {
+      inner->onReady(*onReadyEvent);
+    }
+
+    return nullptr;
+  }
 }
 
 // -------------------------------------------------------------------
@@ -741,6 +774,7 @@ PromiseNode* ExclusiveJoinPromiseNode::getInnerForTrace() {
 ExclusiveJoinPromiseNode::Branch::Branch(
     ExclusiveJoinPromiseNode& joinNode, Own<PromiseNode> dependencyParam)
     : joinNode(joinNode), dependency(kj::mv(dependencyParam)) {
+  dependency->setSelfPointer(&dependency);
   dependency->onReady(*this);
 }
 
@@ -776,6 +810,7 @@ PromiseNode* ExclusiveJoinPromiseNode::Branch::getInnerForTrace() {
 EagerPromiseNodeBase::EagerPromiseNodeBase(
     Own<PromiseNode>&& dependencyParam, ExceptionOrValue& resultRef)
     : dependency(kj::mv(dependencyParam)), resultRef(resultRef) {
+  dependency->setSelfPointer(&dependency);
   dependency->onReady(*this);
 }
 

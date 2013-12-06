@@ -173,6 +173,120 @@ TEST(Async, Chain) {
   EXPECT_EQ(444, promise3.wait(waitScope));
 }
 
+TEST(Async, DeepChain) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Promise<void> promise = NEVER_DONE;
+
+  // Create a ridiculous chain of promises.
+  for (uint i = 0; i < 1000; i++) {
+    promise = evalLater(mvCapture(promise, [&,i](Promise<void> promise) {
+      return kj::mv(promise);
+    }));
+  }
+
+  loop.run();
+
+  auto trace = promise.trace();
+  uint lines = 0;
+  for (char c: trace) {
+    lines += c == '\n';
+  }
+
+  // Chain nodes should have been collapsed such that instead of a chain of 1000 nodes, we have
+  // 2-ish nodes.  We'll give a little room for implementation freedom.
+  EXPECT_LT(lines, 5);
+}
+
+TEST(Async, DeepChain2) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Promise<void> promise = nullptr;
+  promise = evalLater([&]() {
+    auto trace = promise.trace();
+    uint lines = 0;
+    for (char c: trace) {
+      lines += c == '\n';
+    }
+
+    // Chain nodes should have been collapsed such that instead of a chain of 1000 nodes, we have
+    // 2-ish nodes.  We'll give a little room for implementation freedom.
+    EXPECT_LT(lines, 5);
+  });
+
+  // Create a ridiculous chain of promises.
+  for (uint i = 0; i < 1000; i++) {
+    promise = evalLater(mvCapture(promise, [&](Promise<void> promise) {
+      return kj::mv(promise);
+    }));
+  }
+
+  promise.wait(waitScope);
+}
+
+Promise<void> makeChain(uint i) {
+  if (i > 0) {
+    return evalLater([i]() -> Promise<void> {
+      return makeChain(i - 1);
+    });
+  } else {
+    return NEVER_DONE;
+  }
+}
+
+TEST(Async, DeepChain3) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Promise<void> promise = makeChain(1000);
+
+  loop.run();
+
+  auto trace = promise.trace();
+  uint lines = 0;
+  for (char c: trace) {
+    lines += c == '\n';
+  }
+
+  // Chain nodes should have been collapsed such that instead of a chain of 1000 nodes, we have
+  // 2-ish nodes.  We'll give a little room for implementation freedom.
+  EXPECT_LT(lines, 5);
+}
+
+Promise<void> makeChain2(uint i, Promise<void> promise) {
+  if (i > 0) {
+    return evalLater(mvCapture(promise, [i](Promise<void>&& promise) -> Promise<void> {
+      return makeChain2(i - 1, kj::mv(promise));
+    }));
+  } else {
+    return kj::mv(promise);
+  }
+}
+
+TEST(Async, DeepChain4) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  Promise<void> promise = nullptr;
+  promise = evalLater([&]() {
+    auto trace = promise.trace();
+    uint lines = 0;
+    for (char c: trace) {
+      lines += c == '\n';
+    }
+
+    // Chain nodes should have been collapsed such that instead of a chain of 1000 nodes, we have
+    // 2-ish nodes.  We'll give a little room for implementation freedom.
+    EXPECT_LT(lines, 5);
+  });
+
+  promise = makeChain2(1000, kj::mv(promise));
+
+  promise.wait(waitScope);
+}
+
 TEST(Async, SeparateFulfiller) {
   EventLoop loop;
   WaitScope waitScope(loop);

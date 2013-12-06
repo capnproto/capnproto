@@ -136,6 +136,12 @@ public:
   virtual void onReady(Event& event) noexcept = 0;
   // Arms the given event when ready.
 
+  virtual void setSelfPointer(Own<PromiseNode>* selfPtr) noexcept;
+  // Tells the node that `selfPtr` is the pointer that owns this node, and will continue to own
+  // this node until it is destroyed or setSelfPointer() is called again.  ChainPromiseNode uses
+  // this to shorten redundant chains.  The default implementation does nothing; only
+  // ChainPromiseNode should implement this.
+
   virtual void get(ExceptionOrValue& output) noexcept = 0;
   // Get the result.  `output` points to an ExceptionOr<T> into which the result will be written.
   // Can only be called once, and only after the node is ready.  Must be called directly from the
@@ -396,12 +402,18 @@ inline ExceptionOrValue& ForkBranchBase::getHubResultRef() {
 
 // -------------------------------------------------------------------
 
-class ChainPromiseNode final: public PromiseNode, private Event {
+class ChainPromiseNode final: public PromiseNode, public Event {
+  // Promise node which reduces Promise<Promise<T>> to Promise<T>.
+  //
+  // `Event` is only a public base class because otherwise we can't cast Own<ChainPromiseNode> to
+  // Own<Event>.  Ugh, templates and private...
+
 public:
   explicit ChainPromiseNode(Own<PromiseNode> inner);
   ~ChainPromiseNode() noexcept(false);
 
   void onReady(Event& event) noexcept override;
+  void setSelfPointer(Own<PromiseNode>* selfPtr) noexcept override;
   void get(ExceptionOrValue& output) noexcept override;
   PromiseNode* getInnerForTrace() override;
 
@@ -418,6 +430,7 @@ private:
   // In STEP2, a PromiseNode for a T.
 
   Event* onReadyEvent = nullptr;
+  Own<PromiseNode>* selfPtr = nullptr;
 
   Maybe<Own<Event>> fire() override;
 };

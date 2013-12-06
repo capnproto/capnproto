@@ -128,16 +128,39 @@ public:
   ~Own() noexcept(false) { dispose(); }
 
   inline Own& operator=(Own&& other) {
-    dispose();
+    // Move-assingnment operator.
+
+    // Careful, this might own `other`.  Therefore we have to transfer the pointers first, then
+    // dispose.
+    const Disposer* disposerCopy = disposer;
+    T* ptrCopy = ptr;
     disposer = other.disposer;
     ptr = other.ptr;
     other.ptr = nullptr;
+    if (ptrCopy != nullptr) {
+      disposerCopy->dispose(const_cast<RemoveConst<T>*>(ptrCopy));
+    }
     return *this;
   }
 
   inline Own& operator=(decltype(nullptr)) {
     dispose();
     return *this;
+  }
+
+  template <typename U>
+  Own<U> downcast() {
+    // Downcast the pointer to Own<U>, destroying the original pointer.  If this pointer does not
+    // actually point at an instance of U, the results are undefined (throws an exception in debug
+    // mode if RTTI is enabled, otherwise you're on your own).
+
+    Own<U> result;
+    if (ptr != nullptr) {
+      result.ptr = &kj::downcast<U>(*ptr);
+      result.disposer = disposer;
+      ptr = nullptr;
+    }
+    return result;
   }
 
   inline T* operator->() { return ptr; }
