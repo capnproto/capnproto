@@ -1009,17 +1009,14 @@ kj::Promise<void> TestMoreStuffImpl::callFooWhenResolved(CallFooWhenResolvedCont
 kj::Promise<void> TestMoreStuffImpl::neverReturn(NeverReturnContext context) {
   ++callCount;
 
-  auto paf = kj::newPromiseAndFulfiller<void>();
-  neverFulfill = kj::mv(paf.fulfiller);
-
   // Attach `cap` to the promise to make sure it is released.
-  paf.promise = paf.promise.attach(context.getParams().getCap());
+  auto promise = kj::Promise<void>(kj::NEVER_DONE).attach(context.getParams().getCap());
 
   // Also attach `cap` to the result struct to make sure that is released.
   context.getResults().setCapCopy(context.getParams().getCap());
 
-  context.allowAsyncCancellation();
-  return kj::mv(paf.promise);
+  context.allowCancellation();
+  return kj::mv(promise);
 }
 
 kj::Promise<void> TestMoreStuffImpl::hold(HoldContext context) {
@@ -1059,45 +1056,18 @@ kj::Promise<void> TestMoreStuffImpl::echo(EchoContext context) {
   return kj::READY_NOW;
 }
 
-kj::Promise<void> TestMoreStuffImpl::expectAsyncCancel(ExpectAsyncCancelContext context) {
+kj::Promise<void> TestMoreStuffImpl::expectCancel(ExpectCancelContext context) {
   auto cap = context.getParams().getCap();
   context.releaseParams();
-  context.allowAsyncCancellation();
+  context.allowCancellation();
   return loop(0, cap, context);
 }
 
 kj::Promise<void> TestMoreStuffImpl::loop(uint depth, test::TestInterface::Client cap,
-                                          ExpectAsyncCancelContext context) {
+                                          ExpectCancelContext context) {
   if (depth > 100) {
     ADD_FAILURE() << "Looped too long, giving up.";
     return kj::READY_NOW;
-  } else {
-    return kj::evalLater([=]() mutable {
-      return loop(depth + 1, cap, context);
-    });
-  }
-}
-
-kj::Promise<void> TestMoreStuffImpl::expectSyncCancel(ExpectSyncCancelContext context) {
-  auto cap = context.getParams().getCap();
-  context.releaseParams();
-  return loop(0, cap, context);
-}
-
-kj::Promise<void> TestMoreStuffImpl::loop(uint depth, test::TestInterface::Client cap,
-                                          ExpectSyncCancelContext context) {
-  if (depth > 100) {
-    ADD_FAILURE() << "Looped too long, giving up.";
-    return kj::READY_NOW;
-  } else if (context.isCanceled()) {
-    auto request = cap.fooRequest();
-    request.setI(123);
-    request.setJ(true);
-
-    return request.send().then(
-        [](Response<test::TestInterface::FooResults>&& response) mutable {
-          EXPECT_EQ("foo", response.getX());
-        });
   } else {
     return kj::evalLater([=]() mutable {
       return loop(depth + 1, cap, context);

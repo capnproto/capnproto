@@ -539,8 +539,7 @@ public:
   Orphanage getResultsOrphanage(uint firstSegmentWordSize = 0);
   template <typename SubParams>
   kj::Promise<void> tailCall(Request<SubParams, DynamicStruct>&& tailRequest);
-  void allowAsyncCancellation();
-  bool isCanceled();
+  void allowCancellation();
 
 private:
   CallContextHook* hook;
@@ -1540,11 +1539,8 @@ inline kj::Promise<void> CallContext<DynamicStruct, DynamicStruct>::tailCall(
     Request<SubParams, DynamicStruct>&& tailRequest) {
   return hook->tailCall(kj::mv(tailRequest.hook));
 }
-inline void CallContext<DynamicStruct, DynamicStruct>::allowAsyncCancellation() {
-  hook->allowAsyncCancellation();
-}
-inline bool CallContext<DynamicStruct, DynamicStruct>::isCanceled() {
-  return hook->isCanceled();
+inline void CallContext<DynamicStruct, DynamicStruct>::allowCancellation() {
+  hook->allowCancellation();
 }
 
 template <>

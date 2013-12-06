@@ -143,12 +143,9 @@ public:
     tailCallPipelineFulfiller = kj::mv(paf.fulfiller);
     return kj::mv(paf.promise);
   }
-  void allowAsyncCancellation() override {
-    KJ_REQUIRE(request == nullptr, "Must call releaseParams() before allowAsyncCancellation().");
+  void allowCancellation() override {
+    KJ_REQUIRE(request == nullptr, "Must call releaseParams() before allowCancellation().");
     cancelAllowedFulfiller->fulfill();
-  }
-  bool isCanceled() override {
-    return cancelRequested;
   }
   kj::Own<CallContextHook> addRef() override {
     return kj::addRef(*this);
@@ -160,20 +157,6 @@ public:
   kj::Own<ClientHook> clientRef;
   kj::Maybe<kj::Own<kj::PromiseFulfiller<AnyPointer::Pipeline>>> tailCallPipelineFulfiller;
   kj::Own<kj::PromiseFulfiller<void>> cancelAllowedFulfiller;
-  bool cancelRequested = false;
-
-  class Canceler {
-  public:
-    Canceler(kj::Own<LocalCallContext>&& context): context(kj::mv(context)) {}
-    Canceler(Canceler&&) = default;
-
-    ~Canceler() {
-      if (context) context->cancelRequested = true;
-    }
-
-  private:
-    kj::Own<LocalCallContext> context;
-  };
 };
 
 class LocalRequest final: public RequestHook {
@@ -209,15 +192,11 @@ public:
         .detach([](kj::Exception&&) {});  // ignore exceptions
 
     // Now the other branch returns the response from the context.
-    auto contextPtr = context.get();
-    auto promise = forked.addBranch().then([contextPtr]() {
-      contextPtr->getResults(1);  // force response allocation
-      return kj::mv(KJ_ASSERT_NONNULL(contextPtr->response));
-    });
-
-    // We also want to notify the context that cancellation was requested if this branch is
-    // destroyed.
-    promise = promise.attach(LocalCallContext::Canceler(kj::mv(context)));
+    auto promise = forked.addBranch().then(kj::mvCapture(context,
+        [](kj::Own<LocalCallContext>&& context) {
+      context->getResults(1);  // force response allocation
+      return kj::mv(KJ_ASSERT_NONNULL(context->response));
+    }));
 
     // We return the other branch.
     return RemotePromise<AnyPointer>(

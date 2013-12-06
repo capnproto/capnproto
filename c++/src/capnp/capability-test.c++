@@ -189,7 +189,7 @@ TEST(Capability, TailCall) {
 }
 
 TEST(Capability, AsyncCancelation) {
-  // Tests allowAsyncCancellation().
+  // Tests allowCancellation().
 
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
@@ -206,10 +206,10 @@ TEST(Capability, AsyncCancelation) {
 
   bool returned = false;
   {
-    auto request = client.expectAsyncCancelRequest();
+    auto request = client.expectCancelRequest();
     request.setCap(test::TestInterface::Client(kj::heap<TestCapDestructor>(kj::mv(paf.fulfiller))));
     promise = request.send().then(
-        [&](Response<test::TestMoreStuff::ExpectAsyncCancelResults>&& response) {
+        [&](Response<test::TestMoreStuff::ExpectCancelResults>&& response) {
       returned = true;
     }).eagerlyEvaluate(nullptr);
   }
@@ -224,48 +224,6 @@ TEST(Capability, AsyncCancelation) {
   destructionPromise.wait(waitScope);
 
   EXPECT_TRUE(destroyed);
-  EXPECT_FALSE(returned);
-}
-
-TEST(Capability, SyncCancelation) {
-  // Tests isCanceled() without allowAsyncCancellation().
-
-  kj::EventLoop loop;
-  kj::WaitScope waitScope(loop);
-
-  int callCount = 0;
-  int innerCallCount = 0;
-
-  test::TestMoreStuff::Client client(kj::heap<TestMoreStuffImpl>(callCount));
-
-  kj::Promise<void> promise = nullptr;
-
-  bool returned = false;
-  {
-    auto request = client.expectSyncCancelRequest();
-    request.setCap(test::TestInterface::Client(kj::heap<TestInterfaceImpl>(innerCallCount)));
-    promise = request.send().then(
-        [&](Response<test::TestMoreStuff::ExpectSyncCancelResults>&& response) {
-      returned = true;
-    }).eagerlyEvaluate(nullptr);
-  }
-  kj::evalLater([]() {}).wait(waitScope);
-  kj::evalLater([]() {}).wait(waitScope);
-  kj::evalLater([]() {}).wait(waitScope);
-  kj::evalLater([]() {}).wait(waitScope);
-
-  // expectSyncCancel() will make a call to the TestInterfaceImpl only once it noticed isCanceled()
-  // is true.
-  EXPECT_EQ(0, innerCallCount);
-  EXPECT_FALSE(returned);
-
-  promise = nullptr;  // request cancellation
-  kj::evalLater([]() {}).wait(waitScope);
-  kj::evalLater([]() {}).wait(waitScope);
-  kj::evalLater([]() {}).wait(waitScope);
-  kj::evalLater([]() {}).wait(waitScope);
-
-  EXPECT_EQ(1, innerCallCount);
   EXPECT_FALSE(returned);
 }
 

@@ -237,7 +237,7 @@ public:
   // In general, this should be the last thing a method implementation calls, and the promise
   // returned from `tailCall()` should then be returned by the method implementation.
 
-  void allowAsyncCancellation();
+  void allowCancellation();
   // Indicate that it is OK for the RPC system to discard its Promise for this call's result if
   // the caller cancels the call, thereby transitively canceling any asynchronous operations the
   // call implementation was performing.  This is not done by default because it could represent a
@@ -249,16 +249,19 @@ public:
   // executing on a local thread.  The method must perform an asynchronous operation or call
   // `EventLoop::current().runLater()` to yield control.
   //
-  // Currently, you must call `releaseParams()` before `allowAsyncCancellation()`, otherwise the
+  // Currently, you must call `releaseParams()` before `allowCancellation()`, otherwise the
   // latter will throw an exception.  This is a limitation of the current RPC implementation, but
   // this requirement could be lifted in the future.
-
-  bool isCanceled();
-  // As an alternative to `allowAsyncCancellation()`, a server can call this to check for
-  // cancellation.
   //
-  // Keep in mind that if the method is blocking the event loop, the cancel message won't be
-  // received, so it is necessary to use `EventLoop::current().runLater()` occasionally.
+  // Note:  You might think that we should offer `onCancel()` and/or `isCanceled()` methods that
+  // provide notification when the caller cancels the request without forcefully killing off the
+  // promise chain.  Unfortunately, this composes poorly with promise forking:  the canceled
+  // path may be just one branch of a fork of the result promise.  The other branches still want
+  // the call to continue.  Promise forking is used within the Cap'n Proto implementation -- in
+  // particular each pipelined call forks the result promise.  So, if a caller made a pipelined
+  // call and then dropped the original object, the call should not be canceled, but it would be
+  // excessively complicated for the framework to avoid notififying of cancellation as long as
+  // pipelined calls still exist.
 
 private:
   CallContextHook* hook;
@@ -353,7 +356,7 @@ public:
   //
   // Since the caller of this method chooses the CallContext implementation, it is the caller's
   // responsibility to ensure that the returned promise is not canceled unless allowed via
-  // the context's `allowAsyncCancellation()`.
+  // the context's `allowCancellation()`.
   //
   // The call must not begin synchronously, as the caller may hold arbitrary mutexes.
 
@@ -390,8 +393,7 @@ public:
   virtual void releaseParams() = 0;
   virtual AnyPointer::Builder getResults(uint firstSegmentWordSize) = 0;
   virtual kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) = 0;
-  virtual void allowAsyncCancellation() = 0;
-  virtual bool isCanceled() = 0;
+  virtual void allowCancellation() = 0;
 
   virtual kj::Promise<AnyPointer::Pipeline> onTailCall() = 0;
   // If `tailCall()` is called, resolves to the PipelineHook from the tail call.  An
@@ -621,12 +623,8 @@ inline kj::Promise<void> CallContext<Params, Results>::tailCall(
   return hook->tailCall(kj::mv(tailRequest.hook));
 }
 template <typename Params, typename Results>
-inline void CallContext<Params, Results>::allowAsyncCancellation() {
-  hook->allowAsyncCancellation();
-}
-template <typename Params, typename Results>
-inline bool CallContext<Params, Results>::isCanceled() {
-  return hook->isCanceled();
+inline void CallContext<Params, Results>::allowCancellation() {
+  hook->allowCancellation();
 }
 
 template <typename Params, typename Results>

@@ -574,7 +574,7 @@ private:
       context->releaseParams();
 
       // We can and should propagate cancellation.
-      context->allowAsyncCancellation();
+      context->allowCancellation();
 
       return context->directTailCall(RequestHook::from(kj::mv(request)));
     }
@@ -1721,7 +1721,7 @@ private:
       tailCallPipelineFulfiller = kj::mv(paf.fulfiller);
       return kj::mv(paf.promise);
     }
-    void allowAsyncCancellation() override {
+    void allowCancellation() override {
       // TODO(cleanup):  We need to drop the request because it is holding on to the resolution
       //   chain which in turn holds on to the pipeline which holds on to this object thus
       //   preventing cancellation from working.  This is a bit silly because obviously our
@@ -1730,7 +1730,7 @@ private:
       //   a call started doesn't really need to hold the call open.  To fix this we'd presumably
       //   need to make the answer table snapshot-able and have CapExtractorImpl take a snapshot
       //   at creation.
-      KJ_REQUIRE(request == nullptr, "Must call releaseParams() before allowAsyncCancellation().");
+      KJ_REQUIRE(request == nullptr, "Must call releaseParams() before allowCancellation().");
 
       bool previouslyRequestedButNotAllowed = cancellationFlags == CANCEL_REQUESTED;
       cancellationFlags |= CANCEL_ALLOWED;
@@ -1740,9 +1740,6 @@ private:
         // the cancellation.
         cancelFulfiller->fulfill();
       }
-    }
-    bool isCanceled() override {
-      return cancellationFlags & CANCEL_REQUESTED;
     }
     kj::Own<CallContextHook> addRef() override {
       return kj::addRef(*this);
@@ -1993,7 +1990,7 @@ private:
             }));
 
         // If the call that later picks up `redirectedResults` decides to discard it, we need to
-        // make sure our call is not itself canceled unless it has called allowAsyncCancellation().
+        // make sure our call is not itself canceled unless it has called allowCancellation().
         // So we fork the promise and join one branch with the cancellation promise, in order to
         // hold on to it.
         auto forked = resultsPromise.fork();

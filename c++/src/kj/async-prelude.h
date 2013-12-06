@@ -176,13 +176,16 @@ private:
 void detach(kj::Promise<void>&& promise);
 void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope);
 Promise<void> yield();
+Own<PromiseNode> neverDone();
 
 class NeverDone {
 public:
   template <typename T>
-  operator Promise<T>() const;
+  operator Promise<T>() const {
+    return Promise<T>(false, neverDone());
+  }
 
-  void wait() KJ_NORETURN;
+  void wait(WaitScope& waitScope) KJ_NORETURN;
 };
 
 }  // namespace _ (private)

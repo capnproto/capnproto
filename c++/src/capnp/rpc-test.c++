@@ -564,8 +564,8 @@ TEST(Rpc, TailCall) {
   EXPECT_EQ(1, context.restorer.callCount);
 }
 
-TEST(Rpc, AsyncCancelation) {
-  // Tests allowAsyncCancellation().
+TEST(Rpc, Cancelation) {
+  // Tests allowCancellation().
 
   TestContext context;
 
@@ -580,10 +580,10 @@ TEST(Rpc, AsyncCancelation) {
 
   bool returned = false;
   {
-    auto request = client.expectAsyncCancelRequest();
+    auto request = client.expectCancelRequest();
     request.setCap(kj::heap<TestCapDestructor>(kj::mv(paf.fulfiller)));
     promise = request.send().then(
-        [&](Response<test::TestMoreStuff::ExpectAsyncCancelResults>&& response) {
+        [&](Response<test::TestMoreStuff::ExpectCancelResults>&& response) {
       returned = true;
     }).eagerlyEvaluate(nullptr);
   }
@@ -602,49 +602,6 @@ TEST(Rpc, AsyncCancelation) {
   destructionPromise.wait(context.waitScope);
 
   EXPECT_TRUE(destroyed);
-  EXPECT_FALSE(returned);
-}
-
-TEST(Rpc, SyncCancelation) {
-  // Tests isCanceled() without allowAsyncCancellation().
-
-  TestContext context;
-
-  int innerCallCount = 0;
-
-  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
-      .castAs<test::TestMoreStuff>();
-
-  kj::Promise<void> promise = nullptr;
-
-  bool returned = false;
-  {
-    auto request = client.expectSyncCancelRequest();
-    request.setCap(kj::heap<TestInterfaceImpl>(innerCallCount));
-    promise = request.send().then(
-        [&](Response<test::TestMoreStuff::ExpectSyncCancelResults>&& response) {
-      returned = true;
-    }).eagerlyEvaluate(nullptr);
-  }
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-
-  // expectSyncCancel() will make a call to the TestInterfaceImpl only once it noticed isCanceled()
-  // is true.
-  EXPECT_EQ(0, innerCallCount);
-  EXPECT_FALSE(returned);
-
-  promise = nullptr;  // request cancellation
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-  kj::evalLater([]() {}).wait(context.waitScope);
-
-  EXPECT_EQ(1, innerCallCount);
   EXPECT_FALSE(returned);
 }
 

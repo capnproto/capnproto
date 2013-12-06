@@ -226,19 +226,13 @@ public:
 
   kj::Promise<void> echo(EchoContext context) override;
 
-  kj::Promise<void> expectAsyncCancel(ExpectAsyncCancelContext context) override;
-
-  kj::Promise<void> expectSyncCancel(ExpectSyncCancelContext context) override;
+  kj::Promise<void> expectCancel(ExpectCancelContext context) override;
 
 private:
   int& callCount;
-  kj::Own<kj::PromiseFulfiller<void>> neverFulfill;
   test::TestInterface::Client clientToHold = nullptr;
 
-  kj::Promise<void> loop(uint depth, test::TestInterface::Client cap,
-      CallContext<ExpectAsyncCancelParams, ExpectAsyncCancelResults> context);
-  kj::Promise<void> loop(uint depth, test::TestInterface::Client cap,
-      CallContext<ExpectSyncCancelParams, ExpectSyncCancelResults> context);
+  kj::Promise<void> loop(uint depth, test::TestInterface::Client cap, ExpectCancelContext context);
 };
 
 class TestCapDestructor final: public test::TestInterface::Server {

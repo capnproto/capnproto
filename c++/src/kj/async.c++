@@ -75,7 +75,7 @@ public:
   }
 };
 
-class NeverReadyPromiseNode final: public _::PromiseNode {
+class NeverDonePromiseNode final: public _::PromiseNode {
 public:
   void onReady(_::Event& event) noexcept override {
     // ignore
@@ -329,6 +329,16 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
 
 Promise<void> yield() {
   return Promise<void>(false, kj::heap<YieldPromiseNode>());
+}
+
+Own<PromiseNode> neverDone() {
+  return kj::heap<NeverDonePromiseNode>();
+}
+
+void NeverDone::wait(WaitScope& waitScope) {
+  ExceptionOr<Void> dummy;
+  waitImpl(neverDone(), dummy, waitScope);
+  KJ_UNREACHABLE;
 }
 
 void detach(kj::Promise<void>&& promise) {

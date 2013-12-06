@@ -289,6 +289,7 @@ private:
   friend class _::ForkHub;
   friend class _::TaskSetImpl;
   friend Promise<void> _::yield();
+  friend class _::NeverDone;
 };
 
 template <typename T>
