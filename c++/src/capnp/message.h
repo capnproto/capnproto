@@ -335,8 +335,17 @@ private:
 };
 
 class FlatMessageBuilder: public MessageBuilder {
-  // A message builder implementation which allocates from a single flat array, throwing an
-  // exception if it runs out of space.  The array must be zero'd before use.
+  // THIS IS NOT THE CLASS YOU'RE LOOKING FOR.
+  //
+  // If you want to write a message into already-existing scratch space, use `MallocMessageBuilder`
+  // and pass the scratch space to its constructor.  It will then only fall back to malloc() if
+  // the scratch space is not large enough.
+  //
+  // Do NOT use this class unless you really know what you're doing.  This class is problematic
+  // because it requires advance knowledge of the size of your message, which is usually impossible
+  // to determine without actually building the message.  The class was created primarily to
+  // implement `copyToUnchecked()`, which itself exists only to support other internal parts of
+  // the Cap'n Proto implementation.
 
 public:
   explicit FlatMessageBuilder(kj::ArrayPtr<word> array);

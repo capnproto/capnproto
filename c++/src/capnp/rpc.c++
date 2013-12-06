@@ -50,6 +50,24 @@ inline constexpr uint messageSizeHint<void>() {
 constexpr const uint MESSAGE_TARGET_SIZE_HINT = sizeInWords<rpc::MessageTarget>() +
     sizeInWords<rpc::PromisedAnswer>() + 16;  // +16 for ops; hope that's enough
 
+constexpr const uint CAP_DESCRIPTOR_SIZE_HINT = sizeInWords<rpc::CapDescriptor>() +
+    sizeInWords<rpc::PromisedAnswer>();
+
+constexpr const uint64_t MAX_SIZE_HINT = 1 << 20;
+
+uint copySizeHint(MessageSize size) {
+  uint64_t sizeHint = size.wordCount + size.capCount * CAP_DESCRIPTOR_SIZE_HINT;
+  return kj::min(MAX_SIZE_HINT, sizeHint);
+}
+
+uint firstSegmentSize(kj::Maybe<MessageSize> sizeHint, uint additional) {
+  KJ_IF_MAYBE(s, sizeHint) {
+    return copySizeHint(*s) + additional;
+  } else {
+    return 0;
+  }
+}
+
 kj::Maybe<kj::Array<PipelineOp>> toPipelineOps(List<rpc::PromisedAnswer::Op>::Reader ops) {
   auto result = kj::heapArrayBuilder<PipelineOp>(ops.size());
   for (auto opReader: ops) {
@@ -274,7 +292,7 @@ public:
 
     {
       auto message = connection->newOutgoingMessage(
-          objectId.targetSizeInWords() + messageSizeHint<rpc::Restore>());
+          objectId.targetSize().wordCount + messageSizeHint<rpc::Restore>());
 
       auto builder = message->getBody().initAs<rpc::Message>().initRestore();
       builder.setQuestionId(questionId);
@@ -537,9 +555,9 @@ private:
     // implements ClientHook -----------------------------------------
 
     Request<AnyPointer, AnyPointer> newCall(
-        uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) override {
+        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
       auto request = kj::heap<RpcRequest>(
-          *connectionState, firstSegmentWordSize, kj::addRef(*this));
+          *connectionState, sizeHint, kj::addRef(*this));
       auto callBuilder = request->getCall();
 
       callBuilder.setInterfaceId(interfaceId);
@@ -554,21 +572,7 @@ private:
       // Implement call() by copying params and results messages.
 
       auto params = context->getParams();
-
-      size_t sizeHint = params.targetSizeInWords();
-
-      // TODO(perf):  Extend targetSizeInWords() to include a capability count?  Here we increase
-      //   the size by 1/16 to deal with cap descriptors possibly expanding.  See also in
-      //   RpcRequest::send() and RpcCallContext::directTailCall().
-      // TODO(now):  This is a problem, deal with it.
-      sizeHint += sizeHint / 16;
-
-      // Don't overflow.
-      if (uint(sizeHint) != sizeHint) {
-        sizeHint = ~uint(0);
-      }
-
-      auto request = newCall(interfaceId, methodId, sizeHint);
+      auto request = newCall(interfaceId, methodId, params.targetSize());
 
       request.set(params);
       context->releaseParams();
@@ -770,9 +774,9 @@ private:
     // implements ClientHook -----------------------------------------
 
     Request<AnyPointer, AnyPointer> newCall(
-        uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) override {
+        uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
       receivedCall = true;
-      return cap->newCall(interfaceId, methodId, firstSegmentWordSize);
+      return cap->newCall(interfaceId, methodId, sizeHint);
     }
 
     VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
@@ -1171,14 +1175,13 @@ private:
 
   class RpcRequest final: public RequestHook {
   public:
-    RpcRequest(RpcConnectionState& connectionState, uint firstSegmentWordSize,
+    RpcRequest(RpcConnectionState& connectionState, kj::Maybe<MessageSize> sizeHint,
                kj::Own<RpcClient>&& target)
         : connectionState(kj::addRef(connectionState)),
           target(kj::mv(target)),
           message(connectionState.connection->newOutgoingMessage(
-              firstSegmentWordSize == 0 ? 0 :
-                  firstSegmentWordSize + messageSizeHint<rpc::Call>() +
-                  sizeInWords<rpc::Payload>() + MESSAGE_TARGET_SIZE_HINT)),
+              firstSegmentSize(sizeHint, messageSizeHint<rpc::Call>() +
+                  sizeInWords<rpc::Payload>() + MESSAGE_TARGET_SIZE_HINT))),
           callBuilder(message->getBody().getAs<rpc::Message>().initCall()),
           paramsBuilder(context.imbue(callBuilder.getParams().getContent())) {}
 
@@ -1201,18 +1204,8 @@ private:
         // Whoops, this capability has been redirected while we were building the request!
         // We'll have to make a new request and do a copy.  Ick.
 
-        size_t sizeHint = paramsBuilder.targetSizeInWords();
-
-        // TODO(perf):  See TODO in RpcClient::call() about why we need to inflate the size a bit.
-        sizeHint += sizeHint / 16;
-
-        // Don't overflow.
-        if (uint(sizeHint) != sizeHint) {
-          sizeHint = ~uint(0);
-        }
-
         auto replacement = redirect->get()->newCall(
-            callBuilder.getInterfaceId(), callBuilder.getMethodId(), sizeHint);
+            callBuilder.getInterfaceId(), callBuilder.getMethodId(), paramsBuilder.targetSize());
         replacement.set(paramsBuilder);
         return replacement.send();
       } else {
@@ -1501,9 +1494,8 @@ private:
   class LocallyRedirectedRpcResponse final
       : public RpcResponse, public RpcServerResponse, public kj::Refcounted{
   public:
-    LocallyRedirectedRpcResponse(uint firstSegmentWordSize)
-        : message(firstSegmentWordSize == 0 ?
-            SUGGESTED_FIRST_SEGMENT_WORDS : firstSegmentWordSize + 1) {}
+    LocallyRedirectedRpcResponse(kj::Maybe<MessageSize> sizeHint)
+        : message(sizeHint) {}
 
     AnyPointer::Builder getResultsBuilder() override {
       return message.getRoot();
@@ -1568,7 +1560,7 @@ private:
     kj::Own<RpcResponse> consumeRedirectedResponse() {
       KJ_ASSERT(redirectResults);
 
-      if (response == nullptr) getResults(1);  // force initialization of response
+      if (response == nullptr) getResults(MessageSize{0, 0});  // force initialization of response
 
       // Note that the context needs to keep its own reference to the response so that it doesn't
       // get GC'd until the PipelineHook drops its reference to the context.
@@ -1581,7 +1573,7 @@ private:
       // Avoid sending results if canceled so that we don't have to figure out whether or not
       // `releaseResultCaps` was set in the already-received `Finish`.
       if (!(cancellationFlags & CANCEL_REQUESTED) && isFirstResponder()) {
-        if (response == nullptr) getResults(1);  // force initialization of response
+        if (response == nullptr) getResults(MessageSize{0, 0});  // force initialization of response
 
         returnMessage.setQuestionId(questionId);
         returnMessage.setReleaseParamCaps(false);
@@ -1641,19 +1633,18 @@ private:
     void releaseParams() override {
       request = nullptr;
     }
-    AnyPointer::Builder getResults(uint firstSegmentWordSize) override {
+    AnyPointer::Builder getResults(kj::Maybe<MessageSize> sizeHint) override {
       KJ_IF_MAYBE(r, response) {
         return r->get()->getResultsBuilder();
       } else {
         kj::Own<RpcServerResponse> response;
 
         if (redirectResults) {
-          response = kj::refcounted<LocallyRedirectedRpcResponse>(firstSegmentWordSize);
+          response = kj::refcounted<LocallyRedirectedRpcResponse>(sizeHint);
         } else {
-          // TODO(now):  Expand size hint for cap count...
           auto message = connectionState->connection->newOutgoingMessage(
-              firstSegmentWordSize == 0 ? 0 :
-              firstSegmentWordSize + messageSizeHint<rpc::Return>() + sizeInWords<rpc::Payload>());
+              firstSegmentSize(sizeHint, messageSizeHint<rpc::Return>() +
+                               sizeInWords<rpc::Payload>()));
           returnMessage = message->getBody().initAs<rpc::Message>().initReturn();
           response = kj::heap<RpcServerResponseImpl>(
               *connectionState, kj::mv(message), returnMessage.getResults());
@@ -1709,9 +1700,7 @@ private:
         // Copy the response.
         // TODO(perf):  It would be nice if we could somehow make the response get built in-place
         //   but requires some refactoring.
-        size_t sizeHint = tailResponse.targetSizeInWords();
-        sizeHint += sizeHint / 16;  // see TODO in RpcClient::call().
-        getResults(sizeHint).set(tailResponse);
+        getResults(tailResponse.targetSize()).set(tailResponse);
       });
 
       return { kj::mv(voidPromise), PipelineHook::from(kj::mv(promise)) };
@@ -1881,7 +1870,7 @@ private:
 
       default: {
         auto message = connection->newOutgoingMessage(
-            reader.totalSizeInWords() + messageSizeHint<void>());
+            firstSegmentSize(reader.totalSize(), messageSizeHint<void>()));
         message->getBody().initAs<rpc::Message>().setUnimplemented(reader);
         message->send();
         break;

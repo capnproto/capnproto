@@ -125,8 +125,8 @@ public:
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
 
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
   }
 
   inline  ::capnp::rpc::twoparty::Side getSide() const;
@@ -159,7 +159,7 @@ public:
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
 
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
 
   inline  ::capnp::rpc::twoparty::Side getSide();
   inline void setSide( ::capnp::rpc::twoparty::Side value);
@@ -197,8 +197,8 @@ public:
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
 
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
   }
 
   inline  ::uint32_t getJoinId() const;
@@ -231,7 +231,7 @@ public:
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
 
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
 
   inline  ::uint32_t getJoinId();
   inline void setJoinId( ::uint32_t value);
@@ -269,8 +269,8 @@ public:
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
 
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
   }
 
 private:
@@ -301,7 +301,7 @@ public:
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
 
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -336,8 +336,8 @@ public:
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
 
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
   }
 
 private:
@@ -368,7 +368,7 @@ public:
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
 
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -403,8 +403,8 @@ public:
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
 
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
   }
 
   inline  ::uint32_t getJoinId() const;
@@ -441,7 +441,7 @@ public:
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
 
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
 
   inline  ::uint32_t getJoinId();
   inline void setJoinId( ::uint32_t value);
@@ -485,8 +485,8 @@ public:
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
 
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
   }
 
   inline  ::uint32_t getJoinId() const;
@@ -524,7 +524,7 @@ public:
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
 
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
 
   inline  ::uint32_t getJoinId();
   inline void setJoinId( ::uint32_t value);

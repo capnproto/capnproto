@@ -105,8 +105,7 @@ class LocalMessage final {
   // know how to properly serialize its capabilities.
 
 public:
-  LocalMessage(uint firstSegmentWords = SUGGESTED_FIRST_SEGMENT_WORDS,
-               AllocationStrategy allocationStrategy = SUGGESTED_ALLOCATION_STRATEGY);
+  LocalMessage(kj::Maybe<MessageSize> sizeHint = nullptr);
 
   inline AnyPointer::Builder getRoot() { return root; }
   inline AnyPointer::Reader getRootReader() const { return root.asReader(); }

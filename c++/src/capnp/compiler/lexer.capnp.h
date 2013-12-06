@@ -103,8 +103,8 @@ public:
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
 
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
   }
 
   inline Which which() const;
@@ -166,7 +166,7 @@ public:
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
 
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
 
   inline Which which();
   inline bool isIdentifier();
@@ -258,8 +258,8 @@ public:
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
 
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
   }
 
   inline Which which() const;
@@ -308,7 +308,7 @@ public:
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
 
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
 
   inline Which which();
   inline bool hasTokens();
@@ -376,8 +376,8 @@ public:
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
 
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
   }
 
   inline bool hasTokens() const;
@@ -411,7 +411,7 @@ public:
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
 
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
 
   inline bool hasTokens();
   inline  ::capnp::List< ::capnp::compiler::Token>::Builder getTokens();
@@ -453,8 +453,8 @@ public:
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
 
-  inline size_t totalSizeInWords() const {
-    return _reader.totalSize() / ::capnp::WORDS;
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
   }
 
   inline bool hasStatements() const;
@@ -488,7 +488,7 @@ public:
   inline operator Reader() const { return Reader(_builder.asReader()); }
   inline Reader asReader() const { return *this; }
 
-  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
 
   inline bool hasStatements();
   inline  ::capnp::List< ::capnp::compiler::Statement>::Builder getStatements();

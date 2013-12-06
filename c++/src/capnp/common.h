@@ -166,6 +166,12 @@ template <typename T, Kind k = kind<T>()>
 struct PointerHelpers;
 }  // namespace _ (private)
 
+struct MessageSize {
+  // Size of a message.  Every struct type has a method `.totalSize()` that returns this.
+  uint64_t wordCount;
+  uint capCount;
+};
+
 // =======================================================================================
 // Raw memory types and measures
 

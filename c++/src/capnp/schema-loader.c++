@@ -1328,7 +1328,7 @@ void SchemaLoader::Impl::requireStructSize(uint64_t id, uint dataWordCount, uint
 }
 
 kj::ArrayPtr<word> SchemaLoader::Impl::makeUncheckedNode(schema::Node::Reader node) {
-  size_t size = node.totalSizeInWords() + 1;
+  size_t size = node.totalSize().wordCount + 1;
   kj::ArrayPtr<word> result = arena.allocateArray<word>(size);
   memset(result.begin(), 0, size * sizeof(word));
   copyToUnchecked(node, result);

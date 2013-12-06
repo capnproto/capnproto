@@ -166,11 +166,22 @@ inline constexpr FieldSize elementSizeForType() {
   return ElementSizeForType<T>::value;
 }
 
-}  // namespace _ (private)
+struct MessageSizeCounts {
+  WordCount64 wordCount;
+  uint capCount;
+
+  MessageSizeCounts& operator+=(const MessageSizeCounts& other) {
+    wordCount += other.wordCount;
+    capCount += other.capCount;
+    return *this;
+  }
+
+  MessageSize asPublic() {
+    return MessageSize { wordCount / WORDS, capCount };
+  }
+};
 
 // =============================================================================
-
-namespace _ {  // private
 
 template <int wordCount>
 union AlignedData {
@@ -355,7 +366,7 @@ public:
   static inline PointerReader getRootUnchecked(const word* location);
   // Get a PointerReader for an unchecked message.
 
-  WordCount64 targetSize() const;
+  MessageSizeCounts targetSize() const;
   // Return the total size of the target object and everything to which it points.  Does not count
   // far pointer overhead.  This is useful for deciding how much space is needed to copy the object
   // into a flat array.  However, the caller is advised NOT to treat this value as secure.  Instead,
@@ -524,7 +535,7 @@ public:
   // Get a reader for a pointer field given the index within the pointer section.  If the index
   // is out-of-bounds, returns a null pointer.
 
-  WordCount64 totalSize() const;
+  MessageSizeCounts totalSize() const;
   // Return the total size of the struct and everything to which it points.  Does not count far
   // pointer overhead.  This is useful for deciding how much space is needed to copy the struct
   // into a flat array.  However, the caller is advised NOT to treat this value as secure.  Instead,

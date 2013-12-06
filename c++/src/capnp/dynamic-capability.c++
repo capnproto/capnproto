@@ -34,7 +34,7 @@ DynamicCapability::Client DynamicCapability::Client::upcast(InterfaceSchema requ
 }
 
 Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(
-    InterfaceSchema::Method method, uint firstSegmentWordSize) {
+    InterfaceSchema::Method method, kj::Maybe<MessageSize> sizeHint) {
   auto methodInterface = method.getContainingInterface();
 
   KJ_REQUIRE(schema.extends(methodInterface), "Interface does not implement this method.");
@@ -44,15 +44,15 @@ Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(
   auto resultType = methodInterface.getDependency(proto.getResultStructType()).asStruct();
 
   auto typeless = hook->newCall(
-      methodInterface.getProto().getId(), method.getIndex(), firstSegmentWordSize);
+      methodInterface.getProto().getId(), method.getIndex(), sizeHint);
 
   return Request<DynamicStruct, DynamicStruct>(
       typeless.getAs<DynamicStruct>(paramType), kj::mv(typeless.hook), resultType);
 }
 
 Request<DynamicStruct, DynamicStruct> DynamicCapability::Client::newRequest(
-    kj::StringPtr methodName, uint firstSegmentWordSize) {
-  return newRequest(schema.getMethodByName(methodName), firstSegmentWordSize);
+    kj::StringPtr methodName, kj::Maybe<MessageSize> sizeHint) {
+  return newRequest(schema.getMethodByName(methodName), sizeHint);
 }
 
 kj::Promise<void> DynamicCapability::Server::dispatchCall(

@@ -90,8 +90,21 @@ kj::ArrayPtr<kj::Own<ClientHook>> CapBuilderContext::getCapTable() {
 
 // =======================================================================================
 
-LocalMessage::LocalMessage(uint firstSegmentWords, AllocationStrategy allocationStrategy)
-    : message(firstSegmentWords, allocationStrategy),
+namespace {
+
+uint firstSegmentSize(kj::Maybe<MessageSize> sizeHint) {
+  KJ_IF_MAYBE(s, sizeHint) {
+    // 1 for the root pointer.  We don't store caps in the message so we don't count those here.
+    return s->wordCount + 1;
+  } else {
+    return SUGGESTED_FIRST_SEGMENT_WORDS;
+  }
+}
+
+}  // namespace
+
+LocalMessage::LocalMessage(kj::Maybe<MessageSize> sizeHint)
+    : message(firstSegmentSize(sizeHint)),
       root(capContext.imbue(message.getRoot<AnyPointer>())) {}
 
 // =======================================================================================
@@ -114,9 +127,8 @@ private:
 
 class BrokenRequest final: public RequestHook {
 public:
-  BrokenRequest(const kj::Exception& exception, uint firstSegmentWordSize)
-      : exception(exception),
-        message(firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : firstSegmentWordSize) {}
+  BrokenRequest(const kj::Exception& exception, kj::Maybe<MessageSize> sizeHint)
+      : exception(exception), message(sizeHint) {}
 
   RemotePromise<AnyPointer> send() override {
     return RemotePromise<AnyPointer>(kj::cp(exception),
@@ -139,8 +151,8 @@ public:
                   "", 0, kj::str(description)) {}
 
   Request<AnyPointer, AnyPointer> newCall(
-      uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) override {
-    auto hook = kj::heap<BrokenRequest>(exception, firstSegmentWordSize);
+      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
+    auto hook = kj::heap<BrokenRequest>(exception, sizeHint);
     auto root = hook->message.getRoot();
     return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
   }

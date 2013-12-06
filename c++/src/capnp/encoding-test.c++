@@ -72,7 +72,7 @@ TEST(Encoding, AllTypes) {
   checkTestMessage(readMessageUnchecked<TestAllTypes>(builder.getSegmentsForOutput()[0].begin()));
 
   EXPECT_EQ(builder.getSegmentsForOutput()[0].size() - 1,  // -1 for root pointer
-            reader.getRoot<TestAllTypes>().totalSizeInWords());
+            reader.getRoot<TestAllTypes>().totalSize().wordCount);
 }
 
 TEST(Encoding, AllTypesMultiSegment) {
@@ -1624,7 +1624,7 @@ TEST(Encoding, HasEmptyStruct) {
   MallocMessageBuilder message;
   auto root = message.initRoot<test::TestAnyPointer>();
 
-  EXPECT_EQ(1, root.totalSizeInWords());
+  EXPECT_EQ(1, root.totalSize().wordCount);
 
   EXPECT_FALSE(root.asReader().hasAnyPointerField());
   EXPECT_FALSE(root.hasAnyPointerField());
@@ -1632,14 +1632,14 @@ TEST(Encoding, HasEmptyStruct) {
   EXPECT_TRUE(root.asReader().hasAnyPointerField());
   EXPECT_TRUE(root.hasAnyPointerField());
 
-  EXPECT_EQ(1, root.totalSizeInWords());
+  EXPECT_EQ(1, root.totalSize().wordCount);
 }
 
 TEST(Encoding, HasEmptyList) {
   MallocMessageBuilder message;
   auto root = message.initRoot<test::TestAnyPointer>();
 
-  EXPECT_EQ(1, root.totalSizeInWords());
+  EXPECT_EQ(1, root.totalSize().wordCount);
 
   EXPECT_FALSE(root.asReader().hasAnyPointerField());
   EXPECT_FALSE(root.hasAnyPointerField());
@@ -1647,14 +1647,14 @@ TEST(Encoding, HasEmptyList) {
   EXPECT_TRUE(root.asReader().hasAnyPointerField());
   EXPECT_TRUE(root.hasAnyPointerField());
 
-  EXPECT_EQ(1, root.totalSizeInWords());
+  EXPECT_EQ(1, root.totalSize().wordCount);
 }
 
 TEST(Encoding, HasEmptyStructList) {
   MallocMessageBuilder message;
   auto root = message.initRoot<test::TestAnyPointer>();
 
-  EXPECT_EQ(1, root.totalSizeInWords());
+  EXPECT_EQ(1, root.totalSize().wordCount);
 
   EXPECT_FALSE(root.asReader().hasAnyPointerField());
   EXPECT_FALSE(root.hasAnyPointerField());
@@ -1662,7 +1662,7 @@ TEST(Encoding, HasEmptyStructList) {
   EXPECT_TRUE(root.asReader().hasAnyPointerField());
   EXPECT_TRUE(root.hasAnyPointerField());
 
-  EXPECT_EQ(2, root.totalSizeInWords());
+  EXPECT_EQ(2, root.totalSize().wordCount);
 }
 
 }  // namespace

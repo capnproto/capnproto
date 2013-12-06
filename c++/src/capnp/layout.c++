@@ -567,21 +567,22 @@ struct WireHelpers {
 
   // -----------------------------------------------------------------
 
-  static WordCount64 totalSize(SegmentReader* segment, const WirePointer* ref, int nestingLimit) {
+  static MessageSizeCounts totalSize(
+      SegmentReader* segment, const WirePointer* ref, int nestingLimit) {
     // Compute the total size of the object pointed to, not counting far pointer overhead.
 
+    MessageSizeCounts result = { 0 * WORDS, 0 };
+
     if (ref->isNull()) {
-      return 0 * WORDS;
+      return result;
     }
 
     KJ_REQUIRE(nestingLimit > 0, "Message is too deeply-nested.") {
-      return 0 * WORDS;
+      return result;
     }
     --nestingLimit;
 
     const word* ptr = followFars(ref, ref->target(), segment);
-
-    WordCount64 result = 0 * WORDS;
 
     switch (ref->kind()) {
       case WirePointer::STRUCT: {
@@ -589,7 +590,7 @@ struct WireHelpers {
                    "Message contained out-of-bounds struct pointer.") {
           return result;
         }
-        result += ref->structRef.wordSize();
+        result.wordCount += ref->structRef.wordSize();
 
         const WirePointer* pointerSection =
             reinterpret_cast<const WirePointer*>(ptr + ref->structRef.dataSize.get());
@@ -616,7 +617,7 @@ struct WireHelpers {
                        "Message contained out-of-bounds list pointer.") {
               return result;
             }
-            result += totalWords;
+            result.wordCount += totalWords;
             break;
           }
           case FieldSize::POINTER: {
@@ -627,7 +628,7 @@ struct WireHelpers {
               return result;
             }
 
-            result += count * WORDS_PER_POINTER;
+            result.wordCount += count * WORDS_PER_POINTER;
 
             for (uint i = 0; i < count / POINTERS; i++) {
               result += totalSize(segment, reinterpret_cast<const WirePointer*>(ptr) + i,
@@ -642,7 +643,7 @@ struct WireHelpers {
               return result;
             }
 
-            result += wordCount + POINTER_SIZE_IN_WORDS;
+            result.wordCount += wordCount + POINTER_SIZE_IN_WORDS;
 
             const WirePointer* elementTag = reinterpret_cast<const WirePointer*>(ptr);
             ElementCount count = elementTag->inlineCompositeListElementCount();
@@ -681,7 +682,11 @@ struct WireHelpers {
         }
         break;
       case WirePointer::OTHER:
-        KJ_REQUIRE(ref->isCapability(), "Unknown pointer type.") { break; }
+        if (ref->isCapability()) {
+          result.capCount++;
+        } else {
+          KJ_FAIL_REQUIRE("Unknown pointer type.") { break; }
+        }
         break;
     }
 
@@ -2246,7 +2251,7 @@ const word* PointerReader::getUnchecked() const {
   return reinterpret_cast<const word*>(pointer);
 }
 
-WordCount64 PointerReader::targetSize() const {
+MessageSizeCounts PointerReader::targetSize() const {
   return WireHelpers::totalSize(segment, pointer, nestingLimit);
 }
 
@@ -2366,8 +2371,9 @@ BuilderArena* StructBuilder::getArena() {
 // =======================================================================================
 // StructReader
 
-WordCount64 StructReader::totalSize() const {
-  WordCount64 result = WireHelpers::roundBitsUpToWords(dataSize) + pointerCount * WORDS_PER_POINTER;
+MessageSizeCounts StructReader::totalSize() const {
+  MessageSizeCounts result = {
+    WireHelpers::roundBitsUpToWords(dataSize) + pointerCount * WORDS_PER_POINTER, 0 };
 
   for (uint i = 0; i < pointerCount / POINTERS; i++) {
     result += WireHelpers::totalSize(segment, pointers + i, nestingLimit);
@@ -2376,7 +2382,7 @@ WordCount64 StructReader::totalSize() const {
   if (segment != nullptr) {
     // This traversal should not count against the read limit, because it's highly likely that
     // the caller is going to traverse the object again, e.g. to copy it.
-    segment->unread(result);
+    segment->unread(result.wordCount);
   }
 
   return result;

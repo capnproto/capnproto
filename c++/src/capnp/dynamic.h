@@ -162,7 +162,7 @@ public:
   template <typename T, typename = kj::EnableIf<kind<FromReader<T>>() == Kind::STRUCT>>
   inline Reader(T&& value): Reader(toDynamic(value)) {}
 
-  inline size_t totalSizeInWords() const { return reader.totalSize() / ::capnp::WORDS; }
+  inline MessageSize totalSize() const { return reader.totalSize().asPublic(); }
 
   template <typename T>
   typename T::Reader as() const;
@@ -228,7 +228,7 @@ public:
   template <typename T, typename = kj::EnableIf<kind<FromBuilder<T>>() == Kind::STRUCT>>
   inline Builder(T&& value): Builder(toDynamic(value)) {}
 
-  inline size_t totalSizeInWords() const { return asReader().totalSizeInWords(); }
+  inline MessageSize totalSize() const { return asReader().totalSize(); }
 
   template <typename T>
   typename T::Builder as();
@@ -455,9 +455,9 @@ public:
   inline InterfaceSchema getSchema() { return schema; }
 
   Request<DynamicStruct, DynamicStruct> newRequest(
-      InterfaceSchema::Method method, uint firstSegmentWordSize = 0);
+      InterfaceSchema::Method method, kj::Maybe<MessageSize> sizeHint = nullptr);
   Request<DynamicStruct, DynamicStruct> newRequest(
-      kj::StringPtr methodName, uint firstSegmentWordSize = 0);
+      kj::StringPtr methodName, kj::Maybe<MessageSize> sizeHint = nullptr);
 
 private:
   InterfaceSchema schema;
@@ -532,11 +532,11 @@ public:
 
   DynamicStruct::Reader getParams();
   void releaseParams();
-  DynamicStruct::Builder getResults(uint firstSegmentWordSize = 0);
-  DynamicStruct::Builder initResults(uint firstSegmentWordSize = 0);
+  DynamicStruct::Builder getResults(kj::Maybe<MessageSize> sizeHint = nullptr);
+  DynamicStruct::Builder initResults(kj::Maybe<MessageSize> sizeHint = nullptr);
   void setResults(DynamicStruct::Reader value);
   void adoptResults(Orphan<DynamicStruct>&& value);
-  Orphanage getResultsOrphanage(uint firstSegmentWordSize = 0);
+  Orphanage getResultsOrphanage(kj::Maybe<MessageSize> sizeHint = nullptr);
   template <typename SubParams>
   kj::Promise<void> tailCall(Request<SubParams, DynamicStruct>&& tailRequest);
   void allowCancellation();
@@ -1517,22 +1517,22 @@ inline void CallContext<DynamicStruct, DynamicStruct>::releaseParams() {
   hook->releaseParams();
 }
 inline DynamicStruct::Builder CallContext<DynamicStruct, DynamicStruct>::getResults(
-    uint firstSegmentWordSize) {
-  return hook->getResults(firstSegmentWordSize).getAs<DynamicStruct>(resultType);
+    kj::Maybe<MessageSize> sizeHint) {
+  return hook->getResults(sizeHint).getAs<DynamicStruct>(resultType);
 }
 inline DynamicStruct::Builder CallContext<DynamicStruct, DynamicStruct>::initResults(
-    uint firstSegmentWordSize) {
-  return hook->getResults(firstSegmentWordSize).initAs<DynamicStruct>(resultType);
+    kj::Maybe<MessageSize> sizeHint) {
+  return hook->getResults(sizeHint).initAs<DynamicStruct>(resultType);
 }
 inline void CallContext<DynamicStruct, DynamicStruct>::setResults(DynamicStruct::Reader value) {
-  hook->getResults(value.totalSizeInWords() + 1).setAs<DynamicStruct>(value);
+  hook->getResults(value.totalSize()).setAs<DynamicStruct>(value);
 }
 inline void CallContext<DynamicStruct, DynamicStruct>::adoptResults(Orphan<DynamicStruct>&& value) {
-  hook->getResults(0).adopt(kj::mv(value));
+  hook->getResults(MessageSize { 0, 0 }).adopt(kj::mv(value));
 }
 inline Orphanage CallContext<DynamicStruct, DynamicStruct>::getResultsOrphanage(
-    uint firstSegmentWordSize) {
-  return Orphanage::getForMessageContaining(hook->getResults(firstSegmentWordSize));
+    kj::Maybe<MessageSize> sizeHint) {
+  return Orphanage::getForMessageContaining(hook->getResults(sizeHint));
 }
 template <typename SubParams>
 inline kj::Promise<void> CallContext<DynamicStruct, DynamicStruct>::tailCall(

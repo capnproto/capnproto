@@ -166,7 +166,7 @@ protected:
 
   template <typename Params, typename Results>
   Request<Params, Results> newCall(uint64_t interfaceId, uint16_t methodId,
-                                   uint firstSegmentWordSize);
+                                   kj::Maybe<MessageSize> sizeHint);
 
 private:
   kj::Own<ClientHook> hook;
@@ -209,19 +209,22 @@ public:
   // requests.  Long-running asynchronous methods should try to call this as early as is
   // convenient.
 
-  typename Results::Builder getResults(uint firstSegmentWordSize = 0);
-  typename Results::Builder initResults(uint firstSegmentWordSize = 0);
+  typename Results::Builder getResults(kj::Maybe<MessageSize> sizeHint = nullptr);
+  typename Results::Builder initResults(kj::Maybe<MessageSize> sizeHint = nullptr);
   void setResults(typename Results::Reader value);
   void adoptResults(Orphan<Results>&& value);
-  Orphanage getResultsOrphanage(uint firstSegmentWordSize = 0);
+  Orphanage getResultsOrphanage(kj::Maybe<MessageSize> sizeHint = nullptr);
   // Manipulate the results payload.  The "Return" message (part of the RPC protocol) will
   // typically be allocated the first time one of these is called.  Some RPC systems may
   // allocate these messages in a limited space (such as a shared memory segment), therefore the
   // application should delay calling these as long as is convenient to do so (but don't delay
   // if doing so would require extra copies later).
   //
-  // `firstSegmentWordSize` indicates the suggested size of the message's first segment.  This
-  // is a hint only.  If not specified, the system will decide on its own.
+  // `sizeHint` indicates a guess at the message size.  This will usually be used to decide how
+  // much space to allocate for the first message segment (don't worry: only space that is actually
+  // used will be sent on the wire).  If omitted, the system decides.  The message root pointer
+  // should not be included in the size.  So, if you are simply going to copy some existing message
+  // directly into the results, just call `.totalSize()` and pass that in.
 
   template <typename SubParams>
   kj::Promise<void> tailCall(Request<SubParams, Results>&& tailRequest);
@@ -335,7 +338,7 @@ public:
 class ClientHook {
 public:
   virtual Request<AnyPointer, AnyPointer> newCall(
-      uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) = 0;
+      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) = 0;
   // Start a new call, allowing the client to allocate request/response objects as it sees fit.
   // This version is used when calls are made from application code in the local process.
 
@@ -391,7 +394,7 @@ class CallContextHook {
 public:
   virtual AnyPointer::Reader getParams() = 0;
   virtual void releaseParams() = 0;
-  virtual AnyPointer::Builder getResults(uint firstSegmentWordSize) = 0;
+  virtual AnyPointer::Builder getResults(kj::Maybe<MessageSize> sizeHint) = 0;
   virtual kj::Promise<void> tailCall(kj::Own<RequestHook>&& request) = 0;
   virtual void allowCancellation() = 0;
 
@@ -577,8 +580,8 @@ inline kj::Promise<void> Capability::Client::whenResolved() {
 }
 template <typename Params, typename Results>
 inline Request<Params, Results> Capability::Client::newCall(
-    uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) {
-  auto typeless = hook->newCall(interfaceId, methodId, firstSegmentWordSize);
+    uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) {
+  auto typeless = hook->newCall(interfaceId, methodId, sizeHint);
   return Request<Params, Results>(typeless.template getAs<Params>(), kj::mv(typeless.hook));
 }
 
@@ -594,27 +597,28 @@ inline void CallContext<Params, Results>::releaseParams() {
 }
 template <typename Params, typename Results>
 inline typename Results::Builder CallContext<Params, Results>::getResults(
-    uint firstSegmentWordSize) {
+    kj::Maybe<MessageSize> sizeHint) {
   // `template` keyword needed due to: http://llvm.org/bugs/show_bug.cgi?id=17401
-  return hook->getResults(firstSegmentWordSize).template getAs<Results>();
+  return hook->getResults(sizeHint).template getAs<Results>();
 }
 template <typename Params, typename Results>
 inline typename Results::Builder CallContext<Params, Results>::initResults(
-    uint firstSegmentWordSize) {
+    kj::Maybe<MessageSize> sizeHint) {
   // `template` keyword needed due to: http://llvm.org/bugs/show_bug.cgi?id=17401
-  return hook->getResults(firstSegmentWordSize).template initAs<Results>();
+  return hook->getResults(sizeHint).template initAs<Results>();
 }
 template <typename Params, typename Results>
 inline void CallContext<Params, Results>::setResults(typename Results::Reader value) {
-  hook->getResults(value.totalSizeInWords() + 1).set(value);
+  hook->getResults(value.totalSize()).set(value);
 }
 template <typename Params, typename Results>
 inline void CallContext<Params, Results>::adoptResults(Orphan<Results>&& value) {
-  hook->getResults(0).adopt(kj::mv(value));
+  hook->getResults(nullptr).adopt(kj::mv(value));
 }
 template <typename Params, typename Results>
-inline Orphanage CallContext<Params, Results>::getResultsOrphanage(uint firstSegmentWordSize) {
-  return Orphanage::getForMessageContaining(hook->getResults(firstSegmentWordSize));
+inline Orphanage CallContext<Params, Results>::getResultsOrphanage(
+    kj::Maybe<MessageSize> sizeHint) {
+  return Orphanage::getForMessageContaining(hook->getResults(sizeHint));
 }
 template <typename Params, typename Results>
 template <typename SubParams>

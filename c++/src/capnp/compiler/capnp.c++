@@ -1196,7 +1196,7 @@ private:
   void writeFlat(DynamicStruct::Reader value, kj::BufferedOutputStream& output) {
     // Always copy the message to a flat array so that the output is predictable (one segment,
     // in canonical order).
-    size_t size = value.totalSizeInWords() + 1;
+    size_t size = value.totalSize().wordCount + 1;
     kj::Array<word> space = kj::heapArray<word>(size);
     memset(space.begin(), 0, size * sizeof(word));
     FlatMessageBuilder flatMessage(space);

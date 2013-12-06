@@ -1048,8 +1048,8 @@ private:
         "  Reader() = default;\n"
         "  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}\n"
         "\n"
-        "  inline size_t totalSizeInWords() const {\n"
-        "    return _reader.totalSize() / ::capnp::WORDS;\n"
+        "  inline ::capnp::MessageSize totalSize() const {\n"
+        "    return _reader.totalSize().asPublic();\n"
         "  }\n"
         "\n",
         isUnion ? kj::strTree("  inline Which which() const;\n") : kj::strTree(),
@@ -1087,7 +1087,7 @@ private:
         "  inline operator Reader() const { return Reader(_builder.asReader()); }\n"
         "  inline Reader asReader() const { return *this; }\n"
         "\n"
-        "  inline size_t totalSizeInWords() { return asReader().totalSizeInWords(); }\n"
+        "  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }\n"
         "\n",
         isUnion ? kj::strTree("  inline Which which();\n") : kj::strTree(),
         kj::mv(methodDecls),
@@ -1219,7 +1219,7 @@ private:
     return MethodText {
       kj::strTree(
           "  ::capnp::Request<", paramType, ", ", resultType, "> ", name, "Request(\n"
-          "      unsigned int firstSegmentWordSize = 0);\n"),
+          "      ::kj::Maybe< ::capnp::MessageSize> sizeHint = nullptr);\n"),
 
       kj::strTree(
           paramProto.getScopeId() != 0 ? kj::strTree() : kj::strTree(
@@ -1234,9 +1234,9 @@ private:
 
       kj::strTree(
           "::capnp::Request<", paramType, ", ", resultType, ">\n",
-          interfaceName, "::Client::", name, "Request(unsigned int firstSegmentWordSize) {\n"
+          interfaceName, "::Client::", name, "Request(::kj::Maybe< ::capnp::MessageSize> sizeHint) {\n"
           "  return newCall<", paramType, ", ", resultType, ">(\n"
-          "      0x", interfaceIdHex, "ull, ", methodId, ", firstSegmentWordSize);\n"
+          "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint);\n"
           "}\n"
           "::kj::Promise<void> ", interfaceName, "::Server::", name, "(", titleCase, "Context) {\n"
           "  return ::capnp::Capability::Server::internalUnimplemented(\n"

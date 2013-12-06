@@ -52,8 +52,8 @@ struct AnyPointer {
     Reader() = default;
     inline Reader(_::PointerReader reader): reader(reader) {}
 
-    inline size_t targetSizeInWords() const;
-    // Get the total size, in words, of the target object and all its children.
+    inline MessageSize targetSize() const;
+    // Get the total size of the target object and all its children.
 
     inline bool isNull() const;
 
@@ -92,8 +92,8 @@ struct AnyPointer {
     inline Builder(decltype(nullptr)) {}
     inline Builder(_::PointerBuilder builder): builder(builder) {}
 
-    inline size_t targetSizeInWords() const;
-    // Get the total size, in words, of the target object and all its children.
+    inline MessageSize targetSize() const;
+    // Get the total size of the target object and all its children.
 
     inline bool isNull();
 
@@ -325,8 +325,8 @@ public:
 // =======================================================================================
 // Inline implementation details
 
-inline size_t AnyPointer::Reader::targetSizeInWords() const {
-  return reader.targetSize() / WORDS;
+inline MessageSize AnyPointer::Reader::targetSize() const {
+  return reader.targetSize().asPublic();
 }
 
 inline bool AnyPointer::Reader::isNull() const {
@@ -338,8 +338,8 @@ inline ReaderFor<T> AnyPointer::Reader::getAs() const {
   return _::PointerHelpers<T>::get(reader);
 }
 
-inline size_t AnyPointer::Builder::targetSizeInWords() const {
-  return asReader().targetSizeInWords();
+inline MessageSize AnyPointer::Builder::targetSize() const {
+  return asReader().targetSize();
 }
 
 inline bool AnyPointer::Builder::isNull() {

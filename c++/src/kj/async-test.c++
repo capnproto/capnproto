@@ -181,7 +181,7 @@ TEST(Async, DeepChain) {
 
   // Create a ridiculous chain of promises.
   for (uint i = 0; i < 1000; i++) {
-    promise = evalLater(mvCapture(promise, [&,i](Promise<void> promise) {
+    promise = evalLater(mvCapture(promise, [](Promise<void> promise) {
       return kj::mv(promise);
     }));
   }
@@ -218,7 +218,7 @@ TEST(Async, DeepChain2) {
 
   // Create a ridiculous chain of promises.
   for (uint i = 0; i < 1000; i++) {
-    promise = evalLater(mvCapture(promise, [&](Promise<void> promise) {
+    promise = evalLater(mvCapture(promise, [](Promise<void> promise) {
       return kj::mv(promise);
     }));
   }

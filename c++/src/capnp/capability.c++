@@ -88,8 +88,8 @@ kj::Promise<void> ClientHook::whenResolved() {
 
 class LocalResponse final: public ResponseHook, public kj::Refcounted {
 public:
-  LocalResponse(uint sizeHint)
-      : message(sizeHint == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : sizeHint) {}
+  LocalResponse(kj::Maybe<MessageSize> sizeHint)
+      : message(sizeHint) {}
 
   LocalMessage message;
 };
@@ -111,9 +111,9 @@ public:
   void releaseParams() override {
     request = nullptr;
   }
-  AnyPointer::Builder getResults(uint firstSegmentWordSize) override {
+  AnyPointer::Builder getResults(kj::Maybe<MessageSize> sizeHint) override {
     if (response == nullptr) {
-      auto localResponse = kj::refcounted<LocalResponse>(firstSegmentWordSize);
+      auto localResponse = kj::refcounted<LocalResponse>(sizeHint);
       responseBuilder = localResponse->message.getRoot();
       response = Response<AnyPointer>(responseBuilder.asReader(), kj::mv(localResponse));
     }
@@ -162,9 +162,8 @@ public:
 class LocalRequest final: public RequestHook {
 public:
   inline LocalRequest(uint64_t interfaceId, uint16_t methodId,
-                      uint firstSegmentWordSize, kj::Own<ClientHook> client)
-      : message(kj::heap<LocalMessage>(
-            firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : firstSegmentWordSize)),
+                      kj::Maybe<MessageSize> sizeHint, kj::Own<ClientHook> client)
+      : message(kj::heap<LocalMessage>(sizeHint)),
         interfaceId(interfaceId), methodId(methodId), client(kj::mv(client)) {}
 
   RemotePromise<AnyPointer> send() override {
@@ -194,7 +193,7 @@ public:
     // Now the other branch returns the response from the context.
     auto promise = forked.addBranch().then(kj::mvCapture(context,
         [](kj::Own<LocalCallContext>&& context) {
-      context->getResults(1);  // force response allocation
+      context->getResults(MessageSize { 0, 0 });  // force response allocation
       return kj::mv(KJ_ASSERT_NONNULL(context->response));
     }));
 
@@ -274,9 +273,9 @@ public:
         promiseForClientResolution(promise.addBranch().fork()) {}
 
   Request<AnyPointer, AnyPointer> newCall(
-      uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) override {
+      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
     auto hook = kj::heap<LocalRequest>(
-        interfaceId, methodId, firstSegmentWordSize, kj::addRef(*this));
+        interfaceId, methodId, sizeHint, kj::addRef(*this));
     auto root = hook->message->getRoot();  // Do not inline `root` -- kj::mv may happen first.
     return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
   }
@@ -403,7 +402,7 @@ class LocalPipeline final: public PipelineHook, public kj::Refcounted {
 public:
   inline LocalPipeline(kj::Own<CallContextHook>&& contextParam)
       : context(kj::mv(contextParam)),
-        results(context->getResults(1)) {}
+        results(context->getResults(MessageSize { 0, 0 })) {}
 
   kj::Own<PipelineHook> addRef() {
     return kj::addRef(*this);
@@ -424,9 +423,9 @@ public:
       : server(kj::mv(server)) {}
 
   Request<AnyPointer, AnyPointer> newCall(
-      uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) override {
+      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
     auto hook = kj::heap<LocalRequest>(
-        interfaceId, methodId, firstSegmentWordSize, kj::addRef(*this));
+        interfaceId, methodId, sizeHint, kj::addRef(*this));
     auto root = hook->message->getRoot();  // Do not inline `root` -- kj::mv may happen first.
     return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
   }
