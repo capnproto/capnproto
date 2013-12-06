@@ -28,19 +28,18 @@
 #error "This header is only meant to be included by Cap'n Proto's own source code."
 #endif
 
-#include <vector>
 #include <unordered_map>
 #include <kj/common.h>
 #include <kj/mutex.h>
 #include <kj/exception.h>
+#include <kj/vector.h>
 #include "common.h"
 #include "message.h"
 #include "layout.h"
+#include "capability.h"
 
 namespace capnp {
 
-class CapExtractorBase;
-class CapInjectorBase;
 class ClientHook;
 
 namespace _ {  // private
@@ -98,6 +97,14 @@ private:
   KJ_DISALLOW_COPY(ReadLimiter);
 };
 
+class BrokenCapFactory {
+  // Callback for constructing broken caps.  We use this so that we can avoid arena.c++ having a
+  // link-time dependency on capability code that lives in libcapnp-rpc.
+
+public:
+  virtual kj::Own<ClientHook> newBrokenCap(kj::StringPtr description) = 0;
+};
+
 class SegmentReader {
 public:
   inline SegmentReader(Arena* arena, SegmentId id, kj::ArrayPtr<const word> ptr,
@@ -134,11 +141,6 @@ class ImbuedSegmentReader: public SegmentReader {
 public:
   inline ImbuedSegmentReader(Arena* arena, SegmentReader* base);
   inline ImbuedSegmentReader(decltype(nullptr));
-
-  inline SegmentReader* unimbue();
-
-private:
-  SegmentReader* base;
 };
 
 class SegmentBuilder: public SegmentReader {
@@ -183,11 +185,6 @@ public:
   inline ImbuedSegmentBuilder(decltype(nullptr));
 
   KJ_DISALLOW_COPY(ImbuedSegmentBuilder);
-
-  inline SegmentBuilder* unimbue();
-
-private:
-  SegmentBuilder* base;
 };
 
 class Arena {
@@ -202,9 +199,10 @@ public:
   // the VALIDATE_INPUT() macro which may throw an exception; if it returns normally, the caller
   // will need to continue with default values.
 
-  virtual kj::Maybe<kj::Own<ClientHook>> extractCap(const _::StructReader& capDescriptor) = 0;
-  // Given a StructReader for a capability descriptor embedded in the message, return the
-  // corresponding capability.  Returns null if the message is not imbued with a capability context.
+  virtual kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) = 0;
+  // Extract the capability at the given index.  If the index is invalid, returns a dummy
+  // capability whose methods all throw.  Returns null only if the message is not imbued with a
+  // capability context.
 
   virtual kj::Maybe<kj::Own<ClientHook>> newBrokenCap(kj::StringPtr description) = 0;
   // Returns a capability which, when called, always throws an exception with the given description.
@@ -220,7 +218,7 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Maybe<kj::Own<ClientHook>> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<ClientHook>> extractCap(uint index);
   kj::Maybe<kj::Own<ClientHook>> newBrokenCap(kj::StringPtr description);
 
 private:
@@ -243,7 +241,8 @@ private:
 
 class ImbuedReaderArena final: public Arena {
 public:
-  ImbuedReaderArena(Arena* base, CapExtractorBase* capExtractor);
+  ImbuedReaderArena(Arena* base, BrokenCapFactory& brokenCapFactory,
+                    kj::Array<kj::Own<ClientHook>>&& capTable);
   ~ImbuedReaderArena() noexcept(false);
   KJ_DISALLOW_COPY(ImbuedReaderArena);
 
@@ -252,12 +251,13 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Maybe<kj::Own<ClientHook>> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<ClientHook>> extractCap(uint index);
   kj::Maybe<kj::Own<ClientHook>> newBrokenCap(kj::StringPtr description);
 
 private:
   Arena* base;
-  CapExtractorBase* capExtractor;
+  BrokenCapFactory& brokenCapFactory;
+  kj::Array<kj::Own<ClientHook>> capTable;
 
   // Optimize for single-segment messages so that small messages are handled quickly.
   ImbuedSegmentReader segment0;
@@ -284,11 +284,12 @@ public:
   // the arena is guaranteed to succeed.  Therefore callers should try to allocate from a specific
   // segment first if there is one, then fall back to the arena.
 
-  virtual OrphanBuilder injectCap(kj::Own<ClientHook>&& cap) = 0;
-  // Add the capability to the message and initialize the given pointer as an interface pointer
-  // pointing to this cap.
+  virtual uint injectCap(kj::Own<ClientHook>&& cap) = 0;
+  // Add the capability to the message and return its index.  If the same ClientHook is injected
+  // twice, this may return the same index both times, but in this case dropCap() needs to be
+  // called an equal number of times to actually remove the cap.
 
-  virtual void dropCap(const StructReader& capDescriptor) = 0;
+  virtual void dropCap(uint index) = 0;
   // Remove a capability injected earlier.  Called when the pointer is overwritten or zero'd out.
 };
 
@@ -310,14 +311,14 @@ public:
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Maybe<kj::Own<ClientHook>> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<ClientHook>> extractCap(uint index);
   kj::Maybe<kj::Own<ClientHook>> newBrokenCap(kj::StringPtr description);
 
   // implements BuilderArena -----------------------------------------
   SegmentBuilder* getSegment(SegmentId id) override;
   AllocateResult allocate(WordCount amount) override;
-  OrphanBuilder injectCap(kj::Own<ClientHook>&& cap);
-  void dropCap(const StructReader& capDescriptor);
+  uint injectCap(kj::Own<ClientHook>&& cap);
+  void dropCap(uint index);
 
 private:
   MessageBuilder* message;
@@ -327,8 +328,8 @@ private:
   kj::ArrayPtr<const word> segment0ForOutput;
 
   struct MultiSegmentState {
-    std::vector<kj::Own<BasicSegmentBuilder>> builders;
-    std::vector<kj::ArrayPtr<const word>> forOutput;
+    kj::Vector<kj::Own<BasicSegmentBuilder>> builders;
+    kj::Vector<kj::ArrayPtr<const word>> forOutput;
   };
   kj::Maybe<kj::Own<MultiSegmentState>> moreSegments;
 };
@@ -337,33 +338,37 @@ class ImbuedBuilderArena final: public BuilderArena {
   // A BuilderArena imbued with the ability to inject capabilities.
 
 public:
-  ImbuedBuilderArena(BuilderArena* base, CapInjectorBase* capInjector);
+  ImbuedBuilderArena(BuilderArena* base, BrokenCapFactory& brokenCapFactory);
   ~ImbuedBuilderArena() noexcept(false);
   KJ_DISALLOW_COPY(ImbuedBuilderArena);
 
   SegmentBuilder* imbue(SegmentBuilder* baseSegment);
   // Return an imbued SegmentBuilder corresponding to the given segment from the base arena.
 
+  inline kj::ArrayPtr<kj::Own<ClientHook>> getCapTable() { return capTable; }
+  // Release and return the capability table.
+
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
-  kj::Maybe<kj::Own<ClientHook>> extractCap(const _::StructReader& capDescriptor);
+  kj::Maybe<kj::Own<ClientHook>> extractCap(uint index);
   kj::Maybe<kj::Own<ClientHook>> newBrokenCap(kj::StringPtr description);
 
   // implements BuilderArena -----------------------------------------
   SegmentBuilder* getSegment(SegmentId id) override;
   AllocateResult allocate(WordCount amount) override;
-  OrphanBuilder injectCap(kj::Own<ClientHook>&& cap);
-  void dropCap(const StructReader& capDescriptor);
+  uint injectCap(kj::Own<ClientHook>&& cap);
+  void dropCap(uint index);
 
 private:
   BuilderArena* base;
-  CapInjectorBase* capInjector;
+  BrokenCapFactory& brokenCapFactory;
+  kj::Vector<kj::Own<ClientHook>> capTable;
 
   ImbuedSegmentBuilder segment0;
 
   struct MultiSegmentState {
-    std::vector<kj::Maybe<kj::Own<ImbuedSegmentBuilder>>> builders;
+    kj::Vector<kj::Maybe<kj::Own<ImbuedSegmentBuilder>>> builders;
   };
   kj::Maybe<kj::Own<MultiSegmentState>> moreSegments;
 };
@@ -415,12 +420,9 @@ inline kj::ArrayPtr<const word> SegmentReader::getArray() { return ptr; }
 inline void SegmentReader::unread(WordCount64 amount) { readLimiter->unread(amount); }
 
 inline ImbuedSegmentReader::ImbuedSegmentReader(Arena* arena, SegmentReader* base)
-    : SegmentReader(arena, base->id, base->ptr, base->readLimiter), base(base) {}
+    : SegmentReader(arena, base->id, base->ptr, base->readLimiter) {}
 inline ImbuedSegmentReader::ImbuedSegmentReader(decltype(nullptr))
-    : SegmentReader(nullptr, SegmentId(0), nullptr, nullptr), base(nullptr) {}
-inline SegmentReader* ImbuedSegmentReader::unimbue() {
-  return base;
-}
+    : SegmentReader(nullptr, SegmentId(0), nullptr, nullptr) {}
 
 // -------------------------------------------------------------------
 
@@ -470,13 +472,9 @@ inline BasicSegmentBuilder::BasicSegmentBuilder(
 inline ImbuedSegmentBuilder::ImbuedSegmentBuilder(ImbuedBuilderArena* arena, SegmentBuilder* base)
     : SegmentBuilder(arena, base->id,
                      kj::arrayPtr(const_cast<word*>(base->ptr.begin()), base->ptr.size()),
-                     base->readLimiter, base->pos),
-      base(base) {}
+                     base->readLimiter, base->pos) {}
 inline ImbuedSegmentBuilder::ImbuedSegmentBuilder(decltype(nullptr))
-    : SegmentBuilder(nullptr, SegmentId(0), nullptr, nullptr, nullptr),
-      base(nullptr) {}
-
-inline SegmentBuilder* ImbuedSegmentBuilder::unimbue() { return base; }
+    : SegmentBuilder(nullptr, SegmentId(0), nullptr, nullptr, nullptr) {}
 
 }  // namespace _ (private)
 }  // namespace capnp

@@ -102,8 +102,7 @@ void BasicReaderArena::reportReadLimitReached() {
   }
 }
 
-kj::Maybe<kj::Own<ClientHook>> BasicReaderArena::extractCap(
-    const _::StructReader& capDescriptor) {
+kj::Maybe<kj::Own<ClientHook>> BasicReaderArena::extractCap(uint index) {
   return nullptr;
 }
 
@@ -113,8 +112,10 @@ kj::Maybe<kj::Own<ClientHook>> BasicReaderArena::newBrokenCap(kj::StringPtr desc
 
 // =======================================================================================
 
-ImbuedReaderArena::ImbuedReaderArena(Arena* base, CapExtractorBase* capExtractor)
-    : base(base), capExtractor(capExtractor), segment0(nullptr) {}
+ImbuedReaderArena::ImbuedReaderArena(Arena* base, BrokenCapFactory& brokenCapFactory,
+                                     kj::Array<kj::Own<ClientHook>>&& capTable)
+    : base(base), brokenCapFactory(brokenCapFactory), capTable(kj::mv(capTable)),
+      segment0(nullptr) {}
 ImbuedReaderArena::~ImbuedReaderArena() noexcept(false) {}
 
 SegmentReader* ImbuedReaderArena::imbue(SegmentReader* baseSegment) {
@@ -159,15 +160,21 @@ void ImbuedReaderArena::reportReadLimitReached() {
   return base->reportReadLimitReached();
 }
 
-kj::Maybe<kj::Own<ClientHook>> ImbuedReaderArena::extractCap(
-    const _::StructReader& capDescriptor) {
-  _::StructReader copy = capDescriptor;
-  copy.unimbue();
-  return capExtractor->extractCapInternal(copy);
+kj::Maybe<kj::Own<ClientHook>> ImbuedReaderArena::extractCap(uint index) {
+  if (index < capTable.size()) {
+    return capTable[index]->addRef();
+  } else {
+    KJ_FAIL_ASSERT("Invalid capability descriptor in message.") {
+      // Work around http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799 and
+      // http://llvm.org/bugs/show_bug.cgi?id=12286.
+      break;
+    }
+    return brokenCapFactory.newBrokenCap("Calling capability from invalid descriptor.");
+  }
 }
 
 kj::Maybe<kj::Own<ClientHook>> ImbuedReaderArena::newBrokenCap(kj::StringPtr description) {
-  return capExtractor->newBrokenCapInternal(description);
+  return brokenCapFactory.newBrokenCap(description);
 }
 
 // =======================================================================================
@@ -235,7 +242,7 @@ BasicBuilderArena::AllocateResult BasicBuilderArena::allocate(WordCount amount) 
         this, SegmentId(segmentState->builders.size() + 1),
         message->allocateSegment(amount / WORDS), &this->dummyLimiter);
     SegmentBuilder* result = newBuilder.get();
-    segmentState->builders.push_back(kj::mv(newBuilder));
+    segmentState->builders.add(kj::mv(newBuilder));
 
     // Keep forOutput the right size so that we don't have to re-allocate during
     // getSegmentsForOutput(), which callers might reasonably expect is a thread-safe method.
@@ -304,8 +311,7 @@ void BasicBuilderArena::reportReadLimitReached() {
   }
 }
 
-kj::Maybe<kj::Own<ClientHook>> BasicBuilderArena::extractCap(
-    const _::StructReader& capDescriptor) {
+kj::Maybe<kj::Own<ClientHook>> BasicBuilderArena::extractCap(uint index) {
   return nullptr;
 }
 
@@ -313,21 +319,21 @@ kj::Maybe<kj::Own<ClientHook>> BasicBuilderArena::newBrokenCap(kj::StringPtr des
   return nullptr;
 }
 
-OrphanBuilder BasicBuilderArena::injectCap(kj::Own<ClientHook>&& cap) {
+uint BasicBuilderArena::injectCap(kj::Own<ClientHook>&& cap) {
   KJ_FAIL_REQUIRE("Cannot inject capability into a builder that has not been imbued with a "
                   "capability context.") {
-    return OrphanBuilder();
+    return 0;
   }
 }
 
-void BasicBuilderArena::dropCap(const _::StructReader& capDescriptor) {
+void BasicBuilderArena::dropCap(uint index) {
   // They only way we could have a cap in the first place is if the error was already reported...
 }
 
 // =======================================================================================
 
-ImbuedBuilderArena::ImbuedBuilderArena(BuilderArena* base, CapInjectorBase* capInjector)
-    : base(base), capInjector(capInjector), segment0(nullptr) {}
+ImbuedBuilderArena::ImbuedBuilderArena(BuilderArena* base, BrokenCapFactory& brokenCapFactory)
+    : base(base), brokenCapFactory(brokenCapFactory), segment0(nullptr) {}
 ImbuedBuilderArena::~ImbuedBuilderArena() noexcept(false) {}
 
 SegmentBuilder* ImbuedBuilderArena::imbue(SegmentBuilder* baseSegment) {
@@ -375,15 +381,21 @@ void ImbuedBuilderArena::reportReadLimitReached() {
   base->reportReadLimitReached();
 }
 
-kj::Maybe<kj::Own<ClientHook>> ImbuedBuilderArena::extractCap(
-    const _::StructReader& capDescriptor) {
-  _::StructReader copy = capDescriptor;
-  copy.unimbue();
-  return capInjector->getInjectedCapInternal(copy);
+kj::Maybe<kj::Own<ClientHook>> ImbuedBuilderArena::extractCap(uint index) {
+  if (index < capTable.size()) {
+    return capTable[index]->addRef();
+  } else {
+    KJ_FAIL_ASSERT("Invalid capability descriptor in message.") {
+      // Work around http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799 and
+      // http://llvm.org/bugs/show_bug.cgi?id=12286.
+      break;
+    }
+    return brokenCapFactory.newBrokenCap("Calling capability from invalid descriptor.");
+  }
 }
 
 kj::Maybe<kj::Own<ClientHook>> ImbuedBuilderArena::newBrokenCap(kj::StringPtr description) {
-  return capInjector->newBrokenCapInternal(description);
+  return brokenCapFactory.newBrokenCap(description);
 }
 
 SegmentBuilder* ImbuedBuilderArena::getSegment(SegmentId id) {
@@ -396,14 +408,19 @@ BuilderArena::AllocateResult ImbuedBuilderArena::allocate(WordCount amount) {
   return result;
 }
 
-OrphanBuilder ImbuedBuilderArena::injectCap(kj::Own<ClientHook>&& cap) {
-  return capInjector->injectCapInternal(this, kj::mv(cap));
+uint ImbuedBuilderArena::injectCap(kj::Own<ClientHook>&& cap) {
+  // TODO(perf):  Detect if the cap is already on the table and reuse the index?  Perhaps this
+  //   doesn't happen enough to be worth the effort.
+  uint result = capTable.size();
+  capTable.add(kj::mv(cap));
+  return result;
 }
 
-void ImbuedBuilderArena::dropCap(const StructReader& capDescriptor) {
-  _::StructReader copy = capDescriptor;
-  copy.unimbue();
-  capInjector->dropCapInternal(copy);
+void ImbuedBuilderArena::dropCap(uint index) {
+  KJ_ASSERT(index < capTable.size(), "Invalid capability descriptor in message.") {
+    return;
+  }
+  capTable[index] = nullptr;
 }
 
 }  // namespace _ (private)

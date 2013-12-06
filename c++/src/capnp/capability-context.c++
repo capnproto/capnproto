@@ -30,118 +30,69 @@
 
 namespace capnp {
 
-CapReaderContext::CapReaderContext(CapExtractorBase& extractor): extractor(&extractor) {}
+namespace {
+
+class BrokenCapFactoryImpl: public _::BrokenCapFactory {
+public:
+  kj::Own<ClientHook> newBrokenCap(kj::StringPtr description) override {
+    return capnp::newBrokenCap(description);
+  }
+};
+
+static BrokenCapFactoryImpl brokenCapFactory;
+
+}  // namespace
+
+CapReaderContext::CapReaderContext(kj::Array<kj::Own<ClientHook>>&& capTable)
+    : capTable(kj::mv(capTable)) {}
 CapReaderContext::~CapReaderContext() noexcept(false) {
-  if (extractor == nullptr) {
+  if (capTable == nullptr) {
     kj::dtor(arena());
   }
 }
 
 AnyPointer::Reader CapReaderContext::imbue(AnyPointer::Reader base) {
-  KJ_REQUIRE(extractor != nullptr, "imbue() can only be called once.");
   KJ_IF_MAYBE(oldArena, base.reader.getArena()) {
-    kj::ctor(arena(), oldArena, extractor);
+    static_assert(sizeof(arena()) <= sizeof(arenaSpace),
+                  "arenaSpace is too small.  Please increase it.");
+    kj::ctor(arena(), oldArena, brokenCapFactory,
+             kj::mv(KJ_REQUIRE_NONNULL(capTable, "imbue() can only be called once.")));
   } else {
     KJ_FAIL_REQUIRE("Cannot imbue unchecked message.");
   }
-  extractor = nullptr;
+  capTable = nullptr;
   return AnyPointer::Reader(base.reader.imbue(arena()));
 }
 
-CapBuilderContext::CapBuilderContext(CapInjectorBase& injector): injector(&injector) {}
+CapBuilderContext::CapBuilderContext() {}
 CapBuilderContext::~CapBuilderContext() noexcept(false) {
-  if (injector == nullptr) {
+  if (arenaAllocated) {
     kj::dtor(arena());
   }
 }
 
 AnyPointer::Builder CapBuilderContext::imbue(AnyPointer::Builder base) {
-  KJ_REQUIRE(injector != nullptr, "imbue() can only be called once.");
-  kj::ctor(arena(), base.builder.getArena(), injector);
-  injector = nullptr;
+  KJ_REQUIRE(!arenaAllocated, "imbue() can only be called once.");
+  static_assert(sizeof(arena()) <= sizeof(arenaSpace),
+                "arenaSpace is too small.  Please increase it.");
+  kj::ctor(arena(), base.builder.getArena(), brokenCapFactory);
+  arenaAllocated = true;
   return AnyPointer::Builder(base.builder.imbue(arena()));
+}
+
+kj::ArrayPtr<kj::Own<ClientHook>> CapBuilderContext::getCapTable() {
+  if (arenaAllocated) {
+    return arena().getCapTable();
+  } else {
+    return nullptr;
+  }
 }
 
 // =======================================================================================
 
-namespace _ {  // private
-
-// This is basically code for a struct defined as follows:
-//
-//     struct TestCapDescriptor {
-//       index @0 :UInt32;
-//     }
-//
-// I have the code hand-written here because I didn't want to add yet another bootstrap file.
-
-class LocalCapDescriptor::Reader {
-public:
-  typedef LocalCapDescriptor Reads;
-
-  inline explicit Reader(_::StructReader base): _reader(base) {}
-
-  inline uint32_t getIndex() const {
-    return _reader.getDataField<uint32_t>(0 * ELEMENTS);
-  }
-
-private:
-  _::StructReader _reader;
-};
-
-class LocalCapDescriptor::Builder {
-public:
-  typedef LocalCapDescriptor Builds;
-
-  inline explicit Builder(_::StructBuilder base): _builder(base) {}
-  inline operator Reader() const { return Reader(_builder.asReader()); }
-
-  inline uint32_t getIndex() {
-    return _builder.getDataField<uint32_t>(0 * ELEMENTS);
-  }
-  inline void setIndex(uint32_t value) {
-    _builder.setDataField<uint32_t>(0 * ELEMENTS, value);
-  }
-
-private:
-  _::StructBuilder _builder;
-};
-
-template <>
-constexpr StructSize structSize<LocalCapDescriptor>() {
-  return StructSize(1 * WORDS, 0 * POINTERS, FieldSize::FOUR_BYTES);
-}
-
-}  // namespace _ (private)
-
 LocalMessage::LocalMessage(uint firstSegmentWords, AllocationStrategy allocationStrategy)
     : message(firstSegmentWords, allocationStrategy),
-      capContext(*this),
       root(capContext.imbue(message.getRoot<AnyPointer>())) {}
-
-void LocalMessage::injectCap(_::LocalCapDescriptor::Builder descriptor, kj::Own<ClientHook>&& cap) {
-  auto lock = state.lockExclusive();
-  uint index = lock->counter++;
-  descriptor.setIndex(index);
-  lock->caps.add(kj::mv(cap));
-}
-
-kj::Own<ClientHook> LocalMessage::getInjectedCap(_::LocalCapDescriptor::Reader descriptor) {
-  auto lock = state.lockExclusive();
-  KJ_ASSERT(descriptor.getIndex() < lock->caps.size(),
-            "Invalid capability descriptor in message.") {
-    return newBrokenCap("Calling capability from invalid descriptor.");
-  }
-  return lock->caps[descriptor.getIndex()]->addRef();
-}
-
-void LocalMessage::dropCap(_::LocalCapDescriptor::Reader descriptor) {
-  auto lock = state.lockExclusive();
-  KJ_ASSERT(descriptor.getIndex() < lock->caps.size(),
-            "Invalid capability descriptor in message.") {
-    return;
-  }
-  lock->caps[descriptor.getIndex()] = nullptr;
-}
 
 // =======================================================================================
 

@@ -77,8 +77,6 @@ private:
   friend class Orphan;
   friend class Orphanage;
   friend class MessageBuilder;
-  template <typename>
-  friend class CapInjector;
 };
 
 class Orphanage: private kj::DisallowConstCopy {
@@ -135,8 +133,6 @@ private:
   struct NewOrphanListImpl;
 
   friend class MessageBuilder;
-  template <typename>
-  friend class CapInjector;
 };
 
 // =======================================================================================

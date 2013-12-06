@@ -79,17 +79,22 @@ public:
           returnTypes[std::make_pair(sender, call.getQuestionId())] = resultType;
         }
 
-        CapExtractorImpl extractor;
-        CapReaderContext context(extractor);
+        auto payload = call.getParams();
+        auto capTableReader = payload.getCapTable();
+        auto capTable = kj::heapArrayBuilder<kj::Own<ClientHook>>(capTableReader.size());
+        for (uint i = 0; i < capTableReader.size(); i++) {
+          capTable.add(newBrokenCap("fake cap"));
+        }
+        CapReaderContext context(capTable.finish());
 
-        auto params = kj::str(context.imbue(call.getParams()).getAs<DynamicStruct>(paramType));
+        auto params = kj::str(context.imbue(payload.getContent()).getAs<DynamicStruct>(paramType));
 
         auto sendResultsTo = call.getSendResultsTo();
 
         return kj::str(senderName, "(", call.getQuestionId(), "): call ",
                        call.getTarget(), " <- ", interfaceName, ".",
                        methodProto.getName(), params,
-                       " caps:[", extractor.printCaps(), "]",
+                       " caps:[", kj::strArray(payload.getCapTable(), ", "), "]",
                        sendResultsTo.isCaller() ? kj::str()
                                                 : kj::str(" sendResultsTo:", sendResultsTo));
       }
@@ -111,19 +116,25 @@ public:
           break;
         }
 
-        CapExtractorImpl extractor;
-        CapReaderContext context(extractor);
-        auto imbued = context.imbue(ret.getResults());
+        auto payload = ret.getResults();
+        auto capTableReader = payload.getCapTable();
+        auto capTable = kj::heapArrayBuilder<kj::Own<ClientHook>>(capTableReader.size());
+        for (uint i = 0; i < capTableReader.size(); i++) {
+          capTable.add(newBrokenCap("fake cap"));
+        }
+        CapReaderContext context(capTable.finish());
+
+        auto imbued = context.imbue(payload.getContent());
 
         if (schema.getProto().isStruct()) {
           auto results = kj::str(imbued.getAs<DynamicStruct>(schema.asStruct()));
 
           return kj::str(senderName, "(", ret.getQuestionId(), "): return ", results,
-                         " caps:[", extractor.printCaps(), "]");
+                         " caps:[", kj::strArray(payload.getCapTable(), ", "), "]");
         } else if (schema.getProto().isInterface()) {
           imbued.getAs<DynamicCapability>(schema.asInterface());
           return kj::str(senderName, "(", ret.getQuestionId(), "): return cap ",
-                         extractor.printCaps());
+                         kj::strArray(payload.getCapTable(), ", "));
         } else {
           break;
         }
@@ -148,21 +159,6 @@ public:
 private:
   std::map<uint64_t, InterfaceSchema> schemas;
   std::map<std::pair<Sender, uint32_t>, Schema> returnTypes;
-
-  class CapExtractorImpl: public CapExtractor<rpc::CapDescriptor> {
-  public:
-    kj::Own<ClientHook> extractCap(rpc::CapDescriptor::Reader descriptor) override {
-      caps.add(kj::str(descriptor));
-      return newBrokenCap("fake cap");
-    }
-
-    kj::String printCaps() {
-      return kj::strArray(caps, ", ");
-    }
-
-  private:
-    kj::Vector<kj::String> caps;
-  };
 };
 
 // =======================================================================================

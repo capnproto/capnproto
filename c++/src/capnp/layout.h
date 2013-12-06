@@ -767,7 +767,8 @@ private:
   // FAR pointer.
 
   word* location;
-  // Pointer to the object, or nullptr if the pointer is null.
+  // Pointer to the object, or nullptr if the pointer is null.  For capabilities, we make this
+  // point at `tag` just so that it is non-null for operator==, but it is never used.
 
   inline OrphanBuilder(const void* tagPtr, SegmentBuilder* segment, word* location)
       : segment(segment), location(location) {

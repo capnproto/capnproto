@@ -47,75 +47,6 @@ namespace capnp {
 
 class ClientHook;
 
-namespace _ {  // private
-
-class ImbuedReaderArena;
-class ImbuedBuilderArena;
-
-}  // namespace _ (private)
-
-class CapExtractorBase {
-  // Non-template base class for CapExtractor<T>.
-
-private:
-  virtual kj::Own<ClientHook> extractCapInternal(const _::StructReader& capDescriptor) = 0;
-  virtual kj::Own<ClientHook> newBrokenCapInternal(kj::StringPtr description) = 0;
-  friend class _::ImbuedReaderArena;
-};
-
-class CapInjectorBase {
-  // Non-template base class for CapInjector<T>.
-
-private:
-  virtual _::OrphanBuilder injectCapInternal(
-      _::BuilderArena* arena, kj::Own<ClientHook>&& cap) = 0;
-  virtual void dropCapInternal(const _::StructReader& capDescriptor) = 0;
-  virtual kj::Own<ClientHook> getInjectedCapInternal(const _::StructReader& capDescriptor) = 0;
-  virtual kj::Own<ClientHook> newBrokenCapInternal(kj::StringPtr description) = 0;
-  friend class _::ImbuedBuilderArena;
-};
-
-template <typename CapDescriptor>
-class CapExtractor: public CapExtractorBase {
-  // Callback used to read a capability from a message, implemented by the RPC system.
-  // `CapDescriptor` is the struct type which the RPC implementation uses to represent
-  // capabilities.  (On the wire, an interface pointer actually points to a struct of this type.)
-
-public:
-  virtual kj::Own<ClientHook> extractCap(typename CapDescriptor::Reader descriptor) = 0;
-  // Given the descriptor read off the wire, construct a live capability.
-
-private:
-  kj::Own<ClientHook> extractCapInternal(const _::StructReader& capDescriptor) override final;
-  kj::Own<ClientHook> newBrokenCapInternal(kj::StringPtr description) override final;
-};
-
-template <typename CapDescriptor>
-class CapInjector: public CapInjectorBase {
-  // Callback used to write a capability into a message, implemented by the RPC system.
-  // `CapDescriptor` is the struct type which the RPC implementation uses to represent
-  // capabilities.  (On the wire, an interface pointer actually points to a struct of this type.)
-
-public:
-  virtual void injectCap(typename CapDescriptor::Builder descriptor, kj::Own<ClientHook>&& cap) = 0;
-  // Fill in the given descriptor so that it describes the given capability.
-
-  virtual kj::Own<ClientHook> getInjectedCap(typename CapDescriptor::Reader descriptor) = 0;
-  // Read back a cap that was previously injected with `injectCap`.  This should return a new
-  // reference.
-
-  virtual void dropCap(typename CapDescriptor::Reader descriptor) = 0;
-  // Read back a cap that was previously injected with `injectCap`.  This should return a new
-  // reference.
-
-private:
-  _::OrphanBuilder injectCapInternal(_::BuilderArena* arena,
-                                     kj::Own<ClientHook>&& cap) override final;
-  void dropCapInternal(const _::StructReader& capDescriptor) override final;
-  kj::Own<ClientHook> getInjectedCapInternal(const _::StructReader& capDescriptor) override final;
-  kj::Own<ClientHook> newBrokenCapInternal(kj::StringPtr description) override final;
-};
-
 // -------------------------------------------------------------------
 
 class CapReaderContext {
@@ -125,13 +56,15 @@ class CapReaderContext {
   // `imbue()` can only be called once per context.
 
 public:
-  CapReaderContext(CapExtractorBase& extractor);
+  CapReaderContext(kj::Array<kj::Own<ClientHook>>&& capTable);
+  // `capTable` is the list of capabilities for this message.
+
   ~CapReaderContext() noexcept(false);
 
   AnyPointer::Reader imbue(AnyPointer::Reader base);
 
 private:
-  CapExtractorBase* extractor;  // becomes null once arena is allocated
+  kj::Maybe<kj::Array<kj::Own<ClientHook>>> capTable;  // becomes null once arena is allocated
   void* arenaSpace[12 + sizeof(kj::MutexGuarded<void*>) / sizeof(void*)];
 
   _::ImbuedReaderArena& arena() { return *reinterpret_cast<_::ImbuedReaderArena*>(arenaSpace); }
@@ -146,14 +79,17 @@ class CapBuilderContext {
   // `imbue()` can only be called once per context.
 
 public:
-  CapBuilderContext(CapInjectorBase& injector);
+  CapBuilderContext();
   ~CapBuilderContext() noexcept(false);
 
   AnyPointer::Builder imbue(AnyPointer::Builder base);
 
+  kj::ArrayPtr<kj::Own<ClientHook>> getCapTable();
+  // Return the table of capabilities injected into the message.
+
 private:
-  CapInjectorBase* injector;  // becomes null once arena is allocated
-  void* arenaSpace[13];
+  bool arenaAllocated = false;
+  void* arenaSpace[15];
 
   _::ImbuedBuilderArena& arena() { return *reinterpret_cast<_::ImbuedBuilderArena*>(arenaSpace); }
 
@@ -162,16 +98,7 @@ private:
 
 // -------------------------------------------------------------------
 
-namespace _ {  // private
-
-struct LocalCapDescriptor {
-  class Reader;
-  class Builder;
-};
-
-}  // namespace _ (private)
-
-class LocalMessage final: private CapInjector<_::LocalCapDescriptor> {
+class LocalMessage final {
   // An in-process message which can contain capabilities.  Use in place of MallocMessageBuilder
   // when you need to be able to construct a message in-memory that contains capabilities, and this
   // message will never leave the process.  You cannot serialize this message, since it doesn't
@@ -188,16 +115,6 @@ private:
   MallocMessageBuilder message;
   CapBuilderContext capContext;
   AnyPointer::Builder root;
-
-  struct State {
-    uint counter;
-    kj::Vector<kj::Own<ClientHook>> caps;
-  };
-  kj::MutexGuarded<State> state;
-
-  void injectCap(_::LocalCapDescriptor::Builder descriptor, kj::Own<ClientHook>&& cap) override;
-  kj::Own<ClientHook> getInjectedCap(_::LocalCapDescriptor::Reader descriptor) override;
-  void dropCap(_::LocalCapDescriptor::Reader descriptor) override;
 };
 
 kj::Own<ClientHook> newBrokenCap(kj::StringPtr reason);
@@ -206,51 +123,6 @@ kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason);
 
 kj::Own<PipelineHook> newBrokenPipeline(kj::Exception&& reason);
 // Helper function that creates a pipeline which simply throws exceptions when called.
-
-// =======================================================================================
-// inline implementation details
-
-template <typename CapDescriptor>
-kj::Own<ClientHook> CapExtractor<CapDescriptor>::extractCapInternal(
-    const _::StructReader& capDescriptor) {
-  return extractCap(typename CapDescriptor::Reader(capDescriptor));
-}
-
-template <typename CapDescriptor>
-kj::Own<ClientHook> CapExtractor<CapDescriptor>::newBrokenCapInternal(kj::StringPtr description) {
-  // Notice that because this method was virtualized and then implemented in the template,
-  // we can call newBrokenCap which is only implemented in libcapnp-rpc even though arena.c++
-  // (in libcapnp proper) is the only caller of this method.
-  return newBrokenCap(description.cStr());
-}
-
-template <typename CapDescriptor>
-_::OrphanBuilder CapInjector<CapDescriptor>::injectCapInternal(
-    _::BuilderArena* arena, kj::Own<ClientHook>&& cap) {
-  auto result = _::OrphanBuilder::initStruct(arena, _::structSize<CapDescriptor>());
-  injectCap(typename CapDescriptor::Builder(result.asStruct(_::structSize<CapDescriptor>())),
-            kj::mv(cap));
-  return kj::mv(result);
-}
-
-template <typename CapDescriptor>
-void CapInjector<CapDescriptor>::dropCapInternal(const _::StructReader& capDescriptor) {
-  dropCap(typename CapDescriptor::Reader(capDescriptor));
-}
-
-template <typename CapDescriptor>
-kj::Own<ClientHook> CapInjector<CapDescriptor>::getInjectedCapInternal(
-    const _::StructReader& capDescriptor) {
-  return getInjectedCap(typename CapDescriptor::Reader(capDescriptor));
-}
-
-template <typename CapDescriptor>
-kj::Own<ClientHook> CapInjector<CapDescriptor>::newBrokenCapInternal(kj::StringPtr description) {
-  // Notice that because this method was virtualized and then implemented in the template,
-  // we can call newBrokenCap which is only implemented in libcapnp-rpc even though arena.c++
-  // (in libcapnp proper) is the only caller of this method.
-  return newBrokenCap(description.cStr());
-}
 
 }  // namespace capnp
 

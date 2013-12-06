@@ -160,11 +160,8 @@ using ExportId = UInt32;
 # this must be indicated at the time the ID is introduced; in this case, the importer shall expect
 # a later Resolve message which replaces the promise.
 #
-# ExportIds are subject to reference counting.  When an `ExportId` is received embedded in an
-# question or answer, the export has an implicit reference until that question or answer is
-# released (questions are released by `Return`, answers are released by `Finish`).  Such an
-# export can be retained beyond that point by including it in the `retainedCaps` list at the time
-# the question/answer is released, thus incrementing its reference count.  The reference count is
+# ExportIds are subject to reference counting.  When an `ExportId` is sent embedded in an
+# CapDescriptor, the export's reference count is incremented.  The reference count is
 # later decremented by a `Release` message.  Since the `Release` message can specify an arbitrary
 # number by which to reduce the reference count, the importer should usually batch reference
 # decrements and only send a `Release` when it believes the reference count has hit zero.  Of
@@ -269,11 +266,14 @@ struct Call {
   methodId @3 :UInt16;
   # The ordinal number of the method to call within the requested interface.
 
-  params @4 :AnyPointer;
-  # The params struct.  The fields of this struct correspond to the parameters of the method.
-  #
-  # The params may contain capabilities.  These capabilities are automatically released when the
-  # call returns *unless* the Return message explicitly indicates that they are being retained.
+  allowThirdPartyTailCall @8 :Bool = false;
+  # Indicates whether or not the receiver is allowed to send a `Return` containing
+  # `acceptFromThirdParty`.  Level 3 implementations should set this true.  Otherwise, the callee
+  # will have to proxy the return in the case of a tail call to a third-party vat.
+
+  params @4 :Payload;
+  # The call parameters.  `params.content` is a struct whose fields correspond to the parameters of
+  # the method.
 
   sendResultsTo :union {
     # Where should the return message be sent?
@@ -343,20 +343,22 @@ struct Return {
   questionId @0 :QuestionId;
   # Question ID which is being answered, as specified in the corresponding Call.
 
-  retainedCaps @1 :List(ExportId);
-  # **(level 1)**
-  #
-  # List of capabilities from the params to which the callee continues to hold references.  Any
-  # other capabilities from the params are implicitly released.
+  releaseParamCaps @1 :Bool = true;
+  # If true, all capabilities that were in the params should be considered released.  The sender
+  # must not send separate `Release` messages for them.  Level 0 implementations in particular
+  # should always set this true.  This defaults true because if level 0 implementations forgot to
+  # set it they'd never notice (just silently leak caps), but if level >=1 implementations forget
+  # set it false they'll quickly get errors.
 
   union {
-    results @2 :AnyPointer;
-    # For regular method calls, points to the result struct.
+    results @2 :Payload;
+    # The result.
     #
-    # For a `Return` in response to an `Accept`, `results` is a capability pointer (and therefore
-    # points to a `CapDescriptor`, but is tagged as a capability rather than a struct).  A
-    # `Finish` is still required in this case, and the capability must still be listed in
-    # `retainedCaps` if it is to be retained.
+    # For regular method calls, `results.content` points to the result struct.
+    #
+    # For a `Return` in response to an `Accept`, `results` contains a single capability (rather
+    # than a struct), and `results.content` is just a capability pointer with index 0.  A `Finish`
+    # is still required in this case.
 
     exception @3 :Exception;
     # Indicates that the call failed and explains why.
@@ -399,17 +401,20 @@ struct Finish {
   #
   # TODO(someday):  Should we separate (1) and (2)?  It would be possible and useful to notify the
   #   server that it doesn't need to keep around the response to service pipeline requests even
-  #   though the caller still wants to receive it / hasn't yet finished processing it.
+  #   though the caller still wants to receive it / hasn't yet finished processing it.  It could
+  #   also be useful to notify the server that it need not marshal the results because the caller
+  #   doesn't want them anyway, even if the caller is still sending pipelined calls, although this
+  #   seems less useful (just saving some bytes on the wire).
 
   questionId @0 :QuestionId;
   # ID of the call whose result is to be released.
 
-  retainedCaps @1 :List(ExportId);
-  # **(level 1)**
-  #
-  # List of capabilities from the results to which the callee continues to hold references.  Any
-  # other capabilities from the results that need to be released are implicitly released along
-  # with the result itself.
+  releaseResultCaps @1 :Bool = true;
+  # If true, all capabilities that were in the results should be considered released.  The sender
+  # must not send separate `Release` messages for them.  Level 0 implementations in particular
+  # should always set this true.  This defaults true because if level 0 implementations forgot to
+  # set it they'd never notice (just silently leak caps), but if level >=1 implementations forget
+  # set it false they'll quickly get errors.
 }
 
 # Level 1 message types ----------------------------------------------
@@ -442,19 +447,11 @@ struct Resolve {
   # this later promise does _not_ correspond to the earlier `Resolve`.
   #
   # If a promise ID's reference count reaches zero before a `Resolve` is sent, the `Resolve`
-  # message may or may not still be sent.  If it is sent, the ID cannot be reused before hand
-  # (except to represent the same promise, of course).  If it is never sent, then the ID can be
-  # reused to represent a new object.  If a `Resolve` is sent, the object to which the promise
-  # resolved needs to be released, even if the promise was already released before it resolved.
-  #
-  # RPC implementations should keep in mind when they receive a `Resolve` that the promise ID may
-  # have appeared in a previous question or answer which the application has not consumed yet.
-  # The RPC implementation usually shouldn't dig through the question/answer itself looking for
-  # capabilities, so it won't be aware of any promise IDs in that message until the application
-  # actually goes through and extracts the capabilities it wishes to retain.  Therefore, when
-  # a `Resolve` is received, the RPC implementation will have to keep track of this resolution
-  # at least until all previously-received questions and answers have been consumed and released
-  # by the application.
+  # message may or may not still be sent (in particular, the `Resolve` may have already been
+  # in-flight when `Release` was sent).  Thus a `Resolve` may be received for a promise of which
+  # the receiver has no knowledge, because it already released it earlier.  In this case, the
+  # receiver should immediately release the capability to which the promise resolved, if
+  # applicable.
 
   union {
     cap @1 :CapDescriptor;
@@ -806,6 +803,17 @@ struct MessageTarget {
   }
 }
 
+struct Payload {
+  # Represents some data structure that might contain capabilities.
+
+  content @0 :AnyPointer;
+  # Some Cap'n Proto data structure.  Capability pointers embedded in this structure index into
+  # `capTable`.
+
+  capTable @1 :List(CapDescriptor);
+  # Descriptors corresponding to the cap pointers in `content`.
+}
+
 struct CapDescriptor {
   # **(level 1)**
   #
@@ -817,43 +825,42 @@ struct CapDescriptor {
   #
   # Keep in mind that `ExportIds` in a `CapDescriptor` are subject to reference counting.  See the
   # description of `ExportId`.
-  #
-  # Note that CapDescriptors are commonly processed some time after they are received, because
-  # the RPC system must wait for the application to actually traverse the message and find the
-  # CapDescriptors.  RPC implementations must keep in mind that the state of the Four Tables may
-  # change between when a message is received and when a CapDescriptor within it is actually
-  # extracted.  To that end, the RPC system may need to keep track of a list of relevant state
-  # changes that have happened in the meantime, including:
-  # - `Resolve` messages that have replaced an imported promise referenced by `senderPromise`.
-  # - `Release` messages that have released an export referenced by `receiverHosted`.
-  # - `Finish` messages that have released an answer referenced by `receiverAnswer`.
-  # Applications are advised not to hold on to received messages long-term as this could cause
-  # state logs to accumulate.
 
   union {
-    senderHosted @0 :ExportId;
+    none @0 :Void;
+    # There is no capability here.  This `CapDescriptor` should not appear in the payload content.
+    # A `none` CapDescriptor can be generated when an application inserts a capability into a
+    # message and then later changes its mind and removes it -- rewriting all of the other
+    # capability pointers may be hard, so instead a tombstone is left, similar to the way a removed
+    # struct or list instance is zeroed out of the message but the space is not reclaimed.
+    # Hopefully this is unusual.
+
+    senderHosted @1 :ExportId;
     # A capability newly exported by the sender.  This is the ID of the new capability in the
     # sender's export table (receiver's import table).
 
-    senderPromise @1 :ExportId;
+    senderPromise @2 :ExportId;
     # A promise which the sender will resolve later.  The sender will send exactly one Resolve
     # message at a future point in time to replace this promise.  Note that even if the same
     # `senderPromise` is received multiple times, only one `Resolve` is sent to cover all of
-    # them.  The `Resolve` is delivered even if `senderPromise` is not retained, or is retained
-    # but then released before the `Resolve` is sent.
+    # them.  If `senderPromise` is released before the `Resolve` is sent, the sender (of this
+    # `CapDescriptor`) may choose not to send the `Resolve` at all.
 
-    receiverHosted @2 :ExportId;
+    receiverHosted @3 :ExportId;
     # A capability (or promise) previously exported by the receiver.
 
-    receiverAnswer @3 :PromisedAnswer;
+    receiverAnswer @4 :PromisedAnswer;
     # A capability expected to be returned in the results of a currently-outstanding call posed
     # by the sender.
 
-    thirdPartyHosted @4 :ThirdPartyCapDescriptor;
+    thirdPartyHosted @5 :ThirdPartyCapDescriptor;
     # **(level 3)**
     #
     # A capability that lives in neither the sender's nor the receiver's vat.  The sender needs
     # to form a direct connection to a third party to pick up the capability.
+    #
+    # Level 1 and 2 implementations that receive a `thirdPartyHosted` may simply send calls to its
+    # `vine` instead.
   }
 }
 
@@ -925,11 +932,20 @@ struct ThirdPartyCapDescriptor {
   # Identifies the third-party host and the specific capability to accept from it.
 
   vineId @1 :ExportId;
-  # Object in the sender's export table which must be Released once the capability has been
-  # successfully obtained from the third-party vat.  This allows the sender to ensure that the
-  # final capability is not released before the receiver manages to accept it.  In CapTP
-  # terminology this is called a "vine", because it is an indirect reference to the third-party
-  # object that snakes through the sender vat.  The vine does not accept any method calls.
+  # A proxy for the third-party object exported by the sender.  In CapTP terminology this is called
+  # a "vine", because it is an indirect reference to the third-party object that snakes through the
+  # sender vat.  This serves two purposes:
+  #
+  # * Level 1 and 2 implementations that don't understand how to connect to a third party may
+  #   simply send calls to the vine.  Such calls will be forwarded to the third-party by the
+  #   sender.
+  #
+  # * Level 3 implementations must release the vine once they have successfully picked up the
+  #   object from the third party.  This ensures that the capability is not released by the sender
+  #   prematurely.
+  #
+  # The sender will close the `Provide` request that it has sent to the third party as soon as
+  # it receives either a `Call` or a `Release` message directed at the vine.
 }
 
 struct Exception {
