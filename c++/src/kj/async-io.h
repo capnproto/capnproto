@@ -26,6 +26,7 @@
 
 #include "async.h"
 #include "function.h"
+#include "thread.h"
 
 namespace kj {
 
@@ -67,12 +68,19 @@ public:
   // specify a port when constructing the LocalAddress -- one will have been assigned automatically.
 };
 
-class RemoteAddress {
+class NetworkAddress {
   // Represents a remote address to which the application can connect.
 
 public:
   virtual Promise<Own<AsyncIoStream>> connect() = 0;
   // Make a new connection to this address.
+  //
+  // The address must not be a wildcard ("*").  If it is an IP address, it must have a port number.
+
+  virtual Own<ConnectionReceiver> listen() = 0;
+  // Listen for incoming connections on this address.
+  //
+  // The address must be local.
 
   virtual String toString() = 0;
   // Produce a human-readable string which hopefully can be passed to Network::parseRemoteAddress()
@@ -85,9 +93,6 @@ class LocalAddress {
   // Represents a local address on which the application can potentially accept connections.
 
 public:
-  virtual Own<ConnectionReceiver> listen() = 0;
-  // Listen for incoming connections on this address.
-
   virtual String toString() = 0;
   // Produce a human-readable string which hopefully can be passed to Network::parseRemoteAddress()
   // to reproduce this address, although whether or not that works of course depends on the Network
@@ -104,30 +109,24 @@ class Network {
   // LocalAddress and/or RemoteAddress instances directly and work from there, if at all possible.
 
 public:
-  virtual Promise<Own<LocalAddress>> parseLocalAddress(
-      StringPtr addr, uint portHint = 0) = 0;
-  virtual Promise<Own<RemoteAddress>> parseRemoteAddress(
-      StringPtr addr, uint portHint = 0) = 0;
-  // Construct a local or remote address from a user-provided string.  The format of the address
+  virtual Promise<Own<NetworkAddress>> parseAddress(StringPtr addr, uint portHint = 0) = 0;
+  // Construct a network address from a user-provided string.  The format of the address
   // strings is not specified at the API level, and application code should make no assumptions
   // about them.  These strings should always be provided by humans, and said humans will know
   // what format to use in their particular context.
   //
   // `portHint`, if provided, specifies the "standard" IP port number for the application-level
   // service in play.  If the address turns out to be an IP address (v4 or v6), and it lacks a
-  // port number, this port will be used.
-  //
-  // In practice, a local address is usually just a port number (or even an empty string, if a
-  // reasonable `portHint` is provided), whereas a remote address usually requires a hostname.
+  // port number, this port will be used.  If `addr` lacks a port number *and* `portHint` is
+  // omitted, then the returned address will only support listen() (not connect()), and a port
+  // will be chosen when listen() is called.
 
-  virtual Own<LocalAddress> getLocalSockaddr(const void* sockaddr, uint len) = 0;
-  virtual Own<RemoteAddress> getRemoteSockaddr(const void* sockaddr, uint len) = 0;
-  // Construct a local or remote address from a legacy struct sockaddr.
+  virtual Own<NetworkAddress> getSockaddr(const void* sockaddr, uint len) = 0;
+  // Construct a network address from a legacy struct sockaddr.
 };
 
 struct OneWayPipe {
-  // A data pipe with an input end and an output end.  The two ends are safe to use in different
-  // threads.  (Typically backed by pipe() system call.)
+  // A data pipe with an input end and an output end.  (Typically backed by pipe() system call.)
 
   Own<AsyncInputStream> in;
   Own<AsyncOutputStream> out;
@@ -135,8 +134,7 @@ struct OneWayPipe {
 
 struct TwoWayPipe {
   // A data pipe that supports sending in both directions.  Each end's output sends data to the
-  // other end's input.  The ends can be used in separate threads.  (Typically backed by
-  // socketpair() system call.)
+  // other end's input.  (Typically backed by socketpair() system call.)
 
   Own<AsyncIoStream> ends[2];
 };
@@ -174,58 +172,118 @@ public:
   // With that said, KJ currently supports the following string address formats:
   // - IPv4: "1.2.3.4", "1.2.3.4:80"
   // - IPv6: "1234:5678::abcd", "[1234:5678::abcd]:80"
-  // - Local IP wildcard (local addresses only; covers both v4 and v6):  "*", "*:80", ":80", "80"
+  // - Local IP wildcard (covers both v4 and v6):  "*", "*:80"
+  // - Symbolic names:  "example.com", "example.com:80", "example.com:http", "1.2.3.4:http"
   // - Unix domain: "unix:/path/to/socket"
 
-  virtual Own<AsyncIoStream> newPipeThread(
-      Function<void(AsyncIoProvider& ioProvider, AsyncIoStream& stream)> startFunc) = 0;
+  struct PipeThread {
+    // A combination of a thread and a two-way pipe that communicates with that thread.
+    //
+    // The fields are intentionally ordered so that the pipe will be destroyed (and therefore
+    // disconnected) before the thread is destroyed (and therefore joined).  Thus if the thread
+    // arranges to exit when it detects disconnect, destruction should be clean.
+
+    Own<Thread> thread;
+    Own<AsyncIoStream> pipe;
+  };
+
+  virtual PipeThread newPipeThread(
+      Function<void(AsyncIoProvider&, AsyncIoStream&, WaitScope&)> startFunc) = 0;
   // Create a new thread and set up a two-way pipe (socketpair) which can be used to communicate
-  // with it.  One end of the pipe is passed to the thread's starct function and the other end of
+  // with it.  One end of the pipe is passed to the thread's start function and the other end of
   // the pipe is returned.  The new thread also gets its own `AsyncIoProvider` instance and will
   // already have an active `EventLoop` when `startFunc` is called.
   //
-  // The returned stream's destructor first closes its end of the pipe then waits for the thread to
-  // finish (joins it).  The thread should therefore be designed to exit soon after receiving EOF
-  // on the input stream.
-  //
   // TODO(someday):  I'm not entirely comfortable with this interface.  It seems to be doing too
   //   much at once but I'm not sure how to cleanly break it down.
-
-  // ---------------------------------------------------------------------------
-  // Unix-only methods
-  //
-  // TODO(cleanup):  Should these be in a subclass?
-
-  virtual Own<AsyncInputStream> wrapInputFd(int fd) = 0;
-  // Create an AsyncInputStream wrapping a file descriptor.
-  //
-  // Does not take ownership of the descriptor.
-  //
-  // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
-
-  virtual Own<AsyncOutputStream> wrapOutputFd(int fd) = 0;
-  // Create an AsyncOutputStream wrapping a file descriptor.
-  //
-  // Does not take ownership of the descriptor.
-  //
-  // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
-
-  virtual Own<AsyncIoStream> wrapSocketFd(int fd) = 0;
-  // Create an AsyncIoStream wrapping a socket file descriptor.
-  //
-  // Does not take ownership of the descriptor.
-  //
-  // This will set `fd` to non-blocking mode (i.e. set O_NONBLOCK) if it isn't set already.
-
-  // ---------------------------------------------------------------------------
-  // Windows-only methods
-
-  // TODO(port):  IOCP
 };
 
-Own<AsyncIoProvider> setupIoEventLoop();
+class LowLevelAsyncIoProvider {
+  // Similar to `AsyncIoProvider`, but represents a lower-level interface that may differ on
+  // different operating systems.  You should prefer to use `AsyncIoProvider` over this interface
+  // whenever possible, as `AsyncIoProvider` is portable and friendlier to dependency-injection.
+  //
+  // On Unix, this interface can be used to import native file descriptors into the async framework.
+  // Different implementations of this interface might work on top of different event handling
+  // primitives, such as poll vs. epoll vs. kqueue vs. some higher-level event library.
+  //
+  // On Windows, this interface can be used to import native HANDLEs into the async framework.
+  // Different implementations of this interface might work on top of different event handling
+  // primitives, such as I/O completion ports vs. completion routines.
+  //
+  // TODO(port):  Actually implement Windows support.
+
+public:
+  // ---------------------------------------------------------------------------
+  // Unix-specific stuff
+
+  enum Flags {
+    // Flags controlling how to wrap a file descriptor.
+
+    TAKE_OWNERSHIP = 1 << 0,
+    // The returned object should own the file descriptor, automatically closing it when destroyed.
+    // The close-on-exec flag will be set on the descriptor if it is not already.
+    //
+    // If this flag is not used, then the file descriptor is not automatically closed and the
+    // close-on-exec flag is not modified.
+
+    ALREADY_CLOEXEC = 1 << 1,
+    // Indicates that the close-on-exec flag is known already to be set, so need not be set again.
+    // Only relevant when combined with TAKE_OWNERSHIP.
+    //
+    // On Linux, all system calls which yield new file descriptors have flags or variants which
+    // set the close-on-exec flag immediately.  Unfortunately, other OS's do not.
+
+    ALREADY_NONBLOCK = 1 << 2
+    // Indicates that the file descriptor is known already to be in non-blocking mode, so the flag
+    // need not be set again.  Otherwise, all wrap*Fd() methods will enable non-blocking mode
+    // automatically.
+    //
+    // On Linux, all system calls which yield new file descriptors have flags or variants which
+    // enable non-blocking mode immediately.  Unfortunately, other OS's do not.
+  };
+
+  virtual Own<AsyncInputStream> wrapInputFd(int fd, uint flags = 0) = 0;
+  // Create an AsyncInputStream wrapping a file descriptor.
+  //
+  // `flags` is a bitwise-OR of the values of the `Flags` enum.
+
+  virtual Own<AsyncOutputStream> wrapOutputFd(int fd, uint flags = 0) = 0;
+  // Create an AsyncOutputStream wrapping a file descriptor.
+  //
+  // `flags` is a bitwise-OR of the values of the `Flags` enum.
+
+  virtual Own<AsyncIoStream> wrapSocketFd(int fd, uint flags = 0) = 0;
+  // Create an AsyncIoStream wrapping a socket file descriptor.
+  //
+  // `flags` is a bitwise-OR of the values of the `Flags` enum.
+
+  virtual Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(int fd, uint flags = 0) = 0;
+  // Create an AsyncIoStream wrapping a socket that is in the process of connecting.  The returned
+  // promise should not resolve until connection has completed -- traditionally indicated by the
+  // descriptor becoming writable.
+  //
+  // `flags` is a bitwise-OR of the values of the `Flags` enum.
+
+  virtual Own<ConnectionReceiver> wrapListenSocketFd(int fd, uint flags = 0) = 0;
+  // Create an AsyncIoStream wrapping a listen socket file descriptor.  This socket should already
+  // have had `bind()` and `listen()` called on it, so it's ready for `accept()`.
+  //
+  // `flags` is a bitwise-OR of the values of the `Flags` enum.
+};
+
+Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel);
+// Make a new AsyncIoProvider wrapping a `LowLevelAsyncIoProvider`.
+
+struct AsyncIoContext {
+  Own<LowLevelAsyncIoProvider> lowLevelProvider;
+  Own<AsyncIoProvider> provider;
+  WaitScope& waitScope;
+};
+
+AsyncIoContext setupAsyncIo();
 // Convenience method which sets up the current thread with everything it needs to do async I/O.
-// The returned object contains an `EventLoop` which is wrapping an appropriate `EventPort` for
+// The returned objects contain an `EventLoop` which is wrapping an appropriate `EventPort` for
 // doing I/O on the host system, so everything is ready for the thread to start making async calls
 // and waiting on promises.
 //
@@ -233,10 +291,10 @@ Own<AsyncIoProvider> setupIoEventLoop();
 // Example:
 //
 //     int main() {
-//       auto ioSystem = kj::setupIoEventLoop();
+//       auto ioContext = kj::setupAsyncIo();
 //
 //       // Now we can call an async function.
-//       Promise<String> textPromise = getHttp(ioSystem->getNetwork(), "http://example.com");
+//       Promise<String> textPromise = getHttp(*ioContext.provider, "http://example.com");
 //
 //       // And we can wait for the promise to complete.  Note that you can only use `wait()`
 //       // from the top level, not from inside a promise callback.

@@ -52,6 +52,7 @@ namespace {
 
 TEST(Capability, Basic) {
   kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
 
   int callCount = 0;
   test::TestInterface::Client client(kj::heap<TestInterfaceImpl>(callCount));
@@ -76,13 +77,13 @@ TEST(Capability, Basic) {
 
   EXPECT_EQ(0, callCount);
 
-  auto response1 = promise1.wait();
+  auto response1 = promise1.wait(waitScope);
 
   EXPECT_EQ("foo", response1.getX());
 
-  auto response2 = promise2.wait();
+  auto response2 = promise2.wait(waitScope);
 
-  promise3.wait();
+  promise3.wait(waitScope);
 
   EXPECT_EQ(2, callCount);
   EXPECT_TRUE(barFailed);
@@ -90,6 +91,7 @@ TEST(Capability, Basic) {
 
 TEST(Capability, Inheritance) {
   kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
 
   int callCount = 0;
   test::TestExtends::Client client1(kj::heap<TestExtendsImpl>(callCount));
@@ -105,11 +107,11 @@ TEST(Capability, Inheritance) {
 
   EXPECT_EQ(0, callCount);
 
-  auto response2 = promise2.wait();
+  auto response2 = promise2.wait(waitScope);
 
   checkTestMessage(response2);
 
-  auto response1 = promise1.wait();
+  auto response1 = promise1.wait(waitScope);
 
   EXPECT_EQ("bar", response1.getX());
 
@@ -118,6 +120,7 @@ TEST(Capability, Inheritance) {
 
 TEST(Capability, Pipelining) {
   kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
 
   int callCount = 0;
   int chainedCallCount = 0;
@@ -141,10 +144,10 @@ TEST(Capability, Pipelining) {
   EXPECT_EQ(0, callCount);
   EXPECT_EQ(0, chainedCallCount);
 
-  auto response = pipelinePromise.wait();
+  auto response = pipelinePromise.wait(waitScope);
   EXPECT_EQ("bar", response.getX());
 
-  auto response2 = pipelinePromise2.wait();
+  auto response2 = pipelinePromise2.wait(waitScope);
   checkTestMessage(response2);
 
   EXPECT_EQ(3, callCount);
@@ -153,6 +156,7 @@ TEST(Capability, Pipelining) {
 
 TEST(Capability, TailCall) {
   kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
 
   int calleeCallCount = 0;
   int callerCallCount = 0;
@@ -168,7 +172,7 @@ TEST(Capability, TailCall) {
 
   auto dependentCall0 = promise.getC().getCallSequenceRequest().send();
 
-  auto response = promise.wait();
+  auto response = promise.wait(waitScope);
   EXPECT_EQ(456, response.getI());
   EXPECT_EQ(456, response.getI());
 
@@ -176,9 +180,9 @@ TEST(Capability, TailCall) {
 
   auto dependentCall2 = response.getC().getCallSequenceRequest().send();
 
-  EXPECT_EQ(0, dependentCall0.wait().getN());
-  EXPECT_EQ(1, dependentCall1.wait().getN());
-  EXPECT_EQ(2, dependentCall2.wait().getN());
+  EXPECT_EQ(0, dependentCall0.wait(waitScope).getN());
+  EXPECT_EQ(1, dependentCall1.wait(waitScope).getN());
+  EXPECT_EQ(2, dependentCall2.wait(waitScope).getN());
 
   EXPECT_EQ(1, calleeCallCount);
   EXPECT_EQ(1, callerCallCount);
@@ -188,11 +192,11 @@ TEST(Capability, AsyncCancelation) {
   // Tests allowAsyncCancellation().
 
   kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
 
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
-  auto destructionPromise = paf.promise.then([&]() { destroyed = true; });
-  destructionPromise.eagerlyEvaluate();
+  auto destructionPromise = paf.promise.then([&]() { destroyed = true; }).eagerlyEvaluate(nullptr);
 
   int callCount = 0;
 
@@ -207,18 +211,17 @@ TEST(Capability, AsyncCancelation) {
     promise = request.send().then(
         [&](Response<test::TestMoreStuff::ExpectAsyncCancelResults>&& response) {
       returned = true;
-    });
-    promise.eagerlyEvaluate();
+    }).eagerlyEvaluate(nullptr);
   }
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
+  kj::evalLater([]() {}).wait(waitScope);
+  kj::evalLater([]() {}).wait(waitScope);
 
   // We can detect that the method was canceled because it will drop the cap.
   EXPECT_FALSE(destroyed);
   EXPECT_FALSE(returned);
 
   promise = nullptr;  // request cancellation
-  destructionPromise.wait();
+  destructionPromise.wait(waitScope);
 
   EXPECT_TRUE(destroyed);
   EXPECT_FALSE(returned);
@@ -228,6 +231,7 @@ TEST(Capability, SyncCancelation) {
   // Tests isCanceled() without allowAsyncCancellation().
 
   kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
 
   int callCount = 0;
   int innerCallCount = 0;
@@ -243,13 +247,12 @@ TEST(Capability, SyncCancelation) {
     promise = request.send().then(
         [&](Response<test::TestMoreStuff::ExpectSyncCancelResults>&& response) {
       returned = true;
-    });
-    promise.eagerlyEvaluate();
+    }).eagerlyEvaluate(nullptr);
   }
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
+  kj::evalLater([]() {}).wait(waitScope);
+  kj::evalLater([]() {}).wait(waitScope);
+  kj::evalLater([]() {}).wait(waitScope);
+  kj::evalLater([]() {}).wait(waitScope);
 
   // expectSyncCancel() will make a call to the TestInterfaceImpl only once it noticed isCanceled()
   // is true.
@@ -257,10 +260,10 @@ TEST(Capability, SyncCancelation) {
   EXPECT_FALSE(returned);
 
   promise = nullptr;  // request cancellation
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
+  kj::evalLater([]() {}).wait(waitScope);
+  kj::evalLater([]() {}).wait(waitScope);
+  kj::evalLater([]() {}).wait(waitScope);
+  kj::evalLater([]() {}).wait(waitScope);
 
   EXPECT_EQ(1, innerCallCount);
   EXPECT_FALSE(returned);
@@ -270,6 +273,7 @@ TEST(Capability, SyncCancelation) {
 
 TEST(Capability, DynamicClient) {
   kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
 
   int callCount = 0;
   DynamicCapability::Client client =
@@ -295,13 +299,13 @@ TEST(Capability, DynamicClient) {
 
   EXPECT_EQ(0, callCount);
 
-  auto response1 = promise1.wait();
+  auto response1 = promise1.wait(waitScope);
 
   EXPECT_EQ("foo", response1.get("x").as<Text>());
 
-  auto response2 = promise2.wait();
+  auto response2 = promise2.wait(waitScope);
 
-  promise3.wait();
+  promise3.wait(waitScope);
 
   EXPECT_EQ(2, callCount);
   EXPECT_TRUE(barFailed);
@@ -309,6 +313,7 @@ TEST(Capability, DynamicClient) {
 
 TEST(Capability, DynamicClientInheritance) {
   kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
 
   int callCount = 0;
 
@@ -332,11 +337,11 @@ TEST(Capability, DynamicClientInheritance) {
 
   EXPECT_EQ(0, callCount);
 
-  auto response2 = promise2.wait();
+  auto response2 = promise2.wait(waitScope);
 
   checkDynamicTestMessage(response2.as<DynamicStruct>());
 
-  auto response1 = promise1.wait();
+  auto response1 = promise1.wait(waitScope);
 
   EXPECT_EQ("bar", response1.get("x").as<Text>());
 
@@ -345,6 +350,7 @@ TEST(Capability, DynamicClientInheritance) {
 
 TEST(Capability, DynamicClientPipelining) {
   kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
 
   int callCount = 0;
   int chainedCallCount = 0;
@@ -371,10 +377,10 @@ TEST(Capability, DynamicClientPipelining) {
   EXPECT_EQ(0, callCount);
   EXPECT_EQ(0, chainedCallCount);
 
-  auto response = pipelinePromise.wait();
+  auto response = pipelinePromise.wait(waitScope);
   EXPECT_EQ("bar", response.get("x").as<Text>());
 
-  auto response2 = pipelinePromise2.wait();
+  auto response2 = pipelinePromise2.wait(waitScope);
   checkTestMessage(response2);
 
   EXPECT_EQ(3, callCount);
@@ -416,6 +422,7 @@ public:
 
 TEST(Capability, DynamicServer) {
   kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
 
   int callCount = 0;
   test::TestInterface::Client client =
@@ -442,13 +449,13 @@ TEST(Capability, DynamicServer) {
 
   EXPECT_EQ(0, callCount);
 
-  auto response1 = promise1.wait();
+  auto response1 = promise1.wait(waitScope);
 
   EXPECT_EQ("foo", response1.getX());
 
-  auto response2 = promise2.wait();
+  auto response2 = promise2.wait(waitScope);
 
-  promise3.wait();
+  promise3.wait(waitScope);
 
   EXPECT_EQ(2, callCount);
   EXPECT_TRUE(barFailed);
@@ -485,6 +492,7 @@ public:
 
 TEST(Capability, DynamicServerInheritance) {
   kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
 
   int callCount = 0;
   test::TestExtends::Client client1 =
@@ -502,11 +510,11 @@ TEST(Capability, DynamicServerInheritance) {
 
   EXPECT_EQ(0, callCount);
 
-  auto response2 = promise2.wait();
+  auto response2 = promise2.wait(waitScope);
 
   checkTestMessage(response2);
 
-  auto response1 = promise1.wait();
+  auto response1 = promise1.wait(waitScope);
 
   EXPECT_EQ("bar", response1.getX());
 
@@ -516,7 +524,7 @@ TEST(Capability, DynamicServerInheritance) {
 class TestPipelineDynamicImpl final: public DynamicCapability::Server {
 public:
   TestPipelineDynamicImpl(int& callCount)
-      : DynamicCapability::Server(Schema::from<test::TestExtends>()),
+      : DynamicCapability::Server(Schema::from<test::TestPipeline>()),
         callCount(callCount) {}
 
   int& callCount;
@@ -548,8 +556,8 @@ public:
 
             // Too lazy to write a whole separate test for each of these cases...  so just make
             // sure they both compile here, and only actually test the latter.
-            box.set("outCap", kj::heap<TestExtendsDynamicImpl>(callCount));
-            box.set("outCap", kj::heap<TestExtendsImpl>(callCount));
+            box.set("cap", kj::heap<TestExtendsDynamicImpl>(callCount));
+            box.set("cap", kj::heap<TestExtendsImpl>(callCount));
           });
     } else {
       KJ_FAIL_ASSERT("Method not implemented", methodName);
@@ -559,10 +567,13 @@ public:
 
 TEST(Capability, DynamicServerPipelining) {
   kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
 
   int callCount = 0;
   int chainedCallCount = 0;
-  test::TestPipeline::Client client(kj::heap<TestPipelineImpl>(callCount));
+  test::TestPipeline::Client client =
+      DynamicCapability::Client(kj::heap<TestPipelineDynamicImpl>(callCount))
+          .castAs<test::TestPipeline>();
 
   auto request = client.getCapRequest();
   request.setN(234);
@@ -582,40 +593,105 @@ TEST(Capability, DynamicServerPipelining) {
   EXPECT_EQ(0, callCount);
   EXPECT_EQ(0, chainedCallCount);
 
-  auto response = pipelinePromise.wait();
+  auto response = pipelinePromise.wait(waitScope);
   EXPECT_EQ("bar", response.getX());
 
-  auto response2 = pipelinePromise2.wait();
+  auto response2 = pipelinePromise2.wait(waitScope);
   checkTestMessage(response2);
 
   EXPECT_EQ(3, callCount);
   EXPECT_EQ(1, chainedCallCount);
 }
 
+class TestTailCallerDynamicImpl final: public DynamicCapability::Server {
+public:
+  TestTailCallerDynamicImpl(int& callCount)
+      : DynamicCapability::Server(Schema::from<test::TestTailCaller>()),
+        callCount(callCount) {}
+
+  int& callCount;
+
+  kj::Promise<void> call(InterfaceSchema::Method method,
+                         CallContext<DynamicStruct, DynamicStruct> context) {
+    auto methodName = method.getProto().getName();
+    if (methodName == "foo") {
+      ++callCount;
+
+      auto params = context.getParams();
+      auto tailRequest = params.get("callee").as<DynamicCapability>().newRequest("foo");
+      tailRequest.set("i", params.get("i"));
+      tailRequest.set("t", "from TestTailCaller");
+      context.releaseParams();
+      return context.tailCall(kj::mv(tailRequest));
+    } else {
+      KJ_FAIL_ASSERT("Method not implemented", methodName);
+    }
+  }
+};
+
+TEST(Capability, DynamicServerTailCall) {
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+
+  int calleeCallCount = 0;
+  int callerCallCount = 0;
+
+  test::TestTailCallee::Client callee(kj::heap<TestTailCalleeImpl>(calleeCallCount));
+  test::TestTailCaller::Client caller =
+      DynamicCapability::Client(kj::heap<TestTailCallerDynamicImpl>(callerCallCount))
+          .castAs<test::TestTailCaller>();
+
+  auto request = caller.fooRequest();
+  request.setI(456);
+  request.setCallee(callee);
+
+  auto promise = request.send();
+
+  auto dependentCall0 = promise.getC().getCallSequenceRequest().send();
+
+  auto response = promise.wait(waitScope);
+  EXPECT_EQ(456, response.getI());
+  EXPECT_EQ(456, response.getI());
+
+  auto dependentCall1 = promise.getC().getCallSequenceRequest().send();
+
+  auto dependentCall2 = response.getC().getCallSequenceRequest().send();
+
+  EXPECT_EQ(0, dependentCall0.wait(waitScope).getN());
+  EXPECT_EQ(1, dependentCall1.wait(waitScope).getN());
+  EXPECT_EQ(2, dependentCall2.wait(waitScope).getN());
+
+  EXPECT_EQ(1, calleeCallCount);
+  EXPECT_EQ(1, callerCallCount);
+}
+
 // =======================================================================================
 
-void verifyClient(test::TestInterface::Client client, const int& callCount) {
+void verifyClient(test::TestInterface::Client client, const int& callCount,
+                  kj::WaitScope& waitScope) {
   int origCount = callCount;
   auto request = client.fooRequest();
   request.setI(123);
   request.setJ(true);
-  auto response = request.send().wait();
+  auto response = request.send().wait(waitScope);
   EXPECT_EQ("foo", response.getX());
   EXPECT_EQ(origCount + 1, callCount);
 }
 
-void verifyClient(DynamicCapability::Client client, const int& callCount) {
+void verifyClient(DynamicCapability::Client client, const int& callCount,
+                  kj::WaitScope& waitScope) {
   int origCount = callCount;
   auto request = client.newRequest("foo");
   request.set("i", 123);
   request.set("j", true);
-  auto response = request.send().wait();
+  auto response = request.send().wait(waitScope);
   EXPECT_EQ("foo", response.get("x").as<Text>());
   EXPECT_EQ(origCount + 1, callCount);
 }
 
 TEST(Capability, ObjectsAndOrphans) {
   kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
 
   int callCount1 = 0;
   int callCount2 = 0;
@@ -636,49 +712,50 @@ TEST(Capability, ObjectsAndOrphans) {
 
   EXPECT_FALSE(request.hasCap());
 
-  verifyClient(orphan.get(), callCount1);
-  verifyClient(orphan.getReader(), callCount1);
+  verifyClient(orphan.get(), callCount1, waitScope);
+  verifyClient(orphan.getReader(), callCount1, waitScope);
 
   request.getObj().adopt(kj::mv(orphan));
   EXPECT_TRUE(orphan == nullptr);
 
-  verifyClient(request.getObj().getAs<test::TestInterface>(), callCount1);
-  verifyClient(request.asReader().getObj().getAs<test::TestInterface>(), callCount1);
+  verifyClient(request.getObj().getAs<test::TestInterface>(), callCount1, waitScope);
+  verifyClient(request.asReader().getObj().getAs<test::TestInterface>(), callCount1, waitScope);
   verifyClient(request.getObj().getAs<DynamicCapability>(
-      Schema::from<test::TestInterface>()), callCount1);
+      Schema::from<test::TestInterface>()), callCount1, waitScope);
   verifyClient(request.asReader().getObj().getAs<DynamicCapability>(
-      Schema::from<test::TestInterface>()), callCount1);
+      Schema::from<test::TestInterface>()), callCount1, waitScope);
 
   request.getObj().clear();
   EXPECT_FALSE(request.hasObj());
 
   request.getObj().setAs<test::TestInterface>(client2);
-  verifyClient(request.getObj().getAs<test::TestInterface>(), callCount2);
+  verifyClient(request.getObj().getAs<test::TestInterface>(), callCount2, waitScope);
 
   Orphan<DynamicCapability> dynamicOrphan = request.getObj().disownAs<DynamicCapability>(
       Schema::from<test::TestInterface>());
-  verifyClient(dynamicOrphan.get(), callCount2);
-  verifyClient(dynamicOrphan.getReader(), callCount2);
+  verifyClient(dynamicOrphan.get(), callCount2, waitScope);
+  verifyClient(dynamicOrphan.getReader(), callCount2, waitScope);
 
   Orphan<DynamicValue> dynamicValueOrphan = kj::mv(dynamicOrphan);
-  verifyClient(dynamicValueOrphan.get().as<DynamicCapability>(), callCount2);
+  verifyClient(dynamicValueOrphan.get().as<DynamicCapability>(), callCount2, waitScope);
 
   orphan = dynamicValueOrphan.releaseAs<test::TestInterface>();
   EXPECT_FALSE(orphan == nullptr);
-  verifyClient(orphan.get(), callCount2);
+  verifyClient(orphan.get(), callCount2, waitScope);
 
   request.adoptCap(kj::mv(orphan));
   EXPECT_TRUE(orphan == nullptr);
 
-  verifyClient(request.getCap(), callCount2);
+  verifyClient(request.getCap(), callCount2, waitScope);
 
   Orphan<DynamicCapability> dynamicOrphan2 = request.disownCap();
-  verifyClient(dynamicOrphan2.get(), callCount2);
-  verifyClient(dynamicOrphan2.getReader(), callCount2);
+  verifyClient(dynamicOrphan2.get(), callCount2, waitScope);
+  verifyClient(dynamicOrphan2.getReader(), callCount2, waitScope);
 }
 
 TEST(Capability, Lists) {
   kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
 
   int callCount1 = 0;
   int callCount2 = 0;
@@ -695,24 +772,24 @@ TEST(Capability, Lists) {
   list.set(1, client2);
   list.set(2, client3);
 
-  verifyClient(list[0], callCount1);
-  verifyClient(list[1], callCount2);
-  verifyClient(list[2], callCount3);
+  verifyClient(list[0], callCount1, waitScope);
+  verifyClient(list[1], callCount2, waitScope);
+  verifyClient(list[2], callCount3, waitScope);
 
   auto listReader = request.asReader().getList();
-  verifyClient(listReader[0], callCount1);
-  verifyClient(listReader[1], callCount2);
-  verifyClient(listReader[2], callCount3);
+  verifyClient(listReader[0], callCount1, waitScope);
+  verifyClient(listReader[1], callCount2, waitScope);
+  verifyClient(listReader[2], callCount3, waitScope);
 
   auto dynamicList = toDynamic(list);
-  verifyClient(dynamicList[0].as<DynamicCapability>(), callCount1);
-  verifyClient(dynamicList[1].as<DynamicCapability>(), callCount2);
-  verifyClient(dynamicList[2].as<DynamicCapability>(), callCount3);
+  verifyClient(dynamicList[0].as<DynamicCapability>(), callCount1, waitScope);
+  verifyClient(dynamicList[1].as<DynamicCapability>(), callCount2, waitScope);
+  verifyClient(dynamicList[2].as<DynamicCapability>(), callCount3, waitScope);
 
   auto dynamicListReader = toDynamic(listReader);
-  verifyClient(dynamicListReader[0].as<DynamicCapability>(), callCount1);
-  verifyClient(dynamicListReader[1].as<DynamicCapability>(), callCount2);
-  verifyClient(dynamicListReader[2].as<DynamicCapability>(), callCount3);
+  verifyClient(dynamicListReader[0].as<DynamicCapability>(), callCount1, waitScope);
+  verifyClient(dynamicListReader[1].as<DynamicCapability>(), callCount2, waitScope);
+  verifyClient(dynamicListReader[2].as<DynamicCapability>(), callCount3, waitScope);
 }
 
 }  // namespace

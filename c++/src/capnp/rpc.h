@@ -25,86 +25,103 @@
 #define CAPNP_RPC_H_
 
 #include "capability.h"
+#include "rpc-prelude.h"
 
 namespace capnp {
 
-// =======================================================================================
-// ***************************************************************************************
-// This section contains various internal stuff that needs to be declared upfront.
-// Scroll down to `class VatNetwork` or `class RpcSystem` for the public interfaces.
-// ***************************************************************************************
-// =======================================================================================
-
-// TODO(cleanup):  Put these in rpc-internal.h?
-
-class OutgoingRpcMessage;
-class IncomingRpcMessage;
+template <typename SturdyRefHostId, typename ProvisionId, typename RecipientId,
+          typename ThirdPartyCapId, typename JoinResult>
+class VatNetwork;
+template <typename SturdyRefObjectId>
+class SturdyRefRestorer;
 
 template <typename SturdyRefHostId>
-class RpcSystem;
-
-namespace _ {  // private
-
-class VatNetworkBase {
-  // Non-template version of VatNetwork.  Ignore this class; see VatNetwork, below.
+class RpcSystem: public _::RpcSystemBase {
+  // Represents the RPC system, which is the portal to objects available on the network.
+  //
+  // The RPC implementation sits on top of an implementation of `VatNetwork`.  The `VatNetwork`
+  // determines how to form connections between vats -- specifically, two-way, private, reliable,
+  // sequenced datagram connections.  The RPC implementation determines how to use such connections
+  // to manage object references and make method calls.
+  //
+  // See `makeRpcServer()` and `makeRpcClient()` below for convenient syntax for setting up an
+  // `RpcSystem` given a `VatNetwork`.
+  //
+  // See `ez-rpc.h` for an even simpler interface for setting up RPC in a typical two-party
+  // client/server scenario.
 
 public:
-  class Connection;
+  template <typename ProvisionId, typename RecipientId,
+            typename ThirdPartyCapId, typename JoinResult,
+            typename LocalSturdyRefObjectId>
+  RpcSystem(
+      VatNetwork<SturdyRefHostId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+      kj::Maybe<SturdyRefRestorer<LocalSturdyRefObjectId>&> restorer);
+  RpcSystem(RpcSystem&& other) = default;
 
-  struct ConnectionAndProvisionId {
-    kj::Own<Connection> connection;
-    kj::Own<OutgoingRpcMessage> firstMessage;
-    Orphan<ObjectPointer> provisionId;
-  };
-
-  class Connection {
-  public:
-    virtual kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) = 0;
-    virtual kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> receiveIncomingMessage() = 0;
-    virtual void baseIntroduceTo(Connection& recipient,
-        ObjectPointer::Builder sendToRecipient,
-        ObjectPointer::Builder sendToTarget) = 0;
-    virtual ConnectionAndProvisionId baseConnectToIntroduced(
-        ObjectPointer::Reader capId) = 0;
-    virtual kj::Own<Connection> baseAcceptIntroducedConnection(
-        ObjectPointer::Reader recipientId) = 0;
-  };
-  virtual kj::Maybe<kj::Own<Connection>> baseConnectToRefHost(_::StructReader hostId) = 0;
-  virtual kj::Promise<kj::Own<Connection>> baseAcceptConnectionAsRefHost() = 0;
+  Capability::Client restore(typename SturdyRefHostId::Reader hostId,
+                             ObjectPointer::Reader objectId);
+  // Restore the given SturdyRef from the network and return the capability representing it.
+  //
+  // `hostId` identifies the host from which to request the ref, in the format specified by the
+  // `VatNetwork` in use.  `objectId` is the object ID in whatever format is expected by said host.
 };
 
-class SturdyRefRestorerBase {
-public:
-  virtual Capability::Client baseRestore(ObjectPointer::Reader ref) = 0;
-};
+template <typename SturdyRefHostId, typename LocalSturdyRefObjectId,
+          typename ProvisionId, typename RecipientId, typename ThirdPartyCapId, typename JoinResult>
+RpcSystem<SturdyRefHostId> makeRpcServer(
+    VatNetwork<SturdyRefHostId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
+    SturdyRefRestorer<LocalSturdyRefObjectId>& restorer);
+// Make an RPC server.  Typical usage (e.g. in a main() function):
+//
+//    MyEventLoop eventLoop;
+//    MyNetwork network;
+//    MyRestorer restorer;
+//    auto server = makeRpcServer(network, restorer);
+//    kj::NEVER_DONE.wait();  // run forever
+//
+// See also ez-rpc.h, which has simpler instructions for the common case of a two-party
+// client-server RPC connection.
 
-class RpcSystemBase {
+template <typename SturdyRefHostId, typename ProvisionId,
+          typename RecipientId, typename ThirdPartyCapId, typename JoinResult>
+RpcSystem<SturdyRefHostId> makeRpcClient(
+    VatNetwork<SturdyRefHostId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network);
+// Make an RPC client.  Typical usage (e.g. in a main() function):
+//
+//    MyEventLoop eventLoop;
+//    MyNetwork network;
+//    MyRestorer restorer;
+//    auto client = makeRpcClient(network, restorer);
+//    MyCapability::Client cap = client.restore(hostId, objId).castAs<MyCapability>();
+//    auto response = cap.fooRequest().send().wait();
+//    handleMyResponse(response);
+//
+// See also ez-rpc.h, which has simpler instructions for the common case of a two-party
+// client-server RPC connection.
+
+template <typename SturdyRefObjectId>
+class SturdyRefRestorer: public _::SturdyRefRestorerBase {
+  // Applications that can restore SturdyRefs must implement this interface and provide it to the
+  // RpcSystem.
+  //
+  // Hint:  Use SturdyRefRestorer<capnp::Text> to define a server that exports services under
+  //   string names.
+
 public:
-  RpcSystemBase(VatNetworkBase& network, kj::Maybe<SturdyRefRestorerBase&> restorer);
-  RpcSystemBase(RpcSystemBase&& other) noexcept;
-  ~RpcSystemBase() noexcept(false);
+  virtual Capability::Client restore(typename SturdyRefObjectId::Reader ref) = 0;
+  // Restore the given object, returning a capability representing it.
 
 private:
-  class Impl;
-  kj::Own<Impl> impl;
-
-  Capability::Client baseRestore(_::StructReader hostId, ObjectPointer::Reader objectId);
-  // TODO(someday):  Maybe define a public API called `TypelessStruct` so we don't have to rely
-  // on `_::StructReader` here?
-
-  template <typename>
-  friend class capnp::RpcSystem;
+  Capability::Client baseRestore(ObjectPointer::Reader ref) override final;
 };
 
-}  // namespace _ (private)
-
 // =======================================================================================
-// ***************************************************************************************
-// User-relevant interfaces start here.
-// ***************************************************************************************
-// =======================================================================================
+// VatNetwork
 
 class OutgoingRpcMessage {
+  // A message to be sent by a `VatNetwork`.
+
 public:
   virtual ObjectPointer::Builder getBody() = 0;
   // Get the message body, which the caller may fill in any way it wants.  (The standard RPC
@@ -116,6 +133,8 @@ public:
 };
 
 class IncomingRpcMessage {
+  // A message received from a `VatNetwork`.
+
 public:
   virtual ObjectPointer::Reader getBody() = 0;
   // Get the message body, to be interpreted by the caller.  (The standard RPC implementation
@@ -125,6 +144,21 @@ public:
 template <typename SturdyRefHostId, typename ProvisionId, typename RecipientId,
           typename ThirdPartyCapId, typename JoinResult>
 class VatNetwork: public _::VatNetworkBase {
+  // Cap'n Proto RPC operates between vats, where a "vat" is some sort of host of objects.
+  // Typically one Cap'n Proto process (in the Unix sense) is one vat.  The RPC system is what
+  // allows calls between objects hosted in different vats.
+  //
+  // The RPC implementation sits on top of an implementation of `VatNetwork`.  The `VatNetwork`
+  // determines how to form connections between vats -- specifically, two-way, private, reliable,
+  // sequenced datagram connections.  The RPC implementation determines how to use such connections
+  // to manage object references and make method calls.
+  //
+  // The most common implementation of VatNetwork is TwoPartyVatNetwork (rpc-twoparty.h).  Most
+  // simple client-server apps will want to use it.  (You may even want to use the EZ RPC
+  // interfaces in `ez-rpc.h` and avoid all of this.)
+  //
+  // TODO(someday):  Provide a standard implementation for the public internet.
+
 public:
   class Connection;
 
@@ -228,62 +262,6 @@ private:
   kj::Promise<kj::Own<_::VatNetworkBase::Connection>>
       baseAcceptConnectionAsRefHost() override final;
 };
-
-template <typename SturdyRefObjectId>
-class SturdyRefRestorer: public _::SturdyRefRestorerBase {
-  // Applications that can restore SturdyRefs must implement this interface and provide it to the
-  // RpcSystem.
-
-public:
-  virtual Capability::Client restore(typename SturdyRefObjectId::Reader ref) = 0;
-  // Restore the given object, returning a capability representing it.
-
-private:
-  Capability::Client baseRestore(ObjectPointer::Reader ref) override final;
-};
-
-template <typename SturdyRefHostId>
-class RpcSystem: public _::RpcSystemBase {
-public:
-  template <typename ProvisionId, typename RecipientId,
-            typename ThirdPartyCapId, typename JoinResult,
-            typename LocalSturdyRefObjectId>
-  RpcSystem(
-      VatNetwork<SturdyRefHostId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
-      kj::Maybe<SturdyRefRestorer<LocalSturdyRefObjectId>&> restorer);
-  RpcSystem(RpcSystem&& other) = default;
-
-  Capability::Client restore(typename SturdyRefHostId::Reader hostId,
-                             ObjectPointer::Reader objectId);
-  // Restore the given SturdyRef from the network and return the capability representing it.
-};
-
-template <typename SturdyRefHostId, typename LocalSturdyRefObjectId,
-          typename ProvisionId, typename RecipientId, typename ThirdPartyCapId, typename JoinResult>
-RpcSystem<SturdyRefHostId> makeRpcServer(
-    VatNetwork<SturdyRefHostId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network,
-    SturdyRefRestorer<LocalSturdyRefObjectId>& restorer);
-// Make an RPC server.  Typical usage (e.g. in a main() function):
-//
-//    MyEventLoop eventLoop;
-//    MyNetwork network;
-//    MyRestorer restorer;
-//    auto server = makeRpcServer(network, restorer);
-//    kj::NEVER_DONE.wait();  // run forever
-
-template <typename SturdyRefHostId, typename ProvisionId,
-          typename RecipientId, typename ThirdPartyCapId, typename JoinResult>
-RpcSystem<SturdyRefHostId> makeRpcClient(
-    VatNetwork<SturdyRefHostId, ProvisionId, RecipientId, ThirdPartyCapId, JoinResult>& network);
-// Make an RPC client.  Typical usage (e.g. in a main() function):
-//
-//    MyEventLoop eventLoop;
-//    MyNetwork network;
-//    MyRestorer restorer;
-//    auto client = makeRpcClient(network, restorer);
-//    MyCapability::Client cap = client.restore(hostId, objId).castAs<MyCapability>();
-//    auto response = cap.fooRequest().send().wait();
-//    handleMyResponse(response);
 
 // =======================================================================================
 // ***************************************************************************************

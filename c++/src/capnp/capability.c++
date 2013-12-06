@@ -203,11 +203,10 @@ public:
 
     // We daemonize one branch, but only after joining it with the promise that fires if
     // cancellation is allowed.
-    auto daemonPromise = forked.addBranch();
-    daemonPromise.attach(kj::addRef(*context));
-    daemonPromise.exclusiveJoin(kj::mv(cancelPaf.promise));
-    // Daemonize, ignoring exceptions.
-    daemonPromise.daemonize([](kj::Exception&&) {});
+    forked.addBranch()
+        .attach(kj::addRef(*context))
+        .exclusiveJoin(kj::mv(cancelPaf.promise))
+        .detach([](kj::Exception&&) {});  // ignore exceptions
 
     // Now the other branch returns the response from the context.
     auto contextPtr = context.get();
@@ -218,7 +217,7 @@ public:
 
     // We also want to notify the context that cancellation was requested if this branch is
     // destroyed.
-    promise.attach(LocalCallContext::Canceler(kj::mv(context)));
+    promise = promise.attach(LocalCallContext::Canceler(kj::mv(context)));
 
     // We return the other branch.
     return RemotePromise<ObjectPointer>(
@@ -250,12 +249,11 @@ class QueuedPipeline final: public PipelineHook, public kj::Refcounted {
 public:
   QueuedPipeline(kj::Promise<kj::Own<PipelineHook>>&& promiseParam)
       : promise(promiseParam.fork()),
-        selfResolutionOp(promise.addBranch().then(
-            [this](kj::Own<PipelineHook>&& inner) {
-              redirect = kj::mv(inner);
-            })) {
-    selfResolutionOp.eagerlyEvaluate();
-  }
+        selfResolutionOp(promise.addBranch().then([this](kj::Own<PipelineHook>&& inner) {
+          redirect = kj::mv(inner);
+        }, [this](kj::Exception&& exception) {
+          redirect = newBrokenPipeline(kj::mv(exception));
+        }).eagerlyEvaluate(nullptr)) {}
 
   kj::Own<PipelineHook> addRef() override {
     return kj::addRef(*this);
@@ -288,14 +286,13 @@ class QueuedClient final: public ClientHook, public kj::Refcounted {
 public:
   QueuedClient(kj::Promise<kj::Own<ClientHook>>&& promiseParam)
       : promise(promiseParam.fork()),
-        selfResolutionOp(promise.addBranch().then(
-            [this](kj::Own<ClientHook>&& inner) {
-              redirect = kj::mv(inner);
-            })),
+        selfResolutionOp(promise.addBranch().then([this](kj::Own<ClientHook>&& inner) {
+          redirect = kj::mv(inner);
+        }, [this](kj::Exception&& exception) {
+          redirect = newBrokenCap(kj::mv(exception));
+        }).eagerlyEvaluate(nullptr)),
         promiseForCallForwarding(promise.addBranch().fork()),
-        promiseForClientResolution(promise.addBranch().fork()) {
-    selfResolutionOp.eagerlyEvaluate();
-  }
+        promiseForClientResolution(promise.addBranch().fork()) {}
 
   Request<ObjectPointer, ObjectPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, uint firstSegmentWordSize) override {
@@ -470,10 +467,7 @@ public:
     auto promise = kj::evalLater([this,interfaceId,methodId,contextPtr]() {
       return server->dispatchCall(interfaceId, methodId,
                                   CallContext<ObjectPointer, ObjectPointer>(*contextPtr));
-    });
-
-    // Make sure that this client cannot be destroyed until the promise completes.
-    promise.attach(kj::addRef(*this));
+    }).attach(kj::addRef(*this));
 
     // We have to fork this promise for the pipeline to receive a copy of the answer.
     auto forked = promise.fork();
@@ -488,10 +482,9 @@ public:
       return kj::mv(pipeline.hook);
     });
 
-    pipelinePromise.exclusiveJoin(kj::mv(tailPipelinePromise));
+    pipelinePromise = pipelinePromise.exclusiveJoin(kj::mv(tailPipelinePromise));
 
-    auto completionPromise = forked.addBranch();
-    completionPromise.attach(kj::mv(context));
+    auto completionPromise = forked.addBranch().attach(kj::mv(context));
 
     return VoidPromiseAndPipeline { kj::mv(completionPromise),
         kj::refcounted<QueuedPipeline>(kj::mv(pipelinePromise)) };

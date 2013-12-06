@@ -169,10 +169,12 @@ includecapnp_HEADERS =                                         \
   src/capnp/serialize-packed.h                                 \
   src/capnp/pointer-helpers.h                                  \
   src/capnp/generated-header-support.h                         \
+  src/capnp/rpc-prelude.h                                      \
   src/capnp/rpc.h                                              \
   src/capnp/rpc-twoparty.h                                     \
   src/capnp/rpc.capnp.h                                        \
-  src/capnp/rpc-twoparty.capnp.h
+  src/capnp/rpc-twoparty.capnp.h                               \
+  src/capnp/ez-rpc.h
 
 lib_LTLIBRARIES = libkj.la libkj-async.la libcapnp.la libcapnp-rpc.la libcapnpc.la
 
@@ -235,7 +237,8 @@ libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/rpc.c++                                            \
   src/capnp/rpc.capnp.c++                                      \
   src/capnp/rpc-twoparty.c++                                   \
-  src/capnp/rpc-twoparty.capnp.c++
+  src/capnp/rpc-twoparty.capnp.c++                             \
+  src/capnp/ez-rpc.c++
 
 # -lpthread is here to work around https://bugzilla.redhat.com/show_bug.cgi?id=661333
 libcapnpc_la_LIBADD = libcapnp.la libkj.la $(PTHREAD_LIBS) -lpthread
@@ -368,6 +371,7 @@ capnp_test_SOURCES =                                           \
   src/capnp/serialize-packed-test.c++                          \
   src/capnp/rpc-test.c++                                       \
   src/capnp/rpc-twoparty-test.c++                              \
+  src/capnp/ez-rpc-test.c++                                    \
   src/capnp/test-util.c++                                      \
   src/capnp/test-util.h                                        \
   src/capnp/compiler/lexer-test.c++                            \

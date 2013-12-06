@@ -83,11 +83,9 @@ public:
       }, [&](kj::Exception&& exception) {
         // Exception during write!
         network.disconnectFulfiller->fulfill();
-      });
-      promise.eagerlyEvaluate();
+      }).eagerlyEvaluate(nullptr);
       return kj::mv(promise);
-    });
-    network.previousWrite.attach(kj::addRef(*this));
+    }).attach(kj::addRef(*this));
   }
 
 private:

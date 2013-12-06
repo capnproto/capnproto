@@ -120,8 +120,8 @@ protected:
 };
 
 TEST_F(SerializeAsyncTest, ParseAsync) {
-  auto ioProvider = kj::setupIoEventLoop();
-  auto input = ioProvider->wrapInputFd(fds[0]);
+  auto ioContext = kj::setupAsyncIo();
+  auto input = ioContext.lowLevelProvider->wrapInputFd(fds[0]);
   kj::FdOutputStream rawOutput(fds[1]);
   FragmentingOutputStream output(rawOutput);
 
@@ -132,14 +132,14 @@ TEST_F(SerializeAsyncTest, ParseAsync) {
     writeMessage(output, message);
   });
 
-  auto received = readMessage(*input).wait();
+  auto received = readMessage(*input).wait(ioContext.waitScope);
 
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
 
 TEST_F(SerializeAsyncTest, ParseAsyncOddSegmentCount) {
-  auto ioProvider = kj::setupIoEventLoop();
-  auto input = ioProvider->wrapInputFd(fds[0]);
+  auto ioContext = kj::setupAsyncIo();
+  auto input = ioContext.lowLevelProvider->wrapInputFd(fds[0]);
   kj::FdOutputStream rawOutput(fds[1]);
   FragmentingOutputStream output(rawOutput);
 
@@ -150,14 +150,14 @@ TEST_F(SerializeAsyncTest, ParseAsyncOddSegmentCount) {
     writeMessage(output, message);
   });
 
-  auto received = readMessage(*input).wait();
+  auto received = readMessage(*input).wait(ioContext.waitScope);
 
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
 
 TEST_F(SerializeAsyncTest, ParseAsyncEvenSegmentCount) {
-  auto ioProvider = kj::setupIoEventLoop();
-  auto input = ioProvider->wrapInputFd(fds[0]);
+  auto ioContext = kj::setupAsyncIo();
+  auto input = ioContext.lowLevelProvider->wrapInputFd(fds[0]);
   kj::FdOutputStream rawOutput(fds[1]);
   FragmentingOutputStream output(rawOutput);
 
@@ -168,14 +168,14 @@ TEST_F(SerializeAsyncTest, ParseAsyncEvenSegmentCount) {
     writeMessage(output, message);
   });
 
-  auto received = readMessage(*input).wait();
+  auto received = readMessage(*input).wait(ioContext.waitScope);
 
   checkTestMessage(received->getRoot<TestAllTypes>());
 }
 
 TEST_F(SerializeAsyncTest, WriteAsync) {
-  auto ioProvider = kj::setupIoEventLoop();
-  auto output = ioProvider->wrapOutputFd(fds[1]);
+  auto ioContext = kj::setupAsyncIo();
+  auto output = ioContext.lowLevelProvider->wrapOutputFd(fds[1]);
 
   TestMessageBuilder message(1);
   auto root = message.getRoot<TestAllTypes>();
@@ -193,12 +193,12 @@ TEST_F(SerializeAsyncTest, WriteAsync) {
     }
   });
 
-  writeMessage(*output, message).wait();
+  writeMessage(*output, message).wait(ioContext.waitScope);
 }
 
 TEST_F(SerializeAsyncTest, WriteAsyncOddSegmentCount) {
-  auto ioProvider = kj::setupIoEventLoop();
-  auto output = ioProvider->wrapOutputFd(fds[1]);
+  auto ioContext = kj::setupAsyncIo();
+  auto output = ioContext.lowLevelProvider->wrapOutputFd(fds[1]);
 
   TestMessageBuilder message(7);
   auto root = message.getRoot<TestAllTypes>();
@@ -216,12 +216,12 @@ TEST_F(SerializeAsyncTest, WriteAsyncOddSegmentCount) {
     }
   });
 
-  writeMessage(*output, message).wait();
+  writeMessage(*output, message).wait(ioContext.waitScope);
 }
 
 TEST_F(SerializeAsyncTest, WriteAsyncEvenSegmentCount) {
-  auto ioProvider = kj::setupIoEventLoop();
-  auto output = ioProvider->wrapOutputFd(fds[1]);
+  auto ioContext = kj::setupAsyncIo();
+  auto output = ioContext.lowLevelProvider->wrapOutputFd(fds[1]);
 
   TestMessageBuilder message(10);
   auto root = message.getRoot<TestAllTypes>();
@@ -239,7 +239,7 @@ TEST_F(SerializeAsyncTest, WriteAsyncEvenSegmentCount) {
     }
   });
 
-  writeMessage(*output, message).wait();
+  writeMessage(*output, message).wait(ioContext.waitScope);
 }
 
 }  // namespace

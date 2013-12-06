@@ -21,40 +21,38 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef KJ_THREAD_H_
-#define KJ_THREAD_H_
+#include "ez-rpc.h"
+#include "test-util.h"
+#include <gtest/gtest.h>
 
-#include "common.h"
-#include "function.h"
-#include "exception.h"
+namespace capnp {
+namespace _ {
+namespace {
 
-namespace kj {
+TEST(EzRpc, Basic) {
+  EzRpcServer server("localhost");
+  int callCount = 0;
+  server.exportCap("cap1", kj::heap<TestInterfaceImpl>(callCount));
+  server.exportCap("cap2", kj::heap<TestCallOrderImpl>());
 
-class Thread {
-  // A thread!  Pass a lambda to the constructor, and it runs in the thread.  The destructor joins
-  // the thread.  If the function throws an exception, it is rethrown from the thread's destructor
-  // (if not unwinding from another exception).
+  EzRpcClient client("localhost", server.getPort().wait(server.getWaitScope()));
 
-public:
-  explicit Thread(Function<void()> func);
+  auto cap = client.importCap<test::TestInterface>("cap1");
+  auto request = cap.fooRequest();
+  request.setI(123);
+  request.setJ(true);
 
-  ~Thread() noexcept(false);
+  EXPECT_EQ(0, callCount);
+  auto response = request.send().wait(server.getWaitScope());
+  EXPECT_EQ("foo", response.getX());
+  EXPECT_EQ(1, callCount);
 
-  void sendSignal(int signo);
-  // Send a Unix signal to the given thread, using pthread_kill or an equivalent.
+  EXPECT_EQ(0, client.importCap("cap2").castAs<test::TestCallOrder>()
+      .getCallSequenceRequest().send().wait(server.getWaitScope()).getN());
+  EXPECT_EQ(1, client.importCap("cap2").castAs<test::TestCallOrder>()
+      .getCallSequenceRequest().send().wait(server.getWaitScope()).getN());
+}
 
-  void detach();
-  // Don't join the thread in ~Thread().
-
-private:
-  Function<void()> func;
-  unsigned long long threadId;  // actually pthread_t
-  kj::Maybe<kj::Exception> exception;
-  bool detached = false;
-
-  static void* runThread(void* ptr);
-};
-
-}  // namespace kj
-
-#endif  // KJ_THREAD_H_
+}  // namespace
+}  // namespace _
+}  // namespace capnp

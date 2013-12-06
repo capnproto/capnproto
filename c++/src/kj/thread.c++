@@ -40,13 +40,15 @@ Thread::Thread(Function<void()> func): func(kj::mv(func)) {
 }
 
 Thread::~Thread() noexcept(false) {
-  int pthreadResult = pthread_join(*reinterpret_cast<pthread_t*>(&threadId), nullptr);
-  if (pthreadResult != 0) {
-    KJ_FAIL_SYSCALL("pthread_join", pthreadResult) { break; }
-  }
+  if (!detached) {
+    int pthreadResult = pthread_join(*reinterpret_cast<pthread_t*>(&threadId), nullptr);
+    if (pthreadResult != 0) {
+      KJ_FAIL_SYSCALL("pthread_join", pthreadResult) { break; }
+    }
 
-  KJ_IF_MAYBE(e, exception) {
-    kj::throwRecoverableException(kj::mv(*e));
+    KJ_IF_MAYBE(e, exception) {
+      kj::throwRecoverableException(kj::mv(*e));
+    }
   }
 }
 
@@ -55,6 +57,14 @@ void Thread::sendSignal(int signo) {
   if (pthreadResult != 0) {
     KJ_FAIL_SYSCALL("pthread_kill", pthreadResult) { break; }
   }
+}
+
+void Thread::detach() {
+  int pthreadResult = pthread_detach(*reinterpret_cast<pthread_t*>(&threadId));
+  if (pthreadResult != 0) {
+    KJ_FAIL_SYSCALL("pthread_detach", pthreadResult) { break; }
+  }
+  detached = true;
 }
 
 void* Thread::runThread(void* ptr) {

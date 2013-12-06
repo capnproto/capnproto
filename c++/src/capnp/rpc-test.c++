@@ -431,6 +431,7 @@ public:
 
 struct TestContext {
   kj::EventLoop loop;
+  kj::WaitScope waitScope;
   TestNetwork network;
   TestRestorer restorer;
   TestNetworkAdapter& clientNetwork;
@@ -439,7 +440,8 @@ struct TestContext {
   RpcSystem<test::TestSturdyRefHostId> rpcServer;
 
   TestContext()
-      : clientNetwork(network.add("client")),
+      : waitScope(loop),
+        clientNetwork(network.add("client")),
         serverNetwork(network.add("server")),
         rpcClient(makeRpcClient(clientNetwork)),
         rpcServer(makeRpcServer(serverNetwork, restorer)) {}
@@ -484,13 +486,13 @@ TEST(Rpc, Basic) {
 
   EXPECT_EQ(0, context.restorer.callCount);
 
-  auto response1 = promise1.wait();
+  auto response1 = promise1.wait(context.waitScope);
 
   EXPECT_EQ("foo", response1.getX());
 
-  auto response2 = promise2.wait();
+  auto response2 = promise2.wait(context.waitScope);
 
-  promise3.wait();
+  promise3.wait(context.waitScope);
 
   EXPECT_EQ(2, context.restorer.callCount);
   EXPECT_TRUE(barFailed);
@@ -522,10 +524,10 @@ TEST(Rpc, Pipelining) {
   EXPECT_EQ(0, context.restorer.callCount);
   EXPECT_EQ(0, chainedCallCount);
 
-  auto response = pipelinePromise.wait();
+  auto response = pipelinePromise.wait(context.waitScope);
   EXPECT_EQ("bar", response.getX());
 
-  auto response2 = pipelinePromise2.wait();
+  auto response2 = pipelinePromise2.wait(context.waitScope);
   checkTestMessage(response2);
 
   EXPECT_EQ(3, context.restorer.callCount);
@@ -550,7 +552,7 @@ TEST(Rpc, TailCall) {
 
   auto dependentCall0 = promise.getC().getCallSequenceRequest().send();
 
-  auto response = promise.wait();
+  auto response = promise.wait(context.waitScope);
   EXPECT_EQ(456, response.getI());
   EXPECT_EQ(456, response.getI());
 
@@ -558,9 +560,9 @@ TEST(Rpc, TailCall) {
 
   auto dependentCall2 = response.getC().getCallSequenceRequest().send();
 
-  EXPECT_EQ(0, dependentCall0.wait().getN());
-  EXPECT_EQ(1, dependentCall1.wait().getN());
-  EXPECT_EQ(2, dependentCall2.wait().getN());
+  EXPECT_EQ(0, dependentCall0.wait(context.waitScope).getN());
+  EXPECT_EQ(1, dependentCall1.wait(context.waitScope).getN());
+  EXPECT_EQ(2, dependentCall2.wait(context.waitScope).getN());
 
   EXPECT_EQ(1, calleeCallCount);
   EXPECT_EQ(1, context.restorer.callCount);
@@ -573,8 +575,7 @@ TEST(Rpc, AsyncCancelation) {
 
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
-  auto destructionPromise = paf.promise.then([&]() { destroyed = true; });
-  destructionPromise.eagerlyEvaluate();
+  auto destructionPromise = paf.promise.then([&]() { destroyed = true; }).eagerlyEvaluate(nullptr);
 
   auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
       .castAs<test::TestMoreStuff>();
@@ -588,22 +589,21 @@ TEST(Rpc, AsyncCancelation) {
     promise = request.send().then(
         [&](Response<test::TestMoreStuff::ExpectAsyncCancelResults>&& response) {
       returned = true;
-    });
-    promise.eagerlyEvaluate();
+    }).eagerlyEvaluate(nullptr);
   }
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
 
   // We can detect that the method was canceled because it will drop the cap.
   EXPECT_FALSE(destroyed);
   EXPECT_FALSE(returned);
 
   promise = nullptr;  // request cancellation
-  destructionPromise.wait();
+  destructionPromise.wait(context.waitScope);
 
   EXPECT_TRUE(destroyed);
   EXPECT_FALSE(returned);
@@ -628,15 +628,14 @@ TEST(Rpc, SyncCancelation) {
     promise = request.send().then(
         [&](Response<test::TestMoreStuff::ExpectSyncCancelResults>&& response) {
       returned = true;
-    });
-    promise.eagerlyEvaluate();
+    }).eagerlyEvaluate(nullptr);
   }
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
 
   // expectSyncCancel() will make a call to the TestInterfaceImpl only once it noticed isCanceled()
   // is true.
@@ -644,10 +643,10 @@ TEST(Rpc, SyncCancelation) {
   EXPECT_FALSE(returned);
 
   promise = nullptr;  // request cancellation
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
-  kj::evalLater([]() {}).wait();
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
 
   EXPECT_EQ(1, innerCallCount);
   EXPECT_FALSE(returned);
@@ -677,15 +676,15 @@ TEST(Rpc, PromiseResolve) {
 
   // Make sure getCap() has been called on the server side by sending another call and waiting
   // for it.
-  EXPECT_EQ(2, client.getCallSequenceRequest().send().wait().getN());
+  EXPECT_EQ(2, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
   EXPECT_EQ(3, context.restorer.callCount);
 
   // OK, now fulfill the local promise.
   paf.fulfiller->fulfill(kj::heap<TestInterfaceImpl>(chainedCallCount));
 
   // We should now be able to wait for getCap() to finish.
-  EXPECT_EQ("bar", promise.wait().getS());
-  EXPECT_EQ("bar", promise2.wait().getS());
+  EXPECT_EQ("bar", promise.wait(context.waitScope).getS());
+  EXPECT_EQ("bar", promise2.wait(context.waitScope).getS());
 
   EXPECT_EQ(3, context.restorer.callCount);
   EXPECT_EQ(2, chainedCallCount);
@@ -696,8 +695,7 @@ TEST(Rpc, RetainAndRelease) {
 
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
-  auto destructionPromise = paf.promise.then([&]() { destroyed = true; });
-  destructionPromise.eagerlyEvaluate();
+  auto destructionPromise = paf.promise.then([&]() { destroyed = true; }).eagerlyEvaluate(nullptr);
 
   {
     auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
@@ -706,21 +704,21 @@ TEST(Rpc, RetainAndRelease) {
     {
       auto request = client.holdRequest();
       request.setCap(kj::heap<TestCapDestructor>(kj::mv(paf.fulfiller)));
-      request.send().wait();
+      request.send().wait(context.waitScope);
     }
 
     // Do some other call to add a round trip.
-    EXPECT_EQ(1, client.getCallSequenceRequest().send().wait().getN());
+    EXPECT_EQ(1, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
 
     // Shouldn't be destroyed because it's being held by the server.
     EXPECT_FALSE(destroyed);
 
     // We can ask it to call the held capability.
-    EXPECT_EQ("bar", client.callHeldRequest().send().wait().getS());
+    EXPECT_EQ("bar", client.callHeldRequest().send().wait(context.waitScope).getS());
 
     {
       // We can get the cap back from it.
-      auto capCopy = client.getHeldRequest().send().wait().getCap();
+      auto capCopy = client.getHeldRequest().send().wait(context.waitScope).getCap();
 
       {
         // And call it, without any network communications.
@@ -728,7 +726,7 @@ TEST(Rpc, RetainAndRelease) {
         auto request = capCopy.fooRequest();
         request.setI(123);
         request.setJ(true);
-        EXPECT_EQ("foo", request.send().wait().getX());
+        EXPECT_EQ("foo", request.send().wait(context.waitScope).getX());
         EXPECT_EQ(oldSentCount, context.clientNetwork.getSentCount());
       }
 
@@ -736,14 +734,14 @@ TEST(Rpc, RetainAndRelease) {
         // We can send another copy of the same cap to another method, and it works.
         auto request = client.callFooRequest();
         request.setCap(capCopy);
-        EXPECT_EQ("bar", request.send().wait().getS());
+        EXPECT_EQ("bar", request.send().wait(context.waitScope).getS());
       }
     }
 
     // Give some time to settle.
-    EXPECT_EQ(5, client.getCallSequenceRequest().send().wait().getN());
-    EXPECT_EQ(6, client.getCallSequenceRequest().send().wait().getN());
-    EXPECT_EQ(7, client.getCallSequenceRequest().send().wait().getN());
+    EXPECT_EQ(5, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
+    EXPECT_EQ(6, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
+    EXPECT_EQ(7, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
 
     // Can't be destroyed, we haven't released it.
     EXPECT_FALSE(destroyed);
@@ -751,7 +749,7 @@ TEST(Rpc, RetainAndRelease) {
 
   // We released our client, which should cause the server to be released, which in turn will
   // release the cap pointing back to us.
-  destructionPromise.wait();
+  destructionPromise.wait(context.waitScope);
   EXPECT_TRUE(destroyed);
 }
 
@@ -763,8 +761,7 @@ TEST(Rpc, Cancel) {
 
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
-  auto destructionPromise = paf.promise.then([&]() { destroyed = true; });
-  destructionPromise.eagerlyEvaluate();
+  auto destructionPromise = paf.promise.then([&]() { destroyed = true; }).eagerlyEvaluate(nullptr);
 
   {
     auto request = client.neverReturnRequest();
@@ -774,8 +771,8 @@ TEST(Rpc, Cancel) {
       auto responsePromise = request.send();
 
       // Allow some time to settle.
-      EXPECT_EQ(1, client.getCallSequenceRequest().send().wait().getN());
-      EXPECT_EQ(2, client.getCallSequenceRequest().send().wait().getN());
+      EXPECT_EQ(1, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
+      EXPECT_EQ(2, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
 
       // The cap shouldn't have been destroyed yet because the call never returned.
       EXPECT_FALSE(destroyed);
@@ -783,7 +780,7 @@ TEST(Rpc, Cancel) {
   }
 
   // Now the cap should be released.
-  destructionPromise.wait();
+  destructionPromise.wait(context.waitScope);
   EXPECT_TRUE(destroyed);
 }
 
@@ -795,8 +792,7 @@ TEST(Rpc, SendTwice) {
 
   auto paf = kj::newPromiseAndFulfiller<void>();
   bool destroyed = false;
-  auto destructionPromise = paf.promise.then([&]() { destroyed = true; });
-  destructionPromise.eagerlyEvaluate();
+  auto destructionPromise = paf.promise.then([&]() { destroyed = true; }).eagerlyEvaluate(nullptr);
 
   auto cap = test::TestInterface::Client(kj::heap<TestCapDestructor>(kj::mv(paf.fulfiller)));
 
@@ -804,11 +800,11 @@ TEST(Rpc, SendTwice) {
     auto request = client.callFooRequest();
     request.setCap(cap);
 
-    EXPECT_EQ("bar", request.send().wait().getS());
+    EXPECT_EQ("bar", request.send().wait(context.waitScope).getS());
   }
 
   // Allow some time for the server to release `cap`.
-  EXPECT_EQ(1, client.getCallSequenceRequest().send().wait().getN());
+  EXPECT_EQ(1, client.getCallSequenceRequest().send().wait(context.waitScope).getN());
 
   {
     // More requests with the same cap.
@@ -820,12 +816,12 @@ TEST(Rpc, SendTwice) {
     auto promise = request.send();
     auto promise2 = request2.send();
 
-    EXPECT_EQ("bar", promise.wait().getS());
-    EXPECT_EQ("bar", promise2.wait().getS());
+    EXPECT_EQ("bar", promise.wait(context.waitScope).getS());
+    EXPECT_EQ("bar", promise2.wait(context.waitScope).getS());
   }
 
   // Now the cap should be released.
-  destructionPromise.wait();
+  destructionPromise.wait(context.waitScope);
   EXPECT_TRUE(destroyed);
 }
 
@@ -855,22 +851,22 @@ TEST(Rpc, Embargo) {
   auto call0 = getCallSequence(pipeline, 0);
   auto call1 = getCallSequence(pipeline, 1);
 
-  earlyCall.wait();
+  earlyCall.wait(context.waitScope);
 
   auto call2 = getCallSequence(pipeline, 2);
 
-  auto resolved = echo.wait().getCap();
+  auto resolved = echo.wait(context.waitScope).getCap();
 
   auto call3 = getCallSequence(pipeline, 3);
   auto call4 = getCallSequence(pipeline, 4);
   auto call5 = getCallSequence(pipeline, 5);
 
-  EXPECT_EQ(0, call0.wait().getN());
-  EXPECT_EQ(1, call1.wait().getN());
-  EXPECT_EQ(2, call2.wait().getN());
-  EXPECT_EQ(3, call3.wait().getN());
-  EXPECT_EQ(4, call4.wait().getN());
-  EXPECT_EQ(5, call5.wait().getN());
+  EXPECT_EQ(0, call0.wait(context.waitScope).getN());
+  EXPECT_EQ(1, call1.wait(context.waitScope).getN());
+  EXPECT_EQ(2, call2.wait(context.waitScope).getN());
+  EXPECT_EQ(3, call3.wait(context.waitScope).getN());
+  EXPECT_EQ(4, call4.wait(context.waitScope).getN());
+  EXPECT_EQ(5, call5.wait(context.waitScope).getN());
 }
 
 }  // namespace

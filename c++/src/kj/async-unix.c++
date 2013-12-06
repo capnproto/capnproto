@@ -293,11 +293,9 @@ void UnixEventPort::poll() {
     threadCapture = &capture;
     if (sigsetjmp(capture.jumpTo, true)) {
       // We received a signal and longjmp'd back out of the signal handler.
-      KJ_DBG("unsuspend", signalCount);
       sigdelset(&waitMask, capture.siginfo.si_signo);
       gotSignal(capture.siginfo);
     } else {
-      KJ_DBG("suspend", signalCount);
       sigsuspend(&waitMask);
       KJ_FAIL_ASSERT("sigsuspend() shouldn't return because the signal handler should "
                      "have siglongjmp()ed.");

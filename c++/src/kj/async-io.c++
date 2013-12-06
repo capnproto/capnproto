@@ -25,6 +25,7 @@
 #include "async-unix.h"
 #include "debug.h"
 #include "thread.h"
+#include "io.h"
 #include <unistd.h>
 #include <sys/uio.h>
 #include <errno.h>
@@ -36,6 +37,8 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
+#include <netdb.h>
+#include <set>
 
 #ifndef POLLRDHUP
 // Linux-only optimization.  If not available, define to 0, as this will make it a no-op.
@@ -54,24 +57,44 @@ void setNonblocking(int fd) {
   }
 }
 
+void setCloseOnExec(int fd) {
+  int flags;
+  KJ_SYSCALL(flags = fcntl(fd, F_GETFD));
+  if ((flags & FD_CLOEXEC) == 0) {
+    KJ_SYSCALL(fcntl(fd, F_SETFD, flags | FD_CLOEXEC));
+  }
+}
+
+static constexpr uint NEW_FD_FLAGS =
+#if __linux__
+    LowLevelAsyncIoProvider::ALREADY_CLOEXEC || LowLevelAsyncIoProvider::ALREADY_NONBLOCK ||
+#endif
+    LowLevelAsyncIoProvider::TAKE_OWNERSHIP;
+// We always try to open FDs with CLOEXEC and NONBLOCK already set on Linux, but on other platforms
+// this is not possible.
+
 class OwnedFileDescriptor {
 public:
-  OwnedFileDescriptor(int fd): fd(fd) {
-#if __linux__
-    // Linux has alternate APIs allowing these flags to be set at FD creation; make sure we always
-    // use them.
-    KJ_DREQUIRE(fcntl(fd, F_GETFD) & FD_CLOEXEC, "You forgot to set CLOEXEC.");
-    KJ_DREQUIRE(fcntl(fd, F_GETFL) & O_NONBLOCK, "You forgot to set NONBLOCK.");
-#else
-    // On non-Linux, we have to set the flags non-atomically.
-    fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
-    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
-#endif
+  OwnedFileDescriptor(int fd, uint flags): fd(fd), flags(flags) {
+    if (flags & LowLevelAsyncIoProvider::ALREADY_NONBLOCK) {
+      KJ_DREQUIRE(fcntl(fd, F_GETFL) & O_NONBLOCK, "You claimed you set NONBLOCK, but you didn't.");
+    } else {
+      setNonblocking(fd);
+    }
+
+    if (flags & LowLevelAsyncIoProvider::TAKE_OWNERSHIP) {
+      if (flags & LowLevelAsyncIoProvider::ALREADY_CLOEXEC) {
+        KJ_DREQUIRE(fcntl(fd, F_GETFD) & FD_CLOEXEC,
+                    "You claimed you set CLOEXEC, but you didn't.");
+      } else {
+        setCloseOnExec(fd);
+      }
+    }
   }
 
   ~OwnedFileDescriptor() noexcept(false) {
     // Don't use SYSCALL() here because close() should not be repeated on EINTR.
-    if (close(fd) < 0) {
+    if ((flags & LowLevelAsyncIoProvider::TAKE_OWNERSHIP) && close(fd) < 0) {
       KJ_FAIL_SYSCALL("close", errno, fd) {
         // Recoverable exceptions are safe in destructors.
         break;
@@ -81,14 +104,17 @@ public:
 
 protected:
   const int fd;
+
+private:
+  uint flags;
 };
 
 // =======================================================================================
 
-class AsyncStreamFd: public AsyncIoStream {
+class AsyncStreamFd: public OwnedFileDescriptor, public AsyncIoStream {
 public:
-  AsyncStreamFd(UnixEventPort& eventPort, int readFd, int writeFd)
-      : eventPort(eventPort), readFd(readFd), writeFd(writeFd) {}
+  AsyncStreamFd(UnixEventPort& eventPort, int fd, uint flags)
+      : OwnedFileDescriptor(fd, flags), eventPort(eventPort) {}
   virtual ~AsyncStreamFd() noexcept(false) {}
 
   Promise<size_t> read(void* buffer, size_t minBytes, size_t maxBytes) override {
@@ -108,7 +134,7 @@ public:
 
   Promise<void> write(const void* buffer, size_t size) override {
     ssize_t writeResult;
-    KJ_NONBLOCKING_SYSCALL(writeResult = ::write(writeFd, buffer, size)) {
+    KJ_NONBLOCKING_SYSCALL(writeResult = ::write(fd, buffer, size)) {
       return READY_NOW;
     }
 
@@ -122,7 +148,7 @@ public:
       size -= n;
     }
 
-    return eventPort.onFdEvent(writeFd, POLLOUT).then([=](short) {
+    return eventPort.onFdEvent(fd, POLLOUT).then([=](short) {
       return write(buffer, size);
     });
   }
@@ -138,14 +164,11 @@ public:
   void shutdownWrite() override {
     // There's no legitimate way to get an AsyncStreamFd that isn't a socket through the
     // UnixAsyncIoProvider interface.
-    KJ_REQUIRE(readFd == writeFd, "shutdownWrite() is only implemented on sockets.");
-    KJ_SYSCALL(shutdown(writeFd, SHUT_WR));
+    KJ_SYSCALL(shutdown(fd, SHUT_WR));
   }
 
 private:
   UnixEventPort& eventPort;
-  int readFd;
-  int writeFd;
   bool gotHup = false;
 
   Promise<size_t> tryReadInternal(void* buffer, size_t minBytes, size_t maxBytes,
@@ -155,13 +178,13 @@ private:
     // be included in the final return value.
 
     ssize_t n;
-    KJ_NONBLOCKING_SYSCALL(n = ::read(readFd, buffer, maxBytes)) {
+    KJ_NONBLOCKING_SYSCALL(n = ::read(fd, buffer, maxBytes)) {
       return alreadyRead;
     }
 
     if (n < 0) {
       // Read would block.
-      return eventPort.onFdEvent(readFd, POLLIN | POLLRDHUP).then([=](short events) {
+      return eventPort.onFdEvent(fd, POLLIN | POLLRDHUP).then([=](short events) {
         gotHup = events & (POLLHUP | POLLRDHUP);
         return tryReadInternal(buffer, minBytes, maxBytes, alreadyRead);
       });
@@ -186,7 +209,7 @@ private:
         minBytes -= n;
         maxBytes -= n;
         alreadyRead += n;
-        return eventPort.onFdEvent(readFd, POLLIN | POLLRDHUP).then([=](short events) {
+        return eventPort.onFdEvent(fd, POLLIN | POLLRDHUP).then([=](short events) {
           gotHup = events & (POLLHUP | POLLRDHUP);
           return tryReadInternal(buffer, minBytes, maxBytes, alreadyRead);
         });
@@ -210,7 +233,7 @@ private:
     }
 
     ssize_t writeResult;
-    KJ_NONBLOCKING_SYSCALL(writeResult = ::writev(writeFd, iov.begin(), iov.size())) {
+    KJ_NONBLOCKING_SYSCALL(writeResult = ::writev(fd, iov.begin(), iov.size())) {
       // error
       return READY_NOW;
     }
@@ -223,7 +246,7 @@ private:
       if (n < firstPiece.size()) {
         // Only part of the first piece was consumed.  Wait for POLLOUT and then write again.
         firstPiece = firstPiece.slice(n, firstPiece.size());
-        return eventPort.onFdEvent(writeFd, POLLOUT).then([=](short) {
+        return eventPort.onFdEvent(fd, POLLOUT).then([=](short) {
           return writeInternal(firstPiece, morePieces);
         });
       } else if (morePieces.size() == 0) {
@@ -240,23 +263,6 @@ private:
   }
 };
 
-class Socket final: public OwnedFileDescriptor, public AsyncStreamFd {
-public:
-  Socket(UnixEventPort& eventPort, int fd)
-      : OwnedFileDescriptor(fd), AsyncStreamFd(eventPort, fd, fd) {}
-};
-
-class ThreadSocket final: public Thread, public OwnedFileDescriptor, public AsyncStreamFd {
-  // Combination thread and socket.  The thread must be joined strictly after the socket is closed.
-
-public:
-  template <typename StartFunc>
-  ThreadSocket(UnixEventPort& eventPort, int fd, StartFunc&& startFunc)
-      : Thread(kj::fwd<StartFunc>(startFunc)),
-        OwnedFileDescriptor(fd),
-        AsyncStreamFd(eventPort, fd, fd) {}
-};
-
 // =======================================================================================
 
 class SocketAddress {
@@ -264,6 +270,18 @@ public:
   SocketAddress(const void* sockaddr, uint len): addrlen(len) {
     KJ_REQUIRE(len <= sizeof(addr), "Sorry, your sockaddr is too big for me.");
     memcpy(&addr.generic, sockaddr, len);
+  }
+
+  bool operator<(const SocketAddress& other) const {
+    // So we can use std::set<SocketAddress>...  see DNS lookup code.
+
+    if (wildcard < other.wildcard) return true;
+    if (wildcard > other.wildcard) return false;
+
+    if (addrlen < other.addrlen) return true;
+    if (addrlen > other.addrlen) return false;
+
+    return memcmp(&addr.generic, &other.addr.generic, addrlen) < 0;
   }
 
   int socket(int type) const {
@@ -345,7 +363,14 @@ public:
     }
   }
 
-  static SocketAddress parse(StringPtr str, uint portHint, bool requirePort = true) {
+  static Promise<Array<SocketAddress>> lookupHost(
+      LowLevelAsyncIoProvider& lowLevel, kj::String host, kj::String service, uint portHint);
+  // Perform a DNS lookup.
+
+  static Promise<Array<SocketAddress>> parse(
+      LowLevelAsyncIoProvider& lowLevel, StringPtr str, uint portHint) {
+    // TODO(someday):  Allow commas in `str`.
+
     SocketAddress result;
 
     if (str.startsWith("unix:")) {
@@ -355,7 +380,9 @@ public:
       result.addr.unixDomain.sun_family = AF_UNIX;
       strcpy(result.addr.unixDomain.sun_path, path.cStr());
       result.addrlen = offsetof(struct sockaddr_un, sun_path) + path.size() + 1;
-      return result;
+      auto array = kj::heapArrayBuilder<SocketAddress>(1);
+      array.add(result);
+      return array.finish();
     }
 
     // Try to separate the address and port.
@@ -404,14 +431,23 @@ public:
       char* endptr;
       port = strtoul(portText->cStr(), &endptr, 0);
       if (portText->size() == 0 || *endptr != '\0') {
-        KJ_FAIL_REQUIRE("Invalid IP port number.", *portText);
+        // Not a number.  Maybe it's a service name.  Fall back to DNS.
+        return lookupHost(lowLevel, kj::heapString(addrPart), kj::heapString(*portText), portHint);
       }
       KJ_REQUIRE(port < 65536, "Port number too large.");
     } else {
-      if (requirePort) {
-        KJ_REQUIRE(portHint != 0, "You must specify a port with this address.", str);
-      }
       port = portHint;
+    }
+
+    // Check for wildcard.
+    if (addrPart.size() == 1 && addrPart[0] == '*') {
+      result.wildcard = true;
+      result.addrlen = sizeof(addr.inet6);
+      result.addr.inet6.sin6_family = AF_INET6;
+      result.addr.inet6.sin6_port = htons(port);
+      auto array = kj::heapArrayBuilder<SocketAddress>(1);
+      array.add(result);
+      return array.finish();
     }
 
     void* addrTarget;
@@ -435,47 +471,17 @@ public:
 
     // OK, parse it!
     switch (inet_pton(af, buffer, addrTarget)) {
-      case 1:
+      case 1: {
         // success.
-        return result;
+        auto array = kj::heapArrayBuilder<SocketAddress>(1);
+        array.add(result);
+        return array.finish();
+      }
       case 0:
-        KJ_FAIL_REQUIRE("Invalid IP address.", addrPart);
+        // It's apparently not a simple address...  fall back to DNS.
+        return lookupHost(lowLevel, kj::heapString(addrPart), nullptr, port);
       default:
         KJ_FAIL_SYSCALL("inet_pton", errno, af, addrPart);
-    }
-  }
-
-  static SocketAddress parseLocal(StringPtr str, uint portHint) {
-    // If the address contains no colons, or only a leading colon, and no periods, then it is a
-    // port only.  If is empty, then it is a total wildcard.  Otherwise, it is a full address
-    // specified the same as any remote address.
-    if (str == "*" ||
-        (str.findLast(':').orDefault(0) <= 1 &&
-         str.findFirst('.') == nullptr)) {
-      unsigned long port;
-      if (str == "*") {
-        port = portHint;
-      } else {
-        if (str[0] == ':') {
-          str = str.slice(1);
-        }
-        char* endptr;
-        port = strtoul(str.cStr(), &endptr, 0);
-        if (str.size() == 0 || *endptr != '\0') {
-          KJ_FAIL_REQUIRE("Invalid IP port number.", str);
-        }
-        KJ_REQUIRE(port < 65536, "Port number too large.");
-      }
-
-      // Prepare to bind to ALL IP interfaces.  SocketAddress is zero'd by default.
-      SocketAddress result;
-      result.wildcard = true;
-      result.addrlen = sizeof(addr.inet6);
-      result.addr.inet6.sin6_family = AF_INET6;
-      result.addr.inet6.sin6_port = htons(port);
-      return result;
-    } else {
-      return parse(str, portHint, false);
     }
   }
 
@@ -500,37 +506,202 @@ private:
     struct sockaddr_un unixDomain;
     struct sockaddr_storage storage;
   } addr;
+
+  struct LookupParams;
+  class LookupReader;
 };
+
+class SocketAddress::LookupReader {
+  // Reads SocketAddresses off of a pipe coming from another thread that is performing
+  // getaddrinfo.
+
+public:
+  LookupReader(kj::Own<Thread>&& thread, kj::Own<AsyncInputStream>&& input)
+      : thread(kj::mv(thread)), input(kj::mv(input)) {}
+
+  ~LookupReader() {
+    if (thread) thread->detach();
+  }
+
+  Promise<Array<SocketAddress>> read() {
+    return input->tryRead(&current, sizeof(current), sizeof(current)).then(
+        [this](size_t n) -> Promise<Array<SocketAddress>> {
+      if (n < sizeof(current)) {
+        thread = nullptr;
+        // getaddrinfo()'s docs seem to say it will never return an empty list, but let's check
+        // anyway.
+        KJ_REQUIRE(addresses.size() > 0, "DNS lookup returned no addresses.") { break; }
+        return addresses.releaseAsArray();
+      } else {
+        // getaddrinfo() can return multiple copies of the same address for several reasons.
+        // A major one is that we don't give it a socket type (SOCK_STREAM vs. SOCK_DGRAM), so
+        // it may return two copies of the same address, one for each type, unless it explicitly
+        // knows that the service name given is specific to one type.  But we can't tell it a type,
+        // because we don't actually know which one the user wants, and if we specify SOCK_STREAM
+        // while the user specified a UDP service name then they'll get a resolution error which
+        // is lame.  (At least, I think that's how it works.)
+        //
+        // So we instead resort to de-duping results.
+        if (alreadySeen.insert(current).second) {
+          addresses.add(current);
+        }
+        return read();
+      }
+    });
+  }
+
+private:
+  kj::Own<Thread> thread;
+  kj::Own<AsyncInputStream> input;
+  SocketAddress current;
+  kj::Vector<SocketAddress> addresses;
+  std::set<SocketAddress> alreadySeen;
+};
+
+struct SocketAddress::LookupParams {
+  kj::String host;
+  kj::String service;
+};
+
+Promise<Array<SocketAddress>> SocketAddress::lookupHost(
+    LowLevelAsyncIoProvider& lowLevel, kj::String host, kj::String service, uint portHint) {
+  // This shitty function spawns a thread to run getaddrinfo().  Unfortunately, getaddrinfo() is
+  // the only cross-platform DNS API and it is blocking.
+  //
+  // TODO(perf):  Use a thread pool?  Maybe kj::Thread should use a thread pool automatically?
+  //   Maybe use the various platform-specific asynchronous DNS libraries?  Please do not implement
+  //   a custom DNS resolver...
+
+  int fds[2];
+#if __linux__
+  KJ_SYSCALL(pipe2(fds, O_NONBLOCK | O_CLOEXEC));
+#else
+  KJ_SYSCALL(pipe(fds));
+#endif
+
+  auto input = lowLevel.wrapInputFd(fds[0], NEW_FD_FLAGS);
+
+  int outFd = fds[1];
+
+  LookupParams params = { kj::mv(host), kj::mv(service) };
+
+  auto thread = heap<Thread>(kj::mvCapture(params, [outFd,portHint](LookupParams&& params) {
+    FdOutputStream output((AutoCloseFd(outFd)));
+
+    struct addrinfo* list;
+    int status = getaddrinfo(
+        params.host == "*" ? nullptr : params.host.cStr(),
+        params.service == nullptr ? nullptr : params.service.cStr(),
+        nullptr, &list);
+    if (status == 0) {
+      KJ_DEFER(freeaddrinfo(list));
+
+      struct addrinfo* cur = list;
+      while (cur != nullptr) {
+        if (params.service == nullptr) {
+          switch (cur->ai_addr->sa_family) {
+            case AF_INET:
+              ((struct sockaddr_in*)cur->ai_addr)->sin_port = htons(portHint);
+              break;
+            case AF_INET6:
+              ((struct sockaddr_in6*)cur->ai_addr)->sin6_port = htons(portHint);
+              break;
+            default:
+              break;
+          }
+        }
+
+        SocketAddress addr;
+        if (params.host == "*") {
+          // Set up a wildcard SocketAddress.  Only use the port number returned by getaddrinfo().
+          addr.wildcard = true;
+          addr.addrlen = sizeof(addr.addr.inet6);
+          addr.addr.inet6.sin6_family = AF_INET6;
+          switch (cur->ai_addr->sa_family) {
+            case AF_INET:
+              addr.addr.inet6.sin6_port = ((struct sockaddr_in*)cur->ai_addr)->sin_port;
+              break;
+            case AF_INET6:
+              addr.addr.inet6.sin6_port = ((struct sockaddr_in6*)cur->ai_addr)->sin6_port;
+              break;
+            default:
+              addr.addr.inet6.sin6_port = portHint;
+              break;
+          }
+        } else {
+          addr.addrlen = cur->ai_addrlen;
+          memcpy(&addr.addr.generic, cur->ai_addr, cur->ai_addrlen);
+        }
+        static_assert(__has_trivial_copy(SocketAddress), "Can't write() SocketAddress...");
+        output.write(&addr, sizeof(addr));
+        cur = cur->ai_next;
+      }
+    } else if (status == EAI_SYSTEM) {
+      KJ_FAIL_SYSCALL("getaddrinfo", errno, params.host, params.service) {
+        return;
+      }
+    } else {
+      KJ_FAIL_REQUIRE("DNS lookup failed.",
+                      params.host, params.service, gai_strerror(status)) {
+        return;
+      }
+    }
+  }));
+
+  auto reader = heap<LookupReader>(kj::mv(thread), kj::mv(input));
+  return reader->read().attach(kj::mv(reader));
+}
 
 // =======================================================================================
 
 class FdConnectionReceiver final: public ConnectionReceiver, public OwnedFileDescriptor {
 public:
-  FdConnectionReceiver(UnixEventPort& eventPort, int fd)
-      : OwnedFileDescriptor(fd), eventPort(eventPort) {}
+  FdConnectionReceiver(UnixEventPort& eventPort, int fd, uint flags)
+      : OwnedFileDescriptor(fd, flags), eventPort(eventPort) {}
 
   Promise<Own<AsyncIoStream>> accept() override {
     int newFd;
 
+  retry:
 #if __linux__
-    KJ_NONBLOCKING_SYSCALL(newFd = ::accept4(fd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC)) {
-      // error
-      return nullptr;
-    }
+    newFd = ::accept4(fd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
 #else
-    KJ_NONBLOCKING_SYSCALL(newFd = ::accept(fd, nullptr, nullptr)) {
-      // error
-      return nullptr;
-    }
+    newFd = ::accept(fd, nullptr, nullptr);
 #endif
 
-    if (newFd < 0) {
-      // Gotta wait.
-      return eventPort.onFdEvent(fd, POLLIN).then([this](short) {
-        return accept();
-      });
+    if (newFd >= 0) {
+      return Own<AsyncIoStream>(heap<AsyncStreamFd>(eventPort, newFd, NEW_FD_FLAGS));
     } else {
-      return Own<AsyncIoStream>(heap<Socket>(eventPort, newFd));
+      int error = errno;
+
+      switch (error) {
+        case EAGAIN:
+#if EAGAIN != EWOULDBLOCK
+        case EWOULDBLOCK:
+#endif
+          // Not ready yet.
+          return eventPort.onFdEvent(fd, POLLIN).then([this](short) {
+            return accept();
+          });
+
+        case EINTR:
+        case ENETDOWN:
+        case EPROTO:
+        case EHOSTDOWN:
+        case EHOSTUNREACH:
+        case ENETUNREACH:
+        case ECONNABORTED:
+        case ETIMEDOUT:
+          // According to the Linux man page, accept() may report an error if the accepted
+          // connection is already broken.  In this case, we really ought to just ignore it and
+          // keep waiting.  But it's hard to say exactly what errors are such network errors and
+          // which ones are permanent errors.  We've made a guess here.
+          goto retry;
+
+        default:
+          KJ_FAIL_SYSCALL("accept", error);
+      }
+
     }
   }
 
@@ -542,49 +713,23 @@ public:
   UnixEventPort& eventPort;
 };
 
-// =======================================================================================
-
-class LocalSocketAddress final: public LocalAddress {
+class LowLevelAsyncIoProviderImpl final: public LowLevelAsyncIoProvider {
 public:
-  LocalSocketAddress(UnixEventPort& eventPort, SocketAddress addr)
-      : eventPort(eventPort), addr(addr) {}
+  LowLevelAsyncIoProviderImpl(): eventLoop(eventPort), waitScope(eventLoop) {}
 
-  Own<ConnectionReceiver> listen() override {
-    int fd = addr.socket(SOCK_STREAM);
-    auto result = heap<FdConnectionReceiver>(eventPort, fd);
+  inline WaitScope& getWaitScope() { return waitScope; }
 
-    // We always enable SO_REUSEADDR because having to take your server down for five minutes
-    // before it can restart really sucks.
-    int optval = 1;
-    KJ_SYSCALL(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)));
-
-    addr.bind(fd);
-
-    // TODO(someday):  Let queue size be specified explicitly in string addresses.
-    KJ_SYSCALL(::listen(fd, SOMAXCONN));
-
-    return kj::mv(result);
+  Own<AsyncInputStream> wrapInputFd(int fd, uint flags = 0) override {
+    return heap<AsyncStreamFd>(eventPort, fd, flags);
   }
-
-  String toString() override {
-    return addr.toString();
+  Own<AsyncOutputStream> wrapOutputFd(int fd, uint flags = 0) override {
+    return heap<AsyncStreamFd>(eventPort, fd, flags);
   }
-
-private:
-  UnixEventPort& eventPort;
-  SocketAddress addr;
-};
-
-class RemoteSocketAddress final: public RemoteAddress {
-public:
-  RemoteSocketAddress(UnixEventPort& eventPort, SocketAddress addr)
-      : eventPort(eventPort), addr(addr) {}
-
-  Promise<Own<AsyncIoStream>> connect() override {
-    int fd = addr.socket(SOCK_STREAM);
-    auto result = heap<Socket>(eventPort, fd);
-    addr.connect(fd);
-
+  Own<AsyncIoStream> wrapSocketFd(int fd, uint flags = 0) override {
+    return heap<AsyncStreamFd>(eventPort, fd, flags);
+  }
+  Promise<Own<AsyncIoStream>> wrapConnectingSocketFd(int fd, uint flags = 0) override {
+    auto result = heap<AsyncStreamFd>(eventPort, fd, flags);
     return eventPort.onFdEvent(fd, POLLOUT).then(kj::mvCapture(result,
         [fd](Own<AsyncIoStream>&& stream, short events) {
           int err;
@@ -596,52 +741,127 @@ public:
           return kj::mv(stream);
         }));
   }
-
-  String toString() override {
-    return addr.toString();
+  Own<ConnectionReceiver> wrapListenSocketFd(int fd, uint flags = 0) override {
+    return heap<FdConnectionReceiver>(eventPort, fd, flags);
   }
 
 private:
-  UnixEventPort& eventPort;
-  SocketAddress addr;
-};
-
-class SocketNetwork final: public Network {
-public:
-  explicit SocketNetwork(UnixEventPort& eventPort): eventPort(eventPort) {}
-
-  Promise<Own<LocalAddress>> parseLocalAddress(StringPtr addr, uint portHint = 0) override {
-    auto& eventPortCopy = eventPort;
-    return evalLater(mvCapture(heapString(addr),
-        [&eventPortCopy,portHint](String&& addr) -> Own<LocalAddress> {
-          return heap<LocalSocketAddress>(eventPortCopy, SocketAddress::parseLocal(addr, portHint));
-        }));
-  }
-  Promise<Own<RemoteAddress>> parseRemoteAddress(StringPtr addr, uint portHint = 0) override {
-    auto& eventPortCopy = eventPort;
-    return evalLater(mvCapture(heapString(addr),
-        [&eventPortCopy,portHint](String&& addr) -> Own<RemoteAddress> {
-          return heap<RemoteSocketAddress>(eventPortCopy, SocketAddress::parse(addr, portHint));
-        }));
-  }
-
-  Own<LocalAddress> getLocalSockaddr(const void* sockaddr, uint len) override {
-    return Own<LocalAddress>(heap<LocalSocketAddress>(eventPort, SocketAddress(sockaddr, len)));
-  }
-  Own<RemoteAddress> getRemoteSockaddr(const void* sockaddr, uint len) override {
-    return Own<RemoteAddress>(heap<RemoteSocketAddress>(eventPort, SocketAddress(sockaddr, len)));
-  }
-
-private:
-  UnixEventPort& eventPort;
+  UnixEventPort eventPort;
+  EventLoop eventLoop;
+  WaitScope waitScope;
 };
 
 // =======================================================================================
 
-class UnixAsyncIoProvider final: public AsyncIoProvider {
+class NetworkAddressImpl final: public NetworkAddress {
 public:
-  UnixAsyncIoProvider()
-      : eventLoop(eventPort), network(eventPort) {}
+  NetworkAddressImpl(LowLevelAsyncIoProvider& lowLevel, Array<SocketAddress> addrs)
+      : lowLevel(lowLevel), addrs(kj::mv(addrs)) {}
+
+  Promise<Own<AsyncIoStream>> connect() override {
+    return connectImpl(0);
+  }
+
+  Own<ConnectionReceiver> listen() override {
+    if (addrs.size() > 1) {
+      KJ_LOG(WARNING, "Bind address resolved to multiple addresses.  Only the first address will "
+          "be used.  If this is incorrect, specify the address numerically.  This may be fixed "
+          "in the future.", addrs[0].toString());
+    }
+
+    int fd = addrs[0].socket(SOCK_STREAM);
+
+    {
+      KJ_ON_SCOPE_FAILURE(close(fd));
+
+      // We always enable SO_REUSEADDR because having to take your server down for five minutes
+      // before it can restart really sucks.
+      int optval = 1;
+      KJ_SYSCALL(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)));
+
+      addrs[0].bind(fd);
+
+      // TODO(someday):  Let queue size be specified explicitly in string addresses.
+      KJ_SYSCALL(::listen(fd, SOMAXCONN));
+    }
+
+    return lowLevel.wrapListenSocketFd(fd, NEW_FD_FLAGS);
+  }
+
+  String toString() override {
+    return strArray(KJ_MAP(addr, addrs) { return addr.toString(); }, ",");
+  }
+
+private:
+  LowLevelAsyncIoProvider& lowLevel;
+  Array<SocketAddress> addrs;
+
+  Promise<Own<AsyncIoStream>> connectImpl(uint index) {
+    KJ_ASSERT(index < addrs.size());
+
+    int fd = addrs[index].socket(SOCK_STREAM);
+
+    KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+      addrs[index].connect(fd);
+    })) {
+      // Connect failed.
+      close(fd);
+      if (index + 1 < addrs.size()) {
+        // Try the next address instead.
+        return connectImpl(index + 1);
+      } else {
+        // No more addresses to try, so propagate the exception.
+        return kj::mv(*exception);
+      }
+    }
+
+    return lowLevel.wrapConnectingSocketFd(fd, NEW_FD_FLAGS).then(
+        [](Own<AsyncIoStream>&& stream) -> Promise<Own<AsyncIoStream>> {
+      // Success, pass along.
+      return kj::mv(stream);
+    }, [this,index](Exception&& exception) -> Promise<Own<AsyncIoStream>> {
+      // Connect failed.
+      if (index + 1 < addrs.size()) {
+        // Try the next address instead.
+        return connectImpl(index + 1);
+      } else {
+        // No more addresses to try, so propagate the exception.
+        return kj::mv(exception);
+      }
+    });
+  }
+};
+
+class SocketNetwork final: public Network {
+public:
+  explicit SocketNetwork(LowLevelAsyncIoProvider& lowLevel): lowLevel(lowLevel) {}
+
+  Promise<Own<NetworkAddress>> parseAddress(StringPtr addr, uint portHint = 0) override {
+    auto& lowLevelCopy = lowLevel;
+    return evalLater(mvCapture(heapString(addr),
+        [&lowLevelCopy,portHint](String&& addr) {
+      return SocketAddress::parse(lowLevelCopy, addr, portHint);
+    })).then([&lowLevelCopy](Array<SocketAddress> addresses) -> Own<NetworkAddress> {
+      return heap<NetworkAddressImpl>(lowLevelCopy, kj::mv(addresses));
+    });
+  }
+
+  Own<NetworkAddress> getSockaddr(const void* sockaddr, uint len) override {
+    auto array = kj::heapArrayBuilder<SocketAddress>(1);
+    array.add(SocketAddress(sockaddr, len));
+    return Own<NetworkAddress>(heap<NetworkAddressImpl>(lowLevel, array.finish()));
+  }
+
+private:
+  LowLevelAsyncIoProvider& lowLevel;
+};
+
+// =======================================================================================
+
+class AsyncIoProviderImpl final: public AsyncIoProvider {
+public:
+  AsyncIoProviderImpl(LowLevelAsyncIoProvider& lowLevel)
+      : lowLevel(lowLevel), network(lowLevel) {}
 
   OneWayPipe newOneWayPipe() override {
     int fds[2];
@@ -650,7 +870,10 @@ public:
 #else
     KJ_SYSCALL(pipe(fds));
 #endif
-    return OneWayPipe { heap<Socket>(eventPort, fds[0]), heap<Socket>(eventPort, fds[1]) };
+    return OneWayPipe {
+      lowLevel.wrapInputFd(fds[0], NEW_FD_FLAGS),
+      lowLevel.wrapOutputFd(fds[1], NEW_FD_FLAGS)
+    };
   }
 
   TwoWayPipe newTwoWayPipe() override {
@@ -660,15 +883,18 @@ public:
     type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
 #endif
     KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
-    return TwoWayPipe { { heap<Socket>(eventPort, fds[0]), heap<Socket>(eventPort, fds[1]) } };
+    return TwoWayPipe { {
+      lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS),
+      lowLevel.wrapSocketFd(fds[1], NEW_FD_FLAGS)
+    } };
   }
 
   Network& getNetwork() override {
     return network;
   }
 
-  Own<AsyncIoStream> newPipeThread(
-      Function<void(AsyncIoProvider& ioProvider, AsyncIoStream& stream)> startFunc) override {
+  PipeThread newPipeThread(
+      Function<void(AsyncIoProvider&, AsyncIoStream&, WaitScope&)> startFunc) override {
     int fds[2];
     int type = SOCK_STREAM;
 #if __linux__
@@ -677,32 +903,23 @@ public:
     KJ_SYSCALL(socketpair(AF_UNIX, type, 0, fds));
 
     int threadFd = fds[1];
+    KJ_ON_SCOPE_FAILURE(close(threadFd));
 
-    return heap<ThreadSocket>(eventPort, fds[0], kj::mvCapture(startFunc,
-        [threadFd](Function<void(AsyncIoProvider& ioProvider, AsyncIoStream& stream)>&& startFunc) {
-      KJ_DEFER(KJ_SYSCALL(close(threadFd)));
-      UnixAsyncIoProvider ioProvider;
-      auto stream = ioProvider.wrapSocketFd(threadFd);
-      startFunc(ioProvider, *stream);
+    auto pipe = lowLevel.wrapSocketFd(fds[0], NEW_FD_FLAGS);
+
+    auto thread = heap<Thread>(kj::mvCapture(startFunc,
+        [threadFd](Function<void(AsyncIoProvider&, AsyncIoStream&, WaitScope&)>&& startFunc) {
+      LowLevelAsyncIoProviderImpl lowLevel;
+      auto stream = lowLevel.wrapSocketFd(threadFd, NEW_FD_FLAGS);
+      AsyncIoProviderImpl ioProvider(lowLevel);
+      startFunc(ioProvider, *stream, lowLevel.getWaitScope());
     }));
-  }
 
-  Own<AsyncInputStream> wrapInputFd(int fd) override {
-    setNonblocking(fd);
-    return heap<AsyncStreamFd>(eventPort, fd, -1);
-  }
-  Own<AsyncOutputStream> wrapOutputFd(int fd) override {
-    setNonblocking(fd);
-    return heap<AsyncStreamFd>(eventPort, -1, fd);
-  }
-  Own<AsyncIoStream> wrapSocketFd(int fd) override {
-    setNonblocking(fd);
-    return heap<AsyncStreamFd>(eventPort, fd, fd);
+    return { kj::mv(thread), kj::mv(pipe) };
   }
 
 private:
-  UnixEventPort eventPort;
-  EventLoop eventLoop;
+  LowLevelAsyncIoProvider& lowLevel;
   SocketNetwork network;
 };
 
@@ -712,8 +929,15 @@ Promise<void> AsyncInputStream::read(void* buffer, size_t bytes) {
   return read(buffer, bytes, bytes).then([](size_t) {});
 }
 
-Own<AsyncIoProvider> setupIoEventLoop() {
-  return heap<UnixAsyncIoProvider>();
+Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel) {
+  return kj::heap<AsyncIoProviderImpl>(lowLevel);
+}
+
+AsyncIoContext setupAsyncIo() {
+  auto lowLevel = heap<LowLevelAsyncIoProviderImpl>();
+  auto ioProvider = kj::heap<AsyncIoProviderImpl>(*lowLevel);
+  auto& waitScope = lowLevel->getWaitScope();
+  return { kj::mv(lowLevel), kj::mv(ioProvider), waitScope };
 }
 
 }  // namespace kj

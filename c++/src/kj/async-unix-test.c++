@@ -53,10 +53,11 @@ public:
 TEST_F(AsyncUnixTest, Signals) {
   UnixEventPort port;
   EventLoop loop(port);
+  WaitScope waitScope(loop);
 
   kill(getpid(), SIGUSR2);
 
-  siginfo_t info = port.onSignal(SIGUSR2).wait();
+  siginfo_t info = port.onSignal(SIGUSR2).wait(waitScope);
   EXPECT_EQ(SIGUSR2, info.si_signo);
   EXPECT_SI_CODE(SI_USER, info.si_code);
 }
@@ -70,13 +71,14 @@ TEST_F(AsyncUnixTest, SignalWithValue) {
 
   UnixEventPort port;
   EventLoop loop(port);
+  WaitScope waitScope(loop);
 
   union sigval value;
   memset(&value, 0, sizeof(value));
   value.sival_int = 123;
   sigqueue(getpid(), SIGUSR2, value);
 
-  siginfo_t info = port.onSignal(SIGUSR2).wait();
+  siginfo_t info = port.onSignal(SIGUSR2).wait(waitScope);
   EXPECT_EQ(SIGUSR2, info.si_signo);
   EXPECT_SI_CODE(SI_QUEUE, info.si_code);
   EXPECT_EQ(123, info.si_value.sival_int);
@@ -86,16 +88,17 @@ TEST_F(AsyncUnixTest, SignalWithValue) {
 TEST_F(AsyncUnixTest, SignalsMultiListen) {
   UnixEventPort port;
   EventLoop loop(port);
+  WaitScope waitScope(loop);
 
   port.onSignal(SIGIO).then([](siginfo_t&&) {
     ADD_FAILURE() << "Received wrong signal.";
-  }).daemonize([](kj::Exception&& exception) {
+  }).detach([](kj::Exception&& exception) {
     ADD_FAILURE() << kj::str(exception).cStr();
   });
 
   kill(getpid(), SIGUSR2);
 
-  siginfo_t info = port.onSignal(SIGUSR2).wait();
+  siginfo_t info = port.onSignal(SIGUSR2).wait(waitScope);
   EXPECT_EQ(SIGUSR2, info.si_signo);
   EXPECT_SI_CODE(SI_USER, info.si_code);
 }
@@ -103,15 +106,16 @@ TEST_F(AsyncUnixTest, SignalsMultiListen) {
 TEST_F(AsyncUnixTest, SignalsMultiReceive) {
   UnixEventPort port;
   EventLoop loop(port);
+  WaitScope waitScope(loop);
 
   kill(getpid(), SIGUSR2);
   kill(getpid(), SIGIO);
 
-  siginfo_t info = port.onSignal(SIGUSR2).wait();
+  siginfo_t info = port.onSignal(SIGUSR2).wait(waitScope);
   EXPECT_EQ(SIGUSR2, info.si_signo);
   EXPECT_SI_CODE(SI_USER, info.si_code);
 
-  info = port.onSignal(SIGIO).wait();
+  info = port.onSignal(SIGIO).wait(waitScope);
   EXPECT_EQ(SIGIO, info.si_signo);
   EXPECT_SI_CODE(SI_USER, info.si_code);
 }
@@ -119,6 +123,7 @@ TEST_F(AsyncUnixTest, SignalsMultiReceive) {
 TEST_F(AsyncUnixTest, SignalsAsync) {
   UnixEventPort port;
   EventLoop loop(port);
+  WaitScope waitScope(loop);
 
   // Arrange for a signal to be sent from another thread.
   pthread_t mainThread = pthread_self();
@@ -127,7 +132,7 @@ TEST_F(AsyncUnixTest, SignalsAsync) {
     pthread_kill(mainThread, SIGUSR2);
   });
 
-  siginfo_t info = port.onSignal(SIGUSR2).wait();
+  siginfo_t info = port.onSignal(SIGUSR2).wait(waitScope);
   EXPECT_EQ(SIGUSR2, info.si_signo);
 #if __linux__
   EXPECT_SI_CODE(SI_TKILL, info.si_code);
@@ -139,6 +144,7 @@ TEST_F(AsyncUnixTest, SignalsNoWait) {
 
   UnixEventPort port;
   EventLoop loop(port);
+  WaitScope waitScope(loop);
 
   bool receivedSigusr2 = false;
   bool receivedSigio = false;
@@ -146,12 +152,12 @@ TEST_F(AsyncUnixTest, SignalsNoWait) {
     receivedSigusr2 = true;
     EXPECT_EQ(SIGUSR2, info.si_signo);
     EXPECT_SI_CODE(SI_USER, info.si_code);
-  }).daemonize([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
+  }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
   port.onSignal(SIGIO).then([&](siginfo_t&& info) {
     receivedSigio = true;
     EXPECT_EQ(SIGIO, info.si_signo);
     EXPECT_SI_CODE(SI_USER, info.si_code);
-  }).daemonize([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
+  }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
 
   kill(getpid(), SIGUSR2);
   kill(getpid(), SIGIO);
@@ -178,18 +184,20 @@ TEST_F(AsyncUnixTest, SignalsNoWait) {
 TEST_F(AsyncUnixTest, Poll) {
   UnixEventPort port;
   EventLoop loop(port);
+  WaitScope waitScope(loop);
 
   int pipefds[2];
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
   KJ_SYSCALL(pipe(pipefds));
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
 
-  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait());
+  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait(waitScope));
 }
 
 TEST_F(AsyncUnixTest, PollMultiListen) {
   UnixEventPort port;
   EventLoop loop(port);
+  WaitScope waitScope(loop);
 
   int bogusPipefds[2];
   KJ_SYSCALL(pipe(bogusPipefds));
@@ -197,7 +205,7 @@ TEST_F(AsyncUnixTest, PollMultiListen) {
 
   port.onFdEvent(bogusPipefds[0], POLLIN | POLLPRI).then([](short s) {
     ADD_FAILURE() << "Received wrong poll.";
-  }).daemonize([](kj::Exception&& exception) {
+  }).detach([](kj::Exception&& exception) {
     ADD_FAILURE() << kj::str(exception).cStr();
   });
 
@@ -206,12 +214,13 @@ TEST_F(AsyncUnixTest, PollMultiListen) {
   KJ_DEFER({ close(pipefds[1]); close(pipefds[0]); });
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
 
-  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait());
+  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait(waitScope));
 }
 
 TEST_F(AsyncUnixTest, PollMultiReceive) {
   UnixEventPort port;
   EventLoop loop(port);
+  WaitScope waitScope(loop);
 
   int pipefds[2];
   KJ_SYSCALL(pipe(pipefds));
@@ -223,13 +232,14 @@ TEST_F(AsyncUnixTest, PollMultiReceive) {
   KJ_DEFER({ close(pipefds2[1]); close(pipefds2[0]); });
   KJ_SYSCALL(write(pipefds2[1], "bar", 3));
 
-  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait());
-  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds2[0], POLLIN | POLLPRI).wait());
+  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait(waitScope));
+  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds2[0], POLLIN | POLLPRI).wait(waitScope));
 }
 
 TEST_F(AsyncUnixTest, PollAsync) {
   UnixEventPort port;
   EventLoop loop(port);
+  WaitScope waitScope(loop);
 
   // Make a pipe and wait on its read end while another thread writes to it.
   int pipefds[2];
@@ -241,7 +251,7 @@ TEST_F(AsyncUnixTest, PollAsync) {
   });
 
   // Wait for the event in this thread.
-  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait());
+  EXPECT_EQ(POLLIN, port.onFdEvent(pipefds[0], POLLIN | POLLPRI).wait(waitScope));
 }
 
 TEST_F(AsyncUnixTest, PollNoWait) {
@@ -249,6 +259,7 @@ TEST_F(AsyncUnixTest, PollNoWait) {
 
   UnixEventPort port;
   EventLoop loop(port);
+  WaitScope waitScope(loop);
 
   int pipefds[2];
   KJ_SYSCALL(pipe(pipefds));
@@ -262,11 +273,11 @@ TEST_F(AsyncUnixTest, PollNoWait) {
   port.onFdEvent(pipefds[0], POLLIN | POLLPRI).then([&](short&& events) {
     receivedCount++;
     EXPECT_EQ(POLLIN, events);
-  }).daemonize([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
+  }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
   port.onFdEvent(pipefds2[0], POLLIN | POLLPRI).then([&](short&& events) {
     receivedCount++;
     EXPECT_EQ(POLLIN, events);
-  }).daemonize([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
+  }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
 
   KJ_SYSCALL(write(pipefds[1], "foo", 3));
   KJ_SYSCALL(write(pipefds2[1], "bar", 3));

@@ -30,8 +30,8 @@ namespace kj {
 namespace {
 
 TEST(AsyncIo, SimpleNetwork) {
-  auto ioProvider = setupIoEventLoop();
-  auto& network = ioProvider->getNetwork();
+  auto ioContext = setupAsyncIo();
+  auto& network = ioContext.provider->getNetwork();
 
   Own<ConnectionReceiver> listener;
   Own<AsyncIoStream> server;
@@ -42,17 +42,17 @@ TEST(AsyncIo, SimpleNetwork) {
   auto port = newPromiseAndFulfiller<uint>();
 
   port.promise.then([&](uint portnum) {
-    return network.parseRemoteAddress("127.0.0.1", portnum);
-  }).then([&](Own<RemoteAddress>&& result) {
+    return network.parseAddress("localhost", portnum);
+  }).then([&](Own<NetworkAddress>&& result) {
     return result->connect();
   }).then([&](Own<AsyncIoStream>&& result) {
     client = kj::mv(result);
     return client->write("foo", 3);
-  }).daemonize([](kj::Exception&& exception) {
+  }).detach([](kj::Exception&& exception) {
     ADD_FAILURE() << kj::str(exception).cStr();
   });
 
-  kj::String result = network.parseLocalAddress("*").then([&](Own<LocalAddress>&& result) {
+  kj::String result = network.parseAddress("*").then([&](Own<NetworkAddress>&& result) {
     listener = result->listen();
     port.fulfiller->fulfill(listener->getPort());
     return listener->accept();
@@ -62,57 +62,62 @@ TEST(AsyncIo, SimpleNetwork) {
   }).then([&](size_t n) {
     EXPECT_EQ(3u, n);
     return heapString(receiveBuffer, n);
-  }).wait();
+  }).wait(ioContext.waitScope);
 
   EXPECT_EQ("foo", result);
 }
 
-String tryParseLocal(Network& network, StringPtr text, uint portHint = 0) {
-  return network.parseLocalAddress(text, portHint).wait()->toString();
-}
-
-String tryParseRemote(Network& network, StringPtr text, uint portHint = 0) {
-  return network.parseRemoteAddress(text, portHint).wait()->toString();
+String tryParse(WaitScope& waitScope, Network& network, StringPtr text, uint portHint = 0) {
+  return network.parseAddress(text, portHint).wait(waitScope)->toString();
 }
 
 TEST(AsyncIo, AddressParsing) {
-  auto ioProvider = setupIoEventLoop();
-  auto& network = ioProvider->getNetwork();
+  auto ioContext = setupAsyncIo();
+  auto& w = ioContext.waitScope;
+  auto& network = ioContext.provider->getNetwork();
 
-  EXPECT_EQ("*:0", tryParseLocal(network, "*"));
-  EXPECT_EQ("*:123", tryParseLocal(network, "123"));
-  EXPECT_EQ("*:123", tryParseLocal(network, ":123"));
-  EXPECT_EQ("[::]:123", tryParseLocal(network, "0::0", 123));
-  EXPECT_EQ("0.0.0.0:0", tryParseLocal(network, "0.0.0.0"));
-  EXPECT_EQ("1.2.3.4:5678", tryParseRemote(network, "1.2.3.4", 5678));
-  EXPECT_EQ("[12ab:cd::34]:321", tryParseRemote(network, "[12ab:cd:0::0:34]:321", 432));
+  EXPECT_EQ("*:0", tryParse(w, network, "*"));
+  EXPECT_EQ("*:123", tryParse(w, network, "*:123"));
+  EXPECT_EQ("[::]:123", tryParse(w, network, "0::0", 123));
+  EXPECT_EQ("0.0.0.0:0", tryParse(w, network, "0.0.0.0"));
+  EXPECT_EQ("1.2.3.4:5678", tryParse(w, network, "1.2.3.4", 5678));
+  EXPECT_EQ("[12ab:cd::34]:321", tryParse(w, network, "[12ab:cd:0::0:34]:321", 432));
 
-  EXPECT_EQ("unix:foo/bar/baz", tryParseLocal(network, "unix:foo/bar/baz"));
-  EXPECT_EQ("unix:foo/bar/baz", tryParseRemote(network, "unix:foo/bar/baz"));
+  EXPECT_EQ("unix:foo/bar/baz", tryParse(w, network, "unix:foo/bar/baz"));
+
+  // We can parse services by name...
+  EXPECT_EQ("1.2.3.4:80", tryParse(w, network, "1.2.3.4:http", 5678));
+  EXPECT_EQ("[::]:80", tryParse(w, network, "[::]:http", 5678));
+  EXPECT_EQ("[12ab:cd::34]:80", tryParse(w, network, "[12ab:cd::34]:http", 5678));
+  EXPECT_EQ("*:80", tryParse(w, network, "*:http", 5678));
+
+  // It would be nice to test DNS lookup here but the test would not be very hermetic.  Even
+  // localhost can map to different addresses depending on whether IPv6 is enabled.  We do
+  // connect to "localhost" in a different test, though.
 }
 
 TEST(AsyncIo, OneWayPipe) {
-  auto ioProvider = setupIoEventLoop();
+  auto ioContext = setupAsyncIo();
 
-  auto pipe = ioProvider->newOneWayPipe();
+  auto pipe = ioContext.provider->newOneWayPipe();
   char receiveBuffer[4];
 
-  pipe.out->write("foo", 3).daemonize([](kj::Exception&& exception) {
+  pipe.out->write("foo", 3).detach([](kj::Exception&& exception) {
     ADD_FAILURE() << kj::str(exception).cStr();
   });
 
   kj::String result = pipe.in->tryRead(receiveBuffer, 3, 4).then([&](size_t n) {
     EXPECT_EQ(3u, n);
     return heapString(receiveBuffer, n);
-  }).wait();
+  }).wait(ioContext.waitScope);
 
   EXPECT_EQ("foo", result);
 }
 
 TEST(AsyncIo, TwoWayPipe) {
-  auto ioProvider = setupIoEventLoop();
+  auto ioContext = setupAsyncIo();
 
-  auto pipe = ioProvider->newTwoWayPipe();
+  auto pipe = ioContext.provider->newTwoWayPipe();
   char receiveBuffer1[4];
   char receiveBuffer2[4];
 
@@ -128,53 +133,55 @@ TEST(AsyncIo, TwoWayPipe) {
   }).then([&](size_t n) {
     EXPECT_EQ(3u, n);
     return heapString(receiveBuffer2, n);
-  }).wait();
+  }).wait(ioContext.waitScope);
 
-  kj::String result2 = promise.wait();
+  kj::String result2 = promise.wait(ioContext.waitScope);
 
   EXPECT_EQ("foo", result);
   EXPECT_EQ("bar", result2);
 }
 
 TEST(AsyncIo, PipeThread) {
-  auto ioProvider = setupIoEventLoop();
+  auto ioContext = setupAsyncIo();
 
-  auto stream = ioProvider->newPipeThread([](AsyncIoProvider& ioProvider, AsyncIoStream& stream) {
+  auto pipeThread = ioContext.provider->newPipeThread(
+      [](AsyncIoProvider& ioProvider, AsyncIoStream& stream, WaitScope& waitScope) {
     char buf[4];
-    stream.write("foo", 3).wait();
-    EXPECT_EQ(3u, stream.tryRead(buf, 3, 4).wait());
+    stream.write("foo", 3).wait(waitScope);
+    EXPECT_EQ(3u, stream.tryRead(buf, 3, 4).wait(waitScope));
     EXPECT_EQ("bar", heapString(buf, 3));
 
     // Expect disconnect.
-    EXPECT_EQ(0, stream.tryRead(buf, 1, 1).wait());
+    EXPECT_EQ(0, stream.tryRead(buf, 1, 1).wait(waitScope));
   });
 
   char buf[4];
-  stream->write("bar", 3).wait();
-  EXPECT_EQ(3u, stream->tryRead(buf, 3, 4).wait());
+  pipeThread.pipe->write("bar", 3).wait(ioContext.waitScope);
+  EXPECT_EQ(3u, pipeThread.pipe->tryRead(buf, 3, 4).wait(ioContext.waitScope));
   EXPECT_EQ("foo", heapString(buf, 3));
 }
 
 TEST(AsyncIo, PipeThreadDisconnects) {
   // Like above, but in this case we expect the main thread to detect the pipe thread disconnecting.
 
-  auto ioProvider = setupIoEventLoop();
+  auto ioContext = setupAsyncIo();
 
-  auto stream = ioProvider->newPipeThread([](AsyncIoProvider& ioProvider, AsyncIoStream& stream) {
+  auto pipeThread = ioContext.provider->newPipeThread(
+      [](AsyncIoProvider& ioProvider, AsyncIoStream& stream, WaitScope& waitScope) {
     char buf[4];
-    stream.write("foo", 3).wait();
-    EXPECT_EQ(3u, stream.tryRead(buf, 3, 4).wait());
+    stream.write("foo", 3).wait(waitScope);
+    EXPECT_EQ(3u, stream.tryRead(buf, 3, 4).wait(waitScope));
     EXPECT_EQ("bar", heapString(buf, 3));
   });
 
   char buf[4];
-  EXPECT_EQ(3u, stream->tryRead(buf, 3, 4).wait());
+  EXPECT_EQ(3u, pipeThread.pipe->tryRead(buf, 3, 4).wait(ioContext.waitScope));
   EXPECT_EQ("foo", heapString(buf, 3));
 
-  stream->write("bar", 3).wait();
+  pipeThread.pipe->write("bar", 3).wait(ioContext.waitScope);
 
   // Expect disconnect.
-  EXPECT_EQ(0, stream->tryRead(buf, 1, 1).wait());
+  EXPECT_EQ(0, pipeThread.pipe->tryRead(buf, 1, 1).wait(ioContext.waitScope));
 }
 
 }  // namespace
