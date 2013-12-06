@@ -154,7 +154,7 @@ includecapnp_HEADERS =                                         \
   src/capnp/layout.h                                           \
   src/capnp/orphan.h                                           \
   src/capnp/list.h                                             \
-  src/capnp/object.h                                           \
+  src/capnp/any.h                                              \
   src/capnp/message.h                                          \
   src/capnp/capability.h                                       \
   src/capnp/capability-context.h                               \
@@ -216,7 +216,7 @@ libcapnp_la_SOURCES=                                           \
   src/capnp/arena.c++                                          \
   src/capnp/layout.c++                                         \
   src/capnp/list.c++                                           \
-  src/capnp/object.c++                                         \
+  src/capnp/any.c++                                            \
   src/capnp/message.c++                                        \
   src/capnp/schema.capnp.c++                                   \
   src/capnp/schema.c++                                         \
@@ -357,7 +357,7 @@ capnp_test_SOURCES =                                           \
   src/capnp/endian-fallback-test.c++                           \
   src/capnp/endian-reverse-test.c++                            \
   src/capnp/layout-test.c++                                    \
-  src/capnp/object-test.c++                                    \
+  src/capnp/any-test.c++                                       \
   src/capnp/message-test.c++                                   \
   src/capnp/capability-test.c++                                \
   src/capnp/schema-test.c++                                    \
