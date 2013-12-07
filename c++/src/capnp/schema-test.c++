@@ -29,11 +29,6 @@ namespace capnp {
 namespace _ {  // private
 namespace {
 
-#if KJ_NO_EXCEPTIONS
-#undef EXPECT_ANY_THROW
-#define EXPECT_ANY_THROW(code) EXPECT_DEATH(code, ".")
-#endif
-
 TEST(Schema, Structs) {
   StructSchema schema = Schema::from<TestAllTypes>();
 
@@ -46,8 +41,8 @@ TEST(Schema, Structs) {
   EXPECT_ANY_THROW(schema.getDependency(typeId<TestDefaults>()));
 
   EXPECT_TRUE(schema.asStruct() == schema);
-  EXPECT_ANY_THROW(schema.asEnum());
-  EXPECT_ANY_THROW(schema.asInterface());
+  EXPECT_NONFATAL_FAILURE(schema.asEnum());
+  EXPECT_NONFATAL_FAILURE(schema.asInterface());
 
   ASSERT_EQ(schema.getFields().size(), schema.getProto().getStruct().getFields().size());
   StructSchema::Field field = schema.getFields()[0];
@@ -126,8 +121,8 @@ TEST(Schema, Enums) {
   EXPECT_ANY_THROW(schema.getDependency(typeId<TestAllTypes>()));
   EXPECT_ANY_THROW(schema.getDependency(typeId<TestEnum>()));
 
-  EXPECT_ANY_THROW(schema.asStruct());
-  EXPECT_ANY_THROW(schema.asInterface());
+  EXPECT_NONFATAL_FAILURE(schema.asStruct());
+  EXPECT_NONFATAL_FAILURE(schema.asInterface());
   EXPECT_TRUE(schema.asEnum() == schema);
 
   ASSERT_EQ(schema.getEnumerants().size(),

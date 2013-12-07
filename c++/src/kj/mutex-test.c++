@@ -157,7 +157,13 @@ TEST(Mutex, LazyException) {
         return space.construct(456);
       });
 
+  // Unfortunately, the results differ depending on whether exceptions are enabled.
+  // TODO(someday):  Fix this?  Does it matter?
+#if KJ_NO_EXCEPTIONS
+  EXPECT_EQ(123, i);
+#else
   EXPECT_EQ(456, i);
+#endif
 }
 
 }  // namespace

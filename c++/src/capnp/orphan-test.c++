@@ -138,14 +138,6 @@ TEST(Orphans, Data) {
   EXPECT_EQ(data("foo"), root.getDataField());
 }
 
-#if KJ_NO_EXCEPTIONS
-#undef EXPECT_ANY_THROW
-#define EXPECT_ANY_THROW(code) EXPECT_DEATH(code, ".")
-#define EXPECT_NONFATAL_FAILURE(code) code
-#else
-#define EXPECT_NONFATAL_FAILURE EXPECT_ANY_THROW
-#endif
-
 TEST(Orphans, NoCrossMessageTransfers) {
   MallocMessageBuilder builder1;
   MallocMessageBuilder builder2;

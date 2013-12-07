@@ -138,20 +138,6 @@ TEST(Encoding, DefaultsFromEmptyMessage) {
   checkTestMessage(readMessageUnchecked<TestDefaults>(emptyMessage.words));
 }
 
-#if KJ_NO_EXCEPTIONS
-#undef EXPECT_ANY_THROW
-#define EXPECT_ANY_THROW(code) EXPECT_DEATH(code, ".")
-#define EXPECT_NONFATAL_FAILURE(code) code
-#else
-#define EXPECT_NONFATAL_FAILURE EXPECT_ANY_THROW
-#endif
-
-#ifdef KJ_DEBUG
-#define EXPECT_DEBUG_ANY_THROW EXPECT_ANY_THROW
-#else
-#define EXPECT_DEBUG_ANY_THROW(EXP)
-#endif
-
 TEST(Encoding, Unions) {
   MallocMessageBuilder builder;
   TestUnion::Builder root = builder.getRoot<TestUnion>();

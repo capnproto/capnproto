@@ -30,6 +30,20 @@
 #include "dynamic.h"
 #include <gtest/gtest.h>
 
+#if KJ_NO_EXCEPTIONS
+#undef EXPECT_ANY_THROW
+#define EXPECT_ANY_THROW(code) EXPECT_DEATH(code, ".")
+#endif
+
+#define EXPECT_NONFATAL_FAILURE(code) \
+  EXPECT_TRUE(kj::runCatchingExceptions([&]() { code; }) != nullptr);
+
+#ifdef KJ_DEBUG
+#define EXPECT_DEBUG_ANY_THROW EXPECT_ANY_THROW
+#else
+#define EXPECT_DEBUG_ANY_THROW(EXP)
+#endif
+
 namespace capnp {
 
 inline std::ostream& operator<<(std::ostream& os, const Data::Reader& value) {

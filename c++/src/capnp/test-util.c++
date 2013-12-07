@@ -1015,6 +1015,7 @@ kj::Promise<void> TestMoreStuffImpl::neverReturn(NeverReturnContext context) {
   // Also attach `cap` to the result struct to make sure that is released.
   context.getResults().setCapCopy(context.getParams().getCap());
 
+  context.releaseParams();
   context.allowCancellation();
   return kj::mv(promise);
 }

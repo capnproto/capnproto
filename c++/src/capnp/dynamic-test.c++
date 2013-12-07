@@ -313,14 +313,6 @@ TEST(DynamicApi, UnionsRead) {
   }
 }
 
-#if KJ_NO_EXCEPTIONS
-#undef EXPECT_ANY_THROW
-#define EXPECT_ANY_THROW(code) EXPECT_DEATH(code, ".")
-#define EXPECT_NONFATAL_FAILURE(code) code
-#else
-#define EXPECT_NONFATAL_FAILURE EXPECT_ANY_THROW
-#endif
-
 TEST(DynamicApi, UnionsWrite) {
   MallocMessageBuilder builder;
   auto root = builder.initRoot<DynamicStruct>(Schema::from<TestUnion>());

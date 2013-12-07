@@ -42,14 +42,6 @@ namespace capnp {
 namespace _ {
 namespace {
 
-#if KJ_NO_EXCEPTIONS
-#undef EXPECT_ANY_THROW
-#define EXPECT_ANY_THROW(code) EXPECT_DEATH(code, ".")
-#define EXPECT_NONFATAL_FAILURE(code) code
-#else
-#define EXPECT_NONFATAL_FAILURE EXPECT_ANY_THROW
-#endif
-
 TEST(Capability, Basic) {
   kj::EventLoop loop;
   kj::WaitScope waitScope(loop);
@@ -373,7 +365,8 @@ public:
       EXPECT_ANY_THROW(context.getParams());
       return kj::READY_NOW;
     } else {
-      KJ_FAIL_ASSERT("Method not implemented", methodName);
+      KJ_FAIL_ASSERT("Method not implemented", methodName) { break; }
+      return kj::READY_NOW;
     }
   }
 };
