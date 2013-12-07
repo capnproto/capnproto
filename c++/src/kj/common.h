@@ -98,16 +98,18 @@ typedef unsigned char byte;
   #endif
 #endif
 
-#if __OPTIMIZE__ && !defined(NDEBUG) && !defined(DEBUG) && !defined(KJ_DEBUG)
-#warning "You've enabled optimization but not NDEBUG. Usually optimized builds should #define \
-NDEBUG to disable debug asserts, so I am #defining it for you. If you actually want debug asserts, \
-please #define DEBUG or KJ_DEBUG. To make this warning go away, #define NDEBUG yourself, e.g. with \
-the compiler flag -DNDEBUG."
-#define NDEBUG 1
-#endif
-
-#if !defined(NDEBUG) && !defined(KJ_DEBUG)
+#if !defined(KJ_DEBUG) && !defined(KJ_NDEBUG)
+// Heuristically decide whether to enable debug mode.  If DEBUG or NDEBUG is defined, use that.
+// Otherwise, fall back to checking whether optimization is enabled.
+#if defined(DEBUG)
 #define KJ_DEBUG
+#elif defined(NDEBUG)
+#define KJ_NDEBUG
+#elif __OPTIMIZE__
+#define KJ_NDEBUG
+#else
+#define KJ_DEBUG
+#endif
 #endif
 
 #define KJ_DISALLOW_COPY(classname) \

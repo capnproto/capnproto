@@ -101,7 +101,10 @@
 //   `FAIL_RECOVERABLE_SYSCALL` take a string and an OS error number as the first two parameters.
 //   The string should be the name of the failed system call.
 // * For every macro `FOO` above, there is a `DFOO` version (or `RECOVERABLE_DFOO`) which is only
-//   executed in debug mode.  When `NDEBUG` is defined, these macros expand to nothing.
+//   executed in debug mode, i.e. when KJ_DEBUG is defined.  KJ_DEBUG is defined automatically
+//   by common.h when compiling without optimization (unless NDEBUG is defined), but you can also
+//   define it explicitly (e.g. -DKJ_DEBUG).  Generally, production builds should NOT use KJ_DEBUG
+//   as it may enable expensive checks that are unlikely to fail.
 
 #ifndef KJ_DEBUG_H_
 #define KJ_DEBUG_H_
