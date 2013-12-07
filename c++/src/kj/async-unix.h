@@ -43,8 +43,9 @@ class UnixEventPort: public EventPort {
   // just before `poll()` while using a signal handler which `siglongjmp()`s back to just before
   // the signal was unblocked, or it may use a nicer platform-specific API like signalfd.
   //
-  // The implementation uses SIGUSR1.  The application must avoid using this signal for its own
-  // purposes.
+  // The implementation reserves a signal for internal use.  By default, it uses SIGUSR1.  If you
+  // need to use SIGUSR1 for something else, you must offer a different signal by calling
+  // setReservedSignal() at startup.
 
 public:
   UnixEventPort();
@@ -78,6 +79,11 @@ public:
   //
   // To un-capture a signal, simply install a different signal handler and then un-block it from
   // the signal mask.
+
+  static void setReservedSignal(int signum);
+  // Sets the signal number which `UnixEventPort` reserves for internal use.  If your application
+  // needs to use SIGUSR1, call this at startup (before any calls to `captureSignal()` and before
+  // constructing an `UnixEventPort`) to offer a different signal.
 
   // implements EventPort ------------------------------------------------------
   void wait() override;

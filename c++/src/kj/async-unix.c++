@@ -32,6 +32,9 @@ namespace kj {
 
 namespace {
 
+int reservedSignal = SIGUSR1;
+bool tooLateToSetReserved = false;
+
 struct SignalCapture {
   sigjmp_buf jumpTo;
   siginfo_t siginfo;
@@ -48,6 +51,8 @@ void signalHandler(int, siginfo_t* siginfo, void*) {
 }
 
 void registerSignalHandler(int signum) {
+  tooLateToSetReserved = true;
+
   sigset_t mask;
   sigemptyset(&mask);
   sigaddset(&mask, signum);
@@ -61,14 +66,14 @@ void registerSignalHandler(int signum) {
   sigaction(signum, &action, nullptr);
 }
 
-void registerSigusr1() {
-  registerSignalHandler(SIGUSR1);
+void registerReservedSignal() {
+  registerSignalHandler(reservedSignal);
 
   // We also disable SIGPIPE because users of UnixEventLoop almost certainly don't want it.
   signal(SIGPIPE, SIG_IGN);
 }
 
-pthread_once_t registerSigusr1Once = PTHREAD_ONCE_INIT;
+pthread_once_t registerReservedSignalOnce = PTHREAD_ONCE_INIT;
 
 }  // namespace
 
@@ -156,7 +161,7 @@ public:
 };
 
 UnixEventPort::UnixEventPort() {
-  pthread_once(&registerSigusr1Once, &registerSigusr1);
+  pthread_once(&registerReservedSignalOnce, &registerReservedSignal);
 }
 
 UnixEventPort::~UnixEventPort() {}
@@ -170,8 +175,26 @@ Promise<siginfo_t> UnixEventPort::onSignal(int signum) {
 }
 
 void UnixEventPort::captureSignal(int signum) {
-  KJ_REQUIRE(signum != SIGUSR1, "Sorry, SIGUSR1 is reserved by the UnixEventPort implementation.");
+  if (reservedSignal == SIGUSR1) {
+    KJ_REQUIRE(signum != SIGUSR1,
+               "Sorry, SIGUSR1 is reserved by the UnixEventPort implementation.  You may call "
+               "UnixEventPort::setReservedSignal() to reserve a different signal.");
+  } else {
+    KJ_REQUIRE(signum != reservedSignal,
+               "Can't capture signal reserved using setReservedSignal().", signum);
+  }
   registerSignalHandler(signum);
+}
+
+void UnixEventPort::setReservedSignal(int signum) {
+  KJ_REQUIRE(!tooLateToSetReserved,
+             "setReservedSignal() must be called before any calls to `captureSignal()` and "
+             "before any `UnixEventPort` is constructed.");
+  if (reservedSignal != SIGUSR1 && reservedSignal != signum) {
+    KJ_FAIL_REQUIRE("Detected multiple conflicting calls to setReservedSignal().  Please only "
+                    "call this once, or always call it with the same signal number.");
+  }
+  reservedSignal = signum;
 }
 
 class UnixEventPort::PollContext {
@@ -224,7 +247,7 @@ private:
 void UnixEventPort::wait() {
   sigset_t newMask;
   sigemptyset(&newMask);
-  sigaddset(&newMask, SIGUSR1);
+  sigaddset(&newMask, reservedSignal);
 
   {
     auto ptr = signalHead;
@@ -243,7 +266,7 @@ void UnixEventPort::wait() {
     // We received a signal and longjmp'd back out of the signal handler.
     threadCapture = nullptr;
 
-    if (capture.siginfo.si_signo != SIGUSR1) {
+    if (capture.siginfo.si_signo != reservedSignal) {
       gotSignal(capture.siginfo);
     }
 
