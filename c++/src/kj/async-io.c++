@@ -234,8 +234,17 @@ private:
 
     ssize_t writeResult;
     KJ_NONBLOCKING_SYSCALL(writeResult = ::writev(fd, iov.begin(), iov.size())) {
-      // error
-      return READY_NOW;
+      // Error.
+
+      // We can't "return kj::READY_NOW;" inside this block because it causes a memory leak due to
+      // a bug that exists in both Clang and GCC:
+      //   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799
+      //   http://llvm.org/bugs/show_bug.cgi?id=12286
+      goto error;
+    }
+    if (false) {
+    error:
+      return kj::READY_NOW;
     }
 
     // A negative result means EAGAIN, which we can treat the same as having written zero bytes.
@@ -612,6 +621,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
         }
 
         SocketAddress addr;
+        memset(&addr, 0, sizeof(addr));  // mollify valgrind
         if (params.host == "*") {
           // Set up a wildcard SocketAddress.  Only use the port number returned by getaddrinfo().
           addr.wildcard = true;
