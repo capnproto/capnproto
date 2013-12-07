@@ -345,7 +345,10 @@ doit make distclean
 doit ./configure --disable-shared CXXFLAGS="$CXXFLAGS -fno-rtti -fno-exceptions"
 doit make -j6 check
 
-if which valgrind > /dev/null; then
+# Valgrind is currently "experimental and mostly broken" on OSX and fails to run the full test
+# suite, but I have it installed because it did manage to help me track down a bug or two.  Anyway,
+# skip it on OSX for now.
+if [ "x`uname`" != xDarwin ] && which valgrind > /dev/null; then
   doit make distclean
 
   echo "========================================================================="
