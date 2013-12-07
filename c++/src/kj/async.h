@@ -509,19 +509,21 @@ public:
   // Wait for an external event to arrive, sleeping if necessary.  Once at least one event has
   // arrived, queue it to the event loop (e.g. by fulfilling a promise) and return.
   //
+  // This is called during `Promise::wait()` whenever the event queue becomes empty, in order to
+  // wait for new events to populate the queue.
+  //
   // It is safe to return even if nothing has actually been queued, so long as calling `wait()` in
   // a loop will eventually sleep.  (That is to say, false positives are fine.)
   //
   // If the implementation knows that no event will ever arrive, it should throw an exception
   // rather than deadlock.
-  //
-  // This is called only during `Promise::wait()`.
 
   virtual void poll() = 0;
   // Check if any external events have arrived, but do not sleep.  If any events have arrived,
   // add them to the event queue (e.g. by fulfilling promises) before returning.
   //
-  // This is called only during `Promise::wait()`.
+  // This may be called during `Promise::wait()` when the EventLoop has been executing for a while
+  // without a break but is still non-empty.
 
   virtual void setRunnable(bool runnable);
   // Called to notify the `EventPort` when the `EventLoop` has work to do; specifically when it
