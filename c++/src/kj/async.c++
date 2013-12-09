@@ -337,7 +337,7 @@ Own<PromiseNode> neverDone() {
   return kj::heap<NeverDonePromiseNode>();
 }
 
-void NeverDone::wait(WaitScope& waitScope) {
+void NeverDone::wait(WaitScope& waitScope) const {
   ExceptionOr<Void> dummy;
   waitImpl(neverDone(), dummy, waitScope);
   KJ_UNREACHABLE;

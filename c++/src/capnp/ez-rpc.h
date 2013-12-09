@@ -37,32 +37,33 @@ class EzRpcClient {
   //
   //     # Cap'n Proto schema
   //     interface Adder {
-  //       add @0 (left :Int32, right :Int32) -> (result :Int32);
+  //       add @0 (left :Int32, right :Int32) -> (value :Int32);
   //     }
   //
   //     // C++ client
   //     int main() {
-  //       EzRpcClient client("10.0.1.2:3456");
-  //       Adder::Client adder = client.getCap<Adder>("adder");
-  //       auto request = adder.frobRequest();
+  //       capnp::EzRpcClient client("localhost:3456");
+  //       Adder::Client adder = client.importCap<Adder>("adder");
+  //       auto request = adder.addRequest();
   //       request.setLeft(12);
   //       request.setRight(34);
-  //       auto response = request.wait(client.getWaitScope());
-  //       assert(response.getResult() == 46);
+  //       auto response = request.send().wait(client.getWaitScope());
+  //       assert(response.getValue() == 46);
   //       return 0;
   //     }
   //
   //     // C++ server
-  //     class AdderImpl: public Adder::Server {
+  //     class AdderImpl final: public Adder::Server {
   //     public:
-  //       kj::Promise<void> frob(FrobParams::Reader params, FrobResults::Builder results) {
-  //         results.setResult(params.getLeft() + params.getRight());
+  //       kj::Promise<void> add(AddContext context) override {
+  //         auto params = context.getParams();
+  //         context.getResults().setValue(params.getLeft() + params.getRight());
   //         return kj::READY_NOW;
   //       }
   //     };
   //
   //     int main() {
-  //       EzRpcServer server(":3456");
+  //       capnp::EzRpcServer server("*:3456");
   //       server.exportCap("adder", kj::heap<AdderImpl>());
   //       kj::NEVER_DONE.wait(server.getWaitScope());
   //     }
