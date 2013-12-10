@@ -36,6 +36,9 @@ template <typename T>
 class Promise;
 class WaitScope;
 
+template <typename T>
+Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
+
 namespace _ {  // private
 
 template <typename T> struct JoinPromises_ { typedef T Type; };
@@ -44,6 +47,9 @@ template <typename T> struct JoinPromises_<Promise<T>> { typedef T Type; };
 template <typename T>
 using JoinPromises = typename JoinPromises_<T>::Type;
 // If T is Promise<U>, resolves to U, otherwise resolves to T.
+//
+// TODO(cleanup):  Rename to avoid confusion with joinPromises() call which is completely
+//   unrelated.
 
 class PropagateException {
   // A functor which accepts a kj::Exception as a parameter and returns a broken promise of
@@ -171,6 +177,8 @@ private:
   template <typename>
   friend class kj::Promise;
   friend class TaskSetImpl;
+  template <typename U>
+  friend Promise<Array<U>> kj::joinPromises(Array<Promise<U>>&& promises);
 };
 
 void detach(kj::Promise<void>&& promise);

@@ -172,6 +172,9 @@ protected:
 
 class ImmediatePromiseNodeBase: public PromiseNode {
 public:
+  ImmediatePromiseNodeBase();
+  ~ImmediatePromiseNodeBase() noexcept(false);
+
   void onReady(Event& event) noexcept override;
 };
 
@@ -480,6 +483,70 @@ private:
 
 // -------------------------------------------------------------------
 
+class ArrayJoinPromiseNodeBase: public PromiseNode {
+public:
+  ArrayJoinPromiseNodeBase(Array<Own<PromiseNode>> promises,
+                           ExceptionOrValue* resultParts, size_t partSize);
+  ~ArrayJoinPromiseNodeBase() noexcept(false);
+
+  void onReady(Event& event) noexcept override final;
+  void get(ExceptionOrValue& output) noexcept override final;
+  PromiseNode* getInnerForTrace() override final;
+
+protected:
+  virtual void getNoError(ExceptionOrValue& output) noexcept = 0;
+  // Called to compile the result only in the case where there were no errors.
+
+private:
+  uint countLeft;
+  OnReadyEvent onReadyEvent;
+
+  class Branch: public Event {
+  public:
+    Branch(ArrayJoinPromiseNodeBase& joinNode, Own<PromiseNode> dependency,
+           ExceptionOrValue& output);
+    ~Branch() noexcept(false);
+
+    Maybe<Own<Event>> fire() override;
+    _::PromiseNode* getInnerForTrace() override;
+
+    Maybe<Exception> getPart();
+    // Calls dependency->get(output).  If there was an exception, return it.
+
+  private:
+    ArrayJoinPromiseNodeBase& joinNode;
+    Own<PromiseNode> dependency;
+    ExceptionOrValue& output;
+  };
+
+  Array<Branch> branches;
+};
+
+template <typename T>
+class ArrayJoinPromiseNode final: public ArrayJoinPromiseNodeBase {
+public:
+  ArrayJoinPromiseNode(Array<Own<PromiseNode>> promises,
+                       Array<ExceptionOr<T>> resultParts)
+      : ArrayJoinPromiseNodeBase(kj::mv(promises), resultParts.begin(), sizeof(ExceptionOr<T>)),
+        resultParts(kj::mv(resultParts)) {}
+
+protected:
+  void getNoError(ExceptionOrValue& output) noexcept override {
+    auto builder = heapArrayBuilder<T>(resultParts.size());
+    for (auto& part: resultParts) {
+      KJ_IASSERT(part.value != nullptr,
+                 "Bug in KJ promise framework:  Promise result had neither value no exception.");
+      builder.add(kj::mv(*_::readMaybe(part.value)));
+    }
+    output.as<Array<T>>() = builder.finish();
+  }
+
+private:
+  Array<ExceptionOr<T>> resultParts;
+};
+
+// -------------------------------------------------------------------
+
 class EagerPromiseNodeBase: public PromiseNode, protected Event {
   // A PromiseNode that eagerly evaluates its dependency even if its dependent does not eagerly
   // evaluate it.
@@ -680,6 +747,13 @@ template <>
 template <typename ErrorFunc>
 void Promise<void>::detach(ErrorFunc&& errorHandler) {
   return _::detach(then([]() {}, kj::fwd<ErrorFunc>(errorHandler)));
+}
+
+template <typename T>
+Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises) {
+  return Promise<Array<T>>(false, kj::heap<_::ArrayJoinPromiseNode<T>>(
+      KJ_MAP(p, promises) { return kj::mv(p.node); },
+      heapArray<_::ExceptionOr<T>>(promises.size())));
 }
 
 // =======================================================================================

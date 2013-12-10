@@ -723,9 +723,9 @@ private:
           fork(eventual.fork()),
           resolveSelfPromise(fork.addBranch().then(
               [this](kj::Own<ClientHook>&& resolution) {
-                resolve(kj::mv(resolution));
+                resolve(kj::mv(resolution), false);
               }, [this](kj::Exception&& exception) {
-                resolve(newBrokenCap(kj::mv(exception)));
+                resolve(newBrokenCap(kj::mv(exception)), true);
               }).eagerlyEvaluate([&](kj::Exception&& e) {
                 // Make any exceptions thrown from resolve() go to the connection's TaskSet which
                 // will cause the connection to be terminated.
@@ -810,8 +810,8 @@ private:
 
     bool receivedCall = false;
 
-    void resolve(kj::Own<ClientHook> replacement) {
-      if (replacement->getBrand() != connectionState.get() && receivedCall) {
+    void resolve(kj::Own<ClientHook> replacement, bool isError) {
+      if (replacement->getBrand() != connectionState.get() && receivedCall && !isError) {
         // The new capability is hosted locally, not on the remote machine.  And, we had made calls
         // to the promise.  We need to make sure those calls echo back to us before we allow new
         // calls to go directly to the local capability, so we need to set a local embargo and send

@@ -16,6 +16,7 @@
 /c++/src/os
 /c++/src/protobuf
 /c++/src/snappy
+/c++/src/samples
 
 # Ekam build artifacts.
 /c++/tmp/

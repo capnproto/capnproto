@@ -25,8 +25,6 @@
 //
 // This defines very simple utilities that are widely applicable.
 
-#include <stddef.h>
-
 #ifndef KJ_COMMON_H_
 #define KJ_COMMON_H_
 
@@ -68,6 +66,9 @@
            "#define KJ_NO_COMPILER_CHECK to make this warning go away."
 #endif
 #endif
+
+#include <stddef.h>
+#include <initializer_list>
 
 // =======================================================================================
 
@@ -343,6 +344,29 @@ template <typename T, typename U>
 constexpr bool canConvert() {
   return sizeof(CanConvert_<U>::sfinae(instance<T>())) == sizeof(int);
 }
+
+#if __clang__
+template <typename T>
+constexpr bool canMemcpy() {
+  // Returns true if T can be copied using memcpy instead of using the copy constructor or
+  // assignment operator.
+
+  // Clang unhelpfully defines __has_trivial_{copy,assign}(T) to be true if the copy constructor /
+  // assign operator are deleted, on the basis that a strict reading of the definition of "trivial"
+  // according to the standard says that deleted functions are in fact trivial.  Meanwhile Clang
+  // provides these admittedly-better intrinsics, but GCC does not.
+  return __is_trivially_constructible(T, const T&) && __is_trivially_assignable(T, const T&);
+}
+#else
+template <typename T>
+constexpr bool canMemcpy() {
+  // Returns true if T can be copied using memcpy instead of using the copy constructor or
+  // assignment operator.
+
+  // GCC defines these to mean what we want them to mean.
+  return __has_trivial_copy(T) && __has_trivial_assign(T);
+}
+#endif
 
 // =======================================================================================
 // Equivalents to std::move() and std::forward(), since these are very commonly needed and the
@@ -917,6 +941,8 @@ public:
   inline constexpr ArrayPtr(decltype(nullptr)): ptr(nullptr), size_(0) {}
   inline constexpr ArrayPtr(T* ptr, size_t size): ptr(ptr), size_(size) {}
   inline constexpr ArrayPtr(T* begin, T* end): ptr(begin), size_(end - begin) {}
+  inline constexpr ArrayPtr(std::initializer_list<RemoveConstOrDisable<T>> init)
+      : ptr(init.begin()), size_(init.size()) {}
 
   template <size_t size>
   inline constexpr ArrayPtr(T (&native)[size]): ptr(native), size_(size) {}

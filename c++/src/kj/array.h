@@ -570,8 +570,7 @@ T* HeapArrayDisposer::allocateUninitialized(size_t count) {
   return Allocate_<T, true, true>::allocate(0, count);
 }
 
-template <typename Element, typename Iterator,
-          bool trivial = __has_trivial_copy(Element) && __has_trivial_assign(Element)>
+template <typename Element, typename Iterator, bool = canMemcpy<Element>()>
 struct CopyConstructArray_;
 
 template <typename T>

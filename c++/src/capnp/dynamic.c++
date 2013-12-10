@@ -1403,12 +1403,12 @@ DynamicValue::Reader::Reader(const Reader& other) {
     case ENUM:
     case STRUCT:
     case ANY_POINTER:
-      static_assert(__has_trivial_copy(Text::Reader) &&
-                    __has_trivial_copy(Data::Reader) &&
-                    __has_trivial_copy(DynamicList::Reader) &&
-                    __has_trivial_copy(DynamicEnum) &&
-                    __has_trivial_copy(DynamicStruct::Reader) &&
-                    __has_trivial_copy(AnyPointer::Reader),
+      static_assert(kj::canMemcpy<Text::Reader>() &&
+                    kj::canMemcpy<Data::Reader>() &&
+                    kj::canMemcpy<DynamicList::Reader>() &&
+                    kj::canMemcpy<DynamicEnum>() &&
+                    kj::canMemcpy<DynamicStruct::Reader>() &&
+                    kj::canMemcpy<AnyPointer::Reader>(),
                     "Assumptions here don't hold.");
       break;
 
@@ -1434,12 +1434,12 @@ DynamicValue::Reader::Reader(Reader&& other) noexcept {
     case ENUM:
     case STRUCT:
     case ANY_POINTER:
-      static_assert(__has_trivial_copy(Text::Reader) &&
-                    __has_trivial_copy(Data::Reader) &&
-                    __has_trivial_copy(DynamicList::Reader) &&
-                    __has_trivial_copy(DynamicEnum) &&
-                    __has_trivial_copy(DynamicStruct::Reader) &&
-                    __has_trivial_copy(AnyPointer::Reader),
+      static_assert(kj::canMemcpy<Text::Reader>() &&
+                    kj::canMemcpy<Data::Reader>() &&
+                    kj::canMemcpy<DynamicList::Reader>() &&
+                    kj::canMemcpy<DynamicEnum>() &&
+                    kj::canMemcpy<DynamicStruct::Reader>() &&
+                    kj::canMemcpy<AnyPointer::Reader>(),
                     "Assumptions here don't hold.");
       break;
 
@@ -1486,7 +1486,7 @@ DynamicValue::Builder::Builder(Builder& other) {
     case ENUM:
     case STRUCT:
     case ANY_POINTER:
-      // Unfortunately __has_trivial_copy doesn't work on these types due to the use of
+      // Unfortunately canMemcpy() doesn't work on these types due to the use of
       // DisallowConstCopy, but __has_trivial_destructor should detect if any of these types
       // become non-trivial.
       static_assert(__has_trivial_destructor(Text::Builder) &&

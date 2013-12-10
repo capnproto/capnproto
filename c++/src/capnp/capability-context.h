@@ -105,7 +105,12 @@ class LocalMessage final {
   // know how to properly serialize its capabilities.
 
 public:
-  LocalMessage(kj::Maybe<MessageSize> sizeHint = nullptr);
+  explicit LocalMessage(kj::Maybe<MessageSize> sizeHint = nullptr);
+  template <typename T, typename = FromReader<T>>
+  inline LocalMessage(T&& reader): LocalMessage(reader.totalSize()) {
+    // Create a LocalMessage that is a copy of a given reader.
+    getRoot().setAs<FromReader<T>>(kj::fwd<T>(reader));
+  }
 
   inline AnyPointer::Builder getRoot() { return root; }
   inline AnyPointer::Reader getRootReader() const { return root.asReader(); }

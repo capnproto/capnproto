@@ -514,6 +514,25 @@ TEST(Async, ExclusiveJoin) {
   }
 }
 
+TEST(Async, ArrayJoin) {
+  EventLoop loop;
+  WaitScope waitScope(loop);
+
+  auto builder = heapArrayBuilder<Promise<int>>(3);
+  builder.add(123);
+  builder.add(456);
+  builder.add(789);
+
+  Promise<Array<int>> promise = joinPromises(builder.finish());
+
+  auto result = promise.wait(waitScope);
+
+  ASSERT_EQ(3u, result.size());
+  EXPECT_EQ(123, result[0]);
+  EXPECT_EQ(456, result[1]);
+  EXPECT_EQ(789, result[2]);
+}
+
 class ErrorHandlerImpl: public TaskSet::ErrorHandler {
 public:
   uint exceptionCount = 0;

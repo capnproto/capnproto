@@ -944,7 +944,7 @@ private:
             "  inline void set", titleCase, "(", type, "::Reader value);\n",
             kind == FieldKind::LIST && !isStructOrCapList
             ? kj::strTree(
-              "  inline void set", titleCase, "(std::initializer_list<", elementReaderType, "> value);\n")
+              "  inline void set", titleCase, "(::kj::ArrayPtr<const ", elementReaderType, "> value);\n")
             : kj::strTree(),
             kind == FieldKind::STRUCT
             ? kj::strTree(
@@ -994,7 +994,7 @@ private:
             "}\n",
             kind == FieldKind::LIST && !isStructOrCapList
             ? kj::strTree(
-              "inline void ", scope, "Builder::set", titleCase, "(std::initializer_list<", elementReaderType, "> value) {\n",
+              "inline void ", scope, "Builder::set", titleCase, "(::kj::ArrayPtr<const ", elementReaderType, "> value) {\n",
               unionDiscrim.set,
               "  ::capnp::_::PointerHelpers<", type, ">::set(\n"
               "      _builder.getPointerField(", offset, " * ::capnp::POINTERS), value);\n"
