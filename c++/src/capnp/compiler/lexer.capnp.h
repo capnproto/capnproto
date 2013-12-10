@@ -205,7 +205,7 @@ public:
   inline bool hasParenthesizedList();
   inline  ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Builder getParenthesizedList();
   inline void setParenthesizedList( ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Reader value);
-  inline void setParenthesizedList(std::initializer_list< ::capnp::List< ::capnp::compiler::Token>::Reader> value);
+  inline void setParenthesizedList(::kj::ArrayPtr<const  ::capnp::List< ::capnp::compiler::Token>::Reader> value);
   inline  ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Builder initParenthesizedList(unsigned int size);
   inline void adoptParenthesizedList(::capnp::Orphan< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>> disownParenthesizedList();
@@ -214,7 +214,7 @@ public:
   inline bool hasBracketedList();
   inline  ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Builder getBracketedList();
   inline void setBracketedList( ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Reader value);
-  inline void setBracketedList(std::initializer_list< ::capnp::List< ::capnp::compiler::Token>::Reader> value);
+  inline void setBracketedList(::kj::ArrayPtr<const  ::capnp::List< ::capnp::compiler::Token>::Reader> value);
   inline  ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>::Builder initBracketedList(unsigned int size);
   inline void adoptBracketedList(::capnp::Orphan< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>> disownBracketedList();
@@ -772,7 +772,7 @@ inline void Token::Builder::setParenthesizedList( ::capnp::List< ::capnp::List< 
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::set(
       _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
-inline void Token::Builder::setParenthesizedList(std::initializer_list< ::capnp::List< ::capnp::compiler::Token>::Reader> value) {
+inline void Token::Builder::setParenthesizedList(::kj::ArrayPtr<const  ::capnp::List< ::capnp::compiler::Token>::Reader> value) {
   _builder.setDataField<Token::Which>(
       0 * ::capnp::ELEMENTS, Token::PARENTHESIZED_LIST);
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::set(
@@ -830,7 +830,7 @@ inline void Token::Builder::setBracketedList( ::capnp::List< ::capnp::List< ::ca
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::set(
       _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
-inline void Token::Builder::setBracketedList(std::initializer_list< ::capnp::List< ::capnp::compiler::Token>::Reader> value) {
+inline void Token::Builder::setBracketedList(::kj::ArrayPtr<const  ::capnp::List< ::capnp::compiler::Token>::Reader> value) {
   _builder.setDataField<Token::Which>(
       0 * ::capnp::ELEMENTS, Token::BRACKETED_LIST);
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::List< ::capnp::compiler::Token>>>::set(

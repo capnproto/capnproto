@@ -879,7 +879,7 @@ public:
   inline bool hasExtends();
   inline  ::capnp::List< ::uint64_t>::Builder getExtends();
   inline void setExtends( ::capnp::List< ::uint64_t>::Reader value);
-  inline void setExtends(std::initializer_list< ::uint64_t> value);
+  inline void setExtends(::kj::ArrayPtr<const  ::uint64_t> value);
   inline  ::capnp::List< ::uint64_t>::Builder initExtends(unsigned int size);
   inline void adoptExtends(::capnp::Orphan< ::capnp::List< ::uint64_t>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::uint64_t>> disownExtends();
@@ -3309,7 +3309,7 @@ inline void Node::Interface::Builder::setExtends( ::capnp::List< ::uint64_t>::Re
   ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::set(
       _builder.getPointerField(4 * ::capnp::POINTERS), value);
 }
-inline void Node::Interface::Builder::setExtends(std::initializer_list< ::uint64_t> value) {
+inline void Node::Interface::Builder::setExtends(::kj::ArrayPtr<const  ::uint64_t> value) {
   ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::set(
       _builder.getPointerField(4 * ::capnp::POINTERS), value);
 }
