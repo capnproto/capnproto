@@ -117,6 +117,9 @@ includekjparsedir = $(includekjdir)/parse
 
 dist_includecapnp_DATA = $(public_capnpc_inputs)
 
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = capnp.pc capnp-rpc.pc
+
 includekj_HEADERS =                                            \
   src/kj/common.h                                              \
   src/kj/units.h                                               \

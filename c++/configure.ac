@@ -59,5 +59,5 @@ CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
 ac_configure_args="$ac_configure_args 'CXX=$CXX'"
 AC_CONFIG_SUBDIRS([gtest])
 
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile capnp.pc capnp-rpc.pc])
 AC_OUTPUT
