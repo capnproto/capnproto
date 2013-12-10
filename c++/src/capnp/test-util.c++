@@ -943,7 +943,6 @@ kj::Promise<void> TestTailCallerImpl::foo(FooContext context) {
   auto tailRequest = params.getCallee().fooRequest();
   tailRequest.setI(params.getI());
   tailRequest.setT("from TestTailCaller");
-  context.releaseParams();
   return context.tailCall(kj::mv(tailRequest));
 }
 
@@ -1015,7 +1014,6 @@ kj::Promise<void> TestMoreStuffImpl::neverReturn(NeverReturnContext context) {
   // Also attach `cap` to the result struct to make sure that is released.
   context.getResults().setCapCopy(context.getParams().getCap());
 
-  context.releaseParams();
   context.allowCancellation();
   return kj::mv(promise);
 }
@@ -1059,7 +1057,6 @@ kj::Promise<void> TestMoreStuffImpl::echo(EchoContext context) {
 
 kj::Promise<void> TestMoreStuffImpl::expectCancel(ExpectCancelContext context) {
   auto cap = context.getParams().getCap();
-  context.releaseParams();
   context.allowCancellation();
   return loop(0, cap, context);
 }
