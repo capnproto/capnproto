@@ -337,7 +337,7 @@ public:
         }
       });
 
-      answers.forEach([&](QuestionId id, Answer& answer) {
+      answers.forEach([&](AnswerId id, Answer& answer) {
         KJ_IF_MAYBE(p, answer.pipeline) {
           pipelinesToRelease.add(kj::mv(*p));
         }
@@ -357,7 +357,7 @@ public:
         exp = Export();
       });
 
-      imports.forEach([&](ExportId id, Import& import) {
+      imports.forEach([&](ImportId id, Import& import) {
         KJ_IF_MAYBE(f, import.promiseFulfiller) {
           f->get()->reject(kj::cp(networkException));
         }
@@ -399,7 +399,18 @@ private:
   // We have to define these before we can define the class's fields.
 
   typedef uint32_t QuestionId;
+  typedef QuestionId AnswerId;
   typedef uint32_t ExportId;
+  typedef ExportId ImportId;
+  // See equivalent definitions in rpc.capnp.
+  //
+  // We always use the type that refers to the local table of the same name.  So e.g. although
+  // QuestionId and AnswerId are the same type, we use QuestionId when referring to an entry in
+  // the local question table (which corresponds to the peer's answer table) and use AnswerId
+  // to refer to an entry in our answer table (which corresponds to the peer's question table).
+  // Since all messages in the RPC protocol are defined from the sender's point of view, this
+  // means that any time we read an ID from a received message, its type should invert.
+  // TODO(cleanup):  Perhaps we could enforce that in a type-safe way?  Hmm...
 
   struct Question {
     kj::Array<ExportId> paramExports;
@@ -503,8 +514,8 @@ private:
 
   ExportTable<ExportId, Export> exports;
   ExportTable<QuestionId, Question> questions;
-  ImportTable<QuestionId, Answer> answers;
-  ImportTable<ExportId, Import> imports;
+  ImportTable<AnswerId, Answer> answers;
+  ImportTable<ImportId, Import> imports;
   // The Four Tables!
   // The order of the tables is important for correct destruction.
 
@@ -598,7 +609,7 @@ private:
     // A ClientHook that wraps an entry in the import table.
 
   public:
-    ImportClient(RpcConnectionState& connectionState, ExportId importId)
+    ImportClient(RpcConnectionState& connectionState, ImportId importId)
         : RpcClient(connectionState), importId(importId) {}
 
     ~ImportClient() noexcept(false) {
@@ -636,7 +647,7 @@ private:
 
     kj::Maybe<kj::Own<ClientHook>> writeTarget(
         rpc::MessageTarget::Builder target) override {
-      target.setExportedCap(importId);
+      target.setImportedCap(importId);
       return nullptr;
     }
 
@@ -655,7 +666,7 @@ private:
     }
 
   private:
-    ExportId importId;
+    ImportId importId;
 
     uint remoteRefcount = 0;
     // Number of times we've received this import from the peer.
@@ -715,7 +726,7 @@ private:
     PromiseClient(RpcConnectionState& connectionState,
                   kj::Own<ClientHook> initial,
                   kj::Promise<kj::Own<ClientHook>> eventual,
-                  kj::Maybe<ExportId> importId)
+                  kj::Maybe<ImportId> importId)
         : RpcClient(connectionState),
           isResolved(false),
           cap(kj::mv(initial)),
@@ -801,7 +812,7 @@ private:
     bool isResolved;
     kj::Own<ClientHook> cap;
 
-    kj::Maybe<ExportId> importId;
+    kj::Maybe<ImportId> importId;
     kj::ForkedPromise<kj::Own<ClientHook>> fork;
 
     // Keep this last, because the continuation uses *this, so it should be destroyed first to
@@ -1017,7 +1028,7 @@ private:
   // =====================================================================================
   // Interpreting CapDescriptor
 
-  kj::Own<ClientHook> import(ExportId importId, bool isPromise) {
+  kj::Own<ClientHook> import(ImportId importId, bool isPromise) {
     // Receive a new import.
 
     auto& import = imports[importId];
@@ -1515,12 +1526,12 @@ private:
 
   class RpcCallContext final: public CallContextHook, public kj::Refcounted {
   public:
-    RpcCallContext(RpcConnectionState& connectionState, QuestionId questionId,
+    RpcCallContext(RpcConnectionState& connectionState, AnswerId answerId,
                    kj::Own<IncomingRpcMessage>&& request, const AnyPointer::Reader& params,
                    kj::Array<kj::Own<ClientHook>>&& requestCapTable, bool redirectResults,
                    kj::Own<kj::PromiseFulfiller<void>>&& cancelFulfiller)
         : connectionState(kj::addRef(connectionState)),
-          questionId(questionId),
+          answerId(answerId),
           request(kj::mv(request)),
           requestCapContext(kj::mv(requestCapTable)),
           params(requestCapContext.imbue(params)),
@@ -1538,7 +1549,7 @@ private:
                 messageSizeHint<rpc::Return>() + sizeInWords<rpc::Payload>());
             auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
-            builder.setQuestionId(questionId);
+            builder.setAnswerId(answerId);
             builder.setReleaseParamCaps(false);
 
             if (redirectResults) {
@@ -1575,7 +1586,7 @@ private:
       if (!(cancellationFlags & CANCEL_REQUESTED) && isFirstResponder()) {
         if (response == nullptr) getResults(MessageSize{0, 0});  // force initialization of response
 
-        returnMessage.setQuestionId(questionId);
+        returnMessage.setAnswerId(answerId);
         returnMessage.setReleaseParamCaps(false);
 
         auto exports = kj::downcast<RpcServerResponseImpl>(*KJ_ASSERT_NONNULL(response)).send();
@@ -1595,7 +1606,7 @@ private:
             messageSizeHint<rpc::Return>() + exceptionSizeHint(exception));
         auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
-        builder.setQuestionId(questionId);
+        builder.setAnswerId(answerId);
         builder.setReleaseParamCaps(false);
         fromException(exception, builder.initException());
 
@@ -1676,9 +1687,9 @@ private:
                 messageSizeHint<rpc::Return>());
             auto builder = message->getBody().initAs<rpc::Message>().initReturn();
 
-            builder.setQuestionId(questionId);
+            builder.setAnswerId(answerId);
             builder.setReleaseParamCaps(false);
-            builder.setTakeFromOtherAnswer(tailInfo->questionId);
+            builder.setTakeFromOtherQuestion(tailInfo->questionId);
 
             message->send();
 
@@ -1724,7 +1735,7 @@ private:
 
   private:
     kj::Own<RpcConnectionState> connectionState;
-    QuestionId questionId;
+    AnswerId answerId;
 
     // Request ---------------------------------------------
 
@@ -1777,10 +1788,10 @@ private:
         // Already received `Finish` so it's our job to erase the table entry. We shouldn't have
         // sent results if canceled, so we shouldn't have an export list to deal with.
         KJ_ASSERT(resultExports.size() == 0);
-        connectionState->answers.erase(questionId);
+        connectionState->answers.erase(answerId);
       } else {
         // We just have to null out callContext and set the exports.
-        auto& answer = connectionState->answers[questionId];
+        auto& answer = connectionState->answers[answerId];
         answer.callContext = nullptr;
         answer.resultExports = kj::mv(resultExports);
 
@@ -1930,16 +1941,16 @@ private:
     auto capTable = receiveCaps(payload.getCapTable());
     auto cancelPaf = kj::newPromiseAndFulfiller<void>();
 
-    QuestionId questionId = call.getQuestionId();
+    AnswerId answerId = call.getQuestionId();
 
     auto context = kj::refcounted<RpcCallContext>(
-        *this, questionId, kj::mv(message), payload.getContent(),
+        *this, answerId, kj::mv(message), payload.getContent(),
         kj::mv(capTable), redirectResults, kj::mv(cancelPaf.fulfiller));
 
     // No more using `call` after this point, as it now belongs to the context.
 
     {
-      auto& answer = answers[questionId];
+      auto& answer = answers[answerId];
 
       KJ_REQUIRE(!answer.active, "questionId is already in use") {
         return;
@@ -1956,7 +1967,7 @@ private:
     // context->directTailCall().
 
     {
-      auto& answer = answers[questionId];
+      auto& answer = answers[answerId];
 
       answer.pipeline = kj::mv(promiseAndPipeline.pipeline);
 
@@ -1998,8 +2009,8 @@ private:
 
   kj::Maybe<kj::Own<ClientHook>> getMessageTarget(const rpc::MessageTarget::Reader& target) {
     switch (target.which()) {
-      case rpc::MessageTarget::EXPORTED_CAP: {
-        KJ_IF_MAYBE(exp, exports.find(target.getExportedCap())) {
+      case rpc::MessageTarget::IMPORTED_CAP: {
+        KJ_IF_MAYBE(exp, exports.find(target.getImportedCap())) {
           return exp->clientHook->addRef();
         } else {
           KJ_FAIL_REQUIRE("Message target is not a current export ID.") {
@@ -2050,7 +2061,7 @@ private:
     KJ_DEFER(releaseExports(exportsToRelease));
     kj::Maybe<kj::Promise<kj::Own<RpcResponse>>> promiseToRelease;
 
-    KJ_IF_MAYBE(question, questions.find(ret.getQuestionId())) {
+    KJ_IF_MAYBE(question, questions.find(ret.getAnswerId())) {
       KJ_REQUIRE(question->isAwaitingReturn, "Duplicate Return.") { return; }
       question->isAwaitingReturn = false;
 
@@ -2098,8 +2109,8 @@ private:
             questionRef->fulfill(kj::Own<RpcResponse>());
             break;
 
-          case rpc::Return::TAKE_FROM_OTHER_ANSWER:
-            KJ_IF_MAYBE(answer, answers.find(ret.getTakeFromOtherAnswer())) {
+          case rpc::Return::TAKE_FROM_OTHER_QUESTION:
+            KJ_IF_MAYBE(answer, answers.find(ret.getTakeFromOtherQuestion())) {
               KJ_IF_MAYBE(response, answer->redirectedResults) {
                 questionRef->fulfill(kj::mv(*response));
               } else {
@@ -2116,16 +2127,16 @@ private:
             KJ_FAIL_REQUIRE("Unknown 'Return' type.") { return; }
         }
       } else {
-        if (ret.isTakeFromOtherAnswer()) {
+        if (ret.isTakeFromOtherQuestion()) {
           // Be sure to release the tail call's promise.
-          KJ_IF_MAYBE(answer, answers.find(ret.getTakeFromOtherAnswer())) {
+          KJ_IF_MAYBE(answer, answers.find(ret.getTakeFromOtherQuestion())) {
             promiseToRelease = kj::mv(answer->redirectedResults);
           }
         }
 
         // Looks like this question was canceled earlier, so `Finish` was already sent.  We can go
         // ahead and delete it from the table.
-        questions.erase(ret.getQuestionId(), *question);
+        questions.erase(ret.getAnswerId(), *question);
       }
 
     } else {
@@ -2328,13 +2339,13 @@ private:
   };
 
   void handleRestore(kj::Own<IncomingRpcMessage>&& message, const rpc::Restore::Reader& restore) {
-    QuestionId questionId = restore.getQuestionId();
+    AnswerId answerId = restore.getQuestionId();
 
     auto response = connection->newOutgoingMessage(
         messageSizeHint<rpc::Return>() + sizeInWords<rpc::CapDescriptor>() + 32);
 
     rpc::Return::Builder ret = response->getBody().getAs<rpc::Message>().initReturn();
-    ret.setQuestionId(questionId);
+    ret.setAnswerId(answerId);
 
     CapBuilderContext context;
 
@@ -2365,7 +2376,7 @@ private:
     message = nullptr;
 
     // Add the answer to the answer table for pipelining and send the response.
-    auto& answer = answers[questionId];
+    auto& answer = answers[answerId];
     KJ_REQUIRE(!answer.active, "questionId is already in use") {
       return;
     }

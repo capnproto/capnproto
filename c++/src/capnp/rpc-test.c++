@@ -39,6 +39,9 @@ namespace {
 class RpcDumper {
   // Class which stringifies RPC messages for debugging purposes, including decoding params and
   // results based on the call's interface and method IDs and extracting cap descriptors.
+  //
+  // TODO(cleanup):  Clean this code up and move it to someplace reusable, so it can be used as
+  //   a packet inspector / debugging tool for Cap'n Proto network traffic.
 
 public:
   void addSchema(InterfaceSchema schema) {
@@ -103,7 +106,7 @@ public:
         auto ret = message.getReturn();
 
         auto iter = returnTypes.find(
-            std::make_pair(sender == CLIENT ? SERVER : CLIENT, ret.getQuestionId()));
+            std::make_pair(sender == CLIENT ? SERVER : CLIENT, ret.getAnswerId()));
         if (iter == returnTypes.end()) {
           break;
         }
@@ -129,11 +132,11 @@ public:
         if (schema.getProto().isStruct()) {
           auto results = kj::str(imbued.getAs<DynamicStruct>(schema.asStruct()));
 
-          return kj::str(senderName, "(", ret.getQuestionId(), "): return ", results,
+          return kj::str(senderName, "(", ret.getAnswerId(), "): return ", results,
                          " caps:[", kj::strArray(payload.getCapTable(), ", "), "]");
         } else if (schema.getProto().isInterface()) {
           imbued.getAs<DynamicCapability>(schema.asInterface());
-          return kj::str(senderName, "(", ret.getQuestionId(), "): return cap ",
+          return kj::str(senderName, "(", ret.getAnswerId(), "): return cap ",
                          kj::strArray(payload.getCapTable(), ", "));
         } else {
           break;

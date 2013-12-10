@@ -30,64 +30,74 @@
 # capability, the caller can begin calling methods on that capability _before the first call has
 # returned_.  The caller essentially sends a message saying "Hey server, as soon as you finish
 # that previous call, do this with the result!".  Cap'n Proto's RPC protocol makes this possible.
-# As a result, it is more complicated than most.
 #
-# Cap'n Proto RPC is based heavily on CapTP:
+# The protocol is significantly more complicated than most RPC protocols.  However, this is
+# implementation complexity that underlies an easy-to-grasp higher-level model of object oriented
+# programming.  That is, just like TCP is a surprisingly complicated protocol that implements a
+# conceptually-simple byte stream abstraction, Cap'n Proto is a surprisingly complicated protocol
+# that implements a conceptually-simple object abstraction.
+#
+# Cap'n Proto RPC is based heavily on CapTP, the object-capability protocol used by the E
+# programming language:
 #     http://www.erights.org/elib/distrib/captp/index.html
 #
-# Cap'n Proto RPC takes place between "vats".  A vat hosts some set of capabilities and talks to
-# other vats through direct bilateral connections.  Typically, there is a 1:1 correspondence
-# between vats and processes (in the unix sense of the word), although this is not strictly always
-# true (one process could run multiple vats, or a distributed vat might live across many processes).
+# Cap'n Proto RPC takes place between "vats".  A vat hosts some set of objects and talks to other
+# vats through direct bilateral connections.  Typically, there is a 1:1 correspondence between vats
+# and processes (in the unix sense of the word), although this is not strictly always true (one
+# process could run multiple vats, or a distributed virtual vat might live across many processes).
 #
 # Cap'n Proto does not distinguish between "clients" and "servers" -- this is up to the application.
 # Either end of any connection can potentially hold capabilities pointing to the other end, and
 # can call methods on those capabilities.  In the doc comments below, we use the words "sender"
 # and "receiver".  These refer to the sender and receiver of an instance of the struct or field
 # being documented.  Sometimes we refer to a "third-party" which is neither the sender nor the
-# receiver.
+# receiver.  Documentation is generally written from the point of view of the sender.
 #
 # It is generally up to the vat network implementation to securely verify that connections are made
 # to the intended vat as well as to encrypt transmitted data for privacy and integrity.  See the
 # `VatNetwork` example interface near the end of this file.
 #
 # Once a connection is formed, nothing interesting can happen until one side sends a Restore
-# message to obtain a persistent capability.
+# message to convert a persistent capability reference into a live one.
 #
 # Unless otherwise specified, messages must be delivered to the receiving application in the same
-# order in which they were initiated by the sending application, just like in E:
+# order in which they were initiated by the sending application.  The goal is to support "E-Order",
+# which states that two calls made on the same reference must be delivered in the order which they
+# were made:
 #     http://erights.org/elib/concurrency/partial-order.html
 #
 # Since the full protocol is complicated, we define multiple levels of support which an
-# implementation may target.  For typical applications, level 1 support will be sufficient.
+# implementation may target.  For many applications, level 1 support will be sufficient.
 # Comments in this file indicate which level requires the corresponding feature to be
 # implemented.
 #
 # * **Level 0:** The implementation does not support object references.  `Restore` is supported
 #   only for looking up singleton objects which exist for the lifetime of the server, and only
 #   these singleton objects can receive calls.  At this level, the implementation does not support
-#   object-oriented protocols and is similar in complexity to JSON-RPC or Protobuf "generic
-#   services".  This level should be considered only a temporary stepping-stone toward level 1 as
-#   the lack of object references drastically changes how protocols are designed.  Applications
-#   _should not_ attempt to design their protocols around the limitations of level 0
-#   implementations.
+#   object-oriented protocols and is similar in complexity to JSON-RPC or Protobuf services.  This
+#   level should be considered only a temporary stepping-stone toward level 1 as the lack of object
+#   references drastically changes how protocols are designed.  Applications _should not_ attempt
+#   to design their protocols around the limitations of level 0 implementations.
 #
 # * **Level 1:** The implementation supports simple bilateral interaction with object references
 #   and promise pipelining, but interactions between three or more parties are supported only via
-#   proxying of objects.  E.g. if Alice wants to send Bob a capability pointing to Carol, Alice
-#   must host a local proxy of Carol and send Bob a reference to that; Bob cannot form a direct
-#   connection to Carol.  Level 1 implementations do not support "join" or "eq" across capabilities
-#   received from different vats, although they should be supported on capabilities received from
-#   the same vat.  `Restore` is supported only for looking up singleton objects as in level 0.
+#   proxying of objects.  E.g. if Alice (in Vat A) wants to send Bob (in Vat B) a capability
+#   pointing to Carol (in Vat C), Alice must create a proxy of Carol within Vat A and send Bob a
+#   reference to that; Bob cannot form a direct connection to Carol.  Level 1 implementations do
+#   not support checking if two capabilities received from different vats actually point to the
+#   same object ("join"), although they should be able to do this check on capabilities received
+#   from the same vat.  `Restore` is supported only for looking up singleton objects as in level 0.
 #
 # * **Level 2:** The implementation supports saving, restoring, and deleting persistent
-#   capabilities.
+#   capabilities -- i.e. capabilities that remain valid even after disconnect, and can be restored
+#   on a future connection.
 #
-# * **Level 3:** The implementation supports three-way interactions but does not implement "Join"
-#   operations.  The implementation can be used effectively on networks that do not require joins,
-#   or to implement objects that never need to be joined.
+# * **Level 3:** The implementation supports three-way interactions.  That is, if Alice (in Vat A)
+#   sends Bob (in Vat B) a capability pointing to Carol (in Vat C), then Vat B will automatically
+#   form a direct connection to Vat C rather than have requests be proxied through Vat A.
 #
-# * **Level 4:** The entire protocol is implemented, including joins.
+# * **Level 4:** The entire protocol is implemented, including joins (checking if two capabilities
+#   are equivalent).
 #
 # Note that an implementation must also support specific networks (transports), as described in
 # the "Network-specific Parameters" section below.  An implementation might have different levels
@@ -128,7 +138,7 @@ $Cxx.namespace("capnp::rpc");
 # object living in the exporter's vat, or they may be "promises", meaning the exported object is
 # the as-yet-unknown result of an ongoing operation and will eventually be resolved to some other
 # object once that operation completes.  Calls made to a promise will be forwarded to the eventual
-# target once it is known.  The eventual replacement object does *not* take the same ID as the
+# target once it is known.  The eventual replacement object does *not* get the same ID as the
 # promise, as it may turn out to be an object that is already exported (so already has an ID) or
 # may even live in a completely different vat (and so won't get an ID on the same export table
 # at all).
@@ -139,45 +149,64 @@ $Cxx.namespace("capnp::rpc");
 # released by both sides.
 #
 # When a Cap'n Proto connection is lost, everything on the four tables is lost.  All questions are
-# canceled and throw exceptions.  All imports become broken (all methods throw exceptions).  All
-# exports and answers are implicitly released.  The only things not lost are persistent
-# capabilities (`SturdyRef`s).  The application must plan for this and should respond by
+# canceled and throw exceptions.  All imports become broken (all future calls to them throw
+# exceptions).  All exports and answers are implicitly released.  The only things not lost are
+# persistent capabilities (`SturdyRef`s).  The application must plan for this and should respond by
 # establishing a new connection and restoring from these persistent capabilities.
 
 using QuestionId = UInt32;
 # **(level 0)**
 #
-# Identifies a question in the questions/answers table.  The questioner (caller) chooses an ID
-# when making a call.  The ID remains valid in caller -> callee messages until a Finish
-# message is sent, and remains valid in callee -> caller messages until a Return message is sent.
+# Identifies a question in the sender's question table (which corresponds to the receiver's answer
+# table).  The questioner (caller) chooses an ID when making a call.  The ID remains valid in
+# caller -> callee messages until a Finish message is sent, and remains valid in callee -> caller
+# messages until a Return message is sent.
+
+using AnswerId = QuestionId;
+# **(level 0)**
+#
+# Identifies an answer in the sender's answer table (which corresponds to the receiver's question
+# table).
+#
+# AnswerId is physically equivalent to QuestionId, since the question and answer tables correspond,
+# but we define a separate type for documentation purposes:  we always use the type representing
+# the sender's point of view.
 
 using ExportId = UInt32;
 # **(level 1)**
 #
-# Identifies an exported capability or promise in the exports/imports table.  The exporter chooses
-# an ID before sending a capability over the wire.  If the capability is already in the table, the
-# exporter should reuse the same ID.  If the ID is a promise (as opposed to a settled capability),
-# this must be indicated at the time the ID is introduced; in this case, the importer shall expect
-# a later Resolve message which replaces the promise.
+# Identifies an exported capability or promise in the sender's export table (which corresponds
+# to the receiver's import table).  The exporter chooses an ID before sending a capability over the
+# wire.  If the capability is already in the table, the exporter should reuse the same ID.  If the
+# ID is a promise (as opposed to a settled capability), this must be indicated at the time the ID
+# is introduced (e.g. by using `senderPromise` instead of `senderHosted` in `CapDescriptor`); in
+# this case, the importer shall expect a later `Resolve` message which replaces the promise.
 #
-# ExportIds are subject to reference counting.  When an `ExportId` is sent embedded in an
-# CapDescriptor, the export's reference count is incremented.  The reference count is
-# later decremented by a `Release` message.  Since the `Release` message can specify an arbitrary
-# number by which to reduce the reference count, the importer should usually batch reference
-# decrements and only send a `Release` when it believes the reference count has hit zero.  Of
-# course, it is possible that a new reference to the released object is in-flight at the time
-# that the `Release` message is sent, so it is necessary for the exporter to keep track of the
-# reference count on its end as well to avoid race conditions.
-#
-# When an `ExportId` is received as part of a exporter -> importer message but not embedded in a
-# question or answer, its reference count must be incremented unless otherwise specified.
-#
-# An `ExportId` remains valid in importer -> exporter messages until its reference count reaches
-# zero and a `Release` message has been sent to release it.
+# ExportId/ImportIds are subject to reference counting.  Whenever an `ExportId` is sent over the
+# wire (from the exporter to the importer), the export's reference count is incremented (unless
+# otherwise specified).  The reference count is later decremented by a `Release` message.  Since
+# the `Release` message can specify an arbitrary number by which to reduce the reference count, the
+# importer should usually batch reference decrements and only send a `Release` when it believes the
+# reference count has hit zero.  Of course, it is possible that a new reference to the export is
+# in-flight at the time that the `Release` message is sent, so it is necessary for the exporter to
+# keep track of the reference count on its end as well to avoid race conditions.
 #
 # When a connection is lost, all exports are implicitly released.  It is not possible to restore
-# a connection state (or, restoration should be implemented at the transport layer without the RPC
-# layer knowing that anything happened).
+# a connection state after disconnect (although a transport layer could implement a concept of
+# persistent connections if it is transparent to the RPC layer).
+
+using ImportId = ExportId;
+# **(level 1)**
+#
+# Identifies an imported capability or promise in the sender's import table (which corresponds to
+# the receiver's export table).
+#
+# ImportId is physically equivalent to ExportId, since the export and import tables correspond,
+# but we define a separate type for documentation purposes:  we always use the type representing
+# the sender's point of view.
+#
+# An `ImportId` remains valid in importer -> exporter messages until the importer has sent
+# `Release` messages which (it believes) have reduced the reference count to zero.
 
 # ========================================================================================
 # Messages
@@ -187,17 +216,18 @@ struct Message {
 
   union {
     unimplemented @0 :Message;
-    # When a peer receives a message of a type it doesn't recognize or doesn't support, it
-    # must immediately echo the message back to the sender in `unimplemented`.  The sender is
-    # then able to examine the message and decide how to deal with it being unimplemented.
+    # The sender previously received this message from the peer but didn't understand it or doesn't
+    # yet implement the functionality that was requested.  So, the sender is echoing the message
+    # back.  In some cases, the receiver may be able to recover from this by pretending the sender
+    # had taken some appropriate "null" action.
     #
     # For example, say `resolve` is received by a level 0 implementation (because a previous call
-    # or return happened to contain a promise).  The receiver will echo it back as `unimplemented`.
-    # The sender can then simply release the cap to which the promise had resolved, thus avoiding
-    # a leak.
+    # or return happened to contain a promise).  The level 0 implementation will echo it back as
+    # `unimplemented`.  The original sender can then simply release the cap to which the promise
+    # had resolved, thus avoiding a leak.
     #
     # For any message type that introduces a question, if the message comes back unimplemented,
-    # the sender may simply treat it as if the question failed with an exception.
+    # the original sender may simply treat it as if the question failed with an exception.
     #
     # In cases where there is no sensible way to react to an `unimplemented` message (without
     # resource leaks or other serious problems), the connection may need to be aborted.  This is
@@ -340,8 +370,8 @@ struct Return {
   #
   # Message type sent from callee to caller indicating that the call has completed.
 
-  questionId @0 :QuestionId;
-  # Question ID which is being answered, as specified in the corresponding Call.
+  answerId @0 :AnswerId;
+  # Equal to the QuestionId of the corresponding `Call` message.
 
   releaseParamCaps @1 :Bool = true;
   # If true, all capabilities that were in the params should be considered released.  The sender
@@ -371,7 +401,7 @@ struct Return {
     # This is set when returning from a `Call` which had `sendResultsTo` set to something other
     # than `caller`.
 
-    takeFromOtherAnswer @6 :QuestionId;
+    takeFromOtherQuestion @6 :QuestionId;
     # The sender has also sent (before this message) a `Call` with the given question ID and with
     # `sendResultsTo.yourself` set, and the results of that other call should be used as the
     # results here.
@@ -437,7 +467,9 @@ struct Resolve {
   # The ID of the promise to be resolved.
   #
   # Unlike all other instances of `ExportId` sent from the exporter, the `Resolve` message does
-  # _not_ increase the reference count of `promiseId`.
+  # _not_ increase the reference count of `promiseId`.  In fact, it is expected that the receiver
+  # will release the export soon after receiving `Resolve`, and the sender will not send this
+  # `ExportId` again until it has been released and recycled.
   #
   # When an export ID sent over the wire (e.g. in a `CapDescriptor`) is indicated to be a promise,
   # this indicates that the sender will follow up at some point with a `Resolve` message.  If the
@@ -447,11 +479,11 @@ struct Resolve {
   # this later promise does _not_ correspond to the earlier `Resolve`.
   #
   # If a promise ID's reference count reaches zero before a `Resolve` is sent, the `Resolve`
-  # message may or may not still be sent (in particular, the `Resolve` may have already been
-  # in-flight when `Release` was sent).  Thus a `Resolve` may be received for a promise of which
+  # message may or may not still be sent (the `Resolve` may have already been in-flight when
+  # `Release` was sent, but if the `Release` is received before `Resolve` then there is no longer
+  # any reason to send a `Resolve`).  Thus a `Resolve` may be received for a promise of which
   # the receiver has no knowledge, because it already released it earlier.  In this case, the
-  # receiver should immediately release the capability to which the promise resolved, if
-  # applicable.
+  # receiver should simply release the capability to which the promise resolved.
 
   union {
     cap @1 :CapDescriptor;
@@ -477,7 +509,7 @@ struct Release {
   # Message type sent to indicate that the sender is done with the given capability and the receiver
   # can free resources allocated to it.
 
-  id @0 :ExportId;
+  id @0 :ImportId;
   # What to release.
 
   referenceCount @1 :UInt32;
@@ -615,7 +647,8 @@ struct Delete {
   # Message type sent to delete a previously-saved persistent capability.  In other words, this
   # means "this ref will no longer be used in the future", so that the host can potentially
   # garbage collect resources associated with it.  Note that if any ExportId still refers to a
-  # capability restored from this ref, that export should still remain valid until released.
+  # capability restored from this ref, that export should still remain valid until released -- thus
+  # `Delete` behaves like POSIX's `unlink()` when called on a file that is currently open.
   #
   # Different applications may define different policies regarding saved capability lifetimes that
   # may or may not rely on `Delete`.  For the purpose of implementation freedom, a receiver is
@@ -770,7 +803,7 @@ struct Join {
   # it receives a `Finish` for one of the join results before the joiner successfully
   # connects.  It can then free any resources it had allocated as part of the join.
 
-  capId @1 :ExportId;
+  target @1 :MessageTarget;
   # The capability to join.
 
   keyPart @2 :JoinKeyPart;
@@ -791,8 +824,9 @@ struct MessageTarget {
   # The target of a `Call` or other messages that target a capability.
 
   union {
-    exportedCap @0 :ExportId;
-    # This message is to a capability or promise previously exported by the receiver.
+    importedCap @0 :ImportId;
+    # This message is to a capability or promise previously imported by the caller (exported by
+    # the receiver).
 
     promisedAnswer @1 :PromisedAnswer;
     # This message is to a capability that is expected to be returned by another call that has not
@@ -846,8 +880,8 @@ struct CapDescriptor {
     # them.  If `senderPromise` is released before the `Resolve` is sent, the sender (of this
     # `CapDescriptor`) may choose not to send the `Resolve` at all.
 
-    receiverHosted @3 :ExportId;
-    # A capability (or promise) previously exported by the receiver.
+    receiverHosted @3 :ImportId;
+    # A capability (or promise) previously exported by the receiver (imported by the sender).
 
     receiverAnswer @4 :PromisedAnswer;
     # A capability expected to be returned in the results of a currently-outstanding call posed
@@ -1082,7 +1116,7 @@ using ProvisionId = AnyPointer;
 # The information which must be sent in an `Accept` message to identify the object being accepted.
 #
 # In a network where each vat has a public/private key pair, this could simply be the public key
-# fingerprint of the provider vat along with the questionId used in the `Provide` message sent from
+# fingerprint of the provider vat along with the question ID used in the `Provide` message sent from
 # that provider.
 
 using RecipientId = AnyPointer;
