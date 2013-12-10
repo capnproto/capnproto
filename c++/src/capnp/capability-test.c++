@@ -572,7 +572,6 @@ public:
       auto tailRequest = params.get("callee").as<DynamicCapability>().newRequest("foo");
       tailRequest.set("i", params.get("i"));
       tailRequest.set("t", "from TestTailCaller");
-      context.releaseParams();
       return context.tailCall(kj::mv(tailRequest));
     } else {
       KJ_FAIL_ASSERT("Method not implemented", methodName);

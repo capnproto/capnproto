@@ -236,7 +236,6 @@ public:
   // results never actually pass through this machine.  Even if no such optimization is possible,
   // `tailCall()` may allow pipelined calls to be forwarded optimistically to the new call site.
   //
-  // `tailCall()` implies a call to `releaseParams()`, to simplify certain implementations.
   // In general, this should be the last thing a method implementation calls, and the promise
   // returned from `tailCall()` should then be returned by the method implementation.
 
@@ -251,10 +250,6 @@ public:
   // Keep in mind that asynchronous cancellation cannot occur while the method is synchronously
   // executing on a local thread.  The method must perform an asynchronous operation or call
   // `EventLoop::current().runLater()` to yield control.
-  //
-  // Currently, you must call `releaseParams()` before `allowCancellation()`, otherwise the
-  // latter will throw an exception.  This is a limitation of the current RPC implementation, but
-  // this requirement could be lifted in the future.
   //
   // Note:  You might think that we should offer `onCancel()` and/or `isCanceled()` methods that
   // provide notification when the caller cancels the request without forcefully killing off the

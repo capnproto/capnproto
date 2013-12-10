@@ -128,7 +128,6 @@ public:
   }
   ClientHook::VoidPromiseAndPipeline directTailCall(kj::Own<RequestHook>&& request) override {
     KJ_REQUIRE(response == nullptr, "Can't call tailCall() after initializing the results struct.");
-    releaseParams();
 
     auto promise = request->send();
 
@@ -144,7 +143,6 @@ public:
     return kj::mv(paf.promise);
   }
   void allowCancellation() override {
-    KJ_REQUIRE(request == nullptr, "Must call releaseParams() before allowCancellation().");
     cancelAllowedFulfiller->fulfill();
   }
   kj::Own<CallContextHook> addRef() override {

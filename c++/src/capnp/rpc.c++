@@ -1665,8 +1665,6 @@ private:
     ClientHook::VoidPromiseAndPipeline directTailCall(kj::Own<RequestHook>&& request) override {
       KJ_REQUIRE(response == nullptr,
                  "Can't call tailCall() after initializing the results struct.");
-      KJ_REQUIRE(this->request == nullptr,
-                 "Must call releaseParams() before tailCall().");
 
       if (request->getBrand() == connectionState.get() && !redirectResults) {
         // The tail call is headed towards the peer that called us in the first place, so we can
@@ -1711,16 +1709,6 @@ private:
       return kj::mv(paf.promise);
     }
     void allowCancellation() override {
-      // TODO(cleanup):  We need to drop the request because it is holding on to the resolution
-      //   chain which in turn holds on to the pipeline which holds on to this object thus
-      //   preventing cancellation from working.  This is a bit silly because obviously our
-      //   request couldn't contain PromisedAnswers referring to itself, but currently the chain
-      //   is a linear list and we have no way to tell that a reference to the chain taken before
-      //   a call started doesn't really need to hold the call open.  To fix this we'd presumably
-      //   need to make the answer table snapshot-able and have CapExtractorImpl take a snapshot
-      //   at creation.
-      KJ_REQUIRE(request == nullptr, "Must call releaseParams() before allowCancellation().");
-
       bool previouslyRequestedButNotAllowed = cancellationFlags == CANCEL_REQUESTED;
       cancellationFlags |= CANCEL_ALLOWED;
 
