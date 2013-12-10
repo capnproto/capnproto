@@ -30,6 +30,13 @@
 
 namespace capnp {
 
+namespace _ {
+
+void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory);
+// Defined in layout.c++.
+
+}  // namespace _
+
 namespace {
 
 class BrokenCapFactoryImpl: public _::BrokenCapFactory {
@@ -44,7 +51,9 @@ static BrokenCapFactoryImpl brokenCapFactory;
 }  // namespace
 
 CapReaderContext::CapReaderContext(kj::Array<kj::Own<ClientHook>>&& capTable)
-    : capTable(kj::mv(capTable)) {}
+    : capTable(kj::mv(capTable)) {
+  setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
+}
 CapReaderContext::~CapReaderContext() noexcept(false) {
   if (capTable == nullptr) {
     kj::dtor(arena());
@@ -64,7 +73,9 @@ AnyPointer::Reader CapReaderContext::imbue(AnyPointer::Reader base) {
   return AnyPointer::Reader(base.reader.imbue(arena()));
 }
 
-CapBuilderContext::CapBuilderContext() {}
+CapBuilderContext::CapBuilderContext() {
+  setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
+}
 CapBuilderContext::~CapBuilderContext() noexcept(false) {
   if (arenaAllocated) {
     kj::dtor(arena());

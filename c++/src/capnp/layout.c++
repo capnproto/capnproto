@@ -32,6 +32,16 @@
 namespace capnp {
 namespace _ {  // private
 
+static BrokenCapFactory* brokenCapFactory = nullptr;
+// Horrible hack:  We need to be able to construct broken caps without any capability context,
+// but we can't have a link-time dependency on libcapnp-rpc.
+
+void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory) {
+  // Called from capability-context.c++ when a capability context is created.  May be called
+  // multiple times but always with the same value.
+  __atomic_store_n(&brokenCapFactory, &factory, __ATOMIC_RELAXED);
+}
+
 // =======================================================================================
 
 struct WirePointer {
@@ -1830,19 +1840,19 @@ struct WireHelpers {
       SegmentReader* segment, const WirePointer* ref, int nestingLimit)) {
     kj::Maybe<kj::Own<ClientHook>> maybeCap;
 
-    if (segment == nullptr) {
-      // No capability context for unchecked messages.
-      // TODO(now):  This means a capability read from an omitted (and therefore default-valued)
-      //   sub-message will throw a fatal exception.
-      maybeCap = nullptr;
-    } else if (ref->isNull()) {
-      maybeCap = segment->getArena()->newBrokenCap("Calling null capability pointer.");
+    KJ_REQUIRE(brokenCapFactory != nullptr,
+               "Trying to read capabilities without ever having created a capability context.  "
+               "To read capabilities from a message, you must imbue it with CapReaderContext, or "
+               "use the Cap'n Proto RPC system.");
+
+    if (ref->isNull()) {
+      maybeCap = brokenCapFactory->newBrokenCap("Calling null capability pointer.");
     } else if (!ref->isCapability()) {
       KJ_FAIL_REQUIRE(
           "Message contains non-capability pointer where capability pointer was expected.") {
         break;
       }
-      maybeCap = segment->getArena()->newBrokenCap(
+      maybeCap = brokenCapFactory->newBrokenCap(
           "Calling capability extracted from a non-capability pointer.");
     } else {
       maybeCap = segment->getArena()->extractCap(ref->capRef.index.get());

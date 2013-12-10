@@ -106,10 +106,6 @@ kj::Maybe<kj::Own<ClientHook>> BasicReaderArena::extractCap(uint index) {
   return nullptr;
 }
 
-kj::Maybe<kj::Own<ClientHook>> BasicReaderArena::newBrokenCap(kj::StringPtr description) {
-  return nullptr;
-}
-
 // =======================================================================================
 
 ImbuedReaderArena::ImbuedReaderArena(Arena* base, BrokenCapFactory& brokenCapFactory,
@@ -171,10 +167,6 @@ kj::Maybe<kj::Own<ClientHook>> ImbuedReaderArena::extractCap(uint index) {
     }
     return brokenCapFactory.newBrokenCap("Calling capability from invalid descriptor.");
   }
-}
-
-kj::Maybe<kj::Own<ClientHook>> ImbuedReaderArena::newBrokenCap(kj::StringPtr description) {
-  return brokenCapFactory.newBrokenCap(description);
 }
 
 // =======================================================================================
@@ -315,10 +307,6 @@ kj::Maybe<kj::Own<ClientHook>> BasicBuilderArena::extractCap(uint index) {
   return nullptr;
 }
 
-kj::Maybe<kj::Own<ClientHook>> BasicBuilderArena::newBrokenCap(kj::StringPtr description) {
-  return nullptr;
-}
-
 uint BasicBuilderArena::injectCap(kj::Own<ClientHook>&& cap) {
   KJ_FAIL_REQUIRE("Cannot inject capability into a builder that has not been imbued with a "
                   "capability context.") {
@@ -392,10 +380,6 @@ kj::Maybe<kj::Own<ClientHook>> ImbuedBuilderArena::extractCap(uint index) {
     }
     return brokenCapFactory.newBrokenCap("Calling capability from invalid descriptor.");
   }
-}
-
-kj::Maybe<kj::Own<ClientHook>> ImbuedBuilderArena::newBrokenCap(kj::StringPtr description) {
-  return brokenCapFactory.newBrokenCap(description);
 }
 
 SegmentBuilder* ImbuedBuilderArena::getSegment(SegmentId id) {
