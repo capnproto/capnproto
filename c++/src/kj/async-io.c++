@@ -34,6 +34,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
@@ -294,11 +295,26 @@ public:
   }
 
   int socket(int type) const {
+    bool isStream = type == SOCK_STREAM;
+
     int result;
 #if __linux__
     type |= SOCK_NONBLOCK | SOCK_CLOEXEC;
 #endif
     KJ_SYSCALL(result = ::socket(addr.generic.sa_family, type, 0));
+
+    if (isStream && (addr.generic.sa_family == AF_INET ||
+                     addr.generic.sa_family == AF_INET6)) {
+      // TODO(0.5):  As a hack for the 0.4 release we are always setting
+      //   TCP_NODELAY because Nagle's algorithm pretty much kills Cap'n Proto's
+      //   RPC protocol.  Later, we should extend the interface to provide more
+      //   control over this.  Perhaps write() should have a flag which
+      //   specifies whether to pass MSG_MORE.
+      int one = 1;
+      KJ_SYSCALL(setsockopt(
+          result, IPPROTO_TCP, TCP_NODELAY, (char*)&one, sizeof(one)));
+    }
+
     return result;
   }
 
@@ -642,7 +658,7 @@ Promise<Array<SocketAddress>> SocketAddress::lookupHost(
           addr.addrlen = cur->ai_addrlen;
           memcpy(&addr.addr.generic, cur->ai_addr, cur->ai_addrlen);
         }
-        static_assert(__has_trivial_copy(SocketAddress), "Can't write() SocketAddress...");
+        static_assert(canMemcpy<SocketAddress>(), "Can't write() SocketAddress...");
         output.write(&addr, sizeof(addr));
         cur = cur->ai_next;
       }

@@ -77,8 +77,7 @@ struct PointerHelpers<List<T>, Kind::LIST> {
   static inline void set(PointerBuilder builder, typename List<T>::Reader value) {
     builder.setList(value.reader);
   }
-  template <typename U>
-  static void set(PointerBuilder builder, std::initializer_list<U> value) {
+  static void set(PointerBuilder builder, kj::ArrayPtr<const ReaderFor<T>> value) {
     auto l = init(builder, value.size());
     uint i = 0;
     for (auto& element: value) {

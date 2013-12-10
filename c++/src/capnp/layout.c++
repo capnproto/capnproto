@@ -1830,7 +1830,12 @@ struct WireHelpers {
       SegmentReader* segment, const WirePointer* ref, int nestingLimit)) {
     kj::Maybe<kj::Own<ClientHook>> maybeCap;
 
-    if (ref->isNull()) {
+    if (segment == nullptr) {
+      // No capability context for unchecked messages.
+      // TODO(now):  This means a capability read from an omitted (and therefore default-valued)
+      //   sub-message will throw a fatal exception.
+      maybeCap = nullptr;
+    } else if (ref->isNull()) {
       maybeCap = segment->getArena()->newBrokenCap("Calling null capability pointer.");
     } else if (!ref->isCapability()) {
       KJ_FAIL_REQUIRE(

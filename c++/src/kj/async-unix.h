@@ -54,8 +54,6 @@ public:
   Promise<short> onFdEvent(int fd, short eventMask);
   // `eventMask` is a bitwise-OR of poll events (e.g. `POLLIN`, `POLLOUT`, etc.).  The next time
   // one or more of the given events occurs on `fd`, the set of events that occurred are returned.
-  //
-  // The result of waiting on the same FD twice at once is undefined.
 
   Promise<siginfo_t> onSignal(int signum);
   // When the given signal is delivered to this thread, return the corresponding siginfo_t.

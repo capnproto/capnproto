@@ -290,6 +290,8 @@ private:
   friend class _::TaskSetImpl;
   friend Promise<void> _::yield();
   friend class _::NeverDone;
+  template <typename U>
+  friend Promise<Array<U>> joinPromises(Array<Promise<U>>&& promises);
 };
 
 template <typename T>
@@ -338,6 +340,10 @@ PromiseForResult<Func, void> evalLater(Func&& func);
 //
 // If you schedule several evaluations with `evalLater` during the same callback, they are
 // guaranteed to be executed in order.
+
+template <typename T>
+Promise<Array<T>> joinPromises(Array<Promise<T>>&& promises);
+// Join an array of promises into a promise for an array.
 
 // =======================================================================================
 // Hack for creating a lambda that holds an owned pointer.

@@ -51,7 +51,7 @@ if test "$INTERCEPTOR" = ""; then
   exit 1
 fi
 
-echo findProvider file:capnp
+echo findProvider file:compiler/capnp
 read CAPNP
 
 if test "$CAPNP" = ""; then

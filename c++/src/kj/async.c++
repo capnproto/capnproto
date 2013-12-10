@@ -508,6 +508,9 @@ void PromiseNode::OnReadyEvent::arm() {
 
 // -------------------------------------------------------------------
 
+ImmediatePromiseNodeBase::ImmediatePromiseNodeBase() {}
+ImmediatePromiseNodeBase::~ImmediatePromiseNodeBase() noexcept(false) {}
+
 void ImmediatePromiseNodeBase::onReady(Event& event) noexcept {
   event.armBreadthFirst();
 }
@@ -803,6 +806,73 @@ Maybe<Own<Event>> ExclusiveJoinPromiseNode::Branch::fire() {
 
 PromiseNode* ExclusiveJoinPromiseNode::Branch::getInnerForTrace() {
   return dependency;
+}
+
+// -------------------------------------------------------------------
+
+ArrayJoinPromiseNodeBase::ArrayJoinPromiseNodeBase(
+    Array<Own<PromiseNode>> promises, ExceptionOrValue* resultParts, size_t partSize)
+    : countLeft(promises.size()) {
+  // Make the branches.
+  auto builder = heapArrayBuilder<Branch>(promises.size());
+  for (uint i: indices(promises)) {
+    ExceptionOrValue& output = *reinterpret_cast<ExceptionOrValue*>(
+        reinterpret_cast<byte*>(resultParts) + i * partSize);
+    builder.add(*this, kj::mv(promises[i]), output);
+  }
+  branches = builder.finish();
+
+  if (branches.size() == 0) {
+    onReadyEvent.arm();
+  }
+}
+ArrayJoinPromiseNodeBase::~ArrayJoinPromiseNodeBase() noexcept(false) {}
+
+void ArrayJoinPromiseNodeBase::onReady(Event& event) noexcept {
+  onReadyEvent.init(event);
+}
+
+void ArrayJoinPromiseNodeBase::get(ExceptionOrValue& output) noexcept {
+  // If any of the elements threw exceptions, propagate them.
+  for (auto& branch: branches) {
+    KJ_IF_MAYBE(exception, branch.getPart()) {
+      output.addException(kj::mv(*exception));
+    }
+  }
+
+  if (output.exception == nullptr) {
+    // No errors.  The template subclass will need to fill in the result.
+    getNoError(output);
+  }
+}
+
+PromiseNode* ArrayJoinPromiseNodeBase::getInnerForTrace() {
+  return branches.size() == 0 ? nullptr : branches[0].getInnerForTrace();
+}
+
+ArrayJoinPromiseNodeBase::Branch::Branch(
+    ArrayJoinPromiseNodeBase& joinNode, Own<PromiseNode> dependencyParam, ExceptionOrValue& output)
+    : joinNode(joinNode), dependency(kj::mv(dependencyParam)), output(output) {
+  dependency->setSelfPointer(&dependency);
+  dependency->onReady(*this);
+}
+
+ArrayJoinPromiseNodeBase::Branch::~Branch() noexcept(false) {}
+
+Maybe<Own<Event>> ArrayJoinPromiseNodeBase::Branch::fire() {
+  if (--joinNode.countLeft == 0) {
+    joinNode.onReadyEvent.arm();
+  }
+  return nullptr;
+}
+
+_::PromiseNode* ArrayJoinPromiseNodeBase::Branch::getInnerForTrace() {
+  return dependency->getInnerForTrace();
+}
+
+Maybe<Exception> ArrayJoinPromiseNodeBase::Branch::getPart() {
+  dependency->get(output);
+  return kj::mv(output.exception);
 }
 
 // -------------------------------------------------------------------
