@@ -203,10 +203,6 @@ public:
   // Extract the capability at the given index.  If the index is invalid, returns a dummy
   // capability whose methods all throw.  Returns null only if the message is not imbued with a
   // capability context.
-
-  virtual kj::Maybe<kj::Own<ClientHook>> newBrokenCap(kj::StringPtr description) = 0;
-  // Returns a capability which, when called, always throws an exception with the given description.
-  // Returns null if the message is not imbued with a capability context.
 };
 
 class BasicReaderArena final: public Arena {
@@ -219,7 +215,6 @@ public:
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
   kj::Maybe<kj::Own<ClientHook>> extractCap(uint index);
-  kj::Maybe<kj::Own<ClientHook>> newBrokenCap(kj::StringPtr description);
 
 private:
   MessageReader* message;
@@ -252,7 +247,6 @@ public:
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
   kj::Maybe<kj::Own<ClientHook>> extractCap(uint index);
-  kj::Maybe<kj::Own<ClientHook>> newBrokenCap(kj::StringPtr description);
 
 private:
   Arena* base;
@@ -312,7 +306,6 @@ public:
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
   kj::Maybe<kj::Own<ClientHook>> extractCap(uint index);
-  kj::Maybe<kj::Own<ClientHook>> newBrokenCap(kj::StringPtr description);
 
   // implements BuilderArena -----------------------------------------
   SegmentBuilder* getSegment(SegmentId id) override;
@@ -352,7 +345,6 @@ public:
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
   kj::Maybe<kj::Own<ClientHook>> extractCap(uint index);
-  kj::Maybe<kj::Own<ClientHook>> newBrokenCap(kj::StringPtr description);
 
   // implements BuilderArena -----------------------------------------
   SegmentBuilder* getSegment(SegmentId id) override;
