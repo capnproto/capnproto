@@ -50,6 +50,10 @@ AM_CONDITIONAL([USE_EXTERNAL_CAPNP], [test "$external_capnp" != "no"])
 
 AC_SEARCH_LIBS(sched_yield, rt)
 
+# Users will need to use the same -stdlib as us so we'd better let pkg-config know about it.
+STDLIB_FLAG=`echo "$CXX $CXXFLAGS" | grep -o ' [[-]]stdlib=[[^ ]]*'`
+AC_SUBST([STDLIB_FLAG])
+
 LIBS="$PTHREAD_LIBS $LIBS"
 CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
 
