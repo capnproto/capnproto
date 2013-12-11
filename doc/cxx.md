@@ -3,10 +3,11 @@ layout: page
 title: C++ Runtime
 ---
 
-# C++ Runtime
+# C++ Serialization
 
 The Cap'n Proto C++ runtime implementation provides an easy-to-use interface for manipulating
-messages backed by fast pointer arithmetic.
+messages backed by fast pointer arithmetic.  This page discusses the serialization layer of
+the runtime; see [C++ RPC](cxxrpc.html) for information about the RPC layer.
 
 ## Example Usage
 
@@ -173,7 +174,13 @@ To generate C++ code from your `.capnp` [interface definition](language.html), r
 
 This will create `myproto.capnp.h` and `myproto.capnp.c++` in the same directory as `myproto.capnp`.
 
-To use this code in your app, you must link against both `libcapnp` and `libkj`.
+To use this code in your app, you must link against both `libcapnp` and `libkj`.  If you use
+`pkg-config`, Cap'n Proto provides the `capnp` module to simplify discovery of compiler and linker
+flags.
+
+If you use [RPC](cxxrpc.html) (i.e., your schema defines [interfaces](language.html#interfaces)),
+then you will additionally nead to link against `libcapnp-rpc` and `libkj-async`, or use the
+`capnp-rpc` `pkg-config` module.
 
 ### Setting a Namespace
 
@@ -362,7 +369,7 @@ implicitly convertible in this way.  Unfortunately, this trick doesn't work on G
 
 ### Interfaces
 
-Interfaces (RPC) are not yet implemented at this time.
+[Interfaces (RPC) have their own page.](cxxrpc.html)
 
 ### Constants
 
