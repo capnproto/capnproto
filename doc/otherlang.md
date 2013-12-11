@@ -17,14 +17,20 @@ maintained by respective authors and have not been reviewed by me
 
 ##### Works In Progress
 
+* [C](https://github.com/jmckaskill/c-capnproto) by [@jmckaskill](https://github.com/jmckaskill)
 * [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
+* [Go](https://github.com/jmckaskill/go-capnproto) by [@jmckaskill](https://github.com/jmckaskill)
 * [Ruby](https://github.com/cstrahan/capnp-ruby) by [@cstrahan](https://github.com/cstrahan)
 * [Rust](https://github.com/dwrensha/capnproto-rust) by [@dwrensha](https://github.com/dwrensha)
 
-##### Inactive
+##### Non-language Projects
 
-* [C and Go](https://github.com/jmckaskill/go-capnproto) by
-  [@jmckaskill](https://github.com/jmckaskill)
+These are other misc projects related to Cap'n Proto that are not actually implementations in
+new languages.
+
+* [Common Test Framework](https://github.com/kaos/capnp_test) by [@kaos](https://github.com/kaos)
+* [Vim Syntax Highlighting](https://github.com/cstrahan/vim-capnp) by
+  [@cstrahan](https://github.com/cstrahan)
 
 ## Contribute Your Own!
 

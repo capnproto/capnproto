@@ -5,23 +5,26 @@ title: Road Map
 
 # Road Map
 
-Here's what's (hopefully) in store for future versions of Cap'n Proto!
+Here's what's (hopefully) in store for future versions of Cap'n Proto!  Of course, everything here
+is subject to change.
 
-## Next version: 0.4
+## Next version: 0.5
 
-These features are planned for version 0.4.  Some may get pushed back depending on how long
-they take.
+* **Shared memory RPC:**  Zero-copy inter-process communication.  Synchronized with futexes.
+* **Persistent capabilities (level 2 RPC):**  Allow system-assisted saving and restoring of
+  capabilities across connections.
+* **Three-way introductions (level 3 RPC):**  Allow RPC interactions between more than two parties,
+  with new connections formed automatically as needed.
+* **Fiber-based concurrency:**  The C++ runtime's event loop concurrency model will be augmented
+  with support for fibers, which are like threads except that context switches happen only at
+  well-defined points (thus avoiding the need for mutex locking).  Fibers essentially provide
+  syntax sugar on top of the event loop model.
+* **Dynamic schema transmission:**  Allow e.g. Python applications to obtain schemas directly from
+  the RPC server so that they need not have a local copy.  Great for interactive debugging.
 
-* **Generate code for interfaces**
-* **Define RPC protocol**
-* **Implement RPC transports**
-  * **Stream:**  Standard TCP-based RPC.
-  * **Datagram:**  Low-latency UDP-based RPC.
-  * **Shared memory:**  Zero-copy inter-process communication.  Synchronized with futexes.
+## Near future (after 0.5)
 
-## Near future (after 0.4)
-
-Provisionally, these are probably the things that will be worked on after 0.4.
+Provisionally, these are probably the things that will be worked on after 0.5.
 
 * **C++98 Backport:**  Fork and backport the key functionality from the C++11 implementation to
   work under C++98/C++03.  This will make Cap'n Proto accessible to MSVC users.  The schema and
@@ -32,10 +35,6 @@ Provisionally, these are probably the things that will be worked on after 0.4.
   type which will be automatically injected into the generated code, so that you can provide a
   nicer interface which encapsulates the type's inner state.
 * **Implement maps:**  Based on encapsulated and parameterized types.
-
-Note also that after 0.4, Kenton plans to begin devoting some of his time to another project
-built on top of Cap'n Proto.  Experience from this project will help guide future changes to
-Cap'n Proto itelf.
 
 ## Before version 1.0
 

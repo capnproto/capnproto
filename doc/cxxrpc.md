@@ -1,6 +1,6 @@
 ---
 layout: page
-title: C++ Runtime
+title: C++ RPC
 ---
 
 # C++ RPC
@@ -402,3 +402,9 @@ path name.
 
 For a more complete example, see the
 [calculator server sample](https://github.com/kentonv/capnproto/tree/master/c++/samples/calculator-server.c++).
+
+## Debugging
+
+If you've written a server and you want to connect to it to issue some calls for debugging, perhaps
+interactively, the easiest way to do it is to use [pycapnp](http://jparyani.github.io/pycapnp/).
+The `capnp` tool probably will never add RPC functionality because pycapnp is better.

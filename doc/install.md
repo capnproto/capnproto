@@ -22,9 +22,9 @@ you should keep in mind some caveats:
 * **Performance:** While Cap'n Proto is inherently fast by design, the implementation has not yet
   undergone serious profiling and optimization.  Currently it only beats Protobufs in realistic-ish
   end-to-end benchmarks by around 2x-5x.  We can do better.
-* **RPC:** The RPC protocol has not yet been specified, much less implemented.
-* **Support for languages other than C++:** Work is being done to support languages other than C++,
-  but at this time only the C++ implementation is ready to be used.
+* **RPC:** The RPC implementation is very new (introduced in v0.4 / Dec 2013).  It is missing many
+  features that are essential in real-world use (like timeouts), the interface is still in flux,
+  and it needs a lot of optimization work.
 
 If you'd like to hack on Cap'n Proto, you should join the
 [discussion group](https://groups.google.com/group/capnproto)!
@@ -38,6 +38,9 @@ The Cap'n Proto tools, including the compiler which takes `.capnp` files and gen
 for them, are written in C++.  Therefore, you must install the C++ package even if your actual
 development language is something else.
 
+This package is licensed under the
+[BSD 2-Clause License](http://opensource.org/licenses/BSD-2-Clause).
+
 ### GCC 4.7 or Clang 3.2 Needed
 
 If you are using GCC, you MUST use at least version 4.7 as Cap'n Proto uses recently-implemented
@@ -47,18 +50,21 @@ need to set the environment variable `CXX=g++-4.7` before following the instruct
 If you are using Clang, you must use at least version 3.2.  To use Clang, set the environment
 variable `CXX=clang++` before following any instructions below, otherwise `g++` is used by default.
 
-This package is officially tested on Linux (GCC 4.7, Clang 3.2), Mac OSX (Clang 3.2), and Cygwin
-(Windows; GCC 4.7), in 32-bit and 64-bit modes.
+This package is officially tested on Linux (GCC 4.7, GCC 4.8, Clang 3.2), Mac OSX (Xcode 5), and
+Cygwin (Windows; GCC 4.8), in 32-bit and 64-bit modes.
 
-**Mac OSX users:**  Don't miss the [special instructions for OSX](#clang_32_on_mac_osx).
+Mac/Xcode users:  You must use at least Xcode 5, and you must download the Xcode command-line tools
+under Xcode menu > Preferences > Downloads.  Alternatively, compiler builds from
+[Macports](http://www.macports.org/), [Fink](http://www.finkproject.org/), or
+[Homebrew](http://brew.sh/) are reported to work.
 
 ### Building from a release package
 
 You may download and install the release version of Cap'n Proto like so:
 
-<pre><code>curl -O <a href="http://capnproto.org/capnproto-c++-0.2.1.tar.gz">http://capnproto.org/capnproto-c++-0.2.1.tar.gz</a>
-tar zxf capnproto-c++-0.2.1.tar.gz
-cd capnproto-c++-0.2.1
+<pre><code>curl -O <a href="http://capnproto.org/capnproto-c++-0.0.0.tar.gz">http://capnproto.org/capnproto-c++-0.0.0.tar.gz</a>
+tar zxf capnproto-c++-0.0.0.tar.gz
+cd capnproto-c++-0.0.0
 ./configure
 make -j6 check
 sudo make install</code></pre>
@@ -84,46 +90,6 @@ installed (in addition to Git) in order to fetch the Google Test sources (done b
     ./configure
     make -j6 check
     sudo make install
-
-### Clang 3.2 on Mac OSX
-
-As of this writing, Mac OSX 10.8 with Xcode 4.6 command-line tools is not quite good enough to
-compile Cap'n Proto.  The included version of GCC is ancient.  The included version of Clang --
-which mysteriously advertises itself as version 4.2 -- was actually cut from LLVM SVN somewhere
-between versions 3.1 and 3.2; it is not sufficient to build Cap'n Proto.
-
-There are two options:
-
-1. Use [Macports](http://www.macports.org/), [Fink](http://www.finkproject.org/), or
-   [Homebrew](http://brew.sh/) to get an up-to-date GCC.
-2. Obtain Clang 3.2
-   [directly from the LLVM project](http://llvm.org/releases/download.html).  (Unfortunately,
-   Clang 3.3 apparently does NOT work, because the libc++ headers shipped with XCode contain
-   bugs that Clang 3.3 refuses to compile.)
-
-Option 2 is the one preferred by Cap'n Proto's developers.  Here are step-by-step instructions
-for setting this up:
-
-1. Get the Xcode command-line tools:  Download Xcode from the app store.  Then, open Xcode,
-   go to Xcode menu > Preferences > Downloads, and choose to install "Command Line Tools".
-2. Download the Clang 3.2 binaries and put them somewhere easy to remember:
-
-       curl -O http://llvm.org/releases/3.2/clang+llvm-3.2-x86_64-apple-darwin11.tar.gz
-       tar zxf clang+llvm-3.2-x86_64-apple-darwin11.tar.gz
-       mv clang+llvm-3.2-x86_64-apple-darwin11 ~/clang-3.2
-
-3. We will need to use libc++ (from LLVM) rather than libstdc++ (from GNU) because Xcode's
-   libstdc++ (like its GCC) is too old.  In order for your freshly-downloaded Clang binaries to
-   be able to find it, you'll need to symlink it into the Clang tree:
-
-       ln -s /usr/lib/c++ ~/clang-3.2/lib/c++
-
-You may now follow the instructions below, but make sure to tell `configure` to use your
-newly-downloaded Clang binary:
-
-    ./configure CXX=$HOME/clang-3.2/bin/clang++
-
-Hopefully, Xcode 5.0 will be released soon with a newer Clang, making this extra work unnecessary.
 
 ### Building with Ekam
 
