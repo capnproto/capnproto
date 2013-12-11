@@ -195,14 +195,13 @@ export CXXFLAGS="-O2 -DDEBUG -Wall -Werror -Wno-strict-aliasing -Wno-sign-compar
 
 STAGING=$PWD/tmp-staging
 
-if [ "$QUICK" != quick ]; then
-  rm -rf "$STAGING"
-  mkdir "$STAGING"
-  mkdir "$STAGING/bin"
-  mkdir "$STAGING/lib"
-  export PATH=$STAGING/bin:$PATH
-  export LD_LIBRARY_PATH=$STAGING/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
-fi
+rm -rf "$STAGING"
+mkdir "$STAGING"
+mkdir "$STAGING/bin"
+mkdir "$STAGING/lib"
+export PATH=$STAGING/bin:$PATH
+export LD_LIBRARY_PATH=$STAGING/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+export PKG_CONFIG_PATH=$STAGING/lib/pkgconfig
 
 if [ "$QUICK" = quick ]; then
   echo "************************** QUICK TEST ***********************************"
@@ -212,33 +211,26 @@ echo "========================================================================="
 echo "Building c++"
 echo "========================================================================="
 
-if [ "x`uname`" = xDarwin ]; then
-  if [ ! -e ~/clang-3.2/bin/clang++ ]; then
-    echo "You need to put the clang-3.2 binaries in ~/clang-3.2." >&2
-    exit 1
-  fi
-  export CXX=~/clang-3.2/bin/clang++
-  SAMPLE_CXXFLAGS=-stdlib=libc++
+# Apple now aliases gcc to clang, so probe to find out what compiler we're really using.
+if (${CXX:-g++} -dM -E -x c++ /dev/null 2>&1 | grep -q '__clang__'); then
+  IS_CLANG=yes
 else
-  SAMPLE_CXXFLAGS=
+  IS_CLANG=no
 fi
 
-case ${CXX:-g++} in
-  *clang* )
-    # There's an unused private field in gtest.
-    export CXXFLAGS="$CXXFLAGS -Wno-unused-private-field"
-    ;;
-  g++* | *-g++* )
-    if (${CXX:-g++} --version | grep -q ' 4[.]8'); then
-      # GCC 4.8 emits a weird uninitialized warning in kj/parse/char-test, deep in one of the parser
-      # combinators.  It could be a real bug but there is just not enough information to figure out
-      # where the problem is coming from, because GCC does not provide any description of the inlining
-      # that has occurred.  Since I have not observed any actual problem (tests pass, etc.), I'm
-      # muting it for now.
-      CXXFLAGS="$CXXFLAGS -Wno-maybe-uninitialized"
-    fi
-    ;;
-esac
+if [ $IS_CLANG = yes ]; then
+  # There's an unused private field in gtest.
+  export CXXFLAGS="$CXXFLAGS -Wno-unused-private-field"
+else
+  if (${CXX:-g++} --version | grep -q ' 4[.]8'); then
+    # GCC 4.8 emits a weird uninitialized warning in kj/parse/char-test, deep in one of the parser
+    # combinators.  It could be a real bug but there is just not enough information to figure out
+    # where the problem is coming from, because GCC does not provide any description of the inlining
+    # that has occurred.  Since I have not observed any actual problem (tests pass, etc.), I'm
+    # muting it for now.
+    CXXFLAGS="$CXXFLAGS -Wno-maybe-uninitialized"
+  fi
+fi
 
 cd c++
 doit ./setup-autotools.sh | tr = -
@@ -246,18 +238,11 @@ doit autoreconf -i
 doit ./configure --prefix="$STAGING"
 doit make -j6 check
 
-case ${CXX:-g++} in
-  g++* | *-g++* )
-    # Verify that generated code compiles with pedantic warnings.  Make sure to treat capnp headers
-    # as system headers so warnings in them are ignored.
-    doit ${CXX:-g++} -isystem src -std=c++11 -fno-permissive -pedantic -Wall -Wextra -Werror \
-        -c src/capnp/test.capnp.c++ -o /dev/null
-    ;;
-esac
-
-if [ "$QUICK" = quick ]; then
-  make maintainer-clean
-  exit 0
+if [ $IS_CLANG = no ]; then
+  # Verify that generated code compiles with pedantic warnings.  Make sure to treat capnp headers
+  # as system headers so warnings in them are ignored.
+  doit ${CXX:-g++} -isystem src -std=c++11 -fno-permissive -pedantic -Wall -Wextra -Werror \
+      -c src/capnp/test.capnp.c++ -o /dev/null
 fi
 
 echo "========================================================================="
@@ -270,14 +255,35 @@ test "x$(which capnp)" = "x$STAGING/bin/capnp"
 test "x$(which capnpc-c++)" = "x$STAGING/bin/capnpc-c++"
 
 cd samples
+
 doit capnp compile -oc++ addressbook.capnp -I"$STAGING"/include --no-standard-import
-doit ${CXX:-g++} -std=c++11 $CXXFLAGS $SAMPLE_CXXFLAGS -I"$STAGING"/include -L"$STAGING"/lib \
-    addressbook.c++ addressbook.capnp.c++ -lcapnp -lkj -pthread -o addressbook
+doit ${CXX:-g++} -std=c++11 addressbook.c++ addressbook.capnp.c++ -o addressbook \
+    $CXXFLAGS $(pkg-config --cflags --libs capnp)
 echo "@@@@ ./addressbook (in various configurations)"
 ./addressbook write | ./addressbook read
 ./addressbook dwrite | ./addressbook dread
 rm addressbook addressbook.capnp.c++ addressbook.capnp.h
+
+doit capnp compile -oc++ calculator.capnp -I"$STAGING"/include --no-standard-import
+doit ${CXX:-g++} -std=c++11 calculator-client.c++ calculator.capnp.c++ -o calculator-client \
+    $CXXFLAGS $(pkg-config --cflags --libs capnp-rpc)
+doit ${CXX:-g++} -std=c++11 calculator-server.c++ calculator.capnp.c++ -o calculator-server \
+    $CXXFLAGS $(pkg-config --cflags --libs capnp-rpc)
+rm -f /tmp/capnp-calculator-example-$$
+./calculator-server unix:/tmp/capnp-calculator-example-$$ &
+sleep 0.1
+./calculator-client unix:/tmp/capnp-calculator-example-$$
+kill %+
+wait %+ || true
+rm calculator-client calculator-server calculator.capnp.c++ calculator.capnp.h /tmp/capnp-calculator-example-$$
+
 cd ..
+
+if [ "$QUICK" = quick ]; then
+  doit make maintainer-clean
+  rm -rf "$STAGING"
+  exit 0
+fi
 
 echo "========================================================================="
 echo "Testing --with-external-capnp"
@@ -364,4 +370,3 @@ fi
 doit make maintainer-clean
 
 rm -rf "$STAGING"
-
