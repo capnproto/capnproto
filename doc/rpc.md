@@ -22,7 +22,7 @@ on its result, i.e. `bar(foo())`.  Or -- as is very common in object-oriented pr
 want to call a method on the result of another call, i.e. `foo().bar()`.  With any traditional RPC
 system, this will require two network round trips.  With Cap'n Proto, it takes only one.  In fact,
 you can chain any number of such calls together -- with diamond dependencies and everything -- and
-Cap'n Proto will collapse them all into one call.
+Cap'n Proto will collapse them all into one round trip.
 
 By now you can probably imagine how it works:  if you execute `bar(foo())`, the client sends two
 messages to the server, one saying "Please execute foo()", and a second saying "Please execute

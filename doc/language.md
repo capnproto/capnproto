@@ -280,8 +280,8 @@ group" in Cap'n Proto, which was the case that got into the most trouble with Pr
 
 ### Dynamically-typed Fields
 
-A struct may have a field with type `Object`.  This field's value can be of any pointer type -- i.e.
-any struct, interface, list, or blob.  This is essentially like a `void*` in C.
+A struct may have a field with type `AnyPointer`.  This field's value can be of any pointer type --
+i.e. any struct, interface, list, or blob.  This is essentially like a `void*` in C.
 
 ### Enums
 
@@ -498,7 +498,9 @@ annotation myAnnotation(struct) :Int32 $baz(10);
 const myConst :Int32 = 123 $baz(11);
 {% endhighlight %}
 
-`Void` annotations can omit the value.  Struct-typed annotations are also allowed.
+`Void` annotations can omit the value.  Struct-typed annotations are also allowed.  Tip:  If
+you want an annotation to have a default value, declare it as a struct with a single field with
+a default value.
 
 {% highlight capnp %}
 annotation qux(struct, field) :Void;
@@ -511,6 +513,15 @@ struct MyStruct $qux {
 annotation corge(file) :MyStruct;
 
 $corge(string = "hello", number = 123);
+
+struct Grault {
+  value @0 :Int32 = 123;
+}
+
+annotation grault(file) :Grault;
+
+$grault();  # value defaults to 123
+$grault(value = 456);
 {% endhighlight %}
 
 ### Unique IDs
