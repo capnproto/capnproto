@@ -1,7 +1,30 @@
+// Copyright (c) 2013, Kenton Varda <temporal@gmail.com>
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions are met:
+//
+// 1. Redistributions of source code must retain the above copyright notice, this
+//    list of conditions and the following disclaimer.
+// 2. Redistributions in binary form must reproduce the above copyright notice,
+//    this list of conditions and the following disclaimer in the documentation
+//    and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+// ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+// WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+// (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+// ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+// SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 #include "calculator.capnp.h"
 #include <kj/debug.h>
 #include <capnp/ez-rpc.h>
-#include <capnp/capability-context.h>  // for LocalMessage
+#include <capnp/message.h>
 #include <iostream>
 
 typedef unsigned int uint;
@@ -90,13 +113,15 @@ class FunctionImpl final: public Calculator::Function::Server {
 
 public:
   FunctionImpl(uint paramCount, Calculator::Expression::Reader body)
-      : paramCount(paramCount), body(body) {}
+      : paramCount(paramCount) {
+    this->body.setRoot(body);
+  }
 
   kj::Promise<void> call(CallContext context) {
     auto params = context.getParams().getParams();
     KJ_REQUIRE(params.size() == paramCount, "Wrong number of parameters.");
 
-    return evaluateImpl(body.getRoot().getAs<Calculator::Expression>(), params)
+    return evaluateImpl(body.getRoot<Calculator::Expression>(), params)
         .then([context](double value) mutable {
       context.getResults().setValue(value);
     });
@@ -106,10 +131,8 @@ private:
   uint paramCount;
   // The function's arity.
 
-  capnp::LocalMessage body;
-  // LocalMessage holds a message that might contain capabilities (interface
-  // references).  Here we're using it to hold a Calculator.Expression, which
-  // might contain Calculator.Function and/or Calculator.Value capabilities.
+  capnp::MallocMessageBuilder body;
+  // Stores a permanent copy of the function body.
 };
 
 class OperatorImpl final: public Calculator::Function::Server {

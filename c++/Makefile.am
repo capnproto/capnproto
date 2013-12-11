@@ -160,7 +160,6 @@ includecapnp_HEADERS =                                         \
   src/capnp/any.h                                              \
   src/capnp/message.h                                          \
   src/capnp/capability.h                                       \
-  src/capnp/capability-context.h                               \
   src/capnp/schema.capnp.h                                     \
   src/capnp/schema.h                                           \
   src/capnp/schema-loader.h                                    \
@@ -235,7 +234,6 @@ libcapnp_rpc_la_LDFLAGS = -release $(VERSION) -no-undefined
 libcapnp_rpc_la_SOURCES=                                       \
   src/capnp/serialize-async.c++                                \
   src/capnp/capability.c++                                     \
-  src/capnp/capability-context.c++                             \
   src/capnp/dynamic-capability.c++                             \
   src/capnp/rpc.c++                                            \
   src/capnp/rpc.capnp.c++                                      \

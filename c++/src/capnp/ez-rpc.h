@@ -79,6 +79,16 @@ class EzRpcClient {
   //   EzRpcClient / EzRpcServer objects in a single thread; they will make sure to make no more
   //   than one EventLoop.)
   // - These classes only support simple two-party connections, not multilateral VatNetworks.
+  // - These classes only support communication over a raw, unencrypted socket.  If you want to
+  //   build on an abstract stream (perhaps one which supports encryption), you must use the
+  //   lower-level interfaces.
+  //
+  // Some of these restrictions will probably be lifted in future versions, but some things will
+  // always require using the low-level interfaces directly.  If you are interested in working
+  // at a lower level, start by looking at these interfaces:
+  // - `kj::startAsyncIo()` in `kj/async-io.h`.
+  // - `RpcSystem` in `capnp/rpc.h`.
+  // - `TwoPartyVatNetwork` in `capnp/rpc-twoparty.h`.
 
 public:
   explicit EzRpcClient(kj::StringPtr serverAddress, uint defaultPort = 0);

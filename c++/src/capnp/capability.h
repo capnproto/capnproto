@@ -332,6 +332,8 @@ public:
 
 class ClientHook {
 public:
+  ClientHook();
+
   virtual Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) = 0;
   // Start a new call, allowing the client to allocate request/response objects as it sees fit.
@@ -409,6 +411,13 @@ kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<ClientHook>>&& pro
 // Returns a ClientHook that queues up calls until `promise` resolves, then forwards them to
 // the new client.  This hook's `getResolved()` and `whenMoreResolved()` methods will reflect the
 // redirection to the eventual replacement client.
+
+kj::Own<ClientHook> newBrokenCap(kj::StringPtr reason);
+kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason);
+// Helper function that creates a capability which simply throws exceptions when called.
+
+kj::Own<PipelineHook> newBrokenPipeline(kj::Exception&& reason);
+// Helper function that creates a pipeline which simply throws exceptions when called.
 
 // =======================================================================================
 // Extend PointerHelpers for interfaces

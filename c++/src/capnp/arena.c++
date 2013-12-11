@@ -25,7 +25,6 @@
 #include "arena.h"
 #include "message.h"
 #include "capability.h"
-#include "capability-context.h"
 #include <kj/debug.h>
 #include <kj/refcount.h>
 #include <vector>
@@ -36,7 +35,6 @@ namespace capnp {
 namespace _ {  // private
 
 Arena::~Arena() noexcept(false) {}
-BuilderArena::~BuilderArena() noexcept(false) {}
 
 void ReadLimiter::unread(WordCount64 amount) {
   // Be careful not to overflow here.  Since ReadLimiter has no thread-safety, it's possible that
@@ -51,14 +49,14 @@ void ReadLimiter::unread(WordCount64 amount) {
 
 // =======================================================================================
 
-BasicReaderArena::BasicReaderArena(MessageReader* message)
+ReaderArena::ReaderArena(MessageReader* message)
     : message(message),
       readLimiter(message->getOptions().traversalLimitInWords * WORDS),
       segment0(this, SegmentId(0), message->getSegment(0), &readLimiter) {}
 
-BasicReaderArena::~BasicReaderArena() noexcept(false) {}
+ReaderArena::~ReaderArena() noexcept(false) {}
 
-SegmentReader* BasicReaderArena::tryGetSegment(SegmentId id) {
+SegmentReader* ReaderArena::tryGetSegment(SegmentId id) {
   if (id == SegmentId(0)) {
     if (segment0.getArray() == nullptr) {
       return nullptr;
@@ -96,102 +94,41 @@ SegmentReader* BasicReaderArena::tryGetSegment(SegmentId id) {
   return result;
 }
 
-void BasicReaderArena::reportReadLimitReached() {
+void ReaderArena::reportReadLimitReached() {
   KJ_FAIL_REQUIRE("Exceeded message traversal limit.  See capnp::ReaderOptions.") {
     return;
   }
 }
 
-kj::Maybe<kj::Own<ClientHook>> BasicReaderArena::extractCap(uint index) {
-  return nullptr;
-}
-
-// =======================================================================================
-
-ImbuedReaderArena::ImbuedReaderArena(Arena* base, BrokenCapFactory& brokenCapFactory,
-                                     kj::Array<kj::Own<ClientHook>>&& capTable)
-    : base(base), brokenCapFactory(brokenCapFactory), capTable(kj::mv(capTable)),
-      segment0(nullptr) {}
-ImbuedReaderArena::~ImbuedReaderArena() noexcept(false) {}
-
-SegmentReader* ImbuedReaderArena::imbue(SegmentReader* baseSegment) {
-  if (baseSegment == nullptr) return nullptr;
-
-  if (baseSegment->getSegmentId() == SegmentId(0)) {
-    if (segment0.getArena() == nullptr) {
-      kj::dtor(segment0);
-      kj::ctor(segment0, this, baseSegment);
-    }
-    KJ_DASSERT(segment0.getArray().begin() == baseSegment->getArray().begin());
-    return &segment0;
-  }
-
-  auto lock = moreSegments.lockExclusive();
-
-  SegmentMap* segments = nullptr;
-  KJ_IF_MAYBE(s, *lock) {
-    auto iter = s->get()->find(baseSegment);
-    if (iter != s->get()->end()) {
-      KJ_DASSERT(iter->second->getArray().begin() == baseSegment->getArray().begin());
-      return iter->second;
-    }
-    segments = *s;
-  } else {
-    auto newMap = kj::heap<SegmentMap>();
-    segments = newMap;
-    *lock = kj::mv(newMap);
-  }
-
-  auto newSegment = kj::heap<ImbuedSegmentReader>(this, baseSegment);
-  SegmentReader* result = newSegment;
-  segments->insert(std::make_pair(baseSegment, mv(newSegment)));
-  return result;
-}
-
-SegmentReader* ImbuedReaderArena::tryGetSegment(SegmentId id) {
-  return imbue(base->tryGetSegment(id));
-}
-
-void ImbuedReaderArena::reportReadLimitReached() {
-  return base->reportReadLimitReached();
-}
-
-kj::Maybe<kj::Own<ClientHook>> ImbuedReaderArena::extractCap(uint index) {
+kj::Maybe<kj::Own<ClientHook>> ReaderArena::extractCap(uint index) {
   if (index < capTable.size()) {
-    return capTable[index]->addRef();
+    return capTable[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
   } else {
-    KJ_FAIL_ASSERT("Invalid capability descriptor in message.") {
-      // Work around http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799 and
-      // http://llvm.org/bugs/show_bug.cgi?id=12286.
-      break;
-    }
-    return brokenCapFactory.newBrokenCap("Calling capability from invalid descriptor.");
+    return nullptr;
   }
 }
 
 // =======================================================================================
 
-BasicBuilderArena::BasicBuilderArena(MessageBuilder* message)
+BuilderArena::BuilderArena(MessageBuilder* message)
     : message(message), segment0(nullptr, SegmentId(0), nullptr, nullptr) {}
-BasicBuilderArena::~BasicBuilderArena() noexcept(false) {}
+BuilderArena::~BuilderArena() noexcept(false) {}
 
-SegmentBuilder* BasicBuilderArena::getSegment(SegmentId id) {
+SegmentBuilder* BuilderArena::getSegment(SegmentId id) {
   // This method is allowed to fail if the segment ID is not valid.
   if (id == SegmentId(0)) {
     return &segment0;
   } else {
     KJ_IF_MAYBE(s, moreSegments) {
       KJ_REQUIRE(id.value - 1 < s->get()->builders.size(), "invalid segment id", id.value);
-      // TODO(cleanup):  Return a const SegmentBuilder and tediously constify all SegmentBuilder
-      //   pointers throughout the codebase.
-      return const_cast<BasicSegmentBuilder*>(s->get()->builders[id.value - 1].get());
+      return const_cast<SegmentBuilder*>(s->get()->builders[id.value - 1].get());
     } else {
       KJ_FAIL_REQUIRE("invalid segment id", id.value);
     }
   }
 }
 
-BasicBuilderArena::AllocateResult BasicBuilderArena::allocate(WordCount amount) {
+BuilderArena::AllocateResult BuilderArena::allocate(WordCount amount) {
   if (segment0.getArena() == nullptr) {
     // We're allocating the first segment.
     kj::ArrayPtr<word> ptr = message->allocateSegment(amount / WORDS);
@@ -230,7 +167,7 @@ BasicBuilderArena::AllocateResult BasicBuilderArena::allocate(WordCount amount) 
       moreSegments = kj::mv(newSegmentState);
     }
 
-    kj::Own<BasicSegmentBuilder> newBuilder = kj::heap<BasicSegmentBuilder>(
+    kj::Own<SegmentBuilder> newBuilder = kj::heap<SegmentBuilder>(
         this, SegmentId(segmentState->builders.size() + 1),
         message->allocateSegment(amount / WORDS), &this->dummyLimiter);
     SegmentBuilder* result = newBuilder.get();
@@ -245,7 +182,7 @@ BasicBuilderArena::AllocateResult BasicBuilderArena::allocate(WordCount amount) 
   }
 }
 
-kj::ArrayPtr<const kj::ArrayPtr<const word>> BasicBuilderArena::getSegmentsForOutput() {
+kj::ArrayPtr<const kj::ArrayPtr<const word>> BuilderArena::getSegmentsForOutput() {
   // Although this is a read-only method, we shouldn't need to lock a mutex here because if this
   // is called multiple times simultaneously, we should only be overwriting the array with the
   // exact same data.  If the number or size of segments is actually changing due to an activity
@@ -276,7 +213,7 @@ kj::ArrayPtr<const kj::ArrayPtr<const word>> BasicBuilderArena::getSegmentsForOu
   }
 }
 
-SegmentReader* BasicBuilderArena::tryGetSegment(SegmentId id) {
+SegmentReader* BuilderArena::tryGetSegment(SegmentId id) {
   if (id == SegmentId(0)) {
     if (segment0.getArena() == nullptr) {
       // We haven't allocated any segments yet.
@@ -297,102 +234,21 @@ SegmentReader* BasicBuilderArena::tryGetSegment(SegmentId id) {
   }
 }
 
-void BasicBuilderArena::reportReadLimitReached() {
+void BuilderArena::reportReadLimitReached() {
   KJ_FAIL_ASSERT("Read limit reached for BuilderArena, but it should have been unlimited.") {
     return;
   }
 }
 
-kj::Maybe<kj::Own<ClientHook>> BasicBuilderArena::extractCap(uint index) {
-  return nullptr;
-}
-
-uint BasicBuilderArena::injectCap(kj::Own<ClientHook>&& cap) {
-  KJ_FAIL_REQUIRE("Cannot inject capability into a builder that has not been imbued with a "
-                  "capability context.") {
-    return 0;
-  }
-}
-
-void BasicBuilderArena::dropCap(uint index) {
-  // They only way we could have a cap in the first place is if the error was already reported...
-}
-
-// =======================================================================================
-
-ImbuedBuilderArena::ImbuedBuilderArena(BuilderArena* base, BrokenCapFactory& brokenCapFactory)
-    : base(base), brokenCapFactory(brokenCapFactory), segment0(nullptr) {}
-ImbuedBuilderArena::~ImbuedBuilderArena() noexcept(false) {}
-
-SegmentBuilder* ImbuedBuilderArena::imbue(SegmentBuilder* baseSegment) {
-  if (baseSegment == nullptr) return nullptr;
-
-  SegmentBuilder* result;
-  if (baseSegment->getSegmentId() == SegmentId(0)) {
-    if (segment0.getArena() == nullptr) {
-      kj::dtor(segment0);
-      kj::ctor(segment0, this, baseSegment);
-    }
-    result = &segment0;
-  } else {
-    MultiSegmentState* segmentState;
-    KJ_IF_MAYBE(s, moreSegments) {
-      segmentState = *s;
-    } else {
-      auto newState = kj::heap<MultiSegmentState>();
-      segmentState = newState;
-      moreSegments = kj::mv(newState);
-    }
-
-    auto id = baseSegment->getSegmentId().value;
-    if (id >= segmentState->builders.size()) {
-      segmentState->builders.resize(id + 1);
-    }
-    KJ_IF_MAYBE(segment, segmentState->builders[id]) {
-      result = *segment;
-    } else {
-      auto newBuilder = kj::heap<ImbuedSegmentBuilder>(this, baseSegment);
-      result = newBuilder;
-      segmentState->builders[id] = kj::mv(newBuilder);
-    }
-  }
-
-  KJ_DASSERT(result->getArray().begin() == baseSegment->getArray().begin());
-  return result;
-}
-
-SegmentReader* ImbuedBuilderArena::tryGetSegment(SegmentId id) {
-  return imbue(static_cast<SegmentBuilder*>(base->tryGetSegment(id)));
-}
-
-void ImbuedBuilderArena::reportReadLimitReached() {
-  base->reportReadLimitReached();
-}
-
-kj::Maybe<kj::Own<ClientHook>> ImbuedBuilderArena::extractCap(uint index) {
+kj::Maybe<kj::Own<ClientHook>> BuilderArena::extractCap(uint index) {
   if (index < capTable.size()) {
-    return capTable[index]->addRef();
+    return capTable[index].map([](kj::Own<ClientHook>& cap) { return cap->addRef(); });
   } else {
-    KJ_FAIL_ASSERT("Invalid capability descriptor in message.") {
-      // Work around http://gcc.gnu.org/bugzilla/show_bug.cgi?id=33799 and
-      // http://llvm.org/bugs/show_bug.cgi?id=12286.
-      break;
-    }
-    return brokenCapFactory.newBrokenCap("Calling capability from invalid descriptor.");
+    return nullptr;
   }
 }
 
-SegmentBuilder* ImbuedBuilderArena::getSegment(SegmentId id) {
-  return imbue(base->getSegment(id));
-}
-
-BuilderArena::AllocateResult ImbuedBuilderArena::allocate(WordCount amount) {
-  auto result = base->allocate(amount);
-  result.segment = imbue(result.segment);
-  return result;
-}
-
-uint ImbuedBuilderArena::injectCap(kj::Own<ClientHook>&& cap) {
+uint BuilderArena::injectCap(kj::Own<ClientHook>&& cap) {
   // TODO(perf):  Detect if the cap is already on the table and reuse the index?  Perhaps this
   //   doesn't happen enough to be worth the effort.
   uint result = capTable.size();
@@ -400,7 +256,7 @@ uint ImbuedBuilderArena::injectCap(kj::Own<ClientHook>&& cap) {
   return result;
 }
 
-void ImbuedBuilderArena::dropCap(uint index) {
+void BuilderArena::dropCap(uint index) {
   KJ_ASSERT(index < capTable.size(), "Invalid capability descriptor in message.") {
     return;
   }

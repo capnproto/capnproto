@@ -22,9 +22,9 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "rpc.h"
-#include "capability-context.h"
 #include "test-util.h"
 #include "schema.h"
+#include "serialize.h"
 #include <kj/debug.h>
 #include <kj/string-tree.h>
 #include <gtest/gtest.h>
@@ -83,14 +83,7 @@ public:
         }
 
         auto payload = call.getParams();
-        auto capTableReader = payload.getCapTable();
-        auto capTable = kj::heapArrayBuilder<kj::Own<ClientHook>>(capTableReader.size());
-        for (uint i = 0; i < capTableReader.size(); i++) {
-          capTable.add(newBrokenCap("fake cap"));
-        }
-        CapReaderContext context(capTable.finish());
-
-        auto params = kj::str(context.imbue(payload.getContent()).getAs<DynamicStruct>(paramType));
+        auto params = kj::str(payload.getContent().getAs<DynamicStruct>(paramType));
 
         auto sendResultsTo = call.getSendResultsTo();
 
@@ -120,22 +113,14 @@ public:
         }
 
         auto payload = ret.getResults();
-        auto capTableReader = payload.getCapTable();
-        auto capTable = kj::heapArrayBuilder<kj::Own<ClientHook>>(capTableReader.size());
-        for (uint i = 0; i < capTableReader.size(); i++) {
-          capTable.add(newBrokenCap("fake cap"));
-        }
-        CapReaderContext context(capTable.finish());
-
-        auto imbued = context.imbue(payload.getContent());
 
         if (schema.getProto().isStruct()) {
-          auto results = kj::str(imbued.getAs<DynamicStruct>(schema.asStruct()));
+          auto results = kj::str(payload.getContent().getAs<DynamicStruct>(schema.asStruct()));
 
           return kj::str(senderName, "(", ret.getAnswerId(), "): return ", results,
                          " caps:[", kj::strArray(payload.getCapTable(), ", "), "]");
         } else if (schema.getProto().isInterface()) {
-          imbued.getAs<DynamicCapability>(schema.asInterface());
+          payload.getContent().getAs<DynamicCapability>(schema.asInterface());
           return kj::str(senderName, "(", ret.getAnswerId(), "): return cap ",
                          kj::strArray(payload.getCapTable(), ", "));
         } else {
@@ -246,26 +231,37 @@ public:
 
     class IncomingRpcMessageImpl final: public IncomingRpcMessage, public kj::Refcounted {
     public:
-      IncomingRpcMessageImpl(uint firstSegmentWordSize)
-          : message(firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS
-                                              : firstSegmentWordSize) {}
+      IncomingRpcMessageImpl(kj::Array<word> data)
+          : data(kj::mv(data)),
+            message(this->data) {}
 
       AnyPointer::Reader getBody() override {
-        return message.getRoot<AnyPointer>().asReader();
+        return message.getRoot<AnyPointer>();
       }
 
-      MallocMessageBuilder message;
+      void initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>>&& capTable) override {
+        message.initCapTable(kj::mv(capTable));
+      }
+
+      kj::Array<word> data;
+      FlatArrayMessageReader message;
     };
 
     class OutgoingRpcMessageImpl final: public OutgoingRpcMessage {
     public:
       OutgoingRpcMessageImpl(ConnectionImpl& connection, uint firstSegmentWordSize)
           : connection(connection),
-            message(kj::refcounted<IncomingRpcMessageImpl>(firstSegmentWordSize)) {}
+            message(firstSegmentWordSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS
+                                              : firstSegmentWordSize) {}
 
       AnyPointer::Builder getBody() override {
-        return message->message.getRoot<AnyPointer>();
+        return message.getRoot<AnyPointer>();
       }
+
+      kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable() override {
+        return message.getCapTable();
+      }
+
       void send() override {
         if (connection.networkException != nullptr) {
           return;
@@ -275,11 +271,13 @@ public:
 
         // Uncomment to get a debug dump.
 //        kj::String msg = connection.network.network.dumper.dump(
-//            message->message.getRoot<rpc::Message>(), connection.sender);
+//            message.getRoot<rpc::Message>(), connection.sender);
 //        KJ_ DBG(msg);
 
+        auto incomingMessage = kj::heap<IncomingRpcMessageImpl>(messageToFlatArray(message));
+
         auto connectionPtr = &connection;
-        connection.tasks->add(kj::evalLater(kj::mvCapture(kj::addRef(*message),
+        connection.tasks->add(kj::evalLater(kj::mvCapture(incomingMessage,
             [connectionPtr](kj::Own<IncomingRpcMessageImpl>&& message) {
           KJ_IF_MAYBE(p, connectionPtr->partner) {
             if (p->fulfillers.empty()) {
@@ -296,7 +294,7 @@ public:
 
     private:
       ConnectionImpl& connection;
-      kj::Own<IncomingRpcMessageImpl> message;
+      MallocMessageBuilder message;
     };
 
     kj::Own<OutgoingRpcMessage> newOutgoingMessage(uint firstSegmentWordSize) override {

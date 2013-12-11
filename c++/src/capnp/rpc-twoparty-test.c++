@@ -22,7 +22,6 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "rpc-twoparty.h"
-#include "capability-context.h"
 #include "test-util.h"
 #include <kj/async-unix.h>
 #include <kj/debug.h>

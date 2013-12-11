@@ -279,7 +279,7 @@ static void checkStruct(StructReader reader) {
 
 TEST(WireFormat, StructRoundTrip_OneSegment) {
   MallocMessageBuilder message;
-  BasicBuilderArena arena(&message);
+  BuilderArena arena(&message);
   auto allocation = arena.allocate(1 * WORDS);
   SegmentBuilder* segment = allocation.segment;
   word* rootLocation = allocation.words;
@@ -316,7 +316,7 @@ TEST(WireFormat, StructRoundTrip_OneSegment) {
 
 TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
   MallocMessageBuilder message(0, AllocationStrategy::FIXED_SIZE);
-  BasicBuilderArena arena(&message);
+  BuilderArena arena(&message);
   auto allocation = arena.allocate(1 * WORDS);
   SegmentBuilder* segment = allocation.segment;
   word* rootLocation = allocation.words;
@@ -354,7 +354,7 @@ TEST(WireFormat, StructRoundTrip_OneSegmentPerAllocation) {
 
 TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
   MallocMessageBuilder message(8, AllocationStrategy::FIXED_SIZE);
-  BasicBuilderArena arena(&message);
+  BuilderArena arena(&message);
   auto allocation = arena.allocate(1 * WORDS);
   SegmentBuilder* segment = allocation.segment;
   word* rootLocation = allocation.words;
