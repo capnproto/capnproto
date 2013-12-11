@@ -38,16 +38,16 @@ namespace capnp {
 MessageReader::MessageReader(ReaderOptions options): options(options), allocatedArena(false) {}
 MessageReader::~MessageReader() noexcept(false) {
   if (allocatedArena) {
-    arena()->~BasicReaderArena();
+    arena()->~ReaderArena();
   }
 }
 
 AnyPointer::Reader MessageReader::getRootInternal() {
   if (!allocatedArena) {
-    static_assert(sizeof(_::BasicReaderArena) <= sizeof(arenaSpace),
-        "arenaSpace is too small to hold a BasicReaderArena.  Please increase it.  This will break "
+    static_assert(sizeof(_::ReaderArena) <= sizeof(arenaSpace),
+        "arenaSpace is too small to hold a ReaderArena.  Please increase it.  This will break "
         "ABI compatibility.");
-    new(arena()) _::BasicReaderArena(this);
+    new(arena()) _::ReaderArena(this);
     allocatedArena = true;
   }
 
@@ -75,7 +75,7 @@ _::SegmentBuilder* MessageBuilder::getRootSegment() {
   if (allocatedArena) {
     return arena()->getSegment(_::SegmentId(0));
   } else {
-    static_assert(sizeof(_::BasicBuilderArena) <= sizeof(arenaSpace),
+    static_assert(sizeof(_::BuilderArena) <= sizeof(arenaSpace),
         "arenaSpace is too small to hold a BuilderArena.  Please increase it.");
     kj::ctor(*arena(), this);
     allocatedArena = true;
@@ -99,6 +99,14 @@ AnyPointer::Builder MessageBuilder::getRootInternal() {
 kj::ArrayPtr<const kj::ArrayPtr<const word>> MessageBuilder::getSegmentsForOutput() {
   if (allocatedArena) {
     return arena()->getSegmentsForOutput();
+  } else {
+    return nullptr;
+  }
+}
+
+kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> MessageBuilder::getCapTable() {
+  if (allocatedArena) {
+    return arena()->getCapTable();
   } else {
     return nullptr;
   }

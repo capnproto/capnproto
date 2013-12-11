@@ -34,8 +34,8 @@
 namespace capnp {
 
 namespace _ {  // private
-  class BasicReaderArena;
-  class BasicBuilderArena;
+  class ReaderArena;
+  class BuilderArena;
 }
 
 class StructSchema;
@@ -118,6 +118,16 @@ public:
   // RootType in this case must be DynamicStruct, and you must #include <capnp/dynamic.h> to
   // use this.
 
+  void initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTable);
+  // Sets the table of capabilities embedded in this message.  Capability pointers found in the
+  // message content contain indexes into this table.  You must call this before attempting to
+  // read any capability pointers (interface pointers) from the message.  The table is not passed
+  // to the constructor because often (as in the RPC system) the cap table is actually constructed
+  // based on a list read from the message itself.
+  //
+  // You must link against libcapnp-rpc to call this method (the rest of MessageBuilder is in
+  // regular libcapnp).
+
 private:
   ReaderOptions options;
 
@@ -128,7 +138,7 @@ private:
   void* arenaSpace[15 + sizeof(kj::MutexGuarded<void*>) / sizeof(void*)];
   bool allocatedArena;
 
-  _::BasicReaderArena* arena() { return reinterpret_cast<_::BasicReaderArena*>(arenaSpace); }
+  _::ReaderArena* arena() { return reinterpret_cast<_::ReaderArena*>(arenaSpace); }
   AnyPointer::Reader getRootInternal();
 };
 
@@ -186,11 +196,18 @@ public:
   // Like setRoot() but adopts the orphan without copying.
 
   kj::ArrayPtr<const kj::ArrayPtr<const word>> getSegmentsForOutput();
+  // Get the raw data that makes up the message.
+
+  kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable();
+  // Get the table of capabilities (interface pointers) that have been added to this message.
+  // When you later parse this message, you must call `initCapTable()` on the `MessageReader` and
+  // give it an equivalent set of capabilities, otherwise cap pointers in the message will be
+  // unusable.
 
   Orphanage getOrphanage();
 
 private:
-  void* arenaSpace[16];
+  void* arenaSpace[17];
   // Space in which we can construct a BuilderArena.  We don't use BuilderArena directly here
   // because we don't want clients to have to #include arena.h, which itself includes a bunch of
   // big STL headers.  We don't use a pointer to a BuilderArena because that would require an
@@ -203,7 +220,7 @@ private:
   // isn't constructed yet.  This is kind of annoying because it means that getOrphanage() is
   // not thread-safe, but that shouldn't be a huge deal...
 
-  _::BasicBuilderArena* arena() { return reinterpret_cast<_::BasicBuilderArena*>(arenaSpace); }
+  _::BuilderArena* arena() { return reinterpret_cast<_::BuilderArena*>(arenaSpace); }
   _::SegmentBuilder* getRootSegment();
   AnyPointer::Builder getRootInternal();
 };

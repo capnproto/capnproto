@@ -47,11 +47,7 @@ namespace _ {  // private
 class SegmentReader;
 class SegmentBuilder;
 class Arena;
-class BasicReaderArena;
-class ImbuedReaderArena;
 class BuilderArena;
-class BasicBuilderArena;
-class ImbuedBuilderArena;
 class ReadLimiter;
 
 class Segment;
@@ -133,20 +129,12 @@ private:
   KJ_DISALLOW_COPY(SegmentReader);
 
   friend class SegmentBuilder;
-  friend class ImbuedSegmentBuilder;
-  friend class ImbuedSegmentReader;
-};
-
-class ImbuedSegmentReader: public SegmentReader {
-public:
-  inline ImbuedSegmentReader(Arena* arena, SegmentReader* base);
-  inline ImbuedSegmentReader(decltype(nullptr));
 };
 
 class SegmentBuilder: public SegmentReader {
 public:
   inline SegmentBuilder(BuilderArena* arena, SegmentId id, kj::ArrayPtr<word> ptr,
-                        ReadLimiter* readLimiter, word** pos);
+                        ReadLimiter* readLimiter);
 
   KJ_ALWAYS_INLINE(word* allocate(WordCount amount));
   inline word* getPtrUnchecked(WordCount offset);
@@ -158,33 +146,11 @@ public:
   inline void reset();
 
 private:
-  word** pos;
+  word* pos;
   // Pointer to a pointer to the current end point of the segment, i.e. the location where the
-  // next object should be allocated.  The extra level of indirection allows an
-  // ImbuedSegmentBuilder to share this pointer with the underlying BasicSegmentBuilder.
-
-  friend class ImbuedSegmentBuilder;
+  // next object should be allocated.
 
   KJ_DISALLOW_COPY(SegmentBuilder);
-};
-
-class BasicSegmentBuilder: public SegmentBuilder {
-public:
-  inline BasicSegmentBuilder(BuilderArena* arena, SegmentId id, kj::ArrayPtr<word> ptr,
-                             ReadLimiter* readLimiter);
-
-private:
-  word* actualPos;
-
-  KJ_DISALLOW_COPY(BasicSegmentBuilder);
-};
-
-class ImbuedSegmentBuilder: public SegmentBuilder {
-public:
-  inline ImbuedSegmentBuilder(ImbuedBuilderArena* arena, SegmentBuilder* base);
-  inline ImbuedSegmentBuilder(decltype(nullptr));
-
-  KJ_DISALLOW_COPY(ImbuedSegmentBuilder);
 };
 
 class Arena {
@@ -200,16 +166,21 @@ public:
   // will need to continue with default values.
 
   virtual kj::Maybe<kj::Own<ClientHook>> extractCap(uint index) = 0;
-  // Extract the capability at the given index.  If the index is invalid, returns a dummy
-  // capability whose methods all throw.  Returns null only if the message is not imbued with a
-  // capability context.
+  // Extract the capability at the given index.  If the index is invalid, returns null.
 };
 
-class BasicReaderArena final: public Arena {
+class ReaderArena final: public Arena {
 public:
-  BasicReaderArena(MessageReader* message);
-  ~BasicReaderArena() noexcept(false);
-  KJ_DISALLOW_COPY(BasicReaderArena);
+  ReaderArena(MessageReader* message);
+  ~ReaderArena() noexcept(false);
+  KJ_DISALLOW_COPY(ReaderArena);
+
+  inline void initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTable) {
+    // Imbues the arena with a capability table.  This is not passed to the constructor because the
+    // table itself may be built based on some other part of the message (as is the case with the
+    // RPC protocol).
+    this->capTable = kj::mv(capTable);
+  }
 
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
@@ -219,6 +190,7 @@ public:
 private:
   MessageReader* message;
   ReadLimiter readLimiter;
+  kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTable;
 
   // Optimize for single-segment messages so that small messages are handled quickly.
   SegmentReader segment0;
@@ -234,66 +206,13 @@ private:
   //   possibly backed by the same data)?
 };
 
-class ImbuedReaderArena final: public Arena {
-public:
-  ImbuedReaderArena(Arena* base, BrokenCapFactory& brokenCapFactory,
-                    kj::Array<kj::Own<ClientHook>>&& capTable);
-  ~ImbuedReaderArena() noexcept(false);
-  KJ_DISALLOW_COPY(ImbuedReaderArena);
-
-  SegmentReader* imbue(SegmentReader* base);
-
-  // implements Arena ------------------------------------------------
-  SegmentReader* tryGetSegment(SegmentId id) override;
-  void reportReadLimitReached() override;
-  kj::Maybe<kj::Own<ClientHook>> extractCap(uint index);
-
-private:
-  Arena* base;
-  BrokenCapFactory& brokenCapFactory;
-  kj::Array<kj::Own<ClientHook>> capTable;
-
-  // Optimize for single-segment messages so that small messages are handled quickly.
-  ImbuedSegmentReader segment0;
-
-  typedef std::unordered_map<SegmentReader*, kj::Own<ImbuedSegmentReader>> SegmentMap;
-  kj::MutexGuarded<kj::Maybe<kj::Own<SegmentMap>>> moreSegments;
-};
-
-class BuilderArena: public Arena {
-public:
-  virtual ~BuilderArena() noexcept(false);
-
-  virtual SegmentBuilder* getSegment(SegmentId id) = 0;
-  // Get the segment with the given id.  Crashes or throws an exception if no such segment exists.
-
-  struct AllocateResult {
-    SegmentBuilder* segment;
-    word* words;
-  };
-
-  virtual AllocateResult allocate(WordCount amount) = 0;
-  // Find a segment with at least the given amount of space available and allocate the space.
-  // Note that allocating directly from a particular segment is much faster, but allocating from
-  // the arena is guaranteed to succeed.  Therefore callers should try to allocate from a specific
-  // segment first if there is one, then fall back to the arena.
-
-  virtual uint injectCap(kj::Own<ClientHook>&& cap) = 0;
-  // Add the capability to the message and return its index.  If the same ClientHook is injected
-  // twice, this may return the same index both times, but in this case dropCap() needs to be
-  // called an equal number of times to actually remove the cap.
-
-  virtual void dropCap(uint index) = 0;
-  // Remove a capability injected earlier.  Called when the pointer is overwritten or zero'd out.
-};
-
-class BasicBuilderArena final: public BuilderArena {
+class BuilderArena final: public Arena {
   // A BuilderArena that does not allow the injection of capabilities.
 
 public:
-  BasicBuilderArena(MessageBuilder* message);
-  ~BasicBuilderArena() noexcept(false);
-  KJ_DISALLOW_COPY(BasicBuilderArena);
+  BuilderArena(MessageBuilder* message);
+  ~BuilderArena() noexcept(false);
+  KJ_DISALLOW_COPY(BuilderArena);
 
   inline SegmentBuilder* getRootSegment() { return &segment0; }
 
@@ -302,65 +221,47 @@ public:
   // portion of each segment, whereas tryGetSegment() returns something that includes
   // not-yet-allocated space.
 
+  inline kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable() { return capTable; }
+  // Return the capability table.
+
+  SegmentBuilder* getSegment(SegmentId id);
+  // Get the segment with the given id.  Crashes or throws an exception if no such segment exists.
+
+  struct AllocateResult {
+    SegmentBuilder* segment;
+    word* words;
+  };
+
+  AllocateResult allocate(WordCount amount);
+  // Find a segment with at least the given amount of space available and allocate the space.
+  // Note that allocating directly from a particular segment is much faster, but allocating from
+  // the arena is guaranteed to succeed.  Therefore callers should try to allocate from a specific
+  // segment first if there is one, then fall back to the arena.
+
+  uint injectCap(kj::Own<ClientHook>&& cap);
+  // Add the capability to the message and return its index.  If the same ClientHook is injected
+  // twice, this may return the same index both times, but in this case dropCap() needs to be
+  // called an equal number of times to actually remove the cap.
+
+  void dropCap(uint index);
+  // Remove a capability injected earlier.  Called when the pointer is overwritten or zero'd out.
+
   // implements Arena ------------------------------------------------
   SegmentReader* tryGetSegment(SegmentId id) override;
   void reportReadLimitReached() override;
   kj::Maybe<kj::Own<ClientHook>> extractCap(uint index);
-
-  // implements BuilderArena -----------------------------------------
-  SegmentBuilder* getSegment(SegmentId id) override;
-  AllocateResult allocate(WordCount amount) override;
-  uint injectCap(kj::Own<ClientHook>&& cap);
-  void dropCap(uint index);
 
 private:
   MessageBuilder* message;
   ReadLimiter dummyLimiter;
+  kj::Vector<kj::Maybe<kj::Own<ClientHook>>> capTable;
 
-  BasicSegmentBuilder segment0;
+  SegmentBuilder segment0;
   kj::ArrayPtr<const word> segment0ForOutput;
 
   struct MultiSegmentState {
-    kj::Vector<kj::Own<BasicSegmentBuilder>> builders;
+    kj::Vector<kj::Own<SegmentBuilder>> builders;
     kj::Vector<kj::ArrayPtr<const word>> forOutput;
-  };
-  kj::Maybe<kj::Own<MultiSegmentState>> moreSegments;
-};
-
-class ImbuedBuilderArena final: public BuilderArena {
-  // A BuilderArena imbued with the ability to inject capabilities.
-
-public:
-  ImbuedBuilderArena(BuilderArena* base, BrokenCapFactory& brokenCapFactory);
-  ~ImbuedBuilderArena() noexcept(false);
-  KJ_DISALLOW_COPY(ImbuedBuilderArena);
-
-  SegmentBuilder* imbue(SegmentBuilder* baseSegment);
-  // Return an imbued SegmentBuilder corresponding to the given segment from the base arena.
-
-  inline kj::ArrayPtr<kj::Own<ClientHook>> getCapTable() { return capTable; }
-  // Release and return the capability table.
-
-  // implements Arena ------------------------------------------------
-  SegmentReader* tryGetSegment(SegmentId id) override;
-  void reportReadLimitReached() override;
-  kj::Maybe<kj::Own<ClientHook>> extractCap(uint index);
-
-  // implements BuilderArena -----------------------------------------
-  SegmentBuilder* getSegment(SegmentId id) override;
-  AllocateResult allocate(WordCount amount) override;
-  uint injectCap(kj::Own<ClientHook>&& cap);
-  void dropCap(uint index);
-
-private:
-  BuilderArena* base;
-  BrokenCapFactory& brokenCapFactory;
-  kj::Vector<kj::Own<ClientHook>> capTable;
-
-  ImbuedSegmentBuilder segment0;
-
-  struct MultiSegmentState {
-    kj::Vector<kj::Maybe<kj::Own<ImbuedSegmentBuilder>>> builders;
   };
   kj::Maybe<kj::Own<MultiSegmentState>> moreSegments;
 };
@@ -411,25 +312,20 @@ inline WordCount SegmentReader::getSize() { return ptr.size() * WORDS; }
 inline kj::ArrayPtr<const word> SegmentReader::getArray() { return ptr; }
 inline void SegmentReader::unread(WordCount64 amount) { readLimiter->unread(amount); }
 
-inline ImbuedSegmentReader::ImbuedSegmentReader(Arena* arena, SegmentReader* base)
-    : SegmentReader(arena, base->id, base->ptr, base->readLimiter) {}
-inline ImbuedSegmentReader::ImbuedSegmentReader(decltype(nullptr))
-    : SegmentReader(nullptr, SegmentId(0), nullptr, nullptr) {}
-
 // -------------------------------------------------------------------
 
 inline SegmentBuilder::SegmentBuilder(
-    BuilderArena* arena, SegmentId id, kj::ArrayPtr<word> ptr, ReadLimiter* readLimiter, word** pos)
-    : SegmentReader(arena, id, ptr, readLimiter), pos(pos) {}
+    BuilderArena* arena, SegmentId id, kj::ArrayPtr<word> ptr, ReadLimiter* readLimiter)
+    : SegmentReader(arena, id, ptr, readLimiter), pos(ptr.begin()) {}
 
 inline word* SegmentBuilder::allocate(WordCount amount) {
-  if (intervalLength(*pos, ptr.end()) < amount) {
+  if (intervalLength(pos, ptr.end()) < amount) {
     // Not enough space in the segment for this allocation.
     return nullptr;
   } else {
     // Success.
-    word* result = *pos;
-    *pos = *pos + amount;
+    word* result = pos;
+    pos = pos + amount;
     return result;
   }
 }
@@ -447,26 +343,14 @@ inline BuilderArena* SegmentBuilder::getArena() {
 }
 
 inline kj::ArrayPtr<const word> SegmentBuilder::currentlyAllocated() {
-  return kj::arrayPtr(ptr.begin(), *pos - ptr.begin());
+  return kj::arrayPtr(ptr.begin(), pos - ptr.begin());
 }
 
 inline void SegmentBuilder::reset() {
   word* start = getPtrUnchecked(0 * WORDS);
-  memset(start, 0, (*pos - start) * sizeof(word));
-  *pos = start;
+  memset(start, 0, (pos - start) * sizeof(word));
+  pos = start;
 }
-
-inline BasicSegmentBuilder::BasicSegmentBuilder(
-    BuilderArena* arena, SegmentId id, kj::ArrayPtr<word> ptr, ReadLimiter* readLimiter)
-    : SegmentBuilder(arena, id, ptr, readLimiter, &actualPos),
-      actualPos(ptr.begin()) {}
-
-inline ImbuedSegmentBuilder::ImbuedSegmentBuilder(ImbuedBuilderArena* arena, SegmentBuilder* base)
-    : SegmentBuilder(arena, base->id,
-                     kj::arrayPtr(const_cast<word*>(base->ptr.begin()), base->ptr.size()),
-                     base->readLimiter, base->pos) {}
-inline ImbuedSegmentBuilder::ImbuedSegmentBuilder(decltype(nullptr))
-    : SegmentBuilder(nullptr, SegmentId(0), nullptr, nullptr, nullptr) {}
 
 }  // namespace _ (private)
 }  // namespace capnp

@@ -76,6 +76,10 @@ public:
     return message.getRoot<AnyPointer>();
   }
 
+  kj::ArrayPtr<kj::Maybe<kj::Own<ClientHook>>> getCapTable() override {
+    return message.getCapTable();
+  }
+
   void send() override {
     network.previousWrite = network.previousWrite.then([&]() {
       auto promise = writeMessage(network.stream, message).then([]() {
@@ -99,6 +103,10 @@ public:
 
   AnyPointer::Reader getBody() override {
     return message->getRoot<AnyPointer>();
+  }
+
+  void initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>>&& capTable) override {
+    message->initCapTable(kj::mv(capTable));
   }
 
 private:

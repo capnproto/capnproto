@@ -37,8 +37,8 @@ static BrokenCapFactory* brokenCapFactory = nullptr;
 // but we can't have a link-time dependency on libcapnp-rpc.
 
 void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory) {
-  // Called from capability-context.c++ when a capability context is created.  May be called
-  // multiple times but always with the same value.
+  // Called from capability.c++ when the capability API is used, to make sure that layout.c++
+  // is ready for it.  May be called multiple times but always with the same value.
   __atomic_store_n(&brokenCapFactory, &factory, __ATOMIC_RELAXED);
 }
 
@@ -1725,8 +1725,7 @@ struct WireHelpers {
           setCapabilityPointer(dstSegment, dst, kj::mv(*cap), orphanArena);
           return { dstSegment, nullptr };
         } else {
-          KJ_FAIL_REQUIRE("Message contained capability pointer but is not imbued with a "
-                          "capability context.") {
+          KJ_FAIL_REQUIRE("Message contained invalid capability pointer.") {
             goto useDefault;
           }
         }
@@ -1846,28 +1845,21 @@ struct WireHelpers {
                "use the Cap'n Proto RPC system.");
 
     if (ref->isNull()) {
-      maybeCap = brokenCapFactory->newBrokenCap("Calling null capability pointer.");
+      return brokenCapFactory->newBrokenCap("Calling null capability pointer.");
     } else if (!ref->isCapability()) {
       KJ_FAIL_REQUIRE(
           "Message contains non-capability pointer where capability pointer was expected.") {
         break;
       }
-      maybeCap = brokenCapFactory->newBrokenCap(
+      return brokenCapFactory->newBrokenCap(
           "Calling capability extracted from a non-capability pointer.");
-    } else {
-      maybeCap = segment->getArena()->extractCap(ref->capRef.index.get());
-    }
-
-    KJ_IF_MAYBE(cap, maybeCap) {
+    } else KJ_IF_MAYBE(cap, segment->getArena()->extractCap(ref->capRef.index.get())) {
       return kj::mv(*cap);
     } else {
-      // The message is not imbued with a capability context.  We can't really recover from this,
-      // because we have no way to construct a ClientHook in this case -- capability.c++ may not
-      // even be linked in.  Luckily, this is the caller's error, not the message sender's --
-      // it's the message reader who is calling a capability getter on a message they should know
-      // they have not imbued properly.
-      KJ_FAIL_REQUIRE("Tried to read a capability out of a message that doesn't have a "
-                      "capability context.");
+      KJ_FAIL_REQUIRE("Message contains invalid capability pointer.") {
+        break;
+      }
+      return brokenCapFactory->newBrokenCap("Calling invalid capability pointer.");
     }
   }
 
@@ -2216,10 +2208,6 @@ BuilderArena* PointerBuilder::getArena() const {
   return segment->getArena();
 }
 
-PointerBuilder PointerBuilder::imbue(ImbuedBuilderArena& newArena) const {
-  return PointerBuilder(newArena.imbue(segment), pointer);
-}
-
 // =======================================================================================
 // PointerReader
 
@@ -2276,10 +2264,6 @@ bool PointerReader::isNull() const {
 
 kj::Maybe<Arena&> PointerReader::getArena() const {
   return segment == nullptr ? nullptr : segment->getArena();
-}
-
-PointerReader PointerReader::imbue(ImbuedReaderArena& newArena) const {
-  return PointerReader(newArena.imbue(segment), pointer, nestingLimit);
 }
 
 // =======================================================================================

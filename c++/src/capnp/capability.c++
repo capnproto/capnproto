@@ -24,7 +24,6 @@
 #define CAPNP_PRIVATE
 
 #include "capability.h"
-#include "capability-context.h"
 #include "message.h"
 #include "arena.h"
 #include <kj/refcount.h>
@@ -33,6 +32,37 @@
 #include <map>
 
 namespace capnp {
+
+namespace _ {
+
+void setGlobalBrokenCapFactoryForLayoutCpp(BrokenCapFactory& factory);
+// Defined in layout.c++.
+
+}  // namespace _
+
+namespace {
+
+class BrokenCapFactoryImpl: public _::BrokenCapFactory {
+public:
+  kj::Own<ClientHook> newBrokenCap(kj::StringPtr description) override {
+    return capnp::newBrokenCap(description);
+  }
+};
+
+static BrokenCapFactoryImpl brokenCapFactory;
+
+}  // namespace
+
+ClientHook::ClientHook() {
+  setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
+}
+
+void MessageReader::initCapTable(kj::Array<kj::Maybe<kj::Own<ClientHook>>> capTable) {
+  setGlobalBrokenCapFactoryForLayoutCpp(brokenCapFactory);
+  arena()->initCapTable(kj::mv(capTable));
+}
+
+// =======================================================================================
 
 Capability::Client::Client(decltype(nullptr))
     : hook(newBrokenCap("Called null capability.")) {}
@@ -86,24 +116,32 @@ kj::Promise<void> ClientHook::whenResolved() {
 
 // =======================================================================================
 
+static inline uint firstSegmentSize(kj::Maybe<MessageSize> sizeHint) {
+  KJ_IF_MAYBE(s, sizeHint) {
+    return s->wordCount;
+  } else {
+    return SUGGESTED_FIRST_SEGMENT_WORDS;
+  }
+}
+
 class LocalResponse final: public ResponseHook, public kj::Refcounted {
 public:
   LocalResponse(kj::Maybe<MessageSize> sizeHint)
-      : message(sizeHint) {}
+      : message(firstSegmentSize(sizeHint)) {}
 
-  LocalMessage message;
+  MallocMessageBuilder message;
 };
 
 class LocalCallContext final: public CallContextHook, public kj::Refcounted {
 public:
-  LocalCallContext(kj::Own<LocalMessage>&& request, kj::Own<ClientHook> clientRef,
+  LocalCallContext(kj::Own<MallocMessageBuilder>&& request, kj::Own<ClientHook> clientRef,
                    kj::Own<kj::PromiseFulfiller<void>> cancelAllowedFulfiller)
       : request(kj::mv(request)), clientRef(kj::mv(clientRef)),
         cancelAllowedFulfiller(kj::mv(cancelAllowedFulfiller)) {}
 
   AnyPointer::Reader getParams() override {
     KJ_IF_MAYBE(r, request) {
-      return r->get()->getRoot();
+      return r->get()->getRoot<AnyPointer>();
     } else {
       KJ_FAIL_REQUIRE("Can't call getParams() after releaseParams().");
     }
@@ -114,7 +152,7 @@ public:
   AnyPointer::Builder getResults(kj::Maybe<MessageSize> sizeHint) override {
     if (response == nullptr) {
       auto localResponse = kj::refcounted<LocalResponse>(sizeHint);
-      responseBuilder = localResponse->message.getRoot();
+      responseBuilder = localResponse->message.getRoot<AnyPointer>();
       response = Response<AnyPointer>(responseBuilder.asReader(), kj::mv(localResponse));
     }
     return responseBuilder;
@@ -149,7 +187,7 @@ public:
     return kj::addRef(*this);
   }
 
-  kj::Maybe<kj::Own<LocalMessage>> request;
+  kj::Maybe<kj::Own<MallocMessageBuilder>> request;
   kj::Maybe<Response<AnyPointer>> response;
   AnyPointer::Builder responseBuilder = nullptr;  // only valid if `response` is non-null
   kj::Own<ClientHook> clientRef;
@@ -161,7 +199,7 @@ class LocalRequest final: public RequestHook {
 public:
   inline LocalRequest(uint64_t interfaceId, uint16_t methodId,
                       kj::Maybe<MessageSize> sizeHint, kj::Own<ClientHook> client)
-      : message(kj::heap<LocalMessage>(sizeHint)),
+      : message(kj::heap<MallocMessageBuilder>(firstSegmentSize(sizeHint))),
         interfaceId(interfaceId), methodId(methodId), client(kj::mv(client)) {}
 
   RemotePromise<AnyPointer> send() override {
@@ -204,7 +242,7 @@ public:
     return nullptr;
   }
 
-  kj::Own<LocalMessage> message;
+  kj::Own<MallocMessageBuilder> message;
 
 private:
   uint64_t interfaceId;
@@ -274,7 +312,7 @@ public:
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
     auto hook = kj::heap<LocalRequest>(
         interfaceId, methodId, sizeHint, kj::addRef(*this));
-    auto root = hook->message->getRoot();  // Do not inline `root` -- kj::mv may happen first.
+    auto root = hook->message->getRoot<AnyPointer>();
     return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
   }
 
@@ -424,7 +462,7 @@ public:
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
     auto hook = kj::heap<LocalRequest>(
         interfaceId, methodId, sizeHint, kj::addRef(*this));
-    auto root = hook->message->getRoot();  // Do not inline `root` -- kj::mv may happen first.
+    auto root = hook->message->getRoot<AnyPointer>();
     return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
   }
 
@@ -493,6 +531,99 @@ kj::Own<ClientHook> Capability::Client::makeLocalClient(kj::Own<Capability::Serv
 
 kj::Own<ClientHook> newLocalPromiseClient(kj::Promise<kj::Own<ClientHook>>&& promise) {
   return kj::refcounted<QueuedClient>(kj::mv(promise));
+}
+
+// =======================================================================================
+
+namespace {
+
+class BrokenPipeline final: public PipelineHook, public kj::Refcounted {
+public:
+  BrokenPipeline(const kj::Exception& exception): exception(exception) {}
+
+  kj::Own<PipelineHook> addRef() override {
+    return kj::addRef(*this);
+  }
+
+  kj::Own<ClientHook> getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) override;
+
+private:
+  kj::Exception exception;
+};
+
+class BrokenRequest final: public RequestHook {
+public:
+  BrokenRequest(const kj::Exception& exception, kj::Maybe<MessageSize> sizeHint)
+      : exception(exception), message(firstSegmentSize(sizeHint)) {}
+
+  RemotePromise<AnyPointer> send() override {
+    return RemotePromise<AnyPointer>(kj::cp(exception),
+        AnyPointer::Pipeline(kj::refcounted<BrokenPipeline>(exception)));
+  }
+
+  const void* getBrand() {
+    return nullptr;
+  }
+
+  kj::Exception exception;
+  MallocMessageBuilder message;
+};
+
+class BrokenClient final: public ClientHook, public kj::Refcounted {
+public:
+  BrokenClient(const kj::Exception& exception): exception(exception) {}
+  BrokenClient(const kj::StringPtr description)
+      : exception(kj::Exception::Nature::PRECONDITION, kj::Exception::Durability::PERMANENT,
+                  "", 0, kj::str(description)) {}
+
+  Request<AnyPointer, AnyPointer> newCall(
+      uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
+    auto hook = kj::heap<BrokenRequest>(exception, sizeHint);
+    auto root = hook->message.getRoot<AnyPointer>();
+    return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
+  }
+
+  VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
+                              kj::Own<CallContextHook>&& context) override {
+    return VoidPromiseAndPipeline { kj::cp(exception), kj::heap<BrokenPipeline>(exception) };
+  }
+
+  kj::Maybe<ClientHook&> getResolved() {
+    return nullptr;
+  }
+
+  kj::Maybe<kj::Promise<kj::Own<ClientHook>>> whenMoreResolved() override {
+    return kj::Promise<kj::Own<ClientHook>>(kj::cp(exception));
+  }
+
+  kj::Own<ClientHook> addRef() override {
+    return kj::addRef(*this);
+  }
+
+  const void* getBrand() override {
+    return nullptr;
+  }
+
+private:
+  kj::Exception exception;
+};
+
+kj::Own<ClientHook> BrokenPipeline::getPipelinedCap(kj::ArrayPtr<const PipelineOp> ops) {
+  return kj::refcounted<BrokenClient>(exception);
+}
+
+}  // namespace
+
+kj::Own<ClientHook> newBrokenCap(kj::StringPtr reason) {
+  return kj::refcounted<BrokenClient>(reason);
+}
+
+kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason) {
+  return kj::refcounted<BrokenClient>(kj::mv(reason));
+}
+
+kj::Own<PipelineHook> newBrokenPipeline(kj::Exception&& reason) {
+  return kj::refcounted<BrokenPipeline>(kj::mv(reason));
 }
 
 }  // namespace capnp
