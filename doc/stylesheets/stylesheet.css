@@ -380,6 +380,28 @@ body.normal #main_content.inner {
   padding: 50px 10px 30px 10px;
 }
 
+#next_banner {
+  position: absolute;
+  left: 100px;
+  right: 100px;
+  top: 100px;
+  z-index: 100;
+  border: 2px solid black;
+  background-color: rgba(196, 196, 196, 0.8);
+  text-align: center;
+  color: black;
+  padding: 30px;
+}
+
+#next_banner h1 {
+  color: black;
+	font-size: 750%;
+}
+
+#next_banner p {
+	margin: 1em 100px;
+}
+
 #project_title {
   margin: 0;
   color: #fff;

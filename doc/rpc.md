@@ -45,8 +45,8 @@ OK, fair enough.  In a traditional RPC system, we might solve our problem by int
 method `foobar()` which combines `foo()` and `bar()`.  Now we've eliminated the round trip, without
 inventing a new protocol.
 
-The problem is, this kind of arbitrary combining of orthogonal features quickly turns nice, elegant
-object-oriented protocols into ad-hoc procedural messes.
+The problem is, this kind of arbitrary combining of orthogonal features quickly turns elegant
+object-oriented protocols into ad-hoc messes.
 
 For example, consider the following interface:
 
@@ -81,7 +81,7 @@ interface File {
 }
 {% endhighlight %}
 
-This a very clean interface for interacting with a file system.  But say you are using this
+This is a very clean interface for interacting with a file system.  But say you are using this
 interface over a satellite link with 1000ms latency.  Now you have a problem:  simply reading the
 file `foo` in directory `bar` takes four round trips!
 
@@ -102,7 +102,7 @@ So now you're going to change it.  You'll probably do something like:
   call takes a path as an argument.
 
 {% highlight capnp %}
-# A sad, singleton-y interface.
+# A sad, singleton-ish interface.
 
 interface Filesystem {
   list @0 (path :Text) -> (list :List(Text));
@@ -176,10 +176,10 @@ for others to access the capability without consent of either the host or the re
 the host only assigns it an ID specific to the connection over which it was sent.
 
 Capability-based design patterns -- which largely boil down to object-oriented design patterns --
-work great with Cap'n Proto.  Such patterns tend to be much more agile than traditional ACL-based
-security, making it easy to keep security tight and avoid confused-deputy attacks while minimizing
-pain for legitimate users.  That said, you can of course implement ACLs or any other pattern on top
-of capabilities.
+work great with Cap'n Proto.  Such patterns tend to be much more adaptable than traditional
+ACL-based security, making it easy to keep security tight and avoid confused-deputy attacks while
+minimizing pain for legitimate users.  That said, you can of course implement ACLs or any other
+pattern on top of capabilities.
 
 ## Protocol Features
 

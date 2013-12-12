@@ -140,8 +140,7 @@ that value to mean "not present".
 Pointer fields are a bit different.  They start out "null", and you can check for nullness using
 the `hasFoo()` accessor.  You could use a null pointer to mean "not present".  Note, though, that
 calling `getFoo()` on a null pointer returns the default value, which is indistinguishable from a
-legitimate value.  The receiver of the message therefore needs to explicitly check `hasFoo()`
-before calling the getter.
+legitimate value, so checking `hasFoo()` is in fact the _only_ way to detect nullness.
 
 ### How do I resize a list?
 

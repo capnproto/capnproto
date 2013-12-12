@@ -75,7 +75,7 @@ kj::Promise<kj::String> contentPromise =
     fetchHttp("http://example.com");
 
 kj::Promise<int> lineCountPromise =
-    promise.then([](kj::String& content) {
+    promise.then([](kj::String&& content) {
   return countChars(content, '\n');
 });
 {% endhighlight %}
@@ -98,7 +98,7 @@ block.
 
 {% highlight c++ %}
 kj::Promise<int> lineCountPromise =
-    promise.then([](kj::String& content) {
+    promise.then([](kj::String&& content) {
   return countChars(content, '\n');
 }, [](kj::Exception&& exception) {
   // Error!  Pretend the document was empty.
@@ -152,7 +152,7 @@ called when the promise either completes or is canceled.
 
 ### Other Features
 
-KJ promise a number of primitive operations that can be performed on promises.  The complete API
+KJ supports a number of primitive operations that can be performed on promises.  The complete API
 is documented directly in the `kj/async.h` header.  Additionally, see the `kj/async-io.h` header
 for APIs for performing basic network I/O -- although Cap'n Proto RPC users typically won't need
 to use these APIs directly.
