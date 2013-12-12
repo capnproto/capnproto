@@ -12,7 +12,7 @@ title: RPC Protocol
 <img src='images/time-travel.png' style='max-width:639px'>
 
 Cap'n Proto RPC employs TIME TRAVEL!  The results of an RPC call are returned to the client
-instantly, before the server even receives the request to start working on it!
+instantly, before the server even receives the initial request!
 
 There is, of course, a catch:  The results can only be used as part of a new request sent to the
 same server.  If you want to use the results for anything else, you must wait.
@@ -31,7 +31,8 @@ to wait for the first call to actually return.
 
 To make programming to this model easy, in your code, each call returns a "promise".  Promises
 work much like Javascript promises or promises/futures in other languages:  the promise is returned
-immediately, but you must later call `wait()` or register a completion callback to handle.
+immediately, but you must later call `wait()` on it, or call `then()` to register an asynchronous
+callback.
 
 However, Cap'n Proto promises support an additional feature:
 [pipelining](http://en.wikipedia.org/wiki/Futures_and_promises#Promise_pipelining).  The promise
@@ -43,7 +44,7 @@ pipelined promise can be used in the parameters to another call without waiting.
 
 OK, fair enough.  In a traditional RPC system, we might solve our problem by introducing a new
 method `foobar()` which combines `foo()` and `bar()`.  Now we've eliminated the round trip, without
-inventing a new protocol.
+inventing a whole new RPC protocol.
 
 The problem is, this kind of arbitrary combining of orthogonal features quickly turns elegant
 object-oriented protocols into ad-hoc messes.
@@ -53,14 +54,9 @@ For example, consider the following interface:
 {% highlight capnp %}
 # A happy, object-oriented interface!
 
-struct Node {
-  union {
-    file :File;
-    directory :Directory;
-  }
-}
+interface Node {}
 
-interface Directory {
+interface Directory extends Node {
   list @0 () -> (list: List(Entry));
   struct Entry {
     name @0 :Text;
@@ -73,7 +69,7 @@ interface Directory {
   link @4 (name :Text, node :Node);
 }
 
-interface File {
+interface File extends Node {
   size @0 () -> (size: UInt64);
   read @1 (startAt :UInt64, amount :UInt64) -> (data: Data);
   write @2 (startAt :UInt64, data :Data);
@@ -87,10 +83,10 @@ file `foo` in directory `bar` takes four round trips!
 
 {% highlight python %}
 # pseudocode
-foo = root.open("foo").node.directory;   # 1
-bar = foo.open("bar").node.file;         # 2
-size = bar.size();                       # 3
-data = bar.read(0, size);                # 4
+foo = root.open("foo");    # 1
+bar = foo.open("bar");     # 2
+size = bar.size();         # 3
+data = bar.read(0, size);  # 4
 {% endhighlight %}
 
 In such a high-latency scenario, making your interface elegant is simply not worth 4x the latency.
@@ -112,7 +108,7 @@ interface Filesystem {
 
   fileSize @4 (path :Text) -> (size: UInt64);
   read @5 (path :Text, startAt :UInt64, amount :UInt64)
-       -> (data: Data);
+       -> (data :Data);
   readAll @6 (path :Text) -> (data: Data);
   write @7 (path :Text, startAt :UInt64, data :Data);
   truncate @8 (path :Text, size :UInt64);
@@ -126,10 +122,10 @@ We've now solved our latency problem...  but at what cost?
   be complicated and error-prone.
 * We can no longer give someone a specific `File` or a `Directory` -- we have to give them a
   `Filesystem` and a path.
-* But what if they are buggy and have hard-coded some path other than the one we specified?
-* Or what if we don't trust them, and we really want them to access only one particular `File` or
-  `Directory` and not have permission to anything else.  Now we have to implement authentication
-  and authorization systems!  Arrgghh!
+  * But what if they are buggy and have hard-coded some path other than the one we specified?
+  * Or what if we don't trust them, and we really want them to access only one particular `File` or
+    `Directory` and not have permission to anything else.  Now we have to implement authentication
+    and authorization systems!  Arrgghh!
 
 Essentially, in our quest to avoid latency, we've resorted to using a singleton-ish design, and
 [singletons are evil](http://www.object-oriented-security.org/lets-argue/singletons).
@@ -145,12 +141,13 @@ performs as well as we can possibly hope for.
 
 As you've noticed by now, Cap'n Proto RPC is a distributed object protocol.  Interface references --
 or, as we more commonly call them, capabilities -- are a first-class type.  You can pass a
-capability as a parameter or embed it in a struct or list.  This is a huge difference from many
-modern RPC-over-HTTP protocols that only let you address global URLs, or other RPC systems like
-Protocol Buffers and Thrift that only let you address singleton objects exported at startup.  The
-ability to dynamically introduce new objects and pass around references to them allows you to use
-the same design patterns over the network that you use locally in object-oriented programming
-languages.  Many kinds of interactions become vastly easier to express given the richer vocabulary.
+capability as a parameter to a method or embed it in a struct or list.  This is a huge difference
+from many modern RPC-over-HTTP protocols that only let you address global URLs, or other RPC
+systems like Protocol Buffers and Thrift that only let you address singleton objects exported at
+startup.  The ability to dynamically introduce new objects and pass around references to them
+allows you to use the same design patterns over the network that you use locally in object-oriented
+programming languages.  Many kinds of interactions become vastly easier to express given the
+richer vocabulary.
 
 **_Didn't CORBA prove this doesn't work?_**
 
@@ -181,6 +178,11 @@ ACL-based security, making it easy to keep security tight and avoid confused-dep
 minimizing pain for legitimate users.  That said, you can of course implement ACLs or any other
 pattern on top of capabilities.
 
+For an extended discussion of what capabilities are and why they are often easier and more powerful
+than ACLs, see Mark Miller's
+["An Ode to the Granovetter Diagram"](http://www.erights.org/elib/capability/ode/index.html) and
+[Capability Myths Demolished](http://srl.cs.jhu.edu/pubs/SRL2003-02.pdf).
+
 ## Protocol Features
 
 Cap'n Proto's RPC protocol has the following notable features.  Since the protocol is complicated,
@@ -205,6 +207,11 @@ features they have covered by advertising a level number.
   in fact do.  This is subtle, but enables many security patterns that rely on one party being able
   two verify that two or more other parties agree on something (imagine a digital escrow agent).
   See [E's page on equality](http://erights.org/elib/equality/index.html).
+
+## Encryption
+
+At this time, Cap'n Proto does not specify an encryption scheme, but as it is a simple byte
+stream protocol, it can easily be layered on top of SSL/TLS or other such protocols.
 
 ## Specification
 

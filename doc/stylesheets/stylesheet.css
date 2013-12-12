@@ -387,7 +387,7 @@ body.normal #main_content.inner {
   top: 100px;
   z-index: 100;
   border: 2px solid black;
-  background-color: rgba(196, 196, 196, 0.8);
+  background-color: rgba(196, 196, 196, 0.9);
   text-align: center;
   color: black;
   padding: 30px;

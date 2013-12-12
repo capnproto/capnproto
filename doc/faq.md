@@ -35,12 +35,15 @@ That said, Cap'n Proto RPC takes a very different approach.  Cap'n Proto's model
 stateful servers interacting in complex, object-oriented ways.  The model is better suited to
 tasks involving applications with many heterogeneous components and interactions between
 mutually-distrusting parties.  Requests and responses can go in any direction.  Objects have
-state and two calls to the same object had best be implemented on the same machine.  Fault
-tolerance is pushed up the stack, because without a large pool of homogeneous work there's just
-no way to make it transparent at a low level.
+state and so two calls to the same object had best go to the same machine.  Load balancing and
+fault tolerance is pushed up the stack, because without a large pool of homogeneous work there's
+just no way to make them transparent at a low level.
 
-Put concretely, you might build a search engine on ZeroMQ, but an online interactive spreadsheet
-editor would be better built on Cap'n Proto RPC.
+Put concretely, you might build a search engine indexing pipeline on ZeroMQ, but an online
+interactive spreadsheet editor would be better built on Cap'n Proto RPC.
+
+(Actually, a distributed programming framework providing similar features to ZeroMQ could itself be
+built on top of Cap'n Proto RPC.)
 
 ### Aren't messages that contain pointers a huge security problem?
 
@@ -55,8 +58,9 @@ Proto message is negligible.
 ### I think I heard somewhere that capability-based security doesn't work?
 
 This was a popular myth in security circles way back in the 80's and 90's, based on an incomplete
-understanding of how to use capabilities effectively.  Read
-[Capability Myths Demolished](http://srl.cs.jhu.edu/pubs/SRL2003-02.pdf).
+understanding of what capabilities are and how to use them effectively.  Read
+[Capability Myths Demolished](http://srl.cs.jhu.edu/pubs/SRL2003-02.pdf).  (No really, read it;
+it's awesome.)
 
 ## Usage
 
