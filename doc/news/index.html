@@ -10,7 +10,7 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 <h1>News</h1>
 
 {% for post in site.posts %}
-<h2><a href="/capnproto{{ post.url }}">{{ post.title }}</a></h2>
+<h2><a href="{{ site.baseurl }}.{{ post.url }}">{{ post.title }}</a></h2>
 <p class="author">
   <a href="https://github.com/{{ post.author }}">{{ post.author }}</a>
   {% if post.author == 'kentonv' %}
