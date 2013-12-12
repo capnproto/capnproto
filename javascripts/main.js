@@ -1,6 +1,10 @@
 function initSidebar() {
   var filename = document.location.pathname.slice("/capnproto".length);
 
+  if (filename.slice(0, 5) == "/next") {
+    filename = filename.slice(5);
+  }
+
   if (filename == "/") {
     filename = "/index.html";
   } else if (filename.slice(0, 6) == "/news/") {

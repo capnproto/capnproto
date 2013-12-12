@@ -27,6 +27,8 @@
       <a id="forkme_banner" href="https://github.com/kentonv/capnproto">View on GitHub</a>
     </div>
 
+    
+
     <!-- MAIN CONTENT -->
     <div id="main_content_wrap" class="outer">
 
@@ -39,61 +41,65 @@
           <li><a href="/capnproto/encoding.html">Encoding</a></li>
           <li><a href="/capnproto/rpc.html">RPC Protocol</a></li>
           <li><a href="/capnproto/capnp-tool.html">The <code>capnp</code> Tool</a></li>
-          <li><a href="/capnproto/cxx.html">C++ Runtime</a></li>
+          <li><a href="/capnproto/cxx.html">C++ Serialization</a></li>
+          <li><a href="/capnproto/cxxrpc.html">C++ RPC</a></li>
           <li><a href="/capnproto/otherlang.html">Other Languages</a></li>
           <li><a href="/capnproto/roadmap.html">Road Map</a></li>
+          <li><a href="/capnproto/faq.html">FAQ</a></li>
         </ul>
       </section>
       <section id="main_content" class="inner">
 
-<h1 id='installation'>Installation</h1>
-<p style='font-size: 125%; font-weight: bold;'>Note: Cap'n Proto is in BETA</p><div style='float: right'><a class='groups_link' style='color: #fff' href='https://groups.google.com/group/capnproto-announce'>Sign Up for Updates</a></div>
-<p>As of this writing, Cap&#8217;n Proto is in beta. The serialization layer is close to feature-complete and we don&#8217;t anticipate any further changes to the wire format. That said, if you want to use it, you should keep in mind some caveats:</p>
+<h1 id="installation">Installation</h1>
+<p style='font-size: 125%; font-weight: bold;'>Note: Cap'n Proto is in BETA</p><div style='float: right'><a class='groups_link' href='https://groups.google.com/group/capnproto-announce' style='color: #fff'>Sign Up for Updates</a></div>
+<p>As of this writing, Cap’n Proto is in beta. The serialization layer is close to feature-complete and we don’t anticipate any further changes to the wire format. That said, if you want to use it, you should keep in mind some caveats:</p>
 
 <ul>
-<li><strong>Security:</strong> Cap&#8217;n Proto has not yet had a security review. Although Kenton has a background in security and is not aware of any vulnerabilities in the current code, it&#8217;s likely that there are a few. For now, do not accept Cap&#8217;n Proto messages from parties you do not trust.</li>
+<li><strong>Security:</strong> Cap’n Proto has not yet had a security review. Although Kenton has a background in security and is not aware of any vulnerabilities in the current code, it’s likely that there are a few. For now, do not accept Cap’n Proto messages from parties you do not trust.</li>
 
-<li><strong>API Stability:</strong> The Cap&#8217;n Proto programming interface may still change in ways that break existing code. Such changes are likely to be minor and should not affect the wire format.</li>
+<li><strong>API Stability:</strong> The Cap’n Proto programming interface may still change in ways that break existing code. Such changes are likely to be minor and should not affect the wire format.</li>
 
-<li><strong>Performance:</strong> While Cap&#8217;n Proto is inherently fast by design, the implementation has not yet undergone serious profiling and optimization. Currently it only beats Protobufs in realistic-ish end-to-end benchmarks by around 2x-5x. We can do better.</li>
+<li><strong>Performance:</strong> While Cap’n Proto is inherently fast by design, the implementation has not yet undergone serious profiling and optimization. Currently it only beats Protobufs in realistic-ish end-to-end benchmarks by around 2x-5x. We can do better.</li>
 
-<li><strong>RPC:</strong> The RPC protocol has not yet been specified, much less implemented.</li>
-
-<li><strong>Support for languages other than C++:</strong> Work is being done to support languages other than C++, but at this time only the C++ implementation is ready to be used.</li>
+<li><strong>RPC:</strong> The RPC implementation is very new (introduced in v0.4 / Dec 2013). It is missing many features that are essential in real-world use (like timeouts), the interface is still in flux, and it needs a lot of optimization work.</li>
 </ul>
 
-<p>If you&#8217;d like to hack on Cap&#8217;n Proto, you should join the <a href='https://groups.google.com/group/capnproto'>discussion group</a>!</p>
+<p>If you’d like to hack on Cap’n Proto, you should join the <a href="https://groups.google.com/group/capnproto">discussion group</a>!</p>
 
-<p>If you&#8217;d just like to receive updates as things progress, add yourself to the <a href='https://groups.google.com/group/capnproto-announce'>announce list</a>.</p>
+<p>If you’d just like to receive updates as things progress, add yourself to the <a href="https://groups.google.com/group/capnproto-announce">announce list</a>.</p>
 
-<h2 id='installing_the_capn_proto_tools_and_c_runtime'>Installing the Cap&#8217;n Proto tools and C++ Runtime</h2>
+<h2 id="installing_the_capn_proto_tools_and_c_runtime">Installing the Cap’n Proto tools and C++ Runtime</h2>
 
-<p>The Cap&#8217;n Proto tools, including the compiler which takes <code>.capnp</code> files and generates source code for them, are written in C++. Therefore, you must install the C++ package even if your actual development language is something else.</p>
+<p>The Cap’n Proto tools, including the compiler which takes <code>.capnp</code> files and generates source code for them, are written in C++. Therefore, you must install the C++ package even if your actual development language is something else.</p>
 
-<h3 id='gcc_47_or_clang_32_needed'>GCC 4.7 or Clang 3.2 Needed</h3>
+<p>This package is licensed under the <a href="http://opensource.org/licenses/BSD-2-Clause">BSD 2-Clause License</a>.</p>
 
-<p>If you are using GCC, you MUST use at least version 4.7 as Cap&#8217;n Proto uses recently-implemented C++11 features. If GCC 4.7 is installed but your system&#8217;s default GCC is older, you will probably need to set the environment variable <code>CXX=g++-4.7</code> before following the instructions below.</p>
+<h3 id="gcc_47_or_clang_32_needed">GCC 4.7 or Clang 3.2 Needed</h3>
+
+<p>If you are using GCC, you MUST use at least version 4.7 as Cap’n Proto uses recently-implemented C++11 features. If GCC 4.7 is installed but your system’s default GCC is older, you will probably need to set the environment variable <code>CXX=g++-4.7</code> before following the instructions below.</p>
 
 <p>If you are using Clang, you must use at least version 3.2. To use Clang, set the environment variable <code>CXX=clang++</code> before following any instructions below, otherwise <code>g++</code> is used by default.</p>
 
-<p>This package is officially tested on Linux (GCC 4.7, Clang 3.2), Mac OSX (Clang 3.2), and Cygwin (Windows; GCC 4.7), in 32-bit and 64-bit modes.</p>
+<p>This package is officially tested on Linux (GCC 4.7, GCC 4.8, Clang 3.2), Mac OSX (Xcode 5), and Cygwin (Windows; GCC 4.8), in 32-bit and 64-bit modes.</p>
 
-<p><strong>Mac OSX users:</strong> Don&#8217;t miss the <a href='#clang_32_on_mac_osx'>special instructions for OSX</a>.</p>
+<p>Mac/Xcode users: You must use at least Xcode 5, and you must download the Xcode command-line tools under Xcode menu &gt; Preferences &gt; Downloads. Alternatively, compiler builds from <a href="http://www.macports.org/">Macports</a>, <a href="http://www.finkproject.org/">Fink</a>, or <a href="http://brew.sh/">Homebrew</a> are reported to work.</p>
 
-<h3 id='building_from_a_release_package'>Building from a release package</h3>
+<p>Sorry, but Microsoft Visual Studio 2013 <a href="faq.html#can_i_use_capn_proto_with_visual_studio_pleeeeeaaaaassssseeeee">does not implement enough of C++11</a> to compile Cap’n Proto. We hope that the Internet Explorer of compilers will catch up in one of the upcoming CTPs (the November 2013 CTP is almost there).</p>
 
-<p>You may download and install the release version of Cap&#8217;n Proto like so:</p>
-<pre><code>curl -O <a href='http://capnproto.org/capnproto-c++-0.3.0.tar.gz'>http://capnproto.org/capnproto-c++-0.3.0.tar.gz</a>
-tar zxf capnproto-c++-0.3.0.tar.gz
-cd capnproto-c++-0.3.0
+<h3 id="building_from_a_release_package">Building from a release package</h3>
+
+<p>You may download and install the release version of Cap’n Proto like so:</p>
+<pre><code>curl -O <a href='http://capnproto.org/capnproto-c++-0.4.0.tar.gz'>http://capnproto.org/capnproto-c++-0.4.0.tar.gz</a>
+tar zxf capnproto-c++-0.4.0.tar.gz
+cd capnproto-c++-0.4.0
 ./configure
 make -j6 check
 sudo make install</code></pre>
-<p>This will install <code>capnp</code>, the Cap&#8217;n Proto command-line tool. It will also install <code>libcapnp</code>, <code>libcapnpc</code>, and <code>libkj</code> in <code>/usr/local/lib</code> and headers in <code>/usr/local/include/capnp</code> and <code>/usr/local/include/kj</code>.</p>
+<p>This will install <code>capnp</code>, the Cap’n Proto command-line tool. It will also install <code>libcapnp</code>, <code>libcapnpc</code>, and <code>libkj</code> in <code>/usr/local/lib</code> and headers in <code>/usr/local/include/capnp</code> and <code>/usr/local/include/kj</code>.</p>
 
-<h3 id='building_from_git_with_autotools'>Building from Git with Autotools</h3>
+<h3 id="building_from_git_with_autotools">Building from Git with Autotools</h3>
 
-<p>If you download directly from Git, and you don&#8217;t want to <a href='install.html#building_with_ekam'>build with Ekam</a>, you will need to have the GNU autotools &#8211; <a href='http://www.gnu.org/software/autoconf/'>autoconf</a>, <a href='http://www.gnu.org/software/automake/'>automake</a>, and <a href='http://www.gnu.org/software/libtool/'>libtool</a> &#8211; installed. You will also need Subversion installed (in addition to Git) in order to fetch the Google Test sources (done by <code>setup-autotools.sh</code>).</p>
+<p>If you download directly from Git, and you don’t want to <a href="install.html#building_with_ekam">build with Ekam</a>, you will need to have the GNU autotools – <a href="http://www.gnu.org/software/autoconf/">autoconf</a>, <a href="http://www.gnu.org/software/automake/">automake</a>, and <a href="http://www.gnu.org/software/libtool/">libtool</a> – installed. You will also need Subversion installed (in addition to Git) in order to fetch the Google Test sources (done by <code>setup-autotools.sh</code>).</p>
 
 <pre><code>git clone https://github.com/kentonv/capnproto.git
 cd capnproto/c++
@@ -103,59 +109,19 @@ autoreconf -i
 make -j6 check
 sudo make install</code></pre>
 
-<h3 id='clang_32_on_mac_osx'>Clang 3.2 on Mac OSX</h3>
-
-<p>As of this writing, Mac OSX 10.8 with Xcode 4.6 command-line tools is not quite good enough to compile Cap&#8217;n Proto. The included version of GCC is ancient. The included version of Clang &#8211; which mysteriously advertises itself as version 4.2 &#8211; was actually cut from LLVM SVN somewhere between versions 3.1 and 3.2; it is not sufficient to build Cap&#8217;n Proto.</p>
-
-<p>There are two options:</p>
-
-<ol>
-<li>Use <a href='http://www.macports.org/'>Macports</a>, <a href='http://www.finkproject.org/'>Fink</a>, or <a href='http://brew.sh/'>Homebrew</a> to get an up-to-date GCC.</li>
-
-<li>Obtain Clang 3.2 <a href='http://llvm.org/releases/download.html'>directly from the LLVM project</a>. (Unfortunately, Clang 3.3 apparently does NOT work, because the libc++ headers shipped with XCode contain bugs that Clang 3.3 refuses to compile.)</li>
-</ol>
-
-<p>Option 2 is the one preferred by Cap&#8217;n Proto&#8217;s developers. Here are step-by-step instructions for setting this up:</p>
-
-<ol>
-<li>
-<p>Get the Xcode command-line tools: Download Xcode from the app store. Then, open Xcode, go to Xcode menu &gt; Preferences &gt; Downloads, and choose to install &#8220;Command Line Tools&#8221;.</p>
-</li>
-
-<li>
-<p>Download the Clang 3.2 binaries and put them somewhere easy to remember:</p>
-
-<pre><code>curl -O http://llvm.org/releases/3.2/clang+llvm-3.2-x86_64-apple-darwin11.tar.gz
-tar zxf clang+llvm-3.2-x86_64-apple-darwin11.tar.gz
-mv clang+llvm-3.2-x86_64-apple-darwin11 ~/clang-3.2</code></pre>
-</li>
-
-<li>
-<p>We will need to use libc++ (from LLVM) rather than libstdc++ (from GNU) because Xcode&#8217;s libstdc++ (like its GCC) is too old. In order for your freshly-downloaded Clang binaries to be able to find it, you&#8217;ll need to symlink it into the Clang tree:</p>
-
-<pre><code>ln -s /usr/lib/c++ ~/clang-3.2/lib/c++</code></pre>
-</li>
-</ol>
-
-<p>You may now follow the instructions below, but make sure to tell <code>configure</code> to use your newly-downloaded Clang binary:</p>
-
-<pre><code>./configure CXX=$HOME/clang-3.2/bin/clang++</code></pre>
-
-<p>Hopefully, Xcode 5.0 will be released soon with a newer Clang, making this extra work unnecessary.</p>
-
-<h3 id='building_with_ekam'>Building with Ekam</h3>
+<h3 id="building_with_ekam">Building with Ekam</h3>
 
 <p>Ekam is a build system I wrote a while back that automatically figures out how to build your C++ code without instructions. It also supports continuous builds, where it watches the filesystem for changes (via inotify) and immediately rebuilds as necessary. Instant feedback is key to productivity, so I really like using Ekam.</p>
 
-<p>Unfortunately it&#8217;s very much unfinished. It works (for me), but it is quirky and rough around the edges. It only works on Linux, and is best used together with Eclipse. If you find it unacceptable, scroll up to the <a href='#building_from_git_with_autotools'>Automake instructions</a>.</p>
+<p>Unfortunately it’s very much unfinished. It works (for me), but it is quirky and rough around the edges. It only works on Linux, and is best used together with Eclipse. If you find it unacceptable, scroll up to the <a href="#building_from_git_with_autotools">Automake instructions</a>.</p>
 
-<p>The Cap&#8217;n Proto repo includes a script which will attempt to set up Ekam for you.</p>
+<p>The Cap’n Proto repo includes a script which will attempt to set up Ekam for you.</p>
 
 <pre><code>git clone https://github.com/kentonv/capnproto.git
 cd capnproto/c++
 ./setup-ekam.sh</code></pre>
 
-<p>If all goes well, this downloads the Ekam code into a directory called <code>.ekam</code> and adds some symlinks under src. It also imports the <a href='https://googletest.googlecode.com'>Google Test</a> and <a href='http://protobuf.googlecode.com'>Protobuf</a> source code, so you can compile tests and benchmarks.</p>
+<p>If all goes well, this downloads the Ekam code into a directory called <code>.ekam</code> and adds some symlinks under src. It also imports the <a href="https://googletest.googlecode.com">Google Test</a> and <a href="http://protobuf.googlecode.com">Protobuf</a> source code, so you can compile tests and benchmarks.</p>
 
 <p>Once Ekam is installed, you can do:</p>
 
@@ -163,33 +129,33 @@ cd capnproto/c++
 
 <p>This will build everything it can and run tests.</p>
 
-<p>Note that Ekam will fail to build some things and output a bunch of error messages. You should be able to ignore any errors that originate outside of the <code>capnp</code> and <code>kj</code> directories &#8211; these are just parts of other packages like Google Test that Ekam doesn&#8217;t fully know how to build, but aren&#8217;t needed by Cap&#8217;n Proto anyway.</p>
+<p>Note that Ekam will fail to build some things and output a bunch of error messages. You should be able to ignore any errors that originate outside of the <code>capnp</code> and <code>kj</code> directories – these are just parts of other packages like Google Test that Ekam doesn’t fully know how to build, but aren’t needed by Cap’n Proto anyway.</p>
 
-<h4 id='running_the_benchmarks'>Running the Benchmarks</h4>
+<h4 id="running_the_benchmarks">Running the Benchmarks</h4>
 
-<p>Before getting into benchmarks, let me be frank: performance varies wildly by use case, and no benchmark is going to properly reflect the big picture. If performance is critical to your use case, you should write a benchmark specific to your case, and test multiple serialization technologies. Don&#8217;t assume anything. If you find Cap&#8217;n Proto performs sub-optimally, though, <a href='https://groups.google.com/group/capnproto'>tell us about it</a>.</p>
+<p>Before getting into benchmarks, let me be frank: performance varies wildly by use case, and no benchmark is going to properly reflect the big picture. If performance is critical to your use case, you should write a benchmark specific to your case, and test multiple serialization technologies. Don’t assume anything. If you find Cap’n Proto performs sub-optimally, though, <a href="https://groups.google.com/group/capnproto">tell us about it</a>.</p>
 
-<p>That said, Cap&#8217;n Proto does have a small suite of silly benchmarks used to validate changes.</p>
+<p>That said, Cap’n Proto does have a small suite of silly benchmarks used to validate changes.</p>
 
 <p>The Ekam build will put the benchmark binaries in <code>tmp/capnp/benchmark</code>.</p>
 
 <pre><code>tmp/capnp/benchmark/runner</code></pre>
 
-<p>This runs the default test case, CatRank. CatRank simulates a search engine scoring algorithm which promotes pages that discuss cats (and demotes ones discussing dogs). A list of up to 1000 random search results with URLs, scores, and snippets is sent to the server, which searches the snippets for instances of &#8220;cat&#8221; and &#8220;dog&#8221;, adjusts their scores accordingly, then returns the new result list sorted by score.</p>
+<p>This runs the default test case, CatRank. CatRank simulates a search engine scoring algorithm which promotes pages that discuss cats (and demotes ones discussing dogs). A list of up to 1000 random search results with URLs, scores, and snippets is sent to the server, which searches the snippets for instances of “cat” and “dog”, adjusts their scores accordingly, then returns the new result list sorted by score.</p>
 
-<p>This test case is very string-heavy. Cap&#8217;n Proto performs well due to its zero-copy strings, but packing the message doesn&#8217;t help much.</p>
+<p>This test case is very string-heavy. Cap’n Proto performs well due to its zero-copy strings, but packing the message doesn’t help much.</p>
 
 <pre><code>tmp/capnp/benchmark/runner eval</code></pre>
 
-<p>In this test case, the client generates a random, deeply-nested arithmetic expression for the server to evaluate. This case is a pathologically bad case for Cap&#8217;n Proto as it involves lots of pointers with relatively little actual data. When packing is enabled it actually loses to Protobufs by a little bit on CPU time (as of this writing, at least; it&#8217;ll probably get better with optimization).</p>
+<p>In this test case, the client generates a random, deeply-nested arithmetic expression for the server to evaluate. This case is a pathologically bad case for Cap’n Proto as it involves lots of pointers with relatively little actual data. When packing is enabled it actually loses to Protobufs by a little bit on CPU time (as of this writing, at least; it’ll probably get better with optimization).</p>
 
 <pre><code>tmp/capnp/benchmark/runner carsales</code></pre>
 
-<p>This test case involves sending to the server a description of a bunch of cars, and asks the server to decide how much the lot is worth. This case is very number-heavy, and because of this Cap&#8217;n Proto&#8217;s &#8220;packed&#8221; mode really shines.</p>
+<p>This test case involves sending to the server a description of a bunch of cars, and asks the server to decide how much the lot is worth. This case is very number-heavy, and because of this Cap’n Proto’s “packed” mode really shines.</p>
 
-<h4 id='developing_with_ekam'>Developing with Ekam</h4>
+<h4 id="developing_with_ekam">Developing with Ekam</h4>
 
-<p>If you intend to do some development, you should build <code>continuous</code> or <code>continuous-opt</code> instead of <code>once</code>. These modes will build everything, then watch the source tree for changes and rebuild as necessary. <code>continuous</code> does a debug build while <code>continuous-opt</code> optimizes; the former is best while developing but don&#8217;t run the benchmarks in debug mode!</p>
+<p>If you intend to do some development, you should build <code>continuous</code> or <code>continuous-opt</code> instead of <code>once</code>. These modes will build everything, then watch the source tree for changes and rebuild as necessary. <code>continuous</code> does a debug build while <code>continuous-opt</code> optimizes; the former is best while developing but don’t run the benchmarks in debug mode!</p>
 
 <p>If you use Eclipse, you should use the Ekam Eclipse plugin to get build results fed back into your editor while building in continuous mode. Build the plugin like so:</p>
 
@@ -202,7 +168,7 @@ cd capnproto/c++
 
 <li>Restart Eclipse.</li>
 
-<li>Make sure you have some sort of project in your work space containing your Ekam source tree. It should be rooted at the directory containing &#8220;src&#8221;, &#8220;tmp&#8221;, etc. The plugin will mark errors within this project.</li>
+<li>Make sure you have some sort of project in your work space containing your Ekam source tree. It should be rooted at the directory containing “src”, “tmp”, etc. The plugin will mark errors within this project.</li>
 
 <li>Window -&gt; Show View -&gt; Other -&gt; Ekam -&gt; Ekam Dashboard</li>
 </ol>

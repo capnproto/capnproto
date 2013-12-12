@@ -27,6 +27,8 @@
       <a id="forkme_banner" href="https://github.com/kentonv/capnproto">View on GitHub</a>
     </div>
 
+    
+
     <!-- MAIN CONTENT -->
     <div id="main_content_wrap" class="outer">
 
@@ -39,9 +41,11 @@
           <li><a href="/capnproto/encoding.html">Encoding</a></li>
           <li><a href="/capnproto/rpc.html">RPC Protocol</a></li>
           <li><a href="/capnproto/capnp-tool.html">The <code>capnp</code> Tool</a></li>
-          <li><a href="/capnproto/cxx.html">C++ Runtime</a></li>
+          <li><a href="/capnproto/cxx.html">C++ Serialization</a></li>
+          <li><a href="/capnproto/cxxrpc.html">C++ RPC</a></li>
           <li><a href="/capnproto/otherlang.html">Other Languages</a></li>
           <li><a href="/capnproto/roadmap.html">Road Map</a></li>
+          <li><a href="/capnproto/faq.html">FAQ</a></li>
         </ul>
       </section>
       <section id="main_content" class="inner">
@@ -53,7 +57,61 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 <h1>News</h1>
 
 
-<h2><a href="/capnproto/news/2013-09-04-capnproto-0.3-python-tools-features.html">Cap'n Proto v0.3: Python, tools, new features</a></h2>
+<h2><a href="/capnproto/./news/2013-12-12-capnproto-0.4-time-travel.html">Cap'n Proto v0.4: Time Traveling RPC</a></h2>
+<p class="author">
+  <a href="https://github.com/kentonv">kentonv</a>
+  
+  <span class="gplus-followbutton"><span class="g-follow" data-annotation="none" data-height="15" data-href="//plus.google.com/118187272963262049674" data-rel="author"></span></span>
+  <a href="https://www.gittip.com/kentonv/"><img class="gittip" src="/capnproto/images/gittip.png" alt="Gittip"></a>
+  
+  on <span class="date">12 Dec 2013</span>
+</p>
+<p>Well, <a href="http://en.wikipedia.org/wiki/Hofstadter's_law">Hofstadter</a> kicked in and this release took way too long. But, after three long months, I’m happy to announce:</p>
+
+<h3 id="timetraveling_rpc">Time-Traveling RPC</h3>
+
+<p><img src='/capnproto/images/time-travel.png' style='max-width:639px' /></p>
+
+<p>v0.4 finally introduces the long-promised <a href="/capnproto/rpc.html">RPC system</a>. Traditionally, RPC is plagued by the fact that networks have latency, and pretending that latency doesn’t exist by hiding it behind what looks like a normal function call only makes the problem worse. Cap’n Proto has a simple solution to this problem: send call results <em>back in time</em>, so they arrive at the client at the point in time when the call was originally made!</p>
+
+<p>Curious how Cap’n Proto bypasses the laws of physics? <a href="/capnproto/rpc.html">Check out the docs!</a></p>
+
+<h3 id="promises_in_c">Promises in C++</h3>
+
+<p>If you do a lot of serious Javascript programming, you’ve probably heard of <a href="http://promisesaplus.com/">Promises/A+</a> and similar proposals. Cap’n Proto RPC introduces a similar construct in C++. In fact, the API is nearly identical, and its semantics are nearly identical. Compare with <a href="http://domenic.me/2012/10/14/youre-missing-the-point-of-promises/">Domenic Denicola’s Javascript example</a>:</p>
+<div class='highlight'><pre><code class='c++'><span class='c1'>// C++ version of Domenic&#39;s Javascript promises example.</span>
+<span class='n'>getTweetsFor</span><span class='p'>(</span><span class='s'>&quot;domenic&quot;</span><span class='p'>)</span> <span class='c1'>// returns a promise</span>
+  <span class='p'>.</span><span class='n'>then</span><span class='p'>([](</span><span class='n'>vector</span><span class='o'>&lt;</span><span class='n'>Tweet</span><span class='o'>&gt;</span> <span class='n'>tweets</span><span class='p'>)</span> <span class='p'>{</span>
+    <span class='k'>auto</span> <span class='n'>shortUrls</span> <span class='o'>=</span> <span class='n'>parseTweetsForUrls</span><span class='p'>(</span><span class='n'>tweets</span><span class='p'>);</span>
+    <span class='k'>auto</span> <span class='n'>mostRecentShortUrl</span> <span class='o'>=</span> <span class='n'>shortUrls</span><span class='p'>[</span><span class='mi'>0</span><span class='p'>];</span>
+    <span class='c1'>// expandUrlUsingTwitterApi returns a promise</span>
+    <span class='k'>return</span> <span class='nf'>expandUrlUsingTwitterApi</span><span class='p'>(</span><span class='n'>mostRecentShortUrl</span><span class='p'>);</span>
+  <span class='p'>})</span>
+  <span class='p'>.</span><span class='n'>then</span><span class='p'>(</span><span class='n'>httpGet</span><span class='p'>)</span> <span class='c1'>// promise-returning function</span>
+  <span class='p'>.</span><span class='n'>then</span><span class='p'>(</span>
+    <span class='p'>[](</span><span class='n'>string</span> <span class='n'>responseBody</span><span class='p'>)</span> <span class='p'>{</span>
+      <span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;Most recent link text:&quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>responseBody</span> <span class='o'>&lt;&lt;</span> <span class='n'>endl</span><span class='p'>;</span>
+    <span class='p'>},</span>
+    <span class='p'>[](</span><span class='n'>kj</span><span class='o'>::</span><span class='n'>Exception</span><span class='o'>&amp;&amp;</span> <span class='n'>error</span><span class='p'>)</span> <span class='p'>{</span>
+      <span class='n'>cerr</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;Error with the twitterverse:&quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>error</span> <span class='o'>&lt;&lt;</span> <span class='n'>endl</span><span class='p'>;</span>
+    <span class='p'>}</span>
+  <span class='p'>);</span>
+</code></pre></div>
+<p>This is C++, but it is no more lines – nor otherwise more complex – than the equivalent Javascript. We’re doing several I/O operations, we’re doing them asynchronously, and we don’t have a huge unreadable mess of callback functions. Promises are based on event loop concurrency, which means you can perform concurrent operations with shared state without worrying about mutex locking – i.e., the Javascript model. (Of course, if you really want threads, you can run multiple event loops in multiple threads and make inter-thread RPC calls between them.)</p>
+
+<p><a href="/capnproto/cxxrpc.html#kj_concurrency_framework">More on C++ promises.</a></p>
+
+<h3 id="python_too">Python too</h3>
+
+<p><a href="https://github.com/jparyani">Jason</a> has been diligently keeping his <a href="http://jparyani.github.io/pycapnp/">Python bindings</a> up to date, so you can already use RPC there as well. The Python interactive interpreter makes a great debugging tool for calling C++ servers.</p>
+
+<h3 id="up_next">Up Next</h3>
+
+<p>Cap’n Proto is far from done, but working on it in a bubble will not produce ideal results. Starting after the holidays, I will be refocusing some of my time into an adjacent project which will be a heavy user of Cap’n Proto. I hope this experience will help me discover first hand the pain points in the current interface and keep development going in the right direction.</p>
+
+<p>This does, however, mean that core Cap’n Proto development will slow somewhat (unless contributors pick up the slack! ;) ). I am extremely excited about this next project, though, and I think you will be too. Stay tuned!</p>
+
+<h2><a href="/capnproto/./news/2013-09-04-capnproto-0.3-python-tools-features.html">Cap'n Proto v0.3: Python, tools, new features</a></h2>
 <p class="author">
   <a href="https://github.com/kentonv">kentonv</a>
   
@@ -62,65 +120,65 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
   
   on <span class="date">04 Sep 2013</span>
 </p>
-<p>The first release of Cap&#8217;n Proto came three months after the project was announced. The second release came six weeks after that. And the third release is three weeks later. If the pattern holds, there will be an infinite number of releases before the end of this month.</p>
+<p>The first release of Cap’n Proto came three months after the project was announced. The second release came six weeks after that. And the third release is three weeks later. If the pattern holds, there will be an infinite number of releases before the end of this month.</p>
 
-<p>Version 0.3 is not a paradigm-shifting release, but rather a slew of new features largely made possible by building on the rewritten compiler from the last release. Let&#8217;s go through the list&#8230;</p>
+<p>Version 0.3 is not a paradigm-shifting release, but rather a slew of new features largely made possible by building on the rewritten compiler from the last release. Let’s go through the list</p>
 
-<h3 id='python_support'>Python Support!</h3>
+<h3 id="python_support">Python Support!</h3>
 
-<p>Thanks to the tireless efforts of contributor <a href='https://github.com/jparyani'>Jason Paryani</a>, I can now comfortably claim that Cap&#8217;n Proto supports multiple languages. <a href='http://jparyani.github.io/pycapnp/'>His Python implementation</a> wraps the C++ library and exposes most of its features in a nice, easy-to-use way.</p>
+<p>Thanks to the tireless efforts of contributor <a href="https://github.com/jparyani">Jason Paryani</a>, I can now comfortably claim that Cap’n Proto supports multiple languages. <a href="http://jparyani.github.io/pycapnp/">His Python implementation</a> wraps the C++ library and exposes most of its features in a nice, easy-to-use way.</p>
 
-<p>And I have to say, it&#8217;s <em>way</em> better than the old Python Protobuf implementation that I helped put together at Google. Here&#8217;s why:</p>
+<p>And I have to say, it’s <em>way</em> better than the old Python Protobuf implementation that I helped put together at Google. Here’s why:</p>
 
 <ul>
-<li>Jason&#8217;s implementation parses Cap&#8217;n Proto schema files at runtime. There is no need to run a compiler to generate code every time you update your schema, as with protobufs. So, you get to use Python the way Python was intended to be used. In fact, he&#8217;s hooked into the Python import mechanism, so you can basically import a <code>.capnp</code> schema file as if it were a <code>.py</code> module. It&#8217;s even convenient to load schema files and play with Cap&#8217;n Proto messages from the interactive interpreter prompt.</li>
+<li>Jason’s implementation parses Cap’n Proto schema files at runtime. There is no need to run a compiler to generate code every time you update your schema, as with protobufs. So, you get to use Python the way Python was intended to be used. In fact, he’s hooked into the Python import mechanism, so you can basically import a <code>.capnp</code> schema file as if it were a <code>.py</code> module. It’s even convenient to load schema files and play with Cap’n Proto messages from the interactive interpreter prompt.</li>
 
-<li>It&#8217;s <em>fast</em>. Whereas the Python Protobuf implementation &#8211; which we made the mistake of implementing in pure-Python &#8211; is <em>slow</em>. And while technically there is an experimental C-extension-based Python Protobuf implementation (which isn&#8217;t enabled by default due to various obscure problems), Jason&#8217;s Cap&#8217;n Proto implementation is faster than that, too.</li>
+<li>It’s <em>fast</em>. Whereas the Python Protobuf implementation – which we made the mistake of implementing in pure-Python – is <em>slow</em>. And while technically there is an experimental C-extension-based Python Protobuf implementation (which isn’t enabled by default due to various obscure problems), Jason’s Cap’n Proto implementation is faster than that, too.</li>
 </ul>
 
-<p>Go <a href='http://jparyani.github.io/pycapnp/'>check it out</a>!</p>
+<p>Go <a href="http://jparyani.github.io/pycapnp/">check it out</a>!</p>
 
-<p>By the way, there is also a budding <a href='http://ecapnp.astekk.se/'>Erlang implementation</a> (by Andreas Stenius), and work continues on <a href='https://github.com/dwrensha/capnproto-rust'>Rust</a> (David Renshaw) and <a href='https://github.com/cstrahan/capnp-ruby'>Ruby</a> (Charles Strahan) implementations.</p>
+<p>By the way, there is also a budding <a href="http://ecapnp.astekk.se/">Erlang implementation</a> (by Andreas Stenius), and work continues on <a href="https://github.com/dwrensha/capnproto-rust">Rust</a> (David Renshaw) and <a href="https://github.com/cstrahan/capnp-ruby">Ruby</a> (Charles Strahan) implementations.</p>
 
-<h3 id='tools_capn_proto_on_the_command_line'>Tools: Cap&#8217;n Proto on the Command Line</h3>
+<h3 id="tools_capn_proto_on_the_command_line">Tools: Cap’n Proto on the Command Line</h3>
 
-<p>The <code>capnp</code> command-line tool previously served mostly to generate code, via the <code>capnp compile</code> command. It now additionally supports converting encoded Cap&#8217;n Proto messages to a human-readable text format via <code>capnp decode</code>, and converting that format back to binary with <code>capnp encode</code>. These tools are, of course, critical for debugging.</p>
+<p>The <code>capnp</code> command-line tool previously served mostly to generate code, via the <code>capnp compile</code> command. It now additionally supports converting encoded Cap’n Proto messages to a human-readable text format via <code>capnp decode</code>, and converting that format back to binary with <code>capnp encode</code>. These tools are, of course, critical for debugging.</p>
 
-<p>You can also use the new <code>capnp eval</code> command to do something interesting: given a schema file and the name of a constant defined therein, it will print out the value of that constant, or optionally encode it to binary. This is more interesting than it sounds because the schema language supports variable substitution in the definitions of these constants. This means you can build a large structure by importing smaller bits from many different files. This may make it convenient to use Cap&#8217;n Proto schemas as a config format: define your service configuration as a constant in a schema file, importing bits specific to each client from other files that those clients submit to you. Use <code>capnp eval</code> to &#8220;compile&#8221; the whole thing to binary for deployment. (This has always been a common use case for Protobuf text format, which doesn&#8217;t even support variable substitution or imports.)</p>
+<p>You can also use the new <code>capnp eval</code> command to do something interesting: given a schema file and the name of a constant defined therein, it will print out the value of that constant, or optionally encode it to binary. This is more interesting than it sounds because the schema language supports variable substitution in the definitions of these constants. This means you can build a large structure by importing smaller bits from many different files. This may make it convenient to use Cap’n Proto schemas as a config format: define your service configuration as a constant in a schema file, importing bits specific to each client from other files that those clients submit to you. Use <code>capnp eval</code> to “compile” the whole thing to binary for deployment. (This has always been a common use case for Protobuf text format, which doesn’t even support variable substitution or imports.)</p>
 
-<p>Anyway, check out the <a href='/capnproto/capnp-tool.html'>full documentation</a> for more.</p>
+<p>Anyway, check out the <a href="/capnproto/capnp-tool.html">full documentation</a> for more.</p>
 
-<h3 id='new_features'>New Features</h3>
+<h3 id="new_features">New Features</h3>
 
 <p>The core product has been updated as well:</p>
 
 <ul>
-<li>Support for unnamed <a href='/capnproto/language.html#unions'>unions</a> reduces the need for noise-words, improving code readability. Additionally, the syntax for unions has been simplified by removing the unnecessary ordinal number.</li>
+<li>Support for unnamed <a href="/capnproto/language.html#unions">unions</a> reduces the need for noise-words, improving code readability. Additionally, the syntax for unions has been simplified by removing the unnecessary ordinal number.</li>
 
-<li><a href='/capnproto/language.html#groups'>Groups</a> pair nicely with unions.</li>
+<li><a href="/capnproto/language.html#groups">Groups</a> pair nicely with unions.</li>
 
-<li><a href='/capnproto/language.html#constants'>Constants</a> are now <a href='/capnproto/cxx.html#constants'>implemented in C++</a>. Additionally, they can now be defined in terms of other constants (variable substitution), as described earlier.</li>
+<li><a href="/capnproto/language.html#constants">Constants</a> are now <a href="/capnproto/cxx.html#constants">implemented in C++</a>. Additionally, they can now be defined in terms of other constants (variable substitution), as described earlier.</li>
 
 <li>The schema API and <code>schema.capnp</code> have been radically refactored, in particular to take advantage of the new union and group features, making the code more readable.</li>
 
 <li>More and better tests, bug fixes, etc.</li>
 </ul>
 
-<h3 id='users'>Users!</h3>
+<h3 id="users">Users!</h3>
 
 <p>Some news originating outside of the project itself:</p>
 
 <ul>
-<li><a href='http://www.debian.org/releases/sid/'>Debian Unstable (sid)</a> now features <a href='http://packages.debian.org/sid/capnproto'>a Cap&#8217;n Proto package</a>, thanks to <a href='https://github.com/thomaslee'>Tom Lee</a>. Of course, since package updates take some time, this package is still v0.2.1 as of this writing, but it will be updated to v0.3 soon enough.</li>
+<li><a href="http://www.debian.org/releases/sid/">Debian Unstable (sid)</a> now features <a href="http://packages.debian.org/sid/capnproto">a Cap’n Proto package</a>, thanks to <a href="https://github.com/thomaslee">Tom Lee</a>. Of course, since package updates take some time, this package is still v0.2.1 as of this writing, but it will be updated to v0.3 soon enough.</li>
 
-<li>Popular OSX-based text editor <a href='http://macromates.com/'>TextMate</a> now <a href='https://github.com/textmate/textmate/commit/5c02b4ff5cc0c7c319d3d4f127c8ee19b81f80b7'>uses Cap&#8217;n Proto internally</a>, and the developer&#8217;s feedback lead directly to several usability improvements included in this release.</li>
+<li>Popular OSX-based text editor <a href="http://macromates.com/">TextMate</a> now <a href="https://github.com/textmate/textmate/commit/5c02b4ff5cc0c7c319d3d4f127c8ee19b81f80b7">uses Cap’n Proto internally</a>, and the developer’s feedback lead directly to several usability improvements included in this release.</li>
 
-<li>Many people using Cap&#8217;n Proto <em>haven&#8217;t bothered to tell us about it</em>! Please, if you use it, <a href='https://groups.google.com/group/capnproto'>let us know</a> about your experience, both what you like and especially what you don&#8217;t like. This is the critical time where the system is usable but can still be changed if it&#8217;s not right, so your feedback is critical to our long-term success.</li>
+<li>Many people using Cap’n Proto <em>haven’t bothered to tell us about it</em>! Please, if you use it, <a href="https://groups.google.com/group/capnproto">let us know</a> about your experience, both what you like and especially what you don’t like. This is the critical time where the system is usable but can still be changed if it’s not right, so your feedback is critical to our long-term success.</li>
 
-<li>I have revenue! A whopping <a href='https://www.gittip.com/kentonv/'>$1.25 per week</a>! &gt;_&gt; It&#8217;s totally worth it; I love this project. (But thanks for the tips!)</li>
+<li>I have revenue! A whopping <a href="https://www.gittip.com/kentonv/">$1.25 per week</a>! &gt;_&gt; It’s totally worth it; I love this project. (But thanks for the tips!)</li>
 </ul>
 
-<h2><a href="/capnproto/news/2013-08-19-capnproto-0.2.1.html">Cap'n Proto v0.2.1: Minor bug fixes</a></h2>
+<h2><a href="/capnproto/./news/2013-08-19-capnproto-0.2.1.html">Cap'n Proto v0.2.1: Minor bug fixes</a></h2>
 <p class="author">
   <a href="https://github.com/kentonv">kentonv</a>
   
@@ -129,9 +187,9 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
   
   on <span class="date">19 Aug 2013</span>
 </p>
-<p>Cap&#8217;n Proto was just bumped to v0.2.1. This release contains a couple bug fixes, including a work-around for <a href='http://gcc.gnu.org/bugzilla/show_bug.cgi?id=58192'>a GCC bug</a>. If you were observing any odd memory corruption or crashes in 0.2.0 &#8211; especially if you are compiling with GCC with optimization enabled but without <code>-DNDEBUG</code> &#8211; you should upgrade.</p>
+<p>Cap’n Proto was just bumped to v0.2.1. This release contains a couple bug fixes, including a work-around for <a href="http://gcc.gnu.org/bugzilla/show_bug.cgi?id=58192">a GCC bug</a>. If you were observing any odd memory corruption or crashes in 0.2.0 – especially if you are compiling with GCC with optimization enabled but without <code>-DNDEBUG</code> – you should upgrade.</p>
 
-<h2><a href="/capnproto/news/2013-08-12-capnproto-0.2-no-more-haskell.html">Cap'n Proto v0.2: Compiler rewritten Haskell -> C++</a></h2>
+<h2><a href="/capnproto/./news/2013-08-12-capnproto-0.2-no-more-haskell.html">Cap'n Proto v0.2: Compiler rewritten Haskell -> C++</a></h2>
 <p class="author">
   <a href="https://github.com/kentonv">kentonv</a>
   
@@ -140,31 +198,31 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
   
   on <span class="date">12 Aug 2013</span>
 </p>
-<p>Today I am releasing version 0.2 of Cap&#8217;n Proto. The most notable change: the compiler / code generator, which was previously written in Haskell, has been rewritten in C++11. There are a few other changes as well, but before I talk about those, let me try to calm the angry mob that is not doubt reaching for their pitchforks as we speak. There are a few reasons for this change, some practical, some ideological. I&#8217;ll start with the practical.</p>
+<p>Today I am releasing version 0.2 of Cap’n Proto. The most notable change: the compiler / code generator, which was previously written in Haskell, has been rewritten in C++11. There are a few other changes as well, but before I talk about those, let me try to calm the angry mob that is not doubt reaching for their pitchforks as we speak. There are a few reasons for this change, some practical, some ideological. I’ll start with the practical.</p>
 
 <p><strong>The practical: Supporting dynamic languages</strong></p>
 
-<p>Say you are trying to implement Cap&#8217;n Proto in an interpreted language like Python. One of the big draws of such a language is that you can edit your code and then run it without an intervening compile step, allowing you to iterate faster. But if the Python Cap&#8217;n Proto implementation worked like the C++ one (or like Protobufs), you lose some of that: whenever you change your Cap&#8217;n Proto schema files, you must run a command to regenerate the Python code from them. That sucks.</p>
+<p>Say you are trying to implement Cap’n Proto in an interpreted language like Python. One of the big draws of such a language is that you can edit your code and then run it without an intervening compile step, allowing you to iterate faster. But if the Python Cap’n Proto implementation worked like the C++ one (or like Protobufs), you lose some of that: whenever you change your Cap’n Proto schema files, you must run a command to regenerate the Python code from them. That sucks.</p>
 
-<p>What you really want to do is parse the schemas at start-up &#8211; the same time that the Python code itself is parsed. But writing a proper schema parser is harder than it looks; you really should reuse the existing implementation. If it is written in Haskell, that&#8217;s going to be problematic. You either need to invoke the schema parser as a sub-process or you need to call Haskell code from Python via an FFI. Either approach is going to be a huge hack with lots of problems, not the least of which is having a runtime dependency on an entire platform that your end users may not otherwise want.</p>
+<p>What you really want to do is parse the schemas at start-up – the same time that the Python code itself is parsed. But writing a proper schema parser is harder than it looks; you really should reuse the existing implementation. If it is written in Haskell, that’s going to be problematic. You either need to invoke the schema parser as a sub-process or you need to call Haskell code from Python via an FFI. Either approach is going to be a huge hack with lots of problems, not the least of which is having a runtime dependency on an entire platform that your end users may not otherwise want.</p>
 
-<p>But with the schema parser written in C++, things become much simpler. Python code calls into C/C++ all the time. Everyone already has the necessary libraries installed. There&#8217;s no need to generate code, even; the parsed schema can be fed into the Cap&#8217;n Proto C++ runtime&#8217;s dynamic API, and Python bindings can trivially be implemented on top of that in just a few hundred lines of code. Everyone wins.</p>
+<p>But with the schema parser written in C++, things become much simpler. Python code calls into C/C++ all the time. Everyone already has the necessary libraries installed. There’s no need to generate code, even; the parsed schema can be fed into the Cap’n Proto C++ runtime’s dynamic API, and Python bindings can trivially be implemented on top of that in just a few hundred lines of code. Everyone wins.</p>
 
-<p><strong>The ideological: I&#8217;m an object-oriented programmer</strong></p>
+<p><strong>The ideological: I’m an object-oriented programmer</strong></p>
 
 <p>I really wanted to like Haskell. I used to be a strong proponent of functional programming, and I actually once wrote a complete web server and CMS in a purely-functional toy language of my own creation. I love strong static typing, and I find a lot of the constructs in Haskell really powerful and beautiful. Even monads. <em>Especially</em> monads.</p>
 
-<p>But when it comes down to it, I am an object-oriented programmer, and Haskell is not an object-oriented language. Yes, you can do object-oriented style if you want to, just like you can do objects in C. But it&#8217;s just too painful. I want to write <code>object.methodName</code>, not <code>ModuleName.objectTypeMethodName object</code>. I want to be able to write lots of small classes that encapsulate complex functionality in simple interfaces &#8211; <em>without</em> having to place each one in a whole separate module and ending up with thousands of source files. I want to be able to build a list of objects of varying types that implement the same interface without having to re-invent virtual tables every time I do it (type classes don&#8217;t quite solve the problem).</p>
+<p>But when it comes down to it, I am an object-oriented programmer, and Haskell is not an object-oriented language. Yes, you can do object-oriented style if you want to, just like you can do objects in C. But it’s just too painful. I want to write <code>object.methodName</code>, not <code>ModuleName.objectTypeMethodName object</code>. I want to be able to write lots of small classes that encapsulate complex functionality in simple interfaces – <em>without</em> having to place each one in a whole separate module and ending up with thousands of source files. I want to be able to build a list of objects of varying types that implement the same interface without having to re-invent virtual tables every time I do it (type classes don’t quite solve the problem).</p>
 
-<p>And as it turns out, even aside from the lack of object-orientation, I don&#8217;t acutally like functional programming as much as I thought. Yes, writing my parser was super-easy (my first commit message was &#8221;<a href='https://github.com/kentonv/capnproto/commit/6bb49ca775501a9b2c7306992fd0de53c5ee4e95'>Day 1: Learn Haskell, write a parser</a>&#8221;). But everything beyond that seemed to require increasing amounts of brain bending. For instance, to actually encode a Cap&#8217;n Proto message, I couldn&#8217;t just allocate a buffer of zeros and then go through each field and set its value. Instead, I had to compute all the field values first, sort them by position, then concatenate the results.</p>
+<p>And as it turns out, even aside from the lack of object-orientation, I don’t acutally like functional programming as much as I thought. Yes, writing my parser was super-easy (my first commit message was ”<a href="https://github.com/kentonv/capnproto/commit/6bb49ca775501a9b2c7306992fd0de53c5ee4e95">Day 1: Learn Haskell, write a parser</a>”). But everything beyond that seemed to require increasing amounts of brain bending. For instance, to actually encode a Cap’n Proto message, I couldn’t just allocate a buffer of zeros and then go through each field and set its value. Instead, I had to compute all the field values first, sort them by position, then concatenate the results.</p>
 
-<p>Of course, I&#8217;m sure it&#8217;s the case that if I spent years writing Haskell code, I&#8217;d eventually become as proficient with it as I am with C++. Perhaps I could un-learn object-oriented style and learn something else that works just as well or better. Basically, though, I decided that this was going to take a lot longer than it at first appeared, and that this wasn&#8217;t a good use of my limited resources. So, I&#8217;m cutting my losses.</p>
+<p>Of course, I’m sure it’s the case that if I spent years writing Haskell code, I’d eventually become as proficient with it as I am with C++. Perhaps I could un-learn object-oriented style and learn something else that works just as well or better. Basically, though, I decided that this was going to take a lot longer than it at first appeared, and that this wasn’t a good use of my limited resources. So, I’m cutting my losses.</p>
 
-<p>I still think Haskell is a very interesting language, and if works for you, by all means, use it. I would love to see someone write at actual Cap&#8217;n Proto runtime implementation in Haskell. But the compiler is now C++.</p>
+<p>I still think Haskell is a very interesting language, and if works for you, by all means, use it. I would love to see someone write at actual Cap’n Proto runtime implementation in Haskell. But the compiler is now C++.</p>
 
 <p><strong>Parser Combinators in C++</strong></p>
 
-<p>A side effect (so to speak) of the compiler rewrite is that Cap&#8217;n Proto&#8217;s companion utility library, KJ, now includes a parser combinator framework based on C++11 templates and lambdas. Here&#8217;s a sample:</p>
+<p>A side effect (so to speak) of the compiler rewrite is that Cap’n Proto’s companion utility library, KJ, now includes a parser combinator framework based on C++11 templates and lambdas. Here’s a sample:</p>
 <div class='highlight'><pre><code class='c++'><span class='c1'>// Construct a parser that parses a number.</span>
 <span class='k'>auto</span> <span class='n'>number</span> <span class='o'>=</span> <span class='n'>transform</span><span class='p'>(</span>
     <span class='n'>sequence</span><span class='p'>(</span>
@@ -181,9 +239,9 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
       <span class='p'>}</span>
     <span class='p'>});</span>
 </code></pre></div>
-<p>An interesting fact about the above code is that constructing the parser itself does not allocate anything on the heap. The variable <code>number</code> in this case ends up being one 96-byte flat object, most of which is composed of tables for character matching. The whole thing could even be declared <code>constexpr</code>&#8230; if the C++ standard allowed empty-capture lambdas to be <code>constexpr</code>, which unfortunately it doesn&#8217;t (yet).</p>
+<p>An interesting fact about the above code is that constructing the parser itself does not allocate anything on the heap. The variable <code>number</code> in this case ends up being one 96-byte flat object, most of which is composed of tables for character matching. The whole thing could even be declared <code>constexpr</code>… if the C++ standard allowed empty-capture lambdas to be <code>constexpr</code>, which unfortunately it doesn’t (yet).</p>
 
-<p>Unfortunately, KJ is largely undocumented at the moment, since people who just want to use Cap&#8217;n Proto generally don&#8217;t need to know about it.</p>
+<p>Unfortunately, KJ is largely undocumented at the moment, since people who just want to use Cap’n Proto generally don’t need to know about it.</p>
 
 <p><strong>Other New Features</strong></p>
 
@@ -191,25 +249,25 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <ul>
 <li>
-<p>Cygwin has been added as a supported platform, meaning you can now use Cap&#8217;n Proto on Windows. I am considering supporting MinGW as well. Unfortunately, MSVC is unlikely to be supported any time soon as its C++11 support is <a href='http://blogs.msdn.com/b/somasegar/archive/2013/06/28/cpp-conformance-roadmap.aspx'>woefully lacking</a>.</p>
+<p>Cygwin has been added as a supported platform, meaning you can now use Cap’n Proto on Windows. I am considering supporting MinGW as well. Unfortunately, MSVC is unlikely to be supported any time soon as its C++11 support is <a href="http://blogs.msdn.com/b/somasegar/archive/2013/06/28/cpp-conformance-roadmap.aspx">woefully lacking</a>.</p>
 </li>
 
 <li>
-<p>The new compiler binary &#8211; now called <code>capnp</code> rather than <code>capnpc</code> &#8211; is more of a multi-tool. It includes the ability to decode binary messages to text as a debugging aid. Type <code>capnp help decode</code> for more information.</p>
+<p>The new compiler binary – now called <code>capnp</code> rather than <code>capnpc</code> – is more of a multi-tool. It includes the ability to decode binary messages to text as a debugging aid. Type <code>capnp help decode</code> for more information.</p>
 </li>
 
 <li>
-<p>The new <a href='/capnproto//cxx.html#orphans'>Orphan</a> class lets you detach objects from a message tree and re-attach them elsewhere.</p>
+<p>The new <a href="/capnproto//cxx.html#orphans">Orphan</a> class lets you detach objects from a message tree and re-attach them elsewhere.</p>
 </li>
 
 <li>
-<p>Various contributors have declared their intentions to implement <a href='https://github.com/cstrahan/capnp-ruby'>Ruby</a>, <a href='https://github.com/dwrensha/capnproto-rust'>Rust</a>, C#, Java, Erlang, and Delphi bindings. These are still works in progress, but exciting nonetheless!</p>
+<p>Various contributors have declared their intentions to implement <a href="https://github.com/cstrahan/capnp-ruby">Ruby</a>, <a href="https://github.com/dwrensha/capnproto-rust">Rust</a>, C#, Java, Erlang, and Delphi bindings. These are still works in progress, but exciting nonetheless!</p>
 </li>
 </ul>
 
 <p><strong>Backwards-compatibility Note</strong></p>
 
-<p>Cap&#8217;n Proto v0.2 contains an obscure wire format incompatibility with v0.1. If you are using unions containing multiple primitive-type fields of varying sizes, it&#8217;s possible that the new compiler will position those fields differently. A work-around to get back to the old layout exists; if you believe you could be affected, please <a href='mailto:temporal@gmail.com'>send me</a> your schema and I&#8217;ll tell you what to do. <a href='https://groups.google.com/d/msg/capnproto/NIYbD0haP38/pH5LildInwIJ'>Gory details.</a></p>
+<p>Cap’n Proto v0.2 contains an obscure wire format incompatibility with v0.1. If you are using unions containing multiple primitive-type fields of varying sizes, it’s possible that the new compiler will position those fields differently. A work-around to get back to the old layout exists; if you believe you could be affected, please <a href="mailto:temporal@gmail.com">send me</a> your schema and I’ll tell you what to do. <a href="https://groups.google.com/d/msg/capnproto/NIYbD0haP38/pH5LildInwIJ">Gory details.</a></p>
 
 <p><strong>Road Map</strong></p>
 
@@ -217,9 +275,9 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <p>The following release, v0.4, will hopefully be the first release implementing RPC.</p>
 
-<p><em>PS. If you are wondering, compared to the Haskell version, the new compiler is about 50% more lines of code and about 4x faster. The speed increase should be taken with a grain of salt, though, as my Haskell code did all kinds of horribly slow things. The code size is, I think, not bad, considering that Haskell specializes in concision &#8211; but, again, I&#8217;m sure a Haskell expert could have written shorter code.</em></p>
+<p><em>PS. If you are wondering, compared to the Haskell version, the new compiler is about 50% more lines of code and about 4x faster. The speed increase should be taken with a grain of salt, though, as my Haskell code did all kinds of horribly slow things. The code size is, I think, not bad, considering that Haskell specializes in concision – but, again, I’m sure a Haskell expert could have written shorter code.</em></p>
 
-<h2><a href="/capnproto/news/2013-06-27-capn-proto-beta-release.html">Cap'n Proto Beta Release</a></h2>
+<h2><a href="/capnproto/./news/2013-06-27-capn-proto-beta-release.html">Cap'n Proto Beta Release</a></h2>
 <p class="author">
   <a href="https://github.com/kentonv">kentonv</a>
   
@@ -228,9 +286,9 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
   
   on <span class="date">27 Jun 2013</span>
 </p>
-<p>It&#8217;s been nearly three months since Cap&#8217;n Proto was originally announced, and by now you&#8217;re probably wondering what I&#8217;ve been up to. The answer is basically <a href='https://github.com/kentonv/capnproto/commits/master'>non-stop coding</a>. Features were implemented, code was refactored, tests were written, and now Cap&#8217;n Proto is beginning to resemble something like a real product. But as is so often the case with me, I&#8217;ve been so engrossed in coding that I forgot to post updates!</p>
+<p>It’s been nearly three months since Cap’n Proto was originally announced, and by now you’re probably wondering what I’ve been up to. The answer is basically <a href="https://github.com/kentonv/capnproto/commits/master">non-stop coding</a>. Features were implemented, code was refactored, tests were written, and now Cap’n Proto is beginning to resemble something like a real product. But as is so often the case with me, I’ve been so engrossed in coding that I forgot to post updates!</p>
 
-<p>Well, that changes today, with the first official release of Cap&#8217;n Proto, v0.1. While not yet &#8220;done&#8221;, this release should be usable for Real Work. Feature-wise, for C++, the library is roughly on par with <a href='http://protobuf.googlecode.com'>Google&#8217;s Protocol Buffers</a> (which, as you know, I used to maintain). Features include:</p>
+<p>Well, that changes today, with the first official release of Cap’n Proto, v0.1. While not yet “done”, this release should be usable for Real Work. Feature-wise, for C++, the library is roughly on par with <a href="http://protobuf.googlecode.com">Google’s Protocol Buffers</a> (which, as you know, I used to maintain). Features include:</p>
 
 <ul>
 <li>Types: numbers, bytes, text, enums, lists, structs, and unions.</li>
@@ -252,13 +310,13 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <p>Notably missing from this list is RPC (something Protocol Buffers never provided either). The RPC system is still in the design phase, but will be implemented over the coming weeks.</p>
 
-<p>Also missing is support for languages other than C++. However, I&#8217;m happy to report that a number of awesome contributors have stepped up and are working on <a href='/capnproto/otherlang.html'>implementations in C, Go, Python</a>, and a few others not yet announced. None of these are &#8220;ready&#8221; just yet, but watch this space. (Would you like to work on an implementation in your favorite language? <a href='https://groups.google.com/group/capnproto'>Let us know!</a>)</p>
+<p>Also missing is support for languages other than C++. However, I’m happy to report that a number of awesome contributors have stepped up and are working on <a href="/capnproto/otherlang.html">implementations in C, Go, Python</a>, and a few others not yet announced. None of these are “ready” just yet, but watch this space. (Would you like to work on an implementation in your favorite language? <a href="https://groups.google.com/group/capnproto">Let us know!</a>)</p>
 
-<p>Going forward, Cap&#8217;n Proto releases will occur more frequently, perhaps every 2-4 weeks. Consider <a href='https://groups.google.com/group/capnproto-announce'>signing up for release announcements</a>.</p>
+<p>Going forward, Cap’n Proto releases will occur more frequently, perhaps every 2-4 weeks. Consider <a href="https://groups.google.com/group/capnproto-announce">signing up for release announcements</a>.</p>
 
-<p>In any case, go <a href='/capnproto/install.html'>download the release</a> and <a href='https://groups.google.com/group/capnproto'>tell us your thoughts</a>.</p>
+<p>In any case, go <a href="/capnproto/install.html">download the release</a> and <a href="https://groups.google.com/group/capnproto">tell us your thoughts</a>.</p>
 
-<h2><a href="/capnproto/news/2013-04-01-announcing-capn-proto.html">Announcing Cap'n Proto</a></h2>
+<h2><a href="/capnproto/./news/2013-04-01-announcing-capn-proto.html">Announcing Cap'n Proto</a></h2>
 <p class="author">
   <a href="https://github.com/kentonv">kentonv</a>
   
@@ -267,14 +325,15 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
   
   on <span class="date">01 Apr 2013</span>
 </p>
-<img src='/capnproto/images/infinity-times-faster.png' style='width:334px; height:306px; float: right;' />
-<p>So, uh&#8230; I have a confession to make.</p>
+<p><img src='/capnproto/images/infinity-times-faster.png' style='width:334px; height:306px; float: right;' /></p>
+
+<p>So, uh… I have a confession to make.</p>
 
 <p>I may have rewritten Protocol Buffers.</p>
 
 <p>Again.</p>
 
-<p><a href='http://kentonv.github.com/capnproto'>And it&#8217;s infinity times faster.</a></p>
+<p><a href="http://kentonv.github.com/capnproto">And it’s infinity times faster.</a></p>
 
 
 <script type="text/javascript">setupSidebar()</script>

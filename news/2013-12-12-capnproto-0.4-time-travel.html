@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="viewport" content="width=480">
+
+    <link rel="stylesheet" type="text/css" media="screen" href="/capnproto/stylesheets/stylesheet.css">
+
+    <title>Cap'n Proto: Cap'n Proto v0.4: Time Traveling RPC</title>
+
+    <script type="text/javascript" src="/capnproto/javascripts/main.js"></script>
+  </head>
+
+  <body class="desktop">
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+      <header class="inner">
+        <img src="/capnproto/images/logo.png">
+        <div id="infinitely_faster">
+          <img src="/capnproto/images/infinitely_faster.png">
+        </div>
+      </header>
+      <a id="discuss_banner" href="https://groups.google.com/group/capnproto">Discuss on Groups</a>
+      <a id="forkme_banner" href="https://github.com/kentonv/capnproto">View on GitHub</a>
+    </div>
+
+    
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+
+      <section id="menu">
+        <ul>
+          <li><a href="/capnproto/index.html">Introduction</a></li>
+          <li><a href="/capnproto/news/">News</a></li>
+          <li><a href="/capnproto/install.html">Installation</a></li>
+          <li><a href="/capnproto/language.html">Schema Language</a></li>
+          <li><a href="/capnproto/encoding.html">Encoding</a></li>
+          <li><a href="/capnproto/rpc.html">RPC Protocol</a></li>
+          <li><a href="/capnproto/capnp-tool.html">The <code>capnp</code> Tool</a></li>
+          <li><a href="/capnproto/cxx.html">C++ Serialization</a></li>
+          <li><a href="/capnproto/cxxrpc.html">C++ RPC</a></li>
+          <li><a href="/capnproto/otherlang.html">Other Languages</a></li>
+          <li><a href="/capnproto/roadmap.html">Road Map</a></li>
+          <li><a href="/capnproto/faq.html">FAQ</a></li>
+        </ul>
+      </section>
+      <section id="main_content" class="inner">
+
+
+<div class="hmargin" style="float: right"><a class="groups_link" style="color: #fff"
+href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
+
+<h1><a href="/capnproto/news/">News</a></h1>
+
+<h2>Cap'n Proto v0.4: Time Traveling RPC</h2>
+<p class="author">
+  <a href="https://github.com/kentonv">kentonv</a>
+  
+  <span class="gplus-followbutton"><span class="g-follow" data-annotation="none" data-height="15" data-href="//plus.google.com/118187272963262049674" data-rel="author"></span></span>
+  <a href="https://www.gittip.com/kentonv/"><img class="gittip" src="/capnproto/images/gittip.png" alt="Gittip"></a>
+  
+  on <span class="date">12 Dec 2013</span>
+</p>
+<p>Well, <a href="http://en.wikipedia.org/wiki/Hofstadter's_law">Hofstadter</a> kicked in and this release took way too long. But, after three long months, I’m happy to announce:</p>
+
+<h3 id="timetraveling_rpc">Time-Traveling RPC</h3>
+
+<p><img src='/capnproto/images/time-travel.png' style='max-width:639px' /></p>
+
+<p>v0.4 finally introduces the long-promised <a href="/capnproto/rpc.html">RPC system</a>. Traditionally, RPC is plagued by the fact that networks have latency, and pretending that latency doesn’t exist by hiding it behind what looks like a normal function call only makes the problem worse. Cap’n Proto has a simple solution to this problem: send call results <em>back in time</em>, so they arrive at the client at the point in time when the call was originally made!</p>
+
+<p>Curious how Cap’n Proto bypasses the laws of physics? <a href="/capnproto/rpc.html">Check out the docs!</a></p>
+
+<h3 id="promises_in_c">Promises in C++</h3>
+
+<p>If you do a lot of serious Javascript programming, you’ve probably heard of <a href="http://promisesaplus.com/">Promises/A+</a> and similar proposals. Cap’n Proto RPC introduces a similar construct in C++. In fact, the API is nearly identical, and its semantics are nearly identical. Compare with <a href="http://domenic.me/2012/10/14/youre-missing-the-point-of-promises/">Domenic Denicola’s Javascript example</a>:</p>
+<div class='highlight'><pre><code class='c++'><span class='c1'>// C++ version of Domenic&#39;s Javascript promises example.</span>
+<span class='n'>getTweetsFor</span><span class='p'>(</span><span class='s'>&quot;domenic&quot;</span><span class='p'>)</span> <span class='c1'>// returns a promise</span>
+  <span class='p'>.</span><span class='n'>then</span><span class='p'>([](</span><span class='n'>vector</span><span class='o'>&lt;</span><span class='n'>Tweet</span><span class='o'>&gt;</span> <span class='n'>tweets</span><span class='p'>)</span> <span class='p'>{</span>
+    <span class='k'>auto</span> <span class='n'>shortUrls</span> <span class='o'>=</span> <span class='n'>parseTweetsForUrls</span><span class='p'>(</span><span class='n'>tweets</span><span class='p'>);</span>
+    <span class='k'>auto</span> <span class='n'>mostRecentShortUrl</span> <span class='o'>=</span> <span class='n'>shortUrls</span><span class='p'>[</span><span class='mi'>0</span><span class='p'>];</span>
+    <span class='c1'>// expandUrlUsingTwitterApi returns a promise</span>
+    <span class='k'>return</span> <span class='nf'>expandUrlUsingTwitterApi</span><span class='p'>(</span><span class='n'>mostRecentShortUrl</span><span class='p'>);</span>
+  <span class='p'>})</span>
+  <span class='p'>.</span><span class='n'>then</span><span class='p'>(</span><span class='n'>httpGet</span><span class='p'>)</span> <span class='c1'>// promise-returning function</span>
+  <span class='p'>.</span><span class='n'>then</span><span class='p'>(</span>
+    <span class='p'>[](</span><span class='n'>string</span> <span class='n'>responseBody</span><span class='p'>)</span> <span class='p'>{</span>
+      <span class='n'>cout</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;Most recent link text:&quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>responseBody</span> <span class='o'>&lt;&lt;</span> <span class='n'>endl</span><span class='p'>;</span>
+    <span class='p'>},</span>
+    <span class='p'>[](</span><span class='n'>kj</span><span class='o'>::</span><span class='n'>Exception</span><span class='o'>&amp;&amp;</span> <span class='n'>error</span><span class='p'>)</span> <span class='p'>{</span>
+      <span class='n'>cerr</span> <span class='o'>&lt;&lt;</span> <span class='s'>&quot;Error with the twitterverse:&quot;</span> <span class='o'>&lt;&lt;</span> <span class='n'>error</span> <span class='o'>&lt;&lt;</span> <span class='n'>endl</span><span class='p'>;</span>
+    <span class='p'>}</span>
+  <span class='p'>);</span>
+</code></pre></div>
+<p>This is C++, but it is no more lines – nor otherwise more complex – than the equivalent Javascript. We’re doing several I/O operations, we’re doing them asynchronously, and we don’t have a huge unreadable mess of callback functions. Promises are based on event loop concurrency, which means you can perform concurrent operations with shared state without worrying about mutex locking – i.e., the Javascript model. (Of course, if you really want threads, you can run multiple event loops in multiple threads and make inter-thread RPC calls between them.)</p>
+
+<p><a href="/capnproto/cxxrpc.html#kj_concurrency_framework">More on C++ promises.</a></p>
+
+<h3 id="python_too">Python too</h3>
+
+<p><a href="https://github.com/jparyani">Jason</a> has been diligently keeping his <a href="http://jparyani.github.io/pycapnp/">Python bindings</a> up to date, so you can already use RPC there as well. The Python interactive interpreter makes a great debugging tool for calling C++ servers.</p>
+
+<h3 id="up_next">Up Next</h3>
+
+<p>Cap’n Proto is far from done, but working on it in a bubble will not produce ideal results. Starting after the holidays, I will be refocusing some of my time into an adjacent project which will be a heavy user of Cap’n Proto. I hope this experience will help me discover first hand the pain points in the current interface and keep development going in the right direction.</p>
+
+<p>This does, however, mean that core Cap’n Proto development will slow somewhat (unless contributors pick up the slack! ;) ). I am extremely excited about this next project, though, and I think you will be too. Stay tuned!</p>
+<script type="text/javascript">setupNewsSidebar([
+    
+      { title: "Cap'n Proto v0.4: Time Traveling RPC", url: "/capnproto/./news/2013-12-12-capnproto-0.4-time-travel.html" },
+    
+      { title: "Cap'n Proto v0.3: Python, tools, new features", url: "/capnproto/./news/2013-09-04-capnproto-0.3-python-tools-features.html" },
+    
+      { title: "Cap'n Proto v0.2.1: Minor bug fixes", url: "/capnproto/./news/2013-08-19-capnproto-0.2.1.html" },
+    
+      { title: "Cap'n Proto v0.2: Compiler rewritten Haskell -> C++", url: "/capnproto/./news/2013-08-12-capnproto-0.2-no-more-haskell.html" },
+    
+      { title: "Cap'n Proto Beta Release", url: "/capnproto/./news/2013-06-27-capn-proto-beta-release.html" },
+    
+      { title: "Announcing Cap'n Proto", url: "/capnproto/./news/2013-04-01-announcing-capn-proto.html" },
+    
+    ]);</script>
+        <div style="clear: both;"></div>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">Cap'n Proto maintained by <a href="https://github.com/kentonv">kentonv</a>
+          <span class="gplus-followbutton"><span class="g-follow" data-annotation="bubble" data-height="15" data-href="//plus.google.com/118187272963262049674" data-rel="author"></span></span>
+          <a href="https://www.gittip.com/kentonv/"><img class="gittip15" src="/capnproto/images/gittip15.png" alt="Gittip"></a></p>
+        <p>Design by <a href="http://www.starfruit-cafe.net/blog">sailorhg</a> ∙ Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+    <!-- Google+ follow button. -->
+    <script type="text/javascript">
+      (function() {
+        var po = document.createElement('script'); po.type = 'text/javascript'; po.async = true;
+        po.src = 'https://apis.google.com/js/plusone.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(po, s);
+      })();
+    </script>
+
+    <!-- Google Analytics. -->
+    <script type="text/javascript">
+      var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+      document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+    </script>
+    <script type="text/javascript">
+      try {
+        var pageTracker = _gat._getTracker("UA-39711112-1");
+        pageTracker._trackPageview();
+      } catch(err) {}
+    </script>
+  </body>
+</html>
+
