@@ -222,6 +222,25 @@ D (32 bits) = ID of the target segment.  (Segments are numbered
 
 <p>The reason for the convoluted double-far convention is to make it possible to form a new pointer to an object in a segment that is full. If you can’t allocate even one word in the segment where the target resides, then you will need to allocate a landing pad in some other segment, and use this double-far approach. This should be exceedingly rare in practice since pointers are normally set to point to new objects, not existing ones.</p>
 
+<h3 id="capabilities_interfaces">Capabilities (Interfaces)</h3>
+
+<p>When using Cap’n Proto for <a href="rpc.html">RPC</a>, every message has an associated “capability table” which is a flat list of all capabilities present in the message body. The details of what this table contains and where it is stored are the responsibility of the RPC system; in some cases, the table may not even be part of the message content.</p>
+
+<p>A capability pointer, then, simply contains an index into the separate capability table.</p>
+
+<pre><code>lsb                    capability pointer                     msb
++-+-----------------------------+-------------------------------+
+|A|              B              |               C               |
++-+-----------------------------+-------------------------------+
+
+A (2 bits) = 3, to indicate that this is an &quot;other&quot; pointer.
+B (30 bits) = 0, to indicate that this is a capability pointer.
+    (All other values are reserved for future use.)
+C (32 bits) = Index of the capability in the message's capability
+    table.</code></pre>
+
+<p>In <a href="https://github.com/kentonv/capnproto/blob/master/c++/src/capnp/rpc.capnp">rpc.capnp</a>, the capability table is encoded as a list of <code>CapDescriptors</code>, appearing along-side the message content in the <code>Payload</code> struct. However, some use cases may call for different approaches. A message that is built and consumed within the same process need not encode the capability table at all (it can just keep the table as a separate array). A message that is going to be stored to disk would need to store a table of <code>SturdyRef</code>s instead of <code>CapDescriptor</code>s.</p>
+
 <h2 id="serialization_over_a_stream">Serialization Over a Stream</h2>
 
 <p>When transmitting a message, the segments must be framed in some way, i.e. to communicate the number of segments and their sizes before communicating the actual data. The best framing approach may differ depending on the medium – for example, messages read via <code>mmap</code> or shared memory may call for a different approach than messages sent over a socket or a pipe. Cap’n Proto does not attempt to specify a framing format for every situation. However, since byte streams are by far the most common transmission medium, Cap’n Proto does define and implement a recommended framing format for them.</p>
