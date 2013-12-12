@@ -58,6 +58,11 @@ under Xcode menu > Preferences > Downloads.  Alternatively, compiler builds from
 [Macports](http://www.macports.org/), [Fink](http://www.finkproject.org/), or
 [Homebrew](http://brew.sh/) are reported to work.
 
+Sorry, but Microsoft Visual Studio 2013
+[does not implement enough of C++11](faq.html#can_i_use_capn_proto_with_visual_studio_pleeeeeaaaaassssseeeee)
+to compile Cap'n Proto.  We hope that the Internet Explorer of compilers will catch up in one of
+the upcoming CTPs (the November 2013 CTP is almost there).
+
 ### Building from a release package
 
 You may download and install the release version of Cap'n Proto like so:
