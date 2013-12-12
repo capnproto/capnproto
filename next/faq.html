@@ -143,6 +143,14 @@
 
 <p>Keep in mind that you can use <a href="cxx.html#orphans">orphans</a> to allocate sub-objects before you have a place to put them. But, also note that you cannot allocate elements of a struct list as orphans and then put them together as a list later, because struct lists are encoded as a flat array of struct values, not an array of pointers to struct values. You can, however, allocate any inner objects embedded within those structs as orphans.</p>
 
+<h3 id="can_i_use_capn_proto_with_visual_studio_pleeeeeaaaaassssseeeee">Can I use Cap’n Proto with Visual Studio, pleeeeeaaaaassssseeeee?</h3>
+
+<p>We’d love that, but VS2013’s C++11 support just isn’t there yet. Many essential features are still missing. The November 2013 CTP is <em>almost</em> there, but is still missing unrestricted unions, complete constexpr support, and possibly some SFINAE tweaks.</p>
+
+<p>We have it on the <a href="roadmap.html">roadmap</a> to do a limited backport of the code to C++03, not just for MSVC’s sake but also some other platforms that are stuck on older compilers. This will take a fair amount of work, however, and no one has yet volunteered to take this on. If you’d like to work on it, <a href="https://groups.google.com/group/capnproto">let us know</a>!</p>
+
+<p>In the meantime, you can use Cap’n Proto on Windows with Cygwin, and version 0.5 will likely support MinGW. We realize these solutions aren’t acceptable for many people, but that’s what we can offer right now.</p>
+
 <h2 id="personal">Personal</h2>
 
 <h3 id="who_is_paying_you">Who is paying you?</h3>
