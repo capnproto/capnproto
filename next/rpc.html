@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8' />
+    <meta http-equiv="X-UA-Compatible" content="chrome=1" />
+    <meta name="viewport" content="width=480">
+
+    <link rel="stylesheet" type="text/css" media="screen" href="/capnproto/next/stylesheets/stylesheet.css">
+
+    <title>Cap'n Proto: RPC Protocol</title>
+
+    <script type="text/javascript" src="/capnproto/next/javascripts/main.js"></script>
+  </head>
+
+  <body class="desktop">
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+      <header class="inner">
+        <img src="/capnproto/next/images/logo.png">
+        <div id="infinitely_faster">
+          <img src="/capnproto/next/images/infinitely_faster.png">
+        </div>
+      </header>
+      <a id="discuss_banner" href="https://groups.google.com/group/capnproto">Discuss on Groups</a>
+      <a id="forkme_banner" href="https://github.com/kentonv/capnproto">View on GitHub</a>
+    </div>
+
+    
+    <div id="next_banner">
+      <h1>PREVIEW</h1>
+      <p>You are looking at the site as it will appear after the next release.  This is a draft
+         version that may be incomplete, buggy, or not yet applicable.  To look at the current
+         site, <a href="../">click here</a>.
+    </div>
+    
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+
+      <section id="menu">
+        <ul>
+          <li><a href="/capnproto/next/index.html">Introduction</a></li>
+          <li><a href="/capnproto/next/news/">News</a></li>
+          <li><a href="/capnproto/next/install.html">Installation</a></li>
+          <li><a href="/capnproto/next/language.html">Schema Language</a></li>
+          <li><a href="/capnproto/next/encoding.html">Encoding</a></li>
+          <li><a href="/capnproto/next/rpc.html">RPC Protocol</a></li>
+          <li><a href="/capnproto/next/capnp-tool.html">The <code>capnp</code> Tool</a></li>
+          <li><a href="/capnproto/next/cxx.html">C++ Serialization</a></li>
+          <li><a href="/capnproto/next/cxxrpc.html">C++ RPC</a></li>
+          <li><a href="/capnproto/next/otherlang.html">Other Languages</a></li>
+          <li><a href="/capnproto/next/roadmap.html">Road Map</a></li>
+          <li><a href="/capnproto/next/faq.html">FAQ</a></li>
+        </ul>
+      </section>
+      <section id="main_content" class="inner">
+
+<h1 id="rpc_protocol">RPC Protocol</h1>
+
+<h2 id="introduction">Introduction</h2>
+
+<h3 id="time_travel_promise_pipelining">Time Travel! <em>(Promise Pipelining)</em></h3>
+
+<p><img src='images/time-travel.png' style='max-width:639px' /></p>
+
+<p>Cap’n Proto RPC employs TIME TRAVEL! The results of an RPC call are returned to the client instantly, before the server even receives the request to start working on it!</p>
+
+<p>There is, of course, a catch: The results can only be used as part of a new request sent to the same server. If you want to use the results for anything else, you must wait.</p>
+
+<p>This is useful, however: Say that, as in the picture, you want to call <code>foo()</code>, then call <code>bar()</code> on its result, i.e. <code>bar(foo())</code>. Or – as is very common in object-oriented programming – you want to call a method on the result of another call, i.e. <code>foo().bar()</code>. With any traditional RPC system, this will require two network round trips. With Cap’n Proto, it takes only one. In fact, you can chain any number of such calls together – with diamond dependencies and everything – and Cap’n Proto will collapse them all into one round trip.</p>
+
+<p>By now you can probably imagine how it works: if you execute <code>bar(foo())</code>, the client sends two messages to the server, one saying “Please execute foo()”, and a second saying “Please execute bar() on the result of the first call”. These messages can be sent together – there’s no need to wait for the first call to actually return.</p>
+
+<p>To make programming to this model easy, in your code, each call returns a “promise”. Promises work much like Javascript promises or promises/futures in other languages: the promise is returned immediately, but you must later call <code>wait()</code> or register a completion callback to handle.</p>
+
+<p>However, Cap’n Proto promises support an additional feature: <a href="http://en.wikipedia.org/wiki/Futures_and_promises#Promise_pipelining">pipelining</a>. The promise actually has methods corresponding to whatever methods the final result would have, except that these methods may only be used for the purpose of calling back to the server. Moreover, a pipelined promise can be used in the parameters to another call without waiting.</p>
+
+<p><strong><em>But isn’t that just syntax sugar?</em></strong></p>
+
+<p>OK, fair enough. In a traditional RPC system, we might solve our problem by introducing a new method <code>foobar()</code> which combines <code>foo()</code> and <code>bar()</code>. Now we’ve eliminated the round trip, without inventing a new protocol.</p>
+
+<p>The problem is, this kind of arbitrary combining of orthogonal features quickly turns elegant object-oriented protocols into ad-hoc messes.</p>
+
+<p>For example, consider the following interface:</p>
+<div class='highlight'><pre><code class='capnp'><span class='c1'># A happy, object-oriented interface!</span>
+
+<span class='k'>struct</span> <span class='n'>Node</span> {
+  <span class='k'>union</span> {
+    <span class='n'>file</span> <span class='nc'>:File</span>;
+    <span class='n'>directory</span> <span class='nc'>:Directory</span>;
+  }
+}
+
+<span class='k'>interface</span> <span class='n'>Directory</span> {
+  <span class='n'>list</span> <span class='nd'>@0</span> () -&gt; (<span class='n'>list</span><span class='nc'>: List(Entry)</span>);
+  <span class='k'>struct</span> <span class='n'>Entry</span> {
+    <span class='n'>name</span> <span class='nd'>@0</span> <span class='nc'>:Text</span>;
+    <span class='n'>file</span> <span class='nd'>@1</span> <span class='nc'>:Node</span>;
+  }
+
+  <span class='n'>create</span> <span class='nd'>@1</span> (<span class='n'>name</span> <span class='nc'>:Text</span>) -&gt; (<span class='n'>node</span> <span class='nc'>:Node</span>);
+  <span class='n'>open</span> <span class='nd'>@2</span> (<span class='n'>name</span> <span class='nc'>:Text</span>) -&gt; (<span class='n'>node</span> <span class='nc'>:Node</span>);
+  <span class='n'>delete</span> <span class='nd'>@3</span> (<span class='n'>name</span> <span class='nc'>:Text</span>);
+  <span class='n'>link</span> <span class='nd'>@4</span> (<span class='n'>name</span> <span class='nc'>:Text</span>, <span class='n'>node</span> <span class='nc'>:Node</span>);
+}
+
+<span class='k'>interface</span> <span class='n'>File</span> {
+  <span class='n'>size</span> <span class='nd'>@0</span> () -&gt; (<span class='n'>size</span><span class='nc'>: UInt64</span>);
+  <span class='n'>read</span> <span class='nd'>@1</span> (<span class='n'>startAt</span> <span class='nc'>:UInt64</span>, <span class='n'>amount</span> <span class='nc'>:UInt64</span>) -&gt; (<span class='n'>data</span><span class='nc'>: Data</span>);
+  <span class='n'>write</span> <span class='nd'>@2</span> (<span class='n'>startAt</span> <span class='nc'>:UInt64</span>, <span class='n'>data</span> <span class='nc'>:Data</span>);
+  <span class='n'>truncate</span> <span class='nd'>@3</span> (<span class='n'>size</span> <span class='nc'>:UInt64</span>);
+}
+</code></pre></div>
+<p>This is a very clean interface for interacting with a file system. But say you are using this interface over a satellite link with 1000ms latency. Now you have a problem: simply reading the file <code>foo</code> in directory <code>bar</code> takes four round trips!</p>
+<div class='highlight'><pre><code class='python'><span class='c'># pseudocode</span>
+<span class='n'>foo</span> <span class='o'>=</span> <span class='n'>root</span><span class='o'>.</span><span class='n'>open</span><span class='p'>(</span><span class='s'>&quot;foo&quot;</span><span class='p'>)</span><span class='o'>.</span><span class='n'>node</span><span class='o'>.</span><span class='n'>directory</span><span class='p'>;</span>   <span class='c'># 1</span>
+<span class='n'>bar</span> <span class='o'>=</span> <span class='n'>foo</span><span class='o'>.</span><span class='n'>open</span><span class='p'>(</span><span class='s'>&quot;bar&quot;</span><span class='p'>)</span><span class='o'>.</span><span class='n'>node</span><span class='o'>.</span><span class='n'>file</span><span class='p'>;</span>         <span class='c'># 2</span>
+<span class='n'>size</span> <span class='o'>=</span> <span class='n'>bar</span><span class='o'>.</span><span class='n'>size</span><span class='p'>();</span>                       <span class='c'># 3</span>
+<span class='n'>data</span> <span class='o'>=</span> <span class='n'>bar</span><span class='o'>.</span><span class='n'>read</span><span class='p'>(</span><span class='mi'>0</span><span class='p'>,</span> <span class='n'>size</span><span class='p'>);</span>                <span class='c'># 4</span>
+</code></pre></div>
+<p>In such a high-latency scenario, making your interface elegant is simply not worth 4x the latency. So now you’re going to change it. You’ll probably do something like:</p>
+
+<ul>
+<li>Introduce a notion of path strings, so that you can specify “foo/bar” rather than make two separate calls.</li>
+
+<li>Merge the <code>File</code> and <code>Directory</code> interfaces into a single <code>Filesystem</code> interface, where every call takes a path as an argument.</li>
+</ul>
+<div class='highlight'><pre><code class='capnp'><span class='c1'># A sad, singleton-ish interface.</span>
+
+<span class='k'>interface</span> <span class='n'>Filesystem</span> {
+  <span class='n'>list</span> <span class='nd'>@0</span> (<span class='n'>path</span> <span class='nc'>:Text</span>) -&gt; (<span class='n'>list</span> <span class='nc'>:List(Text)</span>);
+  <span class='n'>create</span> <span class='nd'>@1</span> (<span class='n'>path</span> <span class='nc'>:Text</span>, <span class='n'>data</span> <span class='nc'>:Data</span>);
+  <span class='n'>delete</span> <span class='nd'>@2</span> (<span class='n'>path</span> <span class='nc'>:Text</span>);
+  <span class='n'>link</span> <span class='nd'>@3</span> (<span class='n'>path</span> <span class='nc'>:Text</span>, <span class='n'>target</span> <span class='nc'>:Text</span>);
+
+  <span class='n'>fileSize</span> <span class='nd'>@4</span> (<span class='n'>path</span> <span class='nc'>:Text</span>) -&gt; (<span class='n'>size</span><span class='nc'>: UInt64</span>);
+  <span class='n'>read</span> <span class='nd'>@5</span> (<span class='n'>path</span> <span class='nc'>:Text</span>, <span class='n'>startAt</span> <span class='nc'>:UInt64</span>, <span class='n'>amount</span> <span class='nc'>:UInt64</span>)
+       -&gt; (<span class='n'>data</span><span class='nc'>: Data</span>);
+  <span class='n'>readAll</span> <span class='nd'>@6</span> (<span class='n'>path</span> <span class='nc'>:Text</span>) -&gt; (<span class='n'>data</span><span class='nc'>: Data</span>);
+  <span class='n'>write</span> <span class='nd'>@7</span> (<span class='n'>path</span> <span class='nc'>:Text</span>, <span class='n'>startAt</span> <span class='nc'>:UInt64</span>, <span class='n'>data</span> <span class='nc'>:Data</span>);
+  <span class='n'>truncate</span> <span class='nd'>@8</span> (<span class='n'>path</span> <span class='nc'>:Text</span>, <span class='n'>size</span> <span class='nc'>:UInt64</span>);
+}
+</code></pre></div>
+<p>We’ve now solved our latency problem… but at what cost?</p>
+
+<ul>
+<li>We now have to implement path string manipulation, which is always a headache.</li>
+
+<li>If someone wants to perform multiple operations on a file or directory, we now either have to re-allocate resources for every call or we have to implement some sort of cache, which tends to be complicated and error-prone.</li>
+
+<li>We can no longer give someone a specific <code>File</code> or a <code>Directory</code> – we have to give them a <code>Filesystem</code> and a path.</li>
+
+<li>But what if they are buggy and have hard-coded some path other than the one we specified?</li>
+
+<li>Or what if we don’t trust them, and we really want them to access only one particular <code>File</code> or <code>Directory</code> and not have permission to anything else. Now we have to implement authentication and authorization systems! Arrgghh!</li>
+</ul>
+
+<p>Essentially, in our quest to avoid latency, we’ve resorted to using a singleton-ish design, and <a href="http://www.object-oriented-security.org/lets-argue/singletons">singletons are evil</a>.</p>
+
+<p><strong>Promise Pipelining solves all of this!</strong></p>
+
+<p>With pipelining, our 4-step example can be automatically reduced to a single round trip with no need to change our interface at all. We keep our simple, elegant, singleton-free interface, we don’t have to implement path strings, caching, authentication, or authorization, and yet everything performs as well as we can possibly hope for.</p>
+
+<h3 id="distributed_objects">Distributed Objects</h3>
+
+<p>As you’ve noticed by now, Cap’n Proto RPC is a distributed object protocol. Interface references – or, as we more commonly call them, capabilities – are a first-class type. You can pass a capability as a parameter or embed it in a struct or list. This is a huge difference from many modern RPC-over-HTTP protocols that only let you address global URLs, or other RPC systems like Protocol Buffers and Thrift that only let you address singleton objects exported at startup. The ability to dynamically introduce new objects and pass around references to them allows you to use the same design patterns over the network that you use locally in object-oriented programming languages. Many kinds of interactions become vastly easier to express given the richer vocabulary.</p>
+
+<p><strong><em>Didn’t CORBA prove this doesn’t work?</em></strong></p>
+
+<p>No!</p>
+
+<p>CORBA failed for many reasons, with the usual problems of design-by-committee being a big one.</p>
+
+<p>However, CORBA also had a critical technical flaw: it did not implement promise pipelining. As shown above, promise pipelining is absolutely critical to making object-oriented interfaces work in the presence of latency. It is often said that object- and RPC-oriented protocols don’t work because they try to pretend that a network call is equivalent to a local call. In reality, this is not actually a problem with object protocols in general, but specifically CORBA and similarly-naive protocols that lack promise pipelining. Promise pipelining is the missing link.</p>
+
+<h3 id="security">Security</h3>
+
+<p>Cap’n Proto interafce references are <a href="http://en.wikipedia.org/wiki/Capability-based_security">capabilities</a>. That is, they both designate an object to call and confer permission to call it. When a new object is created, only the creator is initially able to call it. When the object is passed over a network connection, the receiver gains permission to make calls – but no one else does. In fact, it is impossible for others to access the capability without consent of either the host or the receiver because the host only assigns it an ID specific to the connection over which it was sent.</p>
+
+<p>Capability-based design patterns – which largely boil down to object-oriented design patterns – work great with Cap’n Proto. Such patterns tend to be much more adaptable than traditional ACL-based security, making it easy to keep security tight and avoid confused-deputy attacks while minimizing pain for legitimate users. That said, you can of course implement ACLs or any other pattern on top of capabilities.</p>
+
+<h2 id="protocol_features">Protocol Features</h2>
+
+<p>Cap’n Proto’s RPC protocol has the following notable features. Since the protocol is complicated, the feature set has been divided into numbered “levels”, so that implementations may declare which features they have covered by advertising a level number.</p>
+
+<ul>
+<li><strong>Level 1:</strong> Object references and promise pipelining, as described above.</li>
+
+<li><strong>Level 2:</strong> Persistent capabilities. You may request to “save” a capability, receiving a persistent token which can be used to “restore” it in the future (on a new connection). Not all capabilities can be saved; the host app must implement support for it. Building this into the protocol makes it possible for a Cap’n-Proto-based data store to transparently save structures containing capabilities without knowledge of the particular capability types or the application built on them, as well as potentially enabling more powerful analysis and visualization of stored data.</li>
+
+<li><strong>Level 3:</strong> Three-way interactions. A network of Cap’n Proto vats (nodes) can pass object references to each other and automatically form direct connections as needed. For instance, if Alice (on machine A) sends Bob (on machine B) a reference to Carol (on machine C), then machine B will form a new connection to machine C so that Bob can call Carol directly without proxying through machine A.</li>
+
+<li><strong>Level 4:</strong> Reference equality / joining. If you receive a set of capabilities from different parties which should all point to the same underlying objects, you can verify securely that they in fact do. This is subtle, but enables many security patterns that rely on one party being able two verify that two or more other parties agree on something (imagine a digital escrow agent). See <a href="http://erights.org/elib/equality/index.html">E’s page on equality</a>.</li>
+</ul>
+
+<h2 id="specification">Specification</h2>
+
+<p>The Cap’n Proto RPC protocol is defined in terms of Cap’n Proto serialization schemas. The documentation is inline. See <a href="https://github.com/kentonv/capnproto/blob/master/c++/src/capnp/rpc.capnp">rpc.capnp</a>.</p>
+
+<p>Cap’n Proto’s RPC protocol is based heavily on <a href="http://www.erights.org/elib/distrib/captp/index.html">CapTP</a>, the distributed capability protocol used by the <a href="http://www.erights.org/index.html">E programming language</a>. Lots of useful material for understanding capabilities can be found at those links.</p>
+
+<p>The protocol is complex, but the functionality it supports is conceptually simple. Just as TCP is a complex protocol that implements the simple concept of a byte stream, Cap’n Proto RPC is a complex protocol that implements the simple concept of objects with callable methods.</p>
+<script type="text/javascript">setupSidebar()</script>
+        <div style="clear: both;"></div>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">Cap'n Proto maintained by <a href="https://github.com/kentonv">kentonv</a>
+          <span class="gplus-followbutton"><span class="g-follow" data-annotation="bubble" data-height="15" data-href="//plus.google.com/118187272963262049674" data-rel="author"></span></span>
+          <a href="https://www.gittip.com/kentonv/"><img class="gittip15" src="/capnproto/next/images/gittip15.png" alt="Gittip"></a></p>
+        <p>Design by <a href="http://www.starfruit-cafe.net/blog">sailorhg</a> ∙ Published with <a href="http://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+    <!-- Google+ follow button. -->
+    <script type="text/javascript">
+      (function() {
+        var po = document.createElement('script'); po.type = 'text/javascript'; po.async = true;
+        po.src = 'https://apis.google.com/js/plusone.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(po, s);
+      })();
+    </script>
+
+    <!-- Google Analytics. -->
+    <script type="text/javascript">
+      var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+      document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+    </script>
+    <script type="text/javascript">
+      try {
+        var pageTracker = _gat._getTracker("UA-39711112-1");
+        pageTracker._trackPageview();
+      } catch(err) {}
+    </script>
+  </body>
+</html>
+
