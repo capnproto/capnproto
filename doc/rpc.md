@@ -164,7 +164,7 @@ similarly-naive protocols that lack promise pipelining.  Promise pipelining is t
 
 ### Security
 
-Cap'n Proto interafce references are
+Cap'n Proto interface references are
 [capabilities](http://en.wikipedia.org/wiki/Capability-based_security).  That is, they both
 designate an object to call and confer permission to call it.  When a new object is created, only
 the creator is initially able to call it.  When the object is passed over a network connection,
