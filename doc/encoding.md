@@ -226,6 +226,33 @@ the target resides, then you will need to allocate a landing pad in some other s
 this double-far approach.  This should be exceedingly rare in practice since pointers are normally
 set to point to new objects, not existing ones.
 
+### Capabilities (Interfaces)
+
+When using Cap'n Proto for [RPC](rpc.html), every message has an associated "capability table"
+which is a flat list of all capabilities present in the message body.  The details of what this
+table contains and where it is stored are the responsibility of the RPC system; in some cases, the
+table may not even be part of the message content.
+
+A capability pointer, then, simply contains an index into the separate capability table.
+
+    lsb                    capability pointer                     msb
+    +-+-----------------------------+-------------------------------+
+    |A|              B              |               C               |
+    +-+-----------------------------+-------------------------------+
+
+    A (2 bits) = 3, to indicate that this is an "other" pointer.
+    B (30 bits) = 0, to indicate that this is a capability pointer.
+        (All other values are reserved for future use.)
+    C (32 bits) = Index of the capability in the message's capability
+        table.
+
+In [rpc.capnp](https://github.com/kentonv/capnproto/blob/master/c++/src/capnp/rpc.capnp), the
+capability table is encoded as a list of `CapDescriptors`, appearing along-side the message content
+in the `Payload` struct.  However, some use cases may call for different approaches.  A message
+that is built and consumed within the same process need not encode the capability table at all
+(it can just keep the table as a separate array).  A message that is going to be stored to disk
+would need to store a table of `SturdyRef`s instead of `CapDescriptor`s.
+
 ## Serialization Over a Stream
 
 When transmitting a message, the segments must be framed in some way, i.e. to communicate the
