@@ -81,25 +81,28 @@
 
 <p>KJ’s event loop model bears a lot of similarity to the Javascript concurrency model. Experienced Javascript hackers – especially node.js hackers – will feel right at home.</p>
 
-<p><em>As of version 0.4, the only supported way to communicate between threads is over pipes or socketpairs. This will be improved in future versions.</em></p>
+<p><em>As of version 0.4, the only supported way to communicate between threads is over pipes or socketpairs. This will be improved in future versions. For now, just set up an RPC connection over that socketpair. :)</em></p>
 
 <h3 id="promises">Promises</h3>
 
 <p>Function calls that do I/O must do so asynchronously, and must return a “promise” for the result. Promises – also known as “futures” in some systems – are placeholders for the results of operations that have not yet completed. When the operation completes, we say that the promise “resolves” to a value, or is “fulfilled”. A promise can also be “rejected”, which means an exception occurred.</p>
-<div class='highlight'><pre><code class='c++'><span class='n'>kj</span><span class='o'>::</span><span class='n'>Promise</span><span class='o'>&lt;</span><span class='n'>kj</span><span class='o'>::</span><span class='n'>String</span><span class='o'>&gt;</span> <span class='n'>fetchHttp</span><span class='p'>(</span><span class='n'>kj</span><span class='o'>::</span><span class='n'>StringPtr</span> <span class='n'>url</span><span class='p'>);</span>
+<div class='highlight'><pre><code class='c++'><span class='c1'>// Example promise-based interfaces.</span>
+
+<span class='n'>kj</span><span class='o'>::</span><span class='n'>Promise</span><span class='o'>&lt;</span><span class='n'>kj</span><span class='o'>::</span><span class='n'>String</span><span class='o'>&gt;</span> <span class='n'>fetchHttp</span><span class='p'>(</span><span class='n'>kj</span><span class='o'>::</span><span class='n'>StringPtr</span> <span class='n'>url</span><span class='p'>);</span>
 <span class='c1'>// Asynchronously fetches an HTTP document and returns</span>
 <span class='c1'>// the content as a string.</span>
 
 <span class='n'>kj</span><span class='o'>::</span><span class='n'>Promise</span><span class='o'>&lt;</span><span class='kt'>void</span><span class='o'>&gt;</span> <span class='n'>sendEmail</span><span class='p'>(</span><span class='n'>kj</span><span class='o'>::</span><span class='n'>StringPtr</span> <span class='n'>address</span><span class='p'>,</span>
     <span class='n'>kj</span><span class='o'>::</span><span class='n'>StringPtr</span> <span class='n'>title</span><span class='p'>,</span> <span class='n'>kj</span><span class='o'>::</span><span class='n'>StringPtr</span> <span class='n'>body</span><span class='p'>);</span>
 <span class='c1'>// Sends an e-mail to the given address with the given title</span>
-<span class='c1'>// and body.</span>
+<span class='c1'>// and body.  The returned promise resolves (to nothing) when</span>
+<span class='c1'>// the message has been successfully sent.</span>
 </code></pre></div>
 <p>As you will see, KJ promises are very similar to the evolving Javascript promise standard, and much of the <a href="https://www.google.com/search?q=javascript+promises">wisdom around it</a> can be directly applied to KJ promises.</p>
 
 <h3 id="callbacks">Callbacks</h3>
 
-<p>If you want to do something with the result of a promise, you must first wait for it to complete. This is normally done by registering a callback to execute on completion. Luckily, C++11 just introduced lambdas which makes this far more pleasant than it would have been a few years ago!</p>
+<p>If you want to do something with the result of a promise, you must first wait for it to complete. This is normally done by registering a callback to execute on completion. Luckily, C++11 just introduced lambdas, which makes this far more pleasant than it would have been a few years ago!</p>
 <div class='highlight'><pre><code class='c++'><span class='n'>kj</span><span class='o'>::</span><span class='n'>Promise</span><span class='o'>&lt;</span><span class='n'>kj</span><span class='o'>::</span><span class='n'>String</span><span class='o'>&gt;</span> <span class='n'>contentPromise</span> <span class='o'>=</span>
     <span class='n'>fetchHttp</span><span class='p'>(</span><span class='s'>&quot;http://example.com&quot;</span><span class='p'>);</span>
 
@@ -285,6 +288,7 @@
 <p>A client should typically look like this:</p>
 <div class='highlight'><pre><code class='c++'><span class='cp'>#include &lt;capnp/ez-rpc.h&gt;</span>
 <span class='cp'>#include &quot;my-interface.capnp.h&quot;</span>
+<span class='cp'>#include &lt;iostream&gt;</span>
 
 <span class='kt'>int</span> <span class='nf'>main</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>argc</span><span class='p'>,</span> <span class='k'>const</span> <span class='kt'>char</span><span class='o'>*</span> <span class='n'>argv</span><span class='p'>[])</span> <span class='p'>{</span>
   <span class='c1'>// We expect one argument specifying the server address.</span>
@@ -324,6 +328,7 @@
 <p>A server might look something like this:</p>
 <div class='highlight'><pre><code class='c++'><span class='cp'>#include &lt;capnp/ez-rpc.h&gt;</span>
 <span class='cp'>#include &quot;my-interface-impl.h&quot;</span>
+<span class='cp'>#include &lt;iostream&gt;</span>
 
 <span class='kt'>int</span> <span class='nf'>main</span><span class='p'>(</span><span class='kt'>int</span> <span class='n'>argc</span><span class='p'>,</span> <span class='k'>const</span> <span class='kt'>char</span><span class='o'>*</span> <span class='n'>argv</span><span class='p'>[])</span> <span class='p'>{</span>
   <span class='c1'>// We expect one argument specifying the address to which</span>
@@ -354,7 +359,7 @@
 
 <h2 id="debugging">Debugging</h2>
 
-<p>If you’ve written a server and you want to connect to it to issue some calls for debugging, perhaps interactively, the easiest way to do it is to use <a href="http://jparyani.github.io/pycapnp/">pycapnp</a>. The <code>capnp</code> tool probably will never add RPC functionality because pycapnp is better.</p>
+<p>If you’ve written a server and you want to connect to it to issue some calls for debugging, perhaps interactively, the easiest way to do it is to use <a href="http://jparyani.github.io/pycapnp/">pycapnp</a>. We have decided not to add RPC functionality to the <code>capnp</code> command-line tool because pycapnp is better than anything we might provide.</p>
 <script type="text/javascript">setupSidebar()</script>
         <div style="clear: both;"></div>
       </section>
