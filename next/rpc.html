@@ -88,7 +88,7 @@
 
 <span class='k'>interface</span> <span class='n'>Node</span> {}
 
-<span class='k'>interface</span> <span class='n'>Directory</span> <span class='k'>extends</span> <span class='n'>Node</span> {
+<span class='k'>interface</span> <span class='n'>Directory</span> <span class='k'>extends</span>(<span class='n'>Node</span>) {
   <span class='n'>list</span> <span class='nd'>@0</span> () -&gt; (<span class='n'>list</span><span class='nc'>: List(Entry)</span>);
   <span class='k'>struct</span> <span class='n'>Entry</span> {
     <span class='n'>name</span> <span class='nd'>@0</span> <span class='nc'>:Text</span>;
@@ -101,7 +101,7 @@
   <span class='n'>link</span> <span class='nd'>@4</span> (<span class='n'>name</span> <span class='nc'>:Text</span>, <span class='n'>node</span> <span class='nc'>:Node</span>);
 }
 
-<span class='k'>interface</span> <span class='n'>File</span> <span class='k'>extends</span> <span class='n'>Node</span> {
+<span class='k'>interface</span> <span class='n'>File</span> <span class='k'>extends</span>(<span class='n'>Node</span>) {
   <span class='n'>size</span> <span class='nd'>@0</span> () -&gt; (<span class='n'>size</span><span class='nc'>: UInt64</span>);
   <span class='n'>read</span> <span class='nd'>@1</span> (<span class='n'>startAt</span> <span class='nc'>:UInt64</span>, <span class='n'>amount</span> <span class='nc'>:UInt64</span>) -&gt; (<span class='n'>data</span><span class='nc'>: Data</span>);
   <span class='n'>write</span> <span class='nd'>@2</span> (<span class='n'>startAt</span> <span class='nc'>:UInt64</span>, <span class='n'>data</span> <span class='nc'>:Data</span>);
