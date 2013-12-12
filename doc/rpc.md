@@ -56,7 +56,7 @@ For example, consider the following interface:
 
 interface Node {}
 
-interface Directory extends Node {
+interface Directory extends(Node) {
   list @0 () -> (list: List(Entry));
   struct Entry {
     name @0 :Text;
@@ -69,7 +69,7 @@ interface Directory extends Node {
   link @4 (name :Text, node :Node);
 }
 
-interface File extends Node {
+interface File extends(Node) {
   size @0 () -> (size: UInt64);
   read @1 (startAt :UInt64, amount :UInt64) -> (data: Data);
   write @2 (startAt :UInt64, data :Data);
