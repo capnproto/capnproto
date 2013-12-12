@@ -39,7 +39,8 @@ KJ's event loop model bears a lot of similarity to the Javascript concurrency mo
 Javascript hackers -- especially node.js hackers -- will feel right at home.
 
 _As of version 0.4, the only supported way to communicate between threads is over pipes or
-socketpairs.  This will be improved in future versions._
+socketpairs.  This will be improved in future versions.  For now, just set up an RPC connection
+over that socketpair.  :)_
 
 ### Promises
 
@@ -50,6 +51,8 @@ of operations that have not yet completed.  When the operation completes, we say
 exception occurred.
 
 {% highlight c++ %}
+// Example promise-based interfaces.
+
 kj::Promise<kj::String> fetchHttp(kj::StringPtr url);
 // Asynchronously fetches an HTTP document and returns
 // the content as a string.
@@ -57,7 +60,8 @@ kj::Promise<kj::String> fetchHttp(kj::StringPtr url);
 kj::Promise<void> sendEmail(kj::StringPtr address,
     kj::StringPtr title, kj::StringPtr body);
 // Sends an e-mail to the given address with the given title
-// and body.
+// and body.  The returned promise resolves (to nothing) when
+// the message has been successfully sent.
 {% endhighlight %}
 
 As you will see, KJ promises are very similar to the evolving Javascript promise standard, and
@@ -68,7 +72,7 @@ applied to KJ promises.
 
 If you want to do something with the result of a promise, you must first wait for it to complete.
 This is normally done by registering a callback to execute on completion.  Luckily, C++11 just
-introduced lambdas which makes this far more pleasant than it would have been a few years ago!
+introduced lambdas, which makes this far more pleasant than it would have been a few years ago!
 
 {% highlight c++ %}
 kj::Promise<kj::String> contentPromise =
@@ -326,6 +330,7 @@ A client should typically look like this:
 {% highlight c++ %}
 #include <capnp/ez-rpc.h>
 #include "my-interface.capnp.h"
+#include <iostream>
 
 int main(int argc, const char* argv[]) {
   // We expect one argument specifying the server address.
@@ -370,6 +375,7 @@ A server might look something like this:
 {% highlight c++ %}
 #include <capnp/ez-rpc.h>
 #include "my-interface-impl.h"
+#include <iostream>
 
 int main(int argc, const char* argv[]) {
   // We expect one argument specifying the address to which
@@ -407,4 +413,5 @@ For a more complete example, see the
 
 If you've written a server and you want to connect to it to issue some calls for debugging, perhaps
 interactively, the easiest way to do it is to use [pycapnp](http://jparyani.github.io/pycapnp/).
-The `capnp` tool probably will never add RPC functionality because pycapnp is better.
+We have decided not to add RPC functionality to the `capnp` command-line tool because pycapnp is
+better than anything we might provide.
