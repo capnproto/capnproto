@@ -167,7 +167,7 @@
 
 <h3 id="security">Security</h3>
 
-<p>Cap’n Proto interafce references are <a href="http://en.wikipedia.org/wiki/Capability-based_security">capabilities</a>. That is, they both designate an object to call and confer permission to call it. When a new object is created, only the creator is initially able to call it. When the object is passed over a network connection, the receiver gains permission to make calls – but no one else does. In fact, it is impossible for others to access the capability without consent of either the host or the receiver because the host only assigns it an ID specific to the connection over which it was sent.</p>
+<p>Cap’n Proto interface references are <a href="http://en.wikipedia.org/wiki/Capability-based_security">capabilities</a>. That is, they both designate an object to call and confer permission to call it. When a new object is created, only the creator is initially able to call it. When the object is passed over a network connection, the receiver gains permission to make calls – but no one else does. In fact, it is impossible for others to access the capability without consent of either the host or the receiver because the host only assigns it an ID specific to the connection over which it was sent.</p>
 
 <p>Capability-based design patterns – which largely boil down to object-oriented design patterns – work great with Cap’n Proto. Such patterns tend to be much more adaptable than traditional ACL-based security, making it easy to keep security tight and avoid confused-deputy attacks while minimizing pain for legitimate users. That said, you can of course implement ACLs or any other pattern on top of capabilities.</p>
 
