@@ -11,10 +11,11 @@ curious, read the docs, find out that this is actually a really cool feature, an
 stuff with it.
 
 Unfortunately, [my post](2013-12-12-capnproto-0.4-time-travel.html) only contained a link to
-the full explanation and then confusingly followed "time travel" section with a separate section
+the full explanation and then confusingly followed the "time travel" section with a separate section
 describing the fact that I had implemented a promise API in C++.  Half the readers clicked through
 to the documentation and understood.  The other half thought I was claiming that promises alone
-constituted "time travel", and thought I was over-hyping an already-widely-used technique.
+constituted "time travel", and thought I was ridiculously over-hyping an already-well-known
+technique.  My HN post was subsequently flagged into oblivion.
 
 Let me be clear:
 
@@ -28,12 +29,12 @@ interface, with `add()`, `sub()`, `mult()`, and `div()` calls, each taking two i
 returning a result.
 
 You are probably already thinking:  That's a ridiculously bad way to define an RPC interface!
-You want to have _one_ method `eval()` that takes an expression tree, otherwise you will have
-ridiculous latency.  But this is exactly the point.  With promise pipelining, this is a perfectly
-fine interface.
+You want to have _one_ method `eval()` that takes an expression tree (or graph, even), otherwise
+you will have ridiculous latency.  But this is exactly the point.  **With promise pipelining, simple,
+composable methods work fine.**
 
-To prove the point, I implemented servers in both Cap'n Proto and
-[ZeroC Ice](http://www.zeroc.com/), an alternative RPC framework.  I also implemented clients
+To prove the point, I've implemented servers in both Cap'n Proto and
+[ZeroC Ice](http://www.zeroc.com/), an alternative RPC framework.  I then implemented clients
 against each one, where the client attempts to evaluate the expression:
 
     ((5 * 2) + ((7 - 3) * 10)) / (6 - 4)
@@ -58,11 +59,12 @@ wait for some to finish before it can continue with the remaining calls.  Over a
 connection, this means the Ice client takes 4x longer than Cap'n Proto to do its work.
 
 So, does this matter outside of a contrived example case?  Yes, it does, because it allows you to
-write cleaner, simpler interfaces.  The four-method calculator interface is much simpler than
-one involving sending an expression graph to the server in one batch.  Moreover, pipelining
-allows you to define object-oriented interfaces where you might otherwise be tempted to go
-procedural.  See [my extended argument]({{ site.baseurl }}rpc.html#introduction)
-(this is what I was trying to get people to click on yesterday :) ).
+write cleaner interfaces with simple, composable methods, rather than monster do-everything-at-once
+methods.  The four-method calculator interface is much simpler than one involving sending an
+expression graph to the server in one batch.  Moreover, pipelining allows you to define
+object-oriented interfaces where you might otherwise be tempted to settle for singletons.  See
+[my extended argument]({{ site.baseurl }}rpc.html#introduction) (this is what I was trying to get
+people to click on yesterday :) ).
 
 Hopefully now it is clearer what I was trying to illustrate with this diagram, and what I meant
 by "time travel"!
