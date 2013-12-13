@@ -114,6 +114,8 @@
 <span class='n'>bar</span> <span class='o'>=</span> <span class='n'>foo</span><span class='o'>.</span><span class='n'>open</span><span class='p'>(</span><span class='s'>&quot;bar&quot;</span><span class='p'>);</span>     <span class='c'># 2</span>
 <span class='n'>size</span> <span class='o'>=</span> <span class='n'>bar</span><span class='o'>.</span><span class='n'>size</span><span class='p'>();</span>         <span class='c'># 3</span>
 <span class='n'>data</span> <span class='o'>=</span> <span class='n'>bar</span><span class='o'>.</span><span class='n'>read</span><span class='p'>(</span><span class='mi'>0</span><span class='p'>,</span> <span class='n'>size</span><span class='p'>);</span>  <span class='c'># 4</span>
+<span class='c'># The above is four calls but takes only one network</span>
+<span class='c'># round trip with Cap&#39;n Proto!</span>
 </code></pre></div>
 <p>In such a high-latency scenario, making your interface elegant is simply not worth 4x the latency. So now you’re going to change it. You’ll probably do something like:</p>
 
@@ -160,6 +162,10 @@
 
 <p>With pipelining, our 4-step example can be automatically reduced to a single round trip with no need to change our interface at all. We keep our simple, elegant, singleton-free interface, we don’t have to implement path strings, caching, authentication, or authorization, and yet everything performs as well as we can possibly hope for.</p>
 
+<h4 id="example_code">Example code</h4>
+
+<p><a href="https://github.com/kentonv/capnproto/blob/master/c++/samples/calculator-client.c++">The calculator example</a> uses promise pipelining. Take a look at the client side in particular.</p>
+
 <h3 id="distributed_objects">Distributed Objects</h3>
 
 <p>As you’ve noticed by now, Cap’n Proto RPC is a distributed object protocol. Interface references – or, as we more commonly call them, capabilities – are a first-class type. You can pass a capability as a parameter to a method or embed it in a struct or list. This is a huge difference from many modern RPC-over-HTTP protocols that only let you address global URLs, or other RPC systems like Protocol Buffers and Thrift that only let you address singleton objects exported at startup. The ability to dynamically introduce new objects and pass around references to them allows you to use the same design patterns over the network that you use locally in object-oriented programming languages. Many kinds of interactions become vastly easier to express given the richer vocabulary.</p>
@@ -174,7 +180,7 @@
 
 <h3 id="security">Security</h3>
 
-<p>Cap’n Proto interafce references are <a href="http://en.wikipedia.org/wiki/Capability-based_security">capabilities</a>. That is, they both designate an object to call and confer permission to call it. When a new object is created, only the creator is initially able to call it. When the object is passed over a network connection, the receiver gains permission to make calls – but no one else does. In fact, it is impossible for others to access the capability without consent of either the host or the receiver because the host only assigns it an ID specific to the connection over which it was sent.</p>
+<p>Cap’n Proto interface references are <a href="http://en.wikipedia.org/wiki/Capability-based_security">capabilities</a>. That is, they both designate an object to call and confer permission to call it. When a new object is created, only the creator is initially able to call it. When the object is passed over a network connection, the receiver gains permission to make calls – but no one else does. In fact, it is impossible for others to access the capability without consent of either the host or the receiver because the host only assigns it an ID specific to the connection over which it was sent.</p>
 
 <p>Capability-based design patterns – which largely boil down to object-oriented design patterns – work great with Cap’n Proto. Such patterns tend to be much more adaptable than traditional ACL-based security, making it easy to keep security tight and avoid confused-deputy attacks while minimizing pain for legitimate users. That said, you can of course implement ACLs or any other pattern on top of capabilities.</p>
 
