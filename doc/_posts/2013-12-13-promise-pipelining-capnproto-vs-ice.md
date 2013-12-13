@@ -61,7 +61,7 @@ So, does this matter outside of a contrived example case?  Yes, it does, because
 write cleaner, simpler interfaces.  The four-method calculator interface is much simpler than
 one involving sending an expression graph to the server in one batch.  Moreover, pipelining
 allows you to define object-oriented interfaces where you might otherwise be tempted to go
-procedural.  See [my extended argument](http://localhost:4000/capnproto/rpc.html#introduction)
+procedural.  See [my extended argument]({{ site.baseurl }}rpc.html#introduction)
 (this is what I was trying to get people to click on yesterday :) ).
 
 Hopefully now it is clearer what I was trying to illustrate with this diagram, and what I meant
