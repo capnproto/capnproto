@@ -35,7 +35,7 @@
 
 #if !KJ_NO_RTTI
 #include <typeinfo>
-#if __GNUC__
+#if __GNUC__ && !EMSCRIPTEN
 #include <cxxabi.h>
 #include <stdlib.h>
 #endif
@@ -419,7 +419,7 @@ _::PromiseNode* Event::getInnerForTrace() {
 }
 
 #if !KJ_NO_RTTI
-#if __GNUC__
+#if __GNUC__ && !EMSCRIPTEN
 static kj::String demangleTypeName(const char* name) {
   int status;
   char* buf = abi::__cxa_demangle(name, nullptr, nullptr, &status);
