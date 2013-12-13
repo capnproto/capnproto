@@ -104,7 +104,7 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <p>Cap’n Proto, you see, sends all six calls from the client to the server at one time. For the latter calls, it simply tells the server to substitute the former calls’ results into the new requests, once those dependency calls finish. Ice can only send three calls to start, then must wait for some to finish before it can continue with the remaining calls. Over a high-latency connection, this means the Ice client takes 4x longer than Cap’n Proto to do its work.</p>
 
-<p>So, does this matter outside of a contrived example case? Yes, it does, because it allows you to write cleaner, simpler interfaces. The four-method calculator interface is much simpler than one involving sending an expression graph to the server in one batch. Moreover, pipelining allows you to define object-oriented interfaces where you might otherwise be tempted to go procedural. See <a href="http://localhost:4000/capnproto/rpc.html#introduction">my extended argument</a> (this is what I was trying to get people to click on yesterday :) ).</p>
+<p>So, does this matter outside of a contrived example case? Yes, it does, because it allows you to write cleaner, simpler interfaces. The four-method calculator interface is much simpler than one involving sending an expression graph to the server in one batch. Moreover, pipelining allows you to define object-oriented interfaces where you might otherwise be tempted to go procedural. See <a href="/capnproto/next/rpc.html#introduction">my extended argument</a> (this is what I was trying to get people to click on yesterday :) ).</p>
 
 <p>Hopefully now it is clearer what I was trying to illustrate with this diagram, and what I meant by “time travel”!</p>
 
