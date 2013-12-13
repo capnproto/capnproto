@@ -107,6 +107,8 @@
 <span class='n'>bar</span> <span class='o'>=</span> <span class='n'>foo</span><span class='o'>.</span><span class='n'>open</span><span class='p'>(</span><span class='s'>&quot;bar&quot;</span><span class='p'>);</span>     <span class='c'># 2</span>
 <span class='n'>size</span> <span class='o'>=</span> <span class='n'>bar</span><span class='o'>.</span><span class='n'>size</span><span class='p'>();</span>         <span class='c'># 3</span>
 <span class='n'>data</span> <span class='o'>=</span> <span class='n'>bar</span><span class='o'>.</span><span class='n'>read</span><span class='p'>(</span><span class='mi'>0</span><span class='p'>,</span> <span class='n'>size</span><span class='p'>);</span>  <span class='c'># 4</span>
+<span class='c'># The above is four calls but takes only one network</span>
+<span class='c'># round trip with Cap&#39;n Proto!</span>
 </code></pre></div>
 <p>In such a high-latency scenario, making your interface elegant is simply not worth 4x the latency. So now you’re going to change it. You’ll probably do something like:</p>
 
@@ -152,6 +154,10 @@
 <p><strong>Promise Pipelining solves all of this!</strong></p>
 
 <p>With pipelining, our 4-step example can be automatically reduced to a single round trip with no need to change our interface at all. We keep our simple, elegant, singleton-free interface, we don’t have to implement path strings, caching, authentication, or authorization, and yet everything performs as well as we can possibly hope for.</p>
+
+<h4 id="example_code">Example code</h4>
+
+<p><a href="https://github.com/kentonv/capnproto/blob/master/c++/samples/calculator-client.c++">The calculator example</a> uses promise pipelining. Take a look at the client side in particular.</p>
 
 <h3 id="distributed_objects">Distributed Objects</h3>
 

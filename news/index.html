@@ -76,9 +76,11 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <p>Curious how Cap’n Proto bypasses the laws of physics? <a href="/capnproto/rpc.html">Check out the docs!</a></p>
 
-<p><em>UPDATE: There has been some confusion about what I’m claiming. I am NOT saying that using promises alone (i.e. being asynchronous) constitutes “time travel”. Cap’n Proto implements a technique called Promise Pipelining which allows a new request to be formed based on the content of a previous result (in part or in whole) before that previous result is returned. Notice in the diagram that the result of foo() is being passed to bar().</em></p>
+<p><em>UPDATE: There has been some confusion about what I’m claiming. I am NOT saying that using promises alone (i.e. being asynchronous) constitutes “time travel”. Cap’n Proto implements a technique called Promise Pipelining which allows a new request to be formed based on the content of a previous result (in part or in whole) before that previous result is returned. Notice in the diagram that the result of foo() is being passed to bar(). Please <a href="/capnproto/rpc.html">see the docs</a> or <a href="https://github.com/kentonv/capnproto/blob/master/c++/samples">check out the calculator example</a> for more.</em></p>
 
 <h3 id="promises_in_c">Promises in C++</h3>
+
+<p><em>UPDATE: More confusion. This section is <strong>not</strong> about pipelining (“time travel”). This section is just talking about implementing a promise API in C++. Pipelining is another feature on top of that. Please <a href="/capnproto/rpc.html">see the RPC page</a> if you want to know more about pipelining.</em></p>
 
 <p>If you do a lot of serious Javascript programming, you’ve probably heard of <a href="http://promisesaplus.com/">Promises/A+</a> and similar proposals. Cap’n Proto RPC introduces a similar construct in C++. In fact, the API is nearly identical, and its semantics are nearly identical. Compare with <a href="http://domenic.me/2012/10/14/youre-missing-the-point-of-promises/">Domenic Denicola’s Javascript example</a>:</p>
 <div class='highlight'><pre><code class='c++'><span class='c1'>// C++ version of Domenic&#39;s Javascript promises example.</span>
