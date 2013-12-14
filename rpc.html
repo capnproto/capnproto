@@ -103,10 +103,10 @@
 </code></pre></div>
 <p>This is a very clean interface for interacting with a file system. But say you are using this interface over a satellite link with 1000ms latency. Now you have a problem: simply reading the file <code>foo</code> in directory <code>bar</code> takes four round trips!</p>
 <div class='highlight'><pre><code class='python'><span class='c'># pseudocode</span>
-<span class='n'>foo</span> <span class='o'>=</span> <span class='n'>root</span><span class='o'>.</span><span class='n'>open</span><span class='p'>(</span><span class='s'>&quot;foo&quot;</span><span class='p'>);</span>    <span class='c'># 1</span>
-<span class='n'>bar</span> <span class='o'>=</span> <span class='n'>foo</span><span class='o'>.</span><span class='n'>open</span><span class='p'>(</span><span class='s'>&quot;bar&quot;</span><span class='p'>);</span>     <span class='c'># 2</span>
-<span class='n'>size</span> <span class='o'>=</span> <span class='n'>bar</span><span class='o'>.</span><span class='n'>size</span><span class='p'>();</span>         <span class='c'># 3</span>
-<span class='n'>data</span> <span class='o'>=</span> <span class='n'>bar</span><span class='o'>.</span><span class='n'>read</span><span class='p'>(</span><span class='mi'>0</span><span class='p'>,</span> <span class='n'>size</span><span class='p'>);</span>  <span class='c'># 4</span>
+<span class='n'>bar</span> <span class='o'>=</span> <span class='n'>root</span><span class='o'>.</span><span class='n'>open</span><span class='p'>(</span><span class='s'>&quot;bar&quot;</span><span class='p'>);</span>    <span class='c'># 1</span>
+<span class='n'>foo</span> <span class='o'>=</span> <span class='n'>bar</span><span class='o'>.</span><span class='n'>open</span><span class='p'>(</span><span class='s'>&quot;foo&quot;</span><span class='p'>);</span>     <span class='c'># 2</span>
+<span class='n'>size</span> <span class='o'>=</span> <span class='n'>foo</span><span class='o'>.</span><span class='n'>size</span><span class='p'>();</span>         <span class='c'># 3</span>
+<span class='n'>data</span> <span class='o'>=</span> <span class='n'>foo</span><span class='o'>.</span><span class='n'>read</span><span class='p'>(</span><span class='mi'>0</span><span class='p'>,</span> <span class='n'>size</span><span class='p'>);</span>  <span class='c'># 4</span>
 <span class='c'># The above is four calls but takes only one network</span>
 <span class='c'># round trip with Cap&#39;n Proto!</span>
 </code></pre></div>
