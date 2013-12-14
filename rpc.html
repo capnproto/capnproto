@@ -68,7 +68,7 @@
 
 <p>To make programming to this model easy, in your code, each call returns a “promise”. Promises work much like Javascript promises or promises/futures in other languages: the promise is returned immediately, but you must later call <code>wait()</code> on it, or call <code>then()</code> to register an asynchronous callback.</p>
 
-<p>However, Cap’n Proto promises support an additional feature: <a href="http://en.wikipedia.org/wiki/Futures_and_promises#Promise_pipelining">pipelining</a>. The promise actually has methods corresponding to whatever methods the final result would have, except that these methods may only be used for the purpose of calling back to the server. Moreover, a pipelined promise can be used in the parameters to another call without waiting.</p>
+<p>However, Cap’n Proto promises support an additional feature: <a href="http://www.erights.org/elib/distrib/pipeline.html">pipelining</a>. The promise actually has methods corresponding to whatever methods the final result would have, except that these methods may only be used for the purpose of calling back to the server. Moreover, a pipelined promise can be used in the parameters to another call without waiting.</p>
 
 <p><strong><em>But isn’t that just syntax sugar?</em></strong></p>
 
