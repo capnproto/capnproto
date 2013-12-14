@@ -4,6 +4,8 @@ title: "Promise Pipelining and Dependent Calls: Cap'n Proto vs. Ice"
 author: kentonv
 ---
 
+_UPDATED:  Added Thrift to the comparison._
+
 So, I totally botched the 0.4 release announcement yesterday.  I was excited about promise
 pipelining, but I wasn't sure how to describe it in headline form.  I decided to be a bit
 silly and call it "time travel", tongue-in-cheek.  My hope was that people would then be
@@ -21,7 +23,7 @@ Let me be clear:
 
 **Promises alone are _not_ what I meant by "time travel"!**
 
-<img src='{{ site.baseurl }}images/capnp-vs-ice.png' style='width:318px; height:276px; float: right;'>
+<img src='{{ site.baseurl }}images/capnp-vs-thrift-vs-ice.png' style='width:350px; height:275px; float: right;'>
 
 So what did I mean?  Perhaps [this benchmark](https://github.com/kentonv/capnp-vs-ice) will
 make things clearer.  Here, I've defined a server that exports a simple four-function calculator
@@ -33,13 +35,13 @@ You want to have _one_ method `eval()` that takes an expression tree (or graph, 
 you will have ridiculous latency.  But this is exactly the point.  **With promise pipelining, simple,
 composable methods work fine.**
 
-To prove the point, I've implemented servers in both Cap'n Proto and
-[ZeroC Ice](http://www.zeroc.com/), an alternative RPC framework.  I then implemented clients
-against each one, where the client attempts to evaluate the expression:
+To prove the point, I've implemented servers in Cap'n Proto, [Apache Thrift](http://thrift.apache.org/),
+and [ZeroC Ice](http://www.zeroc.com/).  I then implemented clients against each one, where the
+client attempts to evaluate the expression:
 
     ((5 * 2) + ((7 - 3) * 10)) / (6 - 4)
 
-Both frameworks support asynchronous calls with a promise/future-like interface, and both of my
+All three frameworks support asynchronous calls with a promise/future-like interface, and all of my
 clients use these interfaces to parallelize calls.  However, notice that even with parallelization,
 it takes four steps to compute the result:
 
@@ -50,13 +52,15 @@ it takes four steps to compute the result:
             50                 /    2      # 3
                               25           # 4
 
-As such, the ZeroC client takes four network round trips.  Cap'n Proto, however, takes only one.
+As such, the Thrift and Ice clients take four network round trips.  Cap'n Proto, however, takes
+only one.
 
 Cap'n Proto, you see, sends all six calls from the client to the server at one time.  For the
 latter calls, it simply tells the server to substitute the former calls' results into the new
-requests, once those dependency calls finish.  Ice can only send three calls to start, then must
-wait for some to finish before it can continue with the remaining calls.  Over a high-latency
-connection, this means the Ice client takes 4x longer than Cap'n Proto to do its work.
+requests, once those dependency calls finish.  Typical RPC systems can only send three calls to
+start, then must wait for some to finish before it can continue with the remaining calls.  Over
+a high-latency connection, this means they take 4x longer than Cap'n Proto to do their work in
+this test.
 
 So, does this matter outside of a contrived example case?  Yes, it does, because it allows you to
 write cleaner interfaces with simple, composable methods, rather than monster do-everything-at-once
