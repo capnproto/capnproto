@@ -83,10 +83,12 @@ file `foo` in directory `bar` takes four round trips!
 
 {% highlight python %}
 # pseudocode
-foo = root.open("foo");    # 1
-bar = foo.open("bar");     # 2
-size = bar.size();         # 3
-data = bar.read(0, size);  # 4
+bar = root.open("bar");    # 1
+foo = bar.open("foo");     # 2
+size = foo.size();         # 3
+data = foo.read(0, size);  # 4
+# The above is four calls but takes only one network
+# round trip with Cap'n Proto!
 {% endhighlight %}
 
 In such a high-latency scenario, making your interface elegant is simply not worth 4x the latency.
@@ -136,6 +138,11 @@ With pipelining, our 4-step example can be automatically reduced to a single rou
 need to change our interface at all.  We keep our simple, elegant, singleton-free interface, we
 don't have to implement path strings, caching, authentication, or authorization, and yet everything
 performs as well as we can possibly hope for.
+
+#### Example code
+
+[The calculator example](https://github.com/kentonv/capnproto/blob/master/c++/samples/calculator-client.c++)
+uses promise pipelining.  Take a look at the client side in particular.
 
 ### Distributed Objects
 
