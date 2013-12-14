@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Promise Pipelining and Dependent Calls: Cap'n Proto vs. Ice"
+title: "Promise Pipelining and Dependent Calls: Cap'n Proto vs. Thrift vs. Ice"
 author: kentonv
 ---
 
