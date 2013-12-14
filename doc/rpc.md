@@ -83,10 +83,10 @@ file `foo` in directory `bar` takes four round trips!
 
 {% highlight python %}
 # pseudocode
-foo = root.open("foo");    # 1
-bar = foo.open("bar");     # 2
-size = bar.size();         # 3
-data = bar.read(0, size);  # 4
+bar = root.open("bar");    # 1
+foo = bar.open("foo");     # 2
+size = foo.size();         # 3
+data = foo.read(0, size);  # 4
 # The above is four calls but takes only one network
 # round trip with Cap'n Proto!
 {% endhighlight %}
