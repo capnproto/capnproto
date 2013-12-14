@@ -35,7 +35,7 @@ immediately, but you must later call `wait()` on it, or call `then()` to registe
 callback.
 
 However, Cap'n Proto promises support an additional feature:
-[pipelining](http://en.wikipedia.org/wiki/Futures_and_promises#Promise_pipelining).  The promise
+[pipelining](http://www.erights.org/elib/distrib/pipeline.html).  The promise
 actually has methods corresponding to whatever methods the final result would have, except that
 these methods may only be used for the purpose of calling back to the server.  Moreover, a
 pipelined promise can be used in the parameters to another call without waiting.
