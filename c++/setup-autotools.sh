@@ -6,14 +6,7 @@ if [ ! -e gtest ]; then
   echo "================================================================================"
   echo "Fetching Google Test code..."
   echo "================================================================================"
-  svn checkout http://googletest.googlecode.com/svn/tags/release-1.6.0 gtest
-
-  echo "================================================================================"
-  echo "Patching Google Test for C++11..."
-  echo "================================================================================"
-  cd gtest
-  patch -p0 < ../gtest-1.6.0-c++11.patch
-  cd ..
+  svn checkout http://googletest.googlecode.com/svn/tags/release-1.7.0 gtest
 fi
 
 echo "================================================================================"
