@@ -1106,5 +1106,4 @@ _::Deferred<Decay<Func>> defer(Func&& func) {
 
 }  // namespace kj
 
-
 #endif  // KJ_COMMON_H_
