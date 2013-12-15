@@ -352,14 +352,7 @@ void throwRecoverableException(kj::Exception&& exception) {
 
 // =======================================================================================
 
-#if EMSCRIPTEN
-UnwindDetector::UnwindDetector() {}
-
-bool UnwindDetector::isUnwinding() const {
-  return false;
-}
-#else
-  #if __GNUC__
+#if __GNUC__ && !EMSCRIPTEN
 namespace _ {  // private
 
 
@@ -398,10 +391,6 @@ uint uncaughtExceptionCount() {
   return __cxa_get_globals()->uncaughtExceptions;
 }
 
-  #else
-  #error "This needs to be ported to your compiler / C++ ABI."
-  #endif
-
 }  // namespace _ (private)
 
 UnwindDetector::UnwindDetector(): uncaughtCount(_::uncaughtExceptionCount()) {}
@@ -410,6 +399,16 @@ bool UnwindDetector::isUnwinding() const {
   return _::uncaughtExceptionCount() > uncaughtCount;
 }
 
+#elif EMSCRIPTEN
+
+UnwindDetector::UnwindDetector() {}
+
+bool UnwindDetector::isUnwinding() const {
+  return std::uncaught_exception();
+}
+
+#else
+#error "This needs to be ported to your compiler / C++ ABI."
 #endif
 
 void UnwindDetector::catchExceptionsAsSecondaryFaults(_::Runnable& runnable) const {
