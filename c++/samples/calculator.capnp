@@ -46,7 +46,7 @@ interface Calculator {
   #   get each operator and then using them in evaluate() still
   #   only takes one network round trip.
 
-  evaluate @0 (expression: Expression) -> (value: Value);
+  evaluate @0 (expression :Expression) -> (value :Value);
   # Evaluate the given expression and return the result.  The
   # result is returned wrapped in a Value interface so that you
   # may pass it back to the server in a pipelined request.  To
@@ -103,11 +103,11 @@ interface Calculator {
     # functions defined on the server and then passed back to it are called
     # locally.
 
-    call @0 (params :List(Float64)) -> (value: Float64);
+    call @0 (params :List(Float64)) -> (value :Float64);
     # Call the function on the given parameters.
   }
 
-  getOperator @2 (op: Operator) -> (func: Function);
+  getOperator @2 (op :Operator) -> (func :Function);
   # Get a Function representing an arithmetic operator, which can then be
   # used in Expressions.
 
