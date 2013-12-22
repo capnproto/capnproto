@@ -657,6 +657,8 @@ interface TestMoreStuff extends(TestCallOrder) {
 
   expectCancel @7 (cap :TestInterface) -> ();
   # evalLater()-loops forever, holding `cap`.  Must be canceled.
+
+  methodWithDefaults @8 (a :Text, b :UInt32 = 123, c :Text = "foo") -> (d :Text, e :Text = "bar");
 }
 
 struct TestSturdyRefHostId {

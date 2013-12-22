@@ -1203,6 +1203,7 @@ private:
             if (member.hasDefaultValue) {
               translator.compileBootstrapValue(member.fieldDefaultValue,
                                                typeBuilder, slot.initDefaultValue());
+              slot.setHadExplicitDefault(true);
             } else {
               translator.compileDefaultDefaultValue(typeBuilder, slot.initDefaultValue());
             }
