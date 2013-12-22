@@ -74,10 +74,11 @@ RpcSystem<SturdyRefHostId> makeRpcServer(
 // Make an RPC server.  Typical usage (e.g. in a main() function):
 //
 //    MyEventLoop eventLoop;
+//    kj::WaitScope waitScope(eventLoop);
 //    MyNetwork network;
 //    MyRestorer restorer;
 //    auto server = makeRpcServer(network, restorer);
-//    kj::NEVER_DONE.wait();  // run forever
+//    kj::NEVER_DONE.wait(waitScope);  // run forever
 //
 // See also ez-rpc.h, which has simpler instructions for the common case of a two-party
 // client-server RPC connection.
@@ -89,11 +90,11 @@ RpcSystem<SturdyRefHostId> makeRpcClient(
 // Make an RPC client.  Typical usage (e.g. in a main() function):
 //
 //    MyEventLoop eventLoop;
+//    kj::WaitScope waitScope(eventLoop);
 //    MyNetwork network;
-//    MyRestorer restorer;
-//    auto client = makeRpcClient(network, restorer);
+//    auto client = makeRpcClient(network);
 //    MyCapability::Client cap = client.restore(hostId, objId).castAs<MyCapability>();
-//    auto response = cap.fooRequest().send().wait();
+//    auto response = cap.fooRequest().send().wait(waitScope);
 //    handleMyResponse(response);
 //
 // See also ez-rpc.h, which has simpler instructions for the common case of a two-party
