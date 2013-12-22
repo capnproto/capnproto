@@ -52,6 +52,12 @@ TEST(Schema, Structs) {
   StructSchema::Field lookup = schema.getFieldByName("voidField");
   EXPECT_TRUE(lookup == field);
   EXPECT_TRUE(lookup != schema.getFields()[1]);
+  EXPECT_FALSE(lookup.getProto().getSlot().getHadExplicitDefault());
+
+  EXPECT_FALSE(schema.getFieldByName("int32Field").getProto().getSlot().getHadExplicitDefault());
+
+  EXPECT_TRUE(Schema::from<TestDefaults>().getFieldByName("int32Field")
+      .getProto().getSlot().getHadExplicitDefault());
 
   EXPECT_TRUE(schema.findFieldByName("noSuchField") == nullptr);
 
@@ -260,6 +266,47 @@ TEST(Schema, NullSchemas) {
 
   EXPECT_TRUE(Schema::from<Capability>() == InterfaceSchema());
   EXPECT_EQ(InterfaceSchema().getProto().getId(), typeId<Capability>());
+}
+
+TEST(Schema, Interfaces) {
+  InterfaceSchema schema = Schema::from<test::TestMoreStuff>();
+
+  EXPECT_EQ(typeId<test::TestMoreStuff>(), schema.getProto().getId());
+
+  EXPECT_TRUE(schema.getDependency(typeId<test::TestCallOrder>()) ==
+              Schema::from<test::TestCallOrder>());
+  EXPECT_TRUE(schema.getDependency(typeId<test::TestCallOrder>()) != schema);
+  EXPECT_ANY_THROW(schema.getDependency(typeId<TestDefaults>()));
+
+  EXPECT_TRUE(schema.asInterface() == schema);
+  EXPECT_NONFATAL_FAILURE(schema.asStruct());
+  EXPECT_NONFATAL_FAILURE(schema.asEnum());
+
+  ASSERT_EQ(schema.getMethods().size(), schema.getProto().getInterface().getMethods().size());
+  InterfaceSchema::Method method = schema.getMethods()[0];
+  EXPECT_EQ("callFoo", method.getProto().getName());
+  EXPECT_TRUE(method.getContainingInterface() == schema);
+
+  InterfaceSchema::Method lookup = schema.getMethodByName("callFoo");
+  EXPECT_TRUE(lookup == method);
+  EXPECT_TRUE(lookup != schema.getMethods()[1]);
+
+  EXPECT_TRUE(Schema::from<TestDefaults>().getFieldByName("int32Field")
+      .getProto().getSlot().getHadExplicitDefault());
+
+  EXPECT_TRUE(schema.findMethodByName("noSuchMethod") == nullptr);
+
+  EXPECT_TRUE(schema.findMethodByName("callFooWhenResolved") != nullptr);
+  EXPECT_TRUE(schema.findMethodByName("neverReturn") != nullptr);
+  EXPECT_TRUE(schema.findMethodByName("hold") != nullptr);
+  EXPECT_TRUE(schema.findMethodByName("callHeld") != nullptr);
+  EXPECT_TRUE(schema.findMethodByName("getHeld") != nullptr);
+
+  auto params = schema.getDependency(schema.getMethodByName("methodWithDefaults")
+      .getProto().getParamStructType()).asStruct();
+  EXPECT_FALSE(params.getFieldByName("a").getProto().getSlot().getHadExplicitDefault());
+  EXPECT_TRUE(params.getFieldByName("b").getProto().getSlot().getHadExplicitDefault());
+  EXPECT_TRUE(params.getFieldByName("c").getProto().getSlot().getHadExplicitDefault());
 }
 
 }  // namespace
