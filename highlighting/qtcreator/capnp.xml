@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE language SYSTEM "language.dtd">
+
+<!-- syntax highlighting for Kate and QtCreator -->
+
+<language name="Cap'n Proto" version="0.5" kateversion="2.4" section="Sources" extensions="*.capnp" mimetype="text/x-capnp" license="BSD 2-clause" author="Kenton Varda (temporal@gmail.com)">
+  <highlighting>
+    <list name="keyword">
+      <item>struct</item>
+      <item>enum</item>
+      <item>interface</item>
+      <item>union</item>
+      <item>import</item>
+      <item>using</item>
+      <item>const</item>
+      <item>annotation</item>
+      <item>extends</item>
+      <item>in</item>
+      <item>of</item>
+      <item>on</item>
+      <item>as</item>
+      <item>with</item>
+      <item>from</item>
+      <item>fixed</item>
+    </list>
+    <list name="type">
+      <item>union</item>
+      <item>group</item>
+      <item>Void</item>
+      <item>Bool</item>
+      <item>Int8</item>
+      <item>Int16</item>
+      <item>Int32</item>
+      <item>Int64</item>
+      <item>UInt8</item>
+      <item>UInt16</item>
+      <item>UInt32</item>
+      <item>UInt64</item>
+      <item>Float32</item>
+      <item>Float64</item>
+      <item>Text</item>
+      <item>Data</item>
+      <item>AnyPointer</item>
+      <item>AnyStruct</item>
+      <item>Capability</item>
+      <item>List</item>
+    </list>
+    <contexts>
+      <context name="Normal" attribute="Normal" lineEndContext="#stay">
+        <DetectChar attribute="Comment" context="Comment" char="#"/>
+        <RegExpr attribute="Id" context="#stay" String="@(0x[0-9a-fA-F]+|[0-9]+)\b"/>
+        <DetectChar attribute="Value" context="Value" char="="/>
+        <DetectChar attribute="Type" context="Type" char=":"/>
+        <DetectChar attribute="Annotation" context="Annotation" char="$"/>
+        <keyword String="keyword" context="#stay" attribute="Keyword" />
+        <DetectChar attribute="Symbol" context="#stay" char="{" beginRegion="Brace1"/>
+        <DetectChar attribute="Symbol" context="#stay" char="}" endRegion="Brace1"/>
+        <AnyChar attribute="Symbol" context="#stay" String="!%&amp;*+-./&lt;=&gt;?^|~;[]()"/>
+      </context>
+      <context name="Comment" attribute="Comment" lineEndContext="#pop"></context>
+      <context name="Value" attribute="Value" lineEndContext="#stay">
+        <DetectChar attribute="Comment" context="Comment" char="#"/>
+        <AnyChar attribute="Value" context="ParenValue" String="(["/>
+        <RegExpr attribute="Value" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
+        <RegExpr attribute="Value" context="#stay" String="'([^'\\]|\\.)*'"/>
+        <AnyChar attribute="Symbol" context="#pop" String="{};:=$)," lookAhead="true"/>
+      </context>
+      <context name="ParenValue" attribute="Value" lineEndContext="#stay">
+        <DetectChar attribute="Comment" context="Comment" char="#"/>
+        <AnyChar attribute="Value" context="ParenValue" String="(["/>
+        <AnyChar attribute="Value" context="#pop" String=")]"/>
+        <AnyChar attribute="Symbol" context="#pop" String="{};" lookAhead="true"/>
+        <RegExpr attribute="Value" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
+        <RegExpr attribute="Value" context="#stay" String="'([^'\\]|\\.)*'"/>
+      </context>
+      <context name="Type" attribute="Type" lineEndContext="#stay">
+        <DetectChar attribute="Comment" context="Comment" char="#"/>
+        <AnyChar attribute="Type" context="ParenType" String="(["/>
+        <keyword String="type" context="#stay" attribute="KeyType" />
+        <RegExpr attribute="Type" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
+        <RegExpr attribute="Type" context="#stay" String="'([^'\\]|\\.)*'"/>
+        <AnyChar attribute="Symbol" context="#pop" String="{};:=$)," lookAhead="true"/>
+      </context>
+      <context name="ParenType" attribute="Type" lineEndContext="#stay">
+        <DetectChar attribute="Comment" context="Comment" char="#"/>
+        <AnyChar attribute="Type" context="ParenType" String="(["/>
+        <AnyChar attribute="Type" context="#pop" String=")]"/>
+        <keyword String="type" context="#stay" attribute="KeyType" />
+        <AnyChar attribute="Symbol" context="#pop" String="{};" lookAhead="true"/>
+        <RegExpr attribute="Type" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
+        <RegExpr attribute="Type" context="#stay" String="'([^'\\]|\\.)*'"/>
+      </context>
+      <context name="Annotation" attribute="Annotation" lineEndContext="#stay">
+        <DetectChar attribute="Comment" context="Comment" char="#"/>
+        <AnyChar attribute="Annotation" context="ParenAnnotation" String="(["/>
+        <RegExpr attribute="Annotation" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
+        <RegExpr attribute="Annotation" context="#stay" String="'([^'\\]|\\.)*'"/>
+        <AnyChar attribute="Symbol" context="#pop" String="{};:=$)," lookAhead="true"/>
+      </context>
+      <context name="ParenAnnotation" attribute="Annotation" lineEndContext="#stay">
+        <DetectChar attribute="Comment" context="Comment" char="#"/>
+        <AnyChar attribute="Annotation" context="ParenAnnotation" String="(["/>
+        <AnyChar attribute="Annotation" context="#pop" String=")]"/>
+        <AnyChar attribute="Symbol" context="#pop" String="{};" lookAhead="true"/>
+        <RegExpr attribute="Annotation" context="#stay" String="&quot;([^&quot;\\]|\\.)*&quot;"/>
+        <RegExpr attribute="Annotation" context="#stay" String="'([^'\\]|\\.)*'"/>
+      </context>
+    </contexts>
+  </highlighting>
+  <itemDatas>
+    <itemData name="Normal"       defStyleNum="dsNormal"/>
+    <itemData name="Keyword"      defStyleNum="dsKeyword"/>
+    <itemData name="Id"           defStyleNum="dsOthers" color="#0099FF"/>
+    <itemData name="Annotation"   defStyleNum="dsOthers" color="#999900"/>
+    <itemData name="Type"         defStyleNum="dsDataType"/>
+    <itemData name="KeyType"      defStyleNum="dsDataType" bold="1"/>
+    <itemData name="Value"        defStyleNum="dsOthers" color="#003399"/>
+    <itemData name="Comment"      defStyleNum="dsComment"/>
+    <itemData name="Symbol"       defStyleNum="dsNormal" bold="1"/>
+  </itemDatas>
+  <general>
+    <comments><comment name="singleLine" start="#"/></comments>
+    <keywords casesensitive="1"/>
+  </general>
+</language>
