@@ -98,7 +98,10 @@ private:
 template <typename T> struct OutputType_;
 template <typename T> struct OutputType_<Maybe<T>> { typedef T Type; };
 template <typename Parser, typename Input>
-using OutputType = typename OutputType_<decltype(instance<Parser&>()(instance<Input&>()))>::Type;
+using CallReturnType = decltype(instance<Parser&>()(instance<Input&>()));
+// Synonym for the output type of parser's operator().
+template <typename Parser, typename Input>
+using OutputType = typename OutputType_<CallReturnType<Parser, Input>>::Type;
 // Synonym for the output type of a parser, given the parser type and the input type.
 
 // =======================================================================================
@@ -344,6 +347,91 @@ constexpr Sequence_<SubParsers...> sequence(SubParsers&&... subParsers) {
   // tuple of their results.
 
   return Sequence_<SubParsers...>(kj::fwd<SubParsers>(subParsers)...);
+}
+
+// -------------------------------------------------------------------
+// choice()
+// Like oneOf(), but does not require sub-parsers to return the same type
+// Output = like sequence(), but with additional `Maybe`-wrap around every argument
+
+template <typename... SubParsers> class Choice_;
+
+template <typename FirstSubParser, typename... SubParsers>
+class Choice_<FirstSubParser, SubParsers...> {
+public:
+  template <typename T, typename... U>
+  explicit constexpr Choice_(T&& firstSubParser, U&&... rest)
+      : first(kj::fwd<T>(firstSubParser)), rest(kj::fwd<U>(rest)...) {}
+
+  template <typename Input>
+  auto operator()(Input& input) const ->
+      Maybe<decltype(tuple(
+          instance<CallReturnType<FirstSubParser, Input>>(),
+          instance<CallReturnType<SubParsers, Input>>()...))> {
+    return parseNext(input);
+  }
+
+  template <typename Input, typename... InitialParams>
+  auto parseNext(Input& input, InitialParams&&... initialParams) const ->
+      Maybe<decltype(tuple(
+          kj::fwd<InitialParams>(initialParams)...,
+          instance<CallReturnType<FirstSubParser, Input>>(),
+          instance<CallReturnType<SubParsers, Input>>()...))> {
+    Input subInput(input);
+    Maybe<OutputType<FirstSubParser, Input>> firstResult = first(subInput);
+
+    if (firstResult != nullptr) {
+      subInput.advanceParent();
+      return rest.skipNext(input, kj::fwd<InitialParams>(initialParams)...,
+                            kj::mv(firstResult));
+    } else {
+      return rest.parseNext(input, kj::fwd<InitialParams>(initialParams)...,
+                            CallReturnType<FirstSubParser, Input>());
+    }
+  }
+
+  template <typename Input, typename... InitialParams>
+  auto skipNext(Input& input, InitialParams&&... initialParams) const ->
+      Maybe<decltype(tuple(
+          kj::fwd<InitialParams>(initialParams)...,
+          instance<CallReturnType<FirstSubParser, Input>>(),
+          instance<CallReturnType<SubParsers, Input>>()...))> {
+      return rest.skipNext(input, kj::fwd<InitialParams>(initialParams)...,
+                            CallReturnType<FirstSubParser, Input>());
+  }
+
+private:
+  FirstSubParser first;
+  Choice_<SubParsers...> rest;
+};
+
+template <>
+class Choice_<> {
+public:
+  template <typename Input>
+  Maybe<Tuple<>> operator()(Input& input) const {
+    return parseNext(input);
+  }
+
+  template <typename Input, typename... Params>
+  auto parseNext(Input& input, Params&&... params) const ->
+      Maybe<decltype(tuple(kj::fwd<Params>(params)...))> {
+    return nullptr;
+  }
+
+  template <typename Input, typename... Params>
+  auto skipNext(Input& input, Params&&... params) const ->
+      Maybe<decltype(tuple(kj::fwd<Params>(params)...))> {
+    return tuple(kj::fwd<Params>(params)...);
+  }
+};
+
+template <typename... SubParsers>
+constexpr Choice_<SubParsers...> choice(SubParsers&&... subParsers) {
+  // Constructs a parser that accepts one of a set of options. Unlike `oneOf`, does not require
+  // all options to return the same type.
+
+  return Choice_<SubParsers...>(kj::fwd<SubParsers>(subParsers)...);
 }
 
 // -------------------------------------------------------------------

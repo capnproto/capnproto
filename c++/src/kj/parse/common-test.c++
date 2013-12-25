@@ -517,6 +517,44 @@ TEST(CommonParsers, EndOfInput) {
   }
 }
 
+TEST(CommonParsers, Choice) {
+  auto parser = transform(
+      choice(
+        transform(exactly('f'), []() -> StringPtr { return "foo"; }),
+        transform(exactly('b'), []() -> bool { return true; }),
+        transform(exactly('q'), []() -> double { return 3.14; })),
+      [](Maybe<StringPtr> foo, Maybe<bool> bar, Maybe<double> qux) -> int {
+        return foo.map([](StringPtr foo) -> int { return foo.size(); })
+          .orDefault(bar.map([](bool bar) -> int { return bar ? 42 : -42; })
+            .orDefault(qux.map([](double qux) -> int { return qux * qux; })
+               .orDefault(0 /* not possible to get here */)));
+      });
+  {
+    StringPtr text = "f";
+    Input input(text.begin(), text.end());
+    EXPECT_EQ(3, parser(input).orDefault(-1));
+  }
+
+  {
+    StringPtr text = "b";
+    Input input(text.begin(), text.end());
+    EXPECT_EQ(42, parser(input).orDefault(-1));
+  }
+
+  {
+    StringPtr text = "q";
+    Input input(text.begin(), text.end());
+    EXPECT_EQ(9, parser(input).orDefault(-1));
+  }
+
+  {
+    StringPtr text = "x";
+    Input input(text.begin(), text.end());
+    EXPECT_TRUE(parser(input) == nullptr);
+  }
+
+}
+
 }  // namespace
 }  // namespace parse
 }  // namespace kj
