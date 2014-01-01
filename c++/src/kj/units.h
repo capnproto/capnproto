@@ -54,12 +54,12 @@ struct Id {
   inline constexpr Id(): value(0) {}
   inline constexpr explicit Id(int value): value(value) {}
 
-  inline constexpr bool operator==(const Id& other) { return value == other.value; }
-  inline constexpr bool operator!=(const Id& other) { return value != other.value; }
-  inline constexpr bool operator<=(const Id& other) { return value <= other.value; }
-  inline constexpr bool operator>=(const Id& other) { return value >= other.value; }
-  inline constexpr bool operator< (const Id& other) { return value <  other.value; }
-  inline constexpr bool operator> (const Id& other) { return value >  other.value; }
+  inline constexpr bool operator==(const Id& other) const { return value == other.value; }
+  inline constexpr bool operator!=(const Id& other) const { return value != other.value; }
+  inline constexpr bool operator<=(const Id& other) const { return value <= other.value; }
+  inline constexpr bool operator>=(const Id& other) const { return value >= other.value; }
+  inline constexpr bool operator< (const Id& other) const { return value <  other.value; }
+  inline constexpr bool operator> (const Id& other) const { return value >  other.value; }
 };
 
 // =======================================================================================
@@ -101,27 +101,27 @@ public:
 
   template <typename OtherNumber>
   inline constexpr UnitRatio<decltype(Number(1)+OtherNumber(1)), Unit1, Unit2>
-      operator+(UnitRatio<OtherNumber, Unit1, Unit2> other) {
+      operator+(UnitRatio<OtherNumber, Unit1, Unit2> other) const {
     return UnitRatio<decltype(Number(1)+OtherNumber(1)), Unit1, Unit2>(
         unit1PerUnit2 + other.unit1PerUnit2);
   }
   template <typename OtherNumber>
   inline constexpr UnitRatio<decltype(Number(1)-OtherNumber(1)), Unit1, Unit2>
-      operator-(UnitRatio<OtherNumber, Unit1, Unit2> other) {
+      operator-(UnitRatio<OtherNumber, Unit1, Unit2> other) const {
     return UnitRatio<decltype(Number(1)-OtherNumber(1)), Unit1, Unit2>(
         unit1PerUnit2 - other.unit1PerUnit2);
   }
 
   template <typename OtherNumber, typename Unit3>
   inline constexpr UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit3, Unit2>
-      operator*(UnitRatio<OtherNumber, Unit3, Unit1> other) {
+      operator*(UnitRatio<OtherNumber, Unit3, Unit1> other) const {
     // U1 / U2 * U3 / U1 = U3 / U2
     return UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit3, Unit2>(
         unit1PerUnit2 * other.unit1PerUnit2);
   }
   template <typename OtherNumber, typename Unit3>
   inline constexpr UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit1, Unit3>
-      operator*(UnitRatio<OtherNumber, Unit2, Unit3> other) {
+      operator*(UnitRatio<OtherNumber, Unit2, Unit3> other) const {
     // U1 / U2 * U2 / U3 = U1 / U3
     return UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit1, Unit3>(
         unit1PerUnit2 * other.unit1PerUnit2);
@@ -129,14 +129,14 @@ public:
 
   template <typename OtherNumber, typename Unit3>
   inline constexpr UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit3, Unit2>
-      operator/(UnitRatio<OtherNumber, Unit1, Unit3> other) {
+      operator/(UnitRatio<OtherNumber, Unit1, Unit3> other) const {
     // (U1 / U2) / (U1 / U3) = U3 / U2
     return UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit3, Unit2>(
         unit1PerUnit2 / other.unit1PerUnit2);
   }
   template <typename OtherNumber, typename Unit3>
   inline constexpr UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit1, Unit3>
-      operator/(UnitRatio<OtherNumber, Unit3, Unit2> other) {
+      operator/(UnitRatio<OtherNumber, Unit3, Unit2> other) const {
     // (U1 / U2) / (U3 / U2) = U1 / U3
     return UnitRatio<decltype(Number(1)*OtherNumber(1)), Unit1, Unit3>(
         unit1PerUnit2 / other.unit1PerUnit2);
