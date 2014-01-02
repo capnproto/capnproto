@@ -406,7 +406,7 @@
 
 <span class='k'>struct</span> <span class='n'>MyStruct</span> <span class='na'>$baz(2) </span>{
   <span class='n'>myField</span> <span class='nd'>@0</span> <span class='nc'>:Text </span><span class='l'>= &quot;default&quot; </span><span class='na'>$baz(3)</span>;
-  <span class='n'>myUnion</span> <span class='nd'>@1</span> <span class='k'>union</span> <span class='na'>$baz(4) </span>{
+  <span class='n'>myUnion</span> <span class='nc'>:union </span><span class='na'>$baz(4) </span>{
     <span class='c1'># ...</span>
   }
 }
@@ -416,7 +416,7 @@
 }
 
 <span class='k'>interface</span> <span class='n'>MyInterface</span> <span class='na'>$baz(7) </span>{
-  <span class='n'>myMethod</span>(<span class='n'>myParam</span> <span class='nc'>:Text </span><span class='na'>$baz(9)</span>) <span class='nc'>:Void </span><span class='na'>$baz(8)</span>;
+  <span class='n'>myMethod</span> <span class='nd'>@0</span> (<span class='n'>myParam</span> <span class='nc'>:Text </span><span class='na'>$baz(9)</span>) -&gt; () <span class='na'>$baz(8)</span>;
 }
 
 <span class='k'>annotation</span> <span class='n'>myAnnotation</span>(<span class='k'>struct</span>) <span class='nc'>:Int32 </span><span class='na'>$baz(10)</span>;
