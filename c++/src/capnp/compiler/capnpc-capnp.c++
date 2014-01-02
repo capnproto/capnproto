@@ -416,7 +416,8 @@ private:
                 proto.getName(), " :", genType(slot.getType(), interface),
                 isEmptyValue(slot.getDefaultValue()) ? kj::strTree("") :
                     kj::strTree(" = ", genValue(
-                        slot.getType(), slot.getDefaultValue(), interface)));
+                        slot.getType(), slot.getDefaultValue(), interface)),
+                genAnnotations(proto.getAnnotations(), interface));
           }, ", "), ")");
     } else {
       return nodeName(schema, interface);
@@ -472,7 +473,8 @@ private:
               auto results = schemaLoader.get(methodProto.getResultStructType()).asStruct();
               return kj::strTree(
                   indent.next(), methodProto.getName(), " @", method.getIndex(), " ",
-                  genParamList(interface, params), " -> ", genParamList(interface, results), ";\n");
+                  genParamList(interface, params), " -> ", genParamList(interface, results),
+                  genAnnotations(methodProto.getAnnotations(), interface), ";\n");
             },
             genNestedDecls(schema, indent.next()),
             indent, "}\n");
@@ -482,7 +484,8 @@ private:
         return kj::strTree(
             indent, "const ", name, " @0x", kj::hex(proto.getId()), " :",
             genType(constProto.getType(), schema), " = ",
-            genValue(constProto.getType(), constProto.getValue(), schema), ";\n");
+            genValue(constProto.getType(), constProto.getValue(), schema),
+            genAnnotations(schema), ";\n");
       }
       case schema::Node::ANNOTATION: {
         auto annotationProto = proto.getAnnotation();
