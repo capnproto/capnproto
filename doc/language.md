@@ -481,7 +481,7 @@ $baz(1);  # Annotate the file.
 
 struct MyStruct $baz(2) {
   myField @0 :Text = "default" $baz(3);
-  myUnion @1 union $baz(4) {
+  myUnion :union $baz(4) {
     # ...
   }
 }
@@ -491,7 +491,7 @@ enum MyEnum $baz(5) {
 }
 
 interface MyInterface $baz(7) {
-  myMethod(myParam :Text $baz(9)) :Void $baz(8);
+  myMethod @0 (myParam :Text $baz(9)) -> () $baz(8);
 }
 
 annotation myAnnotation(struct) :Int32 $baz(10);
