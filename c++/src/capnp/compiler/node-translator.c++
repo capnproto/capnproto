@@ -1295,7 +1295,7 @@ private:
         }
       }
 
-      builder.adoptAnnotations(translator.compileAnnotationApplications(
+      member->getSchema().adoptAnnotations(translator.compileAnnotationApplications(
           member->declAnnotations, targetsFlagName));
     }
 
