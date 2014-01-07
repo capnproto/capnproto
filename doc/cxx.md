@@ -154,7 +154,7 @@ exception.  The callback may abort the process, and is required to do so in cert
 to continue by inventing "safe" values.  This will lead to garbage output, but at least the program
 will not crash.  Your exception callback should set some sort of a flag indicating that an error
 occurred, and somewhere up the stack you should check for that flag and cancel the operation.
-See the header `capnp/exception.h` for details on how to register an exception callback.
+See the header `kj/exception.h` for details on how to register an exception callback.
 
 ## KJ Library
 
@@ -774,7 +774,7 @@ Here are some tips for using the C++ Cap'n Proto runtime most effectively:
   excessively large symbol names caused by its use of template-based parser combinators.  Stripping
   the binary greatly reduces its size.
 
-* The Cap'n Proto library has lots of debug-only asserts that are removed `#define NDEBUG`,
+* The Cap'n Proto library has lots of debug-only asserts that are removed if you `#define NDEBUG`,
   including in headers.  If you care at all about performance, you should compile your production
   binaries with the `-DNDEBUG` compiler flag.  In fact, if Cap'n Proto detects that you have
   optimization enabled but have not defined `NDEBUG`, it will define it for you (with a warning),
