@@ -297,7 +297,7 @@ public:
   bool isNull();
 
   StructBuilder getStruct(StructSize size, const word* defaultValue);
-  ListBuilder getList(FieldSize elementSize, const word* defaultValzue);
+  ListBuilder getList(FieldSize elementSize, const word* defaultValue);
   ListBuilder getStructList(StructSize elementSize, const word* defaultValue);
   template <typename T> typename T::Builder getBlob(const void* defaultValue,ByteCount defaultSize);
   kj::Own<ClientHook> getCapability();
