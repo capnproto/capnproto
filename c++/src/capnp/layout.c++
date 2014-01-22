@@ -235,7 +235,6 @@ struct WirePointer {
     uint32_t upper32Bits;
 
     StructRef structRef;
-    // Also covers capabilities.
 
     ListRef listRef;
 

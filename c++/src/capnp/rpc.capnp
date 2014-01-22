@@ -851,11 +851,11 @@ struct Payload {
 struct CapDescriptor {
   # **(level 1)**
   #
-  # When an application-defined type contains an interface pointer, that pointer's encoding is the
-  # same as a struct pointer except that the bottom two bits are 1's instead of 0's.  The pointer
-  # actually points to an instance of `CapDescriptor`.  The runtime API should not reveal the
-  # CapDescriptor directly to the application, but should instead wrap it in some kind of callable
-  # object with methods corresponding to the interface that the capability implements.
+  # When an application-defined type contains an interface pointer, that pointer contains an index
+  # into the message's capability table -- i.e. the `capTable` part of the `Payload`.  Each
+  # capability in the table is represented as a `CapDescriptor`.  The runtime API should not reveal
+  # the CapDescriptor directly to the application, but should instead wrap it in some kind of
+  # callable object with methods corresponding to the interface that the capability implements.
   #
   # Keep in mind that `ExportIds` in a `CapDescriptor` are subject to reference counting.  See the
   # description of `ExportId`.

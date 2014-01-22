@@ -157,6 +157,7 @@ class MessageBuilder {
 public:
   MessageBuilder();
   virtual ~MessageBuilder() noexcept(false);
+  KJ_DISALLOW_COPY(MessageBuilder);
 
   virtual kj::ArrayPtr<word> allocateSegment(uint minimumSize) = 0;
   // Allocates an array of at least the given number of words, throwing an exception or crashing if
