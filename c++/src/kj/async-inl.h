@@ -98,7 +98,7 @@ public:
   // `armBreadthFirst()`.  (Promise::then() uses depth-first whereas evalLater() uses
   // breadth-first.)
   //
-  // To use breadth-first scheduling instead, use `armLater()`.
+  // To use breadth-first scheduling instead, use `armBreadthFirst()`.
 
   void armBreadthFirst();
   // Like `armDepthFirst()` except that the event is placed at the end of the queue.

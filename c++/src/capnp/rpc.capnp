@@ -425,7 +425,7 @@ struct Finish {
   # 3) If the call has not returned yet, the caller no longer cares about the result.  If nothing
   #    else cares about the result either (e.g. there are to other outstanding calls pipelined on
   #    the result of this one) then the callee may wish to immediately cancel the operation and
-  #    send back a Return message with "canceled" set.  However, implementations are not requried
+  #    send back a Return message with "canceled" set.  However, implementations are not required
   #    to support premature cancellation -- instead, the implementation may wait until the call
   #    actually completes and send a normal `Return` message.
   #
@@ -935,9 +935,9 @@ struct PromisedAnswer {
       #   a SQL table join (not to be confused with the `Join` message type).
       # - Maybe some ability to test a union.
       # - Probably not a good idea:  the ability to specify an arbitrary script to run on the
-      #   result.  We could define a little stack-based language where `PathPart` specifies one
+      #   result.  We could define a little stack-based language where `Op` specifies one
       #   "instruction" or transformation to apply.  Although this is not a good idea
-      #   (over-engineered), any narrower additions to `PathPart` should be designed as if this
+      #   (over-engineered), any narrower additions to `Op` should be designed as if this
       #   were the eventual goal.
     }
   }
