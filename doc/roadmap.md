@@ -39,7 +39,7 @@ Provisionally, these are probably the things that will be worked on after 0.5.
 ## Before version 1.0
 
 These things absolutely must happen before any 1.0 release.  Note that it's not yet decided when
-a 1.0 release would happen nor how many 0.x release might precede it.
+a 1.0 release would happen nor how many 0.x releases might precede it.
 
 * **Expand test coverage:**  There are lots of tests now, but some important scenarios, such as
   handling invalid of invalid input, need better testing.

@@ -22,7 +22,7 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 @0xa184c7885cdaf2a1;
-# This file defines the "network-specific parameters" in rpc.proto to support a network consisting
+# This file defines the "network-specific parameters" in rpc.capnp to support a network consisting
 # of two vats.  Each of these vats may in fact be in communication with other vats, but any
 # capabilities they forward must be proxied.  Thus, to each end of the connection, all capabilities
 # received from the other end appear to live in a single vat.

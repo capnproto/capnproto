@@ -347,7 +347,7 @@ public:
   virtual VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
                                       kj::Own<CallContextHook>&& context) = 0;
   // Call the object, but the caller controls allocation of the request/response objects.  If the
-  // callee insists on allocating this objects itself, it must make a copy.  This version is used
+  // callee insists on allocating these objects itself, it must make a copy.  This version is used
   // when calls come in over the network via an RPC system.  During the call, the context object
   // may be used from any thread so long as it is only used from one thread at a time.  Note that
   // even if the returned `Promise<void>` is discarded, the call may continue executing if any
