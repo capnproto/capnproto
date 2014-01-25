@@ -488,6 +488,16 @@ kj::Maybe<Compiler::Node::Content&> Compiler::Node::getContent(Content::State mi
       auto builder = schemaNode.get();
       builder.setId(id);
       builder.setDisplayName(displayName);
+      // TODO(cleanup):  Would be better if we could remember the prefix length from before we
+      //   added this decl's name to the end.
+      KJ_IF_MAYBE(lastDot, displayName.findLast('.')) {
+        builder.setDisplayNamePrefixLength(*lastDot + 1);
+      }
+      KJ_IF_MAYBE(lastColon, displayName.findLast(':')) {
+        if (*lastColon > builder.getDisplayNamePrefixLength()) {
+          builder.setDisplayNamePrefixLength(*lastColon + 1);
+        }
+      }
       KJ_IF_MAYBE(p, parent) {
         builder.setScopeId(p->id);
       }
