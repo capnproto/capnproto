@@ -125,6 +125,7 @@ private:
   friend class ExceptionImpl;
 };
 
+// TODO(soon):  These should return StringPtr.
 ArrayPtr<const char> KJ_STRINGIFY(Exception::Nature nature);
 ArrayPtr<const char> KJ_STRINGIFY(Exception::Durability durability);
 String KJ_STRINGIFY(const Exception& e);
