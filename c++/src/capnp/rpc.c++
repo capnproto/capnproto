@@ -307,7 +307,6 @@ public:
   }
 
   void taskFailed(kj::Exception&& exception) override {
-    KJ_LOG(ERROR, "Closing connection due to protocol error.", exception);
     disconnect(kj::mv(exception));
   }
 
@@ -1808,17 +1807,19 @@ private:
         [this](kj::Maybe<kj::Own<IncomingRpcMessage>>&& message) {
       KJ_IF_MAYBE(m, message) {
         handleMessage(kj::mv(*m));
+        return true;
       } else {
         disconnect(kj::Exception(
             kj::Exception::Nature::PRECONDITION, kj::Exception::Durability::PERMANENT,
             __FILE__, __LINE__, kj::str("Peer disconnected.")));
+        return false;
       }
-    }).then([this]() {
+    }).then([this](bool keepGoing) {
       // No exceptions; continue loop.
       //
       // (We do this in a separate continuation to handle the case where exceptions are
       // disabled.)
-      tasks.add(messageLoop());
+      if (keepGoing) tasks.add(messageLoop());
     });
   }
 
