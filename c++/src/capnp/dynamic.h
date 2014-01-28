@@ -922,6 +922,7 @@ public:
   template <typename T>
   Orphan(Orphan<T>&&);
   Orphan(Orphan<AnyPointer>&&);
+  Orphan(void*) = delete;  // So Orphan(bool) doesn't accept pointers.
   KJ_DISALLOW_COPY(Orphan);
 
   Orphan& operator=(Orphan&&) = default;
