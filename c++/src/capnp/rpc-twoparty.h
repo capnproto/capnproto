@@ -49,12 +49,19 @@ public:
 
   kj::Promise<void> onDisconnect() { return disconnectPromise.addBranch(); }
   // Returns a promise that resolves when the peer disconnects.
+  //
+  // TODO(soon):  Currently this fires when the underlying physical connection breaks.  It should
+  //   fire after the RPC system has detected EOF itself and dropped its connection reference, so
+  //   that it has a chance to reply to connections ended cleanly.
 
   kj::Promise<void> onDrained() { return drainedPromise.addBranch(); }
   // Returns a promise that resolves once the peer has disconnected *and* all local objects
   // referencing this connection have been destroyed.  A caller might use this to decide when it
   // is safe to destroy the RpcSystem, if it isn't able to reliably destroy all objects using it
   // directly.
+  //
+  // TODO(soon):  This is not quite designed right.  Those local objects should simply be disabled.
+  //   Their existence should not prevent the RpcSystem from being destroyed.
 
   // implements VatNetwork -----------------------------------------------------
 
@@ -83,12 +90,21 @@ private:
   kj::ForkedPromise<void> drainedPromise = nullptr;
 
   class FulfillerDisposer: public kj::Disposer {
+    // Hack:  TwoPartyVatNetwork is both a VatNetwork and a VatNetwork::Connection.  When all
+    //   references to the Connection have been dropped, then we want onDrained() to fire.  So we
+    //   hand out Own<Connection>s with this disposer attached, so that we can detect when they are
+    //   dropped.
+
   public:
     mutable kj::Own<kj::PromiseFulfiller<void>> fulfiller;
+    mutable uint refcount = 0;
 
-    void disposeImpl(void* pointer) const override { fulfiller->fulfill(); }
+    void disposeImpl(void* pointer) const override;
   };
   FulfillerDisposer drainedFulfiller;
+
+  kj::Own<TwoPartyVatNetworkBase::Connection> asConnection();
+  // Returns a pointer to this with the disposer set to drainedFulfiller.
 
   // implements Connection -----------------------------------------------------
 
