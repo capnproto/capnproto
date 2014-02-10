@@ -66,6 +66,7 @@ kj::AsyncIoProvider::PipeThread runServer(kj::AsyncIoProvider& ioProvider, int& 
     TestRestorer restorer(callCount);
     auto server = makeRpcServer(network, restorer);
     network.onDisconnect().wait(waitScope);
+    network.onDrained().wait(waitScope);
   });
 }
 

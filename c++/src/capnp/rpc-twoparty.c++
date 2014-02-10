@@ -32,14 +32,35 @@ TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty:
     : stream(stream), side(side), receiveOptions(receiveOptions), previousWrite(kj::READY_NOW) {
   {
     auto paf = kj::newPromiseAndFulfiller<void>();
-    disconnectPromise = paf.promise.fork();
-    disconnectFulfiller = kj::mv(paf.fulfiller);
-  }
-  {
-    auto paf = kj::newPromiseAndFulfiller<void>();
     drainedPromise = paf.promise.fork();
     drainedFulfiller.fulfiller = kj::mv(paf.fulfiller);
   }
+
+  {
+    auto paf = kj::newPromiseAndFulfiller<void>();
+
+    // If the RPC system on this side drops the connection, thus firing onDrained() before
+    // onDisconnected(), we also want to consider ourselves disconnected.  Otherwise, we might
+    // not detect actual disconnect because the RPC system won't attempt to send or receive any
+    // more messages on the connection.  So, we exclusive-join the disconnect promise with the
+    // first branch of drainedPromise.
+    disconnectPromise = paf.promise.exclusiveJoin(drainedPromise.addBranch()).fork();
+
+    disconnectFulfiller = kj::mv(paf.fulfiller);
+  }
+}
+
+void TwoPartyVatNetwork::FulfillerDisposer::disposeImpl(void* pointer) const {
+  KJ_DBG("deref", this, refcount);
+  if (--refcount == 0) {
+    fulfiller->fulfill();
+  }
+}
+
+kj::Own<TwoPartyVatNetworkBase::Connection> TwoPartyVatNetwork::asConnection() {
+  KJ_DBG("ref", &drainedFulfiller, drainedFulfiller.refcount);
+  ++drainedFulfiller.refcount;
+  return kj::Own<TwoPartyVatNetworkBase::Connection>(this, drainedFulfiller);
 }
 
 kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> TwoPartyVatNetwork::connectToRefHost(
@@ -47,7 +68,7 @@ kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> TwoPartyVatNetwork::conne
   if (ref.getSide() == side) {
     return nullptr;
   } else {
-    return kj::Own<TwoPartyVatNetworkBase::Connection>(this, drainedFulfiller);
+    return asConnection();
   }
 }
 
@@ -55,8 +76,7 @@ kj::Promise<kj::Own<TwoPartyVatNetworkBase::Connection>>
     TwoPartyVatNetwork::acceptConnectionAsRefHost() {
   if (side == rpc::twoparty::Side::SERVER && !accepted) {
     accepted = true;
-    return kj::Own<TwoPartyVatNetworkBase::Connection>(this,
-        kj::DestructorOnlyDisposer<TwoPartyVatNetworkBase::Connection>::instance);
+    return asConnection();
   } else {
     // Create a promise that will never be fulfilled.
     auto paf = kj::newPromiseAndFulfiller<kj::Own<TwoPartyVatNetworkBase::Connection>>();
