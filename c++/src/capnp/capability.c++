@@ -578,9 +578,7 @@ public:
 
   Request<AnyPointer, AnyPointer> newCall(
       uint64_t interfaceId, uint16_t methodId, kj::Maybe<MessageSize> sizeHint) override {
-    auto hook = kj::heap<BrokenRequest>(exception, sizeHint);
-    auto root = hook->message.getRoot<AnyPointer>();
-    return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
+    return newBrokenRequest(kj::cp(exception), sizeHint);
   }
 
   VoidPromiseAndPipeline call(uint64_t interfaceId, uint16_t methodId,
@@ -624,6 +622,13 @@ kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason) {
 
 kj::Own<PipelineHook> newBrokenPipeline(kj::Exception&& reason) {
   return kj::refcounted<BrokenPipeline>(kj::mv(reason));
+}
+
+Request<AnyPointer, AnyPointer> newBrokenRequest(
+    kj::Exception&& reason, kj::Maybe<MessageSize> sizeHint) {
+  auto hook = kj::heap<BrokenRequest>(kj::mv(reason), sizeHint);
+  auto root = hook->message.getRoot<AnyPointer>();
+  return Request<AnyPointer, AnyPointer>(root, kj::mv(hook));
 }
 
 }  // namespace capnp

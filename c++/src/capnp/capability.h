@@ -419,6 +419,10 @@ kj::Own<ClientHook> newBrokenCap(kj::Exception&& reason);
 kj::Own<PipelineHook> newBrokenPipeline(kj::Exception&& reason);
 // Helper function that creates a pipeline which simply throws exceptions when called.
 
+Request<AnyPointer, AnyPointer> newBrokenRequest(
+    kj::Exception&& reason, kj::Maybe<MessageSize> sizeHint);
+// Helper function that creates a Request object that simply throws exceptions when sent.
+
 // =======================================================================================
 // Extend PointerHelpers for interfaces
 

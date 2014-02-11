@@ -30,37 +30,20 @@ namespace capnp {
 TwoPartyVatNetwork::TwoPartyVatNetwork(kj::AsyncIoStream& stream, rpc::twoparty::Side side,
                                        ReaderOptions receiveOptions)
     : stream(stream), side(side), receiveOptions(receiveOptions), previousWrite(kj::READY_NOW) {
-  {
-    auto paf = kj::newPromiseAndFulfiller<void>();
-    drainedPromise = paf.promise.fork();
-    drainedFulfiller.fulfiller = kj::mv(paf.fulfiller);
-  }
-
-  {
-    auto paf = kj::newPromiseAndFulfiller<void>();
-
-    // If the RPC system on this side drops the connection, thus firing onDrained() before
-    // onDisconnected(), we also want to consider ourselves disconnected.  Otherwise, we might
-    // not detect actual disconnect because the RPC system won't attempt to send or receive any
-    // more messages on the connection.  So, we exclusive-join the disconnect promise with the
-    // first branch of drainedPromise.
-    disconnectPromise = paf.promise.exclusiveJoin(drainedPromise.addBranch()).fork();
-
-    disconnectFulfiller = kj::mv(paf.fulfiller);
-  }
+  auto paf = kj::newPromiseAndFulfiller<void>();
+  disconnectPromise = paf.promise.fork();
+  disconnectFulfiller.fulfiller = kj::mv(paf.fulfiller);
 }
 
 void TwoPartyVatNetwork::FulfillerDisposer::disposeImpl(void* pointer) const {
-  KJ_DBG("deref", this, refcount);
   if (--refcount == 0) {
     fulfiller->fulfill();
   }
 }
 
 kj::Own<TwoPartyVatNetworkBase::Connection> TwoPartyVatNetwork::asConnection() {
-  KJ_DBG("ref", &drainedFulfiller, drainedFulfiller.refcount);
-  ++drainedFulfiller.refcount;
-  return kj::Own<TwoPartyVatNetworkBase::Connection>(this, drainedFulfiller);
+  ++disconnectFulfiller.refcount;
+  return kj::Own<TwoPartyVatNetworkBase::Connection>(this, disconnectFulfiller);
 }
 
 kj::Maybe<kj::Own<TwoPartyVatNetworkBase::Connection>> TwoPartyVatNetwork::connectToRefHost(
@@ -102,12 +85,10 @@ public:
 
   void send() override {
     network.previousWrite = network.previousWrite.then([&]() {
-      auto promise = writeMessage(network.stream, message).then([]() {
-        // success; do nothing
-      }, [&](kj::Exception&& exception) {
-        // Exception during write!
-        network.disconnectFulfiller->fulfill();
-      }).eagerlyEvaluate(nullptr);
+      // Note that if the write fails, all further writes will be skipped due to the exception.
+      // We never actually handle this exception because we assume the read end will fail as well
+      // and it's cleaner to handle the failure there.
+      auto promise = writeMessage(network.stream, message).eagerlyEvaluate(nullptr);
       return kj::mv(promise);
     }).attach(kj::addRef(*this));
   }
@@ -145,13 +126,8 @@ kj::Promise<kj::Maybe<kj::Own<IncomingRpcMessage>>> TwoPartyVatNetwork::receiveI
       KJ_IF_MAYBE(m, message) {
         return kj::Own<IncomingRpcMessage>(kj::heap<IncomingMessageImpl>(kj::mv(*m)));
       } else {
-        disconnectFulfiller->fulfill();
         return nullptr;
       }
-    }, [&](kj::Exception&& exception) {
-      disconnectFulfiller->fulfill();
-      kj::throwRecoverableException(kj::mv(exception));
-      return nullptr;
     });
   });
 }
