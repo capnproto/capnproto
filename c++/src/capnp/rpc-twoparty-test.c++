@@ -66,7 +66,6 @@ kj::AsyncIoProvider::PipeThread runServer(kj::AsyncIoProvider& ioProvider, int& 
     TestRestorer restorer(callCount);
     auto server = makeRpcServer(network, restorer);
     network.onDisconnect().wait(waitScope);
-    network.onDrained().wait(waitScope);
   });
 }
 
@@ -141,9 +140,7 @@ TEST(TwoPartyNetwork, Pipelining) {
   auto rpcClient = makeRpcClient(network);
 
   bool disconnected = false;
-  bool drained = false;
   kj::Promise<void> disconnectPromise = network.onDisconnect().then([&]() { disconnected = true; });
-  kj::Promise<void> drainedPromise = network.onDrained().then([&]() { drained = true; });
 
   {
     // Request the particular capability from the server.
@@ -182,14 +179,12 @@ TEST(TwoPartyNetwork, Pipelining) {
     }
 
     EXPECT_FALSE(disconnected);
-    EXPECT_FALSE(drained);
 
     // What if we disconnect?
     serverThread.pipe->shutdownWrite();
 
     // The other side should also disconnect.
     disconnectPromise.wait(ioContext.waitScope);
-    EXPECT_FALSE(drained);
 
     {
       // Use the now-broken capability.
@@ -213,11 +208,7 @@ TEST(TwoPartyNetwork, Pipelining) {
       EXPECT_EQ(3, callCount);
       EXPECT_EQ(1, reverseCallCount);
     }
-
-    EXPECT_FALSE(drained);
   }
-
-  drainedPromise.wait(ioContext.waitScope);
 }
 
 }  // namespace
