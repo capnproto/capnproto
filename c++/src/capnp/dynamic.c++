@@ -522,6 +522,8 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
           if (value.getType() == DynamicValue::TEXT) {
             // Convert from text.
             rawValue = enumSchema.getEnumerantByName(value.as<Text>()).getOrdinal();
+          } else if (value.getType() == DynamicValue::INT || value.getType() == DynamicValue::UINT) {
+            rawValue = value.as<uint16_t>();
           } else {
             DynamicEnum enumValue = value.as<DynamicEnum>();
             KJ_REQUIRE(enumValue.getSchema() == enumSchema, "Value type mismatch.") {
