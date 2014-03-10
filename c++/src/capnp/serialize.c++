@@ -30,7 +30,7 @@ namespace capnp {
 
 FlatArrayMessageReader::FlatArrayMessageReader(
     kj::ArrayPtr<const word> array, ReaderOptions options)
-    : MessageReader(options) {
+    : MessageReader(options), end(array.end()) {
   if (array.size() < 1) {
     // Assume empty message.
     return;
@@ -47,6 +47,7 @@ FlatArrayMessageReader::FlatArrayMessageReader(
   }
 
   if (segmentCount == 0) {
+    end = array.begin() + offset;
     return;
   }
 
@@ -75,6 +76,8 @@ FlatArrayMessageReader::FlatArrayMessageReader(
       offset += segmentSize;
     }
   }
+
+  end = array.begin() + offset;
 }
 
 kj::ArrayPtr<const word> FlatArrayMessageReader::getSegment(uint id) {

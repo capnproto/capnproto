@@ -58,10 +58,17 @@ public:
 
   kj::ArrayPtr<const word> getSegment(uint id) override;
 
+  const word* getEnd() const { return end; }
+  // Get a pointer just past the end of the message as determined by reading the message header.
+  // This could actually be before the end of the input array.  This pointer is useful e.g. if
+  // you know that the input array has extra stuff appended after the message and you want to
+  // get at it.
+
 private:
   // Optimize for single-segment case.
   kj::ArrayPtr<const word> segment0;
   kj::Array<kj::ArrayPtr<const word>> moreSegments;
+  const word* end;
 };
 
 kj::Array<word> messageToFlatArray(MessageBuilder& builder);
