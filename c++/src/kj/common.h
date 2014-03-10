@@ -650,6 +650,12 @@ public:
       ctor(value, other.value);
     }
   }
+  inline NullableValue(NullableValue& other)
+      : isSet(other.isSet) {
+    if (isSet) {
+      ctor(value, other.value);
+    }
+  }
   inline ~NullableValue() noexcept(noexcept(instance<T&>().~T())) {
     if (isSet) {
       dtor(value);
@@ -796,6 +802,7 @@ public:
   Maybe(const T* t) noexcept: ptr(t) {}
   Maybe(Maybe&& other) noexcept(noexcept(T(instance<T&&>()))): ptr(kj::mv(other.ptr)) {}
   Maybe(const Maybe& other): ptr(other.ptr) {}
+  Maybe(Maybe& other): ptr(other.ptr) {}
 
   template <typename U>
   Maybe(Maybe<U>&& other) noexcept(noexcept(T(instance<U&&>()))) {

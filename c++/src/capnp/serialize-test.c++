@@ -69,8 +69,20 @@ TEST(Serialize, FlatArray) {
 
   kj::Array<word> serialized = messageToFlatArray(builder);
 
-  FlatArrayMessageReader reader(serialized.asPtr());
-  checkTestMessage(reader.getRoot<TestAllTypes>());
+  {
+    FlatArrayMessageReader reader(serialized.asPtr());
+    checkTestMessage(reader.getRoot<TestAllTypes>());
+    EXPECT_EQ(serialized.end(), reader.getEnd());
+  }
+
+  kj::Array<word> serializedWithSuffix = kj::heapArray<word>(serialized.size() + 5);
+  memcpy(serializedWithSuffix.begin(), serialized.begin(), serialized.size() * sizeof(word));
+
+  {
+    FlatArrayMessageReader reader(serializedWithSuffix.asPtr());
+    checkTestMessage(reader.getRoot<TestAllTypes>());
+    EXPECT_EQ(serializedWithSuffix.end() - 5, reader.getEnd());
+  }
 }
 
 TEST(Serialize, FlatArrayOddSegmentCount) {
@@ -79,8 +91,20 @@ TEST(Serialize, FlatArrayOddSegmentCount) {
 
   kj::Array<word> serialized = messageToFlatArray(builder);
 
-  FlatArrayMessageReader reader(serialized.asPtr());
-  checkTestMessage(reader.getRoot<TestAllTypes>());
+  {
+    FlatArrayMessageReader reader(serialized.asPtr());
+    checkTestMessage(reader.getRoot<TestAllTypes>());
+    EXPECT_EQ(serialized.end(), reader.getEnd());
+  }
+
+  kj::Array<word> serializedWithSuffix = kj::heapArray<word>(serialized.size() + 5);
+  memcpy(serializedWithSuffix.begin(), serialized.begin(), serialized.size() * sizeof(word));
+
+  {
+    FlatArrayMessageReader reader(serializedWithSuffix.asPtr());
+    checkTestMessage(reader.getRoot<TestAllTypes>());
+    EXPECT_EQ(serializedWithSuffix.end() - 5, reader.getEnd());
+  }
 }
 
 TEST(Serialize, FlatArrayEvenSegmentCount) {
@@ -89,8 +113,20 @@ TEST(Serialize, FlatArrayEvenSegmentCount) {
 
   kj::Array<word> serialized = messageToFlatArray(builder);
 
-  FlatArrayMessageReader reader(serialized.asPtr());
-  checkTestMessage(reader.getRoot<TestAllTypes>());
+  {
+    FlatArrayMessageReader reader(serialized.asPtr());
+    checkTestMessage(reader.getRoot<TestAllTypes>());
+    EXPECT_EQ(serialized.end(), reader.getEnd());
+  }
+
+  kj::Array<word> serializedWithSuffix = kj::heapArray<word>(serialized.size() + 5);
+  memcpy(serializedWithSuffix.begin(), serialized.begin(), serialized.size() * sizeof(word));
+
+  {
+    FlatArrayMessageReader reader(serializedWithSuffix.asPtr());
+    checkTestMessage(reader.getRoot<TestAllTypes>());
+    EXPECT_EQ(serializedWithSuffix.end() - 5, reader.getEnd());
+  }
 }
 
 class TestInputStream: public kj::InputStream {
