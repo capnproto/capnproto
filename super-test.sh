@@ -72,6 +72,9 @@ while [ $# -gt 0 ]; do
     gcc-4.8 )
       export CXX=g++-4.8
       ;;
+    gcc-4.7 )
+      export CXX=g++-4.7
+      ;;
     kenton )
       cat << "__EOF__"
 =========================================================================
@@ -222,14 +225,12 @@ if [ $IS_CLANG = yes ]; then
   # There's an unused private field in gtest.
   export CXXFLAGS="$CXXFLAGS -Wno-unused-private-field"
 else
-  if (${CXX:-g++} --version | grep -q ' 4[.]8'); then
-    # GCC 4.8 emits a weird uninitialized warning in kj/parse/char-test, deep in one of the parser
-    # combinators.  It could be a real bug but there is just not enough information to figure out
-    # where the problem is coming from, because GCC does not provide any description of the inlining
-    # that has occurred.  Since I have not observed any actual problem (tests pass, etc.), I'm
-    # muting it for now.
-    CXXFLAGS="$CXXFLAGS -Wno-maybe-uninitialized"
-  fi
+  # GCC 4.8 emits a weird uninitialized warning in kj/parse/char-test, deep in one of the parser
+  # combinators.  It could be a real bug but there is just not enough information to figure out
+  # where the problem is coming from, because GCC does not provide any description of the inlining
+  # that has occurred.  Since I have not observed any actual problem (tests pass, etc.), I'm
+  # muting it for now.
+  CXXFLAGS="$CXXFLAGS -Wno-maybe-uninitialized"
 fi
 
 cd c++
