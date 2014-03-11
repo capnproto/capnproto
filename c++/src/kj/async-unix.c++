@@ -23,6 +23,7 @@
 
 #include "async-unix.h"
 #include "debug.h"
+#include "threadlocal.h"
 #include <setjmp.h>
 #include <errno.h>
 
@@ -40,7 +41,7 @@ struct SignalCapture {
   siginfo_t siginfo;
 };
 
-__thread SignalCapture* threadCapture = nullptr;
+KJ_THREADLOCAL_PTR(SignalCapture) threadCapture = nullptr;
 
 void signalHandler(int, siginfo_t* siginfo, void*) {
   SignalCapture* capture = threadCapture;
