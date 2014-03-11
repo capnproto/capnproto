@@ -24,6 +24,7 @@
 #include "async.h"
 #include "debug.h"
 #include "vector.h"
+#include "threadlocal.h"
 #include <exception>
 #include <map>
 
@@ -45,7 +46,7 @@ namespace kj {
 
 namespace {
 
-static __thread EventLoop* threadLocalEventLoop = nullptr;
+KJ_THREADLOCAL_PTR(EventLoop) threadLocalEventLoop = nullptr;
 
 #define _kJ_ALREADY_READY reinterpret_cast< ::kj::_::Event*>(1)
 

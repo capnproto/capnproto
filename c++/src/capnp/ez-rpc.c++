@@ -26,11 +26,12 @@
 #include <capnp/rpc.capnp.h>
 #include <kj/async-io.h>
 #include <kj/debug.h>
+#include <kj/threadlocal.h>
 #include <map>
 
 namespace capnp {
 
-static __thread EzRpcContext* threadEzContext = nullptr;
+KJ_THREADLOCAL_PTR(EzRpcContext) threadEzContext = nullptr;
 
 class EzRpcContext: public kj::Refcounted {
 public:

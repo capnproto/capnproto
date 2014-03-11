@@ -24,6 +24,7 @@
 #include "exception.h"
 #include "string.h"
 #include "debug.h"
+#include "threadlocal.h"
 #include <unistd.h>
 #include <stdlib.h>
 #include <exception>
@@ -247,7 +248,7 @@ const char* ExceptionImpl::what() const noexcept {
 
 namespace {
 
-static __thread ExceptionCallback* threadLocalCallback = nullptr;
+KJ_THREADLOCAL_PTR(ExceptionCallback) threadLocalCallback = nullptr;
 
 }  // namespace
 
