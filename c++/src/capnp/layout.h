@@ -719,6 +719,8 @@ public:
   static OrphanBuilder copy(BuilderArena* arena, Data::Reader copyFrom);
   static OrphanBuilder copy(BuilderArena* arena, kj::Own<ClientHook> copyFrom);
 
+  static OrphanBuilder referenceExternalData(BuilderArena* arena, Data::Reader data);
+
   OrphanBuilder& operator=(const OrphanBuilder& other) = delete;
   inline OrphanBuilder& operator=(OrphanBuilder&& other);
 
@@ -752,14 +754,16 @@ private:
   // Contains an encoded WirePointer representing this object.  WirePointer is defined in
   // layout.c++, but fits in a word.
   //
-  // If the pointer is a FAR pointer, then the tag is a complete pointer, `location` is null, and
-  // `segment` is any arbitrary segment in the message.  Otherwise, the tag's offset is garbage,
-  // `location` points at the actual object, and `segment` points at the segment where `location`
-  // resides.
+  // This may be a FAR pointer.  Even in that case, `location` points to the eventual destination
+  // of that far pointer.  The reason we keep the far pointer around rather than just making `tag`
+  // represent the final destination is because if the eventual adopter of the pointer is not in
+  // the target's segment then it may be useful to reuse the far pointer landing pad.
+  //
+  // If `tag` is not a far pointer, its offset is garbage; only `location` points to the actual
+  // target.
 
   SegmentBuilder* segment;
-  // Segment in which the object resides, or an arbitrary segment in the message if the tag is a
-  // FAR pointer.
+  // Segment in which the object resides.
 
   word* location;
   // Pointer to the object, or nullptr if the pointer is null.  For capabilities, we make this

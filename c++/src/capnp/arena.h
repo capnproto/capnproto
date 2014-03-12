@@ -135,9 +135,19 @@ class SegmentBuilder: public SegmentReader {
 public:
   inline SegmentBuilder(BuilderArena* arena, SegmentId id, kj::ArrayPtr<word> ptr,
                         ReadLimiter* readLimiter);
+  inline SegmentBuilder(BuilderArena* arena, SegmentId id, kj::ArrayPtr<const word> ptr,
+                        ReadLimiter* readLimiter);
+  inline SegmentBuilder(BuilderArena* arena, SegmentId id, decltype(nullptr),
+                        ReadLimiter* readLimiter);
 
   KJ_ALWAYS_INLINE(word* allocate(WordCount amount));
-  inline word* getPtrUnchecked(WordCount offset);
+
+  KJ_ALWAYS_INLINE(void checkWritable());
+  // Throw an exception if the segment is read-only (meaning it is a reference to external data).
+
+  KJ_ALWAYS_INLINE(word* getPtrUnchecked(WordCount offset));
+  // Get a writable pointer into the segment.  Throws an exception if the segment is read-only (i.e.
+  // a reference to external immutable data).
 
   inline BuilderArena* getArena();
 
@@ -145,10 +155,16 @@ public:
 
   inline void reset();
 
+  inline bool isWritable() { return !readOnly; }
+
 private:
   word* pos;
   // Pointer to a pointer to the current end point of the segment, i.e. the location where the
   // next object should be allocated.
+
+  bool readOnly;
+
+  void throwNotWritable();
 
   KJ_DISALLOW_COPY(SegmentBuilder);
 };
@@ -238,6 +254,17 @@ public:
   // the arena is guaranteed to succeed.  Therefore callers should try to allocate from a specific
   // segment first if there is one, then fall back to the arena.
 
+  SegmentBuilder* addExternalSegment(kj::ArrayPtr<const word> content);
+  // Add a new segment to the arena which points to some existing memory region.  The segment is
+  // assumed to be completley full; the arena will never allocate from it.  In fact, the segment
+  // is considered read-only.  Any attempt to get a Builder pointing into this segment will throw
+  // an exception.  Readers are allowed, however.
+  //
+  // This can be used to inject some external data into a message without a copy, e.g. embedding a
+  // large mmap'd file into a message as `Data` without forcing that data to actually be read in
+  // from disk (until the message itself is written out).  `Orphanage` provides the public API for
+  // this feature.
+
   uint injectCap(kj::Own<ClientHook>&& cap);
   // Add the capability to the message and return its index.  If the same ClientHook is injected
   // twice, this may return the same index both times, but in this case dropCap() needs to be
@@ -264,6 +291,14 @@ private:
     kj::Vector<kj::ArrayPtr<const word>> forOutput;
   };
   kj::Maybe<kj::Own<MultiSegmentState>> moreSegments;
+
+  SegmentBuilder* segmentWithSpace = nullptr;
+  // When allocating, look for space in this segment first before resorting to allocating a new
+  // segment.  This is not necessarily the last segment because addExternalSegment() may add a
+  // segment that is already-full, in which case we don't update this pointer.
+
+  template <typename T>  // Can be `word` or `const word`.
+  SegmentBuilder* addSegmentInternal(kj::ArrayPtr<T> content);
 };
 
 // =======================================================================================
@@ -316,7 +351,17 @@ inline void SegmentReader::unread(WordCount64 amount) { readLimiter->unread(amou
 
 inline SegmentBuilder::SegmentBuilder(
     BuilderArena* arena, SegmentId id, kj::ArrayPtr<word> ptr, ReadLimiter* readLimiter)
-    : SegmentReader(arena, id, ptr, readLimiter), pos(ptr.begin()) {}
+    : SegmentReader(arena, id, ptr, readLimiter), pos(ptr.begin()), readOnly(false) {}
+inline SegmentBuilder::SegmentBuilder(
+    BuilderArena* arena, SegmentId id, kj::ArrayPtr<const word> ptr, ReadLimiter* readLimiter)
+    : SegmentReader(arena, id, ptr, readLimiter),
+      // const_cast is safe here because the member won't ever be dereferenced because it appears
+      // to point to the end of the segment anyway.
+      pos(const_cast<word*>(ptr.end())),
+      readOnly(true) {}
+inline SegmentBuilder::SegmentBuilder(BuilderArena* arena, SegmentId id, decltype(nullptr),
+                                      ReadLimiter* readLimiter)
+    : SegmentReader(arena, id, nullptr, readLimiter), pos(nullptr), readOnly(false) {}
 
 inline word* SegmentBuilder::allocate(WordCount amount) {
   if (intervalLength(pos, ptr.end()) < amount) {
@@ -330,9 +375,11 @@ inline word* SegmentBuilder::allocate(WordCount amount) {
   }
 }
 
+inline void SegmentBuilder::checkWritable() {
+  if (KJ_UNLIKELY(readOnly)) throwNotWritable();
+}
+
 inline word* SegmentBuilder::getPtrUnchecked(WordCount offset) {
-  // const_cast OK because SegmentBuilder's constructor always initializes its SegmentReader base
-  // class with a pointer that was originally non-const.
   return const_cast<word*>(ptr.begin() + offset);
 }
 

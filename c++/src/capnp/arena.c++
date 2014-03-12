@@ -47,6 +47,13 @@ void ReadLimiter::unread(WordCount64 amount) {
   }
 }
 
+void SegmentBuilder::throwNotWritable() {
+  KJ_FAIL_REQUIRE(
+      "Tried to form a Builder to an external data segment referenced by the MessageBuilder.  "
+      "When you use Orphanage::reference*(), you are not allowed to obtain Builders to the "
+      "referenced data, only Readers, because that data is const.");
+}
+
 // =======================================================================================
 
 ReaderArena::ReaderArena(MessageReader* message)
@@ -137,49 +144,65 @@ BuilderArena::AllocateResult BuilderArena::allocate(WordCount amount) {
     // pointers to this segment yet, so it should be fine.
     kj::dtor(segment0);
     kj::ctor(segment0, this, SegmentId(0), ptr, &this->dummyLimiter);
+
+    segmentWithSpace = &segment0;
     return AllocateResult { &segment0, segment0.allocate(amount) };
   } else {
-    // Check if there is space in the first segment.
-    word* attempt = segment0.allocate(amount);
-    if (attempt != nullptr) {
-      return AllocateResult { &segment0, attempt };
-    }
-
-    // Need to fall back to additional segments.
-
-    MultiSegmentState* segmentState;
-    KJ_IF_MAYBE(s, moreSegments) {
+    if (segmentWithSpace != nullptr) {
+      // Check if there is space in an existing segment.
       // TODO(perf):  Check for available space in more than just the last segment.  We don't
       //   want this to be O(n), though, so we'll need to maintain some sort of table.  Complicating
       //   matters, we want SegmentBuilders::allocate() to be fast, so we can't update any such
       //   table when allocation actually happens.  Instead, we could have a priority queue based
       //   on the last-known available size, and then re-check the size when we pop segments off it
       //   and shove them to the back of the queue if they have become too small.
-
-      attempt = s->get()->builders.back()->allocate(amount);
+      word* attempt = segmentWithSpace->allocate(amount);
       if (attempt != nullptr) {
-        return AllocateResult { s->get()->builders.back().get(), attempt };
+        return AllocateResult { segmentWithSpace, attempt };
       }
-      segmentState = *s;
-    } else {
-      auto newSegmentState = kj::heap<MultiSegmentState>();
-      segmentState = newSegmentState;
-      moreSegments = kj::mv(newSegmentState);
     }
 
-    kj::Own<SegmentBuilder> newBuilder = kj::heap<SegmentBuilder>(
-        this, SegmentId(segmentState->builders.size() + 1),
-        message->allocateSegment(amount / WORDS), &this->dummyLimiter);
-    SegmentBuilder* result = newBuilder.get();
-    segmentState->builders.add(kj::mv(newBuilder));
+    // Need to allocate a new segment.
+    SegmentBuilder* result = addSegmentInternal(message->allocateSegment(amount / WORDS));
 
-    // Keep forOutput the right size so that we don't have to re-allocate during
-    // getSegmentsForOutput(), which callers might reasonably expect is a thread-safe method.
-    segmentState->forOutput.resize(segmentState->builders.size() + 1);
+    // Check this new segment first the next time we need to allocate.
+    segmentWithSpace = result;
 
     // Allocating from the new segment is guaranteed to succeed since we made it big enough.
     return AllocateResult { result, result->allocate(amount) };
   }
+}
+
+SegmentBuilder* BuilderArena::addExternalSegment(kj::ArrayPtr<const word> content) {
+  return addSegmentInternal(content);
+}
+
+template <typename T>
+SegmentBuilder* BuilderArena::addSegmentInternal(kj::ArrayPtr<T> content) {
+  // This check should never fail in practice, since you can't get an Orphanage without allocating
+  // the root segment.
+  KJ_REQUIRE(segment0.getArena() != nullptr,
+      "Can't allocate external segments before allocating the root segment.");
+
+  MultiSegmentState* segmentState;
+  KJ_IF_MAYBE(s, moreSegments) {
+    segmentState = *s;
+  } else {
+    auto newSegmentState = kj::heap<MultiSegmentState>();
+    segmentState = newSegmentState;
+    moreSegments = kj::mv(newSegmentState);
+  }
+
+  kj::Own<SegmentBuilder> newBuilder = kj::heap<SegmentBuilder>(
+      this, SegmentId(segmentState->builders.size() + 1), content, &this->dummyLimiter);
+  SegmentBuilder* result = newBuilder.get();
+  segmentState->builders.add(kj::mv(newBuilder));
+
+  // Keep forOutput the right size so that we don't have to re-allocate during
+  // getSegmentsForOutput(), which callers might reasonably expect is a thread-safe method.
+  segmentState->forOutput.resize(segmentState->builders.size() + 1);
+
+  return result;
 }
 
 kj::ArrayPtr<const kj::ArrayPtr<const word>> BuilderArena::getSegmentsForOutput() {

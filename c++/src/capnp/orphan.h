@@ -120,6 +120,28 @@ public:
   // Allocate a new orphaned object (struct, list, or blob) and initialize it as a copy of the
   // given object.
 
+  Orphan<Data> referenceExternalData(Data::Reader data) const;
+  // Creates an Orphan<Data> that points at an existing region of memory (e.g. from another message)
+  // without copying it.  There are some SEVERE restrictions on how this can be used:
+  // - The memory must remain valid until the `MessageBuilder` is destroyed (even if the orphan is
+  //   abandoned).
+  // - Because the data is const, you will not be allowed to obtain a `Data::Builder`
+  //   for this blob.  Any call which would return such a builder will throw an exception.  You
+  //   can, however, obtain a Reader, e.g. via orphan.getReader() or from a parent Reader (once
+  //   the orphan is adopted).  It is your responsibility to make sure your code can deal with
+  //   these problems when using this optimization; if you can't, allocate a copy instead.
+  // - `data.begin()` must be aligned to a machine word boundary (32-bit or 64-bit depending on
+  //   the CPU).  Any pointer returned by malloc() as well as any data blob obtained from another
+  //   Cap'n Proto message satisfies this.
+  // - If `data.size()` is not a multiple of 8, extra bytes past data.end() up until the next 8-byte
+  //   boundary will be visible in the raw message when it is written out.  Thus, there must be no
+  //   secrets in these bytes.  Data blobs obtained from other Cap'n Proto messages should be safe
+  //   as these bytes should be zero (unless the sender had the same problem).
+  //
+  // The array will actually become one of the message's segments.  The data can thus be adopted
+  // into the message tree without copying it.  This is particularly useful when referencing very
+  // large blobs, such as whole mmap'd files.
+
 private:
   _::BuilderArena* arena;
 
@@ -301,6 +323,10 @@ inline Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(const Reader& copyFro
 template <typename Reader>
 inline Orphan<FromReader<Reader>> Orphanage::newOrphanCopy(Reader& copyFrom) const {
   return newOrphanCopy(kj::implicitCast<const Reader&>(copyFrom));
+}
+
+inline Orphan<Data> Orphanage::referenceExternalData(Data::Reader data) const {
+  return Orphan<Data>(_::OrphanBuilder::referenceExternalData(arena, data));
 }
 
 }  // namespace capnp

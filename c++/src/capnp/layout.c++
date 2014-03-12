@@ -376,7 +376,7 @@ struct WireHelpers {
     }
   }
 
-  static KJ_ALWAYS_INLINE(word* followFars(
+  static KJ_ALWAYS_INLINE(word* followFarsNoWritableCheck(
       WirePointer*& ref, word* refTarget, SegmentBuilder*& segment)) {
     // If `ref` is a far pointer, follow it.  On return, `ref` will have been updated to point at
     // a WirePointer that contains the type information about the target object, and a pointer to
@@ -405,6 +405,13 @@ struct WireHelpers {
     } else {
       return refTarget;
     }
+  }
+
+  static KJ_ALWAYS_INLINE(word* followFars(
+      WirePointer*& ref, word* refTarget, SegmentBuilder*& segment)) {
+    auto result = followFarsNoWritableCheck(ref, refTarget, segment);
+    segment->checkWritable();
+    return result;
   }
 
   static KJ_ALWAYS_INLINE(const word* followFars(
@@ -456,6 +463,9 @@ struct WireHelpers {
     // Zero out the pointed-to object.  Use when the pointer is about to be overwritten making the
     // target object no longer reachable.
 
+    // We shouldn't zero out external data linked into the message.
+    if (!segment->isWritable()) return;
+
     switch (ref->kind()) {
       case WirePointer::STRUCT:
       case WirePointer::LIST:
@@ -463,16 +473,20 @@ struct WireHelpers {
         break;
       case WirePointer::FAR: {
         segment = segment->getArena()->getSegment(ref->farRef.segmentId.get());
-        WirePointer* pad =
-            reinterpret_cast<WirePointer*>(segment->getPtrUnchecked(ref->farPositionInSegment()));
+        if (segment->isWritable()) {  // Don't zero external data.
+          WirePointer* pad =
+              reinterpret_cast<WirePointer*>(segment->getPtrUnchecked(ref->farPositionInSegment()));
 
-        if (ref->isDoubleFar()) {
-          segment = segment->getArena()->getSegment(pad->farRef.segmentId.get());
-          zeroObject(segment, pad + 1, segment->getPtrUnchecked(pad->farPositionInSegment()));
-          memset(pad, 0, sizeof(WirePointer) * 2);
-        } else {
-          zeroObject(segment, pad);
-          memset(pad, 0, sizeof(WirePointer));
+          if (ref->isDoubleFar()) {
+            segment = segment->getArena()->getSegment(pad->farRef.segmentId.get());
+            if (segment->isWritable()) {
+              zeroObject(segment, pad + 1, segment->getPtrUnchecked(pad->farPositionInSegment()));
+            }
+            memset(pad, 0, sizeof(WirePointer) * 2);
+          } else {
+            zeroObject(segment, pad);
+            memset(pad, 0, sizeof(WirePointer));
+          }
         }
         break;
       }
@@ -487,6 +501,9 @@ struct WireHelpers {
   }
 
   static void zeroObject(SegmentBuilder* segment, WirePointer* tag, word* ptr) {
+    // We shouldn't zero out external data linked into the message.
+    if (!segment->isWritable()) return;
+
     switch (tag->kind()) {
       case WirePointer::STRUCT: {
         WirePointer* pointerSection =
@@ -566,9 +583,11 @@ struct WireHelpers {
     // do not zero the object body.  Used when upgrading.
 
     if (ref->kind() == WirePointer::FAR) {
-      word* pad = segment->getArena()->getSegment(ref->farRef.segmentId.get())
-          ->getPtrUnchecked(ref->farPositionInSegment());
-      memset(pad, 0, sizeof(WirePointer) * (1 + ref->isDoubleFar()));
+      SegmentBuilder* padSegment = segment->getArena()->getSegment(ref->farRef.segmentId.get());
+      if (padSegment->isWritable()) {  // Don't zero external data.
+        word* pad = padSegment->getPtrUnchecked(ref->farPositionInSegment());
+        memset(pad, 0, sizeof(WirePointer) * (1 + ref->isDoubleFar()));
+      }
     }
     memset(ref, 0, sizeof(*ref));
   }
@@ -1768,7 +1787,7 @@ struct WireHelpers {
       location = reinterpret_cast<word*>(ref);  // dummy so that it is non-null
     } else {
       WirePointer* refCopy = ref;
-      location = followFars(refCopy, ref->target(), segment);
+      location = followFarsNoWritableCheck(refCopy, ref->target(), segment);
     }
 
     OrphanBuilder result(ref, segment, location);
@@ -2588,6 +2607,25 @@ OrphanBuilder OrphanBuilder::copy(BuilderArena* arena, kj::Own<ClientHook> copyF
   WireHelpers::setCapabilityPointer(nullptr, result.tagAsPtr(), kj::mv(copyFrom), arena);
   result.segment = arena->getSegment(SegmentId(0));
   result.location = &result.tag;  // dummy to make location non-null
+  return result;
+}
+
+OrphanBuilder OrphanBuilder::referenceExternalData(BuilderArena* arena, Data::Reader data) {
+  KJ_REQUIRE(reinterpret_cast<uintptr_t>(data.begin()) % sizeof(void*) == 0,
+             "Cannot referenceExternalData() that is not aligned.");
+
+  auto wordCount = WireHelpers::roundBytesUpToWords(data.size() * BYTES);
+  kj::ArrayPtr<const word> words(reinterpret_cast<const word*>(data.begin()), wordCount / WORDS);
+
+  OrphanBuilder result;
+  result.tagAsPtr()->setKindForOrphan(WirePointer::LIST);
+  result.tagAsPtr()->listRef.set(FieldSize::BYTE, data.size() * ELEMENTS);
+  result.segment = arena->addExternalSegment(words);
+
+  // const_cast OK here because we will check whether the segment is writable when we try to get
+  // a builder.
+  result.location = const_cast<word*>(words.begin());
+
   return result;
 }
 

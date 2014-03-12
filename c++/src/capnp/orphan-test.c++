@@ -881,6 +881,114 @@ TEST(Orphans, DisownNull) {
   }
 }
 
+TEST(Orphans, ReferenceExternalData) {
+  MallocMessageBuilder builder;
+
+  union {
+    word align;
+    byte data[50];
+  };
+
+  memset(data, 0x55, sizeof(data));
+
+  auto orphan = builder.getOrphanage().referenceExternalData(Data::Builder(data, sizeof(data)));
+
+  // Data was added as a new segment.
+  {
+    auto segments = builder.getSegmentsForOutput();
+    ASSERT_EQ(2, segments.size());
+    EXPECT_EQ(data, reinterpret_cast<const byte*>(segments[1].begin()));
+  }
+
+  // Can't get builder because it's read-only.
+  EXPECT_ANY_THROW(orphan.get());
+
+  // Can get reader.
+  {
+    auto reader = orphan.getReader();
+    EXPECT_EQ(data, reader.begin());
+    EXPECT_EQ(sizeof(data), reader.size());
+  }
+
+  // Adopt into message tree.
+  auto root = builder.getRoot<TestAllTypes>();
+  root.adoptDataField(kj::mv(orphan));
+
+  // Can't get child builder.
+  EXPECT_ANY_THROW(root.getDataField());
+
+  // Can get child reader.
+  {
+    auto reader = root.asReader().getDataField();
+    EXPECT_EQ(data, reader.begin());
+    EXPECT_EQ(sizeof(data), reader.size());
+  }
+
+  // Back to orphan.
+  orphan = root.disownDataField();
+
+  // Now the orphan may be pointing to a far pointer landing pad, so check that it still does the
+  // right things.
+
+  // Can't get builder because it's read-only.
+  EXPECT_ANY_THROW(orphan.get());
+
+  // Can get reader.
+  {
+    auto reader = orphan.getReader();
+    EXPECT_EQ(data, reader.begin());
+    EXPECT_EQ(sizeof(data), reader.size());
+  }
+
+  // Finally, let's abandon the orphan and check that this doesn't zero out the data.
+  orphan = Orphan<Data>();
+
+  for (byte b: data) {
+    EXPECT_EQ(0x55, b);
+  }
+}
+
+TEST(Orphans, ReferenceExternalData_NoZeroOnSet) {
+  // Verify that an external blob is not zeroed by setFoo().
+
+  union {
+    word align;
+    byte data[50];
+  };
+
+  memset(data, 0x55, sizeof(data));
+
+  MallocMessageBuilder builder;
+  auto root = builder.getRoot<TestAllTypes>();
+  root.adoptDataField(builder.getOrphanage().referenceExternalData(
+      Data::Builder(data, sizeof(data))));
+
+  root.setDataField(Data::Builder());
+
+  for (byte b: data) {
+    EXPECT_EQ(0x55, b);
+  }
+}
+
+TEST(Orphans, ReferenceExternalData_NoZeroImmediateAbandon) {
+  // Verify that an external blob is not zeroed when abandoned immediately, without ever being
+  // adopted.
+
+  union {
+    word align;
+    byte data[50];
+  };
+
+  memset(data, 0x55, sizeof(data));
+
+  MallocMessageBuilder builder;
+  builder.getOrphanage().referenceExternalData(Data::Builder(data, sizeof(data)));
+
+  for (byte b: data) {
+    EXPECT_EQ(0x55, b);
+  }
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
