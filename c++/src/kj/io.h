@@ -240,6 +240,18 @@ public:
   KJ_DISALLOW_COPY(AutoCloseFd);
   ~AutoCloseFd() noexcept(false);
 
+  inline AutoCloseFd& operator=(AutoCloseFd&& other) {
+    AutoCloseFd old(kj::mv(*this));
+    fd = other.fd;
+    other.fd = -1;
+    return *this;
+  }
+
+  inline AutoCloseFd& operator=(decltype(nullptr)) {
+    AutoCloseFd old(kj::mv(*this));
+    return *this;
+  }
+
   inline operator int() { return fd; }
   inline int get() { return fd; }
 
