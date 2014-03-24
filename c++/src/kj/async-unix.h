@@ -29,6 +29,8 @@
 #include <signal.h>
 #include <poll.h>
 #include <pthread.h>
+#include <chrono>
+#include <set>
 
 namespace kj {
 
@@ -83,6 +85,10 @@ public:
   // needs to use SIGUSR1, call this at startup (before any calls to `captureSignal()` and before
   // constructing an `UnixEventPort`) to offer a different signal.
 
+  std::chrono::steady_clock::time_point steadyTime() { return frozenSteadyTime; };
+  Promise<void> atTime(std::chrono::steady_clock::time_point time);
+  Promise<void> atTime(std::chrono::system_clock::time_point time);
+
   // implements EventPort ------------------------------------------------------
   void wait() override;
   void poll() override;
@@ -90,14 +96,25 @@ public:
 private:
   class PollPromiseAdapter;
   class SignalPromiseAdapter;
+  class TimerPromiseAdapter;
   class PollContext;
+
+  struct TimerBefore {
+    bool operator()(TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs);
+  };
+  using Timers = std::multiset<TimerPromiseAdapter*, TimerBefore>;
 
   PollPromiseAdapter* pollHead = nullptr;
   PollPromiseAdapter** pollTail = &pollHead;
   SignalPromiseAdapter* signalHead = nullptr;
   SignalPromiseAdapter** signalTail = &signalHead;
+  Timers timers;
+  std::chrono::steady_clock::time_point frozenSteadyTime;
 
   void gotSignal(const siginfo_t& siginfo);
+  void processTimers();
+
+  friend class TimerPromiseAdapter;
 };
 
 }  // namespace kj

@@ -26,6 +26,12 @@
 #include "threadlocal.h"
 #include <setjmp.h>
 #include <errno.h>
+#include <limits>
+
+using std::chrono::duration_cast;
+using std::chrono::milliseconds;
+using std::chrono::steady_clock;
+using std::chrono::system_clock;
 
 namespace kj {
 
@@ -161,7 +167,37 @@ public:
   PollPromiseAdapter** prev = nullptr;
 };
 
-UnixEventPort::UnixEventPort() {
+class UnixEventPort::TimerPromiseAdapter {
+public:
+  TimerPromiseAdapter(PromiseFulfiller<void>& fulfiller, UnixEventPort& port,
+                      steady_clock::time_point time)
+      : time(time), fulfiller(fulfiller), port(port) {
+    pos = port.timers.insert(this);
+  }
+
+  ~TimerPromiseAdapter() {
+    if (pos != port.timers.end()) {
+      port.timers.erase(pos);
+    }
+  }
+
+  void fulfill() {
+    fulfiller.fulfill();
+    port.timers.erase(pos);
+    pos = port.timers.end();
+  }
+
+  const steady_clock::time_point time;
+  PromiseFulfiller<void>& fulfiller;
+  UnixEventPort& port;
+  Timers::const_iterator pos;
+};
+
+bool UnixEventPort::TimerBefore::operator()(TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs) {
+  return lhs->time < rhs->time;
+}
+
+UnixEventPort::UnixEventPort(): frozenSteadyTime(steady_clock::now()) {
   pthread_once(&registerReservedSignalOnce, &registerReservedSignal);
 }
 
@@ -245,6 +281,15 @@ private:
   int pollError = 0;
 };
 
+Promise<void> UnixEventPort::atTime(steady_clock::time_point time) {
+  return newAdaptedPromise<void, TimerPromiseAdapter>(*this, time);
+}
+
+Promise<void> UnixEventPort::atTime(system_clock::time_point time) {
+  // TODO: Implement
+  return Promise<void>(nullptr);
+}
+
 void UnixEventPort::wait() {
   sigset_t newMask;
   sigemptyset(&newMask);
@@ -279,13 +324,29 @@ void UnixEventPort::wait() {
   threadCapture = &capture;
   sigprocmask(SIG_UNBLOCK, &newMask, &origMask);
 
-  pollContext.run(-1);
+  int pollTimeout = -1;
+  auto timer = timers.begin();
+  if (timer != timers.end()) {
+    // Calculate timeout and round up to the next millisecond
+    auto timeout = duration_cast<milliseconds>(
+        (*timer)->time - steady_clock::now()
+        + milliseconds(1) - steady_clock::duration(1)).count();
+    if (timeout < 0) {
+      pollTimeout = 0;
+    } else if (timeout <= std::numeric_limits<int>::max()) {
+      pollTimeout = static_cast<int>(timeout);
+    } else {
+      pollTimeout = std::numeric_limits<int>::max();
+    }
+  }
+  pollContext.run(pollTimeout);
 
   sigprocmask(SIG_SETMASK, &origMask, nullptr);
   threadCapture = nullptr;
 
   // Queue events.
   pollContext.processResults();
+  processTimers();
 }
 
 void UnixEventPort::poll() {
@@ -332,6 +393,7 @@ void UnixEventPort::poll() {
     pollContext.run(0);
     pollContext.processResults();
   }
+  processTimers();
 }
 
 void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
@@ -344,6 +406,17 @@ void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
     } else {
       ptr = ptr->next;
     }
+  }
+}
+
+void UnixEventPort::processTimers() {
+  frozenSteadyTime = steady_clock::now();
+  for (;;) {
+    auto front = timers.begin();
+    if (front == timers.end() || (*front)->time > frozenSteadyTime) {
+      break;
+    }
+    (*front)->fulfill();
   }
 }
 

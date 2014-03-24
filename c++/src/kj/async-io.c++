@@ -46,6 +46,9 @@
 #define POLLRDHUP 0
 #endif
 
+using std::chrono::steady_clock;
+using std::chrono::system_clock;
+
 namespace kj {
 
 namespace {
@@ -739,10 +742,36 @@ public:
   UnixEventPort& eventPort;
 };
 
+class TimeProviderImpl final: public TimeProvider {
+public:
+  TimeProviderImpl(UnixEventPort& eventPort): eventPort(eventPort) {}
+
+  steady_clock::time_point steadyTime() override {
+    return eventPort.steadyTime();
+  }
+
+  Promise<void> atTime(steady_clock::time_point time) override {
+    return eventPort.atTime(time);
+  }
+
+  Promise<void> atTime(system_clock::time_point time) override {
+    return eventPort.atTime(time);
+  }
+
+  Promise<void> atTimeFromNow(steady_clock::duration delay) override {
+    return eventPort.atTime(eventPort.steadyTime() + delay);
+  }
+
+private:
+  UnixEventPort& eventPort;
+};
+
 class LowLevelAsyncIoProviderImpl final: public LowLevelAsyncIoProvider {
 public:
-  LowLevelAsyncIoProviderImpl(): eventLoop(eventPort), waitScope(eventLoop) {}
+  LowLevelAsyncIoProviderImpl()
+      : eventLoop(eventPort), timeProvider(eventPort), waitScope(eventLoop) {}
 
+  inline TimeProvider& getTimeProvider() { return timeProvider; }
   inline WaitScope& getWaitScope() { return waitScope; }
 
   Own<AsyncInputStream> wrapInputFd(int fd, uint flags = 0) override {
@@ -774,6 +803,7 @@ public:
 private:
   UnixEventPort eventPort;
   EventLoop eventLoop;
+  TimeProviderImpl timeProvider;
   WaitScope waitScope;
 };
 
@@ -962,8 +992,9 @@ Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel) {
 AsyncIoContext setupAsyncIo() {
   auto lowLevel = heap<LowLevelAsyncIoProviderImpl>();
   auto ioProvider = kj::heap<AsyncIoProviderImpl>(*lowLevel);
+  auto& timeProvider = lowLevel->getTimeProvider();
   auto& waitScope = lowLevel->getWaitScope();
-  return { kj::mv(lowLevel), kj::mv(ioProvider), waitScope };
+  return { kj::mv(lowLevel), kj::mv(ioProvider), timeProvider, waitScope };
 }
 
 }  // namespace kj

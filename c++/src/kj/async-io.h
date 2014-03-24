@@ -27,6 +27,7 @@
 #include "async.h"
 #include "function.h"
 #include "thread.h"
+#include <chrono>
 
 namespace kj {
 
@@ -198,6 +199,28 @@ public:
   //   much at once but I'm not sure how to cleanly break it down.
 };
 
+class TimeProvider {
+  // Interface to time and timer functionality.
+
+public:
+  virtual std::chrono::steady_clock::time_point steadyTime() = 0;
+  // Returns the value of std::chrono::steady_clock (a clock that moves steadily
+  // forward, independent of any changes in the wall clock), at the end of the
+  // last wait of the event loop. It is constant in-between waits.
+
+  virtual Promise<void> atTime(std::chrono::steady_clock::time_point time) = 0;
+  // Schedules a timer that will trigger when std::chrono::steady_clock reaches
+  // the given time.
+
+  virtual Promise<void> atTime(std::chrono::system_clock::time_point time) = 0;
+  // Schedules a timer that will trigger when std::system_clock reaches the
+  // given time.
+
+  virtual Promise<void> atTimeFromNow(std::chrono::steady_clock::duration delay) = 0;
+  // Schedules a timer that will trigger after the given delay. The timer uses
+  // std::chrono::steady_clock and is therefore immune to system clock updates.
+};
+
 class LowLevelAsyncIoProvider {
   // Similar to `AsyncIoProvider`, but represents a lower-level interface that may differ on
   // different operating systems.  You should prefer to use `AsyncIoProvider` over this interface
@@ -278,6 +301,7 @@ Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel);
 struct AsyncIoContext {
   Own<LowLevelAsyncIoProvider> lowLevelProvider;
   Own<AsyncIoProvider> provider;
+  TimeProvider& timeProvider;
   WaitScope& waitScope;
 };
 
