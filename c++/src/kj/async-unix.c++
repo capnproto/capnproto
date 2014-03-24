@@ -26,6 +26,9 @@
 #include "threadlocal.h"
 #include <setjmp.h>
 #include <errno.h>
+#include <inttypes.h>
+#include <limits>
+#include <chrono>
 
 namespace kj {
 
@@ -161,8 +164,38 @@ public:
   PollPromiseAdapter** prev = nullptr;
 };
 
+class UnixEventPort::TimerPromiseAdapter {
+public:
+  TimerPromiseAdapter(PromiseFulfiller<void>& fulfiller, UnixEventPort& port, Time time)
+      : time(time), fulfiller(fulfiller), port(port) {
+    pos = port.timers.insert(this);
+  }
+
+  ~TimerPromiseAdapter() {
+    if (pos != port.timers.end()) {
+      port.timers.erase(pos);
+    }
+  }
+
+  void fulfill() {
+    fulfiller.fulfill();
+    port.timers.erase(pos);
+    pos = port.timers.end();
+  }
+
+  const Time time;
+  PromiseFulfiller<void>& fulfiller;
+  UnixEventPort& port;
+  Timers::const_iterator pos;
+};
+
+bool UnixEventPort::TimerBefore::operator()(TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs) {
+  return lhs->time < rhs->time;
+}
+
 UnixEventPort::UnixEventPort() {
   pthread_once(&registerReservedSignalOnce, &registerReservedSignal);
+  frozenSteadyTime = currentSteadyTime();
 }
 
 UnixEventPort::~UnixEventPort() {}
@@ -245,6 +278,10 @@ private:
   int pollError = 0;
 };
 
+Promise<void> UnixEventPort::atSteadyTime(Time time) {
+  return newAdaptedPromise<void, TimerPromiseAdapter>(*this, time);
+}
+
 void UnixEventPort::wait() {
   sigset_t newMask;
   sigemptyset(&newMask);
@@ -279,13 +316,32 @@ void UnixEventPort::wait() {
   threadCapture = &capture;
   sigprocmask(SIG_UNBLOCK, &newMask, &origMask);
 
-  pollContext.run(-1);
+  constexpr Time MAX_TIMEOUT =
+      std::numeric_limits<int>::digits < std::numeric_limits<uint64_t>::digits ?
+      int64_t(std::numeric_limits<int>::max() - 1) * MILLISECOND :
+      Time(std::numeric_limits<uint64_t>::max()) - MILLISECOND;
+
+  int pollTimeout = -1;
+  auto timer = timers.begin();
+  if (timer != timers.end()) {
+    Time timeout = (*timer)->time - currentSteadyTime();
+    if (timeout < Time()) {
+      pollTimeout = 0;
+    } else if (timeout <= MAX_TIMEOUT) {
+      // Round up to the next millisecond
+      pollTimeout = (timeout + MILLISECOND - unit<Time>()) / MILLISECOND;
+    } else {
+      pollTimeout = MAX_TIMEOUT / MILLISECOND;
+    }
+  }
+  pollContext.run(pollTimeout);
 
   sigprocmask(SIG_SETMASK, &origMask, nullptr);
   threadCapture = nullptr;
 
   // Queue events.
   pollContext.processResults();
+  processTimers();
 }
 
 void UnixEventPort::poll() {
@@ -332,6 +388,7 @@ void UnixEventPort::poll() {
     pollContext.run(0);
     pollContext.processResults();
   }
+  processTimers();
 }
 
 void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
@@ -344,6 +401,22 @@ void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
     } else {
       ptr = ptr->next;
     }
+  }
+}
+
+Time UnixEventPort::currentSteadyTime() {
+  return Time(std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count());
+}
+
+void UnixEventPort::processTimers() {
+  frozenSteadyTime = currentSteadyTime();
+  for (;;) {
+    auto front = timers.begin();
+    if (front == timers.end() || (*front)->time > frozenSteadyTime) {
+      break;
+    }
+    (*front)->fulfill();
   }
 }
 

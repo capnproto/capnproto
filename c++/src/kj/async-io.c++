@@ -739,9 +739,28 @@ public:
   UnixEventPort& eventPort;
 };
 
+class TimerImpl final: public Timer {
+public:
+  TimerImpl(UnixEventPort& eventPort): eventPort(eventPort) {}
+
+  virtual Time steadyTime() { return eventPort.steadyTime(); }
+
+  virtual Promise<void> atSteadyTime(Time time) {
+    return eventPort.atSteadyTime(time);
+  }
+
+  virtual Promise<void> atTimeFromNow(Time delay) {
+    return eventPort.atSteadyTime(eventPort.steadyTime() + delay);
+  }
+
+private:
+  UnixEventPort& eventPort;
+};
+
 class LowLevelAsyncIoProviderImpl final: public LowLevelAsyncIoProvider {
 public:
-  LowLevelAsyncIoProviderImpl(): eventLoop(eventPort), waitScope(eventLoop) {}
+  LowLevelAsyncIoProviderImpl()
+      : eventLoop(eventPort), timer(eventPort), waitScope(eventLoop) {}
 
   inline WaitScope& getWaitScope() { return waitScope; }
 
@@ -771,9 +790,12 @@ public:
     return heap<FdConnectionReceiver>(eventPort, fd, flags);
   }
 
+  Timer& getTimer() override { return timer; }
+
 private:
   UnixEventPort eventPort;
   EventLoop eventLoop;
+  TimerImpl timer;
   WaitScope waitScope;
 };
 
@@ -943,6 +965,8 @@ public:
 
     return { kj::mv(thread), kj::mv(pipe) };
   }
+
+  Timer& getTimer() override { return lowLevel.getTimer(); }
 
 private:
   LowLevelAsyncIoProvider& lowLevel;

@@ -27,6 +27,7 @@
 #include "async.h"
 #include "function.h"
 #include "thread.h"
+#include "time.h"
 
 namespace kj {
 
@@ -196,6 +197,9 @@ public:
   //
   // TODO(someday):  I'm not entirely comfortable with this interface.  It seems to be doing too
   //   much at once but I'm not sure how to cleanly break it down.
+
+  virtual Timer& getTimer() = 0;
+  // Returns a Timer interface for the underlying event loop.
 };
 
 class LowLevelAsyncIoProvider {
@@ -270,6 +274,9 @@ public:
   // have had `bind()` and `listen()` called on it, so it's ready for `accept()`.
   //
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
+
+  virtual Timer& getTimer() = 0;
+  // Returns a Timer interface for the underlying event loop.
 };
 
 Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel);
