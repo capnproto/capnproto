@@ -27,6 +27,7 @@
 #ifndef KJ_ASYNC_PRELUDE_H_
 #define KJ_ASYNC_PRELUDE_H_
 
+#include <set>
 #include "exception.h"
 
 namespace kj {
@@ -160,6 +161,13 @@ class ForkHub;
 class TaskSetImpl;
 
 class Event;
+
+class MicrosecondLabel;
+class TimerPromiseAdapter;
+struct TimerBefore {
+  bool operator()(TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs);
+};
+using Timers = std::multiset<_::TimerPromiseAdapter*, _::TimerBefore>;
 
 class PromiseBase {
 public:

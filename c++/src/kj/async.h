@@ -28,6 +28,8 @@
 #include "exception.h"
 #include "refcount.h"
 #include "tuple.h"
+#include "units.h"
+#include <inttypes.h>
 
 namespace kj {
 
@@ -500,6 +502,18 @@ private:
 };
 
 // =======================================================================================
+// Time values
+
+using Time = Quantity<int64_t, _::MicrosecondLabel>;
+
+constexpr Time MICROSECOND = unit<Time>();
+constexpr Time MILLISECOND = 1000 * MICROSECOND;
+constexpr Time SECOND = 1000 * MILLISECOND;
+constexpr Time MINUTE = 60 * SECOND;
+constexpr Time HOUR = 60 * MINUTE;
+constexpr Time DAY = 24 * HOUR;
+
+// =======================================================================================
 // The EventLoop class
 
 class EventPort {
@@ -511,7 +525,9 @@ class EventPort {
   // framework, allowing the two to coexist in a single thread.
 
 public:
-  virtual void wait() = 0;
+  virtual Time now() = 0;
+
+  virtual void wait(Time timeout) = 0;
   // Wait for an external event to arrive, sleeping if necessary.  Once at least one event has
   // arrived, queue it to the event loop (e.g. by fulfilling a promise) and return.
   //
@@ -587,6 +603,8 @@ public:
   bool isRunnable();
   // Returns true if run() would currently do anything, or false if the queue is empty.
 
+  Promise<void> atTimeFromNow(Time timeFromNow);
+
 private:
   EventPort& port;
 
@@ -601,6 +619,7 @@ private:
   _::Event** depthFirstInsertPoint = &head;
 
   Own<_::TaskSetImpl> daemons;
+  _::Timers timers;
 
   bool turn();
   void setRunnable(bool runnable);
@@ -611,6 +630,7 @@ private:
   friend void _::waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result,
                           WaitScope& waitScope);
   friend class _::Event;
+  friend class _::TimerPromiseAdapter;
   friend class WaitScope;
 };
 

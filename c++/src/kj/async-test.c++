@@ -24,6 +24,8 @@
 #include "async.h"
 #include "debug.h"
 #include <gtest/gtest.h>
+#include <algorithm>
+#include <vector>
 
 namespace kj {
 namespace {
@@ -651,9 +653,10 @@ public:
   bool runnable = false;
   int callCount = 0;
 
-  void wait() override { KJ_FAIL_ASSERT("Nothing to wait for."); }
+  Time now() override { return Time(); }
+  void wait(Time timeout) override { KJ_FAIL_ASSERT("Nothing to wait for."); }
   void poll() override {}
-  void setRunnable(bool runnable) {
+  void setRunnable(bool runnable) override {
     this->runnable = runnable;
     ++callCount;
   }
@@ -699,6 +702,45 @@ TEST(Async, SetRunnable) {
 
     EXPECT_EQ(8, port.callCount);
   }
+}
+
+class WaitingEventPort: public EventPort {
+public:
+  WaitingEventPort(Time start_time) : current_time(start_time) {}
+  Time now() override { return current_time; }
+  void wait(Time timeout) override {
+    if (timeout < Time()) {
+      KJ_FAIL_ASSERT("Waiting forever");
+    }
+    current_time += timeout;
+  }
+  void poll() override {}
+  void setRunnable(bool runnable) override {}
+
+  Time current_time;
+};
+
+TEST(Async, Timers) {
+  Time start_time = 12345 * DAY;
+  WaitingEventPort port(start_time);
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  auto delays = {3 * SECOND, 4 * SECOND, 2 * SECOND, 3 * SECOND,
+                 2 * SECOND + 350 * MILLISECOND};
+  std::vector<Time> expected_times;
+  std::vector<Time> actual_times;
+  std::vector<Promise<void>> promises;
+  for (auto delay : delays) {
+    expected_times.push_back(start_time + delay);
+    promises.emplace_back(loop.atTimeFromNow(delay).then([&, delay]() {
+      actual_times.push_back(port.now());
+    }).eagerlyEvaluate(nullptr));
+  }
+  loop.atTimeFromNow(std::max(delays) + SECOND).wait(waitScope);
+
+  std::sort(expected_times.begin(), expected_times.end());
+  EXPECT_EQ(expected_times, actual_times);
 }
 
 }  // namespace

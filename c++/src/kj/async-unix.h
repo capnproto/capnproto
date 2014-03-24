@@ -84,7 +84,8 @@ public:
   // constructing an `UnixEventPort`) to offer a different signal.
 
   // implements EventPort ------------------------------------------------------
-  void wait() override;
+  Time now() override;
+  void wait(Time timeout) override;
   void poll() override;
 
 private:

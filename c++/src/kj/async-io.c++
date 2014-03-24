@@ -771,6 +771,10 @@ public:
     return heap<FdConnectionReceiver>(eventPort, fd, flags);
   }
 
+  Promise<void> atTimeFromNow(Time timeFromNow) override {
+    return eventLoop.atTimeFromNow(timeFromNow);
+  }
+
 private:
   UnixEventPort eventPort;
   EventLoop eventLoop;
@@ -942,6 +946,10 @@ public:
     }));
 
     return { kj::mv(thread), kj::mv(pipe) };
+  }
+
+  Promise<void> atTimeFromNow(Time timeFromNow) override {
+    return lowLevel.atTimeFromNow(timeFromNow);
   }
 
 private:
