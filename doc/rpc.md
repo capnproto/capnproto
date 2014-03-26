@@ -212,7 +212,7 @@ features they have covered by advertising a level number.
 * **Level 4:**  Reference equality / joining.  If you receive a set of capabilities from different
   parties which should all point to the same underlying objects, you can verify securely that they
   in fact do.  This is subtle, but enables many security patterns that rely on one party being able
-  two verify that two or more other parties agree on something (imagine a digital escrow agent).
+  to verify that two or more other parties agree on something (imagine a digital escrow agent).
   See [E's page on equality](http://erights.org/elib/equality/index.html).
 
 ## Encryption
