@@ -190,7 +190,7 @@
 
 <li><strong>Level 3:</strong> Three-way interactions. A network of Cap’n Proto vats (nodes) can pass object references to each other and automatically form direct connections as needed. For instance, if Alice (on machine A) sends Bob (on machine B) a reference to Carol (on machine C), then machine B will form a new connection to machine C so that Bob can call Carol directly without proxying through machine A.</li>
 
-<li><strong>Level 4:</strong> Reference equality / joining. If you receive a set of capabilities from different parties which should all point to the same underlying objects, you can verify securely that they in fact do. This is subtle, but enables many security patterns that rely on one party being able two verify that two or more other parties agree on something (imagine a digital escrow agent). See <a href="http://erights.org/elib/equality/index.html">E’s page on equality</a>.</li>
+<li><strong>Level 4:</strong> Reference equality / joining. If you receive a set of capabilities from different parties which should all point to the same underlying objects, you can verify securely that they in fact do. This is subtle, but enables many security patterns that rely on one party being able to verify that two or more other parties agree on something (imagine a digital escrow agent). See <a href="http://erights.org/elib/equality/index.html">E’s page on equality</a>.</li>
 </ul>
 
 <h2 id="encryption">Encryption</h2>
