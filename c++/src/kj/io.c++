@@ -27,6 +27,7 @@
 #include <sys/uio.h>
 #include <algorithm>
 #include <errno.h>
+#include <limits.h>
 
 namespace kj {
 
