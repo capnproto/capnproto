@@ -182,7 +182,9 @@ LoggingErrorHandler LoggingErrorHandler::instance = LoggingErrorHandler();
 
 class NullEventPort: public EventPort {
 public:
-  void wait() override {
+  Time now() override { return Time(); }
+
+  void wait(Time timeout) override {
     KJ_FAIL_REQUIRE("Nothing to wait for; this thread would hang forever.");
   }
 
@@ -192,6 +194,35 @@ public:
 };
 
 NullEventPort NullEventPort::instance = NullEventPort();
+
+class TimerPromiseAdapter {
+public:
+  TimerPromiseAdapter(PromiseFulfiller<void>& fulfiller, EventLoop& loop, Time time)
+      : time(time), fulfiller(fulfiller), loop(loop) {
+    pos = loop.timers.insert(this);
+  }
+
+  ~TimerPromiseAdapter() {
+    if (pos != loop.timers.end()) {
+      loop.timers.erase(pos);
+    }
+  }
+
+  void fulfill() {
+    fulfiller.fulfill();
+    loop.timers.erase(pos);
+    pos = loop.timers.end();
+  }
+
+  const Time time;
+  PromiseFulfiller<void>& fulfiller;
+  EventLoop& loop;
+  Timers::const_iterator pos;
+};
+
+bool TimerBefore::operator()(TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs) {
+  return lhs->time < rhs->time;
+}
 
 }  // namespace _ (private)
 
@@ -248,6 +279,17 @@ void EventLoop::run(uint maxTurnCount) {
 }
 
 bool EventLoop::turn() {
+  if (!timers.empty()) {
+    Time now = port.now();
+    for (;;) {
+      auto front = timers.begin();
+      if (front == timers.end() || (*front)->time > now) {
+        break;
+      }
+      (*front)->fulfill();
+    }
+  }
+
   _::Event* event = head;
 
   if (event == nullptr) {
@@ -299,6 +341,10 @@ void EventLoop::leaveScope() {
   threadLocalEventLoop = nullptr;
 }
 
+Promise<void> EventLoop::atTimeFromNow(Time timeFromNow) {
+  return newAdaptedPromise<void, _::TimerPromiseAdapter>(*this, port.now() + timeFromNow);
+}
+
 namespace _ {  // private
 
 void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope& waitScope) {
@@ -316,7 +362,12 @@ void waitImpl(Own<_::PromiseNode>&& node, _::ExceptionOrValue& result, WaitScope
   while (!doneEvent.fired) {
     if (!loop.turn()) {
       // No events in the queue.  Wait for callback.
-      loop.port.wait();
+      Time timeout(-1);
+      auto timer = loop.timers.begin();
+      if (timer != loop.timers.end()) {
+        timeout = (*timer)->time - loop.port.now();
+      }
+      loop.port.wait(timeout);
     }
   }
 

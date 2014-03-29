@@ -26,6 +26,7 @@
 #include "threadlocal.h"
 #include <setjmp.h>
 #include <errno.h>
+#include <chrono>
 
 namespace kj {
 
@@ -245,7 +246,12 @@ private:
   int pollError = 0;
 };
 
-void UnixEventPort::wait() {
+Time UnixEventPort::now() {
+  return Time(std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count());
+}
+
+void UnixEventPort::wait(Time timeout) {
   sigset_t newMask;
   sigemptyset(&newMask);
   sigaddset(&newMask, reservedSignal);
@@ -279,7 +285,20 @@ void UnixEventPort::wait() {
   threadCapture = &capture;
   sigprocmask(SIG_UNBLOCK, &newMask, &origMask);
 
-  pollContext.run(-1);
+  constexpr Time MAX_TIMEOUT =
+      std::numeric_limits<int>::digits < std::numeric_limits<uint64_t>::digits ?
+      int64_t(std::numeric_limits<int>::max() - 1) * MILLISECOND :
+      Time(std::numeric_limits<uint64_t>::max()) - MILLISECOND;
+
+  int pollTimeout = -1;
+  if (timeout >= Time()) {
+    if (timeout <= MAX_TIMEOUT) {
+      pollTimeout = (timeout + MILLISECOND - unit<Time>()) / MILLISECOND;
+    } else {
+      pollTimeout = MAX_TIMEOUT / MILLISECOND;
+    }
+  }
+  pollContext.run(pollTimeout);
 
   sigprocmask(SIG_SETMASK, &origMask, nullptr);
   threadCapture = nullptr;

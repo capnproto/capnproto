@@ -196,6 +196,8 @@ public:
   //
   // TODO(someday):  I'm not entirely comfortable with this interface.  It seems to be doing too
   //   much at once but I'm not sure how to cleanly break it down.
+
+  virtual Promise<void> atTimeFromNow(Time timeFromNow) = 0;
 };
 
 class LowLevelAsyncIoProvider {
@@ -270,6 +272,8 @@ public:
   // have had `bind()` and `listen()` called on it, so it's ready for `accept()`.
   //
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
+
+  virtual Promise<void> atTimeFromNow(Time timeFromNow) = 0;
 };
 
 Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel);
