@@ -1,0 +1,9 @@
+The following people have made large code contributions to this repository.
+Those contributions are copyright the respective authors and licensed by them
+under the same BSD license terms as the rest of the library.
+
+Kenton Varda <temporal@gmail.com>: Primary Author
+Jason Choy <jjwchoy@gmail.com>: kj/threadlocal.h and other iOS tweaks
+
+This file does not list people who maintain their own Cap'n Proto
+implementations as separate projects.  Those people are awesome too!  :)
