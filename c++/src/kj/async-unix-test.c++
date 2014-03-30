@@ -30,6 +30,12 @@
 #include <sys/stat.h>
 #include <gtest/gtest.h>
 #include <pthread.h>
+#include <algorithm>
+#include <vector>
+
+using std::chrono::microseconds;
+using std::chrono::milliseconds;
+using std::chrono::steady_clock;
 
 namespace kj {
 
@@ -312,6 +318,39 @@ TEST_F(AsyncUnixTest, PollNoWait) {
   loop.run();
 
   EXPECT_EQ(2, receivedCount);
+}
+
+TEST_F(AsyncUnixTest, SteadyTimers) {
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  auto start = port.steadyTime();
+  std::vector<steady_clock::time_point> expected;
+  std::vector<steady_clock::time_point> actual;
+
+  auto addTimer = [&](steady_clock::duration delay) {
+    expected.push_back(start + std::max(delay, steady_clock::duration::zero()));
+    port.atTime(start + delay).then([&]() {
+      actual.push_back(port.steadyTime());
+    }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
+  };
+
+  addTimer(milliseconds(30));
+  addTimer(milliseconds(40));
+  addTimer(microseconds(20350));
+  addTimer(milliseconds(30));
+  addTimer(milliseconds(-10));
+
+  std::sort(expected.begin(), expected.end());
+  port.atTime(expected.back() + milliseconds(1)).wait(waitScope);
+
+  ASSERT_EQ(expected.size(), actual.size());
+  for (int i = 0; i < expected.size(); ++i) {
+    EXPECT_LE(expected[i], actual[i]) << "Actual time for timer " << i << "("
+        << actual[i].time_since_epoch().count() << ") lower than expected time ("
+        << expected[i].time_since_epoch().count() << ")";
+  }
 }
 
 }  // namespace kj

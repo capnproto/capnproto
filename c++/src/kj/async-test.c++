@@ -653,7 +653,7 @@ public:
 
   void wait() override { KJ_FAIL_ASSERT("Nothing to wait for."); }
   void poll() override {}
-  void setRunnable(bool runnable) {
+  void setRunnable(bool runnable) override {
     this->runnable = runnable;
     ++callCount;
   }
