@@ -1658,7 +1658,7 @@ struct WireHelpers {
     switch (src->kind()) {
       case WirePointer::STRUCT:
         KJ_REQUIRE(nestingLimit > 0,
-              "Message is too deeply-nested or contains cycles.  See capnp::ReadOptions.") {
+              "Message is too deeply-nested or contains cycles.  See capnp::ReaderOptions.") {
           goto useDefault;
         }
 
@@ -1678,7 +1678,7 @@ struct WireHelpers {
         FieldSize elementSize = src->listRef.elementSize();
 
         KJ_REQUIRE(nestingLimit > 0,
-              "Message is too deeply-nested or contains cycles.  See capnp::ReadOptions.") {
+              "Message is too deeply-nested or contains cycles.  See capnp::ReaderOptions.") {
           goto useDefault;
         }
 
@@ -1826,7 +1826,7 @@ struct WireHelpers {
     }
 
     KJ_REQUIRE(nestingLimit > 0,
-               "Message is too deeply-nested or contains cycles.  See capnp::ReadOptions.") {
+               "Message is too deeply-nested or contains cycles.  See capnp::ReaderOptions.") {
       goto useDefault;
     }
 
@@ -1904,7 +1904,7 @@ struct WireHelpers {
     }
 
     KJ_REQUIRE(nestingLimit > 0,
-               "Message is too deeply-nested or contains cycles.  See capnp::ReadOptions.") {
+               "Message is too deeply-nested or contains cycles.  See capnp::ReaderOptions.") {
       goto useDefault;
     }
 
@@ -2492,7 +2492,7 @@ Data::Reader ListReader::asData() {
 
 StructReader ListReader::getStructElement(ElementCount index) const {
   KJ_REQUIRE(nestingLimit > 0,
-             "Message is too deeply-nested or contains cycles.  See capnp::ReadOptions.") {
+             "Message is too deeply-nested or contains cycles.  See capnp::ReaderOptions.") {
     return StructReader();
   }
 
