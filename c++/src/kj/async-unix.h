@@ -25,10 +25,12 @@
 #define KJ_ASYNC_UNIX_H_
 
 #include "async.h"
+#include "time.h"
 #include "vector.h"
 #include <signal.h>
 #include <poll.h>
 #include <pthread.h>
+#include <set>
 
 namespace kj {
 
@@ -83,6 +85,9 @@ public:
   // needs to use SIGUSR1, call this at startup (before any calls to `captureSignal()` and before
   // constructing an `UnixEventPort`) to offer a different signal.
 
+  Time steadyTime() { return frozenSteadyTime; }
+  Promise<void> atSteadyTime(Time time);
+
   // implements EventPort ------------------------------------------------------
   void wait() override;
   void poll() override;
@@ -90,14 +95,27 @@ public:
 private:
   class PollPromiseAdapter;
   class SignalPromiseAdapter;
+  class TimerPromiseAdapter;
   class PollContext;
+
+  struct TimerBefore {
+    bool operator()(TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs);
+  };
+  using Timers = std::multiset<TimerPromiseAdapter*, TimerBefore>;
 
   PollPromiseAdapter* pollHead = nullptr;
   PollPromiseAdapter** pollTail = &pollHead;
   SignalPromiseAdapter* signalHead = nullptr;
   SignalPromiseAdapter** signalTail = &signalHead;
+  Timers timers;
+  Time frozenSteadyTime;
 
   void gotSignal(const siginfo_t& siginfo);
+
+  Time currentSteadyTime();
+  void processTimers();
+
+  friend class TimerPromiseAdapter;
 };
 
 }  // namespace kj

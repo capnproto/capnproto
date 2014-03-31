@@ -30,6 +30,7 @@
 #include <sys/stat.h>
 #include <gtest/gtest.h>
 #include <pthread.h>
+#include <algorithm>
 
 namespace kj {
 
@@ -312,6 +313,39 @@ TEST_F(AsyncUnixTest, PollNoWait) {
   loop.run();
 
   EXPECT_EQ(2, receivedCount);
+}
+
+TEST_F(AsyncUnixTest, SteadyTimers) {
+  UnixEventPort port;
+  EventLoop loop(port);
+  WaitScope waitScope(loop);
+
+  auto start = port.steadyTime();
+  std::vector<Time> expected;
+  std::vector<Time> actual;
+
+  auto addTimer = [&](Time delay) {
+    expected.push_back(start + std::max(delay, Time()));
+    port.atSteadyTime(start + delay).then([&]() {
+      actual.push_back(port.steadyTime());
+    }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
+  };
+
+  addTimer(30 * MILLISECOND);
+  addTimer(40 * MILLISECOND);
+  addTimer(20350 * MICROSECOND);
+  addTimer(30 * MILLISECOND);
+  addTimer(-10 * MILLISECOND);
+
+  std::sort(expected.begin(), expected.end());
+  port.atSteadyTime(expected.back() + MILLISECOND).wait(waitScope);
+
+  ASSERT_EQ(expected.size(), actual.size());
+  for (int i = 0; i < expected.size(); ++i) {
+    EXPECT_LE(expected[i], actual[i]) << "Actual time for timer " << i << "("
+        << actual[i] / MICROSECOND << ") lower than expected time ("
+        << expected[i] / MICROSECOND << ")";
+  }
 }
 
 }  // namespace kj
