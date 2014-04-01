@@ -742,6 +742,32 @@ TEST(Capability, Lists) {
   verifyClient(dynamicListReader[2].as<DynamicCapability>(), callCount3, waitScope);
 }
 
+TEST(Capability, KeywordMethods) {
+  // Verify that keywords are only munged where necessary.
+
+  kj::EventLoop loop;
+  kj::WaitScope waitScope(loop);
+  bool called = false;
+
+  class TestKeywordMethodsImpl: public test::TestKeywordMethods::Server {
+  public:
+    TestKeywordMethodsImpl(bool& called): called(called) {}
+
+    kj::Promise<void> delete_(DeleteContext context) override {
+      called = true;
+      return kj::READY_NOW;
+    }
+
+  private:
+    bool& called;
+  };
+
+  test::TestKeywordMethods::Client client = kj::heap<TestKeywordMethodsImpl>(called);
+  client.deleteRequest().send().wait(waitScope);
+
+  EXPECT_TRUE(called);
+}
+
 }  // namespace
 }  // namespace _
 }  // namespace capnp

@@ -661,6 +661,13 @@ interface TestMoreStuff extends(TestCallOrder) {
   methodWithDefaults @8 (a :Text, b :UInt32 = 123, c :Text = "foo") -> (d :Text, e :Text = "bar");
 }
 
+interface TestKeywordMethods {
+  delete @0 ();
+  class @1 ();
+  void @2 ();
+  return @3 ();
+}
+
 struct TestSturdyRefHostId {
   host @0 :Text;
 }

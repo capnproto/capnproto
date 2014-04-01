@@ -139,6 +139,31 @@ kj::StringPtr baseName(kj::StringPtr path) {
   }
 }
 
+kj::String safeIdentifier(kj::StringPtr identifier) {
+  // Given a desired identifier name, munge it to make it safe for use in generated code.
+  //
+  // If the identifier is a keyword, this adds an underscore to the end.
+
+  static const std::set<kj::StringPtr> keywords({
+    "alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor", "bool", "break",
+    "case", "catch", "char", "char16_t", "char32_t", "class", "compl", "const", "constexpr",
+    "const_cast", "continue", "decltype", "default", "delete", "do", "double", "dynamic_cast",
+    "else", "enum", "explicit", "export", "extern", "false", "float", "for", "friend", "goto",
+    "if", "inline", "int", "long", "mutable", "namespace", "new", "noexcept", "not", "not_eq",
+    "nullptr", "operator", "or", "or_eq", "private", "protected", "public", "register",
+    "reinterpret_cast", "return", "short", "signed", "sizeof", "static", "static_assert",
+    "static_cast", "struct", "switch", "template", "this", "thread_local", "throw", "true",
+    "try", "typedef", "typeid", "typename", "union", "unsigned", "using", "virtual", "void",
+    "volatile", "wchar_t", "while", "xor", "xor_eq"
+  });
+
+  if (keywords.count(identifier) > 0) {
+    return kj::str(identifier, '_');
+  } else {
+    return kj::heapString(identifier);
+  }
+}
+
 // =======================================================================================
 
 class CapnpcCppMain {
@@ -1197,6 +1222,7 @@ private:
     auto titleCase = toTitleCase(name);
     auto paramSchema = schemaLoader.get(proto.getParamStructType()).asStruct();
     auto resultSchema = schemaLoader.get(proto.getResultStructType()).asStruct();
+    auto identifierName = safeIdentifier(name);
 
     auto paramProto = paramSchema.getProto();
     auto resultProto = resultSchema.getProto();
@@ -1228,7 +1254,7 @@ private:
               "  typedef ", resultType, " ", titleCase, "Results;\n"),
           "  typedef ::capnp::CallContext<", shortParamType, ", ", shortResultType, "> ",
                 titleCase, "Context;\n"
-          "  virtual ::kj::Promise<void> ", name, "(", titleCase, "Context context);\n"),
+          "  virtual ::kj::Promise<void> ", identifierName, "(", titleCase, "Context context);\n"),
 
       kj::strTree(),
 
@@ -1238,7 +1264,7 @@ private:
           "  return newCall<", paramType, ", ", resultType, ">(\n"
           "      0x", interfaceIdHex, "ull, ", methodId, ", sizeHint);\n"
           "}\n"
-          "::kj::Promise<void> ", interfaceName, "::Server::", name, "(", titleCase, "Context) {\n"
+          "::kj::Promise<void> ", interfaceName, "::Server::", identifierName, "(", titleCase, "Context) {\n"
           "  return ::capnp::Capability::Server::internalUnimplemented(\n"
           "      \"", interfaceProto.getDisplayName(), "\", \"", name, "\",\n"
           "      0x", interfaceIdHex, "ull, ", methodId, ");\n"
@@ -1246,7 +1272,7 @@ private:
 
       kj::strTree(
           "    case ", methodId, ":\n"
-          "      return ", name, "(::capnp::Capability::Server::internalGetTypedContext<\n"
+          "      return ", identifierName, "(::capnp::Capability::Server::internalGetTypedContext<\n"
           "          ", paramType, ", ", resultType, ">(context));\n")
     };
   }
