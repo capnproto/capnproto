@@ -142,6 +142,7 @@ includekj_HEADERS =                                            \
   src/kj/async-prelude.h                                       \
   src/kj/async.h                                               \
   src/kj/async-inl.h                                           \
+  src/kj/time.h                                                \
   src/kj/async-unix.h                                          \
   src/kj/async-io.h                                            \
   src/kj/main.h
