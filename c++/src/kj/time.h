@@ -1,4 +1,5 @@
-// Copyright (c) 2014, Kenton Varda <temporal@gmail.com>
+// Copyright (c) 2014 Google Inc. (contributed by Remy Blank <rblank@google.com>)
+// Copyright (c) 2014 Kenton Varda <temporal@gmail.com>
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,38 +32,52 @@
 namespace kj {
 namespace _ {  // private
 
-class MicrosecondLabel;
+class NanosecondLabel;
+class TimeLabel;
+class DateLabel;
 
 }  // namespace _ (private)
 
-using Time = Quantity<int64_t, _::MicrosecondLabel>;
+using Duration = Quantity<int64_t, _::NanosecondLabel>;
 // A time value, in microseconds.
 
-constexpr Time MICROSECOND = unit<Time>();
-constexpr Time MILLISECOND = 1000 * MICROSECOND;
-constexpr Time SECOND = 1000 * MILLISECOND;
-constexpr Time MINUTE = 60 * SECOND;
-constexpr Time HOUR = 60 * MINUTE;
-constexpr Time DAY = 24 * HOUR;
+constexpr Duration NANOSECONDS = unit<Duration>();
+constexpr Duration MICROSECONDS = 1000 * NANOSECONDS;
+constexpr Duration MILLISECONDS = 1000 * MICROSECONDS;
+constexpr Duration SECONDS = 1000 * MILLISECONDS;
+constexpr Duration MINUTES = 60 * SECONDS;
+constexpr Duration HOURS = 60 * MINUTES;
+constexpr Duration DAYS = 24 * HOURS;
+
+using TimePoint = Absolute<Duration, _::TimeLabel>;
+// An absolute time measured by some particular instance of `Timer`.  `Time`s from two different
+// `Timer`s may be measured from different origins and so are not necessarily compatible.
+
+using Date = Absolute<Duration, _::DateLabel>;
+// A point in real-world time, measured relative to the Unix epoch (Jan 1, 1970 00:00:00 UTC).
+
+constexpr Date UNIX_EPOCH = origin<Date>();
+// The `Date` representing Jan 1, 1970 00:00:00 UTC.
 
 class Timer {
-  // Interface to time and timer functionality. The underlying time unit comes from
-  // a steady clock, i.e. a clock that increments steadily and is independent of
-  // system (or wall) time.
+  // Interface to time and timer functionality.
+  //
+  // Each `Timer` may have a different origin, and some `Timer`s may in fact tick at a different
+  // rate than real time (e.g. a `Timer` could represent CPU time consumed by a thread).  However,
+  // all `Timer`s are monotonic: time will never appear to move backwards, even if the calendar
+  // date as tracked by the system is manually modified.
 
 public:
-  virtual Time steadyTime() = 0;
+  virtual TimePoint now() = 0;
   // Returns the current value of a clock that moves steadily forward, independent of any
   // changes in the wall clock. The value is updated every time the event loop waits,
   // and is constant in-between waits.
 
-  virtual Promise<void> atSteadyTime(Time time) = 0;
-  // Schedules a timer that will trigger when the value returned by steadyTime() reaches
-  // the given time.
+  virtual Promise<void> atTime(TimePoint time) = 0;
+  // Returns a promise that returns as soon as now() >= time.
 
-  virtual Promise<void> atTimeFromNow(Time delay) = 0;
-  // Schedules a timer that will trigger after the given delay. The timer uses steadyTime()
-  // and is therefore immune to system clock updates.
+  virtual Promise<void> afterDelay(Duration delay) = 0;
+  // Equivalent to atTime(now() + delay).
 };
 
 }  // namespace kj

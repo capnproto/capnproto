@@ -743,13 +743,13 @@ class TimerImpl final: public Timer {
 public:
   TimerImpl(UnixEventPort& eventPort): eventPort(eventPort) {}
 
-  virtual Time steadyTime() { return eventPort.steadyTime(); }
+  TimePoint now() override { return eventPort.steadyTime(); }
 
-  virtual Promise<void> atSteadyTime(Time time) {
+  Promise<void> atTime(TimePoint time) override {
     return eventPort.atSteadyTime(time);
   }
 
-  virtual Promise<void> atTimeFromNow(Time delay) {
+  Promise<void> afterDelay(Duration delay) override {
     return eventPort.atSteadyTime(eventPort.steadyTime() + delay);
   }
 

@@ -28,7 +28,8 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <limits>
-#include <chrono>
+#include <set>
+#include <time.h>
 
 namespace kj {
 
@@ -80,6 +81,16 @@ void registerReservedSignal() {
 pthread_once_t registerReservedSignalOnce = PTHREAD_ONCE_INIT;
 
 }  // namespace
+
+// =======================================================================================
+
+struct UnixEventPort::TimerSet {
+  struct TimerBefore {
+    bool operator()(TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs);
+  };
+  using Timers = std::multiset<TimerPromiseAdapter*, TimerBefore>;
+  Timers timers;
+};
 
 // =======================================================================================
 
@@ -166,36 +177,38 @@ public:
 
 class UnixEventPort::TimerPromiseAdapter {
 public:
-  TimerPromiseAdapter(PromiseFulfiller<void>& fulfiller, UnixEventPort& port, Time time)
+  TimerPromiseAdapter(PromiseFulfiller<void>& fulfiller, UnixEventPort& port, TimePoint time)
       : time(time), fulfiller(fulfiller), port(port) {
-    pos = port.timers.insert(this);
+    pos = port.timers->timers.insert(this);
   }
 
   ~TimerPromiseAdapter() {
-    if (pos != port.timers.end()) {
-      port.timers.erase(pos);
+    if (pos != port.timers->timers.end()) {
+      port.timers->timers.erase(pos);
     }
   }
 
   void fulfill() {
     fulfiller.fulfill();
-    port.timers.erase(pos);
-    pos = port.timers.end();
+    port.timers->timers.erase(pos);
+    pos = port.timers->timers.end();
   }
 
-  const Time time;
+  const TimePoint time;
   PromiseFulfiller<void>& fulfiller;
   UnixEventPort& port;
-  Timers::const_iterator pos;
+  TimerSet::Timers::const_iterator pos;
 };
 
-bool UnixEventPort::TimerBefore::operator()(TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs) {
+bool UnixEventPort::TimerSet::TimerBefore::operator()(
+    TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs) {
   return lhs->time < rhs->time;
 }
 
-UnixEventPort::UnixEventPort() {
+UnixEventPort::UnixEventPort()
+    : timers(kj::heap<TimerSet>()),
+      frozenSteadyTime(currentSteadyTime()) {
   pthread_once(&registerReservedSignalOnce, &registerReservedSignal);
-  frozenSteadyTime = currentSteadyTime();
 }
 
 UnixEventPort::~UnixEventPort() {}
@@ -278,7 +291,7 @@ private:
   int pollError = 0;
 };
 
-Promise<void> UnixEventPort::atSteadyTime(Time time) {
+Promise<void> UnixEventPort::atSteadyTime(TimePoint time) {
   return newAdaptedPromise<void, TimerPromiseAdapter>(*this, time);
 }
 
@@ -316,22 +329,23 @@ void UnixEventPort::wait() {
   threadCapture = &capture;
   sigprocmask(SIG_UNBLOCK, &newMask, &origMask);
 
-  constexpr Time MAX_TIMEOUT =
-      std::numeric_limits<int>::digits < std::numeric_limits<uint64_t>::digits ?
-      int64_t(std::numeric_limits<int>::max() - 1) * MILLISECOND :
-      Time(std::numeric_limits<uint64_t>::max()) - MILLISECOND;
+  // poll()'s timeout is an `int` count of milliseconds, so truncate to that.
+  // Also, make sure that we aren't within a millisecond of overflowing a `Duration` since that
+  // will break the math below.
+  constexpr Duration MAX_TIMEOUT =
+      min(int(maxValue) * MILLISECONDS, Duration(maxValue) - MILLISECONDS);
 
   int pollTimeout = -1;
-  auto timer = timers.begin();
-  if (timer != timers.end()) {
-    Time timeout = (*timer)->time - currentSteadyTime();
-    if (timeout < Time()) {
+  auto timer = timers->timers.begin();
+  if (timer != timers->timers.end()) {
+    Duration timeout = (*timer)->time - currentSteadyTime();
+    if (timeout < 0 * SECONDS) {
       pollTimeout = 0;
-    } else if (timeout <= MAX_TIMEOUT) {
+    } else if (timeout < MAX_TIMEOUT) {
       // Round up to the next millisecond
-      pollTimeout = (timeout + MILLISECOND - unit<Time>()) / MILLISECOND;
+      pollTimeout = (timeout + 1 * MILLISECONDS - unit<Duration>()) / MILLISECONDS;
     } else {
-      pollTimeout = MAX_TIMEOUT / MILLISECOND;
+      pollTimeout = MAX_TIMEOUT / MILLISECONDS;
     }
   }
   pollContext.run(pollTimeout);
@@ -404,16 +418,17 @@ void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
   }
 }
 
-Time UnixEventPort::currentSteadyTime() {
-  return Time(std::chrono::duration_cast<std::chrono::microseconds>(
-      std::chrono::steady_clock::now().time_since_epoch()).count());
+TimePoint UnixEventPort::currentSteadyTime() {
+  struct timespec tp;
+  KJ_SYSCALL(clock_gettime(CLOCK_MONOTONIC, &tp));
+  return origin<TimePoint>() + (tp.tv_sec * SECONDS + tp.tv_sec * NANOSECONDS);
 }
 
 void UnixEventPort::processTimers() {
   frozenSteadyTime = currentSteadyTime();
   for (;;) {
-    auto front = timers.begin();
-    if (front == timers.end() || (*front)->time > frozenSteadyTime) {
+    auto front = timers->timers.begin();
+    if (front == timers->timers.end() || (*front)->time > frozenSteadyTime) {
       break;
     }
     (*front)->fulfill();

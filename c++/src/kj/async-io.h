@@ -199,7 +199,12 @@ public:
   //   much at once but I'm not sure how to cleanly break it down.
 
   virtual Timer& getTimer() = 0;
-  // Returns a Timer interface for the underlying event loop.
+  // Returns a `Timer` based on real time.  Time does not pass while event handlers are running --
+  // it only updates when the event loop polls for system events.  This means that calling `now()`
+  // on this timer does not require a system call.
+  //
+  // This timer is not affected by changes to the system date.  It is unspecified whether the timer
+  // continues to count while the system is suspended.
 };
 
 class LowLevelAsyncIoProvider {
@@ -276,7 +281,12 @@ public:
   // `flags` is a bitwise-OR of the values of the `Flags` enum.
 
   virtual Timer& getTimer() = 0;
-  // Returns a Timer interface for the underlying event loop.
+  // Returns a `Timer` based on real time.  Time does not pass while event handlers are running --
+  // it only updates when the event loop polls for system events.  This means that calling `now()`
+  // on this timer does not require a system call.
+  //
+  // This timer is not affected by changes to the system date.  It is unspecified whether the timer
+  // continues to count while the system is suspended.
 };
 
 Own<AsyncIoProvider> newAsyncIoProvider(LowLevelAsyncIoProvider& lowLevel);

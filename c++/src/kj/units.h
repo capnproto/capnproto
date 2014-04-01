@@ -219,6 +219,10 @@ class Quantity {
 public:
   inline constexpr Quantity() {}
 
+  inline constexpr Quantity(decltype(maxValue)): value(maxValue) {}
+  inline constexpr Quantity(decltype(minValue)): value(minValue) {}
+  // Allow initialization from maxValue and minValue.
+
   inline explicit constexpr Quantity(Number value): value(value) {}
   // This constructor was intended to be private, but GCC complains about it being private in a
   // bunch of places that don't appear to even call it, so I made it public.  Oh well.
@@ -361,6 +365,63 @@ inline constexpr auto operator*(UnitRatio<Number1, Unit2, Unit> ratio,
     -> decltype(measure * ratio) {
   return measure * ratio;
 }
+
+// =======================================================================================
+// Absolute measures
+
+template <typename T, typename Label>
+class Absolute {
+  // Wraps some other value -- typically a Quantity -- but represents a value measured based on
+  // some absolute origin.  For exmaple, if `Duration` is a type representing a time duration,
+  // Absolute<Duration, UnixEpoch> might be a calendar date.
+  //
+  // Since Absolute represents measurements relative to some arbitrary origin, the only sensible
+  // arithmetic to perform on them is addition and subtraction.
+
+  // TODO(someday):  Do the same automatic expansion of integer width that Quantity does?  Doesn't
+  //   matter for our time use case, where we always use 64-bit anyway.  Note that fixing this
+  //   would implicitly allow things like multiplying an Absolute by a UnitRatio to change its
+  //   units, which is actually totally logical and kind of neat.
+
+public:
+  inline constexpr Absolute operator+(const T& other) const { return Absolute(value + other); }
+  inline constexpr Absolute operator-(const T& other) const { return Absolute(value - other); }
+  inline constexpr T operator-(const Absolute& other) const { return value - other.value; }
+
+  inline Absolute& operator+=(const T& other) { value += other; return *this; }
+  inline Absolute& operator-=(const T& other) { value -= other; return *this; }
+
+  inline constexpr bool operator==(const Absolute& other) const { return value == other.value; }
+  inline constexpr bool operator!=(const Absolute& other) const { return value != other.value; }
+  inline constexpr bool operator<=(const Absolute& other) const { return value <= other.value; }
+  inline constexpr bool operator>=(const Absolute& other) const { return value >= other.value; }
+  inline constexpr bool operator< (const Absolute& other) const { return value <  other.value; }
+  inline constexpr bool operator> (const Absolute& other) const { return value >  other.value; }
+
+private:
+  T value;
+
+  explicit constexpr Absolute(T value): value(value) {}
+
+  template <typename U>
+  friend inline constexpr U origin();
+};
+
+template <typename T, typename Label>
+inline constexpr Absolute<T, Label> operator+(const T& a, const Absolute<T, Label>& b) {
+  return b + a;
+}
+
+template <typename T> struct UnitOf_ { typedef T Type; };
+template <typename T, typename Label> struct UnitOf_<Absolute<T, Label>> { typedef T Type; };
+template <typename T>
+using UnitOf = typename UnitOf_<T>::Type;
+// UnitOf<Absolute<T, U>> is T.  UnitOf<AnythingElse> is AnythingElse.
+
+template <typename T>
+inline constexpr T origin() { return T(0 * unit<UnitOf<T>>()); }
+// origin<Absolute<T, U>>() returns an Absolute of value 0.  It also, intentionally, works on basic
+// numeric types.
 
 }  // namespace kj
 

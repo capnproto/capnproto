@@ -30,7 +30,6 @@
 #include <signal.h>
 #include <poll.h>
 #include <pthread.h>
-#include <set>
 
 namespace kj {
 
@@ -85,8 +84,8 @@ public:
   // needs to use SIGUSR1, call this at startup (before any calls to `captureSignal()` and before
   // constructing an `UnixEventPort`) to offer a different signal.
 
-  Time steadyTime() { return frozenSteadyTime; }
-  Promise<void> atSteadyTime(Time time);
+  TimePoint steadyTime() { return frozenSteadyTime; }
+  Promise<void> atSteadyTime(TimePoint time);
 
   // implements EventPort ------------------------------------------------------
   void wait() override;
@@ -98,21 +97,18 @@ private:
   class TimerPromiseAdapter;
   class PollContext;
 
-  struct TimerBefore {
-    bool operator()(TimerPromiseAdapter* lhs, TimerPromiseAdapter* rhs);
-  };
-  using Timers = std::multiset<TimerPromiseAdapter*, TimerBefore>;
+  struct TimerSet;  // Defined in source file to avoid STL include.
 
   PollPromiseAdapter* pollHead = nullptr;
   PollPromiseAdapter** pollTail = &pollHead;
   SignalPromiseAdapter* signalHead = nullptr;
   SignalPromiseAdapter** signalTail = &signalHead;
-  Timers timers;
-  Time frozenSteadyTime;
+  Own<TimerSet> timers;
+  TimePoint frozenSteadyTime;
 
   void gotSignal(const siginfo_t& siginfo);
 
-  Time currentSteadyTime();
+  TimePoint currentSteadyTime();
   void processTimers();
 
   friend class TimerPromiseAdapter;

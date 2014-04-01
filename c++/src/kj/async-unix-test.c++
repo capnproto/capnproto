@@ -321,30 +321,29 @@ TEST_F(AsyncUnixTest, SteadyTimers) {
   WaitScope waitScope(loop);
 
   auto start = port.steadyTime();
-  std::vector<Time> expected;
-  std::vector<Time> actual;
+  kj::Vector<TimePoint> expected;
+  kj::Vector<TimePoint> actual;
 
-  auto addTimer = [&](Time delay) {
-    expected.push_back(start + std::max(delay, Time()));
+  auto addTimer = [&](Duration delay) {
+    expected.add(max(start + delay, start));
     port.atSteadyTime(start + delay).then([&]() {
-      actual.push_back(port.steadyTime());
+      actual.add(port.steadyTime());
     }).detach([](Exception&& e) { ADD_FAILURE() << str(e).cStr(); });
   };
 
-  addTimer(30 * MILLISECOND);
-  addTimer(40 * MILLISECOND);
-  addTimer(20350 * MICROSECOND);
-  addTimer(30 * MILLISECOND);
-  addTimer(-10 * MILLISECOND);
+  addTimer(30 * MILLISECONDS);
+  addTimer(40 * MILLISECONDS);
+  addTimer(20350 * MICROSECONDS);
+  addTimer(30 * MILLISECONDS);
+  addTimer(-10 * MILLISECONDS);
 
   std::sort(expected.begin(), expected.end());
-  port.atSteadyTime(expected.back() + MILLISECOND).wait(waitScope);
+  port.atSteadyTime(expected.back() + MILLISECONDS).wait(waitScope);
 
   ASSERT_EQ(expected.size(), actual.size());
   for (int i = 0; i < expected.size(); ++i) {
-    EXPECT_LE(expected[i], actual[i]) << "Actual time for timer " << i << "("
-        << actual[i] / MICROSECOND << ") lower than expected time ("
-        << expected[i] / MICROSECOND << ")";
+    EXPECT_LE(expected[i], actual[i]) << "Actual time for timer " << i << " is "
+        << ((expected[i] - actual[i]) / NANOSECONDS) << " ns too early.";
   }
 }
 
