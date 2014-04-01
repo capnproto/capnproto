@@ -29,7 +29,7 @@
 #include <inttypes.h>
 #include <limits>
 #include <set>
-#include <time.h>
+#include <chrono>
 
 namespace kj {
 
@@ -211,7 +211,7 @@ UnixEventPort::UnixEventPort()
   pthread_once(&registerReservedSignalOnce, &registerReservedSignal);
 }
 
-UnixEventPort::~UnixEventPort() {}
+UnixEventPort::~UnixEventPort() noexcept(false) {}
 
 Promise<short> UnixEventPort::onFdEvent(int fd, short eventMask) {
   return newAdaptedPromise<short, PollPromiseAdapter>(*this, fd, eventMask);
@@ -419,9 +419,8 @@ void UnixEventPort::gotSignal(const siginfo_t& siginfo) {
 }
 
 TimePoint UnixEventPort::currentSteadyTime() {
-  struct timespec tp;
-  KJ_SYSCALL(clock_gettime(CLOCK_MONOTONIC, &tp));
-  return origin<TimePoint>() + (tp.tv_sec * SECONDS + tp.tv_sec * NANOSECONDS);
+  return origin<TimePoint>() + std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count() * NANOSECONDS;
 }
 
 void UnixEventPort::processTimers() {
