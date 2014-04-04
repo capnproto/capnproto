@@ -68,7 +68,7 @@ void setCloseOnExec(int fd) {
 
 static constexpr uint NEW_FD_FLAGS =
 #if __linux__
-    LowLevelAsyncIoProvider::ALREADY_CLOEXEC || LowLevelAsyncIoProvider::ALREADY_NONBLOCK ||
+    LowLevelAsyncIoProvider::ALREADY_CLOEXEC | LowLevelAsyncIoProvider::ALREADY_NONBLOCK |
 #endif
     LowLevelAsyncIoProvider::TAKE_OWNERSHIP;
 // We always try to open FDs with CLOEXEC and NONBLOCK already set on Linux, but on other platforms
