@@ -749,7 +749,7 @@ TEST(Capability, KeywordMethods) {
   kj::WaitScope waitScope(loop);
   bool called = false;
 
-  class TestKeywordMethodsImpl: public test::TestKeywordMethods::Server {
+  class TestKeywordMethodsImpl final: public test::TestKeywordMethods::Server {
   public:
     TestKeywordMethodsImpl(bool& called): called(called) {}
 
