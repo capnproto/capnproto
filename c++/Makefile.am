@@ -88,12 +88,12 @@ maintainer-clean-local:
 
 public_capnpc_inputs =                                         \
   src/capnp/c++.capnp                                          \
-  src/capnp/schema.capnp
+  src/capnp/schema.capnp                                       \
+  src/capnp/rpc.capnp                                          \
+  src/capnp/rpc-twoparty.capnp
 
 capnpc_inputs =                                                \
   $(public_capnpc_inputs)                                      \
-  src/capnp/rpc.capnp                                          \
-  src/capnp/rpc-twoparty.capnp                                 \
   src/capnp/compiler/lexer.capnp                               \
   src/capnp/compiler/grammar.capnp
 
