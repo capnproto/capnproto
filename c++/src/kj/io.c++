@@ -301,21 +301,26 @@ void FdOutputStream::write(ArrayPtr<const ArrayPtr<const byte>> pieces) {
 
   struct iovec* current = iov.begin();
 
-  // Make sure we don't do anything on an empty write.
+  // Advance past any leading empty buffers so that a write full of only empty buffers does not
+  // cause a syscall at all.
   while (current < iov.end() && current->iov_len == 0) {
     ++current;
   }
 
   while (current < iov.end()) {
+    // Issue the write.
     ssize_t n = 0;
     KJ_SYSCALL(n = ::writev(fd, current, iov.end() - current), fd);
     KJ_ASSERT(n > 0, "writev() returned zero.");
 
-    while (n > 0 && static_cast<size_t>(n) >= current->iov_len) {
+    // Advance past all buffers that were fully-written.
+    while (current < iov.end() && static_cast<size_t>(n) >= current->iov_len) {
       n -= current->iov_len;
       ++current;
     }
 
+    // If we only partially-wrote one of the buffers, adjust the pointer and size to include only
+    // the unwritten part.
     if (n > 0) {
       current->iov_base = reinterpret_cast<byte*>(current->iov_base) + n;
       current->iov_len -= n;

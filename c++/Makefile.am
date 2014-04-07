@@ -348,6 +348,7 @@ capnp_test_SOURCES =                                           \
   src/kj/tuple-test.c++                                        \
   src/kj/one-of-test.c++                                       \
   src/kj/function-test.c++                                     \
+  src/kj/io-test.c++                                           \
   src/kj/mutex-test.c++                                        \
   src/kj/threadlocal-test.c++                                  \
   src/kj/threadlocal-pthread-test.c++                          \
