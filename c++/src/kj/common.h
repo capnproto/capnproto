@@ -28,6 +28,18 @@
 #ifndef KJ_COMMON_H_
 #define KJ_COMMON_H_
 
+// workaround for #warning not being portable, use KJ_WARNING macro instead
+#define _KJ_STR(x) #x
+#define KJ_STR(x) _KJ_STR(x)
+#if defined(_MSC_VER)
+	// format it according to visual studio output (to get source lines and warnings in the IDE)
+	#define KJ_WARNING(x) __pragma( message(__FILE__ "(" KJ_STR(__LINE__) ") : warning: " x) )
+#else
+	// just wrap #pragma message: gcc 4.7+ and clang 3.2+ supported
+	#define KJ_WARNING(x) _Pragma(KJ_STR(message x))
+#endif
+
+
 #ifndef KJ_NO_COMPILER_CHECK
 #if __cplusplus < 201103L && !__CDT_PARSER__
   #error "This code requires C++11. Either your compiler does not support it or it is not enabled."
@@ -40,32 +52,33 @@
 #ifdef __GNUC__
   #if __clang__
     #if __clang_major__ < 3 || (__clang_major__ == 3 && __clang_minor__ < 2)
-      #warning "This library requires at least Clang 3.2."
+      KJ_WARNING("This library requires at least Clang 3.2.")
     #elif defined(__apple_build_version__) && __apple_build_version__ <= 4250028
-      #warning "This library requires at least Clang 3.2.  XCode 4.6's Clang, which claims to be "\
+      KJ_WARNING("This library requires at least Clang 3.2.  XCode 4.6's Clang, which claims to be "\
                "version 4.2 (wat?), is actually built from some random SVN revision between 3.1 "\
                "and 3.2.  Unfortunately, it is insufficient for compiling this library.  You can "\
                "download the real Clang 3.2 (or newer) from the Clang web site.  Step-by-step "\
                "instructions can be found in Cap'n Proto's documentation: "\
-               "http://kentonv.github.io/capnproto/install.html#clang_32_on_mac_osx"
+               "http://kentonv.github.io/capnproto/install.html#clang_32_on_mac_osx")
     #elif __cplusplus >= 201103L && !__has_include(<initializer_list>)
-      #warning "Your compiler supports C++11 but your C++ standard library does not.  If your "\
+      KJ_WARNING("Your compiler supports C++11 but your C++ standard library does not.  If your "\
                "system has libc++ installed (as should be the case on e.g. Mac OSX), try adding "\
-               "-stdlib=libc++ to your CXXFLAGS."
+               "-stdlib=libc++ to your CXXFLAGS.")
     #endif
   #else
     #if __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 7)
-      #warning "This library requires at least GCC 4.7."
+      KJ_WARNING("This library requires at least GCC 4.7.")
     #endif
   #endif
 #elif defined(_MSC_VER)
-  #warning "As of June 2013, Visual Studio's C++11 support was hopelessly behind what is needed to compile this code."
+  KJ_WARNING("As of June 2013, Visual Studio's C++11 support was hopelessly behind what is\
+	         needed to compile this code. Consider installing Visual Studio CTP2 update.")
 #else
-  #warning "I don't recognize your compiler.  As of this writing, Clang and GCC are the only "\
+  KJ_WARNING("I don't recognize your compiler.  As of this writing, Clang and GCC are the only "\
            "known compilers with enough C++11 support for this library.  "\
-           "#define KJ_NO_COMPILER_CHECK to make this warning go away."
+           "#define KJ_NO_COMPILER_CHECK to make this warning go away.")
 #endif
-#endif
+#endif // from KJ_NO_COMPILER_CHECK
 
 #include <stddef.h>
 #include <initializer_list>

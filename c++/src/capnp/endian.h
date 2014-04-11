@@ -165,8 +165,8 @@ using WireValue = SwappingWireValue<T>;
 // Unknown endianness.  Fall back to bit shifts.
 
 #if !CAPNP_DISABLE_ENDIAN_DETECTION
-#warning "Couldn't detect endianness of your platform.  Using unoptimized fallback implementation."
-#warning "Consider changing this code to detect your platform and send us a patch!"
+  KJ_WARNING("Couldn't detect endianness of your platform.  Using unoptimized fallback implementation.")
+  KJ_WARNING("Consider changing this code to detect your platform and send us a patch!")
 #endif
 
 template <typename T, size_t size = sizeof(T)>
