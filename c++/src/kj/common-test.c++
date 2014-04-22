@@ -286,6 +286,10 @@ TEST(Common, MinMaxValue) {
 
   f = nan();
   EXPECT_FALSE(f == f);
+
+  // `char`'s signedness is platform-specific.
+  EXPECT_LE(char(minValue), '\0');
+  EXPECT_GE(char(maxValue), '\x7f');
 }
 
 TEST(Common, Defer) {
