@@ -426,13 +426,14 @@ private:
 
   kj::StringTree genExtends(InterfaceSchema interface) {
     auto extends = interface.getProto().getInterface().getExtends();
-    if (extends.size() == 0)
+    if (extends.size() == 0) {
       return kj::strTree();
-    else
+    } else {
       return kj::strTree(" extends(", kj::StringTree(
           KJ_MAP(id, extends) {
             return nodeName(schemaLoader.get(id), interface);
           }, ", "), ")");
+    }
   }
 
   kj::StringTree genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent indent) {
