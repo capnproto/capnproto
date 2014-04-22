@@ -424,6 +424,17 @@ private:
     }
   }
 
+  kj::StringTree genExtends(InterfaceSchema interface) {
+    auto extends = interface.getProto().getInterface().getExtends();
+    if (extends.size() == 0)
+      return kj::strTree();
+    else
+      return kj::strTree(" extends(", kj::StringTree(
+          KJ_MAP(id, extends) {
+            return nodeName(schemaLoader.get(id), interface);
+          }, ", "), ")");
+  }
+
   kj::StringTree genDecl(Schema schema, Text::Reader name, uint64_t scopeId, Indent indent) {
     auto proto = schema.getProto();
     if (proto.getScopeId() != scopeId) {
@@ -466,6 +477,7 @@ private:
         auto interface = schema.asInterface();
         return kj::strTree(
             indent, "interface ", name, " @0x", kj::hex(proto.getId()),
+            genExtends(interface),
             genAnnotations(schema), " {\n",
             KJ_MAP(method, sortByCodeOrder(interface.getMethods())) {
               auto methodProto = method.getProto();
