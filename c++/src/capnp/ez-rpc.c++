@@ -114,7 +114,7 @@ struct EzRpcClient::Impl {
               clientContext = kj::heap<ClientContext>(kj::mv(stream));
             }).fork()) {}
 
-  Impl(struct sockaddr* serverAddress, uint addrSize)
+  Impl(const struct sockaddr* serverAddress, uint addrSize)
       : context(EzRpcContext::getThreadLocal()),
         setupPromise(context->getIoProvider().getNetwork()
             .getSockaddr(serverAddress, addrSize)->connect()
@@ -132,7 +132,7 @@ struct EzRpcClient::Impl {
 EzRpcClient::EzRpcClient(kj::StringPtr serverAddress, uint defaultPort)
     : impl(kj::heap<Impl>(serverAddress, defaultPort)) {}
 
-EzRpcClient::EzRpcClient(struct sockaddr* serverAddress, uint addrSize)
+EzRpcClient::EzRpcClient(const struct sockaddr* serverAddress, uint addrSize)
     : impl(kj::heap<Impl>(serverAddress, addrSize)) {}
 
 EzRpcClient::EzRpcClient(int socketFd)

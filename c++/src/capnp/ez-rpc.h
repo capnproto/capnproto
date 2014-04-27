@@ -26,6 +26,8 @@
 
 #include "rpc.h"
 
+struct sockaddr;
+
 namespace kj { class AsyncIoProvider; class LowLevelAsyncIoProvider; }
 
 namespace capnp {
@@ -102,7 +104,7 @@ public:
   // The address is parsed by `kj::Network` in `kj/async-io.h`.  See that interface for more info
   // on the address format, but basically it's what you'd expect.
 
-  EzRpcClient(struct sockaddr* serverAddress, uint addrSize);
+  EzRpcClient(const struct sockaddr* serverAddress, uint addrSize);
   // Like the above constructor, but connects to an already-resolved socket address.  Any address
   // format supported by `kj::Network` in `kj/async-io.h` is accepted.
 
