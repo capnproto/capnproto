@@ -54,6 +54,7 @@ namespace capnp {
 namespace {
 
 static constexpr uint64_t NAMESPACE_ANNOTATION_ID = 0xb9c6f99ebf805f2cull;
+static constexpr uint64_t NAME_ANNOTATION_ID = 0xf264a779fef191ceull;
 
 static constexpr const char* FIELD_SIZE_NAMES[] = {
   "VOID", "BIT", "BYTE", "TWO_BYTES", "FOUR_BYTES", "EIGHT_BYTES", "POINTER", "INLINE_COMPOSITE"
@@ -571,7 +572,14 @@ private:
 
   FieldText makeFieldText(kj::StringPtr scope, StructSchema::Field field) {
     auto proto = field.getProto();
-    kj::String titleCase = toTitleCase(proto.getName());
+    auto baseName = proto.getName();
+    for (auto annotation: proto.getAnnotations()) {
+      if (annotation.getId() == NAME_ANNOTATION_ID) {
+        baseName = annotation.getValue().getText();
+        break;
+      }
+    }
+    kj::String titleCase = toTitleCase(baseName);
 
     DiscriminantChecks unionDiscrim;
     if (hasDiscriminantValue(proto)) {
