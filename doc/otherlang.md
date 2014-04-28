@@ -19,7 +19,7 @@ maintained by respective authors and have not been reviewed by me
 
 * [C](https://github.com/jmckaskill/c-capnproto) by [@jmckaskill](https://github.com/jmckaskill)
 * [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
-* [Go](https://github.com/jmckaskill/go-capnproto) by [@jmckaskill](https://github.com/jmckaskill)
+* [Go]() by [@glycerine](https://github.com/glycerine/go-capnproto)
 * [Javascript](https://github.com/jscheid/capnproto-js) by [@jscheid](https://github.com/jscheid)
 * [Lua](https://github.com/cloudflare/lua-capnproto) by [CloudFlare](http://www.cloudflare.com/) / [@calio](https://github.com/calio)
 * [OCaml](https://github.com/pelzlpj/capnp-ocaml) by [@pelzlpj](https://github.com/pelzlpj)
