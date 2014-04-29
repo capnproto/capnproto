@@ -381,6 +381,22 @@ TEST(WireFormat, StructRoundTrip_MultipleSegmentsWithMultipleAllocations) {
   checkStruct(PointerReader::getRoot(segment, segment->getStartPtr(), 4).getStruct(nullptr));
 }
 
+inline bool isNan(float f) { return f != f; }
+inline bool isNan(double f) { return f != f; }
+
+TEST(WireFormat, NanPatching) {
+  EXPECT_EQ(0x7fc00000u, mask(kj::nan(), 0));
+  EXPECT_TRUE(isNan(unmask<float>(0x7fc00000u, 0)));
+  EXPECT_TRUE(isNan(unmask<float>(0x7fc00001u, 0)));
+  EXPECT_TRUE(isNan(unmask<float>(0x7fc00005u, 0)));
+  EXPECT_EQ(0x7fc00000u, mask(unmask<float>(0x7fc00000u, 0), 0));
+  EXPECT_EQ(0x7ff8000000000000ull, mask((double)kj::nan(), 0));
+  EXPECT_TRUE(isNan(unmask<double>(0x7ff8000000000000ull, 0)));
+  EXPECT_TRUE(isNan(unmask<double>(0x7ff8000000000001ull, 0)));
+  EXPECT_TRUE(isNan(unmask<double>(0x7ff8000000000005ull, 0)));
+  EXPECT_EQ(0x7ff8000000000000ull, mask(unmask<double>(0x7ff8000000000000ull, 0), 0));
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

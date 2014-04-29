@@ -37,6 +37,25 @@
 #include "blob.h"
 #include "endian.h"
 
+#if __mips__ && !defined(CAPNP_CANONICALIZE_NAN)
+#define CAPNP_CANONICALIZE_NAN 1
+// Explicitly detect NaNs and canonicalize them to the quiet NaN value as would be returned by
+// __builtin_nan("") on systems implementing the IEEE-754 recommended (but not required) NaN
+// signalling/quiet differentiation (such as x86).  Unfortunately, some architectures -- in
+// particular, MIPS -- represent quiet vs. signalling nans differently than the rest of the world.
+// Canonicalizing them makes output consistent (which is important!), but hurts performance
+// slightly.
+//
+// Note that trying to convert MIPS NaNs to standard NaNs without losing data doesn't work.
+// Signaling vs. quiet is indicated by a bit, with the meaning being the opposite on MIPS vs.
+// everyone else.  It would be great if we could just flip that bit, but we can't, because if the
+// significand is all-zero, then the value is infinity rather than NaN.  This means that on most
+// machines, where the bit indicates quietness, there is one more quiet NaN value than signalling
+// NaN value, whereas on MIPS there is one more sNaN than qNaN, and thus there is no isomorphic
+// mapping that properly preserves quietness.  Instead of doing something hacky, we just give up
+// and blow away NaN payloads, because no one uses them anyway.
+#endif
+
 namespace capnp {
 
 class ClientHook;
@@ -245,6 +264,12 @@ inline Mask<T> mask(T value, Mask<T> mask) {
 
 template <>
 inline uint32_t mask<float>(float value, uint32_t mask) {
+#if CAPNP_CANONICALIZE_NAN
+  if (value != value) {
+    return 0x7fc00000u;
+  }
+#endif
+
   uint32_t i;
   static_assert(sizeof(i) == sizeof(value), "float is not 32 bits?");
   memcpy(&i, &value, sizeof(value));
@@ -253,6 +278,12 @@ inline uint32_t mask<float>(float value, uint32_t mask) {
 
 template <>
 inline uint64_t mask<double>(double value, uint64_t mask) {
+#if CAPNP_CANONICALIZE_NAN
+  if (value != value) {
+    return 0x7ff8000000000000ull;
+  }
+#endif
+
   uint64_t i;
   static_assert(sizeof(i) == sizeof(value), "double is not 64 bits?");
   memcpy(&i, &value, sizeof(value));
@@ -851,6 +882,18 @@ inline void StructBuilder::setDataField(ElementCount offset, kj::NoInfer<T> valu
   reinterpret_cast<WireValue<T>*>(data)[offset / ELEMENTS].set(value);
 }
 
+#if CAPNP_CANONICALIZE_NAN
+// Use mask() on floats and doubles to make sure we canonicalize NaNs.
+template <>
+inline void StructBuilder::setDataField<float>(ElementCount offset, float value) {
+  setDataField<uint32_t>(offset, mask<float>(value, 0));
+}
+template <>
+inline void StructBuilder::setDataField<double>(ElementCount offset, double value) {
+  setDataField<uint64_t>(offset, mask<double>(value, 0));
+}
+#endif
+
 template <>
 inline void StructBuilder::setDataField<bool>(ElementCount offset, bool value) {
   // This branch should be compiled out whenever this is inlined with a constant offset.
@@ -969,6 +1012,18 @@ template <typename T>
 inline void ListBuilder::setDataElement(ElementCount index, kj::NoInfer<T> value) {
   reinterpret_cast<WireValue<T>*>(ptr + index * step / BITS_PER_BYTE)->set(value);
 }
+
+#if CAPNP_CANONICALIZE_NAN
+// Use mask() on floats and doubles to make sure we canonicalize NaNs.
+template <>
+inline void ListBuilder::setDataElement<float>(ElementCount index, float value) {
+  setDataElement<uint32_t>(index, mask<float>(value, 0));
+}
+template <>
+inline void ListBuilder::setDataElement<double>(ElementCount index, double value) {
+  setDataElement<uint64_t>(index, mask<double>(value, 0));
+}
+#endif
 
 template <>
 inline void ListBuilder::setDataElement<bool>(ElementCount index, bool value) {
