@@ -25,4 +25,4 @@
 $namespace("capnp::annotations");
 
 annotation namespace(file): Text;
-annotation name(field, enumerant): Text;
+annotation name(field, enumerant, struct, enum): Text;
