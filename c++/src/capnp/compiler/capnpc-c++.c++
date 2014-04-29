@@ -271,6 +271,15 @@ private:
     KJ_UNREACHABLE;
   }
 
+  kj::StringPtr enumerantName(schema::Enumerant::Reader proto) {
+    for (auto annotation: proto.getAnnotations()) {
+      if (annotation.getId() == NAME_ANNOTATION_ID) {
+        return annotation.getValue().getText();
+      }
+    }
+    return proto.getName();
+  }
+
   kj::StringTree literalValue(schema::Type::Reader type, schema::Value::Reader value) {
     switch (value.which()) {
       case schema::Value::VOID: return kj::strTree(" ::capnp::VOID");
@@ -290,7 +299,7 @@ private:
         if (value.getEnum() < schema.getEnumerants().size()) {
           return kj::strTree(
               cppFullName(schema), "::",
-              toUpperCase(schema.getEnumerants()[value.getEnum()].getProto().getName()));
+              toUpperCase(enumerantName(schema.getEnumerants()[value.getEnum()].getProto())));
         } else {
           return kj::strTree("static_cast<", cppFullName(schema), ">(", value.getEnum(), ")");
         }
@@ -1742,7 +1751,7 @@ private:
           scope.size() == 0 ? kj::strTree() : kj::strTree(
               "  enum class ", name, ": uint16_t {\n",
               KJ_MAP(e, enumerants) {
-                return kj::strTree("    ", toUpperCase(e.getProto().getName()), ",\n");
+                return kj::strTree("    ", toUpperCase(enumerantName(e.getProto())), ",\n");
               },
               "  };\n"
               "\n"),
@@ -1750,7 +1759,7 @@ private:
           scope.size() > 0 ? kj::strTree() : kj::strTree(
               "enum class ", name, ": uint16_t {\n",
               KJ_MAP(e, enumerants) {
-                return kj::strTree("  ", toUpperCase(e.getProto().getName()), ",\n");
+                return kj::strTree("  ", toUpperCase(enumerantName(e.getProto())), ",\n");
               },
               "};\n"
               "\n"),
