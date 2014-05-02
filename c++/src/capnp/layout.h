@@ -778,6 +778,8 @@ public:
   Text::Reader asTextReader() const;
   Data::Reader asDataReader() const;
 
+  void truncate(ElementCount size, bool isText);
+
 private:
   static_assert(1 * POINTERS * WORDS_PER_POINTER == 1 * WORDS,
                 "This struct assumes a pointer is one word.");

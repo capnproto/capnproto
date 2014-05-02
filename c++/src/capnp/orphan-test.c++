@@ -990,6 +990,48 @@ TEST(Orphans, ReferenceExternalData_NoZeroImmediateAbandon) {
   }
 }
 
+TEST(Orphans, Truncate) {
+  MallocMessageBuilder message;
+  auto orphan = message.getOrphanage().newOrphan<Data>(17);
+  auto builder = orphan.get();
+  memset(builder.begin(), 123, builder.size());
+
+  EXPECT_EQ(4, message.getSegmentsForOutput()[0].size());
+  orphan.truncate(2);
+  EXPECT_EQ(2, message.getSegmentsForOutput()[0].size());
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(2, reader.size());
+  EXPECT_EQ(builder.begin(), reader.begin());
+
+  EXPECT_EQ(123, builder[0]);
+  EXPECT_EQ(123, builder[1]);
+  EXPECT_EQ(0, builder[2]);
+  EXPECT_EQ(0, builder[3]);
+  EXPECT_EQ(0, builder[16]);
+}
+
+TEST(Orphans, TruncateText) {
+  MallocMessageBuilder message;
+  auto orphan = message.getOrphanage().newOrphan<Text>(17);
+  auto builder = orphan.get();
+  memset(builder.begin(), 'a', builder.size());
+
+  EXPECT_EQ(4, message.getSegmentsForOutput()[0].size());
+  orphan.truncate(2);
+  EXPECT_EQ(2, message.getSegmentsForOutput()[0].size());
+
+  auto reader = orphan.getReader();
+  EXPECT_EQ(2, reader.size());
+  EXPECT_EQ(builder.begin(), reader.begin());
+
+  EXPECT_EQ('a', builder[0]);
+  EXPECT_EQ('a', builder[1]);
+  EXPECT_EQ('\0', builder[2]);
+  EXPECT_EQ('\0', builder[3]);
+  EXPECT_EQ('\0', builder[16]);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

@@ -2707,6 +2707,40 @@ Data::Reader OrphanBuilder::asDataReader() const {
   return WireHelpers::readDataPointer(segment, tagAsPtr(), location, nullptr, 0 * BYTES);
 }
 
+void OrphanBuilder::truncate(ElementCount size, bool isText) {
+  if (isText) size += 1 * ELEMENTS;
+
+  WirePointer* ref = tagAsPtr();
+  SegmentBuilder* segment = this->segment;
+
+  word* target = WireHelpers::followFars(ref, location, segment);
+
+  KJ_REQUIRE(ref->kind() == WirePointer::LIST, "Can't truncate non-list.") {
+    return;
+  }
+
+  // TODO(soon): Implement truncation of all sizes.
+  KJ_ASSERT(ref->listRef.elementSize() == FieldSize::BYTE,
+            "Not implemented: truncate non-blob.");
+
+  auto oldSize = ref->listRef.elementCount();
+  KJ_REQUIRE(size <= oldSize, "Truncate size must be smaller than existing size.") {
+    return;
+  }
+
+  ref->listRef.set(ref->listRef.elementSize(), size);
+
+  byte* begin = reinterpret_cast<byte*>(target);
+  byte* truncPoint = begin + size * (1 * BYTES / ELEMENTS);
+  byte* end = begin + oldSize * (1 * BYTES / ELEMENTS);
+  memset(truncPoint - isText, 0, end - truncPoint + isText);
+
+  word* truncWord = target + WireHelpers::roundBytesUpToWords(size * (1 * BYTES / ELEMENTS));
+  word* endWord = target + WireHelpers::roundBytesUpToWords(oldSize * (1 * BYTES / ELEMENTS));
+
+  segment->tryTruncate(endWord, truncWord);
+}
+
 void OrphanBuilder::euthanize() {
   // Carefully catch any exceptions and rethrow them as recoverable exceptions since we may be in
   // a destructor.

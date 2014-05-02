@@ -157,6 +157,10 @@ public:
 
   inline bool isWritable() { return !readOnly; }
 
+  inline void tryTruncate(word* from, word* to);
+  // If `from` points just past the current end of the segment, then move the end back to `to`.
+  // Otherwise, do nothing.
+
 private:
   word* pos;
   // Pointer to a pointer to the current end point of the segment, i.e. the location where the
@@ -397,6 +401,10 @@ inline void SegmentBuilder::reset() {
   word* start = getPtrUnchecked(0 * WORDS);
   memset(start, 0, (pos - start) * sizeof(word));
   pos = start;
+}
+
+inline void SegmentBuilder::tryTruncate(word* from, word* to) {
+  if (pos == from) pos = to;
 }
 
 }  // namespace _ (private)

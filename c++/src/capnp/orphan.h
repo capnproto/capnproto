@@ -64,6 +64,16 @@ public:
   inline bool operator==(decltype(nullptr)) const { return builder == nullptr; }
   inline bool operator!=(decltype(nullptr)) const { return builder != nullptr; }
 
+  inline void truncate(uint size);
+  // Truncate the object (which must be a list or a blob) down to the given size. The object's
+  // current size must be larger than this. The object stays in its current position. If the object
+  // is the last object in its segment (which is always true if the object is the last thing that
+  // was allocated in the message) then the truncated space can be reclaimed. Otherwise, the space
+  // is zero'd out but otherwise lost, like an abandoned orphan.
+  //
+  // Any existing readers or builders pointing at the object are invalidated by this call.  You
+  // must call `get()` or `getReader()` again to get the new, valid pointer.
+
 private:
   _::OrphanBuilder builder;
 
@@ -235,6 +245,16 @@ inline BuilderFor<T> Orphan<T>::get() {
 template <typename T>
 inline ReaderFor<T> Orphan<T>::getReader() const {
   return _::OrphanGetImpl<T>::applyReader(builder);
+}
+
+template <typename T>
+inline void Orphan<T>::truncate(uint size) {
+  builder.truncate(size * ELEMENTS, false);
+}
+
+template <>
+inline void Orphan<Text>::truncate(uint size) {
+  builder.truncate(size * ELEMENTS, true);
 }
 
 template <typename T>
