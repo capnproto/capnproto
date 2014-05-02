@@ -279,7 +279,7 @@ private:
         return annotation.getValue();
       }
     }
-    return kj::Maybe<schema::Value::Reader>();
+    return nullptr;
   }
 
   template <typename P>
