@@ -162,6 +162,7 @@ public:
   // nodes can be found in the SchemaLoader returned by `getLoader()`.
 
   const SchemaLoader& getLoader() const { return loader; }
+  SchemaLoader& getLoader() { return loader; }
   // Get a SchemaLoader backed by this compiler.  Schema nodes will be lazily constructed as you
   // traverse them using this loader.
 

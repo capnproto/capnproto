@@ -196,6 +196,10 @@ SchemaParser::ModuleImpl& SchemaParser::getModuleImpl(kj::Own<SchemaFile>&& file
   return *insertResult.first->second;
 }
 
+SchemaLoader& SchemaParser::getLoader() {
+  return impl->compiler.getLoader();
+}
+
 kj::Maybe<ParsedSchema> ParsedSchema::findNested(kj::StringPtr name) const {
   return parser->impl->compiler.lookup(getProto().getId(), name).map(
       [this](uint64_t childId) {

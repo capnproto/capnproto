@@ -75,6 +75,12 @@ public:
   // normally.  In this case, the result is a best-effort attempt to compile the schema, but it
   // may be invalid or corrupt, and using it for anything may cause exceptions to be thrown.
 
+  template <typename T>
+  inline void loadCompiledTypeAndDependencies() {
+    // See SchemaLoader::loadCompiledTypeAndDependencies().
+    getLoader().loadCompiledTypeAndDependencies<T>();
+  }
+
 private:
   struct Impl;
   class ModuleImpl;
@@ -82,6 +88,7 @@ private:
   mutable bool hadErrors = false;
 
   ModuleImpl& getModuleImpl(kj::Own<SchemaFile>&& file) const;
+  SchemaLoader& getLoader();
 
   friend class ParsedSchema;
 };
