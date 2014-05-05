@@ -71,7 +71,7 @@
 # two-party protocol initially, and then pair applications with an appropriate proxy written in
 # C++, rather than implement other parameterizations of the RPC protocol directly.
 
-using Cxx = import "c++.capnp";
+using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("capnp::rpc::twoparty");
 
 enum Side {
