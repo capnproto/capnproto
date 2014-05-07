@@ -21,7 +21,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-using Cxx = import "c++.capnp";
+using Cxx = import "/capnp/c++.capnp";
 
 @0xa93fc509624c72d9;
 $Cxx.namespace("capnp::schema");
