@@ -119,6 +119,8 @@ struct List<T, Kind::PRIMITIVE> {
     inline Iterator begin() const { return Iterator(this, 0); }
     inline Iterator end() const { return Iterator(this, size()); }
 
+    inline kj::ArrayPtr<const T> asPtr() const { return reader.template asPtr<T>(); }
+
   private:
     _::ListReader reader;
     template <typename U, Kind K>
@@ -159,6 +161,8 @@ struct List<T, Kind::PRIMITIVE> {
     typedef _::IndexingIterator<Builder, T> Iterator;
     inline Iterator begin() { return Iterator(this, 0); }
     inline Iterator end() { return Iterator(this, size()); }
+
+    inline kj::ArrayPtr<T> asPtr() { return builder.template asPtr<T>(); }
 
   private:
     _::ListBuilder builder;
