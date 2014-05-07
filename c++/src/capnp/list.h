@@ -27,6 +27,7 @@
 #include "layout.h"
 #include "orphan.h"
 #include <initializer_list>
+#include <iterator>
 
 namespace capnp {
 namespace _ {  // private
@@ -48,7 +49,7 @@ private:
 };
 
 template <typename Container, typename Element>
-class IndexingIterator {
+class IndexingIterator : public std::iterator<std::random_access_iterator_tag, Element> {
 public:
   IndexingIterator() = default;
 
