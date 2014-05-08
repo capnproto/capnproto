@@ -27,7 +27,9 @@
 #include "layout.h"
 #include "orphan.h"
 #include <initializer_list>
+#ifdef KJ_STD_COMPAT
 #include <iterator>
+#endif  // KJ_STD_COMPAT
 
 namespace capnp {
 namespace _ {  // private
@@ -49,7 +51,7 @@ private:
 };
 
 template <typename Container, typename Element>
-class IndexingIterator : public std::iterator<std::random_access_iterator_tag, Element> {
+class IndexingIterator {
 public:
   IndexingIterator() = default;
 
@@ -506,5 +508,15 @@ private:
 };
 
 }  // namespace capnp
+
+#ifdef KJ_STD_COMPAT
+namespace std {
+
+template <typename Container, typename Element>
+struct iterator_traits<capnp::_::IndexingIterator<Container, Element>>
+      : public std::iterator<std::random_access_iterator_tag, Element, int> {};
+
+}  // namespace std
+#endif  // KJ_STD_COMPAT
 
 #endif  // CAPNP_LIST_H_
