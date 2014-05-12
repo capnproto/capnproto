@@ -1657,14 +1657,31 @@ TEST(Encoding, NameAnnotation) {
   MallocMessageBuilder message;
   auto root = message.initRoot<test::RenamedStruct>();
 
-  EXPECT_FALSE(root.isGoodFieldName());
-
   root.setGoodFieldName(true);
   EXPECT_EQ(true, root.getGoodFieldName());
   EXPECT_TRUE(root.isGoodFieldName());
 
+  root.setBar(0xff);
+  EXPECT_FALSE(root.isGoodFieldName());
+
   root.setAnotherGoodFieldName(test::RenamedStruct::RenamedEnum::QUX);
   EXPECT_EQ(test::RenamedStruct::RenamedEnum::QUX, root.getAnotherGoodFieldName());
+
+  EXPECT_FALSE(root.getNamedUnion().isQux());
+  auto quxBuilder = root.getNamedUnion().initQux();
+  EXPECT_TRUE(root.getNamedUnion().isQux());
+  EXPECT_FALSE(root.getNamedUnion().getQux().hasAnotherGoodNestedFieldName());
+
+  quxBuilder.setGoodNestedFieldName(true);
+  EXPECT_EQ(true, quxBuilder.getGoodNestedFieldName());
+
+  EXPECT_FALSE(quxBuilder.hasAnotherGoodNestedFieldName());
+  auto nestedFieldBuilder = quxBuilder.initAnotherGoodNestedFieldName();
+  EXPECT_TRUE(quxBuilder.hasAnotherGoodNestedFieldName());
+
+  nestedFieldBuilder.setGoodNestedFieldName(true);
+  EXPECT_EQ(true, nestedFieldBuilder.getGoodNestedFieldName());
+  EXPECT_FALSE(nestedFieldBuilder.hasAnotherGoodNestedFieldName());
 }
 
 }  // namespace
