@@ -1653,6 +1653,7 @@ TEST(Encoding, HasEmptyStructList) {
 
 TEST(Encoding, NameAnnotation) {
   EXPECT_EQ(2, static_cast<uint16_t>(test::RenamedStruct::RenamedEnum::QUX));
+  EXPECT_EQ(2, static_cast<uint16_t>(test::RenamedStruct::RenamedNestedStruct::RenamedDeeplyNestedEnum::GARPLY));
 
   MallocMessageBuilder message;
   auto root = message.initRoot<test::RenamedStruct>();

@@ -706,6 +706,12 @@ struct TestNameAnnotation $Cxx.name("RenamedStruct") {
   struct NestedStruct $Cxx.name("RenamedNestedStruct") {
     badNestedFieldName @0 :Bool $Cxx.name("goodNestedFieldName");
     anotherBadNestedFieldName @1 :NestedStruct $Cxx.name("anotherGoodNestedFieldName");
+
+    enum DeeplyNestedEnum $Cxx.name("RenamedDeeplyNestedEnum") {
+      quux @0;
+      corge @1;
+      grault @2 $Cxx.name("garply");
+    }
   }
 
   namedUnion :union {
