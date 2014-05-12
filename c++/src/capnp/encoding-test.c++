@@ -1652,13 +1652,19 @@ TEST(Encoding, HasEmptyStructList) {
 }
 
 TEST(Encoding, NameAnnotation) {
+  EXPECT_EQ(2, static_cast<uint16_t>(test::RenamedStruct::RenamedEnum::QUX));
+
   MallocMessageBuilder message;
   auto root = message.initRoot<test::RenamedStruct>();
 
-  root.setGoodFieldName(true);
-  root.setAnotherGoodFieldName(test::RenamedStruct::RenamedEnum::QUX);
+  EXPECT_FALSE(root.isGoodFieldName());
 
-  EXPECT_EQ(2, static_cast<uint16_t>(test::RenamedStruct::RenamedEnum::QUX));
+  root.setGoodFieldName(true);
+  EXPECT_EQ(true, root.getGoodFieldName());
+  EXPECT_TRUE(root.isGoodFieldName());
+
+  root.setAnotherGoodFieldName(test::RenamedStruct::RenamedEnum::QUX);
+  EXPECT_EQ(test::RenamedStruct::RenamedEnum::QUX, root.getAnotherGoodFieldName());
 }
 
 }  // namespace
