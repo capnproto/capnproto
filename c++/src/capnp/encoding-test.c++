@@ -1651,6 +1651,16 @@ TEST(Encoding, HasEmptyStructList) {
   EXPECT_EQ(2, root.totalSize().wordCount);
 }
 
+TEST(Encoding, NameAnnotation) {
+  MallocMessageBuilder message;
+  auto root = message.initRoot<test::RenamedStruct>();
+
+  root.setGoodFieldName(true);
+  root.setAnotherGoodFieldName(test::RenamedStruct::RenamedEnum::QUX);
+
+  EXPECT_EQ(2, static_cast<uint16_t>(test::RenamedStruct::RenamedEnum::QUX));
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

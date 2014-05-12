@@ -688,3 +688,18 @@ struct TestProvisionId {}
 struct TestRecipientId {}
 struct TestThirdPartyCapId {}
 struct TestJoinResult {}
+
+struct TestNameAnnotation $Cxx.name("RenamedStruct") {
+  union {
+    badFieldName @0 :Bool $Cxx.name("goodFieldName");
+    bar @1 :Int8;
+  }
+
+  enum BadlyNamedEnum $Cxx.name("RenamedEnum") {
+    foo @0;
+    bar @1;
+    baz @2 $Cxx.name("qux");
+  }
+
+  anotherBadFieldName @2 :BadlyNamedEnum $Cxx.name("anotherGoodFieldName");
+}
