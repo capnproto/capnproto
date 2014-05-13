@@ -77,6 +77,12 @@ kj::Array<word> messageToFlatArray(MessageBuilder& builder);
 kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
 // Version of messageToFlatArray that takes a raw segment array.
 
+size_t computeSerializedSizeInWords(MessageBuilder& builder);
+// Returns the size, in words, that will be needed to serialize the message, including the header.
+
+size_t computeSerializedSizeInWords(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments);
+// Version of computeSerializedSizeInWords that takes a raw segment array.
+
 // =======================================================================================
 
 class InputStreamMessageReader: public MessageReader {
@@ -149,6 +155,10 @@ void writeMessageToFd(int fd, kj::ArrayPtr<const kj::ArrayPtr<const word>> segme
 
 inline kj::Array<word> messageToFlatArray(MessageBuilder& builder) {
   return messageToFlatArray(builder.getSegmentsForOutput());
+}
+
+inline size_t computeSerializedSizeInWords(MessageBuilder& builder) {
+  return computeSerializedSizeInWords(builder.getSegmentsForOutput());
 }
 
 inline void writeMessage(kj::OutputStream& output, MessageBuilder& builder) {

@@ -91,15 +91,7 @@ kj::ArrayPtr<const word> FlatArrayMessageReader::getSegment(uint id) {
 }
 
 kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
-  KJ_REQUIRE(segments.size() > 0, "Tried to serialize uninitialized message.");
-
-  size_t totalSize = segments.size() / 2 + 1;
-
-  for (auto& segment: segments) {
-    totalSize += segment.size();
-  }
-
-  kj::Array<word> result = kj::heapArray<word>(totalSize);
+  kj::Array<word> result = kj::heapArray<word>(computeSerializedSizeInWords(segments));
 
   _::WireValue<uint32_t>* table =
       reinterpret_cast<_::WireValue<uint32_t>*>(result.begin());
@@ -128,6 +120,18 @@ kj::Array<word> messageToFlatArray(kj::ArrayPtr<const kj::ArrayPtr<const word>> 
   KJ_DASSERT(dst == result.end(), "Buffer overrun/underrun bug in code above.");
 
   return kj::mv(result);
+}
+
+size_t computeSerializedSizeInWords(kj::ArrayPtr<const kj::ArrayPtr<const word>> segments) {
+  KJ_REQUIRE(segments.size() > 0, "Tried to serialize uninitialized message.");
+
+  size_t totalSize = segments.size() / 2 + 1;
+
+  for (auto& segment: segments) {
+    totalSize += segment.size();
+  }
+
+  return totalSize;
 }
 
 // =======================================================================================
