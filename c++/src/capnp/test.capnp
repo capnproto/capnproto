@@ -688,3 +688,41 @@ struct TestProvisionId {}
 struct TestRecipientId {}
 struct TestThirdPartyCapId {}
 struct TestJoinResult {}
+
+struct TestNameAnnotation $Cxx.name("RenamedStruct") {
+  union {
+    badFieldName @0 :Bool $Cxx.name("goodFieldName");
+    bar @1 :Int8;
+  }
+
+  enum BadlyNamedEnum $Cxx.name("RenamedEnum") {
+    foo @0;
+    bar @1;
+    baz @2 $Cxx.name("qux");
+  }
+
+  anotherBadFieldName @2 :BadlyNamedEnum $Cxx.name("anotherGoodFieldName");
+
+  struct NestedStruct $Cxx.name("RenamedNestedStruct") {
+    badNestedFieldName @0 :Bool $Cxx.name("goodNestedFieldName");
+    anotherBadNestedFieldName @1 :NestedStruct $Cxx.name("anotherGoodNestedFieldName");
+
+    enum DeeplyNestedEnum $Cxx.name("RenamedDeeplyNestedEnum") {
+      quux @0;
+      corge @1;
+      grault @2 $Cxx.name("garply");
+    }
+  }
+
+  badlyNamedUnion :union $Cxx.name("renamedUnion") {
+    badlyNamedGroup :group $Cxx.name("renamedGroup") {
+      foo @3 :Void;
+      bar @4 :Void;
+    }
+    baz @5 :NestedStruct $Cxx.name("qux");
+  }
+}
+
+interface TestNameAnnotationInterface $Cxx.name("RenamedInterface") {
+  badlyNamedMethod @0 (badlyNamedParam :UInt8 $Cxx.name("renamedParam")) $Cxx.name("renamedMethod");
+}

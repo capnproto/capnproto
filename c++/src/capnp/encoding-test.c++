@@ -1651,6 +1651,47 @@ TEST(Encoding, HasEmptyStructList) {
   EXPECT_EQ(2, root.totalSize().wordCount);
 }
 
+TEST(Encoding, NameAnnotation) {
+  EXPECT_EQ(2, static_cast<uint16_t>(test::RenamedStruct::RenamedEnum::QUX));
+  EXPECT_EQ(2, static_cast<uint16_t>(test::RenamedStruct::RenamedNestedStruct::RenamedDeeplyNestedEnum::GARPLY));
+
+  MallocMessageBuilder message;
+  auto root = message.initRoot<test::RenamedStruct>();
+
+  root.setGoodFieldName(true);
+  EXPECT_EQ(true, root.getGoodFieldName());
+  EXPECT_TRUE(root.isGoodFieldName());
+
+  root.setBar(0xff);
+  EXPECT_FALSE(root.isGoodFieldName());
+
+  root.setAnotherGoodFieldName(test::RenamedStruct::RenamedEnum::QUX);
+  EXPECT_EQ(test::RenamedStruct::RenamedEnum::QUX, root.getAnotherGoodFieldName());
+
+  EXPECT_FALSE(root.getRenamedUnion().isQux());
+  auto quxBuilder = root.getRenamedUnion().initQux();
+  EXPECT_TRUE(root.getRenamedUnion().isQux());
+  EXPECT_FALSE(root.getRenamedUnion().getQux().hasAnotherGoodNestedFieldName());
+
+  quxBuilder.setGoodNestedFieldName(true);
+  EXPECT_EQ(true, quxBuilder.getGoodNestedFieldName());
+
+  EXPECT_FALSE(quxBuilder.hasAnotherGoodNestedFieldName());
+  auto nestedFieldBuilder = quxBuilder.initAnotherGoodNestedFieldName();
+  EXPECT_TRUE(quxBuilder.hasAnotherGoodNestedFieldName());
+
+  nestedFieldBuilder.setGoodNestedFieldName(true);
+  EXPECT_EQ(true, nestedFieldBuilder.getGoodNestedFieldName());
+  EXPECT_FALSE(nestedFieldBuilder.hasAnotherGoodNestedFieldName());
+
+  EXPECT_FALSE(root.getRenamedUnion().isRenamedGroup());
+  auto renamedGroupBuilder = root.getRenamedUnion().initRenamedGroup();
+  EXPECT_TRUE(root.getRenamedUnion().isRenamedGroup());
+
+  test::RenamedInterface::RenamedMethodParams::Reader renamedInterfaceParams;
+  renamedInterfaceParams.getRenamedParam();
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp
