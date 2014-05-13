@@ -720,3 +720,7 @@ struct TestNameAnnotation $Cxx.name("RenamedStruct") {
     baz @5 :NestedStruct $Cxx.name("qux");
   }
 }
+
+interface TestNameAnnotationInterface $Cxx.name("RenamedInterface") {
+  badlyNamedMethod @0 (badlyNamedParam :UInt8 $Cxx.name("renamedParam")) $Cxx.name("renamedMethod");
+}

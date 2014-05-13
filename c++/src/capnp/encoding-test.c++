@@ -1683,6 +1683,9 @@ TEST(Encoding, NameAnnotation) {
   nestedFieldBuilder.setGoodNestedFieldName(true);
   EXPECT_EQ(true, nestedFieldBuilder.getGoodNestedFieldName());
   EXPECT_FALSE(nestedFieldBuilder.hasAnotherGoodNestedFieldName());
+
+  test::RenamedInterface::RenamedMethodParams::Reader renamedInterfaceParams;
+  renamedInterfaceParams.getRenamedParam();
 }
 
 }  // namespace

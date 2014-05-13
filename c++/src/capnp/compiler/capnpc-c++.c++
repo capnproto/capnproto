@@ -1243,7 +1243,7 @@ private:
 
   MethodText makeMethodText(kj::StringPtr interfaceName, InterfaceSchema::Method method) {
     auto proto = method.getProto();
-    auto name = proto.getName();
+    auto name = protoName(proto);
     auto titleCase = toTitleCase(name);
     auto paramSchema = schemaLoader.get(proto.getParamStructType()).asStruct();
     auto resultSchema = schemaLoader.get(proto.getResultStructType()).asStruct();
@@ -1593,7 +1593,7 @@ private:
           auto paramsProto = schemaLoader.get(method.getParamStructType()).getProto();
           if (paramsProto.getScopeId() == 0) {
             nestedTexts.add(makeNodeText(namespace_, subScope,
-                toTitleCase(kj::str(method.getName(), "Params")), params));
+                toTitleCase(kj::str(protoName(method), "Params")), params));
           }
         }
         {
@@ -1601,7 +1601,7 @@ private:
           auto resultsProto = schemaLoader.get(method.getResultStructType()).getProto();
           if (resultsProto.getScopeId() == 0) {
             nestedTexts.add(makeNodeText(namespace_, subScope,
-                toTitleCase(kj::str(method.getName(), "Results")), results));
+                toTitleCase(kj::str(protoName(method), "Results")), results));
           }
         }
       }
