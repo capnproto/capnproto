@@ -380,7 +380,8 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
             KJ_IF_MAYBE(error, (*option.funcWithArg)(*arg).releaseError()) {
               usageError(programName, str(param, ": ", *error));
             }
-          } else if (i + 1 < params.size() && !params[i + 1].startsWith("-")) {
+          } else if (i + 1 < params.size() &&
+                     !(params[i + 1].startsWith("-") && params[i + 1].size() > 1)) {
             // "--foo blah": "blah" is the argument.
             ++i;
             KJ_IF_MAYBE(error, (*option.funcWithArg)(params[i]).releaseError()) {
@@ -400,7 +401,7 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
           }
         }
       }
-    } else if (param.startsWith("-")) {
+    } else if (param.startsWith("-") && param.size() > 1) {
       // Short option(s).
       for (uint j = 1; j < param.size(); j++) {
         char c = param[j];
@@ -418,7 +419,8 @@ void MainBuilder::MainImpl::operator()(StringPtr programName, ArrayPtr<const Str
                 usageError(programName, str("-", c, " ", arg, ": ", *error));
               }
               break;
-            } else if (i + 1 < params.size() && !params[i + 1].startsWith("-")) {
+            } else if (i + 1 < params.size() &&
+                       !(params[i + 1].startsWith("-") && params[i + 1].size() > 1)) {
               // Next parameter is argument.
               ++i;
               KJ_IF_MAYBE(error, (*option.funcWithArg)(params[i]).releaseError()) {
