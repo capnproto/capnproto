@@ -1668,10 +1668,10 @@ TEST(Encoding, NameAnnotation) {
   root.setAnotherGoodFieldName(test::RenamedStruct::RenamedEnum::QUX);
   EXPECT_EQ(test::RenamedStruct::RenamedEnum::QUX, root.getAnotherGoodFieldName());
 
-  EXPECT_FALSE(root.getNamedUnion().isQux());
-  auto quxBuilder = root.getNamedUnion().initQux();
-  EXPECT_TRUE(root.getNamedUnion().isQux());
-  EXPECT_FALSE(root.getNamedUnion().getQux().hasAnotherGoodNestedFieldName());
+  EXPECT_FALSE(root.getRenamedUnion().isQux());
+  auto quxBuilder = root.getRenamedUnion().initQux();
+  EXPECT_TRUE(root.getRenamedUnion().isQux());
+  EXPECT_FALSE(root.getRenamedUnion().getQux().hasAnotherGoodNestedFieldName());
 
   quxBuilder.setGoodNestedFieldName(true);
   EXPECT_EQ(true, quxBuilder.getGoodNestedFieldName());
@@ -1683,6 +1683,10 @@ TEST(Encoding, NameAnnotation) {
   nestedFieldBuilder.setGoodNestedFieldName(true);
   EXPECT_EQ(true, nestedFieldBuilder.getGoodNestedFieldName());
   EXPECT_FALSE(nestedFieldBuilder.hasAnotherGoodNestedFieldName());
+
+  EXPECT_FALSE(root.getRenamedUnion().isRenamedGroup());
+  auto renamedGroupBuilder = root.getRenamedUnion().initRenamedGroup();
+  EXPECT_TRUE(root.getRenamedUnion().isRenamedGroup());
 
   test::RenamedInterface::RenamedMethodParams::Reader renamedInterfaceParams;
   renamedInterfaceParams.getRenamedParam();

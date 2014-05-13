@@ -714,9 +714,11 @@ struct TestNameAnnotation $Cxx.name("RenamedStruct") {
     }
   }
 
-  namedUnion :union {
-    foo @3 :Void;
-    bar @4 :Void;
+  badlyNamedUnion :union $Cxx.name("renamedUnion") {
+    badlyNamedGroup :group $Cxx.name("renamedGroup") {
+      foo @3 :Void;
+      bar @4 :Void;
+    }
     baz @5 :NestedStruct $Cxx.name("qux");
   }
 }
