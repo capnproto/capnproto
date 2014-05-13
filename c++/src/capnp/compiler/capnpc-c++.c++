@@ -1582,7 +1582,7 @@ private:
       for (auto field: proto.getStruct().getFields()) {
         if (field.isGroup()) {
           nestedTexts.add(makeNodeText(
-              namespace_, subScope, toTitleCase(field.getName()),
+              namespace_, subScope, toTitleCase(protoName(field)),
               schemaLoader.get(field.getGroup().getTypeId())));
         }
       }
