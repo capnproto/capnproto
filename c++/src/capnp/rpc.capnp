@@ -870,7 +870,7 @@ struct CapDescriptor {
     # Hopefully this is unusual.
 
     senderHosted @1 :ExportId;
-    # A capability newly exported by the sender.  This is the ID of the new capability in the
+    # A capability previously exported by the sender.  This is the ID of the new capability in the
     # sender's export table (receiver's import table).
 
     senderPromise @2 :ExportId;
