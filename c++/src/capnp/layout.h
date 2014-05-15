@@ -266,7 +266,7 @@ template <>
 inline uint32_t mask<float>(float value, uint32_t mask) {
 #if CAPNP_CANONICALIZE_NAN
   if (value != value) {
-    return 0x7fc00000u;
+    return 0x7fc00000u ^ mask;
   }
 #endif
 
@@ -280,7 +280,7 @@ template <>
 inline uint64_t mask<double>(double value, uint64_t mask) {
 #if CAPNP_CANONICALIZE_NAN
   if (value != value) {
-    return 0x7ff8000000000000ull;
+    return 0x7ff8000000000000ull ^ mask;
   }
 #endif
 

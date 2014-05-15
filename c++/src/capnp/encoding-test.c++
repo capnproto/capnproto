@@ -1685,11 +1685,25 @@ TEST(Encoding, NameAnnotation) {
   EXPECT_FALSE(nestedFieldBuilder.hasAnotherGoodNestedFieldName());
 
   EXPECT_FALSE(root.getRenamedUnion().isRenamedGroup());
-  auto renamedGroupBuilder = root.getRenamedUnion().initRenamedGroup();
+  auto renamedGroupBuilder KJ_UNUSED = root.getRenamedUnion().initRenamedGroup();
   EXPECT_TRUE(root.getRenamedUnion().isRenamedGroup());
 
   test::RenamedInterface::RenamedMethodParams::Reader renamedInterfaceParams;
   renamedInterfaceParams.getRenamedParam();
+}
+
+TEST(Encoding, DefaultFloatPlusNan) {
+  MallocMessageBuilder message;
+  auto root = message.initRoot<TestDefaults>();
+
+  root.setFloat32Field(kj::nan());
+  root.setFloat64Field(kj::nan());
+
+  float f = root.getFloat32Field();
+  EXPECT_TRUE(f != f);
+
+  double d = root.getFloat64Field();
+  EXPECT_TRUE(d != d);
 }
 
 }  // namespace
