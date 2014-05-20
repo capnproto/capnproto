@@ -989,7 +989,8 @@ AsyncIoContext setupAsyncIo() {
   auto lowLevel = heap<LowLevelAsyncIoProviderImpl>();
   auto ioProvider = kj::heap<AsyncIoProviderImpl>(*lowLevel);
   auto& waitScope = lowLevel->getWaitScope();
-  return { kj::mv(lowLevel), kj::mv(ioProvider), waitScope, lowLevel->getEventPort() };
+  auto& eventPort = lowLevel->getEventPort();
+  return { kj::mv(lowLevel), kj::mv(ioProvider), waitScope, eventPort };
 }
 
 }  // namespace kj
