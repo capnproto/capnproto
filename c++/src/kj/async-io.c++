@@ -792,6 +792,8 @@ public:
 
   Timer& getTimer() override { return timer; }
 
+  UnixEventPort& getEventPort() { return eventPort; }
+
 private:
   UnixEventPort eventPort;
   EventLoop eventLoop;
@@ -987,7 +989,7 @@ AsyncIoContext setupAsyncIo() {
   auto lowLevel = heap<LowLevelAsyncIoProviderImpl>();
   auto ioProvider = kj::heap<AsyncIoProviderImpl>(*lowLevel);
   auto& waitScope = lowLevel->getWaitScope();
-  return { kj::mv(lowLevel), kj::mv(ioProvider), waitScope };
+  return { kj::mv(lowLevel), kj::mv(ioProvider), waitScope, lowLevel->getEventPort() };
 }
 
 }  // namespace kj

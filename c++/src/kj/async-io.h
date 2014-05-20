@@ -31,6 +31,8 @@
 
 namespace kj {
 
+class UnixEventPort;
+
 class AsyncInputStream {
   // Asynchronous equivalent of InputStream (from io.h).
 
@@ -296,6 +298,10 @@ struct AsyncIoContext {
   Own<LowLevelAsyncIoProvider> lowLevelProvider;
   Own<AsyncIoProvider> provider;
   WaitScope& waitScope;
+
+  UnixEventPort& unixEventPort;
+  // TEMPORARY: Direct access to underlying UnixEventPort, mainly for waiting on signals. This
+  //   field will go away at some point when we have a chance to improve these interfaces.
 };
 
 AsyncIoContext setupAsyncIo();
