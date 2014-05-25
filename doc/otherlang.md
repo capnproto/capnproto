@@ -24,6 +24,7 @@ project's documentation for details.
 * [C](https://github.com/jmckaskill/c-capnproto) by [@jmckaskill](https://github.com/jmckaskill)
 * [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
 * [Go](https://github.com/glycerine/go-capnproto) by [@glycerine](https://github.com/glycerine) (originally by [@jmckaskill](https://github.com/jmckaskill))
+* [Java](https://github.com/dwrensha/capnproto-java/) by [@dwrensha](https://github.com/dwrensha)
 * [Javascript](https://github.com/jscheid/capnproto-js) by [@jscheid](https://github.com/jscheid)
 * [Lua](https://github.com/cloudflare/lua-capnproto) by [CloudFlare](http://www.cloudflare.com/) / [@calio](https://github.com/calio)
 * [OCaml](https://github.com/pelzlpj/capnp-ocaml) by [@pelzlpj](https://github.com/pelzlpj)
