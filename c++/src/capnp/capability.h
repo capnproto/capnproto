@@ -159,6 +159,12 @@ public:
   // where no calls are being made.  There is no reason to wait for this before making calls; if
   // the capability does not resolve, the call results will propagate the error.
 
+  Request<AnyPointer, AnyPointer> typelessRequest(
+      uint64_t interfaceId, uint16_t methodId,
+      kj::Maybe<MessageSize> sizeHint);
+  // Make a request without knowing the types of the params or results. You specify the type ID
+  // and method number manually.
+
   // TODO(someday):  method(s) for Join
 
 protected:
@@ -585,6 +591,11 @@ inline typename T::Client Capability::Client::castAs() {
 }
 inline kj::Promise<void> Capability::Client::whenResolved() {
   return hook->whenResolved();
+}
+inline Request<AnyPointer, AnyPointer> Capability::Client::typelessRequest(
+    uint64_t interfaceId, uint16_t methodId,
+    kj::Maybe<MessageSize> sizeHint) {
+  return newCall<AnyPointer, AnyPointer>(interfaceId, methodId, sizeHint);
 }
 template <typename Params, typename Results>
 inline Request<Params, Results> Capability::Client::newCall(
