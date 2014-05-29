@@ -126,11 +126,11 @@ char* fill(char* __restrict__ target, const StringTree& first, Rest&&... rest) {
 template <typename T> constexpr bool isStringTree() { return false; }
 template <> constexpr bool isStringTree<StringTree>() { return true; }
 
-inline StringTree&& toStringTreeOrCharSequnece(StringTree&& tree) { return kj::mv(tree); }
-inline StringTree toStringTreeOrCharSequnece(String&& str) { return StringTree(kj::mv(str)); }
+inline StringTree&& toStringTreeOrCharSequence(StringTree&& tree) { return kj::mv(tree); }
+inline StringTree toStringTreeOrCharSequence(String&& str) { return StringTree(kj::mv(str)); }
 
 template <typename T>
-inline auto toStringTreeOrCharSequnece(T&& value)
+inline auto toStringTreeOrCharSequence(T&& value)
     -> decltype(toCharSequence(kj::fwd<T>(value))) {
   static_assert(!isStringTree<Decay<T>>(),
       "When passing a StringTree into kj::strTree(), either pass it by rvalue "
@@ -202,7 +202,7 @@ StringTree StringTree::concat(Params&&... params) {
 
 template <typename... Params>
 StringTree strTree(Params&&... params) {
-  return StringTree::concat(_::toStringTreeOrCharSequnece(kj::fwd<Params>(params))...);
+  return StringTree::concat(_::toStringTreeOrCharSequence(kj::fwd<Params>(params))...);
 }
 
 }  // namespace kj

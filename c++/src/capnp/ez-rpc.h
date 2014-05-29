@@ -140,7 +140,7 @@ class EzRpcServer {
   // The server counterpart to `EzRpcClient`.  See `EzRpcClient` for an example.
 
 public:
-  explicit EzRpcServer(kj::StringPtr bindAddress, uint deafultPort = 0);
+  explicit EzRpcServer(kj::StringPtr bindAddress, uint defaultPort = 0);
   // Construct a new `EzRpcServer` that binds to the given address.  An address of "*" means to
   // bind to all local addresses.
   //
@@ -169,7 +169,7 @@ public:
   // Export a capability publicly under the given name, so that clients can import it.
   //
   // Keep in mind that you can implicitly convert `kj::Own<MyType::Server>&&` to
-  // `Capability::Client`, so it's typicall to pass something like
+  // `Capability::Client`, so it's typical to pass something like
   // `kj::heap<MyImplementation>(<constructor params>)` as the second parameter.
 
   kj::Promise<uint> getPort();
