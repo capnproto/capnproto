@@ -172,11 +172,10 @@ public:
   CapnpcCppMain(kj::ProcessContext& context): context(context) {}
 
   kj::MainFunc getMain() {
-    return kj::MainBuilder(context, "Cap'n Proto loopback plugin version " VERSION,
-          "This is a Cap'n Proto compiler plugin which \"de-compiles\" the schema back into "
-          "Cap'n Proto schema language format, with comments showing the offsets chosen by the "
-          "compiler.  This is meant to be run using the Cap'n Proto compiler, e.g.:\n"
-          "    capnp compile -ocapnp foo.capnp")
+    return kj::MainBuilder(context, "Cap'n Proto C++ plugin version " VERSION,
+          "This is a Cap'n Proto compiler plugin which generates C++ code. "
+          "It is meant to be run using the Cap'n Proto compiler, e.g.:\n"
+          "    capnp compile -oc++ foo.capnp")
         .callAfterParsing(KJ_BIND_METHOD(*this, run))
         .build();
   }
