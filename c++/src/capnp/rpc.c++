@@ -265,8 +265,6 @@ private:
 // =======================================================================================
 
 class RpcConnectionState final: public kj::TaskSet::ErrorHandler, public kj::Refcounted {
-  class PromisedAnswerClient;
-
 public:
   RpcConnectionState(kj::Maybe<SturdyRefRestorerBase&> restorer,
                      kj::Own<VatNetworkBase::Connection>&& connectionParam,
