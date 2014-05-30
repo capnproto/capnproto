@@ -14,15 +14,14 @@ project's documentation for details.
 ##### Serialization + RPC
 
 * [C++](cxx.html) by [@kentonv](https://github.com/kentonv)
+* [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
 * [Javascript (Node.js only)](https://github.com/kentonv/node-capnp) by [@kentonv](https://github.com/kentonv)
-* [Python](http://jparyani.github.io/pycapnp/) by
-  [@jparyani](https://github.com/jparyani)
+* [Python](http://jparyani.github.io/pycapnp/) by [@jparyani](https://github.com/jparyani)
 * [Rust](https://github.com/dwrensha/capnproto-rust) by [@dwrensha](https://github.com/dwrensha)
 
 ##### Serialization only
 
 * [C](https://github.com/jmckaskill/c-capnproto) by [@jmckaskill](https://github.com/jmckaskill)
-* [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
 * [Go](https://github.com/glycerine/go-capnproto) by [@glycerine](https://github.com/glycerine) (originally by [@jmckaskill](https://github.com/jmckaskill))
 * [Java](https://github.com/dwrensha/capnproto-java/) by [@dwrensha](https://github.com/dwrensha)
 * [Javascript](https://github.com/popham/capnp-js-base) by [@popham](https://github.com/popham)
