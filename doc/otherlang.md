@@ -14,15 +14,14 @@ project's documentation for details.
 ##### Serialization + RPC
 
 * [C++](cxx.html) by [@kentonv](https://github.com/kentonv)
+* [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
 * [Javascript (Node.js only)](https://github.com/kentonv/node-capnp) by [@kentonv](https://github.com/kentonv)
-* [Python](http://jparyani.github.io/pycapnp/) by
-  [@jparyani](https://github.com/jparyani)
+* [Python](http://jparyani.github.io/pycapnp/) by [@jparyani](https://github.com/jparyani)
 * [Rust](https://github.com/dwrensha/capnproto-rust) by [@dwrensha](https://github.com/dwrensha)
 
 ##### Serialization only
 
 * [C](https://github.com/jmckaskill/c-capnproto) by [@jmckaskill](https://github.com/jmckaskill)
-* [Erlang](http://ecapnp.astekk.se/) by [@kaos](https://github.com/kaos)
 * [Go](https://github.com/glycerine/go-capnproto) by [@glycerine](https://github.com/glycerine) (originally by [@jmckaskill](https://github.com/jmckaskill))
 * [Javascript](https://github.com/jscheid/capnproto-js) by [@jscheid](https://github.com/jscheid)
 * [Lua](https://github.com/cloudflare/lua-capnproto) by [CloudFlare](http://www.cloudflare.com/) / [@calio](https://github.com/calio)
