@@ -389,6 +389,7 @@ int main(int argc, const char* argv[]) {
   // Set up the EzRpcServer, binding to port 5923 unless a
   // different port was specified by the user.
   capnp::EzRpcServer server(argv[1], 5923);
+  auto& waitScope = server.getWaitScope();
 
   // Export a capability under the name "foo".  Note that the
   // second parameter here can be any "Client" object or anything
@@ -396,7 +397,6 @@ int main(int argc, const char* argv[]) {
   // re-export a capability imported from another server.
   server.exportCap("foo", kj::heap<MyInterfaceImpl>());
 
-  auto& waitScope = server.getWaitScope();
   // Run forever, accepting connections and handling requests.
   kj::NEVER_DONE.wait(waitScope);
 }
