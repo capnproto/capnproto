@@ -79,7 +79,7 @@ kj::Promise<kj::String> contentPromise =
     fetchHttp("http://example.com");
 
 kj::Promise<int> lineCountPromise =
-    promise.then([](kj::String&& content) {
+    contentPromise.then([](kj::String&& content) {
   return countChars(content, '\n');
 });
 {% endhighlight %}
@@ -396,6 +396,7 @@ int main(int argc, const char* argv[]) {
   // re-export a capability imported from another server.
   server.exportCap("foo", kj::heap<MyInterfaceImpl>());
 
+  auto& waitScope = server.getWaitScope();
   // Run forever, accepting connections and handling requests.
   kj::NEVER_DONE.wait(waitScope);
 }
