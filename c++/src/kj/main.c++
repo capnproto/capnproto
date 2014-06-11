@@ -56,7 +56,7 @@ void TopLevelProcessContext::exit() {
     throw CleanShutdownException { exitCode };
 #endif
   }
-  _Exit(exitCode);
+  _exit(exitCode);
 }
 
 static void writeLineToFd(int fd, StringPtr message) {
