@@ -1091,7 +1091,7 @@ template <typename Func>
 class Deferred {
 public:
   inline Deferred(Func func): func(func), canceled(false) {}
-  inline ~Deferred() { if (!canceled) func(); }
+  inline ~Deferred() noexcept(false) { if (!canceled) func(); }
   KJ_DISALLOW_COPY(Deferred);
 
   // This move constructor is usually optimized away by the compiler.
