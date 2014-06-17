@@ -75,7 +75,7 @@
 
 <p>To make programming to this model easy, in your code, each call returns a “promise”. Promises work much like Javascript promises or promises/futures in other languages: the promise is returned immediately, but you must later call <code>wait()</code> on it, or call <code>then()</code> to register an asynchronous callback.</p>
 
-<p>However, Cap’n Proto promises support an additional feature: <a href="http://en.wikipedia.org/wiki/Futures_and_promises#Promise_pipelining">pipelining</a>. The promise actually has methods corresponding to whatever methods the final result would have, except that these methods may only be used for the purpose of calling back to the server. Moreover, a pipelined promise can be used in the parameters to another call without waiting.</p>
+<p>However, Cap’n Proto promises support an additional feature: <a href="http://www.erights.org/elib/distrib/pipeline.html">pipelining</a>. The promise actually has methods corresponding to whatever methods the final result would have, except that these methods may only be used for the purpose of calling back to the server. Moreover, a pipelined promise can be used in the parameters to another call without waiting.</p>
 
 <p><strong><em>But isn’t that just syntax sugar?</em></strong></p>
 
@@ -110,10 +110,10 @@
 </code></pre></div>
 <p>This is a very clean interface for interacting with a file system. But say you are using this interface over a satellite link with 1000ms latency. Now you have a problem: simply reading the file <code>foo</code> in directory <code>bar</code> takes four round trips!</p>
 <div class='highlight'><pre><code class='python'><span class='c'># pseudocode</span>
-<span class='n'>foo</span> <span class='o'>=</span> <span class='n'>root</span><span class='o'>.</span><span class='n'>open</span><span class='p'>(</span><span class='s'>&quot;foo&quot;</span><span class='p'>);</span>    <span class='c'># 1</span>
-<span class='n'>bar</span> <span class='o'>=</span> <span class='n'>foo</span><span class='o'>.</span><span class='n'>open</span><span class='p'>(</span><span class='s'>&quot;bar&quot;</span><span class='p'>);</span>     <span class='c'># 2</span>
-<span class='n'>size</span> <span class='o'>=</span> <span class='n'>bar</span><span class='o'>.</span><span class='n'>size</span><span class='p'>();</span>         <span class='c'># 3</span>
-<span class='n'>data</span> <span class='o'>=</span> <span class='n'>bar</span><span class='o'>.</span><span class='n'>read</span><span class='p'>(</span><span class='mi'>0</span><span class='p'>,</span> <span class='n'>size</span><span class='p'>);</span>  <span class='c'># 4</span>
+<span class='n'>bar</span> <span class='o'>=</span> <span class='n'>root</span><span class='o'>.</span><span class='n'>open</span><span class='p'>(</span><span class='s'>&quot;bar&quot;</span><span class='p'>);</span>    <span class='c'># 1</span>
+<span class='n'>foo</span> <span class='o'>=</span> <span class='n'>bar</span><span class='o'>.</span><span class='n'>open</span><span class='p'>(</span><span class='s'>&quot;foo&quot;</span><span class='p'>);</span>     <span class='c'># 2</span>
+<span class='n'>size</span> <span class='o'>=</span> <span class='n'>foo</span><span class='o'>.</span><span class='n'>size</span><span class='p'>();</span>         <span class='c'># 3</span>
+<span class='n'>data</span> <span class='o'>=</span> <span class='n'>foo</span><span class='o'>.</span><span class='n'>read</span><span class='p'>(</span><span class='mi'>0</span><span class='p'>,</span> <span class='n'>size</span><span class='p'>);</span>  <span class='c'># 4</span>
 <span class='c'># The above is four calls but takes only one network</span>
 <span class='c'># round trip with Cap&#39;n Proto!</span>
 </code></pre></div>
@@ -197,7 +197,7 @@
 
 <li><strong>Level 3:</strong> Three-way interactions. A network of Cap’n Proto vats (nodes) can pass object references to each other and automatically form direct connections as needed. For instance, if Alice (on machine A) sends Bob (on machine B) a reference to Carol (on machine C), then machine B will form a new connection to machine C so that Bob can call Carol directly without proxying through machine A.</li>
 
-<li><strong>Level 4:</strong> Reference equality / joining. If you receive a set of capabilities from different parties which should all point to the same underlying objects, you can verify securely that they in fact do. This is subtle, but enables many security patterns that rely on one party being able two verify that two or more other parties agree on something (imagine a digital escrow agent). See <a href="http://erights.org/elib/equality/index.html">E’s page on equality</a>.</li>
+<li><strong>Level 4:</strong> Reference equality / joining. If you receive a set of capabilities from different parties which should all point to the same underlying objects, you can verify securely that they in fact do. This is subtle, but enables many security patterns that rely on one party being able to verify that two or more other parties agree on something (imagine a digital escrow agent). See <a href="http://erights.org/elib/equality/index.html">E’s page on equality</a>.</li>
 </ul>
 
 <h2 id="encryption">Encryption</h2>

@@ -64,7 +64,213 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 <h1>News</h1>
 
 
-<h2><a href="/capnproto/next/./news/2013-12-13-promise-pipelining-capnproto-vs-ice.html">Promise Pipelining and Dependent Calls: Cap'n Proto vs. Ice</a></h2>
+<h2><a href="/capnproto/next/./news/2014-06-17-capnproto-flatbuffers-sbe.html">Cap'n Proto, FlatBuffers, and SBE</a></h2>
+<p class="author">
+  <a href="https://github.com/kentonv">kentonv</a>
+  
+  <span class="gplus-followbutton"><span class="g-follow" data-annotation="none" data-height="15" data-href="//plus.google.com/118187272963262049674" data-rel="author"></span></span>
+  <a href="https://www.gittip.com/kentonv/"><img class="gittip" src="/capnproto/next/images/gittip.png" alt="Gittip"></a>
+  
+  on <span class="date">17 Jun 2014</span>
+</p>
+<p>Yesterday, some engineers at Google released <a href="http://google-opensource.blogspot.com/2014/06/flatbuffers-memory-efficient.html">FlatBuffers</a>, a new serialization protocol and library with similar design principles to Cap’n Proto. Also, a few months back, Real Logic released <a href="http://mechanical-sympathy.blogspot.com/2014/05/simple-binary-encoding.html">Simple Binary Encoding</a>, another protocol and library of this nature.</p>
+
+<p>I hesitate to talk much about competitors – other than Protobufs, of course, which I’ll happily bash since it’s largely my own work. As for the rest, attacking humble open source projects makes me feel icky. Normally, I’d rather just wait for a third party to do their own comparison.</p>
+
+<p>However, I haven’t yet seen any really thorough comparisons written by others. Perhaps, this is too niche a field with too few reviewers with enough expertise to really judge. In any case, at the end of the day, users are left in the dark.</p>
+
+<p>So, my goal in this article is to simply surface a bunch of comparison points between these libraries that could help people make decisions. I am trying to be fact-based, but I cannot pretend to be unbiased. My choice of differences to highlight or omit should be considered suspect, but perhaps this will give people a starting point for further investigation.</p>
+
+<h3 id="feature_matrix">Feature Matrix</h3>
+
+<p>The following are a set of considerations I think are importart. See something I missed? Please <a href="mailto:kenton@sandstorm.io">let me know</a> and I’ll add it. (Especially if you are an SBE or FlatBuffers author!)</p>
+
+<p>I will go into more detail on each item below.</p>
+
+<p>Note: For features which are properties of the implementation rather than the protocol or project, unless otherwise stated, I am judging the C++ implementations.</p>
+<table class='pass-fail'>
+<tr><td>Feature</td><td>Protobuf</td><td>Cap'n Proto</td><td>SBE</td><td>FlatBuffers</td></tr>
+<tr><td>Schema evolution</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='pass'>yes</td></tr>
+<tr><td>Zero-copy</td><td class='fail'>no</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='pass'>yes</td></tr>
+<tr><td>Random-access reads</td><td class='fail'>no</td><td class='pass'>yes</td><td class='fail'>no</td><td class='pass'>yes</td></tr>
+<tr><td>Initialiation order</td><td class='pass'>any</td><td class='pass'>any</td><td class='fail'>preorder</td><td class='warn'>bottom-up</td></tr>
+<tr><td>Padding takes space on wire?</td><td class='pass'>no</td><td class='pass'>optional</td><td class='fail'>yes</td><td class='fail'>yes</td></tr>
+<tr><td>Unset fields take space on wire?</td><td class='pass'>no</td><td class='fail'>yes</td><td class='fail'>yes</td><td class='pass'>no</td></tr>
+<tr><td>Pointers take space on wire?</td><td class='pass'>no</td><td class='fail'>yes</td><td class='pass'>no</td><td class='fail'>yes</td></tr>
+<tr><td>Unknown field retention</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='fail'>no</td><td class='fail'>no</td></tr>
+<tr><td>Object-capability RPC system</td><td class='fail'>no</td><td class='pass'>yes</td><td class='fail'>no</td><td class='fail'>no</td></tr>
+<tr><td>Schema language</td><td class='pass'>custom</td><td class='pass'>custom</td><td class='warn'>XML</td><td class='pass'>custom</td></tr>
+<tr><td>Safe against malicious input</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='fail'>no</td></tr>
+<tr><td>Usable as mutable state</td><td class='pass'>yes</td><td class='fail'>no</td><td class='fail'>no</td><td class='fail'>no</td></tr>
+<tr><td>Reflection / generic algorithms</td><td class='pass'>yes</td><td class='pass'>yes</td><td class='fail'>no</td><td class='fail'>no</td></tr>
+<tr><td>C++</td><td class='pass'>yes</td><td class='warn'>GCC/Clang</td><td class='pass'>yes</td><td class='pass'>yes</td></tr>
+<tr><td>Java</td><td class='pass'>yes</td><td class='warn'>in progress</td><td class='pass'>yes</td><td class='pass'>yes</td></tr>
+<tr><td>Python</td><td class='pass'>yes</td><td class='warn'>yes (C ext)</td><td class='fail'>no</td><td class='fail'>no</td></tr>
+<tr><td>Other languages</td><td class='pass'>lots!</td><td class='warn'>6+ others</td><td class='warn'>C#</td><td class='fail'>no</td></tr>
+<tr><td>Authors' preferred use case</td><td>servers</td><td>sandboxing</td><td>finance</td><td>games</td></tr>
+</table>
+<p><strong>Schema Evolution</strong></p>
+
+<p>All four protocols allow you to add new fields to a schema over time, without breaking backwards-compatibility. New fields will be ignored by old binaries, and new binaries will fill in a default value when reading old data.</p>
+
+<p><strong>Zero-copy</strong></p>
+
+<p>The central thesis of all three competitors is that data should be structured the same way in-memory and on the wire, thus avoiding costly encode/decode steps.</p>
+
+<p>Protobufs reperesents the old way of thinking.</p>
+
+<p><strong>Random-access reads</strong></p>
+
+<p>Can you traverse the message content in an arbitrary order? Relatedly, can you <code>mmap()</code> in a large (say, 2GB) file, then traverse to and read one particular field without causing the entire file to be paged in from disk?</p>
+
+<p>Protobufs does not allow this because the entire file must be parsed upfront before any of the content can be used. Even with a streaming Protobuf parser (which most libraries don’t provide), you would at least need to parse all data appearing before the bit you want.</p>
+
+<p>SBE does not allow random access because the message tree is written in preorder with no information that would allow one to skip over an entire sub-tree. While the primitive fields within a single object can be accessed in random order, sub-objects must be traversed strictly in preorder.</p>
+
+<p>Cap’n Proto permits random access via the use of pointers, exactly as in-memory data structures in C normally do. These pointers are not quite native pointers – they are relative rather than absolute, to allow the message to be loaded at an arbitrary memory location.</p>
+
+<p>FlatBuffers permits random access by having each record store a table of offsets to all of the field positions.</p>
+
+<p><strong>Initialization order</strong></p>
+
+<p>When building a message, depending on how your code is organized, it may be convenient to have flexibility in the order in which you fill in the data. If that flexibility is missing, you may find you have to do extra bookkeeping to store data off to the side until its time comes to be added to the message.</p>
+
+<p>Protocol Buffers is natually completely flexible in terms of initialization order because the mesasge is being built on the heap. There is no reason to impose restrictions. (Although, the C++ Protobuf library heavily encourages top-down building.)</p>
+
+<p>All the zero-copy systems, though, have to use some form of arena allocation to make sure that the message is built in a contiguous block of memory that can be written out all at once. So, things get more complicated.</p>
+
+<p>SBE specifically requires the message tree to be written in preorder (though, as with reads, the primitive fields within a single object can be initialized in arbitrary order).</p>
+
+<p>FlatBuffers requires that you completely finish one object before you can start building the next, because the size of an object depends on its content so the amount of space needed isn’t known until it is finalized. This also implies that FlatBuffer messages must be built bottom-up, starting from the leaves.</p>
+
+<p>Cap’n Proto imposes no ordering constraints. The size of an object is known when it is allocated, so more objects can be allocated immediately. Messages are normally built top-down, but bottom-up ordering is supported through the “orphans” API.</p>
+
+<p><strong>Padding on wire?</strong></p>
+
+<p>Does the protocol tend to write a lot of zero-valued padding bytes to the wire?</p>
+
+<p>This is a problem with zero-copy protocols: fixed-width integers tend to have a lot of zeros in the high-order bits, and padding sometimes needs to be inserted for alignment. This padding can easily double or triple the size of a message.</p>
+
+<p>Protocol Buffers avoids padding by encoding integers using variable widths, which is only possible given a separate encoding/decoding step.</p>
+
+<p>SBE and FlatBuffers leave the padding in to achieve zero-copy.</p>
+
+<p>Cap’n Proto normally leaves the padding in, but comes with a built-in option to apply a very fast compression algorithm called “packing” which aims only to deflate zeros. This algorithm tends to achieve similar sizes to Protobufs while still being faster (and <em>much</em> faster than general-purpose compression).</p>
+
+<p>Note that Cap’n Proto’s packing algorithm would be appropriate for SBE and FlatBuffers as well. Feel free to steal it. :)</p>
+
+<p><strong>Unset fields on wire?</strong></p>
+
+<p>If a field has not been explicitly assigned a value, will it take any space on the wire?</p>
+
+<p>Protobuf encodes tag-value pairs, so it simply skips pairs that have not been set.</p>
+
+<p>Cap’n Proto and SBE position fields at fixed offsets from the start of the struct. The struct is always allocated large enough for all known fields according to the schema. So, unused fields waste space. (But Cap’n Proto’s optional packing will tend to compress away this space.)</p>
+
+<p>FlatBuffers uses a separate table of offsets (the vtable) to indicate the position of each field, with zero meaning the field isn’t present. So, unset fields take no space on the wire – although they do take space in the vtable. vtables can apparently be shared between instances where the offsets are all the same, amortizing this cost.</p>
+
+<p><strong>Pointers on wire?</strong></p>
+
+<p>Do non-primitive fields require storing a pointer?</p>
+
+<p>Protobufs uses tag-length-value for variable-width fields.</p>
+
+<p>Cap’n Proto uses pointers for variable-width fields, so that the size of the parent object is independent of the size of any children. These pointers take some space on the wire.</p>
+
+<p>SBE requires variable-width fields to be embedded in preorder, which means pointers aren’t necessary.</p>
+
+<p>FlatBuffers also uses pointers, even though most objects are variable-width, possibly because the vtables only store 16-bit offsets, limiting the size of any one object.</p>
+
+<p><strong>Unknown field retention?</strong></p>
+
+<p>Say you read in a message, then copy one sub-object of that message over to a sub-object of a new message, then write out the new message. Say that the copied object was created using a newer version of the schema than you have, and so contains fields you don’t know about. Do those fields get copied over?</p>
+
+<p>This question is extremely important for any kind of service that acts as a proxy or broker, forwarding messages on to others. It can be inconvenient if you have to update these middlemen every time a particular backend protocol changes, when the middlemen often don’t care about the protocol details anyway.</p>
+
+<p>When Protobufs sees an unknown field tag on the wire, it stores the value into the message’s <code>UnknownFieldSet</code>, which can be copied and written back out later.</p>
+
+<p>Cap’n Proto’s wire format was very carefully designed to contain just enough information to make it possible to recursively copy its target from one message to another without knowing the object’s schema. This is why Cap’n Proto pointers contain bits to indicate if they point to a struct or a list and how big it is – seemingly redundant information.</p>
+
+<p>SBE and FlatBuffers do not store any such type information on the wire, and thus it is not possible to copy an object without its schema.</p>
+
+<p><strong>Object-capability RPC system</strong></p>
+
+<p>Cap’n Proto features an object-capability RPC system. While this article is not intended to discuss RPC features, there is an important effect on the serialization format: in an object-capability RPC system, references to remote objects must be a first-class type. That is, a struct field’s type can be “reference to remote object implementing RPC interface Foo”.</p>
+
+<p>Protobufs, SBC, and FlatBuffers do not support this type. Note that it is <em>not</em> sufficient to simply store a string URL, or define some custom struct to represent a reference, because a proper capability-based RPC system must be aware of all references embedded in any message it sends. There are many reasons for this requirement, the most obvious of which is that the system must export the reference or change its permissions to make it available to the receiver.</p>
+
+<p><strong>Schema language</strong></p>
+
+<p>Protobufs, Cap’n Proto, and FlatBuffers have custom, concise schema languages.</p>
+
+<p>SBE uses XML schemas, which are verbose.</p>
+
+<p><strong>Safe against malicious input</strong></p>
+
+<p>Protobufs is carefully designed to be resiliant in the face of all kinds of malicious input, and has undergone a security review by Google’s world-class security team. Not only is the Protobuf implementation secure, but the API is explicitly designed to discourage security mistakes in application code. It is considered a security flaw in Protobufs if the interface makes client apps likely to write insecure code.</p>
+
+<p>Cap’n Proto inherits Protocol Buffers’ security stance, and is believed to be similarly secure. However, it has not yet undergone security review.</p>
+
+<p>SBE’s C++ library does bounds checking as of the resolution of <a href="https://github.com/real-logic/simple-binary-encoding/issues/130">this bug</a>.</p>
+
+<p>FlatBuffers does no bounds checking. When reading a message, you start by giving the library a bare pointer to the start of the message, with no size. FlatBuffers appears to be intended for use as a format for static, trusted data files, not network messages.</p>
+
+<p><strong>Usable as mutable state</strong></p>
+
+<p>Protobuf generated classes have often been (ab)used as a convenient way to store an application’s mutable internal state. There’s mostly no problem with modifying a message gradually over time and then serializing it when needed.</p>
+
+<p>This usage pattern does not work well with any zero-copy serialization format because these formats must use arena-style allocation to make sure the message is built in contiguous memory. Arena allocation has the property that you cannot free any object unless you free the entire arena. Therefore, when objects are discarded, the memory ends up leaked until the message as a whole is destoryed. A long-lived message that is modified many times will thus leak memory.</p>
+
+<p><strong>Reflection / generic algorithms</strong></p>
+
+<p>Protobufs provides a “reflection” interface which allows dynamically iterating over all the fields of a message, getting their names and other metadata, and reading and modifying their values in a particular instance. Cap’n Proto also supports this, calling it the “Dynamic API”. SBE and FlatBuffers provide no such API.</p>
+
+<p>Having a reflection/dynamic API opens up a wide range of use cases. You can write reflection-based code which converts the message to/from another format such as JSON – useful not just for interoperability, but for debugging, because it is human-readable. Another popular use of reflection is writing bindings for scripting languages. For example, Python’s Cap’n Proto implementation is simply a wrapper around the C++ dynamic API.</p>
+
+<p>The down side of reflection is that it is generally very slow (compared to generated code) and can lead to code bloat. Cap’n Proto is designed such that the reflection APIs need not be linked into your app if you do not use them, although this requires statically linking the library to get the benefit.</p>
+
+<p><strong>Platform Support</strong></p>
+
+<p>A really huge weakness of Cap’n Proto today is that it doesn’t compile in Visual Studio, and therefore effectively doesn’t support Windows (unless you count Cygwin, but most people don’t).</p>
+
+<p>The problem initially was that Cap’n Proto makes liberal use of C++11 features, and MSVC has lagged behind in implementing them. We conidered, but balked at, forking and backporting. It looks like <a href="http://blogs.msdn.com/b/vcblog/archive/2014/06/03/visual-studio-14-ctp.aspx">VS14 CTP1</a> may finally be far enough to make a port practical, so now it’s just a matter of finding the time. But that’s a new problem: all my time is currently consumed by <a href="https://sandstorm.io">Sandstorm.io</a>, and while it is a major use of Cap’n Proto and will thus drive further development, it is entirely Linux-based, making it hard for me to justify spending my time on Windows support. What we need is a volunteer!</p>
+
+<h3 id="benchmarks">Benchmarks?</h3>
+
+<p>I do not provide benchmarks. I did not provide them when I launched Protobufs, nor when I launched Cap’n Proto, even though I had some with nice numbers. And I don’t see any reason to start now.</p>
+
+<p>Why? Because they would tell you nothing. I could easily construct a benchmark to make any given library “win”, by exploiting the relative tradeoffs each one makes. I can even construct one where Protobufs – supposedly infinitely slower than the others – wins.</p>
+
+<p>The fact of the matter is that the relative performance of these libraries depends deeply on the use case. To know which one will be fastest for <em>your</em> project, you really need to benchmark them in <em>your</em> project, end-to-end. No contrived benchmark will give you the answer.</p>
+
+<p>With that said, my intuition is that SBE will probably edge Cap’n Proto and FlatBuffers on performance in the average case, due to its decision to forgo support for random access. Between Cap’n Proto and FlatBuffers, it’s harder to say. FlatBuffers’ vtable approach seems like it would make access more expensive for primitive fields but perhaps cheaper for aggregates. FlatBuffers also appears to do a lot of bookkeeping at encoding time which could get costly, but I don’t know how costly.</p>
+
+<p>For most people, the performance difference is probably small enough that qualitative (feature) differences in the libraries matter more.</p>
+
+<h2><a href="/capnproto/next/./news/2014-03-11-capnproto-0.4.1-bugfixes.html">Cap'n Proto 0.4.1: Bugfix Release</a></h2>
+<p class="author">
+  <a href="https://github.com/kentonv">kentonv</a>
+  
+  <span class="gplus-followbutton"><span class="g-follow" data-annotation="none" data-height="15" data-href="//plus.google.com/118187272963262049674" data-rel="author"></span></span>
+  <a href="https://www.gittip.com/kentonv/"><img class="gittip" src="/capnproto/next/images/gittip.png" alt="Gittip"></a>
+  
+  on <span class="date">11 Mar 2014</span>
+</p>
+<p>Today I’m releasing <a href="https://capnproto.org/capnproto-c++-0.4.1.tar.gz">version 0.4.1 of Cap’n Proto</a>. As hinted by the version number, this is a bugfix and tweak release, with no big new features.</p>
+
+<p>You may be wondering: If there are no big new features, what has been happening over the last three months? Most of my time lately has been spent laying the groundwork for an interesting project built on Cap’n Proto which should launch by the end of this month. Stay tuned! And don’t worry – this new project is going to need many of the upcoming features on <a href="/capnproto/next/roadmap.html">the roadmap</a>, so work on version 0.5 will be proceeding soon.</p>
+
+<p>In the meantime, though, there have been some major updates from the community:</p>
+
+<ul>
+<li>The folks at <a href="https://www.cloudflare.com/">CloudFlare</a> have produced a <a href="https://github.com/cloudflare/lua-capnproto">Lua port</a> which they are <a href="http://blog.cloudflare.com/introducing-lua-capnproto-better-serialization-in-lua">using successfully in production</a> along with the existing <a href="https://github.com/jmckaskill/go-capnproto">Go port</a>.</li>
+
+<li><a href="https://github.com/dwrensha/capnproto-rust">The Rust port of Cap’n Proto</a> now has preliminary RPC support, making it the third language to support Cap’n Proto RPC (after C++ and Python), and the second language to implement it from the ground up (Python just wraps the C++ implementation). Check out author <a href="https://github.com/dwrensha">David Renshaw</a>’s <a href="https://air.mozilla.org/rust-meetup-february-2014/">talk at Mozilla</a>.</li>
+
+<li>A <a href="https://github.com/jscheid/capnproto-js">Javascript port</a> has appeared, but it needs help to keep going!</li>
+</ul>
+
+<h2><a href="/capnproto/next/./news/2013-12-13-promise-pipelining-capnproto-vs-ice.html">Promise Pipelining and Dependent Calls: Cap'n Proto vs. Thrift vs. Ice</a></h2>
 <p class="author">
   <a href="https://github.com/kentonv">kentonv</a>
   

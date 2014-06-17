@@ -8,7 +8,7 @@
 
     <link rel="stylesheet" type="text/css" media="screen" href="/capnproto/next/stylesheets/stylesheet.css">
 
-    <title>Cap'n Proto: Announcing Cap'n Proto</title>
+    <title>Cap'n Proto: Cap'n Proto 0.4.1: Bugfix Release</title>
 
     <script type="text/javascript" src="/capnproto/next/javascripts/main.js"></script>
   </head>
@@ -63,24 +63,28 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <h1><a href="/capnproto/next/news/">News</a></h1>
 
-<h2>Announcing Cap'n Proto</h2>
+<h2>Cap'n Proto 0.4.1: Bugfix Release</h2>
 <p class="author">
   <a href="https://github.com/kentonv">kentonv</a>
   
   <span class="gplus-followbutton"><span class="g-follow" data-annotation="none" data-height="15" data-href="//plus.google.com/118187272963262049674" data-rel="author"></span></span>
   <a href="https://www.gittip.com/kentonv/"><img class="gittip" src="/capnproto/next/images/gittip.png" alt="Gittip"></a>
   
-  on <span class="date">01 Apr 2013</span>
+  on <span class="date">11 Mar 2014</span>
 </p>
-<p><img src='/capnproto/next/images/infinity-times-faster.png' style='width:334px; height:306px; float: right;' /></p>
+<p>Today I’m releasing <a href="https://capnproto.org/capnproto-c++-0.4.1.tar.gz">version 0.4.1 of Cap’n Proto</a>. As hinted by the version number, this is a bugfix and tweak release, with no big new features.</p>
 
-<p>So, uh… I have a confession to make.</p>
+<p>You may be wondering: If there are no big new features, what has been happening over the last three months? Most of my time lately has been spent laying the groundwork for an interesting project built on Cap’n Proto which should launch by the end of this month. Stay tuned! And don’t worry – this new project is going to need many of the upcoming features on <a href="/capnproto/next/roadmap.html">the roadmap</a>, so work on version 0.5 will be proceeding soon.</p>
 
-<p>I may have rewritten Protocol Buffers.</p>
+<p>In the meantime, though, there have been some major updates from the community:</p>
 
-<p>Again.</p>
+<ul>
+<li>The folks at <a href="https://www.cloudflare.com/">CloudFlare</a> have produced a <a href="https://github.com/cloudflare/lua-capnproto">Lua port</a> which they are <a href="http://blog.cloudflare.com/introducing-lua-capnproto-better-serialization-in-lua">using successfully in production</a> along with the existing <a href="https://github.com/jmckaskill/go-capnproto">Go port</a>.</li>
 
-<p><a href="http://kentonv.github.com/capnproto">And it’s infinity times faster.</a></p>
+<li><a href="https://github.com/dwrensha/capnproto-rust">The Rust port of Cap’n Proto</a> now has preliminary RPC support, making it the third language to support Cap’n Proto RPC (after C++ and Python), and the second language to implement it from the ground up (Python just wraps the C++ implementation). Check out author <a href="https://github.com/dwrensha">David Renshaw</a>’s <a href="https://air.mozilla.org/rust-meetup-february-2014/">talk at Mozilla</a>.</li>
+
+<li>A <a href="https://github.com/jscheid/capnproto-js">Javascript port</a> has appeared, but it needs help to keep going!</li>
+</ul>
 <script type="text/javascript">setupNewsSidebar([
     
       { title: "Cap'n Proto, FlatBuffers, and SBE", url: "/capnproto/next/./news/2014-06-17-capnproto-flatbuffers-sbe.html" },

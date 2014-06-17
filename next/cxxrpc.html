@@ -107,7 +107,7 @@
     <span class='n'>fetchHttp</span><span class='p'>(</span><span class='s'>&quot;http://example.com&quot;</span><span class='p'>);</span>
 
 <span class='n'>kj</span><span class='o'>::</span><span class='n'>Promise</span><span class='o'>&lt;</span><span class='kt'>int</span><span class='o'>&gt;</span> <span class='n'>lineCountPromise</span> <span class='o'>=</span>
-    <span class='n'>promise</span><span class='p'>.</span><span class='n'>then</span><span class='p'>([](</span><span class='n'>kj</span><span class='o'>::</span><span class='n'>String</span><span class='o'>&amp;&amp;</span> <span class='n'>content</span><span class='p'>)</span> <span class='p'>{</span>
+    <span class='n'>contentPromise</span><span class='p'>.</span><span class='n'>then</span><span class='p'>([](</span><span class='n'>kj</span><span class='o'>::</span><span class='n'>String</span><span class='o'>&amp;&amp;</span> <span class='n'>content</span><span class='p'>)</span> <span class='p'>{</span>
   <span class='k'>return</span> <span class='n'>countChars</span><span class='p'>(</span><span class='n'>content</span><span class='p'>,</span> <span class='sc'>&#39;\n&#39;</span><span class='p'>);</span>
 <span class='p'>});</span>
 </code></pre></div>
@@ -342,6 +342,7 @@
   <span class='c1'>// Set up the EzRpcServer, binding to port 5923 unless a</span>
   <span class='c1'>// different port was specified by the user.</span>
   <span class='n'>capnp</span><span class='o'>::</span><span class='n'>EzRpcServer</span> <span class='n'>server</span><span class='p'>(</span><span class='n'>argv</span><span class='p'>[</span><span class='mi'>1</span><span class='p'>],</span> <span class='mi'>5923</span><span class='p'>);</span>
+  <span class='k'>auto</span><span class='o'>&amp;</span> <span class='n'>waitScope</span> <span class='o'>=</span> <span class='n'>server</span><span class='p'>.</span><span class='n'>getWaitScope</span><span class='p'>();</span>
 
   <span class='c1'>// Export a capability under the name &quot;foo&quot;.  Note that the</span>
   <span class='c1'>// second parameter here can be any &quot;Client&quot; object or anything</span>

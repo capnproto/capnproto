@@ -177,7 +177,7 @@
 
 <p>When Cap’n Proto code might throw an exception from a destructor, it first checks <code>std::uncaught_exception()</code> to ensure that this is safe. If another exception is already active, the new exception is assumed to be a side-effect of the main exception, and is either silently swallowed or reported on a side channel.</p>
 
-<p>In recognition of the fact that some teams prefer not to use exceptions, and that even enabling exceptions in the compiler introduces overhead, Cap’n Proto allows you to disable them entirely by registering your own exception callback. The callback will be called in place of throwing an exception. The callback may abort the process, and is required to do so in certain circumstances (when a fatal bug is detected). If the callback returns normally, Cap’n Proto will attempt to continue by inventing “safe” values. This will lead to garbage output, but at least the program will not crash. Your exception callback should set some sort of a flag indicating that an error occurred, and somewhere up the stack you should check for that flag and cancel the operation. See the header <code>capnp/exception.h</code> for details on how to register an exception callback.</p>
+<p>In recognition of the fact that some teams prefer not to use exceptions, and that even enabling exceptions in the compiler introduces overhead, Cap’n Proto allows you to disable them entirely by registering your own exception callback. The callback will be called in place of throwing an exception. The callback may abort the process, and is required to do so in certain circumstances (when a fatal bug is detected). If the callback returns normally, Cap’n Proto will attempt to continue by inventing “safe” values. This will lead to garbage output, but at least the program will not crash. Your exception callback should set some sort of a flag indicating that an error occurred, and somewhere up the stack you should check for that flag and cancel the operation. See the header <code>kj/exception.h</code> for details on how to register an exception callback.</p>
 
 <h2 id="kj_library">KJ Library</h2>
 
@@ -637,7 +637,7 @@ frob(bar.getBaz(), bar.getQux(), bar.getCorge());</code></pre>
 </li>
 
 <li>
-<p>The Cap’n Proto library has lots of debug-only asserts that are removed <code>#define NDEBUG</code>, including in headers. If you care at all about performance, you should compile your production binaries with the <code>-DNDEBUG</code> compiler flag. In fact, if Cap’n Proto detects that you have optimization enabled but have not defined <code>NDEBUG</code>, it will define it for you (with a warning), unless you define <code>DEBUG</code> or <code>KJ_DEBUG</code> to explicitly request debugging.</p>
+<p>The Cap’n Proto library has lots of debug-only asserts that are removed if you <code>#define NDEBUG</code>, including in headers. If you care at all about performance, you should compile your production binaries with the <code>-DNDEBUG</code> compiler flag. In fact, if Cap’n Proto detects that you have optimization enabled but have not defined <code>NDEBUG</code>, it will define it for you (with a warning), unless you define <code>DEBUG</code> or <code>KJ_DEBUG</code> to explicitly request debugging.</p>
 </li>
 </ul>
 
