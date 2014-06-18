@@ -196,7 +196,7 @@ Nobody.  That is, aside from [Gittip](https://www.gittip.com/kentonv/) contribut
 
 ### Can I hire you?
 
-If you would like to purchase by services on a contract basis specifically to work on features you
+If you would like to purchase my services on a contract basis specifically to work on features you
 need in Cap'n Proto or to help you apply Cap'n Proto within your business, I'd be happy to talk.
 
 If you are simply looking for engineers in general and are interested in me because you are
