@@ -681,3 +681,10 @@ ul#toc {
   background-color: #313131;
   cursor: pointer;
 }
+
+table.pass-fail td { text-align: center; vertical-align: middle; }
+table.pass-fail td:first-child { text-align: left; }
+table.pass-fail td.pass { background-color: #0c0; }
+table.pass-fail td.fail { background-color: #c00; }
+table.pass-fail td.warn { background-color: #cc0; }
+
