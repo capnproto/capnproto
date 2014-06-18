@@ -4,6 +4,8 @@ title: Cap'n Proto, FlatBuffers, and SBE
 author: kentonv
 ---
 
+**Update:** I have made [some corrections](https://github.com/kentonv/capnproto/commit/e4e6c9076ae16804c07968cd3bdf6107155df7ee) since the original version of this post.
+
 Yesterday, some engineers at Google released [FlatBuffers](http://google-opensource.blogspot.com/2014/06/flatbuffers-memory-efficient.html), a new serialization protocol and library with similar design principles to Cap'n Proto. Also, a few months back, Real Logic released [Simple Binary Encoding](http://mechanical-sympathy.blogspot.com/2014/05/simple-binary-encoding.html), another protocol and library of this nature.
 
 It seems we now have some friendly rivalry. :)
