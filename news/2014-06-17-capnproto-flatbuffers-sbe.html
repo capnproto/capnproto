@@ -141,7 +141,7 @@ href="https://groups.google.com/group/capnproto-announce">Stay Updated</a></div>
 
 <p><em>Update: I originally failed to discover that SBE and FlatBuffers do in fact have reflection APIs. Sorry!</em></p>
 
-<p>Protobuf provides a “reflection” interface which allows dynamically iterating over all the fields of a message, getting their names and other metadata, and reading and modifying their values in a particular instance. Cap’n Proto also supports this, calling it the “Dynamic API”. SBE provides the “OTF decoder” API with the usual SBE restriction that you can only iterate over the content in order. FlatBuffers also claims to support this though I haven’t found the specific API yet.</p>
+<p>Protobuf provides a “reflection” interface which allows dynamically iterating over all the fields of a message, getting their names and other metadata, and reading and modifying their values in a particular instance. Cap’n Proto also supports this, calling it the “Dynamic API”. SBE provides the “OTF decoder” API with the usual SBE restriction that you can only iterate over the content in order. FlatBuffers has the <code>Parser</code> API in <code>idl.h</code>.</p>
 
 <p>Having a reflection/dynamic API opens up a wide range of use cases. You can write reflection-based code which converts the message to/from another format such as JSON – useful not just for interoperability, but for debugging, because it is human-readable. Another popular use of reflection is writing bindings for scripting languages. For example, Python’s Cap’n Proto implementation is simply a wrapper around the C++ dynamic API. Note that you can do all these things with types that are not even known at compile time, by parsing the schemas at runtime.</p>
 
