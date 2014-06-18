@@ -22,17 +22,17 @@ Note: For features which are properties of the implementation rather than the pr
 
 <table class="pass-fail">
 <tr><td>Feature</td><td>Protobuf</td><td>Cap'n Proto</td><td>SBE</td><td>FlatBuffers</td></tr>
-<tr><td>Schema evolution</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td></tr>
+<tr><td>Schema evolution</td><td class="pass">yes</td><td class="pass">yes</td><td class="warn">caveats</td><td class="pass">yes</td></tr>
 <tr><td>Zero-copy</td><td class="fail">no</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td></tr>
 <tr><td>Random-access reads</td><td class="fail">no</td><td class="pass">yes</td><td class="fail">no</td><td class="pass">yes</td></tr>
 <tr><td>Safe against malicious input</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td><td class="fail">no</td></tr>
-<tr><td>Reflection / generic algorithms</td><td class="pass">yes</td><td class="pass">yes</td><td class="fail">no</td><td class="fail">no</td></tr>
+<tr><td>Reflection / generic algorithms</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td></tr>
 <tr><td>Initialization order</td><td class="pass">any</td><td class="pass">any</td><td class="fail">preorder</td><td class="warn">bottom-up</td></tr>
 <tr><td>Unknown field retention</td><td class="pass">yes</td><td class="pass">yes</td><td class="fail">no</td><td class="fail">no</td></tr>
 <tr><td>Object-capability RPC system</td><td class="fail">no</td><td class="pass">yes</td><td class="fail">no</td><td class="fail">no</td></tr>
 <tr><td>Schema language</td><td class="pass">custom</td><td class="pass">custom</td><td class="warn">XML</td><td class="pass">custom</td></tr>
 <tr><td>Usable as mutable state</td><td class="pass">yes</td><td class="fail">no</td><td class="fail">no</td><td class="fail">no</td></tr>
-<tr><td>Padding takes space on wire?</td><td class="pass">no</td><td class="pass">optional</td><td class="fail">yes</td><td class="fail">yes</td></tr>
+<tr><td>Padding takes space on wire?</td><td class="pass">no</td><td class="warn">optional</td><td class="fail">yes</td><td class="fail">yes</td></tr>
 <tr><td>Unset fields take space on wire?</td><td class="pass">no</td><td class="fail">yes</td><td class="fail">yes</td><td class="pass">no</td></tr>
 <tr><td>Pointers take space on wire?</td><td class="pass">no</td><td class="fail">yes</td><td class="pass">no</td><td class="fail">yes</td></tr>
 <tr><td>C++</td><td class="pass">yes</td><td class="warn">GCC/Clang<br>(no MSVC)</td><td class="pass">yes</td><td class="pass">yes</td></tr>
@@ -46,6 +46,8 @@ Note: For features which are properties of the implementation rather than the pr
 
 All four protocols allow you to add new fields to a schema over time, without breaking backwards-compatibility. New fields will be ignored by old binaries, and new binaries will fill in a default value when reading old data.
 
+SBE, however, does not allow you to add new variable-width fields inside of a sub-object (group), as it is the application's responsibility to explicitly iterate over every variable-width field when reading. When an old app not knowing about the new nested field fails to cover it, its buffer pointer will get out-of-sync.
+
 **Zero-copy**
 
 The central thesis of all three competitors is that data should be structured the same way in-memory and on the wire, thus avoiding costly encode/decode steps.
@@ -54,15 +56,15 @@ Protobufs reperesents the old way of thinking.
 
 **Random-access reads**
 
-Can you traverse the message content in an arbitrary order? Relatedly, can you `mmap()` in a large (say, 2GB) file, then traverse to and read one particular field without causing the entire file to be paged in from disk?
+Can you traverse the message content in an arbitrary order? Relatedly, can you `mmap()` in a large (say, 2GB) file -- where the entire file is one enormous serialized message -- then traverse to and read one particular field without causing the entire file to be paged in from disk?
 
-Protobufs does not allow this because the entire file must be parsed upfront before any of the content can be used. Even with a streaming Protobuf parser (which most libraries don't provide), you would at least need to parse all data appearing before the bit you want.
+Protobufs does not allow this because the entire file must be parsed upfront before any of the content can be used. Even with a streaming Protobuf parser (which most libraries don't provide), you would at least need to parse all data appearing before the bit you want. The Protobuf documentation recommends splitting large files up into many small pieces and implementing some other framing format that allows seeking between them, but this is left entirely up to the app.
 
-SBE does not allow random access because the message tree is written in preorder with no information that would allow one to skip over an entire sub-tree. While the primitive fields within a single object can be accessed in random order, sub-objects must be traversed strictly in preorder. SBE apparently chose to design around this restriction because sequential memory access is faster than random access, therefore this forces application code to be ordered to be as fast as possible.
+SBE does not allow random access because the message tree is written in preorder with no information that would allow one to skip over an entire sub-tree. While the primitive fields within a single object can be accessed in random order, sub-objects must be traversed strictly in preorder. SBE apparently chose to design around this restriction because sequential memory access is faster than random access, therefore this forces application code to be ordered to be as fast as possible. Similar to Protobufs, SBE recommends using some other framing format for large files.
 
 Cap'n Proto permits random access via the use of pointers, exactly as in-memory data structures in C normally do. These pointers are not quite native pointers -- they are relative rather than absolute, to allow the message to be loaded at an arbitrary memory location.
 
-FlatBuffers permits random access by having each record store a table of offsets to all of the field positions.
+FlatBuffers permits random access by having each record store a table of offsets to all of the field positions, and by using pointers between objects like Cap'n Proto does.
 
 **Safe against malicious input**
 
@@ -76,7 +78,9 @@ FlatBuffers does no bounds checking. When reading a message, you start by giving
 
 **Reflection / generic algorithms**
 
-Protobuf provides a "reflection" interface which allows dynamically iterating over all the fields of a message, getting their names and other metadata, and reading and modifying their values in a particular instance. Cap'n Proto also supports this, calling it the "Dynamic API". SBE and FlatBuffers provide no such API.
+_Update: I originally failed to discover that SBE and FlatBuffers do in fact have reflection APIs. Sorry!_
+
+Protobuf provides a "reflection" interface which allows dynamically iterating over all the fields of a message, getting their names and other metadata, and reading and modifying their values in a particular instance. Cap'n Proto also supports this, calling it the "Dynamic API". SBE provides the "OTF decoder" API with the usual SBE restriction that you can only iterate over the content in order. FlatBuffers also claims to support this though I haven't found the specific API yet.
 
 Having a reflection/dynamic API opens up a wide range of use cases. You can write reflection-based code which converts the message to/from another format such as JSON -- useful not just for interoperability, but for debugging, because it is human-readable. Another popular use of reflection is writing bindings for scripting languages. For example, Python's Cap'n Proto implementation is simply a wrapper around the C++ dynamic API. Note that you can do all these things with types that are not even known at compile time, by parsing the schemas at runtime.
 
@@ -106,7 +110,7 @@ When Protobufs sees an unknown field tag on the wire, it stores the value into t
 
 Cap'n Proto's wire format was very carefully designed to contain just enough information to make it possible to recursively copy its target from one message to another without knowing the object's schema. This is why Cap'n Proto pointers contain bits to indicate if they point to a struct or a list and how big it is -- seemingly redundant information.
 
-SBE and FlatBuffers do not store any such type information on the wire, and thus it is not possible to copy an object without its schema.
+SBE and FlatBuffers do not store any such type information on the wire, and thus it is not possible to copy an object without its schema. (Note that, however, if you are willing to require that the sender sends its full schema on the wire, you can always use reflection-based code to effectively make all fields known. This takes some work, though.)
 
 **Object-capability RPC system**
 
@@ -126,7 +130,7 @@ Protobuf generated classes have often been (ab)used as a convenient way to store
 
 This usage pattern does not work well with any zero-copy serialization format because these formats must use arena-style allocation to make sure the message is built in contiguous memory. Arena allocation has the property that you cannot free any object unless you free the entire arena. Therefore, when objects are discarded, the memory ends up leaked until the message as a whole is destoryed. A long-lived message that is modified many times will thus leak memory.
 
-**Padding on wire?**
+**Padding takes space on wire?**
 
 Does the protocol tend to write a lot of zero-valued padding bytes to the wire?
 
@@ -136,11 +140,11 @@ Protocol Buffers avoids padding by encoding integers using variable widths, whic
 
 SBE and FlatBuffers leave the padding in to achieve zero-copy.
 
-Cap'n Proto normally leaves the padding in, but comes with a built-in option to apply a very fast compression algorithm called "packing" which aims only to deflate zeros. This algorithm tends to achieve similar sizes to Protobufs while still being faster (and _much_ faster than general-purpose compression).
+Cap'n Proto normally leaves the padding in, but comes with a built-in option to apply a very fast compression algorithm called "packing" which aims only to deflate zeros. This algorithm tends to achieve similar sizes to Protobufs while still being faster (and _much_ faster than general-purpose compression). In this mode, however, Cap'n Proto is no longer zero-copy.
 
 Note that Cap'n Proto's packing algorithm would be appropriate for SBE and FlatBuffers as well. Feel free to steal it. :)
 
-**Unset fields on wire?**
+**Unset fields take space on wire?**
 
 If a field has not been explicitly assigned a value, will it take any space on the wire?
 
@@ -150,7 +154,9 @@ Cap'n Proto and SBE position fields at fixed offsets from the start of the struc
 
 FlatBuffers uses a separate table of offsets (the vtable) to indicate the position of each field, with zero meaning the field isn't present. So, unset fields take no space on the wire -- although they do take space in the vtable. vtables can apparently be shared between instances where the offsets are all the same, amortizing this cost.
 
-**Pointers on wire?**
+Of course, all this applies to primitive fields and pointer values, not the sub-objects to which those pointers point. All of these formats elide sub-objects that haven't been initialized.
+
+**Pointers take space on wire?**
 
 Do non-primitive fields require storing a pointer?
 
@@ -160,7 +166,7 @@ Cap'n Proto uses pointers for variable-width fields, so that the size of the par
 
 SBE requires variable-width fields to be embedded in preorder, which means pointers aren't necessary.
 
-FlatBuffers also uses pointers, even though most objects are variable-width, possibly because the vtables only store 16-bit offsets, limiting the size of any one object.
+FlatBuffers also uses pointers, even though most objects are variable-width, possibly because the vtables only store 16-bit offsets, limiting the size of any one object. However, note that FlatBuffers' "structs" (which are fixed-width and not extensible) are stored inline (what Cap'n Proto calls a "struct', FlatBuffer calls a "table").
 
 **Platform Support**
 
