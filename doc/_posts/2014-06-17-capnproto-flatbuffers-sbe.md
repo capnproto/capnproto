@@ -48,7 +48,7 @@ Note: For features which are properties of the implementation rather than the pr
 
 All four protocols allow you to add new fields to a schema over time, without breaking backwards-compatibility. New fields will be ignored by old binaries, and new binaries will fill in a default value when reading old data.
 
-SBE, however, does not allow you to add new variable-width fields inside of a sub-object (group), as it is the application's responsibility to explicitly iterate over every variable-width field when reading. When an old app not knowing about the new nested field fails to cover it, its buffer pointer will get out-of-sync. Variable-width fields can be added to the topmost object since they'll end up at the end of the message, so there's no need for old code to traverse past them.
+SBE, however, as far as I can tell from reading the code, does not allow you to add new variable-width fields inside of a sub-object (group), as it is the application's responsibility to explicitly iterate over every variable-width field when reading. When an old app not knowing about the new nested field fails to cover it, its buffer pointer will get out-of-sync. Variable-width fields can be added to the topmost object since they'll end up at the end of the message, so there's no need for old code to traverse past them.
 
 **Zero-copy**
 
