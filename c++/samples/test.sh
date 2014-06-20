@@ -1,4 +1,4 @@
-#! /bin/bash
+#! /usr/bin/env bash
 #
 # Quick script that compiles and runs the samples, then cleans up.
 # Used for release testing.
