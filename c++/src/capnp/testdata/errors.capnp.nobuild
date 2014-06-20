@@ -23,6 +23,8 @@
 # output is matched against a golden file.  The file name has the .nobuild extension to make
 # sure that a build system which automatically builds .capnp files does not try to build this one.
 
+#
+
 @0xccd0890aa4926a9b;
 # Can't really test the missing-ID error because the output is intentionally unpredictable.
 
