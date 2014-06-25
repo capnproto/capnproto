@@ -71,8 +71,8 @@ public:
         throw std::bad_alloc();
       }
 
-      bool isCat = fastRand(8) == 0;
-      bool isDog = fastRand(8) == 0;
+      bool isCat = fastRand(7) == 0;
+      bool isDog = fastRand(7) == 0;
       goodCount += isCat && !isDog;
 
       pos = reinterpret_cast<char*>(arenaPos);
