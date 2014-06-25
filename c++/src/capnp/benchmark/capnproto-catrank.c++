@@ -63,8 +63,8 @@ public:
         *pos++ = 'a' + fastRand(26);
       }
 
-      bool isCat = fastRand(8) == 0;
-      bool isDog = fastRand(8) == 0;
+      bool isCat = fastRand(7) == 0;
+      bool isDog = fastRand(7) == 0;
       goodCount += isCat && !isDog;
 
       static std::string snippet;
