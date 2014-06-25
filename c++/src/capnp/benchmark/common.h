@@ -41,12 +41,20 @@
 namespace capnp {
 namespace benchmark {
 
+// Use a 128-bit Xorshift algorithm.
 static inline uint32_t nextFastRand() {
-  static constexpr uint32_t A = 1664525;
-  static constexpr uint32_t C = 1013904223;
-  static uint32_t state = C;
-  state = A * state + C;
-  return state;
+  // These values are arbitrary. Any seed other than all zeroes is OK.
+  static uint32_t x = 0x1d2acd47;
+  static uint32_t y = 0x58ca3e14;
+  static uint32_t z = 0xf563f232;
+  static uint32_t w = 0x0bc76199;
+
+  uint32_t tmp = x ^ (x << 11);
+  x = y;
+  y = z;
+  z = w;
+  w = w ^ (w >> 19) ^ tmp ^ (tmp >> 8);
+  return w;
 }
 
 static inline uint32_t fastRand(uint32_t range) {
