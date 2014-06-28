@@ -243,7 +243,7 @@ public:
                              "If a file specified for compilation starts with <prefix>, remove "
                              "the prefix for the purpose of deciding the names of output files.  "
                              "For example, the following command:\n"
-                             "    capnp --src-prefix=foo/bar -oc++:corge foo/bar/baz/qux.capnp\n"
+                             "    capnp compile --src-prefix=foo/bar -oc++:corge foo/bar/baz/qux.capnp\n"
                              "would generate the files corge/baz/qux.capnp.{h,c++}.")
            .expectOneOrMoreArgs("<source>", KJ_BIND_METHOD(*this, addSource))
            .callAfterParsing(KJ_BIND_METHOD(*this, generateOutput));
