@@ -328,9 +328,8 @@ constexpr auto singleQuotedString = charsToString(sequence(
 
 constexpr auto doubleQuotedHexBinary = sequence(
     exactChar<'0'>(), exactChar<'x'>(), exactChar<'\"'>(),
-    oneOrMore(oneOf(
-      transform(sequence(hexDigit, hexDigit), _::ParseHexEscape()),
-      whitespaceChar)),
+    oneOrMore(transform(sequence(discardWhitespace, hexDigit, hexDigit), _::ParseHexEscape())),
+    discardWhitespace,
     exactChar<'\"'>());
 // Parses a double-quoted hex binary literal.
 
