@@ -326,6 +326,12 @@ constexpr auto singleQuotedString = charsToString(sequence(
     exactChar<'\''>()));
 // Parses a C-style single-quoted string.
 
+constexpr auto doubleQuotedHexBinary = sequence(
+    exactChar<'0'>(), exactChar<'x'>(), exactChar<'\"'>(),
+    oneOrMore(transform(sequence(hexDigit, hexDigit), _::ParseHexEscape())),
+    exactChar<'\"'>());
+// Parses a double-quoted hex binary literal.
+
 }  // namespace parse
 }  // namespace kj
 

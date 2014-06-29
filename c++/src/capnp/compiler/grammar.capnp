@@ -96,6 +96,7 @@ struct ValueExpression {
     negativeInt @2 :UInt64;
     float @3 :Float64;
     string @4 :Text;
+    binary @10 :Data;
     name @5 :DeclName;
     list @6 :List(ValueExpression);
     struct @7 :List(FieldAssignment);

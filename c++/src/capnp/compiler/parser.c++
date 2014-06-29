@@ -227,6 +227,7 @@ struct MatchTokenType {
 
 constexpr auto identifier = TOKEN_TYPE_PARSER(Text::Reader, IDENTIFIER, getIdentifier);
 constexpr auto stringLiteral = TOKEN_TYPE_PARSER(Text::Reader, STRING_LITERAL, getStringLiteral);
+constexpr auto binaryLiteral = TOKEN_TYPE_PARSER(Data::Reader, BINARY_LITERAL, getBinaryLiteral);
 constexpr auto integerLiteral = TOKEN_TYPE_PARSER(uint64_t, INTEGER_LITERAL, getIntegerLiteral);
 constexpr auto floatLiteral = TOKEN_TYPE_PARSER(double, FLOAT_LITERAL, getFloatLiteral);
 constexpr auto operatorToken = TOKEN_TYPE_PARSER(Text::Reader, OPERATOR, getOperator);
@@ -548,6 +549,14 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
             auto result = orphanage.newOrphan<ValueExpression>();
             auto builder = result.get();
             builder.setString(value.value);
+            value.copyLocationTo(builder);
+            return result;
+          }),
+      p::transform(binaryLiteral,
+          [this](Located<Data::Reader>&& value) -> Orphan<ValueExpression> {
+            auto result = orphanage.newOrphan<ValueExpression>();
+            auto builder = result.get();
+            builder.setBinary(value.value);
             value.copyLocationTo(builder);
             return result;
           }),
