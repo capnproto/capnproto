@@ -238,7 +238,7 @@ struct ParseInteger {
 
 constexpr auto integer = sequence(
     oneOf(
-      transform(sequence(exactChar<'0'>(), exactChar<'x'>(), many(hexDigit)), _::ParseInteger<16>()),
+      transform(sequence(exactChar<'0'>(), exactChar<'x'>(), oneOrMore(hexDigit)), _::ParseInteger<16>()),
       transform(sequence(exactChar<'0'>(), many(octDigit)), _::ParseInteger<8>()),
       transform(sequence(charRange('1', '9'), many(digit)), _::ParseInteger<10>())),
     notLookingAt(alpha.orAny("_.")));
