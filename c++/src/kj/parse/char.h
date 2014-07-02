@@ -238,7 +238,7 @@ struct ParseInteger {
 
 constexpr auto integer = sequence(
     oneOf(
-      transform(sequence(exactChar<'0'>(), exactChar<'x'>(), many(hexDigit)), _::ParseInteger<16>()),
+      transform(sequence(exactChar<'0'>(), exactChar<'x'>(), oneOrMore(hexDigit)), _::ParseInteger<16>()),
       transform(sequence(exactChar<'0'>(), many(octDigit)), _::ParseInteger<8>()),
       transform(sequence(charRange('1', '9'), many(digit)), _::ParseInteger<10>())),
     notLookingAt(alpha.orAny("_.")));
@@ -325,6 +325,13 @@ constexpr auto singleQuotedString = charsToString(sequence(
     many(oneOf(anyOfChars("\\\n\'").invert(), escapeSequence)),
     exactChar<'\''>()));
 // Parses a C-style single-quoted string.
+
+constexpr auto doubleQuotedHexBinary = sequence(
+    exactChar<'0'>(), exactChar<'x'>(), exactChar<'\"'>(),
+    oneOrMore(transform(sequence(discardWhitespace, hexDigit, hexDigit), _::ParseHexEscape())),
+    discardWhitespace,
+    exactChar<'\"'>());
+// Parses a double-quoted hex binary literal.
 
 }  // namespace parse
 }  // namespace kj

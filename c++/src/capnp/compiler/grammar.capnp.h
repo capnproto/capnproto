@@ -83,6 +83,7 @@ struct ValueExpression {
     NAME,
     LIST,
     STRUCT,
+    BINARY,
   };
   struct FieldAssignment;
 };
@@ -1003,6 +1004,10 @@ public:
 
   inline  ::uint32_t getEndByte() const;
 
+  inline bool isBinary() const;
+  inline bool hasBinary() const;
+  inline  ::capnp::Data::Reader getBinary() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename T, ::capnp::Kind k>
@@ -1087,6 +1092,14 @@ public:
 
   inline  ::uint32_t getEndByte();
   inline void setEndByte( ::uint32_t value);
+
+  inline bool isBinary();
+  inline bool hasBinary();
+  inline  ::capnp::Data::Builder getBinary();
+  inline void setBinary( ::capnp::Data::Reader value);
+  inline  ::capnp::Data::Builder initBinary(unsigned int size);
+  inline void adoptBinary(::capnp::Orphan< ::capnp::Data>&& value);
+  inline ::capnp::Orphan< ::capnp::Data> disownBinary();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -3761,6 +3774,58 @@ inline  ::uint32_t ValueExpression::Builder::getEndByte() {
 inline void ValueExpression::Builder::setEndByte( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
       4 * ::capnp::ELEMENTS, value);
+}
+
+inline bool ValueExpression::Reader::isBinary() const {
+  return which() == ValueExpression::BINARY;
+}
+inline bool ValueExpression::Builder::isBinary() {
+  return which() == ValueExpression::BINARY;
+}
+inline bool ValueExpression::Reader::hasBinary() const {
+  if (which() != ValueExpression::BINARY) return false;
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool ValueExpression::Builder::hasBinary() {
+  if (which() != ValueExpression::BINARY) return false;
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Data::Reader ValueExpression::Reader::getBinary() const {
+  KJ_IREQUIRE(which() == ValueExpression::BINARY,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::Data::Builder ValueExpression::Builder::getBinary() {
+  KJ_IREQUIRE(which() == ValueExpression::BINARY,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void ValueExpression::Builder::setBinary( ::capnp::Data::Reader value) {
+  _builder.setDataField<ValueExpression::Which>(
+      0 * ::capnp::ELEMENTS, ValueExpression::BINARY);
+  ::capnp::_::PointerHelpers< ::capnp::Data>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Data::Builder ValueExpression::Builder::initBinary(unsigned int size) {
+  _builder.setDataField<ValueExpression::Which>(
+      0 * ::capnp::ELEMENTS, ValueExpression::BINARY);
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+}
+inline void ValueExpression::Builder::adoptBinary(
+    ::capnp::Orphan< ::capnp::Data>&& value) {
+  _builder.setDataField<ValueExpression::Which>(
+      0 * ::capnp::ELEMENTS, ValueExpression::BINARY);
+  ::capnp::_::PointerHelpers< ::capnp::Data>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Data> ValueExpression::Builder::disownBinary() {
+  KJ_IREQUIRE(which() == ValueExpression::BINARY,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline bool ValueExpression::FieldAssignment::Reader::hasFieldName() const {

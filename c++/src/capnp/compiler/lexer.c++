@@ -173,6 +173,13 @@ Lexer::Lexer(Orphanage orphanageParam, ErrorReporter& errorReporterParam)
             initTok(t, loc).setStringLiteral(text);
             return t;
           }),
+      p::transformWithLocation(p::doubleQuotedHexBinary,
+          [this](Location loc, kj::Array<char> data) -> Orphan<Token> {
+            auto t = orphanage.newOrphan<Token>();
+            kj::ArrayPtr<byte> dataPtr(reinterpret_cast<byte*>(data.begin()), reinterpret_cast<byte*>(data.end()));
+            initTok(t, loc).setBinaryLiteral(dataPtr);
+            return t;
+          }),
       p::transformWithLocation(p::integer,
           [this](Location loc, uint64_t i) -> Orphan<Token> {
             auto t = orphanage.newOrphan<Token>();
