@@ -1859,6 +1859,13 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(
       }
       break;
 
+    case ValueExpression::BINARY:
+      if (!type.isData()) {
+        errorReporter.addErrorOn(src, kj::str("Type mismatch; expected ", makeTypeName(type), "."));
+        return nullptr;
+      }
+      return orphanage.newOrphanCopy(src.getBinary());
+
     case ValueExpression::LIST: {
       if (!type.isList()) {
         errorReporter.addErrorOn(src, kj::str("Type mismatch; expected ", makeTypeName(type), "."));

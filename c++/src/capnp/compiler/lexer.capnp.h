@@ -28,6 +28,7 @@ struct Token {
     OPERATOR,
     PARENTHESIZED_LIST,
     BRACKETED_LIST,
+    BINARY_LITERAL,
   };
 };
 
@@ -138,6 +139,10 @@ public:
 
   inline  ::uint32_t getEndByte() const;
 
+  inline bool isBinaryLiteral() const;
+  inline bool hasBinaryLiteral() const;
+  inline  ::capnp::Data::Reader getBinaryLiteral() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename T, ::capnp::Kind k>
@@ -224,6 +229,14 @@ public:
 
   inline  ::uint32_t getEndByte();
   inline void setEndByte( ::uint32_t value);
+
+  inline bool isBinaryLiteral();
+  inline bool hasBinaryLiteral();
+  inline  ::capnp::Data::Builder getBinaryLiteral();
+  inline void setBinaryLiteral( ::capnp::Data::Reader value);
+  inline  ::capnp::Data::Builder initBinaryLiteral(unsigned int size);
+  inline void adoptBinaryLiteral(::capnp::Orphan< ::capnp::Data>&& value);
+  inline ::capnp::Orphan< ::capnp::Data> disownBinaryLiteral();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -882,6 +895,58 @@ inline  ::uint32_t Token::Builder::getEndByte() {
 inline void Token::Builder::setEndByte( ::uint32_t value) {
   _builder.setDataField< ::uint32_t>(
       4 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Token::Reader::isBinaryLiteral() const {
+  return which() == Token::BINARY_LITERAL;
+}
+inline bool Token::Builder::isBinaryLiteral() {
+  return which() == Token::BINARY_LITERAL;
+}
+inline bool Token::Reader::hasBinaryLiteral() const {
+  if (which() != Token::BINARY_LITERAL) return false;
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool Token::Builder::hasBinaryLiteral() {
+  if (which() != Token::BINARY_LITERAL) return false;
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Data::Reader Token::Reader::getBinaryLiteral() const {
+  KJ_IREQUIRE(which() == Token::BINARY_LITERAL,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::Data::Builder Token::Builder::getBinaryLiteral() {
+  KJ_IREQUIRE(which() == Token::BINARY_LITERAL,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void Token::Builder::setBinaryLiteral( ::capnp::Data::Reader value) {
+  _builder.setDataField<Token::Which>(
+      0 * ::capnp::ELEMENTS, Token::BINARY_LITERAL);
+  ::capnp::_::PointerHelpers< ::capnp::Data>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Data::Builder Token::Builder::initBinaryLiteral(unsigned int size) {
+  _builder.setDataField<Token::Which>(
+      0 * ::capnp::ELEMENTS, Token::BINARY_LITERAL);
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+}
+inline void Token::Builder::adoptBinaryLiteral(
+    ::capnp::Orphan< ::capnp::Data>&& value) {
+  _builder.setDataField<Token::Which>(
+      0 * ::capnp::ELEMENTS, Token::BINARY_LITERAL);
+  ::capnp::_::PointerHelpers< ::capnp::Data>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Data> Token::Builder::disownBinaryLiteral() {
+  KJ_IREQUIRE(which() == Token::BINARY_LITERAL,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::Data>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline Statement::Which Statement::Reader::which() const {

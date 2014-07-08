@@ -29,6 +29,7 @@ struct Token {
   union {
     identifier @0 :Text;
     stringLiteral @1 :Text;
+    binaryLiteral @9 :Data;
     integerLiteral @2 :UInt64;
     floatLiteral @3 :Float64;
     operator @4 :Text;
