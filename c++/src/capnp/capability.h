@@ -626,7 +626,7 @@ inline typename Results::Builder CallContext<Params, Results>::initResults(
 }
 template <typename Params, typename Results>
 inline void CallContext<Params, Results>::setResults(typename Results::Reader value) {
-  hook->getResults(value.totalSize()).set(value);
+  hook->getResults(value.totalSize()).template setAs<Results>(value);
 }
 template <typename Params, typename Results>
 inline void CallContext<Params, Results>::adoptResults(Orphan<Results>&& value) {
