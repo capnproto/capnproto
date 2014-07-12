@@ -27,7 +27,7 @@ Note: For features which are properties of the implementation rather than the pr
 <tr><td>Schema evolution</td><td class="pass">yes</td><td class="pass">yes</td><td class="warn">caveats</td><td class="pass">yes</td></tr>
 <tr><td>Zero-copy</td><td class="fail">no</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td></tr>
 <tr><td>Random-access reads</td><td class="fail">no</td><td class="pass">yes</td><td class="fail">no</td><td class="pass">yes</td></tr>
-<tr><td>Safe against malicious input</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td><td class="fail">no</td></tr>
+<tr><td>Safe against malicious input</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td><td class="warn">opt-in upfront</td></tr>
 <tr><td>Reflection / generic algorithms</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td><td class="pass">yes</td></tr>
 <tr><td>Initialization order</td><td class="pass">any</td><td class="pass">any</td><td class="fail">preorder</td><td class="warn">bottom-up</td></tr>
 <tr><td>Unknown field retention</td><td class="pass">yes</td><td class="pass">yes</td><td class="fail">no</td><td class="fail">no</td></tr>
@@ -76,7 +76,7 @@ Cap'n Proto inherits Protocol Buffers' security stance, and is believed to be si
 
 SBE's C++ library does bounds checking as of the resolution of [this bug](https://github.com/real-logic/simple-binary-encoding/issues/130).
 
-FlatBuffers does no bounds checking. When reading a message, you start by giving the library a bare pointer to the start of the message, with no size. FlatBuffers appears to be intended for use as a format for static, trusted data files, not network messages.
+*Update July 12, 2014:* FlatBuffers [now supports](https://github.com/google/flatbuffers/commit/a0b6ffc25b9a3c726a21e52d6453779265186dbd) performing an optional upfront verification pass over a message to ensure that all pointers are in-bounds. You must explicitly call the verifier, otherwise no bounds checking is performed. The verifier performs a pass over the entire message; it should be very fast, but it is O(n), so you lose the "random access" advantage if you are mmap()ing in a very large file. FlatBuffers is primarily designed for use as a format for static, trusted data files, not network messages.
 
 **Reflection / generic algorithms**
 
