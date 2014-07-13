@@ -15,8 +15,8 @@ DIST_SUBDIRS = $(subdirs)
 # even support "make install" anyway).  So we define a rule such that it will
 # only be built when needed.
 gtest/lib/libgtest.la:
-	@echo "Making lib/libgtest.a lib/libgtest_main.a in gtest"
-	@cd gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la
+	@: echo "Making lib/libgtest.a lib/libgtest_main.a in gtest"
+	@: cd gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la
 
 gtest/lib/libgtest_main.la: gtest/lib/libgtest.la
 	@:
@@ -33,7 +33,7 @@ clean-local:
 	  cd gtest && $(MAKE) $(AM_MAKEFLAGS) clean; \
 	fi
 
-AM_CXXFLAGS = -I$(srcdir)/src -I$(builddir)/src $(PTHREAD_CFLAGS)
+AM_CXXFLAGS = -I$(srcdir)/src -I$(builddir)/src -DCAPNP_INCLUDE_DIR='"$(includedir)"' $(PTHREAD_CFLAGS)
 
 AM_LDFLAGS = $(PTHREAD_CFLAGS)
 
@@ -331,9 +331,9 @@ $(test_capnpc_outputs): test_capnpc_middleman
 BUILT_SOURCES = $(test_capnpc_outputs)
 
 check_PROGRAMS = capnp-test capnp-evolution-test
-capnp_test_LDADD = gtest/lib/libgtest.la gtest/lib/libgtest_main.la \
+capnp_test_LDADD = -lgtest -lgtest_main \
                    libcapnpc.la libcapnp-rpc.la libcapnp.la libkj-async.la libkj.la
-capnp_test_CPPFLAGS = -Igtest/include -I$(srcdir)/gtest/include
+capnp_test_CPPFLAGS = 
 capnp_test_SOURCES =                                           \
   src/kj/common-test.c++                                       \
   src/kj/memory-test.c++                                       \
