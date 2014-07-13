@@ -33,7 +33,7 @@ clean-local:
 	  cd gtest && $(MAKE) $(AM_MAKEFLAGS) clean; \
 	fi
 
-AM_CXXFLAGS = -I$(srcdir)/src -I$(builddir)/src $(PTHREAD_CFLAGS)
+AM_CXXFLAGS = -I$(srcdir)/src -I$(builddir)/src -DCAPNP_INCLUDE_DIR='"$(includedir)"' $(PTHREAD_CFLAGS)
 
 AM_LDFLAGS = $(PTHREAD_CFLAGS)
 
