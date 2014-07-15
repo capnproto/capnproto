@@ -286,6 +286,23 @@ TEST(Arena, Constructor) {
   EXPECT_EQ("foo", arena.allocate<StringPtr>("foo", 3));
 }
 
+TEST(Arena, Move) {
+  Arena arena;
+  EXPECT_EQ(1u, arena.allocate<uint64_t>(1));
+
+  Arena arena_move(kj::mv(arena));
+  EXPECT_EQ(2u, arena_move.allocate<uint64_t>(2));
+  EXPECT_EQ(3u, arena.allocate<uint64_t>(3));
+
+  Arena assigned;
+  EXPECT_EQ(4u, assigned.allocate<uint64_t>(4));
+
+  assigned = kj::mv(arena_move);
+  EXPECT_EQ(5u, assigned.allocate<uint64_t>(5));
+
+  // Nothing should go wrong (e.g., double-free or leak) when the three Arenas are destroyed
+}
+
 TEST(Arena, Strings) {
   Arena arena;
 
