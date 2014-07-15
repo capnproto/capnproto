@@ -21,6 +21,7 @@
 
 #include "exception.h"
 #include "string.h"
+#include "string-tree.h"
 #include "debug.h"
 #include "threadlocal.h"
 #include <unistd.h>
@@ -32,7 +33,7 @@
 #include <execinfo.h>
 #endif
 
-#if __linux__ && defined(KJ_DEBUG)
+#if (__linux__ || __APPLE__) && defined(KJ_DEBUG)
 #include <stdio.h>
 #include <pthread.h>
 #endif
@@ -108,6 +109,23 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
   pthread_mutex_unlock(&mutex);
 
   return strArray(arrayPtr(lines, i), "");
+#elif __APPLE__ && defined(KJ_DEBUG)
+  // The Mac OS X equivalent of addr2line is atos(1).
+  // (Internally, it uses the private CoreSymbolication.framework library.)
+
+  FILE* p = popen(str("atos -d -p ", getpid(), ' ', strArray(trace, " ")).cStr(), "r");
+  if (p == nullptr) {
+    return nullptr;
+  }
+
+  StringTree stackSymbols;
+  char line[512];
+  while (fgets(line, sizeof(line), p) != nullptr) {
+    stackSymbols = strTree(mv(stackSymbols), str(line));
+  }
+  pclose(p);
+
+  return stackSymbols.flatten();
 #else
   return nullptr;
 #endif
@@ -171,6 +189,7 @@ String KJ_STRINGIFY(const Exception& e) {
              e.getDurability() == Exception::Durability::TEMPORARY ? " (temporary)" : "",
              e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
              e.getStackTrace().size() > 0 ? "\nstack: " : "", strArray(e.getStackTrace(), " "),
+             "\n",
              getStackSymbols(e.getStackTrace()));
 }
 
@@ -330,6 +349,7 @@ private:
         e.getNature(), e.getDurability() == Exception::Durability::TEMPORARY ? " (temporary)" : "",
         e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
         e.getStackTrace().size() > 0 ? "\nstack: " : "", strArray(e.getStackTrace(), " "),
+        "\n",
         getStackSymbols(e.getStackTrace()), "\n"));
   }
 };
