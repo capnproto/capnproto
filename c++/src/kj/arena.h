@@ -46,6 +46,9 @@ public:
   explicit Arena(ArrayPtr<byte> scratch);
   // Allocates from the given scratch space first, only resorting to the heap when it runs out.
 
+  Arena(Arena&& other) noexcept;
+  Arena& operator=(Arena&& other) noexcept(false);
+
   KJ_DISALLOW_COPY(Arena);
   ~Arena() noexcept(false);
 
