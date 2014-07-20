@@ -21,7 +21,6 @@
 
 #include "exception.h"
 #include "string.h"
-#include "string-tree.h"
 #include "debug.h"
 #include "threadlocal.h"
 #include <unistd.h>
@@ -43,11 +42,11 @@ namespace kj {
 namespace {
 
 String getStackSymbols(ArrayPtr<void* const> trace) {
-#if __linux__ && defined(KJ_DEBUG)
+#if (__linux__ || __APPLE__) && defined(KJ_DEBUG)
   // We want to generate a human-readable stack trace.
 
-  // TODO(someday):  It would be really great if we could avoid farming out to addr2line and do
-  //   this all in-process, but that may involve onerous requirements like large library
+  // TODO(someday):  It would be really great if we could avoid farming out to another process
+  //   and do this all in-process, but that may involve onerous requirements like large library
   //   dependencies or using -rdynamic.
 
   // The environment manipulation is not thread-safe, so lock a mutex.  This could still be
@@ -57,7 +56,7 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
   static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
   pthread_mutex_lock(&mutex);
 
-  // Don't heapcheck / intercept syscalls for addr2line.
+  // Don't heapcheck / intercept syscalls.
   const char* preload = getenv("LD_PRELOAD");
   String oldPreload;
   if (preload != nullptr) {
@@ -65,36 +64,47 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
     unsetenv("LD_PRELOAD");
   }
 
+  String lines[8];
+  size_t lines_read = 0;
+  FILE* p = nullptr;
+
+#if __linux__
   // Get executable name from /proc/self/exe, then pass it and the stack trace to addr2line to
   // get file/line pairs.
   char exe[512];
   ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe));
   if (n < 0 || n >= static_cast<ssize_t>(sizeof(exe))) {
-    return nullptr;
+    goto cleanup;
   }
   exe[n] = '\0';
 
-  String lines[8];
+  p = popen(str("addr2line -e ", exe, ' ', strArray(trace, " ")).cStr(), "r");
+#elif __APPLE__
+  // The Mac OS X equivalent of addr2line is atos.
+  // (Internally, it uses the private CoreSymbolication.framework library.)
+  p = popen(str("atos -d -p ", getpid(), ' ', strArray(trace, " ")).cStr(), "r");
+#endif
 
-  FILE* p = popen(str("addr2line -e ", exe, ' ', strArray(trace, " ")).cStr(), "r");
   if (p == nullptr) {
-    return nullptr;
+    goto cleanup;
   }
 
   char line[512];
-  size_t i = 0;
-  while (i < kj::size(lines) && fgets(line, sizeof(line), p) != nullptr) {
+  while (lines_read < kj::size(lines) && fgets(line, sizeof(line), p) != nullptr) {
     // Don't include exception-handling infrastructure in stack trace.
-    if (i == 0 &&
+    // addr2line output matches file names; atos output matches symbol names.
+    if (lines_read == 0 &&
         (strstr(line, "kj/common.c++") != nullptr ||
          strstr(line, "kj/exception.") != nullptr ||
-         strstr(line, "kj/debug.") != nullptr)) {
+         strstr(line, "kj/debug.") != nullptr ||
+         strstr(line, "kj::Exception") != nullptr ||
+         strstr(line, "kj::_::Debug") != nullptr)) {
       continue;
     }
 
     size_t len = strlen(line);
     if (len > 0 && line[len-1] == '\n') line[len-1] = '\0';
-    lines[i++] = str("\n", line, ": called here");
+    lines[lines_read++] = str("\n", line, ": called here");
   }
 
   // Skip remaining input.
@@ -102,30 +112,14 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
 
   pclose(p);
 
+cleanup:
   if (oldPreload != nullptr) {
     setenv("LD_PRELOAD", oldPreload.cStr(), true);
   }
 
   pthread_mutex_unlock(&mutex);
 
-  return strArray(arrayPtr(lines, i), "");
-#elif __APPLE__ && defined(KJ_DEBUG)
-  // The Mac OS X equivalent of addr2line is atos(1).
-  // (Internally, it uses the private CoreSymbolication.framework library.)
-
-  FILE* p = popen(str("atos -d -p ", getpid(), ' ', strArray(trace, " ")).cStr(), "r");
-  if (p == nullptr) {
-    return nullptr;
-  }
-
-  StringTree stackSymbols;
-  char line[512];
-  while (fgets(line, sizeof(line), p) != nullptr) {
-    stackSymbols = strTree(mv(stackSymbols), str(line));
-  }
-  pclose(p);
-
-  return stackSymbols.flatten();
+  return (lines_read > 0 ? strArray(arrayPtr(lines, lines_read), "") : nullptr);
 #else
   return nullptr;
 #endif
@@ -189,7 +183,6 @@ String KJ_STRINGIFY(const Exception& e) {
              e.getDurability() == Exception::Durability::TEMPORARY ? " (temporary)" : "",
              e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
              e.getStackTrace().size() > 0 ? "\nstack: " : "", strArray(e.getStackTrace(), " "),
-             "\n",
              getStackSymbols(e.getStackTrace()));
 }
 
@@ -349,7 +342,6 @@ private:
         e.getNature(), e.getDurability() == Exception::Durability::TEMPORARY ? " (temporary)" : "",
         e.getDescription() == nullptr ? "" : ": ", e.getDescription(),
         e.getStackTrace().size() > 0 ? "\nstack: " : "", strArray(e.getStackTrace(), " "),
-        "\n",
         getStackSymbols(e.getStackTrace()), "\n"));
   }
 };
