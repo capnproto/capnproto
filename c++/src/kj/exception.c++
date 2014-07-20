@@ -55,6 +55,7 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
   // is in use.
   static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
   pthread_mutex_lock(&mutex);
+  KJ_DEFER(pthread_mutex_unlock(&mutex));
 
   // Don't heapcheck / intercept syscalls.
   const char* preload = getenv("LD_PRELOAD");
@@ -63,9 +64,9 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
     oldPreload = heapString(preload);
     unsetenv("LD_PRELOAD");
   }
+  KJ_DEFER(if (oldPreload != nullptr) { setenv("LD_PRELOAD", oldPreload.cStr(), true); });
 
   String lines[8];
-  size_t lines_read = 0;
   FILE* p = nullptr;
 
 #if __linux__
@@ -74,7 +75,7 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
   char exe[512];
   ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe));
   if (n < 0 || n >= static_cast<ssize_t>(sizeof(exe))) {
-    goto cleanup;
+    return nullptr;
   }
   exe[n] = '\0';
 
@@ -86,14 +87,15 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
 #endif
 
   if (p == nullptr) {
-    goto cleanup;
+    return nullptr;
   }
 
   char line[512];
-  while (lines_read < kj::size(lines) && fgets(line, sizeof(line), p) != nullptr) {
+  size_t i = 0;
+  while (i < kj::size(lines) && fgets(line, sizeof(line), p) != nullptr) {
     // Don't include exception-handling infrastructure in stack trace.
     // addr2line output matches file names; atos output matches symbol names.
-    if (lines_read == 0 &&
+    if (i == 0 &&
         (strstr(line, "kj/common.c++") != nullptr ||
          strstr(line, "kj/exception.") != nullptr ||
          strstr(line, "kj/debug.") != nullptr ||
@@ -104,7 +106,7 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
 
     size_t len = strlen(line);
     if (len > 0 && line[len-1] == '\n') line[len-1] = '\0';
-    lines[lines_read++] = str("\n", line, ": called here");
+    lines[i++] = str("\n", line, ": called here");
   }
 
   // Skip remaining input.
@@ -112,14 +114,7 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
 
   pclose(p);
 
-cleanup:
-  if (oldPreload != nullptr) {
-    setenv("LD_PRELOAD", oldPreload.cStr(), true);
-  }
-
-  pthread_mutex_unlock(&mutex);
-
-  return (lines_read > 0 ? strArray(arrayPtr(lines, lines_read), "") : nullptr);
+  return strArray(arrayPtr(lines, i), "");
 #else
   return nullptr;
 #endif
