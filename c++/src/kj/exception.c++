@@ -32,7 +32,7 @@
 #include <execinfo.h>
 #endif
 
-#if __linux__ && defined(KJ_DEBUG)
+#if (__linux__ || __APPLE__) && defined(KJ_DEBUG)
 #include <stdio.h>
 #include <pthread.h>
 #endif
@@ -42,11 +42,11 @@ namespace kj {
 namespace {
 
 String getStackSymbols(ArrayPtr<void* const> trace) {
-#if __linux__ && defined(KJ_DEBUG)
+#if (__linux__ || __APPLE__) && defined(KJ_DEBUG)
   // We want to generate a human-readable stack trace.
 
-  // TODO(someday):  It would be really great if we could avoid farming out to addr2line and do
-  //   this all in-process, but that may involve onerous requirements like large library
+  // TODO(someday):  It would be really great if we could avoid farming out to another process
+  //   and do this all in-process, but that may involve onerous requirements like large library
   //   dependencies or using -rdynamic.
 
   // The environment manipulation is not thread-safe, so lock a mutex.  This could still be
@@ -55,15 +55,21 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
   // is in use.
   static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
   pthread_mutex_lock(&mutex);
+  KJ_DEFER(pthread_mutex_unlock(&mutex));
 
-  // Don't heapcheck / intercept syscalls for addr2line.
+  // Don't heapcheck / intercept syscalls.
   const char* preload = getenv("LD_PRELOAD");
   String oldPreload;
   if (preload != nullptr) {
     oldPreload = heapString(preload);
     unsetenv("LD_PRELOAD");
   }
+  KJ_DEFER(if (oldPreload != nullptr) { setenv("LD_PRELOAD", oldPreload.cStr(), true); });
 
+  String lines[8];
+  FILE* p = nullptr;
+
+#if __linux__
   // Get executable name from /proc/self/exe, then pass it and the stack trace to addr2line to
   // get file/line pairs.
   char exe[512];
@@ -73,9 +79,13 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
   }
   exe[n] = '\0';
 
-  String lines[8];
+  p = popen(str("addr2line -e ", exe, ' ', strArray(trace, " ")).cStr(), "r");
+#elif __APPLE__
+  // The Mac OS X equivalent of addr2line is atos.
+  // (Internally, it uses the private CoreSymbolication.framework library.)
+  p = popen(str("atos -d -p ", getpid(), ' ', strArray(trace, " ")).cStr(), "r");
+#endif
 
-  FILE* p = popen(str("addr2line -e ", exe, ' ', strArray(trace, " ")).cStr(), "r");
   if (p == nullptr) {
     return nullptr;
   }
@@ -84,10 +94,13 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
   size_t i = 0;
   while (i < kj::size(lines) && fgets(line, sizeof(line), p) != nullptr) {
     // Don't include exception-handling infrastructure in stack trace.
+    // addr2line output matches file names; atos output matches symbol names.
     if (i == 0 &&
         (strstr(line, "kj/common.c++") != nullptr ||
          strstr(line, "kj/exception.") != nullptr ||
-         strstr(line, "kj/debug.") != nullptr)) {
+         strstr(line, "kj/debug.") != nullptr ||
+         strstr(line, "kj::Exception") != nullptr ||
+         strstr(line, "kj::_::Debug") != nullptr)) {
       continue;
     }
 
@@ -100,12 +113,6 @@ String getStackSymbols(ArrayPtr<void* const> trace) {
   while (fgets(line, sizeof(line), p) != nullptr) {}
 
   pclose(p);
-
-  if (oldPreload != nullptr) {
-    setenv("LD_PRELOAD", oldPreload.cStr(), true);
-  }
-
-  pthread_mutex_unlock(&mutex);
 
   return strArray(arrayPtr(lines, i), "");
 #else
