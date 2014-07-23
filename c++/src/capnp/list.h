@@ -163,6 +163,8 @@ struct List<T, Kind::PRIMITIVE> {
 
   private:
     _::ListBuilder builder;
+    template <typename U, Kind K>
+    friend struct _::PointerHelpers;
     friend class Orphanage;
     template <typename U, Kind K>
     friend struct ToDynamic_;
@@ -282,6 +284,8 @@ struct List<T, Kind::STRUCT> {
 
   private:
     _::ListBuilder builder;
+    template <typename U, Kind K>
+    friend struct _::PointerHelpers;
     friend class Orphanage;
     template <typename U, Kind K>
     friend struct ToDynamic_;
@@ -391,6 +395,8 @@ struct List<List<T>, Kind::LIST> {
 
   private:
     _::ListBuilder builder;
+    template <typename U, Kind K>
+    friend struct _::PointerHelpers;
     friend class Orphanage;
     template <typename U, Kind K>
     friend struct ToDynamic_;
@@ -487,6 +493,8 @@ struct List<T, Kind::BLOB> {
 
   private:
     _::ListBuilder builder;
+    template <typename U, Kind K>
+    friend struct _::PointerHelpers;
     friend class Orphanage;
     template <typename U, Kind K>
     friend struct ToDynamic_;

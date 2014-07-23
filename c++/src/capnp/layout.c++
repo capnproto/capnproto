@@ -251,6 +251,7 @@ struct WirePointer {
     // our "null" value.
     return (offsetAndKind.get() == 0) & (upper32Bits == 0);
   }
+
 };
 static_assert(sizeof(WirePointer) == sizeof(word),
     "capnp::WirePointer is not exactly one word.  This will probably break everything.");
@@ -2155,6 +2156,20 @@ bool PointerBuilder::isNull() {
   return pointer->isNull();
 }
 
+bool PointerBuilder::isStruct() {
+  word* refTarget;
+  WirePointer* ptr = pointer;
+  WireHelpers::followFars(ptr, refTarget, segment);
+  return ptr->kind() == WirePointer::Kind::STRUCT;
+}
+
+bool PointerBuilder::isList() {
+  word* refTarget;
+  WirePointer* ptr = pointer;
+  WireHelpers::followFars(ptr, refTarget, segment);
+  return ptr->kind() == WirePointer::Kind::LIST;
+}
+
 void PointerBuilder::transferFrom(PointerBuilder other) {
   WireHelpers::transferPointer(segment, pointer, other.segment, other.pointer);
 }
@@ -2225,6 +2240,22 @@ MessageSizeCounts PointerReader::targetSize() const {
 
 bool PointerReader::isNull() const {
   return pointer == nullptr || pointer->isNull();
+}
+
+bool PointerReader::isStruct() const {
+  word* refTarget;
+  const WirePointer* ptr = pointer;
+  SegmentReader* sgmt = segment;
+  WireHelpers::followFars(ptr, refTarget, sgmt);
+  return ptr->kind() == WirePointer::Kind::STRUCT;
+}
+
+bool PointerReader::isList() const {
+  word* refTarget;
+  const WirePointer* ptr = pointer;
+  SegmentReader* sgmt = segment;
+  WireHelpers::followFars(ptr, refTarget, sgmt);
+  return ptr->kind() == WirePointer::Kind::LIST;
 }
 
 kj::Maybe<Arena&> PointerReader::getArena() const {
