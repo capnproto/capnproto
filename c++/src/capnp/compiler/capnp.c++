@@ -281,6 +281,9 @@ public:
     if (addStandardImportPaths) {
       loader.addImportPath(kj::heapString("/usr/local/include"));
       loader.addImportPath(kj::heapString("/usr/include"));
+#ifdef CAPNP_INCLUDE_DIR
+      loader.addImportPath(kj::heapString(CAPNP_INCLUDE_DIR));
+#endif
       addStandardImportPaths = false;
     }
 
