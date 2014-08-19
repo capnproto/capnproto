@@ -821,6 +821,103 @@ TEST(Rpc, Embargo) {
   EXPECT_EQ(5, call5.wait(context.waitScope).getN());
 }
 
+TEST(Rpc, EmbargoError) {
+  TestContext context;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  auto paf = kj::newPromiseAndFulfiller<test::TestCallOrder::Client>();
+
+  auto cap = test::TestCallOrder::Client(kj::mv(paf.promise));
+
+  auto earlyCall = client.getCallSequenceRequest().send();
+
+  auto echoRequest = client.echoRequest();
+  echoRequest.setCap(cap);
+  auto echo = echoRequest.send();
+
+  auto pipeline = echo.getCap();
+
+  auto call0 = getCallSequence(pipeline, 0);
+  auto call1 = getCallSequence(pipeline, 1);
+
+  earlyCall.wait(context.waitScope);
+
+  auto call2 = getCallSequence(pipeline, 2);
+
+  auto resolved = echo.wait(context.waitScope).getCap();
+
+  auto call3 = getCallSequence(pipeline, 3);
+  auto call4 = getCallSequence(pipeline, 4);
+  auto call5 = getCallSequence(pipeline, 5);
+
+  paf.fulfiller->rejectIfThrows([]() { KJ_FAIL_ASSERT("foo"); });
+
+  EXPECT_ANY_THROW(call0.wait(context.waitScope));
+  EXPECT_ANY_THROW(call1.wait(context.waitScope));
+  EXPECT_ANY_THROW(call2.wait(context.waitScope));
+  EXPECT_ANY_THROW(call3.wait(context.waitScope));
+  EXPECT_ANY_THROW(call4.wait(context.waitScope));
+  EXPECT_ANY_THROW(call5.wait(context.waitScope));
+
+  // Verify that we're still connected (there were no protocol errors).
+  getCallSequence(client, 1).wait(context.waitScope);
+}
+
+TEST(Rpc, CallBrokenPromise) {
+  // Tell the server to call back to a promise client, then resolve the promise to an error.
+
+  TestContext context;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+  auto paf = kj::newPromiseAndFulfiller<test::TestInterface::Client>();
+
+  {
+    auto req = client.holdRequest();
+    req.setCap(kj::mv(paf.promise));
+    req.send().wait(context.waitScope);
+  }
+
+  bool returned = false;
+  auto req = client.callHeldRequest().send()
+      .then([&](capnp::Response<test::TestMoreStuff::CallHeldResults>&&) {
+    returned = true;
+  }, [&](kj::Exception&& e) {
+    returned = true;
+    kj::throwRecoverableException(kj::mv(e));
+  }).eagerlyEvaluate(nullptr);
+
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+
+  EXPECT_FALSE(returned);
+
+  paf.fulfiller->rejectIfThrows([]() { KJ_FAIL_ASSERT("foo"); });
+
+  EXPECT_ANY_THROW(req.wait(context.waitScope));
+  EXPECT_TRUE(returned);
+
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+  kj::evalLater([]() {}).wait(context.waitScope);
+
+  // Verify that we're still connected (there were no protocol errors).
+  getCallSequence(client, 1).wait(context.waitScope);
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

@@ -1501,6 +1501,17 @@ private:
       auto capTable = message->getCapTable();
       auto exports = connectionState.writeDescriptors(capTable, payload);
 
+      // Capabilities that we are returning are subject to embargos. See `Disembargo` in rpc.capnp.
+      // As explained there, in order to deal with the Tribble 4-way race condition, we need to
+      // make sure that if we're returning any remote promises, that we ignore any subsequent
+      // resolution of those promises for the purpose of pipelined requests on this answer. Luckily,
+      // we can modify the cap table in-place.
+      for (auto& slot: capTable) {
+        KJ_IF_MAYBE(cap, slot) {
+          slot = connectionState.getInnermostClient(**cap);
+        }
+      }
+
       message->send();
       if (capTable.size() == 0) {
         return nullptr;
@@ -2208,6 +2219,7 @@ private:
 
   void handleResolve(const rpc::Resolve::Reader& resolve) {
     kj::Own<ClientHook> replacement;
+    kj::Maybe<kj::Exception> exception;
 
     // Extract the replacement capability.
     switch (resolve.which()) {
@@ -2220,7 +2232,10 @@ private:
         break;
 
       case rpc::Resolve::EXCEPTION:
-        replacement = newBrokenCap(toException(resolve.getException()));
+        // We can't set `replacement` to a new broken cap here because this will confuse
+        // PromiseClient::Resolve() into thinking that the remote promise resolved to a local
+        // capability and therefore a Disembargo is needed. We must actually reject the promise.
+        exception = toException(resolve.getException());
         break;
 
       default:
@@ -2231,7 +2246,11 @@ private:
     KJ_IF_MAYBE(import, imports.find(resolve.getPromiseId())) {
       KJ_IF_MAYBE(fulfiller, import->promiseFulfiller) {
         // OK, this is in fact an unfulfilled promise!
-        fulfiller->get()->fulfill(kj::mv(replacement));
+        KJ_IF_MAYBE(e, exception) {
+          fulfiller->get()->reject(kj::mv(*e));
+        } else {
+          fulfiller->get()->fulfill(kj::mv(replacement));
+        }
       } else if (import->importClient != nullptr) {
         // It appears this is a valid entry on the import table, but was not expected to be a
         // promise.
@@ -2314,13 +2333,14 @@ private:
           {
             auto redirect = downcasted.writeTarget(builder.initTarget());
 
-            // Disembargoes should only be sent to capabilities that were previously the object of
+            // Disembargoes should only be sent to capabilities that were previously the subject of
             // a `Resolve` message.  But `writeTarget` only ever returns non-null when called on
-            // a PromiseClient.  The code which sends `Resolve` should have replaced any promise
-            // with a direct node in order to solve the Tribble 4-way race condition.
+            // a PromiseClient.  The code which sends `Resolve` and `Return` should have replaced
+            // any promise with a direct node in order to solve the Tribble 4-way race condition.
+            // See the documentation of Disembargo in rpc.capnp for more.
             KJ_REQUIRE(redirect == nullptr,
                        "'Disembargo' of type 'senderLoopback' sent to an object that does not "
-                       "appear to have been the object of a previous 'Resolve' message.") {
+                       "appear to have been the subject of a previous 'Resolve' message.") {
               return;
             }
           }

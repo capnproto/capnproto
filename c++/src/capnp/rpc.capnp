@@ -458,6 +458,10 @@ struct Resolve {
   # a follow-up `Resolve` will be sent regardless of this release.  The level 0 receiver will reply
   # with an `unimplemented` message.  The sender (of the `Resolve`) can respond to this as if the
   # receiver had immediately released any capability to which the promise resolved.
+  #
+  # When implementing promise resolution, it's important to understand how embargos work and the
+  # tricky case of the Tribble 4-way race condition. See the comments for the Disembargo message,
+  # below.
 
   promiseId @0 :ExportId;
   # The ID of the promise to be resolved.
@@ -544,6 +548,9 @@ struct Disembargo {
   # already pointed at), no embargo is needed, because the pipelined calls are delivered over the
   # same path as the later direct calls.
   #
+  # Keep in mind that promise resolution happens both in the form of Resolve messages as well as
+  # Return messages (which resolve PromisedAnswers). Embargos apply in both cases.
+  #
   # An alternative strategy for enforcing E-order over promise resolution could be for Vat A to
   # implement the embargo internally.  When Vat A is notified of promise resolution, it could
   # send a dummy no-op call to promise P and wait for it to complete.  Until that call completes,
@@ -552,6 +559,31 @@ struct Disembargo {
   # being delivered directly to from Vat A to Vat C.  The `Disembargo` message allows latency to be
   # reduced.  (In the two-party loopback case, the `Disembargo` message is just a more explicit way
   # of accomplishing the same thing as a no-op call, but isn't any faster.)
+  #
+  # *The Tribble 4-way Race Condition*
+  #
+  # Any implementation of promise resolution and embargos must be aware of what we call the
+  # "Tribble 4-way race condition", after Dean Tribble, who explained the problem in a lively
+  # Friam meeting.
+  #
+  # Embargos are designed to work in the case where a two-hop path is being shortened to one hop.
+  # But sometimes there are more hops. Imagine that Alice has a reference to a remote promise P1
+  # which eventually resolves to _another_ remote promise P2 (in a third vat), which _at the same
+  # time_ happens to resolve to Bob (in a fourth vat). In this case, we're shortening from a 3-hop
+  # path (with four parties) to a 1-hop path (Alice -> Bob).
+  #
+  # Extending the embargo/disembargo protocol to be able to shorted multiple hops at once seems
+  # difficult. Instead, we make a rule that prevents this case from coming up:
+  #
+  # One a promise P has been resolved to a remove object reference R, then all further messages
+  # received addressed to P will be forwarded strictly to R. Even if it turns out later that R is
+  # itself a promise, and has resolved to some other object Q, messages sent to P will still be
+  # forwarded to R, not directly to Q (R will of course further forward the messages to Q).
+  #
+  # This rule does not cause a significant performance burden because once P has resolved to R, it
+  # is expected that people sending messages to P will shortly start sending them to R instead and
+  # drop P. P is at end-of-life anyway, so it doesn't matter if it ignores chances to further
+  # optimize its path.
 
   target @0 :MessageTarget;
   # What is to be disembargoed.
