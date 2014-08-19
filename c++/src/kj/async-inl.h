@@ -854,6 +854,27 @@ private:
 
 }  // namespace _ (private)
 
+template <typename T>
+template <typename Func>
+bool PromiseFulfiller<T>::rejectIfThrows(Func&& func) {
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions(kj::mv(func))) {
+    reject(kj::mv(*exception));
+    return false;
+  } else {
+    return true;
+  }
+}
+
+template <typename Func>
+bool PromiseFulfiller<void>::rejectIfThrows(Func&& func) {
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions(kj::mv(func))) {
+    reject(kj::mv(*exception));
+    return false;
+  } else {
+    return true;
+  }
+}
+
 template <typename T, typename Adapter, typename... Params>
 Promise<T> newAdaptedPromise(Params&&... adapterConstructorParams) {
   return Promise<T>(false, heap<_::AdapterPromiseNode<_::FixVoid<T>, Adapter>>(
