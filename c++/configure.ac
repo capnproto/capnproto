@@ -28,7 +28,7 @@ AC_PROG_CXX
 AC_LANG([C++])
 AX_CXX_COMPILE_STDCXX_11
 ACX_PTHREAD
-AC_PROG_LIBTOOL
+LT_INIT
 
 AS_IF([test "$external_capnp" != "no"], [
 	AS_IF([test "x$CAPNP" = "x"], [CAPNP="capnp"], [with_capnp=yes])
