@@ -303,7 +303,7 @@ packed (hex):  ff 8a (x 8 bytes) 03 8a (x 24 bytes)</code></pre>
 <li>A message with deeply-nested objects can cause a stack overflow in typical code which processes messages recursively.</li>
 </ul>
 
-<p>To defend against these attacks, every Cap’n Proto implementation should implemented the following restrictions by default:</p>
+<p>To defend against these attacks, every Cap’n Proto implementation should implement the following restrictions by default:</p>
 
 <ul>
 <li>As the application traverses the message, each time a pointer is dereferenced, a counter should be incremented by the size of the data to which it points. If this counter goes over some limit, an error should be raised, and/or default values should be returned. The C++ implementation currently defaults to a limit of 64MiB, but allows the caller to set a different limit if desired.</li>
