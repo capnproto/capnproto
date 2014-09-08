@@ -343,7 +343,7 @@ of malicious input:
 * A message with deeply-nested objects can cause a stack overflow in typical code which processes
   messages recursively.
 
-To defend against these attacks, every Cap'n Proto implementation should implemented the following
+To defend against these attacks, every Cap'n Proto implementation should implement the following
 restrictions by default:
 
 * As the application traverses the message, each time a pointer is dereferenced, a counter should

@@ -59,7 +59,7 @@ Proto message is negligible.
 
 This was a popular myth in security circles way back in the 80's and 90's, based on an incomplete
 understanding of what capabilities are and how to use them effectively.  Read
-[Capability Myths Demolished](http://srl.cs.jhu.edu/pubs/SRL2003-02.pdf).  (No really, read it;
+[Capability Myths Demolished](http://zesty.ca/capmyths/usenix.pdf).  (No really, read it;
 it's awesome.)
 
 ## Usage
