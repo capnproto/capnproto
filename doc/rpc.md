@@ -188,7 +188,7 @@ pattern on top of capabilities.
 For an extended discussion of what capabilities are and why they are often easier and more powerful
 than ACLs, see Mark Miller's
 ["An Ode to the Granovetter Diagram"](http://www.erights.org/elib/capability/ode/index.html) and
-[Capability Myths Demolished](http://srl.cs.jhu.edu/pubs/SRL2003-02.pdf).
+[Capability Myths Demolished](http://zesty.ca/capmyths/usenix.pdf).
 
 ## Protocol Features
 
