@@ -558,6 +558,35 @@ TEST(Rpc, Release) {
   EXPECT_EQ(0, context.restorer.handleCount);
 }
 
+TEST(Rpc, ReleaseOnCancel) {
+  // At one time, there was a bug where if a Return contained capabilities, but the client had
+  // canceled the request and already send a Finish (which presumably didn't reach the server before
+  // the Return), then we'd leak those caps. Test for that.
+
+  TestContext context;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+  client.whenResolved().wait(context.waitScope);
+
+  {
+    auto promise = client.getHandleRequest().send();
+
+    // If the server receives cancellation too early, it won't even return a capability in the
+    // results, it will just return "canceled". We want to emulate the case where the return message
+    // and the cancel (finish) message cross paths. It turns out that exactly two evalLater()s get
+    // us there.
+    //
+    // TODO(cleanup): This is fragile, but I'm not sure how else to write it without a ton
+    //   of scaffolding.
+    kj::evalLater([]() {}).wait(context.waitScope);
+    kj::evalLater([]() {}).wait(context.waitScope);
+  }
+
+  for (uint i = 0; i < 16; i++) kj::evalLater([]() {}).wait(context.waitScope);
+  EXPECT_EQ(0, context.restorer.handleCount);
+}
+
 TEST(Rpc, TailCall) {
   TestContext context;
 

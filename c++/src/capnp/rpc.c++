@@ -1157,21 +1157,26 @@ private:
 
     ~QuestionRef() {
       unwindDetector.catchExceptionsIfUnwinding([&]() {
+        auto& question = KJ_ASSERT_NONNULL(
+            connectionState->questions.find(id), "Question ID no longer on table?");
+
         // Send the "Finish" message (if the connection is not already broken).
         if (connectionState->connection.is<Connected>()) {
           auto message = connectionState->connection.get<Connected>()->newOutgoingMessage(
               messageSizeHint<rpc::Finish>());
           auto builder = message->getBody().getAs<rpc::Message>().initFinish();
           builder.setQuestionId(id);
-          builder.setReleaseResultCaps(false);
+          // If we're still awaiting a return, then this request is being canceled, and we're going
+          // to ignore any capabilities in the return message, so set releaseResultCaps true. If we
+          // already received the return, then we've already built local proxies for the caps and
+          // will send Release messages when those are destoryed.
+          builder.setReleaseResultCaps(question.isAwaitingReturn);
           message->send();
         }
 
         // Check if the question has returned and, if so, remove it from the table.
         // Remove question ID from the table.  Must do this *after* sending `Finish` to ensure that
         // the ID is not re-allocated before the `Finish` message can be sent.
-        auto& question = KJ_ASSERT_NONNULL(
-            connectionState->questions.find(id), "Question ID no longer on table?");
         if (question.isAwaitingReturn) {
           // Still waiting for return, so just remove the QuestionRef pointer from the table.
           question.selfRef = nullptr;
@@ -2173,7 +2178,8 @@ private:
           }
         }
 
-        // Looks like this question was canceled earlier, so `Finish` was already sent.  We can go
+        // Looks like this question was canceled earlier, so `Finish` was already sent, with
+        // `releaseResultCaps` set true so that we don't have to release them here.  We can go
         // ahead and delete it from the table.
         questions.erase(ret.getAnswerId(), *question);
       }
