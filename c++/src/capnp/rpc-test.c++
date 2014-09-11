@@ -404,6 +404,7 @@ TestNetworkAdapter& TestNetwork::add(kj::StringPtr name) {
 class TestRestorer final: public SturdyRefRestorer<test::TestSturdyRefObjectId> {
 public:
   int callCount = 0;
+  int handleCount = 0;
 
   Capability::Client restore(test::TestSturdyRefObjectId::Reader objectId) override {
     switch (objectId.getTag()) {
@@ -418,7 +419,7 @@ public:
       case test::TestSturdyRefObjectId::Tag::TEST_TAIL_CALLER:
         return kj::heap<TestTailCallerImpl>(callCount);
       case test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF:
-        return kj::heap<TestMoreStuffImpl>(callCount);
+        return kj::heap<TestMoreStuffImpl>(callCount, handleCount);
     }
     KJ_UNREACHABLE;
   }
@@ -527,6 +528,34 @@ TEST(Rpc, Pipelining) {
 
   EXPECT_EQ(3, context.restorer.callCount);
   EXPECT_EQ(1, chainedCallCount);
+}
+
+TEST(Rpc, Release) {
+  TestContext context;
+
+  auto client = context.connect(test::TestSturdyRefObjectId::Tag::TEST_MORE_STUFF)
+      .castAs<test::TestMoreStuff>();
+
+  auto handle1 = client.getHandleRequest().send().wait(context.waitScope).getHandle();
+  auto promise = client.getHandleRequest().send();
+  auto handle2 = promise.wait(context.waitScope).getHandle();
+
+  EXPECT_EQ(2, context.restorer.handleCount);
+
+  handle1 = nullptr;
+
+  for (uint i = 0; i < 16; i++) kj::evalLater([]() {}).wait(context.waitScope);
+  EXPECT_EQ(1, context.restorer.handleCount);
+
+  handle2 = nullptr;
+
+  for (uint i = 0; i < 16; i++) kj::evalLater([]() {}).wait(context.waitScope);
+  EXPECT_EQ(1, context.restorer.handleCount);
+
+  promise = nullptr;
+
+  for (uint i = 0; i < 16; i++) kj::evalLater([]() {}).wait(context.waitScope);
+  EXPECT_EQ(0, context.restorer.handleCount);
 }
 
 TEST(Rpc, TailCall) {

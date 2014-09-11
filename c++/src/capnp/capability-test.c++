@@ -189,8 +189,9 @@ TEST(Capability, AsyncCancelation) {
   auto destructionPromise = paf.promise.then([&]() { destroyed = true; }).eagerlyEvaluate(nullptr);
 
   int callCount = 0;
+  int handleCount = 0;
 
-  test::TestMoreStuff::Client client(kj::heap<TestMoreStuffImpl>(callCount));
+  test::TestMoreStuff::Client client(kj::heap<TestMoreStuffImpl>(callCount, handleCount));
 
   kj::Promise<void> promise = nullptr;
 

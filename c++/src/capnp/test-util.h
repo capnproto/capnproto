@@ -220,7 +220,7 @@ private:
 
 class TestMoreStuffImpl final: public test::TestMoreStuff::Server {
 public:
-  TestMoreStuffImpl(int& callCount);
+  TestMoreStuffImpl(int& callCount, int& handleCount);
 
   kj::Promise<void> getCallSequence(GetCallSequenceContext context) override;
 
@@ -240,8 +240,11 @@ public:
 
   kj::Promise<void> expectCancel(ExpectCancelContext context) override;
 
+  kj::Promise<void> getHandle(GetHandleContext context) override;
+
 private:
   int& callCount;
+  int& handleCount;
   test::TestInterface::Client clientToHold = nullptr;
 
   kj::Promise<void> loop(uint depth, test::TestInterface::Client cap, ExpectCancelContext context);

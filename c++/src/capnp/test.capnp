@@ -629,6 +629,8 @@ interface TestTailCaller {
   foo @0 (i :Int32, callee :TestTailCallee) -> TestTailCallee.TailResult;
 }
 
+interface TestHandle {}
+
 interface TestMoreStuff extends(TestCallOrder) {
   # Catch-all type that contains lots of testing methods.
 
@@ -657,6 +659,10 @@ interface TestMoreStuff extends(TestCallOrder) {
   # evalLater()-loops forever, holding `cap`.  Must be canceled.
 
   methodWithDefaults @8 (a :Text, b :UInt32 = 123, c :Text = "foo") -> (d :Text, e :Text = "bar");
+
+  getHandle @9 () -> (handle :TestHandle);
+  # Get a new handle. Tests have an out-of-band way to check the current number of live handles, so
+  # this can be used to test garbage collection.
 }
 
 interface TestKeywordMethods {

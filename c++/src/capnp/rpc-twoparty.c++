@@ -86,9 +86,12 @@ public:
       // Note that if the write fails, all further writes will be skipped due to the exception.
       // We never actually handle this exception because we assume the read end will fail as well
       // and it's cleaner to handle the failure there.
-      auto promise = writeMessage(network.stream, message).eagerlyEvaluate(nullptr);
-      return kj::mv(promise);
-    }).attach(kj::addRef(*this));
+      return writeMessage(network.stream, message);
+    }).attach(kj::addRef(*this))
+      // Note that it's important that the eagerlyEvaluate() come *after* the attach() because
+      // otherwise the message (and any capabilities in it) will not be released until a new
+      // message is written! (Kenton once spent all afternoon tracking this down...)
+      .eagerlyEvaluate(nullptr);
   }
 
 private:

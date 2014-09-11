@@ -959,7 +959,8 @@ kj::Promise<void> TestTailCalleeImpl::foo(FooContext context) {
   return kj::READY_NOW;
 }
 
-TestMoreStuffImpl::TestMoreStuffImpl(int& callCount): callCount(callCount) {}
+TestMoreStuffImpl::TestMoreStuffImpl(int& callCount, int& handleCount)
+    : callCount(callCount), handleCount(handleCount) {}
 
 kj::Promise<void> TestMoreStuffImpl::getCallSequence(GetCallSequenceContext context) {
   auto result = context.getResults();
@@ -1069,6 +1070,20 @@ kj::Promise<void> TestMoreStuffImpl::loop(uint depth, test::TestInterface::Clien
       return loop(depth + 1, cap, context);
     });
   }
+}
+
+class HandleImpl final: public test::TestHandle::Server {
+public:
+  HandleImpl(int& count): count(count) { ++count; }
+  ~HandleImpl() { --count; }
+
+private:
+  int& count;
+};
+
+kj::Promise<void> TestMoreStuffImpl::getHandle(GetHandleContext context) {
+  context.getResults().setHandle(kj::heap<HandleImpl>(handleCount));
+  return kj::READY_NOW;
 }
 
 }  // namespace _ (private)
