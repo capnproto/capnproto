@@ -85,13 +85,13 @@ private:
 
   template <typename T>
   static inline size_t flatSize(const T& t) { return t.size(); }
-  static inline size_t flatSize(String&& s) { return 0; }
-  static inline size_t flatSize(StringTree&& s) { return 0; }
+  static inline size_t flatSize(String&& s) { (void)s; return 0; }
+  static inline size_t flatSize(StringTree&& s) { (void)s; return 0; }
 
   template <typename T>
-  static inline size_t branchCount(const T& t) { return 0; }
-  static inline size_t branchCount(String&& s) { return 1; }
-  static inline size_t branchCount(StringTree&& s) { return 1; }
+  static inline size_t branchCount(const T& t) { (void)t; return 0; }
+  static inline size_t branchCount(String&& s) { (void)s; return 1; }
+  static inline size_t branchCount(StringTree&& s) { (void)s; return 1; }
 
   template <typename... Params>
   friend StringTree strTree(Params&&... params);
@@ -162,6 +162,7 @@ void StringTree::visit(Func&& func) const {
 }
 
 inline void StringTree::fill(char* pos, size_t branchIndex) {
+  (void)pos, (void)branchIndex;
   KJ_IREQUIRE(pos == text.end() && branchIndex == branches.size(),
               kj::str(text.end() - pos, ' ', branches.size() - branchIndex).cStr());
 }
