@@ -494,6 +494,15 @@ struct TestPrintInlineStructs {
   }
 }
 
+struct TestWholeFloatDefault {
+  # At one point, these failed to compile in C++ because it would produce literals like "123f",
+  # which is not valid; it needs to be "123.0f".
+  field @0 :Float32 = 123;
+  bigField @1 :Float32 = 123e30;
+  const constant :Float32 = 456;
+  const bigConstant :Float32 = 456e30;
+}
+
 struct TestEmptyStruct {}
 
 struct TestConstants {

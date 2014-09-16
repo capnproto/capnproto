@@ -300,7 +300,15 @@ private:
       case schema::Value::UINT16: return kj::strTree(value.getUint16(), "u");
       case schema::Value::UINT32: return kj::strTree(value.getUint32(), "u");
       case schema::Value::UINT64: return kj::strTree(value.getUint64(), "llu");
-      case schema::Value::FLOAT32: return kj::strTree(value.getFloat32(), "f");
+      case schema::Value::FLOAT32: {
+        auto text = kj::str(value.getFloat32());
+        if (text.findFirst('.') == nullptr &&
+            text.findFirst('e') == nullptr &&
+            text.findFirst('E') == nullptr) {
+          text = kj::str(text, ".0");
+        }
+        return kj::strTree(kj::mv(text), "f");
+      }
       case schema::Value::FLOAT64: return kj::strTree(value.getFloat64());
       case schema::Value::ENUM: {
         EnumSchema schema = schemaLoader.get(type.getEnum().getTypeId()).asEnum();
