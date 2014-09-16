@@ -1709,9 +1709,9 @@ TEST(Encoding, WholeFloatDefault) {
   auto root = message.initRoot<test::TestWholeFloatDefault>();
 
   EXPECT_EQ(123.0f, root.getField());
-  EXPECT_EQ(123e30f, root.getBigField());
+  EXPECT_EQ(2e30f, root.getBigField());
   EXPECT_EQ(456.0f, test::TestWholeFloatDefault::CONSTANT);
-  EXPECT_EQ(456e30f, test::TestWholeFloatDefault::BIG_CONSTANT);
+  EXPECT_EQ(4e30f, test::TestWholeFloatDefault::BIG_CONSTANT);
 }
 
 }  // namespace
