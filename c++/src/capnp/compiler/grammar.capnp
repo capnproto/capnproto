@@ -23,7 +23,7 @@
 # The structures in this file correspond to the AST of the Cap'n Proto schema language.
 #
 # This file is intended to be used internally by capnpc.  Mostly, it is useful because it is more
-# convenient that defining data classes in C++, particularly where variant types (unions) are
+# convenient than defining data classes in C++, particularly where variant types (unions) are
 # needed.  Over time, this file may change in backwards-incompatible ways.
 
 using Cxx = import "/capnp/c++.capnp";
