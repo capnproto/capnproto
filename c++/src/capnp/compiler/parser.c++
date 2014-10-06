@@ -201,6 +201,10 @@ struct Located {
     copyTo(result.get());
     return result;
   }
+  template <typename Other>
+  Located<kj::Decay<Other>> rewrap(Other&& other) {
+    return Located<Other>(kj::fwd<Other>(other), startByte, endByte);
+  }
 
   Located(const T& value, uint32_t startByte, uint32_t endByte)
       : value(value), startByte(startByte), endByte(endByte) {}
@@ -343,11 +347,24 @@ Orphan<List<T>> arrayToList(Orphanage& orphanage, kj::Array<Orphan<T>>&& element
 inline Declaration::Builder initDecl(
     Declaration::Builder builder, Located<Text::Reader>&& name,
     kj::Maybe<Orphan<LocatedInteger>>&& id,
+    kj::Maybe<Located<kj::Array<kj::Maybe<Located<Text::Reader>>>>>&& genericParameters,
     kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations) {
   name.copyTo(builder.initName());
   KJ_IF_MAYBE(i, id) {
     builder.getId().adoptUid(kj::mv(*i));
   }
+
+  KJ_IF_MAYBE(p, genericParameters) {
+    auto params = builder.initParameters(p->value.size());
+    for (uint i: kj::indices(p->value)) {
+      KJ_IF_MAYBE(name, p->value[i]) {
+        auto param = params[i];
+        param.setName(name->value);
+        name->copyLocationTo(param);
+      }
+    }
+  }
+
   auto list = builder.initAnnotations(annotations.size());
   for (uint i = 0; i < annotations.size(); i++) {
     list.adoptWithCaveats(i, kj::mv(annotations[i]));
@@ -383,241 +400,221 @@ void initLocation(kj::parse::Span<List<Token>::Reader::Iterator> location,
 
 CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterParam)
     : orphanage(orphanageParam), errorReporter(errorReporterParam) {
-  parsers.declName = arena.copy(p::transformWithLocation(
-      p::sequence(
-          p::oneOf(
-              p::transform(p::sequence(keyword("import"), stringLiteral),
-                  [this](Located<Text::Reader>&& filename) -> Orphan<DeclName> {
-                    auto result = orphanage.newOrphan<DeclName>();
-                    filename.copyTo(result.get().getBase().initImportName());
-                    return result;
-                  }),
-              p::transform(p::sequence(op("."), identifier),
-                  [this](Located<Text::Reader>&& filename) -> Orphan<DeclName> {
-                    auto result = orphanage.newOrphan<DeclName>();
-                    filename.copyTo(result.get().getBase().initAbsoluteName());
-                    return result;
-                  }),
-              p::transform(identifier,
-                  [this](Located<Text::Reader>&& filename) -> Orphan<DeclName> {
-                    auto result = orphanage.newOrphan<DeclName>();
-                    filename.copyTo(result.get().getBase().initRelativeName());
-                    return result;
-                  })),
-          p::many(p::sequence(op("."), identifier))),
-      [this](kj::parse::Span<List<Token>::Reader::Iterator> location,
-             Orphan<DeclName>&& result, kj::Array<Located<Text::Reader>>&& memberPath)
-          -> Orphan<DeclName> {
-        auto builder = result.get();
-        auto pathBuilder = builder.initMemberPath(memberPath.size());
-        for (size_t i = 0; i < memberPath.size(); i++) {
-          memberPath[i].copyTo(pathBuilder[i]);
-        }
-        initLocation(location, builder);
-        return kj::mv(result);
-      }));
-
-  parsers.typeExpression = arena.copy(p::transformWithLocation(
-      p::sequence(parsers.declName, p::optional(
-          parenthesizedList(parsers.typeExpression, errorReporter))),
-      [this](kj::parse::Span<List<Token>::Reader::Iterator> location,
-             Orphan<DeclName>&& name,
-             kj::Maybe<Located<kj::Array<kj::Maybe<Orphan<TypeExpression>>>>>&& params)
-             -> Orphan<TypeExpression> {
-        auto result = orphanage.newOrphan<TypeExpression>();
-        auto builder = result.get();
-        builder.adoptName(kj::mv(name));
-        KJ_IF_MAYBE(p, params) {
-          auto paramsBuilder = builder.initParams(p->value.size());
-          for (uint i = 0; i < p->value.size(); i++) {
-            KJ_IF_MAYBE(param, p->value[i]) {
-              paramsBuilder.adoptWithCaveats(i, kj::mv(*param));
-            } else {
-              // param failed to parse
-              paramsBuilder[i].initName().getBase().initAbsoluteName().setValue("Void");
-            }
-          }
-        }
-        initLocation(location, builder);
-        return result;
-      }));
-
-  // Parser for a "name = value" pair.  Also matches "name = unionMember(value)",
-  // "unionMember(value)" (unnamed union), and just "value" (which is not actually a valid field
-  // assigment, but simplifies the parser for parenthesizedValueExpression).
-  auto& fieldAssignment = arena.copy(p::transform(
-      p::sequence(p::optional(p::sequence(identifier, op("="))), parsers.valueExpression),
-      [this](kj::Maybe<Located<Text::Reader>>&& fieldName, Orphan<ValueExpression>&& fieldValue)
-             -> Orphan<ValueExpression::FieldAssignment> {
-        auto result = orphanage.newOrphan<ValueExpression::FieldAssignment>();
+  auto& tupleElement = arena.copy(p::transform(
+      p::sequence(p::optional(p::sequence(identifier, op("="))), parsers.expression),
+      [this](kj::Maybe<Located<Text::Reader>>&& fieldName, Orphan<Expression>&& fieldValue)
+             -> Orphan<Expression::Param> {
+        auto result = orphanage.newOrphan<Expression::Param>();
         auto builder = result.get();
         KJ_IF_MAYBE(fn, fieldName) {
-          fn->copyTo(builder.initFieldName());
+          fn->copyTo(builder.initNamed());
+        } else {
+          builder.setUnnamed();
         }
         builder.adoptValue(kj::mv(fieldValue));
         return kj::mv(result);
       }));
 
-  parsers.parenthesizedValueExpression = arena.copy(p::transform(
-      parenthesizedList(fieldAssignment, errorReporter),
-      [this](Located<kj::Array<kj::Maybe<Orphan<ValueExpression::FieldAssignment>>>>&& value)
-          -> Orphan<ValueExpression> {
-        if (value.value.size() == 1) {
-          KJ_IF_MAYBE(firstVal, value.value[0]) {
-            auto reader = firstVal->getReader();
-            if (reader.getFieldName().getValue().size() == 0) {
-              // There is only one value and it isn't an assignment, therefore the value is
-              // not a struct.
-              return firstVal->get().disownValue();
-            }
-          } else {
-            // There is only one value and it failed to parse.
-            auto result = orphanage.newOrphan<ValueExpression>();
-            auto builder = result.get();
-            builder.setUnknown();
-            value.copyLocationTo(builder);
-            return result;
-          }
-        }
-
-        // If we get here, the parentheses appear to contain a list of field assignments, meaning
-        // the value is a struct.
-
-        auto result = orphanage.newOrphan<ValueExpression>();
-        auto builder = result.get();
-        value.copyLocationTo(builder);
-
-        auto structBuilder = builder.initStruct(value.value.size());
-        for (uint i = 0; i < value.value.size(); i++) {
-          KJ_IF_MAYBE(field, value.value[i]) {
-            auto reader = field->getReader();
-            if (reader.getFieldName().getValue().size() > 0) {
-              structBuilder.adoptWithCaveats(i, kj::mv(*field));
+  auto& tuple = arena.copy<Parser<Located<Orphan<List<Expression::Param>>>>>(
+      arena.copy(p::transform(
+        parenthesizedList(tupleElement, errorReporter),
+        [this](Located<kj::Array<kj::Maybe<Orphan<Expression::Param>>>>&& elements)
+               -> Located<Orphan<List<Expression::Param>>> {
+          auto result = orphanage.newOrphan<List<Expression::Param>>(elements.value.size());
+          auto builder = result.get();
+          for (uint i: kj::indices(elements.value)) {
+            KJ_IF_MAYBE(e, elements.value[i]) {
+              builder.adoptWithCaveats(i, kj::mv(*e));
             } else {
-              errorReporter.addErrorOn(reader.getValue(), "Missing field name.");
+              builder[i].initValue().setUnknown();
             }
           }
-        }
+          return elements.rewrap(kj::mv(result));
+        })));
 
-        return result;
+  parsers.expression = arena.copy(p::transform(
+      p::sequence(
+          // Base expression.
+          p::oneOf(
+              p::transform(integerLiteral,
+                  [this](Located<uint64_t>&& value) -> Orphan<Expression> {
+                    auto result = orphanage.newOrphan<Expression>();
+                    auto builder = result.get();
+                    builder.setPositiveInt(value.value);
+                    value.copyLocationTo(builder);
+                    return result;
+                  }),
+              p::transform(p::sequence(op("-"), integerLiteral),
+                  [this](Located<uint64_t>&& value) -> Orphan<Expression> {
+                    auto result = orphanage.newOrphan<Expression>();
+                    auto builder = result.get();
+                    builder.setNegativeInt(value.value);
+                    value.copyLocationTo(builder);
+                    return result;
+                  }),
+              p::transform(floatLiteral,
+                  [this](Located<double>&& value) -> Orphan<Expression> {
+                    auto result = orphanage.newOrphan<Expression>();
+                    auto builder = result.get();
+                    builder.setFloat(value.value);
+                    value.copyLocationTo(builder);
+                    return result;
+                  }),
+              p::transform(p::sequence(op("-"), floatLiteral),
+                  [this](Located<double>&& value) -> Orphan<Expression> {
+                    auto result = orphanage.newOrphan<Expression>();
+                    auto builder = result.get();
+                    builder.setFloat(-value.value);
+                    value.copyLocationTo(builder);
+                    return result;
+                  }),
+              p::transformWithLocation(p::sequence(op("-"), keyword("inf")),
+                  [this](kj::parse::Span<List<Token>::Reader::Iterator> location)
+                      -> Orphan<Expression> {
+                    auto result = orphanage.newOrphan<Expression>();
+                    auto builder = result.get();
+                    builder.setFloat(-kj::inf());
+                    initLocation(location, builder);
+                    return result;
+                  }),
+              p::transform(stringLiteral,
+                  [this](Located<Text::Reader>&& value) -> Orphan<Expression> {
+                    auto result = orphanage.newOrphan<Expression>();
+                    auto builder = result.get();
+                    builder.setString(value.value);
+                    value.copyLocationTo(builder);
+                    return result;
+                  }),
+              p::transform(binaryLiteral,
+                  [this](Located<Data::Reader>&& value) -> Orphan<Expression> {
+                    auto result = orphanage.newOrphan<Expression>();
+                    auto builder = result.get();
+                    builder.setBinary(value.value);
+                    value.copyLocationTo(builder);
+                    return result;
+                  }),
+              p::transform(bracketedList(parsers.expression, errorReporter),
+                  [this](Located<kj::Array<kj::Maybe<Orphan<Expression>>>>&& value)
+                      -> Orphan<Expression> {
+                    auto result = orphanage.newOrphan<Expression>();
+                    auto builder = result.get();
+                    auto listBuilder = builder.initList(value.value.size());
+                    for (uint i = 0; i < value.value.size(); i++) {
+                      KJ_IF_MAYBE(element, value.value[i]) {
+                        listBuilder.adoptWithCaveats(i, kj::mv(*element));
+                      }
+                    }
+                    value.copyLocationTo(builder);
+                    return result;
+                  }),
+              p::transform(tuple,
+                  [this](Located<Orphan<List<Expression::Param>>>&& value)
+                      -> Orphan<Expression> {
+                    auto elements = value.value.get();
+
+                    if (elements.size() == 1 && elements[0].isUnnamed()) {
+                      // Single-value tuple is just a value.
+                      return elements[0].disownValue();
+                    } else {
+                      auto result = orphanage.newOrphan<Expression>();
+                      auto builder = result.get();
+                      builder.adoptTuple(kj::mv(value.value));
+                      value.copyLocationTo(builder);
+                      return result;
+                    }
+                  }),
+              p::transformWithLocation(p::sequence(keyword("import"), stringLiteral),
+                  [this](kj::parse::Span<List<Token>::Reader::Iterator> location,
+                         Located<Text::Reader>&& filename) -> Orphan<Expression> {
+                    auto result = orphanage.newOrphan<Expression>();
+                    auto builder = result.get();
+                    initLocation(location, builder);
+                    filename.copyTo(builder.initImport());
+                    return result;
+                  }),
+              p::transformWithLocation(p::sequence(op("."), identifier),
+                  [this](kj::parse::Span<List<Token>::Reader::Iterator> location,
+                         Located<Text::Reader>&& name) -> Orphan<Expression> {
+                    auto result = orphanage.newOrphan<Expression>();
+                    auto builder = result.get();
+                    initLocation(location, builder);
+                    name.copyTo(builder.initAbsoluteName());
+                    return result;
+                  }),
+              p::transform(identifier,
+                  [this](Located<Text::Reader>&& name) -> Orphan<Expression> {
+                    auto result = orphanage.newOrphan<Expression>();
+                    auto builder = result.get();
+                    name.copyTo(builder.initRelativeName());
+                    name.copyLocationTo(builder);
+                    return result;
+                  })),
+          // Suffixes, e.g. ".member" or "(param1, param2)".
+          p::many(p::oneOf(
+              p::transformWithLocation(p::sequence(op("."), identifier),
+                  [this](kj::parse::Span<List<Token>::Reader::Iterator> location,
+                         Located<Text::Reader>&& name) -> Orphan<Expression> {
+                    auto result = orphanage.newOrphan<Expression>();
+                    auto builder = result.get();
+                    initLocation(location, builder);
+                    name.copyTo(builder.initMember().initName());
+                    return result;
+                  }),
+              p::transform(tuple,
+                  [this](Located<Orphan<List<Expression::Param>>>&& params) -> Orphan<Expression> {
+                    auto result = orphanage.newOrphan<Expression>();
+                    auto builder = result.get();
+                    params.copyLocationTo(builder);
+                    builder.initApplication().adoptParams(kj::mv(params.value));
+                    return result;
+                  })))),
+      [this](Orphan<Expression>&& base, kj::Array<Orphan<Expression>>&& suffixes)
+          -> Orphan<Expression> {
+        // Apply all the suffixes to the base expression.
+        uint startByte = base.getReader().getStartByte();
+        for (auto& suffix: suffixes) {
+          auto builder = suffix.get();
+          if (builder.isApplication()) {
+            builder.getApplication().adoptFunction(kj::mv(base));
+          } else if (builder.isMember()) {
+            builder.getMember().adoptParent(kj::mv(base));
+          } else {
+            KJ_FAIL_ASSERT("Unknown suffix?", (uint)builder.which());
+          }
+          builder.setStartByte(startByte);
+          base = kj::mv(suffix);
+        }
+        return kj::mv(base);
       }));
 
-  parsers.valueExpression = arena.copy(p::oneOf(
-      p::transform(integerLiteral,
-          [this](Located<uint64_t>&& value) -> Orphan<ValueExpression> {
-            auto result = orphanage.newOrphan<ValueExpression>();
-            auto builder = result.get();
-            builder.setPositiveInt(value.value);
-            value.copyLocationTo(builder);
-            return result;
-          }),
-      p::transform(p::sequence(op("-"), integerLiteral),
-          [this](Located<uint64_t>&& value) -> Orphan<ValueExpression> {
-            auto result = orphanage.newOrphan<ValueExpression>();
-            auto builder = result.get();
-            builder.setNegativeInt(value.value);
-            value.copyLocationTo(builder);
-            return result;
-          }),
-      p::transform(floatLiteral,
-          [this](Located<double>&& value) -> Orphan<ValueExpression> {
-            auto result = orphanage.newOrphan<ValueExpression>();
-            auto builder = result.get();
-            builder.setFloat(value.value);
-            value.copyLocationTo(builder);
-            return result;
-          }),
-      p::transform(p::sequence(op("-"), floatLiteral),
-          [this](Located<double>&& value) -> Orphan<ValueExpression> {
-            auto result = orphanage.newOrphan<ValueExpression>();
-            auto builder = result.get();
-            builder.setFloat(-value.value);
-            value.copyLocationTo(builder);
-            return result;
-          }),
-      p::transformWithLocation(p::sequence(op("-"), keyword("inf")),
-          [this](kj::parse::Span<List<Token>::Reader::Iterator> location)
-              -> Orphan<ValueExpression> {
-            auto result = orphanage.newOrphan<ValueExpression>();
-            auto builder = result.get();
-            builder.setFloat(-kj::inf());
-            initLocation(location, builder);
-            return result;
-          }),
-      p::transform(stringLiteral,
-          [this](Located<Text::Reader>&& value) -> Orphan<ValueExpression> {
-            auto result = orphanage.newOrphan<ValueExpression>();
-            auto builder = result.get();
-            builder.setString(value.value);
-            value.copyLocationTo(builder);
-            return result;
-          }),
-      p::transform(binaryLiteral,
-          [this](Located<Data::Reader>&& value) -> Orphan<ValueExpression> {
-            auto result = orphanage.newOrphan<ValueExpression>();
-            auto builder = result.get();
-            builder.setBinary(value.value);
-            value.copyLocationTo(builder);
-            return result;
-          }),
-      p::transformWithLocation(parsers.declName,
-          [this](kj::parse::Span<List<Token>::Reader::Iterator> location,
-                 Orphan<DeclName>&& value) -> Orphan<ValueExpression> {
-            auto result = orphanage.newOrphan<ValueExpression>();
-            auto builder = result.get();
-            builder.adoptName(kj::mv(value));
-            initLocation(location, builder);
-            return result;
-          }),
-      p::transform(bracketedList(parsers.valueExpression, errorReporter),
-          [this](Located<kj::Array<kj::Maybe<Orphan<ValueExpression>>>>&& value)
-              -> Orphan<ValueExpression> {
-            auto result = orphanage.newOrphan<ValueExpression>();
-            auto builder = result.get();
-            auto listBuilder = builder.initList(value.value.size());
-            for (uint i = 0; i < value.value.size(); i++) {
-              KJ_IF_MAYBE(element, value.value[i]) {
-                listBuilder.adoptWithCaveats(i, kj::mv(*element));
-              }
-            }
-            value.copyLocationTo(builder);
-            return result;
-          }),
-      p::transform(parenthesizedList(fieldAssignment, errorReporter),
-          [this](Located<kj::Array<kj::Maybe<Orphan<ValueExpression::FieldAssignment>>>>&& value)
-              -> Orphan<ValueExpression> {
-            auto result = orphanage.newOrphan<ValueExpression>();
-            auto builder = result.get();
-            auto structBuilder = builder.initStruct(value.value.size());
-            for (uint i = 0; i < value.value.size(); i++) {
-              KJ_IF_MAYBE(field, value.value[i]) {
-                auto reader = field->get();
-                if (reader.getFieldName().getValue().size() > 0) {
-                  structBuilder.adoptWithCaveats(i, kj::mv(*field));
-                } else {
-                  auto fieldValue = field->get().getValue();
-                  errorReporter.addError(fieldValue.getStartByte(), fieldValue.getEndByte(),
-                                         "Missing field name.");
-                }
-              }
-            }
-            value.copyLocationTo(builder);
-            return result;
-          })
-      ));
-
   parsers.annotation = arena.copy(p::transform(
-      p::sequence(op("$"), parsers.declName, p::optional(parsers.parenthesizedValueExpression)),
-      [this](Orphan<DeclName>&& name, kj::Maybe<Orphan<ValueExpression>>&& value)
+      p::sequence(op("$"), parsers.expression),
+      [this](Orphan<Expression>&& expression)
           -> Orphan<Declaration::AnnotationApplication> {
         auto result = orphanage.newOrphan<Declaration::AnnotationApplication>();
         auto builder = result.get();
-        builder.adoptName(kj::mv(name));
-        KJ_IF_MAYBE(v, value) {
-          builder.getValue().adoptExpression(kj::mv(*v));
+
+        auto exp = expression.get();
+        if (exp.isApplication()) {
+          // Oops, this annotation specifies the value, but we parsed it as an application on
+          // the preceding expression. Pull it back apart.
+          auto app = exp.getApplication();
+          builder.adoptName(app.disownFunction());
+          auto params = app.getParams();
+          if (params.size() == 1 && params[0].isUnnamed()) {
+            // Params has a single unnamed element, so reduce it to a simple value rather than
+            // a tuple.
+            builder.getValue().adoptExpression(params[0].disownValue());
+          } else {
+            // Params is not a single unnamed element, so it's a tuple.
+            builder.getValue().initExpression().adoptTuple(app.disownParams());
+          }
         } else {
+          // The annotation has no value.
+          builder.adoptName(kj::mv(expression));
           builder.getValue().setNone();
         }
+
         return result;
       }));
 
@@ -645,20 +642,20 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
 
   parsers.usingDecl = arena.copy(p::transform(
       p::sequence(keyword("using"), p::optional(p::sequence(identifier, op("="))),
-                  parsers.declName),
-      [this](kj::Maybe<Located<Text::Reader>>&& name, Orphan<DeclName>&& target)
+                  parsers.expression),
+      [this](kj::Maybe<Located<Text::Reader>>&& name, Orphan<Expression>&& target)
           -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
         auto builder = decl.get();
         KJ_IF_MAYBE(n, name) {
           n->copyTo(builder.initName());
         } else {
-          auto targetPath = target.getReader().getMemberPath();
-          if (targetPath.size() == 0) {
-            errorReporter.addErrorOn(
-                target.getReader(), "'using' declaration without '=' must use a qualified path.");
+          auto targetReader = target.getReader();
+          if (targetReader.isMember()) {
+            builder.setName(targetReader.getMember().getName());
           } else {
-            builder.setName(targetPath[targetPath.size() - 1]);
+            errorReporter.addErrorOn(targetReader,
+                "'using' declaration without '=' must identify a named declaration.");
           }
         }
         // no id, no annotations for using decl
@@ -668,16 +665,17 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
 
   parsers.constDecl = arena.copy(p::transform(
       p::sequence(keyword("const"), identifier, p::optional(parsers.uid),
-                  op(":"), parsers.typeExpression,
-                  op("="), parsers.valueExpression,
+                  op(":"), parsers.expression,
+                  op("="), parsers.expression,
                   p::many(parsers.annotation)),
       [this](Located<Text::Reader>&& name, kj::Maybe<Orphan<LocatedInteger>>&& id,
-             Orphan<TypeExpression>&& type, Orphan<ValueExpression>&& value,
+             Orphan<Expression>&& type, Orphan<Expression>&& value,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
         auto builder =
-            initDecl(decl.get(), kj::mv(name), kj::mv(id), kj::mv(annotations)).initConst();
+            initDecl(decl.get(), kj::mv(name), kj::mv(id), nullptr,
+                     kj::mv(annotations)).initConst();
         builder.adoptType(kj::mv(type));
         builder.adoptValue(kj::mv(value));
         return DeclParserResult(kj::mv(decl));
@@ -690,7 +688,7 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
-        initDecl(decl.get(), kj::mv(name), kj::mv(id), kj::mv(annotations)).setEnum();
+        initDecl(decl.get(), kj::mv(name), kj::mv(id), nullptr, kj::mv(annotations)).setEnum();
         return DeclParserResult(kj::mv(decl), parsers.enumLevelDecl);
       }));
 
@@ -707,21 +705,24 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
 
   parsers.structDecl = arena.copy(p::transform(
       p::sequence(keyword("struct"), identifier, p::optional(parsers.uid),
+                  p::optional(parenthesizedList(identifier, errorReporter)),
                   p::many(parsers.annotation)),
       [this](Located<Text::Reader>&& name, kj::Maybe<Orphan<LocatedInteger>>&& id,
+             kj::Maybe<Located<kj::Array<kj::Maybe<Located<Text::Reader>>>>>&& genericParameters,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
-        initDecl(decl.get(), kj::mv(name), kj::mv(id), kj::mv(annotations)).setStruct();
+        initDecl(decl.get(), kj::mv(name), kj::mv(id), kj::mv(genericParameters),
+                 kj::mv(annotations)).setStruct();
         return DeclParserResult(kj::mv(decl), parsers.structLevelDecl);
       }));
 
   parsers.fieldDecl = arena.copy(p::transform(
-      p::sequence(identifier, parsers.ordinal, op(":"), parsers.typeExpression,
-                  p::optional(p::sequence(op("="), parsers.valueExpression)),
+      p::sequence(identifier, parsers.ordinal, op(":"), parsers.expression,
+                  p::optional(p::sequence(op("="), parsers.expression)),
                   p::many(parsers.annotation)),
       [this](Located<Text::Reader>&& name, Orphan<LocatedInteger>&& ordinal,
-             Orphan<TypeExpression>&& type, kj::Maybe<Orphan<ValueExpression>>&& defaultValue,
+             Orphan<Expression>&& type, kj::Maybe<Orphan<Expression>>&& defaultValue,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
@@ -823,16 +824,19 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
 
   parsers.interfaceDecl = arena.copy(p::transform(
       p::sequence(keyword("interface"), identifier, p::optional(parsers.uid),
+                  p::optional(parenthesizedList(identifier, errorReporter)),
                   p::optional(p::sequence(
-                      keyword("extends"), parenthesizedList(parsers.declName, errorReporter))),
+                      keyword("extends"), parenthesizedList(parsers.expression, errorReporter))),
                   p::many(parsers.annotation)),
       [this](Located<Text::Reader>&& name, kj::Maybe<Orphan<LocatedInteger>>&& id,
-             kj::Maybe<Located<kj::Array<kj::Maybe<Orphan<DeclName>>>>>&& extends,
+             kj::Maybe<Located<kj::Array<kj::Maybe<Located<Text::Reader>>>>>&& genericParameters,
+             kj::Maybe<Located<kj::Array<kj::Maybe<Orphan<Expression>>>>>&& extends,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
         auto builder = initDecl(
-            decl.get(), kj::mv(name), kj::mv(id), kj::mv(annotations)).initInterface();
+            decl.get(), kj::mv(name), kj::mv(id), kj::mv(genericParameters),
+            kj::mv(annotations)).initInterface();
         KJ_IF_MAYBE(e, extends) {
           auto extendsBuilder = builder.initExtends(e->value.size());
           for (uint i: kj::indices(e->value)) {
@@ -845,12 +849,12 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
       }));
 
   parsers.param = arena.copy(p::transformWithLocation(
-      p::sequence(identifier, op(":"), parsers.typeExpression,
-                  p::optional(p::sequence(op("="), parsers.valueExpression)),
+      p::sequence(identifier, op(":"), parsers.expression,
+                  p::optional(p::sequence(op("="), parsers.expression)),
                   p::many(parsers.annotation)),
       [this](kj::parse::Span<List<Token>::Reader::Iterator> location,
-             Located<Text::Reader>&& name, Orphan<TypeExpression>&& type,
-             kj::Maybe<Orphan<ValueExpression>>&& defaultValue,
+             Located<Text::Reader>&& name, Orphan<Expression>&& type,
+             kj::Maybe<Orphan<Expression>>&& defaultValue,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> Orphan<Declaration::Param> {
         auto result = orphanage.newOrphan<Declaration::Param>();
@@ -885,8 +889,8 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
             }
             return decl;
           }),
-      p::transform(parsers.declName,
-          [this](Orphan<DeclName>&& name) -> Orphan<Declaration::ParamList> {
+      p::transform(parsers.expression,
+          [this](Orphan<Expression>&& name) -> Orphan<Declaration::ParamList> {
             auto decl = orphanage.newOrphan<Declaration::ParamList>();
             auto builder = decl.get();
             auto nameReader = name.getReader();
@@ -934,16 +938,17 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
   parsers.annotationDecl = arena.copy(p::transform(
       p::sequence(keyword("annotation"), identifier, p::optional(parsers.uid),
                   parenthesizedList(annotationTarget, errorReporter),
-                  op(":"), parsers.typeExpression,
+                  op(":"), parsers.expression,
                   p::many(parsers.annotation)),
       [this](Located<Text::Reader>&& name, kj::Maybe<Orphan<LocatedInteger>>&& id,
              Located<kj::Array<kj::Maybe<Located<Text::Reader>>>>&& targets,
-             Orphan<TypeExpression>&& type,
+             Orphan<Expression>&& type,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
         auto builder =
-            initDecl(decl.get(), kj::mv(name), kj::mv(id), kj::mv(annotations)).initAnnotation();
+            initDecl(decl.get(), kj::mv(name), kj::mv(id), nullptr,
+                     kj::mv(annotations)).initAnnotation();
         builder.adoptType(kj::mv(type));
         DynamicStruct::Builder dynamicBuilder = builder;
         for (auto& maybeTarget: targets.value) {

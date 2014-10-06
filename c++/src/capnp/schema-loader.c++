@@ -373,7 +373,7 @@ private:
 
   void validate(const schema::Node::Interface::Reader& interfaceNode) {
     for (auto extend: interfaceNode.getExtends()) {
-      validateTypeId(extend, schema::Node::INTERFACE);
+      validateTypeId(extend.getId(), schema::Node::INTERFACE);
     }
 
     auto methods = interfaceNode.getMethods();
@@ -754,11 +754,11 @@ private:
 
       kj::Vector<uint64_t> extends;
       kj::Vector<uint64_t> replacementExtends;
-      for (uint64_t extend: interfaceNode.getExtends()) {
-        extends.add(extend);
+      for (auto extend: interfaceNode.getExtends()) {
+        extends.add(extend.getId());
       }
-      for (uint64_t extend: replacement.getExtends()) {
-        replacementExtends.add(extend);
+      for (auto extend: replacement.getExtends()) {
+        replacementExtends.add(extend.getId());
       }
       std::sort(extends.begin(), extends.end());
       std::sort(replacementExtends.begin(), replacementExtends.end());

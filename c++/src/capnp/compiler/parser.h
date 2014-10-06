@@ -111,10 +111,7 @@ public:
     // enums, but they'll be accepted by enumLevelDecl.  A later stage of compilation should report
     // these as errors.
 
-    Parser<Orphan<DeclName>> declName;
-    Parser<Orphan<TypeExpression>> typeExpression;
-    Parser<Orphan<ValueExpression>> valueExpression;
-    Parser<Orphan<ValueExpression>> parenthesizedValueExpression;
+    Parser<Orphan<Expression>> expression;
     Parser<Orphan<Declaration::AnnotationApplication>> annotation;
     Parser<Orphan<LocatedInteger>> uid;
     Parser<Orphan<LocatedInteger>> ordinal;

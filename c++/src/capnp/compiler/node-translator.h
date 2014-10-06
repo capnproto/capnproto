@@ -27,6 +27,7 @@
 #include <capnp/schema.capnp.h>
 #include <capnp/dynamic.h>
 #include <kj/vector.h>
+#include <kj/one-of.h>
 #include "error-reporter.h"
 
 namespace capnp {
@@ -42,14 +43,38 @@ public:
     // Callback class used to find other nodes relative to this one.
 
   public:
-    struct ResolvedName {
+    struct ResolvedDecl {
       uint64_t id;
+      uint genericParamCount;
+      uint64_t scopeId;
       Declaration::Which kind;
+      Resolver* resolver;
     };
 
-    virtual kj::Maybe<ResolvedName> resolve(const DeclName::Reader& name) = 0;
+    struct ResolvedParameter {
+      uint64_t id;  // ID of the node declaring the parameter.
+      uint index;   // Index of the parameter.
+    };
+
+    struct ResolvedAlias {
+      Expression::Reader value;
+      uint64_t scopeId;
+      Resolver* scope;
+
+      // TODO(now): Returning an Expression from some other file is wrong wrong wrong. We need
+      //   to compile the alias down to an id + type environment.
+    };
+
+    virtual kj::Maybe<kj::OneOf<ResolvedDecl, ResolvedParameter, ResolvedAlias>>
+        resolve(kj::StringPtr name) = 0;
     // Look up the given name, relative to this node, and return basic information about the
     // target.
+
+    virtual kj::Maybe<kj::OneOf<ResolvedDecl, ResolvedAlias>> resolveMember(kj::StringPtr name) = 0;
+    // Look up a member of this node.
+
+    virtual ResolvedDecl getTopScope() = 0;
+    // Get the top-level scope containing this node.
 
     virtual kj::Maybe<Schema> resolveBootstrapSchema(uint64_t id) = 0;
     // Get the schema for the given ID.  If a schema is returned, it must be safe to traverse its
@@ -70,7 +95,7 @@ public:
     // traversing other schemas.  Returns null if the ID is recognized, but the corresponding
     // schema node failed to be built for reasons that were already reported.
 
-    virtual kj::Maybe<uint64_t> resolveImport(kj::StringPtr name) = 0;
+    virtual kj::Maybe<ResolvedDecl> resolveImport(kj::StringPtr name) = 0;
     // Get the ID of an imported file given the import path.
   };
 
@@ -121,7 +146,7 @@ private:
   // If this is an interface, these are the auto-generated structs representing params and results.
 
   struct UnfinishedValue {
-    ValueExpression::Reader source;
+    Expression::Reader source;
     schema::Type::Reader type;
     schema::Value::Builder target;
   };
@@ -141,6 +166,8 @@ private:
   class DuplicateOrdinalDetector;
   class StructLayout;
   class StructTranslator;
+  class DeclInstance;
+  class TypeEnvironment;
 
   void compileEnum(Void decl, List<Declaration>::Reader members,
                    schema::Node::Builder builder);
@@ -152,27 +179,35 @@ private:
   // The `members` arrays contain only members with ordinal numbers, in code order.  Other members
   // are handled elsewhere.
 
+  template <typename InitTypeEnvironmentFunc>
   uint64_t compileParamList(kj::StringPtr methodName, uint16_t ordinal, bool isResults,
-                            Declaration::ParamList::Reader paramList);
+                            Declaration::ParamList::Reader paramList,
+                            InitTypeEnvironmentFunc&& initTypeEnvironment);
   // Compile a param (or result) list and return the type ID of the struct type.
 
-  bool compileType(TypeExpression::Reader source, schema::Type::Builder target);
+  kj::Maybe<DeclInstance> compileDeclExpression(Expression::Reader source);
+  kj::Maybe<DeclInstance> compileDeclExpression(
+      Expression::Reader source, kj::Own<TypeEnvironment> env, Resolver& resolver);
+  // Compile an expression which is expected to resolve to a declaration or type expression.
+
+  bool compileType(Expression::Reader source, schema::Type::Builder target);
+  bool compileType(DeclInstance& decl, schema::Type::Builder target);
   // Returns false if there was a problem, in which case value expressions of this type should
   // not be parsed.
 
   void compileDefaultDefaultValue(schema::Type::Reader type, schema::Value::Builder target);
   // Initializes `target` to contain the "default default" value for `type`.
 
-  void compileBootstrapValue(ValueExpression::Reader source, schema::Type::Reader type,
+  void compileBootstrapValue(Expression::Reader source, schema::Type::Reader type,
                              schema::Value::Builder target);
   // Calls compileValue() if this value should be interpreted at bootstrap time.  Otheriwse,
   // adds the value to `unfinishedValues` for later evaluation.
 
-  void compileValue(ValueExpression::Reader source, schema::Type::Reader type,
+  void compileValue(Expression::Reader source, schema::Type::Reader type,
                     schema::Value::Builder target, bool isBootstrap);
   // Interprets the value expression and initializes `target` with the result.
 
-  kj::Maybe<DynamicValue::Reader> readConstant(DeclName::Reader name, bool isBootstrap);
+  kj::Maybe<DynamicValue::Reader> readConstant(Expression::Reader name, bool isBootstrap);
   // Get the value of the given constant.  May return null if some error occurs, which will already
   // have been reported.
 
@@ -190,25 +225,24 @@ public:
   class Resolver {
   public:
     virtual kj::Maybe<Schema> resolveType(uint64_t id) = 0;
-    virtual kj::Maybe<DynamicValue::Reader> resolveConstant(DeclName::Reader name) = 0;
+    virtual kj::Maybe<DynamicValue::Reader> resolveConstant(Expression::Reader name) = 0;
   };
 
   ValueTranslator(Resolver& resolver, ErrorReporter& errorReporter, Orphanage orphanage)
       : resolver(resolver), errorReporter(errorReporter), orphanage(orphanage) {}
 
-  kj::Maybe<Orphan<DynamicValue>> compileValue(
-      ValueExpression::Reader src, schema::Type::Reader type);
+  kj::Maybe<Orphan<DynamicValue>> compileValue(Expression::Reader src, schema::Type::Reader type);
 
 private:
   Resolver& resolver;
   ErrorReporter& errorReporter;
   Orphanage orphanage;
 
-  Orphan<DynamicValue> compileValueInner(ValueExpression::Reader src, schema::Type::Reader type);
+  Orphan<DynamicValue> compileValueInner(Expression::Reader src, schema::Type::Reader type);
   // Helper for compileValue().
 
   void fillStructValue(DynamicStruct::Builder builder,
-                       List<ValueExpression::FieldAssignment>::Reader assignments);
+                       List<Expression::Param>::Reader assignments);
   // Interprets the given assignments and uses them to fill in the given struct builder.
 
   kj::String makeNodeName(uint64_t id);

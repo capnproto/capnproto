@@ -103,7 +103,7 @@ void enumerateDeps(schema::Node::Reader node, std::set<uint64_t>& deps) {
     case schema::Node::INTERFACE: {
       auto interfaceNode = node.getInterface();
       for (auto extend: interfaceNode.getExtends()) {
-        deps.insert(extend);
+        deps.insert(extend.getId());
       }
       for (auto method: interfaceNode.getMethods()) {
         deps.insert(method.getParamStructType());
@@ -1327,8 +1327,8 @@ private:
 
     auto proto = schema.getProto();
 
-    auto extends = KJ_MAP(id, proto.getInterface().getExtends()) {
-      Schema schema = schemaLoader.get(id);
+    auto extends = KJ_MAP(extend, proto.getInterface().getExtends()) {
+      Schema schema = schemaLoader.get(extend.getId());
       return ExtendInfo { cppFullName(schema).flatten(), schema.getProto().getId() };
     };
 

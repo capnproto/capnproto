@@ -28,7 +28,9 @@ struct Node {
     CONST,
     ANNOTATION,
   };
+  struct Parameter;
   struct NestedNode;
+  struct Extend;
   struct Struct;
   struct Enum;
   struct Interface;
@@ -36,8 +38,24 @@ struct Node {
   struct Annotation;
 };
 
+struct Node::Parameter {
+  Parameter() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+};
+
 struct Node::NestedNode {
   NestedNode() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+};
+
+struct Node::Extend {
+  Extend() = delete;
 
   class Reader;
   class Builder;
@@ -175,6 +193,7 @@ struct Type {
   struct Enum;
   struct Struct;
   struct Interface;
+  struct AnyPointer;
 };
 
 struct Type::List {
@@ -207,6 +226,57 @@ struct Type::Interface {
   class Reader;
   class Builder;
   class Pipeline;
+};
+
+struct Type::AnyPointer {
+  AnyPointer() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  enum Which: uint16_t {
+    UNCONSTRAINED,
+    PARAMETER,
+  };
+  struct Parameter;
+};
+
+struct Type::AnyPointer::Parameter {
+  Parameter() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+};
+
+struct TypeEnvironment {
+  TypeEnvironment() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  struct Scope;
+  struct Binding;
+};
+
+struct TypeEnvironment::Scope {
+  Scope() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+};
+
+struct TypeEnvironment::Binding {
+  Binding() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+  enum Which: uint16_t {
+    UNBOUND,
+    TYPE,
+  };
 };
 
 struct Value {
@@ -292,7 +362,9 @@ namespace capnp {
 namespace schemas {
 
 extern const ::capnp::_::RawSchema s_e682ab4cf923a417;
+extern const ::capnp::_::RawSchema s_b9521bccf10fa3b1;
 extern const ::capnp::_::RawSchema s_debf55bbfa0fc242;
+extern const ::capnp::_::RawSchema s_fd60b24c61c9e47e;
 extern const ::capnp::_::RawSchema s_9ea0b19b37fb4435;
 extern const ::capnp::_::RawSchema s_b54ab3364333f598;
 extern const ::capnp::_::RawSchema s_e82753cff0c2218f;
@@ -310,6 +382,11 @@ extern const ::capnp::_::RawSchema s_87e739250a60ea97;
 extern const ::capnp::_::RawSchema s_9e0e78711a7f87a9;
 extern const ::capnp::_::RawSchema s_ac3a6f60ef4cc6d3;
 extern const ::capnp::_::RawSchema s_ed8bca69f7fb0cbf;
+extern const ::capnp::_::RawSchema s_c2573fe8a23e49f1;
+extern const ::capnp::_::RawSchema s_9dd1f724f4614a85;
+extern const ::capnp::_::RawSchema s_d1f11c4c0434796e;
+extern const ::capnp::_::RawSchema s_8343d91197413c18;
+extern const ::capnp::_::RawSchema s_f5b4269b6dd5cd38;
 extern const ::capnp::_::RawSchema s_ce23dcd2d7b00c9b;
 extern const ::capnp::_::RawSchema s_f1c8950dab257542;
 extern const ::capnp::_::RawSchema s_d1958f7dba521926;
@@ -322,25 +399,31 @@ namespace _ {  // private
 
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Node, e682ab4cf923a417,
-    5, 5, INLINE_COMPOSITE);
+    5, 6, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::Node::Parameter, b9521bccf10fa3b1,
+    0, 1, POINTER);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Node::NestedNode, debf55bbfa0fc242,
     1, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::Node::Extend, fd60b24c61c9e47e,
+    1, 1, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Node::Struct, 9ea0b19b37fb4435,
-    5, 5, INLINE_COMPOSITE);
+    5, 6, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Node::Enum, b54ab3364333f598,
-    5, 5, INLINE_COMPOSITE);
+    5, 6, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Node::Interface, e82753cff0c2218f,
-    5, 5, INLINE_COMPOSITE);
+    5, 6, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Node::Const, b18aa5ac7a0d9420,
-    5, 5, INLINE_COMPOSITE);
+    5, 6, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Node::Annotation, ec1619d4400a0290,
-    5, 5, INLINE_COMPOSITE);
+    5, 6, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Field, 9aad50a41f4af45f,
     3, 4, INLINE_COMPOSITE);
@@ -358,28 +441,43 @@ CAPNP_DECLARE_STRUCT(
     1, 2, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Method, 9500cce23b334d80,
-    3, 2, INLINE_COMPOSITE);
+    3, 4, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Type, d07378ede1f9cc60,
-    2, 1, INLINE_COMPOSITE);
+    3, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Type::List, 87e739250a60ea97,
-    2, 1, INLINE_COMPOSITE);
+    3, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Type::Enum, 9e0e78711a7f87a9,
-    2, 1, INLINE_COMPOSITE);
+    3, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Type::Struct, ac3a6f60ef4cc6d3,
-    2, 1, INLINE_COMPOSITE);
+    3, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Type::Interface, ed8bca69f7fb0cbf,
-    2, 1, INLINE_COMPOSITE);
+    3, 1, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::Type::AnyPointer, c2573fe8a23e49f1,
+    3, 1, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::Type::AnyPointer::Parameter, 9dd1f724f4614a85,
+    3, 1, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::TypeEnvironment, d1f11c4c0434796e,
+    0, 1, POINTER);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::TypeEnvironment::Scope, 8343d91197413c18,
+    1, 1, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::TypeEnvironment::Binding, f5b4269b6dd5cd38,
+    1, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Value, ce23dcd2d7b00c9b,
     2, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Annotation, f1c8950dab257542,
-    1, 1, INLINE_COMPOSITE);
+    1, 2, INLINE_COMPOSITE);
 CAPNP_DECLARE_ENUM(
     ::capnp::schema::ElementSize, d1958f7dba521926);
 CAPNP_DECLARE_STRUCT(
@@ -444,6 +542,9 @@ public:
 
   inline bool isAnnotation() const;
   inline Annotation::Reader getAnnotation() const;
+
+  inline bool hasParameters() const;
+  inline  ::capnp::List< ::capnp::schema::Node::Parameter>::Reader getParameters() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -530,6 +631,13 @@ public:
   inline Annotation::Builder getAnnotation();
   inline Annotation::Builder initAnnotation();
 
+  inline bool hasParameters();
+  inline  ::capnp::List< ::capnp::schema::Node::Parameter>::Builder getParameters();
+  inline void setParameters( ::capnp::List< ::capnp::schema::Node::Parameter>::Reader value);
+  inline  ::capnp::List< ::capnp::schema::Node::Parameter>::Builder initParameters(unsigned int size);
+  inline void adoptParameters(::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Parameter>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Parameter>> disownParameters();
+
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename T, ::capnp::Kind k>
@@ -545,6 +653,83 @@ inline ::kj::StringTree KJ_STRINGIFY(Node::Builder builder) {
 class Node::Pipeline {
 public:
   typedef Node Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
+class Node::Parameter::Reader {
+public:
+  typedef Parameter Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+  inline bool hasName() const;
+  inline  ::capnp::Text::Reader getName() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Node::Parameter::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Node::Parameter::Reader reader) {
+  return ::capnp::_::structString<Node::Parameter>(reader._reader);
+}
+
+class Node::Parameter::Builder {
+public:
+  typedef Parameter Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+
+  inline bool hasName();
+  inline  ::capnp::Text::Builder getName();
+  inline void setName( ::capnp::Text::Reader value);
+  inline  ::capnp::Text::Builder initName(unsigned int size);
+  inline void adoptName(::capnp::Orphan< ::capnp::Text>&& value);
+  inline ::capnp::Orphan< ::capnp::Text> disownName();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Node::Parameter::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Node::Parameter::Builder builder) {
+  return ::capnp::_::structString<Node::Parameter>(builder._builder.asReader());
+}
+
+class Node::Parameter::Pipeline {
+public:
+  typedef Parameter Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
@@ -632,6 +817,89 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
+class Node::Extend::Reader {
+public:
+  typedef Extend Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+  inline  ::uint64_t getId() const;
+
+  inline bool hasEnvironment() const;
+  inline  ::capnp::schema::TypeEnvironment::Reader getEnvironment() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Node::Extend::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Node::Extend::Reader reader) {
+  return ::capnp::_::structString<Node::Extend>(reader._reader);
+}
+
+class Node::Extend::Builder {
+public:
+  typedef Extend Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+
+  inline  ::uint64_t getId();
+  inline void setId( ::uint64_t value);
+
+  inline bool hasEnvironment();
+  inline  ::capnp::schema::TypeEnvironment::Builder getEnvironment();
+  inline void setEnvironment( ::capnp::schema::TypeEnvironment::Reader value);
+  inline  ::capnp::schema::TypeEnvironment::Builder initEnvironment();
+  inline void adoptEnvironment(::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> disownEnvironment();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Node::Extend::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Node::Extend::Builder builder) {
+  return ::capnp::_::structString<Node::Extend>(builder._builder.asReader());
+}
+
+class Node::Extend::Pipeline {
+public:
+  typedef Extend Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::schema::TypeEnvironment::Pipeline getEnvironment();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -837,7 +1105,7 @@ public:
   inline  ::capnp::List< ::capnp::schema::Method>::Reader getMethods() const;
 
   inline bool hasExtends() const;
-  inline  ::capnp::List< ::uint64_t>::Reader getExtends() const;
+  inline  ::capnp::List< ::capnp::schema::Node::Extend>::Reader getExtends() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -877,12 +1145,11 @@ public:
   inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>> disownMethods();
 
   inline bool hasExtends();
-  inline  ::capnp::List< ::uint64_t>::Builder getExtends();
-  inline void setExtends( ::capnp::List< ::uint64_t>::Reader value);
-  inline void setExtends(::kj::ArrayPtr<const  ::uint64_t> value);
-  inline  ::capnp::List< ::uint64_t>::Builder initExtends(unsigned int size);
-  inline void adoptExtends(::capnp::Orphan< ::capnp::List< ::uint64_t>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::uint64_t>> disownExtends();
+  inline  ::capnp::List< ::capnp::schema::Node::Extend>::Builder getExtends();
+  inline void setExtends( ::capnp::List< ::capnp::schema::Node::Extend>::Reader value);
+  inline  ::capnp::List< ::capnp::schema::Node::Extend>::Builder initExtends(unsigned int size);
+  inline void adoptExtends(::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Extend>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Extend>> disownExtends();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1625,6 +1892,12 @@ public:
   inline bool hasAnnotations() const;
   inline  ::capnp::List< ::capnp::schema::Annotation>::Reader getAnnotations() const;
 
+  inline bool hasParamEnvironment() const;
+  inline  ::capnp::schema::TypeEnvironment::Reader getParamEnvironment() const;
+
+  inline bool hasResultEnvironment() const;
+  inline  ::capnp::schema::TypeEnvironment::Reader getResultEnvironment() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename T, ::capnp::Kind k>
@@ -1678,6 +1951,20 @@ public:
   inline void adoptAnnotations(::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>> disownAnnotations();
 
+  inline bool hasParamEnvironment();
+  inline  ::capnp::schema::TypeEnvironment::Builder getParamEnvironment();
+  inline void setParamEnvironment( ::capnp::schema::TypeEnvironment::Reader value);
+  inline  ::capnp::schema::TypeEnvironment::Builder initParamEnvironment();
+  inline void adoptParamEnvironment(::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> disownParamEnvironment();
+
+  inline bool hasResultEnvironment();
+  inline  ::capnp::schema::TypeEnvironment::Builder getResultEnvironment();
+  inline void setResultEnvironment( ::capnp::schema::TypeEnvironment::Reader value);
+  inline  ::capnp::schema::TypeEnvironment::Builder initResultEnvironment();
+  inline void adoptResultEnvironment(::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> disownResultEnvironment();
+
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename T, ::capnp::Kind k>
@@ -1698,6 +1985,8 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
+  inline  ::capnp::schema::TypeEnvironment::Pipeline getParamEnvironment();
+  inline  ::capnp::schema::TypeEnvironment::Pipeline getResultEnvironment();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -1771,7 +2060,7 @@ public:
   inline Interface::Reader getInterface() const;
 
   inline bool isAnyPointer() const;
-  inline  ::capnp::Void getAnyPointer() const;
+  inline AnyPointer::Reader getAnyPointer() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1877,8 +2166,8 @@ public:
   inline Interface::Builder initInterface();
 
   inline bool isAnyPointer();
-  inline  ::capnp::Void getAnyPointer();
-  inline void setAnyPointer( ::capnp::Void value = ::capnp::VOID);
+  inline AnyPointer::Builder getAnyPointer();
+  inline AnyPointer::Builder initAnyPointer();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1997,6 +2286,9 @@ public:
 
   inline  ::uint64_t getTypeId() const;
 
+  inline bool hasTypeEnvironment() const;
+  inline  ::capnp::schema::TypeEnvironment::Reader getTypeEnvironment() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename T, ::capnp::Kind k>
@@ -2030,6 +2322,13 @@ public:
   inline  ::uint64_t getTypeId();
   inline void setTypeId( ::uint64_t value);
 
+  inline bool hasTypeEnvironment();
+  inline  ::capnp::schema::TypeEnvironment::Builder getTypeEnvironment();
+  inline void setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value);
+  inline  ::capnp::schema::TypeEnvironment::Builder initTypeEnvironment();
+  inline void adoptTypeEnvironment(::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> disownTypeEnvironment();
+
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename T, ::capnp::Kind k>
@@ -2050,6 +2349,7 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
+  inline  ::capnp::schema::TypeEnvironment::Pipeline getTypeEnvironment();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -2068,6 +2368,9 @@ public:
   }
 
   inline  ::uint64_t getTypeId() const;
+
+  inline bool hasTypeEnvironment() const;
+  inline  ::capnp::schema::TypeEnvironment::Reader getTypeEnvironment() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -2102,6 +2405,13 @@ public:
   inline  ::uint64_t getTypeId();
   inline void setTypeId( ::uint64_t value);
 
+  inline bool hasTypeEnvironment();
+  inline  ::capnp::schema::TypeEnvironment::Builder getTypeEnvironment();
+  inline void setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value);
+  inline  ::capnp::schema::TypeEnvironment::Builder initTypeEnvironment();
+  inline void adoptTypeEnvironment(::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> disownTypeEnvironment();
+
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename T, ::capnp::Kind k>
@@ -2122,6 +2432,7 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
+  inline  ::capnp::schema::TypeEnvironment::Pipeline getTypeEnvironment();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -2140,6 +2451,9 @@ public:
   }
 
   inline  ::uint64_t getTypeId() const;
+
+  inline bool hasTypeEnvironment() const;
+  inline  ::capnp::schema::TypeEnvironment::Reader getTypeEnvironment() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -2174,6 +2488,13 @@ public:
   inline  ::uint64_t getTypeId();
   inline void setTypeId( ::uint64_t value);
 
+  inline bool hasTypeEnvironment();
+  inline  ::capnp::schema::TypeEnvironment::Builder getTypeEnvironment();
+  inline void setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value);
+  inline  ::capnp::schema::TypeEnvironment::Builder initTypeEnvironment();
+  inline void adoptTypeEnvironment(::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> disownTypeEnvironment();
+
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename T, ::capnp::Kind k>
@@ -2189,6 +2510,414 @@ inline ::kj::StringTree KJ_STRINGIFY(Type::Interface::Builder builder) {
 class Type::Interface::Pipeline {
 public:
   typedef Interface Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::schema::TypeEnvironment::Pipeline getTypeEnvironment();
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
+class Type::AnyPointer::Reader {
+public:
+  typedef AnyPointer Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+  inline Which which() const;
+  inline bool isUnconstrained() const;
+  inline  ::capnp::Void getUnconstrained() const;
+
+  inline bool isParameter() const;
+  inline Parameter::Reader getParameter() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Type::AnyPointer::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Type::AnyPointer::Reader reader) {
+  return ::capnp::_::structString<Type::AnyPointer>(reader._reader);
+}
+
+class Type::AnyPointer::Builder {
+public:
+  typedef AnyPointer Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+
+  inline Which which();
+  inline bool isUnconstrained();
+  inline  ::capnp::Void getUnconstrained();
+  inline void setUnconstrained( ::capnp::Void value = ::capnp::VOID);
+
+  inline bool isParameter();
+  inline Parameter::Builder getParameter();
+  inline Parameter::Builder initParameter();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Type::AnyPointer::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Type::AnyPointer::Builder builder) {
+  return ::capnp::_::structString<Type::AnyPointer>(builder._builder.asReader());
+}
+
+class Type::AnyPointer::Pipeline {
+public:
+  typedef AnyPointer Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
+class Type::AnyPointer::Parameter::Reader {
+public:
+  typedef Parameter Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+  inline  ::uint64_t getNodeId() const;
+
+  inline  ::uint16_t getParameterIndex() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Type::AnyPointer::Parameter::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Type::AnyPointer::Parameter::Reader reader) {
+  return ::capnp::_::structString<Type::AnyPointer::Parameter>(reader._reader);
+}
+
+class Type::AnyPointer::Parameter::Builder {
+public:
+  typedef Parameter Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+
+  inline  ::uint64_t getNodeId();
+  inline void setNodeId( ::uint64_t value);
+
+  inline  ::uint16_t getParameterIndex();
+  inline void setParameterIndex( ::uint16_t value);
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Type::AnyPointer::Parameter::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Type::AnyPointer::Parameter::Builder builder) {
+  return ::capnp::_::structString<Type::AnyPointer::Parameter>(builder._builder.asReader());
+}
+
+class Type::AnyPointer::Parameter::Pipeline {
+public:
+  typedef Parameter Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
+class TypeEnvironment::Reader {
+public:
+  typedef TypeEnvironment Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+  inline bool hasScopes() const;
+  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Reader getScopes() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Reader reader) {
+  return ::capnp::_::structString<TypeEnvironment>(reader._reader);
+}
+
+class TypeEnvironment::Builder {
+public:
+  typedef TypeEnvironment Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+
+  inline bool hasScopes();
+  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Builder getScopes();
+  inline void setScopes( ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Reader value);
+  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Builder initScopes(unsigned int size);
+  inline void adoptScopes(::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>> disownScopes();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Builder builder) {
+  return ::capnp::_::structString<TypeEnvironment>(builder._builder.asReader());
+}
+
+class TypeEnvironment::Pipeline {
+public:
+  typedef TypeEnvironment Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
+class TypeEnvironment::Scope::Reader {
+public:
+  typedef Scope Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+  inline  ::uint64_t getScopeId() const;
+
+  inline bool hasBindings() const;
+  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader getBindings() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Scope::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Scope::Reader reader) {
+  return ::capnp::_::structString<TypeEnvironment::Scope>(reader._reader);
+}
+
+class TypeEnvironment::Scope::Builder {
+public:
+  typedef Scope Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+
+  inline  ::uint64_t getScopeId();
+  inline void setScopeId( ::uint64_t value);
+
+  inline bool hasBindings();
+  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder getBindings();
+  inline void setBindings( ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader value);
+  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder initBindings(unsigned int size);
+  inline void adoptBindings(::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>> disownBindings();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Scope::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Scope::Builder builder) {
+  return ::capnp::_::structString<TypeEnvironment::Scope>(builder._builder.asReader());
+}
+
+class TypeEnvironment::Scope::Pipeline {
+public:
+  typedef Scope Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
+class TypeEnvironment::Binding::Reader {
+public:
+  typedef Binding Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+  inline Which which() const;
+  inline bool isUnbound() const;
+  inline  ::capnp::Void getUnbound() const;
+
+  inline bool isType() const;
+  inline bool hasType() const;
+  inline  ::capnp::schema::Type::Reader getType() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Binding::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Binding::Reader reader) {
+  return ::capnp::_::structString<TypeEnvironment::Binding>(reader._reader);
+}
+
+class TypeEnvironment::Binding::Builder {
+public:
+  typedef Binding Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+
+  inline Which which();
+  inline bool isUnbound();
+  inline  ::capnp::Void getUnbound();
+  inline void setUnbound( ::capnp::Void value = ::capnp::VOID);
+
+  inline bool isType();
+  inline bool hasType();
+  inline  ::capnp::schema::Type::Builder getType();
+  inline void setType( ::capnp::schema::Type::Reader value);
+  inline  ::capnp::schema::Type::Builder initType();
+  inline void adoptType(::capnp::Orphan< ::capnp::schema::Type>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::Type> disownType();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Binding::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Binding::Builder builder) {
+  return ::capnp::_::structString<TypeEnvironment::Binding>(builder._builder.asReader());
+}
+
+class TypeEnvironment::Binding::Pipeline {
+public:
+  typedef Binding Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
@@ -2434,6 +3163,9 @@ public:
   inline bool hasValue() const;
   inline  ::capnp::schema::Value::Reader getValue() const;
 
+  inline bool hasTypeEnvironment() const;
+  inline  ::capnp::schema::TypeEnvironment::Reader getTypeEnvironment() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename T, ::capnp::Kind k>
@@ -2474,6 +3206,13 @@ public:
   inline void adoptValue(::capnp::Orphan< ::capnp::schema::Value>&& value);
   inline ::capnp::Orphan< ::capnp::schema::Value> disownValue();
 
+  inline bool hasTypeEnvironment();
+  inline  ::capnp::schema::TypeEnvironment::Builder getTypeEnvironment();
+  inline void setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value);
+  inline  ::capnp::schema::TypeEnvironment::Builder initTypeEnvironment();
+  inline void adoptTypeEnvironment(::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> disownTypeEnvironment();
+
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename T, ::capnp::Kind k>
@@ -2495,6 +3234,7 @@ public:
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::schema::Value::Pipeline getValue();
+  inline  ::capnp::schema::TypeEnvironment::Pipeline getTypeEnvironment();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -3065,6 +3805,70 @@ inline Node::Annotation::Builder Node::Builder::initAnnotation() {
   _builder.getPointerField(3 * ::capnp::POINTERS).clear();
   return Node::Annotation::Builder(_builder);
 }
+inline bool Node::Reader::hasParameters() const {
+  return !_reader.getPointerField(5 * ::capnp::POINTERS).isNull();
+}
+inline bool Node::Builder::hasParameters() {
+  return !_builder.getPointerField(5 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::List< ::capnp::schema::Node::Parameter>::Reader Node::Reader::getParameters() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Parameter>>::get(
+      _reader.getPointerField(5 * ::capnp::POINTERS));
+}
+inline  ::capnp::List< ::capnp::schema::Node::Parameter>::Builder Node::Builder::getParameters() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Parameter>>::get(
+      _builder.getPointerField(5 * ::capnp::POINTERS));
+}
+inline void Node::Builder::setParameters( ::capnp::List< ::capnp::schema::Node::Parameter>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Parameter>>::set(
+      _builder.getPointerField(5 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::List< ::capnp::schema::Node::Parameter>::Builder Node::Builder::initParameters(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Parameter>>::init(
+      _builder.getPointerField(5 * ::capnp::POINTERS), size);
+}
+inline void Node::Builder::adoptParameters(
+    ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Parameter>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Parameter>>::adopt(
+      _builder.getPointerField(5 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Parameter>> Node::Builder::disownParameters() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Parameter>>::disown(
+      _builder.getPointerField(5 * ::capnp::POINTERS));
+}
+
+inline bool Node::Parameter::Reader::hasName() const {
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool Node::Parameter::Builder::hasName() {
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Text::Reader Node::Parameter::Reader::getName() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::Text::Builder Node::Parameter::Builder::getName() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void Node::Parameter::Builder::setName( ::capnp::Text::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Text::Builder Node::Parameter::Builder::initName(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+}
+inline void Node::Parameter::Builder::adoptName(
+    ::capnp::Orphan< ::capnp::Text>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Text> Node::Parameter::Builder::disownName() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+
 inline bool Node::NestedNode::Reader::hasName() const {
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
@@ -3109,6 +3913,55 @@ inline  ::uint64_t Node::NestedNode::Builder::getId() {
 inline void Node::NestedNode::Builder::setId( ::uint64_t value) {
   _builder.setDataField< ::uint64_t>(
       0 * ::capnp::ELEMENTS, value);
+}
+
+inline  ::uint64_t Node::Extend::Reader::getId() const {
+  return _reader.getDataField< ::uint64_t>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint64_t Node::Extend::Builder::getId() {
+  return _builder.getDataField< ::uint64_t>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void Node::Extend::Builder::setId( ::uint64_t value) {
+  _builder.setDataField< ::uint64_t>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Node::Extend::Reader::hasEnvironment() const {
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool Node::Extend::Builder::hasEnvironment() {
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::schema::TypeEnvironment::Reader Node::Extend::Reader::getEnvironment() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::TypeEnvironment::Builder Node::Extend::Builder::getEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::TypeEnvironment::Pipeline Node::Extend::Pipeline::getEnvironment() {
+  return  ::capnp::schema::TypeEnvironment::Pipeline(_typeless.getPointerField(0));
+}
+inline void Node::Extend::Builder::setEnvironment( ::capnp::schema::TypeEnvironment::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::schema::TypeEnvironment::Builder Node::Extend::Builder::initEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void Node::Extend::Builder::adoptEnvironment(
+    ::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> Node::Extend::Builder::disownEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline  ::uint16_t Node::Struct::Reader::getDataWordCount() const {
@@ -3297,33 +4150,29 @@ inline bool Node::Interface::Reader::hasExtends() const {
 inline bool Node::Interface::Builder::hasExtends() {
   return !_builder.getPointerField(4 * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::uint64_t>::Reader Node::Interface::Reader::getExtends() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::get(
+inline  ::capnp::List< ::capnp::schema::Node::Extend>::Reader Node::Interface::Reader::getExtends() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Extend>>::get(
       _reader.getPointerField(4 * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::uint64_t>::Builder Node::Interface::Builder::getExtends() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::get(
+inline  ::capnp::List< ::capnp::schema::Node::Extend>::Builder Node::Interface::Builder::getExtends() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Extend>>::get(
       _builder.getPointerField(4 * ::capnp::POINTERS));
 }
-inline void Node::Interface::Builder::setExtends( ::capnp::List< ::uint64_t>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::set(
+inline void Node::Interface::Builder::setExtends( ::capnp::List< ::capnp::schema::Node::Extend>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Extend>>::set(
       _builder.getPointerField(4 * ::capnp::POINTERS), value);
 }
-inline void Node::Interface::Builder::setExtends(::kj::ArrayPtr<const  ::uint64_t> value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::set(
-      _builder.getPointerField(4 * ::capnp::POINTERS), value);
-}
-inline  ::capnp::List< ::uint64_t>::Builder Node::Interface::Builder::initExtends(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::init(
+inline  ::capnp::List< ::capnp::schema::Node::Extend>::Builder Node::Interface::Builder::initExtends(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Extend>>::init(
       _builder.getPointerField(4 * ::capnp::POINTERS), size);
 }
 inline void Node::Interface::Builder::adoptExtends(
-    ::capnp::Orphan< ::capnp::List< ::uint64_t>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::adopt(
+    ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Extend>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Extend>>::adopt(
       _builder.getPointerField(4 * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::uint64_t>> Node::Interface::Builder::disownExtends() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::uint64_t>>::disown(
+inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Extend>> Node::Interface::Builder::disownExtends() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Extend>>::disown(
       _builder.getPointerField(4 * ::capnp::POINTERS));
 }
 
@@ -4115,6 +4964,76 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>> Method::Bui
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
+inline bool Method::Reader::hasParamEnvironment() const {
+  return !_reader.getPointerField(2 * ::capnp::POINTERS).isNull();
+}
+inline bool Method::Builder::hasParamEnvironment() {
+  return !_builder.getPointerField(2 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::schema::TypeEnvironment::Reader Method::Reader::getParamEnvironment() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+      _reader.getPointerField(2 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::TypeEnvironment::Builder Method::Builder::getParamEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+      _builder.getPointerField(2 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::TypeEnvironment::Pipeline Method::Pipeline::getParamEnvironment() {
+  return  ::capnp::schema::TypeEnvironment::Pipeline(_typeless.getPointerField(2));
+}
+inline void Method::Builder::setParamEnvironment( ::capnp::schema::TypeEnvironment::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::set(
+      _builder.getPointerField(2 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::schema::TypeEnvironment::Builder Method::Builder::initParamEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::init(
+      _builder.getPointerField(2 * ::capnp::POINTERS));
+}
+inline void Method::Builder::adoptParamEnvironment(
+    ::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::adopt(
+      _builder.getPointerField(2 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> Method::Builder::disownParamEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::disown(
+      _builder.getPointerField(2 * ::capnp::POINTERS));
+}
+
+inline bool Method::Reader::hasResultEnvironment() const {
+  return !_reader.getPointerField(3 * ::capnp::POINTERS).isNull();
+}
+inline bool Method::Builder::hasResultEnvironment() {
+  return !_builder.getPointerField(3 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::schema::TypeEnvironment::Reader Method::Reader::getResultEnvironment() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+      _reader.getPointerField(3 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::TypeEnvironment::Builder Method::Builder::getResultEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+      _builder.getPointerField(3 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::TypeEnvironment::Pipeline Method::Pipeline::getResultEnvironment() {
+  return  ::capnp::schema::TypeEnvironment::Pipeline(_typeless.getPointerField(3));
+}
+inline void Method::Builder::setResultEnvironment( ::capnp::schema::TypeEnvironment::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::set(
+      _builder.getPointerField(3 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::schema::TypeEnvironment::Builder Method::Builder::initResultEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::init(
+      _builder.getPointerField(3 * ::capnp::POINTERS));
+}
+inline void Method::Builder::adoptResultEnvironment(
+    ::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::adopt(
+      _builder.getPointerField(3 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> Method::Builder::disownResultEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::disown(
+      _builder.getPointerField(3 * ::capnp::POINTERS));
+}
+
 inline Type::Which Type::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
@@ -4528,6 +5447,7 @@ inline Type::Enum::Builder Type::Builder::initEnum() {
   _builder.setDataField<Type::Which>(
       0 * ::capnp::ELEMENTS, Type::ENUM);
   _builder.setDataField< ::uint64_t>(1 * ::capnp::ELEMENTS, 0);
+  _builder.getPointerField(0 * ::capnp::POINTERS).clear();
   return Type::Enum::Builder(_builder);
 }
 inline bool Type::Reader::isStruct() const {
@@ -4550,6 +5470,7 @@ inline Type::Struct::Builder Type::Builder::initStruct() {
   _builder.setDataField<Type::Which>(
       0 * ::capnp::ELEMENTS, Type::STRUCT);
   _builder.setDataField< ::uint64_t>(1 * ::capnp::ELEMENTS, 0);
+  _builder.getPointerField(0 * ::capnp::POINTERS).clear();
   return Type::Struct::Builder(_builder);
 }
 inline bool Type::Reader::isInterface() const {
@@ -4572,6 +5493,7 @@ inline Type::Interface::Builder Type::Builder::initInterface() {
   _builder.setDataField<Type::Which>(
       0 * ::capnp::ELEMENTS, Type::INTERFACE);
   _builder.setDataField< ::uint64_t>(1 * ::capnp::ELEMENTS, 0);
+  _builder.getPointerField(0 * ::capnp::POINTERS).clear();
   return Type::Interface::Builder(_builder);
 }
 inline bool Type::Reader::isAnyPointer() const {
@@ -4580,26 +5502,24 @@ inline bool Type::Reader::isAnyPointer() const {
 inline bool Type::Builder::isAnyPointer() {
   return which() == Type::ANY_POINTER;
 }
-inline  ::capnp::Void Type::Reader::getAnyPointer() const {
+inline Type::AnyPointer::Reader Type::Reader::getAnyPointer() const {
   KJ_IREQUIRE(which() == Type::ANY_POINTER,
               "Must check which() before get()ing a union member.");
-  return _reader.getDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS);
+  return Type::AnyPointer::Reader(_reader);
 }
-
-inline  ::capnp::Void Type::Builder::getAnyPointer() {
+inline Type::AnyPointer::Builder Type::Builder::getAnyPointer() {
   KJ_IREQUIRE(which() == Type::ANY_POINTER,
               "Must check which() before get()ing a union member.");
-  return _builder.getDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS);
+  return Type::AnyPointer::Builder(_builder);
 }
-inline void Type::Builder::setAnyPointer( ::capnp::Void value) {
+inline Type::AnyPointer::Builder Type::Builder::initAnyPointer() {
   _builder.setDataField<Type::Which>(
       0 * ::capnp::ELEMENTS, Type::ANY_POINTER);
-  _builder.setDataField< ::capnp::Void>(
-      0 * ::capnp::ELEMENTS, value);
+  _builder.setDataField< ::uint16_t>(4 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint16_t>(5 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint64_t>(2 * ::capnp::ELEMENTS, 0);
+  return Type::AnyPointer::Builder(_builder);
 }
-
 inline bool Type::List::Reader::hasElementType() const {
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
@@ -4649,6 +5569,41 @@ inline void Type::Enum::Builder::setTypeId( ::uint64_t value) {
       1 * ::capnp::ELEMENTS, value);
 }
 
+inline bool Type::Enum::Reader::hasTypeEnvironment() const {
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool Type::Enum::Builder::hasTypeEnvironment() {
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::schema::TypeEnvironment::Reader Type::Enum::Reader::getTypeEnvironment() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::TypeEnvironment::Builder Type::Enum::Builder::getTypeEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::TypeEnvironment::Pipeline Type::Enum::Pipeline::getTypeEnvironment() {
+  return  ::capnp::schema::TypeEnvironment::Pipeline(_typeless.getPointerField(0));
+}
+inline void Type::Enum::Builder::setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::schema::TypeEnvironment::Builder Type::Enum::Builder::initTypeEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void Type::Enum::Builder::adoptTypeEnvironment(
+    ::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> Type::Enum::Builder::disownTypeEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+
 inline  ::uint64_t Type::Struct::Reader::getTypeId() const {
   return _reader.getDataField< ::uint64_t>(
       1 * ::capnp::ELEMENTS);
@@ -4663,6 +5618,41 @@ inline void Type::Struct::Builder::setTypeId( ::uint64_t value) {
       1 * ::capnp::ELEMENTS, value);
 }
 
+inline bool Type::Struct::Reader::hasTypeEnvironment() const {
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool Type::Struct::Builder::hasTypeEnvironment() {
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::schema::TypeEnvironment::Reader Type::Struct::Reader::getTypeEnvironment() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::TypeEnvironment::Builder Type::Struct::Builder::getTypeEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::TypeEnvironment::Pipeline Type::Struct::Pipeline::getTypeEnvironment() {
+  return  ::capnp::schema::TypeEnvironment::Pipeline(_typeless.getPointerField(0));
+}
+inline void Type::Struct::Builder::setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::schema::TypeEnvironment::Builder Type::Struct::Builder::initTypeEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void Type::Struct::Builder::adoptTypeEnvironment(
+    ::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> Type::Struct::Builder::disownTypeEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+
 inline  ::uint64_t Type::Interface::Reader::getTypeId() const {
   return _reader.getDataField< ::uint64_t>(
       1 * ::capnp::ELEMENTS);
@@ -4675,6 +5665,288 @@ inline  ::uint64_t Type::Interface::Builder::getTypeId() {
 inline void Type::Interface::Builder::setTypeId( ::uint64_t value) {
   _builder.setDataField< ::uint64_t>(
       1 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Type::Interface::Reader::hasTypeEnvironment() const {
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool Type::Interface::Builder::hasTypeEnvironment() {
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::schema::TypeEnvironment::Reader Type::Interface::Reader::getTypeEnvironment() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::TypeEnvironment::Builder Type::Interface::Builder::getTypeEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::TypeEnvironment::Pipeline Type::Interface::Pipeline::getTypeEnvironment() {
+  return  ::capnp::schema::TypeEnvironment::Pipeline(_typeless.getPointerField(0));
+}
+inline void Type::Interface::Builder::setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::schema::TypeEnvironment::Builder Type::Interface::Builder::initTypeEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void Type::Interface::Builder::adoptTypeEnvironment(
+    ::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> Type::Interface::Builder::disownTypeEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+
+inline Type::AnyPointer::Which Type::AnyPointer::Reader::which() const {
+  return _reader.getDataField<Which>(4 * ::capnp::ELEMENTS);
+}
+inline Type::AnyPointer::Which Type::AnyPointer::Builder::which() {
+  return _builder.getDataField<Which>(4 * ::capnp::ELEMENTS);
+}
+
+inline bool Type::AnyPointer::Reader::isUnconstrained() const {
+  return which() == Type::AnyPointer::UNCONSTRAINED;
+}
+inline bool Type::AnyPointer::Builder::isUnconstrained() {
+  return which() == Type::AnyPointer::UNCONSTRAINED;
+}
+inline  ::capnp::Void Type::AnyPointer::Reader::getUnconstrained() const {
+  KJ_IREQUIRE(which() == Type::AnyPointer::UNCONSTRAINED,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::Void Type::AnyPointer::Builder::getUnconstrained() {
+  KJ_IREQUIRE(which() == Type::AnyPointer::UNCONSTRAINED,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void Type::AnyPointer::Builder::setUnconstrained( ::capnp::Void value) {
+  _builder.setDataField<Type::AnyPointer::Which>(
+      4 * ::capnp::ELEMENTS, Type::AnyPointer::UNCONSTRAINED);
+  _builder.setDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Type::AnyPointer::Reader::isParameter() const {
+  return which() == Type::AnyPointer::PARAMETER;
+}
+inline bool Type::AnyPointer::Builder::isParameter() {
+  return which() == Type::AnyPointer::PARAMETER;
+}
+inline Type::AnyPointer::Parameter::Reader Type::AnyPointer::Reader::getParameter() const {
+  KJ_IREQUIRE(which() == Type::AnyPointer::PARAMETER,
+              "Must check which() before get()ing a union member.");
+  return Type::AnyPointer::Parameter::Reader(_reader);
+}
+inline Type::AnyPointer::Parameter::Builder Type::AnyPointer::Builder::getParameter() {
+  KJ_IREQUIRE(which() == Type::AnyPointer::PARAMETER,
+              "Must check which() before get()ing a union member.");
+  return Type::AnyPointer::Parameter::Builder(_builder);
+}
+inline Type::AnyPointer::Parameter::Builder Type::AnyPointer::Builder::initParameter() {
+  _builder.setDataField<Type::AnyPointer::Which>(
+      4 * ::capnp::ELEMENTS, Type::AnyPointer::PARAMETER);
+  _builder.setDataField< ::uint16_t>(5 * ::capnp::ELEMENTS, 0);
+  _builder.setDataField< ::uint64_t>(2 * ::capnp::ELEMENTS, 0);
+  return Type::AnyPointer::Parameter::Builder(_builder);
+}
+inline  ::uint64_t Type::AnyPointer::Parameter::Reader::getNodeId() const {
+  return _reader.getDataField< ::uint64_t>(
+      2 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint64_t Type::AnyPointer::Parameter::Builder::getNodeId() {
+  return _builder.getDataField< ::uint64_t>(
+      2 * ::capnp::ELEMENTS);
+}
+inline void Type::AnyPointer::Parameter::Builder::setNodeId( ::uint64_t value) {
+  _builder.setDataField< ::uint64_t>(
+      2 * ::capnp::ELEMENTS, value);
+}
+
+inline  ::uint16_t Type::AnyPointer::Parameter::Reader::getParameterIndex() const {
+  return _reader.getDataField< ::uint16_t>(
+      5 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint16_t Type::AnyPointer::Parameter::Builder::getParameterIndex() {
+  return _builder.getDataField< ::uint16_t>(
+      5 * ::capnp::ELEMENTS);
+}
+inline void Type::AnyPointer::Parameter::Builder::setParameterIndex( ::uint16_t value) {
+  _builder.setDataField< ::uint16_t>(
+      5 * ::capnp::ELEMENTS, value);
+}
+
+inline bool TypeEnvironment::Reader::hasScopes() const {
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool TypeEnvironment::Builder::hasScopes() {
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Reader TypeEnvironment::Reader::getScopes() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Builder TypeEnvironment::Builder::getScopes() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void TypeEnvironment::Builder::setScopes( ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Builder TypeEnvironment::Builder::initScopes(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+}
+inline void TypeEnvironment::Builder::adoptScopes(
+    ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>> TypeEnvironment::Builder::disownScopes() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+
+inline  ::uint64_t TypeEnvironment::Scope::Reader::getScopeId() const {
+  return _reader.getDataField< ::uint64_t>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint64_t TypeEnvironment::Scope::Builder::getScopeId() {
+  return _builder.getDataField< ::uint64_t>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void TypeEnvironment::Scope::Builder::setScopeId( ::uint64_t value) {
+  _builder.setDataField< ::uint64_t>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool TypeEnvironment::Scope::Reader::hasBindings() const {
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool TypeEnvironment::Scope::Builder::hasBindings() {
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader TypeEnvironment::Scope::Reader::getBindings() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder TypeEnvironment::Scope::Builder::getBindings() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void TypeEnvironment::Scope::Builder::setBindings( ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder TypeEnvironment::Scope::Builder::initBindings(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS), size);
+}
+inline void TypeEnvironment::Scope::Builder::adoptBindings(
+    ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>> TypeEnvironment::Scope::Builder::disownBindings() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+
+inline TypeEnvironment::Binding::Which TypeEnvironment::Binding::Reader::which() const {
+  return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
+}
+inline TypeEnvironment::Binding::Which TypeEnvironment::Binding::Builder::which() {
+  return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
+}
+
+inline bool TypeEnvironment::Binding::Reader::isUnbound() const {
+  return which() == TypeEnvironment::Binding::UNBOUND;
+}
+inline bool TypeEnvironment::Binding::Builder::isUnbound() {
+  return which() == TypeEnvironment::Binding::UNBOUND;
+}
+inline  ::capnp::Void TypeEnvironment::Binding::Reader::getUnbound() const {
+  KJ_IREQUIRE(which() == TypeEnvironment::Binding::UNBOUND,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::Void TypeEnvironment::Binding::Builder::getUnbound() {
+  KJ_IREQUIRE(which() == TypeEnvironment::Binding::UNBOUND,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void TypeEnvironment::Binding::Builder::setUnbound( ::capnp::Void value) {
+  _builder.setDataField<TypeEnvironment::Binding::Which>(
+      0 * ::capnp::ELEMENTS, TypeEnvironment::Binding::UNBOUND);
+  _builder.setDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool TypeEnvironment::Binding::Reader::isType() const {
+  return which() == TypeEnvironment::Binding::TYPE;
+}
+inline bool TypeEnvironment::Binding::Builder::isType() {
+  return which() == TypeEnvironment::Binding::TYPE;
+}
+inline bool TypeEnvironment::Binding::Reader::hasType() const {
+  if (which() != TypeEnvironment::Binding::TYPE) return false;
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool TypeEnvironment::Binding::Builder::hasType() {
+  if (which() != TypeEnvironment::Binding::TYPE) return false;
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::schema::Type::Reader TypeEnvironment::Binding::Reader::getType() const {
+  KJ_IREQUIRE(which() == TypeEnvironment::Binding::TYPE,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::Type::Builder TypeEnvironment::Binding::Builder::getType() {
+  KJ_IREQUIRE(which() == TypeEnvironment::Binding::TYPE,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void TypeEnvironment::Binding::Builder::setType( ::capnp::schema::Type::Reader value) {
+  _builder.setDataField<TypeEnvironment::Binding::Which>(
+      0 * ::capnp::ELEMENTS, TypeEnvironment::Binding::TYPE);
+  ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::schema::Type::Builder TypeEnvironment::Binding::Builder::initType() {
+  _builder.setDataField<TypeEnvironment::Binding::Which>(
+      0 * ::capnp::ELEMENTS, TypeEnvironment::Binding::TYPE);
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void TypeEnvironment::Binding::Builder::adoptType(
+    ::capnp::Orphan< ::capnp::schema::Type>&& value) {
+  _builder.setDataField<TypeEnvironment::Binding::Which>(
+      0 * ::capnp::ELEMENTS, TypeEnvironment::Binding::TYPE);
+  ::capnp::_::PointerHelpers< ::capnp::schema::Type>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::schema::Type> TypeEnvironment::Binding::Builder::disownType() {
+  KJ_IREQUIRE(which() == TypeEnvironment::Binding::TYPE,
+              "Must check which() before get()ing a union member.");
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
 inline Value::Which Value::Reader::which() const {
@@ -5304,6 +6576,41 @@ inline void Annotation::Builder::adoptValue(
 inline ::capnp::Orphan< ::capnp::schema::Value> Annotation::Builder::disownValue() {
   return ::capnp::_::PointerHelpers< ::capnp::schema::Value>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+
+inline bool Annotation::Reader::hasTypeEnvironment() const {
+  return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
+}
+inline bool Annotation::Builder::hasTypeEnvironment() {
+  return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::schema::TypeEnvironment::Reader Annotation::Reader::getTypeEnvironment() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+      _reader.getPointerField(1 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::TypeEnvironment::Builder Annotation::Builder::getTypeEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+      _builder.getPointerField(1 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::TypeEnvironment::Pipeline Annotation::Pipeline::getTypeEnvironment() {
+  return  ::capnp::schema::TypeEnvironment::Pipeline(_typeless.getPointerField(1));
+}
+inline void Annotation::Builder::setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::set(
+      _builder.getPointerField(1 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::schema::TypeEnvironment::Builder Annotation::Builder::initTypeEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::init(
+      _builder.getPointerField(1 * ::capnp::POINTERS));
+}
+inline void Annotation::Builder::adoptTypeEnvironment(
+    ::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::adopt(
+      _builder.getPointerField(1 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> Annotation::Builder::disownTypeEnvironment() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::disown(
+      _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
 inline bool CodeGeneratorRequest::Reader::hasNodes() const {

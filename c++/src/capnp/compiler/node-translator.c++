@@ -521,6 +521,288 @@ private:
 
 // =======================================================================================
 
+class NodeTranslator::DeclInstance {
+  // Represents a declaration possibly with generic parameter bindings.
+
+public:
+  inline DeclInstance(Resolver::ResolvedDecl decl,
+                      kj::Own<NodeTranslator::TypeEnvironment>&& environment,
+                      Expression::Reader source)
+      : isVariable(false), decl(decl),
+        environment(kj::mv(environment)), source(source) {}
+  inline DeclInstance(Resolver::ResolvedParameter variable, Expression::Reader source)
+      : isVariable(true), variable(variable), source(source) {}
+
+  DeclInstance(DeclInstance& other);
+  DeclInstance(DeclInstance&& other) = default;
+
+  DeclInstance& operator=(DeclInstance& other);
+  DeclInstance& operator=(DeclInstance&& other) = default;
+
+  kj::Maybe<DeclInstance> applyParams(
+      kj::Array<DeclInstance> params, Expression::Reader subSource);
+  // Treat the declaration as a generic and apply it to the given parameter list.
+
+  kj::Maybe<DeclInstance> getMember(
+      NodeTranslator& nodeTranslator, kj::StringPtr memberName, Expression::Reader subSource);
+  // Get a member of this declaration.
+
+  kj::Maybe<Declaration::Which> getKind();
+  // Returns the kind of declaration, or null if this is an unbound generic variable.
+
+  template <typename InitTypeEnvironmentFunc>
+  uint64_t getIdAndFillEnv(NodeTranslator& nodeTranslator,
+                           InitTypeEnvironmentFunc&& initTypeEnvironment);
+  // Returns the type ID of this node. `initTypeEnvironment` is a zero-arg functor which returns
+  // schema::TypeEnvironment::Builder; this will be called if this decl instance has generic
+  // bindings, and the returned builder filled in to reflect those bindings.
+  //
+  // It is an error to call this when `getKind()` returns null.
+
+  DeclInstance& getListParam();
+  // Only if the kind is BUILTIN_LIST: Get the list's type parameter.
+
+  kj::Maybe<uint64_t> tryAsConst();
+  // If this is a constant, return the id, otherwise return null.
+
+  Resolver::ResolvedParameter asVariable();
+  // If this is an unbound generic variable (i.e. `getKind()` returns null), return information
+  // about the variable.
+  //
+  // It is an error to call this when `getKind()` does not return null.
+
+  inline void addError(ErrorReporter& errorReporter, kj::StringPtr message) {
+    errorReporter.addErrorOn(source, message);
+  }
+
+  kj::String toString();
+  kj::String toDebugString();
+
+private:
+  bool isVariable;
+  union {
+    Resolver::ResolvedDecl decl;
+    Resolver::ResolvedParameter variable;
+  };
+  kj::Own<NodeTranslator::TypeEnvironment> environment;  // null if variable
+  Expression::Reader source;
+};
+
+class NodeTranslator::TypeEnvironment: public kj::Refcounted {
+public:
+  TypeEnvironment(): parent(nullptr), leafId(0) {}
+  // Create an empty type environment.
+
+  kj::Own<TypeEnvironment> push(uint64_t typeId, uint paramCount) {
+    return kj::refcounted<TypeEnvironment>(kj::addRef(*this), typeId, paramCount);
+  }
+
+  kj::Maybe<kj::Own<TypeEnvironment>> setParams(kj::Array<DeclInstance> params) {
+    if (this->params.size() != 0) {
+      // Already set.
+      return nullptr;
+    } else if (params.size() != leafParamCount) {
+      // Wrong arity.
+      return nullptr;
+    } else {
+      return kj::refcounted<TypeEnvironment>(*this, kj::mv(params));
+    }
+  }
+
+  kj::Own<TypeEnvironment> pop(uint64_t newLeafId) {
+    if (leafId == newLeafId) {
+      return kj::refcounted<TypeEnvironment>(*this, nullptr);
+    }
+    KJ_IF_MAYBE(p, parent) {
+      return (*p)->pop(newLeafId);
+    } else {
+      // We are already root.
+      return kj::addRef(*this);
+    }
+  }
+
+  kj::Maybe<DeclInstance&> lookupParameter(uint64_t scopeId, uint index) {
+    if (scopeId == leafId) {
+      if (index < params.size()) {
+        return params[index];
+      } else {
+        return nullptr;
+      }
+    } else KJ_IF_MAYBE(p, parent) {
+      return p->get()->lookupParameter(scopeId, index);
+    } else {
+      return nullptr;
+    }
+  }
+
+  kj::ArrayPtr<DeclInstance> getParams(uint64_t scopeId) {
+    if (scopeId == leafId) {
+      return params;
+    } else KJ_IF_MAYBE(p, parent) {
+      return p->get()->getParams(scopeId);
+    } else {
+      return nullptr;
+    }
+  }
+
+  template <typename InitTypeEnvironmentFunc>
+  void compile(NodeTranslator& translator, InitTypeEnvironmentFunc&& initTypeEnvironment) {
+    kj::Vector<TypeEnvironment*> levels;
+    TypeEnvironment* ptr = this;
+    for (;;) {
+      if (ptr->params.size() > 0) levels.add(ptr);
+      KJ_IF_MAYBE(p, ptr->parent) {
+        ptr = *p;
+      } else {
+        break;
+      }
+    }
+
+    if (levels.size() > 0) {
+      auto scopes = initTypeEnvironment().initScopes(levels.size());
+      for (uint i: kj::indices(levels)) {
+        auto scope = scopes[i];
+        scope.setScopeId(levels[i]->leafId);
+        auto bindings = scope.initBindings(levels[i]->params.size());
+        for (uint j: kj::indices(bindings)) {
+          translator.compileType(levels[i]->params[j], bindings[j].initType());
+        }
+      }
+    }
+  }
+
+private:
+  kj::Maybe<kj::Own<NodeTranslator::TypeEnvironment>> parent;
+  uint64_t leafId;                     // zero = this is the root
+  uint leafParamCount;                 // number of generic parameters on this leaf
+  kj::Array<DeclInstance> params;
+
+  TypeEnvironment(kj::Own<NodeTranslator::TypeEnvironment> parent,
+                  uint64_t leafId, uint leafParamCount)
+      : parent(kj::mv(parent)), leafId(leafId), leafParamCount(leafParamCount) {}
+  TypeEnvironment(TypeEnvironment& base, kj::Array<DeclInstance> params)
+      : leafId(base.leafId), leafParamCount(base.leafParamCount), params(kj::mv(params)) {
+    KJ_IF_MAYBE(p, base.parent) {
+      parent = kj::addRef(**p);
+    }
+  }
+
+  template <typename T, typename... Params>
+  friend kj::Own<T> kj::refcounted(Params&&... params);
+};
+
+NodeTranslator::DeclInstance::DeclInstance(DeclInstance& other)
+    : isVariable(other.isVariable),
+      source(other.source) {
+  if (isVariable) {
+    variable = other.variable;
+  } else {
+    decl = other.decl;
+    environment = kj::addRef(*other.environment);
+  }
+}
+
+NodeTranslator::DeclInstance& NodeTranslator::DeclInstance::operator=(DeclInstance& other) {
+  if (isVariable) {
+    variable = other.variable;
+  } else {
+    decl = other.decl;
+    environment = kj::addRef(*other.environment);
+  }
+  source = other.source;
+  return *this;
+}
+
+kj::Maybe<NodeTranslator::DeclInstance> NodeTranslator::DeclInstance::applyParams(
+    kj::Array<DeclInstance> params, Expression::Reader subSource) {
+  if (isVariable) {
+    return nullptr;
+  } else {
+    return environment->setParams(kj::mv(params)).map([&](kj::Own<TypeEnvironment>& env) {
+      DeclInstance result = *this;
+      result.environment = kj::mv(env);
+      result.source = subSource;
+      return result;
+    });
+  }
+}
+
+kj::Maybe<NodeTranslator::DeclInstance> NodeTranslator::DeclInstance::getMember(
+    NodeTranslator& nodeTranslator, kj::StringPtr memberName, Expression::Reader subSource) {
+  if (isVariable) {
+    return nullptr;
+  } else KJ_IF_MAYBE(r, decl.resolver->resolveMember(memberName)) {
+    if (r->is<Resolver::ResolvedDecl>()) {
+      auto& memberDecl = r->get<Resolver::ResolvedDecl>();
+      return DeclInstance(memberDecl,
+                          environment->push(memberDecl.id, memberDecl.genericParamCount),
+                          subSource);
+    } else {
+      // TODO(now): This is wrong. We can't compile an alias expression from another file in our
+      //   own context.
+      auto& alias = r->get<Resolver::ResolvedAlias>();
+      return nodeTranslator.compileDeclExpression(
+          alias.value, kj::addRef(*environment), *alias.scope);
+    }
+  } else {
+    return nullptr;
+  }
+}
+
+kj::Maybe<Declaration::Which> NodeTranslator::DeclInstance::getKind() {
+  if (isVariable) {
+    return nullptr;
+  } else {
+    return decl.kind;
+  }
+}
+
+template <typename InitTypeEnvironmentFunc>
+uint64_t NodeTranslator::DeclInstance::getIdAndFillEnv(
+    NodeTranslator& nodeTranslator, InitTypeEnvironmentFunc&& initTypeEnvironment) {
+  KJ_REQUIRE(!isVariable);
+
+  environment->compile(nodeTranslator, kj::fwd<InitTypeEnvironmentFunc>(initTypeEnvironment));
+  return decl.id;
+}
+
+NodeTranslator::DeclInstance& NodeTranslator::DeclInstance::getListParam() {
+  KJ_REQUIRE(!isVariable);
+  KJ_REQUIRE(decl.kind == Declaration::BUILTIN_LIST);
+
+  auto params = environment->getParams(decl.id);
+  KJ_ASSERT(params.size() == 1);
+
+  return params[0];
+}
+
+kj::Maybe<uint64_t> NodeTranslator::DeclInstance::tryAsConst() {
+  if (!isVariable && decl.kind == Declaration::CONST) {
+    return decl.id;
+  } else {
+    return nullptr;
+  }
+}
+
+NodeTranslator::Resolver::ResolvedParameter NodeTranslator::DeclInstance::asVariable() {
+  KJ_REQUIRE(isVariable);
+
+  return variable;
+}
+
+static kj::String expressionString(Expression::Reader name);  // defined later
+
+kj::String NodeTranslator::DeclInstance::toString() {
+  return expressionString(source);
+}
+
+kj::String NodeTranslator::DeclInstance::toDebugString() {
+  return isVariable ? kj::str("varibale(", variable.id, ", ", variable.index, ")")
+                    : kj::str("decl(", decl.id, ", ", (uint)decl.kind, "')");
+}
+
+// =======================================================================================
+
 NodeTranslator::NodeTranslator(
     Resolver& resolver, ErrorReporter& errorReporter,
     const Declaration::Reader& decl, Orphan<schema::Node> wipNodeParam,
@@ -571,6 +853,14 @@ private:
 void NodeTranslator::compileNode(Declaration::Reader decl, schema::Node::Builder builder) {
   DuplicateNameDetector(errorReporter)
       .check(decl.getNestedDecls(), decl.which());
+
+  auto genericParams = decl.getParameters();
+  if (genericParams.size() > 0) {
+    auto paramsBuilder = builder.initParameters(genericParams.size());
+    for (auto i: kj::indices(genericParams)) {
+      paramsBuilder[i].setName(genericParams[i].getName());
+    }
+  }
 
   kj::StringPtr targetsFlagName;
 
@@ -873,8 +1163,8 @@ private:
     Declaration::Which declKind;
     bool isParam = false;
     bool hasDefaultValue = false;               // if declKind == FIELD
-    TypeExpression::Reader fieldType;           // if declKind == FIELD
-    ValueExpression::Reader fieldDefaultValue;  // if declKind == FIELD && hasDefaultValue
+    Expression::Reader fieldType;               // if declKind == FIELD
+    Expression::Reader fieldDefaultValue;       // if declKind == FIELD && hasDefaultValue
     List<Declaration::AnnotationApplication>::Reader declAnnotations;
     uint startByte = 0;
     uint endByte = 0;
@@ -1338,7 +1628,7 @@ void NodeTranslator::compileStruct(Void decl, List<Declaration>::Reader members,
 
 // -------------------------------------------------------------------
 
-static kj::String declNameString(DeclName::Reader name);
+static kj::String expressionString(Expression::Reader name);
 
 void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
                                       List<Declaration>::Reader members,
@@ -1349,14 +1639,21 @@ void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
   auto extendsBuilder = interfaceBuilder.initExtends(extendsDecl.size());
   for (uint i: kj::indices(extendsDecl)) {
     auto extend = extendsDecl[i];
-    if (extend.getBase().isAbsoluteName() && !extend.getBase().hasAbsoluteName()) {
-      // Compile error reported earlier.
-    } else KJ_IF_MAYBE(target, resolver.resolve(extend)) {
-      if (target->kind == Declaration::INTERFACE) {
-        extendsBuilder.set(i, target->id);
+
+    KJ_IF_MAYBE(decl, compileDeclExpression(extend)) {
+      KJ_IF_MAYBE(kind, decl->getKind()) {
+        if (*kind == Declaration::INTERFACE) {
+          auto e = extendsBuilder[i];
+          e.setId(decl->getIdAndFillEnv(*this, [&]() { return e.initEnvironment(); }));
+        } else {
+          decl->addError(errorReporter, kj::str(
+            "'", decl->toString(), "' is not an interface."));
+        }
       } else {
-        errorReporter.addErrorOn(
-            extend, kj::str("'", declNameString(extend), "' is not an interface type."));
+        // A variable?
+        decl->addError(errorReporter, kj::str(
+            "'", decl->toString(), "' is an unbound generic parameter. Currently we don't support "
+            "extending these."));
       }
     }
   }
@@ -1391,27 +1688,31 @@ void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
     methodBuilder.setCodeOrder(codeOrder);
 
     methodBuilder.setParamStructType(compileParamList(
-        methodDecl.getName().getValue(), ordinal, false, methodReader.getParams()));
+        methodDecl.getName().getValue(), ordinal, false, methodReader.getParams(),
+        [&]() { return methodBuilder.initParamEnvironment(); }));
 
     auto results = methodReader.getResults();
+    Declaration::ParamList::Reader resultList;
     if (results.isExplicit()) {
-      methodBuilder.setResultStructType(compileParamList(
-          methodDecl.getName().getValue(), ordinal, true, results.getExplicit()));
+      resultList = results.getExplicit();
     } else {
-      // This works because namedList is the default kind of ParamList, and it will default to
-      // an empty list.
-      methodBuilder.setResultStructType(compileParamList(
-          methodDecl.getName().getValue(), ordinal, true, Declaration::ParamList::Reader()));
+      // We just stick with `resultList` uninitialized, which is equivalent to the default
+      // instance. This works because `namedList` is the default kind of ParamList, and it will
+      // default to an empty list.
     }
+    methodBuilder.setResultStructType(compileParamList(
+        methodDecl.getName().getValue(), ordinal, true, resultList,
+        [&]() { return methodBuilder.initResultEnvironment(); }));
 
     methodBuilder.adoptAnnotations(compileAnnotationApplications(
         methodDecl.getAnnotations(), "targetsMethod"));
   }
 }
 
+template <typename InitTypeEnvironmentFunc>
 uint64_t NodeTranslator::compileParamList(
     kj::StringPtr methodName, uint16_t ordinal, bool isResults,
-    Declaration::ParamList::Reader paramList) {
+    Declaration::ParamList::Reader paramList, InitTypeEnvironmentFunc&& initTypeEnvironment) {
   switch (paramList.which()) {
     case Declaration::ParamList::NAMED_LIST: {
       auto newStruct = orphanage.newOrphan<schema::Node>();
@@ -1433,13 +1734,22 @@ uint64_t NodeTranslator::compileParamList(
       return id;
     }
     case Declaration::ParamList::TYPE:
-      KJ_IF_MAYBE(target, resolver.resolve(paramList.getType())) {
-        if (target->kind == Declaration::STRUCT) {
-          return target->id;
+      KJ_IF_MAYBE(target, compileDeclExpression(paramList.getType())) {
+        KJ_IF_MAYBE(kind, target->getKind()) {
+          if (*kind == Declaration::STRUCT) {
+            return target->getIdAndFillEnv(
+                *this, kj::fwd<InitTypeEnvironmentFunc>(initTypeEnvironment));
+          } else {
+            errorReporter.addErrorOn(
+                paramList.getType(),
+                kj::str("'", expressionString(paramList.getType()), "' is not a struct type."));
+          }
         } else {
-          errorReporter.addErrorOn(
-              paramList.getType(),
-              kj::str("'", declNameString(paramList.getType()), "' is not a struct type."));
+          // A variable?
+          target->addError(errorReporter,
+              "Cannot use generic parameter as whole input or output of a method. Instead, "
+              "use a parameter/result list containing a field with this type.");
+          return 0;
         }
       }
       return 0;
@@ -1449,106 +1759,353 @@ uint64_t NodeTranslator::compileParamList(
 
 // -------------------------------------------------------------------
 
-static kj::String declNameString(DeclName::Reader name) {
-  kj::String prefix;
+static const char HEXDIGITS[] = "0123456789abcdef";
 
-  switch (name.getBase().which()) {
-    case DeclName::Base::RELATIVE_NAME:
-      prefix = kj::str(name.getBase().getRelativeName().getValue());
-      break;
-    case DeclName::Base::ABSOLUTE_NAME:
-      prefix = kj::str(".", name.getBase().getAbsoluteName().getValue());
-      break;
-    case DeclName::Base::IMPORT_NAME:
-      prefix = kj::str("import \"", name.getBase().getImportName().getValue(), "\"");
-      break;
+static kj::StringTree stringLiteral(kj::StringPtr chars) {
+  // TODO(cleanup): This code keeps coming up. Put somewhere common?
+
+  kj::Vector<char> escaped(chars.size());
+
+  for (char c: chars) {
+    switch (c) {
+      case '\a': escaped.addAll(kj::StringPtr("\\a")); break;
+      case '\b': escaped.addAll(kj::StringPtr("\\b")); break;
+      case '\f': escaped.addAll(kj::StringPtr("\\f")); break;
+      case '\n': escaped.addAll(kj::StringPtr("\\n")); break;
+      case '\r': escaped.addAll(kj::StringPtr("\\r")); break;
+      case '\t': escaped.addAll(kj::StringPtr("\\t")); break;
+      case '\v': escaped.addAll(kj::StringPtr("\\v")); break;
+      case '\'': escaped.addAll(kj::StringPtr("\\\'")); break;
+      case '\"': escaped.addAll(kj::StringPtr("\\\"")); break;
+      case '\\': escaped.addAll(kj::StringPtr("\\\\")); break;
+      default:
+        if (c < 0x20) {
+          escaped.add('\\');
+          escaped.add('x');
+          uint8_t c2 = c;
+          escaped.add(HEXDIGITS[c2 / 16]);
+          escaped.add(HEXDIGITS[c2 % 16]);
+        } else {
+          escaped.add(c);
+        }
+        break;
+    }
+  }
+  return kj::strTree('"', escaped, '"');
+}
+
+static kj::StringTree binaryLiteral(Data::Reader data) {
+  kj::Vector<char> escaped(data.size() * 3);
+
+  for (byte b: data) {
+    escaped.add(HEXDIGITS[b % 16]);
+    escaped.add(HEXDIGITS[b / 16]);
+    escaped.add(' ');
   }
 
-  if (name.getMemberPath().size() == 0) {
-    return prefix;
-  } else {
-    auto path = name.getMemberPath();
-    KJ_STACK_ARRAY(kj::StringPtr, parts, path.size(), 16, 16);
-    for (size_t i = 0; i < parts.size(); i++) {
-      parts[i] = path[i].getValue();
+  escaped.removeLast();
+  return kj::strTree("0x\"", escaped, '"');
+}
+
+static kj::StringTree expressionStringTree(Expression::Reader exp);
+
+static kj::StringTree tupleLiteral(List<Expression::Param>::Reader params) {
+  auto parts = kj::heapArrayBuilder<kj::StringTree>(params.size());
+  for (auto param: params) {
+    auto part = expressionStringTree(param.getValue());
+    if (param.isNamed()) {
+      part = kj::strTree(param.getNamed().getValue(), " = ", kj::mv(part));
     }
-    return kj::str(prefix, ".", kj::strArray(parts, "."));
+    parts.add(kj::mv(part));
+  }
+  return kj::strTree("( ", kj::StringTree(parts.finish(), ", "), " )");
+}
+
+static kj::StringTree expressionStringTree(Expression::Reader exp) {
+  switch (exp.which()) {
+    case Expression::UNKNOWN:
+      return kj::strTree("<parse error>");
+    case Expression::POSITIVE_INT:
+      return kj::strTree(exp.getPositiveInt());
+    case Expression::NEGATIVE_INT:
+      return kj::strTree('-', exp.getNegativeInt());
+    case Expression::FLOAT:
+      return kj::strTree(exp.getFloat());
+    case Expression::STRING:
+      return stringLiteral(exp.getString());
+    case Expression::BINARY:
+      return binaryLiteral(exp.getBinary());
+    case Expression::RELATIVE_NAME:
+      return kj::strTree(exp.getRelativeName().getValue());
+    case Expression::ABSOLUTE_NAME:
+      return kj::strTree('.', exp.getAbsoluteName().getValue());
+    case Expression::IMPORT:
+      return kj::strTree("import ", stringLiteral(exp.getImport().getValue()));
+
+    case Expression::LIST: {
+      auto list = exp.getList();
+      auto parts = kj::heapArrayBuilder<kj::StringTree>(list.size());
+      for (auto element: list) {
+        parts.add(expressionStringTree(element));
+      }
+      return kj::strTree("[ ", kj::StringTree(parts.finish(), ", "), " ]");
+    }
+
+    case Expression::TUPLE:
+      return tupleLiteral(exp.getTuple());
+
+    case Expression::APPLICATION: {
+      auto app = exp.getApplication();
+      return kj::strTree(expressionStringTree(app.getFunction()),
+                         '(', tupleLiteral(app.getParams()), ')');
+    }
+
+    case Expression::MEMBER: {
+      auto member = exp.getMember();
+      return kj::strTree(expressionStringTree(member.getParent()), '.',
+                         member.getName().getValue());
+    }
+  }
+
+  KJ_UNREACHABLE;
+}
+
+static kj::String expressionString(Expression::Reader name) {
+  return expressionStringTree(name).flatten();
+}
+
+// -------------------------------------------------------------------
+
+kj::Maybe<NodeTranslator::DeclInstance>
+NodeTranslator::compileDeclExpression(Expression::Reader source,
+                                      kj::Own<TypeEnvironment> env,
+                                      Resolver& resolver) {
+  switch (source.which()) {
+    case Expression::UNKNOWN:
+      // Error reported earlier.
+      return nullptr;
+
+    case Expression::POSITIVE_INT:
+    case Expression::NEGATIVE_INT:
+    case Expression::FLOAT:
+    case Expression::STRING:
+    case Expression::BINARY:
+    case Expression::LIST:
+    case Expression::TUPLE:
+      errorReporter.addErrorOn(source, "Expected name.");
+      return nullptr;
+
+    case Expression::RELATIVE_NAME: {
+      auto name = source.getRelativeName();
+      KJ_IF_MAYBE(r, resolver.resolve(name.getValue())) {
+        if (r->is<Resolver::ResolvedDecl>()) {
+          auto& decl = r->get<Resolver::ResolvedDecl>();
+          return DeclInstance(decl,
+              env->pop(decl.scopeId)->push(decl.id, decl.genericParamCount), source);
+        } else if (r->is<Resolver::ResolvedAlias>()) {
+          // TODO(now): This is wrong. We can't compile an alias expression from another file in
+          //   our own context.
+          auto& alias = r->get<Resolver::ResolvedAlias>();
+          return compileDeclExpression(alias.value, env->pop(alias.scopeId), *alias.scope);
+        } else {
+          auto& param = r->get<Resolver::ResolvedParameter>();
+          KJ_IF_MAYBE(p, env->lookupParameter(param.id, param.index)) {
+            return *p;
+          } else {
+            return DeclInstance(param, source);
+          }
+        }
+      } else {
+        errorReporter.addErrorOn(name, kj::str("Not defined: ", name.getValue()));
+        return nullptr;
+      }
+    }
+
+    case Expression::ABSOLUTE_NAME: {
+      auto name = source.getAbsoluteName();
+      KJ_IF_MAYBE(r, resolver.getTopScope().resolver->resolveMember(name.getValue())) {
+        if (r->is<Resolver::ResolvedDecl>()) {
+          auto& decl = r->get<Resolver::ResolvedDecl>();
+          return DeclInstance(decl,
+              kj::refcounted<TypeEnvironment>()->push(decl.id, decl.genericParamCount), source);
+        } else {
+          auto& alias = r->get<Resolver::ResolvedAlias>();
+          return compileDeclExpression(
+              alias.value, kj::refcounted<TypeEnvironment>(), *alias.scope);
+        }
+      } else {
+        errorReporter.addErrorOn(name, kj::str("Not defined: ", name.getValue()));
+        return nullptr;
+      }
+    }
+
+    case Expression::IMPORT: {
+      auto filename = source.getImport();
+      KJ_IF_MAYBE(decl, resolver.resolveImport(filename.getValue())) {
+        return DeclInstance(*decl, kj::refcounted<TypeEnvironment>(), source);
+      } else {
+        errorReporter.addErrorOn(filename, kj::str("Import failed: ", filename.getValue()));
+        return nullptr;
+      }
+    }
+
+    case Expression::APPLICATION: {
+      auto app = source.getApplication();
+      KJ_IF_MAYBE(decl, compileDeclExpression(app.getFunction(), kj::addRef(*env), resolver)) {
+        // Compile all params.
+        auto params = app.getParams();
+        auto compiledParams = kj::heapArrayBuilder<DeclInstance>(params.size());
+        bool paramFailed = false;
+        for (auto param: params) {
+          if (param.isNamed()) {
+            errorReporter.addErrorOn(param.getNamed(), "Named parameter not allowed here.");
+          }
+
+          KJ_IF_MAYBE(d, compileDeclExpression(param.getValue(), kj::addRef(*env), resolver)) {
+            compiledParams.add(kj::mv(*d));
+          } else {
+            // Param failed to compile. Error was already reported.
+            paramFailed = true;
+          }
+        };
+
+        if (paramFailed) {
+          return kj::mv(*decl);
+        }
+
+        // Add the parameters to the environment.
+        KJ_IF_MAYBE(applied, decl->applyParams(compiledParams.finish(), source)) {
+          return kj::mv(*applied);
+        } else {
+          errorReporter.addErrorOn(source, "Wrong number of type parameters.");
+          return kj::mv(*decl);
+        }
+      } else {
+        // error already reported
+        return nullptr;
+      }
+    }
+
+    case Expression::MEMBER: {
+      auto member = source.getMember();
+      KJ_IF_MAYBE(decl, compileDeclExpression(member.getParent(), kj::mv(env), resolver)) {
+        auto name = member.getName();
+        KJ_IF_MAYBE(memberDecl, decl->getMember(*this, name.getValue(), source)) {
+          return kj::mv(*memberDecl);
+        } else {
+          errorReporter.addErrorOn(name, kj::str(
+              '"', expressionString(member.getParent()),
+              "\" has no member named \"", name.getValue(), '"'));
+          return nullptr;
+        }
+      } else {
+        // error already reported
+        return nullptr;
+      }
+    }
   }
 }
 
-bool NodeTranslator::compileType(TypeExpression::Reader source, schema::Type::Builder target) {
-  auto name = source.getName();
-  KJ_IF_MAYBE(base, resolver.resolve(name)) {
-    bool handledParams = false;
+kj::Maybe<NodeTranslator::DeclInstance>
+NodeTranslator::compileDeclExpression(Expression::Reader source) {
+  return compileDeclExpression(source, kj::refcounted<TypeEnvironment>(), resolver);
+}
 
-    switch (base->kind) {
-      case Declaration::ENUM: target.initEnum().setTypeId(base->id); break;
-      case Declaration::STRUCT: target.initStruct().setTypeId(base->id); break;
-      case Declaration::INTERFACE: target.initInterface().setTypeId(base->id); break;
+bool NodeTranslator::compileType(Expression::Reader source, schema::Type::Builder target) {
+  KJ_IF_MAYBE(decl, compileDeclExpression(source)) {
+    return compileType(*decl, target);
+  } else {
+    return false;
+  }
+}
+
+bool NodeTranslator::compileType(DeclInstance& decl, schema::Type::Builder target) {
+  KJ_IF_MAYBE(kind, decl.getKind()) {
+    switch (*kind) {
+      case Declaration::ENUM: {
+        auto enum_ = target.initEnum();
+        enum_.setTypeId(decl.getIdAndFillEnv(*this, [&]() { return enum_.initTypeEnvironment(); }));
+        return true;
+      }
+
+      case Declaration::STRUCT: {
+        auto struct_ = target.initStruct();
+        struct_.setTypeId(decl.getIdAndFillEnv(*this,
+            [&]() { return struct_.initTypeEnvironment(); }));
+        return true;
+      }
+
+      case Declaration::INTERFACE: {
+        auto interface = target.initInterface();
+        interface.setTypeId(decl.getIdAndFillEnv(*this,
+            [&]() { return interface.initTypeEnvironment(); }));
+        return true;
+      }
 
       case Declaration::BUILTIN_LIST: {
-        auto params = source.getParams();
-        if (params.size() != 1) {
-          errorReporter.addErrorOn(source, "'List' requires exactly one parameter.");
-          return false;
-        }
-
         auto elementType = target.initList().initElementType();
-        if (!compileType(params[0], elementType)) {
+        if (!compileType(decl.getListParam(), elementType)) {
           return false;
         }
 
         if (elementType.isAnyPointer()) {
-          errorReporter.addErrorOn(source, "'List(AnyPointer)' is not supported.");
+          decl.addError(errorReporter, "'List(AnyPointer)' is not supported.");
           // Seeing List(AnyPointer) later can mess things up, so change the type to Void.
           elementType.setVoid();
           return false;
         }
 
-        handledParams = true;
-        break;
+        return true;
       }
 
-      case Declaration::BUILTIN_VOID: target.setVoid(); break;
-      case Declaration::BUILTIN_BOOL: target.setBool(); break;
-      case Declaration::BUILTIN_INT8: target.setInt8(); break;
-      case Declaration::BUILTIN_INT16: target.setInt16(); break;
-      case Declaration::BUILTIN_INT32: target.setInt32(); break;
-      case Declaration::BUILTIN_INT64: target.setInt64(); break;
-      case Declaration::BUILTIN_U_INT8: target.setUint8(); break;
-      case Declaration::BUILTIN_U_INT16: target.setUint16(); break;
-      case Declaration::BUILTIN_U_INT32: target.setUint32(); break;
-      case Declaration::BUILTIN_U_INT64: target.setUint64(); break;
-      case Declaration::BUILTIN_FLOAT32: target.setFloat32(); break;
-      case Declaration::BUILTIN_FLOAT64: target.setFloat64(); break;
-      case Declaration::BUILTIN_TEXT: target.setText(); break;
-      case Declaration::BUILTIN_DATA: target.setData(); break;
+      case Declaration::BUILTIN_VOID: target.setVoid(); return true;
+      case Declaration::BUILTIN_BOOL: target.setBool(); return true;
+      case Declaration::BUILTIN_INT8: target.setInt8(); return true;
+      case Declaration::BUILTIN_INT16: target.setInt16(); return true;
+      case Declaration::BUILTIN_INT32: target.setInt32(); return true;
+      case Declaration::BUILTIN_INT64: target.setInt64(); return true;
+      case Declaration::BUILTIN_U_INT8: target.setUint8(); return true;
+      case Declaration::BUILTIN_U_INT16: target.setUint16(); return true;
+      case Declaration::BUILTIN_U_INT32: target.setUint32(); return true;
+      case Declaration::BUILTIN_U_INT64: target.setUint64(); return true;
+      case Declaration::BUILTIN_FLOAT32: target.setFloat32(); return true;
+      case Declaration::BUILTIN_FLOAT64: target.setFloat64(); return true;
+      case Declaration::BUILTIN_TEXT: target.setText(); return true;
+      case Declaration::BUILTIN_DATA: target.setData(); return true;
 
       case Declaration::BUILTIN_OBJECT:
-        errorReporter.addErrorOn(source,
+        decl.addError(errorReporter,
             "As of Cap'n Proto 0.4, 'Object' has been renamed to 'AnyPointer'.  Sorry for the "
             "inconvenience, and thanks for being an early adopter.  :)");
         // no break
-      case Declaration::BUILTIN_ANY_POINTER: target.setAnyPointer(); break;
+      case Declaration::BUILTIN_ANY_POINTER:
+        target.initAnyPointer().setUnconstrained();
+        return true;
 
-      default:
-        errorReporter.addErrorOn(source, kj::str("'", declNameString(name), "' is not a type."));
+      case Declaration::FILE:
+      case Declaration::USING:
+      case Declaration::CONST:
+      case Declaration::ENUMERANT:
+      case Declaration::FIELD:
+      case Declaration::UNION:
+      case Declaration::GROUP:
+      case Declaration::METHOD:
+      case Declaration::ANNOTATION:
+      case Declaration::NAKED_ID:
+      case Declaration::NAKED_ANNOTATION:
+        decl.addError(errorReporter, kj::str(
+            "'", decl.toString(), "' is not a type."));
         return false;
     }
 
-    if (!handledParams) {
-      if (source.getParams().size() != 0) {
-        errorReporter.addErrorOn(source, kj::str(
-            "'", declNameString(name), "' does not accept parameters."));
-        return false;
-      }
-    }
-
-    return true;
-
+    KJ_UNREACHABLE;
   } else {
-    target.setVoid();
-    return false;
+    // Oh, this is a type variable.
+    auto var = decl.asVariable();
+    auto builder = target.initAnyPointer().initParameter();
+    builder.setNodeId(var.id);
+    builder.setParameterIndex(var.index);
+    return true;
   }
 }
 
@@ -1582,7 +2139,7 @@ void NodeTranslator::compileDefaultDefaultValue(
   }
 }
 
-void NodeTranslator::compileBootstrapValue(ValueExpression::Reader source,
+void NodeTranslator::compileBootstrapValue(Expression::Reader source,
                                            schema::Type::Reader type,
                                            schema::Value::Builder target) {
   // Start by filling in a default default value so that if for whatever reason we don't end up
@@ -1604,7 +2161,7 @@ void NodeTranslator::compileBootstrapValue(ValueExpression::Reader source,
   }
 }
 
-void NodeTranslator::compileValue(ValueExpression::Reader source, schema::Type::Reader type,
+void NodeTranslator::compileValue(Expression::Reader source, schema::Type::Reader type,
                                   schema::Value::Builder target, bool isBootstrap) {
   class ResolverGlue: public ValueTranslator::Resolver {
   public:
@@ -1617,7 +2174,7 @@ void NodeTranslator::compileValue(ValueExpression::Reader source, schema::Type::
       return translator.resolver.resolveBootstrapSchema(id);
     }
 
-    kj::Maybe<DynamicValue::Reader> resolveConstant(DeclName::Reader name) override {
+    kj::Maybe<DynamicValue::Reader> resolveConstant(Expression::Reader name) override {
       return translator.readConstant(name, isBootstrap);
     }
 
@@ -1640,7 +2197,7 @@ void NodeTranslator::compileValue(ValueExpression::Reader source, schema::Type::
 }
 
 kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(
-    ValueExpression::Reader src, schema::Type::Reader type) {
+    Expression::Reader src, schema::Type::Reader type) {
   Orphan<DynamicValue> result = compileValueInner(src, type);
 
   switch (result.getType()) {
@@ -1789,53 +2346,60 @@ kj::Maybe<Orphan<DynamicValue>> ValueTranslator::compileValue(
 }
 
 Orphan<DynamicValue> ValueTranslator::compileValueInner(
-    ValueExpression::Reader src, schema::Type::Reader type) {
+    Expression::Reader src, schema::Type::Reader type) {
   switch (src.which()) {
-    case ValueExpression::NAME: {
-      auto name = src.getName();
-      bool isBare = name.getBase().isRelativeName() &&
-                    name.getMemberPath().size() == 0;
-      if (isBare) {
-        // The name is just a bare identifier.  It may be a literal value or an enumerant.
-        kj::StringPtr id = name.getBase().getRelativeName().getValue();
+    case Expression::RELATIVE_NAME: {
+      auto name = src.getRelativeName();
 
-        if (type.isEnum()) {
-          KJ_IF_MAYBE(enumSchema, resolver.resolveType(type.getEnum().getTypeId())) {
-            KJ_IF_MAYBE(enumerant, enumSchema->asEnum().findEnumerantByName(id)) {
-              return DynamicEnum(*enumerant);
-            }
-          } else {
-            // Enum type is broken.
-            return nullptr;
+      // The name is just a bare identifier.  It may be a literal value or an enumerant.
+      kj::StringPtr id = name.getValue();
+
+      if (type.isEnum()) {
+        KJ_IF_MAYBE(enumSchema, resolver.resolveType(type.getEnum().getTypeId())) {
+          KJ_IF_MAYBE(enumerant, enumSchema->asEnum().findEnumerantByName(id)) {
+            return DynamicEnum(*enumerant);
           }
         } else {
-          // Interpret known constant values.
-          if (id == "void") {
-            return VOID;
-          } else if (id == "true") {
-            return true;
-          } else if (id == "false") {
-            return false;
-          } else if (id == "nan") {
-            return kj::nan();
-          } else if (id == "inf") {
-            return kj::inf();
-          }
+          // Enum type is broken.
+          return nullptr;
+        }
+      } else {
+        // Interpret known constant values.
+        if (id == "void") {
+          return VOID;
+        } else if (id == "true") {
+          return true;
+        } else if (id == "false") {
+          return false;
+        } else if (id == "nan") {
+          return kj::nan();
+        } else if (id == "inf") {
+          return kj::inf();
         }
       }
 
-      // Haven't resolved the name yet.  Try looking up a constant.
-      KJ_IF_MAYBE(constValue, resolver.resolveConstant(src.getName())) {
+      // Apparently not a literal. Try resolving it.
+      KJ_IF_MAYBE(constValue, resolver.resolveConstant(src)) {
         return orphanage.newOrphanCopy(*constValue);
+      } else {
+        return nullptr;
       }
-
-      return nullptr;
     }
 
-    case ValueExpression::POSITIVE_INT:
+    case Expression::ABSOLUTE_NAME:
+    case Expression::IMPORT:
+    case Expression::APPLICATION:
+    case Expression::MEMBER:
+      KJ_IF_MAYBE(constValue, resolver.resolveConstant(src)) {
+        return orphanage.newOrphanCopy(*constValue);
+      } else {
+        return nullptr;
+      }
+
+    case Expression::POSITIVE_INT:
       return src.getPositiveInt();
 
-    case ValueExpression::NEGATIVE_INT: {
+    case Expression::NEGATIVE_INT: {
       uint64_t nValue = src.getNegativeInt();
       if (nValue > ((uint64_t)kj::maxValue >> 1) + 1) {
         errorReporter.addErrorOn(src, "Integer is too big to be negative.");
@@ -1845,11 +2409,11 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(
       }
     }
 
-    case ValueExpression::FLOAT:
+    case Expression::FLOAT:
       return src.getFloat();
       break;
 
-    case ValueExpression::STRING:
+    case Expression::STRING:
       if (type.isData()) {
         Text::Reader text = src.getString();
         return orphanage.newOrphanCopy(Data::Reader(
@@ -1859,14 +2423,14 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(
       }
       break;
 
-    case ValueExpression::BINARY:
+    case Expression::BINARY:
       if (!type.isData()) {
         errorReporter.addErrorOn(src, kj::str("Type mismatch; expected ", makeTypeName(type), "."));
         return nullptr;
       }
       return orphanage.newOrphanCopy(src.getBinary());
 
-    case ValueExpression::LIST: {
+    case Expression::LIST: {
       if (!type.isList()) {
         errorReporter.addErrorOn(src, kj::str("Type mismatch; expected ", makeTypeName(type), "."));
         return nullptr;
@@ -1887,7 +2451,7 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(
       }
     }
 
-    case ValueExpression::STRUCT: {
+    case Expression::TUPLE: {
       if (!type.isStruct()) {
         errorReporter.addErrorOn(src, kj::str("Type mismatch; expected ", makeTypeName(type), "."));
         return nullptr;
@@ -1895,14 +2459,14 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(
       KJ_IF_MAYBE(schema, resolver.resolveType(type.getStruct().getTypeId())) {
         auto structSchema = schema->asStruct();
         Orphan<DynamicStruct> result = orphanage.newOrphan(structSchema);
-        fillStructValue(result.get(), src.getStruct());
+        fillStructValue(result.get(), src.getTuple());
         return kj::mv(result);
       } else {
         return nullptr;
       }
     }
 
-    case ValueExpression::UNKNOWN:
+    case Expression::UNKNOWN:
       // Ignore earlier error.
       return nullptr;
   }
@@ -1911,31 +2475,35 @@ Orphan<DynamicValue> ValueTranslator::compileValueInner(
 }
 
 void ValueTranslator::fillStructValue(DynamicStruct::Builder builder,
-                                      List<ValueExpression::FieldAssignment>::Reader assignments) {
+                                      List<Expression::Param>::Reader assignments) {
   for (auto assignment: assignments) {
-    auto fieldName = assignment.getFieldName();
-    KJ_IF_MAYBE(field, builder.getSchema().findFieldByName(fieldName.getValue())) {
-      auto fieldProto = field->getProto();
-      auto value = assignment.getValue();
+    if (assignment.isNamed()) {
+      auto fieldName = assignment.getNamed();
+      KJ_IF_MAYBE(field, builder.getSchema().findFieldByName(fieldName.getValue())) {
+        auto fieldProto = field->getProto();
+        auto value = assignment.getValue();
 
-      switch (fieldProto.which()) {
-        case schema::Field::SLOT:
-          KJ_IF_MAYBE(compiledValue, compileValue(value, fieldProto.getSlot().getType())) {
-            builder.adopt(*field, kj::mv(*compiledValue));
-          }
-          break;
+        switch (fieldProto.which()) {
+          case schema::Field::SLOT:
+            KJ_IF_MAYBE(compiledValue, compileValue(value, fieldProto.getSlot().getType())) {
+              builder.adopt(*field, kj::mv(*compiledValue));
+            }
+            break;
 
-        case schema::Field::GROUP:
-          if (value.isStruct()) {
-            fillStructValue(builder.init(*field).as<DynamicStruct>(), value.getStruct());
-          } else {
-            errorReporter.addErrorOn(value, "Type mismatch; expected group.");
-          }
-          break;
+          case schema::Field::GROUP:
+            if (value.isTuple()) {
+              fillStructValue(builder.init(*field).as<DynamicStruct>(), value.getTuple());
+            } else {
+              errorReporter.addErrorOn(value, "Type mismatch; expected group.");
+            }
+            break;
+        }
+      } else {
+        errorReporter.addErrorOn(fieldName, kj::str(
+            "Struct has no field named '", fieldName.getValue(), "'."));
       }
     } else {
-      errorReporter.addErrorOn(fieldName, kj::str(
-          "Struct has no field named '", fieldName.getValue(), "'."));
+      errorReporter.addErrorOn(assignment.getValue(), kj::str("Missing field name."));
     }
   }
 }
@@ -1976,11 +2544,14 @@ kj::String ValueTranslator::makeTypeName(schema::Type::Reader type) {
 }
 
 kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
-    DeclName::Reader name, bool isBootstrap) {
-  KJ_IF_MAYBE(resolved, resolver.resolve(name)) {
-    if (resolved->kind != Declaration::CONST) {
-      errorReporter.addErrorOn(name,
-          kj::str("'", declNameString(name), "' does not refer to a constant."));
+    Expression::Reader source, bool isBootstrap) {
+  KJ_IF_MAYBE(resolved, compileDeclExpression(source)) {
+    uint64_t id;
+    KJ_IF_MAYBE(i, resolved->tryAsConst()) {
+      id = *i;
+    } else {
+      errorReporter.addErrorOn(source,
+          kj::str("'", expressionString(source), "' does not refer to a constant."));
       return nullptr;
     }
 
@@ -1989,8 +2560,8 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
     // bootstrapping, we may be compiling a non-primitive value and so we need the final
     // version of the constant to make sure its value is filled in.
     kj::Maybe<schema::Node::Reader> maybeConstSchema = isBootstrap ?
-        resolver.resolveBootstrapSchema(resolved->id).map([](Schema s) { return s.getProto(); }) :
-        resolver.resolveFinalSchema(resolved->id);
+        resolver.resolveBootstrapSchema(id).map([](Schema s) { return s.getProto(); }) :
+        resolver.resolveFinalSchema(id);
     KJ_IF_MAYBE(constSchema, maybeConstSchema) {
       auto constReader = constSchema->getConst();
       auto dynamicConst = toDynamic(constReader.getValue());
@@ -2027,8 +2598,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
         }
       }
 
-      if (name.getBase().isRelativeName() &&
-          name.getMemberPath().size() == 0) {
+      if (source.isRelativeName()) {
         // A fully unqualified identifier looks like it might refer to a constant visible in the
         // current scope, but if that's really what the user wanted, we want them to use a
         // qualified name to make it more obvious.  Report an error.
@@ -2040,11 +2610,11 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
           } else {
             parent = scopeReader.getDisplayName().slice(scopeReader.getDisplayNamePrefixLength());
           }
-          kj::StringPtr id = name.getBase().getRelativeName().getValue();
+          kj::StringPtr id = source.getRelativeName().getValue();
 
-          errorReporter.addErrorOn(name, kj::str(
+          errorReporter.addErrorOn(source, kj::str(
               "Constant names must be qualified to avoid confusion.  Please replace '",
-              declNameString(name), "' with '", parent, ".", id,
+              expressionString(source), "' with '", parent, ".", id,
               "', if that's what you intended."));
         }
       }
@@ -2123,39 +2693,46 @@ Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
     annotationBuilder.initValue().setVoid();
 
     auto name = annotation.getName();
-    KJ_IF_MAYBE(decl, resolver.resolve(name)) {
-      if (decl->kind != Declaration::ANNOTATION) {
-        errorReporter.addErrorOn(name, kj::str(
-            "'", declNameString(name), "' is not an annotation."));
-      } else {
-        annotationBuilder.setId(decl->id);
-        KJ_IF_MAYBE(annotationSchema, resolver.resolveBootstrapSchema(decl->id)) {
-          auto node = annotationSchema->getProto().getAnnotation();
-          if (!toDynamic(node).get(targetsFlagName).as<bool>()) {
-            errorReporter.addErrorOn(name, kj::str(
-                "'", declNameString(name), "' cannot be applied to this kind of declaration."));
-          }
+    KJ_IF_MAYBE(decl, compileDeclExpression(name)) {
+      KJ_IF_MAYBE(kind, decl->getKind()) {
+        if (*kind != Declaration::ANNOTATION) {
+          errorReporter.addErrorOn(name, kj::str(
+              "'", expressionString(name), "' is not an annotation."));
+        } else {
+          annotationBuilder.setId(decl->getIdAndFillEnv(*this,
+              [&]() { return annotationBuilder.initTypeEnvironment(); }));
+          KJ_IF_MAYBE(annotationSchema,
+                      resolver.resolveBootstrapSchema(annotationBuilder.getId())) {
+            auto node = annotationSchema->getProto().getAnnotation();
+            if (!toDynamic(node).get(targetsFlagName).as<bool>()) {
+              errorReporter.addErrorOn(name, kj::str(
+                  "'", expressionString(name), "' cannot be applied to this kind of declaration."));
+            }
 
-          // Interpret the value.
-          auto value = annotation.getValue();
-          switch (value.which()) {
-            case Declaration::AnnotationApplication::Value::NONE:
-              // No value, i.e. void.
-              if (node.getType().isVoid()) {
-                annotationBuilder.getValue().setVoid();
-              } else {
-                errorReporter.addErrorOn(name, kj::str(
-                    "'", declNameString(name), "' requires a value."));
-                compileDefaultDefaultValue(node.getType(), annotationBuilder.getValue());
-              }
-              break;
+            // Interpret the value.
+            auto value = annotation.getValue();
+            switch (value.which()) {
+              case Declaration::AnnotationApplication::Value::NONE:
+                // No value, i.e. void.
+                if (node.getType().isVoid()) {
+                  annotationBuilder.getValue().setVoid();
+                } else {
+                  errorReporter.addErrorOn(name, kj::str(
+                      "'", expressionString(name), "' requires a value."));
+                  compileDefaultDefaultValue(node.getType(), annotationBuilder.getValue());
+                }
+                break;
 
-            case Declaration::AnnotationApplication::Value::EXPRESSION:
-              compileBootstrapValue(value.getExpression(), node.getType(),
-                                    annotationBuilder.getValue());
-              break;
+              case Declaration::AnnotationApplication::Value::EXPRESSION:
+                compileBootstrapValue(value.getExpression(), node.getType(),
+                                      annotationBuilder.getValue());
+                break;
+            }
           }
         }
+      } else if (*kind != Declaration::ANNOTATION) {
+        errorReporter.addErrorOn(name, kj::str(
+            "'", expressionString(name), "' is not an annotation."));
       }
     }
   }

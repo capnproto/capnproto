@@ -503,6 +503,33 @@ struct TestWholeFloatDefault {
   const bigConstant :Float32 = 4e30;
 }
 
+struct TestGenerics(Foo, Bar) {
+  foo @0 :Foo;
+  rev @1 :TestGenerics(Bar, Foo);
+
+  struct Inner {
+    foo @0 :Foo;
+    bar @1 :Bar;
+  }
+
+  struct Inner2(Baz) {
+    bar @0 :Bar;
+    baz @1 :Baz;
+  }
+
+  interface Interface(Qux) {
+    call @0 Inner2(Text) -> (qux :Qux, gen :TestGenerics(TestAllTypes, TestDefaults));
+  }
+}
+
+struct TestUseGenerics {
+  basic @0 :TestGenerics(TestAllTypes, TestDefaults);
+  inner @1 :TestGenerics(TestAllTypes, TestDefaults).Inner;
+  inner2 @2 :TestGenerics(TestAllTypes, TestDefaults).Inner2(Text);
+  unspecified @3 :TestGenerics;
+  unspecifiedInner @4 :TestGenerics.Inner2(Text);
+}
+
 struct TestEmptyStruct {}
 
 struct TestConstants {

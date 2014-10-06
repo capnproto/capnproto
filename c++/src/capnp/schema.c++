@@ -406,8 +406,8 @@ kj::Maybe<InterfaceSchema::Method> InterfaceSchema::findMethodByName(
     //   this means that a dynamically-loaded RawSchema cannot be correctly constructed until all
     //   superclasses have been loaded, which imposes an ordering requirement on SchemaLoader or
     //   requires updating subclasses whenever a new superclass is loaded.
-    for (auto extendId: getProto().getInterface().getExtends()) {
-      result = getDependency(extendId).asInterface().findMethodByName(name, counter);
+    for (auto extend: getProto().getInterface().getExtends()) {
+      result = getDependency(extend.getId()).asInterface().findMethodByName(name, counter);
       if (result != nullptr) {
         break;
       }
@@ -445,8 +445,8 @@ bool InterfaceSchema::extends(InterfaceSchema other, uint& counter) const {
   }
 
   // TODO(perf):  This may be somewhat slow.  See findMethodByName() for discussion.
-  for (auto extendId: getProto().getInterface().getExtends()) {
-    if (getDependency(extendId).asInterface().extends(other, counter)) {
+  for (auto extend: getProto().getInterface().getExtends()) {
+    if (getDependency(extend.getId()).asInterface().extends(other, counter)) {
       return true;
     }
   }
@@ -474,8 +474,9 @@ kj::Maybe<InterfaceSchema> InterfaceSchema::findSuperclass(uint64_t typeId, uint
   }
 
   // TODO(perf):  This may be somewhat slow.  See findMethodByName() for discussion.
-  for (auto extendId: getProto().getInterface().getExtends()) {
-    KJ_IF_MAYBE(result, getDependency(extendId).asInterface().findSuperclass(typeId, counter)) {
+  for (auto extend: getProto().getInterface().getExtends()) {
+    KJ_IF_MAYBE(result, getDependency(extend.getId()).asInterface()
+                            .findSuperclass(typeId, counter)) {
       return *result;
     }
   }

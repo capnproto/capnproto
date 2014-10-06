@@ -50,45 +50,9 @@ struct LocatedFloat {
   endByte @2 :UInt32;
 }
 
-struct DeclName {
-  # An expressing naming a thing declared elsewhere.  Examples:
-  # * `MyType`
-  # * `foo.bar.Baz`
-  # * `.absolute.path.to.SomeType`
-  # * `import "foo.capnp"`
-
-  base :union {
-    # The first element of the name.
-
-    absoluteName @0 :LocatedText;   # A symbol at the global scope.
-    relativeName @1 :LocatedText;   # A symbol that should be looked up lexically.
-    importName @2 :LocatedText;     # A file name to import.
-  }
-
-  memberPath @3 :List(LocatedText);
-  # List of `.member` suffixes.
-
-  startByte @4 :UInt32;
-  endByte @5 :UInt32;
-}
-
-struct TypeExpression {
-  # An expression evaluating to a type.
-
-  name @0 :DeclName;
-  # Name of the type declaration.
-
-  params @1 :List(TypeExpression);
-  # Type parameters, if any.  E.g. `List(Foo)` has one type parameter `Foo`.
-  #
-  # If a param failed to parse, its `name` may be null, and it should be ignored.
-
-  startByte @2 :UInt32;
-  endByte @3 :UInt32;
-}
-
-struct ValueExpression {
-  # An expression evaluating to a value.
+struct Expression {
+  # An expression. May evaluate to a type, a value, or a declaration (i.e. some named thing which
+  # is neither a type nor a value, like an annotation declaration).
 
   union {
     unknown @0 :Void;  # e.g. parse error; downstream should ignore
@@ -97,14 +61,48 @@ struct ValueExpression {
     float @3 :Float64;
     string @4 :Text;
     binary @10 :Data;
-    name @5 :DeclName;
-    list @6 :List(ValueExpression);
-    struct @7 :List(FieldAssignment);
+
+    relativeName @5 :LocatedText;
+    # Just an identifier.
+
+    absoluteName @15 :LocatedText;
+    # An identifier with leading '.'.
+
+    import @16 :LocatedText;
+    # An import directive.
+
+    list @6 :List(Expression);
+    # Bracketed list; members are never named.
+
+    tuple @7 :List(Param);
+    # Parenthesized list, possibly with named members.
+    #
+    # Note that a parenthesized list with one unnamed member is just a parenthesized expression,
+    # not a tuple, and so will never be represented as a tuple.
+
+    application :group {
+      # Application of a function to some parameters, e.g. "foo(bar, baz)".
+
+      function @11 :Expression;
+      params @12 :List(Param);
+    }
+
+    member :group {
+      # A named member of an aggregate, e.g. "foo.bar".
+
+      parent @13 :Expression;
+      name @14 :LocatedText;
+    }
+
+    # TODO(someday): Basic arithmetic?
   }
 
-  struct FieldAssignment {
-    fieldName @0 :LocatedText;
-    value @1 :ValueExpression;
+  struct Param {
+    union {
+      unnamed @0 :Void;          # Just a value.
+      named @1 :LocatedText;     # "name = value"
+    }
+    value @2 :Expression;
   }
 
   startByte @8 :UInt32;
@@ -122,15 +120,24 @@ struct Declaration {
     ordinal @3 :LocatedInteger;  # limited to 16 bits
   }
 
+  parameters @57 :List(TypeParameter);
+  # If this node is parameterized (generic), the list of parameters. Empty for non-generic types.
+
+  struct TypeParameter {
+    name @0 :Text;
+    startByte @1 :UInt32;
+    endByte @2 :UInt32;
+  }
+
   nestedDecls @4 :List(Declaration);
 
   annotations @5 :List(AnnotationApplication);
   struct AnnotationApplication {
-    name @0 :DeclName;
+    name @0 :Expression;
 
     value :union {
       none @1 :Void;   # None specified; implies void value.
-      expression @2 :ValueExpression;
+      expression @2 :Expression;
     }
   }
 
@@ -143,12 +150,12 @@ struct Declaration {
     file @9 :Void;
 
     using :group {
-      target @10 :DeclName;
+      target @10 :Expression;
     }
 
     const :group {
-      type @11 :TypeExpression;
-      value @12 :ValueExpression;
+      type @11 :Expression;
+      value @12 :Expression;
     }
 
     enum @13 :Void;
@@ -156,17 +163,17 @@ struct Declaration {
 
     struct @15 :Void;
     field :group {
-      type @16 :TypeExpression;
+      type @16 :Expression;
       defaultValue :union {
         none @17 :Void;
-        value @18 :ValueExpression;
+        value @18 :Expression;
       }
     }
     union @19 :Void;
     group @20 :Void;
 
     interface :group {
-      extends @21 :List(DeclName);
+      extends @21 :List(Expression);
     }
     method :group {
       params @22 :ParamList;
@@ -177,7 +184,7 @@ struct Declaration {
     }
 
     annotation :group {
-      type @25 :TypeExpression;
+      type @25 :Expression;
 
       targetsFile @26 :Bool;
       targetsConst @27 :Bool;
@@ -216,10 +223,12 @@ struct Declaration {
     builtinFloat64 @51 :Void;
     builtinText @52 :Void;
     builtinData @53 :Void;
-    builtinList @54 :Void;
+    builtinList @54 :Void $builtinParams([(name = "Element")]);
     builtinObject @55 :Void;  # only for "renamed to AnyPointer" error message
     builtinAnyPointer @56 :Void;
   }
+
+  annotation builtinParams @0x94099c3f9eb32d6b (field) :List(TypeParameter);
 
   struct ParamList {
     # A list of method parameters or method returns.
@@ -227,7 +236,7 @@ struct Declaration {
     union {
       namedList @0 :List(Param);
 
-      type @1 :DeclName;
+      type @1 :Expression;
       # Specified some other struct type instead of a named list.
     }
 
@@ -236,11 +245,11 @@ struct Declaration {
   }
   struct Param {
     name @0 :LocatedText;  # If null, param failed to parse.
-    type @1 :TypeExpression;
+    type @1 :Expression;
     annotations @2 :List(AnnotationApplication);
     defaultValue :union {
       none @3 :Void;
-      value @4 :ValueExpression;
+      value @4 :Expression;
     }
 
     startByte @5 :UInt32;

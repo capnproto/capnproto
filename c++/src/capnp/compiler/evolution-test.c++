@@ -73,64 +73,64 @@ static Declaration::Builder addNested(Declaration::Builder parent) {
 
 struct TypeOption {
   kj::StringPtr name;
-  kj::ConstFunction<void(ValueExpression::Builder)> makeValue;
+  kj::ConstFunction<void(Expression::Builder)> makeValue;
 };
 
 static const TypeOption TYPE_OPTIONS[] = {
   { "Int32",
-    [](ValueExpression::Builder builder) {
+    [](Expression::Builder builder) {
       builder.setPositiveInt(rand() % (1 << 24));
     }},
   { "Float64",
-    [](ValueExpression::Builder builder) {
+    [](Expression::Builder builder) {
       builder.setPositiveInt(rand());
     }},
   { "Int8",
-    [](ValueExpression::Builder builder) {
+    [](Expression::Builder builder) {
       builder.setPositiveInt(rand() % 128);
     }},
   { "UInt16",
-    [](ValueExpression::Builder builder) {
+    [](Expression::Builder builder) {
       builder.setPositiveInt(rand() % (1 << 16));
     }},
   { "Bool",
-    [](ValueExpression::Builder builder) {
-      builder.initName().getBase().initRelativeName().setValue("true");
+    [](Expression::Builder builder) {
+      builder.initRelativeName().setValue("true");
     }},
   { "Text",
-    [](ValueExpression::Builder builder) {
+    [](Expression::Builder builder) {
       builder.setString(chooseFrom(RFC3092));
     }},
   { "StructType",
-    [](ValueExpression::Builder builder) {
-      auto assignment = builder.initStruct(1)[0];
-      assignment.initFieldName().setValue("i");
+    [](Expression::Builder builder) {
+      auto assignment = builder.initTuple(1)[0];
+      assignment.initNamed().setValue("i");
       assignment.initValue().setPositiveInt(rand() % (1 << 24));
     }},
   { "EnumType",
-    [](ValueExpression::Builder builder) {
-      builder.initName().getBase().initRelativeName().setValue(chooseFrom(RFC3092));
+    [](Expression::Builder builder) {
+      builder.initRelativeName().setValue(chooseFrom(RFC3092));
     }},
 };
 
-void setDeclName(DeclName::Builder decl, kj::StringPtr name) {
-  decl.getBase().initRelativeName().setValue(name);
+void setDeclName(Expression::Builder decl, kj::StringPtr name) {
+  decl.initRelativeName().setValue(name);
 }
 
-static kj::ConstFunction<void(ValueExpression::Builder)> randomizeType(
-    TypeExpression::Builder type) {
+static kj::ConstFunction<void(Expression::Builder)> randomizeType(Expression::Builder type) {
   auto option = &chooseFrom(TYPE_OPTIONS);
 
   if (rand() % 4 == 0) {
-    setDeclName(type.initName(), "List");
-    setDeclName(type.initParams(1)[0].initName(), option->name);
-    return [option](ValueExpression::Builder builder) {
+    auto app = type.initApplication();
+    setDeclName(app.initFunction(), "List");
+    setDeclName(app.initParams(1)[0].initValue(), option->name);
+    return [option](Expression::Builder builder) {
       for (auto element: builder.initList(rand() % 4 + 1)) {
         option->makeValue(element);
       }
     };
   } else {
-    setDeclName(type.initName(), option->name);
+    setDeclName(type, option->name);
     return option->makeValue.reference();
   }
 }
@@ -324,13 +324,14 @@ static ChangeInfo fieldUpgradeList(Declaration::Builder decl, uint& nextOrdinal,
     return { NO_CHANGE, "Upgrade primitive list to struct list, but it had a default value." };
   }
 
-  auto typeParams = field.getType().getParams();
-  if (typeParams.size() != 1) {
+  auto type = field.getType();
+  if (!type.isApplication()) {
     return { NO_CHANGE, "Upgrade primitive list to struct list, but it wasn't a list." };
   }
+  auto typeParams = type.getApplication().getParams();
 
-  auto elementType = typeParams[0];
-  auto relativeName = elementType.getName().getBase().getRelativeName();
+  auto elementType = typeParams[0].getValue();
+  auto relativeName = elementType.getRelativeName();
   auto nameText = relativeName.asReader().getValue();
   if (nameText == "StructType" || nameText.endsWith("Struct")) {
     return { NO_CHANGE, "Upgrade primitive list to struct list, but it was already a struct list."};
@@ -380,15 +381,15 @@ static ChangeInfo fieldChangeType(Declaration::Builder decl, uint& nextOrdinal,
   if (field.getDefaultValue().isNone()) {
     // Change the type.
     auto type = field.getType();
-    while (type.getParams().size() > 0) {
+    while (type.isApplication()) {
       // Either change the list parameter, or revert to a non-list.
       if (rand() % 2) {
-        type = type.getParams()[0];
+        type = type.getApplication().getParams()[0].getValue();
       } else {
-        type.disownParams();
+        type.initRelativeName();
       }
     }
-    auto typeName = type.getName().getBase().getRelativeName();
+    auto typeName = type.getRelativeName();
     if (typeName.asReader().getValue().startsWith("Text")) {
       typeName.setValue("Int32");
     } else {
@@ -399,12 +400,12 @@ static ChangeInfo fieldChangeType(Declaration::Builder decl, uint& nextOrdinal,
     // Change the default value.
     auto dval = field.getDefaultValue().getValue();
     switch (dval.which()) {
-      case ValueExpression::UNKNOWN: KJ_FAIL_ASSERT("unknown value expression?");
-      case ValueExpression::POSITIVE_INT: dval.setPositiveInt(dval.getPositiveInt() ^ 1); break;
-      case ValueExpression::NEGATIVE_INT: dval.setNegativeInt(dval.getNegativeInt() ^ 1); break;
-      case ValueExpression::FLOAT: dval.setFloat(-dval.getFloat()); break;
-      case ValueExpression::NAME: {
-        auto name = dval.getName().getBase().getRelativeName();
+      case Expression::UNKNOWN: KJ_FAIL_ASSERT("unknown value expression?");
+      case Expression::POSITIVE_INT: dval.setPositiveInt(dval.getPositiveInt() ^ 1); break;
+      case Expression::NEGATIVE_INT: dval.setNegativeInt(dval.getNegativeInt() ^ 1); break;
+      case Expression::FLOAT: dval.setFloat(-dval.getFloat()); break;
+      case Expression::RELATIVE_NAME: {
+        auto name = dval.getRelativeName();
         auto nameText = name.asReader().getValue();
         if (nameText == "true") {
           name.setValue("false");
@@ -417,10 +418,17 @@ static ChangeInfo fieldChangeType(Declaration::Builder decl, uint& nextOrdinal,
         }
         break;
       }
-      case ValueExpression::STRING:
-      case ValueExpression::LIST:
-      case ValueExpression::STRUCT:
+      case Expression::STRING:
+      case Expression::BINARY:
+      case Expression::LIST:
+      case Expression::TUPLE:
         return { NO_CHANGE, "Change the default value of a field, but it's a pointer field." };
+
+      case Expression::ABSOLUTE_NAME:
+      case Expression::IMPORT:
+      case Expression::APPLICATION:
+      case Expression::MEMBER:
+        KJ_FAIL_ASSERT("Unexpected expression type.");
     }
     return { INCOMPATIBLE, "Change the default value of a pritimive field." };
   }
@@ -764,7 +772,7 @@ void doTest() {
       fieldDecl.initName().setValue("i");
       fieldDecl.getId().initOrdinal().setValue(0);
       auto field = fieldDecl.initField();
-      setDeclName(field.initType().initName(), "UInt32");
+      setDeclName(field.initType(), "UInt32");
     }
     {
       auto decl = decls[2];
@@ -793,7 +801,7 @@ void doTest() {
       fieldDecl.initName().setValue("f0");
       fieldDecl.getId().initOrdinal().setValue(0);
       auto field = fieldDecl.initField();
-      setDeclName(field.initType().initName(), option.name);
+      setDeclName(field.initType(), option.name);
 
       uint ordinal = 1;
       for (auto j: kj::range(0, rand() % 4)) {

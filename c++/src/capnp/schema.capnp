@@ -47,6 +47,15 @@ struct Node {
   # zero if the node has no parent, which is normally only the case with files, but should be
   # allowed for any kind of node (in order to make runtime type generation easier).
 
+  parameters @32 :List(Parameter);
+  # If this node is parameterized (generic), the list of parameters. Empty for non-generic types.
+
+  struct Parameter {
+    # Information about one of the node's parameters.
+
+    name @0 :Text;
+  }
+
   nestedNodes @4 :List(NestedNode);
   # List of nodes nested within this node, along with the names under which they were declared.
 
@@ -130,7 +139,7 @@ struct Node {
       methods @15 :List(Method);
       # Methods ordered by ordinal.
 
-      extends @31 :List(Id);
+      extends @31 :List(Extend);
       # Superclasses of this interface.
     }
 
@@ -155,6 +164,11 @@ struct Node {
       targetsParam @29 :Bool;
       targetsAnnotation @30 :Bool;
     }
+  }
+
+  struct Extend {
+    id @0 :Id;
+    environment @1 :TypeEnvironment;
   }
 }
 
@@ -242,9 +256,18 @@ struct Method {
   # declaration (rather than a single struct parameter type) then a corresponding struct type is
   # auto-generated.  Such an auto-generated type will not be listed in the interface's
   # `nestedNodes` and its `scopeId` will be zero -- it is completely detached from the namespace.
+  # (Awkwardly, it does of course inherit generic parameters from the method's scope, which makes
+  # this a situation where you can't just climb the scope chain to find where a particular
+  # generic parameter was introduced. Making the `scopeId` zero was a mistake.)
+
+  paramEnvironment @5 :TypeEnvironment;
+  # Parameterization of param struct type.
 
   resultStructType @3 :Id;
   # ID of the return struct type; similar to `paramStructType`.
+
+  resultEnvironment @6 :TypeEnvironment;
+  # Parameterization of result struct type.
 
   annotations @4 :List(Annotation);
 }
@@ -276,15 +299,60 @@ struct Type {
 
     enum :group {
       typeId @15 :Id;
+      typeEnvironment @21 :TypeEnvironment;
     }
     struct :group {
       typeId @16 :Id;
+      typeEnvironment @22 :TypeEnvironment;
     }
     interface :group {
       typeId @17 :Id;
+      typeEnvironment @23 :TypeEnvironment;
     }
 
-    anyPointer @18 :Void;
+    anyPointer :union {
+      unconstrained @18 :Void;
+      # A regular AnyPointer.
+
+      parameter :group {
+        # This is actually a reference to a type parameter defined within this scope.
+
+        nodeId @19 :Id;
+        # Node ID of the generic type whose parameter we're referencing. This must be a parent
+        # of the current scope.
+
+        parameterIndex @20 :UInt16;
+        # Index of the parameter within the generic type's parameter list.
+      }
+    }
+  }
+}
+
+struct TypeEnvironment {
+  # Specifies type parameters applying to a target type declaration, i.e. for generic types.
+
+  scopes @0 :List(Scope);
+  # For each of the target type and each of its parent scopes, a parameterization may be included
+  # in this list. If no parameterization is included for a particular relevant scope, then either
+  # that scope has no parameters or all parameters should be considered to be `AnyPointer`.
+  #
+  # TODO(now): improve naming
+
+  struct Scope {
+    scopeId @0 :Id;
+    # ID of the scope to which these params apply.
+
+    bindings @1 :List(Binding);
+    # List of parameter bindings.
+  }
+
+  struct Binding {
+    union {
+      unbound @0 :Void;
+      type @1 :Type;
+
+      # TODO(someday): Allow non-type parameters? Unsure if useful.
+    }
   }
 }
 
@@ -328,6 +396,11 @@ struct Annotation {
 
   id @0 :Id;
   # ID of the annotation node.
+
+  typeEnvironment @2 :TypeEnvironment;
+  # Type environment of the annotation.
+  #
+  # Note that the annotation itself is not allowed to be parameterized, but its scope might be.
 
   value @1 :Value;
 }

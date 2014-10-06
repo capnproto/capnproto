@@ -1013,7 +1013,7 @@ public:
     kj::BufferedOutputStreamWrapper output(rawOutput);
 
     while (parserInput.getPosition() != tokens.end()) {
-      KJ_IF_MAYBE(expression, parser.getParsers().parenthesizedValueExpression(parserInput)) {
+      KJ_IF_MAYBE(expression, parser.getParsers().expression(parserInput)) {
         MallocMessageBuilder item(
             segmentSize == 0 ? SUGGESTED_FIRST_SEGMENT_WORDS : segmentSize,
             segmentSize == 0 ? SUGGESTED_ALLOCATION_STRATEGY : AllocationStrategy::FIXED_SIZE);
@@ -1243,25 +1243,8 @@ private:
       return loader.get(id);
     }
 
-    kj::Maybe<DynamicValue::Reader> resolveConstant(DeclName::Reader name) {
-      auto base = name.getBase();
-      switch (base.which()) {
-        case DeclName::Base::RELATIVE_NAME: {
-          auto value = base.getRelativeName();
-          errorReporter.addErrorOn(value, kj::str("Not defined: ", value.getValue()));
-          break;
-        }
-        case DeclName::Base::ABSOLUTE_NAME: {
-          auto value = base.getAbsoluteName();
-          errorReporter.addErrorOn(value, kj::str("Not defined: ", value.getValue()));
-          break;
-        }
-        case DeclName::Base::IMPORT_NAME: {
-          auto value = base.getImportName();
-          errorReporter.addErrorOn(value, "Imports not allowed in encode input.");
-          break;
-        }
-      }
+    kj::Maybe<DynamicValue::Reader> resolveConstant(Expression::Reader name) {
+      errorReporter.addErrorOn(name, kj::str("External constants not allowed in encode input."));
       return nullptr;
     }
 
