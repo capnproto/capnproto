@@ -28,7 +28,13 @@
 #include <unistd.h>
 #include <errno.h>
 #include <limits.h>
+
+#if _WIN32
+#include <windows.h>
+#include <io.h>
+#else
 #include <sys/uio.h>
+#endif
 
 namespace kj {
 
@@ -60,12 +66,33 @@ void TopLevelProcessContext::exit() {
 static void writeLineToFd(int fd, StringPtr message) {
   // Write the given message to the given file descriptor with a trailing newline iff the message
   // is non-empty and doesn't already have a trailing newline.  We use writev() to do this in a
-  // single system call without any copying.
+  // single system call without any copying (OS permitting).
 
   if (message.size() == 0) {
     return;
   }
 
+#if _WIN32
+  // Sadly, there doesn't seem to be an API on windows that atomically writes data from multiple buffers.
+  // Also, windows APIs always expect unicode, not utf8.  Therefore, we must convert the data every time.
+
+  HANDLE handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+
+  size_t bufferCharCount = message.size() + 1;
+  wchar_t* buffer = (wchar_t*)_alloca(sizeof(wchar_t) * bufferCharCount);
+
+  size_t finalSize = MultiByteToWideChar(CP_UTF8, 0, message.begin(), message.size(), buffer, bufferCharCount);
+
+  // We should always have at least one character of extra space for the possible '\n'.
+  KJ_ASSERT(finalSize < bufferCharCount);
+
+  if(buffer[finalSize - 1] != '\n') {
+    buffer[finalSize++] = '\n';
+  }
+
+  DWORD writtenSize;
+  WriteFile(handle, buffer, finalSize * sizeof(wchar_t), &writtenSize, nullptr);
+#else
   // Unfortunately the writev interface requires non-const pointers even though it won't modify
   // the data.
   struct iovec vec[2];
@@ -109,6 +136,7 @@ static void writeLineToFd(int fd, StringPtr message) {
       }
     }
   }
+#endif
 }
 
 void TopLevelProcessContext::warning(StringPtr message) {
