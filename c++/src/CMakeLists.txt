@@ -75,11 +75,10 @@ add_executable(capnp-tool
 )
 target_link_libraries(capnp-tool capnpc capnp kj)
 
-add_executable(capnp-c++
+add_executable(capnpc-c++
   capnp/compiler/capnpc-c++.c++
 )
-target_link_libraries(capnp-c++ capnp kj)
-get_property(capnp-c++_location TARGET capnp-c++ PROPERTY LOCATION)
+target_link_libraries(capnpc-c++ capnp kj)
 
 set(test_capnp_files
   capnp/test.capnp
@@ -106,11 +105,11 @@ add_custom_command(
     ${test_capnp_cpp_files}
     ${test_capnp_header_files}
   COMMAND capnp-tool compile
-    -o ${capnp-c++_location}
+    -o $<TARGET_FILE:capnpc-c++>
     --src-prefix=${CMAKE_CURRENT_SOURCE_DIR}
     -I${CMAKE_CURRENT_SOURCE_DIR}
     ${test_capnp_capnp_files}
-  DEPENDS capnp-tool capnp-c++ ${test_capnp_files})
+  DEPENDS capnp-tool capnpc-c++ ${test_capnp_files})
 add_library(capnp_test_lib ${test_capnp_cpp_files})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
