@@ -143,6 +143,14 @@ typedef unsigned char byte;
 #define KJ_UNUSED_MEMBER
 #endif
 
+#if __clang__
+#define KJ_DEPRECATED(reason) \
+    __attribute__((deprecated(reason)))
+#else
+#define KJ_DEPRECATED(reason) \
+    __attribute__((deprecated))
+#endif
+
 namespace _ {  // private
 
 void inlineRequireFailure(

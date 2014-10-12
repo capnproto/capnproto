@@ -156,22 +156,29 @@ TEST(SchemaParser, Constants) {
       "struct Foo {\n"
       "  bar @0 :Int16;\n"
       "  baz @1 :Text;\n"
+      "}\n"
+      "const genericConst :TestGeneric(Text) = (value = \"text\");\n"
+      "struct TestGeneric(T) {\n"
+      "  value @0 :T;\n"
       "}\n");
 
-  ParsedSchema barSchema = parser.parseFile(SchemaFile::newDiskFile(
+  ParsedSchema fileSchema = parser.parseFile(SchemaFile::newDiskFile(
       "const.capnp", "const.capnp", nullptr, reader));
 
-  EXPECT_EQ(1234, barSchema.getNested("uint32Const").asConst().as<uint32_t>());
+  EXPECT_EQ(1234, fileSchema.getNested("uint32Const").asConst().as<uint32_t>());
 
-  auto list = barSchema.getNested("listConst").asConst().as<DynamicList>();
+  auto list = fileSchema.getNested("listConst").asConst().as<DynamicList>();
   ASSERT_EQ(3u, list.size());
   EXPECT_EQ(1.25, list[0].as<float>());
   EXPECT_EQ(2.5, list[1].as<float>());
   EXPECT_EQ(3e4f, list[2].as<float>());
 
-  auto structConst = barSchema.getNested("structConst").asConst().as<DynamicStruct>();
+  auto structConst = fileSchema.getNested("structConst").asConst().as<DynamicStruct>();
   EXPECT_EQ(123, structConst.get("bar").as<int16_t>());
   EXPECT_EQ("qux", structConst.get("baz").as<Text>());
+
+  auto genericConst = fileSchema.getNested("genericConst").asConst().as<DynamicStruct>();
+  EXPECT_EQ("text", genericConst.get("value").as<Text>());
 }
 
 }  // namespace

@@ -265,6 +265,10 @@ struct TypeEnvironment::Scope {
   class Reader;
   class Builder;
   class Pipeline;
+  enum Which: uint16_t {
+    BIND,
+    INHERIT,
+  };
 };
 
 struct TypeEnvironment::Binding {
@@ -468,7 +472,7 @@ CAPNP_DECLARE_STRUCT(
     0, 1, POINTER);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::TypeEnvironment::Scope, 8343d91197413c18,
-    1, 1, INLINE_COMPOSITE);
+    2, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::TypeEnvironment::Binding, f5b4269b6dd5cd38,
     1, 1, INLINE_COMPOSITE);
@@ -2770,10 +2774,15 @@ public:
     return _reader.totalSize().asPublic();
   }
 
+  inline Which which() const;
   inline  ::uint64_t getScopeId() const;
 
-  inline bool hasBindings() const;
-  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader getBindings() const;
+  inline bool isBind() const;
+  inline bool hasBind() const;
+  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader getBind() const;
+
+  inline bool isInherit() const;
+  inline  ::capnp::Void getInherit() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -2805,15 +2814,21 @@ public:
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
 
+  inline Which which();
   inline  ::uint64_t getScopeId();
   inline void setScopeId( ::uint64_t value);
 
-  inline bool hasBindings();
-  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder getBindings();
-  inline void setBindings( ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader value);
-  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder initBindings(unsigned int size);
-  inline void adoptBindings(::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>> disownBindings();
+  inline bool isBind();
+  inline bool hasBind();
+  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder getBind();
+  inline void setBind( ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader value);
+  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder initBind(unsigned int size);
+  inline void adoptBind(::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>> disownBind();
+
+  inline bool isInherit();
+  inline  ::capnp::Void getInherit();
+  inline void setInherit( ::capnp::Void value = ::capnp::VOID);
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -5818,6 +5833,13 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
+inline TypeEnvironment::Scope::Which TypeEnvironment::Scope::Reader::which() const {
+  return _reader.getDataField<Which>(4 * ::capnp::ELEMENTS);
+}
+inline TypeEnvironment::Scope::Which TypeEnvironment::Scope::Builder::which() {
+  return _builder.getDataField<Which>(4 * ::capnp::ELEMENTS);
+}
+
 inline  ::uint64_t TypeEnvironment::Scope::Reader::getScopeId() const {
   return _reader.getDataField< ::uint64_t>(
       0 * ::capnp::ELEMENTS);
@@ -5832,36 +5854,82 @@ inline void TypeEnvironment::Scope::Builder::setScopeId( ::uint64_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool TypeEnvironment::Scope::Reader::hasBindings() const {
+inline bool TypeEnvironment::Scope::Reader::isBind() const {
+  return which() == TypeEnvironment::Scope::BIND;
+}
+inline bool TypeEnvironment::Scope::Builder::isBind() {
+  return which() == TypeEnvironment::Scope::BIND;
+}
+inline bool TypeEnvironment::Scope::Reader::hasBind() const {
+  if (which() != TypeEnvironment::Scope::BIND) return false;
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline bool TypeEnvironment::Scope::Builder::hasBindings() {
+inline bool TypeEnvironment::Scope::Builder::hasBind() {
+  if (which() != TypeEnvironment::Scope::BIND) return false;
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader TypeEnvironment::Scope::Reader::getBindings() const {
+inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader TypeEnvironment::Scope::Reader::getBind() const {
+  KJ_IREQUIRE(which() == TypeEnvironment::Scope::BIND,
+              "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder TypeEnvironment::Scope::Builder::getBindings() {
+inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder TypeEnvironment::Scope::Builder::getBind() {
+  KJ_IREQUIRE(which() == TypeEnvironment::Scope::BIND,
+              "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline void TypeEnvironment::Scope::Builder::setBindings( ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader value) {
+inline void TypeEnvironment::Scope::Builder::setBind( ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader value) {
+  _builder.setDataField<TypeEnvironment::Scope::Which>(
+      4 * ::capnp::ELEMENTS, TypeEnvironment::Scope::BIND);
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::set(
       _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder TypeEnvironment::Scope::Builder::initBindings(unsigned int size) {
+inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder TypeEnvironment::Scope::Builder::initBind(unsigned int size) {
+  _builder.setDataField<TypeEnvironment::Scope::Which>(
+      4 * ::capnp::ELEMENTS, TypeEnvironment::Scope::BIND);
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::init(
       _builder.getPointerField(0 * ::capnp::POINTERS), size);
 }
-inline void TypeEnvironment::Scope::Builder::adoptBindings(
+inline void TypeEnvironment::Scope::Builder::adoptBind(
     ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>&& value) {
+  _builder.setDataField<TypeEnvironment::Scope::Which>(
+      4 * ::capnp::ELEMENTS, TypeEnvironment::Scope::BIND);
   ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::adopt(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>> TypeEnvironment::Scope::Builder::disownBindings() {
+inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>> TypeEnvironment::Scope::Builder::disownBind() {
+  KJ_IREQUIRE(which() == TypeEnvironment::Scope::BIND,
+              "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+
+inline bool TypeEnvironment::Scope::Reader::isInherit() const {
+  return which() == TypeEnvironment::Scope::INHERIT;
+}
+inline bool TypeEnvironment::Scope::Builder::isInherit() {
+  return which() == TypeEnvironment::Scope::INHERIT;
+}
+inline  ::capnp::Void TypeEnvironment::Scope::Reader::getInherit() const {
+  KJ_IREQUIRE(which() == TypeEnvironment::Scope::INHERIT,
+              "Must check which() before get()ing a union member.");
+  return _reader.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::capnp::Void TypeEnvironment::Scope::Builder::getInherit() {
+  KJ_IREQUIRE(which() == TypeEnvironment::Scope::INHERIT,
+              "Must check which() before get()ing a union member.");
+  return _builder.getDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void TypeEnvironment::Scope::Builder::setInherit( ::capnp::Void value) {
+  _builder.setDataField<TypeEnvironment::Scope::Which>(
+      4 * ::capnp::ELEMENTS, TypeEnvironment::Scope::INHERIT);
+  _builder.setDataField< ::capnp::Void>(
+      0 * ::capnp::ELEMENTS, value);
 }
 
 inline TypeEnvironment::Binding::Which TypeEnvironment::Binding::Reader::which() const {

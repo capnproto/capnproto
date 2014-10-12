@@ -515,19 +515,42 @@ struct TestGenerics(Foo, Bar) {
   struct Inner2(Baz) {
     bar @0 :Bar;
     baz @1 :Baz;
+    innerBound @2 :Inner;
+    innerUnbound @3 :TestGenerics.Inner;
   }
 
   interface Interface(Qux) {
     call @0 Inner2(Text) -> (qux :Qux, gen :TestGenerics(TestAllTypes, TestDefaults));
   }
+
+  annotation ann(struct) :Foo;
 }
 
-struct TestUseGenerics {
-  basic @0 :TestGenerics(TestAllTypes, TestDefaults);
-  inner @1 :TestGenerics(TestAllTypes, TestDefaults).Inner;
-  inner2 @2 :TestGenerics(TestAllTypes, TestDefaults).Inner2(Text);
+struct TestGenericsWrapper(Foo, Bar) {
+  value @0 :TestGenerics(Foo, Bar);
+}
+
+struct TestGenericsWrapper2 {
+  value @0 :TestGenericsWrapper(Text, TestAllTypes);
+}
+
+struct TestUseGenerics $TestGenerics(Text, Data).ann("foo") {
+  basic @0 :TestGenerics(TestAllTypes, TestAnyPointer);
+  inner @1 :TestGenerics(TestAllTypes, TestAnyPointer).Inner;
+  inner2 @2 :TestGenerics(TestAllTypes, TestAnyPointer).Inner2(Text);
   unspecified @3 :TestGenerics;
   unspecifiedInner @4 :TestGenerics.Inner2(Text);
+  wrapper @8 :TestGenericsWrapper(TestAllTypes, TestAnyPointer);
+
+  default @5 :TestGenerics(TestAllTypes, Text) =
+      (foo = (int16Field = 123), rev = (foo = "text", rev = (foo = (int16Field = 321))));
+  defaultInner @6 :TestGenerics(TestAllTypes, Text).Inner =
+      (foo = (int16Field = 123), bar = "text");
+  defaultUser @7 :TestUseGenerics = (basic = (foo = (int16Field = 123)));
+  defaultWrapper @9 :TestGenericsWrapper(Text, TestAllTypes) =
+      (value = (foo = "text", rev = (foo = (int16Field = 321))));
+  defaultWrapper2 @10 :TestGenericsWrapper2 =
+      (value = (value = (foo = "text", rev = (foo = (int16Field = 321)))));
 }
 
 struct TestEmptyStruct {}
@@ -622,6 +645,9 @@ const derivedConstant :TestAllTypes = (
     structField = TestConstants.structConst,
     int16List = TestConstants.int16ListConst,
     structList = TestConstants.structListConst);
+
+const genericConstant :TestGenerics(TestAllTypes, Text) =
+    (foo = (int16Field = 123), rev = (foo = "text", rev = (foo = (int16Field = 321))));
 
 interface TestInterface {
   foo @0 (i :UInt32, j :Bool) -> (x :Text);

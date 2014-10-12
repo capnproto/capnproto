@@ -282,8 +282,8 @@ kj::StringTree KJ_STRINGIFY(const DynamicList::Builder& value) { return stringif
 
 namespace _ {  // private
 
-kj::StringTree structString(StructReader reader, const RawSchema& schema) {
-  return stringify(DynamicStruct::Reader(StructSchema(&schema), reader));
+kj::StringTree structString(StructReader reader, const RawBrandedSchema& schema) {
+  return stringify(DynamicStruct::Reader(Schema(&schema).asStruct(), reader));
 }
 
 }  // namespace _ (private)

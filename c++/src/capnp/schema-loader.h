@@ -65,14 +65,29 @@ public:
   ~SchemaLoader() noexcept(false);
   KJ_DISALLOW_COPY(SchemaLoader);
 
-  Schema get(uint64_t id) const;
+  typedef schema::TypeEnvironment::Reader GenericBindings;
+
+  Schema get(uint64_t id, GenericBindings bindings = GenericBindings(),
+             Schema scope = Schema()) const;
   // Gets the schema for the given ID, throwing an exception if it isn't present.
   //
   // The returned schema may be invalidated if load() is called with a new schema for the same ID.
   // In general, you should not call load() while a schema from this loader is in-use.
+  //
+  // `bindings` and `scope` are used to determine generic parameter bindings where relevant.
+  // `bindings` gives parameter bindings for the target type's generic parameters that were
+  // specified at the reference site. `scope` specifies the scope in which the type ID appeared --
+  // if the target type and the scope share some common super-scope which is parameterized,
+  // and bindings for those parameters weren't specified in `bindings`, they will be carried over
+  // from the scope.
 
-  kj::Maybe<Schema> tryGet(uint64_t id) const;
+  kj::Maybe<Schema> tryGet(uint64_t id, GenericBindings bindings = GenericBindings(),
+                           Schema scope = Schema()) const;
   // Like get() but doesn't throw.
+
+  Type getType(schema::Type::Reader type, Schema scope = Schema()) const;
+  // Convenience method which interprets a schema::Type to produce a Type object. Implemented in
+  // terms of get().
 
   Schema load(const schema::Node::Reader& reader);
   // Loads the given schema node.  Validates the node and throws an exception if invalid.  This
@@ -134,6 +149,7 @@ private:
   class CompatibilityChecker;
   class Impl;
   class InitializerImpl;
+  class BrandedInitializerImpl;
   kj::MutexGuarded<kj::Own<Impl>> impl;
 
   void loadNative(const _::RawSchema* nativeSchema);

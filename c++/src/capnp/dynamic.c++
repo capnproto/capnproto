@@ -175,11 +175,16 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
   KJ_REQUIRE(field.getContainingStruct() == schema, "`field` is not a field of this struct.");
   verifySetInUnion(field);
 
+  auto type = field.getType();
   auto proto = field.getProto();
   switch (proto.which()) {
     case schema::Field::SLOT: {
       auto slot = proto.getSlot();
-      auto type = slot.getType();
+
+      // Note that the default value might be "anyPointer" even if the type is some poniter type
+      // *other than* anyPointer. This happens with generics -- the field is actually a generic
+      // parameter that has been bound, but the default value was of course compiled without any
+      // binding available.
       auto dval = slot.getDefaultValue();
 
       switch (type.which()) {
@@ -207,47 +212,42 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
 #undef HANDLE_TYPE
 
         case schema::Type::ENUM: {
-          uint16_t typedDval;
-          typedDval = dval.getEnum();
-          return DynamicEnum(
-              field.getContainingStruct().getDependency(type.getEnum().getTypeId()).asEnum(),
+          uint16_t typedDval = dval.getEnum();
+          return DynamicEnum(type.asEnum(),
               reader.getDataField<uint16_t>(slot.getOffset() * ELEMENTS, typedDval));
         }
 
         case schema::Type::TEXT: {
-          Text::Reader typedDval = dval.getText();
+          Text::Reader typedDval = dval.isAnyPointer() ? Text::Reader() : dval.getText();
           return reader.getPointerField(slot.getOffset() * POINTERS)
                        .getBlob<Text>(typedDval.begin(), typedDval.size() * BYTES);
         }
 
         case schema::Type::DATA: {
-          Data::Reader typedDval = dval.getData();
+          Data::Reader typedDval = dval.isAnyPointer() ? Data::Reader() : dval.getData();
           return reader.getPointerField(slot.getOffset() * POINTERS)
                        .getBlob<Data>(typedDval.begin(), typedDval.size() * BYTES);
         }
 
         case schema::Type::LIST: {
-          auto elementType = type.getList().getElementType();
-          return DynamicList::Reader(
-              ListSchema::of(elementType, field.getContainingStruct()),
+          auto elementType = type.asList().getElementType();
+          return DynamicList::Reader(type.asList(),
               reader.getPointerField(slot.getOffset() * POINTERS)
-                    .getList(elementSizeFor(elementType.which()),
-                             dval.getList().getAs<_::UncheckedMessage>()));
+                    .getList(elementSizeFor(elementType.which()), dval.isAnyPointer() ? nullptr :
+                        dval.getList().getAs<_::UncheckedMessage>()));
         }
 
         case schema::Type::STRUCT:
-          return DynamicStruct::Reader(
-              field.getContainingStruct().getDependency(type.getStruct().getTypeId()).asStruct(),
+          return DynamicStruct::Reader(type.asStruct(),
               reader.getPointerField(slot.getOffset() * POINTERS)
-                    .getStruct(dval.getStruct().getAs<_::UncheckedMessage>()));
+                    .getStruct(dval.isAnyPointer() ? nullptr :
+                        dval.getStruct().getAs<_::UncheckedMessage>()));
 
         case schema::Type::ANY_POINTER:
           return AnyPointer::Reader(reader.getPointerField(slot.getOffset() * POINTERS));
 
         case schema::Type::INTERFACE:
-          return DynamicCapability::Client(
-              field.getContainingStruct().getDependency(
-                  type.getInterface().getTypeId()).asInterface(),
+          return DynamicCapability::Client(type.asInterface(),
               reader.getPointerField(slot.getOffset() * POINTERS).getCapability());
       }
 
@@ -255,8 +255,7 @@ DynamicValue::Reader DynamicStruct::Reader::get(StructSchema::Field field) const
     }
 
     case schema::Field::GROUP:
-      return DynamicStruct::Reader(
-          schema.getDependency(proto.getGroup().getTypeId()).asStruct(), reader);
+      return DynamicStruct::Reader(type.asStruct(), reader);
   }
 
   KJ_UNREACHABLE;
@@ -267,10 +266,15 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
   verifySetInUnion(field);
 
   auto proto = field.getProto();
+  auto type = field.getType();
   switch (proto.which()) {
     case schema::Field::SLOT: {
       auto slot = proto.getSlot();
-      auto type = slot.getType();
+
+      // Note that the default value might be "anyPointer" even if the type is some poniter type
+      // *other than* anyPointer. This happens with generics -- the field is actually a generic
+      // parameter that has been bound, but the default value was of course compiled without any
+      // binding available.
       auto dval = slot.getDefaultValue();
 
       switch (type.which()) {
@@ -298,57 +302,54 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
 #undef HANDLE_TYPE
 
         case schema::Type::ENUM: {
-          uint16_t typedDval;
-          typedDval = dval.getEnum();
-          return DynamicEnum(
-              field.getContainingStruct().getDependency(type.getEnum().getTypeId()).asEnum(),
+          uint16_t typedDval = dval.getEnum();
+          return DynamicEnum(type.asEnum(),
               builder.getDataField<uint16_t>(slot.getOffset() * ELEMENTS, typedDval));
         }
 
         case schema::Type::TEXT: {
-          Text::Reader typedDval = dval.getText();
+          Text::Reader typedDval = dval.isAnyPointer() ? Text::Reader() : dval.getText();
           return builder.getPointerField(slot.getOffset() * POINTERS)
                         .getBlob<Text>(typedDval.begin(), typedDval.size() * BYTES);
         }
 
         case schema::Type::DATA: {
-          Data::Reader typedDval = dval.getData();
+          Data::Reader typedDval = dval.isAnyPointer() ? Data::Reader() : dval.getData();
           return builder.getPointerField(slot.getOffset() * POINTERS)
                         .getBlob<Data>(typedDval.begin(), typedDval.size() * BYTES);
         }
 
         case schema::Type::LIST: {
-          ListSchema listType = ListSchema::of(type.getList().getElementType(),
-                                               field.getContainingStruct());
+          ListSchema listType = type.asList();
           if (listType.whichElementType() == schema::Type::STRUCT) {
             return DynamicList::Builder(listType,
                 builder.getPointerField(slot.getOffset() * POINTERS)
                        .getStructList(structSizeFromSchema(listType.getStructElementType()),
-                                      dval.getList().getAs<_::UncheckedMessage>()));
+                                      dval.isAnyPointer() ? nullptr :
+                                          dval.getList().getAs<_::UncheckedMessage>()));
           } else {
             return DynamicList::Builder(listType,
                 builder.getPointerField(slot.getOffset() * POINTERS)
                        .getList(elementSizeFor(listType.whichElementType()),
-                                dval.getList().getAs<_::UncheckedMessage>()));
+                                dval.isAnyPointer() ? nullptr :
+                                    dval.getList().getAs<_::UncheckedMessage>()));
           }
         }
 
         case schema::Type::STRUCT: {
-          auto structSchema =
-              field.getContainingStruct().getDependency(type.getStruct().getTypeId()).asStruct();
+          auto structSchema = type.asStruct();
           return DynamicStruct::Builder(structSchema,
               builder.getPointerField(slot.getOffset() * POINTERS)
                      .getStruct(structSizeFromSchema(structSchema),
-                                dval.getStruct().getAs<_::UncheckedMessage>()));
+                                dval.isAnyPointer() ? nullptr :
+                                    dval.getStruct().getAs<_::UncheckedMessage>()));
         }
 
         case schema::Type::ANY_POINTER:
           return AnyPointer::Builder(builder.getPointerField(slot.getOffset() * POINTERS));
 
         case schema::Type::INTERFACE:
-          return DynamicCapability::Client(
-              field.getContainingStruct().getDependency(
-                  type.getInterface().getTypeId()).asInterface(),
+          return DynamicCapability::Client(type.asInterface(),
               builder.getPointerField(slot.getOffset() * POINTERS).getCapability());
       }
 
@@ -356,8 +357,7 @@ DynamicValue::Builder DynamicStruct::Builder::get(StructSchema::Field field) {
     }
 
     case schema::Field::GROUP:
-      return DynamicStruct::Builder(
-          schema.getDependency(proto.getGroup().getTypeId()).asStruct(), builder);
+      return DynamicStruct::Builder(type.asStruct(), builder);
   }
 
   KJ_UNREACHABLE;
@@ -369,21 +369,19 @@ DynamicValue::Pipeline DynamicStruct::Pipeline::get(StructSchema::Field field) {
   auto proto = field.getProto();
   KJ_REQUIRE(!hasDiscriminantValue(proto), "Can't pipeline on union members.");
 
+  auto type = field.getType();
+
   switch (proto.which()) {
     case schema::Field::SLOT: {
       auto slot = proto.getSlot();
-      auto type = slot.getType();
 
       switch (type.which()) {
         case schema::Type::STRUCT:
-          return DynamicStruct::Pipeline(
-              field.getContainingStruct().getDependency(type.getStruct().getTypeId()).asStruct(),
+          return DynamicStruct::Pipeline(type.asStruct(),
               typeless.getPointerField(slot.getOffset()));
 
         case schema::Type::INTERFACE:
-          return DynamicCapability::Client(
-              field.getContainingStruct().getDependency(
-                  type.getInterface().getTypeId()).asInterface(),
+          return DynamicCapability::Client(type.asInterface(),
               typeless.getPointerField(slot.getOffset()).asCap());
 
         default:
@@ -394,8 +392,7 @@ DynamicValue::Pipeline DynamicStruct::Pipeline::get(StructSchema::Field field) {
     }
 
     case schema::Field::GROUP:
-      return DynamicStruct::Pipeline(
-          schema.getDependency(proto.getGroup().getTypeId()).asStruct(), typeless.noop());
+      return DynamicStruct::Pipeline(type.asStruct(), typeless.noop());
   }
 
   KJ_UNREACHABLE;
@@ -424,7 +421,7 @@ bool DynamicStruct::Reader::has(StructSchema::Field field) const {
   }
 
   auto slot = proto.getSlot();
-  auto type = slot.getType();
+  auto type = field.getType();
 
   switch (type.which()) {
     case schema::Type::VOID:
@@ -481,10 +478,10 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
   setInUnion(field);
 
   auto proto = field.getProto();
+  auto type = field.getType();
   switch (proto.which()) {
     case schema::Field::SLOT: {
       auto slot = proto.getSlot();
-      auto type = slot.getType();
       auto dval = slot.getDefaultValue();
 
       switch (type.which()) {
@@ -515,12 +512,12 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
 
         case schema::Type::ENUM: {
           uint16_t rawValue;
-          auto enumSchema = field.getContainingStruct()
-              .getDependency(type.getEnum().getTypeId()).asEnum();
+          auto enumSchema = type.asEnum();
           if (value.getType() == DynamicValue::TEXT) {
             // Convert from text.
             rawValue = enumSchema.getEnumerantByName(value.as<Text>()).getOrdinal();
-          } else if (value.getType() == DynamicValue::INT || value.getType() == DynamicValue::UINT) {
+          } else if (value.getType() == DynamicValue::INT ||
+                     value.getType() == DynamicValue::UINT) {
             rawValue = value.as<uint16_t>();
           } else {
             DynamicEnum enumValue = value.as<DynamicEnum>();
@@ -543,7 +540,7 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
           return;
 
         case schema::Type::LIST: {
-          ListSchema listType = ListSchema::of(type.getList().getElementType(), schema);
+          ListSchema listType = type.asList();
           auto listValue = value.as<DynamicList>();
           KJ_REQUIRE(listValue.getSchema() == listType, "Value type mismatch.") {
             return;
@@ -553,7 +550,7 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
         }
 
         case schema::Type::STRUCT: {
-          auto structType = schema.getDependency(type.getStruct().getTypeId()).asStruct();
+          auto structType = type.asStruct();
           auto structValue = value.as<DynamicStruct>();
           KJ_REQUIRE(structValue.getSchema() == structType, "Value type mismatch.") {
             return;
@@ -568,7 +565,7 @@ void DynamicStruct::Builder::set(StructSchema::Field field, const DynamicValue::
           return;
 
         case schema::Type::INTERFACE:
-          auto interfaceType = schema.getDependency(type.getInterface().getTypeId()).asInterface();
+          auto interfaceType = type.asInterface();
           auto capability = value.as<DynamicCapability>();
           KJ_REQUIRE(capability.getSchema().extends(interfaceType), "Value type mismatch.") {
             return;
@@ -605,14 +602,14 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field) {
   setInUnion(field);
 
   auto proto = field.getProto();
+  auto type = field.getType();
 
   switch (proto.which()) {
     case schema::Field::SLOT: {
       auto slot = proto.getSlot();
-      auto type = slot.getType();
       switch (type.which()) {
         case schema::Type::STRUCT: {
-          auto subSchema = schema.getDependency(type.getStruct().getTypeId()).asStruct();
+          auto subSchema = type.asStruct();
           return DynamicStruct::Builder(subSchema,
               builder.getPointerField(slot.getOffset() * POINTERS)
                      .initStruct(structSizeFromSchema(subSchema)));
@@ -629,8 +626,7 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field) {
 
     case schema::Field::GROUP: {
       clear(field);
-      return DynamicStruct::Builder(
-          schema.getDependency(proto.getGroup().getTypeId()).asStruct(), builder);
+      return DynamicStruct::Builder(type.asStruct(), builder);
     }
   }
 
@@ -642,14 +638,14 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field, ui
   setInUnion(field);
 
   auto proto = field.getProto();
+  auto type = field.getType();
 
   switch (proto.which()) {
     case schema::Field::SLOT: {
       auto slot = proto.getSlot();
-      auto type = slot.getType();
       switch (type.which()) {
         case schema::Type::LIST: {
-          auto listType = ListSchema::of(type.getList().getElementType(), schema);
+          auto listType = type.asList();
           if (listType.whichElementType() == schema::Type::STRUCT) {
             return DynamicList::Builder(listType,
                 builder.getPointerField(slot.getOffset() * POINTERS)
@@ -669,7 +665,8 @@ DynamicValue::Builder DynamicStruct::Builder::init(StructSchema::Field field, ui
                         .initBlob<Data>(size * BYTES);
         default:
           KJ_FAIL_REQUIRE(
-              "init() with size is only valid for list, text, or data fields.", (uint)type.which());
+              "init() with size is only valid for list, text, or data fields.",
+              (uint)type.which());
           break;
       }
     }
@@ -689,7 +686,7 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
   switch (proto.which()) {
     case schema::Field::SLOT: {
       auto slot = proto.getSlot();
-      auto type = slot.getType();
+      auto type = field.getType();
 
       switch (type.which()) {
         case schema::Type::VOID:
@@ -717,7 +714,7 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
           break;
 
         case schema::Type::LIST: {
-          ListSchema listType = ListSchema::of(type.getList().getElementType(), schema);
+          ListSchema listType = type.asList();
           KJ_REQUIRE(orphan.getType() == DynamicValue::LIST && orphan.listSchema == listType,
                      "Value type mismatch.") {
             return;
@@ -726,7 +723,7 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
         }
 
         case schema::Type::STRUCT: {
-          auto structType = schema.getDependency(type.getStruct().getTypeId()).asStruct();
+          auto structType = type.asStruct();
           KJ_REQUIRE(orphan.getType() == DynamicValue::STRUCT && orphan.structSchema == structType,
                      "Value type mismatch.") {
             return;
@@ -737,6 +734,8 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
         case schema::Type::ANY_POINTER:
           KJ_REQUIRE(orphan.getType() == DynamicValue::STRUCT ||
                      orphan.getType() == DynamicValue::LIST ||
+                     orphan.getType() == DynamicValue::TEXT ||
+                     orphan.getType() == DynamicValue::DATA ||
                      orphan.getType() == DynamicValue::ANY_POINTER,
                      "Value type mismatch.") {
             return;
@@ -744,7 +743,7 @@ void DynamicStruct::Builder::adopt(StructSchema::Field field, Orphan<DynamicValu
           break;
 
         case schema::Type::INTERFACE:
-          auto interfaceType = schema.getDependency(type.getInterface().getTypeId()).asInterface();
+          auto interfaceType = type.asInterface();
           KJ_REQUIRE(orphan.getType() == DynamicValue::CAPABILITY &&
                      orphan.interfaceSchema.extends(interfaceType),
                      "Value type mismatch.") {
@@ -789,7 +788,7 @@ Orphan<DynamicValue> DynamicStruct::Builder::disown(StructSchema::Field field) {
     case schema::Field::SLOT: {
       auto slot = proto.getSlot();
 
-      switch (slot.getType().which()) {
+      switch (field.getType().which()) {
         case schema::Type::VOID:
         case schema::Type::BOOL:
         case schema::Type::INT8:
@@ -857,10 +856,10 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
   setInUnion(field);
 
   auto proto = field.getProto();
+  auto type = field.getType();
   switch (proto.which()) {
     case schema::Field::SLOT: {
       auto slot = proto.getSlot();
-      auto type = slot.getType();
 
       switch (type.which()) {
         case schema::Type::VOID:
@@ -901,8 +900,7 @@ void DynamicStruct::Builder::clear(StructSchema::Field field) {
     }
 
     case schema::Field::GROUP: {
-      DynamicStruct::Builder group(
-          schema.getDependency(proto.getGroup().getTypeId()).asStruct(), builder);
+      DynamicStruct::Builder group(type.asStruct(), builder);
 
       // We clear the union field with discriminant 0 rather than the one that is set because
       // we want the union to end up with its default field active.
@@ -1347,9 +1345,9 @@ DynamicList::Reader DynamicList::Builder::asReader() const {
 // =======================================================================================
 
 DynamicValue::Reader::Reader(ConstSchema constant): type(VOID) {
-  auto typeSchema = constant.getProto().getConst().getType();
+  auto type = constant.getType();
   auto value = constant.getProto().getConst().getValue();
-  switch (typeSchema.which()) {
+  switch (type.which()) {
     case schema::Type::VOID: *this = capnp::VOID; break;
     case schema::Type::BOOL: *this = value.getBool(); break;
     case schema::Type::INT8: *this = value.getInt8(); break;
@@ -1366,18 +1364,15 @@ DynamicValue::Reader::Reader(ConstSchema constant): type(VOID) {
     case schema::Type::DATA: *this = value.getData(); break;
 
     case schema::Type::ENUM:
-      *this = DynamicEnum(constant.getDependency(
-          typeSchema.getEnum().getTypeId()).asEnum(), value.getEnum());
+      *this = DynamicEnum(type.asEnum(), value.getEnum());
       break;
 
     case schema::Type::STRUCT:
-      *this = value.getStruct().getAs<DynamicStruct>(
-          constant.getDependency(typeSchema.getStruct().getTypeId()).asStruct());
+      *this = value.getStruct().getAs<DynamicStruct>(type.asStruct());
       break;
 
     case schema::Type::LIST:
-      *this = value.getList().getAs<DynamicList>(
-          ListSchema::of(typeSchema.getList().getElementType(), constant));
+      *this = value.getList().getAs<DynamicList>(type.asList());
       break;
 
     case schema::Type::ANY_POINTER:

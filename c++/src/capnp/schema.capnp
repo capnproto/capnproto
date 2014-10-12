@@ -342,8 +342,14 @@ struct TypeEnvironment {
     scopeId @0 :Id;
     # ID of the scope to which these params apply.
 
-    bindings @1 :List(Binding);
-    # List of parameter bindings.
+    union {
+      bind @1 :List(Binding);
+      # List of parameter bindings.
+
+      inherit @2 :Void;
+      # The place where this TypeEnivornment appears is actually within this scope or a sub-scope,
+      # and the bindings for this scope should be inherited from the reference point.
+    }
   }
 
   struct Binding {

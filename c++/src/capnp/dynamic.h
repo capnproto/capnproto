@@ -208,7 +208,7 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend kj::StringTree _::structString(
-      _::StructReader reader, const _::RawSchema& schema);
+      _::StructReader reader, const _::RawBrandedSchema& schema);
   friend class Orphanage;
   friend class Orphan<DynamicStruct>;
   friend class Orphan<DynamicValue>;

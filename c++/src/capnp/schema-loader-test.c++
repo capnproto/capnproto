@@ -328,6 +328,45 @@ TEST(SchemaLoader, LazyLoadGetDependency) {
   EXPECT_EQ(dep, loader.get(typeId<TestAllTypes>()));
 }
 
+TEST(SchemaLoader, Generics) {
+  SchemaLoader loader;
+
+  StructSchema allTypes = loader.load(Schema::from<TestAllTypes>().getProto()).asStruct();
+  StructSchema tap = loader.load(Schema::from<test::TestAnyPointer>().getProto()).asStruct();
+  loader.load(Schema::from<test::TestGenerics::Inner>().getProto());
+  loader.load(Schema::from<test::TestGenerics::Inner2>().getProto());
+  loader.load(Schema::from<test::TestGenerics::Interface>().getProto());
+  loader.load(Schema::from<test::TestGenerics>().getProto());
+  StructSchema schema = loader.load(Schema::from<test::TestUseGenerics>().getProto()).asStruct();
+
+  {
+    StructSchema::Field basic = schema.getFieldByName("basic");
+    StructSchema instance = basic.getType().asStruct();
+
+    StructSchema::Field foo = instance.getFieldByName("foo");
+    EXPECT_TRUE(foo.getType().asStruct() == allTypes);
+    EXPECT_TRUE(foo.getType().asStruct() != tap);
+
+    StructSchema instance2 = instance.getFieldByName("rev").getType().asStruct();
+    StructSchema::Field foo2 = instance2.getFieldByName("foo");
+    EXPECT_TRUE(foo2.getType().asStruct() == tap);
+    EXPECT_TRUE(foo2.getType().asStruct() != allTypes);
+  }
+
+  {
+    StructSchema inner2 = schema.getFieldByName("inner2").getType().asStruct();
+
+    StructSchema bound = inner2.getFieldByName("innerBound").getType().asStruct();
+    Type boundFoo = bound.getFieldByName("foo").getType();
+    EXPECT_FALSE(boundFoo.isAnyPointer());
+    EXPECT_TRUE(boundFoo.asStruct() == allTypes);
+
+    StructSchema unbound = inner2.getFieldByName("innerUnbound").getType().asStruct();
+    Type unboundFoo = unbound.getFieldByName("foo").getType();
+    EXPECT_TRUE(unboundFoo.isAnyPointer());
+  }
+}
+
 }  // namespace
 }  // namespace _ (private)
 }  // namespace capnp

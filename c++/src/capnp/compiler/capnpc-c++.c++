@@ -1679,7 +1679,7 @@ private:
         membersByName.size() == 0 ? kj::strTree("nullptr") : kj::strTree("m_", hexId), ",\n",
         "  ", deps.size(), ", ", membersByName.size(), ", ",
         membersByDiscrim.size() == 0 ? kj::strTree("nullptr") : kj::strTree("i_", hexId),
-        ", nullptr, nullptr\n"
+        ", nullptr, nullptr, { &s_", hexId, ", nullptr, nullptr, 0, 0, nullptr }\n"
         "};\n");
 
     NodeTextNoSchema top = makeNodeTextWithoutNested(

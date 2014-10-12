@@ -1005,8 +1005,6 @@ public:
 
     // Set up stuff for the ValueTranslator.
     ValueResolverGlue resolver(compiler->getLoader(), errorReporter);
-    auto type = arena.getOrphanage().newOrphan<schema::Type>();
-    type.get().initStruct().setTypeId(rootType.getProto().getId());
 
     // Set up output stream.
     kj::FdOutputStream rawOutput(STDOUT_FILENO);
@@ -1019,7 +1017,7 @@ public:
             segmentSize == 0 ? SUGGESTED_ALLOCATION_STRATEGY : AllocationStrategy::FIXED_SIZE);
         ValueTranslator translator(resolver, errorReporter, item.getOrphanage());
 
-        KJ_IF_MAYBE(value, translator.compileValue(expression->getReader(), type.getReader())) {
+        KJ_IF_MAYBE(value, translator.compileValue(expression->getReader(), rootType)) {
           if (segmentSize == 0) {
             writeFlat(value->getReader().as<DynamicStruct>(), output);
           } else {

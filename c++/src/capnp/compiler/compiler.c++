@@ -86,10 +86,13 @@ public:
   kj::Maybe<kj::OneOf<ResolvedDecl, ResolvedParameter, ResolvedAlias>>
       resolve(kj::StringPtr name) override;
   kj::Maybe<kj::OneOf<ResolvedDecl, ResolvedAlias>> resolveMember(kj::StringPtr name) override;
+  kj::Maybe<ResolvedDecl> getParent() override;
   ResolvedDecl getTopScope() override;
-  kj::Maybe<Schema> resolveBootstrapSchema(uint64_t id) override;
+  kj::Maybe<Schema> resolveBootstrapSchema(
+      uint64_t id, schema::TypeEnvironment::Reader environment) override;
   kj::Maybe<schema::Node::Reader> resolveFinalSchema(uint64_t id) override;
   kj::Maybe<ResolvedDecl> resolveImport(kj::StringPtr name) override;
+  kj::Maybe<Type> resolveBootstrapType(schema::Type::Reader type, Schema scope) override;
 
 private:
   CompiledModule* module;  // null iff isBuiltin is true
@@ -732,14 +735,20 @@ void Compiler::Node::traverseEnvironment(
     std::unordered_map<Node*, uint>& seen,
     const SchemaLoader& finalLoader) {
   for (auto scope: env.getScopes()) {
-    for (auto binding: scope.getBindings()) {
-      switch (binding.which()) {
-        case schema::TypeEnvironment::Binding::UNBOUND:
-          break;
-        case schema::TypeEnvironment::Binding::TYPE:
-          traverseType(binding.getType(), eagerness, seen, finalLoader);
-          break;
-      }
+    switch (scope.which()) {
+      case schema::TypeEnvironment::Scope::BIND:
+        for (auto binding: scope.getBind()) {
+          switch (binding.which()) {
+            case schema::TypeEnvironment::Binding::UNBOUND:
+              break;
+            case schema::TypeEnvironment::Binding::TYPE:
+              traverseType(binding.getType(), eagerness, seen, finalLoader);
+              break;
+          }
+        }
+        break;
+      case schema::TypeEnvironment::Scope::INHERIT:
+        break;
     }
   }
 }
@@ -841,14 +850,28 @@ Compiler::Node::resolveMember(kj::StringPtr name) {
   return nullptr;
 }
 
+kj::Maybe<NodeTranslator::Resolver::ResolvedDecl> Compiler::Node::getParent() {
+  return parent.map([](Node& parent) {
+    uint64_t scopeId = parent.parent.map([](Node& gp) { return gp.id; }).orDefault(0);
+    return ResolvedDecl { parent.id, parent.genericParamCount, scopeId, parent.kind, &parent };
+  });
+}
+
 NodeTranslator::Resolver::ResolvedDecl Compiler::Node::getTopScope() {
   Node& node = module->getRootNode();
   return ResolvedDecl { node.id, 0, 0, node.kind, &node };
 }
 
-kj::Maybe<Schema> Compiler::Node::resolveBootstrapSchema(uint64_t id) {
+kj::Maybe<Schema> Compiler::Node::resolveBootstrapSchema(
+    uint64_t id, schema::TypeEnvironment::Reader environment) {
   KJ_IF_MAYBE(node, module->getCompiler().findNode(id)) {
-    return node->getBootstrapSchema();
+    // Make sure the bootstrap schema is loaded into the SchemaLoader.
+    if (node->getBootstrapSchema() == nullptr) {
+      return nullptr;
+    }
+
+    // Now we actually invoke get() to evaluate the environment.
+    return module->getCompiler().getWorkspace().bootstrapLoader.get(id, environment);
   } else {
     KJ_FAIL_REQUIRE("Tried to get schema for ID we haven't seen before.");
   }
@@ -870,6 +893,22 @@ Compiler::Node::resolveImport(kj::StringPtr name) {
   } else {
     return nullptr;
   }
+}
+
+kj::Maybe<Type> Compiler::Node::resolveBootstrapType(schema::Type::Reader type, Schema scope) {
+  // TODO(someday): Arguably should return null if the type or its dependencies are placeholders.
+
+  kj::Maybe<Type> result;
+  KJ_IF_MAYBE(exception, kj::runCatchingExceptions([&]() {
+    result = module->getCompiler().getWorkspace().bootstrapLoader.getType(type, scope);
+  })) {
+    result = nullptr;
+    if (!module->getErrorReporter().hadErrors()) {
+      addError(kj::str("Internal compiler bug: Bootstrap schema failed to load:\n",
+                       *exception));
+    }
+  }
+  return result;
 }
 
 // =======================================================================================
