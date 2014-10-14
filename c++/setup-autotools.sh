@@ -15,7 +15,3 @@ echo "==========================================================================
 echo
 echo "Ready to run autoreconf.  For example:"
 echo "  autoreconf -i && ./configure && make -j6 check && sudo make install"
-echo
-echo "Alternatively, use the cmake build (no support for installing yet)."
-echo "For example:"
-echo "  mkdir build && cd build && cmake .. -G 'Unix Makefiles' && make -j6 check"
