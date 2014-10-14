@@ -23,7 +23,7 @@ add_library(kj
   kj/parse/char.c++
 )
 
-add_library(kj_async
+add_library(kj-async
   kj/async.c++
   kj/async-unix.c++
   kj/async-io.c++
@@ -46,7 +46,7 @@ add_library(capnp
   capnp/serialize-packed.c++
 )
 
-add_library(capnp_rpc
+add_library(capnp-rpc
   capnp/serialize-async.c++
   capnp/capability.c++
   capnp/dynamic-capability.c++
@@ -78,6 +78,7 @@ target_link_libraries(capnp-tool capnpc capnp kj)
 add_executable(capnpc-c++
   capnp/compiler/capnpc-c++.c++
 )
+get_property(capnpc-c++_location TARGET capnpc-c++ PROPERTY LOCATION)
 target_link_libraries(capnpc-c++ capnp kj)
 
 set(test_capnp_files
@@ -105,7 +106,7 @@ add_custom_command(
     ${test_capnp_cpp_files}
     ${test_capnp_header_files}
   COMMAND capnp-tool compile
-    -o $<TARGET_FILE:capnpc-c++>
+    -o ${capnpc-c++_location}
     --src-prefix=${CMAKE_CURRENT_SOURCE_DIR}
     -I${CMAKE_CURRENT_SOURCE_DIR}
     ${test_capnp_capnp_files}
@@ -164,9 +165,9 @@ add_executable(capnp-tests
 target_link_libraries(capnp-tests
   capnp_test_lib
   capnpc
-  capnp_rpc
+  capnp-rpc
   capnp
-  kj_async
+  kj-async
   kj
   gtest
   gtest_main
@@ -176,9 +177,9 @@ add_executable(capnp-evolution-tests capnp/compiler/evolution-test.c++)
 target_link_libraries(capnp-evolution-tests
   capnp_test_lib
   capnpc
-  capnp_rpc
+  capnp-rpc
   capnp
-  kj_async
+  kj-async
   kj
   gtest
   gtest_main
