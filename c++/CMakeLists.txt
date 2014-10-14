@@ -7,7 +7,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/gtest" AND IS_DIRECTORY "${CMAKE_CURRENT_
   add_subdirectory(gtest)
   include_directories(${CMAKE_CURRENT_SOURCE_DIR}/gtest/include)
 else()
-  message(FATAL_ERROR "Please use setup-gtest.sh to download gtest before running the cmake build")
+  message(FATAL_ERROR "Please use setup-cmake.sh to download gtest before running the cmake build")
 endif()
 
 include(CTest)
