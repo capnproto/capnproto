@@ -73,25 +73,45 @@ static void writeLineToFd(int fd, StringPtr message) {
   }
 
 #if _WIN32
-  // Sadly, there doesn't seem to be an API on windows that atomically writes data from multiple buffers.
-  // Also, windows APIs always expect unicode, not utf8.  Therefore, we must convert the data every time.
-
-  HANDLE handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
-
-  size_t bufferCharCount = message.size() + 1;
-  wchar_t* buffer = (wchar_t*)_alloca(sizeof(wchar_t) * bufferCharCount);
-
-  size_t finalSize = MultiByteToWideChar(CP_UTF8, 0, message.begin(), message.size(), buffer, bufferCharCount);
-
-  // We should always have at least one character of extra space for the possible '\n'.
-  KJ_ASSERT(finalSize < bufferCharCount);
-
-  if(buffer[finalSize - 1] != '\n') {
-    buffer[finalSize++] = '\n';
+  char* newlineExpansionBuffer = (char*)_alloca(2 * (message.size() + 1));
+  char* p = newlineExpansionBuffer;
+  for(char ch : message) {
+    if(ch == '\n') {
+      *(p++) = '\r';
+    }
+    *(p++) = ch;
+  }
+  if(!message.endsWith("\n")) {
+    *(p++) = '\r';
+    *(p++) = '\n';
   }
 
+  size_t newlineExpandedSize = p - newlineExpansionBuffer;
+
+  KJ_ASSERT(newlineExpandedSize <= 2 * (message.size() + 1));
+
+  HANDLE handle = reinterpret_cast<HANDLE>(_get_osfhandle(fd));
+  DWORD consoleMode;
+  bool redirectedToFile = !GetConsoleMode(handle, &consoleMode);
+
   DWORD writtenSize;
-  WriteFile(handle, buffer, finalSize * sizeof(wchar_t), &writtenSize, nullptr);
+  if(redirectedToFile) {
+    WriteFile(handle, newlineExpansionBuffer, newlineExpandedSize, &writtenSize, nullptr);
+  } else {
+    wchar_t* buffer = (wchar_t*)_alloca(sizeof(wchar_t) * newlineExpandedSize);
+
+    size_t finalSize = MultiByteToWideChar(
+      CP_UTF8,
+      0,
+      newlineExpansionBuffer,
+      newlineExpandedSize,
+      buffer,
+      newlineExpandedSize);
+
+    KJ_ASSERT(finalSize <= newlineExpandedSize);
+
+    WriteConsoleW(handle, buffer, finalSize, &writtenSize, nullptr);
+  }
 #else
   // Unfortunately the writev interface requires non-const pointers even though it won't modify
   // the data.
