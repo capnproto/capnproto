@@ -121,8 +121,8 @@ public:
                           bool isPlaceholder);
   // Create a dummy empty schema of the given kind for the given id and load it.
 
-  const _::RawBrandedSchema* makeBrand(
-      const _::RawSchema* schema, schema::TypeEnvironment::Reader proto,
+  const _::RawBrandedSchema* makeBranded(
+      const _::RawSchema* schema, schema::Brand::Reader proto,
       kj::ArrayPtr<const _::RawBrandedSchema::Scope> clientBrand);
 
   struct TryGetResult {
@@ -184,7 +184,7 @@ private:
   void applyStructSizeRequirement(_::RawSchema* raw, uint dataWordCount, uint pointerCount,
                                   schema::ElementSize preferredListEncoding);
 
-  const _::RawBrandedSchema* makeBrand(const _::RawSchema* schema,
+  const _::RawBrandedSchema* makeBranded(const _::RawSchema* schema,
       kj::ArrayPtr<const _::RawBrandedSchema::Scope> scopes);
 
   kj::ArrayPtr<const _::RawBrandedSchema::Dependency> makeBrandedDependencies(
@@ -195,9 +195,9 @@ private:
       kj::ArrayPtr<const _::RawBrandedSchema::Scope> brandBindings);
   _::RawBrandedSchema::Binding makeDep(
       uint64_t typeId, schema::Type::Which whichType, schema::Node::Which expectedKind,
-      schema::TypeEnvironment::Reader environment, kj::StringPtr scopeName,
+      schema::Brand::Reader brand, kj::StringPtr scopeName,
       kj::ArrayPtr<const _::RawBrandedSchema::Scope> brandBindings);
-  // Looks up the schema and environment for a type, or creates lazily-evaluated placeholders if
+  // Looks up the schema and brand for a dependency, or creates lazily-evaluated placeholders if
   // they don't already exist. `scopeName` is a human-readable name of the place where the type
   // appeared.
 
@@ -462,9 +462,9 @@ private:
   }
 
   void validate(const schema::Node::Interface::Reader& interfaceNode) {
-    for (auto extend: interfaceNode.getExtends()) {
+    for (auto extend: interfaceNode.getSuperclasses()) {
       validateTypeId(extend.getId(), schema::Node::INTERFACE);
-      validate(extend.getEnvironment());
+      validate(extend.getBrand());
     }
 
     auto methods = interfaceNode.getMethods();
@@ -482,9 +482,9 @@ private:
       sawCodeOrder[method.getCodeOrder()] = true;
 
       validateTypeId(method.getParamStructType(), schema::Node::STRUCT);
-      validate(method.getParamEnvironment());
+      validate(method.getParamBrand());
       validateTypeId(method.getResultStructType(), schema::Node::STRUCT);
-      validate(method.getResultEnvironment());
+      validate(method.getResultBrand());
     }
   }
 
@@ -561,19 +561,19 @@ private:
       case schema::Type::STRUCT: {
         auto structType = type.getStruct();
         validateTypeId(structType.getTypeId(), schema::Node::STRUCT);
-        validate(structType.getTypeEnvironment());
+        validate(structType.getBrand());
         break;
       }
       case schema::Type::ENUM: {
         auto enumType = type.getEnum();
         validateTypeId(enumType.getTypeId(), schema::Node::ENUM);
-        validate(enumType.getTypeEnvironment());
+        validate(enumType.getBrand());
         break;
       }
       case schema::Type::INTERFACE: {
         auto interfaceType = type.getInterface();
         validateTypeId(interfaceType.getTypeId(), schema::Node::INTERFACE);
-        validate(interfaceType.getTypeEnvironment());
+        validate(interfaceType.getBrand());
         break;
       }
 
@@ -585,15 +585,15 @@ private:
     // We intentionally allow unknown types.
   }
 
-  void validate(const schema::TypeEnvironment::Reader& environment) {
-    for (auto scope: environment.getScopes()) {
+  void validate(const schema::Brand::Reader& brand) {
+    for (auto scope: brand.getScopes()) {
       switch (scope.which()) {
-        case schema::TypeEnvironment::Scope::BIND:
+        case schema::Brand::Scope::BIND:
           for (auto binding: scope.getBind()) {
             switch (binding.which()) {
-              case schema::TypeEnvironment::Binding::UNBOUND:
+              case schema::Brand::Binding::UNBOUND:
                 break;
-              case schema::TypeEnvironment::Binding::TYPE: {
+              case schema::Brand::Binding::TYPE: {
                 auto type = binding.getType();
                 validate(type);
                 bool isPointer = true;
@@ -631,7 +631,7 @@ private:
             }
           }
           break;
-        case schema::TypeEnvironment::Scope::INHERIT:
+        case schema::Brand::Scope::INHERIT:
           break;
       }
     }
@@ -906,25 +906,25 @@ private:
     {
       // Check superclasses.
 
-      kj::Vector<uint64_t> extends;
-      kj::Vector<uint64_t> replacementExtends;
-      for (auto extend: interfaceNode.getExtends()) {
-        extends.add(extend.getId());
+      kj::Vector<uint64_t> superclasses;
+      kj::Vector<uint64_t> replacementSuperclasses;
+      for (auto superclass: interfaceNode.getSuperclasses()) {
+        superclasses.add(superclass.getId());
       }
-      for (auto extend: replacement.getExtends()) {
-        replacementExtends.add(extend.getId());
+      for (auto superclass: replacement.getSuperclasses()) {
+        replacementSuperclasses.add(superclass.getId());
       }
-      std::sort(extends.begin(), extends.end());
-      std::sort(replacementExtends.begin(), replacementExtends.end());
+      std::sort(superclasses.begin(), superclasses.end());
+      std::sort(replacementSuperclasses.begin(), replacementSuperclasses.end());
 
-      auto iter = extends.begin();
-      auto replacementIter = replacementExtends.begin();
+      auto iter = superclasses.begin();
+      auto replacementIter = replacementSuperclasses.begin();
 
-      while (iter != extends.end() || replacementIter != replacementExtends.end()) {
-        if (iter == extends.end()) {
+      while (iter != superclasses.end() || replacementIter != replacementSuperclasses.end()) {
+        if (iter == superclasses.end()) {
           replacementIsNewer();
           break;
-        } else if (replacementIter == replacementExtends.end()) {
+        } else if (replacementIter == replacementSuperclasses.end()) {
           replacementIsOlder();
           break;
         } else if (*iter < *replacementIter) {
@@ -1458,8 +1458,8 @@ _::RawSchema* SchemaLoader::Impl::loadEmpty(
   return load(node, isPlaceholder);
 }
 
-const _::RawBrandedSchema* SchemaLoader::Impl::makeBrand(
-    const _::RawSchema* schema, schema::TypeEnvironment::Reader proto,
+const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
+    const _::RawSchema* schema, schema::Brand::Reader proto,
     kj::ArrayPtr<const _::RawBrandedSchema::Scope> clientBrand) {
   kj::StringPtr scopeName =
       readMessageUnchecked<schema::Node>(schema->encodedNode).getDisplayName();
@@ -1471,7 +1471,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBrand(
   uint dstScopeCount = 0;
   for (auto srcScope: srcScopes) {
     switch (srcScope.which()) {
-      case schema::TypeEnvironment::Scope::BIND: {
+      case schema::Brand::Scope::BIND: {
         auto srcBindings = srcScope.getBind();
         KJ_STACK_ARRAY(_::RawBrandedSchema::Binding, dstBindings, srcBindings.size(), 16, 32);
 
@@ -1483,9 +1483,9 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBrand(
           dstBinding.which = schema::Type::ANY_POINTER;
 
           switch (srcBinding.which()) {
-            case schema::TypeEnvironment::Binding::UNBOUND:
+            case schema::Brand::Binding::UNBOUND:
               break;
-            case schema::TypeEnvironment::Binding::TYPE: {
+            case schema::Brand::Binding::TYPE: {
               dstBinding = makeDep(srcBinding.getType(), scopeName, clientBrand);
               break;
             }
@@ -1498,7 +1498,7 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBrand(
         dstScope.bindings = copyDeduped(dstBindings).begin();
         break;
       }
-      case schema::TypeEnvironment::Scope::INHERIT: {
+      case schema::Brand::Scope::INHERIT: {
         // Inherit the whole scope from the client -- or skip this scope entirely if the client
         // doesn't have it.
         for (auto& clientScope: clientBrand) {
@@ -1519,10 +1519,10 @@ const _::RawBrandedSchema* SchemaLoader::Impl::makeBrand(
     return a.typeId < b.typeId;
   });
 
-  return makeBrand(schema, copyDeduped(dstScopes));
+  return makeBranded(schema, copyDeduped(dstScopes));
 }
 
-const _::RawBrandedSchema* SchemaLoader::Impl::makeBrand(
+const _::RawBrandedSchema* SchemaLoader::Impl::makeBranded(
     const _::RawSchema* schema, kj::ArrayPtr<const _::RawBrandedSchema::Scope> bindings) {
   if (bindings.size() == 0) {
     // No bindings, so this is the default brand.
@@ -1587,7 +1587,7 @@ SchemaLoader::Impl::makeBrandedDependencies(
             const _::RawSchema* group = loadEmpty(
                 field.getGroup().getTypeId(),
                 "(unknown group type)", schema::Node::STRUCT, true);
-            ADD_ENTRY(FIELD, i, makeBrand(group, bindings));
+            ADD_ENTRY(FIELD, i, makeBranded(group, bindings));
             break;
           }
         }
@@ -1598,12 +1598,12 @@ SchemaLoader::Impl::makeBrandedDependencies(
     case schema::Node::INTERFACE: {
       auto interface = node.getInterface();
       {
-        auto superclasses = interface.getExtends();
+        auto superclasses = interface.getSuperclasses();
         for (auto i: kj::indices(superclasses)) {
           auto superclass = superclasses[i];
           ADD_ENTRY(SUPERCLASS, i, makeDep(
               superclass.getId(), schema::Type::INTERFACE, schema::Node::INTERFACE,
-              superclass.getEnvironment(), scopeName, bindings).schema)
+              superclass.getBrand(), scopeName, bindings).schema)
         }
       }
       {
@@ -1612,10 +1612,10 @@ SchemaLoader::Impl::makeBrandedDependencies(
           auto method = methods[i];
           ADD_ENTRY(METHOD_PARAMS, i, makeDep(
               method.getParamStructType(), schema::Type::STRUCT, schema::Node::STRUCT,
-              method.getParamEnvironment(), scopeName, bindings).schema)
+              method.getParamBrand(), scopeName, bindings).schema)
           ADD_ENTRY(METHOD_RESULTS, i, makeDep(
               method.getResultStructType(), schema::Type::STRUCT, schema::Node::STRUCT,
-              method.getResultEnvironment(), scopeName, bindings).schema)
+              method.getResultBrand(), scopeName, bindings).schema)
         }
       }
       break;
@@ -1657,17 +1657,17 @@ _::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
     case schema::Type::STRUCT: {
       auto structType = type.getStruct();
       return makeDep(structType.getTypeId(), schema::Type::STRUCT, schema::Node::STRUCT,
-                     structType.getTypeEnvironment(), scopeName, brandBindings);
+                     structType.getBrand(), scopeName, brandBindings);
     }
     case schema::Type::ENUM: {
       auto enumType = type.getEnum();
       return makeDep(enumType.getTypeId(), schema::Type::ENUM, schema::Node::ENUM,
-                     enumType.getTypeEnvironment(), scopeName, brandBindings);
+                     enumType.getBrand(), scopeName, brandBindings);
     }
     case schema::Type::INTERFACE: {
       auto interfaceType = type.getInterface();
       return makeDep(interfaceType.getTypeId(), schema::Type::INTERFACE, schema::Node::INTERFACE,
-                     interfaceType.getTypeEnvironment(), scopeName, brandBindings);
+                     interfaceType.getBrand(), scopeName, brandBindings);
     }
 
     case schema::Type::LIST: {
@@ -1683,7 +1683,7 @@ _::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
           break;
         case schema::Type::AnyPointer::PARAMETER: {
           auto param = anyPointer.getParameter();
-          uint64_t id = param.getNodeId();
+          uint64_t id = param.getScopeId();
           // TODO(perf): We could binary search here, but... bleh.
           for (auto& scope: brandBindings) {
             if (scope.typeId == id) {
@@ -1713,14 +1713,14 @@ _::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
 
 _::RawBrandedSchema::Binding SchemaLoader::Impl::makeDep(
     uint64_t typeId, schema::Type::Which whichType, schema::Node::Which expectedKind,
-    schema::TypeEnvironment::Reader environment, kj::StringPtr scopeName,
+    schema::Brand::Reader brand, kj::StringPtr scopeName,
     kj::ArrayPtr<const _::RawBrandedSchema::Scope> brandBindings) {
   const _::RawSchema* schema = loadEmpty(typeId,
       kj::str("(unknown type; seen as dependency of ", scopeName, ")"),
       expectedKind, true);
   return _::RawBrandedSchema::Binding {
     static_cast<uint8_t>(whichType), 0,
-    makeBrand(schema, environment, brandBindings)
+    makeBranded(schema, brand, brandBindings)
   };
 }
 
@@ -1906,7 +1906,7 @@ void SchemaLoader::BrandedInitializerImpl::init(const _::RawBrandedSchema* schem
   _::RawBrandedSchema* mutableSchema = iter->second;
   KJ_ASSERT(mutableSchema == schema);
 
-  // Construct its dependency environment map.
+  // Construct its dependency map.
   auto deps = lock->get()->makeBrandedDependencies(mutableSchema->generic,
       kj::arrayPtr(mutableSchema->scopes, mutableSchema->scopeCount));
   mutableSchema->dependencies = deps.begin();
@@ -1923,15 +1923,16 @@ SchemaLoader::SchemaLoader(const LazyLoadCallback& callback)
     : impl(kj::heap<Impl>(*this, callback)) {}
 SchemaLoader::~SchemaLoader() noexcept(false) {}
 
-Schema SchemaLoader::get(uint64_t id, GenericBindings bindings, Schema scope) const {
-  KJ_IF_MAYBE(result, tryGet(id, bindings, scope)) {
+Schema SchemaLoader::get(uint64_t id, schema::Brand::Reader brand, Schema scope) const {
+  KJ_IF_MAYBE(result, tryGet(id, brand, scope)) {
     return *result;
   } else {
     KJ_FAIL_REQUIRE("no schema node loaded for id", id);
   }
 }
 
-kj::Maybe<Schema> SchemaLoader::tryGet(uint64_t id, GenericBindings bindings, Schema scope) const {
+kj::Maybe<Schema> SchemaLoader::tryGet(
+    uint64_t id, schema::Brand::Reader brand, Schema scope) const {
   auto getResult = impl.lockShared()->get()->tryGet(id);
   if (getResult.schema == nullptr || getResult.schema->lazyInitializer != nullptr) {
     // This schema couldn't be found or has yet to be lazily loaded. If we have a lazy loader
@@ -1942,12 +1943,12 @@ kj::Maybe<Schema> SchemaLoader::tryGet(uint64_t id, GenericBindings bindings, Sc
     getResult = impl.lockShared()->get()->tryGet(id);
   }
   if (getResult.schema != nullptr && getResult.schema->lazyInitializer == nullptr) {
-    // Schema successfully loaded. If `bindings` is non-empty we'll want to build that too.
-    if (bindings.hasScopes()) {
-      auto brand = impl.lockExclusive()->get()->makeBrand(
-          getResult.schema, bindings, kj::arrayPtr(scope.raw->scopes, scope.raw->scopeCount));
-      brand->ensureInitialized();
-      return Schema(brand);
+    // Schema successfully loaded. If `brand` is non-empty we'll want to build that too.
+    if (brand.hasScopes()) {
+      auto brandedSchema = impl.lockExclusive()->get()->makeBranded(
+          getResult.schema, brand, kj::arrayPtr(scope.raw->scopes, scope.raw->scopeCount));
+      brandedSchema->ensureInitialized();
+      return Schema(brandedSchema);
     } else {
       return Schema(&getResult.schema->defaultBrand);
     }
@@ -1976,17 +1977,17 @@ Type SchemaLoader::getType(schema::Type::Reader proto, Schema scope) const {
 
     case schema::Type::STRUCT: {
       auto structType = proto.getStruct();
-      return get(structType.getTypeId(), structType.getTypeEnvironment(), scope).asStruct();
+      return get(structType.getTypeId(), structType.getBrand(), scope).asStruct();
     }
 
     case schema::Type::ENUM: {
       auto enumType = proto.getEnum();
-      return get(enumType.getTypeId(), enumType.getTypeEnvironment(), scope).asEnum();
+      return get(enumType.getTypeId(), enumType.getBrand(), scope).asEnum();
     }
 
     case schema::Type::INTERFACE: {
       auto interfaceType = proto.getInterface();
-      return get(interfaceType.getTypeId(), interfaceType.getTypeEnvironment(), scope)
+      return get(interfaceType.getTypeId(), interfaceType.getBrand(), scope)
           .asInterface();
     }
 
@@ -2000,7 +2001,7 @@ Type SchemaLoader::getType(schema::Type::Reader proto, Schema scope) const {
           return schema::Type::ANY_POINTER;
         case schema::Type::AnyPointer::PARAMETER: {
           auto param = anyPointer.getParameter();
-          return scope.getBrandBinding(param.getNodeId(), param.getParameterIndex());
+          return scope.getBrandBinding(param.getScopeId(), param.getParameterIndex());
         }
       }
 

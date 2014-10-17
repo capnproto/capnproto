@@ -381,7 +381,7 @@ Type Schema::interpretType(schema::Type::Reader proto, uint location) const {
           return schema::Type::ANY_POINTER;
         case schema::Type::AnyPointer::PARAMETER: {
           auto param = anyPointer.getParameter();
-          return getBrandBinding(param.getNodeId(), param.getParameterIndex());
+          return getBrandBinding(param.getScopeId(), param.getParameterIndex());
         }
       }
 
@@ -529,7 +529,7 @@ kj::Maybe<InterfaceSchema::Method> InterfaceSchema::findMethodByName(
     //   this means that a dynamically-loaded RawSchema cannot be correctly constructed until all
     //   superclasses have been loaded, which imposes an ordering requirement on SchemaLoader or
     //   requires updating subclasses whenever a new superclass is loaded.
-    auto superclasses = getProto().getInterface().getExtends();
+    auto superclasses = getProto().getInterface().getSuperclasses();
     for (auto i: kj::indices(superclasses)) {
       auto superclass = superclasses[i];
       uint location = _::RawBrandedSchema::makeDepLocation(
@@ -554,7 +554,7 @@ InterfaceSchema::Method InterfaceSchema::getMethodByName(kj::StringPtr name) con
 }
 
 InterfaceSchema::SuperclassList InterfaceSchema::getSuperclasses() const {
-  return SuperclassList(*this, getProto().getInterface().getExtends());
+  return SuperclassList(*this, getProto().getInterface().getSuperclasses());
 }
 
 bool InterfaceSchema::extends(InterfaceSchema other) const {
@@ -577,7 +577,7 @@ bool InterfaceSchema::extends(InterfaceSchema other, uint& counter) const {
   }
 
   // TODO(perf):  This may be somewhat slow.  See findMethodByName() for discussion.
-  auto superclasses = getProto().getInterface().getExtends();
+  auto superclasses = getProto().getInterface().getSuperclasses();
   for (auto i: kj::indices(superclasses)) {
     auto superclass = superclasses[i];
     uint location = _::RawBrandedSchema::makeDepLocation(
@@ -610,7 +610,7 @@ kj::Maybe<InterfaceSchema> InterfaceSchema::findSuperclass(uint64_t typeId, uint
   }
 
   // TODO(perf):  This may be somewhat slow.  See findMethodByName() for discussion.
-  auto superclasses = getProto().getInterface().getExtends();
+  auto superclasses = getProto().getInterface().getSuperclasses();
   for (auto i: kj::indices(superclasses)) {
     auto superclass = superclasses[i];
     uint location = _::RawBrandedSchema::makeDepLocation(

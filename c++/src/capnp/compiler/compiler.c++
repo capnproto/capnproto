@@ -64,7 +64,7 @@ public:
   // Create a child node.
 
   Node(kj::StringPtr name, Declaration::Which kind,
-       List<Declaration::TypeParameter>::Reader genericParams);
+       List<Declaration::BrandParameter>::Reader genericParams);
   // Create a dummy node representing a built-in declaration, like "Int32" or "true".
 
   uint64_t getId() { return id; }
@@ -89,7 +89,7 @@ public:
   kj::Maybe<ResolvedDecl> getParent() override;
   ResolvedDecl getTopScope() override;
   kj::Maybe<Schema> resolveBootstrapSchema(
-      uint64_t id, schema::TypeEnvironment::Reader environment) override;
+      uint64_t id, schema::Brand::Reader brand) override;
   kj::Maybe<schema::Node::Reader> resolveFinalSchema(uint64_t id) override;
   kj::Maybe<ResolvedDecl> resolveImport(kj::StringPtr name) override;
   kj::Maybe<Type> resolveBootstrapType(schema::Type::Reader type, Schema scope) override;
@@ -200,9 +200,9 @@ private:
   void traverseType(const schema::Type::Reader& type, uint eagerness,
                     std::unordered_map<Node*, uint>& seen,
                     const SchemaLoader& finalLoader);
-  void traverseEnvironment(const schema::TypeEnvironment::Reader& type, uint eagerness,
-                           std::unordered_map<Node*, uint>& seen,
-                           const SchemaLoader& finalLoader);
+  void traverseBrand(const schema::Brand::Reader& brand, uint eagerness,
+                     std::unordered_map<Node*, uint>& seen,
+                     const SchemaLoader& finalLoader);
   void traverseAnnotations(const List<schema::Annotation>::Reader& annotations, uint eagerness,
                            std::unordered_map<Node*, uint>& seen,
                            const SchemaLoader& finalLoader);
@@ -372,7 +372,7 @@ Compiler::Node::Node(Node& parent, const Declaration::Reader& declaration)
 }
 
 Compiler::Node::Node(kj::StringPtr name, Declaration::Which kind,
-                     List<Declaration::TypeParameter>::Reader genericParams)
+                     List<Declaration::BrandParameter>::Reader genericParams)
     : module(nullptr),
       parent(nullptr),
       // It's helpful if these have unique IDs. Real type IDs can't be under 2^31 anyway.
@@ -677,18 +677,18 @@ void Compiler::Node::traverseNodeDependencies(
 
     case schema::Node::INTERFACE: {
       auto interface = schemaNode.getInterface();
-      for (auto extend: interface.getExtends()) {
-        uint64_t extendId = extend.getId();
-        if (extendId != 0) {  // if zero, we reported an error earlier
-          traverseDependency(extendId, eagerness, seen, finalLoader);
+      for (auto superclass: interface.getSuperclasses()) {
+        uint64_t superclassId = superclass.getId();
+        if (superclassId != 0) {  // if zero, we reported an error earlier
+          traverseDependency(superclassId, eagerness, seen, finalLoader);
         }
-        traverseEnvironment(extend.getEnvironment(), eagerness, seen, finalLoader);
+        traverseBrand(superclass.getBrand(), eagerness, seen, finalLoader);
       }
       for (auto method: interface.getMethods()) {
         traverseDependency(method.getParamStructType(), eagerness, seen, finalLoader, true);
-        traverseEnvironment(method.getParamEnvironment(), eagerness, seen, finalLoader);
+        traverseBrand(method.getParamBrand(), eagerness, seen, finalLoader);
         traverseDependency(method.getResultStructType(), eagerness, seen, finalLoader, true);
-        traverseEnvironment(method.getResultEnvironment(), eagerness, seen, finalLoader);
+        traverseBrand(method.getResultBrand(), eagerness, seen, finalLoader);
         traverseAnnotations(method.getAnnotations(), eagerness, seen, finalLoader);
       }
       break;
@@ -705,19 +705,19 @@ void Compiler::Node::traverseType(const schema::Type::Reader& type, uint eagerne
                                   std::unordered_map<Node*, uint>& seen,
                                   const SchemaLoader& finalLoader) {
   uint64_t id = 0;
-  schema::TypeEnvironment::Reader env;
+  schema::Brand::Reader brand;
   switch (type.which()) {
     case schema::Type::STRUCT:
       id = type.getStruct().getTypeId();
-      env = type.getStruct().getTypeEnvironment();
+      brand = type.getStruct().getBrand();
       break;
     case schema::Type::ENUM:
       id = type.getEnum().getTypeId();
-      env = type.getEnum().getTypeEnvironment();
+      brand = type.getEnum().getBrand();
       break;
     case schema::Type::INTERFACE:
       id = type.getInterface().getTypeId();
-      env = type.getInterface().getTypeEnvironment();
+      brand = type.getInterface().getBrand();
       break;
     case schema::Type::LIST:
       traverseType(type.getList().getElementType(), eagerness, seen, finalLoader);
@@ -727,27 +727,27 @@ void Compiler::Node::traverseType(const schema::Type::Reader& type, uint eagerne
   }
 
   traverseDependency(id, eagerness, seen, finalLoader);
-  traverseEnvironment(env, eagerness, seen, finalLoader);
+  traverseBrand(brand, eagerness, seen, finalLoader);
 }
 
-void Compiler::Node::traverseEnvironment(
-    const schema::TypeEnvironment::Reader& env, uint eagerness,
+void Compiler::Node::traverseBrand(
+    const schema::Brand::Reader& brand, uint eagerness,
     std::unordered_map<Node*, uint>& seen,
     const SchemaLoader& finalLoader) {
-  for (auto scope: env.getScopes()) {
+  for (auto scope: brand.getScopes()) {
     switch (scope.which()) {
-      case schema::TypeEnvironment::Scope::BIND:
+      case schema::Brand::Scope::BIND:
         for (auto binding: scope.getBind()) {
           switch (binding.which()) {
-            case schema::TypeEnvironment::Binding::UNBOUND:
+            case schema::Brand::Binding::UNBOUND:
               break;
-            case schema::TypeEnvironment::Binding::TYPE:
+            case schema::Brand::Binding::TYPE:
               traverseType(binding.getType(), eagerness, seen, finalLoader);
               break;
           }
         }
         break;
-      case schema::TypeEnvironment::Scope::INHERIT:
+      case schema::Brand::Scope::INHERIT:
         break;
     }
   }
@@ -863,15 +863,15 @@ NodeTranslator::Resolver::ResolvedDecl Compiler::Node::getTopScope() {
 }
 
 kj::Maybe<Schema> Compiler::Node::resolveBootstrapSchema(
-    uint64_t id, schema::TypeEnvironment::Reader environment) {
+    uint64_t id, schema::Brand::Reader brand) {
   KJ_IF_MAYBE(node, module->getCompiler().findNode(id)) {
     // Make sure the bootstrap schema is loaded into the SchemaLoader.
     if (node->getBootstrapSchema() == nullptr) {
       return nullptr;
     }
 
-    // Now we actually invoke get() to evaluate the environment.
-    return module->getCompiler().getWorkspace().bootstrapLoader.get(id, environment);
+    // Now we actually invoke get() to evaluate the brand.
+    return module->getCompiler().getWorkspace().bootstrapLoader.get(id, brand);
   } else {
     KJ_FAIL_REQUIRE("Tried to get schema for ID we haven't seen before.");
   }
@@ -982,8 +982,8 @@ static void findImports(Declaration::Reader decl, std::set<kj::StringPtr>& outpu
       findImports(decl.getField().getType(), output);
       break;
     case Declaration::INTERFACE:
-      for (auto extend: decl.getInterface().getExtends()) {
-        findImports(extend, output);
+      for (auto superclass: decl.getInterface().getSuperclasses()) {
+        findImports(superclass, output);
       }
       break;
     case Declaration::METHOD: {
@@ -1064,10 +1064,10 @@ Compiler::Impl::Impl(AnnotationFlag annotationFlag)
       if (name.startsWith("builtin")) {
         kj::StringPtr symbolName = name.slice(strlen("builtin"));
 
-        List<Declaration::TypeParameter>::Reader params;
+        List<Declaration::BrandParameter>::Reader params;
         for (auto annotation: fieldProto.getAnnotations()) {
           if (annotation.getId() == 0x94099c3f9eb32d6bull) {
-            params = annotation.getValue().getList().getAs<List<Declaration::TypeParameter>>();
+            params = annotation.getValue().getList().getAs<List<Declaration::BrandParameter>>();
             break;
           }
         }

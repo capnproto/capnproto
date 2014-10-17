@@ -120,10 +120,10 @@ struct Declaration {
     ordinal @3 :LocatedInteger;  # limited to 16 bits
   }
 
-  parameters @57 :List(TypeParameter);
+  parameters @57 :List(BrandParameter);
   # If this node is parameterized (generic), the list of parameters. Empty for non-generic types.
 
-  struct TypeParameter {
+  struct BrandParameter {
     name @0 :Text;
     startByte @1 :UInt32;
     endByte @2 :UInt32;
@@ -173,7 +173,7 @@ struct Declaration {
     group @20 :Void;
 
     interface :group {
-      extends @21 :List(Expression);
+      superclasses @21 :List(Expression);
     }
     method :group {
       params @22 :ParamList;
@@ -228,7 +228,7 @@ struct Declaration {
     builtinAnyPointer @56 :Void;
   }
 
-  annotation builtinParams @0x94099c3f9eb32d6b (field) :List(TypeParameter);
+  annotation builtinParams @0x94099c3f9eb32d6b (field) :List(BrandParameter);
 
   struct ParamList {
     # A list of method parameters or method returns.

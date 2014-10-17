@@ -114,19 +114,19 @@ private:
     return "(?)";
   }
 
-  kj::StringTree nodeName(Schema target, Schema scope, schema::TypeEnvironment::Reader env) {
+  kj::StringTree nodeName(Schema target, Schema scope, schema::Brand::Reader brand) {
     kj::Vector<Schema> targetPath;
     kj::Vector<Schema> scopeParts;
 
     targetPath.add(target);
 
-    std::map<uint64_t, List<schema::TypeEnvironment::Binding>::Reader> scopeBindings;
-    for (auto scopeEnv: env.getScopes()) {
-      switch (scopeEnv.which()) {
-        case schema::TypeEnvironment::Scope::BIND:
-          scopeBindings[scopeEnv.getScopeId()] = scopeEnv.getBind();
+    std::map<uint64_t, List<schema::Brand::Binding>::Reader> scopeBindings;
+    for (auto scopeBrand: brand.getScopes()) {
+      switch (scopeBrand.which()) {
+        case schema::Brand::Scope::BIND:
+          scopeBindings[scopeBrand.getScopeId()] = scopeBrand.getBind();
           break;
-        case schema::TypeEnvironment::Scope::INHERIT:
+        case schema::Brand::Scope::INHERIT:
           // TODO(someday): We need to pay attention to INHERIT and be sure to explicitly override
           //   any bindings that are not inherited. This requires a way to determine which of our
           //   parent scopes have a non-empty parameter list.
@@ -175,9 +175,9 @@ private:
       if (iter != scopeBindings.end()) {
         auto bindings = KJ_MAP(binding, iter->second) {
           switch (binding.which()) {
-            case schema::TypeEnvironment::Binding::UNBOUND:
+            case schema::Brand::Binding::UNBOUND:
               return kj::strTree("AnyPointer");
-            case schema::TypeEnvironment::Binding::TYPE:
+            case schema::Brand::Binding::TYPE:
               return genType(binding.getType(), scope);
           }
           return kj::strTree("<unknown binding>");
@@ -212,13 +212,13 @@ private:
         return kj::strTree("List(", genType(type.getList().getElementType(), scope), ")");
       case schema::Type::ENUM:
         return nodeName(schemaLoader.get(type.getEnum().getTypeId()), scope,
-                        type.getEnum().getTypeEnvironment());
+                        type.getEnum().getBrand());
       case schema::Type::STRUCT:
         return nodeName(schemaLoader.get(type.getStruct().getTypeId()), scope,
-                        type.getStruct().getTypeEnvironment());
+                        type.getStruct().getBrand());
       case schema::Type::INTERFACE:
         return nodeName(schemaLoader.get(type.getInterface().getTypeId()), scope,
-                        type.getInterface().getTypeEnvironment());
+                        type.getInterface().getBrand());
       case schema::Type::ANY_POINTER: {
         auto anyPointer = type.getAnyPointer();
         switch (anyPointer.which()) {
@@ -227,9 +227,9 @@ private:
           case schema::Type::AnyPointer::PARAMETER: {
             auto param = anyPointer.getParameter();
             auto scopeProto = scope.getProto();
-            auto targetScopeId = param.getNodeId();
+            auto targetScopeId = param.getScopeId();
             while (scopeProto.getId() != targetScopeId) {
-              scopeProto = schemaLoader.get(param.getNodeId()).getProto();
+              scopeProto = schemaLoader.get(param.getScopeId()).getProto();
             }
             auto params = scopeProto.getParameters();
             KJ_REQUIRE(param.getParameterIndex() < params.size());
@@ -353,7 +353,7 @@ private:
   kj::StringTree genAnnotation(schema::Annotation::Reader annotation,
                                Schema scope,
                                const char* prefix = " ", const char* suffix = "") {
-    auto decl = schemaLoader.get(annotation.getId(), annotation.getTypeEnvironment(), scope);
+    auto decl = schemaLoader.get(annotation.getId(), annotation.getBrand(), scope);
     auto proto = decl.getProto();
     KJ_REQUIRE(proto.isAnnotation());
     auto annDecl = proto.getAnnotation();
@@ -361,10 +361,10 @@ private:
     auto value = genValue(schemaLoader.getType(annDecl.getType(), decl),
                           annotation.getValue()).flatten();
     if (value.startsWith("(")) {
-      return kj::strTree(prefix, "$", nodeName(decl, scope, annotation.getTypeEnvironment()),
+      return kj::strTree(prefix, "$", nodeName(decl, scope, annotation.getBrand()),
                          value, suffix);
     } else {
-      return kj::strTree(prefix, "$", nodeName(decl, scope, annotation.getTypeEnvironment()),
+      return kj::strTree(prefix, "$", nodeName(decl, scope, annotation.getBrand()),
                          "(", value, ")", suffix);
     }
   }
@@ -470,7 +470,7 @@ private:
   }
 
   kj::StringTree genParamList(InterfaceSchema interface, StructSchema schema,
-                              schema::TypeEnvironment::Reader env) {
+                              schema::Brand::Reader brand) {
     if (schema.getProto().getScopeId() == 0) {
       // A named parameter list.
       return kj::strTree("(", kj::StringTree(
@@ -485,19 +485,18 @@ private:
                 genAnnotations(proto.getAnnotations(), interface));
           }, ", "), ")");
     } else {
-      return nodeName(schema, interface, env);
+      return nodeName(schema, interface, brand);
     }
   }
 
-  kj::StringTree genExtends(InterfaceSchema interface) {
-    auto extends = interface.getProto().getInterface().getExtends();
-    if (extends.size() == 0) {
+  kj::StringTree genSuperclasses(InterfaceSchema interface) {
+    auto superclasses = interface.getProto().getInterface().getSuperclasses();
+    if (superclasses.size() == 0) {
       return kj::strTree();
     } else {
-      return kj::strTree(" extends(", kj::StringTree(
-          KJ_MAP(extend, extends) {
-            return nodeName(schemaLoader.get(extend.getId()), interface,
-                            extend.getEnvironment());
+      return kj::strTree(" superclasses(", kj::StringTree(
+          KJ_MAP(superclass, superclasses) {
+            return nodeName(schemaLoader.get(superclass.getId()), interface, superclass.getBrand());
           }, ", "), ")");
     }
   }
@@ -546,7 +545,7 @@ private:
         auto interface = schema.asInterface();
         return kj::strTree(
             indent, "interface ", name, " @0x", kj::hex(proto.getId()), genGenericParams(schema),
-            genExtends(interface),
+            genSuperclasses(interface),
             genAnnotations(schema), " {\n",
             KJ_MAP(method, sortByCodeOrder(interface.getMethods())) {
               auto methodProto = method.getProto();
@@ -554,8 +553,8 @@ private:
               auto results = schemaLoader.get(methodProto.getResultStructType()).asStruct();
               return kj::strTree(
                   indent.next(), methodProto.getName(), " @", method.getIndex(), " ",
-                  genParamList(interface, params, methodProto.getParamEnvironment()), " -> ",
-                  genParamList(interface, results, methodProto.getResultEnvironment()),
+                  genParamList(interface, params, methodProto.getParamBrand()), " -> ",
+                  genParamList(interface, results, methodProto.getResultBrand()),
                   genAnnotations(methodProto.getAnnotations(), interface), ";\n");
             },
             genNestedDecls(schema, indent.next()),

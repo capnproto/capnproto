@@ -477,9 +477,9 @@ public:
 
 private:
   InterfaceSchema parent;
-  List<schema::Node::Extend>::Reader list;
+  List<schema::Superclass>::Reader list;
 
-  inline SuperclassList(InterfaceSchema parent, List<schema::Node::Extend>::Reader list)
+  inline SuperclassList(InterfaceSchema parent, List<schema::Superclass>::Reader list)
       : parent(parent), list(list) {}
 
   friend class InterfaceSchema;

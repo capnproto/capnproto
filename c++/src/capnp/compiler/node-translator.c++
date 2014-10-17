@@ -521,46 +521,44 @@ private:
 
 // =======================================================================================
 
-class NodeTranslator::DeclInstance {
+class NodeTranslator::BrandedDecl {
   // Represents a declaration possibly with generic parameter bindings.
 
 public:
-  inline DeclInstance(Resolver::ResolvedDecl decl,
-                      kj::Own<NodeTranslator::TypeEnvironment>&& environment,
-                      Expression::Reader source)
+  inline BrandedDecl(Resolver::ResolvedDecl decl,
+                     kj::Own<NodeTranslator::BrandScope>&& brand,
+                     Expression::Reader source)
       : isVariable(false), decl(decl),
-        environment(kj::mv(environment)), source(source) {}
-  inline DeclInstance(Resolver::ResolvedParameter variable, Expression::Reader source)
+        brand(kj::mv(brand)), source(source) {}
+  inline BrandedDecl(Resolver::ResolvedParameter variable, Expression::Reader source)
       : isVariable(true), variable(variable), source(source) {}
-  inline DeclInstance(decltype(nullptr)) {}
+  inline BrandedDecl(decltype(nullptr)) {}
 
-  DeclInstance(DeclInstance& other);
-  DeclInstance(DeclInstance&& other) = default;
+  BrandedDecl(BrandedDecl& other);
+  BrandedDecl(BrandedDecl&& other) = default;
 
-  DeclInstance& operator=(DeclInstance& other);
-  DeclInstance& operator=(DeclInstance&& other) = default;
+  BrandedDecl& operator=(BrandedDecl& other);
+  BrandedDecl& operator=(BrandedDecl&& other) = default;
 
-  kj::Maybe<DeclInstance> applyParams(
-      kj::Array<DeclInstance> params, Expression::Reader subSource);
+  kj::Maybe<BrandedDecl> applyParams(kj::Array<BrandedDecl> params, Expression::Reader subSource);
   // Treat the declaration as a generic and apply it to the given parameter list.
 
-  kj::Maybe<DeclInstance> getMember(
+  kj::Maybe<BrandedDecl> getMember(
       NodeTranslator& nodeTranslator, kj::StringPtr memberName, Expression::Reader subSource);
   // Get a member of this declaration.
 
   kj::Maybe<Declaration::Which> getKind();
   // Returns the kind of declaration, or null if this is an unbound generic variable.
 
-  template <typename InitTypeEnvironmentFunc>
-  uint64_t getIdAndFillEnv(NodeTranslator& nodeTranslator,
-                           InitTypeEnvironmentFunc&& initTypeEnvironment);
-  // Returns the type ID of this node. `initTypeEnvironment` is a zero-arg functor which returns
-  // schema::TypeEnvironment::Builder; this will be called if this decl instance has generic
-  // bindings, and the returned builder filled in to reflect those bindings.
+  template <typename InitBrandFunc>
+  uint64_t getIdAndFillBrand(NodeTranslator& nodeTranslator, InitBrandFunc&& initBrand);
+  // Returns the type ID of this node. `initBrand` is a zero-arg functor which returns
+  // schema::Brand::Builder; this will be called if this decl has brand bindings, and
+  // the returned builder filled in to reflect those bindings.
   //
   // It is an error to call this when `getKind()` returns null.
 
-  DeclInstance& getListParam();
+  BrandedDecl& getListParam();
   // Only if the kind is BUILTIN_LIST: Get the list's type parameter.
 
   Resolver::ResolvedParameter asVariable();
@@ -582,29 +580,29 @@ private:
     Resolver::ResolvedDecl decl;
     Resolver::ResolvedParameter variable;
   };
-  kj::Own<NodeTranslator::TypeEnvironment> environment;  // null if variable
+  kj::Own<NodeTranslator::BrandScope> brand;  // null if variable
   Expression::Reader source;
 };
 
-class NodeTranslator::TypeEnvironment: public kj::Refcounted {
+class NodeTranslator::BrandScope: public kj::Refcounted {
 public:
-  TypeEnvironment(ErrorReporter& errorReporter, uint64_t startingScopeId,
-                  uint startingScopeParamCount, Resolver& startingScope)
+  BrandScope(ErrorReporter& errorReporter, uint64_t startingScopeId,
+             uint startingScopeParamCount, Resolver& startingScope)
       : errorReporter(errorReporter), parent(nullptr), leafId(startingScopeId),
         leafParamCount(startingScopeParamCount), inherited(true) {
-    // Create an empty type environment.
+    // Create all lexical parent scopes, all with no brand bindings.
     KJ_IF_MAYBE(p, startingScope.getParent()) {
-      parent = kj::refcounted<TypeEnvironment>(
+      parent = kj::refcounted<BrandScope>(
           errorReporter, p->id, p->genericParamCount, *p->resolver);
     }
   }
 
-  kj::Own<TypeEnvironment> push(uint64_t typeId, uint paramCount) {
-    return kj::refcounted<TypeEnvironment>(kj::addRef(*this), typeId, paramCount);
+  kj::Own<BrandScope> push(uint64_t typeId, uint paramCount) {
+    return kj::refcounted<BrandScope>(kj::addRef(*this), typeId, paramCount);
   }
 
-  kj::Maybe<kj::Own<TypeEnvironment>> setParams(
-      kj::Array<DeclInstance> params, Declaration::Which genericType, Expression::Reader source) {
+  kj::Maybe<kj::Own<BrandScope>> setParams(
+      kj::Array<BrandedDecl> params, Declaration::Which genericType, Expression::Reader source) {
     if (this->params.size() != 0) {
       errorReporter.addErrorOn(source, "Double-application of generic parameters.");
       return nullptr;
@@ -636,11 +634,11 @@ public:
         }
       }
 
-      return kj::refcounted<TypeEnvironment>(*this, kj::mv(params));
+      return kj::refcounted<BrandScope>(*this, kj::mv(params));
     }
   }
 
-  kj::Own<TypeEnvironment> pop(uint64_t newLeafId) {
+  kj::Own<BrandScope> pop(uint64_t newLeafId) {
     if (leafId == newLeafId) {
       return kj::addRef(*this);
     }
@@ -648,11 +646,11 @@ public:
       return (*p)->pop(newLeafId);
     } else {
       // Looks like we're moving into a whole top-level scope.
-      return kj::refcounted<TypeEnvironment>(errorReporter, newLeafId);
+      return kj::refcounted<BrandScope>(errorReporter, newLeafId);
     }
   }
 
-  kj::Maybe<DeclInstance&> lookupParameter(uint64_t scopeId, uint index) {
+  kj::Maybe<BrandedDecl&> lookupParameter(uint64_t scopeId, uint index) {
     if (scopeId == leafId) {
       if (index < params.size()) {
         return params[index];
@@ -666,7 +664,7 @@ public:
     }
   }
 
-  kj::ArrayPtr<DeclInstance> getParams(uint64_t scopeId) {
+  kj::ArrayPtr<BrandedDecl> getParams(uint64_t scopeId) {
     if (scopeId == leafId) {
       return params;
     } else KJ_IF_MAYBE(p, parent) {
@@ -676,11 +674,10 @@ public:
     }
   }
 
-  template <typename InitTypeEnvironmentFunc>
-  void compile(NodeTranslator& translator,
-               InitTypeEnvironmentFunc&& initTypeEnvironment) {
-    kj::Vector<TypeEnvironment*> levels;
-    TypeEnvironment* ptr = this;
+  template <typename InitBrandFunc>
+  void compile(NodeTranslator& translator, InitBrandFunc&& initBrand) {
+    kj::Vector<BrandScope*> levels;
+    BrandScope* ptr = this;
     for (;;) {
       if (ptr->params.size() > 0 || (ptr->inherited && ptr->leafParamCount > 0)) {
         levels.add(ptr);
@@ -693,7 +690,7 @@ public:
     }
 
     if (levels.size() > 0) {
-      auto scopes = initTypeEnvironment().initScopes(levels.size());
+      auto scopes = initBrand().initScopes(levels.size());
       for (uint i: kj::indices(levels)) {
         auto scope = scopes[i];
         scope.setScopeId(levels[i]->leafId);
@@ -712,18 +709,17 @@ public:
 
 private:
   ErrorReporter& errorReporter;
-  kj::Maybe<kj::Own<NodeTranslator::TypeEnvironment>> parent;
+  kj::Maybe<kj::Own<NodeTranslator::BrandScope>> parent;
   uint64_t leafId;                     // zero = this is the root
   uint leafParamCount;                 // number of generic parameters on this leaf
   bool inherited;
-  kj::Array<DeclInstance> params;
+  kj::Array<BrandedDecl> params;
 
-  TypeEnvironment(kj::Own<NodeTranslator::TypeEnvironment> parent,
-                  uint64_t leafId, uint leafParamCount)
+  BrandScope(kj::Own<NodeTranslator::BrandScope> parent, uint64_t leafId, uint leafParamCount)
       : errorReporter(parent->errorReporter),
         parent(kj::mv(parent)), leafId(leafId), leafParamCount(leafParamCount),
         inherited(false) {}
-  TypeEnvironment(TypeEnvironment& base, kj::Array<DeclInstance> params)
+  BrandScope(BrandScope& base, kj::Array<BrandedDecl> params)
       : errorReporter(base.errorReporter),
         leafId(base.leafId), leafParamCount(base.leafParamCount),
         inherited(false), params(kj::mv(params)) {
@@ -731,74 +727,73 @@ private:
       parent = kj::addRef(**p);
     }
   }
-  TypeEnvironment(ErrorReporter& errorReporter, uint64_t scopeId)
+  BrandScope(ErrorReporter& errorReporter, uint64_t scopeId)
       : errorReporter(errorReporter), leafId(scopeId), leafParamCount(0), inherited(false) {}
 
   template <typename T, typename... Params>
   friend kj::Own<T> kj::refcounted(Params&&... params);
 };
 
-NodeTranslator::DeclInstance::DeclInstance(DeclInstance& other)
+NodeTranslator::BrandedDecl::BrandedDecl(BrandedDecl& other)
     : isVariable(other.isVariable),
       source(other.source) {
   if (isVariable) {
     variable = other.variable;
   } else {
     decl = other.decl;
-    environment = kj::addRef(*other.environment);
+    brand = kj::addRef(*other.brand);
   }
 }
 
-NodeTranslator::DeclInstance& NodeTranslator::DeclInstance::operator=(DeclInstance& other) {
+NodeTranslator::BrandedDecl& NodeTranslator::BrandedDecl::operator=(BrandedDecl& other) {
   isVariable = other.isVariable;
   source = other.source;
   if (isVariable) {
     variable = other.variable;
   } else {
     decl = other.decl;
-    environment = kj::addRef(*other.environment);
+    brand = kj::addRef(*other.brand);
   }
   return *this;
 }
 
-kj::Maybe<NodeTranslator::DeclInstance> NodeTranslator::DeclInstance::applyParams(
-    kj::Array<DeclInstance> params, Expression::Reader subSource) {
+kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandedDecl::applyParams(
+    kj::Array<BrandedDecl> params, Expression::Reader subSource) {
   if (isVariable) {
     return nullptr;
   } else {
-    return environment->setParams(kj::mv(params), decl.kind, subSource)
-        .map([&](kj::Own<TypeEnvironment>& env) {
-      DeclInstance result = *this;
-      result.environment = kj::mv(env);
+    return brand->setParams(kj::mv(params), decl.kind, subSource)
+        .map([&](kj::Own<BrandScope>& env) {
+      BrandedDecl result = *this;
+      result.brand = kj::mv(env);
       result.source = subSource;
       return result;
     });
   }
 }
 
-kj::Maybe<NodeTranslator::DeclInstance> NodeTranslator::DeclInstance::getMember(
+kj::Maybe<NodeTranslator::BrandedDecl> NodeTranslator::BrandedDecl::getMember(
     NodeTranslator& nodeTranslator, kj::StringPtr memberName, Expression::Reader subSource) {
   if (isVariable) {
     return nullptr;
   } else KJ_IF_MAYBE(r, decl.resolver->resolveMember(memberName)) {
     if (r->is<Resolver::ResolvedDecl>()) {
       auto& memberDecl = r->get<Resolver::ResolvedDecl>();
-      return DeclInstance(memberDecl,
-                          environment->push(memberDecl.id, memberDecl.genericParamCount),
-                          subSource);
+      return BrandedDecl(
+          memberDecl, brand->push(memberDecl.id, memberDecl.genericParamCount), subSource);
     } else {
       // TODO(now): This is wrong. We can't compile an alias expression from another file in our
       //   own context.
       auto& alias = r->get<Resolver::ResolvedAlias>();
       return nodeTranslator.compileDeclExpression(
-          alias.value, kj::addRef(*environment), *alias.scope);
+          alias.value, kj::addRef(*brand), *alias.scope);
     }
   } else {
     return nullptr;
   }
 }
 
-kj::Maybe<Declaration::Which> NodeTranslator::DeclInstance::getKind() {
+kj::Maybe<Declaration::Which> NodeTranslator::BrandedDecl::getKind() {
   if (isVariable) {
     return nullptr;
   } else {
@@ -806,26 +801,26 @@ kj::Maybe<Declaration::Which> NodeTranslator::DeclInstance::getKind() {
   }
 }
 
-template <typename InitTypeEnvironmentFunc>
-uint64_t NodeTranslator::DeclInstance::getIdAndFillEnv(
-    NodeTranslator& nodeTranslator, InitTypeEnvironmentFunc&& initTypeEnvironment) {
+template <typename InitBrandFunc>
+uint64_t NodeTranslator::BrandedDecl::getIdAndFillBrand(
+    NodeTranslator& nodeTranslator, InitBrandFunc&& initBrand) {
   KJ_REQUIRE(!isVariable);
 
-  environment->compile(nodeTranslator, kj::fwd<InitTypeEnvironmentFunc>(initTypeEnvironment));
+  brand->compile(nodeTranslator, kj::fwd<InitBrandFunc>(initBrand));
   return decl.id;
 }
 
-NodeTranslator::DeclInstance& NodeTranslator::DeclInstance::getListParam() {
+NodeTranslator::BrandedDecl& NodeTranslator::BrandedDecl::getListParam() {
   KJ_REQUIRE(!isVariable);
   KJ_REQUIRE(decl.kind == Declaration::BUILTIN_LIST);
 
-  auto params = environment->getParams(decl.id);
+  auto params = brand->getParams(decl.id);
   KJ_ASSERT(params.size() == 1);
 
   return params[0];
 }
 
-NodeTranslator::Resolver::ResolvedParameter NodeTranslator::DeclInstance::asVariable() {
+NodeTranslator::Resolver::ResolvedParameter NodeTranslator::BrandedDecl::asVariable() {
   KJ_REQUIRE(isVariable);
 
   return variable;
@@ -833,11 +828,11 @@ NodeTranslator::Resolver::ResolvedParameter NodeTranslator::DeclInstance::asVari
 
 static kj::String expressionString(Expression::Reader name);  // defined later
 
-kj::String NodeTranslator::DeclInstance::toString() {
+kj::String NodeTranslator::BrandedDecl::toString() {
   return expressionString(source);
 }
 
-kj::String NodeTranslator::DeclInstance::toDebugString() {
+kj::String NodeTranslator::BrandedDecl::toDebugString() {
   return isVariable ? kj::str("varibale(", variable.id, ", ", variable.index, ")")
                     : kj::str("decl(", decl.id, ", ", (uint)decl.kind, "')");
 }
@@ -851,7 +846,7 @@ NodeTranslator::NodeTranslator(
     : resolver(resolver), errorReporter(errorReporter),
       orphanage(Orphanage::getForMessageContaining(wipNodeParam.get())),
       compileAnnotations(compileAnnotations),
-      baseEnvironment(kj::refcounted<TypeEnvironment>(
+      localBrand(kj::refcounted<BrandScope>(
           errorReporter, wipNodeParam.getReader().getId(),
           decl.getParameters().size(), resolver)),
       wipNode(kj::mv(wipNodeParam)) {
@@ -1682,16 +1677,16 @@ void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
                                       schema::Node::Builder builder) {
   auto interfaceBuilder = builder.initInterface();
 
-  auto extendsDecl = decl.getExtends();
-  auto extendsBuilder = interfaceBuilder.initExtends(extendsDecl.size());
-  for (uint i: kj::indices(extendsDecl)) {
-    auto extend = extendsDecl[i];
+  auto superclassesDecl = decl.getSuperclasses();
+  auto superclassesBuilder = interfaceBuilder.initSuperclasses(superclassesDecl.size());
+  for (uint i: kj::indices(superclassesDecl)) {
+    auto superclass = superclassesDecl[i];
 
-    KJ_IF_MAYBE(decl, compileDeclExpression(extend)) {
+    KJ_IF_MAYBE(decl, compileDeclExpression(superclass)) {
       KJ_IF_MAYBE(kind, decl->getKind()) {
         if (*kind == Declaration::INTERFACE) {
-          auto e = extendsBuilder[i];
-          e.setId(decl->getIdAndFillEnv(*this, [&]() { return e.initEnvironment(); }));
+          auto s = superclassesBuilder[i];
+          s.setId(decl->getIdAndFillBrand(*this, [&]() { return s.initBrand(); }));
         } else {
           decl->addError(errorReporter, kj::str(
             "'", decl->toString(), "' is not an interface."));
@@ -1736,7 +1731,7 @@ void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
 
     methodBuilder.setParamStructType(compileParamList(
         methodDecl.getName().getValue(), ordinal, false, methodReader.getParams(),
-        [&]() { return methodBuilder.initParamEnvironment(); }));
+        [&]() { return methodBuilder.initParamBrand(); }));
 
     auto results = methodReader.getResults();
     Declaration::ParamList::Reader resultList;
@@ -1749,17 +1744,17 @@ void NodeTranslator::compileInterface(Declaration::Interface::Reader decl,
     }
     methodBuilder.setResultStructType(compileParamList(
         methodDecl.getName().getValue(), ordinal, true, resultList,
-        [&]() { return methodBuilder.initResultEnvironment(); }));
+        [&]() { return methodBuilder.initResultBrand(); }));
 
     methodBuilder.adoptAnnotations(compileAnnotationApplications(
         methodDecl.getAnnotations(), "targetsMethod"));
   }
 }
 
-template <typename InitTypeEnvironmentFunc>
+template <typename InitBrandFunc>
 uint64_t NodeTranslator::compileParamList(
     kj::StringPtr methodName, uint16_t ordinal, bool isResults,
-    Declaration::ParamList::Reader paramList, InitTypeEnvironmentFunc&& initTypeEnvironment) {
+    Declaration::ParamList::Reader paramList, InitBrandFunc&& initBrand) {
   switch (paramList.which()) {
     case Declaration::ParamList::NAMED_LIST: {
       auto newStruct = orphanage.newOrphan<schema::Node>();
@@ -1784,8 +1779,8 @@ uint64_t NodeTranslator::compileParamList(
       KJ_IF_MAYBE(target, compileDeclExpression(paramList.getType())) {
         KJ_IF_MAYBE(kind, target->getKind()) {
           if (*kind == Declaration::STRUCT) {
-            return target->getIdAndFillEnv(
-                *this, kj::fwd<InitTypeEnvironmentFunc>(initTypeEnvironment));
+            return target->getIdAndFillBrand(
+                *this, kj::fwd<InitBrandFunc>(initBrand));
           } else {
             errorReporter.addErrorOn(
                 paramList.getType(),
@@ -1923,9 +1918,9 @@ static kj::String expressionString(Expression::Reader name) {
 
 // -------------------------------------------------------------------
 
-kj::Maybe<NodeTranslator::DeclInstance>
+kj::Maybe<NodeTranslator::BrandedDecl>
 NodeTranslator::compileDeclExpression(Expression::Reader source,
-                                      kj::Own<TypeEnvironment> env,
+                                      kj::Own<BrandScope> env,
                                       Resolver& resolver) {
   switch (source.which()) {
     case Expression::UNKNOWN:
@@ -1947,7 +1942,7 @@ NodeTranslator::compileDeclExpression(Expression::Reader source,
       KJ_IF_MAYBE(r, resolver.resolve(name.getValue())) {
         if (r->is<Resolver::ResolvedDecl>()) {
           auto& decl = r->get<Resolver::ResolvedDecl>();
-          return DeclInstance(decl,
+          return BrandedDecl(decl,
               env->pop(decl.scopeId)->push(decl.id, decl.genericParamCount), source);
         } else if (r->is<Resolver::ResolvedAlias>()) {
           // TODO(now): This is wrong. We can't compile an alias expression from another file in
@@ -1959,7 +1954,7 @@ NodeTranslator::compileDeclExpression(Expression::Reader source,
           KJ_IF_MAYBE(p, env->lookupParameter(param.id, param.index)) {
             return *p;
           } else {
-            return DeclInstance(param, source);
+            return BrandedDecl(param, source);
           }
         }
       } else {
@@ -1973,12 +1968,12 @@ NodeTranslator::compileDeclExpression(Expression::Reader source,
       KJ_IF_MAYBE(r, resolver.getTopScope().resolver->resolveMember(name.getValue())) {
         if (r->is<Resolver::ResolvedDecl>()) {
           auto& decl = r->get<Resolver::ResolvedDecl>();
-          return DeclInstance(decl,
-              baseEnvironment->pop(decl.scopeId)->push(decl.id, decl.genericParamCount), source);
+          return BrandedDecl(decl,
+              localBrand->pop(decl.scopeId)->push(decl.id, decl.genericParamCount), source);
         } else {
           auto& alias = r->get<Resolver::ResolvedAlias>();
           return compileDeclExpression(
-              alias.value, baseEnvironment->pop(alias.scopeId), *alias.scope);
+              alias.value, localBrand->pop(alias.scopeId), *alias.scope);
         }
       } else {
         errorReporter.addErrorOn(name, kj::str("Not defined: ", name.getValue()));
@@ -1989,8 +1984,8 @@ NodeTranslator::compileDeclExpression(Expression::Reader source,
     case Expression::IMPORT: {
       auto filename = source.getImport();
       KJ_IF_MAYBE(decl, resolver.resolveImport(filename.getValue())) {
-        // Import is always a root scopee, so create a fresh TypeEnvironment.
-        return DeclInstance(*decl, kj::refcounted<TypeEnvironment>(
+        // Import is always a root scopee, so create a fresh BrandScope.
+        return BrandedDecl(*decl, kj::refcounted<BrandScope>(
             errorReporter, decl->id, decl->genericParamCount, *decl->resolver), source);
       } else {
         errorReporter.addErrorOn(filename, kj::str("Import failed: ", filename.getValue()));
@@ -2003,7 +1998,7 @@ NodeTranslator::compileDeclExpression(Expression::Reader source,
       KJ_IF_MAYBE(decl, compileDeclExpression(app.getFunction(), kj::addRef(*env), resolver)) {
         // Compile all params.
         auto params = app.getParams();
-        auto compiledParams = kj::heapArrayBuilder<DeclInstance>(params.size());
+        auto compiledParams = kj::heapArrayBuilder<BrandedDecl>(params.size());
         bool paramFailed = false;
         for (auto param: params) {
           if (param.isNamed()) {
@@ -2022,7 +2017,7 @@ NodeTranslator::compileDeclExpression(Expression::Reader source,
           return kj::mv(*decl);
         }
 
-        // Add the parameters to the environment.
+        // Add the parameters to the brand.
         KJ_IF_MAYBE(applied, decl->applyParams(compiledParams.finish(), source)) {
           return kj::mv(*applied);
         } else {
@@ -2055,9 +2050,9 @@ NodeTranslator::compileDeclExpression(Expression::Reader source,
   }
 }
 
-kj::Maybe<NodeTranslator::DeclInstance>
+kj::Maybe<NodeTranslator::BrandedDecl>
 NodeTranslator::compileDeclExpression(Expression::Reader source) {
-  return compileDeclExpression(source, kj::addRef(*baseEnvironment), resolver);
+  return compileDeclExpression(source, kj::addRef(*localBrand), resolver);
 }
 
 bool NodeTranslator::compileType(Expression::Reader source, schema::Type::Builder target) {
@@ -2068,26 +2063,26 @@ bool NodeTranslator::compileType(Expression::Reader source, schema::Type::Builde
   }
 }
 
-bool NodeTranslator::compileType(DeclInstance& decl, schema::Type::Builder target) {
+bool NodeTranslator::compileType(BrandedDecl& decl, schema::Type::Builder target) {
   KJ_IF_MAYBE(kind, decl.getKind()) {
     switch (*kind) {
       case Declaration::ENUM: {
         auto enum_ = target.initEnum();
-        enum_.setTypeId(decl.getIdAndFillEnv(*this, [&]() { return enum_.initTypeEnvironment(); }));
+        enum_.setTypeId(decl.getIdAndFillBrand(*this, [&]() { return enum_.initBrand(); }));
         return true;
       }
 
       case Declaration::STRUCT: {
         auto struct_ = target.initStruct();
-        struct_.setTypeId(decl.getIdAndFillEnv(*this,
-            [&]() { return struct_.initTypeEnvironment(); }));
+        struct_.setTypeId(decl.getIdAndFillBrand(*this,
+            [&]() { return struct_.initBrand(); }));
         return true;
       }
 
       case Declaration::INTERFACE: {
         auto interface = target.initInterface();
-        interface.setTypeId(decl.getIdAndFillEnv(*this,
-            [&]() { return interface.initTypeEnvironment(); }));
+        interface.setTypeId(decl.getIdAndFillBrand(*this,
+            [&]() { return interface.initBrand(); }));
         return true;
       }
 
@@ -2152,7 +2147,7 @@ bool NodeTranslator::compileType(DeclInstance& decl, schema::Type::Builder targe
     // Oh, this is a type variable.
     auto var = decl.asVariable();
     auto builder = target.initAnyPointer().initParameter();
-    builder.setNodeId(var.id);
+    builder.setScopeId(var.id);
     builder.setParameterIndex(var.index);
     return true;
   }
@@ -2564,7 +2559,7 @@ kj::String ValueTranslator::makeTypeName(Type type) {
 kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
     Expression::Reader source, bool isBootstrap) {
   // Look up the constant decl.
-  NodeTranslator::DeclInstance constDecl = nullptr;
+  NodeTranslator::BrandedDecl constDecl = nullptr;
   KJ_IF_MAYBE(decl, compileDeclExpression(source)) {
     constDecl = *decl;
   } else {
@@ -2579,14 +2574,14 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
     return nullptr;
   }
 
-  // Extract the ID and environment.
+  // Extract the ID and brand.
   MallocMessageBuilder builder(256);
-  auto constEnvironment = builder.getRoot<schema::TypeEnvironment>();
-  uint64_t id = constDecl.getIdAndFillEnv(*this, [&]() { return constEnvironment; });
+  auto constBrand = builder.getRoot<schema::Brand>();
+  uint64_t id = constDecl.getIdAndFillBrand(*this, [&]() { return constBrand; });
 
   // Look up the schema -- we'll need this to compile the constant's type.
   Schema constSchema;
-  KJ_IF_MAYBE(s, resolver.resolveBootstrapSchema(id, constEnvironment)) {
+  KJ_IF_MAYBE(s, resolver.resolveBootstrapSchema(id, constBrand)) {
     constSchema = *s;
   } else {
     // The constant's schema is broken for reasons already reported.
@@ -2637,7 +2632,7 @@ kj::Maybe<DynamicValue::Reader> NodeTranslator::readConstant(
     // current scope, but if that's really what the user wanted, we want them to use a
     // qualified name to make it more obvious.  Report an error.
     KJ_IF_MAYBE(scope, resolver.resolveBootstrapSchema(proto.getScopeId(),
-                                                       schema::TypeEnvironment::Reader())) {
+                                                       schema::Brand::Reader())) {
       auto scopeReader = scope->getProto();
       kj::StringPtr parent;
       if (scopeReader.isFile()) {
@@ -2682,11 +2677,11 @@ Orphan<List<schema::Annotation>> NodeTranslator::compileAnnotationApplications(
           errorReporter.addErrorOn(name, kj::str(
               "'", expressionString(name), "' is not an annotation."));
         } else {
-          annotationBuilder.setId(decl->getIdAndFillEnv(*this,
-              [&]() { return annotationBuilder.initTypeEnvironment(); }));
+          annotationBuilder.setId(decl->getIdAndFillBrand(*this,
+              [&]() { return annotationBuilder.initBrand(); }));
           KJ_IF_MAYBE(annotationSchema,
                       resolver.resolveBootstrapSchema(annotationBuilder.getId(),
-                                                      annotationBuilder.getTypeEnvironment())) {
+                                                      annotationBuilder.getBrand())) {
             auto node = annotationSchema->getProto().getAnnotation();
             if (!toDynamic(node).get(targetsFlagName).as<bool>()) {
               errorReporter.addErrorOn(name, kj::str(

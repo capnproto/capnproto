@@ -139,7 +139,7 @@ struct Node {
       methods @15 :List(Method);
       # Methods ordered by ordinal.
 
-      extends @31 :List(Extend);
+      superclasses @31 :List(Superclass);
       # Superclasses of this interface.
     }
 
@@ -164,11 +164,6 @@ struct Node {
       targetsParam @29 :Bool;
       targetsAnnotation @30 :Bool;
     }
-  }
-
-  struct Extend {
-    id @0 :Id;
-    environment @1 :TypeEnvironment;
   }
 }
 
@@ -242,6 +237,11 @@ struct Enumerant {
   annotations @2 :List(Annotation);
 }
 
+struct Superclass {
+  id @0 :Id;
+  brand @1 :Brand;
+}
+
 struct Method {
   # Schema for method of an interface.
 
@@ -260,14 +260,14 @@ struct Method {
   # this a situation where you can't just climb the scope chain to find where a particular
   # generic parameter was introduced. Making the `scopeId` zero was a mistake.)
 
-  paramEnvironment @5 :TypeEnvironment;
-  # Parameterization of param struct type.
+  paramBrand @5 :Brand;
+  # Brand of param struct type.
 
   resultStructType @3 :Id;
   # ID of the return struct type; similar to `paramStructType`.
 
-  resultEnvironment @6 :TypeEnvironment;
-  # Parameterization of result struct type.
+  resultBrand @6 :Brand;
+  # Brand of result struct type.
 
   annotations @4 :List(Annotation);
 }
@@ -299,15 +299,15 @@ struct Type {
 
     enum :group {
       typeId @15 :Id;
-      typeEnvironment @21 :TypeEnvironment;
+      brand @21 :Brand;
     }
     struct :group {
       typeId @16 :Id;
-      typeEnvironment @22 :TypeEnvironment;
+      brand @22 :Brand;
     }
     interface :group {
       typeId @17 :Id;
-      typeEnvironment @23 :TypeEnvironment;
+      brand @23 :Brand;
     }
 
     anyPointer :union {
@@ -317,9 +317,9 @@ struct Type {
       parameter :group {
         # This is actually a reference to a type parameter defined within this scope.
 
-        nodeId @19 :Id;
-        # Node ID of the generic type whose parameter we're referencing. This must be a parent
-        # of the current scope.
+        scopeId @19 :Id;
+        # ID of the generic type whose parameter we're referencing. This should be a parent of the
+        # current scope.
 
         parameterIndex @20 :UInt16;
         # Index of the parameter within the generic type's parameter list.
@@ -328,8 +328,9 @@ struct Type {
   }
 }
 
-struct TypeEnvironment {
-  # Specifies type parameters applying to a target type declaration, i.e. for generic types.
+struct Brand {
+  # Specifies bindings for parameters of generics. Since these bindings turn a generic into a
+  # non-generic, we call it the "brand".
 
   scopes @0 :List(Scope);
   # For each of the target type and each of its parent scopes, a parameterization may be included
@@ -403,8 +404,8 @@ struct Annotation {
   id @0 :Id;
   # ID of the annotation node.
 
-  typeEnvironment @2 :TypeEnvironment;
-  # Type environment of the annotation.
+  brand @2 :Brand;
+  # Brand of the annotation.
   #
   # Note that the annotation itself is not allowed to be parameterized, but its scope might be.
 

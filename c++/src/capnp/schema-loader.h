@@ -65,23 +65,20 @@ public:
   ~SchemaLoader() noexcept(false);
   KJ_DISALLOW_COPY(SchemaLoader);
 
-  typedef schema::TypeEnvironment::Reader GenericBindings;
-
-  Schema get(uint64_t id, GenericBindings bindings = GenericBindings(),
+  Schema get(uint64_t id, schema::Brand::Reader brand = schema::Brand::Reader(),
              Schema scope = Schema()) const;
   // Gets the schema for the given ID, throwing an exception if it isn't present.
   //
   // The returned schema may be invalidated if load() is called with a new schema for the same ID.
   // In general, you should not call load() while a schema from this loader is in-use.
   //
-  // `bindings` and `scope` are used to determine generic parameter bindings where relevant.
-  // `bindings` gives parameter bindings for the target type's generic parameters that were
-  // specified at the reference site. `scope` specifies the scope in which the type ID appeared --
-  // if the target type and the scope share some common super-scope which is parameterized,
-  // and bindings for those parameters weren't specified in `bindings`, they will be carried over
-  // from the scope.
+  // `brand` and `scope` are used to determine brand bindings where relevant. `brand` gives
+  // parameter bindings for the target type's brand parameters that were specified at the reference
+  // site. `scope` specifies the scope in which the type ID appeared -- if the target type and the
+  // scope share some common super-scope which is parameterized, and bindings for those parameters
+  // weren't specified in `brand`, they will be carried over from the scope.
 
-  kj::Maybe<Schema> tryGet(uint64_t id, GenericBindings bindings = GenericBindings(),
+  kj::Maybe<Schema> tryGet(uint64_t id, schema::Brand::Reader bindings = schema::Brand::Reader(),
                            Schema scope = Schema()) const;
   // Like get() but doesn't throw.
 

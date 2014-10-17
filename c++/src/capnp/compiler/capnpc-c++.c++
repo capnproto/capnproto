@@ -102,8 +102,8 @@ void enumerateDeps(schema::Node::Reader node, std::set<uint64_t>& deps) {
     }
     case schema::Node::INTERFACE: {
       auto interfaceNode = node.getInterface();
-      for (auto extend: interfaceNode.getExtends()) {
-        deps.insert(extend.getId());
+      for (auto superclass: interfaceNode.getSuperclasses()) {
+        deps.insert(superclass.getId());
       }
       for (auto method: interfaceNode.getMethods()) {
         deps.insert(method.getParamStructType());
@@ -1327,7 +1327,7 @@ private:
 
     auto proto = schema.getProto();
 
-    auto extends = KJ_MAP(extend, proto.getInterface().getExtends()) {
+    auto superclasses = KJ_MAP(extend, proto.getInterface().getSuperclasses()) {
       Schema schema = schemaLoader.get(extend.getId());
       return ExtendInfo { cppFullName(schema).flatten(), schema.getProto().getId() };
     };
@@ -1350,8 +1350,8 @@ private:
       kj::strTree(
           "class ", fullName, "::Client\n"
           "    : public virtual ::capnp::Capability::Client",
-          KJ_MAP(e, extends) {
-            return kj::strTree(",\n      public virtual ", e.typeName, "::Client");
+          KJ_MAP(s, superclasses) {
+            return kj::strTree(",\n      public virtual ", s.typeName, "::Client");
           }, " {\n"
           "public:\n"
           "  typedef ", fullName, " Calls;\n"
@@ -1377,8 +1377,8 @@ private:
           "\n"
           "class ", fullName, "::Server\n"
           "    : public virtual ::capnp::Capability::Server",
-          KJ_MAP(e, extends) {
-            return kj::strTree(",\n      public virtual ", e.typeName, "::Server");
+          KJ_MAP(s, superclasses) {
+            return kj::strTree(",\n      public virtual ", s.typeName, "::Server");
           }, " {\n"
           "public:\n",
           "  typedef ", fullName, " Serves;\n"
@@ -1427,10 +1427,10 @@ private:
           "  switch (interfaceId) {\n"
           "    case 0x", kj::hex(proto.getId()), "ull:\n"
           "      return dispatchCallInternal(methodId, context);\n",
-          KJ_MAP(e, extends) {
+          KJ_MAP(s, superclasses) {
             return kj::strTree(
-              "    case 0x", kj::hex(e.id), "ull:\n"
-              "      return ", e.typeName, "::Server::dispatchCallInternal(methodId, context);\n");
+              "    case 0x", kj::hex(s.id), "ull:\n"
+              "      return ", s.typeName, "::Server::dispatchCallInternal(methodId, context);\n");
           },
           "    default:\n"
           "      return internalUnimplemented(\"", proto.getDisplayName(), "\", interfaceId);\n"

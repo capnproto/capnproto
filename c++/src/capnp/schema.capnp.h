@@ -30,7 +30,6 @@ struct Node {
   };
   struct Parameter;
   struct NestedNode;
-  struct Extend;
   struct Struct;
   struct Enum;
   struct Interface;
@@ -48,14 +47,6 @@ struct Node::Parameter {
 
 struct Node::NestedNode {
   NestedNode() = delete;
-
-  class Reader;
-  class Builder;
-  class Pipeline;
-};
-
-struct Node::Extend {
-  Extend() = delete;
 
   class Reader;
   class Builder;
@@ -148,6 +139,14 @@ struct Field::Ordinal {
 
 struct Enumerant {
   Enumerant() = delete;
+
+  class Reader;
+  class Builder;
+  class Pipeline;
+};
+
+struct Superclass {
+  Superclass() = delete;
 
   class Reader;
   class Builder;
@@ -249,8 +248,8 @@ struct Type::AnyPointer::Parameter {
   class Pipeline;
 };
 
-struct TypeEnvironment {
-  TypeEnvironment() = delete;
+struct Brand {
+  Brand() = delete;
 
   class Reader;
   class Builder;
@@ -259,7 +258,7 @@ struct TypeEnvironment {
   struct Binding;
 };
 
-struct TypeEnvironment::Scope {
+struct Brand::Scope {
   Scope() = delete;
 
   class Reader;
@@ -271,7 +270,7 @@ struct TypeEnvironment::Scope {
   };
 };
 
-struct TypeEnvironment::Binding {
+struct Brand::Binding {
   Binding() = delete;
 
   class Reader;
@@ -368,7 +367,6 @@ namespace schemas {
 extern const ::capnp::_::RawSchema s_e682ab4cf923a417;
 extern const ::capnp::_::RawSchema s_b9521bccf10fa3b1;
 extern const ::capnp::_::RawSchema s_debf55bbfa0fc242;
-extern const ::capnp::_::RawSchema s_fd60b24c61c9e47e;
 extern const ::capnp::_::RawSchema s_9ea0b19b37fb4435;
 extern const ::capnp::_::RawSchema s_b54ab3364333f598;
 extern const ::capnp::_::RawSchema s_e82753cff0c2218f;
@@ -380,6 +378,7 @@ extern const ::capnp::_::RawSchema s_c42305476bb4746f;
 extern const ::capnp::_::RawSchema s_cafccddb68db1d11;
 extern const ::capnp::_::RawSchema s_bb90d5c287870be6;
 extern const ::capnp::_::RawSchema s_978a7cebdc549a4d;
+extern const ::capnp::_::RawSchema s_a9962a9ed0a4d7f8;
 extern const ::capnp::_::RawSchema s_9500cce23b334d80;
 extern const ::capnp::_::RawSchema s_d07378ede1f9cc60;
 extern const ::capnp::_::RawSchema s_87e739250a60ea97;
@@ -388,9 +387,9 @@ extern const ::capnp::_::RawSchema s_ac3a6f60ef4cc6d3;
 extern const ::capnp::_::RawSchema s_ed8bca69f7fb0cbf;
 extern const ::capnp::_::RawSchema s_c2573fe8a23e49f1;
 extern const ::capnp::_::RawSchema s_9dd1f724f4614a85;
-extern const ::capnp::_::RawSchema s_d1f11c4c0434796e;
-extern const ::capnp::_::RawSchema s_8343d91197413c18;
-extern const ::capnp::_::RawSchema s_f5b4269b6dd5cd38;
+extern const ::capnp::_::RawSchema s_903455f06065422b;
+extern const ::capnp::_::RawSchema s_abd73485a9636bc9;
+extern const ::capnp::_::RawSchema s_c863cd16969ee7fc;
 extern const ::capnp::_::RawSchema s_ce23dcd2d7b00c9b;
 extern const ::capnp::_::RawSchema s_f1c8950dab257542;
 extern const ::capnp::_::RawSchema s_d1958f7dba521926;
@@ -409,9 +408,6 @@ CAPNP_DECLARE_STRUCT(
     0, 1, POINTER);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Node::NestedNode, debf55bbfa0fc242,
-    1, 1, INLINE_COMPOSITE);
-CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::Node::Extend, fd60b24c61c9e47e,
     1, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Node::Struct, 9ea0b19b37fb4435,
@@ -444,6 +440,9 @@ CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Enumerant, 978a7cebdc549a4d,
     1, 2, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
+    ::capnp::schema::Superclass, a9962a9ed0a4d7f8,
+    1, 1, INLINE_COMPOSITE);
+CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Method, 9500cce23b334d80,
     3, 4, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
@@ -468,13 +467,13 @@ CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Type::AnyPointer::Parameter, 9dd1f724f4614a85,
     3, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::TypeEnvironment, d1f11c4c0434796e,
+    ::capnp::schema::Brand, 903455f06065422b,
     0, 1, POINTER);
 CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::TypeEnvironment::Scope, 8343d91197413c18,
+    ::capnp::schema::Brand::Scope, abd73485a9636bc9,
     2, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
-    ::capnp::schema::TypeEnvironment::Binding, f5b4269b6dd5cd38,
+    ::capnp::schema::Brand::Binding, c863cd16969ee7fc,
     1, 1, INLINE_COMPOSITE);
 CAPNP_DECLARE_STRUCT(
     ::capnp::schema::Value, ce23dcd2d7b00c9b,
@@ -827,89 +826,6 @@ private:
   friend struct ::capnp::ToDynamic_;
 };
 
-class Node::Extend::Reader {
-public:
-  typedef Extend Reads;
-
-  Reader() = default;
-  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
-
-  inline ::capnp::MessageSize totalSize() const {
-    return _reader.totalSize().asPublic();
-  }
-
-  inline  ::uint64_t getId() const;
-
-  inline bool hasEnvironment() const;
-  inline  ::capnp::schema::TypeEnvironment::Reader getEnvironment() const;
-
-private:
-  ::capnp::_::StructReader _reader;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::_::PointerHelpers;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::List;
-  friend class ::capnp::MessageBuilder;
-  friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Node::Extend::Reader reader);
-};
-
-inline ::kj::StringTree KJ_STRINGIFY(Node::Extend::Reader reader) {
-  return ::capnp::_::structString<Node::Extend>(reader._reader);
-}
-
-class Node::Extend::Builder {
-public:
-  typedef Extend Builds;
-
-  Builder() = delete;  // Deleted to discourage incorrect usage.
-                       // You can explicitly initialize to nullptr instead.
-  inline Builder(decltype(nullptr)) {}
-  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
-  inline operator Reader() const { return Reader(_builder.asReader()); }
-  inline Reader asReader() const { return *this; }
-
-  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
-
-  inline  ::uint64_t getId();
-  inline void setId( ::uint64_t value);
-
-  inline bool hasEnvironment();
-  inline  ::capnp::schema::TypeEnvironment::Builder getEnvironment();
-  inline void setEnvironment( ::capnp::schema::TypeEnvironment::Reader value);
-  inline  ::capnp::schema::TypeEnvironment::Builder initEnvironment();
-  inline void adoptEnvironment(::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value);
-  inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> disownEnvironment();
-
-private:
-  ::capnp::_::StructBuilder _builder;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-  friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(Node::Extend::Builder builder);
-};
-
-inline ::kj::StringTree KJ_STRINGIFY(Node::Extend::Builder builder) {
-  return ::capnp::_::structString<Node::Extend>(builder._builder.asReader());
-}
-
-class Node::Extend::Pipeline {
-public:
-  typedef Extend Pipelines;
-
-  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
-  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
-      : _typeless(kj::mv(typeless)) {}
-
-  inline  ::capnp::schema::TypeEnvironment::Pipeline getEnvironment();
-private:
-  ::capnp::AnyPointer::Pipeline _typeless;
-  template <typename T, ::capnp::Kind k>
-  friend struct ::capnp::ToDynamic_;
-};
-
 class Node::Struct::Reader {
 public:
   typedef Struct Reads;
@@ -1108,8 +1024,8 @@ public:
   inline bool hasMethods() const;
   inline  ::capnp::List< ::capnp::schema::Method>::Reader getMethods() const;
 
-  inline bool hasExtends() const;
-  inline  ::capnp::List< ::capnp::schema::Node::Extend>::Reader getExtends() const;
+  inline bool hasSuperclasses() const;
+  inline  ::capnp::List< ::capnp::schema::Superclass>::Reader getSuperclasses() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1148,12 +1064,12 @@ public:
   inline void adoptMethods(::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>> disownMethods();
 
-  inline bool hasExtends();
-  inline  ::capnp::List< ::capnp::schema::Node::Extend>::Builder getExtends();
-  inline void setExtends( ::capnp::List< ::capnp::schema::Node::Extend>::Reader value);
-  inline  ::capnp::List< ::capnp::schema::Node::Extend>::Builder initExtends(unsigned int size);
-  inline void adoptExtends(::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Extend>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Extend>> disownExtends();
+  inline bool hasSuperclasses();
+  inline  ::capnp::List< ::capnp::schema::Superclass>::Builder getSuperclasses();
+  inline void setSuperclasses( ::capnp::List< ::capnp::schema::Superclass>::Reader value);
+  inline  ::capnp::List< ::capnp::schema::Superclass>::Builder initSuperclasses(unsigned int size);
+  inline void adoptSuperclasses(::capnp::Orphan< ::capnp::List< ::capnp::schema::Superclass>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Superclass>> disownSuperclasses();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1873,6 +1789,89 @@ private:
   friend struct ::capnp::ToDynamic_;
 };
 
+class Superclass::Reader {
+public:
+  typedef Superclass Reads;
+
+  Reader() = default;
+  inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
+
+  inline ::capnp::MessageSize totalSize() const {
+    return _reader.totalSize().asPublic();
+  }
+
+  inline  ::uint64_t getId() const;
+
+  inline bool hasBrand() const;
+  inline  ::capnp::schema::Brand::Reader getBrand() const;
+
+private:
+  ::capnp::_::StructReader _reader;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::_::PointerHelpers;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::List;
+  friend class ::capnp::MessageBuilder;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Superclass::Reader reader);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Superclass::Reader reader) {
+  return ::capnp::_::structString<Superclass>(reader._reader);
+}
+
+class Superclass::Builder {
+public:
+  typedef Superclass Builds;
+
+  Builder() = delete;  // Deleted to discourage incorrect usage.
+                       // You can explicitly initialize to nullptr instead.
+  inline Builder(decltype(nullptr)) {}
+  inline explicit Builder(::capnp::_::StructBuilder base): _builder(base) {}
+  inline operator Reader() const { return Reader(_builder.asReader()); }
+  inline Reader asReader() const { return *this; }
+
+  inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
+
+  inline  ::uint64_t getId();
+  inline void setId( ::uint64_t value);
+
+  inline bool hasBrand();
+  inline  ::capnp::schema::Brand::Builder getBrand();
+  inline void setBrand( ::capnp::schema::Brand::Reader value);
+  inline  ::capnp::schema::Brand::Builder initBrand();
+  inline void adoptBrand(::capnp::Orphan< ::capnp::schema::Brand>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::Brand> disownBrand();
+
+private:
+  ::capnp::_::StructBuilder _builder;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+  friend class ::capnp::Orphanage;
+  friend ::kj::StringTree KJ_STRINGIFY(Superclass::Builder builder);
+};
+
+inline ::kj::StringTree KJ_STRINGIFY(Superclass::Builder builder) {
+  return ::capnp::_::structString<Superclass>(builder._builder.asReader());
+}
+
+class Superclass::Pipeline {
+public:
+  typedef Superclass Pipelines;
+
+  inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
+  inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
+      : _typeless(kj::mv(typeless)) {}
+
+  inline  ::capnp::schema::Brand::Pipeline getBrand();
+private:
+  ::capnp::AnyPointer::Pipeline _typeless;
+  template <typename T, ::capnp::Kind k>
+  friend struct ::capnp::ToDynamic_;
+};
+
 class Method::Reader {
 public:
   typedef Method Reads;
@@ -1896,11 +1895,11 @@ public:
   inline bool hasAnnotations() const;
   inline  ::capnp::List< ::capnp::schema::Annotation>::Reader getAnnotations() const;
 
-  inline bool hasParamEnvironment() const;
-  inline  ::capnp::schema::TypeEnvironment::Reader getParamEnvironment() const;
+  inline bool hasParamBrand() const;
+  inline  ::capnp::schema::Brand::Reader getParamBrand() const;
 
-  inline bool hasResultEnvironment() const;
-  inline  ::capnp::schema::TypeEnvironment::Reader getResultEnvironment() const;
+  inline bool hasResultBrand() const;
+  inline  ::capnp::schema::Brand::Reader getResultBrand() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -1955,19 +1954,19 @@ public:
   inline void adoptAnnotations(::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>>&& value);
   inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>> disownAnnotations();
 
-  inline bool hasParamEnvironment();
-  inline  ::capnp::schema::TypeEnvironment::Builder getParamEnvironment();
-  inline void setParamEnvironment( ::capnp::schema::TypeEnvironment::Reader value);
-  inline  ::capnp::schema::TypeEnvironment::Builder initParamEnvironment();
-  inline void adoptParamEnvironment(::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value);
-  inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> disownParamEnvironment();
+  inline bool hasParamBrand();
+  inline  ::capnp::schema::Brand::Builder getParamBrand();
+  inline void setParamBrand( ::capnp::schema::Brand::Reader value);
+  inline  ::capnp::schema::Brand::Builder initParamBrand();
+  inline void adoptParamBrand(::capnp::Orphan< ::capnp::schema::Brand>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::Brand> disownParamBrand();
 
-  inline bool hasResultEnvironment();
-  inline  ::capnp::schema::TypeEnvironment::Builder getResultEnvironment();
-  inline void setResultEnvironment( ::capnp::schema::TypeEnvironment::Reader value);
-  inline  ::capnp::schema::TypeEnvironment::Builder initResultEnvironment();
-  inline void adoptResultEnvironment(::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value);
-  inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> disownResultEnvironment();
+  inline bool hasResultBrand();
+  inline  ::capnp::schema::Brand::Builder getResultBrand();
+  inline void setResultBrand( ::capnp::schema::Brand::Reader value);
+  inline  ::capnp::schema::Brand::Builder initResultBrand();
+  inline void adoptResultBrand(::capnp::Orphan< ::capnp::schema::Brand>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::Brand> disownResultBrand();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -1989,8 +1988,8 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::capnp::schema::TypeEnvironment::Pipeline getParamEnvironment();
-  inline  ::capnp::schema::TypeEnvironment::Pipeline getResultEnvironment();
+  inline  ::capnp::schema::Brand::Pipeline getParamBrand();
+  inline  ::capnp::schema::Brand::Pipeline getResultBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -2290,8 +2289,8 @@ public:
 
   inline  ::uint64_t getTypeId() const;
 
-  inline bool hasTypeEnvironment() const;
-  inline  ::capnp::schema::TypeEnvironment::Reader getTypeEnvironment() const;
+  inline bool hasBrand() const;
+  inline  ::capnp::schema::Brand::Reader getBrand() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -2326,12 +2325,12 @@ public:
   inline  ::uint64_t getTypeId();
   inline void setTypeId( ::uint64_t value);
 
-  inline bool hasTypeEnvironment();
-  inline  ::capnp::schema::TypeEnvironment::Builder getTypeEnvironment();
-  inline void setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value);
-  inline  ::capnp::schema::TypeEnvironment::Builder initTypeEnvironment();
-  inline void adoptTypeEnvironment(::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value);
-  inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> disownTypeEnvironment();
+  inline bool hasBrand();
+  inline  ::capnp::schema::Brand::Builder getBrand();
+  inline void setBrand( ::capnp::schema::Brand::Reader value);
+  inline  ::capnp::schema::Brand::Builder initBrand();
+  inline void adoptBrand(::capnp::Orphan< ::capnp::schema::Brand>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::Brand> disownBrand();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -2353,7 +2352,7 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::capnp::schema::TypeEnvironment::Pipeline getTypeEnvironment();
+  inline  ::capnp::schema::Brand::Pipeline getBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -2373,8 +2372,8 @@ public:
 
   inline  ::uint64_t getTypeId() const;
 
-  inline bool hasTypeEnvironment() const;
-  inline  ::capnp::schema::TypeEnvironment::Reader getTypeEnvironment() const;
+  inline bool hasBrand() const;
+  inline  ::capnp::schema::Brand::Reader getBrand() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -2409,12 +2408,12 @@ public:
   inline  ::uint64_t getTypeId();
   inline void setTypeId( ::uint64_t value);
 
-  inline bool hasTypeEnvironment();
-  inline  ::capnp::schema::TypeEnvironment::Builder getTypeEnvironment();
-  inline void setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value);
-  inline  ::capnp::schema::TypeEnvironment::Builder initTypeEnvironment();
-  inline void adoptTypeEnvironment(::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value);
-  inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> disownTypeEnvironment();
+  inline bool hasBrand();
+  inline  ::capnp::schema::Brand::Builder getBrand();
+  inline void setBrand( ::capnp::schema::Brand::Reader value);
+  inline  ::capnp::schema::Brand::Builder initBrand();
+  inline void adoptBrand(::capnp::Orphan< ::capnp::schema::Brand>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::Brand> disownBrand();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -2436,7 +2435,7 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::capnp::schema::TypeEnvironment::Pipeline getTypeEnvironment();
+  inline  ::capnp::schema::Brand::Pipeline getBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -2456,8 +2455,8 @@ public:
 
   inline  ::uint64_t getTypeId() const;
 
-  inline bool hasTypeEnvironment() const;
-  inline  ::capnp::schema::TypeEnvironment::Reader getTypeEnvironment() const;
+  inline bool hasBrand() const;
+  inline  ::capnp::schema::Brand::Reader getBrand() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -2492,12 +2491,12 @@ public:
   inline  ::uint64_t getTypeId();
   inline void setTypeId( ::uint64_t value);
 
-  inline bool hasTypeEnvironment();
-  inline  ::capnp::schema::TypeEnvironment::Builder getTypeEnvironment();
-  inline void setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value);
-  inline  ::capnp::schema::TypeEnvironment::Builder initTypeEnvironment();
-  inline void adoptTypeEnvironment(::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value);
-  inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> disownTypeEnvironment();
+  inline bool hasBrand();
+  inline  ::capnp::schema::Brand::Builder getBrand();
+  inline void setBrand( ::capnp::schema::Brand::Reader value);
+  inline  ::capnp::schema::Brand::Builder initBrand();
+  inline void adoptBrand(::capnp::Orphan< ::capnp::schema::Brand>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::Brand> disownBrand();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -2519,7 +2518,7 @@ public:
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
       : _typeless(kj::mv(typeless)) {}
 
-  inline  ::capnp::schema::TypeEnvironment::Pipeline getTypeEnvironment();
+  inline  ::capnp::schema::Brand::Pipeline getBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -2620,7 +2619,7 @@ public:
     return _reader.totalSize().asPublic();
   }
 
-  inline  ::uint64_t getNodeId() const;
+  inline  ::uint64_t getScopeId() const;
 
   inline  ::uint16_t getParameterIndex() const;
 
@@ -2654,8 +2653,8 @@ public:
 
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
 
-  inline  ::uint64_t getNodeId();
-  inline void setNodeId( ::uint64_t value);
+  inline  ::uint64_t getScopeId();
+  inline void setScopeId( ::uint64_t value);
 
   inline  ::uint16_t getParameterIndex();
   inline void setParameterIndex( ::uint16_t value);
@@ -2686,9 +2685,9 @@ private:
   friend struct ::capnp::ToDynamic_;
 };
 
-class TypeEnvironment::Reader {
+class Brand::Reader {
 public:
-  typedef TypeEnvironment Reads;
+  typedef Brand Reads;
 
   Reader() = default;
   inline explicit Reader(::capnp::_::StructReader base): _reader(base) {}
@@ -2698,7 +2697,7 @@ public:
   }
 
   inline bool hasScopes() const;
-  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Reader getScopes() const;
+  inline  ::capnp::List< ::capnp::schema::Brand::Scope>::Reader getScopes() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -2710,16 +2709,16 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Reader reader);
+  friend ::kj::StringTree KJ_STRINGIFY(Brand::Reader reader);
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Reader reader) {
-  return ::capnp::_::structString<TypeEnvironment>(reader._reader);
+inline ::kj::StringTree KJ_STRINGIFY(Brand::Reader reader) {
+  return ::capnp::_::structString<Brand>(reader._reader);
 }
 
-class TypeEnvironment::Builder {
+class Brand::Builder {
 public:
-  typedef TypeEnvironment Builds;
+  typedef Brand Builds;
 
   Builder() = delete;  // Deleted to discourage incorrect usage.
                        // You can explicitly initialize to nullptr instead.
@@ -2731,27 +2730,27 @@ public:
   inline ::capnp::MessageSize totalSize() const { return asReader().totalSize(); }
 
   inline bool hasScopes();
-  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Builder getScopes();
-  inline void setScopes( ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Reader value);
-  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Builder initScopes(unsigned int size);
-  inline void adoptScopes(::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>> disownScopes();
+  inline  ::capnp::List< ::capnp::schema::Brand::Scope>::Builder getScopes();
+  inline void setScopes( ::capnp::List< ::capnp::schema::Brand::Scope>::Reader value);
+  inline  ::capnp::List< ::capnp::schema::Brand::Scope>::Builder initScopes(unsigned int size);
+  inline void adoptScopes(::capnp::Orphan< ::capnp::List< ::capnp::schema::Brand::Scope>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Brand::Scope>> disownScopes();
 
 private:
   ::capnp::_::StructBuilder _builder;
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Builder builder);
+  friend ::kj::StringTree KJ_STRINGIFY(Brand::Builder builder);
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Builder builder) {
-  return ::capnp::_::structString<TypeEnvironment>(builder._builder.asReader());
+inline ::kj::StringTree KJ_STRINGIFY(Brand::Builder builder) {
+  return ::capnp::_::structString<Brand>(builder._builder.asReader());
 }
 
-class TypeEnvironment::Pipeline {
+class Brand::Pipeline {
 public:
-  typedef TypeEnvironment Pipelines;
+  typedef Brand Pipelines;
 
   inline Pipeline(decltype(nullptr)): _typeless(nullptr) {}
   inline explicit Pipeline(::capnp::AnyPointer::Pipeline&& typeless)
@@ -2763,7 +2762,7 @@ private:
   friend struct ::capnp::ToDynamic_;
 };
 
-class TypeEnvironment::Scope::Reader {
+class Brand::Scope::Reader {
 public:
   typedef Scope Reads;
 
@@ -2779,7 +2778,7 @@ public:
 
   inline bool isBind() const;
   inline bool hasBind() const;
-  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader getBind() const;
+  inline  ::capnp::List< ::capnp::schema::Brand::Binding>::Reader getBind() const;
 
   inline bool isInherit() const;
   inline  ::capnp::Void getInherit() const;
@@ -2794,14 +2793,14 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Scope::Reader reader);
+  friend ::kj::StringTree KJ_STRINGIFY(Brand::Scope::Reader reader);
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Scope::Reader reader) {
-  return ::capnp::_::structString<TypeEnvironment::Scope>(reader._reader);
+inline ::kj::StringTree KJ_STRINGIFY(Brand::Scope::Reader reader) {
+  return ::capnp::_::structString<Brand::Scope>(reader._reader);
 }
 
-class TypeEnvironment::Scope::Builder {
+class Brand::Scope::Builder {
 public:
   typedef Scope Builds;
 
@@ -2820,11 +2819,11 @@ public:
 
   inline bool isBind();
   inline bool hasBind();
-  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder getBind();
-  inline void setBind( ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader value);
-  inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder initBind(unsigned int size);
-  inline void adoptBind(::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>&& value);
-  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>> disownBind();
+  inline  ::capnp::List< ::capnp::schema::Brand::Binding>::Builder getBind();
+  inline void setBind( ::capnp::List< ::capnp::schema::Brand::Binding>::Reader value);
+  inline  ::capnp::List< ::capnp::schema::Brand::Binding>::Builder initBind(unsigned int size);
+  inline void adoptBind(::capnp::Orphan< ::capnp::List< ::capnp::schema::Brand::Binding>>&& value);
+  inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Brand::Binding>> disownBind();
 
   inline bool isInherit();
   inline  ::capnp::Void getInherit();
@@ -2835,14 +2834,14 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Scope::Builder builder);
+  friend ::kj::StringTree KJ_STRINGIFY(Brand::Scope::Builder builder);
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Scope::Builder builder) {
-  return ::capnp::_::structString<TypeEnvironment::Scope>(builder._builder.asReader());
+inline ::kj::StringTree KJ_STRINGIFY(Brand::Scope::Builder builder) {
+  return ::capnp::_::structString<Brand::Scope>(builder._builder.asReader());
 }
 
-class TypeEnvironment::Scope::Pipeline {
+class Brand::Scope::Pipeline {
 public:
   typedef Scope Pipelines;
 
@@ -2856,7 +2855,7 @@ private:
   friend struct ::capnp::ToDynamic_;
 };
 
-class TypeEnvironment::Binding::Reader {
+class Brand::Binding::Reader {
 public:
   typedef Binding Reads;
 
@@ -2885,14 +2884,14 @@ private:
   friend struct ::capnp::List;
   friend class ::capnp::MessageBuilder;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Binding::Reader reader);
+  friend ::kj::StringTree KJ_STRINGIFY(Brand::Binding::Reader reader);
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Binding::Reader reader) {
-  return ::capnp::_::structString<TypeEnvironment::Binding>(reader._reader);
+inline ::kj::StringTree KJ_STRINGIFY(Brand::Binding::Reader reader) {
+  return ::capnp::_::structString<Brand::Binding>(reader._reader);
 }
 
-class TypeEnvironment::Binding::Builder {
+class Brand::Binding::Builder {
 public:
   typedef Binding Builds;
 
@@ -2923,14 +2922,14 @@ private:
   template <typename T, ::capnp::Kind k>
   friend struct ::capnp::ToDynamic_;
   friend class ::capnp::Orphanage;
-  friend ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Binding::Builder builder);
+  friend ::kj::StringTree KJ_STRINGIFY(Brand::Binding::Builder builder);
 };
 
-inline ::kj::StringTree KJ_STRINGIFY(TypeEnvironment::Binding::Builder builder) {
-  return ::capnp::_::structString<TypeEnvironment::Binding>(builder._builder.asReader());
+inline ::kj::StringTree KJ_STRINGIFY(Brand::Binding::Builder builder) {
+  return ::capnp::_::structString<Brand::Binding>(builder._builder.asReader());
 }
 
-class TypeEnvironment::Binding::Pipeline {
+class Brand::Binding::Pipeline {
 public:
   typedef Binding Pipelines;
 
@@ -3178,8 +3177,8 @@ public:
   inline bool hasValue() const;
   inline  ::capnp::schema::Value::Reader getValue() const;
 
-  inline bool hasTypeEnvironment() const;
-  inline  ::capnp::schema::TypeEnvironment::Reader getTypeEnvironment() const;
+  inline bool hasBrand() const;
+  inline  ::capnp::schema::Brand::Reader getBrand() const;
 
 private:
   ::capnp::_::StructReader _reader;
@@ -3221,12 +3220,12 @@ public:
   inline void adoptValue(::capnp::Orphan< ::capnp::schema::Value>&& value);
   inline ::capnp::Orphan< ::capnp::schema::Value> disownValue();
 
-  inline bool hasTypeEnvironment();
-  inline  ::capnp::schema::TypeEnvironment::Builder getTypeEnvironment();
-  inline void setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value);
-  inline  ::capnp::schema::TypeEnvironment::Builder initTypeEnvironment();
-  inline void adoptTypeEnvironment(::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value);
-  inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> disownTypeEnvironment();
+  inline bool hasBrand();
+  inline  ::capnp::schema::Brand::Builder getBrand();
+  inline void setBrand( ::capnp::schema::Brand::Reader value);
+  inline  ::capnp::schema::Brand::Builder initBrand();
+  inline void adoptBrand(::capnp::Orphan< ::capnp::schema::Brand>&& value);
+  inline ::capnp::Orphan< ::capnp::schema::Brand> disownBrand();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -3249,7 +3248,7 @@ public:
       : _typeless(kj::mv(typeless)) {}
 
   inline  ::capnp::schema::Value::Pipeline getValue();
-  inline  ::capnp::schema::TypeEnvironment::Pipeline getTypeEnvironment();
+  inline  ::capnp::schema::Brand::Pipeline getBrand();
 private:
   ::capnp::AnyPointer::Pipeline _typeless;
   template <typename T, ::capnp::Kind k>
@@ -3930,55 +3929,6 @@ inline void Node::NestedNode::Builder::setId( ::uint64_t value) {
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline  ::uint64_t Node::Extend::Reader::getId() const {
-  return _reader.getDataField< ::uint64_t>(
-      0 * ::capnp::ELEMENTS);
-}
-
-inline  ::uint64_t Node::Extend::Builder::getId() {
-  return _builder.getDataField< ::uint64_t>(
-      0 * ::capnp::ELEMENTS);
-}
-inline void Node::Extend::Builder::setId( ::uint64_t value) {
-  _builder.setDataField< ::uint64_t>(
-      0 * ::capnp::ELEMENTS, value);
-}
-
-inline bool Node::Extend::Reader::hasEnvironment() const {
-  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
-inline bool Node::Extend::Builder::hasEnvironment() {
-  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
-}
-inline  ::capnp::schema::TypeEnvironment::Reader Node::Extend::Reader::getEnvironment() const {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
-      _reader.getPointerField(0 * ::capnp::POINTERS));
-}
-inline  ::capnp::schema::TypeEnvironment::Builder Node::Extend::Builder::getEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
-}
-inline  ::capnp::schema::TypeEnvironment::Pipeline Node::Extend::Pipeline::getEnvironment() {
-  return  ::capnp::schema::TypeEnvironment::Pipeline(_typeless.getPointerField(0));
-}
-inline void Node::Extend::Builder::setEnvironment( ::capnp::schema::TypeEnvironment::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::set(
-      _builder.getPointerField(0 * ::capnp::POINTERS), value);
-}
-inline  ::capnp::schema::TypeEnvironment::Builder Node::Extend::Builder::initEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::init(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
-}
-inline void Node::Extend::Builder::adoptEnvironment(
-    ::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::adopt(
-      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
-}
-inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> Node::Extend::Builder::disownEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::disown(
-      _builder.getPointerField(0 * ::capnp::POINTERS));
-}
-
 inline  ::uint16_t Node::Struct::Reader::getDataWordCount() const {
   return _reader.getDataField< ::uint16_t>(
       7 * ::capnp::ELEMENTS);
@@ -4159,35 +4109,35 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Method>> Node::Interface
       _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 
-inline bool Node::Interface::Reader::hasExtends() const {
+inline bool Node::Interface::Reader::hasSuperclasses() const {
   return !_reader.getPointerField(4 * ::capnp::POINTERS).isNull();
 }
-inline bool Node::Interface::Builder::hasExtends() {
+inline bool Node::Interface::Builder::hasSuperclasses() {
   return !_builder.getPointerField(4 * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::schema::Node::Extend>::Reader Node::Interface::Reader::getExtends() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Extend>>::get(
+inline  ::capnp::List< ::capnp::schema::Superclass>::Reader Node::Interface::Reader::getSuperclasses() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Superclass>>::get(
       _reader.getPointerField(4 * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::schema::Node::Extend>::Builder Node::Interface::Builder::getExtends() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Extend>>::get(
+inline  ::capnp::List< ::capnp::schema::Superclass>::Builder Node::Interface::Builder::getSuperclasses() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Superclass>>::get(
       _builder.getPointerField(4 * ::capnp::POINTERS));
 }
-inline void Node::Interface::Builder::setExtends( ::capnp::List< ::capnp::schema::Node::Extend>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Extend>>::set(
+inline void Node::Interface::Builder::setSuperclasses( ::capnp::List< ::capnp::schema::Superclass>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Superclass>>::set(
       _builder.getPointerField(4 * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::schema::Node::Extend>::Builder Node::Interface::Builder::initExtends(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Extend>>::init(
+inline  ::capnp::List< ::capnp::schema::Superclass>::Builder Node::Interface::Builder::initSuperclasses(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Superclass>>::init(
       _builder.getPointerField(4 * ::capnp::POINTERS), size);
 }
-inline void Node::Interface::Builder::adoptExtends(
-    ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Extend>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Extend>>::adopt(
+inline void Node::Interface::Builder::adoptSuperclasses(
+    ::capnp::Orphan< ::capnp::List< ::capnp::schema::Superclass>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Superclass>>::adopt(
       _builder.getPointerField(4 * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Node::Extend>> Node::Interface::Builder::disownExtends() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Node::Extend>>::disown(
+inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Superclass>> Node::Interface::Builder::disownSuperclasses() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Superclass>>::disown(
       _builder.getPointerField(4 * ::capnp::POINTERS));
 }
 
@@ -4873,6 +4823,55 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>> Enumerant::
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
+inline  ::uint64_t Superclass::Reader::getId() const {
+  return _reader.getDataField< ::uint64_t>(
+      0 * ::capnp::ELEMENTS);
+}
+
+inline  ::uint64_t Superclass::Builder::getId() {
+  return _builder.getDataField< ::uint64_t>(
+      0 * ::capnp::ELEMENTS);
+}
+inline void Superclass::Builder::setId( ::uint64_t value) {
+  _builder.setDataField< ::uint64_t>(
+      0 * ::capnp::ELEMENTS, value);
+}
+
+inline bool Superclass::Reader::hasBrand() const {
+  return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline bool Superclass::Builder::hasBrand() {
+  return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::schema::Brand::Reader Superclass::Reader::getBrand() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::get(
+      _reader.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::Brand::Builder Superclass::Builder::getBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::get(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline  ::capnp::schema::Brand::Pipeline Superclass::Pipeline::getBrand() {
+  return  ::capnp::schema::Brand::Pipeline(_typeless.getPointerField(0));
+}
+inline void Superclass::Builder::setBrand( ::capnp::schema::Brand::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::set(
+      _builder.getPointerField(0 * ::capnp::POINTERS), value);
+}
+inline  ::capnp::schema::Brand::Builder Superclass::Builder::initBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::init(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+inline void Superclass::Builder::adoptBrand(
+    ::capnp::Orphan< ::capnp::schema::Brand>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::adopt(
+      _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::schema::Brand> Superclass::Builder::disownBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::disown(
+      _builder.getPointerField(0 * ::capnp::POINTERS));
+}
+
 inline bool Method::Reader::hasName() const {
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
@@ -4979,73 +4978,73 @@ inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Annotation>> Method::Bui
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 
-inline bool Method::Reader::hasParamEnvironment() const {
+inline bool Method::Reader::hasParamBrand() const {
   return !_reader.getPointerField(2 * ::capnp::POINTERS).isNull();
 }
-inline bool Method::Builder::hasParamEnvironment() {
+inline bool Method::Builder::hasParamBrand() {
   return !_builder.getPointerField(2 * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::schema::TypeEnvironment::Reader Method::Reader::getParamEnvironment() const {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+inline  ::capnp::schema::Brand::Reader Method::Reader::getParamBrand() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::get(
       _reader.getPointerField(2 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::TypeEnvironment::Builder Method::Builder::getParamEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+inline  ::capnp::schema::Brand::Builder Method::Builder::getParamBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::get(
       _builder.getPointerField(2 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::TypeEnvironment::Pipeline Method::Pipeline::getParamEnvironment() {
-  return  ::capnp::schema::TypeEnvironment::Pipeline(_typeless.getPointerField(2));
+inline  ::capnp::schema::Brand::Pipeline Method::Pipeline::getParamBrand() {
+  return  ::capnp::schema::Brand::Pipeline(_typeless.getPointerField(2));
 }
-inline void Method::Builder::setParamEnvironment( ::capnp::schema::TypeEnvironment::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::set(
+inline void Method::Builder::setParamBrand( ::capnp::schema::Brand::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::set(
       _builder.getPointerField(2 * ::capnp::POINTERS), value);
 }
-inline  ::capnp::schema::TypeEnvironment::Builder Method::Builder::initParamEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::init(
+inline  ::capnp::schema::Brand::Builder Method::Builder::initParamBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::init(
       _builder.getPointerField(2 * ::capnp::POINTERS));
 }
-inline void Method::Builder::adoptParamEnvironment(
-    ::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::adopt(
+inline void Method::Builder::adoptParamBrand(
+    ::capnp::Orphan< ::capnp::schema::Brand>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::adopt(
       _builder.getPointerField(2 * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> Method::Builder::disownParamEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::disown(
+inline ::capnp::Orphan< ::capnp::schema::Brand> Method::Builder::disownParamBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::disown(
       _builder.getPointerField(2 * ::capnp::POINTERS));
 }
 
-inline bool Method::Reader::hasResultEnvironment() const {
+inline bool Method::Reader::hasResultBrand() const {
   return !_reader.getPointerField(3 * ::capnp::POINTERS).isNull();
 }
-inline bool Method::Builder::hasResultEnvironment() {
+inline bool Method::Builder::hasResultBrand() {
   return !_builder.getPointerField(3 * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::schema::TypeEnvironment::Reader Method::Reader::getResultEnvironment() const {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+inline  ::capnp::schema::Brand::Reader Method::Reader::getResultBrand() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::get(
       _reader.getPointerField(3 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::TypeEnvironment::Builder Method::Builder::getResultEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+inline  ::capnp::schema::Brand::Builder Method::Builder::getResultBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::get(
       _builder.getPointerField(3 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::TypeEnvironment::Pipeline Method::Pipeline::getResultEnvironment() {
-  return  ::capnp::schema::TypeEnvironment::Pipeline(_typeless.getPointerField(3));
+inline  ::capnp::schema::Brand::Pipeline Method::Pipeline::getResultBrand() {
+  return  ::capnp::schema::Brand::Pipeline(_typeless.getPointerField(3));
 }
-inline void Method::Builder::setResultEnvironment( ::capnp::schema::TypeEnvironment::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::set(
+inline void Method::Builder::setResultBrand( ::capnp::schema::Brand::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::set(
       _builder.getPointerField(3 * ::capnp::POINTERS), value);
 }
-inline  ::capnp::schema::TypeEnvironment::Builder Method::Builder::initResultEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::init(
+inline  ::capnp::schema::Brand::Builder Method::Builder::initResultBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::init(
       _builder.getPointerField(3 * ::capnp::POINTERS));
 }
-inline void Method::Builder::adoptResultEnvironment(
-    ::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::adopt(
+inline void Method::Builder::adoptResultBrand(
+    ::capnp::Orphan< ::capnp::schema::Brand>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::adopt(
       _builder.getPointerField(3 * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> Method::Builder::disownResultEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::disown(
+inline ::capnp::Orphan< ::capnp::schema::Brand> Method::Builder::disownResultBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::disown(
       _builder.getPointerField(3 * ::capnp::POINTERS));
 }
 
@@ -5584,38 +5583,38 @@ inline void Type::Enum::Builder::setTypeId( ::uint64_t value) {
       1 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Type::Enum::Reader::hasTypeEnvironment() const {
+inline bool Type::Enum::Reader::hasBrand() const {
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline bool Type::Enum::Builder::hasTypeEnvironment() {
+inline bool Type::Enum::Builder::hasBrand() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::schema::TypeEnvironment::Reader Type::Enum::Reader::getTypeEnvironment() const {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+inline  ::capnp::schema::Brand::Reader Type::Enum::Reader::getBrand() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::TypeEnvironment::Builder Type::Enum::Builder::getTypeEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+inline  ::capnp::schema::Brand::Builder Type::Enum::Builder::getBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::TypeEnvironment::Pipeline Type::Enum::Pipeline::getTypeEnvironment() {
-  return  ::capnp::schema::TypeEnvironment::Pipeline(_typeless.getPointerField(0));
+inline  ::capnp::schema::Brand::Pipeline Type::Enum::Pipeline::getBrand() {
+  return  ::capnp::schema::Brand::Pipeline(_typeless.getPointerField(0));
 }
-inline void Type::Enum::Builder::setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::set(
+inline void Type::Enum::Builder::setBrand( ::capnp::schema::Brand::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::set(
       _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
-inline  ::capnp::schema::TypeEnvironment::Builder Type::Enum::Builder::initTypeEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::init(
+inline  ::capnp::schema::Brand::Builder Type::Enum::Builder::initBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::init(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline void Type::Enum::Builder::adoptTypeEnvironment(
-    ::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::adopt(
+inline void Type::Enum::Builder::adoptBrand(
+    ::capnp::Orphan< ::capnp::schema::Brand>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::adopt(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> Type::Enum::Builder::disownTypeEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::disown(
+inline ::capnp::Orphan< ::capnp::schema::Brand> Type::Enum::Builder::disownBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
@@ -5633,38 +5632,38 @@ inline void Type::Struct::Builder::setTypeId( ::uint64_t value) {
       1 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Type::Struct::Reader::hasTypeEnvironment() const {
+inline bool Type::Struct::Reader::hasBrand() const {
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline bool Type::Struct::Builder::hasTypeEnvironment() {
+inline bool Type::Struct::Builder::hasBrand() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::schema::TypeEnvironment::Reader Type::Struct::Reader::getTypeEnvironment() const {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+inline  ::capnp::schema::Brand::Reader Type::Struct::Reader::getBrand() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::TypeEnvironment::Builder Type::Struct::Builder::getTypeEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+inline  ::capnp::schema::Brand::Builder Type::Struct::Builder::getBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::TypeEnvironment::Pipeline Type::Struct::Pipeline::getTypeEnvironment() {
-  return  ::capnp::schema::TypeEnvironment::Pipeline(_typeless.getPointerField(0));
+inline  ::capnp::schema::Brand::Pipeline Type::Struct::Pipeline::getBrand() {
+  return  ::capnp::schema::Brand::Pipeline(_typeless.getPointerField(0));
 }
-inline void Type::Struct::Builder::setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::set(
+inline void Type::Struct::Builder::setBrand( ::capnp::schema::Brand::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::set(
       _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
-inline  ::capnp::schema::TypeEnvironment::Builder Type::Struct::Builder::initTypeEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::init(
+inline  ::capnp::schema::Brand::Builder Type::Struct::Builder::initBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::init(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline void Type::Struct::Builder::adoptTypeEnvironment(
-    ::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::adopt(
+inline void Type::Struct::Builder::adoptBrand(
+    ::capnp::Orphan< ::capnp::schema::Brand>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::adopt(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> Type::Struct::Builder::disownTypeEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::disown(
+inline ::capnp::Orphan< ::capnp::schema::Brand> Type::Struct::Builder::disownBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
@@ -5682,38 +5681,38 @@ inline void Type::Interface::Builder::setTypeId( ::uint64_t value) {
       1 * ::capnp::ELEMENTS, value);
 }
 
-inline bool Type::Interface::Reader::hasTypeEnvironment() const {
+inline bool Type::Interface::Reader::hasBrand() const {
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline bool Type::Interface::Builder::hasTypeEnvironment() {
+inline bool Type::Interface::Builder::hasBrand() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::schema::TypeEnvironment::Reader Type::Interface::Reader::getTypeEnvironment() const {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+inline  ::capnp::schema::Brand::Reader Type::Interface::Reader::getBrand() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::TypeEnvironment::Builder Type::Interface::Builder::getTypeEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+inline  ::capnp::schema::Brand::Builder Type::Interface::Builder::getBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::TypeEnvironment::Pipeline Type::Interface::Pipeline::getTypeEnvironment() {
-  return  ::capnp::schema::TypeEnvironment::Pipeline(_typeless.getPointerField(0));
+inline  ::capnp::schema::Brand::Pipeline Type::Interface::Pipeline::getBrand() {
+  return  ::capnp::schema::Brand::Pipeline(_typeless.getPointerField(0));
 }
-inline void Type::Interface::Builder::setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::set(
+inline void Type::Interface::Builder::setBrand( ::capnp::schema::Brand::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::set(
       _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
-inline  ::capnp::schema::TypeEnvironment::Builder Type::Interface::Builder::initTypeEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::init(
+inline  ::capnp::schema::Brand::Builder Type::Interface::Builder::initBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::init(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline void Type::Interface::Builder::adoptTypeEnvironment(
-    ::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::adopt(
+inline void Type::Interface::Builder::adoptBrand(
+    ::capnp::Orphan< ::capnp::schema::Brand>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::adopt(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> Type::Interface::Builder::disownTypeEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::disown(
+inline ::capnp::Orphan< ::capnp::schema::Brand> Type::Interface::Builder::disownBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
@@ -5773,16 +5772,16 @@ inline Type::AnyPointer::Parameter::Builder Type::AnyPointer::Builder::initParam
   _builder.setDataField< ::uint64_t>(2 * ::capnp::ELEMENTS, 0);
   return Type::AnyPointer::Parameter::Builder(_builder);
 }
-inline  ::uint64_t Type::AnyPointer::Parameter::Reader::getNodeId() const {
+inline  ::uint64_t Type::AnyPointer::Parameter::Reader::getScopeId() const {
   return _reader.getDataField< ::uint64_t>(
       2 * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t Type::AnyPointer::Parameter::Builder::getNodeId() {
+inline  ::uint64_t Type::AnyPointer::Parameter::Builder::getScopeId() {
   return _builder.getDataField< ::uint64_t>(
       2 * ::capnp::ELEMENTS);
 }
-inline void Type::AnyPointer::Parameter::Builder::setNodeId( ::uint64_t value) {
+inline void Type::AnyPointer::Parameter::Builder::setScopeId( ::uint64_t value) {
   _builder.setDataField< ::uint64_t>(
       2 * ::capnp::ELEMENTS, value);
 }
@@ -5801,217 +5800,217 @@ inline void Type::AnyPointer::Parameter::Builder::setParameterIndex( ::uint16_t 
       5 * ::capnp::ELEMENTS, value);
 }
 
-inline bool TypeEnvironment::Reader::hasScopes() const {
+inline bool Brand::Reader::hasScopes() const {
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline bool TypeEnvironment::Builder::hasScopes() {
+inline bool Brand::Builder::hasScopes() {
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Reader TypeEnvironment::Reader::getScopes() const {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>::get(
+inline  ::capnp::List< ::capnp::schema::Brand::Scope>::Reader Brand::Reader::getScopes() const {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Brand::Scope>>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Builder TypeEnvironment::Builder::getScopes() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>::get(
+inline  ::capnp::List< ::capnp::schema::Brand::Scope>::Builder Brand::Builder::getScopes() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Brand::Scope>>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline void TypeEnvironment::Builder::setScopes( ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>::set(
+inline void Brand::Builder::setScopes( ::capnp::List< ::capnp::schema::Brand::Scope>::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Brand::Scope>>::set(
       _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>::Builder TypeEnvironment::Builder::initScopes(unsigned int size) {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>::init(
+inline  ::capnp::List< ::capnp::schema::Brand::Scope>::Builder Brand::Builder::initScopes(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Brand::Scope>>::init(
       _builder.getPointerField(0 * ::capnp::POINTERS), size);
 }
-inline void TypeEnvironment::Builder::adoptScopes(
-    ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>::adopt(
+inline void Brand::Builder::adoptScopes(
+    ::capnp::Orphan< ::capnp::List< ::capnp::schema::Brand::Scope>>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Brand::Scope>>::adopt(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>> TypeEnvironment::Builder::disownScopes() {
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Scope>>::disown(
+inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Brand::Scope>> Brand::Builder::disownScopes() {
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Brand::Scope>>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline TypeEnvironment::Scope::Which TypeEnvironment::Scope::Reader::which() const {
+inline Brand::Scope::Which Brand::Scope::Reader::which() const {
   return _reader.getDataField<Which>(4 * ::capnp::ELEMENTS);
 }
-inline TypeEnvironment::Scope::Which TypeEnvironment::Scope::Builder::which() {
+inline Brand::Scope::Which Brand::Scope::Builder::which() {
   return _builder.getDataField<Which>(4 * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t TypeEnvironment::Scope::Reader::getScopeId() const {
+inline  ::uint64_t Brand::Scope::Reader::getScopeId() const {
   return _reader.getDataField< ::uint64_t>(
       0 * ::capnp::ELEMENTS);
 }
 
-inline  ::uint64_t TypeEnvironment::Scope::Builder::getScopeId() {
+inline  ::uint64_t Brand::Scope::Builder::getScopeId() {
   return _builder.getDataField< ::uint64_t>(
       0 * ::capnp::ELEMENTS);
 }
-inline void TypeEnvironment::Scope::Builder::setScopeId( ::uint64_t value) {
+inline void Brand::Scope::Builder::setScopeId( ::uint64_t value) {
   _builder.setDataField< ::uint64_t>(
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool TypeEnvironment::Scope::Reader::isBind() const {
-  return which() == TypeEnvironment::Scope::BIND;
+inline bool Brand::Scope::Reader::isBind() const {
+  return which() == Brand::Scope::BIND;
 }
-inline bool TypeEnvironment::Scope::Builder::isBind() {
-  return which() == TypeEnvironment::Scope::BIND;
+inline bool Brand::Scope::Builder::isBind() {
+  return which() == Brand::Scope::BIND;
 }
-inline bool TypeEnvironment::Scope::Reader::hasBind() const {
-  if (which() != TypeEnvironment::Scope::BIND) return false;
+inline bool Brand::Scope::Reader::hasBind() const {
+  if (which() != Brand::Scope::BIND) return false;
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline bool TypeEnvironment::Scope::Builder::hasBind() {
-  if (which() != TypeEnvironment::Scope::BIND) return false;
+inline bool Brand::Scope::Builder::hasBind() {
+  if (which() != Brand::Scope::BIND) return false;
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader TypeEnvironment::Scope::Reader::getBind() const {
-  KJ_IREQUIRE(which() == TypeEnvironment::Scope::BIND,
+inline  ::capnp::List< ::capnp::schema::Brand::Binding>::Reader Brand::Scope::Reader::getBind() const {
+  KJ_IREQUIRE(which() == Brand::Scope::BIND,
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::get(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Brand::Binding>>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder TypeEnvironment::Scope::Builder::getBind() {
-  KJ_IREQUIRE(which() == TypeEnvironment::Scope::BIND,
+inline  ::capnp::List< ::capnp::schema::Brand::Binding>::Builder Brand::Scope::Builder::getBind() {
+  KJ_IREQUIRE(which() == Brand::Scope::BIND,
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::get(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Brand::Binding>>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline void TypeEnvironment::Scope::Builder::setBind( ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Reader value) {
-  _builder.setDataField<TypeEnvironment::Scope::Which>(
-      4 * ::capnp::ELEMENTS, TypeEnvironment::Scope::BIND);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::set(
+inline void Brand::Scope::Builder::setBind( ::capnp::List< ::capnp::schema::Brand::Binding>::Reader value) {
+  _builder.setDataField<Brand::Scope::Which>(
+      4 * ::capnp::ELEMENTS, Brand::Scope::BIND);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Brand::Binding>>::set(
       _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
-inline  ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>::Builder TypeEnvironment::Scope::Builder::initBind(unsigned int size) {
-  _builder.setDataField<TypeEnvironment::Scope::Which>(
-      4 * ::capnp::ELEMENTS, TypeEnvironment::Scope::BIND);
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::init(
+inline  ::capnp::List< ::capnp::schema::Brand::Binding>::Builder Brand::Scope::Builder::initBind(unsigned int size) {
+  _builder.setDataField<Brand::Scope::Which>(
+      4 * ::capnp::ELEMENTS, Brand::Scope::BIND);
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Brand::Binding>>::init(
       _builder.getPointerField(0 * ::capnp::POINTERS), size);
 }
-inline void TypeEnvironment::Scope::Builder::adoptBind(
-    ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>&& value) {
-  _builder.setDataField<TypeEnvironment::Scope::Which>(
-      4 * ::capnp::ELEMENTS, TypeEnvironment::Scope::BIND);
-  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::adopt(
+inline void Brand::Scope::Builder::adoptBind(
+    ::capnp::Orphan< ::capnp::List< ::capnp::schema::Brand::Binding>>&& value) {
+  _builder.setDataField<Brand::Scope::Which>(
+      4 * ::capnp::ELEMENTS, Brand::Scope::BIND);
+  ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Brand::Binding>>::adopt(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>> TypeEnvironment::Scope::Builder::disownBind() {
-  KJ_IREQUIRE(which() == TypeEnvironment::Scope::BIND,
+inline ::capnp::Orphan< ::capnp::List< ::capnp::schema::Brand::Binding>> Brand::Scope::Builder::disownBind() {
+  KJ_IREQUIRE(which() == Brand::Scope::BIND,
               "Must check which() before get()ing a union member.");
-  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::TypeEnvironment::Binding>>::disown(
+  return ::capnp::_::PointerHelpers< ::capnp::List< ::capnp::schema::Brand::Binding>>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool TypeEnvironment::Scope::Reader::isInherit() const {
-  return which() == TypeEnvironment::Scope::INHERIT;
+inline bool Brand::Scope::Reader::isInherit() const {
+  return which() == Brand::Scope::INHERIT;
 }
-inline bool TypeEnvironment::Scope::Builder::isInherit() {
-  return which() == TypeEnvironment::Scope::INHERIT;
+inline bool Brand::Scope::Builder::isInherit() {
+  return which() == Brand::Scope::INHERIT;
 }
-inline  ::capnp::Void TypeEnvironment::Scope::Reader::getInherit() const {
-  KJ_IREQUIRE(which() == TypeEnvironment::Scope::INHERIT,
+inline  ::capnp::Void Brand::Scope::Reader::getInherit() const {
+  KJ_IREQUIRE(which() == Brand::Scope::INHERIT,
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
 }
 
-inline  ::capnp::Void TypeEnvironment::Scope::Builder::getInherit() {
-  KJ_IREQUIRE(which() == TypeEnvironment::Scope::INHERIT,
+inline  ::capnp::Void Brand::Scope::Builder::getInherit() {
+  KJ_IREQUIRE(which() == Brand::Scope::INHERIT,
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
 }
-inline void TypeEnvironment::Scope::Builder::setInherit( ::capnp::Void value) {
-  _builder.setDataField<TypeEnvironment::Scope::Which>(
-      4 * ::capnp::ELEMENTS, TypeEnvironment::Scope::INHERIT);
+inline void Brand::Scope::Builder::setInherit( ::capnp::Void value) {
+  _builder.setDataField<Brand::Scope::Which>(
+      4 * ::capnp::ELEMENTS, Brand::Scope::INHERIT);
   _builder.setDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline TypeEnvironment::Binding::Which TypeEnvironment::Binding::Reader::which() const {
+inline Brand::Binding::Which Brand::Binding::Reader::which() const {
   return _reader.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
-inline TypeEnvironment::Binding::Which TypeEnvironment::Binding::Builder::which() {
+inline Brand::Binding::Which Brand::Binding::Builder::which() {
   return _builder.getDataField<Which>(0 * ::capnp::ELEMENTS);
 }
 
-inline bool TypeEnvironment::Binding::Reader::isUnbound() const {
-  return which() == TypeEnvironment::Binding::UNBOUND;
+inline bool Brand::Binding::Reader::isUnbound() const {
+  return which() == Brand::Binding::UNBOUND;
 }
-inline bool TypeEnvironment::Binding::Builder::isUnbound() {
-  return which() == TypeEnvironment::Binding::UNBOUND;
+inline bool Brand::Binding::Builder::isUnbound() {
+  return which() == Brand::Binding::UNBOUND;
 }
-inline  ::capnp::Void TypeEnvironment::Binding::Reader::getUnbound() const {
-  KJ_IREQUIRE(which() == TypeEnvironment::Binding::UNBOUND,
+inline  ::capnp::Void Brand::Binding::Reader::getUnbound() const {
+  KJ_IREQUIRE(which() == Brand::Binding::UNBOUND,
               "Must check which() before get()ing a union member.");
   return _reader.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
 }
 
-inline  ::capnp::Void TypeEnvironment::Binding::Builder::getUnbound() {
-  KJ_IREQUIRE(which() == TypeEnvironment::Binding::UNBOUND,
+inline  ::capnp::Void Brand::Binding::Builder::getUnbound() {
+  KJ_IREQUIRE(which() == Brand::Binding::UNBOUND,
               "Must check which() before get()ing a union member.");
   return _builder.getDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS);
 }
-inline void TypeEnvironment::Binding::Builder::setUnbound( ::capnp::Void value) {
-  _builder.setDataField<TypeEnvironment::Binding::Which>(
-      0 * ::capnp::ELEMENTS, TypeEnvironment::Binding::UNBOUND);
+inline void Brand::Binding::Builder::setUnbound( ::capnp::Void value) {
+  _builder.setDataField<Brand::Binding::Which>(
+      0 * ::capnp::ELEMENTS, Brand::Binding::UNBOUND);
   _builder.setDataField< ::capnp::Void>(
       0 * ::capnp::ELEMENTS, value);
 }
 
-inline bool TypeEnvironment::Binding::Reader::isType() const {
-  return which() == TypeEnvironment::Binding::TYPE;
+inline bool Brand::Binding::Reader::isType() const {
+  return which() == Brand::Binding::TYPE;
 }
-inline bool TypeEnvironment::Binding::Builder::isType() {
-  return which() == TypeEnvironment::Binding::TYPE;
+inline bool Brand::Binding::Builder::isType() {
+  return which() == Brand::Binding::TYPE;
 }
-inline bool TypeEnvironment::Binding::Reader::hasType() const {
-  if (which() != TypeEnvironment::Binding::TYPE) return false;
+inline bool Brand::Binding::Reader::hasType() const {
+  if (which() != Brand::Binding::TYPE) return false;
   return !_reader.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline bool TypeEnvironment::Binding::Builder::hasType() {
-  if (which() != TypeEnvironment::Binding::TYPE) return false;
+inline bool Brand::Binding::Builder::hasType() {
+  if (which() != Brand::Binding::TYPE) return false;
   return !_builder.getPointerField(0 * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::schema::Type::Reader TypeEnvironment::Binding::Reader::getType() const {
-  KJ_IREQUIRE(which() == TypeEnvironment::Binding::TYPE,
+inline  ::capnp::schema::Type::Reader Brand::Binding::Reader::getType() const {
+  KJ_IREQUIRE(which() == Brand::Binding::TYPE,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
       _reader.getPointerField(0 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::Type::Builder TypeEnvironment::Binding::Builder::getType() {
-  KJ_IREQUIRE(which() == TypeEnvironment::Binding::TYPE,
+inline  ::capnp::schema::Type::Builder Brand::Binding::Builder::getType() {
+  KJ_IREQUIRE(which() == Brand::Binding::TYPE,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::get(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline void TypeEnvironment::Binding::Builder::setType( ::capnp::schema::Type::Reader value) {
-  _builder.setDataField<TypeEnvironment::Binding::Which>(
-      0 * ::capnp::ELEMENTS, TypeEnvironment::Binding::TYPE);
+inline void Brand::Binding::Builder::setType( ::capnp::schema::Type::Reader value) {
+  _builder.setDataField<Brand::Binding::Which>(
+      0 * ::capnp::ELEMENTS, Brand::Binding::TYPE);
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::set(
       _builder.getPointerField(0 * ::capnp::POINTERS), value);
 }
-inline  ::capnp::schema::Type::Builder TypeEnvironment::Binding::Builder::initType() {
-  _builder.setDataField<TypeEnvironment::Binding::Which>(
-      0 * ::capnp::ELEMENTS, TypeEnvironment::Binding::TYPE);
+inline  ::capnp::schema::Type::Builder Brand::Binding::Builder::initType() {
+  _builder.setDataField<Brand::Binding::Which>(
+      0 * ::capnp::ELEMENTS, Brand::Binding::TYPE);
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::init(
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
-inline void TypeEnvironment::Binding::Builder::adoptType(
+inline void Brand::Binding::Builder::adoptType(
     ::capnp::Orphan< ::capnp::schema::Type>&& value) {
-  _builder.setDataField<TypeEnvironment::Binding::Which>(
-      0 * ::capnp::ELEMENTS, TypeEnvironment::Binding::TYPE);
+  _builder.setDataField<Brand::Binding::Which>(
+      0 * ::capnp::ELEMENTS, Brand::Binding::TYPE);
   ::capnp::_::PointerHelpers< ::capnp::schema::Type>::adopt(
       _builder.getPointerField(0 * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::schema::Type> TypeEnvironment::Binding::Builder::disownType() {
-  KJ_IREQUIRE(which() == TypeEnvironment::Binding::TYPE,
+inline ::capnp::Orphan< ::capnp::schema::Type> Brand::Binding::Builder::disownType() {
+  KJ_IREQUIRE(which() == Brand::Binding::TYPE,
               "Must check which() before get()ing a union member.");
   return ::capnp::_::PointerHelpers< ::capnp::schema::Type>::disown(
       _builder.getPointerField(0 * ::capnp::POINTERS));
@@ -6646,38 +6645,38 @@ inline ::capnp::Orphan< ::capnp::schema::Value> Annotation::Builder::disownValue
       _builder.getPointerField(0 * ::capnp::POINTERS));
 }
 
-inline bool Annotation::Reader::hasTypeEnvironment() const {
+inline bool Annotation::Reader::hasBrand() const {
   return !_reader.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
-inline bool Annotation::Builder::hasTypeEnvironment() {
+inline bool Annotation::Builder::hasBrand() {
   return !_builder.getPointerField(1 * ::capnp::POINTERS).isNull();
 }
-inline  ::capnp::schema::TypeEnvironment::Reader Annotation::Reader::getTypeEnvironment() const {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+inline  ::capnp::schema::Brand::Reader Annotation::Reader::getBrand() const {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::get(
       _reader.getPointerField(1 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::TypeEnvironment::Builder Annotation::Builder::getTypeEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::get(
+inline  ::capnp::schema::Brand::Builder Annotation::Builder::getBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::get(
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
-inline  ::capnp::schema::TypeEnvironment::Pipeline Annotation::Pipeline::getTypeEnvironment() {
-  return  ::capnp::schema::TypeEnvironment::Pipeline(_typeless.getPointerField(1));
+inline  ::capnp::schema::Brand::Pipeline Annotation::Pipeline::getBrand() {
+  return  ::capnp::schema::Brand::Pipeline(_typeless.getPointerField(1));
 }
-inline void Annotation::Builder::setTypeEnvironment( ::capnp::schema::TypeEnvironment::Reader value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::set(
+inline void Annotation::Builder::setBrand( ::capnp::schema::Brand::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::set(
       _builder.getPointerField(1 * ::capnp::POINTERS), value);
 }
-inline  ::capnp::schema::TypeEnvironment::Builder Annotation::Builder::initTypeEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::init(
+inline  ::capnp::schema::Brand::Builder Annotation::Builder::initBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::init(
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
-inline void Annotation::Builder::adoptTypeEnvironment(
-    ::capnp::Orphan< ::capnp::schema::TypeEnvironment>&& value) {
-  ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::adopt(
+inline void Annotation::Builder::adoptBrand(
+    ::capnp::Orphan< ::capnp::schema::Brand>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::adopt(
       _builder.getPointerField(1 * ::capnp::POINTERS), kj::mv(value));
 }
-inline ::capnp::Orphan< ::capnp::schema::TypeEnvironment> Annotation::Builder::disownTypeEnvironment() {
-  return ::capnp::_::PointerHelpers< ::capnp::schema::TypeEnvironment>::disown(
+inline ::capnp::Orphan< ::capnp::schema::Brand> Annotation::Builder::disownBrand() {
+  return ::capnp::_::PointerHelpers< ::capnp::schema::Brand>::disown(
       _builder.getPointerField(1 * ::capnp::POINTERS));
 }
 

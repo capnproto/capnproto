@@ -62,7 +62,7 @@ public:
       Resolver* scope;
 
       // TODO(now): Returning an Expression from some other file is wrong wrong wrong. We need
-      //   to compile the alias down to an id + type environment.
+      //   to compile the alias down to an id + brand.
     };
 
     virtual kj::Maybe<kj::OneOf<ResolvedDecl, ResolvedParameter, ResolvedAlias>>
@@ -79,8 +79,7 @@ public:
     virtual ResolvedDecl getTopScope() = 0;
     // Get the top-level scope containing this node.
 
-    virtual kj::Maybe<Schema> resolveBootstrapSchema(uint64_t id,
-        schema::TypeEnvironment::Reader environment) = 0;
+    virtual kj::Maybe<Schema> resolveBootstrapSchema(uint64_t id, schema::Brand::Reader brand) = 0;
     // Get the schema for the given ID.  If a schema is returned, it must be safe to traverse its
     // dependencies via the Schema API.  A schema that is only at the bootstrap stage is
     // acceptable.
@@ -147,14 +146,14 @@ private:
   class DuplicateOrdinalDetector;
   class StructLayout;
   class StructTranslator;
-  class DeclInstance;
-  class TypeEnvironment;
+  class BrandedDecl;
+  class BrandScope;
 
   Resolver& resolver;
   ErrorReporter& errorReporter;
   Orphanage orphanage;
   bool compileAnnotations;
-  kj::Own<TypeEnvironment> baseEnvironment;
+  kj::Own<BrandScope> localBrand;
 
   Orphan<schema::Node> wipNode;
   // The work-in-progress schema node.
@@ -194,19 +193,19 @@ private:
   // The `members` arrays contain only members with ordinal numbers, in code order.  Other members
   // are handled elsewhere.
 
-  template <typename InitTypeEnvironmentFunc>
+  template <typename InitBrandFunc>
   uint64_t compileParamList(kj::StringPtr methodName, uint16_t ordinal, bool isResults,
                             Declaration::ParamList::Reader paramList,
-                            InitTypeEnvironmentFunc&& initTypeEnvironment);
+                            InitBrandFunc&& initBrand);
   // Compile a param (or result) list and return the type ID of the struct type.
 
-  kj::Maybe<DeclInstance> compileDeclExpression(Expression::Reader source);
-  kj::Maybe<DeclInstance> compileDeclExpression(
-      Expression::Reader source, kj::Own<TypeEnvironment> env, Resolver& resolver);
+  kj::Maybe<BrandedDecl> compileDeclExpression(Expression::Reader source);
+  kj::Maybe<BrandedDecl> compileDeclExpression(
+      Expression::Reader source, kj::Own<BrandScope> brand, Resolver& resolver);
   // Compile an expression which is expected to resolve to a declaration or type expression.
 
   bool compileType(Expression::Reader source, schema::Type::Builder target);
-  bool compileType(DeclInstance& decl, schema::Type::Builder target);
+  bool compileType(BrandedDecl& decl, schema::Type::Builder target);
   // Returns false if there was a problem, in which case value expressions of this type should
   // not be parsed.
 

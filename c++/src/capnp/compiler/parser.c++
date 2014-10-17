@@ -830,18 +830,18 @@ CapnpParser::CapnpParser(Orphanage orphanageParam, ErrorReporter& errorReporterP
                   p::many(parsers.annotation)),
       [this](Located<Text::Reader>&& name, kj::Maybe<Orphan<LocatedInteger>>&& id,
              kj::Maybe<Located<kj::Array<kj::Maybe<Located<Text::Reader>>>>>&& genericParameters,
-             kj::Maybe<Located<kj::Array<kj::Maybe<Orphan<Expression>>>>>&& extends,
+             kj::Maybe<Located<kj::Array<kj::Maybe<Orphan<Expression>>>>>&& superclasses,
              kj::Array<Orphan<Declaration::AnnotationApplication>>&& annotations)
                  -> DeclParserResult {
         auto decl = orphanage.newOrphan<Declaration>();
         auto builder = initDecl(
             decl.get(), kj::mv(name), kj::mv(id), kj::mv(genericParameters),
             kj::mv(annotations)).initInterface();
-        KJ_IF_MAYBE(e, extends) {
-          auto extendsBuilder = builder.initExtends(e->value.size());
-          for (uint i: kj::indices(e->value)) {
-            KJ_IF_MAYBE(extend, e->value[i]) {
-              extendsBuilder.adoptWithCaveats(i, kj::mv(*extend));
+        KJ_IF_MAYBE(s, superclasses) {
+          auto superclassesBuilder = builder.initSuperclasses(s->value.size());
+          for (uint i: kj::indices(s->value)) {
+            KJ_IF_MAYBE(superclass, s->value[i]) {
+              superclassesBuilder.adoptWithCaveats(i, kj::mv(*superclass));
             }
           }
         }
