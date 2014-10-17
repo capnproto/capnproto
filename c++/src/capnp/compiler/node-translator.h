@@ -41,6 +41,10 @@ class NodeTranslator {
 public:
   class Resolver {
     // Callback class used to find other nodes relative to this one.
+    //
+    // TODO(cleanup): This has evolved into being a full interface for traversing the node tree.
+    //   Maybe we should rename it as such, and move it out of NodeTranslator. See also
+    //   TODO(cleanup) on NodeTranslator::BrandedDecl.
 
   public:
     struct ResolvedDecl {
@@ -49,6 +53,12 @@ public:
       uint64_t scopeId;
       Declaration::Which kind;
       Resolver* resolver;
+
+      kj::Maybe<schema::Brand::Reader> brand;
+      // If present, then it is necessary to replace the brand scope with the given brand before
+      // using the target type. This happens when the decl resolved to an alias; all other fields
+      // of `ResolvedDecl` refer to the target of the alias, except for `scopeId` which is the
+      // scope that contained the alias.
     };
 
     struct ResolvedParameter {
@@ -56,22 +66,17 @@ public:
       uint index;   // Index of the parameter.
     };
 
-    struct ResolvedAlias {
-      Expression::Reader value;
-      uint64_t scopeId;
-      Resolver* scope;
+    typedef kj::OneOf<ResolvedDecl, ResolvedParameter> ResolveResult;
 
-      // TODO(now): Returning an Expression from some other file is wrong wrong wrong. We need
-      //   to compile the alias down to an id + brand.
-    };
-
-    virtual kj::Maybe<kj::OneOf<ResolvedDecl, ResolvedParameter, ResolvedAlias>>
-        resolve(kj::StringPtr name) = 0;
+    virtual kj::Maybe<ResolveResult> resolve(kj::StringPtr name) = 0;
     // Look up the given name, relative to this node, and return basic information about the
     // target.
 
-    virtual kj::Maybe<kj::OneOf<ResolvedDecl, ResolvedAlias>> resolveMember(kj::StringPtr name) = 0;
+    virtual kj::Maybe<ResolveResult> resolveMember(kj::StringPtr name) = 0;
     // Look up a member of this node.
+
+    virtual ResolvedDecl resolveBuiltin(Declaration::Which which) = 0;
+    virtual ResolvedDecl resolveId(uint64_t id) = 0;
 
     virtual kj::Maybe<ResolvedDecl> getParent() = 0;
     // Returns the parent of this scope, or null if this is the top scope.
@@ -141,6 +146,15 @@ public:
   // Finish translating the node (including filling in all the pieces that are missing from the
   // bootstrap node) and return it.
 
+  static kj::Maybe<Resolver::ResolveResult> compileDecl(
+      uint64_t scopeId, uint scopeParameterCount, Resolver& resolver, ErrorReporter& errorReporter,
+      Expression::Reader expression, schema::Brand::Builder brandBuilder);
+  // Compile a one-off declaration expression without building a NodeTranslator. Used for
+  // evaluating aliases.
+  //
+  // `brandBuilder` may be used to construct a message which will fill in ResolvedDecl::brand in
+  // the result.
+
 private:
   class DuplicateNameDetector;
   class DuplicateOrdinalDetector;
@@ -200,12 +214,9 @@ private:
   // Compile a param (or result) list and return the type ID of the struct type.
 
   kj::Maybe<BrandedDecl> compileDeclExpression(Expression::Reader source);
-  kj::Maybe<BrandedDecl> compileDeclExpression(
-      Expression::Reader source, kj::Own<BrandScope> brand, Resolver& resolver);
   // Compile an expression which is expected to resolve to a declaration or type expression.
 
   bool compileType(Expression::Reader source, schema::Type::Builder target);
-  bool compileType(BrandedDecl& decl, schema::Type::Builder target);
   // Returns false if there was a problem, in which case value expressions of this type should
   // not be parsed.
 

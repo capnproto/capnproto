@@ -614,16 +614,19 @@ struct CopyConstructArray_<T, Iterator, false> {
   };
 
   static T* apply(T* __restrict__ pos, Iterator start, Iterator end) {
-    if (noexcept(T(instance<const T&>()))) {
+    // Verify that T can be *implicitly* constructed from the source values.
+    if (false) implicitCast<T>(*start);
+
+    if (noexcept(T(*start))) {
       while (start != end) {
-        ctor(*pos++, implicitCast<const T&>(*start++));
+        ctor(*pos++, *start++);
       }
       return pos;
     } else {
       // Crap.  This is complicated.
       ExceptionGuard guard(pos);
       while (start != end) {
-        ctor(*guard.pos, implicitCast<const T&>(*start++));
+        ctor(*guard.pos, *start++);
         ++guard.pos;
       }
       guard.start = guard.pos;
@@ -647,6 +650,13 @@ void ArrayBuilder<T>::addAll(Iterator start, Iterator end) {
 
 template <typename T>
 Array<T> heapArray(const T* content, size_t size) {
+  ArrayBuilder<T> builder = heapArrayBuilder<T>(size);
+  builder.addAll(content, content + size);
+  return builder.finish();
+}
+
+template <typename T>
+Array<T> heapArray(T* content, size_t size) {
   ArrayBuilder<T> builder = heapArrayBuilder<T>(size);
   builder.addAll(content, content + size);
   return builder.finish();

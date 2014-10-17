@@ -524,6 +524,21 @@ struct TestGenerics(Foo, Bar) {
   }
 
   annotation ann(struct) :Foo;
+
+  using AliasFoo = Foo;
+  using AliasInner = Inner;
+  using AliasInner2 = Inner2;
+  using AliasInner2Text = Inner2(Text);
+  using AliasRev = TestGenerics(Bar, Foo);
+
+  struct UseAliases {
+    foo @0 :AliasFoo;
+    inner @1 :AliasInner;
+    inner2 @2 :AliasInner2;
+    inner2Bind @3 :AliasInner2(Text);
+    inner2Text @4 :AliasInner2Text;
+    revFoo @5 :AliasRev.AliasFoo;
+  }
 }
 
 struct TestGenericsWrapper(Foo, Bar) {
@@ -551,6 +566,25 @@ struct TestUseGenerics $TestGenerics(Text, Data).ann("foo") {
       (value = (foo = "text", rev = (foo = (int16Field = 321))));
   defaultWrapper2 @10 :TestGenericsWrapper2 =
       (value = (value = (foo = "text", rev = (foo = (int16Field = 321)))));
+
+  aliasFoo @11 :TestGenerics(TestAllTypes, TestAnyPointer).AliasFoo = (int16Field = 123);
+  aliasInner @12 :TestGenerics(TestAllTypes, TestAnyPointer).AliasInner
+      = (foo = (int16Field = 123));
+  aliasInner2 @13 :TestGenerics(TestAllTypes, TestAnyPointer).AliasInner2
+      = (innerBound = (foo = (int16Field = 123)));
+  aliasInner2Bind @14 :TestGenerics(TestAllTypes, TestAnyPointer).AliasInner2(List(UInt32))
+      = (baz = [12, 34], innerBound = (foo = (int16Field = 123)));
+  aliasInner2Text @15 :TestGenerics(TestAllTypes, TestAnyPointer).AliasInner2Text
+      = (baz = "text", innerBound = (foo = (int16Field = 123)));
+  aliasRev @16 :TestGenerics(TestAnyPointer, Text).AliasRev.AliasFoo = "text";
+
+  useAliases @17 :TestGenerics(TestAllTypes, List(UInt32)).UseAliases = (
+      foo = (int16Field = 123),
+      inner = (foo = (int16Field = 123)),
+      inner2 = (innerBound = (foo = (int16Field = 123))),
+      inner2Bind = (baz = "text", innerBound = (foo = (int16Field = 123))),
+      inner2Text = (baz = "text", innerBound = (foo = (int16Field = 123))),
+      revFoo = [12, 34, 56]);
 }
 
 struct TestEmptyStruct {}

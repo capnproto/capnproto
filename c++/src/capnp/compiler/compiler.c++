@@ -37,13 +37,18 @@ namespace compiler {
 
 class Compiler::Alias {
 public:
-  Alias(Node& parent, const Expression::Reader& targetName)
-      : targetName(targetName) {}
+  Alias(CompiledModule& module, Node& parent, const Expression::Reader& targetName)
+      : module(module), parent(parent), targetName(targetName) {}
 
-  Expression::Reader getTarget() { return targetName; }
+  kj::Maybe<NodeTranslator::Resolver::ResolveResult> compile();
 
 private:
+  CompiledModule& module;
+  Node& parent;
   Expression::Reader targetName;
+  kj::Maybe<NodeTranslator::Resolver::ResolveResult> target;
+  Orphan<schema::Brand> brandOrphan;
+  bool initialized = false;
 };
 
 class Compiler::Node: public NodeTranslator::Resolver {
@@ -68,6 +73,7 @@ public:
   // Create a dummy node representing a built-in declaration, like "Int32" or "true".
 
   uint64_t getId() { return id; }
+  uint getParameterCount() { return genericParamCount; }
   Declaration::Which getKind() { return kind; }
 
   kj::Maybe<Schema> getBootstrapSchema();
@@ -83,9 +89,10 @@ public:
   // Report an error on this Node.
 
   // implements NodeTranslator::Resolver -----------------------------
-  kj::Maybe<kj::OneOf<ResolvedDecl, ResolvedParameter, ResolvedAlias>>
-      resolve(kj::StringPtr name) override;
-  kj::Maybe<kj::OneOf<ResolvedDecl, ResolvedAlias>> resolveMember(kj::StringPtr name) override;
+  kj::Maybe<ResolveResult> resolve(kj::StringPtr name) override;
+  kj::Maybe<ResolveResult> resolveMember(kj::StringPtr name) override;
+  ResolvedDecl resolveBuiltin(Declaration::Which which) override;
+  ResolvedDecl resolveId(uint64_t id) override;
   kj::Maybe<ResolvedDecl> getParent() override;
   ResolvedDecl getTopScope() override;
   kj::Maybe<Schema> resolveBootstrapSchema(
@@ -297,6 +304,7 @@ public:
   kj::Maybe<Node&> findNode(uint64_t id);
 
   kj::Maybe<Node&> lookupBuiltin(kj::StringPtr name);
+  Node& getBuiltin(Declaration::Which which);
 
   void load(const SchemaLoader& loader, uint64_t id) const override;
   // SchemaLoader callback for the bootstrap loader.
@@ -320,11 +328,36 @@ private:
   // Map of nodes by ID.
 
   std::map<kj::StringPtr, kj::Own<Node>> builtinDecls;
+  std::map<Declaration::Which, Node*> builtinDeclsByKind;
   // Map of built-in declarations, like "Int32" and "List", which make up the global scope.
 
   uint64_t nextBogusId = 1000;
   // Counter for assigning bogus IDs to nodes whose real ID is a duplicate.
 };
+
+// =======================================================================================
+
+kj::Maybe<NodeTranslator::Resolver::ResolveResult> Compiler::Alias::compile() {
+  if (!initialized) {
+    initialized = true;
+
+    auto& workspace = module.getCompiler().getWorkspace();
+    brandOrphan = workspace.orphanage.newOrphan<schema::Brand>();
+
+    // If the Workspace is destroyed, revert the alias to the uninitialized state, because the
+    // orphan we created is no longer valid in this case.
+    workspace.arena.copy(kj::defer([this]() {
+      initialized = false;
+      brandOrphan = Orphan<schema::Brand>();
+    }));
+
+    target = NodeTranslator::compileDecl(
+        parent.getId(), parent.getParameterCount(), parent,
+        module.getErrorReporter(), targetName, brandOrphan.get());
+  }
+
+  return target;
+}
 
 // =======================================================================================
 
@@ -447,7 +480,7 @@ kj::Maybe<Compiler::Node::Content&> Compiler::Node::getContent(Content::State mi
 
           case Declaration::USING: {
             kj::Own<Alias> alias = arena.allocateOwn<Alias>(
-                *this, nestedDecl.getUsing().getTarget());
+                *module, *this, nestedDecl.getUsing().getTarget());
             kj::StringPtr name = nestedDecl.getName().getValue();
             content.aliases.insert(std::make_pair(name, kj::mv(alias)));
             break;
@@ -780,21 +813,11 @@ void Compiler::Node::addError(kj::StringPtr error) {
   module->getErrorReporter().addError(startByte, endByte, error);
 }
 
-kj::Maybe<kj::OneOf<NodeTranslator::Resolver::ResolvedDecl,
-                    NodeTranslator::Resolver::ResolvedParameter,
-                    NodeTranslator::Resolver::ResolvedAlias>>
+kj::Maybe<NodeTranslator::Resolver::ResolveResult>
 Compiler::Node::resolve(kj::StringPtr name) {
-  typedef kj::OneOf<ResolvedDecl, ResolvedParameter, ResolvedAlias> Result;
-
   // Check members.
   KJ_IF_MAYBE(member, resolveMember(name)) {
-    Result result;
-    if (member->is<ResolvedDecl>()) {
-      result.init<ResolvedDecl>(kj::mv(member->get<ResolvedDecl>()));
-    } else {
-      result.init<ResolvedAlias>(kj::mv(member->get<ResolvedAlias>()));
-    }
-    return result;
+    return *member;
   }
 
   // Check parameters.
@@ -802,7 +825,7 @@ Compiler::Node::resolve(kj::StringPtr name) {
   auto params = declaration.getParameters();
   for (uint i: kj::indices(params)) {
     if (params[i].getName() == name) {
-      Result result;
+      ResolveResult result;
       result.init<ResolvedParameter>(ResolvedParameter {id, i});
       return result;
     }
@@ -812,7 +835,7 @@ Compiler::Node::resolve(kj::StringPtr name) {
   KJ_IF_MAYBE(p, parent) {
     return p->resolve(name);
   } else KJ_IF_MAYBE(b, module->getCompiler().lookupBuiltin(name)) {
-    Result result;
+    ResolveResult result;
     result.init<ResolvedDecl>(ResolvedDecl { b->id, b->genericParamCount, 0, b->kind, b });
     return result;
   } else {
@@ -820,19 +843,16 @@ Compiler::Node::resolve(kj::StringPtr name) {
   }
 }
 
-kj::Maybe<kj::OneOf<NodeTranslator::Resolver::ResolvedDecl,
-                    NodeTranslator::Resolver::ResolvedAlias>>
+kj::Maybe<NodeTranslator::Resolver::ResolveResult>
 Compiler::Node::resolveMember(kj::StringPtr name) {
   if (isBuiltin) return nullptr;
-
-  typedef kj::OneOf<ResolvedDecl, ResolvedAlias> Result;
 
   KJ_IF_MAYBE(content, getContent(Content::EXPANDED)) {
     {
       auto iter = content->nestedNodes.find(name);
       if (iter != content->nestedNodes.end()) {
         Node* node = iter->second;
-        Result result;
+        ResolveResult result;
         result.init<ResolvedDecl>(ResolvedDecl {
             node->id, node->genericParamCount, id, node->kind, node });
         return result;
@@ -841,13 +861,22 @@ Compiler::Node::resolveMember(kj::StringPtr name) {
     {
       auto iter = content->aliases.find(name);
       if (iter != content->aliases.end()) {
-        Result result;
-        result.init<ResolvedAlias>(ResolvedAlias { iter->second->getTarget(), id, this });
-        return result;
+        return iter->second->compile();
       }
     }
   }
   return nullptr;
+}
+
+NodeTranslator::Resolver::ResolvedDecl Compiler::Node::resolveBuiltin(Declaration::Which which) {
+  auto& b = module->getCompiler().getBuiltin(which);
+  return { b.id, b.genericParamCount, 0, b.kind, &b };
+}
+
+NodeTranslator::Resolver::ResolvedDecl Compiler::Node::resolveId(uint64_t id) {
+  auto& n = KJ_ASSERT_NONNULL(module->getCompiler().findNode(id));
+  uint64_t parentId = n.parent.map([](Node& n) { return n.id; }).orDefault(0);
+  return { n.id, n.genericParamCount, parentId, n.kind, &n };
 }
 
 kj::Maybe<NodeTranslator::Resolver::ResolvedDecl> Compiler::Node::getParent() {
@@ -1072,8 +1101,11 @@ Compiler::Impl::Impl(AnnotationFlag annotationFlag)
           }
         }
 
-        builtinDecls[symbolName] = nodeArena.allocateOwn<Node>(
-            symbolName, static_cast<Declaration::Which>(fieldProto.getDiscriminantValue()), params);
+        Declaration::Which which =
+            static_cast<Declaration::Which>(fieldProto.getDiscriminantValue());
+        kj::Own<Node> newNode = nodeArena.allocateOwn<Node>(symbolName, which, params);
+        builtinDeclsByKind[which] = newNode;
+        builtinDecls[symbolName] = kj::mv(newNode);
       }
     }
   }
@@ -1133,6 +1165,12 @@ kj::Maybe<Compiler::Node&> Compiler::Impl::lookupBuiltin(kj::StringPtr name) {
   } else {
     return *iter->second;
   }
+}
+
+Compiler::Node& Compiler::Impl::getBuiltin(Declaration::Which which) {
+  auto iter = builtinDeclsByKind.find(which);
+  KJ_REQUIRE(iter != builtinDeclsByKind.end(), "invalid builtin", (uint)which);
+  return *iter->second;
 }
 
 uint64_t Compiler::Impl::add(Module& module) {
