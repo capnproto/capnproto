@@ -78,6 +78,12 @@ add_executable(capnpc_cpp
 target_link_libraries(capnpc_cpp capnp kj)
 set_target_properties(capnpc_cpp PROPERTIES OUTPUT_NAME capnpc-c++)
 
+add_executable(capnpc_capnp
+  capnp/compiler/capnpc-capnp.c++
+)
+target_link_libraries(capnpc_capnp capnp kj)
+set_target_properties(capnpc_capnp PROPERTIES OUTPUT_NAME capnpc-capnp)
+
 # Tests ==============================================================
 
 # Setup googletest build and library targets (gtest and gtest_main)
