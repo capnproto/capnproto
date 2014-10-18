@@ -82,6 +82,34 @@ add_executable(capnpc_cpp
 target_link_libraries(capnpc_cpp capnp kj)
 set_target_properties(capnpc_cpp PROPERTIES OUTPUT_NAME capnpc-c++)
 
+# Tests ==============================================================
+
+# Setup googletest build and library targets (gtest and gtest_main)
+include(ExternalProject)
+ExternalProject_Add(gtest_build
+  URL http://googletest.googlecode.com/files/gtest-1.7.0.zip
+  URL_HASH SHA1=f85f6d2481e2c6c4a18539e391aa4ea8ab0394af
+  CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+  INSTALL_COMMAND ""  # Disable install
+)
+
+ExternalProject_Get_Property(gtest_build binary_dir)
+
+add_library(gtest UNKNOWN IMPORTED)
+set_property(TARGET gtest
+  PROPERTY IMPORTED_LOCATION ${binary_dir}/${CMAKE_FIND_LIBRARY_PREFIXES}gtest.a
+)
+add_dependencies(gtest gtest_build)
+
+add_library(gtest_main UNKNOWN IMPORTED)
+set_property(TARGET gtest_main
+  PROPERTY IMPORTED_LOCATION ${binary_dir}/${CMAKE_FIND_LIBRARY_PREFIXES}gtest_main.a
+)
+add_dependencies(gtest_main gtest)
+
+ExternalProject_Get_Property(gtest_build source_dir)
+include_directories(${source_dir}/include)
+
 set(test_capnp_files
   capnp/test.capnp
   capnp/test-import.capnp
@@ -186,6 +214,7 @@ target_link_libraries(capnp-evolution-tests
   gtest_main
 )
 
+include(CTest)
 add_test(NAME capnp-tests-run COMMAND capnp-tests)
 add_test(NAME capnp-evolution-tests-run COMMAND capnp-evolution-tests)
 
